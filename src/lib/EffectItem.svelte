@@ -4,10 +4,7 @@
 	interface Props {
 		effect: EffectInstance;
 		onToggle: () => void;
-		onToggleLock: () => void;
 		onToggleExpand: () => void;
-		onReset: () => void;
-		onDuplicate: () => void;
 		onRemove: () => void;
 		onParamChange: (key: string, value: number | string) => void;
 		isDragging: boolean;
@@ -22,10 +19,7 @@
 	let {
 		effect,
 		onToggle,
-		onToggleLock,
 		onToggleExpand,
-		onReset,
-		onDuplicate,
 		onRemove,
 		onParamChange,
 		isDragging = false,
@@ -90,31 +84,7 @@
 					<span class="toggle-knob"></span>
 				</button>
 
-				<button
-					class="icon-btn"
-					class:active={effect.locked}
-					onclick={onToggleLock}
-					title={effect.locked ? 'Unlock' : 'Lock'}
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						{#if effect.locked}
-							<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-							<path d="M7 11V7a5 5 0 0 1 10 0v4" />
-						{:else}
-							<rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-							<path d="M7 11V7a5 5 0 0 1 9.9-1" />
-						{/if}
-					</svg>
-				</button>
-
-				<button class="icon-btn" onclick={onReset} title="Reset">
+			<button class="icon-btn" onclick={onRemove} title="Remove">
 					<svg
 						width="14"
 						height="14"
@@ -125,20 +95,6 @@
 					>
 						<line x1="18" y1="6" x2="6" y2="18" />
 						<line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
-				</button>
-
-				<button class="icon-btn" onclick={onDuplicate} title="Duplicate">
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-						<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
 					</svg>
 				</button>
 
@@ -175,7 +131,6 @@
 								max={param.max}
 								step={param.step}
 								value={effect.values[param.key]}
-								disabled={effect.locked}
 								oninput={(e) =>
 									onParamChange(param.key, parseFloat(e.currentTarget.value))}
 							/>
@@ -184,7 +139,6 @@
 							<select
 								id="{effect.instanceId}-{param.key}"
 								value={effect.values[param.key]}
-								disabled={effect.locked}
 								onchange={(e) =>
 									onParamChange(param.key, e.currentTarget.value)}
 							>
@@ -354,10 +308,6 @@
 		background: rgba(255, 255, 255, 0.05);
 	}
 
-	.icon-btn.active {
-		color: #aaa;
-	}
-
 	.drag-handle {
 		display: flex;
 		align-items: center;
@@ -425,11 +375,6 @@
 		background: #ddd;
 	}
 
-	input[type='range']:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
 	select {
 		flex: 1;
 		background: #1a1a1a;
@@ -447,8 +392,4 @@
 		border-color: #555;
 	}
 
-	select:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
 </style>

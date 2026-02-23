@@ -1,6 +1,7 @@
 <script lang="ts">
 	import EffectItem from './EffectItem.svelte';
 	import {
+		EFFECT_DEFINITIONS,
 		createEffectInstance,
 		type EffectInstance,
 		getDefinition,
@@ -20,40 +21,24 @@
 		effects[index].enabled = !effects[index].enabled;
 	}
 
-	function toggleLock(index: number) {
-		effects[index].locked = !effects[index].locked;
-	}
-
 	function toggleExpand(index: number) {
 		effects[index].expanded = !effects[index].expanded;
 	}
 
-	function reset(index: number) {
-		const def = getDefinition(effects[index].defId);
-		if (!def) return;
-		effects[index].values = Object.fromEntries(
-			def.params.map((p) => [p.key, p.defaultValue]),
-		);
-		effects[index].enabled = false;
-	}
-
-	function duplicate(index: number) {
-		const source = effects[index];
-		const def = getDefinition(source.defId);
-		if (!def) return;
-		const copy = createEffectInstance(def);
-		copy.enabled = source.enabled;
-		copy.values = { ...source.values };
-		effects.splice(index + 1, 0, copy);
-	}
-
 	function remove(index: number) {
-		const remaining = effects.filter((e) => e.defId === effects[index].defId);
-		if (remaining.length > 1) {
-			effects.splice(index, 1);
-		} else {
-			reset(index);
-		}
+		effects.splice(index, 1);
+	}
+
+	let hiddenDefs = $derived(
+		EFFECT_DEFINITIONS.filter((def) => !effects.some((e) => e.defId === def.id)),
+	);
+
+	let showHidden = $state(false);
+
+	function addEffect(defId: string) {
+		const def = EFFECT_DEFINITIONS.find((d) => d.id === defId);
+		if (!def) return;
+		effects.push(createEffectInstance(def));
 	}
 
 	function paramChange(index: number, key: string, value: number | string) {
@@ -118,10 +103,7 @@
 			<EffectItem
 				{effect}
 				onToggle={() => toggle(i)}
-				onToggleLock={() => toggleLock(i)}
 				onToggleExpand={() => toggleExpand(i)}
-				onReset={() => reset(i)}
-				onDuplicate={() => duplicate(i)}
 				onRemove={() => remove(i)}
 				onParamChange={(key, value) => paramChange(i, key, value)}
 				isDragging={dragFromIndex === i}
@@ -133,6 +115,29 @@
 				onDragEnd={clearDragState}
 			/>
 		{/each}
+
+		{#if hiddenDefs.length > 0}
+			<button class="hidden-header" onclick={() => (showHidden = !showHidden)}>
+				<span class="hidden-arrow" class:expanded={showHidden}>&#9654;</span>
+				<span>Hidden Effects ({hiddenDefs.length})</span>
+			</button>
+
+			{#if showHidden}
+				<div class="hidden-list">
+					{#each hiddenDefs as def (def.id)}
+						<div class="hidden-item">
+							<span class="hidden-name">{def.name}</span>
+							<button class="add-btn" onclick={() => addEffect(def.id)} title="Add to chain">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<line x1="12" y1="5" x2="12" y2="19" />
+									<line x1="5" y1="12" x2="19" y2="12" />
+								</svg>
+							</button>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{/if}
 	</div>
 </aside>
 
@@ -168,5 +173,77 @@
 
 	.panel-scroll::-webkit-scrollbar-thumb:hover {
 		background: #555;
+	}
+
+	.hidden-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.6rem 0.8rem;
+		background: none;
+		border: none;
+		border-top: 1px solid #222;
+		color: #666;
+		font-size: 0.72rem;
+		font-weight: 500;
+		font-family: inherit;
+		letter-spacing: 0.03em;
+		cursor: pointer;
+		transition: color 0.15s;
+	}
+
+	.hidden-header:hover {
+		color: #999;
+	}
+
+	.hidden-arrow {
+		font-size: 0.5rem;
+		transition: transform 0.15s;
+	}
+
+	.hidden-arrow.expanded {
+		transform: rotate(90deg);
+	}
+
+	.hidden-list {
+		border-top: 1px solid #1e1e1e;
+	}
+
+	.hidden-item {
+		display: flex;
+		align-items: center;
+		padding: 0.35rem 0.8rem;
+		border-bottom: 1px solid #1a1a1a;
+	}
+
+	.hidden-item:hover {
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.hidden-name {
+		flex: 1;
+		font-size: 0.75rem;
+		color: #555;
+	}
+
+	.add-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		background: none;
+		border: none;
+		color: #444;
+		cursor: pointer;
+		border-radius: 3px;
+		padding: 0;
+		transition: color 0.15s, background 0.15s;
+	}
+
+	.add-btn:hover {
+		color: #aaa;
+		background: rgba(255, 255, 255, 0.05);
 	}
 </style>

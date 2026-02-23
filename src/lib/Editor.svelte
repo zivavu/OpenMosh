@@ -10,9 +10,11 @@
   interface Props {
     file: File;
     onBack: () => void;
+    onfile: (f: File) => void;
   }
 
-  let { file, onBack }: Props = $props();
+  let { file, onBack, onfile }: Props = $props();
+  let dragging = $state(false);
 
   let format: 'png' | 'jpg' = $state('png');
   let imageSrc = $derived(URL.createObjectURL(file));
@@ -60,7 +62,21 @@
   }
 </script>
 
-<div class="editor">
+<div
+  class="editor"
+  class:drag-over={dragging}
+  ondragover={(e) => { e.preventDefault(); dragging = true; }}
+  ondragenter={(e) => { e.preventDefault(); dragging = true; }}
+  ondragleave={(e) => {
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) dragging = false;
+  }}
+  ondrop={(e) => {
+    e.preventDefault();
+    dragging = false;
+    const f = e.dataTransfer?.files[0];
+    if (f && f.type.startsWith('image/')) onfile(f);
+  }}
+>
   <div class="main-area">
     <div class="toolbar">
       <button class="back-btn" onclick={onBack} title="Load different file">
@@ -108,6 +124,12 @@
   </div>
 
   <EffectsPanel bind:effects />
+
+  {#if dragging}
+    <div class="drop-overlay">
+      <span>Drop image to replace</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -225,5 +247,33 @@
   .mosh-btn:hover {
     border-color: #a89050;
     color: #f0d878;
+  }
+
+  .editor.drag-over::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 99;
+    border: 2px dashed #888;
+    border-radius: 8px;
+    pointer-events: none;
+  }
+
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+  }
+
+  .drop-overlay span {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #ccc;
+    letter-spacing: 0.04em;
   }
 </style>

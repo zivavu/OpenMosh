@@ -6,7 +6,7 @@
 </script>
 
 {#if file}
-  <Editor {file} onBack={() => (file = null)} />
+  <Editor {file} onBack={() => (file = null)} onfile={(f) => (file = f)} />
 {:else}
   <UploadScreen onfile={(f) => (file = f)} />
 {/if}
