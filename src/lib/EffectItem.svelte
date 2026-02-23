@@ -10,6 +10,13 @@
     onDuplicate: () => void;
     onRemove: () => void;
     onParamChange: (key: string, value: number | string) => void;
+    isDragging: boolean;
+    dropIndicator: 'above' | 'below' | null;
+    onDragStart: (e: DragEvent) => void;
+    onDragOver: (e: DragEvent) => void;
+    onDragLeave: () => void;
+    onDrop: (e: DragEvent) => void;
+    onDragEnd: () => void;
   }
 
   let {
@@ -21,13 +28,43 @@
     onDuplicate,
     onRemove,
     onParamChange,
+    isDragging = false,
+    dropIndicator = null,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onDragEnd,
   }: Props = $props();
 
   const def = $derived(getDefinition(effect.defId));
+
+  let canDrag = $state(false);
+
+  function handleDragStart(e: DragEvent) {
+    if (!canDrag) {
+      e.preventDefault();
+      return;
+    }
+    onDragStart(e);
+  }
 </script>
 
 {#if def}
-  <div class="effect-item" class:enabled={effect.enabled}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="effect-item"
+    class:enabled={effect.enabled}
+    class:is-dragging={isDragging}
+    class:drop-above={dropIndicator === 'above'}
+    class:drop-below={dropIndicator === 'below'}
+    draggable={canDrag}
+    ondragstart={handleDragStart}
+    ondragover={(e) => { e.preventDefault(); onDragOver(e); }}
+    ondragleave={onDragLeave}
+    ondrop={(e) => { e.preventDefault(); onDrop(e); }}
+    ondragend={onDragEnd}
+  >
     <div class="header" role="group">
       <button class="expand-trigger" onclick={onToggleExpand}>
         <span class="expand-arrow" class:expanded={effect.expanded}>&#9654;</span>
@@ -75,7 +112,13 @@
           </svg>
         </button>
 
-        <span class="drag-handle" title="Drag to reorder">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span
+          class="drag-handle"
+          title="Drag to reorder"
+          onmousedown={() => (canDrag = true)}
+          onmouseup={() => (canDrag = false)}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="9" cy="5" r="1.5" />
             <circle cx="15" cy="5" r="1.5" />
@@ -127,10 +170,35 @@
 <style>
   .effect-item {
     border-bottom: 1px solid #1e1e1e;
+    position: relative;
   }
 
   .effect-item.enabled {
     background: rgba(255, 255, 255, 0.02);
+  }
+
+  .effect-item.is-dragging {
+    opacity: 0.35;
+  }
+
+  .effect-item.drop-above::before,
+  .effect-item.drop-below::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #666;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .effect-item.drop-above::before {
+    top: -1px;
+  }
+
+  .effect-item.drop-below::after {
+    bottom: -1px;
   }
 
   .header {
