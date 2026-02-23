@@ -58,6 +58,7 @@
 
 	function paramChange(index: number, key: string, value: number | string) {
 		effects[index].values[key] = value;
+		if (!effects[index].enabled) effects[index].enabled = true;
 	}
 
 	function handleDragStart(index: number, e: DragEvent) {

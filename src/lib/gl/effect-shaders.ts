@@ -234,7 +234,8 @@ uniform float u_amount;
 void main() {
   vec4 c = texture(u_texture, v_uv);
   float dist = length(v_uv - 0.5);
-  float vig = smoothstep(u_size, u_size - 0.45, dist);
+  float radius = 1.0 - u_size;
+  float vig = smoothstep(radius, radius - 0.45, dist);
   outColor = vec4(c.rgb * mix(1.0, vig, u_amount), c.a);
 }`,
     setUniforms: (gl, l, v) => {

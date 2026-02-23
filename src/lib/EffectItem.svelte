@@ -41,13 +41,14 @@
 
 	let canDrag = $state(false);
 
-	function handleDragStart(e: DragEvent) {
-		if (!canDrag) {
-			e.preventDefault();
-			return;
-		}
-		onDragStart(e);
-	}
+  function handleDragStart(e: DragEvent) {
+    if (!canDrag) {
+      e.preventDefault();
+      return;
+    }
+    canDrag = false;
+    onDragStart(e);
+  }
 </script>
 
 {#if def}
@@ -69,7 +70,7 @@
 			e.preventDefault();
 			onDrop(e);
 		}}
-		ondragend={onDragEnd}
+		ondragend={() => { canDrag = false; onDragEnd(); }}
 	>
 		<div class="header" role="group">
 			<button class="expand-trigger" onclick={onToggleExpand}>
