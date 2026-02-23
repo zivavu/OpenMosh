@@ -18,6 +18,7 @@ export class GlRenderer {
   private sourceTexture: WebGLTexture | null = null;
   private ppTextures: [WebGLTexture, WebGLTexture] | null = null;
   private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  private feedbackTex: WebGLTexture | null = null;
   private passthrough: CompiledProgram;
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private imgW = 0;
@@ -54,6 +55,7 @@ export class GlRenderer {
 
     if (enabled.length === 0) {
       this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
+      this.captureToFeedback();
       return;
     }
 
@@ -83,6 +85,8 @@ export class GlRenderer {
         ppIdx = 1 - ppIdx;
       }
     }
+
+    this.captureToFeedback();
   }
 
   destroy() {
@@ -96,6 +100,7 @@ export class GlRenderer {
       gl.deleteFramebuffer(this.ppFBOs[0]);
       gl.deleteFramebuffer(this.ppFBOs[1]);
     }
+    if (this.feedbackTex) gl.deleteTexture(this.feedbackTex);
     gl.deleteProgram(this.passthrough.program);
     for (const { program } of this.compiled.values()) {
       gl.deleteProgram(program.program);
@@ -162,6 +167,9 @@ export class GlRenderer {
       gl.deleteFramebuffer(this.ppFBOs[0]);
       gl.deleteFramebuffer(this.ppFBOs[1]);
     }
+    if (this.feedbackTex) {
+      gl.deleteTexture(this.feedbackTex);
+    }
 
     const t0 = this.createTexture(this.imgW, this.imgH);
     const t1 = this.createTexture(this.imgW, this.imgH);
@@ -176,6 +184,14 @@ export class GlRenderer {
 
     this.ppTextures = [t0, t1];
     this.ppFBOs = [f0, f1];
+    this.feedbackTex = this.createTexture(this.imgW, this.imgH);
+  }
+
+  private captureToFeedback() {
+    const gl = this.gl;
+    if (!this.feedbackTex) return;
+    gl.bindTexture(gl.TEXTURE_2D, this.feedbackTex);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, this.imgW, this.imgH);
   }
 
   private drawPass(
@@ -208,6 +224,12 @@ export class GlRenderer {
     }
     if (compiled.uniforms['u_time']) {
       gl.uniform1f(compiled.uniforms['u_time'], time);
+    }
+    if (compiled.uniforms['u_feedback'] && this.feedbackTex) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.feedbackTex);
+      gl.uniform1i(compiled.uniforms['u_feedback'], 1);
+      gl.activeTexture(gl.TEXTURE0);
     }
 
     if (shaderDef && values) {

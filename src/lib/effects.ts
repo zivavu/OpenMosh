@@ -81,17 +81,18 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
     id: 'mirror',
     name: 'Mirror',
     params: [
-      {
-        key: 'direction',
-        label: 'Direction',
-        type: 'select',
-        defaultValue: 'horizontal',
-        options: [
-          { label: 'Horizontal', value: 'horizontal' },
-          { label: 'Vertical', value: 'vertical' },
-          { label: 'Both', value: 'both' },
-        ],
-      },
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 1 },
+      { key: 'side', label: 'Side', type: 'range', min: 0, max: 3, step: 1, defaultValue: 0 },
+      { key: 'position', label: 'Position', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'kaleido',
+    name: 'Kaleido',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 1 },
+      { key: 'sides', label: 'Sides', type: 'range', min: 2, max: 12, step: 1, defaultValue: 6 },
+      { key: 'angle', label: 'Angle', type: 'range', min: 0, max: 360, step: 1, defaultValue: 0 },
     ],
   },
   {
@@ -103,17 +104,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
     ],
   },
   {
-    id: 'brightness-contrast',
-    name: 'Brightness & Contrast',
+    id: 'color-correction',
+    name: 'Color Correction',
     params: [
       { key: 'brightness', label: 'Brightness', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
       { key: 'contrast', label: 'Contrast', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
-    ],
-  },
-  {
-    id: 'hue-saturation',
-    name: 'Hue & Saturation',
-    params: [
       { key: 'hue', label: 'Hue', type: 'range', min: -180, max: 180, step: 1, defaultValue: 0 },
       { key: 'saturation', label: 'Saturation', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
     ],
@@ -148,6 +143,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
     params: [
       { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 100, step: 1, defaultValue: 20 },
       { key: 'seed', label: 'Seed', type: 'range', min: 0, max: 1000, step: 1, defaultValue: 0 },
+      { key: 'speed', label: 'Speed', type: 'range', min: 0.1, max: 5, step: 0.1, defaultValue: 1 },
     ],
   },
   {
@@ -181,6 +177,51 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
     name: 'Shake',
     params: [
       { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 50, step: 1, defaultValue: 10 },
+    ],
+  },
+  {
+    id: 'glow',
+    name: 'Glow',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 2, step: 0.01, defaultValue: 0.5 },
+      { key: 'cutoff', label: 'Cutoff', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'soft-glitch',
+    name: 'Soft Glitch',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 100, step: 1, defaultValue: 30 },
+      { key: 'speed', label: 'Speed', type: 'range', min: 0.1, max: 5, step: 0.1, defaultValue: 1 },
+    ],
+  },
+  {
+    id: 'hard-glitch',
+    name: 'Hard Glitch',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 200, step: 1, defaultValue: 50 },
+      { key: 'scale', label: 'Scale', type: 'range', min: 0.1, max: 2, step: 0.1, defaultValue: 1 },
+      { key: 'speed', label: 'Speed', type: 'range', min: 0.1, max: 5, step: 0.1, defaultValue: 1 },
+    ],
+  },
+  {
+    id: 'optical-flow',
+    name: 'Optical Flow',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.65 },
+      { key: 'distortion', label: 'Distortion', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'speed', label: 'Speed', type: 'range', min: 0.1, max: 5, step: 0.1, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'feedback',
+    name: 'Feedback',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.64 },
+      { key: 'scale', label: 'Scale', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'rotate', label: 'Rotate', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'warp', label: 'Warp', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'hueShift', label: 'Hue Shift', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.39 },
     ],
   },
 ];
