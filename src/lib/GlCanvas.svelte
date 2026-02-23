@@ -1,5 +1,6 @@
 <script lang="ts">
   import { GlRenderer } from './gl/renderer';
+  import { ANIMATED_EFFECTS } from './gl/effect-shaders';
   import type { EffectInstance } from './effects';
 
   interface Props {
@@ -14,6 +15,10 @@
   let renderer: GlRenderer | null = $state(null);
   let imageReady = $state(false);
   let error: string | null = $state(null);
+
+  const needsAnimation = $derived(
+    effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+  );
 
   $effect(() => {
     try {
@@ -47,7 +52,20 @@
 
   $effect(() => {
     if (!renderer || !imageReady) return;
-    renderer.render(effects);
+
+    if (!needsAnimation) {
+      renderer.render(effects, 0);
+      return;
+    }
+
+    let rafId: number;
+    const loop = () => {
+      renderer!.render(effects, performance.now() / 1000);
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+
+    return () => cancelAnimationFrame(rafId);
   });
 </script>
 

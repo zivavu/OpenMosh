@@ -46,14 +46,14 @@ export class GlRenderer {
     this.setupPingPong();
   }
 
-  render(effects: EffectInstance[]) {
+  render(effects: EffectInstance[], time = 0) {
     const gl = this.gl;
     if (!this.sourceTexture || !this.ppTextures || !this.ppFBOs) return;
 
     const enabled = effects.filter((e) => e.enabled);
 
     if (enabled.length === 0) {
-      this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0);
+      this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
       return;
     }
 
@@ -68,13 +68,14 @@ export class GlRenderer {
       const isLast = i === enabled.length - 1;
 
       if (isLast) {
-        this.drawPass(entry.program, null, input, -1.0, entry.def, eff.values);
+        this.drawPass(entry.program, null, input, -1.0, time, entry.def, eff.values);
       } else {
         this.drawPass(
           entry.program,
           this.ppFBOs[ppIdx],
           input,
           1.0,
+          time,
           entry.def,
           eff.values,
         );
@@ -182,6 +183,7 @@ export class GlRenderer {
     fbo: WebGLFramebuffer | null,
     inputTex: WebGLTexture,
     flipY: number,
+    time: number,
     shaderDef?: EffectShaderDef,
     values?: Record<string, number | string>,
   ) {
@@ -203,6 +205,9 @@ export class GlRenderer {
     }
     if (compiled.uniforms['u_flipY']) {
       gl.uniform1f(compiled.uniforms['u_flipY'], flipY);
+    }
+    if (compiled.uniforms['u_time']) {
+      gl.uniform1f(compiled.uniforms['u_time'], time);
     }
 
     if (shaderDef && values) {

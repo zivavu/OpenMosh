@@ -10,6 +10,7 @@ void main() {
 const H = `#version 300 es
 precision highp float;
 uniform sampler2D u_texture;
+uniform float u_time;
 in vec2 v_uv;
 out vec4 outColor;
 `;
@@ -20,6 +21,7 @@ export const PASSTHROUGH_FRAG = H + `void main() {
 
 export interface EffectShaderDef {
   fragment: string;
+  animated?: boolean;
   setUniforms: (
     gl: WebGL2RenderingContext,
     locs: Record<string, WebGLUniformLocation>,
@@ -251,9 +253,10 @@ void main() {
 uniform float u_amount;
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  float line = sin(v_uv.y * u_count * 3.14159265) * 0.5 + 0.5;
+  float line = sin((v_uv.y + u_time * 0.1) * u_count * 3.14159265) * 0.5 + 0.5;
   outColor = vec4(c.rgb * mix(1.0, line, u_amount), c.a);
 }`,
+    animated: true,
     setUniforms: (gl, l, v) => {
       setFloat(gl, l, 'u_count', v.count as number);
       setFloat(gl, l, 'u_amount', v.amount as number);
@@ -292,12 +295,14 @@ float hash(vec2 p) {
 }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float t = floor(u_time * 15.0);
   vec2 off = vec2(
-    hash(vec2(floor(v_uv.y * 500.0), u_seed)) - 0.5,
-    hash(vec2(floor(v_uv.x * 500.0), u_seed + 1.0)) - 0.5
+    hash(vec2(floor(v_uv.y * 500.0), u_seed + t)) - 0.5,
+    hash(vec2(floor(v_uv.x * 500.0), u_seed + t + 1.0)) - 0.5
   ) * u_amount * px;
   outColor = texture(u_texture, v_uv + off);
 }`,
+    animated: true,
     setUniforms: (gl, l, v) => {
       setFloat(gl, l, 'u_amount', v.amount as number);
       setFloat(gl, l, 'u_seed', v.seed as number);
@@ -312,11 +317,12 @@ uniform float u_frequency;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec2 off = vec2(
-    sin(v_uv.y * u_frequency * 6.28318) * u_amount * px.x,
-    cos(v_uv.x * u_frequency * 6.28318) * u_amount * px.y
+    sin(v_uv.y * u_frequency * 6.28318 + u_time * 2.0) * u_amount * px.x,
+    cos(v_uv.x * u_frequency * 6.28318 + u_time * 2.0) * u_amount * px.y
   );
   outColor = texture(u_texture, v_uv + off);
 }`,
+    animated: true,
     setUniforms: (gl, l, v) => {
       setFloat(gl, l, 'u_amount', v.amount as number);
       setFloat(gl, l, 'u_frequency', v.frequency as number);
@@ -356,13 +362,21 @@ void main() {
 float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float t = floor(u_time * 20.0);
   vec2 off = vec2(
-    (hash(u_amount) - 0.5) * 2.0,
-    (hash(u_amount + 7.0) - 0.5) * 2.0
+    (hash(t) - 0.5) * 2.0,
+    (hash(t + 7.0) - 0.5) * 2.0
   ) * u_amount * px;
   outColor = texture(u_texture, v_uv + off);
 }`,
+    animated: true,
     setUniforms: (gl, l, v) =>
       setFloat(gl, l, 'u_amount', v.amount as number),
   },
 };
+
+export const ANIMATED_EFFECTS = new Set(
+  Object.entries(EFFECT_SHADERS)
+    .filter(([, def]) => def.animated)
+    .map(([id]) => id),
+);
