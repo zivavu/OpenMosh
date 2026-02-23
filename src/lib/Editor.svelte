@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ImagePreview from './ImagePreview.svelte';
+  import GlCanvas from './GlCanvas.svelte';
   import EffectsPanel from './EffectsPanel.svelte';
   import {
     EFFECT_DEFINITIONS,
@@ -72,7 +72,7 @@
       </div>
     </div>
 
-    <ImagePreview src={imageSrc} />
+    <GlCanvas {imageSrc} {effects} />
 
     <div class="action-bar">
       <button class="action-btn mosh-btn" onclick={mosh}>
