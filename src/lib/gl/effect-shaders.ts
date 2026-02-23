@@ -579,6 +579,205 @@ void main() {
       setFloat(gl, l, 'u_hueShift', v.hueShift as number);
     },
   },
+
+  vhs: {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_speed;
+uniform float u_tracking;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float t = u_time * u_speed;
+  float scanY = floor(v_uv.y * 480.0);
+
+  float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_amount * 8.0 * px.x;
+
+  float warpA = (hash(vec2(floor(v_uv.y * 80.0), floor(t * 6.0))) - 0.5)
+    * step(0.75, hash(vec2(floor(v_uv.y * 80.0) + 100.0, floor(t * 6.0))))
+    * u_amount * 15.0 * px.x;
+  float warpB = (hash(vec2(floor(v_uv.y * 200.0), floor(t * 8.0))) - 0.5)
+    * step(0.82, hash(vec2(floor(v_uv.y * 200.0) + 50.0, floor(t * 8.0))))
+    * u_amount * 6.0 * px.x;
+  float warpC = sin(v_uv.y * 120.0 + t * 4.0) * u_amount * 1.5 * px.x;
+
+  float totalWarp = lineNoise + warpA + warpB + warpC;
+  float rOff = totalWarp * 1.2;
+  float bOff = totalWarp * -0.8;
+
+  float barPos = fract(t * 0.15);
+  float barDist = abs(v_uv.y - barPos);
+  float bar = smoothstep(0.06, 0.0, barDist) * u_tracking;
+  rOff += bar * 20.0 * px.x;
+  bOff -= bar * 15.0 * px.x;
+
+  vec4 c;
+  c.r = texture(u_texture, v_uv + vec2(rOff, 0.0)).r;
+  c.g = texture(u_texture, v_uv + vec2(totalWarp * 0.3, 0.0)).g;
+  c.b = texture(u_texture, v_uv + vec2(bOff, 0.0)).b;
+  c.a = 1.0;
+
+  float noise = hash(vec2(v_uv * vec2(480.0, 320.0) + floor(t * 30.0))) * u_amount * 0.15;
+  c.rgb += noise;
+  c.rgb += bar * 0.15;
+
+  outColor = c;
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_speed', v.speed as number);
+      setFloat(gl, l, 'u_tracking', v.tracking as number);
+    },
+  },
+
+  duotone: {
+    fragment:
+      H +
+      `uniform float u_shadowHue;
+uniform float u_highlightHue;
+uniform float u_intensity;
+vec3 hsl2rgb(float h) {
+  float hr = h / 60.0;
+  float x = 1.0 - abs(mod(hr, 2.0) - 1.0);
+  vec3 c;
+  if (hr < 1.0) c = vec3(1.0, x, 0.0);
+  else if (hr < 2.0) c = vec3(x, 1.0, 0.0);
+  else if (hr < 3.0) c = vec3(0.0, 1.0, x);
+  else if (hr < 4.0) c = vec3(0.0, x, 1.0);
+  else if (hr < 5.0) c = vec3(x, 0.0, 1.0);
+  else c = vec3(1.0, 0.0, x);
+  return c;
+}
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  vec3 shadow = hsl2rgb(u_shadowHue) * 0.3;
+  vec3 highlight = hsl2rgb(u_highlightHue);
+  vec3 duo = mix(shadow, highlight, luma);
+  outColor = vec4(mix(c.rgb, duo, u_intensity), c.a);
+}`,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_shadowHue', v.shadowHue as number);
+      setFloat(gl, l, 'u_highlightHue', v.highlightHue as number);
+      setFloat(gl, l, 'u_intensity', v.intensity as number);
+    },
+  },
+
+  'chromatic-aberration': {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_falloff;
+void main() {
+  vec2 center = vec2(0.5);
+  vec2 dir = v_uv - center;
+  float dist = length(dir);
+  float strength = u_amount * pow(dist, 1.0 + u_falloff * 3.0) * 0.1;
+  vec2 offset = normalize(dir + 1e-6) * strength;
+  outColor = vec4(
+    texture(u_texture, v_uv + offset).r,
+    texture(u_texture, v_uv).g,
+    texture(u_texture, v_uv - offset).b,
+    texture(u_texture, v_uv).a
+  );
+}`,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_falloff', v.falloff as number);
+    },
+  },
+
+  static: {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_size;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  vec2 texSize = vec2(textureSize(u_texture, 0));
+  vec2 cell = floor(v_uv * texSize / u_size);
+  float t = floor(u_time * 30.0);
+  float n = hash(cell + t);
+  outColor = vec4(mix(c.rgb, vec3(n), u_amount), c.a);
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_size', v.size as number);
+    },
+  },
+
+  grain: {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_size;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  vec2 texSize = vec2(textureSize(u_texture, 0));
+  vec2 cell = floor(v_uv * texSize / u_size);
+  float t = floor(u_time * 24.0);
+  float n1 = hash(cell + t);
+  float n2 = hash(cell + t + 1.0);
+  float grain = mix(n1, n2, fract(v_uv.x * texSize.x / u_size)) - 0.5;
+  outColor = vec4(c.rgb + grain * u_amount * 0.5, c.a);
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_size', v.size as number);
+    },
+  },
+
+  polar: {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_angle;
+float bounce(float v) {
+  v = mod(abs(v), 2.0);
+  return v > 1.0 ? 2.0 - v : v;
+}
+void main() {
+  vec2 uv = v_uv - 0.5;
+  float r = length(uv) * 2.0;
+  float a = atan(uv.y, uv.x) / 6.28318530 + 0.5 + u_angle / 360.0;
+  vec2 polarUV = vec2(fract(a), bounce(r));
+  outColor = mix(texture(u_texture, v_uv), texture(u_texture, polarUV), u_amount);
+}`,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_angle', v.angle as number);
+    },
+  },
+
+  tile: {
+    fragment:
+      H +
+      `uniform float u_size;
+uniform float u_offset;
+void main() {
+  vec2 uv = v_uv * u_size + u_offset;
+  vec2 cell = floor(uv);
+  vec2 local = fract(uv);
+  vec2 mirrored = mix(local, 1.0 - local, mod(cell, 2.0));
+  outColor = texture(u_texture, mirrored);
+}`,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_size', v.size as number);
+      setFloat(gl, l, 'u_offset', v.offset as number);
+    },
+  },
 };
 
 export const ANIMATED_EFFECTS = new Set(

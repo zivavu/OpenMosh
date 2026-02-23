@@ -6,6 +6,8 @@ export interface RangeParam {
   max: number;
   step: number;
   defaultValue: number;
+  moshMin?: number;
+  moshMax?: number;
 }
 
 export interface SelectParam {
@@ -107,7 +109,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
     id: 'color-correction',
     name: 'Color Correction',
     params: [
-      { key: 'brightness', label: 'Brightness', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
+      { key: 'brightness', label: 'Brightness', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0, moshMin: -0.3 },
       { key: 'contrast', label: 'Contrast', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
       { key: 'hue', label: 'Hue', type: 'range', min: -180, max: 180, step: 1, defaultValue: 0 },
       { key: 'saturation', label: 'Saturation', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
@@ -222,6 +224,64 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       { key: 'rotate', label: 'Rotate', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
       { key: 'warp', label: 'Warp', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
       { key: 'hueShift', label: 'Hue Shift', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.39 },
+    ],
+  },
+  {
+    id: 'vhs',
+    name: 'VHS',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'speed', label: 'Speed', type: 'range', min: 0.1, max: 5, step: 0.1, defaultValue: 1 },
+      { key: 'tracking', label: 'Tracking', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'duotone',
+    name: 'Duotone',
+    params: [
+      { key: 'shadowHue', label: 'Shadow Hue', type: 'range', min: 0, max: 360, step: 1, defaultValue: 220 },
+      { key: 'highlightHue', label: 'Highlight Hue', type: 'range', min: 0, max: 360, step: 1, defaultValue: 40 },
+      { key: 'intensity', label: 'Intensity', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 1 },
+    ],
+  },
+  {
+    id: 'chromatic-aberration',
+    name: 'Chromatic Aberration',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.3 },
+      { key: 'falloff', label: 'Falloff', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'static',
+    name: 'Static',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.3 },
+      { key: 'size', label: 'Size', type: 'range', min: 1, max: 10, step: 1, defaultValue: 1 },
+    ],
+  },
+  {
+    id: 'grain',
+    name: 'Grain',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.3 },
+      { key: 'size', label: 'Size', type: 'range', min: 0.5, max: 3, step: 0.1, defaultValue: 1 },
+    ],
+  },
+  {
+    id: 'polar',
+    name: 'Polar',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 1 },
+      { key: 'angle', label: 'Angle', type: 'range', min: 0, max: 360, step: 1, defaultValue: 0 },
+    ],
+  },
+  {
+    id: 'tile',
+    name: 'Tile',
+    params: [
+      { key: 'size', label: 'Size', type: 'range', min: 1, max: 10, step: 0.1, defaultValue: 2 },
+      { key: 'offset', label: 'Offset', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0 },
     ],
   },
 ];
