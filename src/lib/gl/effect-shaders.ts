@@ -131,18 +131,24 @@ void main() {
     fragment:
       H +
       `uniform float u_amount;
+uniform float u_radius;
+uniform float u_threshold;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0)) * u_radius;
   vec4 c  = texture(u_texture, v_uv);
   vec4 t  = texture(u_texture, v_uv + vec2(0, -px.y));
   vec4 b  = texture(u_texture, v_uv + vec2(0,  px.y));
   vec4 le = texture(u_texture, v_uv + vec2(-px.x, 0));
   vec4 r  = texture(u_texture, v_uv + vec2( px.x, 0));
-  vec4 s = c * (1.0 + 4.0*u_amount) - (t+b+le+r) * u_amount;
-  outColor = vec4(clamp(s.rgb, 0.0, 1.0), c.a);
+  vec3 diff = c.rgb * 4.0 - (t.rgb + b.rgb + le.rgb + r.rgb);
+  vec3 mask = step(vec3(u_threshold), abs(diff));
+  outColor = vec4(clamp(c.rgb + diff * u_amount * mask, 0.0, 1.0), c.a);
 }`,
-    setUniforms: (gl, l, v) =>
-      setFloat(gl, l, 'u_amount', v.amount as number),
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_radius', v.radius as number);
+      setFloat(gl, l, 'u_threshold', v.threshold as number);
+    },
   },
 
   mirror: {
@@ -771,8 +777,13 @@ void main() {
       H +
       `uniform float u_size;
 uniform float u_offset;
+uniform float u_angle;
 void main() {
-  vec2 uv = v_uv * u_size + u_offset;
+  float rad = u_angle * 3.14159265 / 180.0;
+  float c = cos(rad), s = sin(rad);
+  vec2 centered = v_uv - 0.5;
+  vec2 rotated = vec2(c * centered.x + s * centered.y, -s * centered.x + c * centered.y) + 0.5;
+  vec2 uv = rotated * u_size + u_offset;
   vec2 cell = floor(uv);
   vec2 local = fract(uv);
   vec2 mirrored = mix(local, 1.0 - local, mod(cell, 2.0));
@@ -781,6 +792,221 @@ void main() {
     setUniforms: (gl, l, v) => {
       setFloat(gl, l, 'u_size', v.size as number);
       setFloat(gl, l, 'u_offset', v.offset as number);
+      setFloat(gl, l, 'u_angle', v.angle as number);
+    },
+  },
+
+  'color-melt': {
+    fragment:
+      H +
+      `uniform float u_intensity;
+uniform float u_speed;
+void main() {
+  float t = u_time * u_speed;
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float rOff = sin(v_uv.y * 12.0 + t * 1.3) + sin(v_uv.y * 23.0 - t * 0.7);
+  float gOff = sin(v_uv.y * 8.0 + t * 0.9 + 2.094) + cos(v_uv.y * 17.0 + t * 1.1);
+  float bOff = sin(v_uv.y * 15.0 + t * 1.7 + 4.189) + sin(v_uv.y * 31.0 + t * 0.5);
+  outColor = vec4(
+    texture(u_texture, v_uv + vec2(rOff * u_intensity * px.x, 0.0)).r,
+    texture(u_texture, v_uv + vec2(gOff * u_intensity * px.x, 0.0)).g,
+    texture(u_texture, v_uv + vec2(bOff * u_intensity * px.x, 0.0)).b,
+    1.0
+  );
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_intensity', v.intensity as number);
+      setFloat(gl, l, 'u_speed', v.speed as number);
+    },
+  },
+
+
+  'spectral-shift': {
+    fragment:
+      H +
+      `uniform float u_hueShift;
+uniform float u_satWarp;
+uniform float u_speed;
+vec3 rgb2hsl(vec3 c) {
+  float mx = max(c.r, max(c.g, c.b));
+  float mn = min(c.r, min(c.g, c.b));
+  float l = (mx + mn) * 0.5;
+  if (mx == mn) return vec3(0.0, 0.0, l);
+  float d = mx - mn;
+  float s = l > 0.5 ? d / (2.0 - mx - mn) : d / (mx + mn);
+  float h;
+  if (mx == c.r) h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
+  else if (mx == c.g) h = (c.b - c.r) / d + 2.0;
+  else h = (c.r - c.g) / d + 4.0;
+  return vec3(h / 6.0, s, l);
+}
+float hue2rgb(float p, float q, float t) {
+  t = fract(t);
+  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+  if (t < 0.5) return q;
+  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+  return p;
+}
+vec3 hsl2rgb(vec3 hsl) {
+  if (hsl.y == 0.0) return vec3(hsl.z);
+  float q = hsl.z < 0.5 ? hsl.z * (1.0 + hsl.y) : hsl.z + hsl.y - hsl.z * hsl.y;
+  float p = 2.0 * hsl.z - q;
+  return vec3(
+    hue2rgb(p, q, hsl.x + 1.0 / 3.0),
+    hue2rgb(p, q, hsl.x),
+    hue2rgb(p, q, hsl.x - 1.0 / 3.0)
+  );
+}
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  vec3 hsl = rgb2hsl(c.rgb);
+  float t = u_time * u_speed;
+  hsl.x = fract(hsl.x + u_hueShift * sin(v_uv.y * 8.0 + t) * sin(v_uv.x * 6.0 + t * 0.7));
+  hsl.y = clamp(hsl.y * (1.0 + u_satWarp * cos(v_uv.x * 10.0 + t * 1.3)), 0.0, 1.0);
+  outColor = vec4(hsl2rgb(hsl), c.a);
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_hueShift', v.hueShift as number);
+      setFloat(gl, l, 'u_satWarp', v.satWarp as number);
+      setFloat(gl, l, 'u_speed', v.speed as number);
+    },
+  },
+
+  'data-bend': {
+    fragment:
+      H +
+      `uniform float u_intensity;
+uniform float u_threshold;
+uniform float u_chunkSize;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+void main() {
+  float t = floor(u_time * 6.0);
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float row = floor(v_uv.y * u_chunkSize);
+  float rowHash = hash(vec2(row, t));
+  float trigger = step(1.0 - u_threshold, rowHash);
+  float strength = (hash(vec2(row * 3.0, t + 1.0)) - 0.5) * 2.0;
+  float burst = 1.0 + step(0.85, hash(vec2(row * 7.0, t))) * 3.0;
+  float offset = strength * u_intensity * trigger * burst * px.x;
+  outColor = vec4(
+    texture(u_texture, v_uv + vec2(offset * 1.3, 0.0)).r,
+    texture(u_texture, v_uv + vec2(offset * -0.5, 0.0)).g,
+    texture(u_texture, v_uv + vec2(offset * -0.9, 0.0)).b,
+    1.0
+  );
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_intensity', v.intensity as number);
+      setFloat(gl, l, 'u_threshold', v.threshold as number);
+      setFloat(gl, l, 'u_chunkSize', v.chunkSize as number);
+    },
+  },
+
+  melt: {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_speed;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+void main() {
+  vec2 ts = vec2(textureSize(u_texture, 0));
+  float t = u_time * u_speed;
+  float col = floor(v_uv.x * ts.x);
+  float colHash = hash(vec2(col, 0.0));
+  float fineHash = hash(vec2(col * 3.0, 7.0));
+  vec4 orig = texture(u_texture, v_uv);
+  float brightness = dot(orig.rgb, vec3(0.299, 0.587, 0.114));
+  float yFactor = v_uv.y;
+  float timeWave = 0.5 + 0.5 * sin(t * 2.0 + colHash * 6.28318);
+  float displacement = u_amount * yFactor * brightness * (colHash * 0.6 + fineHash * 0.4) * timeWave;
+  vec2 uv = v_uv - vec2(0.0, displacement * 0.25);
+  float chromatic = displacement * 0.02;
+  outColor = vec4(
+    texture(u_texture, uv + vec2(chromatic, 0.0)).r,
+    texture(u_texture, uv).g,
+    texture(u_texture, uv - vec2(chromatic, 0.0)).b,
+    1.0
+  );
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_speed', v.speed as number);
+    },
+  },
+
+  fractalize: {
+    fragment:
+      H +
+      `uniform float u_amount;
+uniform float u_threshold;
+uniform float u_zoom;
+uniform float u_detail;
+uniform float u_speed;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+vec3 palette(float t) {
+  return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67)));
+}
+void main() {
+  vec4 orig = texture(u_texture, v_uv);
+  float t = u_time * u_speed;
+  float mask = noise(v_uv * 4.0 + t * 0.3) * 0.5
+             + noise(v_uv * 8.0 - t * 0.2) * 0.3
+             + noise(v_uv * 16.0 + t * 0.1) * 0.2;
+  mask = smoothstep(u_threshold, u_threshold + 0.15, mask);
+  float scale = exp2(u_zoom);
+  vec2 pan = vec2(sin(t * 0.23) * 0.8, cos(t * 0.31) * 0.8);
+  vec2 z = (v_uv - 0.5) * 2.0 / scale + pan;
+  float region = noise(v_uv * 2.5 + t * 0.05);
+  vec2 c;
+  if (region < 0.33) {
+    c = vec2(-0.7269, 0.1889 + 0.04 * sin(t * 0.6));
+  } else if (region < 0.66) {
+    c = vec2(-0.4 + 0.03 * cos(t * 0.5), 0.6 + 0.03 * sin(t * 0.4));
+  } else {
+    c = vec2(0.285 + 0.02 * sin(t * 0.7), 0.01 + 0.02 * cos(t * 0.8));
+  }
+  float smoothIter = 0.0;
+  float escaped = 0.0;
+  for (int i = 0; i < 64; i++) {
+    if (float(i) >= u_detail) break;
+    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+    if (dot(z, z) > 256.0) {
+      smoothIter = float(i) - log2(log2(dot(z, z))) + 4.0;
+      escaped = 1.0;
+      break;
+    }
+  }
+  vec3 fColor = palette(smoothIter / u_detail + t * 0.05);
+  vec3 overlay = fColor * mask * u_amount * escaped;
+  outColor = vec4(1.0 - (1.0 - orig.rgb) * (1.0 - overlay), orig.a);
+}`,
+    animated: true,
+    setUniforms: (gl, l, v) => {
+      setFloat(gl, l, 'u_amount', v.amount as number);
+      setFloat(gl, l, 'u_threshold', v.threshold as number);
+      setFloat(gl, l, 'u_zoom', v.zoom as number);
+      setFloat(gl, l, 'u_detail', v.detail as number);
+      setFloat(gl, l, 'u_speed', v.speed as number);
     },
   },
 };
