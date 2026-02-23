@@ -1,0 +1,201 @@
+export interface RangeParam {
+  key: string;
+  label: string;
+  type: 'range';
+  min: number;
+  max: number;
+  step: number;
+  defaultValue: number;
+}
+
+export interface SelectParam {
+  key: string;
+  label: string;
+  type: 'select';
+  defaultValue: string;
+  options: { label: string; value: string }[];
+}
+
+export type EffectParam = RangeParam | SelectParam;
+
+export interface EffectDefinition {
+  id: string;
+  name: string;
+  params: EffectParam[];
+}
+
+export interface EffectInstance {
+  instanceId: string;
+  defId: string;
+  enabled: boolean;
+  locked: boolean;
+  expanded: boolean;
+  values: Record<string, number | string>;
+}
+
+export const EFFECT_DEFINITIONS: EffectDefinition[] = [
+  {
+    id: 'pixelate',
+    name: 'Pixelate',
+    params: [
+      { key: 'size', label: 'Size', type: 'range', min: 1, max: 100, step: 1, defaultValue: 10 },
+    ],
+  },
+  {
+    id: 'posterize',
+    name: 'Posterize',
+    params: [
+      { key: 'levels', label: 'Levels', type: 'range', min: 2, max: 32, step: 1, defaultValue: 8 },
+    ],
+  },
+  {
+    id: 'solarize',
+    name: 'Solarize',
+    params: [
+      { key: 'threshold', label: 'Threshold', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'edges',
+    name: 'Edges',
+    params: [
+      { key: 'strength', label: 'Strength', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'mix', label: 'Mix', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 1 },
+    ],
+  },
+  {
+    id: 'bleach',
+    name: 'Bleach',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'sharpen',
+    name: 'Sharpen',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'mirror',
+    name: 'Mirror',
+    params: [
+      {
+        key: 'direction',
+        label: 'Direction',
+        type: 'select',
+        defaultValue: 'horizontal',
+        options: [
+          { label: 'Horizontal', value: 'horizontal' },
+          { label: 'Vertical', value: 'vertical' },
+          { label: 'Both', value: 'both' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'rgb-shift',
+    name: 'RGB Shift',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 50, step: 1, defaultValue: 10 },
+      { key: 'angle', label: 'Angle', type: 'range', min: 0, max: 360, step: 1, defaultValue: 0 },
+    ],
+  },
+  {
+    id: 'brightness-contrast',
+    name: 'Brightness & Contrast',
+    params: [
+      { key: 'brightness', label: 'Brightness', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
+      { key: 'contrast', label: 'Contrast', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
+    ],
+  },
+  {
+    id: 'hue-saturation',
+    name: 'Hue & Saturation',
+    params: [
+      { key: 'hue', label: 'Hue', type: 'range', min: -180, max: 180, step: 1, defaultValue: 0 },
+      { key: 'saturation', label: 'Saturation', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0 },
+    ],
+  },
+  {
+    id: 'vignette',
+    name: 'Vignette',
+    params: [
+      { key: 'size', label: 'Size', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'scanlines',
+    name: 'Scanlines',
+    params: [
+      { key: 'count', label: 'Count', type: 'range', min: 1, max: 500, step: 1, defaultValue: 100 },
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'bulge',
+    name: 'Bulge',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: -1, max: 1, step: 0.01, defaultValue: 0.5 },
+      { key: 'radius', label: 'Radius', type: 'range', min: 0.01, max: 1, step: 0.01, defaultValue: 0.5 },
+    ],
+  },
+  {
+    id: 'jitter',
+    name: 'Jitter',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 100, step: 1, defaultValue: 20 },
+      { key: 'seed', label: 'Seed', type: 'range', min: 0, max: 1000, step: 1, defaultValue: 0 },
+    ],
+  },
+  {
+    id: 'wobble',
+    name: 'Wobble',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 100, step: 1, defaultValue: 20 },
+      { key: 'frequency', label: 'Frequency', type: 'range', min: 1, max: 20, step: 0.1, defaultValue: 5 },
+    ],
+  },
+  {
+    id: 'slices',
+    name: 'Slices',
+    params: [
+      { key: 'count', label: 'Count', type: 'range', min: 1, max: 50, step: 1, defaultValue: 10 },
+      { key: 'offset', label: 'Offset', type: 'range', min: 0, max: 100, step: 1, defaultValue: 20 },
+      {
+        key: 'direction',
+        label: 'Direction',
+        type: 'select',
+        defaultValue: 'horizontal',
+        options: [
+          { label: 'Horizontal', value: 'horizontal' },
+          { label: 'Vertical', value: 'vertical' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'shake',
+    name: 'Shake',
+    params: [
+      { key: 'amount', label: 'Amount', type: 'range', min: 0, max: 50, step: 1, defaultValue: 10 },
+    ],
+  },
+];
+
+export function createEffectInstance(def: EffectDefinition): EffectInstance {
+  return {
+    instanceId: crypto.randomUUID(),
+    defId: def.id,
+    enabled: false,
+    locked: false,
+    expanded: false,
+    values: Object.fromEntries(def.params.map((p) => [p.key, p.defaultValue])),
+  };
+}
+
+export function getDefinition(defId: string): EffectDefinition | undefined {
+  return EFFECT_DEFINITIONS.find((d) => d.id === defId);
+}

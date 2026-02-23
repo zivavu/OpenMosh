@@ -1,17 +1,12 @@
 <script lang="ts">
   import UploadScreen from './lib/UploadScreen.svelte';
+  import Editor from './lib/Editor.svelte';
 
   let file: File | null = $state(null);
-
-  function onFile(f: File) {
-    file = f;
-  }
 </script>
 
 {#if file}
-  <main class="editor">
-    <!-- Editor will go here -->
-  </main>
+  <Editor {file} onBack={() => (file = null)} />
 {:else}
-  <UploadScreen onfile={onFile} />
+  <UploadScreen onfile={(f) => (file = f)} />
 {/if}
