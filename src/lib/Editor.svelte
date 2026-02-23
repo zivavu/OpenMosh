@@ -16,21 +16,25 @@
 
   let format: 'png' | 'jpg' = $state('png');
   let imageSrc = $derived(URL.createObjectURL(file));
+  let canvasEl: HTMLCanvasElement | null = $state(null);
   let effects: EffectInstance[] = $state(
     EFFECT_DEFINITIONS.map(createEffectInstance),
   );
 
   function mosh() {
+    const enableChance = 0.25 + Math.random() * 0.25;
     for (const effect of effects) {
       if (effect.locked) continue;
       const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
       if (!def) continue;
-      effect.enabled = Math.random() > 0.5;
+      effect.enabled = Math.random() < enableChance;
+      if (!effect.enabled) continue;
       for (const param of def.params) {
         if (param.type === 'range') {
           const range = param.max - param.min;
+          const bias = 0.15 + Math.random() * 0.55;
           effect.values[param.key] =
-            Math.round((param.min + Math.random() * range) / param.step) * param.step;
+            Math.round((param.min + bias * range) / param.step) * param.step;
         } else if (param.type === 'select') {
           const options = param.options;
           effect.values[param.key] =
@@ -41,7 +45,18 @@
   }
 
   function save() {
-    // TODO: export processed canvas
+    if (!canvasEl) return;
+    const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    const ext = format === 'jpg' ? 'jpg' : 'png';
+    canvasEl.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `openmosh-${Date.now()}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, mimeType, format === 'jpg' ? 0.92 : undefined);
   }
 </script>
 
@@ -72,7 +87,7 @@
       </div>
     </div>
 
-    <GlCanvas {imageSrc} {effects} />
+    <GlCanvas {imageSrc} {effects} bind:canvasEl />
 
     <div class="action-bar">
       <button class="action-btn mosh-btn" onclick={mosh}>

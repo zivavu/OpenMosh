@@ -5,9 +5,10 @@
   interface Props {
     imageSrc: string;
     effects: EffectInstance[];
+    canvasEl?: HTMLCanvasElement | null;
   }
 
-  let { imageSrc, effects }: Props = $props();
+  let { imageSrc, effects, canvasEl = $bindable(null) }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement>(null!);
   let renderer: GlRenderer | null = $state(null);
@@ -17,12 +18,14 @@
   $effect(() => {
     try {
       renderer = new GlRenderer(canvas);
+      canvasEl = canvas;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to initialize WebGL2';
     }
     return () => {
       renderer?.destroy();
       renderer = null;
+      canvasEl = null;
     };
   });
 
