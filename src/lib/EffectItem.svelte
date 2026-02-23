@@ -123,30 +123,40 @@
 						<label class="param-label" for="{effect.instanceId}-{param.key}"
 							>{param.label}</label
 						>
-						{#if param.type === 'range'}
-							<input
-								id="{effect.instanceId}-{param.key}"
-								type="range"
-								min={param.min}
-								max={param.max}
-								step={param.step}
-								value={effect.values[param.key]}
-								oninput={(e) =>
-									onParamChange(param.key, parseFloat(e.currentTarget.value))}
-							/>
-							<span class="param-value">{effect.values[param.key]}</span>
-						{:else if param.type === 'select'}
-							<select
-								id="{effect.instanceId}-{param.key}"
-								value={effect.values[param.key]}
-								onchange={(e) =>
-									onParamChange(param.key, e.currentTarget.value)}
-							>
-								{#each param.options as opt}
-									<option value={opt.value}>{opt.label}</option>
-								{/each}
-							</select>
-						{/if}
+					{#if param.type === 'range'}
+						<input
+							id="{effect.instanceId}-{param.key}"
+							type="range"
+							min={param.min}
+							max={param.max}
+							step={param.step}
+							value={effect.values[param.key]}
+							oninput={(e) =>
+								onParamChange(param.key, parseFloat(e.currentTarget.value))}
+						/>
+						<span class="param-value">{effect.values[param.key]}</span>
+					{/if}
+					{#if param.type === 'checkbox'}
+						<input
+							id="{effect.instanceId}-{param.key}"
+							type="checkbox"
+							checked={effect.values[param.key] === 1}
+							onchange={(e) =>
+								onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
+						/>
+					{/if}
+					{#if param.type === 'select'}
+						<select
+							id="{effect.instanceId}-{param.key}"
+							value={effect.values[param.key]}
+							onchange={(e) =>
+								onParamChange(param.key, e.currentTarget.value)}
+						>
+							{#each param.options as opt}
+								<option value={opt.value}>{opt.label}</option>
+							{/each}
+						</select>
+					{/if}
 					</div>
 				{/each}
 			</div>
@@ -373,6 +383,39 @@
 
 	input[type='range']::-webkit-slider-thumb:hover {
 		background: #ddd;
+	}
+
+	input[type='checkbox'] {
+		appearance: none;
+		width: 14px;
+		height: 14px;
+		border: 1px solid #555;
+		border-radius: 2px;
+		background: #1a1a1a;
+		cursor: pointer;
+		position: relative;
+		flex-shrink: 0;
+	}
+
+	input[type='checkbox']:hover {
+		border-color: #777;
+	}
+
+	input[type='checkbox']:checked {
+		background: #555;
+		border-color: #888;
+	}
+
+	input[type='checkbox']:checked::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
 	}
 
 	select {

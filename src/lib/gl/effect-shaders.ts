@@ -691,51 +691,56 @@ void main() {
     },
   },
 
-  static: {
-    fragment:
-      H +
-      `uniform float u_amount;
-uniform float u_size;
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-void main() {
-  vec4 c = texture(u_texture, v_uv);
-  vec2 texSize = vec2(textureSize(u_texture, 0));
-  vec2 cell = floor(v_uv * texSize / u_size);
-  float t = floor(u_time * 30.0);
-  float n = hash(cell + t);
-  outColor = vec4(mix(c.rgb, vec3(n), u_amount), c.a);
-}`,
-    animated: true,
-    setUniforms: (gl, l, v) => {
-      setFloat(gl, l, 'u_amount', v.amount as number);
-      setFloat(gl, l, 'u_size', v.size as number);
-    },
-  },
 
   grain: {
     fragment:
       H +
       `uniform float u_amount;
-uniform float u_size;
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+uniform float u_rgb;
+uniform int u_blendMode;
+uint ihash(uint x) {
+  x ^= x >> 16u;
+  x *= 0x45d9f3bu;
+  x ^= x >> 16u;
+  x *= 0x45d9f3bu;
+  x ^= x >> 16u;
+  return x;
+}
+float noise(uvec3 v) {
+  return float(ihash(v.x ^ ihash(v.y ^ ihash(v.z)))) / float(0xffffffffu);
+}
+vec3 blendSoftLight(vec3 base, vec3 blend) {
+  return mix(
+    2.0 * base * blend + base * base * (1.0 - 2.0 * blend),
+    2.0 * base * (1.0 - blend) + sqrt(base) * (2.0 * blend - 1.0),
+    step(0.5, blend)
+  );
 }
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  vec2 texSize = vec2(textureSize(u_texture, 0));
-  vec2 cell = floor(v_uv * texSize / u_size);
-  float t = floor(u_time * 24.0);
-  float n1 = hash(cell + t);
-  float n2 = hash(cell + t + 1.0);
-  float grain = mix(n1, n2, fract(v_uv.x * texSize.x / u_size)) - 0.5;
-  outColor = vec4(c.rgb + grain * u_amount * 0.5, c.a);
+  ivec2 px = ivec2(gl_FragCoord.xy);
+  uint frame = uint(floor(u_time * 24.0));
+  float n = noise(uvec3(uint(px.x), uint(px.y), frame));
+  vec3 grain = u_rgb > 0.5
+    ? vec3(n, noise(uvec3(uint(px.x), uint(px.y), frame + 1000u)),
+               noise(uvec3(uint(px.x), uint(px.y), frame + 2000u)))
+    : vec3(n);
+  vec3 result;
+  if (u_blendMode == 0) {
+    result = mix(c.rgb, blendSoftLight(c.rgb, grain), u_amount);
+  } else if (u_blendMode == 1) {
+    result = c.rgb + (grain - 0.5) * u_amount;
+  } else {
+    result = c.rgb * mix(vec3(1.0), grain, u_amount);
+  }
+  outColor = vec4(clamp(result, 0.0, 1.0), c.a);
 }`,
     animated: true,
     setUniforms: (gl, l, v) => {
       setFloat(gl, l, 'u_amount', v.amount as number);
-      setFloat(gl, l, 'u_size', v.size as number);
+      setFloat(gl, l, 'u_rgb', v.rgb as number);
+      const mode = v.blendMode === 'additive' ? 1 : v.blendMode === 'multiply' ? 2 : 0;
+      setInt(gl, l, 'u_blendMode', mode);
     },
   },
 

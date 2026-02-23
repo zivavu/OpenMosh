@@ -7,9 +7,10 @@
     imageSrc: string;
     effects: EffectInstance[];
     canvasEl?: HTMLCanvasElement | null;
+    glRenderer?: GlRenderer | null;
   }
 
-  let { imageSrc, effects, canvasEl = $bindable(null) }: Props = $props();
+  let { imageSrc, effects, canvasEl = $bindable(null), glRenderer = $bindable(null) }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement>(null!);
   let renderer: GlRenderer | null = $state(null);
@@ -22,8 +23,10 @@
 
   $effect(() => {
     try {
-      renderer = new GlRenderer(canvas);
+      const r = new GlRenderer(canvas);
+      renderer = r;
       canvasEl = canvas;
+      glRenderer = r;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to initialize WebGL2';
     }
@@ -31,6 +34,7 @@
       renderer?.destroy();
       renderer = null;
       canvasEl = null;
+      glRenderer = null;
     };
   });
 
