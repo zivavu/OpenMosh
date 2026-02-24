@@ -33,6 +33,23 @@ export interface EffectDefinition {
 	params: EffectParam[];
 }
 
+/** When set, this range param is driven by music volume in [min, max]. */
+export interface VolumeLink {
+	min: number;
+	max: number;
+	/** Optional frequency range in Hz; when set, level is from this band only. */
+	freqMin?: number;
+	freqMax?: number;
+}
+
+/** Frequency presets (Hz) for volume links. */
+export const FREQ_PRESETS = {
+	full: null as { min: number; max: number } | null,
+	low: { min: 20, max: 250 },
+	mid: { min: 250, max: 4000 },
+	high: { min: 4000, max: 20000 },
+} as const;
+
 export interface EffectInstance {
 	instanceId: string;
 	defId: string;
@@ -40,6 +57,8 @@ export interface EffectInstance {
 	locked: boolean;
 	expanded: boolean;
 	values: Record<string, number | string>;
+	/** For range params: key = param key, value = range (min/max) volume maps to. */
+	volumeLinks?: Record<string, VolumeLink>;
 }
 
 export const EFFECT_DEFINITIONS: EffectDefinition[] = [
@@ -1000,6 +1019,7 @@ export interface Preset {
 		defId: string;
 		enabled: boolean;
 		values: Record<string, number | string>;
+		volumeLinks?: Record<string, VolumeLink>;
 	}[];
 }
 
@@ -1020,6 +1040,7 @@ export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
 			defId: e.defId,
 			enabled: e.enabled,
 			values: { ...e.values },
+			...(e.volumeLinks && Object.keys(e.volumeLinks).length > 0 && { volumeLinks: { ...e.volumeLinks } }),
 		})),
 	});
 	localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
@@ -1041,5 +1062,6 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 		locked: false,
 		expanded: false,
 		values: { ...pe.values },
+		...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
 	}));
 }

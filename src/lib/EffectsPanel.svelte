@@ -10,13 +10,16 @@
 		deletePreset,
 		applyPreset,
 		type Preset,
+		type VolumeLink,
 	} from './effects';
 
 	interface Props {
 		effects: EffectInstance[];
+		hasTrack?: boolean;
+		onVolumeLinkChange?: (index: number, paramKey: string, link: VolumeLink | null) => void;
 	}
 
-	let { effects = $bindable() }: Props = $props();
+	let { effects = $bindable(), hasTrack = false, onVolumeLinkChange }: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
 	let showPresets = $state(false);
@@ -214,6 +217,8 @@
 		{#each effects as effect, i (effect.instanceId)}
 			<EffectItem
 				{effect}
+				hasTrack={hasTrack}
+				onVolumeLinkChange={onVolumeLinkChange ? (key, link) => onVolumeLinkChange(i, key, link) : undefined}
 				onToggle={() => toggle(i)}
 				onToggleExpand={() => toggleExpand(i)}
 				onRemove={() => remove(i)}

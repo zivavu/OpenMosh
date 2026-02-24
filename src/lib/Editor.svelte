@@ -4,6 +4,7 @@
 	import {
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
+		getDefinition,
 		type EffectInstance,
 	} from './effects';
 	import { recordVideo, downloadBlob, type RecordFormat } from './recorder';
@@ -53,6 +54,7 @@
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (file && file.type.startsWith('audio/')) {
+			disposeAudioGraph();
 			trackFile = file;
 		}
 		input.value = '';
@@ -63,6 +65,7 @@
 	}
 
 	function clearTrack() {
+		disposeAudioGraph();
 		trackFile = null;
 	}
 
@@ -74,6 +77,11 @@
 	let audioPlaying = $state(false);
 	let draggingHandle = $state<'start' | 'end' | null>(null);
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+
+	let volumeLevel = $state(0);
+	let audioContext = $state<AudioContext | null>(null);
+	let analyserNode = $state<AnalyserNode | null>(null);
+	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {
 		const d = audioEl?.duration;
@@ -97,6 +105,8 @@
 
 	function playSpan() {
 		if (!trackFile || !trackObjectUrl || !audioEl) return;
+		ensureAudioGraph();
+		if (audioContext?.state === 'suspended') audioContext.resume();
 		const t = audioEl.currentTime;
 		if (t < spanStart || t >= spanEnd) {
 			audioEl.currentTime = spanStart;
@@ -166,6 +176,86 @@
 		const m = Math.floor(sec / 60);
 		const s = Math.floor(sec % 60);
 		return `${m}:${s.toString().padStart(2, '0')}`;
+	}
+
+	function ensureAudioGraph() {
+		if (!audioEl || audioContext) return;
+		const ctx = new AudioContext();
+		const source = ctx.createMediaElementSource(audioEl);
+		const analyser = ctx.createAnalyser();
+		analyser.fftSize = 256;
+		source.connect(analyser);
+		analyser.connect(ctx.destination);
+		audioContext = ctx;
+		mediaSource = source;
+		analyserNode = analyser;
+	}
+
+	function disposeAudioGraph() {
+		mediaSource = null;
+		analyserNode = null;
+		if (audioContext) {
+			audioContext.close();
+			audioContext = null;
+		}
+		volumeLevel = 0;
+	}
+
+	$effect(() => {
+		const analyser = analyserNode;
+		if (!analyser) return;
+		const data = new Uint8Array(analyser.fftSize);
+		let rafId: number;
+		function tick() {
+			if (!analyser) return;
+			analyser.getByteTimeDomainData(data);
+			let sum = 0;
+			for (let i = 0; i < data.length; i++) {
+				const n = (data[i] - 128) / 128;
+				sum += n * n;
+			}
+			const rms = Math.min(1, Math.sqrt(sum / data.length));
+			volumeLevel = rms;
+			rafId = requestAnimationFrame(tick);
+		}
+		rafId = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(rafId);
+	});
+
+	$effect(() => {
+		const vol = volumeLevel;
+		const effs = effects;
+		const defs = EFFECT_DEFINITIONS;
+		for (const effect of effs) {
+			const links = effect.volumeLinks;
+			if (!links) continue;
+			const def = getDefinition(effect.defId);
+			if (!def) continue;
+			for (const param of def.params) {
+				if (param.type !== 'range') continue;
+				const link = links[param.key];
+				if (!link) continue;
+				const { min: pMin, max: pMax, step } = param;
+				let value = link.min + vol * (link.max - link.min);
+				value = Math.max(pMin, Math.min(pMax, value));
+				if (step > 0) {
+					value = Math.round((value - pMin) / step) * step + pMin;
+					value = Math.max(pMin, Math.min(pMax, value));
+				}
+				effect.values[param.key] = value;
+			}
+		}
+	});
+
+	function setVolumeLink(index: number, paramKey: string, link: { min: number; max: number } | null) {
+		const e = effects[index];
+		const nextLinks = e.volumeLinks ? { ...e.volumeLinks } : {};
+		if (link === null) {
+			delete nextLinks[paramKey];
+		} else {
+			nextLinks[paramKey] = link;
+		}
+		effects = effects.map((eff, i) => (i === index ? { ...eff, volumeLinks: nextLinks } : eff));
 	}
 
 	let history: EffectInstance[][] = $state([
@@ -516,66 +606,6 @@
 				{/if}
 			</div>
 		</div>
-
-		{#if trackFile && trackDuration > 0}
-			<div class="timeline-bar">
-				<button
-					class="timeline-play-btn"
-					onclick={audioPlaying ? pauseTrack : playSpan}
-					title={audioPlaying ? 'Pause' : 'Play span'}
-				>
-					{#if audioPlaying}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-							<rect x="6" y="4" width="4" height="16" />
-							<rect x="14" y="4" width="4" height="16" />
-						</svg>
-					{:else}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-							<polygon points="5 3 19 12 5 21 5 3" />
-						</svg>
-					{/if}
-				</button>
-				<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
-				<div
-					class="timeline-track-wrap"
-					bind:this={timelineTrackEl}
-					role="slider"
-					aria-label="Timeline"
-					aria-valuenow={trackCurrentTime}
-					aria-valuemin={0}
-					aria-valuemax={trackDuration}
-					tabindex="0"
-					onpointerdown={(e) => onTimelinePointerDown(e, null)}
-				>
-					<div class="timeline-track">
-						<div
-							class="timeline-span"
-							style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
-						></div>
-						<div
-							class="timeline-playhead"
-							style="left: {(trackCurrentTime / trackDuration) * 100}%"
-							aria-hidden="true"
-						></div>
-						<button
-							type="button"
-							class="timeline-handle timeline-handle-start"
-							style="left: {(spanStart / trackDuration) * 100}%"
-							title="Span start"
-							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'start'); }}
-						></button>
-						<button
-							type="button"
-							class="timeline-handle timeline-handle-end"
-							style="left: {(spanEnd / trackDuration) * 100}%"
-							title="Span end"
-							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'end'); }}
-						></button>
-					</div>
-				</div>
-				<span class="timeline-time">{formatTime(spanEnd)}</span>
-			</div>
-		{/if}
 		</div>
 
 		<GlCanvas {imageSrc} {effects} bind:canvasEl bind:glRenderer />
@@ -784,9 +814,73 @@
 				{/if}
 			</div>
 		</div>
+
+		{#if trackFile && trackDuration > 0}
+			<div class="timeline-bar">
+				<button
+					class="timeline-play-btn"
+					onclick={audioPlaying ? pauseTrack : playSpan}
+					title={audioPlaying ? 'Pause' : 'Play span'}
+				>
+					{#if audioPlaying}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+							<rect x="6" y="4" width="4" height="16" />
+							<rect x="14" y="4" width="4" height="16" />
+						</svg>
+					{:else}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+							<polygon points="5 3 19 12 5 21 5 3" />
+						</svg>
+					{/if}
+				</button>
+				<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
+				<div
+					class="timeline-track-wrap"
+					bind:this={timelineTrackEl}
+					role="slider"
+					aria-label="Timeline"
+					aria-valuenow={trackCurrentTime}
+					aria-valuemin={0}
+					aria-valuemax={trackDuration}
+					tabindex="0"
+					onpointerdown={(e) => onTimelinePointerDown(e, null)}
+				>
+					<div class="timeline-track">
+						<div
+							class="timeline-span"
+							style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
+						></div>
+						<div
+							class="timeline-playhead"
+							style="left: {(trackCurrentTime / trackDuration) * 100}%"
+							aria-hidden="true"
+						></div>
+						<button
+							type="button"
+							class="timeline-handle timeline-handle-start"
+							style="left: {(spanStart / trackDuration) * 100}%"
+							title="Span start"
+							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'start'); }}
+						></button>
+						<button
+							type="button"
+							class="timeline-handle timeline-handle-end"
+							style="left: {(spanEnd / trackDuration) * 100}%"
+							title="Span end"
+							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'end'); }}
+						></button>
+					</div>
+				</div>
+				<span class="timeline-time">{formatTime(spanEnd)}</span>
+			</div>
+		{/if}
 	</div>
 
-	<EffectsPanel bind:effects />
+	<EffectsPanel
+		bind:effects
+		hasTrack={!!trackFile}
+		onVolumeLinkChange={setVolumeLink}
+	/>
 
 	{#if recording}
 		<div class="record-overlay">
@@ -965,12 +1059,13 @@
 
 	/* Timeline */
 	.timeline-bar {
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
 		background: rgba(18, 18, 18, 0.9);
-		border-bottom: 1px solid #2a2a2a;
+		border-top: 1px solid #2a2a2a;
 	}
 
 	.timeline-play-btn {
