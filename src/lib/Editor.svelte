@@ -3,12 +3,14 @@
 	import GlCanvas from './GlCanvas.svelte';
 	import {
 		EFFECT_DEFINITIONS,
+		FREQ_PRESETS,
 		createEffectInstance,
 		getDefinition,
 		type EffectInstance,
+		type VolumeLink,
 	} from './effects';
-	import { recordVideo, downloadBlob, type RecordFormat } from './recorder';
 	import type { GlRenderer } from './gl/renderer';
+	import { downloadBlob, recordVideo, type RecordFormat } from './recorder';
 
 	interface Props {
 		file: File;
@@ -31,6 +33,7 @@
 	let moshMax = $state(8);
 	let randomizeOrder = $state(true);
 	let showMoshSettings = $state(false);
+	let moshAudioLink = $state(false);
 
 	let trackFile = $state<File | null>(null);
 	let trackObjectUrl = $state<string | null>(null);
@@ -79,6 +82,9 @@
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
 	let volumeLevel = $state(0);
+	let frequencyData = $state<Uint8Array | null>(null);
+	let audioSampleRate = $state(0);
+	let audioFrequencyBinCount = $state(0);
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
@@ -121,7 +127,7 @@
 		audioPlaying = false;
 	}
 
-	function seekTo( t: number ) {
+	function seekTo(t: number) {
 		if (!audioEl) return;
 		const tClamp = Math.max(0, Math.min(trackDuration, t));
 		audioEl.currentTime = tClamp;
@@ -131,13 +137,19 @@
 	function timeFromEvent(e: { clientX: number } | TouchEvent): number {
 		if (!timelineTrackEl) return 0;
 		const rect = timelineTrackEl.getBoundingClientRect();
-		const clientX = 'touches' in e ? e.touches[0]?.clientX : (e as { clientX: number }).clientX;
+		const clientX =
+			'touches' in e
+				? e.touches[0]?.clientX
+				: (e as { clientX: number }).clientX;
 		const x = typeof clientX === 'number' ? clientX - rect.left : 0;
 		const pct = Math.max(0, Math.min(1, x / rect.width));
 		return pct * trackDuration;
 	}
 
-	function onTimelinePointerDown(e: PointerEvent, handle: 'start' | 'end' | null) {
+	function onTimelinePointerDown(
+		e: PointerEvent,
+		handle: 'start' | 'end' | null,
+	) {
 		e.preventDefault();
 		if (handle === 'start' || handle === 'end') {
 			draggingHandle = handle;
@@ -162,7 +174,9 @@
 				spanEnd = Math.max(spanStart + 0.1, Math.min(trackDuration, t));
 			}
 		};
-		const up = () => { draggingHandle = null; };
+		const up = () => {
+			draggingHandle = null;
+		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
 		return () => {
@@ -183,17 +197,23 @@
 		const ctx = new AudioContext();
 		const source = ctx.createMediaElementSource(audioEl);
 		const analyser = ctx.createAnalyser();
-		analyser.fftSize = 256;
+		analyser.fftSize = 2048;
 		source.connect(analyser);
 		analyser.connect(ctx.destination);
 		audioContext = ctx;
 		mediaSource = source;
 		analyserNode = analyser;
+		frequencyData = new Uint8Array(analyser.frequencyBinCount);
+		audioSampleRate = ctx.sampleRate;
+		audioFrequencyBinCount = analyser.frequencyBinCount;
 	}
 
 	function disposeAudioGraph() {
 		mediaSource = null;
 		analyserNode = null;
+		frequencyData = null;
+		audioSampleRate = 0;
+		audioFrequencyBinCount = 0;
 		if (audioContext) {
 			audioContext.close();
 			audioContext = null;
@@ -201,53 +221,171 @@
 		volumeLevel = 0;
 	}
 
+	function getLevelFromFrequencyRange(
+		freqData: Uint8Array,
+		sampleRate: number,
+		fftSize: number,
+		freqMin: number,
+		freqMax: number,
+	): number {
+		const binCount = freqData.length;
+		const minBin = Math.max(0, Math.floor((freqMin / sampleRate) * fftSize));
+		const maxBin = Math.min(
+			binCount - 1,
+			Math.ceil((freqMax / sampleRate) * fftSize),
+		);
+		if (minBin > maxBin) return 0;
+		let sum = 0;
+		for (let i = minBin; i <= maxBin; i++) sum += freqData[i];
+		const count = maxBin - minBin + 1;
+		return Math.min(1, sum / count / 255);
+	}
+
+	function applyRandomAudioLinks() {
+		if (!trackFile || !audioContext) {
+			for (const effect of effects) {
+				if (effect.volumeLinks) delete effect.volumeLinks;
+			}
+			return;
+		}
+
+		const nyquist = audioSampleRate > 0 ? audioSampleRate / 2 : 22050;
+
+		for (const effect of effects) {
+			const def = getDefinition(effect.defId);
+			if (!def) continue;
+
+			if (!effect.enabled) {
+				if (effect.volumeLinks) delete effect.volumeLinks;
+				continue;
+			}
+
+			const links: Record<string, VolumeLink> = {};
+
+			for (const param of def.params) {
+				if (param.type !== 'range') continue;
+
+				if (Math.random() > 0.8) continue;
+
+				const pMin = param.min;
+				const pMax = param.max;
+				const span = pMax - pMin;
+				const t1 = Math.random();
+				const t2 = Math.random();
+				let vMin = pMin + Math.min(t1, t2) * span;
+				let vMax = pMin + Math.max(t1, t2) * span;
+
+				if (param.step > 0) {
+					const snap = (v: number) =>
+						Math.round((v - pMin) / param.step) * param.step + pMin;
+					vMin = snap(vMin);
+					vMax = snap(vMax);
+					if (vMax <= vMin) vMax = Math.min(pMax, vMin + param.step);
+				}
+
+				let freqMin: number | undefined;
+				let freqMax: number | undefined;
+
+				const mode = Math.random();
+				if (mode < 0.2 || !frequencyData || audioSampleRate <= 0) {
+					// Full spectrum
+				} else if (mode < 0.4) {
+					freqMin = FREQ_PRESETS.low.min;
+					freqMax = FREQ_PRESETS.low.max;
+				} else if (mode < 0.7) {
+					freqMin = FREQ_PRESETS.mid.min;
+					freqMax = FREQ_PRESETS.mid.max;
+				} else if (mode < 0.9) {
+					freqMin = FREQ_PRESETS.high.min;
+					freqMax = FREQ_PRESETS.high.max;
+				} else {
+					// Custom random band
+					const f1 = 20 + Math.random() * (nyquist - 20);
+					const f2 = 20 + Math.random() * (nyquist - 20);
+					freqMin = Math.min(f1, f2);
+					freqMax = Math.max(f1, f2);
+				}
+
+				const link: VolumeLink = { min: vMin, max: vMax };
+				if (freqMin != null && freqMax != null) {
+					link.freqMin = freqMin;
+					link.freqMax = freqMax;
+				}
+
+				links[param.key] = link;
+			}
+
+			if (Object.keys(links).length > 0) {
+				effect.volumeLinks = links;
+			} else if (effect.volumeLinks) {
+				delete effect.volumeLinks;
+			}
+		}
+	}
+
 	$effect(() => {
 		const analyser = analyserNode;
 		if (!analyser) return;
-		const data = new Uint8Array(analyser.fftSize);
+		const timeData = new Uint8Array(analyser.fftSize);
+		const freqDataRef = frequencyData;
+		const sampleRate = audioSampleRate;
+		const binCount = audioFrequencyBinCount;
+		const fftSize = analyser.fftSize;
 		let rafId: number;
 		function tick() {
 			if (!analyser) return;
-			analyser.getByteTimeDomainData(data);
+			analyser.getByteTimeDomainData(timeData);
 			let sum = 0;
-			for (let i = 0; i < data.length; i++) {
-				const n = (data[i] - 128) / 128;
+			for (let i = 0; i < timeData.length; i++) {
+				const n = (timeData[i] - 128) / 128;
 				sum += n * n;
 			}
-			const rms = Math.min(1, Math.sqrt(sum / data.length));
-			volumeLevel = rms;
+			volumeLevel = Math.min(1, Math.sqrt(sum / timeData.length));
+			if (freqDataRef)
+				analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
+			for (const effect of effects) {
+				const links = effect.volumeLinks;
+				if (!links) continue;
+				const def = getDefinition(effect.defId);
+				if (!def) continue;
+				for (const param of def.params) {
+					if (param.type !== 'range') continue;
+					const link = links[param.key];
+					if (!link) continue;
+					const level =
+						link.freqMin != null &&
+						link.freqMax != null &&
+						freqDataRef &&
+						sampleRate > 0
+							? getLevelFromFrequencyRange(
+									freqDataRef,
+									sampleRate,
+									fftSize,
+									link.freqMin,
+									link.freqMax,
+								)
+							: volumeLevel;
+					const { min: pMin, max: pMax, step } = param;
+					let value = link.min + level * (link.max - link.min);
+					value = Math.max(pMin, Math.min(pMax, value));
+					if (step > 0) {
+						value = Math.round((value - pMin) / step) * step + pMin;
+						value = Math.max(pMin, Math.min(pMax, value));
+					}
+					effect.values[param.key] = value;
+				}
+			}
 			rafId = requestAnimationFrame(tick);
 		}
 		rafId = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(rafId);
 	});
 
-	$effect(() => {
-		const vol = volumeLevel;
-		const effs = effects;
-		const defs = EFFECT_DEFINITIONS;
-		for (const effect of effs) {
-			const links = effect.volumeLinks;
-			if (!links) continue;
-			const def = getDefinition(effect.defId);
-			if (!def) continue;
-			for (const param of def.params) {
-				if (param.type !== 'range') continue;
-				const link = links[param.key];
-				if (!link) continue;
-				const { min: pMin, max: pMax, step } = param;
-				let value = link.min + vol * (link.max - link.min);
-				value = Math.max(pMin, Math.min(pMax, value));
-				if (step > 0) {
-					value = Math.round((value - pMin) / step) * step + pMin;
-					value = Math.max(pMin, Math.min(pMax, value));
-				}
-				effect.values[param.key] = value;
-			}
-		}
-	});
-
-	function setVolumeLink(index: number, paramKey: string, link: { min: number; max: number } | null) {
+	function setVolumeLink(
+		index: number,
+		paramKey: string,
+		link: VolumeLink | null,
+	) {
 		const e = effects[index];
 		const nextLinks = e.volumeLinks ? { ...e.volumeLinks } : {};
 		if (link === null) {
@@ -255,7 +393,9 @@
 		} else {
 			nextLinks[paramKey] = link;
 		}
-		effects = effects.map((eff, i) => (i === index ? { ...eff, volumeLinks: nextLinks } : eff));
+		effects = effects.map((eff, i) =>
+			i === index ? { ...eff, volumeLinks: nextLinks } : eff,
+		);
 	}
 
 	let history: EffectInstance[][] = $state([
@@ -329,6 +469,14 @@
 			const snapshot = effects.map((e) => $state.snapshot(e));
 			for (let k = 0; k < moshableIndices.length; k++) {
 				effects[moshableIndices[k]] = snapshot[shuffled[k]];
+			}
+		}
+
+		if (moshAudioLink) {
+			applyRandomAudioLinks();
+		} else {
+			for (const effect of effects) {
+				if (effect.volumeLinks) delete effect.volumeLinks;
 			}
 		}
 
@@ -447,7 +595,11 @@
 	let recordGroupEl: HTMLDivElement;
 
 	function handleRecordClickOutside(e: MouseEvent) {
-		if (showRecordSettings && recordGroupEl && !recordGroupEl.contains(e.target as Node)) {
+		if (
+			showRecordSettings &&
+			recordGroupEl &&
+			!recordGroupEl.contains(e.target as Node)
+		) {
 			showRecordSettings = false;
 		}
 	}
@@ -468,7 +620,9 @@
 				canvas: canvasEl,
 				renderer: glRenderer,
 				effects: $state.snapshot(effects) as EffectInstance[],
-				onProgress: (p) => { recordProgress = p; },
+				onProgress: (p) => {
+					recordProgress = p;
+				},
 				signal: abort.signal,
 			});
 			downloadBlob(blob, recordFormat);
@@ -477,7 +631,11 @@
 				// cancelled
 			} else {
 				console.error('Recording failed:', e);
-				alert(e instanceof Error ? e.message : 'Recording failed. Check the browser console for details.');
+				alert(
+					e instanceof Error
+						? e.message
+						: 'Recording failed. Check the browser console for details.',
+				);
 			}
 		} finally {
 			recording = false;
@@ -493,7 +651,13 @@
 	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} onpointerdown={(e) => { handleClickOutside(e); handleRecordClickOutside(e); }} />
+<svelte:window
+	onkeydown={handleKeydown}
+	onpointerdown={(e) => {
+		handleClickOutside(e);
+		handleRecordClickOutside(e);
+	}}
+/>
 
 {#if trackObjectUrl}
 	<audio
@@ -537,75 +701,103 @@
 >
 	<div class="main-area">
 		<div class="top-bar">
-		<div class="toolbar">
-			<button class="back-btn" onclick={onBack} title="Load different file">
-				<svg
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<line x1="19" y1="12" x2="5" y2="12" />
-					<polyline points="12 19 5 12 12 5" />
-				</svg>
-			</button>
-			<div class="format-group">
-				<button
-					class="format-btn"
-					class:active={format === 'png'}
-					onclick={() => (format = 'png')}
-				>
-					PNG
-				</button>
-				<button
-					class="format-btn"
-					class:active={format === 'jpg'}
-					onclick={() => (format = 'jpg')}
-				>
-					JPG
-				</button>
-			</div>
-			<div class="track-group">
-				<input
-					bind:this={trackInput}
-					type="file"
-					accept="audio/*"
-					onchange={onTrackInputChange}
-					hidden
-				/>
-				{#if trackFile}
-					<span class="track-name" title={trackFile.name}>
-						{trackFile.name.length > 20 ? trackFile.name.slice(0, 17) + '…' : trackFile.name}
-					</span>
-					<button
-						class="track-clear-btn"
-						onclick={clearTrack}
-						title="Clear track"
+			<div class="toolbar">
+				<button class="back-btn" onclick={onBack} title="Load different file">
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
 					>
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<line x1="18" y1="6" x2="6" y2="18" />
-							<line x1="6" y1="6" x2="18" y2="18" />
-						</svg>
+						<line x1="19" y1="12" x2="5" y2="12" />
+						<polyline points="12 19 5 12 12 5" />
+					</svg>
+				</button>
+				<div class="format-group">
+					<button
+						class="format-btn"
+						class:active={format === 'png'}
+						onclick={() => (format = 'png')}
+					>
+						PNG
 					</button>
-					<button class="track-load-btn" onclick={openTrackPicker} title="Replace track">
-						Replace
+					<button
+						class="format-btn"
+						class:active={format === 'jpg'}
+						onclick={() => (format = 'jpg')}
+					>
+						JPG
 					</button>
-				{:else}
-					<button class="track-load-btn" onclick={openTrackPicker} title="Load track">
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-							<polyline points="17 8 12 3 7 8" />
-							<line x1="12" y1="3" x2="12" y2="15" />
-						</svg>
-						Load track
-					</button>
-				{/if}
+				</div>
+				<div class="track-group">
+					<input
+						bind:this={trackInput}
+						type="file"
+						accept="audio/*"
+						onchange={onTrackInputChange}
+						hidden
+					/>
+					{#if trackFile}
+						<span class="track-name" title={trackFile.name}>
+							{trackFile.name.length > 20
+								? trackFile.name.slice(0, 17) + '…'
+								: trackFile.name}
+						</span>
+						<button
+							class="track-clear-btn"
+							onclick={clearTrack}
+							title="Clear track"
+						>
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<line x1="18" y1="6" x2="6" y2="18" />
+								<line x1="6" y1="6" x2="18" y2="18" />
+							</svg>
+						</button>
+						<button
+							class="track-load-btn"
+							onclick={openTrackPicker}
+							title="Replace track"
+						>
+							Replace
+						</button>
+					{:else}
+						<button
+							class="track-load-btn"
+							onclick={openTrackPicker}
+							title="Load track"
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+								<polyline points="17 8 12 3 7 8" />
+								<line x1="12" y1="3" x2="12" y2="15" />
+							</svg>
+							Load track
+						</button>
+					{/if}
+				</div>
 			</div>
-		</div>
 		</div>
 
 		<GlCanvas {imageSrc} {effects} bind:canvasEl bind:glRenderer />
@@ -729,6 +921,15 @@
 								bind:checked={randomizeOrder}
 							/>
 						</div>
+						<div class="mosh-setting-row">
+							<label for="mosh-audio-link">Random audio links</label>
+							<input
+								id="mosh-audio-link"
+								type="checkbox"
+								bind:checked={moshAudioLink}
+								disabled={!trackFile}
+							/>
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -848,7 +1049,8 @@
 					<div class="timeline-track">
 						<div
 							class="timeline-span"
-							style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
+							style="left: {(spanStart / trackDuration) *
+								100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
 						></div>
 						<div
 							class="timeline-playhead"
@@ -860,14 +1062,20 @@
 							class="timeline-handle timeline-handle-start"
 							style="left: {(spanStart / trackDuration) * 100}%"
 							title="Span start"
-							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'start'); }}
+							onpointerdown={(e) => {
+								e.stopPropagation();
+								onTimelinePointerDown(e, 'start');
+							}}
 						></button>
 						<button
 							type="button"
 							class="timeline-handle timeline-handle-end"
 							style="left: {(spanEnd / trackDuration) * 100}%"
 							title="Span end"
-							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'end'); }}
+							onpointerdown={(e) => {
+								e.stopPropagation();
+								onTimelinePointerDown(e, 'end');
+							}}
 						></button>
 					</div>
 				</div>
@@ -879,6 +1087,13 @@
 	<EffectsPanel
 		bind:effects
 		hasTrack={!!trackFile}
+		spectrumData={frequencyData && audioSampleRate > 0
+			? {
+					data: frequencyData as Uint8Array<ArrayBuffer>,
+					sampleRate: audioSampleRate,
+					binCount: audioFrequencyBinCount,
+				}
+			: null}
 		onVolumeLinkChange={setVolumeLink}
 	/>
 
@@ -887,7 +1102,10 @@
 			<div class="record-modal">
 				<p class="record-title">Recording {recordFormat.toUpperCase()}...</p>
 				<div class="progress-track">
-					<div class="progress-fill" style="width: {Math.round(recordProgress * 100)}%"></div>
+					<div
+						class="progress-fill"
+						style="width: {Math.round(recordProgress * 100)}%"
+					></div>
 				</div>
 				<p class="record-pct">{Math.round(recordProgress * 100)}%</p>
 				<button class="rec-cancel-btn" onclick={cancelRecording}>Cancel</button>
@@ -1028,7 +1246,9 @@
 		border-radius: 0;
 		color: #777;
 		cursor: pointer;
-		transition: color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			background 0.15s;
 		flex-shrink: 0;
 	}
 
@@ -1048,7 +1268,9 @@
 		background: none;
 		color: #666;
 		cursor: pointer;
-		transition: color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			background 0.15s;
 		flex-shrink: 0;
 	}
 
@@ -1079,7 +1301,10 @@
 		background: rgba(30, 30, 30, 0.9);
 		color: #aaa;
 		cursor: pointer;
-		transition: color 0.15s, border-color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			border-color 0.15s,
+			background 0.15s;
 		flex-shrink: 0;
 	}
 
@@ -1145,7 +1370,9 @@
 		border-radius: 3px;
 		background: #444;
 		cursor: ew-resize;
-		transition: background 0.15s, border-color 0.15s;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
 	}
 
 	.timeline-handle:hover {
@@ -1393,7 +1620,9 @@
 		font-family: inherit;
 		letter-spacing: 0.04em;
 		cursor: pointer;
-		transition: background 0.15s, color 0.15s;
+		transition:
+			background 0.15s,
+			color 0.15s;
 	}
 
 	.rec-start-btn:hover {
@@ -1461,7 +1690,9 @@
 		font-size: 0.7rem;
 		font-family: inherit;
 		cursor: pointer;
-		transition: color 0.15s, border-color 0.15s;
+		transition:
+			color 0.15s,
+			border-color 0.15s;
 	}
 
 	.rec-cancel-btn:hover {

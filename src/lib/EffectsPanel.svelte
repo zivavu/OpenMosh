@@ -13,13 +13,20 @@
 		type VolumeLink,
 	} from './effects';
 
+	export type SpectrumData = {
+		data: Uint8Array;
+		sampleRate: number;
+		binCount: number;
+	};
+
 	interface Props {
 		effects: EffectInstance[];
 		hasTrack?: boolean;
+		spectrumData?: SpectrumData | null;
 		onVolumeLinkChange?: (index: number, paramKey: string, link: VolumeLink | null) => void;
 	}
 
-	let { effects = $bindable(), hasTrack = false, onVolumeLinkChange }: Props = $props();
+	let { effects = $bindable(), hasTrack = false, spectrumData = null, onVolumeLinkChange }: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
 	let showPresets = $state(false);
@@ -218,6 +225,7 @@
 			<EffectItem
 				{effect}
 				hasTrack={hasTrack}
+				{spectrumData}
 				onVolumeLinkChange={onVolumeLinkChange ? (key, link) => onVolumeLinkChange(i, key, link) : undefined}
 				onToggle={() => toggle(i)}
 				onToggleExpand={() => toggleExpand(i)}

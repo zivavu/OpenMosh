@@ -1,13 +1,22 @@
 <script lang="ts">
+	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
 		getDefinition,
+		FREQ_PRESETS,
 		type EffectInstance,
 		type VolumeLink,
 	} from './effects';
 
+	export type SpectrumData = {
+		data: Uint8Array;
+		sampleRate: number;
+		binCount: number;
+	};
+
 	interface Props {
 		effect: EffectInstance;
 		hasTrack?: boolean;
+		spectrumData?: SpectrumData | null;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
 		onToggle: () => void;
 		onToggleExpand: () => void;
@@ -25,6 +34,7 @@
 	let {
 		effect,
 		hasTrack = false,
+		spectrumData = null,
 		onVolumeLinkChange,
 		onToggle,
 		onToggleExpand,
@@ -203,6 +213,91 @@
 												</svg>
 											</button>
 										</div>
+										<div class="volume-freq-row">
+											<span class="volume-link-label">Freq</span>
+											<div class="freq-presets">
+												<button
+													type="button"
+													class="freq-preset-btn"
+													class:active={link.freqMin == null && link.freqMax == null}
+													title="Full spectrum"
+													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: undefined, freqMax: undefined })}
+												>Full</button>
+												<button
+													type="button"
+													class="freq-preset-btn"
+													class:active={link.freqMin === FREQ_PRESETS.low.min && link.freqMax === FREQ_PRESETS.low.max}
+													title="Low (20–250 Hz)"
+													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: FREQ_PRESETS.low.min, freqMax: FREQ_PRESETS.low.max })}
+												>Low</button>
+												<button
+													type="button"
+													class="freq-preset-btn"
+													class:active={link.freqMin === FREQ_PRESETS.mid.min && link.freqMax === FREQ_PRESETS.mid.max}
+													title="Mid (250–4000 Hz)"
+													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: FREQ_PRESETS.mid.min, freqMax: FREQ_PRESETS.mid.max })}
+												>Mid</button>
+												<button
+													type="button"
+													class="freq-preset-btn"
+													class:active={link.freqMin === FREQ_PRESETS.high.min && link.freqMax === FREQ_PRESETS.high.max}
+													title="High (4k–20k Hz)"
+													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: FREQ_PRESETS.high.min, freqMax: FREQ_PRESETS.high.max })}
+												>High</button>
+												<button
+													type="button"
+													class="freq-preset-btn"
+													class:active={link.freqMin != null && link.freqMax != null && !(link.freqMin === FREQ_PRESETS.low.min && link.freqMax === FREQ_PRESETS.low.max) && !(link.freqMin === FREQ_PRESETS.mid.min && link.freqMax === FREQ_PRESETS.mid.max) && !(link.freqMin === FREQ_PRESETS.high.min && link.freqMax === FREQ_PRESETS.high.max)}
+													title="Custom frequency range"
+													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: link.freqMin ?? 100, freqMax: link.freqMax ?? 2000 })}
+												>Custom</button>
+											</div>
+										</div>
+										{#if link.freqMin != null && link.freqMax != null && spectrumData}
+											<div class="spectrum-wrap">
+												<SpectrumDisplay
+													data={spectrumData.data}
+													sampleRate={spectrumData.sampleRate}
+													binCount={spectrumData.binCount}
+													freqMin={link.freqMin ?? 0}
+													freqMax={link.freqMax ?? 20000}
+													width={200}
+													height={48}
+												/>
+												<div class="spectrum-inputs">
+													<label class="spectrum-label" for="{effect.instanceId}-{param.key}-freqMin">From</label>
+													<input
+														id="{effect.instanceId}-{param.key}-freqMin"
+														type="number"
+														class="volume-link-input spectrum-hz"
+														min={20}
+														max={spectrumData.sampleRate / 2}
+														step={10}
+														value={link.freqMin}
+														oninput={(e) => {
+															const v = parseFloat(e.currentTarget.value);
+															if (!Number.isNaN(v)) onVolumeLinkChange(param.key, { ...link, freqMin: v });
+														}}
+													/>
+													<span class="volume-link-sep">Hz</span>
+													<label class="spectrum-label" for="{effect.instanceId}-{param.key}-freqMax">To</label>
+													<input
+														id="{effect.instanceId}-{param.key}-freqMax"
+														type="number"
+														class="volume-link-input spectrum-hz"
+														min={20}
+														max={spectrumData.sampleRate / 2}
+														step={10}
+														value={link.freqMax}
+														oninput={(e) => {
+															const v = parseFloat(e.currentTarget.value);
+															if (!Number.isNaN(v)) onVolumeLinkChange(param.key, { ...link, freqMax: v });
+														}}
+													/>
+													<span class="volume-link-sep">Hz</span>
+												</div>
+											</div>
+										{/if}
 									{:else}
 										<button
 											type="button"
@@ -544,6 +639,74 @@
 	.volume-unlink-btn:hover {
 		color: #999;
 		border-color: #555;
+	}
+
+	.volume-freq-row {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		width: 100%;
+		margin-top: 0.2rem;
+		flex-wrap: wrap;
+	}
+
+	.freq-presets {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.2rem;
+	}
+
+	.freq-preset-btn {
+		padding: 0.15rem 0.4rem;
+		font-size: 0.6rem;
+		font-family: inherit;
+		color: #666;
+		background: #2a2a2a;
+		border: 1px solid #333;
+		border-radius: 3px;
+		cursor: pointer;
+		transition: color 0.15s, border-color 0.15s, background 0.15s;
+	}
+
+	.freq-preset-btn:hover {
+		color: #999;
+		border-color: #555;
+	}
+
+	.freq-preset-btn.active {
+		color: #aac;
+		border-color: #558;
+		background: rgba(100, 140, 200, 0.15);
+	}
+
+	.spectrum-wrap {
+		width: 100%;
+		margin-top: 0.35rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.spectrum-wrap :global(.spectrum-canvas) {
+		width: 100%;
+		max-width: 200px;
+		height: 48px;
+	}
+
+	.spectrum-inputs {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+	}
+
+	.spectrum-label {
+		font-size: 0.65rem;
+		color: #555;
+	}
+
+	.spectrum-hz {
+		width: 3rem;
 	}
 
 	input[type='range'] {
