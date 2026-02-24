@@ -927,7 +927,6 @@
 								id="mosh-audio-link"
 								type="checkbox"
 								bind:checked={moshAudioLink}
-								disabled={!trackFile}
 							/>
 						</div>
 					</div>

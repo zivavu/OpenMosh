@@ -1,8 +1,8 @@
 <script lang="ts">
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
-		getDefinition,
 		FREQ_PRESETS,
+		getDefinition,
 		type EffectInstance,
 		type VolumeLink,
 	} from './effects';
@@ -52,6 +52,8 @@
 	const def = $derived(getDefinition(effect.defId));
 
 	let canDrag = $state(false);
+	// UI state for frequency settings expansion for each param.key
+	let expandedFreqSettings = $state<Record<string, boolean>>({});
 
 	function handleDragStart(e: DragEvent) {
 		if (!canDrag) {
@@ -219,38 +221,81 @@
 												<button
 													type="button"
 													class="freq-preset-btn"
-													class:active={link.freqMin == null && link.freqMax == null}
+													class:active={link.freqMin == null &&
+														link.freqMax == null}
 													title="Full spectrum"
-													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: undefined, freqMax: undefined })}
-												>Full</button>
+													onclick={() =>
+														onVolumeLinkChange(param.key, {
+															...link,
+															freqMin: undefined,
+															freqMax: undefined,
+														})}>Full</button
+												>
 												<button
 													type="button"
 													class="freq-preset-btn"
-													class:active={link.freqMin === FREQ_PRESETS.low.min && link.freqMax === FREQ_PRESETS.low.max}
+													class:active={link.freqMin === FREQ_PRESETS.low.min &&
+														link.freqMax === FREQ_PRESETS.low.max}
 													title="Low (20–250 Hz)"
-													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: FREQ_PRESETS.low.min, freqMax: FREQ_PRESETS.low.max })}
-												>Low</button>
+													onclick={() =>
+														onVolumeLinkChange(param.key, {
+															...link,
+															freqMin: FREQ_PRESETS.low.min,
+															freqMax: FREQ_PRESETS.low.max,
+														})}>Low</button
+												>
 												<button
 													type="button"
 													class="freq-preset-btn"
-													class:active={link.freqMin === FREQ_PRESETS.mid.min && link.freqMax === FREQ_PRESETS.mid.max}
+													class:active={link.freqMin === FREQ_PRESETS.mid.min &&
+														link.freqMax === FREQ_PRESETS.mid.max}
 													title="Mid (250–4000 Hz)"
-													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: FREQ_PRESETS.mid.min, freqMax: FREQ_PRESETS.mid.max })}
-												>Mid</button>
+													onclick={() =>
+														onVolumeLinkChange(param.key, {
+															...link,
+															freqMin: FREQ_PRESETS.mid.min,
+															freqMax: FREQ_PRESETS.mid.max,
+														})}>Mid</button
+												>
 												<button
 													type="button"
 													class="freq-preset-btn"
-													class:active={link.freqMin === FREQ_PRESETS.high.min && link.freqMax === FREQ_PRESETS.high.max}
+													class:active={link.freqMin ===
+														FREQ_PRESETS.high.min &&
+														link.freqMax === FREQ_PRESETS.high.max}
 													title="High (4k–20k Hz)"
-													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: FREQ_PRESETS.high.min, freqMax: FREQ_PRESETS.high.max })}
-												>High</button>
+													onclick={() =>
+														onVolumeLinkChange(param.key, {
+															...link,
+															freqMin: FREQ_PRESETS.high.min,
+															freqMax: FREQ_PRESETS.high.max,
+														})}>High</button
+												>
 												<button
 													type="button"
 													class="freq-preset-btn"
-													class:active={link.freqMin != null && link.freqMax != null && !(link.freqMin === FREQ_PRESETS.low.min && link.freqMax === FREQ_PRESETS.low.max) && !(link.freqMin === FREQ_PRESETS.mid.min && link.freqMax === FREQ_PRESETS.mid.max) && !(link.freqMin === FREQ_PRESETS.high.min && link.freqMax === FREQ_PRESETS.high.max)}
+													class:active={link.freqMin != null &&
+														link.freqMax != null &&
+														!(
+															link.freqMin === FREQ_PRESETS.low.min &&
+															link.freqMax === FREQ_PRESETS.low.max
+														) &&
+														!(
+															link.freqMin === FREQ_PRESETS.mid.min &&
+															link.freqMax === FREQ_PRESETS.mid.max
+														) &&
+														!(
+															link.freqMin === FREQ_PRESETS.high.min &&
+															link.freqMax === FREQ_PRESETS.high.max
+														)}
 													title="Custom frequency range"
-													onclick={() => onVolumeLinkChange(param.key, { ...link, freqMin: link.freqMin ?? 100, freqMax: link.freqMax ?? 2000 })}
-												>Custom</button>
+													onclick={() =>
+														onVolumeLinkChange(param.key, {
+															...link,
+															freqMin: link.freqMin ?? 100,
+															freqMax: link.freqMax ?? 2000,
+														})}>Custom</button
+												>
 											</div>
 										</div>
 										{#if link.freqMin != null && link.freqMax != null && spectrumData}
@@ -265,7 +310,11 @@
 													height={48}
 												/>
 												<div class="spectrum-inputs">
-													<label class="spectrum-label" for="{effect.instanceId}-{param.key}-freqMin">From</label>
+													<label
+														class="spectrum-label"
+														for="{effect.instanceId}-{param.key}-freqMin"
+														>From</label
+													>
 													<input
 														id="{effect.instanceId}-{param.key}-freqMin"
 														type="number"
@@ -276,11 +325,19 @@
 														value={link.freqMin}
 														oninput={(e) => {
 															const v = parseFloat(e.currentTarget.value);
-															if (!Number.isNaN(v)) onVolumeLinkChange(param.key, { ...link, freqMin: v });
+															if (!Number.isNaN(v))
+																onVolumeLinkChange(param.key, {
+																	...link,
+																	freqMin: v,
+																});
 														}}
 													/>
 													<span class="volume-link-sep">Hz</span>
-													<label class="spectrum-label" for="{effect.instanceId}-{param.key}-freqMax">To</label>
+													<label
+														class="spectrum-label"
+														for="{effect.instanceId}-{param.key}-freqMax"
+														>To</label
+													>
 													<input
 														id="{effect.instanceId}-{param.key}-freqMax"
 														type="number"
@@ -291,7 +348,11 @@
 														value={link.freqMax}
 														oninput={(e) => {
 															const v = parseFloat(e.currentTarget.value);
-															if (!Number.isNaN(v)) onVolumeLinkChange(param.key, { ...link, freqMax: v });
+															if (!Number.isNaN(v))
+																onVolumeLinkChange(param.key, {
+																	...link,
+																	freqMax: v,
+																});
 														}}
 													/>
 													<span class="volume-link-sep">Hz</span>
@@ -665,7 +726,10 @@
 		border: 1px solid #333;
 		border-radius: 3px;
 		cursor: pointer;
-		transition: color 0.15s, border-color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			border-color 0.15s,
+			background 0.15s;
 	}
 
 	.freq-preset-btn:hover {

@@ -2,13 +2,12 @@
 	import EffectItem from './EffectItem.svelte';
 	import {
 		EFFECT_DEFINITIONS,
+		applyPreset,
 		createEffectInstance,
-		type EffectInstance,
-		getDefinition,
+		deletePreset,
 		loadPresets,
 		savePreset,
-		deletePreset,
-		applyPreset,
+		type EffectInstance,
 		type Preset,
 		type VolumeLink,
 	} from './effects';
@@ -23,10 +22,19 @@
 		effects: EffectInstance[];
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
-		onVolumeLinkChange?: (index: number, paramKey: string, link: VolumeLink | null) => void;
+		onVolumeLinkChange?: (
+			index: number,
+			paramKey: string,
+			link: VolumeLink | null,
+		) => void;
 	}
 
-	let { effects = $bindable(), hasTrack = false, spectrumData = null, onVolumeLinkChange }: Props = $props();
+	let {
+		effects = $bindable(),
+		hasTrack = false,
+		spectrumData = null,
+		onVolumeLinkChange,
+	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
 	let showPresets = $state(false);
@@ -66,7 +74,9 @@
 	}
 
 	let hiddenDefs = $derived(
-		EFFECT_DEFINITIONS.filter((def) => !effects.some((e) => e.defId === def.id)),
+		EFFECT_DEFINITIONS.filter(
+			(def) => !effects.some((e) => e.defId === def.id),
+		),
 	);
 
 	let showHidden = $state(false);
@@ -159,7 +169,14 @@
 							autofocus
 						/>
 						<button class="preset-confirm-btn" type="submit" title="Save">
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
 								<polyline points="20 6 9 17 4 12" />
 							</svg>
 						</button>
@@ -172,18 +189,29 @@
 							}}
 							title="Cancel"
 						>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
 								<path d="M18 6L6 18" />
 								<path d="M6 6l12 12" />
 							</svg>
 						</button>
 					</form>
 				{:else}
-					<button
-						class="preset-save-trigger"
-						onclick={() => (saving = true)}
-					>
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<button class="preset-save-trigger" onclick={() => (saving = true)}>
+						<svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
 							<line x1="12" y1="5" x2="12" y2="19" />
 							<line x1="5" y1="12" x2="19" y2="12" />
 						</svg>
@@ -205,7 +233,14 @@
 							onclick={() => handleDeletePreset(i)}
 							title="Delete preset"
 						>
-							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
 								<path d="M18 6L6 18" />
 								<path d="M6 6l12 12" />
 							</svg>
@@ -224,9 +259,11 @@
 		{#each effects as effect, i (effect.instanceId)}
 			<EffectItem
 				{effect}
-				hasTrack={hasTrack}
+				{hasTrack}
 				{spectrumData}
-				onVolumeLinkChange={onVolumeLinkChange ? (key, link) => onVolumeLinkChange(i, key, link) : undefined}
+				onVolumeLinkChange={onVolumeLinkChange
+					? (key, link) => onVolumeLinkChange(i, key, link)
+					: undefined}
 				onToggle={() => toggle(i)}
 				onToggleExpand={() => toggleExpand(i)}
 				onRemove={() => remove(i)}
@@ -252,8 +289,19 @@
 					{#each hiddenDefs as def (def.id)}
 						<div class="hidden-item">
 							<span class="hidden-name">{def.name}</span>
-							<button class="add-btn" onclick={() => addEffect(def.id)} title="Add to chain">
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<button
+								class="add-btn"
+								onclick={() => addEffect(def.id)}
+								title="Add to chain"
+							>
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								>
 									<line x1="12" y1="5" x2="12" y2="19" />
 									<line x1="5" y1="12" x2="19" y2="12" />
 								</svg>
@@ -268,7 +316,7 @@
 
 <style>
 	.effects-panel {
-		width: 280px;
+		width: 300px;
 		height: 100%;
 		background: #161616;
 		border-left: 1px solid #1e1e1e;
@@ -539,7 +587,9 @@
 		cursor: pointer;
 		border-radius: 3px;
 		padding: 0;
-		transition: color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			background 0.15s;
 	}
 
 	.add-btn:hover {
