@@ -31,6 +31,143 @@
 	let randomizeOrder = $state(true);
 	let showMoshSettings = $state(false);
 
+	let trackFile = $state<File | null>(null);
+	let trackObjectUrl = $state<string | null>(null);
+	let trackInput: HTMLInputElement;
+
+	$effect(() => {
+		const f = trackFile;
+		let url: string | null = null;
+		if (f) {
+			url = URL.createObjectURL(f);
+			trackObjectUrl = url;
+		} else {
+			trackObjectUrl = null;
+		}
+		return () => {
+			if (url) URL.revokeObjectURL(url);
+		};
+	});
+
+	function onTrackInputChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (file && file.type.startsWith('audio/')) {
+			trackFile = file;
+		}
+		input.value = '';
+	}
+
+	function openTrackPicker() {
+		trackInput?.click();
+	}
+
+	function clearTrack() {
+		trackFile = null;
+	}
+
+	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
+	let trackDuration = $state(0);
+	let trackCurrentTime = $state(0);
+	let spanStart = $state(0);
+	let spanEnd = $state(0);
+	let audioPlaying = $state(false);
+	let draggingHandle = $state<'start' | 'end' | null>(null);
+	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+
+	function onAudioLoadedMetadata() {
+		const d = audioEl?.duration;
+		if (typeof d === 'number' && Number.isFinite(d)) {
+			trackDuration = d;
+			spanStart = 0;
+			spanEnd = d;
+		}
+	}
+
+	function onAudioTimeUpdate() {
+		if (!audioEl) return;
+		trackCurrentTime = audioEl.currentTime;
+		if (audioPlaying && audioEl.currentTime >= spanEnd) {
+			audioEl.pause();
+			audioEl.currentTime = spanStart;
+			trackCurrentTime = spanStart;
+			audioPlaying = false;
+		}
+	}
+
+	function playSpan() {
+		if (!trackFile || !trackObjectUrl || !audioEl) return;
+		const t = audioEl.currentTime;
+		if (t < spanStart || t >= spanEnd) {
+			audioEl.currentTime = spanStart;
+			trackCurrentTime = spanStart;
+		}
+		audioEl.play();
+		audioPlaying = true;
+	}
+
+	function pauseTrack() {
+		audioEl?.pause();
+		audioPlaying = false;
+	}
+
+	function seekTo( t: number ) {
+		if (!audioEl) return;
+		const tClamp = Math.max(0, Math.min(trackDuration, t));
+		audioEl.currentTime = tClamp;
+		trackCurrentTime = tClamp;
+	}
+
+	function timeFromEvent(e: { clientX: number } | TouchEvent): number {
+		if (!timelineTrackEl) return 0;
+		const rect = timelineTrackEl.getBoundingClientRect();
+		const clientX = 'touches' in e ? e.touches[0]?.clientX : (e as { clientX: number }).clientX;
+		const x = typeof clientX === 'number' ? clientX - rect.left : 0;
+		const pct = Math.max(0, Math.min(1, x / rect.width));
+		return pct * trackDuration;
+	}
+
+	function onTimelinePointerDown(e: PointerEvent, handle: 'start' | 'end' | null) {
+		e.preventDefault();
+		if (handle === 'start' || handle === 'end') {
+			draggingHandle = handle;
+			(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+		} else {
+			seekTo(timeFromEvent(e));
+		}
+	}
+
+	$effect(() => {
+		const handle = draggingHandle;
+		if (handle === null) return;
+		const move = (e: PointerEvent) => {
+			if (!timelineTrackEl) return;
+			const rect = timelineTrackEl.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const pct = Math.max(0, Math.min(1, x / rect.width));
+			const t = pct * trackDuration;
+			if (handle === 'start') {
+				spanStart = Math.max(0, Math.min(t, spanEnd - 0.1));
+			} else {
+				spanEnd = Math.max(spanStart + 0.1, Math.min(trackDuration, t));
+			}
+		};
+		const up = () => { draggingHandle = null; };
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+		return () => {
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+		};
+	});
+
+	function formatTime(sec: number): string {
+		if (!Number.isFinite(sec) || sec < 0) return '0:00';
+		const m = Math.floor(sec / 60);
+		const s = Math.floor(sec % 60);
+		return `${m}:${s.toString().padStart(2, '0')}`;
+	}
+
 	let history: EffectInstance[][] = $state([
 		$state.snapshot(EFFECT_DEFINITIONS.map(createEffectInstance)),
 	]);
@@ -165,7 +302,13 @@
 		)
 			return;
 
-		if (e.key === 'ArrowRight') {
+		if (e.key === ' ') {
+			if (trackFile && audioEl) {
+				e.preventDefault();
+				if (audioPlaying) pauseTrack();
+				else playSpan();
+			}
+		} else if (e.key === 'ArrowRight') {
 			e.preventDefault();
 			mosh();
 		} else if (
@@ -262,6 +405,18 @@
 
 <svelte:window onkeydown={handleKeydown} onpointerdown={(e) => { handleClickOutside(e); handleRecordClickOutside(e); }} />
 
+{#if trackObjectUrl}
+	<audio
+		bind:this={audioEl}
+		src={trackObjectUrl}
+		onloadedmetadata={onAudioLoadedMetadata}
+		ontimeupdate={onAudioTimeUpdate}
+		onplay={() => (audioPlaying = true)}
+		onpause={() => (audioPlaying = false)}
+		hidden
+	></audio>
+{/if}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="editor"
@@ -291,6 +446,7 @@
 	}}
 >
 	<div class="main-area">
+		<div class="top-bar">
 		<div class="toolbar">
 			<button class="back-btn" onclick={onBack} title="Load different file">
 				<svg
@@ -323,6 +479,103 @@
 					JPG
 				</button>
 			</div>
+			<div class="track-group">
+				<input
+					bind:this={trackInput}
+					type="file"
+					accept="audio/*"
+					onchange={onTrackInputChange}
+					hidden
+				/>
+				{#if trackFile}
+					<span class="track-name" title={trackFile.name}>
+						{trackFile.name.length > 20 ? trackFile.name.slice(0, 17) + '…' : trackFile.name}
+					</span>
+					<button
+						class="track-clear-btn"
+						onclick={clearTrack}
+						title="Clear track"
+					>
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18" />
+							<line x1="6" y1="6" x2="18" y2="18" />
+						</svg>
+					</button>
+					<button class="track-load-btn" onclick={openTrackPicker} title="Replace track">
+						Replace
+					</button>
+				{:else}
+					<button class="track-load-btn" onclick={openTrackPicker} title="Load track">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="17 8 12 3 7 8" />
+							<line x1="12" y1="3" x2="12" y2="15" />
+						</svg>
+						Load track
+					</button>
+				{/if}
+			</div>
+		</div>
+
+		{#if trackFile && trackDuration > 0}
+			<div class="timeline-bar">
+				<button
+					class="timeline-play-btn"
+					onclick={audioPlaying ? pauseTrack : playSpan}
+					title={audioPlaying ? 'Pause' : 'Play span'}
+				>
+					{#if audioPlaying}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+							<rect x="6" y="4" width="4" height="16" />
+							<rect x="14" y="4" width="4" height="16" />
+						</svg>
+					{:else}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+							<polygon points="5 3 19 12 5 21 5 3" />
+						</svg>
+					{/if}
+				</button>
+				<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
+				<div
+					class="timeline-track-wrap"
+					bind:this={timelineTrackEl}
+					role="slider"
+					aria-label="Timeline"
+					aria-valuenow={trackCurrentTime}
+					aria-valuemin={0}
+					aria-valuemax={trackDuration}
+					tabindex="0"
+					onpointerdown={(e) => onTimelinePointerDown(e, null)}
+				>
+					<div class="timeline-track">
+						<div
+							class="timeline-span"
+							style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
+						></div>
+						<div
+							class="timeline-playhead"
+							style="left: {(trackCurrentTime / trackDuration) * 100}%"
+							aria-hidden="true"
+						></div>
+						<button
+							type="button"
+							class="timeline-handle timeline-handle-start"
+							style="left: {(spanStart / trackDuration) * 100}%"
+							title="Span start"
+							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'start'); }}
+						></button>
+						<button
+							type="button"
+							class="timeline-handle timeline-handle-end"
+							style="left: {(spanEnd / trackDuration) * 100}%"
+							title="Span end"
+							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'end'); }}
+						></button>
+					</div>
+				</div>
+				<span class="timeline-time">{formatTime(spanEnd)}</span>
+			</div>
+		{/if}
 		</div>
 
 		<GlCanvas {imageSrc} {effects} bind:canvasEl bind:glRenderer />
@@ -571,12 +824,17 @@
 		min-width: 0;
 	}
 
-	/* Toolbar */
-	.toolbar {
+	.top-bar {
 		position: absolute;
 		top: 0;
 		left: 0;
+		right: 0;
 		z-index: 10;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.toolbar {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -638,6 +896,171 @@
 
 	.format-btn:hover {
 		color: #ccc;
+	}
+
+	.track-group {
+		display: flex;
+		align-items: stretch;
+		gap: 0;
+		background: rgba(30, 30, 30, 0.85);
+		border: 1px solid #333;
+		border-radius: 6px;
+		overflow: hidden;
+	}
+
+	.track-name {
+		font-size: 0.7rem;
+		color: #aaa;
+		max-width: 140px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		display: flex;
+		align-items: center;
+		padding: 0 0.5rem;
+	}
+
+	.track-load-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.75rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		font-family: inherit;
+		background: none;
+		border: none;
+		border-radius: 0;
+		color: #777;
+		cursor: pointer;
+		transition: color 0.15s, background 0.15s;
+		flex-shrink: 0;
+	}
+
+	.track-load-btn:hover {
+		color: #ccc;
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.track-clear-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		min-width: 28px;
+		border: none;
+		border-radius: 0;
+		background: none;
+		color: #666;
+		cursor: pointer;
+		transition: color 0.15s, background 0.15s;
+		flex-shrink: 0;
+	}
+
+	.track-clear-btn:hover {
+		color: #ccc;
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	/* Timeline */
+	.timeline-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		background: rgba(18, 18, 18, 0.9);
+		border-bottom: 1px solid #2a2a2a;
+	}
+
+	.timeline-play-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: 1px solid #444;
+		border-radius: 6px;
+		background: rgba(30, 30, 30, 0.9);
+		color: #aaa;
+		cursor: pointer;
+		transition: color 0.15s, border-color 0.15s, background 0.15s;
+		flex-shrink: 0;
+	}
+
+	.timeline-play-btn:hover {
+		color: #fff;
+		border-color: #555;
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.timeline-time {
+		font-size: 0.7rem;
+		color: #666;
+		min-width: 2.2rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.timeline-track-wrap {
+		flex: 1;
+		min-width: 0;
+		cursor: pointer;
+		outline: none;
+	}
+
+	.timeline-track-wrap:focus-visible {
+		outline: 1px solid #555;
+		outline-offset: 2px;
+	}
+
+	.timeline-track {
+		position: relative;
+		height: 20px;
+		background: #222;
+		border-radius: 4px;
+		overflow: visible;
+	}
+
+	.timeline-span {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		background: rgba(255, 255, 255, 0.12);
+		border-radius: 4px;
+		pointer-events: none;
+	}
+
+	.timeline-playhead {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 2px;
+		background: #888;
+		margin-left: -1px;
+		pointer-events: none;
+	}
+
+	.timeline-handle {
+		position: absolute;
+		top: 50%;
+		width: 10px;
+		height: 16px;
+		margin: -8px 0 0 -5px;
+		border: 1px solid #555;
+		border-radius: 3px;
+		background: #444;
+		cursor: ew-resize;
+		transition: background 0.15s, border-color 0.15s;
+	}
+
+	.timeline-handle:hover {
+		background: #555;
+		border-color: #666;
+	}
+
+	.timeline-handle:focus-visible {
+		outline: 1px solid #888;
+		outline-offset: 1px;
 	}
 
 	/* Action bar */
