@@ -119,6 +119,7 @@
 	function clearTrack() {
 		disposeAudioGraph();
 		trackFile = null;
+		if (isVideo && videoEl) ensureVideoAudioGraph();
 	}
 
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
@@ -255,6 +256,24 @@
 		frequencyData = new Uint8Array(analyser.frequencyBinCount);
 		audioSampleRate = ctx.sampleRate;
 		audioFrequencyBinCount = analyser.frequencyBinCount;
+	}
+
+	function ensureVideoAudioGraph() {
+		if (!videoEl || audioContext || trackFile) return;
+		videoEl.muted = false;
+		const ctx = new AudioContext();
+		const source = ctx.createMediaElementSource(videoEl);
+		const analyser = ctx.createAnalyser();
+		analyser.fftSize = 2048;
+		source.connect(analyser);
+		analyser.connect(ctx.destination);
+		audioContext = ctx;
+		mediaSource = source;
+		analyserNode = analyser;
+		frequencyData = new Uint8Array(analyser.frequencyBinCount);
+		audioSampleRate = ctx.sampleRate;
+		audioFrequencyBinCount = analyser.frequencyBinCount;
+		ctx.resume().catch(() => {});
 	}
 
 	function disposeAudioGraph() {
@@ -747,6 +766,7 @@
 <svelte:window
 	onkeydown={handleKeydown}
 	onpointerdown={(e) => {
+		audioContext?.resume();
 		handleClickOutside(e);
 		handleRecordClickOutside(e);
 	}}
@@ -898,9 +918,10 @@
 				bind:this={videoEl}
 				src={imageSrc}
 				muted
+				autoplay
 				loop
 				playsinline
-				onloadedmetadata={() => { recordDuration = Math.round(videoEl!.duration * 10) / 10; }}
+				onloadedmetadata={() => { recordDuration = Math.round(videoEl!.duration * 10) / 10; ensureVideoAudioGraph(); }}
 				style="display:none"
 			></video>
 		{/if}
@@ -1274,7 +1295,7 @@
 
 	<EffectsPanel
 		bind:effects
-		hasTrack={!!trackFile}
+		hasTrack={!!trackFile || (isVideo && !!analyserNode)}
 		spectrumData={frequencyData && audioSampleRate > 0
 			? {
 					data: frequencyData as Uint8Array<ArrayBuffer>,
