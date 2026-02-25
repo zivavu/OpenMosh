@@ -1,4 +1,3 @@
-import { applyPalette, GIFEncoder, quantize } from 'gifenc';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 import {
@@ -21,6 +20,8 @@ export interface RecordOptions {
 	renderer: GlRenderer;
 	effects: EffectInstance[];
 	onProgress?: (progress: number) => void;
+	/** Called when frame capture is done and finalization (encode drain, mux, blob) is about to start. */
+	onFinalizing?: () => void;
 	signal?: AbortSignal;
 	/** When set, audio is decoded and used to drive effects during recording; for MP4/WebM it is also muxed into the output. */
 	audioFile?: File;
@@ -46,6 +47,7 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 		renderer,
 		effects,
 		onProgress,
+		onFinalizing,
 		signal,
 		audioFile,
 		audioStart = 0,
@@ -152,6 +154,9 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
+	const ENCODE_QUEUE_SIZE = 3;
+	const encodeQueue: Promise<void>[] = [];
+
 	for (let i = 0; i < totalFrames; i++) {
 		checkAbort(signal);
 
@@ -165,11 +170,20 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 			);
 		}
 		renderer.render(effects, time);
-		await videoSource.add(time, frameDuration);
+		encodeQueue.push(videoSource.add(time, frameDuration));
+
+		if (encodeQueue.length >= ENCODE_QUEUE_SIZE) {
+			await encodeQueue.shift()!;
+		}
 
 		onProgress?.((i + 1) / totalFrames);
 	}
 
+	// Let the UI paint "Creating file..." before blocking on finalize
+	await new Promise<void>((r) => requestAnimationFrame(() => r()));
+	onFinalizing?.();
+
+	await Promise.all(encodeQueue);
 	videoSource.close();
 	await output.finalize();
 
@@ -179,6 +193,8 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 
 const GIF_MAX_WIDTH = 480;
 
+const GIF_WORKER_IN_FLIGHT = 2;
+
 async function recordGif(opts: RecordOptions): Promise<Blob> {
 	const {
 		duration,
@@ -187,6 +203,7 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		renderer,
 		effects,
 		onProgress,
+		onFinalizing,
 		signal,
 		audioFile,
 		audioStart = 0,
@@ -222,7 +239,36 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 	tempCanvas.height = outH;
 	const ctx = tempCanvas.getContext('2d', { willReadFrequently: true })!;
 
-	const gif = GIFEncoder();
+	const worker = new Worker(
+		new URL('./gif-encoder-worker.ts', import.meta.url),
+		{ type: 'module' },
+	);
+
+	let inFlight = 0;
+	let resolveDrain: (() => void) | null = null;
+	function waitForCapacity(): Promise<void> {
+		if (inFlight < GIF_WORKER_IN_FLIGHT) return Promise.resolve();
+		return new Promise((r) => {
+			resolveDrain = r;
+		});
+	}
+
+	const resultPromise = new Promise<ArrayBuffer>((resolve, reject) => {
+		worker.onmessage = (e: MessageEvent<{ type: string; buffer?: ArrayBuffer }>) => {
+			if (e.data.type === 'frame-done') {
+				inFlight--;
+				if (resolveDrain) {
+					resolveDrain();
+					resolveDrain = null;
+				}
+			} else if (e.data.type === 'done') {
+				resolve(e.data.buffer!);
+			}
+		};
+		worker.onerror = () => reject(new Error('GIF worker error'));
+	});
+
+	worker.postMessage({ type: 'init', width: outW, height: outH, delay });
 
 	for (let i = 0; i < totalFrames; i++) {
 		checkAbort(signal);
@@ -239,11 +285,15 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		renderer.render(effects, time);
 
 		ctx.drawImage(canvas, 0, 0, outW, outH);
-		const { data } = ctx.getImageData(0, 0, outW, outH);
+		const imageData = ctx.getImageData(0, 0, outW, outH);
+		const buffer = imageData.data.buffer;
 
-		const palette = quantize(data, 256);
-		const index = applyPalette(data, palette);
-		gif.writeFrame(index, outW, outH, { palette, delay });
+		await waitForCapacity();
+		inFlight++;
+		worker.postMessage(
+			{ type: 'frame', width: outW, height: outH, delay, rgba: buffer },
+			[buffer],
+		);
 
 		onProgress?.((i + 1) / totalFrames);
 
@@ -252,10 +302,13 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		}
 	}
 
-	gif.finish();
+	await new Promise<void>((r) => requestAnimationFrame(() => r()));
+	onFinalizing?.();
+	worker.postMessage({ type: 'finish' });
+	const buffer = await resultPromise;
+	worker.terminate();
 
-	const bytes = gif.bytes();
-	return new Blob([bytes as unknown as ArrayBuffer], { type: 'image/gif' });
+	return new Blob([buffer], { type: 'image/gif' });
 }
 
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {

@@ -35,15 +35,27 @@ export class GlRenderer {
 
   loadImage(image: HTMLImageElement) {
     const gl = this.gl;
-    this.imgW = image.naturalWidth;
-    this.imgH = image.naturalHeight;
+    const naturalW = image.naturalWidth;
+    const naturalH = image.naturalHeight;
+    this.imgW = naturalW;
+    this.imgH = naturalH;
     this.canvas.width = this.imgW;
     this.canvas.height = this.imgH;
 
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
-    this.sourceTexture = this.createTexture(this.imgW, this.imgH);
+    this.sourceTexture = this.createTexture(naturalW, naturalH);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
+    this.setupPingPong();
+  }
+
+  /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
+  resize(width: number, height: number) {
+    if (width <= 0 || height <= 0) return;
+    this.imgW = width;
+    this.imgH = height;
+    this.canvas.width = width;
+    this.canvas.height = height;
     this.setupPingPong();
   }
 

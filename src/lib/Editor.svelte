@@ -35,6 +35,14 @@
 	let showMoshSettings = $state(false);
 	let moshAudioLink = $state(false);
 
+	let naturalWidth = $state<number | undefined>(undefined);
+	let naturalHeight = $state<number | undefined>(undefined);
+	let resizeWidth = $state(0);
+	let resizeHeight = $state(0);
+	let maintainRatio = $state(true);
+	let showResizeSettings = $state(false);
+	let resizeGroupEl: HTMLDivElement;
+
 	let trackFile = $state<File | null>(null);
 	let trackObjectUrl = $state<string | null>(null);
 	let trackInput: HTMLInputElement;
@@ -52,6 +60,54 @@
 			if (url) URL.revokeObjectURL(url);
 		};
 	});
+
+	$effect(() => {
+		const nw = naturalWidth;
+		const nh = naturalHeight;
+		if (nw != null && nh != null && nw > 0 && nh > 0) {
+			resizeWidth = nw;
+			resizeHeight = nh;
+		}
+	});
+
+	const aspectRatio = $derived(
+		naturalWidth != null && naturalHeight != null && naturalHeight > 0
+			? naturalWidth / naturalHeight
+			: 1,
+	);
+
+	function setResizeWidth(w: number) {
+		const val = Math.max(1, Math.round(w));
+		resizeWidth = val;
+		if (maintainRatio && aspectRatio > 0) {
+			resizeHeight = Math.max(1, Math.round(val / aspectRatio));
+		}
+	}
+
+	function setResizeHeight(h: number) {
+		const val = Math.max(1, Math.round(h));
+		resizeHeight = val;
+		if (maintainRatio && aspectRatio > 0) {
+			resizeWidth = Math.max(1, Math.round(val * aspectRatio));
+		}
+	}
+
+	function resetResize() {
+		if (naturalWidth != null && naturalHeight != null) {
+			resizeWidth = naturalWidth;
+			resizeHeight = naturalHeight;
+		}
+	}
+
+	function handleResizeClickOutside(e: MouseEvent) {
+		if (
+			showResizeSettings &&
+			resizeGroupEl &&
+			!resizeGroupEl.contains(e.target as Node)
+		) {
+			showResizeSettings = false;
+		}
+	}
 
 	function onTrackInputChange(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -593,6 +649,7 @@
 	let recordSpanOnly = $state(false);
 	let recording = $state(false);
 	let recordProgress = $state(0);
+	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 	let recordGroupEl: HTMLDivElement;
 
@@ -621,6 +678,7 @@
 		showRecordSettings = false;
 		recording = true;
 		recordProgress = 0;
+		recordFinalizing = false;
 		const abort = new AbortController();
 		recordAbort = abort;
 
@@ -646,6 +704,9 @@
 				onProgress: (p) => {
 					recordProgress = p;
 				},
+				onFinalizing: () => {
+					recordFinalizing = true;
+				},
 				signal: abort.signal,
 				...(useAudio &&
 					trackFile && {
@@ -668,6 +729,7 @@
 			}
 		} finally {
 			recording = false;
+			recordFinalizing = false;
 			recordAbort = null;
 			if (canvasEl && glRenderer) {
 				glRenderer.render(effects, performance.now() / 1000);
@@ -685,6 +747,7 @@
 	onpointerdown={(e) => {
 		handleClickOutside(e);
 		handleRecordClickOutside(e);
+		handleResizeClickOutside(e);
 	}}
 />
 
@@ -762,6 +825,75 @@
 						JPG
 					</button>
 				</div>
+				<div class="resize-group" bind:this={resizeGroupEl}>
+					<button
+						class="settings-btn"
+						class:active={showResizeSettings}
+						onclick={() => (showResizeSettings = !showResizeSettings)}
+						title="Image size"
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M21 11V3h-8" />
+							<path d="M21 3l-9 9" />
+							<path d="M21 3v8h-8" />
+							<path d="M3 13v8h8" />
+							<path d="M3 21l9-9" />
+							<path d="M3 21v-8h8" />
+						</svg>
+					</button>
+					{#if showResizeSettings}
+						<div class="resize-settings">
+							<div class="mosh-setting-row">
+								<label for="resize-width">Width</label>
+								<input
+									id="resize-width"
+									type="number"
+									min="1"
+									step="1"
+									value={resizeWidth}
+									oninput={(e) =>
+										setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
+								/>
+							</div>
+							<div class="mosh-setting-row">
+								<label for="resize-height">Height</label>
+								<input
+									id="resize-height"
+									type="number"
+									min="1"
+									step="1"
+									value={resizeHeight}
+									oninput={(e) =>
+										setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
+								/>
+							</div>
+							<div class="mosh-setting-row">
+								<label for="resize-ratio">Maintain ratio</label>
+								<input
+									id="resize-ratio"
+									type="checkbox"
+									bind:checked={maintainRatio}
+								/>
+							</div>
+							<button
+								class="resize-reset-btn"
+								onclick={resetResize}
+								title="Reset to original size"
+							>
+								Reset to original
+							</button>
+						</div>
+					{/if}
+				</div>
 				<div class="track-group">
 					<input
 						bind:this={trackInput}
@@ -829,7 +961,16 @@
 			</div>
 		</div>
 
-		<GlCanvas {imageSrc} {effects} bind:canvasEl bind:glRenderer />
+		<GlCanvas
+			{imageSrc}
+			{effects}
+			canvasWidth={resizeWidth || undefined}
+			canvasHeight={resizeHeight || undefined}
+			bind:canvasEl
+			bind:glRenderer
+			bind:naturalWidth
+			bind:naturalHeight
+		/>
 
 		<div class="action-bar">
 			<div class="mosh-group" bind:this={moshGroupEl}>
@@ -1154,8 +1295,12 @@
 	{#if recording}
 		<div class="record-overlay">
 			<div class="record-modal">
-				<p class="record-title">Recording {recordFormat.toUpperCase()}...</p>
-				<div class="progress-track">
+				<p class="record-title">
+					{recordFinalizing
+						? 'Creating file…'
+						: `Recording ${recordFormat.toUpperCase()}...`}
+				</p>
+				<div class="progress-track" class:finalizing={recordFinalizing}>
 					<div
 						class="progress-fill"
 						style="width: {Math.round(recordProgress * 100)}%"
@@ -1262,6 +1407,64 @@
 
 	.format-btn:hover {
 		color: #ccc;
+	}
+
+	.resize-group {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.resize-settings {
+		position: absolute;
+		top: calc(100% + 0.5rem);
+		left: 0;
+		background: #1a1a1a;
+		border: 1px solid #333;
+		border-radius: 8px;
+		padding: 0.75rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		min-width: 200px;
+		z-index: 20;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+	}
+
+	.resize-settings input[type='number'] {
+		width: 4.5rem;
+		background: #1a1a1a;
+		color: #aaa;
+		border: 1px solid #333;
+		border-radius: 4px;
+		padding: 0.2rem 0.4rem;
+		font-size: 0.7rem;
+		font-family: inherit;
+		outline: none;
+	}
+
+	.resize-settings input[type='number']:focus {
+		border-color: #555;
+	}
+
+	.resize-reset-btn {
+		margin-top: 0.25rem;
+		padding: 0.35rem 0.75rem;
+		border: 1px solid #444;
+		border-radius: 6px;
+		background: none;
+		color: #888;
+		font-size: 0.7rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			border-color 0.15s;
+	}
+
+	.resize-reset-btn:hover {
+		color: #ccc;
+		border-color: #666;
 	}
 
 	.track-group {
@@ -1727,6 +1930,20 @@
 		background: #c05050;
 		border-radius: 2px;
 		transition: width 0.15s;
+	}
+
+	.progress-track.finalizing .progress-fill {
+		animation: record-finalize-pulse 1.2s ease-in-out infinite;
+	}
+
+	@keyframes record-finalize-pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.65;
+		}
 	}
 
 	.record-pct {

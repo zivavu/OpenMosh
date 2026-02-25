@@ -6,11 +6,24 @@
   interface Props {
     imageSrc: string;
     effects: EffectInstance[];
+    canvasWidth?: number;
+    canvasHeight?: number;
     canvasEl?: HTMLCanvasElement | null;
     glRenderer?: GlRenderer | null;
+    naturalWidth?: number;
+    naturalHeight?: number;
   }
 
-  let { imageSrc, effects, canvasEl = $bindable(null), glRenderer = $bindable(null) }: Props = $props();
+  let {
+    imageSrc,
+    effects,
+    canvasWidth = undefined,
+    canvasHeight = undefined,
+    canvasEl = $bindable(null),
+    glRenderer = $bindable(null),
+    naturalWidth = $bindable(undefined),
+    naturalHeight = $bindable(undefined),
+  }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement>(null!);
   let renderer: GlRenderer | null = $state(null);
@@ -46,12 +59,38 @@
     img.onload = () => {
       if (cancelled) return;
       renderer!.loadImage(img);
+      naturalWidth = img.naturalWidth;
+      naturalHeight = img.naturalHeight;
       imageReady = true;
+      if (
+        canvasWidth != null &&
+        canvasHeight != null &&
+        (canvasWidth !== img.naturalWidth || canvasHeight !== img.naturalHeight)
+      ) {
+        renderer!.resize(canvasWidth, canvasHeight);
+      }
     };
     img.src = imageSrc;
     return () => {
       cancelled = true;
     };
+  });
+
+  $effect(() => {
+    if (
+      !renderer ||
+      !imageReady ||
+      canvasWidth == null ||
+      canvasHeight == null ||
+      canvasWidth <= 0 ||
+      canvasHeight <= 0
+    )
+      return;
+    renderer.resize(canvasWidth, canvasHeight);
+    renderer.render(
+      effects,
+      needsAnimation ? performance.now() / 1000 : 0,
+    );
   });
 
   $effect(() => {
