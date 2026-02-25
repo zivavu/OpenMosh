@@ -1,6 +1,15 @@
 import { applyPalette, GIFEncoder, quantize } from 'gifenc';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
+import {
+	analyzeFrames,
+	applyFrameAudioToEffects,
+	decodeAudioFile,
+	trimAudioBuffer,
+	type FrameAudioData,
+} from './offline-audio';
+
+const FFT_SIZE = 2048;
 
 export type RecordFormat = 'mp4' | 'webm' | 'gif';
 
@@ -13,6 +22,12 @@ export interface RecordOptions {
 	effects: EffectInstance[];
 	onProgress?: (progress: number) => void;
 	signal?: AbortSignal;
+	/** When set, audio is decoded and used to drive effects during recording; for MP4/WebM it is also muxed into the output. */
+	audioFile?: File;
+	/** Start time of the audio region in seconds (used for trimming and for effect timeline). */
+	audioStart?: number;
+	/** End time of the audio region in seconds. */
+	audioEnd?: number;
 }
 
 function checkAbort(signal?: AbortSignal) {
@@ -32,9 +47,32 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 		effects,
 		onProgress,
 		signal,
+		audioFile,
+		audioStart = 0,
+		audioEnd,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
+
+	// Resolve audio buffer and per-frame analysis when user provided audio
+	let audioBufferForMux: AudioBuffer | null = null;
+	let frameAudioData: FrameAudioData[] = [];
+	let audioSampleRate = 0;
+
+	if (audioFile) {
+		checkAbort(signal);
+		const decoded = await decodeAudioFile(audioFile);
+		const end = audioEnd ?? duration;
+		audioBufferForMux = await trimAudioBuffer(decoded, audioStart, end);
+		audioSampleRate = audioBufferForMux.sampleRate;
+		const trimmedDuration = audioBufferForMux.duration;
+		// Per-frame times; cap to trimmed duration so we don't read past buffer; for frames past end use last moment
+		const frameTimes = Array.from({ length: totalFrames }, (_, i) => {
+			const t = i * frameDuration;
+			return Math.min(t, Math.max(0, trimmedDuration - 0.001));
+		});
+		frameAudioData = analyzeFrames(audioBufferForMux, frameTimes, FFT_SIZE);
+	}
 
 	const outputFormat =
 		format === 'mp4'
@@ -45,7 +83,7 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 
 	const preferredCodecs =
 		format === 'mp4'
-			? (['avc', 'hevc', 'av1'] as const)
+			? (['hevc', 'avc', 'av1'] as const)
 			: (['vp8', 'vp9', 'av1'] as const);
 
 	const candidates = preferredCodecs.filter((c) =>
@@ -71,18 +109,61 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 	const target = new mb.BufferTarget();
 	const output = new mb.Output({ format: outputFormat, target });
 
+	const wantsAudioTrack = audioBufferForMux != null;
 	const videoSource = new mb.CanvasSource(canvas, {
 		codec: selectedCodec as any,
 		bitrate: 4_000_000,
 	});
 	output.addVideoTrack(videoSource);
 
+	// Add audio track for MP4/WebM when we have audio (add track before start; add data after start)
+	let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
+	if (wantsAudioTrack && audioBufferForMux) {
+		const supportedAudio = outputFormat.getSupportedAudioCodecs();
+		// MP4: try AAC first (not encodable on all platforms), then Opus. WebM: Opus, then Vorbis.
+		const preferredAudio =
+			format === 'mp4'
+				? (['aac', 'opus'] as const)
+				: (['opus', 'vorbis'] as const);
+		const audioCandidates = preferredAudio.filter((c) =>
+			supportedAudio.includes(c as any),
+		);
+		const audioCodec = await mb.getFirstEncodableAudioCodec(
+			audioCandidates as any,
+			{
+				numberOfChannels: audioBufferForMux.numberOfChannels,
+				sampleRate: audioBufferForMux.sampleRate,
+				bitrate: 128_000,
+			},
+		);
+		if (audioCodec) {
+			audioSource = new mb.AudioBufferSource({
+				codec: audioCodec as any,
+				bitrate: 128_000,
+			});
+			output.addAudioTrack(audioSource);
+		}
+	}
+
 	await output.start();
+
+	if (audioSource && audioBufferForMux) {
+		await audioSource.add(audioBufferForMux);
+		audioSource.close();
+	}
 
 	for (let i = 0; i < totalFrames; i++) {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
+		if (frameAudioData.length > 0) {
+			applyFrameAudioToEffects(
+				effects,
+				frameAudioData[i]!,
+				audioSampleRate,
+				FFT_SIZE,
+			);
+		}
 		renderer.render(effects, time);
 		await videoSource.add(time, frameDuration);
 
@@ -99,10 +180,38 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 const GIF_MAX_WIDTH = 480;
 
 async function recordGif(opts: RecordOptions): Promise<Blob> {
-	const { duration, fps, canvas, renderer, effects, onProgress, signal } = opts;
+	const {
+		duration,
+		fps,
+		canvas,
+		renderer,
+		effects,
+		onProgress,
+		signal,
+		audioFile,
+		audioStart = 0,
+		audioEnd,
+	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
 	const delay = Math.round(1000 / fps);
+
+	// Optional audio-driven effects (no audio mux in GIF)
+	let frameAudioData: FrameAudioData[] = [];
+	let audioSampleRate = 0;
+	if (audioFile) {
+		checkAbort(signal);
+		const decoded = await decodeAudioFile(audioFile);
+		const end = audioEnd ?? duration;
+		const trimmed = await trimAudioBuffer(decoded, audioStart, end);
+		audioSampleRate = trimmed.sampleRate;
+		const trimmedDuration = trimmed.duration;
+		const frameTimes = Array.from({ length: totalFrames }, (_, i) => {
+			const t = i * frameDuration;
+			return Math.min(t, Math.max(0, trimmedDuration - 0.001));
+		});
+		frameAudioData = analyzeFrames(trimmed, frameTimes, FFT_SIZE);
+	}
 
 	const scale = canvas.width > GIF_MAX_WIDTH ? GIF_MAX_WIDTH / canvas.width : 1;
 	const outW = Math.round(canvas.width * scale);
@@ -119,6 +228,14 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
+		if (frameAudioData.length > 0) {
+			applyFrameAudioToEffects(
+				effects,
+				frameAudioData[i]!,
+				audioSampleRate,
+				FFT_SIZE,
+			);
+		}
 		renderer.render(effects, time);
 
 		ctx.drawImage(canvas, 0, 0, outW, outH);
