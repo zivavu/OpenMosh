@@ -29,6 +29,19 @@ export interface RecordOptions {
 	audioStart?: number;
 	/** End time of the audio region in seconds. */
 	audioEnd?: number;
+	/** When set, each frame is sourced from this video element by seeking to the frame time. */
+	sourceVideo?: HTMLVideoElement;
+}
+
+function seekVideoToTime(video: HTMLVideoElement, time: number): Promise<void> {
+	return new Promise((resolve) => {
+		if (Math.abs(video.currentTime - time) < 0.001) {
+			resolve();
+			return;
+		}
+		video.addEventListener('seeked', () => resolve(), { once: true });
+		video.currentTime = time;
+	});
 }
 
 function checkAbort(signal?: AbortSignal) {
@@ -52,6 +65,7 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 		audioFile,
 		audioStart = 0,
 		audioEnd,
+		sourceVideo,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -169,6 +183,11 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 				FFT_SIZE,
 			);
 		}
+		if (sourceVideo) {
+			const loopedTime = sourceVideo.duration > 0 ? time % sourceVideo.duration : time;
+			await seekVideoToTime(sourceVideo, loopedTime);
+			renderer.updateSourceFrame(sourceVideo);
+		}
 		renderer.render(effects, time);
 		encodeQueue.push(videoSource.add(time, frameDuration));
 
@@ -208,6 +227,7 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		audioFile,
 		audioStart = 0,
 		audioEnd,
+		sourceVideo,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -281,6 +301,11 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 				audioSampleRate,
 				FFT_SIZE,
 			);
+		}
+		if (sourceVideo) {
+			const loopedTime = sourceVideo.duration > 0 ? time % sourceVideo.duration : time;
+			await seekVideoToTime(sourceVideo, loopedTime);
+			renderer.updateSourceFrame(sourceVideo);
 		}
 		renderer.render(effects, time);
 

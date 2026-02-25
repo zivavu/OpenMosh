@@ -21,6 +21,9 @@
 	let { file, onBack, onfile }: Props = $props();
 	let dragging = $state(false);
 
+	let isVideo = $derived(file.type.startsWith('video/'));
+	let videoEl = $state<HTMLVideoElement | null>(null);
+
 	let format: 'png' | 'jpg' = $state('png');
 	let imageSrc = $derived(URL.createObjectURL(file));
 	let canvasEl: HTMLCanvasElement | null = $state(null);
@@ -29,8 +32,8 @@
 		EFFECT_DEFINITIONS.map(createEffectInstance),
 	);
 
-	let moshMin = $state(3);
-	let moshMax = $state(8);
+	let moshMin = $state(7);
+	let moshMax = $state(14);
 	let randomizeOrder = $state(true);
 	let showMoshSettings = $state(false);
 	let moshAudioLink = $state(true);
@@ -42,8 +45,6 @@
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 	let maintainRatio = $state(true);
-	let showResizeSettings = $state(false);
-	let resizeGroupEl: HTMLDivElement;
 
 	let trackFile = $state<File | null>(null);
 	let trackObjectUrl = $state<string | null>(null);
@@ -98,16 +99,6 @@
 		if (naturalWidth != null && naturalHeight != null) {
 			resizeWidth = naturalWidth;
 			resizeHeight = naturalHeight;
-		}
-	}
-
-	function handleResizeClickOutside(e: MouseEvent) {
-		if (
-			showResizeSettings &&
-			resizeGroupEl &&
-			!resizeGroupEl.contains(e.target as Node)
-		) {
-			showResizeSettings = false;
 		}
 	}
 
@@ -701,6 +692,7 @@
 			? spanEnd
 			: Math.min(recordDuration, trackDuration);
 
+		if (isVideo && videoEl) videoEl.pause();
 		try {
 			const blob = await recordVideo({
 				format: recordFormat,
@@ -722,6 +714,7 @@
 						audioStart,
 						audioEnd,
 					}),
+				...(isVideo && videoEl && { sourceVideo: videoEl }),
 			});
 			downloadBlob(blob, recordFormat);
 		} catch (e) {
@@ -739,6 +732,7 @@
 			recording = false;
 			recordFinalizing = false;
 			recordAbort = null;
+			if (isVideo && videoEl) videoEl.play().catch(() => {});
 			if (canvasEl && glRenderer) {
 				glRenderer.render(effects, performance.now() / 1000);
 			}
@@ -755,7 +749,6 @@
 	onpointerdown={(e) => {
 		handleClickOutside(e);
 		handleRecordClickOutside(e);
-		handleResizeClickOutside(e);
 	}}
 />
 
@@ -796,7 +789,7 @@
 		e.preventDefault();
 		dragging = false;
 		const f = e.dataTransfer?.files[0];
-		if (f && f.type.startsWith('image/')) onfile(f);
+		if (f && (f.type.startsWith('image/') || f.type.startsWith('video/'))) onfile(f);
 	}}
 >
 	<div class="main-area">
@@ -832,79 +825,6 @@
 					>
 						JPG
 					</button>
-			</div>
-			<div class="resize-group" bind:this={resizeGroupEl}>
-				<button
-					class="settings-btn"
-					class:active={showResizeSettings}
-					onclick={() => (showResizeSettings = !showResizeSettings)}
-					title="Image size"
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<path d="M21 11V3h-8" />
-							<path d="M21 3l-9 9" />
-							<path d="M21 3v8h-8" />
-							<path d="M3 13v8h8" />
-							<path d="M3 21l9-9" />
-							<path d="M3 21v-8h8" />
-						</svg>
-					</button>
-					{#if showResizeSettings}
-						<div class="resize-settings">
-							<div class="mosh-setting-row">
-								<label for="resize-width">Width</label>
-								<input
-									id="resize-width"
-									type="number"
-									min="1"
-									step="1"
-									value={resizeWidth}
-									oninput={(e) =>
-										setResizeWidth(
-											+(e.currentTarget as HTMLInputElement).value,
-										)}
-								/>
-							</div>
-							<div class="mosh-setting-row">
-								<label for="resize-height">Height</label>
-								<input
-									id="resize-height"
-									type="number"
-									min="1"
-									step="1"
-									value={resizeHeight}
-									oninput={(e) =>
-										setResizeHeight(
-											+(e.currentTarget as HTMLInputElement).value,
-										)}
-								/>
-							</div>
-							<div class="mosh-setting-row">
-								<label for="resize-ratio">Maintain ratio</label>
-								<input
-									id="resize-ratio"
-									type="checkbox"
-									bind:checked={maintainRatio}
-								/>
-							</div>
-							<button
-								class="resize-reset-btn"
-								onclick={resetResize}
-								title="Reset to original size"
-							>
-								Reset to original
-							</button>
-						</div>
-					{/if}
 				</div>
 				<div class="track-group">
 					<input
@@ -973,6 +893,18 @@
 			</div>
 		</div>
 
+		{#if isVideo}
+			<video
+				bind:this={videoEl}
+				src={imageSrc}
+				muted
+				loop
+				playsinline
+				onloadedmetadata={() => { recordDuration = Math.round(videoEl!.duration * 10) / 10; }}
+				style="display:none"
+			></video>
+		{/if}
+
 		<GlCanvas
 			{imageSrc}
 			{effects}
@@ -984,6 +916,7 @@
 			bind:naturalHeight
 			bind:fps={currentFps}
 			{showFps}
+			videoEl={isVideo ? videoEl : null}
 		/>
 
 		<div class="action-bar">
@@ -1105,23 +1038,61 @@
 								bind:checked={randomizeOrder}
 							/>
 						</div>
-					<div class="mosh-setting-row">
-						<label for="mosh-audio-link">Random audio links</label>
-						<input
-							id="mosh-audio-link"
-							type="checkbox"
-							bind:checked={moshAudioLink}
-						/>
+						<div class="mosh-setting-row">
+							<label for="mosh-audio-link">Random audio links</label>
+							<input
+								id="mosh-audio-link"
+								type="checkbox"
+								bind:checked={moshAudioLink}
+							/>
+						</div>
+						<div class="mosh-setting-row">
+							<label for="show-fps">Show FPS</label>
+							<input id="show-fps" type="checkbox" bind:checked={showFps} />
+						</div>
+						<div class="settings-divider"></div>
+						<div class="mosh-setting-row">
+							<label for="resize-width">Width</label>
+							<input
+								id="resize-width"
+								class="size-input"
+								type="number"
+								min="1"
+								step="1"
+								value={resizeWidth}
+								oninput={(e) =>
+									setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
+							/>
+						</div>
+						<div class="mosh-setting-row">
+							<label for="resize-height">Height</label>
+							<input
+								id="resize-height"
+								class="size-input"
+								type="number"
+								min="1"
+								step="1"
+								value={resizeHeight}
+								oninput={(e) =>
+									setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
+							/>
+						</div>
+						<div class="mosh-setting-row">
+							<label for="resize-ratio">Maintain ratio</label>
+							<input
+								id="resize-ratio"
+								type="checkbox"
+								bind:checked={maintainRatio}
+							/>
+						</div>
+						<button
+							class="resize-reset-btn"
+							onclick={resetResize}
+							title="Reset to original size"
+						>
+							Reset to original
+						</button>
 					</div>
-					<div class="mosh-setting-row">
-						<label for="show-fps">Show FPS</label>
-						<input
-							id="show-fps"
-							type="checkbox"
-							bind:checked={showFps}
-						/>
-					</div>
-				</div>
 				{/if}
 			</div>
 			<button class="action-btn save-btn" onclick={save}>
@@ -1431,29 +1402,13 @@
 		color: #ccc;
 	}
 
-	.resize-group {
-		position: relative;
-		display: flex;
-		align-items: center;
+	.settings-divider {
+		height: 1px;
+		background: #333;
+		margin: 0.15rem 0;
 	}
 
-	.resize-settings {
-		position: absolute;
-		top: calc(100% + 0.5rem);
-		left: 0;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 8px;
-		padding: 0.75rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		min-width: 200px;
-		z-index: 20;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-	}
-
-	.resize-settings input[type='number'] {
+	.size-input {
 		width: 4.5rem;
 		background: #1a1a1a;
 		color: #aaa;
@@ -1465,7 +1420,7 @@
 		outline: none;
 	}
 
-	.resize-settings input[type='number']:focus {
+	.size-input:focus {
 		border-color: #555;
 	}
 

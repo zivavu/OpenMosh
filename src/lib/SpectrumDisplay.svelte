@@ -7,9 +7,19 @@
 		freqMax: number;
 		width?: number;
 		height?: number;
+		tick?: number;
 	}
 
-	let { data, sampleRate, binCount, freqMin, freqMax, width = 200, height = 48 }: Props = $props();
+	let {
+		data,
+		sampleRate,
+		binCount,
+		freqMin,
+		freqMax,
+		width = 200,
+		height = 48,
+		tick = 0,
+	}: Props = $props();
 
 	let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);
 
@@ -36,12 +46,17 @@
 			const maxBin = Math.min(binCount - 1, hzToBin(freqMax));
 			for (let i = 0; i < bars; i++) {
 				const binStart = Math.floor((i / bars) * binCount);
-				const binEnd = Math.min(binCount - 1, Math.floor(((i + 1) / bars) * binCount));
+				const binEnd = Math.min(
+					binCount - 1,
+					Math.floor(((i + 1) / bars) * binCount),
+				);
 				let sum = 0;
 				for (let b = binStart; b <= binEnd; b++) sum += data[b];
-				const avg = (sum / (binEnd - binStart + 1)) / 255;
+				const avg = sum / (binEnd - binStart + 1) / 255;
 				const inRange = binEnd >= minBin && binStart <= maxBin;
-				ctx.fillStyle = inRange ? 'rgba(120, 180, 255, 0.8)' : 'rgba(80, 80, 80, 0.9)';
+				ctx.fillStyle = inRange
+					? 'rgba(120, 180, 255, 0.8)'
+					: 'rgba(80, 80, 80, 0.9)';
 				const barH = Math.max(2, avg * h * 0.9);
 				ctx.fillRect(i * barW, h - barH, barW - 1, barH);
 			}

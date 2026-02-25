@@ -8,7 +8,7 @@
   let dragging = $state(false);
   let fileInput: HTMLInputElement;
 
-  const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'];
 
   function handleFile(file: File) {
     if (ACCEPTED_TYPES.includes(file.type)) {
@@ -46,7 +46,7 @@
 <div class="upload-screen">
   <div class="hero">
     <h1 class="title">OpenMosh</h1>
-    <p class="subtitle">Open-source image glitching in the browser.</p>
+    <p class="subtitle">Open-source image & video glitching in the browser.</p>
   </div>
 
   <div

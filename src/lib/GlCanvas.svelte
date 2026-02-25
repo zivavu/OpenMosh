@@ -14,6 +14,7 @@
     naturalHeight?: number;
     fps?: number;
     showFps?: boolean;
+    videoEl?: HTMLVideoElement | null;
   }
 
   let {
@@ -27,6 +28,7 @@
     naturalHeight = $bindable(undefined),
     fps = $bindable(0),
     showFps = false,
+    videoEl = null,
   }: Props = $props();
 
   let frameTimes: number[] = [];
@@ -47,7 +49,7 @@
   let error: string | null = $state(null);
 
   const needsAnimation = $derived(
-    effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+    !!videoEl || effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
   );
 
   $effect(() => {
@@ -67,8 +69,9 @@
     };
   });
 
+  // Image loading — skipped when a video source is active
   $effect(() => {
-    if (!renderer) return;
+    if (!renderer || videoEl) return;
     imageReady = false;
     const img = new Image();
     let cancelled = false;
@@ -92,6 +95,34 @@
     };
   });
 
+  // Video loading — initialises the renderer once metadata is available
+  $effect(() => {
+    if (!renderer || !videoEl) return;
+    imageReady = false;
+    const video = videoEl;
+
+    function onReady() {
+      renderer!.loadVideo(video);
+      naturalWidth = video.videoWidth;
+      naturalHeight = video.videoHeight;
+      imageReady = true;
+      if (
+        canvasWidth != null &&
+        canvasHeight != null &&
+        (canvasWidth !== video.videoWidth || canvasHeight !== video.videoHeight)
+      ) {
+        renderer!.resize(canvasWidth, canvasHeight);
+      }
+    }
+
+    if (video.readyState >= 1) {
+      onReady();
+      return;
+    }
+    video.addEventListener('loadedmetadata', onReady, { once: true });
+    return () => video.removeEventListener('loadedmetadata', onReady);
+  });
+
   $effect(() => {
     if (
       !renderer ||
@@ -103,6 +134,7 @@
     )
       return;
     renderer.resize(canvasWidth, canvasHeight);
+    if (videoEl) renderer.updateSourceFrame(videoEl);
     renderer.render(
       effects,
       needsAnimation ? performance.now() / 1000 : 0,
@@ -113,12 +145,14 @@
     if (!renderer || !imageReady) return;
 
     if (!needsAnimation) {
+      if (videoEl) renderer.updateSourceFrame(videoEl);
       renderer.render(effects, 0);
       return;
     }
 
     let rafId: number;
     const loop = () => {
+      if (videoEl) renderer!.updateSourceFrame(videoEl);
       renderer!.render(effects, performance.now() / 1000);
       trackFps(performance.now());
       rafId = requestAnimationFrame(loop);

@@ -51,6 +51,29 @@ export class GlRenderer {
     this.setupPingPong();
   }
 
+  loadVideo(video: HTMLVideoElement) {
+    const gl = this.gl;
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    this.imgW = w;
+    this.imgH = h;
+    this.canvas.width = w;
+    this.canvas.height = h;
+
+    if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
+    this.sourceTexture = this.createTexture(w, h);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+
+    this.setupPingPong();
+  }
+
+  updateSourceFrame(source: HTMLVideoElement) {
+    if (!this.sourceTexture) return;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  }
+
   /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
   resize(width: number, height: number) {
     if (width <= 0 || height <= 0) return;
