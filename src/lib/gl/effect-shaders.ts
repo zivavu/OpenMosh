@@ -1009,6 +1009,173 @@ void main() {
 			setFloat(gl, l, 'u_speed', v.speed as number);
 		},
 	},
+
+	emboss: {
+		fragment:
+			H +
+			`uniform float u_strength;
+uniform float u_angle;
+uniform float u_mix;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float rad = u_angle * 3.14159265 / 180.0;
+  vec2 dir = vec2(cos(rad), sin(rad));
+  vec2 off = dir * max(px.x, px.y) * 2.0;
+  float s1 = dot(texture(u_texture, v_uv - off).rgb, vec3(0.299, 0.587, 0.114));
+  float s2 = dot(texture(u_texture, v_uv + off).rgb, vec3(0.299, 0.587, 0.114));
+  float diff = (s2 - s1) * u_strength + 0.5;
+  vec3 emboss = clamp(vec3(diff), 0.0, 1.0);
+  vec4 orig = texture(u_texture, v_uv);
+  outColor = vec4(mix(orig.rgb, emboss, u_mix), orig.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_strength', v.strength as number);
+			setFloat(gl, l, 'u_angle', v.angle as number);
+			setFloat(gl, l, 'u_mix', v.mix as number);
+		},
+	},
+
+	thermal: {
+		fragment:
+			H +
+			`uniform float u_intensity;
+uniform int u_palette;
+vec3 thermalRamp(float t) {
+  vec3 c0 = vec3(0.0, 0.0, 0.0);
+  vec3 c1 = vec3(0.2, 0.0, 0.5);
+  vec3 c2 = vec3(0.6, 0.0, 0.6);
+  vec3 c3 = vec3(1.0, 0.0, 0.0);
+  vec3 c4 = vec3(1.0, 0.5, 0.0);
+  vec3 c5 = vec3(1.0, 1.0, 0.0);
+  vec3 c6 = vec3(1.0, 1.0, 1.0);
+  float s0 = smoothstep(0.0, 0.2, t);
+  float s1 = smoothstep(0.2, 0.4, t);
+  float s2 = smoothstep(0.4, 0.55, t);
+  float s3 = smoothstep(0.55, 0.7, t);
+  float s4 = smoothstep(0.7, 0.85, t);
+  float s5 = smoothstep(0.85, 1.0, t);
+  return mix(mix(mix(mix(mix(mix(c0, c1, s0), c2, s1), c3, s2), c4, s3), c5, s4), c6, s5);
+}
+vec3 infraredRamp(float t) {
+  vec3 c0 = vec3(0.1, 0.0, 0.2);
+  vec3 c1 = vec3(0.4, 0.0, 0.5);
+  vec3 c2 = vec3(0.8, 0.2, 0.6);
+  vec3 c3 = vec3(1.0, 0.6, 0.8);
+  vec3 c4 = vec3(1.0, 1.0, 1.0);
+  float s0 = smoothstep(0.0, 0.25, t);
+  float s1 = smoothstep(0.25, 0.5, t);
+  float s2 = smoothstep(0.5, 0.75, t);
+  float s3 = smoothstep(0.75, 1.0, t);
+  return mix(mix(mix(mix(c0, c1, s0), c2, s1), c3, s2), c4, s3);
+}
+vec3 nightVisionRamp(float t) {
+  vec3 c0 = vec3(0.0, 0.05, 0.0);
+  vec3 c1 = vec3(0.0, 0.3, 0.0);
+  vec3 c2 = vec3(0.2, 0.6, 0.1);
+  vec3 c3 = vec3(0.5, 1.0, 0.4);
+  vec3 c4 = vec3(0.9, 1.0, 0.9);
+  float s0 = smoothstep(0.0, 0.25, t);
+  float s1 = smoothstep(0.25, 0.5, t);
+  float s2 = smoothstep(0.5, 0.75, t);
+  float s3 = smoothstep(0.75, 1.0, t);
+  return mix(mix(mix(mix(c0, c1, s0), c2, s1), c3, s2), c4, s3);
+}
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  vec3 ramp;
+  if (u_palette == 0) ramp = thermalRamp(luma);
+  else if (u_palette == 1) ramp = infraredRamp(luma);
+  else ramp = nightVisionRamp(luma);
+  outColor = vec4(mix(c.rgb, ramp, u_intensity), c.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_intensity', v.intensity as number);
+			const p = v.palette as string;
+			setInt(gl, l, 'u_palette', p === 'infrared' ? 1 : p === 'night-vision' ? 2 : 0);
+		},
+	},
+
+	'color-halves': {
+		fragment:
+			H +
+			`uniform float u_position;
+uniform float u_angle;
+uniform int u_mode;
+uniform float u_amount;
+vec3 hueRotate(vec3 c, float angle) {
+  float rad = angle * 3.14159265 / 180.0;
+  float cosA = cos(rad);
+  float sinA = sin(rad);
+  vec3 k = vec3(0.57735026919);
+  return c * cosA + cross(k, c) * sinA + k * dot(k, c) * (1.0 - cosA);
+}
+void main() {
+  vec4 orig = texture(u_texture, v_uv);
+  float rad = u_angle * 3.14159265 / 180.0;
+  vec2 center = vec2(0.5);
+  vec2 uv = v_uv - center;
+  float c = cos(rad), s = sin(rad);
+  float proj = uv.x * c + uv.y * s;
+  float feather = 0.02;
+  float side = smoothstep(u_position - feather, u_position + feather, proj + 0.5);
+  vec3 treated = orig.rgb;
+  if (u_mode == 0) {
+    treated = 1.0 - treated;
+  } else if (u_mode == 1) {
+    treated = hueRotate(treated, 120.0);
+  } else if (u_mode == 2) {
+    float luma = dot(treated, vec3(0.299, 0.587, 0.114));
+    treated = mix(treated, vec3(luma), 1.0);
+  } else {
+    treated = clamp((orig.rgb - 0.5) * 2.0 + 0.5, 0.0, 1.0);
+  }
+  vec3 result = mix(orig.rgb, treated, side * u_amount);
+  outColor = vec4(result, orig.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_position', v.position as number);
+			setFloat(gl, l, 'u_angle', v.angle as number);
+			const m = v.mode as string;
+			setInt(
+				gl,
+				l,
+				'u_mode',
+				m === 'hue-shift' ? 1 : m === 'desaturate' ? 2 : m === 'high-contrast' ? 3 : 0,
+			);
+			setFloat(gl, l, 'u_amount', v.amount as number);
+		},
+	},
+
+	'pixel-sort': {
+		fragment:
+			H +
+			`uniform float u_threshold;
+uniform float u_ceiling;
+uniform float u_range;
+uniform int u_direction;
+uniform float u_reverse;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec4 c = texture(u_texture, v_uv);
+  float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  float lo = min(u_threshold, u_ceiling);
+  float hi = max(u_threshold, u_ceiling);
+  float span = hi - lo;
+  float norm = span > 0.001 ? (clamp(luma, lo, hi) - lo) / span : 0.0;
+  float sign = (u_reverse > 0.5) ? -1.0 : 1.0;
+  float disp = norm * u_range * sign;
+  vec2 offset = u_direction == 0 ? vec2(disp * px.x, 0.0) : vec2(0.0, disp * px.y);
+  outColor = texture(u_texture, v_uv + offset);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_threshold', v.threshold as number);
+			setFloat(gl, l, 'u_ceiling', v.ceiling as number);
+			setFloat(gl, l, 'u_range', v.range as number);
+			setInt(gl, l, 'u_direction', v.direction === 'vertical' ? 1 : 0);
+			setFloat(gl, l, 'u_reverse', v.reverse as number);
+		},
+	},
 };
 
 export const ANIMATED_EFFECTS = new Set(
