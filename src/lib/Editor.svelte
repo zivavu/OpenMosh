@@ -33,7 +33,9 @@
 	let moshMax = $state(8);
 	let randomizeOrder = $state(true);
 	let showMoshSettings = $state(false);
-	let moshAudioLink = $state(false);
+	let moshAudioLink = $state(true);
+	let showFps = $state(false);
+	let currentFps = $state(0);
 
 	let naturalWidth = $state<number | undefined>(undefined);
 	let naturalHeight = $state<number | undefined>(undefined);
@@ -659,9 +661,13 @@
 			: recordDuration,
 	);
 	let canIncludeAudio = $derived(
-		!!trackFile && trackDuration > 0 && (recordFormat === 'mp4' || recordFormat === 'webm'),
+		!!trackFile &&
+			trackDuration > 0 &&
+			(recordFormat === 'mp4' || recordFormat === 'webm'),
 	);
-	let canRenderSpan = $derived(!!recordWithAudio && !!trackFile && trackDuration > 0);
+	let canRenderSpan = $derived(
+		!!recordWithAudio && !!trackFile && trackDuration > 0,
+	);
 
 	function handleRecordClickOutside(e: MouseEvent) {
 		if (
@@ -687,7 +693,9 @@
 				? spanEnd - spanStart
 				: recordDuration;
 		const useAudio =
-			(recordWithAudio || recordFormat === 'gif') && trackFile && trackDuration > 0;
+			(recordWithAudio || recordFormat === 'gif') &&
+			trackFile &&
+			trackDuration > 0;
 		const audioStart = recordSpanOnly ? spanStart : 0;
 		const audioEnd = recordSpanOnly
 			? spanEnd
@@ -824,13 +832,13 @@
 					>
 						JPG
 					</button>
-				</div>
-				<div class="resize-group" bind:this={resizeGroupEl}>
-					<button
-						class="settings-btn"
-						class:active={showResizeSettings}
-						onclick={() => (showResizeSettings = !showResizeSettings)}
-						title="Image size"
+			</div>
+			<div class="resize-group" bind:this={resizeGroupEl}>
+				<button
+					class="settings-btn"
+					class:active={showResizeSettings}
+					onclick={() => (showResizeSettings = !showResizeSettings)}
+					title="Image size"
 					>
 						<svg
 							width="14"
@@ -861,7 +869,9 @@
 									step="1"
 									value={resizeWidth}
 									oninput={(e) =>
-										setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
+										setResizeWidth(
+											+(e.currentTarget as HTMLInputElement).value,
+										)}
 								/>
 							</div>
 							<div class="mosh-setting-row">
@@ -873,7 +883,9 @@
 									step="1"
 									value={resizeHeight}
 									oninput={(e) =>
-										setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
+										setResizeHeight(
+											+(e.currentTarget as HTMLInputElement).value,
+										)}
 								/>
 							</div>
 							<div class="mosh-setting-row">
@@ -970,6 +982,8 @@
 			bind:glRenderer
 			bind:naturalWidth
 			bind:naturalHeight
+			bind:fps={currentFps}
+			{showFps}
 		/>
 
 		<div class="action-bar">
@@ -1091,15 +1105,23 @@
 								bind:checked={randomizeOrder}
 							/>
 						</div>
-						<div class="mosh-setting-row">
-							<label for="mosh-audio-link">Random audio links</label>
-							<input
-								id="mosh-audio-link"
-								type="checkbox"
-								bind:checked={moshAudioLink}
-							/>
-						</div>
+					<div class="mosh-setting-row">
+						<label for="mosh-audio-link">Random audio links</label>
+						<input
+							id="mosh-audio-link"
+							type="checkbox"
+							bind:checked={moshAudioLink}
+						/>
 					</div>
+					<div class="mosh-setting-row">
+						<label for="show-fps">Show FPS</label>
+						<input
+							id="show-fps"
+							type="checkbox"
+							bind:checked={showFps}
+						/>
+					</div>
+				</div>
 				{/if}
 			</div>
 			<button class="action-btn save-btn" onclick={save}>

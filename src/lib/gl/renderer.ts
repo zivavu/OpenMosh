@@ -18,7 +18,9 @@ export class GlRenderer {
   private sourceTexture: WebGLTexture | null = null;
   private ppTextures: [WebGLTexture, WebGLTexture] | null = null;
   private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
-  private feedbackTex: WebGLTexture | null = null;
+  private fbTextures: [WebGLTexture, WebGLTexture] | null = null;
+  private fbFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  private fbIdx = 0;
   private passthrough: CompiledProgram;
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private imgW = 0;
@@ -61,13 +63,15 @@ export class GlRenderer {
 
   render(effects: EffectInstance[], time = 0) {
     const gl = this.gl;
-    if (!this.sourceTexture || !this.ppTextures || !this.ppFBOs) return;
+    if (!this.sourceTexture || !this.ppTextures || !this.ppFBOs || !this.fbTextures || !this.fbFBOs) return;
 
     const enabled = effects.filter((e) => e.enabled);
+    const writeIdx = (1 - this.fbIdx) as 0 | 1;
 
     if (enabled.length === 0) {
-      this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
-      this.captureToFeedback();
+      this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.sourceTexture!, 1.0, time);
+      this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+      this.fbIdx = writeIdx;
       return;
     }
 
@@ -82,7 +86,7 @@ export class GlRenderer {
       const isLast = i === enabled.length - 1;
 
       if (isLast) {
-        this.drawPass(entry.program, null, input, -1.0, time, entry.def, eff.values);
+        this.drawPass(entry.program, this.fbFBOs[writeIdx], input, 1.0, time, entry.def, eff.values);
       } else {
         this.drawPass(
           entry.program,
@@ -98,7 +102,8 @@ export class GlRenderer {
       }
     }
 
-    this.captureToFeedback();
+    this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+    this.fbIdx = writeIdx;
   }
 
   destroy() {
@@ -112,7 +117,14 @@ export class GlRenderer {
       gl.deleteFramebuffer(this.ppFBOs[0]);
       gl.deleteFramebuffer(this.ppFBOs[1]);
     }
-    if (this.feedbackTex) gl.deleteTexture(this.feedbackTex);
+    if (this.fbTextures) {
+      gl.deleteTexture(this.fbTextures[0]);
+      gl.deleteTexture(this.fbTextures[1]);
+    }
+    if (this.fbFBOs) {
+      gl.deleteFramebuffer(this.fbFBOs[0]);
+      gl.deleteFramebuffer(this.fbFBOs[1]);
+    }
     gl.deleteProgram(this.passthrough.program);
     for (const { program } of this.compiled.values()) {
       gl.deleteProgram(program.program);
@@ -179,31 +191,39 @@ export class GlRenderer {
       gl.deleteFramebuffer(this.ppFBOs[0]);
       gl.deleteFramebuffer(this.ppFBOs[1]);
     }
-    if (this.feedbackTex) {
-      gl.deleteTexture(this.feedbackTex);
+    if (this.fbTextures) {
+      gl.deleteTexture(this.fbTextures[0]);
+      gl.deleteTexture(this.fbTextures[1]);
+    }
+    if (this.fbFBOs) {
+      gl.deleteFramebuffer(this.fbFBOs[0]);
+      gl.deleteFramebuffer(this.fbFBOs[1]);
     }
 
-    const t0 = this.createTexture(this.imgW, this.imgH);
-    const t1 = this.createTexture(this.imgW, this.imgH);
-    const f0 = gl.createFramebuffer()!;
-    const f1 = gl.createFramebuffer()!;
+    this.ppTextures = [
+      this.createTexture(this.imgW, this.imgH),
+      this.createTexture(this.imgW, this.imgH),
+    ];
+    this.ppFBOs = [gl.createFramebuffer()!, gl.createFramebuffer()!];
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, f0);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t0, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, f1);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t1, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ppFBOs[0]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.ppTextures[0], 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ppFBOs[1]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.ppTextures[1], 0);
+
+    this.fbTextures = [
+      this.createTexture(this.imgW, this.imgH),
+      this.createTexture(this.imgW, this.imgH),
+    ];
+    this.fbFBOs = [gl.createFramebuffer()!, gl.createFramebuffer()!];
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbFBOs[0]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fbTextures[0], 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbFBOs[1]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fbTextures[1], 0);
+
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    this.ppTextures = [t0, t1];
-    this.ppFBOs = [f0, f1];
-    this.feedbackTex = this.createTexture(this.imgW, this.imgH);
-  }
-
-  private captureToFeedback() {
-    const gl = this.gl;
-    if (!this.feedbackTex) return;
-    gl.bindTexture(gl.TEXTURE_2D, this.feedbackTex);
-    gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, this.imgW, this.imgH);
+    this.fbIdx = 0;
   }
 
   private drawPass(
@@ -237,9 +257,9 @@ export class GlRenderer {
     if (compiled.uniforms['u_time']) {
       gl.uniform1f(compiled.uniforms['u_time'], time);
     }
-    if (compiled.uniforms['u_feedback'] && this.feedbackTex) {
+    if (compiled.uniforms['u_feedback'] && this.fbTextures) {
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, this.feedbackTex);
+      gl.bindTexture(gl.TEXTURE_2D, this.fbTextures[this.fbIdx]);
       gl.uniform1i(compiled.uniforms['u_feedback'], 1);
       gl.activeTexture(gl.TEXTURE0);
     }

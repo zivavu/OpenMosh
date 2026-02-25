@@ -12,6 +12,8 @@
     glRenderer?: GlRenderer | null;
     naturalWidth?: number;
     naturalHeight?: number;
+    fps?: number;
+    showFps?: boolean;
   }
 
   let {
@@ -23,7 +25,21 @@
     glRenderer = $bindable(null),
     naturalWidth = $bindable(undefined),
     naturalHeight = $bindable(undefined),
+    fps = $bindable(0),
+    showFps = false,
   }: Props = $props();
+
+  let frameTimes: number[] = [];
+  let lastFpsUpdate = 0;
+
+  function trackFps(now: number) {
+    frameTimes.push(now);
+    if (now - lastFpsUpdate < 400) return;
+    lastFpsUpdate = now;
+    const cutoff = now - 1000;
+    frameTimes = frameTimes.filter((t) => t > cutoff);
+    fps = frameTimes.length;
+  }
 
   let canvas = $state<HTMLCanvasElement>(null!);
   let renderer: GlRenderer | null = $state(null);
@@ -104,6 +120,7 @@
     let rafId: number;
     const loop = () => {
       renderer!.render(effects, performance.now() / 1000);
+      trackFps(performance.now());
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
@@ -117,11 +134,15 @@
     <p class="error">{error}</p>
   {:else}
     <canvas bind:this={canvas}></canvas>
+    {#if showFps}
+      <span class="fps-overlay">{fps} FPS</span>
+    {/if}
   {/if}
 </div>
 
 <style>
   .preview-area {
+    position: relative;
     flex: 1;
     display: flex;
     align-items: center;
@@ -140,5 +161,22 @@
   .error {
     color: #ff6b6b;
     font-size: 0.9rem;
+  }
+
+  .fps-overlay {
+    position: absolute;
+    top: 1.8rem;
+    left: 1.8rem;
+    background: rgba(0, 0, 0, 0.65);
+    color: #0f0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-variant-numeric: tabular-nums;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 10;
+    letter-spacing: 0.04em;
   }
 </style>
