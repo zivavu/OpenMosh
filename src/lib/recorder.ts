@@ -31,6 +31,8 @@ export interface RecordOptions {
 	audioEnd?: number;
 	/** When set, each frame is sourced from this video element by seeking to the frame time. */
 	sourceVideo?: HTMLVideoElement;
+	/** Start offset (seconds) into the source video for the export span. Frames are seeked to videoSpanStart + time. */
+	videoSpanStart?: number;
 }
 
 function seekVideoToTime(video: HTMLVideoElement, time: number): Promise<void> {
@@ -66,6 +68,7 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 		audioStart = 0,
 		audioEnd,
 		sourceVideo,
+		videoSpanStart = 0,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -184,8 +187,11 @@ async function recordMp4WebM(opts: RecordOptions): Promise<Blob> {
 			);
 		}
 		if (sourceVideo) {
-			const loopedTime = sourceVideo.duration > 0 ? time % sourceVideo.duration : time;
-			await seekVideoToTime(sourceVideo, loopedTime);
+			const seekTime = Math.min(
+				sourceVideo.duration > 0 ? sourceVideo.duration - 0.001 : 0,
+				videoSpanStart + time,
+			);
+			await seekVideoToTime(sourceVideo, seekTime);
 			renderer.updateSourceFrame(sourceVideo);
 		}
 		renderer.render(effects, time);
@@ -228,6 +234,7 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		audioStart = 0,
 		audioEnd,
 		sourceVideo,
+		videoSpanStart = 0,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -303,8 +310,11 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 			);
 		}
 		if (sourceVideo) {
-			const loopedTime = sourceVideo.duration > 0 ? time % sourceVideo.duration : time;
-			await seekVideoToTime(sourceVideo, loopedTime);
+			const seekTime = Math.min(
+				sourceVideo.duration > 0 ? sourceVideo.duration - 0.001 : 0,
+				videoSpanStart + time,
+			);
+			await seekVideoToTime(sourceVideo, seekTime);
 			renderer.updateSourceFrame(sourceVideo);
 		}
 		renderer.render(effects, time);

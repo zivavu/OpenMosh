@@ -23,6 +23,13 @@
 
 	let isVideo = $derived(file.type.startsWith('video/'));
 	let videoEl = $state<HTMLVideoElement | null>(null);
+	let videoDuration = $state(0);
+	let videoCurrentTime = $state(0);
+	let videoSpanStart = $state(0);
+	let videoSpanEnd = $state(0);
+	let videoPlaying = $state(false);
+	let draggingVideoHandle = $state<'start' | 'end' | null>(null);
+	let videoTimelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
 	let format: 'png' | 'jpg' = $state('png');
 	let imageSrc = $derived(URL.createObjectURL(file));
@@ -235,6 +242,32 @@
 		};
 	});
 
+	$effect(() => {
+		const handle = draggingVideoHandle;
+		if (handle === null) return;
+		const move = (e: PointerEvent) => {
+			if (!videoTimelineTrackEl) return;
+			const rect = videoTimelineTrackEl.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const pct = Math.max(0, Math.min(1, x / rect.width));
+			const t = pct * videoDuration;
+			if (handle === 'start') {
+				videoSpanStart = Math.max(0, Math.min(t, videoSpanEnd - 0.1));
+			} else {
+				videoSpanEnd = Math.max(videoSpanStart + 0.1, Math.min(videoDuration, t));
+			}
+		};
+		const up = () => {
+			draggingVideoHandle = null;
+		};
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+		return () => {
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+		};
+	});
+
 	function formatTime(sec: number): string {
 		if (!Number.isFinite(sec) || sec < 0) return '0:00';
 		const m = Math.floor(sec / 60);
@@ -274,6 +307,41 @@
 		audioSampleRate = ctx.sampleRate;
 		audioFrequencyBinCount = analyser.frequencyBinCount;
 		ctx.resume().catch(() => {});
+	}
+
+	function playVideo() {
+		if (!videoEl) return;
+		audioContext?.resume();
+		videoEl.play().catch(() => {});
+	}
+
+	function pauseVideo() {
+		videoEl?.pause();
+	}
+
+	function seekVideoTo(t: number) {
+		if (!videoEl || !videoDuration) return;
+		const tClamp = Math.max(0, Math.min(videoDuration, t));
+		videoEl.currentTime = tClamp;
+		videoCurrentTime = tClamp;
+	}
+
+	function videoTimeFromEvent(e: PointerEvent): number {
+		if (!videoTimelineTrackEl || !videoDuration) return 0;
+		const rect = videoTimelineTrackEl.getBoundingClientRect();
+		const x = e.clientX - rect.left;
+		const pct = Math.max(0, Math.min(1, x / rect.width));
+		return pct * videoDuration;
+	}
+
+	function onVideoTimelinePointerDown(e: PointerEvent, handle: 'start' | 'end' | null) {
+		e.preventDefault();
+		if (handle === 'start' || handle === 'end') {
+			draggingVideoHandle = handle;
+			(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+		} else {
+			seekVideoTo(videoTimeFromEvent(e));
+		}
 	}
 
 	function disposeAudioGraph() {
@@ -666,9 +734,11 @@
 	let recordGroupEl: HTMLDivElement;
 
 	let recordDurationEffective = $derived(
-		recordSpanOnly && trackFile && trackDuration > 0
-			? spanEnd - spanStart
-			: recordDuration,
+		isVideo && videoDuration > 0
+			? videoSpanEnd - videoSpanStart
+			: recordSpanOnly && trackFile && trackDuration > 0
+				? spanEnd - spanStart
+				: recordDuration,
 	);
 	let canIncludeAudio = $derived(
 		!!trackFile &&
@@ -699,9 +769,11 @@
 		recordAbort = abort;
 
 		const duration =
-			recordSpanOnly && trackFile && trackDuration > 0
-				? spanEnd - spanStart
-				: recordDuration;
+			isVideo && videoDuration > 0
+				? videoSpanEnd - videoSpanStart
+				: recordSpanOnly && trackFile && trackDuration > 0
+					? spanEnd - spanStart
+					: recordDuration;
 		const useAudio =
 			(recordWithAudio || recordFormat === 'gif') &&
 			trackFile &&
@@ -709,7 +781,7 @@
 		const audioStart = recordSpanOnly ? spanStart : 0;
 		const audioEnd = recordSpanOnly
 			? spanEnd
-			: Math.min(recordDuration, trackDuration);
+			: Math.min(duration, trackDuration);
 
 		if (isVideo && videoEl) videoEl.pause();
 		try {
@@ -733,7 +805,7 @@
 						audioStart,
 						audioEnd,
 					}),
-				...(isVideo && videoEl && { sourceVideo: videoEl }),
+				...(isVideo && videoEl && { sourceVideo: videoEl, videoSpanStart }),
 			});
 			downloadBlob(blob, recordFormat);
 		} catch (e) {
@@ -921,7 +993,18 @@
 				autoplay
 				loop
 				playsinline
-				onloadedmetadata={() => { recordDuration = Math.round(videoEl!.duration * 10) / 10; ensureVideoAudioGraph(); }}
+				onloadedmetadata={() => {
+					const dur = videoEl!.duration;
+					videoDuration = dur;
+					videoSpanStart = 0;
+					videoSpanEnd = dur;
+					recordDuration = Math.round(dur * 10) / 10;
+					ensureVideoAudioGraph();
+				}}
+				ontimeupdate={() => { videoCurrentTime = videoEl?.currentTime ?? 0; }}
+				onplay={() => (videoPlaying = true)}
+				onpause={() => (videoPlaying = false)}
+				onseeking={() => { audioContext?.resume(); }}
 				style="display:none"
 			></video>
 		{/if}
@@ -1188,7 +1271,11 @@
 						{/if}
 						<div class="mosh-setting-row">
 							<label for="rec-duration">Duration</label>
-							{#if recordSpanOnly && trackFile && trackDuration > 0}
+							{#if isVideo && videoDuration > 0}
+								<span class="mosh-setting-val"
+									>{recordDurationEffective.toFixed(1)}s (video span)</span
+								>
+							{:else if recordSpanOnly && trackFile && trackDuration > 0}
 								<span class="mosh-setting-val"
 									>{recordDurationEffective.toFixed(1)}s (span)</span
 								>
@@ -1225,8 +1312,77 @@
 			</div>
 		</div>
 
+		{#if isVideo && videoDuration > 0}
+			<div class="timeline-bar">
+				<span class="timeline-label">VID</span>
+				<button
+					class="timeline-play-btn"
+					onclick={videoPlaying ? pauseVideo : playVideo}
+					title={videoPlaying ? 'Pause' : 'Play'}
+				>
+					{#if videoPlaying}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+							<rect x="6" y="4" width="4" height="16" />
+							<rect x="14" y="4" width="4" height="16" />
+						</svg>
+					{:else}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+							<polygon points="5 3 19 12 5 21 5 3" />
+						</svg>
+					{/if}
+				</button>
+				<span class="timeline-time">{formatTime(videoCurrentTime)}</span>
+				<div
+					class="timeline-track-wrap"
+					bind:this={videoTimelineTrackEl}
+					role="slider"
+					aria-label="Video timeline"
+					aria-valuenow={videoCurrentTime}
+					aria-valuemin={0}
+					aria-valuemax={videoDuration}
+					tabindex="0"
+					onpointerdown={(e) => onVideoTimelinePointerDown(e, null)}
+				>
+					<div class="timeline-track">
+						<div
+							class="timeline-span"
+							style="left: {(videoSpanStart / videoDuration) * 100}%; width: {((videoSpanEnd - videoSpanStart) / videoDuration) * 100}%"
+						></div>
+						<div
+							class="timeline-playhead"
+							style="left: {(videoCurrentTime / videoDuration) * 100}%"
+							aria-hidden="true"
+						></div>
+						<button
+							type="button"
+							class="timeline-handle timeline-handle-start"
+							style="left: {(videoSpanStart / videoDuration) * 100}%"
+							title="Export span start"
+							onpointerdown={(e) => {
+								e.stopPropagation();
+								onVideoTimelinePointerDown(e, 'start');
+							}}
+						></button>
+						<button
+							type="button"
+							class="timeline-handle timeline-handle-end"
+							style="left: {(videoSpanEnd / videoDuration) * 100}%"
+							title="Export span end"
+							onpointerdown={(e) => {
+								e.stopPropagation();
+								onVideoTimelinePointerDown(e, 'end');
+							}}
+						></button>
+					</div>
+				</div>
+				<span class="timeline-time">{formatTime(videoSpanEnd)}</span>
+			</div>
+		{/if}
 		{#if trackFile && trackDuration > 0}
 			<div class="timeline-bar">
+				{#if isVideo}
+					<span class="timeline-label">AUD</span>
+				{/if}
 				<button
 					class="timeline-play-btn"
 					onclick={audioPlaying ? pauseTrack : playSpan}
@@ -1535,6 +1691,16 @@
 	}
 
 	/* Timeline */
+	.timeline-label {
+		font-size: 0.55rem;
+		font-weight: 700;
+		letter-spacing: 0.07em;
+		color: #555;
+		min-width: 1.6rem;
+		text-align: center;
+		flex-shrink: 0;
+	}
+
 	.timeline-bar {
 		flex-shrink: 0;
 		display: flex;
