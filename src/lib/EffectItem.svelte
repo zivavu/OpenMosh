@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DualRangeSlider from './DualRangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
 		FREQ_PRESETS,
@@ -167,54 +168,39 @@
 								{#if hasTrack && onVolumeLinkChange}
 									{#if effect.volumeLinks?.[param.key]}
 										{@const link = effect.volumeLinks[param.key]}
-										<div class="volume-link-row">
-											<span class="volume-link-label">Vol →</span>
-											<input
-												type="number"
-												class="volume-link-input"
+									<div class="volume-link-row">
+										<span class="volume-link-label">Vol →</span>
+										<div class="volume-link-slider">
+											<DualRangeSlider
 												min={param.min}
 												max={param.max}
 												step={param.step}
-												value={link.min}
-												oninput={(e) => {
-													const v = parseFloat(e.currentTarget.value);
-													if (!Number.isNaN(v))
-														onVolumeLinkChange(param.key, { ...link, min: v });
-												}}
+												valueLow={link.min}
+												valueHigh={link.max}
+												onChangeLow={(v) => onVolumeLinkChange(param.key, { ...link, min: v })}
+												onChangeHigh={(v) => onVolumeLinkChange(param.key, { ...link, max: v })}
+												formatValue={(v) => parseFloat(v.toString()).toFixed(2)}
 											/>
-											<span class="volume-link-sep">–</span>
-											<input
-												type="number"
-												class="volume-link-input"
-												min={param.min}
-												max={param.max}
-												step={param.step}
-												value={link.max}
-												oninput={(e) => {
-													const v = parseFloat(e.currentTarget.value);
-													if (!Number.isNaN(v))
-														onVolumeLinkChange(param.key, { ...link, max: v });
-												}}
-											/>
-											<button
-												type="button"
-												class="volume-unlink-btn"
-												title="Unlink from volume"
-												onclick={() => onVolumeLinkChange(param.key, null)}
-											>
-												<svg
-													width="12"
-													height="12"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-												>
-													<line x1="18" y1="6" x2="6" y2="18" />
-													<line x1="6" y1="6" x2="18" y2="18" />
-												</svg>
-											</button>
 										</div>
+										<button
+											type="button"
+											class="volume-unlink-btn"
+											title="Unlink from volume"
+											onclick={() => onVolumeLinkChange(param.key, null)}
+										>
+											<svg
+												width="12"
+												height="12"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<line x1="18" y1="6" x2="6" y2="18" />
+												<line x1="6" y1="6" x2="18" y2="18" />
+											</svg>
+										</button>
+									</div>
 										<div class="volume-freq-row">
 											<span class="volume-link-label">Freq</span>
 											<div class="freq-presets">
@@ -271,31 +257,6 @@
 															freqMax: FREQ_PRESETS.high.max,
 														})}>High</button
 												>
-												<button
-													type="button"
-													class="freq-preset-btn"
-													class:active={link.freqMin != null &&
-														link.freqMax != null &&
-														!(
-															link.freqMin === FREQ_PRESETS.low.min &&
-															link.freqMax === FREQ_PRESETS.low.max
-														) &&
-														!(
-															link.freqMin === FREQ_PRESETS.mid.min &&
-															link.freqMax === FREQ_PRESETS.mid.max
-														) &&
-														!(
-															link.freqMin === FREQ_PRESETS.high.min &&
-															link.freqMax === FREQ_PRESETS.high.max
-														)}
-													title="Custom frequency range"
-													onclick={() =>
-														onVolumeLinkChange(param.key, {
-															...link,
-															freqMin: link.freqMin ?? 100,
-															freqMax: link.freqMax ?? 2000,
-														})}>Custom</button
-												>
 											</div>
 										</div>
 										{#if link.freqMin != null && link.freqMax != null && spectrumData}
@@ -309,54 +270,23 @@
 													width={200}
 													height={48}
 												/>
-												<div class="spectrum-inputs">
-													<label
-														class="spectrum-label"
-														for="{effect.instanceId}-{param.key}-freqMin"
-														>From</label
-													>
-													<input
-														id="{effect.instanceId}-{param.key}-freqMin"
-														type="number"
-														class="volume-link-input spectrum-hz"
+										<div class="spectrum-inputs">
+												<span class="spectrum-label">Freq</span>
+												<div class="spectrum-slider">
+													<DualRangeSlider
 														min={20}
 														max={spectrumData.sampleRate / 2}
 														step={10}
-														value={link.freqMin}
-														oninput={(e) => {
-															const v = parseFloat(e.currentTarget.value);
-															if (!Number.isNaN(v))
-																onVolumeLinkChange(param.key, {
-																	...link,
-																	freqMin: v,
-																});
-														}}
+														valueLow={link.freqMin ?? 20}
+														valueHigh={link.freqMax ?? 20000}
+														onChangeLow={(v) =>
+															onVolumeLinkChange(param.key, { ...link, freqMin: v })}
+														onChangeHigh={(v) =>
+															onVolumeLinkChange(param.key, { ...link, freqMax: v })}
+														formatValue={(v) => `${Math.round(v)} Hz`}
 													/>
-													<span class="volume-link-sep">Hz</span>
-													<label
-														class="spectrum-label"
-														for="{effect.instanceId}-{param.key}-freqMax"
-														>To</label
-													>
-													<input
-														id="{effect.instanceId}-{param.key}-freqMax"
-														type="number"
-														class="volume-link-input spectrum-hz"
-														min={20}
-														max={spectrumData.sampleRate / 2}
-														step={10}
-														value={link.freqMax}
-														oninput={(e) => {
-															const v = parseFloat(e.currentTarget.value);
-															if (!Number.isNaN(v))
-																onVolumeLinkChange(param.key, {
-																	...link,
-																	freqMax: v,
-																});
-														}}
-													/>
-													<span class="volume-link-sep">Hz</span>
 												</div>
+											</div>
 											</div>
 										{/if}
 									{:else}
@@ -589,14 +519,20 @@
 		padding: 0.4rem 0.8rem 0.6rem 1.8rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.45rem;
+		gap: 0;
 	}
 
 	.param-row {
 		display: flex;
-		align-items: center;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+		padding: 0.35rem 0;
+	}
+
+	.param-row + .param-row {
+		border-top: 1px solid #2a2a2a;
+		margin-top: 0.15rem;
+		padding-top: 0.5rem;
 	}
 
 	.param-label {
@@ -654,7 +590,7 @@
 	.volume-link-row {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.4rem;
 		width: 100%;
 		margin-top: 0.25rem;
 		padding-left: 0;
@@ -666,20 +602,9 @@
 		flex-shrink: 0;
 	}
 
-	.volume-link-input {
-		width: 3.5rem;
-		padding: 0.15rem 0.3rem;
-		font-size: 0.65rem;
-		font-family: inherit;
-		background: #222;
-		border: 1px solid #333;
-		border-radius: 4px;
-		color: #bbb;
-	}
-
-	.volume-link-sep {
-		font-size: 0.65rem;
-		color: #555;
+	.volume-link-slider {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.volume-unlink-btn {
@@ -760,17 +685,18 @@
 	.spectrum-inputs {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
-		flex-wrap: wrap;
+		gap: 0.35rem;
 	}
 
 	.spectrum-label {
 		font-size: 0.65rem;
 		color: #555;
+		flex-shrink: 0;
 	}
 
-	.spectrum-hz {
-		width: 3rem;
+	.spectrum-slider {
+		flex: 1;
+		min-width: 0;
 	}
 
 	input[type='range'] {

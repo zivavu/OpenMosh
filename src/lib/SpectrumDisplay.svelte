@@ -42,7 +42,8 @@
 				const avg = (sum / (binEnd - binStart + 1)) / 255;
 				const inRange = binEnd >= minBin && binStart <= maxBin;
 				ctx.fillStyle = inRange ? 'rgba(120, 180, 255, 0.8)' : 'rgba(80, 80, 80, 0.9)';
-				ctx.fillRect(i * barW, h - avg * h * 0.9, barW - 1, avg * h * 0.9);
+				const barH = Math.max(2, avg * h * 0.9);
+				ctx.fillRect(i * barW, h - barH, barW - 1, barH);
 			}
 			rafId = requestAnimationFrame(draw);
 		}
