@@ -794,7 +794,13 @@
 				fps: recordFormat === 'gif' ? Math.min(recordFps, 15) : recordFps,
 				canvas: canvasEl,
 				renderer: glRenderer,
-				effects: $state.snapshot(effects) as EffectInstance[],
+				effects: effects.map((e) => {
+					const snap = $state.snapshot(e) as EffectInstance;
+					if (e.volumeLinks && !snap.volumeLinks) {
+						snap.volumeLinks = JSON.parse(JSON.stringify(e.volumeLinks));
+					}
+					return snap;
+				}),
 				onProgress: (p) => {
 					recordProgress = p;
 				},

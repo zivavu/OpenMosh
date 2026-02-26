@@ -180,12 +180,20 @@ function computeFrameAnalysis(
 	const magnitude = new Float32Array(fftSize / 2);
 	fftMagnitude(real, imag, magnitude, fftSize);
 
-	// Convert magnitude to byte frequency data (0-255), similar to AnalyserNode.getByteFrequencyData
+	// Convert magnitude to dB-scaled byte frequency data (0-255),
+	// matching AnalyserNode.getByteFrequencyData's logarithmic behaviour.
+	// AnalyserNode defaults: maxDecibels=-30, minDecibels=-100 → 70 dB range.
+	// magnitude[] is normalized to [0,1] (peak=1), so we use relative dB.
+	const DB_RANGE = 70;
 	const frequencyData = new Uint8Array(fftSize / 2);
 	for (let i = 0; i < frequencyData.length; i++) {
-		// AnalyserNode uses dB scale; we use linear normalized, scaled to 0-255
-		const v = Math.min(255, Math.floor(magnitude[i] * 255));
-		frequencyData[i] = v;
+		if (magnitude[i] <= 0) {
+			frequencyData[i] = 0;
+		} else {
+			const db = 20 * Math.log10(magnitude[i]);
+			const scaled = (db + DB_RANGE) / DB_RANGE;
+			frequencyData[i] = Math.max(0, Math.min(255, Math.round(scaled * 255)));
+		}
 	}
 
 	return { volumeLevel, frequencyData };

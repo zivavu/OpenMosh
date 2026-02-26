@@ -1152,6 +1152,7 @@ export function createEffectInstance(def: EffectDefinition): EffectInstance {
 		locked: false,
 		expanded: false,
 		values: Object.fromEntries(def.params.map((p) => [p.key, p.defaultValue])),
+		volumeLinks: undefined,
 	};
 }
 

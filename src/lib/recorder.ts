@@ -70,15 +70,6 @@ interface ResolvedAudio {
 	sampleRate: number;
 }
 
-/**
- * Resolve the audio buffer and per-frame analysis data for a recording session.
- *
- * Priority:
- *   1. opts.audioFile  – explicit separate audio track (trimmed to [audioStart, audioEnd])
- *   2. opts.sourceVideoFile – the video file itself; audio track extracted and trimmed to
- *                             [videoSpanStart, videoSpanStart + duration]
- *   3. No audio
- */
 async function resolveAudio(
 	opts: RecordOptions,
 	totalFrames: number,
@@ -107,8 +98,11 @@ async function resolveAudio(
 		checkAbort(signal);
 		try {
 			const decoded = await decodeAudioFile(sourceVideoFile);
-			// Trim to the exact video span that is being exported
-			buffer = await trimAudioBuffer(decoded, videoSpanStart, videoSpanStart + duration);
+			buffer = await trimAudioBuffer(
+				decoded,
+				videoSpanStart,
+				videoSpanStart + duration,
+			);
 			sampleRate = buffer.sampleRate;
 		} catch {
 			// Video has no audio track or the container is not audio-decodable → skip
@@ -151,11 +145,12 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
 
-	// Resolve audio (separate track OR video's own audio)
-	const { buffer: audioBufferForMux, frameData: frameAudioData, sampleRate: audioSampleRate } =
-		await resolveAudio(opts, totalFrames, frameDuration);
+	const {
+		buffer: audioBufferForMux,
+		frameData: frameAudioData,
+		sampleRate: audioSampleRate,
+	} = await resolveAudio(opts, totalFrames, frameDuration);
 
-	// --- Video codec ---
 	const outputFormat = new mb.WebMOutputFormat();
 	const containerCodecs = outputFormat.getSupportedVideoCodecs();
 	const videoCandidates = (['vp8', 'vp9', 'av1'] as const).filter((c) =>
@@ -178,7 +173,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		);
 	}
 
-	// --- Build output ---
 	const target = new mb.BufferTarget();
 	const output = new mb.Output({ format: outputFormat, target });
 
@@ -188,7 +182,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	});
 	output.addVideoTrack(videoSource);
 
-	// --- Audio track (Opus, fall back to Vorbis) ---
 	let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
 	if (audioBufferForMux) {
 		const supportedAudio = outputFormat.getSupportedAudioCodecs();
@@ -214,13 +207,11 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	await output.start();
 
-	// Feed audio before video frames so the muxer can interleave properly
 	if (audioSource && audioBufferForMux) {
 		await audioSource.add(audioBufferForMux);
 		audioSource.close();
 	}
 
-	// --- Frame loop ---
 	const ENCODE_QUEUE_SIZE = 3;
 	const encodeQueue: Promise<void>[] = [];
 
@@ -254,7 +245,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		onProgress?.((i + 1) / totalFrames);
 	}
 
-	// Let the UI paint "Creating file..." before blocking on finalize
 	await new Promise<void>((r) => requestAnimationFrame(() => r()));
 	onFinalizing?.();
 
