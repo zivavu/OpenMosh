@@ -32,7 +32,12 @@
 	let videoTimelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
 	let format: 'png' | 'jpg' = $state('png');
-	let imageSrc = $derived(URL.createObjectURL(file));
+	let imageSrc = $state('');
+	$effect(() => {
+		const url = URL.createObjectURL(file);
+		imageSrc = url;
+		return () => URL.revokeObjectURL(url);
+	});
 	let canvasEl: HTMLCanvasElement | null = $state(null);
 	let glRenderer: GlRenderer | null = $state(null);
 	let effects: EffectInstance[] = $state(
