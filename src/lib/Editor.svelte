@@ -722,7 +722,7 @@
 	}
 
 	let showRecordSettings = $state(false);
-	let recordFormat: RecordFormat = $state('mp4');
+	let recordFormat: RecordFormat = $state('webm');
 	let recordDuration = $state(5);
 	let recordFps = $state(24);
 	let recordWithAudio = $state(false);
@@ -741,9 +741,7 @@
 				: recordDuration,
 	);
 	let canIncludeAudio = $derived(
-		!!trackFile &&
-			trackDuration > 0 &&
-			(recordFormat === 'mp4' || recordFormat === 'webm'),
+		!!trackFile && trackDuration > 0 && recordFormat === 'webm',
 	);
 	let canRenderSpan = $derived(
 		!!recordWithAudio && !!trackFile && trackDuration > 0,
@@ -774,14 +772,19 @@
 				: recordSpanOnly && trackFile && trackDuration > 0
 					? spanEnd - spanStart
 					: recordDuration;
-		const useAudio =
-			(recordWithAudio || recordFormat === 'gif') &&
-			trackFile &&
-			trackDuration > 0;
+
+		// Separate audio track (user-added file) takes priority over video's own audio.
+		const hasExplicitAudio = !!trackFile && trackDuration > 0;
+		const useAudioFile =
+			hasExplicitAudio && (recordWithAudio || recordFormat === 'gif');
 		const audioStart = recordSpanOnly ? spanStart : 0;
 		const audioEnd = recordSpanOnly
 			? spanEnd
 			: Math.min(duration, trackDuration);
+
+		// When no separate audio track is loaded, pass the video file itself so the
+		// recorder can extract the video's embedded audio track automatically.
+		const useVideoSourceAudio = isVideo && !hasExplicitAudio;
 
 		if (isVideo && videoEl) videoEl.pause();
 		try {
@@ -799,13 +802,17 @@
 					recordFinalizing = true;
 				},
 				signal: abort.signal,
-				...(useAudio &&
-					trackFile && {
-						audioFile: trackFile,
-						audioStart,
-						audioEnd,
+				...(useAudioFile && {
+					audioFile: trackFile!,
+					audioStart,
+					audioEnd,
+				}),
+				...(isVideo &&
+					videoEl && {
+						sourceVideo: videoEl,
+						videoSpanStart,
+						...(useVideoSourceAudio && { sourceVideoFile: file }),
 					}),
-				...(isVideo && videoEl && { sourceVideo: videoEl, videoSpanStart }),
 			});
 			downloadBlob(blob, recordFormat);
 		} catch (e) {
@@ -1244,7 +1251,6 @@
 						<div class="mosh-setting-row">
 							<label for="rec-format">Format</label>
 							<select id="rec-format" bind:value={recordFormat}>
-								<option value="mp4">MP4</option>
 								<option value="webm">WebM</option>
 								<option value="gif">GIF</option>
 							</select>
