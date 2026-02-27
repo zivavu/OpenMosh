@@ -37,7 +37,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
 			gif.finish();
 			const bytes = gif.bytes();
 			const buffer = bytes.buffer;
-			self.postMessage({ type: 'done', buffer }, [buffer]);
+			postMessage({ type: 'done', buffer }, { transfer: [buffer as ArrayBuffer] });
 			gif = null;
 			break;
 		}
