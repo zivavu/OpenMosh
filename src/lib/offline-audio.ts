@@ -27,11 +27,7 @@ export async function trimAudioBuffer(
 	const length = Math.max(0, endSample - startSample);
 
 	const ctx = new AudioContext();
-	const trimmed = ctx.createBuffer(
-		buffer.numberOfChannels,
-		length,
-		sampleRate,
-	);
+	const trimmed = ctx.createBuffer(buffer.numberOfChannels, length, sampleRate);
 
 	for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
 		const src = buffer.getChannelData(ch);
@@ -96,19 +92,10 @@ function fftMagnitude(
 		}
 	}
 
-	// Magnitude for first half (positive frequencies)
+	// Magnitude for first half (positive frequencies) — raw, unnormalized
 	const half = n / 2;
-	let maxMag = 0;
 	for (let i = 0; i < half; i++) {
-		const mag = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
-		magnitude[i] = mag;
-		if (mag > maxMag) maxMag = mag;
-	}
-	// Normalize to 0-1 for later byte conversion
-	if (maxMag > 0) {
-		for (let i = 0; i < half; i++) {
-			magnitude[i] /= maxMag;
-		}
+		magnitude[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
 	}
 }
 
@@ -180,20 +167,22 @@ function computeFrameAnalysis(
 	const magnitude = new Float32Array(fftSize / 2);
 	fftMagnitude(real, imag, magnitude, fftSize);
 
-	// Convert magnitude to dB-scaled byte frequency data (0-255),
-	// matching AnalyserNode.getByteFrequencyData's logarithmic behaviour.
-	// AnalyserNode defaults: maxDecibels=-30, minDecibels=-100 → 70 dB range.
-	// magnitude[] is normalized to [0,1] (peak=1), so we use relative dB.
-	const DB_RANGE = 70;
+	// Convert magnitude to byte frequency data (0-255) using the same dB scale
+	// as AnalyserNode.getByteFrequencyData: dB = 20*log10(mag / fftSize),
+	// mapped from [minDecibels, maxDecibels] → [0, 255].
+	const minDecibels = -100;
+	const maxDecibels = -30;
+	const dbRange = maxDecibels - minDecibels;
 	const frequencyData = new Uint8Array(fftSize / 2);
 	for (let i = 0; i < frequencyData.length; i++) {
-		if (magnitude[i] <= 0) {
+		const mag = magnitude[i];
+		if (mag === 0) {
 			frequencyData[i] = 0;
-		} else {
-			const db = 20 * Math.log10(magnitude[i]);
-			const scaled = (db + DB_RANGE) / DB_RANGE;
-			frequencyData[i] = Math.max(0, Math.min(255, Math.round(scaled * 255)));
+			continue;
 		}
+		const dB = 20 * Math.log10(mag / fftSize);
+		const scaled = 255 * (dB - minDecibels) / dbRange;
+		frequencyData[i] = Math.max(0, Math.min(255, Math.round(scaled)));
 	}
 
 	return { volumeLevel, frequencyData };
@@ -232,9 +221,7 @@ export function applyFrameAudioToEffects(
 			const link = links[param.key];
 			if (!link) continue;
 			const level =
-				link.freqMin != null &&
-				link.freqMax != null &&
-				sampleRate > 0
+				link.freqMin != null && link.freqMax != null && sampleRate > 0
 					? getLevelFromFrequencyRange(
 							frequencyData,
 							sampleRate,

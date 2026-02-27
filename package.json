@@ -22,9 +22,7 @@
     "vite": "^8.0.0-beta.13"
   },
   "dependencies": {
-    "@ffmpeg/core": "^0.12.10",
-    "@ffmpeg/ffmpeg": "^0.12.15",
-    "@ffmpeg/util": "^0.12.2",
-    "gifenc": "^1.0.3"
+    "gifenc": "^1.0.3",
+    "mediabunny": "^1.35.1"
   }
 }

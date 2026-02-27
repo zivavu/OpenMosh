@@ -1,6 +1,11 @@
 import { applyPalette, GIFEncoder, quantize } from 'gifenc';
 
-type InitMessage = { type: 'init'; width: number; height: number; delay: number };
+type InitMessage = {
+	type: 'init';
+	width: number;
+	height: number;
+	delay: number;
+};
 type FrameMessage = {
 	type: 'frame';
 	width: number;
@@ -37,7 +42,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
 			gif.finish();
 			const bytes = gif.bytes();
 			const buffer = bytes.buffer;
-			postMessage({ type: 'done', buffer }, { transfer: [buffer as ArrayBuffer] });
+			self.postMessage({ type: 'done', buffer }, { transfer: [buffer] });
 			gif = null;
 			break;
 		}

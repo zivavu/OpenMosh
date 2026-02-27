@@ -780,19 +780,27 @@
 
 		// Separate audio track (user-added file) takes priority over video's own audio.
 		const hasExplicitAudio = !!trackFile && trackDuration > 0;
+		// Check if any effect uses volume links — if so, we need audio data for
+		// the recorder even when the user doesn't want audio muxed into the output.
+		const hasVolumeLinks = effects.some(
+			(e) => e.volumeLinks && Object.keys(e.volumeLinks).length > 0,
+		);
 		const useAudioFile =
-			hasExplicitAudio && (recordWithAudio || recordFormat === 'gif');
+			hasExplicitAudio &&
+			(recordWithAudio || recordFormat === 'gif' || hasVolumeLinks);
+		// When no separate audio track is loaded, pass the video file itself so the
+		// recorder can extract the video's embedded audio track for volume linking.
+		const useVideoSourceAudio =
+			isVideo && !hasExplicitAudio && hasVolumeLinks;
 		// Always start from the user's span position so the exported audio matches
 		// what they heard during preview. recordSpanOnly only controls whether the
 		// export duration is determined by the span length or the recordDuration slider.
-		const audioStart = spanStart;
-		const audioEnd = recordSpanOnly
-			? spanEnd
-			: Math.min(spanStart + duration, trackDuration);
-
-		// When no separate audio track is loaded, pass the video file itself so the
-		// recorder can extract the video's embedded audio track automatically.
-		const useVideoSourceAudio = isVideo && !hasExplicitAudio;
+		const audioStart = hasExplicitAudio ? spanStart : (isVideo ? videoSpanStart : 0);
+		const audioEnd = hasExplicitAudio
+			? (recordSpanOnly
+				? spanEnd
+				: Math.min(spanStart + duration, trackDuration))
+			: (isVideo ? videoSpanEnd : duration);
 
 		if (isVideo && videoEl) videoEl.pause();
 		try {
@@ -802,13 +810,19 @@
 				fps: recordFormat === 'gif' ? Math.min(recordFps, 15) : recordFps,
 				canvas: canvasEl,
 				renderer: glRenderer,
-				effects: effects.map((e) => {
-					const snap = $state.snapshot(e) as EffectInstance;
-					if (e.volumeLinks && !snap.volumeLinks) {
-						snap.volumeLinks = JSON.parse(JSON.stringify(e.volumeLinks));
-					}
-					return snap;
-				}),
+				effects: effects.map(
+					(e): EffectInstance => ({
+						instanceId: e.instanceId,
+						defId: e.defId,
+						enabled: e.enabled,
+						locked: e.locked,
+						expanded: e.expanded,
+						values: { ...e.values },
+						volumeLinks: e.volumeLinks
+							? JSON.parse(JSON.stringify(e.volumeLinks))
+							: undefined,
+					}),
+				),
 				onProgress: (p) => {
 					recordProgress = p;
 				},
@@ -821,11 +835,15 @@
 					audioStart,
 					audioEnd,
 				}),
+				...(useVideoSourceAudio && {
+					audioFile: file,
+					audioStart,
+					audioEnd,
+				}),
 				...(isVideo &&
 					videoEl && {
 						sourceVideo: videoEl,
 						videoSpanStart,
-						...(useVideoSourceAudio && { sourceVideoFile: file }),
 					}),
 			});
 			downloadBlob(blob, recordFormat);
