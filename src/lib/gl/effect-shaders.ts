@@ -49,6 +49,13 @@ function setInt(
 	if (locs[name]) gl.uniform1i(locs[name], value);
 }
 
+/** Create a setUniforms that maps each key to a float uniform named u_{key}. */
+function floats(...keys: string[]): EffectShaderDef['setUniforms'] {
+	return (gl, l, v) => {
+		for (const key of keys) setFloat(gl, l, `u_${key}`, v[key] as number);
+	};
+}
+
 export const EFFECT_SHADERS: Record<string, EffectShaderDef> = {
 	pixelate: {
 		fragment:
@@ -60,7 +67,7 @@ void main() {
   vec2 cell = (floor(v_uv * ts / cs) + 0.5) * cs;
   outColor = texture(u_texture, cell / ts);
 }`,
-		setUniforms: (gl, l, v) => setFloat(gl, l, 'u_size', v.size as number),
+		setUniforms: floats('size'),
 	},
 
 	posterize: {
@@ -72,7 +79,7 @@ void main() {
   float n = max(2.0, u_levels);
   outColor = vec4(floor(c.rgb * n + 0.5) / n, c.a);
 }`,
-		setUniforms: (gl, l, v) => setFloat(gl, l, 'u_levels', v.levels as number),
+		setUniforms: floats('levels'),
 	},
 
 	solarize: {
@@ -83,8 +90,7 @@ void main() {
   vec4 c = texture(u_texture, v_uv);
   outColor = vec4(mix(c.rgb, 1.0 - c.rgb, step(u_threshold, c.rgb)), c.a);
 }`,
-		setUniforms: (gl, l, v) =>
-			setFloat(gl, l, 'u_threshold', v.threshold as number),
+		setUniforms: floats('threshold'),
 	},
 
 	edges: {
@@ -108,10 +114,7 @@ void main() {
   vec4 orig = texture(u_texture, v_uv);
   outColor = vec4(mix(orig.rgb, edge.rgb, u_mix), orig.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_strength', v.strength as number);
-			setFloat(gl, l, 'u_mix', v.mix as number);
-		},
+		setUniforms: floats('strength', 'mix'),
 	},
 
 	bleach: {
@@ -124,7 +127,7 @@ void main() {
   vec3 b = (vec3(luma) - 0.5) * 1.5 + 0.5;
   outColor = vec4(mix(c.rgb, clamp(b, 0.0, 1.0), u_amount), c.a);
 }`,
-		setUniforms: (gl, l, v) => setFloat(gl, l, 'u_amount', v.amount as number),
+		setUniforms: floats('amount'),
 	},
 
 	sharpen: {
@@ -144,11 +147,7 @@ void main() {
   vec3 mask = step(vec3(u_threshold), abs(diff));
   outColor = vec4(clamp(c.rgb + diff * u_amount * mask, 0.0, 1.0), c.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_radius', v.radius as number);
-			setFloat(gl, l, 'u_threshold', v.threshold as number);
-		},
+		setUniforms: floats('amount', 'radius', 'threshold'),
 	},
 
 	mirror: {
@@ -197,11 +196,7 @@ void main() {
   kUV = vec2(bounce(kUV.x), bounce(kUV.y));
   outColor = mix(texture(u_texture, v_uv), texture(u_texture, kUV), u_amount);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_sides', v.sides as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-		},
+		setUniforms: floats('amount', 'sides', 'angle'),
 	},
 
 	'rgb-shift': {
@@ -220,10 +215,7 @@ void main() {
     texture(u_texture, v_uv).a
   );
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-		},
+		setUniforms: floats('amount', 'angle'),
 	},
 
 	'color-correction': {
@@ -249,12 +241,7 @@ void main() {
   rgb = mix(vec3(luma), rgb, 1.0 + u_saturation);
   outColor = vec4(clamp(rgb, 0.0, 1.0), c.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_brightness', v.brightness as number);
-			setFloat(gl, l, 'u_contrast', v.contrast as number);
-			setFloat(gl, l, 'u_hue', v.hue as number);
-			setFloat(gl, l, 'u_saturation', v.saturation as number);
-		},
+		setUniforms: floats('brightness', 'contrast', 'hue', 'saturation'),
 	},
 
 	vignette: {
@@ -269,10 +256,7 @@ void main() {
   float vig = smoothstep(radius, radius - 0.45, dist);
   outColor = vec4(c.rgb * mix(1.0, vig, u_amount), c.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_size', v.size as number);
-			setFloat(gl, l, 'u_amount', v.amount as number);
-		},
+		setUniforms: floats('size', 'amount'),
 	},
 
 	scanlines: {
@@ -286,10 +270,7 @@ void main() {
   outColor = vec4(c.rgb * mix(1.0, line, u_amount), c.a);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_count', v.count as number);
-			setFloat(gl, l, 'u_amount', v.amount as number);
-		},
+		setUniforms: floats('count', 'amount'),
 	},
 
 	bulge: {
@@ -308,10 +289,7 @@ void main() {
   }
   outColor = texture(u_texture, uv + center);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_radius', v.radius as number);
-		},
+		setUniforms: floats('amount', 'radius'),
 	},
 
 	jitter: {
@@ -333,11 +311,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_seed', v.seed as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('amount', 'seed', 'speed'),
 	},
 
 	wobble: {
@@ -354,10 +328,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_frequency', v.frequency as number);
-		},
+		setUniforms: floats('amount', 'frequency'),
 	},
 
 	slices: {
@@ -401,7 +372,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => setFloat(gl, l, 'u_amount', v.amount as number),
+		setUniforms: floats('amount'),
 	},
 
 	glow: {
@@ -425,10 +396,7 @@ void main() {
   glow /= float((2*R+1) * (2*R+1));
   outColor = vec4(c.rgb + glow * u_amount, c.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_cutoff', v.cutoff as number);
-		},
+		setUniforms: floats('amount', 'cutoff'),
 	},
 
 	'soft-glitch': {
@@ -465,10 +433,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('amount', 'speed'),
 	},
 
 	'hard-glitch': {
@@ -510,11 +475,7 @@ void main() {
   outColor.rgb = mix(outColor.rgb, vec3(outColor.r), flicker * 0.5);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_scale', v.scale as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('amount', 'scale', 'speed'),
 	},
 
 	'optical-flow': {
@@ -537,11 +498,7 @@ void main() {
   outColor = texture(u_texture, v_uv + offset);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_distortion', v.distortion as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('amount', 'distortion', 'speed'),
 	},
 
 	feedback: {
@@ -576,13 +533,7 @@ void main() {
   outColor = mix(cur, fb, u_amount);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_scale', v.scale as number);
-			setFloat(gl, l, 'u_rotate', v.rotate as number);
-			setFloat(gl, l, 'u_warp', v.warp as number);
-			setFloat(gl, l, 'u_hueShift', v.hueShift as number);
-		},
+		setUniforms: floats('amount', 'scale', 'rotate', 'warp', 'hueShift'),
 	},
 
 	vhs: {
@@ -632,11 +583,7 @@ void main() {
   outColor = c;
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-			setFloat(gl, l, 'u_tracking', v.tracking as number);
-		},
+		setUniforms: floats('amount', 'speed', 'tracking'),
 	},
 
 	duotone: {
@@ -665,11 +612,7 @@ void main() {
   vec3 duo = mix(shadow, highlight, luma);
   outColor = vec4(mix(c.rgb, duo, u_intensity), c.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_shadowHue', v.shadowHue as number);
-			setFloat(gl, l, 'u_highlightHue', v.highlightHue as number);
-			setFloat(gl, l, 'u_intensity', v.intensity as number);
-		},
+		setUniforms: floats('shadowHue', 'highlightHue', 'intensity'),
 	},
 
 	'chromatic-aberration': {
@@ -690,10 +633,7 @@ void main() {
     texture(u_texture, v_uv).a
   );
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_falloff', v.falloff as number);
-		},
+		setUniforms: floats('amount', 'falloff'),
 	},
 
 	grain: {
@@ -765,10 +705,7 @@ void main() {
   vec2 polarUV = vec2(fract(a), bounce(r));
   outColor = mix(texture(u_texture, v_uv), texture(u_texture, polarUV), u_amount);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-		},
+		setUniforms: floats('amount', 'angle'),
 	},
 
 	tile: {
@@ -788,11 +725,7 @@ void main() {
   vec2 mirrored = mix(local, 1.0 - local, mod(cell, 2.0));
   outColor = texture(u_texture, mirrored);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_size', v.size as number);
-			setFloat(gl, l, 'u_offset', v.offset as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-		},
+		setUniforms: floats('size', 'offset', 'angle'),
 	},
 
 	'color-melt': {
@@ -814,10 +747,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_intensity', v.intensity as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('intensity', 'speed'),
 	},
 
 	'spectral-shift': {
@@ -865,11 +795,7 @@ void main() {
   outColor = vec4(hsl2rgb(hsl), c.a);
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_hueShift', v.hueShift as number);
-			setFloat(gl, l, 'u_satWarp', v.satWarp as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('hueShift', 'satWarp', 'speed'),
 	},
 
 	'data-bend': {
@@ -898,11 +824,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_intensity', v.intensity as number);
-			setFloat(gl, l, 'u_threshold', v.threshold as number);
-			setFloat(gl, l, 'u_chunkSize', v.chunkSize as number);
-		},
+		setUniforms: floats('intensity', 'threshold', 'chunkSize'),
 	},
 
 	melt: {
@@ -934,10 +856,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('amount', 'speed'),
 	},
 
 	fractalize: {
@@ -1001,13 +920,7 @@ void main() {
     outColor = vec4(1.0 - (1.0 - orig.rgb) * (1.0 - overlay), orig.a);
   }`,
 		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_threshold', v.threshold as number);
-			setFloat(gl, l, 'u_zoom', v.zoom as number);
-			setFloat(gl, l, 'u_detail', v.detail as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
-		},
+		setUniforms: floats('amount', 'threshold', 'zoom', 'detail', 'speed'),
 	},
 
 	emboss: {
@@ -1028,11 +941,7 @@ void main() {
   vec4 orig = texture(u_texture, v_uv);
   outColor = vec4(mix(orig.rgb, emboss, u_mix), orig.a);
 }`,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_strength', v.strength as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-			setFloat(gl, l, 'u_mix', v.mix as number);
-		},
+		setUniforms: floats('strength', 'angle', 'mix'),
 	},
 
 	thermal: {

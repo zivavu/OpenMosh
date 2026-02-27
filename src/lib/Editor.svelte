@@ -31,7 +31,9 @@
 	let draggingVideoHandle = $state<'start' | 'end' | null>(null);
 	let videoTimelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
-	let format: 'png' | 'jpg' = $state('png');
+	let format = $state<'png' | 'jpg' | 'webm' | 'gif'>('png');
+	let isImageFormat = $derived(format === 'png' || format === 'jpg');
+	let isVideoFormat = $derived(format === 'webm' || format === 'gif');
 	let imageSrc = $state('');
 	$effect(() => {
 		const url = URL.createObjectURL(file);
@@ -114,24 +116,29 @@
 		}
 	}
 
-	function onTrackInputChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file && file.type.startsWith('audio/')) {
-			disposeAudioGraph();
-			trackFile = file;
-		}
-		input.value = '';
-	}
-
 	function openTrackPicker() {
 		trackInput?.click();
 	}
 
+	function onTrackInputChange() {
+		const f = trackInput?.files?.[0];
+		if (f) {
+			trackFile = f;
+			trackInput.value = '';
+		}
+	}
+
 	function clearTrack() {
-		disposeAudioGraph();
+		if (audioEl) {
+			audioEl.pause();
+			audioPlaying = false;
+		}
 		trackFile = null;
-		if (isVideo && videoEl) ensureVideoAudioGraph();
+		trackDuration = 0;
+		trackCurrentTime = 0;
+		spanStart = 0;
+		spanEnd = 0;
+		disposeAudioGraph();
 	}
 
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
@@ -259,7 +266,10 @@
 			if (handle === 'start') {
 				videoSpanStart = Math.max(0, Math.min(t, videoSpanEnd - 0.1));
 			} else {
-				videoSpanEnd = Math.max(videoSpanStart + 0.1, Math.min(videoDuration, t));
+				videoSpanEnd = Math.max(
+					videoSpanStart + 0.1,
+					Math.min(videoDuration, t),
+				);
 			}
 		};
 		const up = () => {
@@ -339,7 +349,10 @@
 		return pct * videoDuration;
 	}
 
-	function onVideoTimelinePointerDown(e: PointerEvent, handle: 'start' | 'end' | null) {
+	function onVideoTimelinePointerDown(
+		e: PointerEvent,
+		handle: 'start' | 'end' | null,
+	) {
 		e.preventDefault();
 		if (handle === 'start' || handle === 'end') {
 			draggingVideoHandle = handle;
@@ -727,7 +740,7 @@
 	}
 
 	let showRecordSettings = $state(false);
-	let recordFormat: RecordFormat = $state('webm');
+	let recordFormat: RecordFormat = $derived(format === 'gif' ? 'gif' : 'webm');
 	let recordDuration = $state(5);
 	let recordFps = $state(24);
 	let recordWithAudio = $state(false);
@@ -790,17 +803,22 @@
 			(recordWithAudio || recordFormat === 'gif' || hasVolumeLinks);
 		// When no separate audio track is loaded, pass the video file itself so the
 		// recorder can extract the video's embedded audio track for volume linking.
-		const useVideoSourceAudio =
-			isVideo && !hasExplicitAudio && hasVolumeLinks;
+		const useVideoSourceAudio = isVideo && !hasExplicitAudio && hasVolumeLinks;
 		// Always start from the user's span position so the exported audio matches
 		// what they heard during preview. recordSpanOnly only controls whether the
 		// export duration is determined by the span length or the recordDuration slider.
-		const audioStart = hasExplicitAudio ? spanStart : (isVideo ? videoSpanStart : 0);
+		const audioStart = hasExplicitAudio
+			? spanStart
+			: isVideo
+				? videoSpanStart
+				: 0;
 		const audioEnd = hasExplicitAudio
-			? (recordSpanOnly
+			? recordSpanOnly
 				? spanEnd
-				: Math.min(spanStart + duration, trackDuration))
-			: (isVideo ? videoSpanEnd : duration);
+				: Math.min(spanStart + duration, trackDuration)
+			: isVideo
+				? videoSpanEnd
+				: duration;
 
 		if (isVideo && videoEl) videoEl.pause();
 		try {
@@ -920,7 +938,8 @@
 		e.preventDefault();
 		dragging = false;
 		const f = e.dataTransfer?.files[0];
-		if (f && (f.type.startsWith('image/') || f.type.startsWith('video/'))) onfile(f);
+		if (f && (f.type.startsWith('image/') || f.type.startsWith('video/')))
+			onfile(f);
 	}}
 >
 	<div class="main-area">
@@ -956,70 +975,20 @@
 					>
 						JPG
 					</button>
-				</div>
-				<div class="track-group">
-					<input
-						bind:this={trackInput}
-						type="file"
-						accept="audio/*"
-						onchange={onTrackInputChange}
-						hidden
-					/>
-					{#if trackFile}
-						<span class="track-name" title={trackFile.name}>
-							{trackFile.name.length > 20
-								? trackFile.name.slice(0, 17) + '…'
-								: trackFile.name}
-						</span>
-						<button
-							class="track-clear-btn"
-							onclick={clearTrack}
-							title="Clear track"
-						>
-							<svg
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<line x1="18" y1="6" x2="6" y2="18" />
-								<line x1="6" y1="6" x2="18" y2="18" />
-							</svg>
-						</button>
-						<button
-							class="track-load-btn"
-							onclick={openTrackPicker}
-							title="Replace track"
-						>
-							Replace
-						</button>
-					{:else}
-						<button
-							class="track-load-btn"
-							onclick={openTrackPicker}
-							title="Load track"
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-								<polyline points="17 8 12 3 7 8" />
-								<line x1="12" y1="3" x2="12" y2="15" />
-							</svg>
-							Load track
-						</button>
-					{/if}
+					<button
+						class="format-btn"
+						class:active={format === 'webm'}
+						onclick={() => (format = 'webm')}
+					>
+						WebM
+					</button>
+					<button
+						class="format-btn"
+						class:active={format === 'gif'}
+						onclick={() => (format = 'gif')}
+					>
+						GIF
+					</button>
 				</div>
 			</div>
 		</div>
@@ -1040,10 +1009,14 @@
 					recordDuration = Math.round(dur * 10) / 10;
 					ensureVideoAudioGraph();
 				}}
-				ontimeupdate={() => { videoCurrentTime = videoEl?.currentTime ?? 0; }}
+				ontimeupdate={() => {
+					videoCurrentTime = videoEl?.currentTime ?? 0;
+				}}
 				onplay={() => (videoPlaying = true)}
 				onpause={() => (videoPlaying = false)}
-				onseeking={() => { audioContext?.resume(); }}
+				onseeking={() => {
+					audioContext?.resume();
+				}}
 				style="display:none"
 			></video>
 		{/if}
@@ -1060,6 +1033,7 @@
 			bind:fps={currentFps}
 			{showFps}
 			videoEl={isVideo ? videoEl : null}
+			freezeAnimation={isImageFormat}
 		/>
 
 		<div class="action-bar">
@@ -1238,30 +1212,8 @@
 					</div>
 				{/if}
 			</div>
-			<button class="action-btn save-btn" onclick={save}>
-				<svg
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-					<polyline points="7 10 12 15 17 10" />
-					<line x1="12" y1="15" x2="12" y2="3" />
-				</svg>
-				SAVE
-			</button>
-
-			<div class="record-group" bind:this={recordGroupEl}>
-				<button
-					class="action-btn record-btn"
-					onclick={() => (showRecordSettings = !showRecordSettings)}
-					disabled={recording}
-				>
+			{#if isImageFormat}
+				<button class="action-btn save-btn" onclick={save}>
 					<svg
 						width="16"
 						height="16"
@@ -1272,84 +1224,102 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 					>
-						<circle cx="12" cy="12" r="10" />
-						<circle cx="12" cy="12" r="4" fill="currentColor" />
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+						<polyline points="7 10 12 15 17 10" />
+						<line x1="12" y1="15" x2="12" y2="3" />
 					</svg>
-					RECORD
+					SAVE
 				</button>
+			{/if}
 
-				{#if showRecordSettings}
-					<div class="record-settings">
-						<div class="mosh-setting-row">
-							<label for="rec-format">Format</label>
-							<select id="rec-format" bind:value={recordFormat}>
-								<option value="webm">WebM</option>
-								<option value="gif">GIF</option>
-							</select>
-						</div>
-						{#if canIncludeAudio}
-							<div class="mosh-setting-row">
-								<label for="rec-with-audio">Include audio</label>
-								<input
-									id="rec-with-audio"
-									type="checkbox"
-									bind:checked={recordWithAudio}
-								/>
-							</div>
-							{#if recordWithAudio && canRenderSpan}
+			{#if isVideoFormat}
+				<div class="record-group" bind:this={recordGroupEl}>
+					<button
+						class="action-btn record-btn"
+						onclick={() => (showRecordSettings = !showRecordSettings)}
+						disabled={recording}
+					>
+						<svg
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<circle cx="12" cy="12" r="10" />
+							<circle cx="12" cy="12" r="4" fill="currentColor" />
+						</svg>
+						RECORD
+					</button>
+
+					{#if showRecordSettings}
+						<div class="record-settings">
+							{#if canIncludeAudio}
 								<div class="mosh-setting-row">
-									<label for="rec-span-only">Render selected span</label>
+									<label for="rec-with-audio">Include audio</label>
 									<input
-										id="rec-span-only"
+										id="rec-with-audio"
 										type="checkbox"
-										bind:checked={recordSpanOnly}
+										bind:checked={recordWithAudio}
 									/>
 								</div>
+								{#if recordWithAudio && canRenderSpan}
+									<div class="mosh-setting-row">
+										<label for="rec-span-only">Render selected span</label>
+										<input
+											id="rec-span-only"
+											type="checkbox"
+											bind:checked={recordSpanOnly}
+										/>
+									</div>
+								{/if}
 							{/if}
-						{/if}
-						<div class="mosh-setting-row">
-							<label for="rec-duration">Duration</label>
-							{#if isVideo && videoDuration > 0}
-								<span class="mosh-setting-val"
-									>{recordDurationEffective.toFixed(1)}s (video span)</span
-								>
-							{:else if recordSpanOnly && trackFile && trackDuration > 0}
-								<span class="mosh-setting-val"
-									>{recordDurationEffective.toFixed(1)}s (span)</span
-								>
-							{:else}
-								<input
-									id="rec-duration"
-									type="range"
-									min="1"
-									max="30"
-									step="1"
-									bind:value={recordDuration}
-								/>
-								<span class="mosh-setting-val">{recordDuration}s</span>
-							{/if}
+							<div class="mosh-setting-row">
+								<label for="rec-duration">Duration</label>
+								{#if isVideo && videoDuration > 0}
+									<span class="mosh-setting-val"
+										>{recordDurationEffective.toFixed(1)}s (video span)</span
+									>
+								{:else if recordSpanOnly && trackFile && trackDuration > 0}
+									<span class="mosh-setting-val"
+										>{recordDurationEffective.toFixed(1)}s (span)</span
+									>
+								{:else}
+									<input
+										id="rec-duration"
+										type="range"
+										min="1"
+										max="30"
+										step="1"
+										bind:value={recordDuration}
+									/>
+									<span class="mosh-setting-val">{recordDuration}s</span>
+								{/if}
+							</div>
+							<div class="mosh-setting-row">
+								<label for="rec-fps">FPS</label>
+								<select id="rec-fps" bind:value={recordFps}>
+									<option value={15}>15</option>
+									<option value={24}>24</option>
+									<option value={30}>30</option>
+									<option value={60}>60</option>
+									<option value={120}>120</option>
+								</select>
+								{#if recordFormat === 'gif' && recordFps > 15}
+									<span class="rec-hint">capped to 15</span>
+								{/if}
+							</div>
+							<button class="rec-start-btn" onclick={startRecording}>
+								Start Recording
+							</button>
 						</div>
-						<div class="mosh-setting-row">
-							<label for="rec-fps">FPS</label>
-							<select id="rec-fps" bind:value={recordFps}>
-								<option value={15}>15</option>
-								<option value={24}>24</option>
-								<option value={30}>30</option>
-								<option value={60}>60</option>
-								<option value={120}>120</option>
-							</select>
-							{#if recordFormat === 'gif' && recordFps > 15}
-								<span class="rec-hint">capped to 15</span>
-							{/if}
-						</div>
-						<button class="rec-start-btn" onclick={startRecording}>
-							Start Recording
-						</button>
-					</div>
-				{/if}
-			</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
-
 		{#if isVideo && videoDuration > 0}
 			<div class="timeline-bar">
 				<span class="timeline-label">VID</span>
@@ -1384,7 +1354,10 @@
 					<div class="timeline-track">
 						<div
 							class="timeline-span"
-							style="left: {(videoSpanStart / videoDuration) * 100}%; width: {((videoSpanEnd - videoSpanStart) / videoDuration) * 100}%"
+							style="left: {(videoSpanStart / videoDuration) *
+								100}%; width: {((videoSpanEnd - videoSpanStart) /
+								videoDuration) *
+								100}%"
 						></div>
 						<div
 							class="timeline-playhead"
@@ -1418,9 +1391,7 @@
 		{/if}
 		{#if trackFile && trackDuration > 0}
 			<div class="timeline-bar">
-				{#if isVideo}
-					<span class="timeline-label">AUD</span>
-				{/if}
+				<span class="timeline-label">AUD</span>
 				<button
 					class="timeline-play-btn"
 					onclick={audioPlaying ? pauseTrack : playSpan}
@@ -1483,10 +1454,38 @@
 					</div>
 				</div>
 				<span class="timeline-time">{formatTime(spanEnd)}</span>
+				<button
+					class="track-inline-btn"
+					onclick={clearTrack}
+					title="Remove track"
+				>
+					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<line x1="18" y1="6" x2="6" y2="18" />
+						<line x1="6" y1="6" x2="18" y2="18" />
+					</svg>
+				</button>
+			</div>
+		{/if}
+		<input
+			bind:this={trackInput}
+			type="file"
+			accept="audio/*"
+			onchange={onTrackInputChange}
+			hidden
+		/>
+		{#if !trackFile}
+			<div class="track-add-bar">
+				<button class="track-add-btn" onclick={openTrackPicker}>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M9 18V5l12-2v13" />
+						<circle cx="6" cy="18" r="3" />
+						<circle cx="18" cy="16" r="3" />
+					</svg>
+					Add audio track
+				</button>
 			</div>
 		{/if}
 	</div>
-
 	<EffectsPanel
 		bind:effects
 		hasTrack={!!trackFile || (isVideo && !!analyserNode)}
@@ -1659,75 +1658,6 @@
 		border-color: #666;
 	}
 
-	.track-group {
-		display: flex;
-		align-items: stretch;
-		gap: 0;
-		background: rgba(30, 30, 30, 0.85);
-		border: 1px solid #333;
-		border-radius: 6px;
-		overflow: hidden;
-	}
-
-	.track-name {
-		font-size: 0.7rem;
-		color: #aaa;
-		max-width: 140px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		display: flex;
-		align-items: center;
-		padding: 0 0.5rem;
-	}
-
-	.track-load-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.75rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		font-family: inherit;
-		background: none;
-		border: none;
-		border-radius: 0;
-		color: #777;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			background 0.15s;
-		flex-shrink: 0;
-	}
-
-	.track-load-btn:hover {
-		color: #ccc;
-		background: rgba(255, 255, 255, 0.06);
-	}
-
-	.track-clear-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		min-width: 28px;
-		border: none;
-		border-radius: 0;
-		background: none;
-		color: #666;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			background 0.15s;
-		flex-shrink: 0;
-	}
-
-	.track-clear-btn:hover {
-		color: #ccc;
-		background: rgba(255, 255, 255, 0.06);
-	}
-
 	/* Timeline */
 	.timeline-label {
 		font-size: 0.55rem;
@@ -1842,6 +1772,57 @@
 	.timeline-handle:focus-visible {
 		outline: 1px solid #888;
 		outline-offset: 1px;
+	}
+
+	.track-add-bar {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		padding: 0.35rem 0.75rem;
+		background: rgba(18, 18, 18, 0.9);
+		border-top: 1px solid #2a2a2a;
+	}
+
+	.track-add-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.3rem 0.7rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		font-family: inherit;
+		background: none;
+		border: 1px solid #333;
+		border-radius: 5px;
+		color: #666;
+		cursor: pointer;
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.track-add-btn:hover {
+		color: #aaa;
+		border-color: #555;
+	}
+
+	.track-inline-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border: none;
+		border-radius: 4px;
+		background: none;
+		color: #555;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: color 0.15s, background 0.15s;
+	}
+
+	.track-inline-btn:hover {
+		color: #ccc;
+		background: rgba(255, 255, 255, 0.06);
 	}
 
 	/* Action bar */

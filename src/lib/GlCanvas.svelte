@@ -15,6 +15,7 @@
     fps?: number;
     showFps?: boolean;
     videoEl?: HTMLVideoElement | null;
+    freezeAnimation?: boolean;
   }
 
   let {
@@ -29,6 +30,7 @@
     fps = $bindable(0),
     showFps = false,
     videoEl = null,
+    freezeAnimation = false,
   }: Props = $props();
 
   let frameTimes: number[] = [];
@@ -49,7 +51,8 @@
   let error: string | null = $state(null);
 
   const needsAnimation = $derived(
-    !!videoEl || effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+    !freezeAnimation &&
+      (!!videoEl || effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId))),
   );
 
   $effect(() => {

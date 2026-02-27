@@ -132,22 +132,10 @@ export class GlRenderer {
   destroy() {
     const gl = this.gl;
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
-    if (this.ppTextures) {
-      gl.deleteTexture(this.ppTextures[0]);
-      gl.deleteTexture(this.ppTextures[1]);
-    }
-    if (this.ppFBOs) {
-      gl.deleteFramebuffer(this.ppFBOs[0]);
-      gl.deleteFramebuffer(this.ppFBOs[1]);
-    }
-    if (this.fbTextures) {
-      gl.deleteTexture(this.fbTextures[0]);
-      gl.deleteTexture(this.fbTextures[1]);
-    }
-    if (this.fbFBOs) {
-      gl.deleteFramebuffer(this.fbFBOs[0]);
-      gl.deleteFramebuffer(this.fbFBOs[1]);
-    }
+    this.deleteTexturePair(this.ppTextures);
+    this.deleteFBOPair(this.ppFBOs);
+    this.deleteTexturePair(this.fbTextures);
+    this.deleteFBOPair(this.fbFBOs);
     gl.deleteProgram(this.passthrough.program);
     for (const { program } of this.compiled.values()) {
       gl.deleteProgram(program.program);
@@ -204,46 +192,36 @@ export class GlRenderer {
     return tex;
   }
 
+  private deleteTexturePair(pair: [WebGLTexture, WebGLTexture] | null) {
+    if (pair) { this.gl.deleteTexture(pair[0]); this.gl.deleteTexture(pair[1]); }
+  }
+
+  private deleteFBOPair(pair: [WebGLFramebuffer, WebGLFramebuffer] | null) {
+    if (pair) { this.gl.deleteFramebuffer(pair[0]); this.gl.deleteFramebuffer(pair[1]); }
+  }
+
+  private createFBOPair(textures: [WebGLTexture, WebGLTexture]): [WebGLFramebuffer, WebGLFramebuffer] {
+    const gl = this.gl;
+    const fbos: [WebGLFramebuffer, WebGLFramebuffer] = [gl.createFramebuffer()!, gl.createFramebuffer()!];
+    for (let i = 0; i < 2; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[i]);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textures[i], 0);
+    }
+    return fbos;
+  }
+
   private setupPingPong() {
     const gl = this.gl;
-    if (this.ppTextures) {
-      gl.deleteTexture(this.ppTextures[0]);
-      gl.deleteTexture(this.ppTextures[1]);
-    }
-    if (this.ppFBOs) {
-      gl.deleteFramebuffer(this.ppFBOs[0]);
-      gl.deleteFramebuffer(this.ppFBOs[1]);
-    }
-    if (this.fbTextures) {
-      gl.deleteTexture(this.fbTextures[0]);
-      gl.deleteTexture(this.fbTextures[1]);
-    }
-    if (this.fbFBOs) {
-      gl.deleteFramebuffer(this.fbFBOs[0]);
-      gl.deleteFramebuffer(this.fbFBOs[1]);
-    }
+    this.deleteTexturePair(this.ppTextures);
+    this.deleteFBOPair(this.ppFBOs);
+    this.deleteTexturePair(this.fbTextures);
+    this.deleteFBOPair(this.fbFBOs);
 
-    this.ppTextures = [
-      this.createTexture(this.imgW, this.imgH),
-      this.createTexture(this.imgW, this.imgH),
-    ];
-    this.ppFBOs = [gl.createFramebuffer()!, gl.createFramebuffer()!];
+    this.ppTextures = [this.createTexture(this.imgW, this.imgH), this.createTexture(this.imgW, this.imgH)];
+    this.ppFBOs = this.createFBOPair(this.ppTextures);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ppFBOs[0]);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.ppTextures[0], 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ppFBOs[1]);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.ppTextures[1], 0);
-
-    this.fbTextures = [
-      this.createTexture(this.imgW, this.imgH),
-      this.createTexture(this.imgW, this.imgH),
-    ];
-    this.fbFBOs = [gl.createFramebuffer()!, gl.createFramebuffer()!];
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbFBOs[0]);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fbTextures[0], 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbFBOs[1]);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.fbTextures[1], 0);
+    this.fbTextures = [this.createTexture(this.imgW, this.imgH), this.createTexture(this.imgW, this.imgH)];
+    this.fbFBOs = this.createFBOPair(this.fbTextures);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;
