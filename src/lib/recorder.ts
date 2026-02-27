@@ -123,12 +123,10 @@ async function resolveAudio(
 }
 
 // ---------------------------------------------------------------------------
-// WebM
+// WebM — native MediaRecorder approach (guaranteed browser A/V sync)
 // ---------------------------------------------------------------------------
 
 async function recordWebM(opts: RecordOptions): Promise<Blob> {
-	const mb = await import('mediabunny');
-
 	const {
 		duration,
 		fps,
@@ -144,89 +142,64 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
+	const frameMs = 1000 / fps;
 
-	const {
-		buffer: audioBufferForMux,
-		frameData: frameAudioData,
-		sampleRate: audioSampleRate,
-	} = await resolveAudio(opts, totalFrames, frameDuration);
+	const { buffer: audioBuffer, frameData: frameAudioData, sampleRate: audioSampleRate } =
+		await resolveAudio(opts, totalFrames, frameDuration);
 
-	const outputFormat = new mb.WebMOutputFormat();
-	const containerCodecs = outputFormat.getSupportedVideoCodecs();
-	const videoCandidates = (['vp8', 'vp9', 'av1'] as const).filter((c) =>
-		containerCodecs.includes(c as any),
-	);
+	checkAbort(signal);
 
-	const selectedVideoCodec = await mb.getFirstEncodableVideoCodec(
-		videoCandidates as any,
-		{
-			width: canvas.width,
-			height: canvas.height,
-			bitrate: 4_000_000,
-		},
-	);
+	// Video: auto-capture at target FPS; setTimeout pacing keeps content in sync
+	const videoStream = canvas.captureStream(fps);
+	const videoTrack = videoStream.getVideoTracks()[0]!;
 
-	if (!selectedVideoCodec) {
-		throw new Error(
-			'Your browser cannot encode WebM video. ' +
-				`Tried codecs: ${videoCandidates.join(', ')}. Try GIF instead.`,
-		);
+	const tracks: MediaStreamTrack[] = [videoTrack];
+
+	// Audio: play the decoded buffer through Web Audio and tap the output stream
+	let audioCtx: AudioContext | null = null;
+	let bufferSourceNode: AudioBufferSourceNode | null = null;
+	if (audioBuffer) {
+		audioCtx = new AudioContext({ sampleRate: audioBuffer.sampleRate });
+		await audioCtx.resume();
+		const dest = audioCtx.createMediaStreamDestination();
+		bufferSourceNode = audioCtx.createBufferSource();
+		bufferSourceNode.buffer = audioBuffer;
+		bufferSourceNode.connect(dest);
+		tracks.push(dest.stream.getAudioTracks()[0]!);
 	}
 
-	const target = new mb.BufferTarget();
-	const output = new mb.Output({ format: outputFormat, target });
+	const mimeType =
+		['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(
+			(t) => MediaRecorder.isTypeSupported(t),
+		) ?? 'video/webm';
 
-	const videoSource = new mb.CanvasSource(canvas, {
-		codec: selectedVideoCodec as any,
-		bitrate: 4_000_000,
+	const chunks: Blob[] = [];
+	const recorder = new MediaRecorder(new MediaStream(tracks), {
+		mimeType,
+		videoBitsPerSecond: 4_000_000,
 	});
-	output.addVideoTrack(videoSource);
+	recorder.ondataavailable = (e) => {
+		if (e.data.size > 0) chunks.push(e.data);
+	};
+	const stoppedPromise = new Promise<void>((resolve) => {
+		recorder.onstop = () => resolve();
+	});
 
-	let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
-	if (audioBufferForMux) {
-		const supportedAudio = outputFormat.getSupportedAudioCodecs();
-		const audioCandidates = (['opus', 'vorbis'] as const).filter((c) =>
-			supportedAudio.includes(c as any),
-		);
-		const audioCodec = await mb.getFirstEncodableAudioCodec(
-			audioCandidates as any,
-			{
-				numberOfChannels: audioBufferForMux.numberOfChannels,
-				sampleRate: audioBufferForMux.sampleRate,
-				bitrate: 128_000,
-			},
-		);
-		if (audioCodec) {
-			audioSource = new mb.AudioBufferSource({
-				codec: audioCodec as any,
-				bitrate: 128_000,
-			});
-			output.addAudioTrack(audioSource);
-		}
-	}
+	// Start recorder and audio in the same turn to minimise any offset between them
+	recorder.start();
+	bufferSourceNode?.start(audioCtx!.currentTime);
 
-	await output.start();
-
-	if (audioSource && audioBufferForMux) {
-		await audioSource.add(audioBufferForMux);
-		audioSource.close();
-	}
-
-	const ENCODE_QUEUE_SIZE = 3;
-	const encodeQueue: Promise<void>[] = [];
+	const startWall = performance.now();
 
 	for (let i = 0; i < totalFrames; i++) {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
+
 		if (frameAudioData.length > 0) {
-			applyFrameAudioToEffects(
-				effects,
-				frameAudioData[i]!,
-				audioSampleRate,
-				FFT_SIZE,
-			);
+			applyFrameAudioToEffects(effects, frameAudioData[i]!, audioSampleRate, FFT_SIZE);
 		}
+
 		if (sourceVideo) {
 			const seekTime = Math.min(
 				sourceVideo.duration > 0 ? sourceVideo.duration - 0.001 : 0,
@@ -235,24 +208,25 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			await seekVideoToTime(sourceVideo, seekTime);
 			renderer.updateSourceFrame(sourceVideo);
 		}
-		renderer.render(effects, time);
-		encodeQueue.push(videoSource.add(time, frameDuration));
 
-		if (encodeQueue.length >= ENCODE_QUEUE_SIZE) {
-			await encodeQueue.shift()!;
-		}
+		renderer.render(effects, time);
 
 		onProgress?.((i + 1) / totalFrames);
+
+		// Pace rendering to real-time FPS so MediaRecorder timestamps stay in sync with audio
+		const targetWall = startWall + (i + 1) * frameMs;
+		const remaining = targetWall - performance.now();
+		if (remaining > 1) await new Promise<void>((r) => setTimeout(r, remaining - 1));
 	}
 
 	await new Promise<void>((r) => requestAnimationFrame(() => r()));
 	onFinalizing?.();
 
-	await Promise.all(encodeQueue);
-	videoSource.close();
-	await output.finalize();
+	recorder.stop();
+	await stoppedPromise;
+	await audioCtx?.close();
 
-	return new Blob([target.buffer!], { type: 'video/webm' });
+	return new Blob(chunks, { type: 'video/webm' });
 }
 
 // ---------------------------------------------------------------------------

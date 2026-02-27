@@ -782,10 +782,13 @@
 		const hasExplicitAudio = !!trackFile && trackDuration > 0;
 		const useAudioFile =
 			hasExplicitAudio && (recordWithAudio || recordFormat === 'gif');
-		const audioStart = recordSpanOnly ? spanStart : 0;
+		// Always start from the user's span position so the exported audio matches
+		// what they heard during preview. recordSpanOnly only controls whether the
+		// export duration is determined by the span length or the recordDuration slider.
+		const audioStart = spanStart;
 		const audioEnd = recordSpanOnly
 			? spanEnd
-			: Math.min(duration, trackDuration);
+			: Math.min(spanStart + duration, trackDuration);
 
 		// When no separate audio track is loaded, pass the video file itself so the
 		// recorder can extract the video's embedded audio track automatically.
