@@ -104,19 +104,21 @@
 			: 1,
 	);
 
+	const MAX_RESIZE = 10000;
+
 	function setResizeWidth(w: number) {
-		const val = Math.max(1, Math.round(w));
+		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
 		resizeWidth = val;
 		if (maintainRatio && aspectRatio > 0) {
-			resizeHeight = Math.max(1, Math.round(val / aspectRatio));
+			resizeHeight = Math.min(MAX_RESIZE, Math.max(1, Math.round(val / aspectRatio)));
 		}
 	}
 
 	function setResizeHeight(h: number) {
-		const val = Math.max(1, Math.round(h));
+		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
 		resizeHeight = val;
 		if (maintainRatio && aspectRatio > 0) {
-			resizeWidth = Math.max(1, Math.round(val * aspectRatio));
+			resizeWidth = Math.min(MAX_RESIZE, Math.max(1, Math.round(val * aspectRatio)));
 		}
 	}
 
@@ -892,6 +894,7 @@
 								class="size-input"
 								type="number"
 								min="1"
+								max="10000"
 								step="1"
 								value={resizeWidth}
 								oninput={(e) =>
@@ -905,6 +908,7 @@
 								class="size-input"
 								type="number"
 								min="1"
+								max="10000"
 								step="1"
 								value={resizeHeight}
 								oninput={(e) =>
