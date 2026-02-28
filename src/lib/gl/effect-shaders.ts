@@ -1253,6 +1253,32 @@ void main() {
 			setFloat(gl, l, 'u_reverse', v.reverse as number);
 		},
 	},
+	smear: {
+		fragment:
+			H +
+			`uniform float u_amount;
+uniform float u_angle;
+uniform float u_stretch;
+void main() {
+  float rad = u_angle * 3.14159265 / 180.0;
+  vec2 dir = vec2(cos(rad), sin(rad));
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 s = dir * u_stretch * 80.0 * px;
+  vec4 cur = texture(u_texture, v_uv);
+  float curLuma = dot(cur.rgb, vec3(0.299, 0.587, 0.114));
+  vec4 trail = cur;
+  const int SAMPLES = 24;
+  for (int i = 1; i <= SAMPLES; i++) {
+    float f = float(i) / float(SAMPLES);
+    vec4 tap = texture(u_texture, v_uv - s * f);
+    float tapLuma = dot(tap.rgb, vec3(0.299, 0.587, 0.114));
+    float carry = smoothstep(curLuma - 0.05, curLuma + 0.2, tapLuma);
+    trail = mix(trail, tap, carry * exp(-2.5 * f));
+  }
+  outColor = mix(cur, trail, u_amount);
+}`,
+		setUniforms: floats('amount', 'angle', 'stretch'),
+	},
 };
 
 export const ANIMATED_EFFECTS = new Set(

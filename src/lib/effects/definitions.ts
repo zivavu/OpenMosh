@@ -1204,4 +1204,37 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 			{ key: 'reverse', label: 'Reverse', type: 'checkbox', defaultValue: 0 },
 		],
 	},
+	{
+		id: 'smear',
+		name: 'Smear',
+		params: [
+			{
+				key: 'amount',
+				label: 'Amount',
+				type: 'range',
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 0.5,
+			},
+			{
+				key: 'angle',
+				label: 'Angle',
+				type: 'range',
+				min: 0,
+				max: 360,
+				step: 1,
+				defaultValue: 0,
+			},
+			{
+				key: 'stretch',
+				label: 'Stretch',
+				type: 'range',
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 0.3,
+			},
+		],
+	},
 ];
