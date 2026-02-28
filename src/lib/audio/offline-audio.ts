@@ -1,4 +1,5 @@
-import { getDefinition, type EffectInstance } from './effects';
+import { getDefinition, type EffectInstance } from '../effects';
+import { getLevelFromFrequencyRange } from './audio-utils';
 
 const FFT_SIZE = 2048;
 
@@ -97,26 +98,6 @@ function fftMagnitude(
 	for (let i = 0; i < half; i++) {
 		magnitude[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
 	}
-}
-
-function getLevelFromFrequencyRange(
-	freqData: Uint8Array,
-	sampleRate: number,
-	fftSize: number,
-	freqMin: number,
-	freqMax: number,
-): number {
-	const binCount = freqData.length;
-	const minBin = Math.max(0, Math.floor((freqMin / sampleRate) * fftSize));
-	const maxBin = Math.min(
-		binCount - 1,
-		Math.ceil((freqMax / sampleRate) * fftSize),
-	);
-	if (minBin > maxBin) return 0;
-	let sum = 0;
-	for (let i = minBin; i <= maxBin; i++) sum += freqData[i];
-	const count = maxBin - minBin + 1;
-	return Math.min(1, sum / count / 255);
 }
 
 /**

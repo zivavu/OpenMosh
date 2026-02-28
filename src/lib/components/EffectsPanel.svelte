@@ -10,13 +10,10 @@
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
-	} from './effects';
+	} from '../effects';
+	import type { SpectrumData } from '../types';
 
-	export type SpectrumData = {
-		data: Uint8Array;
-		sampleRate: number;
-		binCount: number;
-	};
+	export type { SpectrumData };
 
 	interface Props {
 		effects: EffectInstance[];

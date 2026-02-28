@@ -6,14 +6,10 @@
 		getDefinition,
 		type EffectInstance,
 		type VolumeLink,
-	} from './effects';
+	} from '../effects';
+	import type { SpectrumData } from '../types';
 
-	export type SpectrumData = {
-		data: Uint8Array;
-		sampleRate: number;
-		binCount: number;
-		tick?: number;
-	};
+	export type { SpectrumData };
 
 	interface Props {
 		effect: EffectInstance;

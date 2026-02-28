@@ -1,6 +1,6 @@
 <script lang="ts">
-  import UploadScreen from './lib/UploadScreen.svelte';
-  import Editor from './lib/Editor.svelte';
+  import UploadScreen from './lib/components/UploadScreen.svelte';
+  import Editor from './lib/components/Editor.svelte';
 
   let file: File | null = $state(null);
 </script>

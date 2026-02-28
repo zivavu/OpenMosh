@@ -3,14 +3,25 @@
 	import GlCanvas from './GlCanvas.svelte';
 	import {
 		EFFECT_DEFINITIONS,
-		FREQ_PRESETS,
 		createEffectInstance,
-		getDefinition,
 		type EffectInstance,
 		type VolumeLink,
-	} from './effects';
-	import type { GlRenderer } from './gl/renderer';
-	import { downloadBlob, recordVideo, type RecordFormat } from './recorder';
+	} from '../effects';
+	import type { GlRenderer } from '../gl/renderer';
+	import type { RecordFormat } from '../recorder';
+	import { executeRecording } from '../editor/recording';
+	import { formatTime } from '../audio/audio-utils';
+	import {
+		createAudioGraph,
+		disposeAudioGraph as disposeAudioGraphState,
+		computeVolumeLevel,
+		applyVolumeLinksTick,
+	} from '../audio/audio-controller';
+	import {
+		generateMosh as generateMoshFn,
+		clearEffects as clearEffectsFn,
+	} from '../editor/mosh';
+	import { createKeyboardHandler } from '../editor/keyboard';
 
 	interface Props {
 		file: File;
@@ -283,45 +294,25 @@
 		};
 	});
 
-	function formatTime(sec: number): string {
-		if (!Number.isFinite(sec) || sec < 0) return '0:00';
-		const m = Math.floor(sec / 60);
-		const s = Math.floor(sec % 60);
-		return `${m}:${s.toString().padStart(2, '0')}`;
+	function applyAudioGraphState(state: ReturnType<typeof createAudioGraph>) {
+		audioContext = state.context;
+		mediaSource = state.source;
+		analyserNode = state.analyser;
+		frequencyData = state.frequencyData;
+		audioSampleRate = state.sampleRate;
+		audioFrequencyBinCount = state.binCount;
 	}
 
 	function ensureAudioGraph() {
 		if (!audioEl || audioContext) return;
-		const ctx = new AudioContext();
-		const source = ctx.createMediaElementSource(audioEl);
-		const analyser = ctx.createAnalyser();
-		analyser.fftSize = 2048;
-		source.connect(analyser);
-		analyser.connect(ctx.destination);
-		audioContext = ctx;
-		mediaSource = source;
-		analyserNode = analyser;
-		frequencyData = new Uint8Array(analyser.frequencyBinCount);
-		audioSampleRate = ctx.sampleRate;
-		audioFrequencyBinCount = analyser.frequencyBinCount;
+		applyAudioGraphState(createAudioGraph(audioEl));
 	}
 
 	function ensureVideoAudioGraph() {
 		if (!videoEl || audioContext || trackFile) return;
 		videoEl.muted = false;
-		const ctx = new AudioContext();
-		const source = ctx.createMediaElementSource(videoEl);
-		const analyser = ctx.createAnalyser();
-		analyser.fftSize = 2048;
-		source.connect(analyser);
-		analyser.connect(ctx.destination);
-		audioContext = ctx;
-		mediaSource = source;
-		analyserNode = analyser;
-		frequencyData = new Uint8Array(analyser.frequencyBinCount);
-		audioSampleRate = ctx.sampleRate;
-		audioFrequencyBinCount = analyser.frequencyBinCount;
-		ctx.resume().catch(() => {});
+		applyAudioGraphState(createAudioGraph(videoEl));
+		audioContext!.resume().catch(() => {});
 	}
 
 	function playVideo() {
@@ -363,118 +354,28 @@
 	}
 
 	function disposeAudioGraph() {
+		if (audioContext) {
+			disposeAudioGraphState({ context: audioContext, source: mediaSource!, analyser: analyserNode!, frequencyData: frequencyData!, sampleRate: audioSampleRate, binCount: audioFrequencyBinCount });
+		}
 		mediaSource = null;
 		analyserNode = null;
 		frequencyData = null;
 		audioSampleRate = 0;
 		audioFrequencyBinCount = 0;
-		if (audioContext) {
-			audioContext.close();
-			audioContext = null;
-		}
+		audioContext = null;
 		volumeLevel = 0;
 	}
 
-	function getLevelFromFrequencyRange(
-		freqData: Uint8Array,
-		sampleRate: number,
-		fftSize: number,
-		freqMin: number,
-		freqMax: number,
-	): number {
-		const binCount = freqData.length;
-		const minBin = Math.max(0, Math.floor((freqMin / sampleRate) * fftSize));
-		const maxBin = Math.min(
-			binCount - 1,
-			Math.ceil((freqMax / sampleRate) * fftSize),
-		);
-		if (minBin > maxBin) return 0;
-		let sum = 0;
-		for (let i = minBin; i <= maxBin; i++) sum += freqData[i];
-		const count = maxBin - minBin + 1;
-		return Math.min(1, sum / count / 255);
-	}
-
-	function applyRandomAudioLinks() {
-		if (!trackFile || !audioContext) {
-			for (const effect of effects) {
-				if (effect.volumeLinks) delete effect.volumeLinks;
-			}
-			return;
-		}
-
-		const nyquist = audioSampleRate > 0 ? audioSampleRate / 2 : 22050;
-
-		for (const effect of effects) {
-			const def = getDefinition(effect.defId);
-			if (!def) continue;
-
-			if (!effect.enabled) {
-				if (effect.volumeLinks) delete effect.volumeLinks;
-				continue;
-			}
-
-			const links: Record<string, VolumeLink> = {};
-
-			for (const param of def.params) {
-				if (param.type !== 'range') continue;
-
-				if (Math.random() > 0.8) continue;
-
-				const pMin = param.min;
-				const pMax = param.max;
-				const span = pMax - pMin;
-				const t1 = Math.random();
-				const t2 = Math.random();
-				let vMin = pMin + Math.min(t1, t2) * span;
-				let vMax = pMin + Math.max(t1, t2) * span;
-
-				if (param.step > 0) {
-					const snap = (v: number) =>
-						Math.round((v - pMin) / param.step) * param.step + pMin;
-					vMin = snap(vMin);
-					vMax = snap(vMax);
-					if (vMax <= vMin) vMax = Math.min(pMax, vMin + param.step);
-				}
-
-				let freqMin: number | undefined;
-				let freqMax: number | undefined;
-
-				const mode = Math.random();
-				if (mode < 0.2 || !frequencyData || audioSampleRate <= 0) {
-					// Full spectrum
-				} else if (mode < 0.4) {
-					freqMin = FREQ_PRESETS.low.min;
-					freqMax = FREQ_PRESETS.low.max;
-				} else if (mode < 0.7) {
-					freqMin = FREQ_PRESETS.mid.min;
-					freqMax = FREQ_PRESETS.mid.max;
-				} else if (mode < 0.9) {
-					freqMin = FREQ_PRESETS.high.min;
-					freqMax = FREQ_PRESETS.high.max;
-				} else {
-					// Custom random band
-					const f1 = 20 + Math.random() * (nyquist - 20);
-					const f2 = 20 + Math.random() * (nyquist - 20);
-					freqMin = Math.min(f1, f2);
-					freqMax = Math.max(f1, f2);
-				}
-
-				const link: VolumeLink = { min: vMin, max: vMax };
-				if (freqMin != null && freqMax != null) {
-					link.freqMin = freqMin;
-					link.freqMax = freqMax;
-				}
-
-				links[param.key] = link;
-			}
-
-			if (Object.keys(links).length > 0) {
-				effect.volumeLinks = links;
-			} else if (effect.volumeLinks) {
-				delete effect.volumeLinks;
-			}
-		}
+	function getMoshOptions() {
+		return {
+			moshMin,
+			moshMax,
+			randomizeOrder,
+			moshAudioLink,
+			hasAudio: !!trackFile && !!audioContext,
+			audioSampleRate,
+			frequencyData,
+		};
 	}
 
 	$effect(() => {
@@ -483,52 +384,14 @@
 		const timeData = new Uint8Array(analyser.fftSize);
 		const freqDataRef = frequencyData;
 		const sampleRate = audioSampleRate;
-		const binCount = audioFrequencyBinCount;
 		const fftSize = analyser.fftSize;
 		let rafId: number;
 		function tick() {
 			if (!analyser) return;
-			analyser.getByteTimeDomainData(timeData);
-			let sum = 0;
-			for (let i = 0; i < timeData.length; i++) {
-				const n = (timeData[i] - 128) / 128;
-				sum += n * n;
-			}
-			volumeLevel = Math.min(1, Math.sqrt(sum / timeData.length));
+			volumeLevel = computeVolumeLevel(analyser, timeData);
 			if (freqDataRef)
 				analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-			for (const effect of effects) {
-				const links = effect.volumeLinks;
-				if (!links) continue;
-				const def = getDefinition(effect.defId);
-				if (!def) continue;
-				for (const param of def.params) {
-					if (param.type !== 'range') continue;
-					const link = links[param.key];
-					if (!link) continue;
-					const level =
-						link.freqMin != null &&
-						link.freqMax != null &&
-						freqDataRef &&
-						sampleRate > 0
-							? getLevelFromFrequencyRange(
-									freqDataRef,
-									sampleRate,
-									fftSize,
-									link.freqMin,
-									link.freqMax,
-								)
-							: volumeLevel;
-					const { min: pMin, max: pMax, step } = param;
-					let value = link.min + level * (link.max - link.min);
-					value = Math.max(pMin, Math.min(pMax, value));
-					if (step > 0) {
-						value = Math.round((value - pMin) / step) * step + pMin;
-						value = Math.max(pMin, Math.min(pMax, value));
-					}
-					effect.values[param.key] = value;
-				}
-			}
+			applyVolumeLinksTick(effects, volumeLevel, freqDataRef, sampleRate, fftSize);
 			rafId = requestAnimationFrame(tick);
 		}
 		rafId = requestAnimationFrame(tick);
@@ -577,63 +440,7 @@
 	}
 
 	function generateMosh() {
-		const moshable = effects.filter((e) => !e.locked);
-		const clampedMin = Math.min(moshMin, moshable.length);
-		const clampedMax = Math.min(moshMax, moshable.length);
-		const target =
-			clampedMin + Math.floor(Math.random() * (clampedMax - clampedMin + 1));
-
-		const indices = moshable.map((_, i) => i);
-		for (let i = indices.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[indices[i], indices[j]] = [indices[j], indices[i]];
-		}
-		const enabledSet = new Set(indices.slice(0, target));
-
-		moshable.forEach((effect, i) => {
-			effect.enabled = enabledSet.has(i);
-			if (!effect.enabled) return;
-			const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
-			if (!def) return;
-			for (const param of def.params) {
-				if (param.type === 'range') {
-					const lo = param.moshMin ?? param.min;
-					const hi = param.moshMax ?? param.max;
-					const range = hi - lo;
-					const bias = 0.15 + Math.random() * 0.55;
-					effect.values[param.key] =
-						Math.round((lo + bias * range) / param.step) * param.step;
-				} else if (param.type === 'select') {
-					const options = param.options;
-					effect.values[param.key] =
-						options[Math.floor(Math.random() * options.length)].value;
-				}
-			}
-		});
-
-		if (randomizeOrder) {
-			const moshableIndices = effects
-				.map((e, i) => (e.locked ? -1 : i))
-				.filter((i) => i !== -1);
-			const shuffled = [...moshableIndices];
-			for (let i = shuffled.length - 1; i > 0; i--) {
-				const j = Math.floor(Math.random() * (i + 1));
-				[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-			}
-			const snapshot = effects.map((e) => $state.snapshot(e));
-			for (let k = 0; k < moshableIndices.length; k++) {
-				effects[moshableIndices[k]] = snapshot[shuffled[k]];
-			}
-		}
-
-		if (moshAudioLink) {
-			applyRandomAudioLinks();
-		} else {
-			for (const effect of effects) {
-				if (effect.volumeLinks) delete effect.volumeLinks;
-			}
-		}
-
+		generateMoshFn(effects, getMoshOptions());
 		pushHistory();
 	}
 
@@ -653,14 +460,7 @@
 	}
 
 	function clearEffects() {
-		for (const effect of effects) {
-			effect.enabled = false;
-			const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
-			if (!def) continue;
-			for (const param of def.params) {
-				effect.values[param.key] = param.defaultValue;
-			}
-		}
+		clearEffectsFn(effects);
 		pushHistory();
 	}
 
@@ -678,47 +478,16 @@
 		}, 'image/png');
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
-			e.preventDefault();
-			save();
-			return;
-		}
-
-		const el = e.target as HTMLElement;
-		if (
-			el.tagName === 'INPUT' ||
-			el.tagName === 'TEXTAREA' ||
-			el.tagName === 'SELECT' ||
-			el.isContentEditable
-		)
-			return;
-
-		if (e.key === ' ') {
-			if (trackFile && audioEl) {
-				e.preventDefault();
-				if (audioPlaying) pauseTrack();
-				else playSpan();
-			}
-		} else if (e.key === 'ArrowRight') {
-			e.preventDefault();
-			mosh();
-		} else if (
-			e.key === 'ArrowLeft' ||
-			(e.key === 'z' && (e.ctrlKey || e.metaKey))
-		) {
-			e.preventDefault();
-			undo();
-		} else if (
-			e.key.toLowerCase() === 'v' &&
-			!e.ctrlKey &&
-			!e.metaKey &&
-			!e.altKey
-		) {
-			e.preventDefault();
-			reInput();
-		}
-	}
+	const handleKeydown = createKeyboardHandler({
+		save,
+		mosh,
+		undo,
+		reInput,
+		playSpan,
+		pauseTrack,
+		hasTrack: () => !!trackFile && !!audioEl,
+		isPlaying: () => audioPlaying,
+	});
 
 	function save() {
 		if (!canvasEl) return;
@@ -784,87 +553,30 @@
 		const abort = new AbortController();
 		recordAbort = abort;
 
-		const duration =
-			isVideo && videoDuration > 0
-				? videoSpanEnd - videoSpanStart
-				: recordSpanOnly && trackFile && trackDuration > 0
-					? spanEnd - spanStart
-					: recordDuration;
-
-		// Separate audio track (user-added file) takes priority over video's own audio.
-		const hasExplicitAudio = !!trackFile && trackDuration > 0;
-		// Check if any effect uses volume links — if so, we need audio data for
-		// the recorder even when the user doesn't want audio muxed into the output.
-		const hasVolumeLinks = effects.some(
-			(e) => e.volumeLinks && Object.keys(e.volumeLinks).length > 0,
-		);
-		const useAudioFile =
-			hasExplicitAudio &&
-			(recordWithAudio || recordFormat === 'gif' || hasVolumeLinks);
-		// When no separate audio track is loaded, pass the video file itself so the
-		// recorder can extract the video's embedded audio track for volume linking.
-		const useVideoSourceAudio = isVideo && !hasExplicitAudio && hasVolumeLinks;
-		// Always start from the user's span position so the exported audio matches
-		// what they heard during preview. recordSpanOnly only controls whether the
-		// export duration is determined by the span length or the recordDuration slider.
-		const audioStart = hasExplicitAudio
-			? spanStart
-			: isVideo
-				? videoSpanStart
-				: 0;
-		const audioEnd = hasExplicitAudio
-			? recordSpanOnly
-				? spanEnd
-				: Math.min(spanStart + duration, trackDuration)
-			: isVideo
-				? videoSpanEnd
-				: duration;
-
-		if (isVideo && videoEl) videoEl.pause();
 		try {
-			const blob = await recordVideo({
+			await executeRecording({
 				format: recordFormat,
-				duration,
-				fps: recordFormat === 'gif' ? Math.min(recordFps, 15) : recordFps,
+				fps: recordFps,
+				recordDuration,
+				recordSpanOnly,
+				recordWithAudio,
 				canvas: canvasEl,
 				renderer: glRenderer,
-				effects: effects.map(
-					(e): EffectInstance => ({
-						instanceId: e.instanceId,
-						defId: e.defId,
-						enabled: e.enabled,
-						locked: e.locked,
-						expanded: e.expanded,
-						values: { ...e.values },
-						volumeLinks: e.volumeLinks
-							? JSON.parse(JSON.stringify(e.volumeLinks))
-							: undefined,
-					}),
-				),
-				onProgress: (p) => {
-					recordProgress = p;
-				},
-				onFinalizing: () => {
-					recordFinalizing = true;
-				},
+				effects,
+				trackFile,
+				trackDuration,
+				spanStart,
+				spanEnd,
+				isVideo,
+				videoEl,
+				videoDuration,
+				videoSpanStart,
+				videoSpanEnd,
+				file,
+				onProgress: (p) => { recordProgress = p; },
+				onFinalizing: () => { recordFinalizing = true; },
 				signal: abort.signal,
-				...(useAudioFile && {
-					audioFile: trackFile!,
-					audioStart,
-					audioEnd,
-				}),
-				...(useVideoSourceAudio && {
-					audioFile: file,
-					audioStart,
-					audioEnd,
-				}),
-				...(isVideo &&
-					videoEl && {
-						sourceVideo: videoEl,
-						videoSpanStart,
-					}),
 			});
-			downloadBlob(blob, recordFormat);
 		} catch (e) {
 			if (e instanceof DOMException && e.name === 'AbortError') {
 				// cancelled

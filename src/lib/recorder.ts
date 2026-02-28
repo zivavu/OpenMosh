@@ -6,7 +6,7 @@ import {
 	decodeAudioFile,
 	trimAudioBuffer,
 	type FrameAudioData,
-} from './offline-audio';
+} from './audio/offline-audio';
 
 const FFT_SIZE = 2048;
 
