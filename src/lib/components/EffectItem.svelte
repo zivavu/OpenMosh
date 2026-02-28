@@ -181,6 +181,27 @@
 										</div>
 										<button
 											type="button"
+											class="volume-invert-btn"
+											class:active={link.inverted}
+											title={link.inverted ? 'Inverted: low volume = high effect' : 'Normal: high volume = high effect'}
+											onclick={() => onVolumeLinkChange(param.key, { ...link, inverted: !link.inverted })}
+										>
+											<svg
+												width="12"
+												height="12"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<polyline points="7 3 7 13" />
+												<polyline points="4 6 7 3 10 6" />
+												<polyline points="17 21 17 11" />
+												<polyline points="14 18 17 21 20 18" />
+											</svg>
+										</button>
+									<button
+											type="button"
 											class="volume-unlink-btn"
 											title="Unlink from volume"
 											onclick={() => onVolumeLinkChange(param.key, null)}
@@ -603,6 +624,33 @@
 	.volume-link-slider {
 		flex: 1;
 		min-width: 0;
+	}
+
+	.volume-invert-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.2rem;
+		background: none;
+		border: 1px solid #333;
+		border-radius: 4px;
+		color: #666;
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			border-color 0.15s,
+			background 0.15s;
+	}
+
+	.volume-invert-btn:hover {
+		color: #999;
+		border-color: #555;
+	}
+
+	.volume-invert-btn.active {
+		color: #aac;
+		border-color: #558;
+		background: rgba(100, 140, 200, 0.15);
 	}
 
 	.volume-unlink-btn {

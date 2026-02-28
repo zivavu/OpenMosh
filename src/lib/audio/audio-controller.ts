@@ -66,7 +66,7 @@ export function applyVolumeLinksTick(
 			if (param.type !== 'range') continue;
 			const link = links[param.key];
 			if (!link) continue;
-			const level =
+			let level =
 				link.freqMin != null &&
 				link.freqMax != null &&
 				frequencyData &&
@@ -79,6 +79,7 @@ export function applyVolumeLinksTick(
 							link.freqMax,
 						)
 					: volumeLevel;
+			if (link.inverted) level = 1 - level;
 			const { min: pMin, max: pMax, step } = param;
 			let value = link.min + level * (link.max - link.min);
 			value = Math.max(pMin, Math.min(pMax, value));

@@ -40,6 +40,8 @@ export interface VolumeLink {
 	/** Optional frequency range in Hz; when set, level is from this band only. */
 	freqMin?: number;
 	freqMax?: number;
+	/** When true, lower volume produces higher effect value. */
+	inverted?: boolean;
 }
 
 /** Frequency presets (Hz) for volume links. */

@@ -68,19 +68,19 @@
 	function saveSettings() {
 		localStorage.setItem(
 			SETTINGS_KEY,
-			JSON.stringify({ moshMin, moshMax, randomizeOrder, moshAudioLink, showFps }),
+			JSON.stringify({ moshMin, moshMax, randomizeOrder, moshAudioLink, showFps, outputVolume }),
 		);
 	}
 	const saved = loadSettings();
-	let moshMin = $state(saved.moshMin ?? 7);
-	let moshMax = $state(saved.moshMax ?? 14);
+	let moshMin = $state(saved.moshMin ?? 3);
+	let moshMax = $state(saved.moshMax ?? 6);
 	let randomizeOrder = $state(saved.randomizeOrder ?? true);
 	let showMoshSettings = $state(false);
 	let moshAudioLink = $state(saved.moshAudioLink ?? true);
 	let showFps = $state(saved.showFps ?? false);
 	$effect(() => {
 		// subscribe to all settings
-		moshMin; moshMax; randomizeOrder; moshAudioLink; showFps;
+		moshMin; moshMax; randomizeOrder; moshAudioLink; showFps; outputVolume;
 		saveSettings();
 	});
 	let currentFps = $state(0);
@@ -190,7 +190,7 @@
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
-	let outputVolume = $state(1);
+	let outputVolume = $state(saved.outputVolume ?? 1);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {

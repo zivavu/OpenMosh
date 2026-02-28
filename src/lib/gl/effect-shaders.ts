@@ -1060,53 +1060,168 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_intensity;
-uniform float u_blocks;
+uniform float u_cells;
 uniform float u_rgbSplit;
 uniform float u_chaos;
 uniform float u_speed;
-float hash(vec2 p) {
+uniform float u_edgeGlow;
+uniform float u_outline;
+
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453);
+}
+
+float hash1(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
-float hash2(vec2 p) {
-  return fract(sin(dot(p, vec2(63.7264, 10.873))) * 24637.195);
+
+// returns vec3(minDist, secondMinDist, cellId)
+vec3 voronoi(vec2 uv, float cells, float t) {
+  vec2 scaled = uv * cells;
+  vec2 iuv = floor(scaled);
+  vec2 fuv = fract(scaled);
+
+  float minD = 1e9;
+  float minD2 = 1e9;
+  vec2 nearestCell = vec2(0.0);
+
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 neighbor = vec2(float(x), float(y));
+      vec2 cellId = iuv + neighbor;
+      vec2 point = hash2(cellId + t * 0.07);
+      // jitter the point within its cell
+      point = 0.5 + 0.4 * sin(point * 6.2831 + t * 0.5);
+      vec2 diff = neighbor + point - fuv;
+      float d = dot(diff, diff);
+
+      if (d < minD) {
+        minD2 = minD;
+        minD = d;
+        nearestCell = cellId;
+      } else if (d < minD2) {
+        minD2 = d;
+      }
+    }
+  }
+
+  float cellHash = hash1(nearestCell + t * 0.1);
+  return vec3(sqrt(minD), sqrt(minD2), cellHash);
 }
+
 void main() {
   float t = floor(u_time * 4.0 * u_speed);
-  vec2 grid = vec2(u_blocks);
-  vec2 cell = floor(v_uv * grid);
-  vec2 local = fract(v_uv * grid);
 
-  // per-block random values seeded by cell + time
-  float h1 = hash(cell + t * 0.1);
-  float h2 = hash2(cell + t * 0.1);
-  float h3 = hash(cell * 3.7 + t * 0.13);
-  float h4 = hash2(cell * 2.3 + t * 0.17);
+  vec3 vor = voronoi(v_uv, u_cells, t);
+  float minD = vor.x;
+  float minD2 = vor.y;
+  float cellHash = vor.z;
 
-  // trigger: which blocks shatter (more chaos = more blocks affected)
+  // per-cell random values
+  float h1 = cellHash;
+  float h2 = fract(cellHash * 127.1);
+  float h3 = fract(cellHash * 269.5);
+  float h4 = fract(cellHash * 419.2);
+  float angle = (h4 - 0.5) * 6.2831 * 0.3;
+
+  // trigger: which cells shatter
   float trigger = step(1.0 - u_chaos, h1);
 
-  // displacement offset in UV space
-  vec2 disp = (vec2(h2, h3) - 0.5) * 2.0 * u_intensity * 0.3 * trigger;
+  // displacement offset per cell
+  vec2 disp = (vec2(h2, h3) - 0.5) * 2.0 * u_intensity * 0.25 * trigger;
 
-  // per-block zoom (some blocks zoom in, creating overlapping fragments)
-  float zoom = 1.0 + (h4 - 0.5) * u_intensity * trigger * 0.6;
-  vec2 zoomed = (local - 0.5) * zoom + 0.5;
-  vec2 uv = (cell + zoomed) / grid + disp;
+  // per-cell rotation around cell center
+  float s = sin(angle * u_intensity * trigger);
+  float c = cos(angle * u_intensity * trigger);
+  vec2 centered = v_uv - 0.5;
+  vec2 rotated = vec2(centered.x * c - centered.y * s, centered.x * s + centered.y * c);
+  vec2 uv = mix(v_uv, rotated + 0.5, trigger * u_intensity * 0.4) + disp;
 
-  // RGB channel split per block
-  float split = u_rgbSplit * u_intensity * trigger * 0.05;
+  // edge detection from Voronoi cell boundaries
+  float edge = 1.0 - smoothstep(0.0, 0.08, minD2 - minD);
+  float glow = edge * u_edgeGlow * 1.5;
+
+  // RGB channel split per cell
+  float split = u_rgbSplit * u_intensity * trigger * 0.04;
   vec2 splitDir = normalize(vec2(h2 - 0.5, h3 - 0.5) + 1e-4);
   vec2 splitOff = splitDir * split;
 
-  outColor = vec4(
+  vec3 color = vec3(
     texture(u_texture, uv + splitOff).r,
     texture(u_texture, uv).g,
-    texture(u_texture, uv - splitOff).b,
-    1.0
+    texture(u_texture, uv - splitOff).b
   );
+
+  // add crack glow (white edge lines)
+  color += vec3(glow);
+
+  // shard outline — darken toward edges based on outline opacity
+  float outlineEdge = smoothstep(0.0, 0.12, minD2 - minD);
+  color = mix(vec3(0.0), color, mix(1.0, outlineEdge, u_outline));
+
+  outColor = vec4(color, 1.0);
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'blocks', 'rgbSplit', 'chaos', 'speed'),
+		setUniforms: floats('intensity', 'cells', 'rgbSplit', 'chaos', 'speed', 'edgeGlow', 'outline'),
+	},
+
+	stereoscopic: {
+		fragment:
+			H +
+			`uniform float u_depth;
+uniform float u_angle;
+uniform int u_mode;
+uniform int u_depthSource;
+uniform float u_focus;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec4 c = texture(u_texture, v_uv);
+
+  // compute depth value
+  float d;
+  if (u_depthSource == 0) {
+    // luminance-based depth
+    d = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  } else if (u_depthSource == 1) {
+    // edge-based depth (gradient magnitude)
+    float lL = dot(texture(u_texture, v_uv + vec2(-px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    float lR = dot(texture(u_texture, v_uv + vec2( px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    float lT = dot(texture(u_texture, v_uv + vec2(0.0, -px.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float lB = dot(texture(u_texture, v_uv + vec2(0.0,  px.y)).rgb, vec3(0.299, 0.587, 0.114));
+    d = clamp(length(vec2(lR - lL, lB - lT)) * 4.0, 0.0, 1.0);
+  } else {
+    // flat — uniform offset
+    d = 1.0;
+  }
+
+  // offset centered around focus point (focus inverted: high focus = less offset)
+  float offset = (d - (1.0 - u_focus)) * u_depth;
+  float rad = u_angle * 3.14159265 / 180.0;
+  vec2 dir = vec2(cos(rad), sin(rad)) * offset * px;
+
+  if (u_mode == 0) {
+    // anaglyph red/cyan
+    float r = texture(u_texture, v_uv + dir).r;
+    vec2 gb = texture(u_texture, v_uv - dir).gb;
+    outColor = vec4(r, gb, c.a);
+  } else {
+    // color split — offset per channel in 3 directions
+    float r = texture(u_texture, v_uv + dir).r;
+    float g = texture(u_texture, v_uv).g;
+    float b = texture(u_texture, v_uv - dir).b;
+    outColor = vec4(r, g, b, c.a);
+  }
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_depth', v.depth as number);
+			setFloat(gl, l, 'u_angle', v.angle as number);
+			const m = v.mode as string;
+			setInt(gl, l, 'u_mode', m === 'color-split' ? 1 : 0);
+			const ds = v.depthSource as string;
+			setInt(gl, l, 'u_depthSource', ds === 'edges' ? 1 : ds === 'flat' ? 2 : 0);
+			setFloat(gl, l, 'u_focus', v.focus as number);
+		},
 	},
 
 	'pixel-sort': {
