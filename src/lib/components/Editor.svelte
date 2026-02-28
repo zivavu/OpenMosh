@@ -167,6 +167,8 @@
 	let audioFrequencyBinCount = $state(0);
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
+	let gainNode = $state<GainNode | null>(null);
+	let outputVolume = $state(1);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {
@@ -298,6 +300,8 @@
 		audioContext = state.context;
 		mediaSource = state.source;
 		analyserNode = state.analyser;
+		gainNode = state.gain;
+		gainNode.gain.value = outputVolume;
 		frequencyData = state.frequencyData;
 		audioSampleRate = state.sampleRate;
 		audioFrequencyBinCount = state.binCount;
@@ -355,10 +359,11 @@
 
 	function disposeAudioGraph() {
 		if (audioContext) {
-			disposeAudioGraphState({ context: audioContext, source: mediaSource!, analyser: analyserNode!, frequencyData: frequencyData!, sampleRate: audioSampleRate, binCount: audioFrequencyBinCount });
+			disposeAudioGraphState({ context: audioContext, source: mediaSource!, analyser: analyserNode!, gain: gainNode!, frequencyData: frequencyData!, sampleRate: audioSampleRate, binCount: audioFrequencyBinCount });
 		}
 		mediaSource = null;
 		analyserNode = null;
+		gainNode = null;
 		frequencyData = null;
 		audioSampleRate = 0;
 		audioFrequencyBinCount = 0;
@@ -1099,6 +1104,21 @@
 					</div>
 				</div>
 				<span class="timeline-time">{formatTime(videoSpanEnd)}</span>
+				{#if analyserNode && !trackFile}
+					<input
+						type="range"
+						class="volume-slider"
+						min="0"
+						max="1"
+						step="0.01"
+						value={outputVolume}
+						oninput={(e) => {
+							outputVolume = +(e.currentTarget as HTMLInputElement).value;
+							if (gainNode) gainNode.gain.value = outputVolume;
+						}}
+						title="Output volume: {Math.round(outputVolume * 100)}%"
+					/>
+				{/if}
 			</div>
 		{/if}
 		{#if trackFile && trackDuration > 0}
@@ -1166,6 +1186,19 @@
 					</div>
 				</div>
 				<span class="timeline-time">{formatTime(spanEnd)}</span>
+				<input
+					type="range"
+					class="volume-slider"
+					min="0"
+					max="1"
+					step="0.01"
+					value={outputVolume}
+					oninput={(e) => {
+						outputVolume = +(e.currentTarget as HTMLInputElement).value;
+						if (gainNode) gainNode.gain.value = outputVolume;
+					}}
+					title="Output volume: {Math.round(outputVolume * 100)}%"
+				/>
 				<button
 					class="track-inline-btn"
 					onclick={clearTrack}
@@ -1515,6 +1548,38 @@
 	.track-add-btn:hover {
 		color: #aaa;
 		border-color: #555;
+	}
+
+	.volume-slider {
+		width: 60px;
+		height: 4px;
+		appearance: none;
+		background: #333;
+		border-radius: 2px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.volume-slider::-webkit-slider-thumb {
+		appearance: none;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: #aaa;
+		cursor: pointer;
+	}
+	.volume-slider::-moz-range-thumb {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: #aaa;
+		border: none;
+		cursor: pointer;
+	}
+	.volume-slider:hover::-webkit-slider-thumb {
+		background: #fff;
+	}
+	.volume-slider:hover::-moz-range-thumb {
+		background: #fff;
 	}
 
 	.track-inline-btn {

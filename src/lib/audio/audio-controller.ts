@@ -5,6 +5,7 @@ export interface AudioGraphState {
 	context: AudioContext;
 	source: MediaElementAudioSourceNode;
 	analyser: AnalyserNode;
+	gain: GainNode;
 	frequencyData: Uint8Array;
 	sampleRate: number;
 	binCount: number;
@@ -17,12 +18,15 @@ export function createAudioGraph(
 	const source = ctx.createMediaElementSource(element);
 	const analyser = ctx.createAnalyser();
 	analyser.fftSize = 2048;
+	const gain = ctx.createGain();
 	source.connect(analyser);
-	analyser.connect(ctx.destination);
+	analyser.connect(gain);
+	gain.connect(ctx.destination);
 	return {
 		context: ctx,
 		source,
 		analyser,
+		gain,
 		frequencyData: new Uint8Array(analyser.frequencyBinCount),
 		sampleRate: ctx.sampleRate,
 		binCount: analyser.frequencyBinCount,
@@ -35,7 +39,7 @@ export function disposeAudioGraph(state: AudioGraphState): void {
 
 export function computeVolumeLevel(
 	analyser: AnalyserNode,
-	timeData: Uint8Array,
+	timeData: Uint8Array<ArrayBuffer>,
 ): number {
 	analyser.getByteTimeDomainData(timeData);
 	let sum = 0;
