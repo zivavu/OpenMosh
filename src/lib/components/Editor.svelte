@@ -1279,10 +1279,12 @@
 				<div class="progress-track" class:finalizing={recordFinalizing}>
 					<div
 						class="progress-fill"
-						style="width: {Math.round(recordProgress * 100)}%"
+						style="width: {recordFinalizing ? '100%' : `${Math.round(recordProgress * 100)}%`}"
 					></div>
 				</div>
-				<p class="record-pct">{Math.round(recordProgress * 100)}%</p>
+				{#if !recordFinalizing}
+					<p class="record-pct">{Math.round(recordProgress * 100)}%</p>
+				{/if}
 				<button class="rec-cancel-btn" onclick={cancelRecording}>Cancel</button>
 			</div>
 		</div>

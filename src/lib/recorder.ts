@@ -20,7 +20,7 @@ export interface RecordOptions {
 	renderer: GlRenderer;
 	effects: EffectInstance[];
 	onProgress?: (progress: number) => void;
-	/** Called when frame capture is done and finalization (encode drain, mux, blob) is about to start. */
+	/** Called when frame capture is done and finalization (mux, blob) begins. */
 	onFinalizing?: () => void;
 	signal?: AbortSignal;
 	/** When set, audio is decoded and used to drive effects during recording; for WebM it is also muxed into the output. */
@@ -35,6 +35,7 @@ function checkAbort(signal?: AbortSignal) {
 	if (signal?.aborted)
 		throw new DOMException('Recording cancelled', 'AbortError');
 }
+
 
 async function prepareFrameAudio(
 	audioFile: File,
@@ -200,7 +201,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	onFinalizing?.();
 
 	await Promise.all(encodeQueue);
+	encodeQueue.length = 0;
 	videoSource.close();
+
 	await output.finalize();
 
 	const mimeType = 'video/webm';

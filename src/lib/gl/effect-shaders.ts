@@ -810,7 +810,8 @@ float hash(vec2 p) {
 void main() {
   float t = floor(u_time * 6.0);
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float row = floor(v_uv.y * u_chunkSize);
+  float chunks = 105.0 - u_chunkSize;
+  float row = floor(v_uv.y * chunks);
   float rowHash = hash(vec2(row, t));
   float trigger = step(1.0 - u_threshold, rowHash);
   float strength = (hash(vec2(row * 3.0, t + 1.0)) - 0.5) * 2.0;
