@@ -770,7 +770,7 @@
 			bind:naturalWidth
 			bind:naturalHeight
 			bind:fps={currentFps}
-			{showFps}
+			showFps={showFps && !isImageFormat}
 			videoEl={isVideo ? videoEl : null}
 			freezeAnimation={isImageFormat}
 		/>
