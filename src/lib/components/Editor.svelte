@@ -57,12 +57,32 @@
 		EFFECT_DEFINITIONS.map(createEffectInstance),
 	);
 
-	let moshMin = $state(7);
-	let moshMax = $state(14);
-	let randomizeOrder = $state(true);
+	const SETTINGS_KEY = 'openmosh-settings';
+	function loadSettings() {
+		try {
+			const raw = localStorage.getItem(SETTINGS_KEY);
+			if (raw) return JSON.parse(raw);
+		} catch {}
+		return {};
+	}
+	function saveSettings() {
+		localStorage.setItem(
+			SETTINGS_KEY,
+			JSON.stringify({ moshMin, moshMax, randomizeOrder, moshAudioLink, showFps }),
+		);
+	}
+	const saved = loadSettings();
+	let moshMin = $state(saved.moshMin ?? 7);
+	let moshMax = $state(saved.moshMax ?? 14);
+	let randomizeOrder = $state(saved.randomizeOrder ?? true);
 	let showMoshSettings = $state(false);
-	let moshAudioLink = $state(true);
-	let showFps = $state(false);
+	let moshAudioLink = $state(saved.moshAudioLink ?? true);
+	let showFps = $state(saved.showFps ?? false);
+	$effect(() => {
+		// subscribe to all settings
+		moshMin; moshMax; randomizeOrder; moshAudioLink; showFps;
+		saveSettings();
+	});
 	let currentFps = $state(0);
 
 	let naturalWidth = $state<number | undefined>(undefined);
