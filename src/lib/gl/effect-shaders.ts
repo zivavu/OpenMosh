@@ -1056,6 +1056,59 @@ void main() {
 		},
 	},
 
+	shatter: {
+		fragment:
+			H +
+			`uniform float u_intensity;
+uniform float u_blocks;
+uniform float u_rgbSplit;
+uniform float u_chaos;
+uniform float u_speed;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+float hash2(vec2 p) {
+  return fract(sin(dot(p, vec2(63.7264, 10.873))) * 24637.195);
+}
+void main() {
+  float t = floor(u_time * 4.0 * u_speed);
+  vec2 grid = vec2(u_blocks);
+  vec2 cell = floor(v_uv * grid);
+  vec2 local = fract(v_uv * grid);
+
+  // per-block random values seeded by cell + time
+  float h1 = hash(cell + t * 0.1);
+  float h2 = hash2(cell + t * 0.1);
+  float h3 = hash(cell * 3.7 + t * 0.13);
+  float h4 = hash2(cell * 2.3 + t * 0.17);
+
+  // trigger: which blocks shatter (more chaos = more blocks affected)
+  float trigger = step(1.0 - u_chaos, h1);
+
+  // displacement offset in UV space
+  vec2 disp = (vec2(h2, h3) - 0.5) * 2.0 * u_intensity * 0.3 * trigger;
+
+  // per-block zoom (some blocks zoom in, creating overlapping fragments)
+  float zoom = 1.0 + (h4 - 0.5) * u_intensity * trigger * 0.6;
+  vec2 zoomed = (local - 0.5) * zoom + 0.5;
+  vec2 uv = (cell + zoomed) / grid + disp;
+
+  // RGB channel split per block
+  float split = u_rgbSplit * u_intensity * trigger * 0.05;
+  vec2 splitDir = normalize(vec2(h2 - 0.5, h3 - 0.5) + 1e-4);
+  vec2 splitOff = splitDir * split;
+
+  outColor = vec4(
+    texture(u_texture, uv + splitOff).r,
+    texture(u_texture, uv).g,
+    texture(u_texture, uv - splitOff).b,
+    1.0
+  );
+}`,
+		animated: true,
+		setUniforms: floats('intensity', 'blocks', 'rgbSplit', 'chaos', 'speed'),
+	},
+
 	'pixel-sort': {
 		fragment:
 			H +
