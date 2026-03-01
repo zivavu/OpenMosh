@@ -138,14 +138,26 @@ uniform float u_radius;
 uniform float u_threshold;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0)) * u_radius;
-  vec4 c  = texture(u_texture, v_uv);
-  vec4 t  = texture(u_texture, v_uv + vec2(0, -px.y));
-  vec4 b  = texture(u_texture, v_uv + vec2(0,  px.y));
-  vec4 le = texture(u_texture, v_uv + vec2(-px.x, 0));
-  vec4 r  = texture(u_texture, v_uv + vec2( px.x, 0));
-  vec3 diff = c.rgb * 4.0 - (t.rgb + b.rgb + le.rgb + r.rgb);
-  vec3 mask = step(vec3(u_threshold), abs(diff));
-  outColor = vec4(clamp(c.rgb + diff * u_amount * mask, 0.0, 1.0), c.a);
+  vec4 c = texture(u_texture, v_uv);
+
+  // 3x3 Gaussian blur (sigma ~0.85)
+  // Weights: center=4/16, edges=2/16, corners=1/16
+  vec3 blur =
+    texture(u_texture, v_uv + vec2(-px.x, -px.y)).rgb * 1.0 +
+    texture(u_texture, v_uv + vec2(   0., -px.y)).rgb * 2.0 +
+    texture(u_texture, v_uv + vec2( px.x, -px.y)).rgb * 1.0 +
+    texture(u_texture, v_uv + vec2(-px.x,    0.)).rgb * 2.0 +
+    c.rgb * 4.0 +
+    texture(u_texture, v_uv + vec2( px.x,    0.)).rgb * 2.0 +
+    texture(u_texture, v_uv + vec2(-px.x,  px.y)).rgb * 1.0 +
+    texture(u_texture, v_uv + vec2(   0.,  px.y)).rgb * 2.0 +
+    texture(u_texture, v_uv + vec2( px.x,  px.y)).rgb * 1.0;
+  blur /= 16.0;
+
+  // Unsharp mask: detail = original - blurred
+  vec3 detail = c.rgb - blur;
+  vec3 mask = step(vec3(u_threshold), abs(detail));
+  outColor = vec4(clamp(c.rgb + detail * u_amount * mask, 0.0, 1.0), c.a);
 }`,
 		setUniforms: floats('amount', 'radius', 'threshold'),
 	},
@@ -367,16 +379,45 @@ void main() {
 			H +
 			`uniform float u_amount;
 uniform float u_frequency;
+uniform float u_speed;
+
+// Value noise helpers
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f); // smoothstep
+  return mix(
+    mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+// Fractal Brownian motion — 3 octaves
+float fbm(vec2 p) {
+  float v = 0.0;
+  v += 0.5    * noise(p); p *= 2.13;
+  v += 0.25   * noise(p); p *= 2.07;
+  v += 0.125  * noise(p);
+  return v / 0.875;
+}
+
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  vec2 off = vec2(
-    sin(v_uv.y * u_frequency * 6.28318 + u_time * 2.0) * u_amount * px.x,
-    cos(v_uv.x * u_frequency * 6.28318 + u_time * 2.0) * u_amount * px.y
-  );
+  float t = u_time * u_speed;
+  vec2 st = v_uv * u_frequency;
+
+  // 2D noise-based displacement — varies in both axes
+  float ox = fbm(st + vec2(t * 0.7, t * 0.3)) - 0.5;
+  float oy = fbm(st + vec2(t * -0.4, t * 0.8) + 50.0) - 0.5;
+
+  vec2 off = vec2(ox, oy) * 2.0 * u_amount * px;
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'frequency'),
+		setUniforms: floats('amount', 'frequency', 'speed'),
 	},
 
 	slices: {
@@ -527,72 +568,141 @@ void main() {
 	'optical-flow': {
 		fragment:
 			H +
-			`uniform float u_amount;
+			`uniform sampler2D u_feedback;
+uniform float u_amount;
 uniform float u_distortion;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float lL = dot(texture(u_texture, v_uv + vec2(-px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-  float lR = dot(texture(u_texture, v_uv + vec2( px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-  float lT = dot(texture(u_texture, v_uv + vec2(0.0, -px.y)).rgb, vec3(0.299, 0.587, 0.114));
-  float lB = dot(texture(u_texture, v_uv + vec2(0.0,  px.y)).rgb, vec3(0.299, 0.587, 0.114));
+  float r = 2.0 + u_distortion * 6.0; // sampling radius: 2–8 pixels
+  vec2 step_ = px * r;
+
+  // Spatial gradient (Sobel-like, wider sampling)
+  float lL = dot(texture(u_texture, v_uv - vec2(step_.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+  float lR = dot(texture(u_texture, v_uv + vec2(step_.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+  float lT = dot(texture(u_texture, v_uv - vec2(0.0, step_.y)).rgb, vec3(0.299, 0.587, 0.114));
+  float lB = dot(texture(u_texture, v_uv + vec2(0.0, step_.y)).rgb, vec3(0.299, 0.587, 0.114));
+
+  // Temporal difference from feedback
+  float lumCur  = dot(texture(u_texture,  v_uv).rgb, vec3(0.299, 0.587, 0.114));
+  float lumPrev = dot(texture(u_feedback, v_uv).rgb, vec3(0.299, 0.587, 0.114));
+  float dt = lumCur - lumPrev;
+
   vec2 grad = vec2(lR - lL, lB - lT);
-  float gradLen = length(grad);
-  float phase = u_time;
-  vec2 flow = grad * u_distortion * sin(phase + gradLen * 20.0);
-  vec2 offset = flow * u_amount * 100.0 * px;
-  outColor = texture(u_texture, v_uv + offset);
+  float gradSq = dot(grad, grad) + 0.001;
+
+  // Lucas-Kanade style: flow = -(Ix*It, Iy*It) / (Ix²+Iy²)
+  vec2 flow = -grad * dt / gradSq;
+  flow *= u_amount * 200.0 * px;
+
+  outColor = texture(u_texture, v_uv + flow);
 }`,
 		animated: true,
+		feedback: true,
 		setUniforms: floats('amount', 'distortion'),
 	},
 
 	vhs: {
 		fragment:
 			H +
-			`uniform float u_amount;
+			`uniform float u_noise;
 uniform float u_tracking;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
+float hash1(float n) {
+  return fract(sin(n * 43758.5453) * 28947.3);
+}
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 res = vec2(textureSize(u_texture, 0));
   float t = u_time;
+  float row = floor(v_uv.y * res.y);
+  float tFrame = floor(t * 30.0);
+
+  // --- Drifting hotspot regions where static concentrates ---
+  float hotspot = 0.5
+    + 0.3 * sin(v_uv.y * 6.0 + t * 0.5)
+    + 0.2 * sin(v_uv.y * 17.0 - t * 0.8);
+  hotspot = clamp(hotspot, 0.0, 1.0);
+
+  // --- Static bands: 2-5px tall, not single pixel rows ---
+  float bandH = 2.0 + hash(vec2(floor(row / 3.0), 444.0)) * 3.0;
+  float bandId = floor(row / bandH);
+
+  // Each band has a random lifetime (2-8 frames) before it changes
+  float lifeLen = 2.0 + floor(hash(vec2(bandId, 123.0)) * 7.0);
+  // Quantize frame time by this band's lifetime
+  float bandEpoch = floor(tFrame / lifeLen);
+
+  float bandChance = hash(vec2(bandId, bandEpoch * 7.0));
+  float isStaticBand = step(1.0 - u_noise * 0.5 * hotspot, bandChance);
+
+  // --- Displacement: horizontal shift for static bands ---
+  float shiftDir = hash(vec2(bandId, bandEpoch * 13.0 + 50.0)) - 0.5;
+  float shiftAmt = isStaticBand * shiftDir * u_noise * 40.0 * px.x;
+
+  // --- White streak overlay on static bands ---
+  float streakX0 = hash(vec2(bandId * 3.0, bandEpoch + 77.0));
+  float lenSeed = hash(vec2(bandId * 7.0, bandEpoch + 33.0));
+  // Mostly short (2-15% width), some medium, rare long
+  float streakLen = 0.02 + lenSeed * 0.13;
+  streakLen += step(0.8, lenSeed) * 0.1;
+  float inStreak = isStaticBand
+    * step(streakX0, v_uv.x) * step(v_uv.x, streakX0 + streakLen);
+  float streakBright = inStreak * (0.5 + hash(vec2(bandId, bandEpoch * 3.0)) * 0.5) * u_noise;
+
+  // --- Subtle per-line jitter on non-static rows too ---
   float scanY = floor(v_uv.y * 480.0);
+  float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_noise * 4.0 * px.x;
 
-  float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_amount * 8.0 * px.x;
-
+  // --- Warp bands (larger sporadic displacement) ---
   float warpA = (hash(vec2(floor(v_uv.y * 80.0), floor(t * 6.0))) - 0.5)
     * step(0.75, hash(vec2(floor(v_uv.y * 80.0) + 100.0, floor(t * 6.0))))
-    * u_amount * 15.0 * px.x;
+    * u_noise * 15.0 * px.x;
   float warpB = (hash(vec2(floor(v_uv.y * 200.0), floor(t * 8.0))) - 0.5)
     * step(0.82, hash(vec2(floor(v_uv.y * 200.0) + 50.0, floor(t * 8.0))))
-    * u_amount * 6.0 * px.x;
-  float warpC = sin(v_uv.y * 120.0 + t * 4.0) * u_amount * 1.5 * px.x;
+    * u_noise * 6.0 * px.x;
 
-  float totalWarp = lineNoise + warpA + warpB + warpC;
+  float totalWarp = lineNoise + warpA + warpB + shiftAmt;
   float rOff = totalWarp * 1.2;
   float bOff = totalWarp * -0.8;
 
-  float barPos = fract(t * 0.15);
-  float barDist = abs(v_uv.y - barPos);
-  float bar = smoothstep(0.06, 0.0, barDist) * u_tracking;
-  rOff += bar * 20.0 * px.x;
-  bOff -= bar * 15.0 * px.x;
+  // --- Multiple tracking bars ---
+  float bars = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    float speed = 0.08 + hash1(fi * 7.0 + 1.0) * 0.25;
+    float bw = 0.02 + hash1(fi * 13.0 + 3.0) * 0.06;
+    float phase = hash1(fi * 19.0 + 5.0);
+    float pos = fract(t * speed + phase + sin(t * speed * 3.7 + fi) * 0.08);
+    float dist = abs(v_uv.y - pos);
+    dist = min(dist, 1.0 - dist);
+    float strength = 0.3 + hash1(fi * 11.0 + 9.0) * 0.7;
+    bars += smoothstep(bw, 0.0, dist) * strength;
+  }
+  bars *= u_tracking;
 
+  rOff += bars * 25.0 * px.x;
+  bOff -= bars * 18.0 * px.x;
+
+  // --- Sample with RGB split ---
   vec4 c;
   c.r = texture(u_texture, v_uv + vec2(rOff, 0.0)).r;
   c.g = texture(u_texture, v_uv + vec2(totalWarp * 0.3, 0.0)).g;
   c.b = texture(u_texture, v_uv + vec2(bOff, 0.0)).b;
   c.a = 1.0;
 
-  float noise = hash(vec2(v_uv * vec2(480.0, 320.0) + floor(t * 30.0))) * u_amount * 0.15;
-  c.rgb += noise;
-  c.rgb += bar * 0.15;
+  // --- Overlay white streaks + bar brightness ---
+  c.rgb += streakBright;
+  c.rgb += bars * 0.12;
 
   outColor = c;
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'tracking'),
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_noise', v.static as number);
+			setFloat(gl, l, 'u_tracking', v.tracking as number);
+		},
 	},
 
 	duotone: {
