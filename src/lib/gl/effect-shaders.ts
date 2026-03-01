@@ -206,7 +206,6 @@ void main() {
 uniform float u_amount;
 uniform float u_angle;
 uniform float u_falloff;
-uniform float u_speed;
 uniform float u_saturation;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
@@ -236,7 +235,7 @@ void main() {
     );
   } else {
     // Prismatic: position-dependent dispersion + hue rotation, animated
-    float t = u_time * u_speed;
+    float t = u_time;
     float rad = u_angle * 3.14159265 / 180.0;
     vec2 dir = vec2(cos(rad), sin(rad));
     float pos = dot(v_uv - 0.5, dir);
@@ -264,7 +263,6 @@ void main() {
 			setFloat(gl, l, 'u_amount', v.amount as number);
 			setFloat(gl, l, 'u_angle', v.angle as number);
 			setFloat(gl, l, 'u_falloff', v.falloff as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
 			setFloat(gl, l, 'u_saturation', v.saturation as number);
 		},
 	},
@@ -348,13 +346,12 @@ void main() {
 			H +
 			`uniform float u_amount;
 uniform float u_seed;
-uniform float u_speed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * 15.0 * u_speed);
+  float t = floor(u_time * 15.0);
   vec2 off = vec2(
     hash(vec2(floor(v_uv.y * 500.0), u_seed + t)) - 0.5,
     hash(vec2(floor(v_uv.x * 500.0), u_seed + t + 1.0)) - 0.5
@@ -362,7 +359,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'seed', 'speed'),
+		setUniforms: floats('amount', 'seed'),
 	},
 
 	wobble: {
@@ -454,13 +451,12 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_speed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * 6.0 * u_speed);
+  float t = floor(u_time * 6.0);
   float y = v_uv.y;
 
   float bandW = mix(15.0, 60.0, hash(vec2(t, 3.0)));
@@ -484,7 +480,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'speed'),
+		setUniforms: floats('amount'),
 	},
 
 	'hard-glitch': {
@@ -492,12 +488,11 @@ void main() {
 			H +
 			`uniform float u_amount;
 uniform float u_scale;
-uniform float u_speed;
 float hash(float n) { return fract(sin(n) * 43758.5453); }
 float hash2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * 10.0 * u_speed);
+  float t = floor(u_time * 10.0);
 
   float rowH = mix(5.0, 30.0, u_scale);
   float blockY = floor(v_uv.y * rowH);
@@ -526,7 +521,7 @@ void main() {
   outColor.rgb = mix(outColor.rgb, vec3(outColor.r), flicker * 0.5);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'scale', 'speed'),
+		setUniforms: floats('amount', 'scale'),
 	},
 
 	'optical-flow': {
@@ -534,7 +529,6 @@ void main() {
 			H +
 			`uniform float u_amount;
 uniform float u_distortion;
-uniform float u_speed;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   float lL = dot(texture(u_texture, v_uv + vec2(-px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
@@ -543,13 +537,13 @@ void main() {
   float lB = dot(texture(u_texture, v_uv + vec2(0.0,  px.y)).rgb, vec3(0.299, 0.587, 0.114));
   vec2 grad = vec2(lR - lL, lB - lT);
   float gradLen = length(grad);
-  float phase = u_time * u_speed;
+  float phase = u_time;
   vec2 flow = grad * u_distortion * sin(phase + gradLen * 20.0);
   vec2 offset = flow * u_amount * 100.0 * px;
   outColor = texture(u_texture, v_uv + offset);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'distortion', 'speed'),
+		setUniforms: floats('amount', 'distortion'),
 	},
 
 	feedback: {
@@ -591,14 +585,13 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_speed;
 uniform float u_tracking;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = u_time * u_speed;
+  float t = u_time;
   float scanY = floor(v_uv.y * 480.0);
 
   float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_amount * 8.0 * px.x;
@@ -634,7 +627,7 @@ void main() {
   outColor = c;
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'speed', 'tracking'),
+		setUniforms: floats('amount', 'tracking'),
 	},
 
 	duotone: {
@@ -763,9 +756,8 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_intensity;
-uniform float u_speed;
 void main() {
-  float t = u_time * u_speed;
+  float t = u_time;
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   float rOff = sin(v_uv.y * 12.0 + t * 1.3) + sin(v_uv.y * 23.0 - t * 0.7);
   float gOff = sin(v_uv.y * 8.0 + t * 0.9 + 2.094) + cos(v_uv.y * 17.0 + t * 1.1);
@@ -778,7 +770,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'speed'),
+		setUniforms: floats('intensity'),
 	},
 
 
@@ -816,13 +808,12 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_speed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 void main() {
   vec2 ts = vec2(textureSize(u_texture, 0));
-  float t = u_time * u_speed;
+  float t = u_time;
   float col = floor(v_uv.x * ts.x);
   float colHash = hash(vec2(col, 0.0));
   float fineHash = hash(vec2(col * 3.0, 7.0));
@@ -841,7 +832,7 @@ void main() {
   );
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'speed'),
+		setUniforms: floats('amount'),
 	},
 
 	fractalize: {
@@ -851,8 +842,7 @@ void main() {
   uniform float u_threshold;
   uniform float u_zoom;
   uniform float u_detail;
-  uniform float u_speed;
-  
+
   vec3 palette(float t) {
     return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67)));
   }
@@ -869,7 +859,7 @@ void main() {
       return;
     }
   
-    float t = u_time * u_speed;
+    float t = u_time;
 
     float region = fract(sin(dot(v_uv, vec2(127.1, 311.7))) * 43758.5453);
     vec2 c;
@@ -905,7 +895,7 @@ void main() {
     outColor = vec4(1.0 - (1.0 - orig.rgb) * (1.0 - overlay), orig.a);
   }`,
 		animated: true,
-		setUniforms: floats('amount', 'threshold', 'zoom', 'detail', 'speed'),
+		setUniforms: floats('amount', 'threshold', 'zoom', 'detail'),
 	},
 
 	emboss: {
@@ -1048,7 +1038,6 @@ void main() {
 uniform float u_cells;
 uniform float u_rgbSplit;
 uniform float u_chaos;
-uniform float u_speed;
 uniform float u_outline;
 
 // smooth 2D value noise
@@ -1117,7 +1106,7 @@ vec4 voronoi(vec2 uv, float cells) {
 }
 
 void main() {
-  float t = u_time * u_speed;
+  float t = u_time;
 
   // warp UV space — this is what makes cells organically morph
   vec2 warp = warpField(v_uv, t) * u_intensity;
@@ -1157,7 +1146,7 @@ void main() {
   outColor = vec4(color, 1.0);
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'cells', 'rgbSplit', 'chaos', 'speed', 'outline'),
+		setUniforms: floats('intensity', 'cells', 'rgbSplit', 'chaos', 'outline'),
 	},
 
 	stereoscopic: {

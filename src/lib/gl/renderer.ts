@@ -25,6 +25,8 @@ export class GlRenderer {
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private imgW = 0;
   private imgH = 0;
+  private lastTime = -1;
+  private phaseMap = new Map<string, number>();
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true });
@@ -88,6 +90,12 @@ export class GlRenderer {
     const gl = this.gl;
     if (!this.sourceTexture || !this.ppTextures || !this.ppFBOs || !this.fbTextures || !this.fbFBOs) return;
 
+    // Compute delta time for phase accumulation
+    const dt = this.lastTime >= 0 ? time - this.lastTime : 0;
+    this.lastTime = time;
+    // Guard against time discontinuities (e.g. switching between recording and real-time)
+    const safeDt = dt > 0 && dt < 0.5 ? dt : 0;
+
     const enabled = effects.filter((e) => e.enabled);
     const writeIdx = (1 - this.fbIdx) as 0 | 1;
 
@@ -106,17 +114,18 @@ export class GlRenderer {
       const entry = this.compiled.get(eff.defId);
       if (!entry) continue;
 
+      const effectTime = this.getEffectTime(eff, time, safeDt);
       const isLast = i === enabled.length - 1;
 
       if (isLast) {
-        this.drawPass(entry.program, this.fbFBOs[writeIdx], input, 1.0, time, entry.def, eff.values);
+        this.drawPass(entry.program, this.fbFBOs[writeIdx], input, 1.0, effectTime, entry.def, eff.values);
       } else {
         this.drawPass(
           entry.program,
           this.ppFBOs[ppIdx],
           input,
           1.0,
-          time,
+          effectTime,
           entry.def,
           eff.values,
         );
@@ -127,6 +136,16 @@ export class GlRenderer {
 
     this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
     this.fbIdx = writeIdx;
+  }
+
+  /** For effects with a speed param, accumulate phase so speed changes don't cause jumps. */
+  private getEffectTime(eff: EffectInstance, time: number, dt: number): number {
+    if (!('speed' in eff.values)) return time;
+    const speed = eff.values.speed as number;
+    const prev = this.phaseMap.get(eff.instanceId) ?? 0;
+    const phase = prev + dt * speed;
+    this.phaseMap.set(eff.instanceId, phase);
+    return phase;
   }
 
   destroy() {
