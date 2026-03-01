@@ -1,0 +1,126 @@
+import type { SlideshowSlide, SlideshowConfig } from './types';
+import type { EffectInstance } from '../effects';
+import type { GlRenderer } from '../gl/renderer';
+import type { RecordFormat } from '../recorder';
+import type { MoshOptions } from '../editor/mosh';
+import { recordVideo, downloadBlob } from '../recorder';
+import { createBeatClock } from './beat-clock';
+import { computeEffectsForBeat, cloneEffects } from './sequencer';
+
+export interface SlideshowRecordContext {
+	format: RecordFormat;
+	fps: number;
+	slides: SlideshowSlide[];
+	config: SlideshowConfig;
+	baseEffects: EffectInstance[];
+	audioFile: File;
+	audioStart: number;
+	audioEnd: number;
+	canvas: HTMLCanvasElement;
+	renderer: GlRenderer;
+	moshOptions: MoshOptions;
+	onProgress: (p: number) => void;
+	onFinalizing: () => void;
+	signal: AbortSignal;
+}
+
+export async function executeSlideshowRecording(
+	ctx: SlideshowRecordContext,
+): Promise<void> {
+	const {
+		format,
+		fps,
+		slides,
+		config,
+		baseEffects,
+		audioFile,
+		audioStart,
+		audioEnd,
+		canvas,
+		renderer,
+		moshOptions,
+		onProgress,
+		onFinalizing,
+		signal,
+	} = ctx;
+
+	const duration = audioEnd - audioStart;
+	const clock = createBeatClock(config.bpm, config.subdivision, config.beatOffset);
+	const smoothState = { effects: cloneEffects(baseEffects) };
+
+	// Pre-load all images
+	const imageMap = new Map<string, HTMLImageElement>();
+	await Promise.all(
+		slides.map(
+			(slide) =>
+				new Promise<void>((resolve) => {
+					const img = new Image();
+					img.onload = () => {
+						imageMap.set(slide.id, img);
+						resolve();
+					};
+					img.onerror = () => resolve();
+					img.src = slide.objectUrl;
+				}),
+		),
+	);
+
+	// Load the first image into the renderer to set up dimensions
+	const firstImg = imageMap.get(slides[0].id);
+	if (firstImg) {
+		renderer.loadImage(firstImg);
+	}
+
+	let currentSlideId: string | null = null;
+	let lastBeatIndex = -1;
+	let currentEffects: EffectInstance[] = cloneEffects(baseEffects);
+	const effectsRef = { current: currentEffects };
+
+	const blob = await recordVideo({
+		format,
+		duration,
+		fps: format === 'gif' ? Math.min(fps, 15) : fps,
+		canvas,
+		renderer,
+		effects: baseEffects,
+		effectsRef,
+		onProgress,
+		onFinalizing,
+		signal,
+		audioFile,
+		audioStart,
+		audioEnd,
+		onBeforeRender(frameIndex: number, time: number) {
+			const { index: beatIndex } = clock.beatAt(time);
+			const slideIndex = config.loop
+				? beatIndex % slides.length
+				: Math.min(beatIndex, slides.length - 1);
+			const slide = slides[slideIndex];
+
+			if (beatIndex !== lastBeatIndex) {
+				lastBeatIndex = beatIndex;
+
+				// Switch source texture when slide changes
+				if (slide.id !== currentSlideId) {
+					const img = imageMap.get(slide.id);
+					if (img) {
+						renderer.updateSourceImage(img);
+						currentSlideId = slide.id;
+					}
+				}
+
+				// Compute effects for this beat
+				currentEffects = computeEffectsForBeat(
+					config,
+					slide,
+					baseEffects,
+					smoothState,
+					moshOptions,
+				);
+				effectsRef.current = currentEffects;
+			}
+		},
+	});
+
+	downloadBlob(blob, format);
+}

@@ -1,14 +1,17 @@
 <script lang="ts">
   interface Props {
     onfile: (file: File) => void;
+    onSlideshow: (files: File[]) => void;
   }
 
-  let { onfile }: Props = $props();
+  let { onfile, onSlideshow }: Props = $props();
 
+  let selectedMode: 'single' | 'slideshow' = $state('single');
   let dragging = $state(false);
   let fileInput: HTMLInputElement;
 
   const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'];
+  const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
   function handleFile(file: File) {
     if (ACCEPTED_TYPES.includes(file.type)) {
@@ -16,10 +19,24 @@
     }
   }
 
+  function handleSlideshowFiles(files: FileList | File[]) {
+    const images = Array.from(files).filter((f) => IMAGE_TYPES.includes(f.type));
+    if (images.length > 0) {
+      onSlideshow(images);
+    }
+  }
+
   function onDrop(e: DragEvent) {
     dragging = false;
-    const file = e.dataTransfer?.files[0];
-    if (file) handleFile(file);
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    if (selectedMode === 'slideshow') {
+      handleSlideshowFiles(files);
+    } else {
+      const file = files[0];
+      if (file) handleFile(file);
+    }
   }
 
   function onDragOver(e: DragEvent) {
@@ -34,12 +51,26 @@
 
   function onInputChange(e: Event) {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) handleFile(file);
+    if (!input.files || input.files.length === 0) return;
+
+    if (selectedMode === 'slideshow') {
+      handleSlideshowFiles(input.files);
+    } else {
+      const file = input.files[0];
+      if (file) handleFile(file);
+    }
+    input.value = '';
   }
 
   function openFilePicker() {
     fileInput.click();
+  }
+
+  function getAcceptTypes() {
+    return selectedMode === 'slideshow' ? IMAGE_TYPES.join(',') : ACCEPTED_TYPES.join(',');
+  }
+  function getIsMultiple() {
+    return selectedMode === 'slideshow';
   }
 </script>
 
@@ -47,6 +78,23 @@
   <div class="hero">
     <h1 class="title">OpenMosh</h1>
     <p class="subtitle">Open-source image & video glitching in the browser.</p>
+  </div>
+
+  <div class="mode-toggle">
+    <button
+      class="mode-btn"
+      class:active={selectedMode === 'single'}
+      onclick={() => (selectedMode = 'single')}
+    >
+      Single
+    </button>
+    <button
+      class="mode-btn"
+      class:active={selectedMode === 'slideshow'}
+      onclick={() => (selectedMode = 'slideshow')}
+    >
+      Slideshow
+    </button>
   </div>
 
   <div
@@ -62,7 +110,8 @@
     <input
       bind:this={fileInput}
       type="file"
-      accept={ACCEPTED_TYPES.join(',')}
+      accept={getAcceptTypes()}
+      multiple={getIsMultiple()}
       onchange={onInputChange}
       hidden
     />
@@ -73,7 +122,7 @@
         <polyline points="17 8 12 3 7 8" />
         <line x1="12" y1="3" x2="12" y2="15" />
       </svg>
-      LOAD FILE
+      {selectedMode === 'slideshow' ? 'LOAD IMAGES' : 'LOAD FILE'}
     </button>
 
     <div class="separator">
@@ -88,9 +137,13 @@
         <circle cx="8.5" cy="8.5" r="1.5" />
         <polyline points="21 15 16 10 5 21" />
       </svg>
-      DRAG AND DROP FILE HERE
+      {selectedMode === 'slideshow' ? 'DRAG AND DROP IMAGES HERE' : 'DRAG AND DROP FILE HERE'}
     </div>
   </div>
+
+  {#if selectedMode === 'slideshow'}
+    <p class="slideshow-hint">Select multiple images to create a beat-synced slideshow.</p>
+  {/if}
 </div>
 
 <style>
@@ -123,6 +176,36 @@
     font-size: 0.95rem;
     color: #666;
     font-weight: 400;
+  }
+
+  .mode-toggle {
+    display: flex;
+    gap: 0;
+    border: 1.5px solid #333;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .mode-btn {
+    padding: 0.45rem 1.5rem;
+    border: none;
+    background: transparent;
+    color: #666;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s;
+    font-family: inherit;
+  }
+
+  .mode-btn:hover {
+    color: #aaa;
+  }
+
+  .mode-btn.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
   }
 
   .drop-zone {
@@ -201,5 +284,11 @@
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
+  }
+
+  .slideshow-hint {
+    font-size: 0.8rem;
+    color: #555;
+    margin-top: -1.5rem;
   }
 </style>

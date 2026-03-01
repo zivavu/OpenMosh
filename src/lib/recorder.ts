@@ -83,6 +83,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioFile,
 		audioStart = 0,
 		audioEnd,
+		onBeforeRender,
+		effectsRef,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -182,15 +184,17 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
+		onBeforeRender?.(i, time);
+		const renderEffects = effectsRef ? effectsRef.current : effects;
 		if (frameAudioData.length > 0) {
 			applyFrameAudioToEffects(
-				effects,
+				renderEffects,
 				frameAudioData[i]!,
 				audioSampleRate,
 				FFT_SIZE,
 			);
 		}
-		renderer.render(effects, time);
+		renderer.render(renderEffects, time);
 		encodeQueue.push(videoSource.add(time, frameDuration));
 
 		if (encodeQueue.length >= ENCODE_QUEUE_SIZE) {
@@ -231,6 +235,8 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		audioFile,
 		audioStart = 0,
 		audioEnd,
+		onBeforeRender,
+		effectsRef,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -299,15 +305,17 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
+		onBeforeRender?.(i, time);
+		const renderEffects = effectsRef ? effectsRef.current : effects;
 		if (frameAudioData.length > 0) {
 			applyFrameAudioToEffects(
-				effects,
+				renderEffects,
 				frameAudioData[i]!,
 				audioSampleRate,
 				FFT_SIZE,
 			);
 		}
-		renderer.render(effects, time);
+		renderer.render(renderEffects, time);
 
 		ctx.drawImage(canvas, 0, 0, outW, outH);
 		const imageData = ctx.getImageData(0, 0, outW, outH);
