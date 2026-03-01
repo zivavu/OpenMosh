@@ -434,7 +434,6 @@
 		}
 
 		let currentSlideId: string | null = null;
-		let targetSlideId: string | null = null;
 		let activeTransition: TransitionType | null = null;
 		let previousSlideImg: HTMLImageElement | null = null;
 
@@ -469,15 +468,23 @@
 			if (beatIndex !== previewBeatIndex && slide) {
 				// Save previous image for transition
 				if (currentSlideId) {
-					const prevSlide = slides.find((s) => s.id === currentSlideId);
-					if (prevSlide) {
-						previousSlideImg = imageCache.get(prevSlide.id) ?? null;
-					}
+					previousSlideImg = imageCache.get(currentSlideId) ?? null;
 				}
 
 				previewBeatIndex = beatIndex;
-				targetSlideId = slide.id;
 				activeTransition = pickRandomTransition();
+
+				// Switch source image immediately
+				const img = getCachedImage(slide);
+				if (img && img.complete) {
+					glRenderer.updateSourceImage(img);
+					currentSlideId = slide.id;
+
+					// Set up transition texture from previous slide
+					if (activeTransition && previousSlideImg) {
+						glRenderer.setTransitionImage(previousSlideImg);
+					}
+				}
 
 				previewEffects = computeEffectsForBeat(
 					config,
@@ -486,23 +493,6 @@
 					smoothState,
 					getMoshOptions(),
 				);
-			}
-
-			// Swap source image
-			if (targetSlideId && targetSlideId !== currentSlideId) {
-				const targetSlide = slides.find((s) => s.id === targetSlideId);
-				if (targetSlide) {
-					const img = getCachedImage(targetSlide);
-					if (img && img.complete) {
-						glRenderer.updateSourceImage(img);
-						currentSlideId = targetSlideId;
-
-						// Set up transition texture from previous slide
-						if (activeTransition && previousSlideImg) {
-							glRenderer.setTransitionImage(previousSlideImg);
-						}
-					}
-				}
 			}
 
 			const activeEffects = previewEffects.length > 0 ? previewEffects : effects;

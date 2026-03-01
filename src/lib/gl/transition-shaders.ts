@@ -85,6 +85,21 @@ void main() {
   outColor = r < threshold ? b : a;
 }`,
 	},
+
+	flash: {
+		fragment:
+			H +
+			`void main() {
+  vec4 a = texture(u_texture, v_uv);
+  vec4 b = texture(u_texture2, v_uv);
+  // Flash peaks at t=0.5, images swap at midpoint
+  float flash = 1.0 - abs(u_progress * 2.0 - 1.0);
+  // Sharpen the flash curve for a punchy burst
+  flash = pow(flash, 0.6);
+  vec4 base = u_progress < 0.5 ? a : b;
+  outColor = mix(base, vec4(1.0), flash);
+}`,
+	},
 };
 
 export const TRANSITION_LABELS: Record<TransitionType, string> = {
@@ -94,4 +109,5 @@ export const TRANSITION_LABELS: Record<TransitionType, string> = {
 	zoom: 'Zoom',
 	pixelate: 'Pixelate',
 	glitch: 'Glitch',
+	flash: 'Flash',
 };

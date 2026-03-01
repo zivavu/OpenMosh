@@ -15,6 +15,31 @@
 		onConfigChange({ ...config, [key]: value });
 	}
 
+	// Tap BPM state
+	let tapTimes: number[] = $state([]);
+	let tapResetTimer: ReturnType<typeof setTimeout> | null = null;
+	const TAP_RESET_MS = 2000;
+
+	function handleTap() {
+		const now = performance.now();
+		if (tapResetTimer) clearTimeout(tapResetTimer);
+		tapResetTimer = setTimeout(() => { tapTimes = []; }, TAP_RESET_MS);
+
+		tapTimes = [...tapTimes, now];
+		if (tapTimes.length < 2) return;
+
+		// Keep last 8 taps for a stable average
+		if (tapTimes.length > 8) tapTimes = tapTimes.slice(-8);
+
+		const intervals: number[] = [];
+		for (let i = 1; i < tapTimes.length; i++) {
+			intervals.push(tapTimes[i] - tapTimes[i - 1]);
+		}
+		const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+		const bpm = Math.round((60000 / avgMs) * 2) / 2; // round to nearest 0.5
+		set('bpm', Math.min(300, Math.max(20, bpm)));
+	}
+
 	const transitionTypes = Object.keys(TRANSITION_LABELS) as TransitionType[];
 
 	function toggleTransition(type: TransitionType) {
@@ -46,6 +71,12 @@
 			disabled={bpmDetecting}
 		>
 			{bpmDetecting ? 'Detecting...' : 'Detect'}
+		</button>
+		<button
+			class="detect-btn"
+			onclick={handleTap}
+		>
+			Tap{tapTimes.length >= 2 ? ` (${tapTimes.length})` : ''}
 		</button>
 	</div>
 
