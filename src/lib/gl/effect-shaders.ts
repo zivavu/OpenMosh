@@ -1026,7 +1026,7 @@ void main() {
   float side = smoothstep(u_position - feather, u_position + feather, proj + 0.5);
   vec3 treated = orig.rgb;
   if (u_mode == 0) {
-    treated = 1.0 - treated;
+    treated = hueRotate(treated, 180.0);
   } else if (u_mode == 1) {
     treated = hueRotate(treated, 120.0);
   } else if (u_mode == 2) {

@@ -220,7 +220,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				max: 1,
 				step: 0.01,
 				defaultValue: 0,
-				moshMin: -0.3,
+				moshMin: -0.5,
 			},
 			{
 				key: 'contrast',
@@ -229,6 +229,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				min: -1,
 				max: 1,
 				step: 0.01,
+				moshMin: -0.5,
+				moshMax: 0.5,
 				defaultValue: 0,
 			},
 			{
