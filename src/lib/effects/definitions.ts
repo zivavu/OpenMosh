@@ -1095,15 +1095,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0,
 			},
-			{
-				key: 'edgeGlow',
-				label: 'Edge Glow',
-				type: 'range',
-				min: 0,
-				max: 1,
-				step: 0.01,
-				defaultValue: 0.3,
-			},
 		],
 	},
 	{
