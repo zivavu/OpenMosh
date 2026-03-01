@@ -29,6 +29,10 @@ export interface RecordOptions {
 	audioStart?: number;
 	/** End time of the audio region in seconds. */
 	audioEnd?: number;
+	/** Called before each frame render — use to swap source textures, effects, etc. */
+	onBeforeRender?: (frameIndex: number, time: number) => void;
+	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
+	effectsRef?: { current: EffectInstance[] };
 }
 
 function checkAbort(signal?: AbortSignal) {

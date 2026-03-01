@@ -76,6 +76,14 @@ export class GlRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
   }
 
+  /** Upload a new image to the existing source texture without re-allocating FBOs. */
+  updateSourceImage(image: HTMLImageElement) {
+    if (!this.sourceTexture) return;
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  }
+
   /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
   resize(width: number, height: number) {
     if (width <= 0 || height <= 0) return;
