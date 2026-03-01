@@ -199,23 +199,74 @@ void main() {
 		setUniforms: floats('amount', 'sides', 'angle'),
 	},
 
-	'rgb-shift': {
+	'channel-split': {
 		fragment:
 			H +
-			`uniform float u_amount;
+			`uniform int u_mode;
+uniform float u_amount;
 uniform float u_angle;
+uniform float u_falloff;
+uniform float u_speed;
+uniform float u_saturation;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float rad = u_angle * 3.14159265 / 180.0;
-  vec2 d = vec2(cos(rad), sin(rad)) * u_amount * px;
-  outColor = vec4(
-    texture(u_texture, v_uv + d).r,
-    texture(u_texture, v_uv).g,
-    texture(u_texture, v_uv - d).b,
-    texture(u_texture, v_uv).a
-  );
+
+  if (u_mode == 0) {
+    // Linear: uniform offset along angle
+    float rad = u_angle * 3.14159265 / 180.0;
+    vec2 d = vec2(cos(rad), sin(rad)) * u_amount * px;
+    outColor = vec4(
+      texture(u_texture, v_uv + d).r,
+      texture(u_texture, v_uv).g,
+      texture(u_texture, v_uv - d).b,
+      texture(u_texture, v_uv).a
+    );
+  } else if (u_mode == 1) {
+    // Radial: offset from center, stronger at edges
+    vec2 center = vec2(0.5);
+    vec2 dir = v_uv - center;
+    float dist = length(dir);
+    float strength = u_amount * pow(dist, 1.0 + u_falloff * 3.0) * 0.002;
+    vec2 offset = normalize(dir + 1e-6) * strength;
+    outColor = vec4(
+      texture(u_texture, v_uv + offset).r,
+      texture(u_texture, v_uv).g,
+      texture(u_texture, v_uv - offset).b,
+      texture(u_texture, v_uv).a
+    );
+  } else {
+    // Prismatic: position-dependent dispersion + hue rotation, animated
+    float t = u_time * u_speed;
+    float rad = u_angle * 3.14159265 / 180.0;
+    vec2 dir = vec2(cos(rad), sin(rad));
+    float pos = dot(v_uv - 0.5, dir);
+    float disp = u_amount * 0.0016;
+    float drift = sin(t * 0.3) * 0.5;
+    vec2 uvR = v_uv - dir * disp * (pos + drift);
+    vec2 uvB = v_uv + dir * disp * (pos + drift);
+    float r = texture(u_texture, uvR).r;
+    float g = texture(u_texture, v_uv).g;
+    float b = texture(u_texture, uvB).b;
+    vec3 color = vec3(r, g, b);
+    float hueShift = pos * u_amount * 0.1 + t * 0.2;
+    float cosH = cos(hueShift);
+    float sinH = sin(hueShift);
+    vec3 k = vec3(0.57735);
+    vec3 rotated = color * cosH + cross(k, color) * sinH + k * dot(k, color) * (1.0 - cosH);
+    color = mix(color, rotated, u_saturation);
+    outColor = vec4(color, 1.0);
+  }
 }`,
-		setUniforms: floats('amount', 'angle'),
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			const mode = v.mode === 'radial' ? 1 : v.mode === 'prismatic' ? 2 : 0;
+			setInt(gl, l, 'u_mode', mode);
+			setFloat(gl, l, 'u_amount', v.amount as number);
+			setFloat(gl, l, 'u_angle', v.angle as number);
+			setFloat(gl, l, 'u_falloff', v.falloff as number);
+			setFloat(gl, l, 'u_speed', v.speed as number);
+			setFloat(gl, l, 'u_saturation', v.saturation as number);
+		},
 	},
 
 	'color-correction': {
@@ -615,26 +666,6 @@ void main() {
 		setUniforms: floats('shadowHue', 'highlightHue', 'intensity'),
 	},
 
-	'chromatic-aberration': {
-		fragment:
-			H +
-			`uniform float u_amount;
-uniform float u_falloff;
-void main() {
-  vec2 center = vec2(0.5);
-  vec2 dir = v_uv - center;
-  float dist = length(dir);
-  float strength = u_amount * pow(dist, 1.0 + u_falloff * 3.0) * 0.1;
-  vec2 offset = normalize(dir + 1e-6) * strength;
-  outColor = vec4(
-    texture(u_texture, v_uv + offset).r,
-    texture(u_texture, v_uv).g,
-    texture(u_texture, v_uv - offset).b,
-    texture(u_texture, v_uv).a
-  );
-}`,
-		setUniforms: floats('amount', 'falloff'),
-	},
 
 	grain: {
 		fragment:
@@ -750,48 +781,6 @@ void main() {
 		setUniforms: floats('intensity', 'speed'),
 	},
 
-	'spectral-shift': {
-		fragment:
-			H +
-			`uniform float u_spread;
-uniform float u_angle;
-uniform float u_speed;
-uniform float u_saturation;
-void main() {
-  float t = u_time * u_speed;
-  float rad = u_angle * 6.2831853;
-  vec2 dir = vec2(cos(rad), sin(rad));
-
-  // position along the angle axis, centered
-  float pos = dot(v_uv - 0.5, dir);
-
-  // prismatic dispersion: sample R/G/B at spread positions along the angle
-  float disp = u_spread * 0.08;
-  float drift = sin(t * 0.3) * 0.5;
-  vec2 uvR = v_uv - dir * disp * (pos + drift);
-  vec2 uvB = v_uv + dir * disp * (pos + drift);
-
-  float r = texture(u_texture, uvR).r;
-  float g = texture(u_texture, v_uv).g;
-  float b = texture(u_texture, uvB).b;
-  vec3 color = vec3(r, g, b);
-
-  // hue rotation sweeping across screen along angle
-  float hueShift = pos * u_spread + t * 0.2;
-  float cosH = cos(hueShift);
-  float sinH = sin(hueShift);
-  vec3 k = vec3(0.57735); // normalized (1,1,1)
-  vec3 rotated = color * cosH
-    + cross(k, color) * sinH
-    + k * dot(k, color) * (1.0 - cosH);
-
-  color = mix(color, rotated, u_saturation);
-
-  outColor = vec4(color, 1.0);
-}`,
-		animated: true,
-		setUniforms: floats('spread', 'angle', 'speed', 'saturation'),
-	},
 
 	'data-bend': {
 		fragment:
