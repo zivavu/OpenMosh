@@ -1,6 +1,6 @@
 export type SlideshowMoshMode = 'random' | 'consistent' | 'smooth' | 'per-image';
 
-export type BeatSubdivision = 0.25 | 0.5 | 1 | 2 | 4;
+export type BeatSubdivision = 0.0625 | 0.125 | 0.25 | 0.5 | 1 | 2 | 4;
 
 export interface SlideshowSlide {
 	id: string;

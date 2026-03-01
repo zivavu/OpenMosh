@@ -392,11 +392,34 @@
 		return undefined;
 	}
 
-	function startPreview() {
+	async function startPreview() {
 		if (slides.length === 0) return;
 		previewPlaying = true;
 		smoothState = { effects: cloneEffects(effects) };
 		previewBeatIndex = -1;
+
+		// Pre-load all slide images before starting
+		await Promise.all(
+			slides.map(
+				(slide) =>
+					new Promise<void>((resolve) => {
+						if (imageCache.has(slide.id)) {
+							resolve();
+							return;
+						}
+						const img = new Image();
+						img.onload = () => {
+							imageCache.set(slide.id, img);
+							resolve();
+						};
+						img.onerror = () => resolve();
+						img.src = slide.objectUrl;
+					}),
+			),
+		);
+
+		// Check if preview was cancelled during loading
+		if (!previewPlaying) return;
 
 		if (audioEl && trackFile) {
 			ensureAudioGraph();
@@ -410,11 +433,13 @@
 			audioPlaying = true;
 		}
 
-		const clock = createBeatClock(config.bpm, config.subdivision, config.beatOffset);
 		let currentSlideId: string | null = null;
+		let targetSlideId: string | null = null;
 
 		function tick() {
 			if (!previewPlaying || !glRenderer) return;
+
+			const clock = createBeatClock(config.bpm, config.subdivision, config.beatOffset);
 
 			let t: number;
 			if (audioEl && trackFile && audioPlaying) {
@@ -435,12 +460,7 @@
 
 			if (beatIndex !== previewBeatIndex && slide) {
 				previewBeatIndex = beatIndex;
-
-				const img = getCachedImage(slide);
-				if (img && img.complete && slide.id !== currentSlideId) {
-					glRenderer.updateSourceImage(img);
-					currentSlideId = slide.id;
-				}
+				targetSlideId = slide.id;
 
 				previewEffects = computeEffectsForBeat(
 					config,
@@ -451,6 +471,18 @@
 				);
 			}
 
+			// Retry image swap every frame until it succeeds
+			if (targetSlideId && targetSlideId !== currentSlideId) {
+				const targetSlide = slides.find((s) => s.id === targetSlideId);
+				if (targetSlide) {
+					const img = getCachedImage(targetSlide);
+					if (img && img.complete) {
+						glRenderer.updateSourceImage(img);
+						currentSlideId = targetSlideId;
+					}
+				}
+			}
+
 			if (previewEffects.length > 0) {
 				glRenderer.render(previewEffects, performance.now() / 1000);
 			} else {
@@ -458,11 +490,6 @@
 			}
 
 			previewRafId = requestAnimationFrame(tick);
-		}
-
-		// Pre-warm cache for first few slides
-		for (let i = 0; i < Math.min(5, slides.length); i++) {
-			getCachedImage(slides[i]);
 		}
 
 		previewRafId = requestAnimationFrame(tick);

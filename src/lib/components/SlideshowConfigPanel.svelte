@@ -45,6 +45,8 @@
 			value={config.subdivision}
 			onchange={(e) => set('subdivision', +(e.currentTarget as HTMLSelectElement).value as BeatSubdivision)}
 		>
+			<option value={0.0625}>1/16 beat</option>
+			<option value={0.125}>1/8 beat</option>
 			<option value={0.25}>1/4 beat</option>
 			<option value={0.5}>1/2 beat</option>
 			<option value={1}>Every beat</option>
