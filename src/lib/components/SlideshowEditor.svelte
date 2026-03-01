@@ -22,7 +22,7 @@
 	} from '../audio/audio-controller';
 	import { formatTime } from '../audio/audio-utils';
 	import { generateMosh as generateMoshFn, clearEffects as clearEffectsFn } from '../editor/mosh';
-	import type { SlideshowSlide, SlideshowConfig } from '../slideshow/types';
+	import type { SlideshowSlide, SlideshowConfig, TransitionType } from '../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
 	import { detectBpm } from '../slideshow/bpm-detector';
 	import { createBeatClock } from '../slideshow/beat-clock';
@@ -435,6 +435,14 @@
 
 		let currentSlideId: string | null = null;
 		let targetSlideId: string | null = null;
+		let activeTransition: TransitionType | null = null;
+		let previousSlideImg: HTMLImageElement | null = null;
+
+		function pickRandomTransition(): TransitionType | null {
+			const enabled = config.enabledTransitions;
+			if (enabled.length === 0) return null;
+			return enabled[Math.floor(Math.random() * enabled.length)];
+		}
 
 		function tick() {
 			if (!previewPlaying || !glRenderer) return;
@@ -452,15 +460,24 @@
 				t = (performance.now() / 1000) % (slides.length * clock.intervalSeconds);
 			}
 
-			const { index: beatIndex } = clock.beatAt(Math.max(0, t));
+			const { index: beatIndex, fraction } = clock.beatAt(Math.max(0, t));
 			const slideIndex = config.loop
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
 			const slide = slides[slideIndex];
 
 			if (beatIndex !== previewBeatIndex && slide) {
+				// Save previous image for transition
+				if (currentSlideId) {
+					const prevSlide = slides.find((s) => s.id === currentSlideId);
+					if (prevSlide) {
+						previousSlideImg = imageCache.get(prevSlide.id) ?? null;
+					}
+				}
+
 				previewBeatIndex = beatIndex;
 				targetSlideId = slide.id;
+				activeTransition = pickRandomTransition();
 
 				previewEffects = computeEffectsForBeat(
 					config,
@@ -471,7 +488,7 @@
 				);
 			}
 
-			// Retry image swap every frame until it succeeds
+			// Swap source image
 			if (targetSlideId && targetSlideId !== currentSlideId) {
 				const targetSlide = slides.find((s) => s.id === targetSlideId);
 				if (targetSlide) {
@@ -479,14 +496,31 @@
 					if (img && img.complete) {
 						glRenderer.updateSourceImage(img);
 						currentSlideId = targetSlideId;
+
+						// Set up transition texture from previous slide
+						if (activeTransition && previousSlideImg) {
+							glRenderer.setTransitionImage(previousSlideImg);
+						}
 					}
 				}
 			}
 
-			if (previewEffects.length > 0) {
-				glRenderer.render(previewEffects, performance.now() / 1000);
+			const activeEffects = previewEffects.length > 0 ? previewEffects : effects;
+			const now = performance.now() / 1000;
+
+			// Render with or without transition
+			if (activeTransition && previousSlideImg && config.transitionDuration > 0) {
+				const progress = Math.min(1, fraction / config.transitionDuration);
+				if (progress < 1) {
+					glRenderer.renderWithTransition(activeEffects, now, activeTransition, progress);
+				} else {
+					glRenderer.clearTransitionImage();
+					activeTransition = null;
+					previousSlideImg = null;
+					glRenderer.render(activeEffects, now);
+				}
 			} else {
-				glRenderer.render(effects, performance.now() / 1000);
+				glRenderer.render(activeEffects, now);
 			}
 
 			previewRafId = requestAnimationFrame(tick);
@@ -505,6 +539,7 @@
 			audioEl.pause();
 			audioPlaying = false;
 		}
+		if (glRenderer) glRenderer.clearTransitionImage();
 		previewBeatIndex = -1;
 		previewEffects = [];
 	}

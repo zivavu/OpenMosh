@@ -2,6 +2,8 @@ export type SlideshowMoshMode = 'random' | 'consistent' | 'smooth' | 'per-image'
 
 export type BeatSubdivision = 0.0625 | 0.125 | 0.25 | 0.5 | 1 | 2 | 4;
 
+export type TransitionType = 'crossfade' | 'wipe-left' | 'wipe-down' | 'zoom' | 'pixelate' | 'glitch';
+
 export interface SlideshowSlide {
 	id: string;
 	file: File;
@@ -21,6 +23,9 @@ export interface SlideshowConfig {
 	moshMax: number;
 	moshAudioLink: boolean;
 	loop: boolean;
+	enabledTransitions: TransitionType[];
+	/** Fraction of beat duration for transition (0.1–0.8). */
+	transitionDuration: number;
 }
 
 export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
@@ -32,4 +37,6 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	moshMax: 5,
 	moshAudioLink: false,
 	loop: true,
+	enabledTransitions: [],
+	transitionDuration: 0.3,
 };

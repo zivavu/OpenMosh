@@ -6,6 +6,8 @@ import {
   EFFECT_SHADERS,
   type EffectShaderDef,
 } from './effect-shaders';
+import { TRANSITION_SHADERS } from './transition-shaders';
+import type { TransitionType } from '../slideshow/types';
 
 interface CompiledProgram {
   program: WebGLProgram;
@@ -23,6 +25,8 @@ export class GlRenderer {
   private fbIdx = 0;
   private passthrough: CompiledProgram;
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
+  private compiledTransitions = new Map<TransitionType, CompiledProgram>();
+  private transitionTexture: WebGLTexture | null = null;
   private imgW = 0;
   private imgH = 0;
   private lastTime = -1;
@@ -82,6 +86,99 @@ export class GlRenderer {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  }
+
+  /** Upload an image as the transition (outgoing) texture. */
+  setTransitionImage(image: HTMLImageElement) {
+    const gl = this.gl;
+    if (!this.transitionTexture) {
+      this.transitionTexture = this.createTexture(this.imgW, this.imgH);
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.transitionTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  }
+
+  /** Clear the transition texture (no transition active). */
+  clearTransitionImage() {
+    if (this.transitionTexture) {
+      this.gl.deleteTexture(this.transitionTexture);
+      this.transitionTexture = null;
+    }
+  }
+
+  /**
+   * Render with a transition pre-pass: blend transitionTexture (outgoing) → sourceTexture (incoming)
+   * into ppFBO[0], then run the normal effect chain starting from that blended result.
+   */
+  renderWithTransition(effects: EffectInstance[], time: number, transitionId: TransitionType, progress: number) {
+    const gl = this.gl;
+    if (!this.sourceTexture || !this.transitionTexture || !this.ppTextures || !this.ppFBOs || !this.fbTextures || !this.fbFBOs) {
+      return this.render(effects, time);
+    }
+
+    const tProg = this.compiledTransitions.get(transitionId);
+    if (!tProg) return this.render(effects, time);
+
+    // Compute delta time for phase accumulation
+    const dt = this.lastTime >= 0 ? time - this.lastTime : 0;
+    this.lastTime = time;
+    const safeDt = dt > 0 && dt < 0.5 ? dt : 0;
+
+    // Pre-pass: blend transition into ppFBO[0]
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.ppFBOs[0]);
+    gl.viewport(0, 0, this.imgW, this.imgH);
+    gl.useProgram(tProg.program);
+
+    // u_texture = outgoing (transition texture)
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.transitionTexture);
+    if (tProg.uniforms['u_texture']) gl.uniform1i(tProg.uniforms['u_texture'], 0);
+
+    // u_texture2 = incoming (source texture)
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    if (tProg.uniforms['u_texture2']) gl.uniform1i(tProg.uniforms['u_texture2'], 2);
+
+    if (tProg.uniforms['u_progress']) gl.uniform1f(tProg.uniforms['u_progress'], progress);
+    if (tProg.uniforms['u_flipY']) gl.uniform1f(tProg.uniforms['u_flipY'], 1.0);
+
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.activeTexture(gl.TEXTURE0);
+
+    // Now run the normal effect chain using the blended result as input
+    const enabled = effects.filter((e) => e.enabled);
+    const writeIdx = (1 - this.fbIdx) as 0 | 1;
+
+    if (enabled.length === 0) {
+      this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.ppTextures[0], 1.0, time);
+      this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+      this.fbIdx = writeIdx;
+      return;
+    }
+
+    let input: WebGLTexture = this.ppTextures[0];
+    let ppIdx = 1; // start at 1 since ppFBO[0] is used by transition
+
+    for (let i = 0; i < enabled.length; i++) {
+      const eff = enabled[i];
+      const entry = this.compiled.get(eff.defId);
+      if (!entry) continue;
+
+      const effectTime = this.getEffectTime(eff, time, safeDt);
+      const isLast = i === enabled.length - 1;
+
+      if (isLast) {
+        this.drawPass(entry.program, this.fbFBOs[writeIdx], input, 1.0, effectTime, entry.def, eff.values);
+      } else {
+        this.drawPass(entry.program, this.ppFBOs[ppIdx], input, 1.0, effectTime, entry.def, eff.values);
+        input = this.ppTextures[ppIdx];
+        ppIdx = 1 - ppIdx;
+      }
+    }
+
+    this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+    this.fbIdx = writeIdx;
   }
 
   /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
@@ -159,12 +256,16 @@ export class GlRenderer {
   destroy() {
     const gl = this.gl;
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
+    if (this.transitionTexture) gl.deleteTexture(this.transitionTexture);
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
     this.deleteFBOPair(this.fbFBOs);
     gl.deleteProgram(this.passthrough.program);
     for (const { program } of this.compiled.values()) {
+      gl.deleteProgram(program.program);
+    }
+    for (const program of this.compiledTransitions.values()) {
       gl.deleteProgram(program.program);
     }
     gl.deleteVertexArray(this.quadVAO);
@@ -201,6 +302,14 @@ export class GlRenderer {
         this.compiled.set(id, { program, def });
       } catch (e) {
         console.error(`Failed to compile effect "${id}":`, e);
+      }
+    }
+    for (const [id, def] of Object.entries(TRANSITION_SHADERS)) {
+      try {
+        const program = this.compile(def.fragment);
+        this.compiledTransitions.set(id as TransitionType, program);
+      } catch (e) {
+        console.error(`Failed to compile transition "${id}":`, e);
       }
     }
   }

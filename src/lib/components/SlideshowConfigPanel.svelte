@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { SlideshowConfig, BeatSubdivision } from '../slideshow/types';
+	import type { SlideshowConfig, BeatSubdivision, TransitionType } from '../slideshow/types';
+	import { TRANSITION_LABELS } from '../gl/transition-shaders';
 
 	interface Props {
 		config: SlideshowConfig;
@@ -12,6 +13,16 @@
 
 	function set<K extends keyof SlideshowConfig>(key: K, value: SlideshowConfig[K]) {
 		onConfigChange({ ...config, [key]: value });
+	}
+
+	const transitionTypes = Object.keys(TRANSITION_LABELS) as TransitionType[];
+
+	function toggleTransition(type: TransitionType) {
+		const current = config.enabledTransitions;
+		const next = current.includes(type)
+			? current.filter((t) => t !== type)
+			: [...current, type];
+		set('enabledTransitions', next);
 	}
 </script>
 
@@ -125,6 +136,37 @@
 			onchange={(e) => set('loop', (e.currentTarget as HTMLInputElement).checked)}
 		/>
 	</div>
+
+	<h3 class="panel-title" style="margin-top: 0.5rem">Transitions</h3>
+
+	<div class="transition-grid">
+		{#each transitionTypes as type}
+			<label class="transition-check">
+				<input
+					type="checkbox"
+					checked={config.enabledTransitions.includes(type)}
+					onchange={() => toggleTransition(type)}
+				/>
+				{TRANSITION_LABELS[type]}
+			</label>
+		{/each}
+	</div>
+
+	{#if config.enabledTransitions.length > 0}
+		<div class="config-row">
+			<label for="ss-trans-dur">Duration</label>
+			<input
+				id="ss-trans-dur"
+				type="range"
+				min="0.1"
+				max="0.8"
+				step="0.05"
+				value={config.transitionDuration}
+				oninput={(e) => set('transitionDuration', +(e.currentTarget as HTMLInputElement).value)}
+			/>
+			<span class="val">{Math.round(config.transitionDuration * 100)}%</span>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -217,5 +259,24 @@
 	.detect-btn:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+
+	.transition-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.2rem 0.5rem;
+	}
+
+	.transition-check {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.72rem;
+		color: #999;
+		cursor: pointer;
+	}
+
+	.transition-check input {
+		accent-color: #888;
 	}
 </style>

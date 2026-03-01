@@ -1,4 +1,4 @@
-import type { SlideshowSlide, SlideshowConfig } from './types';
+import type { SlideshowSlide, SlideshowConfig, TransitionType } from './types';
 import type { EffectInstance } from '../effects';
 import type { GlRenderer } from '../gl/renderer';
 import type { RecordFormat } from '../recorder';
@@ -76,6 +76,16 @@ export async function executeSlideshowRecording(
 	let currentEffects: EffectInstance[] = cloneEffects(baseEffects);
 	const effectsRef = { current: currentEffects };
 
+	// Transition state
+	let activeTransition: TransitionType | null = null;
+	let previousSlideImg: HTMLImageElement | null = null;
+
+	function pickRandomTransition(): TransitionType | null {
+		const enabled = config.enabledTransitions;
+		if (!enabled || enabled.length === 0) return null;
+		return enabled[Math.floor(Math.random() * enabled.length)];
+	}
+
 	const blob = await recordVideo({
 		format,
 		duration,
@@ -91,7 +101,7 @@ export async function executeSlideshowRecording(
 		audioStart,
 		audioEnd,
 		onBeforeRender(frameIndex: number, time: number) {
-			const { index: beatIndex } = clock.beatAt(time);
+			const { index: beatIndex, fraction } = clock.beatAt(time);
 			const slideIndex = config.loop
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
@@ -100,12 +110,23 @@ export async function executeSlideshowRecording(
 			if (beatIndex !== lastBeatIndex) {
 				lastBeatIndex = beatIndex;
 
+				// Save previous image for transition
+				if (currentSlideId) {
+					previousSlideImg = imageMap.get(currentSlideId) ?? null;
+				}
+
 				// Switch source texture when slide changes
 				if (slide.id !== currentSlideId) {
 					const img = imageMap.get(slide.id);
 					if (img) {
 						renderer.updateSourceImage(img);
 						currentSlideId = slide.id;
+
+						// Set up transition
+						activeTransition = pickRandomTransition();
+						if (activeTransition && previousSlideImg) {
+							renderer.setTransitionImage(previousSlideImg);
+						}
 					}
 				}
 
@@ -118,6 +139,25 @@ export async function executeSlideshowRecording(
 					moshOptions,
 				);
 				effectsRef.current = currentEffects;
+			}
+
+			// Handle transition rendering
+			const transitionDuration = config.transitionDuration ?? 0.3;
+			if (activeTransition && previousSlideImg && transitionDuration > 0) {
+				const progress = Math.min(1, fraction / transitionDuration);
+				if (progress < 1) {
+					renderer.renderWithTransition(
+						effectsRef.current,
+						time,
+						activeTransition,
+						progress,
+					);
+					return true; // skip normal render in recordVideo
+				} else {
+					renderer.clearTransitionImage();
+					activeTransition = null;
+					previousSlideImg = null;
+				}
 			}
 		},
 	});
