@@ -546,41 +546,6 @@ void main() {
 		setUniforms: floats('amount', 'distortion'),
 	},
 
-	feedback: {
-		fragment:
-			H +
-			`uniform sampler2D u_feedback;
-uniform float u_amount;
-uniform float u_scale;
-uniform float u_rotate;
-uniform float u_warp;
-uniform float u_hueShift;
-vec3 hueRotate(vec3 c, float angle) {
-  float rad = angle * 3.14159265 / 180.0;
-  float cosA = cos(rad);
-  float sinA = sin(rad);
-  vec3 k = vec3(0.57735026919);
-  return c * cosA + cross(k, c) * sinA + k * dot(k, c) * (1.0 - cosA);
-}
-void main() {
-  vec4 cur = texture(u_texture, v_uv);
-  vec2 center = vec2(0.5);
-  vec2 uv = v_uv - center;
-  uv /= (1.0 + u_scale * 0.1);
-  float a = u_rotate * 0.1;
-  float cs = cos(a); float sn = sin(a);
-  uv = vec2(uv.x * cs - uv.y * sn, uv.x * sn + uv.y * cs);
-  float d = length(uv);
-  uv *= 1.0 + d * u_warp;
-  uv += center;
-  vec4 fb = texture(u_feedback, uv);
-  fb.rgb = hueRotate(fb.rgb, u_hueShift * 360.0);
-  outColor = mix(cur, fb, u_amount);
-}`,
-		animated: true,
-		setUniforms: floats('amount', 'scale', 'rotate', 'warp', 'hueShift'),
-	},
-
 	vhs: {
 		fragment:
 			H +
