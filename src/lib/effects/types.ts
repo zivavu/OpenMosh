@@ -47,8 +47,8 @@ export interface VolumeLink {
 /** Frequency presets (Hz) for volume links. */
 export const FREQ_PRESETS = {
 	full: null as { min: number; max: number } | null,
-	low: { min: 20, max: 250 },
-	mid: { min: 250, max: 4000 },
+	low: { min: 20, max: 500 },
+	mid: { min: 500, max: 4000 },
 	high: { min: 4000, max: 20000 },
 } as const;
 

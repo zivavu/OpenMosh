@@ -27,6 +27,22 @@
 		return Math.floor((hz / sampleRate) * binCount * 2);
 	}
 
+	/** Map bar index to a frequency range: 3/4 of bars for 20–8000 Hz, 1/4 for 8000–20000 Hz. */
+	function barFreqRange(i: number, bars: number): [number, number] {
+		const split = Math.floor(bars * 0.75);
+		let lo: number, hi: number;
+		if (i < split) {
+			lo = 20 + (i / split) * (8000 - 20);
+			hi = 20 + ((i + 1) / split) * (8000 - 20);
+		} else {
+			const j = i - split;
+			const highBars = bars - split;
+			lo = 8000 + (j / highBars) * (20000 - 8000);
+			hi = 8000 + ((j + 1) / highBars) * (20000 - 8000);
+		}
+		return [lo, hi];
+	}
+
 	$effect(() => {
 		const canvas = canvasEl;
 		if (!canvas || !data.length) return;
@@ -45,14 +61,13 @@
 			const minBin = Math.max(0, hzToBin(freqMin));
 			const maxBin = Math.min(binCount - 1, hzToBin(freqMax));
 			for (let i = 0; i < bars; i++) {
-				const binStart = Math.floor((i / bars) * binCount);
-				const binEnd = Math.min(
-					binCount - 1,
-					Math.floor(((i + 1) / bars) * binCount),
-				);
+				const [loHz, hiHz] = barFreqRange(i, bars);
+				const binStart = Math.max(0, hzToBin(loHz));
+				const binEnd = Math.min(binCount - 1, hzToBin(hiHz));
 				let sum = 0;
+				const count = Math.max(1, binEnd - binStart + 1);
 				for (let b = binStart; b <= binEnd; b++) sum += data[b];
-				const avg = sum / (binEnd - binStart + 1) / 255;
+				const avg = sum / count / 255;
 				const inRange = binEnd >= minBin && binStart <= maxBin;
 				ctx.fillStyle = inRange
 					? 'rgba(120, 180, 255, 0.8)'

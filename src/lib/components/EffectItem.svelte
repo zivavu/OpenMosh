@@ -11,6 +11,17 @@
 
 	export type { SpectrumData };
 
+	/** Piecewise-linear mapping: 75% of slider (0–750) = 20–8000 Hz, 25% (750–1000) = 8000–20000 Hz */
+	function sliderToFreq(s: number): number {
+		if (s <= 750) return 20 + (s / 750) * (8000 - 20);
+		return 8000 + ((s - 750) / 250) * (20000 - 8000);
+	}
+
+	function freqToSlider(hz: number): number {
+		if (hz <= 8000) return ((hz - 20) / (8000 - 20)) * 750;
+		return 750 + ((hz - 8000) / (20000 - 8000)) * 250;
+	}
+
 	interface Props {
 		effect: EffectInstance;
 		hasTrack?: boolean;
@@ -293,16 +304,16 @@
 												<span class="spectrum-label">Freq</span>
 												<div class="spectrum-slider">
 													<DualRangeSlider
-														min={20}
-														max={spectrumData.sampleRate / 2}
-														step={10}
-														valueLow={link.freqMin ?? 20}
-														valueHigh={link.freqMax ?? 20000}
+														min={0}
+														max={1000}
+														step={1}
+														valueLow={freqToSlider(link.freqMin ?? 20)}
+														valueHigh={freqToSlider(link.freqMax ?? 20000)}
 														onChangeLow={(v) =>
-															onVolumeLinkChange(param.key, { ...link, freqMin: v })}
+															onVolumeLinkChange(param.key, { ...link, freqMin: sliderToFreq(v) })}
 														onChangeHigh={(v) =>
-															onVolumeLinkChange(param.key, { ...link, freqMax: v })}
-														formatValue={(v) => `${Math.round(v)} Hz`}
+															onVolumeLinkChange(param.key, { ...link, freqMax: sliderToFreq(v) })}
+														formatValue={(v) => `${Math.round(sliderToFreq(v))} Hz`}
 													/>
 												</div>
 											</div>
