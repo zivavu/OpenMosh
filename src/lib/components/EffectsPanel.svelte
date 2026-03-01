@@ -77,6 +77,26 @@
 	);
 
 	let showHidden = $state(false);
+	let searchQuery = $state('');
+
+	let filteredEffects = $derived(
+		searchQuery
+			? effects
+					.map((e, i) => ({ effect: e, index: i }))
+					.filter(({ effect }) => {
+						const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
+						return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
+					})
+			: effects.map((e, i) => ({ effect: e, index: i })),
+	);
+
+	let filteredHiddenDefs = $derived(
+		searchQuery
+			? hiddenDefs.filter((def) =>
+					def.name.toLowerCase().includes(searchQuery.toLowerCase()),
+				)
+			: hiddenDefs,
+	);
 
 	function addEffect(defId: string) {
 		const def = EFFECT_DEFINITIONS.find((d) => d.id === defId);
@@ -252,8 +272,48 @@
 		{/if}
 	</div>
 
+	<div class="search-bar">
+		<svg
+			class="search-icon"
+			width="13"
+			height="13"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+		>
+			<circle cx="11" cy="11" r="8" />
+			<line x1="21" y1="21" x2="16.65" y2="16.65" />
+		</svg>
+		<input
+			class="search-input"
+			type="text"
+			placeholder="Search effects..."
+			bind:value={searchQuery}
+		/>
+		{#if searchQuery}
+			<button
+				class="search-clear"
+				onclick={() => (searchQuery = '')}
+				title="Clear"
+			>
+				<svg
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path d="M18 6L6 18" />
+					<path d="M6 6l12 12" />
+				</svg>
+			</button>
+		{/if}
+	</div>
+
 	<div class="panel-scroll">
-		{#each effects as effect, i (effect.instanceId)}
+		{#each filteredEffects as { effect, index: i } (effect.instanceId)}
 			<EffectItem
 				{effect}
 				{hasTrack}
@@ -275,15 +335,15 @@
 			/>
 		{/each}
 
-		{#if hiddenDefs.length > 0}
+		{#if filteredHiddenDefs.length > 0}
 			<button class="hidden-header" onclick={() => (showHidden = !showHidden)}>
-				<span class="hidden-arrow" class:expanded={showHidden}>&#9654;</span>
-				<span>Hidden Effects ({hiddenDefs.length})</span>
+				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}>&#9654;</span>
+				<span>Hidden Effects ({filteredHiddenDefs.length})</span>
 			</button>
 
-			{#if showHidden}
+			{#if showHidden || searchQuery}
 				<div class="hidden-list">
-					{#each hiddenDefs as def (def.id)}
+					{#each filteredHiddenDefs as def (def.id)}
 						<div class="hidden-item">
 							<span class="hidden-name">{def.name}</span>
 							<button
@@ -495,6 +555,56 @@
 		font-size: 0.68rem;
 		color: #444;
 		padding: 0.2rem 0.5rem;
+	}
+
+	.search-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.45rem 0.6rem;
+		border-bottom: 1px solid #222;
+		flex-shrink: 0;
+	}
+
+	.search-icon {
+		color: #555;
+		flex-shrink: 0;
+	}
+
+	.search-input {
+		flex: 1;
+		min-width: 0;
+		padding: 0.25rem 0.3rem;
+		background: none;
+		border: none;
+		color: #ccc;
+		font-size: 0.75rem;
+		font-family: inherit;
+		outline: none;
+	}
+
+	.search-input::placeholder {
+		color: #444;
+	}
+
+	.search-clear {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		background: none;
+		border: none;
+		color: #555;
+		cursor: pointer;
+		padding: 0;
+		border-radius: 3px;
+		flex-shrink: 0;
+		transition: color 0.15s;
+	}
+
+	.search-clear:hover {
+		color: #999;
 	}
 
 	.panel-scroll {

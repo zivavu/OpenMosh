@@ -753,49 +753,44 @@ void main() {
 	'spectral-shift': {
 		fragment:
 			H +
-			`uniform float u_hueShift;
-uniform float u_satWarp;
+			`uniform float u_spread;
+uniform float u_angle;
 uniform float u_speed;
-vec3 rgb2hsl(vec3 c) {
-  float mx = max(c.r, max(c.g, c.b));
-  float mn = min(c.r, min(c.g, c.b));
-  float l = (mx + mn) * 0.5;
-  if (mx == mn) return vec3(0.0, 0.0, l);
-  float d = mx - mn;
-  float s = l > 0.5 ? d / (2.0 - mx - mn) : d / (mx + mn);
-  float h;
-  if (mx == c.r) h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
-  else if (mx == c.g) h = (c.b - c.r) / d + 2.0;
-  else h = (c.r - c.g) / d + 4.0;
-  return vec3(h / 6.0, s, l);
-}
-float hue2rgb(float p, float q, float t) {
-  t = fract(t);
-  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
-  if (t < 0.5) return q;
-  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-  return p;
-}
-vec3 hsl2rgb(vec3 hsl) {
-  if (hsl.y == 0.0) return vec3(hsl.z);
-  float q = hsl.z < 0.5 ? hsl.z * (1.0 + hsl.y) : hsl.z + hsl.y - hsl.z * hsl.y;
-  float p = 2.0 * hsl.z - q;
-  return vec3(
-    hue2rgb(p, q, hsl.x + 1.0 / 3.0),
-    hue2rgb(p, q, hsl.x),
-    hue2rgb(p, q, hsl.x - 1.0 / 3.0)
-  );
-}
+uniform float u_saturation;
 void main() {
-  vec4 c = texture(u_texture, v_uv);
-  vec3 hsl = rgb2hsl(c.rgb);
   float t = u_time * u_speed;
-  hsl.x = fract(hsl.x + u_hueShift * sin(v_uv.y * 8.0 + t) * sin(v_uv.x * 6.0 + t * 0.7));
-  hsl.y = clamp(hsl.y * (1.0 + u_satWarp * cos(v_uv.x * 10.0 + t * 1.3)), 0.0, 1.0);
-  outColor = vec4(hsl2rgb(hsl), c.a);
+  float rad = u_angle * 6.2831853;
+  vec2 dir = vec2(cos(rad), sin(rad));
+
+  // position along the angle axis, centered
+  float pos = dot(v_uv - 0.5, dir);
+
+  // prismatic dispersion: sample R/G/B at spread positions along the angle
+  float disp = u_spread * 0.08;
+  float drift = sin(t * 0.3) * 0.5;
+  vec2 uvR = v_uv - dir * disp * (pos + drift);
+  vec2 uvB = v_uv + dir * disp * (pos + drift);
+
+  float r = texture(u_texture, uvR).r;
+  float g = texture(u_texture, v_uv).g;
+  float b = texture(u_texture, uvB).b;
+  vec3 color = vec3(r, g, b);
+
+  // hue rotation sweeping across screen along angle
+  float hueShift = pos * u_spread + t * 0.2;
+  float cosH = cos(hueShift);
+  float sinH = sin(hueShift);
+  vec3 k = vec3(0.57735); // normalized (1,1,1)
+  vec3 rotated = color * cosH
+    + cross(k, color) * sinH
+    + k * dot(k, color) * (1.0 - cosH);
+
+  color = mix(color, rotated, u_saturation);
+
+  outColor = vec4(color, 1.0);
 }`,
 		animated: true,
-		setUniforms: floats('hueShift', 'satWarp', 'speed'),
+		setUniforms: floats('spread', 'angle', 'speed', 'saturation'),
 	},
 
 	'data-bend': {
