@@ -1,4 +1,4 @@
-import { guess } from 'web-audio-beat-detector';
+import { Essentia, EssentiaWASM } from 'essentia.js';
 
 export interface BpmResult {
 	bpm: number;
@@ -6,10 +6,36 @@ export interface BpmResult {
 	offset: number;
 }
 
-export async function detectBpm(
-	audioFile: File,
-	signal?: AbortSignal,
-): Promise<BpmResult> {
+let essentiaInstance: InstanceType<typeof Essentia> | null = null;
+
+async function getEssentia(): Promise<InstanceType<typeof Essentia>> {
+	if (!essentiaInstance) {
+		const wasmModule = await EssentiaWASM();
+		essentiaInstance = new Essentia(wasmModule);
+	}
+	return essentiaInstance;
+}
+
+const TARGET_SAMPLE_RATE = 44100;
+
+async function resampleToMono(audioBuffer: AudioBuffer): Promise<AudioBuffer> {
+	if (audioBuffer.sampleRate === TARGET_SAMPLE_RATE && audioBuffer.numberOfChannels === 1) {
+		return audioBuffer;
+	}
+	const duration = audioBuffer.duration;
+	const offlineCtx = new OfflineAudioContext(
+		1,
+		Math.ceil(duration * TARGET_SAMPLE_RATE),
+		TARGET_SAMPLE_RATE,
+	);
+	const source = offlineCtx.createBufferSource();
+	source.buffer = audioBuffer;
+	source.connect(offlineCtx.destination);
+	source.start(0);
+	return offlineCtx.startRendering();
+}
+
+export async function detectBpm(audioFile: File, signal?: AbortSignal): Promise<BpmResult> {
 	const arrayBuffer = await audioFile.arrayBuffer();
 	if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -17,10 +43,23 @@ export async function detectBpm(
 	try {
 		const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-		const result = await guess(audioBuffer);
+
+		const resampled = await resampleToMono(audioBuffer);
+		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+		const essentia = await getEssentia();
+		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+		const monoSignal = essentia.audioBufferToMonoSignal(resampled);
+		const vectorSignal = essentia.arrayToVector(monoSignal);
+		const result = essentia.RhythmExtractor2013(vectorSignal);
+
+		const ticks = essentia.vectorToArray(result.ticks);
+		const offset = ticks.length > 0 ? ticks[0] : 0;
+
 		return {
 			bpm: Math.round(result.bpm * 10) / 10,
-			offset: result.offset,
+			offset,
 		};
 	} finally {
 		await ctx.close();
