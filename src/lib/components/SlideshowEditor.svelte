@@ -72,12 +72,10 @@
 		if (s) s.presetIndex = presetIndex;
 	}
 
-	// Init slides from initial files
-	$effect(() => {
-		if (initialFiles.length > 0 && slides.length === 0) {
-			addFiles(initialFiles);
-		}
-	});
+	// Init slides from initial files (run once at mount)
+	if (initialFiles.length > 0) {
+		addFiles(initialFiles);
+	}
 
 	// Cleanup on destroy
 	$effect(() => {
