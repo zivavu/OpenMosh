@@ -128,6 +128,49 @@
 	let naturalWidth = $state<number | undefined>(undefined);
 	let naturalHeight = $state<number | undefined>(undefined);
 	let currentFps = $state(0);
+	let resizeWidth = $state(0);
+	let resizeHeight = $state(0);
+	let maintainRatio = $state(true);
+
+	$effect(() => {
+		const nw = naturalWidth;
+		const nh = naturalHeight;
+		if (nw != null && nh != null && nw > 0 && nh > 0) {
+			resizeWidth = nw;
+			resizeHeight = nh;
+		}
+	});
+
+	const aspectRatio = $derived(
+		naturalWidth != null && naturalHeight != null && naturalHeight > 0
+			? naturalWidth / naturalHeight
+			: 1,
+	);
+
+	const MAX_RESIZE = 10000;
+
+	function setResizeWidth(w: number) {
+		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
+		resizeWidth = val;
+		if (maintainRatio && aspectRatio > 0) {
+			resizeHeight = Math.min(MAX_RESIZE, Math.max(1, Math.round(val / aspectRatio)));
+		}
+	}
+
+	function setResizeHeight(h: number) {
+		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
+		resizeHeight = val;
+		if (maintainRatio && aspectRatio > 0) {
+			resizeWidth = Math.min(MAX_RESIZE, Math.max(1, Math.round(val * aspectRatio)));
+		}
+	}
+
+	function resetResize() {
+		if (naturalWidth != null && naturalHeight != null) {
+			resizeWidth = naturalWidth;
+			resizeHeight = naturalHeight;
+		}
+	}
 
 	// Use first slide as default canvas source
 	let previewImageSrc = $state('');
@@ -745,6 +788,8 @@
 				<GlCanvas
 					imageSrc={previewImageSrc}
 					effects={previewPlaying && previewEffects.length > 0 ? previewEffects : effects}
+					canvasWidth={resizeWidth || undefined}
+					canvasHeight={resizeHeight || undefined}
 					bind:canvasEl
 					bind:glRenderer
 					bind:naturalWidth
@@ -761,7 +806,54 @@
 				onMosh={mosh}
 				onClear={clearEffects}
 				bind:showSettings={showMoshSettings}
-			/>
+			>
+				{#snippet settingsContent()}
+					<div class="settings-divider"></div>
+					<div class="mosh-setting-row">
+						<label for="ss-resize-width">Width</label>
+						<input
+							id="ss-resize-width"
+							class="size-input"
+							type="number"
+							min="1"
+							max="10000"
+							step="1"
+							value={resizeWidth}
+							oninput={(e) =>
+								setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
+						/>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="ss-resize-height">Height</label>
+						<input
+							id="ss-resize-height"
+							class="size-input"
+							type="number"
+							min="1"
+							max="10000"
+							step="1"
+							value={resizeHeight}
+							oninput={(e) =>
+								setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
+						/>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="ss-resize-ratio">Maintain ratio</label>
+						<input
+							id="ss-resize-ratio"
+							type="checkbox"
+							bind:checked={maintainRatio}
+						/>
+					</div>
+					<button
+						class="resize-reset-btn"
+						onclick={resetResize}
+						title="Reset to original size"
+					>
+						Reset to original
+					</button>
+				{/snippet}
+			</MoshGroup>
 
 			<button
 				class="action-btn play-btn"
@@ -1036,8 +1128,8 @@
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
-		padding: 0.4rem 1rem;
+		gap: 0.5rem;
+		padding: 0.6rem 2rem;
 		border: 1.5px solid #444;
 		border-radius: 999px;
 		background: transparent;
@@ -1059,13 +1151,9 @@
 		cursor: default;
 	}
 
-	.play-btn {
+	.play-btn:hover:not(:disabled) {
 		border-color: #4a7;
 		color: #8fc;
-	}
-
-	.play-btn:hover:not(:disabled) {
-		border-color: #6c9;
 	}
 
 	.setting-row {
@@ -1220,6 +1308,93 @@
 	.volume-slider {
 		width: 60px;
 		accent-color: #888;
+	}
+
+	/* Mosh settings */
+	.mosh-setting-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.mosh-setting-row label {
+		font-size: 0.7rem;
+		color: #888;
+		min-width: 72px;
+		flex-shrink: 0;
+	}
+
+	.mosh-setting-row input[type='checkbox'] {
+		appearance: none;
+		width: 14px;
+		height: 14px;
+		border: 1px solid #555;
+		border-radius: 2px;
+		background: #1a1a1a;
+		cursor: pointer;
+		position: relative;
+		flex-shrink: 0;
+	}
+
+	.mosh-setting-row input[type='checkbox']:hover {
+		border-color: #777;
+	}
+
+	.mosh-setting-row input[type='checkbox']:checked {
+		background: #555;
+		border-color: #888;
+	}
+
+	.mosh-setting-row input[type='checkbox']:checked::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+			center/contain no-repeat;
+	}
+
+	.settings-divider {
+		height: 1px;
+		background: #333;
+		margin: 0.15rem 0;
+	}
+
+	.size-input {
+		width: 4.5rem;
+		background: #1a1a1a;
+		color: #aaa;
+		border: 1px solid #333;
+		border-radius: 4px;
+		padding: 0.2rem 0.4rem;
+		font-size: 0.7rem;
+		font-family: inherit;
+		outline: none;
+	}
+
+	.size-input:focus {
+		border-color: #555;
+	}
+
+	.resize-reset-btn {
+		margin-top: 0.25rem;
+		padding: 0.35rem 0.75rem;
+		border: 1px solid #444;
+		border-radius: 6px;
+		background: none;
+		color: #888;
+		font-size: 0.7rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			border-color 0.15s;
+	}
+
+	.resize-reset-btn:hover {
+		color: #ccc;
+		border-color: #666;
 	}
 
 	/* Sidebar */
