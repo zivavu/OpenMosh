@@ -1,6 +1,9 @@
 <script lang="ts">
 	import EffectsPanel from './EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
+	import MoshGroup from './MoshGroup.svelte';
+	import RecordGroup from './RecordGroup.svelte';
+	import RecordOverlay from './RecordOverlay.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import {
@@ -568,17 +571,13 @@
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 	let showRecordSettings = $state(false);
-	let recordGroupEl: HTMLDivElement;
+	let showMoshSettings = $state(false);
+	let moshGroupRef = $state<MoshGroup>();
+	let recordGroupRef = $state<RecordGroup>();
 
 	let recordDuration = $derived(
 		trackFile && trackDuration > 0 ? spanEnd - spanStart : 5,
 	);
-
-	function handleRecordClickOutside(e: MouseEvent) {
-		if (showRecordSettings && recordGroupEl && !recordGroupEl.contains(e.target as Node)) {
-			showRecordSettings = false;
-		}
-	}
 
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recording || slides.length === 0) return;
@@ -654,7 +653,8 @@
 	onkeydown={handleKeydown}
 	onpointerdown={(e) => {
 		audioContext?.resume();
-		handleRecordClickOutside(e);
+		moshGroupRef?.handleClickOutside(e);
+		recordGroupRef?.handleClickOutside(e);
 	}}
 />
 
@@ -756,17 +756,12 @@
 		{/if}
 
 		<div class="action-bar">
-			<button class="settings-btn" onclick={clearEffects} title="Clear all effects">
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M18 6L6 18" /><path d="M6 6l12 12" />
-				</svg>
-			</button>
-			<button class="action-btn mosh-btn" onclick={mosh}>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-					<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-				</svg>
-				MOSH
-			</button>
+			<MoshGroup
+				bind:this={moshGroupRef}
+				onMosh={mosh}
+				onClear={clearEffects}
+				bind:showSettings={showMoshSettings}
+			/>
 
 			<button
 				class="action-btn play-btn"
@@ -787,63 +782,53 @@
 				{/if}
 			</button>
 
-			<div class="record-group" bind:this={recordGroupEl}>
-				<button
-					class="action-btn record-btn"
-					onclick={() => (showRecordSettings = !showRecordSettings)}
-					disabled={recording || slides.length === 0}
-				>
-					{#if recording}
-						{#if recordFinalizing}
-							Creating file...
-						{:else}
-							{Math.round(recordProgress * 100)}%
-						{/if}
-					{:else}
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<circle cx="12" cy="12" r="10" />
-							<circle cx="12" cy="12" r="4" fill="currentColor" />
-						</svg>
-						RECORD
-					{/if}
-				</button>
-
-				{#if recording}
-					<button class="cancel-btn" onclick={cancelRecording}>Cancel</button>
-				{/if}
-
-				{#if showRecordSettings}
-					<div class="record-settings">
-						<div class="setting-row">
-							<label for="ss-rec-format">Format</label>
-							<select id="ss-rec-format" bind:value={recordFormat}>
-								<option value="webm">WebM</option>
-								<option value="gif">GIF</option>
-							</select>
-						</div>
-						<div class="setting-row">
-							<span class="setting-label">Duration</span>
-							<span class="setting-val">{recordDuration.toFixed(1)}s</span>
-						</div>
-						<div class="setting-row">
-							<label for="ss-rec-fps">FPS</label>
-							<select id="ss-rec-fps" bind:value={recordFps}>
-								<option value={15}>15</option>
-								<option value={24}>24</option>
-								<option value={30}>30</option>
-								<option value={60}>60</option>
-							</select>
-							{#if recordFormat === 'gif' && recordFps > 15}
-								<span class="hint">capped to 15</span>
-							{/if}
-						</div>
-						<button class="start-btn" onclick={startRecording} disabled={!trackFile}>
-							{trackFile ? 'Start Recording' : 'Add audio first'}
-						</button>
+			<RecordGroup
+				bind:this={recordGroupRef}
+				{recording}
+				{recordProgress}
+				{recordFinalizing}
+				disabled={slides.length === 0}
+				bind:showSettings={showRecordSettings}
+				onCancelRecording={cancelRecording}
+			>
+				{#snippet settingsContent()}
+					<div class="setting-row">
+						<label for="ss-rec-format">Format</label>
+						<select id="ss-rec-format" bind:value={recordFormat}>
+							<option value="webm">WebM</option>
+							<option value="gif">GIF</option>
+						</select>
 					</div>
-				{/if}
-			</div>
+					<div class="setting-row">
+						<span class="setting-label">Duration</span>
+						<span class="setting-val">{recordDuration.toFixed(1)}s</span>
+					</div>
+					<div class="setting-row">
+						<label for="ss-rec-fps">FPS</label>
+						<select id="ss-rec-fps" bind:value={recordFps}>
+							<option value={15}>15</option>
+							<option value={24}>24</option>
+							<option value={30}>30</option>
+							<option value={60}>60</option>
+						</select>
+						{#if recordFormat === 'gif' && recordFps > 15}
+							<span class="hint">capped to 15</span>
+						{/if}
+					</div>
+					<button class="start-btn" onclick={startRecording} disabled={!trackFile}>
+						{trackFile ? 'Start Recording' : 'Add audio first'}
+					</button>
+				{/snippet}
+			</RecordGroup>
 		</div>
+
+		<RecordOverlay
+			{recording}
+			{recordProgress}
+			{recordFinalizing}
+			recordFormat={recordFormat}
+			onCancel={cancelRecording}
+		/>
 
 		{#if trackFile && trackDuration > 0}
 			<div class="timeline-bar">
@@ -1048,24 +1033,6 @@
 		border-top: 1px solid #2a2a2a;
 	}
 
-	.settings-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border: 1px solid #333;
-		border-radius: 6px;
-		background: transparent;
-		color: #666;
-		cursor: pointer;
-	}
-
-	.settings-btn:hover {
-		border-color: #555;
-		color: #ccc;
-	}
-
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
@@ -1092,10 +1059,6 @@
 		cursor: default;
 	}
 
-	.mosh-btn {
-		border-color: #555;
-	}
-
 	.play-btn {
 		border-color: #4a7;
 		color: #8fc;
@@ -1103,42 +1066,6 @@
 
 	.play-btn:hover:not(:disabled) {
 		border-color: #6c9;
-	}
-
-	.record-btn {
-		border-color: #a44;
-		color: #f88;
-	}
-
-	.record-group {
-		position: relative;
-	}
-
-	.cancel-btn {
-		padding: 0.3rem 0.6rem;
-		border: 1px solid #a44;
-		border-radius: 6px;
-		background: transparent;
-		color: #f88;
-		font-size: 0.7rem;
-		cursor: pointer;
-		font-family: inherit;
-	}
-
-	.record-settings {
-		position: absolute;
-		bottom: 100%;
-		right: 0;
-		margin-bottom: 0.5rem;
-		padding: 0.75rem;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 8px;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		min-width: 200px;
-		z-index: 10;
 	}
 
 	.setting-row {

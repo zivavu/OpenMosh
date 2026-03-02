@@ -1,6 +1,9 @@
 <script lang="ts">
 	import EffectsPanel from './EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
+	import MoshGroup from './MoshGroup.svelte';
+	import RecordGroup from './RecordGroup.svelte';
+	import RecordOverlay from './RecordOverlay.svelte';
 	import {
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
@@ -448,17 +451,8 @@
 	let historyIndex = $state(0);
 	let canUndo = $derived(historyIndex > 0);
 	let canRedo = $derived(historyIndex < history.length - 1);
-	let moshGroupEl: HTMLDivElement;
-
-	function handleClickOutside(e: MouseEvent) {
-		if (
-			showMoshSettings &&
-			moshGroupEl &&
-			!moshGroupEl.contains(e.target as Node)
-		) {
-			showMoshSettings = false;
-		}
-	}
+	let moshGroupRef = $state<MoshGroup>();
+	let recordGroupRef = $state<RecordGroup>();
 
 	function pushHistory() {
 		history.length = historyIndex + 1;
@@ -545,7 +539,6 @@
 	let recordProgress = $state(0);
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
-	let recordGroupEl: HTMLDivElement;
 
 	let recordDurationEffective = $derived(
 		isVideo && videoDuration > 0
@@ -560,16 +553,6 @@
 	let canRenderSpan = $derived(
 		!!recordWithAudio && !!trackFile && trackDuration > 0,
 	);
-
-	function handleRecordClickOutside(e: MouseEvent) {
-		if (
-			showRecordSettings &&
-			recordGroupEl &&
-			!recordGroupEl.contains(e.target as Node)
-		) {
-			showRecordSettings = false;
-		}
-	}
 
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recording) return;
@@ -635,8 +618,8 @@
 	onkeydown={handleKeydown}
 	onpointerdown={(e) => {
 		audioContext?.resume();
-		handleClickOutside(e);
-		handleRecordClickOutside(e);
+		moshGroupRef?.handleClickOutside(e);
+		recordGroupRef?.handleClickOutside(e);
 	}}
 />
 
@@ -776,183 +759,111 @@
 		/>
 
 		<div class="action-bar">
-			<div class="mosh-group" bind:this={moshGroupEl}>
-				<button
-					class="settings-btn"
-					class:active={showMoshSettings}
-					onclick={() => (showMoshSettings = !showMoshSettings)}
-					title="Mosh settings"
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<circle cx="12" cy="12" r="3" />
-						<path
-							d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+			<MoshGroup
+				bind:this={moshGroupRef}
+				onMosh={mosh}
+				onClear={clearEffects}
+				onUndo={undo}
+				{canUndo}
+				bind:showSettings={showMoshSettings}
+			>
+				{#snippet settingsContent()}
+					<div class="mosh-setting-row">
+						<label for="mosh-min">Min effects</label>
+						<input
+							id="mosh-min"
+							type="range"
+							min="1"
+							max="20"
+							step="1"
+							bind:value={moshMin}
+							oninput={() => {
+								if (moshMax < moshMin) moshMax = moshMin;
+							}}
 						/>
-					</svg>
-				</button>
-				<button
-					class="settings-btn"
-					onclick={clearEffects}
-					title="Clear all effects"
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<path d="M18 6L6 18" />
-						<path d="M6 6l12 12" />
-					</svg>
-				</button>
-				<button
-					class="settings-btn"
-					onclick={undo}
-					disabled={!canUndo}
-					title="Undo (← / Ctrl+Z)"
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polyline points="1 4 1 10 7 10" />
-						<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-					</svg>
-				</button>
-				<button class="action-btn mosh-btn" onclick={mosh}>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-					</svg>
-					MOSH
-				</button>
-
-				{#if showMoshSettings}
-					<div class="mosh-settings">
-						<div class="mosh-setting-row">
-							<label for="mosh-min">Min effects</label>
-							<input
-								id="mosh-min"
-								type="range"
-								min="1"
-								max="20"
-								step="1"
-								bind:value={moshMin}
-								oninput={() => {
-									if (moshMax < moshMin) moshMax = moshMin;
-								}}
-							/>
-							<span class="mosh-setting-val">{moshMin}</span>
-						</div>
-						<div class="mosh-setting-row">
-							<label for="mosh-max">Max effects</label>
-							<input
-								id="mosh-max"
-								type="range"
-								min="1"
-								max="20"
-								step="1"
-								bind:value={moshMax}
-								oninput={() => {
-									if (moshMin > moshMax) moshMin = moshMax;
-								}}
-							/>
-							<span class="mosh-setting-val">{moshMax}</span>
-						</div>
-						<div class="mosh-setting-row">
-							<label for="mosh-shuffle">Shuffle order</label>
-							<input
-								id="mosh-shuffle"
-								type="checkbox"
-								bind:checked={randomizeOrder}
-							/>
-						</div>
-						<div class="mosh-setting-row">
-							<label for="mosh-audio-link">Random audio links</label>
-							<input
-								id="mosh-audio-link"
-								type="checkbox"
-								bind:checked={moshAudioLink}
-							/>
-						</div>
-						<div class="mosh-setting-row">
-							<label for="show-fps">Show FPS</label>
-							<input id="show-fps" type="checkbox" bind:checked={showFps} />
-						</div>
-						<div class="settings-divider"></div>
-						<div class="mosh-setting-row">
-							<label for="resize-width">Width</label>
-							<input
-								id="resize-width"
-								class="size-input"
-								type="number"
-								min="1"
-								max="10000"
-								step="1"
-								value={resizeWidth}
-								oninput={(e) =>
-									setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
-							/>
-						</div>
-						<div class="mosh-setting-row">
-							<label for="resize-height">Height</label>
-							<input
-								id="resize-height"
-								class="size-input"
-								type="number"
-								min="1"
-								max="10000"
-								step="1"
-								value={resizeHeight}
-								oninput={(e) =>
-									setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
-							/>
-						</div>
-						<div class="mosh-setting-row">
-							<label for="resize-ratio">Maintain ratio</label>
-							<input
-								id="resize-ratio"
-								type="checkbox"
-								bind:checked={maintainRatio}
-							/>
-						</div>
-						<button
-							class="resize-reset-btn"
-							onclick={resetResize}
-							title="Reset to original size"
-						>
-							Reset to original
-						</button>
+						<span class="mosh-setting-val">{moshMin}</span>
 					</div>
-				{/if}
-			</div>
+					<div class="mosh-setting-row">
+						<label for="mosh-max">Max effects</label>
+						<input
+							id="mosh-max"
+							type="range"
+							min="1"
+							max="20"
+							step="1"
+							bind:value={moshMax}
+							oninput={() => {
+								if (moshMin > moshMax) moshMin = moshMax;
+							}}
+						/>
+						<span class="mosh-setting-val">{moshMax}</span>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="mosh-shuffle">Shuffle order</label>
+						<input
+							id="mosh-shuffle"
+							type="checkbox"
+							bind:checked={randomizeOrder}
+						/>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="mosh-audio-link">Random audio links</label>
+						<input
+							id="mosh-audio-link"
+							type="checkbox"
+							bind:checked={moshAudioLink}
+						/>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="show-fps">Show FPS</label>
+						<input id="show-fps" type="checkbox" bind:checked={showFps} />
+					</div>
+					<div class="settings-divider"></div>
+					<div class="mosh-setting-row">
+						<label for="resize-width">Width</label>
+						<input
+							id="resize-width"
+							class="size-input"
+							type="number"
+							min="1"
+							max="10000"
+							step="1"
+							value={resizeWidth}
+							oninput={(e) =>
+								setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
+						/>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="resize-height">Height</label>
+						<input
+							id="resize-height"
+							class="size-input"
+							type="number"
+							min="1"
+							max="10000"
+							step="1"
+							value={resizeHeight}
+							oninput={(e) =>
+								setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
+						/>
+					</div>
+					<div class="mosh-setting-row">
+						<label for="resize-ratio">Maintain ratio</label>
+						<input
+							id="resize-ratio"
+							type="checkbox"
+							bind:checked={maintainRatio}
+						/>
+					</div>
+					<button
+						class="resize-reset-btn"
+						onclick={resetResize}
+						title="Reset to original size"
+					>
+						Reset to original
+					</button>
+				{/snippet}
+			</MoshGroup>
 			{#if isImageFormat}
 				<button class="action-btn save-btn" onclick={save}>
 					<svg
@@ -974,91 +885,75 @@
 			{/if}
 
 			{#if isVideoFormat}
-				<div class="record-group" bind:this={recordGroupEl}>
-					<button
-						class="action-btn record-btn"
-						onclick={() => (showRecordSettings = !showRecordSettings)}
-						disabled={recording}
-					>
-						<svg
-							width="16"
-							height="16"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<circle cx="12" cy="12" r="10" />
-							<circle cx="12" cy="12" r="4" fill="currentColor" />
-						</svg>
-						RECORD
-					</button>
-
-					{#if showRecordSettings}
-						<div class="record-settings">
-							{#if canIncludeAudio}
+				<RecordGroup
+					bind:this={recordGroupRef}
+					{recording}
+					{recordProgress}
+					{recordFinalizing}
+					bind:showSettings={showRecordSettings}
+					onCancelRecording={cancelRecording}
+				>
+					{#snippet settingsContent()}
+						{#if canIncludeAudio}
+							<div class="mosh-setting-row">
+								<label for="rec-with-audio">Include audio</label>
+								<input
+									id="rec-with-audio"
+									type="checkbox"
+									bind:checked={recordWithAudio}
+								/>
+							</div>
+							{#if recordWithAudio && canRenderSpan}
 								<div class="mosh-setting-row">
-									<label for="rec-with-audio">Include audio</label>
+									<label for="rec-span-only">Render selected span</label>
 									<input
-										id="rec-with-audio"
+										id="rec-span-only"
 										type="checkbox"
-										bind:checked={recordWithAudio}
+										bind:checked={recordSpanOnly}
 									/>
 								</div>
-								{#if recordWithAudio && canRenderSpan}
-									<div class="mosh-setting-row">
-										<label for="rec-span-only">Render selected span</label>
-										<input
-											id="rec-span-only"
-											type="checkbox"
-											bind:checked={recordSpanOnly}
-										/>
-									</div>
-								{/if}
 							{/if}
-							<div class="mosh-setting-row">
-								<label for="rec-duration">Duration</label>
-								{#if isVideo && videoDuration > 0}
-									<span class="mosh-setting-val"
-										>{recordDurationEffective.toFixed(1)}s (video span)</span
-									>
-								{:else if recordSpanOnly && trackFile && trackDuration > 0}
-									<span class="mosh-setting-val"
-										>{recordDurationEffective.toFixed(1)}s (span)</span
-									>
-								{:else}
-									<input
-										id="rec-duration"
-										type="range"
-										min="1"
-										max="30"
-										step="1"
-										bind:value={recordDuration}
-									/>
-									<span class="mosh-setting-val">{recordDuration}s</span>
-								{/if}
-							</div>
-							<div class="mosh-setting-row">
-								<label for="rec-fps">FPS</label>
-								<select id="rec-fps" bind:value={recordFps}>
-									<option value={15}>15</option>
-									<option value={24}>24</option>
-									<option value={30}>30</option>
-									<option value={60}>60</option>
-									<option value={120}>120</option>
-								</select>
-								{#if recordFormat === 'gif' && recordFps > 15}
-									<span class="rec-hint">capped to 15</span>
-								{/if}
-							</div>
-							<button class="rec-start-btn" onclick={startRecording}>
-								Start Recording
-							</button>
+						{/if}
+						<div class="mosh-setting-row">
+							<label for="rec-duration">Duration</label>
+							{#if isVideo && videoDuration > 0}
+								<span class="mosh-setting-val"
+									>{recordDurationEffective.toFixed(1)}s (video span)</span
+								>
+							{:else if recordSpanOnly && trackFile && trackDuration > 0}
+								<span class="mosh-setting-val"
+									>{recordDurationEffective.toFixed(1)}s (span)</span
+								>
+							{:else}
+								<input
+									id="rec-duration"
+									type="range"
+									min="1"
+									max="30"
+									step="1"
+									bind:value={recordDuration}
+								/>
+								<span class="mosh-setting-val">{recordDuration}s</span>
+							{/if}
 						</div>
-					{/if}
-				</div>
+						<div class="mosh-setting-row">
+							<label for="rec-fps">FPS</label>
+							<select id="rec-fps" bind:value={recordFps}>
+								<option value={15}>15</option>
+								<option value={24}>24</option>
+								<option value={30}>30</option>
+								<option value={60}>60</option>
+								<option value={120}>120</option>
+							</select>
+							{#if recordFormat === 'gif' && recordFps > 15}
+								<span class="rec-hint">capped to 15</span>
+							{/if}
+						</div>
+						<button class="rec-start-btn" onclick={startRecording}>
+							Start Recording
+						</button>
+					{/snippet}
+				</RecordGroup>
 			{/if}
 		</div>
 		{#if isVideo && videoDuration > 0}
@@ -1268,27 +1163,13 @@
 		onVolumeLinkChange={setVolumeLink}
 	/>
 
-	{#if recording}
-		<div class="record-overlay">
-			<div class="record-modal">
-				<p class="record-title">
-					{recordFinalizing
-						? 'Creating file…'
-						: `Recording ${recordFormat.toUpperCase()}...`}
-				</p>
-				<div class="progress-track" class:finalizing={recordFinalizing}>
-					<div
-						class="progress-fill"
-						style="width: {recordFinalizing ? '100%' : `${Math.round(recordProgress * 100)}%`}"
-					></div>
-				</div>
-				{#if !recordFinalizing}
-					<p class="record-pct">{Math.round(recordProgress * 100)}%</p>
-				{/if}
-				<button class="rec-cancel-btn" onclick={cancelRecording}>Cancel</button>
-			</div>
-		</div>
-	{/if}
+	<RecordOverlay
+		{recording}
+		{recordProgress}
+		{recordFinalizing}
+		recordFormat={recordFormat}
+		onCancel={cancelRecording}
+	/>
 
 	{#if dragging}
 		<div class="drop-overlay">
@@ -1662,63 +1543,6 @@
 		background: rgba(255, 255, 255, 0.04);
 	}
 
-	.mosh-btn:hover {
-		border-color: #a89050;
-		color: #f0d878;
-	}
-
-	.mosh-group {
-		position: relative;
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-	}
-
-	.settings-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: none;
-		border: 1.5px solid #444;
-		color: #888;
-		cursor: pointer;
-		transition:
-			border-color 0.2s,
-			color 0.2s;
-	}
-
-	.settings-btn:hover,
-	.settings-btn.active {
-		border-color: #777;
-		color: #ccc;
-	}
-
-	.settings-btn:disabled {
-		opacity: 0.3;
-		cursor: default;
-		pointer-events: none;
-	}
-
-	.mosh-settings {
-		position: absolute;
-		bottom: calc(100% + 0.5rem);
-		left: 50%;
-		transform: translateX(-50%);
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 8px;
-		padding: 0.75rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		min-width: 210px;
-		z-index: 20;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-	}
-
 	.mosh-setting-row {
 		display: flex;
 		align-items: center;
@@ -1782,6 +1606,23 @@
 			center/contain no-repeat;
 	}
 
+	.mosh-setting-row select {
+		flex: 1;
+		background: #1a1a1a;
+		color: #aaa;
+		border: 1px solid #333;
+		border-radius: 4px;
+		padding: 0.2rem 0.4rem;
+		font-size: 0.7rem;
+		font-family: inherit;
+		cursor: pointer;
+		outline: none;
+	}
+
+	.mosh-setting-row select:focus {
+		border-color: #555;
+	}
+
 	.mosh-setting-val {
 		font-size: 0.7rem;
 		color: #999;
@@ -1798,51 +1639,6 @@
 		border: 2px dashed #888;
 		border-radius: 8px;
 		pointer-events: none;
-	}
-
-	/* Record button & settings */
-	.record-group {
-		position: relative;
-		display: flex;
-		align-items: center;
-	}
-
-	.record-btn:hover {
-		border-color: #c05050;
-		color: #ff8888;
-	}
-
-	.record-settings {
-		position: absolute;
-		bottom: calc(100% + 0.5rem);
-		right: 0;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 8px;
-		padding: 0.75rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		min-width: 230px;
-		z-index: 20;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-	}
-
-	.record-settings select {
-		flex: 1;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
-		cursor: pointer;
-		outline: none;
-	}
-
-	.record-settings select:focus {
-		border-color: #555;
 	}
 
 	.rec-hint {
@@ -1871,90 +1667,6 @@
 	.rec-start-btn:hover {
 		background: rgba(192, 80, 80, 0.2);
 		color: #faa;
-	}
-
-	/* Recording overlay */
-	.record-overlay {
-		position: absolute;
-		inset: 0;
-		z-index: 100;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: rgba(0, 0, 0, 0.7);
-	}
-
-	.record-modal {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 2rem 3rem;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 12px;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-	}
-
-	.record-title {
-		font-size: 0.9rem;
-		font-weight: 600;
-		color: #ddd;
-		letter-spacing: 0.04em;
-	}
-
-	.progress-track {
-		width: 200px;
-		height: 4px;
-		background: #333;
-		border-radius: 2px;
-		overflow: hidden;
-	}
-
-	.progress-fill {
-		height: 100%;
-		background: #c05050;
-		border-radius: 2px;
-		transition: width 0.15s;
-	}
-
-	.progress-track.finalizing .progress-fill {
-		animation: record-finalize-pulse 1.2s ease-in-out infinite;
-	}
-
-	@keyframes record-finalize-pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.65;
-		}
-	}
-
-	.record-pct {
-		font-size: 0.75rem;
-		color: #999;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.rec-cancel-btn {
-		padding: 0.35rem 1.2rem;
-		border: 1px solid #444;
-		border-radius: 6px;
-		background: none;
-		color: #999;
-		font-size: 0.7rem;
-		font-family: inherit;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.rec-cancel-btn:hover {
-		color: #ddd;
-		border-color: #666;
 	}
 
 	.drop-overlay {
