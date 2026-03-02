@@ -7,7 +7,7 @@ declare module 'essentia.js' {
 		arrayToVector(array: Float32Array): EssentiaVector;
 		vectorToArray(vector: EssentiaVector): Float32Array;
 		RhythmExtractor2013(
-			signal: any,
+			signal: EssentiaVector,
 			maxTempo?: number,
 			method?: string,
 			minTempo?: number,
