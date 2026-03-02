@@ -1,9 +1,11 @@
 declare module 'essentia.js' {
+	type EssentiaVector = { readonly __brand: 'EssentiaVector' };
+
 	class Essentia {
 		constructor(wasmModule: any);
 		audioBufferToMonoSignal(buffer: AudioBuffer): Float32Array;
-		arrayToVector(array: Float32Array): any;
-		vectorToArray(vector: any): Float32Array;
+		arrayToVector(array: Float32Array): EssentiaVector;
+		vectorToArray(vector: EssentiaVector): Float32Array;
 		RhythmExtractor2013(
 			signal: any,
 			maxTempo?: number,
@@ -11,19 +13,14 @@ declare module 'essentia.js' {
 			minTempo?: number,
 		): {
 			bpm: number;
-			ticks: any;
+			ticks: EssentiaVector;
 			confidence: number;
-			estimates: any;
-			bpmIntervals: any;
+			estimates: EssentiaVector;
+			bpmIntervals: EssentiaVector;
 		};
 	}
 
 	const EssentiaWASM: () => Promise<any>;
 
 	export { Essentia, EssentiaWASM };
-}
-
-declare module 'essentia.js/dist/essentia-wasm.umd.js' {
-	const EssentiaWASM: () => Promise<any>;
-	export default EssentiaWASM;
 }

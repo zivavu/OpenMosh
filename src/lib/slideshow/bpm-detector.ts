@@ -6,19 +6,18 @@ export interface BpmResult {
 	offset: number;
 }
 
-let essentiaInstance: InstanceType<typeof Essentia> | null = null;
+let essentiaPromise: Promise<InstanceType<typeof Essentia>> | null = null;
 
-async function getEssentia(): Promise<InstanceType<typeof Essentia>> {
-	if (!essentiaInstance) {
-		const wasmModule = await EssentiaWASM();
-		essentiaInstance = new Essentia(wasmModule);
+function getEssentia(): Promise<InstanceType<typeof Essentia>> {
+	if (!essentiaPromise) {
+		essentiaPromise = EssentiaWASM().then((wasm) => new Essentia(wasm));
 	}
-	return essentiaInstance;
+	return essentiaPromise;
 }
 
 const TARGET_SAMPLE_RATE = 44100;
 
-async function resampleToMono(audioBuffer: AudioBuffer): Promise<AudioBuffer> {
+async function normalizeAudioBuffer(audioBuffer: AudioBuffer): Promise<AudioBuffer> {
 	if (audioBuffer.sampleRate === TARGET_SAMPLE_RATE && audioBuffer.numberOfChannels === 1) {
 		return audioBuffer;
 	}
@@ -44,7 +43,7 @@ export async function detectBpm(audioFile: File, signal?: AbortSignal): Promise<
 		const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-		const resampled = await resampleToMono(audioBuffer);
+		const resampled = await normalizeAudioBuffer(audioBuffer);
 		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
 		const essentia = await getEssentia();
@@ -58,7 +57,7 @@ export async function detectBpm(audioFile: File, signal?: AbortSignal): Promise<
 		const offset = ticks.length > 0 ? ticks[0] : 0;
 
 		return {
-			bpm: Math.round(result.bpm * 10) / 10,
+			bpm: Math.round(result.bpm * 10) / 10, // round to 1 decimal to avoid jitter in the UI
 			offset,
 		};
 	} finally {
