@@ -6,6 +6,7 @@
 	import RecordOverlay from './RecordOverlay.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
+	import TimelineSegments from './TimelineSegments.svelte';
 	import {
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
@@ -997,6 +998,11 @@
 					title="Volume: {Math.round(outputVolume * 100)}%"
 				/>
 			</div>
+			<TimelineSegments
+				{config}
+				{trackDuration}
+				{onConfigChange}
+			/>
 		{/if}
 	</div>
 

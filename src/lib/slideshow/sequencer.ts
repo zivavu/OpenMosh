@@ -1,6 +1,6 @@
 import type { SlideshowSlide, SlideshowConfig } from './types';
 import type { EffectInstance, RangeParam } from '../effects';
-import { createBeatClock } from './beat-clock';
+import { beatAtTime } from './beat-clock';
 import { generateMosh, type MoshOptions } from '../editor/mosh';
 import {
 	EFFECT_DEFINITIONS,
@@ -112,24 +112,36 @@ export function buildFrameSequence(
 	moshOptions: MoshOptions,
 	durationSeconds: number,
 ): SequencerState {
-	const clock = createBeatClock(config.bpm, config.subdivision, config.beatOffset);
-	const totalBeats = Math.ceil(durationSeconds / clock.intervalSeconds);
 	const frames: ResolvedFrame[] = [];
 	const smoothState = { effects: cloneEffects(baseEffects) };
 
-	for (let i = 0; i < totalBeats; i++) {
-		const slideIndex = config.loop
-			? i % slides.length
-			: Math.min(i, slides.length - 1);
-		const slide = slides[slideIndex];
-		const effects = computeEffectsForBeat(
-			config,
-			slide,
-			baseEffects,
-			smoothState,
-			moshOptions,
+	// Step through time, finding each beat boundary using beatAtTime
+	let lastBeatIndex = -1;
+	const dt = 0.001; // 1ms resolution for finding beat boundaries
+	for (let t = 0; t < durationSeconds; t += dt) {
+		const { index: beatIndex } = beatAtTime(
+			t,
+			config.bpm,
+			config.beatOffset,
+			config.segments,
+			config.manualSwitchPoints,
+			config.subdivision,
 		);
-		frames.push({ slide, effects });
+		if (beatIndex !== lastBeatIndex) {
+			lastBeatIndex = beatIndex;
+			const slideIndex = config.loop
+				? frames.length % slides.length
+				: Math.min(frames.length, slides.length - 1);
+			const slide = slides[slideIndex];
+			const effects = computeEffectsForBeat(
+				config,
+				slide,
+				baseEffects,
+				smoothState,
+				moshOptions,
+			);
+			frames.push({ slide, effects });
+		}
 	}
 
 	return { frames, totalDuration: durationSeconds };

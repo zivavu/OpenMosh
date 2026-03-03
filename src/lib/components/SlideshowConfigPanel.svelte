@@ -95,6 +95,9 @@
 			<option value={2}>Every 2 beats</option>
 			<option value={4}>Every 4 beats</option>
 		</select>
+		{#if config.segments.length > 0}
+			<span class="val" title="Overridden by timeline segments">default</span>
+		{/if}
 	</div>
 
 	<div class="config-row">
