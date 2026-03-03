@@ -28,7 +28,7 @@
 	import type { SlideshowSlide, SlideshowConfig, TransitionType } from '../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
 	import { detectBpm } from '../slideshow/bpm-detector';
-	import { createBeatClock } from '../slideshow/beat-clock';
+	import { beatAtTime } from '../slideshow/beat-clock';
 	import { computeEffectsForBeat, cloneEffects } from '../slideshow/sequencer';
 	import { executeSlideshowRecording } from '../slideshow/slideshow-recorder';
 
@@ -490,8 +490,6 @@
 		function tick() {
 			if (!previewPlaying || !glRenderer) return;
 
-			const clock = createBeatClock(config.bpm, config.subdivision, config.beatOffset);
-
 			let t: number;
 			if (audioEl && trackFile && audioPlaying) {
 				t = audioEl.currentTime - previewStartAudioTime;
@@ -500,10 +498,18 @@
 					return;
 				}
 			} else {
-				t = (performance.now() / 1000) % (slides.length * clock.intervalSeconds);
+				const fallbackInterval = (60 / config.bpm) * config.subdivision;
+				t = (performance.now() / 1000) % (slides.length * fallbackInterval);
 			}
 
-			const { index: beatIndex, fraction } = clock.beatAt(Math.max(0, t));
+			const { index: beatIndex, fraction } = beatAtTime(
+				Math.max(0, t),
+				config.bpm,
+				config.beatOffset,
+				config.segments,
+				config.manualSwitchPoints,
+				config.subdivision,
+			);
 			const slideIndex = config.loop
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
