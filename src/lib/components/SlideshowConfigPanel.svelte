@@ -7,9 +7,24 @@
 		bpmDetecting: boolean;
 		onDetectBpm: () => void;
 		onConfigChange: (config: SlideshowConfig) => void;
+		/** Playhead time in seconds; beat division row shows the segment at this time. */
+		trackCurrentTime?: number;
+		trackDuration?: number;
 	}
 
-	let { config, bpmDetecting, onDetectBpm, onConfigChange }: Props = $props();
+	let { config, bpmDetecting, onDetectBpm, onConfigChange, trackCurrentTime = 0, trackDuration = 0 }: Props = $props();
+
+	// Segment that contains the playhead (so sidebar shows that segment's beat division)
+	let currentSegment = $derived.by(() => {
+		const t = trackCurrentTime;
+		if (config.segments.length === 0) return null;
+		const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+		for (let i = 0; i < sorted.length; i++) {
+			const nextStart = i < sorted.length - 1 ? sorted[i + 1].startTime : trackDuration;
+			if (t >= sorted[i].startTime && t < nextStart) return sorted[i];
+		}
+		return null;
+	});
 
 	function set<K extends keyof SlideshowConfig>(key: K, value: SlideshowConfig[K]) {
 		onConfigChange({ ...config, [key]: value });
@@ -84,8 +99,20 @@
 		<label for="ss-subdiv">Beat division</label>
 		<select
 			id="ss-subdiv"
-			value={config.subdivision}
-			onchange={(e) => set('subdivision', +(e.currentTarget as HTMLSelectElement).value as BeatSubdivision)}
+			value={currentSegment ? currentSegment.subdivision : config.subdivision}
+			onchange={(e) => {
+				const val = +(e.currentTarget as HTMLSelectElement).value as BeatSubdivision;
+				if (currentSegment) {
+					onConfigChange({
+						...config,
+						segments: config.segments.map((s) =>
+							s.id === currentSegment!.id ? { ...s, subdivision: val } : s,
+						),
+					});
+				} else {
+					set('subdivision', val);
+				}
+			}}
 		>
 			<option value={0.0625}>1/16 beat</option>
 			<option value={0.125}>1/8 beat</option>
@@ -95,7 +122,9 @@
 			<option value={2}>Every 2 beats</option>
 			<option value={4}>Every 4 beats</option>
 		</select>
-		{#if config.segments.length > 0}
+		{#if currentSegment}
+			<span class="val" title="Segment at playhead">here</span>
+		{:else if config.segments.length > 0}
 			<span class="val" title="Overridden by timeline segments">default</span>
 		{/if}
 	</div>

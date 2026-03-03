@@ -8,6 +8,12 @@ export interface TimelineSegment {
 	id: string;
 	/** Seconds from audio start where this segment begins. */
 	startTime: number;
+	/**
+	 * Optional end time (seconds from audio start).
+	 * If null/undefined, the segment is treated as open-ended and
+	 * applies until the next segment or the end of the track.
+	 */
+	endTime?: number | null;
 	subdivision: BeatSubdivision;
 }
 

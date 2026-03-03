@@ -6,6 +6,8 @@
 		ManualSwitchPoint,
 	} from '../slideshow/types';
 
+	const MIN_SEGMENT_DURATION = 0.5; // seconds; segments cannot be resized smaller than this
+
 	const SEGMENT_COLORS = [
 		'#3a5a8c',
 		'#5a3a8c',
@@ -33,18 +35,47 @@
 		config: SlideshowConfig;
 		trackDuration: number;
 		onConfigChange: (config: SlideshowConfig) => void;
+		/** Element to align the track width with (the audio timeline track). */
+		alignToEl?: HTMLElement;
+		/** Selected segment id; bound so parent (e.g. sidebar) can sync. */
+		selectedSegmentId?: string | null;
 	}
 
-	let { config, trackDuration, onConfigChange }: Props = $props();
+	let { config, trackDuration, onConfigChange, alignToEl, selectedSegmentId = $bindable(null) }: Props = $props();
+
+	// Align track position/width with the audio timeline track
+	let alignStyle = $state('');
+	$effect(() => {
+		if (!alignToEl) return;
+		const update = () => {
+			const parent = trackEl?.parentElement;
+			if (!parent || !alignToEl) return;
+			const parentRect = parent.getBoundingClientRect();
+			const targetRect = alignToEl.getBoundingClientRect();
+			const left = targetRect.left - parentRect.left;
+			const width = targetRect.width;
+			alignStyle = `margin-left: ${left}px; width: ${width}px`;
+		};
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(alignToEl);
+		return () => observer.disconnect();
+	});
 
 	let segments = $derived([...config.segments].sort((a, b) => a.startTime - b.startTime));
 	let manualPoints = $derived(
 		[...config.manualSwitchPoints].sort((a, b) => a.time - b.time),
 	);
 
-	let selectedSegmentId: string | null = $state(null);
+	// Clear selection if the selected segment was removed from config
+	$effect(() => {
+		if (selectedSegmentId && !config.segments.some((s) => s.id === selectedSegmentId)) {
+			selectedSegmentId = null;
+		}
+	});
+
 	let dragging: {
-		type: 'segment-edge'; segmentIndex: number;
+		type: 'segment-edge'; segmentId: string; side: 'start' | 'end';
 	} | {
 		type: 'segment-move'; segmentId: string; offsetTime: number;
 	} | {
@@ -81,6 +112,7 @@
 		const newSeg: TimelineSegment = {
 			id: crypto.randomUUID(),
 			startTime: time,
+			endTime: trackDuration,
 			subdivision: config.subdivision,
 		};
 		emitConfig({ segments: [...config.segments, newSeg] });
@@ -120,9 +152,9 @@
 		}
 	}
 
-	function startEdgeDrag(e: PointerEvent, segmentIndex: number) {
+	function startEdgeDrag(e: PointerEvent, segmentId: string, side: 'start' | 'end') {
 		e.stopPropagation();
-		dragging = { type: 'segment-edge', segmentIndex };
+		dragging = { type: 'segment-edge', segmentId, side };
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
@@ -152,38 +184,62 @@
 
 	function handlePointerMove(e: PointerEvent) {
 		if (!dragging || !trackEl) return;
+		const currentDrag = dragging;
 		const time = getPointerTime(e);
 
-		if (dragging.type === 'segment-edge') {
-			const idx = dragging.segmentIndex;
+		if (currentDrag.type === 'segment-edge') {
 			const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+			const idx = sorted.findIndex((s) => s.id === currentDrag.segmentId);
+			if (idx === -1) return;
 			const seg = sorted[idx];
-			if (!seg) return;
-			const minTime = idx > 0 ? sorted[idx - 1].startTime + 0.01 : 0;
-			const maxTime = idx < sorted.length - 1 ? sorted[idx + 1].startTime - 0.01 : trackDuration;
-			const clamped = Math.max(minTime, Math.min(maxTime, time));
-			emitConfig({
-				segments: config.segments.map((s) =>
-					s.id === seg.id ? { ...s, startTime: clamped } : s,
-				),
-			});
+			const minLen = MIN_SEGMENT_DURATION;
+
+			if (currentDrag.side === 'start') {
+				const prevEnd =
+					idx > 0 ? (sorted[idx - 1].endTime ?? trackDuration) : 0;
+				const segEnd = seg.endTime ?? trackDuration;
+				const maxTime = segEnd - minLen;
+				const minTime = Math.min(prevEnd, maxTime);
+				const clamped = Math.max(minTime, Math.min(maxTime, time));
+				emitConfig({
+					segments: config.segments.map((s) =>
+						s.id === seg.id ? { ...s, startTime: clamped } : s,
+					),
+				});
+			} else {
+				const segStart = seg.startTime;
+				const nextStart =
+					idx < sorted.length - 1 ? sorted[idx + 1].startTime : trackDuration;
+				const minTime = segStart + minLen;
+				const maxTime = nextStart;
+				const clamped = Math.max(minTime, Math.min(maxTime, time));
+				emitConfig({
+					segments: config.segments.map((s) =>
+						s.id === seg.id ? { ...s, endTime: clamped } : s,
+					),
+				});
+			}
 		} else if (dragging.type === 'segment-move') {
 			segmentDidDrag = true;
 			const { segmentId, offsetTime } = dragging;
 			const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
 			const sortedIdx = sorted.findIndex((s) => s.id === segmentId);
 			if (sortedIdx === -1) return;
+			const seg = sorted[sortedIdx];
+			const segEnd = seg.endTime ?? trackDuration;
+			const duration = segEnd - seg.startTime;
 			const newStart = time - offsetTime;
-			const minTime = sortedIdx > 0 ? sorted[sortedIdx - 1].startTime + 0.01 : 0;
-			const maxTime = sortedIdx < sorted.length - 1 ? sorted[sortedIdx + 1].startTime - 0.01 : trackDuration;
-			const clamped = Math.max(minTime, Math.min(maxTime, newStart));
+			const minStart = sortedIdx > 0 ? (sorted[sortedIdx - 1].endTime ?? trackDuration) + 0.01 : 0;
+			const maxEnd = sortedIdx < sorted.length - 1 ? sorted[sortedIdx + 1].startTime - 0.01 : trackDuration;
+			const clampedStart = Math.max(minStart, Math.min(maxEnd - duration, newStart));
+			const clampedEnd = clampedStart + duration;
 			emitConfig({
 				segments: config.segments.map((s) =>
-					s.id === segmentId ? { ...s, startTime: clamped } : s,
+					s.id === segmentId ? { ...s, startTime: clampedStart, endTime: clampedEnd } : s,
 				),
 			});
 		} else {
-			const pointId = dragging.pointId;
+			const pointId = (dragging as { type: 'manual'; pointId: string }).pointId;
 			const clamped = Math.max(0, Math.min(trackDuration, time));
 			emitConfig({
 				manualSwitchPoints: config.manualSwitchPoints.map((p) =>
@@ -198,6 +254,21 @@
 		emitConfig({ segments: config.segments.filter((s) => s.id !== id) });
 	}
 
+	function clearAllSegments() {
+		selectedSegmentId = null;
+		emitConfig({ segments: [] });
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		const target = e.target as HTMLElement;
+		if (target.closest('input, textarea, select')) return;
+		if (selectedSegmentId) {
+			e.preventDefault();
+			removeSegment(selectedSegmentId);
+		}
+	}
+
 	function updateSegmentSubdivision(id: string, sub: BeatSubdivision) {
 		emitConfig({
 			segments: config.segments.map((s) =>
@@ -209,12 +280,59 @@
 	let selectedSegment = $derived(segments.find((s) => s.id === selectedSegmentId) ?? null);
 
 	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
+
+	/** Unique boundaries (position, left segment, right segment). One handle per boundary; at shared edges we resize the selected segment. */
+	let boundaries = $derived.by(() => {
+		const list: { pct: number; leftSeg: TimelineSegment | null; rightSeg: TimelineSegment | null }[] = [];
+		for (let i = 0; i < segments.length; i++) {
+			const seg = segments[i];
+			const startPct = timeToPercent(seg.startTime);
+			const endTime = Math.min(trackDuration, seg.endTime ?? trackDuration);
+			const endPct = timeToPercent(endTime);
+			if (i === 0 && seg.startTime > 0) {
+				list.push({ pct: startPct, leftSeg: null, rightSeg: seg });
+			}
+			list.push({
+				pct: endPct,
+				leftSeg: seg,
+				rightSeg: i + 1 < segments.length ? segments[i + 1]! : null,
+			});
+		}
+		// Merge duplicate positions (adjacent segments: same pct for end of i and start of i+1)
+		const byPct = new Map<number, { leftSeg: TimelineSegment | null; rightSeg: TimelineSegment | null }>();
+		for (const b of list) {
+			const existing = byPct.get(b.pct);
+			byPct.set(b.pct, {
+				leftSeg: existing?.leftSeg ?? b.leftSeg,
+				rightSeg: existing?.rightSeg ?? b.rightSeg,
+			});
+		}
+		return Array.from(byPct.entries(), ([pct, { leftSeg, rightSeg }]) => ({ pct, leftSeg, rightSeg }));
+	});
+
+	function startBoundaryDrag(e: PointerEvent, leftSeg: TimelineSegment | null, rightSeg: TimelineSegment | null) {
+		e.stopPropagation();
+		// Prioritize selected segment: if left is selected resize its end; if right is selected resize its start
+		if (leftSeg && selectedSegmentId === leftSeg.id) {
+			dragging = { type: 'segment-edge', segmentId: leftSeg.id, side: 'end' };
+		} else if (rightSeg && selectedSegmentId === rightSeg.id) {
+			dragging = { type: 'segment-edge', segmentId: rightSeg.id, side: 'start' };
+		} else if (leftSeg) {
+			dragging = { type: 'segment-edge', segmentId: leftSeg.id, side: 'end' };
+		} else if (rightSeg) {
+			dragging = { type: 'segment-edge', segmentId: rightSeg.id, side: 'start' };
+		} else {
+			return;
+		}
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
 </script>
 
 <svelte:window
 	onpointermove={handlePointerMove}
 	onpointerup={onPointerUp}
 	onclick={closeContextMenu}
+	onkeydown={handleKeydown}
 />
 
 <div class="timeline-segments-container">
@@ -224,6 +342,7 @@
 	<div
 		class="track"
 		bind:this={trackEl}
+		style={alignStyle}
 		ondblclick={handleDblClick}
 	>
 		{#if showHint}
@@ -232,7 +351,8 @@
 
 		{#each segments as seg, i}
 			{@const startPct = timeToPercent(seg.startTime)}
-			{@const endPct = i < segments.length - 1 ? timeToPercent(segments[i + 1].startTime) : 100}
+			{@const endTime = Math.min(trackDuration, seg.endTime ?? trackDuration)}
+			{@const endPct = timeToPercent(endTime)}
 			{@const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length]}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -247,22 +367,15 @@
 				<span class="segment-label">{subdivisionLabel(seg.subdivision)}</span>
 			</div>
 
-			{#if seg.startTime > 0}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="edge-handle"
-					style:left="{startPct}%"
-					onpointerdown={(e) => startEdgeDrag(e, i)}
-				></div>
-			{/if}
-			{#if i < segments.length - 1}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="edge-handle"
-					style:left="{endPct}%"
-					onpointerdown={(e) => startEdgeDrag(e, i + 1)}
-				></div>
-			{/if}
+		{/each}
+
+		{#each boundaries as b}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="edge-handle"
+				style:left="{b.pct}%"
+				onpointerdown={(e) => startBoundaryDrag(e, b.leftSeg, b.rightSeg)}
+			></div>
 		{/each}
 
 		{#each manualPoints as pt}
@@ -291,23 +404,34 @@
 		</div>
 	{/if}
 
-	{#if selectedSegment}
+	{#if selectedSegment || segments.length > 0}
 		<div class="segment-picker">
-			<select
-				value={selectedSegment.subdivision}
-				onchange={(e) =>
-					updateSegmentSubdivision(
-						selectedSegment!.id,
-						Number((e.target as HTMLSelectElement).value) as BeatSubdivision,
-					)}
-			>
-				{#each SUBDIVISION_OPTIONS as opt}
-					<option value={opt.value}>{opt.label} beat</option>
-				{/each}
-			</select>
-			<button class="remove-btn" onclick={() => removeSegment(selectedSegment!.id)}>
-				Remove
-			</button>
+			{#if selectedSegment}
+				<select
+					value={selectedSegment.subdivision}
+					onchange={(e) =>
+						updateSegmentSubdivision(
+							selectedSegment!.id,
+							Number((e.target as HTMLSelectElement).value) as BeatSubdivision,
+						)}
+				>
+					{#each SUBDIVISION_OPTIONS as opt}
+						<option value={opt.value}>{opt.label} beat</option>
+					{/each}
+				</select>
+				<button class="remove-btn" onclick={() => removeSegment(selectedSegment!.id)} title="Remove segment (Delete)">
+					Remove
+				</button>
+			{/if}
+			{#if segments.length > 0}
+				<button
+					class="clear-all-btn"
+					onclick={clearAllSegments}
+					title="Clear all segments"
+				>
+					Clear all
+				</button>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -422,6 +546,22 @@
 
 	.remove-btn:hover {
 		color: #ff8888;
+	}
+
+	.clear-all-btn {
+		background: none;
+		border: 1px solid #444;
+		color: #999;
+		cursor: pointer;
+		font-size: 0.72rem;
+		padding: 0.15rem 0.3rem;
+		border-radius: 3px;
+		margin-left: auto;
+	}
+
+	.clear-all-btn:hover {
+		border-color: #666;
+		color: #ccc;
 	}
 
 	.context-menu {

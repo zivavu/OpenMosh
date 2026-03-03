@@ -10,7 +10,7 @@ let essentiaPromise: Promise<InstanceType<typeof Essentia>> | null = null;
 
 function getEssentia(): Promise<InstanceType<typeof Essentia>> {
 	if (!essentiaPromise) {
-		essentiaPromise = EssentiaWASM().then((wasm) => new Essentia(wasm));
+		essentiaPromise = Promise.resolve(new Essentia(EssentiaWASM.EssentiaWASM));
 	}
 	return essentiaPromise;
 }

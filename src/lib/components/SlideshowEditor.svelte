@@ -104,6 +104,8 @@
 		config = next;
 	}
 
+	let selectedSegmentId = $state<string | null>(null);
+
 	// ── Effects ──
 	let effects: EffectInstance[] = $state(EFFECT_DEFINITIONS.map(createEffectInstance));
 	let presets: Preset[] = $state(loadPresets());
@@ -265,6 +267,7 @@
 		}
 		audioEl.play();
 		audioPlaying = true;
+		selectedSegmentId = null;
 	}
 
 	function pauseAudio() {
@@ -493,8 +496,8 @@
 
 			let t: number;
 			if (audioEl && trackFile && audioPlaying) {
-				t = audioEl.currentTime - previewStartAudioTime;
-				if (audioEl.currentTime >= spanEnd) {
+				t = audioEl.currentTime;
+				if (t >= spanEnd) {
 					stopPreview();
 					return;
 				}
@@ -1002,6 +1005,8 @@
 				{config}
 				{trackDuration}
 				{onConfigChange}
+				alignToEl={timelineTrackEl}
+				bind:selectedSegmentId
 			/>
 		{/if}
 	</div>
@@ -1012,6 +1017,8 @@
 			{bpmDetecting}
 			onDetectBpm={runBpmDetection}
 			{onConfigChange}
+			trackCurrentTime={trackCurrentTime}
+			{trackDuration}
 		/>
 		<EffectsPanel
 			bind:effects

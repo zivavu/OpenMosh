@@ -6,7 +6,8 @@
       "WebSearch",
       "WebFetch(domain:mtg.github.io)",
       "Bash(bun remove:*)",
-      "Bash(bun add:*)"
+      "Bash(bun add:*)",
+      "Bash(bun check:*)"
     ]
   }
 }

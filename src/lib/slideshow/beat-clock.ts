@@ -38,10 +38,14 @@ function getSubdivisionAt(
 	segments: TimelineSegment[],
 	fallback: BeatSubdivision,
 ): BeatSubdivision {
-	for (let i = segments.length - 1; i >= 0; i--) {
-		if (segments[i].startTime <= t) return segments[i].subdivision;
+	let active: BeatSubdivision | null = null;
+	for (const seg of segments) {
+		const end = seg.endTime ?? Infinity;
+		if (seg.startTime <= t && t < end) {
+			active = seg.subdivision;
+		}
 	}
-	return fallback;
+	return active ?? fallback;
 }
 
 export function beatAtTime(
