@@ -4,7 +4,7 @@ import type { GlRenderer } from '../gl/renderer';
 import type { RecordFormat } from '../recorder';
 import type { MoshOptions } from '../editor/mosh';
 import { recordVideo, downloadBlob } from '../recorder';
-import { createBeatClock } from './beat-clock';
+import { beatAtTime } from './beat-clock';
 import { computeEffectsForBeat, cloneEffects } from './sequencer';
 
 export interface SlideshowRecordContext {
@@ -45,7 +45,6 @@ export async function executeSlideshowRecording(
 	} = ctx;
 
 	const duration = audioEnd - audioStart;
-	const clock = createBeatClock(config.bpm, config.subdivision, config.beatOffset);
 	const smoothState = { effects: cloneEffects(baseEffects) };
 
 	// Pre-load all images
@@ -101,7 +100,14 @@ export async function executeSlideshowRecording(
 		audioStart,
 		audioEnd,
 		onBeforeRender(frameIndex: number, time: number) {
-			const { index: beatIndex, fraction } = clock.beatAt(time);
+			const { index: beatIndex, fraction } = beatAtTime(
+				time,
+				config.bpm,
+				config.beatOffset,
+				config.segments,
+				config.manualSwitchPoints,
+				config.subdivision,
+			);
 			const slideIndex = config.loop
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
