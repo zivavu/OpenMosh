@@ -43,7 +43,13 @@
 	);
 
 	let selectedSegmentId: string | null = $state(null);
-	let dragging: { type: 'segment-edge'; segmentIndex: number } | { type: 'manual'; pointId: string } | null = $state(null);
+	let dragging: {
+		type: 'segment-edge'; segmentIndex: number;
+	} | {
+		type: 'segment-move'; segmentId: string; offsetTime: number;
+	} | {
+		type: 'manual'; pointId: string;
+	} | null = $state(null);
 	let trackEl: HTMLDivElement | undefined = $state();
 
 	// Context menu state
@@ -58,11 +64,6 @@
 		return (pct / 100) * trackDuration;
 	}
 
-	function getPointerPercent(e: PointerEvent): number {
-		if (!trackEl) return 0;
-		const rect = trackEl.getBoundingClientRect();
-		return Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-	}
 
 	function emitConfig(patch: Partial<SlideshowConfig>) {
 		onConfigChange({ ...config, ...patch });
@@ -99,21 +100,36 @@
 		contextMenu = null;
 	}
 
-	function handleSegmentClick(e: MouseEvent, id: string) {
+	// Track whether pointer moved during a segment pointerdown (to distinguish click vs drag)
+	let segmentDidDrag = false;
+
+	function handleSegmentPointerDown(e: PointerEvent, id: string) {
 		e.stopPropagation();
-		selectedSegmentId = selectedSegmentId === id ? null : id;
+		const time = getPointerTime(e);
+		const seg = config.segments.find((s) => s.id === id);
+		if (!seg) return;
+		segmentDidDrag = false;
+		dragging = { type: 'segment-move', segmentId: id, offsetTime: time - seg.startTime };
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	function handleSegmentPointerUp(e: PointerEvent, id: string) {
+		if (!segmentDidDrag) {
+			// It was a click, not a drag — toggle selection
+			selectedSegmentId = selectedSegmentId === id ? null : id;
+		}
 	}
 
 	function startEdgeDrag(e: PointerEvent, segmentIndex: number) {
 		e.stopPropagation();
-		e.preventDefault();
 		dragging = { type: 'segment-edge', segmentIndex };
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
 	function startManualDrag(e: PointerEvent, pointId: string) {
 		e.stopPropagation();
-		e.preventDefault();
 		dragging = { type: 'manual', pointId };
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
 	function handleManualDblClick(e: MouseEvent, pointId: string) {
@@ -123,25 +139,47 @@
 		});
 	}
 
+	function getPointerTime(e: PointerEvent | MouseEvent): number {
+		if (!trackEl) return 0;
+		const rect = trackEl.getBoundingClientRect();
+		const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+		return percentToTime(pct);
+	}
+
 	function onPointerUp() {
 		dragging = null;
 	}
 
 	function handlePointerMove(e: PointerEvent) {
 		if (!dragging || !trackEl) return;
-		const time = percentToTime(getPointerPercent(e));
+		const time = getPointerTime(e);
 
 		if (dragging.type === 'segment-edge') {
 			const idx = dragging.segmentIndex;
 			const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
 			const seg = sorted[idx];
 			if (!seg) return;
-			const minTime = idx > 0 ? sorted[idx - 1].startTime + 0.01 : 0.01;
-			const maxTime = idx < sorted.length - 1 ? sorted[idx + 1].startTime - 0.01 : trackDuration - 0.01;
+			const minTime = idx > 0 ? sorted[idx - 1].startTime + 0.01 : 0;
+			const maxTime = idx < sorted.length - 1 ? sorted[idx + 1].startTime - 0.01 : trackDuration;
 			const clamped = Math.max(minTime, Math.min(maxTime, time));
 			emitConfig({
 				segments: config.segments.map((s) =>
 					s.id === seg.id ? { ...s, startTime: clamped } : s,
+				),
+			});
+		} else if (dragging.type === 'segment-move') {
+			segmentDidDrag = true;
+			const { segmentId, offsetTime } = dragging;
+			const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+			const sortedIdx = sorted.findIndex((s) => s.id === segmentId);
+			if (sortedIdx === -1) return;
+			const newStart = time - offsetTime;
+			const minTime = sortedIdx > 0 ? sorted[sortedIdx - 1].startTime + 0.01 : 0;
+			const maxTime = sortedIdx < sorted.length - 1 ? sorted[sortedIdx + 1].startTime - 0.01 : trackDuration;
+			const clamped = Math.max(minTime, Math.min(maxTime, newStart));
+			emitConfig({
+				segments: config.segments.map((s) =>
+					s.id === segmentId ? { ...s, startTime: clamped } : s,
 				),
 			});
 		} else {
@@ -196,7 +234,6 @@
 			{@const startPct = timeToPercent(seg.startTime)}
 			{@const endPct = i < segments.length - 1 ? timeToPercent(segments[i + 1].startTime) : 100}
 			{@const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length]}
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="segment"
@@ -204,7 +241,8 @@
 				style:left="{startPct}%"
 				style:width="{endPct - startPct}%"
 				style:background="{color}44"
-				onclick={(e) => handleSegmentClick(e, seg.id)}
+				onpointerdown={(e) => handleSegmentPointerDown(e, seg.id)}
+				onpointerup={(e) => handleSegmentPointerUp(e, seg.id)}
 			>
 				<span class="segment-label">{subdivisionLabel(seg.subdivision)}</span>
 			</div>
@@ -307,7 +345,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		cursor: pointer;
+		cursor: grab;
 		box-sizing: border-box;
 	}
 
@@ -326,11 +364,17 @@
 	.edge-handle {
 		position: absolute;
 		top: 0;
-		width: 6px;
+		width: 8px;
 		height: 100%;
 		transform: translateX(-50%);
 		cursor: col-resize;
 		z-index: 2;
+		background: transparent;
+	}
+
+	.edge-handle:hover,
+	.edge-handle:active {
+		background: rgba(255, 255, 255, 0.2);
 	}
 
 	.manual-point {
