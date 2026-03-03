@@ -11,6 +11,8 @@ export interface MoshOptions {
 	moshMax: number;
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
+	/** 0–1: controls both how many params get linked and how wide their modulation range is. */
+	moshAudioLinkStrength: number;
 	hasAudio: boolean;
 	audioSampleRate: number;
 	frequencyData: Uint8Array | null;
@@ -23,8 +25,9 @@ export function applyRandomAudioLinks(
 	hasAudio: boolean,
 	audioSampleRate: number,
 	frequencyData: Uint8Array | null,
+	strength: number = 0.8,
 ): void {
-	if (!hasAudio) {
+	if (!hasAudio || strength <= 0) {
 		for (const effect of effects) {
 			if (effect.volumeLinks) delete effect.volumeLinks;
 		}
@@ -47,15 +50,19 @@ export function applyRandomAudioLinks(
 		for (const param of def.params) {
 			if (param.type !== 'range') continue;
 
-			if (Math.random() > 0.8) continue;
+			// Probability scales with strength: at 1.0 all params linked, at 0.0 none
+			if (Math.random() > strength) continue;
 
 			const pMin = param.min;
 			const pMax = param.max;
 			const span = pMax - pMin;
-			const t1 = Math.random();
-			const t2 = Math.random();
-			let vMin = pMin + Math.min(t1, t2) * span;
-			let vMax = pMin + Math.max(t1, t2) * span;
+			// Center position is independent of width so they don't limit each other
+			const centerT = Math.random();
+			// Width is guaranteed [50%–100%] of span at strength=1, scaled down linearly
+			const widthFraction = strength * (0.5 + Math.random() * 0.5);
+			const halfW = widthFraction / 2;
+			let vMin = pMin + Math.max(0, centerT - halfW) * span;
+			let vMax = pMin + Math.min(1, centerT + halfW) * span;
 
 			if (param.step > 0) {
 				const snap = (v: number) =>
@@ -113,7 +120,7 @@ export function generateMosh(
 	effects: EffectInstance[],
 	options: MoshOptions,
 ): void {
-	const { moshMin, moshMax, randomizeOrder, moshAudioLink, onlyMoshEnabled } = options;
+	const { moshMin, moshMax, randomizeOrder, moshAudioLink, moshAudioLinkStrength, onlyMoshEnabled } = options;
 	const moshable = effects.filter(
 		(e) => !e.locked && (!onlyMoshEnabled || e.enabled),
 	);
@@ -171,6 +178,7 @@ export function generateMosh(
 			options.hasAudio,
 			options.audioSampleRate,
 			options.frequencyData,
+			moshAudioLinkStrength,
 		);
 	} else {
 		for (const effect of effects) {

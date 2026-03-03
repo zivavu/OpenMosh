@@ -1,8 +1,19 @@
-export type SlideshowMoshMode = 'random' | 'consistent' | 'smooth' | 'per-image';
+export type SlideshowMoshMode =
+	| 'random'
+	| 'consistent'
+	| 'smooth'
+	| 'per-image';
 
 export type BeatSubdivision = 0.0625 | 0.125 | 0.25 | 0.5 | 1 | 2 | 4;
 
-export type TransitionType = 'crossfade' | 'wipe-left' | 'wipe-down' | 'zoom' | 'pixelate' | 'glitch' | 'flash';
+export type TransitionType =
+	| 'crossfade'
+	| 'wipe-left'
+	| 'wipe-down'
+	| 'zoom'
+	| 'pixelate'
+	| 'glitch'
+	| 'flash';
 
 export interface TimelineSegment {
 	id: string;
@@ -43,6 +54,8 @@ export interface SlideshowConfig {
 	moshMin: number;
 	moshMax: number;
 	moshAudioLink: boolean;
+	/** 0–1: controls probability and range width of random audio links. */
+	moshAudioLinkStrength: number;
 	loop: boolean;
 	enabledTransitions: TransitionType[];
 	/** Fraction of beat duration for transition (0.1–0.8). */
@@ -63,6 +76,7 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	moshMin: 2,
 	moshMax: 5,
 	moshAudioLink: false,
+	moshAudioLinkStrength: 0.8,
 	loop: true,
 	enabledTransitions: [],
 	transitionDuration: 0.3,

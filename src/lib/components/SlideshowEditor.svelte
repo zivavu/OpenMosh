@@ -1,4 +1,33 @@
 <script lang="ts">
+	import {
+		applyVolumeLinksTick,
+		computeVolumeLevel,
+		createAudioGraph,
+		disposeAudioGraph as disposeAudioGraphState,
+	} from '../audio/audio-controller';
+	import { formatTime } from '../audio/audio-utils';
+	import {
+		EFFECT_DEFINITIONS,
+		createEffectInstance,
+		loadPresets,
+		type EffectInstance,
+		type Preset,
+		type VolumeLink,
+	} from '../effects';
+	import type { GlRenderer } from '../gl/renderer';
+	import type { RecordFormat } from '../recorder';
+	import { beatAtTime } from '../slideshow/beat-clock';
+	import { detectBpm } from '../slideshow/bpm-detector';
+	import { cloneEffects, computeEffectsForBeat } from '../slideshow/sequencer';
+	import { executeSlideshowRecording } from '../slideshow/slideshow-recorder';
+	import type {
+		SlideshowConfig,
+		SlideshowSlide,
+		TransitionType,
+	} from '../slideshow/types';
+	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
+	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../text-overlay';
+	import type { SpectrumData } from '../types';
 	import EffectsPanel from './EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import RecordGroup from './RecordGroup.svelte';
@@ -6,32 +35,6 @@
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import TimelineSegments from './TimelineSegments.svelte';
-	import {
-		EFFECT_DEFINITIONS,
-		createEffectInstance,
-		loadPresets,
-		type EffectInstance,
-		type VolumeLink,
-		type Preset,
-	} from '../effects';
-	import type { GlRenderer } from '../gl/renderer';
-	import type { RecordFormat } from '../recorder';
-	import type { SpectrumData } from '../types';
-	import {
-		createAudioGraph,
-		disposeAudioGraph as disposeAudioGraphState,
-		computeVolumeLevel,
-		applyVolumeLinksTick,
-	} from '../audio/audio-controller';
-	import { formatTime } from '../audio/audio-utils';
-	import { generateMosh as generateMoshFn } from '../editor/mosh';
-	import type { SlideshowSlide, SlideshowConfig, TransitionType } from '../slideshow/types';
-	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
-	import { detectBpm } from '../slideshow/bpm-detector';
-	import { beatAtTime } from '../slideshow/beat-clock';
-	import { computeEffectsForBeat, cloneEffects } from '../slideshow/sequencer';
-	import { executeSlideshowRecording } from '../slideshow/slideshow-recorder';
-	import { parsePhrases, DEFAULT_TEXT_OVERLAY_STYLE } from '../text-overlay';
 
 	interface Props {
 		initialFiles: File[];
@@ -107,10 +110,16 @@
 	let selectedSegmentId = $state<string | null>(null);
 
 	// ── Effects ──
-	let effects: EffectInstance[] = $state(EFFECT_DEFINITIONS.map(createEffectInstance));
+	let effects: EffectInstance[] = $state(
+		EFFECT_DEFINITIONS.map(createEffectInstance),
+	);
 	let presets: Preset[] = $state(loadPresets());
 
-	function setVolumeLink(index: number, paramKey: string, link: VolumeLink | null) {
+	function setVolumeLink(
+		index: number,
+		paramKey: string,
+		link: VolumeLink | null,
+	) {
 		const e = effects[index];
 		const nextLinks = e.volumeLinks ? { ...e.volumeLinks } : {};
 		if (link === null) {
@@ -154,7 +163,10 @@
 		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
 		resizeWidth = val;
 		if (maintainRatio && aspectRatio > 0) {
-			resizeHeight = Math.min(MAX_RESIZE, Math.max(1, Math.round(val / aspectRatio)));
+			resizeHeight = Math.min(
+				MAX_RESIZE,
+				Math.max(1, Math.round(val / aspectRatio)),
+			);
 		}
 	}
 
@@ -162,7 +174,10 @@
 		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
 		resizeHeight = val;
 		if (maintainRatio && aspectRatio > 0) {
-			resizeWidth = Math.min(MAX_RESIZE, Math.max(1, Math.round(val * aspectRatio)));
+			resizeWidth = Math.min(
+				MAX_RESIZE,
+				Math.max(1, Math.round(val * aspectRatio)),
+			);
 		}
 	}
 
@@ -290,7 +305,10 @@
 		return pct * trackDuration;
 	}
 
-	function onTimelinePointerDown(e: PointerEvent, handle: 'start' | 'end' | null) {
+	function onTimelinePointerDown(
+		e: PointerEvent,
+		handle: 'start' | 'end' | null,
+	) {
 		e.preventDefault();
 		if (handle === 'start' || handle === 'end') {
 			draggingHandle = handle;
@@ -315,7 +333,9 @@
 				spanEnd = Math.max(spanStart + 0.1, Math.min(trackDuration, t));
 			}
 		};
-		const up = () => { draggingHandle = null; };
+		const up = () => {
+			draggingHandle = null;
+		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
 		return () => {
@@ -327,8 +347,12 @@
 	function disposeAudioGraph() {
 		if (audioContext) {
 			disposeAudioGraphState({
-				context: audioContext, source: mediaSource!, analyser: analyserNode!,
-				gain: gainNode!, frequencyData: frequencyData!, sampleRate: audioSampleRate,
+				context: audioContext,
+				source: mediaSource!,
+				analyser: analyserNode!,
+				gain: gainNode!,
+				frequencyData: frequencyData!,
+				sampleRate: audioSampleRate,
 				binCount: audioFrequencyBinCount,
 			});
 		}
@@ -342,7 +366,9 @@
 		volumeLevel = 0;
 	}
 
-	function openTrackPicker() { trackInput?.click(); }
+	function openTrackPicker() {
+		trackInput?.click();
+	}
 
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
@@ -379,7 +405,13 @@
 			volumeLevel = computeVolumeLevel(analyser, timeData);
 			if (freqDataRef)
 				analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-			applyVolumeLinksTick(effects, volumeLevel, freqDataRef, sampleRate, fftSize);
+			applyVolumeLinksTick(
+				effects,
+				volumeLevel,
+				freqDataRef,
+				sampleRate,
+				fftSize,
+			);
 			rafId = requestAnimationFrame(tick);
 		}
 		rafId = requestAnimationFrame(tick);
@@ -388,7 +420,12 @@
 
 	let spectrumData: SpectrumData | null = $derived(
 		frequencyData && audioSampleRate > 0 && audioFrequencyBinCount > 0
-			? { data: frequencyData, sampleRate: audioSampleRate, binCount: audioFrequencyBinCount, tick: volumeLevel }
+			? {
+					data: frequencyData,
+					sampleRate: audioSampleRate,
+					binCount: audioFrequencyBinCount,
+					tick: volumeLevel,
+				}
 			: null,
 	);
 
@@ -551,7 +588,8 @@
 					now - lastTextUpdateTime >= throttleSec || lastTextUpdateTime === 0;
 				if (shouldUpdateText) {
 					lastTextUpdateTime = now;
-					const phrase = previewPhrases[beatIndex % previewPhrases.length] ?? null;
+					const phrase =
+						previewPhrases[beatIndex % previewPhrases.length] ?? null;
 					const to = config.textOverlay;
 					glRenderer.setTextOverlay(phrase, previewTextStyle, undefined, {
 						layout: previewTextLayout,
@@ -594,14 +632,24 @@
 				);
 			}
 
-			const activeEffects = previewEffects.length > 0 ? previewEffects : effects;
+			const activeEffects =
+				previewEffects.length > 0 ? previewEffects : effects;
 			const now = performance.now() / 1000;
 
 			// Render with or without transition
-			if (activeTransition && previousSlideImg && config.transitionDuration > 0) {
+			if (
+				activeTransition &&
+				previousSlideImg &&
+				config.transitionDuration > 0
+			) {
 				const progress = Math.min(1, fraction / config.transitionDuration);
 				if (progress < 1) {
-					glRenderer.renderWithTransition(activeEffects, now, activeTransition, progress);
+					glRenderer.renderWithTransition(
+						activeEffects,
+						now,
+						activeTransition,
+						progress,
+					);
 				} else {
 					glRenderer.clearTransitionImage();
 					activeTransition = null;
@@ -648,6 +696,7 @@
 			moshMax: config.moshMax,
 			randomizeOrder: true,
 			moshAudioLink: config.moshAudioLink,
+			moshAudioLinkStrength: config.moshAudioLinkStrength,
 			hasAudio: !!trackFile && !!audioContext,
 			audioSampleRate,
 			frequencyData,
@@ -695,7 +744,9 @@
 				baseEffects: effects.map((e) => ({
 					...e,
 					values: { ...e.values },
-					volumeLinks: e.volumeLinks ? JSON.parse(JSON.stringify(e.volumeLinks)) : undefined,
+					volumeLinks: e.volumeLinks
+						? JSON.parse(JSON.stringify(e.volumeLinks))
+						: undefined,
 				})),
 				audioFile: trackFile,
 				audioStart: spanStart,
@@ -705,8 +756,12 @@
 				outputWidth: resizeWidth > 0 ? resizeWidth : undefined,
 				outputHeight: resizeHeight > 0 ? resizeHeight : undefined,
 				moshOptions: getMoshOptions(),
-				onProgress: (p) => { recordProgress = p; },
-				onFinalizing: () => { recordFinalizing = true; },
+				onProgress: (p) => {
+					recordProgress = p;
+				},
+				onFinalizing: () => {
+					recordFinalizing = true;
+				},
 				signal: abort.signal,
 			});
 		} catch (e) {
@@ -732,7 +787,12 @@
 
 	// ── Keyboard ──
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+		if (
+			e.target instanceof HTMLInputElement ||
+			e.target instanceof HTMLSelectElement ||
+			e.target instanceof HTMLTextAreaElement
+		)
+			return;
 		if (e.code === 'Space') {
 			e.preventDefault();
 			togglePreview();
@@ -747,7 +807,11 @@
 	onpointerdown={(e) => {
 		audioContext?.resume();
 		recordGroupRef?.handleClickOutside(e);
-		if (showOptionsPanel && optionsGroupEl && !optionsGroupEl.contains(e.target as Node)) {
+		if (
+			showOptionsPanel &&
+			optionsGroupEl &&
+			!optionsGroupEl.contains(e.target as Node)
+		) {
 			showOptionsPanel = false;
 		}
 	}}
@@ -778,7 +842,16 @@
 		<div class="top-bar">
 			<div class="toolbar">
 				<button class="back-btn" onclick={onBack} title="Back to upload">
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
 						<line x1="19" y1="12" x2="5" y2="12" />
 						<polyline points="12 19 5 12 12 5" />
 					</svg>
@@ -788,14 +861,19 @@
 					<button
 						class="view-btn"
 						class:active={activeView === 'grid'}
-						onclick={() => { activeView = 'grid'; if (previewPlaying) stopPreview(); }}
+						onclick={() => {
+							activeView = 'grid';
+							if (previewPlaying) stopPreview();
+						}}
 					>
 						Grid
 					</button>
 					<button
 						class="view-btn"
 						class:active={activeView === 'preview'}
-						onclick={() => { activeView = 'preview'; }}
+						onclick={() => {
+							activeView = 'preview';
+						}}
 					>
 						Preview
 					</button>
@@ -807,7 +885,16 @@
 
 				{#if !trackFile}
 					<button class="track-btn" onclick={openTrackPicker}>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
 							<path d="M9 18V5l12-2v13" />
 							<circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
 						</svg>
@@ -815,7 +902,14 @@
 					</button>
 				{:else}
 					<button class="track-btn" onclick={clearTrack}>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
 							<path d="M18 6L6 18" /><path d="M6 6l12 12" />
 						</svg>
 						Remove Audio
@@ -839,7 +933,9 @@
 			<div class="preview-area">
 				<GlCanvas
 					imageSrc={previewImageSrc}
-					effects={previewPlaying && previewEffects.length > 0 ? previewEffects : effects}
+					effects={previewPlaying && previewEffects.length > 0
+						? previewEffects
+						: effects}
 					canvasWidth={resizeWidth || undefined}
 					canvasHeight={resizeHeight || undefined}
 					bind:canvasEl
@@ -859,9 +955,20 @@
 					onclick={() => (showOptionsPanel = !showOptionsPanel)}
 					title="Preview size options"
 				>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
 						<circle cx="12" cy="12" r="3" />
-						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+						<path
+							d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+						/>
 					</svg>
 					OPTIONS
 				</button>
@@ -966,7 +1073,11 @@
 							<span class="hint">capped to 15</span>
 						{/if}
 					</div>
-					<button class="start-btn" onclick={startRecording} disabled={!trackFile}>
+					<button
+						class="start-btn"
+						onclick={startRecording}
+						disabled={!trackFile}
+					>
 						{trackFile ? 'Start Recording' : 'Add audio first'}
 					</button>
 				{/snippet}
@@ -977,7 +1088,7 @@
 			{recording}
 			{recordProgress}
 			{recordFinalizing}
-			recordFormat={recordFormat}
+			{recordFormat}
 			onCancel={cancelRecording}
 		/>
 
@@ -1015,7 +1126,8 @@
 					<div class="timeline-track">
 						<div
 							class="timeline-span"
-							style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
+							style="left: {(spanStart / trackDuration) *
+								100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
 						></div>
 						<div
 							class="timeline-playhead"
@@ -1026,14 +1138,20 @@
 							class="timeline-handle timeline-handle-start"
 							style="left: {(spanStart / trackDuration) * 100}%"
 							title="Span start"
-							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'start'); }}
+							onpointerdown={(e) => {
+								e.stopPropagation();
+								onTimelinePointerDown(e, 'start');
+							}}
 						></button>
 						<button
 							type="button"
 							class="timeline-handle timeline-handle-end"
 							style="left: {(spanEnd / trackDuration) * 100}%"
 							title="Span end"
-							onpointerdown={(e) => { e.stopPropagation(); onTimelinePointerDown(e, 'end'); }}
+							onpointerdown={(e) => {
+								e.stopPropagation();
+								onTimelinePointerDown(e, 'end');
+							}}
 						></button>
 					</div>
 				</div>
@@ -1058,6 +1176,8 @@
 				{onConfigChange}
 				alignToEl={timelineTrackEl}
 				bind:selectedSegmentId
+				currentTime={trackCurrentTime}
+				onSeek={seekTo}
 			/>
 		{/if}
 	</div>
@@ -1068,7 +1188,7 @@
 			{bpmDetecting}
 			onDetectBpm={runBpmDetection}
 			{onConfigChange}
-			trackCurrentTime={trackCurrentTime}
+			{trackCurrentTime}
 			{trackDuration}
 		/>
 		<EffectsPanel
@@ -1378,7 +1498,9 @@
 		font-size: 0.7rem;
 		font-family: inherit;
 		cursor: pointer;
-		transition: color 0.15s, border-color 0.15s;
+		transition:
+			color 0.15s,
+			border-color 0.15s;
 	}
 
 	.resize-reset-btn:hover {

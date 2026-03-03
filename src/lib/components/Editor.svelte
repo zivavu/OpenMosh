@@ -71,7 +71,7 @@
 	function saveSettings() {
 		localStorage.setItem(
 			SETTINGS_KEY,
-			JSON.stringify({ moshMin, moshMax, randomizeOrder, moshAudioLink, showFps, outputVolume }),
+			JSON.stringify({ moshMin, moshMax, randomizeOrder, moshAudioLink, moshAudioLinkStrength, showFps, outputVolume }),
 		);
 	}
 	const saved = loadSettings();
@@ -80,10 +80,11 @@
 	let randomizeOrder = $state(saved.randomizeOrder ?? true);
 	let showMoshSettings = $state(false);
 	let moshAudioLink = $state(saved.moshAudioLink ?? true);
+	let moshAudioLinkStrength = $state(saved.moshAudioLinkStrength ?? 0.8);
 	let showFps = $state(saved.showFps ?? false);
 	$effect(() => {
 		// subscribe to all settings
-		moshMin; moshMax; randomizeOrder; moshAudioLink; showFps; outputVolume;
+		moshMin; moshMax; randomizeOrder; moshAudioLink; moshAudioLinkStrength; showFps; outputVolume;
 		saveSettings();
 	});
 	let currentFps = $state(0);
@@ -402,6 +403,7 @@
 			moshMax,
 			randomizeOrder,
 			moshAudioLink,
+			moshAudioLinkStrength,
 			hasAudio: !!trackFile && !!audioContext,
 			audioSampleRate,
 			frequencyData,
@@ -814,6 +816,20 @@
 							bind:checked={moshAudioLink}
 						/>
 					</div>
+					{#if moshAudioLink}
+					<div class="mosh-setting-row">
+						<label for="mosh-audio-link-strength">Link strength</label>
+						<input
+							id="mosh-audio-link-strength"
+							type="range"
+							min="0"
+							max="1"
+							step="0.05"
+							bind:value={moshAudioLinkStrength}
+						/>
+						<span class="mosh-setting-val">{Math.round(moshAudioLinkStrength * 100)}%</span>
+					</div>
+					{/if}
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<input id="show-fps" type="checkbox" bind:checked={showFps} />

@@ -260,6 +260,22 @@
 		/>
 	</div>
 
+	{#if config.moshAudioLink}
+	<div class="config-row">
+		<label for="ss-audio-link-strength">Link strength</label>
+		<input
+			id="ss-audio-link-strength"
+			type="range"
+			min="0"
+			max="1"
+			step="0.05"
+			value={config.moshAudioLinkStrength}
+			oninput={(e) => set('moshAudioLinkStrength', +(e.currentTarget as HTMLInputElement).value)}
+		/>
+		<span class="val">{Math.round(config.moshAudioLinkStrength * 100)}%</span>
+	</div>
+	{/if}
+
 	<div class="config-row">
 		<label for="ss-loop">Loop images</label>
 		<input
@@ -378,7 +394,11 @@
 				max="100"
 				step="5"
 				value={Math.round((textOverlay.chance ?? 0.8) * 100)}
-				oninput={(e) => setTextOverlay('chance', +(e.currentTarget as HTMLInputElement).value / 100)}
+				oninput={(e) =>
+					setTextOverlay(
+						'chance',
+						+(e.currentTarget as HTMLInputElement).value / 100,
+					)}
 			/>
 			<span class="val">{Math.round((textOverlay.chance ?? 0.8) * 100)}%</span>
 		</div>
@@ -387,7 +407,11 @@
 			<select
 				id="ss-text-layout"
 				value={textOverlay.layout ?? 'scattered'}
-				onchange={(e) => setTextOverlay('layout', (e.currentTarget as HTMLSelectElement).value as TextOverlayLayout)}
+				onchange={(e) =>
+					setTextOverlay(
+						'layout',
+						(e.currentTarget as HTMLSelectElement).value as TextOverlayLayout,
+					)}
 			>
 				<option value="block">Block</option>
 				<option value="scattered">Scattered</option>
@@ -401,7 +425,8 @@
 				onchange={(e) =>
 					setTextOverlay(
 						'blendMode',
-						(e.currentTarget as HTMLSelectElement).value as TextOverlayBlendMode,
+						(e.currentTarget as HTMLSelectElement)
+							.value as TextOverlayBlendMode,
 					)}
 			>
 				<option value="normal">Normal</option>
@@ -417,7 +442,10 @@
 				type="checkbox"
 				checked={textOverlay.invert ?? false}
 				onchange={(e) =>
-					setTextOverlay('invert', (e.currentTarget as HTMLInputElement).checked)}
+					setTextOverlay(
+						'invert',
+						(e.currentTarget as HTMLInputElement).checked,
+					)}
 			/>
 		</div>
 		<div class="config-row">
@@ -509,7 +537,40 @@
 
 	.config-row input[type='range'] {
 		flex: 1;
-		accent-color: #888;
+		height: 3px;
+		appearance: none;
+		background: #333;
+		border-radius: 2px;
+		outline: none;
+		cursor: pointer;
+	}
+
+	.config-row input[type='range']::-webkit-slider-thumb {
+		appearance: none;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #aaa;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.config-row input[type='range']::-webkit-slider-thumb:hover {
+		background: #ddd;
+	}
+
+	.config-row input[type='range']::-moz-range-thumb {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #aaa;
+		border: none;
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+
+	.config-row input[type='range']::-moz-range-thumb:hover {
+		background: #ddd;
 	}
 
 	.config-row select {
@@ -574,5 +635,4 @@
 	.transition-check input {
 		accent-color: #888;
 	}
-
 </style>

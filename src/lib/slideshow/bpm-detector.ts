@@ -1,4 +1,4 @@
-import { Essentia, EssentiaWASM } from 'essentia.js';
+import type { BpmWorkerResponse } from './bpm-detector.worker';
 
 export interface BpmResult {
 	bpm: number;
@@ -6,61 +6,76 @@ export interface BpmResult {
 	offset: number;
 }
 
-let essentiaPromise: Promise<InstanceType<typeof Essentia>> | null = null;
-
-function getEssentia(): Promise<InstanceType<typeof Essentia>> {
-	if (!essentiaPromise) {
-		essentiaPromise = Promise.resolve(new Essentia(EssentiaWASM.EssentiaWASM));
-	}
-	return essentiaPromise;
-}
-
 const TARGET_SAMPLE_RATE = 44100;
 
-async function normalizeAudioBuffer(audioBuffer: AudioBuffer): Promise<AudioBuffer> {
-	if (audioBuffer.sampleRate === TARGET_SAMPLE_RATE && audioBuffer.numberOfChannels === 1) {
-		return audioBuffer;
-	}
-	const duration = audioBuffer.duration;
-	const offlineCtx = new OfflineAudioContext(
-		1,
-		Math.ceil(duration * TARGET_SAMPLE_RATE),
-		TARGET_SAMPLE_RATE,
-	);
-	const source = offlineCtx.createBufferSource();
-	source.buffer = audioBuffer;
-	source.connect(offlineCtx.destination);
-	source.start(0);
-	return offlineCtx.startRendering();
-}
-
-export async function detectBpm(audioFile: File, signal?: AbortSignal): Promise<BpmResult> {
+async function getMonoSamples(audioFile: File): Promise<Float32Array> {
 	const arrayBuffer = await audioFile.arrayBuffer();
-	if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
 	const ctx = new AudioContext();
 	try {
 		const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-		const resampled = await normalizeAudioBuffer(audioBuffer);
-		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-		const essentia = await getEssentia();
-		if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-		const monoSignal = essentia.audioBufferToMonoSignal(resampled);
-		const vectorSignal = essentia.arrayToVector(monoSignal);
-		const result = essentia.RhythmExtractor2013(vectorSignal);
-
-		const ticks = essentia.vectorToArray(result.ticks);
-		const offset = ticks.length > 0 ? ticks[0] : 0;
-
-		return {
-			bpm: Math.round(result.bpm * 10) / 10, // round to 1 decimal to avoid jitter in the UI
-			offset,
-		};
+		if (
+			audioBuffer.sampleRate === TARGET_SAMPLE_RATE &&
+			audioBuffer.numberOfChannels === 1
+		) {
+			return audioBuffer.getChannelData(0).slice();
+		}
+		// Resample + downmix to mono 44 100 Hz via OfflineAudioContext
+		const offlineCtx = new OfflineAudioContext(
+			1,
+			Math.ceil(audioBuffer.duration * TARGET_SAMPLE_RATE),
+			TARGET_SAMPLE_RATE,
+		);
+		const source = offlineCtx.createBufferSource();
+		source.buffer = audioBuffer;
+		source.connect(offlineCtx.destination);
+		source.start(0);
+		const resampled = await offlineCtx.startRendering();
+		return resampled.getChannelData(0).slice();
 	} finally {
 		await ctx.close();
 	}
+}
+
+export async function detectBpm(
+	audioFile: File,
+	signal?: AbortSignal,
+): Promise<BpmResult> {
+	if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+	// Audio decoding is fast and can stay on the main thread.
+	const samples = await getMonoSamples(audioFile);
+	if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+	// Hand off the heavy WASM computation to a worker so the UI stays responsive.
+	return new Promise<BpmResult>((resolve, reject) => {
+		const worker = new Worker(
+			new URL('./bpm-detector.worker.ts', import.meta.url),
+			{ type: 'module' },
+		);
+
+		const onAbort = () => {
+			worker.terminate();
+			reject(new DOMException('Aborted', 'AbortError'));
+		};
+		signal?.addEventListener('abort', onAbort, { once: true });
+
+		worker.onmessage = (e: MessageEvent<BpmWorkerResponse>) => {
+			signal?.removeEventListener('abort', onAbort);
+			worker.terminate();
+			if (e.data.ok) {
+				resolve({ bpm: e.data.bpm, offset: e.data.offset });
+			} else {
+				reject(new Error(e.data.error));
+			}
+		};
+
+		worker.onerror = (err) => {
+			signal?.removeEventListener('abort', onAbort);
+			worker.terminate();
+			reject(err);
+		};
+
+		// Transfer the buffer so no copy is needed.
+		worker.postMessage({ samples }, [samples.buffer]);
+	});
 }
