@@ -23,7 +23,6 @@
 	import type {
 		SlideshowConfig,
 		SlideshowSlide,
-		TransitionType,
 	} from '../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
 	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../text-overlay';
@@ -535,16 +534,8 @@
 		}
 
 		let currentSlideId: string | null = null;
-		let activeTransition: TransitionType | null = null;
-		let previousSlideImg: HTMLImageElement | null = null;
 		let lastTextUpdateTime = 0;
 		const TEXT_OVERLAY_THROTTLE_MS = 100;
-
-		function pickRandomTransition(): TransitionType | null {
-			const enabled = config.enabledTransitions;
-			if (enabled.length === 0) return null;
-			return enabled[Math.floor(Math.random() * enabled.length)];
-		}
 
 		function tick() {
 			if (!previewPlaying || !glRenderer) return;
@@ -603,24 +594,13 @@
 			}
 
 			if (beatIndex !== previewBeatIndex && slide) {
-				// Save previous image for transition
-				if (currentSlideId) {
-					previousSlideImg = imageCache.get(currentSlideId) ?? null;
-				}
-
 				previewBeatIndex = beatIndex;
-				activeTransition = pickRandomTransition();
 
 				// Switch source image immediately
 				const img = getCachedImage(slide);
 				if (img && img.complete) {
 					glRenderer.updateSourceImage(img);
 					currentSlideId = slide.id;
-
-					// Set up transition texture from previous slide
-					if (activeTransition && previousSlideImg) {
-						glRenderer.setTransitionImage(previousSlideImg);
-					}
 				}
 
 				previewEffects = computeEffectsForBeat(
@@ -636,29 +616,7 @@
 				previewEffects.length > 0 ? previewEffects : effects;
 			const now = performance.now() / 1000;
 
-			// Render with or without transition
-			if (
-				activeTransition &&
-				previousSlideImg &&
-				config.transitionDuration > 0
-			) {
-				const progress = Math.min(1, fraction / config.transitionDuration);
-				if (progress < 1) {
-					glRenderer.renderWithTransition(
-						activeEffects,
-						now,
-						activeTransition,
-						progress,
-					);
-				} else {
-					glRenderer.clearTransitionImage();
-					activeTransition = null;
-					previousSlideImg = null;
-					glRenderer.render(activeEffects, now);
-				}
-			} else {
-				glRenderer.render(activeEffects, now);
-			}
+			glRenderer.render(activeEffects, now);
 
 			previewRafId = requestAnimationFrame(tick);
 		}
@@ -677,7 +635,6 @@
 			audioPlaying = false;
 		}
 		if (glRenderer) {
-			glRenderer.clearTransitionImage();
 			glRenderer.clearTextOverlay();
 		}
 		previewBeatIndex = -1;

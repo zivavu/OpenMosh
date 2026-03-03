@@ -6,15 +6,6 @@ export type SlideshowMoshMode =
 
 export type BeatSubdivision = 0.0625 | 0.125 | 0.25 | 0.5 | 1 | 2 | 4;
 
-export type TransitionType =
-	| 'crossfade'
-	| 'wipe-left'
-	| 'wipe-down'
-	| 'zoom'
-	| 'pixelate'
-	| 'glitch'
-	| 'flash';
-
 export interface TimelineSegment {
 	id: string;
 	/** Seconds from audio start where this segment begins. */
@@ -57,9 +48,6 @@ export interface SlideshowConfig {
 	/** 0–1: controls probability and range width of random audio links. */
 	moshAudioLinkStrength: number;
 	loop: boolean;
-	enabledTransitions: TransitionType[];
-	/** Fraction of beat duration for transition (0.1–0.8). */
-	transitionDuration: number;
 	segments: TimelineSegment[];
 	manualSwitchPoints: ManualSwitchPoint[];
 	/** Text overlay (phrases from dictionary, per beat/frame). */
@@ -78,8 +66,6 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	moshAudioLink: false,
 	moshAudioLinkStrength: 0.8,
 	loop: true,
-	enabledTransitions: [],
-	transitionDuration: 0.3,
 	segments: [],
 	manualSwitchPoints: [],
 	textOverlay: { ...DEFAULT_TEXT_OVERLAY_CONFIG },
