@@ -21,6 +21,37 @@ export const PASSTHROUGH_FRAG =
   outColor = texture(u_texture, v_uv);
 }`;
 
+/** Blend text overlay over main image. u_blendMode: 0=normal, 1=multiply, 2=add, 3=screen. u_invert: 0/1. */
+export const TEXT_BLEND_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+uniform sampler2D u_texture2;
+uniform int u_blendMode;
+uniform float u_invert;
+in vec2 v_uv;
+out vec4 outColor;
+void main() {
+  vec4 mainC = texture(u_texture, v_uv);
+  vec4 textC = texture(u_texture2, v_uv);
+  if (u_invert > 0.5) {
+    textC.rgb = 1.0 - textC.rgb;
+  }
+  float a = textC.a;
+  vec3 mainRgb = mainC.rgb;
+  vec3 textRgb = textC.rgb;
+  vec3 result;
+  if (u_blendMode == 1) {
+    result = mainRgb * mix(vec3(1.0), textRgb, a);
+  } else if (u_blendMode == 2) {
+    result = min(vec3(1.0), mainRgb + textRgb * a * 0.8);
+  } else if (u_blendMode == 3) {
+    result = 1.0 - (1.0 - mainRgb) * (1.0 - textRgb * a);
+  } else {
+    result = mix(mainRgb, textRgb, a);
+  }
+  outColor = vec4(clamp(result, 0.0, 1.0), 1.0);
+}`;
+
 export interface EffectShaderDef {
 	fragment: string;
 	animated?: boolean;

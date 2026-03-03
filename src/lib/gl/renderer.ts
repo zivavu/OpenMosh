@@ -1,13 +1,18 @@
 import type { EffectInstance } from '../effects';
+import { drawPhraseToCanvas } from '../text-overlay';
+import type { TextOverlayStyle } from '../text-overlay';
+import type { DrawPhraseOptions } from '../text-overlay';
 import { createProgram, getUniformLocations } from './utils';
 import {
   VERTEX_SHADER,
   PASSTHROUGH_FRAG,
+  TEXT_BLEND_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
 } from './effect-shaders';
 import { TRANSITION_SHADERS } from './transition-shaders';
 import type { TransitionType } from '../slideshow/types';
+import type { TextSafeEffectId, TextOverlayBlendMode } from '../text-overlay';
 
 interface CompiledProgram {
   program: WebGLProgram;
@@ -27,10 +32,32 @@ export class GlRenderer {
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private compiledTransitions = new Map<TransitionType, CompiledProgram>();
   private transitionTexture: WebGLTexture | null = null;
+  private textTexture: WebGLTexture | null = null;
+  private textBlendProgram: CompiledProgram | null = null;
+  /** Current overlay phrase; null = no overlay. */
+  private textOverlayPhrase: string | null = null;
+  private textOverlayStyle: TextOverlayStyle | null = null;
+  private textOverlayEffectIds: string[] = [];
+  private textBlendMode: TextOverlayBlendMode = 'normal';
+  private textInvert = false;
+  /** Cache for setTextOverlay: skip redraw when phrase/seed/layout/style/dims unchanged. */
+  private lastTextSeed: number | null = null;
+  private lastTextLayout: string | null = null;
+  private lastTextStyleKey: string | null = null;
+  private lastTextW = 0;
+  private lastTextH = 0;
   private imgW = 0;
   private imgH = 0;
   private lastTime = -1;
   private phaseMap = new Map<string, number>();
+
+  /** Default param values for text-safe effects (keeps text readable). */
+  private static TEXT_EFFECT_DEFAULTS: Record<string, Record<string, number | string>> = {
+    scanlines: { count: 80, amount: 0.4 },
+    grain: { amount: 0.25, rgb: 0, blendMode: 'soft' },
+    vignette: { size: 0.6, amount: 0.4 },
+    bleach: { amount: 0.35 },
+  };
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true });
@@ -38,6 +65,7 @@ export class GlRenderer {
     this.gl = gl;
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
+    this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
     this.compileAllEffects();
   }
 
@@ -107,6 +135,73 @@ export class GlRenderer {
   }
 
   /**
+   * Set text overlay for the next render. Pass null to clear.
+   * options: layout, seed, blendMode, invert.
+   * Legacy: 3rd param as string is treated as single textEffectIds member.
+   */
+  setTextOverlay(
+    phrase: string | null,
+    style?: TextOverlayStyle | null,
+    textEffectIdOrOptions?: TextSafeEffectId | '' | (DrawPhraseOptions & {
+      blendMode?: TextOverlayBlendMode;
+      invert?: boolean;
+    }),
+    options?: DrawPhraseOptions & {
+      blendMode?: TextOverlayBlendMode;
+      invert?: boolean;
+    },
+  ) {
+    this.textOverlayPhrase = phrase;
+    this.textOverlayStyle = style ?? null;
+    const opts = options ?? (typeof textEffectIdOrOptions === 'object' ? textEffectIdOrOptions : null);
+    const legacyId = typeof textEffectIdOrOptions === 'string' ? textEffectIdOrOptions : '';
+    this.textOverlayEffectIds = legacyId ? [legacyId] : [];
+    this.textBlendMode = opts?.blendMode ?? 'normal';
+    this.textInvert = opts?.invert ?? false;
+    if (!phrase || !style) return;
+    if (this.imgW <= 0 || this.imgH <= 0) return;
+    const layout = opts?.layout ?? 'block';
+    const seed = opts?.layout === 'scattered' ? (opts?.seed ?? 0) : 0;
+    const styleKey = JSON.stringify(style);
+    if (
+      this.textOverlayPhrase === phrase &&
+      this.lastTextSeed === seed &&
+      this.lastTextLayout === layout &&
+      this.lastTextStyleKey === styleKey &&
+      this.lastTextW === this.imgW &&
+      this.lastTextH === this.imgH
+    ) {
+      return; // reuse existing text texture
+    }
+    this.lastTextSeed = seed;
+    this.lastTextLayout = layout;
+    this.lastTextStyleKey = styleKey;
+    this.lastTextW = this.imgW;
+    this.lastTextH = this.imgH;
+    const drawOptions: DrawPhraseOptions = {
+      layout,
+      seed: opts?.layout === 'scattered' ? (opts?.seed ?? 0) : undefined,
+    };
+    const textCanvas = drawPhraseToCanvas(phrase, this.imgW, this.imgH, style, drawOptions);
+    const gl = this.gl;
+    if (!this.textTexture) {
+      this.textTexture = this.createTexture(this.imgW, this.imgH);
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.textTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textCanvas);
+  }
+
+  /** Clear text overlay (e.g. after recording). */
+  clearTextOverlay() {
+    this.textOverlayPhrase = null;
+    this.textOverlayStyle = null;
+    this.textOverlayEffectIds = [];
+    this.lastTextSeed = null;
+    this.lastTextLayout = null;
+    this.lastTextStyleKey = null;
+  }
+
+  /**
    * Render with a transition pre-pass: blend transitionTexture (outgoing) → sourceTexture (incoming)
    * into ppFBO[0], then run the normal effect chain starting from that blended result.
    */
@@ -152,7 +247,13 @@ export class GlRenderer {
 
     if (enabled.length === 0) {
       this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.ppTextures[0], 1.0, time);
-      this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+      const mainResult = this.fbTextures[writeIdx]!;
+      if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
+        const overlayTex = this.runTextEffects(this.textTexture, time);
+        this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert);
+      } else {
+        this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
+      }
       this.fbIdx = writeIdx;
       return;
     }
@@ -177,7 +278,13 @@ export class GlRenderer {
       }
     }
 
-    this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+    const mainResult = this.fbTextures[writeIdx]!;
+    if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
+      const overlayTex = this.runTextEffects(this.textTexture, time);
+      this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert);
+    } else {
+      this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
+    }
     this.fbIdx = writeIdx;
   }
 
@@ -206,7 +313,13 @@ export class GlRenderer {
 
     if (enabled.length === 0) {
       this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.sourceTexture!, 1.0, time);
-      this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+      const mainResult = this.fbTextures[writeIdx]!;
+      if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
+        const overlayTex = this.runTextEffects(this.textTexture, time);
+        this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert);
+      } else {
+        this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
+      }
       this.fbIdx = writeIdx;
       return;
     }
@@ -239,7 +352,13 @@ export class GlRenderer {
       }
     }
 
-    this.drawPass(this.passthrough, null, this.fbTextures[writeIdx], -1.0, 0);
+    const mainResult = this.fbTextures[writeIdx]!;
+    if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
+      const overlayTex = this.runTextEffects(this.textTexture, time);
+      this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert);
+    } else {
+      this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
+    }
     this.fbIdx = writeIdx;
   }
 
@@ -257,6 +376,10 @@ export class GlRenderer {
     const gl = this.gl;
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     if (this.transitionTexture) gl.deleteTexture(this.transitionTexture);
+    if (this.textTexture) gl.deleteTexture(this.textTexture);
+    this.textTexture = null;
+    if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
+    this.textBlendProgram = null;
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
@@ -352,6 +475,10 @@ export class GlRenderer {
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
     this.deleteFBOPair(this.fbFBOs);
+    if (this.textTexture) {
+      gl.deleteTexture(this.textTexture);
+      this.textTexture = null;
+    }
 
     this.ppTextures = [this.createTexture(this.imgW, this.imgH), this.createTexture(this.imgW, this.imgH)];
     this.ppFBOs = this.createFBOPair(this.ppTextures);
@@ -361,6 +488,65 @@ export class GlRenderer {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;
+  }
+
+  /** Run zero or more effects on the text texture; returns final texture (ping-pong). */
+  private runTextEffects(inputTex: WebGLTexture, time: number): WebGLTexture {
+    const ids = this.textOverlayEffectIds;
+    if (!ids.length || !this.ppFBOs || !this.ppTextures) return inputTex;
+    let current: WebGLTexture = inputTex;
+    let ppIdx = 0;
+    for (const effectId of ids) {
+      const entry = this.compiled.get(effectId);
+      if (!entry) continue;
+      const defs = GlRenderer.TEXT_EFFECT_DEFAULTS[effectId];
+      this.drawPass(
+        entry.program,
+        this.ppFBOs[ppIdx],
+        current,
+        1.0,
+        time,
+        entry.def,
+        defs ? { ...defs } : {},
+      );
+      current = this.ppTextures[ppIdx]!;
+      ppIdx = 1 - ppIdx;
+    }
+    return current;
+  }
+
+  private static BLEND_MODE_VALUES: Record<TextOverlayBlendMode, number> = {
+    normal: 0,
+    multiply: 1,
+    add: 2,
+    screen: 3,
+  };
+
+  /** Draw to canvas: blend main texture with overlay (mode + invert). */
+  private drawBlendToCanvas(
+    mainTex: WebGLTexture,
+    overlayTex: WebGLTexture,
+    blendMode: TextOverlayBlendMode = 'normal',
+    invert = false,
+  ) {
+    const gl = this.gl;
+    const prog = this.textBlendProgram;
+    if (!prog) return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    gl.useProgram(prog.program);
+    if (prog.uniforms['u_flipY']) gl.uniform1f(prog.uniforms['u_flipY'], -1.0);
+    if (prog.uniforms['u_blendMode']) gl.uniform1i(prog.uniforms['u_blendMode'], GlRenderer.BLEND_MODE_VALUES[blendMode]);
+    if (prog.uniforms['u_invert']) gl.uniform1f(prog.uniforms['u_invert'], invert ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, mainTex);
+    if (prog.uniforms['u_texture']) gl.uniform1i(prog.uniforms['u_texture'], 0);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, overlayTex);
+    if (prog.uniforms['u_texture2']) gl.uniform1i(prog.uniforms['u_texture2'], 2);
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   private drawPass(

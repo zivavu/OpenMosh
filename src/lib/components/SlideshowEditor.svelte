@@ -31,6 +31,7 @@
 	import { beatAtTime } from '../slideshow/beat-clock';
 	import { computeEffectsForBeat, cloneEffects } from '../slideshow/sequencer';
 	import { executeSlideshowRecording } from '../slideshow/slideshow-recorder';
+	import { parsePhrases, DEFAULT_TEXT_OVERLAY_STYLE } from '../text-overlay';
 
 	interface Props {
 		initialFiles: File[];
@@ -421,6 +422,21 @@
 	let previewEffects: EffectInstance[] = $state([]);
 	let smoothState = $state({ effects: cloneEffects(effects) });
 
+	const previewPhrases = $derived(
+		config.textOverlay?.enabled && config.textOverlay?.dictionary?.trim()
+			? parsePhrases(config.textOverlay.dictionary, config.textOverlay.splitBy)
+			: [],
+	);
+	const previewTextStyle = $derived(
+		config.textOverlay?.style != null
+			? { ...DEFAULT_TEXT_OVERLAY_STYLE, ...config.textOverlay.style }
+			: null,
+	);
+	const previewTextChance = $derived(
+		Math.max(0, Math.min(1, config.textOverlay?.chance ?? 0.8)),
+	);
+	const previewTextLayout = $derived(config.textOverlay?.layout ?? 'scattered');
+
 	// Image cache for preview
 	const imageCache = new Map<string, HTMLImageElement>();
 	const IMAGE_CACHE_SIZE = 12;
@@ -484,6 +500,8 @@
 		let currentSlideId: string | null = null;
 		let activeTransition: TransitionType | null = null;
 		let previousSlideImg: HTMLImageElement | null = null;
+		let lastTextUpdateTime = 0;
+		const TEXT_OVERLAY_THROTTLE_MS = 100;
 
 		function pickRandomTransition(): TransitionType | null {
 			const enabled = config.enabledTransitions;
@@ -518,6 +536,33 @@
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
 			const slide = slides[slideIndex];
+
+			// Text overlay: throttle updates so 1/16 stays usable (~10 text updates/sec max)
+			const textRoll = ((beatIndex * 31) % 1000) / 1000;
+			const showText =
+				previewPhrases.length > 0 &&
+				previewTextStyle &&
+				glRenderer &&
+				textRoll < previewTextChance;
+			if (showText && glRenderer) {
+				const now = performance.now() / 1000;
+				const throttleSec = TEXT_OVERLAY_THROTTLE_MS / 1000;
+				const shouldUpdateText =
+					now - lastTextUpdateTime >= throttleSec || lastTextUpdateTime === 0;
+				if (shouldUpdateText) {
+					lastTextUpdateTime = now;
+					const phrase = previewPhrases[beatIndex % previewPhrases.length] ?? null;
+					const to = config.textOverlay;
+					glRenderer.setTextOverlay(phrase, previewTextStyle, undefined, {
+						layout: previewTextLayout,
+						seed: beatIndex,
+						blendMode: to?.blendMode ?? 'normal',
+						invert: to?.invert ?? false,
+					});
+				}
+			} else if (glRenderer) {
+				glRenderer.setTextOverlay(null);
+			}
 
 			if (beatIndex !== previewBeatIndex && slide) {
 				// Save previous image for transition
@@ -583,7 +628,10 @@
 			audioEl.pause();
 			audioPlaying = false;
 		}
-		if (glRenderer) glRenderer.clearTransitionImage();
+		if (glRenderer) {
+			glRenderer.clearTransitionImage();
+			glRenderer.clearTextOverlay();
+		}
 		previewBeatIndex = -1;
 		previewEffects = [];
 	}
@@ -654,6 +702,8 @@
 				audioEnd: spanEnd,
 				canvas: canvasEl,
 				renderer: glRenderer,
+				outputWidth: resizeWidth > 0 ? resizeWidth : undefined,
+				outputHeight: resizeHeight > 0 ? resizeHeight : undefined,
 				moshOptions: getMoshOptions(),
 				onProgress: (p) => { recordProgress = p; },
 				onFinalizing: () => { recordFinalizing = true; },

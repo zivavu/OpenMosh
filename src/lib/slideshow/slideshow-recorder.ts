@@ -3,6 +3,7 @@ import type { EffectInstance } from '../effects';
 import type { GlRenderer } from '../gl/renderer';
 import type { RecordFormat } from '../recorder';
 import { downloadBlob, recordVideo } from '../recorder';
+import { parsePhrases, DEFAULT_TEXT_OVERLAY_STYLE } from '../text-overlay';
 import { beatAtTime } from './beat-clock';
 import { cloneEffects, computeEffectsForBeat } from './sequencer';
 import type { SlideshowConfig, SlideshowSlide, TransitionType } from './types';
@@ -18,6 +19,9 @@ export interface SlideshowRecordContext {
 	audioEnd: number;
 	canvas: HTMLCanvasElement;
 	renderer: GlRenderer;
+	/** If set, recording uses these dimensions instead of the first slide's image size. */
+	outputWidth?: number;
+	outputHeight?: number;
 	moshOptions: MoshOptions;
 	onProgress: (p: number) => void;
 	onFinalizing: () => void;
@@ -38,6 +42,8 @@ export async function executeSlideshowRecording(
 		audioEnd,
 		canvas,
 		renderer,
+		outputWidth,
+		outputHeight,
 		moshOptions,
 		onProgress,
 		onFinalizing,
@@ -68,6 +74,15 @@ export async function executeSlideshowRecording(
 	const firstImg = imageMap.get(slides[0].id);
 	if (firstImg) {
 		renderer.loadImage(firstImg);
+		// Respect user's canvas size if set (otherwise keep first image dimensions)
+		if (
+			outputWidth != null &&
+			outputHeight != null &&
+			outputWidth > 0 &&
+			outputHeight > 0
+		) {
+			renderer.resize(outputWidth, outputHeight);
+		}
 	}
 
 	let currentSlideId: string | null = null;
@@ -85,6 +100,31 @@ export async function executeSlideshowRecording(
 		return enabled[Math.floor(Math.random() * enabled.length)];
 	}
 
+	// Text overlay: parse phrases once
+	const textOverlay = config.textOverlay;
+	const phrases =
+		textOverlay?.enabled && textOverlay.dictionary?.trim()
+			? parsePhrases(textOverlay.dictionary, textOverlay.splitBy)
+			: [];
+	const style =
+		textOverlay?.style != null
+			? { ...DEFAULT_TEXT_OVERLAY_STYLE, ...textOverlay.style }
+			: null;
+	const textBlendMode = textOverlay?.blendMode ?? 'normal';
+	const textInvert = textOverlay?.invert ?? false;
+	const phraseMode = textOverlay?.phraseMode ?? 'per-beat';
+	const textChance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
+	const textLayout = textOverlay?.layout ?? 'scattered';
+
+	function getPhraseForFrame(frameIndex: number, beatIndex: number): string | null {
+		if (phrases.length === 0) return null;
+		let idx: number;
+		if (phraseMode === 'per-beat') idx = beatIndex % phrases.length;
+		else if (phraseMode === 'sequential') idx = frameIndex % phrases.length;
+		else idx = (frameIndex * 7919 + beatIndex) % phrases.length; // deterministic "random"
+		return phrases[idx] ?? null;
+	}
+
 	const blob = await recordVideo({
 		format,
 		duration,
@@ -100,14 +140,33 @@ export async function executeSlideshowRecording(
 		audioStart,
 		audioEnd,
 		onBeforeRender(frameIndex: number, time: number) {
+			// time is 0..duration (recording window); segments use "seconds from audio start"
+			const timeFromAudioStart = time + audioStart;
 			const { index: beatIndex, fraction } = beatAtTime(
-				time,
+				timeFromAudioStart,
 				config.bpm,
 				config.beatOffset,
 				config.segments,
 				config.manualSwitchPoints,
 				config.subdivision,
 			);
+
+			// Set text overlay phrase for this frame (with chance)
+			const roll = ((frameIndex * 7919 + beatIndex) % 1000) / 1000;
+			const showText = phrases.length > 0 && style && roll < textChance;
+			if (showText) {
+				const phrase = getPhraseForFrame(frameIndex, beatIndex);
+				const seed = frameIndex * 31 + beatIndex;
+				renderer.setTextOverlay(phrase, style, undefined, {
+					layout: textLayout,
+					seed,
+					blendMode: textBlendMode,
+					invert: textInvert,
+				});
+			} else {
+				renderer.setTextOverlay(null);
+			}
+
 			const slideIndex = config.loop
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
@@ -168,5 +227,6 @@ export async function executeSlideshowRecording(
 		},
 	});
 
+	renderer.clearTextOverlay();
 	downloadBlob(blob, format);
 }

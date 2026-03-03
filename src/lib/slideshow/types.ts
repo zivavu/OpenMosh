@@ -31,6 +31,8 @@ export interface SlideshowSlide {
 	presetIndex: number | null;
 }
 
+import type { TextOverlayConfig } from '../text-overlay';
+
 export interface SlideshowConfig {
 	bpm: number;
 	/** Seconds offset to the first beat (from BPM detection). */
@@ -47,7 +49,11 @@ export interface SlideshowConfig {
 	transitionDuration: number;
 	segments: TimelineSegment[];
 	manualSwitchPoints: ManualSwitchPoint[];
+	/** Text overlay (phrases from dictionary, per beat/frame). */
+	textOverlay: TextOverlayConfig;
 }
+
+import { DEFAULT_TEXT_OVERLAY_CONFIG } from '../text-overlay';
 
 export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	bpm: 120,
@@ -62,4 +68,5 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	transitionDuration: 0.3,
 	segments: [],
 	manualSwitchPoints: [],
+	textOverlay: { ...DEFAULT_TEXT_OVERLAY_CONFIG },
 };
