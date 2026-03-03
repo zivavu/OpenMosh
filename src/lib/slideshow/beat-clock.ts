@@ -1,4 +1,8 @@
-import type { BeatSubdivision, TimelineSegment, ManualSwitchPoint } from './types';
+import type {
+	BeatSubdivision,
+	ManualSwitchPoint,
+	TimelineSegment,
+} from './types';
 
 export interface BeatClock {
 	/** Duration of one flash interval in seconds. */
@@ -74,7 +78,11 @@ export function beatAtTime(
 	for (let i = 0; i < relevantPoints.length; i++) {
 		const intervalStart = i === 0 ? 0 : relevantPoints[i - 1].time;
 		const intervalEnd = relevantPoints[i].time;
-		const subdivision = getSubdivisionAt(intervalStart, segments, fallbackSubdivision);
+		const subdivision = getSubdivisionAt(
+			intervalStart,
+			segments,
+			fallbackSubdivision,
+		);
 		const intervalSeconds = (60 / bpm) * subdivision;
 		const intervalDuration = intervalEnd - intervalStart;
 		beatsBeforeOrigin += Math.floor(intervalDuration / intervalSeconds);
@@ -84,11 +92,16 @@ export function beatAtTime(
 	}
 
 	// Compute local beat index and fraction from phase origin
-	const activeSubdivision = getSubdivisionAt(adjusted, segments, fallbackSubdivision);
+	const activeSubdivision = getSubdivisionAt(
+		adjusted,
+		segments,
+		fallbackSubdivision,
+	);
 	const activeInterval = (60 / bpm) * activeSubdivision;
 	const elapsed = adjusted - phaseOrigin;
 	const localBeatIndex = Math.floor(elapsed / activeInterval);
-	const fraction = activeInterval > 0 ? (elapsed % activeInterval) / activeInterval : 0;
+	const fraction =
+		activeInterval > 0 ? (elapsed % activeInterval) / activeInterval : 0;
 
 	return {
 		index: beatsBeforeOrigin + localBeatIndex,

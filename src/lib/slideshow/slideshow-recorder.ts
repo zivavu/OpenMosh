@@ -1,11 +1,11 @@
-import type { SlideshowSlide, SlideshowConfig, TransitionType } from './types';
+import type { MoshOptions } from '../editor/mosh';
 import type { EffectInstance } from '../effects';
 import type { GlRenderer } from '../gl/renderer';
 import type { RecordFormat } from '../recorder';
-import type { MoshOptions } from '../editor/mosh';
-import { recordVideo, downloadBlob } from '../recorder';
+import { downloadBlob, recordVideo } from '../recorder';
 import { beatAtTime } from './beat-clock';
-import { computeEffectsForBeat, cloneEffects } from './sequencer';
+import { cloneEffects, computeEffectsForBeat } from './sequencer';
+import type { SlideshowConfig, SlideshowSlide, TransitionType } from './types';
 
 export interface SlideshowRecordContext {
 	format: RecordFormat;

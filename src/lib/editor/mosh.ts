@@ -14,6 +14,8 @@ export interface MoshOptions {
 	hasAudio: boolean;
 	audioSampleRate: number;
 	frequencyData: Uint8Array | null;
+	/** When true, only currently enabled (non–hidden) effects are included in random mosh; disabled effects stay off. */
+	onlyMoshEnabled?: boolean;
 }
 
 export function applyRandomAudioLinks(
@@ -111,8 +113,10 @@ export function generateMosh(
 	effects: EffectInstance[],
 	options: MoshOptions,
 ): void {
-	const { moshMin, moshMax, randomizeOrder, moshAudioLink } = options;
-	const moshable = effects.filter((e) => !e.locked);
+	const { moshMin, moshMax, randomizeOrder, moshAudioLink, onlyMoshEnabled } = options;
+	const moshable = effects.filter(
+		(e) => !e.locked && (!onlyMoshEnabled || e.enabled),
+	);
 	const clampedMin = Math.min(moshMin, moshable.length);
 	const clampedMax = Math.min(moshMax, moshable.length);
 	const target =

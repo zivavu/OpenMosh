@@ -1,7 +1,6 @@
 <script lang="ts">
 	import EffectsPanel from './EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
-	import MoshGroup from './MoshGroup.svelte';
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
@@ -25,7 +24,7 @@
 		applyVolumeLinksTick,
 	} from '../audio/audio-controller';
 	import { formatTime } from '../audio/audio-utils';
-	import { generateMosh as generateMoshFn, clearEffects as clearEffectsFn } from '../editor/mosh';
+	import { generateMosh as generateMoshFn } from '../editor/mosh';
 	import type { SlideshowSlide, SlideshowConfig, TransitionType } from '../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
 	import { detectBpm } from '../slideshow/bpm-detector';
@@ -442,6 +441,7 @@
 
 	async function startPreview() {
 		if (slides.length === 0) return;
+		activeView = 'preview';
 		previewPlaying = true;
 		smoothState = { effects: cloneEffects(effects) };
 		previewBeatIndex = -1;
@@ -606,14 +606,6 @@
 		};
 	}
 
-	function mosh() {
-		generateMoshFn(effects, getMoshOptions());
-	}
-
-	function clearEffects() {
-		clearEffectsFn(effects);
-	}
-
 	// ── Recording ──
 	let recordFormat: RecordFormat = $state('webm');
 	let recordFps = $state(24);
@@ -622,9 +614,9 @@
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 	let showRecordSettings = $state(false);
-	let showMoshSettings = $state(false);
-	let moshGroupRef = $state<MoshGroup>();
 	let recordGroupRef = $state<RecordGroup>();
+	let showOptionsPanel = $state(false);
+	let optionsGroupEl: HTMLDivElement | undefined;
 
 	let recordDuration = $derived(
 		trackFile && trackDuration > 0 ? spanEnd - spanStart : 5,
@@ -704,8 +696,10 @@
 	onkeydown={handleKeydown}
 	onpointerdown={(e) => {
 		audioContext?.resume();
-		moshGroupRef?.handleClickOutside(e);
 		recordGroupRef?.handleClickOutside(e);
+		if (showOptionsPanel && optionsGroupEl && !optionsGroupEl.contains(e.target as Node)) {
+			showOptionsPanel = false;
+		}
 	}}
 />
 
@@ -809,59 +803,66 @@
 		{/if}
 
 		<div class="action-bar">
-			<MoshGroup
-				bind:this={moshGroupRef}
-				onMosh={mosh}
-				onClear={clearEffects}
-				bind:showSettings={showMoshSettings}
-			>
-				{#snippet settingsContent()}
-					<div class="settings-divider"></div>
-					<div class="mosh-setting-row">
-						<label for="ss-resize-width">Width</label>
-						<input
-							id="ss-resize-width"
-							class="size-input"
-							type="number"
-							min="1"
-							max="10000"
-							step="1"
-							value={resizeWidth}
-							oninput={(e) =>
-								setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
-						/>
+			<div class="options-group" bind:this={optionsGroupEl}>
+				<button
+					class="action-btn options-btn"
+					onclick={() => (showOptionsPanel = !showOptionsPanel)}
+					title="Preview size options"
+				>
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="3" />
+						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+					</svg>
+					OPTIONS
+				</button>
+				{#if showOptionsPanel}
+					<div class="options-panel">
+						<div class="option-row">
+							<label for="ss-resize-width">Width</label>
+							<input
+								id="ss-resize-width"
+								class="size-input"
+								type="number"
+								min="1"
+								max="10000"
+								step="1"
+								value={resizeWidth}
+								oninput={(e) =>
+									setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
+							/>
+						</div>
+						<div class="option-row">
+							<label for="ss-resize-height">Height</label>
+							<input
+								id="ss-resize-height"
+								class="size-input"
+								type="number"
+								min="1"
+								max="10000"
+								step="1"
+								value={resizeHeight}
+								oninput={(e) =>
+									setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
+							/>
+						</div>
+						<div class="option-row">
+							<label for="ss-resize-ratio">Maintain ratio</label>
+							<input
+								id="ss-resize-ratio"
+								type="checkbox"
+								bind:checked={maintainRatio}
+							/>
+						</div>
+						<button
+							class="resize-reset-btn"
+							onclick={resetResize}
+							title="Reset to original size"
+						>
+							Reset to original
+						</button>
 					</div>
-					<div class="mosh-setting-row">
-						<label for="ss-resize-height">Height</label>
-						<input
-							id="ss-resize-height"
-							class="size-input"
-							type="number"
-							min="1"
-							max="10000"
-							step="1"
-							value={resizeHeight}
-							oninput={(e) =>
-								setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
-						/>
-					</div>
-					<div class="mosh-setting-row">
-						<label for="ss-resize-ratio">Maintain ratio</label>
-						<input
-							id="ss-resize-ratio"
-							type="checkbox"
-							bind:checked={maintainRatio}
-						/>
-					</div>
-					<button
-						class="resize-reset-btn"
-						onclick={resetResize}
-						title="Reset to original size"
-					>
-						Reset to original
-					</button>
-				{/snippet}
-			</MoshGroup>
+				{/if}
+			</div>
 
 			<button
 				class="action-btn play-btn"
@@ -1228,6 +1229,113 @@
 		cursor: default;
 	}
 
+	.options-group {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.options-btn:hover:not(:disabled) {
+		border-color: #888;
+		color: #fff;
+	}
+
+	.options-panel {
+		position: absolute;
+		bottom: calc(100% + 0.5rem);
+		left: 0;
+		background: #1a1a1a;
+		border: 1px solid #333;
+		border-radius: 8px;
+		padding: 0.75rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		min-width: 200px;
+		z-index: 20;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+	}
+
+	.option-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.option-row label {
+		font-size: 0.7rem;
+		color: #888;
+		min-width: 72px;
+		flex-shrink: 0;
+	}
+
+	.option-row input[type='checkbox'] {
+		appearance: none;
+		-webkit-appearance: none;
+		width: 14px;
+		height: 14px;
+		border: 1px solid #555;
+		border-radius: 2px;
+		background: #1a1a1a;
+		cursor: pointer;
+		position: relative;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+	}
+
+	.option-row input[type='checkbox']::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+			center/contain no-repeat;
+		opacity: 0;
+	}
+
+	.option-row input[type='checkbox']:checked {
+		background: #555;
+		border-color: #888;
+	}
+
+	.option-row input[type='checkbox']:checked::after {
+		opacity: 1;
+	}
+
+	.size-input {
+		width: 4.5rem;
+		background: #1a1a1a;
+		color: #aaa;
+		border: 1px solid #333;
+		border-radius: 4px;
+		padding: 0.2rem 0.4rem;
+		font-size: 0.7rem;
+		font-family: inherit;
+		outline: none;
+	}
+
+	.size-input:focus {
+		border-color: #555;
+	}
+
+	.resize-reset-btn {
+		margin-top: 0.25rem;
+		padding: 0.35rem 0.75rem;
+		border: 1px solid #444;
+		border-radius: 6px;
+		background: none;
+		color: #888;
+		font-size: 0.7rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.resize-reset-btn:hover {
+		color: #ccc;
+		border-color: #666;
+	}
+
 	/* Timeline (same pattern as Editor.svelte) */
 	.timeline-bar {
 		display: flex;
@@ -1325,93 +1433,6 @@
 	.volume-slider {
 		width: 60px;
 		accent-color: #888;
-	}
-
-	/* Mosh settings */
-	.mosh-setting-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.mosh-setting-row label {
-		font-size: 0.7rem;
-		color: #888;
-		min-width: 72px;
-		flex-shrink: 0;
-	}
-
-	.mosh-setting-row input[type='checkbox'] {
-		appearance: none;
-		width: 14px;
-		height: 14px;
-		border: 1px solid #555;
-		border-radius: 2px;
-		background: #1a1a1a;
-		cursor: pointer;
-		position: relative;
-		flex-shrink: 0;
-	}
-
-	.mosh-setting-row input[type='checkbox']:hover {
-		border-color: #777;
-	}
-
-	.mosh-setting-row input[type='checkbox']:checked {
-		background: #555;
-		border-color: #888;
-	}
-
-	.mosh-setting-row input[type='checkbox']:checked::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
-			center/contain no-repeat;
-	}
-
-	.settings-divider {
-		height: 1px;
-		background: #333;
-		margin: 0.15rem 0;
-	}
-
-	.size-input {
-		width: 4.5rem;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
-		outline: none;
-	}
-
-	.size-input:focus {
-		border-color: #555;
-	}
-
-	.resize-reset-btn {
-		margin-top: 0.25rem;
-		padding: 0.35rem 0.75rem;
-		border: 1px solid #444;
-		border-radius: 6px;
-		background: none;
-		color: #888;
-		font-size: 0.7rem;
-		font-family: inherit;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.resize-reset-btn:hover {
-		color: #ccc;
-		border-color: #666;
 	}
 
 	/* Sidebar */
