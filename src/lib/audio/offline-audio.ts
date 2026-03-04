@@ -1,5 +1,5 @@
-import { getDefinition, type EffectInstance } from '../effects';
-import { getLevelFromFrequencyRange } from './audio-utils';
+import type { EffectInstance } from '../effects';
+import { applyVolumeLinksToEffects } from './audio-utils';
 
 const FFT_SIZE = 2048;
 
@@ -17,18 +17,17 @@ export async function decodeAudioFile(file: File): Promise<AudioBuffer> {
 /**
  * Create a new AudioBuffer containing only the samples in [start, end] (seconds).
  */
-export async function trimAudioBuffer(
+export function trimAudioBuffer(
 	buffer: AudioBuffer,
 	start: number,
 	end: number,
-): Promise<AudioBuffer> {
+): AudioBuffer {
 	const sampleRate = buffer.sampleRate;
 	const startSample = Math.max(0, Math.floor(start * sampleRate));
 	const endSample = Math.min(buffer.length, Math.ceil(end * sampleRate));
 	const length = Math.max(0, endSample - startSample);
 
-	const ctx = new AudioContext();
-	const trimmed = ctx.createBuffer(buffer.numberOfChannels, length, sampleRate);
+	const trimmed = new AudioBuffer({ numberOfChannels: buffer.numberOfChannels, length, sampleRate });
 
 	for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
 		const src = buffer.getChannelData(ch);
@@ -37,7 +36,6 @@ export async function trimAudioBuffer(
 			dst[i] = src[startSample + i];
 		}
 	}
-	await ctx.close();
 	return trimmed;
 }
 
@@ -120,25 +118,19 @@ function computeFrameAnalysis(
 
 	// Time-domain: mix down to mono and compute RMS
 	let sumSq = 0;
-	const timeSamples: number[] = [];
+	const real = new Float32Array(fftSize);
+	const imag = new Float32Array(fftSize);
 	for (let i = 0; i < actualLength; i++) {
 		let s = 0;
 		for (let ch = 0; ch < numChannels; ch++) {
 			s += buffer.getChannelData(ch)[frameStartSample + i];
 		}
 		s /= numChannels;
-		timeSamples.push(s);
+		real[i] = s;
 		sumSq += s * s;
 	}
 	const volumeLevel =
 		actualLength > 0 ? Math.min(1, Math.sqrt(sumSq / actualLength)) : 0;
-
-	// Pad to fftSize for FFT
-	const real = new Float32Array(fftSize);
-	const imag = new Float32Array(fftSize);
-	for (let i = 0; i < actualLength; i++) {
-		real[i] = timeSamples[i];
-	}
 	// Apply Hann window
 	for (let i = 0; i < actualLength; i++) {
 		const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (actualLength - 1 || 1)));
@@ -190,35 +182,5 @@ export function applyFrameAudioToEffects(
 	sampleRate: number,
 	fftSize: number,
 ): void {
-	const { volumeLevel, frequencyData } = frameData;
-
-	for (const effect of effects) {
-		const links = effect.volumeLinks;
-		if (!links) continue;
-		const def = getDefinition(effect.defId);
-		if (!def) continue;
-		for (const param of def.params) {
-			if (param.type !== 'range') continue;
-			const link = links[param.key];
-			if (!link) continue;
-			const level =
-				link.freqMin != null && link.freqMax != null && sampleRate > 0
-					? getLevelFromFrequencyRange(
-							frequencyData,
-							sampleRate,
-							fftSize,
-							link.freqMin,
-							link.freqMax,
-						)
-					: volumeLevel;
-			const { min: pMin, max: pMax, step } = param;
-			let value = link.min + level * (link.max - link.min);
-			value = Math.max(pMin, Math.min(pMax, value));
-			if (step > 0) {
-				value = Math.round((value - pMin) / step) * step + pMin;
-				value = Math.max(pMin, Math.min(pMax, value));
-			}
-			effect.values[param.key] = value;
-		}
-	}
+	applyVolumeLinksToEffects(effects, frameData.volumeLevel, frameData.frequencyData, sampleRate, fftSize);
 }

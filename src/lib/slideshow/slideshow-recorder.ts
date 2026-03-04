@@ -123,7 +123,7 @@ export async function executeSlideshowRecording(
 		onBeforeRender(frameIndex: number, time: number) {
 			// time is 0..duration (recording window); segments use "seconds from audio start"
 			const timeFromAudioStart = time + audioStart;
-			const { index: beatIndex, fraction } = beatAtTime(
+			const { index: beatIndex } = beatAtTime(
 				timeFromAudioStart,
 				config.bpm,
 				config.beatOffset,

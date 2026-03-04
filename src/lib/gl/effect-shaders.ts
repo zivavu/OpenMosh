@@ -15,6 +15,21 @@ in vec2 v_uv;
 out vec4 outColor;
 `;
 
+const BOUNCE_GLSL = `float bounce(float v) {
+  v = mod(abs(v), 2.0);
+  return v > 1.0 ? 2.0 - v : v;
+}
+`;
+
+const HUE_ROTATE_GLSL = `vec3 hueRotate(vec3 c, float angle) {
+  float rad = angle * 3.14159265 / 180.0;
+  float cosA = cos(rad);
+  float sinA = sin(rad);
+  vec3 k = vec3(0.57735026919);
+  return c * cosA + cross(k, c) * sinA + k * dot(k, c) * (1.0 - cosA);
+}
+`;
+
 export const PASSTHROUGH_FRAG =
 	H +
 	`void main() {
@@ -207,13 +222,10 @@ void main() {
 	mirror: {
 		fragment:
 			H +
+			BOUNCE_GLSL +
 			`uniform float u_amount;
 uniform int u_side;
 uniform float u_position;
-float bounce(float v) {
-  v = mod(abs(v), 2.0);
-  return v > 1.0 ? 2.0 - v : v;
-}
 void main() {
   vec2 uv = v_uv;
   if (u_side == 0 && uv.x > u_position) uv.x = bounce(2.0 * u_position - uv.x);
@@ -232,13 +244,10 @@ void main() {
 	kaleido: {
 		fragment:
 			H +
+			BOUNCE_GLSL +
 			`uniform float u_amount;
 uniform float u_sides;
 uniform float u_angle;
-float bounce(float v) {
-  v = mod(abs(v), 2.0);
-  return v > 1.0 ? 2.0 - v : v;
-}
 void main() {
   vec2 uv = v_uv - 0.5;
   float r = length(uv);
@@ -324,17 +333,11 @@ void main() {
 	'color-correction': {
 		fragment:
 			H +
+			HUE_ROTATE_GLSL +
 			`uniform float u_brightness;
 uniform float u_contrast;
 uniform float u_hue;
 uniform float u_saturation;
-vec3 hueRotate(vec3 c, float angle) {
-  float rad = angle * 3.14159265 / 180.0;
-  float cosA = cos(rad);
-  float sinA = sin(rad);
-  vec3 k = vec3(0.57735026919);
-  return c * cosA + cross(k, c) * sinA + k * dot(k, c) * (1.0 - cosA);
-}
 void main() {
   vec4 c = texture(u_texture, v_uv);
   vec3 rgb = c.rgb + u_brightness;
@@ -639,7 +642,6 @@ void main() {
   outColor = texture(u_texture, v_uv + flow);
 }`,
 		animated: true,
-		feedback: true,
 		setUniforms: floats('amount', 'distortion'),
 	},
 
@@ -833,12 +835,9 @@ void main() {
 	polar: {
 		fragment:
 			H +
+			BOUNCE_GLSL +
 			`uniform float u_amount;
 uniform float u_angle;
-float bounce(float v) {
-  v = mod(abs(v), 2.0);
-  return v > 1.0 ? 2.0 - v : v;
-}
 void main() {
   vec2 uv = v_uv - 0.5;
   float r = length(uv) * 2.0;
@@ -1100,17 +1099,11 @@ void main() {
 	'color-halves': {
 		fragment:
 			H +
+			HUE_ROTATE_GLSL +
 			`uniform float u_position;
 uniform float u_angle;
 uniform int u_mode;
 uniform float u_amount;
-vec3 hueRotate(vec3 c, float angle) {
-  float rad = angle * 3.14159265 / 180.0;
-  float cosA = cos(rad);
-  float sinA = sin(rad);
-  vec3 k = vec3(0.57735026919);
-  return c * cosA + cross(k, c) * sinA + k * dot(k, c) * (1.0 - cosA);
-}
 void main() {
   vec4 orig = texture(u_texture, v_uv);
   float rad = u_angle * 3.14159265 / 180.0;

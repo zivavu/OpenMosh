@@ -33,8 +33,6 @@ export interface BeatInfo {
 	index: number;
 	/** 0–1 fractional progress through the current beat interval. */
 	fraction: number;
-	/** Whether this exact time lands on a manual switch point. */
-	isManualSwitch: boolean;
 }
 
 function getSubdivisionAt(
@@ -61,11 +59,6 @@ export function beatAtTime(
 	fallbackSubdivision: BeatSubdivision,
 ): BeatInfo {
 	const adjusted = Math.max(0, t - beatOffset);
-
-	// Check if adjusted lands on a manual switch point (within 1ms tolerance)
-	const isManualSwitch = manualSwitchPoints.some(
-		(p) => Math.abs(p.time - adjusted) <= 0.001,
-	);
 
 	// Find phase origin by walking through manual switch points
 	// Each manual switch point resets the phase and counts as 1 beat
@@ -106,6 +99,5 @@ export function beatAtTime(
 	return {
 		index: beatsBeforeOrigin + localBeatIndex,
 		fraction,
-		isManualSwitch,
 	};
 }

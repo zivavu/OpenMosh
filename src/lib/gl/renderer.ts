@@ -38,6 +38,7 @@ export class GlRenderer {
   private textInvert = false;
   private textOpacity = 1;
   /** Cache for setTextOverlay: skip redraw when phrase/seed/layout/style/dims unchanged. */
+  private lastTextPhrase: string | null = null;
   private lastTextSeed: number | null = null;
   private lastTextLayout: string | null = null;
   private lastTextStyleKey: string | null = null;
@@ -146,7 +147,7 @@ export class GlRenderer {
     const seed = opts?.layout === 'scattered' ? (opts?.seed ?? 0) : 0;
     const styleKey = JSON.stringify(style);
     if (
-      this.textOverlayPhrase === phrase &&
+      this.lastTextPhrase === phrase &&
       this.lastTextSeed === seed &&
       this.lastTextLayout === layout &&
       this.lastTextStyleKey === styleKey &&
@@ -155,6 +156,7 @@ export class GlRenderer {
     ) {
       return; // reuse existing text texture
     }
+    this.lastTextPhrase = phrase;
     this.lastTextSeed = seed;
     this.lastTextLayout = layout;
     this.lastTextStyleKey = styleKey;

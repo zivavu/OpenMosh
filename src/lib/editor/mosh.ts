@@ -1,5 +1,4 @@
 import {
-	EFFECT_DEFINITIONS,
 	FREQ_PRESETS,
 	getDefinition,
 	type EffectInstance,
@@ -139,7 +138,7 @@ export function generateMosh(
 	moshable.forEach((effect, i) => {
 		effect.enabled = enabledSet.has(i);
 		if (!effect.enabled) return;
-		const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
+		const def = getDefinition(effect.defId);
 		if (!def) return;
 		for (const param of def.params) {
 			if (param.type === 'range') {
@@ -190,7 +189,7 @@ export function generateMosh(
 export function clearEffects(effects: EffectInstance[]): void {
 	for (const effect of effects) {
 		effect.enabled = false;
-		const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
+		const def = getDefinition(effect.defId);
 		if (!def) continue;
 		for (const param of def.params) {
 			effect.values[param.key] = param.defaultValue;

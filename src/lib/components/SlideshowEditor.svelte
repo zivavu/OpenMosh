@@ -516,7 +516,7 @@
 					config.beatOffset;
 			}
 
-			const { index: beatIndex, fraction } = beatAtTime(
+			const { index: beatIndex } = beatAtTime(
 				Math.max(0, t),
 				config.bpm,
 				config.beatOffset,

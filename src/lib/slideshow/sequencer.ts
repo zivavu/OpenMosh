@@ -3,7 +3,6 @@ import type { EffectInstance } from '../effects';
 import { beatAtTime } from './beat-clock';
 import { generateMosh, type MoshOptions } from '../editor/mosh';
 import {
-	EFFECT_DEFINITIONS,
 	getDefinition,
 	applyPreset,
 	loadPresets,
@@ -38,14 +37,13 @@ export function toggleOneEffect(
 	moshMin: number,
 	moshMax: number,
 ): EffectInstance[] {
-	const moshableEnabled = effects.reduce<number[]>(
-		(acc, e, i) => (!e.locked && e.enabled ? [...acc, i] : acc),
-		[],
-	);
-	const moshableDisabled = effects.reduce<number[]>(
-		(acc, e, i) => (!e.locked && !e.enabled ? [...acc, i] : acc),
-		[],
-	);
+	const moshableEnabled: number[] = [];
+	const moshableDisabled: number[] = [];
+	for (let i = 0; i < effects.length; i++) {
+		const e = effects[i];
+		if (e.locked) continue;
+		(e.enabled ? moshableEnabled : moshableDisabled).push(i);
+	}
 
 	const count = moshableEnabled.length;
 	let shouldEnable: boolean;

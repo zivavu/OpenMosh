@@ -58,7 +58,7 @@ async function prepareFrameAudio(
 	checkAbort(signal);
 	const decoded = await decodeAudioFile(audioFile);
 	const end = audioEnd ?? duration;
-	const audioBuffer = await trimAudioBuffer(decoded, audioStart, end);
+	const audioBuffer = trimAudioBuffer(decoded, audioStart, end);
 	const trimmedDuration = audioBuffer.duration;
 	const frameTimes = Array.from({ length: totalFrames }, (_, i) => {
 		const t = i * frameDuration;
@@ -132,7 +132,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	if (!selectedCodec) {
 		throw new Error(
 			`Your browser cannot encode ${format.toUpperCase()} video. ` +
-				`Tried codecs: ${candidates.join(', ')}. Try WebM or GIF instead.`,
+				`Tried codecs: ${candidates.join(', ')}. Try GIF, or use a different browser.`,
 		);
 	}
 
@@ -353,7 +353,7 @@ export async function recordVideo(opts: RecordOptions): Promise<Blob> {
 }
 
 export function downloadBlob(blob: Blob, format: RecordFormat) {
-	const ext = format === 'gif' ? 'gif' : format;
+	const ext = format;
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement('a');
 	a.href = url;

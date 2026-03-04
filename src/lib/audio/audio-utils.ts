@@ -1,3 +1,38 @@
+import { getDefinition, type EffectInstance } from '../effects';
+
+export function applyVolumeLinksToEffects(
+	effects: EffectInstance[],
+	volumeLevel: number,
+	frequencyData: Uint8Array | null,
+	sampleRate: number,
+	fftSize: number,
+): void {
+	for (const effect of effects) {
+		const links = effect.volumeLinks;
+		if (!links) continue;
+		const def = getDefinition(effect.defId);
+		if (!def) continue;
+		for (const param of def.params) {
+			if (param.type !== 'range') continue;
+			const link = links[param.key];
+			if (!link) continue;
+			let level =
+				link.freqMin != null && link.freqMax != null && frequencyData && sampleRate > 0
+					? getLevelFromFrequencyRange(frequencyData, sampleRate, fftSize, link.freqMin, link.freqMax)
+					: volumeLevel;
+			if (link.inverted) level = 1 - level;
+			const { min: pMin, max: pMax, step } = param;
+			let value = link.min + level * (link.max - link.min);
+			value = Math.max(pMin, Math.min(pMax, value));
+			if (step > 0) {
+				value = Math.round((value - pMin) / step) * step + pMin;
+				value = Math.max(pMin, Math.min(pMax, value));
+			}
+			effect.values[param.key] = value;
+		}
+	}
+}
+
 export function getLevelFromFrequencyRange(
 	freqData: Uint8Array,
 	sampleRate: number,
