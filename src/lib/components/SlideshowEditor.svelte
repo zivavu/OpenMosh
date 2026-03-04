@@ -19,10 +19,7 @@
 	import { detectBpm } from '../slideshow/bpm-detector';
 	import { cloneEffects, computeEffectsForBeat } from '../slideshow/sequencer';
 	import { executeSlideshowRecording } from '../slideshow/slideshow-recorder';
-	import type {
-		SlideshowConfig,
-		SlideshowSlide,
-	} from '../slideshow/types';
+	import type { SlideshowConfig, SlideshowSlide } from '../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
 	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../text-overlay';
 	import type { SpectrumData } from '../types';
@@ -68,6 +65,15 @@
 	function reorderSlides(from: number, to: number) {
 		const [item] = slides.splice(from, 1);
 		slides.splice(to, 0, item);
+	}
+
+	function shuffleSlides() {
+		for (let i = slides.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			const tmp = slides[i];
+			slides[i] = slides[j];
+			slides[j] = tmp;
+		}
 	}
 
 	function setPresetIndex(slideId: string, presetIndex: number | null) {
@@ -492,7 +498,9 @@
 				}
 			} else {
 				const fallbackInterval = (60 / config.bpm) * config.subdivision;
-				t = (performance.now() / 1000) % (slides.length * fallbackInterval);
+				t =
+					((performance.now() / 1000) % (slides.length * fallbackInterval)) +
+					config.beatOffset;
 			}
 
 			const { index: beatIndex, fraction } = beatAtTime(
@@ -731,16 +739,17 @@
 		/>
 
 		{#if activeView === 'grid'}
-			<SlideshowGridView
-				{slides}
-				{config}
-				{presets}
-				onAddFiles={(files) => addFiles(files)}
-				onRemoveSlide={removeSlide}
-				onReorderSlides={reorderSlides}
-				onSetPresetIndex={setPresetIndex}
-				onSelectSlide={selectSlide}
-			/>
+		<SlideshowGridView
+			{slides}
+			{config}
+			{presets}
+			onAddFiles={(files) => addFiles(files)}
+			onRemoveSlide={removeSlide}
+			onReorderSlides={reorderSlides}
+			onShuffleSlides={shuffleSlides}
+			onSetPresetIndex={setPresetIndex}
+			onSelectSlide={selectSlide}
+		/>
 		{:else}
 			<div class="preview-area">
 				<GlCanvas

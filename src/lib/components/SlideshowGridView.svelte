@@ -9,6 +9,7 @@
 		onAddFiles: (files: FileList) => void;
 		onRemoveSlide: (id: string) => void;
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
+		onShuffleSlides: () => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
 		onSelectSlide: (slide: SlideshowSlide) => void;
 	}
@@ -20,6 +21,7 @@
 		onAddFiles,
 		onRemoveSlide,
 		onReorderSlides,
+		onShuffleSlides,
 		onSetPresetIndex,
 		onSelectSlide,
 	}: Props = $props();
@@ -101,6 +103,17 @@
 			<button class="add-btn" onclick={() => fileInput.click()}>Add Images</button>
 		</div>
 	{:else}
+		<div class="grid-toolbar">
+			<button class="toolbar-btn" onclick={onShuffleSlides} title="Shuffle order">
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<polyline points="16 3 21 3 21 8" />
+					<line x1="4" y1="20" x2="21" y2="3" />
+					<polyline points="21 16 21 21 16 21" />
+					<line x1="15" y1="15" x2="21" y2="21" />
+				</svg>
+				Shuffle
+			</button>
+		</div>
 		<div class="grid">
 			{#each slides as slide, i (slide.id)}
 				<div
@@ -200,6 +213,34 @@
 	.add-btn:hover {
 		border-color: #888;
 		color: #fff;
+	}
+
+	.grid-toolbar {
+		display: flex;
+		gap: 0.4rem;
+		margin-bottom: 0.6rem;
+	}
+
+	.toolbar-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.25rem 0.6rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		font-family: inherit;
+		background: none;
+		border: 1px solid #333;
+		border-radius: 5px;
+		color: #666;
+		cursor: pointer;
+		transition: color 0.15s, border-color 0.15s;
+	}
+
+	.toolbar-btn:hover {
+		color: #bbb;
+		border-color: #555;
 	}
 
 	.grid {
