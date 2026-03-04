@@ -20,3 +20,18 @@ export function createEffectInstance(def: EffectDefinition): EffectInstance {
 export function getDefinition(defId: string): EffectDefinition | undefined {
 	return EFFECT_DEFINITIONS.find((d) => d.id === defId);
 }
+
+export const HIDDEN_EFFECTS_KEY = 'openmosh-hidden-effects';
+
+export function loadInitialEffects(): EffectInstance[] {
+	try {
+		const raw = localStorage.getItem(HIDDEN_EFFECTS_KEY);
+		if (raw) {
+			const hiddenIds = new Set<string>(JSON.parse(raw));
+			return EFFECT_DEFINITIONS
+				.filter((def) => !hiddenIds.has(def.id))
+				.map(createEffectInstance);
+		}
+	} catch {}
+	return EFFECT_DEFINITIONS.map(createEffectInstance);
+}

@@ -8,6 +8,7 @@
 	import {
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
+		loadInitialEffects,
 		loadPresets,
 		type EffectInstance,
 		type Preset,
@@ -113,9 +114,7 @@
 	let selectedSegmentId = $state<string | null>(null);
 
 	// ── Effects ──
-	let effects: EffectInstance[] = $state(
-		EFFECT_DEFINITIONS.map(createEffectInstance),
-	);
+	let effects: EffectInstance[] = $state(loadInitialEffects());
 	let presets: Preset[] = $state(loadPresets());
 
 	function setVolumeLink(

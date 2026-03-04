@@ -7,6 +7,7 @@
 	import {
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
+		loadInitialEffects,
 		type EffectInstance,
 		type VolumeLink,
 	} from '../effects';
@@ -56,9 +57,7 @@
 	});
 	let canvasEl: HTMLCanvasElement | null = $state(null);
 	let glRenderer: GlRenderer | null = $state(null);
-	let effects: EffectInstance[] = $state(
-		EFFECT_DEFINITIONS.map(createEffectInstance),
-	);
+	let effects: EffectInstance[] = $state(loadInitialEffects());
 
 	const SETTINGS_KEY = 'openmosh-settings';
 	function loadSettings() {

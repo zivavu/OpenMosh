@@ -1,7 +1,7 @@
 <script lang="ts">
-	import EffectItem from './EffectItem.svelte';
 	import {
 		EFFECT_DEFINITIONS,
+		HIDDEN_EFFECTS_KEY,
 		applyPreset,
 		createEffectInstance,
 		deletePreset,
@@ -12,6 +12,7 @@
 		type VolumeLink,
 	} from '../effects';
 	import type { SpectrumData } from '../types';
+	import EffectItem from './EffectItem.svelte';
 
 	export type { SpectrumData };
 
@@ -66,8 +67,16 @@
 		effects[index].expanded = !effects[index].expanded;
 	}
 
+	function saveHiddenEffectIds() {
+		const ids = EFFECT_DEFINITIONS.filter(
+			(def) => !effects.some((e) => e.defId === def.id),
+		).map((def) => def.id);
+		localStorage.setItem(HIDDEN_EFFECTS_KEY, JSON.stringify(ids));
+	}
+
 	function remove(index: number) {
 		effects.splice(index, 1);
+		saveHiddenEffectIds();
 	}
 
 	let hiddenDefs = $derived(
@@ -76,13 +85,7 @@
 		),
 	);
 
-	const SHOW_HIDDEN_KEY = 'openmosh-show-hidden-effects';
-	let showHidden = $state(localStorage.getItem(SHOW_HIDDEN_KEY) === 'true');
-
-	function toggleShowHidden() {
-		showHidden = !showHidden;
-		localStorage.setItem(SHOW_HIDDEN_KEY, String(showHidden));
-	}
+	let showHidden = $state(false);
 
 	let searchQuery = $state('');
 
@@ -109,6 +112,7 @@
 		const def = EFFECT_DEFINITIONS.find((d) => d.id === defId);
 		if (!def) return;
 		effects.push(createEffectInstance(def));
+		saveHiddenEffectIds();
 	}
 
 	function paramChange(index: number, key: string, value: number | string) {
@@ -343,8 +347,10 @@
 		{/each}
 
 		{#if filteredHiddenDefs.length > 0}
-			<button class="hidden-header" onclick={toggleShowHidden}>
-				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}>&#9654;</span>
+			<button class="hidden-header" onclick={() => (showHidden = !showHidden)}>
+				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}
+					>&#9654;</span
+				>
 				<span>Hidden Effects ({filteredHiddenDefs.length})</span>
 			</button>
 
