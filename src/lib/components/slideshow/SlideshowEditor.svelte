@@ -272,6 +272,17 @@
 		}
 	}
 
+	$effect(() => {
+		if (!audioPlaying || !audioEl) return;
+		let rafId: number;
+		const tick = () => {
+			if (audioEl) trackCurrentTime = audioEl.currentTime;
+			rafId = requestAnimationFrame(tick);
+		};
+		rafId = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(rafId);
+	});
+
 	function ensureAudioGraph() {
 		if (!audioEl || audioContext) return;
 		const state = createAudioGraph(audioEl);

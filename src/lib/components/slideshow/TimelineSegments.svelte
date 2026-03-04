@@ -39,13 +39,9 @@
 		config: SlideshowConfig;
 		trackDuration: number;
 		onConfigChange: (config: SlideshowConfig) => void;
-		/** Element to align the track width with (the audio timeline track). */
 		alignToEl?: HTMLElement;
-		/** Selected segment id; bound so parent can sync. */
 		selectedSegmentId?: string | null;
-		/** Current audio playback position in seconds. */
 		currentTime?: number;
-		/** Called when the user seeks by clicking/dragging the timeline. */
 		onSeek?: (time: number) => void;
 	}
 
@@ -606,9 +602,7 @@
 />
 
 <div class="tl-container">
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="tl-track" bind:this={wrapperEl} style={alignStyle}>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}

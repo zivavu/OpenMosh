@@ -125,8 +125,10 @@
 		<div class="timeline-track">
 			<div
 				class="timeline-span"
-				style="left: {(spanStart / trackDuration) *
-					100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
+				style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd -
+					spanStart) /
+					trackDuration) *
+					100}%"
 			></div>
 			<div
 				class="timeline-playhead"
@@ -162,7 +164,8 @@
 		max="1"
 		step="0.01"
 		value={outputVolume}
-		oninput={(e) => onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+		oninput={(e) =>
+			onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
 		title="Volume: {Math.round(outputVolume * 100)}%"
 	/>
 	<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track">
@@ -188,7 +191,7 @@
 	alignToEl={timelineTrackEl}
 	bind:selectedSegmentId
 	currentTime={trackCurrentTime}
-	onSeek={onSeek}
+	{onSeek}
 />
 
 <style>
