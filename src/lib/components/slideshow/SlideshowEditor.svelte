@@ -698,6 +698,9 @@
 		recordAbort?.abort();
 	}
 
+	// ── Drag & Drop ──
+	let dragging = $state(false);
+
 	// ── Keyboard ──
 	function handleKeydown(e: KeyboardEvent) {
 		if (
@@ -740,7 +743,41 @@
 	hidden
 />
 
-<div class="editor">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="editor"
+	class:drag-over={dragging}
+	ondragover={(e) => {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragging = true;
+	}}
+	ondragenter={(e) => {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragging = true;
+	}}
+	ondragleave={(e) => {
+		if (
+			e.currentTarget === e.target ||
+			!e.currentTarget.contains(e.relatedTarget as Node)
+		)
+			dragging = false;
+	}}
+	ondrop={(e) => {
+		e.preventDefault();
+		dragging = false;
+		const files = e.dataTransfer?.files;
+		if (!files || files.length === 0) return;
+		const first = files[0];
+		if (first.type.startsWith('audio/')) {
+			clearTrack();
+			trackFile = first;
+		} else {
+			addFiles(files);
+		}
+	}}
+>
 	<div class="main-area">
 		<SlideshowTopBar
 			{activeView}
@@ -877,6 +914,12 @@
 			onVolumeLinkChange={setVolumeLink}
 		/>
 	</div>
+
+	{#if dragging}
+		<div class="drop-overlay">
+			<span>Drop to add images or replace audio</span>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -939,5 +982,37 @@
 		border-left: 1px solid #2a2a2a;
 		overflow-y: auto;
 		flex-shrink: 0;
+	}
+
+	.editor {
+		position: relative;
+	}
+
+	.editor.drag-over::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		z-index: 99;
+		border: 2px dashed #888;
+		border-radius: 8px;
+		pointer-events: none;
+	}
+
+	.drop-overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 100;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(0, 0, 0, 0.6);
+		pointer-events: none;
+	}
+
+	.drop-overlay span {
+		font-size: 1.2rem;
+		font-weight: 600;
+		color: #ccc;
+		letter-spacing: 0.04em;
 	}
 </style>

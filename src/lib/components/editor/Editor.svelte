@@ -699,8 +699,13 @@
 		e.preventDefault();
 		dragging = false;
 		const f = e.dataTransfer?.files[0];
-		if (f && (f.type.startsWith('image/') || f.type.startsWith('video/')))
+		if (!f) return;
+		if (f.type.startsWith('audio/')) {
+			clearTrack();
+			trackFile = f;
+		} else if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
 			onfile(f);
+		}
 	}}
 >
 	<div class="main-area">
