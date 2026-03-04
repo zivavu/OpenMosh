@@ -135,9 +135,9 @@
 	let dragging: DragState = $state(null);
 	let dragMoved = $state(false);
 
-	// ── Selection / clipboard ─────────────────────────────────────────────────
-	let selectedPointIds = $state<string[]>([]);
-	let clipboard = $state<number[]>([]); // relative offsets from leftmost selected point
+	// ── Selection / clipboard (boundary dots) ────────────────────────────────
+	let selectedBoundaryTimes = $state<number[]>([]); // absolute track times of selected boundaries
+	let clipboard = $state<number[]>([]); // relative offsets from leftmost selected boundary
 	let pasteMode = $state(false);
 	let pasteCursorTime = $state(0);
 
@@ -404,21 +404,29 @@
 
 	function startSeekDrag(e: PointerEvent) {
 		if (e.button !== 0) return;
-		// If in paste mode, place the clipboard points at the clicked time
+		// If in paste mode, split segments at clipboard offsets from the clicked time
 		if (pasteMode && clipboard.length > 0) {
 			e.stopPropagation();
 			const anchorTime = clientXToTime(e.clientX);
-			const newPoints = clipboard
-				.map((offset) => anchorTime + offset)
-				.filter((t) => t >= 0 && t <= trackDuration)
-				.filter(
-					(t) =>
-						!config.manualSwitchPoints.some((p) => Math.abs(p.time - t) < 0.01),
-				)
-				.map((t) => ({ id: crypto.randomUUID(), time: t }));
-			emit({
-				manualSwitchPoints: [...config.manualSwitchPoints, ...newPoints],
-			});
+			let newSegments = [...config.segments];
+			for (const offset of clipboard) {
+				const t = anchorTime + offset;
+				if (t <= 0.001 || t >= trackDuration - 0.001) continue;
+				const sorted = [...newSegments].sort((a, b) => a.startTime - b.startTime);
+				const hit = sorted.find((s) => {
+					const end = s.endTime ?? trackDuration;
+					return t > s.startTime + 0.01 && t < end - 0.01;
+				});
+				if (!hit) continue;
+				const hitEnd = hit.endTime ?? trackDuration;
+				newSegments = newSegments
+					.filter((s) => s.id !== hit.id)
+					.concat([
+						{ id: crypto.randomUUID(), startTime: hit.startTime, endTime: t, subdivision: hit.subdivision },
+						{ id: crypto.randomUUID(), startTime: t, endTime: hitEnd, subdivision: hit.subdivision },
+					]);
+			}
+			emit({ segments: newSegments });
 			pasteMode = false;
 			return;
 		}
@@ -429,7 +437,7 @@
 		}
 		// Default: seek
 		if (!onSeek) return;
-		selectedPointIds = [];
+		selectedBoundaryTimes = [];
 		const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
@@ -550,11 +558,18 @@
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
-				selectedPointIds = manualPoints
-					.filter((p) => p.time >= minTime && p.time <= maxTime)
-					.map((p) => p.id);
+				// Collect all interior boundary times within the rect's time range
+				const times = new Set<number>();
+				for (const s of segments) {
+					if (s.startTime > 0.001 && s.startTime >= minTime && s.startTime <= maxTime)
+						times.add(s.startTime);
+					const end = s.endTime ?? trackDuration;
+					if (end < trackDuration - 0.001 && end >= minTime && end <= maxTime)
+						times.add(end);
+				}
+				selectedBoundaryTimes = [...times];
 			} else {
-				selectedPointIds = [];
+				selectedBoundaryTimes = [];
 			}
 		}
 		if (dragging?.type === 'seg-y') {
@@ -639,13 +654,12 @@
 		const t = e.target as HTMLElement;
 		if (t.closest('input, textarea, select')) return;
 
-		// Copy selected manual points
+		// Copy selected boundary dots
 		if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-			if (selectedPointIds.length > 0) {
+			if (selectedBoundaryTimes.length > 0) {
 				e.preventDefault();
-				const selected = manualPoints.filter((p) => selectedPointIds.includes(p.id));
-				const minTime = Math.min(...selected.map((p) => p.time));
-				clipboard = selected.map((p) => p.time - minTime);
+				const minTime = Math.min(...selectedBoundaryTimes);
+				clipboard = selectedBoundaryTimes.map((t) => t - minTime);
 			}
 			return;
 		}
@@ -655,7 +669,7 @@
 			if (clipboard.length > 0) {
 				e.preventDefault();
 				pasteMode = true;
-				selectedPointIds = [];
+				selectedBoundaryTimes = [];
 			}
 			return;
 		}
@@ -666,8 +680,8 @@
 				pasteMode = false;
 				return;
 			}
-			if (selectedPointIds.length > 0) {
-				selectedPointIds = [];
+			if (selectedBoundaryTimes.length > 0) {
+				selectedBoundaryTimes = [];
 				return;
 			}
 		}
@@ -690,14 +704,20 @@
 	);
 	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
 
-	// Points currently inside the in-progress rect-select drag (for live highlighting)
-	let rectHoverIds = $derived.by((): string[] => {
+	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
+	let rectHoverTimes = $derived.by((): number[] => {
 		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
-		return manualPoints
-			.filter((p) => p.time >= minTime && p.time <= maxTime)
-			.map((p) => p.id);
+		const times = new Set<number>();
+		for (const s of segments) {
+			if (s.startTime > 0.001 && s.startTime >= minTime && s.startTime <= maxTime)
+				times.add(s.startTime);
+			const end = s.endTime ?? trackDuration;
+			if (end < trackDuration - 0.001 && end >= minTime && end <= maxTime)
+				times.add(end);
+		}
+		return [...times];
 	});
 
 	let svgCursor = $derived.by(() => {
@@ -831,6 +851,8 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === lId &&
 							hoveredDot?.rightSegId === sv.id}
+						class:dot-selected={selectedBoundaryTimes.some((t) => Math.abs(t - sv.startTime) < 0.001) ||
+							rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
 						cx="{sv.startX}%"
 						cy={sv.y}
 						r={DOT_R}
@@ -850,6 +872,8 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === sv.id &&
 							hoveredDot?.rightSegId === rId}
+						class:dot-selected={selectedBoundaryTimes.some((t) => Math.abs(t - sv.endTime) < 0.001) ||
+							rectHoverTimes.some((t) => Math.abs(t - sv.endTime) < 0.001)}
 						cx="{sv.endX}%"
 						cy={sv.y}
 						r={DOT_R}
@@ -875,8 +899,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
 					class="manual-dot"
-					class:manual-dot-selected={selectedPointIds.includes(pt.id) || rectHoverIds.includes(pt.id)}
-					cx="{xp}%"
+						cx="{xp}%"
 					cy={PAD_V - 3}
 					r={DOT_R}
 					onpointerdown={(e) => startManDrag(e, pt.id)}
@@ -1068,8 +1091,14 @@
 	}
 
 	.dot:hover,
-	.dot-hovered {
+	.dot-hovered,
+	.dot-selected {
 		fill: #5a8fc0;
+	}
+
+	.dot-selected {
+		stroke: #90d0ff;
+		stroke-width: 2;
 	}
 
 	.dot-hovered {
@@ -1095,10 +1124,6 @@
 		fill: #cc6666;
 	}
 
-	.manual-dot-selected {
-		fill: #cc6666;
-		stroke: #ff9999;
-	}
 
 	/* Rectangle selection box */
 	.select-rect {
