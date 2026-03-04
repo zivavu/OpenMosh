@@ -387,6 +387,7 @@
 <style>
 	.effects-panel {
 		height: 100%;
+		width: 300px;
 		background: #161616;
 		border-left: 1px solid #1e1e1e;
 		display: flex;
