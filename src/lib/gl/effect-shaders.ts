@@ -1372,6 +1372,40 @@ void main() {
 }`,
 		setUniforms: floats('amount', 'angle', 'stretch'),
 	},
+	'luma-mesh': {
+		fragment:
+			H +
+			`uniform float u_count;
+uniform float u_thickness;
+uniform float u_hue;
+uniform float u_opacity;
+
+vec3 hsvToRgb(float h, float s, float v) {
+  h = fract(h);
+  float i = floor(h * 6.0);
+  float f = h * 6.0 - i;
+  float p = v * (1.0 - s);
+  float q = v * (1.0 - f * s);
+  float t = v * (1.0 - (1.0 - f) * s);
+  if (i == 0.0) return vec3(v, t, p);
+  if (i == 1.0) return vec3(q, v, p);
+  if (i == 2.0) return vec3(p, v, t);
+  if (i == 3.0) return vec3(p, q, v);
+  if (i == 4.0) return vec3(t, p, v);
+  return vec3(v, p, q);
+}
+
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  float bands = luma * u_count;
+  float f = fract(bands);
+  float line = 1.0 - smoothstep(0.0, u_thickness, min(f, 1.0 - f));
+  vec3 lineColor = hsvToRgb(u_hue / 360.0, 0.8, 1.0);
+  outColor = vec4(mix(c.rgb, lineColor, line * u_opacity), c.a);
+}`,
+		setUniforms: floats('count', 'thickness', 'hue', 'opacity'),
+	},
 };
 
 export const ANIMATED_EFFECTS = new Set(
