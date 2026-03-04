@@ -102,6 +102,7 @@ export async function executeSlideshowRecording(
 			: null;
 	const textBlendMode = textOverlay?.blendMode ?? 'normal';
 	const textInvert = textOverlay?.invert ?? false;
+	const textOpacity = textOverlay?.opacity ?? 1;
 	const textChance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
 	const textLayout = textOverlay?.layout ?? 'scattered';
 
@@ -142,6 +143,7 @@ export async function executeSlideshowRecording(
 					seed,
 					blendMode: textBlendMode,
 					invert: textInvert,
+					opacity: textOpacity,
 				});
 			} else {
 				renderer.setTextOverlay(null);

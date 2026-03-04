@@ -6,8 +6,6 @@
 		disposeAudioGraph as disposeAudioGraphState,
 	} from '../audio/audio-controller';
 	import {
-		EFFECT_DEFINITIONS,
-		createEffectInstance,
 		loadInitialEffects,
 		loadPresets,
 		type EffectInstance,
@@ -235,7 +233,23 @@
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
-	let outputVolume = $state(1);
+	const SLIDESHOW_SETTINGS_KEY = 'openmosh-slideshow-settings';
+	function loadSlideshowSettings() {
+		try {
+			const raw = localStorage.getItem(SLIDESHOW_SETTINGS_KEY);
+			if (raw) return JSON.parse(raw);
+		} catch {}
+		return {};
+	}
+	function saveSlideshowSettings() {
+		localStorage.setItem(SLIDESHOW_SETTINGS_KEY, JSON.stringify({ outputVolume }));
+	}
+	const savedSlideshowSettings = loadSlideshowSettings();
+	let outputVolume = $state(savedSlideshowSettings.outputVolume ?? 1);
+	$effect(() => {
+		outputVolume;
+		saveSlideshowSettings();
+	});
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {
@@ -536,6 +550,7 @@
 						seed: beatIndex,
 						blendMode: to?.blendMode ?? 'normal',
 						invert: to?.invert ?? false,
+						opacity: to?.opacity ?? 1,
 					});
 				}
 			} else if (glRenderer) {
@@ -738,17 +753,17 @@
 		/>
 
 		{#if activeView === 'grid'}
-		<SlideshowGridView
-			{slides}
-			{config}
-			{presets}
-			onAddFiles={(files) => addFiles(files)}
-			onRemoveSlide={removeSlide}
-			onReorderSlides={reorderSlides}
-			onShuffleSlides={shuffleSlides}
-			onSetPresetIndex={setPresetIndex}
-			onSelectSlide={selectSlide}
-		/>
+			<SlideshowGridView
+				{slides}
+				{config}
+				{presets}
+				onAddFiles={(files) => addFiles(files)}
+				onRemoveSlide={removeSlide}
+				onReorderSlides={reorderSlides}
+				onShuffleSlides={shuffleSlides}
+				onSetPresetIndex={setPresetIndex}
+				onSelectSlide={selectSlide}
+			/>
 		{:else}
 			<div class="preview-area">
 				<GlCanvas
@@ -849,6 +864,7 @@
 		<SlideshowConfigPanel
 			{config}
 			{bpmDetecting}
+			hasTrack={!!trackFile}
 			onDetectBpm={runBpmDetection}
 			{onConfigChange}
 			{trackCurrentTime}

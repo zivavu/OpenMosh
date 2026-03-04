@@ -5,7 +5,7 @@ export type TextOverlaySplitBy = 'sentence' | 'line' | 'both';
 export type TextOverlayLayout = 'block' | 'scattered';
 
 /** How to composite the text layer onto the main image. */
-export type TextOverlayBlendMode = 'normal' | 'multiply' | 'add' | 'screen';
+export type TextOverlayBlendMode = 'normal' | 'multiply' | 'add' | 'screen' | 'overlay' | 'difference' | 'exclusion' | 'subtract';
 
 /** Effect IDs that can be applied to the text layer (kept for renderer API). */
 export const TEXT_SAFE_EFFECT_IDS = ['scanlines', 'grain', 'vignette', 'bleach'] as const;
@@ -39,6 +39,8 @@ export interface TextOverlayConfig {
 	blendMode: TextOverlayBlendMode;
 	/** Invert text layer (negative). */
 	invert: boolean;
+	/** Opacity of the text layer (0–1). */
+	opacity: number;
 	/** Chance (0–1) that a slide/frame will show text. */
 	chance: number;
 	/** Layout: block = single block, scattered = each word at random position. */
@@ -63,6 +65,7 @@ export const DEFAULT_TEXT_OVERLAY_CONFIG: TextOverlayConfig = {
 	splitBy: 'sentence',
 	blendMode: 'normal',
 	invert: false,
+	opacity: 1,
 	chance: 0.8,
 	layout: 'scattered',
 	style: { ...DEFAULT_TEXT_OVERLAY_STYLE },

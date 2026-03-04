@@ -287,7 +287,34 @@
 
 	.volume-slider {
 		width: 60px;
-		accent-color: #888;
+		height: 4px;
+		appearance: none;
+		background: #333;
+		border-radius: 2px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.volume-slider::-webkit-slider-thumb {
+		appearance: none;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: #aaa;
+		cursor: pointer;
+	}
+	.volume-slider::-moz-range-thumb {
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: #aaa;
+		border: none;
+		cursor: pointer;
+	}
+	.volume-slider:hover::-webkit-slider-thumb {
+		background: #fff;
+	}
+	.volume-slider:hover::-moz-range-thumb {
+		background: #fff;
 	}
 
 	.track-inline-btn {

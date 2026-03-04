@@ -21,13 +21,14 @@ export const PASSTHROUGH_FRAG =
   outColor = texture(u_texture, v_uv);
 }`;
 
-/** Blend text overlay over main image. u_blendMode: 0=normal, 1=multiply, 2=add, 3=screen. u_invert: 0/1. */
+/** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,4=overlay,5=difference,6=exclusion,7=subtract. u_invert: 0/1. u_opacity: 0-1. */
 export const TEXT_BLEND_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_texture;
 uniform sampler2D u_texture2;
 uniform int u_blendMode;
 uniform float u_invert;
+uniform float u_opacity;
 in vec2 v_uv;
 out vec4 outColor;
 void main() {
@@ -36,20 +37,30 @@ void main() {
   if (u_invert > 0.5) {
     textC.rgb = 1.0 - textC.rgb;
   }
-  float a = textC.a;
+  float a = textC.a * u_opacity;
   vec3 mainRgb = mainC.rgb;
   vec3 textRgb = textC.rgb;
-  vec3 result;
+  vec3 blended;
   if (u_blendMode == 1) {
-    result = mainRgb * mix(vec3(1.0), textRgb, a);
+    blended = mainRgb * mix(vec3(1.0), textRgb, a);
   } else if (u_blendMode == 2) {
-    result = min(vec3(1.0), mainRgb + textRgb * a * 0.8);
+    blended = min(vec3(1.0), mainRgb + textRgb * a * 0.8);
   } else if (u_blendMode == 3) {
-    result = 1.0 - (1.0 - mainRgb) * (1.0 - textRgb * a);
+    blended = 1.0 - (1.0 - mainRgb) * (1.0 - textRgb * a);
+  } else if (u_blendMode == 4) {
+    vec3 t = mix(mainRgb, textRgb, a);
+    blended = mix(2.0 * mainRgb * t, 1.0 - 2.0 * (1.0 - mainRgb) * (1.0 - t), step(0.5, mainRgb));
+  } else if (u_blendMode == 5) {
+    blended = mix(mainRgb, abs(mainRgb - textRgb), a);
+  } else if (u_blendMode == 6) {
+    vec3 t = mix(mainRgb, textRgb, a);
+    blended = mainRgb + t - 2.0 * mainRgb * t;
+  } else if (u_blendMode == 7) {
+    blended = mix(mainRgb, max(vec3(0.0), mainRgb - textRgb), a);
   } else {
-    result = mix(mainRgb, textRgb, a);
+    blended = mix(mainRgb, textRgb, a);
   }
-  outColor = vec4(clamp(result, 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(blended, 0.0, 1.0), 1.0);
 }`;
 
 export interface EffectShaderDef {

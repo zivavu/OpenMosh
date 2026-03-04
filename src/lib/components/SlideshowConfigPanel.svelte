@@ -14,6 +14,7 @@
 	interface Props {
 		config: SlideshowConfig;
 		bpmDetecting: boolean;
+		hasTrack?: boolean;
 		onDetectBpm: () => void;
 		onConfigChange: (config: SlideshowConfig) => void;
 		/** Playhead time in seconds; beat division row shows the segment at this time. */
@@ -24,6 +25,7 @@
 	let {
 		config,
 		bpmDetecting,
+		hasTrack = false,
 		onDetectBpm,
 		onConfigChange,
 		trackCurrentTime = 0,
@@ -137,7 +139,7 @@
 			value={config.bpm}
 			oninput={(e) => set('bpm', +(e.currentTarget as HTMLInputElement).value)}
 		/>
-		<button class="detect-btn" onclick={onDetectBpm} disabled={bpmDetecting}>
+		<button class="detect-btn" onclick={onDetectBpm} disabled={bpmDetecting || !hasTrack}>
 			{bpmDetecting ? 'Detecting...' : 'Detect'}
 		</button>
 		<button class="detect-btn" onclick={handleTap}>
@@ -165,6 +167,7 @@
 				}
 			}}
 		>
+			<option value={0.03125}>1/32 beat</option>
 			<option value={0.0625}>1/16 beat</option>
 			<option value={0.125}>1/8 beat</option>
 			<option value={0.25}>1/4 beat</option>
@@ -382,8 +385,12 @@
 			>
 				<option value="normal">Normal</option>
 				<option value="multiply">Multiply</option>
-				<option value="add">Add</option>
 				<option value="screen">Screen</option>
+				<option value="overlay">Overlay</option>
+				<option value="add">Add</option>
+				<option value="subtract">Subtract</option>
+				<option value="difference">Difference</option>
+				<option value="exclusion">Exclusion</option>
 			</select>
 		</div>
 		<div class="config-row">
@@ -398,6 +405,20 @@
 						(e.currentTarget as HTMLInputElement).checked,
 					)}
 			/>
+		</div>
+		<div class="config-row">
+			<label for="ss-text-opacity">Opacity</label>
+			<input
+				id="ss-text-opacity"
+				type="range"
+				min="0"
+				max="1"
+				step="0.01"
+				value={textOverlay.opacity ?? 1}
+				oninput={(e) =>
+					setTextOverlay('opacity', +(e.currentTarget as HTMLInputElement).value)}
+			/>
+			<span class="config-value">{Math.round((textOverlay.opacity ?? 1) * 100)}%</span>
 		</div>
 		<div class="config-row">
 			<label for="ss-text-size">Size</label>

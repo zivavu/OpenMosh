@@ -36,6 +36,7 @@ export class GlRenderer {
   private textOverlayEffectIds: string[] = [];
   private textBlendMode: TextOverlayBlendMode = 'normal';
   private textInvert = false;
+  private textOpacity = 1;
   /** Cache for setTextOverlay: skip redraw when phrase/seed/layout/style/dims unchanged. */
   private lastTextSeed: number | null = null;
   private lastTextLayout: string | null = null;
@@ -123,10 +124,12 @@ export class GlRenderer {
     textEffectIdOrOptions?: TextSafeEffectId | '' | (DrawPhraseOptions & {
       blendMode?: TextOverlayBlendMode;
       invert?: boolean;
+      opacity?: number;
     }),
     options?: DrawPhraseOptions & {
       blendMode?: TextOverlayBlendMode;
       invert?: boolean;
+      opacity?: number;
     },
   ) {
     this.textOverlayPhrase = phrase;
@@ -136,6 +139,7 @@ export class GlRenderer {
     this.textOverlayEffectIds = legacyId ? [legacyId] : [];
     this.textBlendMode = opts?.blendMode ?? 'normal';
     this.textInvert = opts?.invert ?? false;
+    this.textOpacity = opts?.opacity ?? 1;
     if (!phrase || !style) return;
     if (this.imgW <= 0 || this.imgH <= 0) return;
     const layout = opts?.layout ?? 'block';
@@ -207,7 +211,7 @@ export class GlRenderer {
       const mainResult = this.fbTextures[writeIdx]!;
       if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
         const overlayTex = this.runTextEffects(this.textTexture, time);
-        this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert);
+        this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert, this.textOpacity);
       } else {
         this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
       }
@@ -246,7 +250,7 @@ export class GlRenderer {
     const mainResult = this.fbTextures[writeIdx]!;
     if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
       const overlayTex = this.runTextEffects(this.textTexture, time);
-      this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert);
+      this.drawBlendToCanvas(mainResult, overlayTex, this.textBlendMode, this.textInvert, this.textOpacity);
     } else {
       this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
     }
@@ -399,14 +403,19 @@ export class GlRenderer {
     multiply: 1,
     add: 2,
     screen: 3,
+    overlay: 4,
+    difference: 5,
+    exclusion: 6,
+    subtract: 7,
   };
 
-  /** Draw to canvas: blend main texture with overlay (mode + invert). */
+  /** Draw to canvas: blend main texture with overlay (mode + invert + opacity). */
   private drawBlendToCanvas(
     mainTex: WebGLTexture,
     overlayTex: WebGLTexture,
     blendMode: TextOverlayBlendMode = 'normal',
     invert = false,
+    opacity = 1,
   ) {
     const gl = this.gl;
     const prog = this.textBlendProgram;
@@ -417,6 +426,7 @@ export class GlRenderer {
     if (prog.uniforms['u_flipY']) gl.uniform1f(prog.uniforms['u_flipY'], -1.0);
     if (prog.uniforms['u_blendMode']) gl.uniform1i(prog.uniforms['u_blendMode'], GlRenderer.BLEND_MODE_VALUES[blendMode]);
     if (prog.uniforms['u_invert']) gl.uniform1f(prog.uniforms['u_invert'], invert ? 1 : 0);
+    if (prog.uniforms['u_opacity']) gl.uniform1f(prog.uniforms['u_opacity'], opacity);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, mainTex);
     if (prog.uniforms['u_texture']) gl.uniform1i(prog.uniforms['u_texture'], 0);

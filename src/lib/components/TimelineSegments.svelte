@@ -5,11 +5,11 @@
 		TimelineSegment,
 	} from '../slideshow/types';
 
-	const MIN_SEGMENT_DURATION = 0.5;
+	const MIN_SEGMENT_DURATION = 0.25;
 
-	// Ordered top→bottom: fast (1/16) to slow (4) — lower = higher beat value
-	const SUBDIVISIONS: BeatSubdivision[] = [0.0625, 0.125, 0.25, 0.5, 1, 2, 4];
-	const SUBLABELS = ['¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4'];
+	// Ordered top→bottom: fast (1/32) to slow (4) — lower = higher beat value
+	const SUBDIVISIONS: BeatSubdivision[] = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4];
+	const SUBLABELS = ['¹⁄₃₂', '¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4'];
 
 	const SVG_H = 76;
 	const PAD_V = 10;
