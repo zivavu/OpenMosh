@@ -102,18 +102,8 @@ export async function executeSlideshowRecording(
 			: null;
 	const textBlendMode = textOverlay?.blendMode ?? 'normal';
 	const textInvert = textOverlay?.invert ?? false;
-	const phraseMode = textOverlay?.phraseMode ?? 'per-beat';
 	const textChance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
 	const textLayout = textOverlay?.layout ?? 'scattered';
-
-	function getPhraseForFrame(frameIndex: number, beatIndex: number): string | null {
-		if (phrases.length === 0) return null;
-		let idx: number;
-		if (phraseMode === 'per-beat') idx = beatIndex % phrases.length;
-		else if (phraseMode === 'sequential') idx = frameIndex % phrases.length;
-		else idx = (frameIndex * 7919 + beatIndex) % phrases.length; // deterministic "random"
-		return phrases[idx] ?? null;
-	}
 
 	const blob = await recordVideo({
 		format,
@@ -145,7 +135,7 @@ export async function executeSlideshowRecording(
 			const roll = ((frameIndex * 7919 + beatIndex) % 1000) / 1000;
 			const showText = phrases.length > 0 && style && roll < textChance;
 			if (showText) {
-				const phrase = getPhraseForFrame(frameIndex, beatIndex);
+				const phrase = phrases[beatIndex % phrases.length] ?? null;
 				const seed = frameIndex * 31 + beatIndex;
 				renderer.setTextOverlay(phrase, style, undefined, {
 					layout: textLayout,

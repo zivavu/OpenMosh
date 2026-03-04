@@ -8,7 +8,6 @@ export type {
 	TextOverlayConfig,
 	TextOverlayStyle,
 	TextOverlaySplitBy,
-	TextOverlayPhraseMode,
 	TextOverlayLayout,
 	TextOverlayBlendMode,
 	TextSafeEffectId,

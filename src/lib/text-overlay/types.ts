@@ -1,9 +1,6 @@
 /** How to split the dictionary into phrases. */
 export type TextOverlaySplitBy = 'sentence' | 'line' | 'both';
 
-/** How to choose which phrase to show per frame (e.g. per beat). */
-export type TextOverlayPhraseMode = 'per-beat' | 'random' | 'sequential';
-
 /** Layout of text: block = one block at style position, scattered = each word at random position. */
 export type TextOverlayLayout = 'block' | 'scattered';
 
@@ -38,7 +35,6 @@ export interface TextOverlayConfig {
 	/** Raw text: split by sentence (.), line (\\n), or both to get phrases. */
 	dictionary: string;
 	splitBy: TextOverlaySplitBy;
-	phraseMode: TextOverlayPhraseMode;
 	/** How to composite text onto the image. */
 	blendMode: TextOverlayBlendMode;
 	/** Invert text layer (negative). */
@@ -65,7 +61,6 @@ export const DEFAULT_TEXT_OVERLAY_CONFIG: TextOverlayConfig = {
 	enabled: false,
 	dictionary: '',
 	splitBy: 'sentence',
-	phraseMode: 'per-beat',
 	blendMode: 'normal',
 	invert: false,
 	chance: 0.8,

@@ -8,7 +8,6 @@
 		parsePhrases,
 		type TextOverlayBlendMode,
 		type TextOverlayLayout,
-		type TextOverlayPhraseMode,
 		type TextOverlaySplitBy,
 	} from '../text-overlay';
 
@@ -319,23 +318,6 @@
 				<option value="sentence">Sentence (.)</option>
 				<option value="line">Line</option>
 				<option value="both">Both</option>
-			</select>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-mode">Phrase per</label>
-			<select
-				id="ss-text-mode"
-				value={textOverlay.phraseMode}
-				onchange={(e) =>
-					setTextOverlay(
-						'phraseMode',
-						(e.currentTarget as HTMLSelectElement)
-							.value as TextOverlayPhraseMode,
-					)}
-			>
-				<option value="per-beat">Beat</option>
-				<option value="random">Random</option>
-				<option value="sequential">Sequential</option>
 			</select>
 		</div>
 		<div class="config-row">
