@@ -1,5 +1,5 @@
 import type { SlideshowSlide, SlideshowConfig } from './types';
-import type { EffectInstance, RangeParam } from '../effects';
+import type { EffectInstance } from '../effects';
 import { beatAtTime } from './beat-clock';
 import { generateMosh, type MoshOptions } from '../editor/mosh';
 import {
@@ -30,41 +30,63 @@ export function cloneEffects(effects: EffectInstance[]): EffectInstance[] {
 }
 
 /**
- * Smooth modulation: pick one enabled effect, pick one range param,
- * nudge it by ±10–30% of its range. Returns a new effects array.
+ * Smooth mode: toggle exactly one non-locked effect on or off.
+ * Biased toward enabling when below moshMin and disabling when above moshMax.
  */
-export function nudgeOneParam(effects: EffectInstance[]): EffectInstance[] {
-	const enabled = effects.filter((e) => e.enabled);
-	if (enabled.length === 0) return effects;
-
-	const target = enabled[Math.floor(Math.random() * enabled.length)];
-	const def = getDefinition(target.defId);
-	if (!def) return effects;
-
-	const rangeParams = def.params.filter(
-		(p): p is RangeParam => p.type === 'range',
+export function toggleOneEffect(
+	effects: EffectInstance[],
+	moshMin: number,
+	moshMax: number,
+): EffectInstance[] {
+	const moshableEnabled = effects.reduce<number[]>(
+		(acc, e, i) => (!e.locked && e.enabled ? [...acc, i] : acc),
+		[],
 	);
-	if (rangeParams.length === 0) return effects;
-
-	const param = rangeParams[Math.floor(Math.random() * rangeParams.length)];
-	const current = target.values[param.key] as number;
-	const lo = param.moshMin ?? param.min;
-	const hi = param.moshMax ?? param.max;
-	const nudge =
-		(hi - lo) *
-		(0.1 + Math.random() * 0.2) *
-		(Math.random() < 0.5 ? 1 : -1);
-	const next = Math.max(lo, Math.min(hi, current + nudge));
-	const snapped =
-		param.step > 0
-			? Math.round((next - param.min) / param.step) * param.step + param.min
-			: next;
-
-	return effects.map((e) =>
-		e.instanceId === target.instanceId
-			? { ...e, values: { ...e.values, [param.key]: snapped } }
-			: e,
+	const moshableDisabled = effects.reduce<number[]>(
+		(acc, e, i) => (!e.locked && !e.enabled ? [...acc, i] : acc),
+		[],
 	);
+
+	const count = moshableEnabled.length;
+	let shouldEnable: boolean;
+	if (count <= moshMin || moshableDisabled.length === 0) {
+		shouldEnable = true;
+	} else if (count >= moshMax || moshableEnabled.length === 0) {
+		shouldEnable = false;
+	} else {
+		shouldEnable = Math.random() < 0.5;
+	}
+
+	const candidates = shouldEnable ? moshableDisabled : moshableEnabled;
+	if (candidates.length === 0) return effects;
+
+	const pick = candidates[Math.floor(Math.random() * candidates.length)];
+	return effects.map((e, i) => {
+		if (i !== pick) return e;
+		const toggled = { ...e, enabled: !e.enabled };
+		if (!toggled.enabled) return toggled;
+
+		// Randomize params when enabling
+		const def = getDefinition(toggled.defId);
+		if (!def) return toggled;
+		const values = { ...toggled.values };
+		for (const param of def.params) {
+			if (param.type === 'range') {
+				const lo = param.moshMin ?? param.min;
+				const hi = param.moshMax ?? param.max;
+				const bias = 0.15 + Math.random() * 0.55;
+				const raw = lo + bias * (hi - lo);
+				values[param.key] =
+					param.step > 0
+						? Math.round((raw - param.min) / param.step) * param.step + param.min
+						: raw;
+			} else if (param.type === 'select') {
+				const opts = param.options;
+				values[param.key] = opts[Math.floor(Math.random() * opts.length)].value;
+			}
+		}
+		return { ...toggled, values };
+	});
 }
 
 /**
@@ -87,7 +109,14 @@ export function computeEffectsForBeat(
 		case 'consistent':
 			return cloneEffects(baseEffects);
 		case 'smooth': {
-			smoothState.effects = nudgeOneParam(smoothState.effects);
+			const steps = Math.max(1, Math.round(config.smoothSpeed ?? 1));
+			for (let i = 0; i < steps; i++) {
+				smoothState.effects = toggleOneEffect(
+					smoothState.effects,
+					moshOptions.moshMin,
+					moshOptions.moshMax,
+				);
+			}
 			return cloneEffects(smoothState.effects);
 		}
 		case 'per-image': {

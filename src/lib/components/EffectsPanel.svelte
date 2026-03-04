@@ -76,7 +76,14 @@
 		),
 	);
 
-	let showHidden = $state(false);
+	const SHOW_HIDDEN_KEY = 'openmosh-show-hidden-effects';
+	let showHidden = $state(localStorage.getItem(SHOW_HIDDEN_KEY) === 'true');
+
+	function toggleShowHidden() {
+		showHidden = !showHidden;
+		localStorage.setItem(SHOW_HIDDEN_KEY, String(showHidden));
+	}
+
 	let searchQuery = $state('');
 
 	let filteredEffects = $derived(
@@ -336,7 +343,7 @@
 		{/each}
 
 		{#if filteredHiddenDefs.length > 0}
-			<button class="hidden-header" onclick={() => (showHidden = !showHidden)}>
+			<button class="hidden-header" onclick={toggleShowHidden}>
 				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}>&#9654;</span>
 				<span>Hidden Effects ({filteredHiddenDefs.length})</span>
 			</button>

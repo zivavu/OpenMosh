@@ -236,6 +236,22 @@
 		</div>
 	{/if}
 
+	{#if config.moshMode === 'smooth'}
+		<div class="config-row">
+			<label for="ss-smooth-speed">Change rate</label>
+			<input
+				id="ss-smooth-speed"
+				type="range"
+				min="1"
+				max="5"
+				step="1"
+				value={config.smoothSpeed ?? 1}
+				oninput={(e) => set('smoothSpeed', +(e.currentTarget as HTMLInputElement).value)}
+			/>
+			<span class="val">{config.smoothSpeed ?? 1}</span>
+		</div>
+	{/if}
+
 	<div class="config-row">
 		<label for="ss-audio-link">Audio links</label>
 		<input

@@ -44,6 +44,8 @@ export interface SlideshowConfig {
 	moshMode: SlideshowMoshMode;
 	moshMin: number;
 	moshMax: number;
+	/** How many effects are toggled per beat in smooth mode (1 = slow drift, 5 = fast churn). */
+	smoothSpeed: number;
 	moshAudioLink: boolean;
 	/** 0–1: controls probability and range width of random audio links. */
 	moshAudioLinkStrength: number;
@@ -63,6 +65,7 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	moshMode: 'random',
 	moshMin: 2,
 	moshMax: 5,
+	smoothSpeed: 1,
 	moshAudioLink: false,
 	moshAudioLinkStrength: 0.8,
 	loop: true,
