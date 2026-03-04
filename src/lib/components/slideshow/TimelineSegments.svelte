@@ -123,10 +123,23 @@
 				scrollWidth: number;
 		  }
 		| { type: 'seek' }
+		| {
+				type: 'rect-select';
+				startTime: number;
+				startSvgY: number;
+				currentTime: number;
+				currentSvgY: number;
+		  }
 		| null;
 
 	let dragging: DragState = $state(null);
 	let dragMoved = $state(false);
+
+	// ── Selection / clipboard ─────────────────────────────────────────────────
+	let selectedPointIds = $state(new Set<string>());
+	let clipboard = $state<number[]>([]); // relative offsets from leftmost selected point
+	let pasteMode = $state(false);
+	let pasteCursorTime = $state(0);
 
 	// Tracks which interior boundary dot the pointer is currently over
 	let hoveredDot: {
@@ -390,10 +403,45 @@
 	}
 
 	function startSeekDrag(e: PointerEvent) {
-		if (e.button !== 0 || !onSeek) return;
+		if (e.button !== 0) return;
+		// If in paste mode, place the clipboard points at the clicked time
+		if (pasteMode && clipboard.length > 0) {
+			e.stopPropagation();
+			const anchorTime = clientXToTime(e.clientX);
+			const newPoints = clipboard
+				.map((offset) => anchorTime + offset)
+				.filter((t) => t >= 0 && t <= trackDuration)
+				.filter(
+					(t) =>
+						!config.manualSwitchPoints.some((p) => Math.abs(p.time - t) < 0.01),
+				)
+				.map((t) => ({ id: crypto.randomUUID(), time: t }));
+			emit({
+				manualSwitchPoints: [...config.manualSwitchPoints, ...newPoints],
+			});
+			pasteMode = false;
+			return;
+		}
+		// Shift+drag → rectangle selection
+		if (e.shiftKey) {
+			startRectSelect(e);
+			return;
+		}
+		// Default: seek
+		if (!onSeek) return;
+		selectedPointIds = new Set();
 		const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
+		dragMoved = false;
+		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+	}
+
+	function startRectSelect(e: PointerEvent) {
+		e.stopPropagation();
+		const time = clientXToTime(e.clientX);
+		const svgY = clientYToSvgY(e.clientY);
+		dragging = { type: 'rect-select', startTime: time, startSvgY: svgY, currentTime: time, currentSvgY: svgY };
 		dragMoved = false;
 		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
 	}
@@ -408,6 +456,9 @@
 	}
 
 	function onPointerMove(e: PointerEvent) {
+		if (pasteMode) {
+			pasteCursorTime = clientXToTime(e.clientX);
+		}
 		if (!dragging) return;
 
 		if (dragging.type === 'boundary') {
@@ -484,10 +535,28 @@
 			);
 			viewStart = ns;
 			viewEnd = ns + dur;
+		} else if (dragging.type === 'rect-select') {
+			dragMoved = true;
+			dragging = {
+				...dragging,
+				currentTime: clientXToTime(e.clientX),
+				currentSvgY: clientYToSvgY(e.clientY),
+			};
 		}
 	}
 
 	function onPointerUp() {
+		if (dragging?.type === 'rect-select') {
+			if (dragMoved) {
+				const minTime = Math.min(dragging.startTime, dragging.currentTime);
+				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
+				selectedPointIds = new Set(
+					manualPoints.filter((p) => p.time >= minTime && p.time <= maxTime).map((p) => p.id),
+				);
+			} else {
+				selectedPointIds = new Set();
+			}
+		}
 		if (dragging?.type === 'seg-y') {
 			if (!dragMoved) {
 				const segId = dragging.segmentId;
@@ -567,9 +636,44 @@
 	}
 
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 		const t = e.target as HTMLElement;
 		if (t.closest('input, textarea, select')) return;
+
+		// Copy selected manual points
+		if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+			if (selectedPointIds.size > 0) {
+				e.preventDefault();
+				const selected = manualPoints.filter((p) => selectedPointIds.has(p.id));
+				const minTime = Math.min(...selected.map((p) => p.time));
+				clipboard = selected.map((p) => p.time - minTime);
+			}
+			return;
+		}
+
+		// Enter paste mode
+		if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+			if (clipboard.length > 0) {
+				e.preventDefault();
+				pasteMode = true;
+				selectedPointIds = new Set();
+			}
+			return;
+		}
+
+		// Cancel paste mode / clear selection
+		if (e.key === 'Escape') {
+			if (pasteMode) {
+				pasteMode = false;
+				return;
+			}
+			if (selectedPointIds.size > 0) {
+				selectedPointIds = new Set();
+				return;
+			}
+		}
+
+		// Delete / Backspace — existing logic
+		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 		if (hoveredDot) {
 			e.preventDefault();
 			mergeDot(hoveredDot.leftSegId, hoveredDot.rightSegId);
@@ -587,10 +691,12 @@
 	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
 
 	let svgCursor = $derived.by(() => {
+		if (pasteMode) return 'copy';
 		const d = dragging;
 		if (!d) return onSeek ? 'crosshair' : 'default';
 		if (d.type === 'seg-y') return 'ns-resize';
 		if (d.type === 'seek') return 'col-resize';
+		if (d.type === 'rect-select') return 'crosshair';
 		return 'ew-resize';
 	});
 </script>
@@ -759,6 +865,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
 					class="manual-dot"
+					class:manual-dot-selected={selectedPointIds.has(pt.id)}
 					cx="{xp}%"
 					cy={PAD_V - 3}
 					r={DOT_R}
@@ -782,6 +889,31 @@
 				<circle class="playhead-head" cx="{phx}%" cy="1" r="3" />
 				<!-- Wider invisible grab area on the head -->
 				<circle class="playhead-grab" cx="{phx}%" cy="1" r="8" />
+			{/if}
+			<!-- Rectangle selection overlay -->
+			{#if dragging?.type === 'rect-select' && dragMoved}
+				{@const minX = Math.min(toPct(dragging.startTime), toPct(dragging.currentTime))}
+				{@const maxX = Math.max(toPct(dragging.startTime), toPct(dragging.currentTime))}
+				{@const minY = Math.min(dragging.startSvgY, dragging.currentSvgY)}
+				{@const maxY = Math.max(dragging.startSvgY, dragging.currentSvgY)}
+				<rect
+					class="select-rect"
+					x="{minX}%"
+					y={minY}
+					width="{maxX - minX}%"
+					height={Math.max(1, maxY - minY)}
+					pointer-events="none"
+				/>
+			{/if}
+
+			<!-- Ghost paste preview -->
+			{#if pasteMode && clipboard.length > 0}
+				{#each clipboard as offset}
+					{@const ghostTime = pasteCursorTime + offset}
+					{@const gx = toPct(ghostTime)}
+					<line class="ghost-manual-line" x1="{gx}%" y1={PAD_V - 6} x2="{gx}%" y2={SVG_H - PAD_V + 6} />
+					<circle class="ghost-manual-dot" cx="{gx}%" cy={PAD_V - 3} r={DOT_R} />
+				{/each}
 			{/if}
 		</svg>
 
@@ -951,6 +1083,34 @@
 
 	.manual-dot:hover {
 		fill: #cc6666;
+	}
+
+	.manual-dot-selected {
+		fill: #cc6666;
+		stroke: #ff9999;
+	}
+
+	/* Rectangle selection box */
+	.select-rect {
+		fill: rgba(90, 143, 192, 0.08);
+		stroke: rgba(90, 143, 192, 0.5);
+		stroke-width: 1;
+		stroke-dasharray: 3 3;
+	}
+
+	/* Ghost paste preview */
+	.ghost-manual-line {
+		stroke: rgba(176, 80, 80, 0.4);
+		stroke-width: 1;
+		stroke-dasharray: 2 3;
+		pointer-events: none;
+	}
+
+	.ghost-manual-dot {
+		fill: rgba(204, 102, 102, 0.35);
+		stroke: rgba(204, 102, 102, 0.6);
+		stroke-width: 1.5;
+		pointer-events: none;
 	}
 
 	/* Playhead */
