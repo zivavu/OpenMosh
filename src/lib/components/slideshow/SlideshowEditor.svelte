@@ -4,27 +4,27 @@
 		computeVolumeLevel,
 		createAudioGraph,
 		disposeAudioGraph as disposeAudioGraphState,
-	} from '../audio/audio-controller';
+	} from '../../audio/audio-controller';
 	import {
 		loadInitialEffects,
 		loadPresets,
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
-	} from '../effects';
-	import type { GlRenderer } from '../gl/renderer';
-	import type { RecordFormat } from '../recorder';
-	import { beatAtTime } from '../slideshow/beat-clock';
-	import { detectBpm } from '../slideshow/bpm-detector';
-	import { cloneEffects, computeEffectsForBeat } from '../slideshow/sequencer';
-	import { executeSlideshowRecording } from '../slideshow/slideshow-recorder';
-	import type { SlideshowConfig, SlideshowSlide } from '../slideshow/types';
-	import { DEFAULT_SLIDESHOW_CONFIG } from '../slideshow/types';
-	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../text-overlay';
-	import type { SpectrumData } from '../types';
-	import EffectsPanel from './EffectsPanel.svelte';
-	import GlCanvas from './GlCanvas.svelte';
-	import RecordOverlay from './RecordOverlay.svelte';
+	} from '../../effects';
+	import type { GlRenderer } from '../../gl/renderer';
+	import type { RecordFormat } from '../../recorder';
+	import { beatAtTime } from '../../slideshow/beat-clock';
+	import { detectBpm } from '../../slideshow/bpm-detector';
+	import { cloneEffects, computeEffectsForBeat } from '../../slideshow/sequencer';
+	import { executeSlideshowRecording } from '../../slideshow/slideshow-recorder';
+	import type { SlideshowConfig, SlideshowSlide } from '../../slideshow/types';
+	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
+	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../../text-overlay';
+	import type { SpectrumData } from '../../types';
+	import EffectsPanel from '../editor/EffectsPanel.svelte';
+	import GlCanvas from '../editor/GlCanvas.svelte';
+	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import SlideshowActionBar from './SlideshowActionBar.svelte';
 	import SlideshowAudioTimeline from './SlideshowAudioTimeline.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';

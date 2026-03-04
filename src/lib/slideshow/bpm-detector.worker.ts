@@ -12,6 +12,7 @@ let essentia: InstanceType<typeof Essentia> | null = null;
 
 function getEssentia(): InstanceType<typeof Essentia> {
 	if (!essentia) {
+		// @ts-ignore
 		essentia = new Essentia(EssentiaWASM.EssentiaWASM);
 	}
 	return essentia;

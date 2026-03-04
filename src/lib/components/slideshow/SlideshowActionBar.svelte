@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { RecordFormat } from '../recorder';
-	import RecordGroup from './RecordGroup.svelte';
+	import type { RecordFormat } from '../../recorder';
+	import RecordGroup from '../editor/RecordGroup.svelte';
 
 	interface Props {
 		previewPlaying: boolean;

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { SlideshowSlide, SlideshowConfig } from '../slideshow/types';
-	import type { Preset } from '../effects';
+	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
+	import type { Preset } from '../../effects';
 
 	interface Props {
 		slides: SlideshowSlide[];

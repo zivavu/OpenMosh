@@ -1,7 +1,7 @@
 <script lang="ts">
-  import UploadScreen from './lib/components/UploadScreen.svelte';
-  import Editor from './lib/components/Editor.svelte';
-  import SlideshowEditor from './lib/components/SlideshowEditor.svelte';
+  import UploadScreen from './lib/components/ui/UploadScreen.svelte';
+  import Editor from './lib/components/editor/Editor.svelte';
+  import SlideshowEditor from './lib/components/slideshow/SlideshowEditor.svelte';
 
   let file: File | null = $state(null);
   let slideshowFiles: File[] = $state([]);

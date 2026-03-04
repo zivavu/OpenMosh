@@ -10,8 +10,8 @@
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
-	} from '../effects';
-	import type { SpectrumData } from '../types';
+	} from '../../effects';
+	import type { SpectrumData } from '../../types';
 	import EffectItem from './EffectItem.svelte';
 
 	export type { SpectrumData };

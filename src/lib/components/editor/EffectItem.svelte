@@ -1,13 +1,13 @@
 <script lang="ts">
-	import DualRangeSlider from './DualRangeSlider.svelte';
+	import DualRangeSlider from '../ui/DualRangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
 		FREQ_PRESETS,
 		getDefinition,
 		type EffectInstance,
 		type VolumeLink,
-	} from '../effects';
-	import type { SpectrumData } from '../types';
+	} from '../../effects';
+	import type { SpectrumData } from '../../types';
 
 	export type { SpectrumData };
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { formatTime } from '../audio/audio-utils';
-	import type { SlideshowConfig } from '../slideshow/types';
+	import { formatTime } from '../../audio/audio-utils';
+	import type { SlideshowConfig } from '../../slideshow/types';
 	import TimelineSegments from './TimelineSegments.svelte';
 
 	interface Props {

@@ -3,12 +3,14 @@
 		BeatSubdivision,
 		SlideshowConfig,
 		TimelineSegment,
-	} from '../slideshow/types';
+	} from '../../slideshow/types';
 
 	const MIN_SEGMENT_DURATION = 0.25;
 
 	// Ordered top→bottom: fast (1/32) to slow (4) — lower = higher beat value
-	const SUBDIVISIONS: BeatSubdivision[] = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4];
+	const SUBDIVISIONS: BeatSubdivision[] = [
+		0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4,
+	];
 	const SUBLABELS = ['¹⁄₃₂', '¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4'];
 
 	const SVG_H = 76;
@@ -67,8 +69,7 @@
 	let viewEnd = $state(0); // initialised by effect below
 	let viewDuration = $derived(Math.max(0.001, viewEnd - viewStart));
 	let isZoomed = $derived(
-		trackDuration > 0 &&
-			(viewStart > 0.001 || viewEnd < trackDuration - 0.001),
+		trackDuration > 0 && (viewStart > 0.001 || viewEnd < trackDuration - 0.001),
 	);
 
 	// Initialise / clamp viewEnd when trackDuration changes (e.g. audio loaded)
@@ -132,8 +133,10 @@
 	let dragMoved = $state(false);
 
 	// Tracks which interior boundary dot the pointer is currently over
-	let hoveredDot: { leftSegId: string | null; rightSegId: string | null } | null =
-		$state(null);
+	let hoveredDot: {
+		leftSegId: string | null;
+		rightSegId: string | null;
+	} | null = $state(null);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
 	function emit(patch: Partial<SlideshowConfig>) {
@@ -169,8 +172,14 @@
 		const dur = viewEnd - viewStart;
 		let ns = viewStart + delta;
 		let ne = ns + dur;
-		if (ns < 0) { ne -= ns; ns = 0; }
-		if (ne > trackDuration) { ns -= ne - trackDuration; ne = trackDuration; }
+		if (ns < 0) {
+			ne -= ns;
+			ns = 0;
+		}
+		if (ne > trackDuration) {
+			ns -= ne - trackDuration;
+			ne = trackDuration;
+		}
 		viewStart = Math.max(0, ns);
 		viewEnd = Math.min(trackDuration, ne);
 	}
@@ -182,8 +191,14 @@
 		const cursorTime = viewStart + cursorFrac * curDur;
 		let ns = cursorTime - cursorFrac * newDur;
 		let ne = ns + newDur;
-		if (ns < 0) { ne -= ns; ns = 0; }
-		if (ne > trackDuration) { ns -= ne - trackDuration; ne = trackDuration; }
+		if (ns < 0) {
+			ne -= ns;
+			ns = 0;
+		}
+		if (ne > trackDuration) {
+			ns -= ne - trackDuration;
+			ne = trackDuration;
+		}
 		viewStart = Math.max(0, ns);
 		viewEnd = Math.min(trackDuration, ne);
 	}
@@ -196,7 +211,10 @@
 			e.stopPropagation();
 			if (trackDuration <= 0) return;
 			const r = svgEl!.getBoundingClientRect();
-			const cursorFrac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+			const cursorFrac = Math.max(
+				0,
+				Math.min(1, (e.clientX - r.left) / r.width),
+			);
 			if (e.shiftKey) {
 				// Shift + scroll → pan
 				panView(viewDuration * 0.25 * Math.sign(e.deltaY));
@@ -215,12 +233,12 @@
 	// ── Derived visuals ──────────────────────────────────────────────────────────
 	interface SegVis {
 		id: string;
-		startX: number;    // view-relative %
-		endX: number;      // view-relative %
-		y: number;         // svg-px
+		startX: number; // view-relative %
+		endX: number; // view-relative %
+		y: number; // svg-px
 		sub: BeatSubdivision;
 		startTime: number; // absolute track time
-		endTime: number;   // absolute track time
+		endTime: number; // absolute track time
 	}
 
 	let segVis = $derived.by((): SegVis[] =>
@@ -274,7 +292,9 @@
 		segVis.length > 0 ? segVis[0].y : subToY(config.subdivision),
 	);
 	let anchorEndY = $derived(
-		segVis.length > 0 ? segVis[segVis.length - 1].y : subToY(config.subdivision),
+		segVis.length > 0
+			? segVis[segVis.length - 1].y
+			: subToY(config.subdivision),
 	);
 
 	// ── Event handlers ───────────────────────────────────────────────────────────
@@ -297,7 +317,9 @@
 			return;
 		}
 
-		const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+		const sorted = [...config.segments].sort(
+			(a, b) => a.startTime - b.startTime,
+		);
 		const hit = sorted.find((s) => {
 			const end = s.endTime ?? trackDuration;
 			return time > s.startTime + 0.01 && time < end - 0.01;
@@ -450,7 +472,10 @@
 			});
 		} else if (dragging.type === 'seek') {
 			dragMoved = true;
-			const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
+			const time = Math.max(
+				0,
+				Math.min(trackDuration, clientXToTime(e.clientX)),
+			);
 			onSeek?.(time);
 		} else if (dragging.type === 'scroll-pan') {
 			dragMoved = true;
@@ -485,7 +510,9 @@
 	}
 
 	function removeSegment(id: string) {
-		const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+		const sorted = [...config.segments].sort(
+			(a, b) => a.startTime - b.startTime,
+		);
 		const idx = sorted.findIndex((s) => s.id === id);
 		if (idx === -1) return;
 
@@ -496,7 +523,8 @@
 		}
 
 		const deleted = sorted[idx];
-		const neighbour = idx < sorted.length - 1 ? sorted[idx + 1] : sorted[idx - 1];
+		const neighbour =
+			idx < sorted.length - 1 ? sorted[idx + 1] : sorted[idx - 1];
 		const merged: TimelineSegment = {
 			...neighbour,
 			startTime: Math.min(deleted.startTime, neighbour.startTime),
@@ -557,7 +585,9 @@
 		}
 	}
 
-	let selectedSeg = $derived(segments.find((s) => s.id === selectedSegmentId) ?? null);
+	let selectedSeg = $derived(
+		segments.find((s) => s.id === selectedSegmentId) ?? null,
+	);
 	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
 
 	let svgCursor = $derived.by(() => {
@@ -695,9 +725,11 @@
 						cy={sv.y}
 						r={DOT_R}
 						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
-						onpointerenter={() => (hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
+						onpointerenter={() =>
+							(hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
 						onpointerleave={() => (hoveredDot = null)}
-					><title>Drag to move · Delete to remove boundary</title></circle>
+						><title>Drag to move · Delete to remove boundary</title></circle
+					>
 				{/if}
 
 				<!-- End dot: only when not at the absolute track end -->
@@ -712,9 +744,11 @@
 						cy={sv.y}
 						r={DOT_R}
 						onpointerdown={(e) => startBndDrag(e, sv.id, rId)}
-						onpointerenter={() => (hoveredDot = { leftSegId: sv.id, rightSegId: rId })}
+						onpointerenter={() =>
+							(hoveredDot = { leftSegId: sv.id, rightSegId: rId })}
 						onpointerleave={() => (hoveredDot = null)}
-					><title>Drag to move · Delete to remove boundary</title></circle>
+						><title>Drag to move · Delete to remove boundary</title></circle
+					>
 				{/if}
 			{/each}
 

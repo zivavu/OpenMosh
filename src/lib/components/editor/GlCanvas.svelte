@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { GlRenderer } from '../gl/renderer';
-  import { ANIMATED_EFFECTS } from '../gl/effect-shaders';
-  import type { EffectInstance } from '../effects';
+  import { GlRenderer } from '../../gl/renderer';
+  import { ANIMATED_EFFECTS } from '../../gl/effect-shaders';
+  import type { EffectInstance } from '../../effects';
 
   interface Props {
     imageSrc: string;

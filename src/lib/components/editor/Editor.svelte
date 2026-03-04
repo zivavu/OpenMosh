@@ -1,31 +1,31 @@
 <script lang="ts">
-	import EffectsPanel from './EffectsPanel.svelte';
-	import GlCanvas from './GlCanvas.svelte';
-	import MoshGroup from './MoshGroup.svelte';
-	import RecordGroup from './RecordGroup.svelte';
-	import RecordOverlay from './RecordOverlay.svelte';
+	import {
+		applyVolumeLinksTick,
+		computeVolumeLevel,
+		createAudioGraph,
+		disposeAudioGraph as disposeAudioGraphState,
+	} from '../../audio/audio-controller';
+	import { formatTime } from '../../audio/audio-utils';
+	import { createKeyboardHandler } from '../../editor/keyboard';
+	import {
+		clearEffects as clearEffectsFn,
+		generateMosh as generateMoshFn,
+	} from '../../editor/mosh';
+	import { executeRecording } from '../../editor/recording';
 	import {
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
 		loadInitialEffects,
 		type EffectInstance,
 		type VolumeLink,
-	} from '../effects';
-	import type { GlRenderer } from '../gl/renderer';
-	import type { RecordFormat } from '../recorder';
-	import { executeRecording } from '../editor/recording';
-	import { formatTime } from '../audio/audio-utils';
-	import {
-		createAudioGraph,
-		disposeAudioGraph as disposeAudioGraphState,
-		computeVolumeLevel,
-		applyVolumeLinksTick,
-	} from '../audio/audio-controller';
-	import {
-		generateMosh as generateMoshFn,
-		clearEffects as clearEffectsFn,
-	} from '../editor/mosh';
-	import { createKeyboardHandler } from '../editor/keyboard';
+	} from '../../effects';
+	import type { GlRenderer } from '../../gl/renderer';
+	import type { RecordFormat } from '../../recorder';
+	import EffectsPanel from './EffectsPanel.svelte';
+	import GlCanvas from './GlCanvas.svelte';
+	import MoshGroup from './MoshGroup.svelte';
+	import RecordGroup from './RecordGroup.svelte';
+	import RecordOverlay from './RecordOverlay.svelte';
 
 	interface Props {
 		file: File;
@@ -70,7 +70,15 @@
 	function saveSettings() {
 		localStorage.setItem(
 			SETTINGS_KEY,
-			JSON.stringify({ moshMin, moshMax, randomizeOrder, moshAudioLink, moshAudioLinkStrength, showFps, outputVolume }),
+			JSON.stringify({
+				moshMin,
+				moshMax,
+				randomizeOrder,
+				moshAudioLink,
+				moshAudioLinkStrength,
+				showFps,
+				outputVolume,
+			}),
 		);
 	}
 	const saved = loadSettings();
@@ -83,7 +91,13 @@
 	let showFps = $state(saved.showFps ?? false);
 	$effect(() => {
 		// subscribe to all settings
-		moshMin; moshMax; randomizeOrder; moshAudioLink; moshAudioLinkStrength; showFps; outputVolume;
+		moshMin;
+		moshMax;
+		randomizeOrder;
+		moshAudioLink;
+		moshAudioLinkStrength;
+		showFps;
+		outputVolume;
 		saveSettings();
 	});
 	let currentFps = $state(0);
@@ -133,7 +147,10 @@
 		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
 		resizeWidth = val;
 		if (maintainRatio && aspectRatio > 0) {
-			resizeHeight = Math.min(MAX_RESIZE, Math.max(1, Math.round(val / aspectRatio)));
+			resizeHeight = Math.min(
+				MAX_RESIZE,
+				Math.max(1, Math.round(val / aspectRatio)),
+			);
 		}
 	}
 
@@ -141,7 +158,10 @@
 		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
 		resizeHeight = val;
 		if (maintainRatio && aspectRatio > 0) {
-			resizeWidth = Math.min(MAX_RESIZE, Math.max(1, Math.round(val * aspectRatio)));
+			resizeWidth = Math.min(
+				MAX_RESIZE,
+				Math.max(1, Math.round(val * aspectRatio)),
+			);
 		}
 	}
 
@@ -384,7 +404,15 @@
 
 	function disposeAudioGraph() {
 		if (audioContext) {
-			disposeAudioGraphState({ context: audioContext, source: mediaSource!, analyser: analyserNode!, gain: gainNode!, frequencyData: frequencyData!, sampleRate: audioSampleRate, binCount: audioFrequencyBinCount });
+			disposeAudioGraphState({
+				context: audioContext,
+				source: mediaSource!,
+				analyser: analyserNode!,
+				gain: gainNode!,
+				frequencyData: frequencyData!,
+				sampleRate: audioSampleRate,
+				binCount: audioFrequencyBinCount,
+			});
 		}
 		mediaSource = null;
 		analyserNode = null;
@@ -422,7 +450,13 @@
 			volumeLevel = computeVolumeLevel(analyser, timeData);
 			if (freqDataRef)
 				analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-			applyVolumeLinksTick(effects, volumeLevel, freqDataRef, sampleRate, fftSize);
+			applyVolumeLinksTick(
+				effects,
+				volumeLevel,
+				freqDataRef,
+				sampleRate,
+				fftSize,
+			);
 			rafId = requestAnimationFrame(tick);
 		}
 		rafId = requestAnimationFrame(tick);
@@ -584,8 +618,12 @@
 				videoSpanStart,
 				videoSpanEnd,
 				file,
-				onProgress: (p) => { recordProgress = p; },
-				onFinalizing: () => { recordFinalizing = true; },
+				onProgress: (p) => {
+					recordProgress = p;
+				},
+				onFinalizing: () => {
+					recordFinalizing = true;
+				},
 				signal: abort.signal,
 			});
 		} catch (e) {
@@ -816,18 +854,20 @@
 						/>
 					</div>
 					{#if moshAudioLink}
-					<div class="mosh-setting-row">
-						<label for="mosh-audio-link-strength">Link strength</label>
-						<input
-							id="mosh-audio-link-strength"
-							type="range"
-							min="0"
-							max="1"
-							step="0.05"
-							bind:value={moshAudioLinkStrength}
-						/>
-						<span class="mosh-setting-val">{Math.round(moshAudioLinkStrength * 100)}%</span>
-					</div>
+						<div class="mosh-setting-row">
+							<label for="mosh-audio-link-strength">Link strength</label>
+							<input
+								id="mosh-audio-link-strength"
+								type="range"
+								min="0"
+								max="1"
+								step="0.05"
+								bind:value={moshAudioLinkStrength}
+							/>
+							<span class="mosh-setting-val"
+								>{Math.round(moshAudioLinkStrength * 100)}%</span
+							>
+						</div>
 					{/if}
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
@@ -1138,7 +1178,16 @@
 					onclick={clearTrack}
 					title="Remove track"
 				>
-					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg
+						width="12"
+						height="12"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
 						<line x1="18" y1="6" x2="6" y2="18" />
 						<line x1="6" y1="6" x2="18" y2="18" />
 					</svg>
@@ -1155,7 +1204,16 @@
 		{#if !trackFile}
 			<div class="track-add-bar">
 				<button class="track-add-btn" onclick={openTrackPicker}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
 						<path d="M9 18V5l12-2v13" />
 						<circle cx="6" cy="18" r="3" />
 						<circle cx="18" cy="16" r="3" />
@@ -1182,7 +1240,7 @@
 		{recording}
 		{recordProgress}
 		{recordFinalizing}
-		recordFormat={recordFormat}
+		{recordFormat}
 		onCancel={cancelRecording}
 	/>
 
@@ -1464,7 +1522,9 @@
 		border-radius: 5px;
 		color: #666;
 		cursor: pointer;
-		transition: color 0.15s, border-color 0.15s;
+		transition:
+			color 0.15s,
+			border-color 0.15s;
 	}
 
 	.track-add-btn:hover {
@@ -1516,7 +1576,9 @@
 		color: #555;
 		cursor: pointer;
 		flex-shrink: 0;
-		transition: color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			background 0.15s;
 	}
 
 	.track-inline-btn:hover {

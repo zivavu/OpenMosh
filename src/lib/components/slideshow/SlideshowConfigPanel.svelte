@@ -2,14 +2,14 @@
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
-	} from '../slideshow/types';
+	} from '../../slideshow/types';
 	import {
 		DEFAULT_TEXT_OVERLAY_CONFIG,
 		parsePhrases,
 		type TextOverlayBlendMode,
 		type TextOverlayLayout,
 		type TextOverlaySplitBy,
-	} from '../text-overlay';
+	} from '../../text-overlay';
 
 	interface Props {
 		config: SlideshowConfig;
