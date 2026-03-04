@@ -136,7 +136,7 @@
 	let dragMoved = $state(false);
 
 	// ── Selection / clipboard ─────────────────────────────────────────────────
-	let selectedPointIds = $state(new Set<string>());
+	let selectedPointIds = $state<string[]>([]);
 	let clipboard = $state<number[]>([]); // relative offsets from leftmost selected point
 	let pasteMode = $state(false);
 	let pasteCursorTime = $state(0);
@@ -429,7 +429,7 @@
 		}
 		// Default: seek
 		if (!onSeek) return;
-		selectedPointIds = new Set();
+		selectedPointIds = [];
 		const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
@@ -550,11 +550,11 @@
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
-				selectedPointIds = new Set(
-					manualPoints.filter((p) => p.time >= minTime && p.time <= maxTime).map((p) => p.id),
-				);
+				selectedPointIds = manualPoints
+					.filter((p) => p.time >= minTime && p.time <= maxTime)
+					.map((p) => p.id);
 			} else {
-				selectedPointIds = new Set();
+				selectedPointIds = [];
 			}
 		}
 		if (dragging?.type === 'seg-y') {
@@ -641,9 +641,9 @@
 
 		// Copy selected manual points
 		if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-			if (selectedPointIds.size > 0) {
+			if (selectedPointIds.length > 0) {
 				e.preventDefault();
-				const selected = manualPoints.filter((p) => selectedPointIds.has(p.id));
+				const selected = manualPoints.filter((p) => selectedPointIds.includes(p.id));
 				const minTime = Math.min(...selected.map((p) => p.time));
 				clipboard = selected.map((p) => p.time - minTime);
 			}
@@ -655,7 +655,7 @@
 			if (clipboard.length > 0) {
 				e.preventDefault();
 				pasteMode = true;
-				selectedPointIds = new Set();
+				selectedPointIds = [];
 			}
 			return;
 		}
@@ -666,8 +666,8 @@
 				pasteMode = false;
 				return;
 			}
-			if (selectedPointIds.size > 0) {
-				selectedPointIds = new Set();
+			if (selectedPointIds.length > 0) {
+				selectedPointIds = [];
 				return;
 			}
 		}
@@ -691,13 +691,13 @@
 	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
 
 	// Points currently inside the in-progress rect-select drag (for live highlighting)
-	let rectHoverIds = $derived.by((): Set<string> => {
-		if (dragging?.type !== 'rect-select' || !dragMoved) return new Set();
+	let rectHoverIds = $derived.by((): string[] => {
+		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
-		return new Set(
-			manualPoints.filter((p) => p.time >= minTime && p.time <= maxTime).map((p) => p.id),
-		);
+		return manualPoints
+			.filter((p) => p.time >= minTime && p.time <= maxTime)
+			.map((p) => p.id);
 	});
 
 	let svgCursor = $derived.by(() => {
@@ -875,7 +875,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
 					class="manual-dot"
-					class:manual-dot-selected={selectedPointIds.has(pt.id) || rectHoverIds.has(pt.id)}
+					class:manual-dot-selected={selectedPointIds.includes(pt.id) || rectHoverIds.includes(pt.id)}
 					cx="{xp}%"
 					cy={PAD_V - 3}
 					r={DOT_R}
