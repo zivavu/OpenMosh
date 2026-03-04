@@ -690,6 +690,16 @@
 	);
 	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
 
+	// Points currently inside the in-progress rect-select drag (for live highlighting)
+	let rectHoverIds = $derived.by((): Set<string> => {
+		if (dragging?.type !== 'rect-select' || !dragMoved) return new Set();
+		const minTime = Math.min(dragging.startTime, dragging.currentTime);
+		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
+		return new Set(
+			manualPoints.filter((p) => p.time >= minTime && p.time <= maxTime).map((p) => p.id),
+		);
+	});
+
 	let svgCursor = $derived.by(() => {
 		if (pasteMode) return 'copy';
 		const d = dragging;
@@ -865,7 +875,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
 					class="manual-dot"
-					class:manual-dot-selected={selectedPointIds.has(pt.id)}
+					class:manual-dot-selected={selectedPointIds.has(pt.id) || rectHoverIds.has(pt.id)}
 					cx="{xp}%"
 					cy={PAD_V - 3}
 					r={DOT_R}
