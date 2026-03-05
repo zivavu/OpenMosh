@@ -93,9 +93,6 @@
 	let segments = $derived(
 		[...config.segments].sort((a, b) => a.startTime - b.startTime),
 	);
-	let manualPoints = $derived(
-		[...config.manualSwitchPoints].sort((a, b) => a.time - b.time),
-	);
 
 	$effect(() => {
 		if (
@@ -115,7 +112,6 @@
 				snapSub: BeatSubdivision;
 				startClientY: number;
 		  }
-		| { type: 'manual'; pointId: string }
 		| {
 				type: 'scroll-pan';
 				startClientX: number;
@@ -381,13 +377,6 @@
 		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
 	}
 
-	function startManDrag(e: PointerEvent, pointId: string) {
-		e.stopPropagation();
-		dragging = { type: 'manual', pointId };
-		dragMoved = false;
-		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
-	}
-
 	function startScrollPan(e: PointerEvent) {
 		e.stopPropagation();
 		const rect = scrollbarEl?.getBoundingClientRect();
@@ -454,15 +443,6 @@
 		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
 	}
 
-	function onManualDblClick(e: MouseEvent, pointId: string) {
-		e.stopPropagation();
-		emit({
-			manualSwitchPoints: config.manualSwitchPoints.filter(
-				(p) => p.id !== pointId,
-			),
-		});
-	}
-
 	function onPointerMove(e: PointerEvent) {
 		if (pasteMode) {
 			pasteCursorTime = clientXToTime(e.clientX);
@@ -512,19 +492,6 @@
 					dragging = { ...dragging, snapSub: snap };
 				}
 			}
-		} else if (dragging.type === 'manual') {
-			dragMoved = true;
-			const time = Math.max(
-				0,
-				Math.min(trackDuration, clientXToTime(e.clientX)),
-			);
-			emit({
-				manualSwitchPoints: config.manualSwitchPoints.map((p) =>
-					p.id === (dragging as { type: 'manual'; pointId: string }).pointId
-						? { ...p, time }
-						: p,
-				),
-			});
 		} else if (dragging.type === 'seek') {
 			dragMoved = true;
 			const time = Math.max(
@@ -628,6 +595,24 @@
 	}
 
 	/** Remove the boundary between two adjacent segments by merging them into one. */
+	function deleteSelectedBoundaries() {
+		let segs = [...config.segments];
+		const times = [...selectedBoundaryTimes].sort((a, b) => a - b);
+		for (const t of times) {
+			const sorted = [...segs].sort((a, b) => a.startTime - b.startTime);
+			const left = sorted.find((s) => Math.abs((s.endTime ?? trackDuration) - t) < 0.001);
+			const right = sorted.find((s) => Math.abs(s.startTime - t) < 0.001);
+			if (!left || !right) continue;
+			const merged: TimelineSegment = {
+				...left,
+				endTime: right.endTime ?? trackDuration,
+			};
+			segs = segs.filter((s) => s.id !== left.id && s.id !== right.id).concat([merged]);
+		}
+		selectedBoundaryTimes = [];
+		emit({ segments: segs });
+	}
+
 	function mergeDot(leftSegId: string | null, rightSegId: string | null) {
 		if (!leftSegId || !rightSegId) return;
 		const left = config.segments.find((s) => s.id === leftSegId);
@@ -693,6 +678,11 @@
 			mergeDot(hoveredDot.leftSegId, hoveredDot.rightSegId);
 			return;
 		}
+		if (selectedBoundaryTimes.length > 0) {
+			e.preventDefault();
+			deleteSelectedBoundaries();
+			return;
+		}
 		if (selectedSegmentId) {
 			e.preventDefault();
 			removeSegment(selectedSegmentId);
@@ -702,7 +692,7 @@
 	let selectedSeg = $derived(
 		segments.find((s) => s.id === selectedSegmentId) ?? null,
 	);
-	let showHint = $derived(segments.length === 0 && manualPoints.length === 0);
+	let showHint = $derived(segments.length === 0);
 
 	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
 	let rectHoverTimes = $derived.by((): number[] => {
@@ -886,27 +876,6 @@
 				{/if}
 			{/each}
 
-			<!-- Manual switch point markers -->
-			{#each manualPoints as pt}
-				{@const xp = toPct(pt.time)}
-				<line
-					class="manual-line"
-					x1="{xp}%"
-					y1={PAD_V - 6}
-					x2="{xp}%"
-					y2={SVG_H - PAD_V + 6}
-				/>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<circle
-					class="manual-dot"
-						cx="{xp}%"
-					cy={PAD_V - 3}
-					r={DOT_R}
-					onpointerdown={(e) => startManDrag(e, pt.id)}
-					ondblclick={(e) => onManualDblClick(e, pt.id)}
-				/>
-			{/each}
-
 			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
@@ -939,13 +908,12 @@
 				/>
 			{/if}
 
-			<!-- Ghost paste preview -->
+			<!-- Ghost paste preview (boundary splits) -->
 			{#if pasteMode && clipboard.length > 0}
 				{#each clipboard as offset}
 					{@const ghostTime = pasteCursorTime + offset}
 					{@const gx = toPct(ghostTime)}
-					<line class="ghost-manual-line" x1="{gx}%" y1={PAD_V - 6} x2="{gx}%" y2={SVG_H - PAD_V + 6} />
-					<circle class="ghost-manual-dot" cx="{gx}%" cy={PAD_V - 3} r={DOT_R} />
+					<line class="ghost-split-line" x1="{gx}%" y1="0" x2="{gx}%" y2={SVG_H} />
 				{/each}
 			{/if}
 		</svg>
@@ -1105,26 +1073,6 @@
 		stroke: #ff7070;
 	}
 
-	/* Manual switch point */
-	.manual-line {
-		stroke: #b05050;
-		stroke-width: 1;
-		stroke-dasharray: 2 3;
-		pointer-events: none;
-	}
-
-	.manual-dot {
-		fill: #111;
-		stroke: #cc6666;
-		stroke-width: 1.5;
-		cursor: ew-resize;
-	}
-
-	.manual-dot:hover {
-		fill: #cc6666;
-	}
-
-
 	/* Rectangle selection box */
 	.select-rect {
 		fill: rgba(90, 143, 192, 0.08);
@@ -1133,18 +1081,10 @@
 		stroke-dasharray: 3 3;
 	}
 
-	/* Ghost paste preview */
-	.ghost-manual-line {
-		stroke: rgba(176, 80, 80, 0.4);
+	.ghost-split-line {
+		stroke: rgba(90, 143, 192, 0.4);
 		stroke-width: 1;
-		stroke-dasharray: 2 3;
-		pointer-events: none;
-	}
-
-	.ghost-manual-dot {
-		fill: rgba(204, 102, 102, 0.35);
-		stroke: rgba(204, 102, 102, 0.6);
-		stroke-width: 1.5;
+		stroke-dasharray: 3 4;
 		pointer-events: none;
 	}
 
