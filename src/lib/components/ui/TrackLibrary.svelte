@@ -148,21 +148,22 @@
 
 <style>
   .library {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 5;
+    position: relative;
+    flex-shrink: 0;
     display: flex;
     flex-direction: row;
     border-right: 1px solid #2a2a2a;
     background: #141414;
-    transition: width 0.15s ease;
     width: 28px;
     overflow: hidden;
   }
 
   .library.open {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 5;
     width: 220px;
   }
 
