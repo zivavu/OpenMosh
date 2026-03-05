@@ -1,0 +1,186 @@
+import type { EffectInstance } from '../effects';
+import { applyVolumeLinksToEffects } from './audio-utils';
+
+const FFT_SIZE = 2048;
+
+/**
+ * Decode an audio file to an AudioBuffer using the Web Audio API.
+ */
+export async function decodeAudioFile(file: File): Promise<AudioBuffer> {
+	const arrayBuffer = await file.arrayBuffer();
+	const ctx = new AudioContext();
+	const buffer = await ctx.decodeAudioData(arrayBuffer);
+	await ctx.close();
+	return buffer;
+}
+
+/**
+ * Create a new AudioBuffer containing only the samples in [start, end] (seconds).
+ */
+export function trimAudioBuffer(
+	buffer: AudioBuffer,
+	start: number,
+	end: number,
+): AudioBuffer {
+	const sampleRate = buffer.sampleRate;
+	const startSample = Math.max(0, Math.floor(start * sampleRate));
+	const endSample = Math.min(buffer.length, Math.ceil(end * sampleRate));
+	const length = Math.max(0, endSample - startSample);
+
+	const trimmed = new AudioBuffer({ numberOfChannels: buffer.numberOfChannels, length, sampleRate });
+
+	for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+		const src = buffer.getChannelData(ch);
+		const dst = trimmed.getChannelData(ch);
+		for (let i = 0; i < length; i++) {
+			dst[i] = src[startSample + i];
+		}
+	}
+	return trimmed;
+}
+
+export interface FrameAudioData {
+	volumeLevel: number;
+	frequencyData: Uint8Array;
+}
+
+/**
+ * In-place radix-2 FFT. Input and output in real/imag arrays; output is magnitude in freqData[0..fftSize/2].
+ */
+function fftMagnitude(
+	real: Float32Array,
+	imag: Float32Array,
+	magnitude: Float32Array,
+	fftSize: number,
+): void {
+	const n = fftSize;
+	// Bit-reversal permutation
+	const log2n = Math.round(Math.log2(n));
+	for (let i = 0; i < n; i++) {
+		let j = 0;
+		let x = i;
+		for (let b = 0; b < log2n; b++) {
+			j = (j << 1) | (x & 1);
+			x >>= 1;
+		}
+		if (i < j) {
+			[real[i], real[j]] = [real[j], real[i]];
+			[imag[i], imag[j]] = [imag[j], imag[i]];
+		}
+	}
+
+	// Cooley-Tukey
+	for (let len = 2; len <= n; len *= 2) {
+		const angle = (-2 * Math.PI) / len;
+		for (let i = 0; i < n; i += len) {
+			for (let j = 0; j < len / 2; j++) {
+				const idx1 = i + j;
+				const idx2 = i + j + len / 2;
+				const t = angle * j;
+				const wReal = Math.cos(t);
+				const wImag = Math.sin(t);
+				const uReal = real[idx1];
+				const uImag = imag[idx1];
+				const vReal = real[idx2] * wReal - imag[idx2] * wImag;
+				const vImag = real[idx2] * wImag + imag[idx2] * wReal;
+				real[idx1] = uReal + vReal;
+				imag[idx1] = uImag + vImag;
+				real[idx2] = uReal - vReal;
+				imag[idx2] = uImag - vImag;
+			}
+		}
+	}
+
+	// Magnitude for first half (positive frequencies) — raw, unnormalized
+	const half = n / 2;
+	for (let i = 0; i < half; i++) {
+		magnitude[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+	}
+}
+
+/**
+ * Extract a single frame's audio analysis at time t (seconds): RMS volume and frequency bins (0-255).
+ */
+function computeFrameAnalysis(
+	buffer: AudioBuffer,
+	timeSeconds: number,
+	fftSize: number,
+): FrameAudioData {
+	const sampleRate = buffer.sampleRate;
+	const numChannels = buffer.numberOfChannels;
+	const length = buffer.length;
+	const frameStartSample = Math.max(
+		0,
+		Math.floor(timeSeconds * sampleRate) - Math.floor(fftSize / 2),
+	);
+	const frameEndSample = Math.min(length, frameStartSample + fftSize);
+	const actualLength = frameEndSample - frameStartSample;
+
+	// Time-domain: mix down to mono and compute RMS
+	let sumSq = 0;
+	const real = new Float32Array(fftSize);
+	const imag = new Float32Array(fftSize);
+	for (let i = 0; i < actualLength; i++) {
+		let s = 0;
+		for (let ch = 0; ch < numChannels; ch++) {
+			s += buffer.getChannelData(ch)[frameStartSample + i];
+		}
+		s /= numChannels;
+		real[i] = s;
+		sumSq += s * s;
+	}
+	const volumeLevel =
+		actualLength > 0 ? Math.min(1, Math.sqrt(sumSq / actualLength)) : 0;
+	// Apply Hann window
+	for (let i = 0; i < actualLength; i++) {
+		const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (actualLength - 1 || 1)));
+		real[i] *= w;
+	}
+
+	const magnitude = new Float32Array(fftSize / 2);
+	fftMagnitude(real, imag, magnitude, fftSize);
+
+	// Convert magnitude to byte frequency data (0-255) using the same dB scale
+	// as AnalyserNode.getByteFrequencyData: dB = 20*log10(mag / fftSize),
+	// mapped from [minDecibels, maxDecibels] → [0, 255].
+	const minDecibels = -100;
+	const maxDecibels = -30;
+	const dbRange = maxDecibels - minDecibels;
+	const frequencyData = new Uint8Array(fftSize / 2);
+	for (let i = 0; i < frequencyData.length; i++) {
+		const mag = magnitude[i];
+		if (mag === 0) {
+			frequencyData[i] = 0;
+			continue;
+		}
+		const dB = 20 * Math.log10(mag / fftSize);
+		const scaled = 255 * (dB - minDecibels) / dbRange;
+		frequencyData[i] = Math.max(0, Math.min(255, Math.round(scaled)));
+	}
+
+	return { volumeLevel, frequencyData };
+}
+
+/**
+ * Pre-compute audio analysis for each frame timestamp.
+ */
+export function analyzeFrames(
+	buffer: AudioBuffer,
+	frameTimes: number[],
+	fftSize: number = FFT_SIZE,
+): FrameAudioData[] {
+	return frameTimes.map((t) => computeFrameAnalysis(buffer, t, fftSize));
+}
+
+/**
+ * Apply pre-computed frame audio data to effects' values (volume-linked params).
+ * Modifies effect.values in place.
+ */
+export function applyFrameAudioToEffects(
+	effects: EffectInstance[],
+	frameData: FrameAudioData,
+	sampleRate: number,
+	fftSize: number,
+): void {
+	applyVolumeLinksToEffects(effects, frameData.volumeLevel, frameData.frequencyData, sampleRate, fftSize);
+}
