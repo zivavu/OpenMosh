@@ -26,6 +26,7 @@
 	import MoshGroup from './MoshGroup.svelte';
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
+	import TrackLibrary from '../ui/TrackLibrary.svelte';
 
 	interface Props {
 		file: File;
@@ -195,6 +196,11 @@
 		spanStart = 0;
 		spanEnd = 0;
 		disposeAudioGraph();
+	}
+
+	function onLibraryLoadTrack(file: File) {
+		clearTrack();
+		trackFile = file;
 	}
 
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
@@ -708,6 +714,10 @@
 		}
 	}}
 >
+	<TrackLibrary
+		activeTrackName={trackFile?.name ?? null}
+		onLoadTrack={onLibraryLoadTrack}
+	/>
 	<div class="main-area">
 		<div class="top-bar">
 			<div class="toolbar">
