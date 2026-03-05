@@ -30,6 +30,7 @@
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
+	import TrackLibrary from '../ui/TrackLibrary.svelte';
 
 	interface Props {
 		initialFiles: File[];
@@ -367,6 +368,11 @@
 		spanStart = 0;
 		spanEnd = 0;
 		disposeAudioGraph();
+	}
+
+	function onLibraryLoadTrack(file: File) {
+		clearTrack();
+		trackFile = file;
 	}
 
 	// Audio volume tick
@@ -788,6 +794,10 @@
 		}
 	}}
 >
+	<TrackLibrary
+		activeTrackName={trackFile?.name ?? null}
+		onLoadTrack={onLibraryLoadTrack}
+	/>
 	<div class="main-area">
 		<SlideshowTopBar
 			{activeView}
