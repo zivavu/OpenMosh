@@ -107,6 +107,12 @@
 	type DragState =
 		| { type: 'boundary'; leftSegId: string | null; rightSegId: string | null }
 		| {
+				type: 'boundary-group';
+				anchorTime: number;
+				boundaries: Array<{ time: number; leftSegId: string | null; rightSegId: string | null }>;
+				nonSelectedBoundaries: number[];
+		  }
+		| {
 				type: 'seg-y';
 				segmentId: string;
 				snapSub: BeatSubdivision;
@@ -358,6 +364,57 @@
 		rightSegId: string | null,
 	) {
 		e.stopPropagation();
+
+		// Determine the boundary time from segment data
+		let boundaryTime: number | null = null;
+		if (leftSegId) {
+			const lseg = config.segments.find((s) => s.id === leftSegId);
+			if (lseg) boundaryTime = lseg.endTime ?? trackDuration;
+		} else if (rightSegId) {
+			const rseg = config.segments.find((s) => s.id === rightSegId);
+			if (rseg) boundaryTime = rseg.startTime;
+		}
+
+		// If this dot is in a multi-selection, start a group drag
+		if (
+			boundaryTime !== null &&
+			selectedBoundaryTimes.length > 1 &&
+			selectedBoundaryTimes.some((t) => Math.abs(t - boundaryTime!) < 0.001)
+		) {
+			const sortedSegs = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+			const boundaries: Array<{ time: number; leftSegId: string | null; rightSegId: string | null }> = [];
+			for (const t of selectedBoundaryTimes) {
+				const left = sortedSegs.find(
+					(s) => Math.abs((s.endTime ?? trackDuration) - t) < 0.001 && (s.endTime ?? trackDuration) < trackDuration - 0.001,
+				);
+				const right = sortedSegs.find(
+					(s) => Math.abs(s.startTime - t) < 0.001 && s.startTime > 0.001,
+				);
+				boundaries.push({ time: t, leftSegId: left?.id ?? null, rightSegId: right?.id ?? null });
+			}
+
+			// Collect all boundary times that are NOT selected (these stay fixed)
+			const allBoundarySet = new Set<number>([0, trackDuration]);
+			for (const s of config.segments) {
+				if (s.startTime > 0.001) allBoundarySet.add(s.startTime);
+				const end = s.endTime ?? trackDuration;
+				if (end < trackDuration - 0.001) allBoundarySet.add(end);
+			}
+			const nonSelectedBoundaries = [...allBoundarySet]
+				.filter((b) => !selectedBoundaryTimes.some((t) => Math.abs(t - b) < 0.001))
+				.sort((a, b) => a - b);
+
+			dragging = {
+				type: 'boundary-group',
+				anchorTime: clientXToTime(e.clientX),
+				boundaries,
+				nonSelectedBoundaries,
+			};
+			dragMoved = false;
+			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+			return;
+		}
+
 		dragging = { type: 'boundary', leftSegId, rightSegId };
 		dragMoved = false;
 		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -484,6 +541,48 @@
 					),
 				});
 			}
+		} else if (dragging.type === 'boundary-group') {
+			dragMoved = true;
+			const rawDelta = clientXToTime(e.clientX) - dragging.anchorTime;
+
+			// Clamp delta so no selected boundary crosses a non-selected neighbor
+			let minDelta = -Infinity;
+			let maxDelta = Infinity;
+			for (const b of dragging.boundaries) {
+				const nsb = dragging.nonSelectedBoundaries;
+				// Nearest fixed boundary to the left
+				for (let i = nsb.length - 1; i >= 0; i--) {
+					if (nsb[i] < b.time - 0.001) {
+						minDelta = Math.max(minDelta, nsb[i] + MIN_SEGMENT_DURATION - b.time);
+						break;
+					}
+				}
+				// Nearest fixed boundary to the right
+				for (let i = 0; i < nsb.length; i++) {
+					if (nsb[i] > b.time + 0.001) {
+						maxDelta = Math.min(maxDelta, nsb[i] - MIN_SEGMENT_DURATION - b.time);
+						break;
+					}
+				}
+			}
+			const delta = Math.max(
+				isFinite(minDelta) ? minDelta : rawDelta,
+				Math.min(isFinite(maxDelta) ? maxDelta : rawDelta, rawDelta),
+			);
+
+			// Apply delta to all selected boundaries via segment IDs
+			const updates: Record<string, Partial<TimelineSegment>> = {};
+			for (const b of dragging.boundaries) {
+				const newT = b.time + delta;
+				if (b.leftSegId) updates[b.leftSegId] = { ...updates[b.leftSegId], endTime: newT };
+				if (b.rightSegId) updates[b.rightSegId] = { ...updates[b.rightSegId], startTime: newT };
+			}
+
+			emit({
+				segments: config.segments.map((s) =>
+					updates[s.id] ? { ...s, ...updates[s.id] } : s,
+				),
+			});
 		} else if (dragging.type === 'seg-y') {
 			if (Math.abs(e.clientY - dragging.startClientY) > DRAG_THRESHOLD_PX) {
 				dragMoved = true;
@@ -538,6 +637,19 @@
 			} else {
 				selectedBoundaryTimes = [];
 			}
+		}
+		if (dragging?.type === 'boundary-group' && dragMoved) {
+			// Update selection to reflect the new boundary positions
+			const newTimes: number[] = [];
+			for (const b of dragging.boundaries) {
+				const refSeg = b.leftSegId
+					? config.segments.find((s) => s.id === b.leftSegId)
+					: config.segments.find((s) => s.id === b.rightSegId);
+				if (refSeg) {
+					newTimes.push(b.leftSegId ? (refSeg.endTime ?? trackDuration) : refSeg.startTime);
+				}
+			}
+			selectedBoundaryTimes = newTimes;
 		}
 		if (dragging?.type === 'seg-y') {
 			if (!dragMoved) {
