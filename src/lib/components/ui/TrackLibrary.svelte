@@ -4,10 +4,12 @@
 
   interface Props {
     activeTrackName: string | null;
-    onLoadTrack: (file: File) => void;
+    onLoadTrack: (file: File, trackId: string) => void;
+    onPreviewStart?: () => void;
+    mainPlaying?: boolean;
   }
 
-  let { activeTrackName, onLoadTrack }: Props = $props();
+  let { activeTrackName, onLoadTrack, onPreviewStart, mainPlaying = false }: Props = $props();
 
   const OPEN_KEY = 'openmosh-library-open';
   let open = $state(localStorage.getItem(OPEN_KEY) !== 'false');
@@ -18,6 +20,11 @@
 
   $effect(() => {
     localStorage.setItem(OPEN_KEY, String(open));
+  });
+
+  // Stop library preview when main player starts
+  $effect(() => {
+    if (mainPlaying && previewId !== null) stopPreview();
   });
 
   onMount(async () => {
@@ -55,7 +62,7 @@
 
   function onLoad(track: StoredTrack) {
     stopPreview();
-    onLoadTrack(new File([track.blob], track.name, { type: track.blob.type }));
+    onLoadTrack(new File([track.blob], track.name, { type: track.blob.type }), track.id);
   }
 
   function togglePreview(track: StoredTrack) {
@@ -63,6 +70,7 @@
       stopPreview();
     } else {
       stopPreview();
+      onPreviewStart?.();
       previewId = track.id;
       if (previewEl) {
         previewEl.src = URL.createObjectURL(track.blob);
@@ -87,16 +95,6 @@
 <input bind:this={fileInput} type="file" accept="audio/*" onchange={onFileChange} hidden />
 
 <div class="library" class:open>
-  <button class="toggle" onclick={() => (open = !open)} title={open ? 'Close library' : 'Open track library'}>
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      {#if open}
-        <polyline points="15 18 9 12 15 6" />
-      {:else}
-        <polyline points="9 18 15 12 9 6" />
-      {/if}
-    </svg>
-  </button>
-
   {#if open}
     <div class="panel">
       <div class="header">
@@ -104,6 +102,11 @@
         <button class="add-btn" onclick={() => fileInput.click()} title="Add track">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+        <button class="collapse-btn" onclick={() => (open = false)} title="Collapse library">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
       </div>
@@ -134,48 +137,50 @@
         </ul>
       {/if}
     </div>
+  {:else}
+    <button class="expand-btn" onclick={() => (open = true)} title="Open track library">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6" />
+      </svg>
+    </button>
   {/if}
 </div>
 
 <style>
   .library {
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 5;
     display: flex;
     flex-direction: row;
-    flex-shrink: 0;
     border-right: 1px solid #2a2a2a;
     background: #141414;
     transition: width 0.15s ease;
     width: 28px;
+    overflow: hidden;
   }
 
   .library.open {
     width: 220px;
   }
 
-  .toggle {
-    position: absolute;
-    right: -1px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 10;
-    width: 16px;
-    height: 40px;
-    background: #1e1e1e;
-    border: 1px solid #2a2a2a;
-    border-left: none;
-    border-radius: 0 4px 4px 0;
-    color: #666;
+  .expand-btn {
+    width: 100%;
+    height: 100%;
+    background: none;
+    border: none;
+    color: #444;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
   }
 
-  .toggle:hover {
-    color: #aaa;
-    background: #252525;
+  .expand-btn:hover {
+    color: #888;
+    background: #1a1a1a;
   }
 
   .panel {
@@ -190,13 +195,14 @@
   .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 0.6rem 0.4rem;
+    gap: 0.3rem;
+    padding: 0.5rem 0.5rem 0.4rem 0.6rem;
     border-bottom: 1px solid #222;
     flex-shrink: 0;
   }
 
   .title {
+    flex: 1;
     font-size: 0.6rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -204,11 +210,11 @@
     text-transform: uppercase;
   }
 
-  .add-btn {
+  .add-btn,
+  .collapse-btn {
     background: none;
-    border: 1px solid #333;
-    border-radius: 3px;
-    color: #777;
+    border: none;
+    color: #555;
     cursor: pointer;
     width: 18px;
     height: 18px;
@@ -216,11 +222,21 @@
     align-items: center;
     justify-content: center;
     padding: 0;
+    border-radius: 3px;
+  }
+
+  .add-btn {
+    border: 1px solid #333;
   }
 
   .add-btn:hover {
     color: #ccc;
     border-color: #555;
+  }
+
+  .collapse-btn:hover {
+    color: #aaa;
+    background: #1e1e1e;
   }
 
   .empty {

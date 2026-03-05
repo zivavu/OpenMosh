@@ -106,8 +106,28 @@
 		localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 	});
 
+	let currentTrackId = $state<string | null>(null);
+	const TRACK_SEGMENTS_KEY = 'openmosh-track-segments';
+
+	function saveSegments(trackId: string) {
+		try {
+			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
+			all[trackId] = config.segments;
+			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
+		} catch {}
+	}
+
+	function loadSegments(trackId: string): SlideshowConfig['segments'] | null {
+		try {
+			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
+			return all[trackId] ?? null;
+		} catch {}
+		return null;
+	}
+
 	function onConfigChange(next: SlideshowConfig) {
 		config = next;
+		if (currentTrackId) saveSegments(currentTrackId);
 	}
 
 	let selectedSegmentId = $state<string | null>(null);
@@ -367,12 +387,17 @@
 		trackCurrentTime = 0;
 		spanStart = 0;
 		spanEnd = 0;
+		currentTrackId = null;
 		disposeAudioGraph();
 	}
 
-	function onLibraryLoadTrack(file: File) {
+	function onLibraryLoadTrack(file: File, trackId: string) {
+		if (currentTrackId) saveSegments(currentTrackId);
 		clearTrack();
+		currentTrackId = trackId;
 		trackFile = file;
+		const segs = loadSegments(trackId);
+		if (segs !== null) config = { ...config, segments: segs };
 	}
 
 	// Audio volume tick
@@ -797,6 +822,8 @@
 	<TrackLibrary
 		activeTrackName={trackFile?.name ?? null}
 		onLoadTrack={onLibraryLoadTrack}
+		onPreviewStart={pauseAudio}
+		mainPlaying={audioPlaying}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar

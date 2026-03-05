@@ -198,7 +198,7 @@
 		disposeAudioGraph();
 	}
 
-	function onLibraryLoadTrack(file: File) {
+	function onLibraryLoadTrack(file: File, _trackId: string) {
 		clearTrack();
 		trackFile = file;
 	}
@@ -717,6 +717,8 @@
 	<TrackLibrary
 		activeTrackName={trackFile?.name ?? null}
 		onLoadTrack={onLibraryLoadTrack}
+		onPreviewStart={pauseTrack}
+		mainPlaying={audioPlaying}
 	/>
 	<div class="main-area">
 		<div class="top-bar">
@@ -1272,6 +1274,7 @@
 		height: 100%;
 		width: 100%;
 		overflow: hidden;
+		position: relative;
 	}
 
 	.main-area {
