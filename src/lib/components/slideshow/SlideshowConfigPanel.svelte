@@ -176,6 +176,7 @@
 			<option value={1}>Every beat</option>
 			<option value={2}>Every 2 beats</option>
 			<option value={4}>Every 4 beats</option>
+			<option value={0}>Stop</option>
 		</select>
 	</div>
 

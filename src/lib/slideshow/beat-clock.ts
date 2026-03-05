@@ -12,10 +12,11 @@ export function createBeatClock(
 	subdivision: BeatSubdivision,
 	offset = 0,
 ): BeatClock {
-	const intervalSeconds = (60 / bpm) * subdivision;
+	const intervalSeconds = subdivision === 0 ? Infinity : (60 / bpm) * subdivision;
 	return {
 		intervalSeconds,
 		beatAt(t: number) {
+			if (subdivision === 0) return { index: Number.MAX_SAFE_INTEGER, fraction: 0 };
 			const adjusted = Math.max(0, t - offset);
 			const index = Math.floor(adjusted / intervalSeconds);
 			const fraction = (adjusted % intervalSeconds) / intervalSeconds;
@@ -55,6 +56,7 @@ export function beatAtTime(
 ): BeatInfo {
 	const adjusted = Math.max(0, t - beatOffset);
 	const activeSubdivision = getSubdivisionAt(adjusted, segments, fallbackSubdivision);
+	if (activeSubdivision === 0) return { index: Number.MAX_SAFE_INTEGER, fraction: 0 };
 	const activeInterval = (60 / bpm) * activeSubdivision;
 	const index = Math.floor(adjusted / activeInterval);
 	const fraction = activeInterval > 0 ? (adjusted % activeInterval) / activeInterval : 0;

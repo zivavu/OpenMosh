@@ -9,9 +9,9 @@
 
 	// Ordered top→bottom: fast (1/32) to slow (4) — lower = higher beat value
 	const SUBDIVISIONS: BeatSubdivision[] = [
-		0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4,
+		0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 0,
 	];
-	const SUBLABELS = ['¹⁄₃₂', '¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4'];
+	const SUBLABELS = ['¹⁄₃₂', '¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4', '■'];
 
 	const SVG_H = 76;
 	const PAD_V = 10;
@@ -1050,7 +1050,7 @@
 		<div class="controls" style={alignStyle}>
 			{#if selectedSeg}
 				<span class="ctrl-label"
-					>Segment — <strong>{subLabel(selectedSeg.subdivision)}</strong> beat</span
+					>Segment — <strong>{selectedSeg.subdivision === 0 ? 'Stop' : `${subLabel(selectedSeg.subdivision)} beat`}</strong></span
 				>
 				<select
 					value={selectedSeg.subdivision}
@@ -1069,7 +1069,7 @@
 						})}
 				>
 					{#each SUBDIVISIONS as sub, i}
-						<option value={sub}>{SUBLABELS[i]} beat</option>
+						<option value={sub}>{sub === 0 ? 'Stop' : `${SUBLABELS[i]} beat`}</option>
 					{/each}
 				</select>
 				<button
