@@ -824,6 +824,7 @@
 		onLoadTrack={onLibraryLoadTrack}
 		onPreviewStart={pauseAudio}
 		mainPlaying={audioPlaying}
+		pendingTrack={trackFile}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar

@@ -719,6 +719,7 @@
 		onLoadTrack={onLibraryLoadTrack}
 		onPreviewStart={pauseTrack}
 		mainPlaying={audioPlaying}
+		pendingTrack={trackFile}
 	/>
 	<div class="main-area">
 		<div class="top-bar">

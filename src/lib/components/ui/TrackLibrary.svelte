@@ -12,6 +12,7 @@
 		onLoadTrack: (file: File, trackId: string) => void;
 		onPreviewStart?: () => void;
 		mainPlaying?: boolean;
+		pendingTrack?: File | null;
 	}
 
 	let {
@@ -19,11 +20,13 @@
 		onLoadTrack,
 		onPreviewStart,
 		mainPlaying = false,
+		pendingTrack = null,
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-library-open';
 	let open = $state(localStorage.getItem(OPEN_KEY) !== 'false');
 	let tracks = $state<StoredTrack[]>([]);
+	let libraryLoaded = $state(false);
 	let previewId = $state<string | null>(null);
 	let previewEl = $state<HTMLAudioElement | null>(null);
 	let fileInput: HTMLInputElement;
@@ -37,12 +40,26 @@
 		if (mainPlaying && previewId !== null) stopPreview();
 	});
 
+	// Auto-add manually loaded tracks to the library
+	$effect(() => {
+		const f = pendingTrack;
+		if (!f || !libraryLoaded) return;
+		if (tracks.some((t) => t.name === f.name)) return;
+		addTrack(f)
+			.then((track) => {
+				tracks = [...tracks, track];
+			})
+			.catch((e) => console.error('Failed to auto-save track:', e));
+	});
+
 	onMount(async () => {
 		try {
 			const loaded = await getAllTracks();
 			tracks = loaded.sort((a, b) => a.addedAt - b.addedAt);
 		} catch (e) {
 			console.error('Failed to load tracks:', e);
+		} finally {
+			libraryLoaded = true;
 		}
 	});
 
