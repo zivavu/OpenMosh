@@ -1096,11 +1096,13 @@
 					x2="{sv.endX}%"
 					y2={sv.y}
 				/>
-				{#if sv.endX - sv.startX > 2}
+				{#if sv.endX - sv.startX > 4}
+					{@const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, (sv.startX + sv.endX) / 2))}
 					<text
 						class="seg-lbl"
-						x="{(sv.startX + sv.endX) / 2}%"
+						x="{lblX}%"
 						y={sv.y + 16}
+						font-size="16"
 						text-anchor="middle">{subLabel(sv.sub)}</text
 					>
 				{/if}
