@@ -112,12 +112,12 @@
 	function saveSegments(trackId: string) {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			all[trackId] = { segments: config.segments, bpm: config.bpm };
+			all[trackId] = { segments: config.segments, bpm: config.bpm, textOverlay: config.textOverlay };
 			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
 		} catch {}
 	}
 
-	function loadSegments(trackId: string): { segments: SlideshowConfig['segments']; bpm?: number } | null {
+	function loadSegments(trackId: string): { segments: SlideshowConfig['segments']; bpm?: number; textOverlay?: SlideshowConfig['textOverlay'] } | null {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
 			const entry = all[trackId];
@@ -368,6 +368,7 @@
 				...config,
 				segments: saved.segments,
 				...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
+				...(saved.textOverlay !== undefined ? { textOverlay: saved.textOverlay } : {}),
 			};
 		}
 	}
