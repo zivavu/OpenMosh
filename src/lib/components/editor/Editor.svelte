@@ -27,6 +27,7 @@
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
+	import ResizeSettings from '../ui/ResizeSettings.svelte';
 
 	interface Props {
 		file: File;
@@ -107,7 +108,6 @@
 	let naturalHeight = $state<number | undefined>(undefined);
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
-	let maintainRatio = $state(true);
 
 	let trackFile = $state<File | null>(null);
 	let trackObjectUrl = $state<string | null>(null);
@@ -135,43 +135,6 @@
 			resizeHeight = nh;
 		}
 	});
-
-	const aspectRatio = $derived(
-		naturalWidth != null && naturalHeight != null && naturalHeight > 0
-			? naturalWidth / naturalHeight
-			: 1,
-	);
-
-	const MAX_RESIZE = 10000;
-
-	function setResizeWidth(w: number) {
-		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
-		resizeWidth = val;
-		if (maintainRatio && aspectRatio > 0) {
-			resizeHeight = Math.min(
-				MAX_RESIZE,
-				Math.max(1, Math.round(val / aspectRatio)),
-			);
-		}
-	}
-
-	function setResizeHeight(h: number) {
-		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
-		resizeHeight = val;
-		if (maintainRatio && aspectRatio > 0) {
-			resizeWidth = Math.min(
-				MAX_RESIZE,
-				Math.max(1, Math.round(val * aspectRatio)),
-			);
-		}
-	}
-
-	function resetResize() {
-		if (naturalWidth != null && naturalHeight != null) {
-			resizeWidth = naturalWidth;
-			resizeHeight = naturalHeight;
-		}
-	}
 
 	function openTrackPicker() {
 		trackInput?.click();
@@ -892,49 +855,12 @@
 						<input id="show-fps" type="checkbox" bind:checked={showFps} />
 					</div>
 					<div class="settings-divider"></div>
-					<div class="mosh-setting-row">
-						<label for="resize-width">Width</label>
-						<input
-							id="resize-width"
-							class="size-input"
-							type="number"
-							min="1"
-							max="10000"
-							step="1"
-							value={resizeWidth}
-							oninput={(e) =>
-								setResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
-						/>
-					</div>
-					<div class="mosh-setting-row">
-						<label for="resize-height">Height</label>
-						<input
-							id="resize-height"
-							class="size-input"
-							type="number"
-							min="1"
-							max="10000"
-							step="1"
-							value={resizeHeight}
-							oninput={(e) =>
-								setResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
-						/>
-					</div>
-					<div class="mosh-setting-row">
-						<label for="resize-ratio">Maintain ratio</label>
-						<input
-							id="resize-ratio"
-							type="checkbox"
-							bind:checked={maintainRatio}
-						/>
-					</div>
-					<button
-						class="resize-reset-btn"
-						onclick={resetResize}
-						title="Reset to original size"
-					>
-						Reset to original
-					</button>
+					<ResizeSettings
+						bind:width={resizeWidth}
+						bind:height={resizeHeight}
+						{naturalWidth}
+						{naturalHeight}
+					/>
 				{/snippet}
 			</MoshGroup>
 			{#if isImageFormat}
@@ -1364,42 +1290,6 @@
 		height: 1px;
 		background: #333;
 		margin: 0.15rem 0;
-	}
-
-	.size-input {
-		width: 4.5rem;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
-		outline: none;
-	}
-
-	.size-input:focus {
-		border-color: #555;
-	}
-
-	.resize-reset-btn {
-		margin-top: 0.25rem;
-		padding: 0.35rem 0.75rem;
-		border: 1px solid #444;
-		border-radius: 6px;
-		background: none;
-		color: #888;
-		font-size: 0.7rem;
-		font-family: inherit;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.resize-reset-btn:hover {
-		color: #ccc;
-		border-color: #666;
 	}
 
 	/* Timeline */
