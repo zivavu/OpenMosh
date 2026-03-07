@@ -161,53 +161,6 @@
 	let currentFps = $state(0);
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
-	let maintainRatio = $state(true);
-
-	$effect(() => {
-		const nw = naturalWidth;
-		const nh = naturalHeight;
-		if (nw != null && nh != null && nw > 0 && nh > 0) {
-			resizeWidth = nw;
-			resizeHeight = nh;
-		}
-	});
-
-	const aspectRatio = $derived(
-		naturalWidth != null && naturalHeight != null && naturalHeight > 0
-			? naturalWidth / naturalHeight
-			: 1,
-	);
-
-	const MAX_RESIZE = 10000;
-
-	function setResizeWidth(w: number) {
-		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
-		resizeWidth = val;
-		if (maintainRatio && aspectRatio > 0) {
-			resizeHeight = Math.min(
-				MAX_RESIZE,
-				Math.max(1, Math.round(val / aspectRatio)),
-			);
-		}
-	}
-
-	function setResizeHeight(h: number) {
-		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
-		resizeHeight = val;
-		if (maintainRatio && aspectRatio > 0) {
-			resizeWidth = Math.min(
-				MAX_RESIZE,
-				Math.max(1, Math.round(val * aspectRatio)),
-			);
-		}
-	}
-
-	function resetResize() {
-		if (naturalWidth != null && naturalHeight != null) {
-			resizeWidth = naturalWidth;
-			resizeHeight = naturalHeight;
-		}
-	}
 
 	// Use first slide as default canvas source
 	let previewImageSrc = $state('');
@@ -872,9 +825,10 @@
 			{previewPlaying}
 			slidesEmpty={slides.length === 0}
 			{trackFile}
-			{resizeWidth}
-			{resizeHeight}
-			{maintainRatio}
+			bind:resizeWidth
+			bind:resizeHeight
+			{naturalWidth}
+			{naturalHeight}
 			{recording}
 			{recordProgress}
 			{recordFinalizing}
@@ -884,10 +838,6 @@
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			onCancelRecording={cancelRecording}
-			onSetResizeWidth={setResizeWidth}
-			onSetResizeHeight={setResizeHeight}
-			onResetResize={resetResize}
-			onMaintainRatioChange={(v) => (maintainRatio = v)}
 			onRecordFormatChange={(f) => (recordFormat = f)}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
 		/>

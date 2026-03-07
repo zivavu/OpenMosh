@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { RecordFormat } from '../../recorder';
 	import RecordGroup from '../editor/RecordGroup.svelte';
+	import ResizeSettings from '../ui/ResizeSettings.svelte';
 
 	interface Props {
 		previewPlaying: boolean;
@@ -8,7 +9,8 @@
 		trackFile: File | null;
 		resizeWidth: number;
 		resizeHeight: number;
-		maintainRatio: boolean;
+		naturalWidth: number | undefined;
+		naturalHeight: number | undefined;
 		recording: boolean;
 		recordProgress: number;
 		recordFinalizing: boolean;
@@ -18,10 +20,6 @@
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
 		onCancelRecording: () => void;
-		onSetResizeWidth: (w: number) => void;
-		onSetResizeHeight: (h: number) => void;
-		onResetResize: () => void;
-		onMaintainRatioChange: (v: boolean) => void;
 		onRecordFormatChange: (f: RecordFormat) => void;
 		onRecordFpsChange: (fps: number) => void;
 	}
@@ -30,9 +28,10 @@
 		previewPlaying,
 		slidesEmpty,
 		trackFile,
-		resizeWidth,
-		resizeHeight,
-		maintainRatio,
+		resizeWidth = $bindable(0),
+		resizeHeight = $bindable(0),
+		naturalWidth,
+		naturalHeight,
 		recording,
 		recordProgress,
 		recordFinalizing,
@@ -42,10 +41,6 @@
 		onTogglePreview,
 		onStartRecording,
 		onCancelRecording,
-		onSetResizeWidth,
-		onSetResizeHeight,
-		onResetResize,
-		onMaintainRatioChange,
 		onRecordFormatChange,
 		onRecordFpsChange,
 	}: Props = $props();
@@ -97,51 +92,12 @@
 		</button>
 		{#if showOptionsPanel}
 			<div class="options-panel">
-				<div class="option-row">
-					<label for="ss-resize-width">Width</label>
-					<input
-						id="ss-resize-width"
-						class="size-input"
-						type="number"
-						min="1"
-						max="10000"
-						step="1"
-						value={resizeWidth}
-						oninput={(e) =>
-							onSetResizeWidth(+(e.currentTarget as HTMLInputElement).value)}
-					/>
-				</div>
-				<div class="option-row">
-					<label for="ss-resize-height">Height</label>
-					<input
-						id="ss-resize-height"
-						class="size-input"
-						type="number"
-						min="1"
-						max="10000"
-						step="1"
-						value={resizeHeight}
-						oninput={(e) =>
-							onSetResizeHeight(+(e.currentTarget as HTMLInputElement).value)}
-					/>
-				</div>
-				<div class="option-row">
-					<label for="ss-resize-ratio">Maintain ratio</label>
-					<input
-						id="ss-resize-ratio"
-						type="checkbox"
-						checked={maintainRatio}
-						onchange={(e) =>
-							onMaintainRatioChange((e.currentTarget as HTMLInputElement).checked)}
-					/>
-				</div>
-				<button
-					class="resize-reset-btn"
-					onclick={onResetResize}
-					title="Reset to original size"
-				>
-					Reset to original
-				</button>
+				<ResizeSettings
+					bind:width={resizeWidth}
+					bind:height={resizeHeight}
+					{naturalWidth}
+					{naturalHeight}
+				/>
 			</div>
 		{/if}
 	</div>
@@ -291,88 +247,6 @@
 		min-width: 200px;
 		z-index: 20;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-	}
-
-	.option-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.option-row label {
-		font-size: 0.7rem;
-		color: #888;
-		min-width: 72px;
-		flex-shrink: 0;
-	}
-
-	.option-row input[type='checkbox'] {
-		appearance: none;
-		-webkit-appearance: none;
-		width: 14px;
-		height: 14px;
-		border: 1px solid #555;
-		border-radius: 2px;
-		background: #1a1a1a;
-		cursor: pointer;
-		position: relative;
-		flex-shrink: 0;
-		display: grid;
-		place-items: center;
-	}
-
-	.option-row input[type='checkbox']::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
-			center/contain no-repeat;
-		opacity: 0;
-	}
-
-	.option-row input[type='checkbox']:checked {
-		background: #555;
-		border-color: #888;
-	}
-
-	.option-row input[type='checkbox']:checked::after {
-		opacity: 1;
-	}
-
-	.size-input {
-		width: 4.5rem;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
-		outline: none;
-	}
-
-	.size-input:focus {
-		border-color: #555;
-	}
-
-	.resize-reset-btn {
-		margin-top: 0.25rem;
-		padding: 0.35rem 0.75rem;
-		border: 1px solid #444;
-		border-radius: 6px;
-		background: none;
-		color: #888;
-		font-size: 0.7rem;
-		font-family: inherit;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.resize-reset-btn:hover {
-		color: #ccc;
-		border-color: #666;
 	}
 
 	.setting-row {
