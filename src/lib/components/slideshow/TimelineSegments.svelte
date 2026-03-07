@@ -440,6 +440,32 @@
 
 	function startSegYDrag(e: PointerEvent, segId: string) {
 		e.stopPropagation();
+		if (e.ctrlKey || e.metaKey) {
+			const time = clientXToTime(e.clientX);
+			const seg = config.segments.find((s) => s.id === segId);
+			if (!seg) return;
+			const end = seg.endTime ?? trackDuration;
+			if (time <= seg.startTime + 0.01 || time >= end - 0.01) return;
+			emit({
+				segments: config.segments
+					.filter((s) => s.id !== segId)
+					.concat([
+						{
+							id: crypto.randomUUID(),
+							startTime: seg.startTime,
+							endTime: time,
+							subdivision: seg.subdivision,
+						},
+						{
+							id: crypto.randomUUID(),
+							startTime: time,
+							endTime: end,
+							subdivision: seg.subdivision,
+						},
+					]),
+			});
+			return;
+		}
 		const seg = config.segments.find((s) => s.id === segId);
 		if (!seg) return;
 		dragging = {
