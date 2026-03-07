@@ -144,6 +144,8 @@
 	// ── Selection / clipboard (boundary dots) ────────────────────────────────
 	let selectedBoundaryTimes = $state<number[]>([]); // absolute track times of selected boundaries
 	let clipboard = $state<{ offset: number; subdivision: BeatSubdivision }[]>([]); // relative offsets + subdivisions from leftmost selected boundary
+	let undoStack = $state<TimelineSegment[][]>([]);
+	let redoStack = $state<TimelineSegment[][]>([]);
 	let pasteMode = $state(false);
 	let pasteCursorTime = $state(0);
 
@@ -154,7 +156,15 @@
 	} | null = $state(null);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
+	/** Emit without recording history — use during active drags. */
+	function emitLive(patch: Partial<SlideshowConfig>) {
+		onConfigChange({ ...config, ...patch });
+	}
+
+	/** Emit and push current segments to undo history. */
 	function emit(patch: Partial<SlideshowConfig>) {
+		undoStack = [...undoStack, [...config.segments]];
+		redoStack = [];
 		onConfigChange({ ...config, ...patch });
 	}
 
@@ -614,6 +624,10 @@
 		if (!dragging) return;
 
 		if (dragging.type === 'boundary') {
+			if (!dragMoved) {
+				undoStack = [...undoStack, [...config.segments]];
+				redoStack = [];
+			}
 			dragMoved = true;
 			const time = clientXToTime(e.clientX);
 			const { leftSegId, rightSegId } = dragging;
@@ -642,13 +656,17 @@
 			}
 
 			if (Object.keys(updates).length > 0) {
-				emit({
+				emitLive({
 					segments: config.segments.map((s) =>
 						updates[s.id] ? { ...s, ...updates[s.id] } : s,
 					),
 				});
 			}
 		} else if (dragging.type === 'boundary-group') {
+			if (!dragMoved) {
+				undoStack = [...undoStack, [...config.segments]];
+				redoStack = [];
+			}
 			dragMoved = true;
 			const rawDelta = clientXToTime(e.clientX) - dragging.anchorTime;
 
@@ -693,7 +711,7 @@
 					updates[b.rightSegId] = { ...updates[b.rightSegId], startTime: newT };
 			}
 
-			emit({
+			emitLive({
 				segments: config.segments.map((s) =>
 					updates[s.id] ? { ...s, ...updates[s.id] } : s,
 				),
@@ -875,6 +893,30 @@
 	function onKeydown(e: KeyboardEvent) {
 		const t = e.target as HTMLElement;
 		if (t.closest('input, textarea, select')) return;
+
+		// Undo
+		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+			if (undoStack.length > 0) {
+				e.preventDefault();
+				redoStack = [...redoStack, [...config.segments]];
+				const prev = undoStack[undoStack.length - 1];
+				undoStack = undoStack.slice(0, -1);
+				onConfigChange({ ...config, segments: prev });
+			}
+			return;
+		}
+
+		// Redo
+		if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+			if (redoStack.length > 0) {
+				e.preventDefault();
+				undoStack = [...undoStack, [...config.segments]];
+				const next = redoStack[redoStack.length - 1];
+				redoStack = redoStack.slice(0, -1);
+				onConfigChange({ ...config, segments: next });
+			}
+			return;
+		}
 
 		// Copy selected boundary dots
 		if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
