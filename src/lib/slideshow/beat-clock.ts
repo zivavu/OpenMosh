@@ -55,7 +55,7 @@ export function beatAtTime(
 	fallbackSubdivision: BeatSubdivision,
 ): BeatInfo {
 	const adjusted = Math.max(0, t - beatOffset);
-	const activeSubdivision = getSubdivisionAt(adjusted, segments, fallbackSubdivision);
+	const activeSubdivision = getSubdivisionAt(t, segments, fallbackSubdivision);
 	if (activeSubdivision === 0) return { index: Number.MAX_SAFE_INTEGER, fraction: 0 };
 	const activeInterval = (60 / bpm) * activeSubdivision;
 	const index = Math.floor(adjusted / activeInterval);

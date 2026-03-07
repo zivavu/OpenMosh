@@ -13,7 +13,7 @@
 	];
 	const SUBLABELS = ['¹⁄₃₂', '¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4', '■'];
 
-	const SVG_H = 76;
+	const SVG_H = 100;
 	const PAD_V = 10;
 	const ROW_H = (SVG_H - PAD_V * 2) / (SUBDIVISIONS.length - 1);
 	const DOT_R = 4;
@@ -109,7 +109,11 @@
 		| {
 				type: 'boundary-group';
 				anchorTime: number;
-				boundaries: Array<{ time: number; leftSegId: string | null; rightSegId: string | null }>;
+				boundaries: Array<{
+					time: number;
+					leftSegId: string | null;
+					rightSegId: string | null;
+				}>;
 				nonSelectedBoundaries: number[];
 		  }
 		| {
@@ -381,16 +385,28 @@
 			selectedBoundaryTimes.length > 1 &&
 			selectedBoundaryTimes.some((t) => Math.abs(t - boundaryTime!) < 0.001)
 		) {
-			const sortedSegs = [...config.segments].sort((a, b) => a.startTime - b.startTime);
-			const boundaries: Array<{ time: number; leftSegId: string | null; rightSegId: string | null }> = [];
+			const sortedSegs = [...config.segments].sort(
+				(a, b) => a.startTime - b.startTime,
+			);
+			const boundaries: Array<{
+				time: number;
+				leftSegId: string | null;
+				rightSegId: string | null;
+			}> = [];
 			for (const t of selectedBoundaryTimes) {
 				const left = sortedSegs.find(
-					(s) => Math.abs((s.endTime ?? trackDuration) - t) < 0.001 && (s.endTime ?? trackDuration) < trackDuration - 0.001,
+					(s) =>
+						Math.abs((s.endTime ?? trackDuration) - t) < 0.001 &&
+						(s.endTime ?? trackDuration) < trackDuration - 0.001,
 				);
 				const right = sortedSegs.find(
 					(s) => Math.abs(s.startTime - t) < 0.001 && s.startTime > 0.001,
 				);
-				boundaries.push({ time: t, leftSegId: left?.id ?? null, rightSegId: right?.id ?? null });
+				boundaries.push({
+					time: t,
+					leftSegId: left?.id ?? null,
+					rightSegId: right?.id ?? null,
+				});
 			}
 
 			// Collect all boundary times that are NOT selected (these stay fixed)
@@ -401,7 +417,9 @@
 				if (end < trackDuration - 0.001) allBoundarySet.add(end);
 			}
 			const nonSelectedBoundaries = [...allBoundarySet]
-				.filter((b) => !selectedBoundaryTimes.some((t) => Math.abs(t - b) < 0.001))
+				.filter(
+					(b) => !selectedBoundaryTimes.some((t) => Math.abs(t - b) < 0.001),
+				)
 				.sort((a, b) => a - b);
 
 			dragging = {
@@ -458,7 +476,9 @@
 			for (const offset of clipboard) {
 				const t = anchorTime + offset;
 				if (t <= 0.001 || t >= trackDuration - 0.001) continue;
-				const sorted = [...newSegments].sort((a, b) => a.startTime - b.startTime);
+				const sorted = [...newSegments].sort(
+					(a, b) => a.startTime - b.startTime,
+				);
 				const hit = sorted.find((s) => {
 					const end = s.endTime ?? trackDuration;
 					return t > s.startTime + 0.01 && t < end - 0.01;
@@ -468,8 +488,18 @@
 				newSegments = newSegments
 					.filter((s) => s.id !== hit.id)
 					.concat([
-						{ id: crypto.randomUUID(), startTime: hit.startTime, endTime: t, subdivision: hit.subdivision },
-						{ id: crypto.randomUUID(), startTime: t, endTime: hitEnd, subdivision: hit.subdivision },
+						{
+							id: crypto.randomUUID(),
+							startTime: hit.startTime,
+							endTime: t,
+							subdivision: hit.subdivision,
+						},
+						{
+							id: crypto.randomUUID(),
+							startTime: t,
+							endTime: hitEnd,
+							subdivision: hit.subdivision,
+						},
 					]);
 			}
 			emit({ segments: newSegments });
@@ -495,7 +525,13 @@
 		e.stopPropagation();
 		const time = clientXToTime(e.clientX);
 		const svgY = clientYToSvgY(e.clientY);
-		dragging = { type: 'rect-select', startTime: time, startSvgY: svgY, currentTime: time, currentSvgY: svgY };
+		dragging = {
+			type: 'rect-select',
+			startTime: time,
+			startSvgY: svgY,
+			currentTime: time,
+			currentSvgY: svgY,
+		};
 		dragMoved = false;
 		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
 	}
@@ -553,14 +589,20 @@
 				// Nearest fixed boundary to the left
 				for (let i = nsb.length - 1; i >= 0; i--) {
 					if (nsb[i] < b.time - 0.001) {
-						minDelta = Math.max(minDelta, nsb[i] + MIN_SEGMENT_DURATION - b.time);
+						minDelta = Math.max(
+							minDelta,
+							nsb[i] + MIN_SEGMENT_DURATION - b.time,
+						);
 						break;
 					}
 				}
 				// Nearest fixed boundary to the right
 				for (let i = 0; i < nsb.length; i++) {
 					if (nsb[i] > b.time + 0.001) {
-						maxDelta = Math.min(maxDelta, nsb[i] - MIN_SEGMENT_DURATION - b.time);
+						maxDelta = Math.min(
+							maxDelta,
+							nsb[i] - MIN_SEGMENT_DURATION - b.time,
+						);
 						break;
 					}
 				}
@@ -574,8 +616,10 @@
 			const updates: Record<string, Partial<TimelineSegment>> = {};
 			for (const b of dragging.boundaries) {
 				const newT = b.time + delta;
-				if (b.leftSegId) updates[b.leftSegId] = { ...updates[b.leftSegId], endTime: newT };
-				if (b.rightSegId) updates[b.rightSegId] = { ...updates[b.rightSegId], startTime: newT };
+				if (b.leftSegId)
+					updates[b.leftSegId] = { ...updates[b.leftSegId], endTime: newT };
+				if (b.rightSegId)
+					updates[b.rightSegId] = { ...updates[b.rightSegId], startTime: newT };
 			}
 
 			emit({
@@ -627,7 +671,11 @@
 				// Collect all interior boundary times within the rect's time range
 				const times = new Set<number>();
 				for (const s of segments) {
-					if (s.startTime > 0.001 && s.startTime >= minTime && s.startTime <= maxTime)
+					if (
+						s.startTime > 0.001 &&
+						s.startTime >= minTime &&
+						s.startTime <= maxTime
+					)
 						times.add(s.startTime);
 					const end = s.endTime ?? trackDuration;
 					if (end < trackDuration - 0.001 && end >= minTime && end <= maxTime)
@@ -646,7 +694,9 @@
 					? config.segments.find((s) => s.id === b.leftSegId)
 					: config.segments.find((s) => s.id === b.rightSegId);
 				if (refSeg) {
-					newTimes.push(b.leftSegId ? (refSeg.endTime ?? trackDuration) : refSeg.startTime);
+					newTimes.push(
+						b.leftSegId ? (refSeg.endTime ?? trackDuration) : refSeg.startTime,
+					);
 				}
 			}
 			selectedBoundaryTimes = newTimes;
@@ -712,14 +762,18 @@
 		const times = [...selectedBoundaryTimes].sort((a, b) => a - b);
 		for (const t of times) {
 			const sorted = [...segs].sort((a, b) => a.startTime - b.startTime);
-			const left = sorted.find((s) => Math.abs((s.endTime ?? trackDuration) - t) < 0.001);
+			const left = sorted.find(
+				(s) => Math.abs((s.endTime ?? trackDuration) - t) < 0.001,
+			);
 			const right = sorted.find((s) => Math.abs(s.startTime - t) < 0.001);
 			if (!left || !right) continue;
 			const merged: TimelineSegment = {
 				...left,
 				endTime: right.endTime ?? trackDuration,
 			};
-			segs = segs.filter((s) => s.id !== left.id && s.id !== right.id).concat([merged]);
+			segs = segs
+				.filter((s) => s.id !== left.id && s.id !== right.id)
+				.concat([merged]);
 		}
 		selectedBoundaryTimes = [];
 		emit({ segments: segs });
@@ -813,7 +867,11 @@
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 		const times = new Set<number>();
 		for (const s of segments) {
-			if (s.startTime > 0.001 && s.startTime >= minTime && s.startTime <= maxTime)
+			if (
+				s.startTime > 0.001 &&
+				s.startTime >= minTime &&
+				s.startTime <= maxTime
+			)
 				times.add(s.startTime);
 			const end = s.endTime ?? trackDuration;
 			if (end < trackDuration - 0.001 && end >= minTime && end <= maxTime)
@@ -953,8 +1011,9 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === lId &&
 							hoveredDot?.rightSegId === sv.id}
-						class:dot-selected={selectedBoundaryTimes.some((t) => Math.abs(t - sv.startTime) < 0.001) ||
-							rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
+						class:dot-selected={selectedBoundaryTimes.some(
+							(t) => Math.abs(t - sv.startTime) < 0.001,
+						) || rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
 						cx="{sv.startX}%"
 						cy={sv.y}
 						r={DOT_R}
@@ -974,8 +1033,9 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === sv.id &&
 							hoveredDot?.rightSegId === rId}
-						class:dot-selected={selectedBoundaryTimes.some((t) => Math.abs(t - sv.endTime) < 0.001) ||
-							rectHoverTimes.some((t) => Math.abs(t - sv.endTime) < 0.001)}
+						class:dot-selected={selectedBoundaryTimes.some(
+							(t) => Math.abs(t - sv.endTime) < 0.001,
+						) || rectHoverTimes.some((t) => Math.abs(t - sv.endTime) < 0.001)}
 						cx="{sv.endX}%"
 						cy={sv.y}
 						r={DOT_R}
@@ -1006,8 +1066,14 @@
 			{/if}
 			<!-- Rectangle selection overlay -->
 			{#if dragging?.type === 'rect-select' && dragMoved}
-				{@const minX = Math.min(toPct(dragging.startTime), toPct(dragging.currentTime))}
-				{@const maxX = Math.max(toPct(dragging.startTime), toPct(dragging.currentTime))}
+				{@const minX = Math.min(
+					toPct(dragging.startTime),
+					toPct(dragging.currentTime),
+				)}
+				{@const maxX = Math.max(
+					toPct(dragging.startTime),
+					toPct(dragging.currentTime),
+				)}
 				{@const minY = Math.min(dragging.startSvgY, dragging.currentSvgY)}
 				{@const maxY = Math.max(dragging.startSvgY, dragging.currentSvgY)}
 				<rect
@@ -1025,7 +1091,13 @@
 				{#each clipboard as offset}
 					{@const ghostTime = pasteCursorTime + offset}
 					{@const gx = toPct(ghostTime)}
-					<line class="ghost-split-line" x1="{gx}%" y1="0" x2="{gx}%" y2={SVG_H} />
+					<line
+						class="ghost-split-line"
+						x1="{gx}%"
+						y1="0"
+						x2="{gx}%"
+						y2={SVG_H}
+					/>
 				{/each}
 			{/if}
 		</svg>
@@ -1044,47 +1116,6 @@
 			</div>
 		{/if}
 	</div>
-
-	<!-- Bottom controls bar -->
-	{#if selectedSeg || segments.length > 0}
-		<div class="controls" style={alignStyle}>
-			{#if selectedSeg}
-				<span class="ctrl-label"
-					>Segment — <strong>{selectedSeg.subdivision === 0 ? 'Stop' : `${subLabel(selectedSeg.subdivision)} beat`}</strong></span
-				>
-				<select
-					value={selectedSeg.subdivision}
-					onchange={(e) =>
-						emit({
-							segments: config.segments.map((s) =>
-								s.id === selectedSeg!.id
-									? {
-											...s,
-											subdivision: Number(
-												(e.target as HTMLSelectElement).value,
-											) as BeatSubdivision,
-										}
-									: s,
-							),
-						})}
-				>
-					{#each SUBDIVISIONS as sub, i}
-						<option value={sub}>{sub === 0 ? 'Stop' : `${SUBLABELS[i]} beat`}</option>
-					{/each}
-				</select>
-				<button
-					class="rm-btn"
-					onclick={() => removeSegment(selectedSeg!.id)}
-					title="Remove segment (Delete)">Remove</button
-				>
-			{/if}
-			{#if segments.length > 0}
-				<button class="clear-btn" onclick={clearAll} title="Clear all segments"
-					>Clear all</button
-				>
-			{/if}
-		</div>
-	{/if}
 </div>
 
 <style>
@@ -1103,23 +1134,20 @@
 	.step-svg {
 		display: block;
 		width: 100%;
-		overflow: hidden; /* clips segments/dots scrolled out of the view window */
+		overflow: hidden;
 	}
 
-	/* Grid rows */
 	.grid-row {
 		stroke: #1e1e1e;
 		stroke-width: 1;
 	}
 
-	/* Tail / global line */
 	.tail {
 		stroke: #333;
 		stroke-width: 1;
 		stroke-dasharray: 3 4;
 	}
 
-	/* Segment hit area */
 	.seg-hit {
 		stroke: transparent;
 		stroke-width: 14;
@@ -1127,7 +1155,6 @@
 		cursor: ns-resize;
 	}
 
-	/* Segment visible line */
 	.seg {
 		stroke: #5a8fc0;
 		stroke-width: 2;
@@ -1139,7 +1166,6 @@
 		stroke: #90c0f8;
 	}
 
-	/* Segment subdivision label */
 	.seg-lbl {
 		fill: #4a7faf;
 		font-size: 8px;
@@ -1148,21 +1174,18 @@
 		user-select: none;
 	}
 
-	/* Vertical step connectors */
 	.connector {
 		stroke: #5a8fc0;
 		stroke-width: 1.5;
 		pointer-events: none;
 	}
 
-	/* Fixed anchor dots (timeline start/end — not draggable) */
 	.dot-anchor {
 		fill: #5a8fc0;
 		stroke: none;
 		pointer-events: none;
 	}
 
-	/* Interior boundary dots (draggable) */
 	.dot {
 		fill: #111;
 		stroke: #5a8fc0;
@@ -1185,7 +1208,6 @@
 		stroke: #ff7070;
 	}
 
-	/* Rectangle selection box */
 	.select-rect {
 		fill: rgba(90, 143, 192, 0.08);
 		stroke: rgba(90, 143, 192, 0.5);
@@ -1200,7 +1222,6 @@
 		pointer-events: none;
 	}
 
-	/* Playhead */
 	.playhead-line {
 		stroke: rgba(255, 210, 80, 0.75);
 		stroke-width: 1;
@@ -1219,7 +1240,6 @@
 		cursor: col-resize;
 	}
 
-	/* Empty-state hint */
 	.hint {
 		fill: #3a3a3a;
 		font-size: 8.5px;
@@ -1227,7 +1247,6 @@
 		user-select: none;
 	}
 
-	/* Scrollbar (shown when zoomed in) */
 	.scrollbar {
 		position: relative;
 		height: 5px;
@@ -1253,62 +1272,5 @@
 	.scrollbar-thumb:active {
 		cursor: grabbing;
 		background: #5a8fc0;
-	}
-
-	/* Controls bar */
-	.controls {
-		display: flex;
-		flex-direction: row;
-		gap: 0.5rem;
-		margin-top: 0.25rem;
-		font-size: 0.72rem;
-		align-items: center;
-	}
-
-	.ctrl-label {
-		color: #888;
-		white-space: nowrap;
-	}
-
-	.ctrl-label strong {
-		color: #aaa;
-	}
-
-	.controls select {
-		background: #1a1a1a;
-		color: #c0c0c0;
-		border: 1px solid #333;
-		border-radius: 3px;
-		padding: 0.12rem 0.3rem;
-		font-size: 0.72rem;
-	}
-
-	.rm-btn {
-		background: none;
-		border: none;
-		color: #bb5555;
-		cursor: pointer;
-		font-size: 0.72rem;
-		padding: 0.12rem 0.3rem;
-	}
-
-	.rm-btn:hover {
-		color: #dd7777;
-	}
-
-	.clear-btn {
-		background: none;
-		border: 1px solid #333;
-		color: #666;
-		cursor: pointer;
-		font-size: 0.72rem;
-		padding: 0.12rem 0.3rem;
-		border-radius: 3px;
-		margin-left: auto;
-	}
-
-	.clear-btn:hover {
-		border-color: #555;
-		color: #999;
 	}
 </style>

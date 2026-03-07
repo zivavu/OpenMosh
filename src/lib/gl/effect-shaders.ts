@@ -951,69 +951,6 @@ void main() {
 		setUniforms: floats('amount'),
 	},
 
-	fractalize: {
-		fragment:
-			H +
-			`uniform float u_amount;
-  uniform float u_threshold;
-  uniform float u_zoom;
-  uniform float u_detail;
-
-  vec3 palette(float t) {
-    return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67)));
-  }
-  
-  void main() {
-    vec4 orig = texture(u_texture, v_uv);
-  
-    float luma = dot(orig.rgb, vec3(0.2126, 0.7152, 0.0722));
-  
-    float mask = 1.0 - smoothstep(u_threshold - 0.08, u_threshold + 0.08, luma);
-  
-    if (mask < 0.001) {
-      outColor = orig;
-      return;
-    }
-  
-    float t = u_time;
-
-    float region = fract(sin(dot(v_uv, vec2(127.1, 311.7))) * 43758.5453);
-    vec2 c;
-    if (region < 0.33) {
-      c = vec2(-0.7269 + 0.01 * sin(t * 0.31),  0.1889 + 0.04 * sin(t * 0.6));
-    } else if (region < 0.66) {
-      c = vec2(-0.4    + 0.03 * cos(t * 0.5),   0.6    + 0.03 * sin(t * 0.4));
-    } else {
-      c = vec2( 0.285  + 0.02 * sin(t * 0.7),   0.01   + 0.02 * cos(t * 0.8));
-    }
-  
-    float scale = exp2(u_zoom);
-    vec2 pan    = vec2(sin(t * 0.23) * 0.5, cos(t * 0.31) * 0.5);
-    vec2 z      = (v_uv - 0.5) * 2.0 / scale + pan;
-  
-    float smoothIter = 0.0;
-    float escaped    = 0.0;
-    for (int i = 0; i < 64; i++) {
-      if (float(i) >= u_detail) break;
-      z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-      if (dot(z, z) > 256.0) {
-        smoothIter = float(i) - log2(log2(dot(z, z))) + 4.0;
-        escaped    = 1.0;
-        break;
-      }
-    }
-  
-    vec3 fColor = palette(smoothIter / u_detail + t * 0.05);
-  
-    float blendStrength = mask * u_amount * escaped;
-    vec3  overlay       = fColor * blendStrength;
-  
-    outColor = vec4(1.0 - (1.0 - orig.rgb) * (1.0 - overlay), orig.a);
-  }`,
-		animated: true,
-		setUniforms: floats('amount', 'threshold', 'zoom', 'detail'),
-	},
-
 	emboss: {
 		fragment:
 			H +

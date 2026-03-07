@@ -30,6 +30,7 @@
 	let previewId = $state<string | null>(null);
 	let previewEl = $state<HTMLAudioElement | null>(null);
 	let fileInput: HTMLInputElement;
+	let libraryEl: HTMLDivElement;
 
 	$effect(() => {
 		localStorage.setItem(OPEN_KEY, String(open));
@@ -61,6 +62,16 @@
 		} finally {
 			libraryLoaded = true;
 		}
+	});
+
+	onMount(() => {
+		function onPointerDown(e: PointerEvent) {
+			if (open && libraryEl && !libraryEl.contains(e.target as Node)) {
+				open = false;
+			}
+		}
+		document.addEventListener('pointerdown', onPointerDown);
+		return () => document.removeEventListener('pointerdown', onPointerDown);
 	});
 
 	onDestroy(() => stopPreview());
@@ -130,7 +141,7 @@
 	hidden
 />
 
-<div class="library" class:open>
+<div class="library" class:open bind:this={libraryEl}>
 	<!-- Always in flow: the 28px expand strip -->
 	<button
 		class="expand-btn"

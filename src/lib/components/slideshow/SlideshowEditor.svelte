@@ -81,6 +81,7 @@
 		if (s) s.presetIndex = presetIndex;
 	}
 
+	// svelte-ignore state_referenced_locally
 	if (initialFiles.length > 0) {
 		addFiles(initialFiles);
 	}
@@ -112,12 +113,12 @@
 	function saveSegments(trackId: string) {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			all[trackId] = { segments: config.segments, bpm: config.bpm, textOverlay: config.textOverlay };
+			all[trackId] = { segments: config.segments, bpm: config.bpm, textOverlay: config.textOverlay, spanStart, spanEnd };
 			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
 		} catch {}
 	}
 
-	function loadSegments(trackId: string): { segments: SlideshowConfig['segments']; bpm?: number; textOverlay?: SlideshowConfig['textOverlay'] } | null {
+	function loadSegments(trackId: string): { segments: SlideshowConfig['segments']; bpm?: number; textOverlay?: SlideshowConfig['textOverlay']; spanStart?: number; spanEnd?: number } | null {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
 			const entry = all[trackId];
@@ -133,6 +134,12 @@
 		config = next;
 		if (currentTrackId) saveSegments(currentTrackId);
 	}
+
+	// Save span when user adjusts it while a library track is loaded
+	$effect(() => {
+		spanStart; spanEnd;
+		if (currentTrackId) saveSegments(currentTrackId);
+	});
 
 	let selectedSegmentId = $state<string | null>(null);
 
@@ -212,6 +219,7 @@
 	let spanStart = $state(0);
 	let spanEnd = $state(0);
 	let audioPlaying = $state(false);
+	let pendingSpan = $state<{ start: number; end: number } | null>(null);
 
 	let volumeLevel = $state(0);
 	let frequencyData = $state<Uint8Array | null>(null);
@@ -243,8 +251,14 @@
 		const d = audioEl?.duration;
 		if (typeof d === 'number' && Number.isFinite(d)) {
 			trackDuration = d;
-			spanStart = 0;
-			spanEnd = d;
+			if (pendingSpan) {
+				spanStart = Math.max(0, Math.min(pendingSpan.start, d));
+				spanEnd = Math.max(0, Math.min(pendingSpan.end, d));
+				pendingSpan = null;
+			} else {
+				spanStart = 0;
+				spanEnd = d;
+			}
 		}
 	}
 
@@ -353,6 +367,7 @@
 		trackCurrentTime = 0;
 		spanStart = 0;
 		spanEnd = 0;
+		pendingSpan = null;
 		currentTrackId = null;
 		disposeAudioGraph();
 	}
@@ -370,6 +385,9 @@
 				...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
 				...(saved.textOverlay !== undefined ? { textOverlay: saved.textOverlay } : {}),
 			};
+			if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
+				pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
+			}
 		}
 	}
 
@@ -438,6 +456,7 @@
 	let previewRafId = $state<number | null>(null);
 	let previewBeatIndex = $state(-1);
 	let previewEffects: EffectInstance[] = $state([]);
+	// svelte-ignore state_referenced_locally
 	let smoothState = $state({ effects: cloneEffects(effects) });
 
 	const previewPhrases = $derived(
@@ -925,12 +944,14 @@
 			{trackCurrentTime}
 			{trackDuration}
 		/>
-		<EffectsPanel
-			bind:effects
-			hasTrack={!!trackFile}
-			{spectrumData}
-			onVolumeLinkChange={setVolumeLink}
-		/>
+		{#if config.moshMode === 'consistent'}
+			<EffectsPanel
+				bind:effects
+				hasTrack={!!trackFile}
+				{spectrumData}
+				onVolumeLinkChange={setVolumeLink}
+			/>
+		{/if}
 	</div>
 
 	{#if dragging}
