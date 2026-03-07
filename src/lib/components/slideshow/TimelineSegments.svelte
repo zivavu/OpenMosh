@@ -1100,7 +1100,7 @@
 					<text
 						class="seg-lbl"
 						x="{(sv.startX + sv.endX) / 2}%"
-						y={sv.y - 6}
+						y={sv.y + 16}
 						text-anchor="middle">{subLabel(sv.sub)}</text
 					>
 				{/if}
@@ -1284,7 +1284,7 @@
 
 	.seg-lbl {
 		fill: #4a7faf;
-		font-size: 8px;
+		font-size: 16px;
 		font-family: monospace;
 		pointer-events: none;
 		user-select: none;
