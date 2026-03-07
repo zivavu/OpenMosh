@@ -162,6 +162,15 @@
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 
+	$effect(() => {
+		const nw = naturalWidth;
+		const nh = naturalHeight;
+		if (nw != null && nh != null && nw > 0 && nh > 0) {
+			resizeWidth = nw;
+			resizeHeight = nh;
+		}
+	});
+
 	// Use first slide as default canvas source
 	let previewImageSrc = $state('');
 	$effect(() => {
