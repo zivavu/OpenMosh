@@ -5,7 +5,7 @@
 		TimelineSegment,
 	} from '../../slideshow/types';
 
-	const MIN_SEGMENT_DURATION = 0.25;
+	const MIN_SEGMENT_DURATION = 0.125;
 
 	// Ordered top→bottom: fast (1/32) to slow (4) — lower = higher beat value
 	const SUBDIVISIONS: BeatSubdivision[] = [
@@ -143,7 +143,7 @@
 
 	// ── Selection / clipboard (boundary dots) ────────────────────────────────
 	let selectedBoundaryTimes = $state<number[]>([]); // absolute track times of selected boundaries
-	let clipboard = $state<number[]>([]); // relative offsets from leftmost selected boundary
+	let clipboard = $state<{ offset: number; subdivision: BeatSubdivision }[]>([]); // relative offsets + subdivisions from leftmost selected boundary
 	let pasteMode = $state(false);
 	let pasteCursorTime = $state(0);
 
@@ -473,7 +473,7 @@
 			e.stopPropagation();
 			const anchorTime = clientXToTime(e.clientX);
 			let newSegments = [...config.segments];
-			for (const offset of clipboard) {
+			for (const { offset, subdivision } of clipboard) {
 				const t = anchorTime + offset;
 				if (t <= 0.001 || t >= trackDuration - 0.001) continue;
 				const sorted = [...newSegments].sort(
@@ -498,7 +498,7 @@
 							id: crypto.randomUUID(),
 							startTime: t,
 							endTime: hitEnd,
-							subdivision: hit.subdivision,
+							subdivision,
 						},
 					]);
 			}
@@ -810,7 +810,11 @@
 			if (selectedBoundaryTimes.length > 0) {
 				e.preventDefault();
 				const minTime = Math.min(...selectedBoundaryTimes);
-				clipboard = selectedBoundaryTimes.map((t) => t - minTime);
+				clipboard = selectedBoundaryTimes.map((t) => {
+					const offset = t - minTime;
+					const rightSeg = config.segments.find((s) => Math.abs(s.startTime - t) < 0.001);
+					return { offset, subdivision: rightSeg?.subdivision ?? config.subdivision };
+				});
 			}
 			return;
 		}
@@ -1088,7 +1092,7 @@
 
 			<!-- Ghost paste preview (boundary splits) -->
 			{#if pasteMode && clipboard.length > 0}
-				{#each clipboard as offset}
+				{#each clipboard as { offset }}
 					{@const ghostTime = pasteCursorTime + offset}
 					{@const gx = toPct(ghostTime)}
 					<line
