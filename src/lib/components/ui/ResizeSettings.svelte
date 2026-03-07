@@ -81,7 +81,7 @@
 		class="size-input"
 		type="number"
 		min="1"
-		max="10000"
+		max={MAX_RESIZE}
 		step="1"
 		value={width}
 		oninput={(e) => setWidth(+(e.currentTarget as HTMLInputElement).value)}
@@ -94,13 +94,13 @@
 		class="size-input"
 		type="number"
 		min="1"
-		max="10000"
+		max={MAX_RESIZE}
 		step="1"
 		value={height}
 		oninput={(e) => setHeight(+(e.currentTarget as HTMLInputElement).value)}
 	/>
 </div>
-<button class="reset-btn" onclick={resetResize} title="Reset to original size">
+<button class="reset-btn" onclick={resetResize} title="Reset to original size" disabled={naturalWidth == null || naturalHeight == null}>
 	Reset to original
 </button>
 
@@ -192,5 +192,10 @@
 	.reset-btn:hover {
 		color: #ccc;
 		border-color: #666;
+	}
+
+	.reset-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
 	}
 </style>
