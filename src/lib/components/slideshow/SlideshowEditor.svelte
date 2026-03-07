@@ -112,15 +112,19 @@
 	function saveSegments(trackId: string) {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			all[trackId] = config.segments;
+			all[trackId] = { segments: config.segments, bpm: config.bpm };
 			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
 		} catch {}
 	}
 
-	function loadSegments(trackId: string): SlideshowConfig['segments'] | null {
+	function loadSegments(trackId: string): { segments: SlideshowConfig['segments']; bpm?: number } | null {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			return all[trackId] ?? null;
+			const entry = all[trackId];
+			if (!entry) return null;
+			// Backward compat: old format stored segments array directly
+			if (Array.isArray(entry)) return { segments: entry };
+			return entry;
 		} catch {}
 		return null;
 	}
@@ -358,8 +362,14 @@
 		clearTrack();
 		currentTrackId = trackId;
 		trackFile = file;
-		const segs = loadSegments(trackId);
-		if (segs !== null) config = { ...config, segments: segs };
+		const saved = loadSegments(trackId);
+		if (saved !== null) {
+			config = {
+				...config,
+				segments: saved.segments,
+				...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
+			};
+		}
 	}
 
 	// Audio volume tick
