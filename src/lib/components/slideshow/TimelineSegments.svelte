@@ -506,6 +506,51 @@
 			pasteMode = false;
 			return;
 		}
+		// Ctrl+click → split segment at cursor
+		if (e.ctrlKey || e.metaKey) {
+			e.stopPropagation();
+			const time = clientXToTime(e.clientX);
+			const svgY = clientYToSvgY(e.clientY);
+			if (config.segments.length === 0) {
+				emit({
+					segments: [
+						{
+							id: crypto.randomUUID(),
+							startTime: 0,
+							endTime: trackDuration,
+							subdivision: yToSub(svgY),
+						},
+					],
+				});
+				return;
+			}
+			const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+			const hit = sorted.find((s) => {
+				const end = s.endTime ?? trackDuration;
+				return time > s.startTime + 0.01 && time < end - 0.01;
+			});
+			if (!hit) return;
+			const end = hit.endTime ?? trackDuration;
+			emit({
+				segments: config.segments
+					.filter((s) => s.id !== hit.id)
+					.concat([
+						{
+							id: crypto.randomUUID(),
+							startTime: hit.startTime,
+							endTime: time,
+							subdivision: hit.subdivision,
+						},
+						{
+							id: crypto.randomUUID(),
+							startTime: time,
+							endTime: end,
+							subdivision: hit.subdivision,
+						},
+					]),
+			});
+			return;
+		}
 		// Shift+drag → rectangle selection
 		if (e.shiftKey) {
 			startRectSelect(e);
@@ -1055,8 +1100,7 @@
 			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
-					Double-click to create · drag bar up/down to change subdivision · drag
-					dot to move boundary
+					Double-click or Ctrl+click to create · drag bar up/down to change subdivision · drag dot to move boundary
 				</text>
 			{/if}
 
