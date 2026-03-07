@@ -24,7 +24,7 @@
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-library-open';
-	let open = $state(localStorage.getItem(OPEN_KEY) !== 'false');
+	let open = $state(localStorage.getItem(OPEN_KEY) === 'true');
 	let tracks = $state<StoredTrack[]>([]);
 	let libraryLoaded = $state(false);
 	let previewId = $state<string | null>(null);
@@ -132,7 +132,11 @@
 
 <div class="library" class:open>
 	<!-- Always in flow: the 28px expand strip -->
-	<button class="expand-btn" onclick={() => (open = true)} title="Open track library">
+	<button
+		class="expand-btn"
+		onclick={() => (open = true)}
+		title="Open track library"
+	>
 		<svg
 			width="12"
 			height="12"
@@ -151,7 +155,11 @@
 	<div class="panel" aria-hidden={!open} inert={!open || undefined}>
 		<div class="header">
 			<span class="title">Tracks Library</span>
-			<button class="add-btn" onclick={() => fileInput.click()} title="Add track">
+			<button
+				class="add-btn"
+				onclick={() => fileInput.click()}
+				title="Add track"
+			>
 				<svg
 					width="12"
 					height="12"
@@ -162,10 +170,19 @@
 					stroke-linecap="round"
 					stroke-linejoin="round"
 				>
-					<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+					<line x1="12" y1="5" x2="12" y2="19" /><line
+						x1="5"
+						y1="12"
+						x2="19"
+						y2="12"
+					/>
 				</svg>
 			</button>
-			<button class="collapse-btn" onclick={() => (open = false)} title="Collapse library">
+			<button
+				class="collapse-btn"
+				onclick={() => (open = false)}
+				title="Collapse library"
+			>
 				<svg
 					width="12"
 					height="12"
@@ -195,19 +212,41 @@
 							title={isPreviewing ? 'Stop' : 'Preview'}
 						>
 							{#if isPreviewing}
-								<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"
-									><rect x="4" y="4" width="6" height="16" /><rect x="14" y="4" width="6" height="16" /></svg
+								<svg
+									width="10"
+									height="10"
+									viewBox="0 0 24 24"
+									fill="currentColor"
+									stroke="none"
+									><rect x="4" y="4" width="6" height="16" /><rect
+										x="14"
+										y="4"
+										width="6"
+										height="16"
+									/></svg
 								>
 							{:else}
-								<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"
-									><polygon points="5,3 19,12 5,21" /></svg
+								<svg
+									width="10"
+									height="10"
+									viewBox="0 0 24 24"
+									fill="currentColor"
+									stroke="none"><polygon points="5,3 19,12 5,21" /></svg
 								>
 							{/if}
 						</button>
-						<button class="name-btn" onclick={() => onLoad(track)} title="Load track">
+						<button
+							class="name-btn"
+							onclick={() => onLoad(track)}
+							title="Load track"
+						>
 							{track.name}
 						</button>
-						<button class="delete-btn" onclick={() => onDelete(track.id)} title="Remove">
+						<button
+							class="delete-btn"
+							onclick={() => onDelete(track.id)}
+							title="Remove"
+						>
 							<svg
 								width="10"
 								height="10"
@@ -216,7 +255,12 @@
 								stroke="currentColor"
 								stroke-width="2.5"
 								stroke-linecap="round"
-								><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+								><line x1="18" y1="6" x2="6" y2="18" /><line
+									x1="6"
+									y1="6"
+									x2="18"
+									y2="18"
+								/></svg
 							>
 						</button>
 					</li>
@@ -260,7 +304,7 @@
 		left: 0;
 		bottom: 0;
 		width: 220px;
-		z-index: 5;
+		z-index: 20;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;

@@ -977,8 +977,9 @@
 
 	.preview-area {
 		flex: 1;
+		min-height: 0;
 		display: flex;
-		align-items: center;
+		align-items: stretch;
 		justify-content: center;
 		overflow: hidden;
 		background: #0a0a0a;
