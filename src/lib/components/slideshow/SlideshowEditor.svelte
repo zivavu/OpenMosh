@@ -616,13 +616,10 @@
 
 				if (img && img.complete) {
 					glRenderer.updateSourceImage(img);
-					if (accAmount > 0) {
-						if (accReset > 0 && beatIndex % accReset === 0) {
-							glRenderer.clearFeedback();
-						} else {
-							// Arm one-shot blend for this beat's render call only
-							glRenderer.setAccumulation(accAmount);
-						}
+					if (accAmount > 0 && accReset > 0 && beatIndex % accReset === 0) {
+						glRenderer.clearFeedback();
+					} else {
+						glRenderer.setAccumulation(accAmount);
 					}
 				}
 
