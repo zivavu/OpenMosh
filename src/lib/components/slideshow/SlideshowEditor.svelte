@@ -531,6 +531,15 @@
 
 		if (!previewPlaying) return;
 
+		// Seed feedback buffer with first slide so accumulation starts clean.
+		if (slides.length > 0 && glRenderer) {
+			const firstImg = imageCache.get(slides[0].id);
+			if (firstImg) {
+				glRenderer.updateSourceImage(firstImg);
+				glRenderer.clearFeedback();
+			}
+		}
+
 		if (audioEl && trackFile) {
 			ensureAudioGraph();
 			if (audioContext?.state === 'suspended') audioContext.resume();
