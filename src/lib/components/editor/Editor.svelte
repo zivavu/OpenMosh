@@ -149,10 +149,8 @@
 	}
 
 	function clearTrack() {
-		if (audioEl) {
-			audioEl.pause();
-			audioPlaying = false;
-		}
+		audioEl?.pause();
+		audioPlaying = false;
 		trackFile = null;
 		trackDuration = 0;
 		trackCurrentTime = 0;

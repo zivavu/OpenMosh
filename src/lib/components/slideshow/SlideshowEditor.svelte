@@ -358,10 +358,8 @@
 	}
 
 	function clearTrack() {
-		if (audioEl) {
-			audioEl.pause();
-			audioPlaying = false;
-		}
+		audioEl?.pause();
+		audioPlaying = false;
 		trackFile = null;
 		trackDuration = 0;
 		trackCurrentTime = 0;
@@ -373,6 +371,7 @@
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string) {
+		stopPreview();
 		if (currentTrackId) saveSegments(currentTrackId);
 		clearTrack();
 		currentTrackId = trackId;
