@@ -44,6 +44,10 @@ export interface SlideshowConfig {
 	/** 0–1: controls probability and range width of random audio links. */
 	moshAudioLinkStrength: number;
 	loop: boolean;
+	/** 0–1: how much of the previous frame bleeds into the next beat. 0 = off. */
+	accumulationAmount: number;
+	/** Reset feedback every N beats (0 = never). */
+	accumulationResetBeats: number;
 	segments: TimelineSegment[];
 	/** Text overlay (phrases from dictionary, per beat/frame). */
 	textOverlay: TextOverlayConfig;
@@ -62,6 +66,8 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	moshAudioLink: false,
 	moshAudioLinkStrength: 0.8,
 	loop: true,
+	accumulationAmount: 0,
+	accumulationResetBeats: 4,
 	segments: [],
 	textOverlay: { ...DEFAULT_TEXT_OVERLAY_CONFIG },
 };

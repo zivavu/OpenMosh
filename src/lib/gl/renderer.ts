@@ -6,6 +6,7 @@ import { createProgram, getUniformLocations } from './utils';
 import {
   VERTEX_SHADER,
   PASSTHROUGH_FRAG,
+  ACCUMULATE_FRAG,
   TEXT_BLEND_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
@@ -27,6 +28,8 @@ export class GlRenderer {
   private fbFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbIdx = 0;
   private passthrough: CompiledProgram;
+  private accumulateProgram: CompiledProgram;
+  private _accumulationAmount = 0;
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private textTexture: WebGLTexture | null = null;
   private textBlendProgram: CompiledProgram | null = null;
@@ -63,6 +66,7 @@ export class GlRenderer {
     this.gl = gl;
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
+    this.accumulateProgram = this.compile(ACCUMULATE_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
     this.compileAllEffects();
   }
@@ -112,6 +116,22 @@ export class GlRenderer {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  }
+
+  /** Set how much of the previous frame bleeds into the next render (0 = off, 1 = full carry). */
+  setAccumulation(amount: number) {
+    this._accumulationAmount = amount;
+  }
+
+  /**
+   * Reset the feedback buffer to the current source image.
+   * Call after updateSourceImage() on beat-interval resets.
+   */
+  clearFeedback() {
+    if (!this.sourceTexture || !this.fbFBOs || !this.fbTextures) return;
+    const writeIdx = (1 - this.fbIdx) as 0 | 1;
+    this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.sourceTexture, 1.0, 0);
+    this.fbIdx = writeIdx;
   }
 
   /**
@@ -208,8 +228,24 @@ export class GlRenderer {
     const enabled = effects.filter((e) => e.enabled);
     const writeIdx = (1 - this.fbIdx) as 0 | 1;
 
+    // Accumulation pre-pass: blend source with previous frame before effect chain.
+    let effectiveSource = this.sourceTexture!;
+    let startPpIdx = 0;
+    if (this._accumulationAmount > 0 && this.ppFBOs && this.ppTextures) {
+      // drawPass automatically binds fbTextures[fbIdx] as u_feedback.
+      // Write blend result to ppFBO[0]; start effect chain at ppIdx=1 to avoid overwriting it.
+      this.drawPass(this.accumulateProgram, this.ppFBOs[0], this.sourceTexture!, 1.0, 0, {
+        fragment: ACCUMULATE_FRAG,
+        setUniforms: (gl: WebGL2RenderingContext, locs: Record<string, WebGLUniformLocation>, _values: Record<string, number | string>) => {
+          if (locs['u_amount']) gl.uniform1f(locs['u_amount'], this._accumulationAmount);
+        },
+      }, {});
+      effectiveSource = this.ppTextures[0];
+      startPpIdx = 1;
+    }
+
     if (enabled.length === 0) {
-      this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.sourceTexture!, 1.0, time);
+      this.drawPass(this.passthrough, this.fbFBOs[writeIdx], effectiveSource, 1.0, time);
       const mainResult = this.fbTextures[writeIdx]!;
       if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
         const overlayTex = this.runTextEffects(this.textTexture, time);
@@ -221,8 +257,8 @@ export class GlRenderer {
       return;
     }
 
-    let input = this.sourceTexture!;
-    let ppIdx = 0;
+    let input = effectiveSource;
+    let ppIdx = startPpIdx;
 
     for (let i = 0; i < enabled.length; i++) {
       const eff = enabled[i];

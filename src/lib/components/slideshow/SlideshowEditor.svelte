@@ -426,6 +426,10 @@
 		return () => cancelAnimationFrame(rafId);
 	});
 
+	$effect(() => {
+		glRenderer?.setAccumulation(config.accumulationAmount ?? 0);
+	});
+
 	let spectrumData: SpectrumData | null = $derived(
 		frequencyData && audioSampleRate > 0 && audioFrequencyBinCount > 0
 			? {
@@ -602,8 +606,15 @@
 				previewBeatIndex = beatIndex;
 
 				const img = getCachedImage(slide);
+				const accAmount = config.accumulationAmount ?? 0;
+				const accReset = config.accumulationResetBeats ?? 0;
+
 				if (img && img.complete) {
 					glRenderer.updateSourceImage(img);
+					// Reset feedback to clean source on interval
+					if (accAmount > 0 && accReset > 0 && beatIndex % accReset === 0) {
+						glRenderer.clearFeedback();
+					}
 				}
 
 				previewEffects = computeEffectsForBeat(
