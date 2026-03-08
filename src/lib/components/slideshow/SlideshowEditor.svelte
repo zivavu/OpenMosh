@@ -373,7 +373,16 @@
 	function onLibraryLoadTrack(file: File, trackId: string) {
 		stopPreview();
 		if (currentTrackId) saveSegments(currentTrackId);
-		clearTrack();
+		// Partial reset — intentionally skip zeroing trackDuration and trackFile so that
+		// SlideshowAudioTimeline stays mounted during the switch (avoids a remount flash).
+		audioEl?.pause();
+		audioPlaying = false;
+		trackCurrentTime = 0;
+		spanStart = 0;
+		spanEnd = 0;
+		pendingSpan = null;
+		currentTrackId = null;
+		disposeAudioGraph();
 		currentTrackId = trackId;
 		trackFile = file;
 		const saved = loadSegments(trackId);

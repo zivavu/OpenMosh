@@ -143,7 +143,9 @@
 
 	// ── Selection / clipboard (boundary dots) ────────────────────────────────
 	let selectedBoundaryTimes = $state<number[]>([]); // absolute track times of selected boundaries
-	let clipboard = $state<{ offset: number; subdivision: BeatSubdivision }[]>([]); // relative offsets + subdivisions from leftmost selected boundary
+	let clipboard = $state<{ offset: number; subdivision: BeatSubdivision }[]>(
+		[],
+	); // relative offsets + subdivisions from leftmost selected boundary
 	let undoStack = $state<TimelineSegment[][]>([]);
 	let redoStack = $state<TimelineSegment[][]>([]);
 	let pasteMode = $state(false);
@@ -560,7 +562,9 @@
 				});
 				return;
 			}
-			const sorted = [...config.segments].sort((a, b) => a.startTime - b.startTime);
+			const sorted = [...config.segments].sort(
+				(a, b) => a.startTime - b.startTime,
+			);
 			const hit = sorted.find((s) => {
 				const end = s.endTime ?? trackDuration;
 				return time > s.startTime + 0.01 && time < end - 0.01;
@@ -907,7 +911,10 @@
 		}
 
 		// Redo
-		if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+		if (
+			(e.ctrlKey || e.metaKey) &&
+			(e.key === 'y' || (e.key === 'z' && e.shiftKey))
+		) {
 			if (redoStack.length > 0) {
 				e.preventDefault();
 				undoStack = [...undoStack, [...config.segments]];
@@ -925,8 +932,13 @@
 				const minTime = Math.min(...selectedBoundaryTimes);
 				clipboard = selectedBoundaryTimes.map((t) => {
 					const offset = t - minTime;
-					const rightSeg = config.segments.find((s) => Math.abs(s.startTime - t) < 0.001);
-					return { offset, subdivision: rightSeg?.subdivision ?? config.subdivision };
+					const rightSeg = config.segments.find(
+						(s) => Math.abs(s.startTime - t) < 0.001,
+					);
+					return {
+						offset,
+						subdivision: rightSeg?.subdivision ?? config.subdivision,
+					};
 				});
 			}
 			return;
@@ -1097,12 +1109,15 @@
 					y2={sv.y}
 				/>
 				{#if sv.endX - sv.startX > 4}
-					{@const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, (sv.startX + sv.endX) / 2))}
+					{@const lblX = Math.max(
+						sv.startX + 2,
+						Math.min(sv.endX - 2, (sv.startX + sv.endX) / 2),
+					)}
 					<text
 						class="seg-lbl"
 						x="{lblX}%"
 						y={sv.y + 16}
-						font-size="16"
+						font-size="14"
 						text-anchor="middle">{subLabel(sv.sub)}</text
 					>
 				{/if}
@@ -1170,7 +1185,8 @@
 			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
-					Double-click or Ctrl+click to create · drag bar up/down to change subdivision · drag dot to move boundary
+					Double-click or Ctrl+click to create · drag bar up/down to change
+					subdivision · drag dot to move boundary
 				</text>
 			{/if}
 
@@ -1286,7 +1302,7 @@
 
 	.seg-lbl {
 		fill: #4a7faf;
-		font-size: 16px;
+		font-size: 14px;
 		font-family: monospace;
 		pointer-events: none;
 		user-select: none;
