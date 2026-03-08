@@ -106,8 +106,6 @@ export async function executeSlideshowRecording(
 	const textChance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
 	const textLayout = textOverlay?.layout ?? 'scattered';
 
-	renderer.setAccumulation(config.accumulationAmount ?? 0);
-
 	const blob = await recordVideo({
 		format,
 		duration,
@@ -167,11 +165,15 @@ export async function executeSlideshowRecording(
 					}
 				}
 
-				// Reset feedback on interval
+				// Accumulation: reset or arm one-shot blend
 				const accAmount = config.accumulationAmount ?? 0;
 				const accReset = config.accumulationResetBeats ?? 0;
-				if (accAmount > 0 && accReset > 0 && beatIndex % accReset === 0) {
-					renderer.clearFeedback();
+				if (accAmount > 0) {
+					if (accReset > 0 && beatIndex % accReset === 0) {
+						renderer.clearFeedback();
+					} else {
+						renderer.setAccumulation(accAmount);
+					}
 				}
 
 				// Compute effects for this beat
@@ -188,6 +190,5 @@ export async function executeSlideshowRecording(
 	});
 
 	renderer.clearTextOverlay();
-	renderer.setAccumulation(0);
 	downloadBlob(blob, format);
 }

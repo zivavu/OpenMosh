@@ -30,6 +30,7 @@ export class GlRenderer {
   private passthrough: CompiledProgram;
   private accumulateProgram: CompiledProgram;
   private _accumulationAmount = 0;
+  private _accumulationPending = false;
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private textTexture: WebGLTexture | null = null;
   private textBlendProgram: CompiledProgram | null = null;
@@ -118,9 +119,10 @@ export class GlRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   }
 
-  /** Set how much of the previous frame bleeds into the next render (0 = off, 1 = full carry). */
+  /** Arm a one-shot accumulation blend for the next render call (at beat boundaries). */
   setAccumulation(amount: number) {
     this._accumulationAmount = amount;
+    this._accumulationPending = amount > 0;
   }
 
   /**
@@ -231,7 +233,8 @@ export class GlRenderer {
     // Accumulation pre-pass: blend source with previous frame before effect chain.
     let effectiveSource = this.sourceTexture!;
     let startPpIdx = 0;
-    if (this._accumulationAmount > 0 && this.ppFBOs && this.ppTextures) {
+    if (this._accumulationPending && this._accumulationAmount > 0 && this.ppFBOs && this.ppTextures) {
+      this._accumulationPending = false; // consume — only blends once per beat
       // drawPass automatically binds fbTextures[fbIdx] as u_feedback.
       // Write blend result to ppFBO[0]; start effect chain at ppIdx=1 to avoid overwriting it.
       this.drawPass(this.accumulateProgram, this.ppFBOs[0], this.sourceTexture!, 1.0, 0, {
