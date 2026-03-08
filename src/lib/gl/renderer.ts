@@ -227,6 +227,7 @@ export class GlRenderer {
   /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
   resize(width: number, height: number) {
     if (width <= 0 || height <= 0) return;
+    if (width === this.imgW && height === this.imgH) return;
     this.imgW = width;
     this.imgH = height;
     this.canvas.width = width;
