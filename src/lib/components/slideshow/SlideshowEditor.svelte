@@ -841,24 +841,23 @@
 				onSetPresetIndex={setPresetIndex}
 				onSelectSlide={selectSlide}
 			/>
-		{:else}
-			<div class="preview-area">
-				<GlCanvas
-					imageSrc={previewImageSrc}
-					effects={previewPlaying && previewEffects.length > 0
-						? previewEffects
-						: effects}
-					canvasWidth={resizeWidth || undefined}
-					canvasHeight={resizeHeight || undefined}
-					bind:canvasEl
-					bind:glRenderer
-					bind:naturalWidth
-					bind:naturalHeight
-					bind:fps={currentFps}
-					freezeAnimation={!previewPlaying}
-				/>
-			</div>
 		{/if}
+		<div class="preview-area" class:hidden={activeView === 'grid'}>
+			<GlCanvas
+				imageSrc={previewImageSrc}
+				effects={previewPlaying && previewEffects.length > 0
+					? previewEffects
+					: effects}
+				canvasWidth={resizeWidth || undefined}
+				canvasHeight={resizeHeight || undefined}
+				bind:canvasEl
+				bind:glRenderer
+				bind:naturalWidth
+				bind:naturalHeight
+				bind:fps={currentFps}
+				freezeAnimation={!previewPlaying}
+			/>
+		</div>
 
 		<SlideshowActionBar
 			{previewPlaying}
@@ -1015,6 +1014,10 @@
 		justify-content: center;
 		overflow: hidden;
 		background: #0a0a0a;
+	}
+
+	.preview-area.hidden {
+		display: none;
 	}
 
 	.sidebar {
