@@ -200,16 +200,25 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec4 orig = texture(u_texture, v_uv);
 
-  // Sobel on luminance
+  // Sobel on pre-blurred luminance — sample each tap as a 2x2 average to
+  // suppress pixel-level noise and produce smooth, organic edges
   vec3 luma = vec3(0.299, 0.587, 0.114);
-  float tl = dot(texture(u_texture, v_uv + vec2(-px.x,-px.y)).rgb, luma);
-  float tm = dot(texture(u_texture, v_uv + vec2( 0.0, -px.y)).rgb, luma);
-  float tr = dot(texture(u_texture, v_uv + vec2( px.x,-px.y)).rgb, luma);
-  float ml = dot(texture(u_texture, v_uv + vec2(-px.x, 0.0)).rgb, luma);
-  float mr = dot(texture(u_texture, v_uv + vec2( px.x, 0.0)).rgb, luma);
-  float bl = dot(texture(u_texture, v_uv + vec2(-px.x, px.y)).rgb, luma);
-  float bm = dot(texture(u_texture, v_uv + vec2( 0.0,  px.y)).rgb, luma);
-  float br = dot(texture(u_texture, v_uv + vec2( px.x, px.y)).rgb, luma);
+  vec2 h = px * 0.5;
+  #define SLUM(o) dot( \
+    texture(u_texture, v_uv+(o)+vec2(-h.x,-h.y)).rgb + \
+    texture(u_texture, v_uv+(o)+vec2( h.x,-h.y)).rgb + \
+    texture(u_texture, v_uv+(o)+vec2(-h.x, h.y)).rgb + \
+    texture(u_texture, v_uv+(o)+vec2( h.x, h.y)).rgb, luma) * 0.25
+  vec2 S = px * 1.5;
+  float tl = SLUM(vec2(-S.x,-S.y));
+  float tm = SLUM(vec2( 0.0,-S.y));
+  float tr = SLUM(vec2( S.x,-S.y));
+  float ml = SLUM(vec2(-S.x, 0.0));
+  float mr = SLUM(vec2( S.x, 0.0));
+  float bl = SLUM(vec2(-S.x, S.y));
+  float bm = SLUM(vec2( 0.0, S.y));
+  float br = SLUM(vec2( S.x, S.y));
+  #undef SLUM
   float gx = -tl - 2.0*ml - bl + tr + 2.0*mr + br;
   float gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
   float edge = clamp(sqrt(gx*gx + gy*gy) * u_strength, 0.0, 1.0);
