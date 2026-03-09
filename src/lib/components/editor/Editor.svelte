@@ -33,9 +33,10 @@
 		file: File;
 		onBack: () => void;
 		onfile: (f: File) => void;
+		initialAudioFile?: File | null;
 	}
 
-	let { file, onBack, onfile }: Props = $props();
+	let { file, onBack, onfile, initialAudioFile = null }: Props = $props();
 	let dragging = $state(false);
 
 	let isVideo = $derived(file.type.startsWith('video/'));
@@ -110,6 +111,14 @@
 	let resizeHeight = $state(0);
 
 	let trackFile = $state<File | null>(null);
+
+	// Seed track from audio selected on the upload screen
+	$effect(() => {
+		if (initialAudioFile && !trackFile) {
+			trackFile = initialAudioFile;
+		}
+	});
+
 	let trackObjectUrl = $state<string | null>(null);
 	let trackInput: HTMLInputElement;
 

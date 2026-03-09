@@ -5,6 +5,7 @@
 
   let file: File | null = $state(null);
   let slideshowFiles: File[] = $state([]);
+  let pendingAudioFile: File | null = $state(null);
 </script>
 
 {#if slideshowFiles.length > 0}
@@ -13,10 +14,16 @@
     onBack={() => { slideshowFiles = []; }}
   />
 {:else if file}
-  <Editor {file} onBack={() => (file = null)} onfile={(f) => (file = f)} />
+  <Editor
+    {file}
+    initialAudioFile={pendingAudioFile}
+    onBack={() => { file = null; pendingAudioFile = null; }}
+    onfile={(f) => (file = f)}
+  />
 {:else}
   <UploadScreen
     onfile={(f) => (file = f)}
     onSlideshow={(files) => { slideshowFiles = files; }}
+    onaudio={(f) => (pendingAudioFile = f)}
   />
 {/if}
