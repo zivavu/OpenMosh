@@ -22,6 +22,7 @@
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
 	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../../text-overlay';
 	import type { SpectrumData } from '../../types';
+	import { shuffleInPlace } from '../../utils';
 	import EffectsPanel from '../editor/EffectsPanel.svelte';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
@@ -68,12 +69,7 @@
 	}
 
 	function shuffleSlides() {
-		for (let i = slides.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			const tmp = slides[i];
-			slides[i] = slides[j];
-			slides[j] = tmp;
-		}
+		shuffleInPlace(slides);
 	}
 
 	function setPresetIndex(slideId: string, presetIndex: number | null) {

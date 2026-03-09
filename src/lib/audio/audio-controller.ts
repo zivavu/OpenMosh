@@ -1,5 +1,4 @@
-import type { EffectInstance } from '../effects';
-import { applyVolumeLinksToEffects } from './audio-utils';
+export { applyVolumeLinksToEffects as applyVolumeLinksTick } from './audio-utils';
 
 export interface AudioGraphState {
 	context: AudioContext;
@@ -50,12 +49,3 @@ export function computeVolumeLevel(
 	return Math.min(1, Math.sqrt(sum / timeData.length));
 }
 
-export function applyVolumeLinksTick(
-	effects: EffectInstance[],
-	volumeLevel: number,
-	frequencyData: Uint8Array | null,
-	sampleRate: number,
-	fftSize: number,
-): void {
-	applyVolumeLinksToEffects(effects, volumeLevel, frequencyData, sampleRate, fftSize);
-}

@@ -90,15 +90,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		renderer,
 		effects: effects.map(
 			(e): EffectInstance => ({
-				instanceId: e.instanceId,
-				defId: e.defId,
-				enabled: e.enabled,
-				locked: e.locked,
-				expanded: e.expanded,
+				...e,
 				values: { ...e.values },
-				volumeLinks: e.volumeLinks
-					? JSON.parse(JSON.stringify(e.volumeLinks))
-					: undefined,
+				volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
 			}),
 		),
 		onProgress,

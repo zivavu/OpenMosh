@@ -3,6 +3,7 @@ import type { EffectInstance } from '../effects';
 import { beatAtTime } from './beat-clock';
 import { generateMosh, type MoshOptions } from '../editor/mosh';
 import {
+	cloneEffectInstance,
 	getDefinition,
 	applyPreset,
 	loadPresets,
@@ -20,12 +21,7 @@ export interface SequencerState {
 
 /** Deep-clone an effects array, giving each instance a fresh ID. */
 export function cloneEffects(effects: EffectInstance[]): EffectInstance[] {
-	return effects.map((e) => ({
-		...e,
-		instanceId: crypto.randomUUID(),
-		values: { ...e.values },
-		volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
-	}));
+	return effects.map(cloneEffectInstance);
 }
 
 /**

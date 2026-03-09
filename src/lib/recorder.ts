@@ -1,14 +1,13 @@
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 import {
+	FFT_SIZE,
 	analyzeFrames,
 	applyFrameAudioToEffects,
 	decodeAudioFile,
 	trimAudioBuffer,
 	type FrameAudioData,
 } from './audio/offline-audio';
-
-const FFT_SIZE = 2048;
 
 export type RecordFormat = 'webm' | 'gif';
 
@@ -39,6 +38,17 @@ export interface RecordOptions {
 function checkAbort(signal?: AbortSignal) {
 	if (signal?.aborted)
 		throw new DOMException('Recording cancelled', 'AbortError');
+}
+
+function applyFrameAudio(
+	effects: EffectInstance[],
+	frameAudioData: FrameAudioData[],
+	i: number,
+	sampleRate: number,
+): void {
+	if (frameAudioData.length > 0) {
+		applyFrameAudioToEffects(effects, frameAudioData[i]!, sampleRate, FFT_SIZE);
+	}
 }
 
 
@@ -187,14 +197,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		const time = i * frameDuration;
 		const skipRender = onBeforeRender?.(i, time);
 		const renderEffects = effectsRef ? effectsRef.current : effects;
-		if (frameAudioData.length > 0) {
-			applyFrameAudioToEffects(
-				renderEffects,
-				frameAudioData[i]!,
-				audioSampleRate,
-				FFT_SIZE,
-			);
-		}
+		applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
 		if (!skipRender) renderer.render(renderEffects, time);
 		encodeQueue.push(videoSource.add(time, frameDuration));
 
@@ -308,14 +311,7 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		const time = i * frameDuration;
 		const skipRender = onBeforeRender?.(i, time);
 		const renderEffects = effectsRef ? effectsRef.current : effects;
-		if (frameAudioData.length > 0) {
-			applyFrameAudioToEffects(
-				renderEffects,
-				frameAudioData[i]!,
-				audioSampleRate,
-				FFT_SIZE,
-			);
-		}
+		applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
 		if (!skipRender) renderer.render(renderEffects, time);
 
 		ctx.drawImage(canvas, 0, 0, outW, outH);

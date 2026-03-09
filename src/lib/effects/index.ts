@@ -17,6 +17,15 @@ export function createEffectInstance(def: EffectDefinition): EffectInstance {
 	};
 }
 
+export function cloneEffectInstance(e: EffectInstance): EffectInstance {
+	return {
+		...e,
+		instanceId: crypto.randomUUID(),
+		values: { ...e.values },
+		volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
+	};
+}
+
 export function getDefinition(defId: string): EffectDefinition | undefined {
 	return EFFECT_DEFINITIONS.find((d) => d.id === defId);
 }

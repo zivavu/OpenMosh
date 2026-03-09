@@ -4,6 +4,7 @@ import {
 	type EffectInstance,
 	type VolumeLink,
 } from '../effects';
+import { shuffleInPlace } from '../utils';
 
 export interface MoshOptions {
 	moshMin: number;
@@ -128,11 +129,7 @@ export function generateMosh(
 	const target =
 		clampedMin + Math.floor(Math.random() * (clampedMax - clampedMin + 1));
 
-	const indices = moshable.map((_, i) => i);
-	for (let i = indices.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[indices[i], indices[j]] = [indices[j], indices[i]];
-	}
+	const indices = shuffleInPlace(moshable.map((_, i) => i));
 	const enabledSet = new Set(indices.slice(0, target));
 
 	moshable.forEach((effect, i) => {
@@ -160,11 +157,7 @@ export function generateMosh(
 		const moshableIndices = effects
 			.map((e, i) => (e.locked ? -1 : i))
 			.filter((i) => i !== -1);
-		const shuffled = [...moshableIndices];
-		for (let i = shuffled.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-		}
+		const shuffled = shuffleInPlace([...moshableIndices]);
 		const snapshot = effects.map((e) => ({ ...e }));
 		for (let k = 0; k < moshableIndices.length; k++) {
 			effects[moshableIndices[k]] = snapshot[shuffled[k]];

@@ -1,7 +1,7 @@
 import type { EffectInstance } from '../effects';
 import { applyVolumeLinksToEffects } from './audio-utils';
 
-const FFT_SIZE = 2048;
+export const FFT_SIZE = 2048;
 
 /**
  * Decode an audio file to an AudioBuffer using the Web Audio API.
