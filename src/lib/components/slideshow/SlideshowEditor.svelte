@@ -39,9 +39,10 @@
 	interface Props {
 		initialFiles: File[];
 		onBack: () => void;
+		initialAudioFile?: File | null;
 	}
 
-	let { initialFiles, onBack }: Props = $props();
+	let { initialFiles, onBack, initialAudioFile = null }: Props = $props();
 
 	// ── Slides ──
 	let slides: SlideshowSlide[] = $state([]);
@@ -208,6 +209,13 @@
 
 	// ── Audio ──
 	let trackFile = $state<File | null>(null);
+
+	$effect(() => {
+		if (initialAudioFile && !trackFile) {
+			trackFile = initialAudioFile;
+		}
+	});
+
 	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
 
 	let showMusicHint = $state(

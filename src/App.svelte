@@ -11,7 +11,8 @@
 {#if slideshowFiles.length > 0}
   <SlideshowEditor
     initialFiles={slideshowFiles}
-    onBack={() => { slideshowFiles = []; }}
+    initialAudioFile={pendingAudioFile}
+    onBack={() => { slideshowFiles = []; pendingAudioFile = null; }}
   />
 {:else if file}
   <Editor

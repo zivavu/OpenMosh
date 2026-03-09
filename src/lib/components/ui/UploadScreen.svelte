@@ -121,7 +121,7 @@
     <button
       class="mode-btn"
       class:active={selectedMode === 'slideshow'}
-      onclick={() => { selectedMode = 'slideshow'; pendingAudio = null; }}
+      onclick={() => { selectedMode = 'slideshow'; }}
     >
       Slideshow
     </button>
@@ -175,46 +175,48 @@
     <p class="slideshow-hint">Select multiple images to create a beat-synced slideshow.</p>
   {/if}
 
-  {#if selectedMode === 'single'}
-    <input
-      bind:this={audioInput}
-      type="file"
-      accept={AUDIO_TYPES.join(',')}
-      onchange={onAudioInputChange}
-      hidden
-    />
+  <input
+    bind:this={audioInput}
+    type="file"
+    accept={AUDIO_TYPES.join(',')}
+    onchange={onAudioInputChange}
+    hidden
+  />
 
-    {#if pendingAudio}
-      <div class="music-zone music-zone--selected">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-        </svg>
-        <span class="music-filename">{pendingAudio.name}</span>
-        <button class="music-clear" onclick={() => { pendingAudio = null; }} aria-label="Remove audio">✕</button>
-      </div>
-    {:else}
-      <div
-        class="music-zone"
-        class:music-dragging={audioDragging}
-        role="button"
-        tabindex="0"
-        onclick={openAudioPicker}
-        ondrop={(e) => { e.preventDefault(); onAudioDrop(e); }}
-        ondragover={(e) => { e.preventDefault(); audioDragging = true; }}
-        ondragleave={(e) => {
-          if (e.currentTarget instanceof HTMLElement && !e.currentTarget.contains(e.relatedTarget as Node)) {
-            audioDragging = false;
-          }
-        }}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openAudioPicker(); }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-        </svg>
+  {#if pendingAudio}
+    <div class="music-zone music-zone--selected">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+      </svg>
+      <span class="music-filename">{pendingAudio.name}</span>
+      <button class="music-clear" onclick={() => { pendingAudio = null; }} aria-label="Remove audio">✕</button>
+    </div>
+  {:else}
+    <div
+      class="music-zone"
+      class:music-dragging={audioDragging}
+      role="button"
+      tabindex="0"
+      onclick={openAudioPicker}
+      ondrop={(e) => { e.preventDefault(); onAudioDrop(e); }}
+      ondragover={(e) => { e.preventDefault(); audioDragging = true; }}
+      ondragleave={(e) => {
+        if (e.currentTarget instanceof HTMLElement && !e.currentTarget.contains(e.relatedTarget as Node)) {
+          audioDragging = false;
+        }
+      }}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openAudioPicker(); }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+      </svg>
+      {#if selectedMode === 'slideshow'}
+        <span>ADD MUSIC <span class="optional recommended">(RECOMMENDED)</span></span>
+      {:else}
         <span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
-      </div>
-      <p class="music-hint">Make your effects react to the beat</p>
-    {/if}
+      {/if}
+    </div>
+    <p class="music-hint">{selectedMode === 'slideshow' ? 'Sync transitions and effects to the beat' : 'Make your effects react to the beat'}</p>
   {/if}
 </div>
 
@@ -397,6 +399,10 @@
 
   .optional {
     color: #333;
+  }
+
+  .recommended {
+    color: #555;
   }
 
   .music-filename {
