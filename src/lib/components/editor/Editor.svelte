@@ -136,6 +136,24 @@
 		};
 	});
 
+	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
+
+	let showMusicHint = $state(
+		!localStorage.getItem(MUSIC_HINT_KEY)
+	);
+
+	function dismissMusicHint() {
+		localStorage.setItem(MUSIC_HINT_KEY, '1');
+		showMusicHint = false;
+	}
+
+	// Auto-dismiss when a track is loaded
+	$effect(() => {
+		if (trackFile && showMusicHint) {
+			dismissMusicHint();
+		}
+	});
+
 	$effect(() => {
 		const nw = naturalWidth;
 		const nh = naturalHeight;
@@ -1173,6 +1191,12 @@
 				</button>
 			</div>
 		{/if}
+		{#if !trackFile && showMusicHint}
+			<div class="music-hint-callout">
+				<span>Add music to make effects react to the beat</span>
+				<button class="music-hint-dismiss" onclick={dismissMusicHint} aria-label="Dismiss">✕</button>
+			</div>
+		{/if}
 	</div>
 	<EffectsPanel
 		bind:effects
@@ -1679,5 +1703,34 @@
 		font-weight: 600;
 		color: #ccc;
 		letter-spacing: 0.04em;
+	}
+
+	.music-hint-callout {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.4rem 0.75rem;
+		background: rgba(255, 255, 255, 0.02);
+		border-top: 1px solid #222;
+		font-size: 0.68rem;
+		color: #555;
+		line-height: 1.4;
+		flex-shrink: 0;
+	}
+
+	.music-hint-dismiss {
+		background: none;
+		border: none;
+		color: #444;
+		cursor: pointer;
+		font-size: 0.7rem;
+		padding: 0;
+		flex-shrink: 0;
+		line-height: 1;
+	}
+
+	.music-hint-dismiss:hover {
+		color: #888;
 	}
 </style>
