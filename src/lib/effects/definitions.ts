@@ -71,6 +71,39 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		],
 	},
 	{
+		id: 'neon-edges',
+		name: 'Neon Edges',
+		params: [
+			{
+				key: 'strength',
+				label: 'Strength',
+				type: 'range',
+				min: 0.1,
+				max: 5.0,
+				step: 0.1,
+				defaultValue: 1.5,
+			},
+			{
+				key: 'glow',
+				label: 'Glow',
+				type: 'range',
+				min: 0.0,
+				max: 3.0,
+				step: 0.05,
+				defaultValue: 1.0,
+			},
+			{
+				key: 'bg',
+				label: 'Background',
+				type: 'range',
+				min: 0.0,
+				max: 1.0,
+				step: 0.01,
+				defaultValue: 0.05,
+			},
+		],
+	},
+	{
 		id: 'bleach',
 		name: 'Bleach',
 		params: [
