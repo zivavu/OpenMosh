@@ -296,40 +296,6 @@
 	</div>
 
 	<div class="config-row">
-		<label for="ss-accum-amount">Carry</label>
-		<input
-			id="ss-accum-amount"
-			type="range"
-			min="0"
-			max="1"
-			step="0.01"
-			value={config.accumulationAmount ?? 0}
-			oninput={(e) => set('accumulationAmount', +(e.currentTarget as HTMLInputElement).value)}
-		/>
-		<span class="val">{Math.round((config.accumulationAmount ?? 0) * 100)}%</span>
-	</div>
-
-	{#if (config.accumulationAmount ?? 0) > 0}
-		<div class="config-row">
-			<label for="ss-accum-reset">Reset every</label>
-			<select
-				id="ss-accum-reset"
-				value={config.accumulationResetBeats ?? 4}
-				onchange={(e) =>
-					set('accumulationResetBeats', +(e.currentTarget as HTMLSelectElement).value)}
-			>
-				<option value={0}>Never</option>
-				<option value={1}>1 beat</option>
-				<option value={2}>2 beats</option>
-				<option value={4}>4 beats</option>
-				<option value={8}>8 beats</option>
-				<option value={16}>16 beats</option>
-				<option value={32}>32 beats</option>
-			</select>
-		</div>
-	{/if}
-
-	<div class="config-row">
 		<h3 class="panel-title" style="margin-top: 0.5rem">Text overlay</h3>
 		<input
 			id="ss-text-enabled"

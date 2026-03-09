@@ -30,6 +30,21 @@
 	let dragging = $state(false);
 	let dragFromIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
+	let lightboxIndex = $state<number | null>(null);
+	let lightboxOrigin = $state({ x: 0, y: 0 });
+	let lightboxClosing = $state(false);
+	let lightboxImageEl = $state<HTMLImageElement | null>(null);
+
+	const lightboxOriginStyle = $derived(
+		`--lb-ox: ${lightboxOrigin.x}px; --lb-oy: ${lightboxOrigin.y}px`
+	);
+
+	$effect(() => {
+		if (lightboxIndex !== null && lightboxIndex >= slides.length) {
+			lightboxIndex = null;
+			lightboxClosing = false;
+		}
+	});
 
 	const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
@@ -78,6 +93,61 @@
 		}
 		input.value = '';
 	}
+
+	function openLightbox(e: MouseEvent | KeyboardEvent, index: number) {
+		closeVersion++;
+		const card = e.currentTarget as HTMLElement;
+		const rect = card.getBoundingClientRect();
+		lightboxOrigin = {
+			x: rect.left + rect.width / 2 - window.innerWidth / 2,
+			y: rect.top + rect.height / 2 - window.innerHeight / 2
+		};
+		lightboxIndex = index;
+		lightboxClosing = false;
+	}
+
+	let closeVersion = 0;
+
+	function closeLightbox() {
+		if (lightboxClosing || lightboxIndex === null) return;
+		lightboxClosing = true;
+		const version = ++closeVersion;
+		lightboxImageEl?.addEventListener(
+			'transitionend',
+			() => {
+				if (closeVersion !== version) return;
+				lightboxIndex = null;
+				lightboxClosing = false;
+			},
+			{ once: true }
+		);
+		setTimeout(() => {
+			if (closeVersion !== version) return;
+			lightboxIndex = null;
+			lightboxClosing = false;
+		}, 400);
+	}
+
+	function lightboxNext() {
+		if (lightboxIndex === null) return;
+		closeVersion++;
+		lightboxClosing = false;
+		lightboxIndex = (lightboxIndex + 1) % slides.length;
+	}
+
+	function lightboxPrev() {
+		if (lightboxIndex === null) return;
+		closeVersion++;
+		lightboxClosing = false;
+		lightboxIndex = (lightboxIndex - 1 + slides.length) % slides.length;
+	}
+
+	function onLightboxKeydown(e: KeyboardEvent) {
+		if (lightboxIndex === null) return;
+		if (e.key === 'ArrowRight') lightboxNext();
+		else if (e.key === 'ArrowLeft') lightboxPrev();
+		else if (e.key === 'Escape') closeLightbox();
+	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -87,6 +157,8 @@
 	ondrop={(e) => { e.preventDefault(); onDrop(e); }}
 	ondragover={onDragOver}
 	ondragleave={onDragLeave}
+	onkeydown={onLightboxKeydown}
+	tabindex="-1"
 >
 	<input
 		bind:this={fileInput}
@@ -125,8 +197,8 @@
 					ondragstart={(e) => onItemDragStart(e, i)}
 					ondragover={(e) => onItemDragOver(e, i)}
 					ondragend={() => { dragFromIndex = null; dragOverIndex = null; }}
-					onclick={() => onSelectSlide(slide)}
-					onkeydown={(e) => { if (e.key === 'Enter') onSelectSlide(slide); }}
+					onclick={(e) => openLightbox(e, i)}
+					onkeydown={(e) => { if (e.key === 'Enter') openLightbox(e, i); }}
 				>
 					<img
 						class="slide-thumb"
@@ -171,6 +243,50 @@
 					<line x1="5" y1="12" x2="19" y2="12" />
 				</svg>
 			</button>
+		</div>
+	{/if}
+
+	{#if lightboxIndex !== null}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="lb-backdrop"
+			class:lb-closing={lightboxClosing}
+			onclick={closeLightbox}
+			onkeydown={onLightboxKeydown}
+		>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="lb-content" onclick={(e) => e.stopPropagation()}>
+				<div class="lb-topbar">
+					<span class="lb-info">
+						{lightboxIndex + 1} / {slides.length}&nbsp;·&nbsp;{slides[lightboxIndex].file.name}
+					</span>
+					<button class="lb-close" onclick={closeLightbox}>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M18 6L6 18" /><path d="M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+				<div class="lb-img-wrap">
+					<button class="lb-arrow lb-arrow-left" onclick={lightboxPrev} title="Previous">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="15 18 9 12 15 6" />
+						</svg>
+					</button>
+					<img
+						bind:this={lightboxImageEl}
+						class="lb-img"
+						class:lb-closing={lightboxClosing}
+						src={slides[lightboxIndex].objectUrl}
+						alt="Slide {lightboxIndex + 1}"
+						style={lightboxOriginStyle}
+					/>
+					<button class="lb-arrow lb-arrow-right" onclick={lightboxNext} title="Next">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="9 18 15 12 9 6" />
+						</svg>
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>
@@ -345,5 +461,133 @@
 	.add-card:hover {
 		border-color: #555;
 		color: #888;
+	}
+
+	/* Lightbox */
+	.lb-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.85);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 100;
+		opacity: 1;
+		transition: opacity 200ms ease;
+	}
+
+	.lb-backdrop.lb-closing {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.lb-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		max-width: 90vw;
+	}
+
+	.lb-topbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 0 0.25rem;
+	}
+
+	.lb-info {
+		font-size: 0.7rem;
+		color: #888;
+		letter-spacing: 0.03em;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 80%;
+	}
+
+	.lb-close {
+		background: none;
+		border: none;
+		color: #666;
+		cursor: pointer;
+		padding: 2px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: color 0.15s;
+	}
+
+	.lb-close:hover {
+		color: #ccc;
+	}
+
+	.lb-img-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.lb-img {
+		display: block;
+		max-width: 90vw;
+		max-height: 82vh;
+		object-fit: contain;
+		border-radius: 4px;
+		--lb-ox: 0px;
+		--lb-oy: 0px;
+		animation: lb-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+		transition:
+			transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+			opacity 180ms ease;
+	}
+
+	@keyframes lb-in {
+		from {
+			transform: translate(var(--lb-ox), var(--lb-oy)) scale(0.12);
+			opacity: 0;
+		}
+		to {
+			transform: translate(0, 0) scale(1);
+			opacity: 1;
+		}
+	}
+
+	.lb-img.lb-closing {
+		transform: translate(var(--lb-ox), var(--lb-oy)) scale(0.12);
+		opacity: 0;
+	}
+
+	.lb-arrow {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		background: rgba(0, 0, 0, 0.5);
+		border: 1px solid #333;
+		border-radius: 50%;
+		color: #888;
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: color 0.15s, background 0.15s;
+		z-index: 1;
+	}
+
+	.lb-arrow:hover {
+		color: #fff;
+		background: rgba(0, 0, 0, 0.75);
+	}
+
+	.lb-arrow-left {
+		left: -48px;
+	}
+
+	.lb-arrow-right {
+		right: -48px;
 	}
 </style>

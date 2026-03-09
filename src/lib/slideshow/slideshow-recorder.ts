@@ -165,15 +165,6 @@ export async function executeSlideshowRecording(
 					}
 				}
 
-				// Accumulation: reset or arm one-shot blend
-				const accAmount = config.accumulationAmount ?? 0;
-				const accReset = config.accumulationResetBeats ?? 0;
-				if (accAmount > 0 && accReset > 0 && beatIndex % accReset === 0) {
-					renderer.clearFeedback();
-				} else {
-					renderer.setAccumulation(accAmount);
-				}
-
 				// Compute effects for this beat
 				currentEffects = computeEffectsForBeat(
 					config,

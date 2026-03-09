@@ -6,7 +6,6 @@ import { createProgram, getUniformLocations } from './utils';
 import {
   VERTEX_SHADER,
   PASSTHROUGH_FRAG,
-  ACCUMULATE_FRAG,
   TEXT_BLEND_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
@@ -28,11 +27,6 @@ export class GlRenderer {
   private fbFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbIdx = 0;
   private passthrough: CompiledProgram;
-  private accumulateProgram: CompiledProgram;
-  private _accumulationAmount = 0;
-  private accSourceTexture: WebGLTexture | null = null;
-  private accSourceFBO: WebGLFramebuffer | null = null;
-  private _useAccSource = false;
   private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
   private textTexture: WebGLTexture | null = null;
   private textBlendProgram: CompiledProgram | null = null;
@@ -69,7 +63,6 @@ export class GlRenderer {
     this.gl = gl;
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
-    this.accumulateProgram = this.compile(ACCUMULATE_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
     this.compileAllEffects();
   }
@@ -119,38 +112,6 @@ export class GlRenderer {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  }
-
-  /**
-   * Bake an accumulation blend at a beat boundary.
-   * Blends sourceTexture with the previous frame output into a dedicated texture
-   * that persists as the render input for all frames until the next beat.
-   */
-  setAccumulation(amount: number) {
-    this._accumulationAmount = amount;
-    if (amount > 0 && this.accSourceFBO && this.sourceTexture) {
-      this.drawPass(this.accumulateProgram, this.accSourceFBO, this.sourceTexture, 1.0, 0, {
-        fragment: ACCUMULATE_FRAG,
-        setUniforms: (gl: WebGL2RenderingContext, locs: Record<string, WebGLUniformLocation>) => {
-          if (locs['u_amount']) gl.uniform1f(locs['u_amount'], amount);
-        },
-      }, {});
-      this._useAccSource = true;
-    } else {
-      this._useAccSource = false;
-    }
-  }
-
-  /**
-   * Reset the feedback buffer to the current source image.
-   * Call after updateSourceImage() on beat-interval resets.
-   */
-  clearFeedback() {
-    if (!this.sourceTexture || !this.fbFBOs || !this.fbTextures) return;
-    const writeIdx = (1 - this.fbIdx) as 0 | 1;
-    this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.sourceTexture, 1.0, 0);
-    this.fbIdx = writeIdx;
-    this._useAccSource = false;
   }
 
   /**
@@ -248,11 +209,8 @@ export class GlRenderer {
     const enabled = effects.filter((e) => e.enabled);
     const writeIdx = (1 - this.fbIdx) as 0 | 1;
 
-    // Use the pre-baked accumulated source (set at beat boundary) if active, else raw source.
-    const effectiveSource = (this._useAccSource && this.accSourceTexture) ? this.accSourceTexture : this.sourceTexture!;
-
     if (enabled.length === 0) {
-      this.drawPass(this.passthrough, this.fbFBOs[writeIdx], effectiveSource, 1.0, time);
+      this.drawPass(this.passthrough, this.fbFBOs[writeIdx], this.sourceTexture!, 1.0, time);
       const mainResult = this.fbTextures[writeIdx]!;
       if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
         const overlayTex = this.runTextEffects(this.textTexture, time);
@@ -264,7 +222,7 @@ export class GlRenderer {
       return;
     }
 
-    let input = effectiveSource;
+    let input = this.sourceTexture!;
     let ppIdx = 0;
 
     for (let i = 0; i < enabled.length; i++) {
@@ -323,8 +281,6 @@ export class GlRenderer {
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
     this.deleteFBOPair(this.fbFBOs);
-    if (this.accSourceTexture) gl.deleteTexture(this.accSourceTexture);
-    if (this.accSourceFBO) gl.deleteFramebuffer(this.accSourceFBO);
     gl.deleteProgram(this.passthrough.program);
     for (const { program } of this.compiled.values()) {
       gl.deleteProgram(program.program);
@@ -405,8 +361,6 @@ export class GlRenderer {
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
     this.deleteFBOPair(this.fbFBOs);
-    if (this.accSourceTexture) { gl.deleteTexture(this.accSourceTexture); this.accSourceTexture = null; }
-    if (this.accSourceFBO) { gl.deleteFramebuffer(this.accSourceFBO); this.accSourceFBO = null; }
     if (this.textTexture) {
       gl.deleteTexture(this.textTexture);
       this.textTexture = null;
@@ -417,12 +371,6 @@ export class GlRenderer {
 
     this.fbTextures = [this.createTexture(this.imgW, this.imgH), this.createTexture(this.imgW, this.imgH)];
     this.fbFBOs = this.createFBOPair(this.fbTextures);
-
-    this.accSourceTexture = this.createTexture(this.imgW, this.imgH);
-    this.accSourceFBO = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.accSourceFBO);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.accSourceTexture, 0);
-    this._useAccSource = false;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;

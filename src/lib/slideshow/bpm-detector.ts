@@ -63,7 +63,7 @@ export async function detectBpm(
 			signal?.removeEventListener('abort', onAbort);
 			worker.terminate();
 			if (e.data.ok) {
-				resolve({ bpm: e.data.bpm, offset: e.data.offset });
+				resolve({ bpm: Math.round(e.data.bpm), offset: e.data.offset });
 			} else {
 				reject(new Error(e.data.error));
 			}

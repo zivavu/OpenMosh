@@ -36,19 +36,6 @@ export const PASSTHROUGH_FRAG =
   outColor = texture(u_texture, v_uv);
 }`;
 
-export const ACCUMULATE_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D u_texture;
-uniform sampler2D u_feedback;
-uniform float u_flipY;
-uniform float u_amount;
-in vec2 v_uv;
-out vec4 outColor;
-void main() {
-  vec4 src = texture(u_texture, v_uv);
-  vec4 fb  = texture(u_feedback, v_uv);
-  outColor = mix(src, fb, u_amount);
-}`;
 
 /** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,4=overlay,5=difference,6=exclusion,7=subtract. u_invert: 0/1. u_opacity: 0-1. */
 export const TEXT_BLEND_FRAG = `#version 300 es
@@ -792,7 +779,6 @@ void main() {
 		setUniforms: floats('shadowHue', 'highlightHue', 'intensity'),
 	},
 
-
 	grain: {
 		fragment:
 			H +
@@ -902,7 +888,6 @@ void main() {
 		animated: true,
 		setUniforms: floats('intensity'),
 	},
-
 
 	'data-bend': {
 		fragment:
@@ -1043,7 +1028,12 @@ void main() {
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, 'u_intensity', v.intensity as number);
 			const p = v.palette as string;
-			setInt(gl, l, 'u_palette', p === 'infrared' ? 1 : p === 'night-vision' ? 2 : 0);
+			setInt(
+				gl,
+				l,
+				'u_palette',
+				p === 'infrared' ? 1 : p === 'night-vision' ? 2 : 0,
+			);
 		},
 	},
 
@@ -1086,7 +1076,13 @@ void main() {
 				gl,
 				l,
 				'u_mode',
-				m === 'hue-shift' ? 1 : m === 'desaturate' ? 2 : m === 'high-contrast' ? 3 : 0,
+				m === 'hue-shift'
+					? 1
+					: m === 'desaturate'
+						? 2
+						: m === 'high-contrast'
+							? 3
+							: 0,
 			);
 			setFloat(gl, l, 'u_amount', v.amount as number);
 		},
@@ -1263,7 +1259,12 @@ void main() {
 			const m = v.mode as string;
 			setInt(gl, l, 'u_mode', m === 'color-split' ? 1 : 0);
 			const ds = v.depthSource as string;
-			setInt(gl, l, 'u_depthSource', ds === 'edges' ? 1 : ds === 'flat' ? 2 : 0);
+			setInt(
+				gl,
+				l,
+				'u_depthSource',
+				ds === 'edges' ? 1 : ds === 'flat' ? 2 : 0,
+			);
 			setFloat(gl, l, 'u_focus', v.focus as number);
 		},
 	},
