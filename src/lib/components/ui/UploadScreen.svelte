@@ -2,13 +2,19 @@
   interface Props {
     onfile: (file: File) => void;
     onSlideshow: (files: File[]) => void;
+    onaudio?: (file: File) => void;
   }
 
-  let { onfile, onSlideshow }: Props = $props();
+  let { onfile, onSlideshow, onaudio }: Props = $props();
 
   let selectedMode: 'single' | 'slideshow' = $state('single');
   let dragging = $state(false);
   let fileInput: HTMLInputElement;
+
+  const AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/mp4', 'audio/aac'];
+  let pendingAudio = $state<File | null>(null);
+  let audioDragging = $state(false);
+  let audioInput = $state<HTMLInputElement>(undefined!);
 
   const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'];
   const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
@@ -72,6 +78,30 @@
   function getIsMultiple() {
     return selectedMode === 'slideshow';
   }
+
+  function handleAudioFile(file: File) {
+    if (AUDIO_TYPES.includes(file.type) || file.type.startsWith('audio/')) {
+      pendingAudio = file;
+      onaudio?.(file);
+    }
+  }
+
+  function openAudioPicker() {
+    audioInput.click();
+  }
+
+  function onAudioInputChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) handleAudioFile(file);
+    input.value = '';
+  }
+
+  function onAudioDrop(e: DragEvent) {
+    audioDragging = false;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleAudioFile(file);
+  }
 </script>
 
 <div class="upload-screen">
@@ -84,14 +114,14 @@
     <button
       class="mode-btn"
       class:active={selectedMode === 'single'}
-      onclick={() => (selectedMode = 'single')}
+      onclick={() => { selectedMode = 'single'; }}
     >
       Single
     </button>
     <button
       class="mode-btn"
       class:active={selectedMode === 'slideshow'}
-      onclick={() => (selectedMode = 'slideshow')}
+      onclick={() => { selectedMode = 'slideshow'; pendingAudio = null; }}
     >
       Slideshow
     </button>
@@ -143,6 +173,48 @@
 
   {#if selectedMode === 'slideshow'}
     <p class="slideshow-hint">Select multiple images to create a beat-synced slideshow.</p>
+  {/if}
+
+  {#if selectedMode === 'single'}
+    <input
+      bind:this={audioInput}
+      type="file"
+      accept={AUDIO_TYPES.join(',')}
+      onchange={onAudioInputChange}
+      hidden
+    />
+
+    {#if pendingAudio}
+      <div class="music-zone music-zone--selected">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+        </svg>
+        <span class="music-filename">{pendingAudio.name}</span>
+        <button class="music-clear" onclick={() => { pendingAudio = null; }} aria-label="Remove audio">✕</button>
+      </div>
+    {:else}
+      <div
+        class="music-zone"
+        class:music-dragging={audioDragging}
+        role="button"
+        tabindex="0"
+        onclick={openAudioPicker}
+        ondrop={(e) => { e.preventDefault(); onAudioDrop(e); }}
+        ondragover={(e) => { e.preventDefault(); audioDragging = true; }}
+        ondragleave={(e) => {
+          if (e.currentTarget instanceof HTMLElement && !e.currentTarget.contains(e.relatedTarget as Node)) {
+            audioDragging = false;
+          }
+        }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openAudioPicker(); }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+        </svg>
+        <span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
+      </div>
+      <p class="music-hint">Make your effects react to the beat</p>
+    {/if}
   {/if}
 </div>
 
@@ -289,6 +361,68 @@
   .slideshow-hint {
     font-size: 0.8rem;
     color: #555;
+    margin-top: -1.5rem;
+  }
+
+  .music-zone {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1.5rem;
+    border: 1.5px dashed #222;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 520px;
+    color: #444;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    outline: none;
+  }
+
+  .music-zone:not(.music-zone--selected):hover,
+  .music-zone:not(.music-zone--selected):focus-visible,
+  .music-dragging {
+    border-color: #3a3a3a;
+    color: #666;
+  }
+
+  .music-zone--selected {
+    border-color: #2a2a2a;
+    color: #666;
+    cursor: default;
+  }
+
+  .optional {
+    color: #333;
+  }
+
+  .music-filename {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .music-clear {
+    background: none;
+    border: none;
+    color: #555;
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0 0.2rem;
+    line-height: 1;
+  }
+
+  .music-clear:hover {
+    color: #999;
+  }
+
+  .music-hint {
+    font-size: 0.75rem;
+    color: #333;
     margin-top: -1.5rem;
   }
 </style>
