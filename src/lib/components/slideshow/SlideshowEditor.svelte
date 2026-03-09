@@ -16,7 +16,10 @@
 	import type { RecordFormat } from '../../recorder';
 	import { beatAtTime } from '../../slideshow/beat-clock';
 	import { detectBpm } from '../../slideshow/bpm-detector';
-	import { cloneEffects, computeEffectsForBeat } from '../../slideshow/sequencer';
+	import {
+		cloneEffects,
+		computeEffectsForBeat,
+	} from '../../slideshow/sequencer';
 	import { executeSlideshowRecording } from '../../slideshow/slideshow-recorder';
 	import type { SlideshowConfig, SlideshowSlide } from '../../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
@@ -26,12 +29,12 @@
 	import EffectsPanel from '../editor/EffectsPanel.svelte';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
+	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import SlideshowActionBar from './SlideshowActionBar.svelte';
 	import SlideshowAudioTimeline from './SlideshowAudioTimeline.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
-	import TrackLibrary from '../ui/TrackLibrary.svelte';
 
 	interface Props {
 		initialFiles: File[];
@@ -109,12 +112,24 @@
 	function saveSegments(trackId: string) {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			all[trackId] = { segments: config.segments, bpm: config.bpm, textOverlay: config.textOverlay, spanStart, spanEnd };
+			all[trackId] = {
+				segments: config.segments,
+				bpm: config.bpm,
+				textOverlay: config.textOverlay,
+				spanStart,
+				spanEnd,
+			};
 			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
 		} catch {}
 	}
 
-	function loadSegments(trackId: string): { segments: SlideshowConfig['segments']; bpm?: number; textOverlay?: SlideshowConfig['textOverlay']; spanStart?: number; spanEnd?: number } | null {
+	function loadSegments(trackId: string): {
+		segments: SlideshowConfig['segments'];
+		bpm?: number;
+		textOverlay?: SlideshowConfig['textOverlay'];
+		spanStart?: number;
+		spanEnd?: number;
+	} | null {
 		try {
 			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
 			const entry = all[trackId];
@@ -133,7 +148,8 @@
 
 	// Save span when user adjusts it while a library track is loaded
 	$effect(() => {
-		spanStart; spanEnd;
+		spanStart;
+		spanEnd;
 		if (currentTrackId) saveSegments(currentTrackId);
 	});
 
@@ -192,6 +208,24 @@
 
 	// ── Audio ──
 	let trackFile = $state<File | null>(null);
+	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
+
+	let showMusicHint = $state(
+		!localStorage.getItem(MUSIC_HINT_KEY)
+	);
+
+	function dismissMusicHint() {
+		localStorage.setItem(MUSIC_HINT_KEY, '1');
+		showMusicHint = false;
+	}
+
+	// Auto-dismiss when a track is loaded
+	$effect(() => {
+		if (trackFile && showMusicHint) {
+			dismissMusicHint();
+		}
+	});
+
 	let trackObjectUrl = $state<string | null>(null);
 	let trackInput: HTMLInputElement;
 
@@ -233,7 +267,10 @@
 		return {};
 	}
 	function saveSlideshowSettings() {
-		localStorage.setItem(SLIDESHOW_SETTINGS_KEY, JSON.stringify({ outputVolume }));
+		localStorage.setItem(
+			SLIDESHOW_SETTINGS_KEY,
+			JSON.stringify({ outputVolume }),
+		);
 	}
 	const savedSlideshowSettings = loadSlideshowSettings();
 	let outputVolume = $state(savedSlideshowSettings.outputVolume ?? 1);
@@ -387,7 +424,9 @@
 				...config,
 				segments: saved.segments,
 				...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
-				...(saved.textOverlay !== undefined ? { textOverlay: saved.textOverlay } : {}),
+				...(saved.textOverlay !== undefined
+					? { textOverlay: saved.textOverlay }
+					: {}),
 			};
 			if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
 				pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
@@ -523,15 +562,6 @@
 
 		if (!previewPlaying) return;
 
-		// Seed feedback buffer with first slide so accumulation starts clean.
-		if (slides.length > 0 && glRenderer) {
-			const firstImg = imageCache.get(slides[0].id);
-			if (firstImg) {
-				glRenderer.updateSourceImage(firstImg);
-				glRenderer.clearFeedback();
-			}
-		}
-
 		if (audioEl && trackFile) {
 			ensureAudioGraph();
 			if (audioContext?.state === 'suspended') audioContext.resume();
@@ -607,16 +637,9 @@
 				previewBeatIndex = beatIndex;
 
 				const img = getCachedImage(slide);
-				const accAmount = config.accumulationAmount ?? 0;
-				const accReset = config.accumulationResetBeats ?? 0;
 
 				if (img && img.complete) {
 					glRenderer.updateSourceImage(img);
-					if (accAmount > 0 && accReset > 0 && beatIndex % accReset === 0) {
-						glRenderer.clearFeedback();
-					} else {
-						glRenderer.setAccumulation(accAmount);
-					}
 				}
 
 				previewEffects = computeEffectsForBeat(
@@ -929,6 +952,12 @@
 					Add audio track
 				</button>
 			</div>
+		{#if showMusicHint}
+			<div class="music-hint-callout">
+				<span>Add music to sync transitions to the beat</span>
+				<button class="music-hint-dismiss" onclick={dismissMusicHint} aria-label="Dismiss">\u2715</button>
+			</div>
+		{/if}
 		{:else if trackFile && trackDuration > 0}
 			<SlideshowAudioTimeline
 				{trackDuration}
@@ -964,14 +993,12 @@
 			{trackCurrentTime}
 			{trackDuration}
 		/>
-		{#if config.moshMode === 'consistent'}
-			<EffectsPanel
-				bind:effects
-				hasTrack={!!trackFile}
-				{spectrumData}
-				onVolumeLinkChange={setVolumeLink}
-			/>
-		{/if}
+		<EffectsPanel
+			bind:effects
+			hasTrack={!!trackFile}
+			{spectrumData}
+			onVolumeLinkChange={setVolumeLink}
+		/>
 	</div>
 
 	{#if dragging}
@@ -1078,5 +1105,33 @@
 		font-weight: 600;
 		color: #ccc;
 		letter-spacing: 0.04em;
+	}
+	.music-hint-callout {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.4rem 0.75rem;
+		background: rgba(255, 255, 255, 0.02);
+		border-top: 1px solid #222;
+		font-size: 0.68rem;
+		color: #555;
+		line-height: 1.4;
+		flex-shrink: 0;
+	}
+
+	.music-hint-dismiss {
+		background: none;
+		border: none;
+		color: #444;
+		cursor: pointer;
+		font-size: 0.7rem;
+		padding: 0;
+		flex-shrink: 0;
+		line-height: 1;
+	}
+
+	.music-hint-dismiss:hover {
+		color: #888;
 	}
 </style>
