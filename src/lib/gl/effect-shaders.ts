@@ -601,10 +601,11 @@ void main() {
     for (int y = -R; y <= R; y++) {
       float distSq = float(x * x + y * y);
       float w = exp(-distSq * falloff);
-      vec2 off = vec2(float(x), float(y)) * px * u_radius;
+      vec2 off = vec2(float(x), float(y)) * px * u_radius * 4.0;
       vec3 s = texture(u_texture, v_uv + off).rgb;
       float luma = dot(s, vec3(0.299, 0.587, 0.114));
-      glow += vec3(max(0.0, luma - u_cutoff)) * w;
+      float contrib = max(0.0, luma - u_cutoff);
+      glow += vec3(contrib * contrib) * w * 4.0;
       totalWeight += w;
     }
   }
