@@ -8,6 +8,7 @@ export interface RangeParam {
 	defaultValue: number;
 	moshMin?: number;
 	moshMax?: number;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export interface SelectParam {
@@ -16,6 +17,7 @@ export interface SelectParam {
 	type: 'select';
 	defaultValue: string;
 	options: { label: string; value: string }[];
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export interface CheckboxParam {
@@ -23,6 +25,7 @@ export interface CheckboxParam {
 	label: string;
 	type: 'checkbox';
 	defaultValue: number;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export type EffectParam = RangeParam | SelectParam | CheckboxParam;

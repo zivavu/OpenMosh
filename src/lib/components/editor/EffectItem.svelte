@@ -150,7 +150,7 @@
 
 		{#if effect.expanded}
 			<div class="params">
-				{#each def.params as param}
+				{#each def.params.filter((p) => !p.visibleWhen || p.visibleWhen(effect.values)) as param}
 					<div class="param-row">
 						<label class="param-label" for="{effect.instanceId}-{param.key}"
 							>{param.label}</label

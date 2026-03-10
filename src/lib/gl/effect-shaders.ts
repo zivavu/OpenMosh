@@ -375,6 +375,7 @@ uniform float u_amount;
 uniform float u_angle;
 uniform float u_falloff;
 uniform float u_saturation;
+uniform float u_speed;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
 
@@ -403,7 +404,7 @@ void main() {
     );
   } else {
     // Prismatic: position-dependent dispersion + hue rotation, animated
-    float t = u_time;
+    float t = u_time * u_speed;
     float rad = u_angle * 3.14159265 / 180.0;
     vec2 dir = vec2(cos(rad), sin(rad));
     float pos = dot(v_uv - 0.5, dir);
@@ -432,6 +433,7 @@ void main() {
 			setFloat(gl, l, 'u_angle', v.angle as number);
 			setFloat(gl, l, 'u_falloff', v.falloff as number);
 			setFloat(gl, l, 'u_saturation', v.saturation as number);
+			setFloat(gl, l, 'u_speed', v.speed as number);
 		},
 	},
 
