@@ -596,7 +596,7 @@ void main() {
   vec3 glow = vec3(0.0);
   float totalWeight = 0.0;
   float falloff = 1.0 / max(u_radius * u_radius, 0.001);
-  const int R = 2;
+  const int R = 3;
   for (int x = -R; x <= R; x++) {
     for (int y = -R; y <= R; y++) {
       float distSq = float(x * x + y * y);
