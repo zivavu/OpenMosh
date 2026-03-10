@@ -123,7 +123,7 @@
 </script>
 
 <div class="config-panel">
-	<h3 class="panel-title">Slideshow</h3>
+	<h3 class="panel-title">Timing</h3>
 
 	<div class="config-row">
 		<label for="ss-bpm">BPM</label>
@@ -179,6 +179,8 @@
 			<option value={0}>Stop</option>
 		</select>
 	</div>
+
+	<h3 class="panel-title section-title">Mosh</h3>
 
 	<div class="config-row">
 		<label for="ss-mode">Mosh mode</label>
@@ -254,7 +256,7 @@
 	{/if}
 
 	<div class="config-row">
-		<label for="ss-audio-link">Audio links</label>
+		<label for="ss-audio-link">Random audio links</label>
 		<input
 			id="ss-audio-link"
 			type="checkbox"
@@ -284,6 +286,8 @@
 		</div>
 	{/if}
 
+	<h3 class="panel-title section-title">Playback</h3>
+
 	<div class="config-row">
 		<label for="ss-loop">Loop images</label>
 		<input
@@ -295,8 +299,8 @@
 		/>
 	</div>
 
-	<div class="config-row">
-		<h3 class="panel-title" style="margin-top: 0.5rem">Text overlay</h3>
+	<div class="config-row section-title">
+		<h3 class="panel-title" style="margin: 0">Text overlay</h3>
 		<input
 			id="ss-text-enabled"
 			type="checkbox"
@@ -465,6 +469,12 @@
 		color: #888;
 		text-transform: uppercase;
 		margin-bottom: 0.25rem;
+	}
+
+	.section-title {
+		margin-top: 0.25rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid #2a2a2a;
 	}
 
 	.config-row {

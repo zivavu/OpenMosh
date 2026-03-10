@@ -709,7 +709,7 @@
 
 	// ── Recording ──
 	let recordFormat: RecordFormat = $state('webm');
-	let recordFps = $state(24);
+	let recordFps = $state(60);
 	let recording = $state(false);
 	let recordProgress = $state(0);
 	let recordFinalizing = $state(false);

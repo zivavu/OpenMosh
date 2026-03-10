@@ -386,10 +386,10 @@
 
 <style>
 	.effects-panel {
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 		width: 300px;
 		background: #161616;
-		border-left: 1px solid #1e1e1e;
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;

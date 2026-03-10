@@ -21,13 +21,14 @@
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
 	import type { RecordFormat } from '../../recorder';
+	import ResizeSettings from '../ui/ResizeSettings.svelte';
+	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import EffectsPanel from './EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import MoshGroup from './MoshGroup.svelte';
+	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
-	import TrackLibrary from '../ui/TrackLibrary.svelte';
-	import ResizeSettings from '../ui/ResizeSettings.svelte';
 
 	interface Props {
 		file: File;
@@ -49,7 +50,7 @@
 	let draggingVideoHandle = $state<'start' | 'end' | null>(null);
 	let videoTimelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
-	let format = $state<'png' | 'jpg' | 'webm' | 'gif'>('png');
+	let format = $state<'png' | 'jpg' | 'webm' | 'gif'>('webm');
 	let isImageFormat = $derived(format === 'png' || format === 'jpg');
 	let isVideoFormat = $derived(format === 'webm' || format === 'gif');
 	let imageSrc = $state('');
@@ -138,9 +139,7 @@
 
 	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
 
-	let showMusicHint = $state(
-		!localStorage.getItem(MUSIC_HINT_KEY)
-	);
+	let showMusicHint = $state(!localStorage.getItem(MUSIC_HINT_KEY));
 
 	function dismissMusicHint() {
 		localStorage.setItem(MUSIC_HINT_KEY, '1');
@@ -814,68 +813,6 @@
 			>
 				{#snippet settingsContent()}
 					<div class="mosh-setting-row">
-						<label for="mosh-min">Min effects</label>
-						<input
-							id="mosh-min"
-							type="range"
-							min="1"
-							max="20"
-							step="1"
-							bind:value={moshMin}
-							oninput={() => {
-								if (moshMax < moshMin) moshMax = moshMin;
-							}}
-						/>
-						<span class="mosh-setting-val">{moshMin}</span>
-					</div>
-					<div class="mosh-setting-row">
-						<label for="mosh-max">Max effects</label>
-						<input
-							id="mosh-max"
-							type="range"
-							min="1"
-							max="20"
-							step="1"
-							bind:value={moshMax}
-							oninput={() => {
-								if (moshMin > moshMax) moshMin = moshMax;
-							}}
-						/>
-						<span class="mosh-setting-val">{moshMax}</span>
-					</div>
-					<div class="mosh-setting-row">
-						<label for="mosh-shuffle">Shuffle order</label>
-						<input
-							id="mosh-shuffle"
-							type="checkbox"
-							bind:checked={randomizeOrder}
-						/>
-					</div>
-					<div class="mosh-setting-row">
-						<label for="mosh-audio-link">Random audio links</label>
-						<input
-							id="mosh-audio-link"
-							type="checkbox"
-							bind:checked={moshAudioLink}
-						/>
-					</div>
-					{#if moshAudioLink}
-						<div class="mosh-setting-row">
-							<label for="mosh-audio-link-strength">Link strength</label>
-							<input
-								id="mosh-audio-link-strength"
-								type="range"
-								min="0"
-								max="1"
-								step="0.05"
-								bind:value={moshAudioLinkStrength}
-							/>
-							<span class="mosh-setting-val"
-								>{Math.round(moshAudioLinkStrength * 100)}%</span
-							>
-						</div>
-					{/if}
-					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<input id="show-fps" type="checkbox" bind:checked={showFps} />
 					</div>
@@ -1194,22 +1131,35 @@
 		{#if !trackFile && showMusicHint}
 			<div class="music-hint-callout">
 				<span>Add music to make effects react to the beat</span>
-				<button class="music-hint-dismiss" onclick={dismissMusicHint} aria-label="Dismiss">✕</button>
+				<button
+					class="music-hint-dismiss"
+					onclick={dismissMusicHint}
+					aria-label="Dismiss">✕</button
+				>
 			</div>
 		{/if}
 	</div>
-	<EffectsPanel
-		bind:effects
-		hasTrack={!!trackFile || (isVideo && !!analyserNode)}
-		spectrumData={frequencyData && audioSampleRate > 0
-			? {
-					data: frequencyData as Uint8Array<ArrayBuffer>,
-					sampleRate: audioSampleRate,
-					binCount: audioFrequencyBinCount,
-				}
-			: null}
-		onVolumeLinkChange={setVolumeLink}
-	/>
+	<div class="sidebar">
+		<MoshSettingsPanel
+			bind:moshMin
+			bind:moshMax
+			bind:randomizeOrder
+			bind:moshAudioLink
+			bind:moshAudioLinkStrength
+		/>
+		<EffectsPanel
+			bind:effects
+			hasTrack={!!trackFile || (isVideo && !!analyserNode)}
+			spectrumData={frequencyData && audioSampleRate > 0
+				? {
+						data: frequencyData as Uint8Array<ArrayBuffer>,
+						sampleRate: audioSampleRate,
+						binCount: audioFrequencyBinCount,
+					}
+				: null}
+			onVolumeLinkChange={setVolumeLink}
+		/>
+	</div>
 
 	<RecordOverlay
 		{recording}
@@ -1233,6 +1183,15 @@
 		width: 100%;
 		overflow: hidden;
 		position: relative;
+	}
+
+	.sidebar {
+		display: flex;
+		flex-direction: column;
+		border-left: 1px solid #2a2a2a;
+		height: 100%;
+		flex-shrink: 0;
+		overflow: hidden;
 	}
 
 	.main-area {
