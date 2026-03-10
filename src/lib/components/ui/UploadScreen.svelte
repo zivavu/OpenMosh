@@ -152,6 +152,11 @@
 			Slideshow
 		</button>
 	</div>
+	<p class="mode-hint">
+		{selectedMode === 'slideshow'
+			? 'Upload multiple images — sequences them into a beat-synced slideshow'
+			: 'Upload an image or video to apply glitch effects'}
+	</p>
 
 	<div
 		class="drop-zone"
@@ -382,6 +387,13 @@
 	.mode-btn.active {
 		background: rgba(255, 255, 255, 0.08);
 		color: #fff;
+	}
+
+	.mode-hint {
+		font-size: 0.8rem;
+		color: #555;
+		margin-top: -1.5rem;
+		text-align: center;
 	}
 
 	.drop-zone {
