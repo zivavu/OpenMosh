@@ -79,8 +79,16 @@ void main() {
   outColor = vec4(clamp(blended, 0.0, 1.0), 1.0);
 }`;
 
+export interface PrePassDef {
+	fragment: string;
+	/** Use LINEAR texture filtering for this pass (smoother sampling). */
+	linearFilter?: boolean;
+}
+
 export interface EffectShaderDef {
 	fragment: string;
+	/** Pre-passes rendered before the main fragment (for multi-pass effects like bloom). */
+	prePasses?: PrePassDef[];
 	animated?: boolean;
 	setUniforms: (
 		gl: WebGL2RenderingContext,
@@ -113,6 +121,28 @@ function floats(...keys: string[]): EffectShaderDef['setUniforms'] {
 		for (const key of keys) setFloat(gl, l, `u_${key}`, v[key] as number);
 	};
 }
+
+const GLOW_VBLUR_FRAG = `uniform float u_radius;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float spread = u_radius * 3.0;
+  float sigma = spread * 0.4;
+  float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
+  vec3 bloom = vec3(0.0);
+  float totalW = 0.0;
+  const int R = 16;
+  float step = spread / float(R);
+  for (int i = -R; i <= R; i++) {
+    float fi = float(i) * step;
+    float w = exp(-fi * fi * invSigma2);
+    vec2 off = vec2(0.0, fi * px.y);
+    vec3 s = texture(u_texture, v_uv + off).rgb;
+    bloom += s * w;
+    totalW += w;
+  }
+  bloom /= totalW;
+  outColor = vec4(bloom, 1.0);
+}`;
 
 export const EFFECT_SHADERS: Record<string, EffectShaderDef> = {
 	pixelate: {
@@ -585,32 +615,52 @@ void main() {
 	},
 
 	glow: {
+		prePasses: [
+			{
+				// Pass 1: threshold + horizontal Gaussian blur
+				fragment:
+					H +
+					`uniform float u_cutoff;
+uniform float u_radius;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float spread = u_radius * 3.0;
+  float sigma = spread * 0.4;
+  float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
+  vec3 bloom = vec3(0.0);
+  float totalW = 0.0;
+  const int R = 16;
+  float step = spread / float(R);
+  for (int i = -R; i <= R; i++) {
+    float fi = float(i) * step;
+    float w = exp(-fi * fi * invSigma2);
+    vec2 off = vec2(fi * px.x, 0.0);
+    vec3 s = texture(u_texture, v_uv + off).rgb;
+    float luma = dot(s, vec3(0.299, 0.587, 0.114));
+    float contrib = max(0.0, luma - u_cutoff);
+    bloom += s * contrib * contrib * w;
+    totalW += w;
+  }
+  bloom /= totalW;
+  outColor = vec4(bloom, 1.0);
+}`,
+				linearFilter: true,
+			},
+			{
+				// Pass 2: vertical Gaussian blur
+				fragment: H + GLOW_VBLUR_FRAG,
+				linearFilter: true,
+			},
+		],
+		// Final pass: composite blurred bloom with original
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_cutoff;
-uniform float u_radius;
+uniform sampler2D u_original;
 void main() {
-  vec4 c = texture(u_texture, v_uv);
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  vec3 glow = vec3(0.0);
-  float totalWeight = 0.0;
-  float falloff = 1.0 / max(u_radius * u_radius, 0.001);
-  const int R = 3;
-  for (int x = -R; x <= R; x++) {
-    for (int y = -R; y <= R; y++) {
-      float distSq = float(x * x + y * y);
-      float w = exp(-distSq * falloff);
-      vec2 off = vec2(float(x), float(y)) * px * u_radius * 6.0;
-      vec3 s = texture(u_texture, v_uv + off).rgb;
-      float luma = dot(s, vec3(0.299, 0.587, 0.114));
-      float contrib = max(0.0, luma - u_cutoff);
-      glow += vec3(contrib * contrib * contrib) * w * 16.0;
-      totalWeight += w;
-    }
-  }
-  glow /= totalWeight;
-  outColor = vec4(c.rgb + glow * u_amount, c.a);
+  vec4 orig = texture(u_original, v_uv);
+  vec3 bloom = texture(u_texture, v_uv).rgb;
+  outColor = vec4(orig.rgb + bloom * u_amount, orig.a);
 }`,
 		setUniforms: floats('amount', 'cutoff', 'radius'),
 	},

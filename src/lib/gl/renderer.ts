@@ -9,6 +9,7 @@ import {
   TEXT_BLEND_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
+  type PrePassDef,
 } from './effect-shaders';
 import type { TextSafeEffectId, TextOverlayBlendMode } from '../text-overlay';
 
@@ -25,9 +26,16 @@ export class GlRenderer {
   private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbTextures: [WebGLTexture, WebGLTexture] | null = null;
   private fbFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  /** Half-float ping-pong for HDR multi-pass effects (bloom). */
+  private hdrTextures: [WebGLTexture, WebGLTexture] | null = null;
+  private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbIdx = 0;
   private passthrough: CompiledProgram;
-  private compiled = new Map<string, { program: CompiledProgram; def: EffectShaderDef }>();
+  private compiled = new Map<string, {
+    program: CompiledProgram;
+    def: EffectShaderDef;
+    prePasses?: { program: CompiledProgram; linearFilter?: boolean }[];
+  }>();
   private textTexture: WebGLTexture | null = null;
   private textBlendProgram: CompiledProgram | null = null;
   /** Current overlay phrase; null = no overlay. */
@@ -61,6 +69,7 @@ export class GlRenderer {
     const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL2 not supported');
     this.gl = gl;
+    gl.getExtension('EXT_color_buffer_float');
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
@@ -233,8 +242,21 @@ export class GlRenderer {
       const effectTime = this.getEffectTime(eff, time, safeDt);
       const isLast = i === enabled.length - 1;
 
+      // Multi-pass effects: run pre-passes through HDR ping-pong, then composite
+      const originalInput = input;
+      if (entry.prePasses && this.hdrFBOs && this.hdrTextures) {
+        let hdrIdx = 0;
+        for (const pp of entry.prePasses) {
+          if (pp.linearFilter) this.setTextureFilter(input, true);
+          this.drawPass(pp.program, this.hdrFBOs[hdrIdx], input, 1.0, effectTime, entry.def, eff.values);
+          if (pp.linearFilter) this.setTextureFilter(input, false);
+          input = this.hdrTextures[hdrIdx];
+          hdrIdx = 1 - hdrIdx;
+        }
+      }
+
       if (isLast) {
-        this.drawPass(entry.program, this.fbFBOs[writeIdx], input, 1.0, effectTime, entry.def, eff.values);
+        this.drawPass(entry.program, this.fbFBOs[writeIdx], input, 1.0, effectTime, entry.def, eff.values, entry.prePasses ? originalInput : undefined);
       } else {
         this.drawPass(
           entry.program,
@@ -244,6 +266,7 @@ export class GlRenderer {
           effectTime,
           entry.def,
           eff.values,
+          entry.prePasses ? originalInput : undefined,
         );
         input = this.ppTextures[ppIdx];
         ppIdx = 1 - ppIdx;
@@ -281,9 +304,14 @@ export class GlRenderer {
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
     this.deleteFBOPair(this.fbFBOs);
+    this.deleteTexturePair(this.hdrTextures);
+    this.deleteFBOPair(this.hdrFBOs);
     gl.deleteProgram(this.passthrough.program);
-    for (const { program } of this.compiled.values()) {
-      gl.deleteProgram(program.program);
+    for (const entry of this.compiled.values()) {
+      gl.deleteProgram(entry.program.program);
+      if (entry.prePasses) {
+        for (const pp of entry.prePasses) gl.deleteProgram(pp.program.program);
+      }
     }
     gl.deleteVertexArray(this.quadVAO);
   }
@@ -316,7 +344,14 @@ export class GlRenderer {
     for (const [id, def] of Object.entries(EFFECT_SHADERS)) {
       try {
         const program = this.compile(def.fragment);
-        this.compiled.set(id, { program, def });
+        let prePasses: { program: CompiledProgram; linearFilter?: boolean }[] | undefined;
+        if (def.prePasses) {
+          prePasses = def.prePasses.map((pp) => ({
+            program: this.compile(pp.fragment),
+            linearFilter: pp.linearFilter,
+          }));
+        }
+        this.compiled.set(id, { program, def, prePasses });
       } catch (e) {
         console.error(`Failed to compile effect "${id}":`, e);
       }
@@ -333,6 +368,20 @@ export class GlRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texImage2D(
       gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null,
+    );
+    return tex;
+  }
+
+  private createHdrTexture(width: number, height: number): WebGLTexture {
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null,
     );
     return tex;
   }
@@ -361,6 +410,8 @@ export class GlRenderer {
     this.deleteFBOPair(this.ppFBOs);
     this.deleteTexturePair(this.fbTextures);
     this.deleteFBOPair(this.fbFBOs);
+    this.deleteTexturePair(this.hdrTextures);
+    this.deleteFBOPair(this.hdrFBOs);
     if (this.textTexture) {
       gl.deleteTexture(this.textTexture);
       this.textTexture = null;
@@ -371,6 +422,9 @@ export class GlRenderer {
 
     this.fbTextures = [this.createTexture(this.imgW, this.imgH), this.createTexture(this.imgW, this.imgH)];
     this.fbFBOs = this.createFBOPair(this.fbTextures);
+
+    this.hdrTextures = [this.createHdrTexture(this.imgW, this.imgH), this.createHdrTexture(this.imgW, this.imgH)];
+    this.hdrFBOs = this.createFBOPair(this.hdrTextures);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;
@@ -441,6 +495,15 @@ export class GlRenderer {
     gl.activeTexture(gl.TEXTURE0);
   }
 
+  /** Toggle texture filtering between LINEAR and NEAREST. */
+  private setTextureFilter(tex: WebGLTexture, linear: boolean) {
+    const gl = this.gl;
+    const filter = linear ? gl.LINEAR : gl.NEAREST;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  }
+
   private drawPass(
     compiled: CompiledProgram,
     fbo: WebGLFramebuffer | null,
@@ -449,6 +512,7 @@ export class GlRenderer {
     time: number,
     shaderDef?: EffectShaderDef,
     values?: Record<string, number | string>,
+    originalTex?: WebGLTexture,
   ) {
     const gl = this.gl;
 
@@ -476,6 +540,12 @@ export class GlRenderer {
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this.fbTextures[this.fbIdx]);
       gl.uniform1i(compiled.uniforms['u_feedback'], 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    if (originalTex && compiled.uniforms['u_original']) {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, originalTex);
+      gl.uniform1i(compiled.uniforms['u_original'], 3);
       gl.activeTexture(gl.TEXTURE0);
     }
 
