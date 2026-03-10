@@ -589,23 +589,29 @@ void main() {
 			H +
 			`uniform float u_amount;
 uniform float u_cutoff;
+uniform float u_radius;
 void main() {
   vec4 c = texture(u_texture, v_uv);
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec3 glow = vec3(0.0);
+  float totalWeight = 0.0;
+  float falloff = 1.0 / max(u_radius * u_radius, 0.001);
   const int R = 2;
   for (int x = -R; x <= R; x++) {
     for (int y = -R; y <= R; y++) {
-      vec2 off = vec2(float(x), float(y)) * px * 6.0;
+      float distSq = float(x * x + y * y);
+      float w = exp(-distSq * falloff);
+      vec2 off = vec2(float(x), float(y)) * px * u_radius;
       vec3 s = texture(u_texture, v_uv + off).rgb;
-      float b = max(s.r, max(s.g, s.b));
-      glow += s * max(0.0, b - u_cutoff);
+      float luma = dot(s, vec3(0.299, 0.587, 0.114));
+      glow += vec3(max(0.0, luma - u_cutoff)) * w;
+      totalWeight += w;
     }
   }
-  glow /= float((2*R+1) * (2*R+1));
+  glow /= totalWeight;
   outColor = vec4(c.rgb + glow * u_amount, c.a);
 }`,
-		setUniforms: floats('amount', 'cutoff'),
+		setUniforms: floats('amount', 'cutoff', 'radius'),
 	},
 
 	'soft-glitch': {

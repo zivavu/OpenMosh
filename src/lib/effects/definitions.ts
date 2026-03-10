@@ -533,6 +533,15 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0.5,
 			},
+			{
+				key: 'radius',
+				label: 'Radius',
+				type: 'range',
+				min: 1,
+				max: 20,
+				step: 0.5,
+				defaultValue: 8,
+			},
 		],
 	},
 	{
