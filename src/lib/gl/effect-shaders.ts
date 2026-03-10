@@ -1024,30 +1024,70 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_intensity;
-uniform float u_threshold;
-uniform float u_chunkSize;
+uniform float u_corruption;
+uniform float u_channelShift;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
+float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
 void main() {
-  float t = floor(u_time * 6.0);
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float chunks = 105.0 - u_chunkSize;
-  float row = floor(v_uv.y * chunks);
-  float rowHash = hash(vec2(row, t));
-  float trigger = step(1.0 - u_threshold, rowHash);
-  float strength = (hash(vec2(row * 3.0, t + 1.0)) - 0.5) * 2.0;
-  float burst = 1.0 + step(0.85, hash(vec2(row * 7.0, t))) * 3.0;
-  float offset = strength * u_intensity * trigger * burst * px.x;
-  outColor = vec4(
-    texture(u_texture, v_uv + vec2(offset * 1.3, 0.0)).r,
-    texture(u_texture, v_uv + vec2(offset * -0.5, 0.0)).g,
-    texture(u_texture, v_uv + vec2(offset * -0.9, 0.0)).b,
-    1.0
+  vec2 res = vec2(textureSize(u_texture, 0));
+  float t = floor(u_time * 4.0);
+
+  // simulate raw pixel index as if image is a flat byte array
+  float pixelIdx = floor(v_uv.y * res.y) * res.x + floor(v_uv.x * res.x);
+  float totalPixels = res.x * res.y;
+
+  // create corruption zones: regions where "bytes were inserted/deleted"
+  float numZones = floor(3.0 + u_corruption * 12.0);
+  float byteOffset = 0.0;
+  for (float i = 0.0; i < 15.0; i++) {
+    if (i >= numZones) break;
+    float zoneStart = hash(vec2(i, t)) * totalPixels;
+    float zoneSize = hash(vec2(i + 50.0, t)) * totalPixels * 0.15;
+    if (pixelIdx > zoneStart && pixelIdx < zoneStart + zoneSize) {
+      // byte offset: shift the read position
+      byteOffset += (hash(vec2(i * 3.0, t + 7.0)) - 0.3) * u_intensity * res.x * 0.5;
+    }
+  }
+
+  // convert offset pixel index back to UV
+  float newIdx = pixelIdx + byteOffset;
+  vec2 bentUV = vec2(
+    mod(newIdx, res.x) / res.x,
+    floor(newIdx / res.x) / res.y
   );
+
+  // channel separation: each channel reads from a slightly different byte offset
+  // simulating RGB byte misalignment in raw data
+  float chanOff = u_channelShift * res.x * 0.3;
+  float idxR = newIdx;
+  float idxG = newIdx + chanOff;
+  float idxB = newIdx + chanOff * 2.0;
+
+  vec2 uvR = vec2(mod(idxR, res.x) / res.x, floor(idxR / res.x) / res.y);
+  vec2 uvG = vec2(mod(idxG, res.x) / res.x, floor(idxG / res.x) / res.y);
+  vec2 uvB = vec2(mod(idxB, res.x) / res.x, floor(idxB / res.x) / res.y);
+
+  // clamp to valid range
+  uvR = clamp(uvR, 0.0, 1.0);
+  uvG = clamp(uvG, 0.0, 1.0);
+  uvB = clamp(uvB, 0.0, 1.0);
+
+  // in unaffected areas, use original UV
+  if (abs(byteOffset) < 0.5) {
+    outColor = texture(u_texture, v_uv);
+  } else {
+    outColor = vec4(
+      texture(u_texture, uvR).r,
+      texture(u_texture, uvG).g,
+      texture(u_texture, uvB).b,
+      1.0
+    );
+  }
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'threshold', 'chunkSize'),
+		setUniforms: floats('intensity', 'corruption', 'channelShift'),
 	},
 
 	melt: {
