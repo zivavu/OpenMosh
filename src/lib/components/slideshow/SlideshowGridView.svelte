@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Shuffle, X, Plus, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
 
@@ -177,12 +178,7 @@
 	{:else}
 		<div class="grid-toolbar">
 			<button class="toolbar-btn" onclick={onShuffleSlides} title="Shuffle order">
-				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<polyline points="16 3 21 3 21 8" />
-					<line x1="4" y1="20" x2="21" y2="3" />
-					<polyline points="21 16 21 21 16 21" />
-					<line x1="15" y1="15" x2="21" y2="21" />
-				</svg>
+				<Shuffle size={13} />
 				Shuffle
 			</button>
 		</div>
@@ -212,9 +208,7 @@
 						title="Remove"
 						onclick={(e) => { e.stopPropagation(); onRemoveSlide(slide.id); }}
 					>
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path d="M18 6L6 18" /><path d="M6 6l12 12" />
-						</svg>
+						<X size={12} />
 					</button>
 
 					{#if config.moshMode === 'per-image'}
@@ -238,10 +232,7 @@
 			{/each}
 
 			<button class="add-card" onclick={() => fileInput.click()} title="Add more images">
-				<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<line x1="12" y1="5" x2="12" y2="19" />
-					<line x1="5" y1="12" x2="19" y2="12" />
-				</svg>
+				<Plus size={24} />
 			</button>
 		</div>
 	{/if}
@@ -261,16 +252,12 @@
 						{lightboxIndex + 1} / {slides.length}&nbsp;·&nbsp;{slides[lightboxIndex].file.name}
 					</span>
 					<button class="lb-close" onclick={closeLightbox}>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path d="M18 6L6 18" /><path d="M6 6l12 12" />
-						</svg>
+						<X size={14} />
 					</button>
 				</div>
 				<div class="lb-img-wrap">
 					<button class="lb-arrow lb-arrow-left" onclick={lightboxPrev} title="Previous">
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<polyline points="15 18 9 12 15 6" />
-						</svg>
+						<ChevronLeft size={18} />
 					</button>
 					<img
 						bind:this={lightboxImageEl}
@@ -281,9 +268,7 @@
 						style={lightboxOriginStyle}
 					/>
 					<button class="lb-arrow lb-arrow-right" onclick={lightboxNext} title="Next">
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<polyline points="9 18 15 12 9 6" />
-						</svg>
+						<ChevronRight size={18} />
 					</button>
 				</div>
 			</div>

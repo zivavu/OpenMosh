@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ArrowLeft } from 'lucide-svelte';
 	interface Props {
 		activeView: 'grid' | 'preview';
 		slideCount: number;
@@ -12,19 +13,7 @@
 <div class="top-bar">
 	<div class="toolbar">
 		<button class="back-btn" onclick={onBack} title="Back to upload">
-			<svg
-				width="16"
-				height="16"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<line x1="19" y1="12" x2="5" y2="12" />
-				<polyline points="12 19 5 12 12 5" />
-			</svg>
+			<ArrowLeft size={16} />
 		</button>
 
 		<div class="view-toggle">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ChevronRight, ChevronLeft, Plus, Play, Pause, X } from 'lucide-svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import {
 		addTrack,
@@ -148,18 +149,7 @@
 		onclick={() => (open = true)}
 		title="Open track library"
 	>
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2.5"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-		>
-			<polyline points="9 18 15 12 9 6" />
-		</svg>
+		<ChevronRight size={12} />
 	</button>
 
 	<!-- Overlay panel: slides in on top of the expand strip -->
@@ -171,41 +161,14 @@
 				onclick={() => fileInput.click()}
 				title="Add track"
 			>
-				<svg
-					width="12"
-					height="12"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<line x1="12" y1="5" x2="12" y2="19" /><line
-						x1="5"
-						y1="12"
-						x2="19"
-						y2="12"
-					/>
-				</svg>
+				<Plus size={12} />
 			</button>
 			<button
 				class="collapse-btn"
 				onclick={() => (open = false)}
 				title="Collapse library"
 			>
-				<svg
-					width="12"
-					height="12"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2.5"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<polyline points="15 18 9 12 15 6" />
-				</svg>
+				<ChevronLeft size={12} />
 			</button>
 		</div>
 
@@ -223,27 +186,9 @@
 							title={isPreviewing ? 'Stop' : 'Preview'}
 						>
 							{#if isPreviewing}
-								<svg
-									width="10"
-									height="10"
-									viewBox="0 0 24 24"
-									fill="currentColor"
-									stroke="none"
-									><rect x="4" y="4" width="6" height="16" /><rect
-										x="14"
-										y="4"
-										width="6"
-										height="16"
-									/></svg
-								>
+								<Pause size={10} fill="currentColor" stroke="none" />
 							{:else}
-								<svg
-									width="10"
-									height="10"
-									viewBox="0 0 24 24"
-									fill="currentColor"
-									stroke="none"><polygon points="5,3 19,12 5,21" /></svg
-								>
+								<Play size={10} fill="currentColor" stroke="none" />
 							{/if}
 						</button>
 						<button
@@ -258,21 +203,7 @@
 							onclick={() => onDelete(track.id)}
 							title="Remove"
 						>
-							<svg
-								width="10"
-								height="10"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								><line x1="18" y1="6" x2="6" y2="18" /><line
-									x1="6"
-									y1="6"
-									x2="18"
-									y2="18"
-								/></svg
-							>
+							<X size={10} />
 						</button>
 					</li>
 				{/each}

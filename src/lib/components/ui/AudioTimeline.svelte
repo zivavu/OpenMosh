@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Play, Pause, X } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import type { SlideshowConfig } from '../../slideshow/types';
 	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
@@ -101,14 +102,9 @@
 		title={audioPlaying ? 'Pause' : 'Play'}
 	>
 		{#if audioPlaying}
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-				<rect x="6" y="4" width="4" height="16" />
-				<rect x="14" y="4" width="4" height="16" />
-			</svg>
+			<Pause size={14} fill="currentColor" stroke="none" />
 		{:else}
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-				<polygon points="5 3 19 12 5 21 5 3" />
-			</svg>
+			<Play size={14} fill="currentColor" stroke="none" />
 		{/if}
 	</button>
 	<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
@@ -170,19 +166,7 @@
 		title="Volume: {Math.round(outputVolume * 100)}%"
 	/>
 	<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track">
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-		>
-			<line x1="18" y1="6" x2="6" y2="18" />
-			<line x1="6" y1="6" x2="18" y2="18" />
-		</svg>
+		<X size={12} />
 	</button>
 </div>
 

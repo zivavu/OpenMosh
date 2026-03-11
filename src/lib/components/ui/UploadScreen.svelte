@@ -5,6 +5,8 @@
 		onaudio?: (file: File) => void;
 	}
 
+	import { Upload, Image, Music } from 'lucide-svelte';
+
 	let { onfile, onSlideshow, onaudio }: Props = $props();
 
 	let selectedMode: 'single' | 'slideshow' = $state('single');
@@ -186,20 +188,7 @@
 		/>
 
 		<button class="load-btn" onclick={openFilePicker}>
-			<svg
-				width="18"
-				height="18"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-				<polyline points="17 8 12 3 7 8" />
-				<line x1="12" y1="3" x2="12" y2="15" />
-			</svg>
+			<Upload size={18} />
 			{selectedMode === 'slideshow' ? 'LOAD IMAGES' : 'LOAD FILE'}
 		</button>
 
@@ -210,20 +199,7 @@
 		</div>
 
 		<div class="drop-hint">
-			<svg
-				width="16"
-				height="16"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-				<circle cx="8.5" cy="8.5" r="1.5" />
-				<polyline points="21 15 16 10 5 21" />
-			</svg>
+			<Image size={16} />
 			{selectedMode === 'slideshow'
 				? 'DRAG AND DROP IMAGES HERE'
 				: 'DRAG AND DROP FILE HERE'}
@@ -240,22 +216,7 @@
 
 	{#if pendingAudio}
 		<div class="music-zone music-zone--selected">
-			<svg
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle
-					cx="18"
-					cy="16"
-					r="3"
-				/>
-			</svg>
+			<Music size={14} />
 			<span class="music-filename">{pendingAudio.name}</span>
 			<button
 				class="music-clear"
@@ -292,22 +253,7 @@
 				if (e.key === 'Enter' || e.key === ' ') openAudioPicker();
 			}}
 		>
-			<svg
-				width="14"
-				height="14"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			>
-				<path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle
-					cx="18"
-					cy="16"
-					r="3"
-				/>
-			</svg>
+			<Music size={14} />
 			{#if selectedMode === 'slideshow'}
 				<span
 					>ADD MUSIC <span class="optional recommended">(RECOMMENDED)</span

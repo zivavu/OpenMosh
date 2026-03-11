@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { X, GripVertical, ArrowUpDown, Music } from 'lucide-svelte';
 	import DualRangeSlider from '../ui/DualRangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
@@ -117,17 +118,7 @@
 				</button>
 
 				<button class="icon-btn" onclick={onRemove} title="Remove">
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<line x1="18" y1="6" x2="6" y2="18" />
-						<line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
+					<X size={14} />
 				</button>
 
 				<span
@@ -136,14 +127,7 @@
 					onmousedown={() => (canDrag = true)}
 					onmouseup={() => (canDrag = false)}
 				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-						<circle cx="9" cy="5" r="1.5" />
-						<circle cx="15" cy="5" r="1.5" />
-						<circle cx="9" cy="12" r="1.5" />
-						<circle cx="15" cy="12" r="1.5" />
-						<circle cx="9" cy="19" r="1.5" />
-						<circle cx="15" cy="19" r="1.5" />
-					</svg>
+					<GripVertical size={14} />
 				</span>
 			</div>
 		</div>
@@ -197,19 +181,7 @@
 											title={link.inverted ? 'Inverted: low volume = high effect' : 'Normal: high volume = high effect'}
 											onclick={() => onVolumeLinkChange(param.key, { ...link, inverted: !link.inverted })}
 										>
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<polyline points="7 3 7 13" />
-												<polyline points="4 6 7 3 10 6" />
-												<polyline points="17 21 17 11" />
-												<polyline points="14 18 17 21 20 18" />
-											</svg>
+											<ArrowUpDown size={12} />
 										</button>
 									<button
 											type="button"
@@ -217,17 +189,7 @@
 											title="Unlink from volume"
 											onclick={() => onVolumeLinkChange(param.key, null)}
 										>
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<line x1="18" y1="6" x2="6" y2="18" />
-												<line x1="6" y1="6" x2="18" y2="18" />
-											</svg>
+											<X size={12} />
 										</button>
 									</div>
 										<div class="volume-freq-row">
@@ -330,18 +292,7 @@
 													max: param.max,
 												})}
 										>
-											<svg
-												width="12"
-												height="12"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-											>
-												<path d="M9 18V5l12-2v13" />
-												<circle cx="6" cy="18" r="3" />
-												<circle cx="18" cy="16" r="3" />
-											</svg>
+											<Music size={12} />
 											Link
 										</button>
 									{/if}
