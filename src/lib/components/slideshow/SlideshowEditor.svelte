@@ -29,9 +29,9 @@
 	import EffectsPanel from '../editor/EffectsPanel.svelte';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
+	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import SlideshowActionBar from './SlideshowActionBar.svelte';
-	import SlideshowAudioTimeline from './SlideshowAudioTimeline.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
@@ -967,7 +967,7 @@
 			</div>
 		{/if}
 		{:else if trackFile && trackDuration > 0}
-			<SlideshowAudioTimeline
+			<AudioTimeline
 				{trackDuration}
 				{trackCurrentTime}
 				{spanStart}
