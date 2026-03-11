@@ -104,7 +104,7 @@
 	let config: SlideshowConfig = $state(loadConfig());
 
 	$effect(() => {
-		localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+		localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, outputVolume }));
 	});
 
 	let currentTrackId = $state<string | null>(null);
@@ -266,26 +266,7 @@
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
-	const SLIDESHOW_SETTINGS_KEY = 'openmosh-slideshow-settings';
-	function loadSlideshowSettings() {
-		try {
-			const raw = localStorage.getItem(SLIDESHOW_SETTINGS_KEY);
-			if (raw) return JSON.parse(raw);
-		} catch {}
-		return {};
-	}
-	function saveSlideshowSettings() {
-		localStorage.setItem(
-			SLIDESHOW_SETTINGS_KEY,
-			JSON.stringify({ outputVolume }),
-		);
-	}
-	const savedSlideshowSettings = loadSlideshowSettings();
-	let outputVolume = $state(savedSlideshowSettings.outputVolume ?? 1);
-	$effect(() => {
-		outputVolume;
-		saveSlideshowSettings();
-	});
+	let outputVolume = $state((loadConfig() as unknown as Record<string, unknown>).outputVolume as number ?? 1);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {
