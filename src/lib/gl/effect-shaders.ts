@@ -747,36 +747,66 @@ void main() {
 	'optical-flow': {
 		fragment:
 			H +
-			`uniform sampler2D u_feedback;
-uniform float u_amount;
-uniform float u_distortion;
+			`uniform float u_amount;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float r = 2.0 + u_distortion * 6.0; // sampling radius: 2–8 pixels
-  vec2 step_ = px * r;
+  vec3 lum = vec3(0.299, 0.587, 0.114);
+  float t = u_time * 0.2;
 
-  // Spatial gradient (Sobel-like, wider sampling)
-  float lL = dot(texture(u_texture, v_uv - vec2(step_.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-  float lR = dot(texture(u_texture, v_uv + vec2(step_.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-  float lT = dot(texture(u_texture, v_uv - vec2(0.0, step_.y)).rgb, vec3(0.299, 0.587, 0.114));
-  float lB = dot(texture(u_texture, v_uv + vec2(0.0, step_.y)).rgb, vec3(0.299, 0.587, 0.114));
+  float r = 3.0 * max(px.x, px.y);
 
-  // Temporal difference from feedback
-  float lumCur  = dot(texture(u_texture,  v_uv).rgb, vec3(0.299, 0.587, 0.114));
-  float lumPrev = dot(texture(u_feedback, v_uv).rgb, vec3(0.299, 0.587, 0.114));
-  float dt = lumCur - lumPrev;
+  // 4th-order central-difference gradient — smooth, suppresses per-pixel noise
+  float gxN2 = dot(texture(u_texture, v_uv - vec2(2.0*r, 0.0)).rgb, lum);
+  float gxN1 = dot(texture(u_texture, v_uv - vec2(    r, 0.0)).rgb, lum);
+  float gxP1 = dot(texture(u_texture, v_uv + vec2(    r, 0.0)).rgb, lum);
+  float gxP2 = dot(texture(u_texture, v_uv + vec2(2.0*r, 0.0)).rgb, lum);
+  float gyN2 = dot(texture(u_texture, v_uv - vec2(0.0, 2.0*r)).rgb, lum);
+  float gyN1 = dot(texture(u_texture, v_uv - vec2(0.0,     r)).rgb, lum);
+  float gyP1 = dot(texture(u_texture, v_uv + vec2(0.0,     r)).rgb, lum);
+  float gyP2 = dot(texture(u_texture, v_uv + vec2(0.0, 2.0*r)).rgb, lum);
+  float gx = (-gxP2 + 8.0*gxP1 - 8.0*gxN1 + gxN2) * (1.0/12.0);
+  float gy = (-gyP2 + 8.0*gyP1 - 8.0*gyN1 + gyN2) * (1.0/12.0);
 
-  vec2 grad = vec2(lR - lL, lB - lT);
-  float gradSq = dot(grad, grad) + 0.001;
+  // Curl of luminance gradient = divergence-free flow (follows colour contours)
+  vec2 curl = vec2(-gy, gx);
 
-  // Lucas-Kanade style: flow = -(Ix*It, Iy*It) / (Ix²+Iy²)
-  vec2 flow = -grad * dt / gradSq;
-  flow *= u_amount * 200.0 * px;
+  // Two layered sine waves at incommensurate frequencies — live animation
+  float d1 = sin(v_uv.x * 3.1 + t) * cos(v_uv.y * 2.7 - t * 0.73);
+  float d2 = sin(v_uv.y * 4.3 - t * 1.3 + 1.57) * cos(v_uv.x * 3.7 + t * 0.91);
+  vec2 drift = vec2(d1, d2) * 0.2;
 
-  outColor = texture(u_texture, v_uv + flow);
+  // Soft-normalise: ensures both strong-edge and flat regions produce visible flow
+  vec2 rawFlow = curl + drift;
+  vec2 flowDir = rawFlow / max(length(rawFlow), 0.08);
+
+  // LIC-style streamline accumulation:
+  // Step N times backward along the flow direction, blending colours with
+  // exponential decay weights — this is what turns a plain warp into the
+  // characteristic elongated liquid-paint / pour-paint brush-stroke look.
+  float stepLen = r * (1.0 + u_amount * 6.0);
+  vec2  stepVec = flowDir * stepLen;
+
+  vec4  color  = vec4(0.0);
+  float totalW = 0.0;
+  vec2  pos    = v_uv;
+  const int N  = 10;
+  for (int i = 0; i < N; i++) {
+    float w = exp(-2.2 * float(i) / float(N - 1));
+    color  += texture(u_texture, pos) * w;
+    totalW += w;
+    pos    -= stepVec;
+  }
+  vec3 avg = (color / totalW).rgb;
+
+  // Weighted averaging desaturates colours by blending hues toward their
+  // neighbours along the streamline. Re-expand chroma to restore vibrancy.
+  float avgLuma = dot(avg, lum);
+  avg = mix(vec3(avgLuma), avg, 1.35);
+
+  outColor = vec4(clamp(avg, 0.0, 1.0), 1.0);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'distortion'),
+		setUniforms: floats('amount'),
 	},
 
 	vhs: {
@@ -1028,13 +1058,14 @@ void main() {
 			`uniform float u_intensity;
 uniform float u_corruption;
 uniform float u_channelShift;
+uniform float u_speed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
 void main() {
   vec2 res = vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * 4.0);
+  float t = floor(u_time * u_speed);
 
   // simulate raw pixel index as if image is a flat byte array
   float pixelIdx = floor(v_uv.y * res.y) * res.x + floor(v_uv.x * res.x);
@@ -1089,7 +1120,7 @@ void main() {
   }
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'corruption', 'channelShift'),
+		setUniforms: floats('intensity', 'corruption', 'channelShift', 'speed'),
 	},
 
 	melt: {
