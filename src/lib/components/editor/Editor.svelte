@@ -125,7 +125,9 @@
 		} catch {}
 	}
 
-	function loadSingleSpan(trackId: string): { spanStart: number; spanEnd: number } | null {
+	function loadSingleSpan(
+		trackId: string,
+	): { spanStart: number; spanEnd: number } | null {
 		try {
 			const all = JSON.parse(localStorage.getItem(SINGLE_SPAN_KEY) ?? '{}');
 			return all[trackId] ?? null;
@@ -547,7 +549,7 @@
 	let showRecordSettings = $state(false);
 	let recordFormat: RecordFormat = $derived(format === 'gif' ? 'gif' : 'webm');
 	let recordDuration = $state(5);
-	let recordFps = $state(24);
+	let recordFps = $state(60);
 	let recordWithAudio = $state(false);
 	let recordSpanOnly = $state(false);
 	let recording = $state(false);

@@ -1574,6 +1574,96 @@ void main() {
 }`,
 		setUniforms: floats('amount', 'angle'),
 	},
+	'fiber-displace': {
+		fragment:
+			H +
+			BOUNCE_GLSL +
+			`uniform float u_strength;
+uniform float u_density;
+uniform float u_chrome;
+uniform float u_smoothness;
+
+// Hash functions for non-repeating pseudo-random variation
+float hash(float n) { return fract(sin(n) * 43758.5453123); }
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
+// Value noise for smooth random variation
+float vnoise(float x) {
+  float i = floor(x);
+  float f = fract(x);
+  f = f * f * (3.0 - 2.0 * f); // smoothstep
+  return mix(hash(i), hash(i + 1.0), f);
+}
+
+void main() {
+  vec2 ts = vec2(textureSize(u_texture, 0));
+
+  // Non-repeating fiber displacement using value noise layers
+  float x = v_uv.x * u_density;
+
+  // Multiple noise octaves at irrational frequency ratios = no visible repeat
+  float fiber = vnoise(x * 1.0) * 1.0
+              + vnoise(x * 2.37 + 5.1) * 0.5
+              + vnoise(x * 5.09 + 11.3) * 0.25
+              + vnoise(x * 10.71 + 23.7) * 0.125;
+  fiber = fiber / 0.9375 * 2.0 - 1.0; // normalize to [-1, 1]
+
+  // Smoothness: sample neighbors and average
+  float px = 1.0 / ts.x;
+  float sm = u_smoothness * 8.0;
+  float xL = (v_uv.x - px * sm) * u_density;
+  float xR = (v_uv.x + px * sm) * u_density;
+  float fiberL = vnoise(xL) + 0.5 * vnoise(xL * 2.37 + 5.1) + 0.25 * vnoise(xL * 5.09 + 11.3) + 0.125 * vnoise(xL * 10.71 + 23.7);
+  fiberL = fiberL / 0.9375 * 2.0 - 1.0;
+  float fiberR = vnoise(xR) + 0.5 * vnoise(xR * 2.37 + 5.1) + 0.25 * vnoise(xR * 5.09 + 11.3) + 0.125 * vnoise(xR * 10.71 + 23.7);
+  fiberR = fiberR / 0.9375 * 2.0 - 1.0;
+  fiber = mix(fiber, (fiberL + fiber + fiberR) / 3.0, u_smoothness);
+
+  // Displace vertically (strength 0-1 maps to 0-0.1 actual displacement)
+  float disp = fiber * u_strength * 0.1;
+  vec2 uv = vec2(v_uv.x, bounce(v_uv.y + disp));
+
+  vec4 c = texture(u_texture, uv);
+
+  // Luminance and edge detection for specular
+  float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  float lumUp = dot(texture(u_texture, vec2(uv.x, bounce(uv.y + 1.0 / ts.y))).rgb, vec3(0.299, 0.587, 0.114));
+  float lumDn = dot(texture(u_texture, vec2(uv.x, bounce(uv.y - 1.0 / ts.y))).rgb, vec3(0.299, 0.587, 0.114));
+  float spec = pow(clamp(abs(lumUp - lumDn) * ts.y * 0.01, 0.0, 1.0), 0.5);
+
+  // Smooth continuous phase variation — no discrete stripe boundaries
+  float phase = vnoise(v_uv.x * u_density * 0.7 + 100.0)
+              + vnoise(v_uv.x * u_density * 1.73 + 50.0) * 0.5
+              + vnoise(v_uv.y * 2.5 + v_uv.x * u_density * 0.3) * 0.2;
+
+  // 6-stop color ramp offset by unique stripe phase
+  vec3 c0 = vec3(0.02, 0.03, 0.15);  // deep blue-black
+  vec3 c1 = vec3(0.0, 0.35, 0.55);   // teal
+  vec3 c2 = vec3(0.9, 0.4, 0.08);    // warm orange
+  vec3 c3 = vec3(0.7, 0.15, 0.4);    // magenta
+  vec3 c4 = vec3(1.0, 0.82, 0.5);    // gold
+  vec3 c5 = vec3(0.95, 0.95, 1.0);   // near-white
+
+  float t = fract(lum + phase);
+  vec3 ramp;
+  if (t < 0.2) {
+    ramp = mix(c0, c1, t * 5.0);
+  } else if (t < 0.35) {
+    ramp = mix(c1, c2, (t - 0.2) * 6.667);
+  } else if (t < 0.5) {
+    ramp = mix(c2, c3, (t - 0.35) * 6.667);
+  } else if (t < 0.7) {
+    ramp = mix(c3, c4, (t - 0.5) * 5.0);
+  } else {
+    ramp = mix(c4, c5, (t - 0.7) * 3.333);
+  }
+
+  ramp += spec * vec3(0.3, 0.25, 0.35);
+
+  outColor = vec4(mix(c.rgb, ramp, u_chrome), 1.0);
+}`,
+		setUniforms: floats('strength', 'density', 'chrome', 'smoothness'),
+	},
 };
 
 export const ANIMATED_EFFECTS = new Set(
