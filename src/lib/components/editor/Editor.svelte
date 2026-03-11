@@ -21,6 +21,7 @@
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
 	import type { RecordFormat } from '../../recorder';
+	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import EffectsPanel from './EffectsPanel.svelte';
@@ -112,6 +113,32 @@
 	let resizeHeight = $state(0);
 
 	let trackFile = $state<File | null>(null);
+	let currentTrackId = $state<string | null>(null);
+
+	const SINGLE_SPAN_KEY = 'openmosh-single-span';
+
+	function saveSingleSpan(trackId: string) {
+		try {
+			const all = JSON.parse(localStorage.getItem(SINGLE_SPAN_KEY) ?? '{}');
+			all[trackId] = { spanStart, spanEnd };
+			localStorage.setItem(SINGLE_SPAN_KEY, JSON.stringify(all));
+		} catch {}
+	}
+
+	function loadSingleSpan(trackId: string): { spanStart: number; spanEnd: number } | null {
+		try {
+			const all = JSON.parse(localStorage.getItem(SINGLE_SPAN_KEY) ?? '{}');
+			return all[trackId] ?? null;
+		} catch {}
+		return null;
+	}
+
+	// Persist span changes for library tracks
+	$effect(() => {
+		spanStart;
+		spanEnd;
+		if (currentTrackId) saveSingleSpan(currentTrackId);
+	});
 
 	// Seed track from audio selected on the upload screen
 	$effect(() => {
@@ -182,12 +209,18 @@
 		trackCurrentTime = 0;
 		spanStart = 0;
 		spanEnd = 0;
+		currentTrackId = null;
 		disposeAudioGraph();
 	}
 
-	function onLibraryLoadTrack(file: File, _trackId: string) {
+	function onLibraryLoadTrack(file: File, trackId: string) {
 		clearTrack();
+		currentTrackId = trackId;
 		trackFile = file;
+		const saved = loadSingleSpan(trackId);
+		if (saved !== null) {
+			pendingSpan = saved;
+		}
 	}
 
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
@@ -196,8 +229,7 @@
 	let spanStart = $state(0);
 	let spanEnd = $state(0);
 	let audioPlaying = $state(false);
-	let draggingHandle = $state<'start' | 'end' | null>(null);
-	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+	let pendingSpan = $state<{ spanStart: number; spanEnd: number } | null>(null);
 
 	let volumeLevel = $state(0);
 	let frequencyData = $state<Uint8Array | null>(null);
@@ -213,8 +245,14 @@
 		const d = audioEl?.duration;
 		if (typeof d === 'number' && Number.isFinite(d)) {
 			trackDuration = d;
-			spanStart = 0;
-			spanEnd = d;
+			if (pendingSpan) {
+				spanStart = Math.max(0, Math.min(pendingSpan.spanStart, d));
+				spanEnd = Math.max(0, Math.min(pendingSpan.spanEnd, d));
+				pendingSpan = null;
+			} else {
+				spanStart = 0;
+				spanEnd = d;
+			}
 		}
 	}
 
@@ -253,57 +291,6 @@
 		audioEl.currentTime = tClamp;
 		trackCurrentTime = tClamp;
 	}
-
-	function timeFromEvent(e: { clientX: number } | TouchEvent): number {
-		if (!timelineTrackEl) return 0;
-		const rect = timelineTrackEl.getBoundingClientRect();
-		const clientX =
-			'touches' in e
-				? e.touches[0]?.clientX
-				: (e as { clientX: number }).clientX;
-		const x = typeof clientX === 'number' ? clientX - rect.left : 0;
-		const pct = Math.max(0, Math.min(1, x / rect.width));
-		return pct * trackDuration;
-	}
-
-	function onTimelinePointerDown(
-		e: PointerEvent,
-		handle: 'start' | 'end' | null,
-	) {
-		e.preventDefault();
-		if (handle === 'start' || handle === 'end') {
-			draggingHandle = handle;
-			(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-		} else {
-			seekTo(timeFromEvent(e));
-		}
-	}
-
-	$effect(() => {
-		const handle = draggingHandle;
-		if (handle === null) return;
-		const move = (e: PointerEvent) => {
-			if (!timelineTrackEl) return;
-			const rect = timelineTrackEl.getBoundingClientRect();
-			const x = e.clientX - rect.left;
-			const pct = Math.max(0, Math.min(1, x / rect.width));
-			const t = pct * trackDuration;
-			if (handle === 'start') {
-				spanStart = Math.max(0, Math.min(t, spanEnd - 0.1));
-			} else {
-				spanEnd = Math.max(spanStart + 0.1, Math.min(trackDuration, t));
-			}
-		};
-		const up = () => {
-			draggingHandle = null;
-		};
-		window.addEventListener('pointermove', move);
-		window.addEventListener('pointerup', up);
-		return () => {
-			window.removeEventListener('pointermove', move);
-			window.removeEventListener('pointerup', up);
-		};
-	});
 
 	$effect(() => {
 		const handle = draggingVideoHandle;
@@ -1002,103 +989,24 @@
 			</div>
 		{/if}
 		{#if trackFile && trackDuration > 0}
-			<div class="timeline-bar">
-				<span class="timeline-label">AUD</span>
-				<button
-					class="timeline-play-btn"
-					onclick={audioPlaying ? pauseTrack : playSpan}
-					title={audioPlaying ? 'Pause' : 'Play span'}
-				>
-					{#if audioPlaying}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-							<rect x="6" y="4" width="4" height="16" />
-							<rect x="14" y="4" width="4" height="16" />
-						</svg>
-					{:else}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-							<polygon points="5 3 19 12 5 21 5 3" />
-						</svg>
-					{/if}
-				</button>
-				<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
-				<div
-					class="timeline-track-wrap"
-					bind:this={timelineTrackEl}
-					role="slider"
-					aria-label="Timeline"
-					aria-valuenow={trackCurrentTime}
-					aria-valuemin={0}
-					aria-valuemax={trackDuration}
-					tabindex="0"
-					onpointerdown={(e) => onTimelinePointerDown(e, null)}
-				>
-					<div class="timeline-track">
-						<div
-							class="timeline-span"
-							style="left: {(spanStart / trackDuration) *
-								100}%; width: {((spanEnd - spanStart) / trackDuration) * 100}%"
-						></div>
-						<div
-							class="timeline-playhead"
-							style="left: {(trackCurrentTime / trackDuration) * 100}%"
-							aria-hidden="true"
-						></div>
-						<button
-							type="button"
-							class="timeline-handle timeline-handle-start"
-							style="left: {(spanStart / trackDuration) * 100}%"
-							title="Span start"
-							onpointerdown={(e) => {
-								e.stopPropagation();
-								onTimelinePointerDown(e, 'start');
-							}}
-						></button>
-						<button
-							type="button"
-							class="timeline-handle timeline-handle-end"
-							style="left: {(spanEnd / trackDuration) * 100}%"
-							title="Span end"
-							onpointerdown={(e) => {
-								e.stopPropagation();
-								onTimelinePointerDown(e, 'end');
-							}}
-						></button>
-					</div>
-				</div>
-				<span class="timeline-time">{formatTime(spanEnd)}</span>
-				<input
-					type="range"
-					class="volume-slider"
-					min="0"
-					max="1"
-					step="0.01"
-					value={outputVolume}
-					oninput={(e) => {
-						outputVolume = +(e.currentTarget as HTMLInputElement).value;
-						if (gainNode) gainNode.gain.value = outputVolume;
-					}}
-					title="Output volume: {Math.round(outputVolume * 100)}%"
-				/>
-				<button
-					class="track-inline-btn"
-					onclick={clearTrack}
-					title="Remove track"
-				>
-					<svg
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					>
-						<line x1="18" y1="6" x2="6" y2="18" />
-						<line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
-				</button>
-			</div>
+			<AudioTimeline
+				{trackDuration}
+				{trackCurrentTime}
+				{spanStart}
+				{spanEnd}
+				{audioPlaying}
+				{outputVolume}
+				onPlay={playSpan}
+				onPause={pauseTrack}
+				onSeek={seekTo}
+				onSpanStartChange={(t) => (spanStart = t)}
+				onSpanEndChange={(t) => (spanEnd = t)}
+				onVolumeChange={(v) => {
+					outputVolume = v;
+					if (gainNode) gainNode.gain.value = v;
+				}}
+				onRemoveTrack={clearTrack}
+			/>
 		{/if}
 		<input
 			bind:this={trackInput}
@@ -1462,28 +1370,6 @@
 	}
 	.volume-slider:hover::-moz-range-thumb {
 		background: #fff;
-	}
-
-	.track-inline-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border: none;
-		border-radius: 4px;
-		background: none;
-		color: #555;
-		cursor: pointer;
-		flex-shrink: 0;
-		transition:
-			color 0.15s,
-			background 0.15s;
-	}
-
-	.track-inline-btn:hover {
-		color: #ccc;
-		background: rgba(255, 255, 255, 0.06);
 	}
 
 	/* Action bar */
