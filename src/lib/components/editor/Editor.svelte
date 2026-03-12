@@ -751,8 +751,8 @@
 					}
 				}}
 				onended={() => {
-					// Video reached natural end — loop back to span start if playing
-					if (!recording && videoEl && videoPlaying) {
+					// Video reached natural end — loop back to span start
+					if (!recording && videoEl) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
 					}
