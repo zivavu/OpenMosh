@@ -64,10 +64,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	const hasVolumeLinks = effects.some(
 		(e) => e.volumeLinks && Object.keys(e.volumeLinks).length > 0,
 	);
-	const useAudioFile =
-		hasExplicitAudio &&
-		(recordWithAudio || hasVolumeLinks);
-	const useVideoSourceAudio = isVideo && !hasExplicitAudio && (recordWithAudio || hasVolumeLinks);
+	const useAudioFile = hasExplicitAudio && (recordWithAudio || hasVolumeLinks);
+	const useVideoSourceAudio = isVideo && !hasExplicitAudio;
 
 	const audioStart = hasExplicitAudio
 		? spanStart
@@ -112,6 +110,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			audioFile: file,
 			audioStart,
 			audioEnd,
+			...(loopVideo && { loopAudio: true }),
 		}),
 		...(isVideo &&
 			videoEl && {
@@ -122,7 +121,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 							: Math.min(videoSpanStart + time, videoSpanEnd);
 					videoEl!.currentTime = targetTime;
 					await new Promise<void>((resolve) => {
-						videoEl!.addEventListener('seeked', () => resolve(), { once: true });
+						videoEl!.addEventListener('seeked', () => resolve(), {
+							once: true,
+						});
 					});
 					renderer.updateSourceFrame(videoEl!);
 				},

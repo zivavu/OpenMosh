@@ -5,6 +5,7 @@ import {
 	analyzeFrames,
 	applyFrameAudioToEffects,
 	decodeAudioFile,
+	loopAudioBuffer,
 	trimAudioBuffer,
 	type FrameAudioData,
 } from './audio/offline-audio';
@@ -34,6 +35,8 @@ export interface RecordOptions {
 	onBeforeRender?: (frameIndex: number, time: number) => boolean | void | Promise<boolean | void>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
+	/** When true, the audio is looped to match the recording duration. */
+	loopAudio?: boolean;
 }
 
 function checkAbort(signal?: AbortSignal) {
@@ -61,6 +64,7 @@ async function prepareFrameAudio(
 	audioStart: number,
 	audioEnd: number | undefined,
 	signal?: AbortSignal,
+	loop?: boolean,
 ): Promise<{
 	frameAudioData: FrameAudioData[];
 	sampleRate: number;
@@ -69,13 +73,15 @@ async function prepareFrameAudio(
 	checkAbort(signal);
 	const decoded = await decodeAudioFile(audioFile);
 	const end = audioEnd ?? duration;
-	const audioBuffer = trimAudioBuffer(decoded, audioStart, end);
-	const trimmedDuration = audioBuffer.duration;
+	const trimmed = trimAudioBuffer(decoded, audioStart, end);
+	const audioBuffer = loop ? loopAudioBuffer(trimmed, duration) : trimmed;
+	const loopDuration = trimmed.duration;
 	const frameTimes = Array.from({ length: totalFrames }, (_, i) => {
 		const t = i * frameDuration;
-		return Math.min(t, Math.max(0, trimmedDuration - 0.001));
+		if (loop && loopDuration > 0) return t % loopDuration;
+		return Math.min(t, Math.max(0, loopDuration - 0.001));
 	});
-	const frameAudioData = analyzeFrames(audioBuffer, frameTimes, FFT_SIZE);
+	const frameAudioData = analyzeFrames(loop ? trimmed : audioBuffer, frameTimes, FFT_SIZE);
 	return { frameAudioData, sampleRate: audioBuffer.sampleRate, audioBuffer };
 }
 
@@ -97,6 +103,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioEnd,
 		onBeforeRender,
 		effectsRef,
+		loopAudio,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -115,6 +122,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			audioStart,
 			audioEnd,
 			signal,
+			loopAudio,
 		);
 		audioBufferForMux = audio.audioBuffer;
 		frameAudioData = audio.frameAudioData;

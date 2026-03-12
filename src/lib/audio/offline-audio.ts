@@ -39,6 +39,25 @@ export function trimAudioBuffer(
 	return trimmed;
 }
 
+/**
+ * Tile `buffer` to fill `targetDuration` seconds (loops the buffer content).
+ */
+export function loopAudioBuffer(buffer: AudioBuffer, targetDuration: number): AudioBuffer {
+	const sampleRate = buffer.sampleRate;
+	const srcLength = buffer.length;
+	const dstLength = Math.ceil(targetDuration * sampleRate);
+	const looped = new AudioBuffer({ numberOfChannels: buffer.numberOfChannels, length: dstLength, sampleRate });
+
+	for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+		const src = buffer.getChannelData(ch);
+		const dst = looped.getChannelData(ch);
+		for (let i = 0; i < dstLength; i++) {
+			dst[i] = src[i % srcLength];
+		}
+	}
+	return looped;
+}
+
 export interface FrameAudioData {
 	volumeLevel: number;
 	frequencyData: Uint8Array;
