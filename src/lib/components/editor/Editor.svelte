@@ -551,27 +551,11 @@
 	let recordFormat: RecordFormat = $derived('webm');
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
-	let recordWithAudio = $state(false);
-	let recordSpanOnly = $state(false);
-	let loopVideo = $state(false);
 	let recording = $state(false);
 	let recordProgress = $state(0);
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 
-	let recordDurationEffective = $derived(
-		isVideo && videoDuration > 0 && !loopVideo
-			? videoSpanEnd - videoSpanStart
-			: recordSpanOnly && trackFile && trackDuration > 0
-				? spanEnd - spanStart
-				: recordDuration,
-	);
-	let canIncludeAudio = $derived(
-		!!trackFile && trackDuration > 0 && recordFormat === 'webm',
-	);
-	let canRenderSpan = $derived(
-		!!recordWithAudio && !!trackFile && trackDuration > 0,
-	);
 
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recording) return;
@@ -587,9 +571,6 @@
 				format: recordFormat,
 				fps: recordFps,
 				recordDuration,
-				recordSpanOnly,
-				recordWithAudio,
-				loopVideo,
 				canvas: canvasEl,
 				renderer: glRenderer,
 				effects,
@@ -738,7 +719,6 @@
 				src={imageSrc}
 				muted
 				autoplay
-				loop
 				playsinline
 				onloadedmetadata={() => {
 					const dur = videoEl!.duration;
@@ -750,6 +730,10 @@
 				}}
 				ontimeupdate={() => {
 					videoCurrentTime = videoEl?.currentTime ?? 0;
+					// Span-loop: skip during recording (export seeks the video directly)
+					if (!recording && videoEl && videoCurrentTime >= videoSpanEnd) {
+						videoEl.currentTime = videoSpanStart;
+					}
 				}}
 				onplay={() => (videoPlaying = true)}
 				onpause={() => (videoPlaying = false)}
@@ -812,47 +796,9 @@
 					bind:showSettings={showRecordSettings}
 				>
 					{#snippet settingsContent()}
-						{#if canIncludeAudio}
+						{#if !trackFile && !isVideo}
 							<div class="mosh-setting-row">
-								<label for="rec-with-audio">Include audio</label>
-								<input
-									id="rec-with-audio"
-									type="checkbox"
-									bind:checked={recordWithAudio}
-								/>
-							</div>
-							{#if recordWithAudio && canRenderSpan}
-								<div class="mosh-setting-row">
-									<label for="rec-span-only">Render selected span</label>
-									<input
-										id="rec-span-only"
-										type="checkbox"
-										bind:checked={recordSpanOnly}
-									/>
-								</div>
-							{/if}
-						{/if}
-						{#if isVideo && videoDuration > 0}
-							<div class="mosh-setting-row">
-								<label for="rec-loop-video">Repeat video</label>
-								<input
-									id="rec-loop-video"
-									type="checkbox"
-									bind:checked={loopVideo}
-								/>
-							</div>
-						{/if}
-						<div class="mosh-setting-row">
-							<label for="rec-duration">Duration</label>
-							{#if isVideo && videoDuration > 0 && !loopVideo}
-								<span class="mosh-setting-val"
-									>{recordDurationEffective.toFixed(1)}s (video span)</span
-								>
-							{:else if recordSpanOnly && trackFile && trackDuration > 0}
-								<span class="mosh-setting-val"
-									>{recordDurationEffective.toFixed(1)}s (span)</span
-								>
-							{:else}
+								<label for="rec-duration">Duration</label>
 								<input
 									id="rec-duration"
 									type="range"
@@ -862,8 +808,8 @@
 									bind:value={recordDuration}
 								/>
 								<span class="mosh-setting-val">{recordDuration}s</span>
-							{/if}
-						</div>
+							</div>
+						{/if}
 						<div class="mosh-setting-row">
 							<label for="rec-fps">FPS</label>
 							<select id="rec-fps" bind:value={recordFps}>
