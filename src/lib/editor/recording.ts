@@ -67,7 +67,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	const useAudioFile =
 		hasExplicitAudio &&
 		(recordWithAudio || hasVolumeLinks);
-	const useVideoSourceAudio = isVideo && !hasExplicitAudio && hasVolumeLinks;
+	const useVideoSourceAudio = isVideo && !hasExplicitAudio && (recordWithAudio || hasVolumeLinks);
 
 	const audioStart = hasExplicitAudio
 		? spanStart
