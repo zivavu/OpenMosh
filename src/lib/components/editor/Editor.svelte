@@ -25,7 +25,7 @@
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
-	import EffectsPanel from './EffectsPanel.svelte';
+	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import MoshGroup from './MoshGroup.svelte';
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
@@ -873,7 +873,7 @@
 								<option value={60}>60</option>
 								<option value={120}>120</option>
 							</select>
-							</div>
+						</div>
 						<button class="rec-start-btn" onclick={startRecording}>
 							Start Recording
 						</button>
@@ -1463,7 +1463,7 @@
 		pointer-events: none;
 	}
 
-.rec-start-btn {
+	.rec-start-btn {
 		margin-top: 0.25rem;
 		padding: 0.45rem 1rem;
 		border: 1.5px solid #c05050;

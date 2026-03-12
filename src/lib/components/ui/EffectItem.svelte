@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { X, GripVertical, ArrowUpDown, Music } from 'lucide-svelte';
-	import DualRangeSlider from '../ui/DualRangeSlider.svelte';
+	import DualRangeSlider from './DualRangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
 		FREQ_PRESETS,
@@ -160,38 +160,47 @@
 								{#if hasTrack && onVolumeLinkChange}
 									{#if effect.volumeLinks?.[param.key]}
 										{@const link = effect.volumeLinks[param.key]}
-									<div class="volume-link-row">
-										<span class="volume-link-label">Vol →</span>
-										<div class="volume-link-slider">
-											<DualRangeSlider
-												min={param.min}
-												max={param.max}
-												step={param.step}
-												valueLow={link.min}
-												valueHigh={link.max}
-												onChangeLow={(v) => onVolumeLinkChange(param.key, { ...link, min: v })}
-												onChangeHigh={(v) => onVolumeLinkChange(param.key, { ...link, max: v })}
-												formatValue={(v) => parseFloat(v.toString()).toFixed(2)}
-											/>
+										<div class="volume-link-row">
+											<span class="volume-link-label">Vol →</span>
+											<div class="volume-link-slider">
+												<DualRangeSlider
+													min={param.min}
+													max={param.max}
+													step={param.step}
+													valueLow={link.min}
+													valueHigh={link.max}
+													onChangeLow={(v) =>
+														onVolumeLinkChange(param.key, { ...link, min: v })}
+													onChangeHigh={(v) =>
+														onVolumeLinkChange(param.key, { ...link, max: v })}
+													formatValue={(v) =>
+														parseFloat(v.toString()).toFixed(2)}
+												/>
+											</div>
+											<button
+												type="button"
+												class="volume-invert-btn"
+												class:active={link.inverted}
+												title={link.inverted
+													? 'Inverted: low volume = high effect'
+													: 'Normal: high volume = high effect'}
+												onclick={() =>
+													onVolumeLinkChange(param.key, {
+														...link,
+														inverted: !link.inverted,
+													})}
+											>
+												<ArrowUpDown size={12} />
+											</button>
+											<button
+												type="button"
+												class="volume-unlink-btn"
+												title="Unlink from volume"
+												onclick={() => onVolumeLinkChange(param.key, null)}
+											>
+												<X size={12} />
+											</button>
 										</div>
-										<button
-											type="button"
-											class="volume-invert-btn"
-											class:active={link.inverted}
-											title={link.inverted ? 'Inverted: low volume = high effect' : 'Normal: high volume = high effect'}
-											onclick={() => onVolumeLinkChange(param.key, { ...link, inverted: !link.inverted })}
-										>
-											<ArrowUpDown size={12} />
-										</button>
-									<button
-											type="button"
-											class="volume-unlink-btn"
-											title="Unlink from volume"
-											onclick={() => onVolumeLinkChange(param.key, null)}
-										>
-											<X size={12} />
-										</button>
-									</div>
 										<div class="volume-freq-row">
 											<span class="volume-link-label">Freq</span>
 											<div class="freq-presets">
@@ -262,23 +271,30 @@
 													height={48}
 													tick={spectrumData.tick}
 												/>
-										<div class="spectrum-inputs">
-												<span class="spectrum-label">Freq</span>
-												<div class="spectrum-slider">
-													<DualRangeSlider
-														min={0}
-														max={1000}
-														step={1}
-														valueLow={freqToSlider(link.freqMin ?? 20)}
-														valueHigh={freqToSlider(link.freqMax ?? 20000)}
-														onChangeLow={(v) =>
-															onVolumeLinkChange(param.key, { ...link, freqMin: sliderToFreq(v) })}
-														onChangeHigh={(v) =>
-															onVolumeLinkChange(param.key, { ...link, freqMax: sliderToFreq(v) })}
-														formatValue={(v) => `${Math.round(sliderToFreq(v))} Hz`}
-													/>
+												<div class="spectrum-inputs">
+													<span class="spectrum-label">Freq</span>
+													<div class="spectrum-slider">
+														<DualRangeSlider
+															min={0}
+															max={1000}
+															step={1}
+															valueLow={freqToSlider(link.freqMin ?? 20)}
+															valueHigh={freqToSlider(link.freqMax ?? 20000)}
+															onChangeLow={(v) =>
+																onVolumeLinkChange(param.key, {
+																	...link,
+																	freqMin: sliderToFreq(v),
+																})}
+															onChangeHigh={(v) =>
+																onVolumeLinkChange(param.key, {
+																	...link,
+																	freqMax: sliderToFreq(v),
+																})}
+															formatValue={(v) =>
+																`${Math.round(sliderToFreq(v))} Hz`}
+														/>
+													</div>
 												</div>
-											</div>
 											</div>
 										{/if}
 									{:else}
