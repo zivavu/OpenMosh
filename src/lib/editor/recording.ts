@@ -8,6 +8,7 @@ export interface RecordingContext {
 	recordDuration: number;
 	recordSpanOnly: boolean;
 	recordWithAudio: boolean;
+	loopVideo: boolean;
 	canvas: HTMLCanvasElement;
 	renderer: GlRenderer;
 	effects: EffectInstance[];
@@ -33,6 +34,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		recordDuration,
 		recordSpanOnly,
 		recordWithAudio,
+		loopVideo,
 		canvas,
 		renderer,
 		effects,
@@ -52,7 +54,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	} = ctx;
 
 	const duration =
-		isVideo && videoDuration > 0
+		isVideo && videoDuration > 0 && !loopVideo
 			? videoSpanEnd - videoSpanStart
 			: recordSpanOnly && trackFile && trackDuration > 0
 				? spanEnd - spanStart
@@ -82,10 +84,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
 	if (isVideo && videoEl) videoEl.pause();
 
+	const videoSpanDuration = videoSpanEnd - videoSpanStart;
+	const recordFps = format === 'gif' ? Math.min(fps, 15) : fps;
+
 	const blob = await recordVideo({
 		format,
 		duration,
-		fps: format === 'gif' ? Math.min(fps, 15) : fps,
+		fps: recordFps,
 		canvas,
 		renderer,
 		effects: effects.map(
@@ -109,9 +114,17 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			audioEnd,
 		}),
 		...(isVideo &&
-			videoEl && {
-				sourceVideo: videoEl,
-				videoSpanStart,
+			videoEl &&
+			loopVideo &&
+			videoSpanDuration > 0 && {
+				onBeforeRender: async (_frameIndex: number, time: number) => {
+					const loopedTime = videoSpanStart + (time % videoSpanDuration);
+					videoEl!.currentTime = loopedTime;
+					await new Promise<void>((resolve) => {
+						videoEl!.addEventListener('seeked', () => resolve(), { once: true });
+					});
+					renderer.updateSourceFrame(videoEl!);
+				},
 			}),
 	});
 	downloadBlob(blob, format);

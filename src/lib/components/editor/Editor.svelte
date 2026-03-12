@@ -553,13 +553,14 @@
 	let recordFps = $state(60);
 	let recordWithAudio = $state(false);
 	let recordSpanOnly = $state(false);
+	let loopVideo = $state(false);
 	let recording = $state(false);
 	let recordProgress = $state(0);
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 
 	let recordDurationEffective = $derived(
-		isVideo && videoDuration > 0
+		isVideo && videoDuration > 0 && !loopVideo
 			? videoSpanEnd - videoSpanStart
 			: recordSpanOnly && trackFile && trackDuration > 0
 				? spanEnd - spanStart
@@ -588,6 +589,7 @@
 				recordDuration,
 				recordSpanOnly,
 				recordWithAudio,
+				loopVideo,
 				canvas: canvasEl,
 				renderer: glRenderer,
 				effects,
@@ -837,9 +839,19 @@
 								</div>
 							{/if}
 						{/if}
+						{#if isVideo && videoDuration > 0}
+							<div class="mosh-setting-row">
+								<label for="rec-loop-video">Repeat video</label>
+								<input
+									id="rec-loop-video"
+									type="checkbox"
+									bind:checked={loopVideo}
+								/>
+							</div>
+						{/if}
 						<div class="mosh-setting-row">
 							<label for="rec-duration">Duration</label>
-							{#if isVideo && videoDuration > 0}
+							{#if isVideo && videoDuration > 0 && !loopVideo}
 								<span class="mosh-setting-val"
 									>{recordDurationEffective.toFixed(1)}s (video span)</span
 								>

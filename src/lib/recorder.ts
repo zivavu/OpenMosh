@@ -29,8 +29,9 @@ export interface RecordOptions {
 	/** End time of the audio region in seconds. */
 	audioEnd?: number;
 	/** Called before each frame render — use to swap source textures, effects, etc.
-	 * Return `true` to skip the default `renderer.render()` call (e.g. when transition already rendered). */
-	onBeforeRender?: (frameIndex: number, time: number) => boolean | void;
+	 * Return `true` to skip the default `renderer.render()` call (e.g. when transition already rendered).
+	 * May return a Promise. */
+	onBeforeRender?: (frameIndex: number, time: number) => boolean | void | Promise<boolean | void>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
 }
@@ -195,7 +196,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
-		const skipRender = onBeforeRender?.(i, time);
+		const skipRender = onBeforeRender ? await onBeforeRender(i, time) : false;
 		const renderEffects = effectsRef ? effectsRef.current : effects;
 		applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
 		if (!skipRender) renderer.render(renderEffects, time);
@@ -309,7 +310,7 @@ async function recordGif(opts: RecordOptions): Promise<Blob> {
 		checkAbort(signal);
 
 		const time = i * frameDuration;
-		const skipRender = onBeforeRender?.(i, time);
+		const skipRender = onBeforeRender ? await onBeforeRender(i, time) : false;
 		const renderEffects = effectsRef ? effectsRef.current : effects;
 		applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
 		if (!skipRender) renderer.render(renderEffects, time);
