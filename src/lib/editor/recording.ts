@@ -66,7 +66,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	);
 	const useAudioFile =
 		hasExplicitAudio &&
-		(recordWithAudio || format === 'gif' || hasVolumeLinks);
+		(recordWithAudio || hasVolumeLinks);
 	const useVideoSourceAudio = isVideo && !hasExplicitAudio && hasVolumeLinks;
 
 	const audioStart = hasExplicitAudio
@@ -85,7 +85,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	if (isVideo && videoEl) videoEl.pause();
 
 	const videoSpanDuration = videoSpanEnd - videoSpanStart;
-	const recordFps = format === 'gif' ? Math.min(fps, 15) : fps;
+	const recordFps = fps;
 
 	const blob = await recordVideo({
 		format,

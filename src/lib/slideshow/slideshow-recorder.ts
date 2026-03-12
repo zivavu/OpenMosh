@@ -109,7 +109,7 @@ export async function executeSlideshowRecording(
 	const blob = await recordVideo({
 		format,
 		duration,
-		fps: format === 'gif' ? Math.min(fps, 15) : fps,
+		fps,
 		canvas,
 		renderer,
 		effects: baseEffects,

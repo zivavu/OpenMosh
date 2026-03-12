@@ -904,13 +904,11 @@
 			{recording}
 			{recordProgress}
 			{recordFinalizing}
-			{recordFormat}
 			{recordFps}
 			{recordDuration}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			onCancelRecording={cancelRecording}
-			onRecordFormatChange={(f) => (recordFormat = f)}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
 		/>
 

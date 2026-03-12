@@ -52,9 +52,9 @@
 	let draggingVideoHandle = $state<'start' | 'end' | null>(null);
 	let videoTimelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
-	let format = $state<'png' | 'jpg' | 'webm' | 'gif'>('webm');
+	let format = $state<'png' | 'jpg' | 'webm'>('webm');
 	let isImageFormat = $derived(format === 'png' || format === 'jpg');
-	let isVideoFormat = $derived(format === 'webm' || format === 'gif');
+	let isVideoFormat = $derived(format === 'webm');
 	let imageSrc = $state('');
 	$effect(() => {
 		const url = URL.createObjectURL(file);
@@ -548,7 +548,7 @@
 	}
 
 	let showRecordSettings = $state(false);
-	let recordFormat: RecordFormat = $derived(format === 'gif' ? 'gif' : 'webm');
+	let recordFormat: RecordFormat = $derived('webm');
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
 	let recordWithAudio = $state(false);
@@ -728,13 +728,6 @@
 					>
 						WebM
 					</button>
-					<button
-						class="format-btn"
-						class:active={format === 'gif'}
-						onclick={() => (format = 'gif')}
-					>
-						GIF
-					</button>
 				</div>
 			</div>
 		</div>
@@ -880,10 +873,7 @@
 								<option value={60}>60</option>
 								<option value={120}>120</option>
 							</select>
-							{#if recordFormat === 'gif' && recordFps > 15}
-								<span class="rec-hint">capped to 15</span>
-							{/if}
-						</div>
+							</div>
 						<button class="rec-start-btn" onclick={startRecording}>
 							Start Recording
 						</button>
@@ -1473,13 +1463,7 @@
 		pointer-events: none;
 	}
 
-	.rec-hint {
-		font-size: 0.6rem;
-		color: #886;
-		white-space: nowrap;
-	}
-
-	.rec-start-btn {
+.rec-start-btn {
 		margin-top: 0.25rem;
 		padding: 0.45rem 1rem;
 		border: 1.5px solid #c05050;

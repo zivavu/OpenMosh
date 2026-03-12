@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Settings, Play, Pause } from 'lucide-svelte';
-	import type { RecordFormat } from '../../recorder';
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 
@@ -15,13 +14,11 @@
 		recording: boolean;
 		recordProgress: number;
 		recordFinalizing: boolean;
-		recordFormat: RecordFormat;
 		recordFps: number;
 		recordDuration: number;
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
 		onCancelRecording: () => void;
-		onRecordFormatChange: (f: RecordFormat) => void;
 		onRecordFpsChange: (fps: number) => void;
 	}
 
@@ -36,13 +33,11 @@
 		recording,
 		recordProgress,
 		recordFinalizing,
-		recordFormat,
 		recordFps,
 		recordDuration,
 		onTogglePreview,
 		onStartRecording,
 		onCancelRecording,
-		onRecordFormatChange,
 		onRecordFpsChange,
 	}: Props = $props();
 
@@ -114,20 +109,6 @@
 	>
 		{#snippet settingsContent()}
 			<div class="setting-row">
-				<label for="ss-rec-format">Format</label>
-				<select
-					id="ss-rec-format"
-					value={recordFormat}
-					onchange={(e) =>
-						onRecordFormatChange(
-							(e.currentTarget as HTMLSelectElement).value as RecordFormat,
-						)}
-				>
-					<option value="webm">WebM</option>
-					<option value="gif">GIF</option>
-				</select>
-			</div>
-			<div class="setting-row">
 				<span class="setting-label">Duration</span>
 				<span class="setting-val">{recordDuration.toFixed(1)}s</span>
 			</div>
@@ -144,10 +125,7 @@
 					<option value={30}>30</option>
 					<option value={60}>60</option>
 				</select>
-				{#if recordFormat === 'gif' && recordFps > 15}
-					<span class="hint">capped to 15</span>
-				{/if}
-			</div>
+				</div>
 			<button
 				class="start-btn"
 				onclick={() => {

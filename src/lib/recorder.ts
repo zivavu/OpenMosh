@@ -9,7 +9,7 @@ import {
 	type FrameAudioData,
 } from './audio/offline-audio';
 
-export type RecordFormat = 'webm' | 'gif';
+export type RecordFormat = 'webm';
 
 export interface RecordOptions {
 	format: RecordFormat;
@@ -143,7 +143,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	if (!selectedCodec) {
 		throw new Error(
 			`Your browser cannot encode ${format.toUpperCase()} video. ` +
-				`Tried codecs: ${candidates.join(', ')}. Try GIF, or use a different browser.`,
+				`Tried codecs: ${candidates.join(', ')}. Try a different browser.`,
 		);
 	}
 
@@ -223,129 +223,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	return new Blob([target.buffer!], { type: mimeType });
 }
 
-const GIF_MAX_WIDTH = 480;
-
-const GIF_WORKER_IN_FLIGHT = 2;
-
-async function recordGif(opts: RecordOptions): Promise<Blob> {
-	const {
-		duration,
-		fps,
-		canvas,
-		renderer,
-		effects,
-		onProgress,
-		onFinalizing,
-		signal,
-		audioFile,
-		audioStart = 0,
-		audioEnd,
-		onBeforeRender,
-		effectsRef,
-	} = opts;
-	const totalFrames = Math.ceil(duration * fps);
-	const frameDuration = 1 / fps;
-	const delay = Math.round(1000 / fps);
-
-	// Optional audio-driven effects (no audio mux in GIF)
-	let frameAudioData: FrameAudioData[] = [];
-	let audioSampleRate = 0;
-	if (audioFile) {
-		const audio = await prepareFrameAudio(
-			audioFile,
-			duration,
-			totalFrames,
-			frameDuration,
-			audioStart,
-			audioEnd,
-			signal,
-		);
-		frameAudioData = audio.frameAudioData;
-		audioSampleRate = audio.sampleRate;
-	}
-
-	const scale = canvas.width > GIF_MAX_WIDTH ? GIF_MAX_WIDTH / canvas.width : 1;
-	const outW = Math.round(canvas.width * scale);
-	const outH = Math.round(canvas.height * scale);
-
-	const tempCanvas = document.createElement('canvas');
-	tempCanvas.width = outW;
-	tempCanvas.height = outH;
-	const ctx = tempCanvas.getContext('2d', { willReadFrequently: true })!;
-
-	const worker = new Worker(
-		new URL('./gif-encoder-worker.ts', import.meta.url),
-		{ type: 'module' },
-	);
-
-	let inFlight = 0;
-	let resolveDrain: (() => void) | null = null;
-	function waitForCapacity(): Promise<void> {
-		if (inFlight < GIF_WORKER_IN_FLIGHT) return Promise.resolve();
-		return new Promise((r) => {
-			resolveDrain = r;
-		});
-	}
-
-	const resultPromise = new Promise<ArrayBuffer>((resolve, reject) => {
-		worker.onmessage = (
-			e: MessageEvent<{ type: string; buffer?: ArrayBuffer }>,
-		) => {
-			if (e.data.type === 'frame-done') {
-				inFlight--;
-				if (resolveDrain) {
-					resolveDrain();
-					resolveDrain = null;
-				}
-			} else if (e.data.type === 'done') {
-				resolve(e.data.buffer!);
-			}
-		};
-		worker.onerror = () => reject(new Error('GIF worker error'));
-	});
-
-	worker.postMessage({ type: 'init', width: outW, height: outH, delay });
-
-	for (let i = 0; i < totalFrames; i++) {
-		checkAbort(signal);
-
-		const time = i * frameDuration;
-		const skipRender = onBeforeRender ? await onBeforeRender(i, time) : false;
-		const renderEffects = effectsRef ? effectsRef.current : effects;
-		applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
-		if (!skipRender) renderer.render(renderEffects, time);
-
-		ctx.drawImage(canvas, 0, 0, outW, outH);
-		const imageData = ctx.getImageData(0, 0, outW, outH);
-		const buffer = imageData.data.buffer;
-
-		await waitForCapacity();
-		inFlight++;
-		worker.postMessage(
-			{ type: 'frame', width: outW, height: outH, delay, rgba: buffer },
-			[buffer],
-		);
-
-		onProgress?.((i + 1) / totalFrames);
-
-		if (i % 2 === 0) {
-			await new Promise<void>((r) => requestAnimationFrame(() => r()));
-		}
-	}
-
-	await new Promise<void>((r) => requestAnimationFrame(() => r()));
-	onFinalizing?.();
-	worker.postMessage({ type: 'finish' });
-	const buffer = await resultPromise;
-	worker.terminate();
-
-	return new Blob([buffer], { type: 'image/gif' });
-}
-
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {
-	if (opts.format === 'gif') {
-		return recordGif(opts);
-	}
 	return recordWebM(opts);
 }
 
