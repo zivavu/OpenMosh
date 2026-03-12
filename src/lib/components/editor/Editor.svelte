@@ -551,6 +551,13 @@
 	let recordFormat: RecordFormat = $derived('webm');
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
+	let effectiveDuration = $derived(
+		trackFile && trackDuration > 0 && spanEnd - spanStart > 0
+			? spanEnd - spanStart
+			: isVideo && videoDuration > 0
+				? videoSpanEnd - videoSpanStart
+				: recordDuration,
+	);
 	let recording = $state(false);
 	let recordProgress = $state(0);
 	let recordFinalizing = $state(false);
@@ -808,6 +815,11 @@
 									bind:value={recordDuration}
 								/>
 								<span class="mosh-setting-val">{recordDuration}s</span>
+							</div>
+						{:else}
+							<div class="mosh-setting-row">
+								<span class="rec-duration-label">Duration</span>
+								<span class="mosh-setting-val">{effectiveDuration.toFixed(1)}s</span>
 							</div>
 						{/if}
 						<div class="mosh-setting-row">
@@ -1317,7 +1329,8 @@
 		gap: 0.5rem;
 	}
 
-	.mosh-setting-row label {
+	.mosh-setting-row label,
+	.rec-duration-label {
 		font-size: 0.7rem;
 		color: #888;
 		min-width: 72px;
