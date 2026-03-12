@@ -114,12 +114,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			audioEnd,
 		}),
 		...(isVideo &&
-			videoEl &&
-			loopVideo &&
-			videoSpanDuration > 0 && {
+			videoEl && {
 				onBeforeRender: async (_frameIndex: number, time: number) => {
-					const loopedTime = videoSpanStart + (time % videoSpanDuration);
-					videoEl!.currentTime = loopedTime;
+					const targetTime =
+						loopVideo && videoSpanDuration > 0
+							? videoSpanStart + (time % videoSpanDuration)
+							: Math.min(videoSpanStart + time, videoSpanEnd);
+					videoEl!.currentTime = targetTime;
 					await new Promise<void>((resolve) => {
 						videoEl!.addEventListener('seeked', () => resolve(), { once: true });
 					});
