@@ -271,21 +271,29 @@
 	}
 
 	function playSpan() {
-		if (!trackFile || !trackObjectUrl || !audioEl) return;
 		ensureAudioGraph();
 		if (audioContext?.state === 'suspended') audioContext.resume();
-		const t = audioEl.currentTime;
-		if (t < spanStart || t >= spanEnd) {
-			audioEl.currentTime = spanStart;
-			trackCurrentTime = spanStart;
+		if (trackFile && trackObjectUrl && audioEl) {
+			const t = audioEl.currentTime;
+			if (t < spanStart || t >= spanEnd) {
+				audioEl.currentTime = spanStart;
+				trackCurrentTime = spanStart;
+			}
+			audioEl.play();
+			audioPlaying = true;
 		}
-		audioEl.play();
-		audioPlaying = true;
+		if (isVideo && videoEl) {
+			if (videoEl.currentTime < videoSpanStart || videoEl.currentTime >= videoSpanEnd) {
+				videoEl.currentTime = videoSpanStart;
+			}
+			videoEl.play().catch(() => {});
+		}
 	}
 
 	function pauseTrack() {
 		audioEl?.pause();
 		audioPlaying = false;
+		if (isVideo) videoEl?.pause();
 	}
 
 	function seekTo(t: number) {
@@ -524,8 +532,8 @@
 		reInput,
 		playSpan,
 		pauseTrack,
-		hasTrack: () => !!trackFile && !!audioEl,
-		isPlaying: () => audioPlaying,
+		hasTrack: () => (!!trackFile && !!audioEl) || isVideo,
+		isPlaying: () => audioPlaying || videoPlaying,
 	});
 
 	function save() {
