@@ -6,9 +6,6 @@ export interface RecordingContext {
 	format: RecordFormat;
 	fps: number;
 	recordDuration: number;
-	recordSpanOnly: boolean;
-	recordWithAudio: boolean;
-	loopVideo: boolean;
 	canvas: HTMLCanvasElement;
 	renderer: GlRenderer;
 	effects: EffectInstance[];
@@ -32,9 +29,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		format,
 		fps,
 		recordDuration,
-		recordSpanOnly,
-		recordWithAudio,
-		loopVideo,
 		canvas,
 		renderer,
 		effects,
@@ -53,42 +47,36 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		signal,
 	} = ctx;
 
-	const duration =
-		isVideo && videoDuration > 0 && !loopVideo
-			? videoSpanEnd - videoSpanStart
-			: recordSpanOnly && trackFile && trackDuration > 0
-				? spanEnd - spanStart
+	const hasExplicitAudio = !!trackFile && trackDuration > 0;
+	const videoSpanDuration = videoSpanEnd - videoSpanStart;
+
+	// Priority: audio span > video span > manual slider
+	// Each tier is only used if its span duration > 0
+	const exportDuration =
+		hasExplicitAudio && spanEnd - spanStart > 0
+			? spanEnd - spanStart
+			: isVideo && videoDuration > 0 && videoSpanDuration > 0
+				? videoSpanDuration
 				: recordDuration;
 
-	const hasExplicitAudio = !!trackFile && trackDuration > 0;
-	const hasVolumeLinks = effects.some(
-		(e) => e.volumeLinks && Object.keys(e.volumeLinks).length > 0,
-	);
-	const useAudioFile = hasExplicitAudio && (recordWithAudio || hasVolumeLinks);
+	if (exportDuration < 0.1) {
+		throw new Error('Export duration is too short (minimum 0.1s). Adjust the span.');
+	}
+
+	// Looping is implicit: loop when video span is shorter than export duration
+	const loopVideo = isVideo && videoSpanDuration > 0 && videoSpanDuration < exportDuration;
 	const useVideoSourceAudio = isVideo && !hasExplicitAudio;
 
-	const audioStart = hasExplicitAudio
-		? spanStart
-		: isVideo
-			? videoSpanStart
-			: 0;
-	const audioEnd = hasExplicitAudio
-		? recordSpanOnly
-			? spanEnd
-			: Math.min(spanStart + duration, trackDuration)
-		: isVideo
-			? videoSpanEnd
-			: duration;
+	const audioStart = hasExplicitAudio ? spanStart : isVideo ? videoSpanStart : 0;
+	// When explicit audio is present, audioEnd is always spanEnd (the full selected span)
+	const audioEnd = hasExplicitAudio ? spanEnd : isVideo ? videoSpanEnd : exportDuration;
 
 	if (isVideo && videoEl) videoEl.pause();
 
-	const videoSpanDuration = videoSpanEnd - videoSpanStart;
-	const recordFps = fps;
-
 	const blob = await recordVideo({
 		format,
-		duration,
-		fps: recordFps,
+		duration: exportDuration,
+		fps,
 		canvas,
 		renderer,
 		effects: effects.map(
@@ -101,11 +89,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		onProgress,
 		onFinalizing,
 		signal,
-		...(useAudioFile && {
+		// Explicit audio track: always include for both mux output and FFT reactivity
+		...(hasExplicitAudio && {
 			audioFile: trackFile!,
 			audioStart,
 			audioEnd,
 		}),
+		// Video source audio: include when no explicit track, loop if video loops
 		...(useVideoSourceAudio && {
 			audioFile: file,
 			audioStart,
@@ -121,9 +111,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 							: Math.min(videoSpanStart + time, videoSpanEnd);
 					videoEl!.currentTime = targetTime;
 					await new Promise<void>((resolve) => {
-						videoEl!.addEventListener('seeked', () => resolve(), {
-							once: true,
-						});
+						videoEl!.addEventListener('seeked', () => resolve(), { once: true });
 					});
 					renderer.updateSourceFrame(videoEl!);
 				},
