@@ -79,6 +79,7 @@
 		gap: 0.5rem;
 		padding: 0.75rem;
 		border-bottom: 1px solid #2a2a2a;
+		max-width: 100%;
 	}
 
 	.panel-title {
@@ -98,7 +99,6 @@
 	}
 
 	.config-row label {
-		flex-shrink: 0;
 		min-width: 80px;
 		color: #999;
 		font-size: 0.75rem;
@@ -106,11 +106,10 @@
 
 	.config-row input[type='range'] {
 		flex: 1;
+		width: 0;
 		height: 3px;
-		appearance: none;
 		background: #333;
 		border-radius: 2px;
-		outline: none;
 		cursor: pointer;
 	}
 
@@ -147,8 +146,6 @@
 	}
 
 	.val {
-		min-width: 24px;
-		text-align: right;
 		color: #888;
 		font-size: 0.75rem;
 	}
