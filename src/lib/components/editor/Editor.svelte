@@ -750,6 +750,13 @@
 						videoEl.currentTime = videoSpanStart;
 					}
 				}}
+				onended={() => {
+					// Video reached natural end — loop back to span start if playing
+					if (!recording && videoEl && videoPlaying) {
+						videoEl.currentTime = videoSpanStart;
+						videoEl.play().catch(() => {});
+					}
+				}}
 				onplay={() => (videoPlaying = true)}
 				onpause={() => (videoPlaying = false)}
 				onseeking={() => {
