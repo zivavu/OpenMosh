@@ -106,8 +106,8 @@ export class GlRenderer {
     const naturalH = image.naturalHeight;
     this.imgW = naturalW;
     this.imgH = naturalH;
-    this.canvas.width = this.imgW;
-    this.canvas.height = this.imgH;
+    if (this.canvas.width !== naturalW) this.canvas.width = naturalW;
+    if (this.canvas.height !== naturalH) this.canvas.height = naturalH;
 
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     this.sourceTexture = this.createTexture(naturalW, naturalH);
@@ -122,8 +122,8 @@ export class GlRenderer {
     const h = video.videoHeight;
     this.imgW = w;
     this.imgH = h;
-    this.canvas.width = w;
-    this.canvas.height = h;
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
 
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     this.sourceTexture = this.createTexture(w, h);
@@ -224,8 +224,8 @@ export class GlRenderer {
     if (width === this.imgW && height === this.imgH) return;
     this.imgW = width;
     this.imgH = height;
-    this.canvas.width = width;
-    this.canvas.height = height;
+    if (this.canvas.width !== width) this.canvas.width = width;
+    if (this.canvas.height !== height) this.canvas.height = height;
     this.setupPingPong();
   }
 
