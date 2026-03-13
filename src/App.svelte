@@ -47,6 +47,8 @@
 		initialFiles={slideshowFiles}
 		initialAudioFile={pendingAudioFile}
 		onBack={() => history.back()}
+		{warmCanvas}
+		{warmRenderer}
 	/>
 {:else if view === 'editor' && file}
 	<Editor

@@ -41,9 +41,11 @@
 		initialFiles: File[];
 		onBack: () => void;
 		initialAudioFile?: File | null;
+		warmCanvas?: HTMLCanvasElement | null;
+		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 	}
 
-	let { initialFiles, onBack, initialAudioFile = null }: Props = $props();
+	let { initialFiles, onBack, initialAudioFile = null, warmCanvas = null, warmRenderer = null }: Props = $props();
 
 	// ── Slides ──
 	let slides: SlideshowSlide[] = $state([]);
@@ -905,6 +907,8 @@
 				bind:naturalHeight
 				bind:fps={currentFps}
 				freezeAnimation={!previewPlaying}
+				{warmCanvas}
+				{warmRenderer}
 			/>
 		</div>
 
