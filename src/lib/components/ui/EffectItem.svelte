@@ -151,6 +151,7 @@
 									disabled={!!effect.volumeLinks?.[param.key]}
 									oninput={(e) =>
 										onParamChange(param.key, parseFloat(e.currentTarget.value))}
+									ondblclick={() => onParamChange(param.key, param.defaultValue)}
 								/>
 								<span class="param-value"
 									>{parseFloat(effect.values[param.key].toString()).toFixed(
