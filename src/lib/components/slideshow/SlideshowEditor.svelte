@@ -27,7 +27,7 @@
 	import type { SpectrumData } from '../../types';
 	import { Music } from 'lucide-svelte';
 	import { shuffleInPlace } from '../../utils';
-	import EffectsPanel from '../editor/EffectsPanel.svelte';
+	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
@@ -105,7 +105,10 @@
 	let config: SlideshowConfig = $state(loadConfig());
 
 	$effect(() => {
-		localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, outputVolume }));
+		localStorage.setItem(
+			CONFIG_KEY,
+			JSON.stringify({ ...config, outputVolume }),
+		);
 	});
 
 	let currentTrackId = $state<string | null>(null);
@@ -219,9 +222,7 @@
 
 	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
 
-	let showMusicHint = $state(
-		!localStorage.getItem(MUSIC_HINT_KEY)
-	);
+	let showMusicHint = $state(!localStorage.getItem(MUSIC_HINT_KEY));
 
 	function dismissMusicHint() {
 		localStorage.setItem(MUSIC_HINT_KEY, '1');
@@ -267,7 +268,10 @@
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
-	let outputVolume = $state((loadConfig() as unknown as Record<string, unknown>).outputVolume as number ?? 1);
+	let outputVolume = $state(
+		((loadConfig() as unknown as Record<string, unknown>)
+			.outputVolume as number) ?? 1,
+	);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {
@@ -577,7 +581,8 @@
 					return;
 				}
 			} else {
-				const fallbackInterval = (60 / config.bpm) * config.subdivision;
+				const fallbackInterval =
+					config.subdivision === 0 ? 1 : (60 / config.bpm) * config.subdivision;
 				t =
 					((performance.now() / 1000) % (slides.length * fallbackInterval)) +
 					config.beatOffset;
@@ -590,6 +595,14 @@
 				config.segments,
 				config.subdivision,
 			);
+
+			// subdivision === 0 means stop — hold current slide, do not advance
+			if (beatIndex === Number.MAX_SAFE_INTEGER) {
+				glRenderer.render(previewEffects.length > 0 ? previewEffects : effects, performance.now() / 1000);
+				previewRafId = requestAnimationFrame(tick);
+				return;
+			}
+
 			const slideIndex = config.loop
 				? beatIndex % slides.length
 				: Math.min(beatIndex, slides.length - 1);
@@ -927,12 +940,16 @@
 					Add audio track
 				</button>
 			</div>
-		{#if showMusicHint}
-			<div class="music-hint-callout">
-				<span>Add music to sync transitions to the beat</span>
-				<button class="music-hint-dismiss" onclick={dismissMusicHint} aria-label="Dismiss">\u2715</button>
-			</div>
-		{/if}
+			{#if showMusicHint}
+				<div class="music-hint-callout">
+					<span>Add music to sync transitions to the beat</span>
+					<button
+						class="music-hint-dismiss"
+						onclick={dismissMusicHint}
+						aria-label="Dismiss">\u2715</button
+					>
+				</div>
+			{/if}
 		{:else if trackFile && trackDuration > 0}
 			<AudioTimeline
 				{trackDuration}
