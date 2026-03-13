@@ -76,23 +76,27 @@
   $effect(() => {
     if (!renderer || videoEl) return;
     imageReady = false;
-    const img = new Image();
     let cancelled = false;
-    img.onload = () => {
-      if (cancelled) return;
-      renderer!.loadImage(img);
-      naturalWidth = img.naturalWidth;
-      naturalHeight = img.naturalHeight;
-      imageReady = true;
-      if (
-        canvasWidth != null &&
-        canvasHeight != null &&
-        (canvasWidth !== img.naturalWidth || canvasHeight !== img.naturalHeight)
-      ) {
-        renderer!.resize(canvasWidth, canvasHeight);
-      }
-    };
-    img.src = imageSrc;
+    fetch(imageSrc)
+      .then((r) => r.blob())
+      .then((blob) => createImageBitmap(blob, { colorSpaceConversion: 'none' }))
+      .then((bitmap) => {
+        if (cancelled) return;
+        const w = bitmap.width;
+        const h = bitmap.height;
+        renderer!.loadImageBitmap(bitmap);
+        bitmap.close();
+        naturalWidth = w;
+        naturalHeight = h;
+        imageReady = true;
+        if (
+          canvasWidth != null &&
+          canvasHeight != null &&
+          (canvasWidth !== w || canvasHeight !== h)
+        ) {
+          renderer!.resize(canvasWidth, canvasHeight);
+        }
+      });
     return () => {
       cancelled = true;
     };

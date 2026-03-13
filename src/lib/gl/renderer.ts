@@ -92,6 +92,20 @@ export class GlRenderer {
     this.setupPingPong();
   }
 
+  loadImageBitmap(bitmap: ImageBitmap) {
+    const gl = this.gl;
+    this.imgW = bitmap.width;
+    this.imgH = bitmap.height;
+    this.canvas.width = this.imgW;
+    this.canvas.height = this.imgH;
+
+    if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
+    this.sourceTexture = this.createTexture(this.imgW, this.imgH);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+
+    this.setupPingPong();
+  }
+
   loadVideo(video: HTMLVideoElement) {
     const gl = this.gl;
     const w = video.videoWidth;
