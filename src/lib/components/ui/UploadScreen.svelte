@@ -5,7 +5,7 @@
 		onaudio?: (file: File) => void;
 	}
 
-	import { Upload, Image, Music } from 'lucide-svelte';
+	import { Image, Music, Upload } from 'lucide-svelte';
 
 	let { onfile, onSlideshow, onaudio }: Props = $props();
 
@@ -420,12 +420,6 @@
 		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
-	}
-
-	.slideshow-hint {
-		font-size: 0.8rem;
-		color: #555;
-		margin-top: -1.5rem;
 	}
 
 	.music-zone {

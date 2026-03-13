@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Settings, Play, Pause } from 'lucide-svelte';
+	import { Pause, Play, Settings } from 'lucide-svelte';
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 
@@ -101,11 +101,8 @@
 	<RecordGroup
 		bind:this={recordGroupRef}
 		{recording}
-		{recordProgress}
-		{recordFinalizing}
 		disabled={slidesEmpty}
 		bind:showSettings={showRecordSettings}
-		onCancelRecording={onCancelRecording}
 	>
 		{#snippet settingsContent()}
 			<div class="setting-row">
@@ -125,7 +122,7 @@
 					<option value={30}>30</option>
 					<option value={60}>60</option>
 				</select>
-				</div>
+			</div>
 			<button
 				class="start-btn"
 				onclick={() => {
@@ -236,11 +233,6 @@
 	.setting-val {
 		color: #888;
 		font-size: 0.75rem;
-	}
-
-	.hint {
-		color: #a44;
-		font-size: 0.65rem;
 	}
 
 	.start-btn {
