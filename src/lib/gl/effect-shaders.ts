@@ -1574,6 +1574,20 @@ void main() {
 }`,
 		setUniforms: floats('amount', 'angle'),
 	},
+	zoom: {
+		fragment:
+			H +
+			BOUNCE_GLSL +
+			`uniform float u_amount;
+void main() {
+  float scale = pow(2.0, u_amount);
+  vec2 uv = (v_uv - 0.5) / scale + 0.5;
+  uv = vec2(bounce(uv.x), bounce(uv.y));
+  outColor = texture(u_texture, uv);
+}`,
+		setUniforms: floats('amount'),
+	},
+
 	'fiber-displace': {
 		fragment:
 			H +

@@ -1229,4 +1229,19 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 			},
 		],
 	},
+	{
+		id: 'zoom',
+		name: 'Zoom',
+		params: [
+			{
+				key: 'amount',
+				label: 'Amount',
+				type: 'range',
+				min: -1,
+				max: 1,
+				step: 0.01,
+				defaultValue: 0,
+			},
+		],
+	},
 ];
