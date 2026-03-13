@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Settings, X, RotateCcw, Zap } from 'lucide-svelte';
+	import { RotateCcw, Settings, X, Zap } from 'lucide-svelte';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -7,6 +7,7 @@
 		onClear: () => void;
 		onUndo?: () => void;
 		canUndo?: boolean;
+		canClear?: boolean;
 		showSettings?: boolean;
 		settingsContent?: Snippet;
 	}
@@ -16,6 +17,7 @@
 		onClear,
 		onUndo,
 		canUndo = false,
+		canClear = false,
 		showSettings = $bindable(false),
 		settingsContent,
 	}: Props = $props();
@@ -40,23 +42,17 @@
 			<Settings size={14} />
 		</button>
 	{/if}
-	<button
-		class="settings-btn"
-		onclick={onClear}
-		title="Clear all effects"
-	>
+	<button class="settings-btn" onclick={onClear} disabled={!canClear} title="Clear all effects">
 		<X size={14} />
 	</button>
-	{#if onUndo}
-		<button
-			class="settings-btn"
-			onclick={onUndo}
-			disabled={!canUndo}
-			title="Undo"
-		>
-			<RotateCcw size={14} />
-		</button>
-	{/if}
+	<button
+		class="settings-btn"
+		onclick={onUndo}
+		disabled={!canUndo}
+		title="Undo"
+	>
+		<RotateCcw size={14} />
+	</button>
 	<button class="action-btn mosh-btn" onclick={onMosh}>
 		<Zap size={16} />
 		MOSH

@@ -791,6 +791,7 @@
 				onClear={clearEffects}
 				onUndo={undo}
 				{canUndo}
+				canClear={canUndo}
 				bind:showSettings={showMoshSettings}
 			>
 				{#snippet settingsContent()}
