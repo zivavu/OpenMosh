@@ -3,6 +3,7 @@
 	import UploadScreen from './lib/components/ui/UploadScreen.svelte';
 	import Editor from './lib/components/editor/Editor.svelte';
 	import SlideshowEditor from './lib/components/slideshow/SlideshowEditor.svelte';
+	import { GlRenderer } from './lib/gl/renderer';
 
 	let file: File | null = $state(null);
 	let slideshowFiles: File[] = $state([]);
@@ -24,11 +25,19 @@
 		view = v;
 	}
 
+	let warmCanvas: HTMLCanvasElement | null = $state(null);
+	let warmRenderer: GlRenderer | null = $state(null);
+
 	onMount(() => {
 		const onPopState = () => {
 			view = hashToView(window.location.hash);
 		};
 		window.addEventListener('popstate', onPopState);
+
+		const w = GlRenderer.warmup();
+		warmCanvas = w.canvas;
+		warmRenderer = w.renderer;
+
 		return () => window.removeEventListener('popstate', onPopState);
 	});
 </script>
@@ -45,6 +54,8 @@
 		initialAudioFile={pendingAudioFile}
 		onBack={() => history.back()}
 		onfile={(f) => (file = f)}
+		{warmCanvas}
+		{warmRenderer}
 	/>
 {:else}
 	<UploadScreen

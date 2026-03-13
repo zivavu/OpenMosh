@@ -16,6 +16,8 @@
     showFps?: boolean;
     videoEl?: HTMLVideoElement | null;
     freezeAnimation?: boolean;
+    warmCanvas?: HTMLCanvasElement | null;
+    warmRenderer?: GlRenderer | null;
   }
 
   let {
@@ -31,6 +33,8 @@
     showFps = false,
     videoEl = null,
     freezeAnimation = false,
+    warmCanvas = null,
+    warmRenderer = null,
   }: Props = $props();
 
   let frameTimes: number[] = [];
@@ -45,6 +49,7 @@
     fps = frameTimes.length;
   }
 
+  let previewArea = $state<HTMLDivElement>(null!);
   let canvas = $state<HTMLCanvasElement>(null!);
   let renderer: GlRenderer | null = $state(null);
   let imageReady = $state(false);
@@ -57,46 +62,60 @@
 
   $effect(() => {
     try {
-      const r = new GlRenderer(canvas);
+      let r: GlRenderer;
+      let activeCanvas: HTMLCanvasElement;
+
+      if (warmCanvas && warmRenderer) {
+        // Move the pre-warmed canvas (currently hidden in <body>) into our preview area.
+        warmCanvas.style.cssText = 'max-width:100%;max-height:100%;border-radius:2px;box-shadow:0 4px 24px rgba(0,0,0,0.5)';
+        previewArea.appendChild(warmCanvas);
+        warmRenderer.adoptCanvas(warmCanvas);
+        r = warmRenderer;
+        activeCanvas = warmCanvas;
+      } else {
+        r = new GlRenderer(canvas);
+        activeCanvas = canvas;
+      }
+
       renderer = r;
-      canvasEl = canvas;
+      canvasEl = activeCanvas;
       glRenderer = r;
+
+      return () => {
+        r.destroy();
+        renderer = null;
+        canvasEl = null;
+        glRenderer = null;
+        if (warmCanvas && warmCanvas.parentNode === previewArea) {
+          previewArea.removeChild(warmCanvas);
+        }
+      };
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to initialize WebGL2';
     }
-    return () => {
-      renderer?.destroy();
-      renderer = null;
-      canvasEl = null;
-      glRenderer = null;
-    };
   });
 
   // Image loading — skipped when a video source is active
   $effect(() => {
     if (!renderer || videoEl) return;
     imageReady = false;
+    const img = new Image();
     let cancelled = false;
-    fetch(imageSrc)
-      .then((r) => r.blob())
-      .then((blob) => createImageBitmap(blob, { colorSpaceConversion: 'none' }))
-      .then((bitmap) => {
-        if (cancelled) return;
-        const w = bitmap.width;
-        const h = bitmap.height;
-        renderer!.loadImageBitmap(bitmap);
-        bitmap.close();
-        naturalWidth = w;
-        naturalHeight = h;
-        imageReady = true;
-        if (
-          canvasWidth != null &&
-          canvasHeight != null &&
-          (canvasWidth !== w || canvasHeight !== h)
-        ) {
-          renderer!.resize(canvasWidth, canvasHeight);
-        }
-      });
+    img.onload = () => {
+      if (cancelled) return;
+      renderer!.loadImage(img);
+      naturalWidth = img.naturalWidth;
+      naturalHeight = img.naturalHeight;
+      imageReady = true;
+      if (
+        canvasWidth != null &&
+        canvasHeight != null &&
+        (canvasWidth !== img.naturalWidth || canvasHeight !== img.naturalHeight)
+      ) {
+        renderer!.resize(canvasWidth, canvasHeight);
+      }
+    };
+    img.src = imageSrc;
     return () => {
       cancelled = true;
     };
@@ -170,11 +189,13 @@
   });
 </script>
 
-<div class="preview-area">
+<div class="preview-area" bind:this={previewArea}>
   {#if error}
     <p class="error">{error}</p>
   {:else}
-    <canvas bind:this={canvas}></canvas>
+    {#if !warmCanvas}
+      <canvas bind:this={canvas}></canvas>
+    {/if}
     {#if showFps}
       <span class="fps-overlay">{fps} FPS</span>
     {/if}

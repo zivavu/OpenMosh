@@ -76,6 +76,30 @@ export class GlRenderer {
     this.compileAllEffects();
   }
 
+  /**
+   * Pre-compile all shaders on a hidden 1×1 canvas so the first real render
+   * doesn't pay the compilation cost. Returns the warmed renderer + its canvas;
+   * pass both into GlCanvas via the `warmCanvas`/`warmRenderer` props.
+   */
+  static warmup(): { canvas: HTMLCanvasElement; renderer: GlRenderer } {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    canvas.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+    document.body.appendChild(canvas);
+    const renderer = new GlRenderer(canvas);
+    return { canvas, renderer };
+  }
+
+  /**
+   * Update the internal canvas reference after the canvas element has been
+   * moved in the DOM (e.g. from the hidden warmup container into the editor).
+   * The WebGL context stays intact — only the canvas pointer is updated.
+   */
+  adoptCanvas(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
+  }
+
   loadImage(image: HTMLImageElement) {
     const gl = this.gl;
     const naturalW = image.naturalWidth;
@@ -88,20 +112,6 @@ export class GlRenderer {
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     this.sourceTexture = this.createTexture(naturalW, naturalH);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-
-    this.setupPingPong();
-  }
-
-  loadImageBitmap(bitmap: ImageBitmap) {
-    const gl = this.gl;
-    this.imgW = bitmap.width;
-    this.imgH = bitmap.height;
-    this.canvas.width = this.imgW;
-    this.canvas.height = this.imgH;
-
-    if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
-    this.sourceTexture = this.createTexture(this.imgW, this.imgH);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
 
     this.setupPingPong();
   }

@@ -37,9 +37,11 @@
 		onBack: () => void;
 		onfile: (f: File) => void;
 		initialAudioFile?: File | null;
+		warmCanvas?: HTMLCanvasElement | null;
+		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 	}
 
-	let { file, onBack, onfile, initialAudioFile = null }: Props = $props();
+	let { file, onBack, onfile, initialAudioFile = null, warmCanvas = null, warmRenderer = null }: Props = $props();
 	let dragging = $state(false);
 
 	let isVideo = $derived(file.type.startsWith('video/'));
@@ -778,6 +780,8 @@
 			showFps={showFps && !isImageFormat}
 			videoEl={isVideo ? videoEl : null}
 			freezeAnimation={isImageFormat}
+			{warmCanvas}
+			{warmRenderer}
 		/>
 
 		<div class="action-bar">
