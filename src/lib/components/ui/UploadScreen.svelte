@@ -255,10 +255,7 @@
 		>
 			<Music size={14} />
 			{#if selectedMode === 'slideshow'}
-				<span
-					>ADD MUSIC <span class="optional recommended">(RECOMMENDED)</span
-					></span
-				>
+				<span>ADD MUSIC <span class="optional">(RECOMMENDED)</span></span>
 			{:else}
 				<span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
 			{/if}
@@ -466,10 +463,6 @@
 
 	.optional {
 		color: #333;
-	}
-
-	.recommended {
-		color: #555;
 	}
 
 	.music-filename {

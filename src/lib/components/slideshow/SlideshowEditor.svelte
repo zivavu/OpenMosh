@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Music } from 'lucide-svelte';
 	import {
 		applyVolumeLinksTick,
 		computeVolumeLevel,
@@ -25,12 +26,11 @@
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
 	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../../text-overlay';
 	import type { SpectrumData } from '../../types';
-	import { Music } from 'lucide-svelte';
 	import { shuffleInPlace } from '../../utils';
-	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
+	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import SlideshowActionBar from './SlideshowActionBar.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
@@ -598,7 +598,10 @@
 
 			// subdivision === 0 means stop — hold current slide, do not advance
 			if (beatIndex === Number.MAX_SAFE_INTEGER) {
-				glRenderer.render(previewEffects.length > 0 ? previewEffects : effects, performance.now() / 1000);
+				glRenderer.render(
+					previewEffects.length > 0 ? previewEffects : effects,
+					performance.now() / 1000,
+				);
 				previewRafId = requestAnimationFrame(tick);
 				return;
 			}
@@ -869,7 +872,6 @@
 		<SlideshowTopBar
 			{activeView}
 			slideCount={slides.length}
-			{onBack}
 			onViewChange={(view) => {
 				activeView = view;
 				if (view === 'grid' && previewPlaying) stopPreview();

@@ -1,21 +1,15 @@
 <script lang="ts">
-	import { ArrowLeft } from 'lucide-svelte';
 	interface Props {
 		activeView: 'grid' | 'preview';
 		slideCount: number;
-		onBack: () => void;
 		onViewChange: (view: 'grid' | 'preview') => void;
 	}
 
-	let { activeView, slideCount, onBack, onViewChange }: Props = $props();
+	let { activeView, slideCount, onViewChange }: Props = $props();
 </script>
 
 <div class="top-bar">
 	<div class="toolbar">
-		<button class="back-btn" onclick={onBack} title="Back to upload">
-			<ArrowLeft size={16} />
-		</button>
-
 		<div class="view-toggle">
 			<button
 				class="view-btn"
@@ -48,24 +42,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.back-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
-		border: 1px solid #333;
-		border-radius: 6px;
-		background: transparent;
-		color: #999;
-		cursor: pointer;
-	}
-
-	.back-btn:hover {
-		border-color: #555;
-		color: #fff;
 	}
 
 	.view-toggle {

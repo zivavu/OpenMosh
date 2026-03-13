@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowLeft, Download, Music, Play, Pause } from 'lucide-svelte';
+	import { Download, Music, Pause, Play } from 'lucide-svelte';
 	import {
 		applyVolumeLinksTick,
 		computeVolumeLevel,
@@ -23,9 +23,9 @@
 	import type { GlRenderer } from '../../gl/renderer';
 	import type { RecordFormat } from '../../recorder';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
+	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
-	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import MoshGroup from './MoshGroup.svelte';
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
@@ -283,7 +283,10 @@
 			audioPlaying = true;
 		}
 		if (isVideo && videoEl) {
-			if (videoEl.currentTime < videoSpanStart || videoEl.currentTime >= videoSpanEnd) {
+			if (
+				videoEl.currentTime < videoSpanStart ||
+				videoEl.currentTime >= videoSpanEnd
+			) {
 				videoEl.currentTime = videoSpanStart;
 			}
 			videoEl.play().catch(() => {});
@@ -571,7 +574,6 @@
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 
-
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recording) return;
 		showRecordSettings = false;
@@ -699,9 +701,6 @@
 	<div class="main-area">
 		<div class="top-bar">
 			<div class="toolbar">
-				<button class="back-btn" onclick={onBack} title="Load different file">
-					<ArrowLeft size={16} />
-				</button>
 				<div class="format-group">
 					<button
 						class="format-btn"
@@ -834,7 +833,9 @@
 						{:else}
 							<div class="mosh-setting-row">
 								<span class="rec-duration-label">Duration</span>
-								<span class="mosh-setting-val">{effectiveDuration.toFixed(1)}s</span>
+								<span class="mosh-setting-val"
+									>{effectiveDuration.toFixed(1)}s</span
+								>
 							</div>
 						{/if}
 						<div class="mosh-setting-row">
@@ -1058,27 +1059,6 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.75rem;
-	}
-
-	.back-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
-		background: rgba(30, 30, 30, 0.85);
-		border: 1px solid #333;
-		border-radius: 6px;
-		color: #aaa;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.back-btn:hover {
-		color: #fff;
-		border-color: #555;
 	}
 
 	.format-group {
