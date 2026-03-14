@@ -10,18 +10,22 @@
 
 	interface Props {
 		activeTrackName: string | null;
+		activeTrackId?: string | null;
 		onLoadTrack: (file: File, trackId: string) => void;
 		onPreviewStart?: () => void;
 		mainPlaying?: boolean;
 		pendingTrack?: File | null;
+		onNormalizeChange?: (gain: number) => void;
 	}
 
 	let {
 		activeTrackName,
+		activeTrackId = null,
 		onLoadTrack,
 		onPreviewStart,
 		mainPlaying = false,
 		pendingTrack = null,
+		onNormalizeChange,
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-library-open';

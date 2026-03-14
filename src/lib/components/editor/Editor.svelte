@@ -215,6 +215,7 @@
 		spanStart = 0;
 		spanEnd = 0;
 		currentTrackId = null;
+		normalizeGain = 1.0;
 		disposeAudioGraph();
 	}
 
@@ -244,6 +245,7 @@
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
 	let outputVolume = $state(saved.outputVolume ?? 1);
+	let normalizeGain = $state(1.0);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
 
 	function onAudioLoadedMetadata() {
@@ -342,7 +344,7 @@
 		mediaSource = state.source;
 		analyserNode = state.analyser;
 		gainNode = state.gain;
-		gainNode.gain.value = outputVolume;
+		gainNode.gain.value = outputVolume * normalizeGain;
 		frequencyData = state.frequencyData;
 		audioSampleRate = state.sampleRate;
 		audioFrequencyBinCount = state.binCount;
@@ -603,6 +605,7 @@
 				videoSpanStart,
 				videoSpanEnd,
 				file,
+				normalizeGain,
 				onProgress: (p) => {
 					recordProgress = p;
 				},
@@ -695,10 +698,15 @@
 >
 	<TrackLibrary
 		activeTrackName={trackFile?.name ?? null}
+		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
 		onPreviewStart={pauseTrack}
 		mainPlaying={audioPlaying}
 		pendingTrack={trackFile}
+		onNormalizeChange={(gain) => {
+			normalizeGain = gain;
+			if (gainNode) gainNode.gain.value = outputVolume * normalizeGain;
+		}}
 	/>
 	<div class="main-area">
 		<div class="top-bar">
@@ -932,7 +940,7 @@
 						value={outputVolume}
 						oninput={(e) => {
 							outputVolume = +(e.currentTarget as HTMLInputElement).value;
-							if (gainNode) gainNode.gain.value = outputVolume;
+							if (gainNode) gainNode.gain.value = outputVolume * normalizeGain;
 						}}
 						title="Output volume: {Math.round(outputVolume * 100)}%"
 					/>
@@ -954,7 +962,7 @@
 				onSpanEndChange={(t) => (spanEnd = t)}
 				onVolumeChange={(v) => {
 					outputVolume = v;
-					if (gainNode) gainNode.gain.value = v;
+					if (gainNode) gainNode.gain.value = v * normalizeGain;
 				}}
 				onRemoveTrack={clearTrack}
 			/>
