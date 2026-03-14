@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronRight, ChevronLeft, Plus, Play, Pause, X } from 'lucide-svelte';
+	import { ChevronRight, ChevronLeft, Plus, Play, Pause, X, AudioLines } from 'lucide-svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import {
 		addTrack,
@@ -7,6 +7,8 @@
 		getAllTracks,
 		type StoredTrack,
 	} from '../../audio/track-library';
+	import { measureLoudness, computeNormalizeGain } from '../../audio/loudness';
+	import { decodeAudioFile } from '../../audio/offline-audio';
 
 	interface Props {
 		activeTrackName: string | null;
@@ -36,6 +38,22 @@
 	let previewEl = $state<HTMLAudioElement | null>(null);
 	let fileInput: HTMLInputElement;
 	let libraryEl: HTMLDivElement;
+
+	const NORMALIZE_KEY = 'openmosh-library-normalize';
+	let normalizedIds = $state<Set<string>>(
+		new Set(JSON.parse(localStorage.getItem(NORMALIZE_KEY) ?? '[]'))
+	);
+	// Not $state — only used internally, never read in template directly
+	let gainCache = new Map<string, number>();
+	let measuringIds = $state<Set<string>>(new Set());
+
+	$effect(() => {
+		localStorage.setItem(NORMALIZE_KEY, JSON.stringify([...normalizedIds]));
+	});
+
+	let previewCtx: AudioContext | null = null;
+	let previewGain: GainNode | null = null;
+	let previewSource: MediaElementAudioSourceNode | null = null;
 
 	$effect(() => {
 		localStorage.setItem(OPEN_KEY, String(open));
@@ -79,7 +97,13 @@
 		return () => document.removeEventListener('pointerdown', onPointerDown);
 	});
 
-	onDestroy(() => stopPreview());
+	onDestroy(() => {
+		stopPreview();
+		previewCtx?.close();
+		previewCtx = null;
+		previewGain = null;
+		previewSource = null;
+	});
 
 	async function onFileChange() {
 		const f = fileInput?.files?.[0];
@@ -98,6 +122,8 @@
 		try {
 			await deleteTrack(id);
 			tracks = tracks.filter((t) => t.id !== id);
+			normalizedIds = new Set([...normalizedIds].filter(x => x !== id));
+			gainCache.delete(id);
 		} catch (e) {
 			console.error('Failed to delete track:', e);
 		}
@@ -109,6 +135,9 @@
 			new File([track.blob], track.name, { type: track.blob.type }),
 			track.id,
 		);
+		// Communicate normalize gain to editor
+		const gain = normalizedIds.has(track.id) ? (gainCache.get(track.id) ?? 1.0) : 1.0;
+		onNormalizeChange?.(gain);
 	}
 
 	function togglePreview(track: StoredTrack) {
@@ -119,6 +148,23 @@
 			onPreviewStart?.();
 			previewId = track.id;
 			if (previewEl) {
+				// Lazily create audio graph — AT MOST ONCE per component lifetime.
+				// createMediaElementSource can only be called once per element per AudioContext.
+				// Source and gain node persist across all preview cycles; only gain.value changes.
+				if (!previewCtx) {
+					previewCtx = new AudioContext();
+					previewSource = previewCtx.createMediaElementSource(previewEl);
+					previewGain = previewCtx.createGain();
+					previewSource.connect(previewGain);
+					previewGain.connect(previewCtx.destination);
+				}
+				// Set gain for this track
+				if (previewGain) {
+					const gain = normalizedIds.has(track.id) && gainCache.has(track.id)
+						? gainCache.get(track.id)!
+						: 1.0;
+					previewGain.gain.value = gain;
+				}
 				previewEl.src = URL.createObjectURL(track.blob);
 				previewEl.play();
 			}
@@ -133,6 +179,39 @@
 			if (src) URL.revokeObjectURL(src);
 		}
 		previewId = null;
+	}
+
+	async function toggleNormalize(track: StoredTrack) {
+		if (normalizedIds.has(track.id)) {
+			// Turn off
+			normalizedIds = new Set([...normalizedIds].filter(x => x !== track.id));
+			if (track.id === activeTrackId) onNormalizeChange?.(1.0);
+			if (previewId === track.id && previewGain) previewGain.gain.value = 1.0;
+			return;
+		}
+
+		// Turn on — measure if not cached
+		normalizedIds = new Set([...normalizedIds, track.id]);
+		measuringIds = new Set([...measuringIds, track.id]);
+
+		try {
+			if (!gainCache.has(track.id)) {
+				const file = new File([track.blob], track.name, { type: track.blob.type });
+				const buffer = await decodeAudioFile(file);
+				const db = measureLoudness(buffer);
+				const gain = computeNormalizeGain(db);
+				gainCache.set(track.id, gain);
+			}
+			const gain = gainCache.get(track.id)!;
+			if (track.id === activeTrackId) onNormalizeChange?.(gain);
+			if (previewId === track.id && previewGain) previewGain.gain.value = gain;
+		} catch (e) {
+			console.error('Failed to measure track loudness:', e);
+			// Roll back: remove from normalizedIds
+			normalizedIds = new Set([...normalizedIds].filter(x => x !== track.id));
+		} finally {
+			measuringIds = new Set([...measuringIds].filter(x => x !== track.id));
+		}
 	}
 </script>
 
@@ -194,6 +273,15 @@
 							{:else}
 								<Play size={10} fill="currentColor" stroke="none" />
 							{/if}
+						</button>
+						<button
+							class="normalize-btn"
+							class:active={normalizedIds.has(track.id)}
+							class:measuring={measuringIds.has(track.id)}
+							onclick={() => toggleNormalize(track)}
+							title={normalizedIds.has(track.id) ? 'Remove normalization' : 'Normalize to -14 LUFS'}
+						>
+							<AudioLines size={10} />
 						</button>
 						<button
 							class="name-btn"
@@ -386,5 +474,37 @@
 
 	.name-btn:hover {
 		color: #eee;
+	}
+
+	.normalize-btn {
+		flex-shrink: 0;
+		background: none;
+		border: none;
+		color: #555;
+		cursor: pointer;
+		padding: 2px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 2px;
+		width: 18px;
+		height: 18px;
+	}
+
+	.normalize-btn:hover {
+		color: #aaa;
+	}
+
+	.normalize-btn.active {
+		color: #7dba7d;
+	}
+
+	.normalize-btn.measuring {
+		animation: normalize-pulse 0.8s ease-in-out infinite;
+	}
+
+	@keyframes normalize-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
 	}
 </style>
