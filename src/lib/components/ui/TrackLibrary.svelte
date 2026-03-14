@@ -72,6 +72,7 @@
 		addTrack(f)
 			.then((track) => {
 				tracks = [...tracks, track];
+				autoNormalize(track);
 			})
 			.catch((e) => console.error('Failed to auto-save track:', e));
 	});
@@ -105,6 +106,30 @@
 		previewSource = null;
 	});
 
+	// Start normalize measurement for a newly added track (fire-and-forget).
+	function autoNormalize(track: StoredTrack) {
+		normalizedIds = new Set([...normalizedIds, track.id]);
+		if (!gainCache.has(track.id)) {
+			measuringIds = new Set([...measuringIds, track.id]);
+			const file = new File([track.blob], track.name, { type: track.blob.type });
+			decodeAudioFile(file)
+				.then((buffer) => {
+					const db = measureLoudness(buffer);
+					const gain = computeNormalizeGain(db);
+					gainCache.set(track.id, gain);
+					if (track.id === activeTrackId) onNormalizeChange?.(gain);
+					if (previewId === track.id && previewGain) previewGain.gain.value = gain;
+				})
+				.catch((e) => {
+					console.error('Failed to measure track loudness:', e);
+					normalizedIds = new Set([...normalizedIds].filter(x => x !== track.id));
+				})
+				.finally(() => {
+					measuringIds = new Set([...measuringIds].filter(x => x !== track.id));
+				});
+		}
+	}
+
 	async function onFileChange() {
 		const f = fileInput?.files?.[0];
 		if (!f) return;
@@ -112,6 +137,7 @@
 		try {
 			const track = await addTrack(f);
 			tracks = [...tracks, track];
+			autoNormalize(track);
 		} catch (e) {
 			console.error('Failed to save track:', e);
 		}
