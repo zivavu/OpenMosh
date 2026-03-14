@@ -37,6 +37,8 @@ export interface RecordOptions {
 	effectsRef?: { current: EffectInstance[] };
 	/** When true, the audio is looped to match the recording duration. */
 	loopAudio?: boolean;
+	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
+	normalizeGain?: number;
 }
 
 function checkAbort(signal?: AbortSignal) {
@@ -65,6 +67,7 @@ async function prepareFrameAudio(
 	audioEnd: number | undefined,
 	signal?: AbortSignal,
 	loop?: boolean,
+	normalizeGain: number = 1.0,
 ): Promise<{
 	frameAudioData: FrameAudioData[];
 	sampleRate: number;
@@ -75,6 +78,18 @@ async function prepareFrameAudio(
 	const end = audioEnd ?? duration;
 	const trimmed = trimAudioBuffer(decoded, audioStart, end);
 	const audioBuffer = loop ? loopAudioBuffer(trimmed, duration) : trimmed;
+	// Apply normalize gain before analyzeFrames so FFT and muxed audio are consistent.
+	// trimmed: used by analyzeFrames when loop=true
+	// audioBuffer: distinct looped copy used for muxing when loop=true; same object as trimmed when loop=false
+	if (normalizeGain !== 1.0) {
+		const buffersToScale = loop ? [trimmed, audioBuffer] : [audioBuffer];
+		for (const buf of buffersToScale) {
+			for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+				const data = buf.getChannelData(ch);
+				for (let i = 0; i < data.length; i++) data[i] *= normalizeGain;
+			}
+		}
+	}
 	const loopDuration = trimmed.duration;
 	const frameTimes = Array.from({ length: totalFrames }, (_, i) => {
 		const t = i * frameDuration;
@@ -104,6 +119,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		onBeforeRender,
 		effectsRef,
 		loopAudio,
+		normalizeGain = 1.0,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -123,6 +139,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			audioEnd,
 			signal,
 			loopAudio,
+			normalizeGain,
 		);
 		audioBufferForMux = audio.audioBuffer;
 		frameAudioData = audio.frameAudioData;
