@@ -8,6 +8,7 @@
 		deletePreset,
 		loadPresets,
 		savePreset,
+		updatePreset,
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
@@ -39,21 +40,42 @@
 	let showPresets = $state(false);
 	let saving = $state(false);
 	let presetName = $state('');
+	let activePresetIndex: number | null = $state(null);
+
+	$effect(() => {
+		// Deep-track effects by reading all nested values
+		effects.forEach((e) => {
+			e.enabled;
+			e.expanded;
+			Object.values(e.values);
+			if (e.volumeLinks) Object.values(e.volumeLinks);
+		});
+		if (activePresetIndex === null) return;
+		presets = updatePreset(activePresetIndex, $state.snapshot(effects));
+	});
 
 	function handleSavePreset() {
 		const name = presetName.trim();
 		if (!name) return;
 		presets = savePreset(name, $state.snapshot(effects));
+		activePresetIndex = presets.length - 1;
 		presetName = '';
 		saving = false;
 	}
 
 	function handleLoadPreset(index: number) {
+		if (activePresetIndex === index) {
+			activePresetIndex = null;
+			return;
+		}
 		effects = applyPreset(presets[index]);
+		activePresetIndex = index;
 	}
 
 	function handleDeletePreset(index: number) {
 		presets = deletePreset(index);
+		if (activePresetIndex === index) activePresetIndex = null;
+		else if (activePresetIndex !== null && activePresetIndex > index) activePresetIndex--;
 	}
 
 	let dragFromIndex: number | null = $state(null);
@@ -223,6 +245,7 @@
 					<div class="preset-item">
 						<button
 							class="preset-load-btn"
+						class:active={activePresetIndex === i}
 							onclick={() => handleLoadPreset(i)}
 							title="Load preset"
 						>
@@ -470,6 +493,12 @@
 		color: #ccc;
 		border-color: #444;
 		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.preset-load-btn.active {
+		color: #bbb;
+		border-color: #484848;
+		background: rgba(255, 255, 255, 0.07);
 	}
 
 	.preset-delete-btn {

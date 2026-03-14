@@ -1031,7 +1031,7 @@
 
 	{#if dragging}
 		<div class="drop-overlay">
-			<span>Drop image to replace</span>
+			<span>Drop image/video to replace · Drop audio to set track</span>
 		</div>
 	{/if}
 </div>

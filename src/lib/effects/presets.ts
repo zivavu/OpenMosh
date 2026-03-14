@@ -29,6 +29,21 @@ export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
   return presets;
 }
 
+export function updatePreset(index: number, effects: EffectInstance[]): Preset[] {
+  const presets = loadPresets();
+  presets[index].effects = effects.map((e) => ({
+    defId: e.defId,
+    enabled: e.enabled,
+    values: { ...e.values },
+    ...(e.volumeLinks &&
+      Object.keys(e.volumeLinks).length > 0 && {
+        volumeLinks: { ...e.volumeLinks },
+      }),
+  }));
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  return presets;
+}
+
 export function deletePreset(index: number): Preset[] {
   const presets = loadPresets();
   presets.splice(index, 1);

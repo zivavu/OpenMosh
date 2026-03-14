@@ -844,11 +844,6 @@
 		});
 	}
 
-	function clearAll() {
-		selectedSegmentId = null;
-		emit({ segments: [] });
-	}
-
 	/** Remove the boundary between two adjacent segments by merging them into one. */
 	function deleteSelectedBoundaries() {
 		let segs = [...config.segments];

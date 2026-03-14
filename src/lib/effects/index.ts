@@ -1,6 +1,6 @@
 export * from "./types";
 export { EFFECT_DEFINITIONS } from "./definitions";
-export { loadPresets, savePreset, deletePreset, applyPreset } from "./presets";
+export { loadPresets, savePreset, updatePreset, deletePreset, applyPreset } from "./presets";
 
 import type { EffectDefinition, EffectInstance } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
