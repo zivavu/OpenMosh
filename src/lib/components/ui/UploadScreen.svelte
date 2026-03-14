@@ -485,4 +485,27 @@
 		color: #333;
 		margin-top: -1.5rem;
 	}
+
+	@media (max-width: 800px) {
+		.upload-screen {
+			gap: 1.25rem;
+			padding: 1rem;
+		}
+
+		.hero {
+			gap: 0.4rem;
+		}
+
+		.drop-zone {
+			padding: 1.5rem 1.25rem;
+		}
+
+		.separator {
+			display: none;
+		}
+
+		.drop-hint {
+			display: none;
+		}
+	}
 </style>
