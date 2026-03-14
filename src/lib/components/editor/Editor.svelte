@@ -1001,10 +1001,10 @@
 		{/if}
 	</div>
 	{#if panelOpen}
-		<div class="sheet-backdrop" onclick={() => (panelOpen = false)}></div>
+		<button class="sheet-backdrop" onclick={() => (panelOpen = false)} aria-label="Close effects panel"></button>
 	{/if}
 	<div class="sidebar" class:sheet-open={panelOpen}>
-		<button class="sheet-handle-row" onclick={() => (panelOpen = !panelOpen)} aria-label="Toggle effects panel">
+		<button class="sheet-handle-row" onclick={() => (panelOpen = !panelOpen)} aria-label="Toggle effects panel" aria-expanded={panelOpen}>
 			<div class="sheet-handle"></div>
 		</button>
 		<div class="mosh-settings-wrapper">
@@ -1543,6 +1543,9 @@
 			inset: 0;
 			background: rgba(0, 0, 0, 0.5);
 			z-index: 49;
+			border: none;
+			cursor: default;
+			padding: 0;
 		}
 
 		.sheet-handle-row {
@@ -1562,7 +1565,7 @@
 			width: 36px;
 			height: 3px;
 			border-radius: 2px;
-			background: #333;
+			background: #555;
 		}
 
 		.mosh-settings-wrapper {
