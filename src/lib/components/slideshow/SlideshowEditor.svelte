@@ -270,6 +270,7 @@
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
+	let normalizeGainNode = $state<GainNode | null>(null);
 	let outputVolume = $state(
 		((loadConfig() as unknown as Record<string, unknown>)
 			.outputVolume as number) ?? 1,
@@ -318,6 +319,7 @@
 		const state = createAudioGraph(audioEl);
 		audioContext = state.context;
 		mediaSource = state.source;
+		normalizeGainNode = state.normalizeGain;
 		analyserNode = state.analyser;
 		gainNode = state.gain;
 		gainNode.gain.value = outputVolume;
@@ -357,6 +359,7 @@
 			disposeAudioGraphState({
 				context: audioContext,
 				source: mediaSource!,
+				normalizeGain: normalizeGainNode!,
 				analyser: analyserNode!,
 				gain: gainNode!,
 				frequencyData: frequencyData!,
@@ -365,6 +368,7 @@
 			});
 		}
 		mediaSource = null;
+		normalizeGainNode = null;
 		analyserNode = null;
 		gainNode = null;
 		frequencyData = null;

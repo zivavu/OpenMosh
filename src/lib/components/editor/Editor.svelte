@@ -245,6 +245,7 @@
 	let audioContext = $state<AudioContext | null>(null);
 	let analyserNode = $state<AnalyserNode | null>(null);
 	let gainNode = $state<GainNode | null>(null);
+	let normalizeGainNode = $state<GainNode | null>(null);
 	let outputVolume = $state(saved.outputVolume ?? 1);
 	let normalizeGain = $state(1.0);
 	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
@@ -343,9 +344,11 @@
 	function applyAudioGraphState(state: ReturnType<typeof createAudioGraph>) {
 		audioContext = state.context;
 		mediaSource = state.source;
+		normalizeGainNode = state.normalizeGain;
+		normalizeGainNode.gain.value = normalizeGain;
 		analyserNode = state.analyser;
 		gainNode = state.gain;
-		gainNode.gain.value = outputVolume * normalizeGain;
+		gainNode.gain.value = outputVolume;
 		frequencyData = state.frequencyData;
 		audioSampleRate = state.sampleRate;
 		audioFrequencyBinCount = state.binCount;
@@ -406,6 +409,7 @@
 			disposeAudioGraphState({
 				context: audioContext,
 				source: mediaSource!,
+				normalizeGain: normalizeGainNode!,
 				analyser: analyserNode!,
 				gain: gainNode!,
 				frequencyData: frequencyData!,
@@ -414,6 +418,7 @@
 			});
 		}
 		mediaSource = null;
+		normalizeGainNode = null;
 		analyserNode = null;
 		gainNode = null;
 		frequencyData = null;
@@ -706,7 +711,7 @@
 		pendingTrack={trackFile}
 		onNormalizeChange={(gain) => {
 			normalizeGain = gain;
-			if (gainNode) gainNode.gain.value = outputVolume * gain;
+			if (normalizeGainNode) normalizeGainNode.gain.value = gain;
 		}}
 	/>
 	<div class="main-area">
@@ -941,7 +946,7 @@
 						value={outputVolume}
 						oninput={(e) => {
 							outputVolume = +(e.currentTarget as HTMLInputElement).value;
-							if (gainNode) gainNode.gain.value = outputVolume * normalizeGain;
+							if (gainNode) gainNode.gain.value = outputVolume;
 						}}
 						title="Output volume: {Math.round(outputVolume * 100)}%"
 					/>
@@ -963,7 +968,7 @@
 				onSpanEndChange={(t) => (spanEnd = t)}
 				onVolumeChange={(v) => {
 					outputVolume = v;
-					if (gainNode) gainNode.gain.value = v * normalizeGain;
+					if (gainNode) gainNode.gain.value = v;
 				}}
 				onRemoveTrack={clearTrack}
 			/>
