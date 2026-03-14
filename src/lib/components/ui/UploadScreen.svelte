@@ -488,7 +488,6 @@
 
 	@media (max-width: 800px) {
 		.upload-screen {
-			gap: 1.25rem;
 			padding: 1rem;
 		}
 

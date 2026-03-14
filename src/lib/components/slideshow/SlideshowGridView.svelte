@@ -37,7 +37,7 @@
 	let lightboxImageEl = $state<HTMLImageElement | null>(null);
 
 	const lightboxOriginStyle = $derived(
-		`--lb-ox: ${lightboxOrigin.x}px; --lb-oy: ${lightboxOrigin.y}px`
+		`--lb-ox: ${lightboxOrigin.x}px; --lb-oy: ${lightboxOrigin.y}px`,
 	);
 
 	$effect(() => {
@@ -51,7 +51,11 @@
 
 	function onDrop(e: DragEvent) {
 		dragging = false;
-		if (dragFromIndex !== null && dragOverIndex !== null && dragFromIndex !== dragOverIndex) {
+		if (
+			dragFromIndex !== null &&
+			dragOverIndex !== null &&
+			dragFromIndex !== dragOverIndex
+		) {
 			onReorderSlides(dragFromIndex, dragOverIndex);
 		}
 		dragFromIndex = null;
@@ -59,7 +63,9 @@
 
 		const files = e.dataTransfer?.files;
 		if (files && files.length > 0) {
-			const hasImages = Array.from(files).some((f) => IMAGE_TYPES.includes(f.type));
+			const hasImages = Array.from(files).some((f) =>
+				IMAGE_TYPES.includes(f.type),
+			);
 			if (hasImages) onAddFiles(files);
 		}
 	}
@@ -70,7 +76,10 @@
 	}
 
 	function onDragLeave(e: DragEvent) {
-		if (e.currentTarget instanceof HTMLElement && !e.currentTarget.contains(e.relatedTarget as Node)) {
+		if (
+			e.currentTarget instanceof HTMLElement &&
+			!e.currentTarget.contains(e.relatedTarget as Node)
+		) {
 			dragging = false;
 		}
 	}
@@ -101,7 +110,7 @@
 		const rect = card.getBoundingClientRect();
 		lightboxOrigin = {
 			x: rect.left + rect.width / 2 - window.innerWidth / 2,
-			y: rect.top + rect.height / 2 - window.innerHeight / 2
+			y: rect.top + rect.height / 2 - window.innerHeight / 2,
 		};
 		lightboxIndex = index;
 		lightboxClosing = false;
@@ -120,7 +129,7 @@
 				lightboxIndex = null;
 				lightboxClosing = false;
 			},
-			{ once: true }
+			{ once: true },
 		);
 		setTimeout(() => {
 			if (closeVersion !== version) return;
@@ -155,7 +164,10 @@
 <div
 	class="grid-view"
 	class:dragging
-	ondrop={(e) => { e.preventDefault(); onDrop(e); }}
+	ondrop={(e) => {
+		e.preventDefault();
+		onDrop(e);
+	}}
 	ondragover={onDragOver}
 	ondragleave={onDragLeave}
 	onkeydown={onLightboxKeydown}
@@ -172,12 +184,20 @@
 
 	{#if slides.length === 0}
 		<div class="empty-state">
-			<p>No images loaded. Drag and drop images here or click the button below.</p>
-			<button class="add-btn" onclick={() => fileInput.click()}>Add Images</button>
+			<p>
+				No images loaded. Drag and drop images here or click the button below.
+			</p>
+			<button class="add-btn" onclick={() => fileInput.click()}
+				>Add Images</button
+			>
 		</div>
 	{:else}
 		<div class="grid-toolbar">
-			<button class="toolbar-btn" onclick={onShuffleSlides} title="Shuffle order">
+			<button
+				class="toolbar-btn"
+				onclick={onShuffleSlides}
+				title="Shuffle order"
+			>
 				<Shuffle size={13} />
 				Shuffle
 			</button>
@@ -186,24 +206,36 @@
 			{#each slides as slide, i (slide.id)}
 				<div
 					class="slide-card"
-					class:drag-over={dragOverIndex === i && dragFromIndex !== null && dragFromIndex !== i}
+					class:drag-over={dragOverIndex === i &&
+						dragFromIndex !== null &&
+						dragFromIndex !== i}
 					draggable="true"
 					role="button"
 					tabindex="0"
 					ondragstart={(e) => onItemDragStart(e, i)}
 					ondragover={(e) => onItemDragOver(e, i)}
-					ondragend={() => { dragFromIndex = null; dragOverIndex = null; }}
+					ondragend={() => {
+						dragFromIndex = null;
+						dragOverIndex = null;
+					}}
 					onclick={(e) => openLightbox(e, i)}
-					onkeydown={(e) => { if (e.key === 'Enter') openLightbox(e, i); }}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') openLightbox(e, i);
+					}}
 				>
 					{#if slide.thumbUrl}
-					<img class="slide-thumb" src={slide.thumbUrl} alt="Slide {i + 1}" />
-				{/if}
+						<img class="slide-thumb" src={slide.thumbUrl} alt="Slide {i + 1}" />
+					{:else}
+						<div class="thumb-loading"></div>
+					{/if}
 					<div class="slide-index">{i + 1}</div>
 					<button
 						class="remove-btn"
 						title="Remove"
-						onclick={(e) => { e.stopPropagation(); onRemoveSlide(slide.id); }}
+						onclick={(e) => {
+							e.stopPropagation();
+							onRemoveSlide(slide.id);
+						}}
 					>
 						<X size={12} />
 					</button>
@@ -228,7 +260,11 @@
 				</div>
 			{/each}
 
-			<button class="add-card" onclick={() => fileInput.click()} title="Add more images">
+			<button
+				class="add-card"
+				onclick={() => fileInput.click()}
+				title="Add more images"
+			>
 				<Plus size={24} />
 			</button>
 		</div>
@@ -242,18 +278,24 @@
 			onclick={closeLightbox}
 			onkeydown={onLightboxKeydown}
 		>
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<div class="lb-content" onclick={(e) => e.stopPropagation()}>
 				<div class="lb-topbar">
 					<span class="lb-info">
-						{lightboxIndex + 1} / {slides.length}&nbsp;·&nbsp;{slides[lightboxIndex].file.name}
+						{lightboxIndex + 1} / {slides.length}&nbsp;·&nbsp;{slides[
+							lightboxIndex
+						].file.name}
 					</span>
 					<button class="lb-close" onclick={closeLightbox}>
 						<X size={14} />
 					</button>
 				</div>
 				<div class="lb-img-wrap">
-					<button class="lb-arrow lb-arrow-left" onclick={lightboxPrev} title="Previous">
+					<button
+						class="lb-arrow lb-arrow-left"
+						onclick={lightboxPrev}
+						title="Previous"
+					>
 						<ChevronLeft size={18} />
 					</button>
 					<img
@@ -264,7 +306,11 @@
 						alt="Slide {lightboxIndex + 1}"
 						style={lightboxOriginStyle}
 					/>
-					<button class="lb-arrow lb-arrow-right" onclick={lightboxNext} title="Next">
+					<button
+						class="lb-arrow lb-arrow-right"
+						onclick={lightboxNext}
+						title="Next"
+					>
 						<ChevronRight size={18} />
 					</button>
 				</div>
@@ -333,7 +379,9 @@
 		border-radius: 5px;
 		color: #666;
 		cursor: pointer;
-		transition: color 0.15s, border-color 0.15s;
+		transition:
+			color 0.15s,
+			border-color 0.15s;
 	}
 
 	.toolbar-btn:hover {
@@ -375,6 +423,30 @@
 		object-fit: cover;
 		display: block;
 		pointer-events: none;
+	}
+
+	.thumb-loading {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.thumb-loading::after {
+		content: '';
+		width: 16px;
+		height: 16px;
+		border: 2px solid #333;
+		border-top-color: #666;
+		border-radius: 50%;
+		animation: spin 0.7s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.slide-index {
@@ -440,7 +512,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: border-color 0.15s, color 0.15s;
+		transition:
+			border-color 0.15s,
+			color 0.15s;
 	}
 
 	.add-card:hover {
@@ -559,7 +633,9 @@
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			background 0.15s;
 		z-index: 1;
 	}
 

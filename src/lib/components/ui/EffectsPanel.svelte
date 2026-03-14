@@ -75,7 +75,8 @@
 	function handleDeletePreset(index: number) {
 		presets = deletePreset(index);
 		if (activePresetIndex === index) activePresetIndex = null;
-		else if (activePresetIndex !== null && activePresetIndex > index) activePresetIndex--;
+		else if (activePresetIndex !== null && activePresetIndex > index)
+			activePresetIndex--;
 	}
 
 	let dragFromIndex: number | null = $state(null);
@@ -245,7 +246,7 @@
 					<div class="preset-item">
 						<button
 							class="preset-load-btn"
-						class:active={activePresetIndex === i}
+							class:active={activePresetIndex === i}
 							onclick={() => handleLoadPreset(i)}
 							title="Load preset"
 						>
@@ -342,7 +343,6 @@
 	.effects-panel {
 		flex: 1;
 		min-height: 0;
-		width: 300px;
 		background: #161616;
 		display: flex;
 		flex-direction: column;

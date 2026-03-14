@@ -45,7 +45,13 @@
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 	}
 
-	let { initialFiles, onBack, initialAudioFile = null, warmCanvas = null, warmRenderer = null }: Props = $props();
+	let {
+		initialFiles,
+		onBack,
+		initialAudioFile = null,
+		warmCanvas = null,
+		warmRenderer = null,
+	}: Props = $props();
 
 	// ── Slides ──
 	let slides: SlideshowSlide[] = $state([]);
@@ -62,7 +68,8 @@
 				presetIndex: null,
 			}));
 		slides.push(...newSlides);
-		for (const slide of newSlides) generateThumb(slide.id, slide.file, slide.objectUrl);
+		for (const slide of newSlides)
+			generateThumb(slide.id, slide.file, slide.objectUrl);
 	}
 
 	async function generateThumb(id: string, file: File, objectUrl: string) {
@@ -73,14 +80,27 @@
 			const scale = Math.max(SIZE / full.width, SIZE / full.height);
 			const cropW = SIZE / scale;
 			const cropH = SIZE / scale;
-			const cropped = await createImageBitmap(full, (full.width - cropW) / 2, (full.height - cropH) / 2, cropW, cropH);
+			const cropped = await createImageBitmap(
+				full,
+				(full.width - cropW) / 2,
+				(full.height - cropH) / 2,
+				cropW,
+				cropH,
+			);
 			full.close();
-			const resized = await createImageBitmap(cropped, { resizeWidth: SIZE, resizeHeight: SIZE, resizeQuality: 'medium' });
+			const resized = await createImageBitmap(cropped, {
+				resizeWidth: SIZE,
+				resizeHeight: SIZE,
+				resizeQuality: 'medium',
+			});
 			cropped.close();
 			const canvas = new OffscreenCanvas(SIZE, SIZE);
 			canvas.getContext('2d')!.drawImage(resized, 0, 0);
 			resized.close();
-			const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+			const blob = await canvas.convertToBlob({
+				type: 'image/jpeg',
+				quality: 0.8,
+			});
 			thumbUrl = URL.createObjectURL(blob);
 		} catch {
 			thumbUrl = objectUrl;
@@ -94,7 +114,8 @@
 		if (i === -1) return;
 		const s = slides[i];
 		URL.revokeObjectURL(s.objectUrl);
-		if (s.thumbUrl && s.thumbUrl !== s.objectUrl) URL.revokeObjectURL(s.thumbUrl);
+		if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
+			URL.revokeObjectURL(s.thumbUrl);
 		slides.splice(i, 1);
 	}
 
@@ -121,7 +142,8 @@
 		return () => {
 			for (const s of slides) {
 				URL.revokeObjectURL(s.objectUrl);
-				if (s.thumbUrl && s.thumbUrl !== s.objectUrl) URL.revokeObjectURL(s.thumbUrl);
+				if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
+					URL.revokeObjectURL(s.thumbUrl);
 			}
 		};
 	});
@@ -1102,7 +1124,6 @@
 	}
 
 	.sidebar {
-		width: 300px;
 		border-left: 1px solid #2a2a2a;
 		overflow-y: auto;
 		flex-shrink: 0;
