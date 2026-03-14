@@ -705,7 +705,7 @@
 		pendingTrack={trackFile}
 		onNormalizeChange={(gain) => {
 			normalizeGain = gain;
-			if (gainNode) gainNode.gain.value = outputVolume * normalizeGain;
+			if (gainNode) gainNode.gain.value = outputVolume * gain;
 		}}
 	/>
 	<div class="main-area">
