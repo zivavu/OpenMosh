@@ -22,6 +22,8 @@ export interface RecordingContext {
 	onProgress: (p: number) => void;
 	onFinalizing: () => void;
 	signal: AbortSignal;
+	/** Linear normalize gain to apply to audio. Defaults to 1.0. */
+	normalizeGain?: number;
 }
 
 export async function executeRecording(ctx: RecordingContext): Promise<void> {
@@ -45,6 +47,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		onProgress,
 		onFinalizing,
 		signal,
+		normalizeGain = 1.0,
 	} = ctx;
 
 	const hasExplicitAudio = !!trackFile && trackDuration > 0;
@@ -79,6 +82,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		fps,
 		canvas,
 		renderer,
+		normalizeGain,
 		effects: effects.map(
 			(e): EffectInstance => ({
 				...e,
