@@ -135,7 +135,10 @@
 			new File([track.blob], track.name, { type: track.blob.type }),
 			track.id,
 		);
-		// Communicate normalize gain to editor
+		// Communicate normalize gain to editor.
+		// If normalized but gain not yet cached (measurement in flight), emit 1.0 for now.
+		// The in-flight toggleNormalize will call onNormalizeChange once measurement completes,
+		// provided activeTrackId is updated synchronously by onLoadTrack (which it is in Editor.svelte).
 		const gain = normalizedIds.has(track.id) ? (gainCache.get(track.id) ?? 1.0) : 1.0;
 		onNormalizeChange?.(gain);
 	}
@@ -278,6 +281,7 @@
 							class="normalize-btn"
 							class:active={normalizedIds.has(track.id)}
 							class:measuring={measuringIds.has(track.id)}
+							disabled={measuringIds.has(track.id)}
 							onclick={() => toggleNormalize(track)}
 							title={normalizedIds.has(track.id) ? 'Remove normalization' : 'Normalize to -14 LUFS'}
 						>
