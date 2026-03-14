@@ -43,6 +43,7 @@
 
 	let { file, onBack, onfile, initialAudioFile = null, warmCanvas = null, warmRenderer = null }: Props = $props();
 	let dragging = $state(false);
+	let panelOpen = $state(false);
 
 	let isVideo = $derived(file.type.startsWith('video/'));
 	let videoEl = $state<HTMLVideoElement | null>(null);
@@ -999,14 +1000,22 @@
 			</div>
 		{/if}
 	</div>
-	<div class="sidebar">
-		<MoshSettingsPanel
-			bind:moshMin
-			bind:moshMax
-			bind:randomizeOrder
-			bind:moshAudioLink
-			bind:moshAudioLinkStrength
-		/>
+	{#if panelOpen}
+		<div class="sheet-backdrop" onclick={() => (panelOpen = false)}></div>
+	{/if}
+	<div class="sidebar" class:sheet-open={panelOpen}>
+		<button class="sheet-handle-row" onclick={() => (panelOpen = !panelOpen)} aria-label="Toggle effects panel">
+			<div class="sheet-handle"></div>
+		</button>
+		<div class="mosh-settings-wrapper">
+			<MoshSettingsPanel
+				bind:moshMin
+				bind:moshMax
+				bind:randomizeOrder
+				bind:moshAudioLink
+				bind:moshAudioLinkStrength
+			/>
+		</div>
 		<EffectsPanel
 			bind:effects
 			hasTrack={!!trackFile || (isVideo && !!analyserNode)}
@@ -1503,5 +1512,65 @@
 
 	.music-hint-dismiss:hover {
 		color: #888;
+	}
+
+	.sheet-handle-row {
+		display: none;
+	}
+
+	@media (max-width: 800px) {
+		.sidebar {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			height: 70vh;
+			border-left: none;
+			border-top: 1px solid #2a2a2a;
+			border-radius: 12px 12px 0 0;
+			transform: translateY(calc(70vh - 44px));
+			transition: transform 0.3s ease;
+			z-index: 50;
+			overflow-y: auto;
+		}
+
+		.sidebar.sheet-open {
+			transform: translateY(0);
+		}
+
+		.sheet-backdrop {
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.5);
+			z-index: 49;
+		}
+
+		.sheet-handle-row {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 44px;
+			flex-shrink: 0;
+			width: 100%;
+			background: none;
+			border: none;
+			cursor: pointer;
+			padding: 0;
+		}
+
+		.sheet-handle {
+			width: 36px;
+			height: 3px;
+			border-radius: 2px;
+			background: #333;
+		}
+
+		.mosh-settings-wrapper {
+			display: none;
+		}
+
+		.main-area {
+			padding-bottom: 44px;
+		}
 	}
 </style>
