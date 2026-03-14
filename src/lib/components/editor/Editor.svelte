@@ -201,6 +201,7 @@
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
 		if (f) {
+			normalizeGain = 1.0;
 			trackFile = f;
 			trackInput.value = '';
 		}
