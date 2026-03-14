@@ -14,6 +14,12 @@ export function measureLoudness(buffer: AudioBuffer): number {
 	// -3 dB point is at ~80 Hz; attenuates sub-bass and DC
 	const a = Math.exp(-2 * Math.PI * 80 / sampleRate);
 
+	// Hoist channel arrays outside the hot loop
+	const channels: Float32Array[] = [];
+	for (let ch = 0; ch < numChannels; ch++) {
+		channels.push(buffer.getChannelData(ch));
+	}
+
 	let sumSq = 0;
 	let prevX = 0;
 	let prevY = 0;
@@ -22,7 +28,7 @@ export function measureLoudness(buffer: AudioBuffer): number {
 		// Mix down to mono
 		let sample = 0;
 		for (let ch = 0; ch < numChannels; ch++) {
-			sample += buffer.getChannelData(ch)[i]!;
+			sample += channels[ch]![i];
 		}
 		sample /= numChannels;
 
@@ -39,11 +45,12 @@ export function measureLoudness(buffer: AudioBuffer): number {
 }
 
 /**
- * Compute a linear gain factor to bring audio from measuredDb to targetLufs.
+ * Compute a linear gain factor to bring audio from measuredDb to targetDb.
+ * Uses RMS dBFS approximation, not true BS.1770 LUFS measurement.
  * Clamped to [0.1, 10] to avoid extreme amplification of near-silent files.
  */
-export function computeNormalizeGain(measuredDb: number, targetLufs: number = -14): number {
+export function computeNormalizeGain(measuredDb: number, targetDb: number = -14): number {
 	if (!isFinite(measuredDb)) return 1.0; // silent file: leave as-is
-	const gain = Math.pow(10, (targetLufs - measuredDb) / 20);
+	const gain = Math.pow(10, (targetDb - measuredDb) / 20);
 	return Math.max(0.1, Math.min(10, gain));
 }
