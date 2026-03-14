@@ -58,15 +58,43 @@
 				id: crypto.randomUUID(),
 				file,
 				objectUrl: URL.createObjectURL(file),
+				thumbUrl: null,
 				presetIndex: null,
 			}));
 		slides.push(...newSlides);
+		for (const slide of newSlides) generateThumb(slide.id, slide.file, slide.objectUrl);
+	}
+
+	async function generateThumb(id: string, file: File, objectUrl: string) {
+		const SIZE = 100;
+		let thumbUrl: string;
+		try {
+			const full = await createImageBitmap(file);
+			const scale = Math.max(SIZE / full.width, SIZE / full.height);
+			const cropW = SIZE / scale;
+			const cropH = SIZE / scale;
+			const cropped = await createImageBitmap(full, (full.width - cropW) / 2, (full.height - cropH) / 2, cropW, cropH);
+			full.close();
+			const resized = await createImageBitmap(cropped, { resizeWidth: SIZE, resizeHeight: SIZE, resizeQuality: 'medium' });
+			cropped.close();
+			const canvas = new OffscreenCanvas(SIZE, SIZE);
+			canvas.getContext('2d')!.drawImage(resized, 0, 0);
+			resized.close();
+			const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+			thumbUrl = URL.createObjectURL(blob);
+		} catch {
+			thumbUrl = objectUrl;
+		}
+		const s = slides.find((s) => s.id === id);
+		if (s) s.thumbUrl = thumbUrl;
 	}
 
 	function removeSlide(id: string) {
 		const i = slides.findIndex((s) => s.id === id);
 		if (i === -1) return;
-		URL.revokeObjectURL(slides[i].objectUrl);
+		const s = slides[i];
+		URL.revokeObjectURL(s.objectUrl);
+		if (s.thumbUrl && s.thumbUrl !== s.objectUrl) URL.revokeObjectURL(s.thumbUrl);
 		slides.splice(i, 1);
 	}
 
@@ -91,7 +119,10 @@
 
 	$effect(() => {
 		return () => {
-			for (const s of slides) URL.revokeObjectURL(s.objectUrl);
+			for (const s of slides) {
+				URL.revokeObjectURL(s.objectUrl);
+				if (s.thumbUrl && s.thumbUrl !== s.objectUrl) URL.revokeObjectURL(s.thumbUrl);
+			}
 		};
 	});
 

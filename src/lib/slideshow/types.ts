@@ -32,6 +32,8 @@ export interface SlideshowSlide {
   id: string;
   file: File;
   objectUrl: string;
+  /** 100×100 thumbnail blob URL for grid display. null until generated. */
+  thumbUrl: string | null;
   /** Index into the presets array — only used in 'per-image' mode. */
   presetIndex: number | null;
 }

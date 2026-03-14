@@ -196,12 +196,9 @@
 					onclick={(e) => openLightbox(e, i)}
 					onkeydown={(e) => { if (e.key === 'Enter') openLightbox(e, i); }}
 				>
-					<img
-						class="slide-thumb"
-						src={slide.objectUrl}
-						alt="Slide {i + 1}"
-						loading="lazy"
-					/>
+					{#if slide.thumbUrl}
+					<img class="slide-thumb" src={slide.thumbUrl} alt="Slide {i + 1}" />
+				{/if}
 					<div class="slide-index">{i + 1}</div>
 					<button
 						class="remove-btn"
@@ -358,6 +355,9 @@
 		overflow: hidden;
 		cursor: pointer;
 		transition: border-color 0.15s;
+		content-visibility: auto;
+		contain-intrinsic-size: 100px 100px;
+		background: #1a1a1a;
 	}
 
 	.slide-card:hover {
