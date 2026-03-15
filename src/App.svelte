@@ -31,6 +31,18 @@
 	onMount(() => {
 		const onPopState = () => {
 			view = hashToView(window.location.hash);
+			if (view === 'upload') {
+				file = null;
+				slideshowFiles = [];
+				try {
+					const w = GlRenderer.warmup();
+					warmCanvas = w.canvas;
+					warmRenderer = w.renderer;
+				} catch {
+					warmCanvas = null;
+					warmRenderer = null;
+				}
+			}
 		};
 		window.addEventListener('popstate', onPopState);
 
