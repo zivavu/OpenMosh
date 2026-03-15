@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Pause, X } from 'lucide-svelte';
+	import { Pause, Play, X } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import type { SlideshowConfig } from '../../slideshow/types';
 	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
@@ -43,13 +43,14 @@
 		onConfigChange,
 	}: Props = $props();
 
-	let draggingHandle = $state<'start' | 'end' | null>(null);
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+	let startHandleEl = $state<HTMLButtonElement | undefined>(undefined);
+	let endHandleEl = $state<HTMLButtonElement | undefined>(undefined);
 
-	function timeFromEvent(e: { clientX: number }): number {
+	function timeFromClientX(clientX: number): number {
 		if (!timelineTrackEl) return 0;
 		const rect = timelineTrackEl.getBoundingClientRect();
-		const x = e.clientX - rect.left;
+		const x = clientX - rect.left;
 		const pct = Math.max(0, Math.min(1, x / rect.width));
 		return pct * trackDuration;
 	}
@@ -58,38 +59,67 @@
 		e: PointerEvent,
 		handle: 'start' | 'end' | null,
 	) {
+		if (e.pointerType === 'touch') return;
 		e.preventDefault();
 		if (handle === 'start' || handle === 'end') {
-			draggingHandle = handle;
-			(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+			beginHandleDrag(handle, e.clientX);
 		} else {
-			onSeek(timeFromEvent(e));
+			onSeek(timeFromClientX(e.clientX));
 		}
 	}
 
-	$effect(() => {
-		const handle = draggingHandle;
-		if (handle === null) return;
-		const move = (e: PointerEvent) => {
-			if (!timelineTrackEl) return;
-			const rect = timelineTrackEl.getBoundingClientRect();
-			const x = e.clientX - rect.left;
-			const pct = Math.max(0, Math.min(1, x / rect.width));
-			const t = pct * trackDuration;
+	function beginHandleDrag(handle: 'start' | 'end', startClientX: number) {
+		function applyPosition(clientX: number) {
+			const t = timeFromClientX(clientX);
 			if (handle === 'start') {
 				onSpanStartChange(Math.max(0, Math.min(t, spanEnd - 0.1)));
 			} else {
 				onSpanEndChange(Math.max(spanStart + 0.1, Math.min(trackDuration, t)));
 			}
+		}
+
+		const onMove = (ev: PointerEvent | TouchEvent) => {
+			const clientX =
+				'touches' in ev ? (ev.touches[0]?.clientX ?? startClientX) : ev.clientX;
+			applyPosition(clientX);
 		};
-		const up = () => {
-			draggingHandle = null;
+		const onUp = () => {
+			window.removeEventListener('pointermove', onMove as EventListener);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('touchmove', onMove as EventListener);
+			window.removeEventListener('touchend', onUp);
 		};
-		window.addEventListener('pointermove', move);
-		window.addEventListener('pointerup', up);
+		window.addEventListener('pointermove', onMove as EventListener);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('touchmove', onMove as EventListener, {
+			passive: false,
+		});
+		window.addEventListener('touchend', onUp);
+	}
+
+	// Non-passive touchstart on handles for mobile drag
+	$effect(() => {
+		const startEl = startHandleEl;
+		const endEl = endHandleEl;
+		if (!startEl || !endEl) return;
+
+		function makeHandler(handle: 'start' | 'end') {
+			return (e: TouchEvent) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const touch = e.touches[0];
+				if (!touch) return;
+				beginHandleDrag(handle, touch.clientX);
+			};
+		}
+
+		const onStartTouch = makeHandler('start');
+		const onEndTouch = makeHandler('end');
+		startEl.addEventListener('touchstart', onStartTouch, { passive: false });
+		endEl.addEventListener('touchstart', onEndTouch, { passive: false });
 		return () => {
-			window.removeEventListener('pointermove', move);
-			window.removeEventListener('pointerup', up);
+			startEl.removeEventListener('touchstart', onStartTouch);
+			endEl.removeEventListener('touchstart', onEndTouch);
 		};
 	});
 </script>
@@ -126,17 +156,15 @@
 					spanStart) /
 					trackDuration) *
 					100}%"
-			></div>
-			<div
-				class="timeline-playhead"
-				style="left: {(trackCurrentTime / trackDuration) * 100}%"
-				aria-hidden="true"
-			></div>
+			>
+				<div class="timeline-span-line"></div>
+			</div>
 			<button
 				type="button"
 				class="timeline-handle timeline-handle-start"
 				style="left: {(spanStart / trackDuration) * 100}%"
 				title="Span start"
+				bind:this={startHandleEl}
 				onpointerdown={(e) => {
 					e.stopPropagation();
 					onTimelinePointerDown(e, 'start');
@@ -147,11 +175,17 @@
 				class="timeline-handle timeline-handle-end"
 				style="left: {(spanEnd / trackDuration) * 100}%"
 				title="Span end"
+				bind:this={endHandleEl}
 				onpointerdown={(e) => {
 					e.stopPropagation();
 					onTimelinePointerDown(e, 'end');
 				}}
 			></button>
+			<div
+				class="timeline-playhead"
+				style="left: {(trackCurrentTime / trackDuration) * 100}%"
+				aria-hidden="true"
+			></div>
 		</div>
 	</div>
 	<span class="timeline-time">{formatTime(spanEnd)}</span>
@@ -162,7 +196,8 @@
 		max="1"
 		step="0.01"
 		value={outputVolume}
-		oninput={(e) => onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+		oninput={(e) =>
+			onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
 		title="Volume: {Math.round(outputVolume * 100)}%"
 	/>
 	<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track">
@@ -191,6 +226,7 @@
 		padding: 0.5rem 0.75rem;
 		background: rgba(18, 18, 18, 0.9);
 		border-top: 1px solid #2a2a2a;
+		user-select: none;
 	}
 
 	.timeline-label {
@@ -252,6 +288,7 @@
 		background: #222;
 		border-radius: 4px;
 		overflow: visible;
+		user-select: none;
 	}
 
 	.timeline-span {
@@ -261,6 +298,18 @@
 		background: rgba(255, 255, 255, 0.12);
 		border-radius: 4px;
 		pointer-events: none;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+	}
+
+	.timeline-span-line {
+		width: 1px;
+		height: 60%;
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 1px;
+		flex-shrink: 0;
 	}
 
 	.timeline-playhead {
@@ -270,27 +319,25 @@
 		width: 2px;
 		background: #888;
 		margin-left: -1px;
+		z-index: 2;
 		pointer-events: none;
 	}
 
 	.timeline-handle {
 		position: absolute;
 		top: 50%;
-		width: 10px;
+		width: 3px;
 		height: 16px;
-		margin: -8px 0 0 -5px;
-		border: 1px solid #555;
-		border-radius: 3px;
-		background: #444;
+		margin: -8px 0 0 -1px;
+		border: none;
+		border-radius: 2px;
+		background: #666;
 		cursor: ew-resize;
-		transition:
-			background 0.15s,
-			border-color 0.15s;
+		transition: background 0.15s;
 	}
 
 	.timeline-handle:hover {
-		background: #555;
-		border-color: #666;
+		background: #aaa;
 	}
 
 	.timeline-handle:focus-visible {
@@ -328,6 +375,22 @@
 	}
 	.volume-slider:hover::-moz-range-thumb {
 		background: #fff;
+	}
+
+	@media (max-width: 800px) {
+		.volume-slider {
+			display: none;
+		}
+
+		.timeline-bar {
+			gap: 0.25rem;
+		}
+
+		.timeline-handle {
+			width: 5px;
+			height: 28px;
+			margin: -14px 0 0 -2px;
+		}
 	}
 
 	.track-inline-btn {

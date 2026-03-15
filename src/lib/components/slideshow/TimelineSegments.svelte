@@ -1,10 +1,10 @@
 <script lang="ts">
+	import { generateId } from '../../effects';
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
 		TimelineSegment,
 	} from '../../slideshow/types';
-	import { generateId } from '../../effects';
 
 	const MIN_SEGMENT_DURATION = 0.125;
 
@@ -1105,10 +1105,16 @@
 					y2={sv.y}
 				/>
 				{#if sv.endX - sv.startX > 4}
-					{@const lblX = Math.max(
-						sv.startX + 2,
-						Math.min(sv.endX - 2, (sv.startX + sv.endX) / 2),
-					)}
+					{@const midX = (sv.startX + sv.endX) / 2}
+					<line
+						class="seg-mid"
+						x1="{midX}%"
+						y1={sv.y - 4}
+						x2="{midX}%"
+						y2={sv.y + 4}
+						pointer-events="none"
+					/>
+					{@const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX))}
 					<text
 						class="seg-lbl"
 						x="{lblX}%"
@@ -1294,6 +1300,12 @@
 
 	.seg.sel {
 		stroke: #90c0f8;
+	}
+
+	.seg-mid {
+		stroke: #3a6a9a;
+		stroke-width: 1;
+		opacity: 0.5;
 	}
 
 	.seg-lbl {
