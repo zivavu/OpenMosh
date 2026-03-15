@@ -1,8 +1,5 @@
 <script lang="ts">
-	import { X, GripVertical, ArrowUpDown, Music } from 'lucide-svelte';
-	import DualRangeSlider from './DualRangeSlider.svelte';
-	import RangeSlider from './RangeSlider.svelte';
-	import SpectrumDisplay from './SpectrumDisplay.svelte';
+	import { ArrowUpDown, GripVertical, Music, X } from 'lucide-svelte';
 	import {
 		FREQ_PRESETS,
 		getDefinition,
@@ -10,6 +7,9 @@
 		type VolumeLink,
 	} from '../../effects';
 	import type { SpectrumData } from '../../types';
+	import DualRangeSlider from './DualRangeSlider.svelte';
+	import RangeSlider from './RangeSlider.svelte';
+	import SpectrumDisplay from './SpectrumDisplay.svelte';
 
 	export type { SpectrumData };
 
@@ -150,7 +150,8 @@
 									step={param.step}
 									disabled={!!effect.volumeLinks?.[param.key]}
 									oninput={(v) => onParamChange(param.key, v)}
-									ondblclick={() => onParamChange(param.key, param.defaultValue)}
+									ondblclick={() =>
+										onParamChange(param.key, param.defaultValue)}
 								/>
 								<span class="param-value"
 									>{parseFloat(effect.values[param.key].toString()).toFixed(
@@ -554,11 +555,6 @@
 		align-items: center;
 		gap: 0.4rem;
 		flex-wrap: wrap;
-	}
-
-	.param-range-wrap input[type='range'] {
-		flex: 1;
-		min-width: 80px;
 	}
 
 	.volume-link-btn {

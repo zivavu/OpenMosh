@@ -57,6 +57,7 @@
 	}: Props = $props();
 
 	let alignStyle = $state('');
+	let isMobile = $state(false);
 	let wrapperEl: HTMLDivElement | undefined = $state();
 	let svgEl: SVGSVGElement | undefined = $state();
 	let scrollbarEl: HTMLDivElement | undefined = $state();
@@ -73,6 +74,15 @@
 	$effect(() => {
 		const td = trackDuration;
 		if (td > 0 && (viewEnd <= 0 || viewEnd > td)) viewEnd = td;
+	});
+
+	// ── Mobile detection ─────────────────────────────────────────────────────────
+	$effect(() => {
+		const update = () => { isMobile = window.innerWidth <= 800; };
+		update();
+		const ro = new ResizeObserver(update);
+		ro.observe(document.body);
+		return () => ro.disconnect();
 	});
 
 	// ── Alignment with audio timeline ────────────────────────────────────────────
@@ -256,6 +266,15 @@
 		}
 		svgEl.addEventListener('wheel', handleWheel, { passive: false });
 		return () => svgEl!.removeEventListener('wheel', handleWheel);
+	});
+
+	// Attach non-passive touchstart to prevent scroll hijacking during drags
+	$effect(() => {
+		const el = svgEl;
+		if (!el) return;
+		const handler = (e: TouchEvent) => { e.preventDefault(); };
+		el.addEventListener('touchstart', handler, { passive: false });
+		return () => el.removeEventListener('touchstart', handler);
 	});
 
 	// ── Derived visuals ──────────────────────────────────────────────────────────
@@ -1020,10 +1039,12 @@
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onkeydown={onKeydown}
+	ontouchmove={(e) => { if (!dragging) return; const t = e.touches[0]; if (t) onPointerMove({ clientX: t.clientX, clientY: t.clientY, pointerId: -1 } as PointerEvent); }}
+	ontouchend={(e) => { if (!dragging) return; onPointerUp(); }}
 />
 
 <div class="tl-container">
-	<div class="tl-track" bind:this={wrapperEl} style={alignStyle}>
+	<div class="tl-track" bind:this={wrapperEl} style={isMobile ? '' : alignStyle}>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
@@ -1144,6 +1165,14 @@
 					{@const lId = leftConn?.leftSegId ?? null}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
+						class="dot-hit"
+						cx="{sv.startX}%"
+						cy={sv.y}
+						r={14}
+						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
+					/>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<circle
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === lId &&
 							hoveredDot?.rightSegId === sv.id}
@@ -1153,7 +1182,6 @@
 						cx="{sv.startX}%"
 						cy={sv.y}
 						r={DOT_R}
-						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
 						onpointerenter={() =>
 							(hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
 						onpointerleave={() => (hoveredDot = null)}
@@ -1166,6 +1194,14 @@
 					{@const rId = rightConn?.rightSegId ?? null}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
+						class="dot-hit"
+						cx="{sv.endX}%"
+						cy={sv.y}
+						r={14}
+						onpointerdown={(e) => startBndDrag(e, sv.id, rId)}
+					/>
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<circle
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === sv.id &&
 							hoveredDot?.rightSegId === rId}
@@ -1175,7 +1211,6 @@
 						cx="{sv.endX}%"
 						cy={sv.y}
 						r={DOT_R}
-						onpointerdown={(e) => startBndDrag(e, sv.id, rId)}
 						onpointerenter={() =>
 							(hoveredDot = { leftSegId: sv.id, rightSegId: rId })}
 						onpointerleave={() => (hoveredDot = null)}
@@ -1187,8 +1222,7 @@
 			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
-					Double-click or Ctrl+click to create · drag bar up/down to change
-					subdivision · drag dot to move boundary
+					Double-click to create · drag bar up/down to change beat · drag dot to move boundary
 				</text>
 			{/if}
 
@@ -1328,6 +1362,12 @@
 		pointer-events: none;
 	}
 
+	.dot-hit {
+		fill: transparent;
+		stroke: none;
+		cursor: ew-resize;
+	}
+
 	.dot {
 		fill: #111;
 		stroke: #5a8fc0;
@@ -1414,5 +1454,16 @@
 	.scrollbar-thumb:active {
 		cursor: grabbing;
 		background: #5a8fc0;
+	}
+
+	@media (max-width: 800px) {
+		.tl-container {
+			margin: 0;
+		}
+		.tl-track {
+			border-radius: 0;
+			border-left: none;
+			border-right: none;
+		}
 	}
 </style>
