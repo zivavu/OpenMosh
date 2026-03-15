@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Music } from 'lucide-svelte';
+	import { Library, Music } from 'lucide-svelte';
 	import {
 		applyVolumeLinksTick,
 		computeVolumeLevel,
@@ -32,6 +32,7 @@
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
+	import MobileSheet from '../ui/MobileSheet.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import SlideshowActionBar from './SlideshowActionBar.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
@@ -844,6 +845,10 @@
 	// ── Drag & Drop ──
 	let dragging = $state(false);
 
+	// ── Component refs ──
+	let trackLibraryRef = $state<TrackLibrary>();
+	let mobileSheetRef = $state<MobileSheet>();
+
 	// ── Keyboard ──
 	function handleKeydown(e: KeyboardEvent) {
 		if (
@@ -922,6 +927,7 @@
 	}}
 >
 	<TrackLibrary
+		bind:this={trackLibraryRef}
 		activeTrackName={trackFile?.name ?? null}
 		onLoadTrack={onLibraryLoadTrack}
 		onPreviewStart={pauseAudio}
@@ -987,6 +993,7 @@
 			onStartRecording={startRecording}
 			onCancelRecording={cancelRecording}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
+			onOpenSheet={() => mobileSheetRef?.openSheet()}
 		/>
 
 		<RecordOverlay
@@ -1039,7 +1046,7 @@
 		{/if}
 	</div>
 
-	<div class="sidebar">
+	<MobileSheet bind:this={mobileSheetRef}>
 		<SlideshowConfigPanel
 			{config}
 			{bpmDetecting}
@@ -1055,7 +1062,7 @@
 			{spectrumData}
 			onVolumeLinkChange={setVolumeLink}
 		/>
-	</div>
+	</MobileSheet>
 
 	{#if dragging}
 		<div class="drop-overlay">
@@ -1124,12 +1131,6 @@
 		display: none;
 	}
 
-	.sidebar {
-		border-left: 1px solid #2a2a2a;
-		overflow-y: auto;
-		flex-shrink: 0;
-	}
-
 	.editor {
 		position: relative;
 	}
@@ -1188,5 +1189,11 @@
 
 	.music-hint-dismiss:hover {
 		color: #888;
+	}
+
+	@media (max-width: 800px) {
+		.main-area {
+			padding-bottom: 44px;
+		}
 	}
 </style>

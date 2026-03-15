@@ -2,7 +2,7 @@
 	import {
 		AudioLines,
 		ChevronLeft,
-		ChevronRight,
+		Library,
 		Pause,
 		Play,
 		Plus,
@@ -285,7 +285,7 @@
 		onclick={() => (open = true)}
 		title="Open track library"
 	>
-		<ChevronRight size={12} />
+		<Library size={14} />
 	</button>
 
 	<!-- Overlay panel: slides in on top of the expand strip -->

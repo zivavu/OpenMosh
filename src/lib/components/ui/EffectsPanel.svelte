@@ -343,7 +343,8 @@
 	.effects-panel {
 		flex: 1;
 		min-height: 0;
-		max-width: 305px;
+		width: 310px;
+		max-width: 310px;
 		background: #161616;
 		display: flex;
 		flex-direction: column;
