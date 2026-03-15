@@ -144,7 +144,7 @@
 							<div class="param-range-wrap">
 								<RangeSlider
 									id="{effect.instanceId}-{param.key}"
-									value={effect.values[param.key]}
+									value={+effect.values[param.key]}
 									min={param.min}
 									max={param.max}
 									step={param.step}

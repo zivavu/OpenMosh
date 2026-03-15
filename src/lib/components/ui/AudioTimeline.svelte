@@ -97,6 +97,42 @@
 		window.addEventListener('touchend', onUp);
 	}
 
+	// Non-passive touchstart on timeline track for mobile seek
+	$effect(() => {
+		const trackEl = timelineTrackEl;
+		if (!trackEl) return;
+
+		let seeking = false;
+		const onSeekMove = (ev: TouchEvent) => {
+			if (!seeking) return;
+			ev.preventDefault();
+			const touch = ev.touches[0];
+			if (touch) onSeek(timeFromClientX(touch.clientX));
+		};
+		const onSeekUp = () => {
+			seeking = false;
+			window.removeEventListener('touchmove', onSeekMove);
+			window.removeEventListener('touchend', onSeekUp);
+		};
+		const onTrackTouch = (e: TouchEvent) => {
+			// Only if the touch didn't originate on a handle
+			if ((e.target as HTMLElement).classList.contains('timeline-handle')) return;
+			e.preventDefault();
+			const touch = e.touches[0];
+			if (!touch) return;
+			seeking = true;
+			onSeek(timeFromClientX(touch.clientX));
+			window.addEventListener('touchmove', onSeekMove, { passive: false });
+			window.addEventListener('touchend', onSeekUp);
+		};
+		trackEl.addEventListener('touchstart', onTrackTouch, { passive: false });
+		return () => {
+			trackEl.removeEventListener('touchstart', onTrackTouch);
+			window.removeEventListener('touchmove', onSeekMove);
+			window.removeEventListener('touchend', onSeekUp);
+		};
+	});
+
 	// Non-passive touchstart on handles for mobile drag
 	$effect(() => {
 		const startEl = startHandleEl;

@@ -280,6 +280,7 @@
 	$effect(() => {
 		const el = svgEl;
 		if (!el) return;
+		const svgElNonNull: SVGSVGElement = el;
 
 		function handler(e: TouchEvent) {
 			e.preventDefault();
@@ -287,7 +288,7 @@
 			if (!touch) return;
 			const cx = touch.clientX;
 			const cy = touch.clientY;
-			const rect = el.getBoundingClientRect();
+			const rect = svgElNonNull.getBoundingClientRect();
 
 			// Convert client coords to SVG-space pixels for distance checks
 			const svgX = cx - rect.left;
