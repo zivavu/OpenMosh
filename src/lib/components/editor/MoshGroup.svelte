@@ -148,4 +148,16 @@
 		z-index: 20;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 	}
+
+	@media (max-width: 800px) {
+		.action-btn {
+			padding: 0.6rem 1.2rem;
+			font-size: 0.72rem;
+		}
+
+		.settings-btn {
+			width: 26px;
+			height: 26px;
+		}
+	}
 </style>

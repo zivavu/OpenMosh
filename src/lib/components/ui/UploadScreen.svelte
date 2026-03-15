@@ -28,24 +28,53 @@
 	const ACCEPTED_TYPES = [
 		'image/png',
 		'image/jpeg',
+		'image/jpg',
 		'image/webp',
 		'image/gif',
+		'image/heic',
+		'image/heif',
 		'video/mp4',
 		'video/webm',
 		'video/quicktime',
 	];
-	const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+	const IMAGE_TYPES = [
+		'image/png',
+		'image/jpeg',
+		'image/jpg',
+		'image/webp',
+		'image/gif',
+		'image/heic',
+		'image/heif',
+	];
+
+	const ACCEPTED_EXTENSIONS = [
+		'.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.heif',
+		'.mp4', '.webm', '.mov',
+	];
+	const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.heif'];
+
+	function getExtension(name: string) {
+		return name.slice(name.lastIndexOf('.')).toLowerCase();
+	}
+
+	function isAcceptedFile(file: File) {
+		if (file.type) return ACCEPTED_TYPES.includes(file.type);
+		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
+	}
+
+	function isImageFile(file: File) {
+		if (file.type) return IMAGE_TYPES.includes(file.type);
+		return IMAGE_EXTENSIONS.includes(getExtension(file.name));
+	}
 
 	function handleFile(file: File) {
-		if (ACCEPTED_TYPES.includes(file.type)) {
+		if (isAcceptedFile(file)) {
 			onfile(file);
 		}
 	}
 
 	function handleSlideshowFiles(files: FileList | File[]) {
-		const images = Array.from(files).filter((f) =>
-			IMAGE_TYPES.includes(f.type),
-		);
+		const images = Array.from(files).filter((f) => isImageFile(f));
 		if (images.length > 0) {
 			onSlideshow(images);
 		}
@@ -96,8 +125,8 @@
 
 	function getAcceptTypes() {
 		return selectedMode === 'slideshow'
-			? IMAGE_TYPES.join(',')
-			: ACCEPTED_TYPES.join(',');
+			? [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(',')
+			: [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(',');
 	}
 	function getIsMultiple() {
 		return selectedMode === 'slideshow';
@@ -178,19 +207,18 @@
 			if (e.key === 'Enter' || e.key === ' ') openFilePicker();
 		}}
 	>
-		<input
-			bind:this={fileInput}
-			type="file"
-			accept={getAcceptTypes()}
-			multiple={getIsMultiple()}
-			onchange={onInputChange}
-			hidden
-		/>
-
-		<button class="load-btn" onclick={openFilePicker}>
+		<label class="load-btn">
+			<input
+				bind:this={fileInput}
+				type="file"
+				accept={getAcceptTypes()}
+				multiple={getIsMultiple()}
+				onchange={onInputChange}
+				style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
+			/>
 			<Upload size={18} />
 			{selectedMode === 'slideshow' ? 'LOAD IMAGES' : 'LOAD FILE'}
-		</button>
+		</label>
 
 		<div class="separator">
 			<span class="line"></span>

@@ -1320,6 +1320,18 @@
 		padding: 1rem;
 	}
 
+	@media (max-width: 800px) {
+		.action-bar {
+			padding: 0.6rem 0.5rem;
+			gap: 0.4rem;
+		}
+
+		.action-btn {
+			padding: 0.6rem 1.2rem;
+			font-size: 0.72rem;
+		}
+	}
+
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
@@ -1555,7 +1567,7 @@
 			height: 44px;
 			flex-shrink: 0;
 			width: 100%;
-			background: none;
+			background: #161616;
 			border: none;
 			cursor: pointer;
 			padding: 0;

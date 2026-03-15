@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, X, Plus, Check } from 'lucide-svelte';
+	import { Check, Plus, Search, X } from 'lucide-svelte';
 	import {
 		EFFECT_DEFINITIONS,
 		HIDDEN_EFFECTS_KEY,
@@ -343,10 +343,18 @@
 	.effects-panel {
 		flex: 1;
 		min-height: 0;
+		max-width: 305px;
 		background: #161616;
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;
+	}
+
+	@media (max-width: 800px) {
+		.effects-panel {
+			max-width: 100%;
+			width: 100%;
+		}
 	}
 
 	.presets-section {
