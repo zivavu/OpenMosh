@@ -78,7 +78,9 @@
 
 	// ── Mobile detection ─────────────────────────────────────────────────────────
 	$effect(() => {
-		const update = () => { isMobile = window.innerWidth <= 800; };
+		const update = () => {
+			isMobile = window.innerWidth <= 800;
+		};
 		update();
 		const ro = new ResizeObserver(update);
 		ro.observe(document.body);
@@ -268,11 +270,89 @@
 		return () => svgEl!.removeEventListener('wheel', handleWheel);
 	});
 
-	// Attach non-passive touchstart to prevent scroll hijacking during drags
+	// ── Touch handler (non-passive, handles dots + double-tap + seg/seek drags) ──
+	const DOT_HIT_PX = 28; // pixel radius for dot hit detection on touch
+	let lastTapTime = 0;
+	let lastTapPos = { x: 0, y: 0 };
+	const DOUBLE_TAP_MS = 350;
+	const DOUBLE_TAP_PX = 30;
+
 	$effect(() => {
 		const el = svgEl;
 		if (!el) return;
-		const handler = (e: TouchEvent) => { e.preventDefault(); };
+
+		function handler(e: TouchEvent) {
+			e.preventDefault();
+			const touch = e.touches[0];
+			if (!touch) return;
+			const cx = touch.clientX;
+			const cy = touch.clientY;
+			const rect = el.getBoundingClientRect();
+
+			// Convert client coords to SVG-space pixels for distance checks
+			const svgX = cx - rect.left;
+			const svgY_px = cy - rect.top;
+			const svgH = rect.height;
+			// Segments use SVG viewBox coords (0..SVG_H). Convert:
+			const svgYcoord = (svgY_px / svgH) * SVG_H;
+
+			// Check dot hits first (boundary dots)
+			for (const sv of segVis) {
+				// Convert sv.startX/endX (%) to pixel x
+				const startPx = (sv.startX / 100) * rect.width;
+				const endPx = (sv.endX / 100) * rect.width;
+				const dotY_px = (sv.y / SVG_H) * rect.height;
+
+				if (sv.startTime > 0.001) {
+					const dx = svgX - startPx;
+					const dy = svgY_px - dotY_px;
+					if (Math.sqrt(dx * dx + dy * dy) < DOT_HIT_PX) {
+						const lConn = connectors.find((c) => c.rightSegId === sv.id);
+						const lId = lConn?.leftSegId ?? null;
+						startBndDrag({ clientX: cx, clientY: cy, stopPropagation: () => {}, pointerId: -1 } as unknown as PointerEvent, lId, sv.id);
+						return;
+					}
+				}
+				if (sv.endTime < trackDuration - 0.001) {
+					const dx = svgX - endPx;
+					const dy = svgY_px - dotY_px;
+					if (Math.sqrt(dx * dx + dy * dy) < DOT_HIT_PX) {
+						const rConn = connectors.find((c) => c.leftSegId === sv.id);
+						const rId = rConn?.rightSegId ?? null;
+						startBndDrag({ clientX: cx, clientY: cy, stopPropagation: () => {}, pointerId: -1 } as unknown as PointerEvent, sv.id, rId);
+						return;
+					}
+				}
+			}
+
+			// Double-tap detection → create segment
+			const now = performance.now();
+			const distFromLast = Math.sqrt((cx - lastTapPos.x) ** 2 + (cy - lastTapPos.y) ** 2);
+			if (now - lastTapTime < DOUBLE_TAP_MS && distFromLast < DOUBLE_TAP_PX) {
+				lastTapTime = 0;
+				onDblClick({ clientX: cx, clientY: cy } as MouseEvent);
+				return;
+			}
+			lastTapTime = now;
+			lastTapPos = { x: cx, y: cy };
+
+			// Check seg-y drag (hit a segment line)
+			for (const sv of segVis) {
+				const startPx = (sv.startX / 100) * rect.width;
+				const endPx = (sv.endX / 100) * rect.width;
+				const dotY_px = (sv.y / SVG_H) * rect.height;
+				if (svgX >= startPx && svgX <= endPx && Math.abs(svgY_px - dotY_px) < 14) {
+					startSegYDrag({ clientX: cx, clientY: cy, stopPropagation: () => {}, pointerId: -1, ctrlKey: false, metaKey: false } as unknown as PointerEvent, sv.id);
+					return;
+				}
+			}
+
+			// Default: seek
+			if (onSeek && trackDuration > 0) {
+				startSeekDrag({ clientX: cx, clientY: cy, button: 0, stopPropagation: () => {}, pointerId: -1, ctrlKey: false, metaKey: false, shiftKey: false } as unknown as PointerEvent);
+			}
+		}
+
 		el.addEventListener('touchstart', handler, { passive: false });
 		return () => el.removeEventListener('touchstart', handler);
 	});
@@ -461,13 +541,13 @@
 				nonSelectedBoundaries,
 			};
 			dragMoved = false;
-			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+			try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 			return;
 		}
 
 		dragging = { type: 'boundary', leftSegId, rightSegId };
 		dragMoved = false;
-		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
 	function startSegYDrag(e: PointerEvent, segId: string) {
@@ -507,7 +587,7 @@
 			startClientY: e.clientY,
 		};
 		dragMoved = false;
-		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
 	function startScrollPan(e: PointerEvent) {
@@ -521,7 +601,7 @@
 			scrollWidth: rect.width,
 		};
 		dragMoved = false;
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
 	function startSeekDrag(e: PointerEvent) {
@@ -623,7 +703,7 @@
 		onSeek(time);
 		dragging = { type: 'seek' };
 		dragMoved = false;
-		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
 	function startRectSelect(e: PointerEvent) {
@@ -638,7 +718,7 @@
 			currentSvgY: svgY,
 		};
 		dragMoved = false;
-		(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
 	function onPointerMove(e: PointerEvent) {
@@ -1039,12 +1119,28 @@
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onkeydown={onKeydown}
-	ontouchmove={(e) => { if (!dragging) return; const t = e.touches[0]; if (t) onPointerMove({ clientX: t.clientX, clientY: t.clientY, pointerId: -1 } as PointerEvent); }}
-	ontouchend={(e) => { if (!dragging) return; onPointerUp(); }}
+	ontouchmove={(e) => {
+		if (!dragging) return;
+		const t = e.touches[0];
+		if (t)
+			onPointerMove({
+				clientX: t.clientX,
+				clientY: t.clientY,
+				pointerId: -1,
+			} as PointerEvent);
+	}}
+	ontouchend={(e) => {
+		if (!dragging) return;
+		onPointerUp();
+	}}
 />
 
 <div class="tl-container">
-	<div class="tl-track" bind:this={wrapperEl} style={isMobile ? '' : alignStyle}>
+	<div
+		class="tl-track"
+		bind:this={wrapperEl}
+		style={isMobile ? '' : alignStyle}
+	>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
@@ -1222,7 +1318,8 @@
 			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
-					Double-click to create · drag bar up/down to change beat · drag dot to move boundary
+					Double-click to create · drag bar up/down to change beat · drag dot to
+					move boundary
 				</text>
 			{/if}
 
@@ -1458,7 +1555,7 @@
 
 	@media (max-width: 800px) {
 		.tl-container {
-			margin: 0;
+			margin: 0 8px;
 		}
 		.tl-track {
 			border-radius: 0;
