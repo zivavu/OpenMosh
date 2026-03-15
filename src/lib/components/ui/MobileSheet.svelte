@@ -2,16 +2,19 @@
 	import type { Snippet } from 'svelte';
 
 	interface Props {
-		children: Snippet;
+		children?: Snippet;
+		settings?: Snippet;
+		effectsPanel?: Snippet;
 	}
 
-	let { children }: Props = $props();
+	let { children, settings, effectsPanel }: Props = $props();
 
 	const SHEET_HEIGHT_VH = 70;
 	let panelOpen = $state(false);
 	let sheetDragOffset = $state(0);
 	let sheetDragging = $state(false);
 	let sheetHandleEl = $state<HTMLButtonElement>();
+	let activeTab = $state<'settings' | 'effects'>('effects');
 
 	export function openSheet() {
 		panelOpen = true;
@@ -79,6 +82,8 @@
 		window.addEventListener('pointermove', onMove as EventListener);
 		window.addEventListener('pointerup', onUp as EventListener);
 	}
+
+	const hasTabs = $derived(!!(settings && effectsPanel));
 </script>
 
 {#if panelOpen}
@@ -103,7 +108,36 @@
 	>
 		<div class="sheet-handle"></div>
 	</button>
-	{@render children()}
+
+	{#if hasTabs}
+		<!-- Mobile tab bar (only rendered when both snippets provided) -->
+		<div class="tab-bar">
+			<button
+				class="tab-btn"
+				class:active={activeTab === 'settings'}
+				onclick={() => (activeTab = 'settings')}
+			>Settings</button>
+			<button
+				class="tab-btn"
+				class:active={activeTab === 'effects'}
+				onclick={() => (activeTab = 'effects')}
+			>Effects</button>
+		</div>
+		<div class="tab-content">
+			{#if activeTab === 'settings'}
+				{@render settings!()}
+			{:else}
+				{@render effectsPanel!()}
+			{/if}
+		</div>
+		<!-- Desktop: render both stacked normally -->
+		<div class="desktop-content">
+			{@render settings!()}
+			{@render effectsPanel!()}
+		</div>
+	{:else if children}
+		{@render children()}
+	{/if}
 </div>
 
 <style>
@@ -117,6 +151,18 @@
 	}
 
 	.sheet-handle-row {
+		display: none;
+	}
+
+	.tab-bar {
+		display: none;
+	}
+
+	.desktop-content {
+		display: contents;
+	}
+
+	.tab-content {
 		display: none;
 	}
 
@@ -174,6 +220,47 @@
 			height: 3px;
 			border-radius: 2px;
 			background: #555;
+		}
+
+		.tab-bar {
+			display: flex;
+			flex-shrink: 0;
+			border-bottom: 1px solid #222;
+		}
+
+		.tab-btn {
+			flex: 1;
+			padding: 0.55rem;
+			background: none;
+			border: none;
+			color: #555;
+			font-size: 0.72rem;
+			font-weight: 600;
+			letter-spacing: 0.05em;
+			cursor: pointer;
+			font-family: inherit;
+			transition: color 0.15s;
+		}
+
+		.tab-btn.active {
+			color: #ccc;
+			border-bottom: 2px solid #666;
+		}
+
+		.tab-btn:hover:not(.active) {
+			color: #888;
+		}
+
+		.tab-content {
+			display: flex;
+			flex-direction: column;
+			flex: 1;
+			min-height: 0;
+			overflow-y: auto;
+		}
+
+		.desktop-content {
+			display: none;
 		}
 	}
 </style>

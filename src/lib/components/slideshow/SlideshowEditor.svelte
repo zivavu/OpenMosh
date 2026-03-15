@@ -993,7 +993,7 @@
 			onStartRecording={startRecording}
 			onCancelRecording={cancelRecording}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
-			onOpenSheet={() => mobileSheetRef?.openSheet()}
+			onOpenSheet={() => trackLibraryRef?.openLibrary()}
 		/>
 
 		<RecordOverlay
@@ -1047,21 +1047,25 @@
 	</div>
 
 	<MobileSheet bind:this={mobileSheetRef}>
-		<SlideshowConfigPanel
-			{config}
-			{bpmDetecting}
-			hasTrack={!!trackFile}
-			onDetectBpm={runBpmDetection}
-			{onConfigChange}
-			{trackCurrentTime}
-			{trackDuration}
-		/>
-		<EffectsPanel
-			bind:effects
-			hasTrack={!!trackFile}
-			{spectrumData}
-			onVolumeLinkChange={setVolumeLink}
-		/>
+		{#snippet settings()}
+			<SlideshowConfigPanel
+				{config}
+				{bpmDetecting}
+				hasTrack={!!trackFile}
+				onDetectBpm={runBpmDetection}
+				{onConfigChange}
+				{trackCurrentTime}
+				{trackDuration}
+			/>
+		{/snippet}
+		{#snippet effectsPanel()}
+			<EffectsPanel
+				bind:effects
+				hasTrack={!!trackFile}
+				{spectrumData}
+				onVolumeLinkChange={setVolumeLink}
+			/>
+		{/snippet}
 	</MobileSheet>
 
 	{#if dragging}

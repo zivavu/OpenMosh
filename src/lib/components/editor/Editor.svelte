@@ -803,7 +803,7 @@
 		/>
 
 		<div class="action-bar">
-			<button class="library-btn" onclick={() => mobileSheetRef?.openSheet()} title="Effects panel">
+			<button class="library-btn" onclick={() => trackLibraryRef?.openLibrary()} title="Track library">
 				<Library size={12} />
 			</button>
 			<MoshGroup
@@ -1025,27 +1025,31 @@
 		{/if}
 	</div>
 	<MobileSheet bind:this={mobileSheetRef}>
-		<div class="mosh-settings-wrapper">
-			<MoshSettingsPanel
-				bind:moshMin
-				bind:moshMax
-				bind:randomizeOrder
-				bind:moshAudioLink
-				bind:moshAudioLinkStrength
+		{#snippet settings()}
+			<div class="mosh-settings-wrapper">
+				<MoshSettingsPanel
+					bind:moshMin
+					bind:moshMax
+					bind:randomizeOrder
+					bind:moshAudioLink
+					bind:moshAudioLinkStrength
+				/>
+			</div>
+		{/snippet}
+		{#snippet effectsPanel()}
+			<EffectsPanel
+				bind:effects
+				hasTrack={!!trackFile || (isVideo && !!analyserNode)}
+				spectrumData={frequencyData && audioSampleRate > 0
+					? {
+							data: frequencyData as Uint8Array<ArrayBuffer>,
+							sampleRate: audioSampleRate,
+							binCount: audioFrequencyBinCount,
+						}
+					: null}
+				onVolumeLinkChange={setVolumeLink}
 			/>
-		</div>
-		<EffectsPanel
-			bind:effects
-			hasTrack={!!trackFile || (isVideo && !!analyserNode)}
-			spectrumData={frequencyData && audioSampleRate > 0
-				? {
-						data: frequencyData as Uint8Array<ArrayBuffer>,
-						sampleRate: audioSampleRate,
-						binCount: audioFrequencyBinCount,
-					}
-				: null}
-			onVolumeLinkChange={setVolumeLink}
-		/>
+		{/snippet}
 	</MobileSheet>
 
 	<RecordOverlay
@@ -1588,9 +1592,6 @@
 	}
 
 	@media (max-width: 800px) {
-		.mosh-settings-wrapper {
-			display: none;
-		}
 
 		.main-area {
 			padding-bottom: 44px;
