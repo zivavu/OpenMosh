@@ -134,6 +134,7 @@
 			transition: transform 0.3s ease;
 			z-index: 50;
 			overflow-y: auto;
+			background: #161616;
 		}
 
 		.sheet-container.sheet-open {

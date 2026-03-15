@@ -72,12 +72,12 @@
 	{/if}
 	<div class="options-group" bind:this={optionsGroupEl}>
 		<button
-			class="action-btn options-btn"
+			class="icon-btn options-btn"
+			class:active={showOptionsPanel}
 			onclick={() => (showOptionsPanel = !showOptionsPanel)}
-			title="Preview size options"
+			title="Options"
 		>
-			<Settings size={16} />
-			OPTIONS
+			<Settings size={14} />
 		</button>
 		{#if showOptionsPanel}
 			<div class="options-panel">
@@ -156,31 +156,25 @@
 	}
 
 	.library-btn {
-		display: none;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		background: none;
+		border: 1.5px solid #444;
+		color: #888;
+		cursor: pointer;
+		flex-shrink: 0;
+		padding: 0;
+		box-sizing: border-box;
+		transition: border-color 0.2s, color 0.2s;
 	}
 
-	@media (max-width: 800px) {
-		.library-btn {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			width: 26px;
-			height: 26px;
-			border-radius: 50%;
-			background: none;
-			border: 1.5px solid #444;
-			color: #888;
-			cursor: pointer;
-			flex-shrink: 0;
-			padding: 0;
-			box-sizing: border-box;
-			transition: border-color 0.2s, color 0.2s;
-		}
-
-		.library-btn:hover {
-			border-color: #777;
-			color: #ccc;
-		}
+	.library-btn:hover {
+		border-color: #777;
+		color: #ccc;
 	}
 
 	.action-btn {
@@ -214,15 +208,32 @@
 		color: #8fc;
 	}
 
+	.icon-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		background: none;
+		border: 1.5px solid #444;
+		color: #888;
+		cursor: pointer;
+		flex-shrink: 0;
+		padding: 0;
+		transition: border-color 0.2s, color 0.2s;
+	}
+
+	.icon-btn:hover,
+	.icon-btn.active {
+		border-color: #777;
+		color: #ccc;
+	}
+
 	.options-group {
 		position: relative;
 		display: flex;
 		align-items: center;
-	}
-
-	.options-btn:hover:not(:disabled) {
-		border-color: #888;
-		color: #fff;
 	}
 
 	.options-panel {
