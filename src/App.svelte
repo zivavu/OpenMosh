@@ -34,9 +34,13 @@
 		};
 		window.addEventListener('popstate', onPopState);
 
-		const w = GlRenderer.warmup();
-		warmCanvas = w.canvas;
-		warmRenderer = w.renderer;
+		try {
+			const w = GlRenderer.warmup();
+			warmCanvas = w.canvas;
+			warmRenderer = w.renderer;
+		} catch {
+			// WebGL2 not available; Editor will fall back to creating its own context
+		}
 
 		return () => window.removeEventListener('popstate', onPopState);
 	});

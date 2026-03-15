@@ -3,11 +3,12 @@ export { EFFECT_DEFINITIONS } from "./definitions";
 export { loadPresets, savePreset, updatePreset, deletePreset, applyPreset } from "./presets";
 
 import type { EffectDefinition, EffectInstance } from "./types";
+import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
 
 export function createEffectInstance(def: EffectDefinition): EffectInstance {
   return {
-    instanceId: crypto.randomUUID(),
+    instanceId: generateId(),
     defId: def.id,
     enabled: false,
     locked: false,
@@ -20,7 +21,7 @@ export function createEffectInstance(def: EffectDefinition): EffectInstance {
 export function cloneEffectInstance(e: EffectInstance): EffectInstance {
   return {
     ...e,
-    instanceId: crypto.randomUUID(),
+    instanceId: generateId(),
     values: { ...e.values },
     volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
   };

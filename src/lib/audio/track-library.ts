@@ -1,4 +1,5 @@
 // src/lib/audio/track-library.ts
+import { generateId } from '../effects/types';
 
 export interface StoredTrack {
   id: string;
@@ -44,7 +45,7 @@ export async function getAllTracks(): Promise<StoredTrack[]> {
 
 export async function addTrack(file: File): Promise<StoredTrack> {
   const track: StoredTrack = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     name: file.name,
     blob: file,
     addedAt: Date.now(),

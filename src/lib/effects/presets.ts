@@ -1,4 +1,5 @@
 import type { EffectInstance, Preset, VolumeLink } from "./types";
+import { generateId } from "./types";
 
 const PRESETS_KEY = "openmosh-presets";
 
@@ -53,7 +54,7 @@ export function deletePreset(index: number): Preset[] {
 
 export function applyPreset(preset: Preset): EffectInstance[] {
   return preset.effects.map((pe) => ({
-    instanceId: crypto.randomUUID(),
+    instanceId: generateId(),
     defId: pe.defId,
     enabled: pe.enabled,
     locked: false,

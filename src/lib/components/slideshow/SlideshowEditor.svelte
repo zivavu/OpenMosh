@@ -9,6 +9,7 @@
 	import {
 		loadInitialEffects,
 		loadPresets,
+		generateId,
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
@@ -61,7 +62,7 @@
 		const newSlides: SlideshowSlide[] = Array.from(files)
 			.filter((f) => imageTypes.includes(f.type))
 			.map((file) => ({
-				id: crypto.randomUUID(),
+				id: generateId(),
 				file,
 				objectUrl: URL.createObjectURL(file),
 				thumbUrl: null,

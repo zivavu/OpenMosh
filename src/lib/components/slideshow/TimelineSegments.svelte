@@ -4,6 +4,7 @@
 		SlideshowConfig,
 		TimelineSegment,
 	} from '../../slideshow/types';
+	import { generateId } from '../../effects';
 
 	const MIN_SEGMENT_DURATION = 0.125;
 
@@ -334,7 +335,7 @@
 			emit({
 				segments: [
 					{
-						id: crypto.randomUUID(),
+						id: generateId(),
 						startTime: 0,
 						endTime: trackDuration,
 						subdivision: yToSub(svgY),
@@ -359,13 +360,13 @@
 				.filter((s) => s.id !== hit.id)
 				.concat([
 					{
-						id: crypto.randomUUID(),
+						id: generateId(),
 						startTime: hit.startTime,
 						endTime: time,
 						subdivision: hit.subdivision,
 					},
 					{
-						id: crypto.randomUUID(),
+						id: generateId(),
 						startTime: time,
 						endTime: end,
 						subdivision: hit.subdivision,
@@ -463,13 +464,13 @@
 					.filter((s) => s.id !== segId)
 					.concat([
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: seg.startTime,
 							endTime: time,
 							subdivision: seg.subdivision,
 						},
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: time,
 							endTime: end,
 							subdivision: seg.subdivision,
@@ -527,13 +528,13 @@
 					.filter((s) => s.id !== hit.id)
 					.concat([
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: hit.startTime,
 							endTime: t,
 							subdivision: hit.subdivision,
 						},
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: t,
 							endTime: hitEnd,
 							subdivision,
@@ -553,7 +554,7 @@
 				emit({
 					segments: [
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: 0,
 							endTime: trackDuration,
 							subdivision: yToSub(svgY),
@@ -576,13 +577,13 @@
 					.filter((s) => s.id !== hit.id)
 					.concat([
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: hit.startTime,
 							endTime: time,
 							subdivision: hit.subdivision,
 						},
 						{
-							id: crypto.randomUUID(),
+							id: generateId(),
 							startTime: time,
 							endTime: end,
 							subdivision: hit.subdivision,
@@ -874,7 +875,7 @@
 		if (!left || !right) return;
 		const merged: TimelineSegment = {
 			...left,
-			id: crypto.randomUUID(),
+			id: generateId(),
 			startTime: left.startTime,
 			endTime: right.endTime ?? trackDuration,
 		};
