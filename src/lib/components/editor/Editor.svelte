@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Download, Music, Pause, Play } from 'lucide-svelte';
+	import { Download, Music, Pause, Play, Library } from 'lucide-svelte';
 	import {
 		applyVolumeLinksTick,
 		computeVolumeLevel,
@@ -44,6 +44,67 @@
 	let { file, onBack, onfile, initialAudioFile = null, warmCanvas = null, warmRenderer = null }: Props = $props();
 	let dragging = $state(false);
 	let panelOpen = $state(false);
+
+	// Draggable bottom sheet
+	const SHEET_HEIGHT_VH = 70;
+	let sheetDragOffset = $state(0); // px offset from resting position during drag
+	let sheetDragging = $state(false);
+	let sheetDragStartY = 0;
+	let sheetDragStartOpen = false;
+
+	function onSheetPointerDown(e: PointerEvent) {
+		// Use touch events on mobile for reliable preventDefault
+		if (e.pointerType === 'touch') return;
+		beginSheetDrag(e.clientY);
+	}
+
+	function onSheetTouchStart(e: TouchEvent) {
+		e.preventDefault();
+		const touch = e.touches[0];
+		if (!touch) return;
+		beginSheetDrag(touch.clientY);
+	}
+
+	function beginSheetDrag(startClientY: number) {
+		const startY = startClientY;
+		const startOpen = panelOpen;
+		let moved = false;
+
+		const maxTranslate = window.innerHeight * SHEET_HEIGHT_VH / 100 - 44;
+		const currentTranslateY = startOpen ? 0 : maxTranslate;
+
+		sheetDragOffset = currentTranslateY;
+		sheetDragging = true;
+
+		function onMove(ev: TouchEvent | PointerEvent) {
+			const clientY = 'touches' in ev ? ev.touches[0]?.clientY ?? startY : ev.clientY;
+			const delta = clientY - startY;
+			if (Math.abs(delta) > 4) moved = true;
+			sheetDragOffset = Math.max(0, Math.min(maxTranslate, currentTranslateY + delta));
+		}
+
+		function onUp(ev: TouchEvent | PointerEvent) {
+			window.removeEventListener('touchmove', onMove as EventListener);
+			window.removeEventListener('touchend', onUp as EventListener);
+			window.removeEventListener('pointermove', onMove as EventListener);
+			window.removeEventListener('pointerup', onUp as EventListener);
+			sheetDragging = false;
+			sheetDragOffset = 0;
+			const clientY = 'changedTouches' in ev ? ev.changedTouches[0]?.clientY ?? startY : (ev as PointerEvent).clientY;
+			const delta = clientY - startY;
+			if (!moved) {
+				panelOpen = !startOpen;
+			} else {
+				const threshold = 60;
+				panelOpen = startOpen ? delta < threshold : delta < -threshold;
+			}
+		}
+
+		window.addEventListener('touchmove', onMove as EventListener, { passive: false });
+		window.addEventListener('touchend', onUp as EventListener);
+		window.addEventListener('pointermove', onMove as EventListener);
+		window.addEventListener('pointerup', onUp as EventListener);
+	}
 
 	let isVideo = $derived(file.type.startsWith('video/'));
 	let videoEl = $state<HTMLVideoElement | null>(null);
@@ -493,6 +554,16 @@
 	let canRedo = $derived(historyIndex < history.length - 1);
 	let moshGroupRef = $state<MoshGroup>();
 	let recordGroupRef = $state<RecordGroup>();
+	let trackLibraryRef = $state<TrackLibrary>();
+	let sidebarEl = $state<HTMLDivElement>();
+	let sheetHandleEl = $state<HTMLButtonElement>();
+
+	$effect(() => {
+		const el = sheetHandleEl;
+		if (!el) return;
+		el.addEventListener('touchstart', onSheetTouchStart, { passive: false });
+		return () => el.removeEventListener('touchstart', onSheetTouchStart);
+	});
 
 	function pushHistory() {
 		history.length = historyIndex + 1;
@@ -704,6 +775,7 @@
 	}}
 >
 	<TrackLibrary
+		bind:this={trackLibraryRef}
 		activeTrackName={trackFile?.name ?? null}
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
@@ -800,6 +872,9 @@
 		/>
 
 		<div class="action-bar">
+			<button class="library-btn" onclick={() => trackLibraryRef?.openLibrary()} title="Track library">
+				<Library size={12} />
+			</button>
 			<MoshGroup
 				bind:this={moshGroupRef}
 				onMosh={mosh}
@@ -810,6 +885,24 @@
 				bind:showSettings={showMoshSettings}
 			>
 				{#snippet settingsContent()}
+					<div class="format-group-mobile">
+						<button
+							class="format-btn"
+							class:active={format === 'png'}
+							onclick={() => (format = 'png')}
+						>PNG</button>
+						<button
+							class="format-btn"
+							class:active={format === 'jpg'}
+							onclick={() => (format = 'jpg')}
+						>JPG</button>
+						<button
+							class="format-btn"
+							class:active={format === 'webm'}
+							onclick={() => (format = 'webm')}
+						>WebM</button>
+					</div>
+					<div class="settings-divider"></div>
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<input id="show-fps" type="checkbox" bind:checked={showFps} />
@@ -1003,8 +1096,20 @@
 	{#if panelOpen}
 		<button class="sheet-backdrop" onclick={() => (panelOpen = false)} aria-label="Close effects panel"></button>
 	{/if}
-	<div class="sidebar" class:sheet-open={panelOpen}>
-		<button class="sheet-handle-row" onclick={() => (panelOpen = !panelOpen)} aria-label="Toggle effects panel" aria-expanded={panelOpen}>
+	<div
+		class="sidebar"
+		class:sheet-open={panelOpen && !sheetDragging}
+		class:sheet-dragging={sheetDragging}
+		style={sheetDragging ? `transform: translateY(${sheetDragOffset}px)` : ''}
+		bind:this={sidebarEl}
+	>
+		<button
+			class="sheet-handle-row"
+			bind:this={sheetHandleEl}
+			onpointerdown={onSheetPointerDown}
+			aria-label="Toggle effects panel"
+			aria-expanded={panelOpen}
+		>
 			<div class="sheet-handle"></div>
 		</button>
 		<div class="mosh-settings-wrapper">
@@ -1097,6 +1202,12 @@
 		overflow: hidden;
 	}
 
+	@media (max-width: 800px) {
+		.format-group {
+			display: none;
+		}
+	}
+
 	.format-btn {
 		padding: 0.35rem 0.9rem;
 		font-size: 0.7rem;
@@ -1129,6 +1240,25 @@
 		height: 1px;
 		background: #333;
 		margin: 0.15rem 0;
+	}
+
+	.format-group-mobile {
+		display: none;
+	}
+
+	@media (max-width: 800px) {
+		.format-group-mobile {
+			display: flex;
+			background: #111;
+			border: 1px solid #333;
+			border-radius: 6px;
+			overflow: hidden;
+			align-self: stretch;
+		}
+
+		.format-group-mobile .format-btn {
+			flex: 1;
+		}
 	}
 
 	/* Timeline */
@@ -1315,9 +1445,19 @@
 	/* Action bar */
 	.action-bar {
 		display: flex;
+		align-items: center;
 		justify-content: center;
 		gap: 0.75rem;
 		padding: 1rem;
+	}
+
+	.library-btn {
+		display: none;
+	}
+
+	.library-btn:hover {
+		border-color: #777;
+		color: #ccc;
 	}
 
 	@media (max-width: 800px) {
@@ -1329,6 +1469,23 @@
 		.action-btn {
 			padding: 0.6rem 1.2rem;
 			font-size: 0.72rem;
+		}
+
+		.library-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 26px;
+			height: 26px;
+			border-radius: 50%;
+			background: none;
+			border: 1.5px solid #444;
+			color: #888;
+			cursor: pointer;
+			flex-shrink: 0;
+			padding: 0;
+			box-sizing: border-box;
+			transition: border-color 0.2s, color 0.2s;
 		}
 	}
 
@@ -1550,6 +1707,10 @@
 			transform: translateY(0);
 		}
 
+		.sidebar.sheet-dragging {
+			transition: none;
+		}
+
 		.sheet-backdrop {
 			position: fixed;
 			inset: 0;
@@ -1571,6 +1732,7 @@
 			border: none;
 			cursor: pointer;
 			padding: 0;
+			touch-action: none;
 		}
 
 		.sheet-handle {

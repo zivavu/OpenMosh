@@ -1,14 +1,22 @@
 <script lang="ts">
-	import { ChevronRight, ChevronLeft, Plus, Play, Pause, X, AudioLines } from 'lucide-svelte';
+	import {
+		AudioLines,
+		ChevronLeft,
+		ChevronRight,
+		Pause,
+		Play,
+		Plus,
+		X,
+	} from 'lucide-svelte';
 	import { onDestroy, onMount } from 'svelte';
+	import { computeNormalizeGain, measureLoudness } from '../../audio/loudness';
+	import { decodeAudioFile } from '../../audio/offline-audio';
 	import {
 		addTrack,
 		deleteTrack,
 		getAllTracks,
 		type StoredTrack,
 	} from '../../audio/track-library';
-	import { measureLoudness, computeNormalizeGain } from '../../audio/loudness';
-	import { decodeAudioFile } from '../../audio/offline-audio';
 
 	interface Props {
 		activeTrackName: string | null;
@@ -41,7 +49,7 @@
 
 	const NORMALIZE_KEY = 'openmosh-library-normalize';
 	let normalizedIds = $state<Set<string>>(
-		new Set(JSON.parse(localStorage.getItem(NORMALIZE_KEY) ?? '[]'))
+		new Set(JSON.parse(localStorage.getItem(NORMALIZE_KEY) ?? '[]')),
 	);
 	// Not $state — only used internally, never read in template directly
 	let gainCache = new Map<string, number>();
@@ -88,6 +96,10 @@
 		}
 	});
 
+	export function openLibrary() {
+		open = true;
+	}
+
 	onMount(() => {
 		function onPointerDown(e: PointerEvent) {
 			if (open && libraryEl && !libraryEl.contains(e.target as Node)) {
@@ -111,21 +123,28 @@
 		normalizedIds = new Set([...normalizedIds, track.id]);
 		if (!gainCache.has(track.id)) {
 			measuringIds = new Set([...measuringIds, track.id]);
-			const file = new File([track.blob], track.name, { type: track.blob.type });
+			const file = new File([track.blob], track.name, {
+				type: track.blob.type,
+			});
 			decodeAudioFile(file)
 				.then((buffer) => {
 					const db = measureLoudness(buffer);
 					const gain = computeNormalizeGain(db);
 					gainCache.set(track.id, gain);
 					if (track.id === activeTrackId) onNormalizeChange?.(gain);
-					if (previewId === track.id && previewGain) previewGain.gain.value = gain;
+					if (previewId === track.id && previewGain)
+						previewGain.gain.value = gain;
 				})
 				.catch((e) => {
 					console.error('Failed to measure track loudness:', e);
-					normalizedIds = new Set([...normalizedIds].filter(x => x !== track.id));
+					normalizedIds = new Set(
+						[...normalizedIds].filter((x) => x !== track.id),
+					);
 				})
 				.finally(() => {
-					measuringIds = new Set([...measuringIds].filter(x => x !== track.id));
+					measuringIds = new Set(
+						[...measuringIds].filter((x) => x !== track.id),
+					);
 				});
 		}
 	}
@@ -148,7 +167,7 @@
 		try {
 			await deleteTrack(id);
 			tracks = tracks.filter((t) => t.id !== id);
-			normalizedIds = new Set([...normalizedIds].filter(x => x !== id));
+			normalizedIds = new Set([...normalizedIds].filter((x) => x !== id));
 			gainCache.delete(id);
 		} catch (e) {
 			console.error('Failed to delete track:', e);
@@ -165,7 +184,9 @@
 		// If normalized but gain not yet cached (measurement in flight), emit 1.0 for now.
 		// The in-flight toggleNormalize will call onNormalizeChange once measurement completes,
 		// provided activeTrackId is updated synchronously by onLoadTrack (which it is in Editor.svelte).
-		const gain = normalizedIds.has(track.id) ? (gainCache.get(track.id) ?? 1.0) : 1.0;
+		const gain = normalizedIds.has(track.id)
+			? (gainCache.get(track.id) ?? 1.0)
+			: 1.0;
 		onNormalizeChange?.(gain);
 	}
 
@@ -189,9 +210,10 @@
 				}
 				// Set gain for this track
 				if (previewGain) {
-					const gain = normalizedIds.has(track.id) && gainCache.has(track.id)
-						? gainCache.get(track.id)!
-						: 1.0;
+					const gain =
+						normalizedIds.has(track.id) && gainCache.has(track.id)
+							? gainCache.get(track.id)!
+							: 1.0;
 					previewGain.gain.value = gain;
 				}
 				previewEl.src = URL.createObjectURL(track.blob);
@@ -213,7 +235,7 @@
 	async function toggleNormalize(track: StoredTrack) {
 		if (normalizedIds.has(track.id)) {
 			// Turn off
-			normalizedIds = new Set([...normalizedIds].filter(x => x !== track.id));
+			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
 			if (track.id === activeTrackId) onNormalizeChange?.(1.0);
 			if (previewId === track.id && previewGain) previewGain.gain.value = 1.0;
 			return;
@@ -225,7 +247,9 @@
 
 		try {
 			if (!gainCache.has(track.id)) {
-				const file = new File([track.blob], track.name, { type: track.blob.type });
+				const file = new File([track.blob], track.name, {
+					type: track.blob.type,
+				});
 				const buffer = await decodeAudioFile(file);
 				const db = measureLoudness(buffer);
 				const gain = computeNormalizeGain(db);
@@ -237,9 +261,9 @@
 		} catch (e) {
 			console.error('Failed to measure track loudness:', e);
 			// Roll back: remove from normalizedIds
-			normalizedIds = new Set([...normalizedIds].filter(x => x !== track.id));
+			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
 		} finally {
-			measuringIds = new Set([...measuringIds].filter(x => x !== track.id));
+			measuringIds = new Set([...measuringIds].filter((x) => x !== track.id));
 		}
 	}
 </script>
@@ -309,7 +333,9 @@
 							class:measuring={measuringIds.has(track.id)}
 							disabled={measuringIds.has(track.id)}
 							onclick={() => toggleNormalize(track)}
-							title={normalizedIds.has(track.id) ? 'Remove normalization' : 'Normalize to -14 LUFS'}
+							title={normalizedIds.has(track.id)
+								? 'Remove normalization'
+								: 'Normalize to -14 LUFS'}
 						>
 							<AudioLines size={10} />
 						</button>
@@ -341,6 +367,25 @@
 		width: 28px;
 		border-right: 1px solid #2a2a2a;
 		background: #141414;
+	}
+
+	@media (max-width: 800px) {
+		.library {
+			width: 0;
+			border-right: none;
+		}
+
+		.expand-btn {
+			display: none;
+		}
+
+		.panel {
+			position: fixed;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 100;
+		}
 	}
 
 	.expand-btn {
@@ -534,7 +579,12 @@
 	}
 
 	@keyframes normalize-pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.4; }
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
 	}
 </style>
