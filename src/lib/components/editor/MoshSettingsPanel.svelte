@@ -1,4 +1,6 @@
 <script lang="ts">
+	import RangeSlider from '../ui/RangeSlider.svelte';
+
 	interface Props {
 		moshMin: number;
 		moshMax: number;
@@ -20,31 +22,25 @@
 	<h3 class="panel-title">Mosh settings</h3>
 	<div class="config-row">
 		<label for="mosh-min">Min effects</label>
-		<input
+		<RangeSlider
 			id="mosh-min"
-			type="range"
-			min="1"
-			max="20"
-			step="1"
 			bind:value={moshMin}
-			oninput={() => {
-				if (moshMax < moshMin) moshMax = moshMin;
-			}}
+			min={1}
+			max={20}
+			step={1}
+			oninput={(v) => { if (moshMax < v) moshMax = v; }}
 		/>
 		<span class="val">{moshMin}</span>
 	</div>
 	<div class="config-row">
 		<label for="mosh-max">Max effects</label>
-		<input
+		<RangeSlider
 			id="mosh-max"
-			type="range"
-			min="1"
-			max="20"
-			step="1"
 			bind:value={moshMax}
-			oninput={() => {
-				if (moshMin > moshMax) moshMin = moshMax;
-			}}
+			min={1}
+			max={20}
+			step={1}
+			oninput={(v) => { if (moshMin > v) moshMin = v; }}
 		/>
 		<span class="val">{moshMax}</span>
 	</div>
@@ -59,13 +55,12 @@
 	{#if moshAudioLink}
 		<div class="config-row">
 			<label for="mosh-audio-link-strength">Links strength</label>
-			<input
+			<RangeSlider
 				id="mosh-audio-link-strength"
-				type="range"
-				min="0"
-				max="1"
-				step="0.05"
 				bind:value={moshAudioLinkStrength}
+				min={0}
+				max={1}
+				step={0.05}
 			/>
 			<span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
 		</div>
@@ -102,43 +97,6 @@
 		min-width: 80px;
 		color: #999;
 		font-size: 0.75rem;
-	}
-
-	.config-row input[type='range'] {
-		flex: 1;
-		width: 0;
-		height: 3px;
-		background: #333;
-		border-radius: 2px;
-		cursor: pointer;
-	}
-
-	.config-row input[type='range']::-webkit-slider-thumb {
-		appearance: none;
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: #aaa;
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	.config-row input[type='range']::-webkit-slider-thumb:hover {
-		background: #ddd;
-	}
-
-	.config-row input[type='range']::-moz-range-thumb {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: #aaa;
-		border: none;
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	.config-row input[type='range']::-moz-range-thumb:hover {
-		background: #ddd;
 	}
 
 	.config-row input[type='checkbox'] {

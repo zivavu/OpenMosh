@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RangeSlider from '../ui/RangeSlider.svelte';
 	import type { BeatSubdivision, SlideshowConfig } from '../../slideshow/types';
 	import {
 		DEFAULT_TEXT_OVERLAY_CONFIG,
@@ -204,15 +205,13 @@
 	{#if config.moshMode === 'random' || config.moshMode === 'smooth'}
 		<div class="config-row">
 			<label for="ss-mosh-min">Min effects</label>
-			<input
+			<RangeSlider
 				id="ss-mosh-min"
-				type="range"
-				min="1"
-				max="20"
-				step="1"
 				value={config.moshMin}
-				oninput={(e) => {
-					const v = +(e.currentTarget as HTMLInputElement).value;
+				min={1}
+				max={20}
+				step={1}
+				oninput={(v) => {
 					set('moshMin', v);
 					if (config.moshMax < v) set('moshMax', v);
 				}}
@@ -221,15 +220,13 @@
 		</div>
 		<div class="config-row">
 			<label for="ss-mosh-max">Max effects</label>
-			<input
+			<RangeSlider
 				id="ss-mosh-max"
-				type="range"
-				min="1"
-				max="20"
-				step="1"
 				value={config.moshMax}
-				oninput={(e) => {
-					const v = +(e.currentTarget as HTMLInputElement).value;
+				min={1}
+				max={20}
+				step={1}
+				oninput={(v) => {
 					set('moshMax', v);
 					if (config.moshMin > v) set('moshMin', v);
 				}}
@@ -241,15 +238,13 @@
 	{#if config.moshMode === 'smooth'}
 		<div class="config-row">
 			<label for="ss-smooth-speed">Change rate</label>
-			<input
+			<RangeSlider
 				id="ss-smooth-speed"
-				type="range"
-				min="1"
-				max="5"
-				step="1"
 				value={config.smoothSpeed ?? 1}
-				oninput={(e) =>
-					set('smoothSpeed', +(e.currentTarget as HTMLInputElement).value)}
+				min={1}
+				max={5}
+				step={1}
+				oninput={(v) => set('smoothSpeed', v)}
 			/>
 			<span class="val">{config.smoothSpeed ?? 1}</span>
 		</div>
@@ -269,18 +264,13 @@
 	{#if config.moshAudioLink}
 		<div class="config-row">
 			<label for="ss-audio-link-strength">Link strength</label>
-			<input
+			<RangeSlider
 				id="ss-audio-link-strength"
-				type="range"
-				min="0"
-				max="1"
-				step="0.05"
 				value={config.moshAudioLinkStrength}
-				oninput={(e) =>
-					set(
-						'moshAudioLinkStrength',
-						+(e.currentTarget as HTMLInputElement).value,
-					)}
+				min={0}
+				max={1}
+				step={0.05}
+				oninput={(v) => set('moshAudioLinkStrength', v)}
 			/>
 			<span class="val">{Math.round(config.moshAudioLinkStrength * 100)}%</span>
 		</div>
@@ -347,18 +337,13 @@
 		</div>
 		<div class="config-row">
 			<label for="ss-text-chance">Text chance</label>
-			<input
+			<RangeSlider
 				id="ss-text-chance"
-				type="range"
-				min="0"
-				max="100"
-				step="5"
 				value={Math.round((textOverlay.chance ?? 0.8) * 100)}
-				oninput={(e) =>
-					setTextOverlay(
-						'chance',
-						+(e.currentTarget as HTMLInputElement).value / 100,
-					)}
+				min={0}
+				max={100}
+				step={5}
+				oninput={(v) => setTextOverlay('chance', v / 100)}
 			/>
 			<span class="val">{Math.round((textOverlay.chance ?? 0.8) * 100)}%</span>
 		</div>
@@ -414,18 +399,13 @@
 		</div>
 		<div class="config-row">
 			<label for="ss-text-opacity">Opacity</label>
-			<input
+			<RangeSlider
 				id="ss-text-opacity"
-				type="range"
-				min="0"
-				max="1"
-				step="0.01"
 				value={textOverlay.opacity ?? 1}
-				oninput={(e) =>
-					setTextOverlay(
-						'opacity',
-						+(e.currentTarget as HTMLInputElement).value,
-					)}
+				min={0}
+				max={1}
+				step={0.01}
+				oninput={(v) => setTextOverlay('opacity', v)}
 			/>
 			<span class="config-value"
 				>{Math.round((textOverlay.opacity ?? 1) * 100)}%</span
@@ -433,18 +413,13 @@
 		</div>
 		<div class="config-row">
 			<label for="ss-text-size">Size</label>
-			<input
+			<RangeSlider
 				id="ss-text-size"
-				type="range"
-				min="0.02"
-				max="0.12"
-				step="0.01"
 				value={textOverlay.style?.fontSizeRatio ?? 0.06}
-				oninput={(e) =>
-					setTextOverlayStyle(
-						'fontSizeRatio',
-						+(e.currentTarget as HTMLInputElement).value,
-					)}
+				min={0.02}
+				max={0.12}
+				step={0.01}
+				oninput={(v) => setTextOverlayStyle('fontSizeRatio', v)}
 			/>
 			<span class="val"
 				>{Math.round((textOverlay.style?.fontSizeRatio ?? 0.06) * 100)}%</span
@@ -522,44 +497,6 @@
 		color: #e0e0e0;
 		font-size: 0.78rem;
 		font-family: inherit;
-	}
-
-	.config-row input[type='range'] {
-		flex: 1;
-		height: 3px;
-		appearance: none;
-		background: #333;
-		border-radius: 2px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	.config-row input[type='range']::-webkit-slider-thumb {
-		appearance: none;
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: #aaa;
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	.config-row input[type='range']::-webkit-slider-thumb:hover {
-		background: #ddd;
-	}
-
-	.config-row input[type='range']::-moz-range-thumb {
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: #aaa;
-		border: none;
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	.config-row input[type='range']::-moz-range-thumb:hover {
-		background: #ddd;
 	}
 
 	.config-row select {

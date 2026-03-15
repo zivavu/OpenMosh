@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { X, GripVertical, ArrowUpDown, Music } from 'lucide-svelte';
 	import DualRangeSlider from './DualRangeSlider.svelte';
+	import RangeSlider from './RangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
 	import {
 		FREQ_PRESETS,
@@ -141,16 +142,14 @@
 						>
 						{#if param.type === 'range'}
 							<div class="param-range-wrap">
-								<input
+								<RangeSlider
 									id="{effect.instanceId}-{param.key}"
-									type="range"
+									value={effect.values[param.key]}
 									min={param.min}
 									max={param.max}
 									step={param.step}
-									value={effect.values[param.key]}
 									disabled={!!effect.volumeLinks?.[param.key]}
-									oninput={(e) =>
-										onParamChange(param.key, parseFloat(e.currentTarget.value))}
+									oninput={(v) => onParamChange(param.key, v)}
 									ondblclick={() => onParamChange(param.key, param.defaultValue)}
 								/>
 								<span class="param-value"
@@ -722,30 +721,6 @@
 	.spectrum-slider {
 		flex: 1;
 		min-width: 0;
-	}
-
-	input[type='range'] {
-		flex: 1;
-		height: 3px;
-		appearance: none;
-		background: #333;
-		border-radius: 2px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	input[type='range']::-webkit-slider-thumb {
-		appearance: none;
-		width: 10px;
-		height: 10px;
-		border-radius: 50%;
-		background: #aaa;
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	input[type='range']::-webkit-slider-thumb:hover {
-		background: #ddd;
 	}
 
 	input[type='checkbox'] {
