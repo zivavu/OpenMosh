@@ -418,7 +418,7 @@
 
 			let t: number;
 			if (audio.trackFile && audio.audioPlaying) {
-				t = audio.trackCurrentTime;
+				t = audioEl?.currentTime ?? audio.trackCurrentTime;
 				if (t >= audio.spanEnd) {
 					stopPreview();
 					return;

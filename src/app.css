@@ -4,6 +4,7 @@
 	box-sizing: border-box;
 	margin: 0;
 	padding: 0;
+	-webkit-tap-highlight-color: transparent;
 }
 
 :root {
@@ -26,6 +27,10 @@
 body {
 	margin: 0;
 	min-height: 100svh;
+}
+
+button:active {
+	opacity: 0.7;
 }
 
 #app {

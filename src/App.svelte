@@ -62,7 +62,6 @@
 	<SlideshowEditor
 		initialFiles={slideshowFiles}
 		initialAudioFile={pendingAudioFile}
-		onBack={() => history.back()}
 		{warmCanvas}
 		{warmRenderer}
 	/>

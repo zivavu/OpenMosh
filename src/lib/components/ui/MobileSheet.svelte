@@ -51,10 +51,14 @@
 		sheetDragging = true;
 
 		function onMove(ev: TouchEvent | PointerEvent) {
-			const clientY = 'touches' in ev ? ev.touches[0]?.clientY ?? startY : ev.clientY;
+			const clientY =
+				'touches' in ev ? (ev.touches[0]?.clientY ?? startY) : ev.clientY;
 			const delta = clientY - startY;
 			if (Math.abs(delta) > 4) moved = true;
-			sheetDragOffset = Math.max(0, Math.min(maxTranslate, currentTranslateY + delta));
+			sheetDragOffset = Math.max(
+				0,
+				Math.min(maxTranslate, currentTranslateY + delta),
+			);
 		}
 
 		function onUp(ev: TouchEvent | PointerEvent) {
@@ -66,7 +70,7 @@
 			sheetDragOffset = 0;
 			const clientY =
 				'changedTouches' in ev
-					? ev.changedTouches[0]?.clientY ?? startY
+					? (ev.changedTouches[0]?.clientY ?? startY)
 					: (ev as PointerEvent).clientY;
 			const delta = clientY - startY;
 			if (!moved) {
@@ -77,7 +81,9 @@
 			}
 		}
 
-		window.addEventListener('touchmove', onMove as EventListener, { passive: false });
+		window.addEventListener('touchmove', onMove as EventListener, {
+			passive: false,
+		});
 		window.addEventListener('touchend', onUp as EventListener);
 		window.addEventListener('pointermove', onMove as EventListener);
 		window.addEventListener('pointerup', onUp as EventListener);
@@ -115,13 +121,13 @@
 			<button
 				class="tab-btn"
 				class:active={activeTab === 'settings'}
-				onclick={() => (activeTab = 'settings')}
-			>Settings</button>
+				onclick={() => (activeTab = 'settings')}>Settings</button
+			>
 			<button
 				class="tab-btn"
 				class:active={activeTab === 'effects'}
-				onclick={() => (activeTab = 'effects')}
-			>Effects</button>
+				onclick={() => (activeTab = 'effects')}>Effects</button
+			>
 		</div>
 		<div class="tab-content">
 			{#if activeTab === 'settings'}
@@ -172,11 +178,11 @@
 			bottom: 0;
 			left: 0;
 			right: 0;
-			height: 70vh;
+			height: 50svh;
 			border-left: none;
 			border-top: 1px solid #2a2a2a;
 			border-radius: 12px 12px 0 0;
-			transform: translateY(calc(70vh - 44px));
+			transform: translateY(calc(50svh - 44px));
 			transition: transform 0.3s ease;
 			z-index: 50;
 			overflow-y: auto;
