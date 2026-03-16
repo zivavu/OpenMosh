@@ -1,11 +1,7 @@
 <script lang="ts">
-	import { Download, Music, Pause, Play, Library } from 'lucide-svelte';
-	import {
-		applyVolumeLinksTick,
-		computeVolumeLevel,
-		createAudioGraph,
-		disposeAudioGraph as disposeAudioGraphState,
-	} from '../../audio/audio-controller';
+	import { Download, Pause, Play, Library } from 'lucide-svelte';
+	import { createAudioGraph } from '../../audio/audio-controller';
+	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import {
@@ -17,8 +13,8 @@
 		EFFECT_DEFINITIONS,
 		createEffectInstance,
 		loadInitialEffects,
+		setVolumeLink,
 		type EffectInstance,
-		type VolumeLink,
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
 	import type { RecordFormat } from '../../recorder';
@@ -26,6 +22,7 @@
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
+	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import MoshGroup from './MoshGroup.svelte';
@@ -42,7 +39,14 @@
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 	}
 
-	let { file, onBack, onfile, initialAudioFile = null, warmCanvas = null, warmRenderer = null }: Props = $props();
+	let {
+		file,
+		onBack,
+		onfile,
+		initialAudioFile = null,
+		warmCanvas = null,
+		warmRenderer = null,
+	}: Props = $props();
 	let dragging = $state(false);
 	let mobileSheetRef = $state<MobileSheet>();
 
@@ -88,7 +92,7 @@
 				moshAudioLink,
 				moshAudioLinkStrength,
 				showFps,
-				outputVolume,
+				outputVolume: audio.outputVolume,
 			}),
 		);
 	}
@@ -100,6 +104,25 @@
 	let moshAudioLink = $state(saved.moshAudioLink ?? true);
 	let moshAudioLinkStrength = $state(saved.moshAudioLinkStrength ?? 0.8);
 	let showFps = $state(saved.showFps ?? false);
+
+	const audio = new AudioManager({
+		getEffects: () => effects,
+		initialOutputVolume: saved.outputVolume ?? 1,
+	});
+
+	let normalizeGain = $state(1.0);
+
+	// Sync audioEl DOM binding into the manager
+	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
+	$effect(() => { audio.setAudioEl(audioEl); });
+
+	// Seed track from audio selected on the upload screen
+	$effect(() => {
+		if (initialAudioFile && !audio.trackFile) {
+			audio.trackFile = initialAudioFile;
+		}
+	});
+
 	$effect(() => {
 		// subscribe to all settings
 		moshMin;
@@ -108,7 +131,7 @@
 		moshAudioLink;
 		moshAudioLinkStrength;
 		showFps;
-		outputVolume;
+		audio.outputVolume;
 		saveSettings();
 	});
 	let currentFps = $state(0);
@@ -118,7 +141,6 @@
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 
-	let trackFile = $state<File | null>(null);
 	let currentTrackId = $state<string | null>(null);
 
 	const SINGLE_SPAN_KEY = 'openmosh-single-span';
@@ -126,7 +148,7 @@
 	function saveSingleSpan(trackId: string) {
 		try {
 			const all = JSON.parse(localStorage.getItem(SINGLE_SPAN_KEY) ?? '{}');
-			all[trackId] = { spanStart, spanEnd };
+			all[trackId] = { spanStart: audio.spanStart, spanEnd: audio.spanEnd };
 			localStorage.setItem(SINGLE_SPAN_KEY, JSON.stringify(all));
 		} catch {}
 	}
@@ -143,50 +165,12 @@
 
 	// Persist span changes for library tracks
 	$effect(() => {
-		spanStart;
-		spanEnd;
+		audio.spanStart;
+		audio.spanEnd;
 		if (currentTrackId) saveSingleSpan(currentTrackId);
 	});
 
-	// Seed track from audio selected on the upload screen
-	$effect(() => {
-		if (initialAudioFile && !trackFile) {
-			trackFile = initialAudioFile;
-		}
-	});
-
-	let trackObjectUrl = $state<string | null>(null);
 	let trackInput: HTMLInputElement;
-
-	$effect(() => {
-		const f = trackFile;
-		let url: string | null = null;
-		if (f) {
-			url = URL.createObjectURL(f);
-			trackObjectUrl = url;
-		} else {
-			trackObjectUrl = null;
-		}
-		return () => {
-			if (url) URL.revokeObjectURL(url);
-		};
-	});
-
-	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
-
-	let showMusicHint = $state(!localStorage.getItem(MUSIC_HINT_KEY));
-
-	function dismissMusicHint() {
-		localStorage.setItem(MUSIC_HINT_KEY, '1');
-		showMusicHint = false;
-	}
-
-	// Auto-dismiss when a track is loaded
-	$effect(() => {
-		if (trackFile && showMusicHint) {
-			dismissMusicHint();
-		}
-	});
 
 	$effect(() => {
 		const nw = naturalWidth;
@@ -205,114 +189,25 @@
 		const f = trackInput?.files?.[0];
 		if (f) {
 			normalizeGain = 1.0;
-			trackFile = f;
+			audio.trackFile = f;
 			trackInput.value = '';
 		}
 	}
 
 	function clearTrack() {
-		audioEl?.pause();
-		audioPlaying = false;
-		trackFile = null;
-		trackDuration = 0;
-		trackCurrentTime = 0;
-		spanStart = 0;
-		spanEnd = 0;
+		audio.clearTrack();
 		currentTrackId = null;
 		normalizeGain = 1.0;
-		disposeAudioGraph();
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string) {
 		clearTrack();
 		currentTrackId = trackId;
-		trackFile = file;
-		const saved = loadSingleSpan(trackId);
-		if (saved !== null) {
-			pendingSpan = saved;
+		audio.trackFile = file;
+		const savedSpan = loadSingleSpan(trackId);
+		if (savedSpan !== null) {
+			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
-	}
-
-	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
-	let trackDuration = $state(0);
-	let trackCurrentTime = $state(0);
-	let spanStart = $state(0);
-	let spanEnd = $state(0);
-	let audioPlaying = $state(false);
-	let pendingSpan = $state<{ spanStart: number; spanEnd: number } | null>(null);
-
-	let volumeLevel = $state(0);
-	let frequencyData = $state<Uint8Array | null>(null);
-	let audioSampleRate = $state(0);
-	let audioFrequencyBinCount = $state(0);
-	let audioContext = $state<AudioContext | null>(null);
-	let analyserNode = $state<AnalyserNode | null>(null);
-	let gainNode = $state<GainNode | null>(null);
-	let normalizeGainNode = $state<GainNode | null>(null);
-	let outputVolume = $state(saved.outputVolume ?? 1);
-	let normalizeGain = $state(1.0);
-	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
-
-	function onAudioLoadedMetadata() {
-		const d = audioEl?.duration;
-		if (typeof d === 'number' && Number.isFinite(d)) {
-			trackDuration = d;
-			if (pendingSpan) {
-				spanStart = Math.max(0, Math.min(pendingSpan.spanStart, d));
-				spanEnd = Math.max(0, Math.min(pendingSpan.spanEnd, d));
-				pendingSpan = null;
-			} else {
-				spanStart = 0;
-				spanEnd = d;
-			}
-		}
-	}
-
-	function onAudioTimeUpdate() {
-		if (!audioEl) return;
-		trackCurrentTime = audioEl.currentTime;
-		if (audioPlaying && audioEl.currentTime >= spanEnd) {
-			audioEl.pause();
-			audioEl.currentTime = spanStart;
-			trackCurrentTime = spanStart;
-			audioPlaying = false;
-		}
-	}
-
-	function playSpan() {
-		ensureAudioGraph();
-		if (audioContext?.state === 'suspended') audioContext.resume();
-		if (trackFile && trackObjectUrl && audioEl) {
-			const t = audioEl.currentTime;
-			if (t < spanStart || t >= spanEnd) {
-				audioEl.currentTime = spanStart;
-				trackCurrentTime = spanStart;
-			}
-			audioEl.play();
-			audioPlaying = true;
-		}
-		if (isVideo && videoEl) {
-			if (
-				videoEl.currentTime < videoSpanStart ||
-				videoEl.currentTime >= videoSpanEnd
-			) {
-				videoEl.currentTime = videoSpanStart;
-			}
-			videoEl.play().catch(() => {});
-		}
-	}
-
-	function pauseTrack() {
-		audioEl?.pause();
-		audioPlaying = false;
-		if (isVideo) videoEl?.pause();
-	}
-
-	function seekTo(t: number) {
-		if (!audioEl) return;
-		const tClamp = Math.max(0, Math.min(trackDuration, t));
-		audioEl.currentTime = tClamp;
-		trackCurrentTime = tClamp;
 	}
 
 	$effect(() => {
@@ -344,34 +239,18 @@
 		};
 	});
 
-	function applyAudioGraphState(state: ReturnType<typeof createAudioGraph>) {
-		audioContext = state.context;
-		mediaSource = state.source;
-		normalizeGainNode = state.normalizeGain;
-		normalizeGainNode.gain.value = normalizeGain;
-		analyserNode = state.analyser;
-		gainNode = state.gain;
-		gainNode.gain.value = outputVolume;
-		frequencyData = state.frequencyData;
-		audioSampleRate = state.sampleRate;
-		audioFrequencyBinCount = state.binCount;
-	}
-
-	function ensureAudioGraph() {
-		if (!audioEl || audioContext) return;
-		applyAudioGraphState(createAudioGraph(audioEl));
-	}
-
 	function ensureVideoAudioGraph() {
-		if (!videoEl || audioContext || trackFile) return;
+		if (!videoEl || audio.audioContext || audio.trackFile) return;
 		videoEl.muted = false;
-		applyAudioGraphState(createAudioGraph(videoEl));
-		audioContext!.resume().catch(() => {});
+		const state = createAudioGraph(videoEl);
+		audio.applyAudioGraphState(state);
+		audio.normalizeGainNode!.gain.value = normalizeGain;
+		audio.audioContext!.resume().catch(() => {});
 	}
 
 	function playVideo() {
 		if (!videoEl) return;
-		audioContext?.resume();
+		audio.audioContext?.resume();
 		videoEl.play().catch(() => {});
 	}
 
@@ -407,30 +286,6 @@
 		}
 	}
 
-	function disposeAudioGraph() {
-		if (audioContext) {
-			disposeAudioGraphState({
-				context: audioContext,
-				source: mediaSource!,
-				normalizeGain: normalizeGainNode!,
-				analyser: analyserNode!,
-				gain: gainNode!,
-				frequencyData: frequencyData!,
-				sampleRate: audioSampleRate,
-				binCount: audioFrequencyBinCount,
-			});
-		}
-		mediaSource = null;
-		normalizeGainNode = null;
-		analyserNode = null;
-		gainNode = null;
-		frequencyData = null;
-		audioSampleRate = 0;
-		audioFrequencyBinCount = 0;
-		audioContext = null;
-		volumeLevel = 0;
-	}
-
 	function getMoshOptions() {
 		return {
 			moshMin,
@@ -438,53 +293,29 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
-			hasAudio: !!trackFile && !!audioContext,
-			audioSampleRate,
-			frequencyData,
+			hasAudio: !!audio.trackFile && !!audio.audioContext,
+			audioSampleRate: audio.audioSampleRate,
+			frequencyData: audio.frequencyData,
 		};
 	}
 
-	$effect(() => {
-		const analyser = analyserNode;
-		if (!analyser) return;
-		const timeData = new Uint8Array(analyser.fftSize);
-		const freqDataRef = frequencyData;
-		const sampleRate = audioSampleRate;
-		const fftSize = analyser.fftSize;
-		let rafId: number;
-		function tick() {
-			if (!analyser) return;
-			volumeLevel = computeVolumeLevel(analyser, timeData);
-			if (freqDataRef)
-				analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-			applyVolumeLinksTick(
-				effects,
-				volumeLevel,
-				freqDataRef,
-				sampleRate,
-				fftSize,
-			);
-			rafId = requestAnimationFrame(tick);
+	function playSpan() {
+		audio.playAudio();
+		if (isVideo && videoEl) {
+			if (videoEl.currentTime < videoSpanStart || videoEl.currentTime >= videoSpanEnd) {
+				videoEl.currentTime = videoSpanStart;
+			}
+			videoEl.play().catch(() => {});
 		}
-		rafId = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(rafId);
-	});
+	}
 
-	function setVolumeLink(
-		index: number,
-		paramKey: string,
-		link: VolumeLink | null,
-	) {
-		const e = effects[index];
-		const nextLinks = e.volumeLinks ? { ...e.volumeLinks } : {};
-		if (link === null) {
-			delete nextLinks[paramKey];
-		} else {
-			nextLinks[paramKey] = link;
-		}
-		effects = effects.map((eff, i) =>
-			i === index ? { ...eff, volumeLinks: nextLinks } : eff,
-		);
+	function pauseTrack() {
+		audio.pauseAudio();
+		if (isVideo) videoEl?.pause();
+	}
+
+	function seekTo(t: number) {
+		audio.seekTo(t);
 	}
 
 	let history: EffectInstance[][] = $state([
@@ -549,8 +380,8 @@
 		reInput,
 		playSpan,
 		pauseTrack,
-		hasTrack: () => (!!trackFile && !!audioEl) || isVideo,
-		isPlaying: () => audioPlaying || videoPlaying,
+		hasTrack: () => (!!audio.trackFile && !!audioEl) || isVideo,
+		isPlaying: () => audio.audioPlaying || videoPlaying,
 	});
 
 	function save() {
@@ -577,8 +408,8 @@
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
 	let effectiveDuration = $derived(
-		trackFile && trackDuration > 0 && spanEnd - spanStart > 0
-			? spanEnd - spanStart
+		audio.trackFile && audio.trackDuration > 0 && audio.spanEnd - audio.spanStart > 0
+			? audio.spanEnd - audio.spanStart
 			: isVideo && videoDuration > 0
 				? videoSpanEnd - videoSpanStart
 				: recordDuration,
@@ -605,10 +436,10 @@
 				canvas: canvasEl,
 				renderer: glRenderer,
 				effects,
-				trackFile,
-				trackDuration,
-				spanStart,
-				spanEnd,
+				trackFile: audio.trackFile,
+				trackDuration: audio.trackDuration,
+				spanStart: audio.spanStart,
+				spanEnd: audio.spanEnd,
 				isVideo,
 				videoEl,
 				videoDuration,
@@ -654,20 +485,20 @@
 <svelte:window
 	onkeydown={handleKeydown}
 	onpointerdown={(e) => {
-		audioContext?.resume();
+		audio.audioContext?.resume();
 		moshGroupRef?.handleClickOutside(e);
 		recordGroupRef?.handleClickOutside(e);
 	}}
 />
 
-{#if trackObjectUrl}
+{#if audio.trackObjectUrl}
 	<audio
 		bind:this={audioEl}
-		src={trackObjectUrl}
-		onloadedmetadata={onAudioLoadedMetadata}
-		ontimeupdate={onAudioTimeUpdate}
-		onplay={() => (audioPlaying = true)}
-		onpause={() => (audioPlaying = false)}
+		src={audio.trackObjectUrl}
+		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
+		ontimeupdate={() => audio.onAudioTimeUpdate()}
+		onplay={() => (audio.audioPlaying = true)}
+		onpause={() => (audio.audioPlaying = false)}
 		hidden
 	></audio>
 {/if}
@@ -700,7 +531,7 @@
 		if (!f) return;
 		if (f.type.startsWith('audio/')) {
 			clearTrack();
-			trackFile = f;
+			audio.trackFile = f;
 		} else if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
 			onfile(f);
 		}
@@ -708,15 +539,15 @@
 >
 	<TrackLibrary
 		bind:this={trackLibraryRef}
-		activeTrackName={trackFile?.name ?? null}
+		activeTrackName={audio.trackFile?.name ?? null}
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
-		onPreviewStart={pauseTrack}
-		mainPlaying={audioPlaying}
-		pendingTrack={trackFile}
+		onPreviewStart={() => audio.pauseAudio()}
+		mainPlaying={audio.audioPlaying}
+		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => {
 			normalizeGain = gain;
-			if (normalizeGainNode) normalizeGainNode.gain.value = gain;
+			if (audio.normalizeGainNode) audio.normalizeGainNode.gain.value = gain;
 		}}
 	/>
 	<div class="main-area">
@@ -780,7 +611,7 @@
 				onplay={() => (videoPlaying = true)}
 				onpause={() => (videoPlaying = false)}
 				onseeking={() => {
-					audioContext?.resume();
+					audio.audioContext?.resume();
 				}}
 				style="display:none"
 			></video>
@@ -804,7 +635,11 @@
 		/>
 
 		<div class="action-bar">
-			<button class="library-btn" onclick={() => trackLibraryRef?.openLibrary()} title="Track library">
+			<button
+				class="library-btn"
+				onclick={() => trackLibraryRef?.openLibrary()}
+				title="Track library"
+			>
 				<Library size={12} />
 			</button>
 			<MoshGroup
@@ -821,18 +656,18 @@
 						<button
 							class="format-btn"
 							class:active={format === 'png'}
-							onclick={() => (format = 'png')}
-						>PNG</button>
+							onclick={() => (format = 'png')}>PNG</button
+						>
 						<button
 							class="format-btn"
 							class:active={format === 'jpg'}
-							onclick={() => (format = 'jpg')}
-						>JPG</button>
+							onclick={() => (format = 'jpg')}>JPG</button
+						>
 						<button
 							class="format-btn"
 							class:active={format === 'webm'}
-							onclick={() => (format = 'webm')}
-						>WebM</button>
+							onclick={() => (format = 'webm')}>WebM</button
+						>
 					</div>
 					<div class="settings-divider"></div>
 					<div class="mosh-setting-row">
@@ -862,7 +697,7 @@
 					bind:showSettings={showRecordSettings}
 				>
 					{#snippet settingsContent()}
-						{#if !trackFile && !isVideo}
+						{#if !audio.trackFile && !isVideo}
 							<div class="mosh-setting-row">
 								<label for="rec-duration">Duration</label>
 								<input
@@ -962,40 +797,42 @@
 					</div>
 				</div>
 				<span class="timeline-time">{formatTime(videoSpanEnd)}</span>
-				{#if analyserNode && !trackFile}
+				{#if audio.analyserNode && !audio.trackFile}
 					<input
 						type="range"
 						class="volume-slider"
 						min="0"
 						max="1"
 						step="0.01"
-						value={outputVolume}
+						value={audio.outputVolume}
 						oninput={(e) => {
-							outputVolume = +(e.currentTarget as HTMLInputElement).value;
-							if (gainNode) gainNode.gain.value = outputVolume;
+							audio.setOutputVolume(+(e.currentTarget as HTMLInputElement).value);
 						}}
-						title="Output volume: {Math.round(outputVolume * 100)}%"
+						title="Output volume: {Math.round(audio.outputVolume * 100)}%"
 					/>
 				{/if}
 			</div>
 		{/if}
-		{#if trackFile && trackDuration > 0}
+		{#if !audio.trackFile}
+			<TrackAddBar
+				onOpenPicker={openTrackPicker}
+				hintText="Add music to make effects react to the beat"
+			/>
+		{/if}
+		{#if audio.trackFile && audio.trackDuration > 0}
 			<AudioTimeline
-				{trackDuration}
-				{trackCurrentTime}
-				{spanStart}
-				{spanEnd}
-				{audioPlaying}
-				{outputVolume}
+				trackDuration={audio.trackDuration}
+				trackCurrentTime={audio.trackCurrentTime}
+				spanStart={audio.spanStart}
+				spanEnd={audio.spanEnd}
+				audioPlaying={audio.audioPlaying}
+				outputVolume={audio.outputVolume}
 				onPlay={playSpan}
 				onPause={pauseTrack}
 				onSeek={seekTo}
-				onSpanStartChange={(t) => (spanStart = t)}
-				onSpanEndChange={(t) => (spanEnd = t)}
-				onVolumeChange={(v) => {
-					outputVolume = v;
-					if (gainNode) gainNode.gain.value = v;
-				}}
+				onSpanStartChange={(t) => (audio.spanStart = t)}
+				onSpanEndChange={(t) => (audio.spanEnd = t)}
+				onVolumeChange={(v) => audio.setOutputVolume(v)}
 				onRemoveTrack={clearTrack}
 			/>
 		{/if}
@@ -1006,24 +843,6 @@
 			onchange={onTrackInputChange}
 			hidden
 		/>
-		{#if !trackFile}
-			<div class="track-add-bar">
-				<button class="track-add-btn" onclick={openTrackPicker}>
-					<Music size={14} />
-					Add audio track
-				</button>
-			</div>
-		{/if}
-		{#if !trackFile && showMusicHint}
-			<div class="music-hint-callout">
-				<span>Add music to make effects react to the beat</span>
-				<button
-					class="music-hint-dismiss"
-					onclick={dismissMusicHint}
-					aria-label="Dismiss">✕</button
-				>
-			</div>
-		{/if}
 	</div>
 	<MobileSheet bind:this={mobileSheetRef}>
 		{#snippet settings()}
@@ -1040,15 +859,11 @@
 		{#snippet effectsPanel()}
 			<EffectsPanel
 				bind:effects
-				hasTrack={!!trackFile || (isVideo && !!analyserNode)}
-				spectrumData={frequencyData && audioSampleRate > 0
-					? {
-							data: frequencyData as Uint8Array<ArrayBuffer>,
-							sampleRate: audioSampleRate,
-							binCount: audioFrequencyBinCount,
-						}
-					: null}
-				onVolumeLinkChange={setVolumeLink}
+				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+				spectrumData={audio.spectrumData}
+				onVolumeLinkChange={(index, paramKey, link) => {
+					effects = setVolumeLink(effects, index, paramKey, link);
+				}}
 			/>
 		{/snippet}
 	</MobileSheet>
@@ -1151,7 +966,7 @@
 		margin: 0.15rem 0;
 	}
 
-.format-group-mobile {
+	.format-group-mobile {
 		display: none;
 	}
 
@@ -1286,39 +1101,6 @@
 		outline-offset: 1px;
 	}
 
-	.track-add-bar {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		padding: 0.35rem 0.75rem;
-		background: rgba(18, 18, 18, 0.9);
-		border-top: 1px solid #2a2a2a;
-	}
-
-	.track-add-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.3rem 0.7rem;
-		font-size: 0.65rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		font-family: inherit;
-		background: none;
-		border: 1px solid #333;
-		border-radius: 5px;
-		color: #666;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.track-add-btn:hover {
-		color: #aaa;
-		border-color: #555;
-	}
-
 	.volume-slider {
 		width: 60px;
 		height: 4px;
@@ -1394,7 +1176,9 @@
 			flex-shrink: 0;
 			padding: 0;
 			box-sizing: border-box;
-			transition: border-color 0.2s, color 0.2s;
+			transition:
+				border-color 0.2s,
+				color 0.2s;
 		}
 	}
 
@@ -1563,37 +1347,7 @@
 		letter-spacing: 0.04em;
 	}
 
-	.music-hint-callout {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		padding: 0.4rem 0.75rem;
-		background: rgba(255, 255, 255, 0.02);
-		border-top: 1px solid #222;
-		font-size: 0.68rem;
-		color: #555;
-		line-height: 1.4;
-		flex-shrink: 0;
-	}
-
-	.music-hint-dismiss {
-		background: none;
-		border: none;
-		color: #444;
-		cursor: pointer;
-		font-size: 0.7rem;
-		padding: 0;
-		flex-shrink: 0;
-		line-height: 1;
-	}
-
-	.music-hint-dismiss:hover {
-		color: #888;
-	}
-
 	@media (max-width: 800px) {
-
 		.main-area {
 			padding-bottom: 44px;
 		}
