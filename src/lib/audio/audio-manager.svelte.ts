@@ -1,0 +1,216 @@
+import {
+  createAudioGraph,
+  disposeAudioGraph as disposeGraph,
+  computeVolumeLevel,
+  applyVolumeLinksTick,
+  type AudioGraphState,
+} from './audio-controller';
+import type { EffectInstance } from '../effects';
+import type { SpectrumData } from '../types';
+
+interface AudioManagerOptions {
+  getEffects: () => EffectInstance[];
+  initialOutputVolume?: number;
+}
+
+export class AudioManager {
+  // ── Track file ──
+  trackFile = $state<File | null>(null);
+  trackObjectUrl = $state<string | null>(null);
+
+  // ── Audio element (set by editor via setAudioEl) ──
+  #audioEl = $state<HTMLAudioElement | undefined>(undefined);
+
+  // ── Playback ──
+  trackDuration = $state(0);
+  trackCurrentTime = $state(0);
+  spanStart = $state(0);
+  spanEnd = $state(0);
+  audioPlaying = $state(false);
+  pendingSpan = $state<{ start: number; end: number } | null>(null);
+
+  // ── Audio graph ──
+  audioContext = $state<AudioContext | null>(null);
+  analyserNode = $state<AnalyserNode | null>(null);
+  gainNode = $state<GainNode | null>(null);
+  normalizeGainNode = $state<GainNode | null>(null);
+  mediaSource = $state<MediaElementAudioSourceNode | null>(null);
+
+  // ── Frequency / volume ──
+  volumeLevel = $state(0);
+  frequencyData = $state<Uint8Array | null>(null);
+  audioSampleRate = $state(0);
+  audioFrequencyBinCount = $state(0);
+  outputVolume = $state(1);
+
+  // ── Derived ──
+  spectrumData: SpectrumData | null = $derived(
+    this.frequencyData && this.audioSampleRate > 0 && this.audioFrequencyBinCount > 0
+      ? {
+          data: this.frequencyData,
+          sampleRate: this.audioSampleRate,
+          binCount: this.audioFrequencyBinCount,
+          tick: this.volumeLevel,
+        }
+      : null,
+  );
+
+  readonly #getEffects: () => EffectInstance[];
+
+  constructor({ getEffects, initialOutputVolume = 1 }: AudioManagerOptions) {
+    this.#getEffects = getEffects;
+    this.outputVolume = initialOutputVolume;
+
+    // ObjectURL lifecycle
+    $effect(() => {
+      const f = this.trackFile;
+      if (!f) {
+        this.trackObjectUrl = null;
+        return;
+      }
+      const url = URL.createObjectURL(f);
+      this.trackObjectUrl = url;
+      return () => URL.revokeObjectURL(url);
+    });
+
+    // Volume / frequency rAF tick
+    $effect(() => {
+      const analyser = this.analyserNode;
+      if (!analyser) return;
+      const timeData = new Uint8Array(analyser.fftSize);
+      // Capture at effect-run time (preserved behavior from original editors)
+      const freqDataRef = this.frequencyData;
+      const sampleRate = this.audioSampleRate;
+      const fftSize = analyser.fftSize;
+      let rafId: number;
+      const tick = () => {
+        this.volumeLevel = computeVolumeLevel(analyser, timeData);
+        if (freqDataRef)
+          analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
+        applyVolumeLinksTick(
+          this.#getEffects(),
+          this.volumeLevel,
+          freqDataRef,
+          sampleRate,
+          fftSize,
+        );
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(rafId);
+    });
+  }
+
+  setAudioEl(el: HTMLAudioElement | undefined) {
+    this.#audioEl = el;
+  }
+
+  ensureAudioGraph() {
+    if (!this.#audioEl || this.audioContext) return;
+    this.applyAudioGraphState(createAudioGraph(this.#audioEl));
+  }
+
+  applyAudioGraphState(state: AudioGraphState) {
+    this.audioContext = state.context;
+    this.mediaSource = state.source;
+    this.normalizeGainNode = state.normalizeGain;
+    this.analyserNode = state.analyser;
+    this.gainNode = state.gain;
+    this.gainNode.gain.value = this.outputVolume;
+    this.frequencyData = state.frequencyData;
+    this.audioSampleRate = state.sampleRate;
+    this.audioFrequencyBinCount = state.binCount;
+  }
+
+  disposeAudioGraph() {
+    if (this.audioContext) {
+      disposeGraph({
+        context: this.audioContext,
+        source: this.mediaSource!,
+        normalizeGain: this.normalizeGainNode!,
+        analyser: this.analyserNode!,
+        gain: this.gainNode!,
+        frequencyData: this.frequencyData!,
+        sampleRate: this.audioSampleRate,
+        binCount: this.audioFrequencyBinCount,
+      });
+    }
+    this.mediaSource = null;
+    this.normalizeGainNode = null;
+    this.analyserNode = null;
+    this.gainNode = null;
+    this.frequencyData = null;
+    this.audioSampleRate = 0;
+    this.audioFrequencyBinCount = 0;
+    this.audioContext = null;
+    this.volumeLevel = 0;
+  }
+
+  onAudioLoadedMetadata() {
+    const d = this.#audioEl?.duration;
+    if (typeof d === 'number' && Number.isFinite(d)) {
+      this.trackDuration = d;
+      if (this.pendingSpan) {
+        this.spanStart = Math.max(0, Math.min(this.pendingSpan.start, d));
+        this.spanEnd = Math.max(0, Math.min(this.pendingSpan.end, d));
+        this.pendingSpan = null;
+      } else {
+        this.spanStart = 0;
+        this.spanEnd = d;
+      }
+    }
+  }
+
+  onAudioTimeUpdate() {
+    if (!this.#audioEl) return;
+    this.trackCurrentTime = this.#audioEl.currentTime;
+    if (this.audioPlaying && this.#audioEl.currentTime >= this.spanEnd) {
+      this.#audioEl.pause();
+      this.#audioEl.currentTime = this.spanStart;
+      this.trackCurrentTime = this.spanStart;
+      this.audioPlaying = false;
+    }
+  }
+
+  playAudio() {
+    if (!this.trackFile || !this.trackObjectUrl || !this.#audioEl) return;
+    this.ensureAudioGraph();
+    if (this.audioContext?.state === 'suspended') this.audioContext.resume();
+    const t = this.#audioEl.currentTime;
+    if (t < this.spanStart || t >= this.spanEnd) {
+      this.#audioEl.currentTime = this.spanStart;
+      this.trackCurrentTime = this.spanStart;
+    }
+    this.#audioEl.play();
+    this.audioPlaying = true;
+  }
+
+  pauseAudio() {
+    this.#audioEl?.pause();
+    this.audioPlaying = false;
+  }
+
+  seekTo(t: number) {
+    if (!this.#audioEl) return;
+    const clamped = Math.max(0, Math.min(this.trackDuration, t));
+    this.#audioEl.currentTime = clamped;
+    this.trackCurrentTime = clamped;
+  }
+
+  clearTrack() {
+    this.#audioEl?.pause();
+    this.audioPlaying = false;
+    this.trackFile = null;
+    this.trackDuration = 0;
+    this.trackCurrentTime = 0;
+    this.spanStart = 0;
+    this.spanEnd = 0;
+    this.pendingSpan = null;
+    this.disposeAudioGraph();
+  }
+
+  setOutputVolume(v: number) {
+    this.outputVolume = v;
+    if (this.gainNode) this.gainNode.gain.value = v;
+  }
+}
