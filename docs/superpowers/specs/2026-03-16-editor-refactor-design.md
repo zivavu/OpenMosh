@@ -152,7 +152,6 @@ Extracts the "Add audio track" button + music hint callout.
 interface Props {
   onOpenPicker: () => void;
   hintText?: string;  // defaults to "Add music to sync transitions to the beat"
-  trackLoaded?: boolean;  // when true, auto-dismisses the music hint
 }
 ```
 
@@ -162,7 +161,7 @@ The hint text differs between editors:
 
 The `hintText` prop handles this. The localStorage key `openmosh-music-hint-dismissed` is shared — dismissing in one editor dismisses in both (current behavior preserved).
 
-**Internal state:** `showMusicHint` reads/writes `localStorage`. An `$effect` watches `trackLoaded` and auto-dismisses when true.
+**Internal state:** `showMusicHint` reads/writes `localStorage`. The component only renders inside `{#if !audio.trackFile}` in both editors, so the hint naturally disappears when a track is loaded — no `trackLoaded` prop needed.
 
 Styles move from both editor files into this component.
 
