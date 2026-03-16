@@ -5,6 +5,7 @@
 	interface Props {
 		recording: boolean;
 		disabled?: boolean;
+		title?: string;
 		showSettings?: boolean;
 		settingsContent?: Snippet;
 	}
@@ -12,6 +13,7 @@
 	let {
 		recording,
 		disabled = false,
+		title,
 		showSettings = $bindable(false),
 		settingsContent,
 	}: Props = $props();
@@ -30,6 +32,7 @@
 		class="action-btn record-btn"
 		onclick={() => (showSettings = !showSettings)}
 		disabled={recording || disabled}
+		{title}
 	>
 		<Disc size={16} />
 		RECORD

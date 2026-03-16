@@ -43,6 +43,7 @@
 		onOpenSheet,
 	}: Props = $props();
 
+	const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
 	let optionsGroupEl: HTMLDivElement | undefined;
@@ -105,6 +106,7 @@
 		{/if}
 	</button>
 
+	{#if !isMobile}
 	<RecordGroup
 		bind:this={recordGroupRef}
 		{recording}
@@ -142,6 +144,7 @@
 			</button>
 		{/snippet}
 	</RecordGroup>
+	{/if}
 </div>
 
 <style>

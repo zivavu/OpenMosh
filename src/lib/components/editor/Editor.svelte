@@ -47,6 +47,7 @@
 	let mobileSheetRef = $state<MobileSheet>();
 
 	let isVideo = $derived(file.type.startsWith('video/'));
+	const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 	let videoEl = $state<HTMLVideoElement | null>(null);
 	let videoDuration = $state(0);
 	let videoCurrentTime = $state(0);
@@ -56,7 +57,7 @@
 	let draggingVideoHandle = $state<'start' | 'end' | null>(null);
 	let videoTimelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 
-	let format = $state<'png' | 'jpg' | 'webm'>('webm');
+	let format = $state<'png' | 'jpg' | 'webm'>(isMobile ? 'png' : 'webm');
 	let isImageFormat = $derived(format === 'png' || format === 'jpg');
 	let isVideoFormat = $derived(format === 'webm');
 	let imageSrc = $state('');
@@ -854,7 +855,7 @@
 				</button>
 			{/if}
 
-			{#if isVideoFormat}
+			{#if isVideoFormat && !isMobile}
 				<RecordGroup
 					bind:this={recordGroupRef}
 					{recording}
@@ -1150,7 +1151,7 @@
 		margin: 0.15rem 0;
 	}
 
-	.format-group-mobile {
+.format-group-mobile {
 		display: none;
 	}
 
