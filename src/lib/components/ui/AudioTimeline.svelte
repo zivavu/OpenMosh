@@ -193,7 +193,6 @@
 					trackDuration) *
 					100}%"
 			>
-				<div class="timeline-span-line"></div>
 			</div>
 			<button
 				type="button"
@@ -340,15 +339,7 @@
 		overflow: hidden;
 	}
 
-	.timeline-span-line {
-		width: 1px;
-		height: 60%;
-		background: rgba(255, 255, 255, 0.2);
-		border-radius: 1px;
-		flex-shrink: 0;
-	}
-
-	.timeline-playhead {
+.timeline-playhead {
 		position: absolute;
 		top: 0;
 		bottom: 0;
