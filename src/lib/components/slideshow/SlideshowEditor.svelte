@@ -1,15 +1,9 @@
 <script lang="ts">
-	import { Library, Music } from 'lucide-svelte';
 	import {
-		applyVolumeLinksTick,
-		computeVolumeLevel,
-		createAudioGraph,
-		disposeAudioGraph as disposeAudioGraphState,
-	} from '../../audio/audio-controller';
-	import {
+		generateId,
 		loadInitialEffects,
 		loadPresets,
-		generateId,
+		setVolumeLink,
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
@@ -26,22 +20,22 @@
 	import type { SlideshowConfig, SlideshowSlide } from '../../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
 	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../../text-overlay';
-	import type { SpectrumData } from '../../types';
 	import { shuffleInPlace } from '../../utils';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
+	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import SlideshowActionBar from './SlideshowActionBar.svelte';
 	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
+	import { AudioManager } from '../../audio/audio-manager.svelte';
 
 	interface Props {
 		initialFiles: File[];
-		onBack: () => void;
 		initialAudioFile?: File | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
@@ -49,7 +43,6 @@
 
 	let {
 		initialFiles,
-		onBack,
 		initialAudioFile = null,
 		warmCanvas = null,
 		warmRenderer = null,
@@ -164,7 +157,7 @@
 	$effect(() => {
 		localStorage.setItem(
 			CONFIG_KEY,
-			JSON.stringify({ ...config, outputVolume }),
+			JSON.stringify({ ...config, outputVolume: audio.outputVolume }),
 		);
 	});
 
@@ -178,8 +171,8 @@
 				segments: config.segments,
 				bpm: config.bpm,
 				textOverlay: config.textOverlay,
-				spanStart,
-				spanEnd,
+				spanStart: audio.spanStart,
+				spanEnd: audio.spanEnd,
 			};
 			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
 		} catch {}
@@ -210,8 +203,8 @@
 
 	// Save span when user adjusts it while a library track is loaded
 	$effect(() => {
-		spanStart;
-		spanEnd;
+		audio.spanStart;
+		audio.spanEnd;
 		if (currentTrackId) saveSegments(currentTrackId);
 	});
 
@@ -220,23 +213,6 @@
 	// ── Effects ──
 	let effects: EffectInstance[] = $state(loadInitialEffects());
 	let presets: Preset[] = $state(loadPresets());
-
-	function setVolumeLink(
-		index: number,
-		paramKey: string,
-		link: VolumeLink | null,
-	) {
-		const e = effects[index];
-		const nextLinks = e.volumeLinks ? { ...e.volumeLinks } : {};
-		if (link === null) {
-			delete nextLinks[paramKey];
-		} else {
-			nextLinks[paramKey] = link;
-		}
-		effects = effects.map((eff, i) =>
-			i === index ? { ...eff, volumeLinks: nextLinks } : eff,
-		);
-	}
 
 	// ── Canvas / Renderer ──
 	let canvasEl: HTMLCanvasElement | null = $state(null);
@@ -269,169 +245,28 @@
 	}
 
 	// ── Audio ──
-	let trackFile = $state<File | null>(null);
+	// Load outputVolume from config before constructing manager
+	const savedOutputVolume =
+		((loadConfig() as unknown as Record<string, unknown>).outputVolume as number) ?? 1;
 
-	$effect(() => {
-		if (initialAudioFile && !trackFile) {
-			trackFile = initialAudioFile;
-		}
+	const audio = new AudioManager({
+		getEffects: () => effects,
+		initialOutputVolume: savedOutputVolume,
 	});
 
-	const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
-
-	let showMusicHint = $state(!localStorage.getItem(MUSIC_HINT_KEY));
-
-	function dismissMusicHint() {
-		localStorage.setItem(MUSIC_HINT_KEY, '1');
-		showMusicHint = false;
-	}
-
-	// Auto-dismiss when a track is loaded
-	$effect(() => {
-		if (trackFile && showMusicHint) {
-			dismissMusicHint();
-		}
-	});
-
-	let trackObjectUrl = $state<string | null>(null);
-	let trackInput: HTMLInputElement;
-
-	$effect(() => {
-		const f = trackFile;
-		let url: string | null = null;
-		if (f) {
-			url = URL.createObjectURL(f);
-			trackObjectUrl = url;
-		} else {
-			trackObjectUrl = null;
-		}
-		return () => {
-			if (url) URL.revokeObjectURL(url);
-		};
-	});
-
+	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
-	let trackDuration = $state(0);
-	let trackCurrentTime = $state(0);
-	let spanStart = $state(0);
-	let spanEnd = $state(0);
-	let audioPlaying = $state(false);
-	let pendingSpan = $state<{ start: number; end: number } | null>(null);
+	$effect(() => { audio.setAudioEl(audioEl); });
 
-	let volumeLevel = $state(0);
-	let frequencyData = $state<Uint8Array | null>(null);
-	let audioSampleRate = $state(0);
-	let audioFrequencyBinCount = $state(0);
-	let audioContext = $state<AudioContext | null>(null);
-	let analyserNode = $state<AnalyserNode | null>(null);
-	let gainNode = $state<GainNode | null>(null);
-	let normalizeGainNode = $state<GainNode | null>(null);
-	let outputVolume = $state(
-		((loadConfig() as unknown as Record<string, unknown>)
-			.outputVolume as number) ?? 1,
-	);
-	let mediaSource = $state<MediaElementAudioSourceNode | null>(null);
-
-	function onAudioLoadedMetadata() {
-		const d = audioEl?.duration;
-		if (typeof d === 'number' && Number.isFinite(d)) {
-			trackDuration = d;
-			if (pendingSpan) {
-				spanStart = Math.max(0, Math.min(pendingSpan.start, d));
-				spanEnd = Math.max(0, Math.min(pendingSpan.end, d));
-				pendingSpan = null;
-			} else {
-				spanStart = 0;
-				spanEnd = d;
-			}
-		}
-	}
-
-	function onAudioTimeUpdate() {
-		if (!audioEl) return;
-		trackCurrentTime = audioEl.currentTime;
-		if (audioPlaying && audioEl.currentTime >= spanEnd) {
-			audioEl.pause();
-			audioEl.currentTime = spanStart;
-			trackCurrentTime = spanStart;
-			audioPlaying = false;
-		}
-	}
-
+	// Seed track from audio selected on the upload screen
 	$effect(() => {
-		if (!audioPlaying || !audioEl) return;
-		let rafId: number;
-		const tick = () => {
-			if (audioEl) trackCurrentTime = audioEl.currentTime;
-			rafId = requestAnimationFrame(tick);
-		};
-		rafId = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(rafId);
+		if (initialAudioFile && !audio.trackFile) {
+			audio.trackFile = initialAudioFile;
+		}
 	});
 
-	function ensureAudioGraph() {
-		if (!audioEl || audioContext) return;
-		const state = createAudioGraph(audioEl);
-		audioContext = state.context;
-		mediaSource = state.source;
-		normalizeGainNode = state.normalizeGain;
-		analyserNode = state.analyser;
-		gainNode = state.gain;
-		gainNode.gain.value = outputVolume;
-		frequencyData = state.frequencyData;
-		audioSampleRate = state.sampleRate;
-		audioFrequencyBinCount = state.binCount;
-	}
-
-	function playAudio() {
-		if (!trackFile || !trackObjectUrl || !audioEl) return;
-		ensureAudioGraph();
-		if (audioContext?.state === 'suspended') audioContext.resume();
-		const t = audioEl.currentTime;
-		if (t < spanStart || t >= spanEnd) {
-			audioEl.currentTime = spanStart;
-			trackCurrentTime = spanStart;
-		}
-		audioEl.play();
-		audioPlaying = true;
-		selectedSegmentId = null;
-	}
-
-	function pauseAudio() {
-		audioEl?.pause();
-		audioPlaying = false;
-	}
-
-	function seekTo(t: number) {
-		if (!audioEl) return;
-		const tClamp = Math.max(0, Math.min(trackDuration, t));
-		audioEl.currentTime = tClamp;
-		trackCurrentTime = tClamp;
-	}
-
-	function disposeAudioGraph() {
-		if (audioContext) {
-			disposeAudioGraphState({
-				context: audioContext,
-				source: mediaSource!,
-				normalizeGain: normalizeGainNode!,
-				analyser: analyserNode!,
-				gain: gainNode!,
-				frequencyData: frequencyData!,
-				sampleRate: audioSampleRate,
-				binCount: audioFrequencyBinCount,
-			});
-		}
-		mediaSource = null;
-		normalizeGainNode = null;
-		analyserNode = null;
-		gainNode = null;
-		frequencyData = null;
-		audioSampleRate = 0;
-		audioFrequencyBinCount = 0;
-		audioContext = null;
-		volumeLevel = 0;
-	}
+	// ── Track file picker ──
+	let trackInput: HTMLInputElement;
 
 	function openTrackPicker() {
 		trackInput?.click();
@@ -440,39 +275,30 @@
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
 		if (f) {
-			trackFile = f;
+			audio.trackFile = f;
 			trackInput.value = '';
 		}
 	}
 
 	function clearTrack() {
-		audioEl?.pause();
-		audioPlaying = false;
-		trackFile = null;
-		trackDuration = 0;
-		trackCurrentTime = 0;
-		spanStart = 0;
-		spanEnd = 0;
-		pendingSpan = null;
+		audio.clearTrack();
 		currentTrackId = null;
-		disposeAudioGraph();
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string) {
 		stopPreview();
 		if (currentTrackId) saveSegments(currentTrackId);
-		// Partial reset — intentionally skip zeroing trackDuration and trackFile so that
-		// SlideshowAudioTimeline stays mounted during the switch (avoids a remount flash).
-		audioEl?.pause();
-		audioPlaying = false;
-		trackCurrentTime = 0;
-		spanStart = 0;
-		spanEnd = 0;
-		pendingSpan = null;
+		// Partial audio reset — intentionally skip zeroing trackDuration and trackFile
+		// so AudioTimeline stays mounted during the switch (avoids a remount flash).
+		audio.pauseAudio();
+		audio.trackCurrentTime = 0;
+		audio.spanStart = 0;
+		audio.spanEnd = 0;
+		audio.pendingSpan = null;
 		currentTrackId = null;
-		disposeAudioGraph();
+		audio.disposeAudioGraph();
 		currentTrackId = trackId;
-		trackFile = file;
+		audio.trackFile = file;
 		const saved = loadSegments(trackId);
 		if (saved !== null) {
 			config = {
@@ -484,59 +310,21 @@
 					: {}),
 			};
 			if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
-				pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
+				audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
 			}
 		}
 	}
-
-	// Audio volume tick
-	$effect(() => {
-		const analyser = analyserNode;
-		if (!analyser) return;
-		const timeData = new Uint8Array(analyser.fftSize);
-		const freqDataRef = frequencyData;
-		const sampleRate = audioSampleRate;
-		const fftSize = analyser.fftSize;
-		let rafId: number;
-		function tick() {
-			if (!analyser) return;
-			volumeLevel = computeVolumeLevel(analyser, timeData);
-			if (freqDataRef)
-				analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-			applyVolumeLinksTick(
-				effects,
-				volumeLevel,
-				freqDataRef,
-				sampleRate,
-				fftSize,
-			);
-			rafId = requestAnimationFrame(tick);
-		}
-		rafId = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(rafId);
-	});
-
-	let spectrumData: SpectrumData | null = $derived(
-		frequencyData && audioSampleRate > 0 && audioFrequencyBinCount > 0
-			? {
-					data: frequencyData,
-					sampleRate: audioSampleRate,
-					binCount: audioFrequencyBinCount,
-					tick: volumeLevel,
-				}
-			: null,
-	);
 
 	// ── BPM Detection ──
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = $state(null);
 
 	async function runBpmDetection() {
-		if (!trackFile || bpmDetecting) return;
+		if (!audio.trackFile || bpmDetecting) return;
 		bpmDetecting = true;
 		bpmDetectAbort = new AbortController();
 		try {
-			const result = await detectBpm(trackFile, bpmDetectAbort.signal);
+			const result = await detectBpm(audio.trackFile, bpmDetectAbort.signal);
 			config = { ...config, bpm: result.bpm, beatOffset: result.offset };
 		} catch (e) {
 			if (!(e instanceof DOMException && e.name === 'AbortError')) {
@@ -617,15 +405,9 @@
 
 		if (!previewPlaying) return;
 
-		if (audioEl && trackFile) {
-			ensureAudioGraph();
-			if (audioContext?.state === 'suspended') audioContext.resume();
-			const t = audioEl.currentTime;
-			if (t < spanStart || t >= spanEnd) {
-				audioEl.currentTime = spanStart;
-			}
-			audioEl.play();
-			audioPlaying = true;
+		if (audio.trackFile) {
+			audio.playAudio();
+			selectedSegmentId = null;
 		}
 
 		let lastTextUpdateTime = 0;
@@ -635,9 +417,9 @@
 			if (!previewPlaying || !glRenderer) return;
 
 			let t: number;
-			if (audioEl && trackFile && audioPlaying) {
-				t = audioEl.currentTime;
-				if (t >= spanEnd) {
+			if (audio.trackFile && audio.audioPlaying) {
+				t = audio.trackCurrentTime;
+				if (t >= audio.spanEnd) {
 					stopPreview();
 					return;
 				}
@@ -736,9 +518,8 @@
 			cancelAnimationFrame(previewRafId);
 			previewRafId = null;
 		}
-		if (audioEl && audioPlaying) {
-			audioEl.pause();
-			audioPlaying = false;
+		if (audio.audioPlaying) {
+			audio.pauseAudio();
 		}
 		if (glRenderer) {
 			glRenderer.clearTextOverlay();
@@ -760,9 +541,9 @@
 			randomizeOrder: true,
 			moshAudioLink: config.moshAudioLink,
 			moshAudioLinkStrength: config.moshAudioLinkStrength,
-			hasAudio: !!trackFile && !!audioContext,
-			audioSampleRate,
-			frequencyData,
+			hasAudio: !!audio.trackFile && !!audio.audioContext,
+			audioSampleRate: audio.audioSampleRate,
+			frequencyData: audio.frequencyData,
 		};
 	}
 
@@ -774,13 +555,9 @@
 	let recordFinalizing = $state(false);
 	let recordAbort: AbortController | null = $state(null);
 
-	let recordDuration = $derived(
-		trackFile && trackDuration > 0 ? spanEnd - spanStart : 5,
-	);
-
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recording || slides.length === 0) return;
-		if (!trackFile) {
+		if (!audio.trackFile) {
 			alert('Please add an audio track for slideshow recording.');
 			return;
 		}
@@ -805,9 +582,9 @@
 						? JSON.parse(JSON.stringify(e.volumeLinks))
 						: undefined,
 				})),
-				audioFile: trackFile,
-				audioStart: spanStart,
-				audioEnd: spanEnd,
+				audioFile: audio.trackFile,
+				audioStart: audio.spanStart,
+				audioEnd: audio.spanEnd,
 				canvas: canvasEl,
 				renderer: glRenderer,
 				outputWidth: resizeWidth > 0 ? resizeWidth : undefined,
@@ -868,17 +645,17 @@
 
 <svelte:window
 	onkeydown={handleKeydown}
-	onpointerdown={() => audioContext?.resume()}
+	onpointerdown={() => audio.audioContext?.resume()}
 />
 
-{#if trackObjectUrl}
+{#if audio.trackObjectUrl}
 	<audio
 		bind:this={audioEl}
-		src={trackObjectUrl}
-		onloadedmetadata={onAudioLoadedMetadata}
-		ontimeupdate={onAudioTimeUpdate}
-		onplay={() => (audioPlaying = true)}
-		onpause={() => (audioPlaying = false)}
+		src={audio.trackObjectUrl}
+		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
+		ontimeupdate={() => audio.onAudioTimeUpdate()}
+		onplay={() => (audio.audioPlaying = true)}
+		onpause={() => (audio.audioPlaying = false)}
 		hidden
 	></audio>
 {/if}
@@ -920,7 +697,7 @@
 		const first = files[0];
 		if (first.type.startsWith('audio/')) {
 			clearTrack();
-			trackFile = first;
+			audio.trackFile = first;
 		} else {
 			addFiles(files);
 		}
@@ -928,11 +705,11 @@
 >
 	<TrackLibrary
 		bind:this={trackLibraryRef}
-		activeTrackName={trackFile?.name ?? null}
+		activeTrackName={audio.trackFile?.name ?? null}
 		onLoadTrack={onLibraryLoadTrack}
-		onPreviewStart={pauseAudio}
-		mainPlaying={audioPlaying}
-		pendingTrack={trackFile}
+		onPreviewStart={() => audio.pauseAudio()}
+		mainPlaying={audio.audioPlaying}
+		pendingTrack={audio.trackFile}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar
@@ -979,7 +756,7 @@
 		<SlideshowActionBar
 			{previewPlaying}
 			slidesEmpty={slides.length === 0}
-			{trackFile}
+			trackFile={audio.trackFile}
 			bind:resizeWidth
 			bind:resizeHeight
 			{naturalWidth}
@@ -988,7 +765,7 @@
 			{recordProgress}
 			{recordFinalizing}
 			{recordFps}
-			{recordDuration}
+			recordDuration={audio.trackFile && audio.trackDuration > 0 ? audio.spanEnd - audio.spanStart : 5}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			onCancelRecording={cancelRecording}
@@ -1004,43 +781,28 @@
 			onCancel={cancelRecording}
 		/>
 
-		{#if !trackFile}
-			<div class="track-add-bar">
-				<button class="track-add-btn" onclick={openTrackPicker}>
-					<Music size={14} />
-					Add audio track
-				</button>
-			</div>
-			{#if showMusicHint}
-				<div class="music-hint-callout">
-					<span>Add music to sync transitions to the beat</span>
-					<button
-						class="music-hint-dismiss"
-						onclick={dismissMusicHint}
-						aria-label="Dismiss">\u2715</button
-					>
-				</div>
-			{/if}
-		{:else if trackFile && trackDuration > 0}
+		{#if !audio.trackFile}
+			<TrackAddBar
+				onOpenPicker={openTrackPicker}
+				hintText="Add music to sync transitions to the beat"
+			/>
+		{:else if audio.trackFile && audio.trackDuration > 0}
 			<AudioTimeline
-				{trackDuration}
-				{trackCurrentTime}
-				{spanStart}
-				{spanEnd}
-				{audioPlaying}
-				{outputVolume}
+				trackDuration={audio.trackDuration}
+				trackCurrentTime={audio.trackCurrentTime}
+				spanStart={audio.spanStart}
+				spanEnd={audio.spanEnd}
+				audioPlaying={audio.audioPlaying}
+				outputVolume={audio.outputVolume}
 				{config}
 				bind:selectedSegmentId
 				{onConfigChange}
-				onPlay={playAudio}
-				onPause={pauseAudio}
-				onSeek={seekTo}
-				onSpanStartChange={(t) => (spanStart = t)}
-				onSpanEndChange={(t) => (spanEnd = t)}
-				onVolumeChange={(v) => {
-					outputVolume = v;
-					if (gainNode) gainNode.gain.value = v;
-				}}
+				onPlay={() => audio.playAudio()}
+				onPause={() => audio.pauseAudio()}
+				onSeek={(t) => audio.seekTo(t)}
+				onSpanStartChange={(t) => (audio.spanStart = t)}
+				onSpanEndChange={(t) => (audio.spanEnd = t)}
+				onVolumeChange={(v) => audio.setOutputVolume(v)}
 				onRemoveTrack={clearTrack}
 			/>
 		{/if}
@@ -1051,19 +813,21 @@
 			<SlideshowConfigPanel
 				{config}
 				{bpmDetecting}
-				hasTrack={!!trackFile}
+				hasTrack={!!audio.trackFile}
 				onDetectBpm={runBpmDetection}
 				{onConfigChange}
-				{trackCurrentTime}
-				{trackDuration}
+				trackCurrentTime={audio.trackCurrentTime}
+				trackDuration={audio.trackDuration}
 			/>
 		{/snippet}
 		{#snippet effectsPanel()}
 			<EffectsPanel
 				bind:effects
-				hasTrack={!!trackFile}
-				{spectrumData}
-				onVolumeLinkChange={setVolumeLink}
+				hasTrack={!!audio.trackFile}
+				spectrumData={audio.spectrumData}
+				onVolumeLinkChange={(index, paramKey, link) => {
+					effects = setVolumeLink(effects, index, paramKey, link);
+				}}
 			/>
 		{/snippet}
 	</MobileSheet>
@@ -1089,36 +853,6 @@
 		min-width: 0;
 		min-height: 0;
 		overflow: hidden;
-	}
-
-	.track-add-bar {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		padding: 0.35rem 0.75rem;
-		background: rgba(18, 18, 18, 0.9);
-		border-top: 1px solid #2a2a2a;
-	}
-
-	.track-add-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.3rem 0.7rem;
-		font-size: 0.65rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		font-family: inherit;
-		background: none;
-		border: 1px solid #333;
-		border-radius: 5px;
-		color: #666;
-		cursor: pointer;
-	}
-
-	.track-add-btn:hover {
-		color: #aaa;
-		border-color: #555;
 	}
 
 	.preview-area {
@@ -1165,34 +899,6 @@
 		font-weight: 600;
 		color: #ccc;
 		letter-spacing: 0.04em;
-	}
-	.music-hint-callout {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		padding: 0.4rem 0.75rem;
-		background: rgba(255, 255, 255, 0.02);
-		border-top: 1px solid #222;
-		font-size: 0.68rem;
-		color: #555;
-		line-height: 1.4;
-		flex-shrink: 0;
-	}
-
-	.music-hint-dismiss {
-		background: none;
-		border: none;
-		color: #444;
-		cursor: pointer;
-		font-size: 0.7rem;
-		padding: 0;
-		flex-shrink: 0;
-		line-height: 1;
-	}
-
-	.music-hint-dismiss:hover {
-		color: #888;
 	}
 
 	@media (max-width: 800px) {
