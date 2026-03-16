@@ -2,7 +2,7 @@ export * from "./types";
 export { EFFECT_DEFINITIONS } from "./definitions";
 export { loadPresets, savePreset, updatePreset, deletePreset, applyPreset } from "./presets";
 
-import type { EffectDefinition, EffectInstance } from "./types";
+import type { EffectDefinition, EffectInstance, VolumeLink } from "./types";
 import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
 
@@ -44,4 +44,22 @@ export function loadInitialEffects(): EffectInstance[] {
     }
   } catch {}
   return EFFECT_DEFINITIONS.map(createEffectInstance);
+}
+
+export function setVolumeLink(
+  effects: EffectInstance[],
+  index: number,
+  paramKey: string,
+  link: VolumeLink | null,
+): EffectInstance[] {
+  const e = effects[index];
+  const nextLinks = e.volumeLinks ? { ...e.volumeLinks } : {};
+  if (link === null) {
+    delete nextLinks[paramKey];
+  } else {
+    nextLinks[paramKey] = link;
+  }
+  return effects.map((eff, i) =>
+    i === index ? { ...eff, volumeLinks: nextLinks } : eff,
+  );
 }
