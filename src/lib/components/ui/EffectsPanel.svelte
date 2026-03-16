@@ -193,6 +193,87 @@
 		if (dragOverIndex !== index) return null;
 		return dropPosition;
 	}
+
+	// Touch drag support
+	let touchDragFromIndex: number | null = $state(null);
+	let scrollEl: HTMLElement | null = null;
+	let scrollRafId: number | null = null;
+
+	function stopAutoScroll() {
+		if (scrollRafId !== null) {
+			cancelAnimationFrame(scrollRafId);
+			scrollRafId = null;
+		}
+	}
+
+	function startAutoScroll(touchY: number) {
+		stopAutoScroll();
+		if (!scrollEl) return;
+		const rect = scrollEl.getBoundingClientRect();
+		const zone = 60;
+		const maxSpeed = 8;
+
+		function step() {
+			if (!scrollEl || touchDragFromIndex === null) return;
+			const distTop = touchY - rect.top;
+			const distBottom = rect.bottom - touchY;
+			if (distTop < zone && distTop > 0) {
+				scrollEl.scrollTop -= maxSpeed * (1 - distTop / zone);
+			} else if (distBottom < zone && distBottom > 0) {
+				scrollEl.scrollTop += maxSpeed * (1 - distBottom / zone);
+			} else {
+				return;
+			}
+			scrollRafId = requestAnimationFrame(step);
+		}
+
+		scrollRafId = requestAnimationFrame(step);
+	}
+
+	function onDocTouchMove(e: TouchEvent) {
+		if (touchDragFromIndex === null) return;
+		e.preventDefault();
+		const touch = e.touches[0];
+		startAutoScroll(touch.clientY);
+		const el = document.elementFromPoint(touch.clientX, touch.clientY);
+		if (!el) return;
+		const itemEl = el.closest?.('[data-effect-index]') as HTMLElement | null;
+		if (!itemEl) {
+			dragOverIndex = null;
+			dropPosition = null;
+			return;
+		}
+		const idx = Number(itemEl.dataset.effectIndex);
+		if (isNaN(idx) || idx === touchDragFromIndex) {
+			dragOverIndex = null;
+			dropPosition = null;
+			return;
+		}
+		const rect = itemEl.getBoundingClientRect();
+		const midY = rect.top + rect.height / 2;
+		dragOverIndex = idx;
+		dropPosition = touch.clientY < midY ? 'above' : 'below';
+	}
+
+	function onDocTouchEnd() {
+		if (touchDragFromIndex === null) return;
+		stopAutoScroll();
+		if (dragOverIndex !== null) handleDrop(dragOverIndex);
+		touchDragFromIndex = null;
+		clearDragState();
+		document.removeEventListener('touchmove', onDocTouchMove);
+		document.removeEventListener('touchend', onDocTouchEnd);
+		document.removeEventListener('touchcancel', onDocTouchEnd);
+	}
+
+	function handleTouchDragStart(index: number, e: TouchEvent) {
+		e.preventDefault();
+		touchDragFromIndex = index;
+		dragFromIndex = index;
+		document.addEventListener('touchmove', onDocTouchMove, { passive: false });
+		document.addEventListener('touchend', onDocTouchEnd);
+		document.addEventListener('touchcancel', onDocTouchEnd);
+	}
 </script>
 
 <aside class="effects-panel">
@@ -288,7 +369,7 @@
 		{/if}
 	</div>
 
-	<div class="panel-scroll">
+	<div class="panel-scroll" bind:this={scrollEl}>
 		{#each filteredEffects as { effect, index: i } (effect.instanceId)}
 			<EffectItem
 				{effect}
@@ -308,6 +389,8 @@
 				onDragLeave={() => handleDragLeave(i)}
 				onDrop={() => handleDrop(i)}
 				onDragEnd={clearDragState}
+				onTouchDragStart={(e) => handleTouchDragStart(i, e)}
+				effectIndex={i}
 			/>
 		{/each}
 

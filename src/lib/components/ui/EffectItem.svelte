@@ -40,6 +40,8 @@
 		onDragLeave: () => void;
 		onDrop: (e: DragEvent) => void;
 		onDragEnd: () => void;
+		onTouchDragStart?: (e: TouchEvent) => void;
+		effectIndex?: number;
 	}
 
 	let {
@@ -58,6 +60,8 @@
 		onDragLeave,
 		onDrop,
 		onDragEnd,
+		onTouchDragStart,
+		effectIndex,
 	}: Props = $props();
 
 	const def = $derived(getDefinition(effect.defId));
@@ -84,6 +88,7 @@
 		class:is-dragging={isDragging}
 		class:drop-above={dropIndicator === 'above'}
 		class:drop-below={dropIndicator === 'below'}
+		data-effect-index={effectIndex}
 		draggable={canDrag}
 		ondragstart={handleDragStart}
 		ondragover={(e) => {
@@ -127,6 +132,7 @@
 					title="Drag to reorder"
 					onmousedown={() => (canDrag = true)}
 					onmouseup={() => (canDrag = false)}
+					ontouchstart={onTouchDragStart}
 				>
 					<GripVertical size={14} />
 				</span>
@@ -506,6 +512,8 @@
 		height: 22px;
 		color: #444;
 		cursor: grab;
+		touch-action: none;
+		user-select: none;
 	}
 
 	.drag-handle:hover {
