@@ -244,7 +244,7 @@
 		videoEl.muted = false;
 		const state = createAudioGraph(videoEl);
 		audio.applyAudioGraphState(state);
-		audio.normalizeGainNode!.gain.value = normalizeGain;
+		audio.setNormalizeGain(normalizeGain);
 		audio.audioContext!.resume().catch(() => {});
 	}
 
@@ -547,7 +547,7 @@
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => {
 			normalizeGain = gain;
-			if (audio.normalizeGainNode) audio.normalizeGainNode.gain.value = gain;
+			audio.setNormalizeGain(gain);
 		}}
 	/>
 	<div class="main-area">

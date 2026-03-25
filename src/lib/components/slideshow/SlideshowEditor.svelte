@@ -290,11 +290,7 @@
 		if (currentTrackId) saveSegments(currentTrackId);
 		// Partial audio reset — intentionally skip zeroing trackDuration and trackFile
 		// so AudioTimeline stays mounted during the switch (avoids a remount flash).
-		audio.pauseAudio();
-		audio.trackCurrentTime = 0;
-		audio.spanStart = 0;
-		audio.spanEnd = 0;
-		audio.pendingSpan = null;
+		audio.resetPlayback();
 		currentTrackId = null;
 		audio.disposeAudioGraph();
 		currentTrackId = trackId;
@@ -419,6 +415,7 @@
 			let t: number;
 			if (audio.trackFile && audio.audioPlaying) {
 				t = audioEl?.currentTime ?? audio.trackCurrentTime;
+				audio.trackCurrentTime = t;
 				if (t >= audio.spanEnd) {
 					stopPreview();
 					return;

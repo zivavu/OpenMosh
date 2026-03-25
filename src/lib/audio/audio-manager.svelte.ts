@@ -213,4 +213,17 @@ export class AudioManager {
     this.outputVolume = v;
     if (this.gainNode) this.gainNode.gain.value = v;
   }
+
+  setNormalizeGain(v: number) {
+    if (this.normalizeGainNode) this.normalizeGainNode.gain.value = v;
+  }
+
+  resetPlayback() {
+    this.#audioEl?.pause();
+    this.audioPlaying = false;
+    this.trackCurrentTime = 0;
+    this.spanStart = 0;
+    this.spanEnd = 0;
+    this.pendingSpan = null;
+  }
 }
