@@ -194,6 +194,7 @@
 		class:dragging
 		role="button"
 		tabindex="0"
+		aria-label="Drop zone for image or video files"
 		ondrop={(e) => {
 			e.preventDefault();
 			onDrop(e);

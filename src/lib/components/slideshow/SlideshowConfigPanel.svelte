@@ -57,6 +57,11 @@
 	let tapResetTimer: ReturnType<typeof setTimeout> | null = null;
 	const TAP_RESET_MS = 2000;
 
+	import { onDestroy } from 'svelte';
+	onDestroy(() => {
+		if (tapResetTimer) clearTimeout(tapResetTimer);
+	});
+
 	function handleTap() {
 		const now = performance.now();
 		if (tapResetTimer) clearTimeout(tapResetTimer);

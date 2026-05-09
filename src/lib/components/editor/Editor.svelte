@@ -49,7 +49,7 @@
 	let _mobileSheetRef = $state<MobileSheet>();
 
 	let isVideo = $derived(file.type.startsWith('video/'));
-	const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+	const isMobile = window.matchMedia('(pointer: coarse)').matches;
 	let videoEl = $state<HTMLVideoElement | null>(null);
 	let videoDuration = $state(0);
 	let videoCurrentTime = $state(0);

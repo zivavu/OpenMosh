@@ -115,10 +115,12 @@
 	}
 
 	let closeVersion = 0;
+	let lightboxCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function closeLightbox() {
 		if (lightboxClosing || lightboxIndex === null) return;
 		lightboxClosing = true;
+		if (lightboxCloseTimer) clearTimeout(lightboxCloseTimer);
 		const version = ++closeVersion;
 		lightboxImageEl?.addEventListener(
 			'transitionend',
@@ -129,12 +131,17 @@
 			},
 			{ once: true },
 		);
-		setTimeout(() => {
+		lightboxCloseTimer = setTimeout(() => {
 			if (closeVersion !== version) return;
 			lightboxIndex = null;
 			lightboxClosing = false;
 		}, 400);
 	}
+
+	import { onDestroy } from 'svelte';
+	onDestroy(() => {
+		if (lightboxCloseTimer) clearTimeout(lightboxCloseTimer);
+	});
 
 	function lightboxNext() {
 		if (lightboxIndex === null) return;

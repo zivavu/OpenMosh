@@ -235,7 +235,7 @@
 			onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
 		title="Volume: {Math.round(outputVolume * 100)}%"
 	/>
-	<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track">
+	<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track" aria-label="Remove track">
 		<X size={12} />
 	</button>
 </div>

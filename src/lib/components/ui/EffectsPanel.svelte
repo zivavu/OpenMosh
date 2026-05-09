@@ -301,7 +301,7 @@
 							bind:value={presetName}
 							autofocus
 						/>
-						<button class="preset-confirm-btn" type="submit" title="Save">
+						<button class="preset-confirm-btn" type="submit" title="Save" aria-label="Save preset">
 							<Check size={14} />
 						</button>
 						<button

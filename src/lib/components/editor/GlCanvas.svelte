@@ -200,7 +200,7 @@
 		<p class="error">{error}</p>
 	{:else}
 		{#if !warmCanvas}
-			<canvas bind:this={canvas}></canvas>
+			<canvas bind:this={canvas} aria-label="Effect preview canvas"></canvas>
 		{/if}
 		{#if showFps}
 			<span class="fps-overlay">{fps} FPS</span>

@@ -42,7 +42,7 @@
 			<Settings size={14} />
 		</button>
 	{/if}
-	<button class="settings-btn" onclick={onClear} disabled={!canClear} title="Clear all effects">
+	<button class="settings-btn" onclick={onClear} disabled={!canClear} title="Clear all effects" aria-label="Clear all effects">
 		<X size={14} />
 	</button>
 	<button
@@ -50,6 +50,7 @@
 		onclick={onUndo}
 		disabled={!canUndo}
 		title="Undo"
+		aria-label="Undo"
 	>
 		<RotateCcw size={14} />
 	</button>

@@ -121,7 +121,7 @@
 					<span class="toggle-knob"></span>
 				</button>
 
-				<button class="icon-btn" onclick={onRemove} title="Remove">
+				<button class="icon-btn" onclick={onRemove} title="Remove" aria-label="Remove effect">
 					<X size={14} />
 				</button>
 

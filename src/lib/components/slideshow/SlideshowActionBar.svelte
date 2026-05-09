@@ -37,7 +37,7 @@
 		onOpenSheet,
 	}: Props = $props();
 
-	const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+	const isMobile = window.matchMedia('(pointer: coarse)').matches;
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
 	let optionsGroupEl: HTMLDivElement | undefined;
@@ -61,7 +61,7 @@
 
 <div class="action-bar">
 	{#if onOpenSheet}
-		<button class="library-btn" onclick={onOpenSheet} title="Effects panel">
+		<button class="library-btn" onclick={onOpenSheet} title="Effects panel" aria-label="Effects panel">
 			<Library size={12} />
 		</button>
 	{/if}
@@ -71,6 +71,7 @@
 			class:active={showOptionsPanel}
 			onclick={() => (showOptionsPanel = !showOptionsPanel)}
 			title="Options"
+			aria-label="Options"
 		>
 			<Settings size={14} />
 		</button>
