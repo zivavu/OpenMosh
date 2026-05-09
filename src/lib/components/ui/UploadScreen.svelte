@@ -93,7 +93,7 @@
 		}
 	}
 
-	function onDragOver(e: DragEvent) {
+	function onDragOver(_e: DragEvent) {
 		dragging = true;
 	}
 

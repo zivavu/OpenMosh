@@ -1,4 +1,4 @@
-import type { EffectInstance, Preset, VolumeLink } from "./types";
+import type { EffectInstance, Preset } from "./types";
 import { generateId } from "./types";
 
 const PRESETS_KEY = "openmosh-presets";

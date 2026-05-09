@@ -9,7 +9,6 @@ import {
   TEXT_BLEND_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
-  type PrePassDef,
 } from "./effect-shaders";
 import type { TextSafeEffectId, TextOverlayBlendMode } from "../text-overlay";
 
@@ -43,7 +42,6 @@ export class GlRenderer {
   private textBlendProgram: CompiledProgram | null = null;
   /** Current overlay phrase; null = no overlay. */
   private textOverlayPhrase: string | null = null;
-  private textOverlayStyle: TextOverlayStyle | null = null;
   private textOverlayEffectIds: string[] = [];
   private textBlendMode: TextOverlayBlendMode = "normal";
   private textInvert = false;
@@ -177,7 +175,6 @@ export class GlRenderer {
     },
   ) {
     this.textOverlayPhrase = phrase;
-    this.textOverlayStyle = style ?? null;
     const opts =
       options ??
       (typeof textEffectIdOrOptions === "object"
@@ -239,7 +236,6 @@ export class GlRenderer {
   /** Clear text overlay (e.g. after recording). */
   clearTextOverlay() {
     this.textOverlayPhrase = null;
-    this.textOverlayStyle = null;
     this.textOverlayEffectIds = [];
     this.lastTextSeed = null;
     this.lastTextLayout = null;
@@ -258,7 +254,6 @@ export class GlRenderer {
   }
 
   render(effects: EffectInstance[], time = 0) {
-    const gl = this.gl;
     if (
       !this.sourceTexture ||
       !this.ppTextures ||

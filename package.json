@@ -16,10 +16,7 @@
     "svelte": "^5.53.7",
     "svelte-check": "^4.4.4",
     "typescript": "~5.9.3",
-    "vite": "^8.0.0-beta.16"
-  },
-  "overrides": {
-    "vite": "^8.0.0-beta.13"
+    "vite": "^6.2.0"
   },
   "dependencies": {
     "essentia.js": "^0.1.3",

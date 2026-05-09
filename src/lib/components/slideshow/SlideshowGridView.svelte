@@ -12,7 +12,6 @@
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
 		onShuffleSlides: () => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
-		onSelectSlide: (slide: SlideshowSlide) => void;
 	}
 
 	let {
@@ -24,7 +23,6 @@
 		onReorderSlides,
 		onShuffleSlides,
 		onSetPresetIndex,
-		onSelectSlide,
 	}: Props = $props();
 
 	let fileInput: HTMLInputElement;

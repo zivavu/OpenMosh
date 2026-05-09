@@ -295,7 +295,8 @@
 			const svgY_px = cy - rect.top;
 			const svgH = rect.height;
 			// Segments use SVG viewBox coords (0..SVG_H). Convert:
-			const svgYcoord = (svgY_px / svgH) * SVG_H;
+			void svgY_px;
+			void svgH;
 
 			// Check dot hits first (boundary dots)
 			for (const sv of segVis) {
@@ -1080,9 +1081,6 @@
 		}
 	}
 
-	let selectedSeg = $derived(
-		segments.find((s) => s.id === selectedSegmentId) ?? null,
-	);
 	let showHint = $derived(segments.length === 0);
 
 	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
@@ -1130,7 +1128,7 @@
 				pointerId: -1,
 			} as PointerEvent);
 	}}
-	ontouchend={(e) => {
+	ontouchend={(_e) => {
 		if (!dragging) return;
 		onPointerUp();
 	}}

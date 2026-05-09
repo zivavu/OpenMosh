@@ -1,27 +1,28 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import UploadScreen from './lib/components/ui/UploadScreen.svelte';
-	import Editor from './lib/components/editor/Editor.svelte';
-	import SlideshowEditor from './lib/components/slideshow/SlideshowEditor.svelte';
-	import { GlRenderer } from './lib/gl/renderer';
+	import { onMount } from "svelte";
+	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
+	import Editor from "./lib/components/editor/Editor.svelte";
+	import SlideshowEditor from "./lib/components/slideshow/SlideshowEditor.svelte";
+
+	import { GlRenderer } from "./lib/gl/renderer";
 
 	let file: File | null = $state(null);
 	let slideshowFiles: File[] = $state([]);
 	let pendingAudioFile: File | null = $state(null);
 
-	type View = 'upload' | 'editor' | 'slideshow';
+	type View = "upload" | "editor" | "slideshow";
 
 	function hashToView(hash: string): View {
-		if (hash === '#slideshow') return 'slideshow';
-		if (hash === '#editor') return 'editor';
-		return 'upload';
+		if (hash === "#slideshow") return "slideshow";
+		if (hash === "#editor") return "editor";
+		return "upload";
 	}
 
 	let view: View = $state(hashToView(window.location.hash));
 
 	function navigateTo(v: View) {
-		const hash = v === 'upload' ? '#' : `#${v}`;
-		history.pushState(null, '', hash);
+		const hash = v === "upload" ? "#" : `#${v}`;
+		history.pushState(null, "", hash);
 		view = v;
 	}
 
@@ -31,7 +32,7 @@
 	onMount(() => {
 		const onPopState = () => {
 			view = hashToView(window.location.hash);
-			if (view === 'upload') {
+			if (view === "upload") {
 				file = null;
 				slideshowFiles = [];
 				try {
@@ -44,7 +45,7 @@
 				}
 			}
 		};
-		window.addEventListener('popstate', onPopState);
+		window.addEventListener("popstate", onPopState);
 
 		try {
 			const w = GlRenderer.warmup();
@@ -54,7 +55,7 @@
 			// WebGL2 not available; Editor will fall back to creating its own context
 		}
 
-		return () => window.removeEventListener('popstate', onPopState);
+		return () => window.removeEventListener("popstate", onPopState);
 	});
 </script>
 
@@ -69,21 +70,20 @@
 	<Editor
 		{file}
 		initialAudioFile={pendingAudioFile}
-		onBack={() => history.back()}
-		onfile={(f) => (file = f)}
+		onfile={(f: File) => (file = f)}
 		{warmCanvas}
 		{warmRenderer}
 	/>
 {:else}
 	<UploadScreen
-		onfile={(f) => {
+		onfile={(f: File) => {
 			file = f;
 			navigateTo('editor');
 		}}
-		onSlideshow={(files) => {
+		onSlideshow={(files: File[]) => {
 			slideshowFiles = files;
 			navigateTo('slideshow');
 		}}
-		onaudio={(f) => (pendingAudioFile = f)}
+		onaudio={(f: File) => (pendingAudioFile = f)}
 	/>
 {/if}

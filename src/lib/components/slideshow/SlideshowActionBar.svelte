@@ -12,13 +12,10 @@
 		naturalWidth: number | undefined;
 		naturalHeight: number | undefined;
 		recording: boolean;
-		recordProgress: number;
-		recordFinalizing: boolean;
 		recordFps: number;
 		recordDuration: number;
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
-		onCancelRecording: () => void;
 		onRecordFpsChange: (fps: number) => void;
 		onOpenSheet?: () => void;
 	}
@@ -32,13 +29,10 @@
 		naturalWidth,
 		naturalHeight,
 		recording,
-		recordProgress,
-		recordFinalizing,
 		recordFps,
 		recordDuration,
 		onTogglePreview,
 		onStartRecording,
-		onCancelRecording,
 		onRecordFpsChange,
 		onOpenSheet,
 	}: Props = $props();

@@ -18,7 +18,6 @@
 		freqMax,
 		width = 200,
 		height = 48,
-		tick = 0,
 	}: Props = $props();
 
 	let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);

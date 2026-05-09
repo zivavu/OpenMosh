@@ -32,7 +32,6 @@
 
 	interface Props {
 		file: File;
-		onBack: () => void;
 		onfile: (f: File) => void;
 		initialAudioFile?: File | null;
 		warmCanvas?: HTMLCanvasElement | null;
@@ -41,14 +40,13 @@
 
 	let {
 		file,
-		onBack,
 		onfile,
 		initialAudioFile = null,
 		warmCanvas = null,
 		warmRenderer = null,
 	}: Props = $props();
 	let dragging = $state(false);
-	let mobileSheetRef = $state<MobileSheet>();
+	let _mobileSheetRef = $state<MobileSheet>();
 
 	let isVideo = $derived(file.type.startsWith('video/'));
 	const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -844,7 +842,7 @@
 			hidden
 		/>
 	</div>
-	<MobileSheet bind:this={mobileSheetRef}>
+	<MobileSheet bind:this={_mobileSheetRef}>
 		{#snippet settings()}
 			<div class="mosh-settings-wrapper">
 				<MoshSettingsPanel

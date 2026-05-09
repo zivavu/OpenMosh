@@ -6,7 +6,6 @@
 		setVolumeLink,
 		type EffectInstance,
 		type Preset,
-		type VolumeLink,
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
 	import type { RecordFormat } from '../../recorder';
@@ -239,10 +238,6 @@
 			previewImageSrc = slides[0].objectUrl;
 		}
 	});
-
-	function selectSlide(slide: SlideshowSlide) {
-		previewImageSrc = slide.objectUrl;
-	}
 
 	// ── Audio ──
 	// Load outputVolume from config before constructing manager
@@ -621,7 +616,7 @@
 
 	// ── Component refs ──
 	let trackLibraryRef = $state<TrackLibrary>();
-	let mobileSheetRef = $state<MobileSheet>();
+	let _mobileSheetRef = $state<MobileSheet>();
 
 	// ── Keyboard ──
 	function handleKeydown(e: KeyboardEvent) {
@@ -728,7 +723,6 @@
 				onReorderSlides={reorderSlides}
 				onShuffleSlides={shuffleSlides}
 				onSetPresetIndex={setPresetIndex}
-				onSelectSlide={selectSlide}
 			/>
 		{/if}
 		<div class="preview-area" class:hidden={activeView === 'grid'}>
@@ -759,13 +753,10 @@
 			{naturalWidth}
 			{naturalHeight}
 			{recording}
-			{recordProgress}
-			{recordFinalizing}
 			{recordFps}
 			recordDuration={audio.trackFile && audio.trackDuration > 0 ? audio.spanEnd - audio.spanStart : 5}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
-			onCancelRecording={cancelRecording}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
 			onOpenSheet={() => trackLibraryRef?.openLibrary()}
 		/>
@@ -805,7 +796,7 @@
 		{/if}
 	</div>
 
-	<MobileSheet bind:this={mobileSheetRef}>
+	<MobileSheet bind:this={_mobileSheetRef}>
 		{#snippet settings()}
 			<SlideshowConfigPanel
 				{config}

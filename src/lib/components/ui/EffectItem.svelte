@@ -67,8 +67,6 @@
 	const def = $derived(getDefinition(effect.defId));
 
 	let canDrag = $state(false);
-	// UI state for frequency settings expansion for each param.key
-	let expandedFreqSettings = $state<Record<string, boolean>>({});
 
 	function handleDragStart(e: DragEvent) {
 		if (!canDrag) {
