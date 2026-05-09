@@ -41,7 +41,8 @@
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
 	let optionsGroupEl: HTMLDivElement | undefined;
-	let recordGroupRef = $state<RecordGroup>();
+	// svelte-ignore non_reactive_update
+	let recordGroupRef: RecordGroup | undefined = undefined;
 
 	$effect(() => {
 		function handlePointerDown(e: PointerEvent) {

@@ -46,7 +46,7 @@
 		warmRenderer = null,
 	}: Props = $props();
 	let dragging = $state(false);
-	let _mobileSheetRef = $state<MobileSheet>();
+	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
 	let isVideo = $derived(file.type.startsWith('video/'));
 	const isMobile = window.matchMedia('(pointer: coarse)').matches;
@@ -303,9 +303,10 @@
 	}
 
 	const history = createEffectHistory();
-	let moshGroupRef = $state<MoshGroup>();
-	let recordGroupRef = $state<RecordGroup>();
-	let trackLibraryRef = $state<TrackLibrary>();
+	let moshGroupRef: MoshGroup | undefined = undefined;
+	// svelte-ignore non_reactive_update
+	let recordGroupRef: RecordGroup | undefined = undefined;
+	let trackLibraryRef: TrackLibrary | undefined = undefined;
 
 	function generateMosh() {
 		generateMoshFn(effects, getMoshOptions());

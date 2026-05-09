@@ -333,8 +333,7 @@
 	let previewRafId = $state<number | null>(null);
 	let previewBeatIndex = $state(-1);
 	let previewEffects: EffectInstance[] = $state([]);
-	// svelte-ignore state_referenced_locally
-	let smoothState = $state({ effects: cloneEffects(effects) });
+	let smoothState = $state<{ effects: EffectInstance[] } | null>(null);
 
 	const previewPhrases = $derived(
 		config.textOverlay?.enabled && config.textOverlay?.dictionary?.trim()
@@ -487,7 +486,7 @@
 					config,
 					slide,
 					effects,
-					smoothState,
+					smoothState!,
 					getMoshOptions(),
 				);
 			}
@@ -622,8 +621,8 @@
 	let dragging = $state(false);
 
 	// ── Component refs ──
-	let trackLibraryRef = $state<TrackLibrary>();
-	let _mobileSheetRef = $state<MobileSheet>();
+	let trackLibraryRef: TrackLibrary | undefined = undefined;
+	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
 	// ── Keyboard ──
 	function handleKeydown(e: KeyboardEvent) {

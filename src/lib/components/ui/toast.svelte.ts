@@ -1,5 +1,3 @@
-import { tick } from "svelte";
-
 export interface Toast {
 	id: number;
 	message: string;
