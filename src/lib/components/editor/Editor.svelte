@@ -9,9 +9,9 @@
 		generateMosh as generateMoshFn,
 	} from '../../editor/mosh';
 	import { executeRecording } from '../../editor/recording';
+	import { createEffectHistory } from '../../editor/history.svelte';
+	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
-		EFFECT_DEFINITIONS,
-		createEffectInstance,
 		loadInitialEffects,
 		setVolumeLink,
 		type EffectInstance,
@@ -72,28 +72,6 @@
 	let glRenderer: GlRenderer | null = $state(null);
 	let effects: EffectInstance[] = $state(loadInitialEffects());
 
-	const SETTINGS_KEY = 'openmosh-settings';
-	function loadSettings() {
-		try {
-			const raw = localStorage.getItem(SETTINGS_KEY);
-			if (raw) return JSON.parse(raw);
-		} catch {}
-		return {};
-	}
-	function saveSettings() {
-		localStorage.setItem(
-			SETTINGS_KEY,
-			JSON.stringify({
-				moshMin,
-				moshMax,
-				randomizeOrder,
-				moshAudioLink,
-				moshAudioLinkStrength,
-				showFps,
-				outputVolume: audio.outputVolume,
-			}),
-		);
-	}
 	const saved = loadSettings();
 	let moshMin = $state(saved.moshMin ?? 3);
 	let moshMax = $state(saved.moshMax ?? 6);
@@ -130,7 +108,15 @@
 		moshAudioLinkStrength;
 		showFps;
 		audio.outputVolume;
-		saveSettings();
+		saveSettings({
+			moshMin,
+			moshMax,
+			randomizeOrder,
+			moshAudioLink,
+			moshAudioLinkStrength,
+			showFps,
+			outputVolume: audio.outputVolume,
+		});
 	});
 	let currentFps = $state(0);
 
@@ -316,45 +302,33 @@
 		audio.seekTo(t);
 	}
 
-	let history: EffectInstance[][] = $state([
-		$state.snapshot(EFFECT_DEFINITIONS.map(createEffectInstance)),
-	]);
-	let historyIndex = $state(0);
-	let canUndo = $derived(historyIndex > 0);
-	let canRedo = $derived(historyIndex < history.length - 1);
+	const history = createEffectHistory();
 	let moshGroupRef = $state<MoshGroup>();
 	let recordGroupRef = $state<RecordGroup>();
 	let trackLibraryRef = $state<TrackLibrary>();
 
-	function pushHistory() {
-		history.length = historyIndex + 1;
-		history.push($state.snapshot(effects));
-		historyIndex = history.length - 1;
-	}
-
 	function generateMosh() {
 		generateMoshFn(effects, getMoshOptions());
-		pushHistory();
+		history.push(effects);
 	}
 
 	function mosh() {
-		if (canRedo) {
-			historyIndex++;
-			effects = $state.snapshot(history[historyIndex]) as EffectInstance[];
+		const next = history.redo();
+		if (next) {
+			effects = next;
 		} else {
 			generateMosh();
 		}
 	}
 
 	function undo() {
-		if (!canUndo) return;
-		historyIndex--;
-		effects = $state.snapshot(history[historyIndex]) as EffectInstance[];
+		const prev = history.undo();
+		if (prev) effects = prev;
 	}
 
 	function clearEffects() {
 		clearEffectsFn(effects);
-		pushHistory();
+		history.push(effects);
 	}
 
 	function reInput() {
@@ -365,8 +339,7 @@
 				type: 'image/png',
 			});
 			effects.forEach((e) => (e.enabled = false));
-			history = [$state.snapshot(effects)];
-			historyIndex = 0;
+			history.reset(effects);
 			onfile(newFile);
 		}, 'image/png');
 	}
@@ -648,8 +621,8 @@
 				onMosh={mosh}
 				onClear={clearEffects}
 				onUndo={undo}
-				{canUndo}
-				canClear={canUndo}
+				canUndo={history.canUndo}
+				canClear={history.canUndo}
 				bind:showSettings={showMoshSettings}
 			>
 				{#snippet settingsContent()}
