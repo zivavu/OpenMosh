@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getToasts, dismissToast } from './toast';
+	import { getToasts, dismissToast } from './toast.svelte';
 
 	const toasts = getToasts();
 </script>

@@ -550,7 +550,7 @@
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recording || slides.length === 0) return;
 		if (!audio.trackFile) {
-			import('../../components/ui/toast').then(({ showToast }) =>
+			import('../../components/ui/toast.svelte').then(({ showToast }) =>
 				showToast('Please add an audio track for slideshow recording.', 'error'),
 			);
 			return;
@@ -597,7 +597,7 @@
 				// cancelled
 			} else {
 				console.error('Recording failed:', e);
-				import('../../components/ui/toast').then(({ showToast }) =>
+			import('../../components/ui/toast.svelte').then(({ showToast }) =>
 					showToast(
 						e instanceof Error ? e.message : 'Recording failed.',
 						'error',

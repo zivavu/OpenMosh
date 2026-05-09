@@ -431,7 +431,7 @@
 				// cancelled
 			} else {
 				console.error('Recording failed:', e);
-				import('../../components/ui/toast').then(({ showToast }) =>
+				import('../../components/ui/toast.svelte').then(({ showToast }) =>
 					showToast(
 						e instanceof Error
 							? e.message
