@@ -458,10 +458,13 @@
 				// cancelled
 			} else {
 				console.error('Recording failed:', e);
-				alert(
-					e instanceof Error
-						? e.message
-						: 'Recording failed. Check the browser console for details.',
+				import('../../components/ui/toast').then(({ showToast }) =>
+					showToast(
+						e instanceof Error
+							? e.message
+							: 'Recording failed. Check the browser console for details.',
+						'error',
+					),
 				);
 			}
 		} finally {

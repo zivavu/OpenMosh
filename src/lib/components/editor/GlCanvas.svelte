@@ -83,7 +83,14 @@
 			canvasEl = activeCanvas;
 			glRenderer = r;
 
+			const onContextLost = (ev: Event) => {
+				ev.preventDefault();
+				error = 'WebGL context lost. Please reload the page.';
+			};
+			activeCanvas.addEventListener('webglcontextlost', onContextLost);
+
 			return () => {
+				activeCanvas.removeEventListener('webglcontextlost', onContextLost);
 				r.destroy();
 				renderer = null;
 				canvasEl = null;

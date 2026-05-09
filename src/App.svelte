@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
+	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
 	import Editor from "./lib/components/editor/Editor.svelte";
 	import SlideshowEditor from "./lib/components/slideshow/SlideshowEditor.svelte";
 
@@ -87,3 +88,5 @@
 		onaudio={(f: File) => (pendingAudioFile = f)}
 	/>
 {/if}
+
+<ToastContainer />
