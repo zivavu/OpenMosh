@@ -99,10 +99,13 @@
 		}
 	});
 
-	// Mute video when explicit audio track is active; unmute when cleared
+	// Mute video when explicit audio track is active; re-hook video audio when cleared
 	$effect(() => {
-		if (isVideo && videoEl) {
-			videoEl.muted = !!audio.trackFile;
+		if (!isVideo || !videoEl) return;
+		if (audio.trackFile) {
+			videoEl.muted = true;
+		} else {
+			ensureVideoAudioGraph();
 		}
 	});
 
