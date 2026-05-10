@@ -353,18 +353,21 @@
 	.timeline-handle {
 		position: absolute;
 		top: 50%;
-		width: 3px;
+		width: 10px;
 		height: 16px;
-		margin: -8px 0 0 -1px;
-		border: none;
-		border-radius: 2px;
-		background: #666;
+		margin: -8px 0 0 -5px;
+		border: 1px solid #555;
+		border-radius: 3px;
+		background: #444;
 		cursor: ew-resize;
-		transition: background 0.15s;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
 	}
 
 	.timeline-handle:hover {
-		background: #aaa;
+		background: #555;
+		border-color: #666;
 	}
 
 	.timeline-handle:focus-visible {
@@ -411,12 +414,6 @@
 
 		.timeline-bar {
 			gap: 0.25rem;
-		}
-
-		.timeline-handle {
-			width: 5px;
-			height: 28px;
-			margin: -14px 0 0 -2px;
 		}
 	}
 
