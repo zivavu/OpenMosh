@@ -99,6 +99,13 @@
 		}
 	});
 
+	// Mute video when explicit audio track is active; unmute when cleared
+	$effect(() => {
+		if (isVideo && videoEl) {
+			videoEl.muted = !!audio.trackFile;
+		}
+	});
+
 	$effect(() => {
 		// subscribe to all settings
 		moshMin;
@@ -172,6 +179,7 @@
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
 		if (f) {
+			clearTrack();
 			normalizeGain = 1.0;
 			audio.trackFile = f;
 			trackInput.value = '';
