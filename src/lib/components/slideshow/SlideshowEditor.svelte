@@ -782,11 +782,12 @@
 			/>
 		{:else if audio.trackFile && audio.trackDuration > 0}
 			<AudioTimeline
+				label="AUD"
 				trackDuration={audio.trackDuration}
 				trackCurrentTime={audio.trackCurrentTime}
 				spanStart={audio.spanStart}
 				spanEnd={audio.spanEnd}
-				audioPlaying={audio.audioPlaying}
+				isPlaying={audio.audioPlaying}
 				outputVolume={audio.outputVolume}
 				{config}
 				bind:selectedSegmentId

@@ -5,19 +5,21 @@
 	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
 
 	interface Props {
+		label: string;
 		trackDuration: number;
 		trackCurrentTime: number;
 		spanStart: number;
 		spanEnd: number;
-		audioPlaying: boolean;
-		outputVolume: number;
+		isPlaying: boolean;
 		onPlay: () => void;
 		onPause: () => void;
 		onSeek: (t: number) => void;
 		onSpanStartChange: (t: number) => void;
 		onSpanEndChange: (t: number) => void;
-		onVolumeChange: (v: number) => void;
-		onRemoveTrack: () => void;
+		outputVolume?: number;
+		onVolumeChange?: (v: number) => void;
+		onRemoveTrack?: () => void;
+		ariaLabel?: string;
 		// Slideshow-only (segments)
 		config?: SlideshowConfig;
 		selectedSegmentId?: string | null;
@@ -25,19 +27,21 @@
 	}
 
 	let {
+		label,
 		trackDuration,
 		trackCurrentTime,
 		spanStart,
 		spanEnd,
-		audioPlaying,
-		outputVolume,
+		isPlaying,
 		onPlay,
 		onPause,
 		onSeek,
 		onSpanStartChange,
 		onSpanEndChange,
+		outputVolume = 1,
 		onVolumeChange,
 		onRemoveTrack,
+		ariaLabel = 'Timeline',
 		config,
 		selectedSegmentId = $bindable(null),
 		onConfigChange,
@@ -161,13 +165,13 @@
 </script>
 
 <div class="timeline-bar">
-	<span class="timeline-label">AUD</span>
+	<span class="timeline-label">{label}</span>
 	<button
 		class="timeline-play-btn"
-		onclick={audioPlaying ? onPause : onPlay}
-		title={audioPlaying ? 'Pause' : 'Play'}
+		onclick={isPlaying ? onPause : onPlay}
+		title={isPlaying ? 'Pause' : 'Play'}
 	>
-		{#if audioPlaying}
+		{#if isPlaying}
 			<Pause size={14} fill="currentColor" stroke="none" />
 		{:else}
 			<Play size={14} fill="currentColor" stroke="none" />
@@ -178,7 +182,7 @@
 		class="timeline-track-wrap"
 		bind:this={timelineTrackEl}
 		role="slider"
-		aria-label="Timeline"
+		aria-label={ariaLabel}
 		aria-valuenow={trackCurrentTime}
 		aria-valuemin={0}
 		aria-valuemax={trackDuration}
@@ -224,20 +228,24 @@
 		</div>
 	</div>
 	<span class="timeline-time">{formatTime(spanEnd)}</span>
-	<input
-		type="range"
-		class="volume-slider"
-		min="0"
-		max="1"
-		step="0.01"
-		value={outputVolume}
-		oninput={(e) =>
-			onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
-		title="Volume: {Math.round(outputVolume * 100)}%"
-	/>
-	<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track" aria-label="Remove track">
-		<X size={12} />
-	</button>
+	{#if onVolumeChange}
+		<input
+			type="range"
+			class="volume-slider"
+			min="0"
+			max="1"
+			step="0.01"
+			value={outputVolume}
+			oninput={(e) =>
+				onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+			title="Volume: {Math.round(outputVolume * 100)}%"
+		/>
+	{/if}
+	{#if onRemoveTrack}
+		<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track" aria-label="Remove track">
+			<X size={12} />
+		</button>
+	{/if}
 </div>
 
 {#if config && onConfigChange}
