@@ -1280,6 +1280,7 @@
 						onpointerenter={() =>
 							(hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
 						onpointerleave={() => (hoveredDot = null)}
+						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
 						><title>Drag to move · Delete to remove boundary</title></circle
 					>
 				{/if}
@@ -1309,6 +1310,7 @@
 						onpointerenter={() =>
 							(hoveredDot = { leftSegId: sv.id, rightSegId: rId })}
 						onpointerleave={() => (hoveredDot = null)}
+						onpointerdown={(e) => startBndDrag(e, sv.id, rId)}
 						><title>Drag to move · Delete to remove boundary</title></circle
 					>
 				{/if}
