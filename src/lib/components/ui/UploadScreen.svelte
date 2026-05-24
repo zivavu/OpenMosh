@@ -1,160 +1,176 @@
 <script lang="ts">
-	interface Props {
-		onfile: (file: File) => void;
-		onSlideshow: (files: File[]) => void;
-		onaudio?: (file: File) => void;
+interface Props {
+	onfile: (file: File) => void;
+	onSlideshow: (files: File[]) => void;
+	onaudio?: (file: File) => void;
+}
+
+import { Image, Music, Upload } from "lucide-svelte";
+
+let { onfile, onSlideshow, onaudio }: Props = $props();
+
+let selectedMode: "single" | "slideshow" = $state("single");
+let dragging = $state(false);
+let fileInput: HTMLInputElement;
+
+const AUDIO_TYPES = [
+	"audio/mpeg",
+	"audio/wav",
+	"audio/ogg",
+	"audio/flac",
+	"audio/mp4",
+	"audio/aac",
+];
+let pendingAudio = $state<File | null>(null);
+let audioDragging = $state(false);
+let audioInput = $state<HTMLInputElement>(undefined!);
+
+const ACCEPTED_TYPES = [
+	"image/png",
+	"image/jpeg",
+	"image/jpg",
+	"image/webp",
+	"image/gif",
+	"image/heic",
+	"image/heif",
+	"video/mp4",
+	"video/webm",
+	"video/quicktime",
+];
+const IMAGE_TYPES = [
+	"image/png",
+	"image/jpeg",
+	"image/jpg",
+	"image/webp",
+	"image/gif",
+	"image/heic",
+	"image/heif",
+];
+
+const ACCEPTED_EXTENSIONS = [
+	".png",
+	".jpg",
+	".jpeg",
+	".webp",
+	".gif",
+	".heic",
+	".heif",
+	".mp4",
+	".webm",
+	".mov",
+];
+const IMAGE_EXTENSIONS = [
+	".png",
+	".jpg",
+	".jpeg",
+	".webp",
+	".gif",
+	".heic",
+	".heif",
+];
+
+function getExtension(name: string) {
+	return name.slice(name.lastIndexOf(".")).toLowerCase();
+}
+
+function isAcceptedFile(file: File) {
+	if (file.type) return ACCEPTED_TYPES.includes(file.type);
+	return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
+}
+
+function isImageFile(file: File) {
+	if (file.type) return IMAGE_TYPES.includes(file.type);
+	return IMAGE_EXTENSIONS.includes(getExtension(file.name));
+}
+
+function handleFile(file: File) {
+	if (isAcceptedFile(file)) {
+		onfile(file);
 	}
+}
 
-	import { Image, Music, Upload } from 'lucide-svelte';
-
-	let { onfile, onSlideshow, onaudio }: Props = $props();
-
-	let selectedMode: 'single' | 'slideshow' = $state('single');
-	let dragging = $state(false);
-	let fileInput: HTMLInputElement;
-
-	const AUDIO_TYPES = [
-		'audio/mpeg',
-		'audio/wav',
-		'audio/ogg',
-		'audio/flac',
-		'audio/mp4',
-		'audio/aac',
-	];
-	let pendingAudio = $state<File | null>(null);
-	let audioDragging = $state(false);
-	let audioInput = $state<HTMLInputElement>(undefined!);
-
-	const ACCEPTED_TYPES = [
-		'image/png',
-		'image/jpeg',
-		'image/jpg',
-		'image/webp',
-		'image/gif',
-		'image/heic',
-		'image/heif',
-		'video/mp4',
-		'video/webm',
-		'video/quicktime',
-	];
-	const IMAGE_TYPES = [
-		'image/png',
-		'image/jpeg',
-		'image/jpg',
-		'image/webp',
-		'image/gif',
-		'image/heic',
-		'image/heif',
-	];
-
-	const ACCEPTED_EXTENSIONS = [
-		'.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.heif',
-		'.mp4', '.webm', '.mov',
-	];
-	const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.heif'];
-
-	function getExtension(name: string) {
-		return name.slice(name.lastIndexOf('.')).toLowerCase();
+function handleSlideshowFiles(files: FileList | File[]) {
+	const images = Array.from(files).filter((f) => isImageFile(f));
+	if (images.length > 0) {
+		onSlideshow(images);
 	}
+}
 
-	function isAcceptedFile(file: File) {
-		if (file.type) return ACCEPTED_TYPES.includes(file.type);
-		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
+function onDrop(e: DragEvent) {
+	dragging = false;
+	const files = e.dataTransfer?.files;
+	if (!files || files.length === 0) return;
+
+	if (selectedMode === "slideshow") {
+		handleSlideshowFiles(files);
+	} else {
+		const file = files[0];
+		if (file) handleFile(file);
 	}
+}
 
-	function isImageFile(file: File) {
-		if (file.type) return IMAGE_TYPES.includes(file.type);
-		return IMAGE_EXTENSIONS.includes(getExtension(file.name));
-	}
+function onDragOver(_e: DragEvent) {
+	dragging = true;
+}
 
-	function handleFile(file: File) {
-		if (isAcceptedFile(file)) {
-			onfile(file);
-		}
-	}
-
-	function handleSlideshowFiles(files: FileList | File[]) {
-		const images = Array.from(files).filter((f) => isImageFile(f));
-		if (images.length > 0) {
-			onSlideshow(images);
-		}
-	}
-
-	function onDrop(e: DragEvent) {
+function onDragLeave(e: DragEvent) {
+	if (
+		e.currentTarget instanceof HTMLElement &&
+		!e.currentTarget.contains(e.relatedTarget as Node)
+	) {
 		dragging = false;
-		const files = e.dataTransfer?.files;
-		if (!files || files.length === 0) return;
-
-		if (selectedMode === 'slideshow') {
-			handleSlideshowFiles(files);
-		} else {
-			const file = files[0];
-			if (file) handleFile(file);
-		}
 	}
+}
 
-	function onDragOver(_e: DragEvent) {
-		dragging = true;
-	}
+function onInputChange(e: Event) {
+	const input = e.target as HTMLInputElement;
+	if (!input.files || input.files.length === 0) return;
 
-	function onDragLeave(e: DragEvent) {
-		if (
-			e.currentTarget instanceof HTMLElement &&
-			!e.currentTarget.contains(e.relatedTarget as Node)
-		) {
-			dragging = false;
-		}
+	if (selectedMode === "slideshow") {
+		handleSlideshowFiles(input.files);
+	} else {
+		const file = input.files[0];
+		if (file) handleFile(file);
 	}
+	input.value = "";
+}
 
-	function onInputChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		if (!input.files || input.files.length === 0) return;
+function openFilePicker() {
+	fileInput.click();
+}
 
-		if (selectedMode === 'slideshow') {
-			handleSlideshowFiles(input.files);
-		} else {
-			const file = input.files[0];
-			if (file) handleFile(file);
-		}
-		input.value = '';
-	}
+function getAcceptTypes() {
+	return selectedMode === "slideshow"
+		? [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(",")
+		: [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
+}
+function getIsMultiple() {
+	return selectedMode === "slideshow";
+}
 
-	function openFilePicker() {
-		fileInput.click();
+function handleAudioFile(file: File) {
+	if (AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/")) {
+		pendingAudio = file;
+		onaudio?.(file);
 	}
+}
 
-	function getAcceptTypes() {
-		return selectedMode === 'slideshow'
-			? [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(',')
-			: [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(',');
-	}
-	function getIsMultiple() {
-		return selectedMode === 'slideshow';
-	}
+function openAudioPicker() {
+	audioInput.click();
+}
 
-	function handleAudioFile(file: File) {
-		if (AUDIO_TYPES.includes(file.type) || file.type.startsWith('audio/')) {
-			pendingAudio = file;
-			onaudio?.(file);
-		}
-	}
+function onAudioInputChange(e: Event) {
+	const input = e.target as HTMLInputElement;
+	const file = input.files?.[0];
+	if (file) handleAudioFile(file);
+	input.value = "";
+}
 
-	function openAudioPicker() {
-		audioInput.click();
-	}
-
-	function onAudioInputChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (file) handleAudioFile(file);
-		input.value = '';
-	}
-
-	function onAudioDrop(e: DragEvent) {
-		audioDragging = false;
-		const file = e.dataTransfer?.files?.[0];
-		if (file) handleAudioFile(file);
-	}
+function onAudioDrop(e: DragEvent) {
+	audioDragging = false;
+	const file = e.dataTransfer?.files?.[0];
+	if (file) handleAudioFile(file);
+}
 </script>
 
 <div class="upload-screen">
@@ -331,6 +347,7 @@
 
 	.mode-toggle {
 		display: flex;
+		flex-shrink: 0;
 		gap: 0;
 		border: 1.5px solid #333;
 		border-radius: 999px;

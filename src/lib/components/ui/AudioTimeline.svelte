@@ -48,8 +48,6 @@
 	}: Props = $props();
 
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
-	let startHandleEl = $state<HTMLButtonElement | undefined>(undefined);
-	let endHandleEl = $state<HTMLButtonElement | undefined>(undefined);
 
 	function timeFromClientX(clientX: number): number {
 		if (!timelineTrackEl) return 0;
@@ -59,13 +57,23 @@
 		return pct * trackDuration;
 	}
 
-	function onTimelinePointerDown(
-		e: PointerEvent,
-		handle: 'start' | 'end' | null,
-	) {
+	function handleFromClientX(clientX: number): 'start' | 'end' | null {
+		if (!timelineTrackEl || trackDuration === 0) return null;
+		const rect = timelineTrackEl.getBoundingClientRect();
+		const x = clientX - rect.left;
+		const startX = (spanStart / trackDuration) * rect.width;
+		const endX = (spanEnd / trackDuration) * rect.width;
+		const radius = 14;
+		if (Math.abs(x - startX) <= radius) return 'start';
+		if (Math.abs(x - endX) <= radius) return 'end';
+		return null;
+	}
+
+	function onTimelinePointerDown(e: PointerEvent) {
 		if (e.pointerType === 'touch') return;
 		e.preventDefault();
-		if (handle === 'start' || handle === 'end') {
+		const handle = handleFromClientX(e.clientX);
+		if (handle) {
 			beginHandleDrag(handle, e.clientX);
 		} else {
 			onSeek(timeFromClientX(e.clientX));
@@ -101,7 +109,7 @@
 		window.addEventListener('touchend', onUp);
 	}
 
-	// Non-passive touchstart on timeline track for mobile seek
+	// Non-passive touchstart on timeline track — handles seek and handle drag via proximity
 	$effect(() => {
 		const trackEl = timelineTrackEl;
 		if (!trackEl) return;
@@ -119,15 +127,18 @@
 			window.removeEventListener('touchend', onSeekUp);
 		};
 		const onTrackTouch = (e: TouchEvent) => {
-			// Only if the touch didn't originate on a handle
-			if ((e.target as HTMLElement).classList.contains('timeline-handle')) return;
 			e.preventDefault();
 			const touch = e.touches[0];
 			if (!touch) return;
-			seeking = true;
-			onSeek(timeFromClientX(touch.clientX));
-			window.addEventListener('touchmove', onSeekMove, { passive: false });
-			window.addEventListener('touchend', onSeekUp);
+			const handle = handleFromClientX(touch.clientX);
+			if (handle) {
+				beginHandleDrag(handle, touch.clientX);
+			} else {
+				seeking = true;
+				onSeek(timeFromClientX(touch.clientX));
+				window.addEventListener('touchmove', onSeekMove, { passive: false });
+				window.addEventListener('touchend', onSeekUp);
+			}
 		};
 		trackEl.addEventListener('touchstart', onTrackTouch, { passive: false });
 		return () => {
@@ -137,31 +148,6 @@
 		};
 	});
 
-	// Non-passive touchstart on handles for mobile drag
-	$effect(() => {
-		const startEl = startHandleEl;
-		const endEl = endHandleEl;
-		if (!startEl || !endEl) return;
-
-		function makeHandler(handle: 'start' | 'end') {
-			return (e: TouchEvent) => {
-				e.preventDefault();
-				e.stopPropagation();
-				const touch = e.touches[0];
-				if (!touch) return;
-				beginHandleDrag(handle, touch.clientX);
-			};
-		}
-
-		const onStartTouch = makeHandler('start');
-		const onEndTouch = makeHandler('end');
-		startEl.addEventListener('touchstart', onStartTouch, { passive: false });
-		endEl.addEventListener('touchstart', onEndTouch, { passive: false });
-		return () => {
-			startEl.removeEventListener('touchstart', onStartTouch);
-			endEl.removeEventListener('touchstart', onEndTouch);
-		};
-	});
 </script>
 
 <div class="timeline-bar">
@@ -187,7 +173,7 @@
 		aria-valuemin={0}
 		aria-valuemax={trackDuration}
 		tabindex="0"
-		onpointerdown={(e) => onTimelinePointerDown(e, null)}
+		onpointerdown={(e) => onTimelinePointerDown(e)}
 	>
 		<div class="timeline-track">
 			<div
@@ -198,28 +184,16 @@
 					100}%"
 			>
 			</div>
-			<button
-				type="button"
+			<div
 				class="timeline-handle timeline-handle-start"
 				style="left: {(spanStart / trackDuration) * 100}%"
-				title="Span start"
-				bind:this={startHandleEl}
-				onpointerdown={(e) => {
-					e.stopPropagation();
-					onTimelinePointerDown(e, 'start');
-				}}
-			></button>
-			<button
-				type="button"
+				aria-hidden="true"
+			></div>
+			<div
 				class="timeline-handle timeline-handle-end"
 				style="left: {(spanEnd / trackDuration) * 100}%"
-				title="Span end"
-				bind:this={endHandleEl}
-				onpointerdown={(e) => {
-					e.stopPropagation();
-					onTimelinePointerDown(e, 'end');
-				}}
-			></button>
+				aria-hidden="true"
+			></div>
 			<div
 				class="timeline-playhead"
 				style="left: {(trackCurrentTime / trackDuration) * 100}%"
@@ -367,20 +341,7 @@
 		border: 1px solid #555;
 		border-radius: 3px;
 		background: #444;
-		cursor: ew-resize;
-		transition:
-			background 0.15s,
-			border-color 0.15s;
-	}
-
-	.timeline-handle:hover {
-		background: #555;
-		border-color: #666;
-	}
-
-	.timeline-handle:focus-visible {
-		outline: 1px solid #888;
-		outline-offset: 1px;
+		pointer-events: none;
 	}
 
 	.volume-slider {
