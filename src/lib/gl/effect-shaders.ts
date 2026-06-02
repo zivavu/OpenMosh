@@ -1276,124 +1276,6 @@ void main() {
 		},
 	},
 
-	shatter: {
-		fragment:
-			H +
-			`uniform float u_intensity;
-uniform float u_cells;
-uniform float u_rgbSplit;
-uniform float u_chaos;
-uniform float u_outline;
-
-// smooth 2D value noise
-vec2 hash2(vec2 p) {
-  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-  return fract(sin(p) * 43758.5453);
-}
-
-float hash1(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-// smooth noise for UV warping — bicubic interpolated value noise
-vec2 noise2(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f); // smoothstep
-  vec2 a = hash2(i);
-  vec2 b = hash2(i + vec2(1.0, 0.0));
-  vec2 c = hash2(i + vec2(0.0, 1.0));
-  vec2 d = hash2(i + vec2(1.0, 1.0));
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y) - 0.5;
-}
-
-// layered non-repeating warp field
-vec2 warpField(vec2 uv, float t) {
-  vec2 w = vec2(0.0);
-  // layer 1 — large slow movement
-  w += noise2(uv * 2.1 + t * vec2(0.13, 0.17)) * 0.5;
-  // layer 2 — medium drift at irrational speed ratio
-  w += noise2(uv * 4.3 + t * vec2(0.21, -0.16) + 31.7) * 0.25;
-  // layer 3 — fine detail, different direction
-  w += noise2(uv * 7.7 + t * vec2(-0.11, 0.23) + 73.1) * 0.125;
-  return w;
-}
-
-// standard voronoi — points stay centered, no wandering
-vec4 voronoi(vec2 uv, float cells) {
-  vec2 scaled = uv * cells;
-  vec2 iuv = floor(scaled);
-  vec2 fuv = fract(scaled);
-
-  float minD = 1e9;
-  float minD2 = 1e9;
-  vec2 nearestCell = vec2(0.0);
-
-  for (int y = -1; y <= 1; y++) {
-    for (int x = -1; x <= 1; x++) {
-      vec2 neighbor = vec2(float(x), float(y));
-      vec2 cellId = iuv + neighbor;
-      vec2 point = hash2(cellId); // fixed point per cell
-      vec2 diff = neighbor + point - fuv;
-      float d = dot(diff, diff);
-
-      if (d < minD) {
-        minD2 = minD;
-        minD = d;
-        nearestCell = cellId;
-      } else if (d < minD2) {
-        minD2 = d;
-      }
-    }
-  }
-
-  return vec4(sqrt(minD), sqrt(minD2), nearestCell);
-}
-
-void main() {
-  float t = u_time;
-
-  // warp UV space — this is what makes cells organically morph
-  vec2 warp = warpField(v_uv, t) * u_intensity;
-  vec2 warpedUV = v_uv + warp;
-
-  vec4 vor = voronoi(warpedUV, u_cells);
-  float minD = vor.x;
-  float minD2 = vor.y;
-
-  // per-cell identity from cell coords
-  float cellHash = hash1(vor.zw);
-  float h1 = cellHash;
-  float h2 = fract(cellHash * 127.1);
-  float h3 = fract(cellHash * 269.5);
-
-  float trigger = step(1.0 - u_chaos, h1);
-
-  // per-cell displacement — shards show different parts of the image
-  vec2 cellDisp = (vec2(h2, h3) - 0.5) * 2.0 * u_intensity * 0.15 * trigger;
-  vec2 sampleUV = v_uv + cellDisp;
-
-  // RGB split per cell
-  float split = u_rgbSplit * u_intensity * trigger * 0.04;
-  vec2 splitDir = normalize(vec2(h2 - 0.5, h3 - 0.5) + 1e-4);
-  vec2 splitOff = splitDir * split;
-
-  vec3 color = vec3(
-    texture(u_texture, sampleUV + splitOff).r,
-    texture(u_texture, sampleUV).g,
-    texture(u_texture, sampleUV - splitOff).b
-  );
-
-  // outline — darken toward edges
-  float outlineEdge = smoothstep(0.0, 0.12, minD2 - minD);
-  color = mix(vec3(0.0), color, mix(1.0, outlineEdge, u_outline));
-
-  outColor = vec4(color, 1.0);
-}`,
-		animated: true,
-		setUniforms: floats('intensity', 'cells', 'rgbSplit', 'chaos', 'outline'),
-	},
-
 	stereoscopic: {
 		fragment:
 			H +
@@ -1669,3 +1551,6 @@ export const ANIMATED_EFFECTS = new Set(
 		.filter(([, def]) => def.animated)
 		.map(([id]) => id),
 );
+// Tracking is a 2D-canvas overlay (no shader) but animates every frame
+// (jitter / glitch-jumps / data scramble), so the render loop must keep running.
+ANIMATED_EFFECTS.add('tracking');

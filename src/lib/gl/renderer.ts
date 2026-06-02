@@ -11,6 +11,15 @@ import {
   type EffectShaderDef,
 } from "./effect-shaders";
 import type { TextSafeEffectId, TextOverlayBlendMode } from "../text-overlay";
+import {
+  TRACKING_EFFECT_ID,
+  computeSaliency,
+  readTrackingParams,
+  syncBoxes,
+  resolveFrame,
+  drawTrackingToCanvas,
+  type TrackingState,
+} from "../tracking";
 
 interface CompiledProgram {
   program: WebGLProgram;
@@ -57,6 +66,16 @@ export class GlRenderer {
   private imgH = 0;
   private lastTime = -1;
   private phaseMap = new Map<string, number>();
+
+  // --- Tracking overlay effect (2D-canvas HUD composited into the chain) ---
+  private trackingStates = new Map<string, TrackingState>();
+  private trackingCanvas: HTMLCanvasElement | null = null;
+  private trackingTexture: WebGLTexture | null = null;
+  private salFBO: WebGLFramebuffer | null = null;
+  private salTexture: WebGLTexture | null = null;
+  private salBuf: Uint8Array | null = null;
+  private salW = 0;
+  private salH = 0;
 
   /** Default param values for text-safe effects (keeps text readable). */
   private static TEXT_EFFECT_DEFAULTS: Record<
@@ -302,11 +321,24 @@ export class GlRenderer {
 
     for (let i = 0; i < enabled.length; i++) {
       const eff = enabled[i];
+      const isLast = i === enabled.length - 1;
+
+      // Tracking is a CPU-built 2D overlay, not a shader pass. Composite it over
+      // the current chain input at this slot, so later effects can distort it.
+      if (eff.defId === TRACKING_EFFECT_ID) {
+        const target = isLast ? this.fbFBOs[writeIdx] : this.ppFBOs[ppIdx];
+        this.renderTracking(eff, input, target, time);
+        if (!isLast) {
+          input = this.ppTextures[ppIdx];
+          ppIdx = 1 - ppIdx;
+        }
+        continue;
+      }
+
       const entry = this.compiled.get(eff.defId);
       if (!entry) continue;
 
       const effectTime = this.getEffectTime(eff, time, safeDt);
-      const isLast = i === enabled.length - 1;
 
       // Multi-pass effects: run pre-passes through HDR ping-pong, then composite
       const originalInput = input;
@@ -382,9 +414,186 @@ export class GlRenderer {
     return phase;
   }
 
+  private getTrackingState(instanceId: string): TrackingState {
+    let s = this.trackingStates.get(instanceId);
+    if (!s) {
+      s = { boxes: [], salPoints: [], lastAnalyze: -1, signature: "" };
+      this.trackingStates.set(instanceId, s);
+    }
+    return s;
+  }
+
+  /** (Re)allocate the small saliency framebuffer to match the current aspect. */
+  private ensureSalResources() {
+    const gl = this.gl;
+    const targetW = 96;
+    const targetH = Math.max(
+      24,
+      Math.min(160, Math.round((targetW * this.imgH) / Math.max(1, this.imgW))),
+    );
+    if (this.salFBO && this.salW === targetW && this.salH === targetH) return;
+    if (this.salTexture) gl.deleteTexture(this.salTexture);
+    if (this.salFBO) gl.deleteFramebuffer(this.salFBO);
+    this.salW = targetW;
+    this.salH = targetH;
+    this.salTexture = this.createTexture(targetW, targetH);
+    this.salFBO = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.salFBO);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      this.salTexture,
+      0,
+    );
+    this.salBuf = new Uint8Array(targetW * targetH * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /** Downsample the source into the saliency buffer, read it back, score it. */
+  private analyzeSaliency(
+    state: TrackingState,
+    params: ReturnType<typeof readTrackingParams>,
+  ) {
+    const gl = this.gl;
+    if (!this.sourceTexture) return;
+    this.ensureSalResources();
+    if (!this.salFBO || !this.salBuf) return;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.salFBO);
+    gl.viewport(0, 0, this.salW, this.salH);
+    gl.useProgram(this.passthrough.program);
+    if (this.passthrough.uniforms["u_flipY"]) {
+      gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
+    }
+    this.setTextureFilter(this.sourceTexture, true);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    if (this.passthrough.uniforms["u_texture"]) {
+      gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
+    }
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    this.setTextureFilter(this.sourceTexture, false);
+
+    gl.readPixels(
+      0,
+      0,
+      this.salW,
+      this.salH,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      this.salBuf,
+    );
+    state.salPoints = computeSaliency(
+      this.salBuf,
+      this.salW,
+      this.salH,
+      params,
+    );
+  }
+
+  /** Composite an overlay texture over a main texture into the target FBO (normal blend + opacity). */
+  private compositeOverlayToFBO(
+    mainTex: WebGLTexture,
+    overlayTex: WebGLTexture,
+    targetFBO: WebGLFramebuffer,
+    opacity: number,
+  ) {
+    const gl = this.gl;
+    const prog = this.textBlendProgram;
+    if (!prog) return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+    gl.viewport(0, 0, this.imgW, this.imgH);
+    gl.useProgram(prog.program);
+    if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+    if (prog.uniforms["u_blendMode"])
+      gl.uniform1i(prog.uniforms["u_blendMode"], 0);
+    if (prog.uniforms["u_invert"]) gl.uniform1f(prog.uniforms["u_invert"], 0);
+    if (prog.uniforms["u_opacity"])
+      gl.uniform1f(prog.uniforms["u_opacity"], opacity);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, mainTex);
+    if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, overlayTex);
+    if (prog.uniforms["u_texture2"])
+      gl.uniform1i(prog.uniforms["u_texture2"], 2);
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** Build the tracking HUD and composite it over `inputTex` into `targetFBO`. */
+  private renderTracking(
+    eff: EffectInstance,
+    inputTex: WebGLTexture,
+    targetFBO: WebGLFramebuffer,
+    time: number,
+  ) {
+    if (this.imgW <= 0 || this.imgH <= 0) return;
+    const params = readTrackingParams(eff.values);
+    const state = this.getTrackingState(eff.instanceId);
+
+    // Re-analyze saliency on a fixed cadence in animation-time (cheap readback),
+    // so preview and export stay deterministic.
+    const interval = 0.35;
+    let salUpdated = false;
+    if (
+      state.lastAnalyze < 0 ||
+      time < state.lastAnalyze ||
+      time - state.lastAnalyze >= interval
+    ) {
+      this.analyzeSaliency(state, params);
+      state.lastAnalyze = time;
+      salUpdated = true;
+    }
+    syncBoxes(state, params, time, salUpdated);
+    const frame = resolveFrame(state, params, time, this.imgW, this.imgH);
+
+    if (!this.trackingCanvas) {
+      this.trackingCanvas = document.createElement("canvas");
+    }
+    drawTrackingToCanvas(
+      this.trackingCanvas,
+      this.imgW,
+      this.imgH,
+      frame,
+      params,
+    );
+
+    const gl = this.gl;
+    if (!this.trackingTexture) {
+      this.trackingTexture = this.createTexture(this.imgW, this.imgH);
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.trackingTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      this.trackingCanvas,
+    );
+
+    this.compositeOverlayToFBO(
+      inputTex,
+      this.trackingTexture,
+      targetFBO,
+      params.opacity,
+    );
+  }
+
   destroy() {
     const gl = this.gl;
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
+    if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
+    this.trackingTexture = null;
+    if (this.salTexture) gl.deleteTexture(this.salTexture);
+    this.salTexture = null;
+    if (this.salFBO) gl.deleteFramebuffer(this.salFBO);
+    this.salFBO = null;
+    this.trackingStates.clear();
     if (this.textTexture) gl.deleteTexture(this.textTexture);
     this.textTexture = null;
     if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
@@ -540,6 +749,16 @@ export class GlRenderer {
       gl.deleteTexture(this.textTexture);
       this.textTexture = null;
     }
+    if (this.trackingTexture) {
+      gl.deleteTexture(this.trackingTexture);
+      this.trackingTexture = null;
+    }
+    if (this.salTexture) gl.deleteTexture(this.salTexture);
+    if (this.salFBO) gl.deleteFramebuffer(this.salFBO);
+    this.salTexture = null;
+    this.salFBO = null;
+    this.salW = 0;
+    this.salH = 0;
 
     this.ppTextures = [
       this.createTexture(this.imgW, this.imgH),
