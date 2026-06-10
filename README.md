@@ -1,8 +1,13 @@
 # OpenMosh
+[openmosh-1781080776074.webm](https://github.com/user-attachments/assets/e1f3a112-63ce-4a7c-bb64-a89ee9c21453)
+
+> [!WARNING]
+> **Epilepsy warning:** The video above and the app itself produce rapidly flashing images and stroboscopic effects. Use with caution if you are sensitive to flashing lights or have photosensitive epilepsy.
+
 
 > Browser-based glitch art studio — inspired by PhotoMosh.
 
-OpenMosh is a fully client-side image and video glitch tool. Drop in a photo or video, layer GPU effects, sync them to music, or sequence images into a beat-matched slideshow — then export as a still (PNG/JPG) or video (WebM). Everything runs locally in the browser; no files ever leave your machine.
+OpenMosh is a fully client-side image and video glitch tool. Drop in a photo or video, layer GPU effects, sync them to music, or sequence images into a beat-matched slideshow — then export as a still (PNG/JPG) or video (WebM). 
 
 ---
 
@@ -31,9 +36,8 @@ bun preview        # Preview the production build
 bun check          # TypeScript + Svelte type-check (svelte-check + tsc)
 ```
 
-There is no test suite configured.
+**Tech stack:** Svelte 5 (runes), Vite, TypeScript, WebGL2. Key libraries: `mediabunny` (WebM muxing), `essentia.js` (WASM BPM detection).
 
-**Tech stack:** Svelte 5 (runes), Vite, TypeScript, WebGL2. Key libraries: `mediabunny` (WebM muxing), `essentia.js` (WASM BPM detection), `lucide-svelte` (icons).
 
 ---
 
