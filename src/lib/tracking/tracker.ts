@@ -1,5 +1,6 @@
 import type {
   FrameBox,
+  SalPoint,
   TrackBox,
   TrackingFrame,
   TrackingParams,
@@ -7,7 +8,6 @@ import type {
 } from "./types";
 
 const HEX = "0123456789ABCDEF";
-const STATUS = ["TRACK", "ACQ", "LOCK", "SCAN", "TRACE", "SYNC"];
 
 /** Deterministic 0..1 hash of two integers. */
 function hash2(a: number, b: number): number {
@@ -64,19 +64,17 @@ function placementSignature(p: TrackingParams): string {
 
 /**
  * Rebuild the persistent box set from the current salient points when the
- * placement params changed, the box set is empty, or new saliency arrived.
- * Identities (hex) are derived from seed+slot so they stay stable across
- * re-analysis as long as the count is unchanged.
+ * placement params changed or the box set is empty. Boxes otherwise persist —
+ * their motion is owned by trackBoxes. Identities (hex) are derived from
+ * seed+slot so they stay stable across rebuilds with the same count.
  */
 export function syncBoxes(
   state: TrackingState,
   params: TrackingParams,
   time: number,
-  salUpdated: boolean,
 ): void {
   const sig = placementSignature(params);
-  const needsRebuild =
-    salUpdated || state.signature !== sig || state.boxes.length === 0;
+  const needsRebuild = state.signature !== sig || state.boxes.length === 0;
   if (!needsRebuild) return;
 
   const pts = state.salPoints;
@@ -93,15 +91,125 @@ export function syncBoxes(
       hex: hexId(params.seed, k),
       baseX: pt.x,
       baseY: pt.y,
+      drawX: pt.x,
+      drawY: pt.y,
       w,
       h,
       jumpSeed: 1013 + params.seed * 31 + k * 101,
-      conf: 0.62 + hash2(params.seed + k, 7) * 0.37,
+      conf: 0.5,
       acquiredAt: prev ? prev.acquiredAt : time,
     });
   }
   state.boxes = boxes;
   state.signature = sig;
+}
+
+const PATCH_R = 3; // 7x7-cell template
+const SEARCH_R = 5; // +/- cells searched around the last position
+const LOST_CONF = 0.18;
+
+/**
+ * Real frame-to-frame tracking: each box's luminance patch (from the previous
+ * grid, at its previous position) is matched against the new grid within a
+ * local search window (SSD). The box moves to the best match; confidence is
+ * derived from the residual error. Boxes that genuinely lose their content
+ * re-acquire onto an unclaimed salient point.
+ */
+export function trackBoxes(
+  state: TrackingState,
+  params: TrackingParams,
+  lum: Float32Array,
+  gw: number,
+  gh: number,
+  time: number,
+): void {
+  const prev = state.prevLum;
+  if (prev && state.gridW === gw && state.gridH === gh) {
+    for (const box of state.boxes) {
+      const px = clampCell(Math.round(box.baseX * (gw - 1)), gw);
+      const py = clampCell(Math.round(box.baseY * (gh - 1)), gh);
+      let bestErr = Infinity;
+      let bestX = px;
+      let bestY = py;
+      for (let dy = -SEARCH_R; dy <= SEARCH_R; dy++) {
+        for (let dx = -SEARCH_R; dx <= SEARCH_R; dx++) {
+          const cx = px + dx;
+          const cy = py + dy;
+          if (
+            cx < PATCH_R ||
+            cy < PATCH_R ||
+            cx >= gw - PATCH_R ||
+            cy >= gh - PATCH_R
+          ) {
+            continue;
+          }
+          let err = 0;
+          for (let oy = -PATCH_R; oy <= PATCH_R; oy++) {
+            for (let ox = -PATCH_R; ox <= PATCH_R; ox++) {
+              const d =
+                prev[(py + oy) * gw + (px + ox)] -
+                lum[(cy + oy) * gw + (cx + ox)];
+              err += d * d;
+            }
+          }
+          // Tiny bias toward staying put so flat regions don't wander.
+          err += (dx * dx + dy * dy) * 0.0004;
+          if (err < bestErr) {
+            bestErr = err;
+            bestX = cx;
+            bestY = cy;
+          }
+        }
+      }
+      if (bestErr < Infinity) {
+        const n = (PATCH_R * 2 + 1) * (PATCH_R * 2 + 1);
+        const rmse = Math.sqrt(bestErr / n);
+        const conf = Math.max(0, Math.min(1, 1 - rmse * 6));
+        box.conf = box.conf * 0.7 + conf * 0.3;
+        box.baseX = bestX / (gw - 1);
+        box.baseY = bestY / (gh - 1);
+      }
+      if (box.conf < LOST_CONF) {
+        reacquire(box, state, time);
+      }
+    }
+  }
+  // Store the new grid for the next tick (copy: the RGBA buffer is reused).
+  state.prevLum = lum.slice();
+  state.gridW = gw;
+  state.gridH = gh;
+}
+
+function clampCell(c: number, size: number): number {
+  return Math.min(size - 1 - PATCH_R, Math.max(PATCH_R, c));
+}
+
+/** Move a lost box onto the strongest salient point no other box claims. */
+function reacquire(box: TrackBox, state: TrackingState, time: number): void {
+  let best: SalPoint | null = null;
+  for (const pt of state.salPoints) {
+    let claimed = false;
+    for (const other of state.boxes) {
+      if (other === box) continue;
+      const dx = other.baseX - pt.x;
+      const dy = other.baseY - pt.y;
+      if (dx * dx + dy * dy < 0.01) {
+        claimed = true;
+        break;
+      }
+    }
+    if (!claimed) {
+      best = pt;
+      break; // salPoints are sorted strongest-first
+    }
+  }
+  if (!best) return;
+  box.baseX = best.x;
+  box.baseY = best.y;
+  box.drawX = best.x;
+  box.drawY = best.y;
+  box.conf = 0.5;
+  box.acquiredAt = time;
 }
 
 function scramble(
@@ -145,10 +253,14 @@ export function resolveFrame(
   const margin = 0.02;
 
   for (const box of state.boxes) {
-    // Smooth micro-jitter around the locked spot.
+    // Ease the display position toward the tracked spot (analysis is ~8 Hz).
+    box.drawX += (box.baseX - box.drawX) * 0.22;
+    box.drawY += (box.baseY - box.drawY) * 0.22;
+
+    // Smooth micro-jitter around the tracked spot.
     const amp = params.jitter * 0.045;
-    let cx = box.baseX + (noise1(box.jumpSeed, time * 5.5) - 0.5) * amp;
-    let cy = box.baseY + (noise1(box.jumpSeed + 31, time * 5.5) - 0.5) * amp;
+    let cx = box.drawX + (noise1(box.jumpSeed, time * 5.5) - 0.5) * amp;
+    let cy = box.drawY + (noise1(box.jumpSeed + 31, time * 5.5) - 0.5) * amp;
 
     // Occasional glitch-jump: a brief, large offset to a random direction.
     const jumpRate = 0.6 + params.glitchJump * 7;
@@ -162,10 +274,14 @@ export function resolveFrame(
     cx = Math.min(1 - margin, Math.max(margin, cx));
     cy = Math.min(1 - margin, Math.max(margin, cy));
 
-    // Status word cycles; glitch-jumps read as a brief re-acquire.
-    const statusIdx =
-      Math.floor(time * 0.8 + box.key) % STATUS.length;
-    const status = jumped ? "ACQ" : STATUS[statusIdx];
+    // Status reflects real match confidence; glitch-jumps read as re-acquire.
+    const status = jumped
+      ? "ACQ"
+      : box.conf > 0.72
+        ? "LOCK"
+        : box.conf > 0.4
+          ? "TRACK"
+          : "SCAN";
 
     let label = `#${box.hex} ${status}`;
     if (params.showConfidence) label += ` ${box.conf.toFixed(2)}`;
