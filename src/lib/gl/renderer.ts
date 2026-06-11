@@ -14,6 +14,7 @@ import type { TextSafeEffectId, TextOverlayBlendMode } from "../text-overlay";
 import {
   TRACKING_EFFECT_ID,
   computeSaliency,
+  lumFromRGBA,
   readTrackingParams,
   syncBoxes,
   resolveFrame,
@@ -485,12 +486,8 @@ export class GlRenderer {
       gl.UNSIGNED_BYTE,
       this.salBuf,
     );
-    state.salPoints = computeSaliency(
-      this.salBuf,
-      this.salW,
-      this.salH,
-      params,
-    );
+    const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
+    state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
   }
 
   /** Composite an overlay texture over a main texture into the target FBO (normal blend + opacity). */
