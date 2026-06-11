@@ -805,61 +805,55 @@ float hash1(float n) {
   return fract(sin(n * 43758.5453) * 28947.3);
 }
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / res;
   float t = u_time;
-  float row = floor(v_uv.y * res.y);
   float tFrame = floor(t * 30.0);
+  float row = floor(v_uv.y * res.y);
+  float colPx = floor(v_uv.x * res.x);
 
   // --- Drifting hotspot regions where static concentrates ---
-  float hotspot = 0.5
-    + 0.3 * sin(v_uv.y * 6.0 + t * 0.5)
-    + 0.2 * sin(v_uv.y * 17.0 - t * 0.8);
-  hotspot = clamp(hotspot, 0.0, 1.0);
+  float hotspot = clamp(0.5 + 0.3 * sin(v_uv.y * 6.0 + t * 0.5)
+                            + 0.2 * sin(v_uv.y * 17.0 - t * 0.8), 0.0, 1.0);
 
-  // --- Static bands: 2-5px tall, not single pixel rows ---
+  // --- Static bands (2-5 px tall) with random lifetimes ---
   float bandH = 2.0 + hash(vec2(floor(row / 3.0), 444.0)) * 3.0;
   float bandId = floor(row / bandH);
-
-  // Each band has a random lifetime (2-8 frames) before it changes
   float lifeLen = 2.0 + floor(hash(vec2(bandId, 123.0)) * 7.0);
-  // Quantize frame time by this band's lifetime
   float bandEpoch = floor(tFrame / lifeLen);
-
   float bandChance = hash(vec2(bandId, bandEpoch * 7.0));
   float isStaticBand = step(1.0 - u_noise * 0.5 * hotspot, bandChance);
 
-  // --- Displacement: horizontal shift for static bands ---
+  // --- Horizontal displacement of static bands ---
   float shiftDir = hash(vec2(bandId, bandEpoch * 13.0 + 50.0)) - 0.5;
   float shiftAmt = isStaticBand * shiftDir * u_noise * 40.0 * px.x;
 
-  // --- White streak overlay on static bands ---
+  // --- Streak: hot head decaying into a noisy tail; some are dark dropouts ---
   float streakX0 = hash(vec2(bandId * 3.0, bandEpoch + 77.0));
   float lenSeed = hash(vec2(bandId * 7.0, bandEpoch + 33.0));
-  // Mostly short (2-15% width), some medium, rare long
-  float streakLen = 0.02 + lenSeed * 0.13;
-  streakLen += step(0.8, lenSeed) * 0.1;
-  float inStreak = isStaticBand
-    * step(streakX0, v_uv.x) * step(v_uv.x, streakX0 + streakLen);
-  float streakBright = inStreak * (0.5 + hash(vec2(bandId, bandEpoch * 3.0)) * 0.5) * u_noise;
+  float streakLen = 0.03 + lenSeed * 0.15 + step(0.8, lenSeed) * 0.12;
+  float sx = (v_uv.x - streakX0) / streakLen;
+  float inStreak = isStaticBand * step(0.0, sx) * step(sx, 1.0);
+  float env = smoothstep(0.0, 0.1, sx) * pow(max(1.0 - sx, 0.0), 1.6);
+  float sparkle = 0.5 + 0.5 * hash(vec2(colPx + bandId * 91.0, tFrame));
+  float toneSeed = hash(vec2(bandId, bandEpoch * 3.0));
+  float dropout = step(0.75, toneSeed);
+  float streakSig = inStreak * env * sparkle * (0.45 + toneSeed * 0.55) * u_noise;
 
-  // --- Subtle per-line jitter on non-static rows too ---
+  // --- Per-line jitter + sporadic warp bands ---
   float scanY = floor(v_uv.y * 480.0);
   float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_noise * 4.0 * px.x;
-
-  // --- Warp bands (larger sporadic displacement) ---
   float warpA = (hash(vec2(floor(v_uv.y * 80.0), floor(t * 6.0))) - 0.5)
     * step(0.75, hash(vec2(floor(v_uv.y * 80.0) + 100.0, floor(t * 6.0))))
     * u_noise * 15.0 * px.x;
-  float warpB = (hash(vec2(floor(v_uv.y * 200.0), floor(t * 8.0))) - 0.5)
-    * step(0.82, hash(vec2(floor(v_uv.y * 200.0) + 50.0, floor(t * 8.0))))
-    * u_noise * 6.0 * px.x;
 
-  float totalWarp = lineNoise + warpA + warpB + shiftAmt;
-  float rOff = totalWarp * 1.2;
-  float bOff = totalWarp * -0.8;
+  // --- Head-switching noise bar at the frame edge ---
+  float hsEdge = 0.975 - hash(vec2(tFrame, 5.0)) * 0.008;
+  float hs = smoothstep(hsEdge, hsEdge + 0.012, v_uv.y);
+  float hsShift = hs * (hash(vec2(row, tFrame)) - 0.35) * 60.0 * px.x;
+  float hsNoise = hs * hash(vec2(colPx, row * 7.0 + tFrame * 13.0));
 
-  // --- Multiple tracking bars ---
+  // --- Tracking bars crawling vertically ---
   float bars = 0.0;
   for (int i = 0; i < 4; i++) {
     float fi = float(i);
@@ -873,9 +867,11 @@ void main() {
     bars += smoothstep(bw, 0.0, dist) * strength;
   }
   bars *= u_tracking;
+  float barNoise = bars * hash(vec2(colPx, row + tFrame * 31.0));
 
-  rOff += bars * 25.0 * px.x;
-  bOff -= bars * 18.0 * px.x;
+  float totalWarp = lineNoise + warpA + shiftAmt + hsShift + bars * 25.0 * px.x;
+  float rOff = totalWarp * 1.2;
+  float bOff = totalWarp * -0.8;
 
   // --- Sample with RGB split ---
   vec4 c;
@@ -884,11 +880,22 @@ void main() {
   c.b = texture(u_texture, v_uv + vec2(bOff, 0.0)).b;
   c.a = 1.0;
 
-  // --- Overlay white streaks + bar brightness ---
-  c.rgb += streakBright;
-  c.rgb += bars * 0.12;
+  // --- Streaks: bright ones add, dropouts pull toward black ---
+  c.rgb += streakSig * (1.0 - dropout);
+  c.rgb -= streakSig * dropout * 1.6;
 
-  outColor = c;
+  // --- Chroma speckle on static bands (blue/yellow shimmer) ---
+  float chroma = isStaticBand * u_noise * 0.25;
+  c.r += (hash(vec2(colPx * 1.3, row + tFrame)) - 0.5) * chroma;
+  c.b += (hash(vec2(colPx * 1.7, row - tFrame)) - 0.5) * chroma;
+
+  // --- Head-switch bar: noisy gray garbage replaces content ---
+  c.rgb = mix(c.rgb, vec3(0.25 + hsNoise * 0.6), hs * (0.55 + 0.45 * hsNoise));
+
+  // --- Tracking bar interior: noise fill instead of a flat lift ---
+  c.rgb = mix(c.rgb, vec3(barNoise), min(bars * 0.45, 0.85));
+
+  outColor = vec4(clamp(c.rgb, 0.0, 1.0), 1.0);
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
