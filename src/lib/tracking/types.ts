@@ -47,8 +47,11 @@ export interface TrackBox {
   h: number;
   /** Per-box noise seed. */
   jumpSeed: number;
-  /** Fake confidence (stable per box). */
+  /** Match confidence 0..1, exponentially smoothed from real match error. */
   conf: number;
+  /** Display position smoothed toward baseX/baseY (avoids 8 Hz stepping). */
+  drawX: number;
+  drawY: number;
   /** Animation-time the box was (re)acquired, for fade-in. */
   acquiredAt: number;
 }
@@ -60,6 +63,10 @@ export interface TrackingState {
   lastAnalyze: number;
   /** Signature of placement-affecting params; change forces re-acquire. */
   signature: string;
+  /** Previous downsampled luminance grid (row-major, top-first). */
+  prevLum: Float32Array | null;
+  gridW: number;
+  gridH: number;
 }
 
 /** A box resolved for the current frame (jitter + glitch applied). */
