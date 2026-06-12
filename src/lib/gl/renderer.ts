@@ -14,9 +14,11 @@ import type { TextSafeEffectId, TextOverlayBlendMode } from "../text-overlay";
 import {
   TRACKING_EFFECT_ID,
   computeSaliency,
+  lumFromRGBA,
   readTrackingParams,
   syncBoxes,
   resolveFrame,
+  trackBoxes,
   drawTrackingToCanvas,
   type TrackingState,
 } from "../tracking";
@@ -417,7 +419,15 @@ export class GlRenderer {
   private getTrackingState(instanceId: string): TrackingState {
     let s = this.trackingStates.get(instanceId);
     if (!s) {
-      s = { boxes: [], salPoints: [], lastAnalyze: -1, signature: "" };
+      s = {
+        boxes: [],
+        salPoints: [],
+        lastAnalyze: -1,
+        signature: "",
+        prevLum: null,
+        gridW: 0,
+        gridH: 0,
+      };
       this.trackingStates.set(instanceId, s);
     }
     return s;
@@ -450,13 +460,14 @@ export class GlRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  /** Downsample the source into the saliency buffer, read it back, score it. */
+  /** Downsample `srcTex` into the saliency buffer, read it back, track + score. */
   private analyzeSaliency(
     state: TrackingState,
     params: ReturnType<typeof readTrackingParams>,
+    srcTex: WebGLTexture,
+    time: number,
   ) {
     const gl = this.gl;
-    if (!this.sourceTexture) return;
     this.ensureSalResources();
     if (!this.salFBO || !this.salBuf) return;
 
@@ -466,15 +477,15 @@ export class GlRenderer {
     if (this.passthrough.uniforms["u_flipY"]) {
       gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
     }
-    this.setTextureFilter(this.sourceTexture, true);
+    this.setTextureFilter(srcTex, true);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
     if (this.passthrough.uniforms["u_texture"]) {
       gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
     }
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-    this.setTextureFilter(this.sourceTexture, false);
+    this.setTextureFilter(srcTex, false);
 
     gl.readPixels(
       0,
@@ -485,12 +496,9 @@ export class GlRenderer {
       gl.UNSIGNED_BYTE,
       this.salBuf,
     );
-    state.salPoints = computeSaliency(
-      this.salBuf,
-      this.salW,
-      this.salH,
-      params,
-    );
+    const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
+    state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
+    trackBoxes(state, params, lum, this.salW, this.salH, time);
   }
 
   /** Composite an overlay texture over a main texture into the target FBO (normal blend + opacity). */
@@ -535,20 +543,20 @@ export class GlRenderer {
     const params = readTrackingParams(eff.values);
     const state = this.getTrackingState(eff.instanceId);
 
-    // Re-analyze saliency on a fixed cadence in animation-time (cheap readback),
-    // so preview and export stay deterministic.
-    const interval = 0.35;
-    let salUpdated = false;
+    // Re-analyze on a fixed cadence in animation-time so preview and export
+    // stay deterministic. 0.12 s ≈ 8 Hz: fluid motion, cheap 96-px readback.
+    // Reads the chain output feeding this pass, so boxes chase content set in
+    // motion by upstream effects (and video motion).
+    const interval = 0.12;
     if (
       state.lastAnalyze < 0 ||
       time < state.lastAnalyze ||
       time - state.lastAnalyze >= interval
     ) {
-      this.analyzeSaliency(state, params);
+      this.analyzeSaliency(state, params, inputTex, time);
       state.lastAnalyze = time;
-      salUpdated = true;
     }
-    syncBoxes(state, params, time, salUpdated);
+    syncBoxes(state, params, time);
     const frame = resolveFrame(state, params, time, this.imgW, this.imgH);
 
     if (!this.trackingCanvas) {
