@@ -884,12 +884,6 @@ void main() {
     * step(0.75, hash(vec2(floor(v_uv.y * 80.0) + 100.0, floor(t * 6.0))))
     * u_noise * 15.0 * px.x;
 
-  // --- Head-switching noise bar at the frame edge ---
-  float hsEdge = 0.975 - hash(vec2(tFrame, 5.0)) * 0.008;
-  float hs = smoothstep(hsEdge, hsEdge + 0.012, v_uv.y);
-  float hsShift = hs * (hash(vec2(row, tFrame)) - 0.35) * 60.0 * px.x;
-  float hsNoise = hs * hash(vec2(colPx, row * 7.0 + tFrame * 13.0));
-
   // --- Tracking bars crawling vertically ---
   float bars = 0.0;
   for (int i = 0; i < 4; i++) {
@@ -906,7 +900,7 @@ void main() {
   bars *= u_tracking;
   float barNoise = bars * hash(vec2(colPx, row + tFrame * 31.0));
 
-  float totalWarp = lineNoise + warpA + shiftAmt + hsShift + bars * 25.0 * px.x;
+  float totalWarp = lineNoise + warpA + shiftAmt + bars * 25.0 * px.x;
   float rOff = totalWarp * 1.2;
   float bOff = totalWarp * -0.8;
 
@@ -925,9 +919,6 @@ void main() {
   float chroma = isStaticBand * u_noise * 0.25;
   c.r += (hash(vec2(colPx * 1.3, row + tFrame)) - 0.5) * chroma;
   c.b += (hash(vec2(colPx * 1.7, row - tFrame)) - 0.5) * chroma;
-
-  // --- Head-switch bar: noisy gray garbage replaces content ---
-  c.rgb = mix(c.rgb, vec3(0.25 + hsNoise * 0.6), hs * (0.55 + 0.45 * hsNoise));
 
   // --- Tracking bar interior: noise fill instead of a flat lift ---
   c.rgb = mix(c.rgb, vec3(barNoise), min(bars * 0.45, 0.85));
