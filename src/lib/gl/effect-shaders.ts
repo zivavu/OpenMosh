@@ -1086,69 +1086,92 @@ void main() {
 			`uniform float u_intensity;
 uniform float u_corruption;
 uniform float u_channelShift;
-uniform float u_speed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
-float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+vec3 hrot(vec3 c, float a) {
+  float ca = cos(a), sa = sin(a);
+  vec3 k = vec3(0.57735);
+  return c*ca + cross(k,c)*sa + k*dot(k,c)*(1.0-ca);
+}
 void main() {
   vec2 res = vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * u_speed);
+  // Corruption layout persists: quantize phase-time coarsely
+  float t = floor(u_time * 0.8);
 
-  // simulate raw pixel index as if image is a flat byte array
-  float pixelIdx = floor(v_uv.y * res.y) * res.x + floor(v_uv.x * res.x);
-  float totalPixels = res.x * res.y;
+  // Macroblock grid (raster order, like bytes in a file)
+  float gridW = 40.0;
+  float gridH = max(4.0, floor(gridW * res.y / res.x));
+  vec2 grid = vec2(gridW, gridH);
+  vec2 bc = floor(v_uv * grid);
+  vec2 local = fract(v_uv * grid);
+  float bIdx = bc.y * gridW + bc.x;
+  float total = gridW * gridH;
 
-  // create corruption zones: regions where "bytes were inserted/deleted"
-  float numZones = floor(3.0 + u_corruption * 12.0);
-  float byteOffset = 0.0;
-  for (float i = 0.0; i < 15.0; i++) {
+  float numZones = floor(2.0 + u_corruption * 10.0);
+
+  vec2 readBlock = bc;
+  vec2 readLocal = local;
+  float rasterShift = 0.0;
+  float garbage = 0.0;
+  float hueG = 0.0;
+
+  for (float i = 0.0; i < 12.0; i++) {
     if (i >= numZones) break;
-    float zoneStart = hash(vec2(i, t)) * totalPixels;
-    float zoneSize = hash(vec2(i + 50.0, t)) * totalPixels * 0.15;
-    if (pixelIdx > zoneStart && pixelIdx < zoneStart + zoneSize) {
-      // byte offset: shift the read position
-      byteOffset += (hash(vec2(i * 3.0, t + 7.0)) - 0.3) * u_intensity * res.x * 0.5;
+    // Corrupt zones are runs of consecutive blocks in raster order,
+    // wrapping row edges like a corrupted byte stream.
+    float zStart = floor(hash(vec2(i, t)) * total);
+    float zLen = floor((0.01 + hash(vec2(i + 50.0, t)) * 0.06)
+      * total * (0.3 + u_intensity));
+    float zEnd = zStart + zLen;
+
+    // The classic databend signature: everything AFTER the broken bytes
+    // stays shifted sideways for the zone's lifetime.
+    if (bIdx >= zEnd) {
+      rasterShift += floor((hash(vec2(i * 3.0, t + 7.0)) - 0.5)
+        * u_intensity * 7.0);
+    }
+
+    if (bIdx >= zStart && bIdx < zEnd) {
+      float fate = hash(vec2(i * 11.0, t + 3.0));
+      if (fate < 0.45) {
+        // wrong content: this block decodes bytes from elsewhere
+        float srcIdx = mod(bIdx + floor((hash(vec2(i * 5.0, t)) - 0.5)
+          * total * 0.5) + total, total);
+        readBlock = vec2(mod(srcIdx, gridW), floor(srcIdx / gridW));
+      } else if (fate < 0.75) {
+        // smear: the block repeats its first row downward (JPEG streak)
+        readLocal.y = readLocal.y * 0.08;
+      } else {
+        // garbage: posterized hue trash on laterally-shifted content
+        garbage = 1.0;
+        hueG = hash(vec2(i * 7.0, t + 9.0)) * 6.28;
+        readBlock.x = mod(readBlock.x + floor(hash(vec2(i, t + 4.0)) * 8.0), gridW);
+      }
     }
   }
 
-  // convert offset pixel index back to UV
-  float newIdx = pixelIdx + byteOffset;
-  vec2 bentUV = vec2(
-    mod(newIdx, res.x) / res.x,
-    floor(newIdx / res.x) / res.y
-  );
+  // Re-linearize with the persistent raster shift
+  float rIdx = readBlock.y * gridW + readBlock.x + rasterShift;
+  rIdx = clamp(rIdx, 0.0, total - 1.0);
+  vec2 rb = vec2(mod(rIdx, gridW), floor(rIdx / gridW));
+  vec2 uv = (rb + readLocal) / grid;
 
-  // channel separation: each channel reads from a slightly different byte offset
-  // simulating RGB byte misalignment in raw data
-  float chanOff = u_channelShift * res.x * 0.3;
-  float idxR = newIdx;
-  float idxG = newIdx + chanOff;
-  float idxB = newIdx + chanOff * 2.0;
+  // RGB byte misalignment: channels offset by fractions of a block
+  float co = u_channelShift * 2.5 / gridW;
+  vec3 col;
+  col.r = texture(u_texture, clamp(uv, vec2(0.0), vec2(1.0))).r;
+  col.g = texture(u_texture, clamp(uv + vec2(co, 0.0), vec2(0.0), vec2(1.0))).g;
+  col.b = texture(u_texture, clamp(uv + vec2(co * 2.0, 0.0), vec2(0.0), vec2(1.0))).b;
 
-  vec2 uvR = vec2(mod(idxR, res.x) / res.x, floor(idxR / res.x) / res.y);
-  vec2 uvG = vec2(mod(idxG, res.x) / res.x, floor(idxG / res.x) / res.y);
-  vec2 uvB = vec2(mod(idxB, res.x) / res.x, floor(idxB / res.x) / res.y);
-
-  // clamp to valid range
-  uvR = clamp(uvR, 0.0, 1.0);
-  uvG = clamp(uvG, 0.0, 1.0);
-  uvB = clamp(uvB, 0.0, 1.0);
-
-  // in unaffected areas, use original UV
-  if (abs(byteOffset) < 0.5) {
-    outColor = texture(u_texture, v_uv);
-  } else {
-    outColor = vec4(
-      texture(u_texture, uvR).r,
-      texture(u_texture, uvG).g,
-      texture(u_texture, uvB).b,
-      1.0
-    );
+  if (garbage > 0.5) {
+    col = floor(col * 5.0) / 5.0;
+    col = hrot(col, hueG);
   }
+  outColor = vec4(col, 1.0);
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'corruption', 'channelShift', 'speed'),
+		setUniforms: floats('intensity', 'corruption', 'channelShift'),
 	},
 
 	melt: {
