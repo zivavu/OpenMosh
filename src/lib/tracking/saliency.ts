@@ -1,16 +1,28 @@
 import type { SalPoint, TrackingParams } from "./types";
 
+/** Convert a row-major RGBA buffer (top-first) to a 0..1 luminance grid. */
+export function lumFromRGBA(rgba: Uint8Array, n: number): Float32Array {
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = rgba[i * 4];
+    const g = rgba[i * 4 + 1];
+    const b = rgba[i * 4 + 2];
+    lum[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  }
+  return lum;
+}
+
 /**
- * Cheap content-aware saliency: from a small downsampled RGBA buffer, score each
- * cell by edge magnitude (Sobel on luminance) plus deviation from the mean
- * brightness, then greedily pick the strongest cells with spatial spacing so the
- * boxes don't clump. Returns points in normalized coords (y: top→bottom).
+ * Cheap content-aware saliency: from a small downsampled luminance grid, score
+ * each cell by edge magnitude (Sobel) plus deviation from the mean brightness,
+ * then greedily pick the strongest cells with spatial spacing so the boxes
+ * don't clump. Returns points in normalized coords (y: top→bottom).
  *
- * `rgba` is row-major starting at the image TOP (the caller reads the framebuffer
+ * `lum` is row-major starting at the image TOP (the caller reads the framebuffer
  * such that row 0 == top of the image), so normalized y = row / (gh - 1).
  */
 export function computeSaliency(
-  rgba: Uint8Array,
+  lum: Float32Array,
   gw: number,
   gh: number,
   params: TrackingParams,
@@ -18,16 +30,8 @@ export function computeSaliency(
   const n = gw * gh;
   if (n === 0) return [];
 
-  const lum = new Float32Array(n);
   let mean = 0;
-  for (let i = 0; i < n; i++) {
-    const r = rgba[i * 4];
-    const g = rgba[i * 4 + 1];
-    const b = rgba[i * 4 + 2];
-    const l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    lum[i] = l;
-    mean += l;
-  }
+  for (let i = 0; i < n; i++) mean += lum[i];
   mean /= n;
 
   // Score = Sobel edge magnitude + brightness deviation from the mean.

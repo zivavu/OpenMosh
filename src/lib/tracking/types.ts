@@ -8,8 +8,6 @@ export interface TrackingParams {
   sensitivity: number;
   /** Base box size as a fraction of the smaller image dimension. */
   size: number;
-  /** 0..1 — micro-jitter amplitude. */
-  jitter: number;
   /** 0..1 — frequency/strength of occasional glitch-jumps. */
   glitchJump: number;
   /** 0..1 — how fast the data labels scramble. */
@@ -47,8 +45,11 @@ export interface TrackBox {
   h: number;
   /** Per-box noise seed. */
   jumpSeed: number;
-  /** Fake confidence (stable per box). */
+  /** Match confidence 0..1, exponentially smoothed from real match error. */
   conf: number;
+  /** Display position smoothed toward baseX/baseY (avoids 8 Hz stepping). */
+  drawX: number;
+  drawY: number;
   /** Animation-time the box was (re)acquired, for fade-in. */
   acquiredAt: number;
 }
@@ -60,6 +61,10 @@ export interface TrackingState {
   lastAnalyze: number;
   /** Signature of placement-affecting params; change forces re-acquire. */
   signature: string;
+  /** Previous downsampled luminance grid (row-major, top-first). */
+  prevLum: Float32Array | null;
+  gridW: number;
+  gridH: number;
 }
 
 /** A box resolved for the current frame (jitter + glitch applied). */

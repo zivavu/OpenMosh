@@ -670,8 +670,12 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_speed;
 float h1(float n) { return fract(sin(n) * 43758.5453); }
+float vnoise(float x) {
+  float i = floor(x);
+  float f = fract(x);
+  return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f));
+}
 // rotate hue by angle (radians)
 vec3 hrot(vec3 c, float a) {
   float ca = cos(a), sa = sin(a);
@@ -680,52 +684,85 @@ vec3 hrot(vec3 c, float a) {
 }
 void main() {
   float strength = u_amount / 50.0;
-  float et = floor(u_time * u_speed * 2.5);
-  float y = v_uv.y;
+  float t = u_time;
 
-  // Each slot is one corrupted band
+  // Burst/calm envelope: long quiet stretches, then violent fits
+  float burst = smoothstep(0.55, 0.85, vnoise(t * 0.45));
+  float activity = strength * (0.15 + 1.6 * burst);
+
   vec2 readUV = v_uv;
-  int mode = -1; // -1 = clean
   float hueShift = 0.0;
+  float ghost = 0.0;
+  float invertFlash = 0.0;
 
-  for (int i = 0; i < 5; i++) {
+  // 6 bands, each on its OWN clock speed -> poly-rhythm, never one pulse
+  for (int i = 0; i < 6; i++) {
     float fi = float(i);
-    if (h1(et * 0.4 + fi * 4.1) > 0.5) continue; // ~half active
+    float clock = 1.3 + h1(fi * 9.7) * 4.2;
+    float et = floor(t * clock);
+    if (h1(et * 0.41 + fi * 4.1) > activity + 0.18) continue;
 
     float top = h1(et * 1.7 + fi * 6.3);
-    float ht  = mix(0.03, 0.22, h1(et * 3.1 + fi * 2.9));
+    float ht  = mix(0.02, 0.28, h1(et * 3.1 + fi * 2.9));
+    float y = v_uv.y;
     if (y < top || y >= top + ht) continue;
 
-    // Which corruption type for this band?
     float typeR = h1(et * 5.3 + fi * 8.7);
-
-    if (typeR < 0.4) {
-      // TYPE A: content stolen from a different Y — band shows a slice of elsewhere
-      float srcY = h1(et * 2.9 + fi * 1.3); // read from random row
+    if (typeR < 0.25) {
+      // content stolen from another row
+      float srcY = h1(et * 2.9 + fi * 1.3);
       readUV = vec2(v_uv.x, srcY + fract(y - top) * ht);
-      mode = 0;
-    } else if (typeR < 0.72) {
-      // TYPE B: horizontal shift + strong hue rotation (the "wrong color" look)
-      float xOff = (h1(et * 7.1 + fi) - 0.5) * strength * 1.6;
+    } else if (typeR < 0.5) {
+      // horizontal shift + wrong-color hue rotation
+      float xOff = (h1(et * 7.1 + fi) - 0.5) * strength * 1.8;
       readUV = vec2(clamp(v_uv.x + xOff, 0.0, 1.0), y);
-      hueShift = h1(et * 3.3 + fi * 5.5) * 6.28; // full random hue
-      mode = 1;
-    } else {
-      // TYPE C: row duplication stutter — repeats a thin strip multiple times
+      hueShift = h1(et * 3.3 + fi * 5.5) * 6.28;
+    } else if (typeR < 0.68) {
+      // row-duplication stutter
       float stripeH = ht / 4.0;
-      float srcRow  = top + h1(et * 4.4 + fi) * ht * 0.5;
+      float srcRow = top + h1(et * 4.4 + fi) * ht * 0.5;
       readUV = vec2(v_uv.x, srcRow + mod(y - top, stripeH));
-      mode = 2;
+    } else if (typeR < 0.84) {
+      // vertical slip: the band slides up/down
+      float yOff = (h1(et * 6.2 + fi) - 0.5) * strength * 0.8;
+      readUV = vec2(v_uv.x, clamp(y + yOff, 0.0, 1.0));
+      hueShift = (h1(et * 1.9 + fi) - 0.5) * 1.2;
+    } else {
+      // ghost echo: translucent shifted duplicate
+      ghost = 0.4 + h1(et * 8.8 + fi) * 0.4;
     }
     break;
   }
 
+  // Rare full-frame events, only during bursts
+  float ft = floor(t * 14.0);
+  if (burst > 0.0 && h1(ft * 0.173) > 1.0 - 0.06 * burst) {
+    float kind = h1(ft * 0.731);
+    if (kind < 0.45) {
+      // full-frame tear below a random line
+      float tearY = h1(ft * 1.37);
+      float off = (h1(ft * 2.11) - 0.5) * strength * 1.2;
+      if (readUV.y > tearY) readUV.x = clamp(readUV.x + off, 0.0, 1.0);
+    } else if (kind < 0.75) {
+      invertFlash = 1.0;
+    } else {
+      hueShift += 3.14159;
+    }
+  }
+
   vec4 s = texture(u_texture, readUV);
-  if (mode == 1) s.rgb = hrot(s.rgb, hueShift);
+  if (ghost > 0.0) {
+    vec2 gOff = vec2((h1(floor(t * 3.0) * 7.7) - 0.5) * 0.24 * strength,
+                     (h1(floor(t * 3.0) * 3.3) - 0.5) * 0.05);
+    vec4 g = texture(u_texture, clamp(v_uv + gOff, vec2(0.0), vec2(1.0)));
+    s.rgb = mix(s.rgb, max(s.rgb, g.rgb), ghost);
+  }
+  if (hueShift != 0.0) s.rgb = hrot(s.rgb, hueShift);
+  if (invertFlash > 0.5) s.rgb = 1.0 - s.rgb;
   outColor = s;
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'speed'),
+		setUniforms: floats('amount'),
 	},
 
 	'optical-flow': {
@@ -805,61 +842,49 @@ float hash1(float n) {
   return fract(sin(n * 43758.5453) * 28947.3);
 }
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / res;
   float t = u_time;
-  float row = floor(v_uv.y * res.y);
   float tFrame = floor(t * 30.0);
+  float row = floor(v_uv.y * res.y);
+  float colPx = floor(v_uv.x * res.x);
 
   // --- Drifting hotspot regions where static concentrates ---
-  float hotspot = 0.5
-    + 0.3 * sin(v_uv.y * 6.0 + t * 0.5)
-    + 0.2 * sin(v_uv.y * 17.0 - t * 0.8);
-  hotspot = clamp(hotspot, 0.0, 1.0);
+  float hotspot = clamp(0.5 + 0.3 * sin(v_uv.y * 6.0 + t * 0.5)
+                            + 0.2 * sin(v_uv.y * 17.0 - t * 0.8), 0.0, 1.0);
 
-  // --- Static bands: 2-5px tall, not single pixel rows ---
+  // --- Static bands (2-5 px tall) with random lifetimes ---
   float bandH = 2.0 + hash(vec2(floor(row / 3.0), 444.0)) * 3.0;
   float bandId = floor(row / bandH);
-
-  // Each band has a random lifetime (2-8 frames) before it changes
   float lifeLen = 2.0 + floor(hash(vec2(bandId, 123.0)) * 7.0);
-  // Quantize frame time by this band's lifetime
   float bandEpoch = floor(tFrame / lifeLen);
-
   float bandChance = hash(vec2(bandId, bandEpoch * 7.0));
   float isStaticBand = step(1.0 - u_noise * 0.5 * hotspot, bandChance);
 
-  // --- Displacement: horizontal shift for static bands ---
+  // --- Horizontal displacement of static bands ---
   float shiftDir = hash(vec2(bandId, bandEpoch * 13.0 + 50.0)) - 0.5;
   float shiftAmt = isStaticBand * shiftDir * u_noise * 40.0 * px.x;
 
-  // --- White streak overlay on static bands ---
+  // --- Streak: hot head decaying into a noisy tail; some are dark dropouts ---
   float streakX0 = hash(vec2(bandId * 3.0, bandEpoch + 77.0));
   float lenSeed = hash(vec2(bandId * 7.0, bandEpoch + 33.0));
-  // Mostly short (2-15% width), some medium, rare long
-  float streakLen = 0.02 + lenSeed * 0.13;
-  streakLen += step(0.8, lenSeed) * 0.1;
-  float inStreak = isStaticBand
-    * step(streakX0, v_uv.x) * step(v_uv.x, streakX0 + streakLen);
-  float streakBright = inStreak * (0.5 + hash(vec2(bandId, bandEpoch * 3.0)) * 0.5) * u_noise;
+  float streakLen = 0.03 + lenSeed * 0.15 + step(0.8, lenSeed) * 0.12;
+  float sx = (v_uv.x - streakX0) / streakLen;
+  float inStreak = isStaticBand * step(0.0, sx) * step(sx, 1.0);
+  float env = smoothstep(0.0, 0.1, sx) * pow(max(1.0 - sx, 0.0), 1.6);
+  float sparkle = 0.5 + 0.5 * hash(vec2(colPx + bandId * 91.0, tFrame));
+  float toneSeed = hash(vec2(bandId, bandEpoch * 3.0));
+  float dropout = step(0.75, toneSeed);
+  float streakSig = inStreak * env * sparkle * (0.45 + toneSeed * 0.55) * u_noise;
 
-  // --- Subtle per-line jitter on non-static rows too ---
+  // --- Per-line jitter + sporadic warp bands ---
   float scanY = floor(v_uv.y * 480.0);
   float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_noise * 4.0 * px.x;
-
-  // --- Warp bands (larger sporadic displacement) ---
   float warpA = (hash(vec2(floor(v_uv.y * 80.0), floor(t * 6.0))) - 0.5)
     * step(0.75, hash(vec2(floor(v_uv.y * 80.0) + 100.0, floor(t * 6.0))))
     * u_noise * 15.0 * px.x;
-  float warpB = (hash(vec2(floor(v_uv.y * 200.0), floor(t * 8.0))) - 0.5)
-    * step(0.82, hash(vec2(floor(v_uv.y * 200.0) + 50.0, floor(t * 8.0))))
-    * u_noise * 6.0 * px.x;
 
-  float totalWarp = lineNoise + warpA + warpB + shiftAmt;
-  float rOff = totalWarp * 1.2;
-  float bOff = totalWarp * -0.8;
-
-  // --- Multiple tracking bars ---
+  // --- Tracking bars crawling vertically ---
   float bars = 0.0;
   for (int i = 0; i < 4; i++) {
     float fi = float(i);
@@ -873,9 +898,11 @@ void main() {
     bars += smoothstep(bw, 0.0, dist) * strength;
   }
   bars *= u_tracking;
+  float barNoise = bars * hash(vec2(colPx, row + tFrame * 31.0));
 
-  rOff += bars * 25.0 * px.x;
-  bOff -= bars * 18.0 * px.x;
+  float totalWarp = lineNoise + warpA + shiftAmt + bars * 25.0 * px.x;
+  float rOff = totalWarp * 1.2;
+  float bOff = totalWarp * -0.8;
 
   // --- Sample with RGB split ---
   vec4 c;
@@ -884,11 +911,19 @@ void main() {
   c.b = texture(u_texture, v_uv + vec2(bOff, 0.0)).b;
   c.a = 1.0;
 
-  // --- Overlay white streaks + bar brightness ---
-  c.rgb += streakBright;
-  c.rgb += bars * 0.12;
+  // --- Streaks: bright ones add, dropouts pull toward black ---
+  c.rgb += streakSig * (1.0 - dropout);
+  c.rgb -= streakSig * dropout * 1.6;
 
-  outColor = c;
+  // --- Chroma speckle on static bands (blue/yellow shimmer) ---
+  float chroma = isStaticBand * u_noise * 0.25;
+  c.r += (hash(vec2(colPx * 1.3, row + tFrame)) - 0.5) * chroma;
+  c.b += (hash(vec2(colPx * 1.7, row - tFrame)) - 0.5) * chroma;
+
+  // --- Tracking bar interior: noise fill instead of a flat lift ---
+  c.rgb = mix(c.rgb, vec3(barNoise), min(bars * 0.45, 0.85));
+
+  outColor = vec4(clamp(c.rgb, 0.0, 1.0), 1.0);
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
@@ -930,18 +965,25 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
+uniform float u_size;
 uniform float u_rgb;
 uniform int u_blendMode;
-uint ihash(uint x) {
-  x ^= x >> 16u;
-  x *= 0x45d9f3bu;
-  x ^= x >> 16u;
-  x *= 0x45d9f3bu;
-  x ^= x >> 16u;
-  return x;
+float hash2(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
-float noise(uvec3 v) {
-  return float(ihash(v.x ^ ihash(v.y ^ ihash(v.z)))) / float(0xffffffffu);
+float vnoise2(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), u.x),
+             mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float grainNoise(vec2 p, float seed) {
+  // Multi-octave, contrast-expanded: clumpy irregular grains, not speckle
+  float n = vnoise2(p + seed * 17.0) * 0.6
+          + vnoise2(p * 2.3 + seed * 31.0) * 0.3
+          + vnoise2(p * 4.7 + seed * 53.0) * 0.1;
+  return clamp((n - 0.5) * 2.6 + 0.5, 0.0, 1.0);
 }
 vec3 blendSoftLight(vec3 base, vec3 blend) {
   return mix(
@@ -952,26 +994,34 @@ vec3 blendSoftLight(vec3 base, vec3 blend) {
 }
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  ivec2 px = ivec2(gl_FragCoord.xy);
-  uint frame = uint(floor(u_time * 24.0));
-  float n = noise(uvec3(uint(px.x), uint(px.y), frame));
-  vec3 grain = u_rgb > 0.5
-    ? vec3(n, noise(uvec3(uint(px.x), uint(px.y), frame + 1000u)),
-               noise(uvec3(uint(px.x), uint(px.y), frame + 2000u)))
-    : vec3(n);
+  float frame = floor(u_time * 24.0);
+  // Re-seat the pattern every frame so the grain "boils" like film
+  vec2 fOff = vec2(hash2(vec2(frame, 1.0)), hash2(vec2(frame, 2.0))) * 113.0;
+  vec2 p = gl_FragCoord.xy / max(u_size, 0.5) + fOff;
+
+  float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+  // Film stock responds strongest in the midtones
+  float response = clamp(0.25 + 0.75 * (1.0 - abs(luma - 0.5) * 1.6), 0.0, 1.0);
+
+  vec3 g = u_rgb > 0.5
+    ? vec3(grainNoise(p, frame), grainNoise(p + 7.0, frame), grainNoise(p + 13.0, frame))
+    : vec3(grainNoise(p, frame));
+
+  float amt = u_amount * response;
   vec3 result;
   if (u_blendMode == 0) {
-    result = mix(c.rgb, blendSoftLight(c.rgb, grain), u_amount);
+    result = mix(c.rgb, blendSoftLight(c.rgb, g), amt * 1.6);
   } else if (u_blendMode == 1) {
-    result = c.rgb + (grain - 0.5) * u_amount;
+    result = c.rgb + (g - 0.5) * amt * 0.9;
   } else {
-    result = c.rgb * mix(vec3(1.0), grain, u_amount);
+    result = c.rgb * mix(vec3(1.0), 0.4 + g * 0.8, amt);
   }
   outColor = vec4(clamp(result, 0.0, 1.0), c.a);
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, 'u_amount', v.amount as number);
+			setFloat(gl, l, 'u_size', (v.size as number) ?? 1.6);
 			setFloat(gl, l, 'u_rgb', v.rgb as number);
 			const mode =
 				v.blendMode === 'additive' ? 1 : v.blendMode === 'multiply' ? 2 : 0;
@@ -1042,69 +1092,92 @@ void main() {
 			`uniform float u_intensity;
 uniform float u_corruption;
 uniform float u_channelShift;
-uniform float u_speed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
-float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+vec3 hrot(vec3 c, float a) {
+  float ca = cos(a), sa = sin(a);
+  vec3 k = vec3(0.57735);
+  return c*ca + cross(k,c)*sa + k*dot(k,c)*(1.0-ca);
+}
 void main() {
   vec2 res = vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * u_speed);
+  // Corruption layout persists: quantize phase-time coarsely
+  float t = floor(u_time * 0.8);
 
-  // simulate raw pixel index as if image is a flat byte array
-  float pixelIdx = floor(v_uv.y * res.y) * res.x + floor(v_uv.x * res.x);
-  float totalPixels = res.x * res.y;
+  // Macroblock grid (raster order, like bytes in a file)
+  float gridW = 40.0;
+  float gridH = max(4.0, floor(gridW * res.y / res.x));
+  vec2 grid = vec2(gridW, gridH);
+  vec2 bc = floor(v_uv * grid);
+  vec2 local = fract(v_uv * grid);
+  float bIdx = bc.y * gridW + bc.x;
+  float total = gridW * gridH;
 
-  // create corruption zones: regions where "bytes were inserted/deleted"
-  float numZones = floor(3.0 + u_corruption * 12.0);
-  float byteOffset = 0.0;
-  for (float i = 0.0; i < 15.0; i++) {
+  float numZones = floor(2.0 + u_corruption * 10.0);
+
+  vec2 readBlock = bc;
+  vec2 readLocal = local;
+  float rasterShift = 0.0;
+  float garbage = 0.0;
+  float hueG = 0.0;
+
+  for (float i = 0.0; i < 12.0; i++) {
     if (i >= numZones) break;
-    float zoneStart = hash(vec2(i, t)) * totalPixels;
-    float zoneSize = hash(vec2(i + 50.0, t)) * totalPixels * 0.15;
-    if (pixelIdx > zoneStart && pixelIdx < zoneStart + zoneSize) {
-      // byte offset: shift the read position
-      byteOffset += (hash(vec2(i * 3.0, t + 7.0)) - 0.3) * u_intensity * res.x * 0.5;
+    // Corrupt zones are runs of consecutive blocks in raster order,
+    // wrapping row edges like a corrupted byte stream.
+    float zStart = floor(hash(vec2(i, t)) * total);
+    float zLen = floor((0.01 + hash(vec2(i + 50.0, t)) * 0.06)
+      * total * (0.3 + u_intensity));
+    float zEnd = zStart + zLen;
+
+    // The classic databend signature: everything AFTER the broken bytes
+    // stays shifted sideways for the zone's lifetime.
+    if (bIdx >= zEnd) {
+      rasterShift += floor((hash(vec2(i * 3.0, t + 7.0)) - 0.5)
+        * u_intensity * 7.0);
+    }
+
+    if (bIdx >= zStart && bIdx < zEnd) {
+      float fate = hash(vec2(i * 11.0, t + 3.0));
+      if (fate < 0.45) {
+        // wrong content: this block decodes bytes from elsewhere
+        float srcIdx = mod(bIdx + floor((hash(vec2(i * 5.0, t)) - 0.5)
+          * total * 0.5) + total, total);
+        readBlock = vec2(mod(srcIdx, gridW), floor(srcIdx / gridW));
+      } else if (fate < 0.75) {
+        // smear: the block repeats its first row downward (JPEG streak)
+        readLocal.y = readLocal.y * 0.08;
+      } else {
+        // garbage: posterized hue trash on laterally-shifted content
+        garbage = 1.0;
+        hueG = hash(vec2(i * 7.0, t + 9.0)) * 6.28;
+        readBlock.x = mod(readBlock.x + floor(hash(vec2(i, t + 4.0)) * 8.0), gridW);
+      }
     }
   }
 
-  // convert offset pixel index back to UV
-  float newIdx = pixelIdx + byteOffset;
-  vec2 bentUV = vec2(
-    mod(newIdx, res.x) / res.x,
-    floor(newIdx / res.x) / res.y
-  );
+  // Re-linearize with the persistent raster shift
+  float rIdx = readBlock.y * gridW + readBlock.x + rasterShift;
+  rIdx = clamp(rIdx, 0.0, total - 1.0);
+  vec2 rb = vec2(mod(rIdx, gridW), floor(rIdx / gridW));
+  vec2 uv = (rb + readLocal) / grid;
 
-  // channel separation: each channel reads from a slightly different byte offset
-  // simulating RGB byte misalignment in raw data
-  float chanOff = u_channelShift * res.x * 0.3;
-  float idxR = newIdx;
-  float idxG = newIdx + chanOff;
-  float idxB = newIdx + chanOff * 2.0;
+  // RGB byte misalignment: channels offset by fractions of a block
+  float co = u_channelShift * 2.5 / gridW;
+  vec3 col;
+  col.r = texture(u_texture, clamp(uv, vec2(0.0), vec2(1.0))).r;
+  col.g = texture(u_texture, clamp(uv + vec2(co, 0.0), vec2(0.0), vec2(1.0))).g;
+  col.b = texture(u_texture, clamp(uv + vec2(co * 2.0, 0.0), vec2(0.0), vec2(1.0))).b;
 
-  vec2 uvR = vec2(mod(idxR, res.x) / res.x, floor(idxR / res.x) / res.y);
-  vec2 uvG = vec2(mod(idxG, res.x) / res.x, floor(idxG / res.x) / res.y);
-  vec2 uvB = vec2(mod(idxB, res.x) / res.x, floor(idxB / res.x) / res.y);
-
-  // clamp to valid range
-  uvR = clamp(uvR, 0.0, 1.0);
-  uvG = clamp(uvG, 0.0, 1.0);
-  uvB = clamp(uvB, 0.0, 1.0);
-
-  // in unaffected areas, use original UV
-  if (abs(byteOffset) < 0.5) {
-    outColor = texture(u_texture, v_uv);
-  } else {
-    outColor = vec4(
-      texture(u_texture, uvR).r,
-      texture(u_texture, uvG).g,
-      texture(u_texture, uvB).b,
-      1.0
-    );
+  if (garbage > 0.5) {
+    col = floor(col * 5.0) / 5.0;
+    col = hrot(col, hueG);
   }
+  outColor = vec4(col, 1.0);
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'corruption', 'channelShift', 'speed'),
+		setUniforms: floats('intensity', 'corruption', 'channelShift'),
 	},
 
 	melt: {
@@ -1114,25 +1187,53 @@ void main() {
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  return vnoise(p) * 0.55 + vnoise(p * 2.13 + 5.0) * 0.3
+       + vnoise(p * 4.41 + 9.0) * 0.15;
+}
 void main() {
-  vec2 ts = vec2(textureSize(u_texture, 0));
-  float t = u_time;
-  float col = floor(v_uv.x * ts.x);
-  float colHash = hash(vec2(col, 0.0));
-  float fineHash = hash(vec2(col * 3.0, 7.0));
-  vec4 orig = texture(u_texture, v_uv);
-  float brightness = dot(orig.rgb, vec3(0.299, 0.587, 0.114));
-  float yFactor = v_uv.y;
-  float timeWave = 0.5 + 0.5 * sin(t * 2.0 + colHash * 6.28318);
-  float displacement = u_amount * yFactor * brightness * (colHash * 0.6 + fineHash * 0.4) * timeWave;
-  vec2 uv = v_uv - vec2(0.0, displacement * 0.25);
-  float chromatic = displacement * 0.02;
-  outColor = vec4(
-    texture(u_texture, uv + vec2(chromatic, 0.0)).r,
-    texture(u_texture, uv).g,
-    texture(u_texture, uv - vec2(chromatic, 0.0)).b,
-    1.0
-  );
+  vec3 lum = vec3(0.299, 0.587, 0.114);
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float t = u_time * 0.35;
+
+  // Smooth flow field: broad sag shaped by fbm, narrow drips where dripN peaks
+  float flowN = fbm(vec2(v_uv.x * 5.0, v_uv.y * 2.0 - t));
+  float dripN = fbm(vec2(v_uv.x * 13.0 + 31.0, t * 0.7));
+  float bright = dot(texture(u_texture, v_uv).rgb, lum);
+
+  float sag = u_amount * v_uv.y * (0.35 + 0.65 * flowN) * (0.5 + bright * 0.5);
+  float drip = u_amount * pow(dripN, 3.0) * v_uv.y * 1.5;
+  float disp = sag * 0.18 + drip * 0.3;
+
+  // Stretch-sampling: compress above, elongate below — sagging glass
+  float srcY = v_uv.y - disp * smoothstep(0.0, 0.35, v_uv.y);
+
+  // Refraction: bend light horizontally by the local luminance gradient
+  float lL = dot(texture(u_texture, vec2(v_uv.x - 3.0 * px.x, srcY)).rgb, lum);
+  float lR = dot(texture(u_texture, vec2(v_uv.x + 3.0 * px.x, srcY)).rgb, lum);
+  float refr = (lR - lL) * u_amount * 0.04 * (0.3 + flowN);
+
+  vec2 uv = vec2(clamp(v_uv.x + refr, 0.0, 1.0), clamp(srcY, 0.0, 1.0));
+
+  // Chromatic split along the flow axis
+  float ca = disp * 0.015;
+  vec3 col;
+  col.r = texture(u_texture, uv + vec2(0.0, -ca)).r;
+  col.g = texture(u_texture, uv).g;
+  col.b = texture(u_texture, uv + vec2(0.0, ca)).b;
+
+  // Bright rim where the flow gradient is steepest (specular hint)
+  float rim = clamp(abs(dFdy(disp)) * 60.0 - 0.25, 0.0, 0.35);
+  col += vec3(0.9, 0.95, 1.0) * rim * u_amount;
+
+  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`,
 		animated: true,
 		setUniforms: floats('amount'),
@@ -1374,23 +1475,45 @@ void main() {
 			`uniform float u_amount;
 uniform float u_angle;
 uniform float u_stretch;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+float salience(vec3 c) {
+  float luma = dot(c, vec3(0.299, 0.587, 0.114));
+  float sat = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+  return luma * 0.7 + sat * 0.9;
+}
 void main() {
   float rad = u_angle * 3.14159265 / 180.0;
   vec2 dir = vec2(cos(rad), sin(rad));
+  vec2 perp = vec2(-dir.y, dir.x);
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  vec2 s = dir * u_stretch * 80.0 * px;
+
+  // Jagged squeegee edge: each line across the drag direction reaches
+  // a different distance
+  float lineJag = 0.35 + 0.65 * hash(vec2(floor(dot(v_uv, perp) * 900.0), 3.0));
+
+  vec2 s = dir * u_stretch * 120.0 * px * lineJag;
+
   vec4 cur = texture(u_texture, v_uv);
-  float curLuma = dot(cur.rgb, vec3(0.299, 0.587, 0.114));
-  vec4 trail = cur;
-  const int SAMPLES = 24;
+  // Walk backward along the drag and CARRY the most dominant sample.
+  // Winner-takes-all: no averaging, so streaks keep hard edges and
+  // original color — paint dragged across the image, not blur.
+  vec4 best = cur;
+  float bestW = salience(cur.rgb) * 0.85; // handicap so streaks win ties
+  const int SAMPLES = 28;
   for (int i = 1; i <= SAMPLES; i++) {
     float f = float(i) / float(SAMPLES);
-    vec4 tap = texture(u_texture, v_uv - s * f);
-    float tapLuma = dot(tap.rgb, vec3(0.299, 0.587, 0.114));
-    float carry = smoothstep(curLuma - 0.05, curLuma + 0.2, tapLuma);
-    trail = mix(trail, tap, carry * exp(-2.5 * f));
+    vec2 q = v_uv - s * f;
+    if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) break;
+    vec4 tap = texture(u_texture, q);
+    float w = salience(tap.rgb) * (1.0 - f * 0.55);
+    if (w > bestW) {
+      best = tap;
+      bestW = w;
+    }
   }
-  outColor = mix(cur, trail, u_amount);
+  outColor = mix(cur, best, u_amount);
 }`,
 		setUniforms: floats('amount', 'angle', 'stretch'),
 	},
