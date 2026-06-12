@@ -1181,25 +1181,53 @@ void main() {
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  return vnoise(p) * 0.55 + vnoise(p * 2.13 + 5.0) * 0.3
+       + vnoise(p * 4.41 + 9.0) * 0.15;
+}
 void main() {
-  vec2 ts = vec2(textureSize(u_texture, 0));
-  float t = u_time;
-  float col = floor(v_uv.x * ts.x);
-  float colHash = hash(vec2(col, 0.0));
-  float fineHash = hash(vec2(col * 3.0, 7.0));
-  vec4 orig = texture(u_texture, v_uv);
-  float brightness = dot(orig.rgb, vec3(0.299, 0.587, 0.114));
-  float yFactor = v_uv.y;
-  float timeWave = 0.5 + 0.5 * sin(t * 2.0 + colHash * 6.28318);
-  float displacement = u_amount * yFactor * brightness * (colHash * 0.6 + fineHash * 0.4) * timeWave;
-  vec2 uv = v_uv - vec2(0.0, displacement * 0.25);
-  float chromatic = displacement * 0.02;
-  outColor = vec4(
-    texture(u_texture, uv + vec2(chromatic, 0.0)).r,
-    texture(u_texture, uv).g,
-    texture(u_texture, uv - vec2(chromatic, 0.0)).b,
-    1.0
-  );
+  vec3 lum = vec3(0.299, 0.587, 0.114);
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float t = u_time * 0.35;
+
+  // Smooth flow field: broad sag shaped by fbm, narrow drips where dripN peaks
+  float flowN = fbm(vec2(v_uv.x * 5.0, v_uv.y * 2.0 - t));
+  float dripN = fbm(vec2(v_uv.x * 13.0 + 31.0, t * 0.7));
+  float bright = dot(texture(u_texture, v_uv).rgb, lum);
+
+  float sag = u_amount * v_uv.y * (0.35 + 0.65 * flowN) * (0.5 + bright * 0.5);
+  float drip = u_amount * pow(dripN, 3.0) * v_uv.y * 1.5;
+  float disp = sag * 0.18 + drip * 0.3;
+
+  // Stretch-sampling: compress above, elongate below — sagging glass
+  float srcY = v_uv.y - disp * smoothstep(0.0, 0.35, v_uv.y);
+
+  // Refraction: bend light horizontally by the local luminance gradient
+  float lL = dot(texture(u_texture, vec2(v_uv.x - 3.0 * px.x, srcY)).rgb, lum);
+  float lR = dot(texture(u_texture, vec2(v_uv.x + 3.0 * px.x, srcY)).rgb, lum);
+  float refr = (lR - lL) * u_amount * 0.04 * (0.3 + flowN);
+
+  vec2 uv = vec2(clamp(v_uv.x + refr, 0.0, 1.0), clamp(srcY, 0.0, 1.0));
+
+  // Chromatic split along the flow axis
+  float ca = disp * 0.015;
+  vec3 col;
+  col.r = texture(u_texture, uv + vec2(0.0, -ca)).r;
+  col.g = texture(u_texture, uv).g;
+  col.b = texture(u_texture, uv + vec2(0.0, ca)).b;
+
+  // Bright rim where the flow gradient is steepest (specular hint)
+  float rim = clamp(abs(dFdy(disp)) * 60.0 - 0.25, 0.0, 0.35);
+  col += vec3(0.9, 0.95, 1.0) * rim * u_amount;
+
+  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`,
 		animated: true,
 		setUniforms: floats('amount'),
