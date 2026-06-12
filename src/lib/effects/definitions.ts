@@ -675,6 +675,15 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0.3,
 			},
+			{
+				key: 'size',
+				label: 'Size',
+				type: 'range',
+				min: 1,
+				max: 6,
+				step: 0.1,
+				defaultValue: 1.6,
+			},
 			{ key: 'rgb', label: 'RGB', type: 'checkbox', defaultValue: 1 },
 			{
 				key: 'blendMode',
