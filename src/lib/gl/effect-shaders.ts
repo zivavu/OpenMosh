@@ -1469,23 +1469,45 @@ void main() {
 			`uniform float u_amount;
 uniform float u_angle;
 uniform float u_stretch;
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+float salience(vec3 c) {
+  float luma = dot(c, vec3(0.299, 0.587, 0.114));
+  float sat = max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+  return luma * 0.7 + sat * 0.9;
+}
 void main() {
   float rad = u_angle * 3.14159265 / 180.0;
   vec2 dir = vec2(cos(rad), sin(rad));
+  vec2 perp = vec2(-dir.y, dir.x);
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  vec2 s = dir * u_stretch * 80.0 * px;
+
+  // Jagged squeegee edge: each line across the drag direction reaches
+  // a different distance
+  float lineJag = 0.35 + 0.65 * hash(vec2(floor(dot(v_uv, perp) * 900.0), 3.0));
+
+  vec2 s = dir * u_stretch * 120.0 * px * lineJag;
+
   vec4 cur = texture(u_texture, v_uv);
-  float curLuma = dot(cur.rgb, vec3(0.299, 0.587, 0.114));
-  vec4 trail = cur;
-  const int SAMPLES = 24;
+  // Walk backward along the drag and CARRY the most dominant sample.
+  // Winner-takes-all: no averaging, so streaks keep hard edges and
+  // original color — paint dragged across the image, not blur.
+  vec4 best = cur;
+  float bestW = salience(cur.rgb) * 0.85; // handicap so streaks win ties
+  const int SAMPLES = 28;
   for (int i = 1; i <= SAMPLES; i++) {
     float f = float(i) / float(SAMPLES);
-    vec4 tap = texture(u_texture, v_uv - s * f);
-    float tapLuma = dot(tap.rgb, vec3(0.299, 0.587, 0.114));
-    float carry = smoothstep(curLuma - 0.05, curLuma + 0.2, tapLuma);
-    trail = mix(trail, tap, carry * exp(-2.5 * f));
+    vec2 q = v_uv - s * f;
+    if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) break;
+    vec4 tap = texture(u_texture, q);
+    float w = salience(tap.rgb) * (1.0 - f * 0.55);
+    if (w > bestW) {
+      best = tap;
+      bestW = w;
+    }
   }
-  outColor = mix(cur, trail, u_amount);
+  outColor = mix(cur, best, u_amount);
 }`,
 		setUniforms: floats('amount', 'angle', 'stretch'),
 	},
