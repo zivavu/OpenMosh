@@ -8,8 +8,6 @@ export interface TrackingParams {
   sensitivity: number;
   /** Base box size as a fraction of the smaller image dimension. */
   size: number;
-  /** 0..1 — micro-jitter amplitude. */
-  jitter: number;
   /** 0..1 — frequency/strength of occasional glitch-jumps. */
   glitchJump: number;
   /** 0..1 — how fast the data labels scramble. */

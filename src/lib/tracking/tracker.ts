@@ -46,7 +46,6 @@ export function readTrackingParams(
     count: Math.max(1, Math.round(num("count", 8))),
     sensitivity: num("sensitivity", 0.5),
     size: num("size", 0.12),
-    jitter: num("jitter", 0.4),
     glitchJump: num("glitchJump", 0.3),
     scramble: num("scramble", 0.5),
     thickness: num("thickness", 2),
@@ -257,10 +256,8 @@ export function resolveFrame(
     box.drawX += (box.baseX - box.drawX) * 0.22;
     box.drawY += (box.baseY - box.drawY) * 0.22;
 
-    // Smooth micro-jitter around the tracked spot.
-    const amp = params.jitter * 0.045;
-    let cx = box.drawX + (noise1(box.jumpSeed, time * 5.5) - 0.5) * amp;
-    let cy = box.drawY + (noise1(box.jumpSeed + 31, time * 5.5) - 0.5) * amp;
+    let cx = box.drawX;
+    let cy = box.drawY;
 
     // Occasional glitch-jump: a brief, large offset to a random direction.
     const jumpRate = 0.6 + params.glitchJump * 7;
