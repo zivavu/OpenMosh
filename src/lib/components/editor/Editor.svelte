@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Download, Library } from 'lucide-svelte';
+	import { Download, HelpCircle, Library } from 'lucide-svelte';
 	import { createAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createKeyboardHandler } from '../../editor/keyboard';
@@ -28,6 +28,7 @@
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
+	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
 
 	interface Props {
 		file: File;
@@ -78,6 +79,20 @@
 	let moshAudioLink = $state(saved.moshAudioLink ?? true);
 	let moshAudioLinkStrength = $state(saved.moshAudioLinkStrength ?? 0.8);
 	let showFps = $state(saved.showFps ?? false);
+	let showShortcuts = $state(false);
+
+	const shortcutGroups = [
+		{
+			title: 'Shortcuts',
+			shortcuts: [
+				{ keys: ['→'], description: 'Mosh' },
+				{ keys: ['←', 'Ctrl/Cmd+Z'], description: 'Undo' },
+				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
+				{ keys: ['Space'], description: 'Play / pause' },
+				{ keys: ['V'], description: 'Re-input current frame' },
+			],
+		},
+	];
 
 	const audio = new AudioManager({
 		getEffects: () => effects,
@@ -576,47 +591,56 @@
 			>
 				<Library size={12} />
 			</button>
-			<MoshGroup
-				bind:this={moshGroupRef}
-				onMosh={mosh}
-				onClear={clearEffects}
-				onUndo={undo}
-				canUndo={history.canUndo}
-				canClear={history.canUndo}
-				bind:showSettings={showMoshSettings}
-			>
-				{#snippet settingsContent()}
-					<div class="format-group-mobile">
-						<button
-							class="format-btn"
-							class:active={format === 'png'}
-							onclick={() => (format = 'png')}>PNG</button
-						>
-						<button
-							class="format-btn"
-							class:active={format === 'jpg'}
-							onclick={() => (format = 'jpg')}>JPG</button
-						>
-						<button
-							class="format-btn"
-							class:active={format === 'webm'}
-							onclick={() => (format = 'webm')}>WebM</button
-						>
-					</div>
-					<div class="settings-divider"></div>
-					<div class="mosh-setting-row">
-						<label for="show-fps">Show FPS</label>
-						<input id="show-fps" type="checkbox" bind:checked={showFps} />
-					</div>
-					<div class="settings-divider"></div>
-					<ResizeSettings
-						bind:width={resizeWidth}
-						bind:height={resizeHeight}
-						{naturalWidth}
-						{naturalHeight}
-					/>
-				{/snippet}
-			</MoshGroup>
+			<div class="mosh-group-wrap">
+				<button
+					class="help-btn"
+					onclick={() => (showShortcuts = true)}
+					title="Keyboard shortcuts"
+				>
+					<HelpCircle size={14} />
+				</button>
+				<MoshGroup
+					bind:this={moshGroupRef}
+					onMosh={mosh}
+					onClear={clearEffects}
+					onUndo={undo}
+					canUndo={history.canUndo}
+					canClear={history.canUndo}
+					bind:showSettings={showMoshSettings}
+				>
+					{#snippet settingsContent()}
+						<div class="format-group-mobile">
+							<button
+								class="format-btn"
+								class:active={format === 'png'}
+								onclick={() => (format = 'png')}>PNG</button
+							>
+							<button
+								class="format-btn"
+								class:active={format === 'jpg'}
+								onclick={() => (format = 'jpg')}>JPG</button
+							>
+							<button
+								class="format-btn"
+								class:active={format === 'webm'}
+								onclick={() => (format = 'webm')}>WebM</button
+							>
+						</div>
+						<div class="settings-divider"></div>
+						<div class="mosh-setting-row">
+							<label for="show-fps">Show FPS</label>
+							<input id="show-fps" type="checkbox" bind:checked={showFps} />
+						</div>
+						<div class="settings-divider"></div>
+						<ResizeSettings
+							bind:width={resizeWidth}
+							bind:height={resizeHeight}
+							{naturalWidth}
+							{naturalHeight}
+						/>
+					{/snippet}
+				</MoshGroup>
+			</div>
 			{#if isImageFormat}
 				<button class="action-btn save-btn" onclick={save}>
 					<Download size={16} />
@@ -756,6 +780,10 @@
 			<span>Drop image/video to replace · Drop audio to set track</span>
 		</div>
 	{/if}
+
+	{#if showShortcuts}
+		<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+	{/if}
 </div>
 
 <style>
@@ -833,6 +861,43 @@
 
 	.format-btn:hover {
 		color: #ccc;
+	}
+
+	.mosh-group-wrap {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
+	.help-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		border-radius: 50%;
+		background: none;
+		border: 1.5px solid #444;
+		color: #888;
+		cursor: pointer;
+		flex-shrink: 0;
+		padding: 0;
+		box-sizing: border-box;
+		transition:
+			border-color 0.2s,
+			color 0.2s;
+	}
+
+	.help-btn:hover {
+		border-color: #777;
+		color: #ccc;
+	}
+
+	@media (max-width: 800px) {
+		.help-btn {
+			width: 26px;
+			height: 26px;
+		}
 	}
 
 	.settings-divider {

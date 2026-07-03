@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Library, Pause, Play, Settings } from 'lucide-svelte';
+	import { HelpCircle, Library, Pause, Play, Settings } from 'lucide-svelte';
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
+	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
 
 	interface Props {
 		previewPlaying: boolean;
@@ -40,6 +41,27 @@
 	const isMobile = window.matchMedia('(pointer: coarse)').matches;
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
+	let showShortcuts = $state(false);
+
+	const shortcutGroups = [
+		{
+			title: 'Preview',
+			shortcuts: [
+				{ keys: ['Space'], description: 'Play / pause preview' },
+				{ keys: ['Esc'], description: 'Stop preview' },
+			],
+		},
+		{
+			title: 'Timeline Editing',
+			shortcuts: [
+				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo' },
+				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
+				{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected boundaries' },
+				{ keys: ['Ctrl/Cmd+V'], description: 'Paste boundaries' },
+				{ keys: ['Delete', 'Backspace'], description: 'Delete selection' },
+			],
+		},
+	];
 	let optionsGroupEl: HTMLDivElement | undefined;
 	// svelte-ignore non_reactive_update
 	let recordGroupRef: RecordGroup | undefined = undefined;
@@ -87,6 +109,15 @@
 			</div>
 		{/if}
 	</div>
+
+	<button
+		class="icon-btn"
+		onclick={() => (showShortcuts = true)}
+		title="Keyboard shortcuts"
+		aria-label="Keyboard shortcuts"
+	>
+		<HelpCircle size={14} />
+	</button>
 
 	<button
 		class="action-btn play-btn"
@@ -142,6 +173,10 @@
 	</RecordGroup>
 	{/if}
 </div>
+
+{#if showShortcuts}
+	<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+{/if}
 
 <style>
 	.action-bar {
