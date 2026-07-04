@@ -620,6 +620,7 @@ export class GlRenderer {
       }
     }
     gl.deleteVertexArray(this.quadVAO);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 
   private createQuad(): WebGLVertexArrayObject {

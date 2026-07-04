@@ -30,24 +30,22 @@
 	let warmCanvas: HTMLCanvasElement | null = $state(null);
 	let warmRenderer: GlRenderer | null = $state(null);
 
-	onMount(() => {
-		const onPopState = () => {
-			view = hashToView(window.location.hash);
-			if (view === "upload") {
-				file = null;
-				slideshowFiles = [];
-				try {
-					const w = GlRenderer.warmup();
-					warmCanvas = w.canvas;
-					warmRenderer = w.renderer;
-				} catch {
-					warmCanvas = null;
-					warmRenderer = null;
-				}
-			}
-		};
-		window.addEventListener("popstate", onPopState);
+	/** Destroy the current warm renderer/canvas (if any) so contexts don't accumulate. */
+	function disposeWarm() {
+		try {
+			warmRenderer?.destroy();
+		} catch {
+			// already destroyed / context already lost
+		}
+		if (warmCanvas?.parentNode) {
+			warmCanvas.parentNode.removeChild(warmCanvas);
+		}
+		warmCanvas = null;
+		warmRenderer = null;
+	}
 
+	function createWarm() {
+		disposeWarm();
 		try {
 			const w = GlRenderer.warmup();
 			warmCanvas = w.canvas;
@@ -55,6 +53,20 @@
 		} catch {
 			// WebGL2 not available; Editor will fall back to creating its own context
 		}
+	}
+
+	onMount(() => {
+		const onPopState = () => {
+			view = hashToView(window.location.hash);
+			if (view === "upload") {
+				file = null;
+				slideshowFiles = [];
+				createWarm();
+			}
+		};
+		window.addEventListener("popstate", onPopState);
+
+		createWarm();
 
 		return () => window.removeEventListener("popstate", onPopState);
 	});

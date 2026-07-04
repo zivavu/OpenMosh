@@ -120,7 +120,7 @@ export async function executeSlideshowRecording(
     audioFile,
     audioStart,
     audioEnd,
-    onBeforeRender(frameIndex: number, time: number) {
+    onBeforeRender(_frameIndex: number, time: number) {
       // time is 0..duration (recording window); segments use "seconds from audio start"
       const timeFromAudioStart = time + audioStart;
       const { index: beatIndex } = beatAtTime(
@@ -131,15 +131,16 @@ export async function executeSlideshowRecording(
         config.subdivision,
       );
 
-      // Set text overlay phrase for this frame (with chance)
-      const roll = ((frameIndex * 7919 + beatIndex) % 1000) / 1000;
+      // Set text overlay phrase for this frame (with chance).
+      // Roll and seed are both derived from beatIndex so a phrase holds for a
+      // full beat and matches the preview's per-beat cadence exactly.
+      const roll = ((beatIndex * 31) % 1000) / 1000;
       const showText = phrases.length > 0 && style && roll < textChance;
       if (showText) {
         const phrase = phrases[beatIndex % phrases.length] ?? null;
-        const seed = frameIndex * 31 + beatIndex;
         renderer.setTextOverlay(phrase, style, undefined, {
           layout: textLayout,
-          seed,
+          seed: beatIndex,
           blendMode: textBlendMode,
           invert: textInvert,
           opacity: textOpacity,

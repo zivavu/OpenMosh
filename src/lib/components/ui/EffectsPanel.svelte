@@ -27,6 +27,8 @@
 			paramKey: string,
 			link: VolumeLink | null,
 		) => void;
+		/** Called after `effects` is replaced wholesale (e.g. preset load), so callers can push undo history. */
+		onEffectsReplaced?: () => void;
 	}
 
 	let {
@@ -34,6 +36,7 @@
 		hasTrack = false,
 		spectrumData = null,
 		onVolumeLinkChange,
+		onEffectsReplaced,
 	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
@@ -41,6 +44,7 @@
 	let saving = $state(false);
 	let presetName = $state('');
 	let activePresetIndex: number | null = $state(null);
+	let presetSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
 	$effect(() => {
 		// Deep-track effects by reading all nested values
@@ -51,8 +55,15 @@
 			if (e.volumeLinks) Object.values(e.volumeLinks);
 		});
 		if (activePresetIndex === null) return;
-		presets = updatePreset(activePresetIndex, $state.snapshot(effects));
+		const index = activePresetIndex;
+		const snapshot = $state.snapshot(effects);
+		clearTimeout(presetSaveTimer);
+		presetSaveTimer = setTimeout(() => {
+			presets = updatePreset(index, snapshot);
+		}, 500);
 	});
+
+	$effect(() => () => clearTimeout(presetSaveTimer));
 
 	function handleSavePreset() {
 		const name = presetName.trim();
@@ -70,6 +81,7 @@
 		}
 		effects = applyPreset(presets[index]);
 		activePresetIndex = index;
+		onEffectsReplaced?.();
 	}
 
 	function handleDeletePreset(index: number) {
