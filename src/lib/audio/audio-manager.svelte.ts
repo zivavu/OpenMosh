@@ -83,6 +83,13 @@ export class AudioManager {
       const fftSize = analyser.fftSize;
       let rafId: number;
       const tick = () => {
+        // Source-agnostic pause check (works for both <audio> and <video> sources,
+        // unlike `audioPlaying` which only tracks the <audio> element).
+        if (this.mediaSource?.mediaElement.paused) {
+          if (this.volumeLevel !== 0) this.volumeLevel = 0;
+          rafId = requestAnimationFrame(tick);
+          return;
+        }
         this.volumeLevel = computeVolumeLevel(analyser, timeData);
         if (freqDataRef)
           analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
