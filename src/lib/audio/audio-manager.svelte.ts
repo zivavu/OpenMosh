@@ -50,7 +50,6 @@ export class AudioManager {
           data: this.frequencyData,
           sampleRate: this.audioSampleRate,
           binCount: this.audioFrequencyBinCount,
-          tick: this.volumeLevel,
         }
       : null,
   );

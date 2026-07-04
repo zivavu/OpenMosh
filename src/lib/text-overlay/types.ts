@@ -15,15 +15,6 @@ export type TextOverlayBlendMode =
   | "exclusion"
   | "subtract";
 
-/** Effect IDs that can be applied to the text layer (kept for renderer API). */
-export const TEXT_SAFE_EFFECT_IDS = [
-  "scanlines",
-  "grain",
-  "vignette",
-  "bleach",
-] as const;
-export type TextSafeEffectId = (typeof TEXT_SAFE_EFFECT_IDS)[number];
-
 export interface TextOverlayStyle {
   /** CSS font family. */
   fontFamily: string;

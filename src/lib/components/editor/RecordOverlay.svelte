@@ -3,20 +3,17 @@
 		recording: boolean;
 		recordProgress: number;
 		recordFinalizing: boolean;
-		recordFormat: string;
 		onCancel: () => void;
 	}
 
-	let { recording, recordProgress, recordFinalizing, recordFormat, onCancel }: Props = $props();
+	let { recording, recordProgress, recordFinalizing, onCancel }: Props = $props();
 </script>
 
 {#if recording}
 	<div class="record-overlay">
 		<div class="record-modal">
 			<p class="record-title">
-				{recordFinalizing
-					? 'Creating file…'
-					: `Recording ${recordFormat.toUpperCase()}...`}
+				{recordFinalizing ? 'Creating file…' : 'Recording WEBM...'}
 			</p>
 			<div class="progress-track" class:finalizing={recordFinalizing}>
 				<div

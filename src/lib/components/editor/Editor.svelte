@@ -16,7 +16,6 @@
 		type EffectInstance,
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
-	import type { RecordFormat } from '../../recorder';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
@@ -350,7 +349,6 @@
 	}
 
 	let showRecordSettings = $state(false);
-	const recordFormat: RecordFormat = 'webm';
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
 	let effectiveDuration = $derived(
@@ -376,7 +374,6 @@
 
 		try {
 			await executeRecording({
-				format: recordFormat,
 				fps: recordFps,
 				recordDuration,
 				canvas: canvasEl,
@@ -772,7 +769,6 @@
 		{recording}
 		{recordProgress}
 		{recordFinalizing}
-		{recordFormat}
 		onCancel={cancelRecording}
 	/>
 

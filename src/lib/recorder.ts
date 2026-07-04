@@ -10,10 +10,7 @@ import {
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 
-export type RecordFormat = 'webm';
-
 export interface RecordOptions {
-	format: RecordFormat;
 	duration: number;
 	fps: number;
 	canvas: HTMLCanvasElement;
@@ -110,7 +107,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const mb = await import('mediabunny');
 
 	const {
-		format,
 		duration,
 		fps,
 		canvas,
@@ -173,7 +169,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	if (!selectedCodec) {
 		throw new Error(
-			`Your browser cannot encode ${format.toUpperCase()} video. ` +
+			`Your browser cannot encode WEBM video. ` +
 				`Tried codecs: ${candidates.join(', ')}. Try a different browser.`,
 		);
 	}
@@ -259,12 +255,11 @@ export async function recordVideo(opts: RecordOptions): Promise<Blob> {
 	return recordWebM(opts);
 }
 
-export function downloadBlob(blob: Blob, format: RecordFormat) {
-	const ext = format;
+export function downloadBlob(blob: Blob) {
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement('a');
 	a.href = url;
-	a.download = `openmosh-${Date.now()}.${ext}`;
+	a.download = `openmosh-${Date.now()}.webm`;
 	a.click();
 	URL.revokeObjectURL(url);
 }
