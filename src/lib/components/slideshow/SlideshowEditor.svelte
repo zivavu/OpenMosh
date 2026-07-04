@@ -31,6 +31,8 @@
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import { createTrackStore } from '../../audio/track-persistence';
+	import { createRecordingState } from '../../editor/recording-state.svelte';
 
 	interface Props {
 		initialFiles: File[];
@@ -160,38 +162,29 @@
 	});
 
 	let currentTrackId = $state<string | null>(null);
-	const TRACK_SEGMENTS_KEY = 'openmosh-track-segments';
 
-	function saveSegments(trackId: string) {
-		try {
-			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			all[trackId] = {
-				segments: config.segments,
-				bpm: config.bpm,
-				textOverlay: config.textOverlay,
-				spanStart: audio.spanStart,
-				spanEnd: audio.spanEnd,
-			};
-			localStorage.setItem(TRACK_SEGMENTS_KEY, JSON.stringify(all));
-		} catch {}
-	}
-
-	function loadSegments(trackId: string): {
+	interface SegmentsEntry {
 		segments: SlideshowConfig['segments'];
 		bpm?: number;
 		textOverlay?: SlideshowConfig['textOverlay'];
 		spanStart?: number;
 		spanEnd?: number;
-	} | null {
-		try {
-			const all = JSON.parse(localStorage.getItem(TRACK_SEGMENTS_KEY) ?? '{}');
-			const entry = all[trackId];
-			if (!entry) return null;
-			// Backward compat: old format stored segments array directly
-			if (Array.isArray(entry)) return { segments: entry };
-			return entry;
-		} catch {}
-		return null;
+	}
+
+	const segmentsStore = createTrackStore<SegmentsEntry>(
+		'openmosh-track-segments',
+		// Backward compat: old format stored the segments array directly
+		(raw) => (Array.isArray(raw) ? { segments: raw } : (raw as SegmentsEntry)),
+	);
+
+	function saveSegments(trackId: string) {
+		segmentsStore.save(trackId, {
+			segments: config.segments,
+			bpm: config.bpm,
+			textOverlay: config.textOverlay,
+			spanStart: audio.spanStart,
+			spanEnd: audio.spanEnd,
+		});
 	}
 
 	function onConfigChange(next: SlideshowConfig) {
@@ -289,7 +282,7 @@
 		audio.disposeAudioGraph();
 		currentTrackId = trackId;
 		audio.trackFile = file;
-		const saved = loadSegments(trackId);
+		const saved = segmentsStore.load(trackId);
 		if (saved !== null) {
 			config = {
 				...config,
@@ -539,79 +532,65 @@
 
 	// ── Recording ──
 	let recordFps = $state(60);
-	let recording = $state(false);
-	let recordProgress = $state(0);
-	let recordFinalizing = $state(false);
-	let recordAbort: AbortController | null = $state(null);
+	const recordingState = createRecordingState();
 
 	async function startRecording() {
-		if (!canvasEl || !glRenderer || recording || slides.length === 0) return;
+		if (!canvasEl || !glRenderer || recordingState.recording || slides.length === 0)
+			return;
 		if (!audio.trackFile) {
 			import('../../components/ui/toast.svelte').then(({ showToast }) =>
 				showToast('Please add an audio track for slideshow recording.', 'error'),
 			);
 			return;
 		}
-		recording = true;
-		recordProgress = 0;
-		recordFinalizing = false;
-		const abort = new AbortController();
-		recordAbort = abort;
 
 		if (previewPlaying) stopPreview();
 
-		try {
-			await executeSlideshowRecording({
-				fps: recordFps,
-				slides: [...slides],
-				config,
-				baseEffects: effects.map((e) => ({
-					...e,
-					values: { ...e.values },
-					volumeLinks: e.volumeLinks
-						? JSON.parse(JSON.stringify(e.volumeLinks))
-						: undefined,
-				})),
-				audioFile: audio.trackFile,
-				audioStart: audio.spanStart,
-				audioEnd: audio.spanEnd,
-				canvas: canvasEl,
-				renderer: glRenderer,
-				outputWidth: resizeWidth > 0 ? resizeWidth : undefined,
-				outputHeight: resizeHeight > 0 ? resizeHeight : undefined,
-				moshOptions: getMoshOptions(),
-				onProgress: (p) => {
-					recordProgress = p;
-				},
-				onFinalizing: () => {
-					recordFinalizing = true;
-				},
-				signal: abort.signal,
-			});
-		} catch (e) {
-			if (e instanceof DOMException && e.name === 'AbortError') {
-				// cancelled
-			} else {
-				console.error('Recording failed:', e);
-			import('../../components/ui/toast.svelte').then(({ showToast }) =>
-					showToast(
-						e instanceof Error ? e.message : 'Recording failed.',
-						'error',
+		await recordingState.run(
+			(signal) =>
+				executeSlideshowRecording({
+					fps: recordFps,
+					slides: [...slides],
+					config,
+					baseEffects: effects.map((e) => ({
+						...e,
+						values: { ...e.values },
+						volumeLinks: e.volumeLinks
+							? JSON.parse(JSON.stringify(e.volumeLinks))
+							: undefined,
+					})),
+					audioFile: audio.trackFile!,
+					audioStart: audio.spanStart,
+					audioEnd: audio.spanEnd,
+					canvas: canvasEl!,
+					renderer: glRenderer!,
+					outputWidth: resizeWidth > 0 ? resizeWidth : undefined,
+					outputHeight: resizeHeight > 0 ? resizeHeight : undefined,
+					moshOptions: getMoshOptions(),
+					onProgress: (p) => {
+						recordingState.recordProgress = p;
+					},
+					onFinalizing: () => {
+						recordingState.recordFinalizing = true;
+					},
+					signal,
+				}),
+			{
+				onError: (message) =>
+					import('../../components/ui/toast.svelte').then(({ showToast }) =>
+						showToast(message, 'error'),
 					),
-				);
-			}
-		} finally {
-			recording = false;
-			recordFinalizing = false;
-			recordAbort = null;
-			if (canvasEl && glRenderer) {
-				glRenderer.render(effects, performance.now() / 1000);
-			}
+				fallbackErrorMessage: 'Recording failed.',
+			},
+		);
+
+		if (canvasEl && glRenderer) {
+			glRenderer.render(effects, performance.now() / 1000);
 		}
 	}
 
 	function cancelRecording() {
-		recordAbort?.abort();
+		recordingState.cancel();
 	}
 
 	// ── Drag & Drop ──
@@ -755,7 +734,7 @@
 			bind:resizeHeight
 			{naturalWidth}
 			{naturalHeight}
-			{recording}
+			recording={recordingState.recording}
 			{recordFps}
 			recordDuration={audio.trackFile && audio.trackDuration > 0 ? audio.spanEnd - audio.spanStart : 5}
 			onTogglePreview={togglePreview}
@@ -765,9 +744,9 @@
 		/>
 
 		<RecordOverlay
-			{recording}
-			{recordProgress}
-			{recordFinalizing}
+			recording={recordingState.recording}
+			recordProgress={recordingState.recordProgress}
+			recordFinalizing={recordingState.recordFinalizing}
 			onCancel={cancelRecording}
 		/>
 

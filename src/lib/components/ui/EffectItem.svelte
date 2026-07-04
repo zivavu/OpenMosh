@@ -24,6 +24,28 @@
 		return 750 + ((hz - 8000) / (20000 - 8000)) * 250;
 	}
 
+	const FREQ_PRESET_BUTTONS = [
+		{ label: 'Full', title: 'Full spectrum', min: undefined, max: undefined },
+		{
+			label: 'Low',
+			title: 'Low (20–250 Hz)',
+			min: FREQ_PRESETS.low.min,
+			max: FREQ_PRESETS.low.max,
+		},
+		{
+			label: 'Mid',
+			title: 'Mid (250–4000 Hz)',
+			min: FREQ_PRESETS.mid.min,
+			max: FREQ_PRESETS.mid.max,
+		},
+		{
+			label: 'High',
+			title: 'High (4k–20k Hz)',
+			min: FREQ_PRESETS.high.min,
+			max: FREQ_PRESETS.high.max,
+		},
+	] as const;
+
 	interface Props {
 		effect: EffectInstance;
 		hasTrack?: boolean;
@@ -209,59 +231,21 @@
 										<div class="volume-freq-row">
 											<span class="volume-link-label">Freq</span>
 											<div class="freq-presets">
-												<button
-													type="button"
-													class="freq-preset-btn"
-													class:active={link.freqMin == null &&
-														link.freqMax == null}
-													title="Full spectrum"
-													onclick={() =>
-														onVolumeLinkChange(param.key, {
-															...link,
-															freqMin: undefined,
-															freqMax: undefined,
-														})}>Full</button
-												>
-												<button
-													type="button"
-													class="freq-preset-btn"
-													class:active={link.freqMin === FREQ_PRESETS.low.min &&
-														link.freqMax === FREQ_PRESETS.low.max}
-													title="Low (20–250 Hz)"
-													onclick={() =>
-														onVolumeLinkChange(param.key, {
-															...link,
-															freqMin: FREQ_PRESETS.low.min,
-															freqMax: FREQ_PRESETS.low.max,
-														})}>Low</button
-												>
-												<button
-													type="button"
-													class="freq-preset-btn"
-													class:active={link.freqMin === FREQ_PRESETS.mid.min &&
-														link.freqMax === FREQ_PRESETS.mid.max}
-													title="Mid (250–4000 Hz)"
-													onclick={() =>
-														onVolumeLinkChange(param.key, {
-															...link,
-															freqMin: FREQ_PRESETS.mid.min,
-															freqMax: FREQ_PRESETS.mid.max,
-														})}>Mid</button
-												>
-												<button
-													type="button"
-													class="freq-preset-btn"
-													class:active={link.freqMin ===
-														FREQ_PRESETS.high.min &&
-														link.freqMax === FREQ_PRESETS.high.max}
-													title="High (4k–20k Hz)"
-													onclick={() =>
-														onVolumeLinkChange(param.key, {
-															...link,
-															freqMin: FREQ_PRESETS.high.min,
-															freqMax: FREQ_PRESETS.high.max,
-														})}>High</button
-												>
+												{#each FREQ_PRESET_BUTTONS as preset}
+													<button
+														type="button"
+														class="freq-preset-btn"
+														class:active={link.freqMin == preset.min &&
+															link.freqMax == preset.max}
+														title={preset.title}
+														onclick={() =>
+															onVolumeLinkChange(param.key, {
+																...link,
+																freqMin: preset.min,
+																freqMax: preset.max,
+															})}>{preset.label}</button
+													>
+												{/each}
 											</div>
 										</div>
 										{#if link.freqMin != null && link.freqMax != null && spectrumData}

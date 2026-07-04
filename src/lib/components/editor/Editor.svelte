@@ -2,12 +2,14 @@
 	import { Download, HelpCircle, Library } from 'lucide-svelte';
 	import { createAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import { createTrackStore } from '../../audio/track-persistence';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import {
 		clearEffects as clearEffectsFn,
 		generateMosh as generateMoshFn,
 	} from '../../editor/mosh';
 	import { executeRecording } from '../../editor/recording';
+	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createEffectHistory } from '../../editor/history.svelte';
 	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
@@ -149,31 +151,20 @@
 
 	let currentTrackId = $state<string | null>(null);
 
-	const SINGLE_SPAN_KEY = 'openmosh-single-span';
-
-	function saveSingleSpan(trackId: string) {
-		try {
-			const all = JSON.parse(localStorage.getItem(SINGLE_SPAN_KEY) ?? '{}');
-			all[trackId] = { spanStart: audio.spanStart, spanEnd: audio.spanEnd };
-			localStorage.setItem(SINGLE_SPAN_KEY, JSON.stringify(all));
-		} catch {}
-	}
-
-	function loadSingleSpan(
-		trackId: string,
-	): { spanStart: number; spanEnd: number } | null {
-		try {
-			const all = JSON.parse(localStorage.getItem(SINGLE_SPAN_KEY) ?? '{}');
-			return all[trackId] ?? null;
-		} catch {}
-		return null;
-	}
+	const spanStore = createTrackStore<{ spanStart: number; spanEnd: number }>(
+		'openmosh-single-span',
+	);
 
 	// Persist span changes for library tracks
 	$effect(() => {
 		audio.spanStart;
 		audio.spanEnd;
-		if (currentTrackId) saveSingleSpan(currentTrackId);
+		if (currentTrackId) {
+			spanStore.save(currentTrackId, {
+				spanStart: audio.spanStart,
+				spanEnd: audio.spanEnd,
+			});
+		}
 	});
 
 	let trackInput: HTMLInputElement;
@@ -211,7 +202,7 @@
 		clearTrack();
 		currentTrackId = trackId;
 		audio.trackFile = file;
-		const savedSpan = loadSingleSpan(trackId);
+		const savedSpan = spanStore.load(trackId);
 		if (savedSpan !== null) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
@@ -358,73 +349,57 @@
 				? videoSpanEnd - videoSpanStart
 				: recordDuration,
 	);
-	let recording = $state(false);
-	let recordProgress = $state(0);
-	let recordFinalizing = $state(false);
-	let recordAbort: AbortController | null = $state(null);
+	const recordingState = createRecordingState();
 
 	async function startRecording() {
-		if (!canvasEl || !glRenderer || recording) return;
+		if (!canvasEl || !glRenderer || recordingState.recording) return;
 		showRecordSettings = false;
-		recording = true;
-		recordProgress = 0;
-		recordFinalizing = false;
-		const abort = new AbortController();
-		recordAbort = abort;
 
-		try {
-			await executeRecording({
-				fps: recordFps,
-				recordDuration,
-				canvas: canvasEl,
-				renderer: glRenderer,
-				effects,
-				trackFile: audio.trackFile,
-				trackDuration: audio.trackDuration,
-				spanStart: audio.spanStart,
-				spanEnd: audio.spanEnd,
-				isVideo,
-				videoEl,
-				videoDuration,
-				videoSpanStart,
-				videoSpanEnd,
-				file,
-				normalizeGain,
-				onProgress: (p) => {
-					recordProgress = p;
-				},
-				onFinalizing: () => {
-					recordFinalizing = true;
-				},
-				signal: abort.signal,
-			});
-		} catch (e) {
-			if (e instanceof DOMException && e.name === 'AbortError') {
-				// cancelled
-			} else {
-				console.error('Recording failed:', e);
-				import('../../components/ui/toast.svelte').then(({ showToast }) =>
-					showToast(
-						e instanceof Error
-							? e.message
-							: 'Recording failed. Check the browser console for details.',
-						'error',
+		await recordingState.run(
+			(signal) =>
+				executeRecording({
+					fps: recordFps,
+					recordDuration,
+					canvas: canvasEl!,
+					renderer: glRenderer!,
+					effects,
+					trackFile: audio.trackFile,
+					trackDuration: audio.trackDuration,
+					spanStart: audio.spanStart,
+					spanEnd: audio.spanEnd,
+					isVideo,
+					videoEl,
+					videoDuration,
+					videoSpanStart,
+					videoSpanEnd,
+					file,
+					normalizeGain,
+					onProgress: (p) => {
+						recordingState.recordProgress = p;
+					},
+					onFinalizing: () => {
+						recordingState.recordFinalizing = true;
+					},
+					signal,
+				}),
+			{
+				onError: (message) =>
+					import('../../components/ui/toast.svelte').then(({ showToast }) =>
+						showToast(message, 'error'),
 					),
-				);
-			}
-		} finally {
-			recording = false;
-			recordFinalizing = false;
-			recordAbort = null;
-			if (isVideo && videoEl) videoEl.play().catch(() => {});
-			if (canvasEl && glRenderer) {
-				glRenderer.render(effects, performance.now() / 1000);
-			}
+				fallbackErrorMessage:
+					'Recording failed. Check the browser console for details.',
+			},
+		);
+
+		if (isVideo && videoEl) videoEl.play().catch(() => {});
+		if (canvasEl && glRenderer) {
+			glRenderer.render(effects, performance.now() / 1000);
 		}
 	}
 
 	function cancelRecording() {
-		recordAbort?.abort();
+		recordingState.cancel();
 	}
 </script>
 
@@ -448,6 +423,18 @@
 		hidden
 	></audio>
 {/if}
+
+{#snippet formatButtons()}
+	<button class="format-btn" class:active={format === 'png'} onclick={() => (format = 'png')}
+		>PNG</button
+	>
+	<button class="format-btn" class:active={format === 'jpg'} onclick={() => (format = 'jpg')}
+		>JPG</button
+	>
+	<button class="format-btn" class:active={format === 'webm'} onclick={() => (format = 'webm')}
+		>WebM</button
+	>
+{/snippet}
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -500,27 +487,7 @@
 		<div class="top-bar">
 			<div class="toolbar">
 				<div class="format-group">
-					<button
-						class="format-btn"
-						class:active={format === 'png'}
-						onclick={() => (format = 'png')}
-					>
-						PNG
-					</button>
-					<button
-						class="format-btn"
-						class:active={format === 'jpg'}
-						onclick={() => (format = 'jpg')}
-					>
-						JPG
-					</button>
-					<button
-						class="format-btn"
-						class:active={format === 'webm'}
-						onclick={() => (format = 'webm')}
-					>
-						WebM
-					</button>
+					{@render formatButtons()}
 				</div>
 			</div>
 		</div>
@@ -543,13 +510,13 @@
 				ontimeupdate={() => {
 					videoCurrentTime = videoEl?.currentTime ?? 0;
 					// Span-loop: skip during recording (export seeks the video directly)
-					if (!recording && videoEl && videoCurrentTime >= videoSpanEnd) {
+					if (!recordingState.recording && videoEl && videoCurrentTime >= videoSpanEnd) {
 						videoEl.currentTime = videoSpanStart;
 					}
 				}}
 				onended={() => {
 					// Video reached natural end — loop back to span start
-					if (!recording && videoEl) {
+					if (!recordingState.recording && videoEl) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
 					}
@@ -607,21 +574,7 @@
 				>
 					{#snippet settingsContent()}
 						<div class="format-group-mobile">
-							<button
-								class="format-btn"
-								class:active={format === 'png'}
-								onclick={() => (format = 'png')}>PNG</button
-							>
-							<button
-								class="format-btn"
-								class:active={format === 'jpg'}
-								onclick={() => (format = 'jpg')}>JPG</button
-							>
-							<button
-								class="format-btn"
-								class:active={format === 'webm'}
-								onclick={() => (format = 'webm')}>WebM</button
-							>
+							{@render formatButtons()}
 						</div>
 						<div class="settings-divider"></div>
 						<div class="mosh-setting-row">
@@ -648,7 +601,7 @@
 			{#if isVideoFormat && !isMobile}
 				<RecordGroup
 					bind:this={recordGroupRef}
-					{recording}
+					recording={recordingState.recording}
 					bind:showSettings={showRecordSettings}
 				>
 					{#snippet settingsContent()}
@@ -766,9 +719,9 @@
 	</MobileSheet>
 
 	<RecordOverlay
-		{recording}
-		{recordProgress}
-		{recordFinalizing}
+		recording={recordingState.recording}
+		recordProgress={recordingState.recordProgress}
+		recordFinalizing={recordingState.recordFinalizing}
 		onCancel={cancelRecording}
 	/>
 

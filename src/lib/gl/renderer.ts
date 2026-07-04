@@ -268,19 +268,7 @@ export class GlRenderer {
         1.0,
         time,
       );
-      const mainResult = this.fbTextures[writeIdx]!;
-      if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
-        this.drawBlendToCanvas(
-          mainResult,
-          this.textTexture,
-          this.textBlendMode,
-          this.textInvert,
-          this.textOpacity,
-        );
-      } else {
-        this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
-      }
-      this.fbIdx = writeIdx;
+      this.presentFrame(writeIdx);
       return;
     }
 
@@ -356,7 +344,12 @@ export class GlRenderer {
       }
     }
 
-    const mainResult = this.fbTextures[writeIdx]!;
+    this.presentFrame(writeIdx);
+  }
+
+  /** Blend the text overlay (if any) over the rendered frame and draw it to the canvas. */
+  private presentFrame(writeIdx: 0 | 1) {
+    const mainResult = this.fbTextures![writeIdx]!;
     if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
       this.drawBlendToCanvas(
         mainResult,
