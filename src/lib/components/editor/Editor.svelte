@@ -350,7 +350,7 @@
 	}
 
 	let showRecordSettings = $state(false);
-	let recordFormat: RecordFormat = $derived('webm');
+	const recordFormat: RecordFormat = 'webm';
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
 	let effectiveDuration = $derived(
@@ -763,6 +763,7 @@
 				onVolumeLinkChange={(index, paramKey, link) => {
 					effects = setVolumeLink(effects, index, paramKey, link);
 				}}
+				onEffectsReplaced={() => history.push(effects)}
 			/>
 		{/snippet}
 	</MobileSheet>

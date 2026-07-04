@@ -1,12 +1,8 @@
-import {
-	EFFECT_DEFINITIONS,
-	createEffectInstance,
-	type EffectInstance,
-} from "../effects";
+import { loadInitialEffects, type EffectInstance } from "../effects";
 
 export function createEffectHistory() {
 	let history = $state<EffectInstance[][]>([
-		$state.snapshot(EFFECT_DEFINITIONS.map(createEffectInstance)),
+		$state.snapshot(loadInitialEffects()),
 	]);
 	let historyIndex = $state(0);
 	const canUndo = $derived(historyIndex > 0);
