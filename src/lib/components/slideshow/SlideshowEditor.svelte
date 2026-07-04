@@ -39,6 +39,7 @@
 		initialAudioFile?: File | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
+		onExit?: () => void;
 	}
 
 	let {
@@ -46,6 +47,7 @@
 		initialAudioFile = null,
 		warmCanvas = null,
 		warmRenderer = null,
+		onExit,
 	}: Props = $props();
 
 	// ── Slides ──
@@ -121,6 +123,14 @@
 
 	function shuffleSlides() {
 		shuffleInPlace(slides);
+	}
+
+	function handleExit() {
+		if (!onExit) return;
+		if (slides.length > 0 && !confirm('Discard current slideshow and return to upload?')) {
+			return;
+		}
+		onExit();
 	}
 
 	function setPresetIndex(slideId: string, presetIndex: number | null) {
@@ -693,6 +703,7 @@
 				activeView = view;
 				if (view === 'grid' && previewPlaying) stopPreview();
 			}}
+			onExit={onExit ? handleExit : undefined}
 		/>
 
 		{#if activeView === 'grid'}

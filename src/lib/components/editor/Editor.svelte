@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Download, HelpCircle, Library } from 'lucide-svelte';
+	import { Download, HelpCircle, Home, Library } from 'lucide-svelte';
 	import { createAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
@@ -37,6 +37,7 @@
 		initialAudioFile?: File | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
+		onExit?: () => void;
 	}
 
 	let {
@@ -45,6 +46,7 @@
 		initialAudioFile = null,
 		warmCanvas = null,
 		warmRenderer = null,
+		onExit,
 	}: Props = $props();
 	let dragging = $state(false);
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
@@ -86,8 +88,9 @@
 		{
 			title: 'Shortcuts',
 			shortcuts: [
-				{ keys: ['→'], description: 'Mosh' },
+				{ keys: ['→'], description: 'Redo if available, otherwise new mosh' },
 				{ keys: ['←', 'Ctrl/Cmd+Z'], description: 'Undo' },
+				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
 				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
 				{ keys: ['Space'], description: 'Play / pause' },
 				{ keys: ['V'], description: 'Re-input current frame' },
@@ -291,9 +294,22 @@
 		if (prev) effects = prev;
 	}
 
+	function redo() {
+		const next = history.redo();
+		if (next) effects = next;
+	}
+
 	function clearEffects() {
 		clearEffectsFn(effects);
 		history.push(effects);
+	}
+
+	function handleExit() {
+		if (!onExit) return;
+		if (history.canUndo && !confirm('Discard current edits and return to upload?')) {
+			return;
+		}
+		onExit();
 	}
 
 	function reInput() {
@@ -313,6 +329,7 @@
 		save,
 		mosh,
 		undo,
+		redo,
 		reInput,
 		playSpan,
 		pauseTrack,
@@ -486,6 +503,11 @@
 	<div class="main-area">
 		<div class="top-bar">
 			<div class="toolbar">
+				{#if onExit}
+					<button class="help-btn" onclick={handleExit} title="Back to upload">
+						<Home size={14} />
+					</button>
+				{/if}
 				<div class="format-group">
 					{@render formatButtons()}
 				</div>

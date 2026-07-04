@@ -1,15 +1,23 @@
 <script lang="ts">
+	import { Home } from 'lucide-svelte';
+
 	interface Props {
 		activeView: 'grid' | 'preview';
 		slideCount: number;
 		onViewChange: (view: 'grid' | 'preview') => void;
+		onExit?: () => void;
 	}
 
-	let { activeView, slideCount, onViewChange }: Props = $props();
+	let { activeView, slideCount, onViewChange, onExit }: Props = $props();
 </script>
 
 <div class="top-bar">
 	<div class="toolbar">
+		{#if onExit}
+			<button class="home-btn" onclick={onExit} title="Back to upload">
+				<Home size={14} />
+			</button>
+		{/if}
 		<div class="view-toggle">
 			<button
 				class="view-btn"
@@ -42,6 +50,30 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.home-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		background: none;
+		border: 1.5px solid #444;
+		color: #888;
+		cursor: pointer;
+		flex-shrink: 0;
+		padding: 0;
+		box-sizing: border-box;
+		transition:
+			border-color 0.2s,
+			color 0.2s;
+	}
+
+	.home-btn:hover {
+		border-color: #777;
+		color: #ccc;
 	}
 
 	.view-toggle {

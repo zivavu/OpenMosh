@@ -55,6 +55,13 @@
 		}
 	}
 
+	function exitToUpload() {
+		navigateTo("upload");
+		file = null;
+		slideshowFiles = [];
+		createWarm();
+	}
+
 	onMount(() => {
 		const onPopState = () => {
 			view = hashToView(window.location.hash);
@@ -78,6 +85,7 @@
 		initialAudioFile={pendingAudioFile}
 		{warmCanvas}
 		{warmRenderer}
+		onExit={exitToUpload}
 	/>
 {:else if view === 'editor' && file}
 	<Editor
@@ -86,6 +94,7 @@
 		onfile={(f: File) => (file = f)}
 		{warmCanvas}
 		{warmRenderer}
+		onExit={exitToUpload}
 	/>
 {:else}
 	<UploadScreen

@@ -2,6 +2,7 @@ export interface KeyboardActions {
   save: () => void;
   mosh: () => void;
   undo: () => void;
+  redo: () => void;
   reInput: () => void;
   playSpan: () => void;
   pauseTrack: () => void;
@@ -38,8 +39,14 @@ export function createKeyboardHandler(
       e.preventDefault();
       actions.mosh();
     } else if (
+      (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey) ||
+      (e.key.toLowerCase() === "y" && (e.ctrlKey || e.metaKey))
+    ) {
+      e.preventDefault();
+      actions.redo();
+    } else if (
       e.key === "ArrowLeft" ||
-      (e.key === "z" && (e.ctrlKey || e.metaKey))
+      (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey)
     ) {
       e.preventDefault();
       actions.undo();
