@@ -83,15 +83,32 @@
 			canvasEl = activeCanvas;
 			glRenderer = r;
 
+			// Mutable ref so cleanup always destroys whichever renderer is currently
+			// live, even if it was rebuilt by onContextRestored below.
+			const current = { renderer: r };
+
 			const onContextLost = (ev: Event) => {
+				// preventDefault() is required for the browser to attempt automatic
+				// restoration; without it, webglcontextrestored never fires.
 				ev.preventDefault();
-				error = 'WebGL context lost. Please reload the page.';
+				error =
+					'WebGL context lost — attempting to recover automatically. If this persists, please reload the page.';
+			};
+			const onContextRestored = () => {
+				const newRenderer = new GlRenderer(activeCanvas);
+				current.renderer = newRenderer;
+				renderer = newRenderer;
+				canvasEl = activeCanvas;
+				glRenderer = newRenderer;
+				error = null;
 			};
 			activeCanvas.addEventListener('webglcontextlost', onContextLost);
+			activeCanvas.addEventListener('webglcontextrestored', onContextRestored);
 
 			return () => {
 				activeCanvas.removeEventListener('webglcontextlost', onContextLost);
-				r.destroy();
+				activeCanvas.removeEventListener('webglcontextrestored', onContextRestored);
+				current.renderer.destroy();
 				renderer = null;
 				canvasEl = null;
 				glRenderer = null;
