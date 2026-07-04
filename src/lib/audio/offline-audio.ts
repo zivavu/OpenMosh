@@ -130,15 +130,16 @@ function fftMagnitude(
 
 /**
  * Extract a single frame's audio analysis at time t (seconds): RMS volume and frequency bins (0-255).
+ * `channels` should be each channel's Float32Array (fetched once per buffer by the caller).
  */
 function computeFrameAnalysis(
-  buffer: AudioBuffer,
+  channels: Float32Array[],
+  length: number,
+  sampleRate: number,
   timeSeconds: number,
   fftSize: number,
 ): FrameAudioData {
-  const sampleRate = buffer.sampleRate;
-  const numChannels = buffer.numberOfChannels;
-  const length = buffer.length;
+  const numChannels = channels.length;
   const frameStartSample = Math.max(
     0,
     Math.floor(timeSeconds * sampleRate) - Math.floor(fftSize / 2),
@@ -153,7 +154,7 @@ function computeFrameAnalysis(
   for (let i = 0; i < actualLength; i++) {
     let s = 0;
     for (let ch = 0; ch < numChannels; ch++) {
-      s += buffer.getChannelData(ch)[frameStartSample + i];
+      s += channels[ch][frameStartSample + i];
     }
     s /= numChannels;
     real[i] = s;
@@ -199,7 +200,15 @@ export function analyzeFrames(
   frameTimes: number[],
   fftSize: number = FFT_SIZE,
 ): FrameAudioData[] {
-  return frameTimes.map((t) => computeFrameAnalysis(buffer, t, fftSize));
+  const channels: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    channels.push(buffer.getChannelData(ch));
+  }
+  const sampleRate = buffer.sampleRate;
+  const length = buffer.length;
+  return frameTimes.map((t) =>
+    computeFrameAnalysis(channels, length, sampleRate, t, fftSize),
+  );
 }
 
 /**
