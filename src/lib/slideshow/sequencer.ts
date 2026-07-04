@@ -6,18 +6,7 @@ import {
   getDefinition,
   loadPresets,
 } from "../effects";
-import { beatAtTime } from "./beat-clock";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
-
-export interface ResolvedFrame {
-  slide: SlideshowSlide;
-  effects: EffectInstance[];
-}
-
-export interface SequencerState {
-  frames: ResolvedFrame[];
-  totalDuration: number;
-}
 
 /** Deep-clone an effects array, giving each instance a fresh ID. */
 export function cloneEffects(effects: EffectInstance[]): EffectInstance[] {
@@ -123,49 +112,4 @@ export function computeEffectsForBeat(
       return cloneEffects(baseEffects);
     }
   }
-}
-
-/**
- * Pre-compute all per-beat effect snapshots for the entire slideshow duration.
- * Used during recording for deterministic output.
- */
-export function buildFrameSequence(
-  slides: SlideshowSlide[],
-  config: SlideshowConfig,
-  baseEffects: EffectInstance[],
-  moshOptions: MoshOptions,
-  durationSeconds: number,
-): SequencerState {
-  const frames: ResolvedFrame[] = [];
-  const smoothState = { effects: cloneEffects(baseEffects) };
-
-  // Step through time, finding each beat boundary using beatAtTime
-  let lastBeatIndex = -1;
-  const dt = 0.001; // 1ms resolution for finding beat boundaries
-  for (let t = 0; t < durationSeconds; t += dt) {
-    const { index: beatIndex } = beatAtTime(
-      t,
-      config.bpm,
-      config.beatOffset,
-      config.segments,
-      config.subdivision,
-    );
-    if (beatIndex !== lastBeatIndex) {
-      lastBeatIndex = beatIndex;
-      const slideIndex = config.loop
-        ? frames.length % slides.length
-        : Math.min(frames.length, slides.length - 1);
-      const slide = slides[slideIndex];
-      const effects = computeEffectsForBeat(
-        config,
-        slide,
-        baseEffects,
-        smoothState,
-        moshOptions,
-      );
-      frames.push({ slide, effects });
-    }
-  }
-
-  return { frames, totalDuration: durationSeconds };
 }

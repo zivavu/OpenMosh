@@ -7,7 +7,6 @@
 		freqMax: number;
 		width?: number;
 		height?: number;
-		tick?: number;
 	}
 
 	let {

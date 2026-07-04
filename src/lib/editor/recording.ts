@@ -1,9 +1,8 @@
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
-import { downloadBlob, recordVideo, type RecordFormat } from "../recorder";
+import { downloadBlob, recordVideo } from "../recorder";
 
 export interface RecordingContext {
-  format: RecordFormat;
   fps: number;
   recordDuration: number;
   canvas: HTMLCanvasElement;
@@ -28,7 +27,6 @@ export interface RecordingContext {
 
 export async function executeRecording(ctx: RecordingContext): Promise<void> {
   const {
-    format,
     fps,
     recordDuration,
     canvas,
@@ -88,7 +86,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   if (isVideo && videoEl) videoEl.pause();
 
   const blob = await recordVideo({
-    format,
     duration: exportDuration,
     fps,
     canvas,
@@ -134,5 +131,5 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         },
       }),
   });
-  downloadBlob(blob, format);
+  downloadBlob(blob);
 }

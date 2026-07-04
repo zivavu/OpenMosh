@@ -1,7 +1,6 @@
 import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
-import type { RecordFormat } from "../recorder";
 import { downloadBlob, recordVideo } from "../recorder";
 import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from "../text-overlay";
 import { beatAtTime } from "./beat-clock";
@@ -9,7 +8,6 @@ import { cloneEffects, computeEffectsForBeat } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
 
 export interface SlideshowRecordContext {
-  format: RecordFormat;
   fps: number;
   slides: SlideshowSlide[];
   config: SlideshowConfig;
@@ -32,7 +30,6 @@ export async function executeSlideshowRecording(
   ctx: SlideshowRecordContext,
 ): Promise<void> {
   const {
-    format,
     fps,
     slides,
     config,
@@ -107,7 +104,6 @@ export async function executeSlideshowRecording(
   const textLayout = textOverlay?.layout ?? "scattered";
 
   const blob = await recordVideo({
-    format,
     duration,
     fps,
     canvas,
@@ -138,7 +134,7 @@ export async function executeSlideshowRecording(
       const showText = phrases.length > 0 && style && roll < textChance;
       if (showText) {
         const phrase = phrases[beatIndex % phrases.length] ?? null;
-        renderer.setTextOverlay(phrase, style, undefined, {
+        renderer.setTextOverlay(phrase, style, {
           layout: textLayout,
           seed: beatIndex,
           blendMode: textBlendMode,
@@ -180,5 +176,5 @@ export async function executeSlideshowRecording(
   });
 
   renderer.clearTextOverlay();
-  downloadBlob(blob, format);
+  downloadBlob(blob);
 }

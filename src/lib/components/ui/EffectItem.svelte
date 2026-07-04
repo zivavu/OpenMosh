@@ -274,7 +274,6 @@
 													freqMax={link.freqMax ?? 20000}
 													width={200}
 													height={48}
-													tick={spectrumData.tick}
 												/>
 												<div class="spectrum-inputs">
 													<span class="spectrum-label">Freq</span>

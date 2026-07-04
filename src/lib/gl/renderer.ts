@@ -10,7 +10,7 @@ import {
   EFFECT_SHADERS,
   type EffectShaderDef,
 } from "./effect-shaders";
-import type { TextSafeEffectId, TextOverlayBlendMode } from "../text-overlay";
+import type { TextOverlayBlendMode } from "../text-overlay";
 import {
   TRACKING_EFFECT_ID,
   computeSaliency,
@@ -53,7 +53,6 @@ export class GlRenderer {
   private textBlendProgram: CompiledProgram | null = null;
   /** Current overlay phrase; null = no overlay. */
   private textOverlayPhrase: string | null = null;
-  private textOverlayEffectIds: string[] = [];
   private textBlendMode: TextOverlayBlendMode = "normal";
   private textInvert = false;
   private textOpacity = 1;
@@ -78,17 +77,6 @@ export class GlRenderer {
   private salBuf: Uint8Array | null = null;
   private salW = 0;
   private salH = 0;
-
-  /** Default param values for text-safe effects (keeps text readable). */
-  private static TEXT_EFFECT_DEFAULTS: Record<
-    string,
-    Record<string, number | string>
-  > = {
-    scanlines: { count: 80, amount: 0.4 },
-    grain: { amount: 0.25, rgb: 0, blendMode: "soft" },
-    vignette: { size: 0.6, amount: 0.4 },
-    bleach: { amount: 0.35 },
-  };
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
@@ -173,22 +161,10 @@ export class GlRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   }
 
-  /**
-   * Set text overlay for the next render. Pass null to clear.
-   * options: layout, seed, blendMode, invert.
-   * Legacy: 3rd param as string is treated as single textEffectIds member.
-   */
+  /** Set text overlay for the next render. Pass null to clear. options: layout, seed, blendMode, invert. */
   setTextOverlay(
     phrase: string | null,
     style?: TextOverlayStyle | null,
-    textEffectIdOrOptions?:
-      | TextSafeEffectId
-      | ""
-      | (DrawPhraseOptions & {
-          blendMode?: TextOverlayBlendMode;
-          invert?: boolean;
-          opacity?: number;
-        }),
     options?: DrawPhraseOptions & {
       blendMode?: TextOverlayBlendMode;
       invert?: boolean;
@@ -196,21 +172,13 @@ export class GlRenderer {
     },
   ) {
     this.textOverlayPhrase = phrase;
-    const opts =
-      options ??
-      (typeof textEffectIdOrOptions === "object"
-        ? textEffectIdOrOptions
-        : null);
-    const legacyId =
-      typeof textEffectIdOrOptions === "string" ? textEffectIdOrOptions : "";
-    this.textOverlayEffectIds = legacyId ? [legacyId] : [];
-    this.textBlendMode = opts?.blendMode ?? "normal";
-    this.textInvert = opts?.invert ?? false;
-    this.textOpacity = opts?.opacity ?? 1;
+    this.textBlendMode = options?.blendMode ?? "normal";
+    this.textInvert = options?.invert ?? false;
+    this.textOpacity = options?.opacity ?? 1;
     if (!phrase || !style) return;
     if (this.imgW <= 0 || this.imgH <= 0) return;
-    const layout = opts?.layout ?? "block";
-    const seed = opts?.layout === "scattered" ? (opts?.seed ?? 0) : 0;
+    const layout = options?.layout ?? "block";
+    const seed = options?.layout === "scattered" ? (options?.seed ?? 0) : 0;
     const styleKey = JSON.stringify(style);
     if (
       this.lastTextPhrase === phrase &&
@@ -230,7 +198,7 @@ export class GlRenderer {
     this.lastTextH = this.imgH;
     const drawOptions: DrawPhraseOptions = {
       layout,
-      seed: opts?.layout === "scattered" ? (opts?.seed ?? 0) : undefined,
+      seed: options?.layout === "scattered" ? (options?.seed ?? 0) : undefined,
     };
     const textCanvas = drawPhraseToCanvas(
       phrase,
@@ -257,7 +225,6 @@ export class GlRenderer {
   /** Clear text overlay (e.g. after recording). */
   clearTextOverlay() {
     this.textOverlayPhrase = null;
-    this.textOverlayEffectIds = [];
     this.lastTextSeed = null;
     this.lastTextLayout = null;
     this.lastTextStyleKey = null;
@@ -303,10 +270,9 @@ export class GlRenderer {
       );
       const mainResult = this.fbTextures[writeIdx]!;
       if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
-        const overlayTex = this.runTextEffects(this.textTexture, time);
         this.drawBlendToCanvas(
           mainResult,
-          overlayTex,
+          this.textTexture,
           this.textBlendMode,
           this.textInvert,
           this.textOpacity,
@@ -392,10 +358,9 @@ export class GlRenderer {
 
     const mainResult = this.fbTextures[writeIdx]!;
     if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
-      const overlayTex = this.runTextEffects(this.textTexture, time);
       this.drawBlendToCanvas(
         mainResult,
-        overlayTex,
+        this.textTexture,
         this.textBlendMode,
         this.textInvert,
         this.textOpacity,
@@ -789,31 +754,6 @@ export class GlRenderer {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;
-  }
-
-  /** Run zero or more effects on the text texture; returns final texture (ping-pong). */
-  private runTextEffects(inputTex: WebGLTexture, time: number): WebGLTexture {
-    const ids = this.textOverlayEffectIds;
-    if (!ids.length || !this.ppFBOs || !this.ppTextures) return inputTex;
-    let current: WebGLTexture = inputTex;
-    let ppIdx = 0;
-    for (const effectId of ids) {
-      const entry = this.compiled.get(effectId);
-      if (!entry) continue;
-      const defs = GlRenderer.TEXT_EFFECT_DEFAULTS[effectId];
-      this.drawPass(
-        entry.program,
-        this.ppFBOs[ppIdx],
-        current,
-        1.0,
-        time,
-        entry.def,
-        defs ? { ...defs } : {},
-      );
-      current = this.ppTextures[ppIdx]!;
-      ppIdx = 1 - ppIdx;
-    }
-    return current;
   }
 
   private static BLEND_MODE_VALUES: Record<TextOverlayBlendMode, number> = {

@@ -8,7 +8,6 @@
 		type Preset,
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
-	import type { RecordFormat } from '../../recorder';
 	import { beatAtTime } from '../../slideshow/beat-clock';
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import {
@@ -461,7 +460,7 @@
 					const phrase =
 						previewPhrases[beatIndex % previewPhrases.length] ?? null;
 					const to = config.textOverlay;
-					glRenderer.setTextOverlay(phrase, previewTextStyle, undefined, {
+					glRenderer.setTextOverlay(phrase, previewTextStyle, {
 						layout: previewTextLayout,
 						seed: beatIndex,
 						blendMode: to?.blendMode ?? 'normal',
@@ -539,7 +538,6 @@
 	}
 
 	// ── Recording ──
-	let recordFormat: RecordFormat = $state('webm');
 	let recordFps = $state(60);
 	let recording = $state(false);
 	let recordProgress = $state(0);
@@ -564,7 +562,6 @@
 
 		try {
 			await executeSlideshowRecording({
-				format: recordFormat,
 				fps: recordFps,
 				slides: [...slides],
 				config,
@@ -771,7 +768,6 @@
 			{recording}
 			{recordProgress}
 			{recordFinalizing}
-			{recordFormat}
 			onCancel={cancelRecording}
 		/>
 
