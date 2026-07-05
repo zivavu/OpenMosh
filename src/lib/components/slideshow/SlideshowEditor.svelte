@@ -614,7 +614,6 @@
 	let dragging = $state(false);
 
 	// ── Component refs ──
-	let trackLibraryRef: TrackLibrary | undefined = undefined;
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
 	// ── Keyboard ──
@@ -695,7 +694,6 @@
 	}}
 >
 	<TrackLibrary
-		bind:this={trackLibraryRef}
 		activeTrackName={audio.trackFile?.name ?? null}
 		onLoadTrack={onLibraryLoadTrack}
 		onPreviewStart={() => audio.pauseAudio()}
@@ -758,7 +756,6 @@
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
-			onOpenSheet={() => trackLibraryRef?.openLibrary()}
 		/>
 
 		<RecordOverlay
