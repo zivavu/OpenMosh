@@ -255,6 +255,9 @@
 		initialOutputVolume: savedOutputVolume,
 	});
 
+	// Close the AudioContext on unmount so repeated visits don't leak contexts.
+	$effect(() => () => audio.disposeAudioGraph());
+
 	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
 	$effect(() => { audio.setAudioEl(audioEl); });
