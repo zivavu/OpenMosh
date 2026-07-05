@@ -127,6 +127,10 @@
 
 	function handleExit() {
 		if (!onExit) return;
+		if (recordingState.recording) {
+			alert('Please cancel or wait for the recording to finish before exiting.');
+			return;
+		}
 		if (slides.length > 0 && !confirm('Discard current slideshow and return to upload?')) {
 			return;
 		}
