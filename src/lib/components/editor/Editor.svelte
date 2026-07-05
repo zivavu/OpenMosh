@@ -306,6 +306,10 @@
 
 	function handleExit() {
 		if (!onExit) return;
+		if (recordingState.recording) {
+			alert('Please cancel or wait for the recording to finish before exiting.');
+			return;
+		}
 		if (history.canUndo && !confirm('Discard current edits and return to upload?')) {
 			return;
 		}
