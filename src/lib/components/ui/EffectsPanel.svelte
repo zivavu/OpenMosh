@@ -45,6 +45,15 @@
 	let presetName = $state('');
 	let activePresetIndex: number | null = $state(null);
 	let presetSaveTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingSave: { index: number; snapshot: EffectInstance[] } | null = null;
+
+	function flushPendingSave() {
+		if (!pendingSave) return;
+		clearTimeout(presetSaveTimer);
+		presetSaveTimer = undefined;
+		presets = updatePreset(pendingSave.index, pendingSave.snapshot);
+		pendingSave = null;
+	}
 
 	$effect(() => {
 		// Deep-track effects by reading all nested values
@@ -57,13 +66,15 @@
 		if (activePresetIndex === null) return;
 		const index = activePresetIndex;
 		const snapshot = $state.snapshot(effects);
+		pendingSave = { index, snapshot };
 		clearTimeout(presetSaveTimer);
 		presetSaveTimer = setTimeout(() => {
 			presets = updatePreset(index, snapshot);
+			pendingSave = null;
 		}, 500);
 	});
 
-	$effect(() => () => clearTimeout(presetSaveTimer));
+	$effect(() => () => flushPendingSave());
 
 	function handleSavePreset() {
 		const name = presetName.trim();
@@ -75,6 +86,7 @@
 	}
 
 	function handleLoadPreset(index: number) {
+		flushPendingSave();
 		if (activePresetIndex === index) {
 			activePresetIndex = null;
 			return;
@@ -85,6 +97,7 @@
 	}
 
 	function handleDeletePreset(index: number) {
+		flushPendingSave();
 		presets = deletePreset(index);
 		if (activePresetIndex === index) activePresetIndex = null;
 		else if (activePresetIndex !== null && activePresetIndex > index)
