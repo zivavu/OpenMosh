@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { HelpCircle, Library, Pause, Play, Settings } from 'lucide-svelte';
+	import { HelpCircle, Pause, Play, Settings } from 'lucide-svelte';
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
@@ -18,7 +18,6 @@
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
 		onRecordFpsChange: (fps: number) => void;
-		onOpenSheet?: () => void;
 	}
 
 	let {
@@ -35,7 +34,6 @@
 		onTogglePreview,
 		onStartRecording,
 		onRecordFpsChange,
-		onOpenSheet,
 	}: Props = $props();
 
 	const isMobile = window.matchMedia('(pointer: coarse)').matches;
@@ -83,11 +81,15 @@
 </script>
 
 <div class="action-bar">
-	{#if onOpenSheet}
-		<button class="library-btn" onclick={onOpenSheet} title="Effects panel" aria-label="Effects panel">
-			<Library size={12} />
-		</button>
-	{/if}
+	<button
+		class="icon-btn"
+		onclick={() => (showShortcuts = true)}
+		title="Keyboard shortcuts"
+		aria-label="Keyboard shortcuts"
+	>
+		<HelpCircle size={14} />
+	</button>
+
 	<div class="options-group" bind:this={optionsGroupEl}>
 		<button
 			class="icon-btn options-btn"
@@ -109,15 +111,6 @@
 			</div>
 		{/if}
 	</div>
-
-	<button
-		class="icon-btn"
-		onclick={() => (showShortcuts = true)}
-		title="Keyboard shortcuts"
-		aria-label="Keyboard shortcuts"
-	>
-		<HelpCircle size={14} />
-	</button>
 
 	<button
 		class="action-btn play-btn"
@@ -187,28 +180,6 @@
 		padding: 0.5rem 0.75rem;
 		border-top: 1px solid #2a2a2a;
 		flex-shrink: 0;
-	}
-
-	.library-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: none;
-		border: 1.5px solid #444;
-		color: #888;
-		cursor: pointer;
-		flex-shrink: 0;
-		padding: 0;
-		box-sizing: border-box;
-		transition: border-color 0.2s, color 0.2s;
-	}
-
-	.library-btn:hover {
-		border-color: #777;
-		color: #ccc;
 	}
 
 	.action-btn {
