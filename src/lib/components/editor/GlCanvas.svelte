@@ -213,15 +213,13 @@
 </script>
 
 <div class="preview-area" bind:this={previewArea}>
+	{#if !warmCanvas}
+		<canvas bind:this={canvas} aria-label="Effect preview canvas"></canvas>
+	{/if}
 	{#if error}
 		<p class="error">{error}</p>
-	{:else}
-		{#if !warmCanvas}
-			<canvas bind:this={canvas} aria-label="Effect preview canvas"></canvas>
-		{/if}
-		{#if showFps}
-			<span class="fps-overlay">{fps} FPS</span>
-		{/if}
+	{:else if showFps}
+		<span class="fps-overlay">{fps} FPS</span>
 	{/if}
 </div>
 
@@ -245,8 +243,17 @@
 	}
 
 	.error {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		padding: 0 1.5rem;
 		color: #ff6b6b;
 		font-size: 0.9rem;
+		background: rgba(0, 0, 0, 0.55);
+		z-index: 10;
 	}
 
 	.fps-overlay {
