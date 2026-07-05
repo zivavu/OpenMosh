@@ -82,14 +82,23 @@ export class AudioManager {
       const sampleRate = this.audioSampleRate;
       const fftSize = analyser.fftSize;
       let rafId: number;
+      let wasPaused = false;
       const tick = () => {
         // Source-agnostic pause check (works for both <audio> and <video> sources,
         // unlike `audioPlaying` which only tracks the <audio> element).
         if (this.mediaSource?.mediaElement.paused) {
-          if (this.volumeLevel !== 0) this.volumeLevel = 0;
+          if (!wasPaused) {
+            // Settle to baseline once on pause, instead of freezing at the
+            // last non-silent frame for the whole pause duration.
+            wasPaused = true;
+            this.volumeLevel = 0;
+            freqDataRef?.fill(0);
+            applyVolumeLinksTick(this.#getEffects(), 0, freqDataRef, sampleRate, fftSize);
+          }
           rafId = requestAnimationFrame(tick);
           return;
         }
+        wasPaused = false;
         this.volumeLevel = computeVolumeLevel(analyser, timeData);
         if (freqDataRef)
           analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
