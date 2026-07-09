@@ -8,6 +8,7 @@ export interface EditorSettings {
 	moshAudioLinkStrength: number;
 	showFps: boolean;
 	outputVolume: number;
+	loopAudio: boolean;
 }
 
 export function loadSettings(): Partial<EditorSettings> {
@@ -20,4 +21,9 @@ export function loadSettings(): Partial<EditorSettings> {
 
 export function saveSettings(settings: EditorSettings) {
 	localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+/** Merge a partial update into the stored settings without clobbering the rest. */
+export function updateSettings(patch: Partial<EditorSettings>) {
+	localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...loadSettings(), ...patch }));
 }

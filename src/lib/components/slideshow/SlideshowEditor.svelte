@@ -33,6 +33,7 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
+	import { loadSettings, updateSettings } from '../../editor/settings';
 
 	interface Props {
 		initialFiles: File[];
@@ -253,7 +254,13 @@
 	const audio = new AudioManager({
 		getEffects: () => effects,
 		initialOutputVolume: savedOutputVolume,
+		initialLoop: loadSettings().loopAudio ?? false,
 	});
+
+	function toggleLoop() {
+		audio.loopAudio = !audio.loopAudio;
+		updateSettings({ loopAudio: audio.loopAudio });
+	}
 
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.
 	$effect(() => () => audio.disposeAudioGraph());
@@ -420,8 +427,13 @@
 				t = audioEl?.currentTime ?? audio.trackCurrentTime;
 				audio.trackCurrentTime = t;
 				if (t >= audio.spanEnd) {
-					stopPreview();
-					return;
+					if (audio.loopAudio) {
+						audio.seekTo(audio.spanStart);
+						t = audio.spanStart;
+					} else {
+						stopPreview();
+						return;
+					}
 				}
 			} else {
 				const fallbackInterval =
@@ -644,6 +656,7 @@
 		src={audio.trackObjectUrl}
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
+		onended={() => audio.onAudioEnded()}
 		onplay={() => (audio.audioPlaying = true)}
 		onpause={() => (audio.audioPlaying = false)}
 		hidden
@@ -777,13 +790,15 @@
 				trackCurrentTime={audio.trackCurrentTime}
 				spanStart={audio.spanStart}
 				spanEnd={audio.spanEnd}
-				isPlaying={audio.audioPlaying}
+				isPlaying={previewPlaying}
+				loopEnabled={audio.loopAudio}
+				onToggleLoop={toggleLoop}
 				outputVolume={audio.outputVolume}
 				{config}
 				bind:selectedSegmentId
 				{onConfigChange}
-				onPlay={() => audio.playAudio()}
-				onPause={() => audio.pauseAudio()}
+				onPlay={() => startPreview()}
+				onPause={stopPreview}
 				onSeek={(t) => audio.seekTo(t)}
 				onSpanStartChange={(t) => (audio.spanStart = t)}
 				onSpanEndChange={(t) => (audio.spanEnd = t)}
