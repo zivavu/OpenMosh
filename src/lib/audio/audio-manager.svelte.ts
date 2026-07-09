@@ -11,6 +11,7 @@ import type { SpectrumData } from '../types';
 interface AudioManagerOptions {
   getEffects: () => EffectInstance[];
   initialOutputVolume?: number;
+  initialLoop?: boolean;
 }
 
 export class AudioManager {
@@ -27,6 +28,7 @@ export class AudioManager {
   spanStart = $state(0);
   spanEnd = $state(0);
   audioPlaying = $state(false);
+  loopAudio = $state(false);
   pendingSpan = $state<{ start: number; end: number } | null>(null);
 
   // ── Audio graph ──
@@ -56,9 +58,10 @@ export class AudioManager {
 
   readonly #getEffects: () => EffectInstance[];
 
-  constructor({ getEffects, initialOutputVolume = 1 }: AudioManagerOptions) {
+  constructor({ getEffects, initialOutputVolume = 1, initialLoop = false }: AudioManagerOptions) {
     this.#getEffects = getEffects;
     this.outputVolume = initialOutputVolume;
+    this.loopAudio = initialLoop;
 
     // ObjectURL lifecycle
     $effect(() => {
@@ -180,11 +183,22 @@ export class AudioManager {
     if (!this.#audioEl) return;
     this.trackCurrentTime = this.#audioEl.currentTime;
     if (this.audioPlaying && this.#audioEl.currentTime >= this.spanEnd) {
-      this.#audioEl.pause();
       this.#audioEl.currentTime = this.spanStart;
       this.trackCurrentTime = this.spanStart;
-      this.audioPlaying = false;
+      if (!this.loopAudio) {
+        this.#audioEl.pause();
+        this.audioPlaying = false;
+      }
     }
+  }
+
+  onAudioEnded() {
+    // Natural track end can fire before timeupdate reaches spanEnd.
+    if (!this.#audioEl || !this.loopAudio) return;
+    this.#audioEl.currentTime = this.spanStart;
+    this.trackCurrentTime = this.spanStart;
+    this.#audioEl.play();
+    this.audioPlaying = true;
   }
 
   playAudio() {

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Pause, Play, X } from 'lucide-svelte';
+	import { Pause, Play, Repeat, X } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import type { SlideshowConfig } from '../../slideshow/types';
 	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
@@ -18,6 +18,8 @@
 		onSpanEndChange: (t: number) => void;
 		outputVolume?: number;
 		onVolumeChange?: (v: number) => void;
+		loopEnabled?: boolean;
+		onToggleLoop?: () => void;
 		onRemoveTrack?: () => void;
 		ariaLabel?: string;
 		// Slideshow-only (segments)
@@ -40,6 +42,8 @@
 		onSpanEndChange,
 		outputVolume = 1,
 		onVolumeChange,
+		loopEnabled = false,
+		onToggleLoop,
 		onRemoveTrack,
 		ariaLabel = 'Timeline',
 		config,
@@ -163,6 +167,17 @@
 			<Play size={14} fill="currentColor" stroke="none" />
 		{/if}
 	</button>
+	{#if onToggleLoop}
+		<button
+			class="timeline-play-btn timeline-loop-btn"
+			class:loop-on={loopEnabled}
+			onclick={onToggleLoop}
+			title={loopEnabled ? 'Loop: on' : 'Loop: off'}
+			aria-pressed={loopEnabled}
+		>
+			<Repeat size={13} />
+		</button>
+	{/if}
 	<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
 	<div
 		class="timeline-track-wrap"
@@ -278,6 +293,12 @@
 		color: #fff;
 		border-color: #555;
 		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.timeline-loop-btn.loop-on {
+		color: #fff;
+		border-color: #666;
+		background: rgba(255, 255, 255, 0.12);
 	}
 
 	.timeline-time {

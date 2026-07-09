@@ -101,6 +101,7 @@
 	const audio = new AudioManager({
 		getEffects: () => effects,
 		initialOutputVolume: saved.outputVolume ?? 1,
+		initialLoop: saved.loopAudio ?? false,
 	});
 
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.
@@ -138,6 +139,7 @@
 		moshAudioLinkStrength;
 		showFps;
 		audio.outputVolume;
+		audio.loopAudio;
 		saveSettings({
 			moshMin,
 			moshMax,
@@ -146,6 +148,7 @@
 			moshAudioLinkStrength,
 			showFps,
 			outputVolume: audio.outputVolume,
+			loopAudio: audio.loopAudio,
 		});
 	});
 	let currentFps = $state(0);
@@ -442,6 +445,7 @@
 		src={audio.trackObjectUrl}
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
+		onended={() => audio.onAudioEnded()}
 		onplay={() => (audio.audioPlaying = true)}
 		onpause={() => (audio.audioPlaying = false)}
 		hidden
@@ -704,6 +708,8 @@
 				spanStart={audio.spanStart}
 				spanEnd={audio.spanEnd}
 				isPlaying={audio.audioPlaying}
+				loopEnabled={audio.loopAudio}
+				onToggleLoop={() => (audio.loopAudio = !audio.loopAudio)}
 				outputVolume={audio.outputVolume}
 				onPlay={playSpan}
 				onPause={pauseTrack}
