@@ -41,6 +41,18 @@ export interface RecordOptions {
 	normalizeGain?: number;
 }
 
+/** Encoding backend that consumes rendered canvas frames. */
+interface FrameSink {
+	/** Human-readable backend name for the perf log. */
+	label: string;
+	/** Capture the current canvas state as frame `frameIndex`. Applies its own backpressure. */
+	submit(frameIndex: number, time: number): Promise<void> | void;
+	/** Wait until every packet has been encoded and handed to the muxer, then close the video source. */
+	finish(): Promise<void>;
+	/** Release resources (idempotent; used on abort/error paths). */
+	dispose(): void;
+}
+
 function checkAbort(signal?: AbortSignal) {
 	if (signal?.aborted)
 		throw new DOMException('Recording cancelled', 'AbortError');
@@ -199,20 +211,124 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	// Progress tracks encoded packets (1 per frame), not submitted frames, so the
 	// bar reflects the real bottleneck and "Creating file" doesn't appear stuck.
 	let encodedFrames = 0;
-	const videoSource = new mb.CanvasSource(canvas, {
-		codec: selectedCodec as any,
-		// Software realtime mode trades some per-frame efficiency for multithreaded
-		// speed; the higher bitrate compensates so visual quality holds.
-		bitrate: hardware ? 4_000_000 : 6_000_000,
-		...(hardware
-			? { hardwareAcceleration: 'prefer-hardware' as const }
-			: { latencyMode: 'realtime' as const }),
-		onEncodedPacket: () => {
-			encodedFrames++;
-			onProgress?.(Math.min(encodedFrames / totalFrames, 1));
-		},
-	});
-	output.addVideoTrack(videoSource);
+	const reportPacket = () => {
+		encodedFrames++;
+		onProgress?.(Math.min(encodedFrames / totalFrames, 1));
+	};
+
+	const makeCanvasSink = (): FrameSink => {
+		const videoSource = new mb.CanvasSource(canvas, {
+			codec: selectedCodec as any,
+			// Software realtime mode trades some per-frame efficiency for multithreaded
+			// speed; the higher bitrate compensates so visual quality holds.
+			bitrate: hardware ? 4_000_000 : 6_000_000,
+			...(hardware
+				? { hardwareAcceleration: 'prefer-hardware' as const }
+				: { latencyMode: 'realtime' as const }),
+			onEncodedPacket: reportPacket,
+		});
+		output.addVideoTrack(videoSource);
+		const queue: Promise<void>[] = [];
+		return {
+			label: hardware ? 'hardware' : 'software',
+			async submit(_frameIndex, time) {
+				queue.push(videoSource.add(time, frameDuration));
+				if (queue.length >= 8) await queue.shift()!;
+			},
+			async finish() {
+				await Promise.all(queue);
+				queue.length = 0;
+				videoSource.close();
+			},
+			dispose() {},
+		};
+	};
+
+	// Software encoding is mostly single-pipeline per encoder instance, so a
+	// pool of worker-thread VP8 encoders scales throughput with CPU cores.
+	// Chunks of frames go round-robin to workers; each chunk starts with a
+	// forced keyframe so the interleaved streams stay valid.
+	const makePoolSink = async (): Promise<FrameSink> => {
+		const { EncoderPool } = await import('./encode-pool/encode-pool');
+		if (!EncoderPool.isSupported())
+			throw new Error('Workers or WebCodecs unavailable');
+		const CHUNK_SIZE = 24;
+		const workerCount = Math.min(
+			4,
+			Math.max(2, Math.floor((navigator.hardwareConcurrency || 8) / 4)),
+			Math.max(1, Math.ceil(totalFrames / CHUNK_SIZE)),
+		);
+		if (workerCount < 2)
+			throw new Error('Export too short to benefit from the encode pool');
+		let packetSource: InstanceType<typeof mb.EncodedVideoPacketSource>;
+		let drain: Promise<void> = Promise.resolve();
+		let drainError: unknown = null;
+		let first = true;
+		const pool = new EncoderPool({
+			config: {
+				codec: 'vp8',
+				width: canvas.width,
+				height: canvas.height,
+				// Above the single-encoder path's 6 Mbps: the extra keyframes at
+				// chunk boundaries cost bits, this keeps quality at least on par.
+				bitrate: 8_000_000,
+				latencyMode: 'realtime',
+			},
+			workerCount,
+			chunkSize: CHUNK_SIZE,
+			onPacket: (p) => {
+				const meta = first
+					? {
+							decoderConfig: p.decoderConfig ?? {
+								codec: 'vp8',
+								codedWidth: canvas.width,
+								codedHeight: canvas.height,
+							},
+						}
+					: undefined;
+				first = false;
+				drain = drain
+					.then(() =>
+						packetSource.add(
+							new mb.EncodedPacket(p.data, p.type, p.timestamp, p.duration),
+							meta,
+						),
+					)
+					.then(reportPacket, (err) => {
+						drainError = err;
+					});
+			},
+		});
+		// Init before adding the track: if workers fail to start we fall back to
+		// the canvas sink, and the output must not end up with two video tracks.
+		await pool.init();
+		packetSource = new mb.EncodedVideoPacketSource('vp8');
+		output.addVideoTrack(packetSource);
+		return {
+			label: `worker-pool x${workerCount}`,
+			submit: (frameIndex, time) =>
+				pool.submit(canvas, frameIndex, time, frameDuration),
+			async finish() {
+				await pool.flush();
+				await drain;
+				if (drainError) throw drainError;
+				packetSource.close();
+				pool.dispose();
+			},
+			dispose: () => pool.dispose(),
+		};
+	};
+
+	let sink: FrameSink;
+	if (!hardware && selectedCodec === 'vp8') {
+		try {
+			sink = await makePoolSink();
+		} catch {
+			sink = makeCanvasSink();
+		}
+	} else {
+		sink = makeCanvasSink();
+	}
 
 	// Add audio track for WebM when we have audio (add track before start; add data after start)
 	let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
@@ -246,32 +362,52 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
-	const ENCODE_QUEUE_SIZE = 8;
-	const encodeQueue: Promise<void>[] = [];
+	// Per-stage wall-time breakdown, logged after export to locate the
+	// bottleneck (source decode vs GL render vs encoder backpressure vs flush).
+	const perf = { beforeRender: 0, render: 0, encodeSubmit: 0 };
+	const loopStart = performance.now();
+	let loopEnd = loopStart;
 
-	for (let i = 0; i < totalFrames; i++) {
-		checkAbort(signal);
+	try {
+		for (let i = 0; i < totalFrames; i++) {
+			checkAbort(signal);
 
-		const time = i * frameDuration;
-		const renderResult = onBeforeRender?.(i, time);
-		const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
-		const renderEffects = effectsRef ? effectsRef.current : effects;
-		applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
-		if (!skipRender) renderer.render(renderEffects, time);
-		encodeQueue.push(videoSource.add(time, frameDuration));
-
-		if (encodeQueue.length >= ENCODE_QUEUE_SIZE) {
-			await encodeQueue.shift()!;
+			const time = i * frameDuration;
+			let t = performance.now();
+			const renderResult = onBeforeRender?.(i, time);
+			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
+			perf.beforeRender += performance.now() - t;
+			const renderEffects = effectsRef ? effectsRef.current : effects;
+			applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
+			t = performance.now();
+			if (!skipRender) renderer.render(renderEffects, time);
+			perf.render += performance.now() - t;
+			t = performance.now();
+			await sink.submit(i, time);
+			perf.encodeSubmit += performance.now() - t;
 		}
+
+		loopEnd = performance.now();
+		// Encoders flush their remaining pipeline here — packet callbacks keep
+		// firing, driving progress the rest of the way to 100%.
+		await sink.finish();
+		await output.finalize();
+	} finally {
+		sink.dispose();
 	}
 
-	await Promise.all(encodeQueue);
-	encodeQueue.length = 0;
-	videoSource.close();
-
-	// The encoder's internal pipeline flushes during finalize — onEncodedPacket
-	// keeps firing here, driving progress the rest of the way to 100%.
-	await output.finalize();
+	const flushMs = performance.now() - loopEnd;
+	const loopMs = loopEnd - loopStart;
+	const totalS = (loopMs + flushMs) / 1000;
+	console.info(
+		`[export] ${selectedCodec} (${sink.label}): ` +
+			`${totalFrames} frames in ${totalS.toFixed(1)}s (${(totalFrames / totalS).toFixed(0)} fps)\n` +
+			`  avg ms/frame — beforeRender: ${(perf.beforeRender / totalFrames).toFixed(2)}, ` +
+			`render: ${(perf.render / totalFrames).toFixed(2)}, ` +
+			`encodeSubmit: ${(perf.encodeSubmit / totalFrames).toFixed(2)}, ` +
+			`other: ${((loopMs - perf.beforeRender - perf.render - perf.encodeSubmit) / totalFrames).toFixed(2)}\n` +
+			`  encoder flush after last frame: ${flushMs.toFixed(0)}ms`,
+	);
 
 	onProgress?.(1);
 	// Let the UI paint "Creating file..." before blocking on blob creation
