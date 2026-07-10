@@ -146,7 +146,7 @@ export class GlRenderer {
     this.setupPingPong();
   }
 
-  updateSourceFrame(source: HTMLVideoElement) {
+  updateSourceFrame(source: HTMLVideoElement | VideoFrame) {
     if (!this.sourceTexture) return;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);

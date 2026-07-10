@@ -152,25 +152,43 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	const containerCodecs = outputFormat.getSupportedVideoCodecs();
 
-	const preferredCodecs = ['vp8', 'vp9', 'av1'] as const;
-
-	const candidates = preferredCodecs.filter((c) =>
+	// Prefer a hardware encoder (VP9/AV1 on most modern GPUs): far faster than
+	// software VP8 and equal-or-better quality at these bitrates.
+	const hwCandidates = (['vp9', 'av1'] as const).filter((c) =>
 		containerCodecs.includes(c as any),
 	);
+	let selectedCodec: string | null = null;
+	let hardware = false;
+	for (const c of hwCandidates) {
+		if (
+			await mb.canEncodeVideo(c as any, {
+				width: canvas.width,
+				height: canvas.height,
+				bitrate: 4_000_000,
+				hardwareAcceleration: 'prefer-hardware',
+			})
+		) {
+			selectedCodec = c;
+			hardware = true;
+			break;
+		}
+	}
 
-	const selectedCodec = await mb.getFirstEncodableVideoCodec(
-		candidates as any,
-		{
+	const swCandidates = (['vp8', 'vp9', 'av1'] as const).filter((c) =>
+		containerCodecs.includes(c as any),
+	);
+	if (!selectedCodec) {
+		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates as any, {
 			width: canvas.width,
 			height: canvas.height,
-			bitrate: 4_000_000,
-		},
-	);
+			bitrate: 6_000_000,
+		});
+	}
 
 	if (!selectedCodec) {
 		throw new Error(
 			`Your browser cannot encode WEBM video. ` +
-				`Tried codecs: ${candidates.join(', ')}. Try a different browser.`,
+				`Tried codecs: ${swCandidates.join(', ')}. Try a different browser.`,
 		);
 	}
 
@@ -178,9 +196,21 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const output = new mb.Output({ format: outputFormat, target });
 
 	const wantsAudioTrack = audioBufferForMux != null;
+	// Progress tracks encoded packets (1 per frame), not submitted frames, so the
+	// bar reflects the real bottleneck and "Creating file" doesn't appear stuck.
+	let encodedFrames = 0;
 	const videoSource = new mb.CanvasSource(canvas, {
 		codec: selectedCodec as any,
-		bitrate: 4_000_000,
+		// Software realtime mode trades some per-frame efficiency for multithreaded
+		// speed; the higher bitrate compensates so visual quality holds.
+		bitrate: hardware ? 4_000_000 : 6_000_000,
+		...(hardware
+			? { hardwareAcceleration: 'prefer-hardware' as const }
+			: { latencyMode: 'realtime' as const }),
+		onEncodedPacket: () => {
+			encodedFrames++;
+			onProgress?.(Math.min(encodedFrames / totalFrames, 1));
+		},
 	});
 	output.addVideoTrack(videoSource);
 
@@ -216,7 +246,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
-	const ENCODE_QUEUE_SIZE = 3;
+	const ENCODE_QUEUE_SIZE = 8;
 	const encodeQueue: Promise<void>[] = [];
 
 	for (let i = 0; i < totalFrames; i++) {
@@ -233,19 +263,20 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		if (encodeQueue.length >= ENCODE_QUEUE_SIZE) {
 			await encodeQueue.shift()!;
 		}
-
-		onProgress?.((i + 1) / totalFrames);
 	}
-
-	// Let the UI paint "Creating file..." before blocking on finalize
-	await new Promise<void>((r) => requestAnimationFrame(() => r()));
-	onFinalizing?.();
 
 	await Promise.all(encodeQueue);
 	encodeQueue.length = 0;
 	videoSource.close();
 
+	// The encoder's internal pipeline flushes during finalize — onEncodedPacket
+	// keeps firing here, driving progress the rest of the way to 100%.
 	await output.finalize();
+
+	onProgress?.(1);
+	// Let the UI paint "Creating file..." before blocking on blob creation
+	onFinalizing?.();
+	await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
 	const mimeType = 'video/webm';
 	return new Blob([target.buffer!], { type: mimeType });
