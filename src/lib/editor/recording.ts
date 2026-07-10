@@ -85,51 +85,111 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
   if (isVideo && videoEl) videoEl.pause();
 
-  const blob = await recordVideo({
-    duration: exportDuration,
-    fps,
-    canvas,
-    renderer,
-    normalizeGain,
-    effects: effects.map(
-      (e): EffectInstance => ({
-        ...e,
-        values: { ...e.values },
-        volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
-      }),
-    ),
-    onProgress,
-    onFinalizing,
-    signal,
-    // Explicit audio track: always include for both mux output and FFT reactivity
-    ...(hasExplicitAudio && {
-      audioFile: trackFile!,
-      audioStart,
-      audioEnd,
-    }),
-    // Video source audio: include when no explicit track, loop if video loops
-    ...(useVideoSourceAudio && {
-      audioFile: file,
-      audioStart,
-      audioEnd,
-      ...(loopVideo && { loopAudio: true }),
-    }),
-    ...(isVideo &&
-      videoEl && {
-        onBeforeRender: async (_frameIndex: number, time: number) => {
-          const targetTime =
-            loopVideo && videoSpanDuration > 0
+  // Sequential WebCodecs decode of the source video: each packet is decoded at
+  // most once, vs. the fallback path's full <video> seek per frame (keyframe
+  // jump + decode-forward, mostly idle waiting). Falls back to seeking when the
+  // file can't be demuxed/decoded, or when rotation metadata is present (the
+  // <video> element applies rotation; raw decoded frames would not).
+  let videoFrames: AsyncGenerator<
+    import("mediabunny").VideoSample | null,
+    void,
+    unknown
+  > | null = null;
+
+  if (isVideo && videoEl) {
+    try {
+      const mb = await import("mediabunny");
+      const input = new mb.Input({
+        source: new mb.BlobSource(file),
+        formats: mb.ALL_FORMATS,
+      });
+      const track = await input.getPrimaryVideoTrack();
+      if (track && track.rotation === 0 && (await track.canDecode())) {
+        const sink = new mb.VideoSampleSink(track);
+        const totalFrames = Math.ceil(exportDuration * fps);
+        // Must yield exactly one timestamp per recorder frame, mirroring the
+        // recorder's time formula, so the generator stays in lockstep with
+        // onBeforeRender calls.
+        const frameTimes = function* () {
+          for (let i = 0; i < totalFrames; i++) {
+            const time = i / fps;
+            yield loopVideo && videoSpanDuration > 0
               ? videoSpanStart + (time % videoSpanDuration)
               : Math.min(videoSpanStart + time, videoSpanEnd);
-          videoEl!.currentTime = targetTime;
-          await new Promise<void>((resolve) => {
-            videoEl!.addEventListener("seeked", () => resolve(), {
-              once: true,
-            });
-          });
-          renderer.updateSourceFrame(videoEl!);
-        },
+          }
+        };
+        videoFrames = sink.samplesAtTimestamps(frameTimes());
+      }
+    } catch {
+      videoFrames = null;
+    }
+  }
+
+  const seekBeforeRender = async (_frameIndex: number, time: number) => {
+    const targetTime =
+      loopVideo && videoSpanDuration > 0
+        ? videoSpanStart + (time % videoSpanDuration)
+        : Math.min(videoSpanStart + time, videoSpanEnd);
+    videoEl!.currentTime = targetTime;
+    await new Promise<void>((resolve) => {
+      videoEl!.addEventListener("seeked", () => resolve(), {
+        once: true,
+      });
+    });
+    renderer.updateSourceFrame(videoEl!);
+  };
+
+  const decodeBeforeRender = async () => {
+    const { value: sample } = await videoFrames!.next();
+    // null/done: no frame at this timestamp — keep the last uploaded one,
+    // matching the seek path's freeze-frame behavior.
+    if (sample) {
+      const frame = sample.toVideoFrame();
+      renderer.updateSourceFrame(frame);
+      frame.close();
+      sample.close();
+    }
+  };
+
+  try {
+    const blob = await recordVideo({
+      duration: exportDuration,
+      fps,
+      canvas,
+      renderer,
+      normalizeGain,
+      effects: effects.map(
+        (e): EffectInstance => ({
+          ...e,
+          values: { ...e.values },
+          volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
+        }),
+      ),
+      onProgress,
+      onFinalizing,
+      signal,
+      // Explicit audio track: always include for both mux output and FFT reactivity
+      ...(hasExplicitAudio && {
+        audioFile: trackFile!,
+        audioStart,
+        audioEnd,
       }),
-  });
-  downloadBlob(blob);
+      // Video source audio: include when no explicit track, loop if video loops
+      ...(useVideoSourceAudio && {
+        audioFile: file,
+        audioStart,
+        audioEnd,
+        ...(loopVideo && { loopAudio: true }),
+      }),
+      ...(isVideo &&
+        videoEl && {
+          onBeforeRender: videoFrames ? decodeBeforeRender : seekBeforeRender,
+        }),
+    });
+    downloadBlob(blob);
+  } finally {
+    // Stops mediabunny's pre-decode pipeline and closes its decoder on
+    // abort/error; no-op when the generator already ran to completion.
+    void videoFrames?.return();
+  }
 }
