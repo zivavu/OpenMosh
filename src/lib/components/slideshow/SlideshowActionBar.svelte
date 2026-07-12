@@ -81,14 +81,16 @@
 </script>
 
 <div class="action-bar">
-	<button
-		class="icon-btn"
-		onclick={() => (showShortcuts = true)}
-		title="Keyboard shortcuts"
-		aria-label="Keyboard shortcuts"
-	>
-		<HelpCircle size={14} />
-	</button>
+	{#if !isMobile}
+		<button
+			class="icon-btn"
+			onclick={() => (showShortcuts = true)}
+			title="Keyboard shortcuts"
+			aria-label="Keyboard shortcuts"
+		>
+			<HelpCircle size={14} />
+		</button>
+	{/if}
 
 	<div class="options-group" bind:this={optionsGroupEl}>
 		<button
