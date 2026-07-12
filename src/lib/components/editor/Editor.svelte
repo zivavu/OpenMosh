@@ -589,13 +589,15 @@
 				<Library size={12} />
 			</button>
 			<div class="mosh-group-wrap">
-				<button
-					class="help-btn"
-					onclick={() => (showShortcuts = true)}
-					title="Keyboard shortcuts"
-				>
-					<HelpCircle size={14} />
-				</button>
+				{#if !isMobile}
+					<button
+						class="help-btn"
+						onclick={() => (showShortcuts = true)}
+						title="Keyboard shortcuts"
+					>
+						<HelpCircle size={14} />
+					</button>
+				{/if}
 				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
