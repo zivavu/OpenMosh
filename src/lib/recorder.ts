@@ -217,6 +217,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	};
 
 	const makeCanvasSink = (): FrameSink => {
+		let resolveFirstPacket: (() => void) | null = null;
+		const firstPacket = new Promise<void>((r) => (resolveFirstPacket = r));
 		const videoSource = new mb.CanvasSource(canvas, {
 			codec: selectedCodec as any,
 			// Software realtime mode trades some per-frame efficiency for multithreaded
@@ -225,14 +227,30 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			...(hardware
 				? { hardwareAcceleration: 'prefer-hardware' as const }
 				: { latencyMode: 'realtime' as const }),
-			onEncodedPacket: reportPacket,
+			onEncodedPacket: () => {
+				resolveFirstPacket?.();
+				resolveFirstPacket = null;
+				reportPacket();
+			},
 		});
 		output.addVideoTrack(videoSource);
 		const queue: Promise<void>[] = [];
 		return {
 			label: hardware ? 'hardware' : 'software',
-			async submit(_frameIndex, time) {
+			async submit(frameIndex, time) {
 				queue.push(videoSource.add(time, frameDuration));
+				// Chromium hardware encoders can process the first frames out of
+				// order (startup race), emitting frame 1 as the stream's keyframe
+				// with frame 0 as a delta after it — which the muxer rejects. Holding
+				// frame 1 until frame 0's packet is out makes the swap impossible.
+				// The timeout keeps encoders that buffer before emitting from
+				// stalling the export.
+				if (frameIndex === 0) {
+					await Promise.race([
+						firstPacket,
+						new Promise<void>((r) => setTimeout(r, 1000)),
+					]);
+				}
 				if (queue.length >= 8) await queue.shift()!;
 			},
 			async finish() {
