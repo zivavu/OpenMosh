@@ -658,8 +658,15 @@
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
 		onended={() => audio.onAudioEnded()}
-		onplay={() => (audio.audioPlaying = true)}
-		onpause={() => (audio.audioPlaying = false)}
+		onplay={() => {
+			audio.audioPlaying = true;
+			// External playback (media keys) — bring the preview along
+			if (!previewPlaying) startPreview();
+		}}
+		onpause={() => {
+			audio.audioPlaying = false;
+			if (previewPlaying) stopPreview();
+		}}
 		hidden
 	></audio>
 {/if}
