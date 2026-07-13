@@ -252,7 +252,8 @@
 		((loadConfig() as unknown as Record<string, unknown>).outputVolume as number) ?? 1;
 
 	const audio = new AudioManager({
-		getEffects: () => effects,
+		getEffects: () =>
+			previewPlaying && previewEffects.length > 0 ? previewEffects : effects,
 		initialOutputVolume: savedOutputVolume,
 		initialLoop: loadSettings().loopAudio ?? false,
 	});

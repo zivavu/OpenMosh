@@ -1,4 +1,8 @@
-import { generateMosh, type MoshOptions } from "../editor/mosh";
+import {
+  applyRandomAudioLinks,
+  generateMosh,
+  type MoshOptions,
+} from "../editor/mosh";
 import type { EffectInstance } from "../effects";
 import {
   applyPreset,
@@ -101,7 +105,7 @@ export function computeEffectsForBeat(
           moshOptions.moshMax,
         );
       }
-      return cloneEffects(smoothState.effects);
+      return withRandomAudioLinks(cloneEffects(smoothState.effects), moshOptions);
     }
     case "per-image": {
       if (slide.presetIndex !== null) {
@@ -112,4 +116,26 @@ export function computeEffectsForBeat(
       return cloneEffects(baseEffects);
     }
   }
+}
+
+/**
+ * Re-roll random audio links for the beat when the "Random audio links"
+ * toggle is on. `generateMosh` already does this for `random` mode; this
+ * covers `smooth`, which never calls it. Not applied to `consistent` or
+ * `per-image` — those keep the user's manual/preset links.
+ */
+function withRandomAudioLinks(
+  effects: EffectInstance[],
+  moshOptions: MoshOptions,
+): EffectInstance[] {
+  if (moshOptions.moshAudioLink) {
+    applyRandomAudioLinks(
+      effects,
+      moshOptions.hasAudio,
+      moshOptions.audioSampleRate,
+      moshOptions.frequencyData,
+      moshOptions.moshAudioLinkStrength,
+    );
+  }
+  return effects;
 }

@@ -255,30 +255,32 @@
 		</div>
 	{/if}
 
-	<div class="config-row">
-		<label for="ss-audio-link">Random audio links</label>
-		<input
-			id="ss-audio-link"
-			type="checkbox"
-			checked={config.moshAudioLink}
-			onchange={(e) =>
-				set('moshAudioLink', (e.currentTarget as HTMLInputElement).checked)}
-		/>
-	</div>
-
-	{#if config.moshAudioLink}
+	{#if config.moshMode === 'random' || config.moshMode === 'smooth'}
 		<div class="config-row">
-			<label for="ss-audio-link-strength">Link strength</label>
-			<RangeSlider
-				id="ss-audio-link-strength"
-				value={config.moshAudioLinkStrength}
-				min={0}
-				max={1}
-				step={0.05}
-				oninput={(v) => set('moshAudioLinkStrength', v)}
+			<label for="ss-audio-link">Random audio links</label>
+			<input
+				id="ss-audio-link"
+				type="checkbox"
+				checked={config.moshAudioLink}
+				onchange={(e) =>
+					set('moshAudioLink', (e.currentTarget as HTMLInputElement).checked)}
 			/>
-			<span class="val">{Math.round(config.moshAudioLinkStrength * 100)}%</span>
 		</div>
+
+		{#if config.moshAudioLink}
+			<div class="config-row">
+				<label for="ss-audio-link-strength">Link strength</label>
+				<RangeSlider
+					id="ss-audio-link-strength"
+					value={config.moshAudioLinkStrength}
+					min={0}
+					max={1}
+					step={0.05}
+					oninput={(v) => set('moshAudioLinkStrength', v)}
+				/>
+				<span class="val">{Math.round(config.moshAudioLinkStrength * 100)}%</span>
+			</div>
+		{/if}
 	{/if}
 
 	<h3 class="panel-title section-title">Playback</h3>
