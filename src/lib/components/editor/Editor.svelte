@@ -207,7 +207,7 @@
 		normalizeGain = 1.0;
 	}
 
-	function onLibraryLoadTrack(file: File, trackId: string) {
+	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		clearTrack();
 		currentTrackId = trackId;
 		audio.trackFile = file;
@@ -215,6 +215,7 @@
 		if (savedSpan !== null) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
+		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
 	function ensureVideoAudioGraph() {
@@ -503,7 +504,8 @@
 		activeTrackName={audio.trackFile?.name ?? null}
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
-		onPreviewStart={() => audio.pauseAudio()}
+		onPlay={() => audio.playAudio()}
+		onPause={() => audio.pauseAudio()}
 		mainPlaying={audio.audioPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => {
