@@ -30,6 +30,8 @@ export class AudioManager {
   audioPlaying = $state(false);
   loopAudio = $state(false);
   pendingSpan = $state<{ start: number; end: number } | null>(null);
+  // Play as soon as the newly loaded track's metadata arrives (library play button)
+  autoplayOnLoad = false;
 
   // ── Audio graph ──
   audioContext = $state<AudioContext | null>(null);
@@ -177,6 +179,10 @@ export class AudioManager {
         this.spanEnd = d;
       }
     }
+    if (this.autoplayOnLoad) {
+      this.autoplayOnLoad = false;
+      this.playAudio();
+    }
   }
 
   onAudioTimeUpdate() {
@@ -229,6 +235,7 @@ export class AudioManager {
   clearTrack() {
     this.#audioEl?.pause();
     this.audioPlaying = false;
+    this.autoplayOnLoad = false;
     this.trackFile = null;
     this.trackDuration = 0;
     this.trackCurrentTime = 0;

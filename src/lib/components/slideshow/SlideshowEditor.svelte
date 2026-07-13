@@ -297,7 +297,7 @@
 		currentTrackId = null;
 	}
 
-	function onLibraryLoadTrack(file: File, trackId: string) {
+	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		stopPreview();
 		if (currentTrackId) saveSegments(currentTrackId);
 		// Partial audio reset — intentionally skip zeroing trackDuration and trackFile
@@ -321,6 +321,7 @@
 				audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
 			}
 		}
+		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
 	// ── BPM Detection ──
@@ -717,7 +718,8 @@
 	<TrackLibrary
 		activeTrackName={audio.trackFile?.name ?? null}
 		onLoadTrack={onLibraryLoadTrack}
-		onPreviewStart={() => audio.pauseAudio()}
+		onPlay={() => startPreview()}
+		onPause={stopPreview}
 		mainPlaying={audio.audioPlaying}
 		pendingTrack={audio.trackFile}
 	/>

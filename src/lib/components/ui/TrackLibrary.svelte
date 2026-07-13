@@ -8,7 +8,7 @@
 		Plus,
 		X,
 	} from 'lucide-svelte';
-	import { onDestroy, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import { computeNormalizeGain, measureLoudness } from '../../audio/loudness';
 	import { decodeAudioFile } from '../../audio/offline-audio';
 	import {
@@ -21,8 +21,9 @@
 	interface Props {
 		activeTrackName: string | null;
 		activeTrackId?: string | null;
-		onLoadTrack: (file: File, trackId: string) => void;
-		onPreviewStart?: () => void;
+		onLoadTrack: (file: File, trackId: string, autoplay?: boolean) => void;
+		onPlay?: () => void;
+		onPause?: () => void;
 		mainPlaying?: boolean;
 		pendingTrack?: File | null;
 		onNormalizeChange?: (gain: number) => void;
@@ -32,7 +33,8 @@
 		activeTrackName,
 		activeTrackId = null,
 		onLoadTrack,
-		onPreviewStart,
+		onPlay,
+		onPause,
 		mainPlaying = false,
 		pendingTrack = null,
 		onNormalizeChange,
@@ -42,8 +44,6 @@
 	let open = $state(localStorage.getItem(OPEN_KEY) === 'true');
 	let tracks = $state<StoredTrack[]>([]);
 	let libraryLoaded = $state(false);
-	let previewId = $state<string | null>(null);
-	let previewEl = $state<HTMLAudioElement | null>(null);
 	let fileInput: HTMLInputElement;
 	let libraryEl: HTMLDivElement;
 
@@ -59,17 +59,8 @@
 		localStorage.setItem(NORMALIZE_KEY, JSON.stringify([...normalizedIds]));
 	});
 
-	let previewCtx: AudioContext | null = null;
-	let previewGain: GainNode | null = null;
-	let previewSource: MediaElementAudioSourceNode | null = null;
-
 	$effect(() => {
 		localStorage.setItem(OPEN_KEY, String(open));
-	});
-
-	// Stop library preview when main player starts
-	$effect(() => {
-		if (mainPlaying && previewId !== null) stopPreview();
 	});
 
 	// Auto-add manually loaded tracks to the library
@@ -110,14 +101,6 @@
 		return () => document.removeEventListener('pointerdown', onPointerDown);
 	});
 
-	onDestroy(() => {
-		stopPreview();
-		previewCtx?.close();
-		previewCtx = null;
-		previewGain = null;
-		previewSource = null;
-	});
-
 	// Start normalize measurement for a newly added track (fire-and-forget).
 	function autoNormalize(track: StoredTrack) {
 		normalizedIds = new Set([...normalizedIds, track.id]);
@@ -132,8 +115,6 @@
 					const gain = computeNormalizeGain(db);
 					gainCache.set(track.id, gain);
 					if (track.id === activeTrackId) onNormalizeChange?.(gain);
-					if (previewId === track.id && previewGain)
-						previewGain.gain.value = gain;
 				})
 				.catch((e) => {
 					console.error('Failed to measure track loudness:', e);
@@ -163,7 +144,6 @@
 	}
 
 	async function onDelete(id: string) {
-		if (previewId === id) stopPreview();
 		try {
 			await deleteTrack(id);
 			tracks = tracks.filter((t) => t.id !== id);
@@ -174,11 +154,11 @@
 		}
 	}
 
-	function onLoad(track: StoredTrack) {
-		stopPreview();
+	function onLoad(track: StoredTrack, autoplay = false) {
 		onLoadTrack(
 			new File([track.blob], track.name, { type: track.blob.type }),
 			track.id,
+			autoplay,
 		);
 		// Communicate normalize gain to editor.
 		// If normalized but gain not yet cached (measurement in flight), emit 1.0 for now.
@@ -190,46 +170,13 @@
 		onNormalizeChange?.(gain);
 	}
 
-	function togglePreview(track: StoredTrack) {
-		if (previewId === track.id) {
-			stopPreview();
+	function togglePlay(track: StoredTrack) {
+		if (track.name === activeTrackName) {
+			if (mainPlaying) onPause?.();
+			else onPlay?.();
 		} else {
-			stopPreview();
-			onPreviewStart?.();
-			previewId = track.id;
-			if (previewEl) {
-				// Lazily create audio graph — AT MOST ONCE per component lifetime.
-				// createMediaElementSource can only be called once per element per AudioContext.
-				// Source and gain node persist across all preview cycles; only gain.value changes.
-				if (!previewCtx) {
-					previewCtx = new AudioContext();
-					previewSource = previewCtx.createMediaElementSource(previewEl);
-					previewGain = previewCtx.createGain();
-					previewSource.connect(previewGain);
-					previewGain.connect(previewCtx.destination);
-				}
-				// Set gain for this track
-				if (previewGain) {
-					const gain =
-						normalizedIds.has(track.id) && gainCache.has(track.id)
-							? gainCache.get(track.id)!
-							: 1.0;
-					previewGain.gain.value = gain;
-				}
-				previewEl.src = URL.createObjectURL(track.blob);
-				previewEl.play();
-			}
+			onLoad(track, true);
 		}
-	}
-
-	function stopPreview() {
-		if (previewEl) {
-			const src = previewEl.src;
-			previewEl.pause();
-			previewEl.src = '';
-			if (src) URL.revokeObjectURL(src);
-		}
-		previewId = null;
 	}
 
 	async function toggleNormalize(track: StoredTrack) {
@@ -237,7 +184,6 @@
 			// Turn off
 			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
 			if (track.id === activeTrackId) onNormalizeChange?.(1.0);
-			if (previewId === track.id && previewGain) previewGain.gain.value = 1.0;
 			return;
 		}
 
@@ -257,7 +203,6 @@
 			}
 			const gain = gainCache.get(track.id)!;
 			if (track.id === activeTrackId) onNormalizeChange?.(gain);
-			if (previewId === track.id && previewGain) previewGain.gain.value = gain;
 		} catch (e) {
 			console.error('Failed to measure track loudness:', e);
 			// Roll back: remove from normalizedIds
@@ -267,8 +212,6 @@
 		}
 	}
 </script>
-
-<audio bind:this={previewEl} onended={stopPreview} hidden></audio>
 
 <input
 	bind:this={fileInput}
@@ -314,14 +257,14 @@
 			<ul class="track-list">
 				{#each tracks as track (track.id)}
 					{@const isActive = track.name === activeTrackName}
-					{@const isPreviewing = previewId === track.id}
+					{@const isPlaying = isActive && mainPlaying}
 					<li class="track-row" class:active={isActive}>
 						<button
 							class="preview-btn"
-							onclick={() => togglePreview(track)}
-							title={isPreviewing ? 'Stop' : 'Preview'}
+							onclick={() => togglePlay(track)}
+							title={isPlaying ? 'Pause' : 'Play'}
 						>
-							{#if isPreviewing}
+							{#if isPlaying}
 								<Pause size={10} fill="currentColor" stroke="none" />
 							{:else}
 								<Play size={10} fill="currentColor" stroke="none" />
