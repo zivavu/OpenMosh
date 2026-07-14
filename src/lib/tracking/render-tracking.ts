@@ -1,10 +1,10 @@
 import type { TrackingFrame, TrackingParams } from "./types";
 
 /**
- * Draw the tracking HUD (boxes, labels, connecting lines) onto a 2D canvas with
- * a transparent background. The canvas is later uploaded as a texture and
- * alpha-composited over the frame. Coordinates are top-down, matching the
- * normalized centers produced by the tracker.
+ * Draw the tracking HUD (FLIR-style corner brackets + minimal telemetry) onto
+ * a 2D canvas with a transparent background. The canvas is later uploaded as
+ * a texture and alpha-composited over the frame. Coordinates are top-down,
+ * matching the normalized centers produced by the tracker.
  */
 export function drawTrackingToCanvas(
   canvas: HTMLCanvasElement,
@@ -12,6 +12,7 @@ export function drawTrackingToCanvas(
   height: number,
   frame: TrackingFrame,
   params: TrackingParams,
+  time: number,
 ): void {
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
@@ -20,89 +21,115 @@ export function drawTrackingToCanvas(
   ctx.clearRect(0, 0, width, height);
 
   const fg = params.color === "white" ? "#ffffff" : "#000000";
-  const bg = params.color === "white" ? "#000000" : "#ffffff";
   const lw = Math.max(1, params.thickness * (height / 720));
   const fontSize = Math.max(9, Math.round(height * 0.016));
-  const dot = Math.max(1.5, lw * 1.4);
-
   ctx.lineWidth = lw;
   ctx.strokeStyle = fg;
   ctx.fillStyle = fg;
-  ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
+  ctx.font = font(fontSize);
   ctx.textBaseline = "alphabetic";
-
-  const cxPx = (i: number) => frame.boxes[i].cx * width;
-  const cyPx = (i: number) => frame.boxes[i].cy * height;
-
-  // Lines first, under the boxes.
-  for (const [a, b] of frame.lines) {
-    const alpha = Math.min(frame.boxes[a].alpha, frame.boxes[b].alpha);
-    if (alpha <= 0) continue;
-    ctx.globalAlpha = alpha * 0.7;
-    ctx.beginPath();
-    ctx.moveTo(cxPx(a), cyPx(a));
-    ctx.lineTo(cxPx(b), cyPx(b));
-    ctx.stroke();
-    for (const i of [a, b]) {
-      ctx.beginPath();
-      ctx.arc(cxPx(i), cyPx(i), dot, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
 
   for (const box of frame.boxes) {
     if (box.alpha <= 0) continue;
-    const bw = box.w * width;
-    const bh = box.h * height;
+
+    // Reacquire: brackets sweep in from oversized to fitted.
+    let scale = 1;
+    if (box.state === "reacquire") {
+      const t = Math.min(1, box.stateAge / 0.45);
+      scale = 1 + (1 - t) * 1.2;
+    }
+    const bw = box.w * width * scale;
+    const bh = box.h * height * scale;
     const x = box.cx * width - bw / 2;
     const y = box.cy * height - bh / 2;
 
-    // Offset "glitch shadow" duplicate, then the solid box.
-    ctx.globalAlpha = box.alpha * 0.3;
-    ctx.strokeRect(x + lw * 1.5, y + lw * 1.5, bw, bh);
-    ctx.globalAlpha = box.alpha;
-    ctx.strokeRect(x, y, bw, bh);
+    const lost = box.state === "lost";
+    // Degraded brackets flicker occasionally; lost brackets dim + dash.
+    let alpha = box.alpha;
+    if (lost) alpha *= 0.55;
+    else if (box.state === "degraded" && !blinkOn(time + box.cx * 7, 4)) {
+      alpha *= 0.6;
+    }
 
-    // Labels: primary above the box, secondary below.
-    drawLabel(ctx, box.label, x, y - fontSize * 0.5, fg, bg, box.alpha, fontSize);
-    drawLabel(
-      ctx,
-      box.sub,
-      x,
-      y + bh + fontSize * 1.2,
-      fg,
-      bg,
-      box.alpha,
-      fontSize,
-    );
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash(lost ? [lw * 3, lw * 3] : []);
+    drawBrackets(ctx, x, y, bw, bh, box.primary ? 0.32 : 0.26);
+    ctx.setLineDash([]);
+
+    if (box.primary) {
+      // Center designator dot.
+      ctx.beginPath();
+      ctx.arc(box.cx * width, box.cy * height, lw * 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Labels: primary gets status + coords; lost boxes blink SIGNAL LOST;
+    // other secondaries show only a tiny hex id.
+    const labelAlpha = lost ? (blinkOn(time, 1.5) ? alpha * 1.6 : 0) : alpha;
+    if (box.label && labelAlpha > 0) {
+      const size = box.primary || lost ? fontSize : fontSize * 0.85;
+      ctx.font = font(size);
+      ctx.globalAlpha = Math.min(1, labelAlpha);
+      ctx.fillText(box.label, x, y - size * 0.5);
+    }
+    if (box.sub) {
+      ctx.font = font(fontSize * 0.85);
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.fillText(box.sub, x, y + bh + fontSize * 1.1);
+    }
+    ctx.font = font(fontSize);
   }
+
+  // Fixed center crosshair: belongs to the "camera", so it stays rock still
+  // even during signal loss.
+  const ch = Math.min(width, height) * 0.016;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.moveTo(width / 2 - ch, height / 2);
+  ctx.lineTo(width / 2 + ch, height / 2);
+  ctx.moveTo(width / 2, height / 2 - ch);
+  ctx.lineTo(width / 2, height / 2 + ch);
+  ctx.stroke();
 
   ctx.globalAlpha = 1;
 }
 
-function drawLabel(
+function font(px: number): string {
+  return `${px}px ui-monospace, "SF Mono", Menlo, monospace`;
+}
+
+/** Square-wave blink: on/off at `hz` cycles per second. */
+function blinkOn(time: number, hz: number): boolean {
+  return Math.floor(time * hz * 2) % 2 === 0;
+}
+
+/** Four L-shaped corner brackets; `arm` is arm length as a fraction of the side. */
+function drawBrackets(
   ctx: CanvasRenderingContext2D,
-  text: string,
   x: number,
-  baseline: number,
-  fg: string,
-  bg: string,
-  alpha: number,
-  fontSize: number,
+  y: number,
+  w: number,
+  h: number,
+  arm: number,
 ): void {
-  if (!text) return;
-  const w = ctx.measureText(text).width;
-  const padX = 3;
-  const padY = 2;
-  ctx.globalAlpha = alpha * 0.55;
-  ctx.fillStyle = bg;
-  ctx.fillRect(
-    x - padX,
-    baseline - fontSize + padY * 0.5,
-    w + padX * 2,
-    fontSize + padY,
-  );
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = fg;
-  ctx.fillText(text, x, baseline);
+  const ax = w * arm;
+  const ay = h * arm;
+  ctx.beginPath();
+  // top-left
+  ctx.moveTo(x, y + ay);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x + ax, y);
+  // top-right
+  ctx.moveTo(x + w - ax, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + ay);
+  // bottom-right
+  ctx.moveTo(x + w, y + h - ay);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x + w - ax, y + h);
+  // bottom-left
+  ctx.moveTo(x + ax, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + h - ay);
+  ctx.stroke();
 }

@@ -1,27 +1,21 @@
 /** The defId this overlay effect is registered under in EFFECT_DEFINITIONS. */
 export const TRACKING_EFFECT_ID = "tracking";
 
+/** Per-box lifecycle: lock → degraded → lost → reacquire → lock. */
+export type BoxState = "lock" | "degraded" | "lost" | "reacquire";
+
 export interface TrackingParams {
-  /** Max number of tracking boxes. */
+  /** Max number of tracked targets. */
   count: number;
   /** 0..1 — how selective the saliency picker is (higher = only strongest spots). */
   sensitivity: number;
   /** Base box size as a fraction of the smaller image dimension. */
   size: number;
-  /** 0..1 — frequency/strength of occasional glitch-jumps. */
-  glitchJump: number;
-  /** 0..1 — how fast the data labels scramble. */
-  scramble: number;
   /** Stroke width, in px at a 720px reference height (scaled to actual size). */
   thickness: number;
   /** 0..1 overall overlay opacity. */
   opacity: number;
-  lineMode: "chain" | "mesh" | "none";
   color: "white" | "black";
-  /** When true, append a fake confidence value to each label. */
-  showConfidence: boolean;
-  /** Stable seed for ids/placement variation. */
-  seed: number;
 }
 
 /** A salient point in normalized coords (x: left→right, y: top→bottom). */
@@ -37,16 +31,21 @@ export interface TrackBox {
   key: number;
   /** 4-char hex identity shown in the label. */
   hex: string;
-  /** Locked normalized center the box jitters around. */
+  /** Tracked normalized center. Frozen while `state` is "lost". */
   baseX: number;
   baseY: number;
   /** Normalized box size. */
   w: number;
   h: number;
-  /** Per-box noise seed. */
-  jumpSeed: number;
-  /** Match confidence 0..1, exponentially smoothed from real match error. */
-  conf: number;
+  /**
+   * Signal quality 0..1 derived from patch-match residual. Drops fast when the
+   * target patch is disturbed, recovers slowly — like a real tracker losing
+   * and re-confirming a lock.
+   */
+  quality: number;
+  state: BoxState;
+  /** Animation-time of the last state transition (drives state animations). */
+  stateChangedAt: number;
   /** Display position smoothed toward baseX/baseY (avoids 8 Hz stepping). */
   drawX: number;
   drawY: number;
@@ -59,24 +58,40 @@ export interface TrackingState {
   salPoints: SalPoint[];
   /** Animation-time of the last saliency analysis (-1 = never). */
   lastAnalyze: number;
+  /** Animation-time of the last tracking tick (-1 = never); gaps = scene cut. */
+  lastTick: number;
   /** Signature of placement-affecting params; change forces re-acquire. */
   signature: string;
   /** Previous downsampled luminance grid (row-major, top-first). */
   prevLum: Float32Array | null;
   gridW: number;
   gridH: number;
+  /**
+   * Global feed disturbance 0..1 — mean frame-to-frame luminance change,
+   * rising instantly and decaying over a few analysis ticks. High values mean
+   * "the whole feed is glitching", not "my target moved".
+   */
+  disturbance: number;
+  /** Key of the current primary (designated) target, -1 = none. */
+  primaryKey: number;
 }
 
-/** A box resolved for the current frame (jitter + glitch applied). */
+/** A box resolved for the current frame, ready to draw. */
 export interface FrameBox {
-  /** Normalized center incl. jitter/glitch. */
+  /** Normalized center. */
   cx: number;
   cy: number;
   w: number;
   h: number;
-  /** Primary label line (id + status). */
+  hex: string;
+  state: BoxState;
+  /** Seconds since the box entered its current state (drives animations). */
+  stateAge: number;
+  /** True for the designated primary target (drone style hierarchy). */
+  primary: boolean;
+  /** Primary label line (status). Empty = no label. */
   label: string;
-  /** Secondary label line (coords / dims). */
+  /** Secondary label line (coords). Empty = no label. */
   sub: string;
   /** 0..1 fade-in alpha. */
   alpha: number;
@@ -84,6 +99,6 @@ export interface FrameBox {
 
 export interface TrackingFrame {
   boxes: FrameBox[];
-  /** Index pairs into `boxes` describing connecting lines. */
-  lines: [number, number][];
+  /** Global feed disturbance 0..1 (drives frame chrome: blinks, stutters). */
+  disturbance: number;
 }
