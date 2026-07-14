@@ -1513,7 +1513,8 @@ void main() {
       bestW = w;
     }
   }
-  outColor = mix(cur, best, u_amount);
+  // clamp: presets saved while the slider went to 10 would extrapolate past white
+  outColor = mix(cur, best, clamp(u_amount, 0.0, 1.0));
 }`,
 		setUniforms: floats('amount', 'angle', 'stretch'),
 	},

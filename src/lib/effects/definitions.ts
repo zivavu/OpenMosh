@@ -1056,7 +1056,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             label: 'Amount',
             type: 'range',
             min: 0,
-            max: 10,
+            max: 1,
             step: 0.01,
             defaultValue: 0.5,
          },
