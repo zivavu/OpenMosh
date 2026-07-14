@@ -381,10 +381,13 @@ export class GlRenderer {
         boxes: [],
         salPoints: [],
         lastAnalyze: -1,
+        lastTick: -1,
         signature: "",
         prevLum: null,
         gridW: 0,
         gridH: 0,
+        disturbance: 0,
+        primaryKey: -1,
       };
       this.trackingStates.set(instanceId, s);
     }
@@ -526,6 +529,7 @@ export class GlRenderer {
       this.imgH,
       frame,
       params,
+      time,
     );
 
     const gl = this.gl;
