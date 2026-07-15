@@ -94,6 +94,42 @@ export function drawTrackingToCanvas(
   ctx.globalAlpha = 1;
 }
 
+/**
+ * Cheap signature of everything drawTrackingToCanvas would put on screen,
+ * quantized to 0.1 px. When consecutive frames produce the same signature the
+ * caller can skip the full-res canvas redraw and GPU texture upload entirely
+ * (e.g. locked boxes that have settled on a still image). Must mirror the
+ * drawing logic above: anything that changes the drawn pixels has to feed in.
+ */
+export function trackingFrameSignature(
+  frame: TrackingFrame,
+  params: TrackingParams,
+  time: number,
+  width: number,
+  height: number,
+): string {
+  let s = `${width}x${height}|${params.color}|${params.thickness}|${frame.boxes.length}`;
+  for (const box of frame.boxes) {
+    if (box.alpha <= 0) continue;
+    let scale = 1;
+    if (box.state === "reacquire") {
+      const t = Math.min(1, box.stateAge / 0.45);
+      scale = 1 + (1 - t) * 1.2;
+    }
+    const blink =
+      box.state === "degraded"
+        ? blinkOn(time + box.cx * 7, 4)
+        : box.state === "lost"
+          ? blinkOn(time, 1.5)
+          : false;
+    s +=
+      `;${box.state},${Math.round(box.cx * width * 10)},${Math.round(box.cy * height * 10)}` +
+      `,${Math.round(box.w * width * scale * 10)},${Math.round(box.h * height * scale * 10)}` +
+      `,${Math.round(box.alpha * 128)},${blink ? 1 : 0},${box.primary ? 1 : 0},${box.label},${box.sub}`;
+  }
+  return s;
+}
+
 function font(px: number): string {
   return `${px}px ui-monospace, "SF Mono", Menlo, monospace`;
 }
