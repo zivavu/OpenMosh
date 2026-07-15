@@ -753,6 +753,15 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             step: 1,
             defaultValue: 0,
          },
+         {
+            key: 'speed',
+            label: 'Speed',
+            type: 'range',
+            min: 0,
+            max: 50,
+            step: 0.1,
+            defaultValue: 0,
+         },
       ],
    },
    {

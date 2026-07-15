@@ -1,5 +1,6 @@
 import type { EffectInstance, Preset } from "./types";
 import { generateId } from "./types";
+import { EFFECT_DEFINITIONS } from "./definitions";
 
 const PRESETS_KEY = "openmosh-presets";
 
@@ -53,13 +54,21 @@ export function deletePreset(index: number): Preset[] {
 }
 
 export function applyPreset(preset: Preset): EffectInstance[] {
-  return preset.effects.map((pe) => ({
-    instanceId: generateId(),
-    defId: pe.defId,
-    enabled: pe.enabled,
-    locked: false,
-    expanded: false,
-    values: { ...pe.values },
-    ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
-  }));
+  return preset.effects.map((pe) => {
+    // Merge definition defaults under saved values so presets saved before a
+    // param existed still get a sane value for it.
+    const def = EFFECT_DEFINITIONS.find((d) => d.id === pe.defId);
+    const defaults = def
+      ? Object.fromEntries(def.params.map((p) => [p.key, p.defaultValue]))
+      : {};
+    return {
+      instanceId: generateId(),
+      defId: pe.defId,
+      enabled: pe.enabled,
+      locked: false,
+      expanded: false,
+      values: { ...defaults, ...pe.values },
+      ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
+    };
+  });
 }
