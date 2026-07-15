@@ -761,6 +761,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             max: 50,
             step: 0.1,
             defaultValue: 0,
+            moshMax: 20
          },
       ],
    },
