@@ -1057,12 +1057,13 @@ void main() {
   float c = cos(rad), s = sin(rad);
   vec2 centered = v_uv - 0.5;
   vec2 rotated = vec2(c * centered.x + s * centered.y, -s * centered.x + c * centered.y) + 0.5;
-  vec2 uv = rotated * u_size + u_offset;
+  vec2 uv = rotated * u_size + u_offset + vec2(u_time * 0.2, 0.0);
   vec2 cell = floor(uv);
   vec2 local = fract(uv);
   vec2 mirrored = mix(local, 1.0 - local, mod(cell, 2.0));
   outColor = texture(u_texture, mirrored);
 }`,
+		animated: true,
 		setUniforms: floats('size', 'offset', 'angle'),
 	},
 
