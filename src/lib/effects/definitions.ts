@@ -301,7 +301,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             key: 'contrast',
             label: 'Contrast',
             type: 'range',
-            min: 0,
+            min: -1,
             max: 1,
             step: 0.01,
             moshMin: -0.5,
