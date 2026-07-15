@@ -6,4 +6,7 @@ export {
   resolveFrame,
   trackBoxes,
 } from "./tracker";
-export { drawTrackingToCanvas } from "./render-tracking";
+export {
+  drawTrackingToCanvas,
+  trackingFrameSignature,
+} from "./render-tracking";

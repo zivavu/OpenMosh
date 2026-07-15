@@ -20,6 +20,8 @@ import {
   resolveFrame,
   trackBoxes,
   drawTrackingToCanvas,
+  trackingFrameSignature,
+  type TrackingParams,
   type TrackingState,
 } from "../tracking";
 
@@ -72,11 +74,23 @@ export class GlRenderer {
   private trackingStates = new Map<string, TrackingState>();
   private trackingCanvas: HTMLCanvasElement | null = null;
   private trackingTexture: WebGLTexture | null = null;
+  private trackingTexW = 0;
+  private trackingTexH = 0;
+  /** Signature of the HUD currently uploaded in trackingTexture (skip redraws). */
+  private lastTrackingSig = "";
   private salFBO: WebGLFramebuffer | null = null;
   private salTexture: WebGLTexture | null = null;
   private salBuf: Uint8Array | null = null;
   private salW = 0;
   private salH = 0;
+  /** PBO for non-blocking saliency readback + the in-flight fence, if any. */
+  private salPBO: WebGLBuffer | null = null;
+  private salFence: WebGLSync | null = null;
+  private salPending: {
+    state: TrackingState;
+    params: TrackingParams;
+    time: number;
+  } | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
@@ -402,9 +416,18 @@ export class GlRenderer {
       24,
       Math.min(160, Math.round((targetW * this.imgH) / Math.max(1, this.imgW))),
     );
-    if (this.salFBO && this.salW === targetW && this.salH === targetH) return;
+    if (
+      this.salFBO &&
+      this.salPBO &&
+      this.salW === targetW &&
+      this.salH === targetH
+    ) {
+      return;
+    }
+    this.abortPendingSaliency();
     if (this.salTexture) gl.deleteTexture(this.salTexture);
     if (this.salFBO) gl.deleteFramebuffer(this.salFBO);
+    if (this.salPBO) gl.deleteBuffer(this.salPBO);
     this.salW = targetW;
     this.salH = targetH;
     this.salTexture = this.createTexture(targetW, targetH);
@@ -419,19 +442,15 @@ export class GlRenderer {
     );
     this.salBuf = new Uint8Array(targetW * targetH * 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.salPBO = gl.createBuffer()!;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, this.salBuf.byteLength, gl.STREAM_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   }
 
-  /** Downsample `srcTex` into the saliency buffer, read it back, track + score. */
-  private analyzeSaliency(
-    state: TrackingState,
-    params: ReturnType<typeof readTrackingParams>,
-    srcTex: WebGLTexture,
-    time: number,
-  ) {
+  /** Downsample `srcTex` into the small saliency FBO (leaves it bound). */
+  private drawSaliencyPass(srcTex: WebGLTexture) {
     const gl = this.gl;
-    this.ensureSalResources();
-    if (!this.salFBO || !this.salBuf) return;
-
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.salFBO);
     gl.viewport(0, 0, this.salW, this.salH);
     gl.useProgram(this.passthrough.program);
@@ -447,7 +466,35 @@ export class GlRenderer {
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     this.setTextureFilter(srcTex, false);
+  }
 
+  /** Score + track from whatever is currently in salBuf. */
+  private processSalBuf(
+    state: TrackingState,
+    params: TrackingParams,
+    time: number,
+  ) {
+    if (!this.salBuf) return;
+    const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
+    state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
+    trackBoxes(state, params, lum, this.salW, this.salH, time);
+  }
+
+  /**
+   * Blocking analyze: draw, readPixels, score + track. Only used for the very
+   * first analysis (or a time reset) so a single-frame render (still preview,
+   * PNG save) gets a populated HUD immediately.
+   */
+  private analyzeSaliencySync(
+    state: TrackingState,
+    params: TrackingParams,
+    srcTex: WebGLTexture,
+    time: number,
+  ) {
+    const gl = this.gl;
+    this.ensureSalResources();
+    if (!this.salFBO || !this.salBuf) return;
+    this.drawSaliencyPass(srcTex);
     gl.readPixels(
       0,
       0,
@@ -457,9 +504,57 @@ export class GlRenderer {
       gl.UNSIGNED_BYTE,
       this.salBuf,
     );
-    const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
-    state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
-    trackBoxes(state, params, lum, this.salW, this.salH, time);
+    this.processSalBuf(state, params, time);
+  }
+
+  /**
+   * Kick off a non-blocking readback: readPixels goes into a PBO (no CPU
+   * copy, no pipeline stall) and a fence records when the GPU is done.
+   * pollSaliency collects the result on a later frame.
+   */
+  private startSaliencyRead(
+    state: TrackingState,
+    params: TrackingParams,
+    srcTex: WebGLTexture,
+    time: number,
+  ) {
+    const gl = this.gl;
+    this.ensureSalResources();
+    if (!this.salFBO || !this.salPBO) return;
+    this.drawSaliencyPass(srcTex);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
+    gl.readPixels(0, 0, this.salW, this.salH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.salFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    this.salPending = { state, params, time };
+  }
+
+  /** Collect a finished async readback, if its fence has signaled. Never stalls. */
+  private pollSaliency() {
+    const gl = this.gl;
+    if (!this.salFence || !this.salPending || !this.salPBO || !this.salBuf) {
+      return;
+    }
+    const status = gl.clientWaitSync(this.salFence, 0, 0);
+    if (status !== gl.ALREADY_SIGNALED && status !== gl.CONDITION_SATISFIED) {
+      return;
+    }
+    gl.deleteSync(this.salFence);
+    this.salFence = null;
+    const { state, params, time } = this.salPending;
+    this.salPending = null;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.salBuf);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.processSalBuf(state, params, time);
+  }
+
+  private abortPendingSaliency() {
+    if (this.salFence) {
+      this.gl.deleteSync(this.salFence);
+      this.salFence = null;
+    }
+    this.salPending = null;
   }
 
   /** Composite an overlay texture over a main texture into the target FBO (normal blend + opacity). */
@@ -509,46 +604,71 @@ export class GlRenderer {
     // Reads the chain output feeding this pass, so boxes chase content set in
     // motion by upstream effects (and video motion).
     const interval = 0.12;
-    if (
-      state.lastAnalyze < 0 ||
-      time < state.lastAnalyze ||
-      time - state.lastAnalyze >= interval
-    ) {
-      this.analyzeSaliency(state, params, inputTex, time);
+    if (state.lastAnalyze < 0 || time < state.lastAnalyze) {
+      // First frame or time reset: blocking analyze so a single-frame render
+      // shows a populated HUD.
+      this.abortPendingSaliency();
+      this.analyzeSaliencySync(state, params, inputTex, time);
       state.lastAnalyze = time;
+    } else {
+      // Steady state: collect the previous async readback once its fence
+      // signals, then start the next one on cadence. The ~1-frame latency is
+      // invisible at 8 Hz and avoids readPixels' full GPU pipeline stall.
+      this.pollSaliency();
+      if (time - state.lastAnalyze >= interval && !this.salFence) {
+        this.startSaliencyRead(state, params, inputTex, time);
+        state.lastAnalyze = time;
+      }
     }
     syncBoxes(state, params, time);
     const frame = resolveFrame(state, params, time, this.imgW, this.imgH);
 
-    if (!this.trackingCanvas) {
-      this.trackingCanvas = document.createElement("canvas");
-    }
-    drawTrackingToCanvas(
-      this.trackingCanvas,
-      this.imgW,
-      this.imgH,
-      frame,
-      params,
-      time,
-    );
-
+    // The full-res 2D-canvas redraw + texture upload is the expensive part of
+    // this overlay — skip both when the HUD would be pixel-identical (e.g.
+    // locked boxes that have settled).
     const gl = this.gl;
-    if (!this.trackingTexture) {
-      this.trackingTexture = this.createTexture(this.imgW, this.imgH);
+    const sig =
+      eff.instanceId +
+      "|" +
+      trackingFrameSignature(frame, params, time, this.imgW, this.imgH);
+    const texValid =
+      this.trackingTexture !== null &&
+      this.trackingTexW === this.imgW &&
+      this.trackingTexH === this.imgH;
+    if (!texValid || sig !== this.lastTrackingSig) {
+      if (!this.trackingCanvas) {
+        this.trackingCanvas = document.createElement("canvas");
+      }
+      drawTrackingToCanvas(
+        this.trackingCanvas,
+        this.imgW,
+        this.imgH,
+        frame,
+        params,
+        time,
+      );
+      if (!texValid) {
+        if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
+        this.trackingTexture = this.createTexture(this.imgW, this.imgH);
+        this.trackingTexW = this.imgW;
+        this.trackingTexH = this.imgH;
+      }
+      gl.bindTexture(gl.TEXTURE_2D, this.trackingTexture);
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        this.trackingCanvas,
+      );
+      this.lastTrackingSig = sig;
     }
-    gl.bindTexture(gl.TEXTURE_2D, this.trackingTexture);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      this.trackingCanvas,
-    );
 
     this.compositeOverlayToFBO(
       inputTex,
-      this.trackingTexture,
+      this.trackingTexture!,
       targetFBO,
       params.opacity,
     );
@@ -559,10 +679,13 @@ export class GlRenderer {
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
     this.trackingTexture = null;
+    this.abortPendingSaliency();
     if (this.salTexture) gl.deleteTexture(this.salTexture);
     this.salTexture = null;
     if (this.salFBO) gl.deleteFramebuffer(this.salFBO);
     this.salFBO = null;
+    if (this.salPBO) gl.deleteBuffer(this.salPBO);
+    this.salPBO = null;
     this.trackingStates.clear();
     if (this.textTexture) gl.deleteTexture(this.textTexture);
     this.textTexture = null;
@@ -724,10 +847,16 @@ export class GlRenderer {
       gl.deleteTexture(this.trackingTexture);
       this.trackingTexture = null;
     }
+    this.trackingTexW = 0;
+    this.trackingTexH = 0;
+    this.lastTrackingSig = "";
+    this.abortPendingSaliency();
     if (this.salTexture) gl.deleteTexture(this.salTexture);
     if (this.salFBO) gl.deleteFramebuffer(this.salFBO);
+    if (this.salPBO) gl.deleteBuffer(this.salPBO);
     this.salTexture = null;
     this.salFBO = null;
+    this.salPBO = null;
     this.salW = 0;
     this.salH = 0;
 
