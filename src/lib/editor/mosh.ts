@@ -53,8 +53,8 @@ export function applyRandomAudioLinks(
       // Probability scales with strength: at 1.0 all params linked, at 0.0 none
       if (Math.random() > strength) continue;
 
-      const pMin = param.min;
-      const pMax = param.max;
+      const pMin = param.moshMin ?? param.min;
+      const pMax = param.moshMax ?? param.max;
       const span = pMax - pMin;
       // Center position is independent of width so they don't limit each other
       const centerT = Math.random();
