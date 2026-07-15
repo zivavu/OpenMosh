@@ -446,8 +446,9 @@ uniform float u_hue;
 uniform float u_saturation;
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  vec3 rgb = c.rgb * (1.0 + u_brightness * 2.0);
-  rgb = (rgb - 0.5) * (1.0 + u_contrast * 10.0) + 0.5;
+  vec3 rgb = c.rgb * pow(2.0, u_brightness * 2.0);
+  float ct = u_contrast < 0.0 ? 1.0 + u_contrast : 1.0 + u_contrast * u_contrast * 10.0;
+  rgb = (rgb - 0.5) * ct + 0.5;
   rgb = hueRotate(rgb, u_hue);
   float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
   rgb = mix(vec3(luma), rgb, 1.0 + u_saturation);
