@@ -54,9 +54,12 @@
 			shortcuts: [
 				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo' },
 				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
+				{ keys: ['Shift+Drag'], description: 'Rectangle-select boundaries' },
 				{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected boundaries' },
 				{ keys: ['Ctrl/Cmd+V'], description: 'Paste boundaries' },
 				{ keys: ['Delete', 'Backspace'], description: 'Delete selection' },
+				{ keys: ['Esc'], description: 'Cancel paste / clear selection' },
+				{ keys: ['Shift+Scroll'], description: 'Pan timeline view' },
 			],
 		},
 	];
