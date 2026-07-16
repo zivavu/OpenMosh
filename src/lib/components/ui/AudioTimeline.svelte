@@ -102,13 +102,26 @@
 		}
 	}
 
-	function beginHandleDrag(handle: 'start' | 'end', startClientX: number) {
+	function beginHandleDrag(initialHandle: 'start' | 'end', startClientX: number) {
+		let handle: 'start' | 'end' = initialHandle;
 		function applyPosition(clientX: number) {
 			const t = timeFromClientX(clientX);
 			if (handle === 'start') {
-				onSpanStartChange(Math.max(0, Math.min(t, spanEnd - 0.1)));
+				if (t >= spanEnd) {
+					// Swapped: start becomes the new end
+					handle = 'end';
+					onSpanEndChange(t);
+				} else {
+					onSpanStartChange(Math.max(0, t));
+				}
 			} else {
-				onSpanEndChange(Math.max(spanStart + 0.1, Math.min(trackDuration, t)));
+				if (t <= spanStart) {
+					// Swapped: end becomes the new start
+					handle = 'start';
+					onSpanStartChange(t);
+				} else {
+					onSpanEndChange(Math.min(trackDuration, t));
+				}
 			}
 		}
 
