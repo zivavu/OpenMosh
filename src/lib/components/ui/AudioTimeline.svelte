@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Pause, Play, Repeat, X } from 'lucide-svelte';
+	import { Pause, Play, Repeat, Volume2, X } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import type { SlideshowConfig } from '../../slideshow/types';
 	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
@@ -246,6 +246,9 @@
 		/>
 	{/if}
 	{#if onVolumeChange}
+		<span class="volume-icon" title="Volume">
+			<Volume2 size={13} />
+		</span>
 		<input
 			type="range"
 			class="volume-slider"
@@ -402,6 +405,14 @@
 		flex-shrink: 0;
 	}
 
+	.volume-icon {
+		display: flex;
+		align-items: center;
+		color: #666;
+		flex-shrink: 0;
+		margin-right: -0.2rem;
+	}
+
 	.volume-slider {
 		width: 60px;
 		height: 4px;
@@ -436,6 +447,7 @@
 
 	@media (max-width: 800px) {
 		.volume-slider,
+		.volume-icon,
 		.timeline-speed {
 			display: none;
 		}
