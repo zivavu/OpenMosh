@@ -18,6 +18,8 @@
 		onSpanEndChange: (t: number) => void;
 		outputVolume?: number;
 		onVolumeChange?: (v: number) => void;
+		speed?: number;
+		onSpeedChange?: (s: number) => void;
 		loopEnabled?: boolean;
 		onToggleLoop?: () => void;
 		onRemoveTrack?: () => void;
@@ -42,6 +44,8 @@
 		onSpanEndChange,
 		outputVolume = 1,
 		onVolumeChange,
+		speed = 1,
+		onSpeedChange,
 		loopEnabled = false,
 		onToggleLoop,
 		onRemoveTrack,
@@ -52,6 +56,16 @@
 	}: Props = $props();
 
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+
+	let speedLabel = $derived(
+		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + '×',
+	);
+
+	function onSpeedInput(e: Event) {
+		// Log₂ slider (−2…2 → 0.25×…4×) so 1× sits at center; snap near center.
+		const v = +(e.currentTarget as HTMLInputElement).value;
+		onSpeedChange?.(Math.abs(v) < 0.08 ? 1 : 2 ** v);
+	}
 
 	function timeFromClientX(clientX: number): number {
 		if (!timelineTrackEl) return 0;
@@ -217,6 +231,20 @@
 		</div>
 	</div>
 	<span class="timeline-time">{formatTime(spanEnd)}</span>
+	{#if onSpeedChange}
+		<span class="timeline-speed">{speedLabel}</span>
+		<input
+			type="range"
+			class="volume-slider"
+			min="-2"
+			max="2"
+			step="0.05"
+			value={Math.log2(speed)}
+			oninput={onSpeedInput}
+			ondblclick={() => onSpeedChange(1)}
+			title="Speed: {speedLabel} (double-click to reset)"
+		/>
+	{/if}
 	{#if onVolumeChange}
 		<input
 			type="range"
@@ -365,6 +393,15 @@
 		pointer-events: none;
 	}
 
+	.timeline-speed {
+		font-size: 0.7rem;
+		color: #666;
+		min-width: 2.2rem;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		flex-shrink: 0;
+	}
+
 	.volume-slider {
 		width: 60px;
 		height: 4px;
@@ -398,7 +435,8 @@
 	}
 
 	@media (max-width: 800px) {
-		.volume-slider {
+		.volume-slider,
+		.timeline-speed {
 			display: none;
 		}
 

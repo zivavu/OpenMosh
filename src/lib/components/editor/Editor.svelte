@@ -60,6 +60,11 @@
 	let videoSpanStart = $state(0);
 	let videoSpanEnd = $state(0);
 	let videoPlaying = $state(false);
+	let videoSpeed = $state(1);
+
+	$effect(() => {
+		if (videoEl) videoEl.playbackRate = videoSpeed;
+	});
 
 
 	let format = $state<'png' | 'jpg' | 'webm'>(isMobile ? 'png' : 'webm');
@@ -695,6 +700,8 @@
 				onSeek={seekVideoTo}
 				onSpanStartChange={(t) => (videoSpanStart = t)}
 				onSpanEndChange={(t) => (videoSpanEnd = t)}
+				speed={videoSpeed}
+				onSpeedChange={(s) => (videoSpeed = s)}
 				ariaLabel="Video timeline"
 				outputVolume={audio.outputVolume}
 				onVolumeChange={audio.analyserNode && !audio.trackFile ? (v) => audio.setOutputVolume(v) : undefined}
