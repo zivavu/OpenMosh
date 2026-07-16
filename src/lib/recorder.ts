@@ -310,9 +310,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				codec: 'vp8',
 				width: canvas.width,
 				height: canvas.height,
-				// Above the single-encoder path's 6 Mbps: the extra keyframes at
-				// chunk boundaries cost bits, this keeps quality at least on par.
-				bitrate: 8_000_000,
+				bitrate: 12_000_000,
 				latencyMode: 'realtime',
 			},
 			workerCount,
@@ -403,32 +401,19 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
-	// Per-stage wall-time breakdown, logged after export to locate the
-	// bottleneck (source decode vs GL render vs encoder backpressure vs flush).
-	const perf = { beforeRender: 0, render: 0, encodeSubmit: 0 };
-	const loopStart = performance.now();
-	let loopEnd = loopStart;
-
 	try {
 		for (let i = 0; i < totalFrames; i++) {
 			checkAbort(signal);
 
 			const time = i * frameDuration;
-			let t = performance.now();
 			const renderResult = onBeforeRender?.(i, time);
 			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
-			perf.beforeRender += performance.now() - t;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
 			applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
-			t = performance.now();
 			if (!skipRender) renderer.render(renderEffects, time);
-			perf.render += performance.now() - t;
-			t = performance.now();
 			await sink.submit(i, time);
-			perf.encodeSubmit += performance.now() - t;
 		}
 
-		loopEnd = performance.now();
 		// Encoders flush their remaining pipeline here — packet callbacks keep
 		// firing, driving progress the rest of the way to 100%.
 		await sink.finish();
@@ -436,19 +421,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	} finally {
 		sink.dispose();
 	}
-
-	const flushMs = performance.now() - loopEnd;
-	const loopMs = loopEnd - loopStart;
-	const totalS = (loopMs + flushMs) / 1000;
-	console.info(
-		`[export] ${selectedCodec} (${sink.label}): ` +
-			`${totalFrames} frames in ${totalS.toFixed(1)}s (${(totalFrames / totalS).toFixed(0)} fps)\n` +
-			`  avg ms/frame — beforeRender: ${(perf.beforeRender / totalFrames).toFixed(2)}, ` +
-			`render: ${(perf.render / totalFrames).toFixed(2)}, ` +
-			`encodeSubmit: ${(perf.encodeSubmit / totalFrames).toFixed(2)}, ` +
-			`other: ${((loopMs - perf.beforeRender - perf.render - perf.encodeSubmit) / totalFrames).toFixed(2)}\n` +
-			`  encoder flush after last frame: ${flushMs.toFixed(0)}ms`,
-	);
 
 	onProgress?.(1);
 	// Let the UI paint "Creating file..." before blocking on blob creation
