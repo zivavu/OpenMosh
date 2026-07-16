@@ -61,17 +61,23 @@
 	let videoSpanEnd = $state(0);
 	let videoPlaying = $state(false);
 	let videoSpeed = $state(1);
-	let videoHasAudio = $state(true);
+	// Whether the video file has an audio track. Starts false so we don't hook a
+	// silent video into Web Audio before the probe confirms it — Firefox pins any
+	// element captured via createMediaElementSource to realtime, ignoring
+	// playbackRate (mozilla bug 1517199), which breaks the speed control.
+	let videoHasAudio = $state(false);
 
 	$effect(() => {
 		if (videoEl) videoEl.playbackRate = videoSpeed;
 	});
 
-	// Probe the video file for an audio track (hides the volume slider when silent).
-	// On demux failure keep the optimistic default.
+	// Probe the video file for an audio track. Gates both the volume slider and
+	// the Web Audio capture in ensureVideoAudioGraph. On demux failure assume
+	// audio is present so exotic-but-playable files keep their sound.
 	$effect(() => {
 		if (!isVideo) return;
 		const probed = file;
+		videoHasAudio = false;
 		(async () => {
 			try {
 				const mb = await import('mediabunny');
@@ -82,7 +88,7 @@
 				const track = await input.getPrimaryAudioTrack();
 				if (file === probed) videoHasAudio = !!track;
 			} catch {
-				/* keep default */
+				if (file === probed) videoHasAudio = true;
 			}
 		})();
 	});
@@ -246,7 +252,9 @@
 	}
 
 	function ensureVideoAudioGraph() {
-		if (!videoEl || audio.audioContext || audio.trackFile) return;
+		// Skip silent videos: there's nothing to hear or analyze, and capturing
+		// them into Web Audio breaks the speed control in Firefox (see videoHasAudio).
+		if (!videoEl || audio.audioContext || audio.trackFile || !videoHasAudio) return;
 		videoEl.muted = false;
 		const state = createAudioGraph(videoEl);
 		audio.applyAudioGraphState(state);
@@ -423,6 +431,7 @@
 					spanStart: audio.spanStart,
 					spanEnd: audio.spanEnd,
 					isVideo,
+					videoHasAudio,
 					videoEl,
 					videoDuration,
 					videoSpanStart,
