@@ -229,6 +229,15 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const makeCanvasSink = (): FrameSink => {
 		let resolveFirstPacket: (() => void) | null = null;
 		const firstPacket = new Promise<void>((r) => (resolveFirstPacket = r));
+		// videoSource.add() resolves on hand-off to the encoder, not on actual
+		// completion, so it cannot be used as backpressure by itself — submitting
+		// as fast as we render can outrun the encoder's real drain rate (measured:
+		// ~170fps submit vs ~19fps hardware AV1 drain at 2560x1440), building an
+		// unbounded backlog of full-resolution frames that exhausts GPU memory and
+		// crashes the whole tab (driver TDR -> CONTEXT_LOST_WEBGL). Gate submission
+		// on encodedFrames, the only signal tied to real encoder completion.
+		const MAX_BACKLOG = 16;
+		let onPacket: (() => void) | null = null;
 		const videoSource = new mb.CanvasSource(canvas, {
 			codec: selectedCodec as any,
 			// Software realtime mode trades some per-frame efficiency for multithreaded
@@ -241,6 +250,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				resolveFirstPacket?.();
 				resolveFirstPacket = null;
 				reportPacket();
+				onPacket?.();
 			},
 		});
 		output.addVideoTrack(videoSource);
@@ -262,6 +272,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					]);
 				}
 				if (queue.length >= 8) await queue.shift()!;
+				while (frameIndex - encodedFrames > MAX_BACKLOG) {
+					await new Promise<void>((r) => (onPacket = r));
+				}
 			},
 			async finish() {
 				await Promise.all(queue);
