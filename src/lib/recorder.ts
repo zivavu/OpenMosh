@@ -186,7 +186,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			await mb.canEncodeVideo(c as any, {
 				width: canvas.width,
 				height: canvas.height,
-				bitrate: 4_000_000,
+				bitrate: 8_000_000,
 				hardwareAcceleration: 'prefer-hardware',
 			})
 		) {
@@ -203,7 +203,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates as any, {
 			width: canvas.width,
 			height: canvas.height,
-			bitrate: 6_000_000,
+			bitrate: 12_000_000,
 		});
 	}
 
@@ -242,7 +242,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			codec: selectedCodec as any,
 			// Software realtime mode trades some per-frame efficiency for multithreaded
 			// speed; the higher bitrate compensates so visual quality holds.
-			bitrate: hardware ? 4_000_000 : 6_000_000,
+			bitrate: hardware ? 8_000_000 : 12_000_000,
 			...(hardware
 				? { hardwareAcceleration: 'prefer-hardware' as const }
 				: { latencyMode: 'realtime' as const }),
@@ -310,7 +310,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				codec: 'vp8',
 				width: canvas.width,
 				height: canvas.height,
-				bitrate: 12_000_000,
+				bitrate: 24_000_000,
 				latencyMode: 'realtime',
 			},
 			workerCount,
@@ -382,13 +382,13 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			{
 				numberOfChannels: audioBufferForMux.numberOfChannels,
 				sampleRate: audioBufferForMux.sampleRate,
-				bitrate: 128_000,
+				bitrate: 256_000,
 			},
 		);
 		if (audioCodec) {
 			audioSource = new mb.AudioBufferSource({
 				codec: audioCodec as any,
-				bitrate: 128_000,
+				bitrate: 256_000,
 			});
 			output.addAudioTrack(audioSource);
 		}
