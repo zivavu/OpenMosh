@@ -21,6 +21,7 @@
 		width: 30px;
 		height: 30px;
 		border-radius: 50%;
+		background: rgba(18, 18, 18, 0.85);
 		border: 1.5px solid #444;
 		color: #888;
 		flex-shrink: 0;
