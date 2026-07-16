@@ -148,6 +148,9 @@ export class GlRenderer {
     const gl = this.gl;
     const w = video.videoWidth;
     const h = video.videoHeight;
+    // A 0×0 source texture makes every subsequent draw fail, freezing the
+    // preview on the last presented frame (preserveDrawingBuffer)
+    if (w === 0 || h === 0) return;
     this.imgW = w;
     this.imgH = h;
     if (this.canvas.width !== w) this.canvas.width = w;
@@ -162,6 +165,14 @@ export class GlRenderer {
 
   updateSourceFrame(source: HTMLVideoElement | VideoFrame) {
     if (!this.sourceTexture) return;
+    // Skip uploads while the element has no decoded frame (seeking/stalled) —
+    // Firefox would upload zeros, flashing black instead of holding the frame
+    if (
+      source instanceof HTMLVideoElement &&
+      (source.readyState < 2 || source.videoWidth === 0)
+    ) {
+      return;
+    }
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
