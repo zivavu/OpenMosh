@@ -17,6 +17,8 @@ export interface RecordingContext {
   videoDuration: number;
   videoSpanStart: number;
   videoSpanEnd: number;
+  /** Video playback speed factor (1 = normal). Defaults to 1. */
+  videoSpeed?: number;
   file: File;
   onProgress: (p: number) => void;
   onFinalizing: () => void;
@@ -41,6 +43,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     videoDuration,
     videoSpanStart,
     videoSpanEnd,
+    videoSpeed = 1,
     file,
     onProgress,
     onFinalizing,
@@ -50,6 +53,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
   const hasExplicitAudio = !!trackFile && trackDuration > 0;
   const videoSpanDuration = videoSpanEnd - videoSpanStart;
+  // Output-time length of the video span once playback speed is applied
+  const playedSpanDuration = videoSpanDuration / videoSpeed;
 
   // Priority: audio span > video span > manual slider
   // Each tier is only used if its span duration > 0
@@ -57,7 +62,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     hasExplicitAudio && spanEnd - spanStart > 0
       ? spanEnd - spanStart
       : isVideo && videoDuration > 0 && videoSpanDuration > 0
-        ? videoSpanDuration
+        ? playedSpanDuration
         : recordDuration;
 
   if (exportDuration < 0.1) {
@@ -68,7 +73,15 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
   // Looping is implicit: loop when video span is shorter than export duration
   const loopVideo =
-    isVideo && videoSpanDuration > 0 && videoSpanDuration < exportDuration;
+    isVideo && videoSpanDuration > 0 && playedSpanDuration < exportDuration;
+
+  // Map output time to a source-video timestamp, honoring speed + looping
+  const sourceTimeAt = (time: number): number => {
+    const srcElapsed = time * videoSpeed;
+    return loopVideo && videoSpanDuration > 0
+      ? videoSpanStart + (srcElapsed % videoSpanDuration)
+      : Math.min(videoSpanStart + srcElapsed, videoSpanEnd);
+  };
   const useVideoSourceAudio = isVideo && !hasExplicitAudio;
 
   const audioStart = hasExplicitAudio
@@ -112,10 +125,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         // onBeforeRender calls.
         const frameTimes = function* () {
           for (let i = 0; i < totalFrames; i++) {
-            const time = i / fps;
-            yield loopVideo && videoSpanDuration > 0
-              ? videoSpanStart + (time % videoSpanDuration)
-              : Math.min(videoSpanStart + time, videoSpanEnd);
+            yield sourceTimeAt(i / fps);
           }
         };
         videoFrames = sink.samplesAtTimestamps(frameTimes());
@@ -126,11 +136,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   }
 
   const seekBeforeRender = async (_frameIndex: number, time: number) => {
-    const targetTime =
-      loopVideo && videoSpanDuration > 0
-        ? videoSpanStart + (time % videoSpanDuration)
-        : Math.min(videoSpanStart + time, videoSpanEnd);
-    videoEl!.currentTime = targetTime;
+    videoEl!.currentTime = sourceTimeAt(time);
     await new Promise<void>((resolve) => {
       videoEl!.addEventListener("seeked", () => resolve(), {
         once: true,

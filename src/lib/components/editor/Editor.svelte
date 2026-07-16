@@ -380,7 +380,7 @@
 		audio.trackFile && audio.trackDuration > 0 && audio.spanEnd - audio.spanStart > 0
 			? audio.spanEnd - audio.spanStart
 			: isVideo && videoDuration > 0
-				? videoSpanEnd - videoSpanStart
+				? (videoSpanEnd - videoSpanStart) / videoSpeed
 				: recordDuration,
 	);
 	const recordingState = createRecordingState();
@@ -406,6 +406,7 @@
 					videoDuration,
 					videoSpanStart,
 					videoSpanEnd,
+					videoSpeed,
 					file,
 					normalizeGain,
 					onProgress: (p) => {
