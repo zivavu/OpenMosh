@@ -62,7 +62,7 @@
 		width: 26px;
 		height: 26px;
 		border-radius: 50%;
-		background: none;
+		background: rgba(18, 18, 18, 0.85);
 		border: 1.5px solid #444;
 		color: #888;
 		cursor: pointer;
