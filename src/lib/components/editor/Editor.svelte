@@ -418,6 +418,10 @@
 		if (!canvasEl || !glRenderer || recordingState.recording) return;
 		showRecordSettings = false;
 
+		// Pause playback while recording
+		audio.pauseAudio();
+		if (isVideo && videoEl) videoEl.pause();
+
 		await recordingState.run(
 			(signal) =>
 				executeRecording({
@@ -457,6 +461,8 @@
 			},
 		);
 
+		// Resume playback after recording
+		audio.playAudio();
 		if (isVideo && videoEl) videoEl.play().catch(() => {});
 		if (canvasEl && glRenderer) {
 			glRenderer.render(effects, performance.now() / 1000);
