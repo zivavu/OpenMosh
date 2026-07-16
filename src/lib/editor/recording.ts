@@ -185,6 +185,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         audioFile: file,
         audioStart,
         audioEnd,
+        audioSpeed: videoSpeed,
         ...(loopVideo && { loopAudio: true }),
       }),
       ...(isVideo &&
