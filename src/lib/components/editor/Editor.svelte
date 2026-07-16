@@ -61,9 +61,30 @@
 	let videoSpanEnd = $state(0);
 	let videoPlaying = $state(false);
 	let videoSpeed = $state(1);
+	let videoHasAudio = $state(true);
 
 	$effect(() => {
 		if (videoEl) videoEl.playbackRate = videoSpeed;
+	});
+
+	// Probe the video file for an audio track (hides the volume slider when silent).
+	// On demux failure keep the optimistic default.
+	$effect(() => {
+		if (!isVideo) return;
+		const probed = file;
+		(async () => {
+			try {
+				const mb = await import('mediabunny');
+				const input = new mb.Input({
+					source: new mb.BlobSource(probed),
+					formats: mb.ALL_FORMATS,
+				});
+				const track = await input.getPrimaryAudioTrack();
+				if (file === probed) videoHasAudio = !!track;
+			} catch {
+				/* keep default */
+			}
+		})();
 	});
 
 
@@ -705,7 +726,9 @@
 				onSpeedChange={(s) => (videoSpeed = s)}
 				ariaLabel="Video timeline"
 				outputVolume={audio.outputVolume}
-				onVolumeChange={audio.analyserNode && !audio.trackFile ? (v) => audio.setOutputVolume(v) : undefined}
+				onVolumeChange={videoHasAudio && audio.analyserNode && !audio.trackFile
+					? (v) => audio.setOutputVolume(v)
+					: undefined}
 			/>
 		{/if}
 		{#if !audio.trackFile}
