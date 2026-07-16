@@ -7,6 +7,7 @@ import {
 	trimAudioBuffer,
 	type FrameAudioData,
 } from './audio/offline-audio';
+import { stretchAudioBuffer } from './audio/time-stretch';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 
@@ -37,6 +38,8 @@ export interface RecordOptions {
 	effectsRef?: { current: EffectInstance[] };
 	/** When true, the audio is looped to match the recording duration. */
 	loopAudio?: boolean;
+	/** Speed factor applied to the audio via pitch-preserving time-stretch. Defaults to 1. */
+	audioSpeed?: number;
 	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
 	normalizeGain?: number;
 }
@@ -79,6 +82,7 @@ async function prepareFrameAudio(
 	signal?: AbortSignal,
 	loop?: boolean,
 	normalizeGain: number = 1.0,
+	audioSpeed: number = 1,
 ): Promise<{
 	frameAudioData: FrameAudioData[];
 	sampleRate: number;
@@ -87,7 +91,11 @@ async function prepareFrameAudio(
 	checkAbort(signal);
 	const decoded = await decodeAudioFile(audioFile);
 	const end = audioEnd ?? duration;
-	const trimmed = trimAudioBuffer(decoded, audioStart, end);
+	// Stretch before looping so the loop length matches the sped-up video span.
+	const trimmed = stretchAudioBuffer(
+		trimAudioBuffer(decoded, audioStart, end),
+		audioSpeed,
+	);
 	const audioBuffer = loop ? loopAudioBuffer(trimmed, duration) : trimmed;
 	// Apply normalize gain before analyzeFrames so FFT and muxed audio are consistent.
 	// trimmed: used by analyzeFrames when loop=true
@@ -134,6 +142,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		effectsRef,
 		loopAudio,
 		normalizeGain = 1.0,
+		audioSpeed = 1,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -154,6 +163,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			signal,
 			loopAudio,
 			normalizeGain,
+			audioSpeed,
 		);
 		audioBufferForMux = audio.audioBuffer;
 		frameAudioData = audio.frameAudioData;
