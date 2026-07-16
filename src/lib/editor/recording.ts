@@ -13,6 +13,8 @@ export interface RecordingContext {
   spanStart: number;
   spanEnd: number;
   isVideo: boolean;
+  /** Whether the source video has an audio track. When false, no audio is decoded/muxed. */
+  videoHasAudio: boolean;
   videoEl: HTMLVideoElement | null;
   videoDuration: number;
   videoSpanStart: number;
@@ -39,6 +41,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     spanStart,
     spanEnd,
     isVideo,
+    videoHasAudio,
     videoEl,
     videoDuration,
     videoSpanStart,
@@ -82,7 +85,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       ? videoSpanStart + (srcElapsed % videoSpanDuration)
       : Math.min(videoSpanStart + srcElapsed, videoSpanEnd);
   };
-  const useVideoSourceAudio = isVideo && !hasExplicitAudio;
+  // Only decode the video's own audio when it actually has an audio track;
+  // decodeAudioData on a silent file throws and would abort the whole export.
+  const useVideoSourceAudio = isVideo && !hasExplicitAudio && videoHasAudio;
 
   const audioStart = hasExplicitAudio
     ? spanStart
