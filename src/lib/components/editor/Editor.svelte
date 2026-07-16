@@ -61,6 +61,9 @@
 	let videoSpanEnd = $state(0);
 	let videoPlaying = $state(false);
 	let videoSpeed = $state(1);
+	// Treat positions this close to the span end as "at the end" when deciding
+	// whether play should restart from the span start
+	const VIDEO_END_EPSILON = 0.1;
 	// Whether the video file has an audio track. Starts false so we don't hook a
 	// silent video into Web Audio before the probe confirms it — Firefox pins any
 	// element captured via createMediaElementSource to realtime, ignoring
@@ -115,6 +118,7 @@
 	let moshAudioLink = $state(saved.moshAudioLink ?? true);
 	let moshAudioLinkStrength = $state(saved.moshAudioLinkStrength ?? 0.8);
 	let showFps = $state(saved.showFps ?? false);
+	let videoLoop = $state(saved.loopVideo ?? true);
 	let showShortcuts = $state(false);
 
 	const shortcutGroups = [
@@ -173,6 +177,7 @@
 		showFps;
 		audio.outputVolume;
 		audio.loopAudio;
+		videoLoop;
 		saveSettings({
 			moshMin,
 			moshMax,
@@ -182,6 +187,7 @@
 			showFps,
 			outputVolume: audio.outputVolume,
 			loopAudio: audio.loopAudio,
+			loopVideo: videoLoop,
 		});
 	});
 	let currentFps = $state(0);
@@ -265,6 +271,12 @@
 	function playVideo() {
 		if (!videoEl) return;
 		audio.audioContext?.resume();
+		if (
+			videoEl.currentTime < videoSpanStart ||
+			videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
+		) {
+			videoEl.currentTime = videoSpanStart;
+		}
 		videoEl.play().catch(() => {});
 	}
 
@@ -295,7 +307,10 @@
 	function playSpan() {
 		audio.playAudio();
 		if (isVideo && videoEl) {
-			if (videoEl.currentTime < videoSpanStart || videoEl.currentTime >= videoSpanEnd) {
+			if (
+				videoEl.currentTime < videoSpanStart ||
+				videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
+			) {
 				videoEl.currentTime = videoSpanStart;
 			}
 			videoEl.play().catch(() => {});
@@ -591,11 +606,12 @@
 					// Span-loop: skip during recording (export seeks the video directly)
 					if (!recordingState.recording && videoEl && videoCurrentTime >= videoSpanEnd) {
 						videoEl.currentTime = videoSpanStart;
+						if (!videoLoop) videoEl.pause();
 					}
 				}}
 				onended={() => {
-					// Video reached natural end — loop back to span start
-					if (!recordingState.recording && videoEl) {
+					// Natural end can fire before timeupdate reaches spanEnd
+					if (!recordingState.recording && videoEl && videoLoop) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
 					}
@@ -732,6 +748,8 @@
 				spanStart={videoSpanStart}
 				spanEnd={videoSpanEnd}
 				isPlaying={videoPlaying}
+				loopEnabled={videoLoop}
+				onToggleLoop={() => (videoLoop = !videoLoop)}
 				onPlay={playVideo}
 				onPause={pauseVideo}
 				onSeek={seekVideoTo}

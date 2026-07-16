@@ -9,6 +9,7 @@ export interface EditorSettings {
 	showFps: boolean;
 	outputVolume: number;
 	loopAudio: boolean;
+	loopVideo: boolean;
 }
 
 export function loadSettings(): Partial<EditorSettings> {

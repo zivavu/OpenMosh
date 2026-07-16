@@ -167,12 +167,26 @@
 			}
 		}
 
-		if (video.readyState >= 1) {
+		// Wait for an actual decoded frame with known dimensions. In Firefox,
+		// loadedmetadata (readyState 1) can report videoWidth 0 for some files;
+		// initializing then allocates a 0×0 texture, every draw fails, and the
+		// preview appears frozen while the video plays on.
+		const isReady = () => video.readyState >= 2 && video.videoWidth > 0;
+
+		if (isReady()) {
 			onReady();
 			return;
 		}
-		video.addEventListener('loadedmetadata', onReady, { once: true });
-		return () => video.removeEventListener('loadedmetadata', onReady);
+		const events = ['loadeddata', 'canplay', 'resize', 'timeupdate'];
+		const tryReady = () => {
+			if (!isReady()) return;
+			for (const ev of events) video.removeEventListener(ev, tryReady);
+			onReady();
+		};
+		for (const ev of events) video.addEventListener(ev, tryReady);
+		return () => {
+			for (const ev of events) video.removeEventListener(ev, tryReady);
+		};
 	});
 
 	$effect(() => {
