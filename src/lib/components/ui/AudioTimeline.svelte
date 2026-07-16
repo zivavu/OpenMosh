@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Pause, Play, Repeat, Volume2, X } from 'lucide-svelte';
+	import { Pause, Play, Repeat, Volume1, Volume2, VolumeX, X } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import type { SlideshowConfig } from '../../slideshow/types';
 	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
@@ -56,6 +56,10 @@
 	}: Props = $props();
 
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+
+	let VolumeIcon = $derived(
+		outputVolume === 0 ? VolumeX : outputVolume < 0.5 ? Volume1 : Volume2,
+	);
 
 	let speedLabel = $derived(
 		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + '×',
@@ -247,7 +251,7 @@
 	{/if}
 	{#if onVolumeChange}
 		<span class="volume-icon" title="Volume">
-			<Volume2 size={13} />
+			<VolumeIcon size={13} />
 		</span>
 		<input
 			type="range"
