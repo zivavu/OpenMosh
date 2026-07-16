@@ -20,6 +20,7 @@
 	import type { GlRenderer } from '../../gl/renderer';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
+	import GithubLink from '../ui/GithubLink.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
@@ -521,6 +522,7 @@
 						<Home size={14} />
 					</button>
 				{/if}
+				<GithubLink />
 				<div class="format-group">
 					{@render formatButtons()}
 				</div>
