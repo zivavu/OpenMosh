@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Home } from 'lucide-svelte';
+	import GithubLink from '../ui/GithubLink.svelte';
 
 	interface Props {
 		activeView: 'grid' | 'preview';
@@ -18,6 +19,7 @@
 				<Home size={14} />
 			</button>
 		{/if}
+		<GithubLink />
 		<div class="view-toggle">
 			<button
 				class="view-btn"
@@ -36,6 +38,7 @@
 		</div>
 
 		<span class="slide-count">{slideCount} images</span>
+
 	</div>
 </div>
 
@@ -102,5 +105,9 @@
 	.slide-count {
 		font-size: 0.75rem;
 		color: #666;
+	}
+
+	.spacer {
+		flex: 1;
 	}
 </style>

@@ -6,6 +6,7 @@ interface Props {
 }
 
 import { Image, Music, Upload } from "lucide-svelte";
+import GithubLink from "./GithubLink.svelte";
 
 let { onfile, onSlideshow, onaudio }: Props = $props();
 
@@ -311,6 +312,10 @@ function onAudioDrop(e: DragEvent) {
 				: 'Make your effects react to the beat'}
 		</p>
 	{/if}
+
+	<div class="github-corner">
+		<GithubLink />
+	</div>
 </div>
 
 <style>
@@ -322,6 +327,12 @@ function onAudioDrop(e: DragEvent) {
 		height: 100%;
 		gap: 2.5rem;
 		padding: 2rem;
+	}
+
+	.github-corner {
+		position: fixed;
+		bottom: 1rem;
+		right: 1rem;
 	}
 
 	.hero {
