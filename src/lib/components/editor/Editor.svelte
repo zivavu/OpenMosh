@@ -22,6 +22,7 @@
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
+	import ButtonGroup from '../ui/ButtonGroup.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
@@ -589,17 +590,7 @@
 	></audio>
 {/if}
 
-{#snippet formatButtons()}
-	<button class="format-btn" class:active={format === 'png'} onclick={() => (format = 'png')}
-		>PNG</button
-	>
-	<button class="format-btn" class:active={format === 'jpg'} onclick={() => (format = 'jpg')}
-		>JPG</button
-	>
-	<button class="format-btn" class:active={format === 'webm'} onclick={() => (format = 'webm')}
-		>WebM</button
-	>
-{/snippet}
+
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
@@ -658,9 +649,15 @@
 					</button>
 				{/if}
 				<GithubLink />
-				<div class="format-group">
-					{@render formatButtons()}
-				</div>
+				<ButtonGroup
+					buttons={[
+						{ label: 'PNG', value: 'png' },
+						{ label: 'JPG', value: 'jpg' },
+						{ label: 'WebM', value: 'webm' },
+					]}
+					value={format}
+					onchange={(v) => (format = v)}
+				/>
 			</div>
 		</div>
 
@@ -753,9 +750,15 @@
 					bind:showSettings={showMoshSettings}
 				>
 					{#snippet settingsContent()}
-						<div class="format-group-mobile">
-							{@render formatButtons()}
-						</div>
+						<ButtonGroup
+							buttons={[
+								{ label: 'PNG', value: 'png' },
+								{ label: 'JPG', value: 'jpg' },
+								{ label: 'WebM', value: 'webm' },
+							]}
+							value={format}
+							onchange={(v) => (format = v)}
+						/>
 						<div class="settings-divider"></div>
 						<div class="mosh-setting-row">
 							<label for="show-fps">Show FPS</label>
@@ -954,47 +957,7 @@
 		gap: 0.5rem;
 	}
 
-	.format-group {
-		display: flex;
-		background: rgba(30, 30, 30, 0.85);
-		border: 1px solid #333;
-		border-radius: 6px;
-		overflow: hidden;
-	}
 
-	@media (max-width: 800px) {
-		.format-group {
-			display: none;
-		}
-	}
-
-	.format-btn {
-		padding: 0.35rem 0.9rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		font-family: inherit;
-		background: none;
-		border: none;
-		color: #777;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			background 0.15s;
-	}
-
-	.format-btn:not(:last-child) {
-		border-right: 1px solid #333;
-	}
-
-	.format-btn.active {
-		color: #ddd;
-		background: rgba(255, 255, 255, 0.06);
-	}
-
-	.format-btn:hover {
-		color: #ccc;
-	}
 
 	.mosh-group-wrap {
 		display: flex;
@@ -1039,24 +1002,7 @@
 		margin: 0.15rem 0;
 	}
 
-	.format-group-mobile {
-		display: none;
-	}
 
-	@media (max-width: 800px) {
-		.format-group-mobile {
-			display: flex;
-			background: #111;
-			border: 1px solid #333;
-			border-radius: 6px;
-			overflow: hidden;
-			align-self: stretch;
-		}
-
-		.format-group-mobile .format-btn {
-			flex: 1;
-		}
-	}
 
 	/* Action bar */
 	.action-bar {
