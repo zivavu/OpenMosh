@@ -1,6 +1,7 @@
-<script lang="ts">
+	<script lang="ts">
 	import { Home } from 'lucide-svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
+	import ButtonGroup from '../ui/ButtonGroup.svelte';
 
 	interface Props {
 		activeView: 'grid' | 'preview';
@@ -20,22 +21,14 @@
 			</button>
 		{/if}
 		<GithubLink />
-		<div class="view-toggle">
-			<button
-				class="view-btn"
-				class:active={activeView === 'grid'}
-				onclick={() => onViewChange('grid')}
-			>
-				Grid
-			</button>
-			<button
-				class="view-btn"
-				class:active={activeView === 'preview'}
-				onclick={() => onViewChange('preview')}
-			>
-				Preview
-			</button>
-		</div>
+		<ButtonGroup
+			buttons={[
+				{ label: 'Grid', value: 'grid' },
+				{ label: 'Preview', value: 'preview' },
+			]}
+			value={activeView}
+			onchange={onViewChange}
+		/>
 
 		<span class="slide-count">{slideCount} images</span>
 
@@ -77,29 +70,6 @@
 	.home-btn:hover {
 		border-color: #777;
 		color: #ccc;
-	}
-
-	.view-toggle {
-		display: flex;
-		border: 1px solid #333;
-		border-radius: 6px;
-		overflow: hidden;
-	}
-
-	.view-btn {
-		padding: 0.3rem 0.8rem;
-		border: none;
-		background: transparent;
-		color: #666;
-		font-size: 0.75rem;
-		font-weight: 600;
-		cursor: pointer;
-		font-family: inherit;
-	}
-
-	.view-btn.active {
-		background: rgba(255, 255, 255, 0.08);
-		color: #fff;
 	}
 
 	.slide-count {
