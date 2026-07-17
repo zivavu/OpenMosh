@@ -9,6 +9,7 @@ Browser-based glitch art studio, inspired by PhotoMosh. It's a fully client-side
 Here's what it looks like in action:
 
 [openmosh-1781080776074.webm](https://github.com/user-attachments/assets/e1f3a112-63ce-4a7c-bb64-a89ee9c21453)
+
 https://github.com/user-attachments/assets/91477856-e06f-4ec4-975b-a6b217bb61b1
 
 > [!WARNING]
