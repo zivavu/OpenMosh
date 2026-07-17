@@ -943,20 +943,15 @@
 	}
 
 	.top-bar {
-		position: absolute;
-		top: 0;
-		left: 0;
-		right: 0;
-		z-index: 10;
-		display: flex;
-		flex-direction: column;
+		padding: 0.5rem 0.75rem;
+		border-bottom: 1px solid #2a2a2a;
+		flex-shrink: 0;
 	}
 
 	.toolbar {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.75rem;
 	}
 
 	.format-group {
