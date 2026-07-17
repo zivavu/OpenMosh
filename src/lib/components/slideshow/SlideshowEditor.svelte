@@ -17,6 +17,11 @@
 	import { executeSlideshowRecording } from '../../slideshow/slideshow-recorder';
 	import type { SlideshowConfig, SlideshowSlide } from '../../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
+	import {
+		probeSlideVideo,
+		SlideVideoSampler,
+	} from '../../slideshow/video-sampler';
+	import { showToast } from '../ui/toast.svelte';
 	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../../text-overlay';
 	import { shuffleInPlace } from '../../utils';
 	import GlCanvas from '../editor/GlCanvas.svelte';
@@ -56,18 +61,49 @@
 
 	function addFiles(files: FileList | File[]) {
 		const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-		const newSlides: SlideshowSlide[] = Array.from(files)
-			.filter((f) => imageTypes.includes(f.type))
-			.map((file) => ({
-				id: generateId(),
-				file,
-				objectUrl: URL.createObjectURL(file),
-				thumbUrl: null,
-				presetIndex: null,
-			}));
-		slides.push(...newSlides);
-		for (const slide of newSlides)
-			generateThumb(slide.id, slide.file, slide.objectUrl);
+		const videoTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+		for (const file of Array.from(files)) {
+			if (imageTypes.includes(file.type)) {
+				const slide: SlideshowSlide = {
+					id: generateId(),
+					file,
+					objectUrl: URL.createObjectURL(file),
+					thumbUrl: null,
+					presetIndex: null,
+					kind: 'image',
+				};
+				slides.push(slide);
+				generateThumb(slide.id, slide.file, slide.objectUrl);
+			} else if (videoTypes.includes(file.type)) {
+				const slide: SlideshowSlide = {
+					id: generateId(),
+					file,
+					objectUrl: URL.createObjectURL(file),
+					thumbUrl: null,
+					presetIndex: null,
+					kind: 'video',
+				};
+				slides.push(slide);
+				void probeVideoSlide(slide.id, file);
+			}
+		}
+	}
+
+	/** Fill in duration/dimensions/thumb for a video slide, or reject it. */
+	async function probeVideoSlide(id: string, file: File) {
+		const probe = await probeSlideVideo(file);
+		const i = slides.findIndex((s) => s.id === id);
+		if (i === -1) return;
+		if (!probe) {
+			showToast(`Couldn't decode video "${file.name}"`, 'error');
+			removeSlide(id);
+			return;
+		}
+		const s = slides[i];
+		s.duration = probe.duration;
+		s.width = probe.width;
+		s.height = probe.height;
+		if (probe.thumb) s.thumbUrl = URL.createObjectURL(probe.thumb);
 	}
 
 	async function generateThumb(id: string, file: File, objectUrl: string) {
@@ -115,6 +151,9 @@
 		if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
 			URL.revokeObjectURL(s.thumbUrl);
 		slides.splice(i, 1);
+		videoSamplers.get(id)?.dispose();
+		videoSamplers.delete(id);
+		samplerPromises.delete(id);
 	}
 
 	function reorderSlides(from: number, to: number) {
@@ -155,8 +194,27 @@
 				if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
 					URL.revokeObjectURL(s.thumbUrl);
 			}
+			for (const sampler of videoSamplers.values()) sampler.dispose();
+			videoSamplers.clear();
+			samplerPromises.clear();
 		};
 	});
+
+	// ── Video slide samplers (shared decode engine for preview; export creates its own) ──
+	const videoSamplers = new Map<string, SlideVideoSampler>();
+	const samplerPromises = new Map<string, Promise<SlideVideoSampler | null>>();
+
+	function ensureSampler(slide: SlideshowSlide): Promise<SlideVideoSampler | null> {
+		let p = samplerPromises.get(slide.id);
+		if (!p) {
+			p = SlideVideoSampler.create(slide.file).then((s) => {
+				if (s) videoSamplers.set(slide.id, s);
+				return s;
+			});
+			samplerPromises.set(slide.id, p);
+		}
+		return p;
+	}
 
 	// ── Config ──
 	const CONFIG_KEY = 'openmosh-slideshow-config';
@@ -238,11 +296,24 @@
 		}
 	});
 
-	// Use first slide as default canvas source
+	// Use first image slide as default canvas source
 	let previewImageSrc = $state('');
 	$effect(() => {
-		if (slides.length > 0 && !previewImageSrc) {
-			previewImageSrc = slides[0].objectUrl;
+		if (!previewImageSrc) {
+			const firstImage = slides.find((s) => s.kind === 'image');
+			if (firstImage) previewImageSrc = firstImage.objectUrl;
+		}
+	});
+
+	// All-video slideshow: no image to size the canvas — allocate the source
+	// texture from the first video's probed dimensions instead.
+	$effect(() => {
+		if (previewImageSrc || !glRenderer || naturalWidth != null) return;
+		const first = slides[0];
+		if (first?.kind === 'video' && first.width && first.height) {
+			glRenderer.initVideoSource(first.width, first.height);
+			naturalWidth = first.width;
+			naturalHeight = first.height;
 		}
 	});
 
@@ -392,26 +463,36 @@
 		smoothState = { effects: cloneEffects(effects) };
 		previewBeatIndex = -1;
 
-		await Promise.all(
-			slides.map(
-				(slide) =>
-					new Promise<void>((resolve) => {
-						if (imageCache.has(slide.id)) {
-							resolve();
-							return;
-						}
-						const img = new Image();
-						img.onload = () => {
-							imageCache.set(slide.id, img);
-							resolve();
-						};
-						img.onerror = () => resolve();
-						img.src = slide.objectUrl;
-					}),
-			),
-		);
+		await Promise.all([
+			...slides
+				.filter((s) => s.kind === 'image')
+				.map(
+					(slide) =>
+						new Promise<void>((resolve) => {
+							if (imageCache.has(slide.id)) {
+								resolve();
+								return;
+							}
+							const img = new Image();
+							img.onload = () => {
+								imageCache.set(slide.id, img);
+								resolve();
+							};
+							img.onerror = () => resolve();
+							img.src = slide.objectUrl;
+						}),
+				),
+			...slides
+				.filter((s) => s.kind === 'video')
+				.map((slide) => ensureSampler(slide).then(() => {})),
+		]);
 
 		if (!previewPlaying) return;
+
+		// Fresh run: video slides start from their beginning, like the export
+		for (const sampler of videoSamplers.values()) sampler.reset();
+		let lastVideoSlideId: string | null = null;
+		let lastVideoTickMs = 0;
 
 		if (audio.trackFile) {
 			audio.playAudio();
@@ -499,10 +580,11 @@
 			if (beatIndex !== previewBeatIndex && slide) {
 				previewBeatIndex = beatIndex;
 
-				const img = getCachedImage(slide);
-
-				if (img && img.complete) {
-					glRenderer.updateSourceImage(img);
+				if (slide.kind === 'image') {
+					const img = getCachedImage(slide);
+					if (img && img.complete) {
+						glRenderer.updateSourceImage(img);
+					}
 				}
 
 				previewEffects = computeEffectsForBeat(
@@ -512,6 +594,30 @@
 					smoothState!,
 					getMoshOptions(),
 				);
+			}
+
+			// Video slides advance only while visible: resume position across
+			// appearances, dt = rAF delta while the same slide stays on screen.
+			if (slide?.kind === 'video') {
+				const sampler = videoSamplers.get(slide.id);
+				const nowMs = performance.now();
+				if (sampler) {
+					const dt =
+						lastVideoSlideId === slide.id
+							? (nowMs - lastVideoTickMs) / 1000
+							: 0;
+					void sampler.next(dt).then((frame) => {
+						if (frame) {
+							if (previewPlaying && glRenderer)
+								glRenderer.updateSourceFrame(frame);
+							frame.close();
+						}
+					});
+				}
+				lastVideoSlideId = slide.id;
+				lastVideoTickMs = nowMs;
+			} else {
+				lastVideoSlideId = null;
 			}
 
 			const activeEffects =

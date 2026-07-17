@@ -36,6 +36,12 @@ export interface SlideshowSlide {
   thumbUrl: string | null;
   /** Index into the presets array — only used in 'per-image' mode. */
   presetIndex: number | null;
+  kind: "image" | "video";
+  /** Video only: intrinsic duration in seconds (probed at add time). */
+  duration?: number;
+  /** Video only: display dimensions (probed at add time). */
+  width?: number;
+  height?: number;
 }
 
 import type { TextOverlayConfig } from "../text-overlay";

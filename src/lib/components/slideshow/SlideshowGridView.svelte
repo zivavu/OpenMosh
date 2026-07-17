@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { Shuffle, X, Plus, ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import {
+		Shuffle,
+		X,
+		Plus,
+		ChevronLeft,
+		ChevronRight,
+		Play,
+	} from 'lucide-svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
 
@@ -45,7 +52,15 @@
 		}
 	});
 
-	const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+	const MEDIA_TYPES = [
+		'image/png',
+		'image/jpeg',
+		'image/webp',
+		'image/gif',
+		'video/mp4',
+		'video/webm',
+		'video/quicktime',
+	];
 
 	function onDrop(e: DragEvent) {
 		dragging = false;
@@ -61,10 +76,10 @@
 
 		const files = e.dataTransfer?.files;
 		if (files && files.length > 0) {
-			const hasImages = Array.from(files).some((f) =>
-				IMAGE_TYPES.includes(f.type),
+			const hasMedia = Array.from(files).some((f) =>
+				MEDIA_TYPES.includes(f.type),
 			);
-			if (hasImages) onAddFiles(files);
+			if (hasMedia) onAddFiles(files);
 		}
 	}
 
@@ -181,7 +196,7 @@
 	<input
 		bind:this={fileInput}
 		type="file"
-		accept="image/png,image/jpeg,image/webp,image/gif"
+		accept={MEDIA_TYPES.join(',')}
 		multiple
 		onchange={onInputChange}
 		hidden
@@ -190,10 +205,11 @@
 	{#if slides.length === 0}
 		<div class="empty-state">
 			<p>
-				No images loaded. Drag and drop images here or click the button below.
+				No media loaded. Drag and drop images or videos here or click the
+				button below.
 			</p>
 			<button class="add-btn" onclick={() => fileInput.click()}
-				>Add Images</button
+				>Add Media</button
 			>
 		</div>
 	{:else}
@@ -234,6 +250,11 @@
 						<div class="thumb-loading"></div>
 					{/if}
 					<div class="slide-index">{i + 1}</div>
+					{#if slide.kind === 'video'}
+						<div class="video-badge" title="Video">
+							<Play size={10} fill="currentColor" />
+						</div>
+					{/if}
 					<button
 						class="remove-btn"
 						title="Remove"
@@ -268,7 +289,7 @@
 			<button
 				class="add-card"
 				onclick={() => fileInput.click()}
-				title="Add more images"
+				title="Add more media"
 			>
 				<Plus size={24} />
 			</button>
@@ -303,14 +324,28 @@
 					>
 						<ChevronLeft size={18} />
 					</button>
-					<img
-						bind:this={lightboxImageEl}
-						class="lb-img"
-						class:lb-closing={lightboxClosing}
-						src={slides[lightboxIndex].objectUrl}
-						alt="Slide {lightboxIndex + 1}"
-						style={lightboxOriginStyle}
-					/>
+					{#if slides[lightboxIndex].kind === 'video'}
+						<!-- svelte-ignore a11y_media_has_caption -->
+						<video
+							class="lb-img"
+							class:lb-closing={lightboxClosing}
+							src={slides[lightboxIndex].objectUrl}
+							style={lightboxOriginStyle}
+							autoplay
+							muted
+							loop
+							controls
+						></video>
+					{:else}
+						<img
+							bind:this={lightboxImageEl}
+							class="lb-img"
+							class:lb-closing={lightboxClosing}
+							src={slides[lightboxIndex].objectUrl}
+							alt="Slide {lightboxIndex + 1}"
+							style={lightboxOriginStyle}
+						/>
+					{/if}
 					<button
 						class="lb-arrow lb-arrow-right"
 						onclick={lightboxNext}
@@ -465,6 +500,19 @@
 		padding: 0 4px;
 		border-radius: 3px;
 		line-height: 1.4;
+	}
+
+	.video-badge {
+		position: absolute;
+		bottom: 4px;
+		left: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #fff;
+		background: rgba(0, 0, 0, 0.6);
+		padding: 2px 3px;
+		border-radius: 3px;
 	}
 
 	.remove-btn {
