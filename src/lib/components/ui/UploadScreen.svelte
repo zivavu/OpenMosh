@@ -38,16 +38,6 @@ const ACCEPTED_TYPES = [
 	"video/webm",
 	"video/quicktime",
 ];
-const IMAGE_TYPES = [
-	"image/png",
-	"image/jpeg",
-	"image/jpg",
-	"image/webp",
-	"image/gif",
-	"image/heic",
-	"image/heif",
-];
-
 const ACCEPTED_EXTENSIONS = [
 	".png",
 	".jpg",
@@ -60,16 +50,6 @@ const ACCEPTED_EXTENSIONS = [
 	".webm",
 	".mov",
 ];
-const IMAGE_EXTENSIONS = [
-	".png",
-	".jpg",
-	".jpeg",
-	".webp",
-	".gif",
-	".heic",
-	".heif",
-];
-
 function getExtension(name: string) {
 	return name.slice(name.lastIndexOf(".")).toLowerCase();
 }
@@ -79,11 +59,6 @@ function isAcceptedFile(file: File) {
 	return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 }
 
-function isImageFile(file: File) {
-	if (file.type) return IMAGE_TYPES.includes(file.type);
-	return IMAGE_EXTENSIONS.includes(getExtension(file.name));
-}
-
 function handleFile(file: File) {
 	if (isAcceptedFile(file)) {
 		onfile(file);
@@ -91,9 +66,9 @@ function handleFile(file: File) {
 }
 
 function handleSlideshowFiles(files: FileList | File[]) {
-	const images = Array.from(files).filter((f) => isImageFile(f));
-	if (images.length > 0) {
-		onSlideshow(images);
+	const accepted = Array.from(files).filter((f) => isAcceptedFile(f));
+	if (accepted.length > 0) {
+		onSlideshow(accepted);
 	}
 }
 
@@ -141,9 +116,7 @@ function openFilePicker() {
 }
 
 function getAcceptTypes() {
-	return selectedMode === "slideshow"
-		? [...IMAGE_TYPES, ...IMAGE_EXTENSIONS].join(",")
-		: [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
+	return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
 }
 function getIsMultiple() {
 	return selectedMode === "slideshow";
@@ -202,7 +175,7 @@ function onAudioDrop(e: DragEvent) {
 	</div>
 	<p class="mode-hint">
 		{selectedMode === 'slideshow'
-			? 'Upload multiple images — sequences them into a beat-synced slideshow'
+			? 'Upload multiple images or videos — sequences them into a beat-synced slideshow'
 			: 'Upload an image or video to apply glitch effects'}
 	</p>
 
@@ -235,7 +208,7 @@ function onAudioDrop(e: DragEvent) {
 				style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
 			/>
 			<Upload size={18} />
-			{selectedMode === 'slideshow' ? 'LOAD IMAGES' : 'LOAD FILE'}
+			{selectedMode === 'slideshow' ? 'LOAD MEDIA' : 'LOAD FILE'}
 		</label>
 
 		<div class="separator">
@@ -247,7 +220,7 @@ function onAudioDrop(e: DragEvent) {
 		<div class="drop-hint">
 			<Image size={16} />
 			{selectedMode === 'slideshow'
-				? 'DRAG AND DROP IMAGES HERE'
+				? 'DRAG AND DROP IMAGES OR VIDEOS HERE'
 				: 'DRAG AND DROP FILE HERE'}
 		</div>
 	</div>
