@@ -2,7 +2,8 @@ export { applyVolumeLinksToEffects as applyVolumeLinksTick } from "./audio-utils
 
 export interface AudioGraphState {
   context: AudioContext;
-  source: MediaElementAudioSourceNode;
+  /** Null for sourceless graphs (callers connect their own source node). */
+  source: MediaElementAudioSourceNode | null;
   /** Applied before the analyser so FFT/volume-link data sees the normalized signal. */
   normalizeGain: GainNode;
   analyser: AnalyserNode;
@@ -28,6 +29,31 @@ export function createAudioGraph(
   return {
     context: ctx,
     source,
+    normalizeGain,
+    analyser,
+    gain,
+    frequencyData: new Uint8Array(analyser.frequencyBinCount),
+    sampleRate: ctx.sampleRate,
+    binCount: analyser.frequencyBinCount,
+  };
+}
+
+/**
+ * Audio graph with no media-element source — callers connect their own source
+ * node (e.g. an AudioBufferSourceNode) into `normalizeGain`.
+ */
+export function createOutputAudioGraph(): AudioGraphState {
+  const ctx = new AudioContext();
+  const normalizeGain = ctx.createGain();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  const gain = ctx.createGain();
+  normalizeGain.connect(analyser);
+  analyser.connect(gain);
+  gain.connect(ctx.destination);
+  return {
+    context: ctx,
+    source: null,
     normalizeGain,
     analyser,
     gain,

@@ -2,6 +2,7 @@
 	import type { EffectInstance } from '../../effects';
 	import { ANIMATED_EFFECTS } from '../../gl/effect-shaders';
 	import { GlRenderer } from '../../gl/renderer';
+	import type { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 
 	interface Props {
 		imageSrc: string;
@@ -15,6 +16,8 @@
 		fps?: number;
 		showFps?: boolean;
 		videoEl?: HTMLVideoElement | null;
+		/** WebCodecs preview player; takes precedence over videoEl as frame source. */
+		frameSource?: VideoPreviewPlayer | null;
 		freezeAnimation?: boolean;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: GlRenderer | null;
@@ -32,6 +35,7 @@
 		fps = $bindable(0),
 		showFps = false,
 		videoEl = null,
+		frameSource = null,
 		freezeAnimation = false,
 		warmCanvas = null,
 		warmRenderer = null,
@@ -58,6 +62,7 @@
 	const needsAnimation = $derived(
 		!freezeAnimation &&
 			(!!videoEl ||
+				!!frameSource ||
 				effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId))),
 	);
 
@@ -123,7 +128,7 @@
 
 	// Image loading — skipped when a video source is active
 	$effect(() => {
-		if (!renderer || videoEl) return;
+		if (!renderer || videoEl || frameSource) return;
 		imageReady = false;
 		const img = new Image();
 		let cancelled = false;
@@ -147,9 +152,25 @@
 		};
 	});
 
+	// WebCodecs preview — dimensions are known upfront, no element to wait on
+	$effect(() => {
+		if (!renderer || !frameSource) return;
+		renderer.initVideoSource(frameSource.width, frameSource.height);
+		naturalWidth = frameSource.width;
+		naturalHeight = frameSource.height;
+		imageReady = true;
+		if (
+			canvasWidth != null &&
+			canvasHeight != null &&
+			(canvasWidth !== frameSource.width || canvasHeight !== frameSource.height)
+		) {
+			renderer.resize(canvasWidth, canvasHeight);
+		}
+	});
+
 	// Video loading — initialises the renderer once metadata is available
 	$effect(() => {
-		if (!renderer || !videoEl) return;
+		if (!renderer || !videoEl || frameSource) return;
 		imageReady = false;
 		const video = videoEl;
 
@@ -215,7 +236,15 @@
 
 		let rafId: number;
 		const loop = () => {
-			if (videoEl) renderer!.updateSourceFrame(videoEl);
+			if (frameSource) {
+				const frame = frameSource.takeFrame();
+				if (frame) {
+					renderer!.updateSourceFrame(frame);
+					frame.close();
+				}
+			} else if (videoEl) {
+				renderer!.updateSourceFrame(videoEl);
+			}
 			renderer!.render(effects, performance.now() / 1000);
 			trackFps(performance.now());
 			rafId = requestAnimationFrame(loop);

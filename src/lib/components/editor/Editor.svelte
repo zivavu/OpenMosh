@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Download, HelpCircle, Home, Library } from 'lucide-svelte';
-	import { createAudioGraph } from '../../audio/audio-controller';
+	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createKeyboardHandler } from '../../editor/keyboard';
@@ -18,6 +18,7 @@
 		type EffectInstance,
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
+	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
@@ -69,6 +70,58 @@
 	// element captured via createMediaElementSource to realtime, ignoring
 	// playbackRate (mozilla bug 1517199), which breaks the speed control.
 	let videoHasAudio = $state(false);
+
+	// WebCodecs-driven preview playback. When non-null it replaces the <video>
+	// element as the frame source (the element stays mounted but inert, kept as
+	// the recording fallback). Null when the file can't be demuxed/decoded or
+	// has rotation metadata — those keep the element-driven preview.
+	let previewPlayer = $state<VideoPreviewPlayer | null>(null);
+
+	$effect(() => {
+		if (!isVideo) return;
+		let cancelled = false;
+		let player: VideoPreviewPlayer | null = null;
+		VideoPreviewPlayer.create(file).then((p) => {
+			if (cancelled || !p) {
+				p?.dispose();
+				return;
+			}
+			player = p;
+			previewPlayer = p;
+			// Player owns the preview now — the element is only a recording fallback
+			videoEl?.pause();
+			if (videoEl) videoEl.muted = true;
+			videoDuration = p.duration;
+			videoSpanStart = 0;
+			videoSpanEnd = p.duration;
+			recordDuration = Math.round(p.duration * 10) / 10;
+			// If the videoHasAudio probe finished first, ensureVideoAudioGraph
+			// already built an element-sourced graph for the now-inert element —
+			// tear it down and rebuild sourceless for the player.
+			if (audio.audioContext && !audio.trackFile) audio.disposeAudioGraph();
+			ensureVideoAudioGraph();
+			p.play();
+		});
+		return () => {
+			cancelled = true;
+			player?.dispose();
+			previewPlayer = null;
+		};
+	});
+
+	// Push editor state into the player
+	$effect(() => {
+		previewPlayer?.setSpeed(videoSpeed);
+	});
+	$effect(() => {
+		if (previewPlayer) previewPlayer.loop = videoLoop;
+	});
+	$effect(() => {
+		previewPlayer?.setSpan(videoSpanStart, videoSpanEnd);
+	});
+	$effect(() => {
+		previewPlayer?.setMuted(!!audio.trackFile);
+	});
 
 	$effect(() => {
 		if (videoEl) videoEl.playbackRate = videoSpeed;
@@ -260,7 +313,18 @@
 	function ensureVideoAudioGraph() {
 		// Skip silent videos: there's nothing to hear or analyze, and capturing
 		// them into Web Audio breaks the speed control in Firefox (see videoHasAudio).
-		if (!videoEl || audio.audioContext || audio.trackFile || !videoHasAudio) return;
+		if (audio.audioContext || audio.trackFile || !videoHasAudio) return;
+		if (previewPlayer) {
+			// WebCodecs preview: sourceless graph, the player connects its own
+			// AudioBufferSourceNode into normalizeGain.
+			const state = createOutputAudioGraph();
+			audio.applyAudioGraphState(state);
+			audio.setNormalizeGain(normalizeGain);
+			previewPlayer.attachAudioOutput(state.context, state.normalizeGain);
+			state.context.resume().catch(() => {});
+			return;
+		}
+		if (!videoEl) return;
 		videoEl.muted = false;
 		const state = createAudioGraph(videoEl);
 		audio.applyAudioGraphState(state);
@@ -269,8 +333,18 @@
 	}
 
 	function playVideo() {
-		if (!videoEl) return;
 		audio.audioContext?.resume();
+		if (previewPlayer) {
+			if (
+				previewPlayer.currentTime < videoSpanStart ||
+				previewPlayer.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
+			) {
+				previewPlayer.seek(videoSpanStart);
+			}
+			previewPlayer.play();
+			return;
+		}
+		if (!videoEl) return;
 		if (
 			videoEl.currentTime < videoSpanStart ||
 			videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
@@ -281,12 +355,21 @@
 	}
 
 	function pauseVideo() {
+		if (previewPlayer) {
+			previewPlayer.pause();
+			return;
+		}
 		videoEl?.pause();
 	}
 
 	function seekVideoTo(t: number) {
-		if (!videoEl || !videoDuration) return;
+		if (!videoDuration) return;
 		const tClamp = Math.max(0, Math.min(videoDuration, t));
+		if (previewPlayer) {
+			previewPlayer.seek(tClamp);
+			return;
+		}
+		if (!videoEl) return;
 		videoEl.currentTime = tClamp;
 		videoCurrentTime = tClamp;
 	}
@@ -306,20 +389,12 @@
 
 	function playSpan() {
 		audio.playAudio();
-		if (isVideo && videoEl) {
-			if (
-				videoEl.currentTime < videoSpanStart ||
-				videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
-			) {
-				videoEl.currentTime = videoSpanStart;
-			}
-			videoEl.play().catch(() => {});
-		}
+		if (isVideo) playVideo();
 	}
 
 	function pauseTrack() {
 		audio.pauseAudio();
-		if (isVideo) videoEl?.pause();
+		if (isVideo) pauseVideo();
 	}
 
 	function seekTo(t: number) {
@@ -395,7 +470,8 @@
 		playSpan,
 		pauseTrack,
 		hasTrack: () => (!!audio.trackFile && !!audioEl) || isVideo,
-		isPlaying: () => audio.audioPlaying || videoPlaying,
+		isPlaying: () =>
+			audio.audioPlaying || videoPlaying || !!previewPlayer?.playing,
 	});
 
 	function save() {
@@ -435,6 +511,7 @@
 
 		// Pause playback while recording
 		audio.pauseAudio();
+		previewPlayer?.pause();
 		if (isVideo && videoEl) videoEl.pause();
 
 		await recordingState.run(
@@ -478,7 +555,8 @@
 
 		// Resume playback after recording
 		audio.playAudio();
-		if (isVideo && videoEl) videoEl.play().catch(() => {});
+		if (previewPlayer) previewPlayer.play();
+		else if (isVideo && videoEl) videoEl.play().catch(() => {});
 		if (canvasEl && glRenderer) {
 			glRenderer.render(effects, performance.now() / 1000);
 		}
@@ -591,9 +669,12 @@
 				bind:this={videoEl}
 				src={imageSrc}
 				muted
-				autoplay
+				autoplay={!previewPlayer}
 				playsinline
 				onloadedmetadata={() => {
+					// Player owns duration/span/audio when active; element is
+					// just the recording fallback then
+					if (previewPlayer) return;
 					const dur = videoEl!.duration;
 					videoDuration = dur;
 					videoSpanStart = 0;
@@ -602,6 +683,7 @@
 					ensureVideoAudioGraph();
 				}}
 				ontimeupdate={() => {
+					if (previewPlayer) return;
 					videoCurrentTime = videoEl?.currentTime ?? 0;
 					// Span-loop: skip during recording (export seeks the video directly)
 					if (!recordingState.recording && videoEl && videoCurrentTime >= videoSpanEnd) {
@@ -611,7 +693,7 @@
 				}}
 				onended={() => {
 					// Natural end can fire before timeupdate reaches spanEnd
-					if (!recordingState.recording && videoEl && videoLoop) {
+					if (!previewPlayer && !recordingState.recording && videoEl && videoLoop) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
 					}
@@ -636,7 +718,8 @@
 			bind:naturalHeight
 			bind:fps={currentFps}
 			showFps={showFps && !isImageFormat}
-			videoEl={isVideo ? videoEl : null}
+			videoEl={isVideo && !previewPlayer ? videoEl : null}
+			frameSource={previewPlayer}
 			freezeAnimation={isImageFormat}
 			{warmCanvas}
 			{warmRenderer}
@@ -744,10 +827,10 @@
 			<AudioTimeline
 				label="VID"
 				trackDuration={videoDuration}
-				trackCurrentTime={videoCurrentTime}
+				trackCurrentTime={previewPlayer ? previewPlayer.currentTime : videoCurrentTime}
 				spanStart={videoSpanStart}
 				spanEnd={videoSpanEnd}
-				isPlaying={videoPlaying}
+				isPlaying={previewPlayer ? previewPlayer.playing : videoPlaying}
 				loopEnabled={videoLoop}
 				onToggleLoop={() => (videoLoop = !videoLoop)}
 				onPlay={playVideo}
