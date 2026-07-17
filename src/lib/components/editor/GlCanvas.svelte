@@ -276,6 +276,7 @@
 		justify-content: center;
 		overflow: hidden;
 		padding: 1.5rem;
+		background: #0a0a0a;
 	}
 
 	canvas {
