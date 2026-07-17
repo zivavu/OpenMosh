@@ -296,24 +296,43 @@
 		}
 	});
 
-	// Use first image slide as default canvas source
+	// Size the preview canvas from the first slide, matching the export:
+	// image → GlCanvas image loading; video → probed dimensions.
 	let previewImageSrc = $state('');
 	$effect(() => {
-		if (!previewImageSrc) {
-			const firstImage = slides.find((s) => s.kind === 'image');
-			if (firstImage) previewImageSrc = firstImage.objectUrl;
-		}
-	});
-
-	// All-video slideshow: no image to size the canvas — allocate the source
-	// texture from the first video's probed dimensions instead.
-	$effect(() => {
-		if (previewImageSrc || !glRenderer || naturalWidth != null) return;
 		const first = slides[0];
-		if (first?.kind === 'video' && first.width && first.height) {
+		if (!first) return;
+		if (first.kind === 'image') {
+			if (!previewImageSrc) previewImageSrc = first.objectUrl;
+			return;
+		}
+		// Video-first: allocate the source texture from the probed dimensions
+		// (width/height arrive async after the add-time probe).
+		if (previewImageSrc || !glRenderer || naturalWidth != null) return;
+		if (first.width && first.height) {
 			glRenderer.initVideoSource(first.width, first.height);
 			naturalWidth = first.width;
 			naturalHeight = first.height;
+			// Show the first frame instead of a blank canvas until play
+			void ensureSampler(first).then(async (sampler) => {
+				if (!sampler || !glRenderer || previewPlaying) return;
+				const frame = await sampler.next(0);
+				if (frame) {
+					glRenderer.updateSourceFrame(frame);
+					frame.close();
+					glRenderer.render(effects, 0);
+				}
+			});
+		}
+	});
+
+	// GlCanvas applies the user's resize only after its own image/video load
+	// (imageReady) — the video-first path above bypasses it, so apply here.
+	$effect(() => {
+		if (previewImageSrc || !glRenderer || naturalWidth == null) return;
+		if (resizeWidth > 0 && resizeHeight > 0) {
+			glRenderer.resize(resizeWidth, resizeHeight);
+			if (!previewPlaying) glRenderer.render(effects, 0);
 		}
 	});
 
