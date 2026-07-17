@@ -163,6 +163,24 @@ export class GlRenderer {
     this.setupPingPong();
   }
 
+  /**
+   * Allocate the source texture/FBOs for externally-decoded VideoFrames
+   * (WebCodecs preview) — like loadVideo, but without an element to sample.
+   */
+  initVideoSource(w: number, h: number) {
+    if (w === 0 || h === 0) return;
+    const gl = this.gl;
+    this.imgW = w;
+    this.imgH = h;
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
+
+    if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
+    this.sourceTexture = this.createTexture(w, h);
+
+    this.setupPingPong();
+  }
+
   updateSourceFrame(source: HTMLVideoElement | VideoFrame) {
     if (!this.sourceTexture) return;
     // Skip uploads while the element has no decoded frame (seeking/stalled) —
