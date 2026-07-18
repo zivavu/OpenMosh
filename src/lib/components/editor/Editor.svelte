@@ -340,6 +340,15 @@
 		if (savedSpan !== null) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
+		// Restore this track's saved sequence timeline; keep the current one when
+		// the track has nothing saved yet.
+		const savedSeq = seqStore.load(trackId);
+		if (savedSeq !== null) {
+			sequenceSegments = savedSeq.segments;
+			sequenceEnabled = savedSeq.enabled;
+			selectedSegmentId = null;
+			if (savedSeq.enabled) seqPresets = loadPresets();
+		}
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
@@ -429,6 +438,21 @@
 	// With an external track the audio is the master clock (matches export,
 	// where the audio span sets the duration and the video loops inside it).
 	// Segments then live on the audio timeline, not the video's.
+	const seqStore = createTrackStore<{
+		enabled: boolean;
+		segments: SequenceSegment[];
+	}>('openmosh-sequence');
+
+	// Persist the sequence timeline per library track (deep read via snapshot,
+	// so segment/effect edits are captured too)
+	$effect(() => {
+		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
+		const enabled = sequenceEnabled;
+		if (currentTrackId) {
+			seqStore.save(currentTrackId, { enabled, segments: segs });
+		}
+	});
+
 	let seqMasterIsAudio = $derived(!!audio.trackFile && audio.trackDuration > 0);
 	let seqMasterDuration = $derived(
 		seqMasterIsAudio ? audio.trackDuration : videoDuration,
