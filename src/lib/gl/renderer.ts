@@ -42,6 +42,8 @@ export class GlRenderer {
   private hdrTextures: [WebGLTexture, WebGLTexture] | null = null;
   private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbIdx = 0;
+  /** True after feedback buffers were (re)allocated: they hold no valid history yet. */
+  private feedbackDirty = true;
   private passthrough: CompiledProgram;
   private compiled = new Map<
     string,
@@ -294,6 +296,27 @@ export class GlRenderer {
     )
       return;
 
+    // Feedback buffers were reallocated (load/resize): seed both with the
+    // current source so feedback-reading effects (melt) get valid history
+    // instead of uninitialized memory.
+    if (this.feedbackDirty) {
+      this.drawPass(
+        this.passthrough,
+        this.fbFBOs[0],
+        this.sourceTexture,
+        1.0,
+        time,
+      );
+      this.drawPass(
+        this.passthrough,
+        this.fbFBOs[1],
+        this.sourceTexture,
+        1.0,
+        time,
+      );
+      this.feedbackDirty = false;
+    }
+
     // Compute delta time for phase accumulation
     const dt = this.lastTime >= 0 ? time - this.lastTime : 0;
     this.lastTime = time;
@@ -337,7 +360,11 @@ export class GlRenderer {
       const entry = this.compiled.get(eff.defId);
       if (!entry) continue;
 
-      const effectTime = this.getEffectTime(eff, time, safeDt);
+      const { time: effectTime, delta: effectDelta } = this.getEffectTime(
+        eff,
+        time,
+        safeDt,
+      );
 
       // Multi-pass effects: run pre-passes through HDR ping-pong, then composite
       const originalInput = input;
@@ -370,6 +397,7 @@ export class GlRenderer {
           entry.def,
           eff.values,
           entry.prePasses ? originalInput : undefined,
+          effectDelta,
         );
       } else {
         this.drawPass(
@@ -381,6 +409,7 @@ export class GlRenderer {
           entry.def,
           eff.values,
           entry.prePasses ? originalInput : undefined,
+          effectDelta,
         );
         input = this.ppTextures[ppIdx];
         ppIdx = 1 - ppIdx;
@@ -408,13 +437,17 @@ export class GlRenderer {
   }
 
   /** For effects with a speed param, accumulate phase so speed changes don't cause jumps. */
-  private getEffectTime(eff: EffectInstance, time: number, dt: number): number {
-    if (!("speed" in eff.values)) return time;
+  private getEffectTime(
+    eff: EffectInstance,
+    time: number,
+    dt: number,
+  ): { time: number; delta: number } {
+    if (!("speed" in eff.values)) return { time, delta: dt };
     const speed = eff.values.speed as number;
     const prev = this.phaseMap.get(eff.instanceId) ?? 0;
     const phase = prev + dt * speed;
     this.phaseMap.set(eff.instanceId, phase);
-    return phase;
+    return { time: phase, delta: dt * speed };
   }
 
   private getTrackingState(instanceId: string): TrackingState {
@@ -909,6 +942,7 @@ export class GlRenderer {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;
+    this.feedbackDirty = true;
   }
 
   private static BLEND_MODE_VALUES: Record<TextOverlayBlendMode, number> = {
@@ -976,6 +1010,7 @@ export class GlRenderer {
     shaderDef?: EffectShaderDef,
     values?: Record<string, number | string>,
     originalTex?: WebGLTexture,
+    delta?: number,
   ) {
     const gl = this.gl;
 
@@ -998,6 +1033,9 @@ export class GlRenderer {
     }
     if (compiled.uniforms["u_time"]) {
       gl.uniform1f(compiled.uniforms["u_time"], time);
+    }
+    if (compiled.uniforms["u_delta"] && delta !== undefined) {
+      gl.uniform1f(compiled.uniforms["u_delta"], delta);
     }
     if (compiled.uniforms["u_feedback"] && this.fbTextures) {
       gl.activeTexture(gl.TEXTURE1);

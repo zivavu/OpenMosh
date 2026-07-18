@@ -40,6 +40,7 @@
 		border-right: 1px solid #333;
 		color: #777;
 		cursor: pointer;
+		width: 100%;
 		transition:
 			color 0.15s,
 			background 0.15s;

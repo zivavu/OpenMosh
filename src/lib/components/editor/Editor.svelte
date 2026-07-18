@@ -425,9 +425,22 @@
 	let selectedSegmentId = $state<string | null>(null);
 	let seqPresets = $state<Preset[]>([]);
 
+	// With an external track the audio is the master clock (matches export,
+	// where the audio span sets the duration and the video loops inside it).
+	// Segments then live on the audio timeline, not the video's.
+	let seqMasterIsAudio = $derived(!!audio.trackFile && audio.trackDuration > 0);
+	let seqMasterDuration = $derived(
+		seqMasterIsAudio ? audio.trackDuration : videoDuration,
+	);
+
+	function seqMasterTime(): number {
+		if (seqMasterIsAudio) return audio.trackCurrentTime;
+		return previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
+	}
+
 	const previewSeqSource = createSequenceEffectSource(
 		() => sequenceSegments,
-		() => videoDuration,
+		() => seqMasterDuration,
 		getMoshOptions,
 	);
 
@@ -438,14 +451,32 @@
 			return;
 		}
 		seqPresets = loadPresets();
-		if (sequenceSegments.length === 0 && videoDuration > 0) {
-			// Seed the first segment from the current panel state
-			const seg = createSequenceSegment(0, videoDuration);
+		if (sequenceSegments.length === 0 && seqMasterDuration > 0) {
+			// Seed the first segment from the current panel state; open-ended so
+			// it stretches if the master timeline changes (e.g. a track is added)
+			const seg = createSequenceSegment(0, null);
 			seg.effects = effects.map(cloneEffectInstance);
 			seg.label = 'current';
 			sequenceSegments = [seg];
 		}
 	}
+
+	// Single playhead: audio master drives the video. Follow play/pause state
+	// and correct drift (loop cycles, seeks) beyond a small threshold.
+	$effect(() => {
+		if (!sequenceEnabled || !seqMasterIsAudio || !isVideo) return;
+		const vDur = videoSpanEnd - videoSpanStart;
+		if (vDur <= 0) return;
+		const elapsed = Math.max(0, audio.trackCurrentTime - audio.spanStart);
+		const target = videoSpanStart + ((elapsed * videoSpeed) % vDur);
+		const cur = previewPlayer
+			? previewPlayer.currentTime
+			: (videoEl?.currentTime ?? 0);
+		if (Math.abs(cur - target) > 0.25) seekVideoTo(target);
+		const vPlaying = previewPlayer ? previewPlayer.playing : videoPlaying;
+		if (audio.audioPlaying && !vPlaying) playVideo();
+		else if (!audio.audioPlaying && vPlaying) pauseVideo();
+	});
 
 	// Playhead / selection → active effects. While playing the playhead wins;
 	// while paused a clicked segment is loaded into the panel for editing.
@@ -453,10 +484,18 @@
 	// a $state proxy, so comparing against `effects` would never settle.
 	let lastSeqApplied: EffectInstance[] | null = null;
 	$effect(() => {
-		if (!sequenceEnabled || sequenceSegments.length === 0 || videoDuration <= 0)
+		if (
+			!sequenceEnabled ||
+			sequenceSegments.length === 0 ||
+			seqMasterDuration <= 0
+		)
 			return;
-		const playing = previewPlayer ? previewPlayer.playing : videoPlaying;
-		const t = previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
+		const playing = seqMasterIsAudio
+			? audio.audioPlaying
+			: previewPlayer
+				? previewPlayer.playing
+				: videoPlaying;
+		const t = seqMasterTime();
 		let next: EffectInstance[] | null = null;
 		if (!playing && selectedSegmentId) {
 			const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
@@ -538,11 +577,10 @@
 		// Sequence mode: the mosh group is hidden, so the shortcut rolls the
 		// selected (or playhead-active) segment via the timeline path instead.
 		if (sequenceEnabled && sequenceSegments.length > 0) {
-			const t = previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
 			const seg =
 				(selectedSegmentId &&
 					sequenceSegments.find((s) => s.id === selectedSegmentId)) ||
-				findSegmentAt(sequenceSegments, t, videoDuration);
+				findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration);
 			if (seg) seqRoll(seg.id);
 			return;
 		}
@@ -673,6 +711,8 @@
 							? {
 									segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 									moshOptions: getMoshOptions(),
+									duration: seqMasterDuration,
+									masterIsAudio: seqMasterIsAudio,
 								}
 							: null,
 					onProgress: (p) => {
@@ -976,12 +1016,16 @@
 				</RecordGroup>
 			{/if}
 		</div>
-		{#if isVideo && videoDuration > 0 && sequenceEnabled}
+		{#if isVideo && seqMasterDuration > 0 && sequenceEnabled}
 			<SequenceTimeline
 				segments={sequenceSegments}
-				trackDuration={videoDuration}
-				currentTime={previewPlayer ? previewPlayer.currentTime : videoCurrentTime}
-				onSeek={seekVideoTo}
+				trackDuration={seqMasterDuration}
+				currentTime={seqMasterIsAudio
+					? audio.trackCurrentTime
+					: previewPlayer
+						? previewPlayer.currentTime
+						: videoCurrentTime}
+				onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
 				bind:selectedSegmentId
 				presets={seqPresets}
 				onSegmentsChange={(segs) => (sequenceSegments = segs)}
@@ -990,7 +1034,9 @@
 				onModeChange={seqModeChange}
 			/>
 		{/if}
-		{#if isVideo && videoDuration > 0}
+		<!-- One playhead in sequence mode with a track: hide the video transport,
+		     the audio timeline below is the master -->
+		{#if isVideo && videoDuration > 0 && !(sequenceEnabled && seqMasterIsAudio)}
 			<AudioTimeline
 				label="VID"
 				trackDuration={videoDuration}
