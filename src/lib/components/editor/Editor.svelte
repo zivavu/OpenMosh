@@ -24,6 +24,7 @@
 	import {
 		createSequenceEffectSource,
 		createSequenceSegment,
+		findSegmentAt,
 		randomSeed,
 		type SequenceSegment,
 		type SequenceSegmentMode,
@@ -505,7 +506,7 @@
 	}
 
 	const history = createEffectHistory();
-	let moshGroupRef: MoshGroup | undefined = undefined;
+	let moshGroupRef: MoshGroup | undefined = $state(undefined);
 	// svelte-ignore non_reactive_update
 	let recordGroupRef: RecordGroup | undefined = undefined;
 	let trackLibraryRef: TrackLibrary | undefined = undefined;
@@ -516,6 +517,17 @@
 	}
 
 	function mosh() {
+		// Sequence mode: the mosh group is hidden, so the shortcut rolls the
+		// selected (or playhead-active) segment via the timeline path instead.
+		if (sequenceEnabled && sequenceSegments.length > 0) {
+			const t = previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
+			const seg =
+				(selectedSegmentId &&
+					sequenceSegments.find((s) => s.id === selectedSegmentId)) ||
+				findSegmentAt(sequenceSegments, t, videoDuration);
+			if (seg) seqRoll(seg.id);
+			return;
+		}
 		const next = history.redo();
 		if (next) {
 			effects = next;
@@ -859,7 +871,8 @@
 						<ListVideo size={14} />
 					</button>
 				{/if}
-				<MoshGroup
+				{#if !sequenceEnabled}
+					<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
 					onClear={clearEffects}
@@ -892,6 +905,7 @@
 						/>
 					{/snippet}
 				</MoshGroup>
+				{/if}
 			</div>
 			{#if isImageFormat}
 				<button class="action-btn save-btn" onclick={save}>
