@@ -430,6 +430,9 @@
 
 	// Playhead / selection → active effects. While playing the playhead wins;
 	// while paused a clicked segment is loaded into the panel for editing.
+	// Identity latch is a plain variable: `effects = next` wraps plain arrays in
+	// a $state proxy, so comparing against `effects` would never settle.
+	let lastSeqApplied: EffectInstance[] | null = null;
 	$effect(() => {
 		if (!sequenceEnabled || sequenceSegments.length === 0 || videoDuration <= 0)
 			return;
@@ -444,7 +447,10 @@
 			}
 		}
 		if (!next) next = previewSeqSource(t);
-		if (next && next !== effects) effects = next;
+		if (next && next !== lastSeqApplied) {
+			lastSeqApplied = next;
+			effects = next;
+		}
 	});
 
 	function seqApplyPreset(segId: string, presetIndex: number) {

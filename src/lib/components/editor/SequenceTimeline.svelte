@@ -566,8 +566,9 @@
 		{/if}
 	</div>
 
-	{#if selectedSegment}
-		<div class="seg-toolbar">
+	<!-- Toolbar row is always rendered so selecting a segment doesn't shift the layout -->
+	<div class="seg-toolbar">
+		{#if selectedSegment}
 			<span class="seg-toolbar-label">SEGMENT</span>
 			<select
 				class="seg-select"
@@ -632,8 +633,14 @@
 			>
 				<Trash2 size={12} />
 			</button>
-		</div>
-	{/if}
+		{:else}
+			<span class="seg-toolbar-hint">
+				{segments.length === 0
+					? 'Double-click the timeline to create a segment'
+					: 'Click a segment to assign a preset or mosh'}
+			</span>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -777,6 +784,13 @@
 		gap: 0.4rem;
 		padding: 0.35rem 0.25rem 0;
 		flex-wrap: wrap;
+		min-height: 28px;
+	}
+
+	.seg-toolbar-hint {
+		font-size: 0.62rem;
+		color: #555;
+		letter-spacing: 0.03em;
 	}
 
 	.seg-toolbar-label {
