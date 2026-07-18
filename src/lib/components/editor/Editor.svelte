@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Download, HelpCircle, Home, Library } from 'lucide-svelte';
+	import { Download, HelpCircle, Home, Library, ListVideo } from 'lucide-svelte';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
@@ -13,10 +13,21 @@
 	import { createEffectHistory } from '../../editor/history.svelte';
 	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
+		applyPreset,
+		cloneEffectInstance,
 		loadInitialEffects,
+		loadPresets,
 		setVolumeLink,
 		type EffectInstance,
+		type Preset,
 	} from '../../effects';
+	import {
+		createSequenceEffectSource,
+		createSequenceSegment,
+		randomSeed,
+		type SequenceSegment,
+		type SequenceSegmentMode,
+	} from '../../editor/sequence';
 	import type { GlRenderer } from '../../gl/renderer';
 	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
@@ -28,6 +39,7 @@
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import GlCanvas from './GlCanvas.svelte';
+	import SequenceTimeline from './SequenceTimeline.svelte';
 	import MoshGroup from './MoshGroup.svelte';
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
 	import RecordGroup from './RecordGroup.svelte';
@@ -388,6 +400,90 @@
 		};
 	}
 
+	// ── Sequence mode: timeline of preset/mosh segments over the video ───────
+	let sequenceEnabled = $state(false);
+	let sequenceSegments = $state<SequenceSegment[]>([]);
+	let selectedSegmentId = $state<string | null>(null);
+	let seqPresets = $state<Preset[]>([]);
+
+	const previewSeqSource = createSequenceEffectSource(
+		() => sequenceSegments,
+		() => videoDuration,
+		getMoshOptions,
+	);
+
+	function toggleSequence() {
+		sequenceEnabled = !sequenceEnabled;
+		if (!sequenceEnabled) {
+			selectedSegmentId = null;
+			return;
+		}
+		seqPresets = loadPresets();
+		if (sequenceSegments.length === 0 && videoDuration > 0) {
+			// Seed the first segment from the current panel state
+			const seg = createSequenceSegment(0, videoDuration);
+			seg.effects = effects.map(cloneEffectInstance);
+			seg.label = 'current';
+			sequenceSegments = [seg];
+		}
+	}
+
+	// Playhead / selection → active effects. While playing the playhead wins;
+	// while paused a clicked segment is loaded into the panel for editing.
+	$effect(() => {
+		if (!sequenceEnabled || sequenceSegments.length === 0 || videoDuration <= 0)
+			return;
+		const playing = previewPlayer ? previewPlayer.playing : videoPlaying;
+		const t = previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
+		let next: EffectInstance[] | null = null;
+		if (!playing && selectedSegmentId) {
+			const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
+			if (seg) {
+				next =
+					seg.mode === 'static' ? seg.effects : previewSeqSource(seg.startTime);
+			}
+		}
+		if (!next) next = previewSeqSource(t);
+		if (next && next !== effects) effects = next;
+	});
+
+	function seqApplyPreset(segId: string, presetIndex: number) {
+		const preset = seqPresets[presetIndex];
+		if (!preset) return;
+		sequenceSegments = sequenceSegments.map((s) =>
+			s.id === segId
+				? { ...s, mode: 'static', label: preset.name, effects: applyPreset(preset) }
+				: s,
+		);
+	}
+
+	function seqRoll(segId: string) {
+		sequenceSegments = sequenceSegments.map((s) => {
+			if (s.id !== segId) return s;
+			if (s.mode === 'interval') return { ...s, seed: randomSeed() };
+			const fx = loadInitialEffects();
+			generateMoshFn(fx, getMoshOptions());
+			return { ...s, label: 'mosh', effects: fx };
+		});
+	}
+
+	function seqModeChange(
+		segId: string,
+		mode: SequenceSegmentMode,
+		intervalSec?: number,
+	) {
+		sequenceSegments = sequenceSegments.map((s) =>
+			s.id === segId
+				? {
+						...s,
+						mode,
+						intervalSec: intervalSec ?? s.intervalSec ?? 0.25,
+						seed: s.seed ?? randomSeed(),
+					}
+				: s,
+		);
+	}
+
 	function playSpan() {
 		audio.playAudio();
 		if (isVideo) playVideo();
@@ -740,6 +836,16 @@
 						<HelpCircle size={14} />
 					</button>
 				{/if}
+				{#if isVideo && videoDuration > 0}
+					<button
+						class="help-btn"
+						class:seq-active={sequenceEnabled}
+						onclick={toggleSequence}
+						title="Sequence timeline — different presets/moshes over time"
+					>
+						<ListVideo size={14} />
+					</button>
+				{/if}
 				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
@@ -826,6 +932,20 @@
 				</RecordGroup>
 			{/if}
 		</div>
+		{#if isVideo && videoDuration > 0 && sequenceEnabled}
+			<SequenceTimeline
+				segments={sequenceSegments}
+				trackDuration={videoDuration}
+				currentTime={previewPlayer ? previewPlayer.currentTime : videoCurrentTime}
+				onSeek={seekVideoTo}
+				bind:selectedSegmentId
+				presets={seqPresets}
+				onSegmentsChange={(segs) => (sequenceSegments = segs)}
+				onApplyPreset={seqApplyPreset}
+				onRoll={seqRoll}
+				onModeChange={seqModeChange}
+			/>
+		{/if}
 		{#if isVideo && videoDuration > 0}
 			<AudioTimeline
 				label="VID"
@@ -987,6 +1107,11 @@
 	.help-btn:hover {
 		border-color: #777;
 		color: #ccc;
+	}
+
+	.help-btn.seq-active {
+		border-color: #b08ad0;
+		color: #d8b8f8;
 	}
 
 	@media (max-width: 800px) {
