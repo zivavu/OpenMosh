@@ -1067,27 +1067,6 @@ void main() {
 		setUniforms: floats('size', 'offset', 'angle'),
 	},
 
-	'color-melt': {
-		fragment:
-			H +
-			`uniform float u_intensity;
-void main() {
-  float t = u_time;
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float rOff = sin(v_uv.y * 12.0 + t * 1.3) + sin(v_uv.y * 23.0 - t * 0.7);
-  float gOff = sin(v_uv.y * 8.0 + t * 0.9 + 2.094) + cos(v_uv.y * 17.0 + t * 1.1);
-  float bOff = sin(v_uv.y * 15.0 + t * 1.7 + 4.189) + sin(v_uv.y * 31.0 + t * 0.5);
-  outColor = vec4(
-    texture(u_texture, v_uv + vec2(rOff * u_intensity * px.x, 0.0)).r,
-    texture(u_texture, v_uv + vec2(gOff * u_intensity * px.x, 0.0)).g,
-    texture(u_texture, v_uv + vec2(bOff * u_intensity * px.x, 0.0)).b,
-    1.0
-  );
-}`,
-		animated: true,
-		setUniforms: floats('intensity'),
-	},
-
 	'data-bend': {
 		fragment:
 			H +
@@ -1186,6 +1165,8 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
+uniform float u_delta;
+uniform sampler2D u_feedback;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -1203,37 +1184,54 @@ float fbm(vec2 p) {
 void main() {
   vec3 lum = vec3(0.299, 0.587, 0.114);
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = u_time * 0.35;
+  float t = u_time;
 
-  // Smooth flow field: broad sag shaped by fbm, narrow drips where dripN peaks
-  float flowN = fbm(vec2(v_uv.x * 5.0, v_uv.y * 2.0 - t));
-  float dripN = fbm(vec2(v_uv.x * 13.0 + 31.0, t * 0.7));
-  float bright = dot(texture(u_texture, v_uv).rgb, lum);
+  // --- Drip field ---------------------------------------------------------
+  // Broad slow columns crossed with fine streaks; wanders gently over time.
+  float cols = fbm(vec2(v_uv.x * 4.0, t * 0.05));
+  float streaks = fbm(vec2(v_uv.x * 47.0 + 13.0, t * 0.021));
+  float drip = cols * cols * (0.3 + 0.7 * streaks);
 
-  float sag = u_amount * v_uv.y * (0.35 + 0.65 * flowN) * (0.5 + bright * 0.5);
-  float drip = u_amount * pow(dripN, 3.0) * v_uv.y * 1.5;
-  float disp = sag * 0.18 + drip * 0.3;
+  // A melting front descends per column, so drips grow downward over time
+  // instead of the whole image sliding at once.
+  float front = t * u_amount * (0.02 + 0.3 * cols);
+  float meltOn = smoothstep(0.0, 0.18, front - v_uv.y);
 
-  // Stretch-sampling: compress above, elongate below — sagging glass
-  float srcY = v_uv.y - disp * smoothstep(0.0, 0.35, v_uv.y);
+  // Bright wax runs faster.
+  float bright = dot(texture(u_feedback, v_uv).rgb, lum);
 
-  // Refraction: bend light horizontally by the local luminance gradient
-  float lL = dot(texture(u_texture, vec2(v_uv.x - 3.0 * px.x, srcY)).rgb, lum);
-  float lR = dot(texture(u_texture, vec2(v_uv.x + 3.0 * px.x, srcY)).rgb, lum);
-  float refr = (lR - lL) * u_amount * 0.04 * (0.3 + flowN);
+  // Per-frame fall distance (uv units), framerate-independent via u_delta.
+  float fall = u_delta * u_amount * meltOn
+             * (0.05 + 1.6 * drip) * (0.35 + 0.65 * bright) * 0.06;
 
-  vec2 uv = vec2(clamp(v_uv.x + refr, 0.0, 1.0), clamp(srcY, 0.0, 1.0));
+  // Moving drips swing sideways; amplitude scales with their speed.
+  float sway = sin(v_uv.y * 21.0 - t * 1.4 + cols * 6.2831) * fall * 2.2;
 
-  // Chromatic split along the flow axis
-  float ca = disp * 0.015;
-  vec3 col;
-  col.r = texture(u_texture, uv + vec2(0.0, -ca)).r;
-  col.g = texture(u_texture, uv).g;
-  col.b = texture(u_texture, uv + vec2(0.0, ca)).b;
+  // Advection: this pixel receives what was slightly above it last frame
+  // (+v_uv.y is screen-down in effect space).
+  vec2 from = vec2(clamp(v_uv.x + sway, 0.0, 1.0),
+                   clamp(v_uv.y - fall, 0.0, 1.0));
+  vec3 melted = texture(u_feedback, from).rgb;
 
-  // Bright rim where the flow gradient is steepest (specular hint)
-  float rim = clamp(abs(dFdy(disp)) * 60.0 - 0.25, 0.0, 0.35);
-  col += vec3(0.9, 0.95, 1.0) * rim * u_amount;
+  // --- Viscous softening ---------------------------------------------------
+  // Only where actually flowing: fast drips smear and blend like wax,
+  // untouched areas stay perfectly crisp.
+  float visc = 0.7 * clamp(fall / (px.y * 1.5), 0.0, 1.0);
+  vec3 up   = texture(u_feedback, clamp(from + vec2(0.0, px.y * 1.5), vec2(0.0), vec2(1.0))).rgb;
+  vec3 down = texture(u_feedback, clamp(from - vec2(0.0, px.y * 1.5), vec2(0.0), vec2(1.0))).rgb;
+  melted = mix(melted, (melted * 2.0 + up + down) * 0.25, visc);
+
+  // --- Re-solidifying ------------------------------------------------------
+  // The source image constantly seeps back through the wax, so the melt
+  // reaches a living equilibrium instead of burying the input. Higher
+  // amounts drip faster and re-solidify slower, but never fully take over.
+  vec3 fresh = texture(u_texture, v_uv).rgb;
+  float heal = 1.0 - exp(-mix(2.0, 0.25, u_amount) * u_delta);
+  melted = mix(melted, fresh, heal);
+
+  // Where the front hasn't arrived yet, show the live chain input so
+  // unmelted regions (and upstream animated effects) stay alive.
+  vec3 col = mix(fresh, melted, meltOn);
 
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`,

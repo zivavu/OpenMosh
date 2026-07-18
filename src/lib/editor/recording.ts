@@ -24,10 +24,14 @@ export interface RecordingContext {
   /** Video playback speed factor (1 = normal). Defaults to 1. */
   videoSpeed?: number;
   file: File;
-  /** Sequence mode: per-time effect segments over the video timeline. */
+  /** Sequence mode: per-time effect segments over the master timeline. */
   sequence?: {
     segments: SequenceSegment[];
     moshOptions: MoshOptions;
+    /** Master timeline length (audio track duration when masterIsAudio, else video duration). */
+    duration: number;
+    /** True when an external track drives the clock — segments are keyed to audio time. */
+    masterIsAudio: boolean;
   } | null;
   onProgress: (p: number) => void;
   onFinalizing: () => void;
@@ -169,18 +173,21 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     }
   };
 
-  // Sequence mode: resolve effects per frame from the segment list, keyed by
-  // source-video time so speed/looping line up with what was previewed.
+  // Sequence mode: resolve effects per frame from the segment list. With an
+  // external track segments live on the audio timeline (master clock);
+  // otherwise they're keyed by source-video time, honoring speed/looping.
   const sequence = ctx.sequence;
   const seqSource =
     isVideo && videoEl && sequence && sequence.segments.length > 0
       ? createSequenceEffectSource(
           () => sequence.segments,
-          () => videoDuration,
+          () => sequence.duration,
           () => sequence.moshOptions,
           { cloneStatic: true },
         )
       : null;
+  const seqTimeAt = (time: number): number =>
+    sequence?.masterIsAudio ? audioStart + time : sourceTimeAt(time);
   const effectsRef = seqSource
     ? {
         current: effects.map(
@@ -197,7 +204,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     const base = videoFrames ? decodeBeforeRender : seekBeforeRender;
     await base(frameIndex, time);
     // On a gap (no segment) keep the previous frame's effects.
-    const fx = seqSource!(sourceTimeAt(time));
+    const fx = seqSource!(seqTimeAt(time));
     if (fx) effectsRef!.current = fx;
   };
 

@@ -766,30 +766,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       ],
    },
    {
-      id: 'color-melt',
-      name: 'Color Melt',
-      params: [
-         {
-            key: 'intensity',
-            label: 'Intensity',
-            type: 'range',
-            min: 0,
-            max: 100,
-            step: 1,
-            defaultValue: 30,
-         },
-         {
-            key: 'speed',
-            label: 'Speed',
-            type: 'range',
-            min: 0.1,
-            max: 5,
-            step: 0.1,
-            defaultValue: 1,
-         },
-      ],
-   },
-   {
       id: 'data-bend',
       name: 'Data Bend',
       params: [
