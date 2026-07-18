@@ -10,6 +10,8 @@
 		canClear?: boolean;
 		showSettings?: boolean;
 		settingsContent?: Snippet;
+		/** Hide the mosh/clear/undo buttons but keep the settings gear (sequence mode). */
+		hideActions?: boolean;
 	}
 
 	let {
@@ -20,6 +22,7 @@
 		canClear = false,
 		showSettings = $bindable(false),
 		settingsContent,
+		hideActions = false,
 	}: Props = $props();
 
 	let groupEl: HTMLDivElement;
@@ -42,22 +45,24 @@
 			<Settings size={14} />
 		</button>
 	{/if}
-	<button class="settings-btn" onclick={onClear} disabled={!canClear} title="Clear all effects" aria-label="Clear all effects">
-		<X size={14} />
-	</button>
-	<button
-		class="settings-btn"
-		onclick={onUndo}
-		disabled={!canUndo}
-		title="Undo"
-		aria-label="Undo"
-	>
-		<RotateCcw size={14} />
-	</button>
-	<button class="action-btn mosh-btn" onclick={onMosh}>
-		<Zap size={16} />
-		MOSH
-	</button>
+	{#if !hideActions}
+		<button class="settings-btn" onclick={onClear} disabled={!canClear} title="Clear all effects" aria-label="Clear all effects">
+			<X size={14} />
+		</button>
+		<button
+			class="settings-btn"
+			onclick={onUndo}
+			disabled={!canUndo}
+			title="Undo"
+			aria-label="Undo"
+		>
+			<RotateCcw size={14} />
+		</button>
+		<button class="action-btn mosh-btn" onclick={onMosh}>
+			<Zap size={16} />
+			MOSH
+		</button>
+	{/if}
 
 	{#if showSettings && settingsContent}
 		<div class="mosh-settings">

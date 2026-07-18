@@ -188,7 +188,9 @@
 	let videoLoop = $state(saved.loopVideo ?? true);
 	let showShortcuts = $state(false);
 
-	const shortcutGroups = [
+	let sequenceEnabled = $state(false);
+
+	const shortcutGroups = $derived([
 		{
 			title: 'Shortcuts',
 			shortcuts: [
@@ -200,7 +202,23 @@
 				{ keys: ['V'], description: 'Re-input current frame' },
 			],
 		},
-	];
+		...(sequenceEnabled
+			? [
+					{
+						title: 'Sequence timeline',
+						shortcuts: [
+							{ keys: ['Dbl-click'], description: 'Create / split segment' },
+							{ keys: ['Ctrl+Click'], description: 'Split segment at cursor' },
+							{ keys: ['Click'], description: 'Select segment for editing' },
+							{ keys: ['→'], description: 'Re-roll selected segment' },
+							{ keys: ['Delete'], description: 'Delete segment / merge boundary' },
+							{ keys: ['Esc'], description: 'Deselect segment' },
+							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
+						],
+					},
+				]
+			: []),
+	]);
 
 	const audio = new AudioManager({
 		getEffects: () => effects,
@@ -402,7 +420,7 @@
 	}
 
 	// ── Sequence mode: timeline of preset/mosh segments over the video ───────
-	let sequenceEnabled = $state(false);
+	// (sequenceEnabled is declared above the shortcut groups that read it)
 	let sequenceSegments = $state<SequenceSegment[]>([]);
 	let selectedSegmentId = $state<string | null>(null);
 	let seqPresets = $state<Preset[]>([]);
@@ -871,14 +889,14 @@
 						<ListVideo size={14} />
 					</button>
 				{/if}
-				{#if !sequenceEnabled}
-					<MoshGroup
+				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
 					onClear={clearEffects}
 					onUndo={undo}
 					canUndo={history.canUndo}
 					canClear={history.canUndo}
+					hideActions={sequenceEnabled}
 					bind:showSettings={showMoshSettings}
 				>
 					{#snippet settingsContent()}
@@ -905,7 +923,6 @@
 						/>
 					{/snippet}
 				</MoshGroup>
-				{/if}
 			</div>
 			{#if isImageFormat}
 				<button class="action-btn save-btn" onclick={save}>
