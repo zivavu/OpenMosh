@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Download, HelpCircle, Home, Library, ListVideo } from 'lucide-svelte';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
@@ -128,7 +129,7 @@
 		previewPlayer?.setSpeed(videoSpeed);
 	});
 	$effect(() => {
-		if (previewPlayer) previewPlayer.loop = videoLoop;
+		if (previewPlayer) previewPlayer.loop = videoLoop || seqForceLoop;
 	});
 	$effect(() => {
 		previewPlayer?.setSpan(videoSpanStart, videoSpanEnd);
@@ -461,21 +462,35 @@
 		}
 	}
 
-	// Single playhead: audio master drives the video. Follow play/pause state
-	// and correct drift (loop cycles, seeks) beyond a small threshold.
+	// While audio is master the video must always loop its span, regardless of
+	// the user's loop toggle — master positions past the video length land
+	// inside the loop instead of on a paused last frame.
+	let seqForceLoop = $derived(sequenceEnabled && seqMasterIsAudio);
+
+	// Single playhead: audio master drives the video. Runs only on the ~4 Hz
+	// audio clock ticks — video position/play-state are read untracked, so this
+	// never re-runs per rendered frame (a reactive read of the video clock here
+	// caused a seek storm that thrashed the decoder down to a few FPS).
 	$effect(() => {
 		if (!sequenceEnabled || !seqMasterIsAudio || !isVideo) return;
 		const vDur = videoSpanEnd - videoSpanStart;
 		if (vDur <= 0) return;
 		const elapsed = Math.max(0, audio.trackCurrentTime - audio.spanStart);
 		const target = videoSpanStart + ((elapsed * videoSpeed) % vDur);
-		const cur = previewPlayer
-			? previewPlayer.currentTime
-			: (videoEl?.currentTime ?? 0);
-		if (Math.abs(cur - target) > 0.25) seekVideoTo(target);
-		const vPlaying = previewPlayer ? previewPlayer.playing : videoPlaying;
-		if (audio.audioPlaying && !vPlaying) playVideo();
-		else if (!audio.audioPlaying && vPlaying) pauseVideo();
+		const audioPlaying = audio.audioPlaying;
+		untrack(() => {
+			const cur = previewPlayer
+				? previewPlayer.currentTime
+				: (videoEl?.currentTime ?? 0);
+			// Circular distance: near the loop wrap cur≈end vs target≈start is
+			// alignment, not drift.
+			const diff = Math.abs(cur - target);
+			const drift = Math.min(diff, vDur - diff);
+			if (drift > 0.35) seekVideoTo(target);
+			const vPlaying = previewPlayer ? previewPlayer.playing : videoPlaying;
+			if (audioPlaying && !vPlaying) playVideo();
+			else if (!audioPlaying && vPlaying) pauseVideo();
+		});
 	});
 
 	// Playhead / selection → active effects. While playing the playhead wins;
@@ -864,12 +879,12 @@
 					// Span-loop: skip during recording (export seeks the video directly)
 					if (!recordingState.recording && videoEl && videoCurrentTime >= videoSpanEnd) {
 						videoEl.currentTime = videoSpanStart;
-						if (!videoLoop) videoEl.pause();
+						if (!videoLoop && !seqForceLoop) videoEl.pause();
 					}
 				}}
 				onended={() => {
 					// Natural end can fire before timeupdate reaches spanEnd
-					if (!previewPlayer && !recordingState.recording && videoEl && videoLoop) {
+					if (!previewPlayer && !recordingState.recording && videoEl && (videoLoop || seqForceLoop)) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
 					}
