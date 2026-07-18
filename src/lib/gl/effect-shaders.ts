@@ -121,6 +121,26 @@ function floats(...keys: string[]): EffectShaderDef['setUniforms'] {
 	};
 }
 
+/** Plain horizontal Gaussian (no threshold) — Blur effect pass 1. */
+const BLUR_H_FRAG = `uniform float u_radius;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float spread = u_radius * 3.0;
+  float sigma = spread * 0.4;
+  float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
+  vec3 sum = vec3(0.0);
+  float totalW = 0.0;
+  const int R = 16;
+  float step = spread / float(R);
+  for (int i = -R; i <= R; i++) {
+    float fi = float(i) * step;
+    float w = exp(-fi * fi * invSigma2);
+    sum += texture(u_texture, v_uv + vec2(fi * px.x, 0.0)).rgb * w;
+    totalW += w;
+  }
+  outColor = vec4(sum / totalW, 1.0);
+}`;
+
 const GLOW_VBLUR_FRAG = `uniform float u_radius;
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
@@ -1237,6 +1257,275 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: floats('amount'),
+	},
+
+	echo: {
+		fragment:
+			H +
+			`uniform float u_decay;
+uniform int u_mode;
+uniform float u_delta;
+uniform sampler2D u_feedback;
+void main() {
+  vec3 fresh = texture(u_texture, v_uv).rgb;
+  // Per-frame decay normalized to 60 fps so trails last the same
+  // wall-clock time at any frame rate.
+  float d = pow(u_decay, u_delta * 60.0);
+  vec3 prev = texture(u_feedback, v_uv).rgb * d;
+  vec3 col;
+  if (u_mode == 1) {
+    // Light trails: bright residue only ever fades
+    col = max(fresh, prev);
+  } else if (u_mode == 2) {
+    // Accumulate: burns toward white
+    col = min(fresh + prev, vec3(1.0));
+  } else {
+    // Blend: soft dreamy trails that never darken the still image
+    col = mix(fresh, max(fresh, prev), d);
+  }
+  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`,
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_decay', v.decay as number);
+			setInt(gl, l, 'u_mode', v.mode === 'max' ? 1 : v.mode === 'add' ? 2 : 0);
+		},
+	},
+
+	tunnel: {
+		fragment:
+			H +
+			`uniform float u_zoom;
+uniform float u_spin;
+uniform float u_decay;
+uniform float u_delta;
+uniform sampler2D u_feedback;
+void main() {
+  // Pull last frame slightly toward/around the center: infinite zoom tunnel.
+  // Out-of-bounds samples mirror (texture wrap), folding the edges back in.
+  float s = 1.0 - u_zoom * u_delta * 0.8;
+  float a = u_spin * (3.14159265 / 180.0) * u_delta;
+  vec2 c = v_uv - 0.5;
+  float ca = cos(a), sa = sin(a);
+  c = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y) * s;
+  vec3 prev = texture(u_feedback, c + 0.5).rgb * pow(u_decay, u_delta * 60.0);
+  vec3 fresh = texture(u_texture, v_uv).rgb;
+  outColor = vec4(clamp(max(fresh, prev), 0.0, 1.0), 1.0);
+}`,
+		animated: true,
+		setUniforms: floats('zoom', 'spin', 'decay'),
+	},
+
+	halftone: {
+		fragment:
+			H +
+			`uniform float u_scale;
+uniform float u_angle;
+uniform float u_contrast;
+uniform float u_invert;
+uniform int u_mode;
+void main() {
+  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 pos = v_uv * res;
+  vec3 src = texture(u_texture, v_uv).rgb;
+  float lum = dot(src, vec3(0.299, 0.587, 0.114));
+  lum = clamp((lum - 0.5) * u_contrast + 0.5, 0.0, 1.0);
+
+  float rad = u_angle * 3.14159265 / 180.0;
+  float ca = cos(rad), sa = sin(rad);
+  vec2 rp = vec2(ca * pos.x + sa * pos.y, -sa * pos.x + ca * pos.y);
+
+  float ink; // 1 = inked
+  if (u_mode == 1) {
+    // Ordered 4x4 Bayer dither, one threshold per image pixel
+    const float B[16] = float[16](
+      0.0, 8.0, 2.0, 10.0,
+      12.0, 4.0, 14.0, 6.0,
+      3.0, 11.0, 1.0, 9.0,
+      15.0, 7.0, 13.0, 5.0
+    );
+    vec2 bp = floor(mod(pos, 4.0));
+    float th = (B[int(bp.y * 4.0 + bp.x)] + 0.5) / 16.0;
+    ink = step(th, lum);
+  } else if (u_mode == 2) {
+    // Engraving lines; a second, perpendicular set joins in dark areas
+    float aa = 1.5 * 3.14159265 / u_scale;
+    float w1 = 0.5 + 0.5 * sin(rp.y * 3.14159265 / u_scale);
+    float w2 = 0.5 + 0.5 * sin(rp.x * 3.14159265 / u_scale);
+    float l1 = 1.0 - smoothstep(w1 - aa, w1 + aa, lum);
+    float l2 = 1.0 - smoothstep(w2 - aa, w2 + aa, lum * 2.0);
+    ink = max(l1, l2);
+  } else {
+    // Classic rotated dot screen: dot area grows with darkness
+    vec2 cell = fract(rp / u_scale) - 0.5;
+    float r = sqrt(1.0 - lum) * 0.7071;
+    ink = smoothstep(r, r - 1.5 / u_scale, length(cell));
+  }
+  ink = mix(ink, 1.0 - ink, u_invert);
+  // Ink takes the source color over paper white
+  vec3 col = mix(vec3(1.0), src, ink);
+  outColor = vec4(col, 1.0);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_scale', v.scale as number);
+			setFloat(gl, l, 'u_angle', v.angle as number);
+			setFloat(gl, l, 'u_contrast', v.contrast as number);
+			setFloat(gl, l, 'u_invert', v.invert as number);
+			setInt(gl, l, 'u_mode', v.mode === 'dither' ? 1 : v.mode === 'lines' ? 2 : 0);
+		},
+	},
+
+	swirl: {
+		fragment:
+			H +
+			`uniform float u_angle;
+uniform float u_radius;
+void main() {
+  vec2 res = vec2(textureSize(u_texture, 0));
+  float aspect = res.x / res.y;
+  vec2 c = v_uv - 0.5;
+  c.x *= aspect;
+  float d = length(c);
+  // Twist strongest at the core, gone by u_radius
+  float infl = smoothstep(u_radius, u_radius * 0.15, d);
+  float a = (u_angle * 3.14159265 / 180.0 + u_time) * infl;
+  float ca = cos(a), sa = sin(a);
+  vec2 r = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y);
+  vec2 uv = vec2(r.x / aspect, r.y) + 0.5;
+  outColor = texture(u_texture, uv);
+}`,
+		animated: true,
+		setUniforms: floats('angle', 'radius'),
+	},
+
+	ripple: {
+		fragment:
+			H +
+			`uniform float u_amount;
+uniform float u_frequency;
+void main() {
+  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / res;
+  float aspect = res.x / res.y;
+  vec2 c = v_uv - 0.5;
+  c.x *= aspect;
+  float d = length(c);
+  float wave = sin(d * u_frequency * 6.2831 - u_time * 4.0) / (1.0 + d * 3.0);
+  vec2 dir = d > 0.0001 ? c / d : vec2(0.0);
+  vec2 uv = v_uv + dir * wave * u_amount * px;
+  outColor = texture(u_texture, uv);
+}`,
+		animated: true,
+		setUniforms: floats('amount', 'frequency'),
+	},
+
+	blur: {
+		prePasses: [
+			{
+				fragment: H + BLUR_H_FRAG,
+				linearFilter: true,
+			},
+			{
+				fragment: H + GLOW_VBLUR_FRAG,
+				linearFilter: true,
+			},
+		],
+		fragment:
+			H +
+			`void main() {
+  outColor = texture(u_texture, v_uv);
+}`,
+		setUniforms: floats('radius'),
+	},
+
+	ascii: {
+		fragment:
+			H +
+			`uniform float u_size;
+uniform int u_color;
+uniform sampler2D u_glyphs;
+void main() {
+  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 pos = v_uv * res;
+  vec2 cellId = floor(pos / u_size);
+  vec3 cell = texture(u_texture, (cellId + 0.5) * u_size / res).rgb;
+  float lum = dot(cell, vec3(0.299, 0.587, 0.114));
+  float gi = floor(lum * 15.999);
+  vec2 local = fract(pos / u_size);
+  // 16x1 glyph atlas, sparsest (space) leftmost
+  float g = texture(u_glyphs, vec2((gi + local.x) / 16.0, local.y)).r;
+  vec3 tint = u_color == 1 ? vec3(0.25, 1.0, 0.35)
+            : u_color == 2 ? vec3(1.0)
+            : cell;
+  outColor = vec4(g * tint, 1.0);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_size', v.size as number);
+			setInt(gl, l, 'u_color', v.color === 'green' ? 1 : v.color === 'white' ? 2 : 0);
+		},
+	},
+
+	crt: {
+		fragment:
+			H +
+			`uniform float u_curvature;
+uniform float u_grille;
+uniform float u_bleed;
+uniform float u_flicker;
+void main() {
+  vec2 res = vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / res;
+  // Barrel distortion (curved glass)
+  vec2 c = v_uv - 0.5;
+  vec2 uv = v_uv + c * dot(c, c) * u_curvature * 2.0;
+
+  // Phosphor bleed: short horizontal smear
+  vec3 col = texture(u_texture, uv).rgb;
+  vec3 bleed =
+    texture(u_texture, uv + vec2(px.x * 1.5, 0.0)).rgb +
+    texture(u_texture, uv - vec2(px.x * 1.5, 0.0)).rgb +
+    texture(u_texture, uv + vec2(px.x * 3.0, 0.0)).rgb +
+    texture(u_texture, uv - vec2(px.x * 3.0, 0.0)).rgb;
+  col = mix(col, (col * 2.0 + bleed) / 6.0, u_bleed);
+
+  // Aperture grille: vertical RGB stripes with a 3 px period
+  float m = mod(floor(v_uv.x * res.x), 3.0);
+  vec3 mask = vec3(
+    1.0 - step(0.5, m),
+    step(0.5, m) * (1.0 - step(1.5, m)),
+    step(1.5, m)
+  );
+  col *= mix(vec3(1.0), mask * 1.35, u_grille);
+
+  // Frame flicker: fast jitter crossed with a slow roll
+  float fl = 0.5 + 0.5 * sin(u_time * 97.0 + sin(u_time * 61.0));
+  col *= 1.0 - u_flicker * 0.08 * fl;
+
+  // Outside the tube: black
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.0);
+  outColor = vec4(col, 1.0);
+}`,
+		animated: true,
+		setUniforms: floats('curvature', 'grille', 'bleed', 'flicker'),
+	},
+
+	'radial-blur': {
+		fragment:
+			H +
+			`uniform float u_strength;
+void main() {
+  vec2 c = v_uv - 0.5;
+  vec3 col = vec3(0.0);
+  float total = 0.0;
+  for (int i = 0; i < 12; i++) {
+    float t = float(i) / 11.0;
+    float w = 1.0 - 0.5 * t;
+    col += texture(u_texture, v_uv - c * t * u_strength * 0.25).rgb * w;
+    total += w;
+  }
+  outColor = vec4(col / total, 1.0);
+}`,
+		setUniforms: floats('strength'),
 	},
 
 	emboss: {

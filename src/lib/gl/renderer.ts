@@ -102,6 +102,7 @@ export class GlRenderer {
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
+    this.glyphTexture = this.buildGlyphAtlas();
     this.compileAllEffects();
   }
 
@@ -760,6 +761,8 @@ export class GlRenderer {
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
     gl.deleteProgram(this.passthrough.program);
+    if (this.glyphTexture) gl.deleteTexture(this.glyphTexture);
+    this.glyphTexture = null;
     for (const entry of this.compiled.values()) {
       gl.deleteProgram(entry.program.program);
       if (entry.prePasses) {
@@ -768,6 +771,36 @@ export class GlRenderer {
     }
     gl.deleteVertexArray(this.quadVAO);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
+  }
+
+  /** 16x1 ASCII glyph atlas (sparsest leftmost), shared by the ascii effect. */
+  private glyphTexture: WebGLTexture | null = null;
+
+  private buildGlyphAtlas(): WebGLTexture {
+    const CHARS = " .,:;i+r*oX#%&$@";
+    const cell = 32;
+    const canvas = document.createElement("canvas");
+    canvas.width = cell * CHARS.length;
+    canvas.height = cell;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#fff";
+    ctx.font = `bold ${Math.floor(cell * 0.85)}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < CHARS.length; i++) {
+      ctx.fillText(CHARS[i], i * cell + cell / 2, cell / 2 + 1);
+    }
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    return tex;
   }
 
   private createQuad(): WebGLVertexArrayObject {
@@ -1047,6 +1080,12 @@ export class GlRenderer {
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, originalTex);
       gl.uniform1i(compiled.uniforms["u_original"], 3);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    if (compiled.uniforms["u_glyphs"] && this.glyphTexture) {
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.glyphTexture);
+      gl.uniform1i(compiled.uniforms["u_glyphs"], 4);
       gl.activeTexture(gl.TEXTURE0);
     }
 

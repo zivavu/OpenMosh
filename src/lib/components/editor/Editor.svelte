@@ -475,8 +475,13 @@
 		if (!sequenceEnabled || !seqMasterIsAudio || !isVideo) return;
 		const vDur = videoSpanEnd - videoSpanStart;
 		if (vDur <= 0) return;
-		const elapsed = Math.max(0, audio.trackCurrentTime - audio.spanStart);
-		const target = videoSpanStart + ((elapsed * videoSpeed) % vDur);
+		// Signed modulo: positions before the audio span still map onto the video
+		// loop instead of pinning to the span start (which caused a seek-back
+		// stutter when the playhead sat left of the span).
+		const elapsed = audio.trackCurrentTime - audio.spanStart;
+		const wrapped =
+			(((elapsed * videoSpeed) % vDur) + vDur) % vDur;
+		const target = videoSpanStart + wrapped;
 		const audioPlaying = audio.audioPlaying;
 		untrack(() => {
 			const cur = previewPlayer
