@@ -632,6 +632,13 @@
 					videoSpeed,
 					file,
 					normalizeGain,
+					sequence:
+						sequenceEnabled && sequenceSegments.length > 0
+							? {
+									segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
+									moshOptions: getMoshOptions(),
+								}
+							: null,
 					onProgress: (p) => {
 						recordingState.recordProgress = p;
 					},

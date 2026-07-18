@@ -1,6 +1,8 @@
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
+import type { MoshOptions } from "./mosh";
+import { createSequenceEffectSource, type SequenceSegment } from "./sequence";
 
 export interface RecordingContext {
   fps: number;
@@ -22,6 +24,11 @@ export interface RecordingContext {
   /** Video playback speed factor (1 = normal). Defaults to 1. */
   videoSpeed?: number;
   file: File;
+  /** Sequence mode: per-time effect segments over the video timeline. */
+  sequence?: {
+    segments: SequenceSegment[];
+    moshOptions: MoshOptions;
+  } | null;
   onProgress: (p: number) => void;
   onFinalizing: () => void;
   signal: AbortSignal;
@@ -162,6 +169,38 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     }
   };
 
+  // Sequence mode: resolve effects per frame from the segment list, keyed by
+  // source-video time so speed/looping line up with what was previewed.
+  const sequence = ctx.sequence;
+  const seqSource =
+    isVideo && videoEl && sequence && sequence.segments.length > 0
+      ? createSequenceEffectSource(
+          () => sequence.segments,
+          () => videoDuration,
+          () => sequence.moshOptions,
+          { cloneStatic: true },
+        )
+      : null;
+  const effectsRef = seqSource
+    ? {
+        current: effects.map(
+          (e): EffectInstance => ({
+            ...e,
+            values: { ...e.values },
+            volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
+          }),
+        ),
+      }
+    : undefined;
+
+  const sequenceBeforeRender = async (frameIndex: number, time: number) => {
+    const base = videoFrames ? decodeBeforeRender : seekBeforeRender;
+    await base(frameIndex, time);
+    // On a gap (no segment) keep the previous frame's effects.
+    const fx = seqSource!(sourceTimeAt(time));
+    if (fx) effectsRef!.current = fx;
+  };
+
   try {
     const blob = await recordVideo({
       duration: exportDuration,
@@ -195,8 +234,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       }),
       ...(isVideo &&
         videoEl && {
-          onBeforeRender: videoFrames ? decodeBeforeRender : seekBeforeRender,
+          onBeforeRender: seqSource
+            ? sequenceBeforeRender
+            : videoFrames
+              ? decodeBeforeRender
+              : seekBeforeRender,
         }),
+      ...(effectsRef && { effectsRef }),
     });
     downloadBlob(blob);
   } finally {
