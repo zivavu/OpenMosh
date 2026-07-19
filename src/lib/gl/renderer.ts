@@ -1,4 +1,5 @@
 import type { EffectInstance } from "../effects";
+import { ASCII_CHARSETS } from "../effects/definitions";
 import { drawPhraseToCanvas } from "../text-overlay";
 import type { TextOverlayStyle } from "../text-overlay";
 import type { DrawPhraseOptions } from "../text-overlay";
@@ -102,7 +103,12 @@ export class GlRenderer {
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
-    this.glyphTexture = this.buildGlyphAtlas();
+    for (const set of ASCII_CHARSETS) {
+      this.glyphTextures.set(
+        set.value,
+        this.buildGlyphAtlas(set.chars),
+      );
+    }
     this.compileAllEffects();
   }
 
@@ -765,8 +771,8 @@ export class GlRenderer {
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
     gl.deleteProgram(this.passthrough.program);
-    if (this.glyphTexture) gl.deleteTexture(this.glyphTexture);
-    this.glyphTexture = null;
+    for (const tex of this.glyphTextures.values()) gl.deleteTexture(tex);
+    this.glyphTextures.clear();
     for (const entry of this.compiled.values()) {
       gl.deleteProgram(entry.program.program);
       if (entry.prePasses) {
@@ -777,33 +783,53 @@ export class GlRenderer {
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 
-  /** 16x1 ASCII glyph atlas (sparsest leftmost), shared by the ascii effect. */
-  private glyphTexture: WebGLTexture | null = null;
+  /** 16x1 ASCII glyph atlases (sparsest leftmost), one per charset, shared by the ascii effect. */
+  private glyphTextures = new Map<string, WebGLTexture>();
 
-  private buildGlyphAtlas(): WebGLTexture {
-    const CHARS = " .,:;i+r*oX#%&$@";
-    const cell = 32;
+  private buildGlyphAtlas(chars: string): WebGLTexture {
+    const cell = 64;
     const canvas = document.createElement("canvas");
-    canvas.width = cell * CHARS.length;
+    canvas.width = cell * chars.length;
     canvas.height = cell;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#fff";
-    ctx.font = `bold ${Math.floor(cell * 0.85)}px monospace`;
+    ctx.font = `bold ${Math.floor(cell * 0.75)}px "Consolas", "Lucida Console", "Menlo", monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    for (let i = 0; i < CHARS.length; i++) {
-      ctx.fillText(CHARS[i], i * cell + cell / 2, cell / 2 + 1);
+    for (let i = 0; i < chars.length; i++) {
+      ctx.save();
+      ctx.translate(i * cell + cell / 2, cell / 2 + 1);
+      // Stretch glyphs so they nearly fill the cell: chunky characters, tight gaps
+      ctx.scale(1.9, 1.25);
+      ctx.fillText(chars[i], 0, 0);
+      ctx.restore();
     }
     const gl = this.gl;
     const tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    // Mipmapped: without mips, small cell sizes undersample glyphs and
+    // produce dark-square moire patches.
+    gl.texParameteri(
+      gl.TEXTURE_2D,
+      gl.TEXTURE_MIN_FILTER,
+      gl.LINEAR_MIPMAP_LINEAR,
+    );
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
+    if (aniso) {
+      const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+      gl.texParameterf(
+        gl.TEXTURE_2D,
+        aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+        Math.min(4, max),
+      );
+    }
     return tex;
   }
 
@@ -1068,6 +1094,9 @@ export class GlRenderer {
     if (compiled.uniforms["u_flipY"]) {
       gl.uniform1f(compiled.uniforms["u_flipY"], flipY);
     }
+    if (compiled.uniforms["u_resolution"]) {
+      gl.uniform2f(compiled.uniforms["u_resolution"], this.imgW, this.imgH);
+    }
     if (compiled.uniforms["u_time"]) {
       gl.uniform1f(compiled.uniforms["u_time"], time);
     }
@@ -1086,11 +1115,16 @@ export class GlRenderer {
       gl.uniform1i(compiled.uniforms["u_original"], 3);
       gl.activeTexture(gl.TEXTURE0);
     }
-    if (compiled.uniforms["u_glyphs"] && this.glyphTexture) {
-      gl.activeTexture(gl.TEXTURE4);
-      gl.bindTexture(gl.TEXTURE_2D, this.glyphTexture);
-      gl.uniform1i(compiled.uniforms["u_glyphs"], 4);
-      gl.activeTexture(gl.TEXTURE0);
+    if (compiled.uniforms["u_glyphs"]) {
+      const charset = (values?.charset as string) || "classic";
+      const glyphTex =
+        this.glyphTextures.get(charset) ?? this.glyphTextures.get("classic");
+      if (glyphTex) {
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, glyphTex);
+        gl.uniform1i(compiled.uniforms["u_glyphs"], 4);
+        gl.activeTexture(gl.TEXTURE0);
+      }
     }
 
     if (shaderDef && values) {

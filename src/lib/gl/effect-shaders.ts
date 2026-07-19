@@ -1409,20 +1409,30 @@ void main() {
 			`uniform float u_size;
 uniform int u_color;
 uniform sampler2D u_glyphs;
+uniform vec2 u_resolution;
 void main() {
-  vec2 res = vec2(textureSize(u_texture, 0));
+  // Grid must follow the render-target size, not the input texture size —
+  // the source texture keeps natural dimensions while FBOs use output size.
+  vec2 res = u_resolution;
   vec2 pos = v_uv * res;
   vec2 cellId = floor(pos / u_size);
   vec3 cell = texture(u_texture, (cellId + 0.5) * u_size / res).rgb;
   float lum = dot(cell, vec3(0.299, 0.587, 0.114));
-  float gi = floor(lum * 15.999);
+  // Slight gamma-lift: dark cells keep sparse-but-visible glyphs,
+  // bright cells jump to dense ones
+  float gi = floor(pow(lum, 0.8) * 15.999);
+  // Organic variation: jitter the glyph choice per cell (±1 coverage step)
+  float h = fract(sin(dot(cellId, vec2(12.9898, 78.233))) * 43758.5453);
+  gi = clamp(gi + (h < 0.25 ? -1.0 : h > 0.75 ? 1.0 : 0.0), 0.0, 15.0);
   vec2 local = fract(pos / u_size);
   // 16x1 glyph atlas, sparsest (space) leftmost
   float g = texture(u_glyphs, vec2((gi + local.x) / 16.0, local.y)).r;
   vec3 tint = u_color == 1 ? vec3(0.25, 1.0, 0.35)
             : u_color == 2 ? vec3(1.0)
             : cell;
-  outColor = vec4(g * tint, 1.0);
+  // Dense glyphs blaze, sparse glyphs stay dim but visible
+  float gf = gi / 15.0;
+  outColor = vec4(g * (tint * (1.2 + gf) + 0.07), 1.0);
 }`,
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, 'u_size', v.size as number);
