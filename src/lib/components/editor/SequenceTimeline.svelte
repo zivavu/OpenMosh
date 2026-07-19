@@ -7,6 +7,7 @@
 		type SequenceSegment,
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
+	import type { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
 	const SVG_H = 48;
@@ -17,7 +18,7 @@
 	interface Props {
 		segments: SequenceSegment[];
 		trackDuration: number;
-		onSegmentsChange: (segments: SequenceSegment[]) => void;
+		boundaries: SegmentBoundaryController<SequenceSegment>;
 		selectedSegmentId?: string | null;
 		currentTime?: number;
 		onSeek?: (time: number) => void;
@@ -36,7 +37,7 @@
 	let {
 		segments: rawSegments,
 		trackDuration,
-		onSegmentsChange,
+		boundaries,
 		selectedSegmentId = $bindable(null),
 		currentTime = 0,
 		onSeek,
@@ -109,14 +110,20 @@
 				startViewStart: number;
 				scrollWidth: number;
 		  }
+		| {
+				type: 'rect-select';
+				startTime: number;
+				currentTime: number;
+		  }
 		| null;
 
 	let dragging: DragState = $state(null);
 	let dragMoved = $state(false);
 
 	// ── Helpers ──────────────────────────────────────────────────────────────
+	/** Discrete, undoable edit (split, remove, merge, drag-release). */
 	function emit(segs: SequenceSegment[]) {
-		onSegmentsChange(segs);
+		boundaries.commit(segs);
 	}
 
 	function getRect(): DOMRect | null {
@@ -264,6 +271,16 @@
 		} catch {}
 	}
 
+	function startRectSelect(e: PointerEvent) {
+		e.stopPropagation();
+		const time = clientXToTime(e.clientX);
+		dragging = { type: 'rect-select', startTime: time, currentTime: time };
+		dragMoved = false;
+		try {
+			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		} catch {}
+	}
+
 	function startSegClick(e: PointerEvent, segId: string) {
 		e.stopPropagation();
 		if (e.ctrlKey || e.metaKey) {
@@ -295,11 +312,22 @@
 
 	function startSeekDrag(e: PointerEvent) {
 		if (e.button !== 0) return;
+		// If in paste mode, split segments at clipboard offsets from the clicked time
+		if (boundaries.pasteMode && boundaries.clipboard.length > 0) {
+			e.stopPropagation();
+			boundaries.pasteAt(clientXToTime(e.clientX));
+			return;
+		}
 		if (e.ctrlKey || e.metaKey) {
 			splitAt(clientXToTime(e.clientX));
 			return;
 		}
+		if (e.shiftKey) {
+			startRectSelect(e);
+			return;
+		}
 		if (!onSeek) return;
+		boundaries.clearSelection();
 		const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
@@ -310,9 +338,13 @@
 	}
 
 	function onPointerMove(e: PointerEvent) {
+		if (boundaries.pasteMode) {
+			boundaries.pasteCursorTime = clientXToTime(e.clientX);
+		}
 		if (!dragging) return;
 
 		if (dragging.type === 'boundary') {
+			if (!dragMoved) boundaries.snapshotForDrag();
 			dragMoved = true;
 			const time = clientXToTime(e.clientX);
 			const { leftSegId, rightSegId } = dragging;
@@ -341,12 +373,15 @@
 			}
 
 			if (Object.keys(updates).length > 0) {
-				emit(
+				boundaries.live(
 					rawSegments.map((s) =>
 						updates[s.id] ? { ...s, ...updates[s.id] } : s,
 					),
 				);
 			}
+		} else if (dragging.type === 'rect-select') {
+			dragMoved = true;
+			dragging = { ...dragging, currentTime: clientXToTime(e.clientX) };
 		} else if (dragging.type === 'seek') {
 			dragMoved = true;
 			const time = Math.max(
@@ -372,6 +407,15 @@
 		if (dragging?.type === 'seg-click' && !dragMoved) {
 			const segId = dragging.segmentId;
 			selectedSegmentId = selectedSegmentId === segId ? null : segId;
+		}
+		if (dragging?.type === 'rect-select') {
+			if (dragMoved) {
+				const minTime = Math.min(dragging.startTime, dragging.currentTime);
+				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
+				boundaries.setSelectionFromRange(minTime, maxTime);
+			} else {
+				boundaries.clearSelection();
+			}
 		}
 		dragging = null;
 		dragMoved = false;
@@ -421,9 +465,24 @@
 	let hoveredDot: { leftSegId: string | null; rightSegId: string | null } | null =
 		$state(null);
 
+	/**
+	 * Runs in the capture phase (see the `onkeydowncapture` binding below) so it
+	 * gets first look at the key, before Editor.svelte's own window-level
+	 * shortcut handler (bubble phase). When boundaries.onKeydown() consumes a
+	 * key (undo/redo/copy/paste/escape acting on boundary selection or paste
+	 * mode) we stop propagation so Editor's Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y never
+	 * see it; otherwise the event proceeds untouched, so those global shortcuts
+	 * keep working exactly as before whenever there's nothing local to do.
+	 */
 	function onKeydown(e: KeyboardEvent) {
 		const t = e.target as HTMLElement;
 		if (t.closest('input, textarea, select')) return;
+
+		if (boundaries.onKeydown(e)) {
+			e.stopPropagation();
+			return;
+		}
+
 		if (e.key === 'Escape' && selectedSegmentId) {
 			selectedSegmentId = null;
 			return;
@@ -435,6 +494,10 @@
 			hoveredDot = null;
 			return;
 		}
+		if (boundaries.deleteSelection()) {
+			e.preventDefault();
+			return;
+		}
 		if (selectedSegmentId) {
 			e.preventDefault();
 			removeSegment(selectedSegmentId);
@@ -444,16 +507,26 @@
 	let showHint = $derived(segments.length === 0);
 
 	let svgCursor = $derived.by(() => {
+		if (boundaries.pasteMode) return 'copy';
 		if (!dragging) return onSeek ? 'crosshair' : 'default';
+		if (dragging.type === 'rect-select') return 'crosshair';
 		if (dragging.type === 'seek') return 'col-resize';
 		return 'ew-resize';
+	});
+
+	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
+	let rectHoverTimes = $derived.by((): number[] => {
+		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
+		const minTime = Math.min(dragging.startTime, dragging.currentTime);
+		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
+		return boundaries.boundaryTimesInRange(minTime, maxTime);
 	});
 </script>
 
 <svelte:window
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
-	onkeydown={onKeydown}
+	onkeydowncapture={onKeydown}
 />
 
 <div class="tl-container">
@@ -552,6 +625,9 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === lId &&
 							hoveredDot?.rightSegId === sv.id}
+						class:dot-selected={boundaries.selectedBoundaryTimes.some(
+							(t) => Math.abs(t - sv.startTime) < 0.001,
+						) || rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
 						cx="{sv.startX}%"
 						cy={LINE_Y}
 						r={DOT_R}
@@ -559,7 +635,7 @@
 							(hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
 						onpointerleave={() => (hoveredDot = null)}
 						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
-						><title>Drag to move · Delete to merge</title></circle
+						><title>Drag to move · Delete to merge · Shift-drag to select</title></circle
 					>
 				{/if}
 			{/each}
@@ -575,6 +651,29 @@
 				{@const phx = toPct(currentTime)}
 				<line class="playhead-line" x1="{phx}%" y1="0" x2="{phx}%" y2={SVG_H} />
 				<circle class="playhead-head" cx="{phx}%" cy="1" r="3" />
+			{/if}
+
+			<!-- Rectangle selection overlay -->
+			{#if dragging?.type === 'rect-select' && dragMoved}
+				{@const minX = Math.min(toPct(dragging.startTime), toPct(dragging.currentTime))}
+				{@const maxX = Math.max(toPct(dragging.startTime), toPct(dragging.currentTime))}
+				<rect
+					class="select-rect"
+					x="{minX}%"
+					y="0"
+					width="{maxX - minX}%"
+					height={SVG_H}
+					pointer-events="none"
+				/>
+			{/if}
+
+			<!-- Ghost paste preview (boundary splits) -->
+			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
+				{#each boundaries.clipboard as { offset }}
+					{@const ghostTime = boundaries.pasteCursorTime + offset}
+					{@const gx = toPct(ghostTime)}
+					<line class="ghost-split-line" x1="{gx}%" y1="0" x2="{gx}%" y2={SVG_H} />
+				{/each}
 			{/if}
 		</svg>
 
@@ -761,12 +860,32 @@
 	}
 
 	.dot:hover,
-	.dot-hovered {
+	.dot-hovered,
+	.dot-selected {
 		fill: #b08ad0;
+	}
+
+	.dot-selected {
+		stroke: #d8b8f8;
+		stroke-width: 2;
 	}
 
 	.dot-hovered {
 		stroke: #ff7070;
+	}
+
+	.select-rect {
+		fill: rgba(176, 138, 208, 0.1);
+		stroke: rgba(176, 138, 208, 0.5);
+		stroke-width: 1;
+		stroke-dasharray: 3 3;
+	}
+
+	.ghost-split-line {
+		stroke: rgba(176, 138, 208, 0.4);
+		stroke-width: 1;
+		stroke-dasharray: 3 4;
+		pointer-events: none;
 	}
 
 	.playhead-line {

@@ -22,6 +22,7 @@
 		type Preset,
 	} from '../../effects';
 	import {
+		cloneSegmentForSplit,
 		createSequenceEffectSource,
 		createSequenceSegment,
 		findSegmentAt,
@@ -29,6 +30,7 @@
 		type SequenceSegment,
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
+	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 	import type { GlRenderer } from '../../gl/renderer';
 	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
@@ -211,8 +213,19 @@
 							{ keys: ['Ctrl+Click'], description: 'Split segment at cursor' },
 							{ keys: ['Click'], description: 'Select segment for editing' },
 							{ keys: ['→'], description: 'Re-roll selected segment' },
-							{ keys: ['Delete'], description: 'Delete segment / merge boundary' },
-							{ keys: ['Esc'], description: 'Deselect segment' },
+							{
+								keys: ['Delete', 'Backspace'],
+								description: 'Delete segment / selected boundaries',
+							},
+							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
+							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo last sequence edit' },
+							{
+								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
+								description: 'Redo last sequence edit',
+							},
+							{ keys: ['Shift+Drag'], description: 'Rectangle-select boundaries' },
+							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected boundaries' },
+							{ keys: ['Ctrl/Cmd+V'], description: 'Paste boundaries' },
 							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
 						],
 					},
@@ -471,6 +484,23 @@
 		return previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
 	}
 
+	// Owns undo/redo + boundary selection/clipboard for every sequenceSegments
+	// edit — timeline drags/splits (in SequenceTimeline.svelte) as well as
+	// preset/mosh/mode changes made from the segment toolbar below, so Ctrl+Z
+	// in SEQ mode undoes the last sequence edit regardless of where it came from.
+	const seqBoundaries = new SegmentBoundaryController<SequenceSegment>({
+		getSegments: () => sequenceSegments,
+		getTrackDuration: () => seqMasterDuration,
+		onChange: (segments) => (sequenceSegments = segments),
+		splitSegment: (seg, at) => {
+			const end = seg.endTime ?? seqMasterDuration;
+			return [
+				cloneSegmentForSplit(seg, seg.startTime, at),
+				cloneSegmentForSplit(seg, at, end),
+			];
+		},
+	});
+
 	const previewSeqSource = createSequenceEffectSource(
 		() => sequenceSegments,
 		() => seqMasterDuration,
@@ -563,16 +593,18 @@
 	});
 
 	function seqApplyPreset(segId: string, preset: Preset) {
-		sequenceSegments = sequenceSegments.map((s) =>
-			s.id === segId
-				? {
-						...s,
-						mode: 'static',
-						label: preset.name,
-						presetName: preset.name,
-						effects: applyPreset(preset),
-					}
-				: s,
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				s.id === segId
+					? {
+							...s,
+							mode: 'static',
+							label: preset.name,
+							presetName: preset.name,
+							effects: applyPreset(preset),
+						}
+					: s,
+			),
 		);
 	}
 
@@ -623,13 +655,15 @@
 	}
 
 	function seqRoll(segId: string) {
-		sequenceSegments = sequenceSegments.map((s) => {
-			if (s.id !== segId) return s;
-			if (s.mode === 'interval') return { ...s, seed: randomSeed() };
-			const fx = loadInitialEffects();
-			generateMoshFn(fx, getMoshOptions());
-			return { ...s, label: 'mosh', presetName: undefined, effects: fx };
-		});
+		seqBoundaries.commit(
+			sequenceSegments.map((s) => {
+				if (s.id !== segId) return s;
+				if (s.mode === 'interval') return { ...s, seed: randomSeed() };
+				const fx = loadInitialEffects();
+				generateMoshFn(fx, getMoshOptions());
+				return { ...s, label: 'mosh', presetName: undefined, effects: fx };
+			}),
+		);
 	}
 
 	function seqModeChange(
@@ -637,15 +671,17 @@
 		mode: SequenceSegmentMode,
 		intervalSec?: number,
 	) {
-		sequenceSegments = sequenceSegments.map((s) =>
-			s.id === segId
-				? {
-						...s,
-						mode,
-						intervalSec: intervalSec ?? s.intervalSec ?? 0.25,
-						seed: s.seed ?? randomSeed(),
-					}
-				: s,
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				s.id === segId
+					? {
+							...s,
+							mode,
+							intervalSec: intervalSec ?? s.intervalSec ?? 0.25,
+							seed: s.seed ?? randomSeed(),
+						}
+					: s,
+			),
 		);
 	}
 
@@ -1121,6 +1157,7 @@
 			<SequenceTimeline
 				segments={sequenceSegments}
 				trackDuration={seqMasterDuration}
+				boundaries={seqBoundaries}
 				currentTime={seqMasterIsAudio
 					? audio.trackCurrentTime
 					: previewPlayer
@@ -1128,7 +1165,6 @@
 						: videoCurrentTime}
 				onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
 				bind:selectedSegmentId
-				onSegmentsChange={(segs) => (sequenceSegments = segs)}
 				onApplyPreset={seqApplyPreset}
 				onRoll={seqRoll}
 				onModeChange={seqModeChange}

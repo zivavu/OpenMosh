@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { generateId } from '../../effects';
+	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
@@ -154,16 +155,21 @@
 	let dragging: DragState = $state(null);
 	let dragMoved = $state(false);
 
-	// ── Selection / clipboard (boundary dots) ────────────────────────────────
-	let selectedBoundaryTimes = $state<number[]>([]); // absolute track times of selected boundaries
-	let clipboard = $state<{ offset: number; subdivision: BeatSubdivision }[]>(
-		[],
-	); // relative offsets + subdivisions from leftmost selected boundary
-	let undoStack = $state<TimelineSegment[][]>([]);
-	let redoStack = $state<TimelineSegment[][]>([]);
-	let pasteMode = $state(false);
-	let pasteCursorTime = $state(0);
-
+	// ── Selection / clipboard / undo-redo (boundary dots) ────────────────────
+	const boundaries = new SegmentBoundaryController<TimelineSegment, BeatSubdivision>({
+		getSegments: () => config.segments,
+		getTrackDuration: () => trackDuration,
+		onChange: (segments) => onConfigChange({ ...config, segments }),
+		splitSegment: (seg, at) => {
+			const end = seg.endTime ?? trackDuration;
+			return [
+				{ id: generateId(), startTime: seg.startTime, endTime: at, subdivision: seg.subdivision },
+				{ id: generateId(), startTime: at, endTime: end, subdivision: seg.subdivision },
+			];
+		},
+		captureMeta: (rightSeg) => rightSeg?.subdivision ?? config.subdivision,
+		applyMeta: (seg, subdivision) => ({ ...seg, subdivision }),
+	});
 	// Tracks which interior boundary dot the pointer is currently over
 	let hoveredDot: {
 		leftSegId: string | null;
@@ -172,15 +178,13 @@
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
 	/** Emit without recording history — use during active drags. */
-	function emitLive(patch: Partial<SlideshowConfig>) {
-		onConfigChange({ ...config, ...patch });
+	function emitLive(patch: { segments: TimelineSegment[] }) {
+		boundaries.live(patch.segments);
 	}
 
 	/** Emit and push current segments to undo history. */
-	function emit(patch: Partial<SlideshowConfig>) {
-		undoStack = [...undoStack, [...config.segments]];
-		redoStack = [];
-		onConfigChange({ ...config, ...patch });
+	function emit(patch: { segments: TimelineSegment[] }) {
+		boundaries.commit(patch.segments);
 	}
 
 	function getRect(): DOMRect | null {
@@ -496,18 +500,18 @@
 		// If this dot is in a multi-selection, start a group drag
 		if (
 			boundaryTime !== null &&
-			selectedBoundaryTimes.length > 1 &&
-			selectedBoundaryTimes.some((t) => Math.abs(t - boundaryTime!) < 0.001)
+			boundaries.selectedBoundaryTimes.length > 1 &&
+			boundaries.selectedBoundaryTimes.some((t) => Math.abs(t - boundaryTime!) < 0.001)
 		) {
 			const sortedSegs = [...config.segments].sort(
 				(a, b) => a.startTime - b.startTime,
 			);
-			const boundaries: Array<{
+			const groupBoundaries: Array<{
 				time: number;
 				leftSegId: string | null;
 				rightSegId: string | null;
 			}> = [];
-			for (const t of selectedBoundaryTimes) {
+			for (const t of boundaries.selectedBoundaryTimes) {
 				const left = sortedSegs.find(
 					(s) =>
 						Math.abs((s.endTime ?? trackDuration) - t) < 0.001 &&
@@ -516,7 +520,7 @@
 				const right = sortedSegs.find(
 					(s) => Math.abs(s.startTime - t) < 0.001 && s.startTime > 0.001,
 				);
-				boundaries.push({
+				groupBoundaries.push({
 					time: t,
 					leftSegId: left?.id ?? null,
 					rightSegId: right?.id ?? null,
@@ -532,14 +536,14 @@
 			}
 			const nonSelectedBoundaries = [...allBoundarySet]
 				.filter(
-					(b) => !selectedBoundaryTimes.some((t) => Math.abs(t - b) < 0.001),
+					(b) => !boundaries.selectedBoundaryTimes.some((t) => Math.abs(t - b) < 0.001),
 				)
 				.sort((a, b) => a - b);
 
 			dragging = {
 				type: 'boundary-group',
 				anchorTime: clientXToTime(e.clientX),
-				boundaries,
+				boundaries: groupBoundaries,
 				nonSelectedBoundaries,
 			};
 			dragMoved = false;
@@ -609,41 +613,9 @@
 	function startSeekDrag(e: PointerEvent) {
 		if (e.button !== 0) return;
 		// If in paste mode, split segments at clipboard offsets from the clicked time
-		if (pasteMode && clipboard.length > 0) {
+		if (boundaries.pasteMode && boundaries.clipboard.length > 0) {
 			e.stopPropagation();
-			const anchorTime = clientXToTime(e.clientX);
-			let newSegments = [...config.segments];
-			for (const { offset, subdivision } of clipboard) {
-				const t = anchorTime + offset;
-				if (t <= 0.001 || t >= trackDuration - 0.001) continue;
-				const sorted = [...newSegments].sort(
-					(a, b) => a.startTime - b.startTime,
-				);
-				const hit = sorted.find((s) => {
-					const end = s.endTime ?? trackDuration;
-					return t > s.startTime + 0.01 && t < end - 0.01;
-				});
-				if (!hit) continue;
-				const hitEnd = hit.endTime ?? trackDuration;
-				newSegments = newSegments
-					.filter((s) => s.id !== hit.id)
-					.concat([
-						{
-							id: generateId(),
-							startTime: hit.startTime,
-							endTime: t,
-							subdivision: hit.subdivision,
-						},
-						{
-							id: generateId(),
-							startTime: t,
-							endTime: hitEnd,
-							subdivision,
-						},
-					]);
-			}
-			emit({ segments: newSegments });
-			pasteMode = false;
+			boundaries.pasteAt(clientXToTime(e.clientX));
 			return;
 		}
 		// Ctrl+click → split segment at cursor
@@ -700,7 +672,7 @@
 		}
 		// Default: seek
 		if (!onSeek) return;
-		selectedBoundaryTimes = [];
+		boundaries.clearSelection();
 		const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
@@ -724,15 +696,14 @@
 	}
 
 	function onPointerMove(e: PointerEvent) {
-		if (pasteMode) {
-			pasteCursorTime = clientXToTime(e.clientX);
+		if (boundaries.pasteMode) {
+			boundaries.pasteCursorTime = clientXToTime(e.clientX);
 		}
 		if (!dragging) return;
 
 		if (dragging.type === 'boundary') {
 			if (!dragMoved) {
-				undoStack = [...undoStack, [...config.segments]];
-				redoStack = [];
+				boundaries.snapshotForDrag();
 			}
 			dragMoved = true;
 			const time = clientXToTime(e.clientX);
@@ -770,8 +741,7 @@
 			}
 		} else if (dragging.type === 'boundary-group') {
 			if (!dragMoved) {
-				undoStack = [...undoStack, [...config.segments]];
-				redoStack = [];
+				boundaries.snapshotForDrag();
 			}
 			dragMoved = true;
 			const rawDelta = clientXToTime(e.clientX) - dragging.anchorTime;
@@ -863,22 +833,9 @@
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
-				// Collect all interior boundary times within the rect's time range
-				const times = new Set<number>();
-				for (const s of segments) {
-					if (
-						s.startTime > 0.001 &&
-						s.startTime >= minTime &&
-						s.startTime <= maxTime
-					)
-						times.add(s.startTime);
-					const end = s.endTime ?? trackDuration;
-					if (end < trackDuration - 0.001 && end >= minTime && end <= maxTime)
-						times.add(end);
-				}
-				selectedBoundaryTimes = [...times];
+				boundaries.setSelectionFromRange(minTime, maxTime);
 			} else {
-				selectedBoundaryTimes = [];
+				boundaries.clearSelection();
 			}
 		}
 		if (dragging?.type === 'boundary-group' && dragMoved) {
@@ -894,7 +851,7 @@
 					);
 				}
 			}
-			selectedBoundaryTimes = newTimes;
+			boundaries.selectedBoundaryTimes = newTimes;
 		}
 		if (dragging?.type === 'seg-y') {
 			if (!dragMoved) {
@@ -946,29 +903,6 @@
 		});
 	}
 
-	/** Remove the boundary between two adjacent segments by merging them into one. */
-	function deleteSelectedBoundaries() {
-		let segs = [...config.segments];
-		const times = [...selectedBoundaryTimes].sort((a, b) => a - b);
-		for (const t of times) {
-			const sorted = [...segs].sort((a, b) => a.startTime - b.startTime);
-			const left = sorted.find(
-				(s) => Math.abs((s.endTime ?? trackDuration) - t) < 0.001,
-			);
-			const right = sorted.find((s) => Math.abs(s.startTime - t) < 0.001);
-			if (!left || !right) continue;
-			const merged: TimelineSegment = {
-				...left,
-				endTime: right.endTime ?? trackDuration,
-			};
-			segs = segs
-				.filter((s) => s.id !== left.id && s.id !== right.id)
-				.concat([merged]);
-		}
-		selectedBoundaryTimes = [];
-		emit({ segments: segs });
-	}
-
 	function mergeDot(leftSegId: string | null, rightSegId: string | null) {
 		if (!leftSegId || !rightSegId) return;
 		const left = config.segments.find((s) => s.id === leftSegId);
@@ -995,84 +929,19 @@
 		const t = e.target as HTMLElement;
 		if (t.closest('input, textarea, select')) return;
 
-		// Undo
-		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-			if (undoStack.length > 0) {
-				e.preventDefault();
-				redoStack = [...redoStack, [...config.segments]];
-				const prev = undoStack[undoStack.length - 1];
-				undoStack = undoStack.slice(0, -1);
-				onConfigChange({ ...config, segments: prev });
-			}
-			return;
-		}
+		// Undo / redo / copy / paste-mode-enter / escape
+		if (boundaries.onKeydown(e)) return;
 
-		// Redo
-		if (
-			(e.ctrlKey || e.metaKey) &&
-			(e.key === 'y' || (e.key === 'z' && e.shiftKey))
-		) {
-			if (redoStack.length > 0) {
-				e.preventDefault();
-				undoStack = [...undoStack, [...config.segments]];
-				const next = redoStack[redoStack.length - 1];
-				redoStack = redoStack.slice(0, -1);
-				onConfigChange({ ...config, segments: next });
-			}
-			return;
-		}
-
-		// Copy selected boundary dots
-		if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-			if (selectedBoundaryTimes.length > 0) {
-				e.preventDefault();
-				const minTime = Math.min(...selectedBoundaryTimes);
-				clipboard = selectedBoundaryTimes.map((t) => {
-					const offset = t - minTime;
-					const rightSeg = config.segments.find(
-						(s) => Math.abs(s.startTime - t) < 0.001,
-					);
-					return {
-						offset,
-						subdivision: rightSeg?.subdivision ?? config.subdivision,
-					};
-				});
-			}
-			return;
-		}
-
-		// Enter paste mode
-		if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-			if (clipboard.length > 0) {
-				e.preventDefault();
-				pasteMode = true;
-				selectedBoundaryTimes = [];
-			}
-			return;
-		}
-
-		// Cancel paste mode / clear selection
-		if (e.key === 'Escape') {
-			if (pasteMode) {
-				pasteMode = false;
-				return;
-			}
-			if (selectedBoundaryTimes.length > 0) {
-				selectedBoundaryTimes = [];
-				return;
-			}
-		}
-
-		// Delete / Backspace — existing logic
+		// Delete / Backspace — existing local priority: hovered dot, then
+		// selected boundaries, then the selected whole segment.
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 		if (hoveredDot) {
 			e.preventDefault();
 			mergeDot(hoveredDot.leftSegId, hoveredDot.rightSegId);
 			return;
 		}
-		if (selectedBoundaryTimes.length > 0) {
+		if (boundaries.deleteSelection()) {
 			e.preventDefault();
-			deleteSelectedBoundaries();
 			return;
 		}
 		if (selectedSegmentId) {
@@ -1104,7 +973,7 @@
 	});
 
 	let svgCursor = $derived.by(() => {
-		if (pasteMode) return 'copy';
+		if (boundaries.pasteMode) return 'copy';
 		const d = dragging;
 		if (!d) return onSeek ? 'crosshair' : 'default';
 		if (d.type === 'seg-y') return 'ns-resize';
@@ -1271,7 +1140,7 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === lId &&
 							hoveredDot?.rightSegId === sv.id}
-						class:dot-selected={selectedBoundaryTimes.some(
+						class:dot-selected={boundaries.selectedBoundaryTimes.some(
 							(t) => Math.abs(t - sv.startTime) < 0.001,
 						) || rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
 						cx="{sv.startX}%"
@@ -1301,7 +1170,7 @@
 						class="dot"
 						class:dot-hovered={hoveredDot?.leftSegId === sv.id &&
 							hoveredDot?.rightSegId === rId}
-						class:dot-selected={selectedBoundaryTimes.some(
+						class:dot-selected={boundaries.selectedBoundaryTimes.some(
 							(t) => Math.abs(t - sv.endTime) < 0.001,
 						) || rectHoverTimes.some((t) => Math.abs(t - sv.endTime) < 0.001)}
 						cx="{sv.endX}%"
@@ -1355,9 +1224,9 @@
 			{/if}
 
 			<!-- Ghost paste preview (boundary splits) -->
-			{#if pasteMode && clipboard.length > 0}
-				{#each clipboard as { offset }}
-					{@const ghostTime = pasteCursorTime + offset}
+			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
+				{#each boundaries.clipboard as { offset }}
+					{@const ghostTime = boundaries.pasteCursorTime + offset}
 					{@const gx = toPct(ghostTime)}
 					<line
 						class="ghost-split-line"
