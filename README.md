@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 # OpenMosh
 
 Browser-based glitch art studio, inspired by PhotoMosh. It's a fully client-side image and video tool — drop in a photo or video, layer GPU effects, sync them to music, or sequence images into a beat-matched slideshow, then export as a still or a WebM.
@@ -12,9 +5,10 @@ Browser-based glitch art studio, inspired by PhotoMosh. It's a fully client-side
 > [!WARNING]
 > **Epilepsy warning:** the videos below and the app itself produce rapidly flashing images and stroboscopic effects. Use with caution if you're sensitive to flashing lights or have photosensitive epilepsy.
 
-https://github.com/user-attachments/assets/51013c8b-517c-4404-b785-d9566d865f85
 
-[openmosh-1781080776074.webm](https://github.com/user-attachments/assets/e1f3a112-63ce-4a7c-bb64-a89ee9c21453)
+https://github.com/user-attachments/assets/ce69b06b-1d9a-4d72-8518-e86f14cfdaa2
+
+https://github.com/user-attachments/assets/e1f3a112-63ce-4a7c-bb64-a89ee9c21453
 
 https://github.com/user-attachments/assets/3f39413c-5e67-4250-9982-c5bbe60aae23
 
