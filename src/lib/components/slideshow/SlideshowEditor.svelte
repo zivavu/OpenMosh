@@ -526,8 +526,8 @@
 
 			let t: number;
 			if (audio.trackFile && audio.audioPlaying) {
-				t = audioEl?.currentTime ?? audio.trackCurrentTime;
-				audio.trackCurrentTime = t;
+				audio.tickCurrentTime();
+				t = audio.trackCurrentTime;
 				if (t >= audio.spanEnd) {
 					if (audio.loopAudio) {
 						audio.seekTo(audio.spanStart);

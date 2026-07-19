@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Dices, Trash2 } from 'lucide-svelte';
-	import type { Preset } from '../../effects';
+	import { loadPresets, type Preset } from '../../effects';
 	import {
 		cloneSegmentForSplit,
 		createSequenceSegment,
@@ -21,8 +21,7 @@
 		selectedSegmentId?: string | null;
 		currentTime?: number;
 		onSeek?: (time: number) => void;
-		presets: Preset[];
-		onApplyPreset: (segmentId: string, presetIndex: number) => void;
+		onApplyPreset: (segmentId: string, preset: Preset) => void;
 		onRoll: (segmentId: string) => void;
 		onModeChange: (
 			segmentId: string,
@@ -38,7 +37,6 @@
 		selectedSegmentId = $bindable(null),
 		currentTime = 0,
 		onSeek,
-		presets,
 		onApplyPreset,
 		onRoll,
 		onModeChange,
@@ -67,6 +65,13 @@
 	let selectedSegment = $derived(
 		rawSegments.find((s) => s.id === selectedSegmentId) ?? null,
 	);
+
+	// Presets are read fresh on selection and on dropdown open, so ones saved
+	// from the effects panel show up without leaving sequence mode.
+	let presetList = $state<Preset[]>([]);
+	$effect(() => {
+		if (selectedSegment) presetList = loadPresets();
+	});
 
 	$effect(() => {
 		if (selectedSegmentId && !selectedSegment) selectedSegmentId = null;
@@ -573,14 +578,16 @@
 			<select
 				class="seg-select"
 				value={-1}
+				onmousedown={() => (presetList = loadPresets())}
 				onchange={(e) => {
 					const idx = Number(e.currentTarget.value);
-					if (idx >= 0) onApplyPreset(selectedSegment!.id, idx);
+					const preset = presetList[idx];
+					if (preset) onApplyPreset(selectedSegment!.id, preset);
 					e.currentTarget.value = '-1';
 				}}
 			>
 				<option value={-1} disabled>Preset…</option>
-				{#each presets as p, i}
+				{#each presetList as p, i}
 					<option value={i}>{p.name}</option>
 				{/each}
 			</select>

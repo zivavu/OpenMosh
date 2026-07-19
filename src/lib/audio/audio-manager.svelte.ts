@@ -225,6 +225,16 @@ export class AudioManager {
     this.audioPlaying = false;
   }
 
+  /**
+   * Pull the element clock into trackCurrentTime. The timeupdate event only
+   * fires ~4 Hz, which makes playheads jump — call this from a rAF loop while
+   * playing for smooth movement.
+   */
+  tickCurrentTime() {
+    if (!this.#audioEl || !this.audioPlaying) return;
+    this.trackCurrentTime = this.#audioEl.currentTime;
+  }
+
   seekTo(t: number) {
     if (!this.#audioEl) return;
     const clamped = Math.max(0, Math.min(this.trackDuration, t));

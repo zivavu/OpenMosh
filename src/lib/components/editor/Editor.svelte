@@ -17,7 +17,6 @@
 		applyPreset,
 		cloneEffectInstance,
 		loadInitialEffects,
-		loadPresets,
 		setVolumeLink,
 		type EffectInstance,
 		type Preset,
@@ -230,6 +229,17 @@
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.
 	$effect(() => () => audio.disposeAudioGraph());
 
+	// Smooth playhead: pull the element clock every frame while playing (the
+	// ~4 Hz timeupdate event alone makes the playhead jump)
+	$effect(() => {
+		if (!audio.audioPlaying) return;
+		let raf = requestAnimationFrame(function loop() {
+			audio.tickCurrentTime();
+			raf = requestAnimationFrame(loop);
+		});
+		return () => cancelAnimationFrame(raf);
+	});
+
 	let normalizeGain = $state(1.0);
 
 	// Sync audioEl DOM binding into the manager
@@ -347,7 +357,6 @@
 			sequenceSegments = savedSeq.segments;
 			sequenceEnabled = savedSeq.enabled;
 			selectedSegmentId = null;
-			if (savedSeq.enabled) seqPresets = loadPresets();
 		}
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
@@ -433,7 +442,6 @@
 	// (sequenceEnabled is declared above the shortcut groups that read it)
 	let sequenceSegments = $state<SequenceSegment[]>([]);
 	let selectedSegmentId = $state<string | null>(null);
-	let seqPresets = $state<Preset[]>([]);
 
 	// With an external track the audio is the master clock (matches export,
 	// where the audio span sets the duration and the video loops inside it).
@@ -475,7 +483,6 @@
 			selectedSegmentId = null;
 			return;
 		}
-		seqPresets = loadPresets();
 		if (sequenceSegments.length === 0 && seqMasterDuration > 0) {
 			// Seed the first segment from the current panel state; open-ended so
 			// it stretches if the master timeline changes (e.g. a track is added)
@@ -555,9 +562,7 @@
 		}
 	});
 
-	function seqApplyPreset(segId: string, presetIndex: number) {
-		const preset = seqPresets[presetIndex];
-		if (!preset) return;
+	function seqApplyPreset(segId: string, preset: Preset) {
 		sequenceSegments = sequenceSegments.map((s) =>
 			s.id === segId
 				? { ...s, mode: 'static', label: preset.name, effects: applyPreset(preset) }
@@ -1071,7 +1076,6 @@
 						: videoCurrentTime}
 				onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
 				bind:selectedSegmentId
-				presets={seqPresets}
 				onSegmentsChange={(segs) => (sequenceSegments = segs)}
 				onApplyPreset={seqApplyPreset}
 				onRoll={seqRoll}
