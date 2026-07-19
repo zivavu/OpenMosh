@@ -86,6 +86,14 @@
 		if (selectedSegment) presetList = loadPresets();
 	});
 
+	// Index of the selected segment's assigned preset, so the dropdown shows it
+	// instead of the placeholder.
+	let selectedPresetIndex = $derived(
+		selectedSegment?.presetName
+			? presetList.findIndex((p) => p.name === selectedSegment!.presetName)
+			: -1,
+	);
+
 	$effect(() => {
 		if (selectedSegmentId && !selectedSegment) selectedSegmentId = null;
 	});
@@ -590,13 +598,12 @@
 			<span class="seg-toolbar-label">SEGMENT</span>
 			<select
 				class="seg-select"
-				value={-1}
+				value={selectedPresetIndex}
 				onmousedown={() => (presetList = loadPresets())}
 				onchange={(e) => {
 					const idx = Number(e.currentTarget.value);
 					const preset = presetList[idx];
 					if (preset) onApplyPreset(selectedSegment!.id, preset);
-					e.currentTarget.value = '-1';
 				}}
 			>
 				<option value={-1} disabled>Preset…</option>
@@ -812,7 +819,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.35rem 0.25rem 0;
+		padding: 0.35rem 0.25rem;
 		flex-wrap: wrap;
 		min-height: 28px;
 	}
