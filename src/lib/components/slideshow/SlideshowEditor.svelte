@@ -688,17 +688,13 @@
 
 	// ── Recording ──
 	let recordFps = $state(60);
+	/** Export length for silent (no-track) recordings. */
+	let recordDuration = $state(10);
 	const recordingState = createRecordingState();
 
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recordingState.recording || slides.length === 0)
 			return;
-		if (!audio.trackFile) {
-			import('../../components/ui/toast.svelte').then(({ showToast }) =>
-				showToast('Please add an audio track for slideshow recording.', 'error'),
-			);
-			return;
-		}
 
 		if (previewPlaying) stopPreview();
 
@@ -715,9 +711,10 @@
 							? JSON.parse(JSON.stringify(e.volumeLinks))
 							: undefined,
 					})),
-					audioFile: audio.trackFile!,
+					audioFile: audio.trackFile,
 					audioStart: audio.spanStart,
 					audioEnd: audio.spanEnd,
+					noAudioDuration: recordDuration,
 					canvas: canvasEl!,
 					renderer: glRenderer!,
 					outputWidth: resizeWidth > 0 ? resizeWidth : undefined,
@@ -900,10 +897,13 @@
 			{naturalHeight}
 			recording={recordingState.recording}
 			{recordFps}
-			recordDuration={audio.trackFile && audio.trackDuration > 0 ? audio.spanEnd - audio.spanStart : 5}
+			recordDuration={audio.trackFile && audio.trackDuration > 0
+				? audio.spanEnd - audio.spanStart
+				: recordDuration}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
+			onRecordDurationChange={(d) => (recordDuration = d)}
 		/>
 
 		<RecordOverlay

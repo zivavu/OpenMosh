@@ -18,6 +18,7 @@
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
 		onRecordFpsChange: (fps: number) => void;
+		onRecordDurationChange: (d: number) => void;
 	}
 
 	let {
@@ -34,6 +35,7 @@
 		onTogglePreview,
 		onStartRecording,
 		onRecordFpsChange,
+		onRecordDurationChange,
 	}: Props = $props();
 
 	const isMobile = window.matchMedia('(pointer: coarse)').matches;
@@ -139,10 +141,27 @@
 		bind:showSettings={showRecordSettings}
 	>
 		{#snippet settingsContent()}
-			<div class="setting-row">
-				<span class="setting-label">Duration</span>
-				<span class="setting-val">{recordDuration.toFixed(1)}s</span>
-			</div>
+			{#if trackFile}
+				<div class="setting-row">
+					<span class="setting-label">Duration</span>
+					<span class="setting-val">{recordDuration.toFixed(1)}s</span>
+				</div>
+			{:else}
+				<div class="setting-row">
+					<label for="ss-rec-duration">Duration</label>
+					<input
+						id="ss-rec-duration"
+						type="range"
+						min="1"
+						max="60"
+						step="1"
+						value={recordDuration}
+						oninput={(e) =>
+							onRecordDurationChange(+(e.currentTarget as HTMLInputElement).value)}
+					/>
+					<span class="setting-val">{recordDuration.toFixed(0)}s</span>
+				</div>
+			{/if}
 			<div class="setting-row">
 				<label for="ss-rec-fps">FPS</label>
 				<select
@@ -164,9 +183,8 @@
 					showRecordSettings = false;
 					onStartRecording();
 				}}
-				disabled={!trackFile}
 			>
-				{trackFile ? 'Start Recording' : 'Add audio first'}
+				Start Recording{trackFile ? '' : ' (silent)'}
 			</button>
 		{/snippet}
 	</RecordGroup>
@@ -290,6 +308,34 @@
 	.setting-val {
 		color: #888;
 		font-size: 0.75rem;
+	}
+
+	.setting-row input[type='range'] {
+		flex: 1;
+		height: 3px;
+		appearance: none;
+		background: #333;
+		border-radius: 2px;
+		outline: none;
+		cursor: pointer;
+	}
+
+	.setting-row input[type='range']::-webkit-slider-thumb {
+		appearance: none;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #aaa;
+		cursor: pointer;
+	}
+
+	.setting-row input[type='range']::-moz-range-thumb {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #aaa;
+		border: none;
+		cursor: pointer;
 	}
 
 	.start-btn {
