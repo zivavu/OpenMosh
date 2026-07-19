@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Dices, Trash2 } from 'lucide-svelte';
+	import { Dices, Repeat, Trash2 } from 'lucide-svelte';
 	import { loadPresets, type Preset } from '../../effects';
 	import {
 		cloneSegmentForSplit,
@@ -28,6 +28,9 @@
 			mode: SequenceSegmentMode,
 			intervalSec?: number,
 		) => void;
+		/** Loop playback inside the selected segment (for editing while playing). */
+		segmentLoop?: boolean;
+		onToggleSegmentLoop?: () => void;
 	}
 
 	let {
@@ -40,6 +43,8 @@
 		onApplyPreset,
 		onRoll,
 		onModeChange,
+		segmentLoop = false,
+		onToggleSegmentLoop,
 	}: Props = $props();
 
 	let svgEl: SVGSVGElement | undefined = $state();
@@ -53,9 +58,17 @@
 		trackDuration > 0 && (viewStart > 0.001 || viewEnd < trackDuration - 0.001),
 	);
 
+	// Reset to fully zoomed out whenever the master duration changes (e.g. a
+	// track loads after the video) — keeping the old window left the timeline
+	// near-max zoomed on init.
+	let lastDuration = 0;
 	$effect(() => {
 		const td = trackDuration;
-		if (td > 0 && (viewEnd <= 0 || viewEnd > td)) viewEnd = td;
+		if (td > 0 && td !== lastDuration) {
+			lastDuration = td;
+			viewStart = 0;
+			viewEnd = td;
+		}
 	});
 
 	let segments = $derived(
@@ -632,6 +645,16 @@
 						<option value={sec}>every {sec}s</option>
 					{/each}
 				</select>
+			{/if}
+			{#if onToggleSegmentLoop}
+				<button
+					class="seg-btn"
+					class:active={segmentLoop}
+					title="Loop playback inside this segment"
+					onclick={onToggleSegmentLoop}
+				>
+					<Repeat size={12} />
+				</button>
 			{/if}
 			<button
 				class="seg-btn danger"

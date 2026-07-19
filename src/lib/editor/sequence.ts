@@ -23,6 +23,9 @@ export interface SequenceSegment {
   mode: SequenceSegmentMode;
   /** Display label: preset name, "mosh", "clean", … */
   label: string;
+  /** Name of the preset this segment was filled from; used to re-sync the
+   * segment when the user explicitly overwrites that preset. */
+  presetName?: string;
   effects: EffectInstance[];
   /** "interval" mode: seconds between re-rolls. */
   intervalSec?: number;

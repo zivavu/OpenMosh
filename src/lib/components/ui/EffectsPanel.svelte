@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Check, Plus, Search, X } from 'lucide-svelte';
+	import { Check, Plus, Save, Search, X } from 'lucide-svelte';
 	import {
 		EFFECT_DEFINITIONS,
 		HIDDEN_EFFECTS_KEY,
@@ -29,6 +29,8 @@
 		) => void;
 		/** Called after `effects` is replaced wholesale (e.g. preset load), so callers can push undo history. */
 		onEffectsReplaced?: () => void;
+		/** Called after a preset is explicitly overwritten via its save icon. */
+		onPresetUpdated?: (preset: Preset) => void;
 	}
 
 	let {
@@ -37,71 +39,36 @@
 		spectrumData = null,
 		onVolumeLinkChange,
 		onEffectsReplaced,
+		onPresetUpdated,
 	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
 	let showPresets = $state(false);
 	let saving = $state(false);
 	let presetName = $state('');
-	let activePresetIndex: number | null = $state(null);
-	let presetSaveTimer: ReturnType<typeof setTimeout> | undefined;
-	let pendingSave: { index: number; snapshot: EffectInstance[] } | null = null;
-
-	function flushPendingSave() {
-		if (!pendingSave) return;
-		clearTimeout(presetSaveTimer);
-		presetSaveTimer = undefined;
-		presets = updatePreset(pendingSave.index, pendingSave.snapshot);
-		pendingSave = null;
-	}
-
-	$effect(() => {
-		// Deep-track effects by reading all nested values
-		effects.forEach((e) => {
-			e.enabled;
-			e.expanded;
-			Object.values(e.values);
-			if (e.volumeLinks) Object.values(e.volumeLinks);
-		});
-		if (activePresetIndex === null) return;
-		const index = activePresetIndex;
-		const snapshot = $state.snapshot(effects);
-		pendingSave = { index, snapshot };
-		clearTimeout(presetSaveTimer);
-		presetSaveTimer = setTimeout(() => {
-			presets = updatePreset(index, snapshot);
-			pendingSave = null;
-		}, 500);
-	});
-
-	$effect(() => () => flushPendingSave());
 
 	function handleSavePreset() {
 		const name = presetName.trim();
 		if (!name) return;
 		presets = savePreset(name, $state.snapshot(effects));
-		activePresetIndex = presets.length - 1;
 		presetName = '';
 		saving = false;
 	}
 
+	// Loading is a one-shot apply — presets are only ever written via the
+	// explicit save icons, never automatically.
 	function handleLoadPreset(index: number) {
-		flushPendingSave();
-		if (activePresetIndex === index) {
-			activePresetIndex = null;
-			return;
-		}
 		effects = applyPreset(presets[index]);
-		activePresetIndex = index;
 		onEffectsReplaced?.();
 	}
 
+	function handleUpdatePreset(index: number) {
+		presets = updatePreset(index, $state.snapshot(effects));
+		onPresetUpdated?.($state.snapshot(presets[index]) as Preset);
+	}
+
 	function handleDeletePreset(index: number) {
-		flushPendingSave();
 		presets = deletePreset(index);
-		if (activePresetIndex === index) activePresetIndex = null;
-		else if (activePresetIndex !== null && activePresetIndex > index)
-			activePresetIndex--;
 	}
 
 	let dragFromIndex: number | null = $state(null);
@@ -352,11 +319,17 @@
 					<div class="preset-item">
 						<button
 							class="preset-load-btn"
-							class:active={activePresetIndex === i}
 							onclick={() => handleLoadPreset(i)}
 							title="Load preset"
 						>
 							{preset.name}
+						</button>
+						<button
+							class="preset-delete-btn preset-update-btn"
+							onclick={() => handleUpdatePreset(i)}
+							title="Overwrite with current effects"
+						>
+							<Save size={11} />
 						</button>
 						<button
 							class="preset-delete-btn"
@@ -612,12 +585,6 @@
 		background: rgba(255, 255, 255, 0.06);
 	}
 
-	.preset-load-btn.active {
-		color: #bbb;
-		border-color: #484848;
-		background: rgba(255, 255, 255, 0.07);
-	}
-
 	.preset-delete-btn {
 		display: flex;
 		align-items: center;
@@ -639,6 +606,11 @@
 	.preset-delete-btn:hover {
 		color: #c66;
 		background: rgba(255, 80, 80, 0.08);
+	}
+
+	.preset-update-btn:hover {
+		color: #8b8;
+		background: rgba(80, 200, 80, 0.08);
 	}
 
 	.preset-empty {
