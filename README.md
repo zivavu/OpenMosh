@@ -1,6 +1,6 @@
 # OpenMosh
 
-Browser-based glitch art studio, inspired by PhotoMosh. It's a fully client-side image and video tool — drop in a photo or video, layer GPU effects, sync them to music, or sequence images into a beat-matched slideshow, then export as a still or a WebM.
+Browser-based glitch art studio, inspired by PhotoMosh. It's a fully client-side image and video tool — drop in a photo or video, layer effects, sync them to your music, or sequence images into a beat-matched slideshow, then save as photo or video.
 
 ---
 
@@ -24,9 +24,9 @@ Built with Svelte 5, Vite, TypeScript, and WebGL2. Uses `mediabunny` for WebM mu
 
 There are two editing modes.
 
-The **single editor** loads one image or video at a time. Hit Mosh to build a random stack of glitch effects, tweak them individually. You can load some music and link any effect parameter to a frequency band so it reacts to the beat. There also is a sequence timeline mode in which you can arrange effects over time(work in progress).
+The **single editor** loads one image or video at a time. Hit Mosh to build a random stack of glitch effects, tweak them individually. You can load some music and link any effect parameter to a song frequency band. There also is a sequence timeline mode in which you can arrange effects over time(work in progress).
 
-**Slideshow mode** uses a batch of images or videos to a track instead.
+**Slideshow mode** uses a batch of images or videos to a track. Allows you to detect the BPM of the track and sync effects to the beat.
 
 Everything renders in WebGL2 and exports to WebM (audio included) — no MP4 or GIF support.
 
