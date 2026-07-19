@@ -1,5 +1,13 @@
 import type { EffectDefinition } from './types';
 
+/** ASCII effect character sets — each exactly 16 chars, sparsest leftmost. */
+export const ASCII_CHARSETS: { label: string; value: string; chars: string }[] = [
+   { label: 'Classic', value: 'classic', chars: ' .-:;i+r*oX#%&$@' },
+   { label: 'Blocks', value: 'blocks', chars: ' .·:░░░▒▒▓▓████' },
+   { label: 'Binary', value: 'binary', chars: '        00001111' },
+   { label: 'Numbers', value: 'numbers', chars: ' .-:;17245308#%@' },
+];
+
 export const EFFECT_DEFINITIONS: EffectDefinition[] = [
    {
       id: 'pixelate',
@@ -1315,10 +1323,17 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             key: 'size',
             label: 'Cell Size',
             type: 'range',
-            min: 5,
+            min: 20,
             max: 50,
             step: 1,
-            defaultValue: 15,
+            defaultValue: 30,
+         },
+         {
+            key: 'charset',
+            label: 'Character Set',
+            type: 'select',
+            defaultValue: 'classic',
+            options: ASCII_CHARSETS.map(({ label, value }) => ({ label, value })),
          },
          {
             key: 'color',
