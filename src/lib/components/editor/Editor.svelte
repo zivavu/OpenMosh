@@ -565,9 +565,61 @@
 	function seqApplyPreset(segId: string, preset: Preset) {
 		sequenceSegments = sequenceSegments.map((s) =>
 			s.id === segId
-				? { ...s, mode: 'static', label: preset.name, effects: applyPreset(preset) }
+				? {
+						...s,
+						mode: 'static',
+						label: preset.name,
+						presetName: preset.name,
+						effects: applyPreset(preset),
+					}
 				: s,
 		);
+	}
+
+	// A preset was explicitly overwritten in the panel — refresh every static
+	// segment that was filled from it, so segments track the newest version.
+	function seqSyncPreset(preset: Preset) {
+		sequenceSegments = sequenceSegments.map((s) =>
+			s.mode === 'static' && s.presetName === preset.name
+				? { ...s, label: preset.name, effects: applyPreset(preset) }
+				: s,
+		);
+	}
+
+	// Loop playback inside the selected segment (edit-while-playing aid).
+	let seqSegmentLoop = $state(false);
+	$effect(() => {
+		if (!sequenceEnabled || !seqSegmentLoop || !selectedSegmentId) return;
+		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
+		if (!seg) return;
+		const end = seg.endTime ?? seqMasterDuration;
+		const t = seqMasterTime();
+		if (t < seg.startTime - 0.05 || t >= end) {
+			if (seqMasterIsAudio) seekTo(seg.startTime);
+			else seekVideoTo(seg.startTime);
+		}
+	});
+
+	// Effects panel target: while a static segment is selected in sequence mode
+	// the panel edits that segment — even during playback, when the canvas keeps
+	// following the playhead. Otherwise the panel edits the live effects.
+	function panelSelectedSegment(): SequenceSegment | null {
+		if (!sequenceEnabled || !selectedSegmentId) return null;
+		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
+		return seg && seg.mode === 'static' ? seg : null;
+	}
+
+	function getPanelEffects(): EffectInstance[] {
+		return panelSelectedSegment()?.effects ?? effects;
+	}
+
+	function setPanelEffects(v: EffectInstance[]) {
+		const seg = panelSelectedSegment();
+		if (seg) {
+			seg.effects = v;
+		} else {
+			effects = v;
+		}
 	}
 
 	function seqRoll(segId: string) {
@@ -576,7 +628,7 @@
 			if (s.mode === 'interval') return { ...s, seed: randomSeed() };
 			const fx = loadInitialEffects();
 			generateMoshFn(fx, getMoshOptions());
-			return { ...s, label: 'mosh', effects: fx };
+			return { ...s, label: 'mosh', presetName: undefined, effects: fx };
 		});
 	}
 
@@ -1080,6 +1132,8 @@
 				onApplyPreset={seqApplyPreset}
 				onRoll={seqRoll}
 				onModeChange={seqModeChange}
+				segmentLoop={seqSegmentLoop}
+				onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
 			/>
 		{/if}
 		<!-- One playhead in sequence mode with a track: hide the video transport,
@@ -1156,13 +1210,16 @@
 		{/snippet}
 		{#snippet effectsPanel()}
 			<EffectsPanel
-				bind:effects
+				bind:effects={getPanelEffects, setPanelEffects}
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
-					effects = setVolumeLink(effects, index, paramKey, link);
+					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));
 				}}
-				onEffectsReplaced={() => history.push(effects)}
+				onEffectsReplaced={() => {
+					if (!sequenceEnabled) history.push(effects);
+				}}
+				onPresetUpdated={seqSyncPreset}
 			/>
 		{/snippet}
 	</MobileSheet>
