@@ -18,6 +18,8 @@ export interface RangeParam {
   defaultValue: number;
   moshMin?: number;
   moshMax?: number;
+  /** Optional exponent (>1) for a non-linear slider: low end of [min, max] spans more of the slider's width. */
+  curve?: number;
   visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 

@@ -624,10 +624,11 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
+uniform float u_speed;
 float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = floor(u_time * 20.0);
+  float t = floor(u_time * u_speed);
   vec2 off = vec2(
     (hash(t) - 0.5) * 2.0,
     (hash(t + 7.0) - 0.5) * 2.0
@@ -635,7 +636,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount'),
+		setUniforms: floats('amount', 'speed'),
 	},
 
 	glow: {

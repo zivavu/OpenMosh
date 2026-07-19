@@ -174,6 +174,7 @@
 									min={param.min}
 									max={param.max}
 									step={param.step}
+									curve={param.curve}
 									disabled={!!effect.volumeLinks?.[param.key]}
 									oninput={(v) => onParamChange(param.key, v)}
 									ondblclick={() =>
