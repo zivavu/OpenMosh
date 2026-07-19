@@ -388,6 +388,7 @@ export class GlRenderer {
         }
       }
 
+      if (entry.def.linearFilter) this.setTextureFilter(input, true);
       if (isLast) {
         this.drawPass(
           entry.program,
@@ -412,6 +413,9 @@ export class GlRenderer {
           entry.prePasses ? originalInput : undefined,
           effectDelta,
         );
+      }
+      if (entry.def.linearFilter) this.setTextureFilter(input, false);
+      if (!isLast) {
         input = this.ppTextures[ppIdx];
         ppIdx = 1 - ppIdx;
       }

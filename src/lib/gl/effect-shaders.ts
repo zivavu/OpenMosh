@@ -88,6 +88,8 @@ export interface EffectShaderDef {
 	fragment: string;
 	/** Pre-passes rendered before the main fragment (for multi-pass effects like bloom). */
 	prePasses?: PrePassDef[];
+	/** Sample the chain input with LINEAR filtering for the main pass (smooth warps like swirl). */
+	linearFilter?: boolean;
 	animated?: boolean;
 	setUniforms: (
 		gl: WebGL2RenderingContext,
@@ -986,25 +988,14 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_size;
 uniform float u_rgb;
 uniform int u_blendMode;
-float hash2(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-float vnoise2(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), u.x),
-             mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-float grainNoise(vec2 p, float seed) {
-  // Multi-octave, contrast-expanded: clumpy irregular grains, not speckle
-  float n = vnoise2(p + seed * 17.0) * 0.6
-          + vnoise2(p * 2.3 + seed * 31.0) * 0.3
-          + vnoise2(p * 4.7 + seed * 53.0) * 0.1;
-  return clamp((n - 0.5) * 2.6 + 0.5, 0.0, 1.0);
+// Sine-free hash (Dave Hoskins): stable on ANGLE/D3D where fract(sin(x)*K)
+// collapses to a constant for large x — with pixel coords it must not.
+float hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 vec3 blendSoftLight(vec3 base, vec3 blend) {
   return mix(
@@ -1016,36 +1007,33 @@ vec3 blendSoftLight(vec3 base, vec3 blend) {
 void main() {
   vec4 c = texture(u_texture, v_uv);
   float frame = floor(u_time * 24.0);
-  // Re-seat the pattern every frame so the grain "boils" like film
-  vec2 fOff = vec2(hash2(vec2(frame, 1.0)), hash2(vec2(frame, 2.0))) * 113.0;
-  vec2 p = gl_FragCoord.xy / max(u_size, 0.5) + fOff;
 
-  float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-  // Film stock responds strongest in the midtones
-  float response = clamp(0.25 + 0.75 * (1.0 - abs(luma - 0.5) * 1.6), 0.0, 1.0);
+  // Hard per-pixel speckle: one hash per pixel, no interpolation — crisp
+  // grains that re-seat every frame and boil like film.
+  vec2 p = floor(gl_FragCoord.xy) + frame * vec2(13.7, 57.3);
 
+  // RGB mode gives each channel its own grain -> colored speckle
   vec3 g = u_rgb > 0.5
-    ? vec3(grainNoise(p, frame), grainNoise(p + 7.0, frame), grainNoise(p + 13.0, frame))
-    : vec3(grainNoise(p, frame));
+    ? vec3(hash(p), hash(p + 19.19), hash(p + 47.47))
+    : vec3(hash(p));
 
-  float amt = u_amount * response;
   vec3 result;
   if (u_blendMode == 0) {
-    result = mix(c.rgb, blendSoftLight(c.rgb, g), amt * 1.6);
+    // Additive: uniform response, grain reads in shadows and highlights alike
+    result = c.rgb + (g - 0.5) * u_amount * 1.2;
   } else if (u_blendMode == 1) {
-    result = c.rgb + (g - 0.5) * amt * 0.9;
+    result = mix(c.rgb, blendSoftLight(c.rgb, g), u_amount * 1.5);
   } else {
-    result = c.rgb * mix(vec3(1.0), 0.4 + g * 0.8, amt);
+    result = c.rgb * mix(vec3(1.0), g * 1.6, u_amount);
   }
   outColor = vec4(clamp(result, 0.0, 1.0), c.a);
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_size', (v.size as number) ?? 1.6);
 			setFloat(gl, l, 'u_rgb', v.rgb as number);
 			const mode =
-				v.blendMode === 'additive' ? 1 : v.blendMode === 'multiply' ? 2 : 0;
+				v.blendMode === 'softlight' ? 1 : v.blendMode === 'multiply' ? 2 : 0;
 			setInt(gl, l, 'u_blendMode', mode);
 		},
 	},
@@ -1259,39 +1247,6 @@ void main() {
 		setUniforms: floats('amount'),
 	},
 
-	echo: {
-		fragment:
-			H +
-			`uniform float u_decay;
-uniform int u_mode;
-uniform float u_delta;
-uniform sampler2D u_feedback;
-void main() {
-  vec3 fresh = texture(u_texture, v_uv).rgb;
-  // Per-frame decay normalized to 60 fps so trails last the same
-  // wall-clock time at any frame rate.
-  float d = pow(u_decay, u_delta * 60.0);
-  vec3 prev = texture(u_feedback, v_uv).rgb * d;
-  vec3 col;
-  if (u_mode == 1) {
-    // Light trails: bright residue only ever fades
-    col = max(fresh, prev);
-  } else if (u_mode == 2) {
-    // Accumulate: burns toward white
-    col = min(fresh + prev, vec3(1.0));
-  } else {
-    // Blend: soft dreamy trails that never darken the still image
-    col = mix(fresh, max(fresh, prev), d);
-  }
-  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
-}`,
-		animated: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_decay', v.decay as number);
-			setInt(gl, l, 'u_mode', v.mode === 'max' ? 1 : v.mode === 'add' ? 2 : 0);
-		},
-	},
-
 	tunnel: {
 		fragment:
 			H +
@@ -1308,7 +1263,10 @@ void main() {
   vec2 c = v_uv - 0.5;
   float ca = cos(a), sa = sin(a);
   c = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y) * s;
-  vec3 prev = texture(u_feedback, c + 0.5).rgb * pow(u_decay, u_delta * 60.0);
+  // Decay knob is inverted (higher = fades faster) and cropped to the
+  // usable 0.90–1.00 per-frame multiplier range.
+  float fade = 1.0 - u_decay * 0.1;
+  vec3 prev = texture(u_feedback, c + 0.5).rgb * pow(fade, u_delta * 60.0);
   vec3 fresh = texture(u_texture, v_uv).rgb;
   outColor = vec4(clamp(max(fresh, prev), 0.0, 1.0), 1.0);
 }`,
@@ -1386,15 +1344,21 @@ void main() {
   vec2 c = v_uv - 0.5;
   c.x *= aspect;
   float d = length(c);
-  // Twist strongest at the core, gone by u_radius
-  float infl = smoothstep(u_radius, u_radius * 0.15, d);
-  float a = (u_angle * 3.14159265 / 180.0 + u_time) * infl;
+  // Whirlpool profile: full twist at the core with a quadratic falloff
+  // to zero at u_radius — the shear stays concentrated in the middle
+  // instead of streaking the whole disc into rings.
+  float infl = 1.0 - smoothstep(0.0, u_radius, d);
+  infl *= infl;
+  // Bounded rocking around the base twist instead of endless wind-up,
+  // so the vortex breathes instead of spiraling into mush.
+  float a = (u_angle + sin(u_time * 0.8) * 60.0) * (3.14159265 / 180.0) * infl;
   float ca = cos(a), sa = sin(a);
   vec2 r = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y);
   vec2 uv = vec2(r.x / aspect, r.y) + 0.5;
   outColor = texture(u_texture, uv);
 }`,
 		animated: true,
+		linearFilter: true,
 		setUniforms: floats('angle', 'radius'),
 	},
 
@@ -1463,50 +1427,6 @@ void main() {
 			setFloat(gl, l, 'u_size', v.size as number);
 			setInt(gl, l, 'u_color', v.color === 'green' ? 1 : v.color === 'white' ? 2 : 0);
 		},
-	},
-
-	crt: {
-		fragment:
-			H +
-			`uniform float u_curvature;
-uniform float u_grille;
-uniform float u_bleed;
-uniform float u_flicker;
-void main() {
-  vec2 res = vec2(textureSize(u_texture, 0));
-  vec2 px = 1.0 / res;
-  // Barrel distortion (curved glass)
-  vec2 c = v_uv - 0.5;
-  vec2 uv = v_uv + c * dot(c, c) * u_curvature * 2.0;
-
-  // Phosphor bleed: short horizontal smear
-  vec3 col = texture(u_texture, uv).rgb;
-  vec3 bleed =
-    texture(u_texture, uv + vec2(px.x * 1.5, 0.0)).rgb +
-    texture(u_texture, uv - vec2(px.x * 1.5, 0.0)).rgb +
-    texture(u_texture, uv + vec2(px.x * 3.0, 0.0)).rgb +
-    texture(u_texture, uv - vec2(px.x * 3.0, 0.0)).rgb;
-  col = mix(col, (col * 2.0 + bleed) / 6.0, u_bleed);
-
-  // Aperture grille: vertical RGB stripes with a 3 px period
-  float m = mod(floor(v_uv.x * res.x), 3.0);
-  vec3 mask = vec3(
-    1.0 - step(0.5, m),
-    step(0.5, m) * (1.0 - step(1.5, m)),
-    step(1.5, m)
-  );
-  col *= mix(vec3(1.0), mask * 1.35, u_grille);
-
-  // Frame flicker: fast jitter crossed with a slow roll
-  float fl = 0.5 + 0.5 * sin(u_time * 97.0 + sin(u_time * 61.0));
-  col *= 1.0 - u_flicker * 0.08 * fl;
-
-  // Outside the tube: black
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.0);
-  outColor = vec4(col, 1.0);
-}`,
-		animated: true,
-		setUniforms: floats('curvature', 'grille', 'bleed', 'flicker'),
 	},
 
 	'radial-blur': {
