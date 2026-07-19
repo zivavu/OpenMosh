@@ -13,9 +13,12 @@ export interface SlideshowRecordContext {
   slides: SlideshowSlide[];
   config: SlideshowConfig;
   baseEffects: EffectInstance[];
-  audioFile: File;
+  /** Null = silent export; length then comes from noAudioDuration. */
+  audioFile: File | null;
   audioStart: number;
   audioEnd: number;
+  /** Export length in seconds when no audio track is set. */
+  noAudioDuration?: number;
   canvas: HTMLCanvasElement;
   renderer: GlRenderer;
   /** If set, recording uses these dimensions instead of the first slide's image size. */
@@ -48,7 +51,9 @@ export async function executeSlideshowRecording(
     signal,
   } = ctx;
 
-  const duration = audioEnd - audioStart;
+  const duration = audioFile
+    ? audioEnd - audioStart
+    : Math.max(0.5, ctx.noAudioDuration ?? 5);
   const smoothState = { effects: cloneEffects(baseEffects) };
 
   // Pre-load all images; create a fresh sampler per video slide (positions
@@ -132,12 +137,11 @@ export async function executeSlideshowRecording(
     onProgress,
     onFinalizing,
     signal,
-    audioFile,
-    audioStart,
-    audioEnd,
+    ...(audioFile && { audioFile, audioStart, audioEnd }),
     async onBeforeRender(_frameIndex: number, time: number) {
-      // time is 0..duration (recording window); segments use "seconds from audio start"
-      const timeFromAudioStart = time + audioStart;
+      // time is 0..duration (recording window); segments use "seconds from
+      // audio start" (silent export: the beat clock just starts at 0)
+      const timeFromAudioStart = time + (audioFile ? audioStart : 0);
       const { index: beatIndex } = beatAtTime(
         timeFromAudioStart,
         config.bpm,
