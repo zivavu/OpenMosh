@@ -43,8 +43,20 @@ export class GlRenderer {
   private hdrTextures: [WebGLTexture, WebGLTexture] | null = null;
   private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbIdx = 0;
-  /** True after feedback buffers were (re)allocated: they hold no valid history yet. */
-  private feedbackDirty = true;
+  /**
+   * Private history buffers for feedback-reading effects (u_feedback), keyed
+   * by effect instanceId. Each such effect feeds back its OWN previous output
+   * — not the chain composite — so downstream effects can't create runaway
+   * loops (e.g. melt -> bleach crushing shadows to black over a second).
+   */
+  private fxFeedback = new Map<
+    string,
+    {
+      textures: [WebGLTexture, WebGLTexture];
+      fbos: [WebGLFramebuffer, WebGLFramebuffer];
+      idx: number;
+    }
+  >();
   private passthrough: CompiledProgram;
   private compiled = new Map<
     string,
@@ -303,25 +315,17 @@ export class GlRenderer {
     )
       return;
 
-    // Feedback buffers were reallocated (load/resize): seed both with the
-    // current source so feedback-reading effects (melt) get valid history
-    // instead of uninitialized memory.
-    if (this.feedbackDirty) {
-      this.drawPass(
-        this.passthrough,
-        this.fbFBOs[0],
-        this.sourceTexture,
-        1.0,
-        time,
-      );
-      this.drawPass(
-        this.passthrough,
-        this.fbFBOs[1],
-        this.sourceTexture,
-        1.0,
-        time,
-      );
-      this.feedbackDirty = false;
+    // Drop history buffers of effect instances that no longer exist
+    // (deleted, or replaced wholesale by undo/preset).
+    if (this.fxFeedback.size > 0) {
+      const live = new Set(effects.map((e) => e.instanceId));
+      for (const [id, pair] of this.fxFeedback) {
+        if (!live.has(id)) {
+          this.deleteTexturePair(pair.textures);
+          this.deleteFBOPair(pair.fbos);
+          this.fxFeedback.delete(id);
+        }
+      }
     }
 
     // Compute delta time for phase accumulation
@@ -341,12 +345,14 @@ export class GlRenderer {
         1.0,
         time,
       );
-      this.presentFrame(writeIdx);
+      this.presentFrame(this.fbTextures[writeIdx]!, writeIdx);
       return;
     }
 
     let input = this.sourceTexture!;
     let ppIdx = 0;
+    /** Texture holding the final chain output (presented at the end). */
+    let resultTex: WebGLTexture | null = null;
 
     for (let i = 0; i < enabled.length; i++) {
       const eff = enabled[i];
@@ -357,7 +363,9 @@ export class GlRenderer {
       if (eff.defId === TRACKING_EFFECT_ID) {
         const target = isLast ? this.fbFBOs[writeIdx] : this.ppFBOs[ppIdx];
         this.renderTracking(eff, input, target, time);
-        if (!isLast) {
+        if (isLast) {
+          resultTex = this.fbTextures[writeIdx];
+        } else {
           input = this.ppTextures[ppIdx];
           ppIdx = 1 - ppIdx;
         }
@@ -395,6 +403,31 @@ export class GlRenderer {
       }
 
       if (entry.def.linearFilter) this.setTextureFilter(input, true);
+
+      if (entry.program.uniforms["u_feedback"]) {
+        // Feedback effect: render into its private history buffer, reading
+        // its own previous output — downstream effects never enter the loop.
+        const pair = this.getFxFeedback(eff.instanceId, input, time);
+        const writeSlot = 1 - pair.idx;
+        this.drawPass(
+          entry.program,
+          pair.fbos[writeSlot],
+          input,
+          1.0,
+          effectTime,
+          entry.def,
+          eff.values,
+          entry.prePasses ? originalInput : undefined,
+          effectDelta,
+          pair.textures[pair.idx],
+        );
+        pair.idx = writeSlot as 0 | 1;
+        if (entry.def.linearFilter) this.setTextureFilter(input, false);
+        input = pair.textures[writeSlot];
+        if (isLast) resultTex = input;
+        continue;
+      }
+
       if (isLast) {
         this.drawPass(
           entry.program,
@@ -407,6 +440,8 @@ export class GlRenderer {
           entry.prePasses ? originalInput : undefined,
           effectDelta,
         );
+        if (entry.def.linearFilter) this.setTextureFilter(input, false);
+        resultTex = this.fbTextures[writeIdx];
       } else {
         this.drawPass(
           entry.program,
@@ -419,20 +454,29 @@ export class GlRenderer {
           entry.prePasses ? originalInput : undefined,
           effectDelta,
         );
-      }
-      if (entry.def.linearFilter) this.setTextureFilter(input, false);
-      if (!isLast) {
+        if (entry.def.linearFilter) this.setTextureFilter(input, false);
         input = this.ppTextures[ppIdx];
         ppIdx = 1 - ppIdx;
       }
     }
 
-    this.presentFrame(writeIdx);
+    // Every enabled effect was skipped (unknown ids): fall back to source
+    if (!resultTex) {
+      this.drawPass(
+        this.passthrough,
+        this.fbFBOs[writeIdx],
+        this.sourceTexture,
+        1.0,
+        time,
+      );
+      resultTex = this.fbTextures[writeIdx];
+    }
+
+    this.presentFrame(resultTex, writeIdx);
   }
 
   /** Blend the text overlay (if any) over the rendered frame and draw it to the canvas. */
-  private presentFrame(writeIdx: 0 | 1) {
-    const mainResult = this.fbTextures![writeIdx]!;
+  private presentFrame(mainResult: WebGLTexture, writeIdx: 0 | 1) {
     if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
       this.drawBlendToCanvas(
         mainResult,
@@ -445,6 +489,27 @@ export class GlRenderer {
       this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
     }
     this.fbIdx = writeIdx;
+  }
+
+  /**
+   * Get (or lazily create) the private history buffer for a feedback effect.
+   * New buffers are seeded with the current chain input at that slot, so the
+   * effect starts from valid history instead of uninitialized memory.
+   */
+  private getFxFeedback(instanceId: string, seedTex: WebGLTexture, time: number) {
+    let pair = this.fxFeedback.get(instanceId);
+    if (!pair) {
+      const textures: [WebGLTexture, WebGLTexture] = [
+        this.createTexture(this.imgW, this.imgH),
+        this.createTexture(this.imgW, this.imgH),
+      ];
+      const fbos = this.createFBOPair(textures);
+      pair = { textures, fbos, idx: 0 };
+      this.fxFeedback.set(instanceId, pair);
+      this.drawPass(this.passthrough, fbos[0], seedTex, 1.0, time);
+      this.drawPass(this.passthrough, fbos[1], seedTex, 1.0, time);
+    }
+    return pair;
   }
 
   /** For effects with a speed param, accumulate phase so speed changes don't cause jumps. */
@@ -771,6 +836,11 @@ export class GlRenderer {
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
     gl.deleteProgram(this.passthrough.program);
+    for (const pair of this.fxFeedback.values()) {
+      this.deleteTexturePair(pair.textures);
+      this.deleteFBOPair(pair.fbos);
+    }
+    this.fxFeedback.clear();
     for (const tex of this.glyphTextures.values()) gl.deleteTexture(tex);
     this.glyphTextures.clear();
     for (const entry of this.compiled.values()) {
@@ -1005,7 +1075,11 @@ export class GlRenderer {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;
-    this.feedbackDirty = true;
+    for (const pair of this.fxFeedback.values()) {
+      this.deleteTexturePair(pair.textures);
+      this.deleteFBOPair(pair.fbos);
+    }
+    this.fxFeedback.clear();
   }
 
   private static BLEND_MODE_VALUES: Record<TextOverlayBlendMode, number> = {
@@ -1074,6 +1148,7 @@ export class GlRenderer {
     values?: Record<string, number | string>,
     originalTex?: WebGLTexture,
     delta?: number,
+    feedbackTex?: WebGLTexture,
   ) {
     const gl = this.gl;
 
@@ -1105,7 +1180,10 @@ export class GlRenderer {
     }
     if (compiled.uniforms["u_feedback"] && this.fbTextures) {
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, this.fbTextures[this.fbIdx]);
+      gl.bindTexture(
+        gl.TEXTURE_2D,
+        feedbackTex ?? this.fbTextures[this.fbIdx],
+      );
       gl.uniform1i(compiled.uniforms["u_feedback"], 1);
       gl.activeTexture(gl.TEXTURE0);
     }
