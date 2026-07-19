@@ -14,6 +14,7 @@ dist-ssr
 
 # Claude Code
 CLAUDE.md
+AGENTS.md
 docs
 .superpowers
 .claude
@@ -21,6 +22,7 @@ docs
 # Editor directories and files
 .vscode/*
 .cursor/*
+.zed/*
 !.vscode/extensions.json
 .idea
 .DS_Store
