@@ -125,8 +125,11 @@ function floats(...keys: string[]): EffectShaderDef['setUniforms'] {
 
 /** Plain horizontal Gaussian (no threshold) — Blur effect pass 1. */
 const BLUR_H_FRAG = `uniform float u_radius;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  // Pixel size from the full output resolution (not the pre-pass buffer), so
+  // the screen-space blur width is invariant to pre-pass downsampling.
+  vec2 px = 1.0 / u_resolution;
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;
   float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
@@ -144,8 +147,9 @@ void main() {
 }`;
 
 const GLOW_VBLUR_FRAG = `uniform float u_radius;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;
   float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
@@ -647,8 +651,9 @@ void main() {
 					H +
 					`uniform float u_cutoff;
 uniform float u_radius;
+uniform vec2 u_resolution;
 void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  vec2 px = 1.0 / u_resolution;
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;
   float invSigma2 = 1.0 / max(sigma * sigma, 0.001);

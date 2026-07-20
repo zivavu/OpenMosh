@@ -40,9 +40,18 @@ export class GlRenderer {
   private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbTextures: [WebGLTexture, WebGLTexture] | null = null;
   private fbFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
-  /** Half-float ping-pong for HDR multi-pass effects (bloom). */
+  /**
+   * Half-float ping-pong for HDR multi-pass effects (bloom/blur). Allocated at
+   * a fraction of the output resolution: the Gaussian pre-passes are the
+   * heaviest part of these effects, and their result is low-frequency, so a
+   * half-res blur + linear upsample is visually ~identical for a 4× fill cut.
+   * The blur shaders derive pixel size from u_resolution (full res), so the
+   * screen-space blur width is unchanged by this downsampling.
+   */
   private hdrTextures: [WebGLTexture, WebGLTexture] | null = null;
   private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  private hdrW = 0;
+  private hdrH = 0;
   /** Per-side outputs for transitions: chain A and chain B render into these. */
   private sceneTextures: [WebGLTexture, WebGLTexture] | null = null;
   private sceneFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
@@ -489,7 +498,10 @@ export class GlRenderer {
         safeDt,
       );
 
-      // Multi-pass effects: run pre-passes through HDR ping-pong, then composite
+      // Multi-pass effects: run pre-passes through the half-res HDR ping-pong,
+      // then composite. The pre-pass viewport is the HDR buffer size; the
+      // shaders use u_resolution (full res) for blur width, so downsampling
+      // only lowers the sample resolution, not the blur radius.
       const originalInput = input;
       if (entry.prePasses && this.hdrFBOs && this.hdrTextures) {
         let hdrIdx = 0;
@@ -503,11 +515,20 @@ export class GlRenderer {
             effectTime,
             entry.def,
             eff.values,
+            undefined,
+            undefined,
+            undefined,
+            this.hdrW,
+            this.hdrH,
           );
           if (pp.linearFilter) this.setTextureFilter(input, false);
           input = this.hdrTextures[hdrIdx];
           hdrIdx = 1 - hdrIdx;
         }
+        // The composite reads the final blurred buffer at full res — keep it
+        // LINEAR so the upsample is smooth (setTextureFilter may have left the
+        // shared source texture NEAREST above; HDR textures are LINEAR-native).
+        this.setTextureFilter(input, true);
       }
 
       if (entry.def.linearFilter) this.setTextureFilter(input, true);
@@ -1216,9 +1237,12 @@ export class GlRenderer {
     ];
     this.fbFBOs = this.createFBOPair(this.fbTextures);
 
+    // Half resolution (min 1px) — see hdrTextures docstring.
+    this.hdrW = Math.max(1, Math.round(this.imgW / 2));
+    this.hdrH = Math.max(1, Math.round(this.imgH / 2));
     this.hdrTextures = [
-      this.createHdrTexture(this.imgW, this.imgH),
-      this.createHdrTexture(this.imgW, this.imgH),
+      this.createHdrTexture(this.hdrW, this.hdrH),
+      this.createHdrTexture(this.hdrW, this.hdrH),
     ];
     this.hdrFBOs = this.createFBOPair(this.hdrTextures);
 
@@ -1304,12 +1328,15 @@ export class GlRenderer {
     originalTex?: WebGLTexture,
     delta?: number,
     feedbackTex?: WebGLTexture,
+    vpW?: number,
+    vpH?: number,
   ) {
     const gl = this.gl;
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     if (fbo) {
-      gl.viewport(0, 0, this.imgW, this.imgH);
+      // vpW/vpH override for off-size render targets (half-res HDR pre-passes)
+      gl.viewport(0, 0, vpW ?? this.imgW, vpH ?? this.imgH);
     } else {
       gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     }
