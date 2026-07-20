@@ -465,13 +465,27 @@
 	}>('openmosh-sequence');
 
 	// Persist the sequence timeline per library track (deep read via snapshot,
-	// so segment/effect edits are captured too)
+	// so segment/effect edits are captured too). Skipped while playing: static
+	// segments share identity with the live `effects`, so the per-frame
+	// volume-link tick mutates values inside `sequenceSegments` — an ungated
+	// deep read here re-ran the snapshot + localStorage JSON round-trip every
+	// frame, tanking preview FPS proportionally to segment count. Persisting
+	// settles on pause; the debounce keeps slider/segment drags from writing
+	// localStorage per input event.
+	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
+		const playing =
+			audio.audioPlaying ||
+			(previewPlayer ? previewPlayer.playing : videoPlaying);
+		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const enabled = sequenceEnabled;
-		if (currentTrackId) {
-			seqStore.save(currentTrackId, { enabled, segments: segs });
-		}
+		const trackId = currentTrackId;
+		if (!trackId) return;
+		clearTimeout(seqSaveTimer);
+		seqSaveTimer = setTimeout(() => {
+			seqStore.save(trackId, { enabled, segments: segs });
+		}, 300);
 	});
 
 	let seqMasterIsAudio = $derived(!!audio.trackFile && audio.trackDuration > 0);
