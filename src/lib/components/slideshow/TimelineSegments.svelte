@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { generateId } from '../../effects';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
@@ -20,7 +21,6 @@
 	const ROW_H = (SVG_H - PAD_V * 2) / (SUBDIVISIONS.length - 1);
 	const DOT_R = 4;
 	const DRAG_THRESHOLD_PX = 5;
-	const MIN_ZOOM_FRACTION = 1 / 200; // 200× max zoom
 
 	function subToY(sub: BeatSubdivision): number {
 		const idx = SUBDIVISIONS.indexOf(sub);
@@ -64,17 +64,15 @@
 	let scrollbarEl: HTMLDivElement | undefined = $state();
 
 	// ── View window (zoom / pan) ─────────────────────────────────────────────────
-	let viewStart = $state(0);
-	let viewEnd = $state(0); // initialised by effect below
-	let viewDuration = $derived(Math.max(0.001, viewEnd - viewStart));
-	let isZoomed = $derived(
-		trackDuration > 0 && (viewStart > 0.001 || viewEnd < trackDuration - 0.001),
+	const vp = new TimelineViewport(
+		() => trackDuration,
+		() => svgEl?.getBoundingClientRect() ?? null,
 	);
 
-	// Initialise / clamp viewEnd when trackDuration changes (e.g. audio loaded)
+	// Initialise / clamp vp.viewEnd when trackDuration changes (e.g. audio loaded)
 	$effect(() => {
 		const td = trackDuration;
-		if (td > 0 && (viewEnd <= 0 || viewEnd > td)) viewEnd = td;
+		if (td > 0 && (vp.viewEnd <= 0 || vp.viewEnd > td)) vp.viewEnd = td;
 	});
 
 	// ── Mobile detection ─────────────────────────────────────────────────────────
@@ -191,87 +189,16 @@
 		return svgEl?.getBoundingClientRect() ?? null;
 	}
 
-	/** Convert clientX to absolute track time via the current view window. */
-	function clientXToTime(cx: number): number {
-		const r = getRect();
-		if (!r || viewDuration <= 0) return 0;
-		const frac = Math.max(0, Math.min(1, (cx - r.left) / r.width));
-		return viewStart + frac * viewDuration;
-	}
-
 	function clientYToSvgY(cy: number): number {
 		const r = getRect();
 		if (!r || r.height === 0) return SVG_H / 2;
 		return ((cy - r.top) / r.height) * SVG_H;
 	}
 
-	/** Convert absolute track time to a view-relative percentage (can be <0 or >100). */
-	function toPct(time: number): number {
-		if (viewDuration <= 0) return 0;
-		return ((time - viewStart) / viewDuration) * 100;
-	}
-
-	// ── Zoom / pan ───────────────────────────────────────────────────────────────
-	function panView(delta: number) {
-		const dur = viewEnd - viewStart;
-		let ns = viewStart + delta;
-		let ne = ns + dur;
-		if (ns < 0) {
-			ne -= ns;
-			ns = 0;
-		}
-		if (ne > trackDuration) {
-			ns -= ne - trackDuration;
-			ne = trackDuration;
-		}
-		viewStart = Math.max(0, ns);
-		viewEnd = Math.min(trackDuration, ne);
-	}
-
-	function zoomView(factor: number, cursorFrac: number) {
-		const minDur = Math.max(trackDuration * MIN_ZOOM_FRACTION, 0.1);
-		const curDur = viewEnd - viewStart;
-		const newDur = Math.max(minDur, Math.min(trackDuration, curDur * factor));
-		const cursorTime = viewStart + cursorFrac * curDur;
-		let ns = cursorTime - cursorFrac * newDur;
-		let ne = ns + newDur;
-		if (ns < 0) {
-			ne -= ns;
-			ns = 0;
-		}
-		if (ne > trackDuration) {
-			ns -= ne - trackDuration;
-			ne = trackDuration;
-		}
-		viewStart = Math.max(0, ns);
-		viewEnd = Math.min(trackDuration, ne);
-	}
-
 	// Attach wheel handler with { passive: false } so we can call preventDefault
 	$effect(() => {
 		if (!svgEl) return;
-		function handleWheel(e: WheelEvent) {
-			e.preventDefault();
-			e.stopPropagation();
-			if (trackDuration <= 0) return;
-			const r = svgEl!.getBoundingClientRect();
-			const cursorFrac = Math.max(
-				0,
-				Math.min(1, (e.clientX - r.left) / r.width),
-			);
-			if (e.shiftKey) {
-				// Shift + scroll → pan
-				panView(viewDuration * 0.25 * Math.sign(e.deltaY));
-			} else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-				// Horizontal trackpad swipe → pan
-				panView((e.deltaX / 200) * viewDuration);
-			} else {
-				// Vertical scroll → zoom centred on cursor
-				zoomView(e.deltaY > 0 ? 1.2 : 1 / 1.2, cursorFrac);
-			}
-		}
-		svgEl.addEventListener('wheel', handleWheel, { passive: false });
-		return () => svgEl!.removeEventListener('wheel', handleWheel);
+		return vp.attachWheel(svgEl);
 	});
 
 	// ── Touch handler (non-passive, handles dots + double-tap + seg/seek drags) ──
@@ -383,8 +310,8 @@
 			const endTime = Math.min(trackDuration, s.endTime ?? trackDuration);
 			return {
 				id: s.id,
-				startX: toPct(s.startTime),
-				endX: toPct(endTime),
+				startX: vp.toPct(s.startTime),
+				endX: vp.toPct(endTime),
 				y: subToY(activeSub),
 				sub: activeSub,
 				startTime: s.startTime,
@@ -409,7 +336,7 @@
 				const lv = segVis[i];
 				const rv = segVis[i + 1];
 				list.push({
-					xPct: toPct(lend),
+					xPct: vp.toPct(lend),
 					y1: Math.min(lv.y, rv.y),
 					y2: Math.max(lv.y, rv.y),
 					leftSegId: segments[i].id,
@@ -433,7 +360,7 @@
 	// ── Event handlers ───────────────────────────────────────────────────────────
 	function onDblClick(e: MouseEvent) {
 		if (trackDuration <= 0) return;
-		const time = clientXToTime(e.clientX);
+		const time = vp.clientXToTime(e.clientX);
 		const svgY = clientYToSvgY(e.clientY);
 
 		if (config.segments.length === 0) {
@@ -542,7 +469,7 @@
 
 			dragging = {
 				type: 'boundary-group',
-				anchorTime: clientXToTime(e.clientX),
+				anchorTime: vp.clientXToTime(e.clientX),
 				boundaries: groupBoundaries,
 				nonSelectedBoundaries,
 			};
@@ -559,7 +486,7 @@
 	function startSegYDrag(e: PointerEvent, segId: string) {
 		e.stopPropagation();
 		if (e.ctrlKey || e.metaKey) {
-			const time = clientXToTime(e.clientX);
+			const time = vp.clientXToTime(e.clientX);
 			const seg = config.segments.find((s) => s.id === segId);
 			if (!seg) return;
 			const end = seg.endTime ?? trackDuration;
@@ -603,7 +530,7 @@
 		dragging = {
 			type: 'scroll-pan',
 			startClientX: e.clientX,
-			startViewStart: viewStart,
+			startViewStart: vp.viewStart,
 			scrollWidth: rect.width,
 		};
 		dragMoved = false;
@@ -615,13 +542,13 @@
 		// If in paste mode, split segments at clipboard offsets from the clicked time
 		if (boundaries.pasteMode && boundaries.clipboard.length > 0) {
 			e.stopPropagation();
-			boundaries.pasteAt(clientXToTime(e.clientX));
+			boundaries.pasteAt(vp.clientXToTime(e.clientX));
 			return;
 		}
 		// Ctrl+click → split segment at cursor
 		if (e.ctrlKey || e.metaKey) {
 			e.stopPropagation();
-			const time = clientXToTime(e.clientX);
+			const time = vp.clientXToTime(e.clientX);
 			const svgY = clientYToSvgY(e.clientY);
 			if (config.segments.length === 0) {
 				emit({
@@ -673,7 +600,7 @@
 		// Default: seek
 		if (!onSeek) return;
 		boundaries.clearSelection();
-		const time = Math.max(0, Math.min(trackDuration, clientXToTime(e.clientX)));
+		const time = Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
 		dragMoved = false;
@@ -682,7 +609,7 @@
 
 	function startRectSelect(e: PointerEvent) {
 		e.stopPropagation();
-		const time = clientXToTime(e.clientX);
+		const time = vp.clientXToTime(e.clientX);
 		const svgY = clientYToSvgY(e.clientY);
 		dragging = {
 			type: 'rect-select',
@@ -697,7 +624,7 @@
 
 	function onPointerMove(e: PointerEvent) {
 		if (boundaries.pasteMode) {
-			boundaries.pasteCursorTime = clientXToTime(e.clientX);
+			boundaries.pasteCursorTime = vp.clientXToTime(e.clientX);
 		}
 		if (!dragging) return;
 
@@ -706,7 +633,7 @@
 				boundaries.snapshotForDrag();
 			}
 			dragMoved = true;
-			const time = clientXToTime(e.clientX);
+			const time = vp.clientXToTime(e.clientX);
 			const { leftSegId, rightSegId } = dragging;
 			const updates: Record<string, Partial<TimelineSegment>> = {};
 
@@ -744,7 +671,7 @@
 				boundaries.snapshotForDrag();
 			}
 			dragMoved = true;
-			const rawDelta = clientXToTime(e.clientX) - dragging.anchorTime;
+			const rawDelta = vp.clientXToTime(e.clientX) - dragging.anchorTime;
 
 			// Clamp delta so no selected boundary crosses a non-selected neighbor
 			let minDelta = -Infinity;
@@ -804,25 +731,25 @@
 			dragMoved = true;
 			const time = Math.max(
 				0,
-				Math.min(trackDuration, clientXToTime(e.clientX)),
+				Math.min(trackDuration, vp.clientXToTime(e.clientX)),
 			);
 			onSeek?.(time);
 		} else if (dragging.type === 'scroll-pan') {
 			dragMoved = true;
 			const { startClientX, startViewStart, scrollWidth } = dragging;
-			const dur = viewEnd - viewStart;
+			const dur = vp.viewEnd - vp.viewStart;
 			const delta = ((e.clientX - startClientX) / scrollWidth) * trackDuration;
 			const ns = Math.max(
 				0,
 				Math.min(trackDuration - dur, startViewStart + delta),
 			);
-			viewStart = ns;
-			viewEnd = ns + dur;
+			vp.viewStart = ns;
+			vp.viewEnd = ns + dur;
 		} else if (dragging.type === 'rect-select') {
 			dragMoved = true;
 			dragging = {
 				...dragging,
-				currentTime: clientXToTime(e.clientX),
+				currentTime: vp.clientXToTime(e.clientX),
 				currentSvgY: clientYToSvgY(e.clientY),
 			};
 		}
@@ -1030,7 +957,7 @@
 				{#if segVis[0].startTime > 0.001}
 					<line
 						class="tail"
-						x1="{toPct(0)}%"
+						x1="{vp.toPct(0)}%"
 						y1={segVis[0].y}
 						x2="{segVis[0].startX}%"
 						y2={segVis[0].y}
@@ -1041,16 +968,16 @@
 						class="tail"
 						x1="{segVis[segVis.length - 1].endX}%"
 						y1={segVis[segVis.length - 1].y}
-						x2="{toPct(trackDuration)}%"
+						x2="{vp.toPct(trackDuration)}%"
 						y2={segVis[segVis.length - 1].y}
 					/>
 				{/if}
 			{:else}
 				<line
 					class="tail"
-					x1="{toPct(0)}%"
+					x1="{vp.toPct(0)}%"
 					y1={subToY(config.subdivision)}
-					x2="{toPct(trackDuration)}%"
+					x2="{vp.toPct(trackDuration)}%"
 					y2={subToY(config.subdivision)}
 				/>
 			{/if}
@@ -1111,10 +1038,10 @@
 			{/each}
 
 			<!-- Fixed anchor dots at time=0 and time=trackDuration -->
-			<circle class="dot-anchor" cx="{toPct(0)}%" cy={anchorStartY} r={DOT_R} />
+			<circle class="dot-anchor" cx="{vp.toPct(0)}%" cy={anchorStartY} r={DOT_R} />
 			<circle
 				class="dot-anchor"
-				cx="{toPct(trackDuration)}%"
+				cx="{vp.toPct(trackDuration)}%"
 				cy={anchorEndY}
 				r={DOT_R}
 			/>
@@ -1195,7 +1122,7 @@
 
 			<!-- Playhead -->
 			{#if trackDuration > 0}
-				{@const phx = toPct(currentTime)}
+				{@const phx = vp.toPct(currentTime)}
 				<line class="playhead-line" x1="{phx}%" y1="0" x2="{phx}%" y2={SVG_H} />
 				<circle class="playhead-head" cx="{phx}%" cy="1" r="3" />
 				<!-- Wider invisible grab area on the head -->
@@ -1204,12 +1131,12 @@
 			<!-- Rectangle selection overlay -->
 			{#if dragging?.type === 'rect-select' && dragMoved}
 				{@const minX = Math.min(
-					toPct(dragging.startTime),
-					toPct(dragging.currentTime),
+					vp.toPct(dragging.startTime),
+					vp.toPct(dragging.currentTime),
 				)}
 				{@const maxX = Math.max(
-					toPct(dragging.startTime),
-					toPct(dragging.currentTime),
+					vp.toPct(dragging.startTime),
+					vp.toPct(dragging.currentTime),
 				)}
 				{@const minY = Math.min(dragging.startSvgY, dragging.currentSvgY)}
 				{@const maxY = Math.max(dragging.startSvgY, dragging.currentSvgY)}
@@ -1227,7 +1154,7 @@
 			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
 				{#each boundaries.clipboard as { offset }}
 					{@const ghostTime = boundaries.pasteCursorTime + offset}
-					{@const gx = toPct(ghostTime)}
+					{@const gx = vp.toPct(ghostTime)}
 					<line
 						class="ghost-split-line"
 						x1="{gx}%"
@@ -1240,14 +1167,14 @@
 		</svg>
 
 		<!-- Scrollbar — visible only when zoomed in -->
-		{#if isZoomed}
+		{#if vp.isZoomed}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="scrollbar" bind:this={scrollbarEl}>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="scrollbar-thumb"
-					style:left="{(viewStart / trackDuration) * 100}%"
-					style:width="{Math.max(2, (viewDuration / trackDuration) * 100)}%"
+					style:left="{(vp.viewStart / trackDuration) * 100}%"
+					style:width="{Math.max(2, (vp.viewDuration / trackDuration) * 100)}%"
 					onpointerdown={startScrollPan}
 				></div>
 			</div>
