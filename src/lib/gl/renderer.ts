@@ -458,16 +458,23 @@ export class GlRenderer {
     return dt > 0 && dt < 0.5 ? dt : 0;
   }
 
-  /** Drop history buffers of effect instances that no longer exist
-   * (deleted, or replaced wholesale by undo/preset). */
+  /** Drop per-instance state for effects that no longer exist (deleted, or
+   * replaced wholesale by undo/preset): feedback GPU buffers, plus the phase
+   * and tracking maps. Every mosh roll mints fresh instanceIds, so without this
+   * the latter two grow unbounded across a long session. */
   private gcFxFeedback(live: Set<string>) {
-    if (this.fxFeedback.size === 0) return;
     for (const [id, pair] of this.fxFeedback) {
       if (!live.has(id)) {
         this.deleteTexturePair(pair.textures);
         this.deleteFBOPair(pair.fbos);
         this.fxFeedback.delete(id);
       }
+    }
+    for (const id of this.phaseMap.keys()) {
+      if (!live.has(id)) this.phaseMap.delete(id);
+    }
+    for (const id of this.trackingStates.keys()) {
+      if (!live.has(id)) this.trackingStates.delete(id);
     }
   }
 
