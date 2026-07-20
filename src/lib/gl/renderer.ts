@@ -96,7 +96,7 @@ export class GlRenderer {
   private lastTextPhrase: string | null = null;
   private lastTextSeed: number | null = null;
   private lastTextLayout: string | null = null;
-  private lastTextStyleKey: string | null = null;
+  private lastTextStyleRef: TextOverlayStyle | null = null;
   private lastTextW = 0;
   private lastTextH = 0;
   private imgW = 0;
@@ -295,12 +295,14 @@ export class GlRenderer {
     if (this.imgW <= 0 || this.imgH <= 0) return;
     const layout = options?.layout ?? "block";
     const seed = options?.layout === "scattered" ? (options?.seed ?? 0) : 0;
-    const styleKey = JSON.stringify(style);
+    // Identity compare: both callers pass a stable style reference (a $derived
+    // in preview, a build-once object in export), so this skips redraws
+    // without stringifying the style object every frame.
     if (
       this.lastTextPhrase === phrase &&
       this.lastTextSeed === seed &&
       this.lastTextLayout === layout &&
-      this.lastTextStyleKey === styleKey &&
+      this.lastTextStyleRef === style &&
       this.lastTextW === this.imgW &&
       this.lastTextH === this.imgH
     ) {
@@ -309,7 +311,7 @@ export class GlRenderer {
     this.lastTextPhrase = phrase;
     this.lastTextSeed = seed;
     this.lastTextLayout = layout;
-    this.lastTextStyleKey = styleKey;
+    this.lastTextStyleRef = style;
     this.lastTextW = this.imgW;
     this.lastTextH = this.imgH;
     const drawOptions: DrawPhraseOptions = {
@@ -343,7 +345,7 @@ export class GlRenderer {
     this.textOverlayPhrase = null;
     this.lastTextSeed = null;
     this.lastTextLayout = null;
-    this.lastTextStyleKey = null;
+    this.lastTextStyleRef = null;
   }
 
   /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
