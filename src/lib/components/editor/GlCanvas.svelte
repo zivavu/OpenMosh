@@ -4,6 +4,21 @@
 	import { GlRenderer } from '../../gl/renderer';
 	import type { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 
+	/** Active sequence transition descriptor. Progress is computed per rendered
+	 * frame from `getTime()` so the blend stays smooth even when the editor's
+	 * reactive clock ticks slower than the rAF loop. */
+	export interface CanvasTransition {
+		effectsA: EffectInstance[];
+		type: string;
+		seed: number;
+		direction: number;
+		density: number;
+		/** Master-clock time where the blend starts. */
+		startTime: number;
+		durationSec: number;
+		getTime: () => number;
+	}
+
 	interface Props {
 		imageSrc: string;
 		effects: EffectInstance[];
@@ -25,6 +40,8 @@
 		suspended?: boolean;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: GlRenderer | null;
+		/** Sequence segment transition in progress; `effects` is the incoming chain. */
+		transition?: CanvasTransition | null;
 	}
 
 	let {
@@ -44,6 +61,7 @@
 		suspended = false,
 		warmCanvas = null,
 		warmRenderer = null,
+		transition = null,
 	}: Props = $props();
 
 	let frameTimes: number[] = [];
@@ -68,8 +86,32 @@
 		!freezeAnimation &&
 			(!!videoEl ||
 				!!frameSource ||
+				!!transition ||
 				effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId))),
 	);
+
+	/** Render the current frame: transition blend when a segment boundary is
+	 * being crossed, otherwise the plain effect chain. */
+	function drawFrame(now: number) {
+		const tr = transition;
+		if (tr && tr.durationSec > 0) {
+			const p = (tr.getTime() - tr.startTime) / tr.durationSec;
+			if (p >= 0 && p < 1) {
+				renderer!.renderTransition(
+					tr.effectsA,
+					effects,
+					tr.type,
+					p,
+					tr.seed,
+					tr.direction,
+					tr.density,
+					now,
+				);
+				return;
+			}
+		}
+		renderer!.render(effects, now);
+	}
 
 	$effect(() => {
 		try {
@@ -228,7 +270,7 @@
 			return;
 		renderer.resize(canvasWidth, canvasHeight);
 		if (videoEl) renderer.updateSourceFrame(videoEl);
-		renderer.render(effects, needsAnimation ? performance.now() / 1000 : 0);
+		drawFrame(needsAnimation ? performance.now() / 1000 : 0);
 	});
 
 	$effect(() => {
@@ -236,7 +278,7 @@
 
 		if (!needsAnimation) {
 			if (videoEl) renderer.updateSourceFrame(videoEl);
-			renderer.render(effects, 0);
+			drawFrame(0);
 			return;
 		}
 
@@ -251,7 +293,7 @@
 			} else if (videoEl) {
 				renderer!.updateSourceFrame(videoEl);
 			}
-			renderer!.render(effects, performance.now() / 1000);
+			drawFrame(performance.now() / 1000);
 			trackFps(performance.now());
 			rafId = requestAnimationFrame(loop);
 		};

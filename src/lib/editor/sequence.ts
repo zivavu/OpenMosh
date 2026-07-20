@@ -8,6 +8,49 @@ import { generateMosh, type MoshOptions } from "./mosh";
 
 export type SequenceSegmentMode = "static" | "interval";
 
+/** Artistic blend rendered between two segments' effect chains. */
+export type TransitionType =
+  | "cut"
+  | "dissolve"
+  | "static"
+  | "wipe"
+  | "blocks"
+  | "rgbslip";
+
+export interface SegmentTransition {
+  type: TransitionType;
+  /** Seconds the blend runs after the boundary. */
+  durationSec: number;
+  /** Seeded layouts (static/blocks/wipe) stay identical between preview/export. */
+  seed: number;
+  /** "wipe": 0=→ 1=← 2=↓ 3=↑. */
+  direction?: number;
+  /** "static"/"blocks" cell size: 0=coarse 1=medium 2=fine. */
+  density?: number;
+}
+
+/** UI metadata for the transition picker. */
+export const TRANSITION_OPTIONS: {
+  value: TransitionType;
+  label: string;
+  hasDirection?: boolean;
+  hasDensity?: boolean;
+  hasSeed?: boolean;
+}[] = [
+  { value: "cut", label: "cut" },
+  { value: "dissolve", label: "dissolve" },
+  { value: "static", label: "static", hasDensity: true, hasSeed: true },
+  { value: "wipe", label: "wipe", hasDirection: true, hasSeed: true },
+  { value: "blocks", label: "blocks", hasDensity: true, hasSeed: true },
+  { value: "rgbslip", label: "rgb slip" },
+];
+
+export const DEFAULT_TRANSITION_DURATION = 0.3;
+
+export function createTransition(type: TransitionType): SegmentTransition {
+  return { type, durationSec: DEFAULT_TRANSITION_DURATION, seed: randomSeed() };
+}
+
 /**
  * A time span of the source video with its own effect state.
  * "static": `effects` is the concrete, user-editable state for the whole span.
@@ -34,6 +77,10 @@ export interface SequenceSegment {
   intervalSec?: number;
   /** "interval" mode: base seed for per-tick rolls. */
   seed?: number;
+  /** Blend rendered when entering this segment from the previous one. */
+  transition?: SegmentTransition;
+  /** "interval" mode: also blend at each re-roll tick inside the segment. */
+  transitionOnTick?: boolean;
 }
 
 export const DEFAULT_INTERVAL_SEC = 0.25;
@@ -184,4 +231,48 @@ export function createSequenceEffectSource(
     }
     return effects;
   };
+}
+
+export interface ResolvedTransition {
+  /** Outgoing chain (state just before the boundary). */
+  effectsA: EffectInstance[];
+  /** Master time where the blend starts. */
+  boundaryTime: number;
+  transition: SegmentTransition;
+}
+
+/**
+ * Resolve the active transition at `time`, if any: the segment under the
+ * playhead must declare a non-cut transition and the playhead must sit within
+ * `durationSec` after the boundary (the segment start, or — for interval
+ * segments with transitionOnTick — the latest re-roll tick). The outgoing
+ * chain is sampled deterministically just before the boundary so preview and
+ * export blend from exactly the same state. Progress is left to the caller:
+ * (time - boundaryTime) / transition.durationSec.
+ */
+export function resolveTransitionAt(
+  segments: SequenceSegment[],
+  time: number,
+  duration: number,
+  effectsAt: (t: number) => EffectInstance[] | null,
+): ResolvedTransition | null {
+  const seg = findSegmentAt(segments, time, duration);
+  if (!seg?.transition || seg.transition.type === "cut") return null;
+  const dur = seg.transition.durationSec;
+  if (dur <= 0) return null;
+
+  let boundary = seg.startTime;
+  if (seg.mode === "interval" && seg.transitionOnTick) {
+    const tick = segmentTick(seg, time);
+    if (tick > 0) {
+      boundary = seg.startTime + tick * (seg.intervalSec ?? DEFAULT_INTERVAL_SEC);
+    }
+  }
+
+  const elapsed = time - boundary;
+  if (elapsed < 0 || elapsed >= dur) return null;
+
+  const effectsA = effectsAt(boundary - 0.001);
+  if (!effectsA) return null;
+  return { effectsA, boundaryTime: boundary, transition: seg.transition };
 }

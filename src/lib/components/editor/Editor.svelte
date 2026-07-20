@@ -23,10 +23,13 @@
 	} from '../../effects';
 	import {
 		cloneSegmentForSplit,
-		createSequenceEffectSource,
-		createSequenceSegment,
+	createSequenceEffectSource,
+	createSequenceSegment,
+	resolveTransitionAt,
 		findSegmentAt,
 		randomSeed,
+		type ResolvedTransition,
+		type SegmentTransition,
 		type SequenceSegment,
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
@@ -508,10 +511,12 @@
 		onChange: (segments) => (sequenceSegments = segments),
 		splitSegment: (seg, at) => {
 			const end = seg.endTime ?? seqMasterDuration;
-			return [
-				cloneSegmentForSplit(seg, seg.startTime, at),
-				cloneSegmentForSplit(seg, at, end),
-			];
+			const tail = cloneSegmentForSplit(seg, at, end);
+			// The tail continues the same region — a transition configured for
+			// entering `seg` from its predecessor must not replay at the split.
+			tail.transition = undefined;
+			tail.transitionOnTick = undefined;
+			return [cloneSegmentForSplit(seg, seg.startTime, at), tail];
 		},
 	});
 
@@ -578,13 +583,16 @@
 	// Identity latch is a plain variable: `effects = next` wraps plain arrays in
 	// a $state proxy, so comparing against `effects` would never settle.
 	let lastSeqApplied: EffectInstance[] | null = null;
+	let seqTransition = $state<ResolvedTransition | null>(null);
 	$effect(() => {
 		if (
 			!sequenceEnabled ||
 			sequenceSegments.length === 0 ||
 			seqMasterDuration <= 0
-		)
+		) {
+			seqTransition = null;
 			return;
+		}
 		const playing = seqMasterIsAudio
 			? audio.audioPlaying
 			: previewPlayer
@@ -599,11 +607,37 @@
 					seg.mode === 'static' ? seg.effects : previewSeqSource(seg.startTime);
 			}
 		}
-		if (!next) next = previewSeqSource(t);
+		if (!next) {
+			next = previewSeqSource(t);
+			// Only the playhead path blends — a segment selected for editing shows
+			// its own chain plainly so tweaks aren't hidden mid-fade.
+			seqTransition = resolveTransitionAt(
+				sequenceSegments,
+				t,
+				seqMasterDuration,
+				previewSeqSource,
+			);
+		} else {
+			seqTransition = null;
+		}
 		if (next && next !== lastSeqApplied) {
 			lastSeqApplied = next;
 			effects = next;
 		}
+	});
+
+	// Fallback <video> path only (WebCodecs player ticks its own clock per
+	// frame): pull the element clock into state while playing so the effect
+	// above notices transition windows at frame rate, not at the 4 Hz
+	// timeupdate cadence.
+	$effect(() => {
+		if (!sequenceEnabled || seqMasterIsAudio || previewPlayer || !videoPlaying)
+			return;
+		let raf = requestAnimationFrame(function loop() {
+			videoCurrentTime = videoEl?.currentTime ?? 0;
+			raf = requestAnimationFrame(loop);
+		});
+		return () => cancelAnimationFrame(raf);
 	});
 
 	function seqApplyPreset(segId: string, preset: Preset) {
@@ -710,6 +744,24 @@
 							mode,
 							intervalSec: intervalSec ?? s.intervalSec ?? 0.25,
 							seed: s.seed ?? randomSeed(),
+						}
+					: s,
+			),
+		);
+	}
+
+	function seqTransitionChange(
+		segId: string,
+		transition: SegmentTransition | null,
+		transitionOnTick?: boolean,
+	) {
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				s.id === segId
+					? {
+							...s,
+							transition: transition ?? undefined,
+							transitionOnTick: transitionOnTick ?? s.transitionOnTick,
 						}
 					: s,
 			),
@@ -1072,6 +1124,18 @@
 			suspended={recordingState.recording}
 			{warmCanvas}
 			{warmRenderer}
+			transition={seqTransition
+				? {
+						effectsA: seqTransition.effectsA,
+						type: seqTransition.transition.type,
+						seed: seqTransition.transition.seed,
+						direction: seqTransition.transition.direction ?? 0,
+						density: seqTransition.transition.density ?? 1,
+						startTime: seqTransition.boundaryTime,
+						durationSec: seqTransition.transition.durationSec,
+						getTime: seqMasterTime,
+					}
+				: null}
 		/>
 
 		<div class="action-bar">
@@ -1204,6 +1268,7 @@
 				onApplyPreset={seqApplyPreset}
 				onRoll={seqRoll}
 				onModeChange={seqModeChange}
+				onTransitionChange={seqTransitionChange}
 				segmentLoop={seqSegmentLoop}
 				onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
 			/>

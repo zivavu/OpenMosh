@@ -29,11 +29,14 @@ export interface RecordOptions {
 	audioEnd?: number;
 	/** Called before each frame render — use to swap source textures, effects, etc.
 	 * Return `true` to skip the default `renderer.render()` call (e.g. when transition already rendered).
+	 * Return a function to replace the default render: it is invoked AFTER per-frame
+	 * audio data has been applied to the active effects, so custom renders (e.g.
+	 * transitions blending two chains) still get fresh audio-linked values.
 	 * May return a Promise. */
 	onBeforeRender?: (
 		frameIndex: number,
 		time: number,
-	) => boolean | void | Promise<boolean | void>;
+	) => boolean | void | (() => void) | Promise<boolean | void | (() => void)>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
 	/** When true, the audio is looped to match the recording duration. */
@@ -410,7 +413,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
 			applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
-			if (!skipRender) renderer.render(renderEffects, time);
+			if (typeof skipRender === 'function') skipRender();
+			else if (!skipRender) renderer.render(renderEffects, time);
 			await sink.submit(i, time);
 		}
 
