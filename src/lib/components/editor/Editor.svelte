@@ -843,17 +843,50 @@
 		onExit();
 	}
 
+	/**
+	 * The preview renders at display resolution — re-render at the real output
+	 * size, hand the canvas to `capture`, then restore the preview size via the
+	 * passed `done`. Feedback-effect history resets across the resize (buffers
+	 * are reallocated), same as any manual resize.
+	 */
+	function captureAtOutputRes(time: number, capture: (done: () => void) => void) {
+		if (!canvasEl || !glRenderer) return;
+		const r = glRenderer;
+		const prevW = canvasEl.width;
+		const prevH = canvasEl.height;
+		const needsResize =
+			resizeWidth > 0 &&
+			resizeHeight > 0 &&
+			(resizeWidth !== prevW || resizeHeight !== prevH);
+		if (needsResize) {
+			r.resize(resizeWidth, resizeHeight);
+			r.render(effects, time);
+		}
+		capture(() => {
+			if (needsResize) {
+				r.resize(prevW, prevH);
+				r.render(effects, time);
+			}
+		});
+	}
+
 	function reInput() {
 		if (!canvasEl) return;
-		canvasEl.toBlob((blob) => {
-			if (!blob) return;
-			const newFile = new File([blob], `openmosh-reinput-${Date.now()}.png`, {
-				type: 'image/png',
-			});
-			effects.forEach((e) => (e.enabled = false));
-			history.reset(effects);
-			onfile(newFile);
-		}, 'image/png');
+		captureAtOutputRes(performance.now() / 1000, (done) => {
+			canvasEl!.toBlob((blob) => {
+				if (!blob) {
+					done();
+					return;
+				}
+				const newFile = new File([blob], `openmosh-reinput-${Date.now()}.png`, {
+					type: 'image/png',
+				});
+				effects.forEach((e) => (e.enabled = false));
+				history.reset(effects);
+				// No restore: loading the new file re-initializes the renderer
+				onfile(newFile);
+			}, 'image/png');
+		});
 	}
 
 	const handleKeydown = createKeyboardHandler({
@@ -873,19 +906,23 @@
 		if (!canvasEl) return;
 		const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
 		const ext = format === 'jpg' ? 'jpg' : 'png';
-		canvasEl.toBlob(
-			(blob) => {
-				if (!blob) return;
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = `openmosh-${Date.now()}.${ext}`;
-				a.click();
-				URL.revokeObjectURL(url);
-			},
-			mimeType,
-			format === 'jpg' ? 0.92 : undefined,
-		);
+		// Image formats render frozen at time 0 (matches the preview's drawFrame)
+		captureAtOutputRes(0, (done) => {
+			canvasEl!.toBlob(
+				(blob) => {
+					done();
+					if (!blob) return;
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = `openmosh-${Date.now()}.${ext}`;
+					a.click();
+					URL.revokeObjectURL(url);
+				},
+				mimeType,
+				format === 'jpg' ? 0.92 : undefined,
+			);
+		});
 	}
 
 	let showRecordSettings = $state(false);
@@ -908,6 +945,12 @@
 		audio.pauseAudio();
 		previewPlayer?.pause();
 		if (isVideo && videoEl) videoEl.pause();
+
+		// Preview runs at display resolution — export at the real output size.
+		// GlCanvas restores the preview size when `suspended` clears.
+		if (resizeWidth > 0 && resizeHeight > 0) {
+			glRenderer.resize(resizeWidth, resizeHeight);
+		}
 
 		await recordingState.run(
 			(signal) =>

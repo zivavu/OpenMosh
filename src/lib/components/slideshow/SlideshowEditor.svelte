@@ -8,6 +8,7 @@
 		type Preset,
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
+	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
 	import { beatAtTime } from '../../slideshow/beat-clock';
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import {
@@ -296,6 +297,36 @@
 		}
 	});
 
+	// Preview render size, decoupled from the output size (same as the single
+	// editor). For image-first slides GlCanvas owns this; the video-first path
+	// below drives the renderer directly and must apply it itself.
+	let previewArea = $state<HTMLDivElement | null>(null);
+	let displayW = $state(0);
+	let displayH = $state(0);
+	$effect(() => {
+		const el = previewArea;
+		if (!el) return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const measure = () => {
+			const { width, height } = measureDisplaySize(el);
+			displayW = width;
+			displayH = height;
+		};
+		measure();
+		const ro = new ResizeObserver(() => {
+			clearTimeout(timer);
+			timer = setTimeout(measure, 150);
+		});
+		ro.observe(el);
+		return () => {
+			clearTimeout(timer);
+			ro.disconnect();
+		};
+	});
+	const previewRenderSize = $derived(
+		fitPreviewSize(resizeWidth, resizeHeight, displayW, displayH),
+	);
+
 	// Size the preview canvas from the first slide, matching the export:
 	// image → GlCanvas image loading; video → probed dimensions.
 	let previewImageSrc = $state('');
@@ -326,12 +357,15 @@
 		}
 	});
 
-	// GlCanvas applies the user's resize only after its own image/video load
+	// GlCanvas applies the preview size only after its own image/video load
 	// (imageReady) — the video-first path above bypasses it, so apply here.
+	// Also re-runs when recording ends (which resized the renderer to full
+	// output res), restoring the smaller preview size.
 	$effect(() => {
+		recordingState.recording;
 		if (previewImageSrc || !glRenderer || naturalWidth == null) return;
-		if (resizeWidth > 0 && resizeHeight > 0) {
-			glRenderer.resize(resizeWidth, resizeHeight);
+		if (previewRenderSize) {
+			glRenderer.resize(previewRenderSize.width, previewRenderSize.height);
 			if (!previewPlaying) glRenderer.render(effects, 0);
 		}
 	});
@@ -737,7 +771,11 @@
 			},
 		);
 
+		// Export resized the renderer to full output res — restore preview size.
 		if (canvasEl && glRenderer) {
+			if (previewRenderSize) {
+				glRenderer.resize(previewRenderSize.width, previewRenderSize.height);
+			}
 			glRenderer.render(effects, performance.now() / 1000);
 		}
 	}
@@ -868,7 +906,11 @@
 				onSetPresetIndex={setPresetIndex}
 			/>
 		{/if}
-		<div class="preview-area" class:hidden={activeView === 'grid'}>
+		<div
+			class="preview-area"
+			class:hidden={activeView === 'grid'}
+			bind:this={previewArea}
+		>
 			<GlCanvas
 				imageSrc={previewImageSrc}
 				effects={previewPlaying && previewEffects.length > 0
