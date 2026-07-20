@@ -1156,7 +1156,7 @@
 						<HelpCircle size={14} />
 					</button>
 				{/if}
-				{#if isVideo && videoDuration > 0}
+				{#if seqMasterDuration > 0}
 					<button
 						class="help-btn"
 						class:seq-active={sequenceEnabled}
@@ -1253,7 +1253,7 @@
 				</RecordGroup>
 			{/if}
 		</div>
-		{#if isVideo && seqMasterDuration > 0 && sequenceEnabled}
+		{#if seqMasterDuration > 0 && sequenceEnabled}
 			<SequenceTimeline
 				segments={sequenceSegments}
 				trackDuration={seqMasterDuration}

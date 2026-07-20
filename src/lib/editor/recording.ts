@@ -178,11 +178,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   };
 
   // Sequence mode: resolve effects per frame from the segment list. With an
-  // external track segments live on the audio timeline (master clock);
-  // otherwise they're keyed by source-video time, honoring speed/looping.
+  // external track segments live on the audio timeline (master clock) — this
+  // covers still images too, where the track is the only clock; otherwise
+  // they're keyed by source-video time, honoring speed/looping.
   const sequence = ctx.sequence;
   const seqSource =
-    isVideo && videoEl && sequence && sequence.segments.length > 0
+    sequence && sequence.segments.length > 0
       ? createSequenceEffectSource(
           () => sequence.segments,
           () => sequence.duration,
@@ -205,8 +206,11 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     : undefined;
 
   const sequenceBeforeRender = async (frameIndex: number, time: number) => {
-    const base = videoFrames ? decodeBeforeRender : seekBeforeRender;
-    await base(frameIndex, time);
+    // Still images have no per-frame source to advance
+    if (isVideo && videoEl) {
+      const base = videoFrames ? decodeBeforeRender : seekBeforeRender;
+      await base(frameIndex, time);
+    }
     // On a gap (no segment) keep the previous frame's effects.
     const t = seqTimeAt(time);
     const fx = seqSource!(t);
@@ -267,14 +271,11 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         audioSpeed: videoSpeed,
         ...(loopVideo && { loopAudio: true }),
       }),
-      ...(isVideo &&
-        videoEl && {
-          onBeforeRender: seqSource
-            ? sequenceBeforeRender
-            : videoFrames
-              ? decodeBeforeRender
-              : seekBeforeRender,
-        }),
+      ...(seqSource
+        ? { onBeforeRender: sequenceBeforeRender }
+        : isVideo && videoEl
+          ? { onBeforeRender: videoFrames ? decodeBeforeRender : seekBeforeRender }
+          : {}),
       ...(effectsRef && { effectsRef }),
     });
     downloadBlob(blob);
