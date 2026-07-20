@@ -36,6 +36,11 @@ export class GlRenderer {
   private gl: WebGL2RenderingContext;
   private quadVAO: WebGLVertexArrayObject;
   private sourceTexture: WebGLTexture | null = null;
+  /** Allocated dimensions of sourceTexture, so per-frame uploads can take the
+   * texSubImage2D fast path when the size is unchanged and only reallocate on
+   * an actual size change (mixed-size slideshow slides). */
+  private srcTexW = 0;
+  private srcTexH = 0;
   private ppTextures: [WebGLTexture, WebGLTexture] | null = null;
   private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private fbTextures: [WebGLTexture, WebGLTexture] | null = null;
@@ -182,6 +187,8 @@ export class GlRenderer {
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     this.sourceTexture = this.createTexture(naturalW, naturalH);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    this.srcTexW = naturalW;
+    this.srcTexH = naturalH;
 
     this.setupPingPong();
   }
@@ -201,6 +208,8 @@ export class GlRenderer {
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     this.sourceTexture = this.createTexture(w, h);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    this.srcTexW = w;
+    this.srcTexH = h;
 
     this.setupPingPong();
   }
@@ -219,6 +228,8 @@ export class GlRenderer {
 
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     this.sourceTexture = this.createTexture(w, h);
+    this.srcTexW = w;
+    this.srcTexH = h;
 
     this.setupPingPong();
   }
@@ -233,9 +244,27 @@ export class GlRenderer {
     ) {
       return;
     }
+    const w =
+      source instanceof HTMLVideoElement
+        ? source.videoWidth
+        : source.displayWidth;
+    const h =
+      source instanceof HTMLVideoElement
+        ? source.videoHeight
+        : source.displayHeight;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    // Fast path: texSubImage2D writes into the existing allocation (the usual
+    // case — a video plays at constant dimensions). texImage2D would reallocate
+    // and revalidate storage every frame. Reallocate only on an actual size
+    // change (e.g. a mixed-size slideshow switching source mid-preview).
+    if (w === this.srcTexW && h === this.srcTexH) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      this.srcTexW = w;
+      this.srcTexH = h;
+    }
   }
 
   /** Upload a new image to the existing source texture without re-allocating FBOs. */
@@ -244,6 +273,8 @@ export class GlRenderer {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    this.srcTexW = image.naturalWidth;
+    this.srcTexH = image.naturalHeight;
   }
 
   /** Set text overlay for the next render. Pass null to clear. options: layout, seed, blendMode, invert. */
