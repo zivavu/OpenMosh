@@ -96,6 +96,18 @@
 	// has rotation metadata — those keep the element-driven preview.
 	let previewPlayer = $state<VideoPreviewPlayer | null>(null);
 
+	// Single read-side view of the active video source (WebCodecs player when
+	// present, else the fallback <video> element's tracked state), so callers
+	// don't repeat the `previewPlayer ? … : …` fork. The write side stays in
+	// playVideo/pauseVideo/seekVideoTo. These read reactive state, so avoid them
+	// inside untrack() blocks that deliberately sample the live element clock.
+	let videoClock = $derived(
+		previewPlayer ? previewPlayer.currentTime : videoCurrentTime,
+	);
+	let videoIsPlaying = $derived(
+		previewPlayer ? previewPlayer.playing : videoPlaying,
+	);
+
 	$effect(() => {
 		if (!isVideo) return;
 		let cancelled = false;
@@ -477,9 +489,7 @@
 	// localStorage per input event.
 	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
-		const playing =
-			audio.audioPlaying ||
-			(previewPlayer ? previewPlayer.playing : videoPlaying);
+		const playing = audio.audioPlaying || videoIsPlaying;
 		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const enabled = sequenceEnabled;
@@ -498,7 +508,7 @@
 
 	function seqMasterTime(): number {
 		if (seqMasterIsAudio) return audio.trackCurrentTime;
-		return previewPlayer ? previewPlayer.currentTime : videoCurrentTime;
+		return videoClock;
 	}
 
 	// Owns undo/redo + boundary selection/clipboard for every sequenceSegments
@@ -593,11 +603,7 @@
 			seqTransition = null;
 			return;
 		}
-		const playing = seqMasterIsAudio
-			? audio.audioPlaying
-			: previewPlayer
-				? previewPlayer.playing
-				: videoPlaying;
+		const playing = seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
 		const t = seqMasterTime();
 		let next: EffectInstance[] | null = null;
 		if (!playing && selectedSegmentId) {
@@ -898,8 +904,7 @@
 		playSpan,
 		pauseTrack,
 		hasTrack: () => (!!audio.trackFile && !!audioEl) || isVideo,
-		isPlaying: () =>
-			audio.audioPlaying || videoPlaying || !!previewPlayer?.playing,
+		isPlaying: () => audio.audioPlaying || videoIsPlaying,
 	});
 
 	function save() {
@@ -1301,11 +1306,7 @@
 				segments={sequenceSegments}
 				trackDuration={seqMasterDuration}
 				boundaries={seqBoundaries}
-				currentTime={seqMasterIsAudio
-					? audio.trackCurrentTime
-					: previewPlayer
-						? previewPlayer.currentTime
-						: videoCurrentTime}
+				currentTime={seqMasterIsAudio ? audio.trackCurrentTime : videoClock}
 				onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
 				bind:selectedSegmentId
 				onApplyPreset={seqApplyPreset}
@@ -1322,10 +1323,10 @@
 			<AudioTimeline
 				label="VID"
 				trackDuration={videoDuration}
-				trackCurrentTime={previewPlayer ? previewPlayer.currentTime : videoCurrentTime}
+				trackCurrentTime={videoClock}
 				spanStart={videoSpanStart}
 				spanEnd={videoSpanEnd}
-				isPlaying={previewPlayer ? previewPlayer.playing : videoPlaying}
+				isPlaying={videoIsPlaying}
 				loopEnabled={videoLoop}
 				onToggleLoop={() => (videoLoop = !videoLoop)}
 				onPlay={playVideo}
