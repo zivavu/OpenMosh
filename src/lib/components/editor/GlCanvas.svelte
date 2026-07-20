@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { EffectInstance } from '../../effects';
 	import { ANIMATED_EFFECTS } from '../../gl/effect-shaders';
+	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
 	import { GlRenderer } from '../../gl/renderer';
 	import type { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 
@@ -81,6 +82,39 @@
 	let renderer: GlRenderer | null = $state(null);
 	let imageReady = $state(false);
 	let error: string | null = $state(null);
+
+	// Displayed preview size in device pixels. The renderer runs at the output
+	// aspect fitted into this box (never upscaled), so heavy chains aren't paid
+	// at full source resolution while the canvas is CSS-scaled down anyway.
+	// Export/save temporarily resize the renderer to the real output size.
+	let displayW = $state(0);
+	let displayH = $state(0);
+	$effect(() => {
+		const el = previewArea;
+		if (!el) return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const measure = () => {
+			const { width, height } = measureDisplaySize(el);
+			displayW = width;
+			displayH = height;
+		};
+		measure();
+		// Debounced: each renderer resize reallocates every FBO, so tracking a
+		// window drag-resize per event would thrash GPU memory.
+		const ro = new ResizeObserver(() => {
+			clearTimeout(timer);
+			timer = setTimeout(measure, 150);
+		});
+		ro.observe(el);
+		return () => {
+			clearTimeout(timer);
+			ro.disconnect();
+		};
+	});
+
+	const renderSize = $derived(
+		fitPreviewSize(canvasWidth, canvasHeight, displayW, displayH),
+	);
 
 	const needsAnimation = $derived(
 		!freezeAnimation &&
@@ -184,14 +218,8 @@
 			renderer!.loadImage(img);
 			naturalWidth = img.naturalWidth;
 			naturalHeight = img.naturalHeight;
+			// The main resize/draw effect below applies the preview render size
 			imageReady = true;
-			if (
-				canvasWidth != null &&
-				canvasHeight != null &&
-				(canvasWidth !== img.naturalWidth || canvasHeight !== img.naturalHeight)
-			) {
-				renderer!.resize(canvasWidth, canvasHeight);
-			}
 		};
 		img.src = imageSrc;
 		return () => {
@@ -206,13 +234,6 @@
 		naturalWidth = frameSource.width;
 		naturalHeight = frameSource.height;
 		imageReady = true;
-		if (
-			canvasWidth != null &&
-			canvasHeight != null &&
-			(canvasWidth !== frameSource.width || canvasHeight !== frameSource.height)
-		) {
-			renderer.resize(canvasWidth, canvasHeight);
-		}
 	});
 
 	// Video loading — initialises the renderer once metadata is available
@@ -226,13 +247,6 @@
 			naturalWidth = video.videoWidth;
 			naturalHeight = video.videoHeight;
 			imageReady = true;
-			if (
-				canvasWidth != null &&
-				canvasHeight != null &&
-				(canvasWidth !== video.videoWidth || canvasHeight !== video.videoHeight)
-			) {
-				renderer!.resize(canvasWidth, canvasHeight);
-			}
 		}
 
 		// Wait for an actual decoded frame with known dimensions. In Firefox,
@@ -258,17 +272,8 @@
 	});
 
 	$effect(() => {
-		if (
-			suspended ||
-			!renderer ||
-			!imageReady ||
-			canvasWidth == null ||
-			canvasHeight == null ||
-			canvasWidth <= 0 ||
-			canvasHeight <= 0
-		)
-			return;
-		renderer.resize(canvasWidth, canvasHeight);
+		if (suspended || !renderer || !imageReady || !renderSize) return;
+		renderer.resize(renderSize.width, renderSize.height);
 		if (videoEl) renderer.updateSourceFrame(videoEl);
 		drawFrame(needsAnimation ? performance.now() / 1000 : 0);
 	});
