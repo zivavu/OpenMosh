@@ -4,8 +4,13 @@
 	import {
 		cloneSegmentForSplit,
 		createSequenceSegment,
+		DEFAULT_TRANSITION_DURATION,
+		randomSeed,
+		TRANSITION_OPTIONS,
+		type SegmentTransition,
 		type SequenceSegment,
 		type SequenceSegmentMode,
+		type TransitionType,
 	} from '../../editor/sequence';
 	import type { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 
@@ -29,6 +34,12 @@
 			mode: SequenceSegmentMode,
 			intervalSec?: number,
 		) => void;
+		/** Transition config edits; `null` transition = hard cut. */
+		onTransitionChange: (
+			segmentId: string,
+			transition: SegmentTransition | null,
+			transitionOnTick?: boolean,
+		) => void;
 		/** Loop playback inside the selected segment (for editing while playing). */
 		segmentLoop?: boolean;
 		onToggleSegmentLoop?: () => void;
@@ -44,6 +55,7 @@
 		onApplyPreset,
 		onRoll,
 		onModeChange,
+		onTransitionChange,
 		segmentLoop = false,
 		onToggleSegmentLoop,
 	}: Props = $props();
@@ -94,6 +106,38 @@
 			? presetList.findIndex((p) => p.name === selectedSegment!.presetName)
 			: -1,
 	);
+
+	// ── Transition toolbar ─────────────────────────────────────────────────
+	let selectedTransitionType = $derived<TransitionType>(
+		selectedSegment?.transition?.type ?? 'cut',
+	);
+	let selectedTransitionMeta = $derived(
+		TRANSITION_OPTIONS.find((o) => o.value === selectedTransitionType)!,
+	);
+
+	function changeTransitionType(type: TransitionType) {
+		const seg = selectedSegment;
+		if (!seg) return;
+		if (type === 'cut') {
+			onTransitionChange(seg.id, null);
+			return;
+		}
+		// Keep duration/seed/params when switching between non-cut types.
+		const cur = seg.transition;
+		onTransitionChange(seg.id, {
+			type,
+			durationSec: cur?.durationSec ?? DEFAULT_TRANSITION_DURATION,
+			seed: cur?.seed ?? randomSeed(),
+			direction: cur?.direction,
+			density: cur?.density,
+		});
+	}
+
+	function patchTransition(patch: Partial<SegmentTransition>) {
+		const seg = selectedSegment;
+		if (!seg?.transition) return;
+		onTransitionChange(seg.id, { ...seg.transition, ...patch });
+	}
 
 	$effect(() => {
 		if (selectedSegmentId && !selectedSegment) selectedSegmentId = null;
@@ -209,6 +253,8 @@
 		startTime: number;
 		endTime: number;
 		label: string;
+		transitionType: TransitionType;
+		transitionDuration: number;
 	}
 
 	function segLabel(s: SequenceSegment): string {
@@ -227,6 +273,8 @@
 				startTime: s.startTime,
 				endTime,
 				label: segLabel(s),
+				transitionType: s.transition?.type ?? 'cut',
+				transitionDuration: s.transition?.durationSec ?? 0,
 			};
 		}),
 	);
@@ -244,13 +292,15 @@
 		});
 		if (!hit) return;
 		const end = hit.endTime ?? trackDuration;
+		const tail = cloneSegmentForSplit(hit, time, end);
+		// The tail continues the same region — a transition configured for
+		// entering `hit` from its predecessor must not replay at the split.
+		tail.transition = undefined;
+		tail.transitionOnTick = undefined;
 		emit(
 			rawSegments
 				.filter((s) => s.id !== hit.id)
-				.concat([
-					cloneSegmentForSplit(hit, hit.startTime, time),
-					cloneSegmentForSplit(hit, time, end),
-				]),
+				.concat([cloneSegmentForSplit(hit, hit.startTime, time), tail]),
 		);
 	}
 
@@ -609,10 +659,21 @@
 				/>
 			{/if}
 
-			<!-- Interior boundary dots (draggable) -->
+			<!-- Interior boundary dots (draggable) + transition markers -->
 			{#each segVis as sv, i}
 				{#if sv.startTime > 0.001}
 					{@const lId = i > 0 ? segVis[i - 1].id : null}
+					{#if sv.transitionType !== 'cut'}
+						<!-- Lightning zigzag above the boundary: this segment blends in -->
+						<path
+							class="trans-mark"
+							d="M {sv.startX}% {LINE_Y - 13} l 3 4 l -2 0 l 3 4"
+						>
+							<title
+								>{sv.transitionType} transition · {sv.transitionDuration}s</title
+							>
+						</path>
+					{/if}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						class="dot-hit"
@@ -753,6 +814,85 @@
 					{/each}
 				</select>
 			{/if}
+			<span class="seg-toolbar-label">TRANS</span>
+			<select
+				class="seg-select"
+				value={selectedTransitionType}
+				title="How this segment blends in from the previous one"
+				onchange={(e) =>
+					changeTransitionType(e.currentTarget.value as TransitionType)}
+			>
+				{#each TRANSITION_OPTIONS as o}
+					<option value={o.value}>{o.label}</option>
+				{/each}
+			</select>
+			{#if selectedTransitionType !== 'cut' && selectedSegment.transition}
+				<select
+					class="seg-select"
+					value={selectedSegment.transition.durationSec}
+					title="Transition duration"
+					onchange={(e) =>
+						patchTransition({ durationSec: Number(e.currentTarget.value) })}
+				>
+					{#each [0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.2, 2] as sec}
+						<option value={sec}>{sec}s</option>
+					{/each}
+				</select>
+				{#if selectedTransitionMeta.hasDirection}
+					<select
+						class="seg-select"
+						value={selectedSegment.transition.direction ?? 0}
+						title="Wipe direction"
+						onchange={(e) =>
+							patchTransition({ direction: Number(e.currentTarget.value) })}
+					>
+						<option value={0}>→</option>
+						<option value={1}>←</option>
+						<option value={2}>↓</option>
+						<option value={3}>↑</option>
+					</select>
+				{/if}
+				{#if selectedTransitionMeta.hasDensity}
+					<select
+						class="seg-select"
+						value={selectedSegment.transition.density ?? 1}
+						title="Cell size"
+						onchange={(e) =>
+							patchTransition({ density: Number(e.currentTarget.value) })}
+					>
+						<option value={0}>coarse</option>
+						<option value={1}>med</option>
+						<option value={2}>fine</option>
+					</select>
+				{/if}
+				{#if selectedTransitionMeta.hasSeed}
+					<button
+						class="seg-btn"
+						title="Re-roll transition layout"
+						onclick={() => patchTransition({ seed: randomSeed() })}
+					>
+						<Dices size={12} />
+					</button>
+				{/if}
+				{#if selectedSegment.mode === 'interval'}
+					<label
+						class="seg-check"
+						title="Blend at each re-roll tick inside this segment"
+					>
+						<input
+							type="checkbox"
+							checked={selectedSegment.transitionOnTick ?? false}
+							onchange={(e) =>
+								onTransitionChange(
+									selectedSegment!.id,
+									selectedSegment!.transition ?? null,
+									e.currentTarget.checked,
+								)}
+						/>
+						TICKS
+					</label>
+				{/if}
+			{/if}
 			{#if onToggleSegmentLoop}
 				<button
 					class="seg-btn"
@@ -873,6 +1013,15 @@
 
 	.dot-hovered {
 		stroke: #ff7070;
+	}
+
+	.trans-mark {
+		stroke: #d8b8f8;
+		stroke-width: 1.5;
+		fill: none;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		pointer-events: none;
 	}
 
 	.select-rect {
@@ -1004,6 +1153,27 @@
 
 	.seg-mode .seg-btn:last-child {
 		border-radius: 0 4px 4px 0;
+	}
+
+	.seg-check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.62rem;
+		font-weight: 600;
+		color: #aaa;
+		letter-spacing: 0.04em;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.seg-check:hover {
+		color: #ddd;
+	}
+
+	.seg-check input {
+		accent-color: #b08ad0;
+		margin: 0;
 	}
 
 	.seg-select {

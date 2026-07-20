@@ -11,6 +11,7 @@ import {
   EFFECT_SHADERS,
   type EffectShaderDef,
 } from "./effect-shaders";
+import { TRANSITION_SHADERS } from "./transition-shaders";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
   TRACKING_EFFECT_ID,
@@ -42,6 +43,10 @@ export class GlRenderer {
   /** Half-float ping-pong for HDR multi-pass effects (bloom). */
   private hdrTextures: [WebGLTexture, WebGLTexture] | null = null;
   private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  /** Per-side outputs for transitions: chain A and chain B render into these. */
+  private sceneTextures: [WebGLTexture, WebGLTexture] | null = null;
+  private sceneFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  private transitionPrograms = new Map<string, CompiledProgram>();
   private fbIdx = 0;
   /**
    * Private history buffers for feedback-reading effects (u_feedback), keyed
@@ -122,6 +127,13 @@ export class GlRenderer {
       );
     }
     this.compileAllEffects();
+    for (const [id, def] of Object.entries(TRANSITION_SHADERS)) {
+      try {
+        this.transitionPrograms.set(id, this.compile(def.fragment));
+      } catch (e) {
+        console.error(`Failed to compile transition "${id}":`, e);
+      }
+    }
   }
 
   /**
@@ -315,38 +327,134 @@ export class GlRenderer {
     )
       return;
 
-    // Drop history buffers of effect instances that no longer exist
-    // (deleted, or replaced wholesale by undo/preset).
-    if (this.fxFeedback.size > 0) {
-      const live = new Set(effects.map((e) => e.instanceId));
-      for (const [id, pair] of this.fxFeedback) {
-        if (!live.has(id)) {
-          this.deleteTexturePair(pair.textures);
-          this.deleteFBOPair(pair.fbos);
-          this.fxFeedback.delete(id);
-        }
-      }
+    this.gcFxFeedback(new Set(effects.map((e) => e.instanceId)));
+    const safeDt = this.frameDelta(time);
+    const writeIdx = (1 - this.fbIdx) as 0 | 1;
+    const resultTex = this.renderChainTo(
+      effects,
+      time,
+      safeDt,
+      this.fbFBOs[writeIdx],
+      this.fbTextures[writeIdx],
+    );
+    this.presentFrame(resultTex, writeIdx);
+  }
+
+  /**
+   * Blend two effect chains with a transition shader: chain A (outgoing) and
+   * chain B (incoming) each render into their own scene buffer — feedback
+   * effects on both sides keep evolving during the blend — then the
+   * transition pass composites them along `progress` (0 = pure A, 1 = pure B).
+   */
+  renderTransition(
+    effectsA: EffectInstance[],
+    effectsB: EffectInstance[],
+    type: string,
+    progress: number,
+    seed: number,
+    direction: number,
+    density: number,
+    time = 0,
+  ) {
+    if (
+      !this.sourceTexture ||
+      !this.ppTextures ||
+      !this.ppFBOs ||
+      !this.fbTextures ||
+      !this.fbFBOs ||
+      !this.sceneTextures ||
+      !this.sceneFBOs
+    )
+      return;
+    const prog = this.transitionPrograms.get(type);
+    if (!prog || progress >= 1) {
+      this.render(effectsB, time);
+      return;
     }
 
-    // Compute delta time for phase accumulation
+    // Both chains stay alive for the whole blend — collect feedback buffers
+    // only against the union, or rendering A would drop B's history.
+    const live = new Set<string>();
+    for (const e of effectsA) live.add(e.instanceId);
+    for (const e of effectsB) live.add(e.instanceId);
+    this.gcFxFeedback(live);
+    const safeDt = this.frameDelta(time);
+
+    const texA = this.renderChainTo(
+      effectsA,
+      time,
+      safeDt,
+      this.sceneFBOs[0],
+      this.sceneTextures[0],
+    );
+    const texB = this.renderChainTo(
+      effectsB,
+      time,
+      safeDt,
+      this.sceneFBOs[1],
+      this.sceneTextures[1],
+    );
+
+    const writeIdx = (1 - this.fbIdx) as 0 | 1;
+    this.drawTransitionPass(
+      prog,
+      this.fbFBOs[writeIdx],
+      texA,
+      texB,
+      progress,
+      seed,
+      direction,
+      density,
+      time,
+    );
+    this.presentFrame(this.fbTextures[writeIdx]!, writeIdx);
+  }
+
+  /** Per-frame delta time for phase accumulation, guarded against discontinuities. */
+  private frameDelta(time: number): number {
     const dt = this.lastTime >= 0 ? time - this.lastTime : 0;
     this.lastTime = time;
     // Guard against time discontinuities (e.g. switching between recording and real-time)
-    const safeDt = dt > 0 && dt < 0.5 ? dt : 0;
+    return dt > 0 && dt < 0.5 ? dt : 0;
+  }
 
+  /** Drop history buffers of effect instances that no longer exist
+   * (deleted, or replaced wholesale by undo/preset). */
+  private gcFxFeedback(live: Set<string>) {
+    if (this.fxFeedback.size === 0) return;
+    for (const [id, pair] of this.fxFeedback) {
+      if (!live.has(id)) {
+        this.deleteTexturePair(pair.textures);
+        this.deleteFBOPair(pair.fbos);
+        this.fxFeedback.delete(id);
+      }
+    }
+  }
+
+  /**
+   * Render one effect chain, writing the final pass into `finalFbo` and
+   * returning the texture holding the result (a private feedback buffer when
+   * the last effect reads u_feedback). Intermediate passes share the
+   * ping-pong FBOs, so chains must run sequentially.
+   */
+  private renderChainTo(
+    effects: EffectInstance[],
+    time: number,
+    safeDt: number,
+    finalFbo: WebGLFramebuffer,
+    finalTex: WebGLTexture,
+  ): WebGLTexture {
     const enabled = effects.filter((e) => e.enabled);
-    const writeIdx = (1 - this.fbIdx) as 0 | 1;
 
     if (enabled.length === 0) {
       this.drawPass(
         this.passthrough,
-        this.fbFBOs[writeIdx],
+        finalFbo,
         this.sourceTexture!,
         1.0,
         time,
       );
-      this.presentFrame(this.fbTextures[writeIdx]!, writeIdx);
-      return;
+      return finalTex;
     }
 
     let input = this.sourceTexture!;
@@ -361,12 +469,12 @@ export class GlRenderer {
       // Tracking is a CPU-built 2D overlay, not a shader pass. Composite it over
       // the current chain input at this slot, so later effects can distort it.
       if (eff.defId === TRACKING_EFFECT_ID) {
-        const target = isLast ? this.fbFBOs[writeIdx] : this.ppFBOs[ppIdx];
+        const target = isLast ? finalFbo : this.ppFBOs![ppIdx];
         this.renderTracking(eff, input, target, time);
         if (isLast) {
-          resultTex = this.fbTextures[writeIdx];
+          resultTex = finalTex;
         } else {
-          input = this.ppTextures[ppIdx];
+          input = this.ppTextures![ppIdx];
           ppIdx = 1 - ppIdx;
         }
         continue;
@@ -431,7 +539,7 @@ export class GlRenderer {
       if (isLast) {
         this.drawPass(
           entry.program,
-          this.fbFBOs[writeIdx],
+          finalFbo,
           input,
           1.0,
           effectTime,
@@ -441,11 +549,11 @@ export class GlRenderer {
           effectDelta,
         );
         if (entry.def.linearFilter) this.setTextureFilter(input, false);
-        resultTex = this.fbTextures[writeIdx];
+        resultTex = finalTex;
       } else {
         this.drawPass(
           entry.program,
-          this.ppFBOs[ppIdx],
+          this.ppFBOs![ppIdx],
           input,
           1.0,
           effectTime,
@@ -455,24 +563,57 @@ export class GlRenderer {
           effectDelta,
         );
         if (entry.def.linearFilter) this.setTextureFilter(input, false);
-        input = this.ppTextures[ppIdx];
+        input = this.ppTextures![ppIdx];
         ppIdx = 1 - ppIdx;
       }
     }
 
     // Every enabled effect was skipped (unknown ids): fall back to source
     if (!resultTex) {
-      this.drawPass(
-        this.passthrough,
-        this.fbFBOs[writeIdx],
-        this.sourceTexture,
-        1.0,
-        time,
-      );
-      resultTex = this.fbTextures[writeIdx];
+      this.drawPass(this.passthrough, finalFbo, this.sourceTexture!, 1.0, time);
+      resultTex = finalTex;
     }
 
-    this.presentFrame(resultTex, writeIdx);
+    return resultTex;
+  }
+
+  /** Composite outgoing (texA) + incoming (texB) chain outputs along progress. */
+  private drawTransitionPass(
+    prog: CompiledProgram,
+    targetFBO: WebGLFramebuffer,
+    texA: WebGLTexture,
+    texB: WebGLTexture,
+    progress: number,
+    seed: number,
+    direction: number,
+    density: number,
+    time: number,
+  ) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+    gl.viewport(0, 0, this.imgW, this.imgH);
+    gl.useProgram(prog.program);
+    if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+    if (prog.uniforms["u_progress"])
+      gl.uniform1f(prog.uniforms["u_progress"], progress);
+    if (prog.uniforms["u_seed"]) gl.uniform1f(prog.uniforms["u_seed"], seed);
+    if (prog.uniforms["u_direction"])
+      gl.uniform1i(prog.uniforms["u_direction"], direction);
+    if (prog.uniforms["u_density"])
+      gl.uniform1i(prog.uniforms["u_density"], density);
+    if (prog.uniforms["u_resolution"])
+      gl.uniform2f(prog.uniforms["u_resolution"], this.imgW, this.imgH);
+    if (prog.uniforms["u_time"]) gl.uniform1f(prog.uniforms["u_time"], time);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texA);
+    if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, texB);
+    if (prog.uniforms["u_texture2"])
+      gl.uniform1i(prog.uniforms["u_texture2"], 2);
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   /** Blend the text overlay (if any) over the rendered frame and draw it to the canvas. */
@@ -835,6 +976,12 @@ export class GlRenderer {
     this.deleteFBOPair(this.fbFBOs);
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
+    this.deleteTexturePair(this.sceneTextures);
+    this.deleteFBOPair(this.sceneFBOs);
+    for (const prog of this.transitionPrograms.values()) {
+      gl.deleteProgram(prog.program);
+    }
+    this.transitionPrograms.clear();
     gl.deleteProgram(this.passthrough.program);
     for (const pair of this.fxFeedback.values()) {
       this.deleteTexturePair(pair.textures);
@@ -1034,6 +1181,8 @@ export class GlRenderer {
     this.deleteFBOPair(this.fbFBOs);
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
+    this.deleteTexturePair(this.sceneTextures);
+    this.deleteFBOPair(this.sceneFBOs);
     if (this.textTexture) {
       gl.deleteTexture(this.textTexture);
       this.textTexture = null;
@@ -1072,6 +1221,12 @@ export class GlRenderer {
       this.createHdrTexture(this.imgW, this.imgH),
     ];
     this.hdrFBOs = this.createFBOPair(this.hdrTextures);
+
+    this.sceneTextures = [
+      this.createTexture(this.imgW, this.imgH),
+      this.createTexture(this.imgW, this.imgH),
+    ];
+    this.sceneFBOs = this.createFBOPair(this.sceneTextures);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fbIdx = 0;

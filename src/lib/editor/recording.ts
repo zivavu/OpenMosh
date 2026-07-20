@@ -2,7 +2,11 @@ import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
 import type { MoshOptions } from "./mosh";
-import { createSequenceEffectSource, type SequenceSegment } from "./sequence";
+import {
+  createSequenceEffectSource,
+  resolveTransitionAt,
+  type SequenceSegment,
+} from "./sequence";
 
 export interface RecordingContext {
   fps: number;
@@ -204,8 +208,32 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     const base = videoFrames ? decodeBeforeRender : seekBeforeRender;
     await base(frameIndex, time);
     // On a gap (no segment) keep the previous frame's effects.
-    const fx = seqSource!(seqTimeAt(time));
+    const t = seqTimeAt(time);
+    const fx = seqSource!(t);
     if (fx) effectsRef!.current = fx;
+    // Transition window at a segment boundary: blend the outgoing chain into
+    // the incoming one. Returned as a closure so the recorder applies this
+    // frame's audio data to `effectsRef.current` (the incoming chain) before
+    // the custom render runs; the outgoing chain keeps its boundary-frame
+    // values and fades out.
+    const tr =
+      fx && sequence
+        ? resolveTransitionAt(sequence.segments, t, sequence.duration, seqSource!)
+        : null;
+    if (tr && fx) {
+      const progress = (t - tr.boundaryTime) / tr.transition.durationSec;
+      return () =>
+        renderer.renderTransition(
+          tr.effectsA,
+          fx,
+          tr.transition.type,
+          progress,
+          tr.transition.seed,
+          tr.transition.direction ?? 0,
+          tr.transition.density ?? 1,
+          time,
+        );
+    }
   };
 
   try {
