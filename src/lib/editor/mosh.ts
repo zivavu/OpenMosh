@@ -115,6 +115,13 @@ export function applyRandomAudioLinks(
 /**
  * Randomize effects — enable a random subset, randomize their params, optionally shuffle order.
  * Mutates the effects array in place.
+ *
+ * MUST stay fully synchronous and draw all randomness from `Math.random`:
+ * sequence/preview determinism runs it inside `withSeededRandom`, which swaps
+ * the global `Math.random` for the call's duration and restores it in a
+ * `finally`. Introducing an `await` here (or a non-`Math.random` RNG) would let
+ * the swap leak across the microtask boundary or bypass the seed — breaking the
+ * preview/export "same seed → same mosh" guarantee. See [[sequence.ts]].
  */
 export function generateMosh(
   effects: EffectInstance[],
