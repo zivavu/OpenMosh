@@ -882,6 +882,7 @@
 				bind:naturalHeight
 				bind:fps={currentFps}
 				freezeAnimation={!previewPlaying}
+				suspended={recordingState.recording}
 				{warmCanvas}
 				{warmRenderer}
 			/>

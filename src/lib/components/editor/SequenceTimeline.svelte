@@ -213,7 +213,8 @@
 
 	function segLabel(s: SequenceSegment): string {
 		if (s.mode === 'interval') return `auto ${s.intervalSec ?? 0.25}s`;
-		return s.label;
+		// "*" = hand-edited since it was filled (preset overwrites skip it).
+		return s.modified ? `${s.label}*` : s.label;
 	}
 
 	let segVis = $derived.by((): SegVis[] =>

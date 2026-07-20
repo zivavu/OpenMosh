@@ -26,6 +26,9 @@ export interface SequenceSegment {
   /** Name of the preset this segment was filled from; used to re-sync the
    * segment when the user explicitly overwrites that preset. */
   presetName?: string;
+  /** True once the user hand-edits a preset-filled segment: the label shows
+   * "name*" and explicit preset overwrites no longer clobber the edits. */
+  modified?: boolean;
   effects: EffectInstance[];
   /** "interval" mode: seconds between re-rolls. */
   intervalSec?: number;

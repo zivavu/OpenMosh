@@ -31,6 +31,11 @@
 		onEffectsReplaced?: () => void;
 		/** Called after a preset is explicitly overwritten via its save icon. */
 		onPresetUpdated?: (preset: Preset) => void;
+		/** Called after a preset is loaded from the list, with that preset. */
+		onPresetApplied?: (preset: Preset) => void;
+		/** Called on every user action that changes render output (param change,
+		 * enable toggle, add/remove/reorder) — not on expand/lock. */
+		onUserEdit?: () => void;
 	}
 
 	let {
@@ -40,6 +45,8 @@
 		onVolumeLinkChange,
 		onEffectsReplaced,
 		onPresetUpdated,
+		onPresetApplied,
+		onUserEdit,
 	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
@@ -60,6 +67,7 @@
 	function handleLoadPreset(index: number) {
 		effects = applyPreset(presets[index]);
 		onEffectsReplaced?.();
+		onPresetApplied?.($state.snapshot(presets[index]) as Preset);
 	}
 
 	function handleUpdatePreset(index: number) {
@@ -77,6 +85,7 @@
 
 	function toggle(index: number) {
 		effects[index].enabled = !effects[index].enabled;
+		onUserEdit?.();
 	}
 
 	function toggleExpand(index: number) {
@@ -93,6 +102,7 @@
 	function remove(index: number) {
 		effects.splice(index, 1);
 		saveHiddenEffectIds();
+		onUserEdit?.();
 	}
 
 	let hiddenDefs = $derived(
@@ -129,11 +139,13 @@
 		if (!def) return;
 		effects.push(createEffectInstance(def));
 		saveHiddenEffectIds();
+		onUserEdit?.();
 	}
 
 	function paramChange(index: number, key: string, value: number | string) {
 		effects[index].values[key] = value;
 		if (!effects[index].enabled) effects[index].enabled = true;
+		onUserEdit?.();
 	}
 
 	function handleDragStart(index: number, e: DragEvent) {
@@ -173,6 +185,7 @@
 		const [moved] = effects.splice(dragFromIndex, 1);
 		effects.splice(targetIndex, 0, moved);
 		clearDragState();
+		onUserEdit?.();
 	}
 
 	function clearDragState() {

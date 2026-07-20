@@ -615,6 +615,7 @@
 							mode: 'static',
 							label: preset.name,
 							presetName: preset.name,
+							modified: false,
 							effects: applyPreset(preset),
 						}
 					: s,
@@ -624,9 +625,11 @@
 
 	// A preset was explicitly overwritten in the panel — refresh every static
 	// segment that was filled from it, so segments track the newest version.
+	// Hand-edited ("modified") segments keep their edits; overwriting a preset
+	// never re-assigns it to the selected segment.
 	function seqSyncPreset(preset: Preset) {
 		sequenceSegments = sequenceSegments.map((s) =>
-			s.mode === 'static' && s.presetName === preset.name
+			s.mode === 'static' && s.presetName === preset.name && !s.modified
 				? { ...s, label: preset.name, effects: applyPreset(preset) }
 				: s,
 		);
@@ -655,6 +658,14 @@
 		return seg && seg.mode === 'static' ? seg : null;
 	}
 
+	// A hand-edit to a preset-filled segment: label gains a "*" and explicit
+	// preset overwrites stop clobbering it. Driven by explicit edit callbacks
+	// (not data watching) — the audio volume-link tick also mutates values.
+	function markPanelSegmentEdited() {
+		const seg = panelSelectedSegment();
+		if (seg && !seg.modified) seg.modified = true;
+	}
+
 	function getPanelEffects(): EffectInstance[] {
 		return panelSelectedSegment()?.effects ?? effects;
 	}
@@ -675,7 +686,13 @@
 				if (s.mode === 'interval') return { ...s, seed: randomSeed() };
 				const fx = loadInitialEffects();
 				generateMoshFn(fx, getMoshOptions());
-				return { ...s, label: 'mosh', presetName: undefined, effects: fx };
+				return {
+					...s,
+					label: 'mosh',
+					presetName: undefined,
+					modified: false,
+					effects: fx,
+				};
 			}),
 		);
 	}
@@ -755,6 +772,10 @@
 
 	function clearEffects() {
 		clearEffectsFn(effects);
+		// In sequence mode the live effects can be the selected segment's own
+		// array — a clear is a hand-edit to that segment.
+		const seg = panelSelectedSegment();
+		if (seg && seg.effects === effects) seg.modified = true;
 		history.push(effects);
 	}
 
@@ -1048,6 +1069,7 @@
 			videoEl={isVideo && !previewPlayer ? videoEl : null}
 			frameSource={previewPlayer}
 			freezeAnimation={isImageFormat}
+			suspended={recordingState.recording}
 			{warmCanvas}
 			{warmRenderer}
 		/>
@@ -1265,11 +1287,21 @@
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
 					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));
+					markPanelSegmentEdited();
 				}}
 				onEffectsReplaced={() => {
 					if (!sequenceEnabled) history.push(effects);
 				}}
 				onPresetUpdated={seqSyncPreset}
+				onPresetApplied={(preset) => {
+					const seg = panelSelectedSegment();
+					if (seg) {
+						seg.label = preset.name;
+						seg.presetName = preset.name;
+						seg.modified = false;
+					}
+				}}
+				onUserEdit={markPanelSegmentEdited}
 			/>
 		{/snippet}
 	</MobileSheet>
