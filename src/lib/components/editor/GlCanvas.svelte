@@ -19,6 +19,10 @@
 		/** WebCodecs preview player; takes precedence over videoEl as frame source. */
 		frameSource?: VideoPreviewPlayer | null;
 		freezeAnimation?: boolean;
+		/** Stops all preview rendering (e.g. while recording, when the recorder
+		 * owns the shared renderer — interleaved renders corrupt per-effect
+		 * feedback history and delta-time state). */
+		suspended?: boolean;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: GlRenderer | null;
 	}
@@ -37,6 +41,7 @@
 		videoEl = null,
 		frameSource = null,
 		freezeAnimation = false,
+		suspended = false,
 		warmCanvas = null,
 		warmRenderer = null,
 	}: Props = $props();
@@ -212,6 +217,7 @@
 
 	$effect(() => {
 		if (
+			suspended ||
 			!renderer ||
 			!imageReady ||
 			canvasWidth == null ||
@@ -226,7 +232,7 @@
 	});
 
 	$effect(() => {
-		if (!renderer || !imageReady) return;
+		if (suspended || !renderer || !imageReady) return;
 
 		if (!needsAnimation) {
 			if (videoEl) renderer.updateSourceFrame(videoEl);

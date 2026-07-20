@@ -76,8 +76,4 @@
 		font-size: 0.75rem;
 		color: #666;
 	}
-
-	.spacer {
-		flex: 1;
-	}
 </style>
