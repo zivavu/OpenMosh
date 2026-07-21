@@ -9,8 +9,8 @@
 		X,
 	} from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import { getDecodedAudioBuffer } from '../../audio/audio-buffer-cache';
 	import { computeNormalizeGain, measureLoudness } from '../../audio/loudness';
-	import { decodeAudioFile } from '../../audio/offline-audio';
 	import {
 		addTrack,
 		deleteTrack,
@@ -109,7 +109,7 @@
 			const file = new File([track.blob], track.name, {
 				type: track.blob.type,
 			});
-			decodeAudioFile(file)
+			getDecodedAudioBuffer(file)
 				.then((buffer) => {
 					const db = measureLoudness(buffer);
 					const gain = computeNormalizeGain(db);
@@ -196,7 +196,7 @@
 				const file = new File([track.blob], track.name, {
 					type: track.blob.type,
 				});
-				const buffer = await decodeAudioFile(file);
+				const buffer = await getDecodedAudioBuffer(file);
 				const db = measureLoudness(buffer);
 				const gain = computeNormalizeGain(db);
 				gainCache.set(track.id, gain);
