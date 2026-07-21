@@ -43,8 +43,13 @@ export class GlRenderer {
   private srcTexH = 0;
   private ppTextures: [WebGLTexture, WebGLTexture] | null = null;
   private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
-  private fbTextures: [WebGLTexture, WebGLTexture] | null = null;
-  private fbFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  /**
+   * Final result buffer. Only needed when an overlay has to be composited over
+   * the chain; when there's no overlay, the last effect draws straight to the
+   * canvas to avoid an extra full-screen blit.
+   */
+  private fbTexture: WebGLTexture | null = null;
+  private fbFBO: WebGLFramebuffer | null = null;
   /**
    * Half-float ping-pong for HDR multi-pass effects (bloom/blur). Allocated at
    * a fraction of the output resolution: the Gaussian pre-passes are the
@@ -61,7 +66,6 @@ export class GlRenderer {
   private sceneTextures: [WebGLTexture, WebGLTexture] | null = null;
   private sceneFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
   private transitionPrograms = new Map<string, CompiledProgram>();
-  private fbIdx = 0;
   /**
    * Private history buffers for feedback-reading effects (u_feedback), keyed
    * by effect instanceId. Each such effect feeds back its OWN previous output
@@ -363,23 +367,23 @@ export class GlRenderer {
     if (
       !this.sourceTexture ||
       !this.ppTextures ||
-      !this.ppFBOs ||
-      !this.fbTextures ||
-      !this.fbFBOs
+      !this.ppFBOs
     )
       return;
 
     this.gcFxFeedback(new Set(effects.map((e) => e.instanceId)));
     const safeDt = this.frameDelta(time);
-    const writeIdx = (1 - this.fbIdx) as 0 | 1;
+    this.ensurePresentBuffer();
+    const overlayActive = !!this.textOverlayPhrase && !!this.textTexture;
     const resultTex = this.renderChainTo(
       effects,
       time,
       safeDt,
-      this.fbFBOs[writeIdx],
-      this.fbTextures[writeIdx],
+      this.fbFBO!,
+      this.fbTexture!,
+      !overlayActive,
     );
-    this.presentFrame(resultTex, writeIdx);
+    this.presentFrame(resultTex, overlayActive);
   }
 
   /**
@@ -401,11 +405,7 @@ export class GlRenderer {
     if (
       !this.sourceTexture ||
       !this.ppTextures ||
-      !this.ppFBOs ||
-      !this.fbTextures ||
-      !this.fbFBOs ||
-      !this.sceneTextures ||
-      !this.sceneFBOs
+      !this.ppFBOs
     )
       return;
     const prog = this.transitionPrograms.get(type);
@@ -422,34 +422,37 @@ export class GlRenderer {
     this.gcFxFeedback(live);
     const safeDt = this.frameDelta(time);
 
+    this.ensureSceneBuffers();
     const texA = this.renderChainTo(
       effectsA,
       time,
       safeDt,
-      this.sceneFBOs[0],
-      this.sceneTextures[0],
+      this.sceneFBOs![0],
+      this.sceneTextures![0],
+      false,
     );
     const texB = this.renderChainTo(
       effectsB,
       time,
       safeDt,
-      this.sceneFBOs[1],
-      this.sceneTextures[1],
+      this.sceneFBOs![1],
+      this.sceneTextures![1],
+      false,
     );
 
-    const writeIdx = (1 - this.fbIdx) as 0 | 1;
+    this.ensurePresentBuffer();
     this.drawTransitionPass(
       prog,
-      this.fbFBOs[writeIdx],
-      texA,
-      texB,
+      this.fbFBO!,
+      texA!,
+      texB!,
       progress,
       seed,
       direction,
       density,
       time,
     );
-    this.presentFrame(this.fbTextures[writeIdx]!, writeIdx);
+    this.presentFrame(this.fbTexture, true);
   }
 
   /** Per-frame delta time for phase accumulation, guarded against discontinuities. */
@@ -492,17 +495,16 @@ export class GlRenderer {
     safeDt: number,
     finalFbo: WebGLFramebuffer,
     finalTex: WebGLTexture,
-  ): WebGLTexture {
+    toCanvas: boolean,
+  ): WebGLTexture | null {
     const enabled = effects.filter((e) => e.enabled);
 
     if (enabled.length === 0) {
-      this.drawPass(
-        this.passthrough,
-        finalFbo,
-        this.sourceTexture!,
-        1.0,
-        time,
-      );
+      if (toCanvas) {
+        this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
+        return null;
+      }
+      this.drawPass(this.passthrough, finalFbo, this.sourceTexture!, 1.0, time);
       return finalTex;
     }
 
@@ -543,13 +545,14 @@ export class GlRenderer {
       // shaders use u_resolution (full res) for blur width, so downsampling
       // only lowers the sample resolution, not the blur radius.
       const originalInput = input;
-      if (entry.prePasses && this.hdrFBOs && this.hdrTextures) {
+      if (entry.prePasses) {
+        this.ensureHdrBuffers();
         let hdrIdx = 0;
         for (const pp of entry.prePasses) {
           if (pp.linearFilter) this.setTextureFilter(input, true);
           this.drawPass(
             pp.program,
-            this.hdrFBOs[hdrIdx],
+            this.hdrFBOs![hdrIdx],
             input,
             1.0,
             effectTime,
@@ -562,7 +565,7 @@ export class GlRenderer {
             this.hdrH,
           );
           if (pp.linearFilter) this.setTextureFilter(input, false);
-          input = this.hdrTextures[hdrIdx];
+          input = this.hdrTextures![hdrIdx];
           hdrIdx = 1 - hdrIdx;
         }
         // The composite reads the final blurred buffer at full res — keep it
@@ -598,19 +601,33 @@ export class GlRenderer {
       }
 
       if (isLast) {
-        this.drawPass(
-          entry.program,
-          finalFbo,
-          input,
-          1.0,
-          effectTime,
-          entry.def,
-          eff.values,
-          entry.prePasses ? originalInput : undefined,
-          effectDelta,
-        );
+        if (toCanvas) {
+          this.drawPass(
+            entry.program,
+            null,
+            input,
+            -1.0,
+            effectTime,
+            entry.def,
+            eff.values,
+            entry.prePasses ? originalInput : undefined,
+            effectDelta,
+          );
+        } else {
+          this.drawPass(
+            entry.program,
+            finalFbo,
+            input,
+            1.0,
+            effectTime,
+            entry.def,
+            eff.values,
+            entry.prePasses ? originalInput : undefined,
+            effectDelta,
+          );
+        }
         if (entry.def.linearFilter) this.setTextureFilter(input, false);
-        resultTex = finalTex;
+        resultTex = toCanvas ? null : finalTex;
       } else {
         this.drawPass(
           entry.program,
@@ -631,8 +648,12 @@ export class GlRenderer {
 
     // Every enabled effect was skipped (unknown ids): fall back to source
     if (!resultTex) {
-      this.drawPass(this.passthrough, finalFbo, this.sourceTexture!, 1.0, time);
-      resultTex = finalTex;
+      if (toCanvas) {
+        this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
+      } else {
+        this.drawPass(this.passthrough, finalFbo, this.sourceTexture!, 1.0, time);
+      }
+      resultTex = toCanvas ? null : finalTex;
     }
 
     return resultTex;
@@ -678,19 +699,20 @@ export class GlRenderer {
   }
 
   /** Blend the text overlay (if any) over the rendered frame and draw it to the canvas. */
-  private presentFrame(mainResult: WebGLTexture, writeIdx: 0 | 1) {
-    if (this.textOverlayPhrase && this.textTexture && this.textBlendProgram) {
+  private presentFrame(mainResult: WebGLTexture | null, overlayActive: boolean) {
+    if (overlayActive && this.textTexture && this.textBlendProgram) {
       this.drawBlendToCanvas(
-        mainResult,
+        mainResult!,
         this.textTexture,
         this.textBlendMode,
         this.textInvert,
         this.textOpacity,
       );
-    } else {
+    } else if (mainResult) {
+      // Feedback effect at the end of the chain needs one final blit; otherwise
+      // the last pass was already drawn straight to the canvas.
       this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
     }
-    this.fbIdx = writeIdx;
   }
 
   /**
@@ -961,37 +983,42 @@ export class GlRenderer {
       }
     }
     syncBoxes(state, params, time);
-    const frame = resolveFrame(state, params, time, this.imgW, this.imgH);
+    const trackingW = Math.max(1, Math.round(this.imgW * 0.5));
+    const trackingH = Math.max(1, Math.round(this.imgH * 0.5));
+    const frame = resolveFrame(state, params, time, trackingW, trackingH);
 
-    // The full-res 2D-canvas redraw + texture upload is the expensive part of
-    // this overlay — skip both when the HUD would be pixel-identical (e.g.
-    // locked boxes that have settled).
+    // The 2D-canvas redraw + texture upload is the expensive part of this
+    // overlay. Render at half resolution (still plenty for thin HUD strokes)
+    // and skip both when the HUD would be pixel-identical.
     const gl = this.gl;
     const sig =
       eff.instanceId +
       "|" +
-      trackingFrameSignature(frame, params, time, this.imgW, this.imgH);
+      trackingFrameSignature(frame, params, time, trackingW, trackingH);
     const texValid =
       this.trackingTexture !== null &&
-      this.trackingTexW === this.imgW &&
-      this.trackingTexH === this.imgH;
+      this.trackingTexW === trackingW &&
+      this.trackingTexH === trackingH;
     if (!texValid || sig !== this.lastTrackingSig) {
       if (!this.trackingCanvas) {
         this.trackingCanvas = document.createElement("canvas");
       }
       drawTrackingToCanvas(
         this.trackingCanvas,
-        this.imgW,
-        this.imgH,
+        trackingW,
+        trackingH,
         frame,
         params,
         time,
       );
       if (!texValid) {
         if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
-        this.trackingTexture = this.createTexture(this.imgW, this.imgH);
-        this.trackingTexW = this.imgW;
-        this.trackingTexH = this.imgH;
+        this.trackingTexture = this.createTexture(trackingW, trackingH);
+        gl.bindTexture(gl.TEXTURE_2D, this.trackingTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        this.trackingTexW = trackingW;
+        this.trackingTexH = trackingH;
       }
       gl.bindTexture(gl.TEXTURE_2D, this.trackingTexture);
       gl.texSubImage2D(
@@ -1033,8 +1060,8 @@ export class GlRenderer {
     this.textBlendProgram = null;
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
-    this.deleteTexturePair(this.fbTextures);
-    this.deleteFBOPair(this.fbFBOs);
+    if (this.fbTexture) gl.deleteTexture(this.fbTexture);
+    if (this.fbFBO) gl.deleteFramebuffer(this.fbFBO);
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
     this.deleteTexturePair(this.sceneTextures);
@@ -1238,12 +1265,41 @@ export class GlRenderer {
     const gl = this.gl;
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
-    this.deleteTexturePair(this.fbTextures);
-    this.deleteFBOPair(this.fbFBOs);
+    this.ppTextures = [
+      this.createTexture(this.imgW, this.imgH),
+      this.createTexture(this.imgW, this.imgH),
+    ];
+    this.ppFBOs = this.createFBOPair(this.ppTextures);
+
+    this.deleteLazyBuffers();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    for (const pair of this.fxFeedback.values()) {
+      this.deleteTexturePair(pair.textures);
+      this.deleteFBOPair(pair.fbos);
+    }
+    this.fxFeedback.clear();
+  }
+
+  private deleteLazyBuffers() {
+    const gl = this.gl;
+    if (this.fbTexture) {
+      gl.deleteTexture(this.fbTexture);
+      this.fbTexture = null;
+    }
+    if (this.fbFBO) {
+      gl.deleteFramebuffer(this.fbFBO);
+      this.fbFBO = null;
+    }
     this.deleteTexturePair(this.hdrTextures);
     this.deleteFBOPair(this.hdrFBOs);
+    this.hdrTextures = null;
+    this.hdrFBOs = null;
+    this.hdrW = 0;
+    this.hdrH = 0;
     this.deleteTexturePair(this.sceneTextures);
     this.deleteFBOPair(this.sceneFBOs);
+    this.sceneTextures = null;
+    this.sceneFBOs = null;
     if (this.textTexture) {
       gl.deleteTexture(this.textTexture);
       this.textTexture = null;
@@ -1264,41 +1320,53 @@ export class GlRenderer {
     this.salPBO = null;
     this.salW = 0;
     this.salH = 0;
+  }
 
-    this.ppTextures = [
-      this.createTexture(this.imgW, this.imgH),
-      this.createTexture(this.imgW, this.imgH),
-    ];
-    this.ppFBOs = this.createFBOPair(this.ppTextures);
-
-    this.fbTextures = [
-      this.createTexture(this.imgW, this.imgH),
-      this.createTexture(this.imgW, this.imgH),
-    ];
-    this.fbFBOs = this.createFBOPair(this.fbTextures);
-
-    // Half resolution (min 1px) — see hdrTextures docstring.
-    this.hdrW = Math.max(1, Math.round(this.imgW / 2));
-    this.hdrH = Math.max(1, Math.round(this.imgH / 2));
+  private ensureHdrBuffers() {
+    const expectedW = Math.max(1, Math.round(this.imgW / 2));
+    const expectedH = Math.max(1, Math.round(this.imgH / 2));
+    if (
+      this.hdrTextures &&
+      this.hdrFBOs &&
+      this.hdrW === expectedW &&
+      this.hdrH === expectedH
+    ) {
+      return;
+    }
+    this.deleteTexturePair(this.hdrTextures);
+    this.deleteFBOPair(this.hdrFBOs);
+    this.hdrW = expectedW;
+    this.hdrH = expectedH;
     this.hdrTextures = [
       this.createHdrTexture(this.hdrW, this.hdrH),
       this.createHdrTexture(this.hdrW, this.hdrH),
     ];
     this.hdrFBOs = this.createFBOPair(this.hdrTextures);
+  }
 
+  private ensureSceneBuffers() {
+    if (this.sceneTextures && this.sceneFBOs) return;
     this.sceneTextures = [
       this.createTexture(this.imgW, this.imgH),
       this.createTexture(this.imgW, this.imgH),
     ];
     this.sceneFBOs = this.createFBOPair(this.sceneTextures);
+  }
 
+  private ensurePresentBuffer() {
+    if (this.fbTexture && this.fbFBO) return;
+    const gl = this.gl;
+    this.fbTexture = this.createTexture(this.imgW, this.imgH);
+    this.fbFBO = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbFBO);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      this.fbTexture,
+      0,
+    );
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    this.fbIdx = 0;
-    for (const pair of this.fxFeedback.values()) {
-      this.deleteTexturePair(pair.textures);
-      this.deleteFBOPair(pair.fbos);
-    }
-    this.fxFeedback.clear();
   }
 
   private static BLEND_MODE_VALUES: Record<TextOverlayBlendMode, number> = {
@@ -1400,11 +1468,11 @@ export class GlRenderer {
     if (compiled.uniforms["u_delta"] && delta !== undefined) {
       gl.uniform1f(compiled.uniforms["u_delta"], delta);
     }
-    if (compiled.uniforms["u_feedback"] && this.fbTextures) {
+    if (compiled.uniforms["u_feedback"] && this.fbTexture) {
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(
         gl.TEXTURE_2D,
-        feedbackTex ?? this.fbTextures[this.fbIdx],
+        feedbackTex ?? this.fbTexture,
       );
       gl.uniform1i(compiled.uniforms["u_feedback"], 1);
       gl.activeTexture(gl.TEXTURE0);
