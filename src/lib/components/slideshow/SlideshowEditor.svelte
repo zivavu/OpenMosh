@@ -925,6 +925,7 @@
 				bind:fps={currentFps}
 				freezeAnimation={!previewPlaying}
 				suspended={recordingState.recording}
+				externallyDriven
 				{warmCanvas}
 				{warmRenderer}
 			/>
