@@ -1771,18 +1771,18 @@ void main() {
   bool  found    = false;
 
   for (int i = 0; i < N; i++) {
-    float surfH = dot(texture(u_texture, pos).rgb, lum);
-    if (!found && surfH >= rayH) {
-      // Linearly interpolate between prev and current step for sub-step accuracy
-      float prevRayH = rayH + stepH;
-      float t = (prevRayH - prevSurfH) / max((surfH - prevSurfH) - (rayH - prevRayH), 0.0001);
-      hitPos = mix(prevPos, pos, clamp(t, 0.0, 1.0));
-      found  = true;
-    }
-    prevPos   = pos;
-    prevSurfH = dot(texture(u_texture, pos).rgb, lum);
-    pos  += stepUV;
-    rayH -= stepH;
+				float surfH = dot(texture(u_texture, pos).rgb, lum);
+				if (!found && surfH >= rayH) {
+					// Linearly interpolate between prev and current step for sub-step accuracy
+					float prevRayH = rayH + stepH;
+					float t = (prevRayH - prevSurfH) / max((surfH - prevSurfH) - (rayH - prevRayH), 0.0001);
+					hitPos = mix(prevPos, pos, clamp(t, 0.0, 1.0));
+					found  = true;
+				}
+				prevPos   = pos;
+				prevSurfH = surfH;
+				pos  += stepUV;
+				rayH -= stepH;
   }
 
   outColor = texture(u_texture, hitPos);
