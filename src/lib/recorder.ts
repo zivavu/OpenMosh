@@ -7,9 +7,17 @@ import {
 	trimAudioBuffer,
 	type FrameAudioData,
 } from './audio/offline-audio';
+import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
 import { stretchAudioBuffer } from './audio/time-stretch';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
+
+interface WindowWithSavePicker {
+	showSaveFilePicker: (options?: {
+		suggestedName?: string;
+		types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+	}) => Promise<FileSystemFileHandle>;
+}
 
 export interface RecordOptions {
 	duration: number;
@@ -45,6 +53,13 @@ export interface RecordOptions {
 	audioSpeed?: number;
 	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
 	normalizeGain?: number;
+	/** Suggested name for the output file. When the File System Access API is
+	 * available, the user is prompted to save directly to disk and the muxed
+	 * output is streamed instead of buffered in RAM. */
+	suggestedFileName?: string;
+	/** Optional pre-acquired writable stream. When provided, output is streamed
+	 * directly here instead of buffered into a Blob. */
+	writableStream?: FileSystemWritableFileStream;
 }
 
 /** Encoding backend that consumes rendered canvas frames. */
@@ -86,13 +101,14 @@ async function prepareFrameAudio(
 	loop?: boolean,
 	normalizeGain: number = 1.0,
 	audioSpeed: number = 1,
+	onProgress?: (progress: number) => void,
 ): Promise<{
 	frameAudioData: FrameAudioData[];
 	sampleRate: number;
 	audioBuffer: AudioBuffer;
 }> {
 	checkAbort(signal);
-	const decoded = await decodeAudioFile(audioFile);
+	const decoded = await getDecodedAudioBuffer(audioFile);
 	const end = audioEnd ?? duration;
 	// Stretch before looping so the loop length matches the sped-up video span.
 	const trimmed = stretchAudioBuffer(
@@ -118,15 +134,16 @@ async function prepareFrameAudio(
 		if (loop && loopDuration > 0) return t % loopDuration;
 		return Math.min(t, Math.max(0, loopDuration - 0.001));
 	});
-	const frameAudioData = analyzeFrames(
+	const frameAudioData = await analyzeFrames(
 		loop ? trimmed : audioBuffer,
 		frameTimes,
 		FFT_SIZE,
+		onProgress,
 	);
 	return { frameAudioData, sampleRate: audioBuffer.sampleRate, audioBuffer };
 }
 
-async function recordWebM(opts: RecordOptions): Promise<Blob> {
+async function recordWebM(opts: RecordOptions): Promise<Blob | null> {
 	const mb = await import('mediabunny');
 
 	const {
@@ -146,6 +163,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		loopAudio,
 		normalizeGain = 1.0,
 		audioSpeed = 1,
+		suggestedFileName,
+		writableStream: providedWritable,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -167,6 +186,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			loopAudio,
 			normalizeGain,
 			audioSpeed,
+			(p) => onProgress?.(p * 0.15),
 		);
 		audioBufferForMux = audio.audioBuffer;
 		frameAudioData = audio.frameAudioData;
@@ -217,7 +237,27 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		);
 	}
 
-	const target = new mb.BufferTarget();
+	// Prefer streaming to disk when available to avoid buffering the entire
+	// muxed file in RAM. Fall back to the in-memory BufferTarget.
+	let writable: FileSystemWritableFileStream | null = providedWritable ?? null;
+	let target: InstanceType<typeof mb.BufferTarget> | InstanceType<typeof mb.StreamTarget>;
+	if (!writable && typeof window !== 'undefined' && 'showSaveFilePicker' in window && suggestedFileName) {
+		try {
+			const handle = await (window as unknown as WindowWithSavePicker).showSaveFilePicker({
+				suggestedName: suggestedFileName,
+				types: [{ description: 'WebM video', accept: { 'video/webm': ['.webm'] } }],
+			});
+			writable = await handle.createWritable();
+		} catch {
+			// User cancelled the picker or the API failed — fall back to Blob.
+			writable = null;
+		}
+	}
+	if (writable) {
+		target = new mb.StreamTarget(writable, { chunked: true });
+	} else {
+		target = new mb.BufferTarget();
+	}
 	const output = new mb.Output({ format: outputFormat, target });
 
 	const wantsAudioTrack = audioBufferForMux != null;
@@ -226,7 +266,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	let encodedFrames = 0;
 	const reportPacket = () => {
 		encodedFrames++;
-		onProgress?.(Math.min(encodedFrames / totalFrames, 1));
+		// Audio analysis gets the first 15% of the bar; encoding fills the rest.
+		onProgress?.(Math.min(0.15 + encodedFrames / totalFrames * 0.85, 1));
 	};
 
 	const makeCanvasSink = (): FrameSink => {
@@ -240,7 +281,36 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		// crashes the whole tab (driver TDR -> CONTEXT_LOST_WEBGL). Gate submission
 		// on encodedFrames, the only signal tied to real encoder completion.
 		const MAX_BACKLOG = 16;
-		let onPacket: (() => void) | null = null;
+		let resolveWait: (() => void) | null = null;
+		let rejectWait: ((reason?: unknown) => void) | null = null;
+		const notifyPacket = () => {
+			resolveWait?.();
+			resolveWait = null;
+			rejectWait = null;
+		};
+		const abortWait = (reason?: unknown) => {
+			rejectWait?.(reason);
+			resolveWait = null;
+			rejectWait = null;
+		};
+		const never = new Promise<never>(() => {});
+		const abortPromise = signal
+			? new Promise<never>((_, reject) => {
+					if (signal.aborted) {
+						reject(new DOMException('Recording cancelled', 'AbortError'));
+						return;
+					}
+					signal.addEventListener(
+						'abort',
+						() => {
+							reject(new DOMException('Recording cancelled', 'AbortError'));
+							abortWait();
+						},
+						{ once: true },
+					);
+			  })
+			: null;
+		const abortOrNever = abortPromise ?? never;
 		const videoSource = new mb.CanvasSource(canvas, {
 			codec: selectedCodec as any,
 			// Software realtime mode trades some per-frame efficiency for multithreaded
@@ -253,15 +323,29 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				resolveFirstPacket?.();
 				resolveFirstPacket = null;
 				reportPacket();
-				onPacket?.();
+				notifyPacket();
 			},
 		});
 		output.addVideoTrack(videoSource);
 		const queue: Promise<void>[] = [];
+		let queueError: Error | null = null;
+		let rejectQueueError: ((err: Error) => void) | null = null;
+		const queueErrorPromise = new Promise<never>((_, reject) => {
+			rejectQueueError = reject;
+		});
 		return {
 			label: hardware ? 'hardware' : 'software',
 			async submit(frameIndex, time) {
-				queue.push(videoSource.add(time, frameDuration));
+				if (queueError) throw queueError;
+				checkAbort(signal);
+				const addPromise = videoSource.add(time, frameDuration);
+				queue.push(addPromise);
+				addPromise.catch((err) => {
+					if (queueError) return;
+					queueError = err instanceof Error ? err : new Error(String(err));
+					rejectQueueError?.(queueError);
+					abortWait(queueError);
+				});
 				// Chromium hardware encoders can process the first frames out of
 				// order (startup race), emitting frame 1 as the stream's keyframe
 				// with frame 0 as a delta after it — which the muxer rejects. Holding
@@ -272,19 +356,40 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					await Promise.race([
 						firstPacket,
 						new Promise<void>((r) => setTimeout(r, 1000)),
+						abortOrNever,
+						queueErrorPromise,
 					]);
 				}
-				if (queue.length >= 8) await queue.shift()!;
+				if (queue.length >= 8) {
+					await Promise.race([
+						queue.shift()!,
+						abortOrNever,
+						queueErrorPromise,
+					]);
+				}
 				while (frameIndex - encodedFrames > MAX_BACKLOG) {
-					await new Promise<void>((r) => (onPacket = r));
+					checkAbort(signal);
+					if (queueError) throw queueError;
+					await Promise.race([
+						new Promise<void>((resolve, reject) => {
+							resolveWait = resolve;
+							rejectWait = reject;
+						}),
+						abortOrNever,
+					]);
 				}
 			},
 			async finish() {
-				await Promise.all(queue);
-				queue.length = 0;
+				try {
+					await Promise.all(queue);
+				} finally {
+					queue.length = 0;
+					videoSource.close();
+				}
+			},
+			dispose() {
 				videoSource.close();
 			},
-			dispose() {},
 		};
 	};
 
@@ -313,7 +418,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				codec: 'vp8',
 				width: canvas.width,
 				height: canvas.height,
-				bitrate: 24_000_000,
+				// Match the software canvas-sink bitrate so exports are consistent.
+				bitrate: 12_000_000,
 				latencyMode: 'realtime',
 			},
 			workerCount,
@@ -427,15 +533,22 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	}
 
 	onProgress?.(1);
-	// Let the UI paint "Creating file..." before blocking on blob creation
+	// Let the UI paint "Creating file..." before blocking on blob creation.
+	// setTimeout keeps exports alive in background tabs (requestAnimationFrame
+	// does not fire when a tab is hidden).
 	onFinalizing?.();
-	await new Promise<void>((r) => requestAnimationFrame(() => r()));
+	await new Promise<void>((r) => setTimeout(r, 0));
 
+	if (writable) {
+		await writable.close();
+		return null;
+	}
+	const bufferTarget = target as InstanceType<typeof mb.BufferTarget>;
 	const mimeType = 'video/webm';
-	return new Blob([target.buffer!], { type: mimeType });
+	return new Blob([bufferTarget.buffer!], { type: mimeType });
 }
 
-export async function recordVideo(opts: RecordOptions): Promise<Blob> {
+export async function recordVideo(opts: RecordOptions): Promise<Blob | null> {
 	return recordWebM(opts);
 }
 
@@ -445,5 +558,6 @@ export function downloadBlob(blob: Blob) {
 	a.href = url;
 	a.download = `openmosh-${Date.now()}.webm`;
 	a.click();
-	URL.revokeObjectURL(url);
+	// Deleting the object URL immediately can cancel the download in some browsers.
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
