@@ -510,8 +510,11 @@ export class GlRenderer {
 
     let input = this.sourceTexture!;
     let ppIdx = 0;
-    /** Texture holding the final chain output (presented at the end). */
+    /** Texture holding the final chain output (presented at the end); null
+     * either when nothing has rendered yet or when the last pass drew
+     * straight to the canvas (toCanvas) — `producedOutput` disambiguates. */
     let resultTex: WebGLTexture | null = null;
+    let producedOutput = false;
 
     for (let i = 0; i < enabled.length; i++) {
       const eff = enabled[i];
@@ -524,6 +527,7 @@ export class GlRenderer {
         this.renderTracking(eff, input, target, time);
         if (isLast) {
           resultTex = finalTex;
+          producedOutput = true;
         } else {
           input = this.ppTextures![ppIdx];
           ppIdx = 1 - ppIdx;
@@ -596,7 +600,10 @@ export class GlRenderer {
         pair.idx = writeSlot as 0 | 1;
         if (entry.def.linearFilter) this.setTextureFilter(input, false);
         input = pair.textures[writeSlot];
-        if (isLast) resultTex = input;
+        if (isLast) {
+          resultTex = input;
+          producedOutput = true;
+        }
         continue;
       }
 
@@ -628,6 +635,7 @@ export class GlRenderer {
         }
         if (entry.def.linearFilter) this.setTextureFilter(input, false);
         resultTex = toCanvas ? null : finalTex;
+        producedOutput = true;
       } else {
         this.drawPass(
           entry.program,
@@ -647,7 +655,7 @@ export class GlRenderer {
     }
 
     // Every enabled effect was skipped (unknown ids): fall back to source
-    if (!resultTex) {
+    if (!producedOutput) {
       if (toCanvas) {
         this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
       } else {
