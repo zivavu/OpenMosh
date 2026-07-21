@@ -125,7 +125,7 @@ export async function executeSlideshowRecording(
   const textChance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
   const textLayout = textOverlay?.layout ?? "scattered";
 
-  let blob: Blob | null;
+  let blob: Blob;
   try {
     blob = await recordVideo({
     duration,
@@ -134,7 +134,6 @@ export async function executeSlideshowRecording(
     renderer,
     effects: baseEffects,
     effectsRef,
-    suggestedFileName: 'openmosh-slideshow.webm',
     onProgress,
     onFinalizing,
     signal,
@@ -222,5 +221,5 @@ export async function executeSlideshowRecording(
   }
 
   renderer.clearTextOverlay();
-  if (blob) downloadBlob(blob);
+  downloadBlob(blob);
 }
