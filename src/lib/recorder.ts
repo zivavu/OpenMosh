@@ -12,13 +12,6 @@ import { stretchAudioBuffer } from './audio/time-stretch';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 
-interface WindowWithSavePicker {
-	showSaveFilePicker: (options?: {
-		suggestedName?: string;
-		types?: Array<{ description?: string; accept: Record<string, string[]> }>;
-	}) => Promise<FileSystemFileHandle>;
-}
-
 export interface RecordOptions {
 	duration: number;
 	fps: number;
@@ -53,13 +46,6 @@ export interface RecordOptions {
 	audioSpeed?: number;
 	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
 	normalizeGain?: number;
-	/** Suggested name for the output file. When the File System Access API is
-	 * available, the user is prompted to save directly to disk and the muxed
-	 * output is streamed instead of buffered in RAM. */
-	suggestedFileName?: string;
-	/** Optional pre-acquired writable stream. When provided, output is streamed
-	 * directly here instead of buffered into a Blob. */
-	writableStream?: FileSystemWritableFileStream;
 }
 
 /** Encoding backend that consumes rendered canvas frames. */
@@ -143,7 +129,7 @@ async function prepareFrameAudio(
 	return { frameAudioData, sampleRate: audioBuffer.sampleRate, audioBuffer };
 }
 
-async function recordWebM(opts: RecordOptions): Promise<Blob | null> {
+async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const mb = await import('mediabunny');
 
 	const {
@@ -163,8 +149,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob | null> {
 		loopAudio,
 		normalizeGain = 1.0,
 		audioSpeed = 1,
-		suggestedFileName,
-		writableStream: providedWritable,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -237,27 +221,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob | null> {
 		);
 	}
 
-	// Prefer streaming to disk when available to avoid buffering the entire
-	// muxed file in RAM. Fall back to the in-memory BufferTarget.
-	let writable: FileSystemWritableFileStream | null = providedWritable ?? null;
-	let target: InstanceType<typeof mb.BufferTarget> | InstanceType<typeof mb.StreamTarget>;
-	if (!writable && typeof window !== 'undefined' && 'showSaveFilePicker' in window && suggestedFileName) {
-		try {
-			const handle = await (window as unknown as WindowWithSavePicker).showSaveFilePicker({
-				suggestedName: suggestedFileName,
-				types: [{ description: 'WebM video', accept: { 'video/webm': ['.webm'] } }],
-			});
-			writable = await handle.createWritable();
-		} catch {
-			// User cancelled the picker or the API failed — fall back to Blob.
-			writable = null;
-		}
-	}
-	if (writable) {
-		target = new mb.StreamTarget(writable, { chunked: true });
-	} else {
-		target = new mb.BufferTarget();
-	}
+	const target = new mb.BufferTarget();
 	const output = new mb.Output({ format: outputFormat, target });
 
 	const wantsAudioTrack = audioBufferForMux != null;
@@ -539,16 +503,11 @@ async function recordWebM(opts: RecordOptions): Promise<Blob | null> {
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 
-	if (writable) {
-		await writable.close();
-		return null;
-	}
-	const bufferTarget = target as InstanceType<typeof mb.BufferTarget>;
 	const mimeType = 'video/webm';
-	return new Blob([bufferTarget.buffer!], { type: mimeType });
+	return new Blob([target.buffer!], { type: mimeType });
 }
 
-export async function recordVideo(opts: RecordOptions): Promise<Blob | null> {
+export async function recordVideo(opts: RecordOptions): Promise<Blob> {
 	return recordWebM(opts);
 }
 

@@ -247,7 +247,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       canvas,
       renderer,
       normalizeGain,
-      suggestedFileName: 'openmosh-export.webm',
       effects: effects.map(
         (e): EffectInstance => ({
           ...e,
@@ -279,7 +278,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
           : {}),
       ...(effectsRef && { effectsRef }),
     });
-    if (blob) downloadBlob(blob);
+    downloadBlob(blob);
   } finally {
     // Stops mediabunny's pre-decode pipeline and closes its decoder on
     // abort/error; no-op when the generator already ran to completion.
