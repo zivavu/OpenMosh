@@ -39,6 +39,10 @@
 		 * owns the shared renderer — interleaved renders corrupt per-effect
 		 * feedback history and delta-time state). */
 		suspended?: boolean;
+		/** True when a parent component drives `renderer.render()` itself (e.g. the
+		 * slideshow preview engine). Prevents this component's rAF and static
+		 * redraw effects from rendering duplicate frames. */
+		externallyDriven?: boolean;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: GlRenderer | null;
 		/** Sequence segment transition in progress; `effects` is the incoming chain. */
@@ -60,6 +64,7 @@
 		frameSource = null,
 		freezeAnimation = false,
 		suspended = false,
+		externallyDriven = false,
 		warmCanvas = null,
 		warmRenderer = null,
 		transition = null,
@@ -116,12 +121,17 @@
 		fitPreviewSize(canvasWidth, canvasHeight, displayW, displayH),
 	);
 
+	const videoPlaying = $derived(!!videoEl && !videoEl.paused);
+	const hasAnimatedEffects = $derived(
+		effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+	);
 	const needsAnimation = $derived(
-		!freezeAnimation &&
-			(!!videoEl ||
-				!!frameSource ||
+		!externallyDriven &&
+			!freezeAnimation &&
+			(!!frameSource ||
 				!!transition ||
-				effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId))),
+				videoPlaying ||
+				hasAnimatedEffects),
 	);
 
 	/** Render the current frame: transition blend when a segment boundary is
@@ -241,12 +251,17 @@
 		if (!renderer || !videoEl || frameSource) return;
 		imageReady = false;
 		const video = videoEl;
+		let ready = false;
 
 		function onReady() {
+			if (ready) return;
+			ready = true;
 			renderer!.loadVideo(video);
 			naturalWidth = video.videoWidth;
 			naturalHeight = video.videoHeight;
 			imageReady = true;
+			renderer!.updateSourceFrame(video);
+			drawFrame(0);
 		}
 
 		// Wait for an actual decoded frame with known dimensions. In Firefox,
@@ -255,9 +270,18 @@
 		// preview appears frozen while the video plays on.
 		const isReady = () => video.readyState >= 2 && video.videoWidth > 0;
 
+		// While the animation loop is running it handles per-frame uploads.
+		// When the video is paused we still need to redraw after a seek.
+		const onTimeUpdate = () => {
+			if (!ready || needsAnimation) return;
+			renderer!.updateSourceFrame(video);
+			drawFrame(0);
+		};
+
 		if (isReady()) {
 			onReady();
-			return;
+			video.addEventListener('timeupdate', onTimeUpdate);
+			return () => video.removeEventListener('timeupdate', onTimeUpdate);
 		}
 		const events = ['loadeddata', 'canplay', 'resize', 'timeupdate'];
 		const tryReady = () => {
@@ -266,28 +290,41 @@
 			onReady();
 		};
 		for (const ev of events) video.addEventListener(ev, tryReady);
+		video.addEventListener('timeupdate', onTimeUpdate);
 		return () => {
 			for (const ev of events) video.removeEventListener(ev, tryReady);
+			video.removeEventListener('timeupdate', onTimeUpdate);
 		};
 	});
 
+	// Resize the renderer when the preview box changes. The render itself is
+	// handled by the animation loop while active; otherwise a static redraw is
+	// triggered here. When externally driven, the parent owns all rendering.
 	$effect(() => {
 		if (suspended || !renderer || !imageReady || !renderSize) return;
 		renderer.resize(renderSize.width, renderSize.height);
-		if (videoEl) renderer.updateSourceFrame(videoEl);
-		drawFrame(needsAnimation ? performance.now() / 1000 : 0);
+		if (!externallyDriven && !needsAnimation) drawFrame(0);
+	});
+
+	// Static redraw driver: subscribes to effect values and re-renders when the
+	// animation loop is not running. Using a separate effect prevents double
+	// renders during playback (the rAF loop already owns the frame).
+	$effect(() => {
+		if (suspended || !renderer || !imageReady || !renderSize) return;
+		if (externallyDriven || needsAnimation) return;
+		for (const e of effects) {
+			e.enabled;
+			for (const k of Object.keys(e.values)) e.values[k];
+		}
+		drawFrame(0);
 	});
 
 	$effect(() => {
 		if (suspended || !renderer || !imageReady) return;
-
-		if (!needsAnimation) {
-			if (videoEl) renderer.updateSourceFrame(videoEl);
-			drawFrame(0);
-			return;
-		}
+		if (!needsAnimation) return;
 
 		let rafId: number;
+		let lastVideoTime = -1;
 		const loop = () => {
 			if (frameSource) {
 				const frame = frameSource.takeFrame();
@@ -296,7 +333,11 @@
 					frame.close();
 				}
 			} else if (videoEl) {
-				renderer!.updateSourceFrame(videoEl);
+				const t = videoEl.currentTime;
+				if (t !== lastVideoTime) {
+					renderer!.updateSourceFrame(videoEl);
+					lastVideoTime = t;
+				}
 			}
 			drawFrame(performance.now() / 1000);
 			trackFps(performance.now());
