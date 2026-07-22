@@ -228,13 +228,19 @@
 							{ keys: ['Dbl-click'], description: 'Create / split segment' },
 							{ keys: ['Ctrl+Click'], description: 'Split segment at cursor' },
 							{ keys: ['Click'], description: 'Select segment for editing' },
-							{ keys: ['→'], description: 'Re-roll selected segment' },
+							{
+								keys: ['→'],
+								description: 'Redo if available, otherwise re-roll selected segment',
+							},
 							{
 								keys: ['Delete', 'Backspace'],
 								description: 'Delete segment / selected boundaries',
 							},
 							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
-							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo last sequence edit' },
+							{
+								keys: ['←', 'Ctrl/Cmd+Z'],
+								description: 'Undo last sequence edit',
+							},
 							{
 								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
 								description: 'Redo last sequence edit',
@@ -835,9 +841,12 @@
 	}
 
 	function mosh() {
-		// Sequence mode: the mosh group is hidden, so the shortcut rolls the
-		// selected (or playhead-active) segment via the timeline path instead.
+		// Sequence mode: the mosh group is hidden, so the shortcut works the
+		// sequence history instead — redo if available (mirroring the
+		// single-mode ←/→ walk), otherwise roll the selected (or
+		// playhead-active) segment via the timeline path.
 		if (sequenceEnabled && sequenceSegments.length > 0) {
+			if (seqBoundaries.redo()) return;
 			const seg =
 				(selectedSegmentId &&
 					sequenceSegments.find((s) => s.id === selectedSegmentId)) ||
@@ -853,12 +862,23 @@
 		}
 	}
 
+	// In sequence mode every undo/redo path (← key included) targets the
+	// sequence history — the single-mode stack would clobber `effects` with a
+	// pre-sequence chain the segments know nothing about.
 	function undo() {
+		if (sequenceEnabled) {
+			seqBoundaries.undo();
+			return;
+		}
 		const prev = history.undo();
 		if (prev) effects = prev;
 	}
 
 	function redo() {
+		if (sequenceEnabled) {
+			seqBoundaries.redo();
+			return;
+		}
 		const next = history.redo();
 		if (next) effects = next;
 	}
