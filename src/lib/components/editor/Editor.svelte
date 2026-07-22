@@ -800,12 +800,15 @@
 	}
 
 	// ←/→ in sequence mode walk the moshes of one segment: the selected one, or
-	// whichever sits under the playhead. Returns null outside sequence mode, so
-	// the single-mode mosh stack takes over.
+	// whichever sits under the playhead.
 	const seqMoshHistory = new SegmentMoshHistory();
 
+	function inSequenceMode(): boolean {
+		return sequenceEnabled && sequenceSegments.length > 0;
+	}
+
 	function activeSequenceSegment(): SequenceSegment | null {
-		if (!sequenceEnabled || sequenceSegments.length === 0) return null;
+		if (!inSequenceMode()) return null;
 		return (
 			(selectedSegmentId
 				? sequenceSegments.find((s) => s.id === selectedSegmentId)
@@ -952,9 +955,12 @@
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
 		// Sequence mode: the mosh group is hidden, so the arrows drive the
-		// selected (or playhead-active) segment's own mosh history instead.
-		const seg = activeSequenceSegment();
-		if (seg) {
+		// selected (or playhead-active) segment's own mosh history instead. The
+		// single-mode stack stays out of it even when no segment is active —
+		// `effects` belongs to the segment resolver here.
+		if (inSequenceMode()) {
+			const seg = activeSequenceSegment();
+			if (!seg) return;
 			const snap = seqMoshHistory.redo(seg.id);
 			if (snap) applySegmentMosh(seg.id, snap);
 			else seqRoll(seg.id);
@@ -972,10 +978,12 @@
 
 	/** ← : back through the mosh history. Never touches the edit history. */
 	function undoMosh() {
-		const seg = activeSequenceSegment();
-		if (seg) {
-			const snap = seqMoshHistory.undo(seg.id);
-			if (snap) applySegmentMosh(seg.id, snap);
+		if (inSequenceMode()) {
+			const seg = activeSequenceSegment();
+			if (seg) {
+				const snap = seqMoshHistory.undo(seg.id);
+				if (snap) applySegmentMosh(seg.id, snap);
+			}
 			return;
 		}
 		const prev = moshHistory.undo();
