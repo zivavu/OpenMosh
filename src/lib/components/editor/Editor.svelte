@@ -35,6 +35,10 @@
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import {
+		SegmentMoshHistory,
+		type SegmentMoshSnapshot,
+	} from '../../editor/segment-mosh-history';
 	import type { GlRenderer } from '../../gl/renderer';
 	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
@@ -212,9 +216,13 @@
 		{
 			title: 'Shortcuts',
 			shortcuts: [
-				{ keys: ['→'], description: 'Redo if available, otherwise new mosh' },
-				{ keys: ['←', 'Ctrl/Cmd+Z'], description: 'Undo' },
-				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
+				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
+				{ keys: ['←'], description: 'Previous mosh' },
+				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo effect edit' },
+				{
+					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
+					description: 'Redo effect edit',
+				},
 				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
 				{ keys: ['Space'], description: 'Play / pause' },
 				{ keys: ['V'], description: 'Re-input current frame' },
@@ -229,18 +237,15 @@
 							{ keys: ['Ctrl+Click'], description: 'Split segment at cursor' },
 							{ keys: ['Click'], description: 'Select segment for editing' },
 							{
-								keys: ['→'],
-								description: 'Redo if available, otherwise re-roll selected segment',
+								keys: ['←', '→'],
+								description: "Walk the selected segment's moshes",
 							},
 							{
 								keys: ['Delete', 'Backspace'],
 								description: 'Delete segment / selected boundaries',
 							},
 							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
-							{
-								keys: ['←', 'Ctrl/Cmd+Z'],
-								description: 'Undo last sequence edit',
-							},
+							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo last sequence edit' },
 							{
 								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
 								description: 'Redo last sequence edit',
@@ -525,10 +530,15 @@
 	const seqBoundaries = new SegmentBoundaryController<SequenceSegment>({
 		getSegments: () => sequenceSegments,
 		getTrackDuration: () => seqMasterDuration,
-		onChange: (segments) => (sequenceSegments = segments),
-		// A panel-edit burst must not swallow the snapshot of the state an
-		// undo/redo just produced — end it so the next edit records fresh.
-		onRestore: () => endSeqPanelBurst(),
+		onChange: (segments) => {
+			sequenceSegments = segments;
+			// Splits/merges/undo can retire segment ids — drop their mosh stacks
+			// so a later segment reusing an id can't inherit stale rolls.
+			seqMoshHistory.retain(segments.map((s) => s.id));
+		},
+		// A panel-edit burst must not record on top of the state an undo/redo
+		// just restored — drop it so the next edit snapshots fresh.
+		onRestore: () => cancelPanelBurst(),
 		splitSegment: (seg, at) => {
 			const end = seg.endTime ?? seqMasterDuration;
 			const tail = cloneSegmentForSplit(seg, at, end);
@@ -746,30 +756,94 @@
 		}
 	}
 
-	// Panel edits mutate the selected segment's effects in place, so the
-	// pre-edit state is captured just before the first change of a burst and
-	// pushed onto the sequence history. Slider drags fire per tick — 500 ms
-	// coalescing keeps it to one undo entry per gesture.
-	let seqPanelBurstTimer: ReturnType<typeof setTimeout> | undefined;
+	// Panel edits mutate the effect chain in place, so they're recorded around
+	// the edit rather than from it. Slider drags fire per tick, so 500 ms of
+	// coalescing keeps one gesture to one undo entry. The two stacks want
+	// opposite timing: the sequence controller stores the state *before* an
+	// edit, while the single-mode history stores the state *after* one — so a
+	// segment burst snapshots on the first edit and a single-mode burst pushes
+	// once it settles.
+	let panelBurstTimer: ReturnType<typeof setTimeout> | undefined;
+	let panelBurstPushesSingle = false;
 
-	function endSeqPanelBurst() {
-		clearTimeout(seqPanelBurstTimer);
-		seqPanelBurstTimer = undefined;
+	/**
+	 * Close the burst and record it. Called on the coalescing timer, and
+	 * directly by discrete edits (preset loads) that shouldn't wait it out.
+	 */
+	function endPanelBurst() {
+		clearTimeout(panelBurstTimer);
+		panelBurstTimer = undefined;
+		if (panelBurstPushesSingle) {
+			panelBurstPushesSingle = false;
+			history.push(effects);
+		}
 	}
 
-	function seqPanelBeforeEdit() {
-		if (!panelSelectedSegment()) return;
-		if (seqPanelBurstTimer === undefined) {
+	/** Drop a pending burst without recording it — for undo/redo restores. */
+	function cancelPanelBurst() {
+		clearTimeout(panelBurstTimer);
+		panelBurstTimer = undefined;
+		panelBurstPushesSingle = false;
+	}
+
+	function panelBeforeEdit() {
+		if (panelBurstTimer !== undefined) {
+			clearTimeout(panelBurstTimer);
+		} else if (panelSelectedSegment()) {
 			seqBoundaries.pushState(
 				$state.snapshot(sequenceSegments) as SequenceSegment[],
 			);
 		} else {
-			clearTimeout(seqPanelBurstTimer);
+			panelBurstPushesSingle = true;
 		}
-		seqPanelBurstTimer = setTimeout(endSeqPanelBurst, 500);
+		panelBurstTimer = setTimeout(endPanelBurst, 500);
+	}
+
+	// ←/→ in sequence mode walk the moshes of one segment: the selected one, or
+	// whichever sits under the playhead. Returns null outside sequence mode, so
+	// the single-mode mosh stack takes over.
+	const seqMoshHistory = new SegmentMoshHistory();
+
+	function activeSequenceSegment(): SequenceSegment | null {
+		if (!sequenceEnabled || sequenceSegments.length === 0) return null;
+		return (
+			(selectedSegmentId
+				? sequenceSegments.find((s) => s.id === selectedSegmentId)
+				: null) ??
+			findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration)
+		);
+	}
+
+	function segmentMoshSnapshot(seg: SequenceSegment): SegmentMoshSnapshot {
+		return {
+			effects: $state.snapshot(seg.effects) as EffectInstance[],
+			seed: seg.seed,
+			label: seg.label,
+			presetName: seg.presetName,
+			modified: seg.modified,
+		};
+	}
+
+	function applySegmentMosh(segId: string, snap: SegmentMoshSnapshot) {
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				s.id === segId
+					? {
+							...s,
+							effects: snap.effects.map(cloneEffectInstance),
+							seed: snap.seed,
+							label: snap.label,
+							presetName: snap.presetName,
+							modified: snap.modified,
+						}
+					: s,
+			),
+		);
 	}
 
 	function seqRoll(segId: string) {
+		const before = sequenceSegments.find((s) => s.id === segId);
+		if (before) seqMoshHistory.seed(segId, segmentMoshSnapshot(before));
 		seqBoundaries.commit(
 			sequenceSegments.map((s) => {
 				if (s.id !== segId) return s;
@@ -785,6 +859,8 @@
 				};
 			}),
 		);
+		const rolled = sequenceSegments.find((s) => s.id === segId);
+		if (rolled) seqMoshHistory.push(segId, segmentMoshSnapshot(rolled));
 	}
 
 	function seqClear(segId: string) {
@@ -855,47 +931,69 @@
 		audio.seekTo(t);
 	}
 
+	// Two independent stacks over the effect chain, so the two gestures never
+	// fight: ←/→ walk the moshes, Ctrl+Z/Y walk hand-edits. Rolling a mosh
+	// rebases `history` onto the new chain, so an edit undo lands on the mosh
+	// you were tweaking rather than on some chain from before it.
 	const history = createEffectHistory();
+	const moshHistory = createEffectHistory();
 	let moshGroupRef: MoshGroup | undefined = $state(undefined);
 	// svelte-ignore non_reactive_update
 	let recordGroupRef: RecordGroup | undefined = undefined;
 	let trackLibraryRef: TrackLibrary | undefined = undefined;
 
 	function generateMosh() {
+		cancelPanelBurst();
 		generateMoshFn(effects, getMoshOptions());
-		history.push(effects);
+		moshHistory.push(effects);
+		history.reset(effects);
 	}
 
+	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
-		// Sequence mode: the mosh group is hidden, so the shortcut works the
-		// sequence history instead — redo if available (mirroring the
-		// single-mode ←/→ walk), otherwise roll the selected (or
-		// playhead-active) segment via the timeline path.
-		if (sequenceEnabled && sequenceSegments.length > 0) {
-			if (seqBoundaries.redo()) return;
-			const seg =
-				(selectedSegmentId &&
-					sequenceSegments.find((s) => s.id === selectedSegmentId)) ||
-				findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration);
-			if (seg) seqRoll(seg.id);
+		// Sequence mode: the mosh group is hidden, so the arrows drive the
+		// selected (or playhead-active) segment's own mosh history instead.
+		const seg = activeSequenceSegment();
+		if (seg) {
+			const snap = seqMoshHistory.redo(seg.id);
+			if (snap) applySegmentMosh(seg.id, snap);
+			else seqRoll(seg.id);
 			return;
 		}
-		const next = history.redo();
+		const next = moshHistory.redo();
 		if (next) {
+			cancelPanelBurst();
 			effects = next;
+			history.reset(effects);
 		} else {
 			generateMosh();
 		}
 	}
 
-	// In sequence mode every undo/redo path (← key included) targets the
-	// sequence history — the single-mode stack would clobber `effects` with a
-	// pre-sequence chain the segments know nothing about.
+	/** ← : back through the mosh history. Never touches the edit history. */
+	function undoMosh() {
+		const seg = activeSequenceSegment();
+		if (seg) {
+			const snap = seqMoshHistory.undo(seg.id);
+			if (snap) applySegmentMosh(seg.id, snap);
+			return;
+		}
+		const prev = moshHistory.undo();
+		if (prev) {
+			cancelPanelBurst();
+			effects = prev;
+			history.reset(effects);
+		}
+	}
+
+	// Ctrl+Z/Y: hand-edits only. In sequence mode that's the timeline stack,
+	// which covers both segment structure and panel tweaks on a segment.
 	function undo() {
 		if (sequenceEnabled) {
 			seqBoundaries.undo();
 			return;
 		}
+		cancelPanelBurst();
 		const prev = history.undo();
 		if (prev) effects = prev;
 	}
@@ -905,16 +1003,22 @@
 			seqBoundaries.redo();
 			return;
 		}
+		cancelPanelBurst();
 		const next = history.redo();
 		if (next) effects = next;
 	}
 
 	function clearEffects() {
-		clearEffectsFn(effects);
 		// In sequence mode the live effects can be the selected segment's own
 		// array — a clear is a hand-edit to that segment.
 		const seg = panelSelectedSegment();
-		if (seg && seg.effects === effects) seg.modified = true;
+		if (seg && seg.effects === effects) {
+			panelBeforeEdit();
+			clearEffectsFn(effects);
+			seg.modified = true;
+			return;
+		}
+		clearEffectsFn(effects);
 		history.push(effects);
 	}
 
@@ -924,7 +1028,10 @@
 			alert('Please cancel or wait for the recording to finish before exiting.');
 			return;
 		}
-		if (history.canUndo && !confirm('Discard current edits and return to upload?')) {
+		if (
+			(history.canUndo || moshHistory.canUndo) &&
+			!confirm('Discard current edits and return to upload?')
+		) {
 			return;
 		}
 		onExit();
@@ -979,6 +1086,7 @@
 	const handleKeydown = createKeyboardHandler({
 		save,
 		mosh,
+		undoMosh,
 		undo,
 		redo,
 		reInput,
@@ -1299,9 +1407,9 @@
 					bind:this={moshGroupRef}
 					onMosh={mosh}
 					onClear={clearEffects}
-					onUndo={undo}
-					canUndo={history.canUndo}
-					canClear={history.canUndo}
+					onUndo={undoMosh}
+					canUndo={moshHistory.canUndo}
+					canClear={history.canUndo || moshHistory.canUndo}
 					hideActions={sequenceEnabled}
 					bind:showSettings={showMoshSettings}
 				>
@@ -1477,13 +1585,11 @@
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
-					seqPanelBeforeEdit();
+					panelBeforeEdit();
 					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));
 					markPanelSegmentEdited();
 				}}
-				onEffectsReplaced={() => {
-					if (!sequenceEnabled) history.push(effects);
-				}}
+				onEffectsReplaced={endPanelBurst}
 				onPresetUpdated={seqSyncPreset}
 				onPresetApplied={(preset) => {
 					const seg = panelSelectedSegment();
@@ -1494,7 +1600,7 @@
 					}
 				}}
 				onUserEdit={markPanelSegmentEdited}
-				onBeforeUserEdit={seqPanelBeforeEdit}
+				onBeforeUserEdit={panelBeforeEdit}
 			/>
 		{/snippet}
 	</MobileSheet>
