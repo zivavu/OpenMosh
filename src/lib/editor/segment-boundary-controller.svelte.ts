@@ -26,6 +26,8 @@ export interface SegmentBoundaryControllerOptions<
 	captureMeta?: (rightSegmentAtBoundary: S | undefined) => M;
 	/** Apply captured meta to the freshly-split right segment when pasting. */
 	applyMeta?: (seg: S, meta: M) => S;
+	/** Called after every undo/redo restore, whichever code path triggered it. */
+	onRestore?: () => void;
 }
 
 interface ClipboardEntry<M> {
@@ -68,6 +70,16 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		this.#opts.onChange(segments);
 	}
 
+	/**
+	 * Push an externally captured pre-edit state (deep-snapshotted by the
+	 * caller) — for in-place edits that bypass commit(), e.g. effect panel
+	 * tweaks mutating a segment's effects directly.
+	 */
+	pushState(prev: S[]): void {
+		this.#undoStack = [...this.#undoStack, prev];
+		this.#redoStack = [];
+	}
+
 	/** Apply new segments without recording history — use mid-drag, after snapshotForDrag(). */
 	live(segments: S[]): void {
 		this.#opts.onChange(segments);
@@ -79,6 +91,7 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const prev = this.#undoStack[this.#undoStack.length - 1];
 		this.#undoStack = this.#undoStack.slice(0, -1);
 		this.#opts.onChange(prev);
+		this.#opts.onRestore?.();
 		return true;
 	}
 
@@ -88,6 +101,7 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const next = this.#redoStack[this.#redoStack.length - 1];
 		this.#redoStack = this.#redoStack.slice(0, -1);
 		this.#opts.onChange(next);
+		this.#opts.onRestore?.();
 		return true;
 	}
 

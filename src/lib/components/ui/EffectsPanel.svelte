@@ -36,6 +36,10 @@
 		/** Called on every user action that changes render output (param change,
 		 * enable toggle, add/remove/reorder) — not on expand/lock. */
 		onUserEdit?: () => void;
+		/** Called immediately before any of those changes is applied, while the
+		 * pre-edit state is still intact — lets callers capture undo snapshots
+		 * for edits that mutate `effects` in place. */
+		onBeforeUserEdit?: () => void;
 	}
 
 	let {
@@ -47,6 +51,7 @@
 		onPresetUpdated,
 		onPresetApplied,
 		onUserEdit,
+		onBeforeUserEdit,
 	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
@@ -65,6 +70,7 @@
 	// Loading is a one-shot apply — presets are only ever written via the
 	// explicit save icons, never automatically.
 	function handleLoadPreset(index: number) {
+		onBeforeUserEdit?.();
 		effects = applyPreset(presets[index]);
 		onEffectsReplaced?.();
 		onPresetApplied?.($state.snapshot(presets[index]) as Preset);
@@ -84,6 +90,7 @@
 	let dropPosition: 'above' | 'below' | null = $state(null);
 
 	function toggle(index: number) {
+		onBeforeUserEdit?.();
 		effects[index].enabled = !effects[index].enabled;
 		onUserEdit?.();
 	}
@@ -100,6 +107,7 @@
 	}
 
 	function remove(index: number) {
+		onBeforeUserEdit?.();
 		effects.splice(index, 1);
 		saveHiddenEffectIds();
 		onUserEdit?.();
@@ -137,12 +145,14 @@
 	function addEffect(defId: string) {
 		const def = EFFECT_DEFINITIONS.find((d) => d.id === defId);
 		if (!def) return;
+		onBeforeUserEdit?.();
 		effects.push(createEffectInstance(def));
 		saveHiddenEffectIds();
 		onUserEdit?.();
 	}
 
 	function paramChange(index: number, key: string, value: number | string) {
+		onBeforeUserEdit?.();
 		effects[index].values[key] = value;
 		if (!effects[index].enabled) effects[index].enabled = true;
 		onUserEdit?.();
@@ -182,6 +192,7 @@
 		if (dropPosition === 'below') targetIndex += 1;
 		if (dragFromIndex < targetIndex) targetIndex -= 1;
 
+		onBeforeUserEdit?.();
 		const [moved] = effects.splice(dragFromIndex, 1);
 		effects.splice(targetIndex, 0, moved);
 		clearDragState();
