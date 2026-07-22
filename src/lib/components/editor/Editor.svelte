@@ -383,7 +383,7 @@
 		const savedSeq = seqStore.load(trackId);
 		if (savedSeq !== null) {
 			sequenceSegments = savedSeq.segments;
-			sequenceEnabled = savedSeq.enabled;
+			setSequenceEnabled(savedSeq.enabled);
 			selectedSegmentId = null;
 		}
 		if (autoplay) audio.autoplayOnLoad = true;
@@ -536,12 +536,29 @@
 		getMoshOptions,
 	);
 
-	function toggleSequence() {
-		sequenceEnabled = !sequenceEnabled;
-		if (!sequenceEnabled) {
-			selectedSegmentId = null;
+	// Single-mode chain stashed while sequence mode drives `effects`, so
+	// leaving SEQ restores the pre-sequence state instead of leaking whatever
+	// segment was applied last (which also made single-mode Clear mutate it).
+	let preSeqEffects: EffectInstance[] | null = null;
+
+	function setSequenceEnabled(on: boolean) {
+		if (on === sequenceEnabled) return;
+		sequenceEnabled = on;
+		if (on) {
+			preSeqEffects = effects;
 			return;
 		}
+		selectedSegmentId = null;
+		if (preSeqEffects) {
+			effects = preSeqEffects;
+			preSeqEffects = null;
+		}
+		lastSeqApplied = null;
+	}
+
+	function toggleSequence() {
+		setSequenceEnabled(!sequenceEnabled);
+		if (!sequenceEnabled) return;
 		if (sequenceSegments.length === 0 && seqMasterDuration > 0) {
 			// Seed the first segment from the current panel state; open-ended so
 			// it stretches if the master timeline changes (e.g. a track is added)
