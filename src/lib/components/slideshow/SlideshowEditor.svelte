@@ -39,6 +39,8 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
+	import { createEffectHistory } from '../../editor/history.svelte';
+	import { generateMosh as generateMoshFn } from '../../editor/mosh';
 	import { loadSettings, updateSettings } from '../../editor/settings';
 
 	interface Props {
@@ -278,6 +280,12 @@
 	// ── Effects ──
 	let effects: EffectInstance[] = $state(loadInitialEffects());
 	let presets: Preset[] = $state(loadPresets());
+
+	// Same split as the single editor: ←/→ walk the moshes of the base chain,
+	// Ctrl+Z/Y walk hand-edits to it. A mosh rebases the edit history onto the
+	// new chain so an edit undo lands on the mosh you were tweaking.
+	const history = createEffectHistory();
+	const moshHistory = createEffectHistory();
 
 	// ── Canvas / Renderer ──
 	let canvasEl: HTMLCanvasElement | null = $state(null);
@@ -720,6 +728,73 @@
 		};
 	}
 
+	function generateMosh() {
+		cancelPanelBurst();
+		generateMoshFn(effects, getMoshOptions());
+		moshHistory.push(effects);
+		history.reset(effects);
+	}
+
+	/** → : forward through the mosh history, rolling a new mosh at its top. */
+	function mosh() {
+		const next = moshHistory.redo();
+		if (!next) {
+			generateMosh();
+			return;
+		}
+		cancelPanelBurst();
+		effects = next;
+		history.reset(effects);
+	}
+
+	/** ← : back through the mosh history. Never touches the edit history. */
+	function undoMosh() {
+		const prev = moshHistory.undo();
+		if (!prev) return;
+		cancelPanelBurst();
+		effects = prev;
+		history.reset(effects);
+	}
+
+	function undo() {
+		cancelPanelBurst();
+		const prev = history.undo();
+		if (prev) effects = prev;
+	}
+
+	function redo() {
+		cancelPanelBurst();
+		const next = history.redo();
+		if (next) effects = next;
+	}
+
+	// Panel edits mutate the chain in place, so the post-edit state is pushed
+	// once the burst settles — 500 ms of coalescing keeps a slider drag to one
+	// undo entry.
+	let panelBurstTimer: ReturnType<typeof setTimeout> | undefined;
+	let panelBurstPending = false;
+
+	function endPanelBurst() {
+		clearTimeout(panelBurstTimer);
+		panelBurstTimer = undefined;
+		if (panelBurstPending) {
+			panelBurstPending = false;
+			history.push(effects);
+		}
+	}
+
+	function cancelPanelBurst() {
+		clearTimeout(panelBurstTimer);
+		panelBurstTimer = undefined;
+		panelBurstPending = false;
+	}
+
+	function panelBeforeEdit() {
+		if (panelBurstTimer !== undefined) clearTimeout(panelBurstTimer);
+		else panelBurstPending = true;
+		panelBurstTimer = setTimeout(endPanelBurst, 500);
+	}
+
 	// ── Recording ──
 	let recordFps = $state(60);
 	/** Export length for silent (no-track) recordings. */
@@ -798,11 +873,27 @@
 			e.target instanceof HTMLTextAreaElement
 		)
 			return;
+		const mod = e.ctrlKey || e.metaKey;
+		const key = e.key.toLowerCase();
 		if (e.code === 'Space') {
 			e.preventDefault();
 			togglePreview();
 		} else if (e.code === 'Escape' && previewPlaying) {
 			stopPreview();
+		} else if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
+			e.preventDefault();
+			redo();
+		} else if (mod && key === 'z') {
+			e.preventDefault();
+			undo();
+		} else if (mod) {
+			// Leave every other modifier combo (copy, paste, save…) to the browser.
+		} else if (e.key === 'ArrowRight') {
+			e.preventDefault();
+			mosh();
+		} else if (e.key === 'ArrowLeft') {
+			e.preventDefault();
+			undoMosh();
 		}
 	}
 </script>
@@ -1005,8 +1096,11 @@
 				hasTrack={!!audio.trackFile}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
+					panelBeforeEdit();
 					effects = setVolumeLink(effects, index, paramKey, link);
 				}}
+				onBeforeUserEdit={panelBeforeEdit}
+				onEffectsReplaced={endPanelBurst}
 			/>
 		{/snippet}
 	</MobileSheet>

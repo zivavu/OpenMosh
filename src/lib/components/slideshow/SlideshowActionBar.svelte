@@ -52,9 +52,21 @@
 			],
 		},
 		{
+			title: 'Effects',
+			shortcuts: [
+				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
+				{ keys: ['←'], description: 'Previous mosh' },
+				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo effect edit' },
+				{
+					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
+					description: 'Redo effect edit',
+				},
+			],
+		},
+		{
 			title: 'Timeline Editing',
 			shortcuts: [
-				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo' },
+				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo (timeline takes priority)' },
 				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
 				{ keys: ['Shift+Drag'], description: 'Rectangle-select boundaries' },
 				{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected boundaries' },

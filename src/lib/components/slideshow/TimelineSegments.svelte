@@ -852,12 +852,22 @@
 		});
 	}
 
+	/**
+	 * Runs in the capture phase (see the `onkeydowncapture` binding below) so
+	 * it gets first look at the key, before SlideshowEditor's own window-level
+	 * handler (bubble phase) applies Ctrl+Z to the effect chain. Consuming a
+	 * key stops propagation so only one stack reacts; anything the timeline
+	 * doesn't want proceeds untouched.
+	 */
 	function onKeydown(e: KeyboardEvent) {
 		const t = e.target as HTMLElement;
 		if (t.closest('input, textarea, select')) return;
 
 		// Undo / redo / copy / paste-mode-enter / escape
-		if (boundaries.onKeydown(e)) return;
+		if (boundaries.onKeydown(e)) {
+			e.stopPropagation();
+			return;
+		}
 
 		// Delete / Backspace — existing local priority: hovered dot, then
 		// selected boundaries, then the selected whole segment.
@@ -913,7 +923,7 @@
 <svelte:window
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
-	onkeydown={onKeydown}
+	onkeydowncapture={onKeydown}
 	ontouchmove={(e) => {
 		if (!dragging) return;
 		const t = e.touches[0];
