@@ -841,8 +841,11 @@
 		};
 	}
 
+	// Applied with live(), not commit(): a mosh is not an edit, so it must stay
+	// out of the timeline's undo stack. Otherwise every arrow press would leave
+	// a Ctrl+Z entry behind and the two histories would drive each other.
 	function applySegmentMosh(segId: string, snap: SegmentMoshSnapshot) {
-		seqBoundaries.commit(
+		seqBoundaries.live(
 			sequenceSegments.map((s) =>
 				s.id === segId
 					? {
@@ -858,10 +861,11 @@
 		);
 	}
 
+	/** Roll a new mosh for one segment. Mosh history only — see applySegmentMosh. */
 	function seqRoll(segId: string) {
 		const before = sequenceSegments.find((s) => s.id === segId);
 		if (before) seqMoshHistory.seed(segId, segmentMoshSnapshot(before));
-		seqBoundaries.commit(
+		seqBoundaries.live(
 			sequenceSegments.map((s) => {
 				if (s.id !== segId) return s;
 				if (s.mode === 'interval') return { ...s, seed: randomSeed() };
@@ -961,6 +965,9 @@
 
 	function generateMosh() {
 		cancelPanelBurst();
+		// Record what the chain looked like before the very first roll, so ←
+		// comes back to the user's own work rather than the startup chain.
+		if (!moshHistory.canUndo && !moshHistory.canRedo) moshHistory.reset(effects);
 		generateMoshFn(effects, getMoshOptions());
 		moshHistory.push(effects);
 		history.reset(effects);
