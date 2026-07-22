@@ -1064,15 +1064,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             step: 1,
             defaultValue: 0,
          },
-         {
-            key: 'stretch',
-            label: 'Stretch',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.01,
-            defaultValue: 0.3,
-         },
       ],
    },
    {
