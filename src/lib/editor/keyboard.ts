@@ -1,6 +1,10 @@
 export interface KeyboardActions {
   save: () => void;
+  /** → : step forward through the mosh history, or roll a new mosh at its top. */
   mosh: () => void;
+  /** ← : step back through the mosh history. */
+  undoMosh: () => void;
+  /** Ctrl/Cmd+Z: undo an edit (effects panel / timeline), never a mosh. */
   undo: () => void;
   redo: () => void;
   reInput: () => void;
@@ -44,9 +48,13 @@ export function createKeyboardHandler(
     ) {
       e.preventDefault();
       actions.redo();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      actions.undoMosh();
     } else if (
-      e.key === "ArrowLeft" ||
-      (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey)
+      e.key.toLowerCase() === "z" &&
+      (e.ctrlKey || e.metaKey) &&
+      !e.shiftKey
     ) {
       e.preventDefault();
       actions.undo();

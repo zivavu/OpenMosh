@@ -757,7 +757,7 @@
 					{/each}
 				</select>
 			{/if}
-			<span class="seg-toolbar-label">TRANS</span>
+			<span class="seg-toolbar-label">TRANSITION</span>
 			<select
 				class="seg-select"
 				value={selectedTransitionType}
