@@ -177,6 +177,11 @@
 		if (e.key === 'ArrowRight') lightboxNext();
 		else if (e.key === 'ArrowLeft') lightboxPrev();
 		else if (e.key === 'Escape') closeLightbox();
+		else return;
+		// The editor's window-level handler binds the same arrows to the mosh
+		// history — while the lightbox owns them, it consumes them outright.
+		e.preventDefault();
+		e.stopPropagation();
 	}
 </script>
 
