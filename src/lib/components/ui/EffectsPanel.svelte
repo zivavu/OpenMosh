@@ -38,8 +38,10 @@
 		onUserEdit?: () => void;
 		/** Called immediately before any of those changes is applied, while the
 		 * pre-edit state is still intact — lets callers capture undo snapshots
-		 * for edits that mutate `effects` in place. */
-		onBeforeUserEdit?: () => void;
+		 * for edits that mutate `effects` in place. `coalesceKey` identifies a
+		 * continuously-dragged parameter so consecutive ticks of one gesture can
+		 * be merged into a single undo entry; discrete edits pass nothing. */
+		onBeforeUserEdit?: (coalesceKey?: string) => void;
 	}
 
 	let {
@@ -152,7 +154,7 @@
 	}
 
 	function paramChange(index: number, key: string, value: number | string) {
-		onBeforeUserEdit?.();
+		onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
 		effects[index].values[key] = value;
 		if (!effects[index].enabled) effects[index].enabled = true;
 		onUserEdit?.();

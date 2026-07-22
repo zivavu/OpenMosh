@@ -757,13 +757,16 @@
 	}
 
 	// Panel edits mutate the effect chain in place, so they're recorded around
-	// the edit rather than from it. Slider drags fire per tick, so 500 ms of
-	// coalescing keeps one gesture to one undo entry. The two stacks want
+	// the edit rather than from it. Only consecutive ticks of one dragged
+	// parameter coalesce (same `coalesceKey`, within 500 ms) — discrete edits
+	// like toggles each get their own undo entry, so undoing after flipping
+	// five effects on takes five steps rather than one. The two stacks want
 	// opposite timing: the sequence controller stores the state *before* an
 	// edit, while the single-mode history stores the state *after* one — so a
 	// segment burst snapshots on the first edit and a single-mode burst pushes
 	// once it settles.
 	let panelBurstTimer: ReturnType<typeof setTimeout> | undefined;
+	let panelBurstKey: string | null = null;
 	let panelBurstPushesSingle = false;
 
 	/**
@@ -773,6 +776,7 @@
 	function endPanelBurst() {
 		clearTimeout(panelBurstTimer);
 		panelBurstTimer = undefined;
+		panelBurstKey = null;
 		if (panelBurstPushesSingle) {
 			panelBurstPushesSingle = false;
 			history.push(effects);
@@ -783,10 +787,17 @@
 	function cancelPanelBurst() {
 		clearTimeout(panelBurstTimer);
 		panelBurstTimer = undefined;
+		panelBurstKey = null;
 		panelBurstPushesSingle = false;
 	}
 
-	function panelBeforeEdit() {
+	function panelBeforeEdit(coalesceKey?: string) {
+		const key = coalesceKey ?? null;
+		// A discrete edit, or a drag that moved to a different parameter, closes
+		// whatever burst is open so the two don't share an undo entry.
+		if (panelBurstTimer !== undefined && (key === null || key !== panelBurstKey))
+			endPanelBurst();
+
 		if (panelBurstTimer !== undefined) {
 			clearTimeout(panelBurstTimer);
 		} else if (panelSelectedSegment()) {
@@ -796,7 +807,10 @@
 		} else {
 			panelBurstPushesSingle = true;
 		}
-		panelBurstTimer = setTimeout(endPanelBurst, 500);
+		panelBurstKey = key;
+		// Discrete edits close on the next tick — just late enough for the
+		// mutation to have landed, so the pushed state is the post-edit one.
+		panelBurstTimer = setTimeout(endPanelBurst, key === null ? 0 : 500);
 	}
 
 	// ←/→ in sequence mode walk the moshes of one segment: the selected one, or
@@ -1593,7 +1607,7 @@
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
-					panelBeforeEdit();
+					panelBeforeEdit(`link:${index}:${paramKey}`);
 					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));
 					markPanelSegmentEdited();
 				}}

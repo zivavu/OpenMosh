@@ -769,14 +769,17 @@
 	}
 
 	// Panel edits mutate the chain in place, so the post-edit state is pushed
-	// once the burst settles — 500 ms of coalescing keeps a slider drag to one
-	// undo entry.
+	// once the burst settles. Only consecutive ticks of one dragged parameter
+	// coalesce (same `coalesceKey`, within 500 ms) — discrete edits like
+	// toggles each get their own undo entry.
 	let panelBurstTimer: ReturnType<typeof setTimeout> | undefined;
+	let panelBurstKey: string | null = null;
 	let panelBurstPending = false;
 
 	function endPanelBurst() {
 		clearTimeout(panelBurstTimer);
 		panelBurstTimer = undefined;
+		panelBurstKey = null;
 		if (panelBurstPending) {
 			panelBurstPending = false;
 			history.push(effects);
@@ -786,13 +789,19 @@
 	function cancelPanelBurst() {
 		clearTimeout(panelBurstTimer);
 		panelBurstTimer = undefined;
+		panelBurstKey = null;
 		panelBurstPending = false;
 	}
 
-	function panelBeforeEdit() {
+	function panelBeforeEdit(coalesceKey?: string) {
+		const key = coalesceKey ?? null;
+		if (panelBurstTimer !== undefined && (key === null || key !== panelBurstKey))
+			endPanelBurst();
+
 		if (panelBurstTimer !== undefined) clearTimeout(panelBurstTimer);
 		else panelBurstPending = true;
-		panelBurstTimer = setTimeout(endPanelBurst, 500);
+		panelBurstKey = key;
+		panelBurstTimer = setTimeout(endPanelBurst, key === null ? 0 : 500);
 	}
 
 	// ── Recording ──
@@ -1096,7 +1105,7 @@
 				hasTrack={!!audio.trackFile}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
-					panelBeforeEdit();
+					panelBeforeEdit(`link:${index}:${paramKey}`);
 					effects = setVolumeLink(effects, index, paramKey, link);
 				}}
 				onBeforeUserEdit={panelBeforeEdit}
