@@ -29,6 +29,8 @@
 		onSeek?: (time: number) => void;
 		onApplyPreset: (segmentId: string, preset: Preset) => void;
 		onRoll: (segmentId: string) => void;
+		/** Reset the segment to a clean (all effects off) static state. */
+		onClear: (segmentId: string) => void;
 		onModeChange: (
 			segmentId: string,
 			mode: SequenceSegmentMode,
@@ -54,6 +56,7 @@
 		onSeek,
 		onApplyPreset,
 		onRoll,
+		onClear,
 		onModeChange,
 		onTransitionChange,
 		segmentLoop = false,
@@ -713,6 +716,14 @@
 			>
 				<Dices size={12} />
 				MOSH
+			</button>
+			<button
+				class="seg-btn"
+				title="Clear this segment's effects"
+				onclick={() => onClear(selectedSegment!.id)}
+			>
+				<Trash2 size={12} />
+				CLEAR
 			</button>
 			<div class="seg-mode">
 				<button

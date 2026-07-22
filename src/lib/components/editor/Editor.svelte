@@ -22,6 +22,7 @@
 		type Preset,
 	} from '../../effects';
 	import {
+		cleanEffects,
 		cloneSegmentForSplit,
 	createSequenceEffectSource,
 	createSequenceSegment,
@@ -754,6 +755,23 @@
 		);
 	}
 
+	function seqClear(segId: string) {
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				s.id === segId
+					? {
+							...s,
+							mode: 'static' as const,
+							label: 'clean',
+							presetName: undefined,
+							modified: false,
+							effects: cleanEffects(),
+						}
+					: s,
+			),
+		);
+	}
+
 	function seqModeChange(
 		segId: string,
 		mode: SequenceSegmentMode,
@@ -1328,6 +1346,7 @@
 				bind:selectedSegmentId
 				onApplyPreset={seqApplyPreset}
 				onRoll={seqRoll}
+				onClear={seqClear}
 				onModeChange={seqModeChange}
 				onTransitionChange={seqTransitionChange}
 				segmentLoop={seqSegmentLoop}
