@@ -1015,7 +1015,10 @@
 			seqBoundaries.undo();
 			return;
 		}
-		cancelPanelBurst();
+		// An edit still inside its coalescing window is a real edit — commit it
+		// first, so undoing lands on the state before it rather than skipping
+		// past it to whatever was recorded last.
+		endPanelBurst();
 		const prev = history.undo();
 		if (prev) effects = prev;
 	}
@@ -1025,7 +1028,7 @@
 			seqBoundaries.redo();
 			return;
 		}
-		cancelPanelBurst();
+		endPanelBurst();
 		const next = history.redo();
 		if (next) effects = next;
 	}
