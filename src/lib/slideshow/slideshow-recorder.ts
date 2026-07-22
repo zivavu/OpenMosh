@@ -19,6 +19,8 @@ export interface SlideshowRecordContext {
   audioEnd: number;
   /** Export length in seconds when no audio track is set. */
   noAudioDuration?: number;
+  /** Linear normalize gain applied to audio before FFT analysis and muxing. */
+  normalizeGain?: number;
   canvas: HTMLCanvasElement;
   renderer: GlRenderer;
   /** If set, recording uses these dimensions instead of the first slide's image size. */
@@ -41,6 +43,7 @@ export async function executeSlideshowRecording(
     audioFile,
     audioStart,
     audioEnd,
+    normalizeGain = 1.0,
     canvas,
     renderer,
     outputWidth,
@@ -137,7 +140,7 @@ export async function executeSlideshowRecording(
     onProgress,
     onFinalizing,
     signal,
-    ...(audioFile && { audioFile, audioStart, audioEnd }),
+    ...(audioFile && { audioFile, audioStart, audioEnd, normalizeGain }),
     async onBeforeRender(_frameIndex: number, time: number) {
       // time is 0..duration (recording window); segments use "seconds from
       // audio start" (silent export: the beat clock just starts at 0)
