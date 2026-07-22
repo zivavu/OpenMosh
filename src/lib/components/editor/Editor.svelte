@@ -526,6 +526,9 @@
 		getSegments: () => sequenceSegments,
 		getTrackDuration: () => seqMasterDuration,
 		onChange: (segments) => (sequenceSegments = segments),
+		// A panel-edit burst must not swallow the snapshot of the state an
+		// undo/redo just produced — end it so the next edit records fresh.
+		onRestore: () => endSeqPanelBurst(),
 		splitSegment: (seg, at) => {
 			const end = seg.endTime ?? seqMasterDuration;
 			const tail = cloneSegmentForSplit(seg, at, end);
@@ -741,6 +744,29 @@
 		} else {
 			effects = v;
 		}
+	}
+
+	// Panel edits mutate the selected segment's effects in place, so the
+	// pre-edit state is captured just before the first change of a burst and
+	// pushed onto the sequence history. Slider drags fire per tick — 500 ms
+	// coalescing keeps it to one undo entry per gesture.
+	let seqPanelBurstTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function endSeqPanelBurst() {
+		clearTimeout(seqPanelBurstTimer);
+		seqPanelBurstTimer = undefined;
+	}
+
+	function seqPanelBeforeEdit() {
+		if (!panelSelectedSegment()) return;
+		if (seqPanelBurstTimer === undefined) {
+			seqBoundaries.pushState(
+				$state.snapshot(sequenceSegments) as SequenceSegment[],
+			);
+		} else {
+			clearTimeout(seqPanelBurstTimer);
+		}
+		seqPanelBurstTimer = setTimeout(endSeqPanelBurst, 500);
 	}
 
 	function seqRoll(segId: string) {
@@ -1451,6 +1477,7 @@
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
+					seqPanelBeforeEdit();
 					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));
 					markPanelSegmentEdited();
 				}}
@@ -1467,6 +1494,7 @@
 					}
 				}}
 				onUserEdit={markPanelSegmentEdited}
+				onBeforeUserEdit={seqPanelBeforeEdit}
 			/>
 		{/snippet}
 	</MobileSheet>
