@@ -730,6 +730,9 @@
 
 	function generateMosh() {
 		cancelPanelBurst();
+		// Record what the chain looked like before the very first roll, so ←
+		// comes back to the user's own work rather than the startup chain.
+		if (!moshHistory.canUndo && !moshHistory.canRedo) moshHistory.reset(effects);
 		generateMoshFn(effects, getMoshOptions());
 		moshHistory.push(effects);
 		history.reset(effects);

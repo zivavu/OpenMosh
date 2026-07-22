@@ -80,7 +80,11 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		this.#redoStack = [];
 	}
 
-	/** Apply new segments without recording history — use mid-drag, after snapshotForDrag(). */
+	/**
+	 * Apply new segments without recording history — mid-drag (after
+	 * snapshotForDrag()), or for changes that belong to a different history
+	 * than this one, such as mosh rolls driven by their own stack.
+	 */
 	live(segments: S[]): void {
 		this.#opts.onChange(segments);
 	}
