@@ -27,6 +27,9 @@
 		mainPlaying?: boolean;
 		pendingTrack?: File | null;
 		onNormalizeChange?: (gain: number) => void;
+		/** Fired when a manually loaded track (drag/picker) is auto-saved to the
+		 * library, so the editor can adopt it as the active library track. */
+		onAutoAdded?: (trackId: string) => void;
 	}
 
 	let {
@@ -38,6 +41,7 @@
 		mainPlaying = false,
 		pendingTrack = null,
 		onNormalizeChange,
+		onAutoAdded,
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-library-open';
@@ -71,6 +75,7 @@
 		addTrack(f)
 			.then((track) => {
 				tracks = [...tracks, track];
+				onAutoAdded?.(track.id);
 				autoNormalize(track);
 			})
 			.catch((e) => console.error('Failed to auto-save track:', e));
@@ -101,33 +106,48 @@
 		return () => document.removeEventListener('pointerdown', onPointerDown);
 	});
 
+	/**
+	 * Resolve the track's normalize gain (measuring if not cached) and push it
+	 * to the editor once known, provided the track is still the active one.
+	 * Rolls back the normalized flag on measurement failure. Fire-and-forget;
+	 * an in-flight measurement for the same track is left to do the emitting.
+	 */
+	function applyNormalizeGain(track: StoredTrack) {
+		const cached = gainCache.get(track.id);
+		if (cached !== undefined) {
+			if (track.id === activeTrackId) onNormalizeChange?.(cached);
+			return;
+		}
+		if (measuringIds.has(track.id)) return;
+		measuringIds = new Set([...measuringIds, track.id]);
+		const file = new File([track.blob], track.name, {
+			type: track.blob.type,
+		});
+		getDecodedAudioBuffer(file)
+			.then((buffer) => {
+				const db = measureLoudness(buffer);
+				const gain = computeNormalizeGain(db);
+				gainCache.set(track.id, gain);
+				if (track.id === activeTrackId) onNormalizeChange?.(gain);
+			})
+			.catch((e) => {
+				console.error('Failed to measure track loudness:', e);
+				normalizedIds = new Set(
+					[...normalizedIds].filter((x) => x !== track.id),
+				);
+				if (track.id === activeTrackId) onNormalizeChange?.(1.0);
+			})
+			.finally(() => {
+				measuringIds = new Set(
+					[...measuringIds].filter((x) => x !== track.id),
+				);
+			});
+	}
+
 	// Start normalize measurement for a newly added track (fire-and-forget).
 	function autoNormalize(track: StoredTrack) {
 		normalizedIds = new Set([...normalizedIds, track.id]);
-		if (!gainCache.has(track.id)) {
-			measuringIds = new Set([...measuringIds, track.id]);
-			const file = new File([track.blob], track.name, {
-				type: track.blob.type,
-			});
-			getDecodedAudioBuffer(file)
-				.then((buffer) => {
-					const db = measureLoudness(buffer);
-					const gain = computeNormalizeGain(db);
-					gainCache.set(track.id, gain);
-					if (track.id === activeTrackId) onNormalizeChange?.(gain);
-				})
-				.catch((e) => {
-					console.error('Failed to measure track loudness:', e);
-					normalizedIds = new Set(
-						[...normalizedIds].filter((x) => x !== track.id),
-					);
-				})
-				.finally(() => {
-					measuringIds = new Set(
-						[...measuringIds].filter((x) => x !== track.id),
-					);
-				});
-		}
+		applyNormalizeGain(track);
 	}
 
 	async function onFileChange() {
@@ -160,14 +180,16 @@
 			track.id,
 			autoplay,
 		);
-		// Communicate normalize gain to editor.
-		// If normalized but gain not yet cached (measurement in flight), emit 1.0 for now.
-		// The in-flight toggleNormalize will call onNormalizeChange once measurement completes,
-		// provided activeTrackId is updated synchronously by onLoadTrack (which it is in Editor.svelte).
-		const gain = normalizedIds.has(track.id)
-			? (gainCache.get(track.id) ?? 1.0)
-			: 1.0;
-		onNormalizeChange?.(gain);
+		// Communicate normalize gain to the editor. The gain cache is memory-only
+		// while normalizedIds persists, so after a reload the gain must be
+		// re-measured; applyNormalizeGain emits once it resolves (relies on
+		// activeTrackId being updated synchronously by onLoadTrack, which it is).
+		if (normalizedIds.has(track.id)) {
+			if (!gainCache.has(track.id)) onNormalizeChange?.(1.0);
+			applyNormalizeGain(track);
+		} else {
+			onNormalizeChange?.(1.0);
+		}
 	}
 
 	function togglePlay(track: StoredTrack) {
@@ -179,7 +201,7 @@
 		}
 	}
 
-	async function toggleNormalize(track: StoredTrack) {
+	function toggleNormalize(track: StoredTrack) {
 		if (normalizedIds.has(track.id)) {
 			// Turn off
 			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
@@ -189,27 +211,7 @@
 
 		// Turn on — measure if not cached
 		normalizedIds = new Set([...normalizedIds, track.id]);
-		measuringIds = new Set([...measuringIds, track.id]);
-
-		try {
-			if (!gainCache.has(track.id)) {
-				const file = new File([track.blob], track.name, {
-					type: track.blob.type,
-				});
-				const buffer = await getDecodedAudioBuffer(file);
-				const db = measureLoudness(buffer);
-				const gain = computeNormalizeGain(db);
-				gainCache.set(track.id, gain);
-			}
-			const gain = gainCache.get(track.id)!;
-			if (track.id === activeTrackId) onNormalizeChange?.(gain);
-		} catch (e) {
-			console.error('Failed to measure track loudness:', e);
-			// Roll back: remove from normalizedIds
-			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
-		} finally {
-			measuringIds = new Set([...measuringIds].filter((x) => x !== track.id));
-		}
+		applyNormalizeGain(track);
 	}
 </script>
 

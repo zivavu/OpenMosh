@@ -46,6 +46,7 @@ export class AudioManager {
   audioSampleRate = $state(0);
   audioFrequencyBinCount = $state(0);
   outputVolume = $state(1);
+  normalizeGain = $state(1.0);
 
   // ── Derived ──
   spectrumData: SpectrumData | null = $derived(
@@ -134,6 +135,7 @@ export class AudioManager {
     this.audioContext = state.context;
     this.mediaSource = state.source;
     this.normalizeGainNode = state.normalizeGain;
+    this.normalizeGainNode.gain.value = this.normalizeGain;
     this.analyserNode = state.analyser;
     this.gainNode = state.gain;
     this.gainNode.gain.value = this.outputVolume;
@@ -252,6 +254,7 @@ export class AudioManager {
     this.spanStart = 0;
     this.spanEnd = 0;
     this.pendingSpan = null;
+    this.normalizeGain = 1.0;
     this.disposeAudioGraph();
   }
 
@@ -261,6 +264,8 @@ export class AudioManager {
   }
 
   setNormalizeGain(v: number) {
+    // Stored so graphs created later (they're built lazily on play) pick it up.
+    this.normalizeGain = v;
     if (this.normalizeGainNode) this.normalizeGainNode.gain.value = v;
   }
 

@@ -419,6 +419,9 @@
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
 		if (f) {
+			// Drop the previous track's normalize gain until the auto-add
+			// measurement reports the new track's own.
+			audio.setNormalizeGain(1.0);
 			audio.trackFile = f;
 			trackInput.value = '';
 		}
@@ -838,6 +841,7 @@
 					audioFile: audio.trackFile,
 					audioStart: audio.spanStart,
 					audioEnd: audio.spanEnd,
+					normalizeGain: audio.normalizeGain,
 					noAudioDuration: recordDuration,
 					canvas: canvasEl!,
 					renderer: glRenderer!,
@@ -983,11 +987,14 @@
 >
 	<TrackLibrary
 		activeTrackName={audio.trackFile?.name ?? null}
+		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
 		onPlay={() => startPreview()}
 		onPause={stopPreview}
 		mainPlaying={audio.audioPlaying}
 		pendingTrack={audio.trackFile}
+		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
+		onAutoAdded={(trackId) => (currentTrackId = trackId)}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar

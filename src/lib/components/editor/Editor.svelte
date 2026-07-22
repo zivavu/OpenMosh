@@ -280,8 +280,6 @@
 		return () => cancelAnimationFrame(raf);
 	});
 
-	let normalizeGain = $state(1.0);
-
 	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
 	$effect(() => { audio.setAudioEl(audioEl); });
@@ -370,7 +368,6 @@
 		const f = trackInput?.files?.[0];
 		if (f) {
 			clearTrack();
-			normalizeGain = 1.0;
 			audio.trackFile = f;
 			trackInput.value = '';
 		}
@@ -379,7 +376,6 @@
 	function clearTrack() {
 		audio.clearTrack();
 		currentTrackId = null;
-		normalizeGain = 1.0;
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
@@ -410,7 +406,6 @@
 			// AudioBufferSourceNode into normalizeGain.
 			const state = createOutputAudioGraph();
 			audio.applyAudioGraphState(state);
-			audio.setNormalizeGain(normalizeGain);
 			previewPlayer.attachAudioOutput(state.context, state.normalizeGain);
 			state.context.resume().catch(() => {});
 			return;
@@ -419,7 +414,6 @@
 		videoEl.muted = false;
 		const state = createAudioGraph(videoEl);
 		audio.applyAudioGraphState(state);
-		audio.setNormalizeGain(normalizeGain);
 		audio.audioContext!.resume().catch(() => {});
 	}
 
@@ -1198,7 +1192,7 @@
 					videoSpanEnd,
 					videoSpeed,
 					file,
-					normalizeGain,
+					normalizeGain: audio.normalizeGain,
 					sequence:
 						sequenceEnabled && sequenceSegments.length > 0
 							? {
@@ -1307,10 +1301,8 @@
 		onPause={() => audio.pauseAudio()}
 		mainPlaying={audio.audioPlaying}
 		pendingTrack={audio.trackFile}
-		onNormalizeChange={(gain) => {
-			normalizeGain = gain;
-			audio.setNormalizeGain(gain);
-		}}
+		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
+		onAutoAdded={(trackId) => (currentTrackId = trackId)}
 	/>
 	<div class="main-area">
 		<div class="top-bar">
