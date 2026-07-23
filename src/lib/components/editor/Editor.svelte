@@ -30,7 +30,7 @@
 		findSegmentAt,
 		randomSeed,
 		type ResolvedTransition,
-		type SegmentTransition,
+		type SegmentTransitionChange,
 		type SequenceSegment,
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
@@ -679,10 +679,11 @@
 		return () => cancelAnimationFrame(raf);
 	});
 
-	function seqApplyPreset(segId: string, preset: Preset) {
+	function seqApplyPreset(segIds: string[], preset: Preset) {
+		const ids = new Set(segIds);
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
-				s.id === segId
+				ids.has(s.id)
 					? {
 							...s,
 							mode: 'static',
@@ -857,13 +858,15 @@
 		);
 	}
 
-	/** Roll a new mosh for one segment. Mosh history only — see applySegmentMosh. */
-	function seqRoll(segId: string) {
-		const before = sequenceSegments.find((s) => s.id === segId);
-		if (before) seqMoshHistory.seed(segId, segmentMoshSnapshot(before));
+	/** Roll a new mosh for each segment. Mosh history only — see applySegmentMosh. */
+	function seqRoll(segIds: string[]) {
+		const ids = new Set(segIds);
+		for (const s of sequenceSegments) {
+			if (ids.has(s.id)) seqMoshHistory.seed(s.id, segmentMoshSnapshot(s));
+		}
 		seqBoundaries.live(
 			sequenceSegments.map((s) => {
-				if (s.id !== segId) return s;
+				if (!ids.has(s.id)) return s;
 				if (s.mode === 'interval') return { ...s, seed: randomSeed() };
 				const fx = loadInitialEffects();
 				generateMoshFn(fx, getMoshOptions());
@@ -876,14 +879,16 @@
 				};
 			}),
 		);
-		const rolled = sequenceSegments.find((s) => s.id === segId);
-		if (rolled) seqMoshHistory.push(segId, segmentMoshSnapshot(rolled));
+		for (const s of sequenceSegments) {
+			if (ids.has(s.id)) seqMoshHistory.push(s.id, segmentMoshSnapshot(s));
+		}
 	}
 
-	function seqClear(segId: string) {
+	function seqClear(segIds: string[]) {
+		const ids = new Set(segIds);
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
-				s.id === segId
+				ids.has(s.id)
 					? {
 							...s,
 							mode: 'static' as const,
@@ -898,13 +903,14 @@
 	}
 
 	function seqModeChange(
-		segId: string,
+		segIds: string[],
 		mode: SequenceSegmentMode,
 		intervalSec?: number,
 	) {
+		const ids = new Set(segIds);
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
-				s.id === segId
+				ids.has(s.id)
 					? {
 							...s,
 							mode,
@@ -916,21 +922,19 @@
 		);
 	}
 
-	function seqTransitionChange(
-		segId: string,
-		transition: SegmentTransition | null,
-		transitionOnTick?: boolean,
-	) {
+	function seqTransitionChange(changes: SegmentTransitionChange[]) {
+		const byId = new Map(changes.map((c) => [c.segmentId, c]));
 		seqBoundaries.commit(
-			sequenceSegments.map((s) =>
-				s.id === segId
+			sequenceSegments.map((s) => {
+				const c = byId.get(s.id);
+				return c
 					? {
 							...s,
-							transition: transition ?? undefined,
-							transitionOnTick: transitionOnTick ?? s.transitionOnTick,
+							transition: c.transition ?? undefined,
+							transitionOnTick: c.transitionOnTick ?? s.transitionOnTick,
 						}
-					: s,
-			),
+					: s;
+			}),
 		);
 	}
 
@@ -980,7 +984,7 @@
 			if (!seg) return;
 			const snap = seqMoshHistory.redo(seg.id);
 			if (snap) applySegmentMosh(seg.id, snap);
-			else seqRoll(seg.id);
+			else seqRoll([seg.id]);
 			return;
 		}
 		const next = moshHistory.redo();
