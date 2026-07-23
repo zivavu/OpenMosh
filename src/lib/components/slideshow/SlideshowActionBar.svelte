@@ -66,6 +66,8 @@
 		{
 			title: 'Timeline Editing',
 			shortcuts: [
+				{ keys: ['Dbl-click'], description: 'Create / split segment' },
+				{ keys: ['Ctrl+Click'], description: 'Split segment at cursor' },
 				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo (timeline takes priority)' },
 				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
 				{ keys: ['Shift+Drag'], description: 'Rectangle-select boundaries' },
