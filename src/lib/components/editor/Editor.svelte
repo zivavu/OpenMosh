@@ -233,8 +233,10 @@
 					{
 						title: 'Sequence timeline',
 						shortcuts: [
-							{ keys: ['Dbl-click'], description: 'Create / split segment' },
-							{ keys: ['Ctrl+Click'], description: 'Split segment at cursor' },
+							{
+								keys: ['Dbl-click', 'Ctrl+Click'],
+								description: 'Create / split segment at cursor',
+							},
 							{ keys: ['Click'], description: 'Select segment for editing' },
 							{
 								keys: ['←', '→'],
