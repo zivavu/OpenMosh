@@ -214,7 +214,7 @@
 
 	const shortcutGroups = $derived([
 		{
-			title: 'Shortcuts',
+			title: 'Editor',
 			shortcuts: [
 				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
 				{ keys: ['←'], description: 'Previous mosh' },

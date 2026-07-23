@@ -24,7 +24,11 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="shortcuts-overlay" onclick={onClose}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="shortcuts-modal" onclick={(e) => e.stopPropagation()}>
+	<div
+		class="shortcuts-modal"
+		class:narrow={groups.length === 1}
+		onclick={(e) => e.stopPropagation()}
+	>
 		<div class="header">
 			<span class="title">Keyboard Shortcuts</span>
 			<button class="close-btn" onclick={onClose} title="Close">
@@ -38,13 +42,13 @@
 					<ul class="shortcut-list">
 						{#each group.shortcuts as shortcut (shortcut.description)}
 							<li class="shortcut-row">
+								<span class="description">{shortcut.description}</span>
 								<span class="keys">
 									{#each shortcut.keys as key, i (key)}
 										{#if i > 0}<span class="key-sep">or</span>{/if}
 										<kbd>{key}</kbd>
 									{/each}
 								</span>
-								<span class="description">{shortcut.description}</span>
 							</li>
 						{/each}
 					</ul>
@@ -69,7 +73,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-		width: 320px;
+		width: 640px;
 		max-width: calc(100vw - 2rem);
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
@@ -78,6 +82,10 @@
 		border: 1px solid #333;
 		border-radius: 12px;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+	}
+
+	.shortcuts-modal.narrow {
+		width: 420px;
 	}
 
 	.header {
@@ -110,17 +118,18 @@
 	}
 
 	.groups {
-		display: flex;
-		flex-direction: column;
-		gap: 0.9rem;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		gap: 1rem 1.75rem;
+		align-items: start;
 	}
 
 	.group-title {
 		display: block;
-		font-size: 0.6rem;
+		font-size: 0.62rem;
 		font-weight: 700;
 		letter-spacing: 0.08em;
-		color: #777;
+		color: #888;
 		text-transform: uppercase;
 		margin-bottom: 0.4rem;
 	}
@@ -131,7 +140,6 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
 	}
 
 	.shortcut-row {
@@ -139,6 +147,12 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
+		padding: 0.3rem 0;
+		border-bottom: 1px solid #242424;
+	}
+
+	.shortcut-row:last-child {
+		border-bottom: none;
 	}
 
 	.keys {
@@ -146,6 +160,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		flex-shrink: 0;
+		white-space: nowrap;
 	}
 
 	.key-sep {
@@ -165,8 +180,8 @@
 	}
 
 	.description {
-		font-size: 0.72rem;
-		color: #999;
-		text-align: right;
+		font-size: 0.75rem;
+		color: #b5b5b5;
+		text-align: left;
 	}
 </style>
