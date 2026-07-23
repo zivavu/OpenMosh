@@ -2,7 +2,11 @@ import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
-import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from "../text-overlay";
+import {
+  DEFAULT_TEXT_OVERLAY_STYLE,
+  ensureFontLoaded,
+  parsePhrases,
+} from "../text-overlay";
 import { beatAtTime } from "./beat-clock";
 import { cloneEffects, computeEffectsForBeat } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
@@ -127,6 +131,7 @@ export async function executeSlideshowRecording(
   const textOpacity = textOverlay?.opacity ?? 1;
   const textChance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
   const textLayout = textOverlay?.layout ?? "scattered";
+  if (phrases.length > 0 && style) await ensureFontLoaded(style.fontFamily);
 
   let blob: Blob;
   try {
