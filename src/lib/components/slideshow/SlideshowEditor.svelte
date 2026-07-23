@@ -23,7 +23,11 @@
 		SlideVideoSampler,
 	} from '../../slideshow/video-sampler';
 	import { showToast } from '../ui/toast.svelte';
-	import { DEFAULT_TEXT_OVERLAY_STYLE, parsePhrases } from '../../text-overlay';
+	import {
+		DEFAULT_TEXT_OVERLAY_STYLE,
+		ensureFontLoaded,
+		parsePhrases,
+	} from '../../text-overlay';
 	import { shuffleInPlace } from '../../utils';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
@@ -502,6 +506,12 @@
 		Math.max(0, Math.min(1, config.textOverlay?.chance ?? 0.8)),
 	);
 	const previewTextLayout = $derived(config.textOverlay?.layout ?? 'scattered');
+
+	// Load the configured overlay font (covers fonts restored from a saved config)
+	$effect(() => {
+		const family = config.textOverlay?.style?.fontFamily;
+		if (family) void ensureFontLoaded(family);
+	});
 
 	const imageCache = new Map<string, HTMLImageElement>();
 	const IMAGE_CACHE_SIZE = 12;
