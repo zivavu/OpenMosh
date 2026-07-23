@@ -3,6 +3,8 @@
 	import type { BeatSubdivision, SlideshowConfig } from '../../slideshow/types';
 	import {
 		DEFAULT_TEXT_OVERLAY_CONFIG,
+		ensureFontLoaded,
+		FONT_OPTIONS,
 		parsePhrases,
 		type TextOverlayBlendMode,
 		type TextOverlayLayout,
@@ -417,6 +419,22 @@
 			<span class="config-value"
 				>{Math.round((textOverlay.opacity ?? 1) * 100)}%</span
 			>
+		</div>
+		<div class="config-row">
+			<label for="ss-text-font">Font</label>
+			<select
+				id="ss-text-font"
+				value={textOverlay.style?.fontFamily ?? 'Georgia, serif'}
+				onchange={(e) => {
+					const family = (e.currentTarget as HTMLSelectElement).value;
+					void ensureFontLoaded(family);
+					setTextOverlayStyle('fontFamily', family);
+				}}
+			>
+				{#each FONT_OPTIONS as font (font.id)}
+					<option value={font.family}>{font.label}</option>
+				{/each}
+			</select>
 		</div>
 		<div class="config-row">
 			<label for="ss-text-size">Size</label>
