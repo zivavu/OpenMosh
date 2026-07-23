@@ -974,20 +974,32 @@
 					/>
 				{/if}
 				{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
+					<!-- Drawn end→start so the dash pattern anchors at the end dot;
+					     with start-anchored dashes the phase could leave a gap there -->
 					<line
 						class="tail"
-						x1="{segVis[segVis.length - 1].endX}%"
+						x1="{vp.toPct(trackDuration)}%"
 						y1={segVis[segVis.length - 1].y}
-						x2="{vp.toPct(trackDuration)}%"
+						x2="{segVis[segVis.length - 1].endX}%"
 						y2={segVis[segVis.length - 1].y}
 					/>
 				{/if}
 			{:else}
+				<!-- Two halves, each dash-anchored at its end dot, so both dots
+				     stay connected; any phase seam lands mid-track -->
+				{@const tailMid = (vp.toPct(0) + vp.toPct(trackDuration)) / 2}
 				<line
 					class="tail"
 					x1="{vp.toPct(0)}%"
 					y1={subToY(config.subdivision)}
-					x2="{vp.toPct(trackDuration)}%"
+					x2="{tailMid}%"
+					y2={subToY(config.subdivision)}
+				/>
+				<line
+					class="tail"
+					x1="{vp.toPct(trackDuration)}%"
+					y1={subToY(config.subdivision)}
+					x2="{tailMid}%"
 					y2={subToY(config.subdivision)}
 				/>
 			{/if}

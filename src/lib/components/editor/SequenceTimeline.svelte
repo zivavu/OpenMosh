@@ -541,11 +541,13 @@
 					/>
 				{/if}
 				{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
+					<!-- Drawn end→start so the dash pattern anchors at the end dot;
+					     with start-anchored dashes the phase could leave a gap there -->
 					<line
 						class="tail"
-						x1="{segVis[segVis.length - 1].endX}%"
+						x1="{vp.toPct(trackDuration)}%"
 						y1={LINE_Y}
-						x2="{vp.toPct(trackDuration)}%"
+						x2="{segVis[segVis.length - 1].endX}%"
 						y2={LINE_Y}
 					/>
 				{/if}
