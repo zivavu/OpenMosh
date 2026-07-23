@@ -47,6 +47,14 @@ export const TRANSITION_OPTIONS: {
 
 export const DEFAULT_TRANSITION_DURATION = 0.3;
 
+/** One segment's transition edit inside a (possibly multi-segment) change. */
+export interface SegmentTransitionChange {
+  segmentId: string;
+  /** `null` = hard cut. */
+  transition: SegmentTransition | null;
+  transitionOnTick?: boolean;
+}
+
 export function createTransition(type: TransitionType): SegmentTransition {
   return { type, durationSec: DEFAULT_TRANSITION_DURATION, seed: randomSeed() };
 }

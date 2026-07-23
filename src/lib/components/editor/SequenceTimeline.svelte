@@ -8,6 +8,7 @@
 		randomSeed,
 		TRANSITION_OPTIONS,
 		type SegmentTransition,
+		type SegmentTransitionChange,
 		type SequenceSegment,
 		type SequenceSegmentMode,
 		type TransitionType,
@@ -27,21 +28,17 @@
 		selectedSegmentId?: string | null;
 		currentTime?: number;
 		onSeek?: (time: number) => void;
-		onApplyPreset: (segmentId: string, preset: Preset) => void;
-		onRoll: (segmentId: string) => void;
-		/** Reset the segment to a clean (all effects off) static state. */
-		onClear: (segmentId: string) => void;
+		onApplyPreset: (segmentIds: string[], preset: Preset) => void;
+		onRoll: (segmentIds: string[]) => void;
+		/** Reset the segments to a clean (all effects off) static state. */
+		onClear: (segmentIds: string[]) => void;
 		onModeChange: (
-			segmentId: string,
+			segmentIds: string[],
 			mode: SequenceSegmentMode,
 			intervalSec?: number,
 		) => void;
-		/** Transition config edits; `null` transition = hard cut. */
-		onTransitionChange: (
-			segmentId: string,
-			transition: SegmentTransition | null,
-			transitionOnTick?: boolean,
-		) => void;
+		/** Transition config edits, one entry per segment; `null` = hard cut. */
+		onTransitionChange: (changes: SegmentTransitionChange[]) => void;
 		/** Loop playback inside the selected segment (for editing while playing). */
 		segmentLoop?: boolean;
 		onToggleSegmentLoop?: () => void;
@@ -89,60 +86,145 @@
 		[...rawSegments].sort((a, b) => a.startTime - b.startTime),
 	);
 
-	let selectedSegment = $derived(
-		rawSegments.find((s) => s.id === selectedSegmentId) ?? null,
+	// ── Multi-selection ──────────────────────────────────────────────────────
+	// All selected segment ids; the bindable selectedSegmentId is the primary
+	// (last-selected) one, which Editor uses for the effects panel and loop.
+	let selectedIds = $state<string[]>([]);
+
+	function setSelection(ids: string[]) {
+		selectedIds = ids;
+		selectedSegmentId = ids.length > 0 ? ids[ids.length - 1] : null;
+	}
+
+	function toggleInSelection(id: string) {
+		if (selectedIds.includes(id)) setSelection(selectedIds.filter((x) => x !== id));
+		else setSelection([...selectedIds, id]);
+	}
+
+	let selectedSegments = $derived(
+		segments.filter((s) => selectedIds.includes(s.id)),
 	);
+
+	// Drop ids whose segments were removed (merge/undo/track change).
+	$effect(() => {
+		const alive = new Set(rawSegments.map((s) => s.id));
+		if (selectedIds.some((id) => !alive.has(id))) {
+			setSelection(selectedIds.filter((id) => alive.has(id)));
+		}
+	});
+
+	// Editor clears selectedSegmentId externally (e.g. loading a saved sequence).
+	$effect(() => {
+		if (!selectedSegmentId && selectedIds.length > 0) selectedIds = [];
+	});
 
 	// Presets are read fresh on selection and on dropdown open, so ones saved
 	// from the effects panel show up without leaving sequence mode.
 	let presetList = $state<Preset[]>([]);
 	$effect(() => {
-		if (selectedSegment) presetList = loadPresets();
+		if (selectedSegments.length > 0) presetList = loadPresets();
 	});
 
-	// Index of the selected segment's assigned preset, so the dropdown shows it
-	// instead of the placeholder.
+	/** Value shared by every selected segment, or undefined when mixed. */
+	function commonValue<T>(values: T[]): T | undefined {
+		return values.every((v) => v === values[0]) ? values[0] : undefined;
+	}
+
+	// Index of the selection's shared preset, so the dropdown shows it instead
+	// of the placeholder (also the placeholder when the selection is mixed).
+	let commonPresetName = $derived(
+		commonValue(selectedSegments.map((s) => s.presetName)),
+	);
 	let selectedPresetIndex = $derived(
-		selectedSegment?.presetName
-			? presetList.findIndex((p) => p.name === selectedSegment!.presetName)
+		commonPresetName
+			? presetList.findIndex((p) => p.name === commonPresetName)
 			: -1,
 	);
 
-	// ── Transition toolbar ─────────────────────────────────────────────────
-	let selectedTransitionType = $derived<TransitionType>(
-		selectedSegment?.transition?.type ?? 'cut',
+	let commonMode = $derived(commonValue(selectedSegments.map((s) => s.mode)));
+	let commonIntervalSec = $derived(
+		commonValue(selectedSegments.map((s) => s.intervalSec ?? 0.25)),
 	);
-	let selectedTransitionMeta = $derived(
-		TRANSITION_OPTIONS.find((o) => o.value === selectedTransitionType)!,
+
+	// ── Transition toolbar ─────────────────────────────────────────────────
+	// Each value is undefined when the selected segments disagree; the controls
+	// then render blank until the user picks a value, which applies to all.
+	let commonTransitionType = $derived(
+		commonValue(
+			selectedSegments.map((s): TransitionType => s.transition?.type ?? 'cut'),
+		),
+	);
+	let commonTransitionMeta = $derived(
+		commonTransitionType
+			? TRANSITION_OPTIONS.find((o) => o.value === commonTransitionType)
+			: undefined,
+	);
+	let commonTransitionDuration = $derived(
+		commonValue(selectedSegments.map((s) => s.transition?.durationSec)),
+	);
+	let commonTransitionDirection = $derived(
+		commonValue(selectedSegments.map((s) => s.transition?.direction ?? 0)),
+	);
+	let commonTransitionDensity = $derived(
+		commonValue(selectedSegments.map((s) => s.transition?.density ?? 1)),
+	);
+	let commonTransitionOnTick = $derived(
+		commonValue(selectedSegments.map((s) => s.transitionOnTick ?? false)),
 	);
 
 	function changeTransitionType(type: TransitionType) {
-		const seg = selectedSegment;
-		if (!seg) return;
-		if (type === 'cut') {
-			onTransitionChange(seg.id, null);
-			return;
-		}
-		// Keep duration/seed/params when switching between non-cut types.
-		const cur = seg.transition;
-		onTransitionChange(seg.id, {
-			type,
-			durationSec: cur?.durationSec ?? DEFAULT_TRANSITION_DURATION,
-			seed: cur?.seed ?? randomSeed(),
-			direction: cur?.direction,
-			density: cur?.density,
-		});
+		if (selectedSegments.length === 0) return;
+		onTransitionChange(
+			selectedSegments.map((seg) => ({
+				segmentId: seg.id,
+				// Keep each segment's duration/seed/params when switching between
+				// non-cut types.
+				transition:
+					type === 'cut'
+						? null
+						: {
+								type,
+								durationSec:
+									seg.transition?.durationSec ?? DEFAULT_TRANSITION_DURATION,
+								seed: seg.transition?.seed ?? randomSeed(),
+								direction: seg.transition?.direction,
+								density: seg.transition?.density,
+							},
+			})),
+		);
 	}
 
 	function patchTransition(patch: Partial<SegmentTransition>) {
-		const seg = selectedSegment;
-		if (!seg?.transition) return;
-		onTransitionChange(seg.id, { ...seg.transition, ...patch });
+		const changes = selectedSegments
+			.filter((s) => s.transition)
+			.map((seg) => ({
+				segmentId: seg.id,
+				transition: { ...seg.transition!, ...patch },
+			}));
+		if (changes.length > 0) onTransitionChange(changes);
 	}
 
-	$effect(() => {
-		if (selectedSegmentId && !selectedSegment) selectedSegmentId = null;
-	});
+	/** Each segment gets its own fresh seed so layouts don't all match. */
+	function rerollTransitionSeeds() {
+		const changes = selectedSegments
+			.filter((s) => s.transition)
+			.map((seg) => ({
+				segmentId: seg.id,
+				transition: { ...seg.transition!, seed: randomSeed() },
+			}));
+		if (changes.length > 0) onTransitionChange(changes);
+	}
+
+	function setTransitionOnTick(on: boolean) {
+		const changes = selectedSegments
+			.filter((s) => s.mode === 'interval')
+			.map((seg) => ({
+				segmentId: seg.id,
+				transition: seg.transition ?? null,
+				transitionOnTick: on,
+			}));
+		if (changes.length > 0) onTransitionChange(changes);
+	}
 
 	// ── Drag state ───────────────────────────────────────────────────────────
 	type DragState =
@@ -159,6 +241,8 @@
 				type: 'rect-select';
 				startTime: number;
 				currentTime: number;
+				/** Segment under the pointer at drag start: shift-click (no move) toggles it. */
+				toggleSegId?: string;
 		  }
 		| null;
 
@@ -257,10 +341,10 @@
 		} catch {}
 	}
 
-	function startRectSelect(e: PointerEvent) {
+	function startRectSelect(e: PointerEvent, toggleSegId?: string) {
 		e.stopPropagation();
 		const time = vp.clientXToTime(e.clientX);
-		dragging = { type: 'rect-select', startTime: time, currentTime: time };
+		dragging = { type: 'rect-select', startTime: time, currentTime: time, toggleSegId };
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -271,6 +355,12 @@
 		e.stopPropagation();
 		if (e.ctrlKey || e.metaKey) {
 			splitAt(vp.clientXToTime(e.clientX));
+			return;
+		}
+		// Shift: toggle this segment into the selection on click, or rect-select
+		// on drag — same gesture as on the empty timeline.
+		if (e.shiftKey) {
+			startRectSelect(e, segId);
 			return;
 		}
 		dragging = { type: 'seg-click', segmentId: segId };
@@ -389,16 +479,30 @@
 		}
 	}
 
+	/** Segment ids overlapping [minTime, maxTime]. */
+	function segmentIdsInRange(minTime: number, maxTime: number): string[] {
+		return segments
+			.filter((s) => {
+				const end = Math.min(trackDuration, s.endTime ?? trackDuration);
+				return end > minTime && s.startTime < maxTime;
+			})
+			.map((s) => s.id);
+	}
+
 	function onPointerUp() {
 		if (dragging?.type === 'seg-click' && !dragMoved) {
 			const segId = dragging.segmentId;
-			selectedSegmentId = selectedSegmentId === segId ? null : segId;
+			const soleSelected = selectedIds.length === 1 && selectedIds[0] === segId;
+			setSelection(soleSelected ? [] : [segId]);
 		}
 		if (dragging?.type === 'rect-select') {
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 				boundaries.setSelectionFromRange(minTime, maxTime);
+				setSelection(segmentIdsInRange(minTime, maxTime));
+			} else if (dragging.toggleSegId) {
+				toggleInSelection(dragging.toggleSegId);
 			} else {
 				boundaries.clearSelection();
 			}
@@ -408,31 +512,35 @@
 	}
 
 	// ── Remove ───────────────────────────────────────────────────────────────
-	function removeSegment(id: string) {
-		const idx = segments.findIndex((s) => s.id === id);
-		if (idx === -1) return;
-		selectedSegmentId = null;
-
-		if (segments.length === 1) {
-			emit([]);
-			return;
-		}
-		// Merge the freed span into a neighbour so coverage stays gapless
-		const deleted = segments[idx];
-		const neighbour = idx < segments.length - 1 ? segments[idx + 1] : segments[idx - 1];
-		const merged: SequenceSegment = {
-			...neighbour,
-			startTime: Math.min(deleted.startTime, neighbour.startTime),
-			endTime: Math.max(
-				deleted.endTime ?? trackDuration,
-				neighbour.endTime ?? trackDuration,
-			),
-		};
-		emit(
-			rawSegments
+	/** Remove segments, merging each freed span into a neighbour so coverage
+	 *  stays gapless. One history commit for the whole batch. */
+	function removeSegments(ids: string[]) {
+		if (ids.length === 0) return;
+		setSelection([]);
+		let working = [...rawSegments];
+		for (const id of ids) {
+			const sorted = [...working].sort((a, b) => a.startTime - b.startTime);
+			const idx = sorted.findIndex((s) => s.id === id);
+			if (idx === -1) continue;
+			if (sorted.length === 1) {
+				working = [];
+				break;
+			}
+			const deleted = sorted[idx];
+			const neighbour = idx < sorted.length - 1 ? sorted[idx + 1] : sorted[idx - 1];
+			const merged: SequenceSegment = {
+				...neighbour,
+				startTime: Math.min(deleted.startTime, neighbour.startTime),
+				endTime: Math.max(
+					deleted.endTime ?? trackDuration,
+					neighbour.endTime ?? trackDuration,
+				),
+			};
+			working = working
 				.filter((s) => s.id !== id && s.id !== neighbour.id)
-				.concat([merged]),
-		);
+				.concat([merged]);
+		}
+		emit(working);
 	}
 
 	function mergeBoundary(leftSegId: string | null, rightSegId: string | null) {
@@ -440,7 +548,11 @@
 		const left = rawSegments.find((s) => s.id === leftSegId);
 		const right = rawSegments.find((s) => s.id === rightSegId);
 		if (!left || !right) return;
-		if (selectedSegmentId === rightSegId) selectedSegmentId = leftSegId;
+		if (selectedIds.includes(rightSegId)) {
+			setSelection([
+				...new Set(selectedIds.map((id) => (id === rightSegId ? leftSegId : id))),
+			]);
+		}
 		emit(
 			rawSegments
 				.filter((s) => s.id !== leftSegId && s.id !== rightSegId)
@@ -469,8 +581,8 @@
 			return;
 		}
 
-		if (e.key === 'Escape' && selectedSegmentId) {
-			selectedSegmentId = null;
+		if (e.key === 'Escape' && selectedIds.length > 0) {
+			setSelection([]);
 			return;
 		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
@@ -484,9 +596,9 @@
 			e.preventDefault();
 			return;
 		}
-		if (selectedSegmentId) {
+		if (selectedIds.length > 0) {
 			e.preventDefault();
-			removeSegment(selectedSegmentId);
+			removeSegments(selectedIds);
 		}
 	}
 
@@ -506,6 +618,14 @@
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 		return boundaries.boundaryTimesInRange(minTime, maxTime);
+	});
+
+	// Segment ids the in-progress rect-select drag would select
+	let rectHoverSegIds = $derived.by((): string[] => {
+		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
+		const minTime = Math.min(dragging.startTime, dragging.currentTime);
+		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
+		return segmentIdsInRange(minTime, maxTime);
 	});
 </script>
 
@@ -566,7 +686,7 @@
 				/>
 				<line
 					class="seg"
-					class:sel={selectedSegmentId === sv.id}
+					class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
 					x1="{sv.startX}%"
 					y1={LINE_Y}
 					x2="{sv.endX}%"
@@ -577,7 +697,7 @@
 					{@const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX))}
 					<text
 						class="seg-lbl"
-						class:sel={selectedSegmentId === sv.id}
+						class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
 						x="{lblX}%"
 						y={LINE_Y + 18}
 						text-anchor="middle">{sv.label}</text
@@ -692,8 +812,11 @@
 
 	<!-- Toolbar row is always rendered so selecting a segment doesn't shift the layout -->
 	<div class="seg-toolbar">
-		{#if selectedSegment}
-			<span class="seg-toolbar-label">SEGMENT</span>
+		{#if selectedSegments.length > 0}
+			{@const many = selectedSegments.length > 1}
+			<span class="seg-toolbar-label">
+				{many ? `${selectedSegments.length} SEGMENTS` : 'SEGMENT'}
+			</span>
 			<select
 				class="seg-select"
 				value={selectedPresetIndex}
@@ -701,7 +824,7 @@
 				onchange={(e) => {
 					const idx = Number(e.currentTarget.value);
 					const preset = presetList[idx];
-					if (preset) onApplyPreset(selectedSegment!.id, preset);
+					if (preset) onApplyPreset(selectedIds, preset);
 				}}
 			>
 				<option value={-1} disabled>Preset…</option>
@@ -711,18 +834,22 @@
 			</select>
 			<button
 				class="seg-btn"
-				title={selectedSegment.mode === 'interval'
+				title={commonMode === 'interval'
 					? 'New random seed'
-					: 'Random mosh for this segment'}
-				onclick={() => onRoll(selectedSegment!.id)}
+					: many
+						? 'Random mosh for each selected segment'
+						: 'Random mosh for this segment'}
+				onclick={() => onRoll(selectedIds)}
 			>
 				<Dices size={12} />
 				MOSH
 			</button>
 			<button
 				class="seg-btn"
-				title="Clear this segment's effects"
-				onclick={() => onClear(selectedSegment!.id)}
+				title={many
+					? "Clear the selected segments' effects"
+					: "Clear this segment's effects"}
+				onclick={() => onClear(selectedIds)}
 			>
 				<Trash2 size={12} />
 				CLEAR
@@ -730,30 +857,31 @@
 			<div class="seg-mode">
 				<button
 					class="seg-btn"
-					class:active={selectedSegment.mode === 'static'}
-					onclick={() => onModeChange(selectedSegment!.id, 'static')}
+					class:active={commonMode === 'static'}
+					onclick={() => onModeChange(selectedIds, 'static')}
 				>
 					STATIC
 				</button>
 				<button
 					class="seg-btn"
-					class:active={selectedSegment.mode === 'interval'}
-					onclick={() => onModeChange(selectedSegment!.id, 'interval')}
+					class:active={commonMode === 'interval'}
+					onclick={() => onModeChange(selectedIds, 'interval')}
 				>
 					AUTO
 				</button>
 			</div>
-			{#if selectedSegment.mode === 'interval'}
+			{#if commonMode === 'interval'}
 				<select
 					class="seg-select"
-					value={selectedSegment.intervalSec ?? 0.25}
-					onchange={(e) =>
-						onModeChange(
-							selectedSegment!.id,
-							'interval',
-							Number(e.currentTarget.value),
-						)}
+					value={commonIntervalSec ?? ''}
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v !== '') onModeChange(selectedIds, 'interval', Number(v));
+					}}
 				>
+					{#if commonIntervalSec === undefined}
+						<option value="" disabled>—</option>
+					{/if}
 					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
 						<option value={sec}>every {sec}s</option>
 					{/each}
@@ -762,83 +890,99 @@
 			<span class="seg-toolbar-label">TRANSITION</span>
 			<select
 				class="seg-select"
-				value={selectedTransitionType}
-				title="How this segment blends in from the previous one"
-				onchange={(e) =>
-					changeTransitionType(e.currentTarget.value as TransitionType)}
+				value={commonTransitionType ?? ''}
+				title="How each selected segment blends in from the previous one"
+				onchange={(e) => {
+					const v = e.currentTarget.value;
+					if (v !== '') changeTransitionType(v as TransitionType);
+				}}
 			>
+				{#if commonTransitionType === undefined}
+					<option value="" disabled>—</option>
+				{/if}
 				{#each TRANSITION_OPTIONS as o}
 					<option value={o.value}>{o.label}</option>
 				{/each}
 			</select>
-			{#if selectedTransitionType !== 'cut' && selectedSegment.transition}
+			{#if commonTransitionType && commonTransitionType !== 'cut'}
 				<select
 					class="seg-select"
-					value={selectedSegment.transition.durationSec}
+					value={commonTransitionDuration ?? ''}
 					title="Transition duration"
-					onchange={(e) =>
-						patchTransition({ durationSec: Number(e.currentTarget.value) })}
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v !== '') patchTransition({ durationSec: Number(v) });
+					}}
 				>
+					{#if commonTransitionDuration === undefined}
+						<option value="" disabled>—</option>
+					{/if}
 					{#each [0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.2, 2] as sec}
 						<option value={sec}>{sec}s</option>
 					{/each}
 				</select>
-				{#if selectedTransitionMeta.hasDirection}
+				{#if commonTransitionMeta?.hasDirection}
 					<select
 						class="seg-select"
-						value={selectedSegment.transition.direction ?? 0}
+						value={commonTransitionDirection ?? ''}
 						title="Wipe direction"
-						onchange={(e) =>
-							patchTransition({ direction: Number(e.currentTarget.value) })}
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							if (v !== '') patchTransition({ direction: Number(v) });
+						}}
 					>
+						{#if commonTransitionDirection === undefined}
+							<option value="" disabled>—</option>
+						{/if}
 						<option value={0}>→</option>
 						<option value={1}>←</option>
 						<option value={2}>↓</option>
 						<option value={3}>↑</option>
 					</select>
 				{/if}
-				{#if selectedTransitionMeta.hasDensity}
+				{#if commonTransitionMeta?.hasDensity}
 					<select
 						class="seg-select"
-						value={selectedSegment.transition.density ?? 1}
+						value={commonTransitionDensity ?? ''}
 						title="Cell size"
-						onchange={(e) =>
-							patchTransition({ density: Number(e.currentTarget.value) })}
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							if (v !== '') patchTransition({ density: Number(v) });
+						}}
 					>
+						{#if commonTransitionDensity === undefined}
+							<option value="" disabled>—</option>
+						{/if}
 						<option value={0}>coarse</option>
 						<option value={1}>med</option>
 						<option value={2}>fine</option>
 					</select>
 				{/if}
-				{#if selectedTransitionMeta.hasSeed}
+				{#if commonTransitionMeta?.hasSeed}
 					<button
 						class="seg-btn"
 						title="Re-roll transition layout"
-						onclick={() => patchTransition({ seed: randomSeed() })}
+						onclick={rerollTransitionSeeds}
 					>
 						<Dices size={12} />
 					</button>
 				{/if}
-				{#if selectedSegment.mode === 'interval'}
+				{#if commonMode === 'interval'}
 					<label
 						class="seg-check"
-						title="Blend at each re-roll tick inside this segment"
+						title="Blend at each re-roll tick inside the segment"
 					>
 						<input
 							type="checkbox"
-							checked={selectedSegment.transitionOnTick ?? false}
-							onchange={(e) =>
-								onTransitionChange(
-									selectedSegment!.id,
-									selectedSegment!.transition ?? null,
-									e.currentTarget.checked,
-								)}
+							checked={commonTransitionOnTick === true}
+							indeterminate={commonTransitionOnTick === undefined}
+							onchange={(e) => setTransitionOnTick(e.currentTarget.checked)}
 						/>
 						TICKS
 					</label>
 				{/if}
 			{/if}
-			{#if onToggleSegmentLoop}
+			{#if onToggleSegmentLoop && !many}
 				<button
 					class="seg-btn"
 					class:active={segmentLoop}
@@ -850,8 +994,8 @@
 			{/if}
 			<button
 				class="seg-btn danger"
-				title="Delete segment"
-				onclick={() => removeSegment(selectedSegment!.id)}
+				title={many ? 'Delete selected segments' : 'Delete segment'}
+				onclick={() => removeSegments(selectedIds)}
 			>
 				<Trash2 size={12} />
 			</button>
@@ -859,7 +1003,7 @@
 			<span class="seg-toolbar-hint">
 				{segments.length === 0
 					? 'Double-click the timeline to create a segment'
-					: 'Click a segment to assign a preset or mosh'}
+					: 'Click a segment to edit · shift-click or shift-drag to select several'}
 			</span>
 		{/if}
 	</div>
