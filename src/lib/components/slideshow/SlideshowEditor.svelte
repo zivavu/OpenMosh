@@ -35,9 +35,8 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
-	import { createEffectHistory } from '../../editor/history.svelte';
+	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
-	import { generateMosh as generateMoshFn } from '../../editor/mosh';
 	import { loadSettings, updateSettings } from '../../editor/settings';
 
 	interface Props {
@@ -278,11 +277,13 @@
 	let effects: EffectInstance[] = $state(loadInitialEffects());
 	let presets: Preset[] = $state(loadPresets());
 
-	// Same split as the single editor: ←/→ walk the moshes of the base chain,
-	// Ctrl+Z/Y walk hand-edits to it. A mosh rebases the edit history onto the
-	// new chain so an edit undo lands on the mosh you were tweaking.
-	const history = createEffectHistory();
-	const moshHistory = createEffectHistory();
+	const moshSession = createMoshSession({
+		getEffects: () => effects,
+		setEffects: (v) => (effects = v),
+		getMoshOptions,
+		cancelBurst: () => panelBurst.cancel(),
+		endBurst: () => panelBurst.end(),
+	});
 
 	// ── Canvas / Renderer ──
 	let canvasEl: HTMLCanvasElement | null = $state(null);
@@ -646,59 +647,12 @@
 		};
 	}
 
-	function generateMosh() {
-		cancelPanelBurst();
-		// Record what the chain looked like before the very first roll, so ←
-		// comes back to the user's own work rather than the startup chain.
-		if (!moshHistory.canUndo && !moshHistory.canRedo) moshHistory.reset(effects);
-		generateMoshFn(effects, getMoshOptions());
-		moshHistory.push(effects);
-		history.reset(effects);
-	}
-
-	/** → : forward through the mosh history, rolling a new mosh at its top. */
-	function mosh() {
-		const next = moshHistory.redo();
-		if (!next) {
-			generateMosh();
-			return;
-		}
-		cancelPanelBurst();
-		effects = next;
-		history.reset(effects);
-	}
-
-	/** ← : back through the mosh history. Never touches the edit history. */
-	function undoMosh() {
-		const prev = moshHistory.undo();
-		if (!prev) return;
-		cancelPanelBurst();
-		effects = prev;
-		history.reset(effects);
-	}
-
-	// An edit still inside its coalescing window is a real edit — commit it
-	// first, so undoing lands on the state before it rather than skipping past
-	// it to whatever was recorded last.
-	function undo() {
-		endPanelBurst();
-		const prev = history.undo();
-		if (prev) effects = prev;
-	}
-
-	function redo() {
-		endPanelBurst();
-		const next = history.redo();
-		if (next) effects = next;
-	}
-
 	// Panel edits mutate the chain in place, so the post-edit state is pushed
 	// once the burst settles.
 	const panelBurst = new PanelBurstController({
-		onEditStart: () => () => history.push(effects),
+		onEditStart: () => () => moshSession.pushEdit(effects),
 	});
 	const endPanelBurst = () => panelBurst.end();
-	const cancelPanelBurst = () => panelBurst.cancel();
 	const panelBeforeEdit = (coalesceKey?: string) =>
 		panelBurst.beforeEdit(coalesceKey);
 
@@ -790,18 +744,18 @@
 			stopPreview();
 		} else if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
 			e.preventDefault();
-			redo();
+			moshSession.redoEdit();
 		} else if (mod && key === 'z') {
 			e.preventDefault();
-			undo();
+			moshSession.undoEdit();
 		} else if (mod) {
 			// Leave every other modifier combo (copy, paste, save…) to the browser.
 		} else if (e.key === 'ArrowRight') {
 			e.preventDefault();
-			mosh();
+			moshSession.forward();
 		} else if (e.key === 'ArrowLeft') {
 			e.preventDefault();
-			undoMosh();
+			moshSession.back();
 		}
 	}
 </script>
