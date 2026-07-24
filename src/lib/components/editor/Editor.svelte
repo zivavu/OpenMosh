@@ -5,17 +5,13 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createKeyboardHandler } from '../../editor/keyboard';
-	import {
-		clearEffects as clearEffectsFn,
-		generateMosh as generateMoshFn,
-	} from '../../editor/mosh';
+	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
 	import { executeRecording } from '../../editor/recording';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
 	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
-		applyPreset,
 		cloneEffectInstance,
 		loadInitialEffects,
 		setVolumeLink,
@@ -23,18 +19,25 @@
 		type Preset,
 	} from '../../effects';
 	import {
-		cleanEffects,
 		cloneSegmentForSplit,
-	createSequenceEffectSource,
-	createSequenceSegment,
-	resolveTransitionAt,
+		createSequenceEffectSource,
+		createSequenceSegment,
+		resolveTransitionAt,
 		findSegmentAt,
-		randomSeed,
 		type ResolvedTransition,
 		type SegmentTransitionChange,
 		type SequenceSegment,
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
+	import {
+		applyTransitionChanges,
+		clearSegments,
+		fillSegmentsFromPreset,
+		restoreSegmentMosh,
+		rollSegments,
+		setSegmentsMode,
+		syncSegmentsToPreset,
+	} from '../../editor/segment-edits';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 	import {
 		SegmentMoshHistory,
@@ -681,33 +684,15 @@
 	});
 
 	function seqApplyPreset(segIds: string[], preset: Preset) {
-		const ids = new Set(segIds);
 		seqBoundaries.commit(
-			sequenceSegments.map((s) =>
-				ids.has(s.id)
-					? {
-							...s,
-							mode: 'static',
-							label: preset.name,
-							presetName: preset.name,
-							modified: false,
-							effects: applyPreset(preset),
-						}
-					: s,
-			),
+			fillSegmentsFromPreset(sequenceSegments, new Set(segIds), preset),
 		);
 	}
 
-	// A preset was explicitly overwritten in the panel — refresh every static
-	// segment that was filled from it, so segments track the newest version.
-	// Hand-edited ("modified") segments keep their edits; overwriting a preset
-	// never re-assigns it to the selected segment.
+	// A preset was explicitly overwritten in the panel — overwriting never
+	// re-assigns the preset to the selected segment, so this isn't an edit.
 	function seqSyncPreset(preset: Preset) {
-		sequenceSegments = sequenceSegments.map((s) =>
-			s.mode === 'static' && s.presetName === preset.name && !s.modified
-				? { ...s, label: preset.name, effects: applyPreset(preset) }
-				: s,
-		);
+		sequenceSegments = syncSegmentsToPreset(sequenceSegments, preset);
 	}
 
 	// Loop playback inside the selected segment (edit-while-playing aid).
@@ -812,20 +797,7 @@
 	// out of the timeline's undo stack. Otherwise every arrow press would leave
 	// a Ctrl+Z entry behind and the two histories would drive each other.
 	function applySegmentMosh(segId: string, snap: SegmentMoshSnapshot) {
-		seqBoundaries.live(
-			sequenceSegments.map((s) =>
-				s.id === segId
-					? {
-							...s,
-							effects: snap.effects.map(cloneEffectInstance),
-							seed: snap.seed,
-							label: snap.label,
-							presetName: snap.presetName,
-							modified: snap.modified,
-						}
-					: s,
-			),
-		);
+		seqBoundaries.live(restoreSegmentMosh(sequenceSegments, segId, snap));
 	}
 
 	/** Roll a new mosh for each segment. Mosh history only — see applySegmentMosh. */
@@ -834,42 +806,14 @@
 		for (const s of sequenceSegments) {
 			if (ids.has(s.id)) seqMoshHistory.seed(s.id, segmentMoshSnapshot(s));
 		}
-		seqBoundaries.live(
-			sequenceSegments.map((s) => {
-				if (!ids.has(s.id)) return s;
-				if (s.mode === 'interval') return { ...s, seed: randomSeed() };
-				const fx = loadInitialEffects();
-				generateMoshFn(fx, getMoshOptions());
-				return {
-					...s,
-					label: 'mosh',
-					presetName: undefined,
-					modified: false,
-					effects: fx,
-				};
-			}),
-		);
+		seqBoundaries.live(rollSegments(sequenceSegments, ids, getMoshOptions()));
 		for (const s of sequenceSegments) {
 			if (ids.has(s.id)) seqMoshHistory.push(s.id, segmentMoshSnapshot(s));
 		}
 	}
 
 	function seqClear(segIds: string[]) {
-		const ids = new Set(segIds);
-		seqBoundaries.commit(
-			sequenceSegments.map((s) =>
-				ids.has(s.id)
-					? {
-							...s,
-							mode: 'static' as const,
-							label: 'clean',
-							presetName: undefined,
-							modified: false,
-							effects: cleanEffects(),
-						}
-					: s,
-			),
-		);
+		seqBoundaries.commit(clearSegments(sequenceSegments, new Set(segIds)));
 	}
 
 	function seqModeChange(
@@ -877,35 +821,13 @@
 		mode: SequenceSegmentMode,
 		intervalSec?: number,
 	) {
-		const ids = new Set(segIds);
 		seqBoundaries.commit(
-			sequenceSegments.map((s) =>
-				ids.has(s.id)
-					? {
-							...s,
-							mode,
-							intervalSec: intervalSec ?? s.intervalSec ?? 0.25,
-							seed: s.seed ?? randomSeed(),
-						}
-					: s,
-			),
+			setSegmentsMode(sequenceSegments, new Set(segIds), mode, intervalSec),
 		);
 	}
 
 	function seqTransitionChange(changes: SegmentTransitionChange[]) {
-		const byId = new Map(changes.map((c) => [c.segmentId, c]));
-		seqBoundaries.commit(
-			sequenceSegments.map((s) => {
-				const c = byId.get(s.id);
-				return c
-					? {
-							...s,
-							transition: c.transition ?? undefined,
-							transitionOnTick: c.transitionOnTick ?? s.transitionOnTick,
-						}
-					: s;
-			}),
-		);
+		seqBoundaries.commit(applyTransitionChanges(sequenceSegments, changes));
 	}
 
 	function playSpan() {
