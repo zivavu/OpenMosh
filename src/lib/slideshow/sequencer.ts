@@ -3,7 +3,7 @@ import {
   generateMosh,
   type MoshOptions,
 } from "../editor/mosh";
-import type { EffectInstance } from "../effects";
+import type { EffectInstance, Preset } from "../effects";
 import {
   applyPreset,
   cloneEffectInstance,
@@ -80,6 +80,8 @@ export function toggleOneEffect(
 /**
  * Compute the effects for a single beat based on the mosh mode.
  * For 'smooth' mode, mutates `smoothState` in place (pass a ref object).
+ * `presets` (used by 'per-image') should be supplied by callers that run this
+ * per beat, so a localStorage read + parse doesn't land on every frame.
  */
 export function computeEffectsForBeat(
   config: SlideshowConfig,
@@ -87,6 +89,7 @@ export function computeEffectsForBeat(
   baseEffects: EffectInstance[],
   smoothState: { effects: EffectInstance[] },
   moshOptions: MoshOptions,
+  presets?: Preset[],
 ): EffectInstance[] {
   switch (config.moshMode) {
     case "random": {
@@ -109,8 +112,7 @@ export function computeEffectsForBeat(
     }
     case "per-image": {
       if (slide.presetIndex !== null) {
-        const presets = loadPresets();
-        const preset = presets[slide.presetIndex];
+        const preset = (presets ?? loadPresets())[slide.presetIndex];
         if (preset) return applyPreset(preset);
       }
       return cloneEffects(baseEffects);

@@ -9,12 +9,8 @@
 	} from '../../effects';
 	import type { GlRenderer } from '../../gl/renderer';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
-	import { beatAtTime } from '../../slideshow/beat-clock';
 	import { detectBpm } from '../../slideshow/bpm-detector';
-	import {
-		cloneEffects,
-		computeEffectsForBeat,
-	} from '../../slideshow/sequencer';
+	import { SlideshowFrameDriver } from '../../slideshow/frame-driver';
 	import { executeSlideshowRecording } from '../../slideshow/slideshow-recorder';
 	import type { SlideshowConfig, SlideshowSlide } from '../../slideshow/types';
 	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
@@ -23,11 +19,7 @@
 		SlideVideoSampler,
 	} from '../../slideshow/video-sampler';
 	import { showToast } from '../ui/toast.svelte';
-	import {
-		DEFAULT_TEXT_OVERLAY_STYLE,
-		ensureFontLoaded,
-		parsePhrases,
-	} from '../../text-overlay';
+	import { ensureFontLoaded } from '../../text-overlay';
 	import { shuffleInPlace } from '../../utils';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
@@ -488,24 +480,8 @@
 	let activeView: 'grid' | 'preview' = $state('grid');
 	let previewPlaying = $state(false);
 	let previewRafId = $state<number | null>(null);
-	let previewBeatIndex = $state(-1);
 	let previewEffects: EffectInstance[] = $state([]);
-	let smoothState = $state<{ effects: EffectInstance[] } | null>(null);
-
-	const previewPhrases = $derived(
-		config.textOverlay?.enabled && config.textOverlay?.dictionary?.trim()
-			? parsePhrases(config.textOverlay.dictionary, config.textOverlay.splitBy)
-			: [],
-	);
-	const previewTextStyle = $derived(
-		config.textOverlay?.style != null
-			? { ...DEFAULT_TEXT_OVERLAY_STYLE, ...config.textOverlay.style }
-			: null,
-	);
-	const previewTextChance = $derived(
-		Math.max(0, Math.min(1, config.textOverlay?.chance ?? 0.8)),
-	);
-	const previewTextLayout = $derived(config.textOverlay?.layout ?? 'scattered');
+	let previewDriver: SlideshowFrameDriver | null = null;
 
 	// Load the configured overlay font (covers fonts restored from a saved config)
 	$effect(() => {
@@ -534,8 +510,6 @@
 		if (slides.length === 0) return;
 		activeView = 'preview';
 		previewPlaying = true;
-		smoothState = { effects: cloneEffects(effects) };
-		previewBeatIndex = -1;
 
 		await Promise.all([
 			...slides
@@ -561,20 +535,34 @@
 				.map((slide) => ensureSampler(slide).then(() => {})),
 		]);
 
-		if (!previewPlaying) return;
+		if (!previewPlaying || !glRenderer) return;
 
 		// Fresh run: video slides start from their beginning, like the export
 		for (const sampler of videoSamplers.values()) sampler.reset();
-		let lastVideoSlideId: string | null = null;
-		let lastVideoTickMs = 0;
 
 		if (audio.trackFile) {
 			audio.playAudio();
 			selectedSegmentId = null;
 		}
 
-		let lastTextUpdateTime = 0;
-		const TEXT_OVERLAY_THROTTLE_MS = 100;
+		previewDriver?.dispose();
+		const driver = new SlideshowFrameDriver({
+			getConfig: () => config,
+			getSlides: () => slides,
+			baseEffects: effects,
+			getMoshOptions,
+			getRenderer: () => glRenderer!,
+			sources: {
+				getImage: getCachedImage,
+				getSampler: (slide) => videoSamplers.get(slide.id),
+			},
+		});
+		previewDriver = driver;
+		let lastTickMs = performance.now();
+		// Raw reference of the chain last handed to `previewEffects`; comparing
+		// against the $state proxy would never match, so this keeps the
+		// assignment (and the reactivity it triggers) on beat changes only.
+		let lastAppliedEffects: EffectInstance[] | null = null;
 
 		function tick() {
 			if (!previewPlaying || !glRenderer) return;
@@ -600,105 +588,20 @@
 					config.beatOffset;
 			}
 
-			const { index: beatIndex } = beatAtTime(
-				Math.max(0, t),
-				config.bpm,
-				config.beatOffset,
-				config.segments,
-				config.subdivision,
+			// The video-frame upload is left unawaited here: the render loop must
+			// not stall on the decoder (the export awaits it instead).
+			const nowMs = performance.now();
+			const frame = driver.advance(t, (nowMs - lastTickMs) / 1000);
+			lastTickMs = nowMs;
+			if (frame.effects !== lastAppliedEffects) {
+				lastAppliedEffects = frame.effects;
+				previewEffects = frame.effects;
+			}
+
+			glRenderer.render(
+				previewEffects.length > 0 ? previewEffects : effects,
+				nowMs / 1000,
 			);
-
-			// subdivision === 0 means stop — hold current slide, do not advance
-			if (beatIndex === Number.MAX_SAFE_INTEGER) {
-				glRenderer.render(
-					previewEffects.length > 0 ? previewEffects : effects,
-					performance.now() / 1000,
-				);
-				previewRafId = requestAnimationFrame(tick);
-				return;
-			}
-
-			const slideIndex = config.loop
-				? beatIndex % slides.length
-				: Math.min(beatIndex, slides.length - 1);
-			const slide = slides[slideIndex];
-
-			const textRoll = ((beatIndex * 31) % 1000) / 1000;
-			const showText =
-				previewPhrases.length > 0 &&
-				previewTextStyle &&
-				glRenderer &&
-				textRoll < previewTextChance;
-			if (showText && glRenderer) {
-				const now = performance.now() / 1000;
-				const throttleSec = TEXT_OVERLAY_THROTTLE_MS / 1000;
-				const shouldUpdateText =
-					now - lastTextUpdateTime >= throttleSec || lastTextUpdateTime === 0;
-				if (shouldUpdateText) {
-					lastTextUpdateTime = now;
-					const phrase =
-						previewPhrases[beatIndex % previewPhrases.length] ?? null;
-					const to = config.textOverlay;
-					glRenderer.setTextOverlay(phrase, previewTextStyle, {
-						layout: previewTextLayout,
-						seed: beatIndex,
-						blendMode: to?.blendMode ?? 'normal',
-						invert: to?.invert ?? false,
-						opacity: to?.opacity ?? 1,
-					});
-				}
-			} else if (glRenderer) {
-				glRenderer.setTextOverlay(null);
-			}
-
-			if (beatIndex !== previewBeatIndex && slide) {
-				previewBeatIndex = beatIndex;
-
-				if (slide.kind === 'image') {
-					const img = getCachedImage(slide);
-					if (img && img.complete) {
-						glRenderer.updateSourceImage(img);
-					}
-				}
-
-				previewEffects = computeEffectsForBeat(
-					config,
-					slide,
-					effects,
-					smoothState!,
-					getMoshOptions(),
-				);
-			}
-
-			// Video slides advance only while visible: resume position across
-			// appearances, dt = rAF delta while the same slide stays on screen.
-			if (slide?.kind === 'video') {
-				const sampler = videoSamplers.get(slide.id);
-				const nowMs = performance.now();
-				if (sampler) {
-					const dt =
-						lastVideoSlideId === slide.id
-							? (nowMs - lastVideoTickMs) / 1000
-							: 0;
-					void sampler.next(dt).then((frame) => {
-						if (frame) {
-							if (previewPlaying && glRenderer)
-								glRenderer.updateSourceFrame(frame);
-							frame.close();
-						}
-					});
-				}
-				lastVideoSlideId = slide.id;
-				lastVideoTickMs = nowMs;
-			} else {
-				lastVideoSlideId = null;
-			}
-
-			const activeEffects =
-				previewEffects.length > 0 ? previewEffects : effects;
-			const now = performance.now() / 1000;
-
-			glRenderer.render(activeEffects, now);
 
 			previewRafId = requestAnimationFrame(tick);
 		}
@@ -718,7 +621,8 @@
 		if (glRenderer) {
 			glRenderer.clearTextOverlay();
 		}
-		previewBeatIndex = -1;
+		previewDriver?.dispose();
+		previewDriver = null;
 		previewEffects = [];
 	}
 
