@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fileDrop } from '../../actions/file-drop';
 	import {
 		generateId,
 		loadInitialEffects,
@@ -723,6 +724,16 @@
 	// ── Drag & Drop ──
 	let dragging = $state(false);
 
+	/** Audio replaces the track; anything else is added as slides. */
+	function handleDroppedFiles(files: FileList) {
+		if (files[0].type.startsWith('audio/')) {
+			clearTrack();
+			audio.trackFile = files[0];
+		} else {
+			addFiles(files);
+		}
+	}
+
 	// ── Component refs ──
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
@@ -792,39 +803,12 @@
 	hidden
 />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="editor"
 	class:drag-over={dragging}
-	ondragover={(e) => {
-		if (!e.dataTransfer?.types.includes('Files')) return;
-		e.preventDefault();
-		dragging = true;
-	}}
-	ondragenter={(e) => {
-		if (!e.dataTransfer?.types.includes('Files')) return;
-		e.preventDefault();
-		dragging = true;
-	}}
-	ondragleave={(e) => {
-		if (
-			e.currentTarget === e.target ||
-			!e.currentTarget.contains(e.relatedTarget as Node)
-		)
-			dragging = false;
-	}}
-	ondrop={(e) => {
-		e.preventDefault();
-		dragging = false;
-		const files = e.dataTransfer?.files;
-		if (!files || files.length === 0) return;
-		const first = files[0];
-		if (first.type.startsWith('audio/')) {
-			clearTrack();
-			audio.trackFile = first;
-		} else {
-			addFiles(files);
-		}
+	use:fileDrop={{
+		onDraggingChange: (d) => (dragging = d),
+		onDrop: handleDroppedFiles,
 	}}
 >
 	<TrackLibrary
