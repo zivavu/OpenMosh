@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { generateId } from '../../effects';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import {
+		isInteractiveTarget,
+		isTextEntryTarget,
+	} from '../../editor/shortcut-target';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 	import type {
 		BeatSubdivision,
@@ -860,8 +864,7 @@
 	 * doesn't want proceeds untouched.
 	 */
 	function onKeydown(e: KeyboardEvent) {
-		const t = e.target as HTMLElement;
-		if (t.closest('input, textarea, select')) return;
+		if (isTextEntryTarget(e.target)) return;
 
 		// Undo / redo / copy / paste-mode-enter / escape
 		if (boundaries.onKeydown(e)) {
@@ -871,6 +874,7 @@
 
 		// Delete / Backspace — existing local priority: hovered dot, then
 		// selected boundaries, then the selected whole segment.
+		if (isInteractiveTarget(e.target)) return;
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 		if (hoveredDot) {
 			e.preventDefault();

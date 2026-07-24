@@ -7,6 +7,8 @@
  * Escape, and rectangle-select boundary math.
  */
 
+import { isInteractiveTarget, isTextEntryTarget } from './shortcut-target';
+
 export interface BoundarySegment {
 	id: string;
 	startTime: number;
@@ -211,8 +213,9 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 	 * handler exists, stop the event from reaching it.
 	 */
 	onKeydown(e: KeyboardEvent): boolean {
-		const target = e.target as HTMLElement;
-		if (target.closest('input, textarea, select')) return false;
+		// Modifier shortcuts still fire from a focused dropdown/slider (see
+		// shortcut-target); only Escape, a bare key, defers to the control.
+		if (isTextEntryTarget(e.target)) return false;
 
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
@@ -245,7 +248,7 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 			}
 			return false;
 		}
-		if (e.key === 'Escape') {
+		if (e.key === 'Escape' && !isInteractiveTarget(e.target)) {
 			if (this.pasteMode) {
 				this.cancelPaste();
 				return true;
@@ -261,8 +264,7 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 
 	/** True if onKeydown would consume this key right now (used to decide whether to stop propagation). */
 	wouldHandle(e: KeyboardEvent): boolean {
-		const target = e.target as HTMLElement;
-		if (target.closest('input, textarea, select')) return false;
+		if (isTextEntryTarget(e.target)) return false;
 
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
@@ -271,7 +273,7 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) return this.canRedo;
 		if (mod && key === 'c') return this.selectedBoundaryTimes.length > 0;
 		if (mod && key === 'v') return this.clipboard.length > 0;
-		if (e.key === 'Escape')
+		if (e.key === 'Escape' && !isInteractiveTarget(e.target))
 			return this.pasteMode || this.selectedBoundaryTimes.length > 0;
 		return false;
 	}

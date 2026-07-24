@@ -1,3 +1,5 @@
+import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
+
 export interface KeyboardActions {
   save: () => void;
   /** → : step forward through the mosh history, or roll a new mosh at its top. */
@@ -24,14 +26,26 @@ export function createKeyboardHandler(
       return;
     }
 
-    const el = e.target as HTMLElement;
-    if (
-      el.tagName === "INPUT" ||
-      el.tagName === "TEXTAREA" ||
-      el.tagName === "SELECT" ||
-      el.isContentEditable
-    )
+    const key = e.key.toLowerCase();
+    const mod = e.ctrlKey || e.metaKey;
+
+    // Undo/redo reach the app even while a dropdown or slider holds focus —
+    // they have nothing of their own to undo — but never from a text field.
+    if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
+      if (isTextEntryTarget(e.target)) return;
+      e.preventDefault();
+      actions.redo();
       return;
+    }
+    if (mod && key === "z") {
+      if (isTextEntryTarget(e.target)) return;
+      e.preventDefault();
+      actions.undo();
+      return;
+    }
+
+    // Bare keys belong to whichever control has focus, if any.
+    if (isInteractiveTarget(e.target)) return;
 
     if (e.key === " ") {
       if (actions.hasTrack()) {
@@ -42,28 +56,10 @@ export function createKeyboardHandler(
     } else if (e.key === "ArrowRight") {
       e.preventDefault();
       actions.mosh();
-    } else if (
-      (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey) ||
-      (e.key.toLowerCase() === "y" && (e.ctrlKey || e.metaKey))
-    ) {
-      e.preventDefault();
-      actions.redo();
     } else if (e.key === "ArrowLeft") {
       e.preventDefault();
       actions.undoMosh();
-    } else if (
-      e.key.toLowerCase() === "z" &&
-      (e.ctrlKey || e.metaKey) &&
-      !e.shiftKey
-    ) {
-      e.preventDefault();
-      actions.undo();
-    } else if (
-      e.key.toLowerCase() === "v" &&
-      !e.ctrlKey &&
-      !e.metaKey &&
-      !e.altKey
-    ) {
+    } else if (key === "v" && !mod && !e.altKey) {
       e.preventDefault();
       actions.reInput();
     }
