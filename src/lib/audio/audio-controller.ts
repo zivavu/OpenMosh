@@ -63,8 +63,9 @@ export function createOutputAudioGraph(): AudioGraphState {
   };
 }
 
-export function disposeAudioGraph(state: AudioGraphState): void {
-  state.context.close();
+/** Tearing down the graph is just closing its context; the nodes go with it. */
+export function disposeAudioGraph(context: AudioContext): void {
+  context.close();
 }
 
 export function computeVolumeLevel(

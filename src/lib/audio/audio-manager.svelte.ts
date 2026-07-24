@@ -145,18 +145,7 @@ export class AudioManager {
   }
 
   disposeAudioGraph() {
-    if (this.audioContext) {
-      disposeGraph({
-        context: this.audioContext,
-        source: this.mediaSource!,
-        normalizeGain: this.normalizeGainNode!,
-        analyser: this.analyserNode!,
-        gain: this.gainNode!,
-        frequencyData: this.frequencyData!,
-        sampleRate: this.audioSampleRate,
-        binCount: this.audioFrequencyBinCount,
-      });
-    }
+    if (this.audioContext) disposeGraph(this.audioContext);
     this.mediaSource = null;
     this.normalizeGainNode = null;
     this.analyserNode = null;

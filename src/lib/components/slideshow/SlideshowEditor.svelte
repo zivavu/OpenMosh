@@ -378,8 +378,7 @@
 
 	// ── Audio ──
 	// Load outputVolume from config before constructing manager
-	const savedOutputVolume =
-		((loadConfig() as unknown as Record<string, unknown>).outputVolume as number) ?? 1;
+	const savedOutputVolume = loadConfig().outputVolume ?? 1;
 
 	const audio = new AudioManager({
 		getEffects: () =>
