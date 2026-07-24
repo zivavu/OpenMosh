@@ -12,6 +12,7 @@
 	import { executeRecording } from '../../editor/recording';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createEffectHistory } from '../../editor/history.svelte';
+	import { PanelBurstController } from '../../editor/panel-burst';
 	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
 		applyPreset,
@@ -753,62 +754,23 @@
 		}
 	}
 
-	// Panel edits mutate the effect chain in place, so they're recorded around
-	// the edit rather than from it. Only consecutive ticks of one dragged
-	// parameter coalesce (same `coalesceKey`, within 500 ms) — discrete edits
-	// like toggles each get their own undo entry, so undoing after flipping
-	// five effects on takes five steps rather than one. The two stacks want
-	// opposite timing: the sequence controller stores the state *before* an
-	// edit, while the single-mode history stores the state *after* one — so a
-	// segment burst snapshots on the first edit and a single-mode burst pushes
-	// once it settles.
-	let panelBurstTimer: ReturnType<typeof setTimeout> | undefined;
-	let panelBurstKey: string | null = null;
-	let panelBurstPushesSingle = false;
-
-	/**
-	 * Close the burst and record it. Called on the coalescing timer, and
-	 * directly by discrete edits (preset loads) that shouldn't wait it out.
-	 */
-	function endPanelBurst() {
-		clearTimeout(panelBurstTimer);
-		panelBurstTimer = undefined;
-		panelBurstKey = null;
-		if (panelBurstPushesSingle) {
-			panelBurstPushesSingle = false;
-			history.push(effects);
-		}
-	}
-
-	/** Drop a pending burst without recording it — for undo/redo restores. */
-	function cancelPanelBurst() {
-		clearTimeout(panelBurstTimer);
-		panelBurstTimer = undefined;
-		panelBurstKey = null;
-		panelBurstPushesSingle = false;
-	}
-
-	function panelBeforeEdit(coalesceKey?: string) {
-		const key = coalesceKey ?? null;
-		// A discrete edit, or a drag that moved to a different parameter, closes
-		// whatever burst is open so the two don't share an undo entry.
-		if (panelBurstTimer !== undefined && (key === null || key !== panelBurstKey))
-			endPanelBurst();
-
-		if (panelBurstTimer !== undefined) {
-			clearTimeout(panelBurstTimer);
-		} else if (panelSelectedSegment()) {
-			seqBoundaries.pushState(
-				$state.snapshot(sequenceSegments) as SequenceSegment[],
-			);
-		} else {
-			panelBurstPushesSingle = true;
-		}
-		panelBurstKey = key;
-		// Discrete edits close on the next tick — just late enough for the
-		// mutation to have landed, so the pushed state is the post-edit one.
-		panelBurstTimer = setTimeout(endPanelBurst, key === null ? 0 : 500);
-	}
+	// A segment edit records into the sequence stack (pre-edit snapshot), any
+	// other edit into the single-mode history (pushed once the burst settles).
+	const panelBurst = new PanelBurstController({
+		onEditStart: () => {
+			if (panelSelectedSegment()) {
+				seqBoundaries.pushState(
+					$state.snapshot(sequenceSegments) as SequenceSegment[],
+				);
+				return;
+			}
+			return () => history.push(effects);
+		},
+	});
+	const endPanelBurst = () => panelBurst.end();
+	const cancelPanelBurst = () => panelBurst.cancel();
+	const panelBeforeEdit = (coalesceKey?: string) =>
+		panelBurst.beforeEdit(coalesceKey);
 
 	// ←/→ in sequence mode walk the moshes of one segment: the selected one, or
 	// whichever sits under the playhead.

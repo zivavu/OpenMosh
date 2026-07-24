@@ -36,6 +36,7 @@
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createEffectHistory } from '../../editor/history.svelte';
+	import { PanelBurstController } from '../../editor/panel-burst';
 	import { generateMosh as generateMoshFn } from '../../editor/mosh';
 	import { loadSettings, updateSettings } from '../../editor/settings';
 
@@ -692,40 +693,14 @@
 	}
 
 	// Panel edits mutate the chain in place, so the post-edit state is pushed
-	// once the burst settles. Only consecutive ticks of one dragged parameter
-	// coalesce (same `coalesceKey`, within 500 ms) — discrete edits like
-	// toggles each get their own undo entry.
-	let panelBurstTimer: ReturnType<typeof setTimeout> | undefined;
-	let panelBurstKey: string | null = null;
-	let panelBurstPending = false;
-
-	function endPanelBurst() {
-		clearTimeout(panelBurstTimer);
-		panelBurstTimer = undefined;
-		panelBurstKey = null;
-		if (panelBurstPending) {
-			panelBurstPending = false;
-			history.push(effects);
-		}
-	}
-
-	function cancelPanelBurst() {
-		clearTimeout(panelBurstTimer);
-		panelBurstTimer = undefined;
-		panelBurstKey = null;
-		panelBurstPending = false;
-	}
-
-	function panelBeforeEdit(coalesceKey?: string) {
-		const key = coalesceKey ?? null;
-		if (panelBurstTimer !== undefined && (key === null || key !== panelBurstKey))
-			endPanelBurst();
-
-		if (panelBurstTimer !== undefined) clearTimeout(panelBurstTimer);
-		else panelBurstPending = true;
-		panelBurstKey = key;
-		panelBurstTimer = setTimeout(endPanelBurst, key === null ? 0 : 500);
-	}
+	// once the burst settles.
+	const panelBurst = new PanelBurstController({
+		onEditStart: () => () => history.push(effects),
+	});
+	const endPanelBurst = () => panelBurst.end();
+	const cancelPanelBurst = () => panelBurst.cancel();
+	const panelBeforeEdit = (coalesceKey?: string) =>
+		panelBurst.beforeEdit(coalesceKey);
 
 	// ── Recording ──
 	let recordFps = $state(60);
