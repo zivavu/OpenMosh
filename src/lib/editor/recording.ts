@@ -1,6 +1,7 @@
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
+import { openDecodableVideo } from "../video/decode";
 import type { MoshOptions } from "./mosh";
 import {
   createSequenceEffectSource,
@@ -130,28 +131,18 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   > | null = null;
 
   if (isVideo && videoEl) {
-    try {
-      const mb = await import("mediabunny");
-      const input = new mb.Input({
-        source: new mb.BlobSource(file),
-        formats: mb.ALL_FORMATS,
-      });
-      const track = await input.getPrimaryVideoTrack();
-      if (track && track.rotation === 0 && (await track.canDecode())) {
-        const sink = new mb.VideoSampleSink(track);
-        const totalFrames = Math.ceil(exportDuration * fps);
-        // Must yield exactly one timestamp per recorder frame, mirroring the
-        // recorder's time formula, so the generator stays in lockstep with
-        // onBeforeRender calls.
-        const frameTimes = function* () {
-          for (let i = 0; i < totalFrames; i++) {
-            yield sourceTimeAt(i / fps);
-          }
-        };
-        videoFrames = sink.samplesAtTimestamps(frameTimes());
-      }
-    } catch {
-      videoFrames = null;
+    const opened = await openDecodableVideo(file);
+    if (opened) {
+      const totalFrames = Math.ceil(exportDuration * fps);
+      // Must yield exactly one timestamp per recorder frame, mirroring the
+      // recorder's time formula, so the generator stays in lockstep with
+      // onBeforeRender calls.
+      const frameTimes = function* () {
+        for (let i = 0; i < totalFrames; i++) {
+          yield sourceTimeAt(i / fps);
+        }
+      };
+      videoFrames = opened.sink.samplesAtTimestamps(frameTimes());
     }
   }
 

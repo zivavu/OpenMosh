@@ -1,9 +1,6 @@
-import type { InputAudioTrack, VideoSample, VideoSampleSink } from "mediabunny";
+import type { InputAudioTrack } from "mediabunny";
+import { openPlayableVideo, SampleQueue, toVideoFrame } from "../video/decode";
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** Decode-ahead queue depth; absorbs rAF/decoder cadence mismatch. */
-const QUEUE_DEPTH = 8;
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
 const MAX_DECODE_LAG = 1;
 
@@ -34,7 +31,7 @@ export class VideoPreviewPlayer {
   /** Whether looping at the span end is enabled (set by the editor). */
   loop = true;
 
-  #videoSink: VideoSampleSink;
+  #queue: SampleQueue;
   #spanStart = 0;
   #spanEnd: number;
   #speed = 1;
@@ -46,13 +43,6 @@ export class VideoPreviewPlayer {
   #baseMedia = 0;
   #baseWall = 0;
 
-  // Decode pump state. Bumping #genId cancels the previous pump loop.
-  #genId = 0;
-  #queue: VideoSample[] = [];
-  /** Timestamp of the newest decoded sample — how far ahead the decoder is. */
-  #decodeHead = 0;
-  #pumpDone = false;
-
   // Video-source audio, decoded once into a buffer and played through the
   // editor's Web Audio graph so volume links / analysis keep working.
   #audioBuffer: AudioBuffer | null = null;
@@ -61,12 +51,12 @@ export class VideoPreviewPlayer {
   #audioSrc: AudioBufferSourceNode | null = null;
 
   private constructor(
-    sink: VideoSampleSink,
+    queue: SampleQueue,
     width: number,
     height: number,
     duration: number,
   ) {
-    this.#videoSink = sink;
+    this.#queue = queue;
     this.width = width;
     this.height = height;
     this.duration = duration;
@@ -75,49 +65,33 @@ export class VideoPreviewPlayer {
 
   /** Returns null when the file can't drive the WebCodecs preview path. */
   static async create(file: File): Promise<VideoPreviewPlayer | null> {
-    try {
-      const mb = await import("mediabunny");
-      const input = new mb.Input({
-        source: new mb.BlobSource(file),
-        formats: mb.ALL_FORMATS,
-      });
-      const track = await input.getPrimaryVideoTrack();
-      // Rotation metadata is applied by the <video> element but not by raw
-      // decoded frames — same fallback rule as the export path.
-      if (!track || track.rotation !== 0 || !(await track.canDecode())) {
-        return null;
+    const opened = await openPlayableVideo(file);
+    if (!opened) return null;
+
+    const player = new VideoPreviewPlayer(
+      new SampleQueue(opened.sink),
+      opened.width,
+      opened.height,
+      opened.duration,
+    );
+
+    // Decode the audio track in the background; playback starts silent and
+    // sound joins in once ready (usually well under a second).
+    void (async () => {
+      try {
+        const audioTrack = await opened.input.getPrimaryAudioTrack();
+        if (!audioTrack || !(await audioTrack.canDecode())) return;
+        const buffer = await decodeAudioTrackToBuffer(audioTrack);
+        if (player.#disposed || !buffer) return;
+        player.#audioBuffer = buffer;
+        if (player.playing) player.#startAudio();
+      } catch {
+        // Silent preview; export decodes audio separately
       }
-      const duration = await track.computeDuration();
-      if (!Number.isFinite(duration) || duration <= 0) return null;
-      if (track.displayWidth <= 0 || track.displayHeight <= 0) return null;
+    })();
 
-      const player = new VideoPreviewPlayer(
-        new mb.VideoSampleSink(track),
-        track.displayWidth,
-        track.displayHeight,
-        duration,
-      );
-
-      // Decode the audio track in the background; playback starts silent and
-      // sound joins in once ready (usually well under a second).
-      void (async () => {
-        try {
-          const audioTrack = await input.getPrimaryAudioTrack();
-          if (!audioTrack || !(await audioTrack.canDecode())) return;
-          const buffer = await decodeAudioTrackToBuffer(audioTrack);
-          if (player.#disposed || !buffer) return;
-          player.#audioBuffer = buffer;
-          if (player.playing) player.#startAudio();
-        } catch {
-          // Silent preview; export decodes audio separately
-        }
-      })();
-
-      void player.#pump(0);
-      return player;
-    } catch {
-      return null;
-    }
+    player.#queue.start(0);
+    return player;
   }
 
   /**
@@ -186,32 +160,23 @@ export class VideoPreviewPlayer {
     // near the clock instead of grinding through every skipped frame.
     if (
       this.playing &&
-      !this.#pumpDone &&
-      this.#queue.length === 0 &&
-      t - this.#decodeHead > MAX_DECODE_LAG
+      !this.#queue.done &&
+      this.#queue.size === 0 &&
+      t - this.#queue.head > MAX_DECODE_LAG
     ) {
-      this.#restartPump(t);
+      this.#queue.start(t);
       return null;
     }
 
-    // Newest due sample wins; older due samples are stale — discard.
-    let chosen: VideoSample | null = null;
-    while (this.#queue.length > 0 && this.#queue[0].timestamp <= t) {
-      chosen?.close();
-      chosen = this.#queue.shift()!;
-    }
-    if (!chosen) return null;
-    const frame = chosen.toVideoFrame();
-    chosen.close();
-    return frame;
+    const due = this.#queue.takeDue(t);
+    return due ? toVideoFrame(due) : null;
   }
 
   dispose() {
     this.#disposed = true;
-    this.#genId++;
     this.playing = false;
     this.#stopAudio();
-    this.#clearQueue();
+    this.#queue.dispose();
   }
 
   #end(): number {
@@ -250,49 +215,8 @@ export class VideoPreviewPlayer {
     this.#baseMedia = t;
     this.#baseWall = performance.now();
     this.currentTime = t;
-    this.#restartPump(t);
+    this.#queue.start(t);
     if (this.playing) this.#startAudio();
-  }
-
-  #restartPump(t: number) {
-    this.#clearQueue();
-    void this.#pump(t);
-  }
-
-  #clearQueue() {
-    for (const sample of this.#queue) sample.close();
-    this.#queue = [];
-  }
-
-  /**
-   * Sequential decode loop: fills the ready-queue as fast as the decoder
-   * allows, parking only while the queue is full (paused, or decoder ahead).
-   */
-  async #pump(startTime: number) {
-    const id = ++this.#genId;
-    this.#pumpDone = false;
-    this.#decodeHead = startTime;
-    try {
-      for await (const sample of this.#videoSink.samples(startTime)) {
-        while (
-          id === this.#genId &&
-          !this.#disposed &&
-          this.#queue.length >= QUEUE_DEPTH
-        ) {
-          await sleep(10);
-        }
-        if (id !== this.#genId || this.#disposed) {
-          sample.close();
-          return;
-        }
-        this.#queue.push(sample);
-        this.#decodeHead = sample.timestamp;
-      }
-      if (id === this.#genId) this.#pumpDone = true;
-    } catch {
-      // Decode failure mid-stream: keep the last good frame on screen
-      if (id === this.#genId) this.#pumpDone = true;
-    }
   }
 
   #startAudio() {
