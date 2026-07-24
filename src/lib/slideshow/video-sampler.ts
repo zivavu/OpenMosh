@@ -1,9 +1,9 @@
-import type { VideoSample, VideoSampleSink } from "mediabunny";
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-/** Decode-ahead queue depth; absorbs rAF/decoder cadence mismatch. */
-const QUEUE_DEPTH = 8;
+import {
+  openPlayableVideo,
+  SampleQueue,
+  sleep,
+  toVideoFrame,
+} from "../video/decode";
 
 export interface SlideVideoProbe {
   duration: number;
@@ -23,42 +23,26 @@ export async function probeSlideVideo(
   file: File,
   thumbSize = 100,
 ): Promise<SlideVideoProbe | null> {
-  try {
-    const mb = await import("mediabunny");
-    const input = new mb.Input({
-      source: new mb.BlobSource(file),
-      formats: mb.ALL_FORMATS,
-    });
-    const track = await input.getPrimaryVideoTrack();
-    if (!track || track.rotation !== 0 || !(await track.canDecode())) {
-      return null;
-    }
-    const duration = await track.computeDuration();
-    if (!Number.isFinite(duration) || duration <= 0) return null;
-    if (track.displayWidth <= 0 || track.displayHeight <= 0) return null;
+  const opened = await openPlayableVideo(file);
+  if (!opened) return null;
 
-    let thumb: Blob | null = null;
-    try {
-      const sink = new mb.VideoSampleSink(track);
-      const sample = await sink.getSample(0);
-      if (sample) {
-        const frame = sample.toVideoFrame();
-        sample.close();
-        thumb = await drawThumb(frame, thumbSize);
-        frame.close();
-      }
-    } catch {
-      // Thumbless slide is fine — grid shows the loading placeholder
+  let thumb: Blob | null = null;
+  try {
+    const sample = await opened.sink.getSample(0);
+    if (sample) {
+      const frame = toVideoFrame(sample);
+      thumb = await drawThumb(frame, thumbSize);
+      frame.close();
     }
-    return {
-      duration,
-      width: track.displayWidth,
-      height: track.displayHeight,
-      thumb,
-    };
   } catch {
-    return null;
+    // Thumbless slide is fine — grid shows the loading placeholder
   }
+  return {
+    duration: opened.duration,
+    width: opened.width,
+    height: opened.height,
+    thumb,
+  };
 }
 
 async function drawThumb(frame: VideoFrame, size: number): Promise<Blob | null> {
@@ -102,12 +86,7 @@ export class SlideVideoSampler {
   /** Accumulated visible time, wrapped into [0, duration). */
   position = 0;
 
-  #sink: VideoSampleSink;
-  #queue: VideoSample[] = [];
-  /** Bumping cancels the previous pump loop. */
-  #genId = 0;
-  #pumpStarted = false;
-  #pumpDone = false;
+  #queue: SampleQueue;
   /** Whether a frame has been returned since the last (re)start at 0. */
   #delivered = false;
   /** Guards against overlapping next() calls from the preview rAF loop. */
@@ -115,12 +94,12 @@ export class SlideVideoSampler {
   #disposed = false;
 
   private constructor(
-    sink: VideoSampleSink,
+    queue: SampleQueue,
     duration: number,
     width: number,
     height: number,
   ) {
-    this.#sink = sink;
+    this.#queue = queue;
     this.duration = duration;
     this.width = width;
     this.height = height;
@@ -128,35 +107,21 @@ export class SlideVideoSampler {
 
   /** Returns null when the file can't drive the WebCodecs path. */
   static async create(file: File): Promise<SlideVideoSampler | null> {
-    try {
-      const mb = await import("mediabunny");
-      const input = new mb.Input({
-        source: new mb.BlobSource(file),
-        formats: mb.ALL_FORMATS,
-      });
-      const track = await input.getPrimaryVideoTrack();
-      if (!track || track.rotation !== 0 || !(await track.canDecode())) {
-        return null;
-      }
-      const duration = await track.computeDuration();
-      if (!Number.isFinite(duration) || duration <= 0) return null;
-      if (track.displayWidth <= 0 || track.displayHeight <= 0) return null;
-      return new SlideVideoSampler(
-        new mb.VideoSampleSink(track),
-        duration,
-        track.displayWidth,
-        track.displayHeight,
-      );
-    } catch {
-      return null;
-    }
+    const opened = await openPlayableVideo(file);
+    if (!opened) return null;
+    return new SlideVideoSampler(
+      new SampleQueue(opened.sink),
+      opened.duration,
+      opened.width,
+      opened.height,
+    );
   }
 
   /** Rewind to 0 so a fresh preview/export run starts deterministically. */
   reset() {
     this.position = 0;
     this.#delivered = false;
-    if (this.#pumpStarted) this.#restartPump(0);
+    if (this.#queue.started) this.#queue.start(0);
   }
 
   /**
@@ -175,36 +140,26 @@ export class SlideVideoSampler {
       if (t >= this.duration) {
         t %= this.duration;
         this.#delivered = false;
-        this.#restartPump(0);
+        this.#queue.start(0);
       }
       this.position = t;
-      if (!this.#pumpStarted) this.#startPump(t);
+      if (!this.#queue.started) this.#queue.start(t);
 
       while (!this.#disposed) {
-        // Newest due sample wins; older due samples are stale — discard.
-        let chosen: VideoSample | null = null;
-        while (this.#queue.length > 0 && this.#queue[0].timestamp <= t) {
-          chosen?.close();
-          chosen = this.#queue.shift()!;
-        }
-        if (chosen) {
+        const due = this.#queue.takeDue(t);
+        if (due) {
           this.#delivered = true;
-          const frame = chosen.toVideoFrame();
-          chosen.close();
-          return frame;
+          return toVideoFrame(due);
         }
-        if (this.#queue.length > 0) {
+        if (this.#queue.size > 0) {
           // Head is in the future. If we've already shown a frame it's still
           // current; otherwise (first frame timestamp > t) show the head so
           // the slide isn't blank on its first beat.
           if (this.#delivered) return null;
-          const sample = this.#queue.shift()!;
           this.#delivered = true;
-          const frame = sample.toVideoFrame();
-          sample.close();
-          return frame;
+          return toVideoFrame(this.#queue.takeHead()!);
         }
-        if (this.#pumpDone) return null;
+        if (this.#queue.done) return null;
         await sleep(5);
       }
       return null;
@@ -215,52 +170,6 @@ export class SlideVideoSampler {
 
   dispose() {
     this.#disposed = true;
-    this.#genId++;
-    this.#clearQueue();
-  }
-
-  #startPump(t: number) {
-    this.#pumpStarted = true;
-    void this.#pump(t);
-  }
-
-  #restartPump(t: number) {
-    this.#clearQueue();
-    this.#pumpStarted = true;
-    void this.#pump(t);
-  }
-
-  #clearQueue() {
-    for (const sample of this.#queue) sample.close();
-    this.#queue = [];
-  }
-
-  /**
-   * Sequential decode loop: fills the ready-queue as fast as the decoder
-   * allows, parking while the queue is full.
-   */
-  async #pump(startTime: number) {
-    const id = ++this.#genId;
-    this.#pumpDone = false;
-    try {
-      for await (const sample of this.#sink.samples(startTime)) {
-        while (
-          id === this.#genId &&
-          !this.#disposed &&
-          this.#queue.length >= QUEUE_DEPTH
-        ) {
-          await sleep(10);
-        }
-        if (id !== this.#genId || this.#disposed) {
-          sample.close();
-          return;
-        }
-        this.#queue.push(sample);
-      }
-      if (id === this.#genId) this.#pumpDone = true;
-    } catch {
-      // Decode failure mid-stream: keep the last good frame on screen
-      if (id === this.#genId) this.#pumpDone = true;
-    }
+    this.#queue.dispose();
   }
 }
