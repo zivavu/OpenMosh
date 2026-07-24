@@ -64,6 +64,8 @@ export interface SlideshowConfig {
   segments: TimelineSegment[];
   /** Text overlay (phrases from dictionary, per beat/frame). */
   textOverlay: TextOverlayConfig;
+  /** Persisted alongside the config; the live value lives on the AudioManager. */
+  outputVolume: number;
 }
 
 import { DEFAULT_TEXT_OVERLAY_CONFIG } from "../text-overlay";
@@ -81,4 +83,5 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
   loop: true,
   segments: [],
   textOverlay: { ...DEFAULT_TEXT_OVERLAY_CONFIG },
+  outputVolume: 1,
 };
