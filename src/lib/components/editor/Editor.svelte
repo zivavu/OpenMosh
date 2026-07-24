@@ -11,7 +11,7 @@
 	} from '../../editor/mosh';
 	import { executeRecording } from '../../editor/recording';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
-	import { createEffectHistory } from '../../editor/history.svelte';
+	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
 	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
@@ -754,6 +754,14 @@
 		}
 	}
 
+	const moshSession = createMoshSession({
+		getEffects: () => effects,
+		setEffects: (v) => (effects = v),
+		getMoshOptions,
+		cancelBurst: () => panelBurst.cancel(),
+		endBurst: () => panelBurst.end(),
+	});
+
 	// A segment edit records into the sequence stack (pre-edit snapshot), any
 	// other edit into the single-mode history (pushed once the burst settles).
 	const panelBurst = new PanelBurstController({
@@ -764,7 +772,7 @@
 				);
 				return;
 			}
-			return () => history.push(effects);
+			return () => moshSession.pushEdit(effects);
 		},
 	});
 	const endPanelBurst = () => panelBurst.end();
@@ -914,26 +922,10 @@
 		audio.seekTo(t);
 	}
 
-	// Two independent stacks over the effect chain, so the two gestures never
-	// fight: ←/→ walk the moshes, Ctrl+Z/Y walk hand-edits. Rolling a mosh
-	// rebases `history` onto the new chain, so an edit undo lands on the mosh
-	// you were tweaking rather than on some chain from before it.
-	const history = createEffectHistory();
-	const moshHistory = createEffectHistory();
 	let moshGroupRef: MoshGroup | undefined = $state(undefined);
 	// svelte-ignore non_reactive_update
 	let recordGroupRef: RecordGroup | undefined = undefined;
 	let trackLibraryRef: TrackLibrary | undefined = undefined;
-
-	function generateMosh() {
-		cancelPanelBurst();
-		// Record what the chain looked like before the very first roll, so ←
-		// comes back to the user's own work rather than the startup chain.
-		if (!moshHistory.canUndo && !moshHistory.canRedo) moshHistory.reset(effects);
-		generateMoshFn(effects, getMoshOptions());
-		moshHistory.push(effects);
-		history.reset(effects);
-	}
 
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
@@ -949,14 +941,7 @@
 			else seqRoll([seg.id]);
 			return;
 		}
-		const next = moshHistory.redo();
-		if (next) {
-			cancelPanelBurst();
-			effects = next;
-			history.reset(effects);
-		} else {
-			generateMosh();
-		}
+		moshSession.forward();
 	}
 
 	/** ← : back through the mosh history. Never touches the edit history. */
@@ -969,12 +954,7 @@
 			}
 			return;
 		}
-		const prev = moshHistory.undo();
-		if (prev) {
-			cancelPanelBurst();
-			effects = prev;
-			history.reset(effects);
-		}
+		moshSession.back();
 	}
 
 	// Ctrl+Z/Y: hand-edits only. In sequence mode that's the timeline stack,
@@ -984,12 +964,7 @@
 			seqBoundaries.undo();
 			return;
 		}
-		// An edit still inside its coalescing window is a real edit — commit it
-		// first, so undoing lands on the state before it rather than skipping
-		// past it to whatever was recorded last.
-		endPanelBurst();
-		const prev = history.undo();
-		if (prev) effects = prev;
+		moshSession.undoEdit();
 	}
 
 	function redo() {
@@ -997,9 +972,7 @@
 			seqBoundaries.redo();
 			return;
 		}
-		endPanelBurst();
-		const next = history.redo();
-		if (next) effects = next;
+		moshSession.redoEdit();
 	}
 
 	function clearEffects() {
@@ -1013,7 +986,7 @@
 			return;
 		}
 		clearEffectsFn(effects);
-		history.push(effects);
+		moshSession.pushEdit(effects);
 	}
 
 	function handleExit() {
@@ -1023,7 +996,7 @@
 			return;
 		}
 		if (
-			(history.canUndo || moshHistory.canUndo) &&
+			moshSession.touched &&
 			!confirm('Discard current edits and return to upload?')
 		) {
 			return;
@@ -1070,7 +1043,7 @@
 					type: 'image/png',
 				});
 				effects.forEach((e) => (e.enabled = false));
-				history.reset(effects);
+				moshSession.resetEdits(effects);
 				// No restore: loading the new file re-initializes the renderer
 				onfile(newFile);
 			}, 'image/png');
@@ -1400,8 +1373,8 @@
 					onMosh={mosh}
 					onClear={clearEffects}
 					onUndo={undoMosh}
-					canUndo={moshHistory.canUndo}
-					canClear={history.canUndo || moshHistory.canUndo}
+					canUndo={moshSession.canUndoMosh}
+					canClear={moshSession.touched}
 					hideActions={sequenceEnabled}
 					bind:showSettings={showMoshSettings}
 				>
