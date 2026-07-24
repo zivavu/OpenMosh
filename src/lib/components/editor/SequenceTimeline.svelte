@@ -14,6 +14,10 @@
 		type TransitionType,
 	} from '../../editor/sequence';
 	import type { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import {
+		isInteractiveTarget,
+		isTextEntryTarget,
+	} from '../../editor/shortcut-target';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
@@ -573,13 +577,17 @@
 	 * keep working exactly as before whenever there's nothing local to do.
 	 */
 	function onKeydown(e: KeyboardEvent) {
-		const t = e.target as HTMLElement;
-		if (t.closest('input, textarea, select')) return;
+		if (isTextEntryTarget(e.target)) return;
 
+		// Undo/redo still apply while a toolbar dropdown holds focus, which is
+		// exactly where focus sits right after a preset/transition change.
 		if (boundaries.onKeydown(e)) {
 			e.stopPropagation();
 			return;
 		}
+
+		// The rest are bare keys — they belong to a focused control.
+		if (isInteractiveTarget(e.target)) return;
 
 		if (e.key === 'Escape' && selectedIds.length > 0) {
 			setSelection([]);

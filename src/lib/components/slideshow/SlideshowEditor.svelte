@@ -38,6 +38,10 @@
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
+	import {
+		isInteractiveTarget,
+		isTextEntryTarget,
+	} from '../../editor/shortcut-target';
 	import { loadSettings, updateSettings } from '../../editor/settings';
 
 	interface Props {
@@ -739,27 +743,34 @@
 
 	// ── Keyboard ──
 	function handleKeydown(e: KeyboardEvent) {
-		if (
-			e.target instanceof HTMLInputElement ||
-			e.target instanceof HTMLSelectElement ||
-			e.target instanceof HTMLTextAreaElement
-		)
-			return;
 		const mod = e.ctrlKey || e.metaKey;
 		const key = e.key.toLowerCase();
+
+		// Undo/redo reach the app even while a dropdown or slider holds focus;
+		// only a text field owns Ctrl+Z.
+		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
+			if (isTextEntryTarget(e.target)) return;
+			e.preventDefault();
+			moshSession.redoEdit();
+			return;
+		}
+		if (mod && key === 'z') {
+			if (isTextEntryTarget(e.target)) return;
+			e.preventDefault();
+			moshSession.undoEdit();
+			return;
+		}
+		// Leave every other modifier combo (copy, paste, save…) to the browser.
+		if (mod) return;
+
+		// Bare keys belong to whichever control has focus, if any.
+		if (isInteractiveTarget(e.target)) return;
+
 		if (e.code === 'Space') {
 			e.preventDefault();
 			togglePreview();
 		} else if (e.code === 'Escape' && previewPlaying) {
 			stopPreview();
-		} else if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
-			e.preventDefault();
-			moshSession.redoEdit();
-		} else if (mod && key === 'z') {
-			e.preventDefault();
-			moshSession.undoEdit();
-		} else if (mod) {
-			// Leave every other modifier combo (copy, paste, save…) to the browser.
 		} else if (e.key === 'ArrowRight') {
 			e.preventDefault();
 			moshSession.forward();
