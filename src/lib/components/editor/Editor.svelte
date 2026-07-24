@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { Download, HelpCircle, Home, Library, ListVideo } from 'lucide-svelte';
+	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { createTrackStore } from '../../audio/track-persistence';
@@ -1095,6 +1096,17 @@
 	function cancelRecording() {
 		recordingState.cancel();
 	}
+
+	/** Audio sets the track; an image/video replaces the file being edited. */
+	function handleDroppedFiles(files: FileList) {
+		const f = files[0];
+		if (f.type.startsWith('audio/')) {
+			clearTrack();
+			audio.trackFile = f;
+		} else if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
+			onfile(f);
+		}
+	}
 </script>
 
 <svelte:window
@@ -1121,38 +1133,12 @@
 
 
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="editor"
 	class:drag-over={dragging}
-	ondragover={(e) => {
-		if (!e.dataTransfer?.types.includes('Files')) return;
-		e.preventDefault();
-		dragging = true;
-	}}
-	ondragenter={(e) => {
-		if (!e.dataTransfer?.types.includes('Files')) return;
-		e.preventDefault();
-		dragging = true;
-	}}
-	ondragleave={(e) => {
-		if (
-			e.currentTarget === e.target ||
-			!e.currentTarget.contains(e.relatedTarget as Node)
-		)
-			dragging = false;
-	}}
-	ondrop={(e) => {
-		e.preventDefault();
-		dragging = false;
-		const f = e.dataTransfer?.files[0];
-		if (!f) return;
-		if (f.type.startsWith('audio/')) {
-			clearTrack();
-			audio.trackFile = f;
-		} else if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
-			onfile(f);
-		}
+	use:fileDrop={{
+		onDraggingChange: (d) => (dragging = d),
+		onDrop: handleDroppedFiles,
 	}}
 >
 	<TrackLibrary
