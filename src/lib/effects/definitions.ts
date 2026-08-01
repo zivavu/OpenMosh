@@ -422,15 +422,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             defaultValue: 20,
          },
          {
-            key: 'seed',
-            label: 'Seed',
-            type: 'range',
-            min: 0,
-            max: 1000,
-            step: 1,
-            defaultValue: 0,
-         },
-         {
             key: 'speed',
             label: 'Speed',
             type: 'range',

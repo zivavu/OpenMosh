@@ -561,7 +561,6 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amount;
-uniform float u_seed;
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
@@ -569,13 +568,13 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   float t = floor(u_time * 15.0);
   vec2 off = vec2(
-    hash(vec2(floor(v_uv.y * 500.0), u_seed + t)) - 0.5,
-    hash(vec2(floor(v_uv.x * 500.0), u_seed + t + 1.0)) - 0.5
+    hash(vec2(floor(v_uv.y * 500.0), t)) - 0.5,
+    hash(vec2(floor(v_uv.x * 500.0), t + 1.0)) - 0.5
   ) * u_amount * px;
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'seed'),
+		setUniforms: floats('amount'),
 	},
 
 	wobble: {
