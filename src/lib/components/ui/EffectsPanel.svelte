@@ -4,6 +4,7 @@
 		EFFECT_DEFINITIONS,
 		HIDDEN_EFFECTS_KEY,
 		applyPreset,
+		cloneEffectInstance,
 		createEffectInstance,
 		deletePreset,
 		loadPresets,
@@ -57,7 +58,10 @@
 	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
-	let showPresets = $state(false);
+	// Open when there's something to show — otherwise the starter presets are
+	// invisible behind a collapsed header on first run.
+	// svelte-ignore state_referenced_locally
+	let showPresets = $state(presets.length > 0);
 	let saving = $state(false);
 	let presetName = $state('');
 
@@ -73,7 +77,20 @@
 	// explicit save icons, never automatically.
 	function handleLoadPreset(index: number) {
 		onBeforeUserEdit?.();
-		effects = applyPreset(presets[index]);
+		const applied = applyPreset(presets[index]);
+		// Keep the rest of the library in the list, switched off. Replacing the
+		// chain outright made every other effect look deleted (they silently fell
+		// into "Hidden Effects"), which reads as data loss on what is meant to be
+		// a one-click starting point.
+		const inPreset = new Set(applied.map((e) => e.defId));
+		const rest = effects
+			.filter((e) => !inPreset.has(e.defId))
+			.map((e) => ({
+				...cloneEffectInstance($state.snapshot(e) as EffectInstance),
+				enabled: false,
+				expanded: false,
+			}));
+		effects = [...applied, ...rest];
 		onEffectsReplaced?.();
 		onPresetApplied?.($state.snapshot(presets[index]) as Preset);
 	}
@@ -101,18 +118,53 @@
 		effects[index].expanded = !effects[index].expanded;
 	}
 
-	function saveHiddenEffectIds() {
-		const ids = EFFECT_DEFINITIONS.filter(
-			(def) => !effects.some((e) => e.defId === def.id),
-		).map((def) => def.id);
-		localStorage.setItem(HIDDEN_EFFECTS_KEY, JSON.stringify(ids));
+	// Hidden effects are tracked as an explicit set of ids the user chose to
+	// hide, *not* as "every definition missing from the current chain". The
+	// panel's chain is often a subset of the library — a preset-filled sequence
+	// segment, say — and deriving the set from it would silently mark the whole
+	// rest of the library as permanently hidden.
+	function loadHiddenEffectIds(): Set<string> {
+		try {
+			const raw = localStorage.getItem(HIDDEN_EFFECTS_KEY);
+			if (raw) return new Set<string>(JSON.parse(raw));
+		} catch {}
+		return new Set<string>();
 	}
 
-	function remove(index: number) {
-		onBeforeUserEdit?.();
+	let hiddenIds = $state<Set<string>>(loadHiddenEffectIds());
+
+	function persistHiddenIds() {
+		localStorage.setItem(HIDDEN_EFFECTS_KEY, JSON.stringify([...hiddenIds]));
+	}
+
+	// Params of hidden effects, so re-adding one restores it as it was rather
+	// than resetting it to defaults.
+	const stashedValues = new Map<
+		string,
+		{
+			values: EffectInstance['values'];
+			volumeLinks: EffectInstance['volumeLinks'];
+		}
+	>();
+
+	/**
+	 * Hide an effect from the list. This is a persisted preference rather than a
+	 * chain edit, so it deliberately stays out of the undo stack — Ctrl+Z can't
+	 * un-hide, but one click under "Hidden Effects" restores it with its params.
+	 */
+	function hide(index: number) {
+		const effect = effects[index];
+		stashedValues.set(effect.defId, {
+			values: $state.snapshot(effect.values) as EffectInstance['values'],
+			volumeLinks: $state.snapshot(
+				effect.volumeLinks,
+			) as EffectInstance['volumeLinks'],
+		});
+		hiddenIds = new Set([...hiddenIds, effect.defId]);
+		persistHiddenIds();
 		effects.splice(index, 1);
-		saveHiddenEffectIds();
-		onUserEdit?.();
+		// Reveal where it went the first time someone hides an effect
+		showHidden = true;
 	}
 
 	let hiddenDefs = $derived(
@@ -147,9 +199,19 @@
 	function addEffect(defId: string) {
 		const def = EFFECT_DEFINITIONS.find((d) => d.id === defId);
 		if (!def) return;
+		if (hiddenIds.has(defId)) {
+			hiddenIds = new Set([...hiddenIds].filter((id) => id !== defId));
+			persistHiddenIds();
+		}
 		onBeforeUserEdit?.();
-		effects.push(createEffectInstance(def));
-		saveHiddenEffectIds();
+		const instance = createEffectInstance(def);
+		const stashed = stashedValues.get(defId);
+		if (stashed) {
+			instance.values = { ...instance.values, ...stashed.values };
+			if (stashed.volumeLinks) instance.volumeLinks = { ...stashed.volumeLinks };
+			stashedValues.delete(defId);
+		}
+		effects.push(instance);
 		onUserEdit?.();
 	}
 
@@ -404,7 +466,7 @@
 					: undefined}
 				onToggle={() => toggle(i)}
 				onToggleExpand={() => toggleExpand(i)}
-				onRemove={() => remove(i)}
+				onHide={() => hide(i)}
 				onParamChange={(key, value) => paramChange(i, key, value)}
 				isDragging={dragFromIndex === i}
 				dropIndicator={getDropIndicator(i)}
