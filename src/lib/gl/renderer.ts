@@ -583,7 +583,12 @@ export class GlRenderer {
       if (entry.program.uniforms["u_feedback"]) {
         // Feedback effect: render into its private history buffer, reading
         // its own previous output — downstream effects never enter the loop.
-        const pair = this.getFxFeedback(eff.instanceId, input, time);
+        const pair = this.getFxFeedback(
+          eff.instanceId,
+          input,
+          time,
+          entry.def.hdrFeedback,
+        );
         const writeSlot = 1 - pair.idx;
         this.drawPass(
           entry.program,
@@ -727,14 +732,22 @@ export class GlRenderer {
    * Get (or lazily create) the private history buffer for a feedback effect.
    * New buffers are seeded with the current chain input at that slot, so the
    * effect starts from valid history instead of uninitialized memory.
+   * Simulation effects (hdrFeedback) get half-float history so their per-frame
+   * deltas survive round-tripping.
    */
-  private getFxFeedback(instanceId: string, seedTex: WebGLTexture, time: number) {
+  private getFxFeedback(
+    instanceId: string,
+    seedTex: WebGLTexture,
+    time: number,
+    hdr = false,
+  ) {
     let pair = this.fxFeedback.get(instanceId);
     if (!pair) {
-      const textures: [WebGLTexture, WebGLTexture] = [
-        this.createTexture(this.imgW, this.imgH),
-        this.createTexture(this.imgW, this.imgH),
-      ];
+      const make = () =>
+        hdr
+          ? this.createHdrTexture(this.imgW, this.imgH, false)
+          : this.createTexture(this.imgW, this.imgH);
+      const textures: [WebGLTexture, WebGLTexture] = [make(), make()];
       const fbos = this.createFBOPair(textures);
       pair = { textures, fbos, idx: 0 };
       this.fxFeedback.set(instanceId, pair);
@@ -1212,14 +1225,19 @@ export class GlRenderer {
     return tex;
   }
 
-  private createHdrTexture(width: number, height: number): WebGLTexture {
+  private createHdrTexture(
+    width: number,
+    height: number,
+    linear = true,
+  ): WebGLTexture {
     const gl = this.gl;
+    const filter = linear ? gl.LINEAR : gl.NEAREST;
     const tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,

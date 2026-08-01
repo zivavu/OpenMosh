@@ -21,6 +21,26 @@ const BOUNCE_GLSL = `float bounce(float v) {
 }
 `;
 
+const HASH_GLSL = `float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+`;
+
+const NOISE_GLSL =
+	HASH_GLSL +
+	`float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  return vnoise(p) * 0.55 + vnoise(p * 2.13 + 5.0) * 0.3
+       + vnoise(p * 4.41 + 9.0) * 0.15;
+}
+`;
+
 const HUE_ROTATE_GLSL = `vec3 hueRotate(vec3 c, float angle) {
   float rad = angle * 3.14159265 / 180.0;
   float cosA = cos(rad);
@@ -90,6 +110,12 @@ export interface EffectShaderDef {
 	prePasses?: PrePassDef[];
 	/** Sample the chain input with LINEAR filtering for the main pass (smooth warps like swirl). */
 	linearFilter?: boolean;
+	/**
+	 * Allocate this effect's u_feedback history as half-float instead of RGBA8.
+	 * Needed by simulations whose per-frame deltas fall below 8-bit quantization
+	 * (they stall into flat blobs otherwise).
+	 */
+	hdrFeedback?: boolean;
 	animated?: boolean;
 	setUniforms: (
 		gl: WebGL2RenderingContext,
@@ -1863,6 +1889,178 @@ void main() {
   outColor = vec4(mix(c.rgb, ramp, u_chrome), 1.0);
 }`,
 		setUniforms: floats('strength', 'density', 'chrome', 'smoothness'),
+	},
+
+	'liquid-light': {
+		fragment:
+			H +
+			NOISE_GLSL +
+			HUE_ROTATE_GLSL +
+			`uniform float u_scale;
+uniform float u_flow;
+uniform float u_refraction;
+uniform float u_dispersion;
+uniform float u_delta;
+uniform vec2 u_resolution;
+uniform sampler2D u_feedback;
+void main() {
+  vec2 aspect = vec2(u_resolution.x / max(u_resolution.y, 1.0), 1.0);
+  float t = u_time * (0.04 + u_flow * 0.5);
+  float freq = 1.0 + (1.0 - u_scale) * 11.0;
+  vec2 p = v_uv * aspect * freq;
+
+  // Domain warp: a slow vector field steers the cell field, so blobs creep and
+  // merge like oil on water instead of boiling in place.
+  vec2 w = 2.2 * vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t * 0.6));
+
+  // Field + gradient. The offset samples reuse the same warp, so the surface
+  // normal costs two extra noise lookups instead of six.
+  vec2 e = (2.0 / u_resolution) * aspect * freq;
+  float f = fbm(p + w);
+  vec2 grad = vec2(fbm(p + w + vec2(e.x, 0.0)) - f, fbm(p + w + vec2(0.0, e.y)) - f);
+  float slope = length(grad);
+  vec2 n = grad / max(slope, 1e-4);
+
+  // Refract through the cell surface, one sample per channel at slightly
+  // different strengths: every blob edge blooms into a wet spectral rim.
+  vec2 dir = n * min(slope * 16.0, 1.0) * u_refraction * 0.3;
+  float d = u_dispersion * 0.7;
+  vec3 fresh;
+  fresh.r = texture(u_texture, clamp(v_uv - dir * (1.0 + d), vec2(0.0), vec2(1.0))).r;
+  fresh.g = texture(u_texture, clamp(v_uv - dir, vec2(0.0), vec2(1.0))).g;
+  fresh.b = texture(u_texture, clamp(v_uv - dir * (1.0 - d), vec2(0.0), vec2(1.0))).b;
+
+  // Thin-film iridescence riding the field value, strongest on the rims.
+  float rim = min(slope * 24.0, 1.0);
+  fresh = mix(fresh, hueRotate(fresh, f * 220.0 + t * 40.0), rim * u_dispersion);
+
+  // Dye drifts along the field (perpendicular to the gradient) and heals back
+  // to the live input, so the wash never buries the source.
+  vec2 from = clamp(v_uv - vec2(-n.y, n.x) * u_delta * u_flow * 0.05, vec2(0.0), vec2(1.0));
+  vec3 prev = texture(u_feedback, from).rgb;
+  float heal = 1.0 - exp(-mix(6.0, 1.2, u_flow) * u_delta);
+  outColor = vec4(clamp(mix(prev, fresh, heal), 0.0, 1.0), 1.0);
+}`,
+		animated: true,
+		linearFilter: true,
+		setUniforms: floats('scale', 'flow', 'refraction', 'dispersion'),
+	},
+
+	petri: {
+		fragment:
+			H +
+			HASH_GLSL +
+			`uniform float u_reaction;
+uniform float u_drift;
+uniform float u_scale;
+uniform float u_takeover;
+uniform float u_delta;
+uniform vec2 u_resolution;
+uniform sampler2D u_feedback;
+void main() {
+  // Three reagents held in RGB, so the simulation state is the visible image.
+  // Each cell reacts against the local average of its neighbours -- that
+  // spatial coupling is what rolls the spiral waves outward.
+  vec2 px = (1.0 + u_scale * 3.0) / u_resolution;
+  vec3 avg = vec3(0.0);
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 uv = clamp(v_uv + vec2(float(x), float(y)) * px, vec2(0.0), vec2(1.0));
+      avg += texture(u_feedback, uv).rgb;
+    }
+  }
+  avg /= 9.0;
+
+  // Each reagent drifts along its own heading, 120 degrees apart and slowly
+  // rotating, so they chase one another across the frame instead of settling.
+  // This is pure transport -- it curls the waves without producing reagent,
+  // so it can't tint anything.
+  float curl = (u_drift - 0.5) * 2.0;
+  float a = u_time * 0.15;
+  float reach = 2.5 * curl;
+  vec3 drift;
+  drift.r = texture(u_feedback, clamp(v_uv + vec2(cos(a), sin(a)) * px * reach, vec2(0.0), vec2(1.0))).r;
+  drift.g = texture(u_feedback, clamp(v_uv + vec2(cos(a + 2.0944), sin(a + 2.0944)) * px * reach, vec2(0.0), vec2(1.0))).g;
+  drift.b = texture(u_feedback, clamp(v_uv + vec2(cos(a + 4.1888), sin(a + 4.1888)) * px * reach, vec2(0.0), vec2(1.0))).b;
+  avg = mix(avg, drift, 0.6 * abs(curl));
+
+  // Cyclic reaction: red eats green eats blue eats red. The three increments
+  // sum to exactly zero, so total concentration is conserved and no reagent
+  // can win globally -- that is what keeps the frame from drifting into a flat
+  // colour cast, however far the knobs are pushed.
+  float k = clamp(u_delta * 60.0, 0.4, 2.0) * (0.4 + u_reaction * 1.6);
+  vec3 next;
+  next.r = avg.r + avg.r * (avg.g - avg.b) * k;
+  next.g = avg.g + avg.g * (avg.b - avg.r) * k;
+  next.b = avg.b + avg.b * (avg.r - avg.g) * k;
+
+  // A whisper of noise nucleates the spirals and keeps flat regions from
+  // locking into a dead uniform state, which is where this stalls on stills.
+  next += (hash(v_uv * u_resolution + fract(u_time)) - 0.5) * 0.004;
+  next = clamp(next, 0.0, 1.0);
+
+  // The picture is fed back in as reagent concentration, so the chemistry
+  // grows out of the image's own colours. Low takeover heals fast (picture
+  // legible, faint structure); high takeover lets the reaction run away.
+  vec3 src = texture(u_texture, v_uv).rgb;
+  float seed = 1.0 - exp(-mix(7.0, 0.22, u_takeover) * u_delta);
+  outColor = vec4(clamp(mix(next, src, seed), 0.0, 1.0), 1.0);
+}`,
+		animated: true,
+		hdrFeedback: true,
+		setUniforms: floats('reaction', 'drift', 'scale', 'takeover'),
+	},
+
+	'flow-contours': {
+		fragment:
+			H +
+			HUE_ROTATE_GLSL +
+			`uniform float u_bands;
+uniform float u_flow;
+uniform float u_cycle;
+uniform float u_sheen;
+uniform float u_delta;
+uniform vec2 u_resolution;
+uniform sampler2D u_feedback;
+void main() {
+  vec2 px = 1.0 / u_resolution;
+  vec3 lumW = vec3(0.299, 0.587, 0.114);
+  vec3 src = texture(u_texture, v_uv).rgb;
+  float l = dot(src, lumW);
+
+  // Luminance gradient: contour lines run perpendicular to it.
+  float lx = dot(texture(u_texture, clamp(v_uv + vec2(px.x, 0.0), vec2(0.0), vec2(1.0))).rgb, lumW);
+  float ly = dot(texture(u_texture, clamp(v_uv + vec2(0.0, px.y), vec2(0.0), vec2(1.0))).rgb, lumW);
+  vec2 grad = vec2(lx - l, ly - l);
+  float slope = length(grad);
+
+  float bands = max(2.0, floor(u_bands));
+  float band = floor(l * bands);
+
+  // Neighbouring bands slide in opposite directions along the terrain
+  // gradient, so the contours shear against each other rather than
+  // translating as one sheet.
+  float dirSign = mod(band, 2.0) * 2.0 - 1.0;
+  vec2 flow = (grad / max(slope, 1e-4)) * dirSign * u_flow * u_delta * 0.2;
+  vec3 prev = texture(u_feedback, clamp(v_uv - flow, vec2(0.0), vec2(1.0))).rgb;
+
+  // Quantise luminance while keeping the source chroma, then cycle hue per
+  // band so the terrain reads as a heat map that has gone liquid.
+  vec3 quant = src * ((band + 0.5) / bands) / max(l, 0.02);
+  float q = band / bands;
+  quant = hueRotate(clamp(quant, 0.0, 1.0), (q * 360.0 + u_time * 50.0) * u_cycle);
+
+  vec3 col = mix(prev, quant, 1.0 - exp(-mix(9.0, 1.5, u_flow) * u_delta));
+
+  // Specular seam on each band edge, brightest where the terrain is steep.
+  float edge = fract(l * bands);
+  float seam = 1.0 - smoothstep(0.0, 0.16, min(edge, 1.0 - edge));
+  col += seam * u_sheen * min(slope * 45.0, 1.0);
+
+  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`,
+		animated: true,
+		setUniforms: floats('bands', 'flow', 'cycle', 'sheen'),
 	},
 };
 
