@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getToasts, dismissToast } from './toast.svelte';
+	import { getToasts, dismissToast, runToastAction } from './toast.svelte';
 
 	const toasts = getToasts();
 </script>
@@ -12,6 +12,11 @@
 			class:info={toast.type === 'info'}
 		>
 			<span class="message">{toast.message}</span>
+			{#if toast.action}
+				<button class="action" onclick={() => runToastAction(toast.id)}>
+					{toast.action.label}
+				</button>
+			{/if}
 			<button
 				class="close"
 				onclick={() => dismissToast(toast.id)}
@@ -59,6 +64,30 @@
 	.message {
 		flex: 1;
 		line-height: 1.4;
+	}
+
+	.action {
+		flex-shrink: 0;
+		padding: 0.25rem 0.6rem;
+		border: 1px solid #555;
+		border-radius: 4px;
+		background: none;
+		color: #ddd;
+		font-size: 0.75rem;
+		font-weight: 600;
+		font-family: inherit;
+		letter-spacing: 0.03em;
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			border-color 0.15s,
+			background 0.15s;
+	}
+
+	.action:hover {
+		color: #fff;
+		border-color: #888;
+		background: rgba(255, 255, 255, 0.06);
 	}
 
 	.close {
