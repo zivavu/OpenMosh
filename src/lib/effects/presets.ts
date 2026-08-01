@@ -1,16 +1,25 @@
 import type { EffectInstance, Preset } from "./types";
 import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
+import { STARTER_PRESETS } from "./starter-presets";
 
 const PRESETS_KEY = "openmosh-presets";
+/** Set once the starter presets have been written, so deleting them sticks. */
+const SEEDED_KEY = "openmosh-presets-seeded";
 
 export function loadPresets(): Preset[] {
   try {
     const raw = localStorage.getItem(PRESETS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+    if (raw !== null) return JSON.parse(raw);
+    // First run: seed the starters as ordinary, editable user presets. Guarded
+    // by its own key so a user who deletes them all doesn't get them back.
+    if (localStorage.getItem(SEEDED_KEY) === null) {
+      localStorage.setItem(SEEDED_KEY, "1");
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(STARTER_PRESETS));
+      return JSON.parse(JSON.stringify(STARTER_PRESETS)) as Preset[];
+    }
+  } catch {}
+  return [];
 }
 
 export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
