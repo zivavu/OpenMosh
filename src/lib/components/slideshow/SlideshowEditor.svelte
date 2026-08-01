@@ -66,7 +66,20 @@
 	function addFiles(files: FileList | File[]) {
 		const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 		const videoTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
-		for (const file of Array.from(files)) {
+		const all = Array.from(files);
+		const skipped = all.filter(
+			(f) => !imageTypes.includes(f.type) && !videoTypes.includes(f.type),
+		);
+		if (skipped.length > 0) {
+			showToast(
+				skipped.length === all.length
+					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : 'those files'} — supported formats: PNG, JPG, WEBP, GIF, MP4, WEBM, MOV`
+					: `Skipped ${skipped.length} unsupported file${skipped.length === 1 ? '' : 's'}`,
+				skipped.length === all.length ? 'error' : 'info',
+				6000,
+			);
+		}
+		for (const file of all) {
 			if (imageTypes.includes(file.type)) {
 				const slide: SlideshowSlide = {
 					id: generateId(),
@@ -100,7 +113,7 @@
 		if (i === -1) return;
 		if (!probe) {
 			showToast(`Couldn't decode video "${file.name}"`, 'error');
-			removeSlide(id);
+			removeSlide(id, false);
 			return;
 		}
 		const s = slides[i];
@@ -147,17 +160,54 @@
 		if (s) s.thumbUrl = thumbUrl;
 	}
 
-	function removeSlide(id: string) {
-		const i = slides.findIndex((s) => s.id === id);
-		if (i === -1) return;
-		const s = slides[i];
+	/** How long a removed slide stays restorable — matches its toast's lifetime. */
+	const UNDO_WINDOW_MS = 8000;
+
+	interface PendingRemoval {
+		slide: SlideshowSlide;
+		index: number;
+		timer: ReturnType<typeof setTimeout>;
+	}
+	/** Removed slides awaiting either an Undo or the end of the undo window.
+	 * Their object URLs stay alive until then, so a restore is a plain re-insert. */
+	const pendingRemovals = new Map<string, PendingRemoval>();
+
+	function disposeSlide(s: SlideshowSlide) {
 		URL.revokeObjectURL(s.objectUrl);
 		if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
 			URL.revokeObjectURL(s.thumbUrl);
-		slides.splice(i, 1);
-		videoSamplers.get(id)?.dispose();
-		videoSamplers.delete(id);
-		samplerPromises.delete(id);
+		videoSamplers.get(s.id)?.dispose();
+		videoSamplers.delete(s.id);
+		samplerPromises.delete(s.id);
+		imageCache.delete(s.id);
+	}
+
+	/** `undoable: false` for removals the user didn't ask for (a failed decode). */
+	function removeSlide(id: string, undoable = true) {
+		const i = slides.findIndex((s) => s.id === id);
+		if (i === -1) return;
+		const [slide] = slides.splice(i, 1);
+		if (!undoable) {
+			disposeSlide(slide);
+			return;
+		}
+		const timer = setTimeout(() => {
+			pendingRemovals.delete(id);
+			disposeSlide(slide);
+		}, UNDO_WINDOW_MS);
+		pendingRemovals.set(id, { slide, index: i, timer });
+		showToast(`Removed "${slide.file.name}"`, 'info', UNDO_WINDOW_MS, {
+			label: 'Undo',
+			run: () => restoreSlide(id),
+		});
+	}
+
+	function restoreSlide(id: string) {
+		const pending = pendingRemovals.get(id);
+		if (!pending) return;
+		clearTimeout(pending.timer);
+		pendingRemovals.delete(id);
+		slides.splice(Math.min(pending.index, slides.length), 0, pending.slide);
 	}
 
 	function reorderSlides(from: number, to: number) {
@@ -166,7 +216,22 @@
 	}
 
 	function shuffleSlides() {
+		const previousOrder = slides.map((s) => s.id);
 		shuffleInPlace(slides);
+		showToast('Slides shuffled', 'info', UNDO_WINDOW_MS, {
+			label: 'Undo',
+			run: () => restoreOrder(previousOrder),
+		});
+	}
+
+	/** Re-apply a saved id order; slides added or removed since are left at the end. */
+	function restoreOrder(order: string[]) {
+		const byId = new Map(slides.map((s) => [s.id, s]));
+		const restored = order
+			.map((id) => byId.get(id))
+			.filter((s): s is SlideshowSlide => s !== undefined);
+		const known = new Set(order);
+		slides = [...restored, ...slides.filter((s) => !known.has(s.id))];
 	}
 
 	function handleExit() {
@@ -198,6 +263,14 @@
 				if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
 					URL.revokeObjectURL(s.thumbUrl);
 			}
+			// Slides still inside their undo window own live object URLs too
+			for (const { slide, timer } of pendingRemovals.values()) {
+				clearTimeout(timer);
+				URL.revokeObjectURL(slide.objectUrl);
+				if (slide.thumbUrl && slide.thumbUrl !== slide.objectUrl)
+					URL.revokeObjectURL(slide.thumbUrl);
+			}
+			pendingRemovals.clear();
 			for (const sampler of videoSamplers.values()) sampler.dispose();
 			videoSamplers.clear();
 			samplerPromises.clear();
@@ -475,6 +548,11 @@
 		} catch (e) {
 			if (!(e instanceof DOMException && e.name === 'AbortError')) {
 				console.error('BPM detection failed:', e);
+				showToast(
+					"Couldn't detect the BPM for this track — set it by hand or use Tap",
+					'error',
+					6000,
+				);
 			}
 		} finally {
 			bpmDetecting = false;
