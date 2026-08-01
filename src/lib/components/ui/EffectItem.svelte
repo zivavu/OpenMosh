@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ArrowUpDown, GripVertical, Music, X } from 'lucide-svelte';
+	import { ArrowUpDown, EyeOff, GripVertical, Music, X } from 'lucide-svelte';
 	import {
 		FREQ_PRESETS,
 		getDefinition,
@@ -53,7 +53,8 @@
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
 		onToggle: () => void;
 		onToggleExpand: () => void;
-		onRemove: () => void;
+		/** Hide from the effect list (a persisted preference, not a chain edit). */
+		onHide: () => void;
 		onParamChange: (key: string, value: number | string) => void;
 		isDragging: boolean;
 		dropIndicator: 'above' | 'below' | null;
@@ -73,7 +74,7 @@
 		onVolumeLinkChange,
 		onToggle,
 		onToggleExpand,
-		onRemove,
+		onHide,
 		onParamChange,
 		isDragging = false,
 		dropIndicator = null,
@@ -143,8 +144,13 @@
 					<span class="toggle-knob"></span>
 				</button>
 
-				<button class="icon-btn" onclick={onRemove} title="Remove" aria-label="Remove effect">
-					<X size={14} />
+				<button
+					class="icon-btn"
+					onclick={onHide}
+					title="Hide from the list — stays hidden next session, restore it under Hidden Effects"
+					aria-label="Hide effect"
+				>
+					<EyeOff size={14} />
 				</button>
 
 				<span
