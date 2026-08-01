@@ -7,6 +7,7 @@ interface Props {
 
 import { Image, Music, Upload } from "lucide-svelte";
 import GithubLink from "./GithubLink.svelte";
+import { showToast } from "./toast.svelte";
 
 let { onfile, onSlideshow, onaudio }: Props = $props();
 
@@ -59,17 +60,60 @@ function isAcceptedFile(file: File) {
 	return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 }
 
+const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
+
+function rejectFile(file: File) {
+	showToast(
+		`Can't open "${file.name}" — supported formats: ${SUPPORTED_LABEL}`,
+		"error",
+		6000,
+	);
+}
+
 function handleFile(file: File) {
-	if (isAcceptedFile(file)) {
-		onfile(file);
+	if (!isAcceptedFile(file)) {
+		rejectFile(file);
+		return;
 	}
+	onfile(file);
 }
 
 function handleSlideshowFiles(files: FileList | File[]) {
-	const accepted = Array.from(files).filter((f) => isAcceptedFile(f));
-	if (accepted.length > 0) {
-		onSlideshow(accepted);
+	const all = Array.from(files);
+	const accepted = all.filter((f) => isAcceptedFile(f));
+	if (accepted.length === 0) {
+		if (all.length === 1) rejectFile(all[0]);
+		else
+			showToast(
+				`None of those ${all.length} files are supported — try ${SUPPORTED_LABEL}`,
+				"error",
+				6000,
+			);
+		return;
 	}
+	const skipped = all.length - accepted.length;
+	if (skipped > 0) {
+		showToast(
+			`Skipped ${skipped} unsupported file${skipped === 1 ? "" : "s"}`,
+			"info",
+		);
+	}
+	onSlideshow(accepted);
+}
+
+/** Single mode takes one file — say so rather than silently dropping the rest. */
+function handleSingleFile(files: FileList | File[]) {
+	const all = Array.from(files);
+	const file = all[0];
+	if (!file) return;
+	if (all.length > 1 && isAcceptedFile(file)) {
+		showToast(
+			`Loaded "${file.name}" only — switch to Slideshow mode to use all ${all.length}`,
+			"info",
+			6000,
+		);
+	}
+	handleFile(file);
 }
 
 function onDrop(e: DragEvent) {
@@ -80,8 +124,7 @@ function onDrop(e: DragEvent) {
 	if (selectedMode === "slideshow") {
 		handleSlideshowFiles(files);
 	} else {
-		const file = files[0];
-		if (file) handleFile(file);
+		handleSingleFile(files);
 	}
 }
 
@@ -105,8 +148,7 @@ function onInputChange(e: Event) {
 	if (selectedMode === "slideshow") {
 		handleSlideshowFiles(input.files);
 	} else {
-		const file = input.files[0];
-		if (file) handleFile(file);
+		handleSingleFile(input.files);
 	}
 	input.value = "";
 }
@@ -123,10 +165,12 @@ function getIsMultiple() {
 }
 
 function handleAudioFile(file: File) {
-	if (AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/")) {
-		pendingAudio = file;
-		onaudio?.(file);
+	if (!(AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/"))) {
+		showToast(`"${file.name}" isn't an audio file`, "error");
+		return;
 	}
+	pendingAudio = file;
+	onaudio?.(file);
 }
 
 function openAudioPicker() {
