@@ -61,6 +61,7 @@
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
 	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
+	import { showToast } from '../ui/toast.svelte';
 
 	interface Props {
 		file: File;
@@ -230,7 +231,10 @@
 				},
 				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
 				{ keys: ['Space'], description: 'Play / pause' },
-				{ keys: ['V'], description: 'Re-input current frame' },
+				{
+					keys: ['V'],
+					description: 'Bake current frame as the new source (undoable)',
+				},
 			],
 		},
 		...(sequenceEnabled
@@ -954,8 +958,16 @@
 		});
 	}
 
+	/**
+	 * Bake the current frame into a new source file. Destructive — it replaces
+	 * the file being edited and clears the chain — and it's bound to a bare `V`,
+	 * so it hands back an Undo that restores both the previous file and the
+	 * effect chain as it stood before the bake.
+	 */
 	function reInput() {
 		if (!canvasEl) return;
+		const prevFile = file;
+		const prevEffects = $state.snapshot(effects) as EffectInstance[];
 		captureAtOutputRes(performance.now() / 1000, (done) => {
 			canvasEl!.toBlob((blob) => {
 				if (!blob) {
@@ -969,6 +981,14 @@
 				moshSession.resetEdits(effects);
 				// No restore: loading the new file re-initializes the renderer
 				onfile(newFile);
+				showToast('Frame re-input as the new source', 'info', 8000, {
+					label: 'Undo',
+					run: () => {
+						effects = prevEffects.map(cloneEffectInstance);
+						moshSession.resetEdits(effects);
+						onfile(prevFile);
+					},
+				});
 			}, 'image/png');
 		});
 	}
@@ -1075,10 +1095,7 @@
 					signal,
 				}),
 			{
-				onError: (message) =>
-					import('../../components/ui/toast.svelte').then(({ showToast }) =>
-						showToast(message, 'error'),
-					),
+				onError: (message) => showToast(message, 'error'),
 				fallbackErrorMessage:
 					'Recording failed. Check the browser console for details.',
 			},
