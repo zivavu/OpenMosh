@@ -17,8 +17,6 @@ const OPTIONS: MoshOptions = {
   moshAudioLink: false,
   moshAudioLinkStrength: 0,
   hasAudio: false,
-  audioSampleRate: 0,
-  frequencyData: null,
 };
 
 /** Compare two effect lists by the fields that drive render output. */

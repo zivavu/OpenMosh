@@ -134,8 +134,6 @@ function withRandomAudioLinks(
     applyRandomAudioLinks(
       effects,
       moshOptions.hasAudio,
-      moshOptions.audioSampleRate,
-      moshOptions.frequencyData,
       moshOptions.moshAudioLinkStrength,
     );
   }

@@ -478,8 +478,6 @@
 			moshAudioLink,
 			moshAudioLinkStrength,
 			hasAudio: !!audio.trackFile && !!audio.audioContext,
-			audioSampleRate: audio.audioSampleRate,
-			frequencyData: audio.frequencyData,
 		};
 	}
 

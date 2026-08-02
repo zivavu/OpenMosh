@@ -724,8 +724,6 @@
 			moshAudioLink: config.moshAudioLink,
 			moshAudioLinkStrength: config.moshAudioLinkStrength,
 			hasAudio: !!audio.trackFile && !!audio.audioContext,
-			audioSampleRate: audio.audioSampleRate,
-			frequencyData: audio.frequencyData,
 		};
 	}
 
