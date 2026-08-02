@@ -1,9 +1,4 @@
-import {
-  FREQ_PRESETS,
-  getDefinition,
-  type EffectInstance,
-  type VolumeLink,
-} from "../effects";
+import { getDefinition, type EffectInstance, type VolumeLink } from "../effects";
 import { shuffleInPlace } from "../utils";
 
 export interface MoshOptions {
@@ -14,17 +9,17 @@ export interface MoshOptions {
   /** 0–1: controls both how many params get linked and how wide their modulation range is. */
   moshAudioLinkStrength: number;
   hasAudio: boolean;
-  audioSampleRate: number;
-  frequencyData: Uint8Array | null;
   /** When true, only currently enabled (non–hidden) effects are included in random mosh; disabled effects stay off. */
   onlyMoshEnabled?: boolean;
 }
 
+/**
+ * Link a random share of range params to the music. Every link is full
+ * spectrum — see the comment at the link site below.
+ */
 export function applyRandomAudioLinks(
   effects: EffectInstance[],
   hasAudio: boolean,
-  audioSampleRate: number,
-  frequencyData: Uint8Array | null,
   strength: number = 0.8,
 ): void {
   if (!hasAudio || strength <= 0) {
@@ -33,8 +28,6 @@ export function applyRandomAudioLinks(
     }
     return;
   }
-
-  const nyquist = audioSampleRate > 0 ? audioSampleRate / 2 : 22050;
 
   for (const effect of effects) {
     const def = getDefinition(effect.defId);
@@ -72,36 +65,12 @@ export function applyRandomAudioLinks(
         if (vMax <= vMin) vMax = Math.min(pMax, vMin + param.step);
       }
 
-      let freqMin: number | undefined;
-      let freqMax: number | undefined;
-
-      const mode = Math.random();
-      if (mode < 0.2 || !frequencyData || audioSampleRate <= 0) {
-        // Full spectrum
-      } else if (mode < 0.4) {
-        freqMin = FREQ_PRESETS.low.min;
-        freqMax = FREQ_PRESETS.low.max;
-      } else if (mode < 0.7) {
-        freqMin = FREQ_PRESETS.mid.min;
-        freqMax = FREQ_PRESETS.mid.max;
-      } else if (mode < 0.9) {
-        freqMin = FREQ_PRESETS.high.min;
-        freqMax = FREQ_PRESETS.high.max;
-      } else {
-        // Custom random band
-        const f1 = 20 + Math.random() * (nyquist - 20);
-        const f2 = 20 + Math.random() * (nyquist - 20);
-        freqMin = Math.min(f1, f2);
-        freqMax = Math.max(f1, f2);
-      }
-
-      const link: VolumeLink = { min: vMin, max: vMax };
-      if (freqMin != null && freqMax != null) {
-        link.freqMin = freqMin;
-        link.freqMax = freqMax;
-      }
-
-      links[param.key] = link;
+      // Full spectrum: leaving freqMin/freqMax unset makes the link follow the
+      // overall RMS level. Rolling a random band per param used to be the
+      // default, but it reads as noise — half the links would sit on a quiet
+      // part of the mix and barely move. Per-band links stay available by hand
+      // via the Freq row on any linked param.
+      links[param.key] = { min: vMin, max: vMax };
     }
 
     if (Object.keys(links).length > 0) {
@@ -179,13 +148,7 @@ export function generateMosh(
   }
 
   if (moshAudioLink) {
-    applyRandomAudioLinks(
-      effects,
-      options.hasAudio,
-      options.audioSampleRate,
-      options.frequencyData,
-      moshAudioLinkStrength,
-    );
+    applyRandomAudioLinks(effects, options.hasAudio, moshAudioLinkStrength);
   } else {
     for (const effect of effects) {
       if (effect.volumeLinks) delete effect.volumeLinks;
