@@ -125,21 +125,6 @@ export const STARTER_PRESETS: Preset[] = [
     ],
   },
   {
-    name: "ASCII Terminal",
-    effects: [
-      {
-        defId: "ascii",
-        enabled: true,
-        values: { size: 34, charset: "classic", color: "green" },
-      },
-      {
-        defId: "grain",
-        enabled: true,
-        values: { amount: 0.15, rgb: 0, blendMode: "additive" },
-      },
-    ],
-  },
-  {
     name: "Liquid Dream",
     effects: [
       {
