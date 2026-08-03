@@ -274,7 +274,7 @@
 	async function moveEffect(pos: number, direction: -1 | 1, toEnd: boolean) {
 		const visible = filteredEffects;
 		const to = resolveMoveTarget(
-			visible.map((v) => v.index),
+			visible.map((v) => ({ index: v.index, enabled: v.effect.enabled })),
 			pos,
 			direction,
 			toEnd,
