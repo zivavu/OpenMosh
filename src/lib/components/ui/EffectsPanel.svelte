@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { Check, Plus, Save, Search, X } from 'lucide-svelte';
 	import {
 		EFFECT_DEFINITIONS,
@@ -15,6 +16,7 @@
 		type VolumeLink,
 	} from '../../effects';
 	import type { SpectrumData } from '../../types';
+	import { moveItem, resolveMoveTarget } from '../../effects/reorder';
 	import EffectItem from './EffectItem.svelte';
 
 	export type { SpectrumData };
@@ -263,6 +265,51 @@
 		onUserEdit?.();
 	}
 
+	/**
+	 * Move an effect by button rather than by drag. `pos` indexes the *visible*
+	 * list, and neighbours are taken from it too: with a search active the
+	 * adjacent row on screen is rarely adjacent in `effects`, and stepping
+	 * through the raw array would look like the button did nothing.
+	 */
+	async function moveEffect(pos: number, direction: -1 | 1, toEnd: boolean) {
+		const visible = filteredEffects;
+		const to = resolveMoveTarget(
+			visible.map((v) => v.index),
+			pos,
+			direction,
+			toEnd,
+		);
+		if (to === null) return;
+		const moved = visible[pos].effect;
+
+		onBeforeUserEdit?.();
+		moveItem(effects, visible[pos].index, to);
+		onUserEdit?.();
+
+		// Keep the effect the user is working on under their eye — after a jump
+		// to either end it would otherwise be somewhere off-screen.
+		await tick();
+		centerOnEffect(moved.instanceId);
+	}
+
+	function centerOnEffect(instanceId: string) {
+		if (!scrollEl) return;
+		const el = scrollEl.querySelector<HTMLElement>(
+			`[data-effect-id="${instanceId}"]`,
+		);
+		if (!el) return;
+		const item = el.getBoundingClientRect();
+		const container = scrollEl.getBoundingClientRect();
+		// Offset from the container's own scrollTop, so this works regardless of
+		// where the list sits on the page or which element is the offsetParent.
+		const delta =
+			item.top - container.top - (container.height - item.height) / 2;
+		scrollEl.scrollTo({
+			top: scrollEl.scrollTop + delta,
+			behavior: 'smooth',
+		});
+	}
+
 	function clearDragState() {
 		dragFromIndex = null;
 		dragOverIndex = null;
@@ -456,9 +503,12 @@
 	</div>
 
 	<div class="panel-scroll" bind:this={scrollEl}>
-		{#each filteredEffects as { effect, index: i } (effect.instanceId)}
+		{#each filteredEffects as { effect, index: i }, pos (effect.instanceId)}
 			<EffectItem
 				{effect}
+				canMoveUp={pos > 0}
+				canMoveDown={pos < filteredEffects.length - 1}
+				onMove={(direction, toEnd) => moveEffect(pos, direction, toEnd)}
 				{hasTrack}
 				{spectrumData}
 				onVolumeLinkChange={onVolumeLinkChange

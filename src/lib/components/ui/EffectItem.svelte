@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { ArrowUpDown, EyeOff, GripVertical, Music, X } from 'lucide-svelte';
+	import {
+		ArrowUpDown,
+		ChevronDown,
+		ChevronUp,
+		EyeOff,
+		GripVertical,
+		Music,
+		X,
+	} from 'lucide-svelte';
 	import {
 		FREQ_PRESETS,
 		getDefinition,
@@ -55,6 +63,10 @@
 		onToggleExpand: () => void;
 		/** Hide from the effect list (a persisted preference, not a chain edit). */
 		onHide: () => void;
+		/** Step one place in `direction`, or jump to that end when `toEnd`. */
+		onMove: (direction: -1 | 1, toEnd: boolean) => void;
+		canMoveUp: boolean;
+		canMoveDown: boolean;
 		onParamChange: (key: string, value: number | string) => void;
 		isDragging: boolean;
 		dropIndicator: 'above' | 'below' | null;
@@ -75,6 +87,9 @@
 		onToggle,
 		onToggleExpand,
 		onHide,
+		onMove,
+		canMoveUp,
+		canMoveDown,
 		onParamChange,
 		isDragging = false,
 		dropIndicator = null,
@@ -110,6 +125,7 @@
 		class:drop-above={dropIndicator === 'above'}
 		class:drop-below={dropIndicator === 'below'}
 		data-effect-index={effectIndex}
+		data-effect-id={effect.instanceId}
 		draggable={canDrag}
 		ondragstart={handleDragStart}
 		ondragover={(e) => {
@@ -152,6 +168,27 @@
 				>
 					<EyeOff size={14} />
 				</button>
+
+				<div class="move-btns">
+					<button
+						class="move-btn"
+						disabled={!canMoveUp}
+						onclick={(e) => onMove(-1, e.shiftKey)}
+						title="Move up — shift-click to send to the top"
+						aria-label="Move effect up"
+					>
+						<ChevronUp size={13} />
+					</button>
+					<button
+						class="move-btn"
+						disabled={!canMoveDown}
+						onclick={(e) => onMove(1, e.shiftKey)}
+						title="Move down — shift-click to send to the bottom"
+						aria-label="Move effect down"
+					>
+						<ChevronDown size={13} />
+					</button>
+				</div>
 
 				<span
 					class="drag-handle"
@@ -430,8 +467,42 @@
 	.controls {
 		display: flex;
 		align-items: center;
-		gap: 0.3rem;
+		gap: 0.25rem;
 		flex-shrink: 0;
+	}
+
+	/* Stacked so the pair costs one control's width, not two */
+	.move-btns {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+	}
+
+	.move-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 11px;
+		background: none;
+		border: none;
+		color: #4a4a4a;
+		cursor: pointer;
+		border-radius: 2px;
+		padding: 0;
+		transition:
+			color 0.15s,
+			background 0.15s;
+	}
+
+	.move-btn:hover:not(:disabled) {
+		color: #ccc;
+		background: rgba(255, 255, 255, 0.07);
+	}
+
+	.move-btn:disabled {
+		opacity: 0.3;
+		cursor: default;
 	}
 
 	/* Toggle switch */
