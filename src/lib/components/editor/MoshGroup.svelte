@@ -10,7 +10,9 @@
 		canClear?: boolean;
 		showSettings?: boolean;
 		settingsContent?: Snippet;
-		/** Hide the mosh/clear/undo buttons but keep the settings gear (sequence mode). */
+		/** Hide the mosh/clear/undo buttons but keep the settings gear (sequence
+		 * mode). Gate this on the sequence timeline actually being rendered —
+		 * otherwise these actions vanish with nothing replacing them. */
 		hideActions?: boolean;
 	}
 
