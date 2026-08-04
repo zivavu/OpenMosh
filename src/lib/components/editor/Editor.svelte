@@ -592,6 +592,23 @@
 		}
 	}
 
+	// Sequence mode needs a master timeline: the audio track, or the video.
+	// Losing both — removing the track while editing an image — left the mode
+	// stuck on, because the SEQ toggle and the timeline are both gated on
+	// `seqMasterDuration > 0` and unmounted while `sequenceEnabled` stayed true.
+	// That hid the mosh actions with no control left to switch back.
+	//
+	// Keyed on `trackFile` rather than `seqMasterDuration` on purpose: swapping
+	// library tracks drops the duration to 0 until the new track's metadata
+	// loads, and exiting there would throw away the timeline mid-switch.
+	$effect(() => {
+		if (!sequenceEnabled) return;
+		if (audio.trackFile) return;
+		if (isVideo && videoDuration > 0) return;
+		setSequenceEnabled(false);
+		showToast('Sequence mode off — nothing left to sequence over', 'info');
+	});
+
 	// While audio is master the video must always loop its span, regardless of
 	// the user's loop toggle — master positions past the video length land
 	// inside the loop instead of on a paused last frame.
@@ -1298,7 +1315,7 @@
 					onUndo={undoMosh}
 					canUndo={moshSession.canUndoMosh}
 					canClear={moshSession.touched}
-					hideActions={sequenceEnabled}
+					hideActions={sequenceEnabled && seqMasterDuration > 0}
 					bind:showSettings={showMoshSettings}
 				>
 					{#snippet settingsContent()}
