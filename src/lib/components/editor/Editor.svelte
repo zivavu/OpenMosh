@@ -491,7 +491,9 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
-			hasAudio: !!audio.trackFile && !!audio.audioContext,
+			// Not gated on audioContext: links are data, and the graph is only built
+			// on first play, so requiring it drops links when moshing before playback.
+			hasAudio: !!audio.trackFile || (isVideo && videoHasAudio),
 		};
 	}
 
