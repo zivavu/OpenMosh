@@ -25,6 +25,7 @@
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
+	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
@@ -235,13 +236,19 @@
 		slides = [...restored, ...slides.filter((s) => !known.has(s.id))];
 	}
 
+	let showExitConfirm = $state(false);
+
 	function handleExit() {
 		if (!onExit) return;
 		if (recordingState.recording) {
-			alert('Please cancel or wait for the recording to finish before exiting.');
+			showToast(
+				'Cancel or wait for the recording to finish before exiting',
+				'error',
+			);
 			return;
 		}
-		if (slides.length > 0 && !confirm('Discard current slideshow and return to upload?')) {
+		if (slides.length > 0) {
+			showExitConfirm = true;
 			return;
 		}
 		onExit();
@@ -1047,6 +1054,21 @@
 		<div class="drop-overlay">
 			<span>Drop to add images or replace audio</span>
 		</div>
+	{/if}
+
+	{#if showExitConfirm}
+		<ConfirmDialog
+			title="Return to upload?"
+			message="Your current slideshow will be discarded. Presets you've saved are kept."
+			confirmLabel="Discard and exit"
+			cancelLabel="Keep editing"
+			danger
+			onConfirm={() => {
+				showExitConfirm = false;
+				onExit?.();
+			}}
+			onCancel={() => (showExitConfirm = false)}
+		/>
 	{/if}
 </div>
 
