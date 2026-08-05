@@ -103,8 +103,7 @@
 		}
 	}
 
-	// Scrub while the button stays down, so the playhead can be dragged and not
-	// just jumped to.
+	// Scrub while the button stays down, so the playhead drags rather than jumps.
 	function beginSeekDrag(startClientX: number) {
 		onSeek(timeFromClientX(startClientX));
 		seekDragging = true;
