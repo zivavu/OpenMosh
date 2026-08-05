@@ -1,13 +1,40 @@
 import { describe, expect, it } from "bun:test";
 import { EFFECT_DEFINITIONS } from "./definitions";
+import { normalizePresetName, PRESET_NAME_MAX_LENGTH } from "./presets";
 import { STARTER_PRESETS } from "./starter-presets";
 
 const defById = new Map(EFFECT_DEFINITIONS.map((d) => [d.id, d]));
+
+describe("normalizePresetName", () => {
+  it("trims surrounding whitespace", () => {
+    expect(normalizePresetName("  glitchy  ")).toBe("glitchy");
+  });
+
+  it("truncates to the maximum length", () => {
+    const name = normalizePresetName("x".repeat(PRESET_NAME_MAX_LENGTH + 20));
+    expect(name.length).toBe(PRESET_NAME_MAX_LENGTH);
+  });
+
+  it("doesn't leave trailing whitespace after truncating mid-word", () => {
+    const name = normalizePresetName("x".repeat(PRESET_NAME_MAX_LENGTH - 1) + " yz");
+    expect(name).toBe("x".repeat(PRESET_NAME_MAX_LENGTH - 1));
+  });
+
+  it("collapses an all-whitespace name to empty, so saving is rejected", () => {
+    expect(normalizePresetName("   ")).toBe("");
+  });
+});
 
 describe("starter presets", () => {
   it("have unique names", () => {
     const names = STARTER_PRESETS.map((p) => p.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("fit within the preset name limit", () => {
+    for (const preset of STARTER_PRESETS) {
+      expect(preset.name.length).toBeLessThanOrEqual(PRESET_NAME_MAX_LENGTH);
+    }
   });
 
   for (const preset of STARTER_PRESETS) {

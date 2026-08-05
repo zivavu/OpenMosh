@@ -22,10 +22,18 @@ export function loadPresets(): Preset[] {
   return [];
 }
 
+/** Names longer than this are truncated — they only ever render in narrow
+ * one-line rows, where anything longer is ellipsised into uselessness. */
+export const PRESET_NAME_MAX_LENGTH = 40;
+
+export function normalizePresetName(name: string): string {
+  return name.trim().slice(0, PRESET_NAME_MAX_LENGTH).trim();
+}
+
 export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
   const presets = loadPresets();
   presets.push({
-    name,
+    name: normalizePresetName(name),
     effects: effects.map((e) => ({
       defId: e.defId,
       enabled: e.enabled,
