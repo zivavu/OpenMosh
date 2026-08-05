@@ -257,7 +257,7 @@
 		</div>
 	{/if}
 
-	{#if config.moshMode === 'random' || config.moshMode === 'smooth'}
+	{#if hasTrack && (config.moshMode === 'random' || config.moshMode === 'smooth')}
 		<div class="config-row">
 			<label for="ss-audio-link">Random audio links</label>
 			<input
