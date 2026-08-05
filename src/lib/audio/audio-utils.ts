@@ -8,7 +8,11 @@ function bandKey(freqMin: number, freqMax: number): string {
   return `${freqMin}:${freqMax}`;
 }
 
-/** `dt` must be the real frame delta, or preview and export will disagree. */
+/**
+ * `dt` and `autoRangeAmount` must match between preview and export, or a render
+ * will not sound like what was previewed. `autoRangeAmount` blends raw level
+ * (0) against auto-ranged (1).
+ */
 export function applyVolumeLinksToEffects(
   effects: EffectInstance[],
   volumeLevel: number,
@@ -16,6 +20,7 @@ export function applyVolumeLinksToEffects(
   sampleRate: number,
   fftSize: number,
   dt: number,
+  autoRangeAmount: number,
 ): void {
   // Cached so a band's envelope advances once per frame, not once per link.
   const perBand = new Map<string, number>();
@@ -33,9 +38,12 @@ export function applyVolumeLinksToEffects(
             freqMax,
           )
         : volumeLevel;
+    // Always stepped, even at amount 0, so the envelope stays warm and raising
+    // the slider mid-track doesn't jump off stale floor/ceiling values.
     const ranged = autoRangeLevel(key, raw, dt);
-    perBand.set(key, ranged);
-    return ranged;
+    const blended = raw + (ranged - raw) * autoRangeAmount;
+    perBand.set(key, blended);
+    return blended;
   };
 
   for (const effect of effects) {

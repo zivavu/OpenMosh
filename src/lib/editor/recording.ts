@@ -1,5 +1,6 @@
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
+import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
 import { downloadBlob, recordVideo } from "../recorder";
 import { openDecodableVideo } from "../video/decode";
 import type { MoshOptions } from "./mosh";
@@ -43,6 +44,8 @@ export interface RecordingContext {
   signal: AbortSignal;
   /** Linear normalize gain to apply to audio. Defaults to 1.0. */
   normalizeGain?: number;
+  /** Blend between raw (0) and auto-ranged (1) levels. Must match the preview. */
+  autoRangeAmount?: number;
 }
 
 export async function executeRecording(ctx: RecordingContext): Promise<void> {
@@ -68,6 +71,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     onFinalizing,
     signal,
     normalizeGain = 1.0,
+    autoRangeAmount = DEFAULT_AUTO_RANGE_AMOUNT,
   } = ctx;
 
   const hasExplicitAudio = !!trackFile && trackDuration > 0;
@@ -238,6 +242,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       canvas,
       renderer,
       normalizeGain,
+      autoRangeAmount,
       effects: effects.map(
         (e): EffectInstance => ({
           ...e,

@@ -11,6 +11,8 @@ import type { SpectrumData } from '../types';
 
 interface AudioManagerOptions {
   getEffects: () => EffectInstance[];
+  /** Blend between raw (0) and auto-ranged (1) levels; read per frame. */
+  getAutoRangeAmount: () => number;
   initialOutputVolume?: number;
   initialLoop?: boolean;
 }
@@ -61,9 +63,16 @@ export class AudioManager {
   );
 
   readonly #getEffects: () => EffectInstance[];
+  readonly #getAutoRangeAmount: () => number;
 
-  constructor({ getEffects, initialOutputVolume = 1, initialLoop = false }: AudioManagerOptions) {
+  constructor({
+    getEffects,
+    getAutoRangeAmount,
+    initialOutputVolume = 1,
+    initialLoop = false,
+  }: AudioManagerOptions) {
     this.#getEffects = getEffects;
+    this.#getAutoRangeAmount = getAutoRangeAmount;
     this.outputVolume = initialOutputVolume;
     this.loopAudio = initialLoop;
 
@@ -112,6 +121,7 @@ export class AudioManager {
               sampleRate,
               fftSize,
               dt,
+              this.#getAutoRangeAmount(),
             );
           }
           rafId = requestAnimationFrame(tick);
@@ -128,6 +138,7 @@ export class AudioManager {
           sampleRate,
           fftSize,
           dt,
+          this.#getAutoRangeAmount(),
         );
         rafId = requestAnimationFrame(tick);
       };

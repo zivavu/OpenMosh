@@ -12,6 +12,9 @@
  * would not match what was previewed.
  */
 
+/** Default blend of raw (0) vs auto-ranged (1) level, when no setting is stored. */
+export const DEFAULT_AUTO_RANGE_AMOUNT = 0.5;
+
 const CEIL_DECAY_TAU = 2.5;
 /** Slower than the ceiling so a loud passage doesn't erase its own headroom. */
 const FLOOR_RISE_TAU = 4;

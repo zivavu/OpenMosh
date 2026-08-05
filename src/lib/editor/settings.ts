@@ -6,6 +6,8 @@ export interface EditorSettings {
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
 	moshAudioLinkStrength: number;
+	/** 0 = raw band level, 1 = fully auto-ranged. Applies to every volume link. */
+	autoRangeAmount: number;
 	showFps: boolean;
 	outputVolume: number;
 	loopAudio: boolean;

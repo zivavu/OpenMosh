@@ -4,6 +4,7 @@
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import { DEFAULT_AUTO_RANGE_AMOUNT } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
@@ -212,6 +213,7 @@
 	let showMoshSettings = $state(false);
 	let moshAudioLink = $state(saved.moshAudioLink ?? true);
 	let moshAudioLinkStrength = $state(saved.moshAudioLinkStrength ?? 0.8);
+	let autoRangeAmount = $state(saved.autoRangeAmount ?? DEFAULT_AUTO_RANGE_AMOUNT);
 	let showFps = $state(saved.showFps ?? false);
 	let videoLoop = $state(saved.loopVideo ?? true);
 	let showShortcuts = $state(false);
@@ -273,6 +275,7 @@
 
 	const audio = new AudioManager({
 		getEffects: () => effects,
+		getAutoRangeAmount: () => autoRangeAmount,
 		initialOutputVolume: saved.outputVolume ?? 1,
 		initialLoop: saved.loopAudio ?? false,
 	});
@@ -319,6 +322,7 @@
 		randomizeOrder;
 		moshAudioLink;
 		moshAudioLinkStrength;
+		autoRangeAmount;
 		showFps;
 		audio.outputVolume;
 		audio.loopAudio;
@@ -329,6 +333,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
+			autoRangeAmount,
 			showFps,
 			outputVolume: audio.outputVolume,
 			loopAudio: audio.loopAudio,
@@ -484,6 +489,10 @@
 		videoCurrentTime = tClamp;
 	}
 
+	// Not gated on audioContext: links are data, and the graph is only built
+	// on first play, so requiring it drops links when moshing before playback.
+	const hasAudio = $derived(!!audio.trackFile || (isVideo && videoHasAudio));
+
 	function getMoshOptions() {
 		return {
 			moshMin,
@@ -491,9 +500,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
-			// Not gated on audioContext: links are data, and the graph is only built
-			// on first play, so requiring it drops links when moshing before playback.
-			hasAudio: !!audio.trackFile || (isVideo && videoHasAudio),
+			hasAudio,
 		};
 	}
 
@@ -1108,6 +1115,7 @@
 					videoSpeed,
 					file,
 					normalizeGain: audio.normalizeGain,
+					autoRangeAmount,
 					sequence:
 						sequenceEnabled && sequenceSegments.length > 0
 							? {
@@ -1497,6 +1505,8 @@
 					bind:randomizeOrder
 					bind:moshAudioLink
 					bind:moshAudioLinkStrength
+					bind:autoRangeAmount
+					{hasAudio}
 				/>
 			</div>
 		{/snippet}

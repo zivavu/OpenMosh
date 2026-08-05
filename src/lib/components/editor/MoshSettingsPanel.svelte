@@ -7,6 +7,8 @@
 		randomizeOrder: boolean;
 		moshAudioLink: boolean;
 		moshAudioLinkStrength: number;
+		autoRangeAmount: number;
+		hasAudio: boolean;
 	}
 
 	let {
@@ -15,6 +17,8 @@
 		randomizeOrder = $bindable(),
 		moshAudioLink = $bindable(),
 		moshAudioLinkStrength = $bindable(),
+		autoRangeAmount = $bindable(),
+		hasAudio,
 	}: Props = $props();
 </script>
 
@@ -48,11 +52,13 @@
 		<label for="mosh-shuffle">Shuffle order</label>
 		<input id="mosh-shuffle" type="checkbox" bind:checked={randomizeOrder} />
 	</div>
-	<div class="config-row">
-		<label for="mosh-audio-link">Random audio links</label>
-		<input id="mosh-audio-link" type="checkbox" bind:checked={moshAudioLink} />
-	</div>
-	{#if moshAudioLink}
+	{#if hasAudio}
+		<div class="config-row">
+			<label for="mosh-audio-link">Random audio links</label>
+			<input id="mosh-audio-link" type="checkbox" bind:checked={moshAudioLink} />
+		</div>
+	{/if}
+	{#if hasAudio && moshAudioLink}
 		<div class="config-row">
 			<label for="mosh-audio-link-strength">Links strength</label>
 			<RangeSlider
@@ -63,6 +69,20 @@
 				step={0.05}
 			/>
 			<span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
+		</div>
+	{/if}
+	<!-- Not gated on moshAudioLink: this shapes every link, hand-made ones too. -->
+	{#if hasAudio}
+		<div class="config-row">
+			<label for="auto-range-amount" title="0% = raw level, 100% = fully normalized to the track's recent range">Auto-range</label>
+			<RangeSlider
+				id="auto-range-amount"
+				bind:value={autoRangeAmount}
+				min={0}
+				max={1}
+				step={0.05}
+			/>
+			<span class="val">{Math.round(autoRangeAmount * 100)}%</span>
 		</div>
 	{/if}
 </div>
