@@ -41,6 +41,7 @@
 		syncSegmentsToPreset,
 	} from '../../editor/segment-edits';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import { normalizeCoverage } from '../../editor/segment-coverage';
 	import {
 		SegmentMoshHistory,
 		type SegmentMoshSnapshot,
@@ -519,10 +520,37 @@
 	// With an external track the audio is the master clock (matches export,
 	// where the audio span sets the duration and the video loops inside it).
 	// Segments then live on the audio timeline, not the video's.
+	let seqMasterIsAudio = $derived(!!audio.trackFile && audio.trackDuration > 0);
+	let seqMasterDuration = $derived(
+		seqMasterIsAudio ? audio.trackDuration : videoDuration,
+	);
+
 	const seqStore = createTrackStore<{
 		enabled: boolean;
 		segments: SequenceSegment[];
 	}>('openmosh-sequence');
+
+	// Keyed by master clock — that's what segment times are relative to.
+	let videoSeqKey = $derived(
+		isVideo ? `video:${file.name}:${file.size}:${file.lastModified}` : null,
+	);
+	let seqStoreKey = $derived(
+		seqMasterIsAudio ? currentTrackId : (videoSeqKey ?? currentTrackId),
+	);
+
+	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.
+	let restoredSeqKey: string | null = null;
+	$effect(() => {
+		const key = videoSeqKey;
+		if (!key || key === restoredSeqKey) return;
+		restoredSeqKey = key;
+		if (untrack(() => seqMasterIsAudio)) return;
+		const saved = seqStore.load(key);
+		if (saved === null) return;
+		sequenceSegments = saved.segments;
+		setSequenceEnabled(saved.enabled);
+		selectedSegmentId = null;
+	});
 
 	// Persist the sequence timeline per library track (deep read via snapshot,
 	// so segment/effect edits are captured too). Skipped while playing: static
@@ -538,18 +566,21 @@
 		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const enabled = sequenceEnabled;
-		const trackId = currentTrackId;
-		if (!trackId) return;
+		const key = seqStoreKey;
+		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(trackId, { enabled, segments: segs });
+			seqStore.save(key, { enabled, segments: segs });
 		}, 300);
 	});
 
-	let seqMasterIsAudio = $derived(!!audio.trackFile && audio.trackDuration > 0);
-	let seqMasterDuration = $derived(
-		seqMasterIsAudio ? audio.trackDuration : videoDuration,
-	);
+	// Re-fit segments when the master clock changes (track loaded/swapped/cleared).
+	$effect(() => {
+		const duration = seqMasterDuration;
+		const segs = sequenceSegments;
+		const fixed = normalizeCoverage(segs, duration);
+		if (fixed !== segs) sequenceSegments = fixed;
+	});
 
 	function seqMasterTime(): number {
 		if (seqMasterIsAudio) return audio.trackCurrentTime;
@@ -564,10 +595,12 @@
 		getSegments: () => sequenceSegments,
 		getTrackDuration: () => seqMasterDuration,
 		onChange: (segments) => {
-			sequenceSegments = segments;
+			// Every edit funnels through here — the one place to hold the invariant.
+			const fitted = normalizeCoverage(segments, seqMasterDuration);
+			sequenceSegments = fitted;
 			// Splits/merges/undo can retire segment ids — drop their mosh stacks
 			// so a later segment reusing an id can't inherit stale rolls.
-			seqMoshHistory.retain(segments.map((s) => s.id));
+			seqMoshHistory.retain(fitted.map((s) => s.id));
 		},
 		// A panel-edit burst must not record on top of the state an undo/redo
 		// just restored — drop it so the next edit snapshots fresh.
