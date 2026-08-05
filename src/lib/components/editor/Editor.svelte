@@ -142,7 +142,7 @@
 			// tear it down and rebuild sourceless for the player.
 			if (audio.audioContext && !audio.trackFile) audio.disposeAudioGraph();
 			ensureVideoAudioGraph();
-			p.play();
+			// Starts paused on purpose — see videoAudioUnlocked.
 		});
 		return () => {
 			cancelled = true;
@@ -408,7 +408,17 @@
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
+	// An AudioContext created before the user has interacted with the page starts
+	// suspended and the browser refuses to resume it ("An AudioContext was
+	// prevented from starting automatically"), leaving the preview silent until
+	// some later gesture. The preview therefore starts paused and the graph is
+	// built on the first play — inside the gesture — so it is never born blocked.
+	// Reactive so the callers that re-run ensureVideoAudioGraph on state changes
+	// pick it up, and so the videoHasAudio probe is re-read once it flips.
+	let videoAudioUnlocked = $state(false);
+
 	function ensureVideoAudioGraph() {
+		if (!videoAudioUnlocked) return;
 		// Skip silent videos: there's nothing to hear or analyze, and capturing
 		// them into Web Audio breaks the speed control in Firefox (see videoHasAudio).
 		if (audio.audioContext || audio.trackFile || !videoHasAudio) return;
@@ -429,6 +439,10 @@
 	}
 
 	function playVideo() {
+		// First play is a user gesture — the point at which the audio graph can be
+		// created unblocked.
+		videoAudioUnlocked = true;
+		ensureVideoAudioGraph();
 		audio.audioContext?.resume();
 		if (previewPlayer) {
 			if (

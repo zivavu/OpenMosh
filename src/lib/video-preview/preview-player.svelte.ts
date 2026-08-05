@@ -99,10 +99,23 @@ export class VideoPreviewPlayer {
    * before the audio buffer has finished decoding.
    */
   attachAudioOutput(context: AudioContext, destination: AudioNode) {
+    if (this.#audioCtx && this.#audioCtx !== context) {
+      this.#audioCtx.removeEventListener("statechange", this.#onContextState);
+    }
     this.#audioCtx = context;
     this.#audioDest = destination;
+    context.addEventListener("statechange", this.#onContextState);
     if (this.playing) this.#startAudio();
   }
+
+  // resume() is async, so the context is usually still suspended when play()
+  // starts audio synchronously right after it. The media clock is wall-clock
+  // based and keeps running regardless, so a buffer source scheduled while
+  // suspended resumes at a stale offset, behind the video. Restart from the
+  // current media time once the context is actually running.
+  #onContextState = () => {
+    if (this.#audioCtx?.state === "running" && this.playing) this.#startAudio();
+  };
 
   play() {
     if (this.#disposed || this.playing) return;
@@ -176,6 +189,7 @@ export class VideoPreviewPlayer {
     this.#disposed = true;
     this.playing = false;
     this.#stopAudio();
+    this.#audioCtx?.removeEventListener("statechange", this.#onContextState);
     this.#queue.dispose();
   }
 
@@ -229,6 +243,11 @@ export class VideoPreviewPlayer {
       !this.#audioDest
     ) {
       return;
+    }
+    // Covers entry points that don't resume the context themselves, e.g. the
+    // space-bar play shortcut; a no-op when it is already running.
+    if (this.#audioCtx.state === "suspended") {
+      void this.#audioCtx.resume().catch(() => {});
     }
     const t = this.#mediaTimeNow();
     if (t >= this.#audioBuffer.duration) return;
