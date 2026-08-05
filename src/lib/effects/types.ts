@@ -59,12 +59,21 @@ export interface VolumeLink {
   inverted?: boolean;
 }
 
-/** Frequency presets (Hz) for volume links. */
+/**
+ * Frequency presets (Hz) for volume links.
+ *
+ * Capped at 16 kHz rather than 20 kHz: MP3 and AAC lowpass around there, so on
+ * most source material the bins above are dead air that only drag the band's
+ * average down.
+ *
+ * `full` is not stored on the link (it leaves freqMin/freqMax unset) — it is the
+ * range an unbanded link resolves to in applyVolumeLinksToEffects.
+ */
 export const FREQ_PRESETS = {
-  full: null as { min: number; max: number } | null,
+  full: { min: 20, max: 16000 },
   low: { min: 20, max: 500 },
   mid: { min: 500, max: 4000 },
-  high: { min: 4000, max: 20000 },
+  high: { min: 4000, max: 16000 },
 } as const;
 
 export interface EffectInstance {

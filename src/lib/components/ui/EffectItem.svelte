@@ -33,22 +33,23 @@
 	}
 
 	const FREQ_PRESET_BUTTONS = [
-		{ label: 'Full', title: 'Full spectrum', min: undefined, max: undefined },
+		// Full stores no band on the link; it resolves to FREQ_PRESETS.full.
+		{ label: 'Full', title: 'Full spectrum (20–16k Hz)', min: undefined, max: undefined },
 		{
 			label: 'Low',
-			title: 'Low (20–250 Hz)',
+			title: 'Low (20–500 Hz)',
 			min: FREQ_PRESETS.low.min,
 			max: FREQ_PRESETS.low.max,
 		},
 		{
 			label: 'Mid',
-			title: 'Mid (250–4000 Hz)',
+			title: 'Mid (500–4000 Hz)',
 			min: FREQ_PRESETS.mid.min,
 			max: FREQ_PRESETS.mid.max,
 		},
 		{
 			label: 'High',
-			title: 'High (4k–20k Hz)',
+			title: 'High (4k–16k Hz)',
 			min: FREQ_PRESETS.high.min,
 			max: FREQ_PRESETS.high.max,
 		},

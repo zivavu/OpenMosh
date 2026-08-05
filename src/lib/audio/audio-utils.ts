@@ -1,4 +1,4 @@
-import { getDefinition, type EffectInstance } from "../effects";
+import { FREQ_PRESETS, getDefinition, type EffectInstance } from "../effects";
 
 export function applyVolumeLinksToEffects(
   effects: EffectInstance[],
@@ -16,17 +16,18 @@ export function applyVolumeLinksToEffects(
       if (param.type !== "range") continue;
       const link = links[param.key];
       if (!link) continue;
+      // An unbanded link ("Full") resolves to FREQ_PRESETS.full rather than the
+      // time-domain RMS it used to use, so it is measured the same way as the
+      // other presets. volumeLevel stays the fallback for callers with no
+      // spectrum to read.
       let level =
-        link.freqMin != null &&
-        link.freqMax != null &&
-        frequencyData &&
-        sampleRate > 0
+        frequencyData && sampleRate > 0
           ? getLevelFromFrequencyRange(
               frequencyData,
               sampleRate,
               fftSize,
-              link.freqMin,
-              link.freqMax,
+              link.freqMin ?? FREQ_PRESETS.full.min,
+              link.freqMax ?? FREQ_PRESETS.full.max,
             )
           : volumeLevel;
       if (link.inverted) level = 1 - level;
