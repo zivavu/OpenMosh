@@ -299,8 +299,8 @@
 													data={spectrumData.data}
 													sampleRate={spectrumData.sampleRate}
 													binCount={spectrumData.binCount}
-													freqMin={link.freqMin ?? 0}
-													freqMax={link.freqMax ?? 20000}
+													freqMin={link.freqMin ?? FREQ_PRESETS.full.min}
+													freqMax={link.freqMax ?? FREQ_PRESETS.full.max}
 													width={200}
 													height={48}
 												/>

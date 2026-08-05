@@ -1,12 +1,43 @@
 import { FREQ_PRESETS, getDefinition, type EffectInstance } from "../effects";
+import { autoRangeLevel } from "./auto-range";
 
+/** Shaping applied after auto-ranging. Above 1 = only bigger hits register. */
+const RESPONSE_EXPONENT = 1.5;
+
+function bandKey(freqMin: number, freqMax: number): string {
+  return `${freqMin}:${freqMax}`;
+}
+
+/** `dt` must be the real frame delta, or preview and export will disagree. */
 export function applyVolumeLinksToEffects(
   effects: EffectInstance[],
   volumeLevel: number,
   frequencyData: Uint8Array | null,
   sampleRate: number,
   fftSize: number,
+  dt: number,
 ): void {
+  // Cached so a band's envelope advances once per frame, not once per link.
+  const perBand = new Map<string, number>();
+  const levelForBand = (freqMin: number, freqMax: number): number => {
+    const key = bandKey(freqMin, freqMax);
+    const cached = perBand.get(key);
+    if (cached !== undefined) return cached;
+    const raw =
+      frequencyData && sampleRate > 0
+        ? getLevelFromFrequencyRange(
+            frequencyData,
+            sampleRate,
+            fftSize,
+            freqMin,
+            freqMax,
+          )
+        : volumeLevel;
+    const ranged = autoRangeLevel(key, raw, dt);
+    perBand.set(key, ranged);
+    return ranged;
+  };
+
   for (const effect of effects) {
     const links = effect.volumeLinks;
     if (!links) continue;
@@ -16,20 +47,12 @@ export function applyVolumeLinksToEffects(
       if (param.type !== "range") continue;
       const link = links[param.key];
       if (!link) continue;
-      // An unbanded link ("Full") resolves to FREQ_PRESETS.full rather than the
-      // time-domain RMS it used to use, so it is measured the same way as the
-      // other presets. volumeLevel stays the fallback for callers with no
-      // spectrum to read.
-      let level =
-        frequencyData && sampleRate > 0
-          ? getLevelFromFrequencyRange(
-              frequencyData,
-              sampleRate,
-              fftSize,
-              link.freqMin ?? FREQ_PRESETS.full.min,
-              link.freqMax ?? FREQ_PRESETS.full.max,
-            )
-          : volumeLevel;
+      let level = levelForBand(
+        link.freqMin ?? FREQ_PRESETS.full.min,
+        link.freqMax ?? FREQ_PRESETS.full.max,
+      );
+      // Shape before inverting, so inverted is the mirror of the same response.
+      level = level ** RESPONSE_EXPONENT;
       if (link.inverted) level = 1 - level;
       const { min: pMin, max: pMax, step } = param;
       let value = link.min + level * (link.max - link.min);
