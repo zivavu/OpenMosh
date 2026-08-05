@@ -291,9 +291,7 @@
 						>
 							{track.name}
 						</button>
-						<!-- No delete while this track is the loaded one: removing it
-						     from the library leaves the editor holding a track it can no
-						     longer resolve, and the auto-save effect races to re-add it. -->
+						<!-- Deleting the loaded track strands the editor and races the auto-save -->
 						{#if !isActive}
 							<button
 								class="delete-btn"

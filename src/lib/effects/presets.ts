@@ -22,8 +22,7 @@ export function loadPresets(): Preset[] {
   return [];
 }
 
-/** Names longer than this are truncated — they only ever render in narrow
- * one-line rows, where anything longer is ellipsised into uselessness. */
+/** Names only ever render in narrow one-line rows. */
 export const PRESET_NAME_MAX_LENGTH = 40;
 
 export function normalizePresetName(name: string): string {

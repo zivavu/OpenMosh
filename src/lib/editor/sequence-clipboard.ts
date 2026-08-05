@@ -1,8 +1,4 @@
-/**
- * Copy/paste of segment *content* for the sequence timeline. The boundary
- * clipboard in segment-boundary-controller only moves split positions around;
- * this moves what each span actually renders.
- */
+// Copy/paste of segment content — the boundary clipboard only moves splits.
 
 import { cloneEffectInstance, generateId } from "../effects";
 import type { SequenceSegment } from "./sequence";
@@ -57,10 +53,7 @@ export function copySegments(
   }));
 }
 
-/**
- * Replace everything in [start, end) with one segment carrying `content`,
- * trimming or dropping whatever it overlaps so coverage stays gapless.
- */
+/** Replace [start, end) with one segment, trimming whatever it overlaps. */
 function stampRegion(
   segments: SequenceSegment[],
   start: number,
@@ -77,8 +70,7 @@ function stampRegion(
     } else if (sStart >= start - 0.001 && sEnd <= end + 0.001) {
       // Fully covered — drop it.
     } else if (sStart < start && sEnd > end) {
-      // The stamp lands inside one segment: keep a head and a tail. The tail
-      // re-enters the same region mid-stream, so it carries no transition.
+      // Stamped inside one segment: head + tail, the tail re-entering mid-stream.
       out.push({ ...s, endTime: start });
       out.push({
         ...s,
@@ -105,11 +97,7 @@ function stampRegion(
   return out.sort((a, b) => a.startTime - b.startTime);
 }
 
-/**
- * Stamp copied clips onto the timeline with the earliest one starting at
- * `anchorTime`. Clips falling outside the track are clipped, then skipped if
- * nothing usable is left.
- */
+/** Stamp clips with the earliest one starting at `anchorTime`. */
 export function pasteClipsAt(
   segments: SequenceSegment[],
   clips: SegmentClip[],
@@ -127,11 +115,7 @@ export function pasteClipsAt(
   return out;
 }
 
-/**
- * Overwrite the target segments' content in place, keeping their spans. With
- * fewer clips than targets the clips repeat, so one copied segment can fill a
- * whole selection.
- */
+/** Overwrite targets in place, keeping their spans; clips repeat if fewer. */
 export function pasteContentOnto(
   segments: SequenceSegment[],
   targetIds: string[],
