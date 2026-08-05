@@ -21,6 +21,14 @@
 		type SegmentClip,
 	} from '../../editor/sequence-clipboard';
 	import {
+		clampGroupDelta,
+		collectGroupBoundaries,
+		groupBoundaryTimesAfter,
+		groupDeltaUpdates,
+		nonSelectedBoundaryTimes,
+		type GroupBoundary,
+	} from '../../editor/boundary-group-drag';
+	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
@@ -237,10 +245,8 @@
 	}
 
 	// ── Segment clipboard ────────────────────────────────────────────────────
-	// Ctrl+C copies the selected segments' content (effects, mode, interval,
-	// transition, label). How Ctrl+V spends it depends on how they were picked:
-	// a shift+drag span covering boundaries is placed by clicking the timeline,
-	// while a plain segment copy drops straight onto the current selection.
+	// A span copy (shift+drag, covers boundaries) is placed by clicking; a plain
+	// segment copy drops straight onto the current selection.
 	let segClipboard = $state<SegmentClip[]>([]);
 	let clipIsSpan = $state(false);
 	let spanPasteMode = $state(false);
@@ -273,6 +279,12 @@
 	// ── Drag state ───────────────────────────────────────────────────────────
 	type DragState =
 		| { type: 'boundary'; leftSegId: string | null; rightSegId: string | null }
+		| {
+				type: 'boundary-group';
+				anchorTime: number;
+				group: GroupBoundary[];
+				nonSelected: number[];
+		  }
 		| { type: 'seek' }
 		| { type: 'seg-click'; segmentId: string }
 		| {
@@ -378,11 +390,42 @@
 		rightSegId: string | null,
 	) {
 		e.stopPropagation();
-		dragging = { type: 'boundary', leftSegId, rightSegId };
+		const selected = boundaries.selectedBoundaryTimes;
+		const time = boundaryTimeOf(leftSegId, rightSegId);
+		// Grabbing a dot that's part of a multi-selection moves the whole set.
+		if (
+			time !== null &&
+			selected.length > 1 &&
+			selected.some((t) => Math.abs(t - time) < 0.001)
+		) {
+			dragging = {
+				type: 'boundary-group',
+				anchorTime: vp.clientXToTime(e.clientX),
+				group: collectGroupBoundaries(segments, selected, trackDuration),
+				nonSelected: nonSelectedBoundaryTimes(segments, selected, trackDuration),
+			};
+		} else {
+			dragging = { type: 'boundary', leftSegId, rightSegId };
+		}
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
 		} catch {}
+	}
+
+	function boundaryTimeOf(
+		leftSegId: string | null,
+		rightSegId: string | null,
+	): number | null {
+		if (leftSegId) {
+			const seg = rawSegments.find((s) => s.id === leftSegId);
+			if (seg) return seg.endTime ?? trackDuration;
+		}
+		if (rightSegId) {
+			const seg = rawSegments.find((s) => s.id === rightSegId);
+			if (seg) return seg.startTime;
+		}
+		return null;
 	}
 
 	function startRectSelect(e: PointerEvent, toggleSegId?: string) {
@@ -397,8 +440,7 @@
 
 	function startSegClick(e: PointerEvent, segId: string) {
 		e.stopPropagation();
-		// Segment bodies cover most of the timeline, so placing a span has to work
-		// over them too — otherwise paste mode is only clickable in the gaps.
+		// Segment bodies cover most of the timeline — placing must work over them.
 		if (spanPasteMode) {
 			pasteSpanAt(vp.clientXToTime(e.clientX));
 			return;
@@ -514,6 +556,20 @@
 					),
 				);
 			}
+		} else if (dragging.type === 'boundary-group') {
+			if (!dragMoved) boundaries.snapshotForDrag();
+			dragMoved = true;
+			const delta = clampGroupDelta(
+				vp.clientXToTime(e.clientX) - dragging.anchorTime,
+				dragging.group,
+				dragging.nonSelected,
+				trackDuration,
+				MIN_SEGMENT_DURATION,
+			);
+			const updates = groupDeltaUpdates(dragging.group, delta);
+			boundaries.live(
+				rawSegments.map((s) => (updates[s.id] ? { ...s, ...updates[s.id] } : s)),
+			);
 		} else if (dragging.type === 'rect-select') {
 			dragMoved = true;
 			dragging = { ...dragging, currentTime: vp.clientXToTime(e.clientX) };
@@ -549,6 +605,14 @@
 	}
 
 	function onPointerUp() {
+		if (dragging?.type === 'boundary-group' && dragMoved) {
+			// Follow the dots to their new times so the selection survives the drag.
+			boundaries.selectedBoundaryTimes = groupBoundaryTimesAfter(
+				dragging.group,
+				rawSegments,
+				trackDuration,
+			);
+		}
 		if (dragging?.type === 'seg-click' && !dragMoved) {
 			const segId = dragging.segmentId;
 			const soleSelected = selectedIds.length === 1 && selectedIds[0] === segId;
@@ -634,9 +698,7 @@
 	function onKeydown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
 
-		// Segment copy/paste outranks the boundary clipboard: a segment selection
-		// means the user is after content, not split positions. With nothing
-		// selected these fall through to boundaries.onKeydown below.
+		// Outranks the boundary clipboard; falls through when nothing is selected.
 		const key = e.key.toLowerCase();
 		if (e.ctrlKey || e.metaKey) {
 			if (key === 'c' && copySelectedSegments()) {
@@ -695,6 +757,7 @@
 		if (!dragging) return onSeek ? 'crosshair' : 'default';
 		if (dragging.type === 'rect-select') return 'crosshair';
 		if (dragging.type === 'seek') return 'col-resize';
+		if (dragging.type === 'boundary-group') return 'grabbing';
 		return 'ew-resize';
 	});
 
@@ -840,7 +903,10 @@
 							(hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
 						onpointerleave={() => (hoveredDot = null)}
 						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
-						><title>Drag to move · Delete to merge · Shift-drag to select</title></circle
+						><title
+							>Drag to move (whole selection if selected) · Delete to merge ·
+							Shift-drag to select</title
+						></circle
 					>
 				{/if}
 			{/each}
