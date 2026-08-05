@@ -1,6 +1,15 @@
 <script lang="ts">
 	import { generateId } from '../../effects';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import { normalizeCoverage } from '../../editor/segment-coverage';
+	import {
+		clampGroupDelta,
+		collectGroupBoundaries,
+		groupBoundaryTimesAfter,
+		groupDeltaUpdates,
+		nonSelectedBoundaryTimes,
+		type GroupBoundary,
+	} from '../../editor/boundary-group-drag';
 	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
@@ -79,6 +88,14 @@
 		if (td > 0 && (vp.viewEnd <= 0 || vp.viewEnd > td)) vp.viewEnd = td;
 	});
 
+	// Re-fit on duration change, and repair lists already out of range.
+	$effect(() => {
+		const td = trackDuration;
+		const segs = config.segments;
+		const fixed = normalizeCoverage(segs, td);
+		if (fixed !== segs) onConfigChange({ ...config, segments: fixed });
+	});
+
 	// ── Mobile detection ─────────────────────────────────────────────────────────
 	$effect(() => {
 		const update = () => {
@@ -125,11 +142,7 @@
 		| {
 				type: 'boundary-group';
 				anchorTime: number;
-				boundaries: Array<{
-					time: number;
-					leftSegId: string | null;
-					rightSegId: string | null;
-				}>;
+				boundaries: GroupBoundary[];
 				nonSelectedBoundaries: number[];
 		  }
 		| {
@@ -161,7 +174,11 @@
 	const boundaries = new SegmentBoundaryController<TimelineSegment, BeatSubdivision>({
 		getSegments: () => config.segments,
 		getTrackDuration: () => trackDuration,
-		onChange: (segments) => onConfigChange({ ...config, segments }),
+		onChange: (segments) =>
+			onConfigChange({
+				...config,
+				segments: normalizeCoverage(segments, trackDuration),
+			}),
 		splitSegment: (seg, at) => {
 			const end = seg.endTime ?? trackDuration;
 			return [
@@ -434,48 +451,20 @@
 			boundaries.selectedBoundaryTimes.length > 1 &&
 			boundaries.selectedBoundaryTimes.some((t) => Math.abs(t - boundaryTime!) < 0.001)
 		) {
-			const sortedSegs = [...config.segments].sort(
-				(a, b) => a.startTime - b.startTime,
-			);
-			const groupBoundaries: Array<{
-				time: number;
-				leftSegId: string | null;
-				rightSegId: string | null;
-			}> = [];
-			for (const t of boundaries.selectedBoundaryTimes) {
-				const left = sortedSegs.find(
-					(s) =>
-						Math.abs((s.endTime ?? trackDuration) - t) < 0.001 &&
-						(s.endTime ?? trackDuration) < trackDuration - 0.001,
-				);
-				const right = sortedSegs.find(
-					(s) => Math.abs(s.startTime - t) < 0.001 && s.startTime > 0.001,
-				);
-				groupBoundaries.push({
-					time: t,
-					leftSegId: left?.id ?? null,
-					rightSegId: right?.id ?? null,
-				});
-			}
-
-			// Collect all boundary times that are NOT selected (these stay fixed)
-			const allBoundarySet = new Set<number>([0, trackDuration]);
-			for (const s of config.segments) {
-				if (s.startTime > 0.001) allBoundarySet.add(s.startTime);
-				const end = s.endTime ?? trackDuration;
-				if (end < trackDuration - 0.001) allBoundarySet.add(end);
-			}
-			const nonSelectedBoundaries = [...allBoundarySet]
-				.filter(
-					(b) => !boundaries.selectedBoundaryTimes.some((t) => Math.abs(t - b) < 0.001),
-				)
-				.sort((a, b) => a - b);
-
+			const selected = boundaries.selectedBoundaryTimes;
 			dragging = {
 				type: 'boundary-group',
 				anchorTime: vp.clientXToTime(e.clientX),
-				boundaries: groupBoundaries,
-				nonSelectedBoundaries,
+				boundaries: collectGroupBoundaries(
+					config.segments,
+					selected,
+					trackDuration,
+				),
+				nonSelectedBoundaries: nonSelectedBoundaryTimes(
+					config.segments,
+					selected,
+					trackDuration,
+				),
 			};
 			dragMoved = false;
 			try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
@@ -675,48 +664,14 @@
 				boundaries.snapshotForDrag();
 			}
 			dragMoved = true;
-			const rawDelta = vp.clientXToTime(e.clientX) - dragging.anchorTime;
-
-			// Clamp delta so no selected boundary crosses a non-selected neighbor
-			let minDelta = -Infinity;
-			let maxDelta = Infinity;
-			for (const b of dragging.boundaries) {
-				const nsb = dragging.nonSelectedBoundaries;
-				// Nearest fixed boundary to the left
-				for (let i = nsb.length - 1; i >= 0; i--) {
-					if (nsb[i] < b.time - 0.001) {
-						minDelta = Math.max(
-							minDelta,
-							nsb[i] + MIN_SEGMENT_DURATION - b.time,
-						);
-						break;
-					}
-				}
-				// Nearest fixed boundary to the right
-				for (let i = 0; i < nsb.length; i++) {
-					if (nsb[i] > b.time + 0.001) {
-						maxDelta = Math.min(
-							maxDelta,
-							nsb[i] - MIN_SEGMENT_DURATION - b.time,
-						);
-						break;
-					}
-				}
-			}
-			const delta = Math.max(
-				isFinite(minDelta) ? minDelta : rawDelta,
-				Math.min(isFinite(maxDelta) ? maxDelta : rawDelta, rawDelta),
+			const delta = clampGroupDelta(
+				vp.clientXToTime(e.clientX) - dragging.anchorTime,
+				dragging.boundaries,
+				dragging.nonSelectedBoundaries,
+				trackDuration,
+				MIN_SEGMENT_DURATION,
 			);
-
-			// Apply delta to all selected boundaries via segment IDs
-			const updates: Record<string, Partial<TimelineSegment>> = {};
-			for (const b of dragging.boundaries) {
-				const newT = b.time + delta;
-				if (b.leftSegId)
-					updates[b.leftSegId] = { ...updates[b.leftSegId], endTime: newT };
-				if (b.rightSegId)
-					updates[b.rightSegId] = { ...updates[b.rightSegId], startTime: newT };
-			}
+			const updates = groupDeltaUpdates(dragging.boundaries, delta);
 
 			emitLive({
 				segments: config.segments.map((s) =>
@@ -770,19 +725,11 @@
 			}
 		}
 		if (dragging?.type === 'boundary-group' && dragMoved) {
-			// Update selection to reflect the new boundary positions
-			const newTimes: number[] = [];
-			for (const b of dragging.boundaries) {
-				const refSeg = b.leftSegId
-					? config.segments.find((s) => s.id === b.leftSegId)
-					: config.segments.find((s) => s.id === b.rightSegId);
-				if (refSeg) {
-					newTimes.push(
-						b.leftSegId ? (refSeg.endTime ?? trackDuration) : refSeg.startTime,
-					);
-				}
-			}
-			boundaries.selectedBoundaryTimes = newTimes;
+			boundaries.selectedBoundaryTimes = groupBoundaryTimesAfter(
+				dragging.boundaries,
+				config.segments,
+				trackDuration,
+			);
 		}
 		if (dragging?.type === 'seg-y') {
 			if (!dragMoved) {
