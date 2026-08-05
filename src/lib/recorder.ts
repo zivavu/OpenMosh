@@ -8,6 +8,7 @@ import {
 	type FrameAudioData,
 } from './audio/offline-audio';
 import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
+import { resetAutoRange } from './audio/auto-range';
 import { stretchAudioBuffer } from './audio/time-stretch';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
@@ -70,9 +71,16 @@ function applyFrameAudio(
 	frameAudioData: FrameAudioData[],
 	i: number,
 	sampleRate: number,
+	frameDuration: number,
 ): void {
 	if (frameAudioData.length > 0) {
-		applyFrameAudioToEffects(effects, frameAudioData[i]!, sampleRate, FFT_SIZE);
+		applyFrameAudioToEffects(
+			effects,
+			frameAudioData[i]!,
+			sampleRate,
+			FFT_SIZE,
+			frameDuration,
+		);
 	}
 }
 
@@ -474,6 +482,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
+	// Otherwise the output's first seconds depend on where the preview was scrubbed.
+	resetAutoRange();
+
 	try {
 		for (let i = 0; i < totalFrames; i++) {
 			checkAbort(signal);
@@ -482,7 +493,13 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			const renderResult = onBeforeRender?.(i, time);
 			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
-			applyFrameAudio(renderEffects, frameAudioData, i, audioSampleRate);
+			applyFrameAudio(
+				renderEffects,
+				frameAudioData,
+				i,
+				audioSampleRate,
+				frameDuration,
+			);
 			if (typeof skipRender === 'function') skipRender();
 			else if (!skipRender) renderer.render(renderEffects, time);
 			await sink.submit(i, time);

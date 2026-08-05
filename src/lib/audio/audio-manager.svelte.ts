@@ -5,6 +5,7 @@ import {
   applyVolumeLinksTick,
   type AudioGraphState,
 } from './audio-controller';
+import { resetAutoRange } from './auto-range';
 import type { EffectInstance } from '../effects';
 import type { SpectrumData } from '../types';
 
@@ -89,7 +90,11 @@ export class AudioManager {
       const fftSize = analyser.fftSize;
       let rafId: number;
       let wasPaused = false;
+      let lastTick = performance.now();
       const tick = () => {
+        const now = performance.now();
+        const dt = (now - lastTick) / 1000;
+        lastTick = now;
         // Source-agnostic pause check (works for both <audio> and <video> sources,
         // unlike `audioPlaying` which only tracks the <audio> element).
         if (this.mediaSource?.mediaElement.paused) {
@@ -99,7 +104,15 @@ export class AudioManager {
             wasPaused = true;
             this.volumeLevel = 0;
             freqDataRef?.fill(0);
-            applyVolumeLinksTick(this.#getEffects(), 0, freqDataRef, sampleRate, fftSize);
+            // Envelopes survive a pause; re-learning would cost dead seconds.
+            applyVolumeLinksTick(
+              this.#getEffects(),
+              0,
+              freqDataRef,
+              sampleRate,
+              fftSize,
+              dt,
+            );
           }
           rafId = requestAnimationFrame(tick);
           return;
@@ -114,6 +127,7 @@ export class AudioManager {
           freqDataRef,
           sampleRate,
           fftSize,
+          dt,
         );
         rafId = requestAnimationFrame(tick);
       };
@@ -231,9 +245,11 @@ export class AudioManager {
     const clamped = Math.max(0, Math.min(this.trackDuration, t));
     this.#audioEl.currentTime = clamped;
     this.trackCurrentTime = clamped;
+    resetAutoRange();
   }
 
   clearTrack() {
+    resetAutoRange();
     this.#audioEl?.pause();
     this.audioPlaying = false;
     this.autoplayOnLoad = false;

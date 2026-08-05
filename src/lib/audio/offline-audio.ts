@@ -312,6 +312,7 @@ export function applyFrameAudioToEffects(
   frameData: FrameAudioData,
   sampleRate: number,
   fftSize: number,
+  frameDuration: number,
 ): void {
   applyVolumeLinksToEffects(
     effects,
@@ -319,5 +320,6 @@ export function applyFrameAudioToEffects(
     frameData.frequencyData,
     sampleRate,
     fftSize,
+    frameDuration,
   );
 }
