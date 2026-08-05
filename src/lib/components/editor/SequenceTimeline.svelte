@@ -15,6 +15,12 @@
 	} from '../../editor/sequence';
 	import type { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 	import {
+		copySegments,
+		pasteClipsAt,
+		pasteContentOnto,
+		type SegmentClip,
+	} from '../../editor/sequence-clipboard';
+	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
@@ -230,6 +236,40 @@
 		if (changes.length > 0) onTransitionChange(changes);
 	}
 
+	// ── Segment clipboard ────────────────────────────────────────────────────
+	// Ctrl+C copies the selected segments' content (effects, mode, interval,
+	// transition, label). How Ctrl+V spends it depends on how they were picked:
+	// a shift+drag span covering boundaries is placed by clicking the timeline,
+	// while a plain segment copy drops straight onto the current selection.
+	let segClipboard = $state<SegmentClip[]>([]);
+	let clipIsSpan = $state(false);
+	let spanPasteMode = $state(false);
+	let spanPasteCursor = $state(0);
+
+	function copySelectedSegments(): boolean {
+		if (selectedSegments.length === 0) return false;
+		segClipboard = copySegments(selectedSegments, trackDuration);
+		clipIsSpan = boundaries.selectedBoundaryTimes.length > 0;
+		return segClipboard.length > 0;
+	}
+
+	function pasteSegments(): boolean {
+		if (segClipboard.length === 0) return false;
+		if (!clipIsSpan && selectedIds.length > 0) {
+			emit(pasteContentOnto(rawSegments, selectedIds, segClipboard));
+			return true;
+		}
+		spanPasteMode = true;
+		boundaries.clearSelection();
+		return true;
+	}
+
+	function pasteSpanAt(time: number) {
+		spanPasteMode = false;
+		const next = pasteClipsAt(rawSegments, segClipboard, time, trackDuration);
+		if (next !== rawSegments) emit(next);
+	}
+
 	// ── Drag state ───────────────────────────────────────────────────────────
 	type DragState =
 		| { type: 'boundary'; leftSegId: string | null; rightSegId: string | null }
@@ -357,6 +397,12 @@
 
 	function startSegClick(e: PointerEvent, segId: string) {
 		e.stopPropagation();
+		// Segment bodies cover most of the timeline, so placing a span has to work
+		// over them too — otherwise paste mode is only clickable in the gaps.
+		if (spanPasteMode) {
+			pasteSpanAt(vp.clientXToTime(e.clientX));
+			return;
+		}
 		if (e.ctrlKey || e.metaKey) {
 			splitAt(vp.clientXToTime(e.clientX));
 			return;
@@ -392,6 +438,12 @@
 
 	function startSeekDrag(e: PointerEvent) {
 		if (e.button !== 0) return;
+		// Place the copied span with its first segment starting at the click
+		if (spanPasteMode) {
+			e.stopPropagation();
+			pasteSpanAt(vp.clientXToTime(e.clientX));
+			return;
+		}
 		// If in paste mode, split segments at clipboard offsets from the clicked time
 		if (boundaries.pasteMode && boundaries.clipboard.length > 0) {
 			e.stopPropagation();
@@ -420,6 +472,9 @@
 	function onPointerMove(e: PointerEvent) {
 		if (boundaries.pasteMode) {
 			boundaries.pasteCursorTime = vp.clientXToTime(e.clientX);
+		}
+		if (spanPasteMode) {
+			spanPasteCursor = vp.clientXToTime(e.clientX);
 		}
 		if (!dragging) return;
 
@@ -579,6 +634,29 @@
 	function onKeydown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
 
+		// Segment copy/paste outranks the boundary clipboard: a segment selection
+		// means the user is after content, not split positions. With nothing
+		// selected these fall through to boundaries.onKeydown below.
+		const key = e.key.toLowerCase();
+		if (e.ctrlKey || e.metaKey) {
+			if (key === 'c' && copySelectedSegments()) {
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+			if (key === 'v' && pasteSegments()) {
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+		}
+
+		if (e.key === 'Escape' && spanPasteMode) {
+			spanPasteMode = false;
+			e.stopPropagation();
+			return;
+		}
+
 		// Undo/redo still apply while a toolbar dropdown holds focus, which is
 		// exactly where focus sits right after a preset/transition change.
 		if (boundaries.onKeydown(e)) {
@@ -613,7 +691,7 @@
 	let showHint = $derived(segments.length === 0);
 
 	let svgCursor = $derived.by(() => {
-		if (boundaries.pasteMode) return 'copy';
+		if (boundaries.pasteMode || spanPasteMode) return 'copy';
 		if (!dragging) return onSeek ? 'crosshair' : 'default';
 		if (dragging.type === 'rect-select') return 'crosshair';
 		if (dragging.type === 'seek') return 'col-resize';
@@ -792,6 +870,29 @@
 					height={SVG_H}
 					pointer-events="none"
 				/>
+			{/if}
+
+			<!-- Ghost paste preview (copied segment spans) -->
+			{#if spanPasteMode}
+				{#each segClipboard as clip}
+					{@const gStart = vp.toPct(spanPasteCursor + clip.offsetStart)}
+					{@const gEnd = vp.toPct(spanPasteCursor + clip.offsetEnd)}
+					<rect
+						class="ghost-span"
+						x="{gStart}%"
+						y={LINE_Y - 6}
+						width="{Math.max(0, gEnd - gStart)}%"
+						height="12"
+						pointer-events="none"
+					/>
+					<line
+						class="ghost-split-line"
+						x1="{gStart}%"
+						y1="0"
+						x2="{gStart}%"
+						y2={SVG_H}
+					/>
+				{/each}
 			{/if}
 
 			<!-- Ghost paste preview (boundary splits) -->
@@ -1133,6 +1234,13 @@
 		stroke-width: 1;
 		stroke-dasharray: 3 4;
 		pointer-events: none;
+	}
+
+	.ghost-span {
+		fill: rgba(176, 138, 208, 0.18);
+		stroke: rgba(176, 138, 208, 0.45);
+		stroke-width: 1;
+		rx: 2;
 	}
 
 	.playhead-line {

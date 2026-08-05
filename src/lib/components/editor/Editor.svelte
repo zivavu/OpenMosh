@@ -264,9 +264,15 @@
 								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
 								description: 'Redo last sequence edit',
 							},
-							{ keys: ['Shift+Drag'], description: 'Rectangle-select boundaries' },
-							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected boundaries' },
-							{ keys: ['Ctrl/Cmd+V'], description: 'Paste boundaries' },
+							{
+								keys: ['Shift+Drag'],
+								description: 'Rectangle-select segments and boundaries',
+							},
+							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected segments' },
+							{
+								keys: ['Ctrl/Cmd+V'],
+								description: 'Paste onto selection, or click to place a copied span',
+							},
 							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
 						],
 					},
