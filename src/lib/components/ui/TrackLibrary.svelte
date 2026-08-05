@@ -291,13 +291,21 @@
 						>
 							{track.name}
 						</button>
-						<button
-							class="delete-btn"
-							onclick={() => onDelete(track.id)}
-							title="Remove"
-						>
-							<X size={10} />
-						</button>
+						<!-- No delete while this track is the loaded one: removing it
+						     from the library leaves the editor holding a track it can no
+						     longer resolve, and the auto-save effect races to re-add it. -->
+						{#if !isActive}
+							<button
+								class="delete-btn"
+								onclick={() => onDelete(track.id)}
+								title="Remove"
+							>
+								<X size={10} />
+							</button>
+						{:else}
+							<!-- Keeps the name column the same width as every other row -->
+							<span class="delete-spacer" aria-hidden="true"></span>
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -471,6 +479,11 @@
 	}
 	.delete-btn:hover {
 		color: #e06060;
+	}
+
+	.delete-spacer {
+		flex-shrink: 0;
+		width: 14px;
 	}
 
 	.name-btn {
