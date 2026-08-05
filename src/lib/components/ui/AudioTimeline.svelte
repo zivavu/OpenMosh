@@ -56,6 +56,7 @@
 	}: Props = $props();
 
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
+	let seekDragging = $state(false);
 
 	let VolumeIcon = $derived(
 		outputVolume === 0 ? VolumeX : outputVolume < 0.5 ? Volume1 : Volume2,
@@ -98,8 +99,28 @@
 		if (handle) {
 			beginHandleDrag(handle, e.clientX);
 		} else {
-			onSeek(timeFromClientX(e.clientX));
+			beginSeekDrag(e.clientX);
 		}
+	}
+
+	// Scrub while the button stays down, so the playhead can be dragged and not
+	// just jumped to.
+	function beginSeekDrag(startClientX: number) {
+		onSeek(timeFromClientX(startClientX));
+		seekDragging = true;
+		const onMove = (ev: PointerEvent) => {
+			ev.preventDefault();
+			onSeek(timeFromClientX(ev.clientX));
+		};
+		const onUp = () => {
+			seekDragging = false;
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		};
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
 	}
 
 	function beginHandleDrag(initialHandle: 'start' | 'end', startClientX: number) {
@@ -212,6 +233,7 @@
 	<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
 	<div
 		class="timeline-track-wrap"
+		class:seeking={seekDragging}
 		bind:this={timelineTrackEl}
 		role="slider"
 		aria-label={ariaLabel}
@@ -361,6 +383,10 @@
 		min-width: 0;
 		cursor: pointer;
 		outline: none;
+	}
+
+	.timeline-track-wrap.seeking {
+		cursor: grabbing;
 	}
 
 	.timeline-track-wrap:focus-visible {
