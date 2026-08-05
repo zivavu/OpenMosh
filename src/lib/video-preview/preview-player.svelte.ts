@@ -257,16 +257,31 @@ async function decodeAudioTrackToBuffer(
   track: InputAudioTrack,
 ): Promise<AudioBuffer | null> {
   const { AudioBufferSink } = await import("mediabunny");
-  const sampleRate = track.sampleRate;
-  const channels = track.numberOfChannels;
   const duration = await track.computeDuration();
-  if (!sampleRate || !channels || !Number.isFinite(duration) || duration <= 0) {
-    return null;
-  }
-  const length = Math.ceil(duration * sampleRate);
-  const out = new AudioBuffer({ numberOfChannels: channels, length, sampleRate });
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+
+  // The output buffer's rate/channels come from the first decoded chunk, not
+  // from the container metadata: mediabunny reads MP4/AAC's rate from the base
+  // samplingFrequencyIndex in the AudioSpecificConfig, which for HE-AAC is half
+  // the decoder's real output rate (SBR) — and channelConfiguration reads 1 for
+  // HE-AAC v2 despite stereo output (PS). Sizing from those values wrote every
+  // chunk at half its true offset into a half-rate buffer, so video-source
+  // audio played back slowed down and overlapping. Opus (WebM) is always 48 kHz
+  // and so never tripped this.
+  let out: AudioBuffer | null = null;
+  let sampleRate = 0;
+  let channels = 0;
+  let length = 0;
+
   const sink = new AudioBufferSink(track);
   for await (const { buffer, timestamp } of sink.buffers()) {
+    if (!out) {
+      sampleRate = buffer.sampleRate;
+      channels = buffer.numberOfChannels;
+      if (!sampleRate || !channels) return null;
+      length = Math.ceil(duration * sampleRate);
+      out = new AudioBuffer({ numberOfChannels: channels, length, sampleRate });
+    }
     const offset = Math.round(timestamp * sampleRate);
     if (offset >= length) break;
     const room = length - offset;
