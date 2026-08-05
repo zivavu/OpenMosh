@@ -1,6 +1,14 @@
 export * from "./types";
 export { EFFECT_DEFINITIONS } from "./definitions";
-export { loadPresets, savePreset, updatePreset, deletePreset, applyPreset } from "./presets";
+export {
+  loadPresets,
+  savePreset,
+  updatePreset,
+  deletePreset,
+  applyPreset,
+  normalizePresetName,
+  PRESET_NAME_MAX_LENGTH,
+} from "./presets";
 
 import type { EffectDefinition, EffectInstance, VolumeLink } from "./types";
 import { generateId } from "./types";

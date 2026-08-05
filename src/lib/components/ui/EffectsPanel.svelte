@@ -9,6 +9,8 @@
 		createEffectInstance,
 		deletePreset,
 		loadPresets,
+		normalizePresetName,
+		PRESET_NAME_MAX_LENGTH,
 		savePreset,
 		updatePreset,
 		type EffectInstance,
@@ -67,8 +69,13 @@
 	let saving = $state(false);
 	let presetName = $state('');
 
+	// Warn only near the cap, so the row stays quiet for ordinary short names.
+	const NAME_COUNTER_FROM = PRESET_NAME_MAX_LENGTH - 8;
+	let showNameCounter = $derived(presetName.length >= NAME_COUNTER_FROM);
+
 	function handleSavePreset() {
-		const name = presetName.trim();
+		// maxlength stops typing, but not a paste on every browser/IME path.
+		const name = normalizePresetName(presetName);
 		if (!name) return;
 		presets = savePreset(name, $state.snapshot(effects));
 		presetName = '';
@@ -425,9 +432,18 @@
 							class="preset-name-input"
 							type="text"
 							placeholder="Preset name..."
+							maxlength={PRESET_NAME_MAX_LENGTH}
 							bind:value={presetName}
 							autofocus
 						/>
+						{#if showNameCounter}
+							<span
+								class="preset-name-count"
+								class:at-max={presetName.length >= PRESET_NAME_MAX_LENGTH}
+							>
+								{presetName.length}/{PRESET_NAME_MAX_LENGTH}
+							</span>
+						{/if}
 						<button class="preset-confirm-btn" type="submit" title="Save" aria-label="Save preset">
 							<Check size={14} />
 						</button>
@@ -643,7 +659,19 @@
 
 	.preset-save-row {
 		display: flex;
+		align-items: center;
 		gap: 0.25rem;
+	}
+
+	.preset-name-count {
+		flex-shrink: 0;
+		font-size: 0.6rem;
+		color: #666;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.preset-name-count.at-max {
+		color: #c07a7a;
 	}
 
 	.preset-name-input {
