@@ -61,6 +61,7 @@
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
+	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
 	import { showToast } from '../ui/toast.svelte';
 
@@ -954,16 +955,19 @@
 		moshSession.pushEdit(effects);
 	}
 
+	let showExitConfirm = $state(false);
+
 	function handleExit() {
 		if (!onExit) return;
 		if (recordingState.recording) {
-			alert('Please cancel or wait for the recording to finish before exiting.');
+			showToast(
+				'Cancel or wait for the recording to finish before exiting',
+				'error',
+			);
 			return;
 		}
-		if (
-			moshSession.touched &&
-			!confirm('Discard current edits and return to upload?')
-		) {
+		if (moshSession.touched) {
+			showExitConfirm = true;
 			return;
 		}
 		onExit();
@@ -1551,6 +1555,21 @@
 
 	{#if showShortcuts}
 		<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+	{/if}
+
+	{#if showExitConfirm}
+		<ConfirmDialog
+			title="Return to upload?"
+			message="Your current edits will be discarded. Presets you've saved are kept."
+			confirmLabel="Discard and exit"
+			cancelLabel="Keep editing"
+			danger
+			onConfirm={() => {
+				showExitConfirm = false;
+				onExit?.();
+			}}
+			onCancel={() => (showExitConfirm = false)}
+		/>
 	{/if}
 </div>
 
