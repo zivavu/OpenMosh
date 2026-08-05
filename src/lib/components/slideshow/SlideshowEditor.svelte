@@ -34,6 +34,7 @@
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import { DEFAULT_AUTO_RANGE_AMOUNT } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
@@ -461,6 +462,8 @@
 	const audio = new AudioManager({
 		getEffects: () =>
 			previewPlaying && previewEffects.length > 0 ? previewEffects : effects,
+		// Unused here — the slideshow drives effects from beats, never volume links.
+		getAutoRangeAmount: () => DEFAULT_AUTO_RANGE_AMOUNT,
 		initialOutputVolume: savedOutputVolume,
 		initialLoop: loadSettings().loopAudio ?? false,
 	});

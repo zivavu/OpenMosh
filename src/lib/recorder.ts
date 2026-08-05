@@ -8,7 +8,7 @@ import {
 	type FrameAudioData,
 } from './audio/offline-audio';
 import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
-import { resetAutoRange } from './audio/auto-range';
+import { DEFAULT_AUTO_RANGE_AMOUNT, resetAutoRange } from './audio/auto-range';
 import { stretchAudioBuffer } from './audio/time-stretch';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
@@ -47,6 +47,8 @@ export interface RecordOptions {
 	audioSpeed?: number;
 	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
 	normalizeGain?: number;
+	/** Blend between raw (0) and auto-ranged (1) levels. Must match the preview. */
+	autoRangeAmount?: number;
 }
 
 /** Encoding backend that consumes rendered canvas frames. */
@@ -72,6 +74,7 @@ function applyFrameAudio(
 	i: number,
 	sampleRate: number,
 	frameDuration: number,
+	autoRangeAmount: number,
 ): void {
 	if (frameAudioData.length > 0) {
 		applyFrameAudioToEffects(
@@ -80,6 +83,7 @@ function applyFrameAudio(
 			sampleRate,
 			FFT_SIZE,
 			frameDuration,
+			autoRangeAmount,
 		);
 	}
 }
@@ -157,6 +161,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		loopAudio,
 		normalizeGain = 1.0,
 		audioSpeed = 1,
+		autoRangeAmount = DEFAULT_AUTO_RANGE_AMOUNT,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -499,6 +504,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				i,
 				audioSampleRate,
 				frameDuration,
+				autoRangeAmount,
 			);
 			if (typeof skipRender === 'function') skipRender();
 			else if (!skipRender) renderer.render(renderEffects, time);
