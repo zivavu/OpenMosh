@@ -17,6 +17,7 @@
 		type VolumeLink,
 	} from '../../effects';
 	import type { SpectrumData } from '../../types';
+	import ColorPicker from './ColorPicker.svelte';
 	import DualRangeSlider from './DualRangeSlider.svelte';
 	import RangeSlider from './RangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
@@ -113,16 +114,6 @@
 	}: Props = $props();
 
 	const def = $derived(getDefinition(effect.defId));
-
-	/** `<input type="color">` only accepts #rrggbb; half-typed hex falls back. */
-	function normalizeHex(value: number | string, fallback: string): string {
-		const s = String(value).trim();
-		if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
-		if (/^#[0-9a-fA-F]{3}$/.test(s)) {
-			return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`.toLowerCase();
-		}
-		return fallback;
-	}
 
 	let canDrag = $state(false);
 
@@ -420,30 +411,12 @@
 							/>
 						{/if}
 						{#if param.type === 'color'}
-							<div class="color-wrap">
-								<input
-									id="{effect.instanceId}-{param.key}"
-									class="color-swatch"
-									type="color"
-									value={normalizeHex(
-										effect.values[param.key],
-										param.defaultValue,
-									)}
-									oninput={(e) => onParamChange(param.key, e.currentTarget.value)}
-								/>
-								<input
-									class="color-hex"
-									type="text"
-									spellcheck="false"
-									value={effect.values[param.key]}
-									oninput={(e) => onParamChange(param.key, e.currentTarget.value)}
-									onblur={(e) =>
-										onParamChange(
-											param.key,
-											normalizeHex(e.currentTarget.value, param.defaultValue),
-										)}
-								/>
-							</div>
+							<ColorPicker
+								id="{effect.instanceId}-{param.key}"
+								value={String(effect.values[param.key])}
+								defaultValue={param.defaultValue}
+								onChange={(hex) => onParamChange(param.key, hex)}
+							/>
 						{/if}
 					</div>
 				{/each}
@@ -914,8 +887,9 @@
 		border-color: #555;
 	}
 
-	.text-input,
-	.color-hex {
+	.text-input {
+		flex: 1;
+		min-width: 0;
 		background: #1a1a1a;
 		color: #ccc;
 		border: 1px solid #333;
@@ -924,53 +898,9 @@
 		font-size: 0.7rem;
 		font-family: inherit;
 		outline: none;
-		min-width: 0;
 	}
 
-	.text-input {
-		flex: 1;
-	}
-
-	.text-input:focus,
-	.color-hex:focus {
+	.text-input:focus {
 		border-color: #555;
-	}
-
-	.color-wrap {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		min-width: 0;
-	}
-
-	.color-hex {
-		width: 6.5rem;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.color-swatch {
-		width: 24px;
-		height: 20px;
-		padding: 0;
-		border: 1px solid #333;
-		border-radius: 3px;
-		background: none;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-
-	.color-swatch::-webkit-color-swatch-wrapper {
-		padding: 2px;
-	}
-
-	.color-swatch::-webkit-color-swatch {
-		border: none;
-		border-radius: 2px;
-	}
-
-	.color-swatch::-moz-color-swatch {
-		border: none;
-		border-radius: 2px;
 	}
 </style>
