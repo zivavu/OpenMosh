@@ -3,9 +3,11 @@
 		ArrowUpDown,
 		ChevronDown,
 		ChevronUp,
+		Copy,
 		EyeOff,
 		GripVertical,
 		Music,
+		Trash2,
 		X,
 	} from 'lucide-svelte';
 	import {
@@ -64,6 +66,11 @@
 		onToggleExpand: () => void;
 		/** Hide from the effect list (a persisted preference, not a chain edit). */
 		onHide: () => void;
+		/** Insert an independent copy right below this one. */
+		onDuplicate: () => void;
+		/** True when the chain holds other copies of this effect — hiding one copy
+		 * would be a chain edit, so it removes instead. */
+		isCopy?: boolean;
 		/** Step one place in `direction`, or jump to that end when `toEnd`. */
 		onMove: (direction: -1 | 1, toEnd: boolean) => void;
 		canMoveUp: boolean;
@@ -88,6 +95,8 @@
 		onToggle,
 		onToggleExpand,
 		onHide,
+		onDuplicate,
+		isCopy = false,
 		onMove,
 		canMoveUp,
 		canMoveDown,
@@ -173,12 +182,32 @@
 
 				<button
 					class="icon-btn"
-					onclick={onHide}
-					title="Hide from the list — stays hidden next session, restore it under Hidden Effects"
-					aria-label="Hide effect"
+					onclick={onDuplicate}
+					title="Duplicate — adds an independent copy below"
+					aria-label="Duplicate effect"
 				>
-					<EyeOff size={14} />
+					<Copy size={13} />
 				</button>
+
+				{#if isCopy}
+					<button
+						class="icon-btn"
+						onclick={onHide}
+						title="Remove this copy"
+						aria-label="Remove effect copy"
+					>
+						<Trash2 size={14} />
+					</button>
+				{:else}
+					<button
+						class="icon-btn"
+						onclick={onHide}
+						title="Hide from the list — stays hidden next session, restore it under Hidden Effects"
+						aria-label="Hide effect"
+					>
+						<EyeOff size={14} />
+					</button>
+				{/if}
 
 				<div class="move-btns">
 					<button

@@ -156,13 +156,38 @@
 		}
 	>();
 
+	/** True when the chain holds more than one instance of this effect. */
+	function isCopy(effect: EffectInstance): boolean {
+		return effects.filter((e) => e.defId === effect.defId).length > 1;
+	}
+
+	/** Insert an independent copy of an effect right below it. */
+	function duplicate(index: number) {
+		onBeforeUserEdit?.();
+		const copy = cloneEffectInstance(
+			$state.snapshot(effects[index]) as EffectInstance,
+		);
+		copy.expanded = true;
+		effects.splice(index + 1, 0, copy);
+		onUserEdit?.();
+	}
+
 	/**
 	 * Hide an effect from the list. This is a persisted preference rather than a
 	 * chain edit, so it deliberately stays out of the undo stack — Ctrl+Z can't
 	 * un-hide, but one click under "Hidden Effects" restores it with its params.
+	 *
+	 * Copies are the exception: with other instances left in the chain there is
+	 * nothing to hide, so this is an ordinary (undoable) delete.
 	 */
 	function hide(index: number) {
 		const effect = effects[index];
+		if (isCopy(effect)) {
+			onBeforeUserEdit?.();
+			effects.splice(index, 1);
+			onUserEdit?.();
+			return;
+		}
 		stashedValues.set(effect.defId, {
 			values: $state.snapshot(effect.values) as EffectInstance['values'],
 			volumeLinks: $state.snapshot(
@@ -533,6 +558,8 @@
 				onToggle={() => toggle(i)}
 				onToggleExpand={() => toggleExpand(i)}
 				onHide={() => hide(i)}
+				onDuplicate={() => duplicate(i)}
+				isCopy={isCopy(effect)}
 				onParamChange={(key, value) => paramChange(i, key, value)}
 				isDragging={dragFromIndex === i}
 				dropIndicator={getDropIndicator(i)}
