@@ -1,6 +1,7 @@
 import {
   applyRandomAudioLinks,
   generateMosh,
+  isMoshable,
   type MoshOptions,
 } from "../editor/mosh";
 import type { EffectInstance, Preset } from "../effects";
@@ -30,7 +31,7 @@ export function toggleOneEffect(
   const moshableDisabled: number[] = [];
   for (let i = 0; i < effects.length; i++) {
     const e = effects[i];
-    if (e.locked) continue;
+    if (!isMoshable(e)) continue;
     (e.enabled ? moshableEnabled : moshableDisabled).push(i);
   }
 

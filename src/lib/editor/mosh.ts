@@ -14,6 +14,15 @@ export interface MoshOptions {
 }
 
 /**
+ * Effects a roll may touch: locked ones are the user's choice to protect,
+ * `moshable: false` ones have nothing worth randomizing (see EffectDefinition).
+ * Both keep their enabled state, params and chain position through a mosh.
+ */
+export function isMoshable(effect: EffectInstance): boolean {
+  return !effect.locked && getDefinition(effect.defId)?.moshable !== false;
+}
+
+/**
  * Link a random share of range params to the music. Every link is full
  * spectrum — see the comment at the link site below.
  */
@@ -24,14 +33,14 @@ export function applyRandomAudioLinks(
 ): void {
   if (!hasAudio || strength <= 0) {
     for (const effect of effects) {
-      if (effect.volumeLinks) delete effect.volumeLinks;
+      if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;
     }
     return;
   }
 
   for (const effect of effects) {
     const def = getDefinition(effect.defId);
-    if (!def) continue;
+    if (!def || !isMoshable(effect)) continue;
 
     if (!effect.enabled) {
       if (effect.volumeLinks) delete effect.volumeLinks;
@@ -105,7 +114,7 @@ export function generateMosh(
     onlyMoshEnabled,
   } = options;
   const moshable = effects.filter(
-    (e) => !e.locked && (!onlyMoshEnabled || e.enabled),
+    (e) => isMoshable(e) && (!onlyMoshEnabled || e.enabled),
   );
   const clampedMin = Math.min(moshMin, moshable.length);
   const clampedMax = Math.min(moshMax, moshable.length);
@@ -138,7 +147,7 @@ export function generateMosh(
 
   if (randomizeOrder) {
     const moshableIndices = effects
-      .map((e, i) => (e.locked ? -1 : i))
+      .map((e, i) => (isMoshable(e) ? i : -1))
       .filter((i) => i !== -1);
     const shuffled = shuffleInPlace([...moshableIndices]);
     const snapshot = effects.map((e) => ({ ...e }));
@@ -151,7 +160,7 @@ export function generateMosh(
     applyRandomAudioLinks(effects, options.hasAudio, moshAudioLinkStrength);
   } else {
     for (const effect of effects) {
-      if (effect.volumeLinks) delete effect.volumeLinks;
+      if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;
     }
   }
 }
