@@ -123,6 +123,7 @@ export const FONT_OPTIONS: FontOption[] = [
 const loaded = new Map<string, Promise<void>>();
 
 let version = 0;
+const listeners = new Set<() => void>();
 
 /**
  * Bumped every time a bundled face lands. Renderers that cache drawn text by
@@ -131,6 +132,12 @@ let version = 0;
  */
 export function fontsVersion(): number {
   return version;
+}
+
+/** Notified when a face lands, so a paused preview can redraw. Returns an unsubscribe. */
+export function onFontsChanged(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
 }
 
 /**
@@ -153,6 +160,7 @@ export function ensureFontLoaded(family: string): Promise<void> {
       .then((f) => {
         document.fonts.add(f);
         version++;
+        for (const cb of listeners) cb();
       })
       .catch(() => {
         loaded.delete(option.id);

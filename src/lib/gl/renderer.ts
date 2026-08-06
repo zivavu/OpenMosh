@@ -1,6 +1,12 @@
 import type { EffectInstance } from "../effects";
 import { ASCII_CHARSETS } from "../effects/definitions";
-import { drawPhraseToCanvas } from "../text-overlay";
+import { drawPhraseToCanvas, ensureFontLoaded, fontsVersion } from "../text-overlay";
+import {
+  CAPTION_EFFECT_ID,
+  captionSignature,
+  drawCaptionToCanvas,
+  readCaptionParams,
+} from "../caption";
 import type { TextOverlayStyle } from "../text-overlay";
 import type { DrawPhraseOptions } from "../text-overlay";
 import { createProgram, getUniformLocations } from "./utils";
@@ -107,6 +113,16 @@ export class GlRenderer {
   private imgH = 0;
   private lastTime = -1;
   private phaseMap = new Map<string, number>();
+
+  /**
+   * Caption overlay textures, keyed by instanceId — unlike tracking there can
+   * be any number of captions in one chain, each with its own drawn text.
+   */
+  private captionTextures = new Map<
+    string,
+    { tex: WebGLTexture; w: number; h: number; sig: string }
+  >();
+  private captionCanvas: HTMLCanvasElement | null = null;
 
   // --- Tracking overlay effect (2D-canvas HUD composited into the chain) ---
   private trackingStates = new Map<string, TrackingState>();
@@ -464,9 +480,9 @@ export class GlRenderer {
   }
 
   /** Drop per-instance state for effects that no longer exist (deleted, or
-   * replaced wholesale by undo/preset): feedback GPU buffers, plus the phase
-   * and tracking maps. Every mosh roll mints fresh instanceIds, so without this
-   * the latter two grow unbounded across a long session. */
+   * replaced wholesale by undo/preset): feedback GPU buffers, plus the phase,
+   * tracking and caption maps. Every mosh roll mints fresh instanceIds, so
+   * without this the latter three grow unbounded across a long session. */
   private gcFxFeedback(live: Set<string>) {
     for (const [id, pair] of this.fxFeedback) {
       if (!live.has(id)) {
@@ -481,6 +497,20 @@ export class GlRenderer {
     for (const id of this.trackingStates.keys()) {
       if (!live.has(id)) this.trackingStates.delete(id);
     }
+    for (const [id, entry] of this.captionTextures) {
+      if (!live.has(id)) {
+        this.gl.deleteTexture(entry.tex);
+        this.captionTextures.delete(id);
+      }
+    }
+  }
+
+  /** Drop every cached caption texture (resize, teardown). */
+  private clearCaptionTextures() {
+    for (const entry of this.captionTextures.values()) {
+      this.gl.deleteTexture(entry.tex);
+    }
+    this.captionTextures.clear();
   }
 
   /**
@@ -520,11 +550,16 @@ export class GlRenderer {
       const eff = enabled[i];
       const isLast = i === enabled.length - 1;
 
-      // Tracking is a CPU-built 2D overlay, not a shader pass. Composite it over
-      // the current chain input at this slot, so later effects can distort it.
-      if (eff.defId === TRACKING_EFFECT_ID) {
+      // Tracking and captions are CPU-built 2D overlays, not shader passes.
+      // Composite them over the chain input at this slot, so later effects can
+      // distort them.
+      if (eff.defId === TRACKING_EFFECT_ID || eff.defId === CAPTION_EFFECT_ID) {
         const target = isLast ? finalFbo : this.ppFBOs![ppIdx];
-        this.renderTracking(eff, input, target, time);
+        if (eff.defId === CAPTION_EFFECT_ID) {
+          this.renderCaption(eff, input, target);
+        } else {
+          this.renderTracking(eff, input, target, time);
+        }
         if (isLast) {
           resultTex = finalTex;
           producedOutput = true;
@@ -940,12 +975,13 @@ export class GlRenderer {
     this.salPending = null;
   }
 
-  /** Composite an overlay texture over a main texture into the target FBO (normal blend + opacity). */
+  /** Composite an overlay texture over a main texture into the target FBO. */
   private compositeOverlayToFBO(
     mainTex: WebGLTexture,
     overlayTex: WebGLTexture,
     targetFBO: WebGLFramebuffer,
     opacity: number,
+    blendMode: TextOverlayBlendMode = "normal",
   ) {
     const gl = this.gl;
     const prog = this.textBlendProgram;
@@ -955,7 +991,10 @@ export class GlRenderer {
     gl.useProgram(prog.program);
     if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
     if (prog.uniforms["u_blendMode"])
-      gl.uniform1i(prog.uniforms["u_blendMode"], 0);
+      gl.uniform1i(
+        prog.uniforms["u_blendMode"],
+        GlRenderer.BLEND_MODE_VALUES[blendMode],
+      );
     if (prog.uniforms["u_invert"]) gl.uniform1f(prog.uniforms["u_invert"], 0);
     if (prog.uniforms["u_opacity"])
       gl.uniform1f(prog.uniforms["u_opacity"], opacity);
@@ -969,6 +1008,67 @@ export class GlRenderer {
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** Draw a caption and composite it over `inputTex` into `targetFBO`. */
+  private renderCaption(
+    eff: EffectInstance,
+    inputTex: WebGLTexture,
+    targetFBO: WebGLFramebuffer,
+  ) {
+    if (this.imgW <= 0 || this.imgH <= 0) return;
+    const params = readCaptionParams(eff.values);
+    if (!params.text.trim() || params.opacity <= 0) {
+      this.drawPass(this.passthrough, targetFBO, inputTex, 1.0, 0);
+      return;
+    }
+    // Bundled faces load async; the caption draws with a fallback until then and
+    // is redrawn once fontsVersion() moves.
+    void ensureFontLoaded(params.fontFamily);
+
+    const gl = this.gl;
+    const w = this.imgW;
+    const h = this.imgH;
+    const sig = captionSignature(params, w, h, fontsVersion());
+    let entry = this.captionTextures.get(eff.instanceId);
+    if (entry && (entry.w !== w || entry.h !== h)) {
+      gl.deleteTexture(entry.tex);
+      this.captionTextures.delete(eff.instanceId);
+      entry = undefined;
+    }
+    if (!entry || entry.sig !== sig) {
+      if (!this.captionCanvas) {
+        this.captionCanvas = document.createElement("canvas");
+      }
+      drawCaptionToCanvas(this.captionCanvas, w, h, params);
+      if (!entry) {
+        const tex = this.createTexture(w, h);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        entry = { tex, w, h, sig };
+        this.captionTextures.set(eff.instanceId, entry);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        this.captionCanvas,
+      );
+      entry.sig = sig;
+    }
+
+    this.compositeOverlayToFBO(
+      inputTex,
+      entry.tex,
+      targetFBO,
+      params.opacity,
+      params.blendMode,
+    );
   }
 
   /** Build the tracking HUD and composite it over `inputTex` into `targetFBO`. */
@@ -1067,6 +1167,7 @@ export class GlRenderer {
     if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
     if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
     this.trackingTexture = null;
+    this.clearCaptionTextures();
     this.abortPendingSaliency();
     if (this.salTexture) gl.deleteTexture(this.salTexture);
     this.salTexture = null;
@@ -1337,6 +1438,7 @@ export class GlRenderer {
     this.trackingTexW = 0;
     this.trackingTexH = 0;
     this.lastTrackingSig = "";
+    this.clearCaptionTextures();
     this.abortPendingSaliency();
     if (this.salTexture) gl.deleteTexture(this.salTexture);
     if (this.salFBO) gl.deleteFramebuffer(this.salFBO);

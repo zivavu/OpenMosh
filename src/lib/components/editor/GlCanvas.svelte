@@ -3,6 +3,7 @@
 	import { ANIMATED_EFFECTS } from '../../gl/effect-shaders';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
 	import { GlRenderer } from '../../gl/renderer';
+	import { onFontsChanged } from '../../text-overlay';
 	import type { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 
 	/** Active sequence transition descriptor. Progress is computed per rendered
@@ -316,8 +317,13 @@
 			e.enabled;
 			for (const k of Object.keys(e.values)) e.values[k];
 		}
+		// A caption font that lands after the frame was drawn changes its glyphs.
+		fontTick;
 		drawFrame(0);
 	});
+
+	let fontTick = $state(0);
+	$effect(() => onFontsChanged(() => fontTick++));
 
 	$effect(() => {
 		if (suspended || !renderer || !imageReady) return;
