@@ -24,7 +24,14 @@ export function drawCaptionToCanvas(
 
   const fontSize = Math.max(4, Math.round(height * params.size));
   ctx.font = `${fontSize}px ${params.fontFamily}`;
-  ctx.textAlign = params.align;
+  // Align names the side of Position X the text sits on, so "left" puts the
+  // text left of the anchor — the inverse of the canvas' edge-naming.
+  ctx.textAlign =
+    params.align === "left"
+      ? "right"
+      : params.align === "right"
+        ? "left"
+        : "center";
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
   ctx.miterLimit = 2;
