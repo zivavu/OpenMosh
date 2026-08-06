@@ -70,6 +70,12 @@ export interface EffectDefinition {
   id: string;
   name: string;
   params: EffectParam[];
+  /**
+   * Exclude from random moshing (treated as permanently locked). For effects
+   * whose output is driven by content the user typed in, which a roll can only
+   * scramble or blank out.
+   */
+  moshable?: false;
 }
 
 /** When set, this range param is driven by music volume in [min, max]. */

@@ -1540,6 +1540,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
    {
       id: 'caption',
       name: 'Caption',
+      moshable: false,
       params: [
          {
             key: 'text',
@@ -1575,7 +1576,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             max: 0.5,
             step: 0.005,
             defaultValue: 0.1,
-            moshMax: 0.25,
          },
          {
             key: 'font',
@@ -1635,7 +1635,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             max: 1,
             step: 0.01,
             defaultValue: 1,
-            moshMin: 0.5,
          },
          {
             key: 'blendMode',
