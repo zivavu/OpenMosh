@@ -2,6 +2,7 @@ import type { EffectInstance, Preset } from "./types";
 import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
 import { STARTER_PRESETS } from "./starter-presets";
+import { hueToHex } from "../color";
 
 const PRESETS_KEY = "openmosh-presets";
 /** Set once the starter presets have been written, so deleting them sticks. */
@@ -69,6 +70,26 @@ export function deletePreset(index: number): Preset[] {
   return presets;
 }
 
+/**
+ * Duotone's two hue sliders became color pickers. Presets saved before that
+ * carry hues only — rebuild the colors the old shader would have produced
+ * (shadows were the hue at 30% brightness) so they still look the same.
+ */
+function migrateValues(
+  defId: string,
+  values: Record<string, number | string>,
+): Record<string, number | string> {
+  if (defId !== "duotone") return values;
+  const migrated = { ...values };
+  if (typeof values.shadowHue === "number" && values.shadowColor == null) {
+    migrated.shadowColor = hueToHex(values.shadowHue, 0.3);
+  }
+  if (typeof values.highlightHue === "number" && values.highlightColor == null) {
+    migrated.highlightColor = hueToHex(values.highlightHue);
+  }
+  return migrated;
+}
+
 export function applyPreset(preset: Preset): EffectInstance[] {
   return preset.effects.map((pe) => {
     // Merge definition defaults under saved values so presets saved before a
@@ -83,7 +104,7 @@ export function applyPreset(preset: Preset): EffectInstance[] {
       enabled: pe.enabled,
       locked: false,
       expanded: false,
-      values: { ...defaults, ...pe.values },
+      values: { ...defaults, ...migrateValues(pe.defId, pe.values) },
       ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
     };
   });

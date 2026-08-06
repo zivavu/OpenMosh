@@ -65,6 +65,10 @@ describe("starter presets", () => {
                 param.options.some((o) => o.value === value),
                 `${where} = "${value}"`,
               ).toBe(true);
+            } else if (param.type === "color") {
+              expect(String(value), where).toMatch(/^#[0-9a-f]{6}$/i);
+            } else if (param.type === "text") {
+              expect(typeof value, where).toBe("string");
             } else {
               expect([0, 1], where).toContain(value as number);
             }

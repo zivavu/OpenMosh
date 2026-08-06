@@ -114,7 +114,11 @@ export const STARTER_PRESETS: Preset[] = [
       {
         defId: "duotone",
         enabled: true,
-        values: { shadowHue: 265, highlightHue: 175, intensity: 0.55 },
+        values: {
+          shadowColor: "#20004d",
+          highlightColor: "#00ffea",
+          intensity: 0.55,
+        },
       },
       {
         defId: "glow",
