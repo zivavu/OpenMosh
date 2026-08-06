@@ -40,7 +40,31 @@ export interface CheckboxParam {
   visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
-export type EffectParam = RangeParam | SelectParam | CheckboxParam;
+export interface TextParam {
+  key: string;
+  label: string;
+  type: "text";
+  defaultValue: string;
+  maxLength?: number;
+  placeholder?: string;
+  visibleWhen?: (values: Record<string, number | string>) => boolean;
+}
+
+/** A hex color (#rrggbb), edited with a swatch + text field. */
+export interface ColorParam {
+  key: string;
+  label: string;
+  type: "color";
+  defaultValue: string;
+  visibleWhen?: (values: Record<string, number | string>) => boolean;
+}
+
+export type EffectParam =
+  | RangeParam
+  | SelectParam
+  | CheckboxParam
+  | TextParam
+  | ColorParam;
 
 export interface EffectDefinition {
   id: string;
