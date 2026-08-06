@@ -122,6 +122,17 @@ export const FONT_OPTIONS: FontOption[] = [
 
 const loaded = new Map<string, Promise<void>>();
 
+let version = 0;
+
+/**
+ * Bumped every time a bundled face lands. Renderers that cache drawn text by
+ * signature mix this in, so a caption drawn with the fallback face is redrawn
+ * once its real font is available.
+ */
+export function fontsVersion(): number {
+  return version;
+}
+
 /**
  * Ensure the font for the given CSS family value is registered and loaded
  * into document.fonts so 2D-canvas drawing (preview and export) uses it.
@@ -141,6 +152,7 @@ export function ensureFontLoaded(family: string): Promise<void> {
       .load()
       .then((f) => {
         document.fonts.add(f);
+        version++;
       })
       .catch(() => {
         loaded.delete(option.id);

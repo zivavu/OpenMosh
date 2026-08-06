@@ -12,5 +12,5 @@ export type {
 } from "./types";
 export { drawPhraseToCanvas } from "./render-text";
 export type { DrawPhraseOptions } from "./render-text";
-export { FONT_OPTIONS, ensureFontLoaded } from "./fonts";
+export { FONT_OPTIONS, ensureFontLoaded, fontsVersion } from "./fonts";
 export type { FontOption } from "./fonts";
