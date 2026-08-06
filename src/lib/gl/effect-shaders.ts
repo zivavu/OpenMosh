@@ -1,3 +1,5 @@
+import { hexToVec3 } from '../color';
+
 export const VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec2 a_position;
 out vec2 v_uv;
@@ -140,6 +142,16 @@ function setInt(
 	value: number,
 ) {
 	if (locs[name]) gl.uniform1i(locs[name], value);
+}
+
+/** Set a vec3 uniform from a hex color param. */
+function setColor(
+	gl: WebGL2RenderingContext,
+	locs: Record<string, WebGLUniformLocation>,
+	name: string,
+	hex: string,
+) {
+	if (locs[name]) gl.uniform3fv(locs[name], hexToVec3(hex));
 }
 
 /** Create a setUniforms that maps each key to a float uniform named u_{key}. */
@@ -989,30 +1001,20 @@ void main() {
 	duotone: {
 		fragment:
 			H +
-			`uniform float u_shadowHue;
-uniform float u_highlightHue;
+			`uniform vec3 u_shadowColor;
+uniform vec3 u_highlightColor;
 uniform float u_intensity;
-vec3 hsl2rgb(float h) {
-  float hr = h / 60.0;
-  float x = 1.0 - abs(mod(hr, 2.0) - 1.0);
-  vec3 c;
-  if (hr < 1.0) c = vec3(1.0, x, 0.0);
-  else if (hr < 2.0) c = vec3(x, 1.0, 0.0);
-  else if (hr < 3.0) c = vec3(0.0, 1.0, x);
-  else if (hr < 4.0) c = vec3(0.0, x, 1.0);
-  else if (hr < 5.0) c = vec3(x, 0.0, 1.0);
-  else c = vec3(1.0, 0.0, x);
-  return c;
-}
 void main() {
   vec4 c = texture(u_texture, v_uv);
   float luma = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-  vec3 shadow = hsl2rgb(u_shadowHue) * 0.3;
-  vec3 highlight = hsl2rgb(u_highlightHue);
-  vec3 duo = mix(shadow, highlight, luma);
+  vec3 duo = mix(u_shadowColor, u_highlightColor, luma);
   outColor = vec4(mix(c.rgb, duo, u_intensity), c.a);
 }`,
-		setUniforms: floats('shadowHue', 'highlightHue', 'intensity'),
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_intensity', v.intensity as number);
+			setColor(gl, l, 'u_shadowColor', v.shadowColor as string);
+			setColor(gl, l, 'u_highlightColor', v.highlightColor as string);
+		},
 	},
 
 	grain: {
