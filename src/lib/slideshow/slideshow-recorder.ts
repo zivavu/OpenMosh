@@ -3,6 +3,7 @@ import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
 import { DEFAULT_TEXT_OVERLAY_STYLE, ensureFontLoaded } from "../text-overlay";
+import { preloadCaptionFonts } from "../caption";
 import { SlideshowFrameDriver } from "./frame-driver";
 import { cloneEffects } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
@@ -127,6 +128,7 @@ export async function executeSlideshowRecording(
       textStyle.fontFamily ?? DEFAULT_TEXT_OVERLAY_STYLE.fontFamily,
     );
   }
+  await preloadCaptionFonts(baseEffects);
 
   let blob: Blob;
   try {

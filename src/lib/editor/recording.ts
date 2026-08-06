@@ -2,6 +2,7 @@ import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
 import { downloadBlob, recordVideo } from "../recorder";
+import { preloadCaptionFonts } from "../caption";
 import { openDecodableVideo } from "../video/decode";
 import type { MoshOptions } from "./mosh";
 import {
@@ -122,6 +123,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       : exportDuration;
 
   if (isVideo && videoEl) videoEl.pause();
+
+  // Sequence segments carry their own chains, so captions can live outside the
+  // base one too.
+  await preloadCaptionFonts([
+    ...effects,
+    ...(ctx.sequence?.segments.flatMap((s) => s.effects) ?? []),
+  ]);
 
   // Sequential WebCodecs decode of the source video: each packet is decoded at
   // most once, vs. the fallback path's full <video> seek per frame (keyframe
