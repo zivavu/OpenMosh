@@ -28,6 +28,30 @@
 
 	let open = $state(false);
 	let hsv = $state<Hsv>(untrack(() => hexToHsv(value, defaultValue)));
+	let root = $state<HTMLElement | null>(null);
+
+	// Click-away / Escape to close. Bound on pointerdown so a drag that starts
+	// outside closes immediately, and capture-phase so a stopPropagation()
+	// elsewhere in the panel can't strand the picker open.
+	$effect(() => {
+		if (!open) return;
+
+		const onPointerDown = (e: PointerEvent) => {
+			if (!root?.contains(e.target as Node)) open = false;
+		};
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape') return;
+			open = false;
+			(root?.querySelector('.swatch') as HTMLElement | null)?.focus();
+		};
+
+		document.addEventListener('pointerdown', onPointerDown, true);
+		document.addEventListener('keydown', onKeyDown, true);
+		return () => {
+			document.removeEventListener('pointerdown', onPointerDown, true);
+			document.removeEventListener('keydown', onKeyDown, true);
+		};
+	});
 
 	// Re-sync from the outside (typed hex, preset load, undo) without clobbering
 	// the hue while dragging through greys, where hex → hsv can't recover it.
@@ -89,7 +113,7 @@
 	}
 </script>
 
-<div class="color-picker">
+<div class="color-picker" bind:this={root}>
 	<div class="color-row">
 		<button
 			{id}
