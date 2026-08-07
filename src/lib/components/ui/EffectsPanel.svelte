@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { Check, Plus, Save, Search, X } from 'lucide-svelte';
+	import {
+		Check,
+		ChevronsDownUp,
+		Plus,
+		Save,
+		Search,
+		X,
+	} from 'lucide-svelte';
 	import {
 		EFFECT_DEFINITIONS,
 		HIDDEN_EFFECTS_KEY,
@@ -125,6 +132,13 @@
 
 	function toggleExpand(index: number) {
 		effects[index].expanded = !effects[index].expanded;
+	}
+
+	// Expansion is view state, not a chain edit — deliberately out of undo.
+	const anyExpanded = $derived(effects.some((e) => e.expanded));
+
+	function collapseAll() {
+		for (const effect of effects) effect.expanded = false;
 	}
 
 	// Hidden effects are tracked as an explicit set of ids the user chose to
@@ -539,6 +553,16 @@
 				title="Clear"
 			>
 				<X size={12} />
+			</button>
+		{/if}
+		{#if anyExpanded}
+			<button
+				class="search-clear"
+				onclick={collapseAll}
+				title="Collapse all open effects"
+				aria-label="Collapse all effects"
+			>
+				<ChevronsDownUp size={13} />
 			</button>
 		{/if}
 	</div>
