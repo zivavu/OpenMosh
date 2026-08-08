@@ -12,6 +12,9 @@ import type { SequenceSource } from "./sequence-sources.svelte";
  * the preview's are parked at arbitrary positions, and an export must not
  * depend on where the user last left the playhead.
  */
+/** Mirrors the preview registry's cap. */
+const MAX_DECODED_IMAGES = 16;
+
 export interface SequenceExportSources {
   /**
    * Upload the frame for `sourceId`, advancing a video source by `dtSec`.
@@ -31,18 +34,17 @@ export async function createSequenceExportSources(
   const images = new Map<string, HTMLImageElement>();
   const samplers = new Map<string, SlideVideoSampler>();
 
+  // Videos are opened up front — creating a decoder mid-export would stall the
+  // frame it happens on. Images are decoded on first use instead: a pool can
+  // hold hundreds, and holding every full-resolution bitmap for the length of
+  // an export is what actually runs the tab out of memory.
   await Promise.all(
-    sources.map(async (src) => {
-      if (src.kind === "image") {
-        const img = await decodeImage(src.objectUrl);
-        if (img) images.set(src.id, img);
-        return;
-      }
-      // The primary video is decoded by the recorder's own lockstep generator.
-      if (src.primary) return;
-      const sampler = await SlideVideoSampler.create(src.file);
-      if (sampler) samplers.set(src.id, sampler);
-    }),
+    sources
+      .filter((src) => src.kind === "video" && !src.primary)
+      .map(async (src) => {
+        const sampler = await SlideVideoSampler.create(src.file);
+        if (sampler) samplers.set(src.id, sampler);
+      }),
   );
 
   let currentId: string | null = null;
@@ -67,8 +69,20 @@ export async function createSequenceExportSources(
       if (src.kind === "image") {
         lastVideoId = null;
         if (currentId !== src.id) {
-          const img = images.get(src.id);
-          if (!img) return false;
+          let img = images.get(src.id);
+          if (!img) {
+            const decoded = await decodeImage(src.objectUrl);
+            if (!decoded) return false;
+            img = decoded;
+            images.set(src.id, img);
+            // Bounded: only the recently-used segments' images stay resident.
+            if (images.size > MAX_DECODED_IMAGES) {
+              const oldest = images.keys().next().value;
+              if (oldest !== undefined && oldest !== src.id) {
+                images.delete(oldest);
+              }
+            }
+          }
           renderer.updateSourceImage(img);
           currentId = src.id;
         }

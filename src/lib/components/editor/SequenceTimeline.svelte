@@ -96,6 +96,8 @@
 	let multiSource = $derived(sources.length > 1);
 	let svgH = $derived(multiSource ? SVG_H_BASE + 13 : SVG_H_BASE);
 	let sourceInput = $state<HTMLInputElement>(undefined!);
+	// Collapsed by default on touch, where the preview has far less room to give.
+	let binOpen = $state(!window.matchMedia('(pointer: coarse)').matches);
 
 	function sourceOf(s: SequenceSegment): SequenceSource | undefined {
 		return sources.find((x) => x.id === (s.sourceId ?? primarySourceId));
@@ -838,22 +840,48 @@
 		{@const assignable = selectedIds.length > 0}
 		<div class="media-bin">
 			<div class="media-bin-head">
-				<span class="media-bin-title">SOURCES</span>
-				<span class="media-bin-hint">
-					{assignable
-						? `CLICK TO ASSIGN TO ${selectedIds.length > 1 ? `${selectedIds.length} SEGMENTS` : 'SEGMENT'}`
-						: 'SELECT A SEGMENT TO ASSIGN'}
-				</span>
+				<button
+					class="media-bin-toggle"
+					aria-expanded={binOpen}
+					onclick={() => (binOpen = !binOpen)}
+				>
+					<span class="media-bin-caret" class:open={binOpen}>▸</span>
+					SOURCES
+					<span class="media-bin-count">{sources.length}</span>
+				</button>
+				{#if binOpen}
+					<span class="media-bin-hint">
+						{assignable
+							? `CLICK TO ASSIGN TO ${selectedIds.length > 1 ? `${selectedIds.length} SEGMENTS` : 'SEGMENT'}`
+							: 'SELECT A SEGMENT TO ASSIGN'}
+					</span>
+				{/if}
+				<input
+					bind:this={sourceInput}
+					type="file"
+					accept="image/*,video/*"
+					multiple
+					hidden
+					onchange={(e) => {
+						const picked = Array.from(e.currentTarget.files ?? []);
+						if (picked.length > 0) onAddSources?.(picked);
+						e.currentTarget.value = '';
+					}}
+				/>
+				<button
+					class="media-bin-add"
+					title="Add images or videos to the pool"
+					onclick={() => sourceInput.click()}>+ ADD</button
+				>
 			</div>
-			<div class="media-grid">
+			<!-- Capped height with its own scroll: letting a few hundred chips
+			     wrap freely pushes the preview clean off the screen. -->
+			<div class="media-grid" class:collapsed={!binOpen}>
 				{#each sources as src, i (src.id)}
 					<div class="media-chip" class:active={selectedSourceId === src.id}>
 						<button
 							class="media-chip-assign"
 							class:assignable
-							style:background-image={src.thumbUrl
-								? `url(${src.thumbUrl})`
-								: 'none'}
 							title={assignable
 								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}`
 								: `${src.name} — select a segment to assign it`}
@@ -861,6 +889,16 @@
 								if (assignable) onAssignSource?.(selectedIds, src.id);
 							}}
 						>
+							{#if src.thumbUrl}
+								<img
+									class="media-chip-img"
+									src={src.thumbUrl}
+									alt=""
+									loading="lazy"
+									decoding="async"
+									draggable="false"
+								/>
+							{/if}
 							<span class="media-chip-num">
 								{i + 1}{#if src.kind === 'video'}<span class="media-chip-kind"
 										>▶</span
@@ -877,23 +915,6 @@
 						{/if}
 					</div>
 				{/each}
-				<input
-				bind:this={sourceInput}
-				type="file"
-				accept="image/*,video/*"
-				multiple
-				hidden
-				onchange={(e) => {
-					const picked = Array.from(e.currentTarget.files ?? []);
-					if (picked.length > 0) onAddSources?.(picked);
-					e.currentTarget.value = '';
-				}}
-			/>
-			<button
-					class="media-add"
-					title="Add images or videos to the pool"
-					onclick={() => sourceInput.click()}>+</button
-				>
 			</div>
 		</div>
 	{/if}
@@ -1385,17 +1406,47 @@
 
 	.media-bin-head {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: 0.6rem;
 		padding: 0 0.1rem 0.35rem;
 	}
 
-	.media-bin-title {
+	.media-bin-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0;
+		border: none;
+		background: none;
 		color: #7a5f94;
 		font-size: 0.62rem;
 		font-family: monospace;
 		font-weight: 700;
 		letter-spacing: 0.1em;
+		cursor: pointer;
+	}
+
+	.media-bin-toggle:hover {
+		color: #b08ad0;
+	}
+
+	.media-bin-caret {
+		display: inline-block;
+		font-size: 0.6rem;
+		transition: transform 0.15s;
+	}
+
+	.media-bin-caret.open {
+		transform: rotate(90deg);
+	}
+
+	.media-bin-count {
+		padding: 1px 5px;
+		border-radius: 999px;
+		background: #221a2c;
+		color: #b08ad0;
+		font-size: 0.58rem;
+		letter-spacing: 0;
 	}
 
 	.media-bin-hint {
@@ -1405,12 +1456,41 @@
 		letter-spacing: 0.04em;
 	}
 
-	/* Wraps rather than scrolls: a hidden source is a source you forget you
-	   have, and the bin sits above a full-width timeline with room to grow. */
+	.media-bin-add {
+		margin-left: auto;
+		padding: 0.2rem 0.6rem;
+		border: 1px solid #2e2438;
+		border-radius: 4px;
+		background: transparent;
+		color: #7a5f94;
+		font-size: 0.6rem;
+		font-family: monospace;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		cursor: pointer;
+	}
+
+	.media-bin-add:hover {
+		border-color: #6a5080;
+		color: #d8b8f8;
+	}
+
+	/* Two rows tall, then scrolls — a wrapping grid of a few hundred chips
+	   would take the whole viewport and leave nothing for the preview. */
 	.media-grid {
 		display: flex;
 		flex-wrap: wrap;
+		align-content: flex-start;
 		gap: 0.35rem;
+		max-height: 128px;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		scrollbar-width: thin;
+		scrollbar-color: #3a2e48 transparent;
+	}
+
+	.media-grid.collapsed {
+		display: none;
 	}
 
 	.media-chip {
@@ -1435,16 +1515,28 @@
 
 	.media-chip-assign {
 		display: block;
+		position: relative;
 		width: 100%;
 		height: 100%;
 		padding: 0;
 		border: none;
-		background: #14101a no-repeat center / cover;
+		background: #14101a;
 		cursor: default;
 	}
 
 	.media-chip-assign.assignable {
 		cursor: pointer;
+	}
+
+	/* A real <img> rather than a background: object-fit centres the crop
+	   predictably, and loading="lazy" keeps a few hundred offscreen chips from
+	   being decoded at once. */
+	.media-chip-img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		object-position: center;
 	}
 
 	.media-chip-num {
@@ -1518,22 +1610,6 @@
 		background: #8a3a4a;
 	}
 
-	.media-add {
-		flex: 0 0 auto;
-		width: 58px;
-		height: 58px;
-		border: 1.5px dashed #2e2438;
-		border-radius: 6px;
-		background: transparent;
-		color: #6a5080;
-		font-size: 18px;
-		cursor: pointer;
-	}
-
-	.media-add:hover {
-		border-color: #6a5080;
-		color: #b08ad0;
-	}
 
 	.dot-anchor {
 		fill: #b08ad0;
@@ -1756,6 +1832,32 @@
 	@media (max-width: 800px) {
 		.tl-container {
 			margin: 0 8px;
+		}
+
+		/* Smaller chips and one row of scroll — a phone has no screen to spare,
+		   and the bin starts collapsed there anyway. */
+		.media-chip,
+		.media-chip-assign {
+			width: 46px;
+			height: 46px;
+		}
+
+		.media-grid {
+			max-height: 100px;
+			gap: 0.3rem;
+		}
+
+		/* No hover on touch: show the name band permanently instead. */
+		.media-chip-name {
+			opacity: 1;
+		}
+
+		.media-chip-remove {
+			display: flex;
+		}
+
+		.media-bin-hint {
+			display: none;
 		}
 		.tl-track {
 			border-radius: 0;

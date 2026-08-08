@@ -639,7 +639,16 @@
 	// editor was opened with: it keeps owning the master clock and (as a video)
 	// the preview audio, so the frame driver hands its frames back to the
 	// existing player rather than sampling it a second time.
-	const sourceRegistry = new SequenceSourceRegistry();
+	// Bumped when a late upload — a video frame or a lazily-decoded image —
+	// lands while paused, so the canvas redraws with it. Gated on paused:
+	// during playback the rAF loop already redraws, and ticking state per
+	// frame would be pure reactivity churn.
+	let sourceTick = $state(0);
+	const bumpSourceTick = () => {
+		if (!seqPlaying()) sourceTick++;
+	};
+
+	const sourceRegistry = new SequenceSourceRegistry(bumpSourceTick);
 	let sequenceSources = $derived(sourceRegistry.sources);
 
 	onMount(() => {
@@ -728,16 +737,10 @@
 		return seg?.sourceId ?? primary;
 	}
 
-	// Bumped when a late video upload lands while paused, so the canvas redraws
-	// with it. Gated on paused: during playback the rAF loop already redraws,
-	// and ticking state per frame would be pure reactivity churn.
-	let sourceTick = $state(0);
 	const seqFrames = new SequenceFrameDriver({
 		registry: sourceRegistry,
 		getRenderer: () => glRenderer,
-		onUpload: () => {
-			if (!seqPlaying()) sourceTick++;
-		},
+		onUpload: bumpSourceTick,
 	});
 
 	let seqActiveSourceId = $derived.by(() => activeSourceId());
