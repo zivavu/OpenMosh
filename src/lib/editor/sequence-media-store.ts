@@ -111,7 +111,8 @@ export async function putSequenceMedia(id: string, file: File): Promise<void> {
   });
 }
 
-export async function deleteSequenceMedia(id: string): Promise<void> {
+/** Only pruning deletes blobs — removing a source just unlinks it from a pool. */
+async function deleteSequenceMedia(id: string): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");

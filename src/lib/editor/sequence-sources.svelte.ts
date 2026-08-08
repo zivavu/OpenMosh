@@ -1,6 +1,5 @@
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import {
-  deleteSequenceMedia,
   getAllSequenceMedia,
   putSequenceMedia,
   stableSourceId,
@@ -114,11 +113,11 @@ export class SequenceSourceRegistry {
   }
 
   /**
-   * `forget` false drops the source from this session only, leaving the stored
-   * blob alone — that's what swapping songs does, where another song's pool may
-   * still reference the same media.
+   * Drops the source from this song. The stored blob is deliberately left
+   * alone: another song's pool may reference the same media, and once none
+   * does, `pruneSequenceMedia` collects it on the next pool save.
    */
-  remove(id: string, { forget = true } = {}) {
+  remove(id: string) {
     const src = this.get(id);
     if (!src) return;
     this.sources = this.sources.filter((s) => s.id !== id);
@@ -126,10 +125,9 @@ export class SequenceSourceRegistry {
     this.#samplers.delete(id);
     this.#images.delete(id);
     this.#revoke(src);
-    if (forget) void deleteSequenceMedia(id).catch(() => {});
   }
 
-  /** Drop every added source, keeping the primary. Deletes the stored blobs. */
+  /** Drop every added source, keeping the primary. */
   clearExtras() {
     for (const s of [...this.sources]) {
       if (!s.primary) this.remove(s.id);
@@ -143,8 +141,8 @@ export class SequenceSourceRegistry {
    */
   async setExtras(ids: string[]): Promise<void> {
     const want = new Set(ids);
-    for (const s of this.sources) {
-      if (!s.primary && !want.has(s.id)) this.remove(s.id, { forget: false });
+    for (const s of [...this.sources]) {
+      if (!s.primary && !want.has(s.id)) this.remove(s.id);
     }
     await this.restore(ids);
   }
@@ -230,6 +228,8 @@ export class SequenceSourceRegistry {
     for (const s of this.#samplers.values()) s.dispose();
     this.#samplers.clear();
     this.#images.clear();
+    this.#creating.clear();
+    this.#decoding.clear();
     for (const s of this.sources) this.#revoke(s);
     this.sources = [];
   }

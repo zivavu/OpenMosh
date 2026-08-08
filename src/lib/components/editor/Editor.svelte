@@ -715,7 +715,10 @@
 	onMount(() => {
 		if (!isSequenceMode) return;
 		void (async () => {
-			await sourceRegistry.add([file], { primary: true });
+			// Not persisted: the primary belongs to the editor session, never to
+			// a song's pool, so storing it would write (possibly hundreds of MB
+			// of) video into IndexedDB that nothing would ever read back.
+			await sourceRegistry.add([file], { primary: true, persist: false });
 			const extras = extraFiles.filter((f) => f !== file);
 			if (extras.length > 0) await sourceRegistry.add(extras);
 		})();
@@ -1951,7 +1954,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Removes every added image and video from this song's pool and deletes them from storage. Segments fall back to the original source. The file you opened with is kept."
+			message="Removes every added image and video from this song's pool. Segments fall back to the original source. The file you opened with is kept, and media another song still uses stays in storage."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger
