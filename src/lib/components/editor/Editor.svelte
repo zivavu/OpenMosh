@@ -772,6 +772,9 @@
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
 		sourceRegistry.clearExtras();
+		// The cleared source's frame is still on the texture, and the driver
+		// still thinks it's current — make it re-upload from the primary.
+		seqFrames.invalidate();
 		restoreAttempted.clear();
 		if (sequenceSegments.some((s) => s.sourceId)) {
 			seqBoundaries.commit(
@@ -789,6 +792,7 @@
 			return;
 		}
 		sourceRegistry.remove(id);
+		seqFrames.invalidate();
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
 				s.sourceId === id ? { ...s, sourceId: undefined } : s,
