@@ -1301,6 +1301,7 @@
 									moshOptions: getMoshOptions(),
 									duration: seqMasterDuration,
 									masterIsAudio: seqMasterIsAudio,
+									sources: sourceRegistry.sources,
 								}
 							: null,
 					onProgress: (p) => {

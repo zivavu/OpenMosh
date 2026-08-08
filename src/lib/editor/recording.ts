@@ -7,9 +7,12 @@ import { openDecodableVideo } from "../video/decode";
 import type { MoshOptions } from "./mosh";
 import {
   createSequenceEffectSource,
+  findSegmentAt,
   resolveTransitionAt,
   type SequenceSegment,
 } from "./sequence";
+import { createSequenceExportSources } from "./sequence-export-sources";
+import type { SequenceSource } from "./sequence-sources.svelte";
 
 export interface RecordingContext {
   fps: number;
@@ -39,6 +42,8 @@ export interface RecordingContext {
     duration: number;
     /** True when an external track drives the clock — segments are keyed to audio time. */
     masterIsAudio: boolean;
+    /** Media pool segments draw from. Empty/absent = every segment uses `file`. */
+    sources?: SequenceSource[];
   } | null;
   onProgress: (p: number) => void;
   onFinalizing: () => void;
@@ -168,17 +173,23 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     renderer.updateSourceFrame(videoEl!);
   };
 
-  const decodeBeforeRender = async () => {
+  // `upload` false still pulls a sample: the generator was built to yield one
+  // timestamp per recorder frame, so skipping a pull would desynchronise every
+  // later frame from `sourceTimeAt`.
+  const pullPrimaryFrame = async (upload: boolean) => {
     const { value: sample } = await videoFrames!.next();
     // null/done: no frame at this timestamp — keep the last uploaded one,
     // matching the seek path's freeze-frame behavior.
     if (sample) {
-      const frame = sample.toVideoFrame();
-      renderer.updateSourceFrame(frame);
-      frame.close();
+      if (upload) {
+        const frame = sample.toVideoFrame();
+        renderer.updateSourceFrame(frame);
+        frame.close();
+      }
       sample.close();
     }
   };
+  const decodeBeforeRender = () => pullPrimaryFrame(true);
 
   // Sequence mode: resolve effects per frame from the segment list. With an
   // external track segments live on the audio timeline (master clock) — this
@@ -208,14 +219,31 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       }
     : undefined;
 
+  // Multi-source sequences: whichever segment is under the playhead picks the
+  // media for its frames. Built lazily below so single-source exports (and
+  // non-sequence ones) pay nothing.
+  let exportSources: Awaited<
+    ReturnType<typeof createSequenceExportSources>
+  > | null = null;
+  const multiSource = (sequence?.sources?.length ?? 0) > 1;
+
   const sequenceBeforeRender = async (frameIndex: number, time: number) => {
+    const t = seqTimeAt(time);
+
+    // A non-primary source owns this frame; the primary is still pulled (but
+    // not uploaded) so its decode stays in lockstep with the frame clock.
+    let primaryOwnsFrame = true;
+    if (exportSources) {
+      const seg = findSegmentAt(sequence!.segments, t, sequence!.duration);
+      primaryOwnsFrame = !(await exportSources.advance(seg?.sourceId, 1 / fps));
+    }
+
     // Still images have no per-frame source to advance
     if (isVideo && videoEl) {
-      const base = videoFrames ? decodeBeforeRender : seekBeforeRender;
-      await base(frameIndex, time);
+      if (videoFrames) await pullPrimaryFrame(primaryOwnsFrame);
+      else if (primaryOwnsFrame) await seekBeforeRender(frameIndex, time);
     }
     // On a gap (no segment) keep the previous frame's effects.
-    const t = seqTimeAt(time);
     const fx = seqSource!(t);
     if (fx) effectsRef!.current = fx;
     // Transition window at a segment boundary: blend the outgoing chain into
@@ -244,6 +272,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   };
 
   try {
+    if (seqSource && multiSource) {
+      exportSources = await createSequenceExportSources(
+        sequence!.sources!,
+        renderer,
+      );
+    }
     const blob = await recordVideo({
       duration: exportDuration,
       fps,
@@ -287,5 +321,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     // Stops mediabunny's pre-decode pipeline and closes its decoder on
     // abort/error; no-op when the generator already ran to completion.
     void videoFrames?.return();
+    exportSources?.dispose();
   }
 }
