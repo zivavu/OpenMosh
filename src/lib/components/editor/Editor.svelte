@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { Download, HelpCircle, Home, Library, ListVideo } from 'lucide-svelte';
+	import {
+		Download,
+		HelpCircle,
+		Home,
+		Library,
+		ListVideo,
+		Maximize,
+	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
@@ -230,6 +237,15 @@
 	let showFps = $state(saved.showFps ?? false);
 	let videoLoop = $state(saved.loopVideo ?? true);
 	let showShortcuts = $state(false);
+	let previewFullscreen = $state(false);
+	const fullscreenSupported =
+		typeof document !== 'undefined' && document.fullscreenEnabled;
+
+	// The record overlay and progress live outside the fullscreen element, so
+	// staying in it during an export would hide every control the user needs.
+	$effect(() => {
+		if (recordingState.recording) previewFullscreen = false;
+	});
 
 	// The sequence route starts in the mode; in single mode it's the SEQ toggle.
 	let sequenceEnabled = $state(untrack(() => isSequenceMode));
@@ -247,6 +263,7 @@
 				},
 				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
 				{ keys: ['Space'], description: 'Play / pause' },
+				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
 				{
 					keys: ['V'],
 					description: 'Bake current frame as the new source (undoable)',
@@ -1237,6 +1254,7 @@
 		undo,
 		redo,
 		reInput,
+		toggleFullscreen: () => (previewFullscreen = !previewFullscreen),
 		playSpan,
 		pauseTrack,
 		hasTrack: () => (!!audio.trackFile && !!audioEl) || isVideo,
@@ -1489,6 +1507,7 @@
 			bind:naturalWidth
 			bind:naturalHeight
 			bind:fps={currentFps}
+			bind:fullscreen={previewFullscreen}
 			showFps={showFps && !isImageFormat}
 			videoEl={isVideo && !previewPlayer ? videoEl : null}
 			frameSource={previewPlayer}
@@ -1529,6 +1548,16 @@
 						title="Keyboard shortcuts"
 					>
 						<HelpCircle size={14} />
+					</button>
+				{/if}
+				{#if fullscreenSupported}
+					<button
+						class="help-btn"
+						class:seq-active={previewFullscreen}
+						onclick={() => (previewFullscreen = !previewFullscreen)}
+						title="Fullscreen preview (F)"
+					>
+						<Maximize size={14} />
 					</button>
 				{/if}
 				{#if seqMasterDuration > 0 && !isSequenceMode}
