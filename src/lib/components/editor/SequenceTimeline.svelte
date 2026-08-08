@@ -101,6 +101,16 @@
 		return sources.find((x) => x.id === (s.sourceId ?? primarySourceId));
 	}
 
+	/** Filenames from one export batch share a long prefix, so keep the tail
+	 * (and the extension) rather than truncating from the right. */
+	function shortName(name: string, max = 16): string {
+		if (name.length <= max) return name;
+		const dot = name.lastIndexOf('.');
+		const ext = dot > 0 && name.length - dot <= 5 ? name.slice(dot) : '';
+		const stem = ext ? name.slice(0, dot) : name;
+		return `…${stem.slice(-(max - ext.length - 1))}${ext}`;
+	}
+
 	let svgEl: SVGSVGElement | undefined = $state();
 	let scrollbarEl: HTMLDivElement | undefined = $state();
 
@@ -379,7 +389,14 @@
 				startTime: s.startTime,
 				endTime,
 				label: segLabel(s),
-				sourceLabel: multiSource ? (sourceOf(s)?.name ?? null) : null,
+				sourceLabel: multiSource
+					? (() => {
+							const src = sourceOf(s);
+							if (!src) return null;
+							const n = sources.indexOf(src) + 1;
+							return `${n}· ${shortName(src.name, 14)}`;
+						})()
+					: null,
 				transitionType: s.transition?.type ?? 'cut',
 				transitionDuration: s.transition?.durationSec ?? 0,
 			};
@@ -820,35 +837,47 @@
 	{#if hasMediaBin}
 		{@const assignable = selectedIds.length > 0}
 		<div class="media-bin">
-			{#each sources as src (src.id)}
-				<div class="media-chip" class:active={selectedSourceId === src.id}>
-					<button
-						class="media-chip-assign"
-						style:background-image={src.thumbUrl
-							? `url(${src.thumbUrl})`
-							: 'none'}
-						title={assignable
-							? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}`
-							: `${src.name} — select a segment to assign it`}
-						onclick={() => {
-							if (assignable) onAssignSource?.(selectedIds, src.id);
-						}}
-					>
-						{#if src.kind === 'video'}
-							<span class="media-chip-kind">▶</span>
-						{/if}
-						<span class="media-chip-name">{src.name}</span>
-					</button>
-					{#if !src.primary}
+			<div class="media-bin-head">
+				<span class="media-bin-title">SOURCES</span>
+				<span class="media-bin-hint">
+					{assignable
+						? `CLICK TO ASSIGN TO ${selectedIds.length > 1 ? `${selectedIds.length} SEGMENTS` : 'SEGMENT'}`
+						: 'SELECT A SEGMENT TO ASSIGN'}
+				</span>
+			</div>
+			<div class="media-grid">
+				{#each sources as src, i (src.id)}
+					<div class="media-chip" class:active={selectedSourceId === src.id}>
 						<button
-							class="media-chip-remove"
-							title="Remove from the pool"
-							onclick={() => onRemoveSource?.(src.id)}>✕</button
+							class="media-chip-assign"
+							class:assignable
+							style:background-image={src.thumbUrl
+								? `url(${src.thumbUrl})`
+								: 'none'}
+							title={assignable
+								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}`
+								: `${src.name} — select a segment to assign it`}
+							onclick={() => {
+								if (assignable) onAssignSource?.(selectedIds, src.id);
+							}}
 						>
-					{/if}
-				</div>
-			{/each}
-			<input
+							<span class="media-chip-num">
+								{i + 1}{#if src.kind === 'video'}<span class="media-chip-kind"
+										>▶</span
+									>{/if}
+							</span>
+							<span class="media-chip-name">{shortName(src.name, 18)}</span>
+						</button>
+						{#if !src.primary}
+							<button
+								class="media-chip-remove"
+								title="Remove from the pool"
+								onclick={() => onRemoveSource?.(src.id)}>✕</button
+							>
+						{/if}
+					</div>
+				{/each}
+				<input
 				bind:this={sourceInput}
 				type="file"
 				accept="image/*,video/*"
@@ -861,13 +890,11 @@
 				}}
 			/>
 			<button
-				class="media-add"
-				title="Add images or videos to the pool"
-				onclick={() => sourceInput.click()}>+</button
-			>
-			<span class="media-bin-hint">
-				{assignable ? 'CLICK TO ASSIGN' : 'SELECT A SEGMENT TO ASSIGN'}
-			</span>
+					class="media-add"
+					title="Add images or videos to the pool"
+					onclick={() => sourceInput.click()}>+</button
+				>
+			</div>
 		</div>
 	{/if}
 	<div class="tl-track">
@@ -1353,19 +1380,44 @@
 
 	/* ── Media bin ── */
 	.media-bin {
+		padding-bottom: 0.5rem;
+	}
+
+	.media-bin-head {
 		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0 0.15rem 0.5rem;
-		overflow-x: auto;
-		scrollbar-width: thin;
+		align-items: baseline;
+		gap: 0.6rem;
+		padding: 0 0.1rem 0.35rem;
+	}
+
+	.media-bin-title {
+		color: #7a5f94;
+		font-size: 0.62rem;
+		font-family: monospace;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+	}
+
+	.media-bin-hint {
+		color: #4a3c58;
+		font-size: 0.62rem;
+		font-family: monospace;
+		letter-spacing: 0.04em;
+	}
+
+	/* Wraps rather than scrolls: a hidden source is a source you forget you
+	   have, and the bin sits above a full-width timeline with room to grow. */
+	.media-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
 	}
 
 	.media-chip {
 		position: relative;
 		flex: 0 0 auto;
-		width: 44px;
-		height: 44px;
+		width: 58px;
+		height: 58px;
 		border: 1.5px solid #2e2438;
 		border-radius: 6px;
 		overflow: hidden;
@@ -1378,6 +1430,7 @@
 
 	.media-chip.active {
 		border-color: #d8b8f8;
+		box-shadow: 0 0 0 1px rgba(216, 184, 248, 0.35);
 	}
 
 	.media-chip-assign {
@@ -1387,46 +1440,70 @@
 		padding: 0;
 		border: none;
 		background: #14101a no-repeat center / cover;
+		cursor: default;
+	}
+
+	.media-chip-assign.assignable {
 		cursor: pointer;
 	}
 
-	.media-chip-name {
+	.media-chip-num {
 		position: absolute;
-		inset: auto 0 0 0;
-		padding: 1px 2px;
-		background: rgba(0, 0, 0, 0.72);
-		color: #cdb6e0;
-		font-size: 7px;
+		top: 0;
+		left: 0;
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding: 1px 4px;
+		border-bottom-right-radius: 5px;
+		background: rgba(10, 6, 16, 0.82);
+		color: #d8b8f8;
+		font-size: 9px;
 		font-family: monospace;
-		line-height: 1.2;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		font-weight: 700;
+		line-height: 1.3;
 	}
 
 	.media-chip-kind {
-		position: absolute;
-		top: 2px;
-		left: 3px;
-		color: #d8b8f8;
+		color: #9a70b8;
 		font-size: 7px;
+	}
+
+	/* Names in one batch share a long prefix, so showing them all the time is
+	   noise that also covers the thumbnail. Reveal on hover instead. */
+	.media-chip-name {
+		position: absolute;
+		inset: auto 0 0 0;
+		padding: 2px 3px;
+		background: rgba(10, 6, 16, 0.86);
+		color: #cdb6e0;
+		font-size: 8px;
 		font-family: monospace;
-		text-shadow: 0 0 3px #000;
+		line-height: 1.25;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		opacity: 0;
+		transition: opacity 0.12s;
+	}
+
+	.media-chip:hover .media-chip-name {
+		opacity: 1;
 	}
 
 	.media-chip-remove {
 		position: absolute;
 		top: 1px;
 		right: 1px;
-		width: 13px;
-		height: 13px;
+		width: 15px;
+		height: 15px;
 		display: none;
 		align-items: center;
 		justify-content: center;
 		padding: 0;
 		border: none;
 		border-radius: 3px;
-		background: rgba(0, 0, 0, 0.75);
+		background: rgba(10, 6, 16, 0.8);
 		color: #e0c8f0;
 		font-size: 9px;
 		line-height: 1;
@@ -1443,28 +1520,19 @@
 
 	.media-add {
 		flex: 0 0 auto;
-		width: 44px;
-		height: 44px;
+		width: 58px;
+		height: 58px;
 		border: 1.5px dashed #2e2438;
 		border-radius: 6px;
 		background: transparent;
 		color: #6a5080;
-		font-size: 16px;
+		font-size: 18px;
 		cursor: pointer;
 	}
 
 	.media-add:hover {
 		border-color: #6a5080;
 		color: #b08ad0;
-	}
-
-	.media-bin-hint {
-		flex: 0 0 auto;
-		margin-left: 0.3rem;
-		color: #4a3c58;
-		font-size: 0.62rem;
-		font-family: monospace;
-		letter-spacing: 0.04em;
 	}
 
 	.dot-anchor {
