@@ -69,6 +69,8 @@
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
 		onAddSources?: (files: File[]) => void;
 		onRemoveSource?: (sourceId: string) => void;
+		/** Empty the pool back to the primary source. */
+		onClearSources?: () => void;
 	}
 
 	let {
@@ -90,6 +92,7 @@
 		onAssignSource,
 		onAddSources,
 		onRemoveSource,
+		onClearSources,
 	}: Props = $props();
 
 	let hasMediaBin = $derived(!!onAddSources);
@@ -868,11 +871,23 @@
 						e.currentTarget.value = '';
 					}}
 				/>
-				<button
-					class="media-bin-add"
-					title="Add images or videos to the pool"
-					onclick={() => sourceInput.click()}>+ ADD</button
-				>
+				<div class="media-bin-actions">
+					{#if onClearSources && multiSource}
+						<button
+							class="media-bin-btn danger"
+							title="Remove every added source from this song"
+							onclick={onClearSources}
+						>
+							<Trash2 size={11} />
+							CLEAR
+						</button>
+					{/if}
+					<button
+						class="media-bin-btn"
+						title="Add images or videos to the pool"
+						onclick={() => sourceInput.click()}>+ ADD</button
+					>
+				</div>
 			</div>
 			<!-- Capped height with its own scroll: letting a few hundred chips
 			     wrap freely pushes the preview clean off the screen. -->
@@ -1456,8 +1471,17 @@
 		letter-spacing: 0.04em;
 	}
 
-	.media-bin-add {
+	.media-bin-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
 		margin-left: auto;
+	}
+
+	.media-bin-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
 		padding: 0.2rem 0.6rem;
 		border: 1px solid #2e2438;
 		border-radius: 4px;
@@ -1470,9 +1494,14 @@
 		cursor: pointer;
 	}
 
-	.media-bin-add:hover {
+	.media-bin-btn:hover {
 		border-color: #6a5080;
 		color: #d8b8f8;
+	}
+
+	.media-bin-btn.danger:hover {
+		border-color: #8a3a4a;
+		color: #f0a0b0;
 	}
 
 	/* Two rows tall, then scrolls — a wrapping grid of a few hundred chips

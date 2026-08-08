@@ -129,6 +129,13 @@ export class SequenceSourceRegistry {
     if (forget) void deleteSequenceMedia(id).catch(() => {});
   }
 
+  /** Drop every added source, keeping the primary. Deletes the stored blobs. */
+  clearExtras() {
+    for (const s of [...this.sources]) {
+      if (!s.primary) this.remove(s.id);
+    }
+  }
+
   /**
    * Make the non-primary pool exactly `ids`, pulling any missing ones out of
    * storage. Used when the song changes: the primary source belongs to the

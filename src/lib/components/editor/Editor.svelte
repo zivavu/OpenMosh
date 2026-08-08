@@ -762,6 +762,26 @@
 		}
 	}
 
+	let showClearSourcesConfirm = $state(false);
+
+	/**
+	 * Empty the pool back to the primary source. The segment reset goes through
+	 * seqBoundaries so Ctrl+Z restores the assignments — the media itself is
+	 * deleted from storage though, so re-adding the files is on the user.
+	 */
+	function clearSequenceSources() {
+		showClearSourcesConfirm = false;
+		sourceRegistry.clearExtras();
+		restoreAttempted.clear();
+		if (sequenceSegments.some((s) => s.sourceId)) {
+			seqBoundaries.commit(
+				sequenceSegments.map((s) =>
+					s.sourceId ? { ...s, sourceId: undefined } : s,
+				),
+			);
+		}
+	}
+
 	/** Segments pointing at a removed source fall back to the primary. */
 	function removeSequenceSource(id: string) {
 		if (sourceRegistry.get(id)?.primary) {
@@ -1735,6 +1755,9 @@
 					? (files) => void addSequenceSources(files)
 					: undefined}
 				onRemoveSource={isSequenceMode ? removeSequenceSource : undefined}
+				onClearSources={isSequenceMode
+					? () => (showClearSourcesConfirm = true)
+					: undefined}
 			/>
 		{/if}
 		<!-- One playhead in sequence mode with a track: hide the video transport,
@@ -1866,6 +1889,18 @@
 				onExit?.();
 			}}
 			onCancel={() => (showExitConfirm = false)}
+		/>
+	{/if}
+
+	{#if showClearSourcesConfirm}
+		<ConfirmDialog
+			title="Clear all sources?"
+			message="Removes every added image and video from this song's pool and deletes them from storage. Segments fall back to the original source. The file you opened with is kept."
+			confirmLabel="Clear sources"
+			cancelLabel="Cancel"
+			danger
+			onConfirm={clearSequenceSources}
+			onCancel={() => (showClearSourcesConfirm = false)}
 		/>
 	{/if}
 </div>
