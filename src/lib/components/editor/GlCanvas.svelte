@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Minimize } from 'lucide-svelte';
 	import type { EffectInstance } from '../../effects';
 	import { ANIMATED_EFFECTS } from '../../gl/effect-shaders';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
@@ -56,6 +57,9 @@
 		sourceKey?: string | null;
 		/** True while the driven source needs a per-frame upload (a video). */
 		sourceAnimating?: boolean;
+		/** Two-way: set it to enter/leave fullscreen, and it follows Esc or any
+		 * other way the browser drops out of it. */
+		fullscreen?: boolean;
 	}
 
 	let {
@@ -80,6 +84,7 @@
 		sourceDriver = null,
 		sourceKey = null,
 		sourceAnimating = false,
+		fullscreen = $bindable(false),
 	}: Props = $props();
 
 	let frameTimes: number[] = [];
@@ -132,6 +137,50 @@
 	const renderSize = $derived(
 		fitPreviewSize(canvasWidth, canvasHeight, displayW, displayH),
 	);
+
+	// ── Fullscreen ───────────────────────────────────────────────────────────
+	// The preview area is the element that goes fullscreen, so the existing
+	// ResizeObserver above picks up the new box and the renderer follows —
+	// `fitPreviewSize` still caps at the output resolution, so a small source
+	// isn't suddenly rendered at monitor size.
+	$effect(() => {
+		const el = previewArea;
+		if (!el) return;
+		const onChange = () => {
+			fullscreen = document.fullscreenElement === el;
+		};
+		document.addEventListener('fullscreenchange', onChange);
+		return () => document.removeEventListener('fullscreenchange', onChange);
+	});
+
+	$effect(() => {
+		const el = previewArea;
+		if (!el) return;
+		const isFs = document.fullscreenElement === el;
+		if (fullscreen === isFs) return;
+		if (fullscreen) {
+			// iOS Safari has no element fullscreen at all, and a request that
+			// wasn't user-initiated is rejected. Either way, snap the flag back
+			// so the button never sits in a state the document isn't in.
+			const req = el.requestFullscreen?.();
+			if (req) req.catch(() => (fullscreen = false));
+			else fullscreen = false;
+		} else if (document.fullscreenElement === el) {
+			void document.exitFullscreen?.();
+		}
+	});
+
+	// The exit hint fades on its own; re-shown on each entry.
+	let showFsHint = $state(false);
+	$effect(() => {
+		if (!fullscreen) {
+			showFsHint = false;
+			return;
+		}
+		showFsHint = true;
+		const timer = setTimeout(() => (showFsHint = false), 2200);
+		return () => clearTimeout(timer);
+	});
 
 	const videoPlaying = $derived(!!videoEl && !videoEl.paused);
 	const hasAnimatedEffects = $derived(
@@ -389,6 +438,18 @@
 	{:else if showFps}
 		<span class="fps-overlay">{fps} FPS</span>
 	{/if}
+	{#if fullscreen}
+		<button
+			class="fs-exit"
+			title="Exit fullscreen (Esc)"
+			onclick={() => (fullscreen = false)}
+		>
+			<Minimize size={16} />
+		</button>
+		{#if showFsHint}
+			<span class="fs-hint">ESC TO EXIT · SPACE TO PLAY</span>
+		{/if}
+	{/if}
 </div>
 
 <style>
@@ -423,6 +484,78 @@
 		font-size: 0.9rem;
 		background: rgba(0, 0, 0, 0.55);
 		z-index: 10;
+	}
+
+	/* Fullscreen: drop the framing so the render fills the display. */
+	.preview-area:fullscreen {
+		padding: 0;
+		background: #000;
+	}
+
+	.preview-area:fullscreen :global(canvas) {
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	.fs-exit {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		padding: 0;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 6px;
+		background: rgba(0, 0, 0, 0.5);
+		color: #bbb;
+		cursor: pointer;
+		opacity: 0;
+		transition:
+			opacity 0.2s,
+			color 0.2s;
+		z-index: 11;
+	}
+
+	/* Out of the way until the pointer moves — the point of fullscreen is to
+	   see only the render. Focus-visible keeps it reachable by keyboard. */
+	.preview-area:hover .fs-exit,
+	.fs-exit:focus-visible {
+		opacity: 1;
+	}
+
+	.fs-exit:hover {
+		color: #fff;
+		border-color: rgba(255, 255, 255, 0.3);
+	}
+
+	.fs-hint {
+		position: absolute;
+		bottom: 1.6rem;
+		left: 50%;
+		transform: translateX(-50%);
+		padding: 0.35rem 0.8rem;
+		border-radius: 999px;
+		background: rgba(0, 0, 0, 0.6);
+		color: #999;
+		font-size: 0.66rem;
+		font-family: 'Consolas', 'Monaco', monospace;
+		letter-spacing: 0.1em;
+		pointer-events: none;
+		z-index: 11;
+		animation: fs-hint-fade 2.2s ease-out forwards;
+	}
+
+	@keyframes fs-hint-fade {
+		0%,
+		60% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+		}
 	}
 
 	.fps-overlay {

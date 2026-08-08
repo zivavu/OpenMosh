@@ -10,6 +10,8 @@ export interface KeyboardActions {
   undo: () => void;
   redo: () => void;
   reInput: () => void;
+  /** F: fill the screen with the preview. */
+  toggleFullscreen: () => void;
   playSpan: () => void;
   pauseTrack: () => void;
   hasTrack: () => boolean;
@@ -62,6 +64,9 @@ export function createKeyboardHandler(
     } else if (key === "v" && !mod && !e.altKey) {
       e.preventDefault();
       actions.reInput();
+    } else if (key === "f" && !mod && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      actions.toggleFullscreen();
     }
   };
 }
