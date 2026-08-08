@@ -513,6 +513,9 @@
 	}
 
 	function clearTrack() {
+		// Unloading is a song change too — onLibraryLoadTrack saves before
+		// switching, and dropping the track has to do the same.
+		if (currentTrackId) saveSegments(currentTrackId);
 		audio.clearTrack();
 		currentTrackId = null;
 	}
