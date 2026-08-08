@@ -41,6 +41,11 @@
 	import { SequenceFrameDriver } from '../../editor/sequence-frames';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import {
+		loadMediaPool,
+		pruneSequenceMedia,
+		saveMediaPool,
+	} from '../../editor/sequence-media-store';
+	import {
 		applyTransitionChanges,
 		clearSegments,
 		fillSegmentsFromPreset,
@@ -678,11 +683,61 @@
 		return () => sourceRegistry.dispose();
 	});
 
+	// ── Per-song media pool ──────────────────────────────────────────────────
+	// Keyed the same way as the sequence timeline (seqStoreKey), so loading a
+	// track brings back both the segments and the media they were built from.
+	// The primary source belongs to the editor session, not the song, and is
+	// left alone by all of this.
+	let poolKey: string | null = null;
+	let poolReady = $state(false);
+	/** Segment source ids already looked for in storage; see the effect below. */
+	const restoreAttempted = new Set<string>();
+
+	$effect(() => {
+		if (!isSequenceMode) return;
+		const key = seqStoreKey;
+		if (!key || key === poolKey) return;
+		poolKey = key;
+		poolReady = false;
+		// A different song may reference media this session hasn't tried yet.
+		restoreAttempted.clear();
+		void (async () => {
+			let ids: string[] | null = null;
+			try {
+				ids = await loadMediaPool(key);
+			} catch {
+				// Storage blocked — carry on with whatever is loaded.
+			}
+			// Null means this song has nothing saved yet: keep the current pool
+			// and let the save below adopt it, mirroring how the timeline keeps
+			// the current segments for a track with no saved sequence.
+			if (ids && poolKey === key) await sourceRegistry.setExtras(ids);
+			if (poolKey === key) poolReady = true;
+		})();
+	});
+
+	// Persist the pool for the current song. Debounced because a multi-file add
+	// appends in batches and would otherwise write once per batch.
+	let poolSaveTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		if (!isSequenceMode || !poolReady) return;
+		const key = poolKey;
+		const ids = sourceRegistry.sources
+			.filter((s) => !s.primary)
+			.map((s) => s.id);
+		if (!key) return;
+		clearTimeout(poolSaveTimer);
+		poolSaveTimer = setTimeout(() => {
+			void saveMediaPool(key, ids)
+				.then(() => pruneSequenceMedia())
+				.catch(() => {});
+		}, 400);
+	});
+
 	// A restored timeline references sources by id. Pull any the pool is missing
 	// back out of IndexedDB, so a reload shows each segment's own media instead
 	// of silently falling back to the primary. Ids that aren't in the store are
 	// remembered as attempted, otherwise this would retry them forever.
-	const restoreAttempted = new Set<string>();
 	$effect(() => {
 		if (!isSequenceMode) return;
 		const missing = sequenceSegments
