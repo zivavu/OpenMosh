@@ -95,6 +95,28 @@
 		onClearSources,
 	}: Props = $props();
 
+	// The hint only teaches things the ? shortcuts modal also lists, so hiding
+	// it for good costs no discoverability.
+	const HINT_KEY = 'openmosh-seq-hint-dismissed';
+	let hintDismissed = $state(readHintDismissed());
+
+	function readHintDismissed(): boolean {
+		try {
+			return localStorage.getItem(HINT_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+
+	function dismissHint() {
+		hintDismissed = true;
+		try {
+			localStorage.setItem(HINT_KEY, '1');
+		} catch {
+			// Private mode / storage blocked — hidden for this session only.
+		}
+	}
+
 	let hasMediaBin = $derived(!!onAddSources);
 	let multiSource = $derived(sources.length > 1);
 	let svgH = $derived(multiSource ? SVG_H_BASE + 13 : SVG_H_BASE);
@@ -1248,9 +1270,12 @@
 		{/if}
 	</div>
 
-	<!-- Toolbar row is always rendered so selecting a segment doesn't shift the layout -->
-	<div class="seg-toolbar">
-		{#if selectedSegments.length > 0}
+	<!-- Kept mounted while the hint shows so selecting a segment doesn't shift
+	     the layout. Once the hint is dismissed there's nothing to reserve space
+	     for, and the row collapses until something is selected. -->
+	{#if selectedSegments.length > 0 || !hintDismissed}
+		<div class="seg-toolbar">
+			{#if selectedSegments.length > 0}
 			{@const many = selectedSegments.length > 1}
 			<span class="seg-toolbar-label">
 				{many ? `${selectedSegments.length} SEGMENTS` : 'SEGMENT'}
@@ -1443,8 +1468,14 @@
 					? 'Double-click the timeline to create a segment'
 					: 'Click a segment to edit · shift-click or shift-drag to select several'}
 			</span>
+			<button
+				class="hint-dismiss"
+				title="Hide this hint — the shortcuts are still in the ? menu"
+				onclick={dismissHint}>✕</button
+			>
 		{/if}
-	</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -1902,6 +1933,21 @@
 		font-size: 0.62rem;
 		color: #555;
 		letter-spacing: 0.03em;
+	}
+
+	.hint-dismiss {
+		margin-left: auto;
+		padding: 0 0.3rem;
+		border: none;
+		background: none;
+		color: #3d3d3d;
+		font-size: 0.7rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.hint-dismiss:hover {
+		color: #999;
 	}
 
 	.seg-toolbar-label {
