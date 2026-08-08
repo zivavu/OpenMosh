@@ -70,6 +70,9 @@
 		file: File;
 		onfile: (f: File) => void;
 		initialAudioFile?: File | null;
+		/** 'sequence' pins the editor to the segment timeline: the SEQ toggle is
+		 * gone and the mode can't be left without leaving the route. */
+		mode?: 'single' | 'sequence';
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 		onExit?: () => void;
@@ -79,10 +82,13 @@
 		file,
 		onfile,
 		initialAudioFile = null,
+		mode = 'single',
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
 	}: Props = $props();
+
+	let isSequenceMode = $derived(mode === 'sequence');
 	let dragging = $state(false);
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
@@ -220,7 +226,8 @@
 	let videoLoop = $state(saved.loopVideo ?? true);
 	let showShortcuts = $state(false);
 
-	let sequenceEnabled = $state(false);
+	// The sequence route starts in the mode; in single mode it's the SEQ toggle.
+	let sequenceEnabled = $state(untrack(() => isSequenceMode));
 
 	const shortcutGroups = $derived([
 		{
@@ -628,6 +635,9 @@
 	let preSeqEffects: EffectInstance[] | null = null;
 
 	function setSequenceEnabled(on: boolean) {
+		// On the sequence route the mode is the route — restores and the
+		// lost-master guard must not switch it off underneath the user.
+		if (!on && isSequenceMode) return;
 		if (on === sequenceEnabled) return;
 		sequenceEnabled = on;
 		if (on) {
@@ -665,11 +675,22 @@
 	// library tracks drops the duration to 0 until the new track's metadata
 	// loads, and exiting there would throw away the timeline mid-switch.
 	$effect(() => {
-		if (!sequenceEnabled) return;
+		if (!sequenceEnabled || isSequenceMode) return;
 		if (audio.trackFile) return;
 		if (isVideo && videoDuration > 0) return;
 		setSequenceEnabled(false);
 		showToast('Sequence mode off — nothing left to sequence over', 'info');
+	});
+
+	// The route enables sequence mode with no toggle press to seed the first
+	// segment, so do it as soon as a master clock exists.
+	$effect(() => {
+		if (!isSequenceMode || seqMasterDuration <= 0) return;
+		if (untrack(() => sequenceSegments).length > 0) return;
+		const seg = createSequenceSegment(0, null);
+		seg.effects = untrack(() => effects).map(cloneEffectInstance);
+		seg.label = 'current';
+		sequenceSegments = [seg];
 	});
 
 	// While audio is master the video must always loop its span, regardless of
@@ -1365,7 +1386,7 @@
 						<HelpCircle size={14} />
 					</button>
 				{/if}
-				{#if seqMasterDuration > 0}
+				{#if seqMasterDuration > 0 && !isSequenceMode}
 					<button
 						class="help-btn"
 						class:seq-active={sequenceEnabled}
