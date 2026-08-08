@@ -2,7 +2,6 @@ import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import {
   deleteSequenceMedia,
   getAllSequenceMedia,
-  pruneSequenceMedia,
   putSequenceMedia,
   stableSourceId,
   storedMediaToFile,
@@ -103,9 +102,10 @@ export class SequenceSourceRegistry {
     }
 
     if (persist) {
+      // No prune here: these blobs belong to no song's pool until the editor
+      // saves one, and pruning now would evict the batch we just wrote.
       void (async () => {
         for (const s of ok) await putSequenceMedia(s.id, s.file);
-        await pruneSequenceMedia();
       })().catch(() => {
         // Storage full or blocked — the pool still works for this session.
       });
@@ -113,7 +113,12 @@ export class SequenceSourceRegistry {
     return ok;
   }
 
-  remove(id: string) {
+  /**
+   * `forget` false drops the source from this session only, leaving the stored
+   * blob alone — that's what swapping songs does, where another song's pool may
+   * still reference the same media.
+   */
+  remove(id: string, { forget = true } = {}) {
     const src = this.get(id);
     if (!src) return;
     this.sources = this.sources.filter((s) => s.id !== id);
@@ -121,7 +126,20 @@ export class SequenceSourceRegistry {
     this.#samplers.delete(id);
     this.#images.delete(id);
     this.#revoke(src);
-    void deleteSequenceMedia(id).catch(() => {});
+    if (forget) void deleteSequenceMedia(id).catch(() => {});
+  }
+
+  /**
+   * Make the non-primary pool exactly `ids`, pulling any missing ones out of
+   * storage. Used when the song changes: the primary source belongs to the
+   * editor session, everything else belongs to the song.
+   */
+  async setExtras(ids: string[]): Promise<void> {
+    const want = new Set(ids);
+    for (const s of this.sources) {
+      if (!s.primary && !want.has(s.id)) this.remove(s.id, { forget: false });
+    }
+    await this.restore(ids);
   }
 
   /**
