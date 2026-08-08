@@ -1,5 +1,13 @@
-import { generateId } from "../effects";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
+import {
+  deleteSequenceMedia,
+  getAllSequenceMedia,
+  pruneSequenceMedia,
+  putSequenceMedia,
+  stableSourceId,
+  storedMediaToFile,
+  type StoredSequenceMedia,
+} from "./sequence-media-store";
 
 /** One piece of media a sequence segment can draw from. */
 export interface SequenceSource {
@@ -47,15 +55,31 @@ export class SequenceSourceRegistry {
     return this.sources.find((s) => s.primary)?.id ?? null;
   }
 
-  /** Adds files in the given order, skipping any that can't be decoded. */
-  async add(files: File[], primary = false): Promise<SequenceSource[]> {
-    const built = await Promise.all(files.map((f) => this.#build(f, primary)));
+  /**
+   * Adds files in the given order, skipping any that can't be decoded and any
+   * already in the pool (ids are content-derived, so re-adding is idempotent).
+   * `persist` false is for entries coming back out of the store.
+   */
+  async add(
+    files: File[],
+    { primary = false, persist = true } = {},
+  ): Promise<SequenceSource[]> {
+    const fresh = files.filter((f) => !this.get(stableSourceId(f)));
+    const built = await Promise.all(fresh.map((f) => this.#build(f, primary)));
     const ok = built.filter((s): s is SequenceSource => s !== null);
     if (this.#disposed) {
       for (const s of ok) this.#revoke(s);
       return [];
     }
     this.sources = [...this.sources, ...ok];
+    if (persist) {
+      void (async () => {
+        for (const s of ok) await putSequenceMedia(s.id, s.file);
+        await pruneSequenceMedia();
+      })().catch(() => {
+        // Storage full or blocked — the pool still works for this session.
+      });
+    }
     return ok;
   }
 
@@ -67,6 +91,28 @@ export class SequenceSourceRegistry {
     this.#samplers.delete(id);
     this.#images.delete(id);
     this.#revoke(src);
+    void deleteSequenceMedia(id).catch(() => {});
+  }
+
+  /**
+   * Pulls previously-stored media back into the pool. Only ids that saved
+   * segments actually reference are restored, so an unrelated earlier session's
+   * files don't pile into the bin.
+   */
+  async restore(wantedIds: Iterable<string>): Promise<void> {
+    const wanted = new Set(wantedIds);
+    for (const s of this.sources) wanted.delete(s.id);
+    if (wanted.size === 0) return;
+    let stored: StoredSequenceMedia[];
+    try {
+      stored = await getAllSequenceMedia();
+    } catch {
+      return;
+    }
+    const files = stored
+      .filter((e) => wanted.has(e.id))
+      .map(storedMediaToFile);
+    if (files.length > 0) await this.add(files, { persist: false });
   }
 
   /** Decoded at add time, so this is a plain lookup. */
@@ -115,7 +161,7 @@ export class SequenceSourceRegistry {
 
   async #build(file: File, primary: boolean): Promise<SequenceSource | null> {
     const objectUrl = URL.createObjectURL(file);
-    const id = generateId();
+    const id = stableSourceId(file);
     const base = { id, file, name: file.name, objectUrl, primary };
 
     if (file.type.startsWith("video/")) {
