@@ -12,6 +12,8 @@ export interface EditorSettings {
 	outputVolume: number;
 	loopAudio: boolean;
 	loopVideo: boolean;
+	/** How sequence sources that don't match the output aspect are fitted. */
+	sourceFit: "stretch" | "contain" | "cover";
 }
 
 export function loadSettings(): Partial<EditorSettings> {

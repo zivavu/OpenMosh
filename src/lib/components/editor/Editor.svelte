@@ -60,7 +60,7 @@
 		SegmentMoshHistory,
 		type SegmentMoshSnapshot,
 	} from '../../editor/segment-mosh-history';
-	import type { GlRenderer } from '../../gl/renderer';
+	import type { GlRenderer, SourceFit } from '../../gl/renderer';
 	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
@@ -241,6 +241,11 @@
 	let autoRangeAmount = $state(saved.autoRangeAmount ?? DEFAULT_AUTO_RANGE_AMOUNT);
 	let showFps = $state(saved.showFps ?? false);
 	let videoLoop = $state(saved.loopVideo ?? true);
+	// Only bites with a mixed media pool; "contain" never crops the user's media.
+	let sourceFit = $state<SourceFit>(saved.sourceFit ?? 'contain');
+	$effect(() => {
+		glRenderer?.setSourceFit(sourceFit);
+	});
 	let showShortcuts = $state(false);
 	let previewFullscreen = $state(false);
 	const fullscreenSupported =
@@ -380,6 +385,7 @@
 			outputVolume: audio.outputVolume,
 			loopAudio: audio.loopAudio,
 			loopVideo: videoLoop,
+			sourceFit,
 		});
 	});
 	let currentFps = $state(0);
@@ -1748,6 +1754,18 @@
 							<label for="show-fps">Show FPS</label>
 							<input id="show-fps" type="checkbox" bind:checked={showFps} />
 						</div>
+						{#if isSequenceMode}
+							<div class="mosh-setting-row">
+								<label for="source-fit" title="How sources that don't match the output aspect are fitted">
+									Fit sources
+								</label>
+								<select id="source-fit" bind:value={sourceFit}>
+									<option value="contain">Contain</option>
+									<option value="cover">Cover</option>
+									<option value="stretch">Stretch</option>
+								</select>
+							</div>
+						{/if}
 						<div class="settings-divider"></div>
 						<ResizeSettings
 							bind:width={resizeWidth}

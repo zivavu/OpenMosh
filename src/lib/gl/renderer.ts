@@ -38,10 +38,22 @@ interface CompiledProgram {
   uniforms: Record<string, WebGLUniformLocation>;
 }
 
+/**
+ * How a source whose aspect ratio differs from the output is fitted. Only
+ * reachable with a mixed media pool — a single source always defines the
+ * output aspect itself.
+ */
+export type SourceFit = "stretch" | "contain" | "cover";
+
 export class GlRenderer {
   private gl: WebGL2RenderingContext;
   private quadVAO: WebGLVertexArrayObject;
   private sourceTexture: WebGLTexture | null = null;
+  private sourceFit: SourceFit = "contain";
+  /** Output-sized copy of the source, letterboxed or cropped. Only allocated
+   * once a source whose aspect differs from the output actually arrives. */
+  private stageTexture: WebGLTexture | null = null;
+  private stageFBO: WebGLFramebuffer | null = null;
   /** Allocated dimensions of sourceTexture, so per-frame uploads can take the
    * texSubImage2D fast path when the size is unchanged and only reallocate on
    * an actual size change (mixed-size slideshow slides). */
@@ -471,6 +483,84 @@ export class GlRenderer {
     this.presentFrame(this.fbTexture, true);
   }
 
+  setSourceFit(fit: SourceFit) {
+    this.sourceFit = fit;
+  }
+
+  /**
+   * The texture the effect chain should read.
+   *
+   * Uploads keep their own dimensions, so a source that doesn't share the
+   * output's aspect would be stretched across it by the chain's 0..1 sampling.
+   * When that happens (only possible with a mixed media pool) the source is
+   * first copied into an output-sized buffer, scaled to fit and centred, and
+   * the chain reads that instead. Matching aspects skip the copy entirely, so
+   * the ordinary single-source case pays nothing.
+   */
+  private chainSource(): WebGLTexture {
+    const src = this.sourceTexture!;
+    if (this.sourceFit === "stretch") return src;
+    const sw = this.srcTexW;
+    const sh = this.srcTexH;
+    if (sw <= 0 || sh <= 0 || this.imgW <= 0 || this.imgH <= 0) return src;
+    // Sub-pixel differences aren't worth a full-screen pass.
+    if (Math.abs(sw / sh - this.imgW / this.imgH) < 0.002) return src;
+
+    const gl = this.gl;
+    if (!this.stageTexture || !this.stageFBO) {
+      this.stageTexture = this.createTexture(this.imgW, this.imgH);
+      const fbo = gl.createFramebuffer();
+      if (!fbo) return src;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        this.stageTexture,
+        0,
+      );
+      this.stageFBO = fbo;
+    }
+
+    const scale =
+      this.sourceFit === "cover"
+        ? Math.max(this.imgW / sw, this.imgH / sh)
+        : Math.min(this.imgW / sw, this.imgH / sh);
+    const w = Math.round(sw * scale);
+    const h = Math.round(sh * scale);
+    const x = Math.round((this.imgW - w) / 2);
+    const y = Math.round((this.imgH - h) / 2);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.stageFBO);
+    // Clear at full size first, then draw into the fitted rect — "contain"
+    // leaves the bars black, "cover" simply clips outside the viewport.
+    gl.viewport(0, 0, this.imgW, this.imgH);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.viewport(x, y, w, h);
+    gl.useProgram(this.passthrough.program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src);
+    if (this.passthrough.uniforms["u_texture"]) {
+      gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
+    }
+    if (this.passthrough.uniforms["u_flipY"]) {
+      gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
+    }
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    return this.stageTexture;
+  }
+
+  private deleteStageBuffer() {
+    const gl = this.gl;
+    if (this.stageTexture) gl.deleteTexture(this.stageTexture);
+    if (this.stageFBO) gl.deleteFramebuffer(this.stageFBO);
+    this.stageTexture = null;
+    this.stageFBO = null;
+  }
+
   /** Per-frame delta time for phase accumulation, guarded against discontinuities. */
   private frameDelta(time: number): number {
     const dt = this.lastTime >= 0 ? time - this.lastTime : 0;
@@ -528,17 +618,18 @@ export class GlRenderer {
     toCanvas: boolean,
   ): WebGLTexture | null {
     const enabled = effects.filter((e) => e.enabled);
+    const srcTex = this.chainSource();
 
     if (enabled.length === 0) {
       if (toCanvas) {
-        this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
+        this.drawPass(this.passthrough, null, srcTex, -1.0, time);
         return null;
       }
-      this.drawPass(this.passthrough, finalFbo, this.sourceTexture!, 1.0, time);
+      this.drawPass(this.passthrough, finalFbo, srcTex, 1.0, time);
       return finalTex;
     }
 
-    let input = this.sourceTexture!;
+    let input = srcTex;
     let ppIdx = 0;
     /** Texture holding the final chain output (presented at the end); null
      * either when nothing has rendered yet or when the last pass drew
@@ -697,9 +788,9 @@ export class GlRenderer {
     // Every enabled effect was skipped (unknown ids): fall back to source
     if (!producedOutput) {
       if (toCanvas) {
-        this.drawPass(this.passthrough, null, this.sourceTexture!, -1.0, time);
+        this.drawPass(this.passthrough, null, srcTex, -1.0, time);
       } else {
-        this.drawPass(this.passthrough, finalFbo, this.sourceTexture!, 1.0, time);
+        this.drawPass(this.passthrough, finalFbo, srcTex, 1.0, time);
       }
       resultTex = toCanvas ? null : finalTex;
     }
@@ -1180,6 +1271,7 @@ export class GlRenderer {
     this.textTexture = null;
     if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
     this.textBlendProgram = null;
+    this.deleteStageBuffer();
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
     if (this.fbTexture) gl.deleteTexture(this.fbTexture);
@@ -1390,6 +1482,8 @@ export class GlRenderer {
 
   private setupPingPong() {
     const gl = this.gl;
+    // Sized from imgW/imgH, which this call is the signal changed.
+    this.deleteStageBuffer();
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
     this.ppTextures = [
