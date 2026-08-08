@@ -8,13 +8,15 @@
 	import { GlRenderer } from "./lib/gl/renderer";
 
 	let file: File | null = $state(null);
+	let sequenceFiles: File[] = $state([]);
 	let slideshowFiles: File[] = $state([]);
 	let pendingAudioFile: File | null = $state(null);
 
-	type View = "upload" | "editor" | "slideshow";
+	type View = "upload" | "editor" | "sequence" | "slideshow";
 
 	function hashToView(hash: string): View {
 		if (hash === "#slideshow") return "slideshow";
+		if (hash === "#sequence") return "sequence";
 		if (hash === "#editor") return "editor";
 		return "upload";
 	}
@@ -55,10 +57,15 @@
 		}
 	}
 
+	function resetFiles() {
+		file = null;
+		sequenceFiles = [];
+		slideshowFiles = [];
+	}
+
 	function exitToUpload() {
 		navigateTo("upload");
-		file = null;
-		slideshowFiles = [];
+		resetFiles();
 		createWarm();
 	}
 
@@ -66,8 +73,7 @@
 		const onPopState = () => {
 			view = hashToView(window.location.hash);
 			if (view === "upload") {
-				file = null;
-				slideshowFiles = [];
+				resetFiles();
 				createWarm();
 			}
 		};
@@ -87,6 +93,16 @@
 		{warmRenderer}
 		onExit={exitToUpload}
 	/>
+{:else if view === 'sequence' && sequenceFiles.length > 0}
+	<Editor
+		mode="sequence"
+		file={sequenceFiles[0]}
+		initialAudioFile={pendingAudioFile}
+		onfile={(f: File) => (sequenceFiles = [f, ...sequenceFiles.slice(1)])}
+		{warmCanvas}
+		{warmRenderer}
+		onExit={exitToUpload}
+	/>
 {:else if view === 'editor' && file}
 	<Editor
 		{file}
@@ -101,6 +117,10 @@
 		onfile={(f: File) => {
 			file = f;
 			navigateTo('editor');
+		}}
+		onSequence={(files: File[]) => {
+			sequenceFiles = files;
+			navigateTo('sequence');
 		}}
 		onSlideshow={(files: File[]) => {
 			slideshowFiles = files;

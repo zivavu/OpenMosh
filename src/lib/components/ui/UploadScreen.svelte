@@ -1,6 +1,7 @@
 <script lang="ts">
 interface Props {
 	onfile: (file: File) => void;
+	onSequence: (files: File[]) => void;
 	onSlideshow: (files: File[]) => void;
 	onaudio?: (file: File) => void;
 }
@@ -9,9 +10,12 @@ import { Image, Music, Upload } from "lucide-svelte";
 import GithubLink from "./GithubLink.svelte";
 import { showToast } from "./toast.svelte";
 
-let { onfile, onSlideshow, onaudio }: Props = $props();
+let { onfile, onSequence, onSlideshow, onaudio }: Props = $props();
 
-let selectedMode: "single" | "slideshow" = $state("single");
+type Mode = "single" | "sequence" | "slideshow";
+let selectedMode: Mode = $state("single");
+/** Modes that take a whole set of media rather than one file. */
+let isMultiMode = $derived(selectedMode !== "single");
 let dragging = $state(false);
 let fileInput: HTMLInputElement;
 
@@ -78,7 +82,7 @@ function handleFile(file: File) {
 	onfile(file);
 }
 
-function handleSlideshowFiles(files: FileList | File[]) {
+function handleMultiFiles(files: FileList | File[]) {
 	const all = Array.from(files);
 	const accepted = all.filter((f) => isAcceptedFile(f));
 	if (accepted.length === 0) {
@@ -98,7 +102,8 @@ function handleSlideshowFiles(files: FileList | File[]) {
 			"info",
 		);
 	}
-	onSlideshow(accepted);
+	if (selectedMode === "sequence") onSequence(accepted);
+	else onSlideshow(accepted);
 }
 
 /** Single mode takes one file — say so rather than silently dropping the rest. */
@@ -108,7 +113,7 @@ function handleSingleFile(files: FileList | File[]) {
 	if (!file) return;
 	if (all.length > 1 && isAcceptedFile(file)) {
 		showToast(
-			`Loaded "${file.name}" only — switch to Slideshow mode to use all ${all.length}`,
+			`Loaded "${file.name}" only — switch to Sequence or Slideshow mode to use all ${all.length}`,
 			"info",
 			6000,
 		);
@@ -121,8 +126,8 @@ function onDrop(e: DragEvent) {
 	const files = e.dataTransfer?.files;
 	if (!files || files.length === 0) return;
 
-	if (selectedMode === "slideshow") {
-		handleSlideshowFiles(files);
+	if (isMultiMode) {
+		handleMultiFiles(files);
 	} else {
 		handleSingleFile(files);
 	}
@@ -145,8 +150,8 @@ function onInputChange(e: Event) {
 	const input = e.target as HTMLInputElement;
 	if (!input.files || input.files.length === 0) return;
 
-	if (selectedMode === "slideshow") {
-		handleSlideshowFiles(input.files);
+	if (isMultiMode) {
+		handleMultiFiles(input.files);
 	} else {
 		handleSingleFile(input.files);
 	}
@@ -161,7 +166,7 @@ function getAcceptTypes() {
 	return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
 }
 function getIsMultiple() {
-	return selectedMode === "slideshow";
+	return isMultiMode;
 }
 
 function handleAudioFile(file: File) {
@@ -198,29 +203,26 @@ function onAudioDrop(e: DragEvent) {
 	</div>
 
 	<div class="mode-toggle">
-		<button
-			class="mode-btn"
-			class:active={selectedMode === 'single'}
-			onclick={() => {
-				selectedMode = 'single';
-			}}
-		>
-			Single
-		</button>
-		<button
-			class="mode-btn"
-			class:active={selectedMode === 'slideshow'}
-			onclick={() => {
-				selectedMode = 'slideshow';
-			}}
-		>
-			Slideshow
-		</button>
+		{#each [{ value: 'single', label: 'Single' }, { value: 'sequence', label: 'Sequence' }, { value: 'slideshow', label: 'Slideshow' }] as const as m}
+			<button
+				class="mode-btn"
+				class:active={selectedMode === m.value}
+				onclick={() => {
+					selectedMode = m.value;
+				}}
+			>
+				{m.label}
+			</button>
+		{/each}
 	</div>
 	<p class="mode-hint">
-		{selectedMode === 'slideshow'
-			? 'Upload multiple images or videos — sequences them into a beat-synced slideshow'
-			: 'Upload an image or video to apply glitch effects'}
+		{#if selectedMode === 'slideshow'}
+			Upload multiple images or videos — cuts between them on the beat
+		{:else if selectedMode === 'sequence'}
+			Upload media and lay it out on a timeline — a different look per segment
+		{:else}
+			Upload an image or video to apply glitch effects
+		{/if}
 	</p>
 
 	<div
@@ -252,7 +254,7 @@ function onAudioDrop(e: DragEvent) {
 				style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
 			/>
 			<Upload size={18} />
-			{selectedMode === 'slideshow' ? 'LOAD MEDIA' : 'LOAD FILE'}
+			{isMultiMode ? 'LOAD MEDIA' : 'LOAD FILE'}
 		</label>
 
 		<div class="separator">
@@ -263,7 +265,7 @@ function onAudioDrop(e: DragEvent) {
 
 		<div class="drop-hint">
 			<Image size={16} />
-			{selectedMode === 'slideshow'
+			{isMultiMode
 				? 'DRAG AND DROP IMAGES OR VIDEOS HERE'
 				: 'DRAG AND DROP FILE HERE'}
 		</div>
@@ -317,16 +319,20 @@ function onAudioDrop(e: DragEvent) {
 			}}
 		>
 			<Music size={14} />
-			{#if selectedMode === 'slideshow'}
+			{#if isMultiMode}
 				<span>ADD MUSIC <span class="optional">(RECOMMENDED)</span></span>
 			{:else}
 				<span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
 			{/if}
 		</div>
 		<p class="music-hint">
-			{selectedMode === 'slideshow'
-				? 'Sync transitions and effects to the beat'
-				: 'Make your effects react to the beat'}
+			{#if selectedMode === 'slideshow'}
+				Sync transitions and effects to the beat
+			{:else if selectedMode === 'sequence'}
+				The track becomes the master timeline for your segments
+			{:else}
+				Make your effects react to the beat
+			{/if}
 		</p>
 	{/if}
 
@@ -571,6 +577,10 @@ function onAudioDrop(e: DragEvent) {
 
 		.drop-zone {
 			padding: 1.5rem 1.25rem;
+		}
+
+		.mode-btn {
+			padding: 0.45rem 1rem;
 		}
 
 		.separator {
