@@ -28,6 +28,9 @@ export class SequenceFrameDriver {
   #currentId: string | null = null;
   /** Video source advanced on the previous call; a change restarts playback. */
   #lastVideoId: string | null = null;
+  /** Same pair of latches for the outgoing (transition) source texture. */
+  #outgoingId: string | null = null;
+  #lastOutgoingVideoId: string | null = null;
   #disposed = false;
 
   constructor(opts: SequenceFrameDriverOptions) {
@@ -69,10 +72,70 @@ export class SequenceFrameDriver {
     return true;
   }
 
+  /**
+   * Upload the *outgoing* segment's media into the renderer's second source
+   * texture, so a transition across two different sources cross-fades the
+   * media and not just the effect chains.
+   *
+   * Returns false when the caller has to supply it instead — the primary video
+   * is decoded by the editor's own player, which is the only place its current
+   * frame exists. Pass `null` when no transition is running, which releases the
+   * texture so a later one can't blend from a stale frame.
+   */
+  advanceOutgoing(sourceId: string | null, dt: number): boolean {
+    if (!sourceId) {
+      if (this.#outgoingId !== null) {
+        this.#outgoingId = null;
+        this.#lastOutgoingVideoId = null;
+        this.#getRenderer()?.clearAltSource();
+      }
+      return true;
+    }
+    const src = this.#registry.get(sourceId);
+    if (!src) return true;
+
+    if (src.primary && src.kind === "video") {
+      this.#outgoingId = src.id;
+      this.#lastOutgoingVideoId = null;
+      return false;
+    }
+
+    if (src.kind === "image") {
+      this.#lastOutgoingVideoId = null;
+      if (this.#outgoingId !== src.id) {
+        const img = this.#registry.image(src.id);
+        if (img?.complete) {
+          this.#getRenderer()?.updateAltSourceImage(img);
+          this.#outgoingId = src.id;
+        }
+      }
+      return true;
+    }
+
+    const sampler = this.#registry.sampler(src.id);
+    if (!sampler) return true;
+    // No reset here: the outgoing clip keeps playing from where the segment
+    // left it, which is what "fading out" should look like.
+    const step = this.#lastOutgoingVideoId === src.id ? dt : 0;
+    this.#lastOutgoingVideoId = src.id;
+    this.#outgoingId = src.id;
+    void sampler.next(step).then((frame) => {
+      if (!frame) return;
+      if (!this.#disposed) {
+        this.#getRenderer()?.updateAltSourceFrame(frame);
+        this.#onUpload?.();
+      }
+      frame.close();
+    });
+    return true;
+  }
+
   /** Force the next call to re-upload, e.g. after the renderer was rebuilt. */
   invalidate() {
     this.#currentId = null;
     this.#lastVideoId = null;
+    this.#outgoingId = null;
+    this.#lastOutgoingVideoId = null;
   }
 
   dispose() {

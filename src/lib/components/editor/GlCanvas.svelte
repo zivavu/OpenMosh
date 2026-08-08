@@ -20,6 +20,9 @@
       startTime: number;
       durationSec: number;
       getTime: () => number;
+      /** Chain A draws from the outgoing source texture — set when the two
+       * segments use different media, so the media cross-fades too. */
+      useAltSource?: boolean;
    }
 
    interface Props {
@@ -53,6 +56,10 @@
        * uploads the active segment's frame. Returning true means it owned the
        * source texture, so the primary image/video upload is skipped. */
       sourceDriver?: ((dtSec: number) => boolean) | null;
+      /** Uploads the outgoing segment's frame during a transition. Returning
+       * false means the primary's frame is the outgoing one, so this component
+       * has to route it to the alt texture itself. */
+      outgoingDriver?: ((dtSec: number) => boolean) | null;
       /** Changes whenever the driven source does, retriggering a paused redraw. */
       sourceKey?: string | null;
       /** True while the driven source needs a per-frame upload (a video). */
@@ -82,6 +89,7 @@
       warmRenderer = null,
       transition = null,
       sourceDriver = null,
+      outgoingDriver = null,
       sourceKey = null,
       sourceAnimating = false,
       fullscreen = $bindable(false),
@@ -212,6 +220,7 @@
                tr.direction,
                tr.density,
                now,
+               tr.useAltSource ?? false,
             );
             return;
          }
@@ -420,17 +429,22 @@
          const dt = Math.min(0.25, (nowMs - lastLoopMs) / 1000);
          lastLoopMs = nowMs;
          const owned = !!sourceDriver?.(dt);
+         // False means the primary is the outgoing side of a transition, so its
+         // frame has to reach the alt texture as well as (or instead of) the
+         // main one.
+         const altFromPrimary = !!outgoingDriver && !outgoingDriver(dt);
          // The frame a sequence segment borrowed the source texture for is
          // still on it. Both primary paths below only upload when something
          // changed, so without forcing one here a paused preview would keep
          // showing the other segment's media after the playhead left it.
          const handedBack = driverOwned && !owned;
          driverOwned = owned;
-         if (!owned) {
+         if (!owned || altFromPrimary) {
             if (frameSource) {
                const frame = frameSource.takeFrame();
                if (frame) {
-                  renderer!.updateSourceFrame(frame);
+                  if (!owned) renderer!.updateSourceFrame(frame);
+                  if (altFromPrimary) renderer!.updateAltSourceFrame(frame);
                   frame.close();
                } else if (handedBack) {
                   // The player only hands out newly-due frames; re-seeking to
@@ -439,10 +453,11 @@
                }
             } else if (videoEl) {
                const t = videoEl.currentTime;
-               if (handedBack || t !== lastVideoTime) {
+               if (!owned && (handedBack || t !== lastVideoTime)) {
                   renderer!.updateSourceFrame(videoEl);
                   lastVideoTime = t;
                }
+               if (altFromPrimary) renderer!.updateAltSourceFrame(videoEl);
             }
          }
          drawFrame(nowMs / 1000);

@@ -50,6 +50,16 @@ export class GlRenderer {
   private quadVAO: WebGLVertexArrayObject;
   private sourceTexture: WebGLTexture | null = null;
   private sourceFit: SourceFit = "contain";
+  /**
+   * Second source texture, holding the *outgoing* segment's media while a
+   * transition runs. Only allocated once a transition actually crosses two
+   * different sources.
+   */
+  private altSourceTexture: WebGLTexture | null = null;
+  private altTexW = 0;
+  private altTexH = 0;
+  private altStageTexture: WebGLTexture | null = null;
+  private altStageFBO: WebGLFramebuffer | null = null;
   /** Output-sized copy of the source, letterboxed or cropped. Only allocated
    * once a source whose aspect differs from the output actually arrives. */
   private stageTexture: WebGLTexture | null = null;
@@ -309,6 +319,68 @@ export class GlRenderer {
     this.srcTexH = image.naturalHeight;
   }
 
+  // ── Outgoing source (transitions across two different media) ─────────────
+
+  /** Whether anything has been staged for the outgoing side yet. */
+  get hasAltSource(): boolean {
+    return !!this.altSourceTexture;
+  }
+
+  updateAltSourceImage(image: HTMLImageElement) {
+    this.uploadAlt(image, image.naturalWidth, image.naturalHeight);
+  }
+
+  updateAltSourceFrame(source: HTMLVideoElement | VideoFrame) {
+    if (
+      source instanceof HTMLVideoElement &&
+      (source.readyState < 2 || source.videoWidth === 0)
+    ) {
+      return;
+    }
+    const w =
+      source instanceof HTMLVideoElement
+        ? source.videoWidth
+        : source.displayWidth;
+    const h =
+      source instanceof HTMLVideoElement
+        ? source.videoHeight
+        : source.displayHeight;
+    this.uploadAlt(source, w, h);
+  }
+
+  /** Forget the outgoing media so a later transition can't reuse a stale frame. */
+  clearAltSource() {
+    const gl = this.gl;
+    if (this.altSourceTexture) gl.deleteTexture(this.altSourceTexture);
+    this.altSourceTexture = null;
+    this.altTexW = 0;
+    this.altTexH = 0;
+    this.deleteAltStageBuffer();
+  }
+
+  private uploadAlt(
+    source: TexImageSource,
+    w: number,
+    h: number,
+  ) {
+    if (w <= 0 || h <= 0) return;
+    const gl = this.gl;
+    if (!this.altSourceTexture) {
+      this.altSourceTexture = this.createTexture(w, h);
+      this.altTexW = w;
+      this.altTexH = h;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.altSourceTexture);
+    if (w === this.altTexW && h === this.altTexH) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      this.altTexW = w;
+      this.altTexH = h;
+      this.deleteAltStageBuffer();
+    }
+  }
+
   /** Set text overlay for the next render. Pass null to clear. options: layout, seed, blendMode, invert. */
   setTextOverlay(
     phrase: string | null,
@@ -429,6 +501,9 @@ export class GlRenderer {
     direction: number,
     density: number,
     time = 0,
+    /** Render chain A from the outgoing source texture — set when the two
+     * segments draw from different media, so the media cross-fades too. */
+    useAltSourceForA = false,
   ) {
     if (
       !this.sourceTexture ||
@@ -458,6 +533,7 @@ export class GlRenderer {
       this.sceneFBOs![0],
       this.sceneTextures![0],
       false,
+      useAltSourceForA && !!this.altSourceTexture,
     );
     const texB = this.renderChainTo(
       effectsB,
@@ -497,18 +573,21 @@ export class GlRenderer {
    * the chain reads that instead. Matching aspects skip the copy entirely, so
    * the ordinary single-source case pays nothing.
    */
-  private chainSource(): WebGLTexture {
-    const src = this.sourceTexture!;
+  private chainSource(alt = false): WebGLTexture {
+    const src = alt ? this.altSourceTexture : this.sourceTexture;
+    if (!src) return this.sourceTexture!;
     if (this.sourceFit === "stretch") return src;
-    const sw = this.srcTexW;
-    const sh = this.srcTexH;
+    const sw = alt ? this.altTexW : this.srcTexW;
+    const sh = alt ? this.altTexH : this.srcTexH;
     if (sw <= 0 || sh <= 0 || this.imgW <= 0 || this.imgH <= 0) return src;
     // Sub-pixel differences aren't worth a full-screen pass.
     if (Math.abs(sw / sh - this.imgW / this.imgH) < 0.002) return src;
 
     const gl = this.gl;
-    if (!this.stageTexture || !this.stageFBO) {
-      this.stageTexture = this.createTexture(this.imgW, this.imgH);
+    let stageTex = alt ? this.altStageTexture : this.stageTexture;
+    let stageFbo = alt ? this.altStageFBO : this.stageFBO;
+    if (!stageTex || !stageFbo) {
+      stageTex = this.createTexture(this.imgW, this.imgH);
       const fbo = gl.createFramebuffer();
       if (!fbo) return src;
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -516,10 +595,17 @@ export class GlRenderer {
         gl.FRAMEBUFFER,
         gl.COLOR_ATTACHMENT0,
         gl.TEXTURE_2D,
-        this.stageTexture,
+        stageTex,
         0,
       );
-      this.stageFBO = fbo;
+      stageFbo = fbo;
+      if (alt) {
+        this.altStageTexture = stageTex;
+        this.altStageFBO = fbo;
+      } else {
+        this.stageTexture = stageTex;
+        this.stageFBO = fbo;
+      }
     }
 
     const scale =
@@ -531,7 +617,7 @@ export class GlRenderer {
     const x = Math.round((this.imgW - w) / 2);
     const y = Math.round((this.imgH - h) / 2);
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.stageFBO);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, stageFbo);
     // Clear at full size first, then draw into the fitted rect — "contain"
     // leaves the bars black, "cover" simply clips outside the viewport.
     gl.viewport(0, 0, this.imgW, this.imgH);
@@ -550,7 +636,7 @@ export class GlRenderer {
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    return this.stageTexture;
+    return stageTex;
   }
 
   private deleteStageBuffer() {
@@ -559,6 +645,15 @@ export class GlRenderer {
     if (this.stageFBO) gl.deleteFramebuffer(this.stageFBO);
     this.stageTexture = null;
     this.stageFBO = null;
+    this.deleteAltStageBuffer();
+  }
+
+  private deleteAltStageBuffer() {
+    const gl = this.gl;
+    if (this.altStageTexture) gl.deleteTexture(this.altStageTexture);
+    if (this.altStageFBO) gl.deleteFramebuffer(this.altStageFBO);
+    this.altStageTexture = null;
+    this.altStageFBO = null;
   }
 
   /** Per-frame delta time for phase accumulation, guarded against discontinuities. */
@@ -616,9 +711,10 @@ export class GlRenderer {
     finalFbo: WebGLFramebuffer,
     finalTex: WebGLTexture,
     toCanvas: boolean,
+    useAltSource = false,
   ): WebGLTexture | null {
     const enabled = effects.filter((e) => e.enabled);
-    const srcTex = this.chainSource();
+    const srcTex = this.chainSource(useAltSource);
 
     if (enabled.length === 0) {
       if (toCanvas) {
@@ -1271,6 +1367,8 @@ export class GlRenderer {
     this.textTexture = null;
     if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
     this.textBlendProgram = null;
+    if (this.altSourceTexture) gl.deleteTexture(this.altSourceTexture);
+    this.altSourceTexture = null;
     this.deleteStageBuffer();
     this.deleteTexturePair(this.ppTextures);
     this.deleteFBOPair(this.ppFBOs);
