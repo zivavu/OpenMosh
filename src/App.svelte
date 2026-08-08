@@ -97,6 +97,7 @@
 	<Editor
 		mode="sequence"
 		file={sequenceFiles[0]}
+		extraFiles={sequenceFiles.slice(1)}
 		initialAudioFile={pendingAudioFile}
 		onfile={(f: File) => (sequenceFiles = [f, ...sequenceFiles.slice(1)])}
 		{warmCanvas}

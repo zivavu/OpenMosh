@@ -48,6 +48,14 @@
 		warmRenderer?: GlRenderer | null;
 		/** Sequence segment transition in progress; `effects` is the incoming chain. */
 		transition?: CanvasTransition | null;
+		/** Sequence multi-source: given the seconds elapsed since the last call,
+		 * uploads the active segment's frame. Returning true means it owned the
+		 * source texture, so the primary image/video upload is skipped. */
+		sourceDriver?: ((dtSec: number) => boolean) | null;
+		/** Changes whenever the driven source does, retriggering a paused redraw. */
+		sourceKey?: string | null;
+		/** True while the driven source needs a per-frame upload (a video). */
+		sourceAnimating?: boolean;
 	}
 
 	let {
@@ -69,6 +77,9 @@
 		warmCanvas = null,
 		warmRenderer = null,
 		transition = null,
+		sourceDriver = null,
+		sourceKey = null,
+		sourceAnimating = false,
 	}: Props = $props();
 
 	let frameTimes: number[] = [];
@@ -132,6 +143,7 @@
 			(!!frameSource ||
 				!!transition ||
 				videoPlaying ||
+				sourceAnimating ||
 				hasAnimatedEffects),
 	);
 
@@ -319,6 +331,11 @@
 		}
 		// A caption font that lands after the frame was drawn changes its glyphs.
 		fontTick;
+		// Scrubbing onto another sequence source while paused: re-upload before
+		// drawing. sourceKey also ticks when a late video upload lands, which is
+		// what gets that frame onto a paused canvas.
+		sourceKey;
+		sourceDriver?.(0);
 		drawFrame(0);
 	});
 
@@ -331,22 +348,30 @@
 
 		let rafId: number;
 		let lastVideoTime = -1;
+		let lastLoopMs = performance.now();
 		const loop = () => {
-			if (frameSource) {
-				const frame = frameSource.takeFrame();
-				if (frame) {
-					renderer!.updateSourceFrame(frame);
-					frame.close();
-				}
-			} else if (videoEl) {
-				const t = videoEl.currentTime;
-				if (t !== lastVideoTime) {
-					renderer!.updateSourceFrame(videoEl);
-					lastVideoTime = t;
+			const nowMs = performance.now();
+			// Clamped: a backgrounded tab would otherwise jump a video source
+			// forward by the whole time the tab was hidden.
+			const dt = Math.min(0.25, (nowMs - lastLoopMs) / 1000);
+			lastLoopMs = nowMs;
+			if (!sourceDriver?.(dt)) {
+				if (frameSource) {
+					const frame = frameSource.takeFrame();
+					if (frame) {
+						renderer!.updateSourceFrame(frame);
+						frame.close();
+					}
+				} else if (videoEl) {
+					const t = videoEl.currentTime;
+					if (t !== lastVideoTime) {
+						renderer!.updateSourceFrame(videoEl);
+						lastVideoTime = t;
+					}
 				}
 			}
-			drawFrame(performance.now() / 1000);
-			trackFps(performance.now());
+			drawFrame(nowMs / 1000);
+			trackFps(nowMs);
 			rafId = requestAnimationFrame(loop);
 		};
 		rafId = requestAnimationFrame(loop);

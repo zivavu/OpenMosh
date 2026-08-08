@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Download, HelpCircle, Home, Library, ListVideo } from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
@@ -31,6 +31,8 @@
 		type SequenceSegment,
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
+	import { SequenceFrameDriver } from '../../editor/sequence-frames';
+	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import {
 		applyTransitionChanges,
 		clearSegments,
@@ -69,6 +71,8 @@
 	interface Props {
 		file: File;
 		onfile: (f: File) => void;
+		/** Sequence mode: the rest of the media pool, alongside `file`. */
+		extraFiles?: File[];
 		initialAudioFile?: File | null;
 		/** 'sequence' pins the editor to the segment timeline: the SEQ toggle is
 		 * gone and the mode can't be left without leaving the route. */
@@ -81,6 +85,7 @@
 	let {
 		file,
 		onfile,
+		extraFiles = [],
 		initialAudioFile = null,
 		mode = 'single',
 		warmCanvas = null,
@@ -628,6 +633,115 @@
 		() => seqMasterDuration,
 		getMoshOptions,
 	);
+
+	// ── Sequence media pool ──────────────────────────────────────────────────
+	// Segments pick their source from here. The primary entry is the file the
+	// editor was opened with: it keeps owning the master clock and (as a video)
+	// the preview audio, so the frame driver hands its frames back to the
+	// existing player rather than sampling it a second time.
+	const sourceRegistry = new SequenceSourceRegistry();
+	let sequenceSources = $derived(sourceRegistry.sources);
+
+	onMount(() => {
+		if (!isSequenceMode) return;
+		void (async () => {
+			await sourceRegistry.add([file], true);
+			const extras = extraFiles.filter((f) => f !== file);
+			if (extras.length > 0) await sourceRegistry.add(extras);
+		})();
+		return () => sourceRegistry.dispose();
+	});
+
+	async function addSequenceSources(files: File[]) {
+		const added = await sourceRegistry.add(files);
+		const skipped = files.length - added.length;
+		if (skipped > 0) {
+			showToast(
+				`Skipped ${skipped} file${skipped === 1 ? '' : 's'} that couldn't be decoded`,
+				'error',
+			);
+		}
+	}
+
+	/** Segments pointing at a removed source fall back to the primary. */
+	function removeSequenceSource(id: string) {
+		if (sourceRegistry.get(id)?.primary) {
+			showToast("The first source can't be removed", 'info');
+			return;
+		}
+		sourceRegistry.remove(id);
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				s.sourceId === id ? { ...s, sourceId: undefined } : s,
+			),
+		);
+	}
+
+	function assignSegmentSource(segIds: string[], sourceId: string) {
+		const ids = new Set(segIds);
+		const primary = sourceRegistry.primaryId;
+		seqBoundaries.commit(
+			sequenceSegments.map((s) =>
+				ids.has(s.id)
+					? { ...s, sourceId: sourceId === primary ? undefined : sourceId }
+					: s,
+			),
+		);
+	}
+
+	function seqPlaying(): boolean {
+		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
+	}
+
+	/** Source under the playhead — or, while paused, under the selected segment,
+	 * matching which chain the panel is editing. */
+	function activeSourceId(): string | null {
+		const primary = sourceRegistry.primaryId;
+		if (!sequenceEnabled) return primary;
+		if (!seqPlaying() && selectedSegmentId) {
+			const sel = sequenceSegments.find((s) => s.id === selectedSegmentId);
+			if (sel) return sel.sourceId ?? primary;
+		}
+		const seg = findSegmentAt(
+			sequenceSegments,
+			seqMasterTime(),
+			seqMasterDuration,
+		);
+		return seg?.sourceId ?? primary;
+	}
+
+	// Bumped when a late video upload lands while paused, so the canvas redraws
+	// with it. Gated on paused: during playback the rAF loop already redraws,
+	// and ticking state per frame would be pure reactivity churn.
+	let sourceTick = $state(0);
+	const seqFrames = new SequenceFrameDriver({
+		registry: sourceRegistry,
+		getRenderer: () => glRenderer,
+		onUpload: () => {
+			if (!seqPlaying()) sourceTick++;
+		},
+	});
+
+	let seqActiveSourceId = $derived.by(() => activeSourceId());
+	let seqActiveSource = $derived(sourceRegistry.get(seqActiveSourceId));
+	let seqSourceKey = $derived(`${seqActiveSourceId}:${sourceTick}`);
+	// The primary video is driven by the editor's own player, which GlCanvas
+	// already keeps animating.
+	let seqSourceAnimating = $derived(
+		seqActiveSource?.kind === 'video' && !seqActiveSource.primary,
+	);
+
+	function driveSequenceSource(dt: number): boolean {
+		if (!isSequenceMode || !sequenceEnabled) return false;
+		return seqFrames.advance(activeSourceId(), dt);
+	}
+
+	// A rebuilt renderer (context loss) has a blank source texture; make the
+	// driver re-upload instead of holding a texture that no longer exists.
+	$effect(() => {
+		glRenderer;
+		seqFrames.invalidate();
+	});
 
 	// Single-mode chain stashed while sequence mode drives `effects`, so
 	// leaving SEQ restores the pre-sequence state instead of leaking whatever
@@ -1217,15 +1331,21 @@
 		recordingState.cancel();
 	}
 
-	/** Audio sets the track; an image/video replaces the file being edited. */
+	/** Audio sets the track. Media replaces the file in single mode; in sequence
+	 * mode it joins the pool, since segments can each pick their own. */
 	function handleDroppedFiles(files: FileList) {
-		const f = files[0];
-		if (f.type.startsWith('audio/')) {
+		const all = Array.from(files);
+		const audioFile = all.find((f) => f.type.startsWith('audio/'));
+		if (audioFile) {
 			clearTrack();
-			audio.trackFile = f;
-		} else if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
-			onfile(f);
+			audio.trackFile = audioFile;
 		}
+		const media = all.filter(
+			(f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
+		);
+		if (media.length === 0) return;
+		if (isSequenceMode) void addSequenceSources(media);
+		else onfile(media[0]);
 	}
 </script>
 
@@ -1350,6 +1470,9 @@
 			showFps={showFps && !isImageFormat}
 			videoEl={isVideo && !previewPlayer ? videoEl : null}
 			frameSource={previewPlayer}
+			sourceDriver={isSequenceMode ? driveSequenceSource : null}
+			sourceKey={seqSourceKey}
+			sourceAnimating={seqSourceAnimating}
 			freezeAnimation={isImageFormat}
 			suspended={recordingState.recording}
 			{warmCanvas}
@@ -1498,6 +1621,13 @@
 				onTransitionChange={seqTransitionChange}
 				segmentLoop={seqSegmentLoop}
 				onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
+				sources={sequenceSources}
+				primarySourceId={sourceRegistry.primaryId}
+				onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+				onAddSources={isSequenceMode
+					? (files) => void addSequenceSources(files)
+					: undefined}
+				onRemoveSource={isSequenceMode ? removeSequenceSource : undefined}
 			/>
 		{/if}
 		<!-- One playhead in sequence mode with a track: hide the video transport,
