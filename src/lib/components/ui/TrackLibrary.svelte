@@ -22,6 +22,8 @@
 		activeTrackName: string | null;
 		activeTrackId?: string | null;
 		onLoadTrack: (file: File, trackId: string, autoplay?: boolean) => void;
+		/** Clicking the already-loaded track unloads it. */
+		onUnloadTrack?: () => void;
 		onPlay?: () => void;
 		onPause?: () => void;
 		mainPlaying?: boolean;
@@ -36,6 +38,7 @@
 		activeTrackName,
 		activeTrackId = null,
 		onLoadTrack,
+		onUnloadTrack,
 		onPlay,
 		onPause,
 		mainPlaying = false,
@@ -174,6 +177,23 @@
 		}
 	}
 
+	/** Prefer the id — two library entries can share a name. Fall back to the
+	 * name for tracks loaded outside the library (drag/picker), which have no
+	 * id yet but should still show as the loaded one. */
+	function isTrackActive(track: StoredTrack): boolean {
+		return activeTrackId
+			? track.id === activeTrackId
+			: track.name === activeTrackName;
+	}
+
+	/** Clicking the loaded track unloads it. Re-loading it instead used to
+	 * clear and immediately reload the same file — a visible deselect flash
+	 * for no change. */
+	function toggleLoad(track: StoredTrack) {
+		if (isTrackActive(track)) onUnloadTrack?.();
+		else onLoad(track);
+	}
+
 	function onLoad(track: StoredTrack, autoplay = false) {
 		onLoadTrack(
 			new File([track.blob], track.name, { type: track.blob.type }),
@@ -193,7 +213,7 @@
 	}
 
 	function togglePlay(track: StoredTrack) {
-		if (track.name === activeTrackName) {
+		if (isTrackActive(track)) {
 			if (mainPlaying) onPause?.();
 			else onPlay?.();
 		} else {
@@ -258,7 +278,7 @@
 		{:else}
 			<ul class="track-list">
 				{#each tracks as track (track.id)}
-					{@const isActive = track.name === activeTrackName}
+					{@const isActive = isTrackActive(track)}
 					{@const isPlaying = isActive && mainPlaying}
 					<li class="track-row" class:active={isActive}>
 						<button
@@ -286,8 +306,8 @@
 						</button>
 						<button
 							class="name-btn"
-							onclick={() => onLoad(track)}
-							title="Load track"
+							onclick={() => toggleLoad(track)}
+							title={isActive ? 'Unload track' : 'Load track'}
 						>
 							{track.name}
 						</button>

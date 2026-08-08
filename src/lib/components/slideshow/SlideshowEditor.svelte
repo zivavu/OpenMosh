@@ -912,6 +912,7 @@
 		activeTrackName={audio.trackFile?.name ?? null}
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
+		onUnloadTrack={clearTrack}
 		onPlay={() => startPreview()}
 		onPause={stopPreview}
 		mainPlaying={audio.audioPlaying}
