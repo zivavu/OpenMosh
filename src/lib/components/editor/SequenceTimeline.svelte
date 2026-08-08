@@ -204,6 +204,77 @@
 	);
 
 	let commonMode = $derived(commonValue(selectedSegments.map((s) => s.mode)));
+
+	// ── Drag a source onto a segment ─────────────────────────────────────────
+	// HTML5 drag events, deliberately: they're a separate stream from the
+	// pointer events every other timeline interaction uses, so nothing here can
+	// be mistaken for a boundary drag, a rect-select or a seek.
+	let dragSourceId = $state<string | null>(null);
+	let dropSegId = $state<string | null>(null);
+	let gridEl = $state<HTMLDivElement | null>(null);
+	let gridScrollTop = 0;
+
+	/** Segments a drop would land on — the whole selection when the target is
+	 * part of it, matching how the toolbar actions fan out. */
+	let dropTargetIds = $derived(
+		dropSegId
+			? selectedIds.includes(dropSegId)
+				? selectedIds
+				: [dropSegId]
+			: [],
+	);
+
+	function startSourceDrag(e: DragEvent, sourceId: string) {
+		gridScrollTop = gridEl?.scrollTop ?? 0;
+		dragSourceId = sourceId;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'copy';
+			// Some browsers cancel a drag that carries no data at all.
+			e.dataTransfer.setData('text/plain', sourceId);
+		}
+	}
+
+	function endSourceDrag() {
+		dragSourceId = null;
+		dropSegId = null;
+		// Toggling overflow back can clamp scrollTop; put it back where it was.
+		if (gridEl) gridEl.scrollTop = gridScrollTop;
+	}
+
+	function segmentAtTime(t: number): SequenceSegment | undefined {
+		return segments.find((s) => {
+			const end = Math.min(trackDuration, s.endTime ?? trackDuration);
+			return t >= s.startTime && t < end;
+		});
+	}
+
+	function onTimelineDragOver(e: DragEvent) {
+		if (!dragSourceId) return;
+		// Without preventDefault the browser refuses the drop entirely.
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+		dropSegId = segmentAtTime(vp.clientXToTime(e.clientX))?.id ?? null;
+	}
+
+	function onTimelineDragLeave(e: DragEvent) {
+		if (
+			e.currentTarget instanceof Element &&
+			e.relatedTarget instanceof Node &&
+			e.currentTarget.contains(e.relatedTarget)
+		) {
+			return;
+		}
+		dropSegId = null;
+	}
+
+	function onTimelineDrop(e: DragEvent) {
+		if (!dragSourceId) return;
+		e.preventDefault();
+		const sourceId = dragSourceId;
+		const targets = dropTargetIds;
+		endSourceDrag();
+		if (targets.length > 0) onAssignSource?.(targets, sourceId);
+	}
 	let commonIntervalSec = $derived(
 		commonValue(selectedSegments.map((s) => s.intervalSec ?? 0.25)),
 	);
@@ -854,9 +925,15 @@
 				</button>
 				{#if binOpen}
 					<span class="media-bin-hint">
-						{assignable
-							? `CLICK TO ASSIGN TO ${selectedIds.length > 1 ? `${selectedIds.length} SEGMENTS` : 'SEGMENT'}`
-							: 'SELECT A SEGMENT TO ASSIGN'}
+						{#if dragSourceId}
+							DROP ON A SEGMENT
+						{:else if assignable}
+							CLICK OR DRAG ONTO {selectedIds.length > 1
+								? `${selectedIds.length} SEGMENTS`
+								: 'A SEGMENT'}
+						{:else}
+							DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
+						{/if}
 					</span>
 				{/if}
 				<input
@@ -891,15 +968,27 @@
 			</div>
 			<!-- Capped height with its own scroll: letting a few hundred chips
 			     wrap freely pushes the preview clean off the screen. -->
-			<div class="media-grid" class:collapsed={!binOpen}>
+			<div
+					bind:this={gridEl}
+					class="media-grid"
+					class:collapsed={!binOpen}
+					class:drag-locked={!!dragSourceId}
+				>
 				{#each sources as src, i (src.id)}
-					<div class="media-chip" class:active={selectedSourceId === src.id}>
+					<div
+						class="media-chip"
+						class:active={selectedSourceId === src.id}
+						class:dragging={dragSourceId === src.id}
+					>
 						<button
 							class="media-chip-assign"
 							class:assignable
+							draggable="true"
 							title={assignable
-								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}`
-								: `${src.name} — select a segment to assign it`}
+								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''} — or drag it onto one`
+								: `${src.name} — drag onto a segment, or select one and click`}
+							ondragstart={(e) => startSourceDrag(e, src.id)}
+							ondragend={endSourceDrag}
 							onclick={() => {
 								if (assignable) onAssignSource?.(selectedIds, src.id);
 							}}
@@ -933,7 +1022,14 @@
 			</div>
 		</div>
 	{/if}
-	<div class="tl-track">
+	<div
+		class="tl-track"
+		class:drop-active={!!dragSourceId}
+		ondragover={onTimelineDragOver}
+		ondragleave={onTimelineDragLeave}
+		ondrop={onTimelineDrop}
+		role="presentation"
+	>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
@@ -984,6 +1080,7 @@
 				<line
 					class="seg"
 					class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
+					class:drop={dropTargetIds.includes(sv.id)}
 					x1="{sv.startX}%"
 					y1={LINE_Y}
 					x2="{sv.endX}%"
@@ -995,6 +1092,7 @@
 					<text
 						class="seg-lbl"
 						class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
+						class:drop={dropTargetIds.includes(sv.id)}
 						x="{lblX}%"
 						y={LINE_Y + 18}
 						text-anchor="middle">{sv.label}</text
@@ -1002,6 +1100,7 @@
 					{#if sv.sourceLabel}
 						<text
 							class="seg-src-lbl"
+							class:drop={dropTargetIds.includes(sv.id)}
 							class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
 							x="{lblX}%"
 							y={LINE_Y + 31}
@@ -1390,6 +1489,23 @@
 		stroke-width: 3;
 	}
 
+	/* Drop preview — deliberately a different hue from selection purple, so
+	   "where this will land" reads apart from "what is selected". */
+	.seg.drop {
+		stroke: #6ee7c0;
+		stroke-width: 5;
+	}
+
+	.seg-src-lbl.drop,
+	.seg-lbl.drop {
+		fill: #6ee7c0;
+	}
+
+	.tl-track.drop-active {
+		outline: 1px dashed #3d6b5c;
+		outline-offset: -1px;
+	}
+
 	.seg-lbl {
 		fill: #9a70b8;
 		font-size: 11px;
@@ -1516,6 +1632,16 @@
 		overscroll-behavior: contain;
 		scrollbar-width: thin;
 		scrollbar-color: #3a2e48 transparent;
+		/* Reserved so locking the scroll mid-drag can't reflow the chips. */
+		scrollbar-gutter: stable;
+	}
+
+	/* Dragging a chip toward the timeline drags it past the grid's bottom edge,
+	   which the browser reads as "autoscroll this container" — the chips slide
+	   away under the cursor mid-drag. Freezing the scroll for the duration is
+	   the only reliable way to stop it; the position is kept either way. */
+	.media-grid.drag-locked {
+		overflow-y: hidden;
 	}
 
 	.media-grid.collapsed {
@@ -1542,6 +1668,11 @@
 		box-shadow: 0 0 0 1px rgba(216, 184, 248, 0.35);
 	}
 
+	.media-chip.dragging {
+		opacity: 0.45;
+		border-color: #6ee7c0;
+	}
+
 	.media-chip-assign {
 		display: block;
 		position: relative;
@@ -1550,11 +1681,12 @@
 		padding: 0;
 		border: none;
 		background: #14101a;
-		cursor: default;
+		/* Always draggable, so grab beats pointer even with nothing selected. */
+		cursor: grab;
 	}
 
-	.media-chip-assign.assignable {
-		cursor: pointer;
+	.media-chip-assign:active {
+		cursor: grabbing;
 	}
 
 	/* A real <img> rather than a background: object-fit centres the crop
