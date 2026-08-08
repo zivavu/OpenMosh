@@ -225,9 +225,11 @@
 			let activeCanvas: HTMLCanvasElement;
 
 			if (warmCanvas && warmRenderer) {
-				// Move the pre-warmed canvas (currently hidden in <body>) into our preview area.
-				warmCanvas.style.cssText =
-					'max-width:100%;max-height:100%;border-radius:2px;box-shadow:0 4px 24px rgba(0,0,0,0.5)';
+				// Move the pre-warmed canvas (currently hidden in <body>) into our
+				// preview area. Styled by class, not inline: an inline rule would
+				// outrank the :fullscreen overrides below.
+				warmCanvas.style.cssText = '';
+				warmCanvas.className = 'preview-canvas';
 				previewArea.appendChild(warmCanvas);
 				warmRenderer.adoptCanvas(warmCanvas);
 				r = warmRenderer;
@@ -431,7 +433,11 @@
 
 <div class="preview-area" bind:this={previewArea}>
 	{#if !warmCanvas}
-		<canvas bind:this={canvas} aria-label="Effect preview canvas"></canvas>
+		<canvas
+			bind:this={canvas}
+			class="preview-canvas"
+			aria-label="Effect preview canvas"
+		></canvas>
 	{/if}
 	{#if error}
 		<p class="error">{error}</p>
@@ -465,7 +471,9 @@
 		background: #0a0a0a;
 	}
 
-	canvas {
+	/* :global — the pre-warmed canvas is moved in via the DOM, so it never gets
+	   Svelte's scoping attribute. */
+	.preview-area :global(.preview-canvas) {
 		max-width: 100%;
 		max-height: 100%;
 		border-radius: 2px;
@@ -492,7 +500,15 @@
 		background: #000;
 	}
 
-	.preview-area:fullscreen :global(canvas) {
+	/* Scale up to fill the screen on whichever axis runs out first, letterboxing
+	   the other — object-fit: contain does this on a canvas, which max-width /
+	   max-height alone can't (they cap, they never upscale). */
+	.preview-area:fullscreen :global(.preview-canvas) {
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		max-height: none;
+		object-fit: contain;
 		border-radius: 0;
 		box-shadow: none;
 	}
