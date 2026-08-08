@@ -1936,7 +1936,6 @@
 	}
 
 	.hint-dismiss {
-		margin-left: auto;
 		padding: 0 0.3rem;
 		border: none;
 		background: none;
