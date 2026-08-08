@@ -1426,6 +1426,7 @@
 		activeTrackName={audio.trackFile?.name ?? null}
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
+		onUnloadTrack={clearTrack}
 		onPlay={() => audio.playAudio()}
 		onPause={() => audio.pauseAudio()}
 		mainPlaying={audio.audioPlaying}
