@@ -432,6 +432,9 @@
 	}
 
 	function clearTrack() {
+		// Before the key changes out from under them — see flushSequenceSave.
+		flushSequenceSave();
+		flushMediaPoolSave();
 		audio.clearTrack();
 		currentTrackId = null;
 	}
@@ -608,6 +611,42 @@
 		}, 300);
 	});
 
+	/**
+	 * Write the current timeline under the current key, now.
+	 *
+	 * The effect above can't cover a track switch on its own. Svelte batches the
+	 * whole switch into one update, so by the time it re-runs `seqStoreKey` is
+	 * already the *new* track and `sequenceSegments` may already have been
+	 * replaced — the outgoing track's edits were never written, and any pending
+	 * debounce for it gets cancelled on the way past. Worse, the effect is gated
+	 * on playback, so editing while the track plays (the normal way to use this)
+	 * schedules nothing at all until a pause that the switch itself supplies too
+	 * late. Every path that changes or drops the song calls this first.
+	 */
+	function flushSequenceSave() {
+		clearTimeout(seqSaveTimer);
+		const key = seqStoreKey;
+		if (!key) return;
+		seqStore.save(key, {
+			enabled: sequenceEnabled,
+			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
+		});
+	}
+
+	// Reloading or closing mid-playback would otherwise lose the session, for
+	// the same reason: no pause ever arrives to settle the debounce.
+	onMount(() => {
+		const onHide = () => {
+			flushSequenceSave();
+			flushMediaPoolSave();
+		};
+		window.addEventListener('pagehide', onHide);
+		return () => {
+			window.removeEventListener('pagehide', onHide);
+			onHide();
+		};
+	});
+
 	// Re-fit segments when the master clock changes (track loaded/swapped/cleared).
 	$effect(() => {
 		const duration = seqMasterDuration;
@@ -733,6 +772,19 @@
 				.catch(() => {});
 		}, 400);
 	});
+
+	/** Pool counterpart to flushSequenceSave — same track-switch race. */
+	function flushMediaPoolSave() {
+		clearTimeout(poolSaveTimer);
+		if (!isSequenceMode || !poolReady || !poolKey) return;
+		const key = poolKey;
+		const ids = sourceRegistry.sources
+			.filter((s) => !s.primary)
+			.map((s) => s.id);
+		void saveMediaPool(key, ids)
+			.then(() => pruneSequenceMedia())
+			.catch(() => {});
+	}
 
 	// A restored timeline references sources by id. Pull any the pool is missing
 	// back out of IndexedDB, so a reload shows each segment's own media instead
