@@ -163,27 +163,34 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     }
   }
 
-  const seekBeforeRender = async (_frameIndex: number, time: number) => {
+  const seekBeforeRender = async (
+    _frameIndex: number,
+    time: number,
+    toMain = true,
+    toAlt = false,
+  ) => {
     videoEl!.currentTime = sourceTimeAt(time);
     await new Promise<void>((resolve) => {
       videoEl!.addEventListener("seeked", () => resolve(), {
         once: true,
       });
     });
-    renderer.updateSourceFrame(videoEl!);
+    if (toMain) renderer.updateSourceFrame(videoEl!);
+    if (toAlt) renderer.updateAltSourceFrame(videoEl!);
   };
 
   // `upload` false still pulls a sample: the generator was built to yield one
   // timestamp per recorder frame, so skipping a pull would desynchronise every
   // later frame from `sourceTimeAt`.
-  const pullPrimaryFrame = async (upload: boolean) => {
+  const pullPrimaryFrame = async (upload: boolean, toAlt = false) => {
     const { value: sample } = await videoFrames!.next();
     // null/done: no frame at this timestamp — keep the last uploaded one,
     // matching the seek path's freeze-frame behavior.
     if (sample) {
-      if (upload) {
+      if (upload || toAlt) {
         const frame = sample.toVideoFrame();
-        renderer.updateSourceFrame(frame);
+        if (upload) renderer.updateSourceFrame(frame);
+        if (toAlt) renderer.updateAltSourceFrame(frame);
         frame.close();
       }
       sample.close();
@@ -226,6 +233,35 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     ReturnType<typeof createSequenceExportSources>
   > | null = null;
   const multiSource = (sequence?.sources?.length ?? 0) > 1;
+  const primarySourceId = sequence?.sources?.find((s) => s.primary)?.id ?? null;
+
+  /**
+   * Source a transition at `t` is fading out of, or null when there is no
+   * transition or both sides use the same media. Mirrors the preview's
+   * `outgoingSourceId` — the two must agree or exports drift from what was
+   * previewed.
+   */
+  const outgoingSourceIdAt = (
+    t: number,
+    incomingSourceId: string | undefined,
+  ): string | null => {
+    if (!sequence || !seqSource) return null;
+    const tr = resolveTransitionAt(
+      sequence.segments,
+      t,
+      sequence.duration,
+      seqSource,
+    );
+    if (!tr) return null;
+    const segA = findSegmentAt(
+      sequence.segments,
+      tr.boundaryTime - 0.001,
+      sequence.duration,
+    );
+    const idA = segA?.sourceId ?? primarySourceId;
+    const idB = incomingSourceId ?? primarySourceId;
+    return idA && idA !== idB ? idA : null;
+  };
 
   const sequenceBeforeRender = async (frameIndex: number, time: number) => {
     const t = seqTimeAt(time);
@@ -233,15 +269,27 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     // A non-primary source owns this frame; the primary is still pulled (but
     // not uploaded) so its decode stays in lockstep with the frame clock.
     let primaryOwnsFrame = true;
+    // Set when the primary is the *outgoing* side of a transition, so its frame
+    // has to reach the alt texture too.
+    let primaryIsOutgoing = false;
+    const segSourceId = sequence
+      ? findSegmentAt(sequence.segments, t, sequence.duration)?.sourceId
+      : undefined;
     if (exportSources) {
-      const seg = findSegmentAt(sequence!.segments, t, sequence!.duration);
-      primaryOwnsFrame = !(await exportSources.advance(seg?.sourceId, 1 / fps));
+      primaryOwnsFrame = !(await exportSources.advance(segSourceId, 1 / fps));
+      primaryIsOutgoing = !(await exportSources.advanceOutgoing(
+        outgoingSourceIdAt(t, segSourceId),
+        1 / fps,
+      ));
     }
 
     // Still images have no per-frame source to advance
     if (isVideo && videoEl) {
-      if (videoFrames) await pullPrimaryFrame(primaryOwnsFrame);
-      else if (primaryOwnsFrame) await seekBeforeRender(frameIndex, time);
+      if (videoFrames) {
+        await pullPrimaryFrame(primaryOwnsFrame, primaryIsOutgoing);
+      } else if (primaryOwnsFrame || primaryIsOutgoing) {
+        await seekBeforeRender(frameIndex, time, primaryOwnsFrame, primaryIsOutgoing);
+      }
     }
     // On a gap (no segment) keep the previous frame's effects.
     const fx = seqSource!(t);
@@ -257,6 +305,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         : null;
     if (tr && fx) {
       const progress = (t - tr.boundaryTime) / tr.transition.durationSec;
+      const crossFade = outgoingSourceIdAt(t, segSourceId) !== null;
       return () =>
         renderer.renderTransition(
           tr.effectsA,
@@ -267,6 +316,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
           tr.transition.direction ?? 0,
           tr.transition.density ?? 1,
           time,
+          crossFade,
         );
     }
   };

@@ -932,6 +932,31 @@
 		return seqFrames.advance(activeSourceId(), dt);
 	}
 
+	/**
+	 * Source the running transition is fading *out* of, or null when there
+	 * isn't one or both sides draw from the same media (nothing to cross-fade,
+	 * so the effect chains blend over one texture as before).
+	 */
+	function outgoingSourceId(): string | null {
+		const tr = seqTransition;
+		if (!tr) return null;
+		const primary = sourceRegistry.primaryId;
+		const segA = findSegmentAt(
+			sequenceSegments,
+			tr.boundaryTime - 0.001,
+			seqMasterDuration,
+		);
+		const idA = segA?.sourceId ?? primary;
+		return idA && idA !== activeSourceId() ? idA : null;
+	}
+
+	function driveOutgoingSource(dt: number): boolean {
+		if (!isSequenceMode || !sequenceEnabled) return true;
+		return seqFrames.advanceOutgoing(outgoingSourceId(), dt);
+	}
+
+	let seqCrossFades = $derived.by(() => outgoingSourceId() !== null);
+
 	// A rebuilt renderer (context loss) has a blank source texture; make the
 	// driver re-upload instead of holding a texture that no longer exists.
 	$effect(() => {
@@ -1671,6 +1696,7 @@
 			videoEl={isVideo && !previewPlayer ? videoEl : null}
 			frameSource={previewPlayer}
 			sourceDriver={isSequenceMode ? driveSequenceSource : null}
+			outgoingDriver={isSequenceMode ? driveOutgoingSource : null}
 			sourceKey={seqSourceKey}
 			sourceAnimating={seqSourceAnimating}
 			freezeAnimation={isImageFormat}
@@ -1687,6 +1713,7 @@
 						startTime: seqTransition.boundaryTime,
 						durationSec: seqTransition.transition.durationSec,
 						getTime: seqMasterTime,
+						useAltSource: seqCrossFades,
 					}
 				: null}
 		/>
