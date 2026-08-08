@@ -33,9 +33,11 @@
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
+	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
-	const SVG_H = 48;
+	// Grows to fit the per-segment source line once the pool has more than one.
+	const SVG_H_BASE = 48;
 	const LINE_Y = 18;
 	const DOT_R = 4;
 
@@ -60,6 +62,13 @@
 		/** Loop playback inside the selected segment (for editing while playing). */
 		segmentLoop?: boolean;
 		onToggleSegmentLoop?: () => void;
+		/** Media pool the segments draw from. One entry = the media bin is hidden. */
+		sources?: SequenceSource[];
+		/** Segments with no explicit sourceId render as this one. */
+		primarySourceId?: string | null;
+		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
+		onAddSources?: (files: File[]) => void;
+		onRemoveSource?: (sourceId: string) => void;
 	}
 
 	let {
@@ -76,7 +85,21 @@
 		onTransitionChange,
 		segmentLoop = false,
 		onToggleSegmentLoop,
+		sources = [],
+		primarySourceId = null,
+		onAssignSource,
+		onAddSources,
+		onRemoveSource,
 	}: Props = $props();
+
+	let hasMediaBin = $derived(!!onAddSources);
+	let multiSource = $derived(sources.length > 1);
+	let svgH = $derived(multiSource ? SVG_H_BASE + 13 : SVG_H_BASE);
+	let sourceInput = $state<HTMLInputElement>(undefined!);
+
+	function sourceOf(s: SequenceSegment): SequenceSource | undefined {
+		return sources.find((x) => x.id === (s.sourceId ?? primarySourceId));
+	}
 
 	let svgEl: SVGSVGElement | undefined = $state();
 	let scrollbarEl: HTMLDivElement | undefined = $state();
@@ -157,6 +180,12 @@
 		commonPresetName
 			? presetList.findIndex((p) => p.name === commonPresetName)
 			: -1,
+	);
+
+	// Highlights the bin chip the selection uses; null when they disagree.
+	let selectedSourceId = $derived(
+		commonValue(selectedSegments.map((s) => s.sourceId ?? primarySourceId)) ??
+			null,
 	);
 
 	let commonMode = $derived(commonValue(selectedSegments.map((s) => s.mode)));
@@ -328,6 +357,8 @@
 		startTime: number;
 		endTime: number;
 		label: string;
+		/** Null when the pool has one source — nothing to distinguish. */
+		sourceLabel: string | null;
 		transitionType: TransitionType;
 		transitionDuration: number;
 	}
@@ -348,6 +379,7 @@
 				startTime: s.startTime,
 				endTime,
 				label: segLabel(s),
+				sourceLabel: multiSource ? (sourceOf(s)?.name ?? null) : null,
 				transitionType: s.transition?.type ?? 'cut',
 				transitionDuration: s.transition?.durationSec ?? 0,
 			};
@@ -785,12 +817,65 @@
 />
 
 <div class="tl-container">
+	{#if hasMediaBin}
+		{@const assignable = selectedIds.length > 0}
+		<div class="media-bin">
+			{#each sources as src (src.id)}
+				<div class="media-chip" class:active={selectedSourceId === src.id}>
+					<button
+						class="media-chip-assign"
+						style:background-image={src.thumbUrl
+							? `url(${src.thumbUrl})`
+							: 'none'}
+						title={assignable
+							? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}`
+							: `${src.name} — select a segment to assign it`}
+						onclick={() => {
+							if (assignable) onAssignSource?.(selectedIds, src.id);
+						}}
+					>
+						{#if src.kind === 'video'}
+							<span class="media-chip-kind">▶</span>
+						{/if}
+						<span class="media-chip-name">{src.name}</span>
+					</button>
+					{#if !src.primary}
+						<button
+							class="media-chip-remove"
+							title="Remove from the pool"
+							onclick={() => onRemoveSource?.(src.id)}>✕</button
+						>
+					{/if}
+				</div>
+			{/each}
+			<input
+				bind:this={sourceInput}
+				type="file"
+				accept="image/*,video/*"
+				multiple
+				hidden
+				onchange={(e) => {
+					const picked = Array.from(e.currentTarget.files ?? []);
+					if (picked.length > 0) onAddSources?.(picked);
+					e.currentTarget.value = '';
+				}}
+			/>
+			<button
+				class="media-add"
+				title="Add images or videos to the pool"
+				onclick={() => sourceInput.click()}>+</button
+			>
+			<span class="media-bin-hint">
+				{assignable ? 'CLICK TO ASSIGN' : 'SELECT A SEGMENT TO ASSIGN'}
+			</span>
+		</div>
+	{/if}
 	<div class="tl-track">
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
 			width="100%"
-			height={SVG_H}
+			height={svgH}
 			class="step-svg"
 			style:cursor={svgCursor}
 			ondblclick={onDblClick}
@@ -851,6 +936,15 @@
 						y={LINE_Y + 18}
 						text-anchor="middle">{sv.label}</text
 					>
+					{#if sv.sourceLabel}
+						<text
+							class="seg-src-lbl"
+							class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
+							x="{lblX}%"
+							y={LINE_Y + 31}
+							text-anchor="middle">{sv.sourceLabel}</text
+						>
+					{/if}
 				{/if}
 			{/each}
 
@@ -920,7 +1014,7 @@
 			<!-- Playhead -->
 			{#if trackDuration > 0}
 				{@const phx = vp.toPct(currentTime)}
-				<line class="playhead-line" x1="{phx}%" y1="0" x2="{phx}%" y2={SVG_H} />
+				<line class="playhead-line" x1="{phx}%" y1="0" x2="{phx}%" y2={svgH} />
 				<circle class="playhead-head" cx="{phx}%" cy="1" r="3" />
 			{/if}
 
@@ -933,7 +1027,7 @@
 					x="{minX}%"
 					y="0"
 					width="{maxX - minX}%"
-					height={SVG_H}
+					height={svgH}
 					pointer-events="none"
 				/>
 			{/if}
@@ -956,7 +1050,7 @@
 						x1="{gStart}%"
 						y1="0"
 						x2="{gStart}%"
-						y2={SVG_H}
+						y2={svgH}
 					/>
 				{/each}
 			{/if}
@@ -966,7 +1060,7 @@
 				{#each boundaries.clipboard as { offset }}
 					{@const ghostTime = boundaries.pasteCursorTime + offset}
 					{@const gx = vp.toPct(ghostTime)}
-					<line class="ghost-split-line" x1="{gx}%" y1="0" x2="{gx}%" y2={SVG_H} />
+					<line class="ghost-split-line" x1="{gx}%" y1="0" x2="{gx}%" y2={svgH} />
 				{/each}
 			{/if}
 		</svg>
@@ -1243,6 +1337,134 @@
 
 	.seg-lbl.sel {
 		fill: #d8b8f8;
+	}
+
+	.seg-src-lbl {
+		fill: #6a5080;
+		font-size: 9px;
+		font-family: monospace;
+		pointer-events: none;
+		user-select: none;
+	}
+
+	.seg-src-lbl.sel {
+		fill: #a888c4;
+	}
+
+	/* ── Media bin ── */
+	.media-bin {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0 0.15rem 0.5rem;
+		overflow-x: auto;
+		scrollbar-width: thin;
+	}
+
+	.media-chip {
+		position: relative;
+		flex: 0 0 auto;
+		width: 44px;
+		height: 44px;
+		border: 1.5px solid #2e2438;
+		border-radius: 6px;
+		overflow: hidden;
+		transition: border-color 0.15s;
+	}
+
+	.media-chip:hover {
+		border-color: #6a5080;
+	}
+
+	.media-chip.active {
+		border-color: #d8b8f8;
+	}
+
+	.media-chip-assign {
+		display: block;
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		border: none;
+		background: #14101a no-repeat center / cover;
+		cursor: pointer;
+	}
+
+	.media-chip-name {
+		position: absolute;
+		inset: auto 0 0 0;
+		padding: 1px 2px;
+		background: rgba(0, 0, 0, 0.72);
+		color: #cdb6e0;
+		font-size: 7px;
+		font-family: monospace;
+		line-height: 1.2;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.media-chip-kind {
+		position: absolute;
+		top: 2px;
+		left: 3px;
+		color: #d8b8f8;
+		font-size: 7px;
+		font-family: monospace;
+		text-shadow: 0 0 3px #000;
+	}
+
+	.media-chip-remove {
+		position: absolute;
+		top: 1px;
+		right: 1px;
+		width: 13px;
+		height: 13px;
+		display: none;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: none;
+		border-radius: 3px;
+		background: rgba(0, 0, 0, 0.75);
+		color: #e0c8f0;
+		font-size: 9px;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.media-chip:hover .media-chip-remove {
+		display: flex;
+	}
+
+	.media-chip-remove:hover {
+		background: #8a3a4a;
+	}
+
+	.media-add {
+		flex: 0 0 auto;
+		width: 44px;
+		height: 44px;
+		border: 1.5px dashed #2e2438;
+		border-radius: 6px;
+		background: transparent;
+		color: #6a5080;
+		font-size: 16px;
+		cursor: pointer;
+	}
+
+	.media-add:hover {
+		border-color: #6a5080;
+		color: #b08ad0;
+	}
+
+	.media-bin-hint {
+		flex: 0 0 auto;
+		margin-left: 0.3rem;
+		color: #4a3c58;
+		font-size: 0.62rem;
+		font-family: monospace;
+		letter-spacing: 0.04em;
 	}
 
 	.dot-anchor {

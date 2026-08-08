@@ -74,6 +74,9 @@ export interface SequenceSegment {
   mode: SequenceSegmentMode;
   /** Display label: preset name, "mosh", "clean", … */
   label: string;
+  /** Media this segment draws from. Unset = the primary source (the file the
+   * editor was opened with), which is also what pre-multi-source saves mean. */
+  sourceId?: string;
   /** Name of the preset this segment was filled from; used to re-sync the
    * segment when the user explicitly overwrites that preset. */
   presetName?: string;
