@@ -645,11 +645,29 @@
 	onMount(() => {
 		if (!isSequenceMode) return;
 		void (async () => {
-			await sourceRegistry.add([file], true);
+			await sourceRegistry.add([file], { primary: true });
 			const extras = extraFiles.filter((f) => f !== file);
 			if (extras.length > 0) await sourceRegistry.add(extras);
 		})();
 		return () => sourceRegistry.dispose();
+	});
+
+	// A restored timeline references sources by id. Pull any the pool is missing
+	// back out of IndexedDB, so a reload shows each segment's own media instead
+	// of silently falling back to the primary. Ids that aren't in the store are
+	// remembered as attempted, otherwise this would retry them forever.
+	const restoreAttempted = new Set<string>();
+	$effect(() => {
+		if (!isSequenceMode) return;
+		const missing = sequenceSegments
+			.map((s) => s.sourceId)
+			.filter(
+				(id): id is string =>
+					!!id && !sourceRegistry.get(id) && !restoreAttempted.has(id),
+			);
+		if (missing.length === 0) return;
+		for (const id of missing) restoreAttempted.add(id);
+		void sourceRegistry.restore(missing);
 	});
 
 	async function addSequenceSources(files: File[]) {
