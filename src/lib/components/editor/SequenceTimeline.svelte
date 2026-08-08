@@ -102,8 +102,15 @@
 	// Collapsed by default on touch, where the preview has far less room to give.
 	let binOpen = $state(!window.matchMedia('(pointer: coarse)').matches);
 
+	// Indexed rather than scanned: segVis recomputes on every zoom/pan frame,
+	// and a linear find per segment over a few hundred sources showed up as
+	// drag lag.
+	let sourceIndex = $derived(
+		new Map(sources.map((s, i) => [s.id, { src: s, n: i + 1 }])),
+	);
+
 	function sourceOf(s: SequenceSegment): SequenceSource | undefined {
-		return sources.find((x) => x.id === (s.sourceId ?? primarySourceId));
+		return sourceIndex.get(s.sourceId ?? primarySourceId ?? '')?.src;
 	}
 
 	/** Filenames from one export batch share a long prefix, so keep the tail
@@ -113,7 +120,9 @@
 		const dot = name.lastIndexOf('.');
 		const ext = dot > 0 && name.length - dot <= 5 ? name.slice(dot) : '';
 		const stem = ext ? name.slice(0, dot) : name;
-		return `…${stem.slice(-(max - ext.length - 1))}${ext}`;
+		// A slice(0) would return the whole stem, so never let the budget hit 0.
+		const keep = Math.max(1, max - ext.length - 1);
+		return `…${stem.slice(-keep)}${ext}`;
 	}
 
 	let svgEl: SVGSVGElement | undefined = $state();
@@ -467,10 +476,8 @@
 				label: segLabel(s),
 				sourceLabel: multiSource
 					? (() => {
-							const src = sourceOf(s);
-							if (!src) return null;
-							const n = sources.indexOf(src) + 1;
-							return `${n}· ${shortName(src.name, 14)}`;
+							const hit = sourceIndex.get(s.sourceId ?? primarySourceId ?? '');
+							return hit ? `${hit.n}· ${shortName(hit.src.name, 14)}` : null;
 						})()
 					: null,
 				transitionType: s.transition?.type ?? 'cut',
