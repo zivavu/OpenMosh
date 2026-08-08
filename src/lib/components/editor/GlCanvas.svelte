@@ -386,7 +386,11 @@
 		// drawing. sourceKey also ticks when a late video upload lands, which is
 		// what gets that frame onto a paused canvas.
 		sourceKey;
-		sourceDriver?.(0);
+		// Same hand-back problem as the animation loop, minus the frameSource
+		// case (which always keeps that loop running).
+		if (!sourceDriver?.(0) && videoEl && !frameSource) {
+			renderer.updateSourceFrame(videoEl);
+		}
 		drawFrame(0);
 	});
 
@@ -400,22 +404,34 @@
 		let rafId: number;
 		let lastVideoTime = -1;
 		let lastLoopMs = performance.now();
+		let driverOwned = false;
 		const loop = () => {
 			const nowMs = performance.now();
 			// Clamped: a backgrounded tab would otherwise jump a video source
 			// forward by the whole time the tab was hidden.
 			const dt = Math.min(0.25, (nowMs - lastLoopMs) / 1000);
 			lastLoopMs = nowMs;
-			if (!sourceDriver?.(dt)) {
+			const owned = !!sourceDriver?.(dt);
+			// The frame a sequence segment borrowed the source texture for is
+			// still on it. Both primary paths below only upload when something
+			// changed, so without forcing one here a paused preview would keep
+			// showing the other segment's media after the playhead left it.
+			const handedBack = driverOwned && !owned;
+			driverOwned = owned;
+			if (!owned) {
 				if (frameSource) {
 					const frame = frameSource.takeFrame();
 					if (frame) {
 						renderer!.updateSourceFrame(frame);
 						frame.close();
+					} else if (handedBack) {
+						// The player only hands out newly-due frames; re-seeking to
+						// where it already is makes the next tick produce one.
+						frameSource.seek(frameSource.currentTime);
 					}
 				} else if (videoEl) {
 					const t = videoEl.currentTime;
-					if (t !== lastVideoTime) {
+					if (handedBack || t !== lastVideoTime) {
 						renderer!.updateSourceFrame(videoEl);
 						lastVideoTime = t;
 					}
