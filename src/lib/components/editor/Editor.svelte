@@ -440,6 +440,10 @@
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
+		// Moving between two songs starts the new one clean; arriving at the
+		// first song keeps what's on screen, since that work was made for it and
+		// had nowhere else to be saved.
+		const switchingSongs = !!currentTrackId && currentTrackId !== trackId;
 		clearTrack();
 		currentTrackId = trackId;
 		audio.trackFile = file;
@@ -447,14 +451,20 @@
 		if (savedSpan !== null) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
-		// Restore this track's saved sequence timeline; keep the current one when
-		// the track has nothing saved yet.
 		const savedSeq = seqStore.load(trackId);
 		if (savedSeq !== null) {
 			sequenceSegments = savedSeq.segments;
 			setSequenceEnabled(savedSeq.enabled);
 			selectedSegmentId = null;
+		} else if (switchingSongs) {
+			// Empty rather than a fresh segment: the seeding effect rebuilds one
+			// once the new track reports its duration.
+			sequenceSegments = [];
+			selectedSegmentId = null;
 		}
+		// The media pool is keyed the same way and restores asynchronously, so it
+		// needs the same signal — see the pool restore effect.
+		clearPoolIfUnsaved = switchingSongs;
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
@@ -732,6 +742,8 @@
 	// left alone by all of this.
 	let poolKey: string | null = null;
 	let poolReady = $state(false);
+	/** Set by onLibraryLoadTrack when the song actually changed. */
+	let clearPoolIfUnsaved = false;
 	/** Segment source ids already looked for in storage; see the effect below. */
 	const restoreAttempted = new Set<string>();
 
@@ -743,6 +755,10 @@
 		poolReady = false;
 		// A different song may reference media this session hasn't tried yet.
 		restoreAttempted.clear();
+		// Read now: onLibraryLoadTrack sets it synchronously, and the await below
+		// gives a later switch time to overwrite it.
+		const clearIfUnsaved = clearPoolIfUnsaved;
+		clearPoolIfUnsaved = false;
 		void (async () => {
 			let ids: string[] | null = null;
 			try {
@@ -750,10 +766,12 @@
 			} catch {
 				// Storage blocked — carry on with whatever is loaded.
 			}
-			// Null means this song has nothing saved yet: keep the current pool
-			// and let the save below adopt it, mirroring how the timeline keeps
-			// the current segments for a track with no saved sequence.
-			if (ids && poolKey === key) await sourceRegistry.setExtras(ids);
+			if (poolKey !== key) return;
+			// Nothing saved: empty the pool when this was a song switch, otherwise
+			// keep what's loaded and let the save below adopt it — same rule the
+			// timeline follows just above.
+			if (ids) await sourceRegistry.setExtras(ids);
+			else if (clearIfUnsaved) await sourceRegistry.setExtras([]);
 			if (poolKey === key) poolReady = true;
 		})();
 	});
