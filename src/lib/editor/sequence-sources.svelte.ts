@@ -9,6 +9,11 @@ import {
   type StoredSequenceMedia,
 } from "./sequence-media-store";
 
+/** Full-resolution decodes held at once; the rest re-decode on demand. */
+const MAX_DECODED_IMAGES = 16;
+/** Files decoded concurrently while adding, to bound peak memory. */
+const ADD_BATCH_SIZE = 8;
+
 /** One piece of media a sequence segment can draw from. */
 export interface SequenceSource {
   id: string;
@@ -40,11 +45,19 @@ export interface SequenceSource {
 export class SequenceSourceRegistry {
   sources = $state<SequenceSource[]>([]);
 
+  /** Insertion-ordered LRU of decoded images — see MAX_DECODED_IMAGES. */
   #images = new Map<string, HTMLImageElement>();
+  #decoding = new Set<string>();
   #samplers = new Map<string, SlideVideoSampler>();
   /** Samplers whose create() is in flight, so we don't start a second one. */
   #creating = new Set<string>();
   #disposed = false;
+  #onReady: (() => void) | undefined;
+
+  /** Notified when a lazy decode lands, so a paused preview can redraw. */
+  constructor(onReady?: () => void) {
+    this.#onReady = onReady;
+  }
 
   get(id: string | null | undefined): SequenceSource | undefined {
     if (!id) return undefined;
@@ -64,14 +77,31 @@ export class SequenceSourceRegistry {
     files: File[],
     { primary = false, persist = true } = {},
   ): Promise<SequenceSource[]> {
-    const fresh = files.filter((f) => !this.get(stableSourceId(f)));
-    const built = await Promise.all(fresh.map((f) => this.#build(f, primary)));
-    const ok = built.filter((s): s is SequenceSource => s !== null);
-    if (this.#disposed) {
-      for (const s of ok) this.#revoke(s);
-      return [];
+    const seen = new Set<string>();
+    const fresh = files.filter((f) => {
+      const id = stableSourceId(f);
+      if (this.get(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    // Batched rather than one Promise.all: dropping a folder of a few hundred
+    // images would otherwise hold every full-resolution decode in memory at
+    // once. Each batch is appended as it lands, so the bin fills progressively.
+    const ok: SequenceSource[] = [];
+    for (let i = 0; i < fresh.length; i += ADD_BATCH_SIZE) {
+      const built = await Promise.all(
+        fresh.slice(i, i + ADD_BATCH_SIZE).map((f) => this.#build(f, primary)),
+      );
+      const batch = built.filter((s): s is SequenceSource => s !== null);
+      if (this.#disposed) {
+        for (const s of batch) this.#revoke(s);
+        return [];
+      }
+      if (batch.length > 0) this.sources = [...this.sources, ...batch];
+      ok.push(...batch);
     }
-    this.sources = [...this.sources, ...ok];
+
     if (persist) {
       void (async () => {
         for (const s of ok) await putSequenceMedia(s.id, s.file);
@@ -115,9 +145,36 @@ export class SequenceSourceRegistry {
     if (files.length > 0) await this.add(files, { persist: false });
   }
 
-  /** Decoded at add time, so this is a plain lookup. */
+  /**
+   * Returns undefined while the image is still being decoded — same contract
+   * as `sampler`: the caller holds the previous frame and is called back via
+   * `onReady`. Decoding eagerly at add time would pin every source's full
+   * bitmap in memory, which a few hundred screenshots will not survive.
+   */
   image(id: string): HTMLImageElement | undefined {
-    return this.#images.get(id);
+    const hit = this.#images.get(id);
+    if (hit) {
+      // Re-insert to mark as most recently used.
+      this.#images.delete(id);
+      this.#images.set(id, hit);
+      return hit;
+    }
+    if (this.#decoding.has(id)) return undefined;
+    const src = this.get(id);
+    if (!src || src.kind !== "image") return undefined;
+    this.#decoding.add(id);
+    void decodeImage(src.objectUrl).then((img) => {
+      this.#decoding.delete(id);
+      if (!img || this.#disposed || !this.get(id)) return;
+      this.#images.set(id, img);
+      while (this.#images.size > MAX_DECODED_IMAGES) {
+        const oldest = this.#images.keys().next().value;
+        if (oldest === undefined) break;
+        this.#images.delete(oldest);
+      }
+      this.#onReady?.();
+    });
+    return undefined;
   }
 
   /**
@@ -180,12 +237,13 @@ export class SequenceSourceRegistry {
       };
     }
 
+    // Decoded only for its dimensions and to reject unreadable files; not
+    // retained — `image()` re-decodes on demand into the bounded cache.
     const img = await decodeImage(objectUrl);
     if (!img) {
       URL.revokeObjectURL(objectUrl);
       return null;
     }
-    this.#images.set(id, img);
     return {
       ...base,
       kind: "image",
