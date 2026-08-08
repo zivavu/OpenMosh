@@ -11,6 +11,8 @@ import {
 const MAX_DECODED_IMAGES = 16;
 /** Files decoded concurrently while adding, to bound peak memory. */
 const ADD_BATCH_SIZE = 8;
+/** Chip thumbnail edge, matching probeSlideVideo's default for videos. */
+const THUMB_SIZE = 100;
 
 /** One piece of media a sequence segment can draw from. */
 export interface SequenceSource {
@@ -262,21 +264,48 @@ export class SequenceSourceRegistry {
       };
     }
 
-    // Decoded only for its dimensions and to reject unreadable files; not
-    // retained — `image()` re-decodes on demand into the bounded cache.
+    // Decoded only for its dimensions, its thumbnail, and to reject unreadable
+    // files; not retained — `image()` re-decodes on demand into the bounded
+    // cache.
     const img = await decodeImage(objectUrl);
     if (!img) {
       URL.revokeObjectURL(objectUrl);
       return null;
     }
+    const thumb = await makeImageThumb(img);
     return {
       ...base,
       kind: "image",
-      thumbUrl: objectUrl,
+      // A real thumbnail, not the source file: pointing the chips at the
+      // originals made the browser decode full-resolution screenshots to fill
+      // 58px boxes, which is most of a large pool's memory.
+      thumbUrl: thumb ? URL.createObjectURL(thumb) : objectUrl,
       width: img.naturalWidth,
       height: img.naturalHeight,
       duration: 0,
     };
+  }
+}
+
+/** Cover-cropped square JPEG, matching what probeSlideVideo makes for videos. */
+async function makeImageThumb(
+  img: HTMLImageElement,
+  size = THUMB_SIZE,
+): Promise<Blob | null> {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  if (w <= 0 || h <= 0) return null;
+  try {
+    const scale = Math.max(size / w, size / h);
+    const crop = size / scale;
+    const canvas = new OffscreenCanvas(size, size);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, (w - crop) / 2, (h - crop) / 2, crop, crop, 0, 0, size, size);
+    return await canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+  } catch {
+    // No OffscreenCanvas / tainted draw — fall back to the source file.
+    return null;
   }
 }
 
