@@ -94,19 +94,31 @@ export async function getAllSequenceMedia(): Promise<StoredSequenceMedia[]> {
   });
 }
 
-export async function putSequenceMedia(id: string, file: File): Promise<void> {
-  const entry: StoredSequenceMedia = {
-    id,
-    name: file.name,
-    blob: file,
-    type: file.type,
-    addedAt: Date.now(),
-    lastModified: file.lastModified,
-  };
+/**
+ * One connection and one transaction for the whole batch. Writing a few
+ * hundred files one call at a time meant a few hundred database opens, which
+ * took longer than everything else about adding them put together.
+ */
+export async function putSequenceMedia(
+  entries: { id: string; file: File }[],
+): Promise<void> {
+  if (entries.length === 0) return;
+  const addedAt = Date.now();
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(entry);
+    const store = tx.objectStore(STORE);
+    for (const { id, file } of entries) {
+      const entry: StoredSequenceMedia = {
+        id,
+        name: file.name,
+        blob: file,
+        type: file.type,
+        addedAt,
+        lastModified: file.lastModified,
+      };
+      store.put(entry);
+    }
     tx.oncomplete = () => {
       db.close();
       resolve();

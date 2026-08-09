@@ -9,8 +9,10 @@ import {
 
 /** Full-resolution decodes held at once; the rest re-decode on demand. */
 const MAX_DECODED_IMAGES = 16;
-/** Files decoded concurrently while adding, to bound peak memory. */
+/** Videos probed concurrently while adding, to bound peak memory. */
 const ADD_BATCH_SIZE = 8;
+/** Thumbnails generated concurrently after the chips are already on screen. */
+const THUMB_CONCURRENCY = 6;
 /** Chip thumbnail edge, matching probeSlideVideo's default for videos. */
 const THUMB_SIZE = 100;
 
@@ -21,10 +23,13 @@ export interface SequenceSource {
   name: string;
   kind: "image" | "video";
   objectUrl: string;
-  /** Grid thumbnail. Images reuse `objectUrl`; videos get a first-frame JPEG. */
+  /** Grid thumbnail. Null until generated — images fill theirs in after the
+   * chip is already on screen. */
   thumbUrl: string | null;
-  width: number;
-  height: number;
+  /** Videos only, from the add-time probe. Images enter the pool without
+   * touching their pixels, so they carry no dimensions. */
+  width?: number;
+  height?: number;
   /** Videos only; 0 for images. */
   duration: number;
   /**
@@ -91,28 +96,30 @@ export class SequenceSourceRegistry {
       return true;
     });
 
-    // Batched rather than one Promise.all: dropping a folder of a few hundred
-    // images would otherwise hold every full-resolution decode in memory at
-    // once. Each batch is appended as it lands, so the bin fills progressively.
+    const images = fresh.filter((f) => !f.type.startsWith("video/"));
+    const videos = fresh.filter((f) => f.type.startsWith("video/"));
+
     const ok: SequenceSource[] = [];
     try {
-      for (let i = 0; i < fresh.length; i += ADD_BATCH_SIZE) {
-        const built = await Promise.all(
-          fresh.slice(i, i + ADD_BATCH_SIZE).map((f) => this.#build(f, primary)),
-        );
-        const batch: SequenceSource[] = [];
-        for (const s of built) {
-          if (!s) continue;
-          // Belt and braces: anything that slipped in behind us is dropped
-          // rather than duplicated.
-          if (this.#disposed || this.get(s.id)) {
-            this.#revoke(s);
-            continue;
-          }
-          batch.push(s);
-        }
+      // Nothing about an image source needs its pixels — the dimensions were
+      // never read, and the thumbnail can arrive later. So they go into the
+      // pool synchronously and a few hundred chips appear in one frame instead
+      // of waiting on a full-resolution decode and a JPEG encode each.
+      if (images.length > 0) {
+        const batch = this.#accept(images.map((f) => this.#buildImage(f, primary)));
         if (this.#disposed) return [];
-        if (batch.length > 0) this.sources = [...this.sources, ...batch];
+        ok.push(...batch);
+        void this.#fillThumbnails(batch).catch(() => {});
+      }
+
+      // Videos still need probing up front: it's what rejects undecodable
+      // files and supplies the duration, and a pool rarely holds many.
+      for (let i = 0; i < videos.length; i += ADD_BATCH_SIZE) {
+        const built = await Promise.all(
+          videos.slice(i, i + ADD_BATCH_SIZE).map((f) => this.#buildVideo(f, primary)),
+        );
+        const batch = this.#accept(built);
+        if (this.#disposed) return [];
         ok.push(...batch);
       }
     } finally {
@@ -124,9 +131,9 @@ export class SequenceSourceRegistry {
     if (persist) {
       // No prune here: these blobs belong to no song's pool until the editor
       // saves one, and pruning now would evict the batch we just wrote.
-      void (async () => {
-        for (const s of ok) await putSequenceMedia(s.id, s.file);
-      })().catch(() => {
+      void putSequenceMedia(
+        ok.map((s) => ({ id: s.id, file: s.file })),
+      ).catch(() => {
         // Storage full or blocked — the pool still works for this session.
       });
     }
@@ -256,6 +263,54 @@ export class SequenceSourceRegistry {
     this.sources = [];
   }
 
+  /** Append the ones that are still wanted, discarding late duplicates. */
+  #accept(built: (SequenceSource | null)[]): SequenceSource[] {
+    const batch: SequenceSource[] = [];
+    for (const s of built) {
+      if (!s) continue;
+      // Belt and braces: anything that slipped in behind us is dropped rather
+      // than duplicated.
+      if (this.#disposed || this.get(s.id)) {
+        this.#revoke(s);
+        continue;
+      }
+      batch.push(s);
+    }
+    if (this.#disposed || batch.length === 0) return [];
+    this.sources = [...this.sources, ...batch];
+    return batch;
+  }
+
+  /**
+   * Fills in image thumbnails once the chips are already on screen. Also the
+   * validation pass: a file that won't decode isn't usable media, so it leaves
+   * the pool again.
+   */
+  async #fillThumbnails(list: SequenceSource[]) {
+    let next = 0;
+    const worker = async () => {
+      while (next < list.length && !this.#disposed) {
+        const src = list[next++];
+        const url = await makeThumbUrl(src.file);
+        // Removed while we were decoding, or the registry is gone.
+        const live = this.#disposed ? undefined : this.get(src.id);
+        if (!live) {
+          if (url) URL.revokeObjectURL(url);
+          continue;
+        }
+        if (!url) {
+          this.remove(src.id);
+          continue;
+        }
+        // `sources` is $state, so assigning through the proxy updates the chip.
+        live.thumbUrl = url;
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(THUMB_CONCURRENCY, list.length) }, worker),
+    );
+  }
+
   #revoke(src: SequenceSource) {
     URL.revokeObjectURL(src.objectUrl);
     if (src.thumbUrl && src.thumbUrl !== src.objectUrl) {
@@ -263,69 +318,77 @@ export class SequenceSourceRegistry {
     }
   }
 
-  async #build(file: File, primary: boolean): Promise<SequenceSource | null> {
+  /** Synchronous — an image needs no decoding to become a pool entry. */
+  #buildImage(file: File, primary: boolean): SequenceSource {
+    return {
+      id: stableSourceId(file),
+      file,
+      name: file.name,
+      objectUrl: URL.createObjectURL(file),
+      primary,
+      kind: "image",
+      thumbUrl: null,
+      duration: 0,
+    };
+  }
+
+  async #buildVideo(
+    file: File,
+    primary: boolean,
+  ): Promise<SequenceSource | null> {
     const objectUrl = URL.createObjectURL(file);
-    const id = stableSourceId(file);
-    const base = { id, file, name: file.name, objectUrl, primary };
-
-    if (file.type.startsWith("video/")) {
-      const probe = await probeSlideVideo(file);
-      if (!probe) {
-        URL.revokeObjectURL(objectUrl);
-        return null;
-      }
-      return {
-        ...base,
-        kind: "video",
-        thumbUrl: probe.thumb ? URL.createObjectURL(probe.thumb) : null,
-        width: probe.width,
-        height: probe.height,
-        duration: probe.duration,
-      };
-    }
-
-    // Decoded only for its dimensions, its thumbnail, and to reject unreadable
-    // files; not retained — `image()` re-decodes on demand into the bounded
-    // cache.
-    const img = await decodeImage(objectUrl);
-    if (!img) {
+    const probe = await probeSlideVideo(file);
+    if (!probe) {
       URL.revokeObjectURL(objectUrl);
       return null;
     }
-    const thumb = await makeImageThumb(img);
     return {
-      ...base,
-      kind: "image",
-      // A real thumbnail, not the source file: pointing the chips at the
-      // originals made the browser decode full-resolution screenshots to fill
-      // 58px boxes, which is most of a large pool's memory.
-      thumbUrl: thumb ? URL.createObjectURL(thumb) : objectUrl,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      duration: 0,
+      id: stableSourceId(file),
+      file,
+      name: file.name,
+      objectUrl,
+      primary,
+      kind: "video",
+      thumbUrl: probe.thumb ? URL.createObjectURL(probe.thumb) : null,
+      width: probe.width,
+      height: probe.height,
+      duration: probe.duration,
     };
   }
 }
 
-/** Cover-cropped square JPEG, matching what probeSlideVideo makes for videos. */
-async function makeImageThumb(
-  img: HTMLImageElement,
+/**
+ * Cover-cropped square JPEG for a chip, as an object URL.
+ *
+ * `createImageBitmap` rather than an `<img>`: it decodes off the main thread
+ * and the bitmap is closed straight after, so a few hundred of these don't
+ * pile full-resolution decodes into memory. Pointing the chips at the original
+ * files instead would make the browser decode full-size screenshots to fill
+ * 58px boxes.
+ */
+async function makeThumbUrl(
+  file: File,
   size = THUMB_SIZE,
-): Promise<Blob | null> {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
-  if (w <= 0 || h <= 0) return null;
+): Promise<string | null> {
+  let bitmap: ImageBitmap | undefined;
   try {
+    bitmap = await createImageBitmap(file);
+    const w = bitmap.width;
+    const h = bitmap.height;
+    if (w <= 0 || h <= 0) return null;
     const scale = Math.max(size / w, size / h);
     const crop = size / scale;
     const canvas = new OffscreenCanvas(size, size);
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(img, (w - crop) / 2, (h - crop) / 2, crop, crop, 0, 0, size, size);
-    return await canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+    ctx.drawImage(bitmap, (w - crop) / 2, (h - crop) / 2, crop, crop, 0, 0, size, size);
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+    return URL.createObjectURL(blob);
   } catch {
-    // No OffscreenCanvas / tainted draw — fall back to the source file.
+    // Not a decodable image, or no OffscreenCanvas.
     return null;
+  } finally {
+    bitmap?.close();
   }
 }
 
