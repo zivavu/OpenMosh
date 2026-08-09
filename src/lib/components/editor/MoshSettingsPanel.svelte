@@ -14,6 +14,13 @@
       moshAudioLinkStrength: number;
       autoRangeAmount: number;
       hasAudio: boolean;
+      /** Sequence mode only: the tempo the AUTO segments re-roll against. */
+      showTiming?: boolean;
+      bpm?: number;
+      bpmDetecting?: boolean;
+      hasTrack?: boolean;
+      onDetectBpm?: () => void;
+      onBpmChange?: (bpm: number) => void;
    }
 
    let {
@@ -24,6 +31,12 @@
       moshAudioLinkStrength = $bindable(),
       autoRangeAmount = $bindable(),
       hasAudio,
+      showTiming = false,
+      bpm = 0,
+      bpmDetecting = false,
+      hasTrack = false,
+      onDetectBpm,
+      onBpmChange,
    }: Props = $props();
 </script>
 
@@ -42,7 +55,40 @@
 />
 
 <div class="config-panel">
-   <h3 class="panel-title">Mosh settings</h3>
+   {#if showTiming}
+      <h3 class="panel-title">Timing</h3>
+      <div class="config-row">
+         <label for="seq-bpm">BPM</label>
+         <input
+            id="seq-bpm"
+            class="bpm-input"
+            type="number"
+            min="20"
+            max="300"
+            step="1"
+            placeholder="—"
+            value={bpm > 0 ? bpm : ""}
+            title="Tempo the beat-based AUTO spacings are measured against"
+            onchange={(e) => {
+               const v = Number((e.currentTarget as HTMLInputElement).value);
+               if (v >= 20 && v <= 300) onBpmChange?.(Math.round(v));
+            }}
+         />
+         <button
+            class="detect-btn"
+            onclick={onDetectBpm}
+            disabled={bpmDetecting || !hasTrack}
+            title={hasTrack
+               ? "Detect the tempo from the loaded track"
+               : "Load a track first"}
+         >
+            {bpmDetecting ? "Detecting..." : "Detect"}
+         </button>
+      </div>
+      <h3 class="panel-title section-title">Mosh settings</h3>
+   {:else}
+      <h3 class="panel-title">Mosh settings</h3>
+   {/if}
    <div class="config-row">
       <label for="mosh-min">Min effects</label>
       <RangeSlider
@@ -149,6 +195,49 @@
       padding: 0.75rem;
       border-bottom: 1px solid #2a2a2a;
       max-width: 100%;
+   }
+
+   .section-title {
+      margin-top: 0.75rem;
+   }
+
+   .bpm-input {
+      width: 56px;
+      padding: 0.15rem 0.3rem;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: #141414;
+      color: #ccc;
+      font-size: 0.72rem;
+      font-family: inherit;
+      text-align: center;
+   }
+
+   .bpm-input:focus {
+      outline: none;
+      border-color: #888;
+   }
+
+   .detect-btn {
+      padding: 0.15rem 0.6rem;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background: transparent;
+      color: #ccc;
+      font-size: 0.7rem;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+   }
+
+   .detect-btn:hover:not(:disabled) {
+      border-color: #888;
+      color: #fff;
+   }
+
+   .detect-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
    }
 
    .panel-title {
