@@ -103,14 +103,19 @@ export interface SequenceSegment {
 
 export const DEFAULT_INTERVAL_SEC = 0.25;
 
-/** Re-roll spacings offered once a BPM is known, in beats. */
+/**
+ * Re-roll spacings offered once a BPM is known, as multiples of a beat.
+ * Same ladder and wording as the slideshow's beat divisions.
+ */
 export const BEAT_INTERVALS: { beats: number; label: string }[] = [
-  { beats: 0.25, label: "1/16" },
-  { beats: 0.5, label: "1/8" },
-  { beats: 1, label: "1/4" },
-  { beats: 2, label: "1/2" },
-  { beats: 4, label: "1 bar" },
-  { beats: 8, label: "2 bars" },
+  { beats: 0.03125, label: "1/32 beat" },
+  { beats: 0.0625, label: "1/16 beat" },
+  { beats: 0.125, label: "1/8 beat" },
+  { beats: 0.25, label: "1/4 beat" },
+  { beats: 0.5, label: "1/2 beat" },
+  { beats: 1, label: "every beat" },
+  { beats: 2, label: "every 2 beats" },
+  { beats: 4, label: "every 4 beats" },
 ];
 
 /** Seconds between re-rolls for a beat spacing at `bpm`. */

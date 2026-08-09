@@ -1930,9 +1930,6 @@
 				onClear={seqClear}
 				onModeChange={seqModeChange}
 				bpm={sequenceBpm}
-				{bpmDetecting}
-				onDetectBpm={audio.trackFile ? runSequenceBpmDetection : undefined}
-				onBpmChange={setSequenceBpm}
 				onTransitionChange={seqTransitionChange}
 				segmentLoop={seqSegmentLoop}
 				onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
@@ -2019,6 +2016,12 @@
 					bind:moshAudioLinkStrength
 					bind:autoRangeAmount
 					{hasAudio}
+					showTiming={isSequenceMode}
+					bpm={sequenceBpm}
+					{bpmDetecting}
+					hasTrack={!!audio.trackFile}
+					onDetectBpm={runSequenceBpmDetection}
+					onBpmChange={setSequenceBpm}
 				/>
 			</div>
 		{/snippet}
