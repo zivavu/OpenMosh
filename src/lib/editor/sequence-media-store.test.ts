@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { stableSourceId } from "./sequence-media-store";
+import {
+  stableSourceId,
+  storedMediaToFile,
+  type StoredSequenceMedia,
+} from "./sequence-media-store";
 
 function makeFile(name: string, body: string, lastModified: number): File {
   return new File([body], name, { lastModified });
@@ -21,6 +25,36 @@ describe("stableSourceId", () => {
       .not.toBe(id);
     expect(stableSourceId(makeFile("clip.mp4", "abcdef", 1_700_000_000_001)))
       .not.toBe(id);
+  });
+
+  // The whole point of a content-derived id is that storage round-trips it.
+  // The File constructor defaults lastModified to Date.now(), so this only
+  // holds while storedMediaToFile carries it across explicitly.
+  test("a stored record rebuilds to a File with the same id", () => {
+    const file = makeFile("clip.mp4", "abcdef", 1_700_000_000_000);
+    const id = stableSourceId(file);
+    const record: StoredSequenceMedia = {
+      id,
+      name: file.name,
+      blob: file,
+      type: file.type,
+      addedAt: Date.now(),
+      lastModified: file.lastModified,
+    };
+    expect(stableSourceId(storedMediaToFile(record))).toBe(id);
+  });
+
+  test("records predating the lastModified field recover it from the id", () => {
+    const file = makeFile("old.png", "xyz", 1_600_000_000_000);
+    const id = stableSourceId(file);
+    const legacy = {
+      id,
+      name: file.name,
+      blob: file,
+      type: file.type,
+      addedAt: Date.now(),
+    } as StoredSequenceMedia;
+    expect(stableSourceId(storedMediaToFile(legacy))).toBe(id);
   });
 
   test("names containing the field separator stay distinct", () => {

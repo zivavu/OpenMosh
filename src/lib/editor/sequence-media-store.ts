@@ -17,6 +17,12 @@ export interface StoredSequenceMedia {
   blob: Blob;
   type: string;
   addedAt: number;
+  /**
+   * The source file's mtime. Part of the id, so rebuilding a File without it
+   * changes that File's id — see storedMediaToFile. Absent on records written
+   * before this field existed.
+   */
+  lastModified?: number;
 }
 
 /** The set of media one song's timeline draws from. */
@@ -95,6 +101,7 @@ export async function putSequenceMedia(id: string, file: File): Promise<void> {
     blob: file,
     type: file.type,
     addedAt: Date.now(),
+    lastModified: file.lastModified,
   };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -232,9 +239,24 @@ export async function pruneSequenceMedia(): Promise<void> {
   }
 }
 
-/** Rebuilds a `File` from a stored entry so it can re-enter the pool. */
+/**
+ * Rebuilds a `File` from a stored entry so it can re-enter the pool.
+ *
+ * `lastModified` has to be carried across explicitly: the File constructor
+ * defaults it to `Date.now()`, and since it feeds `stableSourceId`, a restored
+ * file would come back under a brand-new id every time. Segments would never
+ * resolve their source, and each restore would re-add the same media under yet
+ * another id.
+ */
 export function storedMediaToFile(entry: StoredSequenceMedia): File {
   return new File([entry.blob], entry.name, {
     type: entry.type || entry.blob.type,
+    lastModified: entry.lastModified ?? lastModifiedFromId(entry.id),
   });
+}
+
+/** Records written before `lastModified` existed still encode it in the id. */
+function lastModifiedFromId(id: string): number {
+  const n = Number(id.slice(id.lastIndexOf(":") + 1));
+  return Number.isFinite(n) ? n : 0;
 }
