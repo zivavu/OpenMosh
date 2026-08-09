@@ -462,6 +462,25 @@
 		}
 	});
 
+	// Image-first counterpart. GlCanvas uploads the texture and sizes the canvas
+	// itself here, but it never draws: the slideshow owns rendering
+	// (externallyDriven), so both its animation loop and its static redraw bail
+	// out. Nothing else drew either, which left the preview black until playback
+	// started. Sizing stays GlCanvas's job — this only supplies the frame.
+	$effect(() => {
+		recordingState.recording;
+		if (!previewImageSrc || !glRenderer || naturalWidth == null) return;
+		if (previewPlaying) return;
+		// Re-draw after a resize, and on effect edits, so a stopped preview
+		// reflects the panel the way the single editor's does.
+		previewRenderSize;
+		for (const e of effects) {
+			e.enabled;
+			for (const k of Object.keys(e.values)) e.values[k];
+		}
+		glRenderer.render(effects, 0);
+	});
+
 	// ── Audio ──
 	// Load outputVolume from config before constructing manager
 	const savedOutputVolume = loadConfig().outputVolume ?? 1;
