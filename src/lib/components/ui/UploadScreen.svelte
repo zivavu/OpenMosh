@@ -2,15 +2,34 @@
 interface Props {
 	onfile: (file: File) => void;
 	onSequence: (files: File[]) => void;
+	/** Reopen a song's saved sequence — no media picking needed. */
+	onSequenceFromSong: (trackId: string) => void;
 	onSlideshow: (files: File[]) => void;
 	onaudio?: (file: File) => void;
 }
 
-import { Image, Music, Upload } from "lucide-svelte";
+import { Image, ListVideo, Music, Upload } from "lucide-svelte";
 import GithubLink from "./GithubLink.svelte";
 import { showToast } from "./toast.svelte";
+import {
+	listSavedSequences,
+	type SavedSequence,
+} from "../../editor/saved-sequences";
 
-let { onfile, onSequence, onSlideshow, onaudio }: Props = $props();
+let {
+	onfile,
+	onSequence,
+	onSequenceFromSong,
+	onSlideshow,
+	onaudio,
+}: Props = $props();
+
+// Songs already built into a sequence, offered as a way in that skips picking
+// media. Loaded once; an empty list simply hides the section.
+let savedSequences = $state<SavedSequence[]>([]);
+$effect(() => {
+	void listSavedSequences().then((list) => (savedSequences = list));
+});
 
 type Mode = "single" | "sequence" | "slideshow";
 let selectedMode: Mode = $state("single");
@@ -271,6 +290,25 @@ function onAudioDrop(e: DragEvent) {
 		</div>
 	</div>
 
+	{#if selectedMode === 'sequence' && savedSequences.length > 0}
+		<div class="saved-zone">
+			<div class="saved-head">OR PICK UP A SONG YOU'VE SEQUENCED</div>
+			<div class="saved-list">
+				{#each savedSequences as seq (seq.trackId)}
+					<button
+						class="saved-item"
+						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? '' : 's'}`}
+						onclick={() => onSequenceFromSong(seq.trackId)}
+					>
+						<ListVideo size={13} />
+						<span class="saved-name">{seq.trackName}</span>
+						<span class="saved-count">{seq.sourceCount}</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<input
 		bind:this={audioInput}
 		type="file"
@@ -500,6 +538,71 @@ function onAudioDrop(e: DragEvent) {
 		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
+	}
+
+	.saved-zone {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		width: 100%;
+		max-width: 520px;
+		margin-top: -1.5rem;
+	}
+
+	.saved-head {
+		font-size: 0.66rem;
+		color: #555;
+		letter-spacing: 0.08em;
+		font-weight: 600;
+	}
+
+	.saved-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		/* Three rows or so, then scroll — a long history shouldn't push the
+		   music zone off the screen. */
+		max-height: 108px;
+		overflow-y: auto;
+		scrollbar-width: thin;
+	}
+
+	.saved-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.7rem;
+		border: 1.5px solid #2e2438;
+		border-radius: 999px;
+		background: transparent;
+		color: #9a7fb4;
+		font-size: 0.72rem;
+		font-family: inherit;
+		cursor: pointer;
+		transition:
+			border-color 0.2s,
+			color 0.2s;
+	}
+
+	.saved-item:hover {
+		border-color: #6a5080;
+		color: #d8b8f8;
+	}
+
+	.saved-name {
+		max-width: 200px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.saved-count {
+		padding: 0 0.35rem;
+		border-radius: 999px;
+		background: #221a2c;
+		color: #b08ad0;
+		font-size: 0.62rem;
+		font-family: monospace;
 	}
 
 	.music-zone {

@@ -6,9 +6,13 @@
 	import SlideshowEditor from "./lib/components/slideshow/SlideshowEditor.svelte";
 
 	import { GlRenderer } from "./lib/gl/renderer";
+	import { openSavedSequence } from "./lib/editor/saved-sequences";
+	import { showToast } from "./lib/components/ui/toast.svelte";
 
 	let file: File | null = $state(null);
 	let sequenceFiles: File[] = $state([]);
+	/** Set when sequence mode was opened from a saved song. */
+	let sequenceTrackId: string | null = $state(null);
 	let slideshowFiles: File[] = $state([]);
 	let pendingAudioFile: File | null = $state(null);
 
@@ -60,7 +64,23 @@
 	function resetFiles() {
 		file = null;
 		sequenceFiles = [];
+		sequenceTrackId = null;
+		pendingAudioFile = null;
 		slideshowFiles = [];
+	}
+
+	/** Reopen a song's saved sequence: its media becomes the pool, and the song
+	 * itself is handed over as the already-known library track. */
+	async function openSequenceFromSong(trackId: string) {
+		const opened = await openSavedSequence(trackId);
+		if (!opened) {
+			showToast("That sequence's media is no longer stored", 'error');
+			return;
+		}
+		sequenceFiles = opened.sources;
+		pendingAudioFile = opened.trackFile;
+		sequenceTrackId = opened.trackId;
+		navigateTo('sequence');
 	}
 
 	function exitToUpload() {
@@ -99,6 +119,7 @@
 		file={sequenceFiles[0]}
 		extraFiles={sequenceFiles.slice(1)}
 		initialAudioFile={pendingAudioFile}
+		initialTrackId={sequenceTrackId}
 		onfile={(f: File) => (sequenceFiles = [f, ...sequenceFiles.slice(1)])}
 		{warmCanvas}
 		{warmRenderer}
@@ -123,6 +144,7 @@
 			sequenceFiles = files;
 			navigateTo('sequence');
 		}}
+		onSequenceFromSong={(trackId: string) => void openSequenceFromSong(trackId)}
 		onSlideshow={(files: File[]) => {
 			slideshowFiles = files;
 			navigateTo('slideshow');

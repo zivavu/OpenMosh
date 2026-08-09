@@ -86,6 +86,8 @@
 		/** Sequence mode: the rest of the media pool, alongside `file`. */
 		extraFiles?: File[];
 		initialAudioFile?: File | null;
+		/** Library id of `initialAudioFile`, when it came from a saved sequence. */
+		initialTrackId?: string | null;
 		/** 'sequence' pins the editor to the segment timeline: the SEQ toggle is
 		 * gone and the mode can't be left without leaving the route. */
 		mode?: 'single' | 'sequence';
@@ -99,6 +101,7 @@
 		onfile,
 		extraFiles = [],
 		initialAudioFile = null,
+		initialTrackId = null,
 		mode = 'single',
 		warmCanvas = null,
 		warmRenderer = null,
@@ -349,6 +352,10 @@
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
+			// Opened from a library song: adopt its id straight away. The
+			// library's auto-save skips files it already holds, so nothing else
+			// would set this, and the sequence and pool stores are keyed on it.
+			if (initialTrackId) currentTrackId = initialTrackId;
 		}
 	});
 
@@ -734,7 +741,11 @@
 			// of) video into IndexedDB that nothing would ever read back.
 			await sourceRegistry.add([file], { primary: true, persist: false });
 			const extras = extraFiles.filter((f) => f !== file);
-			if (extras.length > 0) await sourceRegistry.add(extras);
+			// Opened from a saved song: these blobs came straight out of storage,
+			// so writing them back would rewrite the whole pool for nothing.
+			if (extras.length > 0) {
+				await sourceRegistry.add(extras, { persist: !initialTrackId });
+			}
 		})();
 		return () => sourceRegistry.dispose();
 	});
@@ -779,13 +790,16 @@
 
 	// Persist the pool for the current song. Debounced because a multi-file add
 	// appends in batches and would otherwise write once per batch.
+	//
+	// The primary is listed too. Opening a saved sequence promotes the pool's
+	// first entry to primary, so excluding primaries would drop one source from
+	// the pool every time the song was reopened. Restoring skips ids already
+	// present, and the primary is never removed, so listing it costs nothing.
 	let poolSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		if (!isSequenceMode || !poolReady) return;
 		const key = poolKey;
-		const ids = sourceRegistry.sources
-			.filter((s) => !s.primary)
-			.map((s) => s.id);
+		const ids = sourceRegistry.sources.map((s) => s.id);
 		if (!key) return;
 		clearTimeout(poolSaveTimer);
 		poolSaveTimer = setTimeout(() => {
@@ -800,9 +814,7 @@
 		clearTimeout(poolSaveTimer);
 		if (!isSequenceMode || !poolReady || !poolKey) return;
 		const key = poolKey;
-		const ids = sourceRegistry.sources
-			.filter((s) => !s.primary)
-			.map((s) => s.id);
+		const ids = sourceRegistry.sources.map((s) => s.id);
 		void saveMediaPool(key, ids)
 			.then(() => pruneSequenceMedia())
 			.catch(() => {});

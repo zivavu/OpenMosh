@@ -188,7 +188,7 @@ export async function saveMediaPool(
   });
 }
 
-async function getAllMediaPools(): Promise<StoredMediaPool[]> {
+export async function getAllMediaPools(): Promise<StoredMediaPool[]> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(POOL_STORE, "readonly");
