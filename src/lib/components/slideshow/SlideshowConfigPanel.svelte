@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BpmControl from '../ui/BpmControl.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
 	import type { BeatSubdivision, SlideshowConfig } from '../../slideshow/types';
 	import {
@@ -54,38 +55,6 @@
 		onConfigChange({ ...config, [key]: value });
 	}
 
-	// Tap BPM state
-	let tapTimes: number[] = $state([]);
-	let tapResetTimer: ReturnType<typeof setTimeout> | null = null;
-	const TAP_RESET_MS = 2000;
-
-	import { onDestroy } from 'svelte';
-	onDestroy(() => {
-		if (tapResetTimer) clearTimeout(tapResetTimer);
-	});
-
-	function handleTap() {
-		const now = performance.now();
-		if (tapResetTimer) clearTimeout(tapResetTimer);
-		tapResetTimer = setTimeout(() => {
-			tapTimes = [];
-		}, TAP_RESET_MS);
-
-		tapTimes = [...tapTimes, now];
-		if (tapTimes.length < 2) return;
-
-		// Keep last 8 taps for a stable average
-		if (tapTimes.length > 8) tapTimes = tapTimes.slice(-8);
-
-		const intervals: number[] = [];
-		for (let i = 1; i < tapTimes.length; i++) {
-			intervals.push(tapTimes[i] - tapTimes[i - 1]);
-		}
-		const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-		const bpm = Math.round((60000 / avgMs) * 2) / 2; // round to nearest 0.5
-		set('bpm', Math.min(300, Math.max(20, bpm)));
-	}
-
 	const textOverlay = $derived({
 		...DEFAULT_TEXT_OVERLAY_CONFIG,
 		...config.textOverlay,
@@ -133,28 +102,14 @@
 <div class="config-panel">
 	<h3 class="panel-title">Timing</h3>
 
-	<div class="config-row">
-		<label for="ss-bpm">BPM</label>
-		<input
-			id="ss-bpm"
-			type="number"
-			min="20"
-			max="300"
-			step="0.5"
-			value={config.bpm}
-			oninput={(e) => set('bpm', +(e.currentTarget as HTMLInputElement).value)}
-		/>
-		<button
-			class="detect-btn"
-			onclick={onDetectBpm}
-			disabled={bpmDetecting || !hasTrack}
-		>
-			{bpmDetecting ? 'Detecting...' : 'Detect'}
-		</button>
-		<button class="detect-btn" onclick={handleTap}>
-			Tap{tapTimes.length >= 2 ? ` (${tapTimes.length})` : ''}
-		</button>
-	</div>
+	<BpmControl
+		id="ss-bpm"
+		bpm={config.bpm}
+		onBpmChange={(v) => set('bpm', v)}
+		{bpmDetecting}
+		{hasTrack}
+		{onDetectBpm}
+	/>
 
 	<div class="config-row">
 		<label for="ss-subdiv">Beat division</label>
@@ -513,17 +468,6 @@
 		color: #555;
 	}
 
-	.config-row input[type='number'] {
-		width: 64px;
-		padding: 0.2rem 0.4rem;
-		border: 1px solid #333;
-		border-radius: 4px;
-		background: #1a1a1a;
-		color: #e0e0e0;
-		font-size: 0.78rem;
-		font-family: inherit;
-	}
-
 	.config-row select {
 		flex: 1;
 		padding: 0.2rem 0.3rem;
@@ -546,25 +490,4 @@
 		font-size: 0.75rem;
 	}
 
-	.detect-btn {
-		padding: 0.15rem 0.6rem;
-		border: 1px solid #444;
-		border-radius: 4px;
-		background: transparent;
-		color: #ccc;
-		font-size: 0.7rem;
-		cursor: pointer;
-		font-family: inherit;
-		white-space: nowrap;
-	}
-
-	.detect-btn:hover:not(:disabled) {
-		border-color: #888;
-		color: #fff;
-	}
-
-	.detect-btn:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
 </style>
