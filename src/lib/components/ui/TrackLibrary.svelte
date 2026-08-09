@@ -190,8 +190,16 @@
 	 * clear and immediately reload the same file — a visible deselect flash
 	 * for no change. */
 	function toggleLoad(track: StoredTrack) {
-		if (isTrackActive(track)) onUnloadTrack?.();
-		else onLoad(track);
+		if (isTrackActive(track)) {
+			onUnloadTrack?.();
+			return;
+		}
+		onLoad(track);
+		// Picking a track is what the drawer is for, and it sits over the left
+		// of the editor — including the sequence media bin, whose chips are
+		// entirely hidden behind it. Leaving it open after the job is done just
+		// covers the controls the user reaches for next.
+		open = false;
 	}
 
 	function onLoad(track: StoredTrack, autoplay = false) {
