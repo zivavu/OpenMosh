@@ -48,6 +48,8 @@ export class SequenceSourceRegistry {
   /** Insertion-ordered LRU of decoded images — see MAX_DECODED_IMAGES. */
   #images = new Map<string, HTMLImageElement>();
   #decoding = new Set<string>();
+  /** Ids an in-flight `add` has claimed but not appended yet. */
+  #pendingIds = new Set<string>();
   #samplers = new Map<string, SlideVideoSampler>();
   /** Samplers whose create() is in flight, so we don't start a second one. */
   #creating = new Set<string>();
@@ -77,11 +79,15 @@ export class SequenceSourceRegistry {
     files: File[],
     { primary = false, persist = true } = {},
   ): Promise<SequenceSource[]> {
-    const seen = new Set<string>();
+    // Ids are reserved before the first await, not just checked against the
+    // current pool. Probing and decoding are async, so two overlapping calls —
+    // the per-song pool restore and the segment-driven restore both pulling the
+    // same media out of storage on load — would each see an empty pool and
+    // append the same source, which is a duplicate key in the bin's keyed each.
     const fresh = files.filter((f) => {
       const id = stableSourceId(f);
-      if (this.get(id) || seen.has(id)) return false;
-      seen.add(id);
+      if (this.get(id) || this.#pendingIds.has(id)) return false;
+      this.#pendingIds.add(id);
       return true;
     });
 
@@ -89,17 +95,30 @@ export class SequenceSourceRegistry {
     // images would otherwise hold every full-resolution decode in memory at
     // once. Each batch is appended as it lands, so the bin fills progressively.
     const ok: SequenceSource[] = [];
-    for (let i = 0; i < fresh.length; i += ADD_BATCH_SIZE) {
-      const built = await Promise.all(
-        fresh.slice(i, i + ADD_BATCH_SIZE).map((f) => this.#build(f, primary)),
-      );
-      const batch = built.filter((s): s is SequenceSource => s !== null);
-      if (this.#disposed) {
-        for (const s of batch) this.#revoke(s);
-        return [];
+    try {
+      for (let i = 0; i < fresh.length; i += ADD_BATCH_SIZE) {
+        const built = await Promise.all(
+          fresh.slice(i, i + ADD_BATCH_SIZE).map((f) => this.#build(f, primary)),
+        );
+        const batch: SequenceSource[] = [];
+        for (const s of built) {
+          if (!s) continue;
+          // Belt and braces: anything that slipped in behind us is dropped
+          // rather than duplicated.
+          if (this.#disposed || this.get(s.id)) {
+            this.#revoke(s);
+            continue;
+          }
+          batch.push(s);
+        }
+        if (this.#disposed) return [];
+        if (batch.length > 0) this.sources = [...this.sources, ...batch];
+        ok.push(...batch);
       }
-      if (batch.length > 0) this.sources = [...this.sources, ...batch];
-      ok.push(...batch);
+    } finally {
+      // Released only after the appends, so a call waiting behind this one
+      // sees the sources in the pool rather than re-adding them.
+      for (const f of fresh) this.#pendingIds.delete(stableSourceId(f));
     }
 
     if (persist) {
@@ -232,6 +251,7 @@ export class SequenceSourceRegistry {
     this.#images.clear();
     this.#creating.clear();
     this.#decoding.clear();
+    this.#pendingIds.clear();
     for (const s of this.sources) this.#revoke(s);
     this.sources = [];
   }
