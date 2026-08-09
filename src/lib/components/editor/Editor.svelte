@@ -464,13 +464,11 @@
 			selectedSegmentId = null;
 		} else if (switchingSongs) {
 			// Empty rather than a fresh segment: the seeding effect rebuilds one
-			// once the new track reports its duration.
+			// once the new track reports its duration. The media pool is
+			// deliberately left alone — see the pool restore effect.
 			sequenceSegments = [];
 			selectedSegmentId = null;
 		}
-		// The media pool is keyed the same way and restores asynchronously, so it
-		// needs the same signal — see the pool restore effect.
-		clearPoolIfUnsaved = switchingSongs;
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
@@ -748,8 +746,6 @@
 	// left alone by all of this.
 	let poolKey: string | null = null;
 	let poolReady = $state(false);
-	/** Set by onLibraryLoadTrack when the song actually changed. */
-	let clearPoolIfUnsaved = false;
 	/** Segment source ids already looked for in storage; see the effect below. */
 	const restoreAttempted = new Set<string>();
 
@@ -761,10 +757,6 @@
 		poolReady = false;
 		// A different song may reference media this session hasn't tried yet.
 		restoreAttempted.clear();
-		// Read now: onLibraryLoadTrack sets it synchronously, and the await below
-		// gives a later switch time to overwrite it.
-		const clearIfUnsaved = clearPoolIfUnsaved;
-		clearPoolIfUnsaved = false;
 		void (async () => {
 			let ids: string[] | null = null;
 			try {
@@ -773,11 +765,14 @@
 				// Storage blocked — carry on with whatever is loaded.
 			}
 			if (poolKey !== key) return;
-			// Nothing saved: empty the pool when this was a song switch, otherwise
-			// keep what's loaded and let the save below adopt it — same rule the
-			// timeline follows just above.
+			// A song with a saved pool swaps to it. A song with none keeps what's
+			// loaded and adopts it on the next save — deliberately *not* the same
+			// rule the timeline follows. Clearing a timeline costs a few clicks;
+			// clearing the pool throws away media the user assembled by hand, and
+			// once no pool references those blobs, pruning deletes them for good.
+			// Keeping them strands nothing either way: a reset timeline holds no
+			// source ids at all.
 			if (ids) await sourceRegistry.setExtras(ids);
-			else if (clearIfUnsaved) await sourceRegistry.setExtras([]);
 			if (poolKey === key) poolReady = true;
 		})();
 	});
