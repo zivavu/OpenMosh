@@ -261,7 +261,7 @@
             // restoration; without it, webglcontextrestored never fires.
             ev.preventDefault();
             error =
-               "WebGL context lost — attempting to recover automatically. If this persists, please reload the page.";
+               "Lost the WebGL context. Trying to recover. If this keeps happening, reload the page.";
          };
          const onContextRestored = () => {
             const newRenderer = new GlRenderer(activeCanvas);

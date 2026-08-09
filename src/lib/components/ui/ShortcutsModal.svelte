@@ -30,7 +30,7 @@
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="header">
-			<span class="title">Keyboard Shortcuts</span>
+			<span class="title">Keyboard shortcuts</span>
 			<button class="close-btn" onclick={onClose} title="Close">
 				<X size={14} />
 			</button>

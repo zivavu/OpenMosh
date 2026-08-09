@@ -75,7 +75,7 @@
 		if (skipped.length > 0) {
 			showToast(
 				skipped.length === all.length
-					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : 'those files'} — supported formats: PNG, JPG, WEBP, GIF, MP4, WEBM, MOV`
+					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : 'those files'}. Supported formats: PNG, JPG, WEBP, GIF, MP4, WEBM, MOV`
 					: `Skipped ${skipped.length} unsupported file${skipped.length === 1 ? '' : 's'}`,
 				skipped.length === all.length ? 'error' : 'info',
 				6000,
@@ -562,7 +562,7 @@
 			if (!(e instanceof DOMException && e.name === 'AbortError')) {
 				console.error('BPM detection failed:', e);
 				showToast(
-					"Couldn't detect the BPM for this track — set it by hand or use Tap",
+					"Couldn't detect the BPM for this track. Set it by hand or use Tap.",
 					'error',
 					6000,
 				);
@@ -1063,7 +1063,7 @@
 	{#if showExitConfirm}
 		<ConfirmDialog
 			title="Return to upload?"
-			message="Your current slideshow will be discarded. Presets you've saved are kept."
+			message="This discards your current slideshow. Presets you've saved stay."
 			confirmLabel="Discard and exit"
 			cancelLabel="Keep editing"
 			danger

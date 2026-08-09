@@ -210,11 +210,11 @@
 	{#if slides.length === 0}
 		<div class="empty-state">
 			<p>
-				No media loaded. Drag and drop images or videos here or click the
-				button below.
+				Nothing here yet. Drop images or videos in, or use the button
+				below.
 			</p>
 			<button class="add-btn" onclick={() => fileInput.click()}
-				>Add Media</button
+				>Add media</button
 			>
 		</div>
 	{:else}

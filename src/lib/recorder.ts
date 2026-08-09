@@ -229,8 +229,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	if (!selectedCodec) {
 		throw new Error(
-			`Your browser cannot encode WEBM video. ` +
-				`Tried codecs: ${swCandidates.join(', ')}. Try a different browser.`,
+			`This browser can't encode WEBM video. ` +
+				`Tried ${swCandidates.join(', ')}. Try another browser.`,
 		);
 	}
 

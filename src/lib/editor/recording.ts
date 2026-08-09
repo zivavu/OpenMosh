@@ -96,7 +96,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
   if (exportDuration < 0.1) {
     throw new Error(
-      "Export duration is too short (minimum 0.1s). Adjust the span.",
+      "That export is too short (0.1s minimum). Widen the span and try again.",
     );
   }
 

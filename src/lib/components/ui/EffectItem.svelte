@@ -174,7 +174,7 @@
 				<button
 					class="icon-btn"
 					onclick={onDuplicate}
-					title="Duplicate — adds an independent copy below"
+					title="Duplicate: adds an independent copy below"
 					aria-label="Duplicate effect"
 				>
 					<Copy size={13} />
@@ -193,7 +193,7 @@
 					<button
 						class="icon-btn"
 						onclick={onHide}
-						title="Hide from the list — stays hidden next session, restore it under Hidden Effects"
+						title="Hide from the list. It stays hidden next session; restore it under Hidden effects."
 						aria-label="Hide effect"
 					>
 						<EyeOff size={14} />
@@ -205,7 +205,7 @@
 						class="move-btn"
 						disabled={!canMoveUp}
 						onclick={(e) => onMove(-1, e.shiftKey)}
-						title="Move up — shift-click to send to the top"
+						title="Move up (shift-click to send it to the top)"
 						aria-label="Move effect up"
 					>
 						<ChevronUp size={13} />
@@ -214,7 +214,7 @@
 						class="move-btn"
 						disabled={!canMoveDown}
 						onclick={(e) => onMove(1, e.shiftKey)}
-						title="Move down — shift-click to send to the bottom"
+						title="Move down (shift-click to send it to the bottom)"
 						aria-label="Move effect down"
 					>
 						<ChevronDown size={13} />
@@ -364,7 +364,7 @@
 										<button
 											type="button"
 											class="volume-link-btn"
-											title="Link to music volume (slider will follow volume in a range)"
+											title="Link to music volume (the slider follows the volume within a range)"
 											onclick={() =>
 												onVolumeLinkChange(param.key, {
 													min: param.min,

@@ -96,7 +96,7 @@
 		const applied = applyPreset(presets[index]);
 		// Keep the rest of the library in the list, switched off. Replacing the
 		// chain outright made every other effect look deleted (they silently fell
-		// into "Hidden Effects"), which reads as data loss on what is meant to be
+		// into "Hidden effects"), which reads as data loss on what is meant to be
 		// a one-click starting point.
 		const inPreset = new Set(applied.map((e) => e.defId));
 		const rest = effects
@@ -189,7 +189,7 @@
 	/**
 	 * Hide an effect from the list. This is a persisted preference rather than a
 	 * chain edit, so it deliberately stays out of the undo stack — Ctrl+Z can't
-	 * un-hide, but one click under "Hidden Effects" restores it with its params.
+	 * un-hide, but one click under "Hidden effects" restores it with its params.
 	 *
 	 * Copies are the exception: with other instances left in the chain there is
 	 * nothing to hide, so this is an ordinary (undoable) delete.
@@ -602,7 +602,7 @@
 				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}
 					>&#9654;</span
 				>
-				<span>Hidden Effects ({filteredHiddenDefs.length})</span>
+				<span>Hidden effects ({filteredHiddenDefs.length})</span>
 			</button>
 
 			{#if showHidden || searchQuery}

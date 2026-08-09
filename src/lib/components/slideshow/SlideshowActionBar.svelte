@@ -64,7 +64,7 @@
 			],
 		},
 		{
-			title: 'Timeline Editing',
+			title: 'Timeline editing',
 			shortcuts: [
 				{
 					keys: ['Dbl-click', 'Ctrl+Click'],

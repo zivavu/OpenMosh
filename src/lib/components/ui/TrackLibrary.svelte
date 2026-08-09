@@ -256,7 +256,7 @@
 	<!-- Overlay panel: slides in on top of the expand strip -->
 	<div class="panel" aria-hidden={!open} inert={!open || undefined}>
 		<div class="header">
-			<span class="title">Tracks Library</span>
+			<span class="title">Track library</span>
 			<button
 				class="add-btn"
 				onclick={() => fileInput.click()}

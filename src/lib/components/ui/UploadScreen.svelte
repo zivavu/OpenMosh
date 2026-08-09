@@ -68,7 +68,7 @@ const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
 
 function rejectFile(file: File) {
 	showToast(
-		`Can't open "${file.name}" — supported formats: ${SUPPORTED_LABEL}`,
+		`Can't open "${file.name}". Supported formats: ${SUPPORTED_LABEL}`,
 		"error",
 		6000,
 	);
@@ -89,7 +89,7 @@ function handleMultiFiles(files: FileList | File[]) {
 		if (all.length === 1) rejectFile(all[0]);
 		else
 			showToast(
-				`None of those ${all.length} files are supported — try ${SUPPORTED_LABEL}`,
+				`None of those ${all.length} files are supported. Try ${SUPPORTED_LABEL}`,
 				"error",
 				6000,
 			);
@@ -113,7 +113,7 @@ function handleSingleFile(files: FileList | File[]) {
 	if (!file) return;
 	if (all.length > 1 && isAcceptedFile(file)) {
 		showToast(
-			`Loaded "${file.name}" only — switch to Sequence or Slideshow mode to use all ${all.length}`,
+			`Loaded "${file.name}" only. Switch to Sequence or Slideshow mode to use all ${all.length}`,
 			"info",
 			6000,
 		);
@@ -217,9 +217,9 @@ function onAudioDrop(e: DragEvent) {
 	</div>
 	<p class="mode-hint">
 		{#if selectedMode === 'slideshow'}
-			Upload multiple images or videos — cuts between them on the beat
+			Upload several images or videos and cut between them on the beat
 		{:else if selectedMode === 'sequence'}
-			Upload media and lay it out on a timeline — a different look per segment
+			Upload media, lay it out on a timeline, give each segment its own look
 		{:else}
 			Upload an image or video to apply glitch effects
 		{/if}
