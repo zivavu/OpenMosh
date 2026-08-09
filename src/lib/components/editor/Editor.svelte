@@ -37,7 +37,9 @@
 		type SegmentTransitionChange,
 		type SequenceSegment,
 		type SequenceSegmentMode,
+		applyBpmToSegments,
 	} from '../../editor/sequence';
+	import { detectBpm } from '../../slideshow/bpm-detector';
 	import { SequenceFrameDriver } from '../../editor/sequence-frames';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import {
@@ -468,6 +470,7 @@
 		if (savedSeq !== null) {
 			sequenceSegments = savedSeq.segments;
 			setSequenceEnabled(savedSeq.enabled);
+			sequenceBpm = savedSeq.bpm ?? 0;
 			selectedSegmentId = null;
 		} else if (switchingSongs) {
 			// Empty rather than a fresh segment: the seeding effect rebuilds one
@@ -583,9 +586,15 @@
 		seqMasterIsAudio ? audio.trackDuration : videoDuration,
 	);
 
+	// Beats per minute for this song, feeding the AUTO segments' re-roll
+	// spacing. 0 = not detected yet.
+	let sequenceBpm = $state(0);
+
 	const seqStore = createTrackStore<{
 		enabled: boolean;
 		segments: SequenceSegment[];
+		/** Absent on entries saved before BPM existed. */
+		bpm?: number;
 	}>('openmosh-sequence');
 
 	// Keyed by master clock — that's what segment times are relative to.
@@ -607,6 +616,7 @@
 		if (saved === null) return;
 		sequenceSegments = saved.segments;
 		setSequenceEnabled(saved.enabled);
+		sequenceBpm = saved.bpm ?? 0;
 		selectedSegmentId = null;
 	});
 
@@ -624,11 +634,12 @@
 		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const enabled = sequenceEnabled;
+		const bpm = sequenceBpm;
 		const key = seqStoreKey;
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { enabled, segments: segs });
+			seqStore.save(key, { enabled, segments: segs, bpm });
 		}, 300);
 	});
 
@@ -651,6 +662,7 @@
 		seqStore.save(key, {
 			enabled: sequenceEnabled,
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
+			bpm: sequenceBpm,
 		});
 	}
 
@@ -1266,10 +1278,53 @@
 		segIds: string[],
 		mode: SequenceSegmentMode,
 		intervalSec?: number,
+		intervalBeats?: number | null,
 	) {
 		seqBoundaries.commit(
-			setSegmentsMode(sequenceSegments, new Set(segIds), mode, intervalSec),
+			setSegmentsMode(
+				sequenceSegments,
+				new Set(segIds),
+				mode,
+				intervalSec,
+				intervalBeats,
+			),
 		);
+	}
+
+	// ── BPM ──────────────────────────────────────────────────────────────────
+	// Same detector the slideshow uses: decode to mono 44.1 kHz, then
+	// essentia's RhythmExtractor2013 in a shared worker. Here it feeds the
+	// AUTO segments' re-roll spacing rather than a slide clock.
+	let bpmDetecting = $state(false);
+	let bpmDetectAbort: AbortController | null = null;
+
+	async function runSequenceBpmDetection() {
+		if (!audio.trackFile || bpmDetecting) return;
+		bpmDetecting = true;
+		bpmDetectAbort = new AbortController();
+		try {
+			const result = await detectBpm(audio.trackFile, bpmDetectAbort.signal);
+			setSequenceBpm(Math.round(result.bpm));
+		} catch (e) {
+			if (!(e instanceof DOMException && e.name === 'AbortError')) {
+				console.error('BPM detection failed:', e);
+				showToast(
+					"Couldn't detect the BPM for this track. Set it by hand instead.",
+					'error',
+					6000,
+				);
+			}
+		} finally {
+			bpmDetecting = false;
+			bpmDetectAbort = null;
+		}
+	}
+
+	/** Correcting the BPM retimes every segment whose spacing was set in beats. */
+	function setSequenceBpm(bpm: number) {
+		sequenceBpm = bpm;
+		const retimed = applyBpmToSegments(sequenceSegments, bpm);
+		if (retimed !== sequenceSegments) seqBoundaries.commit(retimed);
 	}
 
 	function seqTransitionChange(changes: SegmentTransitionChange[]) {
@@ -1874,6 +1929,10 @@
 				onRoll={seqRoll}
 				onClear={seqClear}
 				onModeChange={seqModeChange}
+				bpm={sequenceBpm}
+				{bpmDetecting}
+				onDetectBpm={audio.trackFile ? runSequenceBpmDetection : undefined}
+				onBpmChange={setSequenceBpm}
 				onTransitionChange={seqTransitionChange}
 				segmentLoop={seqSegmentLoop}
 				onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}

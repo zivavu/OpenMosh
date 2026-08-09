@@ -84,8 +84,15 @@ export interface SequenceSegment {
    * "name*" and explicit preset overwrites no longer clobber the edits. */
   modified?: boolean;
   effects: EffectInstance[];
-  /** "interval" mode: seconds between re-rolls. */
+  /** "interval" mode: seconds between re-rolls. Always the value the tick math
+   * uses, whether it was picked directly or derived from `intervalBeats`. */
   intervalSec?: number;
+  /**
+   * "interval" mode: the re-roll spacing expressed in beats, when the user
+   * picked one. Kept alongside the seconds so a later BPM correction can
+   * re-derive them; absent when the interval was picked in seconds.
+   */
+  intervalBeats?: number;
   /** "interval" mode: base seed for per-tick rolls. */
   seed?: number;
   /** Blend rendered when entering this segment from the previous one. */
@@ -95,6 +102,43 @@ export interface SequenceSegment {
 }
 
 export const DEFAULT_INTERVAL_SEC = 0.25;
+
+/** Re-roll spacings offered once a BPM is known, in beats. */
+export const BEAT_INTERVALS: { beats: number; label: string }[] = [
+  { beats: 0.25, label: "1/16" },
+  { beats: 0.5, label: "1/8" },
+  { beats: 1, label: "1/4" },
+  { beats: 2, label: "1/2" },
+  { beats: 4, label: "1 bar" },
+  { beats: 8, label: "2 bars" },
+];
+
+/** Seconds between re-rolls for a beat spacing at `bpm`. */
+export function beatsToSeconds(beats: number, bpm: number): number {
+  if (bpm <= 0) return DEFAULT_INTERVAL_SEC;
+  return (60 / bpm) * beats;
+}
+
+/**
+ * Re-derive `intervalSec` for every segment whose interval was set in beats,
+ * so correcting the BPM retimes them. Returns the input by identity when
+ * nothing moves, so callers can skip a redundant commit.
+ */
+export function applyBpmToSegments(
+  segments: SequenceSegment[],
+  bpm: number,
+): SequenceSegment[] {
+  if (bpm <= 0) return segments;
+  let changed = false;
+  const out = segments.map((s) => {
+    if (!s.intervalBeats) return s;
+    const sec = beatsToSeconds(s.intervalBeats, bpm);
+    if (Math.abs((s.intervalSec ?? 0) - sec) < 0.0005) return s;
+    changed = true;
+    return { ...s, intervalSec: sec };
+  });
+  return changed ? out : segments;
+}
 
 export function randomSeed(): number {
   return Math.floor(Math.random() * 0x7fffffff);
