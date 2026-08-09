@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { MoshOptions } from "./mosh";
 import {
+  applyBpmToSegments,
+  beatsToSeconds,
   createSequenceEffectSource,
   createSequenceSegment,
+  DEFAULT_INTERVAL_SEC,
   findSegmentAt,
   rollEffects,
   segmentTick,
@@ -151,5 +154,43 @@ describe("createSequenceEffectSource", () => {
     const seg = createSequenceSegment(0, 2);
     const src = createSequenceEffectSource(() => [seg], () => 5, () => OPTIONS);
     expect(src(3)).toBeNull();
+  });
+});
+
+describe("beat-based re-roll spacing", () => {
+  test("converts beats to seconds at the given tempo", () => {
+    expect(beatsToSeconds(1, 120)).toBeCloseTo(0.5, 6);
+    expect(beatsToSeconds(4, 120)).toBeCloseTo(2, 6);
+    expect(beatsToSeconds(0.5, 90)).toBeCloseTo(1 / 3, 6);
+  });
+
+  test("falls back to the default rather than dividing by a missing tempo", () => {
+    expect(beatsToSeconds(1, 0)).toBe(DEFAULT_INTERVAL_SEC);
+  });
+
+  test("a tempo change retimes only the segments set in beats", () => {
+    const beatSeg: SequenceSegment = {
+      ...createSequenceSegment(0, 10),
+      mode: "interval",
+      intervalBeats: 1,
+      intervalSec: 0.5,
+    };
+    const secondsSeg: SequenceSegment = {
+      ...createSequenceSegment(10, 20),
+      mode: "interval",
+      intervalSec: 0.25,
+    };
+    const out = applyBpmToSegments([beatSeg, secondsSeg], 60);
+    expect(out[0].intervalSec).toBeCloseTo(1, 6);
+    expect(out[1].intervalSec).toBe(0.25);
+    expect(out[1]).toBe(secondsSeg);
+  });
+
+  test("returns the same array when nothing moves, so no redundant commit", () => {
+    const segs: SequenceSegment[] = [
+      { ...createSequenceSegment(0, 10), mode: "interval", intervalBeats: 1, intervalSec: 0.5 },
+    ];
+    expect(applyBpmToSegments(segs, 120)).toBe(segs);
+    expect(applyBpmToSegments(segs, 0)).toBe(segs);
   });
 });

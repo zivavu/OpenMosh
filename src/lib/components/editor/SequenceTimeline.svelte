@@ -4,6 +4,7 @@
 	import {
 		cloneSegmentForSplit,
 		createSequenceSegment,
+		BEAT_INTERVALS,
 		DEFAULT_TRANSITION_DURATION,
 		randomSeed,
 		TRANSITION_OPTIONS,
@@ -56,7 +57,13 @@
 			segmentIds: string[],
 			mode: SequenceSegmentMode,
 			intervalSec?: number,
+			intervalBeats?: number | null,
 		) => void;
+		/** 0 when no BPM is known yet — the AUTO picker then offers only seconds. */
+		bpm?: number;
+		bpmDetecting?: boolean;
+		onDetectBpm?: () => void;
+		onBpmChange?: (bpm: number) => void;
 		/** Transition config edits, one entry per segment; `null` = hard cut. */
 		onTransitionChange: (changes: SegmentTransitionChange[]) => void;
 		/** Loop playback inside the selected segment (for editing while playing). */
@@ -84,6 +91,10 @@
 		onRoll,
 		onClear,
 		onModeChange,
+		bpm = 0,
+		bpmDetecting = false,
+		onDetectBpm,
+		onBpmChange,
 		onTransitionChange,
 		segmentLoop = false,
 		onToggleSegmentLoop,
@@ -309,6 +320,19 @@
 	let commonIntervalSec = $derived(
 		commonValue(selectedSegments.map((s) => s.intervalSec ?? 0.25)),
 	);
+	let commonIntervalBeats = $derived(
+		commonValue(selectedSegments.map((s) => s.intervalBeats ?? 0)),
+	);
+
+	/** The picker's value: a `b`-prefixed beat count when the spacing is tied to
+	 * the beat, otherwise the raw seconds. Blank when the selection disagrees. */
+	let intervalValue = $derived.by(() => {
+		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
+		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
+			return '';
+		}
+		return String(commonIntervalSec);
+	});
 
 	// ── Transition toolbar ─────────────────────────────────────────────────
 	// Each value is undefined when the selected segments disagree; the controls
@@ -1336,19 +1360,65 @@
 			{#if commonMode === 'interval'}
 				<select
 					class="seg-select"
-					value={commonIntervalSec ?? ''}
+					value={intervalValue}
+					title="How often this segment re-rolls its mosh"
 					onchange={(e) => {
 						const v = e.currentTarget.value;
-						if (v !== '') onModeChange(selectedIds, 'interval', Number(v));
+						if (v === '') return;
+						if (v.startsWith('b')) {
+							const beats = Number(v.slice(1));
+							onModeChange(
+								selectedIds,
+								'interval',
+								(60 / bpm) * beats,
+								beats,
+							);
+						} else {
+							// Picking a plain duration drops the beat link, so a later
+							// BPM change leaves it alone.
+							onModeChange(selectedIds, 'interval', Number(v), null);
+						}
 					}}
 				>
-					{#if commonIntervalSec === undefined}
+					{#if intervalValue === ''}
 						<option value="" disabled>—</option>
+					{/if}
+					{#if bpm > 0}
+						{#each BEAT_INTERVALS as opt}
+							<option value={`b${opt.beats}`}>every {opt.label}</option>
+						{/each}
 					{/if}
 					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
 						<option value={sec}>every {sec}s</option>
 					{/each}
 				</select>
+				<div class="bpm-group">
+					<span class="seg-toolbar-label">BPM</span>
+					<input
+						class="bpm-input"
+						type="number"
+						min="20"
+						max="300"
+						step="1"
+						placeholder="—"
+						value={bpm > 0 ? bpm : ''}
+						title="Beats per minute, used by the beat spacings above"
+						onchange={(e) => {
+							const v = Number(e.currentTarget.value);
+							if (v >= 20 && v <= 300) onBpmChange?.(Math.round(v));
+						}}
+					/>
+					{#if onDetectBpm}
+						<button
+							class="seg-btn"
+							disabled={bpmDetecting}
+							title="Detect the BPM from the loaded track"
+							onclick={onDetectBpm}
+						>
+							{bpmDetecting ? '…' : 'DETECT'}
+						</button>
+					{/if}
+				</div>
 			{/if}
 			<span class="seg-toolbar-label">TRANSITION</span>
 			<select
@@ -1927,6 +1997,29 @@
 		padding: 0.35rem 0.25rem;
 		flex-wrap: wrap;
 		min-height: 28px;
+	}
+
+	.bpm-group {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+
+	.bpm-input {
+		width: 48px;
+		padding: 0.15rem 0.3rem;
+		border: 1px solid #2e2438;
+		border-radius: 4px;
+		background: #14101a;
+		color: #cdb6e0;
+		font-size: 0.68rem;
+		font-family: monospace;
+		text-align: center;
+	}
+
+	.bpm-input:focus {
+		outline: none;
+		border-color: #6a5080;
 	}
 
 	.seg-toolbar-hint {

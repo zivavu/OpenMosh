@@ -79,11 +79,18 @@ export function setSegmentsMode(
   ids: Set<string>,
   mode: SequenceSegmentMode,
   intervalSec?: number,
+  /** Set when the spacing was picked in beats; null clears a beat spacing back
+   * to a plain seconds one. */
+  intervalBeats?: number | null,
 ): SequenceSegment[] {
   return mapIds(segments, ids, (s) => ({
     ...s,
     mode,
     intervalSec: intervalSec ?? s.intervalSec ?? DEFAULT_INTERVAL_SEC,
+    intervalBeats:
+      intervalBeats === undefined
+        ? s.intervalBeats
+        : (intervalBeats ?? undefined),
     seed: s.seed ?? randomSeed(),
   }));
 }
