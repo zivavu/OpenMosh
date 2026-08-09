@@ -127,11 +127,11 @@
                   and loud parts of a track.
                </p>
                <p>
-                  <strong>Low</strong> — effects follow the actual volume. Most music
+                  <strong>Low</strong>: effects follow the actual volume. Most music
                   sits at a steady level, so they only drift a little.
                </p>
                <p>
-                  <strong>High</strong> — the quietest and loudest moments of the last
+                  <strong>High</strong>: the quietest and loudest moments of the last
                   few seconds are stretched across the whole range you set. Drops
                   hit harder, but quiet parts get pushed up too.
                </p>

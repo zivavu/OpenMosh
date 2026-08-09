@@ -1014,7 +1014,7 @@
 		if (audio.trackFile) return;
 		if (isVideo && videoDuration > 0) return;
 		setSequenceEnabled(false);
-		showToast('Sequence mode off — nothing left to sequence over', 'info');
+		showToast('Sequence mode off: nothing left to sequence over', 'info');
 	});
 
 	// The route enables sequence mode with no toggle press to seed the first
@@ -1418,7 +1418,7 @@
 				moshSession.resetEdits(effects);
 				// No restore: loading the new file re-initializes the renderer
 				onfile(newFile);
-				showToast('Frame re-input as the new source', 'info', 8000, {
+				showToast('Using this frame as the new source', 'info', 8000, {
 					label: 'Undo',
 					run: () => {
 						effects = prevEffects.map(cloneEffectInstance);
@@ -1751,7 +1751,7 @@
 						class="help-btn"
 						class:seq-active={sequenceEnabled}
 						onclick={toggleSequence}
-						title="Sequence timeline — different presets/moshes over time"
+						title="Sequence timeline: a different preset or mosh over time"
 					>
 						<ListVideo size={14} />
 					</button>
@@ -1783,7 +1783,7 @@
 						</div>
 						{#if isSequenceMode}
 							<div class="mosh-setting-row">
-								<label for="source-fit" title="How sources that don't match the output aspect are fitted">
+								<label for="source-fit" title="How to fit sources that don't match the output aspect">
 									Fit sources
 								</label>
 								<select id="source-fit" bind:value={sourceFit}>
@@ -2002,7 +2002,7 @@
 	{#if showExitConfirm}
 		<ConfirmDialog
 			title="Return to upload?"
-			message="Your current edits will be discarded. Presets you've saved are kept."
+			message="This discards your current edits. Presets you've saved stay."
 			confirmLabel="Discard and exit"
 			cancelLabel="Keep editing"
 			danger
@@ -2017,7 +2017,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Removes every added image and video from this song's pool. Segments fall back to the original source. The file you opened with is kept, and media another song still uses stays in storage."
+			message="This removes every added image and video from this song's pool, so its segments fall back to the original source. The file you opened with stays, and so does any media another song still uses."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger

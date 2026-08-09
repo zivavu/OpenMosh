@@ -1014,8 +1014,8 @@
 							class:assignable
 							draggable="true"
 							title={assignable
-								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''} — or drag it onto one`
-								: `${src.name} — drag onto a segment, or select one and click`}
+								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}, or drag it onto one`
+								: `${src.name}. Drag it onto a segment, or select one and click`}
 							ondragstart={(e) => startSourceDrag(e, src.id)}
 							ondragend={endSourceDrag}
 							onclick={() => {
@@ -1470,7 +1470,7 @@
 			</span>
 			<button
 				class="hint-dismiss"
-				title="Hide this hint — the shortcuts are still in the ? menu"
+				title="Hide this hint. The shortcuts stay in the ? menu."
 				onclick={dismissHint}>✕</button
 			>
 		{/if}
