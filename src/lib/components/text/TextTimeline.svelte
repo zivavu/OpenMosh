@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { Eye, EyeOff, Pause, Play, Plus, Trash2 } from 'lucide-svelte';
+	import {
+		Eye,
+		EyeOff,
+		MicVocal,
+		Pause,
+		Play,
+		Plus,
+		Trash2,
+	} from 'lucide-svelte';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
 	import {
@@ -16,6 +24,9 @@
 		type TextLane,
 		type TextTimeline,
 	} from '../../text';
+	import LyricsSyncModal, {
+		type LyricsSyncProps,
+	} from './LyricsSyncModal.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
@@ -41,6 +52,11 @@
 		 * image has, since there is no track or video to drive one. */
 		isPlaying?: boolean;
 		onTogglePlay?: (() => void) | null;
+		/** When provided, the header grows a Lyrics button that opens the sync
+			* modal, wired to the mode's own transport. */
+		lyricsSync?: LyricsSyncProps | null;
+		/** External open/close of the sync modal (e.g. the editor's top bar). */
+		lyricsOpen?: boolean;
 	}
 
 	let {
@@ -55,6 +71,8 @@
 		onSeek,
 		isPlaying = false,
 		onTogglePlay = null,
+		lyricsSync = null,
+		lyricsOpen = $bindable(false),
 	}: Props = $props();
 
 	let trackEl = $state<HTMLElement | undefined>(undefined);
@@ -242,6 +260,16 @@
 		<button class="tl-btn" onclick={addLane} title="Add a text lane">
 			<Plus size={12} /> Lane
 		</button>
+		{#if lyricsSync}
+			<button
+				class="tl-btn"
+				class:active={lyricsOpen}
+				onclick={() => (lyricsOpen = true)}
+				title="Sync lyrics to the song: paste them, then press Space as it plays"
+			>
+				<MicVocal size={12} /> Lyrics
+			</button>
+		{/if}
 		{#if trackDuration <= 0}
 			<span class="tl-hint">No timeline yet — add media or a track.</span>
 		{:else}
@@ -377,6 +405,22 @@
 	{#if timeline.lanes.length === 0}
 		<p class="tl-empty">No text lanes. Add one to put text on the timeline.</p>
 	{/if}
+
+	{#if lyricsSync}
+		<LyricsSyncModal
+			open={lyricsOpen}
+			currentTime={currentTime}
+			isPlaying={lyricsSync.isPlaying}
+			spanStart={lyricsSync.spanStart}
+			spanEnd={lyricsSync.spanEnd}
+			getCurrentTime={lyricsSync.getCurrentTime}
+			onPlay={lyricsSync.onPlay}
+			onPause={lyricsSync.onPause}
+			onSeek={lyricsSync.onSeek}
+			onApply={lyricsSync.onApply}
+			onClose={() => (lyricsOpen = false)}
+		/>
+	{/if}
 </div>
 
 <style>
@@ -417,6 +461,11 @@
 
 	.tl-btn:hover {
 		border-color: #555;
+		color: #fff;
+	}
+
+	.tl-btn.active {
+		border-color: #4a6a8a;
 		color: #fff;
 	}
 

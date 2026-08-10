@@ -7,6 +7,7 @@
 		Library,
 		ListVideo,
 		Maximize,
+		MicVocal,
 		Type,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
@@ -34,6 +35,7 @@
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
 		normalizeTextTimeline,
+		applyLyricsToTimeline,
 		type TextClip,
 		type TextTimeline,
 	} from '../../text';
@@ -83,6 +85,7 @@
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import TextTimelineLane from '../text/TextTimeline.svelte';
+	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import SequenceTimeline from './SequenceTimeline.svelte';
@@ -1608,6 +1611,7 @@
 	// don't want text.
 	let textTimeline = $state<TextTimeline>({ ...EMPTY_TEXT_TIMELINE });
 	let selectedTextClipId = $state<string | null>(null);
+	let lyricsOpen = $state(false);
 
 	// A still image with no track has no clock at all, so the text timeline
 	// supplies one: it loops the record window, which is what an export writes.
@@ -1706,7 +1710,74 @@
 			: textTimeline.lanes.length > 0
 				? { ...textTimeline, enabled: true }
 				: createTextTimeline();
-		if (!textTimeline.enabled) selectedTextClipId = null;
+		if (!textTimeline.enabled) {
+			selectedTextClipId = null;
+			lyricsOpen = false;
+		}
+	}
+
+	/** Enable the text timeline (when off) and open the lyrics-sync modal. */
+	function openLyricsSync() {
+		if (!textTimeline.enabled) {
+			pushTextHistory();
+			textTimeline =
+				textTimeline.lanes.length > 0
+					? { ...textTimeline, enabled: true }
+					: createTextTimeline();
+		}
+		lyricsOpen = true;
+	}
+
+	/** Transport for the lyrics-sync modal, on whichever clock owns the master
+		* timeline here: the track, the video, or the still-image loop. */
+	let lyricsSync = $derived<LyricsSyncProps | null>(
+		textTimeline.enabled
+			? {
+				isPlaying: textNeedsTransport
+					? stillPlaying
+					: audio.audioPlaying || videoIsPlaying,
+				spanStart: textNeedsTransport
+					? 0
+					: seqMasterIsAudio
+						? audio.spanStart
+						: videoSpanStart,
+				spanEnd: textNeedsTransport
+					? textDuration
+					: seqMasterIsAudio
+						? audio.spanEnd
+						: videoSpanEnd,
+				getCurrentTime: () =>
+					textNeedsTransport
+						? stillClock
+						: seqMasterIsAudio
+							? audio.trackCurrentTime
+							: videoClock,
+				onPlay: textNeedsTransport
+					? () => (stillPlaying = true)
+					: seqMasterIsAudio
+						? playSpan
+						: playVideo,
+				onPause: textNeedsTransport
+					? () => (stillPlaying = false)
+					: seqMasterIsAudio
+						? pauseTrack
+						: pauseVideo,
+				onSeek: textNeedsTransport
+					? (t) => (stillClock = t)
+					: seqMasterIsAudio
+						? seekTo
+						: seekVideoTo,
+				onApply: applyLyrics,
+			}
+		: null,
+	);
+
+	/** Drop the synced lines into the lyrics lane and select the first one. */
+	function applyLyrics(clips: TextClip[]) {
+		if (clips.length === 0) return;
+		pushTextHistory();
+		textTimeline = applyLyricsToTimeline(textTimeline, clips);
+		selectedTextClipId = clips[0].id;
 	}
 	let effectiveDuration = $derived(
 		audio.trackFile && audio.trackDuration > 0 && audio.spanEnd - audio.spanStart > 0
@@ -2008,6 +2079,14 @@
 				>
 					<Type size={14} />
 				</button>
+				<button
+					class="help-btn"
+					class:seq-active={lyricsOpen}
+					onclick={openLyricsSync}
+					title="Sync lyrics to the song: paste them, then press Space as it plays"
+				>
+					<MicVocal size={14} />
+				</button>
 				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
@@ -2154,6 +2233,8 @@
 				onTogglePlay={textNeedsTransport
 					? () => (stillPlaying = !stillPlaying)
 					: null}
+				{lyricsSync}
+				bind:lyricsOpen
 			/>
 		{/if}
 		<!-- One playhead in sequence mode with a track: hide the video transport,
