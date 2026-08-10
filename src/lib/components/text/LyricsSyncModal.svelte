@@ -7,8 +7,16 @@
 		RotateCcw,
 		X,
 	} from "lucide-svelte";
+	import { untrack } from "svelte";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
 	import { createLyricsClips, type TextClip } from "../../text";
+
+	/** The lyrics lane's current contents, as the modal reads them. */
+	export interface LyricsDraft {
+		lines: string[];
+		timings: number[];
+		clips: TextClip[];
+	}
 
 	/** Transport + apply hooks the host editor provides for the sync session. */
 	export interface LyricsSyncProps {
@@ -28,6 +36,9 @@
 		/** Kept mounted while closed so a half-done sync isn't lost. */
 		open: boolean;
 		currentTime: number;
+		/** What the lyrics lane holds right now. Opening seeds from this, so the
+		 * modal shows the same lines the timeline does. Null before any sync. */
+		existing?: LyricsDraft | null;
 		onClose: () => void;
 	}
 
@@ -38,6 +49,7 @@
 		spanEnd,
 		isPlaying,
 		getCurrentTime,
+		existing = null,
 		onPlay,
 		onPause,
 		onSeek,
@@ -53,6 +65,9 @@
 	let phase = $state<"edit" | "sync">("edit");
 	let lyricsText = $state("");
 	let timings = $state<(number | null)[]>([]);
+	/** Cleared by any edit, so the confirmation only ever describes the lane as
+	 * it stands. */
+	let applied = $state(false);
 
 	let panelEl = $state<HTMLElement | undefined>(undefined);
 
@@ -69,9 +84,33 @@
 	});
 	let allTimed = $derived(lines.length > 0 && activeIndex >= lines.length);
 
+	let wasOpen = false;
 	$effect(() => {
-		if (open && phase === "sync") panelEl?.focus();
+		if (!open) {
+			wasOpen = false;
+			return;
+		}
+		if (!wasOpen) {
+			wasOpen = true;
+			untrack(seedFromTimeline);
+		}
+		if (phase === "sync") panelEl?.focus();
 	});
+
+	/**
+	 * Open onto whatever the lyrics lane already holds, so the modal and the
+	 * timeline show the same lines — including timings nudged by dragging clips.
+	 * A sync left half-done survives instead: closing mid-pass to look at
+	 * something shouldn't throw the pass away.
+	 */
+	function seedFromTimeline() {
+		if (phase === "sync" && !allTimed) return;
+		if (!existing || existing.lines.length === 0) return;
+		lyricsText = existing.lines.join("\n");
+		timings = [...existing.timings];
+		phase = "sync";
+		applied = false;
+	}
 
 	function fmt(t: number): string {
 		const s = Math.max(0, t);
@@ -84,6 +123,7 @@
 		if (n === 0) return;
 		timings = new Array(n).fill(null);
 		phase = "sync";
+		applied = false;
 		onSeek(spanStart);
 		onPlay();
 	}
@@ -92,6 +132,7 @@
 		if (activeIndex >= lines.length) return;
 		const t = getCurrentTime ? getCurrentTime() : currentTime;
 		timings[activeIndex] = Math.min(spanEnd, Math.max(spanStart, t));
+		applied = false;
 		if (activeIndex + 1 >= lines.length) onPause();
 	}
 
@@ -99,6 +140,7 @@
 		if (activeIndex === 0) return;
 		const i = activeIndex - 1;
 		timings[i] = null;
+		applied = false;
 		const prev = i > 0 ? (timings[i - 1] ?? spanStart) : spanStart;
 		onSeek(Math.max(spanStart, prev));
 	}
@@ -109,6 +151,7 @@
 		if (i < 0 || i >= lines.length) return;
 		const anchor = timings[i] ?? timings[i - 1] ?? spanStart;
 		for (let k = i; k < timings.length; k++) timings[k] = null;
+		applied = false;
 		onSeek(Math.max(spanStart, anchor - LEAD_IN));
 	}
 
@@ -118,6 +161,7 @@
 			if (t != null)
 				timings[i] = Math.min(spanEnd, Math.max(spanStart, t + delta));
 		}
+		applied = false;
 	}
 
 	function togglePlay() {
@@ -125,11 +169,20 @@
 		else onPlay();
 	}
 
+	/** Write the lines into the lane and stay put, so the result is visible and
+	 * still nudgeable. The lane's own clips go in as `previous`, which is what
+	 * keeps per-line effect chains alive across a re-apply. */
 	function apply() {
 		if (!allTimed) return;
-		onApply(createLyricsClips(lines, timings as number[], spanEnd));
-		phase = "edit";
-		onClose();
+		onApply(
+			createLyricsClips(
+				lines,
+				timings as number[],
+				spanEnd,
+				existing?.clips ?? [],
+			),
+		);
+		applied = true;
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -213,6 +266,7 @@
 				oninput={(e) => {
 					lyricsText = (e.currentTarget as HTMLTextAreaElement).value;
 					timings = [];
+					applied = false;
 				}}
 			></textarea>
 			<p class="hint">
@@ -221,7 +275,7 @@
 					: "Paste the lyrics above, then sync them to the music."}
 			</p>
 			<div class="actions">
-				<button class="ghost" onclick={onClose}>Cancel</button>
+				<button class="ghost" onclick={onClose}>Close</button>
 				<button
 					class="primary"
 					disabled={lines.length === 0}
@@ -241,7 +295,10 @@
 				</button>
 				<button
 					class="mark-btn"
-					title="Mark this line (Space)"
+					title={allTimed
+						? "Every line is timed — click one below to re-time it"
+						: "Mark this line (Space)"}
+					disabled={allTimed}
 					onclick={stamp}
 				>
 					Mark line
@@ -285,14 +342,19 @@
 					</li>
 				{/each}
 			</ol>
-			<p class="hint">
-				Space marks this line · Backspace steps back · P plays or pauses ·
-				click a line to re-time it
+			<p class="hint" class:ok={applied}>
+				{#if applied}
+					On the timeline as the Lyrics lane — keep nudging and apply again,
+					or close.
+				{:else}
+					Space marks this line · Backspace steps back · P plays or pauses ·
+					click a line to re-time it
+				{/if}
 			</p>
 			<div class="actions">
 				<button
 					class="ghost"
-					title="Restart from the beginning"
+					title="Clear every timing and sync again from the top"
 					onclick={startSync}
 				>
 					<RotateCcw size={12} />Restart
@@ -300,9 +362,9 @@
 				<button class="ghost" onclick={() => (phase = "edit")}
 					>Edit lyrics</button
 				>
-				<button class="ghost" onclick={onClose}>Cancel</button>
+				<button class="ghost" onclick={onClose}>Close</button>
 				<button class="primary" disabled={!allTimed} onclick={apply}>
-					Apply to timeline
+					{applied ? "Re-apply" : "Apply to timeline"}
 				</button>
 			</div>
 		{/if}
@@ -512,6 +574,10 @@
 		line-height: 1.35;
 	}
 
+	.hint.ok {
+		color: #6f9f6f;
+	}
+
 	.actions {
 		display: flex;
 		justify-content: flex-end;
@@ -529,8 +595,13 @@
 		cursor: pointer;
 	}
 
-	.mark-btn:hover {
+	.mark-btn:hover:not(:disabled) {
 		background: #3a6391;
+	}
+
+	.mark-btn:disabled {
+		opacity: 0.45;
+		cursor: default;
 	}
 
 	.primary {

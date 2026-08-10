@@ -8,6 +8,7 @@ export {
   createLyricsClips,
   LYRICS_LANE_NAME,
   LYRICS_STYLE,
+  lyricsDraftFromTimeline,
   lyricsLane,
 } from "./lyrics";
 export { drawTextToCanvas, textSignature } from "./render-text-clip";

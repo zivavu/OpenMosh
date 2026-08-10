@@ -1,6 +1,8 @@
 /**
- * Rolling per-band normalization: reports where a level sits within the band's
- * recent dynamic range, not its absolute loudness.
+ * Per-band temporal state: the smoothing that steadies a band level, and the
+ * rolling normalization that reports where it sits within the band's recent
+ * dynamic range rather than its absolute loudness. Both are keyed by band and
+ * both are cleared together on a discontinuity.
  *
  * Band levels are dB-scaled FFT means, so limited music (hardstyle, most modern
  * EDM) moves only ~0.15 between break and drop and no fixed curve can serve both
@@ -27,10 +29,47 @@ interface BandEnvelope {
 }
 
 const envelopes = new Map<string, BandEnvelope>();
+const smoothed = new Map<string, number>();
 
 /** Call on any signal discontinuity: seek, track change, export start. */
 export function resetAutoRange(): void {
    envelopes.clear();
+   smoothed.clear();
+}
+
+/**
+ * Time constant of the band smoother. Chosen to match what the preview used to
+ * get for free from AnalyserNode's default smoothingTimeConstant of 0.8:
+ * τ = -1 / (60 · ln 0.8) ≈ 75 ms at 60 fps.
+ */
+const SMOOTH_TAU = 0.075;
+
+/**
+ * One-pole smoothing of a raw band level, stepped in seconds.
+ *
+ * The preview took this from the AnalyserNode, which the offline export has no
+ * equivalent for — so a render fed auto-ranging raw, twitchy per-frame FFT
+ * values while the preview fed it a smoothed curve. Since the ceiling below
+ * snaps to any peak, those spikes pinned it and left the effect reading near
+ * its floor for most frames: the render stopped tracking the beat the preview
+ * rode. Doing it here, off the frame delta, is what makes the two agree — and
+ * frees the preview from its dependence on the monitor's refresh rate.
+ */
+export function smoothBandLevel(
+   key: string,
+   level: number,
+   dt: number,
+): number {
+   const prev = smoothed.get(key);
+   if (prev === undefined) {
+      smoothed.set(key, level);
+      return level;
+   }
+   // A stalled clock would otherwise snap the smoother straight to the input.
+   const step = Math.max(0, Math.min(dt, 0.25));
+   const next = prev + (level - prev) * (1 - Math.exp(-step / SMOOTH_TAU));
+   smoothed.set(key, next);
+   return next;
 }
 
 /** Position of `level` in the band's recent range, in [0, 1]. */

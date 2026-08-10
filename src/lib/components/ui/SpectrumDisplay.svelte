@@ -56,9 +56,18 @@
 		const bars = 64;
 		const barW = w / bars;
 		let rafId: number;
+		// The analyser hands out raw bins now (its smoothing moved into the
+		// shared band level, so exports get it too), so the bars are damped here
+		// instead. Display-only: nothing downstream reads these.
+		const shown = new Float32Array(bars);
+		let lastFrame = performance.now();
 
 		function draw() {
 			if (!canvas || !ctx) return;
+			const now = performance.now();
+			const dt = Math.min((now - lastFrame) / 1000, 0.25);
+			lastFrame = now;
+			const damp = 1 - Math.exp(-dt / 0.075);
 			ctx.fillStyle = '#1a1a1a';
 			ctx.fillRect(0, 0, w, h);
 			for (let i = 0; i < bars; i++) {
@@ -79,7 +88,8 @@
 						if (data[b] > peak) peak = data[b];
 					}
 				}
-				const level = peak / 255;
+				shown[i] += (peak - shown[i]) * damp;
+				const level = shown[i] / 255;
 				const inRange = hiHz >= freqMin && loHz <= freqMax;
 				ctx.fillStyle = inRange
 					? 'rgba(120, 180, 255, 0.8)'

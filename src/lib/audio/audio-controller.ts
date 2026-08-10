@@ -21,6 +21,11 @@ export function createAudioGraph(
   const normalizeGain = ctx.createGain();
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 2048;
+  // Raw bins. Smoothing lives in smoothBandLevel, which an export runs too —
+  // left at the 0.8 default this path would be smoothed twice over and a render
+  // not at all. It also ran per rAF tick, so a 144 Hz monitor previewed
+  // something a 60 Hz one never saw.
+  analyser.smoothingTimeConstant = 0;
   const gain = ctx.createGain();
   source.connect(normalizeGain);
   normalizeGain.connect(analyser);
@@ -47,6 +52,11 @@ export function createOutputAudioGraph(): AudioGraphState {
   const normalizeGain = ctx.createGain();
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 2048;
+  // Raw bins. Smoothing lives in smoothBandLevel, which an export runs too —
+  // left at the 0.8 default this path would be smoothed twice over and a render
+  // not at all. It also ran per rAF tick, so a 144 Hz monitor previewed
+  // something a 60 Hz one never saw.
+  analyser.smoothingTimeConstant = 0;
   const gain = ctx.createGain();
   normalizeGain.connect(analyser);
   analyser.connect(gain);
