@@ -354,10 +354,8 @@
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
-			// Opened from a library song: adopt its id straight away. The
-			// library's auto-save skips files it already holds, so nothing else
-			// would set this, and the sequence and pool stores are keyed on it.
-			if (initialTrackId) currentTrackId = initialTrackId;
+			// Opened from a saved song: adopt its id and its stored timeline.
+			if (initialTrackId) adoptLibraryTrack(initialTrackId);
 		}
 	});
 
@@ -454,6 +452,36 @@
 		currentTrackId = null;
 	}
 
+	/**
+	 * Pull back whatever was stored against a song. Returns false when it has
+	 * nothing saved, so callers can decide what an empty result means.
+	 *
+	 * Every path that learns a track id has to run this, not just loading one
+	 * from the library: a track picked on the upload screen is adopted by id
+	 * only, and without a restore its timeline would sit unreachable in storage.
+	 */
+	function applySavedTrackState(trackId: string): boolean {
+		const savedSpan = spanStore.load(trackId);
+		if (savedSpan !== null) {
+			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
+		}
+		const savedSeq = seqStore.load(trackId);
+		if (savedSeq === null) return false;
+		sequenceSegments = savedSeq.segments;
+		setSequenceEnabled(savedSeq.enabled);
+		sequenceBpm = savedSeq.bpm ?? 0;
+		selectedSegmentId = null;
+		return true;
+	}
+
+	/** The editor learned a track's library id without being asked to load it —
+	 * the upload screen's track, saved or already present. */
+	function adoptLibraryTrack(trackId: string) {
+		if (currentTrackId === trackId) return;
+		currentTrackId = trackId;
+		applySavedTrackState(trackId);
+	}
+
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		// Moving between two songs starts the new one clean; arriving at the
 		// first song keeps what's on screen, since that work was made for it and
@@ -462,17 +490,7 @@
 		clearTrack();
 		currentTrackId = trackId;
 		audio.trackFile = file;
-		const savedSpan = spanStore.load(trackId);
-		if (savedSpan !== null) {
-			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
-		}
-		const savedSeq = seqStore.load(trackId);
-		if (savedSeq !== null) {
-			sequenceSegments = savedSeq.segments;
-			setSequenceEnabled(savedSeq.enabled);
-			sequenceBpm = savedSeq.bpm ?? 0;
-			selectedSegmentId = null;
-		} else if (switchingSongs) {
+		if (!applySavedTrackState(trackId) && switchingSongs) {
 			// Empty rather than a fresh segment: the seeding effect rebuilds one
 			// once the new track reports its duration. The media pool is
 			// deliberately left alone — see the pool restore effect.
@@ -1698,7 +1716,7 @@
 		mainPlaying={audio.audioPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
-		onAutoAdded={(trackId) => (currentTrackId = trackId)}
+		onAutoAdded={adoptLibraryTrack}
 	/>
 	<div class="main-area">
 		<div class="top-bar">
