@@ -10,6 +10,11 @@ import {
 import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
 import { DEFAULT_AUTO_RANGE_AMOUNT, resetAutoRange } from './audio/auto-range';
 import { stretchAudioBuffer } from './audio/time-stretch';
+import {
+	resolveTextLayersAt,
+	type ResolvedTextLayer,
+	type TextTimeline,
+} from './text';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 
@@ -33,12 +38,17 @@ export interface RecordOptions {
 	 * Return `true` to skip the default `renderer.render()` call (e.g. when transition already rendered).
 	 * Return a function to replace the default render: it is invoked AFTER per-frame
 	 * audio data has been applied to the active effects, so custom renders (e.g.
-	 * transitions blending two chains) still get fresh audio-linked values.
+	 * transitions blending two chains) still get fresh audio-linked values. It is
+	 * handed this frame's text layers so a custom render can composite them too.
 	 * May return a Promise. */
 	onBeforeRender?: (
 		frameIndex: number,
 		time: number,
-	) => boolean | void | (() => void) | Promise<boolean | void | (() => void)>;
+	) =>
+		| boolean
+		| void
+		| ((layers: ResolvedTextLayer[]) => void)
+		| Promise<boolean | void | ((layers: ResolvedTextLayer[]) => void)>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
 	/** When true, the audio is looped to match the recording duration. */
@@ -49,6 +59,13 @@ export interface RecordOptions {
 	normalizeGain?: number;
 	/** Blend between raw (0) and auto-ranged (1) levels. Must match the preview. */
 	autoRangeAmount?: number;
+	/** Text lanes composited into the chain, resolved per frame. */
+	textTimeline?: TextTimeline | null;
+	/** Added to the frame time to reach the timeline's clock — an export that
+	 * starts at an audio span offset still lands on the clips you placed. */
+	textTimeOffset?: number;
+	/** Frame-time-to-master-clock rate, for sources played back off-speed. */
+	textTimeScale?: number;
 }
 
 /** Encoding backend that consumes rendered canvas frames. */
@@ -162,6 +179,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		normalizeGain = 1.0,
 		audioSpeed = 1,
 		autoRangeAmount = DEFAULT_AUTO_RANGE_AMOUNT,
+		textTimeline = null,
+		textTimeOffset = 0,
+		textTimeScale = 1,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -498,6 +518,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			const renderResult = onBeforeRender?.(i, time);
 			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
+			const textLayers = textTimeline
+				? resolveTextLayersAt(textTimeline, textTimeOffset + time * textTimeScale)
+				: [];
 			applyFrameAudio(
 				renderEffects,
 				frameAudioData,
@@ -506,8 +529,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				frameDuration,
 				autoRangeAmount,
 			);
-			if (typeof skipRender === 'function') skipRender();
-			else if (!skipRender) renderer.render(renderEffects, time);
+			if (typeof skipRender === 'function') skipRender(textLayers);
+			else if (!skipRender) renderer.render(renderEffects, time, textLayers);
 			await sink.submit(i, time);
 		}
 

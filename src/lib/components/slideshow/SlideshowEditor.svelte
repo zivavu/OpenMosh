@@ -2,12 +2,24 @@
 	import { fileDrop } from '../../actions/file-drop';
 	import {
 		generateId,
+		getDefinition,
 		loadInitialEffects,
 		loadPresets,
 		setVolumeLink,
 		type EffectInstance,
 		type Preset,
 	} from '../../effects';
+	import {
+		createTextHistory,
+		createTextTimeline,
+		EMPTY_TEXT_TIMELINE,
+		normalizeTextTimeline,
+		resolveTextLayersAt,
+		type TextClip,
+		type TextTimeline,
+	} from '../../text';
+	import TextTimelineLane from '../text/TextTimeline.svelte';
+	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import type { GlRenderer } from '../../gl/renderer';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
 	import { detectBpm } from '../../slideshow/bpm-detector';
@@ -20,7 +32,6 @@
 		SlideVideoSampler,
 	} from '../../slideshow/video-sampler';
 	import { showToast } from '../ui/toast.svelte';
-	import { ensureFontLoaded } from '../../text-overlay';
 	import { shuffleInPlace } from '../../utils';
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
@@ -306,7 +317,14 @@
 	function loadConfig(): SlideshowConfig {
 		try {
 			const raw = localStorage.getItem(CONFIG_KEY);
-			if (raw) return { ...DEFAULT_SLIDESHOW_CONFIG, ...JSON.parse(raw) };
+			if (raw) {
+				const saved = JSON.parse(raw);
+				return {
+					...DEFAULT_SLIDESHOW_CONFIG,
+					...saved,
+					text: normalizeTextTimeline(saved.text),
+				};
+			}
 		} catch {}
 		return { ...DEFAULT_SLIDESHOW_CONFIG };
 	}
@@ -324,7 +342,8 @@
 	interface SegmentsEntry {
 		segments: SlideshowConfig['segments'];
 		bpm?: number;
-		textOverlay?: SlideshowConfig['textOverlay'];
+		/** Absent on entries saved before the text timeline existed. */
+		text?: TextTimeline;
 		spanStart?: number;
 		spanEnd?: number;
 	}
@@ -339,7 +358,7 @@
 		segmentsStore.save(trackId, {
 			segments: config.segments,
 			bpm: config.bpm,
-			textOverlay: config.textOverlay,
+			text: $state.snapshot(config.text) as TextTimeline,
 			spanStart: audio.spanStart,
 			spanEnd: audio.spanEnd,
 		});
@@ -443,7 +462,7 @@
 				if (frame) {
 					glRenderer.updateSourceFrame(frame);
 					frame.close();
-					glRenderer.render(effects, 0);
+					glRenderer.render(effects, 0, currentTextLayers());
 				}
 			});
 		}
@@ -458,7 +477,7 @@
 		if (previewImageSrc || !glRenderer || naturalWidth == null) return;
 		if (previewRenderSize) {
 			glRenderer.resize(previewRenderSize.width, previewRenderSize.height);
-			if (!previewPlaying) glRenderer.render(effects, 0);
+			if (!previewPlaying) glRenderer.render(effects, 0, currentTextLayers());
 		}
 	});
 
@@ -478,7 +497,9 @@
 			e.enabled;
 			for (const k of Object.keys(e.values)) e.values[k];
 		}
-		glRenderer.render(effects, 0);
+		textTime;
+		textTimeline;
+		glRenderer.render(effects, 0, currentTextLayers());
 	});
 
 	// ── Audio ──
@@ -560,8 +581,8 @@
 			...config,
 			segments: saved.segments,
 			...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
-			...(saved.textOverlay !== undefined
-				? { textOverlay: saved.textOverlay }
+			...(saved.text !== undefined
+				? { text: normalizeTextTimeline(saved.text) }
 				: {}),
 		};
 		if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
@@ -610,12 +631,6 @@
 	let previewRafId = $state<number | null>(null);
 	let previewEffects: EffectInstance[] = $state([]);
 	let previewDriver: SlideshowFrameDriver | null = null;
-
-	// Load the configured overlay font (covers fonts restored from a saved config)
-	$effect(() => {
-		const family = config.textOverlay?.style?.fontFamily;
-		if (family) void ensureFontLoaded(family);
-	});
 
 	const imageCache = new Map<string, HTMLImageElement>();
 	const IMAGE_CACHE_SIZE = 12;
@@ -726,9 +741,11 @@
 				previewEffects = frame.effects;
 			}
 
+			textTime = t;
 			glRenderer.render(
 				previewEffects.length > 0 ? previewEffects : effects,
 				nowMs / 1000,
+				currentTextLayers(),
 			);
 
 			previewRafId = requestAnimationFrame(tick);
@@ -745,9 +762,6 @@
 		}
 		if (audio.audioPlaying) {
 			audio.pauseAudio();
-		}
-		if (glRenderer) {
-			glRenderer.clearTextOverlay();
 		}
 		previewDriver?.dispose();
 		previewDriver = null;
@@ -784,6 +798,69 @@
 	let recordFps = $state(60);
 	/** Export length for silent (no-track) recordings. */
 	let recordDuration = $state(10);
+
+	// ── Text timeline ──
+	// Keyed to audio time, the same clock the beat driver runs on.
+	let selectedTextClipId = $state<string | null>(null);
+	let textTime = $state(0);
+	const textHistory = createTextHistory();
+
+	let textTimeline = $derived(config.text ?? EMPTY_TEXT_TIMELINE);
+	let textDuration = $derived(
+		audio.trackFile && audio.trackDuration > 0
+			? audio.trackDuration
+			: recordDuration,
+	);
+	let textSnapGrid = $derived(config.bpm > 0 ? 60 / config.bpm / 4 : 0);
+	let textChainLabels = $derived(
+		effects.filter((e) => e.enabled).map((e) => getDefinition(e.defId)?.name ?? e.defId),
+	);
+	let selectedTextClip = $derived.by(() => {
+		if (!selectedTextClipId) return null;
+		for (const lane of textTimeline.lanes) {
+			const clip = lane.clips.find((c) => c.id === selectedTextClipId);
+			if (clip) return clip;
+		}
+		return null;
+	});
+
+	/** Layers for whatever the preview is showing right now. */
+	function currentTextLayers() {
+		return resolveTextLayersAt(textTimeline, textTime);
+	}
+
+	function setTextTimeline(next: TextTimeline) {
+		onConfigChange({ ...config, text: next });
+	}
+
+	function pushTextHistory(coalesceKey?: string) {
+		textHistory.push(
+			$state.snapshot(textTimeline) as TextTimeline,
+			coalesceKey,
+		);
+	}
+
+	function updateTextClip(next: TextClip) {
+		setTextTimeline({
+			...textTimeline,
+			lanes: textTimeline.lanes.map((lane) => ({
+				...lane,
+				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
+			})),
+		});
+	}
+
+	function toggleTextTimeline() {
+		pushTextHistory();
+		setTextTimeline(
+			textTimeline.enabled
+				? { ...textTimeline, enabled: false }
+				: textTimeline.lanes.length > 0
+					? { ...textTimeline, enabled: true }
+					: createTextTimeline(),
+		);
+		if (!textTimeline.enabled) selectedTextClipId = null;
+	}
 	const recordingState = createRecordingState();
 
 	async function startRecording() {
@@ -837,7 +914,7 @@
 			if (previewRenderSize) {
 				glRenderer.resize(previewRenderSize.width, previewRenderSize.height);
 			}
-			glRenderer.render(effects, performance.now() / 1000);
+			glRenderer.render(effects, performance.now() / 1000, currentTextLayers());
 		}
 	}
 
@@ -871,12 +948,23 @@
 		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
+			// A selected text clip means the last thing edited was text.
+			if (selectedTextClipId && textHistory.canRedo) {
+				const next = textHistory.redo();
+				if (next) setTextTimeline(next);
+				return;
+			}
 			moshSession.redoEdit();
 			return;
 		}
 		if (mod && key === 'z') {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
+			if (selectedTextClipId && textHistory.canUndo) {
+				const prev = textHistory.undo();
+				if (prev) setTextTimeline(prev);
+				return;
+			}
 			moshSession.undoEdit();
 			return;
 		}
@@ -963,6 +1051,8 @@
 				if (view === 'grid' && previewPlaying) stopPreview();
 			}}
 			onExit={onExit ? handleExit : undefined}
+			textEnabled={textTimeline.enabled}
+			onToggleText={toggleTextTimeline}
 		/>
 
 		{#if activeView === 'grid'}
@@ -1028,6 +1118,22 @@
 			onCancel={cancelRecording}
 		/>
 
+		{#if textTimeline.enabled}
+			<TextTimelineLane
+				timeline={textTimeline}
+				trackDuration={textDuration}
+				currentTime={textTime}
+				snapGrid={textSnapGrid}
+				chainLabels={textChainLabels}
+				bind:selectedClipId={selectedTextClipId}
+				onChange={setTextTimeline}
+				onBeforeEdit={pushTextHistory}
+				onSeek={(t) => {
+					textTime = t;
+					if (audio.trackFile) audio.seekTo(t);
+				}}
+			/>
+		{/if}
 		{#if !audio.trackFile}
 			<TrackAddBar
 				onOpenPicker={openTrackPicker}
@@ -1071,6 +1177,18 @@
 			/>
 		{/snippet}
 		{#snippet effectsPanel()}
+			{#if selectedTextClip}
+				<button class="text-back-btn" onclick={() => (selectedTextClipId = null)}>
+					← Back to image effects
+				</button>
+				<TextClipPanel
+					clip={selectedTextClip}
+					onChange={updateTextClip}
+					onBeforeEdit={pushTextHistory}
+					hasTrack={!!audio.trackFile}
+					spectrumData={audio.spectrumData}
+				/>
+			{:else}
 			<EffectsPanel
 				bind:effects
 				hasTrack={!!audio.trackFile}
@@ -1082,6 +1200,7 @@
 				onBeforeUserEdit={panelBeforeEdit}
 				onEffectsReplaced={endPanelBurst}
 			/>
+			{/if}
 		{/snippet}
 	</MobileSheet>
 
@@ -1149,6 +1268,22 @@
 		border: 2px dashed #888;
 		border-radius: 8px;
 		pointer-events: none;
+	}
+
+	.text-back-btn {
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border: none;
+		border-bottom: 1px solid #2a2a2a;
+		background: #161616;
+		color: #999;
+		font-size: 0.72rem;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.text-back-btn:hover {
+		color: #fff;
 	}
 
 	.drop-overlay {

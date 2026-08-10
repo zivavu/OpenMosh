@@ -44,7 +44,7 @@ export interface SlideshowSlide {
   height?: number;
 }
 
-import type { TextOverlayConfig } from "../text-overlay";
+import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "../text";
 
 export interface SlideshowConfig {
   bpm: number;
@@ -62,13 +62,11 @@ export interface SlideshowConfig {
   moshAudioLinkStrength: number;
   loop: boolean;
   segments: TimelineSegment[];
-  /** Text overlay (phrases from dictionary, per beat/frame). */
-  textOverlay: TextOverlayConfig;
+  /** Optional timed text lanes, keyed to audio time. */
+  text: TextTimeline;
   /** Persisted alongside the config; the live value lives on the AudioManager. */
   outputVolume: number;
 }
-
-import { DEFAULT_TEXT_OVERLAY_CONFIG } from "../text-overlay";
 
 export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
   bpm: 120,
@@ -82,6 +80,6 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
   moshAudioLinkStrength: 0.8,
   loop: true,
   segments: [],
-  textOverlay: { ...DEFAULT_TEXT_OVERLAY_CONFIG },
+  text: { ...EMPTY_TEXT_TIMELINE },
   outputVolume: 1,
 };

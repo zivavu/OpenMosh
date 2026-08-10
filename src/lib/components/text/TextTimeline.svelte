@@ -1,0 +1,561 @@
+<script lang="ts">
+	import { Eye, EyeOff, Pause, Play, Plus, Trash2 } from 'lucide-svelte';
+	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
+	import { isTextEntryTarget } from '../../editor/shortcut-target';
+	import {
+		addClip,
+		createTextClip,
+		createTextLane,
+		freeRangeAt,
+		MIN_CLIP_LENGTH,
+		moveClip,
+		removeClip,
+		resizeClip,
+		snapTime,
+		updateLane,
+		type TextLane,
+		type TextTimeline,
+	} from '../../text';
+
+	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
+	const DEFAULT_CLIP_LENGTH = 2;
+	const LANE_HEIGHT = 30;
+	/** Chain position meaning "over the finished frame". */
+	const ON_TOP = Number.MAX_SAFE_INTEGER;
+
+	interface Props {
+		timeline: TextTimeline;
+		trackDuration: number;
+		currentTime?: number;
+		/** Snap grid in seconds; 0 disables snapping. Alt overrides it per drag. */
+		snapGrid?: number;
+		/** Names of the enabled main effects, in order — the chain-position picker. */
+		chainLabels?: string[];
+		selectedClipId?: string | null;
+		onChange: (timeline: TextTimeline) => void;
+		/** Called before a change lands, while the pre-edit state is intact. */
+		onBeforeEdit?: (coalesceKey?: string) => void;
+		/** Scrubbing the ruler. Omit when the mode has its own transport. */
+		onSeek?: (time: number) => void;
+		/** Given both, the ruler grows a play button — the only transport a still
+		 * image has, since there is no track or video to drive one. */
+		isPlaying?: boolean;
+		onTogglePlay?: (() => void) | null;
+	}
+
+	let {
+		timeline,
+		trackDuration,
+		currentTime = 0,
+		snapGrid = 0,
+		chainLabels = [],
+		selectedClipId = $bindable(null),
+		onChange,
+		onBeforeEdit,
+		onSeek,
+		isPlaying = false,
+		onTogglePlay = null,
+	}: Props = $props();
+
+	let trackEl = $state<HTMLElement | undefined>(undefined);
+	const vp = new TimelineViewport(
+		() => trackDuration,
+		() => trackEl?.getBoundingClientRect() ?? null,
+	);
+
+	/** Every lane track shares one geometry, so any of them can measure the
+	 * viewport — and scrolling over any of them should zoom all of them. */
+	function laneTrack(node: HTMLElement) {
+		trackEl = node;
+		const detachWheel = vp.attachWheel(node);
+		return {
+			destroy() {
+				detachWheel();
+				if (trackEl === node) trackEl = undefined;
+			},
+		};
+	}
+
+	// Follow the track: a new duration resets the window to the whole thing.
+	$effect(() => {
+		const d = trackDuration;
+		if (d > 0 && vp.viewEnd <= 0) {
+			vp.viewStart = 0;
+			vp.viewEnd = d;
+		} else if (d > 0 && vp.viewEnd > d) {
+			vp.viewStart = Math.min(vp.viewStart, d);
+			vp.viewEnd = d;
+		}
+	});
+
+	let drag = $state<{
+		laneId: string;
+		clipId: string;
+		mode: 'move' | 'start' | 'end';
+		/** Seconds between the pointer and the clip's start, for move drags. */
+		grabOffset: number;
+	} | null>(null);
+
+	function timeAt(clientX: number, altKey: boolean): number {
+		const t = vp.clientXToTime(clientX);
+		return altKey ? t : snapTime(t, snapGrid);
+	}
+
+	function laneOf(laneId: string): TextLane | undefined {
+		return timeline.lanes.find((l) => l.id === laneId);
+	}
+
+	function addLane() {
+		onBeforeEdit?.();
+		onChange({
+			...timeline,
+			lanes: [
+				...timeline.lanes,
+				createTextLane(`Text ${timeline.lanes.length + 1}`),
+			],
+		});
+	}
+
+	function deleteLane(laneId: string) {
+		onBeforeEdit?.();
+		onChange({
+			...timeline,
+			lanes: timeline.lanes.filter((l) => l.id !== laneId),
+		});
+	}
+
+	function setLane<K extends keyof TextLane>(
+		laneId: string,
+		key: K,
+		value: TextLane[K],
+	) {
+		onBeforeEdit?.();
+		onChange(updateLane(timeline, laneId, (l) => ({ ...l, [key]: value })));
+	}
+
+	function addClipAt(laneId: string, time: number) {
+		const lane = laneOf(laneId);
+		if (!lane) return;
+		const gap = freeRangeAt(lane, time, trackDuration);
+		if (!gap) return;
+		const start = Math.max(gap.start, Math.min(time, gap.end - MIN_CLIP_LENGTH));
+		const end = Math.min(start + DEFAULT_CLIP_LENGTH, gap.end);
+		const clip = createTextClip(start, end, 'TEXT');
+		onBeforeEdit?.();
+		onChange(updateLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)));
+		selectedClipId = clip.id;
+	}
+
+	function deleteClip(laneId: string, clipId: string) {
+		onBeforeEdit?.();
+		onChange(updateLane(timeline, laneId, (l) => removeClip(l, clipId)));
+		if (selectedClipId === clipId) selectedClipId = null;
+	}
+
+	function onTrackPointerDown(e: PointerEvent, laneId: string) {
+		if (e.button !== 0 || trackDuration <= 0) return;
+		// Empty space: drop a clip here rather than making the user find a button.
+		addClipAt(laneId, timeAt(e.clientX, e.altKey));
+	}
+
+	function onClipPointerDown(
+		e: PointerEvent,
+		laneId: string,
+		clipId: string,
+		mode: 'move' | 'start' | 'end',
+	) {
+		if (e.button !== 0) return;
+		e.stopPropagation();
+		selectedClipId = clipId;
+		const clip = laneOf(laneId)?.clips.find((c) => c.id === clipId);
+		if (!clip) return;
+		drag = {
+			laneId,
+			clipId,
+			mode,
+			grabOffset: vp.clientXToTime(e.clientX) - clip.start,
+		};
+		// One undo entry per gesture, not per pointermove.
+		onBeforeEdit?.(`text-${mode}-${clipId}`);
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	function onPointerMove(e: PointerEvent) {
+		if (!drag) return;
+		const t = timeAt(e.clientX, e.altKey);
+		const { laneId, clipId, mode, grabOffset } = drag;
+		onChange(
+			updateLane(timeline, laneId, (lane) =>
+				mode === 'move'
+					? moveClip(lane, clipId, t - grabOffset, trackDuration)
+					: resizeClip(lane, clipId, mode, t, trackDuration),
+			),
+		);
+	}
+
+	function onPointerUp(e: PointerEvent) {
+		if (!drag) return;
+		drag = null;
+		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+	}
+
+	function onKeyDown(e: KeyboardEvent) {
+		if (isTextEntryTarget(e.target)) return;
+		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		if (!selectedClipId) return;
+		const lane = timeline.lanes.find((l) =>
+			l.clips.some((c) => c.id === selectedClipId),
+		);
+		if (!lane) return;
+		e.preventDefault();
+		deleteClip(lane.id, selectedClipId);
+	}
+
+	let scrubbing = $state(false);
+
+	function onRulerPointerDown(e: PointerEvent) {
+		if (e.button !== 0 || !onSeek || trackDuration <= 0) return;
+		scrubbing = true;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		onSeek(vp.clientXToTime(e.clientX));
+	}
+
+	function onRulerPointerMove(e: PointerEvent) {
+		if (!scrubbing || !onSeek) return;
+		onSeek(vp.clientXToTime(e.clientX));
+	}
+
+	function onRulerPointerUp(e: PointerEvent) {
+		if (!scrubbing) return;
+		scrubbing = false;
+		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+	}
+
+	let playheadPct = $derived(vp.toPct(currentTime));
+</script>
+
+<svelte:window onkeydown={onKeyDown} />
+
+<div class="text-tl">
+	<div class="tl-head">
+		<span class="tl-title">Text</span>
+		<button class="tl-btn" onclick={addLane} title="Add a text lane">
+			<Plus size={12} /> Lane
+		</button>
+		{#if trackDuration <= 0}
+			<span class="tl-hint">No timeline yet — add media or a track.</span>
+		{:else}
+			<span class="tl-hint">
+				Click a lane to add text · drag to move · drag an edge to trim
+				{#if snapGrid > 0}· hold Alt for free placement{/if}
+			</span>
+		{/if}
+	</div>
+
+	{#if trackDuration > 0}
+		<div class="lane-row">
+			<div class="lane-head ruler-head">
+				{#if onTogglePlay}
+					<button
+						class="lane-eye"
+						title={isPlaying ? 'Pause' : 'Play'}
+						onclick={onTogglePlay}
+					>
+						{#if isPlaying}<Pause size={12} />{:else}<Play size={12} />{/if}
+					</button>
+				{/if}
+				<span class="ruler-time">{currentTime.toFixed(2)}s</span>
+			</div>
+			<div
+				class="ruler"
+				class:seekable={!!onSeek}
+				use:laneTrack
+				role="slider"
+				tabindex="-1"
+				aria-label="Text timeline playhead"
+				aria-valuemin={0}
+				aria-valuemax={trackDuration}
+				aria-valuenow={currentTime}
+				onpointerdown={onRulerPointerDown}
+				onpointermove={onRulerPointerMove}
+				onpointerup={onRulerPointerUp}
+				onpointercancel={onRulerPointerUp}
+			>
+				{#if playheadPct >= 0 && playheadPct <= 100}
+					<div class="playhead" style="left: {playheadPct}%"></div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	{#each timeline.lanes as lane (lane.id)}
+		<div class="lane-row">
+			<div class="lane-head">
+				<button
+					class="lane-eye"
+					class:off={!lane.enabled}
+					title={lane.enabled ? 'Hide this lane' : 'Show this lane'}
+					onclick={() => setLane(lane.id, 'enabled', !lane.enabled)}
+				>
+					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+				</button>
+				<select
+					class="lane-chain"
+					title="Where this text meets the effect chain"
+					value={lane.chainIndex >= chainLabels.length ? ON_TOP : lane.chainIndex}
+					onchange={(e) =>
+						setLane(
+							lane.id,
+							'chainIndex',
+							+(e.currentTarget as HTMLSelectElement).value,
+						)}
+				>
+					<option value={ON_TOP}>On top</option>
+					{#each chainLabels as label, i (i)}
+						<option value={i}>From “{label}”</option>
+					{/each}
+				</select>
+				<button
+					class="lane-del"
+					title="Delete this lane"
+					onclick={() => deleteLane(lane.id)}
+				>
+					<Trash2 size={12} />
+				</button>
+			</div>
+
+			<div
+				class="lane-track"
+				use:laneTrack
+				style="height: {LANE_HEIGHT}px"
+				role="group"
+				aria-label="{lane.name} clips"
+				onpointerdown={(e) => onTrackPointerDown(e, lane.id)}
+				onpointermove={onPointerMove}
+				onpointerup={onPointerUp}
+				onpointercancel={onPointerUp}
+			>
+				{#each lane.clips as clip (clip.id)}
+					{@const left = vp.toPct(clip.start)}
+					{@const width = vp.toPct(clip.end) - left}
+					{#if left < 100 && left + width > 0}
+						<div
+							class="clip"
+							class:selected={clip.id === selectedClipId}
+							class:muted={!lane.enabled}
+							style="left: {left}%; width: {width}%"
+							role="button"
+							tabindex="0"
+							title={clip.text}
+							onpointerdown={(e) =>
+								onClipPointerDown(e, lane.id, clip.id, 'move')}
+						>
+							<span
+								class="clip-edge start"
+								role="presentation"
+								onpointerdown={(e) =>
+									onClipPointerDown(e, lane.id, clip.id, 'start')}
+							></span>
+							<span class="clip-label">{clip.text || '—'}</span>
+							<span
+								class="clip-edge end"
+								role="presentation"
+								onpointerdown={(e) =>
+									onClipPointerDown(e, lane.id, clip.id, 'end')}
+							></span>
+						</div>
+					{/if}
+				{/each}
+
+				{#if trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100}
+					<div class="playhead" style="left: {playheadPct}%"></div>
+				{/if}
+			</div>
+		</div>
+	{/each}
+
+	{#if timeline.lanes.length === 0}
+		<p class="tl-empty">No text lanes. Add one to put text on the timeline.</p>
+	{/if}
+</div>
+
+<style>
+	.text-tl {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 0.4rem 0.5rem;
+		border-top: 1px solid #2a2a2a;
+	}
+
+	.tl-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.tl-title {
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		color: #888;
+		text-transform: uppercase;
+	}
+
+	.tl-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0.15rem 0.4rem;
+		border: 1px solid #333;
+		border-radius: 4px;
+		background: #1a1a1a;
+		color: #ccc;
+		font-size: 0.7rem;
+		cursor: pointer;
+	}
+
+	.tl-btn:hover {
+		border-color: #555;
+		color: #fff;
+	}
+
+	.tl-hint,
+	.tl-empty {
+		color: #666;
+		font-size: 0.68rem;
+	}
+
+	.lane-row {
+		display: flex;
+		align-items: stretch;
+		gap: 0.35rem;
+	}
+
+	.lane-head {
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+		width: 150px;
+		flex-shrink: 0;
+	}
+
+	.lane-eye,
+	.lane-del {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.15rem;
+		border: none;
+		background: none;
+		color: #888;
+		cursor: pointer;
+	}
+
+	.lane-eye:hover,
+	.lane-del:hover {
+		color: #fff;
+	}
+
+	.lane-eye.off {
+		color: #555;
+	}
+
+	.lane-chain {
+		flex: 1;
+		min-width: 0;
+		padding: 0.1rem 0.2rem;
+		border: 1px solid #333;
+		border-radius: 4px;
+		background: #1a1a1a;
+		color: #bbb;
+		font-size: 0.68rem;
+		font-family: inherit;
+	}
+
+	.ruler {
+		position: relative;
+		flex: 1;
+		height: 14px;
+		border: 1px solid #2a2a2a;
+		border-radius: 3px;
+		background: #101010;
+		touch-action: none;
+	}
+
+	.ruler.seekable {
+		cursor: pointer;
+	}
+
+	.ruler-head {
+		justify-content: flex-end;
+	}
+
+	.ruler-time {
+		color: #777;
+		font-size: 0.65rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.lane-track {
+		position: relative;
+		flex: 1;
+		border: 1px solid #2a2a2a;
+		border-radius: 4px;
+		background: #141414;
+		overflow: hidden;
+		touch-action: none;
+	}
+
+	.clip {
+		position: absolute;
+		top: 3px;
+		bottom: 3px;
+		display: flex;
+		align-items: center;
+		border: 1px solid #3a5a7a;
+		border-radius: 3px;
+		background: #24384d;
+		color: #dce8f2;
+		font-size: 0.68rem;
+		cursor: grab;
+		overflow: hidden;
+	}
+
+	.clip.selected {
+		border-color: #7ab8f5;
+		background: #2f527a;
+	}
+
+	.clip.muted {
+		opacity: 0.4;
+	}
+
+	.clip-label {
+		flex: 1;
+		padding: 0 0.4rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		pointer-events: none;
+	}
+
+	.clip-edge {
+		width: 6px;
+		align-self: stretch;
+		cursor: ew-resize;
+		flex-shrink: 0;
+	}
+
+	.clip-edge:hover {
+		background: #7ab8f5;
+	}
+
+	.playhead {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 1px;
+		background: #e05a5a;
+		pointer-events: none;
+	}
+</style>

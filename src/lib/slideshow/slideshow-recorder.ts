@@ -2,8 +2,8 @@ import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
-import { DEFAULT_TEXT_OVERLAY_STYLE, ensureFontLoaded } from "../text-overlay";
 import { preloadCaptionFonts } from "../caption";
+import { preloadTextTimelineFonts } from "../text";
 import { SlideshowFrameDriver } from "./frame-driver";
 import { cloneEffects } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
@@ -108,8 +108,8 @@ export async function executeSlideshowRecording(
   const frameDuration = 1 / fps;
   const effectsRef = { current: cloneEffects(baseEffects) };
 
-  // Same driver the preview runs on — slide selection, text cadence, per-beat
-  // effects and video advancement all come from there.
+  // Same driver the preview runs on — slide selection, per-beat effects and
+  // video advancement all come from there.
   const driver = new SlideshowFrameDriver({
     getConfig: () => config,
     getSlides: () => slides,
@@ -122,13 +122,8 @@ export async function executeSlideshowRecording(
     },
   });
 
-  const textStyle = config.textOverlay?.style;
-  if (config.textOverlay?.enabled && textStyle) {
-    await ensureFontLoaded(
-      textStyle.fontFamily ?? DEFAULT_TEXT_OVERLAY_STYLE.fontFamily,
-    );
-  }
   await preloadCaptionFonts(baseEffects);
+  await preloadTextTimelineFonts(config.text);
 
   let blob: Blob;
   try {
@@ -142,6 +137,10 @@ export async function executeSlideshowRecording(
     onProgress,
     onFinalizing,
     signal,
+    // Clips are placed against audio time; a silent export starts its beat
+    // clock at 0, so the offset follows the same rule the driver uses.
+    textTimeline: config.text?.enabled ? config.text : null,
+    textTimeOffset: audioFile ? audioStart : 0,
     ...(audioFile && { audioFile, audioStart, audioEnd, normalizeGain }),
     async onBeforeRender(_frameIndex: number, time: number) {
       // time is 0..duration (recording window); segments use "seconds from
@@ -159,6 +158,5 @@ export async function executeSlideshowRecording(
     for (const sampler of samplerMap.values()) sampler.dispose();
   }
 
-  renderer.clearTextOverlay();
   downloadBlob(blob);
 }

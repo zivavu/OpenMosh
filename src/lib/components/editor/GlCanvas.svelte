@@ -5,6 +5,7 @@
    import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
    import { GlRenderer } from "../../gl/renderer";
    import { onFontsChanged } from "../../text-overlay";
+   import { resolveTextLayersAt, type TextTimeline } from "../../text";
    import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 
    /** Active sequence transition descriptor. Progress is computed per rendered
@@ -67,6 +68,13 @@
       /** Two-way: set it to enter/leave fullscreen, and it follows Esc or any
        * other way the browser drops out of it. */
       fullscreen?: boolean;
+      /** Optional text lanes composited into the chain at their insertion points. */
+      textTimeline?: TextTimeline | null;
+      /** Master-timeline seconds the text clips are looked up at. */
+      textTime?: number;
+      /** Keep the animation loop running even when nothing else needs it — a
+       * still image with a playing text timeline has no other reason to. */
+      forceAnimation?: boolean;
    }
 
    let {
@@ -93,6 +101,9 @@
       sourceKey = null,
       sourceAnimating = false,
       fullscreen = $bindable(false),
+      textTimeline = null,
+      textTime = 0,
+      forceAnimation = false,
    }: Props = $props();
 
    let frameTimes: number[] = [];
@@ -201,12 +212,14 @@
             !!transition ||
             videoPlaying ||
             sourceAnimating ||
+            forceAnimation ||
             hasAnimatedEffects),
    );
 
    /** Render the current frame: transition blend when a segment boundary is
     * being crossed, otherwise the plain effect chain. */
    function drawFrame(now: number) {
+      const layers = textTimeline ? resolveTextLayersAt(textTimeline, textTime) : [];
       const tr = transition;
       if (tr && tr.durationSec > 0) {
          const p = (tr.getTime() - tr.startTime) / tr.durationSec;
@@ -221,11 +234,12 @@
                tr.density,
                now,
                tr.useAltSource ?? false,
+               layers,
             );
             return;
          }
       }
-      renderer!.render(effects, now);
+      renderer!.render(effects, now, layers);
    }
 
    $effect(() => {
@@ -397,6 +411,9 @@
       }
       // A caption font that lands after the frame was drawn changes its glyphs.
       fontTick;
+      // Text edits and scrubbing both change which clip is on screen.
+      textTick;
+      textTime;
       // Scrubbing onto another sequence source while paused: re-upload before
       // drawing. sourceKey also ticks when a late video upload lands, which is
       // what gets that frame onto a paused canvas.
@@ -413,6 +430,25 @@
 
    let fontTick = $state(0);
    $effect(() => onFontsChanged(() => fontTick++));
+
+   /** Deep-reads the text lanes so a paused canvas redraws on any text edit. */
+   const textTick = $derived.by(() => {
+      if (!textTimeline?.enabled) return "";
+      return textTimeline.lanes
+         .map((l) =>
+            [
+               l.enabled,
+               l.chainIndex,
+               ...l.clips.map(
+                  (c) =>
+                     `${c.id}:${c.start}:${c.end}:${c.text}:${JSON.stringify(c.style)}:${c.effects
+                        .map((e) => `${e.defId}${e.enabled}${JSON.stringify(e.values)}`)
+                        .join(",")}`,
+               ),
+            ].join("|"),
+         )
+         .join(";");
+   });
 
    $effect(() => {
       if (suspended || !renderer || !imageReady) return;
