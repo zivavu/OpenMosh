@@ -74,7 +74,15 @@
 	$effect(() => {
 		const f = pendingTrack;
 		if (!f || !libraryLoaded) return;
-		if (tracks.some((t) => t.name === f.name)) return;
+		const existing = tracks.find((t) => t.name === f.name);
+		if (existing) {
+			// Already saved from an earlier visit. Still report it: this is the
+			// only place the editor learns the id of a track picked on the upload
+			// screen, and everything keyed per song — the sequence timeline, its
+			// media pool, the audio span — is dead without it.
+			onAutoAdded?.(existing.id);
+			return;
+		}
 		addTrack(f)
 			.then((track) => {
 				tracks = [...tracks, track];

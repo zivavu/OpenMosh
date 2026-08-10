@@ -549,21 +549,33 @@
 		audio.disposeAudioGraph();
 		currentTrackId = trackId;
 		audio.trackFile = file;
-		const saved = segmentsStore.load(trackId);
-		if (saved !== null) {
-			config = {
-				...config,
-				segments: saved.segments,
-				...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
-				...(saved.textOverlay !== undefined
-					? { textOverlay: saved.textOverlay }
-					: {}),
-			};
-			if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
-				audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
-			}
-		}
+		applySavedSegments(trackId);
 		if (autoplay) audio.autoplayOnLoad = true;
+	}
+
+	function applySavedSegments(trackId: string) {
+		const saved = segmentsStore.load(trackId);
+		if (saved === null) return;
+		config = {
+			...config,
+			segments: saved.segments,
+			...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
+			...(saved.textOverlay !== undefined
+				? { textOverlay: saved.textOverlay }
+				: {}),
+		};
+		if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
+			audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
+		}
+	}
+
+	/** A track picked on the upload screen: the library reports its id once it
+	 * has been saved, or straight away if it was already there. That id is what
+	 * keys the segments, so restore against it too. */
+	function adoptLibraryTrack(trackId: string) {
+		if (currentTrackId === trackId) return;
+		currentTrackId = trackId;
+		applySavedSegments(trackId);
 	}
 
 	// ── BPM Detection ──
@@ -940,7 +952,7 @@
 		mainPlaying={audio.audioPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
-		onAutoAdded={(trackId) => (currentTrackId = trackId)}
+		onAutoAdded={adoptLibraryTrack}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar
