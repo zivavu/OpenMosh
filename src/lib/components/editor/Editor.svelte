@@ -36,7 +36,9 @@
 		EMPTY_TEXT_TIMELINE,
 		normalizeTextTimeline,
 		applyLyricsToTimeline,
+		updateLane,
 		type TextClip,
+		type TextLane,
 		type TextTimeline,
 	} from '../../text';
 	import {
@@ -1671,6 +1673,16 @@
 		return null;
 	});
 
+	/** The lane holding the selected clip — the panel edits its style. */
+	let selectedTextLane = $derived.by(() => {
+		if (!selectedTextClipId) return null;
+		return (
+			textTimeline.lanes.find((l) =>
+				l.clips.some((c) => c.id === selectedTextClipId),
+			) ?? null
+		);
+	});
+
 	// Its own undo stack: the chain stacks are typed to effect arrays, and a
 	// text edit shouldn't rewind a mosh. Ctrl+Z routes here while a clip is
 	// selected, and falls back to the chain once it is not.
@@ -1692,6 +1704,10 @@
 				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
 			})),
 		};
+	}
+
+	function updateTextLane(next: TextLane) {
+		textTimeline = updateLane(textTimeline, next.id, () => next);
 	}
 
 	/** Adopt a saved timeline, or clear back to empty when a track has none. */
@@ -1729,7 +1745,7 @@
 	}
 
 	/** Transport for the lyrics-sync modal, on whichever clock owns the master
-		* timeline here: the track, the video, or the still-image loop. */
+	 * timeline here: the track, the video, or the still-image loop. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
 		textTimeline.enabled
 			? {
@@ -2323,8 +2339,10 @@
 					← Back to image effects
 				</button>
 				<TextClipPanel
+					lane={selectedTextLane}
 					clip={selectedTextClip}
-					onChange={updateTextClip}
+					onLaneChange={updateTextLane}
+					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}

@@ -8,6 +8,7 @@
 		Plus,
 		Trash2,
 	} from 'lucide-svelte';
+	import { untrack } from 'svelte';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
 	import {
@@ -18,9 +19,12 @@
 		MIN_CLIP_LENGTH,
 		moveClip,
 		removeClip,
+		resizeBoundary,
 		resizeClip,
 		snapTime,
+		sortClips,
 		updateLane,
+		type TextClip,
 		type TextLane,
 		type TextTimeline,
 	} from '../../text';
@@ -79,6 +83,8 @@
 	const vp = new TimelineViewport(
 		() => trackDuration,
 		() => trackEl?.getBoundingClientRect() ?? null,
+		// Wheel-zoom pins the playhead when it's on screen.
+		() => currentTime,
 	);
 
 	/** Every lane track shares one geometry, so any of them can measure the
@@ -106,10 +112,32 @@
 		}
 	});
 
+	// Follow the playhead: once it crosses the edges of the window while
+	// playing or scrubbing, slide the view so it settles back at ~90% (or
+	// ~10% when rewinding). Zooming to a tight spot can't lose it.
+	$effect(() => {
+		const t = currentTime;
+		const d = trackDuration;
+		if (d <= 0) return;
+		const vs = untrack(() => vp.viewStart);
+		const ve = untrack(() => vp.viewEnd);
+		if (ve <= 0) return;
+		const dur = ve - vs;
+		const past = t - (vs + dur * 0.9);
+		if (past > 0) {
+			vp.panView(past);
+		} else {
+			const back = vs + dur * 0.1 - t;
+			if (back > 0) vp.panView(-back);
+		}
+	});
+
 	let drag = $state<{
 		laneId: string;
 		clipId: string;
-		mode: 'move' | 'start' | 'end';
+		/** The clip on the far side of a shared-boundary drag. */
+		otherId?: string;
+		mode: 'move' | 'start' | 'end' | 'boundary';
 		/** Seconds between the pointer and the clip's start, for move drags. */
 		grabOffset: number;
 	} | null>(null);
@@ -170,9 +198,11 @@
 		if (selectedClipId === clipId) selectedClipId = null;
 	}
 
-	function onTrackPointerDown(e: PointerEvent, laneId: string) {
-		if (e.button !== 0 || trackDuration <= 0) return;
-		// Empty space: drop a clip here rather than making the user find a button.
+	function onTrackDblClick(e: MouseEvent, laneId: string) {
+		if (trackDuration <= 0) return;
+		// A double-click inside a clip is the clip's business; only empty lane
+		// space drops a new clip.
+		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
 		addClipAt(laneId, timeAt(e.clientX, e.altKey));
 	}
 
@@ -198,16 +228,55 @@
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
+	function onBoundaryPointerDown(
+		e: PointerEvent,
+		laneId: string,
+		leftId: string,
+		rightId: string,
+	) {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		drag = {
+			laneId,
+			clipId: leftId,
+			otherId: rightId,
+			mode: 'boundary',
+			grabOffset: 0,
+		};
+		// One undo entry per gesture, not per pointermove.
+		onBeforeEdit?.(`text-boundary-${leftId}`);
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	/** Consecutive clip pairs sharing an exact edge — the draggable boundaries. */
+	function adjacentPairs(
+		lane: TextLane,
+	): { left: TextClip; right: TextClip; at: number }[] {
+		const clips = sortClips(lane.clips);
+		const pairs: { left: TextClip; right: TextClip; at: number }[] = [];
+		for (let i = 0; i + 1 < clips.length; i++) {
+			if (clips[i].end === clips[i + 1].start) {
+				pairs.push({ left: clips[i], right: clips[i + 1], at: clips[i].end });
+			}
+		}
+		return pairs;
+	}
+
 	function onPointerMove(e: PointerEvent) {
 		if (!drag) return;
 		const t = timeAt(e.clientX, e.altKey);
-		const { laneId, clipId, mode, grabOffset } = drag;
+		const { laneId, clipId, otherId, mode, grabOffset } = drag;
 		onChange(
-			updateLane(timeline, laneId, (lane) =>
-				mode === 'move'
-					? moveClip(lane, clipId, t - grabOffset, trackDuration)
-					: resizeClip(lane, clipId, mode, t, trackDuration),
-			),
+			updateLane(timeline, laneId, (lane) => {
+				if (mode === 'move') return moveClip(lane, clipId, t - grabOffset, trackDuration);
+				// A boundary drag moves both clips' facing edges; the per-clip edges
+				// (resizeClip) trim one clip and can pull it away from its neighbour.
+				if (mode === 'boundary') {
+					return resizeBoundary(lane, clipId, otherId!, t);
+				}
+				return resizeClip(lane, clipId, mode, t, trackDuration);
+			}),
 		);
 	}
 
@@ -274,7 +343,7 @@
 			<span class="tl-hint">No timeline yet — add media or a track.</span>
 		{:else}
 			<span class="tl-hint">
-				Click a lane to add text · drag to move · drag an edge to trim
+				Double-click a lane to add text · drag to move · drag a boundary to trim both, an edge to trim one
 				{#if snapGrid > 0}· hold Alt for free placement{/if}
 			</span>
 		{/if}
@@ -358,7 +427,7 @@
 				style="height: {LANE_HEIGHT}px"
 				role="group"
 				aria-label="{lane.name} clips"
-				onpointerdown={(e) => onTrackPointerDown(e, lane.id)}
+				ondblclick={(e) => onTrackDblClick(e, lane.id)}
 				onpointermove={onPointerMove}
 				onpointerup={onPointerUp}
 				onpointercancel={onPointerUp}
@@ -392,6 +461,20 @@
 									onClipPointerDown(e, lane.id, clip.id, 'end')}
 							></span>
 						</div>
+					{/if}
+				{/each}
+
+				{#each adjacentPairs(lane) as pair (pair.left.id)}
+					{@const left = vp.toPct(pair.at)}
+					{#if left >= 0 && left <= 100}
+						<div
+							class="clip-boundary"
+							style="left: {left}%"
+							role="presentation"
+							title="Drag to trim both clips"
+							onpointerdown={(e) =>
+								onBoundaryPointerDown(e, lane.id, pair.left.id, pair.right.id)}
+						></div>
 					{/if}
 				{/each}
 
@@ -589,13 +672,37 @@
 	}
 
 	.clip-edge {
-		width: 6px;
+		width: 8px;
 		align-self: stretch;
 		cursor: ew-resize;
 		flex-shrink: 0;
 	}
 
 	.clip-edge:hover {
+		background: #7ab8f5;
+	}
+
+	.clip-boundary {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 4px;
+		transform: translateX(-50%);
+		cursor: ew-resize;
+		z-index: 3;
+	}
+
+	.clip-boundary::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 4px;
+		width: 1px;
+		background: rgba(255, 255, 255, 0.3);
+	}
+
+	.clip-boundary:hover::after {
 		background: #7ab8f5;
 	}
 

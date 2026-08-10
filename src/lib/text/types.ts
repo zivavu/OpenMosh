@@ -6,7 +6,7 @@ export type TextAlign = "left" | "center" | "right";
 /** Shortest clip the timeline will create or leave behind after a resize. */
 export const MIN_CLIP_LENGTH = 0.05;
 
-/** How a clip's text is drawn, independent of when it is on screen. */
+/** How a lane's text is drawn, independent of when it is on screen. */
 export interface TextStyle {
   /** Anchor position, normalized (x: left→right, y: top→bottom). */
   x: number;
@@ -34,7 +34,6 @@ export interface TextClip {
   start: number;
   end: number;
   text: string;
-  style: TextStyle;
   /** Applied to this clip's text layer alone, before it meets the image. */
   effects: EffectInstance[];
 }
@@ -53,6 +52,8 @@ export interface TextLane {
    * distort it; a value at or past the end lays it over the finished frame.
    */
   chainIndex: number;
+  /** Shared by every clip in the lane. */
+  style: TextStyle;
   clips: TextClip[];
 }
 
@@ -83,27 +84,23 @@ function nextId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${idCounter}`;
 }
 
-export function createTextClip(
-  start: number,
-  end: number,
-  text = "",
-  style?: Partial<TextStyle>,
-): TextClip {
-  return {
-    id: nextId("clip"),
-    start,
-    end,
-    text,
-    style: { ...DEFAULT_TEXT_STYLE, ...style },
-    effects: [],
-  };
+export function createTextClip(start: number, end: number, text = ""): TextClip {
+  return { id: nextId("clip"), start, end, text, effects: [] };
 }
 
 export function createTextLane(
   name: string,
   chainIndex = Number.MAX_SAFE_INTEGER,
+  style: TextStyle = DEFAULT_TEXT_STYLE,
 ): TextLane {
-  return { id: nextId("lane"), name, enabled: true, chainIndex, clips: [] };
+  return {
+    id: nextId("lane"),
+    name,
+    enabled: true,
+    chainIndex,
+    style: { ...style },
+    clips: [],
+  };
 }
 
 export function createTextTimeline(): TextTimeline {
@@ -117,22 +114,30 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
   const lanes = Array.isArray(t.lanes) ? t.lanes : [];
   return {
     enabled: !!t.enabled,
-    lanes: lanes.map((lane, i) => ({
-      id: lane.id ?? nextId("lane"),
-      name: lane.name ?? `Text ${i + 1}`,
-      enabled: lane.enabled !== false,
-      chainIndex:
-        typeof lane.chainIndex === "number"
-          ? lane.chainIndex
-          : Number.MAX_SAFE_INTEGER,
-      clips: (Array.isArray(lane.clips) ? lane.clips : []).map((clip) => ({
-        id: clip.id ?? nextId("clip"),
-        start: clip.start ?? 0,
-        end: clip.end ?? 0,
-        text: clip.text ?? "",
-        style: { ...DEFAULT_TEXT_STYLE, ...clip.style },
-        effects: Array.isArray(clip.effects) ? clip.effects : [],
-      })),
-    })),
+    lanes: lanes.map((lane, i) => {
+      const clips = Array.isArray(lane.clips) ? lane.clips : [];
+      // Timelines saved before styles moved to the lane carried one per
+      // clip; the first clip's style stands in for the lane's.
+      const legacyStyle = (clips as Array<{ style?: TextStyle }>).find(
+        (c) => c.style,
+      )?.style;
+      return {
+        id: lane.id ?? nextId("lane"),
+        name: lane.name ?? `Text ${i + 1}`,
+        enabled: lane.enabled !== false,
+        chainIndex:
+          typeof lane.chainIndex === "number"
+            ? lane.chainIndex
+            : Number.MAX_SAFE_INTEGER,
+        style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
+        clips: clips.map((clip) => ({
+          id: clip.id ?? nextId("clip"),
+          start: clip.start ?? 0,
+          end: clip.end ?? 0,
+          text: clip.text ?? "",
+          effects: Array.isArray(clip.effects) ? clip.effects : [],
+        })),
+      };
+    }),
   };
 }

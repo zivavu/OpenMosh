@@ -31,13 +31,13 @@ export function resolveTextLayersAt(
   for (const lane of timeline.lanes) {
     if (!lane.enabled) continue;
     const clip = clipAt(lane, time);
-    if (!clip || !clip.text.trim() || clip.style.opacity <= 0) continue;
+    if (!clip || !clip.text.trim() || lane.style.opacity <= 0) continue;
     layers.push({
       key: clip.id,
       laneId: lane.id,
       chainIndex: lane.chainIndex,
       text: clip.text,
-      style: clip.style,
+      style: lane.style,
       effects: clip.effects,
     });
   }
@@ -64,7 +64,7 @@ export function textTimelineFonts(
 ): string[] {
   const families = new Set<string>();
   for (const lane of timeline?.lanes ?? []) {
-    for (const clip of lane.clips) families.add(clip.style.fontFamily);
+    families.add(lane.style.fontFamily);
   }
   return [...families];
 }
@@ -126,7 +126,8 @@ export function moveClip(
 
 /**
  * Drag one edge. The clip keeps at least MIN_CLIP_LENGTH and stops at its
- * neighbours, so edges can meet but never cross.
+ * neighbours, so edges can meet but never cross — dragging one edge alone
+ * pulls it away from a flush neighbour, leaving a gap.
  */
 export function resizeClip(
   lane: TextLane,
@@ -155,6 +156,37 @@ export function resizeClip(
   }
   const end = Math.max(Math.min(time, upper), clip.start + MIN_CLIP_LENGTH);
   return replaceClip(lane, { ...clip, end });
+}
+
+/**
+ * Drag the edge shared by two flush clips: both clips' facing edges move to
+ * `time`, each keeping at least MIN_CLIP_LENGTH.
+ */
+export function resizeBoundary(
+  lane: TextLane,
+  leftId: string,
+  rightId: string,
+  time: number,
+): TextLane {
+  const left = lane.clips.find((c) => c.id === leftId);
+  const right = lane.clips.find((c) => c.id === rightId);
+  if (!left || !right) return lane;
+  const t = Math.max(
+    left.start + MIN_CLIP_LENGTH,
+    Math.min(time, right.end - MIN_CLIP_LENGTH),
+  );
+  return {
+    ...lane,
+    clips: sortClips(
+      lane.clips.map((c) =>
+        c.id === left.id
+          ? { ...left, end: t }
+          : c.id === right.id
+            ? { ...right, start: t }
+            : c,
+      ),
+    ),
+  };
 }
 
 /** Add a clip, trimmed to the free span it lands in. Returns the lane unchanged

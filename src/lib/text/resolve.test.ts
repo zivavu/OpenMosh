@@ -5,6 +5,7 @@ import {
   freeRangeAt,
   moveClip,
   removeClip,
+  resizeBoundary,
   resizeClip,
   resolveTextLayersAt,
   snapTime,
@@ -53,7 +54,7 @@ describe("resolveTextLayersAt", () => {
     const disabled = { ...laneWith([[0, 5]]), enabled: false };
     const blank = laneWith([[0, 5]], "   ");
     const clear = laneWith([[0, 5]]);
-    clear.clips[0].style = { ...clear.clips[0].style, opacity: 0 };
+    clear.style = { ...clear.style, opacity: 0 };
 
     const layers = resolveTextLayersAt(
       timelineOf([visible, disabled, blank, clear]),
@@ -149,6 +150,60 @@ describe("resizeClip", () => {
       10,
     );
   });
+
+  it("lets a flush edge disconnect from its neighbour", () => {
+    const lane = laneWith([
+      [0, 2],
+      [2, 4],
+    ]);
+    const resized = resizeClip(lane, lane.clips[0].id, "end", 1.5, 10);
+    expect(resized.clips[0].end).toBe(1.5);
+    expect(resized.clips[1].start).toBe(2);
+  });
+
+  it("resizes a free edge without touching its neighbours", () => {
+    const lane = laneWith([
+      [0, 2],
+      [4, 6],
+    ]);
+    const resized = resizeClip(lane, lane.clips[0].id, "end", 3, 10);
+    expect(resized.clips[0].end).toBe(3);
+    expect(resized.clips[1].start).toBe(4);
+  });
+});
+
+describe("resizeBoundary", () => {
+  it("moves both clips' facing edges together", () => {
+    const lane = laneWith([
+      [0, 2],
+      [2, 4],
+      [6, 8],
+    ]);
+    const resized = resizeBoundary(
+      lane,
+      lane.clips[0].id,
+      lane.clips[1].id,
+      2.5,
+    );
+    expect(resized.clips[0].end).toBe(2.5);
+    expect(resized.clips[1].start).toBe(2.5);
+    expect(resized.clips[2].start).toBe(6);
+  });
+
+  it("keeps both clips above the minimum length", () => {
+    const lane = laneWith([
+      [0, 2],
+      [2, 4],
+    ]);
+    const resized = resizeBoundary(
+      lane,
+      lane.clips[0].id,
+      lane.clips[1].id,
+      3.99,
+    );
+    expect(resized.clips[0].end).toBeCloseTo(4 - MIN_CLIP_LENGTH);
+    expect(resized.clips[1].start).toBeCloseTo(4 - MIN_CLIP_LENGTH);
+  });
 });
 
 describe("addClip", () => {
@@ -199,7 +254,24 @@ describe("normalizeTextTimeline", () => {
     });
     expect(t.lanes[0].enabled).toBe(true);
     expect(t.lanes[0].chainIndex).toBe(Number.MAX_SAFE_INTEGER);
-    expect(t.lanes[0].clips[0].style.color).toBe("#ffffff");
+    expect(t.lanes[0].style.color).toBe("#ffffff");
     expect(t.lanes[0].clips[0].effects).toEqual([]);
+  });
+
+  it("lifts a legacy per-clip style onto the lane", () => {
+    const t = normalizeTextTimeline({
+      enabled: true,
+      lanes: [
+        {
+          clips: [
+            { start: 0, end: 1, style: { color: "#ff0000", y: 0.7 } },
+            { start: 1, end: 2, style: { color: "#00ff00" } },
+          ],
+        },
+      ],
+    });
+    expect(t.lanes[0].style.color).toBe("#ff0000");
+    expect(t.lanes[0].style.y).toBe(0.7);
+    expect(t.lanes[0].clips[0]).not.toHaveProperty("style");
   });
 });

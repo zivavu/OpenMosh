@@ -439,9 +439,10 @@
             [
                l.enabled,
                l.chainIndex,
+               JSON.stringify(l.style),
                ...l.clips.map(
                   (c) =>
-                     `${c.id}:${c.start}:${c.end}:${c.text}:${JSON.stringify(c.style)}:${c.effects
+                     `${c.id}:${c.start}:${c.end}:${c.text}:${c.effects
                         .map((e) => `${e.defId}${e.enabled}${JSON.stringify(e.values)}`)
                         .join(",")}`,
                ),

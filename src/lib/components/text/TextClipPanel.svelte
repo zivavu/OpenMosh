@@ -3,7 +3,7 @@
 	import type { EffectInstance, VolumeLink } from '../../effects';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
 	import { ensureFontLoaded, FONT_OPTIONS } from '../../text-overlay';
-	import type { TextAlign, TextClip, TextStyle } from '../../text';
+	import type { TextAlign, TextClip, TextLane, TextStyle } from '../../text';
 	import type { SpectrumData } from '../../types';
 	import ColorPicker from '../ui/ColorPicker.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
@@ -21,8 +21,11 @@
 	] as const;
 
 	interface Props {
+		/** The lane the selected clip lives in; the panel edits its style. */
+		lane: TextLane | null;
 		clip: TextClip | null;
-		onChange: (clip: TextClip) => void;
+		onLaneChange: (lane: TextLane) => void;
+		onClipChange: (clip: TextClip) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
@@ -34,8 +37,10 @@
 	}
 
 	let {
+		lane,
 		clip,
-		onChange,
+		onLaneChange,
+		onClipChange,
 		onBeforeEdit,
 		hasTrack = false,
 		spectrumData = null,
@@ -47,15 +52,15 @@
 		value: TextStyle[K],
 		coalesceKey?: string,
 	) {
-		if (!clip) return;
+		if (!lane) return;
 		onBeforeEdit?.(coalesceKey);
-		onChange({ ...clip, style: { ...clip.style, [key]: value } });
+		onLaneChange({ ...lane, style: { ...lane.style, [key]: value } });
 	}
 
 	function setText(text: string) {
 		if (!clip) return;
 		onBeforeEdit?.(`text-body-${clip.id}`);
-		onChange({ ...clip, text });
+		onClipChange({ ...clip, text });
 	}
 
 	// EffectsPanel owns its array (it mutates and reassigns), so the clip's chain
@@ -73,7 +78,7 @@
 
 	function commitEffects() {
 		if (!clip) return;
-		onChange({ ...clip, effects: $state.snapshot(clipEffects) as EffectInstance[] });
+		onClipChange({ ...clip, effects: $state.snapshot(clipEffects) as EffectInstance[] });
 	}
 
 	let opaqueNames = $derived(
@@ -83,11 +88,15 @@
 	);
 </script>
 
-{#if !clip}
+{#if !clip || !lane}
 	<p class="empty">Select a text clip to edit it.</p>
 {:else}
 	<div class="clip-panel">
 		<h3 class="panel-title">Text</h3>
+		<p class="note">
+			Font and placement apply to the whole lane — every clip in it
+			shares this look.
+		</p>
 
 		<textarea
 			class="text-input"
@@ -100,7 +109,7 @@
 			<label for="tc-font">Font</label>
 			<select
 				id="tc-font"
-				value={clip.style.fontFamily}
+				value={lane.style.fontFamily}
 				onchange={(e) => {
 					const family = (e.currentTarget as HTMLSelectElement).value;
 					void ensureFontLoaded(family);
@@ -117,20 +126,20 @@
 			<label for="tc-size">Size</label>
 			<RangeSlider
 				id="tc-size"
-				value={clip.style.size}
+				value={lane.style.size}
 				min={0.02}
 				max={0.5}
 				step={0.005}
 				oninput={(v) => setStyle('size', v, `tc-size-${clip.id}`)}
 			/>
-			<span class="val">{Math.round(clip.style.size * 100)}%</span>
+			<span class="val">{Math.round(lane.style.size * 100)}%</span>
 		</div>
 
 		<div class="row">
 			<label for="tc-align">Align</label>
 			<select
 				id="tc-align"
-				value={clip.style.align}
+				value={lane.style.align}
 				onchange={(e) =>
 					setStyle(
 						'align',
@@ -147,33 +156,33 @@
 			<label for="tc-x">Position X</label>
 			<RangeSlider
 				id="tc-x"
-				value={clip.style.x}
+				value={lane.style.x}
 				min={0}
 				max={1}
 				step={0.01}
 				oninput={(v) => setStyle('x', v, `tc-x-${clip.id}`)}
 			/>
-			<span class="val">{Math.round(clip.style.x * 100)}</span>
+			<span class="val">{Math.round(lane.style.x * 100)}</span>
 		</div>
 
 		<div class="row">
 			<label for="tc-y">Position Y</label>
 			<RangeSlider
 				id="tc-y"
-				value={clip.style.y}
+				value={lane.style.y}
 				min={0}
 				max={1}
 				step={0.01}
 				oninput={(v) => setStyle('y', v, `tc-y-${clip.id}`)}
 			/>
-			<span class="val">{Math.round(clip.style.y * 100)}</span>
+			<span class="val">{Math.round(lane.style.y * 100)}</span>
 		</div>
 
 		<div class="row">
 			<label for="tc-color">Color</label>
 			<ColorPicker
 				id="tc-color"
-				value={clip.style.color}
+				value={lane.style.color}
 				defaultValue="#ffffff"
 				onChange={(hex) => setStyle('color', hex)}
 			/>
@@ -184,18 +193,18 @@
 			<input
 				id="tc-outline"
 				type="checkbox"
-				checked={clip.style.outline}
+				checked={lane.style.outline}
 				onchange={(e) =>
 					setStyle('outline', (e.currentTarget as HTMLInputElement).checked)}
 			/>
 		</div>
 
-		{#if clip.style.outline}
+		{#if lane.style.outline}
 			<div class="row">
 				<label for="tc-outline-color">Outline color</label>
 				<ColorPicker
 					id="tc-outline-color"
-					value={clip.style.outlineColor}
+					value={lane.style.outlineColor}
 					defaultValue="#000000"
 					onChange={(hex) => setStyle('outlineColor', hex)}
 				/>
@@ -204,13 +213,13 @@
 				<label for="tc-outline-w">Outline width</label>
 				<RangeSlider
 					id="tc-outline-w"
-					value={clip.style.outlineWidth}
+					value={lane.style.outlineWidth}
 					min={0}
 					max={8}
 					step={0.5}
 					oninput={(v) => setStyle('outlineWidth', v, `tc-ow-${clip.id}`)}
 				/>
-				<span class="val">{clip.style.outlineWidth}</span>
+				<span class="val">{lane.style.outlineWidth}</span>
 			</div>
 		{/if}
 
@@ -218,20 +227,20 @@
 			<label for="tc-opacity">Opacity</label>
 			<RangeSlider
 				id="tc-opacity"
-				value={clip.style.opacity}
+				value={lane.style.opacity}
 				min={0}
 				max={1}
 				step={0.01}
 				oninput={(v) => setStyle('opacity', v, `tc-op-${clip.id}`)}
 			/>
-			<span class="val">{Math.round(clip.style.opacity * 100)}%</span>
+			<span class="val">{Math.round(lane.style.opacity * 100)}%</span>
 		</div>
 
 		<div class="row">
 			<label for="tc-blend">Blend</label>
 			<select
 				id="tc-blend"
-				value={clip.style.blendMode}
+				value={lane.style.blendMode}
 				onchange={(e) =>
 					setStyle(
 						'blendMode',
