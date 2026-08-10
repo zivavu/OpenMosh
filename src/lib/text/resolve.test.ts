@@ -2,13 +2,16 @@ import { describe, expect, it } from "bun:test";
 import {
   addClip,
   clipAt,
+  clipRange,
   freeRangeAt,
   moveClip,
+  moveClips,
   removeClip,
   resizeBoundary,
   resizeClip,
   resolveTextLayersAt,
   snapTime,
+  sortClips,
 } from "./resolve";
 import {
   createTextClip,
@@ -273,5 +276,128 @@ describe("normalizeTextTimeline", () => {
     expect(t.lanes[0].style.color).toBe("#ff0000");
     expect(t.lanes[0].style.y).toBe(0.7);
     expect(t.lanes[0].clips[0]).not.toHaveProperty("style");
+  });
+});
+
+describe("clipRange", () => {
+  it("covers everything between the two ends, inclusive", () => {
+    const lane = laneWith([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+    ]);
+    const ids = lane.clips.map((c) => c.id);
+    expect(clipRange(lane, ids[0], ids[2])).toEqual([ids[0], ids[1], ids[2]]);
+  });
+
+  it("reads the same range dragged backwards", () => {
+    const lane = laneWith([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ]);
+    const ids = lane.clips.map((c) => c.id);
+    expect(clipRange(lane, ids[2], ids[0])).toEqual(clipRange(lane, ids[0], ids[2]));
+  });
+
+  it("orders by time, not by position in the lane's array", () => {
+    const lane = laneWith([
+      [4, 5],
+      [0, 1],
+      [2, 3],
+    ]);
+    const byTime = sortClips(lane.clips).map((c) => c.id);
+    expect(clipRange(lane, byTime[0], byTime[2])).toEqual(byTime);
+  });
+
+  it("falls back to the clicked clip when the anchor is elsewhere", () => {
+    const lane = laneWith([[0, 1]]);
+    expect(clipRange(lane, "not-in-this-lane", lane.clips[0].id)).toEqual([
+      lane.clips[0].id,
+    ]);
+  });
+
+  it("is empty when the target isn't in the lane", () => {
+    const lane = laneWith([[0, 1]]);
+    expect(clipRange(lane, lane.clips[0].id, "nope")).toEqual([]);
+  });
+});
+
+describe("moveClips", () => {
+  it("slides the group, keeping the spacing inside it", () => {
+    const lane = laneWith([
+      [0, 1],
+      [2, 3],
+      [8, 9],
+    ]);
+    const ids = [lane.clips[0].id, lane.clips[1].id];
+    const moved = moveClips(lane, ids, 1, 20);
+    expect(moved.clips.map((c) => [c.start, c.end])).toEqual([
+      [1, 2],
+      [3, 4],
+      [8, 9],
+    ]);
+  });
+
+  it("stops the whole group at the first unselected neighbour", () => {
+    const lane = laneWith([
+      [0, 1],
+      [2, 3],
+      [4, 5],
+    ]);
+    // Moving the first two right can only close the 1s gap before the third.
+    const ids = [lane.clips[0].id, lane.clips[1].id];
+    const moved = moveClips(lane, ids, 10, 20);
+    expect(moved.clips.map((c) => [c.start, c.end])).toEqual([
+      [1, 2],
+      [3, 4],
+      [4, 5],
+    ]);
+  });
+
+  it("stops at the track ends", () => {
+    const lane = laneWith([
+      [1, 2],
+      [3, 4],
+    ]);
+    const ids = lane.clips.map((c) => c.id);
+    expect(moveClips(lane, ids, -10, 10).clips.map((c) => c.start)).toEqual([0, 2]);
+    expect(moveClips(lane, ids, 10, 10).clips.map((c) => c.end)).toEqual([8, 10]);
+  });
+
+  it("never lets a moved clip overlap a fixed one", () => {
+    const lane = laneWith([
+      [0, 2],
+      [2, 4],
+      [4, 6],
+    ]);
+    const moved = moveClips(lane, [lane.clips[1].id], -5, 10);
+    const ordered = sortClips(moved.clips);
+    for (let i = 1; i < ordered.length; i++) {
+      expect(ordered[i].start).toBeGreaterThanOrEqual(ordered[i - 1].end);
+    }
+  });
+
+  it("ignores ids from other lanes", () => {
+    const lane = laneWith([[0, 1]]);
+    const before = lane.clips.map((c) => c.start);
+    expect(moveClips(lane, ["elsewhere"], 5, 10).clips.map((c) => c.start)).toEqual(
+      before,
+    );
+  });
+
+  it("leaves a boxed-in group alone", () => {
+    const lane = laneWith([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ]);
+    const moved = moveClips(lane, [lane.clips[1].id], 5, 3);
+    expect(moved.clips.map((c) => [c.start, c.end])).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ]);
   });
 });

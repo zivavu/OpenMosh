@@ -13,12 +13,14 @@
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
 	import {
 		addClip,
+		clipRange,
 		createTextClip,
 		createTextLane,
 		freeRangeAt,
 		lyricsDraftFromTimeline,
 		MIN_CLIP_LENGTH,
 		moveClip,
+		moveClips,
 		removeClip,
 		resizeBoundary,
 		resizeClip,
@@ -146,6 +148,40 @@
 		grabOffset: number;
 	} | null>(null);
 
+	/**
+	 * The whole selection. `selectedClipId` stays the primary — the one the clip
+	 * panel edits and the anchor a shift-range extends from — and is always a
+	 * member of this list.
+	 */
+	let selectedIds = $state<string[]>([]);
+	/** Set on pointerdown when a plain click landed on an already-selected clip:
+	 * the selection has to survive until pointerup so the group can be dragged,
+	 * and only collapses if the click turns out not to be a drag. */
+	let collapseOnUp: string | null = null;
+
+	function selectOnly(clipId: string) {
+		selectedClipId = clipId;
+		selectedIds = [clipId];
+	}
+
+	// Follow external changes to the primary (applying lyrics, the panel's back
+	// button), and drop ids whose clips are gone.
+	$effect(() => {
+		const id = selectedClipId;
+		const alive = new Set(
+			timeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
+		);
+		untrack(() => {
+			if (!id || !alive.has(id)) {
+				if (selectedIds.length > 0) selectedIds = [];
+				return;
+			}
+			const pruned = selectedIds.filter((x) => alive.has(x));
+			if (!pruned.includes(id)) selectedIds = [id];
+			else if (pruned.length !== selectedIds.length) selectedIds = pruned;
+		});
+	});
+
 	function timeAt(clientX: number, altKey: boolean): number {
 		const t = vp.clientXToTime(clientX);
 		return altKey ? t : snapTime(t, snapGrid);
@@ -193,7 +229,7 @@
 		const clip = createTextClip(start, end, 'TEXT');
 		onBeforeEdit?.();
 		onChange(updateLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)));
-		selectedClipId = clip.id;
+		selectOnly(clip.id);
 	}
 
 	function deleteClip(laneId: string, clipId: string) {
@@ -218,7 +254,44 @@
 	) {
 		if (e.button !== 0) return;
 		e.stopPropagation();
-		selectedClipId = clipId;
+		collapseOnUp = null;
+
+		// Shift extends from the primary, ctrl/cmd toggles one. Neither starts a
+		// drag — they are selection gestures, and dragging from them would move
+		// clips the user was only trying to pick.
+		if (e.shiftKey && mode === 'move') {
+			const lane = laneOf(laneId);
+			if (lane && selectedClipId) {
+				const range = clipRange(lane, selectedClipId, clipId);
+				if (range.length > 0) {
+					selectedIds = range;
+					return;
+				}
+			}
+			selectOnly(clipId);
+			return;
+		}
+		if ((e.ctrlKey || e.metaKey) && mode === 'move') {
+			if (selectedIds.includes(clipId)) {
+				const rest = selectedIds.filter((x) => x !== clipId);
+				selectedIds = rest;
+				if (selectedClipId === clipId) selectedClipId = rest[rest.length - 1] ?? null;
+			} else {
+				selectedIds = [...selectedIds, clipId];
+				selectedClipId = clipId;
+			}
+			return;
+		}
+
+		// A plain click on part of the selection keeps it, so the group can be
+		// dragged; it collapses on pointerup if nothing moved.
+		if (selectedIds.length > 1 && selectedIds.includes(clipId)) {
+			selectedClipId = clipId;
+			collapseOnUp = clipId;
+		} else {
+			selectOnly(clipId);
+		}
+
 		const clip = laneOf(laneId)?.clips.find((c) => c.id === clipId);
 		if (!clip) return;
 		drag = {
@@ -253,6 +326,38 @@
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
+	/** Comfortable grab width for a shared boundary, in px. */
+	const BOUNDARY_GRAB = 12;
+	/** Comfortable grab width for a clip's own start/end handles, in px. */
+	const EDGE_GRAB = 10;
+
+	/**
+	 * Sized against the clip rather than fixed. At a flat 10px each, two handles
+	 * overrun any clip under 20px wide and the right one is clipped away
+	 * entirely — text set very small does exactly that. A third each keeps both
+	 * edges grabbable at any width, and leaves the middle third to drag by.
+	 */
+	function edgeWidth(clip: TextClip): number {
+		const px = trackEl?.getBoundingClientRect().width ?? 0;
+		if (px <= 0) return EDGE_GRAB;
+		const clipPx = ((clip.end - clip.start) / vp.viewDuration) * px;
+		return Math.max(1, Math.min(EDGE_GRAB, clipPx / 3));
+	}
+
+	/**
+	 * A boundary is drawn over the clips either side of it, so a fixed grab area
+	 * would blanket short clips entirely and leave nothing to click — which is
+	 * every clip once a long lyric is zoomed out. Never take more than a third of
+	 * the narrower neighbour.
+	 */
+	function boundaryWidth(left: TextClip, right: TextClip): number {
+		const px = trackEl?.getBoundingClientRect().width ?? 0;
+		if (px <= 0) return BOUNDARY_GRAB;
+		const narrower = Math.min(left.end - left.start, right.end - right.start);
+		const narrowerPx = (narrower / vp.viewDuration) * px;
+		return Math.max(2, Math.min(BOUNDARY_GRAB, narrowerPx / 3));
+	}
+
 	/** Consecutive clip pairs sharing an exact edge — the draggable boundaries. */
 	function adjacentPairs(
 		lane: TextLane,
@@ -271,9 +376,26 @@
 		if (!drag) return;
 		const t = timeAt(e.clientX, e.altKey);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
+		collapseOnUp = null;
 		onChange(
 			updateLane(timeline, laneId, (lane) => {
-				if (mode === 'move') return moveClip(lane, clipId, t - grabOffset, trackDuration);
+				if (mode === 'move') {
+					// Dragging any member drags the whole selection with it. Measured
+					// as a delta off the grabbed clip's live position, since each move
+					// re-enters here against an already-shifted timeline.
+					if (selectedIds.length > 1 && selectedIds.includes(clipId)) {
+						const held = lane.clips.find((c) => c.id === clipId);
+						if (held) {
+							return moveClips(
+								lane,
+								selectedIds,
+								t - grabOffset - held.start,
+								trackDuration,
+							);
+						}
+					}
+					return moveClip(lane, clipId, t - grabOffset, trackDuration);
+				}
 				// A boundary drag moves both clips' facing edges; the per-clip edges
 				// (resizeClip) trim one clip and can pull it away from its neighbour.
 				if (mode === 'boundary') {
@@ -285,21 +407,41 @@
 	}
 
 	function onPointerUp(e: PointerEvent) {
+		if (collapseOnUp) {
+			selectOnly(collapseOnUp);
+			collapseOnUp = null;
+		}
 		if (!drag) return;
 		drag = null;
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}
 
+	/** Delete every selected clip, across lanes, as one undo step. */
+	function deleteSelection() {
+		const ids = new Set(selectedIds);
+		if (ids.size === 0) return;
+		onBeforeEdit?.();
+		onChange({
+			...timeline,
+			lanes: timeline.lanes.map((l) => ({
+				...l,
+				clips: l.clips.filter((c) => !ids.has(c.id)),
+			})),
+		});
+		selectedClipId = null;
+		selectedIds = [];
+	}
+
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
+		if (e.key === 'Escape' && selectedIds.length > 0) {
+			selectedClipId = null;
+			return;
+		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-		if (!selectedClipId) return;
-		const lane = timeline.lanes.find((l) =>
-			l.clips.some((c) => c.id === selectedClipId),
-		);
-		if (!lane) return;
+		if (selectedIds.length === 0) return;
 		e.preventDefault();
-		deleteClip(lane.id, selectedClipId);
+		deleteSelection();
 	}
 
 	let scrubbing = $state(false);
@@ -347,7 +489,7 @@
 			<span class="tl-hint">No timeline yet — add media or a track.</span>
 		{:else}
 			<span class="tl-hint">
-				Double-click a lane to add text · drag to move · drag a boundary to trim both, an edge to trim one
+				Double-click a lane to add text · drag to move · drag a boundary to trim both, an edge to trim one · shift-click for a range, ctrl-click to add one
 				{#if snapGrid > 0}· hold Alt for free placement{/if}
 			</span>
 		{/if}
@@ -439,20 +581,26 @@
 				{#each lane.clips as clip (clip.id)}
 					{@const left = vp.toPct(clip.start)}
 					{@const width = vp.toPct(clip.end) - left}
+					{@const edge = edgeWidth(clip)}
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"
-							class:selected={clip.id === selectedClipId}
+							class:selected={selectedIds.includes(clip.id)}
+							class:primary={selectedIds.length > 1 &&
+								clip.id === selectedClipId}
 							class:muted={!lane.enabled}
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
 							title={clip.text}
+							draggable="false"
+							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
 								onClipPointerDown(e, lane.id, clip.id, 'move')}
 						>
 							<span
 								class="clip-edge start"
+								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
 									onClipPointerDown(e, lane.id, clip.id, 'start')}
@@ -460,6 +608,7 @@
 							<span class="clip-label">{clip.text || '—'}</span>
 							<span
 								class="clip-edge end"
+								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
 									onClipPointerDown(e, lane.id, clip.id, 'end')}
@@ -473,7 +622,10 @@
 					{#if left >= 0 && left <= 100}
 						<div
 							class="clip-boundary"
-							style="left: {left}%"
+							style="left: {left}%; width: {boundaryWidth(
+								pair.left,
+								pair.right,
+							)}px"
 							role="presentation"
 							title="Drag to trim both clips"
 							onpointerdown={(e) =>
@@ -656,11 +808,21 @@
 		font-size: 0.68rem;
 		cursor: grab;
 		overflow: hidden;
+		/* A clip is dragged with pointer events, so the browser's own drag — the
+		   translucent copy that trails the cursor — is never wanted. Covers the
+		   label and edges too. */
+		user-select: none;
+		-webkit-user-drag: none;
 	}
 
 	.clip.selected {
 		border-color: #7ab8f5;
 		background: #2f527a;
+	}
+
+	/* Which of a multi-selection the clip panel is editing. */
+	.clip.primary {
+		box-shadow: inset 0 0 0 1px #cfe6ff;
 	}
 
 	.clip.muted {
@@ -669,6 +831,7 @@
 
 	.clip-label {
 		flex: 1;
+		min-width: 0;
 		padding: 0 0.4rem;
 		white-space: nowrap;
 		overflow: hidden;
@@ -676,11 +839,25 @@
 		pointer-events: none;
 	}
 
+	/* Width is set inline, against the clip's own width — see edgeWidth. At full
+	   size that is EDGE_GRAB, wider than the boundary's half-width, so a flush
+	   junction still leaves a strip that trims one clip and opens a gap.
+	   Positioned rather than laid out in the flex row: as flex items they
+	   competed with the label, whose padding cannot shrink, so on a narrow clip
+	   they were pushed into overflow and the end handle was clipped away. */
 	.clip-edge {
-		width: 8px;
-		align-self: stretch;
+		position: absolute;
+		top: 0;
+		bottom: 0;
 		cursor: ew-resize;
-		flex-shrink: 0;
+	}
+
+	.clip-edge.start {
+		left: 0;
+	}
+
+	.clip-edge.end {
+		right: 0;
 	}
 
 	.clip-edge:hover {
@@ -691,23 +868,25 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		width: 4px;
 		transform: translateX(-50%);
 		cursor: ew-resize;
 		z-index: 3;
 	}
 
+	/* Centred in the grab area, which is wider than the line and sized inline. */
 	.clip-boundary::after {
 		content: '';
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		left: 4px;
+		left: 50%;
 		width: 1px;
+		transform: translateX(-50%);
 		background: rgba(255, 255, 255, 0.3);
 	}
 
 	.clip-boundary:hover::after {
+		width: 2px;
 		background: #7ab8f5;
 	}
 

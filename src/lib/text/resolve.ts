@@ -69,6 +69,20 @@ export function textTimelineFonts(
   return [...families];
 }
 
+/**
+ * The clips between two ids inclusive, in time order — a shift-click range.
+ * Both must be in this lane; otherwise only `toId` is in range.
+ */
+export function clipRange(lane: TextLane, fromId: string, toId: string): string[] {
+  const ordered = sortClips(lane.clips);
+  const a = ordered.findIndex((c) => c.id === fromId);
+  const b = ordered.findIndex((c) => c.id === toId);
+  if (b === -1) return [];
+  if (a === -1) return [toId];
+  const [lo, hi] = a <= b ? [a, b] : [b, a];
+  return ordered.slice(lo, hi + 1).map((c) => c.id);
+}
+
 /** The clip covering `time`, or null. Clips are half-open: [start, end). */
 export function clipAt(lane: TextLane, time: number): TextClip | null {
   for (const clip of lane.clips) {
@@ -122,6 +136,48 @@ export function moveClip(
   }
   const start = Math.min(Math.max(newStart, lower), Math.max(lower, upper - length));
   return replaceClip(lane, { ...clip, start, end: start + length });
+}
+
+/**
+ * Slide every clip in `clipIds` by `delta`, as one block. The whole group stops
+ * at whichever unselected neighbour any member runs into, so the selection
+ * keeps its internal spacing and still can't overwrite anything. Ids belonging
+ * to other lanes are ignored.
+ */
+export function moveClips(
+  lane: TextLane,
+  clipIds: string[],
+  delta: number,
+  duration: number,
+): TextLane {
+  const ids = new Set(clipIds);
+  const moving = lane.clips.filter((c) => ids.has(c.id));
+  if (moving.length === 0) return lane;
+  const fixed = lane.clips.filter((c) => !ids.has(c.id));
+
+  // The tightest limit any one member imposes governs the whole group.
+  let lower = -Infinity;
+  let upper = Infinity;
+  for (const clip of moving) {
+    lower = Math.max(lower, -clip.start);
+    upper = Math.min(upper, duration - clip.end);
+    for (const other of fixed) {
+      if (other.end <= clip.start) lower = Math.max(lower, other.end - clip.start);
+      else if (other.start >= clip.end) upper = Math.min(upper, other.start - clip.end);
+    }
+  }
+  if (lower > upper) return lane;
+
+  const step = Math.min(Math.max(delta, lower), upper);
+  if (step === 0) return lane;
+  return {
+    ...lane,
+    clips: sortClips(
+      lane.clips.map((c) =>
+        ids.has(c.id) ? { ...c, start: c.start + step, end: c.end + step } : c,
+      ),
+    ),
+  };
 }
 
 /**
