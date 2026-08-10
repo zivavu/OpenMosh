@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenMosh Font Picker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #121212;
+    --panel: #1a1a1a;
+    --border: #333;
+    --text: #e0e0e0;
+    --muted: #888;
+    --accent: #b06ad8;
+    --accent-dim: #7a5f94;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: 90px;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(18, 18, 18, 0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  .title { font-size: 15px; font-weight: 700; letter-spacing: 0.05em; }
+  .title span { color: var(--accent); }
+  .subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-top: 10px;
+  }
+  .controls input[type="text"] {
+    flex: 1 1 320px;
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+  }
+  .controls input[type="text"]:focus { border-color: var(--accent-dim); }
+  .controls input[type="range"] { width: 120px; accent-color: var(--accent); }
+  .controls label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .controls .size { display: flex; align-items: center; gap: 6px; }
+  .btn {
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent-dim); color: #fff; }
+  .btn.accent { border-color: var(--accent-dim); background: rgba(176, 106, 216, 0.12); color: #d8b8f8; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .chip.active { border-color: var(--accent-dim); color: #d8b8f8; background: rgba(176,106,216,0.12); }
+  .count { font-size: 12px; color: var(--muted); }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+  .card {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .card:hover { border-color: #555; }
+  .card.selected { border-color: var(--accent); background: rgba(176, 106, 216, 0.07); }
+  .card .check {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1.5px solid #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: transparent;
+    background: rgba(0,0,0,0.4);
+  }
+  .card.selected .check { border-color: var(--accent); background: var(--accent); color: #111; }
+  .card .name { font-size: 12px; color: var(--muted); margin-bottom: 10px; padding-right: 28px; }
+  .card.selected .name { color: #d8b8f8; }
+  .card .preview {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #f2f2f2;
+    line-height: 1.25;
+    word-break: break-word;
+    opacity: 0.25;
+    transition: opacity 0.4s;
+  }
+  .card.ready .preview { opacity: 1; }
+  .card .status {
+    position: absolute;
+    top: 42px;
+    right: 12px;
+    font-size: 10px;
+    color: #c06060;
+  }
+  #bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    background: rgba(18, 18, 18, 0.95);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  #modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #modal-backdrop.open { display: flex; }
+  #modal {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 12px;
+    width: min(680px, 92vw);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #modal textarea {
+    flex: 1;
+    background: #0d0d0d;
+    color: var(--text);
+    border: none;
+    padding: 12px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    resize: none;
+    min-height: 260px;
+    outline: none;
+  }
+  #modal .mhead {
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  #modal .mfoot { padding: 10px 14px; display: flex; gap: 8px; justify-content: flex-end; }
+  #toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-60px);
+    background: rgba(176,106,216,0.95);
+    color: #111;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 60;
+    transition: transform 0.25s;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #loading {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">OpenMosh <span>Font Picker</span></div>
+  <div class="subtitle">175 latin-ext Google Fonts, all verified to render ą ć ę ł ń ś ź ż — pick your favorites and copy the list.</div>
+  <div class="controls">
+    <input type="text" id="textInput" placeholder="Test text (default: Polish pangram)">
+    <div class="size">
+      <label>Size</label>
+      <input type="range" id="sizeRange" min="16" max="96" value="44">
+      <label id="sizeLabel">44px</label>
+    </div>
+    <input type="text" id="search" placeholder="Search…">
+    <div class="chips" id="batchChips"></div>
+    <div class="chips" id="chips"></div>
+    <button class="btn" id="shuffleBtn">Shuffle</button>
+    <button class="btn" id="clearBtn">Clear</button>
+    <button class="btn accent" id="copyBtn">Copy selected</button>
+  </div>
+</header>
+<div id="loading">Loading fonts…</div>
+<div id="grid"></div>
+<div id="bar">
+  <span class="count" id="count">0 selected</span>
+  <button class="btn accent" id="copyBtn2">Copy selected (JSON)</button>
+  <button class="btn" id="copyNamesBtn">Copy names only</button>
+</div>
+<div id="modal-backdrop">
+  <div id="modal">
+    <div class="mhead">
+      <span>Selected fonts</span>
+      <button class="btn" id="closeModal">✕</button>
+    </div>
+    <textarea id="output" spellcheck="false"></textarea>
+    <div class="mfoot">
+      <button class="btn" id="copyOutput">Copy to clipboard</button>
+      <button class="btn" id="closeModal2">Done</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+const FONTS = [{"name": "Abhaya Libre", "cat": "Serif", "b": "m"}, {"name": "Abril Fatface", "cat": "Display", "b": "m"}, {"name": "Agbalumo", "cat": "Display", "b": "e"}, {"name": "Agu Display", "cat": "Display", "b": "m"}, {"name": "Akaya Telivigala", "cat": "Display", "b": "m"}, {"name": "Alegreya", "cat": "Serif", "b": "e"}, {"name": "Alfa Slab One", "cat": "Display", "b": "m"}, {"name": "Amarante", "cat": "Display", "b": "e"}, {"name": "Anonymous Pro", "cat": "Monospace", "b": "m"}, {"name": "Anton", "cat": "Sans Serif", "b": "m"}, {"name": "Anybody", "cat": "Display", "b": "m"}, {"name": "Asset", "cat": "Display", "b": "e"}, {"name": "Atomic Age", "cat": "Display", "b": "m"}, {"name": "Audiowide", "cat": "Display", "b": "m"}, {"name": "Badeen Display", "cat": "Display", "b": "m"}, {"name": "Bahianita", "cat": "Display", "b": "e"}, {"name": "Bakbak One", "cat": "Display", "b": "m"}, {"name": "Baloo Bhai 2", "cat": "Display", "b": "m"}, {"name": "Baloo Bhaina 2", "cat": "Display", "b": "m"}, {"name": "Baloo Chettan 2", "cat": "Display", "b": "m"}, {"name": "Baloo Tamma 2", "cat": "Display", "b": "m"}, {"name": "Balsamiq Sans", "cat": "Display", "b": "m"}, {"name": "Bangers", "cat": "Display", "b": "m"}, {"name": "Barrio", "cat": "Display", "b": "e"}, {"name": "Bebas Neue", "cat": "Sans Serif", "b": "e"}, {"name": "Bellota Text", "cat": "Display", "b": "m"}, {"name": "Bevan", "cat": "Serif", "b": "e"}, {"name": "Big Shoulders", "cat": "Display", "b": "e"}, {"name": "Bigelow Rules", "cat": "Display", "b": "e"}, {"name": "Bitcount Grid Double Ink", "cat": "Display", "b": "m"}, {"name": "Bitcount Grid Single", "cat": "Display", "b": "m"}, {"name": "Bitcount Ink", "cat": "Display", "b": "m"}, {"name": "Bitcount Prop Double Ink", "cat": "Display", "b": "m"}, {"name": "Bitcount Prop Single", "cat": "Display", "b": "m"}, {"name": "Bitcount Single Ink", "cat": "Display", "b": "m"}, {"name": "Black Ops One", "cat": "Display", "b": "m"}, {"name": "Blaka", "cat": "Display", "b": "e"}, {"name": "Blaka Hollow", "cat": "Display", "b": "e"}, {"name": "Blaka Ink", "cat": "Display", "b": "e"}, {"name": "Bowlby One SC", "cat": "Display", "b": "m"}, {"name": "Bruno Ace SC", "cat": "Display", "b": "m"}, {"name": "Bungee Outline", "cat": "Display", "b": "e"}, {"name": "Bungee Spice", "cat": "Display", "b": "e"}, {"name": "Butcherman", "cat": "Display", "b": "e"}, {"name": "Cabin Condensed", "cat": "Sans Serif", "b": "m"}, {"name": "Calistoga", "cat": "Display", "b": "m"}, {"name": "Castoro Titling", "cat": "Display", "b": "e"}, {"name": "Caveat", "cat": "Handwriting", "b": "m"}, {"name": "Changa", "cat": "Sans Serif", "b": "m"}, {"name": "Chonburi", "cat": "Display", "b": "m"}, {"name": "Cinzel", "cat": "Serif", "b": "e"}, {"name": "Cinzel Decorative", "cat": "Display", "b": "m"}, {"name": "Coda", "cat": "Display", "b": "m"}, {"name": "Coiny", "cat": "Display", "b": "m"}, {"name": "Combo", "cat": "Display", "b": "e"}, {"name": "Cousine", "cat": "Monospace", "b": "m"}, {"name": "Coustard", "cat": "Serif", "b": "e"}, {"name": "Croissant One", "cat": "Display", "b": "m"}, {"name": "Crushed", "cat": "Display", "b": "m"}, {"name": "Dela Gothic One", "cat": "Display", "b": "e"}, {"name": "Diplomata SC", "cat": "Display", "b": "m"}, {"name": "DynaPuff", "cat": "Display", "b": "e"}, {"name": "Edu VIC WA NT Hand Pre", "cat": "Handwriting", "b": "m"}, {"name": "Exo 2", "cat": "Sans Serif", "b": "m"}, {"name": "Fascinate", "cat": "Display", "b": "e"}, {"name": "Fascinate Inline", "cat": "Display", "b": "e"}, {"name": "Fira Code", "cat": "Monospace", "b": "m"}, {"name": "Flow Block", "cat": "Display", "b": "e"}, {"name": "Flow Circular", "cat": "Display", "b": "e"}, {"name": "Flow Rounded", "cat": "Display", "b": "e"}, {"name": "Forum", "cat": "Display", "b": "e"}, {"name": "Freckle Face", "cat": "Display", "b": "m"}, {"name": "Freeman", "cat": "Display", "b": "e"}, {"name": "Funnel Display", "cat": "Display", "b": "m"}, {"name": "Ga Maamli", "cat": "Display", "b": "e"}, {"name": "Galindo", "cat": "Display", "b": "m"}, {"name": "Girassol", "cat": "Display", "b": "m"}, {"name": "Glass Antiqua", "cat": "Display", "b": "e"}, {"name": "Goldman", "cat": "Display", "b": "e"}, {"name": "Google Sans", "cat": "Sans Serif", "b": "m"}, {"name": "Google Sans Code", "cat": "Monospace", "b": "m"}, {"name": "Gowun Batang", "cat": "Serif", "b": "m"}, {"name": "Grenze Gotisch", "cat": "Display", "b": "e"}, {"name": "Handjet", "cat": "Display", "b": "e"}, {"name": "Intel One Mono", "cat": "Monospace", "b": "m"}, {"name": "Itim", "cat": "Handwriting", "b": "m"}, {"name": "Jacquard 12", "cat": "Display", "b": "e"}, {"name": "Jacquard 12 Charted", "cat": "Display", "b": "m"}, {"name": "Jacquard 24", "cat": "Display", "b": "e"}, {"name": "Jacquard 24 Charted", "cat": "Display", "b": "e"}, {"name": "Jacquarda Bastarda 9 Charted", "cat": "Display", "b": "m"}, {"name": "Jaini", "cat": "Display", "b": "m"}, {"name": "Jersey 10", "cat": "Display", "b": "e"}, {"name": "Jersey 10 Charted", "cat": "Display", "b": "m"}, {"name": "Jersey 20", "cat": "Display", "b": "e"}, {"name": "Jersey 20 Charted", "cat": "Display", "b": "m"}, {"name": "Jersey 25 Charted", "cat": "Display", "b": "e"}, {"name": "Jomhuria", "cat": "Display", "b": "m"}, {"name": "Joti One", "cat": "Display", "b": "m"}, {"name": "Kelly Slab", "cat": "Display", "b": "m"}, {"name": "Kode Mono", "cat": "Monospace", "b": "m"}, {"name": "Konkhmer Sleokchher", "cat": "Display", "b": "e"}, {"name": "Kumar One", "cat": "Display", "b": "e"}, {"name": "Kumar One Outline", "cat": "Display", "b": "e"}, {"name": "Lemon", "cat": "Display", "b": "e"}, {"name": "Lemonada", "cat": "Display", "b": "m"}, {"name": "Life Savers", "cat": "Display", "b": "e"}, {"name": "Lilex", "cat": "Monospace", "b": "m"}, {"name": "Limelight", "cat": "Display", "b": "m"}, {"name": "Livvic", "cat": "Sans Serif", "b": "m"}, {"name": "Lobster", "cat": "Display", "b": "e"}, {"name": "Lora", "cat": "Serif", "b": "m"}, {"name": "Love Ya Like A Sister", "cat": "Display", "b": "m"}, {"name": "Luckiest Guy", "cat": "Display", "b": "e"}, {"name": "Margarine", "cat": "Display", "b": "e"}, {"name": "MedievalSharp", "cat": "Display", "b": "e"}, {"name": "Megrim", "cat": "Display", "b": "m"}, {"name": "Micro 5", "cat": "Display", "b": "e"}, {"name": "Milonga", "cat": "Display", "b": "e"}, {"name": "Modak", "cat": "Display", "b": "e"}, {"name": "New Rocker", "cat": "Display", "b": "e"}, {"name": "Noto Sans Cherokee", "cat": "Sans Serif", "b": "m"}, {"name": "Noto Sans Old Permic", "cat": "Sans Serif", "b": "m"}, {"name": "Noto Serif Khojki", "cat": "Serif", "b": "m"}, {"name": "Nova Flat", "cat": "Display", "b": "m"}, {"name": "Nova Mono", "cat": "Monospace", "b": "m"}, {"name": "Nova Slim", "cat": "Display", "b": "m"}, {"name": "Oldenburg", "cat": "Display", "b": "m"}, {"name": "Orelega One", "cat": "Display", "b": "m"}, {"name": "Oxanium", "cat": "Display", "b": "m"}, {"name": "Pacifico", "cat": "Handwriting", "b": "e"}, {"name": "Pathway Gothic One", "cat": "Sans Serif", "b": "m"}, {"name": "Phudu", "cat": "Display", "b": "m"}, {"name": "Pinyon Script", "cat": "Handwriting", "b": "e"}, {"name": "Playball", "cat": "Display", "b": "m"}, {"name": "Playpen Sans", "cat": "Handwriting", "b": "m"}, {"name": "Prosto One", "cat": "Display", "b": "m"}, {"name": "Protest Strike", "cat": "Display", "b": "m"}, {"name": "Raleway Dots", "cat": "Display", "b": "e"}, {"name": "Ranga", "cat": "Display", "b": "m"}, {"name": "Red Hat Mono", "cat": "Monospace", "b": "m"}, {"name": "Ribeye", "cat": "Display", "b": "e"}, {"name": "Ribeye Marrow", "cat": "Display", "b": "e"}, {"name": "Righteous", "cat": "Display", "b": "m"}, {"name": "Rozha One", "cat": "Serif", "b": "m"}, {"name": "Rubik 80s Fade", "cat": "Display", "b": "e"}, {"name": "Rubik Burned", "cat": "Display", "b": "e"}, {"name": "Rubik Doodle Triangles", "cat": "Display", "b": "e"}, {"name": "Rubik Lines", "cat": "Display", "b": "e"}, {"name": "Rubik Microbe", "cat": "Display", "b": "e"}, {"name": "Rubik Scribble", "cat": "Display", "b": "e"}, {"name": "Rubik Wet Paint", "cat": "Display", "b": "e"}, {"name": "Sancreek", "cat": "Display", "b": "e"}, {"name": "Sassy Frass", "cat": "Handwriting", "b": "e"}, {"name": "Sekuya", "cat": "Display", "b": "m"}, {"name": "Shojumaru", "cat": "Display", "b": "e"}, {"name": "Sigmar One", "cat": "Display", "b": "m"}, {"name": "Smokum", "cat": "Display", "b": "e"}, {"name": "Sora", "cat": "Sans Serif", "b": "m"}, {"name": "Srisakdi", "cat": "Display", "b": "e"}, {"name": "Staatliches", "cat": "Display", "b": "m"}, {"name": "Stint Ultra Expanded", "cat": "Serif", "b": "e"}, {"name": "Style Script", "cat": "Handwriting", "b": "m"}, {"name": "Syne Tactile", "cat": "Display", "b": "e"}, {"name": "Teko", "cat": "Sans Serif", "b": "m"}, {"name": "Tilt Neon", "cat": "Display", "b": "e"}, {"name": "Tilt Prism", "cat": "Display", "b": "e"}, {"name": "Tourney", "cat": "Display", "b": "m"}, {"name": "Ultra", "cat": "Serif", "b": "m"}, {"name": "Underdog", "cat": "Display", "b": "e"}, {"name": "Viaoda Libre", "cat": "Display", "b": "m"}, {"name": "Wittgenstein", "cat": "Serif", "b": "m"}, {"name": "Yatra One", "cat": "Display", "b": "e"}, {"name": "Yeseva One", "cat": "Display", "b": "m"}, {"name": "Zilla Slab", "cat": "Serif", "b": "m"}];
+
+const grid = document.getElementById("grid");
+const search = document.getElementById("search");
+const textInput = document.getElementById("textInput");
+const sizeRange = document.getElementById("sizeRange");
+const sizeLabel = document.getElementById("sizeLabel");
+const chips = document.getElementById("chips");
+const countEl = document.getElementById("count");
+
+const DEFAULT_TEXT = "Zażółć gęślą jaźń ąćęłńśźż";
+textInput.value = DEFAULT_TEXT;
+
+let previewText = DEFAULT_TEXT;
+let fontSize = 44;
+let filter = "";
+let catFilter = "All";
+let batchFilter = "All";
+const selected = new Set(JSON.parse(localStorage.getItem("openmosh-font-picks") || "[]"));
+let order = FONTS.map((f) => f.name);
+let readyCount = 0;
+
+// ---- font loading: inject stylesheet chunks so all families register ----
+function loadStylesheets() {
+  const CHUNK = 40;
+  for (let i = 0; i < FONTS.length; i += CHUNK) {
+    const fams = FONTS.slice(i, i + CHUNK)
+      .map((f) => "family=" + f.name.replace(/ /g, "+").replace(/&/g, "%26"))
+      .join("&");
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?" + fams + "&display=swap";
+    document.head.appendChild(link);
+  }
+}
+
+// ---- cards ----
+function render() {
+  const q = filter.toLowerCase();
+  const cats = new Set(["All", ...FONTS.map((f) => f.cat)]);
+  chips.innerHTML = "";
+  for (const c of cats) {
+    const b = document.createElement("button");
+    b.className = "chip" + (c === catFilter ? " active" : "");
+    b.textContent = c;
+    b.onclick = () => { catFilter = c; updateChips(); render(); };
+    chips.appendChild(b);
+  }
+  const batchChipsEl = document.getElementById("batchChips");
+  const batches = [
+    ["All", FONTS.length],
+    ["Exotic", FONTS.filter((f) => f.b === "e").length],
+    ["Main", FONTS.filter((f) => f.b === "m").length],
+  ];
+  batchChipsEl.innerHTML = "";
+  for (const [label, n] of batches) {
+    const b = document.createElement("button");
+    b.className = "chip" + (label === batchFilter ? " active" : "");
+    b.textContent = label + " (" + n + ")";
+    b.onclick = () => { batchFilter = label; render(); };
+    batchChipsEl.appendChild(b);
+  }
+  const batchMap = { Exotic: "e", Main: "m" };
+  const visible = order.filter((name) => {
+    const f = FONTS.find((x) => x.name === name);
+    const okCat = catFilter === "All" || f.cat === catFilter;
+    const okBatch = batchFilter === "All" || f.b === batchMap[batchFilter];
+    return okCat && okBatch && name.toLowerCase().includes(q);
+  });
+  grid.innerHTML = "";
+  document.getElementById("loading").style.display = "none";
+  if (visible.length === 0) {
+    grid.innerHTML = '<div class="subtitle" style="grid-column:1/-1;padding:40px;text-align:center">No fonts match.</div>';
+  }
+  for (const name of visible) {
+    const card = document.createElement("div");
+    card.className = "card" + (selected.has(name) ? " selected" : "");
+    card.innerHTML =
+      '<div class="check">✓</div>' +
+      '<div class="name">' + escapeHtml(name) + "</div>" +
+      '<div class="preview"></div>';
+    card.onclick = () => toggle(name, card);
+    const prev = card.querySelector(".preview");
+    prev.textContent = previewText;
+    prev.style.fontFamily = "'" + name + "', sans-serif";
+    prev.style.fontSize = fontSize + "px";
+    // fade in once the face (incl. latin-ext) is usable
+    if (document.fonts) {
+      document.fonts.load(fontSize + 'px "' + name + '"', previewText)
+        .then(() => { card.classList.add("ready"); readyCount++; updateCounts(); })
+        .catch(() => {
+          const s = document.createElement("div");
+          s.className = "status";
+          s.textContent = "load failed";
+          card.appendChild(s);
+        });
+    } else {
+      card.classList.add("ready");
+    }
+    grid.appendChild(card);
+  }
+  updateCounts();
+}
+
+function updateChips() {
+  for (const c of chips.children) {
+    c.classList.toggle("active", c.textContent === catFilter);
+  }
+}
+
+function toggle(name, card) {
+  if (selected.has(name)) selected.delete(name);
+  else selected.add(name);
+  card.classList.toggle("selected");
+  localStorage.setItem("openmosh-font-picks", JSON.stringify([...selected]));
+  updateCounts();
+}
+
+function updateCounts() {
+  countEl.textContent = selected.size + " selected · " + readyCount + "/" + FONTS.length + " fonts loaded";
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ---- toolbar events ----
+textInput.addEventListener("input", () => {
+  previewText = textInput.value.trim() || DEFAULT_TEXT;
+  for (const card of grid.children) {
+    card.querySelector(".preview").textContent = previewText;
+  }
+});
+sizeRange.addEventListener("input", () => {
+  fontSize = +sizeRange.value;
+  sizeLabel.textContent = fontSize + "px";
+  for (const card of grid.children) {
+    card.querySelector(".preview").style.fontSize = fontSize + "px";
+  }
+});
+search.addEventListener("input", () => { filter = search.value; render(); });
+
+document.getElementById("shuffleBtn").onclick = () => {
+  order = [...order].sort(() => Math.random() - 0.5);
+  render();
+};
+document.getElementById("clearBtn").onclick = () => {
+  selected.clear();
+  localStorage.removeItem("openmosh-font-picks");
+  render();
+};
+
+// ---- copy ----
+function selectedOrdered() {
+  return order.filter((n) => selected.has(n));
+}
+
+function showModal(text) {
+  document.getElementById("output").value = text;
+  document.getElementById("modal-backdrop").classList.add("open");
+}
+
+function copySelected(kind) {
+  const sel = selectedOrdered();
+  if (sel.length === 0) { toast("Nothing selected"); return; }
+  const text = kind === "json" ? '["' + sel.join('","') + '"]' : sel.join(", ");
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text)
+      .then(() => toast("Copied " + sel.length + " fonts"))
+      .catch(() => showModal(text));
+  } else {
+    showModal(text);
+  }
+}
+
+document.getElementById("copyBtn").onclick = () => copySelected("json");
+document.getElementById("copyBtn2").onclick = () => copySelected("json");
+document.getElementById("copyNamesBtn").onclick = () => copySelected("names");
+document.getElementById("copyOutput").onclick = () => {
+  const ta = document.getElementById("output");
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  toast("Copied to clipboard");
+};
+document.getElementById("closeModal").onclick = () => document.getElementById("modal-backdrop").classList.remove("open");
+document.getElementById("closeModal2").onclick = () => document.getElementById("modal-backdrop").classList.remove("open");
+document.getElementById("modal-backdrop").onclick = (e) => { if (e.target.id === "modal-backdrop") e.target.classList.remove("open"); };
+
+// ---- toast ----
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+loadStylesheets();
+render();
+</script>
+</body>
+</html>

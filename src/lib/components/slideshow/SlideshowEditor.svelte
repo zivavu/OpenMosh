@@ -16,7 +16,9 @@
 		normalizeTextTimeline,
 		resolveTextLayersAt,
 		applyLyricsToTimeline,
+		updateLane,
 		type TextClip,
+		type TextLane,
 		type TextTimeline,
 	} from '../../text';
 	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
@@ -827,6 +829,16 @@
 		return null;
 	});
 
+	/** The lane holding the selected clip — the panel edits its style. */
+	let selectedTextLane = $derived.by(() => {
+		if (!selectedTextClipId) return null;
+		return (
+			textTimeline.lanes.find((l) =>
+				l.clips.some((c) => c.id === selectedTextClipId),
+			) ?? null
+		);
+	});
+
 	/** Layers for whatever the preview is showing right now. */
 	function currentTextLayers() {
 		return resolveTextLayersAt(textTimeline, textTime);
@@ -851,6 +863,10 @@
 				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
 			})),
 		});
+	}
+
+	function updateTextLane(next: TextLane) {
+		setTextTimeline(updateLane(textTimeline, next.id, () => next));
 	}
 
 	function toggleTextTimeline() {
@@ -882,7 +898,7 @@
 	}
 
 	/** Transport for the lyrics-sync modal: the preview drives the same audio
-		* clock the beats and text timeline run on. */
+	 * clock the beats and text timeline run on. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
 		textTimeline.enabled
 			? {
@@ -1232,8 +1248,10 @@
 					← Back to image effects
 				</button>
 				<TextClipPanel
+					lane={selectedTextLane}
 					clip={selectedTextClip}
-					onChange={updateTextClip}
+					onLaneChange={updateTextLane}
+					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
 					hasTrack={!!audio.trackFile}
 					spectrumData={audio.spectrumData}
