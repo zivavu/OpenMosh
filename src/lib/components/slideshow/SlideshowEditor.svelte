@@ -15,9 +15,11 @@
 		EMPTY_TEXT_TIMELINE,
 		normalizeTextTimeline,
 		resolveTextLayersAt,
+		applyLyricsToTimeline,
 		type TextClip,
 		type TextTimeline,
 	} from '../../text';
+	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
 	import TextTimelineLane from '../text/TextTimeline.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import type { GlRenderer } from '../../gl/renderer';
@@ -802,6 +804,7 @@
 	// ── Text timeline ──
 	// Keyed to audio time, the same clock the beat driver runs on.
 	let selectedTextClipId = $state<string | null>(null);
+	let lyricsOpen = $state(false);
 	let textTime = $state(0);
 	const textHistory = createTextHistory();
 
@@ -859,7 +862,51 @@
 					? { ...textTimeline, enabled: true }
 					: createTextTimeline(),
 		);
-		if (!textTimeline.enabled) selectedTextClipId = null;
+		if (!textTimeline.enabled) {
+			selectedTextClipId = null;
+			lyricsOpen = false;
+		}
+	}
+
+	/** Enable the text timeline (when off) and open the lyrics-sync modal. */
+	function openLyricsSync() {
+		if (!textTimeline.enabled) {
+			pushTextHistory();
+			setTextTimeline(
+				textTimeline.lanes.length > 0
+					? { ...textTimeline, enabled: true }
+					: createTextTimeline(),
+			);
+		}
+		lyricsOpen = true;
+	}
+
+	/** Transport for the lyrics-sync modal: the preview drives the same audio
+		* clock the beats and text timeline run on. */
+	let lyricsSync = $derived<LyricsSyncProps | null>(
+		textTimeline.enabled
+			? {
+				isPlaying: previewPlaying,
+				spanStart: audio.spanStart,
+				spanEnd: audio.spanEnd,
+				getCurrentTime: () => textTime,
+				onPlay: () => void startPreview(),
+				onPause: stopPreview,
+				onSeek: (t) => {
+					textTime = t;
+					if (audio.trackFile) audio.seekTo(t);
+				},
+				onApply: applyLyrics,
+			}
+		: null,
+	);
+
+	/** Drop the synced lines into the lyrics lane and select the first one. */
+	function applyLyrics(clips: TextClip[]) {
+		if (clips.length === 0) return;
+		pushTextHistory();
+		setTextTimeline(applyLyricsToTimeline(textTimeline, clips));
+		selectedTextClipId = clips[0].id;
 	}
 	const recordingState = createRecordingState();
 
@@ -1053,6 +1100,7 @@
 			onExit={onExit ? handleExit : undefined}
 			textEnabled={textTimeline.enabled}
 			onToggleText={toggleTextTimeline}
+			onSyncLyrics={openLyricsSync}
 		/>
 
 		{#if activeView === 'grid'}
@@ -1132,6 +1180,8 @@
 					textTime = t;
 					if (audio.trackFile) audio.seekTo(t);
 				}}
+				{lyricsSync}
+				bind:lyricsOpen
 			/>
 		{/if}
 		{#if !audio.trackFile}

@@ -9,50 +9,50 @@ import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "./types";
  * slider sweep) into a single entry, so undo steps back a whole gesture.
  */
 export function createTextHistory() {
-  let history = $state<TextTimeline[]>([{ ...EMPTY_TEXT_TIMELINE }]);
-  let index = $state(0);
-  let lastKey: string | null = null;
-  const canUndo = $derived(index > 0);
-  const canRedo = $derived(index < history.length - 1);
+   let history = $state<TextTimeline[]>([{ ...EMPTY_TEXT_TIMELINE }]);
+   let index = $state(0);
+   let lastKey: string | null = null;
+   const canUndo = $derived(index > 0);
+   const canRedo = $derived(index < history.length - 1);
 
-  function push(timeline: TextTimeline, coalesceKey?: string) {
-    if (coalesceKey && coalesceKey === lastKey) return;
-    lastKey = coalesceKey ?? null;
-    history.length = index + 1;
-    history.push(structuredClone(timeline));
-    index = history.length - 1;
-  }
+   function push(timeline: TextTimeline, coalesceKey?: string) {
+      if (coalesceKey && coalesceKey === lastKey) return;
+      lastKey = coalesceKey ?? null;
+      history.length = index + 1;
+      history.push($state.snapshot(timeline) as TextTimeline);
+      index = history.length - 1;
+   }
 
-  function undo(): TextTimeline | null {
-    if (!canUndo) return null;
-    lastKey = null;
-    index--;
-    return structuredClone(history[index]);
-  }
+   function undo(): TextTimeline | null {
+      if (!canUndo) return null;
+      lastKey = null;
+      index--;
+      return $state.snapshot(history[index]) as TextTimeline;
+   }
 
-  function redo(): TextTimeline | null {
-    if (!canRedo) return null;
-    lastKey = null;
-    index++;
-    return structuredClone(history[index]);
-  }
+   function redo(): TextTimeline | null {
+      if (!canRedo) return null;
+      lastKey = null;
+      index++;
+      return $state.snapshot(history[index]) as TextTimeline;
+   }
 
-  function reset(timeline: TextTimeline) {
-    history = [structuredClone(timeline)];
-    index = 0;
-    lastKey = null;
-  }
+   function reset(timeline: TextTimeline) {
+      history = [$state.snapshot(timeline) as TextTimeline];
+      index = 0;
+      lastKey = null;
+   }
 
-  return {
-    get canUndo() {
-      return canUndo;
-    },
-    get canRedo() {
-      return canRedo;
-    },
-    push,
-    undo,
-    redo,
-    reset,
-  };
+   return {
+      get canUndo() {
+         return canUndo;
+      },
+      get canRedo() {
+         return canRedo;
+      },
+      push,
+      undo,
+      redo,
+      reset,
+   };
 }

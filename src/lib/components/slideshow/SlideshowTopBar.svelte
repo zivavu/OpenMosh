@@ -1,5 +1,5 @@
 	<script lang="ts">
-	import { Home, Type } from 'lucide-svelte';
+	import { Home, MicVocal, Type } from 'lucide-svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
 
@@ -10,6 +10,7 @@
 		onExit?: () => void;
 		textEnabled?: boolean;
 		onToggleText?: () => void;
+		onSyncLyrics?: () => void;
 	}
 
 	let {
@@ -19,6 +20,7 @@
 		onExit,
 		textEnabled = false,
 		onToggleText,
+		onSyncLyrics,
 	}: Props = $props();
 </script>
 
@@ -49,6 +51,16 @@
 				title="Text timeline: timed text layers with their own effects"
 			>
 				<Type size={14} />
+			</button>
+		{/if}
+
+		{#if onSyncLyrics}
+			<button
+				class="text-btn"
+				title="Sync lyrics to the song: paste them, then press Space as it plays"
+				onclick={onSyncLyrics}
+			>
+				<MicVocal size={14} />
 			</button>
 		{/if}
 
