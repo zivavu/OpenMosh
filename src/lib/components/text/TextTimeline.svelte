@@ -16,6 +16,7 @@
 		createTextClip,
 		createTextLane,
 		freeRangeAt,
+		lyricsDraftFromTimeline,
 		MIN_CLIP_LENGTH,
 		moveClip,
 		removeClip,
@@ -57,7 +58,7 @@
 		isPlaying?: boolean;
 		onTogglePlay?: (() => void) | null;
 		/** When provided, the header grows a Lyrics button that opens the sync
-			* modal, wired to the mode's own transport. */
+		 * modal, wired to the mode's own transport. */
 		lyricsSync?: LyricsSyncProps | null;
 		/** External open/close of the sync modal (e.g. the editor's top bar). */
 		lyricsOpen?: boolean;
@@ -78,6 +79,10 @@
 		lyricsSync = null,
 		lyricsOpen = $bindable(false),
 	}: Props = $props();
+
+	/** What the sync modal opens onto: the lyrics lane as the timeline holds it,
+	 * so clips dragged here show up there with their nudged times. */
+	let lyricsDraft = $derived(lyricsDraftFromTimeline(timeline));
 
 	let trackEl = $state<HTMLElement | undefined>(undefined);
 	const vp = new TimelineViewport(
@@ -112,24 +117,22 @@
 		}
 	});
 
-	// Follow the playhead: once it crosses the edges of the window while
-	// playing or scrubbing, slide the view so it settles back at ~90% (or
-	// ~10% when rewinding). Zooming to a tight spot can't lose it.
+	// Keep the playhead centred: the view slides under it rather than the other
+	// way round, so the clip being heard is always the one in the middle. Only
+	// while zoomed — unzoomed the whole track is on screen and there is nothing
+	// to scroll. panView clamps at the track ends, where the window runs out of
+	// room and the playhead drifts off centre instead of scrolling past the end.
 	$effect(() => {
 		const t = currentTime;
 		const d = trackDuration;
 		if (d <= 0) return;
-		const vs = untrack(() => vp.viewStart);
-		const ve = untrack(() => vp.viewEnd);
-		if (ve <= 0) return;
-		const dur = ve - vs;
-		const past = t - (vs + dur * 0.9);
-		if (past > 0) {
-			vp.panView(past);
-		} else {
-			const back = vs + dur * 0.1 - t;
-			if (back > 0) vp.panView(-back);
-		}
+		// Untracked: this effect writes the view, and reading it back tracked
+		// would retrigger on its own pan.
+		const centred = untrack(() => {
+			if (!vp.isZoomed || vp.viewEnd <= 0) return null;
+			return t - (vp.viewStart + vp.viewDuration / 2);
+		});
+		if (centred !== null && centred !== 0) vp.panView(centred);
 	});
 
 	let drag = $state<{
@@ -497,6 +500,7 @@
 			spanStart={lyricsSync.spanStart}
 			spanEnd={lyricsSync.spanEnd}
 			getCurrentTime={lyricsSync.getCurrentTime}
+			existing={lyricsDraft}
 			onPlay={lyricsSync.onPlay}
 			onPause={lyricsSync.onPause}
 			onSeek={lyricsSync.onSeek}

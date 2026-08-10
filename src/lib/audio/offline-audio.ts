@@ -80,7 +80,7 @@ export interface FrameAudioData {
 const bitReversalTables = new Map<number, Uint32Array>();
 const twiddleRealTables = new Map<number, Float32Array>();
 const twiddleImagTables = new Map<number, Float32Array>();
-const hannWindows = new Map<number, Float32Array>();
+const blackmanWindows = new Map<number, Float32Array>();
 
 function getBitReversalTable(n: number): Uint32Array {
   let table = bitReversalTables.get(n);
@@ -124,14 +124,23 @@ function getTwiddleTables(n: number): { real: Float32Array; imag: Float32Array }
   return { real, imag };
 }
 
-function getHannWindow(n: number): Float32Array {
-  let w = hannWindows.get(n);
+/**
+ * The Blackman window AnalyserNode applies (a0 .42, a1 .5, a2 .08, over N).
+ * Matching it matters because its coherent gain differs from a Hann window's
+ * by ~1.5 dB — a constant offset between what a preview measured and what an
+ * export measured for the very same audio.
+ */
+function getBlackmanWindow(n: number): Float32Array {
+  let w = blackmanWindows.get(n);
   if (!w) {
     w = new Float32Array(n);
     for (let i = 0; i < n; i++) {
-      w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1 || 1)));
+      w[i] =
+        0.42 -
+        0.5 * Math.cos((2 * Math.PI * i) / n) +
+        0.08 * Math.cos((4 * Math.PI * i) / n);
     }
-    hannWindows.set(n, w);
+    blackmanWindows.set(n, w);
   }
   return w;
 }
@@ -206,7 +215,7 @@ function computeFrameAnalysis(
   timeSeconds: number,
   fftSize: number,
   scratch: AnalysisScratch,
-  hannWindow: Float32Array,
+  windowCurve: Float32Array,
 ): FrameAudioData {
   const numChannels = channels.length;
   const frameStartSample = Math.max(
@@ -228,7 +237,7 @@ function computeFrameAnalysis(
       s += channels[ch][frameStartSample + i];
     }
     s /= numChannels;
-    real[i] = s * hannWindow[i];
+    real[i] = s * windowCurve[i];
     sumSq += s * s;
   }
   const volumeLevel =
@@ -274,7 +283,7 @@ export async function analyzeFrames(
   }
   const sampleRate = buffer.sampleRate;
   const length = buffer.length;
-  const hannWindow = getHannWindow(fftSize);
+  const windowCurve = getBlackmanWindow(fftSize);
   const scratch: AnalysisScratch = {
     real: new Float32Array(fftSize),
     imag: new Float32Array(fftSize),
@@ -291,7 +300,7 @@ export async function analyzeFrames(
         frameTimes[i],
         fftSize,
         scratch,
-        hannWindow,
+        windowCurve,
       ),
     );
     if (i % yieldEvery === yieldEvery - 1 && i < frameTimes.length - 1) {

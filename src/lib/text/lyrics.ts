@@ -1,3 +1,4 @@
+import { sortClips } from "./resolve";
 import {
   createTextClip,
   createTextLane,
@@ -21,11 +22,16 @@ export const LYRICS_STYLE = { x: 0.5, y: 0.85, size: 0.075 } as const;
  * Timings are forced to climb on the way in. A nudge that clamps at the span
  * end, or a re-stamp after seeking backwards, can hand us lines that sit on or
  * behind their predecessor, and a lane's clips must never overlap.
+ *
+ * `previous` is the lane's current clips. A line whose text is unchanged is
+ * re-timed in place rather than replaced, so re-syncing one bad line leaves the
+ * effect chains on every other line alone.
  */
 export function createLyricsClips(
   lines: string[],
   timings: number[],
   spanEnd: number,
+  previous: TextClip[] = [],
 ): TextClip[] {
   const starts: number[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -35,15 +41,37 @@ export function createLyricsClips(
     const capped = Math.min(timings[i], latest);
     starts.push(i > 0 ? Math.max(capped, starts[i - 1] + MIN_CLIP_LENGTH) : capped);
   }
-  return lines.map((text, i) =>
-    createTextClip(
-      starts[i],
+  // Claimed one at a time, so a line repeated twice reuses two distinct clips.
+  const spare = [...previous];
+  return lines.map((text, i) => {
+    const start = starts[i];
+    const end =
       i + 1 < lines.length
         ? starts[i + 1]
-        : Math.max(spanEnd, starts[i] + MIN_CLIP_LENGTH),
-      text,
-    ),
-  );
+        : Math.max(spanEnd, start + MIN_CLIP_LENGTH);
+    const at = spare.findIndex((c) => c.text === text);
+    if (at === -1) return createTextClip(start, end, text);
+    const [kept] = spare.splice(at, 1);
+    return { ...kept, start, end };
+  });
+}
+
+/** The lines and timings a sync left in the lane, for reopening the modal on
+ * what the timeline actually holds. Null before the first sync lands. */
+export function lyricsDraftFromTimeline(
+  timeline: TextTimeline,
+): { lines: string[]; timings: number[]; clips: TextClip[] } | null {
+  const lane = lyricsLane(timeline);
+  if (!lane) return null;
+  // A blank clip is no line at all. Dropping it here keeps lines and timings
+  // index-aligned, which everything downstream assumes.
+  const clips = sortClips(lane.clips).filter((c) => c.text.trim());
+  if (clips.length === 0) return null;
+  return {
+    lines: clips.map((c) => c.text),
+    timings: clips.map((c) => c.start),
+    clips,
+  };
 }
 
 /** The timeline's lyrics lane, or undefined before the first sync lands. */

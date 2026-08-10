@@ -1,5 +1,5 @@
 import { FREQ_PRESETS, getDefinition, type EffectInstance } from "../effects";
-import { autoRangeLevel } from "./auto-range";
+import { autoRangeLevel, smoothBandLevel } from "./auto-range";
 
 /** Shaping applied after auto-ranging. Above 1 = only bigger hits register. */
 const RESPONSE_EXPONENT = 1.5;
@@ -28,7 +28,7 @@ export function applyVolumeLinksToEffects(
     const key = bandKey(freqMin, freqMax);
     const cached = perBand.get(key);
     if (cached !== undefined) return cached;
-    const raw =
+    const measured =
       frequencyData && sampleRate > 0
         ? getLevelFromFrequencyRange(
             frequencyData,
@@ -38,6 +38,10 @@ export function applyVolumeLinksToEffects(
             freqMax,
           )
         : volumeLevel;
+    // Smoothed before ranging, not after: the envelope has to see the same
+    // steadied signal in an export that the preview's analyser handed it, or
+    // its ceiling gets pinned by transients the preview never showed it.
+    const raw = smoothBandLevel(key, measured, dt);
     // Always stepped, even at amount 0, so the envelope stays warm and raising
     // the slider mid-track doesn't jump off stale floor/ceiling values.
     const ranged = autoRangeLevel(key, raw, dt);
