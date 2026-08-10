@@ -105,16 +105,17 @@
 		};
 	}
 
-	// Follow the track: a new duration resets the window to the whole thing.
+	// Follow the track: any new duration opens the window onto the whole thing.
+	// The duration grows under us — both modes start on the short record window
+	// and only reach the track length once a track loads — and the old window
+	// left in place reads as a deep zoom into the new, far longer timeline.
+	let viewedDuration = 0;
 	$effect(() => {
 		const d = trackDuration;
-		if (d > 0 && vp.viewEnd <= 0) {
-			vp.viewStart = 0;
-			vp.viewEnd = d;
-		} else if (d > 0 && vp.viewEnd > d) {
-			vp.viewStart = Math.min(vp.viewStart, d);
-			vp.viewEnd = d;
-		}
+		if (d <= 0 || d === viewedDuration) return;
+		viewedDuration = d;
+		vp.viewStart = 0;
+		vp.viewEnd = d;
 	});
 
 	// Keep the playhead centred: the view slides under it rather than the other

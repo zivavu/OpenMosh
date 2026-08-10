@@ -283,6 +283,27 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding: 0.75rem;
+		/* Matches the effects panel this replaces. Without a width the sidebar is
+		   sized by this panel's content, and the help text alone is a single
+		   unbroken max-content line — enough to stretch the sidebar across the
+		   window the moment a clip is selected. */
+		width: 310px;
+		max-width: 310px;
+		box-sizing: border-box;
+	}
+
+	@media (max-width: 800px) {
+		.clip-panel {
+			width: 100%;
+			max-width: 100%;
+		}
+	}
+
+	/* The nested chain panel pins itself to the full sidebar width; inside this
+	   panel's padding there is less room, so let it take what is left. */
+	.clip-panel :global(.effects-panel) {
+		width: 100%;
+		max-width: 100%;
 	}
 
 	.empty {
@@ -319,6 +340,10 @@
 
 	.text-input {
 		min-height: 60px;
+		/* A textarea carries an intrinsic `cols` width that ignores the flex
+		   column it sits in. */
+		width: 100%;
+		box-sizing: border-box;
 		padding: 0.35rem;
 		border: 1px solid #333;
 		border-radius: 4px;
@@ -345,6 +370,9 @@
 
 	.row select {
 		flex: 1;
+		/* Font names are long; without this the select refuses to shrink below
+		   its widest option and pushes the row wider than the panel. */
+		min-width: 0;
 		padding: 0.2rem 0.3rem;
 		border: 1px solid #333;
 		border-radius: 4px;

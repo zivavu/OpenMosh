@@ -884,18 +884,6 @@
 		}
 	}
 
-	/** Enable the text timeline (when off) and open the lyrics-sync modal. */
-	function openLyricsSync() {
-		if (!textTimeline.enabled) {
-			pushTextHistory();
-			setTextTimeline(
-				textTimeline.lanes.length > 0
-					? { ...textTimeline, enabled: true }
-					: createTextTimeline(),
-			);
-		}
-		lyricsOpen = true;
-	}
 
 	/** Transport for the lyrics-sync modal: the preview drives the same audio
 	 * clock the beats and text timeline run on. */
@@ -1116,7 +1104,6 @@
 			onExit={onExit ? handleExit : undefined}
 			textEnabled={textTimeline.enabled}
 			onToggleText={toggleTextTimeline}
-			onSyncLyrics={openLyricsSync}
 		/>
 
 		{#if activeView === 'grid'}
