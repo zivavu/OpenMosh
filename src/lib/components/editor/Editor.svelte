@@ -7,6 +7,7 @@
 		Library,
 		ListVideo,
 		Maximize,
+		Type,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
@@ -22,11 +23,20 @@
 	import { loadSettings, saveSettings } from '../../editor/settings';
 	import {
 		cloneEffectInstance,
+		getDefinition,
 		loadInitialEffects,
 		setVolumeLink,
 		type EffectInstance,
 		type Preset,
 	} from '../../effects';
+	import {
+		createTextHistory,
+		createTextTimeline,
+		EMPTY_TEXT_TIMELINE,
+		normalizeTextTimeline,
+		type TextClip,
+		type TextTimeline,
+	} from '../../text';
 	import {
 		cloneSegmentForSplit,
 		createSequenceEffectSource,
@@ -72,6 +82,8 @@
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
+	import TextTimelineLane from '../text/TextTimeline.svelte';
+	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import SequenceTimeline from './SequenceTimeline.svelte';
 	import MoshGroup from './MoshGroup.svelte';
@@ -471,6 +483,7 @@
 		setSequenceEnabled(savedSeq.enabled);
 		sequenceBpm = savedSeq.bpm ?? 0;
 		selectedSegmentId = null;
+		restoreTextTimeline(savedSeq.text);
 		return true;
 	}
 
@@ -613,6 +626,8 @@
 		segments: SequenceSegment[];
 		/** Absent on entries saved before BPM existed. */
 		bpm?: number;
+		/** Absent on entries saved before the text timeline existed. */
+		text?: TextTimeline;
 	}>('openmosh-sequence');
 
 	// Keyed by master clock — that's what segment times are relative to.
@@ -636,6 +651,7 @@
 		setSequenceEnabled(saved.enabled);
 		sequenceBpm = saved.bpm ?? 0;
 		selectedSegmentId = null;
+		restoreTextTimeline(saved.text);
 	});
 
 	// Persist the sequence timeline per library track (deep read via snapshot,
@@ -653,11 +669,12 @@
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const enabled = sequenceEnabled;
 		const bpm = sequenceBpm;
+		const text = $state.snapshot(textTimeline) as TextTimeline;
 		const key = seqStoreKey;
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { enabled, segments: segs, bpm });
+			seqStore.save(key, { enabled, segments: segs, bpm, text });
 		}, 300);
 	});
 
@@ -681,6 +698,7 @@
 			enabled: sequenceEnabled,
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
+			text: $state.snapshot(textTimeline) as TextTimeline,
 		});
 	}
 
@@ -710,6 +728,7 @@
 		if (seqMasterIsAudio) return audio.trackCurrentTime;
 		return videoClock;
 	}
+
 
 	// Owns undo/redo + boundary selection/clipboard for every sequenceSegments
 	// edit — timeline drags/splits (in SequenceTimeline.svelte) as well as
@@ -1422,6 +1441,12 @@
 	// Ctrl+Z/Y: hand-edits only. In sequence mode that's the timeline stack,
 	// which covers both segment structure and panel tweaks on a segment.
 	function undo() {
+		// A selected text clip means the last thing edited was text.
+		if (selectedTextClipId && textHistory.canUndo) {
+			const prev = textHistory.undo();
+			if (prev) textTimeline = prev;
+			return;
+		}
 		if (sequenceEnabled) {
 			seqBoundaries.undo();
 			return;
@@ -1430,6 +1455,11 @@
 	}
 
 	function redo() {
+		if (selectedTextClipId && textHistory.canRedo) {
+			const next = textHistory.redo();
+			if (next) textTimeline = next;
+			return;
+		}
 		if (sequenceEnabled) {
 			seqBoundaries.redo();
 			return;
@@ -1571,6 +1601,113 @@
 	let showRecordSettings = $state(false);
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
+
+	// ── Text timeline ──
+	// Optional lanes of text clips over the master clock. Off until the user
+	// turns it on, so nothing about the existing editor changes for people who
+	// don't want text.
+	let textTimeline = $state<TextTimeline>({ ...EMPTY_TEXT_TIMELINE });
+	let selectedTextClipId = $state<string | null>(null);
+
+	// A still image with no track has no clock at all, so the text timeline
+	// supplies one: it loops the record window, which is what an export writes.
+	let stillClock = $state(0);
+	let stillPlaying = $state(false);
+
+	let textDuration = $derived(
+		seqMasterDuration > 0 ? seqMasterDuration : recordDuration,
+	);
+	/** True when nothing else owns a playhead, so the text ruler grows one. */
+	let textNeedsTransport = $derived(seqMasterDuration <= 0);
+	let textTime = $derived(textNeedsTransport ? stillClock : seqMasterTime());
+	// An export's frame 0 is not the master clock's zero: it starts at the audio
+	// span (or the video's in-point), and a sped-up video covers master time
+	// faster than frame time. Both preview and export read the same clips.
+	let textTimeOffset = $derived(
+		audio.trackFile && audio.trackDuration > 0
+			? audio.spanStart
+			: isVideo && videoDuration > 0
+				? videoSpanStart
+				: 0,
+	);
+	let textTimeScale = $derived(
+		!audio.trackFile && isVideo && videoDuration > 0 ? videoSpeed : 1,
+	);
+	let textClockRunning = $derived(
+		textNeedsTransport ? stillPlaying : audio.audioPlaying || videoIsPlaying,
+	);
+
+	$effect(() => {
+		if (!stillPlaying) return;
+		const span = Math.max(0.1, textDuration);
+		const started = performance.now() - untrack(() => stillClock) * 1000;
+		let raf = requestAnimationFrame(function loop(now) {
+			stillClock = ((now - started) / 1000) % span;
+			raf = requestAnimationFrame(loop);
+		});
+		return () => cancelAnimationFrame(raf);
+	});
+
+	/** Names of the enabled main effects — the lane chain-position picker. */
+	let textChainLabels = $derived(
+		renderedEffects
+			.filter((e) => e.enabled)
+			.map((e) => getDefinition(e.defId)?.name ?? e.defId),
+	);
+
+	/** Beat grid for clip snapping; falls back to no snapping without a BPM. */
+	let textSnapGrid = $derived(sequenceBpm > 0 ? 60 / sequenceBpm / 4 : 0);
+
+	let selectedTextClip = $derived.by(() => {
+		if (!selectedTextClipId) return null;
+		for (const lane of textTimeline.lanes) {
+			const clip = lane.clips.find((c) => c.id === selectedTextClipId);
+			if (clip) return clip;
+		}
+		return null;
+	});
+
+	// Its own undo stack: the chain stacks are typed to effect arrays, and a
+	// text edit shouldn't rewind a mosh. Ctrl+Z routes here while a clip is
+	// selected, and falls back to the chain once it is not.
+	const textHistory = createTextHistory();
+
+	function pushTextHistory(coalesceKey?: string) {
+		textHistory.push($state.snapshot(textTimeline) as TextTimeline, coalesceKey);
+	}
+
+	function setTextTimeline(next: TextTimeline) {
+		textTimeline = next;
+	}
+
+	function updateTextClip(next: TextClip) {
+		textTimeline = {
+			...textTimeline,
+			lanes: textTimeline.lanes.map((lane) => ({
+				...lane,
+				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
+			})),
+		};
+	}
+
+	/** Adopt a saved timeline, or clear back to empty when a track has none. */
+	function restoreTextTimeline(saved: TextTimeline | undefined) {
+		textTimeline = saved
+			? normalizeTextTimeline(saved)
+			: { ...EMPTY_TEXT_TIMELINE };
+		selectedTextClipId = null;
+		textHistory.reset(textTimeline);
+	}
+
+	function toggleTextTimeline() {
+		pushTextHistory();
+		textTimeline = textTimeline.enabled
+			? { ...textTimeline, enabled: false }
+			: textTimeline.lanes.length > 0
+				? { ...textTimeline, enabled: true }
+				: createTextTimeline();
+		if (!textTimeline.enabled) selectedTextClipId = null;
+	}
 	let effectiveDuration = $derived(
 		audio.trackFile && audio.trackDuration > 0 && audio.spanEnd - audio.spanStart > 0
 			? audio.spanEnd - audio.spanStart
@@ -1617,6 +1754,9 @@
 					file,
 					normalizeGain: audio.normalizeGain,
 					autoRangeAmount,
+					textTimeline: textTimeline.enabled ? $state.snapshot(textTimeline) as TextTimeline : null,
+					textTimeOffset,
+					textTimeScale,
 					sequence:
 						sequenceEnabled && sequenceSegments.length > 0
 							? {
@@ -1804,6 +1944,9 @@
 			suspended={recordingState.recording}
 			{warmCanvas}
 			{warmRenderer}
+			textTimeline={textTimeline.enabled ? textTimeline : null}
+			{textTime}
+			forceAnimation={textTimeline.enabled && textClockRunning}
 			transition={seqTransition
 				? {
 						effectsA: seqTransition.effectsA,
@@ -1857,6 +2000,14 @@
 						<ListVideo size={14} />
 					</button>
 				{/if}
+				<button
+					class="help-btn"
+					class:seq-active={textTimeline.enabled}
+					onclick={toggleTextTimeline}
+					title="Text timeline: timed text layers with their own effects"
+				>
+					<Type size={14} />
+				</button>
 				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
@@ -1984,6 +2135,27 @@
 					: undefined}
 			/>
 		{/if}
+		{#if textTimeline.enabled}
+			<TextTimelineLane
+				timeline={textTimeline}
+				trackDuration={textDuration}
+				currentTime={textTime}
+				snapGrid={textSnapGrid}
+				chainLabels={textChainLabels}
+				bind:selectedClipId={selectedTextClipId}
+				onChange={setTextTimeline}
+				onBeforeEdit={pushTextHistory}
+				onSeek={textNeedsTransport
+					? (t) => (stillClock = t)
+					: seqMasterIsAudio
+						? seekTo
+						: seekVideoTo}
+				isPlaying={stillPlaying}
+				onTogglePlay={textNeedsTransport
+					? () => (stillPlaying = !stillPlaying)
+					: null}
+			/>
+		{/if}
 		<!-- One playhead in sequence mode with a track: hide the video transport,
 		     the audio timeline below is the master -->
 		{#if isVideo && videoDuration > 0 && !(sequenceEnabled && seqMasterIsAudio)}
@@ -2065,6 +2237,18 @@
 			</div>
 		{/snippet}
 		{#snippet effectsPanel()}
+			{#if selectedTextClip}
+				<button class="text-back-btn" onclick={() => (selectedTextClipId = null)}>
+					← Back to image effects
+				</button>
+				<TextClipPanel
+					clip={selectedTextClip}
+					onChange={updateTextClip}
+					onBeforeEdit={pushTextHistory}
+					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+					spectrumData={audio.spectrumData}
+				/>
+			{:else}
 			<EffectsPanel
 				bind:effects={getPanelEffects, setPanelEffects}
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
@@ -2087,6 +2271,7 @@
 				onUserEdit={markPanelSegmentEdited}
 				onBeforeUserEdit={panelBeforeEdit}
 			/>
+			{/if}
 		{/snippet}
 	</MobileSheet>
 
@@ -2190,6 +2375,22 @@
 		transition:
 			border-color 0.2s,
 			color 0.2s;
+	}
+
+	.text-back-btn {
+		width: 100%;
+		padding: 0.35rem 0.5rem;
+		border: none;
+		border-bottom: 1px solid #2a2a2a;
+		background: #161616;
+		color: #999;
+		font-size: 0.72rem;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.text-back-btn:hover {
+		color: #fff;
 	}
 
 	.help-btn:hover {

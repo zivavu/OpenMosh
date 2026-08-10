@@ -3,6 +3,11 @@ import type { GlRenderer } from "../gl/renderer";
 import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
 import { downloadBlob, recordVideo } from "../recorder";
 import { preloadCaptionFonts } from "../caption";
+import {
+  preloadTextTimelineFonts,
+  type ResolvedTextLayer,
+  type TextTimeline,
+} from "../text";
 import { openDecodableVideo } from "../video/decode";
 import type { MoshOptions } from "./mosh";
 import {
@@ -52,6 +57,12 @@ export interface RecordingContext {
   normalizeGain?: number;
   /** Blend between raw (0) and auto-ranged (1) levels. Must match the preview. */
   autoRangeAmount?: number;
+  /** Optional text lanes, keyed to the master clock. */
+  textTimeline?: TextTimeline | null;
+  /** Master-clock time the export's frame 0 lands on. */
+  textTimeOffset?: number;
+  /** Frame-time-to-master-clock rate (video speed). */
+  textTimeScale?: number;
 }
 
 export async function executeRecording(ctx: RecordingContext): Promise<void> {
@@ -78,6 +89,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     signal,
     normalizeGain = 1.0,
     autoRangeAmount = DEFAULT_AUTO_RANGE_AMOUNT,
+    textTimeline = null,
+    textTimeOffset = 0,
+    textTimeScale = 1,
   } = ctx;
 
   const hasExplicitAudio = !!trackFile && trackDuration > 0;
@@ -135,6 +149,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     ...effects,
     ...(ctx.sequence?.segments.flatMap((s) => s.effects) ?? []),
   ]);
+  await preloadTextTimelineFonts(textTimeline);
 
   // Sequential WebCodecs decode of the source video: each packet is decoded at
   // most once, vs. the fallback path's full <video> seek per frame (keyframe
@@ -306,7 +321,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     if (tr && fx) {
       const progress = (t - tr.boundaryTime) / tr.transition.durationSec;
       const crossFade = outgoingSourceIdAt(t, segSourceId) !== null;
-      return () =>
+      return (layers: ResolvedTextLayer[]) =>
         renderer.renderTransition(
           tr.effectsA,
           fx,
@@ -317,6 +332,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
           tr.transition.density ?? 1,
           time,
           crossFade,
+          layers,
         );
     }
   };
@@ -335,6 +351,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       renderer,
       normalizeGain,
       autoRangeAmount,
+      textTimeline,
+      textTimeOffset,
+      textTimeScale,
       effects: effects.map(
         (e): EffectInstance => ({
           ...e,

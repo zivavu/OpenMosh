@@ -1,6 +1,6 @@
 # OpenMosh
 
-Browser-based glitch art studio, inspired by PhotoMosh. It's a fully client-side image and video tool — drop in a photo or video, layer effects, sync them to your music, or sequence images into a beat-matched slideshow, then save as photo or video.
+A browser-based glitch art studio, inspired by PhotoMosh. Drop in a photo or a video, pile on effects until it falls apart, hook the whole mess up to a song, and save the result. Nothing is uploaded anywhere, it all runs in your browser.
 
 ---
 
@@ -16,21 +16,23 @@ bun preview        # Preview the production build
 bun check          # TypeScript + Svelte type-check (svelte-check + tsc)
 ```
 
-Built with Svelte 5, Vite, TypeScript, and WebGL2. Uses `mediabunny` for WebM muxing and `essentia.js` for BPM detection.
+Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxing, `essentia.js` does the BPM detection.
 
 ---
 
 ## How to use it
 
-There are two editing modes.
+Pick one of three modes on the upload screen.
 
-The **single editor** loads one image or video at a time. Hit Mosh to build a random stack of glitch effects, tweak them individually. You can load some music and link any effect parameter to a song frequency band. There also is a sequence timeline mode in which you can arrange effects over time(work in progress).
+**Single** takes one image or video. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
 
-**Slideshow mode** uses a batch of images or videos to a track. Allows you to detect the BPM of the track and sync effects to the beat.
+**Sequence** is a timeline. You upload a batch of media, drop the song in as the master track, then cut it into segments and give each one its own source and its own look: a preset, a fixed mosh, or a re-roll that fires on an interval. Still rough around the edges and getting worked on.
 
-Everything renders in WebGL2 and exports to WebM (audio included) — no MP4 or GIF support.
+**Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 
-Keyboard shortcuts are listed in the app under the shortcuts button.
+Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
+
+Keyboard shortcuts live behind the shortcuts button in the app.
 
 ---
 

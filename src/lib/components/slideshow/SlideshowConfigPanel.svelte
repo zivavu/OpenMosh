@@ -2,15 +2,6 @@
 	import BpmControl from '../ui/BpmControl.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
 	import type { BeatSubdivision, SlideshowConfig } from '../../slideshow/types';
-	import {
-		DEFAULT_TEXT_OVERLAY_CONFIG,
-		ensureFontLoaded,
-		FONT_OPTIONS,
-		parsePhrases,
-		type TextOverlayBlendMode,
-		type TextOverlayLayout,
-		type TextOverlaySplitBy,
-	} from '../../text-overlay';
 
 	interface Props {
 		config: SlideshowConfig;
@@ -55,48 +46,6 @@
 		onConfigChange({ ...config, [key]: value });
 	}
 
-	const textOverlay = $derived({
-		...DEFAULT_TEXT_OVERLAY_CONFIG,
-		...config.textOverlay,
-		style: {
-			...DEFAULT_TEXT_OVERLAY_CONFIG.style,
-			...config.textOverlay?.style,
-		},
-	});
-	const phraseCount = $derived(
-		parsePhrases(textOverlay.dictionary, textOverlay.splitBy).length,
-	);
-
-	function setTextOverlay<K extends keyof typeof textOverlay>(
-		key: K,
-		value: (typeof textOverlay)[K],
-	) {
-		onConfigChange({
-			...config,
-			textOverlay: {
-				...DEFAULT_TEXT_OVERLAY_CONFIG,
-				...config.textOverlay,
-				[key]: value,
-			},
-		});
-	}
-	function setTextOverlayStyle<K extends keyof typeof textOverlay.style>(
-		key: K,
-		value: (typeof textOverlay.style)[K],
-	) {
-		onConfigChange({
-			...config,
-			textOverlay: {
-				...DEFAULT_TEXT_OVERLAY_CONFIG,
-				...config.textOverlay,
-				style: {
-					...DEFAULT_TEXT_OVERLAY_CONFIG.style,
-					...config.textOverlay?.style,
-					[key]: value,
-				},
-			},
-		});
-	}
 </script>
 
 <div class="config-panel">
@@ -253,159 +202,6 @@
 		/>
 	</div>
 
-	<div class="config-row section-title">
-		<h3 class="panel-title" style="margin: 0">Text overlay</h3>
-		<input
-			id="ss-text-enabled"
-			type="checkbox"
-			checked={textOverlay.enabled}
-			onchange={(e) =>
-				setTextOverlay(
-					'enabled',
-					(e.currentTarget as HTMLInputElement).checked,
-				)}
-		/>
-	</div>
-	{#if textOverlay.enabled}
-		<div class="config-row config-row-col">
-			<label for="ss-text-dict">Dictionary</label>
-			<textarea
-				id="ss-text-dict"
-				class="dict-input"
-				placeholder="Paste text. Split by sentence (.) or line (setting below)."
-				value={textOverlay.dictionary}
-				oninput={(e) =>
-					setTextOverlay(
-						'dictionary',
-						(e.currentTarget as HTMLTextAreaElement).value,
-					)}
-			></textarea>
-			<span class="val">{phraseCount} phrase{phraseCount !== 1 ? 's' : ''}</span
-			>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-split">Split by</label>
-			<select
-				id="ss-text-split"
-				value={textOverlay.splitBy}
-				onchange={(e) =>
-					setTextOverlay(
-						'splitBy',
-						(e.currentTarget as HTMLSelectElement).value as TextOverlaySplitBy,
-					)}
-			>
-				<option value="sentence">Sentence (.)</option>
-				<option value="line">Line</option>
-				<option value="both">Both</option>
-			</select>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-chance">Text chance</label>
-			<RangeSlider
-				id="ss-text-chance"
-				value={Math.round((textOverlay.chance ?? 0.8) * 100)}
-				min={0}
-				max={100}
-				step={5}
-				oninput={(v) => setTextOverlay('chance', v / 100)}
-			/>
-			<span class="val">{Math.round((textOverlay.chance ?? 0.8) * 100)}%</span>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-layout">Layout</label>
-			<select
-				id="ss-text-layout"
-				value={textOverlay.layout ?? 'scattered'}
-				onchange={(e) =>
-					setTextOverlay(
-						'layout',
-						(e.currentTarget as HTMLSelectElement).value as TextOverlayLayout,
-					)}
-			>
-				<option value="block">Block</option>
-				<option value="scattered">Scattered</option>
-			</select>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-blend">Blend mode</label>
-			<select
-				id="ss-text-blend"
-				value={textOverlay.blendMode ?? 'normal'}
-				onchange={(e) =>
-					setTextOverlay(
-						'blendMode',
-						(e.currentTarget as HTMLSelectElement)
-							.value as TextOverlayBlendMode,
-					)}
-			>
-				<option value="normal">Normal</option>
-				<option value="multiply">Multiply</option>
-				<option value="screen">Screen</option>
-				<option value="overlay">Overlay</option>
-				<option value="add">Add</option>
-				<option value="subtract">Subtract</option>
-				<option value="difference">Difference</option>
-				<option value="exclusion">Exclusion</option>
-			</select>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-invert">Invert</label>
-			<input
-				id="ss-text-invert"
-				type="checkbox"
-				checked={textOverlay.invert ?? false}
-				onchange={(e) =>
-					setTextOverlay(
-						'invert',
-						(e.currentTarget as HTMLInputElement).checked,
-					)}
-			/>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-opacity">Opacity</label>
-			<RangeSlider
-				id="ss-text-opacity"
-				value={textOverlay.opacity ?? 1}
-				min={0}
-				max={1}
-				step={0.01}
-				oninput={(v) => setTextOverlay('opacity', v)}
-			/>
-			<span class="config-value"
-				>{Math.round((textOverlay.opacity ?? 1) * 100)}%</span
-			>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-font">Font</label>
-			<select
-				id="ss-text-font"
-				value={textOverlay.style?.fontFamily ?? 'Georgia, serif'}
-				onchange={(e) => {
-					const family = (e.currentTarget as HTMLSelectElement).value;
-					void ensureFontLoaded(family);
-					setTextOverlayStyle('fontFamily', family);
-				}}
-			>
-				{#each FONT_OPTIONS as font (font.id)}
-					<option value={font.family}>{font.label}</option>
-				{/each}
-			</select>
-		</div>
-		<div class="config-row">
-			<label for="ss-text-size">Size</label>
-			<RangeSlider
-				id="ss-text-size"
-				value={textOverlay.style?.fontSizeRatio ?? 0.06}
-				min={0.02}
-				max={0.12}
-				step={0.01}
-				oninput={(v) => setTextOverlayStyle('fontSizeRatio', v)}
-			/>
-			<span class="val"
-				>{Math.round((textOverlay.style?.fontSizeRatio ?? 0.06) * 100)}%</span
-			>
-		</div>
-	{/if}
 </div>
 
 <style>
@@ -444,28 +240,6 @@
 		min-width: 80px;
 		color: #999;
 		font-size: 0.75rem;
-	}
-
-	.config-row-col {
-		flex-direction: column;
-		align-items: stretch;
-	}
-
-	.dict-input {
-		min-height: 72px;
-		width: 100%;
-		padding: 0.35rem;
-		border: 1px solid #333;
-		border-radius: 4px;
-		background: #1a1a1a;
-		color: #e0e0e0;
-		font-size: 0.75rem;
-		font-family: inherit;
-		resize: vertical;
-	}
-
-	.dict-input::placeholder {
-		color: #555;
 	}
 
 	.config-row select {

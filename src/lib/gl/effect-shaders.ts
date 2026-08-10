@@ -118,6 +118,12 @@ export interface EffectShaderDef {
 	 * (they stall into flat blobs otherwise).
 	 */
 	hdrFeedback?: boolean;
+	/**
+	 * This shader paints its own background over the whole frame (halftone's
+	 * paper, ascii's void), so it can't preserve the transparency of what it was
+	 * handed. On a text layer it fills the frame instead of following the glyphs.
+	 */
+	opaqueOutput?: boolean;
 	animated?: boolean;
 	setUniforms: (
 		gl: WebGL2RenderingContext,
@@ -171,17 +177,17 @@ void main() {
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;
   float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
-  vec3 sum = vec3(0.0);
+  vec4 sum = vec4(0.0);
   float totalW = 0.0;
   const int R = 16;
   float step = spread / float(R);
   for (int i = -R; i <= R; i++) {
     float fi = float(i) * step;
     float w = exp(-fi * fi * invSigma2);
-    sum += texture(u_texture, v_uv + vec2(fi * px.x, 0.0)).rgb * w;
+    sum += texture(u_texture, v_uv + vec2(fi * px.x, 0.0)) * w;
     totalW += w;
   }
-  outColor = vec4(sum / totalW, 1.0);
+  outColor = sum / totalW;
 }`;
 
 const GLOW_VBLUR_FRAG = `uniform float u_radius;
@@ -191,7 +197,7 @@ void main() {
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;
   float invSigma2 = 1.0 / max(sigma * sigma, 0.001);
-  vec3 bloom = vec3(0.0);
+  vec4 bloom = vec4(0.0);
   float totalW = 0.0;
   const int R = 16;
   float step = spread / float(R);
@@ -199,12 +205,10 @@ void main() {
     float fi = float(i) * step;
     float w = exp(-fi * fi * invSigma2);
     vec2 off = vec2(0.0, fi * px.y);
-    vec3 s = texture(u_texture, v_uv + off).rgb;
-    bloom += s * w;
+    bloom += texture(u_texture, v_uv + off) * w;
     totalW += w;
   }
-  bloom /= totalW;
-  outColor = vec4(bloom, 1.0);
+  outColor = bloom / totalW;
 }`;
 
 export const EFFECT_SHADERS: Record<string, EffectShaderDef> = {
@@ -478,6 +482,10 @@ void main() {
     float r = texture(u_texture, uvR).r;
     float g = texture(u_texture, v_uv).g;
     float b = texture(u_texture, uvB).b;
+    // Widest coverage of the three taps, so a split text layer keeps every
+    // channel it displaced.
+    float a = max(texture(u_texture, uvR).a,
+                  max(texture(u_texture, v_uv).a, texture(u_texture, uvB).a));
     vec3 color = vec3(r, g, b);
     float hueShift = pos * u_amount * 0.1 + t * 0.2;
     float cosH = cos(hueShift);
@@ -485,7 +493,7 @@ void main() {
     vec3 k = vec3(0.57735);
     vec3 rotated = color * cosH + cross(k, color) * sinH + k * dot(k, color) * (1.0 - cosH);
     color = mix(color, rotated, u_saturation);
-    outColor = vec4(color, 1.0);
+    outColor = vec4(color, a);
   }
 }`,
 		animated: true,
@@ -727,7 +735,10 @@ uniform sampler2D u_original;
 void main() {
   vec4 orig = texture(u_original, v_uv);
   vec3 bloom = texture(u_texture, v_uv).rgb;
-  outColor = vec4(orig.rgb + bloom * u_amount, orig.a);
+  // The halo carries its own coverage, so glow spreads past the edge of a text
+  // layer instead of being clipped to the glyphs. No-op on an opaque image.
+  float halo = dot(bloom * u_amount, vec3(0.299, 0.587, 0.114));
+  outColor = vec4(orig.rgb + bloom * u_amount, clamp(max(orig.a, halo), 0.0, 1.0));
 }`,
 		setUniforms: floats('amount', 'cutoff', 'radius'),
 	},
@@ -883,14 +894,15 @@ void main() {
     totalW += w;
     pos    -= stepVec;
   }
-  vec3 avg = (color / totalW).rgb;
+  vec4 acc = color / totalW;
+  vec3 avg = acc.rgb;
 
   // Weighted averaging desaturates colours by blending hues toward their
   // neighbours along the streamline. Re-expand chroma to restore vibrancy.
   float avgLuma = dot(avg, lum);
   avg = mix(vec3(avgLuma), avg, 1.35);
 
-  outColor = vec4(clamp(avg, 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(avg, 0.0, 1.0), acc.a);
 }`,
 		animated: true,
 		setUniforms: floats('amount'),
@@ -975,7 +987,8 @@ void main() {
   c.r = texture(u_texture, v_uv + vec2(rOff, 0.0)).r;
   c.g = texture(u_texture, v_uv + vec2(totalWarp * 0.3, 0.0)).g;
   c.b = texture(u_texture, v_uv + vec2(bOff, 0.0)).b;
-  c.a = 1.0;
+  c.a = max(texture(u_texture, v_uv + vec2(rOff, 0.0)).a,
+            texture(u_texture, v_uv + vec2(bOff, 0.0)).a);
 
   // --- Streaks: bright ones add, dropouts pull toward black ---
   c.rgb += streakSig * (1.0 - dropout);
@@ -989,7 +1002,7 @@ void main() {
   // --- Tracking bar interior: noise fill instead of a flat lift ---
   c.rgb = mix(c.rgb, vec3(barNoise), min(bars * 0.45, 0.85));
 
-  outColor = vec4(clamp(c.rgb, 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(c.rgb, 0.0, 1.0), c.a);
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
@@ -1191,12 +1204,13 @@ void main() {
   col.r = texture(u_texture, clamp(uv, vec2(0.0), vec2(1.0))).r;
   col.g = texture(u_texture, clamp(uv + vec2(co, 0.0), vec2(0.0), vec2(1.0))).g;
   col.b = texture(u_texture, clamp(uv + vec2(co * 2.0, 0.0), vec2(0.0), vec2(1.0))).b;
+  float alpha = texture(u_texture, clamp(uv, vec2(0.0), vec2(1.0))).a;
 
   if (garbage > 0.5) {
     col = floor(col * 5.0) / 5.0;
     col = hrot(col, hueG);
   }
-  outColor = vec4(col, 1.0);
+  outColor = vec4(col, alpha);
 }`,
 		animated: true,
 		setUniforms: floats('intensity', 'corruption', 'channelShift'),
@@ -1252,7 +1266,9 @@ void main() {
   // (+v_uv.y is screen-down in effect space).
   vec2 from = vec2(clamp(v_uv.x + sway, 0.0, 1.0),
                    clamp(v_uv.y - fall, 0.0, 1.0));
-  vec3 melted = texture(u_feedback, from).rgb;
+  vec4 meltedS = texture(u_feedback, from);
+  vec3 melted = meltedS.rgb;
+  float meltedA = meltedS.a;
 
   // --- Viscous softening ---------------------------------------------------
   // Only where actually flowing: fast drips smear and blend like wax,
@@ -1266,15 +1282,17 @@ void main() {
   // The source image constantly seeps back through the wax, so the melt
   // reaches a living equilibrium instead of burying the input. Higher
   // amounts drip faster and re-solidify slower, but never fully take over.
-  vec3 fresh = texture(u_texture, v_uv).rgb;
+  vec4 freshS = texture(u_texture, v_uv);
+  vec3 fresh = freshS.rgb;
   float heal = 1.0 - exp(-mix(2.0, 0.25, u_amount) * u_delta);
   melted = mix(melted, fresh, heal);
+  meltedA = mix(meltedA, freshS.a, heal);
 
   // Where the front hasn't arrived yet, show the live chain input so
   // unmelted regions (and upstream animated effects) stay alive.
   vec3 col = mix(fresh, melted, meltOn);
 
-  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(col, 0.0, 1.0), mix(freshS.a, meltedA, meltOn));
 }`,
 		animated: true,
 		setUniforms: floats('amount'),
@@ -1299,9 +1317,10 @@ void main() {
   // Decay knob is inverted (higher = fades faster) and cropped to the
   // usable 0.90–1.00 per-frame multiplier range.
   float fade = 1.0 - u_decay * 0.1;
-  vec3 prev = texture(u_feedback, c + 0.5).rgb * pow(fade, u_delta * 60.0);
-  vec3 fresh = texture(u_texture, v_uv).rgb;
-  outColor = vec4(clamp(max(fresh, prev), 0.0, 1.0), 1.0);
+  vec4 prev = texture(u_feedback, c + 0.5) * pow(fade, u_delta * 60.0);
+  vec4 fresh = texture(u_texture, v_uv);
+  outColor = vec4(clamp(max(fresh.rgb, prev.rgb), 0.0, 1.0),
+                  clamp(max(fresh.a, prev.a), 0.0, 1.0));
 }`,
 		animated: true,
 		setUniforms: floats('zoom', 'spin', 'decay'),
@@ -1357,6 +1376,7 @@ void main() {
   vec3 col = mix(vec3(1.0), src, ink);
   outColor = vec4(col, 1.0);
 }`,
+		opaqueOutput: true,
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, 'u_scale', v.scale as number);
 			setFloat(gl, l, 'u_angle', v.angle as number);
@@ -1466,6 +1486,7 @@ void main() {
   float gf = gi / 15.0;
   outColor = vec4(g * (tint * (1.2 + gf) + 0.07), 1.0);
 }`,
+		opaqueOutput: true,
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, 'u_size', v.size as number);
 			setInt(gl, l, 'u_color', v.color === 'green' ? 1 : v.color === 'white' ? 2 : 0);
@@ -1478,15 +1499,15 @@ void main() {
 			`uniform float u_strength;
 void main() {
   vec2 c = v_uv - 0.5;
-  vec3 col = vec3(0.0);
+  vec4 col = vec4(0.0);
   float total = 0.0;
   for (int i = 0; i < 12; i++) {
     float t = float(i) / 11.0;
     float w = 1.0 - 0.5 * t;
-    col += texture(u_texture, v_uv - c * t * u_strength * 0.25).rgb * w;
+    col += texture(u_texture, v_uv - c * t * u_strength * 0.25) * w;
     total += w;
   }
-  outColor = vec4(col / total, 1.0);
+  outColor = col / total;
 }`,
 		setUniforms: floats('strength'),
 	},
@@ -1887,7 +1908,7 @@ void main() {
 
   ramp += spec * vec3(0.3, 0.25, 0.35);
 
-  outColor = vec4(mix(c.rgb, ramp, u_chrome), 1.0);
+  outColor = vec4(mix(c.rgb, ramp, u_chrome), c.a);
 }`,
 		setUniforms: floats('strength', 'density', 'chrome', 'smoothness'),
 	},
@@ -1930,6 +1951,8 @@ void main() {
   fresh.r = texture(u_texture, clamp(v_uv - dir * (1.0 + d), vec2(0.0), vec2(1.0))).r;
   fresh.g = texture(u_texture, clamp(v_uv - dir, vec2(0.0), vec2(1.0))).g;
   fresh.b = texture(u_texture, clamp(v_uv - dir * (1.0 - d), vec2(0.0), vec2(1.0))).b;
+  float freshA = max(texture(u_texture, clamp(v_uv - dir * (1.0 + d), vec2(0.0), vec2(1.0))).a,
+                     texture(u_texture, clamp(v_uv - dir * (1.0 - d), vec2(0.0), vec2(1.0))).a);
 
   // Thin-film iridescence riding the field value, strongest on the rims.
   float rim = min(slope * 24.0, 1.0);
@@ -1938,9 +1961,10 @@ void main() {
   // Dye drifts along the field (perpendicular to the gradient) and heals back
   // to the live input, so the wash never buries the source.
   vec2 from = clamp(v_uv - vec2(-n.y, n.x) * u_delta * u_flow * 0.05, vec2(0.0), vec2(1.0));
-  vec3 prev = texture(u_feedback, from).rgb;
+  vec4 prevS = texture(u_feedback, from);
   float heal = 1.0 - exp(-mix(6.0, 1.2, u_flow) * u_delta);
-  outColor = vec4(clamp(mix(prev, fresh, heal), 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(mix(prevS.rgb, fresh, heal), 0.0, 1.0),
+                  clamp(mix(prevS.a, freshA, heal), 0.0, 1.0));
 }`,
 		animated: true,
 		linearFilter: true,
@@ -1964,13 +1988,16 @@ void main() {
   // spatial coupling is what rolls the spiral waves outward.
   vec2 px = (1.0 + u_scale * 3.0) / u_resolution;
   vec3 avg = vec3(0.0);
+  float avgA = 0.0;
   for (int y = -1; y <= 1; y++) {
     for (int x = -1; x <= 1; x++) {
       vec2 uv = clamp(v_uv + vec2(float(x), float(y)) * px, vec2(0.0), vec2(1.0));
       avg += texture(u_feedback, uv).rgb;
+      avgA += texture(u_feedback, uv).a;
     }
   }
   avg /= 9.0;
+  avgA /= 9.0;
 
   // Each reagent drifts along its own heading, 120 degrees apart and slowly
   // rotating, so they chase one another across the frame instead of settling.
@@ -2003,9 +2030,11 @@ void main() {
   // The picture is fed back in as reagent concentration, so the chemistry
   // grows out of the image's own colours. Low takeover heals fast (picture
   // legible, faint structure); high takeover lets the reaction run away.
-  vec3 src = texture(u_texture, v_uv).rgb;
+  vec4 srcS = texture(u_texture, v_uv);
+  vec3 src = srcS.rgb;
   float seed = 1.0 - exp(-mix(7.0, 0.22, u_takeover) * u_delta);
-  outColor = vec4(clamp(mix(next, src, seed), 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(mix(next, src, seed), 0.0, 1.0),
+                  clamp(mix(avgA, srcS.a, seed), 0.0, 1.0));
 }`,
 		animated: true,
 		hdrFeedback: true,
@@ -2043,7 +2072,8 @@ void main() {
   // translating as one sheet.
   float dirSign = mod(band, 2.0) * 2.0 - 1.0;
   vec2 flow = (grad / max(slope, 1e-4)) * dirSign * u_flow * u_delta * 0.2;
-  vec3 prev = texture(u_feedback, clamp(v_uv - flow, vec2(0.0), vec2(1.0))).rgb;
+  vec4 prevS = texture(u_feedback, clamp(v_uv - flow, vec2(0.0), vec2(1.0)));
+  vec3 prev = prevS.rgb;
 
   // Quantise luminance while keeping the source chroma, then cycle hue per
   // band so the terrain reads as a heat map that has gone liquid.
@@ -2051,14 +2081,16 @@ void main() {
   float q = band / bands;
   quant = hueRotate(clamp(quant, 0.0, 1.0), (q * 360.0 + u_time * 50.0) * u_cycle);
 
-  vec3 col = mix(prev, quant, 1.0 - exp(-mix(9.0, 1.5, u_flow) * u_delta));
+  float blend = 1.0 - exp(-mix(9.0, 1.5, u_flow) * u_delta);
+  vec3 col = mix(prev, quant, blend);
+  float colA = mix(prevS.a, texture(u_texture, v_uv).a, blend);
 
   // Specular seam on each band edge, brightest where the terrain is steep.
   float edge = fract(l * bands);
   float seam = 1.0 - smoothstep(0.0, 0.16, min(edge, 1.0 - edge));
   col += seam * u_sheen * min(slope * 45.0, 1.0);
 
-  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  outColor = vec4(clamp(col, 0.0, 1.0), clamp(colA, 0.0, 1.0));
 }`,
 		animated: true,
 		setUniforms: floats('bands', 'flow', 'cycle', 'sheen'),
@@ -2073,3 +2105,11 @@ export const ANIMATED_EFFECTS = new Set(
 // Tracking is a 2D-canvas overlay (no shader) but animates every frame
 // (jitter / glitch-jumps / data scramble), so the render loop must keep running.
 ANIMATED_EFFECTS.add('tracking');
+
+/** Effects that paint their own background, so they can't sit on a text layer
+ * without filling the frame. The text panel warns before one is added. */
+export const OPAQUE_OUTPUT_EFFECTS = new Set(
+	Object.entries(EFFECT_SHADERS)
+		.filter(([, def]) => def.opaqueOutput)
+		.map(([id]) => id),
+);

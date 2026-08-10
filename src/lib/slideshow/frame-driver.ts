@@ -1,12 +1,6 @@
 import type { MoshOptions } from "../editor/mosh";
 import { loadPresets, type EffectInstance, type Preset } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
-import {
-  DEFAULT_TEXT_OVERLAY_STYLE,
-  parsePhrases,
-  type TextOverlayConfig,
-  type TextOverlayStyle,
-} from "../text-overlay";
 import { beatAtTime } from "./beat-clock";
 import { cloneEffects, computeEffectsForBeat } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
@@ -46,10 +40,10 @@ export interface SlideshowFrame {
 /**
  * Beat → frame resolution for the slideshow, shared by the live preview and
  * the export. Both drive the same instance sequentially, so what a preview
- * shows and what an export writes can't drift apart: slide selection, text
- * overlay cadence, per-beat effect computation and video-slide advancement all
- * live here, and the only differences left to the callers are where frames
- * come from and how time is stepped.
+ * shows and what an export writes can't drift apart: slide selection, per-beat
+ * effect computation and video-slide advancement all live here, and the only
+ * differences left to the callers are where frames come from and how time is
+ * stepped.
  */
 export class SlideshowFrameDriver {
   #getConfig: () => SlideshowConfig;
@@ -67,13 +61,6 @@ export class SlideshowFrameDriver {
   #currentSlideId: string | null = null;
   #lastVideoSlideId: string | null = null;
   #disposed = false;
-
-  // Memoized text-overlay derivations. The style object identity must stay
-  // stable across frames — the renderer skips its canvas redraw by comparing
-  // the reference it was handed last.
-  #phrasesKey: string | null = null;
-  #phrases: string[] = [];
-  #style: TextOverlayStyle | null = null;
 
   constructor(opts: SlideshowFrameDriverOptions) {
     this.#getConfig = opts.getConfig;
@@ -103,12 +90,10 @@ export class SlideshowFrameDriver {
       config.subdivision,
     );
 
-    // Stopped (subdivision 0): hold the current slide, effects and overlay.
+    // Stopped (subdivision 0): hold the current slide and effects.
     if (beatIndex === HOLD_BEAT || slides.length === 0) {
       return { effects: this.#effects, ready: null };
     }
-
-    this.#applyTextOverlay(config.textOverlay, beatIndex);
 
     const slideIndex = config.loop
       ? beatIndex % slides.length
@@ -171,62 +156,5 @@ export class SlideshowFrameDriver {
   #resolvePresets(): Preset[] {
     if (!this.#presets) this.#presets = loadPresets();
     return this.#presets;
-  }
-
-  /**
-   * Roll and seed both derive from beatIndex, so a phrase holds for a whole
-   * beat and preview and export land on the same phrases at the same times.
-   */
-  #applyTextOverlay(
-    textOverlay: TextOverlayConfig | undefined,
-    beatIndex: number,
-  ) {
-    const phrases = this.#resolvePhrases(textOverlay);
-    const style = this.#resolveStyle(textOverlay);
-    const chance = Math.max(0, Math.min(1, textOverlay?.chance ?? 0.8));
-    const roll = ((beatIndex * 31) % 1000) / 1000;
-    if (phrases.length === 0 || !style || roll >= chance) {
-      this.#getRenderer().setTextOverlay(null);
-      return;
-    }
-    this.#getRenderer().setTextOverlay(
-      phrases[beatIndex % phrases.length] ?? null,
-      style,
-      {
-        layout: textOverlay?.layout ?? "scattered",
-        seed: beatIndex,
-        blendMode: textOverlay?.blendMode ?? "normal",
-        invert: textOverlay?.invert ?? false,
-        opacity: textOverlay?.opacity ?? 1,
-      },
-    );
-  }
-
-  #resolvePhrases(textOverlay: TextOverlayConfig | undefined): string[] {
-    if (!textOverlay?.enabled || !textOverlay.dictionary?.trim()) return [];
-    const key = `${textOverlay.splitBy}:${textOverlay.dictionary}`;
-    if (key !== this.#phrasesKey) {
-      this.#phrasesKey = key;
-      this.#phrases = parsePhrases(textOverlay.dictionary, textOverlay.splitBy);
-    }
-    return this.#phrases;
-  }
-
-  #resolveStyle(
-    textOverlay: TextOverlayConfig | undefined,
-  ): TextOverlayStyle | null {
-    if (textOverlay?.style == null) return null;
-    const next = { ...DEFAULT_TEXT_OVERLAY_STYLE, ...textOverlay.style };
-    // Compared by value, not identity: the config panel replaces the style
-    // object on edit, but keeping the previous instance when nothing actually
-    // changed is what lets the renderer skip redrawing the text canvas.
-    const prev = this.#style;
-    if (prev && (Object.keys(next) as (keyof TextOverlayStyle)[]).every(
-      (k) => prev[k] === next[k],
-    )) {
-      return prev;
-    }
-    this.#style = next;
-    return next;
   }
 }
