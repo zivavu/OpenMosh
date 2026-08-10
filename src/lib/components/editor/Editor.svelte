@@ -7,7 +7,6 @@
 		Library,
 		ListVideo,
 		Maximize,
-		MicVocal,
 		Type,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
@@ -424,6 +423,9 @@
 	const spanStore = createTrackStore<{ spanStart: number; spanEnd: number }>(
 		'openmosh-single-span',
 	);
+	const sizeStore = createTrackStore<{ width: number; height: number }>(
+		'openmosh-single-size',
+	);
 
 	// Persist span changes for library tracks
 	$effect(() => {
@@ -439,10 +441,32 @@
 
 	let trackInput: HTMLInputElement;
 
+	// Persist the output size per track, alongside the span above.
+	$effect(() => {
+		const w = resizeWidth;
+		const h = resizeHeight;
+		if (currentTrackId && w > 0 && h > 0) {
+			sizeStore.save(currentTrackId, { width: w, height: h });
+		}
+	});
+
+	/**
+	 * Latched when a track restores a size, so the default below doesn't
+	 * immediately overwrite it — the two race whenever media finishes loading
+	 * after the track was adopted. Consumed once: picking new media afterwards
+	 * is deliberate, and that media's own size should win.
+	 */
+	let sizeRestoredFromTrack = false;
+
+	// New media defaults the output to its own size.
 	$effect(() => {
 		const nw = naturalWidth;
 		const nh = naturalHeight;
 		if (nw != null && nh != null && nw > 0 && nh > 0) {
+			if (sizeRestoredFromTrack) {
+				sizeRestoredFromTrack = false;
+				return;
+			}
 			resizeWidth = nw;
 			resizeHeight = nh;
 		}
@@ -467,6 +491,7 @@
 		flushMediaPoolSave();
 		audio.clearTrack();
 		currentTrackId = null;
+		sizeRestoredFromTrack = false;
 	}
 
 	/**
@@ -481,6 +506,12 @@
 		const savedSpan = spanStore.load(trackId);
 		if (savedSpan !== null) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
+		}
+		const savedSize = sizeStore.load(trackId);
+		if (savedSize && savedSize.width > 0 && savedSize.height > 0) {
+			resizeWidth = savedSize.width;
+			resizeHeight = savedSize.height;
+			sizeRestoredFromTrack = true;
 		}
 		const savedSeq = seqStore.load(trackId);
 		if (savedSeq === null) return false;
@@ -1732,17 +1763,6 @@
 		}
 	}
 
-	/** Enable the text timeline (when off) and open the lyrics-sync modal. */
-	function openLyricsSync() {
-		if (!textTimeline.enabled) {
-			pushTextHistory();
-			textTimeline =
-				textTimeline.lanes.length > 0
-					? { ...textTimeline, enabled: true }
-					: createTextTimeline();
-		}
-		lyricsOpen = true;
-	}
 
 	/** Transport for the lyrics-sync modal, on whichever clock owns the master
 	 * timeline here: the track, the video, or the still-image loop. */
@@ -2094,14 +2114,6 @@
 					title="Text timeline: timed text layers with their own effects"
 				>
 					<Type size={14} />
-				</button>
-				<button
-					class="help-btn"
-					class:seq-active={lyricsOpen}
-					onclick={openLyricsSync}
-					title="Sync lyrics to the song: paste them, then press Space as it plays"
-				>
-					<MicVocal size={14} />
 				</button>
 				<MoshGroup
 					bind:this={moshGroupRef}
