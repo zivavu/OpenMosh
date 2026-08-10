@@ -70,6 +70,7 @@
 	let applied = $state(false);
 
 	let panelEl = $state<HTMLElement | undefined>(undefined);
+	let linesEl = $state<HTMLElement | undefined>(undefined);
 
 	let lines = $derived(
 		lyricsText
@@ -95,6 +96,30 @@
 			untrack(seedFromTimeline);
 		}
 		if (phase === "sync") panelEl?.focus();
+	});
+
+	/**
+	 * Hold the line being timed in the middle of the list. Marking lines is a
+	 * heads-down job at tempo — the eye stays in one place and the lyrics move
+	 * past it, rather than chasing the highlight down to the bottom edge.
+	 *
+	 * Measured off rects rather than offsetTop, which would be relative to
+	 * whichever ancestor happens to be positioned.
+	 */
+	$effect(() => {
+		const i = activeIndex;
+		const list = linesEl;
+		if (!list || phase !== "sync") return;
+		// Past the end once every line is timed: hold on the last one.
+		const item = list.children[Math.min(i, list.children.length - 1)] as
+			| HTMLElement
+			| undefined;
+		if (!item) return;
+		const listBox = list.getBoundingClientRect();
+		const itemBox = item.getBoundingClientRect();
+		const offset =
+			itemBox.top - listBox.top - (list.clientHeight - itemBox.height) / 2;
+		list.scrollTo({ top: list.scrollTop + offset, behavior: "smooth" });
 	});
 
 	/**
@@ -321,7 +346,7 @@
 					0.05<ChevronRight size={12} />
 				</button>
 			</div>
-			<ol class="lines">
+			<ol class="lines" bind:this={linesEl}>
 				{#each lines as line, i (i)}
 					<li>
 						<button
@@ -496,11 +521,16 @@
 	}
 
 	.lines {
+		--lines-height: 320px;
+		--line-height: 1.9rem;
 		list-style: none;
 		margin: 0;
-		padding: 0;
 		overflow-y: auto;
-		max-height: 320px;
+		height: var(--lines-height);
+		/* Half a box of slack at each end, so the first and last lines can sit in
+		   the middle like every other one — without it the highlight starts at
+		   the top edge and travels, which is the thing being avoided. */
+		padding: calc((var(--lines-height) - var(--line-height)) / 2) 0;
 		border: 1px solid #2a2a2a;
 		border-radius: 6px;
 		background: #121212;
