@@ -326,7 +326,7 @@
 	]);
 
 	const audio = new AudioManager({
-		getEffects: () => effects,
+		getEffects: () => renderedEffects,
 		getAutoRangeAmount: () => autoRangeAmount,
 		initialOutputVolume: saved.outputVolume ?? 1,
 		initialLoop: saved.loopAudio ?? false,
@@ -1088,6 +1088,15 @@
 	// Identity latch is a plain variable: `effects = next` wraps plain arrays in
 	// a $state proxy, so comparing against `effects` would never settle.
 	let lastSeqApplied: EffectInstance[] | null = null;
+	let lastSeqWasPlaying = false;
+	/**
+	 * The chain the canvas renders while a sequence plays, kept out of the
+	 * panel-bound `effects`. Raw rather than deep state: the render loop reads
+	 * it every frame anyway, so proxying 39 objects per re-roll buys nothing.
+	 */
+	let seqPlaybackEffects = $state.raw<EffectInstance[] | null>(null);
+	/** What is actually on screen right now. */
+	let renderedEffects = $derived(seqPlaybackEffects ?? effects);
 	let seqTransition = $state<ResolvedTransition | null>(null);
 	$effect(() => {
 		if (
@@ -1121,9 +1130,21 @@
 		} else {
 			seqTransition = null;
 		}
-		if (next && next !== lastSeqApplied) {
+		// While playing, the rolled chain goes to the canvas only. Writing it to
+		// `effects` would re-render the whole effects sidebar (which is bound to
+		// it) on every re-roll — at a 1/32-beat spacing that's ~68 times a
+		// second — and deep-proxy 39 fresh objects each time. The slideshow
+		// keeps its per-beat chain off the panel for the same reason.
+		if (next && (next !== lastSeqApplied || playing !== lastSeqWasPlaying)) {
 			lastSeqApplied = next;
-			effects = next;
+			lastSeqWasPlaying = playing;
+			if (playing) {
+				seqPlaybackEffects = next;
+			} else {
+				// Back to a still: hand the chain to the panel and stop overriding.
+				seqPlaybackEffects = null;
+				effects = next;
+			}
 		}
 	});
 
@@ -1447,12 +1468,12 @@
 			(resizeWidth !== prevW || resizeHeight !== prevH);
 		if (needsResize) {
 			r.resize(resizeWidth, resizeHeight);
-			r.render(effects, time);
+			r.render(renderedEffects, time);
 		}
 		capture(() => {
 			if (needsResize) {
 				r.resize(prevW, prevH);
-				r.render(effects, time);
+				r.render(renderedEffects, time);
 			}
 		});
 	}
@@ -1608,7 +1629,7 @@
 		if (previewPlayer) previewPlayer.play();
 		else if (isVideo && videoEl) videoEl.play().catch(() => {});
 		if (canvasEl && glRenderer) {
-			glRenderer.render(effects, performance.now() / 1000);
+			glRenderer.render(renderedEffects, performance.now() / 1000);
 		}
 	}
 
@@ -1745,7 +1766,7 @@
 
 		<GlCanvas
 			{imageSrc}
-			{effects}
+			effects={renderedEffects}
 			canvasWidth={resizeWidth || undefined}
 			canvasHeight={resizeHeight || undefined}
 			bind:canvasEl
