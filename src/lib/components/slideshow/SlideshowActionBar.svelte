@@ -3,6 +3,7 @@
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
+	import { TEXT_TIMELINE_SHORTCUTS } from '../../text';
 
 	interface Props {
 		previewPlaying: boolean;
@@ -80,6 +81,7 @@
 				{ keys: ['Shift+Scroll'], description: 'Pan timeline view' },
 			],
 		},
+		TEXT_TIMELINE_SHORTCUTS,
 	];
 	let optionsGroupEl: HTMLDivElement | undefined;
 	// svelte-ignore non_reactive_update

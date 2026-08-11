@@ -7,6 +7,7 @@ import {
   createSequenceSegment,
   DEFAULT_INTERVAL_SEC,
   findSegmentAt,
+  intervalLabel,
   rollEffects,
   segmentTick,
   withSeededRandom,
@@ -184,6 +185,22 @@ describe("beat-based re-roll spacing", () => {
     expect(out[0].intervalSec).toBeCloseTo(1, 6);
     expect(out[1].intervalSec).toBe(0.25);
     expect(out[1]).toBe(secondsSeg);
+  });
+
+  test("labels beat spacings as beats, not their BPM division in seconds", () => {
+    expect(intervalLabel(beatsToSeconds(2, 105), 2)).toBe("2 beats");
+    expect(intervalLabel(beatsToSeconds(1, 105), 1)).toBe("1 beat");
+    expect(intervalLabel(beatsToSeconds(0.25, 105), 0.25)).toBe("1/4 beat");
+    expect(intervalLabel(beatsToSeconds(0.03125, 105), 0.03125)).toBe(
+      "1/32 beat",
+    );
+  });
+
+  test("labels second spacings in seconds, without float noise", () => {
+    expect(intervalLabel(0.25)).toBe("0.25s");
+    expect(intervalLabel(2)).toBe("2s");
+    expect(intervalLabel(1.1428571428571428)).toBe("1.143s");
+    expect(intervalLabel(undefined)).toBe(`${DEFAULT_INTERVAL_SEC}s`);
   });
 
   test("returns the same array when nothing moves, so no redundant commit", () => {

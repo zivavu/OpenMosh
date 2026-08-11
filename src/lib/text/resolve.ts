@@ -282,9 +282,3 @@ export function updateLane(
     lanes: timeline.lanes.map((l) => (l.id === laneId ? fn(l) : l)),
   };
 }
-
-/** Snap to a grid (beat or second). `grid <= 0` snaps to nothing. */
-export function snapTime(time: number, grid: number): number {
-  if (grid <= 0) return time;
-  return Math.round(time / grid) * grid;
-}

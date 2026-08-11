@@ -543,7 +543,6 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      padding: 1.5rem;
       background: #0a0a0a;
    }
 
@@ -570,9 +569,7 @@
       z-index: 10;
    }
 
-   /* Fullscreen: drop the framing so the render fills the display. */
    .preview-area:fullscreen {
-      padding: 0;
       background: #000;
    }
 
@@ -665,11 +662,5 @@
       pointer-events: none;
       z-index: 10;
       letter-spacing: 0.04em;
-   }
-
-   @media (max-width: 800px) {
-      .preview-area {
-         padding: 0.5rem;
-      }
    }
 </style>

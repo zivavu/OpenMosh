@@ -816,7 +816,6 @@
 			? audio.trackDuration
 			: recordDuration,
 	);
-	let textSnapGrid = $derived(config.bpm > 0 ? 60 / config.bpm / 4 : 0);
 	let textChainLabels = $derived(
 		effects.filter((e) => e.enabled).map((e) => getDefinition(e.defId)?.name ?? e.defId),
 	);
@@ -1174,7 +1173,6 @@
 				timeline={textTimeline}
 				trackDuration={textDuration}
 				currentTime={textTime}
-				snapGrid={textSnapGrid}
 				chainLabels={textChainLabels}
 				bind:selectedClipId={selectedTextClipId}
 				onChange={setTextTimeline}

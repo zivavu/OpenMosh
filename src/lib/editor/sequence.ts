@@ -118,6 +118,26 @@ export const BEAT_INTERVALS: { beats: number; label: string }[] = [
   { beats: 4, label: "every 4 beats" },
 ];
 
+/**
+ * Compact wording for a re-roll spacing, for timeline labels. Beat-set
+ * intervals read as beats: their seconds are a BPM division, so they print as
+ * float noise ("1.1428571428571428s") and change meaning with the BPM.
+ */
+export function intervalLabel(
+  intervalSec: number | undefined,
+  intervalBeats?: number | null,
+): string {
+  if (intervalBeats) {
+    if (intervalBeats >= 1) {
+      return `${intervalBeats} beat${intervalBeats === 1 ? "" : "s"}`;
+    }
+    return `1/${Math.round(1 / intervalBeats)} beat`;
+  }
+  const sec = intervalSec ?? DEFAULT_INTERVAL_SEC;
+  // Number() drops the padding zeros toFixed adds to whole values.
+  return `${Number(sec.toFixed(3))}s`;
+}
+
 /** Seconds between re-rolls for a beat spacing at `bpm`. */
 export function beatsToSeconds(beats: number, bpm: number): number {
   if (bpm <= 0) return DEFAULT_INTERVAL_SEC;

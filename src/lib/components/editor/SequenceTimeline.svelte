@@ -6,6 +6,7 @@
 		createSequenceSegment,
 		BEAT_INTERVALS,
 		DEFAULT_TRANSITION_DURATION,
+		intervalLabel,
 		randomSeed,
 		TRANSITION_OPTIONS,
 		type SegmentTransition,
@@ -34,13 +35,18 @@
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
+	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
-	// Grows to fit the per-segment source line once the pool has more than one.
-	const SVG_H_BASE = 48;
-	const LINE_Y = 18;
-	const DOT_R = 4;
+	// Segments are drawn as clip blocks in one lane row, matching the text
+	// timeline's geometry: a 22px block inset in a 30px row, growing by a line
+	// once the pool has more than one source and each block names its own.
+	const ROW_PAD = 4;
+	const SEG_H_BASE = 22;
+	const SEG_H_SOURCE = 34;
+	/** Half-width of a boundary's invisible grab strip. */
+	const BND_GRAB = 5;
 
 	interface Props {
 		segments: SequenceSegment[];
@@ -103,31 +109,48 @@
 	// The hint only teaches things the ? shortcuts modal also lists, so hiding
 	// it for good costs no discoverability.
 	const HINT_KEY = 'openmosh-seq-hint-dismissed';
-	let hintDismissed = $state(readHintDismissed());
+	const BIN_KEY = 'openmosh-seq-bin-open';
+	let hintDismissed = $state(readFlag(HINT_KEY, false));
 
-	function readHintDismissed(): boolean {
+	function readFlag(key: string, fallback: boolean): boolean {
 		try {
-			return localStorage.getItem(HINT_KEY) === '1';
+			const raw = localStorage.getItem(key);
+			return raw === null ? fallback : raw === '1';
 		} catch {
-			return false;
+			return fallback;
+		}
+	}
+
+	function writeFlag(key: string, on: boolean) {
+		try {
+			localStorage.setItem(key, on ? '1' : '0');
+		} catch {
+			// Private mode / storage blocked — remembered for this session only.
 		}
 	}
 
 	function dismissHint() {
 		hintDismissed = true;
-		try {
-			localStorage.setItem(HINT_KEY, '1');
-		} catch {
-			// Private mode / storage blocked — hidden for this session only.
-		}
+		writeFlag(HINT_KEY, true);
 	}
 
 	let hasMediaBin = $derived(!!onAddSources);
 	let multiSource = $derived(sources.length > 1);
-	let svgH = $derived(multiSource ? SVG_H_BASE + 13 : SVG_H_BASE);
+	let segH = $derived(multiSource ? SEG_H_SOURCE : SEG_H_BASE);
+	let svgH = $derived(segH + ROW_PAD * 2);
+	/** Baseline of the segment's own label: centred when it's the only line. */
+	let labelY = $derived(ROW_PAD + (multiSource ? 14 : segH / 2 + 4));
+	let sourceLabelY = $derived(ROW_PAD + 27);
 	let sourceInput = $state<HTMLInputElement>(undefined!);
-	// Collapsed by default on touch, where the preview has far less room to give.
-	let binOpen = $state(!window.matchMedia('(pointer: coarse)').matches);
+	// Collapsed by default: a grid of chips is the tallest thing in the timeline
+	// stack and it's only needed while assigning sources. The choice is
+	// remembered, so anyone who works with it open keeps it open.
+	let binOpen = $state(readFlag(BIN_KEY, false));
+
+	function toggleBin() {
+		binOpen = !binOpen;
+		writeFlag(BIN_KEY, binOpen);
+	}
 
 	// Indexed rather than scanned: segVis recomputes on every zoom/pan frame,
 	// and a linear find per segment over a few hundred sources showed up as
@@ -153,7 +176,8 @@
 	}
 
 	let svgEl: SVGSVGElement | undefined = $state();
-	let scrollbarEl: HTMLDivElement | undefined = $state();
+	/** Track width in px, for sizing labels to their blocks. */
+	let trackWidth = $state(0);
 
 	// ── View window (zoom / pan) ─────────────────────────────────────────────
 	const vp = new TimelineViewport(
@@ -452,12 +476,6 @@
 		| { type: 'seek' }
 		| { type: 'seg-click'; segmentId: string }
 		| {
-				type: 'scroll-pan';
-				startClientX: number;
-				startViewStart: number;
-				scrollWidth: number;
-		  }
-		| {
 				type: 'rect-select';
 				startTime: number;
 				currentTime: number;
@@ -499,26 +517,39 @@
 	}
 
 	function segLabel(s: SequenceSegment): string {
-		if (s.mode === 'interval') return `auto ${s.intervalSec ?? 0.25}s`;
+		if (s.mode === 'interval') {
+			return `auto ${intervalLabel(s.intervalSec, s.intervalBeats)}`;
+		}
 		// "*" = hand-edited since it was filled (preset overwrites skip it).
 		return s.modified ? `${s.label}*` : s.label;
+	}
+
+	/** Trim a label to what fits inside its block, so text can't spill onto the
+	 * neighbouring segments the way a centred label under a line couldn't. */
+	function fitLabel(text: string, boxPx: number, charPx: number): string {
+		const max = Math.floor((boxPx - 6) / charPx);
+		if (max < 2) return '';
+		return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 	}
 
 	let segVis = $derived.by((): SegVis[] =>
 		segments.map((s) => {
 			const endTime = Math.min(trackDuration, s.endTime ?? trackDuration);
+			const startX = vp.toPct(s.startTime);
+			const endX = vp.toPct(endTime);
+			const boxPx = ((endX - startX) / 100) * trackWidth;
+			const source = multiSource
+				? sourceIndex.get(s.sourceId ?? primarySourceId ?? '')
+				: undefined;
 			return {
 				id: s.id,
-				startX: vp.toPct(s.startTime),
-				endX: vp.toPct(endTime),
+				startX,
+				endX,
 				startTime: s.startTime,
 				endTime,
-				label: segLabel(s),
-				sourceLabel: multiSource
-					? (() => {
-							const hit = sourceIndex.get(s.sourceId ?? primarySourceId ?? '');
-							return hit ? `${hit.n}· ${shortName(hit.src.name, 14)}` : null;
-						})()
+				label: fitLabel(segLabel(s), boxPx, 6.6),
+				sourceLabel: source
+					? fitLabel(`${source.n}· ${shortName(source.src.name, 14)}`, boxPx, 5.4)
 					: null,
 				transitionType: s.transition?.type ?? 'cut',
 				transitionDuration: s.transition?.durationSec ?? 0,
@@ -564,7 +595,7 @@
 		e.stopPropagation();
 		const selected = boundaries.selectedBoundaryTimes;
 		const time = boundaryTimeOf(leftSegId, rightSegId);
-		// Grabbing a dot that's part of a multi-selection moves the whole set.
+		// Grabbing a boundary that's part of a multi-selection moves the whole set.
 		if (
 			time !== null &&
 			selected.length > 1 &&
@@ -631,22 +662,6 @@
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
-		} catch {}
-	}
-
-	function startScrollPan(e: PointerEvent) {
-		e.stopPropagation();
-		const rect = scrollbarEl?.getBoundingClientRect();
-		if (!rect) return;
-		dragging = {
-			type: 'scroll-pan',
-			startClientX: e.clientX,
-			startViewStart: vp.viewStart,
-			scrollWidth: rect.width,
-		};
-		dragMoved = false;
-		try {
-			(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		} catch {}
 	}
 
@@ -752,17 +767,6 @@
 				Math.min(trackDuration, vp.clientXToTime(e.clientX)),
 			);
 			onSeek?.(time);
-		} else if (dragging.type === 'scroll-pan') {
-			dragMoved = true;
-			const { startClientX, startViewStart, scrollWidth } = dragging;
-			const dur = vp.viewEnd - vp.viewStart;
-			const delta = ((e.clientX - startClientX) / scrollWidth) * trackDuration;
-			const ns = Math.max(
-				0,
-				Math.min(trackDuration - dur, startViewStart + delta),
-			);
-			vp.viewStart = ns;
-			vp.viewEnd = ns + dur;
 		}
 	}
 
@@ -778,7 +782,7 @@
 
 	function onPointerUp() {
 		if (dragging?.type === 'boundary-group' && dragMoved) {
-			// Follow the dots to their new times so the selection survives the drag.
+			// Follow the boundaries to their new times so the selection survives.
 			boundaries.selectedBoundaryTimes = groupBoundaryTimesAfter(
 				dragging.group,
 				rawSegments,
@@ -855,7 +859,7 @@
 		);
 	}
 
-	let hoveredDot: { leftSegId: string | null; rightSegId: string | null } | null =
+	let hoveredBoundary: { leftSegId: string | null; rightSegId: string | null } | null =
 		$state(null);
 
 	/**
@@ -906,10 +910,10 @@
 			return;
 		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-		if (hoveredDot) {
+		if (hoveredBoundary) {
 			e.preventDefault();
-			mergeBoundary(hoveredDot.leftSegId, hoveredDot.rightSegId);
-			hoveredDot = null;
+			mergeBoundary(hoveredBoundary.leftSegId, hoveredBoundary.rightSegId);
+			hoveredBoundary = null;
 			return;
 		}
 		if (boundaries.deleteSelection()) {
@@ -964,7 +968,7 @@
 				<button
 					class="media-bin-toggle"
 					aria-expanded={binOpen}
-					onclick={() => (binOpen = !binOpen)}
+					onclick={toggleBin}
 				>
 					<span class="media-bin-caret" class:open={binOpen}>▸</span>
 					SOURCES
@@ -1072,6 +1076,7 @@
 	<div
 		class="tl-track"
 		class:drop-active={!!dragSourceId}
+		bind:clientWidth={trackWidth}
 		ondragover={onTimelineDragOver}
 		ondragleave={onTimelineDragLeave}
 		ondrop={onTimelineDrop}
@@ -1087,135 +1092,127 @@
 			ondblclick={onDblClick}
 			onpointerdown={startSeekDrag}
 		>
-			<line class="grid-row" x1="0%" y1={LINE_Y} x2="100%" y2={LINE_Y} />
-
-			<!-- Tail lines for uncovered regions -->
+			<!-- Tails for uncovered regions, on the row's centre line -->
 			{#if segVis.length > 0}
+				{@const midY = ROW_PAD + segH / 2}
 				{#if segVis[0].startTime > 0.001}
 					<line
 						class="tail"
 						x1="{vp.toPct(0)}%"
-						y1={LINE_Y}
+						y1={midY}
 						x2="{segVis[0].startX}%"
-						y2={LINE_Y}
+						y2={midY}
 					/>
 				{/if}
 				{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
-					<!-- Drawn end→start so the dash pattern anchors at the end dot;
+					<!-- Drawn end→start so the dash pattern anchors at the track end;
 					     with start-anchored dashes the phase could leave a gap there -->
 					<line
 						class="tail"
 						x1="{vp.toPct(trackDuration)}%"
-						y1={LINE_Y}
+						y1={midY}
 						x2="{segVis[segVis.length - 1].endX}%"
-						y2={LINE_Y}
+						y2={midY}
 					/>
 				{/if}
 			{/if}
 
-			<!-- Segment hit areas + lines + labels -->
+			<!-- Segment blocks + labels. The block is its own hit area. -->
 			{#each segVis as sv}
+				{@const sel =
+					selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
+				{@const drop = dropTargetIds.includes(sv.id)}
+				{@const midX = (sv.startX + sv.endX) / 2}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<line
-					class="seg-hit"
-					x1="{sv.startX}%"
-					y1={LINE_Y}
-					x2="{sv.endX}%"
-					y2={LINE_Y}
+				<rect
+					class="seg"
+					class:sel
+					class:drop
+					x="{sv.startX}%"
+					y={ROW_PAD}
+					width="{Math.max(0, sv.endX - sv.startX)}%"
+					height={segH}
+					rx="3"
 					onpointerdown={(e) => startSegClick(e, sv.id)}
 				/>
-				<line
-					class="seg"
-					class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
-					class:drop={dropTargetIds.includes(sv.id)}
-					x1="{sv.startX}%"
-					y1={LINE_Y}
-					x2="{sv.endX}%"
-					y2={LINE_Y}
-				/>
-				{#if sv.endX - sv.startX > 6}
-					{@const midX = (sv.startX + sv.endX) / 2}
-					{@const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX))}
+				{#if sv.label}
 					<text
 						class="seg-lbl"
-						class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
-						class:drop={dropTargetIds.includes(sv.id)}
-						x="{lblX}%"
-						y={LINE_Y + 18}
+						class:sel
+						class:drop
+						x="{midX}%"
+						y={labelY}
 						text-anchor="middle">{sv.label}</text
 					>
-					{#if sv.sourceLabel}
-						<text
-							class="seg-src-lbl"
-							class:drop={dropTargetIds.includes(sv.id)}
-							class:sel={selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
-							x="{lblX}%"
-							y={LINE_Y + 31}
-							text-anchor="middle">{sv.sourceLabel}</text
-						>
-					{/if}
+				{/if}
+				{#if sv.sourceLabel}
+					<text
+						class="seg-src-lbl"
+						class:sel
+						class:drop
+						x="{midX}%"
+						y={sourceLabelY}
+						text-anchor="middle">{sv.sourceLabel}</text
+					>
 				{/if}
 			{/each}
 
-			<!-- Fixed anchor dots -->
-			{#if segVis.length > 0}
-				<circle class="dot-anchor" cx="{vp.toPct(0)}%" cy={LINE_Y} r={DOT_R} />
-				<circle
-					class="dot-anchor"
-					cx="{vp.toPct(trackDuration)}%"
-					cy={LINE_Y}
-					r={DOT_R}
-				/>
-			{/if}
-
-			<!-- Interior boundary dots (draggable) + transition markers -->
+			<!-- Interior boundaries (draggable) + transition markers -->
 			{#each segVis as sv, i}
 				{#if sv.startTime > 0.001}
 					{@const lId = i > 0 ? segVis[i - 1].id : null}
+					{@const hovered =
+						hoveredBoundary?.leftSegId === lId &&
+						hoveredBoundary?.rightSegId === sv.id}
+					{@const bndSel =
+						boundaries.selectedBoundaryTimes.some(
+							(t) => Math.abs(t - sv.startTime) < 0.001,
+						) || rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
 					{#if sv.transitionType !== 'cut'}
-						<!-- Lightning zigzag above the boundary: this segment blends in -->
+						<!-- Lightning zigzag inside the block's leading edge: this segment
+						     blends in rather than cutting -->
 						<path
 							class="trans-mark"
-							d="M {sv.startX}% {LINE_Y - 13} l 3 4 l -2 0 l 3 4"
+							d="M {sv.startX}% {ROW_PAD + 3} l 3 4 l -2 0 l 3 4"
 						>
 							<title
 								>{sv.transitionType} transition · {sv.transitionDuration}s</title
 							>
 						</path>
 					{/if}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<circle
-						class="dot-hit"
-						cx="{sv.startX}%"
-						cy={LINE_Y}
-						r={14}
-						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
+					<line
+						class="bnd"
+						class:hovered
+						class:sel={bndSel}
+						x1="{sv.startX}%"
+						y1={ROW_PAD}
+						x2="{sv.startX}%"
+						y2={ROW_PAD + segH}
 					/>
+					<!-- Grab strip, wider than the line it draws — same trick as the text
+					     timeline's clip boundaries. -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<circle
-						class="dot"
-						class:dot-hovered={hoveredDot?.leftSegId === lId &&
-							hoveredDot?.rightSegId === sv.id}
-						class:dot-selected={boundaries.selectedBoundaryTimes.some(
-							(t) => Math.abs(t - sv.startTime) < 0.001,
-						) || rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
-						cx="{sv.startX}%"
-						cy={LINE_Y}
-						r={DOT_R}
+					<rect
+						class="bnd-hit"
+						x="{sv.startX}%"
+						y={ROW_PAD}
+						width={BND_GRAB * 2}
+						height={segH}
+						transform="translate({-BND_GRAB},0)"
 						onpointerenter={() =>
-							(hoveredDot = { leftSegId: lId, rightSegId: sv.id })}
-						onpointerleave={() => (hoveredDot = null)}
+							(hoveredBoundary = { leftSegId: lId, rightSegId: sv.id })}
+						onpointerleave={() => (hoveredBoundary = null)}
 						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
-						><title
+					><title
 							>Drag to move (whole selection if selected) · Delete to merge ·
 							Shift-drag to select</title
-						></circle
+						></rect
 					>
 				{/if}
 			{/each}
 
 			{#if showHint}
-				<text class="hint" x="50%" y={LINE_Y + 4} text-anchor="middle">
+				<text class="hint" x="50%" y={ROW_PAD + segH / 2 + 4} text-anchor="middle">
 					Double-click to create a segment · click a segment to edit its effects
 				</text>
 			{/if}
@@ -1249,9 +1246,10 @@
 					<rect
 						class="ghost-span"
 						x="{gStart}%"
-						y={LINE_Y - 6}
+						y={ROW_PAD}
 						width="{Math.max(0, gEnd - gStart)}%"
-						height="12"
+						height={segH}
+						rx="3"
 						pointer-events="none"
 					/>
 					<line
@@ -1273,19 +1271,10 @@
 				{/each}
 			{/if}
 		</svg>
+	</div>
 
-		{#if vp.isZoomed}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="scrollbar" bind:this={scrollbarEl}>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="scrollbar-thumb"
-					style:left="{(vp.viewStart / trackDuration) * 100}%"
-					style:width="{Math.max(2, (vp.viewDuration / trackDuration) * 100)}%"
-					onpointerdown={startScrollPan}
-				></div>
-			</div>
-		{/if}
+	<div class="tl-scroll-row">
+		<TimelineScrollbar {vp} {trackDuration} accent="purple" />
 	</div>
 
 	<!-- Kept mounted while the hint shows so selecting a segment doesn't shift
@@ -1534,9 +1523,10 @@
 		overflow: hidden;
 	}
 
-	.grid-row {
-		stroke: #1e1e1e;
-		stroke-width: 1;
+	/* Outside the bordered track, so the bar doesn't sit inside a second frame. */
+	.tl-scroll-row {
+		display: flex;
+		margin-top: 3px;
 	}
 
 	.tail {
@@ -1545,30 +1535,31 @@
 		stroke-dasharray: 3 4;
 	}
 
-	.seg-hit {
-		stroke: transparent;
-		stroke-width: 18;
+	/* Segment blocks, styled like the text timeline's clips: a filled body with
+	   its label inside, rather than a line with the label hung underneath. */
+	.seg {
+		fill: #2b2038;
+		stroke: #6a5080;
+		stroke-width: 1;
 		pointer-events: all;
 		cursor: pointer;
 	}
 
-	.seg {
-		stroke: #b08ad0;
-		stroke-width: 2;
-		stroke-linecap: round;
-		pointer-events: none;
+	.seg:hover {
+		stroke: #9a70b8;
 	}
 
 	.seg.sel {
+		fill: #3d2c52;
 		stroke: #d8b8f8;
-		stroke-width: 3;
 	}
 
 	/* Drop preview — deliberately a different hue from selection purple, so
 	   "where this will land" reads apart from "what is selected". */
 	.seg.drop {
+		fill: #14382e;
 		stroke: #6ee7c0;
-		stroke-width: 5;
+		stroke-width: 2;
 	}
 
 	.seg-src-lbl.drop,
@@ -1582,7 +1573,7 @@
 	}
 
 	.seg-lbl {
-		fill: #9a70b8;
+		fill: #c3a4dc;
 		font-size: 11px;
 		font-family: monospace;
 		pointer-events: none;
@@ -1594,7 +1585,7 @@
 	}
 
 	.seg-src-lbl {
-		fill: #6a5080;
+		fill: #8e76a6;
 		font-size: 9px;
 		font-family: monospace;
 		pointer-events: none;
@@ -1702,7 +1693,7 @@
 		flex-wrap: wrap;
 		align-content: flex-start;
 		gap: 0.35rem;
-		max-height: 128px;
+		max-height: 94px;
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		scrollbar-width: thin;
@@ -1726,8 +1717,8 @@
 	.media-chip {
 		position: relative;
 		flex: 0 0 auto;
-		width: 58px;
-		height: 58px;
+		width: 44px;
+		height: 44px;
 		border: 1.5px solid #2e2438;
 		border-radius: 6px;
 		overflow: hidden;
@@ -1847,38 +1838,29 @@
 	}
 
 
-	.dot-anchor {
-		fill: #b08ad0;
-		stroke: none;
+	/* Boundary handles: a hairline between two blocks with a wider invisible
+	   grab strip over it, the same shape as the text timeline's clip
+	   boundaries. */
+	.bnd {
+		stroke: #6a5080;
+		stroke-width: 1;
 		pointer-events: none;
 	}
 
-	.dot-hit {
-		fill: transparent;
-		stroke: none;
-		cursor: ew-resize;
+	.bnd.hovered {
+		stroke: #ff7070;
+		stroke-width: 2;
 	}
 
-	.dot {
-		fill: #111;
-		stroke: #b08ad0;
-		stroke-width: 1.5;
-		cursor: ew-resize;
-	}
-
-	.dot:hover,
-	.dot-hovered,
-	.dot-selected {
-		fill: #b08ad0;
-	}
-
-	.dot-selected {
+	.bnd.sel {
 		stroke: #d8b8f8;
 		stroke-width: 2;
 	}
 
-	.dot-hovered {
-		stroke: #ff7070;
+	.bnd-hit {
+		fill: transparent;
+		stroke: none;
+		cursor: ew-resize;
 	}
 
 	.trans-mark {
@@ -1930,32 +1912,6 @@
 		user-select: none;
 	}
 
-	.scrollbar {
-		position: relative;
-		height: 5px;
-		background: #161616;
-		border-top: 1px solid #2a2a2a;
-		cursor: default;
-	}
-
-	.scrollbar-thumb {
-		position: absolute;
-		top: 0;
-		height: 100%;
-		min-width: 8px;
-		background: #6a4a8a;
-		border-radius: 2px;
-		cursor: grab;
-	}
-
-	.scrollbar-thumb:hover {
-		background: #7a5a9a;
-	}
-
-	.scrollbar-thumb:active {
-		cursor: grabbing;
-		background: #b08ad0;
-	}
 
 	.seg-toolbar {
 		display: flex;
@@ -2084,16 +2040,15 @@
 			margin: 0 8px;
 		}
 
-		/* Smaller chips and one row of scroll — a phone has no screen to spare,
-		   and the bin starts collapsed there anyway. */
+		/* Smaller chips still — a phone has no screen to spare. */
 		.media-chip,
 		.media-chip-assign {
-			width: 46px;
-			height: 46px;
+			width: 38px;
+			height: 38px;
 		}
 
 		.media-grid {
-			max-height: 100px;
+			max-height: 82px;
 			gap: 0.3rem;
 		}
 

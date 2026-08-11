@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		Crosshair,
 		Eye,
 		EyeOff,
 		MicVocal,
@@ -24,7 +25,6 @@
 		removeClip,
 		resizeBoundary,
 		resizeClip,
-		snapTime,
 		sortClips,
 		updateLane,
 		type TextClip,
@@ -34,6 +34,7 @@
 	import LyricsSyncModal, {
 		type LyricsSyncProps,
 	} from './LyricsSyncModal.svelte';
+	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
@@ -45,8 +46,6 @@
 		timeline: TextTimeline;
 		trackDuration: number;
 		currentTime?: number;
-		/** Snap grid in seconds; 0 disables snapping. Alt overrides it per drag. */
-		snapGrid?: number;
 		/** Names of the enabled main effects, in order — the chain-position picker. */
 		chainLabels?: string[];
 		selectedClipId?: string | null;
@@ -70,7 +69,6 @@
 		timeline,
 		trackDuration,
 		currentTime = 0,
-		snapGrid = 0,
 		chainLabels = [],
 		selectedClipId = $bindable(null),
 		onChange,
@@ -87,18 +85,23 @@
 	let lyricsDraft = $derived(lyricsDraftFromTimeline(timeline));
 
 	let trackEl = $state<HTMLElement | undefined>(undefined);
+	/** Whether the view chases the playhead. Panning the view by hand takes it
+	 * over — chasing while the user is reading somewhere else just drags them
+	 * back — and pressing play (or the Follow button) hands it back. */
+	let followPlayhead = $state(true);
 	const vp = new TimelineViewport(
 		() => trackDuration,
 		() => trackEl?.getBoundingClientRect() ?? null,
-		// Wheel-zoom pins the playhead when it's on screen.
-		() => currentTime,
+		// Wheel-zoom pins the playhead when it's on screen, but only while
+		// following; a hand-panned view zooms around the cursor instead.
+		() => (followPlayhead ? currentTime : null),
 	);
 
 	/** Every lane track shares one geometry, so any of them can measure the
 	 * viewport — and scrolling over any of them should zoom all of them. */
 	function laneTrack(node: HTMLElement) {
 		trackEl = node;
-		const detachWheel = vp.attachWheel(node);
+		const detachWheel = vp.attachWheel(node, () => (followPlayhead = false));
 		return {
 			destroy() {
 				detachWheel();
@@ -118,6 +121,18 @@
 		viewedDuration = d;
 		vp.viewStart = 0;
 		vp.viewEnd = d;
+		followPlayhead = true;
+	});
+
+	// Pressing play hands the view back to the playhead: starting playback is
+	// the moment the user wants to watch it again.
+	let wasPlaying = false;
+	$effect(() => {
+		const playing = isPlaying;
+		untrack(() => {
+			if (playing && !wasPlaying) followPlayhead = true;
+			wasPlaying = playing;
+		});
 	});
 
 	// Keep the playhead centred: the view slides under it rather than the other
@@ -128,14 +143,15 @@
 	$effect(() => {
 		const t = currentTime;
 		const d = trackDuration;
-		if (d <= 0) return;
-		// Untracked: this effect writes the view, and reading it back tracked
-		// would retrigger on its own pan.
-		const centred = untrack(() => {
-			if (!vp.isZoomed || vp.viewEnd <= 0) return null;
-			return t - (vp.viewStart + vp.viewDuration / 2);
+		if (d <= 0 || !followPlayhead) return;
+		// Untracked, pan included: panView reads the window it writes, so a
+		// tracked call retriggers on its own pan — and at the track ends, where
+		// the clamp means the correction never reaches zero, never settles.
+		untrack(() => {
+			if (!vp.isZoomed || vp.viewEnd <= 0) return;
+			const centred = t - (vp.viewStart + vp.viewDuration / 2);
+			if (centred !== 0) vp.panView(centred);
 		});
-		if (centred !== null && centred !== 0) vp.panView(centred);
 	});
 
 	let drag = $state<{
@@ -182,9 +198,9 @@
 		});
 	});
 
-	function timeAt(clientX: number, altKey: boolean): number {
-		const t = vp.clientXToTime(clientX);
-		return altKey ? t : snapTime(t, snapGrid);
+	/** Clips are placed freely — no grid, nothing to snap to. */
+	function timeAt(clientX: number): number {
+		return vp.clientXToTime(clientX);
 	}
 
 	function laneOf(laneId: string): TextLane | undefined {
@@ -243,7 +259,7 @@
 		// A double-click inside a clip is the clip's business; only empty lane
 		// space drops a new clip.
 		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
-		addClipAt(laneId, timeAt(e.clientX, e.altKey));
+		addClipAt(laneId, timeAt(e.clientX));
 	}
 
 	function onClipPointerDown(
@@ -374,7 +390,7 @@
 
 	function onPointerMove(e: PointerEvent) {
 		if (!drag) return;
-		const t = timeAt(e.clientX, e.altKey);
+		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
 		collapseOnUp = null;
 		onChange(
@@ -465,6 +481,7 @@
 	}
 
 	let playheadPct = $derived(vp.toPct(currentTime));
+
 </script>
 
 <svelte:window onkeydown={onKeyDown} />
@@ -485,13 +502,20 @@
 				<MicVocal size={12} /> Lyrics
 			</button>
 		{/if}
+		{#if trackDuration > 0}
+			<button
+				class="tl-btn"
+				class:active={followPlayhead}
+				onclick={() => (followPlayhead = !followPlayhead)}
+				title={followPlayhead
+					? 'Following the playhead — scroll or drag the scrollbar to look elsewhere'
+					: 'Follow the playhead again'}
+			>
+				<Crosshair size={12} /> Follow
+			</button>
+		{/if}
 		{#if trackDuration <= 0}
 			<span class="tl-hint">No timeline yet — add media or a track.</span>
-		{:else}
-			<span class="tl-hint">
-				Double-click a lane to add text · drag to move · drag a boundary to trim both, an edge to trim one · shift-click for a range, ctrl-click to add one
-				{#if snapGrid > 0}· hold Alt for free placement{/if}
-			</span>
 		{/if}
 	</div>
 
@@ -640,6 +664,17 @@
 			</div>
 		</div>
 	{/each}
+
+	{#if trackDuration > 0}
+		<div class="lane-row">
+			<div class="lane-head"></div>
+			<TimelineScrollbar
+				{vp}
+				{trackDuration}
+				onPanStart={() => (followPlayhead = false)}
+			/>
+		</div>
+	{/if}
 
 	{#if timeline.lanes.length === 0}
 		<p class="tl-empty">No text lanes. Add one to put text on the timeline.</p>
