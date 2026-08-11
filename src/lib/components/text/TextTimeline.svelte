@@ -1,16 +1,7 @@
 <script lang="ts">
-	import {
-		Crosshair,
-		Eye,
-		EyeOff,
-		MicVocal,
-		Pause,
-		Play,
-		Plus,
-		Trash2,
-	} from 'lucide-svelte';
+	import { Eye, EyeOff, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
-	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
+	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
 	import {
 		addClip,
@@ -34,7 +25,6 @@
 	import LyricsSyncModal, {
 		type LyricsSyncProps,
 	} from './LyricsSyncModal.svelte';
-	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
@@ -45,20 +35,12 @@
 
 	interface Props {
 		timeline: TextTimeline;
-		trackDuration: number;
-		currentTime?: number;
 		/** Names of the enabled main effects, in order — the chain-position picker. */
 		chainLabels?: string[];
 		selectedClipId?: string | null;
 		onChange: (timeline: TextTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
-		/** Scrubbing the ruler. Omit when the mode has its own transport. */
-		onSeek?: (time: number) => void;
-		/** Given both, the ruler grows a play button — the only transport a still
-		 * image has, since there is no track or video to drive one. */
-		isPlaying?: boolean;
-		onTogglePlay?: (() => void) | null;
 		/** When provided, the header grows a Lyrics button that opens the sync
 		 * modal, wired to the mode's own transport. */
 		lyricsSync?: LyricsSyncProps | null;
@@ -68,15 +50,10 @@
 
 	let {
 		timeline,
-		trackDuration,
-		currentTime = 0,
 		chainLabels = [],
 		selectedClipId = $bindable(null),
 		onChange,
 		onBeforeEdit,
-		onSeek,
-		isPlaying = false,
-		onTogglePlay = null,
 		lyricsSync = null,
 		lyricsOpen = $bindable(false),
 	}: Props = $props();
@@ -85,75 +62,27 @@
 	 * so clips dragged here show up there with their nudged times. */
 	let lyricsDraft = $derived(lyricsDraftFromTimeline(timeline));
 
-	let trackEl = $state<HTMLElement | undefined>(undefined);
-	/** Whether the view chases the playhead. Panning the view by hand takes it
-	 * over — chasing while the user is reading somewhere else just drags them
-	 * back — and pressing play (or the Follow button) hands it back. */
-	let followPlayhead = $state(true);
-	const vp = new TimelineViewport(
-		() => trackDuration,
-		() => trackEl?.getBoundingClientRect() ?? null,
-		// Wheel-zoom pins the playhead when it's on screen, but only while
-		// following; a hand-panned view zooms around the cursor instead.
-		() => (followPlayhead ? currentTime : null),
-	);
+	// One axis for the whole stack: zoom, pan, playhead-following and the
+	// duration-change reset all live in TimelineStack.
+	const stack = getTimelineStack();
+	const vp = stack.vp;
+	let trackDuration = $derived(stack.trackDuration);
 
-	/** Every lane track shares one geometry, so any of them can measure the
-	 * viewport — and scrolling over any of them should zoom all of them. */
+	/** The lane geometry, for sizing grab handles against their clips. */
+	let trackEl = $state<HTMLElement | undefined>(undefined);
+
+	/** Registers a lane track with the shared axis and keeps a local handle on
+	 * it — every lane shares one geometry, so whichever mounted last will do. */
 	function laneTrack(node: HTMLElement) {
 		trackEl = node;
-		const detachWheel = vp.attachWheel(node, () => (followPlayhead = false));
+		const shared = stack.lane(node);
 		return {
 			destroy() {
-				detachWheel();
+				shared.destroy();
 				if (trackEl === node) trackEl = undefined;
 			},
 		};
 	}
-
-	// Follow the track: any new duration opens the window onto the whole thing.
-	// The duration grows under us — both modes start on the short record window
-	// and only reach the track length once a track loads — and the old window
-	// left in place reads as a deep zoom into the new, far longer timeline.
-	let viewedDuration = 0;
-	$effect(() => {
-		const d = trackDuration;
-		if (d <= 0 || d === viewedDuration) return;
-		viewedDuration = d;
-		vp.viewStart = 0;
-		vp.viewEnd = d;
-		followPlayhead = true;
-	});
-
-	// Pressing play hands the view back to the playhead: starting playback is
-	// the moment the user wants to watch it again.
-	let wasPlaying = false;
-	$effect(() => {
-		const playing = isPlaying;
-		untrack(() => {
-			if (playing && !wasPlaying) followPlayhead = true;
-			wasPlaying = playing;
-		});
-	});
-
-	// Keep the playhead centred: the view slides under it rather than the other
-	// way round, so the clip being heard is always the one in the middle. Only
-	// while zoomed — unzoomed the whole track is on screen and there is nothing
-	// to scroll. panView clamps at the track ends, where the window runs out of
-	// room and the playhead drifts off centre instead of scrolling past the end.
-	$effect(() => {
-		const t = currentTime;
-		const d = trackDuration;
-		if (d <= 0 || !followPlayhead) return;
-		// Untracked, pan included: panView reads the window it writes, so a
-		// tracked call retriggers on its own pan — and at the track ends, where
-		// the clamp means the correction never reaches zero, never settles.
-		untrack(() => {
-			if (!vp.isZoomed || vp.viewEnd <= 0) return;
-			const centred = t - (vp.viewStart + vp.viewDuration / 2);
-			if (centred !== 0) vp.panView(centred);
-		});
-	});
 
 	let drag = $state<{
 		laneId: string;
@@ -206,17 +135,6 @@
 
 	function laneOf(laneId: string): TextLane | undefined {
 		return timeline.lanes.find((l) => l.id === laneId);
-	}
-
-	function addLane() {
-		onBeforeEdit?.();
-		onChange({
-			...timeline,
-			lanes: [
-				...timeline.lanes,
-				createTextLane(`Text ${timeline.lanes.length + 1}`),
-			],
-		});
 	}
 
 	/** Lane the delete button is asking about; null when nothing is pending. */
@@ -357,6 +275,12 @@
 	const BOUNDARY_GRAB = 12;
 	/** Comfortable grab width for a clip's own start/end handles, in px. */
 	const EDGE_GRAB = 10;
+	/**
+	 * Below this the label is all ellipsis and no word — a lane of synced lyrics
+	 * zoomed out becomes a row of "P…", which reads as noise rather than as text.
+	 * The clip's tooltip still names it.
+	 */
+	const MIN_LABEL_PX = 34;
 
 	/**
 	 * Sized against the clip rather than fixed. At a flat 10px each, two handles
@@ -365,10 +289,16 @@
 	 * edges grabbable at any width, and leaves the middle third to drag by.
 	 */
 	function edgeWidth(clip: TextClip): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
+		const px = clipPx(clip);
 		if (px <= 0) return EDGE_GRAB;
-		const clipPx = ((clip.end - clip.start) / vp.viewDuration) * px;
-		return Math.max(1, Math.min(EDGE_GRAB, clipPx / 3));
+		return Math.max(1, Math.min(EDGE_GRAB, px / 3));
+	}
+
+	/** The clip's on-screen width. */
+	function clipPx(clip: TextClip): number {
+		const px = trackEl?.getBoundingClientRect().width ?? 0;
+		if (px <= 0) return 0;
+		return ((clip.end - clip.start) / vp.viewDuration) * px;
 	}
 
 	/**
@@ -399,7 +329,18 @@
 		return pairs;
 	}
 
+	/** Empty lane space scrubs: with no ruler row of its own, every lane has to
+	 * be draggable, or a text-only timeline has nothing to seek with. */
+	function onLanePointerDown(e: PointerEvent) {
+		if (e.button !== 0 || trackDuration <= 0) return;
+		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		scrubbing = true;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		stack.seekTo(timeAt(e.clientX));
+	}
+
 	function onPointerMove(e: PointerEvent) {
+		if (scrubbing) stack.seekTo(timeAt(e.clientX));
 		if (!drag) return;
 		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
@@ -438,10 +379,13 @@
 			selectOnly(collapseOnUp);
 			collapseOnUp = null;
 		}
+		scrubbing = false;
 		if (!drag) return;
 		drag = null;
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}
+
+	let scrubbing = $state(false);
 
 	/** Delete every selected clip, across lanes, as one undo step. */
 	function deleteSelection() {
@@ -471,104 +415,14 @@
 		deleteSelection();
 	}
 
-	let scrubbing = $state(false);
-
-	function onRulerPointerDown(e: PointerEvent) {
-		if (e.button !== 0 || !onSeek || trackDuration <= 0) return;
-		scrubbing = true;
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		onSeek(vp.clientXToTime(e.clientX));
-	}
-
-	function onRulerPointerMove(e: PointerEvent) {
-		if (!scrubbing || !onSeek) return;
-		onSeek(vp.clientXToTime(e.clientX));
-	}
-
-	function onRulerPointerUp(e: PointerEvent) {
-		if (!scrubbing) return;
-		scrubbing = false;
-		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-	}
-
-	let playheadPct = $derived(vp.toPct(currentTime));
-
 </script>
 
 <svelte:window onkeydown={onKeyDown} />
 
 <div class="text-tl">
-	<div class="tl-head">
-		<span class="tl-title">Text</span>
-		<button class="tl-btn" onclick={addLane} title="Add a text lane">
-			<Plus size={12} /> Lane
-		</button>
-		{#if lyricsSync}
-			<button
-				class="tl-btn"
-				class:active={lyricsOpen}
-				onclick={() => (lyricsOpen = true)}
-				title="Sync lyrics to the song: paste them, then press Space as it plays"
-			>
-				<MicVocal size={12} /> Lyrics
-			</button>
-		{/if}
-		{#if trackDuration > 0}
-			<button
-				class="tl-btn"
-				class:active={followPlayhead}
-				onclick={() => (followPlayhead = !followPlayhead)}
-				title={followPlayhead
-					? 'Following the playhead — scroll or drag the scrollbar to look elsewhere'
-					: 'Follow the playhead again'}
-			>
-				<Crosshair size={12} /> Follow
-			</button>
-		{/if}
-		{#if trackDuration <= 0}
-			<span class="tl-hint">No timeline yet — add media or a track.</span>
-		{/if}
-	</div>
-
-	{#if trackDuration > 0}
-		<div class="lane-row">
-			<div class="lane-head ruler-head">
-				{#if onTogglePlay}
-					<button
-						class="lane-eye"
-						title={isPlaying ? 'Pause' : 'Play'}
-						onclick={onTogglePlay}
-					>
-						{#if isPlaying}<Pause size={12} />{:else}<Play size={12} />{/if}
-					</button>
-				{/if}
-				<span class="ruler-time">{currentTime.toFixed(2)}s</span>
-			</div>
-			<div
-				class="ruler"
-				class:seekable={!!onSeek}
-				use:laneTrack
-				role="slider"
-				tabindex="-1"
-				aria-label="Text timeline playhead"
-				aria-valuemin={0}
-				aria-valuemax={trackDuration}
-				aria-valuenow={currentTime}
-				onpointerdown={onRulerPointerDown}
-				onpointermove={onRulerPointerMove}
-				onpointerup={onRulerPointerUp}
-				onpointercancel={onRulerPointerUp}
-			>
-				{#if playheadPct >= 0 && playheadPct <= 100}
-					<div class="playhead" style="left: {playheadPct}%"></div>
-				{/if}
-			</div>
-		</div>
-	{/if}
-
 	{#each timeline.lanes as lane (lane.id)}
-		<div class="lane-row">
-			<div class="lane-head">
+		<div class="tl-row">
+			<div class="tl-gutter">
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
@@ -603,12 +457,13 @@
 			</div>
 
 			<div
-				class="lane-track"
+				class="tl-lane lane-track"
 				use:laneTrack
 				style="height: {LANE_HEIGHT}px"
 				role="group"
 				aria-label="{lane.name} clips"
 				ondblclick={(e) => onTrackDblClick(e, lane.id)}
+				onpointerdown={onLanePointerDown}
 				onpointermove={onPointerMove}
 				onpointerup={onPointerUp}
 				onpointercancel={onPointerUp}
@@ -640,7 +495,9 @@
 								onpointerdown={(e) =>
 									onClipPointerDown(e, lane.id, clip.id, 'start')}
 							></span>
-							<span class="clip-label">{clip.text || '—'}</span>
+							{#if clipPx(clip) >= MIN_LABEL_PX}
+								<span class="clip-label">{clip.text || '—'}</span>
+							{/if}
 							<span
 								class="clip-edge end"
 								style="width: {edge}px"
@@ -668,28 +525,9 @@
 						></div>
 					{/if}
 				{/each}
-
-				{#if trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100}
-					<div class="playhead" style="left: {playheadPct}%"></div>
-				{/if}
 			</div>
 		</div>
 	{/each}
-
-	{#if trackDuration > 0}
-		<div class="lane-row">
-			<div class="lane-head"></div>
-			<TimelineScrollbar
-				{vp}
-				{trackDuration}
-				onPanStart={() => (followPlayhead = false)}
-			/>
-		</div>
-	{/if}
-
-	{#if timeline.lanes.length === 0}
-		<p class="tl-empty">No text lanes. Add one to put text on the timeline.</p>
-	{/if}
 
 	{#if lanePendingDelete}
 		{@const count = lanePendingDelete.clips.length}
@@ -709,7 +547,7 @@
 	{#if lyricsSync}
 		<LyricsSyncModal
 			open={lyricsOpen}
-			currentTime={currentTime}
+			currentTime={stack.currentTime}
 			isPlaying={lyricsSync.isPlaying}
 			spanStart={lyricsSync.spanStart}
 			spanEnd={lyricsSync.spanEnd}
@@ -729,65 +567,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: 0.4rem 0.5rem;
-		border-top: 1px solid #2a2a2a;
-	}
-
-	.tl-head {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.tl-title {
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		color: #888;
-		text-transform: uppercase;
-	}
-
-	.tl-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.2rem;
-		padding: 0.15rem 0.4rem;
-		border: 1px solid #333;
-		border-radius: 4px;
-		background: #1a1a1a;
-		color: #ccc;
-		font-size: 0.7rem;
-		cursor: pointer;
-	}
-
-	.tl-btn:hover {
-		border-color: #555;
-		color: #fff;
-	}
-
-	.tl-btn.active {
-		border-color: #4a6a8a;
-		color: #fff;
-	}
-
-	.tl-hint,
-	.tl-empty {
-		color: #666;
-		font-size: 0.68rem;
-	}
-
-	.lane-row {
-		display: flex;
-		align-items: stretch;
-		gap: 0.35rem;
-	}
-
-	.lane-head {
-		display: flex;
-		align-items: center;
-		gap: 0.2rem;
-		width: 150px;
-		flex-shrink: 0;
 	}
 
 	.lane-eye,
@@ -810,45 +589,28 @@
 		color: #555;
 	}
 
+	/* Borderless until hovered: three framed controls per lane gutter read as
+	   more chrome than the lane itself. */
 	.lane-chain {
 		flex: 1;
 		min-width: 0;
-		padding: 0.1rem 0.2rem;
-		border: 1px solid #333;
+		padding: 0.1rem 0.15rem;
+		border: 1px solid transparent;
 		border-radius: 4px;
-		background: #1a1a1a;
-		color: #bbb;
-		font-size: 0.68rem;
+		background: none;
+		color: #8a8a8a;
+		font-size: 0.65rem;
 		font-family: inherit;
 	}
 
-	.ruler {
-		position: relative;
-		flex: 1;
-		height: 14px;
-		border: 1px solid #2a2a2a;
-		border-radius: 3px;
-		background: #101010;
-		touch-action: none;
-	}
-
-	.ruler.seekable {
-		cursor: pointer;
-	}
-
-	.ruler-head {
-		justify-content: flex-end;
-	}
-
-	.ruler-time {
-		color: #777;
-		font-size: 0.65rem;
-		font-variant-numeric: tabular-nums;
+	.lane-chain:hover,
+	.lane-chain:focus {
+		border-color: #333;
+		background: #1a1a1a;
+		color: #ddd;
 	}
 
 	.lane-track {
-		position: relative;
-		flex: 1;
 		border: 1px solid #2a2a2a;
 		border-radius: 4px;
 		background: #141414;
@@ -951,12 +713,4 @@
 		background: #7ab8f5;
 	}
 
-	.playhead {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 1px;
-		background: #e05a5a;
-		pointer-events: none;
-	}
 </style>

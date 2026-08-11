@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { Pause, Play, Repeat, Volume1, Volume2, VolumeX, X } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
-	import type { SlideshowConfig } from '../../slideshow/types';
-	import TimelineSegments from '../slideshow/TimelineSegments.svelte';
+	import { tryGetTimelineStack } from '../../editor/timeline-stack.svelte';
+	import SpeedControl from './SpeedControl.svelte';
 
 	interface Props {
 		label: string;
@@ -24,10 +24,14 @@
 		onToggleLoop?: () => void;
 		onRemoveTrack?: () => void;
 		ariaLabel?: string;
-		// Slideshow-only (segments)
-		config?: SlideshowConfig;
-		selectedSegmentId?: string | null;
-		onConfigChange?: (c: SlideshowConfig) => void;
+		/**
+		 * `lane` puts the track on the enclosing TimelineStack's shared axis: it
+		 * zooms with every other lane, and the stack draws the playhead and owns
+		 * the transport. `bar` is the self-contained strip, for a clock that is not
+		 * the stack's master (a video playing under its own span while a track
+		 * drives the timeline).
+		 */
+		layout?: 'bar' | 'lane';
 	}
 
 	let {
@@ -50,10 +54,13 @@
 		onToggleLoop,
 		onRemoveTrack,
 		ariaLabel = 'Timeline',
-		config,
-		selectedSegmentId = $bindable(null),
-		onConfigChange,
+		layout = 'bar',
 	}: Props = $props();
+
+	// Present whenever this is mounted inside a stack; used only in lane layout,
+	// so a bar keeps its own axis even when it sits next to one.
+	const enclosingStack = tryGetTimelineStack();
+	let stack = $derived(layout === 'lane' ? enclosingStack : undefined);
 
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 	let seekDragging = $state(false);
@@ -62,30 +69,49 @@
 		outputVolume === 0 ? VolumeX : outputVolume < 0.5 ? Volume1 : Volume2,
 	);
 
-	let speedLabel = $derived(
-		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + '×',
-	);
-
-	function onSpeedInput(e: Event) {
-		// Log₂ slider (−2…2 → 0.25×…4×) so 1× sits at center; snap near center.
-		const v = +(e.currentTarget as HTMLInputElement).value;
-		onSpeedChange?.(Math.abs(v) < 0.08 ? 1 : 2 ** v);
+	/** Registers the track with the shared axis; a no-op for a standalone bar. */
+	function laneTrack(node: HTMLElement) {
+		return stack?.lane(node);
 	}
 
+	/** Absolute time → percent across the track, through the shared view window
+	 * when there is one and over the whole track when there isn't. Off-screen
+	 * either side once the view is zoomed in, so anything drawn from it clamps. */
+	function pct(time: number): number {
+		if (stack) return stack.toPct(time);
+		return trackDuration > 0 ? (time / trackDuration) * 100 : 0;
+	}
+
+	/** `pct` held inside the lane — a span that starts before the view window
+	 * would otherwise draw its bar clean across the panel beside the timeline. */
+	function clampPct(time: number): number {
+		return Math.max(0, Math.min(100, pct(time)));
+	}
+
+	/** Whether a handle is inside the view at all; off-screen it isn't drawn. */
+	function onScreen(time: number): boolean {
+		const p = pct(time);
+		return p >= 0 && p <= 100;
+	}
+
+	let spanL = $derived(clampPct(spanStart));
+	let spanR = $derived(clampPct(spanEnd));
+
 	function timeFromClientX(clientX: number): number {
+		if (stack) return stack.timeAt(clientX);
 		if (!timelineTrackEl) return 0;
 		const rect = timelineTrackEl.getBoundingClientRect();
 		const x = clientX - rect.left;
-		const pct = Math.max(0, Math.min(1, x / rect.width));
-		return pct * trackDuration;
+		const frac = Math.max(0, Math.min(1, x / rect.width));
+		return frac * trackDuration;
 	}
 
 	function handleFromClientX(clientX: number): 'start' | 'end' | null {
 		if (!timelineTrackEl || trackDuration === 0) return null;
 		const rect = timelineTrackEl.getBoundingClientRect();
 		const x = clientX - rect.left;
-		const startX = (spanStart / trackDuration) * rect.width;
-		const endX = (spanEnd / trackDuration) * rect.width;
+		const startX = (pct(spanStart) / 100) * rect.width;
+		const endX = (pct(spanEnd) / 100) * rect.width;
 		const radius = 14;
 		if (Math.abs(x - startX) <= radius) return 'start';
 		if (Math.abs(x - endX) <= radius) return 'end';
@@ -205,35 +231,16 @@
 
 </script>
 
-<div class="timeline-bar">
-	<span class="timeline-label">{label}</span>
-	<button
-		class="timeline-play-btn"
-		onclick={isPlaying ? onPause : onPlay}
-		title={isPlaying ? 'Pause' : 'Play'}
-	>
-		{#if isPlaying}
-			<Pause size={14} fill="currentColor" stroke="none" />
-		{:else}
-			<Play size={14} fill="currentColor" stroke="none" />
-		{/if}
-	</button>
-	{#if onToggleLoop}
-		<button
-			class="timeline-play-btn timeline-loop-btn"
-			class:loop-on={loopEnabled}
-			onclick={onToggleLoop}
-			title={loopEnabled ? 'Loop: on' : 'Loop: off'}
-			aria-pressed={loopEnabled}
-		>
-			<Repeat size={13} />
-		</button>
-	{/if}
-	<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
+<!-- The track itself, identical either way: only the chrome around it differs.
+     The playhead is the stack's job in lane layout — it draws one line through
+     every lane rather than one per row. -->
+{#snippet trackBody()}
 	<div
 		class="timeline-track-wrap"
 		class:seeking={seekDragging}
+		class:tl-lane={layout === 'lane'}
 		bind:this={timelineTrackEl}
+		use:laneTrack
 		role="slider"
 		aria-label={ariaLabel}
 		aria-valuenow={trackCurrentTime}
@@ -245,77 +252,124 @@
 		<div class="timeline-track">
 			<div
 				class="timeline-span"
-				style="left: {(spanStart / trackDuration) * 100}%; width: {((spanEnd -
-					spanStart) /
-					trackDuration) *
-					100}%"
-			>
-			</div>
-			<div
-				class="timeline-handle timeline-handle-start"
-				style="left: {(spanStart / trackDuration) * 100}%"
-				aria-hidden="true"
+				style="left: {spanL}%; width: {Math.max(0, spanR - spanL)}%"
 			></div>
-			<div
-				class="timeline-handle timeline-handle-end"
-				style="left: {(spanEnd / trackDuration) * 100}%"
-				aria-hidden="true"
-			></div>
-			<div
-				class="timeline-playhead"
-				style="left: {(trackCurrentTime / trackDuration) * 100}%"
-				aria-hidden="true"
-			></div>
+			{#if onScreen(spanStart)}
+				<div
+					class="timeline-handle timeline-handle-start"
+					style="left: {spanL}%"
+					aria-hidden="true"
+				></div>
+			{/if}
+			{#if onScreen(spanEnd)}
+				<div
+					class="timeline-handle timeline-handle-end"
+					style="left: {spanR}%"
+					aria-hidden="true"
+				></div>
+			{/if}
+			{#if layout === 'bar'}
+				<div
+					class="timeline-playhead"
+					style="left: {pct(trackCurrentTime)}%"
+					aria-hidden="true"
+				></div>
+			{/if}
 		</div>
 	</div>
-	<span class="timeline-time">{formatTime(spanEnd)}</span>
-	{#if onSpeedChange}
-		<span class="timeline-speed">{speedLabel}</span>
-		<input
-			type="range"
-			class="volume-slider"
-			min="-2"
-			max="2"
-			step="0.05"
-			value={Math.log2(speed)}
-			oninput={onSpeedInput}
-			ondblclick={() => onSpeedChange(1)}
-			title="Speed: {speedLabel} (double-click to reset)"
-		/>
-	{/if}
-	{#if onVolumeChange}
-		<span class="volume-icon" title="Volume">
-			<VolumeIcon size={13} />
-		</span>
-		<input
-			type="range"
-			class="volume-slider"
-			min="0"
-			max="1"
-			step="0.01"
-			value={outputVolume}
-			oninput={(e) =>
-				onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
-			title="Volume: {Math.round(outputVolume * 100)}%"
-		/>
-	{/if}
-	{#if onRemoveTrack}
-		<button class="track-inline-btn" onclick={onRemoveTrack} title="Remove track" aria-label="Remove track">
-			<X size={12} />
-		</button>
-	{/if}
-</div>
+{/snippet}
 
-{#if config && onConfigChange}
-	<TimelineSegments
-		{config}
-		{trackDuration}
-		{onConfigChange}
-		alignToEl={timelineTrackEl}
-		bind:selectedSegmentId
-		currentTime={trackCurrentTime}
-		{onSeek}
-	/>
+{#if layout === 'lane'}
+	<div class="tl-row">
+		<div class="tl-gutter audio-gutter">
+			<span class="tl-gutter-label">{label}</span>
+			{#if onVolumeChange}
+				<span class="volume-icon" title="Volume">
+					<VolumeIcon size={13} />
+				</span>
+				<input
+					type="range"
+					class="volume-slider lane-volume"
+					min="0"
+					max="1"
+					step="0.01"
+					value={outputVolume}
+					oninput={(e) =>
+						onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+					title="Volume: {Math.round(outputVolume * 100)}%"
+				/>
+			{/if}
+			{#if onRemoveTrack}
+				<button
+					class="track-inline-btn"
+					onclick={onRemoveTrack}
+					title="Remove track"
+					aria-label="Remove track"
+				>
+					<X size={12} />
+				</button>
+			{/if}
+		</div>
+		{@render trackBody()}
+	</div>
+{:else}
+	<div class="timeline-bar">
+		<span class="timeline-label">{label}</span>
+		<button
+			class="timeline-play-btn"
+			onclick={isPlaying ? onPause : onPlay}
+			title={isPlaying ? 'Pause' : 'Play'}
+		>
+			{#if isPlaying}
+				<Pause size={14} fill="currentColor" stroke="none" />
+			{:else}
+				<Play size={14} fill="currentColor" stroke="none" />
+			{/if}
+		</button>
+		{#if onToggleLoop}
+			<button
+				class="timeline-play-btn timeline-loop-btn"
+				class:loop-on={loopEnabled}
+				onclick={onToggleLoop}
+				title={loopEnabled ? 'Loop: on' : 'Loop: off'}
+				aria-pressed={loopEnabled}
+			>
+				<Repeat size={13} />
+			</button>
+		{/if}
+		<span class="timeline-time">{formatTime(trackCurrentTime)}</span>
+		{@render trackBody()}
+		<span class="timeline-time">{formatTime(spanEnd)}</span>
+		{#if onSpeedChange}
+			<SpeedControl {speed} {onSpeedChange} />
+		{/if}
+		{#if onVolumeChange}
+			<span class="volume-icon" title="Volume">
+				<VolumeIcon size={13} />
+			</span>
+			<input
+				type="range"
+				class="volume-slider"
+				min="0"
+				max="1"
+				step="0.01"
+				value={outputVolume}
+				oninput={(e) =>
+					onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+				title="Volume: {Math.round(outputVolume * 100)}%"
+			/>
+		{/if}
+		{#if onRemoveTrack}
+			<button
+				class="track-inline-btn"
+				onclick={onRemoveTrack}
+				title="Remove track"
+				aria-label="Remove track"
+			>
+				<X size={12} />
+			</button>
+		{/if}
+	</div>
 {/if}
 
 <style>
@@ -384,6 +438,14 @@
 		outline: none;
 	}
 
+	/* A lane is a window onto a zoomed axis, so nothing may paint outside it.
+	   The standalone bar always spans its whole track and keeps the visible
+	   overflow its handles are drawn with. */
+	.timeline-track-wrap.tl-lane {
+		overflow: hidden;
+		border-radius: 4px;
+	}
+
 	.timeline-track-wrap.seeking {
 		cursor: grabbing;
 	}
@@ -438,21 +500,29 @@
 		pointer-events: none;
 	}
 
-	.timeline-speed {
-		font-size: 0.7rem;
-		color: #666;
-		min-width: 2.2rem;
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-		flex-shrink: 0;
-	}
-
 	.volume-icon {
 		display: flex;
 		align-items: center;
 		color: #666;
 		flex-shrink: 0;
 		margin-right: -0.2rem;
+	}
+
+	/* The gutter is a fixed column, so anything short of 150px leaves slack. Let
+	   the slider take it — a longer throw is a finer volume — with the × pinned
+	   to the far edge. */
+	.audio-gutter {
+		gap: 0.4rem;
+	}
+
+	.volume-slider.lane-volume {
+		flex: 1;
+		width: auto;
+		min-width: 28px;
+	}
+
+	.audio-gutter .track-inline-btn {
+		margin-left: auto;
 	}
 
 	.volume-slider {
@@ -489,8 +559,7 @@
 
 	@media (max-width: 800px) {
 		.volume-slider,
-		.volume-icon,
-		.timeline-speed {
+		.volume-icon {
 			display: none;
 		}
 

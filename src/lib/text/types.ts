@@ -107,6 +107,14 @@ export function createTextTimeline(): TextTimeline {
   return { enabled: true, lanes: [createTextLane("Text 1")] };
 }
 
+/** Add an empty lane, named after its position. */
+export function appendTextLane(timeline: TextTimeline): TextTimeline {
+  return {
+    ...timeline,
+    lanes: [...timeline.lanes, createTextLane(`Text ${timeline.lanes.length + 1}`)],
+  };
+}
+
 /** Fill in anything a saved timeline predates or dropped. */
 export function normalizeTextTimeline(raw: unknown): TextTimeline {
   if (!raw || typeof raw !== "object") return { ...EMPTY_TEXT_TIMELINE };

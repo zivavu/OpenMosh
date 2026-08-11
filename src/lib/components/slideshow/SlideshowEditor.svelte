@@ -9,7 +9,9 @@
 		type EffectInstance,
 		type Preset,
 	} from '../../effects';
+	import { MicVocal, Plus } from 'lucide-svelte';
 	import {
+		appendTextLane,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
@@ -40,6 +42,8 @@
 	import GlCanvas from '../editor/GlCanvas.svelte';
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
+	import TimelineStack from '../ui/TimelineStack.svelte';
+	import TimelineSegments from './TimelineSegments.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
@@ -777,6 +781,18 @@
 		else startPreview();
 	}
 
+	function addTextLane() {
+		pushTextHistory();
+		setTextTimeline(appendTextLane(textTimeline));
+	}
+
+	/** Scrubbing the shared timeline axis: the audio clock when there is a
+	 * track, and the text lanes' own clock when the slideshow is silent. */
+	function seekMaster(t: number) {
+		textTime = t;
+		if (audio.trackFile) audio.seekTo(t);
+	}
+
 	// ── Mosh ──
 	function getMoshOptions() {
 		return {
@@ -1168,49 +1184,77 @@
 			onCancel={cancelRecording}
 		/>
 
-		{#if textTimeline.enabled}
-			<TextTimelineLane
-				timeline={textTimeline}
-				trackDuration={textDuration}
-				currentTime={textTime}
-				chainLabels={textChainLabels}
-				bind:selectedClipId={selectedTextClipId}
-				onChange={setTextTimeline}
-				onBeforeEdit={pushTextHistory}
-				onSeek={(t) => {
-					textTime = t;
-					if (audio.trackFile) audio.seekTo(t);
-				}}
-				{lyricsSync}
-				bind:lyricsOpen
-			/>
-		{/if}
+		<TimelineStack
+			trackDuration={textDuration}
+			currentTime={textTime}
+			isPlaying={previewPlaying}
+			onTogglePlay={() => (previewPlaying ? stopPreview() : startPreview())}
+			onSeek={seekMaster}
+			loopEnabled={audio.loopAudio}
+			onToggleLoop={audio.trackFile ? toggleLoop : null}
+		>
+			{#snippet toolbar()}
+				{#if textTimeline.enabled}
+					<div class="tl-tool-sep"></div>
+					<span class="tl-tool-label">Text</span>
+					<button class="tl-tool-btn" title="Add a text lane" onclick={addTextLane}>
+						<Plus size={12} /> Lane
+					</button>
+					{#if lyricsSync}
+						<button
+							class="tl-tool-btn"
+							class:active={lyricsOpen}
+							title="Sync lyrics to the song: paste them, then press Space as it plays"
+							onclick={() => (lyricsOpen = true)}
+						>
+							<MicVocal size={12} /> Lyrics
+						</button>
+					{/if}
+				{/if}
+			{/snippet}
+			{#if audio.trackFile && audio.trackDuration > 0}
+				<AudioTimeline
+					layout="lane"
+					label="AUD"
+					trackDuration={audio.trackDuration}
+					trackCurrentTime={audio.trackCurrentTime}
+					spanStart={audio.spanStart}
+					spanEnd={audio.spanEnd}
+					isPlaying={previewPlaying}
+					outputVolume={audio.outputVolume}
+					onPlay={() => startPreview()}
+					onPause={stopPreview}
+					onSeek={(t) => audio.seekTo(t)}
+					onSpanStartChange={(t) => (audio.spanStart = t)}
+					onSpanEndChange={(t) => (audio.spanEnd = t)}
+					onVolumeChange={(v) => audio.setOutputVolume(v)}
+					onRemoveTrack={clearTrack}
+				/>
+			{/if}
+			{#if textTimeline.enabled}
+				<TextTimelineLane
+					timeline={textTimeline}
+					chainLabels={textChainLabels}
+					bind:selectedClipId={selectedTextClipId}
+					onChange={setTextTimeline}
+					onBeforeEdit={pushTextHistory}
+					{lyricsSync}
+					bind:lyricsOpen
+				/>
+			{/if}
+			{#if audio.trackFile && audio.trackDuration > 0}
+				<TimelineSegments
+					{config}
+					{onConfigChange}
+					bind:selectedSegmentId
+					onSeek={(t) => audio.seekTo(t)}
+				/>
+			{/if}
+		</TimelineStack>
 		{#if !audio.trackFile}
 			<TrackAddBar
 				onOpenPicker={openTrackPicker}
 				hintText="Add music to sync transitions to the beat"
-			/>
-		{:else if audio.trackFile && audio.trackDuration > 0}
-			<AudioTimeline
-				label="AUD"
-				trackDuration={audio.trackDuration}
-				trackCurrentTime={audio.trackCurrentTime}
-				spanStart={audio.spanStart}
-				spanEnd={audio.spanEnd}
-				isPlaying={previewPlaying}
-				loopEnabled={audio.loopAudio}
-				onToggleLoop={toggleLoop}
-				outputVolume={audio.outputVolume}
-				{config}
-				bind:selectedSegmentId
-				{onConfigChange}
-				onPlay={() => startPreview()}
-				onPause={stopPreview}
-				onSeek={(t) => audio.seekTo(t)}
-				onSpanStartChange={(t) => (audio.spanStart = t)}
-				onSpanEndChange={(t) => (audio.spanEnd = t)}
-				onVolumeChange={(v) => audio.setOutputVolume(v)}
-				onRemoveTrack={clearTrack}
 			/>
 		{/if}
 	</div>
