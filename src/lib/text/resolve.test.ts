@@ -10,7 +10,6 @@ import {
   resizeBoundary,
   resizeClip,
   resolveTextLayersAt,
-  snapTime,
   sortClips,
 } from "./resolve";
 import {
@@ -238,13 +237,6 @@ describe("removeClip", () => {
       [4, 6],
     ]);
     expect(removeClip(lane, lane.clips[0].id).clips).toHaveLength(1);
-  });
-});
-
-describe("snapTime", () => {
-  it("rounds to the grid, and passes through when there is none", () => {
-    expect(snapTime(1.3, 0.5)).toBe(1.5);
-    expect(snapTime(1.3, 0)).toBe(1.3);
   });
 });
 

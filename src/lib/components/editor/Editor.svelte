@@ -35,6 +35,7 @@
 		EMPTY_TEXT_TIMELINE,
 		normalizeTextTimeline,
 		applyLyricsToTimeline,
+		TEXT_TIMELINE_SHORTCUTS,
 		updateLane,
 		type TextClip,
 		type TextLane,
@@ -280,66 +281,6 @@
 
 	// The sequence route starts in the mode; in single mode it's the SEQ toggle.
 	let sequenceEnabled = $state(untrack(() => isSequenceMode));
-
-	const shortcutGroups = $derived([
-		{
-			title: 'Editor',
-			shortcuts: [
-				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
-				{ keys: ['←'], description: 'Previous mosh' },
-				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo effect edit' },
-				{
-					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-					description: 'Redo effect edit',
-				},
-				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
-				{ keys: ['Space'], description: 'Play / pause' },
-				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
-				{
-					keys: ['V'],
-					description: 'Bake current frame as the new source (undoable)',
-				},
-			],
-		},
-		...(sequenceEnabled
-			? [
-					{
-						title: 'Sequence timeline',
-						shortcuts: [
-							{
-								keys: ['Dbl-click', 'Ctrl+Click'],
-								description: 'Create / split segment at cursor',
-							},
-							{ keys: ['Click'], description: 'Select segment for editing' },
-							{
-								keys: ['←', '→'],
-								description: "Walk the selected segment's moshes",
-							},
-							{
-								keys: ['Delete', 'Backspace'],
-								description: 'Delete segment / selected boundaries',
-							},
-							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
-							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo last sequence edit' },
-							{
-								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-								description: 'Redo last sequence edit',
-							},
-							{
-								keys: ['Shift+Drag'],
-								description: 'Rectangle-select segments and boundaries',
-							},
-							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected segments' },
-							{
-								keys: ['Ctrl/Cmd+V'],
-								description: 'Paste onto selection, or click to place a copied span',
-							},
-							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
-						],
-					},
-				]
-			: []),
-	]);
 
 	const audio = new AudioManager({
 		getEffects: () => renderedEffects,
@@ -1646,6 +1587,67 @@
 	let selectedTextClipId = $state<string | null>(null);
 	let lyricsOpen = $state(false);
 
+	const shortcutGroups = $derived([
+		{
+			title: 'Editor',
+			shortcuts: [
+				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
+				{ keys: ['←'], description: 'Previous mosh' },
+				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo effect edit' },
+				{
+					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
+					description: 'Redo effect edit',
+				},
+				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
+				{ keys: ['Space'], description: 'Play / pause' },
+				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
+				{
+					keys: ['V'],
+					description: 'Bake current frame as the new source (undoable)',
+				},
+			],
+		},
+		...(sequenceEnabled
+			? [
+					{
+						title: 'Sequence timeline',
+						shortcuts: [
+							{
+								keys: ['Dbl-click', 'Ctrl+Click'],
+								description: 'Create / split segment at cursor',
+							},
+							{ keys: ['Click'], description: 'Select segment for editing' },
+							{
+								keys: ['←', '→'],
+								description: "Walk the selected segment's moshes",
+							},
+							{
+								keys: ['Delete', 'Backspace'],
+								description: 'Delete segment / selected boundaries',
+							},
+							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
+							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo last sequence edit' },
+							{
+								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
+								description: 'Redo last sequence edit',
+							},
+							{
+								keys: ['Shift+Drag'],
+								description: 'Rectangle-select segments and boundaries',
+							},
+							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected segments' },
+							{
+								keys: ['Ctrl/Cmd+V'],
+								description: 'Paste onto selection, or click to place a copied span',
+							},
+							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
+						],
+					},
+				]
+			: []),
+		...(textTimeline.enabled ? [TEXT_TIMELINE_SHORTCUTS] : []),
+	]);
+
 	// A still image with no track has no clock at all, so the text timeline
 	// supplies one: it loops the record window, which is what an export writes.
 	let stillClock = $state(0);
@@ -1691,9 +1693,6 @@
 			.filter((e) => e.enabled)
 			.map((e) => getDefinition(e.defId)?.name ?? e.defId),
 	);
-
-	/** Beat grid for clip snapping; falls back to no snapping without a BPM. */
-	let textSnapGrid = $derived(sequenceBpm > 0 ? 60 / sequenceBpm / 4 : 0);
 
 	let selectedTextClip = $derived.by(() => {
 		if (!selectedTextClipId) return null;
@@ -2247,7 +2246,6 @@
 				timeline={textTimeline}
 				trackDuration={textDuration}
 				currentTime={textTime}
-				snapGrid={textSnapGrid}
 				chainLabels={textChainLabels}
 				bind:selectedClipId={selectedTextClipId}
 				onChange={setTextTimeline}

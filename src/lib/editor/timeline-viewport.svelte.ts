@@ -17,13 +17,14 @@ export class TimelineViewport {
 
    readonly #getDuration: () => number;
    readonly #getRect: () => DOMRect | null;
-   /** Optional playhead read: wheel-zoom pins it instead of the cursor. */
-   readonly #getAnchorTime: (() => number) | null;
+   /** Optional playhead read: wheel-zoom pins it instead of the cursor. Return
+    * null to fall back to the cursor (e.g. while not following the playhead). */
+   readonly #getAnchorTime: (() => number | null) | null;
 
    constructor(
       getTrackDuration: () => number,
       getRect: () => DOMRect | null,
-      getAnchorTime: (() => number) | null = null,
+      getAnchorTime: (() => number | null) | null = null,
    ) {
       this.#getDuration = getTrackDuration;
       this.#getRect = getRect;
@@ -56,7 +57,7 @@ export class TimelineViewport {
    /** The playhead's position as a 0..1 view fraction, or null off-screen. */
    anchorFrac(): number | null {
       const t = this.#getAnchorTime?.();
-      if (typeof t !== "number" || this.viewDuration <= 0) return null;
+      if (t == null || this.viewDuration <= 0) return null;
       const frac = (t - this.viewStart) / this.viewDuration;
       return frac >= 0 && frac <= 1 ? frac : null;
    }
@@ -103,9 +104,13 @@ export class TimelineViewport {
    /**
     * Attach the shared wheel behavior (shift/horizontal → pan, vertical → zoom,
     * pinned to the playhead when it's on screen) to `el` with a non-passive
-    * listener. Returns a cleanup fn.
+    * listener. `onPan` fires on the pan gestures only, for callers that treat a
+    * deliberate pan as taking the view over. Returns a cleanup fn.
     */
-   attachWheel(el: HTMLElement | SVGElement): () => void {
+   attachWheel(
+      el: HTMLElement | SVGElement,
+      onPan: (() => void) | null = null,
+   ): () => void {
       const handleWheel = (e: WheelEvent) => {
          e.preventDefault();
          e.stopPropagation();
@@ -113,8 +118,10 @@ export class TimelineViewport {
          const r = el.getBoundingClientRect();
          const cursorFrac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
          if (e.shiftKey) {
+            onPan?.();
             this.panView(this.viewDuration * 0.25 * Math.sign(e.deltaY));
          } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+            onPan?.();
             this.panView((e.deltaX / 200) * this.viewDuration);
          } else {
             // Pin the playhead while zooming when it's on screen, so the view
