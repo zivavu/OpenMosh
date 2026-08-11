@@ -36,6 +36,7 @@
 	} from '../../editor/shortcut-target';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
+	import SourcePreviewModal from './SourcePreviewModal.svelte';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
@@ -142,6 +143,8 @@
 	let labelY = $derived(ROW_PAD + (multiSource ? 14 : segH / 2 + 4));
 	let sourceLabelY = $derived(ROW_PAD + 27);
 	let sourceInput = $state<HTMLInputElement>(undefined!);
+	/** Source shown full size in the preview modal; null when it's closed. */
+	let previewSource = $state<SequenceSource | null>(null);
 	// Collapsed by default: a grid of chips is the tallest thing in the timeline
 	// stack and it's only needed while assigning sources. The choice is
 	// remembered, so anyone who works with it open keeps it open.
@@ -873,6 +876,9 @@
 	 */
 	function onKeydown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
+		// The preview owns the keyboard while it's up: Escape closes it there, and
+		// Delete must not reach the segments behind it.
+		if (previewSource) return;
 
 		// Outranks the boundary clipboard; falls through when nothing is selected.
 		const key = e.key.toLowerCase();
@@ -1036,13 +1042,17 @@
 							class:assignable
 							draggable="true"
 							title={assignable
-								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}, or drag it onto one`
-								: `${src.name}. Drag it onto a segment, or select one and click`}
+								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}, or drag it onto one. Double-click to preview it.`
+								: `${src.name}. Click to preview, drag it onto a segment, or select one and click`}
 							ondragstart={(e) => startSourceDrag(e, src.id)}
 							ondragend={endSourceDrag}
 							onclick={() => {
+								// With a segment selected the click belongs to assigning, so
+								// preview is the double-click there instead.
 								if (assignable) onAssignSource?.(selectedIds, src.id);
+								else previewSource = src;
 							}}
+							ondblclick={() => (previewSource = src)}
 						>
 							{#if src.thumbUrl}
 								<img
@@ -1501,6 +1511,13 @@
 			>
 		{/if}
 		</div>
+	{/if}
+
+	{#if previewSource}
+		<SourcePreviewModal
+			source={previewSource}
+			onClose={() => (previewSource = null)}
+		/>
 	{/if}
 </div>
 
