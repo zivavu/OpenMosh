@@ -1,5 +1,5 @@
 	<script lang="ts">
-	import { Home, Type } from 'lucide-svelte';
+	import { Home } from 'lucide-svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
 
@@ -8,8 +8,6 @@
 		slideCount: number;
 		onViewChange: (view: 'grid' | 'preview') => void;
 		onExit?: () => void;
-		textEnabled?: boolean;
-		onToggleText?: () => void;
 	}
 
 	let {
@@ -17,8 +15,6 @@
 		slideCount,
 		onViewChange,
 		onExit,
-		textEnabled = false,
-		onToggleText,
 	}: Props = $props();
 </script>
 
@@ -40,18 +36,6 @@
 		/>
 
 		<span class="slide-count">{slideCount} images</span>
-
-		{#if onToggleText}
-			<button
-				class="text-btn"
-				class:active={textEnabled}
-				onclick={onToggleText}
-				title="Text timeline: timed text layers with their own effects"
-			>
-				<Type size={14} />
-			</button>
-		{/if}
-
 	</div>
 </div>
 
@@ -66,31 +50,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.text-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 26px;
-		height: 26px;
-		border-radius: 50%;
-		background: rgba(18, 18, 18, 0.85);
-		border: 1.5px solid #444;
-		color: #888;
-		cursor: pointer;
-		padding: 0;
-		box-sizing: border-box;
-	}
-
-	.text-btn:hover {
-		border-color: #777;
-		color: #ccc;
-	}
-
-	.text-btn.active {
-		border-color: #7ab8f5;
-		color: #7ab8f5;
 	}
 
 	.home-btn {
