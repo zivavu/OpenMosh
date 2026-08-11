@@ -5,7 +5,6 @@
 		HelpCircle,
 		Home,
 		Library,
-		ListVideo,
 		Maximize,
 		Type,
 	} from 'lucide-svelte';
@@ -107,8 +106,8 @@
 		initialAudioFile?: File | null;
 		/** Library id of `initialAudioFile`, when it came from a saved sequence. */
 		initialTrackId?: string | null;
-		/** 'sequence' pins the editor to the segment timeline: the SEQ toggle is
-		 * gone and the mode can't be left without leaving the route. */
+		/** The segment timeline belongs to 'sequence' alone — 'single' is one
+		 * source and one effect chain, and the two persist separately. */
 		mode?: 'single' | 'sequence';
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
@@ -278,9 +277,6 @@
 	$effect(() => {
 		if (recordingState.recording) previewFullscreen = false;
 	});
-
-	// The sequence route starts in the mode; in single mode it's the SEQ toggle.
-	let sequenceEnabled = $state(untrack(() => isSequenceMode));
 
 	const audio = new AudioManager({
 		getEffects: () => renderedEffects,
@@ -454,12 +450,13 @@
 			resizeHeight = savedSize.height;
 			sizeRestoredFromTrack = true;
 		}
-		const savedSeq = seqStore.load(trackId);
+		const savedSeq = loadSeqEntry(trackId);
 		if (savedSeq === null) return false;
-		sequenceSegments = savedSeq.segments;
-		setSequenceEnabled(savedSeq.enabled);
-		sequenceBpm = savedSeq.bpm ?? 0;
-		selectedSegmentId = null;
+		if (isSequenceMode) {
+			sequenceSegments = savedSeq.segments ?? [];
+			sequenceBpm = savedSeq.bpm ?? 0;
+			selectedSegmentId = null;
+		}
 		restoreTextTimeline(savedSeq.text);
 		return true;
 	}
@@ -582,7 +579,7 @@
 	}
 
 	// ── Sequence mode: timeline of preset/mosh segments over the video ───────
-	// (sequenceEnabled is declared above the shortcut groups that read it)
+	// Only ever populated on the sequence route; single mode has no timeline.
 	let sequenceSegments = $state<SequenceSegment[]>([]);
 	let selectedSegmentId = $state<string | null>(null);
 
@@ -599,8 +596,7 @@
 	let sequenceBpm = $state(0);
 
 	const seqStore = createTrackStore<{
-		enabled: boolean;
-		segments: SequenceSegment[];
+		segments?: SequenceSegment[];
 		/** Absent on entries saved before BPM existed. */
 		bpm?: number;
 		/** Absent on entries saved before the text timeline existed. */
@@ -611,9 +607,34 @@
 	let videoSeqKey = $derived(
 		isVideo ? `video:${file.name}:${file.size}:${file.lastModified}` : null,
 	);
-	let seqStoreKey = $derived(
+	// The song/video this editor is saving against, before the mode prefix. The
+	// media pool keys off this directly: pools only ever exist on the sequence
+	// route, so there is nothing to disambiguate and prefixing would orphan the
+	// ones already in IndexedDB.
+	let seqBaseKey = $derived(
 		seqMasterIsAudio ? currentTrackId : (videoSeqKey ?? currentTrackId),
 	);
+
+	/**
+	 * Single and sequence are the same component, so one un-namespaced store had
+	 * them overwriting each other: a song sequenced on #sequence came back with
+	 * its timeline (and the sequence mode) forced on in #editor, and any edit there
+	 * wrote back over the sequence work. The prefix keeps the two apart.
+	 */
+	const seqKeyPrefix = $derived(isSequenceMode ? 'seq:' : 'single:');
+	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
+
+	/**
+	 * Read this mode's entry for a song, falling back once to the legacy
+	 * un-prefixed entry. Only the sequence route falls back: those entries hold
+	 * real timelines worth keeping, whereas letting single mode read them is the
+	 * exact leak the prefix exists to stop.
+	 */
+	function loadSeqEntry(baseKey: string) {
+		const entry = seqStore.load(seqKeyPrefix + baseKey);
+		if (entry !== null) return entry;
+		return isSequenceMode ? seqStore.load(baseKey) : null;
+	}
 
 	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.
 	let restoredSeqKey: string | null = null;
@@ -622,12 +643,13 @@
 		if (!key || key === restoredSeqKey) return;
 		restoredSeqKey = key;
 		if (untrack(() => seqMasterIsAudio)) return;
-		const saved = seqStore.load(key);
+		const saved = loadSeqEntry(key);
 		if (saved === null) return;
-		sequenceSegments = saved.segments;
-		setSequenceEnabled(saved.enabled);
-		sequenceBpm = saved.bpm ?? 0;
-		selectedSegmentId = null;
+		if (isSequenceMode) {
+			sequenceSegments = saved.segments ?? [];
+			sequenceBpm = saved.bpm ?? 0;
+			selectedSegmentId = null;
+		}
 		restoreTextTimeline(saved.text);
 	});
 
@@ -644,14 +666,13 @@
 		const playing = audio.audioPlaying || videoIsPlaying;
 		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
-		const enabled = sequenceEnabled;
 		const bpm = sequenceBpm;
 		const text = $state.snapshot(textTimeline) as TextTimeline;
 		const key = seqStoreKey;
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { enabled, segments: segs, bpm, text });
+			seqStore.save(key, { segments: segs, bpm, text });
 		}, 300);
 	});
 
@@ -672,7 +693,6 @@
 		const key = seqStoreKey;
 		if (!key) return;
 		seqStore.save(key, {
-			enabled: sequenceEnabled,
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
 			text: $state.snapshot(textTimeline) as TextTimeline,
@@ -777,7 +797,7 @@
 	});
 
 	// ── Per-song media pool ──────────────────────────────────────────────────
-	// Keyed the same way as the sequence timeline (seqStoreKey), so loading a
+	// Keyed the same way as the sequence timeline (seqBaseKey), so loading a
 	// track brings back both the segments and the media they were built from.
 	// The primary source belongs to the editor session, not the song, and is
 	// left alone by all of this.
@@ -788,7 +808,7 @@
 
 	$effect(() => {
 		if (!isSequenceMode) return;
-		const key = seqStoreKey;
+		const key = seqBaseKey;
 		if (!key || key === poolKey) return;
 		poolKey = key;
 		poolReady = false;
@@ -932,7 +952,7 @@
 	 * matching which chain the panel is editing. */
 	function activeSourceId(): string | null {
 		const primary = sourceRegistry.primaryId;
-		if (!sequenceEnabled) return primary;
+		if (!isSequenceMode) return primary;
 		if (!seqPlaying() && selectedSegmentId) {
 			const sel = sequenceSegments.find((s) => s.id === selectedSegmentId);
 			if (sel) return sel.sourceId ?? primary;
@@ -961,7 +981,7 @@
 	);
 
 	function driveSequenceSource(dt: number): boolean {
-		if (!isSequenceMode || !sequenceEnabled) return false;
+		if (!isSequenceMode) return false;
 		return seqFrames.advance(activeSourceId(), dt);
 	}
 
@@ -984,7 +1004,7 @@
 	}
 
 	function driveOutgoingSource(dt: number): boolean {
-		if (!isSequenceMode || !sequenceEnabled) return true;
+		if (!isSequenceMode) return true;
 		return seqFrames.advanceOutgoing(outgoingSourceId(), dt);
 	}
 
@@ -995,59 +1015,6 @@
 	$effect(() => {
 		glRenderer;
 		seqFrames.invalidate();
-	});
-
-	// Single-mode chain stashed while sequence mode drives `effects`, so
-	// leaving SEQ restores the pre-sequence state instead of leaking whatever
-	// segment was applied last (which also made single-mode Clear mutate it).
-	let preSeqEffects: EffectInstance[] | null = null;
-
-	function setSequenceEnabled(on: boolean) {
-		// On the sequence route the mode is the route — restores and the
-		// lost-master guard must not switch it off underneath the user.
-		if (!on && isSequenceMode) return;
-		if (on === sequenceEnabled) return;
-		sequenceEnabled = on;
-		if (on) {
-			preSeqEffects = effects;
-			return;
-		}
-		selectedSegmentId = null;
-		if (preSeqEffects) {
-			effects = preSeqEffects;
-			preSeqEffects = null;
-		}
-		lastSeqApplied = null;
-	}
-
-	function toggleSequence() {
-		setSequenceEnabled(!sequenceEnabled);
-		if (!sequenceEnabled) return;
-		if (sequenceSegments.length === 0 && seqMasterDuration > 0) {
-			// Seed the first segment from the current panel state; open-ended so
-			// it stretches if the master timeline changes (e.g. a track is added)
-			const seg = createSequenceSegment(0, null);
-			seg.effects = effects.map(cloneEffectInstance);
-			seg.label = 'current';
-			sequenceSegments = [seg];
-		}
-	}
-
-	// Sequence mode needs a master timeline: the audio track, or the video.
-	// Losing both — removing the track while editing an image — left the mode
-	// stuck on, because the SEQ toggle and the timeline are both gated on
-	// `seqMasterDuration > 0` and unmounted while `sequenceEnabled` stayed true.
-	// That hid the mosh actions with no control left to switch back.
-	//
-	// Keyed on `trackFile` rather than `seqMasterDuration` on purpose: swapping
-	// library tracks drops the duration to 0 until the new track's metadata
-	// loads, and exiting there would throw away the timeline mid-switch.
-	$effect(() => {
-		if (!sequenceEnabled || isSequenceMode) return;
-		if (audio.trackFile) return;
-		if (isVideo && videoDuration > 0) return;
-		setSequenceEnabled(false);
-		showToast('Sequence mode off: nothing left to sequence over', 'info');
 	});
 
 	// The route enables sequence mode with no toggle press to seed the first
@@ -1064,14 +1031,14 @@
 	// While audio is master the video must always loop its span, regardless of
 	// the user's loop toggle — master positions past the video length land
 	// inside the loop instead of on a paused last frame.
-	let seqForceLoop = $derived(sequenceEnabled && seqMasterIsAudio);
+	let seqForceLoop = $derived(isSequenceMode && seqMasterIsAudio);
 
 	// Single playhead: audio master drives the video. Runs only on the ~4 Hz
 	// audio clock ticks — video position/play-state are read untracked, so this
 	// never re-runs per rendered frame (a reactive read of the video clock here
 	// caused a seek storm that thrashed the decoder down to a few FPS).
 	$effect(() => {
-		if (!sequenceEnabled || !seqMasterIsAudio || !isVideo) return;
+		if (!isSequenceMode || !seqMasterIsAudio || !isVideo) return;
 		const vDur = videoSpanEnd - videoSpanStart;
 		if (vDur <= 0) return;
 		// Signed modulo: positions before the audio span still map onto the video
@@ -1114,7 +1081,7 @@
 	let seqTransition = $state<ResolvedTransition | null>(null);
 	$effect(() => {
 		if (
-			!sequenceEnabled ||
+			!isSequenceMode ||
 			sequenceSegments.length === 0 ||
 			seqMasterDuration <= 0
 		) {
@@ -1167,7 +1134,7 @@
 	// above notices transition windows at frame rate, not at the 4 Hz
 	// timeupdate cadence.
 	$effect(() => {
-		if (!sequenceEnabled || seqMasterIsAudio || previewPlayer || !videoPlaying)
+		if (!isSequenceMode || seqMasterIsAudio || previewPlayer || !videoPlaying)
 			return;
 		let raf = requestAnimationFrame(function loop() {
 			videoCurrentTime = videoEl?.currentTime ?? 0;
@@ -1191,7 +1158,7 @@
 	// Loop playback inside the selected segment (edit-while-playing aid).
 	let seqSegmentLoop = $state(false);
 	$effect(() => {
-		if (!sequenceEnabled || !seqSegmentLoop || !selectedSegmentId) return;
+		if (!isSequenceMode || !seqSegmentLoop || !selectedSegmentId) return;
 		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
 		if (!seg) return;
 		const end = seg.endTime ?? seqMasterDuration;
@@ -1206,7 +1173,7 @@
 	// the panel edits that segment — even during playback, when the canvas keeps
 	// following the playhead. Otherwise the panel edits the live effects.
 	function panelSelectedSegment(): SequenceSegment | null {
-		if (!sequenceEnabled || !selectedSegmentId) return null;
+		if (!isSequenceMode || !selectedSegmentId) return null;
 		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
 		return seg && seg.mode === 'static' ? seg : null;
 	}
@@ -1263,7 +1230,7 @@
 	const seqMoshHistory = new SegmentMoshHistory();
 
 	function inSequenceMode(): boolean {
-		return sequenceEnabled && sequenceSegments.length > 0;
+		return isSequenceMode && sequenceSegments.length > 0;
 	}
 
 	function activeSequenceSegment(): SequenceSegment | null {
@@ -1424,7 +1391,7 @@
 			if (prev) textTimeline = prev;
 			return;
 		}
-		if (sequenceEnabled) {
+		if (isSequenceMode) {
 			seqBoundaries.undo();
 			return;
 		}
@@ -1437,7 +1404,7 @@
 			if (next) textTimeline = next;
 			return;
 		}
-		if (sequenceEnabled) {
+		if (isSequenceMode) {
 			seqBoundaries.redo();
 			return;
 		}
@@ -1607,7 +1574,7 @@
 				},
 			],
 		},
-		...(sequenceEnabled
+		...(isSequenceMode
 			? [
 					{
 						title: 'Sequence timeline',
@@ -1864,7 +1831,7 @@
 					textTimeOffset,
 					textTimeScale,
 					sequence:
-						sequenceEnabled && sequenceSegments.length > 0
+						isSequenceMode && sequenceSegments.length > 0
 							? {
 									segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 									moshOptions: getMoshOptions(),
@@ -2096,16 +2063,6 @@
 						<Maximize size={14} />
 					</button>
 				{/if}
-				{#if seqMasterDuration > 0 && !isSequenceMode}
-					<button
-						class="help-btn"
-						class:seq-active={sequenceEnabled}
-						onclick={toggleSequence}
-						title="Sequence timeline: a different preset or mosh over time"
-					>
-						<ListVideo size={14} />
-					</button>
-				{/if}
 				<button
 					class="help-btn"
 					class:seq-active={textTimeline.enabled}
@@ -2121,7 +2078,7 @@
 					onUndo={undoMosh}
 					canUndo={moshSession.canUndoMosh}
 					canClear={moshSession.touched}
-					hideActions={sequenceEnabled && seqMasterDuration > 0}
+					hideActions={isSequenceMode && seqMasterDuration > 0}
 					bind:showSettings={showMoshSettings}
 				>
 					{#snippet settingsContent()}
@@ -2213,7 +2170,7 @@
 				</RecordGroup>
 			{/if}
 		</div>
-		{#if seqMasterDuration > 0 && sequenceEnabled}
+		{#if seqMasterDuration > 0 && isSequenceMode}
 			<SequenceTimeline
 				segments={sequenceSegments}
 				trackDuration={seqMasterDuration}
@@ -2265,7 +2222,7 @@
 		{/if}
 		<!-- One playhead in sequence mode with a track: hide the video transport,
 		     the audio timeline below is the master -->
-		{#if isVideo && videoDuration > 0 && !(sequenceEnabled && seqMasterIsAudio)}
+		{#if isVideo && videoDuration > 0 && !(isSequenceMode && seqMasterIsAudio)}
 			<AudioTimeline
 				label="VID"
 				trackDuration={videoDuration}
