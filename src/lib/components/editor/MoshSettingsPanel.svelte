@@ -1,5 +1,5 @@
 <script lang="ts">
-   import { HelpCircle } from "lucide-svelte";
+   import { CircleQuestionMark, HelpCircle } from "lucide-svelte";
    import BpmControl from "../ui/BpmControl.svelte";
    import RangeSlider from "../ui/RangeSlider.svelte";
 
@@ -99,7 +99,7 @@
       <span class="val">{moshMax}</span>
    </div>
    <div class="config-row">
-      <label for="mosh-shuffle">Shuffle order</label>
+      <label for="mosh-shuffle">Shuffle effects order</label>
       <input id="mosh-shuffle" type="checkbox" bind:checked={randomizeOrder} />
    </div>
    {#if hasAudio}
@@ -137,7 +137,7 @@
             aria-expanded={showAutoRangeHelp}
             aria-label="What is auto-range?"
          >
-            <HelpCircle size={13} />
+            <CircleQuestionMark size={13} />
          </button>
          <RangeSlider
             id="auto-range-amount"
@@ -154,13 +154,13 @@
                   and loud parts of a track.
                </p>
                <p>
-                  <strong>Low</strong>: effects follow the actual volume. Most music
-                  sits at a steady level, so they only drift a little.
+                  <strong>Low</strong>: effects follow the actual volume. Most
+                  music sits at a steady level, so they only drift a little.
                </p>
                <p>
-                  <strong>High</strong>: the quietest and loudest moments of the last
-                  few seconds are stretched across the whole range you set. Drops
-                  hit harder, but quiet parts get pushed up too.
+                  <strong>High</strong>: the quietest and loudest moments of the
+                  last few seconds are stretched across the whole range you set.
+                  Drops hit harder, but quiet parts get pushed up too.
                </p>
             </div>
          {/if}
