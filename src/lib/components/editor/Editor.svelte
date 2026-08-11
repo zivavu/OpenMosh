@@ -2419,7 +2419,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="This removes every added image and video from this song's pool, so its segments fall back to the original source. The file you opened with stays, and so does any media another song still uses."
+			message="Every image and video you added to this song is removed, and its segments go back to the original source. The file you opened with stays, along with media that other songs still use."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger

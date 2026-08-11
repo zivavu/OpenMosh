@@ -35,6 +35,7 @@
 		type LyricsSyncProps,
 	} from './LyricsSyncModal.svelte';
 	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
+	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
@@ -218,7 +219,17 @@
 		});
 	}
 
+	/** Lane the delete button is asking about; null when nothing is pending. */
+	let lanePendingDelete = $state<TextLane | null>(null);
+
+	/** An empty lane takes nothing with it, so it goes without asking. */
+	function requestDeleteLane(lane: TextLane) {
+		if (lane.clips.length === 0) deleteLane(lane.id);
+		else lanePendingDelete = lane;
+	}
+
 	function deleteLane(laneId: string) {
+		lanePendingDelete = null;
 		onBeforeEdit?.();
 		onChange({
 			...timeline,
@@ -585,7 +596,7 @@
 				<button
 					class="lane-del"
 					title="Delete this lane"
-					onclick={() => deleteLane(lane.id)}
+					onclick={() => requestDeleteLane(lane)}
 				>
 					<Trash2 size={12} />
 				</button>
@@ -678,6 +689,21 @@
 
 	{#if timeline.lanes.length === 0}
 		<p class="tl-empty">No text lanes. Add one to put text on the timeline.</p>
+	{/if}
+
+	{#if lanePendingDelete}
+		{@const count = lanePendingDelete.clips.length}
+		<ConfirmDialog
+			title="Delete “{lanePendingDelete.name}”?"
+			message="This removes the lane and the {count} text clip{count === 1
+				? ''
+				: 's'} on it."
+			confirmLabel="Delete lane"
+			cancelLabel="Cancel"
+			danger
+			onConfirm={() => deleteLane(lanePendingDelete!.id)}
+			onCancel={() => (lanePendingDelete = null)}
+		/>
 	{/if}
 
 	{#if lyricsSync}
