@@ -6,6 +6,9 @@
 		Home,
 		Library,
 		Maximize,
+		MicVocal,
+		Plus,
+		Trash2,
 		Type,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
@@ -29,6 +32,7 @@
 		type Preset,
 	} from '../../effects';
 	import {
+		appendTextLane,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
@@ -78,6 +82,8 @@
 	import type { GlRenderer, SourceFit } from '../../gl/renderer';
 	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
+	import SpeedControl from '../ui/SpeedControl.svelte';
+	import TimelineStack from '../ui/TimelineStack.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
@@ -1643,6 +1649,79 @@
 		textNeedsTransport ? stillPlaying : audio.audioPlaying || videoIsPlaying,
 	);
 
+	// ── Timeline stack ───────────────────────────────────────────────────────
+	// Every lane shares the master clock's axis: the segment lane, the text
+	// lanes and whichever transport is the master. A video playing under its own
+	// span while a track drives the timeline is a second clock, so it stays a
+	// standalone bar above the stack rather than joining the axis.
+	let showVideoBar = $derived(
+		isVideo && videoDuration > 0 && !(isSequenceMode && seqMasterIsAudio),
+	);
+	let videoIsMaster = $derived(showVideoBar && !seqMasterIsAudio);
+	let audioIsMaster = $derived(audio.trackFile && audio.trackDuration > 0);
+	let showStack = $derived(
+		textDuration > 0 &&
+			((isSequenceMode && seqMasterDuration > 0) ||
+				textTimeline.enabled ||
+				videoIsMaster ||
+				audioIsMaster),
+	);
+
+	function toggleMasterPlay() {
+		if (textNeedsTransport) {
+			stillPlaying = !stillPlaying;
+		} else if (seqMasterIsAudio) {
+			if (audio.audioPlaying) pauseTrack();
+			else playSpan();
+		} else if (videoIsPlaying) {
+			pauseVideo();
+		} else {
+			playVideo();
+		}
+	}
+
+	function seekMaster(t: number) {
+		if (textNeedsTransport) stillClock = t;
+		else if (seqMasterIsAudio) seekTo(t);
+		else seekVideoTo(t);
+	}
+
+	function toggleMasterLoop() {
+		if (seqMasterIsAudio) audio.loopAudio = !audio.loopAudio;
+		else videoLoop = !videoLoop;
+	}
+
+	// ── Stack toolbar ────────────────────────────────────────────────────────
+	// The lanes' own actions, gathered into the stack's one toolbar rather than a
+	// header row each. The media bin is collapsed by default — a grid of chips is
+	// the tallest thing in the stack and it's only needed while assigning sources
+	// — and the choice is remembered.
+	const BIN_KEY = 'openmosh-seq-bin-open';
+	let binOpen = $state(readBinOpen());
+	let sourceInput = $state<HTMLInputElement | undefined>(undefined);
+
+	function readBinOpen(): boolean {
+		try {
+			return localStorage.getItem(BIN_KEY) === '1';
+		} catch {
+			return false;
+		}
+	}
+
+	function toggleBin() {
+		binOpen = !binOpen;
+		try {
+			localStorage.setItem(BIN_KEY, binOpen ? '1' : '0');
+		} catch {
+			// Private mode / storage blocked — remembered for this session only.
+		}
+	}
+
+	function addTextLane() {
+		pushTextHistory();
+		setTextTimeline(appendTextLane(textTimeline));
+	}
+
 	$effect(() => {
 		if (!stillPlaying) return;
 		const span = Math.max(0.1, textDuration);
@@ -2170,59 +2249,9 @@
 				</RecordGroup>
 			{/if}
 		</div>
-		{#if seqMasterDuration > 0 && isSequenceMode}
-			<SequenceTimeline
-				segments={sequenceSegments}
-				trackDuration={seqMasterDuration}
-				boundaries={seqBoundaries}
-				currentTime={seqMasterIsAudio ? audio.trackCurrentTime : videoClock}
-				onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
-				bind:selectedSegmentId
-				onApplyPreset={seqApplyPreset}
-				onRoll={seqRoll}
-				onClear={seqClear}
-				onModeChange={seqModeChange}
-				bpm={sequenceBpm}
-				onTransitionChange={seqTransitionChange}
-				segmentLoop={seqSegmentLoop}
-				onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
-				sources={sequenceSources}
-				primarySourceId={sourceRegistry.primaryId}
-				onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
-				onAddSources={isSequenceMode
-					? (files) => void addSequenceSources(files)
-					: undefined}
-				onRemoveSource={isSequenceMode ? removeSequenceSource : undefined}
-				onClearSources={isSequenceMode
-					? () => (showClearSourcesConfirm = true)
-					: undefined}
-			/>
-		{/if}
-		{#if textTimeline.enabled}
-			<TextTimelineLane
-				timeline={textTimeline}
-				trackDuration={textDuration}
-				currentTime={textTime}
-				chainLabels={textChainLabels}
-				bind:selectedClipId={selectedTextClipId}
-				onChange={setTextTimeline}
-				onBeforeEdit={pushTextHistory}
-				onSeek={textNeedsTransport
-					? (t) => (stillClock = t)
-					: seqMasterIsAudio
-						? seekTo
-						: seekVideoTo}
-				isPlaying={stillPlaying}
-				onTogglePlay={textNeedsTransport
-					? () => (stillPlaying = !stillPlaying)
-					: null}
-				{lyricsSync}
-				bind:lyricsOpen
-			/>
-		{/if}
-		<!-- One playhead in sequence mode with a track: hide the video transport,
-		     the audio timeline below is the master -->
-		{#if isVideo && videoDuration > 0 && !(isSequenceMode && seqMasterIsAudio)}
+		{#if showVideoBar && !videoIsMaster}
+			<!-- A second clock: the video runs its own span while the track drives
+			     the timeline, so it can't share the stack's axis. -->
 			<AudioTimeline
 				label="VID"
 				trackDuration={videoDuration}
@@ -2246,30 +2275,172 @@
 					: undefined}
 			/>
 		{/if}
+		{#if showStack}
+			<TimelineStack
+				trackDuration={textDuration}
+				currentTime={textTime}
+				isPlaying={textClockRunning}
+				onTogglePlay={toggleMasterPlay}
+				onSeek={seekMaster}
+				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
+				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
+				accent={isSequenceMode ? 'purple' : 'blue'}
+			>
+				{#snippet toolbar()}
+					{#if isSequenceMode && sequenceSources.length > 0}
+						<div class="tl-tool-sep"></div>
+						<button
+							class="tl-tool-btn"
+							class:active={binOpen}
+							aria-expanded={binOpen}
+							title="Show the pool of images and videos the segments draw from"
+							onclick={toggleBin}
+						>
+							<Library size={12} /> Sources
+							<span class="tl-tool-count">{sequenceSources.length}</span>
+						</button>
+						{#if sequenceSources.length > 1}
+							<button
+								class="tl-tool-btn danger"
+								title="Remove every added source from this song"
+								onclick={() => (showClearSourcesConfirm = true)}
+							>
+								<Trash2 size={11} />
+							</button>
+						{/if}
+						<button
+							class="tl-tool-btn"
+							title="Add images or videos to the pool"
+							onclick={() => sourceInput?.click()}
+						>
+							<Plus size={12} />
+						</button>
+						<input
+							bind:this={sourceInput}
+							type="file"
+							accept="image/*,video/*"
+							multiple
+							hidden
+							onchange={(e) => {
+								const picked = Array.from(e.currentTarget.files ?? []);
+								if (picked.length > 0) void addSequenceSources(picked);
+								e.currentTarget.value = '';
+							}}
+						/>
+					{/if}
+					{#if textTimeline.enabled}
+						<div class="tl-tool-sep"></div>
+						<span class="tl-tool-label">Text</span>
+						<button
+							class="tl-tool-btn"
+							title="Add a text lane"
+							onclick={addTextLane}
+						>
+							<Plus size={12} /> Lane
+						</button>
+						{#if lyricsSync}
+							<button
+								class="tl-tool-btn"
+								class:active={lyricsOpen}
+								title="Sync lyrics to the song: paste them, then press Space as it plays"
+								onclick={() => (lyricsOpen = true)}
+							>
+								<MicVocal size={12} /> Lyrics
+							</button>
+						{/if}
+					{/if}
+					{#if videoIsMaster}
+						<div class="tl-tool-sep"></div>
+						<SpeedControl
+							speed={videoSpeed}
+							onSpeedChange={(s) => (videoSpeed = s)}
+						/>
+					{/if}
+				{/snippet}
+				{#if videoIsMaster}
+					<AudioTimeline
+						layout="lane"
+						label="VID"
+						trackDuration={videoDuration}
+						trackCurrentTime={videoClock}
+						spanStart={videoSpanStart}
+						spanEnd={videoSpanEnd}
+						isPlaying={videoIsPlaying}
+						onPlay={playVideo}
+						onPause={pauseVideo}
+						onSeek={seekVideoTo}
+						onSpanStartChange={(t) => (videoSpanStart = t)}
+						onSpanEndChange={(t) => (videoSpanEnd = t)}
+						ariaLabel="Video timeline"
+						outputVolume={audio.outputVolume}
+						onVolumeChange={videoHasAudio && audio.analyserNode && !audio.trackFile
+							? (v) => audio.setOutputVolume(v)
+							: undefined}
+					/>
+				{/if}
+				{#if audioIsMaster}
+					<AudioTimeline
+						layout="lane"
+						label="AUD"
+						trackDuration={audio.trackDuration}
+						trackCurrentTime={audio.trackCurrentTime}
+						spanStart={audio.spanStart}
+						spanEnd={audio.spanEnd}
+						isPlaying={audio.audioPlaying}
+						outputVolume={audio.outputVolume}
+						onPlay={playSpan}
+						onPause={pauseTrack}
+						onSeek={seekTo}
+						onSpanStartChange={(t) => (audio.spanStart = t)}
+						onSpanEndChange={(t) => (audio.spanEnd = t)}
+						onVolumeChange={(v) => audio.setOutputVolume(v)}
+						onRemoveTrack={clearTrack}
+					/>
+				{/if}
+				{#if textTimeline.enabled}
+					<TextTimelineLane
+						timeline={textTimeline}
+						chainLabels={textChainLabels}
+						bind:selectedClipId={selectedTextClipId}
+						onChange={setTextTimeline}
+						onBeforeEdit={pushTextHistory}
+						{lyricsSync}
+						bind:lyricsOpen
+					/>
+				{/if}
+				{#if seqMasterDuration > 0 && isSequenceMode}
+					<SequenceTimeline
+						segments={sequenceSegments}
+						boundaries={seqBoundaries}
+						onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
+						bind:selectedSegmentId
+						onApplyPreset={seqApplyPreset}
+						onRoll={seqRoll}
+						onClear={seqClear}
+						onModeChange={seqModeChange}
+						bpm={sequenceBpm}
+						onTransitionChange={seqTransitionChange}
+						segmentLoop={seqSegmentLoop}
+						onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
+						sources={sequenceSources}
+						primarySourceId={sourceRegistry.primaryId}
+						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+						onAddSources={isSequenceMode
+							? (files) => void addSequenceSources(files)
+							: undefined}
+						onRemoveSource={isSequenceMode ? removeSequenceSource : undefined}
+						onClearSources={isSequenceMode
+							? () => (showClearSourcesConfirm = true)
+							: undefined}
+						{binOpen}
+					/>
+				{/if}
+			</TimelineStack>
+		{/if}
 		{#if !audio.trackFile}
 			<TrackAddBar
 				onOpenPicker={openTrackPicker}
 				hintText="Add music to make effects react to the beat"
-			/>
-		{/if}
-		{#if audio.trackFile && audio.trackDuration > 0}
-			<AudioTimeline
-				label="AUD"
-				trackDuration={audio.trackDuration}
-				trackCurrentTime={audio.trackCurrentTime}
-				spanStart={audio.spanStart}
-				spanEnd={audio.spanEnd}
-				isPlaying={audio.audioPlaying}
-				loopEnabled={audio.loopAudio}
-				onToggleLoop={() => (audio.loopAudio = !audio.loopAudio)}
-				outputVolume={audio.outputVolume}
-				onPlay={playSpan}
-				onPause={pauseTrack}
-				onSeek={seekTo}
-				onSpanStartChange={(t) => (audio.spanStart = t)}
-				onSpanEndChange={(t) => (audio.spanEnd = t)}
-				onVolumeChange={(v) => audio.setOutputVolume(v)}
-				onRemoveTrack={clearTrack}
 			/>
 		{/if}
 		<input

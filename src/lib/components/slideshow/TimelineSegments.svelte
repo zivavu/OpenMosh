@@ -14,7 +14,7 @@
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
-	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
+	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
@@ -52,41 +52,25 @@
 
 	interface Props {
 		config: SlideshowConfig;
-		trackDuration: number;
 		onConfigChange: (config: SlideshowConfig) => void;
-		alignToEl?: HTMLElement;
 		selectedSegmentId?: string | null;
-		currentTime?: number;
 		onSeek?: (time: number) => void;
 	}
 
 	let {
 		config,
-		trackDuration,
 		onConfigChange,
-		alignToEl,
 		selectedSegmentId = $bindable(null),
-		currentTime = 0,
 		onSeek,
 	}: Props = $props();
 
-	let alignStyle = $state('');
-	let isMobile = $state(false);
-	let wrapperEl: HTMLDivElement | undefined = $state();
+	// One axis for the whole stack — zoom, pan and the playhead live there.
+	const stack = getTimelineStack();
+	const vp = stack.vp;
+	const laneTrack = stack.lane;
+	let trackDuration = $derived(stack.trackDuration);
+
 	let svgEl: SVGSVGElement | undefined = $state();
-	let scrollbarEl: HTMLDivElement | undefined = $state();
-
-	// ── View window (zoom / pan) ─────────────────────────────────────────────────
-	const vp = new TimelineViewport(
-		() => trackDuration,
-		() => svgEl?.getBoundingClientRect() ?? null,
-	);
-
-	// Initialise / clamp vp.viewEnd when trackDuration changes (e.g. audio loaded)
-	$effect(() => {
-		const td = trackDuration;
-		if (td > 0 && (vp.viewEnd <= 0 || vp.viewEnd > td)) vp.viewEnd = td;
-	});
 
 	// Re-fit on duration change, and repair lists already out of range.
 	$effect(() => {
@@ -94,33 +78,6 @@
 		const segs = config.segments;
 		const fixed = normalizeCoverage(segs, td);
 		if (fixed !== segs) onConfigChange({ ...config, segments: fixed });
-	});
-
-	// ── Mobile detection ─────────────────────────────────────────────────────────
-	$effect(() => {
-		const update = () => {
-			isMobile = window.innerWidth <= 800;
-		};
-		update();
-		const ro = new ResizeObserver(update);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
-
-	// ── Alignment with audio timeline ────────────────────────────────────────────
-	$effect(() => {
-		if (!alignToEl) return;
-		const update = () => {
-			const parent = wrapperEl?.parentElement;
-			if (!parent || !alignToEl) return;
-			const pr = parent.getBoundingClientRect();
-			const tr = alignToEl.getBoundingClientRect();
-			alignStyle = `margin-left: ${tr.left - pr.left}px; width: ${tr.width}px`;
-		};
-		update();
-		const ro = new ResizeObserver(update);
-		ro.observe(alignToEl);
-		return () => ro.disconnect();
 	});
 
 	let segments = $derived(
@@ -150,12 +107,6 @@
 				segmentId: string;
 				snapSub: BeatSubdivision;
 				startClientY: number;
-		  }
-		| {
-				type: 'scroll-pan';
-				startClientX: number;
-				startViewStart: number;
-				scrollWidth: number;
 		  }
 		| { type: 'seek' }
 		| {
@@ -215,12 +166,6 @@
 		if (!r || r.height === 0) return SVG_H / 2;
 		return ((cy - r.top) / r.height) * SVG_H;
 	}
-
-	// Attach wheel handler with { passive: false } so we can call preventDefault
-	$effect(() => {
-		if (!svgEl) return;
-		return vp.attachWheel(svgEl);
-	});
 
 	// ── Touch handler (non-passive, handles dots + double-tap + seg/seek drags) ──
 	const DOT_HIT_PX = 28; // pixel radius for dot hit detection on touch
@@ -516,20 +461,6 @@
 		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
-	function startScrollPan(e: PointerEvent) {
-		e.stopPropagation();
-		const rect = scrollbarEl?.getBoundingClientRect();
-		if (!rect) return;
-		dragging = {
-			type: 'scroll-pan',
-			startClientX: e.clientX,
-			startViewStart: vp.viewStart,
-			scrollWidth: rect.width,
-		};
-		dragMoved = false;
-		try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch {}
-	}
-
 	function startSeekDrag(e: PointerEvent) {
 		if (e.button !== 0) return;
 		// If in paste mode, split segments at clipboard offsets from the clicked time
@@ -693,17 +624,6 @@
 				Math.min(trackDuration, vp.clientXToTime(e.clientX)),
 			);
 			onSeek?.(time);
-		} else if (dragging.type === 'scroll-pan') {
-			dragMoved = true;
-			const { startClientX, startViewStart, scrollWidth } = dragging;
-			const dur = vp.viewEnd - vp.viewStart;
-			const delta = ((e.clientX - startClientX) / scrollWidth) * trackDuration;
-			const ns = Math.max(
-				0,
-				Math.min(trackDuration - dur, startViewStart + delta),
-			);
-			vp.viewStart = ns;
-			vp.viewEnd = ns + dur;
 		} else if (dragging.type === 'rect-select') {
 			dragMoved = true;
 			dragging = {
@@ -891,15 +811,15 @@
 	}}
 />
 
-<div class="tl-container">
-	<div
-		class="tl-track"
-		bind:this={wrapperEl}
-		style={isMobile ? '' : alignStyle}
-	>
+<div class="tl-row">
+	<div class="tl-gutter">
+		<span class="tl-gutter-label">Beat</span>
+	</div>
+	<div class="tl-lane tl-track">
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
+			use:laneTrack
 			width="100%"
 			height={SVG_H}
 			class="step-svg"
@@ -1093,14 +1013,6 @@
 				</text>
 			{/if}
 
-			<!-- Playhead -->
-			{#if trackDuration > 0}
-				{@const phx = vp.toPct(currentTime)}
-				<line class="playhead-line" x1="{phx}%" y1="0" x2="{phx}%" y2={SVG_H} />
-				<circle class="playhead-head" cx="{phx}%" cy="1" r="3" />
-				<!-- Wider invisible grab area on the head -->
-				<circle class="playhead-grab" cx="{phx}%" cy="1" r="8" />
-			{/if}
 			<!-- Rectangle selection overlay -->
 			{#if dragging?.type === 'rect-select' && dragMoved}
 				{@const minX = Math.min(
@@ -1138,30 +1050,11 @@
 				{/each}
 			{/if}
 		</svg>
-
-		<!-- Scrollbar — visible only when zoomed in -->
-		{#if vp.isZoomed}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="scrollbar" bind:this={scrollbarEl}>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="scrollbar-thumb"
-					style:left="{(vp.viewStart / trackDuration) * 100}%"
-					style:width="{Math.max(2, (vp.viewDuration / trackDuration) * 100)}%"
-					onpointerdown={startScrollPan}
-				></div>
-			</div>
-		{/if}
 	</div>
 </div>
 
 <style>
-	.tl-container {
-		margin: 0 0.5rem;
-	}
-
 	.tl-track {
-		position: relative;
 		background: #111;
 		border: 1px solid #2a2a2a;
 		border-radius: 4px;
@@ -1271,24 +1164,6 @@
 		pointer-events: none;
 	}
 
-	.playhead-line {
-		stroke: rgba(255, 210, 80, 0.75);
-		stroke-width: 1;
-		pointer-events: none;
-	}
-
-	.playhead-head {
-		fill: rgba(255, 210, 80, 0.9);
-		stroke: none;
-		pointer-events: none;
-	}
-
-	.playhead-grab {
-		fill: transparent;
-		stroke: none;
-		cursor: col-resize;
-	}
-
 	.hint {
 		fill: #3a3a3a;
 		font-size: 8.5px;
@@ -1296,41 +1171,4 @@
 		user-select: none;
 	}
 
-	.scrollbar {
-		position: relative;
-		height: 5px;
-		background: #161616;
-		border-top: 1px solid #2a2a2a;
-		cursor: default;
-	}
-
-	.scrollbar-thumb {
-		position: absolute;
-		top: 0;
-		height: 100%;
-		min-width: 8px;
-		background: #3a5a80;
-		border-radius: 2px;
-		cursor: grab;
-	}
-
-	.scrollbar-thumb:hover {
-		background: #4a6a9a;
-	}
-
-	.scrollbar-thumb:active {
-		cursor: grabbing;
-		background: #5a8fc0;
-	}
-
-	@media (max-width: 800px) {
-		.tl-container {
-			margin: 0 8px;
-		}
-		.tl-track {
-			border-radius: 0;
-			border-left: none;
-			border-right: none;
-		}
-	}
 </style>

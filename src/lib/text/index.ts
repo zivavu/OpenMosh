@@ -38,6 +38,7 @@ export type {
   TextTimeline,
 } from "./types";
 export {
+  appendTextLane,
   createTextClip,
   createTextLane,
   createTextTimeline,

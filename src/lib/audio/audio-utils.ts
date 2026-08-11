@@ -104,3 +104,10 @@ export function formatTime(sec: number): string {
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
+
+/** m:ss.mmm — for the playhead readout, where a frame is ~16ms. */
+export function formatTimeMs(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00.000";
+  const ms = Math.floor((sec % 1) * 1000);
+  return `${formatTime(sec)}.${ms.toString().padStart(3, "0")}`;
+}

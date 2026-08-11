@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Dices, Repeat, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Repeat, Trash2 } from 'lucide-svelte';
 	import { loadPresets, type Preset } from '../../effects';
 	import {
 		cloneSegmentForSplit,
@@ -34,27 +34,30 @@
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
-	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
-	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
+	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
 	// Segments are drawn as clip blocks in one lane row, matching the text
-	// timeline's geometry: a 22px block inset in a 30px row, growing by a line
-	// once the pool has more than one source and each block names its own.
+	// timeline's geometry: a 22px block inset in a 30px row.
 	const ROW_PAD = 4;
-	const SEG_H_BASE = 22;
-	const SEG_H_SOURCE = 34;
+	const SEG_H = 22;
+	/** Colour band along a block's bottom edge naming its source. */
+	const SRC_BAND = 3;
 	/** Half-width of a boundary's invisible grab strip. */
 	const BND_GRAB = 5;
+	/**
+	 * Below this a label is all ellipsis and no word — a song's worth of
+	 * quarter-note segments becomes a row of "mo…", which reads as noise. The
+	 * block's tooltip still spells everything out.
+	 */
+	const MIN_LABEL_PX = 46;
 
 	interface Props {
 		segments: SequenceSegment[];
-		trackDuration: number;
 		boundaries: SegmentBoundaryController<SequenceSegment>;
 		selectedSegmentId?: string | null;
-		currentTime?: number;
 		onSeek?: (time: number) => void;
 		onApplyPreset: (segmentIds: string[], preset: Preset) => void;
 		onRoll: (segmentIds: string[]) => void;
@@ -82,14 +85,14 @@
 		onRemoveSource?: (sourceId: string) => void;
 		/** Empty the pool back to the primary source. */
 		onClearSources?: () => void;
+		/** The media bin's disclosure state — the toggle lives in the stack toolbar. */
+		binOpen?: boolean;
 	}
 
 	let {
 		segments: rawSegments,
-		trackDuration,
 		boundaries,
 		selectedSegmentId = $bindable(null),
-		currentTime = 0,
 		onSeek,
 		onApplyPreset,
 		onRoll,
@@ -105,12 +108,12 @@
 		onAddSources,
 		onRemoveSource,
 		onClearSources,
+		binOpen = false,
 	}: Props = $props();
 
 	// The hint only teaches things the ? shortcuts modal also lists, so hiding
 	// it for good costs no discoverability.
 	const HINT_KEY = 'openmosh-seq-hint-dismissed';
-	const BIN_KEY = 'openmosh-seq-bin-open';
 	let hintDismissed = $state(readFlag(HINT_KEY, false));
 
 	function readFlag(key: string, fallback: boolean): boolean {
@@ -137,12 +140,9 @@
 
 	let hasMediaBin = $derived(!!onAddSources);
 	let multiSource = $derived(sources.length > 1);
-	let segH = $derived(multiSource ? SEG_H_SOURCE : SEG_H_BASE);
-	let svgH = $derived(segH + ROW_PAD * 2);
-	/** Baseline of the segment's own label: centred when it's the only line. */
-	let labelY = $derived(ROW_PAD + (multiSource ? 14 : segH / 2 + 4));
-	let sourceLabelY = $derived(ROW_PAD + 27);
-	let sourceInput = $state<HTMLInputElement>(undefined!);
+	const segH = SEG_H;
+	const svgH = SEG_H + ROW_PAD * 2;
+	const labelY = ROW_PAD + SEG_H / 2 + 4;
 	/** Index into the pool of the source shown full size; null when closed.
 	 * An index rather than the source itself, so the lightbox's arrows can walk
 	 * the whole pool from wherever it was opened. */
@@ -166,16 +166,6 @@
 			objectUrl: s.objectUrl,
 		})),
 	);
-	// Collapsed by default: a grid of chips is the tallest thing in the timeline
-	// stack and it's only needed while assigning sources. The choice is
-	// remembered, so anyone who works with it open keeps it open.
-	let binOpen = $state(readFlag(BIN_KEY, false));
-
-	function toggleBin() {
-		binOpen = !binOpen;
-		writeFlag(BIN_KEY, binOpen);
-	}
-
 	// Indexed rather than scanned: segVis recomputes on every zoom/pan frame,
 	// and a linear find per segment over a few hundred sources showed up as
 	// drag lag.
@@ -203,24 +193,12 @@
 	/** Track width in px, for sizing labels to their blocks. */
 	let trackWidth = $state(0);
 
-	// ── View window (zoom / pan) ─────────────────────────────────────────────
-	const vp = new TimelineViewport(
-		() => trackDuration,
-		() => svgEl?.getBoundingClientRect() ?? null,
-	);
-
-	// Reset to fully zoomed out whenever the master duration changes (e.g. a
-	// track loads after the video) — keeping the old window left the timeline
-	// near-max zoomed on init.
-	let lastDuration = 0;
-	$effect(() => {
-		const td = trackDuration;
-		if (td > 0 && td !== lastDuration) {
-			lastDuration = td;
-			vp.viewStart = 0;
-			vp.viewEnd = td;
-		}
-	});
+	// One axis for the whole stack: the view window, the playhead and the
+	// duration-change reset all live in TimelineStack.
+	const stack = getTimelineStack();
+	const vp = stack.vp;
+	const laneTrack = stack.lane;
+	let trackDuration = $derived(stack.trackDuration);
 
 	let segments = $derived(
 		[...rawSegments].sort((a, b) => a.startTime - b.startTime),
@@ -521,11 +499,6 @@
 		return svgEl?.getBoundingClientRect() ?? null;
 	}
 
-	$effect(() => {
-		if (!svgEl) return;
-		return vp.attachWheel(svgEl);
-	});
-
 	// ── Derived visuals ──────────────────────────────────────────────────────
 	interface SegVis {
 		id: string;
@@ -535,9 +508,20 @@
 		endTime: number;
 		label: string;
 		/** Null when the pool has one source — nothing to distinguish. */
-		sourceLabel: string | null;
+		sourceColor: string | null;
+		/** Everything the block can't show at this width. */
+		tip: string;
 		transitionType: TransitionType;
 		transitionDuration: number;
+	}
+
+	/**
+	 * A stable colour per position in the pool. Sources are told apart by the
+	 * band along the block's bottom edge, which stays readable at widths where a
+	 * filename never would; the number and name live in the tooltip.
+	 */
+	function sourceColor(n: number): string {
+		return `hsl(${(n * 57) % 360} 45% 52%)`;
 	}
 
 	function segLabel(s: SequenceSegment): string {
@@ -549,10 +533,10 @@
 	}
 
 	/** Trim a label to what fits inside its block, so text can't spill onto the
-	 * neighbouring segments the way a centred label under a line couldn't. */
+	 * neighbouring segments. Nothing at all below MIN_LABEL_PX — see there. */
 	function fitLabel(text: string, boxPx: number, charPx: number): string {
+		if (boxPx < MIN_LABEL_PX) return '';
 		const max = Math.floor((boxPx - 6) / charPx);
-		if (max < 2) return '';
 		return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 	}
 
@@ -565,17 +549,24 @@
 			const source = multiSource
 				? sourceIndex.get(s.sourceId ?? primarySourceId ?? '')
 				: undefined;
+			const full = segLabel(s);
+			const trans = s.transition?.type ?? 'cut';
 			return {
 				id: s.id,
 				startX,
 				endX,
 				startTime: s.startTime,
 				endTime,
-				label: fitLabel(segLabel(s), boxPx, 6.6),
-				sourceLabel: source
-					? fitLabel(`${source.n}· ${shortName(source.src.name, 14)}`, boxPx, 5.4)
-					: null,
-				transitionType: s.transition?.type ?? 'cut',
+				label: fitLabel(full, boxPx, 6.6),
+				sourceColor: source ? sourceColor(source.n) : null,
+				tip: [
+					full,
+					source ? `source ${source.n}: ${source.src.name}` : null,
+					trans === 'cut' ? null : `${trans} ${s.transition?.durationSec ?? 0}s`,
+				]
+					.filter(Boolean)
+					.join(' · '),
+				transitionType: trans,
 				transitionDuration: s.transition?.durationSec ?? 0,
 			};
 		}),
@@ -988,134 +979,23 @@
 />
 
 <div class="tl-container">
-	{#if hasMediaBin}
-		{@const assignable = selectedIds.length > 0}
-		<div class="media-bin">
-			<div class="media-bin-head">
-				<button
-					class="media-bin-toggle"
-					aria-expanded={binOpen}
-					onclick={toggleBin}
-				>
-					<span class="media-bin-caret" class:open={binOpen}>▸</span>
-					SOURCES
-					<span class="media-bin-count">{sources.length}</span>
-				</button>
-				{#if binOpen}
-					<span class="media-bin-hint">
-						{#if dragSourceId}
-							DROP ON A SEGMENT
-						{:else if assignable}
-							CLICK OR DRAG ONTO {selectedIds.length > 1
-								? `${selectedIds.length} SEGMENTS`
-								: 'A SEGMENT'}
-						{:else}
-							DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
-						{/if}
-					</span>
-				{/if}
-				<input
-					bind:this={sourceInput}
-					type="file"
-					accept="image/*,video/*"
-					multiple
-					hidden
-					onchange={(e) => {
-						const picked = Array.from(e.currentTarget.files ?? []);
-						if (picked.length > 0) onAddSources?.(picked);
-						e.currentTarget.value = '';
-					}}
-				/>
-				<div class="media-bin-actions">
-					{#if onClearSources && multiSource}
-						<button
-							class="media-bin-btn danger"
-							title="Remove every added source from this song"
-							onclick={onClearSources}
-						>
-							<Trash2 size={11} />
-							CLEAR
-						</button>
-					{/if}
-					<button
-						class="media-bin-btn"
-						title="Add images or videos to the pool"
-						onclick={() => sourceInput.click()}>+ ADD</button
-					>
-				</div>
-			</div>
-			<!-- Capped height with its own scroll: letting a few hundred chips
-			     wrap freely pushes the preview clean off the screen. -->
-			<div
-					bind:this={gridEl}
-					class="media-grid"
-					class:collapsed={!binOpen}
-					class:drag-locked={!!dragSourceId}
-				>
-				{#each sources as src, i (src.id)}
-					<div
-						class="media-chip"
-						class:active={selectedSourceId === src.id}
-						class:dragging={dragSourceId === src.id}
-					>
-						<button
-							class="media-chip-assign"
-							class:assignable
-							draggable="true"
-							title={assignable
-								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}, or drag it onto one. Double-click to preview it.`
-								: `${src.name}. Click to preview, drag it onto a segment, or select one and click`}
-							ondragstart={(e) => startSourceDrag(e, src.id)}
-							ondragend={endSourceDrag}
-							onclick={(e) => {
-								// With a segment selected the click belongs to assigning, so
-								// preview is the double-click there instead.
-								if (assignable) onAssignSource?.(selectedIds, src.id);
-								else openPreview(e, i);
-							}}
-							ondblclick={(e) => openPreview(e, i)}
-						>
-							{#if src.thumbUrl}
-								<img
-									class="media-chip-img"
-									src={src.thumbUrl}
-									alt=""
-									loading="lazy"
-									decoding="async"
-									draggable="false"
-								/>
-							{/if}
-							<span class="media-chip-num">
-								{i + 1}{#if src.kind === 'video'}<span class="media-chip-kind"
-										>▶</span
-									>{/if}
-							</span>
-							<span class="media-chip-name">{shortName(src.name, 18)}</span>
-						</button>
-						{#if !src.primary}
-							<button
-								class="media-chip-remove"
-								title="Remove from the pool"
-								onclick={() => onRemoveSource?.(src.id)}>✕</button
-							>
-						{/if}
-					</div>
-				{/each}
-			</div>
+	<div class="tl-row">
+		<div class="tl-gutter">
+			<span class="tl-gutter-label">Mosh</span>
 		</div>
-	{/if}
-	<div
-		class="tl-track"
-		class:drop-active={!!dragSourceId}
-		bind:clientWidth={trackWidth}
-		ondragover={onTimelineDragOver}
-		ondragleave={onTimelineDragLeave}
-		ondrop={onTimelineDrop}
-		role="presentation"
-	>
+		<div
+			class="tl-lane tl-track"
+			class:drop-active={!!dragSourceId}
+			bind:clientWidth={trackWidth}
+			ondragover={onTimelineDragOver}
+			ondragleave={onTimelineDragLeave}
+			ondrop={onTimelineDrop}
+			role="presentation"
+		>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
+			use:laneTrack
 			width="100%"
 			height={svgH}
 			class="step-svg"
@@ -1164,8 +1044,19 @@
 					width="{Math.max(0, sv.endX - sv.startX)}%"
 					height={segH}
 					rx="3"
-					onpointerdown={(e) => startSegClick(e, sv.id)}
-				/>
+					onpointerdown={(e) => startSegClick(e, sv.id)}><title>{sv.tip}</title></rect
+				>
+				{#if sv.sourceColor}
+					<!-- Which source this segment plays, at a width no filename survives. -->
+					<rect
+						class="seg-src-band"
+						x="{sv.startX}%"
+						y={ROW_PAD + segH - SRC_BAND - 1}
+						width="{Math.max(0, sv.endX - sv.startX)}%"
+						height={SRC_BAND}
+						fill={sv.sourceColor}
+					/>
+				{/if}
 				{#if sv.label}
 					<text
 						class="seg-lbl"
@@ -1174,16 +1065,6 @@
 						x="{midX}%"
 						y={labelY}
 						text-anchor="middle">{sv.label}</text
-					>
-				{/if}
-				{#if sv.sourceLabel}
-					<text
-						class="seg-src-lbl"
-						class:sel
-						class:drop
-						x="{midX}%"
-						y={sourceLabelY}
-						text-anchor="middle">{sv.sourceLabel}</text
 					>
 				{/if}
 			{/each}
@@ -1248,13 +1129,6 @@
 				</text>
 			{/if}
 
-			<!-- Playhead -->
-			{#if trackDuration > 0}
-				{@const phx = vp.toPct(currentTime)}
-				<line class="playhead-line" x1="{phx}%" y1="0" x2="{phx}%" y2={svgH} />
-				<circle class="playhead-head" cx="{phx}%" cy="1" r="3" />
-			{/if}
-
 			<!-- Rectangle selection overlay -->
 			{#if dragging?.type === 'rect-select' && dragMoved}
 				{@const minX = Math.min(vp.toPct(dragging.startTime), vp.toPct(dragging.currentTime))}
@@ -1302,238 +1176,325 @@
 				{/each}
 			{/if}
 		</svg>
-	</div>
-
-	<div class="tl-scroll-row">
-		<TimelineScrollbar {vp} {trackDuration} accent="purple" />
+		</div>
 	</div>
 
 	<!-- Kept mounted while the hint shows so selecting a segment doesn't shift
 	     the layout. Once the hint is dismissed there's nothing to reserve space
 	     for, and the row collapses until something is selected. -->
 	{#if selectedSegments.length > 0 || !hintDismissed}
-		<div class="seg-toolbar">
+		<div class="seg-toolbar tl-chrome">
 			{#if selectedSegments.length > 0}
-			{@const many = selectedSegments.length > 1}
-			<span class="seg-toolbar-label">
-				{many ? `${selectedSegments.length} SEGMENTS` : 'SEGMENT'}
-			</span>
-			<select
-				class="seg-select"
-				value={selectedPresetIndex}
-				onmousedown={() => (presetList = loadPresets())}
-				onchange={(e) => {
-					const idx = Number(e.currentTarget.value);
-					const preset = presetList[idx];
-					if (preset) onApplyPreset(selectedIds, preset);
-				}}
-			>
-				<option value={-1} disabled>Preset…</option>
-				{#each presetList as p, i}
-					<option value={i}>{p.name}</option>
-				{/each}
-			</select>
-			<button
-				class="seg-btn"
-				title={commonMode === 'interval'
-					? 'New random seed'
-					: many
-						? 'Random mosh for each selected segment'
-						: 'Random mosh for this segment'}
-				onclick={() => onRoll(selectedIds)}
-			>
-				<Dices size={12} />
-				MOSH
-			</button>
-			<button
-				class="seg-btn"
-				title={many
-					? "Clear the selected segments' effects"
-					: "Clear this segment's effects"}
-				onclick={() => onClear(selectedIds)}
-			>
-				<Trash2 size={12} />
-				CLEAR
-			</button>
-			<div class="seg-mode">
-				<button
-					class="seg-btn"
-					class:active={commonMode === 'static'}
-					onclick={() => onModeChange(selectedIds, 'static')}
-				>
-					STATIC
-				</button>
-				<button
-					class="seg-btn"
-					class:active={commonMode === 'interval'}
-					onclick={() => onModeChange(selectedIds, 'interval')}
-				>
-					AUTO
-				</button>
-			</div>
-			{#if commonMode === 'interval'}
-				<select
-					class="seg-select"
-					value={intervalValue}
-					title="How often this segment re-rolls its mosh"
-					onchange={(e) => {
-						const v = e.currentTarget.value;
-						if (v === '') return;
-						if (v.startsWith('b')) {
-							const beats = Number(v.slice(1));
-							onModeChange(
-								selectedIds,
-								'interval',
-								(60 / bpm) * beats,
-								beats,
-							);
-						} else {
-							// Picking a plain duration drops the beat link, so a later
-							// BPM change leaves it alone.
-							onModeChange(selectedIds, 'interval', Number(v), null);
-						}
-					}}
-				>
-					{#if intervalValue === ''}
-						<option value="" disabled>—</option>
-					{/if}
-					{#if bpm > 0}
-						{#each BEAT_INTERVALS as opt}
-							<option value={`b${opt.beats}`}>{opt.label}</option>
+				{@const many = selectedSegments.length > 1}
+				<!-- Centred as one run, and never taller than a row: the transition
+				     controls come and go with the type, and a wrapping bar changed the
+				     stack's height every time they did. -->
+				<div class="seg-groups">
+					<span class="seg-title">
+						{many ? `${selectedSegments.length} segments` : 'Segment'}
+					</span>
+
+					<div class="tl-tool-sep"></div>
+					<span class="tl-tool-label">Fill</span>
+					<select
+						class="seg-select"
+						value={selectedPresetIndex}
+						onmousedown={() => (presetList = loadPresets())}
+						onchange={(e) => {
+							const idx = Number(e.currentTarget.value);
+							const preset = presetList[idx];
+							if (preset) onApplyPreset(selectedIds, preset);
+						}}
+					>
+						<option value={-1} disabled>Preset…</option>
+						{#each presetList as p, i}
+							<option value={i}>{p.name}</option>
 						{/each}
-					{/if}
-					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
-						<option value={sec}>every {sec}s</option>
-					{/each}
-				</select>
-		{/if}
-			<span class="seg-toolbar-label">TRANSITION</span>
-			<select
-				class="seg-select"
-				value={commonTransitionType ?? ''}
-				title="How each selected segment blends in from the previous one"
-				onchange={(e) => {
-					const v = e.currentTarget.value;
-					if (v !== '') changeTransitionType(v as TransitionType);
-				}}
-			>
-				{#if commonTransitionType === undefined}
-					<option value="" disabled>—</option>
-				{/if}
-				{#each TRANSITION_OPTIONS as o}
-					<option value={o.value}>{o.label}</option>
-				{/each}
-			</select>
-			{#if commonTransitionType && commonTransitionType !== 'cut'}
-				<select
-					class="seg-select"
-					value={commonTransitionDuration ?? ''}
-					title="Transition duration"
-					onchange={(e) => {
-						const v = e.currentTarget.value;
-						if (v !== '') patchTransition({ durationSec: Number(v) });
-					}}
-				>
-					{#if commonTransitionDuration === undefined}
-						<option value="" disabled>—</option>
-					{/if}
-					{#each [0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.2, 2] as sec}
-						<option value={sec}>{sec}s</option>
-					{/each}
-				</select>
-				{#if commonTransitionMeta?.hasDirection}
-					<select
-						class="seg-select"
-						value={commonTransitionDirection ?? ''}
-						title="Wipe direction"
-						onchange={(e) => {
-							const v = e.currentTarget.value;
-							if (v !== '') patchTransition({ direction: Number(v) });
-						}}
-					>
-						{#if commonTransitionDirection === undefined}
-							<option value="" disabled>—</option>
-						{/if}
-						<option value={0}>→</option>
-						<option value={1}>←</option>
-						<option value={2}>↓</option>
-						<option value={3}>↑</option>
 					</select>
-				{/if}
-				{#if commonTransitionMeta?.hasDensity}
-					<select
-						class="seg-select"
-						value={commonTransitionDensity ?? ''}
-						title="Cell size"
-						onchange={(e) => {
-							const v = e.currentTarget.value;
-							if (v !== '') patchTransition({ density: Number(v) });
-						}}
-					>
-						{#if commonTransitionDensity === undefined}
-							<option value="" disabled>—</option>
-						{/if}
-						<option value={0}>coarse</option>
-						<option value={1}>med</option>
-						<option value={2}>fine</option>
-					</select>
-				{/if}
-				{#if commonTransitionMeta?.hasSeed}
 					<button
-						class="seg-btn"
-						title="Re-roll transition layout"
-						onclick={rerollTransitionSeeds}
+						class="tl-tool-btn"
+						title={commonMode === 'interval'
+							? 'New random seed'
+							: many
+								? 'Random mosh for each selected segment'
+								: 'Random mosh for this segment'}
+						onclick={() => onRoll(selectedIds)}
 					>
-						<Dices size={12} />
+						<Dices size={12} /> Mosh
 					</button>
-				{/if}
-				{#if commonMode === 'interval'}
-					<label
-						class="seg-check"
-						title="Blend at each re-roll tick inside the segment"
+					<button
+						class="tl-tool-btn"
+						title={many
+							? "Clear the selected segments' effects"
+							: "Clear this segment's effects"}
+						onclick={() => onClear(selectedIds)}
 					>
-						<input
-							type="checkbox"
-							checked={commonTransitionOnTick === true}
-							indeterminate={commonTransitionOnTick === undefined}
-							onchange={(e) => setTransitionOnTick(e.currentTarget.checked)}
-						/>
-						TICKS
-					</label>
-				{/if}
+						<Eraser size={12} /> Clear
+					</button>
+
+					<div class="tl-tool-sep"></div>
+					<span class="tl-tool-label">Mode</span>
+					<div class="seg-mode">
+						<button
+							class="tl-tool-btn"
+							class:active={commonMode === 'static'}
+							onclick={() => onModeChange(selectedIds, 'static')}
+						>
+							Static
+						</button>
+						<button
+							class="tl-tool-btn"
+							class:active={commonMode === 'interval'}
+							onclick={() => onModeChange(selectedIds, 'interval')}
+						>
+							Auto
+						</button>
+					</div>
+					{#if commonMode === 'interval'}
+						<select
+							class="seg-select"
+							value={intervalValue}
+							title="How often this segment re-rolls its mosh"
+							onchange={(e) => {
+								const v = e.currentTarget.value;
+								if (v === '') return;
+								if (v.startsWith('b')) {
+									const beats = Number(v.slice(1));
+									onModeChange(selectedIds, 'interval', (60 / bpm) * beats, beats);
+								} else {
+									// Picking a plain duration drops the beat link, so a later
+									// BPM change leaves it alone.
+									onModeChange(selectedIds, 'interval', Number(v), null);
+								}
+							}}
+						>
+							{#if intervalValue === ''}
+								<option value="" disabled>—</option>
+							{/if}
+							{#if bpm > 0}
+								{#each BEAT_INTERVALS as opt}
+									<option value={`b${opt.beats}`}>{opt.label}</option>
+								{/each}
+							{/if}
+							{#each [0.125, 0.25, 0.5, 1, 2] as sec}
+								<option value={sec}>every {sec}s</option>
+							{/each}
+						</select>
+					{/if}
+
+					<div class="tl-tool-sep"></div>
+					<span class="tl-tool-label">Transition</span>
+					<select
+						class="seg-select"
+						value={commonTransitionType ?? ''}
+						title="How each selected segment blends in from the previous one"
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							if (v !== '') changeTransitionType(v as TransitionType);
+						}}
+					>
+						{#if commonTransitionType === undefined}
+							<option value="" disabled>—</option>
+						{/if}
+						{#each TRANSITION_OPTIONS as o}
+							<option value={o.value}>{o.label}</option>
+						{/each}
+					</select>
+					{#if commonTransitionType && commonTransitionType !== 'cut'}
+						<select
+							class="seg-select"
+							value={commonTransitionDuration ?? ''}
+							title="Transition duration"
+							onchange={(e) => {
+								const v = e.currentTarget.value;
+								if (v !== '') patchTransition({ durationSec: Number(v) });
+							}}
+						>
+							{#if commonTransitionDuration === undefined}
+								<option value="" disabled>—</option>
+							{/if}
+							{#each [0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.2, 2] as sec}
+								<option value={sec}>{sec}s</option>
+							{/each}
+						</select>
+						{#if commonTransitionMeta?.hasDirection}
+							<select
+								class="seg-select"
+								value={commonTransitionDirection ?? ''}
+								title="Wipe direction"
+								onchange={(e) => {
+									const v = e.currentTarget.value;
+									if (v !== '') patchTransition({ direction: Number(v) });
+								}}
+							>
+								{#if commonTransitionDirection === undefined}
+									<option value="" disabled>—</option>
+								{/if}
+								<option value={0}>→</option>
+								<option value={1}>←</option>
+								<option value={2}>↓</option>
+								<option value={3}>↑</option>
+							</select>
+						{/if}
+						{#if commonTransitionMeta?.hasDensity}
+							<select
+								class="seg-select"
+								value={commonTransitionDensity ?? ''}
+								title="Cell size"
+								onchange={(e) => {
+									const v = e.currentTarget.value;
+									if (v !== '') patchTransition({ density: Number(v) });
+								}}
+							>
+								{#if commonTransitionDensity === undefined}
+									<option value="" disabled>—</option>
+								{/if}
+								<option value={0}>coarse</option>
+								<option value={1}>med</option>
+								<option value={2}>fine</option>
+							</select>
+						{/if}
+						{#if commonTransitionMeta?.hasSeed}
+							<button
+								class="tl-tool-btn"
+								title="Re-roll transition layout"
+								onclick={rerollTransitionSeeds}
+							>
+								<Dices size={12} />
+							</button>
+						{/if}
+						{#if commonMode === 'interval'}
+							<label
+								class="seg-check"
+								title="Blend at each re-roll tick inside the segment"
+							>
+								<input
+									type="checkbox"
+									checked={commonTransitionOnTick === true}
+									indeterminate={commonTransitionOnTick === undefined}
+									onchange={(e) => setTransitionOnTick(e.currentTarget.checked)}
+								/>
+								Ticks
+							</label>
+						{/if}
+					{/if}
+
+					<div class="tl-tool-sep"></div>
+					{#if onToggleSegmentLoop && !many}
+						<button
+							class="tl-tool-btn"
+							class:active={segmentLoop}
+							title="Loop playback inside this segment"
+							onclick={onToggleSegmentLoop}
+						>
+							<Repeat size={12} />
+						</button>
+					{/if}
+					<button
+						class="tl-tool-btn danger"
+						title={many ? 'Delete selected segments' : 'Delete segment'}
+						onclick={() => removeSegments(selectedIds)}
+					>
+						<Trash2 size={12} />
+					</button>
+				</div>
+			{:else}
+				<div class="seg-groups">
+					<span class="seg-toolbar-hint">
+						{segments.length === 0
+							? 'Double-click the timeline to create a segment'
+							: 'Click a segment to edit · shift-click or shift-drag to select several'}
+					</span>
+					<button
+						class="hint-dismiss"
+						title="Hide this hint. The shortcuts stay in the ? menu."
+						onclick={dismissHint}>✕</button
+					>
+				</div>
 			{/if}
-			{#if onToggleSegmentLoop && !many}
-				<button
-					class="seg-btn"
-					class:active={segmentLoop}
-					title="Loop playback inside this segment"
-					onclick={onToggleSegmentLoop}
-				>
-					<Repeat size={12} />
-				</button>
-			{/if}
-			<button
-				class="seg-btn danger"
-				title={many ? 'Delete selected segments' : 'Delete segment'}
-				onclick={() => removeSegments(selectedIds)}
-			>
-				<Trash2 size={12} />
-			</button>
-		{:else}
-			<span class="seg-toolbar-hint">
-				{segments.length === 0
-					? 'Double-click the timeline to create a segment'
-					: 'Click a segment to edit · shift-click or shift-drag to select several'}
-			</span>
-			<button
-				class="hint-dismiss"
-				title="Hide this hint. The shortcuts stay in the ? menu."
-				onclick={dismissHint}>✕</button
-			>
-		{/if}
 		</div>
 	{/if}
 
+	{#if hasMediaBin && binOpen}
+		{@const assignable = selectedIds.length > 0}
+		<div class="media-bin tl-chrome">
+			<div class="media-bin-head">
+				<span class="media-bin-hint">
+					{#if dragSourceId}
+						DROP ON A SEGMENT
+					{:else if assignable}
+						CLICK OR DRAG ONTO {selectedIds.length > 1
+							? `${selectedIds.length} SEGMENTS`
+							: 'A SEGMENT'}
+					{:else}
+						DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
+					{/if}
+				</span>
+			</div>
+			<!-- Capped height with its own scroll: letting a few hundred chips
+			     wrap freely pushes the preview clean off the screen. -->
+			<div
+					bind:this={gridEl}
+					class="media-grid"
+					class:drag-locked={!!dragSourceId}
+				>
+				{#each sources as src, i (src.id)}
+					<div
+						class="media-chip"
+						class:active={selectedSourceId === src.id}
+						class:dragging={dragSourceId === src.id}
+					>
+						<button
+							class="media-chip-assign"
+							class:assignable
+							draggable="true"
+							title={assignable
+								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}, or drag it onto one. Double-click to preview it.`
+								: `${src.name}. Click to preview, drag it onto a segment, or select one and click`}
+							ondragstart={(e) => startSourceDrag(e, src.id)}
+							ondragend={endSourceDrag}
+							onclick={(e) => {
+								// With a segment selected the click belongs to assigning, so
+								// preview is the double-click there instead.
+								if (assignable) onAssignSource?.(selectedIds, src.id);
+								else openPreview(e, i);
+							}}
+							ondblclick={(e) => openPreview(e, i)}
+						>
+							{#if src.thumbUrl}
+								<img
+									class="media-chip-img"
+									src={src.thumbUrl}
+									alt=""
+									loading="lazy"
+									decoding="async"
+									draggable="false"
+								/>
+							{/if}
+							<!-- Tinted to match the band along the bottom of every segment
+							     that plays this source. -->
+							<span
+								class="media-chip-num"
+								style:border-left="3px solid {sourceColor(i + 1)}"
+							>
+								{i + 1}{#if src.kind === 'video'}<span class="media-chip-kind"
+										>▶</span
+									>{/if}
+							</span>
+							<span class="media-chip-name">{shortName(src.name, 18)}</span>
+						</button>
+						{#if !src.primary}
+							<button
+								class="media-chip-remove"
+								title="Remove from the pool"
+								onclick={() => onRemoveSource?.(src.id)}>✕</button
+							>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
 	{#if previewIndex !== null}
 		<MediaLightbox
 			items={previewItems}
@@ -1546,11 +1507,12 @@
 
 <style>
 	.tl-container {
-		margin: 0 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 	}
 
 	.tl-track {
-		position: relative;
 		background: #111;
 		border: 1px solid #2a2a2a;
 		border-radius: 4px;
@@ -1561,12 +1523,6 @@
 		display: block;
 		width: 100%;
 		overflow: hidden;
-	}
-
-	/* Outside the bordered track, so the bar doesn't sit inside a second frame. */
-	.tl-scroll-row {
-		display: flex;
-		margin-top: 3px;
 	}
 
 	.tail {
@@ -1602,9 +1558,14 @@
 		stroke-width: 2;
 	}
 
-	.seg-src-lbl.drop,
 	.seg-lbl.drop {
 		fill: #6ee7c0;
+	}
+
+	/* Inset a pixel each side so neighbouring bands don't read as one run. */
+	.seg-src-band {
+		pointer-events: none;
+		opacity: 0.85;
 	}
 
 	.tl-track.drop-active {
@@ -1624,18 +1585,6 @@
 		fill: #d8b8f8;
 	}
 
-	.seg-src-lbl {
-		fill: #8e76a6;
-		font-size: 9px;
-		font-family: monospace;
-		pointer-events: none;
-		user-select: none;
-	}
-
-	.seg-src-lbl.sel {
-		fill: #a888c4;
-	}
-
 	/* ── Media bin ── */
 	.media-bin {
 		padding-bottom: 0.5rem;
@@ -1648,43 +1597,10 @@
 		padding: 0 0.1rem 0.35rem;
 	}
 
-	.media-bin-toggle {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0;
-		border: none;
-		background: none;
-		color: #7a5f94;
-		font-size: 0.62rem;
-		font-family: monospace;
-		font-weight: 700;
-		letter-spacing: 0.1em;
-		cursor: pointer;
-	}
 
-	.media-bin-toggle:hover {
-		color: #b08ad0;
-	}
 
-	.media-bin-caret {
-		display: inline-block;
-		font-size: 0.6rem;
-		transition: transform 0.15s;
-	}
 
-	.media-bin-caret.open {
-		transform: rotate(90deg);
-	}
 
-	.media-bin-count {
-		padding: 1px 5px;
-		border-radius: 999px;
-		background: #221a2c;
-		color: #b08ad0;
-		font-size: 0.58rem;
-		letter-spacing: 0;
-	}
 
 	.media-bin-hint {
 		color: #4a3c58;
@@ -1693,38 +1609,9 @@
 		letter-spacing: 0.04em;
 	}
 
-	.media-bin-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		margin-left: auto;
-	}
 
-	.media-bin-btn {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.2rem 0.6rem;
-		border: 1px solid #2e2438;
-		border-radius: 4px;
-		background: transparent;
-		color: #7a5f94;
-		font-size: 0.6rem;
-		font-family: monospace;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		cursor: pointer;
-	}
 
-	.media-bin-btn:hover {
-		border-color: #6a5080;
-		color: #d8b8f8;
-	}
 
-	.media-bin-btn.danger:hover {
-		border-color: #8a3a4a;
-		color: #f0a0b0;
-	}
 
 	/* Two rows tall, then scrolls — a wrapping grid of a few hundred chips
 	   would take the whole viewport and leave nothing for the preview. */
@@ -1750,9 +1637,6 @@
 		overflow-y: hidden;
 	}
 
-	.media-grid.collapsed {
-		display: none;
-	}
 
 	.media-chip {
 		position: relative;
@@ -1810,6 +1694,7 @@
 		position: absolute;
 		top: 0;
 		left: 0;
+		border-top-left-radius: 3px;
 		display: flex;
 		align-items: center;
 		gap: 2px;
@@ -1933,18 +1818,6 @@
 		rx: 2;
 	}
 
-	.playhead-line {
-		stroke: rgba(255, 210, 80, 0.75);
-		stroke-width: 1;
-		pointer-events: none;
-	}
-
-	.playhead-head {
-		fill: rgba(255, 210, 80, 0.9);
-		stroke: none;
-		pointer-events: none;
-	}
-
 	.hint {
 		fill: #3a3a3a;
 		font-size: 8.5px;
@@ -1953,13 +1826,28 @@
 	}
 
 
+	/* Fixed height, no wrapping: the transition controls appear and disappear
+	   with the type, and a wrapping bar resized the stack every time. The run is
+	   centred with an auto margin rather than justify-content, which keeps the
+	   left end reachable if it ever does overflow. */
 	.seg-toolbar {
 		display: flex;
+		height: 30px;
+		flex-shrink: 0;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.seg-toolbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.seg-groups {
+		display: flex;
 		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.25rem;
-		flex-wrap: wrap;
-		min-height: 28px;
+		gap: 0.35rem;
+		margin: 0 auto;
+		padding: 0 0.25rem;
 	}
 
 	.seg-toolbar-hint {
@@ -1982,76 +1870,47 @@
 		color: #999;
 	}
 
-	.seg-toolbar-label {
-		font-size: 0.62rem;
+	.seg-title {
+		font-size: 0.68rem;
 		font-weight: 600;
-		letter-spacing: 0.08em;
-		color: #9a70b8;
+		color: #b08ad0;
+		white-space: nowrap;
 	}
 
-	.seg-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.2rem 0.5rem;
-		border: 1px solid #444;
-		border-radius: 4px;
-		background: #1a1a1a;
-		color: #aaa;
-		font-size: 0.62rem;
-		font-weight: 600;
-		font-family: inherit;
-		letter-spacing: 0.04em;
-		cursor: pointer;
-		transition:
-			border-color 0.15s,
-			color 0.15s;
-	}
-
-	.seg-btn:hover {
-		border-color: #777;
-		color: #ddd;
-	}
-
-	.seg-btn.active {
-		border-color: #b08ad0;
-		color: #d8b8f8;
-		background: rgba(176, 138, 208, 0.1);
-	}
-
-	.seg-btn.danger:hover {
-		border-color: #c05050;
-		color: #e88;
-	}
-
+	/* One pill out of two buttons. */
 	.seg-mode {
 		display: flex;
-		gap: 0;
 	}
 
-	.seg-mode .seg-btn:first-child {
+	.seg-mode :global(.tl-tool-btn:first-child) {
+		border-right-color: transparent;
 		border-radius: 4px 0 0 4px;
-		border-right: none;
 	}
 
-	.seg-mode .seg-btn:last-child {
+	.seg-mode :global(.tl-tool-btn:last-child) {
 		border-radius: 0 4px 4px 0;
+	}
+
+	/* The lane's own accent, rather than the stack toolbar's blue. */
+	.seg-mode :global(.tl-tool-btn.active) {
+		border-color: #b08ad0;
+		background: rgba(176, 138, 208, 0.12);
+		color: #d8b8f8;
 	}
 
 	.seg-check {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
-		font-size: 0.62rem;
-		font-weight: 600;
-		color: #aaa;
-		letter-spacing: 0.04em;
+		font-size: 0.68rem;
+		color: #bbb;
 		cursor: pointer;
 		user-select: none;
+		white-space: nowrap;
 	}
 
 	.seg-check:hover {
-		color: #ddd;
+		color: #fff;
 	}
 
 	.seg-check input {
@@ -2059,16 +1918,22 @@
 		margin: 0;
 	}
 
+	/* Matches .tl-tool-btn, so the bar reads as one set of controls. */
 	.seg-select {
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
+		padding: 0.15rem 0.4rem;
+		border: 1px solid #2e2e2e;
 		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.62rem;
+		background: #191919;
+		color: #bbb;
+		font-size: 0.68rem;
 		font-family: inherit;
 		cursor: pointer;
 		outline: none;
+	}
+
+	.seg-select:hover {
+		border-color: #555;
+		color: #fff;
 	}
 
 	.seg-select:focus {
@@ -2076,10 +1941,6 @@
 	}
 
 	@media (max-width: 800px) {
-		.tl-container {
-			margin: 0 8px;
-		}
-
 		/* Smaller chips still — a phone has no screen to spare. */
 		.media-chip,
 		.media-chip-assign {
@@ -2103,11 +1964,6 @@
 
 		.media-bin-hint {
 			display: none;
-		}
-		.tl-track {
-			border-radius: 0;
-			border-left: none;
-			border-right: none;
 		}
 	}
 </style>
