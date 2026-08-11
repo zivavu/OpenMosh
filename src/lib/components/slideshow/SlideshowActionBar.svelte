@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { HelpCircle, Pause, Play, Settings } from 'lucide-svelte';
+	import { HelpCircle, Pause, Play, Settings, Type } from 'lucide-svelte';
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
@@ -16,6 +16,8 @@
 		recording: boolean;
 		recordFps: number;
 		recordDuration: number;
+		textEnabled?: boolean;
+		onToggleText?: () => void;
 		onTogglePreview: () => void;
 		onStartRecording: () => void;
 		onRecordFpsChange: (fps: number) => void;
@@ -33,6 +35,8 @@
 		recording,
 		recordFps,
 		recordDuration,
+		textEnabled = false,
+		onToggleText,
 		onTogglePreview,
 		onStartRecording,
 		onRecordFpsChange,
@@ -112,6 +116,18 @@
 			aria-label="Keyboard shortcuts"
 		>
 			<HelpCircle size={14} />
+		</button>
+	{/if}
+
+	{#if onToggleText}
+		<button
+			class="icon-btn"
+			class:on={textEnabled}
+			onclick={onToggleText}
+			title="Text timeline: timed text layers with their own effects"
+			aria-label="Text timeline"
+		>
+			<Type size={14} />
 		</button>
 	{/if}
 
@@ -275,6 +291,12 @@
 	.icon-btn.active {
 		border-color: #777;
 		color: #ccc;
+	}
+
+	/* Lit while the timeline is on, matching the editor's own text toggle. */
+	.icon-btn.on {
+		border-color: #7ab8f5;
+		color: #7ab8f5;
 	}
 
 	.options-group {

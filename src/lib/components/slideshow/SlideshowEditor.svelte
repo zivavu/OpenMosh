@@ -1101,8 +1101,6 @@
 				if (view === 'grid' && previewPlaying) stopPreview();
 			}}
 			onExit={onExit ? handleExit : undefined}
-			textEnabled={textTimeline.enabled}
-			onToggleText={toggleTextTimeline}
 		/>
 
 		{#if activeView === 'grid'}
@@ -1155,6 +1153,8 @@
 			recordDuration={audio.trackFile && audio.trackDuration > 0
 				? audio.spanEnd - audio.spanStart
 				: recordDuration}
+			textEnabled={textTimeline.enabled}
+			onToggleText={toggleTextTimeline}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			onRecordFpsChange={(fps) => (recordFps = fps)}

@@ -1,12 +1,6 @@
 <script lang="ts">
-	import {
-		Shuffle,
-		X,
-		Plus,
-		ChevronLeft,
-		ChevronRight,
-		Play,
-	} from 'lucide-svelte';
+	import { Shuffle, X, Plus, Play } from 'lucide-svelte';
+	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
 
@@ -38,19 +32,14 @@
 	let dragOverIndex = $state<number | null>(null);
 	let lightboxIndex = $state<number | null>(null);
 	let lightboxOrigin = $state({ x: 0, y: 0 });
-	let lightboxClosing = $state(false);
-	let lightboxImageEl = $state<HTMLImageElement | null>(null);
 
-	const lightboxOriginStyle = $derived(
-		`--lb-ox: ${lightboxOrigin.x}px; --lb-oy: ${lightboxOrigin.y}px`,
+	let lightboxItems = $derived(
+		slides.map((s) => ({
+			name: s.file.name,
+			kind: s.kind,
+			objectUrl: s.objectUrl,
+		})),
 	);
-
-	$effect(() => {
-		if (lightboxIndex !== null && lightboxIndex >= slides.length) {
-			lightboxIndex = null;
-			lightboxClosing = false;
-		}
-	});
 
 	const MEDIA_TYPES = [
 		'image/png',
@@ -118,7 +107,6 @@
 	}
 
 	function openLightbox(e: MouseEvent | KeyboardEvent, index: number) {
-		closeVersion++;
 		const card = e.currentTarget as HTMLElement;
 		const rect = card.getBoundingClientRect();
 		lightboxOrigin = {
@@ -126,62 +114,6 @@
 			y: rect.top + rect.height / 2 - window.innerHeight / 2,
 		};
 		lightboxIndex = index;
-		lightboxClosing = false;
-	}
-
-	let closeVersion = 0;
-	let lightboxCloseTimer: ReturnType<typeof setTimeout> | null = null;
-
-	function closeLightbox() {
-		if (lightboxClosing || lightboxIndex === null) return;
-		lightboxClosing = true;
-		if (lightboxCloseTimer) clearTimeout(lightboxCloseTimer);
-		const version = ++closeVersion;
-		lightboxImageEl?.addEventListener(
-			'transitionend',
-			() => {
-				if (closeVersion !== version) return;
-				lightboxIndex = null;
-				lightboxClosing = false;
-			},
-			{ once: true },
-		);
-		lightboxCloseTimer = setTimeout(() => {
-			if (closeVersion !== version) return;
-			lightboxIndex = null;
-			lightboxClosing = false;
-		}, 400);
-	}
-
-	import { onDestroy } from 'svelte';
-	onDestroy(() => {
-		if (lightboxCloseTimer) clearTimeout(lightboxCloseTimer);
-	});
-
-	function lightboxNext() {
-		if (lightboxIndex === null) return;
-		closeVersion++;
-		lightboxClosing = false;
-		lightboxIndex = (lightboxIndex + 1) % slides.length;
-	}
-
-	function lightboxPrev() {
-		if (lightboxIndex === null) return;
-		closeVersion++;
-		lightboxClosing = false;
-		lightboxIndex = (lightboxIndex - 1 + slides.length) % slides.length;
-	}
-
-	function onLightboxKeydown(e: KeyboardEvent) {
-		if (lightboxIndex === null) return;
-		if (e.key === 'ArrowRight') lightboxNext();
-		else if (e.key === 'ArrowLeft') lightboxPrev();
-		else if (e.key === 'Escape') closeLightbox();
-		else return;
-		// The editor's window-level handler binds the same arrows to the mosh
-		// history — while the lightbox owns them, it consumes them outright.
-		e.preventDefault();
-		e.stopPropagation();
 	}
 </script>
 
@@ -195,8 +127,6 @@
 	}}
 	ondragover={onDragOver}
 	ondragleave={onDragLeave}
-	onkeydown={onLightboxKeydown}
-	tabindex="-1"
 >
 	<input
 		bind:this={fileInput}
@@ -302,65 +232,12 @@
 	{/if}
 
 	{#if lightboxIndex !== null}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="lb-backdrop"
-			class:lb-closing={lightboxClosing}
-			onclick={closeLightbox}
-			onkeydown={onLightboxKeydown}
-		>
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div class="lb-content" onclick={(e) => e.stopPropagation()}>
-				<div class="lb-topbar">
-					<span class="lb-info">
-						{lightboxIndex + 1} / {slides.length}&nbsp;·&nbsp;{slides[
-							lightboxIndex
-						].file.name}
-					</span>
-					<button class="lb-close" onclick={closeLightbox}>
-						<X size={14} />
-					</button>
-				</div>
-				<div class="lb-img-wrap">
-					<button
-						class="lb-arrow lb-arrow-left"
-						onclick={lightboxPrev}
-						title="Previous"
-					>
-						<ChevronLeft size={18} />
-					</button>
-					{#if slides[lightboxIndex].kind === 'video'}
-						<!-- svelte-ignore a11y_media_has_caption -->
-						<video
-							class="lb-img"
-							class:lb-closing={lightboxClosing}
-							src={slides[lightboxIndex].objectUrl}
-							style={lightboxOriginStyle}
-							autoplay
-							muted
-							loop
-							controls
-						></video>
-					{:else}
-						<img
-							bind:this={lightboxImageEl}
-							class="lb-img"
-							class:lb-closing={lightboxClosing}
-							src={slides[lightboxIndex].objectUrl}
-							alt="Slide {lightboxIndex + 1}"
-							style={lightboxOriginStyle}
-						/>
-					{/if}
-					<button
-						class="lb-arrow lb-arrow-right"
-						onclick={lightboxNext}
-						title="Next"
-					>
-						<ChevronRight size={18} />
-					</button>
-				</div>
-			</div>
-		</div>
+		<MediaLightbox
+			items={lightboxItems}
+			bind:index={lightboxIndex}
+			origin={lightboxOrigin}
+			onClose={() => (lightboxIndex = null)}
+		/>
 	{/if}
 </div>
 
@@ -578,135 +455,5 @@
 	.add-card:hover {
 		border-color: #555;
 		color: #888;
-	}
-
-	/* Lightbox */
-	.lb-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.85);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 100;
-		opacity: 1;
-		transition: opacity 200ms ease;
-	}
-
-	.lb-backdrop.lb-closing {
-		opacity: 0;
-		pointer-events: none;
-	}
-
-	.lb-content {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.5rem;
-		max-width: 90vw;
-	}
-
-	.lb-topbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		width: 100%;
-		padding: 0 0.25rem;
-	}
-
-	.lb-info {
-		font-size: 0.7rem;
-		color: #888;
-		letter-spacing: 0.03em;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 80%;
-	}
-
-	.lb-close {
-		background: none;
-		border: none;
-		color: #666;
-		cursor: pointer;
-		padding: 2px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: color 0.15s;
-	}
-
-	.lb-close:hover {
-		color: #ccc;
-	}
-
-	.lb-img-wrap {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.lb-img {
-		display: block;
-		max-width: 90vw;
-		max-height: 82vh;
-		object-fit: contain;
-		border-radius: 4px;
-		--lb-ox: 0px;
-		--lb-oy: 0px;
-		animation: lb-in 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-		transition:
-			transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
-			opacity 180ms ease;
-	}
-
-	@keyframes lb-in {
-		from {
-			transform: translate(var(--lb-ox), var(--lb-oy)) scale(0.12);
-			opacity: 0;
-		}
-		to {
-			transform: translate(0, 0) scale(1);
-			opacity: 1;
-		}
-	}
-
-	.lb-img.lb-closing {
-		transform: translate(var(--lb-ox), var(--lb-oy)) scale(0.12);
-		opacity: 0;
-	}
-
-	.lb-arrow {
-		position: absolute;
-		top: 50%;
-		transform: translateY(-50%);
-		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid #333;
-		border-radius: 50%;
-		color: #888;
-		width: 36px;
-		height: 36px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			background 0.15s;
-		z-index: 1;
-	}
-
-	.lb-arrow:hover {
-		color: #fff;
-		background: rgba(0, 0, 0, 0.75);
-	}
-
-	.lb-arrow-left {
-		left: -48px;
-	}
-
-	.lb-arrow-right {
-		right: -48px;
 	}
 </style>

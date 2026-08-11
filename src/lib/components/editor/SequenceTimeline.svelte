@@ -36,7 +36,7 @@
 	} from '../../editor/shortcut-target';
 	import { TimelineViewport } from '../../editor/timeline-viewport.svelte';
 	import TimelineScrollbar from '../ui/TimelineScrollbar.svelte';
-	import SourcePreviewModal from './SourcePreviewModal.svelte';
+	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
@@ -143,8 +143,29 @@
 	let labelY = $derived(ROW_PAD + (multiSource ? 14 : segH / 2 + 4));
 	let sourceLabelY = $derived(ROW_PAD + 27);
 	let sourceInput = $state<HTMLInputElement>(undefined!);
-	/** Source shown full size in the preview modal; null when it's closed. */
-	let previewSource = $state<SequenceSource | null>(null);
+	/** Index into the pool of the source shown full size; null when closed.
+	 * An index rather than the source itself, so the lightbox's arrows can walk
+	 * the whole pool from wherever it was opened. */
+	let previewIndex = $state<number | null>(null);
+	/** Where the opening zoom flies from, as an offset from screen centre. */
+	let previewOrigin = $state({ x: 0, y: 0 });
+
+	function openPreview(e: MouseEvent, index: number) {
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		previewOrigin = {
+			x: rect.left + rect.width / 2 - window.innerWidth / 2,
+			y: rect.top + rect.height / 2 - window.innerHeight / 2,
+		};
+		previewIndex = index;
+	}
+
+	let previewItems = $derived(
+		sources.map((s) => ({
+			name: s.name,
+			kind: s.kind,
+			objectUrl: s.objectUrl,
+		})),
+	);
 	// Collapsed by default: a grid of chips is the tallest thing in the timeline
 	// stack and it's only needed while assigning sources. The choice is
 	// remembered, so anyone who works with it open keeps it open.
@@ -876,9 +897,9 @@
 	 */
 	function onKeydown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
-		// The preview owns the keyboard while it's up: Escape closes it there, and
-		// Delete must not reach the segments behind it.
-		if (previewSource) return;
+		// The preview owns the keyboard while it's up: it handles Escape and the
+		// arrows itself, and Delete must not reach the segments behind it.
+		if (previewIndex !== null) return;
 
 		// Outranks the boundary clipboard; falls through when nothing is selected.
 		const key = e.key.toLowerCase();
@@ -1046,13 +1067,13 @@
 								: `${src.name}. Click to preview, drag it onto a segment, or select one and click`}
 							ondragstart={(e) => startSourceDrag(e, src.id)}
 							ondragend={endSourceDrag}
-							onclick={() => {
+							onclick={(e) => {
 								// With a segment selected the click belongs to assigning, so
 								// preview is the double-click there instead.
 								if (assignable) onAssignSource?.(selectedIds, src.id);
-								else previewSource = src;
+								else openPreview(e, i);
 							}}
-							ondblclick={() => (previewSource = src)}
+							ondblclick={(e) => openPreview(e, i)}
 						>
 							{#if src.thumbUrl}
 								<img
@@ -1513,10 +1534,12 @@
 		</div>
 	{/if}
 
-	{#if previewSource}
-		<SourcePreviewModal
-			source={previewSource}
-			onClose={() => (previewSource = null)}
+	{#if previewIndex !== null}
+		<MediaLightbox
+			items={previewItems}
+			bind:index={previewIndex}
+			origin={previewOrigin}
+			onClose={() => (previewIndex = null)}
 		/>
 	{/if}
 </div>
