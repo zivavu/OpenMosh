@@ -26,7 +26,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="shortcuts-modal"
-		class:narrow={groups.length === 1}
+		style="--cols: {groups.length}"
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="header">
@@ -73,7 +73,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-		width: 640px;
+		/* One column per group, so every group sits in a single row rather than
+		   wrapping — sequence mode with the text timeline on has three. The floor
+		   keeps a lone group from collapsing to a cramped 326px; max-width still
+		   wins on small screens, where the grid falls back to wrapping. */
+		width: max(
+			420px,
+			calc(var(--cols) * 286px + (var(--cols) - 1) * 1.75rem + 2.5rem)
+		);
 		max-width: calc(100vw - 2rem);
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
@@ -82,10 +89,6 @@
 		border: 1px solid #333;
 		border-radius: 12px;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-	}
-
-	.shortcuts-modal.narrow {
-		width: 420px;
 	}
 
 	.header {
