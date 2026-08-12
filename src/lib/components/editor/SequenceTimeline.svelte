@@ -58,6 +58,8 @@
 		segments: SequenceSegment[];
 		boundaries: SegmentBoundaryController<SequenceSegment>;
 		selectedSegmentId?: string | null;
+		/** The whole selection, for toolbar actions that live outside this lane. */
+		selectedSegmentIds?: string[];
 		onSeek?: (time: number) => void;
 		onApplyPreset: (segmentIds: string[], preset: Preset) => void;
 		onRoll: (segmentIds: string[]) => void;
@@ -81,8 +83,6 @@
 		/** Segments with no explicit sourceId render as this one. */
 		primarySourceId?: string | null;
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
-		/** Deal the pool at random across the given segments. */
-		onRandomizeSources?: (segmentIds: string[]) => void;
 		onAddSources?: (files: File[]) => void;
 		onRemoveSource?: (sourceId: string) => void;
 		/** Empty the pool back to the primary source. */
@@ -95,6 +95,7 @@
 		segments: rawSegments,
 		boundaries,
 		selectedSegmentId = $bindable(null),
+		selectedSegmentIds = $bindable([]),
 		onSeek,
 		onApplyPreset,
 		onRoll,
@@ -107,7 +108,6 @@
 		sources = [],
 		primarySourceId = null,
 		onAssignSource,
-		onRandomizeSources,
 		onAddSources,
 		onRemoveSource,
 		onClearSources,
@@ -210,10 +210,13 @@
 	// ── Multi-selection ──────────────────────────────────────────────────────
 	// All selected segment ids; the bindable selectedSegmentId is the primary
 	// (last-selected) one, which Editor uses for the effects panel and loop.
-	let selectedIds = $state<string[]>([]);
+	// Held in the bindable prop so the stack toolbar — which lives outside this
+	// lane — can act on the selection too; this alias keeps the rest of the file
+	// reading as it did.
+	let selectedIds = $derived(selectedSegmentIds);
 
 	function setSelection(ids: string[]) {
-		selectedIds = ids;
+		selectedSegmentIds = ids;
 		selectedSegmentId = ids.length > 0 ? ids[ids.length - 1] : null;
 	}
 
@@ -1455,21 +1458,6 @@
 						DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
 					{/if}
 				</span>
-				<button
-					class="tl-tool-btn bin-shuffle"
-					disabled={!multiSource || segments.length === 0}
-					title={!multiSource
-						? 'Add more media to shuffle between'
-						: assignable
-							? `Deal the pool at random across the ${selectedIds.length} selected segment${selectedIds.length > 1 ? 's' : ''}`
-							: 'Deal the pool at random across every segment'}
-					onclick={() =>
-						onRandomizeSources?.(
-							assignable ? selectedIds : segments.map((s) => s.id),
-						)}
-				>
-					<Dices size={12} /> Shuffle{assignable ? ' selected' : ' all'}
-				</button>
 			</div>
 			<!-- Capped height with its own scroll: letting a few hundred chips
 			     wrap freely pushes the preview clean off the screen. -->
@@ -1649,10 +1637,6 @@
 		letter-spacing: 0.04em;
 	}
 
-	/* Pushed to the far end of the head row, away from the hint. */
-	.bin-shuffle {
-		margin-left: auto;
-	}
 
 
 

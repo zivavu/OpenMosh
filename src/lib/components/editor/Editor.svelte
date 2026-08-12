@@ -8,6 +8,7 @@
 		Maximize,
 		MicVocal,
 		Plus,
+		Shuffle,
 		Trash2,
 		Type,
 	} from 'lucide-svelte';
@@ -968,7 +969,10 @@
 		);
 	}
 
-	/** Deal the pool across the given segments — the timeline passes the whole
+	/** The timeline's whole selection, so the stack toolbar can act on it too. */
+	let seqSelectedIds = $state<string[]>([]);
+
+	/** Deal the pool across the given segments — the toolbar passes the whole
 	 * lane when nothing is selected. */
 	function randomizeSegmentSourcesFor(segIds: string[]) {
 		const pool = sequenceSources.map((s) => s.id);
@@ -2359,6 +2363,22 @@
 						</button>
 						{#if sequenceSources.length > 1}
 							<button
+								class="tl-tool-btn"
+								disabled={sequenceSegments.length === 0}
+								title={seqSelectedIds.length > 0
+									? `Deal the pool at random across the ${seqSelectedIds.length} selected segment${seqSelectedIds.length > 1 ? 's' : ''}`
+									: 'Deal the pool at random across every segment'}
+								onclick={() =>
+									randomizeSegmentSourcesFor(
+										seqSelectedIds.length > 0
+											? seqSelectedIds
+											: sequenceSegments.map((s) => s.id),
+									)}
+							>
+								<Shuffle size={11} />
+								{seqSelectedIds.length > 0 ? 'Shuffle selected' : 'Shuffle all'}
+							</button>
+							<button
 								class="tl-tool-btn danger"
 								title="Remove every added source from this song"
 								onclick={() => (showClearSourcesConfirm = true)}
@@ -2472,6 +2492,7 @@
 						boundaries={seqBoundaries}
 						onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
 						bind:selectedSegmentId
+						bind:selectedSegmentIds={seqSelectedIds}
 						onApplyPreset={seqApplyPreset}
 						onRoll={seqRoll}
 						onClear={seqClear}
@@ -2483,9 +2504,6 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
-					onRandomizeSources={isSequenceMode
-						? randomizeSegmentSourcesFor
-						: undefined}
 						onAddSources={isSequenceMode
 							? (files) => void addSequenceSources(files)
 							: undefined}
