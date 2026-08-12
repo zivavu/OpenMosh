@@ -97,7 +97,13 @@ void main() {
   } else {
     blended = mix(mainRgb, textRgb, a);
   }
-  outColor = vec4(clamp(blended, 0.0, 1.0), 1.0);
+  // Source-over coverage rather than a flat 1.0. Over the image this is still
+  // 1.0 (the frame is opaque), but this same pass runs inside a text layer's
+  // own chain — tracking and captions composite through it — where the input is
+  // the transparent drawn text. Forcing alpha there made the whole layer opaque,
+  // so compositing it back over the frame hid the image completely.
+  float outA = mainC.a + a * (1.0 - mainC.a);
+  outColor = vec4(clamp(blended, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }`;
 
 export interface PrePassDef {
