@@ -4,6 +4,7 @@ import {
   loadInitialEffects,
   type Preset,
 } from "../effects";
+import { shuffleInPlace } from "../utils";
 import { generateMosh, type MoshOptions } from "./mosh";
 import type { SegmentMoshSnapshot } from "./segment-mosh-history";
 import {
@@ -93,6 +94,42 @@ export function setSegmentsMode(
         : (intervalBeats ?? undefined),
     seed: s.seed ?? randomSeed(),
   }));
+}
+
+/**
+ * Deal the pool across the given segments at random.
+ *
+ * Dealt from a shuffled deck rather than picked independently: independent
+ * picks clump, and four segments in a row on the same clip reads as a broken
+ * shuffle. Every source is used once before any repeats, and the reshuffle
+ * never lets one repeat across the seam either.
+ *
+ * The primary source is stored as `undefined`, the same as assigning it by
+ * hand — segments without an explicit source render as the primary.
+ */
+export function randomizeSegmentSources(
+  segments: SequenceSegment[],
+  ids: Set<string>,
+  sourceIds: string[],
+  primaryId?: string | null,
+): SequenceSegment[] {
+  if (sourceIds.length === 0) return segments;
+  let deck: string[] = [];
+  let last: string | undefined;
+  const deal = (): string => {
+    if (deck.length === 0) {
+      deck = shuffleInPlace([...sourceIds]);
+      if (deck.length > 1 && deck[0] === last) {
+        [deck[0], deck[1]] = [deck[1], deck[0]];
+      }
+    }
+    last = deck.shift()!;
+    return last;
+  };
+  return mapIds(segments, ids, (s) => {
+    const id = deal();
+    return { ...s, sourceId: id === primaryId ? undefined : id };
+  });
 }
 
 export function applyTransitionChanges(

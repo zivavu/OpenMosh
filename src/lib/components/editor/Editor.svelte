@@ -71,6 +71,7 @@
 		applyTransitionChanges,
 		clearSegments,
 		fillSegmentsFromPreset,
+		randomizeSegmentSources,
 		restoreSegmentMosh,
 		rollSegments,
 		setSegmentsMode,
@@ -963,6 +964,21 @@
 				ids.has(s.id)
 					? { ...s, sourceId: sourceId === primary ? undefined : sourceId }
 					: s,
+			),
+		);
+	}
+
+	/** Deal the pool across the given segments — the timeline passes the whole
+	 * lane when nothing is selected. */
+	function randomizeSegmentSourcesFor(segIds: string[]) {
+		const pool = sequenceSources.map((s) => s.id);
+		if (pool.length < 2 || segIds.length === 0) return;
+		seqBoundaries.commit(
+			randomizeSegmentSources(
+				sequenceSegments,
+				new Set(segIds),
+				pool,
+				sourceRegistry.primaryId,
 			),
 		);
 	}
@@ -2467,6 +2483,9 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+					onRandomizeSources={isSequenceMode
+						? randomizeSegmentSourcesFor
+						: undefined}
 						onAddSources={isSequenceMode
 							? (files) => void addSequenceSources(files)
 							: undefined}
