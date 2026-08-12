@@ -116,10 +116,7 @@
 {:else}
 	<div class="clip-panel">
 		<div class="panel-head">
-			<div class="head-label">
-				<h3 class="panel-title">{lane.name}</h3>
-				<span class="clip-name" title={clip.text}>{clip.text || 'Empty clip'}</span>
-			</div>
+			<h3 class="panel-title">{lane.name}</h3>
 			{#if onClose}
 				<button
 					class="close-btn"
@@ -442,26 +439,13 @@
 		font-size: 0.75rem;
 	}
 
+	/* The lane names the panel; the clip's own text is the box below, so it is
+	   not repeated up here. */
 	.panel-head {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
-	}
-
-	/* The lane names the panel; the clip's own text sits under it so a selection
-	   made on the timeline is identifiable without reading the text box. */
-	.head-label {
-		min-width: 0;
-	}
-
-	.clip-name {
-		display: block;
-		color: #ccc;
-		font-size: 0.78rem;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
 	.close-btn {
