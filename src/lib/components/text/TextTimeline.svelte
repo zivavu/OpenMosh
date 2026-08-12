@@ -100,14 +100,20 @@
 	 * member of this list.
 	 */
 	let selectedIds = $state<string[]>([]);
-	/** Set on pointerdown when a plain click landed on an already-selected clip:
-	 * the selection has to survive until pointerup so the group can be dragged,
-	 * and only collapses if the click turns out not to be a drag. */
-	let collapseOnUp: string | null = null;
+	/** Set on pointerdown when a plain click landed on an already-selected clip.
+	 * The selection has to survive until pointerup so the clip (or the group) can
+	 * still be dragged; only a click that turns out not to be a drag resolves it —
+	 * a group collapses to the one clicked, a lone clip deselects. */
+	let clickOnUp: string | null = null;
 
 	function selectOnly(clipId: string) {
 		selectedClipId = clipId;
 		selectedIds = [clipId];
+	}
+
+	function deselect() {
+		selectedClipId = null;
+		selectedIds = [];
 	}
 
 	// Follow external changes to the primary (applying lyrics, the panel's back
@@ -199,7 +205,7 @@
 	) {
 		if (e.button !== 0) return;
 		e.stopPropagation();
-		collapseOnUp = null;
+		clickOnUp = null;
 
 		// Shift extends from the primary, ctrl/cmd toggles one. Neither starts a
 		// drag — they are selection gestures, and dragging from them would move
@@ -228,11 +234,11 @@
 			return;
 		}
 
-		// A plain click on part of the selection keeps it, so the group can be
-		// dragged; it collapses on pointerup if nothing moved.
-		if (selectedIds.length > 1 && selectedIds.includes(clipId)) {
+		// A plain click on something already selected keeps the selection, so it
+		// can be dragged; pointerup resolves it if nothing moved.
+		if (selectedIds.includes(clipId) && mode === 'move') {
 			selectedClipId = clipId;
-			collapseOnUp = clipId;
+			clickOnUp = clipId;
 		} else {
 			selectOnly(clipId);
 		}
@@ -351,7 +357,7 @@
 		if (!drag) return;
 		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
-		collapseOnUp = null;
+		clickOnUp = null;
 		onChange(
 			updateLane(timeline, laneId, (lane) => {
 				if (mode === 'move') {
@@ -382,9 +388,13 @@
 	}
 
 	function onPointerUp(e: PointerEvent) {
-		if (collapseOnUp) {
-			selectOnly(collapseOnUp);
-			collapseOnUp = null;
+		if (clickOnUp) {
+			// Clicking the one selected clip again drops the selection — the same
+			// gesture the sequence timeline gives a segment.
+			const sole = selectedIds.length === 1 && selectedIds[0] === clickOnUp;
+			if (sole) deselect();
+			else selectOnly(clickOnUp);
+			clickOnUp = null;
 		}
 		scrubbing = false;
 		if (!drag) return;
@@ -406,14 +416,13 @@
 				clips: l.clips.filter((c) => !ids.has(c.id)),
 			})),
 		});
-		selectedClipId = null;
-		selectedIds = [];
+		deselect();
 	}
 
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
 		if (e.key === 'Escape' && selectedIds.length > 0) {
-			selectedClipId = null;
+			deselect();
 			return;
 		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
