@@ -346,6 +346,25 @@
 
 	/** The picker's value: a `b`-prefixed beat count when the spacing is tied to
 	 * the beat, otherwise the raw seconds. Blank when the selection disagrees. */
+	/** True once any selected segment carries a spacing of its own to go back to. */
+	let hasInterval = $derived(
+		selectedSegments.some(
+			(s) => s.intervalSec !== undefined || s.intervalBeats !== undefined,
+		),
+	);
+
+	/**
+	 * Auto starts on a beat where one is known, a second otherwise — spacing a
+	 * re-roll to the music is the point of the mode, and either beats landing on
+	 * whatever the segment happened to inherit. Segments that were already on
+	 * Auto keep the spacing they had.
+	 */
+	function switchToAuto() {
+		if (hasInterval) onModeChange(selectedIds, 'interval');
+		else if (bpm > 0) onModeChange(selectedIds, 'interval', 60 / bpm, 1);
+		else onModeChange(selectedIds, 'interval', 1, null);
+	}
+
 	let intervalValue = $derived.by(() => {
 		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
 		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
@@ -1245,7 +1264,7 @@
 						<button
 							class="tl-tool-btn"
 							class:active={commonMode === 'interval'}
-							onclick={() => onModeChange(selectedIds, 'interval')}
+							onclick={switchToAuto}
 						>
 							Auto
 						</button>
@@ -1277,7 +1296,10 @@
 								{/each}
 							{/if}
 							{#each [0.125, 0.25, 0.5, 1, 2] as sec}
-								<option value={sec}>every {sec}s</option>
+								<!-- String, not the number: the select's value is a string, and
+								     Svelte matches an option by strict equality — a numeric
+								     option value never matches and the picker renders blank. -->
+								<option value={String(sec)}>every {sec}s</option>
 							{/each}
 						</select>
 					{/if}
