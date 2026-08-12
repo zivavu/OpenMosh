@@ -25,7 +25,7 @@
 	import {
 		DEFAULT_SETTINGS,
 		loadSettings,
-		saveSettings,
+		updateSettings,
 	} from '../../editor/settings';
 	import {
 		cloneEffectInstance,
@@ -348,7 +348,9 @@
 		audio.outputVolume;
 		audio.loopAudio;
 		videoLoop;
-		saveSettings({
+		// Merged, not replaced: settings written from outside the editor (the
+		// upload screen's mode) live under the same key.
+		updateSettings({
 			moshMin,
 			moshMax,
 			randomizeOrder,

@@ -69,10 +69,9 @@
 	}: Props = $props();
 
 	let presets: Preset[] = $state(loadPresets());
-	// Open when there's something to show — otherwise the starter presets are
-	// invisible behind a collapsed header on first run.
-	// svelte-ignore state_referenced_locally
-	let showPresets = $state(presets.length > 0);
+	// Collapsed: the count in the header says they're there, and the effect
+	// chain below is what the panel is for.
+	let showPresets = $state(false);
 	let saving = $state(false);
 	let presetName = $state('');
 
