@@ -1273,15 +1273,13 @@
 		{/snippet}
 		{#snippet effectsPanel()}
 			{#if selectedTextClip}
-				<button class="text-back-btn" onclick={() => (selectedTextClipId = null)}>
-					← Back to image effects
-				</button>
 				<TextClipPanel
 					lane={selectedTextLane}
 					clip={selectedTextClip}
 					onLaneChange={updateTextLane}
 					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
+					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile}
 					spectrumData={audio.spectrumData}
 				/>
@@ -1365,22 +1363,6 @@
 		border: 2px dashed #888;
 		border-radius: 8px;
 		pointer-events: none;
-	}
-
-	.text-back-btn {
-		width: 100%;
-		padding: 0.35rem 0.5rem;
-		border: none;
-		border-bottom: 1px solid #2a2a2a;
-		background: #161616;
-		color: #999;
-		font-size: 0.72rem;
-		text-align: left;
-		cursor: pointer;
-	}
-
-	.text-back-btn:hover {
-		color: #fff;
 	}
 
 	.drop-overlay {
