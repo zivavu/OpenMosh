@@ -296,9 +296,14 @@
 		cursor: pointer;
 	}
 
-	:global(.tl-stack .tl-tool-btn:hover) {
+	:global(.tl-stack .tl-tool-btn:hover:not(:disabled)) {
 		border-color: #555;
 		color: #fff;
+	}
+
+	:global(.tl-stack .tl-tool-btn:disabled) {
+		opacity: 0.45;
+		cursor: default;
 	}
 
 	:global(.tl-stack .tl-tool-btn.active) {

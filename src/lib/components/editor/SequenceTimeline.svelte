@@ -81,6 +81,8 @@
 		/** Segments with no explicit sourceId render as this one. */
 		primarySourceId?: string | null;
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
+		/** Deal the pool at random across the given segments. */
+		onRandomizeSources?: (segmentIds: string[]) => void;
 		onAddSources?: (files: File[]) => void;
 		onRemoveSource?: (sourceId: string) => void;
 		/** Empty the pool back to the primary source. */
@@ -105,6 +107,7 @@
 		sources = [],
 		primarySourceId = null,
 		onAssignSource,
+		onRandomizeSources,
 		onAddSources,
 		onRemoveSource,
 		onClearSources,
@@ -1452,6 +1455,21 @@
 						DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
 					{/if}
 				</span>
+				<button
+					class="tl-tool-btn bin-shuffle"
+					disabled={!multiSource || segments.length === 0}
+					title={!multiSource
+						? 'Add more media to shuffle between'
+						: assignable
+							? `Deal the pool at random across the ${selectedIds.length} selected segment${selectedIds.length > 1 ? 's' : ''}`
+							: 'Deal the pool at random across every segment'}
+					onclick={() =>
+						onRandomizeSources?.(
+							assignable ? selectedIds : segments.map((s) => s.id),
+						)}
+				>
+					<Dices size={12} /> Shuffle{assignable ? ' selected' : ' all'}
+				</button>
 			</div>
 			<!-- Capped height with its own scroll: letting a few hundred chips
 			     wrap freely pushes the preview clean off the screen. -->
@@ -1629,6 +1647,11 @@
 		font-size: 0.62rem;
 		font-family: monospace;
 		letter-spacing: 0.04em;
+	}
+
+	/* Pushed to the far end of the head row, away from the hint. */
+	.bin-shuffle {
+		margin-left: auto;
 	}
 
 
