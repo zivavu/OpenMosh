@@ -330,10 +330,17 @@
 	}
 
 	/** Empty lane space scrubs: with no ruler row of its own, every lane has to
-	 * be draggable, or a text-only timeline has nothing to seek with. */
-	function onLanePointerDown(e: PointerEvent) {
+	 * be draggable, or a text-only timeline has nothing to seek with. Ctrl/Cmd
+	 * drops a clip there instead — the same gesture the sequence timeline uses,
+	 * and a one-handed alternative to double-clicking. */
+	function onLanePointerDown(e: PointerEvent, laneId: string) {
 		if (e.button !== 0 || trackDuration <= 0) return;
 		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if (e.ctrlKey || e.metaKey) {
+			e.preventDefault();
+			addClipAt(laneId, timeAt(e.clientX));
+			return;
+		}
 		scrubbing = true;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		stack.seekTo(timeAt(e.clientX));
@@ -463,7 +470,7 @@
 				role="group"
 				aria-label="{lane.name} clips"
 				ondblclick={(e) => onTrackDblClick(e, lane.id)}
-				onpointerdown={onLanePointerDown}
+				onpointerdown={(e) => onLanePointerDown(e, lane.id)}
 				onpointermove={onPointerMove}
 				onpointerup={onPointerUp}
 				onpointercancel={onPointerUp}
