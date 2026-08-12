@@ -128,11 +128,6 @@
 				</button>
 			{/if}
 		</div>
-		<p class="note">
-			Font and placement apply to the whole lane — every clip in it
-			shares this look.
-		</p>
-
 		<textarea
 			class="text-input"
 			placeholder="Type the text for this clip"
@@ -348,10 +343,6 @@
 		</div>
 
 		<h3 class="panel-title section">Text effects</h3>
-		<p class="note">
-			These run on the text alone, before it meets the image. The lane's chain
-			position decides which image effects hit it afterwards.
-		</p>
 		{#if opaqueNames.length > 0}
 			<p class="warn">
 				{opaqueNames.join(', ')} paints its own background, so it fills the frame
@@ -478,11 +469,6 @@
 		border-top: 1px solid #2a2a2a;
 	}
 
-	.note {
-		color: #666;
-		font-size: 0.68rem;
-		line-height: 1.35;
-	}
 
 	.warn {
 		color: #d9a441;
