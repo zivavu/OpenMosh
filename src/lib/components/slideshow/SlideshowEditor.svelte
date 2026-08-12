@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import {
 		generateId,
@@ -373,6 +374,8 @@
 	}
 
 	function onConfigChange(next: SlideshowConfig) {
+		// A tempo set by hand outranks a detection still running.
+		if (next.bpm !== config.bpm) bpmEpoch++;
 		config = next;
 		if (currentTrackId) saveSegments(currentTrackId);
 	}
@@ -593,6 +596,12 @@
 				? { text: normalizeTextTimeline(saved.text) }
 				: {}),
 		};
+		if (saved.bpm !== undefined) {
+			// The song brought its own tempo back: nothing to detect, and a
+			// detection already running must not overwrite it.
+			bpmEpoch++;
+			bpmRestoredFor = trackId;
+		}
 		if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
 			audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
 		}
@@ -610,13 +619,39 @@
 	// ── BPM Detection ──
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = $state(null);
+	/** Bumped whenever the BPM is settled from elsewhere — a restored song, a
+	 * typed correction. A detection that started before that yields to it. */
+	let bpmEpoch = 0;
+	/** The track the automatic pass has already been spent on. */
+	let autoBpmFor: File | null = null;
+	/** Track id whose saved BPM came back with it, so it needs no detection. */
+	let bpmRestoredFor: string | null = null;
 
-	async function runBpmDetection() {
+	// A new track detects its own tempo: everything here is cut to the beat, and
+	// the default 120 is only right by accident.
+	$effect(() => {
+		const file = audio.trackFile;
+		if (!file) return;
+		untrack(() => {
+			if (autoBpmFor === file) return;
+			autoBpmFor = file;
+			// A song reopened from the library brings its own BPM back.
+			if (currentTrackId && bpmRestoredFor === currentTrackId) return;
+			void runBpmDetection(true);
+		});
+	});
+
+	async function runBpmDetection(auto = false) {
 		if (!audio.trackFile || bpmDetecting) return;
+		const file = audio.trackFile;
+		const epoch = bpmEpoch;
 		bpmDetecting = true;
 		bpmDetectAbort = new AbortController();
 		try {
-			const result = await detectBpm(audio.trackFile, bpmDetectAbort.signal);
+			const result = await detectBpm(file, bpmDetectAbort.signal);
+			// The automatic pass never overrules what landed while it ran: a
+			// restore, or a number the user typed themselves.
+			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			config = { ...config, bpm: result.bpm, beatOffset: result.offset };
 		} catch (e) {
 			if (!(e instanceof DOMException && e.name === 'AbortError')) {

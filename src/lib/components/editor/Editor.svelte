@@ -441,6 +441,9 @@
 		audio.clearTrack();
 		currentTrackId = null;
 		sizeRestoredFromTrack = false;
+		// Belongs to the song that just left; whatever arrives next restores or
+		// detects its own.
+		sequenceBpm = 0;
 	}
 
 	/**
@@ -466,7 +469,7 @@
 		if (savedSeq === null) return false;
 		if (isSequenceMode) {
 			sequenceSegments = savedSeq.segments ?? [];
-			sequenceBpm = savedSeq.bpm ?? 0;
+			restoreSequenceBpm(savedSeq.bpm ?? 0);
 			selectedSegmentId = null;
 		}
 		restoreTextTimeline(savedSeq.text);
@@ -659,11 +662,19 @@
 		if (saved === null) return;
 		if (isSequenceMode) {
 			sequenceSegments = saved.segments ?? [];
-			sequenceBpm = saved.bpm ?? 0;
+			restoreSequenceBpm(saved.bpm ?? 0);
 			selectedSegmentId = null;
 		}
 		restoreTextTimeline(saved.text);
 	});
+
+	/** A restored BPM wins over any detection already in flight — the segments
+	 * were built against it, so re-deriving it would retime them. Restoring
+	 * nothing leaves the detection to land. */
+	function restoreSequenceBpm(bpm: number) {
+		if (bpm > 0) bpmEpoch++;
+		sequenceBpm = bpm;
+	}
 
 	// Persist the sequence timeline per library track (deep read via snapshot,
 	// so segment/effect edits are captured too). Skipped while playing: static
@@ -1311,13 +1322,37 @@
 	// AUTO segments' re-roll spacing rather than a slide clock.
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = null;
+	/** Bumped whenever the BPM is settled from elsewhere — a restored song, a
+	 * typed correction. A detection that started before that yields to it. */
+	let bpmEpoch = 0;
+	/** The track the automatic pass has already been spent on. */
+	let autoBpmFor: File | null = null;
 
-	async function runSequenceBpmDetection() {
+	// A new track detects its own tempo: the segment timing this feeds is
+	// unusable until the BPM is right, so it shouldn't wait to be asked.
+	$effect(() => {
+		const file = audio.trackFile;
+		if (!isSequenceMode || !file) return;
+		untrack(() => {
+			if (autoBpmFor === file) return;
+			autoBpmFor = file;
+			// A song reopened from the library brings its own BPM back.
+			if (sequenceBpm > 0) return;
+			void runSequenceBpmDetection(true);
+		});
+	});
+
+	async function runSequenceBpmDetection(auto = false) {
 		if (!audio.trackFile || bpmDetecting) return;
+		const file = audio.trackFile;
+		const epoch = bpmEpoch;
 		bpmDetecting = true;
 		bpmDetectAbort = new AbortController();
 		try {
-			const result = await detectBpm(audio.trackFile, bpmDetectAbort.signal);
+			const result = await detectBpm(file, bpmDetectAbort.signal);
+			// The automatic pass never overrules what landed while it ran: a
+			// restore, or a number the user typed themselves.
+			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			setSequenceBpm(Math.round(result.bpm));
 		} catch (e) {
 			if (!(e instanceof DOMException && e.name === 'AbortError')) {
@@ -1336,6 +1371,7 @@
 
 	/** Correcting the BPM retimes every segment whose spacing was set in beats. */
 	function setSequenceBpm(bpm: number) {
+		bpmEpoch++;
 		sequenceBpm = bpm;
 		const retimed = applyBpmToSegments(sequenceSegments, bpm);
 		if (retimed !== sequenceSegments) seqBoundaries.commit(retimed);
