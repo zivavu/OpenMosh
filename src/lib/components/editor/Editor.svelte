@@ -14,7 +14,6 @@
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
-	import { DEFAULT_AUTO_RANGE_AMOUNT } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
@@ -22,7 +21,11 @@
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
-	import { loadSettings, saveSettings } from '../../editor/settings';
+	import {
+		DEFAULT_SETTINGS,
+		loadSettings,
+		saveSettings,
+	} from '../../editor/settings';
 	import {
 		cloneEffectInstance,
 		getDefinition,
@@ -259,17 +262,20 @@
 	let effects: EffectInstance[] = $state(loadInitialEffects());
 
 	const saved = loadSettings();
-	let moshMin = $state(saved.moshMin ?? 3);
-	let moshMax = $state(saved.moshMax ?? 6);
-	let randomizeOrder = $state(saved.randomizeOrder ?? true);
+	let moshMin = $state(saved.moshMin ?? DEFAULT_SETTINGS.moshMin);
+	let moshMax = $state(saved.moshMax ?? DEFAULT_SETTINGS.moshMax);
+	let randomizeOrder = $state(saved.randomizeOrder ?? DEFAULT_SETTINGS.randomizeOrder);
 	let showMoshSettings = $state(false);
-	let moshAudioLink = $state(saved.moshAudioLink ?? true);
-	let moshAudioLinkStrength = $state(saved.moshAudioLinkStrength ?? 0.8);
-	let autoRangeAmount = $state(saved.autoRangeAmount ?? DEFAULT_AUTO_RANGE_AMOUNT);
-	let showFps = $state(saved.showFps ?? false);
-	let videoLoop = $state(saved.loopVideo ?? true);
-	// Only bites with a mixed media pool; "contain" never crops the user's media.
-	let sourceFit = $state<SourceFit>(saved.sourceFit ?? 'contain');
+	let moshAudioLink = $state(saved.moshAudioLink ?? DEFAULT_SETTINGS.moshAudioLink);
+	let moshAudioLinkStrength = $state(
+		saved.moshAudioLinkStrength ?? DEFAULT_SETTINGS.moshAudioLinkStrength,
+	);
+	let autoRangeAmount = $state(
+		saved.autoRangeAmount ?? DEFAULT_SETTINGS.autoRangeAmount,
+	);
+	let showFps = $state(saved.showFps ?? DEFAULT_SETTINGS.showFps);
+	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
+	let sourceFit = $state<SourceFit>(saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit);
 	$effect(() => {
 		glRenderer?.setSourceFit(sourceFit);
 	});
@@ -287,8 +293,8 @@
 	const audio = new AudioManager({
 		getEffects: () => renderedEffects,
 		getAutoRangeAmount: () => autoRangeAmount,
-		initialOutputVolume: saved.outputVolume ?? 1,
-		initialLoop: saved.loopAudio ?? false,
+		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
+		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,
 	});
 
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.

@@ -1,3 +1,5 @@
+import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
+
 const SETTINGS_KEY = "openmosh-settings";
 
 export interface EditorSettings {
@@ -15,6 +17,22 @@ export interface EditorSettings {
 	/** How sequence sources that don't match the output aspect are fitted. */
 	sourceFit: "stretch" | "contain" | "cover";
 }
+
+/** What a fresh editor starts from, and what double-clicking a control restores. */
+export const DEFAULT_SETTINGS: EditorSettings = {
+	moshMin: 3,
+	moshMax: 6,
+	randomizeOrder: true,
+	moshAudioLink: true,
+	moshAudioLinkStrength: 0.8,
+	autoRangeAmount: DEFAULT_AUTO_RANGE_AMOUNT,
+	showFps: false,
+	outputVolume: 1,
+	loopAudio: false,
+	loopVideo: true,
+	// Only bites with a mixed media pool; "contain" never crops the user's media.
+	sourceFit: "contain",
+};
 
 export function loadSettings(): Partial<EditorSettings> {
 	try {

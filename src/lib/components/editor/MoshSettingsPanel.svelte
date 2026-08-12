@@ -1,5 +1,6 @@
 <script lang="ts">
    import { CircleQuestionMark, HelpCircle } from "lucide-svelte";
+   import { DEFAULT_SETTINGS } from "../../editor/settings";
    import BpmControl from "../ui/BpmControl.svelte";
    import RangeSlider from "../ui/RangeSlider.svelte";
 
@@ -39,6 +40,18 @@
       onDetectBpm,
       onBpmChange,
    }: Props = $props();
+
+   /**
+    * Double-clicking a row — its label, its slider, its checkbox — puts that
+    * setting back to its default. Bound on the row rather than the control so
+    * the label works too; text fields keep double-click-to-select-a-word.
+    */
+   function resetRow(e: MouseEvent, reset: () => void) {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("button, input[type='number'], input[type='text'], textarea"))
+         return;
+      reset();
+   }
 </script>
 
 <svelte:window
@@ -70,7 +83,16 @@
    {:else}
       <h3 class="panel-title">Mosh settings</h3>
    {/if}
-   <div class="config-row">
+   <!-- svelte-ignore a11y_no_static_element_interactions -->
+   <div
+      class="config-row"
+      title="Double-click to reset"
+      ondblclick={(e) =>
+         resetRow(e, () => {
+            moshMin = DEFAULT_SETTINGS.moshMin;
+            if (moshMax < moshMin) moshMax = moshMin;
+         })}
+   >
       <label for="mosh-min">Min effects</label>
       <RangeSlider
          id="mosh-min"
@@ -84,7 +106,16 @@
       />
       <span class="val">{moshMin}</span>
    </div>
-   <div class="config-row">
+   <!-- svelte-ignore a11y_no_static_element_interactions -->
+   <div
+      class="config-row"
+      title="Double-click to reset"
+      ondblclick={(e) =>
+         resetRow(e, () => {
+            moshMax = DEFAULT_SETTINGS.moshMax;
+            if (moshMin > moshMax) moshMin = moshMax;
+         })}
+   >
       <label for="mosh-max">Max effects</label>
       <RangeSlider
          id="mosh-max"
@@ -98,12 +129,24 @@
       />
       <span class="val">{moshMax}</span>
    </div>
-   <div class="config-row">
+   <!-- svelte-ignore a11y_no_static_element_interactions -->
+   <div
+      class="config-row"
+      title="Double-click to reset"
+      ondblclick={(e) =>
+         resetRow(e, () => (randomizeOrder = DEFAULT_SETTINGS.randomizeOrder))}
+   >
       <label for="mosh-shuffle">Shuffle effects order</label>
       <input id="mosh-shuffle" type="checkbox" bind:checked={randomizeOrder} />
    </div>
    {#if hasAudio}
-      <div class="config-row">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+         class="config-row"
+         title="Double-click to reset"
+         ondblclick={(e) =>
+            resetRow(e, () => (moshAudioLink = DEFAULT_SETTINGS.moshAudioLink))}
+      >
          <label for="mosh-audio-link">Random audio links</label>
          <input
             id="mosh-audio-link"
@@ -113,7 +156,17 @@
       </div>
    {/if}
    {#if hasAudio && moshAudioLink}
-      <div class="config-row">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+         class="config-row"
+         title="Double-click to reset"
+         ondblclick={(e) =>
+            resetRow(
+               e,
+               () =>
+                  (moshAudioLinkStrength = DEFAULT_SETTINGS.moshAudioLinkStrength),
+            )}
+      >
          <label for="mosh-audio-link-strength">Links strength</label>
          <RangeSlider
             id="mosh-audio-link-strength"
@@ -127,7 +180,13 @@
    {/if}
    <!-- Not gated on moshAudioLink: this shapes every link, hand-made ones too. -->
    {#if hasAudio}
-      <div class="config-row auto-range-row">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+         class="config-row auto-range-row"
+         title="Double-click to reset"
+         ondblclick={(e) =>
+            resetRow(e, () => (autoRangeAmount = DEFAULT_SETTINGS.autoRangeAmount))}
+      >
          <label for="auto-range-amount">Auto-range</label>
          <button
             bind:this={helpBtnEl}
@@ -202,6 +261,9 @@
       min-width: 80px;
       color: #999;
       font-size: 0.75rem;
+      /* The row's double-click resets the setting; without this it also
+         selects the label text. */
+      user-select: none;
    }
 
    .config-row input[type="checkbox"] {
