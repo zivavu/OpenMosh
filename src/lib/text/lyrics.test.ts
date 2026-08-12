@@ -58,12 +58,10 @@ describe("createLyricsClips", () => {
     expect(clips[clips.length - 1].end).toBe(10);
   });
 
-  it("re-times a matching line in place, keeping its id and effects", () => {
+  it("re-times a matching line in place, keeping its id", () => {
     const first = createLyricsClips(["a", "b"], [1, 3], 10);
-    first[1].effects = [{ instanceId: "fx-1" } as never];
     const again = createLyricsClips(["a", "b"], [1, 4], 10, first);
     expect(again[1].id).toBe(first[1].id);
-    expect(again[1].effects).toEqual(first[1].effects);
     expect(again[1].start).toBe(4);
   });
 

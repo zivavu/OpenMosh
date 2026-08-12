@@ -38,7 +38,7 @@ export function resolveTextLayersAt(
       chainIndex: lane.chainIndex,
       text: clip.text,
       style: lane.style,
-      effects: clip.effects,
+      effects: lane.effects,
     });
   }
   return layers;
@@ -51,9 +51,7 @@ export function allTextEffectIds(
   if (!timeline) return [];
   const ids: string[] = [];
   for (const lane of timeline.lanes) {
-    for (const clip of lane.clips) {
-      for (const eff of clip.effects) ids.push(eff.instanceId);
-    }
+    for (const eff of lane.effects) ids.push(eff.instanceId);
   }
   return ids;
 }
