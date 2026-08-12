@@ -86,26 +86,29 @@
 		onClipChange({ ...clip, text });
 	}
 
-	// EffectsPanel owns its array (it mutates and reassigns), so the clip's chain
+	// EffectsPanel owns its array (it mutates and reassigns), so the lane's chain
 	// is mirrored into local state and written back on every edit. Keyed on the
-	// clip id so switching selection reloads rather than cross-contaminates.
-	let clipEffects = $state<EffectInstance[]>([]);
-	let loadedClipId = $state<string | null>(null);
+	// lane id so switching lanes reloads rather than cross-contaminates.
+	let laneEffects = $state<EffectInstance[]>([]);
+	let loadedLaneId = $state<string | null>(null);
 
 	$effect(() => {
-		const id = clip?.id ?? null;
-		if (id === untrack(() => loadedClipId)) return;
-		loadedClipId = id;
-		clipEffects = clip ? [...clip.effects] : [];
+		const id = lane?.id ?? null;
+		if (id === untrack(() => loadedLaneId)) return;
+		loadedLaneId = id;
+		laneEffects = lane ? [...lane.effects] : [];
 	});
 
 	function commitEffects() {
-		if (!clip) return;
-		onClipChange({ ...clip, effects: $state.snapshot(clipEffects) as EffectInstance[] });
+		if (!lane) return;
+		onLaneChange({
+			...lane,
+			effects: $state.snapshot(laneEffects) as EffectInstance[],
+		});
 	}
 
 	let opaqueNames = $derived(
-		clipEffects
+		laneEffects
 			.filter((e) => e.enabled && OPAQUE_OUTPUT_EFFECTS.has(e.defId))
 			.map((e) => e.defId),
 	);
@@ -350,7 +353,7 @@
 			</p>
 		{/if}
 		<EffectsPanel
-			bind:effects={clipEffects}
+			bind:effects={laneEffects}
 			{hasTrack}
 			{spectrumData}
 			{onVolumeLinkChange}

@@ -440,12 +440,10 @@
                l.enabled,
                l.chainIndex,
                JSON.stringify(l.style),
-               ...l.clips.map(
-                  (c) =>
-                     `${c.id}:${c.start}:${c.end}:${c.text}:${c.effects
-                        .map((e) => `${e.defId}${e.enabled}${JSON.stringify(e.values)}`)
-                        .join(",")}`,
-               ),
+               l.effects
+                  .map((e) => `${e.defId}${e.enabled}${JSON.stringify(e.values)}`)
+                  .join(","),
+               ...l.clips.map((c) => `${c.id}:${c.start}:${c.end}:${c.text}`),
             ].join("|"),
          )
          .join(";");

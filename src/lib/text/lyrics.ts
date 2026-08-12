@@ -24,8 +24,8 @@ export const LYRICS_STYLE = { x: 0.5, y: 0.85, size: 0.075 } as const;
  * behind their predecessor, and a lane's clips must never overlap.
  *
  * `previous` is the lane's current clips. A line whose text is unchanged is
- * re-timed in place rather than replaced, so re-syncing one bad line leaves the
- * effect chains on every other line alone.
+ * re-timed in place rather than replaced, so its id survives a re-sync and
+ * anything keyed on it stays put.
  */
 export function createLyricsClips(
   lines: string[],

@@ -27,15 +27,13 @@ export interface TextStyle {
   blendMode: TextOverlayBlendMode;
 }
 
-/** One span of text on a lane, with its own effect chain. */
+/** One span of text on a lane. */
 export interface TextClip {
   id: string;
   /** Seconds on the mode's master timeline. */
   start: number;
   end: number;
   text: string;
-  /** Applied to this clip's text layer alone, before it meets the image. */
-  effects: EffectInstance[];
 }
 
 /**
@@ -54,6 +52,9 @@ export interface TextLane {
   chainIndex: number;
   /** Shared by every clip in the lane. */
   style: TextStyle;
+  /** Run on the lane's text alone, before it meets the image. Shared by every
+   * clip in the lane, like the style is. */
+  effects: EffectInstance[];
   clips: TextClip[];
 }
 
@@ -85,7 +86,7 @@ function nextId(prefix: string): string {
 }
 
 export function createTextClip(start: number, end: number, text = ""): TextClip {
-  return { id: nextId("clip"), start, end, text, effects: [] };
+  return { id: nextId("clip"), start, end, text };
 }
 
 export function createTextLane(
@@ -99,6 +100,7 @@ export function createTextLane(
     enabled: true,
     chainIndex,
     style: { ...style },
+    effects: [],
     clips: [],
   };
 }
@@ -129,6 +131,11 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
       const legacyStyle = (clips as Array<{ style?: TextStyle }>).find(
         (c) => c.style,
       )?.style;
+      // Same for the effect chain, which was per clip until it followed the
+      // style up to the lane. The first chain found wins; the rest are dropped.
+      const legacyEffects = (
+        clips as Array<{ effects?: EffectInstance[] }>
+      ).find((c) => Array.isArray(c.effects) && c.effects.length > 0)?.effects;
       return {
         id: lane.id ?? nextId("lane"),
         name: lane.name ?? `Text ${i + 1}`,
@@ -138,12 +145,14 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
             ? lane.chainIndex
             : Number.MAX_SAFE_INTEGER,
         style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
+        effects: Array.isArray(lane.effects)
+          ? lane.effects
+          : (legacyEffects ?? []),
         clips: clips.map((clip) => ({
           id: clip.id ?? nextId("clip"),
           start: clip.start ?? 0,
           end: clip.end ?? 0,
           text: clip.text ?? "",
-          effects: Array.isArray(clip.effects) ? clip.effects : [],
         })),
       };
     }),
