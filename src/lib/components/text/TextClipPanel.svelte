@@ -379,6 +379,13 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding: 0.75rem;
+		/* Takes the sidebar's leftover height and scrolls as one region — the
+		   fields and the nested chain together. The chain used to scroll on its
+		   own, which left the sidebar with no scrollbar at all when this panel
+		   replaced it, and the lower rows simply ran off the bottom. */
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 		/* Matches the effects panel this replaces. Without a width the sidebar is
 		   sized by this panel's content, and the help text alone is a single
 		   unbroken max-content line — enough to stretch the sidebar across the
@@ -395,11 +402,38 @@
 		}
 	}
 
-	/* The nested chain panel pins itself to the full sidebar width; inside this
-	   panel's padding there is less room, so let it take what is left. */
-	.clip-panel :global(.effects-panel) {
-		width: 100%;
-		max-width: 100%;
+	/* Nothing shrinks: children keep their natural height and the panel scrolls. */
+	.clip-panel > :global(*) {
+		flex-shrink: 0;
+	}
+
+	.clip-panel::-webkit-scrollbar {
+		width: 4px;
+	}
+
+	.clip-panel::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.clip-panel::-webkit-scrollbar-thumb {
+		background: #333;
+		border-radius: 2px;
+	}
+
+	.clip-panel::-webkit-scrollbar-thumb:hover {
+		background: #555;
+	}
+
+	/* The nested chain carries the same padding as it does in the sidebar, so it
+	   goes full-bleed here — inside this panel's padding too it sat in a double
+	   inset, reading as a sunken box rather than a continuation of the panel. */
+	.clip-panel :global(aside.effects-panel) {
+		/* Its own `flex: 1` is for owning the sidebar's height; here the scroll
+		   belongs to this panel, so it takes its content height instead. */
+		flex: 0 0 auto;
+		width: auto;
+		max-width: none;
+		margin: 0 -0.75rem -0.75rem;
 	}
 
 	.empty {
