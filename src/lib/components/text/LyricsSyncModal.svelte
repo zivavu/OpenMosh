@@ -9,7 +9,11 @@
 	} from "lucide-svelte";
 	import { untrack } from "svelte";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
-	import { createLyricsClips, type TextClip } from "../../text";
+	import {
+		createLyricsClips,
+		MIN_CLIP_LENGTH,
+		type TextClip,
+	} from "../../text";
 
 	/** The lyrics lane's current contents, as the modal reads them. */
 	export interface LyricsDraft {
@@ -153,10 +157,25 @@
 		onPlay();
 	}
 
+	/**
+	 * The earliest a line may be marked: clear of the line above it. Lines are
+	 * applied in order and never overlap, so a mark placed behind its
+	 * predecessor would be silently pushed forward on apply — the list would
+	 * stop matching the timeline. Held here instead, where it is visible.
+	 */
+	function earliestFor(i: number): number {
+		for (let k = i - 1; k >= 0; k--) {
+			const t = timings[k];
+			if (t != null) return t + MIN_CLIP_LENGTH;
+		}
+		return spanStart;
+	}
+
 	function stamp() {
 		if (activeIndex >= lines.length) return;
 		const t = getCurrentTime ? getCurrentTime() : currentTime;
-		timings[activeIndex] = Math.min(spanEnd, Math.max(spanStart, t));
+		const floor = earliestFor(activeIndex);
+		timings[activeIndex] = Math.min(spanEnd, Math.max(floor, t));
 		applied = false;
 		if (activeIndex + 1 >= lines.length) onPause();
 	}
@@ -170,14 +189,18 @@
 		onSeek(Math.max(spanStart, prev));
 	}
 
-	/** Re-time from line `i`: everything from there on is cleared and the
-	 * playhead jumps back ahead of that line's spot. */
+	/**
+	 * Re-time from line `i`: everything from there on is cleared and the playhead
+	 * jumps back ahead of that line's spot. The lead-in never reaches past the
+	 * line above — rewinding behind a line that keeps its timing only invites a
+	 * mark that can't be honoured.
+	 */
 	function retimeFrom(i: number) {
 		if (i < 0 || i >= lines.length) return;
 		const anchor = timings[i] ?? timings[i - 1] ?? spanStart;
 		for (let k = i; k < timings.length; k++) timings[k] = null;
 		applied = false;
-		onSeek(Math.max(spanStart, anchor - LEAD_IN));
+		onSeek(Math.max(spanStart, earliestFor(i), anchor - LEAD_IN));
 	}
 
 	function shiftAll(delta: number) {

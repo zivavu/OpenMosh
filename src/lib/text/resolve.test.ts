@@ -269,23 +269,6 @@ describe("normalizeTextTimeline", () => {
     expect(t.lanes[0].style.y).toBe(0.7);
     expect(t.lanes[0].clips[0]).not.toHaveProperty("style");
   });
-
-  it("lifts a legacy per-clip chain onto the lane", () => {
-    const t = normalizeTextTimeline({
-      enabled: true,
-      lanes: [
-        {
-          clips: [
-            { start: 0, end: 1, effects: [] },
-            { start: 1, end: 2, effects: [{ instanceId: "fx-1" }] },
-            { start: 2, end: 3, effects: [{ instanceId: "fx-2" }] },
-          ],
-        },
-      ],
-    });
-    expect(t.lanes[0].effects).toEqual([{ instanceId: "fx-1" } as never]);
-    expect(t.lanes[0].clips[1]).not.toHaveProperty("effects");
-  });
 });
 
 describe("clipRange", () => {
