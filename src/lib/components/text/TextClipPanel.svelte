@@ -3,7 +3,13 @@
 	import type { EffectInstance, VolumeLink } from '../../effects';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
 	import { ensureFontLoaded, FONT_OPTIONS } from '../../text-overlay';
-	import type { TextAlign, TextClip, TextLane, TextStyle } from '../../text';
+	import {
+		DEFAULT_TEXT_STYLE,
+		type TextAlign,
+		type TextClip,
+		type TextLane,
+		type TextStyle,
+	} from '../../text';
 	import type { SpectrumData } from '../../types';
 	import ColorPicker from '../ui/ColorPicker.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
@@ -57,6 +63,19 @@
 		onLaneChange({ ...lane, style: { ...lane.style, [key]: value } });
 	}
 
+	/**
+	 * Double-clicking a row — its label, its slider, its checkbox, its swatch —
+	 * puts that style back to the default. Bound on the row rather than the
+	 * control so it also reaches a native select, whose open popup swallows the
+	 * second click. Text fields and the open colour picker are left alone, so
+	 * double-click-to-select-a-word and picking a preset still work.
+	 */
+	function resetStyle(e: MouseEvent, key: keyof TextStyle) {
+		const t = e.target as HTMLElement | null;
+		if (t?.closest('input[type="text"], textarea, .picker')) return;
+		setStyle(key, DEFAULT_TEXT_STYLE[key]);
+	}
+
 	function setText(text: string) {
 		if (!clip) return;
 		onBeforeEdit?.(`text-body-${clip.id}`);
@@ -105,7 +124,15 @@
 			oninput={(e) => setText((e.currentTarget as HTMLTextAreaElement).value)}
 		></textarea>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => {
+				void ensureFontLoaded(DEFAULT_TEXT_STYLE.fontFamily);
+				resetStyle(e, 'fontFamily');
+			}}
+		>
 			<label for="tc-font">Font</label>
 			<select
 				id="tc-font"
@@ -122,7 +149,12 @@
 			</select>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'size')}
+		>
 			<label for="tc-size">Size</label>
 			<RangeSlider
 				id="tc-size"
@@ -135,7 +167,12 @@
 			<span class="val">{Math.round(lane.style.size * 100)}%</span>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'align')}
+		>
 			<label for="tc-align">Align</label>
 			<select
 				id="tc-align"
@@ -152,7 +189,12 @@
 			</select>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'x')}
+		>
 			<label for="tc-x">Position X</label>
 			<RangeSlider
 				id="tc-x"
@@ -165,7 +207,12 @@
 			<span class="val">{Math.round(lane.style.x * 100)}</span>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'y')}
+		>
 			<label for="tc-y">Position Y</label>
 			<RangeSlider
 				id="tc-y"
@@ -178,7 +225,12 @@
 			<span class="val">{Math.round(lane.style.y * 100)}</span>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'color')}
+		>
 			<label for="tc-color">Color</label>
 			<ColorPicker
 				id="tc-color"
@@ -188,7 +240,12 @@
 			/>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'outline')}
+		>
 			<label for="tc-outline">Outline</label>
 			<input
 				id="tc-outline"
@@ -200,7 +257,12 @@
 		</div>
 
 		{#if lane.style.outline}
-			<div class="row">
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="row"
+				title="Double-click to reset"
+				ondblclick={(e) => resetStyle(e, 'outlineColor')}
+			>
 				<label for="tc-outline-color">Outline color</label>
 				<ColorPicker
 					id="tc-outline-color"
@@ -209,7 +271,12 @@
 					onChange={(hex) => setStyle('outlineColor', hex)}
 				/>
 			</div>
-			<div class="row">
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="row"
+				title="Double-click to reset"
+				ondblclick={(e) => resetStyle(e, 'outlineWidth')}
+			>
 				<label for="tc-outline-w">Outline width</label>
 				<RangeSlider
 					id="tc-outline-w"
@@ -223,7 +290,12 @@
 			</div>
 		{/if}
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'opacity')}
+		>
 			<label for="tc-opacity">Opacity</label>
 			<RangeSlider
 				id="tc-opacity"
@@ -236,7 +308,12 @@
 			<span class="val">{Math.round(lane.style.opacity * 100)}%</span>
 		</div>
 
-		<div class="row">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Double-click to reset"
+			ondblclick={(e) => resetStyle(e, 'blendMode')}
+		>
 			<label for="tc-blend">Blend</label>
 			<select
 				id="tc-blend"
@@ -366,6 +443,9 @@
 		min-width: 84px;
 		color: #999;
 		font-size: 0.75rem;
+		/* The row's double-click resets the style; without this it also selects
+		   the label text. */
+		user-select: none;
 	}
 
 	.row select {
