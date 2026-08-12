@@ -15,6 +15,12 @@ import {
 	listSavedSequences,
 	type SavedSequence,
 } from "../../editor/saved-sequences";
+import {
+	DEFAULT_SETTINGS,
+	loadSettings,
+	updateSettings,
+	type UploadMode,
+} from "../../editor/settings";
 
 let {
 	onfile,
@@ -31,8 +37,16 @@ $effect(() => {
 	void listSavedSequences().then((list) => (savedSequences = list));
 });
 
-type Mode = "single" | "sequence" | "slideshow";
-let selectedMode: Mode = $state("single");
+// Opens on whichever mode was last launched: coming back for a second pass at
+// the same kind of edit is the common case.
+let selectedMode: UploadMode = $state(
+	loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode,
+);
+
+function setMode(mode: UploadMode) {
+	selectedMode = mode;
+	updateSettings({ lastMode: mode });
+}
 /** Modes that take a whole set of media rather than one file. */
 let isMultiMode = $derived(selectedMode !== "single");
 let dragging = $state(false);
@@ -226,9 +240,7 @@ function onAudioDrop(e: DragEvent) {
 			<button
 				class="mode-btn"
 				class:active={selectedMode === m.value}
-				onclick={() => {
-					selectedMode = m.value;
-				}}
+				onclick={() => setMode(m.value)}
 			>
 				{m.label}
 			</button>
@@ -298,7 +310,11 @@ function onAudioDrop(e: DragEvent) {
 					<button
 						class="saved-item"
 						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? '' : 's'}`}
-						onclick={() => onSequenceFromSong(seq.trackId)}
+						onclick={() => {
+						// Reopening a song is entering sequence mode too.
+						updateSettings({ lastMode: 'sequence' });
+						onSequenceFromSong(seq.trackId);
+					}}
 					>
 						<ListVideo size={13} />
 						<span class="saved-name">{seq.trackName}</span>

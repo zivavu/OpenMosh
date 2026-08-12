@@ -141,6 +141,18 @@
 		writeFlag(HINT_KEY, true);
 	}
 
+	// The media bin's own hint, retired the first time a source actually lands
+	// on a segment: having done it once, reading how to do it is just noise.
+	const BIN_HINT_KEY = 'openmosh-seq-bin-hint-dismissed';
+	let binHintDone = $state(readFlag(BIN_HINT_KEY, false));
+
+	function assignSources(segmentIds: string[], sourceId: string) {
+		onAssignSource?.(segmentIds, sourceId);
+		if (binHintDone) return;
+		binHintDone = true;
+		writeFlag(BIN_HINT_KEY, true);
+	}
+
 	let hasMediaBin = $derived(!!onAddSources);
 	let multiSource = $derived(sources.length > 1);
 	const segH = SEG_H;
@@ -341,7 +353,7 @@
 		const sourceId = dragSourceId;
 		const targets = dropTargetIds;
 		endSourceDrag();
-		if (targets.length > 0) onAssignSource?.(targets, sourceId);
+		if (targets.length > 0) assignSources(targets, sourceId);
 	}
 	let commonIntervalSec = $derived(
 		commonValue(selectedSegments.map((s) => s.intervalSec ?? 0.25)),
@@ -1446,19 +1458,21 @@
 	{#if hasMediaBin && binOpen}
 		{@const assignable = selectedIds.length > 0}
 		<div class="media-bin tl-chrome">
-			<div class="media-bin-head">
-				<span class="media-bin-hint">
-					{#if dragSourceId}
-						DROP ON A SEGMENT
-					{:else if assignable}
-						CLICK OR DRAG ONTO {selectedIds.length > 1
-							? `${selectedIds.length} SEGMENTS`
-							: 'A SEGMENT'}
-					{:else}
-						DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
-					{/if}
-				</span>
-			</div>
+			{#if !binHintDone || dragSourceId}
+				<div class="media-bin-head">
+					<span class="media-bin-hint">
+						{#if dragSourceId}
+							DROP ON A SEGMENT
+						{:else if assignable}
+							CLICK OR DRAG ONTO {selectedIds.length > 1
+								? `${selectedIds.length} SEGMENTS`
+								: 'A SEGMENT'}
+						{:else}
+							DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
+						{/if}
+					</span>
+				</div>
+			{/if}
 			<!-- Capped height with its own scroll: letting a few hundred chips
 			     wrap freely pushes the preview clean off the screen. -->
 			<div
@@ -1484,7 +1498,7 @@
 							onclick={(e) => {
 								// With a segment selected the click belongs to assigning, so
 								// preview is the double-click there instead.
-								if (assignable) onAssignSource?.(selectedIds, src.id);
+								if (assignable) assignSources(selectedIds, src.id);
 								else openPreview(e, i);
 							}}
 							ondblclick={(e) => openPreview(e, i)}

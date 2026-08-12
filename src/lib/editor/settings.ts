@@ -2,7 +2,12 @@ import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
 
 const SETTINGS_KEY = "openmosh-settings";
 
+/** The three ways in from the upload screen. */
+export type UploadMode = "single" | "sequence" | "slideshow";
+
 export interface EditorSettings {
+	/** Which mode the app was last launched in, so it opens on it again. */
+	lastMode: UploadMode;
 	moshMin: number;
 	moshMax: number;
 	randomizeOrder: boolean;
@@ -20,6 +25,7 @@ export interface EditorSettings {
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
 export const DEFAULT_SETTINGS: EditorSettings = {
+	lastMode: "single",
 	moshMin: 3,
 	moshMax: 6,
 	randomizeOrder: true,
@@ -40,10 +46,6 @@ export function loadSettings(): Partial<EditorSettings> {
 		if (raw) return JSON.parse(raw);
 	} catch {}
 	return {};
-}
-
-export function saveSettings(settings: EditorSettings) {
-	localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 /** Merge a partial update into the stored settings without clobbering the rest. */

@@ -106,6 +106,14 @@
 		return frac * trackDuration;
 	}
 
+	// The handles are hit-tested by proximity and drawn with pointer-events off,
+	// so :hover can't reach them — which handle is live is tracked here instead.
+	let hoverHandle = $state<'start' | 'end' | null>(null);
+	let dragHandle = $state<'start' | 'end' | null>(null);
+	/** The handle to light up: the dragged one wins, since the pointer wanders
+	 * off the grab zone once a drag is under way. */
+	let liveHandle = $derived(dragHandle ?? hoverHandle);
+
 	function handleFromClientX(clientX: number): 'start' | 'end' | null {
 		if (!timelineTrackEl || trackDuration === 0) return null;
 		const rect = timelineTrackEl.getBoundingClientRect();
@@ -150,6 +158,7 @@
 
 	function beginHandleDrag(initialHandle: 'start' | 'end', startClientX: number) {
 		let handle: 'start' | 'end' = initialHandle;
+		dragHandle = handle;
 		function applyPosition(clientX: number) {
 			const t = timeFromClientX(clientX);
 			if (handle === 'start') {
@@ -169,6 +178,8 @@
 					onSpanEndChange(Math.min(trackDuration, t));
 				}
 			}
+			// Follows a swap, so the lit handle is the one under the pointer.
+			dragHandle = handle;
 		}
 
 		const onMove = (ev: PointerEvent | TouchEvent) => {
@@ -177,6 +188,7 @@
 			applyPosition(clientX);
 		};
 		const onUp = () => {
+			dragHandle = null;
 			window.removeEventListener('pointermove', onMove as EventListener);
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('touchmove', onMove as EventListener);
@@ -238,6 +250,7 @@
 	<div
 		class="timeline-track-wrap"
 		class:seeking={seekDragging}
+		class:over-handle={!!liveHandle}
 		class:tl-lane={layout === 'lane'}
 		bind:this={timelineTrackEl}
 		use:laneTrack
@@ -248,6 +261,11 @@
 		aria-valuemax={trackDuration}
 		tabindex="0"
 		onpointerdown={(e) => onTimelinePointerDown(e)}
+		onpointermove={(e) => {
+			if (e.pointerType === 'touch' || dragHandle) return;
+			hoverHandle = handleFromClientX(e.clientX);
+		}}
+		onpointerleave={() => (hoverHandle = null)}
 	>
 		<div class="timeline-track">
 			<div
@@ -257,6 +275,8 @@
 			{#if onScreen(spanStart)}
 				<div
 					class="timeline-handle timeline-handle-start"
+					class:live={liveHandle === 'start'}
+					class:dragging={dragHandle === 'start'}
 					style="left: {spanL}%"
 					aria-hidden="true"
 				></div>
@@ -264,6 +284,8 @@
 			{#if onScreen(spanEnd)}
 				<div
 					class="timeline-handle timeline-handle-end"
+					class:live={liveHandle === 'end'}
+					class:dragging={dragHandle === 'end'}
 					style="left: {spanR}%"
 					aria-hidden="true"
 				></div>
@@ -450,6 +472,10 @@
 		cursor: grabbing;
 	}
 
+	.timeline-track-wrap.over-handle {
+		cursor: ew-resize;
+	}
+
 	.timeline-track-wrap:focus-visible {
 		outline: 1px solid #555;
 		outline-offset: 2px;
@@ -498,6 +524,22 @@
 		border-radius: 3px;
 		background: #444;
 		pointer-events: none;
+		transition:
+			background 0.12s,
+			border-color 0.12s;
+	}
+
+	/* Lit by proximity rather than :hover — the handles take no pointer events,
+	   since the track hit-tests them by distance. */
+	.timeline-handle.live {
+		border-color: #7ab8f5;
+		background: #2f527a;
+	}
+
+	.timeline-handle.dragging {
+		border-color: #cfe6ff;
+		background: #3a6391;
+		transition: none;
 	}
 
 	.volume-icon {
