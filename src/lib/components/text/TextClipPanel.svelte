@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { X } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import type { EffectInstance, VolumeLink } from '../../effects';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
@@ -33,6 +34,8 @@
 		onLaneChange: (lane: TextLane) => void;
 		onClipChange: (clip: TextClip) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
+		/** Deselects the clip, which puts the image effects back in the sidebar. */
+		onClose?: () => void;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
 		onVolumeLinkChange?: (
@@ -48,6 +51,7 @@
 		onLaneChange,
 		onClipChange,
 		onBeforeEdit,
+		onClose,
 		hasTrack = false,
 		spectrumData = null,
 		onVolumeLinkChange,
@@ -111,7 +115,22 @@
 	<p class="empty">Select a text clip to edit it.</p>
 {:else}
 	<div class="clip-panel">
-		<h3 class="panel-title">Text</h3>
+		<div class="panel-head">
+			<div class="head-label">
+				<h3 class="panel-title">{lane.name}</h3>
+				<span class="clip-name" title={clip.text}>{clip.text || 'Empty clip'}</span>
+			</div>
+			{#if onClose}
+				<button
+					class="close-btn"
+					onclick={onClose}
+					title="Close (Esc)"
+					aria-label="Close text clip"
+				>
+					<X size={14} />
+				</button>
+			{/if}
+		</div>
 		<p class="note">
 			Font and placement apply to the whole lane — every clip in it
 			shares this look.
@@ -387,6 +406,44 @@
 		padding: 0.75rem;
 		color: #666;
 		font-size: 0.75rem;
+	}
+
+	.panel-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	/* The lane names the panel; the clip's own text sits under it so a selection
+	   made on the timeline is identifiable without reading the text box. */
+	.head-label {
+		min-width: 0;
+	}
+
+	.clip-name {
+		display: block;
+		color: #ccc;
+		font-size: 0.78rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.close-btn {
+		display: flex;
+		align-items: center;
+		flex-shrink: 0;
+		padding: 2px;
+		border: none;
+		border-radius: 4px;
+		background: none;
+		color: #777;
+		cursor: pointer;
+	}
+
+	.close-btn:hover {
+		color: #eee;
 	}
 
 	.panel-title {
