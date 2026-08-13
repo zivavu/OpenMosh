@@ -74,6 +74,8 @@
 		// Shared across modes and mounts, so the performance never restarts.
 		const director = getDemoDirector(imgs.length);
 		let shownIndex = -1;
+		/** Poster currently staged in the renderer's outgoing slot. */
+		let altIndex = -1;
 		let raf = 0;
 		// Fed a delta rather than wall-clock, so a pause doesn't silently skip
 		// the demo forward by however long it sat frozen.
@@ -92,7 +94,28 @@
 				else renderer.updateSourceImage(img);
 				shownIndex = frame.sourceIndex;
 			}
-			renderer.render(frame.effects, frame.time);
+			const t = frame.transition;
+			if (t) {
+				// The outgoing poster goes in the alt slot so the blend crosses
+				// two different media, not just two effect chains.
+				if (t.fromSourceIndex !== altIndex) {
+					renderer.updateAltSourceImage(imgs[t.fromSourceIndex]);
+					altIndex = t.fromSourceIndex;
+				}
+				renderer.renderTransition(
+					t.effects,
+					frame.effects,
+					t.type,
+					t.progress,
+					t.seed,
+					t.direction,
+					t.density,
+					frame.time,
+					true,
+				);
+			} else {
+				renderer.render(frame.effects, frame.time);
+			}
 			live = true;
 		};
 
@@ -125,6 +148,9 @@
 			stop();
 			transport = null;
 			document.removeEventListener("visibilitychange", onVisibility);
+			// The editor inherits this renderer; a poster left in the outgoing
+			// slot would surface in its first sequence transition.
+			renderer.clearAltSource();
 			// Park the canvas back where warmup left it, hidden — the editor
 			// reparents this exact element and expects it still attached.
 			canvas.style.cssText =

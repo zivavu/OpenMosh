@@ -51,6 +51,28 @@ const STATIC_POOL = [
   "soft-glitch",
 ];
 
+/** Every transition the app ships, so the upload screen is an honest sample of
+ * what a sequence can do. "cut" is excluded — the demo already cuts whenever a
+ * blend is not running. */
+const TRANSITION_POOL = [
+  "dissolve",
+  "static",
+  "wipe",
+  "blocks",
+  "rgbslip",
+  "slam",
+  "whip",
+  "shatter",
+  "echo",
+  "burn",
+  "roll",
+  "bleed",
+];
+
+/** How much of the beat the blend occupies. Long enough for the motion in each
+ * shader to read, short enough that the poster is still on screen afterwards. */
+const TRANSITION_BEATS = 0.55;
+
 /** One cadence for every mode: the demo is a single continuous performance, so
  * switching tabs on the upload screen must not restart or re-time it. */
 const BEATS_PER_CHAIN = 2;
@@ -89,11 +111,27 @@ function buildChain(): EffectInstance[] {
   return chain;
 }
 
+/** A source change still mid-blend. Null on the frame's `transition` means the
+ * poster is simply on screen and a single chain render will do. */
+export interface DemoTransition {
+  /** Poster being blended out of — goes in the renderer's alt source slot. */
+  fromSourceIndex: number;
+  /** Chain that was running on the outgoing poster. */
+  effects: EffectInstance[];
+  type: string;
+  /** 0→1 across the blend. */
+  progress: number;
+  seed: number;
+  direction: number;
+  density: number;
+}
+
 export interface DemoFrame {
   sourceIndex: number;
   effects: EffectInstance[];
   /** Seconds since the demo first started, for the renderer's time uniform. */
   time: number;
+  transition: DemoTransition | null;
 }
 
 export interface DemoDirector {
@@ -116,16 +154,35 @@ function createDemoDirector(sourceCount: number): DemoDirector {
   let sourceCut = -1;
   let sourceIndex = 0;
   let effects: EffectInstance[] = [];
+  /** The blend rolled at the last source cut, replayed until it finishes. */
+  let blend: Omit<DemoTransition, "progress"> | null = null;
+  let blendStartBeat = 0;
 
   return {
     advance(deltaSeconds: number): DemoFrame {
       elapsed += Math.max(0, deltaSeconds);
       const beat = elapsed / beatSeconds;
 
+      // Source first: the chain that was on screen at the cut is the one the
+      // blend has to keep rendering, and the reroll below would overwrite it.
       const nextSourceCut = Math.floor(beat / BEATS_PER_SOURCE);
       if (nextSourceCut !== sourceCut) {
+        const first = sourceCut === -1;
+        const fromSourceIndex = sourceIndex;
         sourceCut = nextSourceCut;
         sourceIndex = nextSourceCut % sourceCount;
+        // Nothing to blend out of on the very first poster.
+        blend = first
+          ? null
+          : {
+              fromSourceIndex,
+              effects,
+              type: pick(TRANSITION_POOL),
+              seed: Math.floor(Math.random() * 997),
+              direction: Math.floor(Math.random() * 4),
+              density: Math.floor(Math.random() * 3),
+            };
+        blendStartBeat = nextSourceCut * BEATS_PER_SOURCE;
       }
 
       const nextChainCut = Math.floor(beat / BEATS_PER_CHAIN);
@@ -133,7 +190,15 @@ function createDemoDirector(sourceCount: number): DemoDirector {
         chainCut = nextChainCut;
         effects = buildChain();
       }
-      return { sourceIndex, effects, time: elapsed };
+
+      let transition: DemoTransition | null = null;
+      if (blend) {
+        const progress = (beat - blendStartBeat) / TRANSITION_BEATS;
+        if (progress >= 1) blend = null;
+        else transition = { ...blend, progress: Math.max(0, progress) };
+      }
+
+      return { sourceIndex, effects, time: elapsed, transition };
     },
   };
 }

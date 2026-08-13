@@ -15,7 +15,14 @@ export type TransitionType =
   | "static"
   | "wipe"
   | "blocks"
-  | "rgbslip";
+  | "rgbslip"
+  | "slam"
+  | "whip"
+  | "shatter"
+  | "echo"
+  | "burn"
+  | "roll"
+  | "bleed";
 
 export interface SegmentTransition {
   type: TransitionType;
@@ -38,14 +45,23 @@ export const TRANSITION_OPTIONS: {
   hasSeed?: boolean;
 }[] = [
   { value: "cut", label: "cut" },
-  { value: "dissolve", label: "dissolve" },
+  { value: "dissolve", label: "dissolve", hasSeed: true },
   { value: "static", label: "static", hasDensity: true, hasSeed: true },
   { value: "wipe", label: "wipe", hasDirection: true, hasSeed: true },
   { value: "blocks", label: "blocks", hasDensity: true, hasSeed: true },
-  { value: "rgbslip", label: "rgb slip" },
+  { value: "rgbslip", label: "rgb slip", hasSeed: true },
+  { value: "slam", label: "slam" },
+  { value: "whip", label: "whip", hasDirection: true, hasSeed: true },
+  { value: "shatter", label: "shatter", hasDensity: true, hasSeed: true },
+  { value: "echo", label: "echo", hasSeed: true },
+  { value: "burn", label: "burn", hasSeed: true },
+  { value: "roll", label: "roll", hasSeed: true },
+  { value: "bleed", label: "bleed", hasSeed: true },
 ];
 
-export const DEFAULT_TRANSITION_DURATION = 0.3;
+/** Half a second, not the third it used to be: the reworked shaders all carry
+ * a motion beat, and 0.3s cut them off before it read. */
+export const DEFAULT_TRANSITION_DURATION = 0.5;
 
 /** One segment's transition edit inside a (possibly multi-segment) change. */
 export interface SegmentTransitionChange {
