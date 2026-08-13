@@ -248,7 +248,7 @@ function onAudioDrop(e: DragEvent) {
 }
 </script>
 
-<DemoBackground mode={selectedMode} {warmCanvas} {warmRenderer} />
+<DemoBackground {warmCanvas} {warmRenderer} />
 
 <div class="upload-screen">
 	<div class="hero">
