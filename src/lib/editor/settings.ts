@@ -21,6 +21,8 @@ export interface EditorSettings {
 	loopVideo: boolean;
 	/** How sequence sources that don't match the output aspect are fitted. */
 	sourceFit: "stretch" | "contain" | "cover";
+	/** Whether the upload screen's demo keeps moshing behind the UI. */
+	demoBackground: boolean;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	loopVideo: true,
 	// Only bites with a mixed media pool; "contain" never crops the user's media.
 	sourceFit: "contain",
+	demoBackground: true,
 };
 
 export function loadSettings(): Partial<EditorSettings> {
