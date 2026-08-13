@@ -6,9 +6,14 @@ interface Props {
 	onSequenceFromSong: (trackId: string) => void;
 	onSlideshow: (files: File[]) => void;
 	onaudio?: (file: File) => void;
+	/** Pre-warmed context, borrowed for the demo until the editor claims it. */
+	warmCanvas?: HTMLCanvasElement | null;
+	warmRenderer?: GlRenderer | null;
 }
 
 import { Image, ListVideo, Music, Upload } from "lucide-svelte";
+import type { GlRenderer } from "../../gl/renderer";
+import DemoBackground from "./DemoBackground.svelte";
 import GithubLink from "./GithubLink.svelte";
 import { showToast } from "./toast.svelte";
 import {
@@ -28,6 +33,8 @@ let {
 	onSequenceFromSong,
 	onSlideshow,
 	onaudio,
+	warmCanvas = null,
+	warmRenderer = null,
 }: Props = $props();
 
 // Songs already built into a sequence, offered as a way in that skips picking
@@ -229,6 +236,8 @@ function onAudioDrop(e: DragEvent) {
 }
 </script>
 
+<DemoBackground mode={selectedMode} {warmCanvas} {warmRenderer} />
+
 <div class="upload-screen">
 	<div class="hero">
 		<h1 class="title">OpenMosh</h1>
@@ -396,7 +405,12 @@ function onAudioDrop(e: DragEvent) {
 </div>
 
 <style>
+	/* Everything here sits over a live mosh, so panels carry their own frosted
+	   backing and text runs a step brighter than it would on flat black —
+	   motion behind copy eats apparent contrast. */
 	.upload-screen {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -410,6 +424,7 @@ function onAudioDrop(e: DragEvent) {
 		position: fixed;
 		bottom: 1rem;
 		right: 1rem;
+		z-index: 1;
 	}
 
 	.hero {
@@ -425,28 +440,33 @@ function onAudioDrop(e: DragEvent) {
 		letter-spacing: -0.02em;
 		color: #fff;
 		line-height: 1;
+		text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85);
 	}
 
 	.subtitle {
 		font-size: 0.95rem;
-		color: #666;
+		color: #9a9a9a;
 		font-weight: 400;
+		text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
 	}
 
 	.mode-toggle {
 		display: flex;
 		flex-shrink: 0;
 		gap: 0;
-		border: 1.5px solid #333;
+		border: 1.5px solid rgba(255, 255, 255, 0.16);
 		border-radius: 999px;
 		overflow: hidden;
+		background: rgba(10, 10, 12, 0.55);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
 	}
 
 	.mode-btn {
 		padding: 0.45rem 1.5rem;
 		border: none;
 		background: transparent;
-		color: #666;
+		color: #8a8a8a;
 		font-size: 0.78rem;
 		font-weight: 600;
 		letter-spacing: 0.06em;
@@ -458,19 +478,20 @@ function onAudioDrop(e: DragEvent) {
 	}
 
 	.mode-btn:hover {
-		color: #aaa;
+		color: #ccc;
 	}
 
 	.mode-btn.active {
-		background: rgba(255, 255, 255, 0.08);
+		background: rgba(255, 255, 255, 0.14);
 		color: #fff;
 	}
 
 	.mode-hint {
 		font-size: 0.8rem;
-		color: #555;
+		color: #8a8a8a;
 		margin-top: -1.5rem;
 		text-align: center;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
 	.drop-zone {
@@ -479,10 +500,13 @@ function onAudioDrop(e: DragEvent) {
 		align-items: center;
 		gap: 1.5rem;
 		padding: 2.5rem 3rem;
-		border: 1.5px dashed #333;
+		border: 1.5px dashed rgba(255, 255, 255, 0.18);
 		border-radius: 12px;
 		width: 100%;
 		max-width: 520px;
+		background: rgba(10, 10, 12, 0.5);
+		backdrop-filter: blur(20px) saturate(0.7);
+		-webkit-backdrop-filter: blur(20px) saturate(0.7);
 		transition:
 			border-color 0.2s,
 			background-color 0.2s;
@@ -492,12 +516,12 @@ function onAudioDrop(e: DragEvent) {
 
 	.drop-zone:hover,
 	.drop-zone:focus-visible {
-		border-color: #555;
+		border-color: rgba(255, 255, 255, 0.35);
 	}
 
 	.drop-zone.dragging {
-		border-color: #888;
-		background-color: rgba(255, 255, 255, 0.03);
+		border-color: rgba(255, 255, 255, 0.6);
+		background-color: rgba(20, 20, 24, 0.68);
 	}
 
 	.load-btn {
@@ -505,10 +529,10 @@ function onAudioDrop(e: DragEvent) {
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.7rem 2rem;
-		border: 1.5px solid #444;
+		border: 1.5px solid rgba(255, 255, 255, 0.28);
 		border-radius: 999px;
 		background: transparent;
-		color: #ccc;
+		color: #e4e4e4;
 		font-size: 0.8rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
@@ -521,9 +545,9 @@ function onAudioDrop(e: DragEvent) {
 	}
 
 	.load-btn:hover {
-		border-color: #888;
+		border-color: rgba(255, 255, 255, 0.6);
 		color: #fff;
-		background-color: rgba(255, 255, 255, 0.05);
+		background-color: rgba(255, 255, 255, 0.1);
 	}
 
 	.separator {
@@ -536,12 +560,12 @@ function onAudioDrop(e: DragEvent) {
 	.line {
 		flex: 1;
 		height: 1px;
-		background: #2a2a2a;
+		background: rgba(255, 255, 255, 0.14);
 	}
 
 	.or {
 		font-size: 0.7rem;
-		color: #555;
+		color: #777;
 		letter-spacing: 0.05em;
 		font-weight: 500;
 	}
@@ -550,7 +574,7 @@ function onAudioDrop(e: DragEvent) {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		color: #555;
+		color: #7d7d7d;
 		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
@@ -567,9 +591,10 @@ function onAudioDrop(e: DragEvent) {
 
 	.saved-head {
 		font-size: 0.66rem;
-		color: #555;
+		color: #7d7d7d;
 		letter-spacing: 0.08em;
 		font-weight: 600;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
 	.saved-list {
@@ -588,10 +613,12 @@ function onAudioDrop(e: DragEvent) {
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.4rem 0.7rem;
-		border: 1.5px solid #2e2438;
+		border: 1.5px solid #3d3049;
 		border-radius: 999px;
-		background: transparent;
-		color: #9a7fb4;
+		background: rgba(10, 10, 12, 0.5);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		color: #b193cc;
 		font-size: 0.72rem;
 		font-family: inherit;
 		cursor: pointer;
@@ -626,11 +653,14 @@ function onAudioDrop(e: DragEvent) {
 		align-items: center;
 		gap: 0.6rem;
 		padding: 0.75rem 1.5rem;
-		border: 1.5px dashed #222;
+		border: 1.5px dashed rgba(255, 255, 255, 0.12);
 		border-radius: 10px;
 		width: 100%;
 		max-width: 520px;
-		color: #444;
+		background: rgba(10, 10, 12, 0.42);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		color: #6e6e6e;
 		font-size: 0.72rem;
 		font-weight: 600;
 		letter-spacing: 0.07em;
@@ -644,18 +674,18 @@ function onAudioDrop(e: DragEvent) {
 	.music-zone:not(.music-zone--selected):hover,
 	.music-zone:not(.music-zone--selected):focus-visible,
 	.music-dragging {
-		border-color: #3a3a3a;
-		color: #666;
+		border-color: rgba(255, 255, 255, 0.3);
+		color: #a0a0a0;
 	}
 
 	.music-zone--selected {
-		border-color: #2a2a2a;
-		color: #666;
+		border-color: rgba(255, 255, 255, 0.16);
+		color: #909090;
 		cursor: default;
 	}
 
 	.optional {
-		color: #333;
+		color: #565656;
 	}
 
 	.music-filename {
@@ -681,8 +711,9 @@ function onAudioDrop(e: DragEvent) {
 
 	.music-hint {
 		font-size: 0.75rem;
-		color: #333;
+		color: #5e5e5e;
 		margin-top: -1.5rem;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
 	@media (max-width: 800px) {

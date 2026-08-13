@@ -150,6 +150,8 @@
 			navigateTo('slideshow');
 		}}
 		onaudio={(f: File) => (pendingAudioFile = f)}
+		{warmCanvas}
+		{warmRenderer}
 	/>
 {/if}
 
