@@ -5,8 +5,14 @@
 	 * for shader pre-compilation, so the demo costs no extra WebGL context and
 	 * hands the same one straight to the editor when a file lands.
 	 */
+	import { Pause, Play } from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
-	import type { UploadMode } from "../../editor/settings";
+	import {
+		DEFAULT_SETTINGS,
+		loadSettings,
+		updateSettings,
+		type UploadMode,
+	} from "../../editor/settings";
 	import { loadDemoSources } from "../../demo/demo-sources";
 	import {
 		createDemoDirector,
@@ -25,9 +31,20 @@
 	let sources = $state<HTMLImageElement[]>([]);
 	let live = $state(false);
 
-	const reducedMotion =
-		typeof matchMedia === "function" &&
-		matchMedia("(prefers-reduced-motion: reduce)").matches;
+	// Deliberately not tied to prefers-reduced-motion: people set that flag for
+	// their OS, not to opt out of a page's centrepiece. Own button, own memory.
+	let playing = $state(
+		loadSettings().demoBackground ?? DEFAULT_SETTINGS.demoBackground,
+	);
+
+	/** Set once the render loop is wired up, so the button can drive it without
+	 * tearing down and reparenting the canvas on every toggle. */
+	let transport = $state<{ start: () => void; stop: () => void } | null>(null);
+
+	function togglePlaying() {
+		playing = !playing;
+		updateSettings({ demoBackground: playing });
+	}
 
 	$effect(() => {
 		if (import.meta.env.DEV) {
@@ -59,10 +76,16 @@
 		const director = createDemoDirector(currentMode, imgs.length);
 		let shownIndex = -1;
 		let raf = 0;
-		const start = performance.now();
+		// Accumulated rather than wall-clock, so a pause doesn't silently skip
+		// the demo forward by however long it sat frozen.
+		let elapsed = 0;
+		let lastTs = 0;
 
 		const drawFrame = () => {
-			const t = (performance.now() - start) / 1000;
+			const now = performance.now();
+			if (lastTs) elapsed += (now - lastTs) / 1000;
+			lastTs = now;
+			const t = elapsed;
 			const frame = director.frameAt(t);
 			if (frame.sourceIndex !== shownIndex) {
 				const img = imgs[frame.sourceIndex];
@@ -84,22 +107,23 @@
 		const stop = () => {
 			if (raf) cancelAnimationFrame(raf);
 			raf = 0;
+			lastTs = 0;
 		};
-		const resume = () => {
+		const start = () => {
 			if (!raf && !document.hidden) raf = requestAnimationFrame(loop);
 		};
-		const onVisibility = () => (document.hidden ? stop() : resume());
+		const onVisibility = () =>
+			document.hidden || !playing ? stop() : start();
 
-		if (reducedMotion) {
-			// One moshed still: the look without the motion.
-			drawFrame();
-		} else {
-			document.addEventListener("visibilitychange", onVisibility);
-			resume();
-		}
+		// A paused demo still shows a moshed still rather than a black hole —
+		// preserveDrawingBuffer keeps the last frame on screen.
+		drawFrame();
+		document.addEventListener("visibilitychange", onVisibility);
+		transport = { start, stop };
 
 		return () => {
 			stop();
+			transport = null;
 			document.removeEventListener("visibilitychange", onVisibility);
 			// Park the canvas back where warmup left it, hidden — the editor
 			// reparents this exact element and expects it still attached.
@@ -108,6 +132,12 @@
 			canvas.className = "";
 			document.body.appendChild(canvas);
 		};
+	});
+
+	$effect(() => {
+		if (!transport) return;
+		if (playing) transport.start();
+		else transport.stop();
 	});
 </script>
 
@@ -118,6 +148,22 @@
 	{/if}
 	<div class="scrim"></div>
 </div>
+
+{#if transport}
+	<button
+		class="demo-toggle"
+		onclick={togglePlaying}
+		title={playing ? 'Freeze the background demo' : 'Resume the background demo'}
+	>
+		{#if playing}
+			<Pause size={12} />
+			FREEZE
+		{:else}
+			<Play size={12} />
+			ANIMATE
+		{/if}
+	</button>
+{/if}
 
 <style>
 	.demo-bg {
@@ -151,6 +197,37 @@
 
 	.demo-poster {
 		opacity: 0.5;
+	}
+
+	/* Bottom left, opposite the GitHub link. */
+	.demo-toggle {
+		position: fixed;
+		bottom: 1rem;
+		left: 1rem;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.75rem;
+		border: 1.5px solid rgba(255, 255, 255, 0.14);
+		border-radius: 999px;
+		background: rgba(10, 10, 12, 0.5);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		color: #7d7d7d;
+		font-family: inherit;
+		font-size: 0.66rem;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		cursor: pointer;
+		transition:
+			color 0.2s,
+			border-color 0.2s;
+	}
+
+	.demo-toggle:hover {
+		border-color: rgba(255, 255, 255, 0.32);
+		color: #ccc;
 	}
 
 	/* The upload UI has to stay readable over whatever the mosh throws up:
