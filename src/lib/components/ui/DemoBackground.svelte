@@ -6,27 +6,25 @@
 	 * hands the same one straight to the editor when a file lands.
 	 */
 	import { untrack } from "svelte";
-	import { Pause, Play } from "lucide-svelte";
+	import { Play, Square } from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import {
 		DEFAULT_SETTINGS,
 		loadSettings,
 		updateSettings,
-		type UploadMode,
 	} from "../../editor/settings";
 	import { loadDemoSources } from "../../demo/demo-sources";
 	import {
-		createDemoDirector,
+		getDemoDirector,
 		missingDemoEffects,
 	} from "../../demo/demo-director";
 
 	interface Props {
-		mode: UploadMode;
 		warmCanvas: HTMLCanvasElement | null;
 		warmRenderer: GlRenderer | null;
 	}
 
-	let { mode, warmCanvas, warmRenderer }: Props = $props();
+	let { warmCanvas, warmRenderer }: Props = $props();
 
 	let holder = $state<HTMLDivElement>(undefined!);
 	let sources = $state<HTMLImageElement[]>([]);
@@ -67,27 +65,25 @@
 		const renderer = warmRenderer;
 		const canvas = warmCanvas;
 		const imgs = sources;
-		const currentMode = mode;
 		if (!renderer || !canvas || imgs.length === 0 || !holder) return;
 
 		canvas.style.cssText = "";
 		canvas.className = "demo-canvas";
 		holder.appendChild(canvas);
 
-		const director = createDemoDirector(currentMode, imgs.length);
+		// Shared across modes and mounts, so the performance never restarts.
+		const director = getDemoDirector(imgs.length);
 		let shownIndex = -1;
 		let raf = 0;
-		// Accumulated rather than wall-clock, so a pause doesn't silently skip
+		// Fed a delta rather than wall-clock, so a pause doesn't silently skip
 		// the demo forward by however long it sat frozen.
-		let elapsed = 0;
 		let lastTs = 0;
 
 		const drawFrame = () => {
 			const now = performance.now();
-			if (lastTs) elapsed += (now - lastTs) / 1000;
+			const dt = lastTs ? (now - lastTs) / 1000 : 0;
 			lastTs = now;
-			const t = elapsed;
-			const frame = director.frameAt(t);
+			const frame = director.advance(dt);
 			if (frame.sourceIndex !== shownIndex) {
 				const img = imgs[frame.sourceIndex];
 				// First upload allocates the texture and FBOs; later cuts only
@@ -96,7 +92,7 @@
 				else renderer.updateSourceImage(img);
 				shownIndex = frame.sourceIndex;
 			}
-			renderer.render(frame.effects, t);
+			renderer.render(frame.effects, frame.time);
 			live = true;
 		};
 
@@ -116,11 +112,12 @@
 		const onVisibility = () =>
 			document.hidden || !playing ? stop() : start();
 
-		// A paused demo still shows a moshed still rather than a black hole —
-		// preserveDrawingBuffer keeps the last frame on screen. Untracked: this
-		// one draw runs inside the effect body, so anything it touches would
-		// otherwise become a dependency and re-trigger the whole setup.
-		untrack(drawFrame);
+		// Prime the canvas so the first painted frame isn't a fade-in from
+		// nothing. Skipped when switched off, since off means a black screen
+		// rather than a held still. Untracked: this draw runs inside the effect
+		// body, so anything it touches would otherwise become a dependency and
+		// re-trigger the whole setup.
+		if (untrack(() => playing)) untrack(drawFrame);
 		document.addEventListener("visibilitychange", onVisibility);
 		transport = { start, stop };
 
@@ -144,9 +141,9 @@
 	});
 </script>
 
-<div class="demo-bg" class:live>
+<div class="demo-bg" class:live={live && playing}>
 	<div class="demo-holder" bind:this={holder}></div>
-	{#if !live && sources.length > 0}
+	{#if !live && playing && sources.length > 0}
 		<img class="demo-poster" src={sources[0].src} alt="" />
 	{/if}
 	<div class="scrim"></div>
@@ -156,11 +153,13 @@
 	<button
 		class="demo-toggle"
 		onclick={togglePlaying}
-		title={playing ? 'Freeze the background demo' : 'Resume the background demo'}
+		title={playing
+			? 'Black out the background demo'
+			: 'Resume the background demo'}
 	>
 		{#if playing}
-			<Pause size={12} />
-			FREEZE
+			<Square size={12} />
+			BLACK
 		{:else}
 			<Play size={12} />
 			ANIMATE
