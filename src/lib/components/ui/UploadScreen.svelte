@@ -104,6 +104,10 @@ function isAcceptedFile(file: File) {
 	return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 }
 
+function isAudioFile(file: File) {
+	return AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/");
+}
+
 const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
 
 function rejectFile(file: File) {
@@ -166,10 +170,18 @@ function onDrop(e: DragEvent) {
 	const files = e.dataTransfer?.files;
 	if (!files || files.length === 0) return;
 
+	// A track dropped on the media zone is far likelier to be a track than a
+	// mistake worth a toast about, so route by what landed rather than reject.
+	const all = Array.from(files);
+	const audio = all.filter(isAudioFile);
+	const media = all.filter((f) => !isAudioFile(f));
+	if (audio.length > 0) handleAudioFile(audio[0]);
+	if (media.length === 0) return;
+
 	if (isMultiMode) {
-		handleMultiFiles(files);
+		handleMultiFiles(media);
 	} else {
-		handleSingleFile(files);
+		handleSingleFile(media);
 	}
 }
 
@@ -210,7 +222,7 @@ function getIsMultiple() {
 }
 
 function handleAudioFile(file: File) {
-	if (!(AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/"))) {
+	if (!isAudioFile(file)) {
 		showToast(`"${file.name}" isn't an audio file`, "error");
 		return;
 	}
