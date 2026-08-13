@@ -54,6 +54,7 @@
 		createSequenceSegment,
 		resolveTransitionAt,
 		findSegmentAt,
+		normalizeSegmentTransitions,
 		type ResolvedTransition,
 		type SegmentTransitionChange,
 		type SequenceSegment,
@@ -650,9 +651,13 @@
 	 * exact leak the prefix exists to stop.
 	 */
 	function loadSeqEntry(baseKey: string) {
-		const entry = seqStore.load(seqKeyPrefix + baseKey);
-		if (entry !== null) return entry;
-		return isSequenceMode ? seqStore.load(baseKey) : null;
+		const entry =
+			seqStore.load(seqKeyPrefix + baseKey) ??
+			(isSequenceMode ? seqStore.load(baseKey) : null);
+		// Entries can predate a transition being retired; remap before anything
+		// downstream tries to look up a shader that no longer exists.
+		if (entry?.segments) normalizeSegmentTransitions(entry.segments);
+		return entry;
 	}
 
 	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.

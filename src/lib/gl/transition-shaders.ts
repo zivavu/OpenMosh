@@ -7,7 +7,7 @@
  * re-rolls at the same output times in preview and export.
  *
  * u_direction (wipe/whip): 0=→ 1=← 2=↓ 3=↑ (in image space; v_uv.y=1 is the top).
- * u_density (static/blocks/shatter): 0=coarse 1=medium 2=fine.
+ * u_density (blocks/shatter): 0=coarse 1=medium 2=fine.
  *
  * Scene buffers wrap MIRRORED_REPEAT and filter NEAREST, so samples past the
  * edge mirror rather than clamp, and multi-tap smears read as strobed ghosts
@@ -113,32 +113,6 @@ const DISSOLVE_FRAG = frag(`  float p = u_progress;
   vec3 col = mix(a, b, m);
   col *= 1.0 + (hash12(vec2(tick, SEED)) - 0.5) * 0.3 * s;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);`);
-
-/** TV-snow wall, now with the picture rolling and breathing underneath rather
- * than sitting still behind a noise curtain. */
-const STATIC_FRAG = frag(`  float p = u_progress;
-  float cover = smoothstep(0.0, 0.30, p) * smoothstep(1.0, 0.62, p);
-  float tick = floor(p * 36.0);
-  float px = u_density == 0 ? 8.0 : (u_density == 1 ? 4.0 : 2.0);
-  vec2 cell = floor(v_uv * u_resolution / px);
-  float row = floor(v_uv.y * u_resolution.y / 4.0);
-  float rr = hash12(vec2(row, SEED + tick));
-  // The signal loses lock: the frame rolls and swells while the snow covers.
-  float roll = cover * (hash12(vec2(floor(p * 12.0), SEED + 3.0)) - 0.5) * 0.25;
-  float zoom = 1.0 + cover * 0.10;
-  vec2 uv = (v_uv - 0.5) / zoom + 0.5;
-  uv.y = fract(uv.y + roll);
-  if (rr > 0.93) {
-    uv.x += (hash12(vec2(row, SEED + tick + 51.0)) - 0.5) * 0.5 * cover;
-  }
-  vec3 base = (p < 0.5 ? texture(u_texture, uv) : texture(u_texture2, uv)).rgb;
-  if (rr < 0.05) base *= 1.0 - 0.85 * cover;
-  float n = hash12(cell + SEED + tick * 13.0);
-  if (n < cover * 0.97) {
-    float snow = hash12(cell + SEED + tick * 29.0 + 7.0);
-    base = vec3(0.12 + 0.83 * snow);
-  }
-  outColor = vec4(clamp(base, 0.0, 1.0), 1.0);`);
 
 /** Directional wipe with a jagged front. Both sides now move: the outgoing
  * frame is pushed off ahead of the front instead of waiting to be covered. */
@@ -403,7 +377,6 @@ const BLEED_FRAG = frag(`  float p = u_progress;
 
 export const TRANSITION_SHADERS: Record<string, TransitionShaderDef> = {
 	dissolve: { fragment: DISSOLVE_FRAG },
-	static: { fragment: STATIC_FRAG },
 	wipe: { fragment: WIPE_FRAG },
 	blocks: { fragment: BLOCKS_FRAG },
 	rgbslip: { fragment: RGBSLIP_FRAG },
