@@ -141,7 +141,7 @@
 	});
 </script>
 
-<div class="demo-bg" class:live={live && playing}>
+<div class="demo-bg" class:live={live && playing} class:blank={!playing}>
 	<div class="demo-holder" bind:this={holder}></div>
 	{#if !live && playing && sources.length > 0}
 		<img class="demo-poster" src={sources[0].src} alt="" />
@@ -175,6 +175,18 @@
 		overflow: hidden;
 		pointer-events: none;
 		background: #000;
+	}
+
+	/* Switched off is the flat #121212 the upload screen had before the demo
+	   existed — inherited from :root, no gradient, no scrim. */
+	.demo-bg.blank {
+		background: #121212;
+	}
+
+	/* The scrim only exists to keep the UI readable over the mosh; over the
+	   blank grey it would just crush it back to black. */
+	.blank .scrim {
+		opacity: 0;
 	}
 
 	.demo-holder {
@@ -239,6 +251,7 @@
 	.scrim {
 		position: absolute;
 		inset: 0;
+		transition: opacity 0.5s ease;
 		background:
 			radial-gradient(
 				ellipse 70% 60% at 50% 45%,
