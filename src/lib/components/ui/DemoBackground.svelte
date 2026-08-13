@@ -199,12 +199,13 @@
 		opacity: 0.5;
 	}
 
-	/* Bottom left, opposite the GitHub link. */
+	/* Bottom left, opposite the GitHub link. Above the upload screen, which is
+	   a full-viewport flex layer and would otherwise swallow the click. */
 	.demo-toggle {
 		position: fixed;
 		bottom: 1rem;
 		left: 1rem;
-		z-index: 1;
+		z-index: 2;
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
