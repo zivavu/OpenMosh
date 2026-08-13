@@ -12,7 +12,6 @@ export type SequenceSegmentMode = "static" | "interval";
 export type TransitionType =
   | "cut"
   | "dissolve"
-  | "static"
   | "wipe"
   | "blocks"
   | "rgbslip"
@@ -32,7 +31,7 @@ export interface SegmentTransition {
   seed: number;
   /** "wipe": 0=→ 1=← 2=↓ 3=↑. */
   direction?: number;
-  /** "static"/"blocks" cell size: 0=coarse 1=medium 2=fine. */
+  /** "blocks"/"shatter" cell size: 0=coarse 1=medium 2=fine. */
   density?: number;
 }
 
@@ -46,7 +45,6 @@ export const TRANSITION_OPTIONS: {
 }[] = [
   { value: "cut", label: "cut" },
   { value: "dissolve", label: "dissolve", hasSeed: true },
-  { value: "static", label: "static", hasDensity: true, hasSeed: true },
   { value: "wipe", label: "wipe", hasDirection: true, hasSeed: true },
   { value: "blocks", label: "blocks", hasDensity: true, hasSeed: true },
   { value: "rgbslip", label: "rgb slip", hasSeed: true },
@@ -73,6 +71,28 @@ export interface SegmentTransitionChange {
 
 export function createTransition(type: TransitionType): SegmentTransition {
   return { type, durationSec: DEFAULT_TRANSITION_DURATION, seed: randomSeed() };
+}
+
+/**
+ * Transitions that earlier saves could hold. Mapped rather than dropped, so a
+ * stored sequence keeps a blend instead of quietly becoming a hard cut.
+ * "static" was a noise curtain that hid the cut instead of performing it;
+ * "roll" is the nearest thing left in the same signal-failure family.
+ */
+const RETIRED_TRANSITIONS: Record<string, TransitionType> = { static: "roll" };
+
+export function normalizeTransitionType(type: string): TransitionType {
+  return RETIRED_TRANSITIONS[type] ?? (type as TransitionType);
+}
+
+/** Rewrite retired transition names across a timeline read back from storage. */
+export function normalizeSegmentTransitions(segments: SequenceSegment[]) {
+  for (const seg of segments) {
+    if (seg.transition) {
+      seg.transition.type = normalizeTransitionType(seg.transition.type);
+    }
+  }
+  return segments;
 }
 
 /**

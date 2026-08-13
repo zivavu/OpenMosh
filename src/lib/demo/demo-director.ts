@@ -9,7 +9,7 @@ import { createEffectInstance, getDefinition } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { generateMosh } from "../editor/mosh";
 
-export const DEMO_BPM = 80;
+export const DEMO_BPM = 40;
 
 /** Effects that keep moving between cuts, so the background never sits still.
  * Excludes the per-frame noise ones (shake, jitter): moshed speeds run them at
@@ -56,7 +56,6 @@ const STATIC_POOL = [
  * blend is not running. */
 const TRANSITION_POOL = [
   "dissolve",
-  "static",
   "wipe",
   "blocks",
   "rgbslip",
@@ -69,9 +68,11 @@ const TRANSITION_POOL = [
   "bleed",
 ];
 
-/** How much of the beat the blend occupies. Long enough for the motion in each
- * shader to read, short enough that the poster is still on screen afterwards. */
-const TRANSITION_BEATS = 0.55;
+/** How much of the beat the blend occupies. Tuned for how long a blend should
+ * feel (~0.45s), not as a fixed share of the bar: at 40 BPM a beat is 1.5s, and
+ * the old 0.55 would have stretched every slam and whip past three quarters of
+ * a second, which is the sluggishness these were rewritten to fix. */
+const TRANSITION_BEATS = 0.3;
 
 /** One cadence for every mode: the demo is a single continuous performance, so
  * switching tabs on the upload screen must not restart or re-time it. */
