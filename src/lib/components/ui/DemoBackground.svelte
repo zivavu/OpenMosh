@@ -5,6 +5,7 @@
 	 * for shader pre-compilation, so the demo costs no extra WebGL context and
 	 * hands the same one straight to the editor when a file lands.
 	 */
+	import { untrack } from "svelte";
 	import { Pause, Play } from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import {
@@ -116,8 +117,10 @@
 			document.hidden || !playing ? stop() : start();
 
 		// A paused demo still shows a moshed still rather than a black hole —
-		// preserveDrawingBuffer keeps the last frame on screen.
-		drawFrame();
+		// preserveDrawingBuffer keeps the last frame on screen. Untracked: this
+		// one draw runs inside the effect body, so anything it touches would
+		// otherwise become a dependency and re-trigger the whole setup.
+		untrack(drawFrame);
 		document.addEventListener("visibilitychange", onVisibility);
 		transport = { start, stop };
 
