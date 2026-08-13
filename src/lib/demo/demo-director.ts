@@ -9,46 +9,43 @@ import { createEffectInstance, getDefinition } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { generateMosh } from "../editor/mosh";
 
-export const DEMO_BPM = 120;
+export const DEMO_BPM = 80;
 
-/** Effects that keep moving between cuts, so the background never sits still. */
+/** Effects that keep moving between cuts, so the background never sits still.
+ * Excludes the per-frame noise ones (shake, jitter): moshed speeds run them at
+ * frame rate, which reads as a broken page rather than a designed motion. */
 const ANIMATED_POOL = [
   "wobble",
   "ripple",
   "swirl",
   "melt",
-  "jitter",
-  "shake",
   "zoom",
   "tunnel",
   "vhs",
   "scanlines",
-  "kaleido",
   "tile",
   "glow",
 ];
 
 /** Stills that give each cut its character. Deliberately excludes the subtle
  * ones (blur, sharpen, colour correction) — at background scale they read as
- * nothing happening. */
+ * nothing happening — and the novelty ones (ascii, thermal, kaleido, polar),
+ * which overwrite the poster with their own gimmick instead of glitching it,
+ * and pixelate, which just throws the artwork away. */
 const STATIC_POOL = [
-  "pixelate",
   "posterize",
   "solarize",
   "channel-split",
   "duotone",
-  "thermal",
   "color-halves",
   "slices",
   "smear",
   "data-bend",
   "pixel-sort",
   "halftone",
-  "ascii",
   "edges",
   "neon-edges",
   "mirror",
-  "polar",
   "bulge",
   "bleach",
   "soft-glitch",
@@ -57,6 +54,10 @@ const STATIC_POOL = [
 /** One cadence for every mode: the demo is a single continuous performance, so
  * switching tabs on the upload screen must not restart or re-time it. */
 const BEATS_PER_CHAIN = 2;
+/** Sources cut on the beat, never per frame: the posters differ in palette as
+ * much as in layout, so swapping them at frame rate is a strobe no chain can
+ * sit on top of. */
+const BEATS_PER_SOURCE = 1;
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -112,7 +113,8 @@ function createDemoDirector(sourceCount: number): DemoDirector {
   const beatSeconds = 60 / DEMO_BPM;
   let elapsed = 0;
   let chainCut = -1;
-  let sourceIndex = -1;
+  let sourceCut = -1;
+  let sourceIndex = 0;
   let effects: EffectInstance[] = [];
 
   return {
@@ -120,9 +122,11 @@ function createDemoDirector(sourceCount: number): DemoDirector {
       elapsed += Math.max(0, deltaSeconds);
       const beat = elapsed / beatSeconds;
 
-      // One poster per frame: the source itself is the fastest layer of the
-      // performance, and the effect chain sits on top at beat tempo.
-      sourceIndex = (sourceIndex + 1) % sourceCount;
+      const nextSourceCut = Math.floor(beat / BEATS_PER_SOURCE);
+      if (nextSourceCut !== sourceCut) {
+        sourceCut = nextSourceCut;
+        sourceIndex = nextSourceCut % sourceCount;
+      }
 
       const nextChainCut = Math.floor(beat / BEATS_PER_CHAIN);
       if (nextChainCut !== chainCut) {
