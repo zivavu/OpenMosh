@@ -338,7 +338,7 @@ export function createSequenceEffectSource(
     const seed = (seg.seed ?? 0) + tick * 7919;
     // Options participate in the key so settings changes don't serve rolls
     // generated under different mosh parameters (preview/export mismatch).
-    const key = `${seg.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.hasAudio}`;
+    const key = `${seg.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}`;
     let effects = cache.get(key);
     if (!effects) {
       effects = rollEffects(seed, options);

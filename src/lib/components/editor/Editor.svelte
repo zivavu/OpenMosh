@@ -36,6 +36,7 @@
 		loadInitialEffects,
 		setVolumeLink,
 		type EffectInstance,
+		type FreqBand,
 		type Preset,
 	} from '../../effects';
 	import {
@@ -295,6 +296,9 @@
 	let moshAudioLinkStrength = $state(
 		saved.moshAudioLinkStrength ?? DEFAULT_SETTINGS.moshAudioLinkStrength,
 	);
+	let moshLinkBand = $state<FreqBand>(
+		saved.moshLinkBand ?? DEFAULT_SETTINGS.moshLinkBand,
+	);
 	let autoRangeAmount = $state(
 		saved.autoRangeAmount ?? DEFAULT_SETTINGS.autoRangeAmount,
 	);
@@ -374,6 +378,7 @@
 		randomizeOrder;
 		moshAudioLink;
 		moshAudioLinkStrength;
+		moshLinkBand;
 		autoRangeAmount;
 		audioSmoothing;
 		audioPunch;
@@ -389,6 +394,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
+			moshLinkBand,
 			autoRangeAmount,
 			audioSmoothing,
 			audioPunch,
@@ -628,6 +634,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
+			moshLinkBand,
 			hasAudio,
 		};
 	}
@@ -2658,6 +2665,7 @@
 					bind:randomizeOrder
 					bind:moshAudioLink
 					bind:moshAudioLinkStrength
+					bind:moshLinkBand
 					bind:autoRangeAmount
 					bind:audioSmoothing
 					bind:audioPunch
@@ -2759,10 +2767,13 @@
 		min-width: 0;
 	}
 
+	/* The extra pixel up top pays for the bottom border: it sits below the
+	   padding, so equal padding centres the row in the box but not between the
+	   two edges you can see. Whole pixels, so nothing rounds either. */
 	.top-bar {
 		display: flex;
 		align-items: center;
-		padding: 0.4rem 0.75rem;
+		padding: 7px 12px 6px;
 		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}

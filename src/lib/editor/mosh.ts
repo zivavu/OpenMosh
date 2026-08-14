@@ -1,4 +1,10 @@
-import { getDefinition, type EffectInstance, type VolumeLink } from "../effects";
+import {
+  FREQ_PRESETS,
+  getDefinition,
+  type EffectInstance,
+  type FreqBand,
+  type VolumeLink,
+} from "../effects";
 import { shuffleInPlace } from "../utils";
 
 export interface MoshOptions {
@@ -8,6 +14,8 @@ export interface MoshOptions {
   moshAudioLink: boolean;
   /** 0–1: controls both how many params get linked and how wide their modulation range is. */
   moshAudioLinkStrength: number;
+  /** Band every rolled link listens to. Defaults to the full spectrum. */
+  moshLinkBand?: FreqBand;
   hasAudio: boolean;
   /** When true, only currently enabled (non–hidden) effects are included in random mosh; disabled effects stay off. */
   onlyMoshEnabled?: boolean;
@@ -23,13 +31,14 @@ export function isMoshable(effect: EffectInstance): boolean {
 }
 
 /**
- * Link a random share of range params to the music. Every link is full
- * spectrum — see the comment at the link site below.
+ * Link a random share of range params to the music, all on the same band —
+ * see the comment at the link site below.
  */
 export function applyRandomAudioLinks(
   effects: EffectInstance[],
   hasAudio: boolean,
   strength: number = 0.8,
+  band: FreqBand = "full",
 ): void {
   if (!hasAudio || strength <= 0) {
     for (const effect of effects) {
@@ -74,12 +83,19 @@ export function applyRandomAudioLinks(
         if (vMax <= vMin) vMax = Math.min(pMax, vMin + param.step);
       }
 
-      // Full spectrum: leaving freqMin/freqMax unset makes the link follow the
-      // overall RMS level. Rolling a random band per param used to be the
-      // default, but it reads as noise — half the links would sit on a quiet
-      // part of the mix and barely move. Per-band links stay available by hand
-      // via the Freq row on any linked param.
-      links[param.key] = { min: vMin, max: vMax };
+      // One band for the whole roll, chosen by the user. Rolling a random band
+      // per param used to be the default, but it reads as noise — half the
+      // links would sit on a quiet part of the mix and barely move. "full"
+      // leaves freqMin/freqMax unset, which follows the overall RMS level.
+      links[param.key] =
+        band === "full"
+          ? { min: vMin, max: vMax }
+          : {
+              min: vMin,
+              max: vMax,
+              freqMin: FREQ_PRESETS[band].min,
+              freqMax: FREQ_PRESETS[band].max,
+            };
     }
 
     if (Object.keys(links).length > 0) {
@@ -111,6 +127,7 @@ export function generateMosh(
     randomizeOrder,
     moshAudioLink,
     moshAudioLinkStrength,
+    moshLinkBand,
     onlyMoshEnabled,
   } = options;
   const moshable = effects.filter(
@@ -157,7 +174,12 @@ export function generateMosh(
   }
 
   if (moshAudioLink) {
-    applyRandomAudioLinks(effects, options.hasAudio, moshAudioLinkStrength);
+    applyRandomAudioLinks(
+      effects,
+      options.hasAudio,
+      moshAudioLinkStrength,
+      moshLinkBand,
+    );
   } else {
     for (const effect of effects) {
       if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;

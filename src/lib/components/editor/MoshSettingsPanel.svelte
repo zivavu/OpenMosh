@@ -1,11 +1,20 @@
 <script lang="ts">
    import { CircleQuestionMark } from "lucide-svelte";
    import { DEFAULT_SETTINGS } from "../../editor/settings";
+   import type { FreqBand } from "../../effects";
    import BpmControl from "../ui/BpmControl.svelte";
    import RangeSlider from "../ui/RangeSlider.svelte";
 
    /** Id of the row whose help popover is open, if any. */
    let openHelp = $state<string | null>(null);
+
+   /** Mirrors the per-param Freq row on a linked effect. */
+   const BANDS = [
+      { id: "full", label: "Full", title: "Full spectrum (20–16k Hz)" },
+      { id: "low", label: "Low", title: "Low (20–500 Hz)" },
+      { id: "mid", label: "Mid", title: "Mid (500–4000 Hz)" },
+      { id: "high", label: "High", title: "High (4k–16k Hz)" },
+   ] as const satisfies { id: FreqBand; label: string; title: string }[];
 
    interface Props {
       moshMin: number;
@@ -13,6 +22,7 @@
       randomizeOrder: boolean;
       moshAudioLink: boolean;
       moshAudioLinkStrength: number;
+      moshLinkBand: FreqBand;
       autoRangeAmount: number;
       audioSmoothing: number;
       audioPunch: number;
@@ -32,6 +42,7 @@
       randomizeOrder = $bindable(),
       moshAudioLink = $bindable(),
       moshAudioLinkStrength = $bindable(),
+      moshLinkBand = $bindable(),
       autoRangeAmount = $bindable(),
       audioSmoothing = $bindable(),
       audioPunch = $bindable(),
@@ -168,6 +179,7 @@
       <input id="mosh-shuffle" type="checkbox" bind:checked={randomizeOrder} />
    </div>
    {#if hasAudio}
+      <h3 class="panel-title section-title">Random audio links</h3>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row"
@@ -175,7 +187,7 @@
          ondblclick={(e) =>
             resetRow(e, () => (moshAudioLink = DEFAULT_SETTINGS.moshAudioLink))}
       >
-         <label for="mosh-audio-link">Random audio links</label>
+         <label for="mosh-audio-link">Link on mosh</label>
          <input
             id="mosh-audio-link"
             type="checkbox"
@@ -195,7 +207,7 @@
                   (moshAudioLinkStrength = DEFAULT_SETTINGS.moshAudioLinkStrength),
             )}
       >
-         <label for="mosh-audio-link-strength">Links strength</label>
+         <label for="mosh-audio-link-strength">Strength</label>
          <RangeSlider
             id="mosh-audio-link-strength"
             bind:value={moshAudioLinkStrength}
@@ -204,6 +216,26 @@
             step={0.05}
          />
          <span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
+      </div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+         class="config-row"
+         title="Double-click to reset"
+         ondblclick={(e) =>
+            resetRow(e, () => (moshLinkBand = DEFAULT_SETTINGS.moshLinkBand))}
+      >
+         <span class="row-label">Freq</span>
+         <div class="band-presets" role="group" aria-label="Link frequency band">
+            {#each BANDS as band}
+               <button
+                  type="button"
+                  class="band-btn"
+                  class:active={moshLinkBand === band.id}
+                  title={band.title}
+                  onclick={() => (moshLinkBand = band.id)}>{band.label}</button
+               >
+            {/each}
+         </div>
       </div>
    {/if}
    <!-- Not gated on moshAudioLink: these shape every link, hand-made ones too. -->
@@ -336,7 +368,8 @@
       font-size: 0.78rem;
    }
 
-   .config-row label {
+   .config-row label,
+   .config-row .row-label {
       min-width: 84px;
       color: var(--text-3);
       font-family: var(--font-mono);
@@ -358,6 +391,40 @@
       font-family: var(--font-mono);
       font-size: 0.66rem;
       font-variant-numeric: tabular-nums;
+   }
+
+   .band-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.2rem;
+   }
+
+   .band-btn {
+      padding: 0.1rem 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.58rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      background: none;
+      border: 1px solid var(--line);
+      border-radius: var(--r-pill);
+      cursor: pointer;
+      transition:
+         color var(--t-fast),
+         border-color var(--t-fast),
+         background var(--t-fast);
+   }
+
+   .band-btn:hover {
+      color: var(--text-2);
+      border-color: var(--line-strong);
+   }
+
+   .band-btn.active {
+      color: var(--live);
+      border-color: var(--live-dim);
+      background: rgba(110, 231, 192, 0.12);
    }
 
    .help-toggle {
