@@ -8,7 +8,11 @@ import {
 	type FrameAudioData,
 } from './audio/offline-audio';
 import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
-import { DEFAULT_AUTO_RANGE_AMOUNT, resetAutoRange } from './audio/auto-range';
+import {
+	DEFAULT_AUDIO_RESPONSE,
+	resetAutoRange,
+	type AudioResponse,
+} from './audio/auto-range';
 import { stretchAudioBuffer } from './audio/time-stretch';
 import {
 	resolveTextLayersAt,
@@ -57,8 +61,8 @@ export interface RecordOptions {
 	audioSpeed?: number;
 	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
 	normalizeGain?: number;
-	/** Blend between raw (0) and auto-ranged (1) levels. Must match the preview. */
-	autoRangeAmount?: number;
+	/** How band levels are followed and shaped. Must match the preview. */
+	audioResponse?: AudioResponse;
 	/** Text lanes composited into the chain, resolved per frame. */
 	textTimeline?: TextTimeline | null;
 	/** Added to the frame time to reach the timeline's clock — an export that
@@ -91,7 +95,7 @@ function applyFrameAudio(
 	i: number,
 	sampleRate: number,
 	frameDuration: number,
-	autoRangeAmount: number,
+	response: AudioResponse,
 ): void {
 	if (frameAudioData.length > 0) {
 		applyFrameAudioToEffects(
@@ -100,7 +104,7 @@ function applyFrameAudio(
 			sampleRate,
 			FFT_SIZE,
 			frameDuration,
-			autoRangeAmount,
+			response,
 		);
 	}
 }
@@ -178,7 +182,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		loopAudio,
 		normalizeGain = 1.0,
 		audioSpeed = 1,
-		autoRangeAmount = DEFAULT_AUTO_RANGE_AMOUNT,
+		audioResponse = DEFAULT_AUDIO_RESPONSE,
 		textTimeline = null,
 		textTimeOffset = 0,
 		textTimeScale = 1,
@@ -527,7 +531,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				i,
 				audioSampleRate,
 				frameDuration,
-				autoRangeAmount,
+				audioResponse,
 			);
 			if (typeof skipRender === 'function') skipRender(textLayers);
 			else if (!skipRender) renderer.render(renderEffects, time, textLayers);

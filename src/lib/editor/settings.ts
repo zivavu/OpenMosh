@@ -1,4 +1,4 @@
-import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
+import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
 
 const SETTINGS_KEY = "openmosh-settings";
 
@@ -15,6 +15,10 @@ export interface EditorSettings {
 	moshAudioLinkStrength: number;
 	/** 0 = raw band level, 1 = fully auto-ranged. Applies to every volume link. */
 	autoRangeAmount: number;
+	/** 0 = the level snaps to the signal, 1 = it glides. Sets the follower's release. */
+	audioSmoothing: number;
+	/** Response curve of a linked param: low lifts quiet detail, high keeps only hits. */
+	audioPunch: number;
 	showFps: boolean;
 	outputVolume: number;
 	loopAudio: boolean;
@@ -33,7 +37,9 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	randomizeOrder: true,
 	moshAudioLink: true,
 	moshAudioLinkStrength: 0.8,
-	autoRangeAmount: DEFAULT_AUTO_RANGE_AMOUNT,
+	autoRangeAmount: DEFAULT_AUDIO_RESPONSE.autoRange,
+	audioSmoothing: DEFAULT_AUDIO_RESPONSE.smoothing,
+	audioPunch: DEFAULT_AUDIO_RESPONSE.punch,
 	showFps: false,
 	outputVolume: 1,
 	loopAudio: false,

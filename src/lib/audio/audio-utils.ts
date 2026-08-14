@@ -1,17 +1,18 @@
 import { FREQ_PRESETS, getDefinition, type EffectInstance } from "../effects";
-import { autoRangeLevel, smoothBandLevel } from "./auto-range";
-
-/** Shaping applied after auto-ranging. Above 1 = only bigger hits register. */
-const RESPONSE_EXPONENT = 1.5;
+import {
+  autoRangeLevel,
+  punchExponent,
+  smoothBandLevel,
+  type AudioResponse,
+} from "./auto-range";
 
 function bandKey(freqMin: number, freqMax: number): string {
   return `${freqMin}:${freqMax}`;
 }
 
 /**
- * `dt` and `autoRangeAmount` must match between preview and export, or a render
- * will not sound like what was previewed. `autoRangeAmount` blends raw level
- * (0) against auto-ranged (1).
+ * `dt` and `response` must match between preview and export, or a render will
+ * not look like what was previewed.
  */
 export function applyVolumeLinksToEffects(
   effects: EffectInstance[],
@@ -20,8 +21,9 @@ export function applyVolumeLinksToEffects(
   sampleRate: number,
   fftSize: number,
   dt: number,
-  autoRangeAmount: number,
+  response: AudioResponse,
 ): void {
+  const exponent = punchExponent(response.punch);
   // Cached so a band's envelope advances once per frame, not once per link.
   const perBand = new Map<string, number>();
   const levelForBand = (freqMin: number, freqMax: number): number => {
@@ -41,11 +43,11 @@ export function applyVolumeLinksToEffects(
     // Smoothed before ranging, not after: the envelope has to see the same
     // steadied signal in an export that the preview's analyser handed it, or
     // its ceiling gets pinned by transients the preview never showed it.
-    const raw = smoothBandLevel(key, measured, dt);
+    const raw = smoothBandLevel(key, measured, dt, response.smoothing);
     // Always stepped, even at amount 0, so the envelope stays warm and raising
     // the slider mid-track doesn't jump off stale floor/ceiling values.
     const ranged = autoRangeLevel(key, raw, dt);
-    const blended = raw + (ranged - raw) * autoRangeAmount;
+    const blended = raw + (ranged - raw) * response.autoRange;
     perBand.set(key, blended);
     return blended;
   };
@@ -64,7 +66,7 @@ export function applyVolumeLinksToEffects(
         link.freqMax ?? FREQ_PRESETS.full.max,
       );
       // Shape before inverting, so inverted is the mirror of the same response.
-      level = level ** RESPONSE_EXPONENT;
+      level = level ** exponent;
       if (link.inverted) level = 1 - level;
       const { min: pMin, max: pMax, step } = param;
       let value = link.min + level * (link.max - link.min);
