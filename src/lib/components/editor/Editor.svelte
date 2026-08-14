@@ -7,6 +7,8 @@
 		Library,
 		Maximize,
 		MicVocal,
+		Pause,
+		Play,
 		Plus,
 		Shuffle,
 		Trash2,
@@ -2352,6 +2354,19 @@
 					{/snippet}
 				</MoshGroup>
 			</div>
+			{#if showStack}
+				<!-- The same transport as the timeline toolbar's, at the size the
+				     slideshow gives it: playing back is a main action here too. -->
+				<button class="action-btn play-btn" onclick={toggleMasterPlay}>
+					{#if textClockRunning}
+						<Pause size={16} fill="currentColor" stroke="none" />
+						STOP
+					{:else}
+						<Play size={16} fill="currentColor" stroke="none" />
+						PLAY
+					{/if}
+				</button>
+			{/if}
 			{#if isImageFormat}
 				<button class="action-btn save-btn" onclick={save}>
 					<Download size={16} />
@@ -2898,6 +2913,12 @@
 	.save-btn:hover {
 		border-color: var(--live-dim);
 		color: var(--live);
+	}
+
+	.play-btn:hover {
+		border-color: var(--live-dim);
+		color: var(--live);
+		background: rgba(110, 231, 192, 0.1);
 	}
 
 	.mosh-setting-row {
