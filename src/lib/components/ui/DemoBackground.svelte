@@ -7,7 +7,7 @@
 	 */
 	import { untrack } from "svelte";
 	import { Play, Square } from "lucide-svelte";
-	import type { GlRenderer } from "../../gl/renderer";
+	import { GlRenderer } from "../../gl/renderer";
 	import {
 		DEFAULT_SETTINGS,
 		loadSettings,
@@ -173,9 +173,10 @@
 			// slot would surface in its first sequence transition.
 			renderer.clearAltSource();
 			// Park the canvas back where warmup left it, hidden — the editor
-			// reparents this exact element and expects it still attached.
-			canvas.style.cssText =
-				"position:absolute;visibility:hidden;pointer-events:none";
+			// reparents this exact element and expects it still attached. Same
+			// style as warmup, since by now it carries the demo's render size and
+			// would otherwise leave a page-tall box at the end of <body>.
+			canvas.style.cssText = GlRenderer.PARKED_CANVAS_STYLE;
 			canvas.className = "";
 			document.body.appendChild(canvas);
 		};

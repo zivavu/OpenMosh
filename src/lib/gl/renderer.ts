@@ -238,16 +238,38 @@ export class GlRenderer {
   }
 
   /**
+   * How a canvas parked in <body> has to be styled to hold its GL context
+   * without affecting the page.
+   *
+   * `position:fixed` and an explicit 1px box, not `position:absolute` alone: an
+   * absolutely positioned element with no offsets sits at its static position —
+   * the end of <body> — and still contributes to the document's scrollable
+   * overflow. `visibility:hidden` hides the pixels but keeps the layout box, so
+   * a parked canvas carrying its last render size (hundreds of pixels tall) gave
+   * the editor a phantom vertical scrollbar.
+   */
+  static readonly PARKED_CANVAS_STYLE =
+    "position:fixed;top:0;left:0;width:1px;height:1px;visibility:hidden;pointer-events:none";
+
+  /**
    * Pre-compile all shaders on a hidden 1×1 canvas so the first real render
    * doesn't pay the compilation cost. Returns the warmed renderer + its canvas;
    * pass both into GlCanvas via the `warmCanvas`/`warmRenderer` props.
    */
   static warmup(): { canvas: HTMLCanvasElement; renderer: GlRenderer } {
+    // Sweep any warm canvas still parked from a previous cycle. Only direct
+    // children of <body> qualify: one adopted into an editor lives inside that
+    // editor's DOM and is still in use.
+    for (const stale of document.body.querySelectorAll(
+      ":scope > canvas[data-openmosh-warm]",
+    )) {
+      stale.remove();
+    }
     const canvas = document.createElement("canvas");
     canvas.width = 1;
     canvas.height = 1;
-    canvas.style.cssText =
-      "position:absolute;visibility:hidden;pointer-events:none";
+    canvas.dataset.openmoshWarm = "1";
+    canvas.style.cssText = GlRenderer.PARKED_CANVAS_STYLE;
     document.body.appendChild(canvas);
     const renderer = new GlRenderer(canvas);
     return { canvas, renderer };
