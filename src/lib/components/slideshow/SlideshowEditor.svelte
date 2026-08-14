@@ -45,7 +45,6 @@
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import TimelineStack from '../ui/TimelineStack.svelte';
 	import TimelineSegments from './TimelineSegments.svelte';
-	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
@@ -65,10 +64,16 @@
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
 	import { loadSettings, updateSettings } from '../../editor/settings';
+	import { saveSession } from '../../editor/sessions';
+	import { pruneSequenceMedia } from '../../editor/sequence-media-store';
 
 	interface Props {
 		initialFiles: File[];
 		initialAudioFile?: File | null;
+		/** Library id of `initialAudioFile`, when it came from a saved session. */
+		initialTrackId?: string | null;
+		/** Config restored from a saved session, if reopened from one. */
+		initialConfig?: SlideshowConfig | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 		onExit?: () => void;
@@ -77,6 +82,8 @@
 	let {
 		initialFiles,
 		initialAudioFile = null,
+		initialTrackId = null,
+		initialConfig = null,
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
@@ -256,7 +263,41 @@
 		slides = [...restored, ...slides.filter((s) => !known.has(s.id))];
 	}
 
-	let showExitConfirm = $state(false);
+	// ── Session ──
+	// The image set and the config that was built around it are saved together,
+	// so the upload screen can offer the whole slideshow back.
+	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function saveSlideshowSession() {
+		const files = slides.map((s) => s.file);
+		if (files.length === 0) return;
+		// Keyed by the song when there is one, so the session sits alongside the
+		// segments and text already saved under that track id.
+		void saveSession(
+			'slideshow',
+			files,
+			{ config: $state.snapshot(config) as SlideshowConfig },
+			currentTrackId,
+		)
+			.then(() => pruneSequenceMedia())
+			.catch((e) => {
+				// Swallowing this outright is what made the last failure invisible.
+				if (import.meta.env.DEV) console.error('Slideshow session save failed:', e);
+			});
+	}
+
+	$effect(() => {
+		// Deep-read, discarded: naming `slides` and `config` alone subscribes to
+		// the two references only, so changing a segment or a slide's preset —
+		// which is most of the editing — would never re-arm the debounce.
+		$state.snapshot(slides);
+		$state.snapshot(config);
+		// Loading a different song re-keys the session, so it has to re-save.
+		currentTrackId;
+		clearTimeout(sessionSaveTimer);
+		sessionSaveTimer = setTimeout(saveSlideshowSession, 600);
+		return () => clearTimeout(sessionSaveTimer);
+	});
 
 	function handleExit() {
 		if (!onExit) return;
@@ -267,10 +308,10 @@
 			);
 			return;
 		}
-		if (slides.length > 0) {
-			showExitConfirm = true;
-			return;
-		}
+		// No confirm: the slideshow is saved as a session and offered back on
+		// the upload screen, so leaving costs nothing.
+		clearTimeout(sessionSaveTimer);
+		saveSlideshowSession();
 		onExit();
 	}
 
@@ -324,6 +365,16 @@
 	// ── Config ──
 	const CONFIG_KEY = 'openmosh-slideshow-config';
 	function loadConfig(): SlideshowConfig {
+		// A reopened session carries its own config; the global key is only the
+		// "whatever was set last" default for a brand-new slideshow.
+		const restored = untrack(() => initialConfig);
+		if (restored) {
+			return {
+				...DEFAULT_SLIDESHOW_CONFIG,
+				...restored,
+				text: normalizeTextTimeline(restored.text),
+			};
+		}
 		try {
 			const raw = localStorage.getItem(CONFIG_KEY);
 			if (raw) {
@@ -542,6 +593,9 @@
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
+			// Reopened from a saved session: adopting the library id is what
+			// brings its segments, BPM and text timeline back with it.
+			if (initialTrackId) adoptLibraryTrack(initialTrackId);
 		}
 	});
 
@@ -1339,20 +1393,6 @@
 		</div>
 	{/if}
 
-	{#if showExitConfirm}
-		<ConfirmDialog
-			title="Return to upload?"
-			message="This discards your current slideshow. Presets you've saved stay."
-			confirmLabel="Discard and exit"
-			cancelLabel="Keep editing"
-			danger
-			onConfirm={() => {
-				showExitConfirm = false;
-				onExit?.();
-			}}
-			onCancel={() => (showExitConfirm = false)}
-		/>
-	{/if}
 </div>
 
 <style>
