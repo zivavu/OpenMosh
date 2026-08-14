@@ -29,7 +29,10 @@
 
 	let holder = $state<HTMLDivElement>(undefined!);
 	let sources = $state<HTMLImageElement[]>([]);
-	let live = $state(false);
+
+	/** Seconds the demo takes to come up from black on its first frames. */
+	const FADE_SECONDS = 1.2;
+	const easeOut = (p: number) => 1 - (1 - p) ** 3;
 
 	// Deliberately not tied to prefers-reduced-motion: people set that flag for
 	// their OS, not to opt out of a page's centrepiece. Own button, own memory.
@@ -39,7 +42,11 @@
 
 	/** Set once the render loop is wired up, so the button can drive it without
 	 * tearing down and reparenting the canvas on every toggle. */
-	let transport = $state<{ start: () => void; stop: () => void } | null>(null);
+	let transport = $state<{
+		start: () => void;
+		stop: () => void;
+		blank: () => void;
+	} | null>(null);
 
 	function togglePlaying() {
 		playing = !playing;
@@ -85,19 +92,21 @@
 		/** Poster currently staged in the renderer's outgoing slot. */
 		let altIndex = -1;
 		let raf = 0;
-		let fadeRaf = 0;
 		// Fed a delta rather than wall-clock, so a pause doesn't silently skip
 		// the demo forward by however long it sat frozen.
 		let lastTs = 0;
+		/** Seconds of drawn demo so far, capped at FADE_SECONDS. */
+		let fadeT = 0;
 
-		// Flipped a frame after the first draw, not during it: the holder has to
-		// be painted at opacity 0 once for the fade up from black to run at all.
-		const markLive = () => {
-			if (live || fadeRaf) return;
-			fadeRaf = requestAnimationFrame(() => {
-				fadeRaf = 0;
-				live = true;
-			});
+		// Driven off the render loop rather than a CSS transition: the fade has
+		// to start from a frame that was actually painted, and a class flipped
+		// around mount lands in the same frame as the first paint, so it just
+		// cuts. Sharing the loop's delta also means the ramp only advances on
+		// frames that really drew.
+		const advanceFade = (dt: number) => {
+			if (fadeT >= FADE_SECONDS) return;
+			fadeT = Math.min(FADE_SECONDS, fadeT + dt);
+			holder.style.opacity = String(easeOut(fadeT / FADE_SECONDS));
 		};
 
 		const drawFrame = () => {
@@ -135,7 +144,9 @@
 			} else {
 				renderer.render(frame.effects, frame.time);
 			}
-			markLive();
+			// dt is 0 on the first frame after any start, so the priming draw
+			// paints the holder at opacity 0 before the ramp moves at all.
+			advanceFade(dt);
 		};
 
 		const loop = () => {
@@ -145,13 +156,17 @@
 
 		const stop = () => {
 			if (raf) cancelAnimationFrame(raf);
-			if (fadeRaf) cancelAnimationFrame(fadeRaf);
 			raf = 0;
-			fadeRaf = 0;
 			lastTs = 0;
 		};
 		const start = () => {
 			if (!raf && !document.hidden) raf = requestAnimationFrame(loop);
+		};
+		// Stopping is a blackout, not a pause, so it cuts and re-fades on
+		// resume. A tab left in the background only calls stop().
+		const blank = () => {
+			fadeT = 0;
+			holder.style.opacity = "0";
 		};
 		const onVisibility = () =>
 			document.hidden || !playing ? stop() : start();
@@ -163,7 +178,7 @@
 		// re-trigger the whole setup.
 		if (untrack(() => playing)) untrack(drawFrame);
 		document.addEventListener("visibilitychange", onVisibility);
-		transport = { start, stop };
+		transport = { start, stop, blank };
 
 		return () => {
 			stop();
@@ -184,12 +199,16 @@
 
 	$effect(() => {
 		if (!transport) return;
-		if (playing) transport.start();
-		else transport.stop();
+		if (playing) {
+			transport.start();
+		} else {
+			transport.stop();
+			transport.blank();
+		}
 	});
 </script>
 
-<div class="demo-bg" class:live={live && playing} class:blank={!playing}>
+<div class="demo-bg" class:blank={!playing}>
 	<div class="demo-holder" bind:this={holder}></div>
 	<div class="scrim"></div>
 </div>
@@ -235,16 +254,12 @@
 	}
 
 	/* Starts black and comes up into the mosh — the first frame is a whole
-	   image appearing at once, so a hard cut reads as a flash. */
+	   image appearing at once, so a hard cut reads as a flash. The ramp itself
+	   is an inline opacity written by the render loop, not a transition. */
 	.demo-holder {
 		position: absolute;
 		inset: 0;
 		opacity: 0;
-		transition: opacity 1.2s ease-out;
-	}
-
-	.live .demo-holder {
-		opacity: 1;
 	}
 
 	.demo-holder :global(.demo-canvas) {
