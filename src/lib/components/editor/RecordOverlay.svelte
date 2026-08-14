@@ -13,7 +13,8 @@
 	<div class="record-overlay">
 		<div class="record-modal">
 			<p class="record-title">
-				{recordFinalizing ? 'Creating file…' : 'Recording WEBM...'}
+				<span class="tally" class:steady={recordFinalizing}></span>
+				{recordFinalizing ? 'Writing file' : 'Recording'}
 			</p>
 			<div class="progress-track" class:finalizing={recordFinalizing}>
 				<div
@@ -46,30 +47,60 @@
 		align-items: center;
 		gap: 0.75rem;
 		padding: 2rem 3rem;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 12px;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+		background: var(--surface);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-3);
+		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
 	}
 
 	.record-title {
-		font-size: 0.9rem;
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
 		font-weight: 600;
-		color: #ddd;
-		letter-spacing: 0.04em;
+		color: var(--text);
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+	}
+
+	/* Tally light: blinks while frames are being captured, steady while writing. */
+	.tally {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--rec);
+		box-shadow: 0 0 10px rgba(255, 95, 86, 0.9);
+		animation: tally-blink 1s steps(1, end) infinite;
+	}
+
+	.tally.steady {
+		animation: none;
+	}
+
+	@keyframes tally-blink {
+		0%,
+		50% {
+			opacity: 1;
+		}
+		51%,
+		100% {
+			opacity: 0.25;
+		}
 	}
 
 	.progress-track {
 		width: 200px;
 		height: 4px;
-		background: #333;
+		background: rgba(255, 255, 255, 0.07);
 		border-radius: 2px;
 		overflow: hidden;
 	}
 
 	.progress-fill {
 		height: 100%;
-		background: #c05050;
+		background: var(--rec);
 		border-radius: 2px;
 		transition: width 0.15s;
 	}
@@ -89,19 +120,22 @@
 	}
 
 	.record-pct {
-		font-size: 0.75rem;
-		color: #999;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--text-2);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.rec-cancel-btn {
 		padding: 0.35rem 1.2rem;
-		border: 1px solid #444;
-		border-radius: 6px;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-2);
 		background: none;
-		color: #999;
-		font-size: 0.7rem;
-		font-family: inherit;
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
 		cursor: pointer;
 		transition:
 			color 0.15s,
@@ -109,7 +143,7 @@
 	}
 
 	.rec-cancel-btn:hover {
-		color: #ddd;
-		border-color: #666;
+		color: var(--text);
+		border-color: var(--text-4);
 	}
 </style>

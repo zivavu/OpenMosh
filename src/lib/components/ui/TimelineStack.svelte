@@ -18,8 +18,6 @@
 		onSeek?: ((time: number) => void) | null;
 		loopEnabled?: boolean;
 		onToggleLoop?: (() => void) | null;
-		/** Matches the lanes stacked under it. */
-		accent?: 'blue' | 'purple';
 		/**
 		 * The lanes' own actions — one toolbar for the whole stack rather than a
 		 * header row per lane. The editors fill this; see Editor.svelte.
@@ -37,7 +35,6 @@
 		onSeek = null,
 		loopEnabled = false,
 		onToggleLoop = null,
-		accent = 'blue',
 		toolbar,
 		children,
 	}: Props = $props();
@@ -206,7 +203,6 @@
 			<TimelineScrollbar
 				{vp}
 				{trackDuration}
-				{accent}
 				onPanStart={() => (stack.followPlayhead = false)}
 			/>
 		</div>
@@ -218,10 +214,10 @@
 	   renders against, so they are global — scoped to this container, which is
 	   the only place they mean anything. */
 	.tl-stack {
-		--tl-gutter: 150px;
+		--tl-gutter: 110px;
 		--tl-gap: 0.35rem;
-		--tl-playhead: #e8b84b;
-		--tl-chrome-bg: #121212;
+		--tl-playhead: var(--live);
+		--tl-chrome-bg: var(--surface);
 		/* Height of the band under the lanes that the tick labels sit in. */
 		--tl-scale-h: 12px;
 		flex-shrink: 0;
@@ -229,7 +225,7 @@
 		flex-direction: column;
 		gap: 2px;
 		padding: 0.4rem 0.5rem;
-		border-top: 1px solid #2a2a2a;
+		border-top: 1px solid var(--line);
 		background: var(--tl-chrome-bg);
 	}
 
@@ -264,10 +260,11 @@
 	}
 
 	:global(.tl-stack .tl-gutter-label) {
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		color: #666;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		color: var(--text-3);
 		text-transform: uppercase;
 		flex-shrink: 0;
 	}
@@ -288,17 +285,20 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.15rem 0.4rem;
-		border: 1px solid #2e2e2e;
-		border-radius: 4px;
-		background: #191919;
-		color: #bbb;
-		font-size: 0.68rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		background: rgba(255, 255, 255, 0.03);
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 		cursor: pointer;
 	}
 
 	:global(.tl-stack .tl-tool-btn:hover:not(:disabled)) {
-		border-color: #555;
-		color: #fff;
+		border-color: var(--text-4);
+		color: var(--text);
 	}
 
 	:global(.tl-stack .tl-tool-btn:disabled) {
@@ -307,13 +307,13 @@
 	}
 
 	:global(.tl-stack .tl-tool-btn.active) {
-		border-color: #4a6a8a;
-		color: #fff;
+		border-color: var(--live-dim);
+		color: var(--text);
 	}
 
 	:global(.tl-stack .tl-tool-btn.danger:hover) {
-		border-color: #7a3a3a;
-		color: #ff9a9a;
+		border-color: var(--rec-dim);
+		color: var(--rec);
 	}
 
 	/* Pushes Follow — and nothing else — to the far right. */
@@ -327,23 +327,25 @@
 		width: 1px;
 		align-self: stretch;
 		margin: 0 0.15rem;
-		background: #2a2a2a;
+		background: rgba(255, 255, 255, 0.05);
 	}
 
 	:global(.tl-stack .tl-tool-count) {
 		padding: 0 4px;
 		border-radius: 999px;
-		background: #262626;
-		color: #9a9a9a;
-		font-size: 0.58rem;
+		background: rgba(255, 255, 255, 0.08);
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.55rem;
 		font-variant-numeric: tabular-nums;
 	}
 
 	:global(.tl-stack .tl-tool-label) {
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		color: #5f5f5f;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		color: var(--text-3);
 		text-transform: uppercase;
 	}
 
@@ -353,10 +355,10 @@
 		justify-content: center;
 		width: 26px;
 		height: 22px;
-		border: 1px solid #444;
+		border: 1px solid var(--line-strong);
 		border-radius: 5px;
 		background: rgba(30, 30, 30, 0.9);
-		color: #aaa;
+		color: var(--text-2);
 		cursor: pointer;
 		flex-shrink: 0;
 		transition:
@@ -366,28 +368,29 @@
 	}
 
 	.tl-transport-btn:hover {
-		color: #fff;
-		border-color: #555;
+		color: var(--text);
+		border-color: var(--text-4);
 		background: rgba(255, 255, 255, 0.06);
 	}
 
 	.tl-transport-btn.loop-on {
-		color: #fff;
-		border-color: #666;
+		color: var(--text);
+		border-color: var(--text-4);
 		background: rgba(255, 255, 255, 0.12);
 	}
 
 	.tl-clock {
 		padding: 0 0.2rem;
-		color: #999;
+		color: var(--text-2);
 		font-size: 0.72rem;
 		/* Tabular, so the digits don't shuffle the toolbar every frame. */
+		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}
 
 	.tl-clock-ms {
-		color: #6a6a6a;
+		color: var(--text-3);
 		font-size: 0.64rem;
 	}
 
@@ -438,8 +441,9 @@
 		position: absolute;
 		bottom: calc(-1 * var(--tl-scale-h));
 		left: 3px;
-		color: #5a5a5a;
-		font-size: 0.55rem;
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.53rem;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}
@@ -450,7 +454,7 @@
 		bottom: 0;
 		width: 1px;
 		background: var(--tl-playhead);
-		box-shadow: 0 0 3px rgba(232, 184, 75, 0.5);
+		box-shadow: 0 0 4px rgba(110, 231, 192, 0.6);
 	}
 
 	@media (max-width: 800px) {

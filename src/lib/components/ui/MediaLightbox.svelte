@@ -192,7 +192,7 @@
 
 	.lb-info {
 		font-size: 0.7rem;
-		color: #888;
+		color: var(--text-3);
 		letter-spacing: 0.03em;
 		white-space: nowrap;
 		overflow: hidden;
@@ -203,7 +203,7 @@
 	.lb-close {
 		background: none;
 		border: none;
-		color: #666;
+		color: var(--text-3);
 		cursor: pointer;
 		padding: 2px;
 		display: flex;
@@ -213,7 +213,7 @@
 	}
 
 	.lb-close:hover {
-		color: #ccc;
+		color: var(--text);
 	}
 
 	.lb-img-wrap {
@@ -258,9 +258,9 @@
 		top: 50%;
 		transform: translateY(-50%);
 		background: rgba(0, 0, 0, 0.5);
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 50%;
-		color: #888;
+		color: var(--text-3);
 		width: 36px;
 		height: 36px;
 		display: flex;
@@ -274,7 +274,7 @@
 	}
 
 	.lb-arrow:hover {
-		color: #fff;
+		color: var(--text);
 		background: rgba(0, 0, 0, 0.75);
 	}
 

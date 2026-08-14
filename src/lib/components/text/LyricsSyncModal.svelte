@@ -444,8 +444,8 @@
 		max-height: min(80vh, 640px);
 		overflow-y: auto;
 		padding: 1.1rem 1.25rem;
-		background: #1a1a1a;
-		border: 1px solid #333;
+		background: var(--surface);
+		border: 1px solid var(--line);
 		border-radius: 12px;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 	}
@@ -459,7 +459,7 @@
 	.title {
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: #ddd;
+		color: var(--text);
 		letter-spacing: 0.04em;
 	}
 
@@ -470,22 +470,22 @@
 		padding: 2px;
 		border: none;
 		background: none;
-		color: #777;
+		color: var(--text-3);
 		cursor: pointer;
 		border-radius: 4px;
 	}
 
 	.close-btn:hover {
-		color: #eee;
+		color: var(--text);
 	}
 
 	.lyrics-input {
 		min-height: 180px;
 		padding: 0.5rem;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 6px;
-		background: #121212;
-		color: #e0e0e0;
+		background: var(--ink);
+		color: var(--text);
 		font-size: 0.85rem;
 		font-family: inherit;
 		line-height: 1.5;
@@ -493,7 +493,7 @@
 	}
 
 	.lyrics-input:focus {
-		border-color: #4a6a8a;
+		border-color: var(--live-dim);
 		outline: none;
 	}
 
@@ -509,10 +509,10 @@
 		align-items: center;
 		gap: 0.15rem;
 		padding: 0.3rem 0.5rem;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 6px;
-		background: #1a1a1a;
-		color: #bbb;
+		background: var(--surface);
+		color: var(--text-2);
 		font-size: 0.7rem;
 		cursor: pointer;
 	}
@@ -523,19 +523,21 @@
 
 	.play-btn:hover,
 	.shift-btn:hover {
-		border-color: #555;
-		color: #fff;
+		border-color: var(--text-4);
+		color: var(--text);
 	}
 
 	.clock {
-		color: #ddd;
+		color: var(--text);
 		font-size: 0.85rem;
+		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.count {
-		color: #888;
+		color: var(--text-3);
 		font-size: 0.72rem;
+		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -554,9 +556,9 @@
 		   the middle like every other one — without it the highlight starts at
 		   the top edge and travels, which is the thing being avoided. */
 		padding: calc((var(--lines-height) - var(--line-height)) / 2) 0;
-		border: 1px solid #2a2a2a;
+		border: 1px solid var(--line);
 		border-radius: 6px;
-		background: #121212;
+		background: var(--ink);
 	}
 
 	.line {
@@ -568,7 +570,7 @@
 		border: none;
 		border-bottom: 1px solid #1f1f1f;
 		background: none;
-		color: #bbb;
+		color: var(--text-2);
 		font-size: 0.78rem;
 		font-family: inherit;
 		text-align: left;
@@ -580,8 +582,8 @@
 	}
 
 	.line.active {
-		background: #2f527a;
-		color: #fff;
+		background: var(--live-dim);
+		color: var(--text);
 	}
 
 	.line.timed:not(.active) {
@@ -593,13 +595,13 @@
 	}
 
 	.line.active:hover {
-		background: #2f527a;
+		background: var(--live-dim);
 	}
 
 	.line-no {
 		flex-shrink: 0;
 		width: 20px;
-		color: #666;
+		color: var(--text-3);
 		font-size: 0.68rem;
 		text-align: right;
 	}
@@ -614,15 +616,16 @@
 	.line-time {
 		flex-shrink: 0;
 		min-width: 44px;
-		color: #888;
+		color: var(--text-3);
 		font-size: 0.7rem;
+		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
 		text-align: right;
 	}
 
 	.hint {
 		margin: 0;
-		color: #666;
+		color: var(--text-3);
 		font-size: 0.72rem;
 		line-height: 1.35;
 	}
@@ -640,16 +643,16 @@
 
 	.mark-btn {
 		padding: 0.3rem 0.7rem;
-		border: 1px solid #4a6a8a;
+		border: 1px solid var(--live-dim);
 		border-radius: 6px;
-		background: #2f527a;
-		color: #fff;
+		background: var(--live-dim);
+		color: var(--text);
 		font-size: 0.72rem;
 		cursor: pointer;
 	}
 
 	.mark-btn:hover:not(:disabled) {
-		background: #3a6391;
+		background: var(--live-dim);
 	}
 
 	.mark-btn:disabled {
@@ -659,16 +662,16 @@
 
 	.primary {
 		padding: 0.35rem 0.8rem;
-		border: 1px solid #4a6a8a;
+		border: 1px solid var(--live-dim);
 		border-radius: 6px;
-		background: #2f527a;
-		color: #fff;
+		background: var(--live-dim);
+		color: var(--text);
 		font-size: 0.75rem;
 		cursor: pointer;
 	}
 
 	.primary:hover:not(:disabled) {
-		background: #3a6391;
+		background: var(--live-dim);
 	}
 
 	.primary:disabled {
@@ -681,17 +684,17 @@
 		align-items: center;
 		gap: 0.25rem;
 		padding: 0.3rem 0.6rem;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 6px;
-		background: #1a1a1a;
-		color: #bbb;
+		background: var(--surface);
+		color: var(--text-2);
 		font-size: 0.72rem;
 		font-family: inherit;
 		cursor: pointer;
 	}
 
 	.ghost:hover {
-		border-color: #555;
-		color: #fff;
+		border-color: var(--text-4);
+		color: var(--text);
 	}
 </style>

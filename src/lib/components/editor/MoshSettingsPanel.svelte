@@ -233,7 +233,7 @@
       flex-direction: column;
       gap: 0.5rem;
       padding: 0.75rem;
-      border-bottom: 1px solid #2a2a2a;
+      border-bottom: 1px solid var(--line);
       max-width: 100%;
    }
 
@@ -242,10 +242,11 @@
    }
 
    .panel-title {
-      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
       font-weight: 600;
-      letter-spacing: 0.08em;
-      color: #888;
+      letter-spacing: 0.16em;
+      color: var(--text-3);
       text-transform: uppercase;
       margin-bottom: 0.25rem;
    }
@@ -258,21 +259,27 @@
    }
 
    .config-row label {
-      min-width: 80px;
-      color: #999;
-      font-size: 0.75rem;
+      min-width: 84px;
+      color: var(--text-3);
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 500;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
       /* The row's double-click resets the setting; without this it also
          selects the label text. */
       user-select: none;
    }
 
    .config-row input[type="checkbox"] {
-      accent-color: #888;
+      accent-color: var(--live);
    }
 
    .val {
-      color: #888;
-      font-size: 0.75rem;
+      color: var(--text-2);
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-variant-numeric: tabular-nums;
    }
 
    .help-toggle {
@@ -282,14 +289,14 @@
       padding: 0;
       border: none;
       background: none;
-      color: #666;
+      color: var(--text-3);
       cursor: pointer;
       flex-shrink: 0;
    }
 
    .help-toggle:hover,
    .help-toggle.active {
-      color: #bbb;
+      color: var(--text-2);
    }
 
    .auto-range-row {
@@ -305,11 +312,11 @@
       right: 0;
       z-index: 30;
       padding: 0.6rem 0.7rem;
-      background: #202020;
-      border: 1px solid #383838;
-      border-radius: 6px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
-      color: #9a9a9a;
+      background: var(--raised);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-2);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      color: var(--text-2);
       font-size: 0.68rem;
       line-height: 1.5;
    }
@@ -323,7 +330,7 @@
    }
 
    .help-popover strong {
-      color: #ccc;
+      color: var(--text);
       font-weight: 600;
    }
 </style>

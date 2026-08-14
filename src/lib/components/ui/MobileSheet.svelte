@@ -150,7 +150,7 @@
 	.sheet-container {
 		display: flex;
 		flex-direction: column;
-		border-left: 1px solid #2a2a2a;
+		border-left: 1px solid var(--line);
 		height: 100%;
 		flex-shrink: 0;
 		overflow: hidden;
@@ -180,13 +180,13 @@
 			right: 0;
 			height: 50svh;
 			border-left: none;
-			border-top: 1px solid #2a2a2a;
+			border-top: 1px solid var(--line);
 			border-radius: 12px 12px 0 0;
 			transform: translateY(calc(50svh - 44px));
 			transition: transform 0.3s ease;
 			z-index: 50;
 			overflow-y: auto;
-			background: #161616;
+			background: var(--surface);
 		}
 
 		.sheet-container.sheet-open {
@@ -214,7 +214,7 @@
 			height: 44px;
 			flex-shrink: 0;
 			width: 100%;
-			background: #161616;
+			background: var(--surface);
 			border: none;
 			cursor: pointer;
 			padding: 0;
@@ -225,13 +225,13 @@
 			width: 36px;
 			height: 3px;
 			border-radius: 2px;
-			background: #555;
+			background: var(--text-4);
 		}
 
 		.tab-bar {
 			display: flex;
 			flex-shrink: 0;
-			border-bottom: 1px solid #222;
+			border-bottom: 1px solid var(--line);
 		}
 
 		.tab-btn {
@@ -239,7 +239,7 @@
 			padding: 0.55rem;
 			background: none;
 			border: none;
-			color: #555;
+			color: var(--text-4);
 			font-size: 0.72rem;
 			font-weight: 600;
 			letter-spacing: 0.05em;
@@ -249,12 +249,12 @@
 		}
 
 		.tab-btn.active {
-			color: #ccc;
-			border-bottom: 2px solid #666;
+			color: var(--text);
+			border-bottom: 2px solid var(--text-4);
 		}
 
 		.tab-btn:hover:not(.active) {
-			color: #888;
+			color: var(--text-3);
 		}
 
 		.tab-content {

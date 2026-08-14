@@ -98,7 +98,8 @@
 		left: 0;
 		right: 0;
 		height: 3px;
-		background: #333;
+		background: var(--sunken);
+		box-shadow: inset 0 0 0 1px var(--line);
 		border-radius: 2px;
 		pointer-events: none;
 	}
@@ -107,7 +108,7 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		background: #666;
+		background: var(--live-dim);
 		border-radius: 2px;
 	}
 
@@ -128,36 +129,36 @@
 	.thumb::-webkit-slider-thumb {
 		-webkit-appearance: none;
 		appearance: none;
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: #aaa;
+		width: 9px;
+		height: 13px;
+		border-radius: 4px;
+		background: var(--text-2);
 		cursor: pointer;
 		pointer-events: all;
 		position: relative;
 		z-index: 2;
-		transition: background 0.15s;
+		transition: background var(--t-fast);
 	}
 
 	.thumb::-webkit-slider-thumb:hover {
-		background: #ddd;
+		background: var(--text);
 	}
 
 	.thumb::-moz-range-thumb {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: #aaa;
+		width: 9px;
+		height: 13px;
+		border-radius: 4px;
+		background: var(--text-2);
 		cursor: pointer;
 		pointer-events: all;
 		border: none;
 		position: relative;
 		z-index: 2;
-		transition: background 0.15s;
+		transition: background var(--t-fast);
 	}
 
 	.thumb::-moz-range-thumb:hover {
-		background: #ddd;
+		background: var(--text);
 	}
 
 	.thumb-high {
@@ -171,8 +172,9 @@
 	}
 
 	.val {
-		font-size: 0.6rem;
-		color: #777;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		color: var(--text-3);
 		font-variant-numeric: tabular-nums;
 	}
 </style>

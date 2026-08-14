@@ -541,7 +541,7 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      background: #0a0a0a;
+      background: var(--ink);
    }
 
    /* :global — the pre-warmed canvas is moved in via the DOM, so it never gets
@@ -561,14 +561,14 @@
       justify-content: center;
       text-align: center;
       padding: 0 1.5rem;
-      color: #ff6b6b;
+      color: var(--rec);
       font-size: 0.9rem;
       background: rgba(0, 0, 0, 0.55);
       z-index: 10;
    }
 
    .preview-area:fullscreen {
-      background: #000;
+      background: var(--sunken);
    }
 
    /* Scale up to fill the screen on whichever axis runs out first, letterboxing
@@ -597,7 +597,7 @@
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 6px;
       background: rgba(0, 0, 0, 0.5);
-      color: #bbb;
+      color: var(--text-2);
       cursor: pointer;
       opacity: 0;
       transition:
@@ -614,7 +614,7 @@
    }
 
    .fs-exit:hover {
-      color: #fff;
+      color: var(--text);
       border-color: rgba(255, 255, 255, 0.3);
    }
 
@@ -626,7 +626,7 @@
       padding: 0.35rem 0.8rem;
       border-radius: 999px;
       background: rgba(0, 0, 0, 0.6);
-      color: #999;
+      color: var(--text-2);
       font-size: 0.66rem;
       font-family: "Consolas", "Monaco", monospace;
       letter-spacing: 0.1em;
@@ -650,7 +650,7 @@
       top: 1.8rem;
       left: 1.8rem;
       background: rgba(0, 0, 0, 0.65);
-      color: #0f0;
+      color: var(--live);
       font-size: 0.72rem;
       font-weight: 600;
       font-family: "Consolas", "Monaco", monospace;

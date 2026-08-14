@@ -1263,7 +1263,6 @@
 					onSpanStartChange={(t) => (audio.spanStart = t)}
 					onSpanEndChange={(t) => (audio.spanEnd = t)}
 					onVolumeChange={(v) => audio.setOutputVolume(v)}
-					onRemoveTrack={clearTrack}
 				/>
 			{/if}
 			{#if textTimeline.enabled}
@@ -1395,7 +1394,7 @@
 		position: absolute;
 		inset: 0;
 		z-index: 99;
-		border: 2px dashed #888;
+		border: 2px dashed var(--text-3);
 		border-radius: 8px;
 		pointer-events: none;
 	}
@@ -1414,7 +1413,7 @@
 	.drop-overlay span {
 		font-size: 1.2rem;
 		font-weight: 600;
-		color: #ccc;
+		color: var(--text);
 		letter-spacing: 0.04em;
 	}
 

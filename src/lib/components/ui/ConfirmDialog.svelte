@@ -99,24 +99,26 @@
       width: 360px;
       max-width: calc(100vw - 2rem);
       padding: 1.25rem;
-      background: #1a1a1a;
-      border: 1px solid #333;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--r-3);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
    }
 
    .title {
-      font-size: 0.85rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
       font-weight: 600;
-      color: #ddd;
-      letter-spacing: 0.04em;
+      color: var(--text);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
    }
 
    .message {
       margin: 0;
       font-size: 0.75rem;
       line-height: 1.5;
-      color: #999;
+      color: var(--text-2);
    }
 
    .actions {
@@ -128,39 +130,44 @@
 
    .btn {
       padding: 0.35rem 0.8rem;
-      font-family: inherit;
-      font-size: 0.72rem;
-      border-radius: 5px;
-      border: 1px solid #3a3a3a;
-      background: #242424;
-      color: #bbb;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-radius: var(--r-2);
+      border: 1px solid var(--line-strong);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-2);
       cursor: pointer;
+      transition:
+         background var(--t-fast),
+         color var(--t-fast);
    }
 
    .btn:hover {
-      background: #2c2c2c;
-      color: #eee;
+      background: rgba(255, 255, 255, 0.09);
+      color: var(--text);
    }
 
    .btn:focus-visible {
-      outline: 1px solid #666;
+      outline: 1px solid var(--text-4);
       outline-offset: 2px;
    }
 
    .confirm-btn {
-      border-color: #4a4a4a;
-      background: #333;
-      color: #ddd;
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text);
    }
 
    .confirm-btn.danger {
-      border-color: #5c2a2a;
-      background: #3a2020;
-      color: #e08080;
+      border-color: var(--rec-dim);
+      background: rgba(255, 95, 86, 0.12);
+      color: var(--rec);
    }
 
    .confirm-btn.danger:hover {
-      background: #4a2626;
-      color: #f0a0a0;
+      background: rgba(255, 95, 86, 0.22);
+      color: #ffa8a2;
    }
 </style>

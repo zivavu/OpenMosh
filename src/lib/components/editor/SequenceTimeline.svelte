@@ -43,8 +43,6 @@
 	// timeline's geometry: a 22px block inset in a 30px row.
 	const ROW_PAD = 4;
 	const SEG_H = 22;
-	/** Colour band along a block's bottom edge naming its source. */
-	const SRC_BAND = 3;
 	/** Half-width of a boundary's invisible grab strip. */
 	const BND_GRAB = 5;
 	/**
@@ -544,19 +542,13 @@
 		startTime: number;
 		endTime: number;
 		label: string;
-		/** Null when the pool has one source — nothing to distinguish. */
-		sourceColor: string | null;
 		/** Everything the block can't show at this width. */
 		tip: string;
 		transitionType: TransitionType;
 		transitionDuration: number;
 	}
 
-	/**
-	 * A stable colour per position in the pool. Sources are told apart by the
-	 * band along the block's bottom edge, which stays readable at widths where a
-	 * filename never would; the number and name live in the tooltip.
-	 */
+	/** A stable colour per position in the pool, used to tag it in the media bin. */
 	function sourceColor(n: number): string {
 		return `hsl(${(n * 57) % 360} 45% 52%)`;
 	}
@@ -595,7 +587,6 @@
 				startTime: s.startTime,
 				endTime,
 				label: fitLabel(full, boxPx, 6.6),
-				sourceColor: source ? sourceColor(source.n) : null,
 				tip: [
 					full,
 					source ? `source ${source.n}: ${source.src.name}` : null,
@@ -1083,17 +1074,6 @@
 					rx="3"
 					onpointerdown={(e) => startSegClick(e, sv.id)}><title>{sv.tip}</title></rect
 				>
-				{#if sv.sourceColor}
-					<!-- Which source this segment plays, at a width no filename survives. -->
-					<rect
-						class="seg-src-band"
-						x="{sv.startX}%"
-						y={ROW_PAD + segH - SRC_BAND - 1}
-						width="{Math.max(0, sv.endX - sv.startX)}%"
-						height={SRC_BAND}
-						fill={sv.sourceColor}
-					/>
-				{/if}
 				{#if sv.label}
 					<text
 						class="seg-lbl"
@@ -1555,8 +1535,8 @@
 	}
 
 	.tl-track {
-		background: #111;
-		border: 1px solid #2a2a2a;
+		background: var(--ink);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		overflow: hidden;
 	}
@@ -1568,7 +1548,7 @@
 	}
 
 	.tail {
-		stroke: #333;
+		stroke: var(--text-4);
 		stroke-width: 1;
 		stroke-dasharray: 3 4;
 	}
@@ -1577,37 +1557,31 @@
 	   its label inside, rather than a line with the label hung underneath. */
 	.seg {
 		fill: #2b2038;
-		stroke: #6a5080;
+		stroke: var(--mosh-dim);
 		stroke-width: 1;
 		pointer-events: all;
 		cursor: pointer;
 	}
 
 	.seg:hover {
-		stroke: #9a70b8;
+		stroke: var(--mosh-dim);
 	}
 
 	.seg.sel {
 		fill: #3d2c52;
-		stroke: #d8b8f8;
+		stroke: var(--mosh);
 	}
 
 	/* Drop preview — deliberately a different hue from selection purple, so
 	   "where this will land" reads apart from "what is selected". */
 	.seg.drop {
 		fill: #14382e;
-		stroke: #6ee7c0;
+		stroke: var(--live);
 		stroke-width: 2;
 	}
 
 	.seg-lbl.drop {
-		fill: #6ee7c0;
-	}
-
-	/* Inset a pixel each side so neighbouring bands don't read as one run. */
-	.seg-src-band {
-		pointer-events: none;
-		opacity: 0.85;
+		fill: var(--live);
 	}
 
 	.tl-track.drop-active {
@@ -1624,7 +1598,7 @@
 	}
 
 	.seg-lbl.sel {
-		fill: #d8b8f8;
+		fill: var(--mosh);
 	}
 
 	/* ── Media bin ── */
@@ -1693,17 +1667,17 @@
 	}
 
 	.media-chip:hover {
-		border-color: #6a5080;
+		border-color: var(--mosh-dim);
 	}
 
 	.media-chip.active {
-		border-color: #d8b8f8;
+		border-color: var(--mosh);
 		box-shadow: 0 0 0 1px rgba(216, 184, 248, 0.35);
 	}
 
 	.media-chip.dragging {
 		opacity: 0.45;
-		border-color: #6ee7c0;
+		border-color: var(--live);
 	}
 
 	.media-chip-assign {
@@ -1744,7 +1718,7 @@
 		padding: 1px 4px;
 		border-bottom-right-radius: 5px;
 		background: rgba(10, 6, 16, 0.82);
-		color: #d8b8f8;
+		color: var(--mosh);
 		font-size: 9px;
 		font-family: monospace;
 		font-weight: 700;
@@ -1752,7 +1726,7 @@
 	}
 
 	.media-chip-kind {
-		color: #9a70b8;
+		color: var(--mosh-dim);
 		font-size: 7px;
 	}
 
@@ -1810,18 +1784,18 @@
 	   grab strip over it, the same shape as the text timeline's clip
 	   boundaries. */
 	.bnd {
-		stroke: #6a5080;
+		stroke: var(--mosh-dim);
 		stroke-width: 1;
 		pointer-events: none;
 	}
 
 	.bnd.hovered {
-		stroke: #ff7070;
+		stroke: var(--rec);
 		stroke-width: 2;
 	}
 
 	.bnd.sel {
-		stroke: #d8b8f8;
+		stroke: var(--mosh);
 		stroke-width: 2;
 	}
 
@@ -1832,7 +1806,7 @@
 	}
 
 	.trans-mark {
-		stroke: #d8b8f8;
+		stroke: var(--mosh);
 		stroke-width: 1.5;
 		fill: none;
 		stroke-linecap: round;
@@ -1862,7 +1836,7 @@
 	}
 
 	.hint {
-		fill: #3a3a3a;
+		fill: var(--text-4);
 		font-size: 8.5px;
 		pointer-events: none;
 		user-select: none;
@@ -1895,7 +1869,7 @@
 
 	.seg-toolbar-hint {
 		font-size: 0.62rem;
-		color: #555;
+		color: var(--text-4);
 		letter-spacing: 0.03em;
 	}
 
@@ -1910,13 +1884,13 @@
 	}
 
 	.hint-dismiss:hover {
-		color: #999;
+		color: var(--text-2);
 	}
 
 	.seg-title {
 		font-size: 0.68rem;
 		font-weight: 600;
-		color: #b08ad0;
+		color: var(--mosh);
 		white-space: nowrap;
 	}
 
@@ -1936,9 +1910,9 @@
 
 	/* The lane's own accent, rather than the stack toolbar's blue. */
 	.seg-mode :global(.tl-tool-btn.active) {
-		border-color: #b08ad0;
+		border-color: var(--mosh);
 		background: rgba(176, 138, 208, 0.12);
-		color: #d8b8f8;
+		color: var(--mosh);
 	}
 
 	.seg-check {
@@ -1946,18 +1920,18 @@
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.68rem;
-		color: #bbb;
+		color: var(--text-2);
 		cursor: pointer;
 		user-select: none;
 		white-space: nowrap;
 	}
 
 	.seg-check:hover {
-		color: #fff;
+		color: var(--text);
 	}
 
 	.seg-check input {
-		accent-color: #b08ad0;
+		accent-color: var(--mosh);
 		margin: 0;
 	}
 
@@ -1967,7 +1941,7 @@
 		border: 1px solid #2e2e2e;
 		border-radius: 4px;
 		background: #191919;
-		color: #bbb;
+		color: var(--text-2);
 		font-size: 0.68rem;
 		font-family: inherit;
 		cursor: pointer;
@@ -1975,12 +1949,12 @@
 	}
 
 	.seg-select:hover {
-		border-color: #555;
-		color: #fff;
+		border-color: var(--text-4);
+		color: var(--text);
 	}
 
 	.seg-select:focus {
-		border-color: #555;
+		border-color: var(--text-4);
 	}
 
 	@media (max-width: 800px) {
