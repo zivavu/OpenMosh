@@ -85,9 +85,20 @@
 		/** Poster currently staged in the renderer's outgoing slot. */
 		let altIndex = -1;
 		let raf = 0;
+		let fadeRaf = 0;
 		// Fed a delta rather than wall-clock, so a pause doesn't silently skip
 		// the demo forward by however long it sat frozen.
 		let lastTs = 0;
+
+		// Flipped a frame after the first draw, not during it: the holder has to
+		// be painted at opacity 0 once for the fade up from black to run at all.
+		const markLive = () => {
+			if (live || fadeRaf) return;
+			fadeRaf = requestAnimationFrame(() => {
+				fadeRaf = 0;
+				live = true;
+			});
+		};
 
 		const drawFrame = () => {
 			const now = performance.now();
@@ -124,7 +135,7 @@
 			} else {
 				renderer.render(frame.effects, frame.time);
 			}
-			live = true;
+			markLive();
 		};
 
 		const loop = () => {
@@ -134,7 +145,9 @@
 
 		const stop = () => {
 			if (raf) cancelAnimationFrame(raf);
+			if (fadeRaf) cancelAnimationFrame(fadeRaf);
 			raf = 0;
+			fadeRaf = 0;
 			lastTs = 0;
 		};
 		const start = () => {
@@ -177,9 +190,6 @@
 
 <div class="demo-bg" class:live={live && playing} class:blank={!playing}>
 	<div class="demo-holder" bind:this={holder}></div>
-	{#if !live && playing && sources.length > 0}
-		<img class="demo-poster" src={sources[0].src} alt="" />
-	{/if}
 	<div class="scrim"></div>
 </div>
 
@@ -223,28 +233,25 @@
 		opacity: 0;
 	}
 
+	/* Starts black and comes up into the mosh — the first frame is a whole
+	   image appearing at once, so a hard cut reads as a flash. */
 	.demo-holder {
 		position: absolute;
 		inset: 0;
 		opacity: 0;
-		transition: opacity 0.8s ease;
+		transition: opacity 1.2s ease-out;
 	}
 
 	.live .demo-holder {
 		opacity: 1;
 	}
 
-	.demo-holder :global(.demo-canvas),
-	.demo-poster {
+	.demo-holder :global(.demo-canvas) {
 		position: absolute;
 		inset: 0;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-	}
-
-	.demo-poster {
-		opacity: 0.5;
 	}
 
 	/* Bottom left, opposite the GitHub link. Above the upload screen, which is
