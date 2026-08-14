@@ -23,7 +23,6 @@ const ANIMATED_POOL = [
   "wobble",
   "ripple",
   "swirl",
-  "melt",
   "tunnel",
   "vhs",
   "scanlines",
