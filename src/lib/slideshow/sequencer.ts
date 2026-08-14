@@ -136,6 +136,7 @@ function withRandomAudioLinks(
       effects,
       moshOptions.hasAudio,
       moshOptions.moshAudioLinkStrength,
+      moshOptions.moshLinkBand,
     );
   }
   return effects;

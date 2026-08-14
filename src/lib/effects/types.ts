@@ -106,6 +106,8 @@ export const FREQ_PRESETS = {
   high: { min: 4000, max: 16000 },
 } as const;
 
+export type FreqBand = keyof typeof FREQ_PRESETS;
+
 export interface EffectInstance {
   instanceId: string;
   defId: string;

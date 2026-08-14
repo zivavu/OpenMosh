@@ -1,4 +1,5 @@
 import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
+import type { FreqBand } from "../effects";
 
 const SETTINGS_KEY = "openmosh-settings";
 
@@ -13,6 +14,8 @@ export interface EditorSettings {
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
 	moshAudioLinkStrength: number;
+	/** Band the links a mosh rolls listen to. */
+	moshLinkBand: FreqBand;
 	/** 0 = raw band level, 1 = fully auto-ranged. Applies to every volume link. */
 	autoRangeAmount: number;
 	/** 0 = the level snaps to the signal, 1 = it glides. Sets the follower's release. */
@@ -37,6 +40,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	randomizeOrder: true,
 	moshAudioLink: true,
 	moshAudioLinkStrength: 0.8,
+	moshLinkBand: "full",
 	autoRangeAmount: DEFAULT_AUDIO_RESPONSE.autoRange,
 	audioSmoothing: DEFAULT_AUDIO_RESPONSE.smoothing,
 	audioPunch: DEFAULT_AUDIO_RESPONSE.punch,
