@@ -30,6 +30,9 @@
 	function navigateTo(v: View) {
 		const hash = v === "upload" ? "#" : `#${v}`;
 		history.pushState(null, "", hash);
+		// A warmup still queued would land after the editor already built its own
+		// context, leaving a stray hidden one behind.
+		if (v !== "upload") cancelWarm();
 		view = v;
 	}
 
@@ -61,6 +64,27 @@
 		}
 	}
 
+	let warmRaf = 0;
+	let warmTimer = 0;
+
+	function cancelWarm() {
+		if (warmRaf) cancelAnimationFrame(warmRaf);
+		if (warmTimer) clearTimeout(warmTimer);
+		warmRaf = 0;
+		warmTimer = 0;
+	}
+
+	/** Linking every shader stalls the main thread, so warm up only after the
+	 * upload screen has had a frame to paint. Its demo starts on nulls anyway. */
+	function scheduleWarm() {
+		cancelWarm();
+		disposeWarm();
+		warmRaf = requestAnimationFrame(() => {
+			warmRaf = 0;
+			warmTimer = window.setTimeout(createWarm, 0);
+		});
+	}
+
 	function resetFiles() {
 		file = null;
 		sequenceFiles = [];
@@ -86,7 +110,7 @@
 	function exitToUpload() {
 		navigateTo("upload");
 		resetFiles();
-		createWarm();
+		scheduleWarm();
 	}
 
 	onMount(() => {
@@ -94,14 +118,17 @@
 			view = hashToView(window.location.hash);
 			if (view === "upload") {
 				resetFiles();
-				createWarm();
+				scheduleWarm();
 			}
 		};
 		window.addEventListener("popstate", onPopState);
 
-		createWarm();
+		scheduleWarm();
 
-		return () => window.removeEventListener("popstate", onPopState);
+		return () => {
+			cancelWarm();
+			window.removeEventListener("popstate", onPopState);
+		};
 	});
 </script>
 
