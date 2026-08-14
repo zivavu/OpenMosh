@@ -17,6 +17,7 @@
 	import {
 		getDemoDirector,
 		missingDemoEffects,
+		stillDemoEffects,
 	} from "../../demo/demo-director";
 
 	interface Props {
@@ -50,6 +51,13 @@
 			const missing = missingDemoEffects();
 			if (missing.length > 0) {
 				console.warn("Demo references unknown effects:", missing);
+			}
+			const still = stillDemoEffects();
+			if (still.length > 0) {
+				console.warn(
+					"Demo's animated pool holds effects that never move:",
+					still,
+				);
 			}
 		}
 		let cancelled = false;
@@ -185,7 +193,7 @@
 	>
 		{#if playing}
 			<Square size={12} />
-			BLACK
+			STOP
 		{:else}
 			<Play size={12} />
 			ANIMATE
