@@ -437,9 +437,19 @@ export async function pruneSequenceMedia(): Promise<void> {
     await deleteMediaPool(stale.key);
   }
 
-  const sessions = (await getAllSessions()).sort(
-    (a, b) => b.updatedAt - a.updatedAt,
-  );
+  const allSessions = await getAllSessions();
+  // Slideshow sessions keyed by media rather than a song date from before the
+  // upload screen required a track. They can't be recreated, and one editing
+  // pass left a separate entry behind for every image added or removed, so the
+  // list fills up with near-duplicates of the same slideshow.
+  const orphaned = allSessions.filter((s) => s.mode === "slideshow" && !s.trackId);
+  for (const stale of orphaned) {
+    await deleteSession(stale.key);
+  }
+
+  const sessions = allSessions
+    .filter((s) => !orphaned.includes(s))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
   for (const stale of sessions.slice(MAX_SESSIONS)) {
     await deleteSession(stale.key);
   }

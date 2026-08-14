@@ -46,11 +46,16 @@ export interface SavedSession {
 /**
  * What identifies a resumable edit.
  *
- * The song wins whenever one is loaded, so the session lines up with the text
- * timeline and segments already stored under that track id. With no song it
- * falls back to the media — the one file in single mode, or the whole set in
- * slideshow, hashed so that adding or removing an image forks a new session
- * rather than silently overwriting the old one.
+ * The song, whenever there is one: that's what the text timeline and segments
+ * are already stored under.
+ *
+ * Slideshow has no fallback. The upload screen requires a track before it will
+ * start one, so a song-less slideshow can't be created — and keying it by its
+ * media instead meant every image added or removed forked a whole new session,
+ * leaving a trail of them behind one editing pass.
+ *
+ * Single mode does fall back to its one file, because it genuinely works with
+ * no audio at all, and one file is a stable identity in a way a set isn't.
  */
 export function sessionKey(
   mode: SessionMode,
@@ -58,17 +63,9 @@ export function sessionKey(
   trackId?: string | null,
 ): string | null {
   if (trackId) return `${mode}:track:${trackId}`;
+  if (mode === "slideshow") return null;
   if (files.length === 0) return null;
-  if (mode === "single") return `single:${stableSourceId(files[0])}`;
-  const ids = files.map(stableSourceId).join("|");
-  return `slideshow:${files.length}:${hashString(ids)}`;
-}
-
-/** djb2 — this only has to separate sets, not resist anything. */
-function hashString(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
+  return `single:${stableSourceId(files[0])}`;
 }
 
 function defaultLabel(mode: SessionMode, files: File[]): string {
@@ -170,6 +167,10 @@ export async function listSavedSessions(
   }
   const out = sessions
     .filter((s) => s.mode === mode)
+    // Song-less slideshow entries predate the track requirement. They're
+    // deleted on the next prune; hiding them now keeps the list from showing
+    // one near-duplicate per image that was ever added or removed.
+    .filter((s) => s.mode !== "slideshow" || !!s.trackId)
     .map((s) => ({
       key: s.key,
       mode: s.mode,
