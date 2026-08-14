@@ -51,6 +51,12 @@ export function loadSettings(): Partial<EditorSettings> {
 	return {};
 }
 
+/** Whether the upload screen's live demo is switched on. Read by both the demo
+ * itself and the wordmark that glitches along with it. */
+export function demoBackgroundEnabled(): boolean {
+	return loadSettings().demoBackground ?? DEFAULT_SETTINGS.demoBackground;
+}
+
 /** Merge a partial update into the stored settings without clobbering the rest. */
 export function updateSettings(patch: Partial<EditorSettings>) {
 	localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...loadSettings(), ...patch }));

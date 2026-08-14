@@ -9,8 +9,7 @@
 	import { Play, Square } from "lucide-svelte";
 	import { GlRenderer } from "../../gl/renderer";
 	import {
-		DEFAULT_SETTINGS,
-		loadSettings,
+		demoBackgroundEnabled,
 		updateSettings,
 	} from "../../editor/settings";
 	import { loadDemoSources } from "../../demo/demo-sources";
@@ -23,9 +22,15 @@
 	interface Props {
 		warmCanvas: HTMLCanvasElement | null;
 		warmRenderer: GlRenderer | null;
+		/** Bound so the STOP button can also quiet things outside the demo. */
+		playing?: boolean;
 	}
 
-	let { warmCanvas, warmRenderer }: Props = $props();
+	let {
+		warmCanvas,
+		warmRenderer,
+		playing = $bindable(demoBackgroundEnabled()),
+	}: Props = $props();
 
 	let holder = $state<HTMLDivElement>(undefined!);
 	let sources = $state<HTMLImageElement[]>([]);
@@ -33,12 +38,6 @@
 	/** Seconds the demo takes to come up from black on its first frames. */
 	const FADE_SECONDS = 1.2;
 	const easeOut = (p: number) => 1 - (1 - p) ** 3;
-
-	// Deliberately not tied to prefers-reduced-motion: people set that flag for
-	// their OS, not to opt out of a page's centrepiece. Own button, own memory.
-	let playing = $state(
-		loadSettings().demoBackground ?? DEFAULT_SETTINGS.demoBackground,
-	);
 
 	/** Set once the render loop is wired up, so the button can drive it without
 	 * tearing down and reparenting the canvas on every toggle. */
