@@ -1313,7 +1313,7 @@
 					outputVolume={audio.outputVolume}
 					onPlay={() => startPreview()}
 					onPause={stopPreview}
-					onSeek={(t) => audio.seekTo(t)}
+					onSeek={seekMaster}
 					onSpanStartChange={(t) => (audio.spanStart = t)}
 					onSpanEndChange={(t) => (audio.spanEnd = t)}
 					onVolumeChange={(v) => audio.setOutputVolume(v)}
@@ -1335,7 +1335,7 @@
 					{config}
 					{onConfigChange}
 					bind:selectedSegmentId
-					onSeek={(t) => audio.seekTo(t)}
+					onSeek={seekMaster}
 				/>
 			{/if}
 		</TimelineStack>
