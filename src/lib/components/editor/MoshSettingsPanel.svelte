@@ -1,12 +1,11 @@
 <script lang="ts">
-   import { CircleQuestionMark, HelpCircle } from "lucide-svelte";
+   import { CircleQuestionMark } from "lucide-svelte";
    import { DEFAULT_SETTINGS } from "../../editor/settings";
    import BpmControl from "../ui/BpmControl.svelte";
    import RangeSlider from "../ui/RangeSlider.svelte";
 
-   let showAutoRangeHelp = $state(false);
-   let helpBtnEl = $state<HTMLButtonElement | undefined>(undefined);
-   let helpPopoverEl = $state<HTMLDivElement | undefined>(undefined);
+   /** Id of the row whose help popover is open, if any. */
+   let openHelp = $state<string | null>(null);
 
    interface Props {
       moshMin: number;
@@ -15,6 +14,8 @@
       moshAudioLink: boolean;
       moshAudioLinkStrength: number;
       autoRangeAmount: number;
+      audioSmoothing: number;
+      audioPunch: number;
       hasAudio: boolean;
       /** Sequence mode only: the tempo the AUTO segments re-roll against. */
       showTiming?: boolean;
@@ -32,6 +33,8 @@
       moshAudioLink = $bindable(),
       moshAudioLinkStrength = $bindable(),
       autoRangeAmount = $bindable(),
+      audioSmoothing = $bindable(),
+      audioPunch = $bindable(),
       hasAudio,
       showTiming = false,
       bpm = 0,
@@ -56,17 +59,42 @@
 
 <svelte:window
    onkeydown={(e) => {
-      if (e.key === "Escape" && showAutoRangeHelp) showAutoRangeHelp = false;
+      if (e.key === "Escape") openHelp = null;
    }}
    onpointerdown={(e) => {
-      if (!showAutoRangeHelp) return;
-      const t = e.target as Node;
-      // The button is "inside" only so its own click can toggle rather than
-      // fight this handler.
-      if (helpBtnEl?.contains(t) || helpPopoverEl?.contains(t)) return;
-      showAutoRangeHelp = false;
+      if (!openHelp) return;
+      // The toggle counts as "inside" only so its own click toggles rather than
+      // fights this handler.
+      if ((e.target as HTMLElement).closest?.(".help-toggle, .help-popover"))
+         return;
+      openHelp = null;
    }}
 />
+
+{#snippet helpToggle(id: string, label: string)}
+   <button
+      class="help-toggle"
+      class:active={openHelp === id}
+      onclick={() => (openHelp = openHelp === id ? null : id)}
+      aria-expanded={openHelp === id}
+      aria-label={label}
+   >
+      <CircleQuestionMark size={13} />
+   </button>
+{/snippet}
+
+{#snippet helpBody(id: string, paras: { term?: string; text: string }[])}
+   {#if openHelp === id}
+      <div class="help-popover" role="tooltip">
+         {#each paras as p}
+            <p>
+               {#if p.term}<strong>{p.term}</strong>:
+               {/if}{p.text}
+            </p>
+         {/each}
+      </div>
+   {/if}
+{/snippet}
 
 <div class="config-panel">
    {#if showTiming}
@@ -178,26 +206,18 @@
          <span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
       </div>
    {/if}
-   <!-- Not gated on moshAudioLink: this shapes every link, hand-made ones too. -->
+   <!-- Not gated on moshAudioLink: these shape every link, hand-made ones too. -->
    {#if hasAudio}
+      <h3 class="panel-title section-title">Audio response</h3>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-         class="config-row auto-range-row"
+         class="config-row help-row"
          title="Double-click to reset"
          ondblclick={(e) =>
             resetRow(e, () => (autoRangeAmount = DEFAULT_SETTINGS.autoRangeAmount))}
       >
          <label for="auto-range-amount">Auto-range</label>
-         <button
-            bind:this={helpBtnEl}
-            class="help-toggle"
-            class:active={showAutoRangeHelp}
-            onclick={() => (showAutoRangeHelp = !showAutoRangeHelp)}
-            aria-expanded={showAutoRangeHelp}
-            aria-label="What is auto-range?"
-         >
-            <CircleQuestionMark size={13} />
-         </button>
+         {@render helpToggle("auto-range", "What is auto-range?")}
          <RangeSlider
             id="auto-range-amount"
             bind:value={autoRangeAmount}
@@ -206,23 +226,81 @@
             step={0.05}
          />
          <span class="val">{Math.round(autoRangeAmount * 100)}%</span>
-         {#if showAutoRangeHelp}
-            <div bind:this={helpPopoverEl} class="help-popover" role="tooltip">
-               <p>
-                  Controls how much effects exaggerate the gap between the quiet
-                  and loud parts of a track.
-               </p>
-               <p>
-                  <strong>Low</strong>: effects follow the actual volume. Most
-                  music sits at a steady level, so they only drift a little.
-               </p>
-               <p>
-                  <strong>High</strong>: the quietest and loudest moments of the
-                  last few seconds are stretched across the whole range you set.
-                  Drops hit harder, but quiet parts get pushed up too.
-               </p>
-            </div>
-         {/if}
+         {@render helpBody("auto-range", [
+            {
+               text: "How far apart the quiet and loud parts of a track are pushed before effects see them.",
+            },
+            {
+               term: "Low",
+               text: "effects follow the real volume. Most music sits at a steady level, so they barely move.",
+            },
+            {
+               term: "High",
+               text: "the last few seconds get stretched across your whole range. Drops hit harder, but quiet parts come up too.",
+            },
+         ])}
+      </div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+         class="config-row help-row"
+         title="Double-click to reset"
+         ondblclick={(e) =>
+            resetRow(e, () => (audioSmoothing = DEFAULT_SETTINGS.audioSmoothing))}
+      >
+         <label for="audio-smoothing">Smoothing</label>
+         {@render helpToggle("smoothing", "What is smoothing?")}
+         <RangeSlider
+            id="audio-smoothing"
+            bind:value={audioSmoothing}
+            min={0}
+            max={1}
+            step={0.05}
+         />
+         <span class="val">{Math.round(audioSmoothing * 100)}%</span>
+         {@render helpBody("smoothing", [
+            {
+               text: "How fast an effect drops back after a hit. Hits are always caught quickly, this is the fall.",
+            },
+            {
+               term: "Low",
+               text: "effects snap frame by frame. Sharp, but it flickers on busy music.",
+            },
+            {
+               term: "High",
+               text: "effects ease down over most of a second. Smoother, but close hits blur together.",
+            },
+         ])}
+      </div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+         class="config-row help-row"
+         title="Double-click to reset"
+         ondblclick={(e) =>
+            resetRow(e, () => (audioPunch = DEFAULT_SETTINGS.audioPunch))}
+      >
+         <label for="audio-punch">Punch</label>
+         {@render helpToggle("punch", "What is punch?")}
+         <RangeSlider
+            id="audio-punch"
+            bind:value={audioPunch}
+            min={0}
+            max={1}
+            step={0.05}
+         />
+         <span class="val">{Math.round(audioPunch * 100)}%</span>
+         {@render helpBody("punch", [
+            {
+               text: "How the audio level maps onto the effect's value.",
+            },
+            {
+               term: "Low",
+               text: "quiet parts count too, so effects stay busy the whole track.",
+            },
+            {
+               term: "High",
+               text: "only the loud hits move an effect far. It rests near the bottom in between.",
+            },
+         ])}
       </div>
    {/if}
 </div>
@@ -299,7 +377,7 @@
       color: var(--text-2);
    }
 
-   .auto-range-row {
+   .help-row {
       position: relative;
    }
 

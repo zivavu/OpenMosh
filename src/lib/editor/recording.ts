@@ -1,6 +1,9 @@
 import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
-import { DEFAULT_AUTO_RANGE_AMOUNT } from "../audio/auto-range";
+import {
+  DEFAULT_AUDIO_RESPONSE,
+  type AudioResponse,
+} from "../audio/auto-range";
 import { downloadBlob, recordVideo } from "../recorder";
 import { preloadCaptionFonts } from "../caption";
 import {
@@ -55,8 +58,8 @@ export interface RecordingContext {
   signal: AbortSignal;
   /** Linear normalize gain to apply to audio. Defaults to 1.0. */
   normalizeGain?: number;
-  /** Blend between raw (0) and auto-ranged (1) levels. Must match the preview. */
-  autoRangeAmount?: number;
+  /** How band levels are followed and shaped. Must match the preview. */
+  audioResponse?: AudioResponse;
   /** Optional text lanes, keyed to the master clock. */
   textTimeline?: TextTimeline | null;
   /** Master-clock time the export's frame 0 lands on. */
@@ -88,7 +91,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     onFinalizing,
     signal,
     normalizeGain = 1.0,
-    autoRangeAmount = DEFAULT_AUTO_RANGE_AMOUNT,
+    audioResponse = DEFAULT_AUDIO_RESPONSE,
     textTimeline = null,
     textTimeOffset = 0,
     textTimeScale = 1,
@@ -350,7 +353,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       canvas,
       renderer,
       normalizeGain,
-      autoRangeAmount,
+      audioResponse,
       textTimeline,
       textTimeOffset,
       textTimeScale,

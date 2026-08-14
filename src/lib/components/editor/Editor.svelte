@@ -17,6 +17,7 @@
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import type { AudioResponse } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
@@ -297,6 +298,14 @@
 	let autoRangeAmount = $state(
 		saved.autoRangeAmount ?? DEFAULT_SETTINGS.autoRangeAmount,
 	);
+	let audioSmoothing = $state(saved.audioSmoothing ?? DEFAULT_SETTINGS.audioSmoothing);
+	let audioPunch = $state(saved.audioPunch ?? DEFAULT_SETTINGS.audioPunch);
+	// One object so the preview tick and the export are fed the same thing.
+	const audioResponse = $derived<AudioResponse>({
+		autoRange: autoRangeAmount,
+		smoothing: audioSmoothing,
+		punch: audioPunch,
+	});
 	let showFps = $state(saved.showFps ?? DEFAULT_SETTINGS.showFps);
 	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
 	let sourceFit = $state<SourceFit>(saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit);
@@ -316,7 +325,7 @@
 
 	const audio = new AudioManager({
 		getEffects: () => renderedEffects,
-		getAutoRangeAmount: () => autoRangeAmount,
+		getAudioResponse: () => audioResponse,
 		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
 		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,
 	});
@@ -366,6 +375,8 @@
 		moshAudioLink;
 		moshAudioLinkStrength;
 		autoRangeAmount;
+		audioSmoothing;
+		audioPunch;
 		showFps;
 		audio.outputVolume;
 		audio.loopAudio;
@@ -379,6 +390,8 @@
 			moshAudioLink,
 			moshAudioLinkStrength,
 			autoRangeAmount,
+			audioSmoothing,
+			audioPunch,
 			showFps,
 			outputVolume: audio.outputVolume,
 			loopAudio: audio.loopAudio,
@@ -2058,7 +2071,7 @@
 					videoSpeed,
 					file,
 					normalizeGain: audio.normalizeGain,
-					autoRangeAmount,
+					audioResponse,
 					textTimeline: textTimeline.enabled ? $state.snapshot(textTimeline) as TextTimeline : null,
 					textTimeOffset,
 					textTimeScale,
@@ -2646,6 +2659,8 @@
 					bind:moshAudioLink
 					bind:moshAudioLinkStrength
 					bind:autoRangeAmount
+					bind:audioSmoothing
+					bind:audioPunch
 					{hasAudio}
 					showTiming={isSequenceMode}
 					bpm={sequenceBpm}

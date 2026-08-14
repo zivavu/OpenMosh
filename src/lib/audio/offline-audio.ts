@@ -1,5 +1,6 @@
 import type { EffectInstance } from "../effects";
 import { applyVolumeLinksToEffects } from "./audio-utils";
+import type { AudioResponse } from "./auto-range";
 
 export const FFT_SIZE = 2048;
 
@@ -322,7 +323,7 @@ export function applyFrameAudioToEffects(
   sampleRate: number,
   fftSize: number,
   frameDuration: number,
-  autoRangeAmount: number,
+  response: AudioResponse,
 ): void {
   applyVolumeLinksToEffects(
     effects,
@@ -331,6 +332,6 @@ export function applyFrameAudioToEffects(
     sampleRate,
     fftSize,
     frameDuration,
-    autoRangeAmount,
+    response,
   );
 }

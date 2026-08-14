@@ -5,14 +5,14 @@ import {
   applyVolumeLinksTick,
   type AudioGraphState,
 } from './audio-controller';
-import { resetAutoRange } from './auto-range';
+import { resetAutoRange, type AudioResponse } from './auto-range';
 import type { EffectInstance } from '../effects';
 import type { SpectrumData } from '../types';
 
 interface AudioManagerOptions {
   getEffects: () => EffectInstance[];
-  /** Blend between raw (0) and auto-ranged (1) levels; read per frame. */
-  getAutoRangeAmount: () => number;
+  /** How band levels are followed, ranged and shaped; read per frame. */
+  getAudioResponse: () => AudioResponse;
   initialOutputVolume?: number;
   initialLoop?: boolean;
 }
@@ -63,16 +63,16 @@ export class AudioManager {
   );
 
   readonly #getEffects: () => EffectInstance[];
-  readonly #getAutoRangeAmount: () => number;
+  readonly #getAudioResponse: () => AudioResponse;
 
   constructor({
     getEffects,
-    getAutoRangeAmount,
+    getAudioResponse,
     initialOutputVolume = 1,
     initialLoop = false,
   }: AudioManagerOptions) {
     this.#getEffects = getEffects;
-    this.#getAutoRangeAmount = getAutoRangeAmount;
+    this.#getAudioResponse = getAudioResponse;
     this.outputVolume = initialOutputVolume;
     this.loopAudio = initialLoop;
 
@@ -121,7 +121,7 @@ export class AudioManager {
               sampleRate,
               fftSize,
               dt,
-              this.#getAutoRangeAmount(),
+              this.#getAudioResponse(),
             );
           }
           rafId = requestAnimationFrame(tick);
@@ -138,7 +138,7 @@ export class AudioManager {
           sampleRate,
           fftSize,
           dt,
-          this.#getAutoRangeAmount(),
+          this.#getAudioResponse(),
         );
         rafId = requestAnimationFrame(tick);
       };

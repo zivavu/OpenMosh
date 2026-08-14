@@ -68,6 +68,57 @@ describe("smoothBandLevel", () => {
     resetAutoRange();
     expect(smoothBandLevel("a", 0.3, 1 / 60)).toBe(0.3);
   });
+
+  it("falls back slower than it rises", () => {
+    // The point of the asymmetry: catch the kick, glide off it.
+    smoothBandLevel("a", 0, 1 / 60);
+    const up = smoothBandLevel("a", 1, 1 / 60);
+    resetAutoRange();
+    smoothBandLevel("a", 1, 1 / 60);
+    const down = 1 - smoothBandLevel("a", 0, 1 / 60);
+    expect(down).toBeLessThan(up / 2);
+  });
+
+  it("glides off a hit for longer at higher smoothing", () => {
+    const decay = (smoothing: number) => {
+      resetAutoRange();
+      smoothBandLevel("a", 1, 1 / 60, smoothing);
+      let v = 1;
+      for (let i = 0; i < 30; i++) v = smoothBandLevel("a", 0, 1 / 60, smoothing);
+      return v;
+    };
+    expect(decay(1)).toBeGreaterThan(decay(0.45));
+    expect(decay(0.45)).toBeGreaterThan(decay(0));
+  });
+});
+
+describe("autoRangeLevel", () => {
+  beforeEach(resetAutoRange);
+
+  it("falls back to the raw level once a band goes steady", () => {
+    // A band with no dynamics used to bail out at 0, snapping every param
+    // linked to it to the bottom of its range.
+    let v = 0;
+    for (let i = 0; i < 600; i++) v = autoRangeLevel("k", 0.4, 1 / 60);
+    expect(v).toBeCloseTo(0.4, 1);
+  });
+
+  it("still reads silence as silence", () => {
+    let v = 1;
+    for (let i = 0; i < 600; i++) v = autoRangeLevel("k", 0, 1 / 60);
+    expect(v).toBeLessThan(0.05);
+  });
+
+  it("does not let a single-frame spike own the whole range", () => {
+    for (let i = 0; i < 120; i++) autoRangeLevel("k", 0.3, 1 / 60);
+    autoRangeLevel("k", 1, 1 / 60);
+    // The spike itself reads as a peak, but the frames after it must not all
+    // collapse onto the floor of a range stretched to fit one frame.
+    expect(autoRangeLevel("k", 0.3, 1 / 60)).toBeLessThan(0.35);
+    let v = 0;
+    for (let i = 0; i < 30; i++) v = autoRangeLevel("k", 0.45, 1 / 60);
+    expect(v).toBeGreaterThan(0.5);
+  });
 });
 
 describe("smoothed levels through auto-ranging", () => {
