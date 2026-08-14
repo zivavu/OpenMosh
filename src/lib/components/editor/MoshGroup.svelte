@@ -88,19 +88,21 @@
 		width: 30px;
 		height: 30px;
 		border-radius: 50%;
-		background: none;
-		border: 1.5px solid #444;
-		color: #888;
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		border: 1.5px solid var(--line-strong);
+		color: var(--text-3);
 		cursor: pointer;
 		transition:
-			border-color 0.2s,
-			color 0.2s;
+			border-color var(--t),
+			color var(--t);
 	}
 
 	.settings-btn:hover,
 	.settings-btn.active {
-		border-color: #777;
-		color: #ccc;
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 
 	.settings-btn:disabled {
@@ -109,35 +111,36 @@
 		pointer-events: none;
 	}
 
+	/* The primary action in the app: the only control that gets a filled look. */
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.6rem 2rem;
-		border: 1.5px solid #444;
-		border-radius: 999px;
-		background: transparent;
-		color: #ccc;
-		font-size: 0.78rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		font-family: inherit;
+		border: 1.5px solid var(--mosh-dim);
+		border-radius: var(--r-pill);
+		background: rgba(198, 162, 234, 0.1);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		color: var(--mosh);
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
 		cursor: pointer;
 		transition:
-			border-color 0.2s,
-			color 0.2s,
-			background 0.2s;
-	}
-
-	.action-btn:hover {
-		border-color: #888;
-		color: #fff;
-		background: rgba(255, 255, 255, 0.04);
+			border-color var(--t),
+			color var(--t),
+			background var(--t),
+			box-shadow var(--t);
 	}
 
 	.mosh-btn:hover {
-		border-color: #a89050;
-		color: #f0d878;
+		border-color: var(--mosh);
+		background: rgba(198, 162, 234, 0.2);
+		color: #f0e2ff;
+		box-shadow: 0 0 18px rgba(198, 162, 234, 0.25);
 	}
 
 	.mosh-settings {
@@ -145,22 +148,22 @@
 		bottom: calc(100% + 0.5rem);
 		left: 50%;
 		transform: translateX(-50%);
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 8px;
+		background: var(--raised);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-3);
 		padding: 0.75rem 1rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
 		min-width: 210px;
 		z-index: 20;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+		box-shadow: 0 10px 34px rgba(0, 0, 0, 0.65);
 	}
 
 	@media (max-width: 800px) {
 		.action-btn {
 			padding: 0.6rem 1.2rem;
-			font-size: 0.72rem;
+			font-size: 0.66rem;
 		}
 
 		.settings-btn {

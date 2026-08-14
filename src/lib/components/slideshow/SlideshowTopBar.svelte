@@ -26,23 +26,24 @@
 			</button>
 		{/if}
 		<GithubLink />
-		<ButtonGroup
-			buttons={[
-				{ label: 'Grid', value: 'grid' },
-				{ label: 'Preview', value: 'preview' },
-			]}
-			value={activeView}
-			onchange={onViewChange}
-		/>
-
-		<span class="slide-count">{slideCount} images</span>
+		<div class="view-group">
+			<ButtonGroup
+				buttons={[
+					{ label: 'Grid', value: 'grid' },
+					{ label: 'Preview', value: 'preview' },
+				]}
+				value={activeView}
+				onchange={onViewChange}
+			/>
+		</div>
+		<span class="slide-count readout">{slideCount} images</span>
 	</div>
 </div>
 
 <style>
 	.top-bar {
-		padding: 0.5rem 0.75rem;
-		border-bottom: 1px solid #2a2a2a;
+		padding: 0.4rem 0.75rem;
+		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
 
@@ -50,6 +51,12 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		min-height: 30px;
+	}
+
+	.view-group {
+		display: flex;
+		align-items: center;
 	}
 
 	.home-btn {
@@ -59,9 +66,11 @@
 		width: 26px;
 		height: 26px;
 		border-radius: 50%;
-		background: rgba(18, 18, 18, 0.85);
-		border: 1.5px solid #444;
-		color: #888;
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		border: 1.5px solid var(--line-strong);
+		color: var(--text-3);
 		cursor: pointer;
 		flex-shrink: 0;
 		padding: 0;
@@ -72,12 +81,15 @@
 	}
 
 	.home-btn:hover {
-		border-color: #777;
-		color: #ccc;
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 
 	.slide-count {
-		font-size: 0.75rem;
-		color: #666;
+		margin-left: auto;
+		font-size: 0.62rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-3);
 	}
 </style>

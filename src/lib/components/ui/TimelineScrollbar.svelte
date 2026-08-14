@@ -5,13 +5,12 @@
 		vp: TimelineViewport;
 		trackDuration: number;
 		/** Matches the timeline it sits under. */
-		accent?: 'blue' | 'purple';
 		/** Fires when a pan drag starts, for callers that treat a hand-panned view
 		 * as taking over from an automatic one (e.g. playhead following). */
 		onPanStart?: (() => void) | null;
 	}
 
-	let { vp, trackDuration, accent = 'blue', onPanStart = null }: Props = $props();
+	let { vp, trackDuration, onPanStart = null }: Props = $props();
 
 	let barEl = $state<HTMLElement | undefined>(undefined);
 	let drag: {
@@ -63,7 +62,7 @@
      everything under it by a row on every zoom in and out. -->
 <div class="scrollbar" bind:this={barEl}>
 	<div
-		class="scrollbar-thumb {accent}"
+		class="scrollbar-thumb"
 		class:full={!vp.isZoomed}
 		style="left: {left}%; width: {width}%"
 		role="presentation"
@@ -80,9 +79,9 @@
 		position: relative;
 		flex: 1;
 		height: 6px;
-		border: 1px solid #2a2a2a;
+		border: 1px solid var(--line);
 		border-radius: 3px;
-		background: #101010;
+		background: var(--sunken);
 		touch-action: none;
 	}
 
@@ -92,32 +91,16 @@
 		height: 100%;
 		min-width: 8px;
 		border-radius: 3px;
+		background: var(--live-dim);
 		cursor: grab;
 	}
 
-	.scrollbar-thumb.blue {
-		background: #3a5a7a;
+	.scrollbar-thumb:hover {
+		background: #3f8f7a;
 	}
 
-	.scrollbar-thumb.blue:hover {
-		background: #4d76a0;
-	}
-
-	.scrollbar-thumb.blue:active {
-		background: #7ab8f5;
-		cursor: grabbing;
-	}
-
-	.scrollbar-thumb.purple {
-		background: #5a4a6a;
-	}
-
-	.scrollbar-thumb.purple:hover {
-		background: #7a5a9a;
-	}
-
-	.scrollbar-thumb.purple:active {
-		background: #b08ad0;
+	.scrollbar-thumb:active {
+		background: var(--live);
 		cursor: grabbing;
 	}
 
@@ -126,18 +109,7 @@
 	.scrollbar-thumb.full,
 	.scrollbar-thumb.full:hover,
 	.scrollbar-thumb.full:active {
+		background: var(--live-dim);
 		cursor: default;
-	}
-
-	.scrollbar-thumb.blue.full,
-	.scrollbar-thumb.blue.full:hover,
-	.scrollbar-thumb.blue.full:active {
-		background: #3a5a7a;
-	}
-
-	.scrollbar-thumb.purple.full,
-	.scrollbar-thumb.purple.full:hover,
-	.scrollbar-thumb.purple.full:active {
-		background: #5a4a6a;
 	}
 </style>

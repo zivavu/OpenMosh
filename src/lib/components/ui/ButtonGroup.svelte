@@ -23,27 +23,30 @@
 <style>
 	.btn-group {
 		display: flex;
-		background: rgba(30, 30, 30, 0.85);
-		border: 1px solid #333;
-		border-radius: 6px;
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
 		overflow: hidden;
 	}
 
 	.btn {
-		padding: 0.35rem 0.9rem;
-		font-size: 0.7rem;
+		padding: 0.3rem 0.85rem;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
 		font-weight: 600;
-		letter-spacing: 0.06em;
-		font-family: inherit;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
 		background: none;
 		border: none;
-		border-right: 1px solid #333;
-		color: #777;
+		border-right: 1px solid var(--line);
+		color: var(--text-3);
 		cursor: pointer;
 		width: 100%;
 		transition:
-			color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.btn:last-child {
@@ -51,11 +54,11 @@
 	}
 
 	.btn.active {
-		color: #ddd;
-		background: rgba(255, 255, 255, 0.06);
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.07);
 	}
 
 	.btn:hover {
-		color: #ccc;
+		color: var(--text-2);
 	}
 </style>

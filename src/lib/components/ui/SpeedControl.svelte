@@ -33,9 +33,10 @@
 <style>
 	.speed-label {
 		font-size: 0.7rem;
-		color: #666;
+		color: var(--text-3);
 		min-width: 2.2rem;
 		text-align: right;
+		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
 		flex-shrink: 0;
 	}
@@ -44,7 +45,7 @@
 		width: 60px;
 		height: 4px;
 		appearance: none;
-		background: #333;
+		background: rgba(255, 255, 255, 0.07);
 		border-radius: 2px;
 		cursor: pointer;
 		flex-shrink: 0;
@@ -55,7 +56,7 @@
 		width: 12px;
 		height: 12px;
 		border-radius: 50%;
-		background: #aaa;
+		background: var(--text-2);
 		cursor: pointer;
 	}
 
@@ -63,17 +64,17 @@
 		width: 12px;
 		height: 12px;
 		border-radius: 50%;
-		background: #aaa;
+		background: var(--text-2);
 		border: none;
 		cursor: pointer;
 	}
 
 	.speed-slider:hover::-webkit-slider-thumb {
-		background: #fff;
+		background: var(--text);
 	}
 
 	.speed-slider:hover::-moz-range-thumb {
-		background: #fff;
+		background: var(--text);
 	}
 
 	@media (max-width: 800px) {

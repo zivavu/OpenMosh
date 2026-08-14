@@ -210,14 +210,14 @@
 		flex-direction: column;
 		gap: 0.5rem;
 		padding: 0.75rem;
-		border-bottom: 1px solid #2a2a2a;
+		border-bottom: 1px solid var(--line);
 	}
 
 	.panel-title {
 		font-size: 0.7rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
-		color: #888;
+		color: var(--text-3);
 		text-transform: uppercase;
 		margin-bottom: 0.25rem;
 	}
@@ -225,7 +225,7 @@
 	.section-title {
 		margin-top: 0.25rem;
 		padding-top: 0.75rem;
-		border-top: 1px solid #2a2a2a;
+		border-top: 1px solid var(--line);
 	}
 
 	.config-row {
@@ -238,29 +238,29 @@
 	.config-row label {
 		flex-shrink: 0;
 		min-width: 80px;
-		color: #999;
+		color: var(--text-2);
 		font-size: 0.75rem;
 	}
 
 	.config-row select {
 		flex: 1;
 		padding: 0.2rem 0.3rem;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 4px;
-		background: #1a1a1a;
-		color: #e0e0e0;
+		background: var(--surface);
+		color: var(--text);
 		font-size: 0.75rem;
 		font-family: inherit;
 	}
 
 	.config-row input[type='checkbox'] {
-		accent-color: #888;
+		accent-color: var(--live);
 	}
 
 	.val {
 		min-width: 24px;
 		text-align: right;
-		color: #888;
+		color: var(--text-3);
 		font-size: 0.75rem;
 	}
 

@@ -153,6 +153,14 @@
 			onDragEnd();
 		}}
 	>
+		<!-- The rail runs the height of every strip, lit where signal passes, so
+		     the chain reads as one continuous path down the panel. -->
+		<div class="rail" aria-hidden="true">
+			<span class="rail-index readout"
+				>{String((effectIndex ?? 0) + 1).padStart(2, '0')}</span
+			>
+		</div>
+		<div class="strip">
 		<div class="header" role="group">
 			<button class="expand-trigger" onclick={onToggleExpand}>
 				<span class="expand-arrow" class:expanded={effect.expanded}
@@ -422,17 +430,65 @@
 				{/each}
 			</div>
 		{/if}
+		</div>
 	</div>
 {/if}
 
 <style>
 	.effect-item {
-		border-bottom: 1px solid #1e1e1e;
+		display: flex;
+		align-items: stretch;
 		position: relative;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+	}
+
+	/* Signal rail: dark when the effect is bypassed, lit when it passes signal. */
+	.rail {
+		position: relative;
+		flex-shrink: 0;
+		width: 30px;
+		padding-top: 0.62rem;
+		text-align: center;
+	}
+
+	.rail::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: -1px;
+		right: 0;
+		width: 2px;
+		border-radius: 1px;
+		background: var(--line);
+		transition:
+			background var(--t),
+			box-shadow var(--t);
+	}
+
+	.enabled .rail::after {
+		background: var(--live);
+		box-shadow: 0 0 10px rgba(110, 231, 192, 0.35);
+	}
+
+	.rail-index {
+		font-size: 0.58rem;
+		font-weight: 500;
+		letter-spacing: 0.04em;
+		color: var(--text-4);
+		transition: color var(--t);
+	}
+
+	.enabled .rail-index {
+		color: var(--live-dim);
+	}
+
+	.strip {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.effect-item.enabled {
-		background: rgba(255, 255, 255, 0.02);
+		background: rgba(110, 231, 192, 0.024);
 	}
 
 	.effect-item.is-dragging {
@@ -446,7 +502,7 @@
 		left: 0;
 		right: 0;
 		height: 2px;
-		background: #666;
+		background: var(--live);
 		pointer-events: none;
 		z-index: 5;
 	}
@@ -463,11 +519,11 @@
 		display: flex;
 		align-items: center;
 		width: 100%;
-		padding: 0.5rem 0.6rem;
+		padding: 0.45rem 0.55rem 0.45rem 0.6rem;
 		gap: 0;
-		color: #999;
-		font-size: 0.8rem;
-		transition: background 0.15s;
+		color: var(--text-2);
+		font-size: 0.78rem;
+		transition: background var(--t-fast);
 	}
 
 	.header:hover {
@@ -475,13 +531,13 @@
 	}
 
 	.enabled .header {
-		color: #ddd;
+		color: var(--text);
 	}
 
 	.expand-trigger {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.45rem;
 		flex: 1;
 		min-width: 0;
 		background: none;
@@ -494,11 +550,18 @@
 	}
 
 	.expand-arrow {
-		font-size: 0.55rem;
-		transition: transform 0.15s;
+		font-size: 0.5rem;
+		color: var(--text-4);
+		transition:
+			transform var(--t),
+			color var(--t-fast);
 		flex-shrink: 0;
-		width: 0.8rem;
+		width: 0.7rem;
 		text-align: center;
+	}
+
+	.expand-trigger:hover .expand-arrow {
+		color: var(--text-2);
 	}
 
 	.expand-arrow.expanded {
@@ -512,12 +575,17 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		font-weight: 500;
+		letter-spacing: 0.005em;
+	}
+
+	.enabled .name {
+		font-weight: 600;
 	}
 
 	.controls {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.2rem;
 		flex-shrink: 0;
 	}
 
@@ -536,17 +604,17 @@
 		height: 11px;
 		background: none;
 		border: none;
-		color: #4a4a4a;
+		color: var(--text-4);
 		cursor: pointer;
-		border-radius: 2px;
+		border-radius: var(--r-2);
 		padding: 0;
 		transition:
-			color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.move-btn:hover:not(:disabled) {
-		color: #ccc;
+		color: var(--text);
 		background: rgba(255, 255, 255, 0.07);
 	}
 
@@ -555,39 +623,45 @@
 		cursor: default;
 	}
 
-	/* Toggle switch */
+	/* Lit knob when the effect is passing signal. */
 	.toggle {
 		position: relative;
 		width: 28px;
-		height: 14px;
-		border-radius: 7px;
-		background: #333;
-		border: none;
+		height: 15px;
+		border-radius: var(--r-pill);
+		background: var(--sunken);
+		border: 1px solid var(--line);
 		cursor: pointer;
 		padding: 0;
-		transition: background 0.2s;
+		margin-right: 0.15rem;
+		transition:
+			background var(--t),
+			border-color var(--t);
 	}
 
 	.toggle.on {
-		background: #666;
+		border-color: var(--live-dim);
+		background: rgba(110, 231, 192, 0.1);
 	}
 
 	.toggle-knob {
 		position: absolute;
 		top: 2px;
 		left: 2px;
-		width: 10px;
-		height: 10px;
+		width: 9px;
+		height: 9px;
 		border-radius: 50%;
-		background: #888;
+		background: var(--text-4);
 		transition:
-			transform 0.2s,
-			background 0.2s;
+			transform var(--t),
+			background var(--t),
+			box-shadow var(--t);
 	}
 
 	.toggle.on .toggle-knob {
-		transform: translateX(14px);
-		background: #ccc;
+		transform: translateX(13px);
+		background: var(--live);
+		box-shadow: 0 0 6px rgba(110, 231, 192, 0.7);
 	}
 
 	/* Icon buttons */
@@ -599,39 +673,39 @@
 		height: 22px;
 		background: none;
 		border: none;
-		color: #555;
+		color: var(--text-4);
 		cursor: pointer;
-		border-radius: 3px;
+		border-radius: var(--r-2);
 		padding: 0;
 		transition:
-			color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.icon-btn:hover {
-		color: #aaa;
-		background: rgba(255, 255, 255, 0.05);
+		color: var(--text-2);
+		background: rgba(255, 255, 255, 0.06);
 	}
 
 	.drag-handle {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 22px;
+		width: 20px;
 		height: 22px;
-		color: #444;
+		color: var(--text-4);
 		cursor: grab;
 		touch-action: none;
 		user-select: none;
 	}
 
 	.drag-handle:hover {
-		color: #888;
+		color: var(--text-2);
 	}
 
 	/* Params panel */
 	.params {
-		padding: 0.4rem 0.8rem 0.6rem 1.8rem;
+		padding: 0.3rem 0.7rem 0.6rem 1.15rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0;
@@ -645,21 +719,25 @@
 	}
 
 	.param-row + .param-row {
-		border-top: 1px solid #2a2a2a;
+		border-top: 1px solid rgba(255, 255, 255, 0.035);
 		margin-top: 0.15rem;
 		padding-top: 0.5rem;
 	}
 
 	.param-label {
 		font-size: 0.7rem;
-		color: #777;
-		min-width: 70px;
+		font-weight: 400;
+		letter-spacing: 0.01em;
+		color: var(--text-3);
+		min-width: 74px;
 		flex-shrink: 0;
+		padding-top: 0.1rem;
 	}
 
 	.param-value {
-		font-size: 0.7rem;
-		color: #888;
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		color: var(--text-2);
 		min-width: 36px;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
@@ -678,23 +756,25 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.65rem;
-		font-family: inherit;
-		color: #666;
-		background: #2a2a2a;
-		border: 1px solid #333;
-		border-radius: 4px;
+		padding: 0.15rem 0.4rem;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-3);
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
 		cursor: pointer;
 		transition:
-			color 0.15s,
-			border-color 0.15s;
+			color var(--t-fast),
+			border-color var(--t-fast);
 		flex-shrink: 0;
 	}
 
 	.volume-link-btn:hover {
-		color: #999;
-		border-color: #555;
+		color: var(--live);
+		border-color: var(--live-dim);
 	}
 
 	.volume-link-row {
@@ -707,8 +787,11 @@
 	}
 
 	.volume-link-label {
-		font-size: 0.65rem;
-		color: #555;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--live-dim);
 		flex-shrink: 0;
 	}
 
@@ -717,51 +800,33 @@
 		min-width: 0;
 	}
 
-	.volume-invert-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.2rem;
-		background: none;
-		border: 1px solid #333;
-		border-radius: 4px;
-		color: #666;
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s,
-			background 0.15s;
-	}
-
-	.volume-invert-btn:hover {
-		color: #999;
-		border-color: #555;
-	}
-
-	.volume-invert-btn.active {
-		color: #aac;
-		border-color: #558;
-		background: rgba(100, 140, 200, 0.15);
-	}
-
+	.volume-invert-btn,
 	.volume-unlink-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 0.2rem;
+		padding: 0.25rem;
 		background: none;
-		border: 1px solid #333;
-		border-radius: 4px;
-		color: #666;
+		border: 1px solid var(--line);
+		border-radius: 50%;
+		color: var(--text-3);
 		cursor: pointer;
 		transition:
-			color 0.15s,
-			border-color 0.15s;
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
 	}
 
+	.volume-invert-btn:hover,
 	.volume-unlink-btn:hover {
-		color: #999;
-		border-color: #555;
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
+	.volume-invert-btn.active {
+		color: var(--live);
+		border-color: var(--live-dim);
+		background: rgba(110, 231, 192, 0.12);
 	}
 
 	.volume-freq-row {
@@ -780,29 +845,31 @@
 	}
 
 	.freq-preset-btn {
-		padding: 0.15rem 0.4rem;
-		font-size: 0.6rem;
-		font-family: inherit;
-		color: #666;
-		background: #2a2a2a;
-		border: 1px solid #333;
-		border-radius: 3px;
+		padding: 0.1rem 0.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-3);
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
 		cursor: pointer;
 		transition:
-			color 0.15s,
-			border-color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.freq-preset-btn:hover {
-		color: #999;
-		border-color: #555;
+		color: var(--text-2);
+		border-color: var(--line-strong);
 	}
 
 	.freq-preset-btn.active {
-		color: #aac;
-		border-color: #558;
-		background: rgba(100, 140, 200, 0.15);
+		color: var(--live);
+		border-color: var(--live-dim);
+		background: rgba(110, 231, 192, 0.12);
 	}
 
 	.spectrum-wrap {
@@ -826,8 +893,11 @@
 	}
 
 	.spectrum-label {
-		font-size: 0.65rem;
-		color: #555;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--live-dim);
 		flex-shrink: 0;
 	}
 
@@ -840,21 +910,21 @@
 		appearance: none;
 		width: 14px;
 		height: 14px;
-		border: 1px solid #555;
-		border-radius: 2px;
-		background: #1a1a1a;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-2);
+		background: var(--sunken);
 		cursor: pointer;
 		position: relative;
 		flex-shrink: 0;
 	}
 
 	input[type='checkbox']:hover {
-		border-color: #777;
+		border-color: var(--text-3);
 	}
 
 	input[type='checkbox']:checked {
-		background: #555;
-		border-color: #888;
+		background: rgba(110, 231, 192, 0.15);
+		border-color: var(--live-dim);
 	}
 
 	input[type='checkbox']:checked::after {
@@ -866,41 +936,41 @@
 		justify-content: center;
 		width: 100%;
 		height: 100%;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
 			center/contain no-repeat;
 	}
 
 	select {
 		flex: 1;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
+		background: var(--sunken);
+		color: var(--text-2);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		padding: 0.25rem 0.45rem;
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
 		cursor: pointer;
 		outline: none;
 	}
 
 	select:focus {
-		border-color: #555;
+		border-color: var(--line-strong);
 	}
 
 	.text-input {
 		flex: 1;
 		min-width: 0;
-		background: #1a1a1a;
-		color: #ccc;
-		border: 1px solid #333;
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
+		background: var(--sunken);
+		color: var(--text);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		padding: 0.25rem 0.45rem;
 		font-family: inherit;
+		font-size: 0.72rem;
 		outline: none;
 	}
 
 	.text-input:focus {
-		border-color: #555;
+		border-color: var(--line-strong);
 	}
 </style>

@@ -1055,8 +1055,8 @@
 
 <style>
 	.tl-track {
-		background: #111;
-		border: 1px solid #2a2a2a;
+		background: var(--ink);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		overflow: hidden;
 	}
@@ -1073,7 +1073,7 @@
 	}
 
 	.tail {
-		stroke: #333;
+		stroke: var(--text-4);
 		stroke-width: 1;
 		stroke-dasharray: 3 4;
 	}
@@ -1086,7 +1086,7 @@
 	}
 
 	.seg {
-		stroke: #5a8fc0;
+		stroke: var(--live-dim);
 		stroke-width: 2;
 		stroke-linecap: round;
 		pointer-events: none;
@@ -1111,13 +1111,13 @@
 	}
 
 	.connector {
-		stroke: #5a8fc0;
+		stroke: var(--live-dim);
 		stroke-width: 1.5;
 		pointer-events: none;
 	}
 
 	.dot-anchor {
-		fill: #5a8fc0;
+		fill: var(--live-dim);
 		stroke: none;
 		pointer-events: none;
 	}
@@ -1130,7 +1130,7 @@
 
 	.dot {
 		fill: #111;
-		stroke: #5a8fc0;
+		stroke: var(--live-dim);
 		stroke-width: 1.5;
 		cursor: ew-resize;
 	}
@@ -1138,7 +1138,7 @@
 	.dot:hover,
 	.dot-hovered,
 	.dot-selected {
-		fill: #5a8fc0;
+		fill: var(--live-dim);
 	}
 
 	.dot-selected {
@@ -1147,7 +1147,7 @@
 	}
 
 	.dot-hovered {
-		stroke: #ff7070;
+		stroke: var(--rec);
 	}
 
 	.select-rect {
@@ -1165,7 +1165,7 @@
 	}
 
 	.hint {
-		fill: #3a3a3a;
+		fill: var(--text-4);
 		font-size: 8.5px;
 		pointer-events: none;
 		user-select: none;

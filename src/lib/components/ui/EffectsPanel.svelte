@@ -3,6 +3,7 @@
 	import {
 		Check,
 		ChevronsDownUp,
+		Filter,
 		Plus,
 		Save,
 		Search,
@@ -67,6 +68,9 @@
 		onUserEdit,
 		onBeforeUserEdit,
 	}: Props = $props();
+
+	/** How many effects are actually passing signal, shown in the panel header. */
+	let liveCount = $derived(effects.filter((e) => e.enabled).length);
 
 	let presets: Preset[] = $state(loadPresets());
 	// Collapsed: the count in the header says they're there, and the effect
@@ -224,23 +228,30 @@
 
 	let searchQuery = $state('');
 
+	// Narrows the list to the effects actually passing signal — the working set
+	// once a mosh has filled the chain with things you don't want to scroll past.
+	let onlyLive = $state(false);
+
 	let filteredEffects = $derived(
-		searchQuery
-			? effects
-					.map((e, i) => ({ effect: e, index: i }))
-					.filter(({ effect }) => {
-						const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
-						return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
-					})
-			: effects.map((e, i) => ({ effect: e, index: i })),
+		effects
+			.map((e, i) => ({ effect: e, index: i }))
+			.filter(({ effect }) => {
+				if (onlyLive && !effect.enabled) return false;
+				if (!searchQuery) return true;
+				const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
+				return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
+			}),
 	);
 
+	// Nothing in here is live, so the section has no place in a live-only list.
 	let filteredHiddenDefs = $derived(
-		searchQuery
-			? hiddenDefs.filter((def) =>
-					def.name.toLowerCase().includes(searchQuery.toLowerCase()),
-				)
-			: hiddenDefs,
+		onlyLive
+			? []
+			: searchQuery
+				? hiddenDefs.filter((def) =>
+						def.name.toLowerCase().includes(searchQuery.toLowerCase()),
+					)
+				: hiddenDefs,
 	);
 
 	function addEffect(defId: string) {
@@ -449,6 +460,13 @@
 </script>
 
 <aside class="effects-panel">
+	<header class="panel-head">
+		<span class="rack-label">Signal chain</span>
+		<span class="chain-count readout" class:live={liveCount > 0}>
+			{liveCount} live
+		</span>
+	</header>
+
 	<div class="presets-section">
 		<button class="presets-header" onclick={() => (showPresets = !showPresets)}>
 			<span class="presets-arrow" class:expanded={showPresets}>&#9654;</span>
@@ -554,6 +572,18 @@
 				<X size={12} />
 			</button>
 		{/if}
+		<button
+			class="search-clear live-filter"
+			class:on={onlyLive}
+			onclick={() => (onlyLive = !onlyLive)}
+			title={onlyLive
+				? 'Showing live effects only — click to show the whole chain'
+				: 'Show live effects only'}
+			aria-pressed={onlyLive}
+			aria-label="Show live effects only"
+		>
+			<Filter size={13} />
+		</button>
 		{#if anyExpanded}
 			<button
 				class="search-clear"
@@ -630,7 +660,8 @@
 		min-height: 0;
 		width: 310px;
 		max-width: 310px;
-		background: #161616;
+		background: var(--surface);
+		border-left: 1px solid var(--line);
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;
@@ -640,46 +671,76 @@
 		.effects-panel {
 			max-width: 100%;
 			width: 100%;
+			border-left: none;
 		}
 	}
 
-	.presets-section {
-		border-bottom: 1px solid #222;
+	.panel-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.55rem 0.75rem;
+		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
 
-	.presets-header {
+	.chain-count {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.6rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-4);
+		transition: color var(--t);
+	}
+
+	.chain-count.live {
+		color: var(--live);
+	}
+
+	.presets-section {
+		border-bottom: 1px solid var(--line);
+		flex-shrink: 0;
+	}
+
+	.presets-header,
+	.hidden-header {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
-		padding: 0.6rem 0.8rem;
+		padding: 0.5rem 0.75rem;
 		background: none;
 		border: none;
-		color: #666;
-		font-size: 0.72rem;
-		font-weight: 500;
-		font-family: inherit;
-		letter-spacing: 0.03em;
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
 		cursor: pointer;
-		transition: color 0.15s;
+		transition: color var(--t-fast);
 	}
 
-	.presets-header:hover {
-		color: #999;
+	.presets-header:hover,
+	.hidden-header:hover {
+		color: var(--mosh);
 	}
 
-	.presets-arrow {
+	.presets-arrow,
+	.hidden-arrow {
 		font-size: 0.5rem;
-		transition: transform 0.15s;
+		transition: transform var(--t);
 	}
 
-	.presets-arrow.expanded {
+	.presets-arrow.expanded,
+	.hidden-arrow.expanded {
 		transform: rotate(90deg);
 	}
 
 	.presets-body {
-		padding: 0 0.6rem 0.5rem;
+		padding: 0 0.6rem 0.55rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
@@ -691,20 +752,22 @@
 		gap: 0.4rem;
 		padding: 0.35rem 0.5rem;
 		background: none;
-		border: 1px dashed #333;
-		border-radius: 4px;
-		color: #555;
-		font-size: 0.7rem;
-		font-family: inherit;
+		border: 1px dashed var(--line-strong);
+		border-radius: var(--r-2);
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
 		cursor: pointer;
 		transition:
-			color 0.15s,
-			border-color 0.15s;
+			color var(--t-fast),
+			border-color var(--t-fast);
 	}
 
 	.preset-save-trigger:hover {
-		color: #999;
-		border-color: #555;
+		color: var(--mosh);
+		border-color: var(--mosh-dim);
 	}
 
 	.preset-save-row {
@@ -715,30 +778,31 @@
 
 	.preset-name-count {
 		flex-shrink: 0;
-		font-size: 0.6rem;
-		color: #666;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		color: var(--text-3);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.preset-name-count.at-max {
-		color: #c07a7a;
+		color: var(--rec);
 	}
 
 	.preset-name-input {
 		flex: 1;
 		min-width: 0;
 		padding: 0.3rem 0.5rem;
-		background: #111;
-		border: 1px solid #333;
-		border-radius: 4px;
-		color: #ccc;
-		font-size: 0.7rem;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		color: var(--text);
+		font-size: 0.72rem;
 		font-family: inherit;
 		outline: none;
 	}
 
 	.preset-name-input:focus {
-		border-color: #555;
+		border-color: var(--mosh-dim);
 	}
 
 	.preset-confirm-btn,
@@ -749,24 +813,24 @@
 		width: 26px;
 		height: 26px;
 		background: none;
-		border: 1px solid #333;
-		border-radius: 4px;
-		color: #666;
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		color: var(--text-3);
 		cursor: pointer;
 		padding: 0;
 		transition:
-			color 0.15s,
-			border-color 0.15s;
+			color var(--t-fast),
+			border-color var(--t-fast);
 	}
 
 	.preset-confirm-btn:hover {
-		color: #8c8;
-		border-color: #585;
+		color: var(--live);
+		border-color: var(--live-dim);
 	}
 
 	.preset-cancel-btn:hover {
-		color: #c88;
-		border-color: #855;
+		color: var(--rec);
+		border-color: var(--rec-dim);
 	}
 
 	.preset-item {
@@ -777,12 +841,12 @@
 
 	.preset-load-btn {
 		flex: 1;
-		padding: 0.35rem 0.5rem;
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid #2a2a2a;
-		border-radius: 4px;
-		color: #888;
-		font-size: 0.7rem;
+		padding: 0.35rem 0.55rem;
+		background: rgba(198, 162, 234, 0.05);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		color: var(--text-2);
+		font-size: 0.72rem;
 		font-family: inherit;
 		text-align: left;
 		cursor: pointer;
@@ -790,15 +854,15 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		transition:
-			color 0.15s,
-			border-color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.preset-load-btn:hover {
-		color: #ccc;
-		border-color: #444;
-		background: rgba(255, 255, 255, 0.06);
+		color: var(--mosh);
+		border-color: var(--mosh-dim);
+		background: rgba(198, 162, 234, 0.1);
 	}
 
 	.preset-delete-btn {
@@ -809,29 +873,29 @@
 		height: 22px;
 		background: none;
 		border: none;
-		color: #444;
+		color: var(--text-4);
 		cursor: pointer;
-		border-radius: 3px;
+		border-radius: var(--r-1);
 		padding: 0;
 		flex-shrink: 0;
 		transition:
-			color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.preset-delete-btn:hover {
-		color: #c66;
-		background: rgba(255, 80, 80, 0.08);
+		color: var(--rec);
+		background: rgba(255, 95, 86, 0.1);
 	}
 
 	.preset-update-btn:hover {
-		color: #8b8;
-		background: rgba(80, 200, 80, 0.08);
+		color: var(--live);
+		background: rgba(110, 231, 192, 0.1);
 	}
 
 	.preset-empty {
 		font-size: 0.68rem;
-		color: #444;
+		color: var(--text-4);
 		padding: 0.2rem 0.5rem;
 	}
 
@@ -839,13 +903,13 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.45rem 0.6rem;
-		border-bottom: 1px solid #222;
+		padding: 0.4rem 0.7rem;
+		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
 
 	.search-bar :global(.search-icon) {
-		color: #555;
+		color: var(--text-4);
 		flex-shrink: 0;
 	}
 
@@ -855,14 +919,14 @@
 		padding: 0.25rem 0.3rem;
 		background: none;
 		border: none;
-		color: #ccc;
+		color: var(--text);
 		font-size: 0.75rem;
 		font-family: inherit;
 		outline: none;
 	}
 
 	.search-input::placeholder {
-		color: #444;
+		color: var(--text-4);
 	}
 
 	.search-clear {
@@ -873,22 +937,28 @@
 		height: 18px;
 		background: none;
 		border: none;
-		color: #555;
+		color: var(--text-4);
 		cursor: pointer;
 		padding: 0;
-		border-radius: 3px;
+		border-radius: var(--r-1);
 		flex-shrink: 0;
-		transition: color 0.15s;
+		transition: color var(--t-fast);
 	}
 
 	.search-clear:hover {
-		color: #999;
+		color: var(--text);
+	}
+
+	.live-filter.on {
+		color: var(--live);
 	}
 
 	.panel-scroll {
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
+		scrollbar-width: thin;
+		scrollbar-color: var(--line-strong) transparent;
 	}
 
 	.panel-scroll::-webkit-scrollbar {
@@ -900,54 +970,28 @@
 	}
 
 	.panel-scroll::-webkit-scrollbar-thumb {
-		background: #333;
+		background: var(--line-strong);
 		border-radius: 2px;
 	}
 
 	.panel-scroll::-webkit-scrollbar-thumb:hover {
-		background: #555;
+		background: var(--text-4);
 	}
 
 	.hidden-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		padding: 0.6rem 0.8rem;
-		background: none;
-		border: none;
-		border-top: 1px solid #222;
-		color: #666;
-		font-size: 0.72rem;
-		font-weight: 500;
-		font-family: inherit;
-		letter-spacing: 0.03em;
-		cursor: pointer;
-		transition: color 0.15s;
-	}
-
-	.hidden-header:hover {
-		color: #999;
-	}
-
-	.hidden-arrow {
-		font-size: 0.5rem;
-		transition: transform 0.15s;
-	}
-
-	.hidden-arrow.expanded {
-		transform: rotate(90deg);
+		border-top: 1px solid var(--line);
 	}
 
 	.hidden-list {
-		border-top: 1px solid #1e1e1e;
+		border-top: 1px solid var(--line);
 	}
 
 	.hidden-item {
 		display: flex;
 		align-items: center;
-		padding: 0.35rem 0.8rem;
-		border-bottom: 1px solid #1a1a1a;
+		/* Aligned to the effect strips above, past the 30px signal rail. */
+		padding: 0.3rem 0.6rem 0.3rem calc(30px + 0.6rem);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 	}
 
 	.hidden-item:hover {
@@ -957,7 +1001,7 @@
 	.hidden-name {
 		flex: 1;
 		font-size: 0.75rem;
-		color: #555;
+		color: var(--text-3);
 	}
 
 	.add-btn {
@@ -968,17 +1012,17 @@
 		height: 22px;
 		background: none;
 		border: none;
-		color: #444;
+		color: var(--text-4);
 		cursor: pointer;
-		border-radius: 3px;
+		border-radius: var(--r-1);
 		padding: 0;
 		transition:
-			color 0.15s,
-			background 0.15s;
+			color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.add-btn:hover {
-		color: #aaa;
-		background: rgba(255, 255, 255, 0.05);
+		color: var(--live);
+		background: rgba(110, 231, 192, 0.1);
 	}
 </style>

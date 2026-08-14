@@ -205,21 +205,21 @@
 		width: 24px;
 		height: 20px;
 		padding: 0;
-		border: 1px solid #444;
+		border: 1px solid var(--line-strong);
 		border-radius: 3px;
 		cursor: pointer;
 		flex-shrink: 0;
 	}
 
 	.swatch:hover {
-		border-color: #777;
+		border-color: var(--text-3);
 	}
 
 	.hex {
 		width: 6.5rem;
-		background: #1a1a1a;
-		color: #ccc;
-		border: 1px solid #333;
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		padding: 0.2rem 0.4rem;
 		font-size: 0.7rem;
@@ -230,7 +230,7 @@
 	}
 
 	.hex:focus {
-		border-color: #555;
+		border-color: var(--text-4);
 	}
 
 	.picker {
@@ -245,7 +245,7 @@
 		width: 100%;
 		height: 86px;
 		border-radius: 4px;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		cursor: crosshair;
 		touch-action: none;
 		background:
@@ -256,7 +256,7 @@
 
 	.sv-area:focus-visible,
 	.hue-strip:focus-visible {
-		outline: 1px solid #666;
+		outline: 1px solid var(--text-4);
 		outline-offset: 1px;
 	}
 
@@ -276,7 +276,7 @@
 		width: 100%;
 		height: 12px;
 		border-radius: 4px;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		cursor: ew-resize;
 		touch-action: none;
 		background: linear-gradient(
@@ -313,13 +313,13 @@
 		width: 16px;
 		height: 16px;
 		padding: 0;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 3px;
 		cursor: pointer;
 	}
 
 	.preset:hover {
-		border-color: #888;
+		border-color: var(--text-3);
 	}
 
 	.preset.active {

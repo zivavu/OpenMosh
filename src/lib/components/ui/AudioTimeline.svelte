@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Pause, Play, Repeat, Volume1, Volume2, VolumeX, X } from 'lucide-svelte';
+	import { Pause, Play, Repeat, Volume1, Volume2, VolumeX } from 'lucide-svelte';
 	import { formatTime } from '../../audio/audio-utils';
 	import { tryGetTimelineStack } from '../../editor/timeline-stack.svelte';
 	import SpeedControl from './SpeedControl.svelte';
@@ -22,7 +22,6 @@
 		onSpeedChange?: (s: number) => void;
 		loopEnabled?: boolean;
 		onToggleLoop?: () => void;
-		onRemoveTrack?: () => void;
 		ariaLabel?: string;
 		/**
 		 * `lane` puts the track on the enclosing TimelineStack's shared axis: it
@@ -52,7 +51,6 @@
 		onSpeedChange,
 		loopEnabled = false,
 		onToggleLoop,
-		onRemoveTrack,
 		ariaLabel = 'Timeline',
 		layout = 'bar',
 	}: Props = $props();
@@ -321,16 +319,6 @@
 					title="Volume: {Math.round(outputVolume * 100)}%"
 				/>
 			{/if}
-			{#if onRemoveTrack}
-				<button
-					class="track-inline-btn"
-					onclick={onRemoveTrack}
-					title="Remove track"
-					aria-label="Remove track"
-				>
-					<X size={12} />
-				</button>
-			{/if}
 		</div>
 		{@render trackBody()}
 	</div>
@@ -381,16 +369,6 @@
 				title="Volume: {Math.round(outputVolume * 100)}%"
 			/>
 		{/if}
-		{#if onRemoveTrack}
-			<button
-				class="track-inline-btn"
-				onclick={onRemoveTrack}
-				title="Remove track"
-				aria-label="Remove track"
-			>
-				<X size={12} />
-			</button>
-		{/if}
 	</div>
 {/if}
 
@@ -402,7 +380,7 @@
 		gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
 		background: rgba(18, 18, 18, 0.9);
-		border-top: 1px solid #2a2a2a;
+		border-top: 1px solid var(--line);
 		user-select: none;
 	}
 
@@ -410,7 +388,7 @@
 		font-size: 0.55rem;
 		font-weight: 700;
 		letter-spacing: 0.07em;
-		color: #555;
+		color: var(--text-4);
 		min-width: 1.6rem;
 		text-align: center;
 		flex-shrink: 0;
@@ -422,10 +400,10 @@
 		justify-content: center;
 		width: 28px;
 		height: 28px;
-		border: 1px solid #444;
+		border: 1px solid var(--line-strong);
 		border-radius: 6px;
 		background: rgba(30, 30, 30, 0.9);
-		color: #aaa;
+		color: var(--text-2);
 		cursor: pointer;
 		transition:
 			color 0.15s,
@@ -435,21 +413,22 @@
 	}
 
 	.timeline-play-btn:hover {
-		color: #fff;
-		border-color: #555;
+		color: var(--text);
+		border-color: var(--text-4);
 		background: rgba(255, 255, 255, 0.06);
 	}
 
 	.timeline-loop-btn.loop-on {
-		color: #fff;
-		border-color: #666;
+		color: var(--text);
+		border-color: var(--text-4);
 		background: rgba(255, 255, 255, 0.12);
 	}
 
 	.timeline-time {
 		font-size: 0.7rem;
-		color: #666;
+		color: var(--text-3);
 		min-width: 2.2rem;
+		font-family: var(--font-mono);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -477,14 +456,14 @@
 	}
 
 	.timeline-track-wrap:focus-visible {
-		outline: 1px solid #555;
+		outline: 1px solid var(--text-4);
 		outline-offset: 2px;
 	}
 
 	.timeline-track {
 		position: relative;
 		height: 20px;
-		background: #222;
+		background: var(--raised);
 		border-radius: 4px;
 		overflow: visible;
 		user-select: none;
@@ -520,7 +499,7 @@
 		width: 10px;
 		height: 16px;
 		margin: -8px 0 0 -5px;
-		border: 1px solid #555;
+		border: 1px solid var(--text-4);
 		border-radius: 3px;
 		background: #444;
 		pointer-events: none;
@@ -532,20 +511,20 @@
 	/* Lit by proximity rather than :hover — the handles take no pointer events,
 	   since the track hit-tests them by distance. */
 	.timeline-handle.live {
-		border-color: #7ab8f5;
-		background: #2f527a;
+		border-color: var(--live);
+		background: var(--live-dim);
 	}
 
 	.timeline-handle.dragging {
-		border-color: #cfe6ff;
-		background: #3a6391;
+		border-color: var(--live);
+		background: var(--live-dim);
 		transition: none;
 	}
 
 	.volume-icon {
 		display: flex;
 		align-items: center;
-		color: #666;
+		color: var(--text-3);
 		flex-shrink: 0;
 		margin-right: -0.2rem;
 	}
@@ -563,40 +542,36 @@
 		min-width: 28px;
 	}
 
-	.audio-gutter .track-inline-btn {
-		margin-left: auto;
-	}
-
 	.volume-slider {
 		width: 60px;
 		height: 4px;
 		appearance: none;
-		background: #333;
+		background: rgba(255, 255, 255, 0.07);
 		border-radius: 2px;
 		cursor: pointer;
 		flex-shrink: 0;
 	}
 	.volume-slider::-webkit-slider-thumb {
 		appearance: none;
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: #aaa;
+		width: 9px;
+		height: 13px;
+		border-radius: 4px;
+		background: var(--text-2);
 		cursor: pointer;
 	}
 	.volume-slider::-moz-range-thumb {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: #aaa;
+		width: 9px;
+		height: 13px;
+		border-radius: 4px;
+		background: var(--text-2);
 		border: none;
 		cursor: pointer;
 	}
 	.volume-slider:hover::-webkit-slider-thumb {
-		background: #fff;
+		background: var(--text);
 	}
 	.volume-slider:hover::-moz-range-thumb {
-		background: #fff;
+		background: var(--text);
 	}
 
 	@media (max-width: 800px) {
@@ -610,25 +585,4 @@
 		}
 	}
 
-	.track-inline-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border: none;
-		border-radius: 4px;
-		background: none;
-		color: #555;
-		cursor: pointer;
-		flex-shrink: 0;
-		transition:
-			color 0.15s,
-			background 0.15s;
-	}
-
-	.track-inline-btn:hover {
-		color: #ccc;
-		background: rgba(255, 255, 255, 0.06);
-	}
 </style>

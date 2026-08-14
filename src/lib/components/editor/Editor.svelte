@@ -2088,15 +2088,18 @@
 					</button>
 				{/if}
 				<GithubLink />
-				<ButtonGroup
-					buttons={[
-						{ label: 'PNG', value: 'png' },
-						{ label: 'JPG', value: 'jpg' },
-						{ label: 'WebM', value: 'webm' },
-					]}
-					value={format}
-					onchange={(v) => (format = v)}
-				/>
+				<div class="output-group">
+					<span class="rack-label">Output</span>
+					<ButtonGroup
+						buttons={[
+							{ label: 'PNG', value: 'png' },
+							{ label: 'JPG', value: 'jpg' },
+							{ label: 'WebM', value: 'webm' },
+						]}
+						value={format}
+						onchange={(v) => (format = v)}
+					/>
+				</div>
 			</div>
 		</div>
 
@@ -2353,7 +2356,6 @@
 				onSeek={seekMaster}
 				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
-				accent={isSequenceMode ? 'purple' : 'blue'}
 			>
 				{#snippet toolbar()}
 					{#if isSequenceMode && sequenceSources.length > 0}
@@ -2383,7 +2385,7 @@
 									)}
 							>
 								<Shuffle size={11} />
-								{seqSelectedIds.length > 0 ? 'Shuffle selected' : 'Shuffle all'}
+								{seqSelectedIds.length > 0 ? 'Shuffle selected' : 'Shuffle media'}
 							</button>
 							<button
 								class="tl-tool-btn danger"
@@ -2479,7 +2481,6 @@
 						onSpanStartChange={(t) => (audio.spanStart = t)}
 						onSpanEndChange={(t) => (audio.spanEnd = t)}
 						onVolumeChange={(v) => audio.setOutputVolume(v)}
-						onRemoveTrack={clearTrack}
 					/>
 				{/if}
 				{#if textTimeline.enabled}
@@ -2648,6 +2649,7 @@
 		width: 100%;
 		overflow: hidden;
 		position: relative;
+		background: var(--ink);
 	}
 
 	.main-area {
@@ -2660,18 +2662,33 @@
 	}
 
 	.top-bar {
-		padding: 0.5rem 0.75rem;
-		border-bottom: 1px solid #2a2a2a;
+		display: flex;
+		align-items: center;
+		padding: 0.4rem 0.75rem;
+		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
 
+
 	.toolbar {
+		flex: 1;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 	}
 
+	.output-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		line-height: 1;
+	}
 
+	@media (max-width: 800px) {
+		.output-group :global(.rack-label) {
+			display: none;
+		}
+	}
 
 	.mosh-group-wrap {
 		display: flex;
@@ -2686,26 +2703,29 @@
 		width: 30px;
 		height: 30px;
 		border-radius: 50%;
-		background: rgba(18, 18, 18, 0.85);
-		border: 1.5px solid #444;
-		color: #888;
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		border: 1.5px solid var(--line-strong);
+		color: var(--text-3);
 		cursor: pointer;
 		flex-shrink: 0;
 		padding: 0;
 		box-sizing: border-box;
 		transition:
-			border-color 0.2s,
-			color 0.2s;
+			border-color var(--t),
+			color var(--t);
 	}
 
 	.help-btn:hover {
-		border-color: #777;
-		color: #ccc;
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 
 	.help-btn.seq-active {
-		border-color: #b08ad0;
-		color: #d8b8f8;
+		border-color: var(--live-dim);
+		color: var(--live);
+		background: rgba(110, 231, 192, 0.1);
 	}
 
 	@media (max-width: 800px) {
@@ -2717,11 +2737,9 @@
 
 	.settings-divider {
 		height: 1px;
-		background: #333;
+		background: var(--line);
 		margin: 0.15rem 0;
 	}
-
-
 
 	/* Action bar */
 	.action-bar {
@@ -2737,8 +2755,8 @@
 	}
 
 	.library-btn:hover {
-		border-color: #777;
-		color: #ccc;
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 
 	@media (max-width: 800px) {
@@ -2749,7 +2767,7 @@
 
 		.action-btn {
 			padding: 0.6rem 1.2rem;
-			font-size: 0.72rem;
+			font-size: 0.7rem;
 		}
 
 		.library-btn {
@@ -2760,15 +2778,15 @@
 			height: 26px;
 			border-radius: 50%;
 			background: none;
-			border: 1.5px solid #444;
-			color: #888;
+			border: 1.5px solid var(--line-strong);
+			color: var(--text-3);
 			cursor: pointer;
 			flex-shrink: 0;
 			padding: 0;
 			box-sizing: border-box;
 			transition:
-				border-color 0.2s,
-				color 0.2s;
+				border-color var(--t),
+				color var(--t);
 		}
 	}
 
@@ -2777,25 +2795,32 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.6rem 2rem;
-		border: 1.5px solid #444;
-		border-radius: 999px;
-		background: transparent;
-		color: #ccc;
-		font-size: 0.78rem;
+		border: 1.5px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
 		font-weight: 600;
-		letter-spacing: 0.08em;
-		font-family: inherit;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
 		cursor: pointer;
 		transition:
-			border-color 0.2s,
-			color 0.2s,
-			background 0.2s;
+			border-color var(--t),
+			color var(--t),
+			background var(--t);
 	}
 
 	.action-btn:hover {
-		border-color: #888;
-		color: #fff;
-		background: rgba(255, 255, 255, 0.04);
+		border-color: var(--text-3);
+		color: var(--text);
+	}
+
+	.save-btn:hover {
+		border-color: var(--live-dim);
+		color: var(--live);
 	}
 
 	.mosh-setting-row {
@@ -2806,8 +2831,12 @@
 
 	.mosh-setting-row label,
 	.rec-duration-label {
-		font-size: 0.7rem;
-		color: #888;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		font-weight: 500;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-3);
 		min-width: 72px;
 		flex-shrink: 0;
 	}
@@ -2816,7 +2845,7 @@
 		flex: 1;
 		height: 3px;
 		appearance: none;
-		background: #333;
+		background: var(--sunken);
 		border-radius: 2px;
 		outline: none;
 		cursor: pointer;
@@ -2826,8 +2855,8 @@
 		appearance: none;
 		width: 10px;
 		height: 10px;
-		border-radius: 50%;
-		background: #aaa;
+		border-radius: 2px;
+		background: var(--text-2);
 		cursor: pointer;
 	}
 
@@ -2835,21 +2864,21 @@
 		appearance: none;
 		width: 14px;
 		height: 14px;
-		border: 1px solid #555;
-		border-radius: 2px;
-		background: #1a1a1a;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
+		background: var(--sunken);
 		cursor: pointer;
 		position: relative;
 		flex-shrink: 0;
 	}
 
 	.mosh-setting-row input[type='checkbox']:hover {
-		border-color: #777;
+		border-color: var(--text-3);
 	}
 
 	.mosh-setting-row input[type='checkbox']:checked {
-		background: #555;
-		border-color: #888;
+		background: rgba(110, 231, 192, 0.15);
+		border-color: var(--live-dim);
 	}
 
 	.mosh-setting-row input[type='checkbox']:checked::after {
@@ -2858,30 +2887,31 @@
 		inset: 0;
 		width: 100%;
 		height: 100%;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%23ddd' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
 			center/contain no-repeat;
 	}
 
 	.mosh-setting-row select {
 		flex: 1;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
-		border-radius: 4px;
+		background: var(--sunken);
+		color: var(--text-2);
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
 		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
 		cursor: pointer;
 		outline: none;
 	}
 
 	.mosh-setting-row select:focus {
-		border-color: #555;
+		border-color: var(--line-strong);
 	}
 
 	.mosh-setting-val {
-		font-size: 0.7rem;
-		color: #999;
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		color: var(--text-2);
 		min-width: 20px;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
@@ -2892,31 +2922,32 @@
 		position: absolute;
 		inset: 0;
 		z-index: 99;
-		border: 2px dashed #888;
-		border-radius: 8px;
+		border: 2px dashed var(--line-strong);
+		border-radius: var(--r-3);
 		pointer-events: none;
 	}
 
 	.rec-start-btn {
 		margin-top: 0.25rem;
 		padding: 0.45rem 1rem;
-		border: 1.5px solid #c05050;
-		border-radius: 6px;
-		background: rgba(192, 80, 80, 0.1);
-		color: #e88;
-		font-size: 0.72rem;
+		border: 1.5px solid var(--rec-dim);
+		border-radius: var(--r-2);
+		background: rgba(255, 95, 86, 0.1);
+		color: var(--rec);
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
 		font-weight: 600;
-		font-family: inherit;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 		cursor: pointer;
 		transition:
-			background 0.15s,
-			color 0.15s;
+			background var(--t-fast),
+			color var(--t-fast);
 	}
 
 	.rec-start-btn:hover {
-		background: rgba(192, 80, 80, 0.2);
-		color: #faa;
+		background: rgba(255, 95, 86, 0.2);
+		color: #ffa8a2;
 	}
 
 	.drop-overlay {
@@ -2926,15 +2957,18 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(0, 0, 0, 0.6);
+		background: rgba(6, 6, 8, 0.72);
+		backdrop-filter: blur(2px);
 		pointer-events: none;
 	}
 
 	.drop-overlay span {
-		font-size: 1.2rem;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
 		font-weight: 600;
-		color: #ccc;
-		letter-spacing: 0.04em;
+		color: var(--text);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
 	}
 
 	@media (max-width: 800px) {

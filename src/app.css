@@ -1,3 +1,6 @@
+@import "@fontsource-variable/archivo";
+@import "@fontsource-variable/jetbrains-mono";
+
 *,
 *::before,
 *::after {
@@ -7,17 +10,55 @@
 	-webkit-tap-highlight-color: transparent;
 }
 
+/* The app is a signal path: media enters, passes a chain of effects, leaves as a
+   file. The chrome is built like the rack around that signal — near-black
+   surfaces, engraved uppercase labels, mono for anything a number. Color is
+   reserved for state: a lit effect, a running clock, a live recording. */
 :root {
-	font-family:
-		system-ui,
-		-apple-system,
-		'Segoe UI',
-		Roboto,
+	/* Surfaces, darkest to lightest */
+	--ink: #0a0a0c;
+	--surface: #101014;
+	--raised: #17171d;
+	--sunken: #08080a;
+
+	--line: rgba(255, 255, 255, 0.08);
+	--line-strong: rgba(255, 255, 255, 0.16);
+
+	--text: #ececf0;
+	--text-2: #9a9aa6;
+	--text-3: #62626e;
+	--text-4: #43434d;
+
+	/* State colors — each one means something, none are decorative */
+	--live: #6ee7c0; /* anything live: lit effects, active toggles, clocks, timelines */
+	--live-dim: #2f6a5b;
+	--mosh: #c6a2ea; /* mosh and presets — the generative actions */
+	--mosh-dim: #6a5080;
+	--rec: #ff5f56; /* recording, destructive */
+	--rec-dim: #7d3430;
+
+	--r-1: 3px;
+	--r-2: 6px;
+	--r-3: 10px;
+	--r-pill: 999px;
+
+	/* Panels that float over the preview borrow the upload screen's frosting */
+	--glass: rgba(12, 12, 16, 0.62);
+	--blur: blur(18px) saturate(0.75);
+
+	--t-fast: 0.12s ease;
+	--t: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+
+	--font-ui: "Archivo Variable", system-ui, -apple-system, "Segoe UI", Roboto,
 		sans-serif;
+	--font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono",
+		Consolas, monospace;
+
+	font-family: var(--font-ui);
 	line-height: 1.5;
 	font-weight: 400;
-	color: #e0e0e0;
-	background-color: #121212;
+	color: var(--text);
+	background-color: var(--ink);
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
@@ -33,7 +74,39 @@ button:active {
 	opacity: 0.7;
 }
 
+/* Engraved rack label: every uppercase micro-label in the app is this. */
+.rack-label {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-3);
+}
+
+/* Numbers never reflow as they tick. */
+.readout {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+	font-feature-settings: "zero" 1;
+}
+
+:focus-visible {
+	outline: 1.5px solid var(--live);
+	outline-offset: 2px;
+}
+
 #app {
 	width: 100%;
 	height: 100svh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
 }

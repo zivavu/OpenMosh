@@ -48,8 +48,8 @@
 		padding: 0.75rem 1rem;
 		border-radius: 6px;
 		background: rgba(30, 30, 30, 0.95);
-		border: 1px solid #333;
-		color: #ccc;
+		border: 1px solid var(--line);
+		color: var(--text);
 		font-size: 0.85rem;
 		max-width: 320px;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -58,7 +58,7 @@
 
 	.toast.error {
 		border-color: rgba(192, 80, 80, 0.5);
-		color: #ff9999;
+		color: var(--rec);
 	}
 
 	.message {
@@ -69,10 +69,10 @@
 	.action {
 		flex-shrink: 0;
 		padding: 0.25rem 0.6rem;
-		border: 1px solid #555;
+		border: 1px solid var(--text-4);
 		border-radius: 4px;
 		background: none;
-		color: #ddd;
+		color: var(--text);
 		font-size: 0.75rem;
 		font-weight: 600;
 		font-family: inherit;
@@ -85,15 +85,15 @@
 	}
 
 	.action:hover {
-		color: #fff;
-		border-color: #888;
+		color: var(--text);
+		border-color: var(--text-3);
 		background: rgba(255, 255, 255, 0.06);
 	}
 
 	.close {
 		background: none;
 		border: none;
-		color: #888;
+		color: var(--text-3);
 		cursor: pointer;
 		font-size: 0.75rem;
 		padding: 0.2rem;
@@ -101,7 +101,7 @@
 	}
 
 	.close:hover {
-		color: #fff;
+		color: var(--text);
 	}
 
 	@keyframes slideIn {

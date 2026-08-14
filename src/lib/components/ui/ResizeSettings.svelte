@@ -180,8 +180,8 @@
 	.ratio-row {
 		display: flex;
 		gap: 2px;
-		background: #111;
-		border: 1px solid #333;
+		background: var(--ink);
+		border: 1px solid var(--line);
 		border-radius: 5px;
 		overflow: hidden;
 		margin-bottom: 0.15rem;
@@ -196,7 +196,7 @@
 		font-family: inherit;
 		background: none;
 		border: none;
-		color: #666;
+		color: var(--text-3);
 		cursor: pointer;
 		transition:
 			color 0.15s,
@@ -205,16 +205,16 @@
 	}
 
 	.ratio-btn:not(:last-child) {
-		border-right: 1px solid #2a2a2a;
+		border-right: 1px solid var(--line);
 	}
 
 	.ratio-btn.active {
-		color: #ddd;
+		color: var(--text);
 		background: rgba(255, 255, 255, 0.07);
 	}
 
 	.ratio-btn:hover:not(.active) {
-		color: #bbb;
+		color: var(--text-2);
 	}
 
 	.size-row {
@@ -225,16 +225,16 @@
 
 	.size-row label {
 		font-size: 0.7rem;
-		color: #888;
+		color: var(--text-3);
 		min-width: 72px;
 		flex-shrink: 0;
 	}
 
 	.size-input {
 		width: 4.5rem;
-		background: #1a1a1a;
-		color: #aaa;
-		border: 1px solid #333;
+		background: var(--surface);
+		color: var(--text-2);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		padding: 0.2rem 0.4rem;
 		font-size: 0.7rem;
@@ -243,7 +243,7 @@
 	}
 
 	.size-input:focus {
-		border-color: #555;
+		border-color: var(--text-4);
 	}
 
 	.lock-btn {
@@ -254,9 +254,9 @@
 		height: 1.4rem;
 		flex-shrink: 0;
 		background: none;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 4px;
-		color: #555;
+		color: var(--text-4);
 		cursor: pointer;
 		transition:
 			color 0.15s,
@@ -265,22 +265,22 @@
 	}
 
 	.lock-btn:hover {
-		color: #aaa;
-		border-color: #555;
+		color: var(--text-2);
+		border-color: var(--text-4);
 	}
 
 	.lock-btn.active {
-		color: #ccc;
-		border-color: #666;
+		color: var(--text);
+		border-color: var(--text-4);
 	}
 
 	.reset-btn {
 		margin-top: 0.25rem;
 		padding: 0.35rem 0.75rem;
-		border: 1px solid #444;
+		border: 1px solid var(--line-strong);
 		border-radius: 6px;
 		background: none;
-		color: #888;
+		color: var(--text-3);
 		font-size: 0.7rem;
 		font-family: inherit;
 		cursor: pointer;
@@ -290,8 +290,8 @@
 	}
 
 	.reset-btn:hover {
-		color: #ccc;
-		border-color: #666;
+		color: var(--text);
+		border-color: var(--text-4);
 	}
 
 	.reset-btn:disabled {

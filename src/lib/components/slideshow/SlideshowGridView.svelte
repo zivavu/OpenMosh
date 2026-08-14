@@ -260,16 +260,16 @@
 		justify-content: center;
 		height: 100%;
 		gap: 1rem;
-		color: #666;
+		color: var(--text-3);
 		font-size: 0.85rem;
 	}
 
 	.add-btn {
 		padding: 0.5rem 1.5rem;
-		border: 1.5px solid #444;
+		border: 1.5px solid var(--line-strong);
 		border-radius: 999px;
 		background: transparent;
-		color: #ccc;
+		color: var(--text);
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -277,8 +277,8 @@
 	}
 
 	.add-btn:hover {
-		border-color: #888;
-		color: #fff;
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 
 	.grid-toolbar {
@@ -297,9 +297,9 @@
 		letter-spacing: 0.04em;
 		font-family: inherit;
 		background: none;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 5px;
-		color: #666;
+		color: var(--text-3);
 		cursor: pointer;
 		transition:
 			color 0.15s,
@@ -307,8 +307,8 @@
 	}
 
 	.toolbar-btn:hover {
-		color: #bbb;
-		border-color: #555;
+		color: var(--text-2);
+		border-color: var(--text-4);
 	}
 
 	.grid {
@@ -320,22 +320,22 @@
 	.slide-card {
 		position: relative;
 		aspect-ratio: 1;
-		border: 1.5px solid #2a2a2a;
+		border: 1.5px solid var(--line);
 		border-radius: 6px;
 		overflow: hidden;
 		cursor: pointer;
 		transition: border-color 0.15s;
 		content-visibility: auto;
 		contain-intrinsic-size: 100px 100px;
-		background: #1a1a1a;
+		background: var(--surface);
 	}
 
 	.slide-card:hover {
-		border-color: #555;
+		border-color: var(--text-4);
 	}
 
 	.slide-card.drag-over {
-		border-color: #888;
+		border-color: var(--text-3);
 		border-style: dashed;
 	}
 
@@ -359,8 +359,8 @@
 		content: '';
 		width: 16px;
 		height: 16px;
-		border: 2px solid #333;
-		border-top-color: #666;
+		border: 2px solid var(--line);
+		border-top-color: var(--text-4);
 		border-radius: 50%;
 		animation: spin 0.7s linear infinite;
 	}
@@ -377,7 +377,7 @@
 		left: 4px;
 		font-size: 0.65rem;
 		font-weight: 700;
-		color: #fff;
+		color: var(--text);
 		background: rgba(0, 0, 0, 0.6);
 		padding: 0 4px;
 		border-radius: 3px;
@@ -391,7 +391,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: #fff;
+		color: var(--text);
 		background: rgba(0, 0, 0, 0.6);
 		padding: 2px 3px;
 		border-radius: 3px;
@@ -406,7 +406,7 @@
 		border: none;
 		border-radius: 3px;
 		background: rgba(0, 0, 0, 0.6);
-		color: #ccc;
+		color: var(--text);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -421,7 +421,7 @@
 
 	.remove-btn:hover {
 		background: rgba(200, 50, 50, 0.8);
-		color: #fff;
+		color: var(--text);
 	}
 
 	.preset-select {
@@ -432,17 +432,17 @@
 		padding: 2px 4px;
 		border: none;
 		background: rgba(0, 0, 0, 0.7);
-		color: #ccc;
+		color: var(--text);
 		font-size: 0.6rem;
 		font-family: inherit;
 	}
 
 	.add-card {
 		aspect-ratio: 1;
-		border: 1.5px dashed #333;
+		border: 1.5px dashed var(--line);
 		border-radius: 6px;
 		background: transparent;
-		color: #555;
+		color: var(--text-4);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -453,7 +453,7 @@
 	}
 
 	.add-card:hover {
-		border-color: #555;
-		color: #888;
+		border-color: var(--text-4);
+		color: var(--text-3);
 	}
 </style>

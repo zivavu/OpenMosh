@@ -57,25 +57,22 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.6rem 2rem;
-		border: 1.5px solid #444;
-		border-radius: 999px;
-		background: transparent;
-		color: #ccc;
-		font-size: 0.78rem;
+		border: 1.5px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
 		font-weight: 600;
-		letter-spacing: 0.08em;
-		font-family: inherit;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
 		cursor: pointer;
 		transition:
-			border-color 0.2s,
-			color 0.2s,
-			background 0.2s;
-	}
-
-	.action-btn:hover:not(:disabled) {
-		border-color: #888;
-		color: #fff;
-		background: rgba(255, 255, 255, 0.04);
+			border-color var(--t),
+			color var(--t),
+			background var(--t);
 	}
 
 	.action-btn:disabled {
@@ -83,31 +80,33 @@
 		cursor: default;
 	}
 
+	/* Tally red: the same color the overlay uses while a take is running. */
 	.record-btn:hover:not(:disabled) {
-		border-color: #c05050;
-		color: #ff8888;
+		border-color: var(--rec-dim);
+		color: var(--rec);
+		background: rgba(255, 95, 86, 0.1);
 	}
 
 	.record-settings {
 		position: absolute;
 		bottom: calc(100% + 0.5rem);
 		right: 0;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 8px;
+		background: var(--raised);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-3);
 		padding: 0.75rem 1rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
 		min-width: 230px;
 		z-index: 20;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+		box-shadow: 0 10px 34px rgba(0, 0, 0, 0.65);
 	}
 
 	@media (max-width: 800px) {
 		.action-btn {
 			padding: 0.6rem 1.2rem;
-			font-size: 0.72rem;
+			font-size: 0.66rem;
 		}
 	}
 </style>

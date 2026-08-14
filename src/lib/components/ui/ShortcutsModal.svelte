@@ -85,10 +85,10 @@
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
 		padding: 1.25rem;
-		background: #1a1a1a;
-		border: 1px solid #333;
-		border-radius: 12px;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+		background: var(--surface);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-3);
+		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
 	}
 
 	.header {
@@ -98,16 +98,18 @@
 	}
 
 	.title {
-		font-size: 0.85rem;
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
 		font-weight: 600;
-		color: #ddd;
-		letter-spacing: 0.04em;
+		color: var(--text);
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
 	}
 
 	.close-btn {
 		background: none;
 		border: none;
-		color: #777;
+		color: var(--text-3);
 		cursor: pointer;
 		padding: 2px;
 		display: flex;
@@ -117,7 +119,7 @@
 	}
 
 	.close-btn:hover {
-		color: #eee;
+		color: var(--text);
 	}
 
 	.groups {
@@ -129,10 +131,11 @@
 
 	.group-title {
 		display: block;
-		font-size: 0.62rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		color: #888;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		color: var(--text-3);
 		text-transform: uppercase;
 		margin-bottom: 0.4rem;
 	}
@@ -151,7 +154,7 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		padding: 0.3rem 0;
-		border-bottom: 1px solid #242424;
+		border-bottom: 1px solid var(--line);
 	}
 
 	.shortcut-row:last-child {
@@ -168,23 +171,24 @@
 
 	.key-sep {
 		font-size: 0.6rem;
-		color: #666;
+		color: var(--text-3);
 	}
 
 	kbd {
-		font-family: inherit;
-		font-size: 0.65rem;
-		color: #ccc;
-		background: #262626;
-		border: 1px solid #3a3a3a;
-		border-radius: 4px;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		font-weight: 500;
+		color: var(--text);
+		background: var(--raised);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
 		padding: 0.15rem 0.4rem;
-		box-shadow: inset 0 -1px 0 #111;
+		box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.6);
 	}
 
 	.description {
 		font-size: 0.75rem;
-		color: #b5b5b5;
+		color: var(--text-2);
 		text-align: left;
 	}
 </style>

@@ -352,8 +352,8 @@
 		position: relative;
 		flex-shrink: 0;
 		width: 28px;
-		border-right: 1px solid #2a2a2a;
-		background: #141414;
+		border-right: 1px solid var(--line);
+		background: var(--ink);
 	}
 
 	@media (max-width: 800px) {
@@ -380,7 +380,7 @@
 		height: 100%;
 		background: none;
 		border: none;
-		color: #444;
+		color: var(--text-4);
 		cursor: pointer;
 		display: flex;
 		align-items: center;
@@ -390,8 +390,8 @@
 	}
 
 	.expand-btn:hover {
-		color: #888;
-		background: #1a1a1a;
+		color: var(--text-3);
+		background: var(--surface);
 	}
 
 	.panel {
@@ -404,8 +404,8 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		background: #141414;
-		border-right: 1px solid #2a2a2a;
+		background: var(--ink);
+		border-right: 1px solid var(--line);
 		transform: translateX(-100%);
 		transition: transform 0.15s ease;
 	}
@@ -419,7 +419,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.5rem 0.5rem 0.4rem 0.6rem;
-		border-bottom: 1px solid #222;
+		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
 
@@ -428,7 +428,7 @@
 		font-size: 0.6rem;
 		font-weight: 700;
 		letter-spacing: 0.08em;
-		color: #888;
+		color: var(--text-3);
 		text-transform: uppercase;
 	}
 
@@ -436,7 +436,7 @@
 	.collapse-btn {
 		background: none;
 		border: none;
-		color: #555;
+		color: var(--text-4);
 		cursor: pointer;
 		width: 18px;
 		height: 18px;
@@ -448,23 +448,23 @@
 	}
 
 	.add-btn {
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 	}
 
 	.add-btn:hover {
-		color: #ccc;
-		border-color: #555;
+		color: var(--text);
+		border-color: var(--text-4);
 	}
 
 	.collapse-btn:hover {
-		color: #aaa;
-		background: #1e1e1e;
+		color: var(--text-2);
+		background: var(--raised);
 	}
 
 	.empty {
 		padding: 1rem 0.8rem;
 		font-size: 0.65rem;
-		color: #555;
+		color: var(--text-4);
 		line-height: 1.6;
 	}
 
@@ -487,7 +487,7 @@
 	}
 
 	.track-row:hover {
-		background: #1e1e1e;
+		background: var(--raised);
 	}
 
 	.track-row.active {
@@ -499,7 +499,7 @@
 		flex-shrink: 0;
 		background: none;
 		border: none;
-		color: #666;
+		color: var(--text-3);
 		cursor: pointer;
 		padding: 2px;
 		display: flex;
@@ -509,7 +509,7 @@
 	}
 
 	.preview-btn:hover {
-		color: #aaa;
+		color: var(--text-2);
 	}
 	.delete-btn:hover {
 		color: #e06060;
@@ -524,7 +524,7 @@
 		flex: 1;
 		background: none;
 		border: none;
-		color: #bbb;
+		color: var(--text-2);
 		cursor: pointer;
 		font-size: 0.65rem;
 		text-align: left;
@@ -540,14 +540,14 @@
 	}
 
 	.name-btn:hover {
-		color: #eee;
+		color: var(--text);
 	}
 
 	.normalize-btn {
 		flex-shrink: 0;
 		background: none;
 		border: none;
-		color: #555;
+		color: var(--text-4);
 		cursor: pointer;
 		padding: 2px;
 		display: flex;
@@ -559,7 +559,7 @@
 	}
 
 	.normalize-btn:hover {
-		color: #aaa;
+		color: var(--text-2);
 	}
 
 	.normalize-btn.active {

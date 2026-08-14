@@ -45,7 +45,7 @@
     align-items: center;
     padding: 0.35rem 0.75rem;
     background: rgba(18, 18, 18, 0.9);
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid var(--line);
   }
 
   .track-add-btn {
@@ -58,9 +58,9 @@
     letter-spacing: 0.05em;
     font-family: inherit;
     background: none;
-    border: 1px solid #333;
+    border: 1px solid var(--line);
     border-radius: 5px;
-    color: #666;
+    color: var(--text-3);
     cursor: pointer;
     transition:
       color 0.15s,
@@ -68,8 +68,8 @@
   }
 
   .track-add-btn:hover {
-    color: #aaa;
-    border-color: #555;
+    color: var(--text-2);
+    border-color: var(--text-4);
   }
 
   .music-hint-callout {
@@ -79,9 +79,9 @@
     gap: 0.5rem;
     padding: 0.4rem 0.75rem;
     background: rgba(255, 255, 255, 0.02);
-    border-top: 1px solid #222;
+    border-top: 1px solid var(--line);
     font-size: 0.68rem;
-    color: #555;
+    color: var(--text-4);
     line-height: 1.4;
     flex-shrink: 0;
   }
@@ -89,7 +89,7 @@
   .music-hint-dismiss {
     background: none;
     border: none;
-    color: #444;
+    color: var(--text-4);
     cursor: pointer;
     font-size: 0.7rem;
     padding: 0;
@@ -98,6 +98,6 @@
   }
 
   .music-hint-dismiss:hover {
-    color: #888;
+    color: var(--text-3);
   }
 </style>

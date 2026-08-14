@@ -116,6 +116,6 @@
 	.spectrum-canvas {
 		display: block;
 		border-radius: 4px;
-		background: #1a1a1a;
+		background: var(--surface);
 	}
 </style>

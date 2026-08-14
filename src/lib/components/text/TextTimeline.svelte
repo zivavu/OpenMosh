@@ -592,17 +592,17 @@
 		padding: 0.15rem;
 		border: none;
 		background: none;
-		color: #888;
+		color: var(--text-3);
 		cursor: pointer;
 	}
 
 	.lane-eye:hover,
 	.lane-del:hover {
-		color: #fff;
+		color: var(--text);
 	}
 
 	.lane-eye.off {
-		color: #555;
+		color: var(--text-4);
 	}
 
 	/* Borderless until hovered: three framed controls per lane gutter read as
@@ -614,22 +614,22 @@
 		border: 1px solid transparent;
 		border-radius: 4px;
 		background: none;
-		color: #8a8a8a;
+		color: var(--text-2);
 		font-size: 0.65rem;
 		font-family: inherit;
 	}
 
 	.lane-chain:hover,
 	.lane-chain:focus {
-		border-color: #333;
-		background: #1a1a1a;
-		color: #ddd;
+		border-color: var(--line);
+		background: var(--surface);
+		color: var(--text);
 	}
 
 	.lane-track {
-		border: 1px solid #2a2a2a;
+		border: 1px solid var(--line);
 		border-radius: 4px;
-		background: #141414;
+		background: var(--ink);
 		overflow: hidden;
 		touch-action: none;
 	}
@@ -640,7 +640,7 @@
 		bottom: 3px;
 		display: flex;
 		align-items: center;
-		border: 1px solid #3a5a7a;
+		border: 1px solid var(--live-dim);
 		border-radius: 3px;
 		background: #24384d;
 		color: #dce8f2;
@@ -655,13 +655,13 @@
 	}
 
 	.clip.selected {
-		border-color: #7ab8f5;
-		background: #2f527a;
+		border-color: var(--live);
+		background: var(--live-dim);
 	}
 
 	/* Which of a multi-selection the clip panel is editing. */
 	.clip.primary {
-		box-shadow: inset 0 0 0 1px #cfe6ff;
+		box-shadow: inset 0 0 0 1px var(--live);
 	}
 
 	.clip.muted {
@@ -700,7 +700,7 @@
 	}
 
 	.clip-edge:hover {
-		background: #7ab8f5;
+		background: var(--live);
 	}
 
 	.clip-boundary {
@@ -726,7 +726,7 @@
 
 	.clip-boundary:hover::after {
 		width: 2px;
-		background: #7ab8f5;
+		background: var(--live);
 	}
 
 </style>

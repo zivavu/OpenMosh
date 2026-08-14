@@ -407,7 +407,7 @@
 	}
 
 	.clip-panel::-webkit-scrollbar-thumb {
-		background: #333;
+		background: rgba(255, 255, 255, 0.07);
 		border-radius: 2px;
 	}
 
@@ -429,7 +429,7 @@
 
 	.empty {
 		padding: 0.75rem;
-		color: #666;
+		color: var(--text-3);
 		font-size: 0.75rem;
 	}
 
@@ -450,26 +450,26 @@
 		border: none;
 		border-radius: 4px;
 		background: none;
-		color: #777;
+		color: var(--text-3);
 		cursor: pointer;
 	}
 
 	.close-btn:hover {
-		color: #eee;
+		color: var(--text);
 	}
 
 	.panel-title {
 		font-size: 0.7rem;
 		font-weight: 600;
 		letter-spacing: 0.08em;
-		color: #888;
+		color: var(--text-3);
 		text-transform: uppercase;
 	}
 
 	.section {
 		margin-top: 0.5rem;
 		padding-top: 0.6rem;
-		border-top: 1px solid #2a2a2a;
+		border-top: 1px solid var(--line);
 	}
 
 
@@ -486,10 +486,10 @@
 		width: 100%;
 		box-sizing: border-box;
 		padding: 0.35rem;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 4px;
-		background: #1a1a1a;
-		color: #e0e0e0;
+		background: var(--surface);
+		color: var(--text);
 		font-size: 0.78rem;
 		font-family: inherit;
 		resize: vertical;
@@ -505,7 +505,7 @@
 	.row label {
 		flex-shrink: 0;
 		min-width: 84px;
-		color: #999;
+		color: var(--text-2);
 		font-size: 0.75rem;
 		/* The row's double-click resets the style; without this it also selects
 		   the label text. */
@@ -518,10 +518,10 @@
 		   its widest option and pushes the row wider than the panel. */
 		min-width: 0;
 		padding: 0.2rem 0.3rem;
-		border: 1px solid #333;
+		border: 1px solid var(--line);
 		border-radius: 4px;
-		background: #1a1a1a;
-		color: #e0e0e0;
+		background: var(--surface);
+		color: var(--text);
 		font-size: 0.75rem;
 		font-family: inherit;
 	}
@@ -533,7 +533,7 @@
 	.val {
 		min-width: 34px;
 		text-align: right;
-		color: #888;
+		color: var(--text-3);
 		font-size: 0.75rem;
 	}
 </style>

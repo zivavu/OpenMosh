@@ -22,8 +22,8 @@
 		height: 30px;
 		border-radius: 50%;
 		background: rgba(18, 18, 18, 0.85);
-		border: 1.5px solid #444;
-		color: #888;
+		border: 1.5px solid var(--line-strong);
+		color: var(--text-3);
 		flex-shrink: 0;
 		box-sizing: border-box;
 		transition:
@@ -32,7 +32,7 @@
 	}
 
 	.github-link:hover {
-		border-color: #777;
-		color: #ccc;
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 </style>
