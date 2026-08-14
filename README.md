@@ -45,9 +45,6 @@ https://github.com/user-attachments/assets/ce69b06b-1d9a-4d72-8518-e86f14cfdaa2
 
 https://github.com/user-attachments/assets/e1f3a112-63ce-4a7c-bb64-a89ee9c21453
 
-https://github.com/user-attachments/assets/3f39413c-5e67-4250-9982-c5bbe60aae23
-
-
 ## License
 
 [MIT](LICENSE)
