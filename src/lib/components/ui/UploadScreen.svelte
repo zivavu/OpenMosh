@@ -320,6 +320,7 @@ function onAudioDrop(e: DragEvent) {
 			OpenMosh
 			<span class="ghost ghost-live" aria-hidden="true">OpenMosh</span>
 			<span class="ghost ghost-rec" aria-hidden="true">OpenMosh</span>
+			<span class="ghost ghost-slice" aria-hidden="true">OpenMosh</span>
 		</h1>
 		<p class="subtitle">Open-source image & video glitching in the browser.</p>
 	</div>
@@ -559,48 +560,74 @@ function onAudioDrop(e: DragEvent) {
 		user-select: none;
 	}
 
-	/* The negative delay starts the cycle already most of the way through, so
-	   the wordmark tears within a moment of the page appearing rather than
-	   sitting still for the first few seconds and looking like flat text. */
+	/* Each layer runs on its own period, and the periods share no small common
+	   multiple, so the bursts drift in and out of phase and the tear never
+	   repeats the same shape twice within a sitting. The negative delays start
+	   every cycle already near a burst, so the wordmark tears within a moment
+	   of the page appearing rather than sitting still and looking like flat
+	   text. */
 	.ghost-live {
 		color: var(--live);
 		transform: translate(-3px, 0);
-		animation: tear-live 3.6s steps(1, end) -3.3s infinite;
+		animation: tear-live 3.7s steps(1, end) -3.5s infinite;
 	}
 
 	.ghost-rec {
 		color: var(--rec);
 		transform: translate(3px, 0);
-		animation: tear-rec 3.6s steps(1, end) -3.3s infinite;
+		animation: tear-rec 2.3s steps(1, end) -2.1s infinite;
+	}
+
+	/* A white shard on a third period. Hidden between bursts — its own clip-path
+	   is what makes it appear — so between tears there is nothing extra stacked
+	   over the wordmark. */
+	.ghost-slice {
+		color: #fff;
+		clip-path: inset(0 0 100% 0);
+		animation: slice 2.9s steps(1, end) -2.7s infinite;
 	}
 
 	/* Stepped, not eased: a datamosh cuts between states, it doesn't tween.
-	   Each held step is about 70ms, slow enough to actually read as a torn
-	   frame instead of blurring into a shimmer. */
+	   Each held step is about 50ms, slow enough to actually read as a torn
+	   frame instead of blurring into a shimmer. Two bursts per cycle — one
+	   glancing, one full — so a layer isn't dead for its whole period. */
 	@keyframes tear-live {
 		0%,
+		37% {
+			transform: translate(-3px, 0);
+			clip-path: none;
+		}
+		38.5% {
+			transform: translate(-9px, 2px);
+			clip-path: inset(44% 0 30% 0);
+		}
+		40% {
+			transform: translate(6px, -2px);
+			clip-path: inset(14% 0 66% 0);
+		}
+		41.5%,
 		84% {
 			transform: translate(-3px, 0);
 			clip-path: none;
 		}
 		86% {
-			transform: translate(-18px, -4px);
+			transform: translate(-22px, -5px);
 			clip-path: inset(10% 0 62% 0);
 		}
 		88% {
-			transform: translate(12px, 3px);
+			transform: translate(14px, 3px);
 			clip-path: inset(56% 0 18% 0);
 		}
 		90% {
-			transform: translate(-14px, 4px);
+			transform: translate(-16px, 5px);
 			clip-path: inset(32% 0 40% 0);
 		}
 		92% {
-			transform: translate(8px, -3px);
+			transform: translate(9px, -3px);
 			clip-path: inset(70% 0 6% 0);
 		}
 		94% {
-			transform: translate(-10px, 2px);
+			transform: translate(-12px, 2px);
 			clip-path: inset(2% 0 76% 0);
 		}
 		96%,
@@ -612,28 +639,41 @@ function onAudioDrop(e: DragEvent) {
 
 	@keyframes tear-rec {
 		0%,
+		22% {
+			transform: translate(3px, 0);
+			clip-path: none;
+		}
+		23.5% {
+			transform: translate(10px, -2px);
+			clip-path: inset(60% 0 18% 0);
+		}
+		25% {
+			transform: translate(-7px, 2px);
+			clip-path: inset(24% 0 52% 0);
+		}
+		26.5%,
 		84% {
 			transform: translate(3px, 0);
 			clip-path: none;
 		}
 		86% {
-			transform: translate(15px, 4px);
+			transform: translate(18px, 4px);
 			clip-path: inset(48% 0 26% 0);
 		}
 		88% {
-			transform: translate(-13px, -3px);
+			transform: translate(-15px, -3px);
 			clip-path: inset(6% 0 68% 0);
 		}
 		90% {
-			transform: translate(16px, -4px);
+			transform: translate(19px, -5px);
 			clip-path: inset(26% 0 44% 0);
 		}
 		92% {
-			transform: translate(-9px, 3px);
+			transform: translate(-11px, 3px);
 			clip-path: inset(64% 0 12% 0);
 		}
 		94% {
-			transform: translate(11px, -2px);
+			transform: translate(13px, -2px);
 			clip-path: inset(36% 0 34% 0);
 		}
 		96%,
@@ -643,28 +683,77 @@ function onAudioDrop(e: DragEvent) {
 		}
 	}
 
-	/* The white wordmark shears on the same beat. Without this only the colour
-	   fringes move and the tear reads as a halo rather than a broken frame. */
+	/* Bands of the wordmark yanked sideways and dropped back. Kept thin: a wide
+	   band just reads as the whole title sliding. */
+	@keyframes slice {
+		0%,
+		29% {
+			transform: none;
+			clip-path: inset(0 0 100% 0);
+		}
+		30.5% {
+			transform: translate(-26px, 0);
+			clip-path: inset(38% 0 50% 0);
+		}
+		32% {
+			transform: translate(20px, 0);
+			clip-path: inset(66% 0 22% 0);
+		}
+		33.5%,
+		70% {
+			transform: none;
+			clip-path: inset(0 0 100% 0);
+		}
+		71.5% {
+			transform: translate(30px, 0);
+			clip-path: inset(16% 0 72% 0);
+		}
+		73% {
+			transform: translate(-18px, 0);
+			clip-path: inset(52% 0 36% 0);
+		}
+		74.5% {
+			transform: translate(24px, 0);
+			clip-path: inset(78% 0 10% 0);
+		}
+		76%,
+		100% {
+			transform: none;
+			clip-path: inset(0 0 100% 0);
+		}
+	}
+
+	/* The white wordmark shears on its own beat too, on a fourth period so the
+	   body of the title and its colour fringes rarely break together. Without
+	   this only the fringes move and the tear reads as a halo rather than a
+	   broken frame. */
 	.title {
-		animation: shear 3.6s steps(1, end) -3.3s infinite;
+		animation: shear 4.1s steps(1, end) -3.9s infinite;
 	}
 
 	@keyframes shear {
 		0%,
+		46% {
+			transform: none;
+		}
+		47.5% {
+			transform: translate(2px, 0) skewX(-2deg);
+		}
+		49%,
 		84% {
 			transform: none;
 		}
 		86% {
-			transform: translate(4px, 0) skewX(-3deg);
+			transform: translate(5px, 0) skewX(-4deg);
 		}
 		88% {
-			transform: translate(-5px, 0) skewX(4deg);
+			transform: translate(-6px, -1px) skewX(5deg);
 		}
 		90% {
-			transform: translate(3px, 0) skewX(-2deg);
+			transform: translate(4px, 1px) skewX(-3deg);
 		}
 		92% {
-			transform: translate(-2px, 0);
+			transform: translate(-2px, 0) skewX(1deg);
 		}
 		94%,
 		100% {
@@ -672,11 +761,12 @@ function onAudioDrop(e: DragEvent) {
 		}
 	}
 
-	/* Hovering the wordmark runs the same tear on a tight loop, so the title
+	/* Hovering pulls every layer onto the same short period, so the drifting
+	   tear snaps into one hard repeating break under the pointer — the title
 	   answers the pointer the way the effect rack does. */
 	.title:hover,
 	.title:hover .ghost {
-		animation-duration: 1.1s;
+		animation-duration: 0.8s;
 	}
 
 	/* STOP blacks out the demo, so the wordmark settles with it and keeps only
