@@ -70,6 +70,10 @@
 		saveMediaPool,
 	} from '../../editor/sequence-media-store';
 	import {
+		saveSession,
+		type SingleSessionState,
+	} from '../../editor/sessions';
+	import {
 		applyTransitionChanges,
 		clearSegments,
 		fillSegmentsFromPreset,
@@ -121,6 +125,8 @@
 		/** The segment timeline belongs to 'sequence' alone — 'single' is one
 		 * source and one effect chain, and the two persist separately. */
 		mode?: 'single' | 'sequence';
+		/** Single mode: work restored from a saved session, if reopened from one. */
+		initialSession?: SingleSessionState | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
 		onExit?: () => void;
@@ -133,6 +139,7 @@
 		initialAudioFile = null,
 		initialTrackId = null,
 		mode = 'single',
+		initialSession = null,
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
@@ -262,7 +269,19 @@
 	});
 	let canvasEl: HTMLCanvasElement | null = $state(null);
 	let glRenderer: GlRenderer | null = $state(null);
-	let effects: EffectInstance[] = $state(loadInitialEffects());
+	/**
+	 * Restored instances are dropped if their definition no longer exists —
+	 * a session can outlive an effect being renamed or retired, and a stale
+	 * defId would render as a hole in the chain.
+	 */
+	function restoredEffects(): EffectInstance[] | null {
+		const saved = untrack(() => initialSession)?.effects;
+		if (!Array.isArray(saved) || saved.length === 0) return null;
+		const known = saved.filter((e) => e && getDefinition(e.defId));
+		return known.length > 0 ? known : null;
+	}
+
+	let effects: EffectInstance[] = $state(restoredEffects() ?? loadInitialEffects());
 
 	const saved = loadSettings();
 	let moshMin = $state(saved.moshMin ?? DEFAULT_SETTINGS.moshMin);
@@ -1500,8 +1519,6 @@
 		moshSession.pushEdit(effects);
 	}
 
-	let showExitConfirm = $state(false);
-
 	function handleExit() {
 		if (!onExit) return;
 		if (recordingState.recording) {
@@ -1511,10 +1528,10 @@
 			);
 			return;
 		}
-		if (moshSession.touched) {
-			showExitConfirm = true;
-			return;
-		}
+		// No confirm: the work survives the exit either way — sequence mode as
+		// its song's pool and timeline, single mode as a session the upload
+		// screen offers straight back.
+		flushSingleSessionSave();
 		onExit();
 	}
 
@@ -1625,9 +1642,67 @@
 	// Optional lanes of text clips over the master clock. Off until the user
 	// turns it on, so nothing about the existing editor changes for people who
 	// don't want text.
-	let textTimeline = $state<TextTimeline>({ ...EMPTY_TEXT_TIMELINE });
+	// Seed only — a later change to the prop shouldn't overwrite live edits.
+	let textTimeline = $state<TextTimeline>(
+		untrack(() =>
+			initialSession?.text
+				? normalizeTextTimeline(initialSession.text)
+				: { ...EMPTY_TEXT_TIMELINE },
+		),
+	);
 	let selectedTextClipId = $state<string | null>(null);
 	let lyricsOpen = $state(false);
+
+	// ── Single-mode session ──
+	// Sequence mode resumes from its song's media pool; single mode has only the
+	// one file, so the file and the work done to it are saved together and the
+	// upload screen offers it back. Untouched opens aren't saved — every file
+	// ever previewed would otherwise pile up in the list.
+	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function saveSingleSession() {
+		if (isSequenceMode) return;
+		// Lane presence, not `enabled`: that flag is the layer's visibility
+		// toggle and survives being switched off with the lanes still there.
+		// Keying either the guard or the payload off it discards the whole
+		// timeline the moment the user hides it.
+		const hasText = textTimeline.lanes.length > 0;
+		if (!moshSession.touched && !hasText) return;
+		const source = file;
+		const state = {
+			effects: $state.snapshot(effects) as EffectInstance[],
+			text: hasText ? ($state.snapshot(textTimeline) as TextTimeline) : null,
+		};
+		// Keyed by the song when there is one, so the session sits alongside the
+		// text timeline and span already saved under that track id.
+		void saveSession('single', [source], state, currentTrackId)
+			.then(() => pruneSequenceMedia())
+			.catch((e) => {
+				// Swallowing this outright is what made the last failure invisible.
+				if (import.meta.env.DEV) console.error('Session save failed:', e);
+			});
+	}
+
+	$effect(() => {
+		if (isSequenceMode) return;
+		// Deep-read, discarded: naming `effects` alone subscribes to the array
+		// reference only, so dragging a parameter — which mutates in place —
+		// would never re-arm the debounce.
+		$state.snapshot(effects);
+		$state.snapshot(textTimeline);
+		file;
+		// Loading a different song re-keys the session, so it has to re-save.
+		currentTrackId;
+		clearTimeout(sessionSaveTimer);
+		sessionSaveTimer = setTimeout(saveSingleSession, 600);
+		return () => clearTimeout(sessionSaveTimer);
+	});
+
+	/** Backing out shouldn't race the debounce and lose the last edit. */
+	function flushSingleSessionSave() {
+		clearTimeout(sessionSaveTimer);
+		saveSingleSession();
+	}
 
 	const shortcutGroups = $derived([
 		{
@@ -1832,6 +1907,13 @@
 	// text edit shouldn't rewind a mosh. Ctrl+Z routes here while a clip is
 	// selected, and falls back to the chain once it is not.
 	const textHistory = createTextHistory();
+
+	// A restored timeline is the baseline, not an edit on top of an empty one:
+	// the stack starts seeded with EMPTY, so without this the first undo would
+	// wipe the lanes that just came back.
+	if (untrack(() => initialSession?.text)) {
+		textHistory.reset(untrack(() => textTimeline));
+	}
 
 	function pushTextHistory(coalesceKey?: string) {
 		textHistory.push($state.snapshot(textTimeline) as TextTimeline, coalesceKey);
@@ -2613,21 +2695,6 @@
 
 	{#if showShortcuts}
 		<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
-	{/if}
-
-	{#if showExitConfirm}
-		<ConfirmDialog
-			title="Return to upload?"
-			message="This discards your current edits. Presets you've saved stay."
-			confirmLabel="Discard and exit"
-			cancelLabel="Keep editing"
-			danger
-			onConfirm={() => {
-				showExitConfirm = false;
-				onExit?.();
-			}}
-			onCancel={() => (showExitConfirm = false)}
-		/>
 	{/if}
 
 	{#if showClearSourcesConfirm}

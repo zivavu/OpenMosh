@@ -4,6 +4,8 @@ interface Props {
 	onSequence: (files: File[]) => void;
 	/** Reopen a song's saved sequence — no media picking needed. */
 	onSequenceFromSong: (trackId: string) => void;
+	/** Reopen a saved single or slideshow session by its key. */
+	onSessionOpen: (mode: SessionMode, key: string) => void;
 	onSlideshow: (files: File[]) => void;
 	onaudio?: (file: File) => void;
 	/** Pre-warmed context, borrowed for the demo until the editor claims it. */
@@ -22,6 +24,12 @@ import {
 	type SavedSequence,
 } from "../../editor/saved-sequences";
 import {
+	listSavedSessions,
+	readCachedSessions,
+	type SavedSession,
+} from "../../editor/sessions";
+import type { SessionMode } from "../../editor/sequence-media-store";
+import {
 	DEFAULT_SETTINGS,
 	loadSettings,
 	updateSettings,
@@ -32,18 +40,23 @@ let {
 	onfile,
 	onSequence,
 	onSequenceFromSong,
+	onSessionOpen,
 	onSlideshow,
 	onaudio,
 	warmCanvas = null,
 	warmRenderer = null,
 }: Props = $props();
 
-// Songs already built into a sequence, offered as a way in that skips picking
-// media. Painted from the cache so the section is there on the first frame,
-// then reconciled against IndexedDB. An empty list simply hides the section.
+// Work already done, offered as a way back in that skips picking media. All
+// three lists are painted from their cache so the section is there on the first
+// frame, then reconciled against IndexedDB.
 let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
+let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
+let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
 $effect(() => {
 	void listSavedSequences().then((list) => (savedSequences = list));
+	void listSavedSessions("single").then((list) => (savedSingle = list));
+	void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
 });
 
 // Opens on whichever mode was last launched: coming back for a second pass at
@@ -58,6 +71,21 @@ function setMode(mode: UploadMode) {
 }
 /** Modes that take a whole set of media rather than one file. */
 let isMultiMode = $derived(selectedMode !== "single");
+
+/** The session list backing whichever mode is showing. Sequence keeps its own
+ * list, keyed by song rather than by media. */
+let savedForMode = $derived<SavedSession[]>(
+	selectedMode === "single"
+		? savedSingle
+		: selectedMode === "slideshow"
+			? savedSlideshow
+			: [],
+);
+let savedHead = $derived(
+	selectedMode === "single"
+		? "OR PICK UP SOMETHING YOU WERE MOSHING"
+		: "OR PICK UP A SLIDESHOW YOU WERE BUILDING",
+);
 let dragging = $state(false);
 let fileInput: HTMLInputElement;
 
@@ -325,29 +353,6 @@ function onAudioDrop(e: DragEvent) {
 		</div>
 	</div>
 
-	{#if selectedMode === 'sequence' && savedSequences.length > 0}
-		<div class="saved-zone">
-			<div class="saved-head">OR PICK UP A SONG YOU'VE SEQUENCED</div>
-			<div class="saved-list">
-				{#each savedSequences as seq (seq.trackId)}
-					<button
-						class="saved-item"
-						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? '' : 's'}`}
-						onclick={() => {
-						// Reopening a song is entering sequence mode too.
-						updateSettings({ lastMode: 'sequence' });
-						onSequenceFromSong(seq.trackId);
-					}}
-					>
-						<ListVideo size={13} />
-						<span class="saved-name">{seq.trackName}</span>
-						<span class="saved-count">{seq.sourceCount}</span>
-					</button>
-				{/each}
-			</div>
-		</div>
-	{/if}
-
 	<input
 		bind:this={audioInput}
 		type="file"
@@ -402,16 +407,56 @@ function onAudioDrop(e: DragEvent) {
 				<span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
 			{/if}
 		</div>
-		<p class="music-hint">
-			{#if selectedMode === 'slideshow'}
-				Sync transitions and effects to the beat
-			{:else if selectedMode === 'sequence'}
-				The track becomes the master timeline for your segments
-			{:else}
-				Make your effects react to the beat
-			{/if}
-		</p>
 	{/if}
+
+	<!-- Always rendered at a fixed height, for every mode: this block collapsing
+	     when a mode has nothing saved is what made switching modes jump. -->
+	<div class="saved-zone">
+		{#if selectedMode === 'sequence' && savedSequences.length > 0}
+			<div class="saved-head">OR PICK UP A SONG YOU'VE SEQUENCED</div>
+			<div class="saved-list">
+				{#each savedSequences as seq (seq.trackId)}
+					<button
+						class="saved-item"
+						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? '' : 's'}`}
+						onclick={() => {
+							// Reopening a song is entering sequence mode too.
+							updateSettings({ lastMode: 'sequence' });
+							onSequenceFromSong(seq.trackId);
+						}}
+					>
+						<ListVideo size={13} />
+						<span class="saved-name">{seq.trackName}</span>
+						<span class="saved-count">{seq.sourceCount}</span>
+					</button>
+				{/each}
+			</div>
+		{:else if selectedMode !== 'sequence' && savedForMode.length > 0}
+			<div class="saved-head">{savedHead}</div>
+			<div class="saved-list">
+				{#each savedForMode as session (session.key)}
+					<button
+						class="saved-item"
+						title={`Reopen "${session.label}" with the work already done on it`}
+						onclick={() => {
+							updateSettings({ lastMode: selectedMode });
+							onSessionOpen(session.mode, session.key);
+						}}
+					>
+						{#if session.mode === 'single'}
+							<Image size={13} />
+						{:else}
+							<ListVideo size={13} />
+						{/if}
+						<span class="saved-name">{session.label}</span>
+						{#if session.mode === 'slideshow'}
+							<span class="saved-count">{session.sourceCount}</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	</div>
 
 	<div class="github-corner">
 		<GithubLink />
@@ -594,12 +639,15 @@ function onAudioDrop(e: DragEvent) {
 		letter-spacing: 0.08em;
 	}
 
+	/* Fixed, not min-height: a mode with one saved row and a mode with three
+	   would otherwise still shift past each other. The list scrolls inside. */
 	.saved-zone {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
 		width: 100%;
 		max-width: 520px;
+		height: 132px;
 		margin-top: -1.5rem;
 	}
 
@@ -614,10 +662,11 @@ function onAudioDrop(e: DragEvent) {
 	.saved-list {
 		display: flex;
 		flex-wrap: wrap;
+		align-content: flex-start;
 		gap: 0.4rem;
 		/* Three rows or so, then scroll — a long history shouldn't push the
-		   music zone off the screen. */
-		max-height: 108px;
+		   music zone off the screen, and a short one shouldn't pull it up. */
+		height: 108px;
 		overflow-y: auto;
 		scrollbar-width: thin;
 	}
@@ -666,6 +715,9 @@ function onAudioDrop(e: DragEvent) {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
+		/* Pulled up against the drop box — the screen's 2.5rem rhythm reads as
+		   too loose between a zone and the one it belongs to. */
+		margin-top: -1rem;
 		padding: 0.75rem 1.5rem;
 		border: 1.5px dashed rgba(255, 255, 255, 0.12);
 		border-radius: 10px;
@@ -721,13 +773,6 @@ function onAudioDrop(e: DragEvent) {
 
 	.music-clear:hover {
 		color: #999;
-	}
-
-	.music-hint {
-		font-size: 0.75rem;
-		color: #5e5e5e;
-		margin-top: -1.5rem;
-		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
 	@media (max-width: 800px) {

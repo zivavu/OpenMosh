@@ -7,6 +7,9 @@
 
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
+	import { openSession, type SingleSessionState } from "./lib/editor/sessions";
+	import type { SessionMode } from "./lib/editor/sequence-media-store";
+	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
 
 	let file: File | null = $state(null);
@@ -15,6 +18,11 @@
 	let sequenceTrackId: string | null = $state(null);
 	let slideshowFiles: File[] = $state([]);
 	let pendingAudioFile: File | null = $state(null);
+	/** Editor state carried in from a reopened session, cleared on exit. */
+	let restoredSingle: SingleSessionState | null = $state(null);
+	let restoredSlideshowConfig: SlideshowConfig | null = $state(null);
+	/** Library id of the song a reopened session was keyed to. */
+	let sessionTrackId: string | null = $state(null);
 
 	type View = "upload" | "editor" | "sequence" | "slideshow";
 
@@ -91,6 +99,32 @@
 		sequenceTrackId = null;
 		pendingAudioFile = null;
 		slideshowFiles = [];
+		restoredSingle = null;
+		restoredSlideshowConfig = null;
+		sessionTrackId = null;
+	}
+
+	/** Reopen a saved single or slideshow edit: its media and the work done. */
+	async function openSessionByKey(mode: SessionMode, key: string) {
+		const opened = await openSession(key);
+		if (!opened) {
+			showToast("That session's media is no longer stored", 'error');
+			return;
+		}
+		// The song comes back too, so the per-song text timeline and segments
+		// the editor restores have the track they're keyed to.
+		pendingAudioFile = opened.trackFile;
+		sessionTrackId = opened.trackId;
+		if (mode === 'single') {
+			restoredSingle = opened.state as SingleSessionState;
+			file = opened.files[0];
+			navigateTo('editor');
+			return;
+		}
+		const state = opened.state as { config?: SlideshowConfig } | null;
+		restoredSlideshowConfig = state?.config ?? null;
+		slideshowFiles = opened.files;
+		navigateTo('slideshow');
 	}
 
 	/** Reopen a song's saved sequence: its media becomes the pool, and the song
@@ -136,6 +170,8 @@
 	<SlideshowEditor
 		initialFiles={slideshowFiles}
 		initialAudioFile={pendingAudioFile}
+		initialTrackId={sessionTrackId}
+		initialConfig={restoredSlideshowConfig}
 		{warmCanvas}
 		{warmRenderer}
 		onExit={exitToUpload}
@@ -156,6 +192,8 @@
 	<Editor
 		{file}
 		initialAudioFile={pendingAudioFile}
+		initialTrackId={sessionTrackId}
+		initialSession={restoredSingle}
 		onfile={(f: File) => (file = f)}
 		{warmCanvas}
 		{warmRenderer}
@@ -172,6 +210,8 @@
 			navigateTo('sequence');
 		}}
 		onSequenceFromSong={(trackId: string) => void openSequenceFromSong(trackId)}
+		onSessionOpen={(mode: SessionMode, key: string) =>
+			void openSessionByKey(mode, key)}
 		onSlideshow={(files: File[]) => {
 			slideshowFiles = files;
 			navigateTo('slideshow');
