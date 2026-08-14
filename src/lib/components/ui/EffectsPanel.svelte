@@ -626,6 +626,39 @@
 			/>
 		{/each}
 
+		{#if filteredEffects.length === 0}
+			<div class="list-empty">
+				{#if onlyLive && searchQuery}
+					<p class="empty-title">No live match</p>
+					<p class="empty-hint">
+						Nothing switched on is called “{searchQuery}”.
+					</p>
+					<button class="empty-action" onclick={() => (onlyLive = false)}>
+						Show the whole chain
+					</button>
+				{:else if onlyLive}
+					<p class="empty-title">Nothing is live</p>
+					<p class="empty-hint">
+						Switch an effect on, or hit MOSH to fill the chain for you.
+					</p>
+					<button class="empty-action" onclick={() => (onlyLive = false)}>
+						Show the whole chain
+					</button>
+				{:else if searchQuery}
+					<p class="empty-title">No match</p>
+					<p class="empty-hint">Nothing here is called “{searchQuery}”.</p>
+					<button class="empty-action" onclick={() => (searchQuery = '')}>
+						Clear the search
+					</button>
+				{:else}
+					<p class="empty-title">The chain is empty</p>
+					<p class="empty-hint">
+						Add effects from the list below to start building a look.
+					</p>
+				{/if}
+			</div>
+		{/if}
+
 		{#if filteredHiddenDefs.length > 0}
 			<button class="hidden-header" onclick={() => (showHidden = !showHidden)}>
 				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}
@@ -658,8 +691,8 @@
 	.effects-panel {
 		flex: 1;
 		min-height: 0;
-		width: 310px;
-		max-width: 310px;
+		width: 340px;
+		max-width: 340px;
 		background: var(--surface);
 		border-left: 1px solid var(--line);
 		display: flex;
@@ -976,6 +1009,57 @@
 
 	.panel-scroll::-webkit-scrollbar-thumb:hover {
 		background: var(--text-4);
+	}
+
+	/* Standing in for the list, so a filtered-to-nothing panel still says what
+	   happened and offers the way out. */
+	.list-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 2.25rem 1.5rem;
+		text-align: center;
+	}
+
+	.empty-title {
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--text-2);
+	}
+
+	.empty-hint {
+		font-size: 0.72rem;
+		line-height: 1.5;
+		color: var(--text-3);
+		max-width: 24ch;
+	}
+
+	.empty-action {
+		margin-top: 0.35rem;
+		padding: 0.3rem 0.8rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: none;
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.empty-action:hover {
+		color: var(--live);
+		border-color: var(--live-dim);
+		background: rgba(110, 231, 192, 0.1);
 	}
 
 	.hidden-header {
