@@ -68,6 +68,10 @@ let selectedMode: UploadMode = $state(
 function setMode(mode: UploadMode) {
 	selectedMode = mode;
 	updateSettings({ lastMode: mode });
+	// Staged media belongs to the mode it was dropped on: single takes one file
+	// and needs no song, so holding a set across the switch would misrepresent
+	// what's about to happen.
+	stagedMedia = null;
 }
 /** Modes that take a whole set of media rather than one file. */
 let isMultiMode = $derived(selectedMode !== "single");
@@ -176,8 +180,27 @@ function handleMultiFiles(files: FileList | File[]) {
 			"info",
 		);
 	}
-	if (selectedMode === "sequence") onSequence(accepted);
-	else onSlideshow(accepted);
+	// Both multi modes cut media to a track — there is nothing to time against
+	// without one. Rather than reject the drop and make the user find the files
+	// again, hold them until a song arrives and start the moment it does.
+	if (!pendingAudio) {
+		stagedMedia = accepted;
+		showToast(
+			`${accepted.length} file${accepted.length === 1 ? '' : 's'} ready — add a song to start`,
+			"info",
+		);
+		return;
+	}
+	launchMultiMode(accepted);
+}
+
+/** Media held back waiting on the song a multi mode requires. */
+let stagedMedia = $state<File[] | null>(null);
+
+function launchMultiMode(files: File[]) {
+	stagedMedia = null;
+	if (selectedMode === "sequence") onSequence(files);
+	else onSlideshow(files);
 }
 
 /** Single mode takes one file — say so rather than silently dropping the rest. */
@@ -258,6 +281,9 @@ function handleAudioFile(file: File) {
 	}
 	pendingAudio = file;
 	onaudio?.(file);
+	// The song was the only thing missing — go, rather than making the user
+	// re-drop media they already picked.
+	if (stagedMedia && isMultiMode) launchMultiMode(stagedMedia);
 }
 
 function openAudioPicker() {
@@ -345,11 +371,15 @@ function onAudioDrop(e: DragEvent) {
 			<span class="line"></span>
 		</div>
 
-		<div class="drop-hint">
+		<div class="drop-hint" class:staged={stagedMedia}>
 			<Image size={16} />
-			{isMultiMode
-				? 'DRAG AND DROP IMAGES OR VIDEOS HERE'
-				: 'DRAG AND DROP FILE HERE'}
+			{#if stagedMedia}
+				{stagedMedia.length} FILE{stagedMedia.length === 1 ? '' : 'S'} READY · ADD A SONG TO START
+			{:else if isMultiMode}
+				DRAG AND DROP IMAGES OR VIDEOS HERE
+			{:else}
+				DRAG AND DROP FILE HERE
+			{/if}
 		</div>
 	</div>
 
@@ -402,7 +432,7 @@ function onAudioDrop(e: DragEvent) {
 		>
 			<Music size={14} />
 			{#if isMultiMode}
-				<span>ADD MUSIC <span class="optional">(RECOMMENDED)</span></span>
+				<span>ADD MUSIC <span class="required">(REQUIRED)</span></span>
 			{:else}
 				<span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
 			{/if}
@@ -639,6 +669,12 @@ function onAudioDrop(e: DragEvent) {
 		letter-spacing: 0.08em;
 	}
 
+	/* Media is picked and waiting on the song, so this is a live state rather
+	   than the idle instruction it replaces. */
+	.drop-hint.staged {
+		color: #b193cc;
+	}
+
 	/* Fixed, not min-height: a mode with one saved row and a mode with three
 	   would otherwise still shift past each other. The list scrolls inside. */
 	.saved-zone {
@@ -752,6 +788,12 @@ function onAudioDrop(e: DragEvent) {
 
 	.optional {
 		color: #565656;
+	}
+
+	/* Reads as a live requirement rather than a footnote — it's the one thing
+	   standing between staged media and the editor. */
+	.required {
+		color: #b193cc;
 	}
 
 	.music-filename {
