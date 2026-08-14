@@ -31,6 +31,7 @@ import {
 import type { SessionMode } from "../../editor/sequence-media-store";
 import {
 	DEFAULT_SETTINGS,
+	demoBackgroundEnabled,
 	loadSettings,
 	updateSettings,
 	type UploadMode,
@@ -58,6 +59,10 @@ $effect(() => {
 	void listSavedSessions("single").then((list) => (savedSingle = list));
 	void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
 });
+
+// Owned here rather than inside the demo, so STOP quiets the wordmark's tear
+// along with the background it belongs to.
+let demoPlaying = $state(demoBackgroundEnabled());
 
 // Opens on whichever mode was last launched: coming back for a second pass at
 // the same kind of edit is the common case.
@@ -304,11 +309,18 @@ function onAudioDrop(e: DragEvent) {
 }
 </script>
 
-<DemoBackground {warmCanvas} {warmRenderer} />
+<DemoBackground {warmCanvas} {warmRenderer} bind:playing={demoPlaying} />
 
 <div class="upload-screen">
 	<div class="hero">
-		<h1 class="title">OpenMosh</h1>
+		<!-- The ghosts are the two split channels. Real spans rather than
+		     ::before/::after content, so screen readers announce the wordmark
+		     once instead of three times. -->
+		<h1 class="title" class:still={!demoPlaying}>
+			OpenMosh
+			<span class="ghost ghost-live" aria-hidden="true">OpenMosh</span>
+			<span class="ghost ghost-rec" aria-hidden="true">OpenMosh</span>
+		</h1>
 		<p class="subtitle">Open-source image & video glitching in the browser.</p>
 	</div>
 
@@ -362,7 +374,7 @@ function onAudioDrop(e: DragEvent) {
 				style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
 			/>
 			<Upload size={18} />
-			{isMultiMode ? 'LOAD MEDIA' : 'LOAD FILE'}
+			{isMultiMode ? 'LOAD FILES' : 'LOAD A FILE'}
 		</label>
 
 		<div class="separator">
@@ -376,9 +388,9 @@ function onAudioDrop(e: DragEvent) {
 			{#if stagedMedia}
 				{stagedMedia.length} FILE{stagedMedia.length === 1 ? '' : 'S'} READY · ADD A SONG TO START
 			{:else if isMultiMode}
-				DRAG AND DROP IMAGES OR VIDEOS HERE
+				DRAG AND DROP IMAGES AND VIDEOS HERE
 			{:else}
-				DRAG AND DROP FILE HERE
+				DRAG AND DROP AN IMAGE OR VIDEO HERE
 			{/if}
 		</div>
 	</div>
@@ -524,12 +536,167 @@ function onAudioDrop(e: DragEvent) {
 	}
 
 	.title {
+		position: relative;
 		font-size: clamp(2.5rem, 6vw, 4.5rem);
 		font-weight: 800;
 		letter-spacing: -0.02em;
 		color: #fff;
 		line-height: 1;
 		text-shadow: 0 2px 24px rgba(0, 0, 0, 0.85);
+		cursor: default;
+	}
+
+	/* Offset copies of the wordmark in the app's own two accents, screened over
+	   the white so only the fringes show. They sit still most of the cycle and
+	   tear for about half a second, since a permanent jitter stops reading as a
+	   glitch and starts reading as a broken page. */
+	.ghost {
+		position: absolute;
+		inset: 0;
+		text-shadow: none;
+		mix-blend-mode: screen;
+		pointer-events: none;
+		user-select: none;
+	}
+
+	/* The negative delay starts the cycle already most of the way through, so
+	   the wordmark tears within a moment of the page appearing rather than
+	   sitting still for the first few seconds and looking like flat text. */
+	.ghost-live {
+		color: var(--live);
+		transform: translate(-3px, 0);
+		animation: tear-live 3.6s steps(1, end) -3.3s infinite;
+	}
+
+	.ghost-rec {
+		color: var(--rec);
+		transform: translate(3px, 0);
+		animation: tear-rec 3.6s steps(1, end) -3.3s infinite;
+	}
+
+	/* Stepped, not eased: a datamosh cuts between states, it doesn't tween.
+	   Each held step is about 70ms, slow enough to actually read as a torn
+	   frame instead of blurring into a shimmer. */
+	@keyframes tear-live {
+		0%,
+		84% {
+			transform: translate(-3px, 0);
+			clip-path: none;
+		}
+		86% {
+			transform: translate(-18px, -4px);
+			clip-path: inset(10% 0 62% 0);
+		}
+		88% {
+			transform: translate(12px, 3px);
+			clip-path: inset(56% 0 18% 0);
+		}
+		90% {
+			transform: translate(-14px, 4px);
+			clip-path: inset(32% 0 40% 0);
+		}
+		92% {
+			transform: translate(8px, -3px);
+			clip-path: inset(70% 0 6% 0);
+		}
+		94% {
+			transform: translate(-10px, 2px);
+			clip-path: inset(2% 0 76% 0);
+		}
+		96%,
+		100% {
+			transform: translate(-3px, 0);
+			clip-path: none;
+		}
+	}
+
+	@keyframes tear-rec {
+		0%,
+		84% {
+			transform: translate(3px, 0);
+			clip-path: none;
+		}
+		86% {
+			transform: translate(15px, 4px);
+			clip-path: inset(48% 0 26% 0);
+		}
+		88% {
+			transform: translate(-13px, -3px);
+			clip-path: inset(6% 0 68% 0);
+		}
+		90% {
+			transform: translate(16px, -4px);
+			clip-path: inset(26% 0 44% 0);
+		}
+		92% {
+			transform: translate(-9px, 3px);
+			clip-path: inset(64% 0 12% 0);
+		}
+		94% {
+			transform: translate(11px, -2px);
+			clip-path: inset(36% 0 34% 0);
+		}
+		96%,
+		100% {
+			transform: translate(3px, 0);
+			clip-path: none;
+		}
+	}
+
+	/* The white wordmark shears on the same beat. Without this only the colour
+	   fringes move and the tear reads as a halo rather than a broken frame. */
+	.title {
+		animation: shear 3.6s steps(1, end) -3.3s infinite;
+	}
+
+	@keyframes shear {
+		0%,
+		84% {
+			transform: none;
+		}
+		86% {
+			transform: translate(4px, 0) skewX(-3deg);
+		}
+		88% {
+			transform: translate(-5px, 0) skewX(4deg);
+		}
+		90% {
+			transform: translate(3px, 0) skewX(-2deg);
+		}
+		92% {
+			transform: translate(-2px, 0);
+		}
+		94%,
+		100% {
+			transform: none;
+		}
+	}
+
+	/* Hovering the wordmark runs the same tear on a tight loop, so the title
+	   answers the pointer the way the effect rack does. */
+	.title:hover,
+	.title:hover .ghost {
+		animation-duration: 1.1s;
+	}
+
+	/* STOP blacks out the demo, so the wordmark settles with it and keeps only
+	   the static split. Deliberately not tied to prefers-reduced-motion: people
+	   set that flag for their OS, not to opt out of a page's centrepiece, and
+	   the button is the opt-out this screen offers. */
+	.title.still,
+	.title.still .ghost,
+	.title.still:hover,
+	.title.still:hover .ghost {
+		animation: none;
+		transform: none;
+	}
+
+	.title.still .ghost-live {
+		transform: translate(-3px, 0);
+	}
+
+	.title.still .ghost-rec {
+		transform: translate(3px, 0);
 	}
 
 	.subtitle {

@@ -101,12 +101,8 @@ button:active {
 	height: 100svh;
 }
 
-@media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
-	}
-}
+/* No prefers-reduced-motion reset here on purpose. Windows ships that flag off
+   by default under "Show animations in Windows", so the blanket !important
+   version silently flattened every animation in the app, glitch effects
+   included, for anyone who had never thought about the setting. The upload
+   screen's STOP button is the opt-out this app offers instead. */
