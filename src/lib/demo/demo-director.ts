@@ -8,23 +8,26 @@
 import { createEffectInstance, getDefinition } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { generateMosh } from "../editor/mosh";
+import { ANIMATED_EFFECTS } from "../gl/effect-shaders";
 
 export const DEMO_BPM = 40;
 
 /** Effects that keep moving between cuts, so the background never sits still.
  * Excludes the per-frame noise ones (shake, jitter): moshed speeds run them at
- * frame rate, which reads as a broken page rather than a designed motion. */
+ * frame rate, which reads as a broken page rather than a designed motion.
+ *
+ * Every id here must be one the renderer actually animates — this pool supplies
+ * each slide's guaranteed movement, so a still effect in it costs that slide
+ * its motion entirely. `stillDemoEffects()` guards the list in dev builds. */
 const ANIMATED_POOL = [
   "wobble",
   "ripple",
   "swirl",
   "melt",
-  "zoom",
   "tunnel",
   "vhs",
   "scanlines",
   "tile",
-  "glow",
 ];
 
 /** Stills that give each cut its character. Deliberately excludes the subtle
@@ -33,6 +36,8 @@ const ANIMATED_POOL = [
  * which overwrite the poster with their own gimmick instead of glitching it,
  * and pixelate, which just throws the artwork away. */
 const STATIC_POOL = [
+  "zoom",
+  "glow",
   "posterize",
   "solarize",
   "channel-split",
@@ -74,12 +79,10 @@ const TRANSITION_POOL = [
  * a second, which is the sluggishness these were rewritten to fix. */
 const TRANSITION_BEATS = 0.3;
 
-/** One cadence for every mode: the demo is a single continuous performance, so
- * switching tabs on the upload screen must not restart or re-time it. */
-const BEATS_PER_CHAIN = 2;
 /** Sources cut on the beat, never per frame: the posters differ in palette as
  * much as in layout, so swapping them at frame rate is a strobe no chain can
- * sit on top of. */
+ * sit on top of. The chain rerolls on the same cut — one slide, one mosh — so
+ * a poster never arrives wearing the look built for the one before it. */
 const BEATS_PER_SOURCE = 1;
 
 function pick<T>(arr: T[]): T {
@@ -151,7 +154,6 @@ export interface DemoDirector {
 function createDemoDirector(sourceCount: number): DemoDirector {
   const beatSeconds = 60 / DEMO_BPM;
   let elapsed = 0;
-  let chainCut = -1;
   let sourceCut = -1;
   let sourceIndex = 0;
   let effects: EffectInstance[] = [];
@@ -164,32 +166,28 @@ function createDemoDirector(sourceCount: number): DemoDirector {
       elapsed += Math.max(0, deltaSeconds);
       const beat = elapsed / beatSeconds;
 
-      // Source first: the chain that was on screen at the cut is the one the
-      // blend has to keep rendering, and the reroll below would overwrite it.
       const nextSourceCut = Math.floor(beat / BEATS_PER_SOURCE);
       if (nextSourceCut !== sourceCut) {
         const first = sourceCut === -1;
         const fromSourceIndex = sourceIndex;
         sourceCut = nextSourceCut;
         sourceIndex = nextSourceCut % sourceCount;
+        // Captured before the reroll: the outgoing side of the blend has to
+        // keep rendering the chain that was actually on screen.
+        const outgoing = effects;
+        effects = buildChain();
         // Nothing to blend out of on the very first poster.
         blend = first
           ? null
           : {
               fromSourceIndex,
-              effects,
+              effects: outgoing,
               type: pick(TRANSITION_POOL),
               seed: Math.floor(Math.random() * 997),
               direction: Math.floor(Math.random() * 4),
               density: Math.floor(Math.random() * 3),
             };
         blendStartBeat = nextSourceCut * BEATS_PER_SOURCE;
-      }
-
-      const nextChainCut = Math.floor(beat / BEATS_PER_CHAIN);
-      if (nextChainCut !== chainCut) {
-        chainCut = nextChainCut;
-        effects = buildChain();
       }
 
       let transition: DemoTransition | null = null;
@@ -222,4 +220,11 @@ export function getDemoDirector(sourceCount: number): DemoDirector {
  * silently emptying the demo. Exported for the check in dev builds only. */
 export function missingDemoEffects(): string[] {
   return [...ANIMATED_POOL, ...STATIC_POOL].filter((id) => !getDefinition(id));
+}
+
+/** Entries in the animated pool the renderer does not actually animate. Each
+ * one is a slide that can come out completely still, since this pool is where
+ * the guaranteed movement comes from. Dev builds only. */
+export function stillDemoEffects(): string[] {
+  return ANIMATED_POOL.filter((id) => !ANIMATED_EFFECTS.has(id));
 }
