@@ -1730,7 +1730,7 @@
 						title: 'Sequence timeline',
 						shortcuts: [
 							{
-								keys: ['Dbl-click', 'Ctrl+Click'],
+								keys: ['Ctrl+Click'],
 								description: 'Create / split segment at cursor',
 							},
 							{ keys: ['Click'], description: 'Select segment for editing' },

@@ -625,10 +625,6 @@
 		);
 	}
 
-	function onDblClick(e: MouseEvent) {
-		splitAt(vp.clientXToTime(e.clientX));
-	}
-
 	// ── Drags ────────────────────────────────────────────────────────────────
 	function startBndDrag(
 		e: PointerEvent,
@@ -732,6 +728,9 @@
 		}
 		if (!onSeek) return;
 		boundaries.clearSelection();
+		// Dragging the playhead hands the view over: chasing it back to centre
+		// fights the drag.
+		stack.followPlayhead = false;
 		const time = Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };
@@ -1028,7 +1027,6 @@
 			height={svgH}
 			class="step-svg"
 			style:cursor={svgCursor}
-			ondblclick={onDblClick}
 			onpointerdown={startSeekDrag}
 		>
 			<!-- Tails for uncovered regions, on the row's centre line -->
@@ -1142,7 +1140,7 @@
 
 			{#if showHint}
 				<text class="hint" x="50%" y={ROW_PAD + segH / 2 + 4} text-anchor="middle">
-					Double-click to create a segment · click a segment to edit its effects
+					Ctrl+click to create a segment · click a segment to edit its effects
 				</text>
 			{/if}
 
@@ -1422,7 +1420,7 @@
 				<div class="seg-groups">
 					<span class="seg-toolbar-hint">
 						{segments.length === 0
-							? 'Double-click the timeline to create a segment'
+							? 'Ctrl+click the timeline to create a segment'
 							: 'Click a segment to edit · shift-click or shift-drag to select several'}
 					</span>
 					<button
