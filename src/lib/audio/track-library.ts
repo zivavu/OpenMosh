@@ -43,6 +43,26 @@ export async function getAllTracks(): Promise<StoredTrack[]> {
   });
 }
 
+export async function getTrack(id: string): Promise<StoredTrack | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).get(id);
+    let result: StoredTrack | undefined;
+    req.onsuccess = () => {
+      result = req.result as StoredTrack | undefined;
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve(result ?? null);
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
 export async function addTrack(file: File): Promise<StoredTrack> {
   const track: StoredTrack = {
     id: generateId(),

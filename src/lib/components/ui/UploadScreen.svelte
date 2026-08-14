@@ -18,6 +18,7 @@ import GithubLink from "./GithubLink.svelte";
 import { showToast } from "./toast.svelte";
 import {
 	listSavedSequences,
+	readCachedSavedSequences,
 	type SavedSequence,
 } from "../../editor/saved-sequences";
 import {
@@ -38,8 +39,9 @@ let {
 }: Props = $props();
 
 // Songs already built into a sequence, offered as a way in that skips picking
-// media. Loaded once; an empty list simply hides the section.
-let savedSequences = $state<SavedSequence[]>([]);
+// media. Painted from the cache so the section is there on the first frame,
+// then reconciled against IndexedDB. An empty list simply hides the section.
+let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
 $effect(() => {
 	void listSavedSequences().then((list) => (savedSequences = list));
 });
