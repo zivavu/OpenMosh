@@ -2088,6 +2088,7 @@
 					</button>
 				{/if}
 				<GithubLink />
+				<div class="bar-sep"></div>
 				<div class="output-group">
 					<span class="rack-label">Output</span>
 					<ButtonGroup
@@ -2675,6 +2676,15 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	/* Splits the navigation icons from the output controls: two jobs, one bar. */
+	.bar-sep {
+		width: 1px;
+		height: 18px;
+		margin: 0 0.15rem;
+		background: var(--line);
+		flex-shrink: 0;
 	}
 
 	.output-group {
