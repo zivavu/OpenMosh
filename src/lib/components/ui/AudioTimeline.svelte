@@ -137,6 +137,9 @@
 
 	// Scrub while the button stays down, so the playhead drags rather than jumps.
 	function beginSeekDrag(startClientX: number) {
+		// Dragging the playhead hands the view over: chasing it back to centre
+		// fights the drag.
+		if (stack) stack.followPlayhead = false;
 		onSeek(timeFromClientX(startClientX));
 		seekDragging = true;
 		const onMove = (ev: PointerEvent) => {

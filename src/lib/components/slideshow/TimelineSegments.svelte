@@ -524,6 +524,9 @@
 		// Default: seek
 		if (!onSeek) return;
 		boundaries.clearSelection();
+		// Dragging the playhead hands the view over: chasing it back to centre
+		// fights the drag.
+		stack.followPlayhead = false;
 		const time = Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX)));
 		onSeek(time);
 		dragging = { type: 'seek' };

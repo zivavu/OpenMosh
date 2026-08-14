@@ -72,8 +72,11 @@ export class TimelineStackState {
    }
 
    /** Move the master clock. Any lane can scrub — there is no ruler row to be
-    * the only place that does. */
+    * the only place that does. Scrubbing by hand takes the view over, the same
+    * way panning does: recentring on a playhead the user is dragging fights the
+    * drag. */
    seekTo(time: number): void {
+      this.followPlayhead = false;
       const clamped = Math.max(0, Math.min(this.#getDuration(), time));
       this.#seek(clamped);
    }
