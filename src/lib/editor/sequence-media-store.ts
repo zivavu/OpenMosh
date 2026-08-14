@@ -95,6 +95,64 @@ export async function getAllSequenceMedia(): Promise<StoredSequenceMedia[]> {
 }
 
 /**
+ * Just the ids, without deserializing a blob per record. Callers that only need
+ * to know what's stored (rather than read it) should use this: the media store
+ * holds every image and video, so a full getAll there is the most expensive
+ * read in the app.
+ */
+export async function getAllSequenceMediaIds(): Promise<Set<string>> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAllKeys();
+    let result: IDBValidKey[] = [];
+    req.onsuccess = () => {
+      result = req.result;
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve(new Set(result.map(String)));
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+/**
+ * The named entries only, in the order asked for, skipping ids that are gone.
+ * One transaction, one `get` each — cheaper than pulling the whole store to
+ * pick a pool's worth out of it.
+ */
+export async function getSequenceMediaByIds(
+  ids: string[],
+): Promise<StoredSequenceMedia[]> {
+  if (ids.length === 0) return [];
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const store = tx.objectStore(STORE);
+    const found = new Map<string, StoredSequenceMedia>();
+    for (const id of ids) {
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const entry = req.result as StoredSequenceMedia | undefined;
+        if (entry) found.set(id, entry);
+      };
+    }
+    tx.oncomplete = () => {
+      db.close();
+      resolve(ids.map((id) => found.get(id)).filter((m) => m !== undefined));
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+/**
  * One connection and one transaction for the whole batch. Writing a few
  * hundred files one call at a time meant a few hundred database opens, which
  * took longer than everything else about adding them put together.

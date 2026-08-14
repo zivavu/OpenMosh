@@ -1,7 +1,9 @@
-import { getAllTracks } from "../audio/track-library";
+import { getAllTracks, getTrack } from "../audio/track-library";
 import {
   getAllMediaPools,
-  getAllSequenceMedia,
+  getAllSequenceMediaIds,
+  getSequenceMediaByIds,
+  loadMediaPool,
   storedMediaToFile,
 } from "./sequence-media-store";
 
@@ -21,19 +23,60 @@ export interface SavedSequence {
   updatedAt: number;
 }
 
-export async function listSavedSequences(): Promise<SavedSequence[]> {
-  let pools, tracks, media;
+const CACHE_KEY = "openmosh-saved-sequences";
+
+/**
+ * The last computed list, readable synchronously.
+ *
+ * IndexedDB can only answer a tick or two after mount, so the upload screen
+ * would always paint without this section and pop it in afterwards. The cache
+ * is a mirror, never the source of truth: `listSavedSequences` still runs and
+ * overwrites it, so a song deleted elsewhere corrects itself on the next paint.
+ */
+export function readCachedSavedSequences(): SavedSequence[] {
   try {
-    [pools, tracks, media] = await Promise.all([
-      getAllMediaPools(),
-      getAllTracks(),
-      getAllSequenceMedia(),
-    ]);
+    const parsed: unknown = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "");
+    return Array.isArray(parsed) ? parsed.filter(isSavedSequence) : [];
   } catch {
     return [];
   }
+}
+
+function isSavedSequence(value: unknown): value is SavedSequence {
+  const s = value as SavedSequence | null;
+  return (
+    !!s &&
+    typeof s.trackId === "string" &&
+    typeof s.trackName === "string" &&
+    typeof s.sourceCount === "number" &&
+    typeof s.updatedAt === "number"
+  );
+}
+
+function writeCachedSavedSequences(list: SavedSequence[]): void {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(list));
+  } catch {
+    // Quota or a private window; the list still loads, just not instantly.
+  }
+}
+
+export async function listSavedSequences(): Promise<SavedSequence[]> {
+  let pools, tracks, stored;
+  try {
+    // Ids, not records: this only counts which sources survive, and the media
+    // store holds every image and video the sequences were built from.
+    [pools, tracks, stored] = await Promise.all([
+      getAllMediaPools(),
+      getAllTracks(),
+      getAllSequenceMediaIds(),
+    ]);
+  } catch {
+    // Keep showing what was cached rather than blanking the section on a
+    // transient database failure.
+    return readCachedSavedSequences();
+  }
   const trackById = new Map(tracks.map((t) => [t.id, t]));
-  const stored = new Set(media.map((m) => m.id));
 
   const out: SavedSequence[] = [];
   for (const pool of pools) {
@@ -48,7 +91,9 @@ export async function listSavedSequences(): Promise<SavedSequence[]> {
       updatedAt: pool.updatedAt,
     });
   }
-  return out.sort((a, b) => b.updatedAt - a.updatedAt);
+  out.sort((a, b) => b.updatedAt - a.updatedAt);
+  writeCachedSavedSequences(out);
+  return out;
 }
 
 /** The song and its media, ready to hand to the editor. */
@@ -62,25 +107,24 @@ export interface OpenedSequence {
 export async function openSavedSequence(
   trackId: string,
 ): Promise<OpenedSequence | null> {
-  let pools, tracks, media;
+  let sourceIds, track;
   try {
-    [pools, tracks, media] = await Promise.all([
-      getAllMediaPools(),
-      getAllTracks(),
-      getAllSequenceMedia(),
+    // Only this song's pool and track, rather than every pool and every track.
+    [sourceIds, track] = await Promise.all([
+      loadMediaPool(trackId),
+      getTrack(trackId),
     ]);
   } catch {
     return null;
   }
-  const pool = pools.find((p) => p.key === trackId);
-  const track = tracks.find((t) => t.id === trackId);
-  if (!pool || !track) return null;
+  if (!sourceIds || !track) return null;
 
-  const byId = new Map(media.map((m) => [m.id, m]));
-  const sources = pool.sourceIds
-    .map((id) => byId.get(id))
-    .filter((m) => m !== undefined)
-    .map(storedMediaToFile);
+  let sources: File[];
+  try {
+    sources = (await getSequenceMediaByIds(sourceIds)).map(storedMediaToFile);
+  } catch {
+    return null;
+  }
   if (sources.length === 0) return null;
 
   return {
