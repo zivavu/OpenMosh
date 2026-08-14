@@ -123,6 +123,40 @@
 	let playheadVisible = $derived(
 		trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100,
 	);
+
+	// ── Scrubbing ────────────────────────────────────────────────────────────
+	// Owned by the stack rather than the lanes: the playhead is drawn once over
+	// the lot, so it is grabbable once over the lot too — a lane that spends its
+	// pointer events on segments or span handles (the mosh lane, the audio lane)
+	// can't be the only way to move the clock.
+	let scrubbing = $state(false);
+
+	/** Registers the scale strip with the shared axis, so it zooms with the
+	 * lanes and can measure the axis even when no lane is mounted. */
+	function laneTrack(node: HTMLElement) {
+		return stack.lane(node);
+	}
+
+	function beginScrub(e: PointerEvent) {
+		if (!onSeek || trackDuration <= 0 || e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		scrubbing = true;
+		stack.seekTo(vp.clientXToTime(e.clientX));
+		const onMove = (ev: PointerEvent) => {
+			ev.preventDefault();
+			stack.seekTo(vp.clientXToTime(ev.clientX));
+		};
+		const onUp = () => {
+			scrubbing = false;
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		};
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
+	}
 </script>
 
 <div class="tl-stack">
@@ -190,9 +224,36 @@
 			</div>
 		{/if}
 
+		<!-- The band the tick labels sit in, doubling as a ruler: scrubbing here
+		     works in every mode, whatever the lanes above do with a pointer. -->
+		<div
+			class="tl-scale"
+			class:scrubbing
+			class:seekable={!!onSeek && trackDuration > 0}
+			use:laneTrack
+			role="slider"
+			aria-label="Seek"
+			aria-valuenow={currentTime}
+			aria-valuemin={0}
+			aria-valuemax={trackDuration}
+			tabindex="-1"
+			onpointerdown={beginScrub}
+		></div>
+
 		{#if playheadVisible}
 			<div class="tl-playhead-layer">
-				<div class="tl-playhead" style="left: {playheadPct}%"></div>
+				<div class="tl-playhead" style="left: {playheadPct}%">
+					{#if onSeek}
+						<!-- The only part of the overlay that takes pointer events, and
+						     narrow, so it doesn't shadow the lane under it. -->
+						<div
+							class="tl-playhead-grab"
+							class:scrubbing
+							role="presentation"
+							onpointerdown={beginScrub}
+						></div>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -455,6 +516,44 @@
 		width: 1px;
 		background: var(--tl-playhead);
 		box-shadow: 0 0 4px rgba(110, 231, 192, 0.6);
+	}
+
+	/* A grab zone wider than the 1px line, since nobody can hit 1px. */
+	.tl-playhead-grab {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: -5px;
+		width: 11px;
+		pointer-events: auto;
+		cursor: col-resize;
+		touch-action: none;
+	}
+
+	.tl-playhead-grab:hover,
+	.tl-playhead-grab.scrubbing {
+		background: rgba(110, 231, 192, 0.14);
+	}
+
+	/* Sits in the padding band under the lanes, over the tick labels — they are
+	   in the grid layer, which takes no pointer events. */
+	.tl-scale {
+		position: absolute;
+		bottom: 0;
+		left: calc(var(--tl-gutter) + var(--tl-gap));
+		right: 0;
+		height: var(--tl-scale-h);
+		z-index: 6;
+		touch-action: none;
+	}
+
+	.tl-scale.seekable {
+		cursor: col-resize;
+	}
+
+	.tl-scale.scrubbing {
+		cursor: col-resize;
+		background: rgba(255, 255, 255, 0.04);
 	}
 
 	@media (max-width: 800px) {
