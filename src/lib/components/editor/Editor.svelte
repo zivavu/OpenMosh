@@ -851,6 +851,12 @@
 
 	const sourceRegistry = new SequenceSourceRegistry(bumpSourceTick);
 	let sequenceSources = $derived(sourceRegistry.sources);
+	/** The pool is empty until the opening file lands in it, so the placeholder
+	 * waits for that rather than flashing over every load. */
+	let poolFilled = $state(false);
+	let noSequenceMedia = $derived(
+		isSequenceMode && poolFilled && sequenceSources.length === 0,
+	);
 
 	onMount(() => {
 		if (!isSequenceMode) return;
@@ -859,6 +865,7 @@
 			// a song's pool, so storing it would write (possibly hundreds of MB
 			// of) video into IndexedDB that nothing would ever read back.
 			await sourceRegistry.add([file], { primary: true, persist: false });
+			poolFilled = true;
 			const extras = extraFiles.filter((f) => f !== file);
 			// Opened from a saved song: these blobs came straight out of storage,
 			// so writing them back would rewrite the whole pool for nothing.
@@ -956,6 +963,21 @@
 		void sourceRegistry.restore(missing);
 	});
 
+	// A non-empty pool always has a primary: segments carrying no source of
+	// their own resolve to it, and the editor's own player is what decodes it.
+	// This covers every path that refills a pool the user emptied — the picker,
+	// a drop, and the restore that follows a song change.
+	$effect(() => {
+		if (!isSequenceMode || sourceRegistry.primaryId) return;
+		const next = sourceRegistry.sources[0];
+		if (!next) return;
+		untrack(() => {
+			sourceRegistry.setPrimary(next.id);
+			onfile(next.file);
+			seqFrames.invalidate();
+		});
+	});
+
 	async function addSequenceSources(files: File[]) {
 		const added = await sourceRegistry.add(files);
 		const skipped = files.length - added.length;
@@ -990,12 +1012,13 @@
 		}
 	}
 
-	/** Segments pointing at a removed source fall back to the primary. */
+	/**
+	 * Segments pointing at a removed source fall back to the primary. The primary
+	 * goes the same way as the rest: the effect above re-seats it on whatever is
+	 * left, and emptying the pool entirely leaves the preview on its no-media
+	 * placeholder until something is added back.
+	 */
 	function removeSequenceSource(id: string) {
-		if (sourceRegistry.get(id)?.primary) {
-			showToast("The first source can't be removed", 'info');
-			return;
-		}
 		sourceRegistry.remove(id);
 		seqFrames.invalidate();
 		seqBoundaries.commit(
@@ -1635,6 +1658,10 @@
 
 	function save() {
 		if (!canvasEl) return;
+		if (noSequenceMedia) {
+			showToast('Add media before saving a frame', 'info');
+			return;
+		}
 		const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
 		const ext = format === 'jpg' ? 'jpg' : 'png';
 		// Image formats render frozen at time 0 (matches the preview's drawFrame)
@@ -2044,6 +2071,10 @@
 
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recordingState.recording) return;
+		if (noSequenceMedia) {
+			showToast('Add media before recording', 'info');
+			return;
+		}
 		showRecordSettings = false;
 
 		// Pause playback while recording
@@ -2208,6 +2239,20 @@
 			</div>
 		</div>
 
+		{#snippet noMediaOverlay()}
+			<div class="no-media">
+				<span class="no-media-label">NO MEDIA</span>
+				<p class="no-media-text">
+					Every source is gone from this song. Add an image or a video and the
+					segments have something to play again.
+				</p>
+				<button class="no-media-btn" onclick={() => sourceInput?.click()}>
+					<Plus size={14} /> ADD MEDIA
+				</button>
+				<span class="no-media-hint">or drop files anywhere</span>
+			</div>
+		{/snippet}
+
 		{#if isVideo}
 			<video
 				bind:this={videoEl}
@@ -2270,7 +2315,7 @@
 			sourceKey={seqSourceKey}
 			sourceAnimating={seqSourceAnimating}
 			freezeAnimation={isImageFormat}
-			suspended={recordingState.recording}
+			suspended={recordingState.recording || noSequenceMedia}
 			{warmCanvas}
 			{warmRenderer}
 			textTimeline={textTimeline.enabled ? textTimeline : null}
@@ -2289,6 +2334,7 @@
 						useAltSource: seqCrossFades,
 					}
 				: null}
+			overlay={noSequenceMedia ? noMediaOverlay : undefined}
 		/>
 
 		<div class="action-bar">
@@ -2476,7 +2522,7 @@
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
 			>
 				{#snippet toolbar()}
-					{#if isSequenceMode && sequenceSources.length > 0}
+					{#if isSequenceMode}
 						<div class="tl-tool-sep"></div>
 						<button
 							class="tl-tool-btn"
@@ -2520,18 +2566,6 @@
 						>
 							<Plus size={12} />
 						</button>
-						<input
-							bind:this={sourceInput}
-							type="file"
-							accept="image/*,video/*"
-							multiple
-							hidden
-							onchange={(e) => {
-								const picked = Array.from(e.currentTarget.files ?? []);
-								if (picked.length > 0) void addSequenceSources(picked);
-								e.currentTarget.value = '';
-							}}
-						/>
 					{/if}
 					{#if textTimeline.enabled}
 						<div class="tl-tool-sep"></div>
@@ -2655,6 +2689,22 @@
 			onchange={onTrackInputChange}
 			hidden
 		/>
+		{#if isSequenceMode}
+			<!-- Outside the timeline stack: the stack is hidden while there's no
+			     clock, and the empty-pool placeholder still needs this picker. -->
+			<input
+				bind:this={sourceInput}
+				type="file"
+				accept="image/*,video/*"
+				multiple
+				hidden
+				onchange={(e) => {
+					const picked = Array.from(e.currentTarget.files ?? []);
+					if (picked.length > 0) void addSequenceSources(picked);
+					e.currentTarget.value = '';
+				}}
+			/>
+		{/if}
 	</div>
 	<MobileSheet bind:this={_mobileSheetRef}>
 		{#snippet settings()}
@@ -2866,6 +2916,62 @@
 		justify-content: center;
 		gap: 0.75rem;
 		padding: 1rem;
+	}
+
+	/* Stands in for the preview while the sequence pool is empty. */
+	.no-media {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.7rem;
+		max-width: 26rem;
+		padding: 2rem;
+		border: 1px dashed var(--line-strong);
+		border-radius: var(--r-3);
+		background: var(--surface);
+		text-align: center;
+	}
+
+	.no-media-label {
+		color: var(--mosh);
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		letter-spacing: 0.16em;
+	}
+
+	.no-media-text {
+		margin: 0;
+		color: var(--text-3);
+		font-size: 0.82rem;
+		line-height: 1.5;
+	}
+
+	.no-media-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.5rem 0.9rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-2);
+		background: var(--raised);
+		color: var(--text);
+		font-family: var(--font-mono);
+		font-size: 0.68rem;
+		letter-spacing: 0.12em;
+		cursor: pointer;
+		transition: border-color var(--t-fast), color var(--t-fast);
+	}
+
+	.no-media-btn:hover {
+		border-color: var(--mosh);
+		color: var(--mosh);
+	}
+
+	.no-media-hint {
+		color: var(--text-4);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.1em;
 	}
 
 	.library-btn {

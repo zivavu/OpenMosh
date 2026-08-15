@@ -141,6 +141,19 @@ export class SequenceSourceRegistry {
   }
 
   /**
+   * Hands primary status to another pooled source, or to nothing when the pool
+   * is empty. The caller is responsible for pointing the editor's own player at
+   * the new primary's file — that's what makes it the primary. Its sampler and
+   * decoded bitmap go with it: the player owns those frames now.
+   */
+  setPrimary(id: string | null) {
+    for (const s of this.sources) s.primary = s.id === id;
+    if (!id) return;
+    this.#samplers.get(id)?.dispose();
+    this.#samplers.delete(id);
+  }
+
+  /**
    * Drops the source from this song. The stored blob is deliberately left
    * alone: another song's pool may reference the same media, and once none
    * does, `pruneSequenceMedia` collects it on the next pool save.
