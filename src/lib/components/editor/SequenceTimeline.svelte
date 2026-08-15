@@ -35,6 +35,11 @@
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
+	import {
+		SOURCE_DND_TYPE,
+		shortSourceName,
+		sourceColor,
+	} from '../../editor/sequence-source-ui';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
@@ -190,17 +195,6 @@
 		return sourceIndex.get(s.sourceId ?? primarySourceId ?? '')?.src;
 	}
 
-	/** Filenames from one export batch share a long prefix, so keep the tail
-	 * (and the extension) rather than truncating from the right. */
-	function shortName(name: string, max = 16): string {
-		if (name.length <= max) return name;
-		const dot = name.lastIndexOf('.');
-		const ext = dot > 0 && name.length - dot <= 5 ? name.slice(dot) : '';
-		const stem = ext ? name.slice(0, dot) : name;
-		// A slice(0) would return the whole stem, so never let the budget hit 0.
-		const keep = Math.max(1, max - ext.length - 1);
-		return `…${stem.slice(-keep)}${ext}`;
-	}
 
 	let svgEl: SVGSVGElement | undefined = $state();
 	/** Track width in px, for sizing labels to their blocks. */
@@ -288,6 +282,9 @@
 	// pointer events every other timeline interaction uses, so nothing here can
 	// be mistaken for a boundary drag, a rect-select or a seek.
 	let dragSourceId = $state<string | null>(null);
+	/** A source drag is over the track — set from the drag events rather than
+	 * from `dragSourceId`, which only knows about drags that started in here. */
+	let sourceDragOver = $state(false);
 	let dropSegId = $state<string | null>(null);
 	let gridEl = $state<HTMLDivElement | null>(null);
 	let gridScrollTop = 0;
@@ -307,13 +304,15 @@
 		dragSourceId = sourceId;
 		if (e.dataTransfer) {
 			e.dataTransfer.effectAllowed = 'copy';
-			// Some browsers cancel a drag that carries no data at all.
+			e.dataTransfer.setData(SOURCE_DND_TYPE, sourceId);
+			// Some browsers cancel a drag that carries no standard data at all.
 			e.dataTransfer.setData('text/plain', sourceId);
 		}
 	}
 
 	function endSourceDrag() {
 		dragSourceId = null;
+		sourceDragOver = false;
 		dropSegId = null;
 		// Toggling overflow back can clamp scrollTop; put it back where it was.
 		if (gridEl) gridEl.scrollTop = gridScrollTop;
@@ -326,11 +325,18 @@
 		});
 	}
 
+	/** A source drag, wherever it started — the grid view is above us and shares
+	 * no state, so the payload's type is what identifies it. */
+	function isSourceDrag(e: DragEvent): boolean {
+		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
+	}
+
 	function onTimelineDragOver(e: DragEvent) {
-		if (!dragSourceId) return;
+		if (!isSourceDrag(e)) return;
 		// Without preventDefault the browser refuses the drop entirely.
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+		sourceDragOver = true;
 		dropSegId = segmentAtTime(vp.clientXToTime(e.clientX))?.id ?? null;
 	}
 
@@ -342,16 +348,17 @@
 		) {
 			return;
 		}
+		sourceDragOver = false;
 		dropSegId = null;
 	}
 
 	function onTimelineDrop(e: DragEvent) {
-		if (!dragSourceId) return;
+		if (!isSourceDrag(e)) return;
 		e.preventDefault();
-		const sourceId = dragSourceId;
+		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? '';
 		const targets = dropTargetIds;
 		endSourceDrag();
-		if (targets.length > 0) assignSources(targets, sourceId);
+		if (sourceId && targets.length > 0) assignSources(targets, sourceId);
 	}
 	let commonIntervalSec = $derived(
 		commonValue(selectedSegments.map((s) => s.intervalSec ?? 0.25)),
@@ -546,11 +553,6 @@
 		tip: string;
 		transitionType: TransitionType;
 		transitionDuration: number;
-	}
-
-	/** A stable colour per position in the pool, used to tag it in the media bin. */
-	function sourceColor(n: number): string {
-		return `hsl(${(n * 57) % 360} 45% 52%)`;
 	}
 
 	function segLabel(s: SequenceSegment): string {
@@ -1012,7 +1014,7 @@
 		</div>
 		<div
 			class="tl-lane tl-track"
-			class:drop-active={!!dragSourceId}
+			class:drop-active={sourceDragOver}
 			bind:clientWidth={trackWidth}
 			ondragover={onTimelineDragOver}
 			ondragleave={onTimelineDragLeave}
@@ -1505,7 +1507,7 @@
 										>▶</span
 									>{/if}
 							</span>
-							<span class="media-chip-name">{shortName(src.name, 18)}</span>
+							<span class="media-chip-name">{shortSourceName(src.name, 18)}</span>
 						</button>
 						<button
 							class="media-chip-remove"

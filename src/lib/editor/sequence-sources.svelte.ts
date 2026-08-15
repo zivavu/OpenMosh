@@ -168,6 +168,20 @@ export class SequenceSourceRegistry {
     this.#revoke(src);
   }
 
+  /**
+   * Move a source to another slot. The order is what the pool's numbering and
+   * per-source colours follow, so it's the user's to arrange; assignments ride
+   * on ids and don't move with it.
+   */
+  reorder(from: number, to: number) {
+    const list = [...this.sources];
+    if (from === to) return;
+    if (from < 0 || from >= list.length || to < 0 || to >= list.length) return;
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    this.sources = list;
+  }
+
   /** Drop every added source, keeping the primary. */
   clearExtras() {
     for (const s of [...this.sources]) {
