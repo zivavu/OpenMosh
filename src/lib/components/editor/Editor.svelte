@@ -262,7 +262,11 @@
 	});
 
 
-	let format = $state<'png' | 'jpg' | 'webm'>(isMobile ? 'png' : 'webm');
+	// Sequence mode has no still to save — a segment timeline is a video by
+	// definition — so it skips the picker and stays on WebM.
+	let format = $state<'png' | 'jpg' | 'webm'>(
+		isMobile && untrack(() => mode) !== 'sequence' ? 'png' : 'webm',
+	);
 	let isImageFormat = $derived(format === 'png' || format === 'jpg');
 	let isVideoFormat = $derived(format === 'webm');
 	let imageSrc = $state('');
@@ -2224,18 +2228,20 @@
 				{/if}
 				<GithubLink />
 				<div class="bar-sep"></div>
-				<div class="output-group">
-					<span class="rack-label">Output</span>
-					<ButtonGroup
-						buttons={[
-							{ label: 'PNG', value: 'png' },
-							{ label: 'JPG', value: 'jpg' },
-							{ label: 'WebM', value: 'webm' },
-						]}
-						value={format}
-						onchange={(v) => (format = v)}
-					/>
-				</div>
+				{#if !isSequenceMode}
+					<div class="output-group">
+						<span class="rack-label">Output</span>
+						<ButtonGroup
+							buttons={[
+								{ label: 'PNG', value: 'png' },
+								{ label: 'JPG', value: 'jpg' },
+								{ label: 'WebM', value: 'webm' },
+							]}
+							value={format}
+							onchange={(v) => (format = v)}
+						/>
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -2384,16 +2390,18 @@
 					bind:showSettings={showMoshSettings}
 				>
 					{#snippet settingsContent()}
-						<ButtonGroup
-							buttons={[
-								{ label: 'PNG', value: 'png' },
-								{ label: 'JPG', value: 'jpg' },
-								{ label: 'WebM', value: 'webm' },
-							]}
-							value={format}
-							onchange={(v) => (format = v)}
-						/>
-						<div class="settings-divider"></div>
+						{#if !isSequenceMode}
+							<ButtonGroup
+								buttons={[
+									{ label: 'PNG', value: 'png' },
+									{ label: 'JPG', value: 'jpg' },
+									{ label: 'WebM', value: 'webm' },
+								]}
+								value={format}
+								onchange={(v) => (format = v)}
+							/>
+							<div class="settings-divider"></div>
+						{/if}
 						<div class="mosh-setting-row">
 							<label for="show-fps">Show FPS</label>
 							<input id="show-fps" type="checkbox" bind:checked={showFps} />
