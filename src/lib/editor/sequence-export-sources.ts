@@ -3,10 +3,10 @@ import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
 /**
- * Export-side twin of `SequenceFrameDriver`. Same state machine — a segment's
- * video restarts when the segment is entered and advances one frame per
- * frame — but every upload is awaited, so the recorder writes the exact frame
- * rather than whatever the decoder happened to have ready.
+ * Export-side twin of `SequenceFrameDriver`. Same state machine — the caller
+ * states where in the clip each segment wants to be — but every upload is
+ * awaited, so the recorder writes the exact frame rather than whatever the
+ * decoder happened to have ready.
  *
  * Samplers are created here rather than borrowed from the preview registry:
  * the preview's are parked at arbitrary positions, and an export must not
@@ -17,10 +17,11 @@ const MAX_DECODED_IMAGES = 16;
 
 export interface SequenceExportSources {
   /**
-   * Upload the frame for `sourceId`, advancing a video source by `dtSec`.
-   * Returns false when the caller should upload the primary file itself.
+   * Upload the frame for `sourceId`, taking a video source to `sourceTime`
+   * seconds into its clip. Returns false when the caller should upload the
+   * primary file itself.
    */
-  advance(sourceId: string | undefined, dtSec: number): Promise<boolean>;
+  advance(sourceId: string | undefined, sourceTime: number): Promise<boolean>;
   /**
    * Upload the outgoing side of a transition into the renderer's second source
    * texture. Returns false when the primary is the outgoing source, which the
@@ -28,7 +29,7 @@ export interface SequenceExportSources {
    */
   advanceOutgoing(
     sourceId: string | null | undefined,
-    dtSec: number,
+    sourceTime: number,
   ): Promise<boolean>;
   dispose(): void;
 }
@@ -57,9 +58,7 @@ export async function createSequenceExportSources(
   );
 
   let currentId: string | null = null;
-  let lastVideoId: string | null = null;
   let outgoingId: string | null = null;
-  let lastOutgoingVideoId: string | null = null;
 
   /** Shared by both sides; `images` is the cache, bounded below. */
   async function resolveImage(
@@ -78,23 +77,20 @@ export async function createSequenceExportSources(
   }
 
   return {
-    async advance(sourceId, dtSec) {
+    async advance(sourceId, sourceTime) {
       const id = sourceId ?? primaryId;
       const src = id ? byId.get(id) : undefined;
       if (!src) {
         currentId = null;
-        lastVideoId = null;
         return false;
       }
 
       if (src.primary && src.kind === "video") {
         currentId = null;
-        lastVideoId = null;
         return false;
       }
 
       if (src.kind === "image") {
-        lastVideoId = null;
         if (currentId !== src.id) {
           const img = await resolveImage(src);
           if (!img) return false;
@@ -106,22 +102,18 @@ export async function createSequenceExportSources(
 
       const sampler = samplers.get(src.id);
       if (!sampler) return false;
-      if (lastVideoId !== src.id) sampler.reset();
-      const step = lastVideoId === src.id ? dtSec : 0;
-      lastVideoId = src.id;
       currentId = src.id;
-      const frame = await sampler.next(step);
+      const frame = await sampler.at(sourceTime);
       if (frame) {
         renderer.updateSourceFrame(frame);
         frame.close();
       }
       return true;
     },
-    async advanceOutgoing(sourceId, dtSec) {
+    async advanceOutgoing(sourceId, sourceTime) {
       if (!sourceId) {
         if (outgoingId !== null) {
           outgoingId = null;
-          lastOutgoingVideoId = null;
           renderer.clearAltSource();
         }
         return true;
@@ -131,12 +123,10 @@ export async function createSequenceExportSources(
 
       if (src.primary && src.kind === "video") {
         outgoingId = src.id;
-        lastOutgoingVideoId = null;
         return false;
       }
 
       if (src.kind === "image") {
-        lastOutgoingVideoId = null;
         if (outgoingId !== src.id) {
           const img = await resolveImage(src);
           if (!img) return true;
@@ -148,12 +138,10 @@ export async function createSequenceExportSources(
 
       const sampler = samplers.get(src.id);
       if (!sampler) return true;
-      // No reset: the outgoing clip carries on from where its segment ended,
-      // matching the preview driver.
-      const step = lastOutgoingVideoId === src.id ? dtSec : 0;
-      lastOutgoingVideoId = src.id;
+      // Measured from the outgoing segment's start, so the clip carries on past
+      // the boundary instead of restarting under the fade.
       outgoingId = src.id;
-      const frame = await sampler.next(step);
+      const frame = await sampler.at(sourceTime);
       if (frame) {
         renderer.updateAltSourceFrame(frame);
         frame.close();

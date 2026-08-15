@@ -259,10 +259,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
    * `outgoingSourceId` — the two must agree or exports drift from what was
    * previewed.
    */
-  const outgoingSourceIdAt = (
+  const outgoingSourceAt = (
     t: number,
     incomingSourceId: string | undefined,
-  ): string | null => {
+  ): { id: string; time: number } | null => {
     if (!sequence || !seqSource) return null;
     const tr = resolveTransitionAt(
       sequence.segments,
@@ -278,7 +278,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     );
     const idA = segA?.sourceId ?? primarySourceId;
     const idB = incomingSourceId ?? primarySourceId;
-    return idA && idA !== idB ? idA : null;
+    if (!idA || idA === idB) return null;
+    return { id: idA, time: Math.max(0, t - (segA?.startTime ?? 0)) };
   };
 
   const sequenceBeforeRender = async (frameIndex: number, time: number) => {
@@ -290,14 +291,21 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     // Set when the primary is the *outgoing* side of a transition, so its frame
     // has to reach the alt texture too.
     let primaryIsOutgoing = false;
-    const segSourceId = sequence
-      ? findSegmentAt(sequence.segments, t, sequence.duration)?.sourceId
-      : undefined;
+    const seg = sequence
+      ? findSegmentAt(sequence.segments, t, sequence.duration)
+      : null;
+    const segSourceId = seg?.sourceId;
     if (exportSources) {
-      primaryOwnsFrame = !(await exportSources.advance(segSourceId, 1 / fps));
+      // Seconds into the clip, not a per-frame step: the same rule the preview
+      // follows, so an export writes the frames that were previewed.
+      const out = outgoingSourceAt(t, segSourceId);
+      primaryOwnsFrame = !(await exportSources.advance(
+        segSourceId,
+        Math.max(0, t - (seg?.startTime ?? 0)),
+      ));
       primaryIsOutgoing = !(await exportSources.advanceOutgoing(
-        outgoingSourceIdAt(t, segSourceId),
-        1 / fps,
+        out?.id ?? null,
+        out?.time ?? 0,
       ));
     }
 
@@ -323,7 +331,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         : null;
     if (tr && fx) {
       const progress = (t - tr.boundaryTime) / tr.transition.durationSec;
-      const crossFade = outgoingSourceIdAt(t, segSourceId) !== null;
+      const crossFade = outgoingSourceAt(t, segSourceId) !== null;
       return (layers: ResolvedTextLayer[]) =>
         renderer.renderTransition(
           tr.effectsA,

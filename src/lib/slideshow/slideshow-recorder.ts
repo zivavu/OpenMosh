@@ -105,7 +105,6 @@ export async function executeSlideshowRecording(
     renderer.resize(outputWidth, outputHeight);
   }
 
-  const frameDuration = 1 / fps;
   const effectsRef = { current: cloneEffects(baseEffects) };
 
   // Same driver the preview runs on — slide selection, per-beat effects and
@@ -145,10 +144,7 @@ export async function executeSlideshowRecording(
     async onBeforeRender(_frameIndex: number, time: number) {
       // time is 0..duration (recording window); segments use "seconds from
       // audio start" (silent export: the beat clock just starts at 0)
-      const frame = driver.advance(
-        time + (audioFile ? audioStart : 0),
-        frameDuration,
-      );
+      const frame = driver.advance(time + (audioFile ? audioStart : 0));
       // Video slides must have their frame uploaded before this frame renders.
       if (frame.ready) await frame.ready;
       effectsRef.current = frame.effects;

@@ -59,7 +59,6 @@ export class SlideshowFrameDriver {
   #presets: Preset[] | null = null;
   #lastBeatIndex = -1;
   #currentSlideId: string | null = null;
-  #lastVideoSlideId: string | null = null;
   #disposed = false;
 
   constructor(opts: SlideshowFrameDriverOptions) {
@@ -74,12 +73,12 @@ export class SlideshowFrameDriver {
   }
 
   /**
-   * Resolve the frame at `time` (seconds on the beat timeline). `videoDt` is
-   * the elapsed time to advance a visible video slide by — a wall-clock delta
-   * in preview, one frame duration in export; it is ignored on the beat a
-   * video slide first appears, so slides resume where they left off.
+   * Resolve the frame at `time` (seconds on the beat timeline). A video slide
+   * is shown at the moment `time` picks out of its clip, so the same song
+   * position always yields the same frame — in the preview, in a second run of
+   * it, and in the export.
    */
-  advance(time: number, videoDt: number): SlideshowFrame {
+  advance(time: number): SlideshowFrame {
     const config = this.#getConfig();
     const slides = this.#getSlides();
     const { index: beatIndex } = beatAtTime(
@@ -124,11 +123,8 @@ export class SlideshowFrameDriver {
 
     let ready: Promise<void> | null = null;
     if (slide.kind === "video") {
-      ready = this.#advanceVideo(slide, videoDt);
-      this.#lastVideoSlideId = slide.id;
+      ready = this.#advanceVideo(slide, time);
       this.#currentSlideId = slide.id;
-    } else {
-      this.#lastVideoSlideId = null;
     }
 
     return { effects: this.#effects, ready };
@@ -139,14 +135,13 @@ export class SlideshowFrameDriver {
     this.#disposed = true;
   }
 
-  #advanceVideo(
-    slide: SlideshowSlide,
-    videoDt: number,
-  ): Promise<void> | null {
+  #advanceVideo(slide: SlideshowSlide, time: number): Promise<void> | null {
     const sampler = this.#sources.getSampler(slide);
     if (!sampler) return null;
-    const dt = this.#lastVideoSlideId === slide.id ? videoDt : 0;
-    return sampler.next(dt).then((frame) => {
+    // The clip runs against the song rather than against its own appearances:
+    // a slide that comes back shows where the track has got to, and the same
+    // beat always shows the same frame.
+    return sampler.at(time).then((frame) => {
       if (!frame) return;
       if (!this.#disposed) this.#getRenderer().updateSourceFrame(frame);
       frame.close();

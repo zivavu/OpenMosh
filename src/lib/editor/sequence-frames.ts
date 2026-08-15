@@ -11,8 +11,10 @@ export interface SequenceFrameDriverOptions {
 
 /**
  * Uploads the source texture for whichever sequence segment is under the
- * playhead. Preview calls this once per animation frame; a paused scrub calls
- * it with dt 0.
+ * playhead. Preview calls this once per animation frame, a paused scrub on
+ * every redraw; either way the caller states where in the clip it wants to be,
+ * so the frame shown at a given master time never depends on how playback got
+ * there — and matches what the export writes.
  *
  * `advance` returns false only for the primary video, which the editor's own
  * player already drives (it owns the master clock and the preview audio) —
@@ -26,11 +28,8 @@ export class SequenceFrameDriver {
 
   /** Source whose frame is currently on the texture. */
   #currentId: string | null = null;
-  /** Video source advanced on the previous call; a change restarts playback. */
-  #lastVideoId: string | null = null;
-  /** Same pair of latches for the outgoing (transition) source texture. */
+  /** Same latch for the outgoing (transition) source texture. */
   #outgoingId: string | null = null;
-  #lastOutgoingVideoId: string | null = null;
   #disposed = false;
 
   constructor(opts: SequenceFrameDriverOptions) {
@@ -39,12 +38,15 @@ export class SequenceFrameDriver {
     this.#onUpload = opts.onUpload;
   }
 
-  /** True when this driver owns the source texture for this frame. */
-  advance(sourceId: string | null, dt: number): boolean {
+  /**
+   * True when this driver owns the source texture for this frame. `sourceTime`
+   * is where in the clip the segment wants to be — seconds since the segment
+   * started, wrapped by the sampler.
+   */
+  advance(sourceId: string | null, sourceTime: number): boolean {
     const src = this.#registry.get(sourceId);
     if (!src) {
       this.#currentId = null;
-      this.#lastVideoId = null;
       return false;
     }
 
@@ -52,12 +54,10 @@ export class SequenceFrameDriver {
       // The editor's player is already uploading this video's frames. Forget
       // the texture state so returning to another source re-uploads it.
       this.#currentId = null;
-      this.#lastVideoId = null;
       return false;
     }
 
     if (src.kind === "image") {
-      this.#lastVideoId = null;
       if (this.#currentId !== src.id) {
         const img = this.#registry.image(src.id);
         if (img?.complete) {
@@ -68,7 +68,18 @@ export class SequenceFrameDriver {
       return true;
     }
 
-    this.#advanceVideo(src, dt);
+    const sampler = this.#registry.sampler(src.id);
+    if (sampler) {
+      this.#currentId = src.id;
+      void sampler.at(sourceTime).then((frame) => {
+        if (!frame) return;
+        if (!this.#disposed) {
+          this.#getRenderer()?.updateSourceFrame(frame);
+          this.#onUpload?.();
+        }
+        frame.close();
+      });
+    }
     return true;
   }
 
@@ -82,11 +93,10 @@ export class SequenceFrameDriver {
    * frame exists. Pass `null` when no transition is running, which releases the
    * texture so a later one can't blend from a stale frame.
    */
-  advanceOutgoing(sourceId: string | null, dt: number): boolean {
+  advanceOutgoing(sourceId: string | null, sourceTime: number): boolean {
     if (!sourceId) {
       if (this.#outgoingId !== null) {
         this.#outgoingId = null;
-        this.#lastOutgoingVideoId = null;
         this.#getRenderer()?.clearAltSource();
       }
       return true;
@@ -96,12 +106,10 @@ export class SequenceFrameDriver {
 
     if (src.primary && src.kind === "video") {
       this.#outgoingId = src.id;
-      this.#lastOutgoingVideoId = null;
       return false;
     }
 
     if (src.kind === "image") {
-      this.#lastOutgoingVideoId = null;
       if (this.#outgoingId !== src.id) {
         const img = this.#registry.image(src.id);
         if (img?.complete) {
@@ -114,12 +122,10 @@ export class SequenceFrameDriver {
 
     const sampler = this.#registry.sampler(src.id);
     if (!sampler) return true;
-    // No reset here: the outgoing clip keeps playing from where the segment
-    // left it, which is what "fading out" should look like.
-    const step = this.#lastOutgoingVideoId === src.id ? dt : 0;
-    this.#lastOutgoingVideoId = src.id;
+    // Measured from the *outgoing* segment's start, so the clip carries on past
+    // the boundary instead of restarting under the fade.
     this.#outgoingId = src.id;
-    void sampler.next(step).then((frame) => {
+    void sampler.at(sourceTime).then((frame) => {
       if (!frame) return;
       if (!this.#disposed) {
         this.#getRenderer()?.updateAltSourceFrame(frame);
@@ -133,31 +139,10 @@ export class SequenceFrameDriver {
   /** Force the next call to re-upload, e.g. after the renderer was rebuilt. */
   invalidate() {
     this.#currentId = null;
-    this.#lastVideoId = null;
     this.#outgoingId = null;
-    this.#lastOutgoingVideoId = null;
   }
 
   dispose() {
     this.#disposed = true;
-  }
-
-  #advanceVideo(src: SequenceSource, dt: number) {
-    const sampler = this.#registry.sampler(src.id);
-    if (!sampler) return;
-    // A segment re-entered from elsewhere restarts its video, so the same
-    // playhead position always shows the same frame.
-    if (this.#lastVideoId !== src.id) sampler.reset();
-    const step = this.#lastVideoId === src.id ? dt : 0;
-    this.#lastVideoId = src.id;
-    this.#currentId = src.id;
-    void sampler.next(step).then((frame) => {
-      if (!frame) return;
-      if (!this.#disposed) {
-        this.#getRenderer()?.updateSourceFrame(frame);
-        this.#onUpload?.();
-      }
-      frame.close();
-    });
   }
 }

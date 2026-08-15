@@ -520,7 +520,7 @@
 			// Show the first frame instead of a blank canvas until play
 			void ensureSampler(first).then(async (sampler) => {
 				if (!sampler || !glRenderer || previewPlaying) return;
-				const frame = await sampler.next(0);
+				const frame = await sampler.at(0);
 				if (frame) {
 					glRenderer.updateSourceFrame(frame);
 					frame.close();
@@ -798,7 +798,6 @@
 			},
 		});
 		previewDriver = driver;
-		let lastTickMs = performance.now();
 		// Raw reference of the chain last handed to `previewEffects`; comparing
 		// against the $state proxy would never match, so this keeps the
 		// assignment (and the reactivity it triggers) on beat changes only.
@@ -831,8 +830,7 @@
 			// The video-frame upload is left unawaited here: the render loop must
 			// not stall on the decoder (the export awaits it instead).
 			const nowMs = performance.now();
-			const frame = driver.advance(t, (nowMs - lastTickMs) / 1000);
-			lastTickMs = nowMs;
+			const frame = driver.advance(t);
 			if (frame.effects !== lastAppliedEffects) {
 				lastAppliedEffects = frame.effects;
 				previewEffects = frame.effects;

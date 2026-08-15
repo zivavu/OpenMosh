@@ -54,14 +54,16 @@
       warmRenderer?: GlRenderer | null;
       /** Sequence segment transition in progress; `effects` is the incoming chain. */
       transition?: CanvasTransition | null;
-      /** Sequence multi-source: given the seconds elapsed since the last call,
-       * uploads the active segment's frame. Returning true means it owned the
-       * source texture, so the primary image/video upload is skipped. */
-      sourceDriver?: ((dtSec: number) => boolean) | null;
+      /** Sequence multi-source: uploads the active segment's frame for wherever
+       * the master clock is (the driver reads it — this loop's wall-clock time
+       * would make the same song position show different frames). Returning
+       * true means it owned the source texture, so the primary image/video
+       * upload is skipped. */
+      sourceDriver?: (() => boolean) | null;
       /** Uploads the outgoing segment's frame during a transition. Returning
        * false means the primary's frame is the outgoing one, so this component
        * has to route it to the alt texture itself. */
-      outgoingDriver?: ((dtSec: number) => boolean) | null;
+      outgoingDriver?: (() => boolean) | null;
       /** Changes whenever the driven source does, retriggering a paused redraw. */
       sourceKey?: string | null;
       /** True while the driven source needs a per-frame upload (a video). */
@@ -427,7 +429,7 @@
       // case (which always keeps that loop running). Gated on there being a
       // driver at all: without one nothing can have overwritten the texture,
       // and uploading here would cost a frame upload per slider tick.
-      if (sourceDriver && !sourceDriver(0) && videoEl && !frameSource) {
+      if (sourceDriver && !sourceDriver() && videoEl && !frameSource) {
          renderer.updateSourceFrame(videoEl);
       }
       drawFrame(0);
@@ -460,19 +462,14 @@
 
       let rafId: number;
       let lastVideoTime = -1;
-      let lastLoopMs = performance.now();
       let driverOwned = false;
       const loop = () => {
          const nowMs = performance.now();
-         // Clamped: a backgrounded tab would otherwise jump a video source
-         // forward by the whole time the tab was hidden.
-         const dt = Math.min(0.25, (nowMs - lastLoopMs) / 1000);
-         lastLoopMs = nowMs;
-         const owned = !!sourceDriver?.(dt);
+         const owned = !!sourceDriver?.();
          // False means the primary is the outgoing side of a transition, so its
          // frame has to reach the alt texture as well as (or instead of) the
          // main one.
-         const altFromPrimary = !!outgoingDriver && !outgoingDriver(dt);
+         const altFromPrimary = !!outgoingDriver && !outgoingDriver();
          // The frame a sequence segment borrowed the source texture for is
          // still on it. Both primary paths below only upload when something
          // changed, so without forcing one here a paused preview would keep
