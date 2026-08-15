@@ -109,6 +109,7 @@
 	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
+	import SequenceGridView from './SequenceGridView.svelte';
 	import SequenceTimeline from './SequenceTimeline.svelte';
 	import MoshGroup from './MoshGroup.svelte';
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
@@ -1046,6 +1047,22 @@
 
 	/** The timeline's whole selection, so the stack toolbar can act on it too. */
 	let seqSelectedIds = $state<string[]>([]);
+
+	/** Grid replaces the preview while the pool is being arranged; the timeline
+	 * stays put under it, so a card can still be dragged onto a segment. */
+	let sequenceView = $state<'preview' | 'grid'>('preview');
+	let sequenceGridOpen = $derived(isSequenceMode && sequenceView === 'grid');
+
+	/** The source the selection plays, for the grid's highlight; null when the
+	 * selected segments disagree or nothing is selected. */
+	let seqSelectedSourceId = $derived.by(() => {
+		const picked = new Set(seqSelectedIds);
+		const played = sequenceSegments
+			.filter((s) => picked.has(s.id))
+			.map((s) => s.sourceId ?? sourceRegistry.primaryId);
+		if (played.length === 0) return null;
+		return played.every((id) => id === played[0]) ? played[0] : null;
+	});
 
 	/** Deal the pool across the given segments — the toolbar passes the whole
 	 * lane when nothing is selected. */
@@ -2228,7 +2245,23 @@
 				{/if}
 				<GithubLink />
 				<div class="bar-sep"></div>
-				{#if !isSequenceMode}
+				{#if isSequenceMode}
+					<div class="output-group">
+						<ButtonGroup
+							buttons={[
+								{ label: 'Preview', value: 'preview' },
+								{ label: 'Grid', value: 'grid' },
+							]}
+							value={sequenceView}
+							onchange={(v) => (sequenceView = v as 'preview' | 'grid')}
+						/>
+					</div>
+					<span class="source-count readout">
+						{sequenceSources.length} source{sequenceSources.length === 1
+							? ''
+							: 's'}
+					</span>
+				{:else}
 					<div class="output-group">
 						<span class="rack-label">Output</span>
 						<ButtonGroup
@@ -2302,46 +2335,71 @@
 			></video>
 		{/if}
 
-		<GlCanvas
-			{imageSrc}
-			effects={renderedEffects}
-			canvasWidth={resizeWidth || undefined}
-			canvasHeight={resizeHeight || undefined}
-			bind:canvasEl
-			bind:glRenderer
-			bind:naturalWidth
-			bind:naturalHeight
-			bind:fps={currentFps}
-			bind:fullscreen={previewFullscreen}
-			showFps={showFps && !isImageFormat}
-			videoEl={isVideo && !previewPlayer ? videoEl : null}
-			frameSource={previewPlayer}
-			sourceDriver={isSequenceMode ? driveSequenceSource : null}
-			outgoingDriver={isSequenceMode ? driveOutgoingSource : null}
-			sourceKey={seqSourceKey}
-			sourceAnimating={seqSourceAnimating}
-			freezeAnimation={isImageFormat}
-			suspended={recordingState.recording || noSequenceMedia}
-			{warmCanvas}
-			{warmRenderer}
-			textTimeline={textTimeline.enabled ? textTimeline : null}
-			{textTime}
-			forceAnimation={textTimeline.enabled && textClockRunning}
-			transition={seqTransition
-				? {
-						effectsA: seqTransition.effectsA,
-						type: seqTransition.transition.type,
-						seed: seqTransition.transition.seed,
-						direction: seqTransition.transition.direction ?? 0,
-						density: seqTransition.transition.density ?? 1,
-						startTime: seqTransition.boundaryTime,
-						durationSec: seqTransition.transition.durationSec,
-						getTime: seqMasterTime,
-						useAltSource: seqCrossFades,
-					}
-				: null}
-			overlay={noSequenceMedia ? noMediaOverlay : undefined}
-		/>
+		{#if sequenceGridOpen}
+			<SequenceGridView
+				sources={sequenceSources}
+				primarySourceId={sourceRegistry.primaryId}
+				selectedCount={seqSelectedIds.length}
+				selectedSourceId={seqSelectedSourceId}
+				onAddFiles={(files) => void addSequenceSources(files)}
+				onRemove={removeSequenceSource}
+				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
+				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
+				onShuffle={() =>
+					randomizeSegmentSourcesFor(
+						seqSelectedIds.length > 0
+							? seqSelectedIds
+							: sequenceSegments.map((s) => s.id),
+					)}
+				onClear={() => (showClearSourcesConfirm = true)}
+			/>
+		{/if}
+		<!-- Hidden, never unmounted: tearing the canvas down would take the
+		     renderer (and the pre-warmed context it adopted) with it. -->
+		<div class="preview-slot" class:hidden={sequenceGridOpen}>
+			<GlCanvas
+				{imageSrc}
+				effects={renderedEffects}
+				canvasWidth={resizeWidth || undefined}
+				canvasHeight={resizeHeight || undefined}
+				bind:canvasEl
+				bind:glRenderer
+				bind:naturalWidth
+				bind:naturalHeight
+				bind:fps={currentFps}
+				bind:fullscreen={previewFullscreen}
+				showFps={showFps && !isImageFormat}
+				videoEl={isVideo && !previewPlayer ? videoEl : null}
+				frameSource={previewPlayer}
+				sourceDriver={isSequenceMode ? driveSequenceSource : null}
+				outgoingDriver={isSequenceMode ? driveOutgoingSource : null}
+				sourceKey={seqSourceKey}
+				sourceAnimating={seqSourceAnimating}
+				freezeAnimation={isImageFormat}
+				suspended={recordingState.recording ||
+					noSequenceMedia ||
+					sequenceGridOpen}
+				{warmCanvas}
+				{warmRenderer}
+				textTimeline={textTimeline.enabled ? textTimeline : null}
+				{textTime}
+				forceAnimation={textTimeline.enabled && textClockRunning}
+				transition={seqTransition
+					? {
+							effectsA: seqTransition.effectsA,
+							type: seqTransition.transition.type,
+							seed: seqTransition.transition.seed,
+							direction: seqTransition.transition.direction ?? 0,
+							density: seqTransition.transition.density ?? 1,
+							startTime: seqTransition.boundaryTime,
+							durationSec: seqTransition.transition.durationSec,
+							getTime: seqMasterTime,
+							useAltSource: seqCrossFades,
+						}
+					: null}
+				overlay={noSequenceMedia ? noMediaOverlay : undefined}
+			/>
+		</div>
 
 		<div class="action-bar">
 			<button
@@ -2858,6 +2916,27 @@
 		align-items: center;
 		gap: 0.5rem;
 		line-height: 1;
+	}
+
+	.source-count {
+		margin-left: auto;
+		font-size: 0.62rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-3);
+	}
+
+	/* Holds the canvas's place in the column so the grid can take the box
+	   without the preview being torn down. */
+	.preview-slot {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.preview-slot.hidden {
+		display: none;
 	}
 
 	@media (max-width: 800px) {
