@@ -39,7 +39,6 @@
 	}: Props = $props();
 
 	let fileInput = $state<HTMLInputElement | null>(null);
-	let fileDragging = $state(false);
 	let dragFromIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
 	let lightboxIndex = $state<number | null>(null);
@@ -54,10 +53,6 @@
 			objectUrl: s.objectUrl,
 		})),
 	);
-
-	function isFileDrag(e: DragEvent): boolean {
-		return !!e.dataTransfer?.types.includes('Files');
-	}
 
 	/** One dragstart serves both drops: a card carries its index for a reorder
 	 * here, and its id under our own type so the timeline below can take the
@@ -76,37 +71,18 @@
 		dragOverIndex = null;
 	}
 
+	// Files dropped anywhere in here are the editor pane's to handle — it already
+	// routes a drop to the pool in sequence mode, and taking them here as well
+	// would add every file twice.
 	function onGridDragOver(e: DragEvent) {
-		if (isFileDrag(e)) {
-			e.preventDefault();
-			fileDragging = true;
-		} else if (dragFromIndex !== null) {
-			e.preventDefault();
-		}
-	}
-
-	function onGridDragLeave(e: DragEvent) {
-		if (
-			e.currentTarget instanceof Element &&
-			e.relatedTarget instanceof Node &&
-			e.currentTarget.contains(e.relatedTarget)
-		) {
-			return;
-		}
-		fileDragging = false;
+		if (dragFromIndex !== null) e.preventDefault();
 	}
 
 	function onGridDrop(e: DragEvent) {
+		if (dragFromIndex === null) return;
 		e.preventDefault();
-		fileDragging = false;
-		if (dragFromIndex !== null && dragOverIndex !== null) {
-			onReorder(dragFromIndex, dragOverIndex);
-		}
+		if (dragOverIndex !== null) onReorder(dragFromIndex, dragOverIndex);
 		endCardDrag();
-		const files = Array.from(e.dataTransfer?.files ?? []).filter(
-			(f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
-		);
-		if (files.length > 0) onAddFiles(files);
 	}
 
 	function openLightbox(e: MouseEvent, index: number) {
@@ -127,13 +103,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-	class="grid-view"
-	class:file-dragging={fileDragging}
-	ondragover={onGridDragOver}
-	ondragleave={onGridDragLeave}
-	ondrop={onGridDrop}
->
+<div class="grid-view" ondragover={onGridDragOver} ondrop={onGridDrop}>
 	<input
 		bind:this={fileInput}
 		type="file"
@@ -288,11 +258,6 @@
 		overflow-y: auto;
 		padding: 0.9rem 1rem 1.2rem;
 		background: var(--ink);
-		transition: background-color var(--t-fast);
-	}
-
-	.grid-view.file-dragging {
-		background: var(--surface);
 	}
 
 	.grid-head {
