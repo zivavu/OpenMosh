@@ -1081,21 +1081,31 @@
 		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
 	}
 
-	/** Source under the playhead — or, while paused, under the selected segment,
-	 * matching which chain the panel is editing. */
+	/** Segment under the playhead — or, while paused, the selected one, matching
+	 * which chain the panel is editing. */
+	function activeSegment(): SequenceSegment | null {
+		if (!seqPlaying() && selectedSegmentId) {
+			const sel = sequenceSegments.find((s) => s.id === selectedSegmentId);
+			if (sel) return sel;
+		}
+		return findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration);
+	}
+
 	function activeSourceId(): string | null {
 		const primary = sourceRegistry.primaryId;
 		if (!isSequenceMode) return primary;
-		if (!seqPlaying() && selectedSegmentId) {
-			const sel = sequenceSegments.find((s) => s.id === selectedSegmentId);
-			if (sel) return sel.sourceId ?? primary;
-		}
-		const seg = findSegmentAt(
-			sequenceSegments,
-			seqMasterTime(),
-			seqMasterDuration,
-		);
-		return seg?.sourceId ?? primary;
+		return activeSegment()?.sourceId ?? primary;
+	}
+
+	/**
+	 * How far into its clip a segment's video should be: the master clock minus
+	 * the segment's start, so every source frame is a function of song position
+	 * alone. Playback that stalls, a scrub, and the export all land on the same
+	 * frame — and a paused preview holds instead of running on.
+	 */
+	function sourceTimeIn(seg: SequenceSegment | null | undefined): number {
+		if (!seg) return 0;
+		return Math.max(0, seqMasterTime() - seg.startTime);
 	}
 
 	const seqFrames = new SequenceFrameDriver({
@@ -1108,40 +1118,48 @@
 	let seqActiveSource = $derived(sourceRegistry.get(seqActiveSourceId));
 	let seqSourceKey = $derived(`${seqActiveSourceId}:${sourceTick}`);
 	// The primary video is driven by the editor's own player, which GlCanvas
-	// already keeps animating.
+	// already keeps animating. Only while the master runs: a paused source sits
+	// at one master time, so the canvas has nothing to re-upload — a late decode
+	// bumps `sourceTick` and redraws through the static path instead.
 	let seqSourceAnimating = $derived(
-		seqActiveSource?.kind === 'video' && !seqActiveSource.primary,
+		seqActiveSource?.kind === 'video' &&
+			!seqActiveSource.primary &&
+			seqPlaying(),
 	);
 
-	function driveSequenceSource(dt: number): boolean {
+	function driveSequenceSource(): boolean {
 		if (!isSequenceMode) return false;
-		return seqFrames.advance(activeSourceId(), dt);
+		const seg = activeSegment();
+		const id = seg?.sourceId ?? sourceRegistry.primaryId;
+		return seqFrames.advance(id, sourceTimeIn(seg));
 	}
 
 	/**
-	 * Source the running transition is fading *out* of, or null when there
-	 * isn't one or both sides draw from the same media (nothing to cross-fade,
-	 * so the effect chains blend over one texture as before).
+	 * Source the running transition is fading *out* of, with how far into its
+	 * clip it should be. Null when there isn't one or both sides draw from the
+	 * same media (nothing to cross-fade, so the effect chains blend over one
+	 * texture as before).
 	 */
-	function outgoingSourceId(): string | null {
+	function outgoingSource(): { id: string; time: number } | null {
 		const tr = seqTransition;
 		if (!tr) return null;
-		const primary = sourceRegistry.primaryId;
 		const segA = findSegmentAt(
 			sequenceSegments,
 			tr.boundaryTime - 0.001,
 			seqMasterDuration,
 		);
-		const idA = segA?.sourceId ?? primary;
-		return idA && idA !== activeSourceId() ? idA : null;
+		const idA = segA?.sourceId ?? sourceRegistry.primaryId;
+		if (!idA || idA === activeSourceId()) return null;
+		return { id: idA, time: sourceTimeIn(segA) };
 	}
 
-	function driveOutgoingSource(dt: number): boolean {
+	function driveOutgoingSource(): boolean {
 		if (!isSequenceMode) return true;
-		return seqFrames.advanceOutgoing(outgoingSourceId(), dt);
+		const out = outgoingSource();
+		return seqFrames.advanceOutgoing(out?.id ?? null, out?.time ?? 0);
 	}
 
-	let seqCrossFades = $derived.by(() => outgoingSourceId() !== null);
+	let seqCrossFades = $derived.by(() => outgoingSource() !== null);
 
 	// A rebuilt renderer (context loss) has a blank source texture; make the
 	// driver re-upload instead of holding a texture that no longer exists.
