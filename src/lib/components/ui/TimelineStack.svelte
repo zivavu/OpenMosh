@@ -391,16 +391,6 @@
 		background: rgba(255, 255, 255, 0.05);
 	}
 
-	:global(.tl-stack .tl-tool-count) {
-		padding: 0 4px;
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.08);
-		color: var(--text-2);
-		font-family: var(--font-mono);
-		font-size: 0.55rem;
-		font-variant-numeric: tabular-nums;
-	}
-
 	:global(.tl-stack .tl-tool-label) {
 		font-family: var(--font-mono);
 		font-size: 0.58rem;

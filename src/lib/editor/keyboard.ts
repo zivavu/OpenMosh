@@ -1,3 +1,4 @@
+import { isModalKeyboardOpen } from "../modal-keyboard";
 import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
 
 export interface KeyboardActions {
@@ -22,6 +23,9 @@ export function createKeyboardHandler(
   actions: KeyboardActions,
 ): (e: KeyboardEvent) => void {
   return (e: KeyboardEvent) => {
+    // An overlay (the media lightbox) has the keyboard.
+    if (isModalKeyboardOpen()) return;
+
     if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       actions.save();
