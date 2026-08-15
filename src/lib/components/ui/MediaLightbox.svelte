@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { ChevronLeft, ChevronRight, X } from 'lucide-svelte';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { pushModalKeyboard } from '../../modal-keyboard';
 
 	/** Anything with a name and an object URL can be shown here: slideshow
 	 * slides, sequence sources. */
@@ -84,6 +85,10 @@
 		closing = false;
 		index = (index - 1 + items.length) % items.length;
 	}
+
+	// While we're up the editors' own shortcuts stand down — Delete would take
+	// the segment behind us, and the arrows are ours to walk the pool with.
+	onMount(() => pushModalKeyboard());
 
 	function onKeydown(e: KeyboardEvent) {
 		if (e.key === 'ArrowRight') next();

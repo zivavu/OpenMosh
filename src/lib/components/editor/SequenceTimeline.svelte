@@ -35,12 +35,11 @@
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
+	import { isModalKeyboardOpen } from '../../modal-keyboard';
 	import {
 		SOURCE_DND_TYPE,
-		shortSourceName,
 		sourceColor,
 	} from '../../editor/sequence-source-ui';
-	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
 	const MIN_SEGMENT_DURATION = 0.125;
@@ -81,17 +80,13 @@
 		/** Loop playback inside the selected segment (for editing while playing). */
 		segmentLoop?: boolean;
 		onToggleSegmentLoop?: () => void;
-		/** Media pool the segments draw from. One entry = the media bin is hidden. */
+		/** Media pool the segments draw from, for their number and colour band.
+		 * The pool itself is arranged in the grid view, not in here. */
 		sources?: SequenceSource[];
 		/** Segments with no explicit sourceId render as this one. */
 		primarySourceId?: string | null;
+		/** Takes a source card dragged out of the grid view onto a segment. */
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
-		onAddSources?: (files: File[]) => void;
-		onRemoveSource?: (sourceId: string) => void;
-		/** Empty the pool back to the primary source. */
-		onClearSources?: () => void;
-		/** The media bin's disclosure state — the toggle lives in the stack toolbar. */
-		binOpen?: boolean;
 	}
 
 	let {
@@ -111,10 +106,6 @@
 		sources = [],
 		primarySourceId = null,
 		onAssignSource,
-		onAddSources,
-		onRemoveSource,
-		onClearSources,
-		binOpen = false,
 	}: Props = $props();
 
 	// The hint only teaches things the ? shortcuts modal also lists, so hiding
@@ -144,46 +135,10 @@
 		writeFlag(HINT_KEY, true);
 	}
 
-	// The media bin's own hint, retired the first time a source actually lands
-	// on a segment: having done it once, reading how to do it is just noise.
-	const BIN_HINT_KEY = 'openmosh-seq-bin-hint-dismissed';
-	let binHintDone = $state(readFlag(BIN_HINT_KEY, false));
-
-	function assignSources(segmentIds: string[], sourceId: string) {
-		onAssignSource?.(segmentIds, sourceId);
-		if (binHintDone) return;
-		binHintDone = true;
-		writeFlag(BIN_HINT_KEY, true);
-	}
-
-	let hasMediaBin = $derived(!!onAddSources);
 	let multiSource = $derived(sources.length > 1);
 	const segH = SEG_H;
 	const svgH = SEG_H + ROW_PAD * 2;
 	const labelY = ROW_PAD + SEG_H / 2 + 4;
-	/** Index into the pool of the source shown full size; null when closed.
-	 * An index rather than the source itself, so the lightbox's arrows can walk
-	 * the whole pool from wherever it was opened. */
-	let previewIndex = $state<number | null>(null);
-	/** Where the opening zoom flies from, as an offset from screen centre. */
-	let previewOrigin = $state({ x: 0, y: 0 });
-
-	function openPreview(e: MouseEvent, index: number) {
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		previewOrigin = {
-			x: rect.left + rect.width / 2 - window.innerWidth / 2,
-			y: rect.top + rect.height / 2 - window.innerHeight / 2,
-		};
-		previewIndex = index;
-	}
-
-	let previewItems = $derived(
-		sources.map((s) => ({
-			name: s.name,
-			kind: s.kind,
-			objectUrl: s.objectUrl,
-		})),
-	);
 	// Indexed rather than scanned: segVis recomputes on every zoom/pan frame,
 	// and a linear find per segment over a few hundred sources showed up as
 	// drag lag.
@@ -269,25 +224,16 @@
 			: -1,
 	);
 
-	// Highlights the bin chip the selection uses; null when they disagree.
-	let selectedSourceId = $derived(
-		commonValue(selectedSegments.map((s) => s.sourceId ?? primarySourceId)) ??
-			null,
-	);
-
 	let commonMode = $derived(commonValue(selectedSegments.map((s) => s.mode)));
 
-	// ── Drag a source onto a segment ─────────────────────────────────────────
+	// ── Drop a source onto a segment ─────────────────────────────────────────
 	// HTML5 drag events, deliberately: they're a separate stream from the
 	// pointer events every other timeline interaction uses, so nothing here can
 	// be mistaken for a boundary drag, a rect-select or a seek.
-	let dragSourceId = $state<string | null>(null);
-	/** A source drag is over the track — set from the drag events rather than
-	 * from `dragSourceId`, which only knows about drags that started in here. */
+	/** A source drag is over the track. The drag itself starts in the grid view,
+	 * which shares no state with us — the payload's type is all we go on. */
 	let sourceDragOver = $state(false);
 	let dropSegId = $state<string | null>(null);
-	let gridEl = $state<HTMLDivElement | null>(null);
-	let gridScrollTop = 0;
 
 	/** Segments a drop would land on — the whole selection when the target is
 	 * part of it, matching how the toolbar actions fan out. */
@@ -299,23 +245,9 @@
 			: [],
 	);
 
-	function startSourceDrag(e: DragEvent, sourceId: string) {
-		gridScrollTop = gridEl?.scrollTop ?? 0;
-		dragSourceId = sourceId;
-		if (e.dataTransfer) {
-			e.dataTransfer.effectAllowed = 'copy';
-			e.dataTransfer.setData(SOURCE_DND_TYPE, sourceId);
-			// Some browsers cancel a drag that carries no standard data at all.
-			e.dataTransfer.setData('text/plain', sourceId);
-		}
-	}
-
 	function endSourceDrag() {
-		dragSourceId = null;
 		sourceDragOver = false;
 		dropSegId = null;
-		// Toggling overflow back can clamp scrollTop; put it back where it was.
-		if (gridEl) gridEl.scrollTop = gridScrollTop;
 	}
 
 	function segmentAtTime(t: number): SequenceSegment | undefined {
@@ -325,8 +257,6 @@
 		});
 	}
 
-	/** A source drag, wherever it started — the grid view is above us and shares
-	 * no state, so the payload's type is what identifies it. */
 	function isSourceDrag(e: DragEvent): boolean {
 		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
 	}
@@ -358,7 +288,7 @@
 		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? '';
 		const targets = dropTargetIds;
 		endSourceDrag();
-		if (sourceId && targets.length > 0) assignSources(targets, sourceId);
+		if (sourceId && targets.length > 0) onAssignSource?.(targets, sourceId);
 	}
 	let commonIntervalSec = $derived(
 		commonValue(selectedSegments.map((s) => s.intervalSec ?? 0.25)),
@@ -917,9 +847,9 @@
 	 */
 	function onKeydown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
-		// The preview owns the keyboard while it's up: it handles Escape and the
-		// arrows itself, and Delete must not reach the segments behind it.
-		if (previewIndex !== null) return;
+		// The media lightbox owns the keyboard while it's up: it handles Escape
+		// and the arrows itself, and Delete must not reach the segments behind it.
+		if (isModalKeyboardOpen()) return;
 
 		// Outranks the boundary clipboard; falls through when nothing is selected.
 		const key = e.key.toLowerCase();
@@ -1435,98 +1365,6 @@
 		</div>
 	{/if}
 
-	{#if hasMediaBin && binOpen}
-		{@const assignable = selectedIds.length > 0}
-		<div class="media-bin tl-chrome">
-			{#if sources.length === 0}
-				<p class="media-bin-empty">
-					THE POOL IS EMPTY — ADD IMAGES OR VIDEOS WITH ＋
-				</p>
-			{:else if !binHintDone || dragSourceId}
-				<div class="media-bin-head">
-					<span class="media-bin-hint">
-						{#if dragSourceId}
-							DROP ON A SEGMENT
-						{:else if assignable}
-							CLICK OR DRAG ONTO {selectedIds.length > 1
-								? `${selectedIds.length} SEGMENTS`
-								: 'A SEGMENT'}
-						{:else}
-							DRAG ONTO A SEGMENT, OR SELECT ONE FIRST
-						{/if}
-					</span>
-				</div>
-			{/if}
-			<!-- Capped height with its own scroll: letting a few hundred chips
-			     wrap freely pushes the preview clean off the screen. -->
-			<div
-					bind:this={gridEl}
-					class="media-grid"
-					class:drag-locked={!!dragSourceId}
-				>
-				{#each sources as src, i (src.id)}
-					<div
-						class="media-chip"
-						class:active={selectedSourceId === src.id}
-						class:dragging={dragSourceId === src.id}
-					>
-						<button
-							class="media-chip-assign"
-							class:assignable
-							draggable="true"
-							title={assignable
-								? `Use "${src.name}" for the selected segment${selectedIds.length > 1 ? 's' : ''}, or drag it onto one. Double-click to preview it.`
-								: `${src.name}. Click to preview, drag it onto a segment, or select one and click`}
-							ondragstart={(e) => startSourceDrag(e, src.id)}
-							ondragend={endSourceDrag}
-							onclick={(e) => {
-								// With a segment selected the click belongs to assigning, so
-								// preview is the double-click there instead.
-								if (assignable) assignSources(selectedIds, src.id);
-								else openPreview(e, i);
-							}}
-							ondblclick={(e) => openPreview(e, i)}
-						>
-							{#if src.thumbUrl}
-								<img
-									class="media-chip-img"
-									src={src.thumbUrl}
-									alt=""
-									loading="lazy"
-									decoding="async"
-									draggable="false"
-								/>
-							{/if}
-							<!-- Tinted to match the band along the bottom of every segment
-							     that plays this source. -->
-							<span
-								class="media-chip-num"
-								style:border-left="3px solid {sourceColor(i + 1)}"
-							>
-								{i + 1}{#if src.kind === 'video'}<span class="media-chip-kind"
-										>▶</span
-									>{/if}
-							</span>
-							<span class="media-chip-name">{shortSourceName(src.name, 18)}</span>
-						</button>
-						<button
-							class="media-chip-remove"
-							title="Remove from the pool"
-							onclick={() => onRemoveSource?.(src.id)}>✕</button
-						>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{/if}
-	{#if previewIndex !== null}
-		<MediaLightbox
-			items={previewItems}
-			bind:index={previewIndex}
-			origin={previewOrigin}
-			onClose={() => (previewIndex = null)}
-		/>
-	{/if}
 </div>
 
 <style>
@@ -1602,194 +1440,6 @@
 	.seg-lbl.sel {
 		fill: var(--mosh);
 	}
-
-	/* ── Media bin ── */
-	.media-bin {
-		padding-bottom: 0.5rem;
-	}
-
-	.media-bin-head {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0 0.1rem 0.35rem;
-	}
-
-
-
-
-
-
-	.media-bin-hint {
-		color: #4a3c58;
-		font-size: 0.62rem;
-		font-family: monospace;
-		letter-spacing: 0.04em;
-	}
-
-	.media-bin-empty {
-		margin: 0;
-		padding: 0.6rem 0.2rem;
-		color: var(--text-4);
-		font-size: 0.62rem;
-		font-family: var(--font-mono);
-		letter-spacing: 0.12em;
-	}
-
-
-
-
-
-
-	/* Two rows tall, then scrolls — a wrapping grid of a few hundred chips
-	   would take the whole viewport and leave nothing for the preview. */
-	.media-grid {
-		display: flex;
-		flex-wrap: wrap;
-		align-content: flex-start;
-		gap: 0.35rem;
-		max-height: 94px;
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		scrollbar-width: thin;
-		scrollbar-color: #3a2e48 transparent;
-		/* Reserved so locking the scroll mid-drag can't reflow the chips. */
-		scrollbar-gutter: stable;
-	}
-
-	/* Dragging a chip toward the timeline drags it past the grid's bottom edge,
-	   which the browser reads as "autoscroll this container" — the chips slide
-	   away under the cursor mid-drag. Freezing the scroll for the duration is
-	   the only reliable way to stop it; the position is kept either way. */
-	.media-grid.drag-locked {
-		overflow-y: hidden;
-	}
-
-
-	.media-chip {
-		position: relative;
-		flex: 0 0 auto;
-		width: 44px;
-		height: 44px;
-		border: 1.5px solid #2e2438;
-		border-radius: 6px;
-		overflow: hidden;
-		transition: border-color 0.15s;
-	}
-
-	.media-chip:hover {
-		border-color: var(--mosh-dim);
-	}
-
-	.media-chip.active {
-		border-color: var(--mosh);
-		box-shadow: 0 0 0 1px rgba(216, 184, 248, 0.35);
-	}
-
-	.media-chip.dragging {
-		opacity: 0.45;
-		border-color: var(--live);
-	}
-
-	.media-chip-assign {
-		display: block;
-		position: relative;
-		width: 100%;
-		height: 100%;
-		padding: 0;
-		border: none;
-		background: #14101a;
-		/* Always draggable, so grab beats pointer even with nothing selected. */
-		cursor: grab;
-	}
-
-	.media-chip-assign:active {
-		cursor: grabbing;
-	}
-
-	/* A real <img> rather than a background: object-fit centres the crop
-	   predictably, and loading="lazy" keeps a few hundred offscreen chips from
-	   being decoded at once. */
-	.media-chip-img {
-		display: block;
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		object-position: center;
-	}
-
-	.media-chip-num {
-		position: absolute;
-		top: 0;
-		left: 0;
-		border-top-left-radius: 3px;
-		display: flex;
-		align-items: center;
-		gap: 2px;
-		padding: 1px 4px;
-		border-bottom-right-radius: 5px;
-		background: rgba(10, 6, 16, 0.82);
-		color: var(--mosh);
-		font-size: 9px;
-		font-family: monospace;
-		font-weight: 700;
-		line-height: 1.3;
-	}
-
-	.media-chip-kind {
-		color: var(--mosh-dim);
-		font-size: 7px;
-	}
-
-	/* Names in one batch share a long prefix, so showing them all the time is
-	   noise that also covers the thumbnail. Reveal on hover instead. */
-	.media-chip-name {
-		position: absolute;
-		inset: auto 0 0 0;
-		padding: 2px 3px;
-		background: rgba(10, 6, 16, 0.86);
-		color: #cdb6e0;
-		font-size: 8px;
-		font-family: monospace;
-		line-height: 1.25;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		opacity: 0;
-		transition: opacity 0.12s;
-	}
-
-	.media-chip:hover .media-chip-name {
-		opacity: 1;
-	}
-
-	.media-chip-remove {
-		position: absolute;
-		top: 1px;
-		right: 1px;
-		width: 15px;
-		height: 15px;
-		display: none;
-		align-items: center;
-		justify-content: center;
-		padding: 0;
-		border: none;
-		border-radius: 3px;
-		background: rgba(10, 6, 16, 0.8);
-		color: #e0c8f0;
-		font-size: 9px;
-		line-height: 1;
-		cursor: pointer;
-	}
-
-	.media-chip:hover .media-chip-remove {
-		display: flex;
-	}
-
-	.media-chip-remove:hover {
-		background: #8a3a4a;
-	}
-
 
 	/* Boundary handles: a hairline between two blocks with a wider invisible
 	   grab strip over it, the same shape as the text timeline's clip
@@ -1968,30 +1618,4 @@
 		border-color: var(--text-4);
 	}
 
-	@media (max-width: 800px) {
-		/* Smaller chips still — a phone has no screen to spare. */
-		.media-chip,
-		.media-chip-assign {
-			width: 38px;
-			height: 38px;
-		}
-
-		.media-grid {
-			max-height: 82px;
-			gap: 0.3rem;
-		}
-
-		/* No hover on touch: show the name band permanently instead. */
-		.media-chip-name {
-			opacity: 1;
-		}
-
-		.media-chip-remove {
-			display: flex;
-		}
-
-		.media-bin-hint {
-			display: none;
-		}
-	}
 </style>

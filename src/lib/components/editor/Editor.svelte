@@ -10,8 +10,6 @@
 		Pause,
 		Play,
 		Plus,
-		Shuffle,
-		Trash2,
 		Type,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
@@ -1907,29 +1905,8 @@
 
 	// ── Stack toolbar ────────────────────────────────────────────────────────
 	// The lanes' own actions, gathered into the stack's one toolbar rather than a
-	// header row each. The media bin is collapsed by default — a grid of chips is
-	// the tallest thing in the stack and it's only needed while assigning sources
-	// — and the choice is remembered.
-	const BIN_KEY = 'openmosh-seq-bin-open';
-	let binOpen = $state(readBinOpen());
+	// header row each.
 	let sourceInput = $state<HTMLInputElement | undefined>(undefined);
-
-	function readBinOpen(): boolean {
-		try {
-			return localStorage.getItem(BIN_KEY) === '1';
-		} catch {
-			return false;
-		}
-	}
-
-	function toggleBin() {
-		binOpen = !binOpen;
-		try {
-			localStorage.setItem(BIN_KEY, binOpen ? '1' : '0');
-		} catch {
-			// Private mode / storage blocked — remembered for this session only.
-		}
-	}
 
 	function addTextLane() {
 		pushTextHistory();
@@ -2588,51 +2565,6 @@
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
 			>
 				{#snippet toolbar()}
-					{#if isSequenceMode}
-						<div class="tl-tool-sep"></div>
-						<button
-							class="tl-tool-btn"
-							class:active={binOpen}
-							aria-expanded={binOpen}
-							title="Show the pool of images and videos the segments draw from"
-							onclick={toggleBin}
-						>
-							<Library size={12} /> Sources
-							<span class="tl-tool-count">{sequenceSources.length}</span>
-						</button>
-						{#if sequenceSources.length > 1}
-							<button
-								class="tl-tool-btn"
-								disabled={sequenceSegments.length === 0}
-								title={seqSelectedIds.length > 0
-									? `Deal the pool at random across the ${seqSelectedIds.length} selected segment${seqSelectedIds.length > 1 ? 's' : ''}`
-									: 'Deal the pool at random across every segment'}
-								onclick={() =>
-									randomizeSegmentSourcesFor(
-										seqSelectedIds.length > 0
-											? seqSelectedIds
-											: sequenceSegments.map((s) => s.id),
-									)}
-							>
-								<Shuffle size={11} />
-								{seqSelectedIds.length > 0 ? 'Shuffle selected' : 'Shuffle media'}
-							</button>
-							<button
-								class="tl-tool-btn danger"
-								title="Remove every added source from this song"
-								onclick={() => (showClearSourcesConfirm = true)}
-							>
-								<Trash2 size={11} />
-							</button>
-						{/if}
-						<button
-							class="tl-tool-btn"
-							title="Add images or videos to the pool"
-							onclick={() => sourceInput?.click()}
-						>
-							<Plus size={12} />
-						</button>
-					{/if}
 					{#if textTimeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<span class="tl-tool-label">Text</span>
@@ -2730,14 +2662,6 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
-						onAddSources={isSequenceMode
-							? (files) => void addSequenceSources(files)
-							: undefined}
-						onRemoveSource={isSequenceMode ? removeSequenceSource : undefined}
-						onClearSources={isSequenceMode
-							? () => (showClearSourcesConfirm = true)
-							: undefined}
-						{binOpen}
 					/>
 				{/if}
 			</TimelineStack>
@@ -2854,7 +2778,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Every image and video you added to this song is removed, and its segments go back to the original source. The file you opened with stays, along with media that other songs still use."
+			message="Every source but the one marked BASE is removed from this song, and its segments go back to playing the base. Media that other songs still use is kept."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger
