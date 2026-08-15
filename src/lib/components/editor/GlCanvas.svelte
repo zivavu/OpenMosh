@@ -1,5 +1,6 @@
 <script lang="ts">
    import { Minimize } from "lucide-svelte";
+   import type { Snippet } from "svelte";
    import type { EffectInstance } from "../../effects";
    import { ANIMATED_EFFECTS } from "../../gl/effect-shaders";
    import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
@@ -75,6 +76,9 @@
       /** Keep the animation loop running even when nothing else needs it — a
        * still image with a playing text timeline has no other reason to. */
       forceAnimation?: boolean;
+      /** Drawn over the whole preview box — for states where the canvas holds
+       * nothing worth looking at, like a sequence with an empty media pool. */
+      overlay?: Snippet;
    }
 
    let {
@@ -104,6 +108,7 @@
       textTimeline = null,
       textTime = 0,
       forceAnimation = false,
+      overlay = undefined,
    }: Props = $props();
 
    let frameTimes: number[] = [];
@@ -513,6 +518,9 @@
          aria-label="Effect preview canvas"
       ></canvas>
    {/if}
+   {#if overlay}
+      <div class="canvas-overlay">{@render overlay()}</div>
+   {/if}
    {#if error}
       <p class="error">{error}</p>
    {:else if showFps}
@@ -551,6 +559,18 @@
       max-height: 100%;
       border-radius: 2px;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+   }
+
+   /* Opaque: whatever is still on the canvas underneath is stale by the time
+	   anything wants to cover it. */
+   .canvas-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--ink);
+      z-index: 9;
    }
 
    .error {

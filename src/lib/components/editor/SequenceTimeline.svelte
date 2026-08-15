@@ -1436,7 +1436,11 @@
 	{#if hasMediaBin && binOpen}
 		{@const assignable = selectedIds.length > 0}
 		<div class="media-bin tl-chrome">
-			{#if !binHintDone || dragSourceId}
+			{#if sources.length === 0}
+				<p class="media-bin-empty">
+					THE POOL IS EMPTY — ADD IMAGES OR VIDEOS WITH ＋
+				</p>
+			{:else if !binHintDone || dragSourceId}
 				<div class="media-bin-head">
 					<span class="media-bin-hint">
 						{#if dragSourceId}
@@ -1503,13 +1507,11 @@
 							</span>
 							<span class="media-chip-name">{shortName(src.name, 18)}</span>
 						</button>
-						{#if !src.primary}
-							<button
-								class="media-chip-remove"
-								title="Remove from the pool"
-								onclick={() => onRemoveSource?.(src.id)}>✕</button
-							>
-						{/if}
+						<button
+							class="media-chip-remove"
+							title="Remove from the pool"
+							onclick={() => onRemoveSource?.(src.id)}>✕</button
+						>
 					</div>
 				{/each}
 			</div>
@@ -1621,6 +1623,15 @@
 		font-size: 0.62rem;
 		font-family: monospace;
 		letter-spacing: 0.04em;
+	}
+
+	.media-bin-empty {
+		margin: 0;
+		padding: 0.6rem 0.2rem;
+		color: var(--text-4);
+		font-size: 0.62rem;
+		font-family: var(--font-mono);
+		letter-spacing: 0.12em;
 	}
 
 
