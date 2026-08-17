@@ -63,6 +63,14 @@
 		type SequenceSegmentMode,
 		applyBpmToSegments,
 	} from '../../editor/sequence';
+	import {
+		appendFxLane,
+		findFxClip,
+		normalizeFxLanes,
+		resolveFxEffectsAt,
+		type FxLane,
+	} from '../../editor/fx-lanes';
+	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import { SequenceFrameDriver } from '../../editor/sequence-frames';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
@@ -109,6 +117,7 @@
 	import GlCanvas from './GlCanvas.svelte';
 	import SequenceGridView from './SequenceGridView.svelte';
 	import SequenceTimeline from './SequenceTimeline.svelte';
+	import FxLanes from './FxLanes.svelte';
 	import MoshGroup from './MoshGroup.svelte';
 	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
 	import RecordGroup from './RecordGroup.svelte';
@@ -519,6 +528,7 @@
 			sequenceSegments = savedSeq.segments ?? [];
 			restoreSequenceBpm(savedSeq.bpm ?? 0);
 			selectedSegmentId = null;
+			restoreFxLanes(savedSeq.fx);
 		}
 		restoreTextTimeline(savedSeq.text);
 		return true;
@@ -546,6 +556,7 @@
 			// deliberately left alone — see the pool restore effect.
 			sequenceSegments = [];
 			selectedSegmentId = null;
+			restoreFxLanes(undefined);
 		}
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
@@ -647,6 +658,13 @@
 	let sequenceSegments = $state<SequenceSegment[]>([]);
 	let selectedSegmentId = $state<string | null>(null);
 
+	// Stacked effect lanes over the source lane above. They carry no media — a
+	// clip only says "also run these effects here" — and their chains are
+	// appended to the source segment's, in lane order. See editor/fx-lanes.ts.
+	let fxLanes = $state<FxLane[]>([]);
+	let selectedFxClipId = $state<string | null>(null);
+	let selectedFxClipIds = $state<string[]>([]);
+
 	// With an external track the audio is the master clock (matches export,
 	// where the audio span sets the duration and the video loops inside it).
 	// Segments then live on the audio timeline, not the video's.
@@ -665,6 +683,8 @@
 		bpm?: number;
 		/** Absent on entries saved before the text timeline existed. */
 		text?: TextTimeline;
+		/** Absent on entries saved before fx lanes existed. */
+		fx?: FxLane[];
 	}>('openmosh-sequence');
 
 	// Keyed by master clock — that's what segment times are relative to.
@@ -717,6 +737,7 @@
 			sequenceSegments = saved.segments ?? [];
 			restoreSequenceBpm(saved.bpm ?? 0);
 			selectedSegmentId = null;
+			restoreFxLanes(saved.fx);
 		}
 		restoreTextTimeline(saved.text);
 	});
@@ -744,11 +765,12 @@
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const bpm = sequenceBpm;
 		const text = $state.snapshot(textTimeline) as TextTimeline;
+		const fx = $state.snapshot(fxLanes) as FxLane[];
 		const key = seqStoreKey;
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { segments: segs, bpm, text });
+			seqStore.save(key, { segments: segs, bpm, text, fx });
 		}, 300);
 	});
 
@@ -772,6 +794,7 @@
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
 			text: $state.snapshot(textTimeline) as TextTimeline,
+			fx: $state.snapshot(fxLanes) as FxLane[],
 		});
 	}
 
@@ -836,6 +859,70 @@
 		() => sequenceSegments,
 		() => seqMasterDuration,
 		getMoshOptions,
+	);
+
+	// ── FX lanes ─────────────────────────────────────────────────────────────
+	// Their own undo stack, for the same reason the text timeline has one: the
+	// sequence stack is typed to segments, and nudging an fx clip shouldn't
+	// rewind the source lane. Ctrl+Z routes here while an fx clip is selected.
+	const fxHistory = createSnapshotHistory<FxLane[]>([]);
+
+	function pushFxHistory(coalesceKey?: string) {
+		fxHistory.push($state.snapshot(fxLanes) as FxLane[], coalesceKey);
+	}
+
+	function setFxLanes(next: FxLane[]) {
+		fxLanes = next;
+	}
+
+	/** Adopt saved lanes, or clear back to none when a song has none. */
+	function restoreFxLanes(saved: FxLane[] | undefined) {
+		fxLanes = normalizeFxLanes(saved);
+		selectedFxClipId = null;
+		selectedFxClipIds = [];
+		fxHistory.reset(fxLanes);
+	}
+
+	function addFxLane() {
+		pushFxHistory();
+		fxLanes = appendFxLane(fxLanes);
+	}
+
+	// The panel edits one chain at a time, so the two lane selections are
+	// mutually exclusive: picking either drops the other. Written as a pair of
+	// one-way effects rather than one arbitrating effect — each only reacts to
+	// the selection it clears against, so whichever the user just made survives
+	// and the other settles to null on the next pass.
+	$effect(() => {
+		if (!selectedFxClipId) return;
+		untrack(() => (selectedSegmentId = null));
+	});
+
+	$effect(() => {
+		if (!selectedSegmentId) return;
+		untrack(() => {
+			selectedFxClipId = null;
+			selectedFxClipIds = [];
+		});
+	});
+
+	/** The fx clip the effects panel is editing, if one is selected. */
+	let selectedFxClip = $derived(
+		isSequenceMode ? (findFxClip(fxLanes, selectedFxClipId)?.clip ?? null) : null,
+	);
+
+	/**
+	 * The stacked chain for this frame. The selected clip is forced in so a tweak
+	 * is visible wherever the playhead sits — and, because forcing replaces its
+	 * lane's own contribution, the same instance can never land in the chain
+	 * twice (two passes would then share one feedback buffer).
+	 */
+	let fxChain = $derived(
+		isSequenceMode
+			? resolveFxEffectsAt(fxLanes, seqMasterTime(), {
+					forceClipId: selectedFxClipId,
+				})
+			: [],
 	);
 
 	// ── Sequence media pool ──────────────────────────────────────────────────
@@ -1227,8 +1314,16 @@
 	 * it every frame anyway, so proxying 39 objects per re-roll buys nothing.
 	 */
 	let seqPlaybackEffects = $state.raw<EffectInstance[] | null>(null);
-	/** What is actually on screen right now. */
-	let renderedEffects = $derived(seqPlaybackEffects ?? effects);
+	/**
+	 * What is actually on screen right now: the source lane's chain, then each
+	 * fx lane's, in lane order. GlRenderer runs a chain sequentially and keys
+	 * per-effect state by instanceId, so appending is exactly "and then run
+	 * these too".
+	 */
+	let renderedEffects = $derived.by(() => {
+		const base = seqPlaybackEffects ?? effects;
+		return fxChain.length === 0 ? base : [...base, ...fxChain];
+	});
 	let seqTransition = $state<ResolvedTransition | null>(null);
 	$effect(() => {
 		if (
@@ -1329,19 +1424,28 @@
 		return seg && seg.mode === 'static' ? seg : null;
 	}
 
-	// A hand-edit to a preset-filled segment: label gains a "*" and explicit
-	// preset overwrites stop clobbering it. Driven by explicit edit callbacks
-	// (not data watching) — the audio volume-link tick also mutates values.
+	// A hand-edit to a preset-filled segment or fx clip: the label gains a "*"
+	// and explicit preset overwrites stop clobbering it. Driven by explicit edit
+	// callbacks (not data watching) — the audio volume-link tick also mutates
+	// values.
 	function markPanelSegmentEdited() {
-		const seg = panelSelectedSegment();
-		if (seg && !seg.modified) seg.modified = true;
+		const target = selectedFxClip ?? panelSelectedSegment();
+		if (target && !target.modified) target.modified = true;
 	}
 
+	// An fx clip outranks a source segment: it's the more recent selection (the
+	// lanes clear their selection when a segment is picked, and vice versa), and
+	// it's the only thing the panel could mean while one is highlighted.
 	function getPanelEffects(): EffectInstance[] {
-		return panelSelectedSegment()?.effects ?? effects;
+		return selectedFxClip?.effects ?? panelSelectedSegment()?.effects ?? effects;
 	}
 
 	function setPanelEffects(v: EffectInstance[]) {
+		const clip = selectedFxClip;
+		if (clip) {
+			clip.effects = v;
+			return;
+		}
 		const seg = panelSelectedSegment();
 		if (seg) {
 			seg.effects = v;
@@ -1362,6 +1466,12 @@
 	// other edit into the single-mode history (pushed once the burst settles).
 	const panelBurst = new PanelBurstController({
 		onEditStart: () => {
+			// An fx clip edit belongs to the fx stack, so Ctrl+Z steps back the
+			// tweak rather than the source lane's last structural change.
+			if (selectedFxClip) {
+				pushFxHistory();
+				return;
+			}
 			if (panelSelectedSegment()) {
 				seqBoundaries.pushState(
 					$state.snapshot(sequenceSegments) as SequenceSegment[],
@@ -1567,6 +1677,11 @@
 			if (prev) textTimeline = prev;
 			return;
 		}
+		if (selectedFxClipId && fxHistory.canUndo) {
+			const prev = fxHistory.undo();
+			if (prev) fxLanes = prev;
+			return;
+		}
 		if (isSequenceMode) {
 			seqBoundaries.undo();
 			return;
@@ -1580,6 +1695,11 @@
 			if (next) textTimeline = next;
 			return;
 		}
+		if (selectedFxClipId && fxHistory.canRedo) {
+			const next = fxHistory.redo();
+			if (next) fxLanes = next;
+			return;
+		}
 		if (isSequenceMode) {
 			seqBoundaries.redo();
 			return;
@@ -1588,6 +1708,16 @@
 	}
 
 	function clearEffects() {
+		// A selected fx clip is what the panel is showing, so it's what a clear
+		// means — and unlike a segment its chain is never `effects`, so this has
+		// to be checked before the identity test below.
+		const clip = selectedFxClip;
+		if (clip) {
+			panelBeforeEdit();
+			clearEffectsFn(clip.effects);
+			clip.modified = true;
+			return;
+		}
 		// In sequence mode the live effects can be the selected segment's own
 		// array — a clear is a hand-edit to that segment.
 		const seg = panelSelectedSegment();
@@ -2604,6 +2734,17 @@
 							</button>
 						{/if}
 					{/if}
+					{#if isSequenceMode && seqMasterDuration > 0}
+						<div class="tl-tool-sep"></div>
+						<span class="tl-tool-label">FX</span>
+						<button
+							class="tl-tool-btn"
+							title="Add a stacked effect lane — its clips run after the segment's own chain"
+							onclick={addFxLane}
+						>
+							<Plus size={12} /> Lane
+						</button>
+					{/if}
 					{#if videoIsMaster}
 						<div class="tl-tool-sep"></div>
 						<SpeedControl
@@ -2680,6 +2821,15 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+					/>
+				{/if}
+				{#if isSequenceMode && fxLanes.length > 0}
+					<FxLanes
+						lanes={fxLanes}
+						bind:selectedClipId={selectedFxClipId}
+						bind:selectedClipIds={selectedFxClipIds}
+						onChange={setFxLanes}
+						onBeforeEdit={pushFxHistory}
 					/>
 				{/if}
 			</TimelineStack>
@@ -2762,11 +2912,11 @@
 				onEffectsReplaced={endPanelBurst}
 				onPresetUpdated={seqSyncPreset}
 				onPresetApplied={(preset) => {
-					const seg = panelSelectedSegment();
-					if (seg) {
-						seg.label = preset.name;
-						seg.presetName = preset.name;
-						seg.modified = false;
+					const target = selectedFxClip ?? panelSelectedSegment();
+					if (target) {
+						target.label = preset.name;
+						target.presetName = preset.name;
+						target.modified = false;
 					}
 				}}
 				onUserEdit={markPanelSegmentEdited}
