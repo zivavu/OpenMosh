@@ -12,7 +12,7 @@ import {
   type TextTimeline,
 } from "../text";
 import { openDecodableVideo } from "../video/decode";
-import { createFxEffectSource, type FxLane } from "./fx-lanes";
+import { createFxLayerSource, flattenFxLayers, type FxLane } from "./fx-lanes";
 import type { MoshOptions } from "./mosh";
 import {
   createSequenceEffectSource,
@@ -241,7 +241,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   // values written into it, and those must not reach the user's clips.
   const fxSource =
     seqSource && (sequence?.fxLanes?.length ?? 0) > 0
-      ? createFxEffectSource(() => sequence!.fxLanes, () => sequence!.moshOptions, {
+      ? createFxLayerSource(() => sequence!.fxLanes, () => sequence!.moshOptions, {
           clone: true,
         })
       : null;
@@ -332,10 +332,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     }
     // On a gap (no segment) keep the previous frame's effects.
     const base = seqSource!(t);
-    // Appended, never blended: the renderer runs a chain sequentially and keys
-    // per-effect state by instanceId, so this is "the segment's chain, and then
-    // the lanes'" — the same array the preview builds.
-    const stacked = fxSource?.(t) ?? [];
+    // The stacked lanes run after the segment's own chain. `effectsRef.current`
+    // is the flat form, which is what the recorder writes this frame's
+    // audio-link values into — the layers hold the same instances, so the
+    // renderer sees those values too.
+    const fxLayers = fxSource?.(t) ?? [];
+    const stacked = flattenFxLayers(fxLayers);
     const fx = base && stacked.length > 0 ? [...base, ...stacked] : base;
     if (fx) effectsRef!.current = fx;
     // Transition window at a segment boundary: blend the outgoing chain into
@@ -350,10 +352,14 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     if (tr && fx) {
       const progress = (t - tr.boundaryTime) / tr.transition.durationSec;
       const crossFade = outgoingSourceAt(t, segSourceId) !== null;
-      return (layers: ResolvedTextLayer[]) =>
+      // The stacked lanes run over the finished blend, not inside either side
+      // of it — the incoming chain is `fx` without that tail. Mirrors what
+      // GlCanvas does, so an export matches what was previewed.
+      const incoming = stacked.length > 0 ? base! : fx;
+      return (textLayers: ResolvedTextLayer[]) =>
         renderer.renderTransition(
           tr.effectsA,
-          fx,
+          incoming,
           tr.transition.type,
           progress,
           tr.transition.seed,
@@ -361,8 +367,20 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
           tr.transition.density ?? 1,
           time,
           crossFade,
-          layers,
+          textLayers,
+          fxLayers,
         );
+    }
+
+    // No transition, but lanes are stacked: render through the same layered
+    // call the preview uses, so a lane's fade ramps in the export too. The
+    // default path would flatten it into one chain and apply every lane at
+    // full strength. `base` carries this frame's audio-link values already —
+    // the recorder writes them into effectsRef.current, which holds the very
+    // same instances.
+    if (fxLayers.length > 0 && base) {
+      return (textLayers: ResolvedTextLayer[]) =>
+        renderer.render(base, time, textLayers, fxLayers);
     }
   };
 

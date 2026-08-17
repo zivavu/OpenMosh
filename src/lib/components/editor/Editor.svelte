@@ -67,8 +67,9 @@
 		appendFxLane,
 		applyBpmToFxLanes,
 		clearFxClips,
-		createFxEffectSource,
+		createFxLayerSource,
 		findFxClip,
+		flattenFxLayers,
 		normalizeFxLanes,
 		rollFxClips,
 		setFxClipsMode,
@@ -942,20 +943,21 @@
 	);
 
 	// Same resolver the export builds, so interval rolls reproduce exactly.
-	const previewFxSource = createFxEffectSource(
-		() => fxLanes,
-		getMoshOptions,
-	);
+	const previewFxSource = createFxLayerSource(() => fxLanes, getMoshOptions);
 
 	/**
-	 * The stacked chain for this frame. The selected clip is forced in so a tweak
-	 * is visible wherever the playhead sits — and, because forcing replaces its
-	 * lane's own contribution, the same instance can never land in the chain
-	 * twice (two passes would then share one feedback buffer).
+	 * The stacked lanes for this frame, with their fade weights. The selected
+	 * clip is forced in so a tweak is visible wherever the playhead sits — and,
+	 * because forcing replaces its lane's own contribution, the same instance
+	 * can never land in the chain twice (two passes would then share one
+	 * feedback buffer).
 	 */
-	let fxChain = $derived(
+	let fxLayers = $derived(
 		isSequenceMode ? previewFxSource(seqMasterTime(), selectedFxClipId) : [],
 	);
+
+	/** The same effects flat, for the panel-facing chain and the audio tick. */
+	let fxChain = $derived(flattenFxLayers(fxLayers));
 
 	// ── Sequence media pool ──────────────────────────────────────────────────
 	// Segments pick their source from here. The primary entry is the file the
@@ -2524,6 +2526,7 @@
 			<GlCanvas
 				{imageSrc}
 				effects={renderedEffects}
+				postLayers={fxLayers}
 				canvasWidth={resizeWidth || undefined}
 				canvasHeight={resizeHeight || undefined}
 				bind:canvasEl

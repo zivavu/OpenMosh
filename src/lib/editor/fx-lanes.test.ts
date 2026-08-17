@@ -5,8 +5,10 @@ import {
   appendFxLane,
   applyBpmToFxLanes,
   clearFxClips,
-  createFxEffectSource,
+  createFxLayerSource,
   createFxLane,
+  flattenFxLayers,
+  fxClipWeight,
   findFxClip,
   fxClipTick,
   normalizeFxLanes,
@@ -32,7 +34,9 @@ function resolveFxEffectsAt(
   time: number,
   opts: { forceClipId?: string | null } = {},
 ) {
-  return createFxEffectSource(() => lanes, () => OPTIONS)(time, opts.forceClipId);
+  return flattenFxLayers(
+    createFxLayerSource(() => lanes, () => OPTIONS)(time, opts.forceClipId),
+  );
 }
 
 /** Compare two chains by the fields that drive render output. */
@@ -141,8 +145,10 @@ describe("resolveFxEffectsAt", () => {
 });
 
 describe("createFxEffectSource", () => {
-  const source = (lanes: FxLane[], clone = false) =>
-    createFxEffectSource(() => lanes, () => OPTIONS, { clone });
+  const source = (lanes: FxLane[], clone = false) => {
+    const src = createFxLayerSource(() => lanes, () => OPTIONS, { clone });
+    return (t: number) => flattenFxLayers(src(t));
+  };
 
   test("clone keeps the export's per-frame values out of the user's clips", () => {
     const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
@@ -180,8 +186,10 @@ describe("interval clips", () => {
     effects: [],
   });
 
-  const source = (lanes: FxLane[]) =>
-    createFxEffectSource(() => lanes, () => OPTIONS);
+  const source = (lanes: FxLane[]) => {
+    const src = createFxLayerSource(() => lanes, () => OPTIONS);
+    return (t: number) => flattenFxLayers(src(t));
+  };
 
   test("tick counts re-rolls from the clip's own start, never below zero", () => {
     const c = auto("c1", 2, 6, 1);
@@ -200,7 +208,8 @@ describe("interval clips", () => {
   test("a second source with the same inputs reproduces the preview exactly", () => {
     const lanes = [lane("a", [auto("c1", 0, 8, 0.5)])];
     const preview = source(lanes);
-    const exported = createFxEffectSource(() => lanes, () => OPTIONS, { clone: true });
+    const exportSrc = createFxLayerSource(() => lanes, () => OPTIONS, { clone: true });
+    const exported = (t: number) => flattenFxLayers(exportSrc(t));
     for (const t of [0.1, 0.7, 1.4, 3.9]) {
       expect(renderShape(exported(t))).toEqual(renderShape(preview(t)));
     }
@@ -209,6 +218,69 @@ describe("interval clips", () => {
   test("the same seed and tick give the same roll on a fresh source", () => {
     const lanes = [lane("a", [auto("c1", 0, 8, 1)])];
     expect(renderShape(source(lanes)(2.5))).toEqual(renderShape(source(lanes)(2.5)));
+  });
+});
+
+describe("fxClipWeight", () => {
+  const faded = (fadeSec: number, start = 0, end = 10): FxClip => ({
+    ...clip("c1", start, end, []),
+    fadeSec,
+  });
+
+  test("a clip without a fade is fully applied everywhere", () => {
+    const c = clip("c1", 0, 10, []);
+    expect(fxClipWeight(c, 0)).toBe(1);
+    expect(fxClipWeight(c, 5)).toBe(1);
+  });
+
+  test("ramps from 0 at the start to 1 once the fade is done", () => {
+    const c = faded(2);
+    expect(fxClipWeight(c, 0)).toBe(0);
+    expect(fxClipWeight(c, 1)).toBeCloseTo(0.5, 5);
+    expect(fxClipWeight(c, 2)).toBe(1);
+    expect(fxClipWeight(c, 5)).toBe(1);
+  });
+
+  test("ramps back down to 0 at the end", () => {
+    const c = faded(2);
+    expect(fxClipWeight(c, 8)).toBe(1);
+    expect(fxClipWeight(c, 9)).toBeCloseTo(0.5, 5);
+    expect(fxClipWeight(c, 10)).toBe(0);
+  });
+
+  test("a fade longer than half the clip meets in the middle, never overlapping", () => {
+    // 4s clip, 10s fade: the ramps cap at 2s each and peak exactly at centre.
+    const c = faded(10, 0, 4);
+    expect(fxClipWeight(c, 2)).toBe(1);
+    expect(fxClipWeight(c, 1)).toBeCloseTo(0.5, 5);
+    expect(fxClipWeight(c, 3)).toBeCloseTo(0.5, 5);
+    expect(fxClipWeight(c, 0)).toBe(0);
+    expect(fxClipWeight(c, 4)).toBe(0);
+  });
+
+  test("never leaves [0, 1], even outside the clip", () => {
+    const c = faded(2);
+    expect(fxClipWeight(c, -5)).toBe(0);
+    expect(fxClipWeight(c, 50)).toBe(0);
+  });
+});
+
+describe("fade weights in the layer source", () => {
+  test("a fading clip reports its ramp, and a plain one reports full", () => {
+    const lanes = [
+      lane("a", [{ ...clip("c1", 0, 10, ["grain"]), fadeSec: 2 }]),
+      lane("b", [clip("c2", 0, 10, ["shift"])]),
+    ];
+    const at = createFxLayerSource(() => lanes, () => OPTIONS);
+    expect(at(1).map((l) => l.weight)).toEqual([0.5, 1]);
+    expect(at(5).map((l) => l.weight)).toEqual([1, 1]);
+  });
+
+  test("the clip being edited shows at full strength, fade or not", () => {
+    const lanes = [lane("a", [{ ...clip("c1", 0, 10, ["grain"]), fadeSec: 2 }])];
+    const at = createFxLayerSource(() => lanes, () => OPTIONS);
+    expect(at(1, "c1")[0].weight).toBe(1);
+    expect(at(1)[0].weight).toBe(0.5);
   });
 });
 
