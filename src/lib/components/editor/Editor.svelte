@@ -65,9 +65,13 @@
 	} from '../../editor/sequence';
 	import {
 		appendFxLane,
+		applyBpmToFxLanes,
+		clearFxClips,
+		createFxEffectSource,
 		findFxClip,
 		normalizeFxLanes,
-		resolveFxEffectsAt,
+		rollFxClips,
+		setFxClipsMode,
 		type FxLane,
 	} from '../../editor/fx-lanes';
 	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
@@ -888,6 +892,32 @@
 		fxLanes = appendFxLane(fxLanes);
 	}
 
+	function fxModeChange(
+		clipIds: string[],
+		mode: SequenceSegmentMode,
+		intervalSec?: number,
+		intervalBeats?: number | null,
+	) {
+		pushFxHistory();
+		fxLanes = setFxClipsMode(
+			fxLanes,
+			new Set(clipIds),
+			mode,
+			intervalSec,
+			intervalBeats,
+		);
+	}
+
+	function fxRoll(clipIds: string[]) {
+		pushFxHistory();
+		fxLanes = rollFxClips(fxLanes, new Set(clipIds), getMoshOptions());
+	}
+
+	function fxClear(clipIds: string[]) {
+		pushFxHistory();
+		fxLanes = clearFxClips(fxLanes, new Set(clipIds));
+	}
+
 	// The panel edits one chain at a time, so the two lane selections are
 	// mutually exclusive: picking either drops the other. Written as a pair of
 	// one-way effects rather than one arbitrating effect — each only reacts to
@@ -911,6 +941,12 @@
 		isSequenceMode ? (findFxClip(fxLanes, selectedFxClipId)?.clip ?? null) : null,
 	);
 
+	// Same resolver the export builds, so interval rolls reproduce exactly.
+	const previewFxSource = createFxEffectSource(
+		() => fxLanes,
+		getMoshOptions,
+	);
+
 	/**
 	 * The stacked chain for this frame. The selected clip is forced in so a tweak
 	 * is visible wherever the playhead sits — and, because forcing replaces its
@@ -918,11 +954,7 @@
 	 * twice (two passes would then share one feedback buffer).
 	 */
 	let fxChain = $derived(
-		isSequenceMode
-			? resolveFxEffectsAt(fxLanes, seqMasterTime(), {
-					forceClipId: selectedFxClipId,
-				})
-			: [],
+		isSequenceMode ? previewFxSource(seqMasterTime(), selectedFxClipId) : [],
 	);
 
 	// ── Sequence media pool ──────────────────────────────────────────────────
@@ -1607,12 +1639,18 @@
 		}
 	}
 
-	/** Correcting the BPM retimes every segment whose spacing was set in beats. */
+	/** Correcting the BPM retimes every segment — and every fx clip — whose
+	 * spacing was set in beats. */
 	function setSequenceBpm(bpm: number) {
 		bpmEpoch++;
 		sequenceBpm = bpm;
 		const retimed = applyBpmToSegments(sequenceSegments, bpm);
 		if (retimed !== sequenceSegments) seqBoundaries.commit(retimed);
+		const retimedFx = applyBpmToFxLanes(fxLanes, bpm);
+		if (retimedFx !== fxLanes) {
+			pushFxHistory();
+			fxLanes = retimedFx;
+		}
 	}
 
 	function seqTransitionChange(changes: SegmentTransitionChange[]) {
@@ -2831,6 +2869,10 @@
 						bind:selectedClipIds={selectedFxClipIds}
 						onChange={setFxLanes}
 						onBeforeEdit={pushFxHistory}
+						bpm={sequenceBpm}
+						onModeChange={fxModeChange}
+						onRoll={fxRoll}
+						onClear={fxClear}
 					/>
 				{/if}
 			</TimelineStack>

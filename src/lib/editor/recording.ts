@@ -241,7 +241,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   // values written into it, and those must not reach the user's clips.
   const fxSource =
     seqSource && (sequence?.fxLanes?.length ?? 0) > 0
-      ? createFxEffectSource(() => sequence!.fxLanes, { clone: true })
+      ? createFxEffectSource(() => sequence!.fxLanes, () => sequence!.moshOptions, {
+          clone: true,
+        })
       : null;
   const effectsRef = seqSource
     ? {

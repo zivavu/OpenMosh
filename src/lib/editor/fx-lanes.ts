@@ -16,17 +16,46 @@
 
 import { cloneEffectInstance, generateId, type EffectInstance } from "../effects";
 import { clipAt, type TimelineClip } from "../timeline/clips";
-import { cleanEffects } from "./sequence";
+import type { MoshOptions } from "./mosh";
+import {
+  beatsToSeconds,
+  cleanEffects,
+  DEFAULT_INTERVAL_SEC,
+  randomSeed,
+  rollEffects,
+  type SequenceSegmentMode,
+} from "./sequence";
 
-/** One span of extra effects on an fx lane. */
+/**
+ * One span of extra effects on an fx lane.
+ *
+ * "static": `effects` is the concrete, user-editable chain for the whole span.
+ * "interval": the chain is re-rolled deterministically every `intervalSec` from
+ * `seed`, exactly as an interval segment is — so preview and export agree.
+ */
 export interface FxClip extends TimelineClip {
   /** Display label: preset name, "mosh", "clean", … */
   label: string;
+  /** Absent on clips saved before interval mode; treated as "static". */
+  mode?: SequenceSegmentMode;
   /** Preset this clip was filled from, for the same re-sync rule as segments. */
   presetName?: string;
   /** Set once the user hand-edits a preset-filled clip. */
   modified?: boolean;
   effects: EffectInstance[];
+  /** "interval" mode: seconds between re-rolls. */
+  intervalSec?: number;
+  /** "interval" mode: the spacing in beats, when picked that way, so a later
+   * BPM correction can re-derive the seconds. */
+  intervalBeats?: number;
+  /** "interval" mode: base seed for per-tick rolls. */
+  seed?: number;
+}
+
+/** 0-based re-roll tick index inside an interval clip. */
+export function fxClipTick(clip: FxClip, time: number): number {
+  const interval = clip.intervalSec ?? DEFAULT_INTERVAL_SEC;
+  return Math.max(0, Math.floor((time - clip.start) / interval));
 }
 
 /**
@@ -42,7 +71,14 @@ export interface FxLane {
 }
 
 export function createFxClip(start: number, end: number): FxClip {
-  return { id: generateId(), start, end, label: "clean", effects: cleanEffects() };
+  return {
+    id: generateId(),
+    start,
+    end,
+    mode: "static",
+    label: "clean",
+    effects: cleanEffects(),
+  };
 }
 
 export function createFxLane(name: string): FxLane {
@@ -54,30 +90,23 @@ export function appendFxLane(lanes: FxLane[]): FxLane[] {
   return [...lanes, createFxLane(`FX ${lanes.length + 1}`)];
 }
 
-export interface ResolveFxOptions {
-  /**
-   * Clip being edited in the panel. Its lane contributes it whatever the
-   * playhead is over, and a lane holding it contributes nothing else — so a
-   * tweak is never invisible because the playhead sits past the clip, and the
-   * chain can't carry the same instanceId twice (which would have two passes
-   * sharing one feedback buffer). Preview only: export passes no override.
-   */
-  forceClipId?: string | null;
-}
-
 /**
- * The extra effects active at `time`, in lane order — which is chain order, so
- * reordering lanes reorders the passes. Returns a fresh array only when
- * something is active; the empty case returns a shared constant so the common
- * "no fx lanes here" frame doesn't churn the render loop's identity checks.
+ * The clips contributing at `time`, in lane order — which is chain order, so
+ * reordering lanes reorders the passes.
+ *
+ * `forceClipId` is the clip being edited in the panel: its lane contributes it
+ * whatever the playhead is over, and contributes nothing else — so a tweak is
+ * never invisible because the playhead sits past the clip, and the chain can't
+ * carry the same instanceId twice (which would leave two passes sharing one
+ * feedback buffer). Preview only; the export passes no override.
  */
-export function resolveFxEffectsAt(
+export function activeFxClips(
   lanes: FxLane[] | null | undefined,
   time: number,
-  { forceClipId }: ResolveFxOptions = {},
-): EffectInstance[] {
-  if (!lanes || lanes.length === 0) return EMPTY;
-  let out: EffectInstance[] | null = null;
+  forceClipId?: string | null,
+): FxClip[] {
+  if (!lanes || lanes.length === 0) return NO_CLIPS;
+  let out: FxClip[] | null = null;
   for (const lane of lanes) {
     if (!lane.enabled) continue;
     const forced = forceClipId
@@ -85,49 +114,83 @@ export function resolveFxEffectsAt(
       : undefined;
     const clip = forced ?? clipAt(lane, time);
     if (!clip) continue;
-    (out ??= []).push(...clip.effects);
+    (out ??= []).push(clip);
   }
-  return out ?? EMPTY;
+  return out ?? NO_CLIPS;
 }
 
 const EMPTY: EffectInstance[] = [];
+const NO_CLIPS: FxClip[] = [];
+
+export interface FxEffectSourceOptions {
+  /**
+   * Serve static clips as cached deep clones, so the export can write each
+   * frame's audio-link values into the chain it renders without those values
+   * landing in the clips the user is still editing. Same contract
+   * createSequenceEffectSource offers for static segments.
+   */
+  clone?: boolean;
+}
 
 /**
- * Time → stacked chain resolver, for the export path.
+ * Time → stacked chain resolver. Preview and export both build one of these,
+ * so a frame that was scrubbed past is the frame that gets written out:
+ * interval rolls are keyed by (clip, seed, tick, mosh options), which makes a
+ * fresh source built from the same inputs reproduce the preview exactly.
  *
- * `clone` serves cached deep copies, so the recorder can write each frame's
- * audio-link values into the chain it renders without those values landing in
- * the clips the user is still editing — the same contract
- * createSequenceEffectSource offers for static segments. Cached per clip rather
- * than per frame: a clip's chain is the same objects for its whole span, and
- * re-cloning 39 effects per frame is not.
+ * Returns a shared empty array when nothing is active, so the common "no fx
+ * lanes here" frame doesn't mint an array the render loop has to re-check.
  */
 export function createFxEffectSource(
   getLanes: () => FxLane[] | null | undefined,
-  { clone = false }: { clone?: boolean } = {},
-): (time: number) => EffectInstance[] {
+  getMoshOptions: () => MoshOptions,
+  { clone = false }: FxEffectSourceOptions = {},
+): (time: number, forceClipId?: string | null) => EffectInstance[] {
   const cache = new Map<string, EffectInstance[]>();
-  return (time: number) => {
-    const lanes = getLanes();
-    if (!lanes || lanes.length === 0) return EMPTY;
+  return (time: number, forceClipId?: string | null) => {
+    const clips = activeFxClips(getLanes(), time, forceClipId);
+    if (clips.length === 0) return EMPTY;
     let out: EffectInstance[] | null = null;
-    for (const lane of lanes) {
-      if (!lane.enabled) continue;
-      const clip = clipAt(lane, time);
-      if (!clip) continue;
-      if (!clone) {
-        (out ??= []).push(...clip.effects);
-        continue;
-      }
-      let cloned = cache.get(clip.id);
-      if (!cloned) {
-        cloned = cloneFxEffects(clip.effects);
-        cache.set(clip.id, cloned);
-      }
-      (out ??= []).push(...cloned);
+    for (const clip of clips) {
+      (out ??= []).push(...chainFor(clip, time, cache, clone, getMoshOptions));
     }
     return out ?? EMPTY;
   };
+}
+
+function chainFor(
+  clip: FxClip,
+  time: number,
+  cache: Map<string, EffectInstance[]>,
+  clone: boolean,
+  getMoshOptions: () => MoshOptions,
+): EffectInstance[] {
+  if (clip.mode !== "interval") {
+    if (!clone) return clip.effects;
+    // Cached per clip, not per frame: a static clip's chain is the same objects
+    // for its whole span, and re-cloning 39 effects per frame is not free.
+    let cloned = cache.get(clip.id);
+    if (!cloned) {
+      cloned = cloneFxEffects(clip.effects);
+      cache.set(clip.id, cloned);
+    }
+    return cloned;
+  }
+
+  const options = getMoshOptions();
+  const tick = fxClipTick(clip, time);
+  const seed = (clip.seed ?? 0) + tick * 7919;
+  // Options participate in the key so a settings change can't serve rolls
+  // generated under different mosh parameters — the preview/export mismatch
+  // createSequenceEffectSource guards against for the same reason.
+  const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}`;
+  let effects = cache.get(key);
+  if (!effects) {
+    effects = rollEffects(seed, options);
+    if (cache.size > 512) cache.clear();
+    cache.set(key, effects);
+  }
+  return effects;
 }
 
 /** Every effect instance held anywhere in the lanes (for feedback-buffer GC). */
@@ -139,6 +202,81 @@ export function allFxEffectIds(lanes: FxLane[] | null | undefined): string[] {
     }
   }
   return ids;
+}
+
+/** Apply an edit to every clip in `clipIds`, across lanes. */
+export function updateFxClips(
+  lanes: FxLane[],
+  clipIds: Set<string>,
+  fn: (clip: FxClip) => FxClip,
+): FxLane[] {
+  return lanes.map((lane) => {
+    if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
+    return { ...lane, clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)) };
+  });
+}
+
+/**
+ * Switch clips to a re-roll mode. Going to "interval" mints a seed if there
+ * isn't one, so the rolls are reproducible from the moment it's turned on;
+ * going back to "static" keeps the last concrete chain rather than blanking it.
+ */
+export function setFxClipsMode(
+  lanes: FxLane[],
+  clipIds: Set<string>,
+  mode: SequenceSegmentMode,
+  intervalSec?: number,
+  intervalBeats?: number | null,
+): FxLane[] {
+  return updateFxClips(lanes, clipIds, (clip) => {
+    if (mode === "static") {
+      return { ...clip, mode: "static", label: clip.presetName ?? clip.label };
+    }
+    return {
+      ...clip,
+      mode: "interval",
+      label: "auto",
+      seed: clip.seed ?? randomSeed(),
+      intervalSec: intervalSec ?? clip.intervalSec ?? DEFAULT_INTERVAL_SEC,
+      // null explicitly drops the beat link, so a later BPM change leaves a
+      // hand-picked duration alone; undefined leaves whatever was there.
+      intervalBeats:
+        intervalBeats === null ? undefined : (intervalBeats ?? clip.intervalBeats),
+    };
+  });
+}
+
+/**
+ * Re-roll clips. Static clips get a fresh concrete chain; interval clips get a
+ * new base seed, which re-rolls every tick in the span at once.
+ */
+export function rollFxClips(
+  lanes: FxLane[],
+  clipIds: Set<string>,
+  options: MoshOptions,
+): FxLane[] {
+  return updateFxClips(lanes, clipIds, (clip) => {
+    if (clip.mode === "interval") return { ...clip, seed: randomSeed() };
+    return {
+      ...clip,
+      effects: rollEffects(randomSeed(), options),
+      label: "mosh",
+      presetName: undefined,
+      modified: false,
+    };
+  });
+}
+
+/** Reset clips to an all-disabled chain. */
+export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
+  return updateFxClips(lanes, clipIds, (clip) => ({
+    ...clip,
+    mode: "static",
+    effects: cleanEffects(),
+    label: "clean",
+    presetName: undefined,
+    modified: false,
+  }));
 }
 
 /** The lane holding `clipId`, and the clip itself. */
@@ -179,9 +317,38 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
         start: clip.start ?? 0,
         end: clip.end ?? 0,
         label: clip.label ?? "clean",
+        mode: clip.mode === "interval" ? "interval" : ("static" as SequenceSegmentMode),
         presetName: clip.presetName,
         modified: clip.modified,
         effects: clip.effects,
+        intervalSec: clip.intervalSec,
+        intervalBeats: clip.intervalBeats,
+        seed: clip.seed,
       })),
   }));
+}
+
+/**
+ * Re-derive `intervalSec` for every clip whose interval was set in beats, so
+ * correcting the BPM retimes them. Returns the input by identity when nothing
+ * moves, so callers can skip a redundant commit — the same contract
+ * applyBpmToSegments holds for the source lane.
+ */
+export function applyBpmToFxLanes(lanes: FxLane[], bpm: number): FxLane[] {
+  if (bpm <= 0) return lanes;
+  let changed = false;
+  const out = lanes.map((lane) => {
+    let laneChanged = false;
+    const clips = lane.clips.map((c) => {
+      if (!c.intervalBeats) return c;
+      const sec = beatsToSeconds(c.intervalBeats, bpm);
+      if (Math.abs((c.intervalSec ?? 0) - sec) < 0.0005) return c;
+      laneChanged = true;
+      return { ...c, intervalSec: sec };
+    });
+    if (!laneChanged) return lane;
+    changed = true;
+    return { ...lane, clips };
+  });
+  return changed ? out : lanes;
 }
