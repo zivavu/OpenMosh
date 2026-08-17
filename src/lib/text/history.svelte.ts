@@ -1,58 +1,7 @@
+import { createSnapshotHistory } from "../timeline/snapshot-history.svelte";
 import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "./types";
 
-/**
- * Undo stack for the text timeline, separate from the effect-chain stacks
- * because those are typed to effect arrays and because rewinding a mosh is not
- * what a mistyped caption calls for.
- *
- * `coalesceKey` merges the ticks of one continuous gesture (a clip drag, a
- * slider sweep) into a single entry, so undo steps back a whole gesture.
- */
+/** Undo stack for the text timeline. See createSnapshotHistory. */
 export function createTextHistory() {
-  let history = $state<TextTimeline[]>([{ ...EMPTY_TEXT_TIMELINE }]);
-  let index = $state(0);
-  let lastKey: string | null = null;
-  const canUndo = $derived(index > 0);
-  const canRedo = $derived(index < history.length - 1);
-
-  function push(timeline: TextTimeline, coalesceKey?: string) {
-    if (coalesceKey && coalesceKey === lastKey) return;
-    lastKey = coalesceKey ?? null;
-    history.length = index + 1;
-    history.push($state.snapshot(timeline) as TextTimeline);
-    index = history.length - 1;
-  }
-
-  function undo(): TextTimeline | null {
-    if (!canUndo) return null;
-    lastKey = null;
-    index--;
-    return $state.snapshot(history[index]) as TextTimeline;
-  }
-
-  function redo(): TextTimeline | null {
-    if (!canRedo) return null;
-    lastKey = null;
-    index++;
-    return $state.snapshot(history[index]) as TextTimeline;
-  }
-
-  function reset(timeline: TextTimeline) {
-    history = [$state.snapshot(timeline) as TextTimeline];
-    index = 0;
-    lastKey = null;
-  }
-
-  return {
-    get canUndo() {
-      return canUndo;
-    },
-    get canRedo() {
-      return canRedo;
-    },
-    push,
-    undo,
-    redo,
-    reset,
-  };
+  return createSnapshotHistory<TextTimeline>({ ...EMPTY_TEXT_TIMELINE });
 }

@@ -1,10 +1,10 @@
 import type { EffectInstance } from "../effects/types";
 import { FONT_OPTIONS, type TextOverlayBlendMode } from "../text-overlay";
+import type { TimelineClip } from "../timeline/clips";
 
 export type TextAlign = "left" | "center" | "right";
 
-/** Shortest clip the timeline will create or leave behind after a resize. */
-export const MIN_CLIP_LENGTH = 0.05;
+export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
 /** How a lane's text is drawn, independent of when it is on screen. */
 export interface TextStyle {
@@ -28,11 +28,7 @@ export interface TextStyle {
 }
 
 /** One span of text on a lane. */
-export interface TextClip {
-  id: string;
-  /** Seconds on the mode's master timeline. */
-  start: number;
-  end: number;
+export interface TextClip extends TimelineClip {
   text: string;
 }
 
