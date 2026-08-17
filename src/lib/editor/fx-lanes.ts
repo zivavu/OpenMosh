@@ -22,6 +22,7 @@ import {
   type TimelineClip,
 } from "../timeline/clips";
 import { generateMosh, type MoshOptions } from "./mosh";
+import type { SegmentMoshSnapshot } from "./segment-mosh-history";
 import {
   beatsToSeconds,
   cleanEffects,
@@ -446,6 +447,37 @@ export function splitFxClipAt(lane: FxLane, at: number): FxLane {
   return {
     ...lane,
     clips: sortClips([...lane.clips.filter((c) => c.id !== clip.id), head, tail]),
+  };
+}
+
+/**
+ * Put a clip back to a remembered mosh. Timing is deliberately excluded, the
+ * same way restoreSegmentMosh leaves a segment's span alone: walking the mosh
+ * history must change what a clip renders, never where it sits.
+ */
+export function restoreFxClipMosh(
+  lanes: FxLane[],
+  clipId: string,
+  snap: SegmentMoshSnapshot,
+): FxLane[] {
+  return updateFxClips(lanes, new Set([clipId]), (clip) => ({
+    ...clip,
+    effects: snap.effects.map(cloneEffectInstance),
+    seed: snap.seed,
+    label: snap.label,
+    presetName: snap.presetName,
+    modified: snap.modified,
+  }));
+}
+
+/** The mosh-relevant slice of a clip, for the ←/→ history. */
+export function fxClipMoshSnapshot(clip: FxClip): SegmentMoshSnapshot {
+  return {
+    effects: clip.effects,
+    seed: clip.seed,
+    label: clip.label,
+    presetName: clip.presetName,
+    modified: clip.modified,
   };
 }
 
