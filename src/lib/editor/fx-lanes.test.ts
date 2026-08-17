@@ -1,15 +1,48 @@
 import { describe, expect, test } from "bun:test";
 import type { EffectInstance } from "../effects";
 import {
+  activeFxClips,
   appendFxLane,
+  applyBpmToFxLanes,
+  clearFxClips,
   createFxEffectSource,
   createFxLane,
   findFxClip,
+  fxClipTick,
   normalizeFxLanes,
-  resolveFxEffectsAt,
+  rollFxClips,
+  setFxClipsMode,
   type FxClip,
   type FxLane,
 } from "./fx-lanes";
+import type { MoshOptions } from "./mosh";
+
+const OPTIONS: MoshOptions = {
+  moshMin: 3,
+  moshMax: 6,
+  randomizeOrder: true,
+  moshAudioLink: false,
+  moshAudioLinkStrength: 0,
+  hasAudio: false,
+};
+
+/** The chain resolver as the preview builds it (no cloning). */
+function resolveFxEffectsAt(
+  lanes: FxLane[] | null | undefined,
+  time: number,
+  opts: { forceClipId?: string | null } = {},
+) {
+  return createFxEffectSource(() => lanes, () => OPTIONS)(time, opts.forceClipId);
+}
+
+/** Compare two chains by the fields that drive render output. */
+function renderShape(effects: EffectInstance[]) {
+  return effects.map((e) => ({
+    defId: e.defId,
+    enabled: e.enabled,
+    values: { ...e.values },
+  }));
+}
 
 function fx(id: string): EffectInstance {
   return {
@@ -108,21 +141,12 @@ describe("resolveFxEffectsAt", () => {
 });
 
 describe("createFxEffectSource", () => {
-  test("resolves the same chain the preview does", () => {
-    const lanes = [
-      lane("a", [clip("c1", 0, 5, ["grain"])]),
-      lane("b", [clip("c2", 0, 5, ["shift"])]),
-    ];
-    const src = createFxEffectSource(() => lanes);
-    expect(src(1).map((e) => e.defId)).toEqual(
-      resolveFxEffectsAt(lanes, 1).map((e) => e.defId),
-    );
-  });
+  const source = (lanes: FxLane[], clone = false) =>
+    createFxEffectSource(() => lanes, () => OPTIONS, { clone });
 
   test("clone keeps the export's per-frame values out of the user's clips", () => {
     const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
-    const src = createFxEffectSource(() => lanes, { clone: true });
-    const out = src(1);
+    const out = source(lanes, true)(1);
     expect(out[0]).not.toBe(lanes[0].clips[0].effects[0]);
     out[0].values.amount = 0.9;
     expect(lanes[0].clips[0].effects[0].values.amount).toBeUndefined();
@@ -130,18 +154,159 @@ describe("createFxEffectSource", () => {
 
   test("clones are cached per clip, so a span doesn't re-clone per frame", () => {
     const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
-    const src = createFxEffectSource(() => lanes, { clone: true });
+    const src = source(lanes, true);
     expect(src(1)[0]).toBe(src(2)[0]);
   });
 
   test("without clone the caller sees the live instances", () => {
     const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
-    const src = createFxEffectSource(() => lanes);
-    expect(src(1)[0]).toBe(lanes[0].clips[0].effects[0]);
+    expect(source(lanes)(1)[0]).toBe(lanes[0].clips[0].effects[0]);
   });
 
   test("no lanes resolves to nothing", () => {
-    expect(createFxEffectSource(() => [])(1)).toEqual([]);
+    expect(source([])(1)).toEqual([]);
+  });
+});
+
+describe("interval clips", () => {
+  const auto = (id: string, start: number, end: number, intervalSec: number): FxClip => ({
+    id,
+    start,
+    end,
+    label: id,
+    mode: "interval",
+    seed: 4242,
+    intervalSec,
+    effects: [],
+  });
+
+  const source = (lanes: FxLane[]) =>
+    createFxEffectSource(() => lanes, () => OPTIONS);
+
+  test("tick counts re-rolls from the clip's own start, never below zero", () => {
+    const c = auto("c1", 2, 6, 1);
+    expect(fxClipTick(c, 2)).toBe(0);
+    expect(fxClipTick(c, 2.9)).toBe(0);
+    expect(fxClipTick(c, 3)).toBe(1);
+    expect(fxClipTick(c, 0)).toBe(0);
+  });
+
+  test("the chain holds for a tick and changes at the next one", () => {
+    const src = source([lane("a", [auto("c1", 0, 8, 1)])]);
+    expect(renderShape(src(0.2))).toEqual(renderShape(src(0.9)));
+    expect(renderShape(src(0.2))).not.toEqual(renderShape(src(1.2)));
+  });
+
+  test("a second source with the same inputs reproduces the preview exactly", () => {
+    const lanes = [lane("a", [auto("c1", 0, 8, 0.5)])];
+    const preview = source(lanes);
+    const exported = createFxEffectSource(() => lanes, () => OPTIONS, { clone: true });
+    for (const t of [0.1, 0.7, 1.4, 3.9]) {
+      expect(renderShape(exported(t))).toEqual(renderShape(preview(t)));
+    }
+  });
+
+  test("the same seed and tick give the same roll on a fresh source", () => {
+    const lanes = [lane("a", [auto("c1", 0, 8, 1)])];
+    expect(renderShape(source(lanes)(2.5))).toEqual(renderShape(source(lanes)(2.5)));
+  });
+});
+
+describe("setFxClipsMode", () => {
+  test("switching to interval mints a seed and keeps the spacing", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const [out] = setFxClipsMode(lanes, new Set(["c1"]), "interval", 0.5, 1);
+    expect(out.clips[0].mode).toBe("interval");
+    expect(out.clips[0].seed).toBeGreaterThan(0);
+    expect(out.clips[0].intervalSec).toBe(0.5);
+    expect(out.clips[0].intervalBeats).toBe(1);
+  });
+
+  test("a null beat count drops the beat link, so a BPM change won't retime it", () => {
+    const lanes = [lane("a", [{ ...clip("c1", 0, 5, []), intervalBeats: 2 }])];
+    const [out] = setFxClipsMode(lanes, new Set(["c1"]), "interval", 1, null);
+    expect(out.clips[0].intervalBeats).toBeUndefined();
+  });
+
+  test("going back to static keeps the chain rather than blanking it", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const [out] = setFxClipsMode(lanes, new Set(["c1"]), "static");
+    expect(out.clips[0].mode).toBe("static");
+    expect(out.clips[0].effects.map((e) => e.defId)).toEqual(["grain"]);
+  });
+
+  test("clips outside the selection are untouched, by identity", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, [])]), lane("b", [clip("c2", 0, 5, [])])];
+    const out = setFxClipsMode(lanes, new Set(["c1"]), "interval");
+    expect(out[1]).toBe(lanes[1]);
+  });
+});
+
+describe("rollFxClips", () => {
+  test("an interval clip gets a new seed, not a new chain", () => {
+    const lanes = [
+      lane("a", [{ ...clip("c1", 0, 5, ["grain"]), mode: "interval" as const, seed: 1 }]),
+    ];
+    const [out] = rollFxClips(lanes, new Set(["c1"]), OPTIONS);
+    expect(out.clips[0].seed).not.toBe(1);
+    expect(out.clips[0].effects.map((e) => e.defId)).toEqual(["grain"]);
+  });
+
+  test("a static clip gets a fresh chain and drops its preset link", () => {
+    const lanes = [
+      lane("a", [{ ...clip("c1", 0, 5, ["grain"]), presetName: "vhs", modified: true }]),
+    ];
+    const [out] = rollFxClips(lanes, new Set(["c1"]), OPTIONS);
+    expect(out.clips[0].label).toBe("mosh");
+    expect(out.clips[0].presetName).toBeUndefined();
+    expect(out.clips[0].modified).toBe(false);
+    expect(out.clips[0].effects.length).toBeGreaterThan(0);
+  });
+});
+
+describe("clearFxClips", () => {
+  test("resets to a static, all-disabled chain", () => {
+    const lanes = [
+      lane("a", [{ ...clip("c1", 0, 5, ["grain"]), mode: "interval" as const }]),
+    ];
+    const [out] = clearFxClips(lanes, new Set(["c1"]));
+    expect(out.clips[0].mode).toBe("static");
+    expect(out.clips[0].label).toBe("clean");
+    expect(out.clips[0].effects.every((e) => !e.enabled)).toBe(true);
+  });
+});
+
+describe("applyBpmToFxLanes", () => {
+  test("retimes beat-set clips and leaves second-set ones alone", () => {
+    const lanes = [
+      lane("a", [
+        { ...clip("c1", 0, 5, []), intervalBeats: 1, intervalSec: 0.5 },
+        { ...clip("c2", 5, 9, []), intervalSec: 0.25 },
+      ]),
+    ];
+    const [out] = applyBpmToFxLanes(lanes, 120);
+    expect(out.clips[0].intervalSec).toBeCloseTo(0.5, 5);
+    expect(out.clips[1].intervalSec).toBe(0.25);
+
+    const [changed] = applyBpmToFxLanes(lanes, 60);
+    expect(changed.clips[0].intervalSec).toBeCloseTo(1, 5);
+  });
+
+  test("returns the input by identity when nothing moves", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, [])])];
+    expect(applyBpmToFxLanes(lanes, 120)).toBe(lanes);
+    expect(applyBpmToFxLanes(lanes, 0)).toBe(lanes);
+  });
+});
+
+describe("activeFxClips", () => {
+  test("returns the contributing clips in lane order", () => {
+    const lanes = [
+      lane("a", [clip("c1", 0, 5, [])]),
+      lane("b", [clip("c2", 0, 5, [])], false),
+      lane("c", [clip("c3", 0, 5, [])]),
+    ];
+    expect(activeFxClips(lanes, 1).map((c) => c.id)).toEqual(["c1", "c3"]);
   });
 });
 

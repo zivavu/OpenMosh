@@ -1,11 +1,16 @@
 <script lang="ts">
-	import { Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import {
 		createFxClip,
 		type FxClip,
 		type FxLane,
 	} from '../../editor/fx-lanes';
+	import {
+		BEAT_INTERVALS,
+		intervalLabel,
+		type SequenceSegmentMode,
+	} from '../../editor/sequence';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import {
@@ -34,6 +39,16 @@
 		onChange: (lanes: FxLane[]) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
+		/** Beats per minute, when known — unlocks the beat-spaced re-roll options. */
+		bpm?: number;
+		onModeChange?: (
+			clipIds: string[],
+			mode: SequenceSegmentMode,
+			intervalSec?: number,
+			intervalBeats?: number | null,
+		) => void;
+		onRoll?: (clipIds: string[]) => void;
+		onClear?: (clipIds: string[]) => void;
 	}
 
 	let {
@@ -42,6 +57,10 @@
 		selectedClipIds = $bindable([]),
 		onChange,
 		onBeforeEdit,
+		bpm = 0,
+		onModeChange,
+		onRoll,
+		onClear,
 	}: Props = $props();
 
 	// One axis for the whole stack: zoom, pan and playhead-following all live in
@@ -106,6 +125,47 @@
 			else if (pruned.length !== selectedClipIds.length) selectedClipIds = pruned;
 		});
 	});
+
+	// ── Clip toolbar ─────────────────────────────────────────────────────────
+	// Every action fans out over the whole selection; a value the selection
+	// disagrees on renders blank until the user picks one, which then applies to
+	// all of them — the same convention the source lane's toolbar follows.
+	let selectedClips = $derived(
+		lanes.flatMap((l) => l.clips.filter((c) => selectedClipIds.includes(c.id))),
+	);
+	let many = $derived(selectedClips.length > 1);
+
+	function commonValue<T>(values: T[]): T | undefined {
+		return values.every((v) => v === values[0]) ? values[0] : undefined;
+	}
+
+	let commonMode = $derived(
+		commonValue(selectedClips.map((c) => c.mode ?? 'static')),
+	);
+	let commonIntervalSec = $derived(
+		commonValue(selectedClips.map((c) => c.intervalSec)),
+	);
+	let commonIntervalBeats = $derived(
+		commonValue(selectedClips.map((c) => c.intervalBeats)),
+	);
+	let hasInterval = $derived(
+		selectedClips.every((c) => c.intervalSec !== undefined),
+	);
+
+	let intervalValue = $derived.by(() => {
+		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
+		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
+			return '';
+		}
+		return String(commonIntervalSec);
+	});
+
+	/** A clip with no spacing yet takes one beat, or a flat second without a BPM. */
+	function switchToAuto() {
+		if (hasInterval) onModeChange?.(selectedClipIds, 'interval');
+		else if (bpm > 0) onModeChange?.(selectedClipIds, 'interval', 60 / bpm, 1);
+		else onModeChange?.(selectedClipIds, 'interval', 1, null);
+	}
 
 	/** Clips are placed freely — no grid, nothing to snap to. */
 	function timeAt(clientX: number): number {
@@ -408,17 +468,24 @@
 					{@const width = vp.toPct(clip.end) - left}
 					{@const edge = edgeWidth(clip)}
 					{#if left < 100 && left + width > 0}
+						{@const interval = clip.mode === 'interval'}
 						{@const active = clip.effects.filter((e) => e.enabled).length}
+						{@const label = interval
+							? intervalLabel(clip.intervalSec, clip.intervalBeats)
+							: clip.label}
 						<div
 							class="clip"
 							class:selected={selectedClipIds.includes(clip.id)}
 							class:primary={selectedClipIds.length > 1 &&
 								clip.id === selectedClipId}
 							class:muted={!lane.enabled}
+							class:interval
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
-							title="{clip.label} — {active} effect{active === 1 ? '' : 's'}"
+							title={interval
+								? `Re-rolls every ${label}`
+								: `${clip.label} — ${active} effect${active === 1 ? '' : 's'}`}
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) => onClipPointerDown(e, lane.id, clip.id, 'move')}
@@ -431,7 +498,7 @@
 									onClipPointerDown(e, lane.id, clip.id, 'start')}
 							></span>
 							{#if clipPx(clip) >= MIN_LABEL_PX}
-								<span class="clip-label">{clip.label}</span>
+								<span class="clip-label">{label}</span>
 							{/if}
 							<span
 								class="clip-edge end"
@@ -459,6 +526,84 @@
 			</div>
 		</div>
 	{/each}
+
+	{#if selectedClips.length > 0 && onModeChange}
+		<div class="fx-toolbar tl-chrome">
+			<span class="tl-tool-label">
+				{many ? `${selectedClips.length} clips` : selectedClips[0].label}
+			</span>
+			<button
+				class="tl-tool-btn"
+				title={commonMode === 'interval'
+					? 'New random seed'
+					: many
+						? 'Random mosh for each selected clip'
+						: 'Random mosh for this clip'}
+				onclick={() => onRoll?.(selectedClipIds)}
+			>
+				<Dices size={12} /> Mosh
+			</button>
+			<button
+				class="tl-tool-btn"
+				title={many ? "Clear the selected clips' effects" : "Clear this clip's effects"}
+				onclick={() => onClear?.(selectedClipIds)}
+			>
+				<Eraser size={12} /> Clear
+			</button>
+
+			<div class="tl-tool-sep"></div>
+			<div class="fx-mode">
+				<button
+					class="tl-tool-btn"
+					class:active={commonMode === 'static'}
+					onclick={() => onModeChange?.(selectedClipIds, 'static')}
+				>
+					Static
+				</button>
+				<button
+					class="tl-tool-btn"
+					class:active={commonMode === 'interval'}
+					onclick={switchToAuto}
+				>
+					Auto
+				</button>
+			</div>
+			{#if commonMode === 'interval'}
+				<select
+					class="fx-select"
+					value={intervalValue}
+					title="How often this clip re-rolls its mosh"
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v === '') return;
+						if (v.startsWith('b')) {
+							const beats = Number(v.slice(1));
+							onModeChange?.(selectedClipIds, 'interval', (60 / bpm) * beats, beats);
+						} else {
+							// Picking a plain duration drops the beat link, so a later BPM
+							// change leaves it alone.
+							onModeChange?.(selectedClipIds, 'interval', Number(v), null);
+						}
+					}}
+				>
+					{#if intervalValue === ''}
+						<option value="" disabled>—</option>
+					{/if}
+					{#if bpm > 0}
+						{#each BEAT_INTERVALS as opt}
+							<option value={`b${opt.beats}`}>{opt.label}</option>
+						{/each}
+					{/if}
+					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
+						<!-- String, not the number: the select's value is a string and Svelte
+						     matches an option by strict equality, so a numeric option value
+						     never matches and the picker renders blank. -->
+						<option value={String(sec)}>every {sec}s</option>
+					{/each}
+				</select>
+			{/if}
+		</div>
+	{/if}
 
 	{#if lanePendingDelete}
 		{@const count = lanePendingDelete.clips.length}
@@ -513,6 +658,51 @@
 		text-overflow: ellipsis;
 	}
 
+	.fx-toolbar {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		height: 30px;
+		flex-shrink: 0;
+		padding: 0 0.25rem;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.fx-toolbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.fx-mode {
+		display: flex;
+	}
+
+	.fx-mode :global(.tl-tool-btn:first-child) {
+		border-right-color: transparent;
+		border-radius: 4px 0 0 4px;
+	}
+
+	.fx-mode :global(.tl-tool-btn:last-child) {
+		border-radius: 0 4px 4px 0;
+	}
+
+	/* The lane's own accent, rather than the stack toolbar's blue. */
+	.fx-mode :global(.tl-tool-btn.active) {
+		border-color: var(--mosh);
+		background: rgba(198, 162, 234, 0.12);
+		color: var(--mosh);
+	}
+
+	.fx-select {
+		padding: 0.15rem 0.25rem;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--surface);
+		color: var(--text-2);
+		font-size: 0.65rem;
+		font-family: inherit;
+	}
+
 	.lane-track {
 		border: 1px solid var(--line);
 		border-radius: 4px;
@@ -530,10 +720,10 @@
 		bottom: 3px;
 		display: flex;
 		align-items: center;
-		border: 1px solid #6b4a86;
+		border: 1px solid var(--mosh-dim);
 		border-radius: 3px;
-		background: #3b2b4d;
-		color: #e8dcf2;
+		background: #33264a;
+		color: var(--mosh);
 		font-size: 0.68rem;
 		cursor: grab;
 		overflow: hidden;
@@ -542,17 +732,23 @@
 	}
 
 	.clip.selected {
-		border-color: #b98ce0;
-		background: #55396f;
+		border-color: var(--mosh);
+		background: var(--mosh-dim);
 	}
 
 	/* Which of a multi-selection the effects panel is editing. */
 	.clip.primary {
-		box-shadow: inset 0 0 0 1px #b98ce0;
+		box-shadow: inset 0 0 0 1px var(--mosh);
 	}
 
 	.clip.muted {
 		opacity: 0.4;
+	}
+
+	/* Dashed, because the chain under it is re-rolled rather than fixed —
+	   the same "this isn't one held value" reading the label gives. */
+	.clip.interval {
+		border-style: dashed;
 	}
 
 	.clip-label {
@@ -581,7 +777,7 @@
 	}
 
 	.clip-edge:hover {
-		background: #b98ce0;
+		background: var(--mosh);
 	}
 
 	.clip-boundary {
@@ -606,6 +802,6 @@
 
 	.clip-boundary:hover::after {
 		width: 2px;
-		background: #b98ce0;
+		background: var(--mosh);
 	}
 </style>
