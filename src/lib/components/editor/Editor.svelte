@@ -70,10 +70,13 @@
 		createFxLayerSource,
 		findFxClip,
 		flattenFxLayers,
+		fxClipMoshSnapshot,
 		MAX_FX_LANES,
+		restoreFxClipMosh,
 		normalizeFxLanes,
 		rollFxClips,
 		setFxClipsMode,
+		type FxClip,
 		type FxLane,
 	} from '../../editor/fx-lanes';
 	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
@@ -879,6 +882,9 @@
 
 	function setFxLanes(next: FxLane[]) {
 		fxLanes = next;
+		// Splits, deletes and undo retire clip ids — drop their mosh stacks so a
+		// later clip can't inherit rolls that were never its own.
+		fxMoshHistory.retain(next.flatMap((l) => l.clips.map((c) => c.id)));
 	}
 
 	/** Adopt saved lanes, or clear back to none when a song has none. */
@@ -914,9 +920,46 @@
 		);
 	}
 
+	// ←/→ walk one fx clip's moshes, the same way they walk a segment's. Its own
+	// stack per clip, keyed by clip id — SegmentMoshHistory is agnostic about
+	// what the id names, and an FxClip carries exactly the fields it snapshots.
+	const fxMoshHistory = new SegmentMoshHistory();
+
+	/**
+	 * The fx clip the mosh gestures act on: the selected one, and only that.
+	 *
+	 * No playhead fallback, unlike segments — several lanes can hold a clip at
+	 * one time, so "the clip under the playhead" names no single thing. With
+	 * nothing selected the gestures stay with the source lane, which is what
+	 * they did before fx lanes existed.
+	 */
+	function activeFxClip(): FxClip | null {
+		return selectedFxClip;
+	}
+
+	/**
+	 * Roll the given clips. Mosh history only — never the fx edit stack: a mosh
+	 * is not a hand-edit, and recording it would leave a Ctrl+Z entry behind
+	 * every arrow press, with the two histories driving each other. Same rule
+	 * applySegmentMosh follows for the source lane.
+	 */
 	function fxRoll(clipIds: string[]) {
-		pushFxHistory();
-		fxLanes = rollFxClips(fxLanes, new Set(clipIds), getMoshOptions());
+		const ids = new Set(clipIds);
+		for (const clip of fxClipsById(ids)) {
+			fxMoshHistory.seed(clip.id, fxClipMoshSnapshot($state.snapshot(clip) as FxClip));
+		}
+		fxLanes = rollFxClips(fxLanes, ids, getMoshOptions());
+		for (const clip of fxClipsById(ids)) {
+			fxMoshHistory.push(clip.id, fxClipMoshSnapshot($state.snapshot(clip) as FxClip));
+		}
+	}
+
+	function fxClipsById(ids: Set<string>): FxClip[] {
+		return fxLanes.flatMap((l) => l.clips.filter((c) => ids.has(c.id)));
+	}
+
+	function applyFxClipMosh(clipId: string, snap: SegmentMoshSnapshot) {
+		fxLanes = restoreFxClipMosh(fxLanes, clipId, snap);
 	}
 
 	function fxClear(clipIds: string[]) {
@@ -1685,6 +1728,16 @@
 
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
+		// A selected fx clip is what every other panel action is aimed at, so a
+		// mosh means that clip — not a fresh roll of the whole segment chain
+		// underneath it.
+		const clip = activeFxClip();
+		if (clip) {
+			const snap = fxMoshHistory.redo(clip.id);
+			if (snap) applyFxClipMosh(clip.id, snap);
+			else fxRoll([clip.id]);
+			return;
+		}
 		// Sequence mode: the mosh group is hidden, so the arrows drive the
 		// selected (or playhead-active) segment's own mosh history instead. The
 		// single-mode stack stays out of it even when no segment is active —
@@ -1702,6 +1755,12 @@
 
 	/** ← : back through the mosh history. Never touches the edit history. */
 	function undoMosh() {
+		const clip = activeFxClip();
+		if (clip) {
+			const snap = fxMoshHistory.undo(clip.id);
+			if (snap) applyFxClipMosh(clip.id, snap);
+			return;
+		}
 		if (inSequenceMode()) {
 			const seg = activeSequenceSegment();
 			if (seg) {

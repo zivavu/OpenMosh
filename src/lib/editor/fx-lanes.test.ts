@@ -9,12 +9,14 @@ import {
   createFxLayerSource,
   createFxLane,
   flattenFxLayers,
+  fxClipMoshSnapshot,
   fxClipWeight,
   findFxClip,
   fxClipTick,
   MAX_FX_LANES,
   normalizeFxLanes,
   paletteEffects,
+  restoreFxClipMosh,
   rollFxClips,
   setLanePalette,
   setFxClipsMode,
@@ -544,6 +546,55 @@ describe("splitFxClipAt", () => {
     expect(splitFxClipAt(l, 9.999)).toBe(l);
     // On the start edge: inside the clip, but the head would be zero-length.
     expect(splitFxClipAt(l, 0)).toBe(l);
+  });
+});
+
+describe("fx clip mosh history helpers", () => {
+  test("a snapshot carries what a mosh changes, and nothing about timing", () => {
+    const c: FxClip = {
+      ...clip("c1", 2, 8, ["grain"]),
+      seed: 5,
+      presetName: "vhs",
+      modified: true,
+    };
+    const snap = fxClipMoshSnapshot(c);
+    expect(snap).toEqual({
+      effects: c.effects,
+      seed: 5,
+      label: "c1",
+      presetName: "vhs",
+      modified: true,
+    });
+    expect(snap).not.toHaveProperty("start");
+    expect(snap).not.toHaveProperty("end");
+  });
+
+  test("restoring puts the chain back without moving the clip", () => {
+    const lanes = [
+      lane("a", [{ ...clip("c1", 2, 8, ["shift"]), fadeSec: 0.5, seed: 9 }]),
+    ];
+    const snap = fxClipMoshSnapshot(clip("old", 0, 1, ["grain"]));
+    const [out] = restoreFxClipMosh(lanes, "c1", snap);
+    const c = out.clips[0];
+    expect(c.effects.map((e) => e.defId)).toEqual(["grain"]);
+    // Span and fade are the clip's, not the snapshot's.
+    expect([c.start, c.end]).toEqual([2, 8]);
+    expect(c.fadeSec).toBe(0.5);
+    expect(c.label).toBe("old");
+  });
+
+  test("restored instances are copies, so the stack can be replayed", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["shift"])])];
+    const source = clip("old", 0, 1, ["grain"]);
+    const snap = fxClipMoshSnapshot(source);
+    const [out] = restoreFxClipMosh(lanes, "c1", snap);
+    expect(out.clips[0].effects[0]).not.toBe(source.effects[0]);
+  });
+
+  test("clips other than the target are untouched, by identity", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, [])]), lane("b", [clip("c2", 0, 5, [])])];
+    const out = restoreFxClipMosh(lanes, "c1", fxClipMoshSnapshot(clip("x", 0, 1, [])));
+    expect(out[1]).toBe(lanes[1]);
   });
 });
 
