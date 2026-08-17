@@ -12,6 +12,7 @@ import {
   type TextTimeline,
 } from "../text";
 import { openDecodableVideo } from "../video/decode";
+import { createFxEffectSource, type FxLane } from "./fx-lanes";
 import type { MoshOptions } from "./mosh";
 import {
   createSequenceEffectSource,
@@ -52,6 +53,8 @@ export interface RecordingContext {
     masterIsAudio: boolean;
     /** Media pool segments draw from. Empty/absent = every segment uses `file`. */
     sources?: SequenceSource[];
+    /** Stacked effect lanes, appended to each segment's chain in lane order. */
+    fxLanes?: FxLane[];
   } | null;
   onProgress: (p: number) => void;
   onFinalizing: () => void;
@@ -232,6 +235,14 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       : null;
   const seqTimeAt = (time: number): number =>
     sequence?.masterIsAudio ? audioStart + time : sourceTimeAt(time);
+
+  // Stacked lanes append to whatever the source lane resolved. Cloned for the
+  // same reason static segments are: this chain gets each frame's audio-link
+  // values written into it, and those must not reach the user's clips.
+  const fxSource =
+    seqSource && (sequence?.fxLanes?.length ?? 0) > 0
+      ? createFxEffectSource(() => sequence!.fxLanes, { clone: true })
+      : null;
   const effectsRef = seqSource
     ? {
         current: effects.map(
@@ -318,7 +329,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       }
     }
     // On a gap (no segment) keep the previous frame's effects.
-    const fx = seqSource!(t);
+    const base = seqSource!(t);
+    // Appended, never blended: the renderer runs a chain sequentially and keys
+    // per-effect state by instanceId, so this is "the segment's chain, and then
+    // the lanes'" — the same array the preview builds.
+    const stacked = fxSource?.(t) ?? [];
+    const fx = base && stacked.length > 0 ? [...base, ...stacked] : base;
     if (fx) effectsRef!.current = fx;
     // Transition window at a segment boundary: blend the outgoing chain into
     // the incoming one. Returned as a closure so the recorder applies this
