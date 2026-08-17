@@ -9,6 +9,11 @@ import { resetAutoRange, type AudioResponse } from './auto-range';
 import type { EffectInstance } from '../effects';
 import type { SpectrumData } from '../types';
 
+/** Element-clock gap that reads as a jump rather than as step granularity. */
+const CLOCK_RESYNC = 0.25;
+/** How much of the interpolation error survives each new element reading. */
+const CLOCK_DECAY = 0.8;
+
 interface AudioManagerOptions {
   getEffects: () => EffectInstance[];
   /** How band levels are followed, ranged and shaped; read per frame. */
@@ -35,6 +40,11 @@ export class AudioManager {
   pendingSpan = $state<{ start: number; end: number } | null>(null);
   // Play as soon as the newly loaded track's metadata arrives (library play button)
   autoplayOnLoad = false;
+
+  // ── Interpolated playback clock (see tickCurrentTime) ──
+  #clockAnchor = 0;
+  #clockWall = 0;
+  #clockLastRaw = -1;
 
   // ── Audio graph ──
   audioContext = $state<AudioContext | null>(null);
@@ -203,10 +213,13 @@ export class AudioManager {
 
   onAudioTimeUpdate() {
     if (!this.#audioEl) return;
-    this.trackCurrentTime = this.#audioEl.currentTime;
+    // While playing the rAF tick owns trackCurrentTime; writing the coarse
+    // element clock here as well would drag the playhead back every ~250 ms.
+    if (!this.audioPlaying) this.trackCurrentTime = this.#audioEl.currentTime;
     if (this.audioPlaying && this.#audioEl.currentTime >= this.spanEnd) {
       this.#audioEl.currentTime = this.spanStart;
       this.trackCurrentTime = this.spanStart;
+      this.#resetClock(this.spanStart);
       if (!this.loopAudio) {
         this.#audioEl.pause();
         this.audioPlaying = false;
@@ -219,6 +232,7 @@ export class AudioManager {
     if (!this.#audioEl || !this.loopAudio) return;
     this.#audioEl.currentTime = this.spanStart;
     this.trackCurrentTime = this.spanStart;
+    this.#resetClock(this.spanStart);
     this.#audioEl.play();
     this.audioPlaying = true;
   }
@@ -232,6 +246,7 @@ export class AudioManager {
       this.#audioEl.currentTime = this.spanStart;
       this.trackCurrentTime = this.spanStart;
     }
+    this.#resetClock(this.#audioEl.currentTime);
     this.#audioEl.play();
     this.audioPlaying = true;
   }
@@ -245,10 +260,44 @@ export class AudioManager {
    * Pull the element clock into trackCurrentTime. The timeupdate event only
    * fires ~4 Hz, which makes playheads jump — call this from a rAF loop while
    * playing for smooth movement.
+   *
+   * `currentTime` itself is coarse: browsers advance it in audio-buffer steps
+   * (tens of ms), so reading it per frame still steps. Between steps the wall
+   * clock carries the estimate forward from the last reading, and each new
+   * reading re-anchors it, bleeding off the error rather than snapping — a snap
+   * is the stutter we're avoiding.
    */
   tickCurrentTime() {
-    if (!this.#audioEl || !this.audioPlaying) return;
-    this.trackCurrentTime = this.#audioEl.currentTime;
+    const el = this.#audioEl;
+    if (!el || !this.audioPlaying) return;
+    const now = performance.now() / 1000;
+    const rate = el.playbackRate || 1;
+    const raw = el.currentTime;
+
+    if (raw !== this.#clockLastRaw) {
+      this.#clockLastRaw = raw;
+      const predicted = this.#clockAnchor + (now - this.#clockWall) * rate;
+      this.#clockWall = now;
+      // A seek, a loop or a stall puts the estimate somewhere else entirely;
+      // anything smaller is the step granularity and gets absorbed.
+      this.#clockAnchor =
+        Math.abs(predicted - raw) > CLOCK_RESYNC
+          ? raw
+          : raw + (predicted - raw) * CLOCK_DECAY;
+    }
+
+    const est = this.#clockAnchor + (now - this.#clockWall) * rate;
+    // The estimate leads the element clock by a few ms, which at the very end
+    // of a track would read as a time past the end.
+    this.trackCurrentTime =
+      this.trackDuration > 0 ? Math.min(est, this.trackDuration) : est;
+  }
+
+  /** Drop the interpolated clock onto `t` — after a seek, a loop or a pause. */
+  #resetClock(t: number) {
+    this.#clockAnchor = t;
+    this.#clockWall = performance.now() / 1000;
+    this.#clockLastRaw = -1;
   }
 
   seekTo(t: number) {
@@ -256,6 +305,7 @@ export class AudioManager {
     const clamped = Math.max(0, Math.min(this.trackDuration, t));
     this.#audioEl.currentTime = clamped;
     this.trackCurrentTime = clamped;
+    this.#resetClock(clamped);
     resetAutoRange();
   }
 

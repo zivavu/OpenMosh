@@ -16,7 +16,7 @@ const KEY = Symbol("timeline-stack");
 export class TimelineStackState {
    /** Whether the view chases the playhead. Panning by hand takes it over —
     * chasing while the user is reading somewhere else drags them back — and
-    * pressing play (or the Follow button) hands it back. */
+    * only the Follow button hands it back. */
    followPlayhead = $state(true);
 
    readonly vp: TimelineViewport;

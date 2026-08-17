@@ -61,17 +61,6 @@
 		stack.followPlayhead = true;
 	});
 
-	// Pressing play hands the view back to the playhead: starting playback is the
-	// moment the user wants to watch it again.
-	let wasPlaying = false;
-	$effect(() => {
-		const playing = isPlaying;
-		untrack(() => {
-			if (playing && !wasPlaying) stack.followPlayhead = true;
-			wasPlaying = playing;
-		});
-	});
-
 	// Keep the playhead centred: the view slides under it rather than the other
 	// way round. Only while zoomed — unzoomed the whole track is on screen and
 	// there is nothing to scroll. panView clamps at the track ends, where the
@@ -242,7 +231,15 @@
 
 		{#if playheadVisible}
 			<div class="tl-playhead-layer">
-				<div class="tl-playhead" style="left: {playheadPct}%">
+				<!-- Full-width and moved by transform rather than by `left`: a
+				     percentage translate is of this element's own width, i.e. the
+				     lane width, and it moves on the compositor without laying the
+				     layer out again every frame. -->
+				<div
+					class="tl-playhead"
+					style="transform: translate3d({playheadPct}%, 0, 0)"
+				>
+					<div class="tl-playhead-line"></div>
 					{#if onSeek}
 						<!-- The only part of the overlay that takes pointer events, and
 						     narrow, so it doesn't shadow the lane under it. -->
@@ -503,6 +500,16 @@
 		position: absolute;
 		top: 0;
 		bottom: 0;
+		left: 0;
+		width: 100%;
+		will-change: transform;
+	}
+
+	.tl-playhead-line {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
 		width: 1px;
 		background: var(--tl-playhead);
 		box-shadow: 0 0 4px rgba(110, 231, 192, 0.6);
