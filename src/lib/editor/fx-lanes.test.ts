@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { EffectInstance } from "../effects";
+import { EFFECT_DEFINITIONS, type EffectInstance } from "../effects";
 import {
   activeFxClips,
   appendFxLane,
   applyBpmToFxLanes,
   clearFxClips,
+  createFxClip,
   createFxLayerSource,
   createFxLane,
   flattenFxLayers,
@@ -12,7 +13,9 @@ import {
   findFxClip,
   fxClipTick,
   normalizeFxLanes,
+  paletteEffects,
   rollFxClips,
+  setLanePalette,
   setFxClipsMode,
   type FxClip,
   type FxLane,
@@ -372,15 +375,106 @@ describe("applyBpmToFxLanes", () => {
 });
 
 describe("activeFxClips", () => {
-  test("returns the contributing clips in lane order", () => {
+  test("returns the contributing clips in lane order, with their lanes", () => {
     const lanes = [
       lane("a", [clip("c1", 0, 5, [])]),
       lane("b", [clip("c2", 0, 5, [])], false),
       lane("c", [clip("c3", 0, 5, [])]),
     ];
-    expect(activeFxClips(lanes, 1).map((c) => c.id)).toEqual(["c1", "c3"]);
+    const active = activeFxClips(lanes, 1);
+    expect(active.map((e) => e.clip.id)).toEqual(["c1", "c3"]);
+    expect(active.map((e) => e.lane.id)).toEqual(["a", "c"]);
   });
 });
+
+describe("lane palettes", () => {
+  /** Two real effect ids, so the palette filter has something to match. */
+  const [defA, defB, defC] = EFFECT_DEFINITIONS.map((d) => d.id);
+
+  test("paletteEffects narrows the chain, and no palette means everything", () => {
+    expect(paletteEffects([defA, defB]).map((e) => e.defId)).toEqual([defA, defB]);
+    expect(paletteEffects().length).toBe(paletteEffects(undefined).length);
+    expect(paletteEffects().length).toBeGreaterThan(2);
+  });
+
+  test("a new clip on a narrowed lane starts with only that lane's effects", () => {
+    expect(createFxClip(0, 1, [defA]).effects.map((e) => e.defId)).toEqual([defA]);
+  });
+
+  test("setLanePalette keeps the state of effects that survive the change", () => {
+    const base = createFxClip(0, 5, [defA, defB]);
+    base.effects[0].enabled = true;
+    base.effects[0].values.amount = 0.7;
+    const lanes: FxLane[] = [{ id: "a", name: "a", enabled: true, clips: [base] }];
+
+    const [out] = setLanePalette(lanes, "a", [defA, defC]);
+    const kept = out.clips[0].effects.find((e) => e.defId === defA)!;
+    expect(kept.enabled).toBe(true);
+    expect(kept.values.amount).toBe(0.7);
+    // defB left the palette, defC joined it (disabled).
+    expect(out.clips[0].effects.map((e) => e.defId)).toEqual([defA, defC]);
+    expect(out.clips[0].effects.find((e) => e.defId === defC)!.enabled).toBe(false);
+  });
+
+  test("clearing the palette restores the full chain", () => {
+    const lanes: FxLane[] = [
+      { id: "a", name: "a", enabled: true, palette: [defA], clips: [createFxClip(0, 5, [defA])] },
+    ];
+    const [out] = setLanePalette(lanes, "a", undefined);
+    expect(out.palette).toBeUndefined();
+    expect(out.clips[0].effects.length).toBe(paletteEffects().length);
+  });
+
+  test("a roll on a narrowed lane can only enable that lane's effects", () => {
+    const lanes: FxLane[] = [
+      {
+        id: "a",
+        name: "a",
+        enabled: true,
+        palette: [defA, defB],
+        clips: [createFxClip(0, 5, [defA, defB])],
+      },
+    ];
+    const [out] = rollFxClips(lanes, new Set([lanes[0].clips[0].id]), OPTIONS);
+    expect(out.clips[0].effects.every((e) => e.defId === defA || e.defId === defB)).toBe(
+      true,
+    );
+  });
+
+  test("interval rolls stay inside the palette too", () => {
+    const clipId = "auto";
+    const lanes: FxLane[] = [
+      {
+        id: "a",
+        name: "a",
+        enabled: true,
+        palette: [defA, defB],
+        clips: [
+          {
+            ...createFxClip(0, 8, [defA, defB]),
+            id: clipId,
+            mode: "interval",
+            seed: 99,
+            intervalSec: 1,
+          },
+        ],
+      },
+    ];
+    const at = createFxLayerSource(() => lanes, () => OPTIONS);
+    for (const t of [0.1, 1.5, 3.2]) {
+      const ids = flattenFxLayers(at(t)).map((e) => e.defId);
+      expect(ids.every((id) => id === defA || id === defB)).toBe(true);
+    }
+  });
+
+  test("normalizing reads an empty saved palette as no restriction", () => {
+    const [out] = normalizeFxLanes([{ palette: [], clips: [] }]);
+    expect(out.palette).toBeUndefined();
+    const [kept] = normalizeFxLanes([{ palette: [defA], clips: [] }]);
+    expect(kept.palette).toEqual([defA]);
+  });
+});
+
 
 describe("findFxClip", () => {
   test("locates a clip and the lane holding it", () => {

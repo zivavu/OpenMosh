@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Eye, EyeOff, SlidersHorizontal, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
+	import { EFFECT_DEFINITIONS } from '../../effects';
 	import {
 		createFxClip,
+		setLanePalette,
 		type FxClip,
 		type FxLane,
 	} from '../../editor/fx-lanes';
@@ -195,6 +197,26 @@
 		onChange(updateLaneIn(lanes, laneId, fn));
 	}
 
+	// ── Palette ──────────────────────────────────────────────────────────────
+	/** Lane whose palette picker is open; null when none is. */
+	let palettePickerLane = $state<string | null>(null);
+
+	function togglePaletteEffect(lane: FxLane, defId: string) {
+		const current = lane.palette ?? EFFECT_DEFINITIONS.map((d) => d.id);
+		const next = current.includes(defId)
+			? current.filter((id) => id !== defId)
+			: [...current, defId];
+		onBeforeEdit?.();
+		// Emptying the palette means "no restriction" rather than "no effects" —
+		// a lane that can run nothing is never what unticking the last box meant.
+		onChange(setLanePalette(lanes, lane.id, next.length > 0 ? next : undefined));
+	}
+
+	function resetPalette(lane: FxLane) {
+		onBeforeEdit?.();
+		onChange(setLanePalette(lanes, lane.id, undefined));
+	}
+
 	/** Lane the delete button is asking about; null when nothing is pending. */
 	let lanePendingDelete = $state<FxLane | null>(null);
 
@@ -222,7 +244,7 @@
 		if (!gap) return;
 		const start = Math.max(gap.start, Math.min(time, gap.end - MIN_CLIP_LENGTH));
 		const end = Math.min(start + DEFAULT_CLIP_LENGTH, gap.end);
-		const clip = createFxClip(start, end);
+		const clip = createFxClip(start, end, lane.palette);
 		onBeforeEdit?.();
 		update(laneId, (l) => addClip(l, clip, trackDuration));
 		selectOnly(clip.id);
@@ -429,6 +451,10 @@
 
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
+		if (e.key === 'Escape' && palettePickerLane) {
+			palettePickerLane = null;
+			return;
+		}
 		if (e.key === 'Escape' && selectedClipIds.length > 0) {
 			deselect();
 			return;
@@ -458,12 +484,49 @@
 					>{lane.name}</span
 				>
 				<button
+					class="lane-palette"
+					class:narrowed={!!lane.palette}
+					title={lane.palette
+						? `Rolls draw from ${lane.palette.length} effects`
+						: 'Rolls draw from every effect'}
+					onclick={() =>
+						(palettePickerLane = palettePickerLane === lane.id ? null : lane.id)}
+				>
+					<SlidersHorizontal size={12} />
+					{#if lane.palette}<span class="palette-count">{lane.palette.length}</span
+						>{/if}
+				</button>
+				<button
 					class="lane-del"
 					title="Delete this lane"
 					onclick={() => requestDeleteLane(lane)}
 				>
 					<Trash2 size={12} />
 				</button>
+
+				{#if palettePickerLane === lane.id}
+					{@const allowed = new Set(lane.palette ?? EFFECT_DEFINITIONS.map((d) => d.id))}
+					<div class="palette-pop tl-chrome">
+						<div class="palette-head">
+							<span>Effects this lane may roll</span>
+							<button class="palette-reset" onclick={() => resetPalette(lane)}>
+								All
+							</button>
+						</div>
+						<div class="palette-list">
+							{#each EFFECT_DEFINITIONS as def (def.id)}
+								<label class="palette-item">
+									<input
+										type="checkbox"
+										checked={allowed.has(def.id)}
+										onchange={() => togglePaletteEffect(lane, def.id)}
+									/>
+									{def.name}
+								</label>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			</div>
 
 			<div
@@ -681,6 +744,86 @@
 
 	.lane-eye.off {
 		color: var(--text-4);
+	}
+
+	/* Anchors the palette popover. Scoped to this component's own gutters, so
+	   the other lanes in the stack are untouched. */
+	.tl-gutter {
+		position: relative;
+	}
+
+	.lane-palette {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0.15rem;
+		border: none;
+		background: none;
+		color: var(--text-3);
+		font-size: 0.6rem;
+		font-family: inherit;
+		cursor: pointer;
+	}
+
+	.lane-palette:hover {
+		color: var(--text);
+	}
+
+	/* Lit only when the lane is actually restricted — the default is "all". */
+	.lane-palette.narrowed {
+		color: var(--mosh);
+	}
+
+	.palette-pop {
+		position: absolute;
+		z-index: 20;
+		top: 100%;
+		left: 0;
+		width: 190px;
+		padding: 0.35rem;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--surface);
+		box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+	}
+
+	.palette-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-bottom: 0.25rem;
+		border-bottom: 1px solid var(--line);
+		color: var(--text-3);
+		font-size: 0.6rem;
+	}
+
+	.palette-reset {
+		padding: 0 0.25rem;
+		border: none;
+		background: none;
+		color: var(--mosh);
+		font-size: 0.6rem;
+		font-family: inherit;
+		cursor: pointer;
+	}
+
+	.palette-list {
+		max-height: 220px;
+		overflow-y: auto;
+	}
+
+	.palette-item {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.1rem 0;
+		color: var(--text-2);
+		font-size: 0.65rem;
+		cursor: pointer;
+	}
+
+	.palette-item:hover {
+		color: var(--text);
 	}
 
 	.lane-name {

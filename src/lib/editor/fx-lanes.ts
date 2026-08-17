@@ -16,13 +16,14 @@
 
 import { cloneEffectInstance, generateId, type EffectInstance } from "../effects";
 import { clipAt, type TimelineClip } from "../timeline/clips";
-import type { MoshOptions } from "./mosh";
+import { generateMosh, type MoshOptions } from "./mosh";
 import {
   beatsToSeconds,
   cleanEffects,
   DEFAULT_INTERVAL_SEC,
   randomSeed,
   rollEffects,
+  withSeededRandom,
   type SequenceSegmentMode,
 } from "./sequence";
 
@@ -99,22 +100,72 @@ export interface FxLane {
   name: string;
   /** Off = the lane contributes nothing, without losing its clips. */
   enabled: boolean;
+  /**
+   * Effect ids this lane is allowed to use. Undefined = all of them.
+   *
+   * A stacked lane is usually built for one job — a colour lane, a glitch lane
+   * — and a mosh roll drawing from all 39 effects can't respect that. Narrowing
+   * the palette makes every roll on the lane stay in character, and keeps its
+   * clips' chains short enough to read in the panel.
+   */
+  palette?: string[];
   clips: FxClip[];
 }
 
-export function createFxClip(start: number, end: number): FxClip {
+/** A lane's allowed chain, all disabled. Honours hidden effects either way. */
+export function paletteEffects(palette?: string[]): EffectInstance[] {
+  const all = cleanEffects();
+  if (!palette) return all;
+  const allowed = new Set(palette);
+  return all.filter((e) => allowed.has(e.defId));
+}
+
+export function createFxClip(
+  start: number,
+  end: number,
+  palette?: string[],
+): FxClip {
   return {
     id: generateId(),
     start,
     end,
     mode: "static",
     label: "clean",
-    effects: cleanEffects(),
+    effects: paletteEffects(palette),
   };
 }
 
 export function createFxLane(name: string): FxLane {
   return { id: generateId(), name, enabled: true, clips: [] };
+}
+
+/**
+ * Set a lane's palette and bring every clip on it into line: instances still
+ * allowed keep their values and enabled state, newly allowed ones join
+ * disabled, and the rest are dropped. Editing the palette is therefore
+ * non-destructive to anything that stays in it.
+ */
+export function setLanePalette(
+  lanes: FxLane[],
+  laneId: string,
+  palette: string[] | undefined,
+): FxLane[] {
+  return lanes.map((lane) => {
+    if (lane.id !== laneId) return lane;
+    return {
+      ...lane,
+      palette,
+      clips: lane.clips.map((clip) => {
+        const kept = new Map(clip.effects.map((e) => [e.defId, e]));
+        return {
+          ...clip,
+          // Rebuilt from the allowed list rather than filtered in place, so the
+          // chain keeps definition order and picks up effects added later.
+          effects: paletteEffects(palette).map((fresh) => kept.get(fresh.defId) ?? fresh),
+        };
+      }),
+    };
+  });
 }
 
 /** Add an empty lane, named after its position. */
@@ -136,9 +187,9 @@ export function activeFxClips(
   lanes: FxLane[] | null | undefined,
   time: number,
   forceClipId?: string | null,
-): FxClip[] {
+): { lane: FxLane; clip: FxClip }[] {
   if (!lanes || lanes.length === 0) return NO_CLIPS;
-  let out: FxClip[] | null = null;
+  let out: { lane: FxLane; clip: FxClip }[] | null = null;
   for (const lane of lanes) {
     if (!lane.enabled) continue;
     const forced = forceClipId
@@ -146,13 +197,13 @@ export function activeFxClips(
       : undefined;
     const clip = forced ?? clipAt(lane, time);
     if (!clip) continue;
-    (out ??= []).push(clip);
+    (out ??= []).push({ lane, clip });
   }
   return out ?? NO_CLIPS;
 }
 
 const EMPTY: EffectInstance[] = [];
-const NO_CLIPS: FxClip[] = [];
+const NO_CLIPS: { lane: FxLane; clip: FxClip }[] = [];
 const NO_LAYERS: FxLayer[] = [];
 
 /**
@@ -191,10 +242,10 @@ export function createFxLayerSource(
 ): (time: number, forceClipId?: string | null) => FxLayer[] {
   const cache = new Map<string, EffectInstance[]>();
   return (time: number, forceClipId?: string | null) => {
-    const clips = activeFxClips(getLanes(), time, forceClipId);
-    if (clips.length === 0) return NO_LAYERS;
-    return clips.map((clip) => ({
-      effects: chainFor(clip, time, cache, clone, getMoshOptions),
+    const active = activeFxClips(getLanes(), time, forceClipId);
+    if (active.length === 0) return NO_LAYERS;
+    return active.map(({ lane, clip }) => ({
+      effects: chainFor(clip, lane, time, cache, clone, getMoshOptions),
       // A clip pinned in for editing shows at full strength: the fade is about
       // how it enters during playback, and ramping it here would leave the
       // panel adjusting a chain that is only partly on screen.
@@ -214,6 +265,7 @@ export function flattenFxLayers(layers: FxLayer[]): EffectInstance[] {
 
 function chainFor(
   clip: FxClip,
+  lane: FxLane,
   time: number,
   cache: Map<string, EffectInstance[]>,
   clone: boolean,
@@ -237,13 +289,28 @@ function chainFor(
   // Options participate in the key so a settings change can't serve rolls
   // generated under different mosh parameters — the preview/export mismatch
   // createSequenceEffectSource guards against for the same reason.
-  const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}`;
+  // The palette is in the key too: narrowing a lane has to invalidate the rolls
+  // it already served, or the clip would keep replaying effects it no longer
+  // allows until the cache happened to turn over.
+  const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${lane.palette?.join(",") ?? "*"}`;
   let effects = cache.get(key);
   if (!effects) {
-    effects = rollEffects(seed, options);
+    effects = rollPaletteEffects(seed, options, lane.palette);
     if (cache.size > 512) cache.clear();
     cache.set(key, effects);
   }
+  return effects;
+}
+
+/** A seeded mosh roll restricted to a lane's palette. */
+function rollPaletteEffects(
+  seed: number,
+  options: MoshOptions,
+  palette?: string[],
+): EffectInstance[] {
+  if (!palette) return rollEffects(seed, options);
+  const effects = paletteEffects(palette);
+  withSeededRandom(seed, () => generateMosh(effects, options));
   return effects;
 }
 
@@ -262,11 +329,14 @@ export function allFxEffectIds(lanes: FxLane[] | null | undefined): string[] {
 export function updateFxClips(
   lanes: FxLane[],
   clipIds: Set<string>,
-  fn: (clip: FxClip) => FxClip,
+  fn: (clip: FxClip, lane: FxLane) => FxClip,
 ): FxLane[] {
   return lanes.map((lane) => {
     if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
-    return { ...lane, clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)) };
+    return {
+      ...lane,
+      clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c, lane) : c)),
+    };
   });
 }
 
@@ -309,11 +379,11 @@ export function rollFxClips(
   clipIds: Set<string>,
   options: MoshOptions,
 ): FxLane[] {
-  return updateFxClips(lanes, clipIds, (clip) => {
+  return updateFxClips(lanes, clipIds, (clip, lane) => {
     if (clip.mode === "interval") return { ...clip, seed: randomSeed() };
     return {
       ...clip,
-      effects: rollEffects(randomSeed(), options),
+      effects: rollPaletteEffects(randomSeed(), options, lane.palette),
       label: "mosh",
       presetName: undefined,
       modified: false,
@@ -321,12 +391,12 @@ export function rollFxClips(
   });
 }
 
-/** Reset clips to an all-disabled chain. */
+/** Reset clips to an all-disabled chain, within the lane's palette. */
 export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
-  return updateFxClips(lanes, clipIds, (clip) => ({
+  return updateFxClips(lanes, clipIds, (clip, lane) => ({
     ...clip,
     mode: "static",
-    effects: cleanEffects(),
+    effects: paletteEffects(lane.palette),
     label: "clean",
     presetName: undefined,
     modified: false,
@@ -362,6 +432,12 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
     id: lane.id ?? generateId(),
     name: lane.name ?? `FX ${i + 1}`,
     enabled: lane.enabled !== false,
+    // An empty saved palette would mean "no effects allowed", which no UI can
+    // produce and which would leave the lane permanently dead; read it as none.
+    palette:
+      Array.isArray(lane.palette) && lane.palette.length > 0
+        ? lane.palette
+        : undefined,
     clips: (Array.isArray(lane.clips) ? lane.clips : [])
       // A clip with no chain would be an invisible span that still takes up
       // room on the lane; drop it rather than resurrect it empty.
