@@ -15,7 +15,12 @@
  */
 
 import { cloneEffectInstance, generateId, type EffectInstance } from "../effects";
-import { clipAt, type TimelineClip } from "../timeline/clips";
+import {
+  clipAt,
+  MIN_CLIP_LENGTH,
+  sortClips,
+  type TimelineClip,
+} from "../timeline/clips";
 import { generateMosh, type MoshOptions } from "./mosh";
 import {
   beatsToSeconds,
@@ -168,8 +173,17 @@ export function setLanePalette(
   });
 }
 
-/** Add an empty lane, named after its position. */
+/**
+ * Most stacked lanes at once. Every enabled effect on a lane is another
+ * full-screen pass on top of the segment's own chain, so this is a frame-budget
+ * limit rather than a modelling one.
+ */
+export const MAX_FX_LANES = 5;
+
+/** Add an empty lane, named after its position. At the cap, returns the input
+ * by identity so callers can skip a history entry for a no-op. */
 export function appendFxLane(lanes: FxLane[]): FxLane[] {
+  if (lanes.length >= MAX_FX_LANES) return lanes;
   return [...lanes, createFxLane(`FX ${lanes.length + 1}`)];
 }
 
@@ -401,6 +415,38 @@ export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
     presetName: undefined,
     modified: false,
   }));
+}
+
+/**
+ * Cut the clip covering `at` into two, matching the source lane's Ctrl+Click
+ * split. Both halves keep the chain — deep-copied, so editing one no longer
+ * touches the other — along with the mode, interval spacing and seed.
+ *
+ * Returns the lane unchanged when `at` isn't inside a clip, or when either half
+ * would come out shorter than MIN_CLIP_LENGTH.
+ */
+export function splitFxClipAt(lane: FxLane, at: number): FxLane {
+  const clip = clipAt(lane, at);
+  if (!clip) return lane;
+  if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
+    return lane;
+  }
+  const head: FxClip = {
+    ...clip,
+    id: generateId(),
+    end: at,
+    effects: cloneFxEffects(clip.effects),
+  };
+  const tail: FxClip = {
+    ...clip,
+    id: generateId(),
+    start: at,
+    effects: cloneFxEffects(clip.effects),
+  };
+  return {
+    ...lane,
+    clips: sortClips([...lane.clips.filter((c) => c.id !== clip.id), head, tail]),
+  };
 }
 
 /** The lane holding `clipId`, and the clip itself. */

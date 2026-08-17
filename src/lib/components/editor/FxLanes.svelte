@@ -5,6 +5,7 @@
 	import {
 		createFxClip,
 		setLanePalette,
+		splitFxClipAt,
 		type FxClip,
 		type FxLane,
 	} from '../../editor/fx-lanes';
@@ -250,6 +251,24 @@
 		selectOnly(clip.id);
 	}
 
+	/**
+	 * Cut the clip under the cursor in two. Ctrl+Click over empty lane space
+	 * creates a clip instead (see onLanePointerDown), which together give the
+	 * source lane's one "create / split at cursor" gesture.
+	 */
+	function splitAt(laneId: string, time: number) {
+		const lane = laneOf(laneId);
+		if (!lane) return;
+		const next = splitFxClipAt(lane, time);
+		// Not inside a clip, or one half would be too short to keep.
+		if (next === lane) return;
+		onBeforeEdit?.();
+		update(laneId, () => next);
+		// The clip the cursor was in is gone; leaving its id selected would show
+		// the panel a chain that is no longer on the lane.
+		deselect();
+	}
+
 	function onTrackDblClick(e: MouseEvent, laneId: string) {
 		if (trackDuration <= 0) return;
 		// A double-click inside a clip is the clip's business; only empty lane
@@ -268,9 +287,35 @@
 		e.stopPropagation();
 		clickOnUp = null;
 
-		// Shift extends from the primary, ctrl/cmd toggles one. Neither starts a
-		// drag — they are selection gestures, and dragging from them would move
-		// clips the user was only trying to pick.
+		// Selection gestures first, and none of them start a drag — dragging from
+		// one would move clips the user was only trying to pick.
+		//
+		// Ctrl+Shift toggles a single clip in or out: the additive pick that
+		// plain Ctrl used to be, moved aside so Ctrl+Click can split the way it
+		// does on the source lane. Checked before the plain-Shift range, which
+		// would otherwise swallow it.
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === 'move') {
+			if (selectedClipIds.includes(clipId)) {
+				const rest = selectedClipIds.filter((x) => x !== clipId);
+				selectedClipIds = rest;
+				if (selectedClipId === clipId)
+					selectedClipId = rest[rest.length - 1] ?? null;
+			} else {
+				selectedClipIds = [...selectedClipIds, clipId];
+				selectedClipId = clipId;
+			}
+			return;
+		}
+
+		// Ctrl+Click cuts the clip at the cursor, the same gesture the source
+		// lane uses. Handled on the edge handles too: they sit over the clip's
+		// ends, and a cut there is no less unambiguous.
+		if (e.ctrlKey || e.metaKey) {
+			splitAt(laneId, timeAt(e.clientX));
+			return;
+		}
+
+		// Shift extends the selection from the primary.
 		if (e.shiftKey && mode === 'move') {
 			const lane = laneOf(laneId);
 			if (lane && selectedClipId) {
@@ -281,18 +326,6 @@
 				}
 			}
 			selectOnly(clipId);
-			return;
-		}
-		if ((e.ctrlKey || e.metaKey) && mode === 'move') {
-			if (selectedClipIds.includes(clipId)) {
-				const rest = selectedClipIds.filter((x) => x !== clipId);
-				selectedClipIds = rest;
-				if (selectedClipId === clipId)
-					selectedClipId = rest[rest.length - 1] ?? null;
-			} else {
-				selectedClipIds = [...selectedClipIds, clipId];
-				selectedClipId = clipId;
-			}
 			return;
 		}
 

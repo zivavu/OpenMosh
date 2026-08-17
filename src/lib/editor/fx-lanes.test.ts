@@ -12,11 +12,13 @@ import {
   fxClipWeight,
   findFxClip,
   fxClipTick,
+  MAX_FX_LANES,
   normalizeFxLanes,
   paletteEffects,
   rollFxClips,
   setLanePalette,
   setFxClipsMode,
+  splitFxClipAt,
   type FxClip,
   type FxLane,
 } from "./fx-lanes";
@@ -476,6 +478,75 @@ describe("lane palettes", () => {
 });
 
 
+describe("splitFxClipAt", () => {
+  test("cuts the clip under the time into two abutting halves", () => {
+    const l = lane("a", [clip("c1", 0, 10, ["grain"])]);
+    const out = splitFxClipAt(l, 4);
+    expect(out.clips.map((c) => [c.start, c.end])).toEqual([
+      [0, 4],
+      [4, 10],
+    ]);
+  });
+
+  test("both halves keep the chain, deep-copied so edits don't cross", () => {
+    const l = lane("a", [clip("c1", 0, 10, ["grain"])]);
+    const [head, tail] = splitFxClipAt(l, 4).clips;
+    expect(head.effects.map((e) => e.defId)).toEqual(["grain"]);
+    expect(tail.effects.map((e) => e.defId)).toEqual(["grain"]);
+    expect(head.effects[0]).not.toBe(tail.effects[0]);
+    expect(head.effects[0].instanceId).not.toBe(tail.effects[0].instanceId);
+    head.effects[0].enabled = false;
+    expect(tail.effects[0].enabled).toBe(true);
+  });
+
+  test("halves get fresh ids, so neither collides with the original", () => {
+    const l = lane("a", [clip("c1", 0, 10, [])]);
+    const out = splitFxClipAt(l, 4);
+    expect(out.clips.map((c) => c.id)).not.toContain("c1");
+    expect(out.clips[0].id).not.toBe(out.clips[1].id);
+  });
+
+  test("carries the mode, spacing and seed onto both halves", () => {
+    const l = lane("a", [
+      {
+        ...clip("c1", 0, 10, []),
+        mode: "interval" as const,
+        seed: 77,
+        intervalSec: 0.5,
+        intervalBeats: 1,
+      },
+    ]);
+    for (const c of splitFxClipAt(l, 4).clips) {
+      expect(c.mode).toBe("interval");
+      expect(c.seed).toBe(77);
+      expect(c.intervalSec).toBe(0.5);
+      expect(c.intervalBeats).toBe(1);
+    }
+  });
+
+  test("leaves other clips on the lane alone", () => {
+    const l = lane("a", [clip("c1", 0, 10, []), clip("c2", 12, 15, [])]);
+    const out = splitFxClipAt(l, 4);
+    expect(out.clips).toHaveLength(3);
+    expect(out.clips[2].id).toBe("c2");
+  });
+
+  test("a time outside every clip is a no-op, by identity", () => {
+    const l = lane("a", [clip("c1", 0, 10, [])]);
+    expect(splitFxClipAt(l, 20)).toBe(l);
+    const empty = lane("a", []);
+    expect(splitFxClipAt(empty, 5)).toBe(empty);
+  });
+
+  test("refuses a cut that would leave a half under the minimum length", () => {
+    const l = lane("a", [clip("c1", 0, 10, [])]);
+    expect(splitFxClipAt(l, 0.001)).toBe(l);
+    expect(splitFxClipAt(l, 9.999)).toBe(l);
+    // On the start edge: inside the clip, but the head would be zero-length.
+    expect(splitFxClipAt(l, 0)).toBe(l);
+  });
+});
+
 describe("findFxClip", () => {
   test("locates a clip and the lane holding it", () => {
     const lanes = [lane("a", [clip("c1", 0, 1, [])]), lane("b", [clip("c2", 0, 1, [])])];
@@ -513,6 +584,13 @@ describe("appendFxLane", () => {
     const lanes = appendFxLane(appendFxLane([]));
     expect(lanes.map((l) => l.name)).toEqual(["FX 1", "FX 2"]);
     expect(lanes[0].id).not.toBe(lanes[1].id);
+  });
+
+  test("stops at the cap, returning the input by identity", () => {
+    let lanes: FxLane[] = [];
+    for (let i = 0; i < MAX_FX_LANES; i++) lanes = appendFxLane(lanes);
+    expect(lanes).toHaveLength(MAX_FX_LANES);
+    expect(appendFxLane(lanes)).toBe(lanes);
   });
 
   test("a fresh lane starts empty and enabled", () => {
