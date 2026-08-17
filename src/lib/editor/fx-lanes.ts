@@ -92,6 +92,44 @@ export function resolveFxEffectsAt(
 
 const EMPTY: EffectInstance[] = [];
 
+/**
+ * Time → stacked chain resolver, for the export path.
+ *
+ * `clone` serves cached deep copies, so the recorder can write each frame's
+ * audio-link values into the chain it renders without those values landing in
+ * the clips the user is still editing — the same contract
+ * createSequenceEffectSource offers for static segments. Cached per clip rather
+ * than per frame: a clip's chain is the same objects for its whole span, and
+ * re-cloning 39 effects per frame is not.
+ */
+export function createFxEffectSource(
+  getLanes: () => FxLane[] | null | undefined,
+  { clone = false }: { clone?: boolean } = {},
+): (time: number) => EffectInstance[] {
+  const cache = new Map<string, EffectInstance[]>();
+  return (time: number) => {
+    const lanes = getLanes();
+    if (!lanes || lanes.length === 0) return EMPTY;
+    let out: EffectInstance[] | null = null;
+    for (const lane of lanes) {
+      if (!lane.enabled) continue;
+      const clip = clipAt(lane, time);
+      if (!clip) continue;
+      if (!clone) {
+        (out ??= []).push(...clip.effects);
+        continue;
+      }
+      let cloned = cache.get(clip.id);
+      if (!cloned) {
+        cloned = cloneFxEffects(clip.effects);
+        cache.set(clip.id, cloned);
+      }
+      (out ??= []).push(...cloned);
+    }
+    return out ?? EMPTY;
+  };
+}
+
 /** Every effect instance held anywhere in the lanes (for feedback-buffer GC). */
 export function allFxEffectIds(lanes: FxLane[] | null | undefined): string[] {
   const ids: string[] = [];

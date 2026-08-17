@@ -2267,6 +2267,7 @@
 									duration: seqMasterDuration,
 									masterIsAudio: seqMasterIsAudio,
 									sources: sourceRegistry.sources,
+									fxLanes: $state.snapshot(fxLanes) as FxLane[],
 								}
 							: null,
 					onProgress: (p) => {

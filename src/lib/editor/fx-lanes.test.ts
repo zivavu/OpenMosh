@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { EffectInstance } from "../effects";
 import {
   appendFxLane,
+  createFxEffectSource,
   createFxLane,
   findFxClip,
   normalizeFxLanes,
@@ -103,6 +104,44 @@ describe("resolveFxEffectsAt", () => {
     ];
     const out = resolveFxEffectsAt(lanes, 1);
     expect(out.map((e) => e.instanceId)).toEqual(["echo", "echo-2"]);
+  });
+});
+
+describe("createFxEffectSource", () => {
+  test("resolves the same chain the preview does", () => {
+    const lanes = [
+      lane("a", [clip("c1", 0, 5, ["grain"])]),
+      lane("b", [clip("c2", 0, 5, ["shift"])]),
+    ];
+    const src = createFxEffectSource(() => lanes);
+    expect(src(1).map((e) => e.defId)).toEqual(
+      resolveFxEffectsAt(lanes, 1).map((e) => e.defId),
+    );
+  });
+
+  test("clone keeps the export's per-frame values out of the user's clips", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const src = createFxEffectSource(() => lanes, { clone: true });
+    const out = src(1);
+    expect(out[0]).not.toBe(lanes[0].clips[0].effects[0]);
+    out[0].values.amount = 0.9;
+    expect(lanes[0].clips[0].effects[0].values.amount).toBeUndefined();
+  });
+
+  test("clones are cached per clip, so a span doesn't re-clone per frame", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const src = createFxEffectSource(() => lanes, { clone: true });
+    expect(src(1)[0]).toBe(src(2)[0]);
+  });
+
+  test("without clone the caller sees the live instances", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const src = createFxEffectSource(() => lanes);
+    expect(src(1)[0]).toBe(lanes[0].clips[0].effects[0]);
+  });
+
+  test("no lanes resolves to nothing", () => {
+    expect(createFxEffectSource(() => [])(1)).toEqual([]);
   });
 });
 
