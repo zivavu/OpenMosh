@@ -70,6 +70,7 @@
 		createFxLayerSource,
 		findFxClip,
 		flattenFxLayers,
+		MAX_FX_LANES,
 		normalizeFxLanes,
 		rollFxClips,
 		setFxClipsMode,
@@ -889,8 +890,12 @@
 	}
 
 	function addFxLane() {
+		const next = appendFxLane(fxLanes);
+		// At the cap this is a no-op; recording it would leave a Ctrl+Z entry
+		// that undoes nothing.
+		if (next === fxLanes) return;
 		pushFxHistory();
-		fxLanes = appendFxLane(fxLanes);
+		fxLanes = next;
 	}
 
 	function fxModeChange(
@@ -2018,6 +2023,28 @@
 					},
 				]
 			: []),
+		...(isSequenceMode && fxLanes.length > 0
+			? [
+					{
+						title: 'FX lanes',
+						shortcuts: [
+							{
+								keys: ['Ctrl+Click'],
+								description: 'Create clip in empty space / split the clip at cursor',
+							},
+							{ keys: ['Double-click'], description: 'Create clip in empty space' },
+							{ keys: ['Click'], description: 'Select clip for editing' },
+							{ keys: ['Shift+Click'], description: 'Select a range of clips' },
+							{
+								keys: ['Ctrl/Cmd+Shift+Click'],
+								description: 'Add / remove one clip from the selection',
+							},
+							{ keys: ['Delete', 'Backspace'], description: 'Delete selected clips' },
+							{ keys: ['Esc'], description: 'Deselect / close the palette picker' },
+						],
+					},
+				]
+			: []),
 		...(textTimeline.enabled ? [TEXT_TIMELINE_SHORTCUTS] : []),
 	]);
 
@@ -2781,11 +2808,17 @@
 						<span class="tl-tool-label">FX</span>
 						<button
 							class="tl-tool-btn"
-							title="Add a stacked effect lane — its clips run after the segment's own chain"
+							disabled={fxLanes.length >= MAX_FX_LANES}
+							title={fxLanes.length >= MAX_FX_LANES
+								? `${MAX_FX_LANES} lanes is the limit — each effect on a lane is another full-screen pass`
+								: "Add a stacked effect lane — its clips run after the segment's own chain"}
 							onclick={addFxLane}
 						>
 							<Plus size={12} /> Lane
 						</button>
+						{#if fxLanes.length > 0}
+							<span class="tl-tool-count">{fxLanes.length}/{MAX_FX_LANES}</span>
+						{/if}
 					{/if}
 					{#if videoIsMaster}
 						<div class="tl-tool-sep"></div>
