@@ -160,6 +160,21 @@
 		return String(commonIntervalSec);
 	});
 
+	let commonFade = $derived(commonValue(selectedClips.map((c) => c.fadeSec ?? 0)));
+
+	function setFade(sec: number) {
+		const ids = new Set(selectedClipIds);
+		onBeforeEdit?.();
+		onChange(
+			lanes.map((l) => ({
+				...l,
+				clips: l.clips.map((c) =>
+					ids.has(c.id) ? { ...c, fadeSec: sec > 0 ? sec : undefined } : c,
+				),
+			})),
+		);
+	}
+
 	/** A clip with no spacing yet takes one beat, or a flat second without a BPM. */
 	function switchToAuto() {
 		if (hasInterval) onModeChange?.(selectedClipIds, 'interval');
@@ -568,6 +583,26 @@
 					Auto
 				</button>
 			</div>
+			<div class="tl-tool-sep"></div>
+			<span class="tl-tool-label">Fade</span>
+			<select
+				class="fx-select"
+				value={commonFade === undefined ? '' : String(commonFade)}
+				title="Ramp this lane's effects in and out at the clip's edges"
+				onchange={(e) => {
+					const v = e.currentTarget.value;
+					if (v !== '') setFade(Number(v));
+				}}
+			>
+				{#if commonFade === undefined}
+					<option value="" disabled>—</option>
+				{/if}
+				<option value="0">none</option>
+				{#each [0.1, 0.25, 0.5, 1] as sec}
+					<option value={String(sec)}>{sec}s</option>
+				{/each}
+			</select>
+
 			{#if commonMode === 'interval'}
 				<select
 					class="fx-select"

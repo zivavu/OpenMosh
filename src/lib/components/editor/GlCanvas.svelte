@@ -4,7 +4,7 @@
    import type { EffectInstance } from "../../effects";
    import { ANIMATED_EFFECTS } from "../../gl/effect-shaders";
    import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
-   import { GlRenderer } from "../../gl/renderer";
+   import { GlRenderer, type PostChainLayer } from "../../gl/renderer";
    import { onFontsChanged } from "../../text-overlay";
    import { resolveTextLayersAt, type TextTimeline } from "../../text";
    import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
@@ -26,6 +26,9 @@
        * segments use different media, so the media cross-fades too. */
       useAltSource?: boolean;
    }
+
+   /** Shared, so the default prop doesn't mint an array per render. */
+   const EMPTY_POST: PostChainLayer[] = [];
 
    interface Props {
       imageSrc: string;
@@ -54,6 +57,14 @@
       warmRenderer?: GlRenderer | null;
       /** Sequence segment transition in progress; `effects` is the incoming chain. */
       transition?: CanvasTransition | null;
+      /**
+       * Sequence fx lanes: stacked over whatever the source lane produced, so
+       * during a transition they run over the finished blend rather than on
+       * each side of it, and so a fading lane can mix against its own input.
+       * `effects` still carries their instances flat, for the animation check
+       * and the audio-link tick — the renderer is handed the layers.
+       */
+      postLayers?: PostChainLayer[];
       /** Sequence multi-source: uploads the active segment's frame for wherever
        * the master clock is (the driver reads it — this loop's wall-clock time
        * would make the same song position show different frames). Returning
@@ -102,6 +113,7 @@
       warmCanvas = null,
       warmRenderer = null,
       transition = null,
+      postLayers = EMPTY_POST,
       sourceDriver = null,
       outgoingDriver = null,
       sourceKey = null,
@@ -231,9 +243,15 @@
       if (tr && tr.durationSec > 0) {
          const p = (tr.getTime() - tr.startTime) / tr.durationSec;
          if (p >= 0 && p < 1) {
+            // `effects` already ends with the stacked lanes' instances; the
+            // incoming chain is what's left once that tail is peeled off, since
+            // the lanes run over the blend rather than inside either side.
+            const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
+            const incoming =
+               stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
             renderer!.renderTransition(
                tr.effectsA,
-               effects,
+               incoming,
                tr.type,
                p,
                tr.seed,
@@ -242,11 +260,17 @@
                now,
                tr.useAltSource ?? false,
                layers,
+               postLayers,
             );
             return;
          }
       }
-      renderer!.render(effects, now, layers);
+      // The plain path hands over the source chain alone plus the layers, so a
+      // fading lane can be mixed against its input; `effects` is the flat form,
+      // which would double the stacked instances if passed whole.
+      const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
+      const base = stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
+      renderer!.render(base, now, layers, postLayers);
    }
 
    $effect(() => {

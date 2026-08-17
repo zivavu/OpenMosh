@@ -80,6 +80,29 @@ function buildChainOps(
   return ops;
 }
 
+/**
+ * One stacked fx lane's contribution for a frame: the chain it adds, and how
+ * strongly it applies. A weight below 1 mixes the lane's output back over its
+ * input, which is what fades a lane's clip in and out at its edges — there is
+ * no "other side" to blend against the way a source-lane transition has one.
+ */
+export interface PostChainLayer {
+  effects: EffectInstance[];
+  /** 0 = lane absent, 1 = fully applied. */
+  weight: number;
+}
+
+/** Lanes that actually change the frame — the rest are skipped entirely. */
+function livePostLayers(layers: PostChainLayer[]): PostChainLayer[] {
+  return layers.filter((l) => l.weight > 0 && l.effects.some((e) => e.enabled));
+}
+
+/** True when every live lane applies at full strength, so they can run as one
+ * concatenated chain with no intermediate buffers — the common case. */
+function allFullWeight(layers: PostChainLayer[]): boolean {
+  return layers.every((l) => l.weight >= 1);
+}
+
 /** Every instance id alive this frame, so feedback buffers survive the GC. */
 function liveInstanceIds(
   chains: EffectInstance[][],
@@ -143,6 +166,18 @@ export class GlRenderer {
   /** Per-side outputs for transitions: chain A and chain B render into these. */
   private sceneTextures: [WebGLTexture, WebGLTexture] | null = null;
   private sceneFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
+  /** Holds a finished transition blend while a post chain runs over it. Only
+   * allocated when something actually stacks on top of a blend. */
+  private blendTexture: WebGLTexture | null = null;
+  private blendFBO: WebGLFramebuffer | null = null;
+  /**
+   * Rotation for the stacked fx lanes. Three, not two: fading a lane needs its
+   * input and its output both readable while a third buffer takes the mix, and
+   * the ping-pong pair is already in use inside each lane's own chain. Only
+   * allocated when a lane actually stacks.
+   */
+  private stackTextures: WebGLTexture[] | null = null;
+  private stackFBOs: WebGLFramebuffer[] | null = null;
   private transitionPrograms = new Map<string, CompiledProgram>();
   /**
    * Private history buffers for feedback-reading effects (u_feedback), keyed
@@ -459,7 +494,13 @@ export class GlRenderer {
     this.setupPingPong();
   }
 
-  render(effects: EffectInstance[], time = 0, textLayers: ResolvedTextLayer[] = []) {
+  render(
+    effects: EffectInstance[],
+    time = 0,
+    textLayers: ResolvedTextLayer[] = [],
+    /** Stacked fx lanes, run over the finished chain. See PostChainLayer. */
+    postLayers: PostChainLayer[] = [],
+  ) {
     if (
       !this.sourceTexture ||
       !this.ppTextures ||
@@ -467,24 +508,52 @@ export class GlRenderer {
     )
       return;
 
-    this.gcFxFeedback(liveInstanceIds([effects], textLayers));
+    const post = livePostLayers(postLayers);
+    this.gcFxFeedback(
+      liveInstanceIds([effects, ...post.map((l) => l.effects)], textLayers),
+    );
     this.gcTextLayers(textLayers);
     const safeDt = this.frameDelta(time);
     this.ensurePresentBuffer();
     // Text layers run their own chains through the shared ping-pong, so they
     // have to be finished before the main chain starts using it.
     const prepared = this.prepareTextLayers(textLayers, time, safeDt);
-    const resultTex = this.renderChainTo(
+
+    // Nothing stacked, or nothing fading: one chain, no intermediate buffers.
+    // This is the path every non-sequence render takes.
+    if (post.length === 0 || allFullWeight(post)) {
+      const flat =
+        post.length === 0
+          ? effects
+          : [...effects, ...post.flatMap((l) => l.effects)];
+      const resultTex = this.renderChainTo(
+        flat,
+        time,
+        safeDt,
+        this.fbFBO!,
+        this.fbTexture!,
+        true,
+        false,
+        prepared,
+      );
+      this.presentFrame(resultTex);
+      return;
+    }
+
+    // A fading lane has to mix against its own input, so the source chain lands
+    // in a buffer rather than going straight to the canvas.
+    this.ensureSceneBuffers();
+    const baseTex = this.renderChainTo(
       effects,
       time,
       safeDt,
-      this.fbFBO!,
-      this.fbTexture!,
-      true,
+      this.sceneFBOs![0],
+      this.sceneTextures![0],
+      false,
       false,
       prepared,
-    );
-    this.presentFrame(resultTex);
+    )!;
+    this.presentFrame(this.renderStack(post, baseTex, time, safeDt));
   }
 
   /**
@@ -506,6 +575,14 @@ export class GlRenderer {
      * segments draw from different media, so the media cross-fades too. */
     useAltSourceForA = false,
     textLayers: ResolvedTextLayer[] = [],
+    /**
+     * Stacked fx lanes, run over the finished blend — they sit above the source
+     * lane, so they apply to whatever it produced, blend included. Deliberately
+     * *not* appended to both sides: chains A and B render separately, so the
+     * same instance on both would have two passes writing one feedback buffer,
+     * each reading the other's history.
+     */
+    postLayers: PostChainLayer[] = [],
   ) {
     if (
       !this.sourceTexture ||
@@ -513,15 +590,21 @@ export class GlRenderer {
       !this.ppFBOs
     )
       return;
+    const post = livePostLayers(postLayers);
     const prog = this.transitionPrograms.get(type);
     if (!prog || progress >= 1) {
-      this.render(effectsB, time, textLayers);
+      this.render(effectsB, time, textLayers, post);
       return;
     }
 
-    // Both chains stay alive for the whole blend — collect feedback buffers
+    // Every chain stays alive for the whole blend — collect feedback buffers
     // only against the union, or rendering A would drop B's history.
-    this.gcFxFeedback(liveInstanceIds([effectsA, effectsB], textLayers));
+    this.gcFxFeedback(
+      liveInstanceIds(
+        [effectsA, effectsB, ...post.map((l) => l.effects)],
+        textLayers,
+      ),
+    );
     this.gcTextLayers(textLayers);
     const safeDt = this.frameDelta(time);
 
@@ -552,9 +635,32 @@ export class GlRenderer {
     );
 
     this.ensurePresentBuffer();
+
+    // Nothing stacked on top: blend straight into the present buffer.
+    if (post.length === 0) {
+      this.drawTransitionPass(
+        prog,
+        this.fbFBO!,
+        texA!,
+        texB!,
+        progress,
+        seed,
+        direction,
+        density,
+        time,
+      );
+      this.presentFrame(this.fbTexture);
+      return;
+    }
+
+    // A post chain reads the blend, so the blend can't land in the buffer that
+    // chain writes to. Park it in its own texture and hand that over as the
+    // chain's source; text layers stay on A and B, where they ride through the
+    // blend rather than popping in when B takes over.
+    this.ensureBlendBuffer();
     this.drawTransitionPass(
       prog,
-      this.fbFBO!,
+      this.blendFBO!,
       texA!,
       texB!,
       progress,
@@ -563,7 +669,9 @@ export class GlRenderer {
       density,
       time,
     );
-    this.presentFrame(this.fbTexture);
+    this.presentFrame(
+      this.renderStack(post, this.blendTexture!, time, safeDt),
+    );
   }
 
   setSourceFit(fit: SourceFit) {
@@ -1541,6 +1649,9 @@ export class GlRenderer {
     this.deleteFBOPair(this.hdrFBOs);
     this.deleteTexturePair(this.sceneTextures);
     this.deleteFBOPair(this.sceneFBOs);
+    if (this.blendTexture) gl.deleteTexture(this.blendTexture);
+    if (this.blendFBO) gl.deleteFramebuffer(this.blendFBO);
+    this.deleteStackBuffers();
     for (const prog of this.transitionPrograms.values()) {
       gl.deleteProgram(prog.program);
     }
@@ -1782,6 +1893,15 @@ export class GlRenderer {
     this.deleteFBOPair(this.sceneFBOs);
     this.sceneTextures = null;
     this.sceneFBOs = null;
+    if (this.blendTexture) {
+      gl.deleteTexture(this.blendTexture);
+      this.blendTexture = null;
+    }
+    if (this.blendFBO) {
+      gl.deleteFramebuffer(this.blendFBO);
+      this.blendFBO = null;
+    }
+    this.deleteStackBuffers();
     if (this.trackingTexture) {
       gl.deleteTexture(this.trackingTexture);
       this.trackingTexture = null;
@@ -1832,6 +1952,118 @@ export class GlRenderer {
       this.createTexture(this.imgW, this.imgH),
     ];
     this.sceneFBOs = this.createFBOPair(this.sceneTextures);
+  }
+
+  /**
+   * Run the stacked fx lanes over `inputTex`, in lane order, and return the
+   * texture holding the result.
+   *
+   * A full-strength lane just chains off the previous result. A fading one
+   * renders its chain, then mixes that output back over its own input at the
+   * lane's weight — so the lane arrives and leaves gradually without any of its
+   * effects needing to know what "half applied" means for their parameters.
+   */
+  private renderStack(
+    layers: PostChainLayer[],
+    inputTex: WebGLTexture,
+    time: number,
+    safeDt: number,
+  ): WebGLTexture {
+    this.ensureStackBuffers();
+    let cur = inputTex;
+    // Index of the buffer `cur` lives in, or -1 while it's still the caller's
+    // texture — which must never be written to.
+    let curIdx = -1;
+
+    for (const layer of layers) {
+      const outIdx = this.freeStackIndex(curIdx, -1);
+      const outTex = this.renderChainTo(
+        layer.effects,
+        time,
+        safeDt,
+        this.stackFBOs![outIdx],
+        this.stackTextures![outIdx],
+        false,
+        false,
+        [],
+        cur,
+      )!;
+
+      if (layer.weight >= 1) {
+        cur = outTex;
+        // renderChainTo can hand back a private feedback texture rather than
+        // the buffer we named, so track where the result actually is.
+        curIdx = outTex === this.stackTextures![outIdx] ? outIdx : -1;
+        continue;
+      }
+
+      const mixIdx = this.freeStackIndex(curIdx, outIdx);
+      this.compositeOverlayToFBO(
+        cur,
+        outTex,
+        this.stackFBOs![mixIdx],
+        layer.weight,
+        "normal",
+      );
+      cur = this.stackTextures![mixIdx];
+      curIdx = mixIdx;
+    }
+    return cur;
+  }
+
+  /** A stack buffer that is neither of the two given ones. */
+  private freeStackIndex(a: number, b: number): number {
+    for (let i = 0; i < 3; i++) {
+      if (i !== a && i !== b) return i;
+    }
+    return 0;
+  }
+
+  private ensureStackBuffers() {
+    if (this.stackTextures && this.stackFBOs) return;
+    const gl = this.gl;
+    this.stackTextures = [];
+    this.stackFBOs = [];
+    for (let i = 0; i < 3; i++) {
+      const tex = this.createTexture(this.imgW, this.imgH);
+      const fbo = gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        tex,
+        0,
+      );
+      this.stackTextures.push(tex);
+      this.stackFBOs.push(fbo);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  private deleteStackBuffers() {
+    const gl = this.gl;
+    for (const tex of this.stackTextures ?? []) gl.deleteTexture(tex);
+    for (const fbo of this.stackFBOs ?? []) gl.deleteFramebuffer(fbo);
+    this.stackTextures = null;
+    this.stackFBOs = null;
+  }
+
+  /** Lazy: only a blend with a chain stacked over it ever needs this. */
+  private ensureBlendBuffer() {
+    if (this.blendTexture && this.blendFBO) return;
+    const gl = this.gl;
+    this.blendTexture = this.createTexture(this.imgW, this.imgH);
+    this.blendFBO = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.blendFBO);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      this.blendTexture,
+      0,
+    );
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   private ensurePresentBuffer() {

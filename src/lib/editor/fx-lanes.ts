@@ -50,6 +50,38 @@ export interface FxClip extends TimelineClip {
   intervalBeats?: number;
   /** "interval" mode: base seed for per-tick rolls. */
   seed?: number;
+  /**
+   * Fade the lane's contribution in over this many seconds from the clip's
+   * start, and out over the same before its end.
+   *
+   * Deliberately not the source lane's transition set. Those blend two whole
+   * scenes, which needs both sides rendered separately — and a stacked lane has
+   * no "other side": before the clip the lane contributes nothing at all. What
+   * a clip boundary needs is the chain arriving rather than snapping on, so
+   * this scales the parameters of the lane's own effects toward their disabled
+   * state instead of compositing anything.
+   */
+  fadeSec?: number;
+}
+
+/** Default ramp for a clip that asks for one, in seconds. */
+export const DEFAULT_FX_FADE = 0.25;
+
+/**
+ * How strongly `clip` applies at `time`: 1 across the body, ramping from 0 at
+ * each edge when the clip has a fade. Returns 1 for clips without one, which is
+ * every clip until the user asks for a ramp.
+ */
+export function fxClipWeight(clip: FxClip, time: number): number {
+  const fade = clip.fadeSec ?? 0;
+  if (fade <= 0) return 1;
+  // A fade longer than half the clip would have the two ramps overlap and the
+  // chain never reach full strength; meeting in the middle is the cap.
+  const ramp = Math.min(fade, (clip.end - clip.start) / 2);
+  if (ramp <= 0) return 1;
+  const inWeight = (time - clip.start) / ramp;
+  const outWeight = (clip.end - time) / ramp;
+  return Math.max(0, Math.min(1, inWeight, outWeight));
 }
 
 /** 0-based re-roll tick index inside an interval clip. */
@@ -121,6 +153,17 @@ export function activeFxClips(
 
 const EMPTY: EffectInstance[] = [];
 const NO_CLIPS: FxClip[] = [];
+const NO_LAYERS: FxLayer[] = [];
+
+/**
+ * One lane's contribution for a frame. Structurally the renderer's
+ * PostChainLayer: the chain the lane adds, and how strongly it applies.
+ */
+export interface FxLayer {
+  effects: EffectInstance[];
+  /** 0 = absent, 1 = fully applied. Below 1 only while a clip's fade ramps. */
+  weight: number;
+}
 
 export interface FxEffectSourceOptions {
   /**
@@ -133,7 +176,7 @@ export interface FxEffectSourceOptions {
 }
 
 /**
- * Time → stacked chain resolver. Preview and export both build one of these,
+ * Time → stacked lanes resolver. Preview and export both build one of these,
  * so a frame that was scrubbed past is the frame that gets written out:
  * interval rolls are keyed by (clip, seed, tick, mosh options), which makes a
  * fresh source built from the same inputs reproduce the preview exactly.
@@ -141,21 +184,32 @@ export interface FxEffectSourceOptions {
  * Returns a shared empty array when nothing is active, so the common "no fx
  * lanes here" frame doesn't mint an array the render loop has to re-check.
  */
-export function createFxEffectSource(
+export function createFxLayerSource(
   getLanes: () => FxLane[] | null | undefined,
   getMoshOptions: () => MoshOptions,
   { clone = false }: FxEffectSourceOptions = {},
-): (time: number, forceClipId?: string | null) => EffectInstance[] {
+): (time: number, forceClipId?: string | null) => FxLayer[] {
   const cache = new Map<string, EffectInstance[]>();
   return (time: number, forceClipId?: string | null) => {
     const clips = activeFxClips(getLanes(), time, forceClipId);
-    if (clips.length === 0) return EMPTY;
-    let out: EffectInstance[] | null = null;
-    for (const clip of clips) {
-      (out ??= []).push(...chainFor(clip, time, cache, clone, getMoshOptions));
-    }
-    return out ?? EMPTY;
+    if (clips.length === 0) return NO_LAYERS;
+    return clips.map((clip) => ({
+      effects: chainFor(clip, time, cache, clone, getMoshOptions),
+      // A clip pinned in for editing shows at full strength: the fade is about
+      // how it enters during playback, and ramping it here would leave the
+      // panel adjusting a chain that is only partly on screen.
+      weight: clip.id === forceClipId ? 1 : fxClipWeight(clip, time),
+    }));
   };
+}
+
+/** Every stacked effect for a frame, in lane order — for the audio-link tick
+ * and the animation check, which care about the instances, not the weights. */
+export function flattenFxLayers(layers: FxLayer[]): EffectInstance[] {
+  if (layers.length === 0) return EMPTY;
+  let out: EffectInstance[] | null = null;
+  for (const layer of layers) (out ??= []).push(...layer.effects);
+  return out ?? EMPTY;
 }
 
 function chainFor(
@@ -324,6 +378,7 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
         intervalSec: clip.intervalSec,
         intervalBeats: clip.intervalBeats,
         seed: clip.seed,
+        fadeSec: clip.fadeSec,
       })),
   }));
 }
