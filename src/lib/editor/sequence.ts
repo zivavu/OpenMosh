@@ -11,27 +11,21 @@ export type SequenceSegmentMode = "static" | "interval";
 /** Artistic blend rendered between two segments' effect chains. */
 export type TransitionType =
   | "cut"
-  | "dissolve"
-  | "wipe"
-  | "blocks"
   | "rgbslip"
   | "slam"
   | "whip"
   | "shatter"
-  | "echo"
-  | "burn"
-  | "roll"
-  | "bleed";
+  | "burn";
 
 export interface SegmentTransition {
   type: TransitionType;
   /** Seconds the blend runs after the boundary. */
   durationSec: number;
-  /** Seeded layouts (static/blocks/wipe) stay identical between preview/export. */
+  /** Seeded layouts (shatter/whip) stay identical between preview/export. */
   seed: number;
-  /** "wipe": 0=→ 1=← 2=↓ 3=↑. */
+  /** "whip": 0=→ 1=← 2=↓ 3=↑. */
   direction?: number;
-  /** "blocks"/"shatter" cell size: 0=coarse 1=medium 2=fine. */
+  /** "shatter" cell size: 0=coarse 1=medium 2=fine. */
   density?: number;
 }
 
@@ -44,17 +38,11 @@ export const TRANSITION_OPTIONS: {
   hasSeed?: boolean;
 }[] = [
   { value: "cut", label: "cut" },
-  { value: "dissolve", label: "dissolve", hasSeed: true },
-  { value: "wipe", label: "wipe", hasDirection: true, hasSeed: true },
-  { value: "blocks", label: "blocks", hasDensity: true, hasSeed: true },
   { value: "rgbslip", label: "rgb slip", hasSeed: true },
   { value: "slam", label: "slam" },
   { value: "whip", label: "whip", hasDirection: true, hasSeed: true },
   { value: "shatter", label: "shatter", hasDensity: true, hasSeed: true },
-  { value: "echo", label: "echo", hasSeed: true },
   { value: "burn", label: "burn", hasSeed: true },
-  { value: "roll", label: "roll", hasSeed: true },
-  { value: "bleed", label: "bleed", hasSeed: true },
 ];
 
 /** Half a second, not the third it used to be: the reworked shaders all carry
@@ -73,16 +61,17 @@ export function createTransition(type: TransitionType): SegmentTransition {
   return { type, durationSec: DEFAULT_TRANSITION_DURATION, seed: randomSeed() };
 }
 
-/**
- * Transitions that earlier saves could hold. Mapped rather than dropped, so a
- * stored sequence keeps a blend instead of quietly becoming a hard cut.
- * "static" was a noise curtain that hid the cut instead of performing it;
- * "roll" is the nearest thing left in the same signal-failure family.
- */
-const RETIRED_TRANSITIONS: Record<string, TransitionType> = { static: "roll" };
+const LIVE_TRANSITIONS = new Set<string>(TRANSITION_OPTIONS.map((o) => o.value));
 
+/**
+ * Anything an earlier save could hold that this build no longer ships
+ * ("dissolve", "wipe", "blocks", "echo", "roll", "bleed", the old "static")
+ * falls back to a hard cut: none of the survivors stands in closely enough to
+ * be worth substituting one blend for another behind the user's back, and a
+ * name with no shader would otherwise render as nothing at all.
+ */
 export function normalizeTransitionType(type: string): TransitionType {
-  return RETIRED_TRANSITIONS[type] ?? (type as TransitionType);
+  return LIVE_TRANSITIONS.has(type) ? (type as TransitionType) : "cut";
 }
 
 /** Rewrite retired transition names across a timeline read back from storage. */

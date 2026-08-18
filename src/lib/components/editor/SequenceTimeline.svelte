@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Dices, Eraser, Repeat, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Repeat, Shuffle, Trash2 } from 'lucide-svelte';
 	import { loadPresets, type Preset } from '../../effects';
 	import {
 		cloneSegmentForSplit,
@@ -87,6 +87,8 @@
 		primarySourceId?: string | null;
 		/** Takes a source card dragged out of the grid view onto a segment. */
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
+		/** Deal the pool at random across the given segments. */
+		onShuffleSources?: (segmentIds: string[]) => void;
 	}
 
 	let {
@@ -106,6 +108,7 @@
 		sources = [],
 		primarySourceId = null,
 		onAssignSource,
+		onShuffleSources,
 	}: Props = $props();
 
 	// The hint only teaches things the ? shortcuts modal also lists, so hiding
@@ -1178,6 +1181,20 @@
 					>
 						<Eraser size={12} /> Clear
 					</button>
+
+					{#if onShuffleSources && multiSource}
+						<div class="tl-tool-sep"></div>
+						<span class="tl-tool-label">Source</span>
+						<button
+							class="tl-tool-btn"
+							title={many
+								? 'Deal the pool at random across the selected segments'
+								: 'Play a random source on this segment'}
+							onclick={() => onShuffleSources(selectedIds)}
+						>
+							<Shuffle size={12} /> Shuffle
+						</button>
+					{/if}
 
 					<div class="tl-tool-sep"></div>
 					<span class="tl-tool-label">Mode</span>

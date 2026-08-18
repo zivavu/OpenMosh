@@ -340,7 +340,7 @@ function onAudioDrop(e: DragEvent) {
 		{#if selectedMode === 'slideshow'}
 			Upload several images or videos and cut between them on the beat
 		{:else if selectedMode === 'sequence'}
-			Upload media, lay it out on a timeline, give each segment its own look
+			Upload media, lay it out on a timeline, give each segment its own mosh
 		{:else}
 			Upload an image or video to apply glitch effects
 		{/if}
