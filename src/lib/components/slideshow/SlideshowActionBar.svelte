@@ -56,6 +56,7 @@
 			shortcuts: [
 				{ keys: ['Space'], description: 'Play / pause preview' },
 				{ keys: ['Esc'], description: 'Stop preview' },
+				{ keys: ['C'], description: 'Follow the playhead on the timeline' },
 			],
 		},
 		{

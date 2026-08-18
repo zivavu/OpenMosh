@@ -114,6 +114,7 @@
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import SpeedControl from '../ui/SpeedControl.svelte';
 	import TimelineStack from '../ui/TimelineStack.svelte';
+	import type { TimelineStackState } from '../../editor/timeline-stack.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
@@ -1961,6 +1962,10 @@
 		});
 	}
 
+	/** The timeline's shared axis, once a stack is mounted — the C shortcut
+	 * fires from the window, outside the context the stack puts it in. */
+	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
+
 	const handleKeydown = createKeyboardHandler({
 		save,
 		mosh,
@@ -1969,6 +1974,9 @@
 		redo,
 		reInput,
 		toggleFullscreen: () => (previewFullscreen = !previewFullscreen),
+		toggleFollowPlayhead: () => {
+			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
+		},
 		playSpan,
 		pauseTrack,
 		hasTrack: () => (!!audio.trackFile && !!audioEl) || isVideo,
@@ -2094,6 +2102,7 @@
 				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
 				{ keys: ['Space'], description: 'Play / pause' },
 				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
+				{ keys: ['C'], description: 'Follow the playhead on the timeline' },
 				{
 					keys: ['V'],
 					description: 'Bake current frame as the new source (undoable)',
@@ -2889,6 +2898,7 @@
 		{/if}
 		{#if showStack}
 			<TimelineStack
+				bind:axis={timelineAxis}
 				trackDuration={textDuration}
 				currentTime={textTime}
 				isPlaying={textClockRunning}
