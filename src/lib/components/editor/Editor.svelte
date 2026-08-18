@@ -860,6 +860,7 @@
 		const onHide = () => {
 			flushSequenceSave();
 			flushMediaPoolSave();
+			flushSingleSessionSave();
 		};
 		window.addEventListener('pagehide', onHide);
 		return () => {
@@ -2052,6 +2053,14 @@
 
 	$effect(() => {
 		if (isSequenceMode) return;
+		// Skipped while playing, for the same reason the sequence save above is:
+		// the per-frame volume-link tick mutates values inside `effects`, so the
+		// deep read below re-runs this effect — and its two deep snapshots —
+		// once per rendered frame. The clones are discarded immediately, which
+		// makes it pure garbage for the collector to come back for every couple
+		// of seconds. Saving settles on pause, and the pagehide flush covers a
+		// tab closed mid-playback.
+		if (audio.audioPlaying || videoIsPlaying) return;
 		// Deep-read, discarded: naming `effects` alone subscribes to the array
 		// reference only, so dragging a parameter — which mutates in place —
 		// would never re-arm the debounce.
