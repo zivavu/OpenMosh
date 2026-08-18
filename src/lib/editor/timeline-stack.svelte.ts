@@ -21,10 +21,24 @@ export class TimelineStackState {
 
    readonly vp: TimelineViewport;
 
+   /**
+    * Lane width in px, kept current by a ResizeObserver.
+    *
+    * Observed rather than measured on demand because the callers that want it
+    * read it while the lanes' own inline widths are being written — a
+    * getBoundingClientRect() there forces a layout flush, once per clip, on
+    * every frame the view pans.
+    */
+   laneWidth = $state(0);
+
    /** Every mounted lane track. They all share one geometry, so any of them can
     * measure the axis — kept as a set so deleting the lane that happened to
     * register (a text lane, say) doesn't leave the axis unmeasurable. */
    readonly #trackEls = new Set<HTMLElement>();
+   readonly #resizeObserver = new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1].contentRect.width;
+      if (width > 0) this.laneWidth = width;
+   });
    readonly #getDuration: () => number;
    readonly #getCurrentTime: () => number;
    readonly #seek: (time: number) => void;
@@ -89,12 +103,17 @@ export class TimelineStackState {
    lane = (node: HTMLElement | SVGElement) => {
       const el = node as HTMLElement;
       this.#trackEls.add(el);
+      this.#resizeObserver.observe(el);
+      if (this.laneWidth <= 0) {
+         this.laneWidth = el.getBoundingClientRect().width;
+      }
       const detachWheel = this.vp.attachWheel(node, () => {
          this.followPlayhead = false;
       });
       return {
          destroy: () => {
             detachWheel();
+            this.#resizeObserver.unobserve(el);
             this.#trackEls.delete(el);
          },
       };
