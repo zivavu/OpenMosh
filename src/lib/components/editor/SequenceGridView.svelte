@@ -127,13 +127,11 @@
 			{#if onShuffle && sources.length > 1}
 				<button
 					class="grid-btn"
-					title={selectedCount > 0
-						? `Deal the pool at random across the ${selectedCount} selected segment${selectedCount > 1 ? 's' : ''}`
-						: 'Deal the pool at random across every segment'}
+					title="Deal the pool at random across every segment. Selected segments alone shuffle from the segment bar under the timeline."
 					onclick={onShuffle}
 				>
 					<Shuffle size={12} />
-					{selectedCount > 0 ? 'Shuffle selected' : 'Shuffle media'}
+					Shuffle media
 				</button>
 			{/if}
 			{#if onClear && sources.length > 1}

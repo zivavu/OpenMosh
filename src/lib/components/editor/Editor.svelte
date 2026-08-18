@@ -1280,8 +1280,8 @@
 		return played.every((id) => id === played[0]) ? played[0] : null;
 	});
 
-	/** Deal the pool across the given segments — the toolbar passes the whole
-	 * lane when nothing is selected. */
+	/** Deal the pool across the given segments — the grid passes the whole lane,
+	 * the segment bar passes the selection. */
 	function randomizeSegmentSourcesFor(segIds: string[]) {
 		const pool = sequenceSources.map((s) => s.id);
 		if (pool.length < 2 || segIds.length === 0) return;
@@ -1935,6 +1935,9 @@
 	 */
 	function reInput() {
 		if (!canvasEl) return;
+		// Single mode only: sequence draws from a pool of sources with a chain per
+		// segment, so there is no one source for a baked frame to replace.
+		if (isSequenceMode) return;
 		const prevFile = file;
 		const prevEffects = $state.snapshot(effects) as EffectInstance[];
 		captureAtOutputRes(performance.now() / 1000, (done) => {
@@ -2103,10 +2106,14 @@
 				{ keys: ['Space'], description: 'Play / pause' },
 				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
 				{ keys: ['C'], description: 'Follow the playhead on the timeline' },
-				{
-					keys: ['V'],
-					description: 'Bake current frame as the new source (undoable)',
-				},
+				...(isSequenceMode
+					? []
+					: [
+							{
+								keys: ['V'],
+								description: 'Bake current frame as the new source (undoable)',
+							},
+						]),
 			],
 		},
 		...(isSequenceMode
@@ -2476,10 +2483,8 @@
 			},
 		);
 
-		// Resume playback after recording
-		audio.playAudio();
-		if (previewPlayer) previewPlayer.play();
-		else if (isVideo && videoEl) videoEl.play().catch(() => {});
+		// Left paused: an export ends with the file saved and the user reading a
+		// toast, not wanting the song to start up again on its own.
 		if (canvasEl && glRenderer) {
 			glRenderer.render(renderedEffects, performance.now() / 1000);
 		}
@@ -2664,11 +2669,7 @@
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
 				onShuffle={() =>
-					randomizeSegmentSourcesFor(
-						seqSelectedIds.length > 0
-							? seqSelectedIds
-							: sequenceSegments.map((s) => s.id),
-					)}
+					randomizeSegmentSourcesFor(sequenceSegments.map((s) => s.id))}
 				onClear={() => (showClearSourcesConfirm = true)}
 			/>
 		{/if}
@@ -3019,6 +3020,7 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+						onShuffleSources={isSequenceMode ? randomizeSegmentSourcesFor : undefined}
 					/>
 				{/if}
 				{#if isSequenceMode && fxLanes.length > 0}
