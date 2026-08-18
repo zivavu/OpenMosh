@@ -55,6 +55,11 @@
 		 * continuously-dragged parameter so consecutive ticks of one gesture can
 		 * be merged into a single undo entry; discrete edits pass nothing. */
 		onBeforeUserEdit?: (coalesceKey?: string) => void;
+		/** Set when `effects` is not a chain the user can edit — sequence mode
+		 * with nothing selected renders the segment under the playhead, and any
+		 * edit there is thrown away on the next re-roll. The rack stands down and
+		 * shows this instead of pretending to be that chain. */
+		noTarget?: { title: string; hint: string } | null;
 	}
 
 	let {
@@ -67,6 +72,7 @@
 		onPresetApplied,
 		onUserEdit,
 		onBeforeUserEdit,
+		noTarget = null,
 	}: Props = $props();
 
 	/** How many effects are actually passing signal, shown in the panel header. */
@@ -379,7 +385,9 @@
 
 	// Touch drag support
 	let touchDragFromIndex: number | null = $state(null);
-	let scrollEl: HTMLElement | null = null;
+	// $state because the rack stands down (and the binding drops to null) when
+	// there is no chain to edit.
+	let scrollEl = $state<HTMLElement | null>(null);
 	let scrollRafId: number | null = null;
 
 	function stopAutoScroll() {
@@ -462,11 +470,21 @@
 <aside class="effects-panel">
 	<header class="panel-head">
 		<span class="rack-label">Signal chain</span>
-		<span class="chain-count readout" class:live={liveCount > 0}>
-			{liveCount} live
-		</span>
+		{#if !noTarget}
+			<span class="chain-count readout" class:live={liveCount > 0}>
+				{liveCount} live
+			</span>
+		{/if}
 	</header>
 
+	{#if noTarget}
+		<div class="panel-scroll">
+			<div class="list-empty">
+				<p class="empty-title">{noTarget.title}</p>
+				<p class="empty-hint">{noTarget.hint}</p>
+			</div>
+		</div>
+	{:else}
 	<div class="presets-section">
 		<button class="presets-header" onclick={() => (showPresets = !showPresets)}>
 			<span class="presets-arrow" class:expanded={showPresets}>&#9654;</span>
@@ -685,6 +703,7 @@
 			{/if}
 		{/if}
 	</div>
+	{/if}
 </aside>
 
 <style>

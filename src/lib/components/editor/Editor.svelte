@@ -1571,6 +1571,30 @@
 		return selectedFxClip?.effects ?? panelSelectedSegment()?.effects ?? effects;
 	}
 
+	/**
+	 * Sequence mode only: with segments on the timeline, `effects` is whatever
+	 * the playhead last landed on — a chain that renders but belongs to nothing,
+	 * so an edit to it is silently dropped on the next re-roll. The rack shows a
+	 * standing-down note rather than that chain.
+	 */
+	let panelNoTarget = $derived.by(() => {
+		if (!isSequenceMode || sequenceSegments.length === 0) return null;
+		if (selectedFxClip || panelSelectedSegment()) return null;
+		const seg = selectedSegmentId
+			? sequenceSegments.find((s) => s.id === selectedSegmentId)
+			: null;
+		if (seg) {
+			return {
+				title: 'Auto segment',
+				hint: 'This one re-rolls its own mosh on an interval. Switch it to Static in the segment bar to build a chain by hand.',
+			};
+		}
+		return {
+			title: 'Nothing selected',
+			hint: 'Click a segment on the timeline to edit its chain, or an fx clip to edit that one.',
+		};
+	});
+
 	function setPanelEffects(v: EffectInstance[]) {
 		const clip = selectedFxClip;
 		if (clip) {
@@ -3106,6 +3130,7 @@
 			{:else}
 			<EffectsPanel
 				bind:effects={getPanelEffects, setPanelEffects}
+				noTarget={panelNoTarget}
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
 				onVolumeLinkChange={(index, paramKey, link) => {
