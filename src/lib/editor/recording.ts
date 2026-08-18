@@ -12,7 +12,13 @@ import {
   type TextTimeline,
 } from "../text";
 import { openDecodableVideo } from "../video/decode";
-import { createFxLayerSource, flattenFxLayers, type FxLane } from "./fx-lanes";
+import type { AudioLinkGroup } from "../audio/audio-utils";
+import {
+  createFxLayerSource,
+  flattenFxLayers,
+  laneAudioResponse,
+  type FxLane,
+} from "./fx-lanes";
 import type { MoshOptions } from "./mosh";
 import {
   createSequenceEffectSource,
@@ -245,6 +251,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
           clone: true,
         })
       : null;
+  /** Rebuilt per frame: the base chain under the editor's response, then each
+   * active lane under its own — the split the preview's tick makes. */
+  const audioGroupsRef: { current: AudioLinkGroup[] | null } = { current: null };
   const effectsRef = seqSource
     ? {
         current: effects.map(
@@ -340,6 +349,22 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     const stacked = flattenFxLayers(fxLayers);
     const fx = base && stacked.length > 0 ? [...base, ...stacked] : base;
     if (fx) effectsRef!.current = fx;
+    audioGroupsRef.current =
+      base && fxLayers.length > 0
+        ? [
+            { scope: "", effects: base, response: audioResponse },
+            ...fxLayers.map((layer) => {
+              const lane = sequence!.fxLanes!.find((l) => l.id === layer.laneId);
+              return {
+                scope: layer.laneId,
+                effects: layer.effects,
+                response: lane
+                  ? laneAudioResponse(lane, audioResponse)
+                  : audioResponse,
+              };
+            }),
+          ]
+        : null;
     // Transition window at a segment boundary: blend the outgoing chain into
     // the incoming one. Returned as a closure so the recorder applies this
     // frame's audio data to `effectsRef.current` (the incoming chain) before
@@ -430,7 +455,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         : isVideo && videoEl
           ? { onBeforeRender: videoFrames ? decodeBeforeRender : seekBeforeRender }
           : {}),
-      ...(effectsRef && { effectsRef }),
+      ...(effectsRef && { effectsRef, audioGroupsRef }),
     });
     downloadBlob(blob);
   } finally {
