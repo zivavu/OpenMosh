@@ -17,6 +17,7 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
+	import { addTrack, getAllTracks } from '../../audio/track-library';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
 	import { executeRecording } from '../../editor/recording';
@@ -551,6 +552,40 @@
 		applySavedTrackState(trackId);
 	}
 
+	/**
+	 * Give a song that arrived without a library id one.
+	 *
+	 * A track picked on the upload screen, dropped on the editor or chosen from
+	 * the file picker has no id — only the library drawer hands one out. But the
+	 * id is the key everything per-song is saved under, so without this an entire
+	 * session's timeline, text and span were silently never written: `seqStoreKey`
+	 * is null with no track id, and every save path returns early on that.
+	 *
+	 * Matched against the library by name and size first, so re-picking a file
+	 * reopens the work already saved for it instead of forking a second identity.
+	 */
+	let registeringTrack: File | null = null;
+	$effect(() => {
+		const f = audio.trackFile;
+		if (!f || currentTrackId || registeringTrack === f) return;
+		registeringTrack = f;
+		void (async () => {
+			try {
+				const existing = (await getAllTracks()).find(
+					(t) => t.name === f.name && t.blob.size === f.size,
+				);
+				const track = existing ?? (await addTrack(f));
+				// Swapped or cleared while the lookup was out; that song owns the id now.
+				if (audio.trackFile !== f) return;
+				adoptLibraryTrack(track.id);
+			} catch (e) {
+				console.error('Failed to register track:', e);
+			} finally {
+				registeringTrack = null;
+			}
+		})();
+	});
+
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		// Moving between two songs starts the new one clean; arriving at the
 		// first song keeps what's on screen, since that work was made for it and
@@ -677,7 +712,16 @@
 	// With an external track the audio is the master clock (matches export,
 	// where the audio span sets the duration and the video loops inside it).
 	// Segments then live on the audio timeline, not the video's.
-	let seqMasterIsAudio = $derived(!!audio.trackFile && audio.trackDuration > 0);
+	//
+	// Loading a track file is enough to make it master — deliberately not
+	// "…and its duration is known". The duration lands a beat after the file
+	// does, and treating that window as video-mastered corrupted the save: the
+	// store key fell back to the video's (so a reload restored a stale
+	// video-keyed entry over the song's), and the coverage invariant re-fitted
+	// segments built against a 3-minute song onto a 10-second clip. Until the
+	// duration arrives `seqMasterDuration` is simply 0, which every consumer
+	// already reads as "no timeline yet".
+	let seqMasterIsAudio = $derived(!!audio.trackFile);
 	let seqMasterDuration = $derived(
 		seqMasterIsAudio ? audio.trackDuration : videoDuration,
 	);
