@@ -16,8 +16,6 @@ export interface EditorSettings {
 	moshAudioLinkStrength: number;
 	/** Band the links a mosh rolls listen to. */
 	moshLinkBand: FreqBand;
-	/** 0 = raw band level, 1 = fully auto-ranged. Applies to every volume link. */
-	autoRangeAmount: number;
 	/** 0 = the level snaps to the signal, 1 = it glides. Sets the follower's release. */
 	audioSmoothing: number;
 	/** Response curve of a linked param: low lifts quiet detail, high keeps only hits. */
@@ -41,7 +39,6 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	moshAudioLink: true,
 	moshAudioLinkStrength: 0.8,
 	moshLinkBand: "full",
-	autoRangeAmount: DEFAULT_AUDIO_RESPONSE.autoRange,
 	audioSmoothing: DEFAULT_AUDIO_RESPONSE.smoothing,
 	audioPunch: DEFAULT_AUDIO_RESPONSE.punch,
 	showFps: false,

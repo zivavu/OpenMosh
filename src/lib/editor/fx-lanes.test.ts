@@ -590,7 +590,7 @@ const LANE_SETTINGS: FxLaneSettings = {
   moshAudioLink: false,
   moshAudioLinkStrength: 0,
   moshLinkBand: "low",
-  audioResponse: { autoRange: 0.1, smoothing: 0.2, punch: 0.3 },
+  audioResponse: { smoothing: 0.2, punch: 0.3 },
 };
 
 describe("per-lane settings", () => {

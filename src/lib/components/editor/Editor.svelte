@@ -324,14 +324,10 @@
 	let moshLinkBand = $state<FreqBand>(
 		saved.moshLinkBand ?? DEFAULT_SETTINGS.moshLinkBand,
 	);
-	let autoRangeAmount = $state(
-		saved.autoRangeAmount ?? DEFAULT_SETTINGS.autoRangeAmount,
-	);
 	let audioSmoothing = $state(saved.audioSmoothing ?? DEFAULT_SETTINGS.audioSmoothing);
 	let audioPunch = $state(saved.audioPunch ?? DEFAULT_SETTINGS.audioPunch);
 	// One object so the preview tick and the export are fed the same thing.
 	const audioResponse = $derived<AudioResponse>({
-		autoRange: autoRangeAmount,
 		smoothing: audioSmoothing,
 		punch: audioPunch,
 	});
@@ -412,7 +408,6 @@
 		moshAudioLink;
 		moshAudioLinkStrength;
 		moshLinkBand;
-		autoRangeAmount;
 		audioSmoothing;
 		audioPunch;
 		showFps;
@@ -428,7 +423,6 @@
 			moshAudioLink,
 			moshAudioLinkStrength,
 			moshLinkBand,
-			autoRangeAmount,
 			audioSmoothing,
 			audioPunch,
 			showFps,
@@ -3212,8 +3206,6 @@
 						)}
 					bind:moshLinkBand={() => fxSetting('moshLinkBand', moshLinkBand),
 					(v) => setFxSetting('moshLinkBand', v, (g) => (moshLinkBand = g))}
-					bind:autoRangeAmount={() => fxResponse('autoRange', autoRangeAmount),
-					(v) => setFxResponse('autoRange', v, (g) => (autoRangeAmount = g))}
 					bind:audioSmoothing={() => fxResponse('smoothing', audioSmoothing),
 					(v) => setFxResponse('smoothing', v, (g) => (audioSmoothing = g))}
 					bind:audioPunch={() => fxResponse('punch', audioPunch),
