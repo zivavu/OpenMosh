@@ -57,12 +57,9 @@ export function applyVolumeLinksToEffects(
     // steadied signal in an export that the preview's analyser handed it, or
     // its ceiling gets pinned by transients the preview never showed it.
     const raw = smoothBandLevel(key, measured, dt, response.smoothing);
-    // Always stepped, even at amount 0, so the envelope stays warm and raising
-    // the slider mid-track doesn't jump off stale floor/ceiling values.
     const ranged = autoRangeLevel(key, raw, dt);
-    const blended = raw + (ranged - raw) * response.autoRange;
-    perBand.set(key, blended);
-    return blended;
+    perBand.set(key, ranged);
+    return ranged;
   };
 
   for (const effect of effects) {

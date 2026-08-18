@@ -16,8 +16,6 @@
 
 /** How the raw band level is turned into the number a volume link rides. */
 export interface AudioResponse {
-   /** 0 = raw band level, 1 = fully auto-ranged against the recent window. */
-   autoRange: number;
    /** 0 = twitchy and immediate, 1 = slow and glidey. Sets the follower's release. */
    smoothing: number;
    /** Response curve. Low lifts quiet detail, high leaves only the big hits. */
@@ -25,7 +23,6 @@ export interface AudioResponse {
 }
 
 export const DEFAULT_AUDIO_RESPONSE: AudioResponse = {
-   autoRange: 0.75,
    smoothing: 0.45,
    punch: 0.4,
 };

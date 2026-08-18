@@ -556,7 +556,6 @@ function normalizeLaneSettings(raw: unknown): FxLaneSettings | undefined {
     typeof s.moshMax !== "number" ||
     typeof s.moshAudioLinkStrength !== "number" ||
     !r ||
-    typeof r.autoRange !== "number" ||
     typeof r.smoothing !== "number" ||
     typeof r.punch !== "number"
   ) {
@@ -569,7 +568,7 @@ function normalizeLaneSettings(raw: unknown): FxLaneSettings | undefined {
     moshAudioLink: s.moshAudioLink !== false,
     moshAudioLinkStrength: s.moshAudioLinkStrength,
     moshLinkBand: s.moshLinkBand ?? "full",
-    audioResponse: { autoRange: r.autoRange, smoothing: r.smoothing, punch: r.punch },
+    audioResponse: { smoothing: r.smoothing, punch: r.punch },
   };
 }
 

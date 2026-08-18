@@ -23,7 +23,6 @@
       moshAudioLink: boolean;
       moshAudioLinkStrength: number;
       moshLinkBand: FreqBand;
-      autoRangeAmount: number;
       audioSmoothing: number;
       audioPunch: number;
       hasAudio: boolean;
@@ -46,7 +45,6 @@
       moshAudioLink = $bindable(),
       moshAudioLinkStrength = $bindable(),
       moshLinkBand = $bindable(),
-      autoRangeAmount = $bindable(),
       audioSmoothing = $bindable(),
       audioPunch = $bindable(),
       hasAudio,
@@ -251,37 +249,6 @@
    <!-- Not gated on moshAudioLink: these shape every link, hand-made ones too. -->
    {#if hasAudio}
       <h3 class="panel-title section-title">Audio response</h3>
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-         class="config-row help-row"
-         title="Double-click to reset"
-         ondblclick={(e) =>
-            resetRow(e, () => (autoRangeAmount = DEFAULT_SETTINGS.autoRangeAmount))}
-      >
-         <label for="auto-range-amount">Auto-range</label>
-         {@render helpToggle("auto-range", "What is auto-range?")}
-         <RangeSlider
-            id="auto-range-amount"
-            bind:value={autoRangeAmount}
-            min={0}
-            max={1}
-            step={0.05}
-         />
-         <span class="val">{Math.round(autoRangeAmount * 100)}%</span>
-         {@render helpBody("auto-range", [
-            {
-               text: "How far apart the quiet and loud parts of a track are pushed before effects see them.",
-            },
-            {
-               term: "Low",
-               text: "effects follow the real volume. Most music sits at a steady level, so they barely move.",
-            },
-            {
-               term: "High",
-               text: "the last few seconds get stretched across your whole range. Drops hit harder, but quiet parts come up too.",
-            },
-         ])}
-      </div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row help-row"
