@@ -70,14 +70,26 @@
 	const vp = stack.vp;
 	let trackDuration = $derived(stack.trackDuration);
 
-	/** The lane geometry, for sizing grab handles against their clips. */
-	let trackEl = $state<HTMLElement | undefined>(undefined);
+	/**
+	 * Lane width in px, for sizing grab handles against their clips. Observed
+	 * rather than measured on demand: the sizes are read once per clip while the
+	 * clips' own inline widths are being written, so a getBoundingClientRect()
+	 * there forces a layout flush per clip, every frame the view pans.
+	 */
+	let laneWidthPx = $state(0);
+	let trackEl: HTMLElement | undefined;
 
 	function laneTrack(node: HTMLElement) {
 		trackEl = node;
+		laneWidthPx = node.getBoundingClientRect().width;
+		const observer = new ResizeObserver(([entry]) => {
+			laneWidthPx = entry.contentRect.width;
+		});
+		observer.observe(node);
 		const shared = stack.lane(node);
 		return {
 			destroy() {
+				observer.disconnect();
 				shared.destroy();
 				if (trackEl === node) trackEl = undefined;
 			},
@@ -359,18 +371,16 @@
 
 	/** The clip's on-screen width. */
 	function clipPx(clip: FxClip): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
-		if (px <= 0) return 0;
-		return ((clip.end - clip.start) / vp.viewDuration) * px;
+		if (laneWidthPx <= 0) return 0;
+		return ((clip.end - clip.start) / vp.viewDuration) * laneWidthPx;
 	}
 
 	/** Never take more than a third of the narrower neighbour, or a short clip
 	 * would be blanketed by the boundary and leave nothing to click. */
 	function boundaryWidth(left: FxClip, right: FxClip): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
-		if (px <= 0) return BOUNDARY_GRAB;
+		if (laneWidthPx <= 0) return BOUNDARY_GRAB;
 		const narrower = Math.min(left.end - left.start, right.end - right.start);
-		const narrowerPx = (narrower / vp.viewDuration) * px;
+		const narrowerPx = (narrower / vp.viewDuration) * laneWidthPx;
 		return Math.max(2, Math.min(BOUNDARY_GRAB, narrowerPx / 3));
 	}
 
