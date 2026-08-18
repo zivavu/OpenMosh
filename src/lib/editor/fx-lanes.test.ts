@@ -176,6 +176,27 @@ describe("createFxEffectSource", () => {
   test("no lanes resolves to nothing", () => {
     expect(source([])(1)).toEqual([]);
   });
+
+  test("an unchanged frame hands back the same array", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const src = createFxLayerSource(() => lanes, () => OPTIONS);
+    expect(src(1)).toBe(src(2));
+  });
+
+  test("a changed weight mints a new array", () => {
+    const faded = { ...clip("c1", 0, 5, ["grain"]), fadeSec: 1 };
+    const lanes = [lane("a", [faded])];
+    const src = createFxLayerSource(() => lanes, () => OPTIONS);
+    expect(src(0.25)).not.toBe(src(0.5));
+  });
+
+  test("leaving the clips and coming back mints a new array", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const src = createFxLayerSource(() => lanes, () => OPTIONS);
+    const before = src(1);
+    expect(src(9)).toEqual([]);
+    expect(src(2)).not.toBe(before);
+  });
 });
 
 describe("interval clips", () => {

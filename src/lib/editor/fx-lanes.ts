@@ -198,6 +198,13 @@ export interface FxEffectSourceOptions {
  *
  * Returns a shared empty array when nothing is active, so the common "no fx
  * lanes here" frame doesn't mint an array the render loop has to re-check.
+ *
+ * A frame whose layers came out identical to the last one gets that same array
+ * back rather than an equal copy. The preview calls this from a derived that
+ * re-runs on every tick of an interpolated clock, and most of those ticks land
+ * inside the same clips at the same weights — handing back a fresh array there
+ * would invalidate the whole chain downstream (and the canvas props with it)
+ * for a frame that renders exactly the same thing.
  */
 export function createFxLayerSource(
   getLanes: () => FxLane[] | null | undefined,
@@ -205,17 +212,33 @@ export function createFxLayerSource(
   { clone = false }: FxEffectSourceOptions = {},
 ): (time: number, forceClipId?: string | null) => FxLayer[] {
   const cache = new Map<string, EffectInstance[]>();
+  let last: FxLayer[] = NO_LAYERS;
   return (time: number, forceClipId?: string | null) => {
     const clips = activeFxClips(getLanes(), time, forceClipId);
-    if (clips.length === 0) return NO_LAYERS;
-    return clips.map((clip) => ({
+    if (clips.length === 0) {
+      last = NO_LAYERS;
+      return NO_LAYERS;
+    }
+    const layers = clips.map((clip) => ({
       effects: chainFor(clip, time, cache, clone, getMoshOptions),
       // A clip pinned in for editing shows at full strength: the fade is about
       // how it enters during playback, and ramping it here would leave the
       // panel adjusting a chain that is only partly on screen.
       weight: clip.id === forceClipId ? 1 : fxClipWeight(clip, time),
     }));
+    if (sameLayers(last, layers)) return last;
+    last = layers;
+    return layers;
   };
+}
+
+/** Layer-for-layer identical: same chains, by identity, at the same weights. */
+function sameLayers(a: FxLayer[], b: FxLayer[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].effects !== b[i].effects || a[i].weight !== b[i].weight) return false;
+  }
+  return true;
 }
 
 /** Every stacked effect for a frame, in lane order — for the audio-link tick
