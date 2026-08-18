@@ -443,16 +443,17 @@
 		'openmosh-single-size',
 	);
 
-	// Persist span changes for library tracks
+	// Persist span changes for library tracks. The span sits at 0/0 from the
+	// moment a track id is adopted until the audio element reports its duration,
+	// so writing unguarded would overwrite the saved span with an empty one —
+	// permanently, whenever the tab is left before that metadata ever arrives.
 	$effect(() => {
-		audio.spanStart;
-		audio.spanEnd;
-		if (currentTrackId) {
-			spanStore.save(currentTrackId, {
-				spanStart: audio.spanStart,
-				spanEnd: audio.spanEnd,
-			});
-		}
+		const start = audio.spanStart;
+		const end = audio.spanEnd;
+		const restorePending = audio.pendingSpan !== null;
+		if (!currentTrackId || restorePending || audio.trackDuration <= 0) return;
+		if (end <= start) return;
+		spanStore.save(currentTrackId, { spanStart: start, spanEnd: end });
 	});
 
 	let trackInput: HTMLInputElement;
@@ -523,7 +524,9 @@
 	 */
 	function applySavedTrackState(trackId: string): boolean {
 		const savedSpan = spanStore.load(trackId);
-		if (savedSpan !== null) {
+		// An empty span is never something the user chose — it's an entry left
+		// behind by the overwrite above. Fall through to the whole track.
+		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
 		const savedSize = sizeStore.load(trackId);
@@ -2500,6 +2503,7 @@
 		bind:this={audioEl}
 		src={audio.trackObjectUrl}
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
+		onerror={() => showToast('Could not load this audio track', 'error')}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
 		onended={() => audio.onAudioEnded()}
 		onplay={() => (audio.audioPlaying = true)}

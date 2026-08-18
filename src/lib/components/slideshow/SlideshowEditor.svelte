@@ -414,13 +414,32 @@
 		(raw) => (Array.isArray(raw) ? { segments: raw } : (raw as SegmentsEntry)),
 	);
 
+	/**
+	 * The span worth writing back. Between adopting a track id and the audio
+	 * element reporting its duration the live span reads 0/0, and persisting
+	 * that would wipe the saved one for good if the metadata never lands. A
+	 * restore still in flight is the real value; failing that, keep whatever
+	 * was already stored rather than replacing it with an empty span.
+	 */
+	function spanForSave(trackId: string): Pick<SegmentsEntry, 'spanStart' | 'spanEnd'> {
+		const pending = audio.pendingSpan;
+		if (pending) return { spanStart: pending.start, spanEnd: pending.end };
+		if (audio.trackDuration > 0 && audio.spanEnd > audio.spanStart) {
+			return { spanStart: audio.spanStart, spanEnd: audio.spanEnd };
+		}
+		const prev = segmentsStore.load(trackId);
+		if (prev?.spanStart !== undefined && prev.spanEnd !== undefined) {
+			return { spanStart: prev.spanStart, spanEnd: prev.spanEnd };
+		}
+		return {};
+	}
+
 	function saveSegments(trackId: string) {
 		segmentsStore.save(trackId, {
 			segments: config.segments,
 			bpm: config.bpm,
 			text: $state.snapshot(config.text) as TextTimeline,
-			spanStart: audio.spanStart,
-			spanEnd: audio.spanEnd,
+			...spanForSave(trackId),
 		});
 	}
 
@@ -656,7 +675,13 @@
 			bpmEpoch++;
 			bpmRestoredFor = trackId;
 		}
-		if (saved.spanStart !== undefined && saved.spanEnd !== undefined) {
+		// An empty span is never something the user chose — it's an entry left
+		// behind by an older build. Fall through to the whole track.
+		if (
+			saved.spanStart !== undefined &&
+			saved.spanEnd !== undefined &&
+			saved.spanEnd > saved.spanStart
+		) {
 			audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
 		}
 	}
@@ -1152,6 +1177,7 @@
 		bind:this={audioEl}
 		src={audio.trackObjectUrl}
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
+		onerror={() => showToast('Could not load this audio track', 'error')}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
 		onended={() => audio.onAudioEnded()}
 		onplay={() => {
