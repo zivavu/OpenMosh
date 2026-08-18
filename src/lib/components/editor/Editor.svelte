@@ -2099,7 +2099,7 @@
 								description: 'Add / remove one clip from the selection',
 							},
 							{ keys: ['Delete', 'Backspace'], description: 'Delete selected clips' },
-							{ keys: ['Esc'], description: 'Deselect / close the palette picker' },
+							{ keys: ['Esc'], description: 'Deselect' },
 						],
 					},
 				]
@@ -2875,9 +2875,6 @@
 						>
 							<Plus size={12} /> Lane
 						</button>
-						{#if fxLanes.length > 0}
-							<span class="tl-tool-count">{fxLanes.length}/{MAX_FX_LANES}</span>
-						{/if}
 					{/if}
 					{#if videoIsMaster}
 						<div class="tl-tool-sep"></div>
