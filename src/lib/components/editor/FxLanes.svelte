@@ -366,6 +366,20 @@
 		return Math.max(2, Math.min(BOUNDARY_GRAB, narrowerPx / 3));
 	}
 
+	/**
+	 * Tooltip for a clip. Filled in on hover rather than rendered as an
+	 * attribute: counting the enabled effects walks the clip's whole chain
+	 * through its state proxy, which is more than the tooltip is worth on every
+	 * clip of every lane, every frame the view pans. The clip carries an
+	 * aria-label of its own, so nothing depends on this to be named.
+	 */
+	function clipTitle(clip: FxClip, label: string): string {
+		if (clip.mode === 'interval') return `Re-rolls every ${label}`;
+		let active = 0;
+		for (const e of clip.effects) if (e.enabled) active++;
+		return `${clip.label} — ${active} effect${active === 1 ? '' : 's'}`;
+	}
+
 	/** Consecutive clip pairs sharing an exact edge — the draggable boundaries. */
 	function adjacentPairs(
 		lane: FxLane,
@@ -509,7 +523,6 @@
 					{@const edge = edgeWidth(clip)}
 					{#if left < 100 && left + width > 0}
 						{@const interval = clip.mode === 'interval'}
-						{@const active = clip.effects.filter((e) => e.enabled).length}
 						{@const label = interval
 							? intervalLabel(clip.intervalSec, clip.intervalBeats)
 							: clip.label}
@@ -523,11 +536,10 @@
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
-							title={interval
-								? `Re-rolls every ${label}`
-								: `${clip.label} — ${active} effect${active === 1 ? '' : 's'}`}
+							aria-label="{label} clip on {lane.name}"
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
+							onpointerenter={(e) => (e.currentTarget.title = clipTitle(clip, label))}
 							onpointerdown={(e) => onClipPointerDown(e, lane.id, clip.id, 'move')}
 						>
 							<span
