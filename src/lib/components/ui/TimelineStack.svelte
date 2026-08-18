@@ -75,7 +75,15 @@
 		untrack(() => {
 			if (!vp.isZoomed || vp.viewEnd <= 0) return;
 			const centred = t - (vp.viewStart + vp.viewDuration / 2);
-			if (centred !== 0) vp.panView(centred);
+			// The clock is interpolated per frame, so any correction at all would
+			// pan on every one of them — and a pan rewrites the window every lane
+			// maps its clips through, re-laying out every clip on screen. Below a
+			// pixel of movement there is nothing to show for that, so let the
+			// playhead drift and catch it up on the frame the drift is visible.
+			// Zoomed far enough in a frame's worth of time is more than a pixel,
+			// where this passes every frame and the view scrolls as it did.
+			const perPixel = stack.laneWidth > 0 ? vp.viewDuration / stack.laneWidth : 0;
+			if (Math.abs(centred) >= perPixel) vp.panView(centred);
 		});
 	});
 

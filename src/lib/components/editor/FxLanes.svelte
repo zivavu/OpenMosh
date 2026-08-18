@@ -70,30 +70,12 @@
 	const vp = stack.vp;
 	let trackDuration = $derived(stack.trackDuration);
 
-	/**
-	 * Lane width in px, for sizing grab handles against their clips. Observed
-	 * rather than measured on demand: the sizes are read once per clip while the
-	 * clips' own inline widths are being written, so a getBoundingClientRect()
-	 * there forces a layout flush per clip, every frame the view pans.
-	 */
-	let laneWidthPx = $state(0);
-	let trackEl: HTMLElement | undefined;
+	/** Lane width in px, for sizing grab handles against their clips. The stack
+	 * observes it once for every lane — they all share one geometry. */
+	let laneWidthPx = $derived(stack.laneWidth);
 
 	function laneTrack(node: HTMLElement) {
-		trackEl = node;
-		laneWidthPx = node.getBoundingClientRect().width;
-		const observer = new ResizeObserver(([entry]) => {
-			laneWidthPx = entry.contentRect.width;
-		});
-		observer.observe(node);
-		const shared = stack.lane(node);
-		return {
-			destroy() {
-				observer.disconnect();
-				shared.destroy();
-				if (trackEl === node) trackEl = undefined;
-			},
-		};
+		return stack.lane(node);
 	}
 
 	let drag = $state<{
