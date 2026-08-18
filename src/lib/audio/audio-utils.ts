@@ -6,8 +6,20 @@ import {
   type AudioResponse,
 } from "./auto-range";
 
-function bandKey(freqMin: number, freqMax: number): string {
-  return `${freqMin}:${freqMax}`;
+function bandKey(scope: string, freqMin: number, freqMax: number): string {
+  return `${scope}|${freqMin}:${freqMax}`;
+}
+
+/**
+ * A set of effects that follows the music its own way. Every chain used to
+ * share one response; an fx lane now carries its own, and the envelope state
+ * behind a band is per scope so one lane's smoothing never steps another's.
+ */
+export interface AudioLinkGroup {
+  /** Namespaces the per-band envelope state. Lanes pass their lane id. */
+  scope: string;
+  effects: EffectInstance[];
+  response: AudioResponse;
 }
 
 /**
@@ -22,12 +34,13 @@ export function applyVolumeLinksToEffects(
   fftSize: number,
   dt: number,
   response: AudioResponse,
+  scope: string = "",
 ): void {
   const exponent = punchExponent(response.punch);
   // Cached so a band's envelope advances once per frame, not once per link.
   const perBand = new Map<string, number>();
   const levelForBand = (freqMin: number, freqMax: number): number => {
-    const key = bandKey(freqMin, freqMax);
+    const key = bandKey(scope, freqMin, freqMax);
     const cached = perBand.get(key);
     if (cached !== undefined) return cached;
     const measured =

@@ -8,6 +8,7 @@ import {
 	type FrameAudioData,
 } from './audio/offline-audio';
 import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
+import type { AudioLinkGroup } from './audio/audio-utils';
 import {
 	DEFAULT_AUDIO_RESPONSE,
 	resetAutoRange,
@@ -55,6 +56,13 @@ export interface RecordOptions {
 		| Promise<boolean | void | ((layers: ResolvedTextLayer[]) => void)>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
+	/**
+	 * Per-frame split of the render chain by audio response, set from
+	 * `onBeforeRender`. Sequence exports use it to give each fx lane the
+	 * response its clips were previewed under; null falls back to applying one
+	 * response to the whole chain.
+	 */
+	audioGroupsRef?: { current: AudioLinkGroup[] | null };
 	/** When true, the audio is looped to match the recording duration. */
 	loopAudio?: boolean;
 	/** Speed factor applied to the audio via pitch-preserving time-stretch. Defaults to 1. */
@@ -96,15 +104,20 @@ function applyFrameAudio(
 	sampleRate: number,
 	frameDuration: number,
 	response: AudioResponse,
+	groups?: AudioLinkGroup[] | null,
 ): void {
-	if (frameAudioData.length > 0) {
+	if (frameAudioData.length === 0) return;
+	// Each group carries its own response and its own envelope scope, exactly
+	// as the preview's per-frame tick does.
+	for (const g of groups ?? [{ scope: '', effects, response }]) {
 		applyFrameAudioToEffects(
-			effects,
+			g.effects,
 			frameAudioData[i]!,
 			sampleRate,
 			FFT_SIZE,
 			frameDuration,
-			response,
+			g.response,
+			g.scope,
 		);
 	}
 }
@@ -179,6 +192,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioEnd,
 		onBeforeRender,
 		effectsRef,
+		audioGroupsRef,
 		loopAudio,
 		normalizeGain = 1.0,
 		audioSpeed = 1,
@@ -532,6 +546,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				audioSampleRate,
 				frameDuration,
 				audioResponse,
+				audioGroupsRef?.current,
 			);
 			if (typeof skipRender === 'function') skipRender(textLayers);
 			else if (!skipRender) renderer.render(renderEffects, time, textLayers);

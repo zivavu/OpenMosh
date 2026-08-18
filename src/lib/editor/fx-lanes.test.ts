@@ -18,9 +18,13 @@ import {
   rollFxClips,
   setFxClipsMode,
   splitFxClipAt,
+  laneAudioResponse,
+  laneMoshOptions,
   type FxClip,
   type FxLane,
+  type FxLaneSettings,
 } from "./fx-lanes";
+import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
 import type { MoshOptions } from "./mosh";
 
 const OPTIONS: MoshOptions = {
@@ -575,5 +579,85 @@ describe("appendFxLane", () => {
     const l = createFxLane("FX 1");
     expect(l.clips).toEqual([]);
     expect(l.enabled).toBe(true);
+  });
+});
+
+
+const LANE_SETTINGS: FxLaneSettings = {
+  moshMin: 1,
+  moshMax: 1,
+  randomizeOrder: false,
+  moshAudioLink: false,
+  moshAudioLinkStrength: 0,
+  moshLinkBand: "low",
+  audioResponse: { autoRange: 0.1, smoothing: 0.2, punch: 0.3 },
+};
+
+describe("per-lane settings", () => {
+  test("a lane without settings rolls under the editor's", () => {
+    expect(laneMoshOptions(lane("a", []), OPTIONS)).toEqual(OPTIONS);
+    expect(laneAudioResponse(lane("a", []), DEFAULT_AUDIO_RESPONSE)).toBe(
+      DEFAULT_AUDIO_RESPONSE,
+    );
+  });
+
+  test("a lane's own settings win, but the session still says whether there is audio", () => {
+    const l = { ...lane("a", []), settings: LANE_SETTINGS };
+    const opts = laneMoshOptions(l, { ...OPTIONS, hasAudio: true });
+    expect(opts.moshMin).toBe(1);
+    expect(opts.moshLinkBand).toBe("low");
+    expect(opts.hasAudio).toBe(true);
+    expect(laneAudioResponse(l, DEFAULT_AUDIO_RESPONSE).punch).toBe(0.3);
+  });
+
+  test("a new lane snapshots the settings it was handed", () => {
+    const [made] = appendFxLane([], LANE_SETTINGS);
+    expect(made.settings).toEqual(LANE_SETTINGS);
+    expect(createFxLane("FX 1").settings).toBeUndefined();
+  });
+
+  test("a roll uses the lane's own mosh bounds, per lane", () => {
+    const lanes = [
+      { ...lane("a", [clip("c1", 0, 5, ["grain"])]), settings: LANE_SETTINGS },
+      lane("b", [clip("c2", 0, 5, ["grain"])]),
+    ];
+    const out = rollFxClips(lanes, new Set(["c1", "c2"]), {
+      ...OPTIONS,
+      moshMin: 6,
+      moshMax: 6,
+    });
+    const live = (l: FxLane) => l.clips[0].effects.filter((e) => e.enabled).length;
+    expect(live(out[0])).toBe(1);
+    expect(live(out[1])).toBe(6);
+  });
+
+  test("interval clips re-roll under their lane's settings too", () => {
+    const lanes = [
+      {
+        ...lane("a", [
+          { ...clip("c1", 0, 5, ["grain"]), mode: "interval" as const, seed: 3 },
+        ]),
+        settings: LANE_SETTINGS,
+      },
+    ];
+    const chain = resolveFxEffectsAt(lanes, 1);
+    expect(chain.filter((e) => e.enabled).length).toBe(1);
+  });
+
+  test("layers name the lane they came from", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, ["grain"])])];
+    const layers = createFxLayerSource(() => lanes, () => OPTIONS)(1);
+    expect(layers.map((l) => l.laneId)).toEqual(["a"]);
+  });
+
+  test("stored settings survive a reload, half-written ones are dropped", () => {
+    const [kept] = normalizeFxLanes([
+      { id: "a", name: "a", clips: [], settings: LANE_SETTINGS },
+    ]);
+    expect(kept.settings).toEqual(LANE_SETTINGS);
+    const [dropped] = normalizeFxLanes([
+      { id: "a", name: "a", clips: [], settings: { moshMin: 2 } },
+    ]);
+    expect(dropped.settings).toBeUndefined();
   });
 });

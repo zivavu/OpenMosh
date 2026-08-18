@@ -5,8 +5,8 @@ import {
   applyVolumeLinksTick,
   type AudioGraphState,
 } from './audio-controller';
-import { resetAutoRange, type AudioResponse } from './auto-range';
-import type { EffectInstance } from '../effects';
+import { resetAutoRange } from './auto-range';
+import type { AudioLinkGroup } from './audio-utils';
 import type { SpectrumData } from '../types';
 
 /** Element-clock gap that reads as a jump rather than as step granularity. */
@@ -15,9 +15,10 @@ const CLOCK_RESYNC = 0.25;
 const CLOCK_DECAY = 0.8;
 
 interface AudioManagerOptions {
-  getEffects: () => EffectInstance[];
-  /** How band levels are followed, ranged and shaped; read per frame. */
-  getAudioResponse: () => AudioResponse;
+  /** Every chain on screen, split by how it follows the music: the base chain
+   * under the editor's response, then one group per active fx lane under its
+   * own. Read per frame. */
+  getLinkGroups: () => AudioLinkGroup[];
   initialOutputVolume?: number;
   initialLoop?: boolean;
 }
@@ -72,17 +73,14 @@ export class AudioManager {
       : null,
   );
 
-  readonly #getEffects: () => EffectInstance[];
-  readonly #getAudioResponse: () => AudioResponse;
+  readonly #getLinkGroups: () => AudioLinkGroup[];
 
   constructor({
-    getEffects,
-    getAudioResponse,
+    getLinkGroups,
     initialOutputVolume = 1,
     initialLoop = false,
   }: AudioManagerOptions) {
-    this.#getEffects = getEffects;
-    this.#getAudioResponse = getAudioResponse;
+    this.#getLinkGroups = getLinkGroups;
     this.outputVolume = initialOutputVolume;
     this.loopAudio = initialLoop;
 
@@ -124,15 +122,18 @@ export class AudioManager {
             this.volumeLevel = 0;
             freqDataRef?.fill(0);
             // Envelopes survive a pause; re-learning would cost dead seconds.
-            applyVolumeLinksTick(
-              this.#getEffects(),
-              0,
-              freqDataRef,
-              sampleRate,
-              fftSize,
-              dt,
-              this.#getAudioResponse(),
-            );
+            for (const group of this.#getLinkGroups()) {
+              applyVolumeLinksTick(
+                group.effects,
+                0,
+                freqDataRef,
+                sampleRate,
+                fftSize,
+                dt,
+                group.response,
+                group.scope,
+              );
+            }
           }
           rafId = requestAnimationFrame(tick);
           return;
@@ -141,15 +142,18 @@ export class AudioManager {
         this.volumeLevel = computeVolumeLevel(analyser, timeData);
         if (freqDataRef)
           analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-        applyVolumeLinksTick(
-          this.#getEffects(),
-          this.volumeLevel,
-          freqDataRef,
-          sampleRate,
-          fftSize,
-          dt,
-          this.#getAudioResponse(),
-        );
+        for (const group of this.#getLinkGroups()) {
+          applyVolumeLinksTick(
+            group.effects,
+            this.volumeLevel,
+            freqDataRef,
+            sampleRate,
+            fftSize,
+            dt,
+            group.response,
+            group.scope,
+          );
+        }
         rafId = requestAnimationFrame(tick);
       };
       rafId = requestAnimationFrame(tick);

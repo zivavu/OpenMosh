@@ -72,6 +72,7 @@
 		findFxClip,
 		flattenFxLayers,
 		fxClipMoshSnapshot,
+		laneAudioResponse,
 		MAX_FX_LANES,
 		restoreFxClipMosh,
 		normalizeFxLanes,
@@ -79,6 +80,7 @@
 		setFxClipsMode,
 		type FxClip,
 		type FxLane,
+		type FxLaneSettings,
 	} from '../../editor/fx-lanes';
 	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
 	import { detectBpm } from '../../slideshow/bpm-detector';
@@ -351,8 +353,16 @@
 	});
 
 	const audio = new AudioManager({
-		getEffects: () => renderedEffects,
-		getAudioResponse: () => audioResponse,
+		// The base chain follows the editor's response; every active fx lane
+		// follows its own, under its own envelope state.
+		getLinkGroups: () => [
+			{ scope: '', effects: seqPlaybackEffects ?? effects, response: audioResponse },
+			...fxLayers.map((layer) => ({
+				scope: layer.laneId,
+				effects: layer.effects,
+				response: fxLaneResponse(layer.laneId),
+			})),
+		],
 		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
 		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,
 	});
@@ -941,11 +951,26 @@
 		fxLanes = normalizeFxLanes(saved);
 		selectedFxClipId = null;
 		selectedFxClipIds = [];
+		selectedFxLaneId = null;
 		fxHistory.reset(fxLanes);
 	}
 
+	/** What a new lane starts from: the editor's current settings, copied. From
+	 * then on the lane is its own — the panel edits whichever is selected. */
+	function currentFxLaneSettings(): FxLaneSettings {
+		return {
+			moshMin,
+			moshMax,
+			randomizeOrder,
+			moshAudioLink,
+			moshAudioLinkStrength,
+			moshLinkBand,
+			audioResponse: { ...audioResponse },
+		};
+	}
+
 	function addFxLane() {
-		const next = appendFxLane(fxLanes);
+		const next = appendFxLane(fxLanes, currentFxLaneSettings());
 		// At the cap this is a no-op; recording it would leave a Ctrl+Z entry
 		// that undoes nothing.
 		if (next === fxLanes) return;
@@ -1031,6 +1056,9 @@
 		untrack(() => {
 			selectedFxClipId = null;
 			selectedFxClipIds = [];
+			// A segment rolls under the editor's settings, so a lane left picked
+			// in the gutter would have the panel showing the wrong owner's.
+			selectedFxLaneId = null;
 		});
 	});
 
@@ -1041,6 +1069,75 @@
 
 	// Same resolver the export builds, so interval rolls reproduce exactly.
 	const previewFxSource = createFxLayerSource(() => fxLanes, getMoshOptions);
+
+	/**
+	 * Which lane the settings panel is aimed at: the selected clip's lane, or a
+	 * lane picked by its name in the gutter. Null means the editor's own
+	 * settings, which is what segments and single mode always roll under.
+	 */
+	let selectedFxLaneId = $state<string | null>(null);
+	let panelFxLane = $derived.by(() => {
+		if (!isSequenceMode) return null;
+		const byClip = findFxClip(fxLanes, selectedFxClipId)?.lane;
+		if (byClip) return byClip;
+		return fxLanes.find((l) => l.id === selectedFxLaneId) ?? null;
+	});
+
+	/** Panel value: the lane's, or the editor's for lanes without settings yet. */
+	function fxSetting<K extends keyof FxLaneSettings>(
+		key: K,
+		global: FxLaneSettings[K],
+	): FxLaneSettings[K] {
+		return panelFxLane?.settings?.[key] ?? global;
+	}
+
+	/** Panel edit: writes to the lane when one is selected, otherwise to the
+	 * editor's settings. A lane still on the defaults materializes them first,
+	 * so an edit pins the whole set rather than one stray field. */
+	function setFxSetting<K extends keyof FxLaneSettings>(
+		key: K,
+		value: FxLaneSettings[K],
+		setGlobal: (v: FxLaneSettings[K]) => void,
+	) {
+		const lane = panelFxLane;
+		if (!lane) {
+			setGlobal(value);
+			return;
+		}
+		lane.settings = { ...(lane.settings ?? currentFxLaneSettings()), [key]: value };
+	}
+
+	/** The three audio-response sliders, which sit one level down. */
+	function fxResponse<K extends keyof AudioResponse>(
+		key: K,
+		global: number,
+	): number {
+		return panelFxLane?.settings?.audioResponse[key] ?? global;
+	}
+
+	function setFxResponse<K extends keyof AudioResponse>(
+		key: K,
+		value: number,
+		setGlobal: (v: number) => void,
+	) {
+		const lane = panelFxLane;
+		if (!lane) {
+			setGlobal(value);
+			return;
+		}
+		const settings = lane.settings ?? currentFxLaneSettings();
+		lane.settings = {
+			...settings,
+			audioResponse: { ...settings.audioResponse, [key]: value },
+		};
+	}
+
+	/** A lane's audio response, falling back to the editor's for lanes that were
+	 * made before they had their own. */
+	function fxLaneResponse(laneId: string) {
+		const lane = fxLanes.find((l) => l.id === laneId);
+		return lane ? laneAudioResponse(lane, audioResponse) : audioResponse;
+	}
 
 	/**
 	 * The stacked lanes for this frame, with their fade weights. The selected
@@ -3055,6 +3152,7 @@
 						onChange={setFxLanes}
 						onBeforeEdit={pushFxHistory}
 						bpm={sequenceBpm}
+						bind:selectedLaneId={selectedFxLaneId}
 						onModeChange={fxModeChange}
 						onRoll={fxRoll}
 						onClear={fxClear}
@@ -3096,15 +3194,31 @@
 		{#snippet settings()}
 			<div class="mosh-settings-wrapper">
 				<MoshSettingsPanel
-					bind:moshMin
-					bind:moshMax
-					bind:randomizeOrder
-					bind:moshAudioLink
-					bind:moshAudioLinkStrength
-					bind:moshLinkBand
-					bind:autoRangeAmount
-					bind:audioSmoothing
-					bind:audioPunch
+					bind:moshMin={() => fxSetting('moshMin', moshMin),
+					(v) => setFxSetting('moshMin', v, (g) => (moshMin = g))}
+					bind:moshMax={() => fxSetting('moshMax', moshMax),
+					(v) => setFxSetting('moshMax', v, (g) => (moshMax = g))}
+					bind:randomizeOrder={() => fxSetting('randomizeOrder', randomizeOrder),
+					(v) => setFxSetting('randomizeOrder', v, (g) => (randomizeOrder = g))}
+					bind:moshAudioLink={() => fxSetting('moshAudioLink', moshAudioLink),
+					(v) => setFxSetting('moshAudioLink', v, (g) => (moshAudioLink = g))}
+					bind:moshAudioLinkStrength={() =>
+						fxSetting('moshAudioLinkStrength', moshAudioLinkStrength),
+					(v) =>
+						setFxSetting(
+							'moshAudioLinkStrength',
+							v,
+							(g) => (moshAudioLinkStrength = g),
+						)}
+					bind:moshLinkBand={() => fxSetting('moshLinkBand', moshLinkBand),
+					(v) => setFxSetting('moshLinkBand', v, (g) => (moshLinkBand = g))}
+					bind:autoRangeAmount={() => fxResponse('autoRange', autoRangeAmount),
+					(v) => setFxResponse('autoRange', v, (g) => (autoRangeAmount = g))}
+					bind:audioSmoothing={() => fxResponse('smoothing', audioSmoothing),
+					(v) => setFxResponse('smoothing', v, (g) => (audioSmoothing = g))}
+					bind:audioPunch={() => fxResponse('punch', audioPunch),
+					(v) => setFxResponse('punch', v, (g) => (audioPunch = g))}
+					targetLabel={panelFxLane?.name ?? null}
 					{hasAudio}
 					showTiming={isSequenceMode}
 					bpm={sequenceBpm}

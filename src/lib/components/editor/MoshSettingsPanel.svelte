@@ -27,6 +27,9 @@
       audioSmoothing: number;
       audioPunch: number;
       hasAudio: boolean;
+      /** Name of the fx lane these settings belong to, when one is selected.
+       * Null = the editor's own settings, which segments and single mode use. */
+      targetLabel?: string | null;
       /** Sequence mode only: the tempo the AUTO segments re-roll against. */
       showTiming?: boolean;
       bpm?: number;
@@ -47,6 +50,7 @@
       audioSmoothing = $bindable(),
       audioPunch = $bindable(),
       hasAudio,
+      targetLabel = null,
       showTiming = false,
       bpm = 0,
       bpmDetecting = false,
@@ -121,6 +125,12 @@
       <h3 class="panel-title section-title">Mosh settings</h3>
    {:else}
       <h3 class="panel-title">Mosh settings</h3>
+   {/if}
+   {#if targetLabel}
+      <p class="scope-note">
+         Editing <strong>{targetLabel}</strong> — its own mosh and audio
+         settings.
+      </p>
    {/if}
    <!-- svelte-ignore a11y_no_static_element_interactions -->
    <div
@@ -349,6 +359,17 @@
 
    .section-title {
       margin-top: 0.75rem;
+   }
+
+   .scope-note {
+      margin: 0 0 0.35rem;
+      font-size: 0.7rem;
+      color: var(--text-3);
+   }
+
+   .scope-note strong {
+      color: var(--live);
+      font-weight: 600;
    }
 
    .panel-title {

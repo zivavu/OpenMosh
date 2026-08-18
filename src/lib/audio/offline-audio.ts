@@ -324,6 +324,7 @@ export function applyFrameAudioToEffects(
   fftSize: number,
   frameDuration: number,
   response: AudioResponse,
+  scope: string = "",
 ): void {
   applyVolumeLinksToEffects(
     effects,
@@ -333,5 +334,6 @@ export function applyFrameAudioToEffects(
     fftSize,
     frameDuration,
     response,
+    scope,
   );
 }

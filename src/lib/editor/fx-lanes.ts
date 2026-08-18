@@ -14,7 +14,13 @@
  * lanes can even hold the same effect without colliding.
  */
 
-import { cloneEffectInstance, generateId, type EffectInstance } from "../effects";
+import type { AudioResponse } from "../audio/auto-range";
+import {
+  cloneEffectInstance,
+  generateId,
+  type EffectInstance,
+  type FreqBand,
+} from "../effects";
 import {
   clipAt,
   MIN_CLIP_LENGTH,
@@ -97,6 +103,25 @@ export function fxClipTick(clip: FxClip, time: number): number {
 }
 
 /**
+ * How one lane rolls its moshes and how its links follow the music.
+ *
+ * A lane is its own instrument: a slow-breathing wash on lane 1 and a hard
+ * per-hit stutter on lane 2 want opposite settings, and one global set could
+ * only ever serve one of them. Snapshotted from the editor's settings when the
+ * lane is created, then the lane's own.
+ */
+export interface FxLaneSettings {
+  moshMin: number;
+  moshMax: number;
+  randomizeOrder: boolean;
+  moshAudioLink: boolean;
+  moshAudioLinkStrength: number;
+  moshLinkBand: FreqBand;
+  /** How this lane's linked params follow the band they listen to. */
+  audioResponse: AudioResponse;
+}
+
+/**
  * A stacked effect layer. Clips within a lane never overlap, so a lane
  * contributes at most one chain at a time and drag/resize stay unambiguous.
  */
@@ -106,6 +131,38 @@ export interface FxLane {
   /** Off = the lane contributes nothing, without losing its clips. */
   enabled: boolean;
   clips: FxClip[];
+  /** Absent on lanes saved before per-lane settings, and on lanes the user has
+   * never opened: those follow the editor's settings, as they always did. */
+  settings?: FxLaneSettings;
+}
+
+/** The options a lane rolls under: its own settings, or the editor's. */
+export function laneMoshOptions(
+  lane: FxLane,
+  fallback: MoshOptions,
+): MoshOptions {
+  const s = lane.settings;
+  if (!s) return fallback;
+  return {
+    moshMin: s.moshMin,
+    moshMax: s.moshMax,
+    randomizeOrder: s.randomizeOrder,
+    moshAudioLink: s.moshAudioLink,
+    moshAudioLinkStrength: s.moshAudioLinkStrength,
+    moshLinkBand: s.moshLinkBand,
+    // Not the lane's to decide: whether a track is loaded at all, and whether
+    // the roll is restricted to what is already switched on, are the session's.
+    hasAudio: fallback.hasAudio,
+    onlyMoshEnabled: fallback.onlyMoshEnabled,
+  };
+}
+
+/** How a lane's links follow the music: its own response, or the editor's. */
+export function laneAudioResponse(
+  lane: FxLane,
+  fallback: AudioResponse,
+): AudioResponse {
+  return lane.settings?.audioResponse ?? fallback;
 }
 
 export function createFxClip(start: number, end: number): FxClip {
@@ -119,8 +176,8 @@ export function createFxClip(start: number, end: number): FxClip {
   };
 }
 
-export function createFxLane(name: string): FxLane {
-  return { id: generateId(), name, enabled: true, clips: [] };
+export function createFxLane(name: string, settings?: FxLaneSettings): FxLane {
+  return { id: generateId(), name, enabled: true, clips: [], settings };
 }
 
 /**
@@ -132,9 +189,12 @@ export const MAX_FX_LANES = 5;
 
 /** Add an empty lane, named after its position. At the cap, returns the input
  * by identity so callers can skip a history entry for a no-op. */
-export function appendFxLane(lanes: FxLane[]): FxLane[] {
+export function appendFxLane(
+  lanes: FxLane[],
+  settings?: FxLaneSettings,
+): FxLane[] {
   if (lanes.length >= MAX_FX_LANES) return lanes;
-  return [...lanes, createFxLane(`FX ${lanes.length + 1}`)];
+  return [...lanes, createFxLane(`FX ${lanes.length + 1}`, settings)];
 }
 
 /**
@@ -152,8 +212,18 @@ export function activeFxClips(
   time: number,
   forceClipId?: string | null,
 ): FxClip[] {
-  if (!lanes || lanes.length === 0) return NO_CLIPS;
-  let out: FxClip[] | null = null;
+  return activeFxParts(lanes, time, forceClipId).map((p) => p.clip);
+}
+
+/** The same walk, keeping the lane each clip came from — the settings it rolls
+ * and follows the music under live there. */
+function activeFxParts(
+  lanes: FxLane[] | null | undefined,
+  time: number,
+  forceClipId?: string | null,
+): { lane: FxLane; clip: FxClip }[] {
+  if (!lanes || lanes.length === 0) return NO_PARTS;
+  let out: { lane: FxLane; clip: FxClip }[] | null = null;
   for (const lane of lanes) {
     if (!lane.enabled) continue;
     const forced = forceClipId
@@ -161,13 +231,14 @@ export function activeFxClips(
       : undefined;
     const clip = forced ?? clipAt(lane, time);
     if (!clip) continue;
-    (out ??= []).push(clip);
+    (out ??= []).push({ lane, clip });
   }
-  return out ?? NO_CLIPS;
+  return out ?? NO_PARTS;
 }
 
 const EMPTY: EffectInstance[] = [];
 const NO_CLIPS: FxClip[] = [];
+const NO_PARTS: { lane: FxLane; clip: FxClip }[] = [];
 const NO_LAYERS: FxLayer[] = [];
 
 /**
@@ -178,6 +249,9 @@ export interface FxLayer {
   effects: EffectInstance[];
   /** 0 = absent, 1 = fully applied. Below 1 only while a clip's fade ramps. */
   weight: number;
+  /** Whose settings this chain rolled under, and whose audio response its
+   * links follow. */
+  laneId: string;
 }
 
 export interface FxEffectSourceOptions {
@@ -214,13 +288,16 @@ export function createFxLayerSource(
   const cache = new Map<string, EffectInstance[]>();
   let last: FxLayer[] = NO_LAYERS;
   return (time: number, forceClipId?: string | null) => {
-    const clips = activeFxClips(getLanes(), time, forceClipId);
-    if (clips.length === 0) {
+    const parts = activeFxParts(getLanes(), time, forceClipId);
+    if (parts.length === 0) {
       last = NO_LAYERS;
       return NO_LAYERS;
     }
-    const layers = clips.map((clip) => ({
-      effects: chainFor(clip, time, cache, clone, getMoshOptions),
+    const layers = parts.map(({ lane, clip }) => ({
+      laneId: lane.id,
+      effects: chainFor(clip, time, cache, clone, () =>
+        laneMoshOptions(lane, getMoshOptions()),
+      ),
       // A clip pinned in for editing shows at full strength: the fade is about
       // how it enters during playback, and ramping it here would leave the
       // panel adjusting a chain that is only partly on screen.
@@ -347,14 +424,24 @@ export function rollFxClips(
   clipIds: Set<string>,
   options: MoshOptions,
 ): FxLane[] {
-  return updateFxClips(lanes, clipIds, (clip) => {
-    if (clip.mode === "interval") return { ...clip, seed: randomSeed() };
+  return lanes.map((lane) => {
+    if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
+    // Each lane rolls under its own settings, so one Mosh over a selection
+    // spanning lanes gives each lane the mosh it is set up for.
+    const laneOptions = laneMoshOptions(lane, options);
     return {
-      ...clip,
-      effects: rollEffects(randomSeed(), options),
-      label: "mosh",
-      presetName: undefined,
-      modified: false,
+      ...lane,
+      clips: lane.clips.map((clip) => {
+        if (!clipIds.has(clip.id)) return clip;
+        if (clip.mode === "interval") return { ...clip, seed: randomSeed() };
+        return {
+          ...clip,
+          effects: rollEffects(randomSeed(), laneOptions),
+          label: "mosh",
+          presetName: undefined,
+          modified: false,
+        };
+      }),
     };
   });
 }
@@ -457,12 +544,42 @@ export function cloneFxEffects(effects: EffectInstance[]): EffectInstance[] {
 }
 
 /** Fill in anything a saved lane list predates or dropped. */
+/** A stored settings block is kept only if it is complete — a half-written one
+ * would leave the lane rolling under a mix of its own values and the
+ * editor's, which is neither of the two things the user set up. */
+function normalizeLaneSettings(raw: unknown): FxLaneSettings | undefined {
+  const s = raw as Partial<FxLaneSettings> | undefined;
+  if (!s || typeof s !== "object") return undefined;
+  const r = s.audioResponse;
+  if (
+    typeof s.moshMin !== "number" ||
+    typeof s.moshMax !== "number" ||
+    typeof s.moshAudioLinkStrength !== "number" ||
+    !r ||
+    typeof r.autoRange !== "number" ||
+    typeof r.smoothing !== "number" ||
+    typeof r.punch !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    moshMin: s.moshMin,
+    moshMax: s.moshMax,
+    randomizeOrder: s.randomizeOrder !== false,
+    moshAudioLink: s.moshAudioLink !== false,
+    moshAudioLinkStrength: s.moshAudioLinkStrength,
+    moshLinkBand: s.moshLinkBand ?? "full",
+    audioResponse: { autoRange: r.autoRange, smoothing: r.smoothing, punch: r.punch },
+  };
+}
+
 export function normalizeFxLanes(raw: unknown): FxLane[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((lane: Partial<FxLane>, i) => ({
     id: lane.id ?? generateId(),
     name: lane.name ?? `FX ${i + 1}`,
     enabled: lane.enabled !== false,
+    settings: normalizeLaneSettings(lane.settings),
     clips: (Array.isArray(lane.clips) ? lane.clips : [])
       // A clip with no chain would be an invisible span that still takes up
       // room on the lane; drop it rather than resurrect it empty.

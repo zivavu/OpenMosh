@@ -604,10 +604,16 @@
 	const savedOutputVolume = loadConfig().outputVolume ?? 1;
 
 	const audio = new AudioManager({
-		getEffects: () =>
-			previewPlaying && previewEffects.length > 0 ? previewEffects : effects,
-		// Unused here — the slideshow drives effects from beats, never volume links.
-		getAudioResponse: () => DEFAULT_AUDIO_RESPONSE,
+		// One group: the slideshow drives effects from beats, so there are no
+		// per-lane responses to keep apart.
+		getLinkGroups: () => [
+			{
+				scope: '',
+				effects:
+					previewPlaying && previewEffects.length > 0 ? previewEffects : effects,
+				response: DEFAULT_AUDIO_RESPONSE,
+			},
+		],
 		initialOutputVolume: savedOutputVolume,
 		initialLoop: loadSettings().loopAudio ?? false,
 	});

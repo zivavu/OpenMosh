@@ -37,6 +37,11 @@
 		selectedClipId?: string | null;
 		/** The whole selection, for toolbar actions that live outside these lanes. */
 		selectedClipIds?: string[];
+		/** Lane picked by its name in the gutter, for the settings panel — a lane
+		 * rolls and follows the music under its own settings, so the panel needs
+		 * to know which one it is aimed at. A selected clip speaks for its lane,
+		 * so this only carries a pick made with no clip selected. */
+		selectedLaneId?: string | null;
 		onChange: (lanes: FxLane[]) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
@@ -56,6 +61,7 @@
 		lanes,
 		selectedClipId = $bindable(null),
 		selectedClipIds = $bindable([]),
+		selectedLaneId = $bindable(null),
 		onChange,
 		onBeforeEdit,
 		bpm = 0,
@@ -99,11 +105,25 @@
 	function selectOnly(clipId: string) {
 		selectedClipId = clipId;
 		selectedClipIds = [clipId];
+		// The clip's own lane speaks for the panel now; a lane picked earlier in
+		// the gutter would otherwise come back the moment this clip is dropped.
+		selectedLaneId = null;
 	}
 
 	function deselect() {
 		selectedClipId = null;
 		selectedClipIds = [];
+	}
+
+	/** Clicking a lane's name aims the settings panel at it; clicking it again
+	 * hands the panel back to the editor's own settings. */
+	function toggleLaneSelection(lane: FxLane) {
+		if (selectedLaneId === lane.id) {
+			selectedLaneId = null;
+			return;
+		}
+		selectedLaneId = lane.id;
+		deselect();
 	}
 
 	// Follow external changes to the primary, and drop ids whose clips are gone.
@@ -493,8 +513,11 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
-				<span class="lane-name" title="{lane.name} — runs after the lanes above"
-					>{lane.name}</span
+				<button
+					class="lane-name"
+					class:active={selectedLaneId === lane.id}
+					title="{lane.name} — runs after the lanes above. Click for its mosh and audio settings."
+					onclick={() => toggleLaneSelection(lane)}>{lane.name}</button
 				>
 				<button
 					class="lane-del"
@@ -723,11 +746,25 @@
 	.lane-name {
 		flex: 1;
 		min-width: 0;
+		border: none;
+		background: none;
+		padding: 0;
+		text-align: left;
+		cursor: pointer;
 		color: var(--text-2);
+		font-family: inherit;
 		font-size: 0.65rem;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.lane-name:hover {
+		color: var(--text);
+	}
+
+	.lane-name.active {
+		color: var(--live);
 	}
 
 	.fx-toolbar {
