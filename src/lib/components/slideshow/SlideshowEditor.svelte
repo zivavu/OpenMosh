@@ -63,7 +63,7 @@
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
-	import { loadSettings, updateSettings } from '../../editor/settings';
+	import { DEFAULT_SETTINGS, loadSettings, updateSettings } from '../../editor/settings';
 	import { saveSession } from '../../editor/sessions';
 	import { pruneSequenceMedia } from '../../editor/sequence-media-store';
 
@@ -477,6 +477,21 @@
 	let naturalWidth = $state<number | undefined>(undefined);
 	let naturalHeight = $state<number | undefined>(undefined);
 	let currentFps = $state(0);
+	let showFps = $state(loadSettings().showFps ?? DEFAULT_SETTINGS.showFps);
+	// GlCanvas is externally driven here, so its own counter never ticks — the
+	// preview loop below feeds this one instead.
+	let frameTimes: number[] = [];
+	let lastFpsUpdate = 0;
+	function trackFps(now: number) {
+		frameTimes.push(now);
+		if (now - lastFpsUpdate < 400) return;
+		lastFpsUpdate = now;
+		frameTimes = frameTimes.filter((t) => t > now - 1000);
+		currentFps = frameTimes.length;
+	}
+	$effect(() => {
+		updateSettings({ showFps });
+	});
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 
@@ -855,6 +870,7 @@
 			// The video-frame upload is left unawaited here: the render loop must
 			// not stall on the decoder (the export awaits it instead).
 			const nowMs = performance.now();
+			trackFps(nowMs);
 			const frame = driver.advance(t);
 			if (frame.effects !== lastAppliedEffects) {
 				lastAppliedEffects = frame.effects;
@@ -876,6 +892,8 @@
 
 	function stopPreview() {
 		previewPlaying = false;
+		frameTimes = [];
+		currentFps = 0;
 		if (previewRafId !== null) {
 			cancelAnimationFrame(previewRafId);
 			previewRafId = null;
@@ -1260,7 +1278,8 @@
 				bind:glRenderer
 				bind:naturalWidth
 				bind:naturalHeight
-				bind:fps={currentFps}
+				fps={currentFps}
+				{showFps}
 				freezeAnimation={!previewPlaying}
 				suspended={recordingState.recording}
 				externallyDriven
@@ -1286,6 +1305,7 @@
 			onToggleText={toggleTextTimeline}
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
+			bind:showFps
 			onRecordFpsChange={(fps) => (recordFps = fps)}
 			onRecordDurationChange={(d) => (recordDuration = d)}
 		/>
