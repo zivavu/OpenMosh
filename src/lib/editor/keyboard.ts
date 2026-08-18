@@ -13,6 +13,8 @@ export interface KeyboardActions {
   reInput: () => void;
   /** F: fill the screen with the preview. */
   toggleFullscreen: () => void;
+  /** C: chase the playhead with the timeline view, or stop chasing it. */
+  toggleFollowPlayhead: () => void;
   playSpan: () => void;
   pauseTrack: () => void;
   hasTrack: () => boolean;
@@ -71,6 +73,9 @@ export function createKeyboardHandler(
     } else if (key === "f" && !mod && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       actions.toggleFullscreen();
+    } else if (key === "c" && !mod && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      actions.toggleFollowPlayhead();
     }
   };
 }

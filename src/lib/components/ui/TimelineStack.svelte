@@ -25,6 +25,9 @@
 		toolbar?: Snippet;
 		/** The lanes, top to bottom. */
 		children: Snippet;
+		/** Out: the axis this stack owns, for editors whose window-level
+		 * shortcuts sit outside the context it lives in. */
+		axis?: TimelineStackState;
 	}
 
 	let {
@@ -37,6 +40,7 @@
 		onToggleLoop = null,
 		toolbar,
 		children,
+		axis = $bindable(),
 	}: Props = $props();
 
 	const stack = new TimelineStackState(
@@ -45,6 +49,7 @@
 		(t) => onSeek?.(t),
 	);
 	setTimelineStack(stack);
+	axis = stack;
 	const vp = stack.vp;
 
 	// Follow the track: any new duration opens the window onto the whole thing.
@@ -198,8 +203,8 @@
 				class:active={stack.followPlayhead}
 				onclick={() => (stack.followPlayhead = !stack.followPlayhead)}
 				title={stack.followPlayhead
-					? 'Following the playhead — scroll or drag the scrollbar to look elsewhere'
-					: 'Follow the playhead again'}
+					? 'Following the playhead (C) — scroll or drag the scrollbar to look elsewhere'
+					: 'Follow the playhead again (C)'}
 			>
 				<Crosshair size={12} />
 			</button>

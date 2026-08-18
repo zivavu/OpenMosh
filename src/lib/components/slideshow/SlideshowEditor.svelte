@@ -44,6 +44,7 @@
 	import RecordOverlay from '../editor/RecordOverlay.svelte';
 	import AudioTimeline from '../ui/AudioTimeline.svelte';
 	import TimelineStack from '../ui/TimelineStack.svelte';
+	import type { TimelineStackState } from '../../editor/timeline-stack.svelte';
 	import TimelineSegments from './TimelineSegments.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
@@ -1135,6 +1136,10 @@
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
 	// ── Keyboard ──
+	/** The timeline's shared axis, once the stack is mounted — the C shortcut
+	 * fires from the window, outside the context the stack puts it in. */
+	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
+
 	function handleKeydown(e: KeyboardEvent) {
 		const mod = e.ctrlKey || e.metaKey;
 		const key = e.key.toLowerCase();
@@ -1181,6 +1186,9 @@
 		} else if (e.key === 'ArrowLeft') {
 			e.preventDefault();
 			moshSession.back();
+		} else if (key === 'c' && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		}
 	}
 </script>
@@ -1318,6 +1326,7 @@
 		/>
 
 		<TimelineStack
+			bind:axis={timelineAxis}
 			trackDuration={textDuration}
 			currentTime={textTime}
 			isPlaying={previewPlaying}
