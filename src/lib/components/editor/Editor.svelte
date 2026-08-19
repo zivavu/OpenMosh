@@ -40,9 +40,12 @@
 	} from '../../effects';
 	import {
 		appendTextLane,
+		chainLabels,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
+		findTextClip,
+		findTextClipLane,
 		normalizeTextTimeline,
 		applyLyricsToTimeline,
 		TEXT_TIMELINE_SHORTCUTS,
@@ -2386,30 +2389,12 @@
 	});
 
 	/** Names of the enabled main effects — the lane chain-position picker. */
-	let textChainLabels = $derived(
-		renderedEffects
-			.filter((e) => e.enabled)
-			.map((e) => getDefinition(e.defId)?.name ?? e.defId),
-	);
-
-	let selectedTextClip = $derived.by(() => {
-		if (!selectedTextClipId) return null;
-		for (const lane of textTimeline.lanes) {
-			const clip = lane.clips.find((c) => c.id === selectedTextClipId);
-			if (clip) return clip;
-		}
-		return null;
-	});
-
+	let textChainLabels = $derived(chainLabels(renderedEffects));
+	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
 	/** The lane holding the selected clip — the panel edits its style. */
-	let selectedTextLane = $derived.by(() => {
-		if (!selectedTextClipId) return null;
-		return (
-			textTimeline.lanes.find((l) =>
-				l.clips.some((c) => c.id === selectedTextClipId),
-			) ?? null
-		);
-	});
+	let selectedTextLane = $derived(
+		findTextClipLane(textTimeline, selectedTextClipId),
+	);
 
 	// Its own undo stack: the chain stacks are typed to effect arrays, and a
 	// text edit shouldn't rewind a mosh. Ctrl+Z routes here while a clip is

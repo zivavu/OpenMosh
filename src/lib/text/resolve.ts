@@ -1,6 +1,7 @@
+import { getDefinition } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
-import type { TextLane, TextStyle, TextTimeline } from "./types";
+import type { TextClip, TextLane, TextStyle, TextTimeline } from "./types";
 
 // Clip geometry is lane-shape agnostic and shared with the sequence fx lanes;
 // re-exported here so the text timeline keeps importing it from one place.
@@ -52,6 +53,37 @@ export function resolveTextLayersAt(
     });
   }
   return layers;
+}
+
+/** The clip with this id, wherever it sits. Null when nothing is selected. */
+export function findTextClip(
+  timeline: TextTimeline | null | undefined,
+  clipId: string | null,
+): TextClip | null {
+  if (!clipId || !timeline) return null;
+  for (const lane of timeline.lanes) {
+    const clip = lane.clips.find((c) => c.id === clipId);
+    if (clip) return clip;
+  }
+  return null;
+}
+
+/** The lane holding this clip — the style panel edits the lane, not the clip. */
+export function findTextClipLane(
+  timeline: TextTimeline | null | undefined,
+  clipId: string | null,
+): TextLane | null {
+  if (!clipId || !timeline) return null;
+  return timeline.lanes.find((l) => l.clips.some((c) => c.id === clipId)) ?? null;
+}
+
+/** Names of the enabled effects, for the lane chain-position picker. */
+export function chainLabels(effects: EffectInstance[]): string[] {
+  const labels: string[] = [];
+  for (const e of effects) {
+    if (e.enabled) labels.push(getDefinition(e.defId)?.name ?? e.defId);
+  }
+  return labels;
 }
 
 /** Every effect instance held anywhere in the timeline (for feedback-buffer GC). */
