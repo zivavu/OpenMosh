@@ -347,42 +347,15 @@ export class GlRenderer {
   }
 
   loadImage(image: HTMLImageElement) {
+    if (!this.resetSource(image.naturalWidth, image.naturalHeight)) return;
     const gl = this.gl;
-    const naturalW = image.naturalWidth;
-    const naturalH = image.naturalHeight;
-    this.imgW = naturalW;
-    this.imgH = naturalH;
-    if (this.canvas.width !== naturalW) this.canvas.width = naturalW;
-    if (this.canvas.height !== naturalH) this.canvas.height = naturalH;
-
-    if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
-    this.sourceTexture = this.createTexture(naturalW, naturalH);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    this.srcTexW = naturalW;
-    this.srcTexH = naturalH;
-
-    this.setupPingPong();
   }
 
   loadVideo(video: HTMLVideoElement) {
+    if (!this.resetSource(video.videoWidth, video.videoHeight)) return;
     const gl = this.gl;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    // A 0×0 source texture makes every subsequent draw fail, freezing the
-    // preview on the last presented frame (preserveDrawingBuffer)
-    if (w === 0 || h === 0) return;
-    this.imgW = w;
-    this.imgH = h;
-    if (this.canvas.width !== w) this.canvas.width = w;
-    if (this.canvas.height !== h) this.canvas.height = h;
-
-    if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
-    this.sourceTexture = this.createTexture(w, h);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-    this.srcTexW = w;
-    this.srcTexH = h;
-
-    this.setupPingPong();
   }
 
   /**
@@ -390,7 +363,17 @@ export class GlRenderer {
    * (WebCodecs preview) — like loadVideo, but without an element to sample.
    */
   initVideoSource(w: number, h: number) {
-    if (w === 0 || h === 0) return;
+    this.resetSource(w, h);
+  }
+
+  /**
+   * Size the output to `w`×`h` and hand back a freshly bound source texture for
+   * the caller to upload into. False when the dimensions aren't usable yet: a
+   * 0×0 source texture makes every subsequent draw fail, freezing the preview
+   * on the last presented frame (preserveDrawingBuffer).
+   */
+  private resetSource(w: number, h: number): boolean {
+    if (w === 0 || h === 0) return false;
     const gl = this.gl;
     this.imgW = w;
     this.imgH = h;
@@ -403,6 +386,7 @@ export class GlRenderer {
     this.srcTexH = h;
 
     this.setupPingPong();
+    return true;
   }
 
   updateSourceFrame(source: HTMLVideoElement | VideoFrame) {

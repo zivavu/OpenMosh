@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { autoRangeLevel, resetAutoRange, smoothBandLevel } from "./auto-range";
+import {
+  autoRangeLevel,
+  dropAutoRangeScope,
+  resetAutoRange,
+  smoothBandLevel,
+} from "./auto-range";
 
 /** Run a level signal through the smoother at a given frame rate. */
 function runAtFps(
@@ -162,5 +167,38 @@ describe("smoothed levels through auto-ranging", () => {
     // Raw is all-or-nothing; smoothed spends several frames per kick in between.
     expect(midRangeShare(raw)).toBeLessThan(0.05);
     expect(midRangeShare(smoothed)).toBeGreaterThan(0.15);
+  });
+});
+
+describe("dropAutoRangeScope", () => {
+  it("forgets only the named scope's bands", () => {
+    resetAutoRange();
+    // Drive two scopes to clearly different envelopes.
+    for (let i = 0; i < 40; i++) {
+      smoothBandLevel("laneA|20:250", 0.9, 1 / 60, 0.5);
+      autoRangeLevel("laneA|20:250", 0.9, 1 / 60);
+      smoothBandLevel("laneB|20:250", 0.1, 1 / 60, 0.5);
+      autoRangeLevel("laneB|20:250", 0.1, 1 / 60);
+    }
+    const bBefore = smoothBandLevel("laneB|20:250", 0.1, 1 / 60, 0.5);
+
+    dropAutoRangeScope("laneA");
+
+    // A dropped scope starts over: the first sample is returned as-is.
+    expect(smoothBandLevel("laneA|20:250", 0.2, 1 / 60, 0.5)).toBe(0.2);
+    // The other scope kept following where it was.
+    expect(smoothBandLevel("laneB|20:250", 0.1, 1 / 60, 0.5)).toBeCloseTo(
+      bBefore,
+      5,
+    );
+  });
+
+  it("leaves a scope whose id is a prefix of another alone", () => {
+    resetAutoRange();
+    smoothBandLevel("lane1|20:250", 0.5, 1 / 60, 0.5);
+    smoothBandLevel("lane10|20:250", 0.5, 1 / 60, 0.5);
+    dropAutoRangeScope("lane1");
+    // lane10 is not lane1 — the "|" in the prefix is what keeps them apart.
+    expect(smoothBandLevel("lane10|20:250", 0.9, 1 / 60, 0.5)).not.toBe(0.9);
   });
 });
