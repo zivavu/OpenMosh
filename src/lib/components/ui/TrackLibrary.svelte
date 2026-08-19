@@ -9,6 +9,7 @@
 		X,
 	} from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import { readJson, readRaw, writeJson, writeRaw } from '../../storage';
 	import { getDecodedAudioBuffer } from '../../audio/audio-buffer-cache';
 	import { computeNormalizeGain, measureLoudness } from '../../audio/loudness';
 	import {
@@ -48,7 +49,7 @@
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-library-open';
-	let open = $state(localStorage.getItem(OPEN_KEY) === 'true');
+	let open = $state(readRaw(OPEN_KEY) === 'true');
 	let tracks = $state<StoredTrack[]>([]);
 	let libraryLoaded = $state(false);
 	let fileInput: HTMLInputElement;
@@ -56,18 +57,18 @@
 
 	const NORMALIZE_KEY = 'openmosh-library-normalize';
 	let normalizedIds = $state<Set<string>>(
-		new Set(JSON.parse(localStorage.getItem(NORMALIZE_KEY) ?? '[]')),
+		new Set(readJson<string[]>(NORMALIZE_KEY, [])),
 	);
 	// Not $state — only used internally, never read in template directly
 	let gainCache = new Map<string, number>();
 	let measuringIds = $state<Set<string>>(new Set());
 
 	$effect(() => {
-		localStorage.setItem(NORMALIZE_KEY, JSON.stringify([...normalizedIds]));
+		writeJson(NORMALIZE_KEY, [...normalizedIds]);
 	});
 
 	$effect(() => {
-		localStorage.setItem(OPEN_KEY, String(open));
+		writeRaw(OPEN_KEY, String(open));
 	});
 
 	// Auto-add manually loaded tracks to the library

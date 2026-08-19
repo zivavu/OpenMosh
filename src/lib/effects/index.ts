@@ -13,6 +13,7 @@ export {
 import type { EffectDefinition, EffectInstance, VolumeLink } from "./types";
 import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
+import { readJson } from "../storage";
 
 export function createEffectInstance(def: EffectDefinition): EffectInstance {
   return {
@@ -46,16 +47,12 @@ export function getDefinition(defId: string): EffectDefinition | undefined {
 export const HIDDEN_EFFECTS_KEY = "openmosh-hidden-effects";
 
 export function loadInitialEffects(): EffectInstance[] {
-  try {
-    const raw = localStorage.getItem(HIDDEN_EFFECTS_KEY);
-    if (raw) {
-      const hiddenIds = new Set<string>(JSON.parse(raw));
-      return EFFECT_DEFINITIONS.filter((def) => !hiddenIds.has(def.id)).map(
-        createEffectInstance,
-      );
-    }
-  } catch {}
-  return EFFECT_DEFINITIONS.map(createEffectInstance);
+  const hidden = readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null);
+  if (!Array.isArray(hidden)) return EFFECT_DEFINITIONS.map(createEffectInstance);
+  const hiddenIds = new Set(hidden);
+  return EFFECT_DEFINITIONS.filter((def) => !hiddenIds.has(def.id)).map(
+    createEffectInstance,
+  );
 }
 
 export function setVolumeLink(

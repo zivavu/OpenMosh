@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { readJson, writeJson } from '../../storage';
 	import {
 		Check,
 		ChevronsDownUp,
@@ -156,17 +157,13 @@
 	// segment, say — and deriving the set from it would silently mark the whole
 	// rest of the library as permanently hidden.
 	function loadHiddenEffectIds(): Set<string> {
-		try {
-			const raw = localStorage.getItem(HIDDEN_EFFECTS_KEY);
-			if (raw) return new Set<string>(JSON.parse(raw));
-		} catch {}
-		return new Set<string>();
+		return new Set(readJson<string[]>(HIDDEN_EFFECTS_KEY, []));
 	}
 
 	let hiddenIds = $state<Set<string>>(loadHiddenEffectIds());
 
 	function persistHiddenIds() {
-		localStorage.setItem(HIDDEN_EFFECTS_KEY, JSON.stringify([...hiddenIds]));
+		writeJson(HIDDEN_EFFECTS_KEY, [...hiddenIds]);
 	}
 
 	// Params of hidden effects, so re-adding one restores it as it was rather
