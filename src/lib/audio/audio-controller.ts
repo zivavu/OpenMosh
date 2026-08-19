@@ -17,30 +17,7 @@ export function createAudioGraph(
   element: HTMLAudioElement | HTMLVideoElement,
 ): AudioGraphState {
   const ctx = new AudioContext();
-  const source = ctx.createMediaElementSource(element);
-  const normalizeGain = ctx.createGain();
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 2048;
-  // Raw bins. Smoothing lives in smoothBandLevel, which an export runs too —
-  // left at the 0.8 default this path would be smoothed twice over and a render
-  // not at all. It also ran per rAF tick, so a 144 Hz monitor previewed
-  // something a 60 Hz one never saw.
-  analyser.smoothingTimeConstant = 0;
-  const gain = ctx.createGain();
-  source.connect(normalizeGain);
-  normalizeGain.connect(analyser);
-  analyser.connect(gain);
-  gain.connect(ctx.destination);
-  return {
-    context: ctx,
-    source,
-    normalizeGain,
-    analyser,
-    gain,
-    frequencyData: new Uint8Array(analyser.frequencyBinCount),
-    sampleRate: ctx.sampleRate,
-    binCount: analyser.frequencyBinCount,
-  };
+  return buildGraph(ctx, ctx.createMediaElementSource(element));
 }
 
 /**
@@ -48,7 +25,14 @@ export function createAudioGraph(
  * node (e.g. an AudioBufferSourceNode) into `normalizeGain`.
  */
 export function createOutputAudioGraph(): AudioGraphState {
-  const ctx = new AudioContext();
+  return buildGraph(new AudioContext(), null);
+}
+
+/** source -> normalizeGain -> analyser -> gain -> destination. */
+function buildGraph(
+  ctx: AudioContext,
+  source: MediaElementAudioSourceNode | null,
+): AudioGraphState {
   const normalizeGain = ctx.createGain();
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 2048;
@@ -58,12 +42,13 @@ export function createOutputAudioGraph(): AudioGraphState {
   // something a 60 Hz one never saw.
   analyser.smoothingTimeConstant = 0;
   const gain = ctx.createGain();
+  source?.connect(normalizeGain);
   normalizeGain.connect(analyser);
   analyser.connect(gain);
   gain.connect(ctx.destination);
   return {
     context: ctx,
-    source: null,
+    source,
     normalizeGain,
     analyser,
     gain,
