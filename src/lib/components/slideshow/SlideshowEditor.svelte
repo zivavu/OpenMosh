@@ -4,7 +4,6 @@
 	import { readJson, writeJson } from '../../storage';
 	import {
 		generateId,
-		getDefinition,
 		loadInitialEffects,
 		loadPresets,
 		setVolumeLink,
@@ -14,9 +13,12 @@
 	import { MicVocal, Plus } from 'lucide-svelte';
 	import {
 		appendTextLane,
+		chainLabels,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
+		findTextClip,
+		findTextClipLane,
 		normalizeTextTimeline,
 		resolveTextLayersAt,
 		applyLyricsToTimeline,
@@ -965,27 +967,12 @@
 			? audio.trackDuration
 			: recordDuration,
 	);
-	let textChainLabels = $derived(
-		effects.filter((e) => e.enabled).map((e) => getDefinition(e.defId)?.name ?? e.defId),
-	);
-	let selectedTextClip = $derived.by(() => {
-		if (!selectedTextClipId) return null;
-		for (const lane of textTimeline.lanes) {
-			const clip = lane.clips.find((c) => c.id === selectedTextClipId);
-			if (clip) return clip;
-		}
-		return null;
-	});
-
+	let textChainLabels = $derived(chainLabels(effects));
+	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
 	/** The lane holding the selected clip — the panel edits its style. */
-	let selectedTextLane = $derived.by(() => {
-		if (!selectedTextClipId) return null;
-		return (
-			textTimeline.lanes.find((l) =>
-				l.clips.some((c) => c.id === selectedTextClipId),
-			) ?? null
-		);
-	});
+	let selectedTextLane = $derived(
+		findTextClipLane(textTimeline, selectedTextClipId),
+	);
 
 	/** Layers for whatever the preview is showing right now. */
 	function currentTextLayers() {

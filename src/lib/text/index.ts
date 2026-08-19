@@ -17,6 +17,9 @@ export type { ResolvedTextLayer } from "./resolve";
 export {
   addClip,
   allTextEffectIds,
+  chainLabels,
+  findTextClip,
+  findTextClipLane,
   clipAt,
   clipRange,
   freeRangeAt,
