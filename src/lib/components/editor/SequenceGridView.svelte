@@ -125,16 +125,6 @@
 		</span>
 		<div class="grid-actions">
 			<!-- Only once there is a pool: the empty state carries its own -->
-			{#if sources.length > 0}
-				<button
-					class="grid-btn"
-					title="Add images or videos to the pool"
-					onclick={() => fileInput?.click()}
-				>
-					<Plus size={12} />
-					Add media
-				</button>
-			{/if}
 			{#if onShuffle && sources.length > 1}
 				<button
 					class="grid-btn"
@@ -143,6 +133,16 @@
 				>
 					<Shuffle size={12} />
 					Shuffle media
+				</button>
+			{/if}
+			{#if sources.length > 0}
+				<button
+					class="grid-btn"
+					title="Add images or videos to the pool"
+					onclick={() => fileInput?.click()}
+				>
+					<Plus size={12} />
+					Add media
 				</button>
 			{/if}
 			{#if onClear && sources.length > 1}
