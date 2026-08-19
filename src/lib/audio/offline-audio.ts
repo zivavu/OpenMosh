@@ -39,10 +39,7 @@ export function trimAudioBuffer(
 
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const src = buffer.getChannelData(ch);
-    const dst = trimmed.getChannelData(ch);
-    for (let i = 0; i < length; i++) {
-      dst[i] = src[startSample + i];
-    }
+    trimmed.getChannelData(ch).set(src.subarray(startSample, endSample));
   }
   return trimmed;
 }
@@ -63,11 +60,15 @@ export function loopAudioBuffer(
     sampleRate,
   });
 
+  // Nothing to tile — an empty source would spin the copy loop forever.
+  if (srcLength === 0) return looped;
+
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const src = buffer.getChannelData(ch);
     const dst = looped.getChannelData(ch);
-    for (let i = 0; i < dstLength; i++) {
-      dst[i] = src[i % srcLength];
+    // Whole copies of the source at a time, so the tail is the only partial one.
+    for (let off = 0; off < dstLength; off += srcLength) {
+      dst.set(src.subarray(0, Math.min(srcLength, dstLength - off)), off);
     }
   }
   return looped;
