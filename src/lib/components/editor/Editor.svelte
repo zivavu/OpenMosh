@@ -17,6 +17,10 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
+	import {
+		loadRenderSettings,
+		saveRenderSettings,
+	} from '../../editor/render-settings';
 	import { addTrack, getAllTracks } from '../../audio/track-library';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
@@ -447,6 +451,8 @@
 	const spanStore = createTrackStore<{ spanStart: number; spanEnd: number }>(
 		'openmosh-single-span',
 	);
+	/** Read-only now: output size moved into the per-project render settings.
+	 * Entries written before that still restore through the fallback below. */
 	const sizeStore = createTrackStore<{ width: number; height: number }>(
 		'openmosh-single-size',
 	);
@@ -465,15 +471,6 @@
 	});
 
 	let trackInput: HTMLInputElement;
-
-	// Persist the output size per track, alongside the span above.
-	$effect(() => {
-		const w = resizeWidth;
-		const h = resizeHeight;
-		if (currentTrackId && w > 0 && h > 0) {
-			sizeStore.save(currentTrackId, { width: w, height: h });
-		}
-	});
 
 	/**
 	 * Latched when a track restores a size, so the default below doesn't
@@ -536,12 +533,6 @@
 		// behind by the overwrite above. Fall through to the whole track.
 		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
-		}
-		const savedSize = sizeStore.load(trackId);
-		if (savedSize && savedSize.width > 0 && savedSize.height > 0) {
-			resizeWidth = savedSize.width;
-			resizeHeight = savedSize.height;
-			sizeRestoredFromTrack = true;
 		}
 		const savedSeq = loadSeqEntry(trackId);
 		if (savedSeq === null) return false;
@@ -2140,6 +2131,66 @@
 	let showRecordSettings = $state(false);
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
+
+	/**
+	 * Which project the export settings belong to. `seqStoreKey` already carries
+	 * the mode prefix, so #editor and #sequence keep separate settings for the
+	 * same song. Media with no song of its own still has an identity worth
+	 * keying by — single mode works with no audio at all — so it falls back to
+	 * the file, matching how sessions.ts keys a track-less edit.
+	 */
+	let renderKey = $derived(
+		seqStoreKey ??
+			(isSequenceMode
+				? null
+				: `single:file:${file.name}:${file.size}:${file.lastModified}`),
+	);
+
+	/** The project whose settings are already loaded, so the save effect can't
+	 * write one project's values under the next one's key. */
+	let renderKeyLoaded = $state<string | null>(null);
+
+	$effect(() => {
+		const key = renderKey;
+		if (!key || untrack(() => renderKeyLoaded) === key) return;
+		untrack(() => {
+			renderKeyLoaded = key;
+			const saved = loadRenderSettings(key);
+			if (saved?.fps) recordFps = saved.fps;
+			if (saved?.duration) recordDuration = saved.duration;
+			// Falls back to the pre-render-settings per-track size store, whose
+			// entries were written before the output size lived here.
+			const size =
+				saved?.width && saved?.height
+					? { width: saved.width, height: saved.height }
+					: currentTrackId
+						? sizeStore.load(currentTrackId)
+						: null;
+			if (size && size.width > 0 && size.height > 0) {
+				resizeWidth = size.width;
+				resizeHeight = size.height;
+				// Media finishing its load after this would otherwise default the
+				// output back to its own size — see the latch's own comment.
+				sizeRestoredFromTrack = true;
+			}
+		});
+	});
+
+	$effect(() => {
+		const key = renderKey;
+		const fps = recordFps;
+		const duration = recordDuration;
+		const width = resizeWidth;
+		const height = resizeHeight;
+		// Before this project's own values are in, the live ones still belong to
+		// whatever was open before.
+		if (!key || renderKeyLoaded !== key) return;
+		saveRenderSettings(key, {
+			fps,
+			duration,
+			...(width > 0 && height > 0 ? { width, height } : {}),
+		});
+	});
 
 	// ── Text timeline ──
 	// Optional lanes of text clips over the master clock. Off until the user
