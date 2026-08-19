@@ -496,31 +496,57 @@
 		pointer-events: none;
 	}
 
+	/* Drawn inside the span rather than straddling its edge: a lane clips to its
+	   window, so a centred handle lost its outer half whenever the span reached
+	   either end of the track — which is exactly where a full-length selection
+	   puts both of them. Inset, the whole grip is always on screen, and it reads
+	   as the end of the selection rather than a marker sitting on top of it. */
 	.timeline-handle {
 		position: absolute;
-		top: 50%;
-		width: 10px;
-		height: 16px;
-		margin: -8px 0 0 -5px;
-		border: 1px solid var(--text-4);
-		border-radius: 3px;
-		background: #444;
+		top: 0;
+		bottom: 0;
+		width: 9px;
+		background: #4a4a56;
 		pointer-events: none;
 		transition:
-			background 0.12s,
-			border-color 0.12s;
+			background var(--t-fast),
+			box-shadow var(--t-fast);
+	}
+
+	.timeline-handle-start {
+		border-radius: 4px 0 0 4px;
+	}
+
+	.timeline-handle-end {
+		margin-left: -9px;
+		border-radius: 0 4px 4px 0;
+	}
+
+	/* Two grip lines, so it reads as something to drag rather than a boundary
+	   the span happens to end at. */
+	.timeline-handle::after {
+		content: '';
+		position: absolute;
+		inset: 5px 3px;
+		border-left: 1px solid var(--text-2);
+		border-right: 1px solid var(--text-2);
+		transition: border-color var(--t-fast);
 	}
 
 	/* Lit by proximity rather than :hover — the handles take no pointer events,
 	   since the track hit-tests them by distance. */
-	.timeline-handle.live {
-		border-color: var(--live);
-		background: var(--live-dim);
+	.timeline-handle.live,
+	.timeline-handle.dragging {
+		background: var(--live);
+		box-shadow: 0 0 0 1px var(--live-dim);
+	}
+
+	.timeline-handle.live::after,
+	.timeline-handle.dragging::after {
+		border-color: rgba(10, 10, 12, 0.55);
 	}
 
 	.timeline-handle.dragging {
-		border-color: var(--live);
-		background: var(--live-dim);
 		transition: none;
 	}
 
