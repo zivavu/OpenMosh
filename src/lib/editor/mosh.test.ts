@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { FREQ_PRESETS, loadInitialEffects } from "../effects";
-import { applyRandomAudioLinks } from "./mosh";
+import { EFFECT_DEFINITIONS, FREQ_PRESETS, loadInitialEffects } from "../effects";
+import { applyRandomAudioLinks, randomizeParams } from "./mosh";
 
 /** Every link a roll produced, flattened across effects. */
 function rolledLinks(band?: Parameters<typeof applyRandomAudioLinks>[3]) {
@@ -30,5 +30,39 @@ describe("applyRandomAudioLinks", () => {
 
   it("defaults to full spectrum", () => {
     for (const link of rolledLinks()) expect(link.freqMin).toBeUndefined();
+  });
+});
+
+describe("randomizeParams", () => {
+  it("lands every range param on its own step grid", () => {
+    for (const def of EFFECT_DEFINITIONS) {
+      const values: Record<string, number | string> = {};
+      // Many rolls per definition: the value is random, the grid is not.
+      for (let i = 0; i < 50; i++) {
+        randomizeParams(values, def);
+        for (const param of def.params) {
+          if (param.type !== "range" || param.step <= 0) continue;
+          const v = values[param.key] as number;
+          const offGrid = (v - param.min) / param.step;
+          expect(Math.abs(offGrid - Math.round(offGrid))).toBeLessThan(1e-6);
+          expect(v).toBeGreaterThanOrEqual(param.min);
+          expect(v).toBeLessThanOrEqual(param.max);
+        }
+      }
+    }
+  });
+
+  it("leaves a stepless range param unquantized", () => {
+    const def = {
+      id: "t",
+      name: "T",
+      params: [
+        { key: "a", label: "A", type: "range", min: 0, max: 1, step: 0, defaultValue: 0 },
+      ],
+    } as unknown as (typeof EFFECT_DEFINITIONS)[number];
+    const values: Record<string, number | string> = {};
+    randomizeParams(values, def);
+    expect(typeof values.a).toBe("number");
+    expect(Number.isFinite(values.a as number)).toBe(true);
   });
 });
