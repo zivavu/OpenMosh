@@ -49,6 +49,9 @@ interface OverlayTexture {
  * than once per allocation. */
 const reportedFBOStatuses = new Set<number>();
 
+/** Effect ids already warned about, so a stale preset logs once, not per frame. */
+const reportedUnknownEffects = new Set<string>();
+
 interface CompiledProgram {
   program: WebGLProgram;
   uniforms: Record<string, WebGLUniformLocation>;
@@ -932,7 +935,15 @@ export class GlRenderer {
       }
 
       const entry = this.compiled.get(eff.defId);
-      if (!entry) continue;
+      if (!entry) {
+        // A stale preset or a deleted effect. Skipping is right — reporting it
+        // once is what makes "my preset does nothing" diagnosable.
+        if (!reportedUnknownEffects.has(eff.defId)) {
+          reportedUnknownEffects.add(eff.defId);
+          console.warn(`No shader for effect "${eff.defId}" — skipping it.`);
+        }
+        continue;
+      }
 
       const { time: effectTime, delta: effectDelta } = this.getEffectTime(
         eff,
