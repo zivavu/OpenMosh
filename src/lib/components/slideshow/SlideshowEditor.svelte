@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { fileDrop } from '../../actions/file-drop';
+	import { readJson, writeJson } from '../../storage';
 	import {
 		generateId,
 		getDefinition,
@@ -376,26 +377,20 @@
 				text: normalizeTextTimeline(restored.text),
 			};
 		}
-		try {
-			const raw = localStorage.getItem(CONFIG_KEY);
-			if (raw) {
-				const saved = JSON.parse(raw);
-				return {
-					...DEFAULT_SLIDESHOW_CONFIG,
-					...saved,
-					text: normalizeTextTimeline(saved.text),
-				};
-			}
-		} catch {}
+		const saved = readJson<Partial<SlideshowConfig> | null>(CONFIG_KEY, null);
+		if (saved) {
+			return {
+				...DEFAULT_SLIDESHOW_CONFIG,
+				...saved,
+				text: normalizeTextTimeline(saved.text),
+			};
+		}
 		return { ...DEFAULT_SLIDESHOW_CONFIG };
 	}
 	let config: SlideshowConfig = $state(loadConfig());
 
 	$effect(() => {
-		localStorage.setItem(
-			CONFIG_KEY,
-			JSON.stringify({ ...config, outputVolume: audio.outputVolume }),
-		);
+		writeJson(CONFIG_KEY, { ...config, outputVolume: audio.outputVolume });
 	});
 
 	let currentTrackId = $state<string | null>(null);

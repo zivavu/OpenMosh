@@ -1,3 +1,5 @@
+import { readJson, writeJson } from "../storage";
+
 /** Generic per-track-id localStorage store, keyed by a single storage key holding a Record<trackId, T>. */
 export function createTrackStore<T>(
   storageKey: string,
@@ -5,19 +7,14 @@ export function createTrackStore<T>(
   migrate?: (raw: unknown) => T | null,
 ) {
   function loadAll(): Record<string, unknown> {
-    try {
-      return JSON.parse(localStorage.getItem(storageKey) ?? "{}");
-    } catch {
-      return {};
-    }
+    const all = readJson<Record<string, unknown>>(storageKey, {});
+    return all && typeof all === "object" ? all : {};
   }
 
   function save(trackId: string, data: T) {
-    try {
-      const all = loadAll();
-      all[trackId] = data;
-      localStorage.setItem(storageKey, JSON.stringify(all));
-    } catch {}
+    const all = loadAll();
+    all[trackId] = data;
+    writeJson(storageKey, all);
   }
 
   function load(trackId: string): T | null {

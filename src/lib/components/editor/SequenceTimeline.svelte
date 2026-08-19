@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Dices, Eraser, Repeat, Shuffle, Trash2 } from 'lucide-svelte';
+	import { readRaw, writeRaw } from '../../storage';
 	import { loadPresets, type Preset } from '../../effects';
 	import {
 		cloneSegmentForSplit,
@@ -117,20 +118,13 @@
 	let hintDismissed = $state(readFlag(HINT_KEY, false));
 
 	function readFlag(key: string, fallback: boolean): boolean {
-		try {
-			const raw = localStorage.getItem(key);
-			return raw === null ? fallback : raw === '1';
-		} catch {
-			return fallback;
-		}
+		const raw = readRaw(key);
+		return raw === null ? fallback : raw === '1';
 	}
 
+	/** Private mode / storage blocked just means "remembered for this session". */
 	function writeFlag(key: string, on: boolean) {
-		try {
-			localStorage.setItem(key, on ? '1' : '0');
-		} catch {
-			// Private mode / storage blocked — remembered for this session only.
-		}
+		writeRaw(key, on ? '1' : '0');
 	}
 
 	function dismissHint() {

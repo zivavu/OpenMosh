@@ -1,5 +1,6 @@
 import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
 import type { FreqBand } from "../effects";
+import { readJson, writeJson } from "../storage";
 
 const SETTINGS_KEY = "openmosh-settings";
 
@@ -51,11 +52,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 };
 
 export function loadSettings(): Partial<EditorSettings> {
-	try {
-		const raw = localStorage.getItem(SETTINGS_KEY);
-		if (raw) return JSON.parse(raw);
-	} catch {}
-	return {};
+	return readJson<Partial<EditorSettings>>(SETTINGS_KEY, {});
 }
 
 /** Whether the upload screen's live demo is switched on. Read by both the demo
@@ -66,5 +63,5 @@ export function demoBackgroundEnabled(): boolean {
 
 /** Merge a partial update into the stored settings without clobbering the rest. */
 export function updateSettings(patch: Partial<EditorSettings>) {
-	localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...loadSettings(), ...patch }));
+	writeJson(SETTINGS_KEY, { ...loadSettings(), ...patch });
 }

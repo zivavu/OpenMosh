@@ -15,6 +15,7 @@
  */
 
 import { getTrack } from "../audio/track-library";
+import { createListCache } from "../storage";
 import {
   getAllSessions,
   getSequenceMediaByIds,
@@ -185,16 +186,12 @@ export async function listSavedSessions(
 
 const cacheKey = (mode: SessionMode) => `openmosh-saved-sessions:${mode}`;
 
+const cacheFor = (mode: SessionMode) =>
+  createListCache(cacheKey(mode), isSavedSession);
+
 /** Synchronous, so the upload screen can paint the list on its first render. */
 export function readCachedSessions(mode: SessionMode): SavedSession[] {
-  try {
-    const parsed: unknown = JSON.parse(
-      localStorage.getItem(cacheKey(mode)) ?? "",
-    );
-    return Array.isArray(parsed) ? parsed.filter(isSavedSession) : [];
-  } catch {
-    return [];
-  }
+  return cacheFor(mode).read();
 }
 
 function isSavedSession(value: unknown): value is SavedSession {
@@ -209,9 +206,5 @@ function isSavedSession(value: unknown): value is SavedSession {
 }
 
 function writeCache(mode: SessionMode, list: SavedSession[]): void {
-  try {
-    localStorage.setItem(cacheKey(mode), JSON.stringify(list));
-  } catch {
-    // Quota or a private window; the list still loads, just not instantly.
-  }
+  cacheFor(mode).write(list);
 }

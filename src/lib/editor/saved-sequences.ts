@@ -1,4 +1,5 @@
 import { getAllTracks, getTrack } from "../audio/track-library";
+import { createListCache } from "../storage";
 import {
   getAllMediaPools,
   getAllSequenceMediaIds,
@@ -24,6 +25,7 @@ export interface SavedSequence {
 }
 
 const CACHE_KEY = "openmosh-saved-sequences";
+const cache = createListCache(CACHE_KEY, isSavedSequence);
 
 /**
  * The last computed list, readable synchronously.
@@ -34,12 +36,7 @@ const CACHE_KEY = "openmosh-saved-sequences";
  * overwrites it, so a song deleted elsewhere corrects itself on the next paint.
  */
 export function readCachedSavedSequences(): SavedSequence[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "");
-    return Array.isArray(parsed) ? parsed.filter(isSavedSequence) : [];
-  } catch {
-    return [];
-  }
+  return cache.read();
 }
 
 function isSavedSequence(value: unknown): value is SavedSequence {
@@ -54,11 +51,7 @@ function isSavedSequence(value: unknown): value is SavedSequence {
 }
 
 function writeCachedSavedSequences(list: SavedSequence[]): void {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(list));
-  } catch {
-    // Quota or a private window; the list still loads, just not instantly.
-  }
+  cache.write(list);
 }
 
 export async function listSavedSequences(): Promise<SavedSequence[]> {

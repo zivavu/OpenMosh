@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Music } from 'lucide-svelte';
+  import { readRaw, writeRaw } from '../../storage';
 
   interface Props {
     onOpenPicker: () => void;
@@ -13,10 +14,10 @@
 
   const MUSIC_HINT_KEY = 'openmosh-music-hint-dismissed';
 
-  let showMusicHint = $state(!localStorage.getItem(MUSIC_HINT_KEY));
+  let showMusicHint = $state(!readRaw(MUSIC_HINT_KEY));
 
   function dismissMusicHint() {
-    localStorage.setItem(MUSIC_HINT_KEY, '1');
+    writeRaw(MUSIC_HINT_KEY, '1');
     showMusicHint = false;
   }
 </script>
