@@ -187,9 +187,33 @@
 		if (!keepBoundaries) boundaries.clearSelection();
 	}
 
+	/** Where a shift+click range measures from: the segment picked on its own,
+	 * or the far end of the last range. Survives the range clicks themselves, so
+	 * a second shift+click re-extends from the same place rather than walking. */
+	let selectionAnchorId = $state<string | null>(null);
+
 	function toggleInSelection(id: string) {
 		if (selectedIds.includes(id)) setSelection(selectedIds.filter((x) => x !== id));
 		else setSelection([...selectedIds, id]);
+		selectionAnchorId = id;
+	}
+
+	/** Select every segment between the anchor and `segId`, inclusive. Falls
+	 * back to a plain pick when there is no live anchor to measure from. */
+	function selectRangeTo(segId: string) {
+		const from = segments.findIndex((s) => s.id === selectionAnchorId);
+		const to = segments.findIndex((s) => s.id === segId);
+		if (to === -1) return;
+		if (from === -1 || from === to) {
+			setSelection([segId]);
+			selectionAnchorId = segId;
+			return;
+		}
+		const ids = segments
+			.slice(Math.min(from, to), Math.max(from, to) + 1)
+			.map((s) => s.id);
+		// Clicked segment last, so it becomes the primary the panel edits.
+		setSelection(to < from ? ids.reverse() : ids);
 	}
 
 	let selectedSegments = $derived(
@@ -462,8 +486,11 @@
 				type: 'rect-select';
 				startTime: number;
 				currentTime: number;
-				/** Segment under the pointer at drag start: shift-click (no move) toggles it. */
-				toggleSegId?: string;
+				/** Segment under the pointer at drag start. Without a drag the
+				 * gesture is a click on it: shift extends the selection to it,
+				 * alt toggles it. */
+				clickSegId?: string;
+				clickAction?: 'range' | 'toggle';
 		  }
 		| null;
 
@@ -611,10 +638,20 @@
 		return null;
 	}
 
-	function startRectSelect(e: PointerEvent, toggleSegId?: string) {
+	function startRectSelect(
+		e: PointerEvent,
+		clickSegId?: string,
+		clickAction: 'range' | 'toggle' = 'range',
+	) {
 		e.stopPropagation();
 		const time = vp.clientXToTime(e.clientX);
-		dragging = { type: 'rect-select', startTime: time, currentTime: time, toggleSegId };
+		dragging = {
+			type: 'rect-select',
+			startTime: time,
+			currentTime: time,
+			clickSegId,
+			clickAction,
+		};
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -632,10 +669,15 @@
 			splitAt(vp.clientXToTime(e.clientX));
 			return;
 		}
-		// Shift: toggle this segment into the selection on click, or rect-select
-		// on drag — same gesture as on the empty timeline.
+		// Shift: extend the selection to this segment on click, or rect-select on
+		// drag — same gesture as on the empty timeline. Alt picks a single
+		// segment in or out, which shift used to do; Ctrl is taken by the split.
+		if (e.altKey) {
+			startRectSelect(e, segId, 'toggle');
+			return;
+		}
 		if (e.shiftKey) {
-			startRectSelect(e, segId);
+			startRectSelect(e, segId, 'range');
 			return;
 		}
 		dragging = { type: 'seg-click', segmentId: segId };
@@ -776,15 +818,20 @@
 			const segId = dragging.segmentId;
 			const soleSelected = selectedIds.length === 1 && selectedIds[0] === segId;
 			setSelection(soleSelected ? [] : [segId]);
+			selectionAnchorId = soleSelected ? null : segId;
 		}
 		if (dragging?.type === 'rect-select') {
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 				boundaries.setSelectionFromRange(minTime, maxTime);
-				setSelection(segmentIdsInRange(minTime, maxTime), true);
-			} else if (dragging.toggleSegId) {
-				toggleInSelection(dragging.toggleSegId);
+				const ids = segmentIdsInRange(minTime, maxTime);
+				setSelection(ids, true);
+				// A later shift+click extends from where the drag began.
+				selectionAnchorId = ids[0] ?? null;
+			} else if (dragging.clickSegId) {
+				if (dragging.clickAction === 'toggle') toggleInSelection(dragging.clickSegId);
+				else selectRangeTo(dragging.clickSegId);
 			} else {
 				boundaries.clearSelection();
 			}
@@ -1377,7 +1424,7 @@
 					<span class="seg-toolbar-hint">
 						{segments.length === 0
 							? 'Ctrl+click the timeline to create a segment'
-							: 'Click a segment to edit · shift-click or shift-drag to select several'}
+							: 'Click a segment to edit · shift-click a second for the range · alt-click to add one'}
 					</span>
 					<button
 						class="hint-dismiss"
