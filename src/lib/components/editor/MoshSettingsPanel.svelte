@@ -109,6 +109,12 @@
    {/if}
 {/snippet}
 
+<!-- Whose settings these are: an fx lane's, or (unlabelled) the editor's own. -->
+{#snippet moshHeading()}
+   Mosh settings{#if targetLabel} - <span class="scope-name">{targetLabel}</span
+      >{/if}
+{/snippet}
+
 <div class="config-panel">
    {#if showTiming}
       <h3 class="panel-title">Timing</h3>
@@ -120,15 +126,9 @@
          {hasTrack}
          {onDetectBpm}
       />
-      <h3 class="panel-title section-title">Mosh settings</h3>
+      <h3 class="panel-title section-title">{@render moshHeading()}</h3>
    {:else}
-      <h3 class="panel-title">Mosh settings</h3>
-   {/if}
-   {#if targetLabel}
-      <p class="scope-note">
-         Editing <strong>{targetLabel}</strong> — its own mosh and audio
-         settings.
-      </p>
+      <h3 class="panel-title">{@render moshHeading()}</h3>
    {/if}
    <!-- svelte-ignore a11y_no_static_element_interactions -->
    <div
@@ -328,15 +328,8 @@
       margin-top: 0.75rem;
    }
 
-   .scope-note {
-      margin: 0 0 0.35rem;
-      font-size: 0.7rem;
-      color: var(--text-3);
-   }
-
-   .scope-note strong {
+   .scope-name {
       color: var(--live);
-      font-weight: 600;
    }
 
    .panel-title {
