@@ -36,6 +36,10 @@ import {
   type TrackingState,
 } from "../tracking";
 
+/** Framebuffer statuses already reported, so a broken target logs once rather
+ * than once per allocation. */
+const reportedFBOStatuses = new Set<number>();
+
 interface CompiledProgram {
   program: WebGLProgram;
   uniforms: Record<string, WebGLUniformLocation>;
@@ -731,16 +735,8 @@ export class GlRenderer {
     let stageFbo = alt ? this.altStageFBO : this.stageFBO;
     if (!stageTex || !stageFbo) {
       stageTex = this.createTexture(this.imgW, this.imgH);
-      const fbo = gl.createFramebuffer();
+      const fbo = this.createRenderTarget(stageTex);
       if (!fbo) return src;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.framebufferTexture2D(
-        gl.FRAMEBUFFER,
-        gl.COLOR_ATTACHMENT0,
-        gl.TEXTURE_2D,
-        stageTex,
-        0,
-      );
       stageFbo = fbo;
       if (alt) {
         this.altStageTexture = stageTex;
@@ -1463,18 +1459,9 @@ export class GlRenderer {
   ): { tex: WebGLTexture; fbo: WebGLFramebuffer } | null {
     const existing = this.layerBuffers[index];
     if (existing) return existing;
-    const gl = this.gl;
     const tex = this.createTexture(this.imgW, this.imgH);
-    const fbo = gl.createFramebuffer();
+    const fbo = this.createRenderTarget(tex);
     if (!fbo) return null;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      tex,
-      0,
-    );
     const buf = { tex, fbo };
     this.layerBuffers[index] = buf;
     return buf;
@@ -1872,25 +1859,42 @@ export class GlRenderer {
     }
   }
 
+  /**
+   * An FBO rendering into `tex`. Null only when the context refuses to make one
+   * at all; an *incomplete* one is still returned, because that is what every
+   * call site here did before and the draws against it fail harmlessly (a black
+   * pass) rather than taking the editor down. It gets reported once per status,
+   * which is the whole point — a half-float target the driver won't accept used
+   * to show up only as bloom that silently does nothing.
+   */
+  private createRenderTarget(tex: WebGLTexture): WebGLFramebuffer | null {
+    const gl = this.gl;
+    const fbo = gl.createFramebuffer();
+    if (!fbo) return null;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      tex,
+      0,
+    );
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE && !reportedFBOStatuses.has(status)) {
+      reportedFBOStatuses.add(status);
+      console.error(`Incomplete framebuffer (status 0x${status.toString(16)})`);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return fbo;
+  }
+
   private createFBOPair(
     textures: [WebGLTexture, WebGLTexture],
   ): [WebGLFramebuffer, WebGLFramebuffer] {
-    const gl = this.gl;
-    const fbos: [WebGLFramebuffer, WebGLFramebuffer] = [
-      gl.createFramebuffer()!,
-      gl.createFramebuffer()!,
+    return [
+      this.createRenderTarget(textures[0])!,
+      this.createRenderTarget(textures[1])!,
     ];
-    for (let i = 0; i < 2; i++) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbos[i]);
-      gl.framebufferTexture2D(
-        gl.FRAMEBUFFER,
-        gl.COLOR_ATTACHMENT0,
-        gl.TEXTURE_2D,
-        textures[i],
-        0,
-      );
-    }
-    return fbos;
   }
 
   private setupPingPong() {
@@ -2062,24 +2066,13 @@ export class GlRenderer {
 
   private ensureStackBuffers() {
     if (this.stackTextures && this.stackFBOs) return;
-    const gl = this.gl;
     this.stackTextures = [];
     this.stackFBOs = [];
     for (let i = 0; i < 3; i++) {
       const tex = this.createTexture(this.imgW, this.imgH);
-      const fbo = gl.createFramebuffer()!;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.framebufferTexture2D(
-        gl.FRAMEBUFFER,
-        gl.COLOR_ATTACHMENT0,
-        gl.TEXTURE_2D,
-        tex,
-        0,
-      );
       this.stackTextures.push(tex);
-      this.stackFBOs.push(fbo);
+      this.stackFBOs.push(this.createRenderTarget(tex)!);
     }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   private deleteStackBuffers() {
@@ -2093,34 +2086,14 @@ export class GlRenderer {
   /** Lazy: only a blend with a chain stacked over it ever needs this. */
   private ensureBlendBuffer() {
     if (this.blendTexture && this.blendFBO) return;
-    const gl = this.gl;
     this.blendTexture = this.createTexture(this.imgW, this.imgH);
-    this.blendFBO = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.blendFBO);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      this.blendTexture,
-      0,
-    );
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.blendFBO = this.createRenderTarget(this.blendTexture);
   }
 
   private ensurePresentBuffer() {
     if (this.fbTexture && this.fbFBO) return;
-    const gl = this.gl;
     this.fbTexture = this.createTexture(this.imgW, this.imgH);
-    this.fbFBO = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbFBO);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      this.fbTexture,
-      0,
-    );
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.fbFBO = this.createRenderTarget(this.fbTexture);
   }
 
   private static BLEND_MODE_VALUES: Record<TextOverlayBlendMode, number> = {
