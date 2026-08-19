@@ -10,6 +10,9 @@ function bandKey(scope: string, freqMin: number, freqMax: number): string {
   return `${scope}|${freqMin}:${freqMax}`;
 }
 
+/** Scratch for applyVolumeLinksToEffects; valid only within one call. */
+const perBand = new Map<string, number>();
+
 /**
  * A set of effects that follows the music its own way. Every chain used to
  * share one response; an fx lane now carries its own, and the envelope state
@@ -38,7 +41,9 @@ export function applyVolumeLinksToEffects(
 ): void {
   const exponent = punchExponent(response.punch);
   // Cached so a band's envelope advances once per frame, not once per link.
-  const perBand = new Map<string, number>();
+  // Reused across calls rather than minted per frame: this runs every rAF tick
+  // for every link group, and nothing reads it after the call returns.
+  perBand.clear();
   const levelForBand = (freqMin: number, freqMax: number): number => {
     const key = bandKey(scope, freqMin, freqMax);
     const cached = perBand.get(key);

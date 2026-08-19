@@ -107,12 +107,26 @@ function applyFrameAudio(
 	groups?: AudioLinkGroup[] | null,
 ): void {
 	if (frameAudioData.length === 0) return;
+	const frame = frameAudioData[i]!;
 	// Each group carries its own response and its own envelope scope, exactly
-	// as the preview's per-frame tick does.
-	for (const g of groups ?? [{ scope: '', effects, response }]) {
+	// as the preview's per-frame tick does. The ungrouped case is applied
+	// directly rather than through a one-element array minted per frame — an
+	// export renders tens of thousands of them.
+	if (!groups) {
+		applyFrameAudioToEffects(
+			effects,
+			frame,
+			sampleRate,
+			FFT_SIZE,
+			frameDuration,
+			response,
+		);
+		return;
+	}
+	for (const g of groups) {
 		applyFrameAudioToEffects(
 			g.effects,
-			frameAudioData[i]!,
+			frame,
 			sampleRate,
 			FFT_SIZE,
 			frameDuration,
