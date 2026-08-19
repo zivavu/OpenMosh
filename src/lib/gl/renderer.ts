@@ -36,6 +36,15 @@ import {
   type TrackingState,
 } from "../tracking";
 
+/** A 2D-drawn overlay uploaded as a texture, kept until its content or the
+ * output size changes. `sig` is everything the draw depended on. */
+interface OverlayTexture {
+  tex: WebGLTexture;
+  w: number;
+  h: number;
+  sig: string;
+}
+
 /** Framebuffer statuses already reported, so a broken target logs once rather
  * than once per allocation. */
 const reportedFBOStatuses = new Set<number>();
@@ -227,10 +236,7 @@ export class GlRenderer {
   >();
   private textBlendProgram: CompiledProgram | null = null;
   /** Drawn (pre-effect) text per clip, keyed by clip id. */
-  private textLayerTextures = new Map<
-    string,
-    { tex: WebGLTexture; w: number; h: number; sig: string }
-  >();
+  private textLayerTextures = new Map<string, OverlayTexture>();
   private textLayerCanvas: HTMLCanvasElement | null = null;
   /** Scratch targets holding each layer's own chain output for this frame. */
   private layerBuffers: { tex: WebGLTexture; fbo: WebGLFramebuffer }[] = [];
@@ -247,10 +253,7 @@ export class GlRenderer {
    * Caption overlay textures, keyed by instanceId — unlike tracking there can
    * be any number of captions in one chain, each with its own drawn text.
    */
-  private captionTextures = new Map<
-    string,
-    { tex: WebGLTexture; w: number; h: number; sig: string }
-  >();
+  private captionTextures = new Map<string, OverlayTexture>();
   private captionCanvas: HTMLCanvasElement | null = null;
 
   // --- Tracking overlay effect (2D-canvas HUD composited into the chain) ---
@@ -528,6 +531,11 @@ export class GlRenderer {
     this.gcTextLayers(textLayers);
     const safeDt = this.frameDelta(time);
     this.ensurePresentBuffer();
+    const presentFBO = this.fbFBO;
+    const presentTex = this.fbTexture;
+    // Narrowed rather than asserted: createRenderTarget can genuinely fail, and
+    // there is nothing to draw into if it did.
+    if (!presentFBO || !presentTex) return;
     // Text layers run their own chains through the shared ping-pong, so they
     // have to be finished before the main chain starts using it.
     const prepared = this.prepareTextLayers(textLayers, time, safeDt);
@@ -546,8 +554,8 @@ export class GlRenderer {
         flat,
         time,
         safeDt,
-        this.fbFBO!,
-        this.fbTexture!,
+        presentFBO,
+        presentTex,
         true,
         false,
         prepared,
@@ -559,12 +567,15 @@ export class GlRenderer {
     // A fading lane has to mix against its own input, so the source chain lands
     // in a buffer rather than going straight to the canvas.
     this.ensureSceneBuffers();
+    const sceneFBOs = this.sceneFBOs;
+    const sceneTextures = this.sceneTextures;
+    if (!sceneFBOs || !sceneTextures) return;
     const baseTex = this.renderChainTo(
       effects,
       time,
       safeDt,
-      this.sceneFBOs![0],
-      this.sceneTextures![0],
+      sceneFBOs[0],
+      sceneTextures[0],
       false,
       false,
       prepared,
@@ -629,12 +640,15 @@ export class GlRenderer {
     const prepared = this.prepareTextLayers(textLayers, time, safeDt);
 
     this.ensureSceneBuffers();
+    const sceneFBOs = this.sceneFBOs;
+    const sceneTextures = this.sceneTextures;
+    if (!sceneFBOs || !sceneTextures) return;
     const texA = this.renderChainTo(
       effectsA,
       time,
       safeDt,
-      this.sceneFBOs![0],
-      this.sceneTextures![0],
+      sceneFBOs[0],
+      sceneTextures[0],
       false,
       useAltSourceForA && !!this.altSourceTexture,
       prepared,
@@ -643,20 +657,22 @@ export class GlRenderer {
       effectsB,
       time,
       safeDt,
-      this.sceneFBOs![1],
-      this.sceneTextures![1],
+      sceneFBOs[1],
+      sceneTextures[1],
       false,
       false,
       prepared,
     );
 
     this.ensurePresentBuffer();
+    const presentFBO = this.fbFBO;
+    if (!presentFBO) return;
 
     // Nothing stacked on top: blend straight into the present buffer.
     if (post.length === 0) {
       this.drawTransitionPass(
         prog,
-        this.fbFBO!,
+        presentFBO,
         texA!,
         texB!,
         progress,
@@ -674,9 +690,12 @@ export class GlRenderer {
     // chain's source; text layers stay on A and B, where they ride through the
     // blend rather than popping in when B takes over.
     this.ensureBlendBuffer();
+    const blendFBO = this.blendFBO;
+    const blendTexture = this.blendTexture;
+    if (!blendFBO || !blendTexture) return;
     this.drawTransitionPass(
       prog,
-      this.blendFBO!,
+      blendFBO,
       texA!,
       texB!,
       progress,
@@ -686,7 +705,7 @@ export class GlRenderer {
       time,
     );
     this.presentFrame(
-      this.renderStack(post, this.blendTexture!, time, safeDt),
+      this.renderStack(post, blendTexture, time, safeDt),
     );
   }
 
@@ -1400,41 +1419,51 @@ export class GlRenderer {
     // is redrawn once fontsVersion() moves.
     void ensureFontLoaded(layer.style.fontFamily);
 
+    return this.upsertOverlayTexture(
+      this.textLayerTextures,
+      layer.key,
+      textSignature(layer.text, layer.style, this.imgW, this.imgH, fontsVersion()),
+      (canvas, w, h) => drawTextToCanvas(canvas, w, h, layer.text, layer.style),
+      () => (this.textLayerCanvas ??= document.createElement("canvas")),
+    );
+  }
+
+  /**
+   * The cached texture for an overlay, redrawn only when `sig` or the output
+   * size changed. Text layers and captions differ solely in what they draw and
+   * what they key by, so they share this rather than a copy each.
+   */
+  private upsertOverlayTexture(
+    cache: Map<string, OverlayTexture>,
+    key: string,
+    sig: string,
+    draw: (canvas: HTMLCanvasElement, w: number, h: number) => void,
+    canvasFor: () => HTMLCanvasElement,
+  ): WebGLTexture {
     const gl = this.gl;
     const w = this.imgW;
     const h = this.imgH;
-    const sig = textSignature(layer.text, layer.style, w, h, fontsVersion());
-    let entry = this.textLayerTextures.get(layer.key);
+    let entry = cache.get(key);
     if (entry && (entry.w !== w || entry.h !== h)) {
       gl.deleteTexture(entry.tex);
-      this.textLayerTextures.delete(layer.key);
+      cache.delete(key);
       entry = undefined;
     }
-    if (!entry || entry.sig !== sig) {
-      if (!this.textLayerCanvas) {
-        this.textLayerCanvas = document.createElement("canvas");
-      }
-      drawTextToCanvas(this.textLayerCanvas, w, h, layer.text, layer.style);
-      if (!entry) {
-        const tex = this.createTexture(w, h);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        entry = { tex, w, h, sig };
-        this.textLayerTextures.set(layer.key, entry);
-      }
-      gl.bindTexture(gl.TEXTURE_2D, entry.tex);
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        this.textLayerCanvas,
-      );
-      entry.sig = sig;
+    if (entry && entry.sig === sig) return entry.tex;
+
+    const canvas = canvasFor();
+    draw(canvas, w, h);
+    if (!entry) {
+      const tex = this.createTexture(w, h);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      entry = { tex, w, h, sig };
+      cache.set(key, entry);
     }
+    gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    entry.sig = sig;
     return entry.tex;
   }
 
@@ -1495,45 +1524,17 @@ export class GlRenderer {
     // is redrawn once fontsVersion() moves.
     void ensureFontLoaded(params.fontFamily);
 
-    const gl = this.gl;
-    const w = this.imgW;
-    const h = this.imgH;
-    const sig = captionSignature(params, w, h, fontsVersion());
-    let entry = this.captionTextures.get(eff.instanceId);
-    if (entry && (entry.w !== w || entry.h !== h)) {
-      gl.deleteTexture(entry.tex);
-      this.captionTextures.delete(eff.instanceId);
-      entry = undefined;
-    }
-    if (!entry || entry.sig !== sig) {
-      if (!this.captionCanvas) {
-        this.captionCanvas = document.createElement("canvas");
-      }
-      drawCaptionToCanvas(this.captionCanvas, w, h, params);
-      if (!entry) {
-        const tex = this.createTexture(w, h);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        entry = { tex, w, h, sig };
-        this.captionTextures.set(eff.instanceId, entry);
-      }
-      gl.bindTexture(gl.TEXTURE_2D, entry.tex);
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        this.captionCanvas,
-      );
-      entry.sig = sig;
-    }
+    const tex = this.upsertOverlayTexture(
+      this.captionTextures,
+      eff.instanceId,
+      captionSignature(params, this.imgW, this.imgH, fontsVersion()),
+      (canvas, w, h) => drawCaptionToCanvas(canvas, w, h, params),
+      () => (this.captionCanvas ??= document.createElement("canvas")),
+    );
 
     this.compositeOverlayToFBO(
       inputTex,
-      entry.tex,
+      tex,
       targetFBO,
       params.opacity,
       params.blendMode,
