@@ -61,6 +61,21 @@ export function resetAutoRange(): void {
    smoothed.clear();
 }
 
+/**
+ * Forget one scope's bands. Scopes are fx lane ids, so without this a deleted
+ * lane's envelopes sat here for the rest of the session — and a lane that
+ * happened to reuse the id would inherit them.
+ */
+export function dropAutoRangeScope(scope: string): void {
+   const prefix = `${scope}|`;
+   for (const key of envelopes.keys()) {
+      if (key.startsWith(prefix)) envelopes.delete(key);
+   }
+   for (const key of smoothed.keys()) {
+      if (key.startsWith(prefix)) smoothed.delete(key);
+   }
+}
+
 function clamp01(v: number): number {
    return v < 0 ? 0 : v > 1 ? 1 : v;
 }

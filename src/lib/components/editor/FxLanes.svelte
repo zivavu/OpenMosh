@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { untrack } from 'svelte';
 	import {
 		createFxClip,
@@ -222,6 +223,8 @@
 	function deleteLane(laneId: string) {
 		lanePendingDelete = null;
 		onBeforeEdit?.();
+		// The lane id is its audio-link scope; its envelopes outlive it otherwise.
+		dropAutoRangeScope(laneId);
 		onChange(lanes.filter((l) => l.id !== laneId));
 	}
 
