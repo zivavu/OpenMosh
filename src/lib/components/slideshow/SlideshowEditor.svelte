@@ -60,6 +60,10 @@
 	import { AudioManager } from '../../audio/audio-manager.svelte';
 	import { DEFAULT_AUDIO_RESPONSE } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
+	import {
+		loadRenderSettings,
+		saveRenderSettings,
+	} from '../../editor/render-settings';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
@@ -494,10 +498,19 @@
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 
+	/** Set when a project restores its output size, so the slides finishing
+	 * their load doesn't default it straight back to their own. Consumed once:
+	 * media picked afterwards is a deliberate change and should win. */
+	let sizeRestoredFromProject = false;
+
 	$effect(() => {
 		const nw = naturalWidth;
 		const nh = naturalHeight;
 		if (nw != null && nh != null && nw > 0 && nh > 0) {
+			if (sizeRestoredFromProject) {
+				sizeRestoredFromProject = false;
+				return;
+			}
 			resizeWidth = nw;
 			resizeHeight = nh;
 		}
@@ -953,6 +966,42 @@
 	let recordFps = $state(60);
 	/** Export length for silent (no-track) recordings. */
 	let recordDuration = $state(10);
+
+	// Export settings ride with the song, and under their own mode prefix: the
+	// same song sequenced in #editor keeps a separate set.
+	let renderKey = $derived(currentTrackId && `slideshow:${currentTrackId}`);
+	let renderKeyLoaded = $state<string | null>(null);
+
+	$effect(() => {
+		const key = renderKey;
+		if (!key || untrack(() => renderKeyLoaded) === key) return;
+		untrack(() => {
+			renderKeyLoaded = key;
+			const saved = loadRenderSettings(key);
+			if (saved?.fps) recordFps = saved.fps;
+			if (saved?.duration) recordDuration = saved.duration;
+			if (saved?.width && saved?.height) {
+				resizeWidth = saved.width;
+				resizeHeight = saved.height;
+				sizeRestoredFromProject = true;
+			}
+		});
+	});
+
+	$effect(() => {
+		const key = renderKey;
+		const fps = recordFps;
+		const duration = recordDuration;
+		const width = resizeWidth;
+		const height = resizeHeight;
+		// Until this song's own values are in, the live ones are the last song's.
+		if (!key || renderKeyLoaded !== key) return;
+		saveRenderSettings(key, {
+			fps,
+			duration,
+			...(width > 0 && height > 0 ? { width, height } : {}),
+		});
+	});
 
 	// ── Text timeline ──
 	// Keyed to audio time, the same clock the beat driver runs on.
