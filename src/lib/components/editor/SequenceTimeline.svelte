@@ -171,9 +171,20 @@
 	// reading as it did.
 	let selectedIds = $derived(selectedSegmentIds);
 
-	function setSelection(ids: string[]) {
+	/**
+	 * Boundaries only ever get selected as part of a span drag over segments, so
+	 * a new segment selection — including an empty one, however it was made —
+	 * retires the old boundary set with it. Left behind, those dots stayed lit
+	 * with nothing selected, and the next Ctrl+C copied a span the user could no
+	 * longer see.
+	 *
+	 * `keepBoundaries` is for the callers that aren't a fresh pick: the span
+	 * drag itself, which sets both, and the remaps that only rewrite ids.
+	 */
+	function setSelection(ids: string[], keepBoundaries = false) {
 		selectedSegmentIds = ids;
 		selectedSegmentId = ids.length > 0 ? ids[ids.length - 1] : null;
+		if (!keepBoundaries) boundaries.clearSelection();
 	}
 
 	function toggleInSelection(id: string) {
@@ -189,13 +200,14 @@
 	$effect(() => {
 		const alive = new Set(rawSegments.map((s) => s.id));
 		if (selectedIds.some((id) => !alive.has(id))) {
-			setSelection(selectedIds.filter((id) => alive.has(id)));
+			setSelection(selectedIds.filter((id) => alive.has(id)), true);
 		}
 	});
 
-	// Editor clears selectedSegmentId externally (e.g. loading a saved sequence).
+	// Editor clears selectedSegmentId externally (e.g. picking an fx clip, or
+	// loading a saved sequence).
 	$effect(() => {
-		if (!selectedSegmentId && selectedIds.length > 0) selectedIds = [];
+		if (!selectedSegmentId && selectedIds.length > 0) setSelection([]);
 	});
 
 	// Presets are read fresh on selection and on dropdown open, so ones saved
@@ -770,7 +782,7 @@
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 				boundaries.setSelectionFromRange(minTime, maxTime);
-				setSelection(segmentIdsInRange(minTime, maxTime));
+				setSelection(segmentIdsInRange(minTime, maxTime), true);
 			} else if (dragging.toggleSegId) {
 				toggleInSelection(dragging.toggleSegId);
 			} else {
@@ -819,9 +831,10 @@
 		const right = rawSegments.find((s) => s.id === rightSegId);
 		if (!left || !right) return;
 		if (selectedIds.includes(rightSegId)) {
-			setSelection([
-				...new Set(selectedIds.map((id) => (id === rightSegId ? leftSegId : id))),
-			]);
+			setSelection(
+				[...new Set(selectedIds.map((id) => (id === rightSegId ? leftSegId : id)))],
+				true,
+			);
 		}
 		emit(
 			rawSegments
