@@ -128,6 +128,8 @@
    let frameTimes: number[] = [];
    let lastFpsUpdate = 0;
 
+   /** Only called while the overlay is on: with it hidden, the sampling and its
+    * `fps` write were reactive churn nobody could see. */
    function trackFps(now: number) {
       frameTimes.push(now);
       if (now - lastFpsUpdate < 400) return;
@@ -522,7 +524,7 @@
             }
          }
          drawFrame(nowMs / 1000);
-         trackFps(nowMs);
+         if (showFps) trackFps(nowMs);
          rafId = requestAnimationFrame(loop);
       };
       rafId = requestAnimationFrame(loop);

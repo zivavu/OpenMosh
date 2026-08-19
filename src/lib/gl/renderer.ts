@@ -776,7 +776,6 @@ export class GlRenderer {
     if (this.passthrough.uniforms["u_flipY"]) {
       gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
     }
-    gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     return stageTex;
@@ -1104,7 +1103,6 @@ export class GlRenderer {
     gl.bindTexture(gl.TEXTURE_2D, texB);
     if (prog.uniforms["u_texture2"])
       gl.uniform1i(prog.uniforms["u_texture2"], 2);
-    gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.activeTexture(gl.TEXTURE0);
   }
@@ -1246,7 +1244,6 @@ export class GlRenderer {
     if (this.passthrough.uniforms["u_texture"]) {
       gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
     }
-    gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     this.setTextureFilter(srcTex, false);
   }
@@ -1370,7 +1367,6 @@ export class GlRenderer {
     gl.bindTexture(gl.TEXTURE_2D, overlayTex);
     if (prog.uniforms["u_texture2"])
       gl.uniform1i(prog.uniforms["u_texture2"], 2);
-    gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.activeTexture(gl.TEXTURE0);
   }
@@ -1781,7 +1777,8 @@ export class GlRenderer {
     ]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
+    // Left bound: every draw in this class uses this one quad, and nothing else
+    // ever binds a VAO on this context, so re-binding per pass was pure churn.
     return vao;
   }
 
@@ -2220,7 +2217,6 @@ export class GlRenderer {
       shaderDef.setUniforms(gl, compiled.uniforms, values);
     }
 
-    gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 }
