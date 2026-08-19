@@ -2,6 +2,7 @@ import {
   applyRandomAudioLinks,
   generateMosh,
   isMoshable,
+  randomizeParams,
   type MoshOptions,
 } from "../editor/mosh";
 import type { EffectInstance, Preset } from "../effects";
@@ -58,22 +59,7 @@ export function toggleOneEffect(
     const def = getDefinition(toggled.defId);
     if (!def) return toggled;
     const values = { ...toggled.values };
-    for (const param of def.params) {
-      if (param.type === "range") {
-        const lo = param.moshMin ?? param.min;
-        const hi = param.moshMax ?? param.max;
-        const bias = 0.15 + Math.random() * 0.55;
-        const raw = lo + bias * (hi - lo);
-        values[param.key] =
-          param.step > 0
-            ? Math.round((raw - param.min) / param.step) * param.step +
-              param.min
-            : raw;
-      } else if (param.type === "select") {
-        const opts = param.options;
-        values[param.key] = opts[Math.floor(Math.random() * opts.length)].value;
-      }
-    }
+    randomizeParams(values, def);
     return { ...toggled, values };
   });
 }

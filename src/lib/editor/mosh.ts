@@ -1,6 +1,7 @@
 import {
   FREQ_PRESETS,
   getDefinition,
+  type EffectDefinition,
   type EffectInstance,
   type FreqBand,
   type VolumeLink,
@@ -28,6 +29,36 @@ export interface MoshOptions {
  */
 export function isMoshable(effect: EffectInstance): boolean {
   return !effect.locked && getDefinition(effect.defId)?.moshable !== false;
+}
+
+/**
+ * Roll fresh values for every randomizable param of one effect, in place.
+ *
+ * Shared with the slideshow sequencer, which held a second copy that quantized
+ * range params onto a grid anchored at `param.min` while this one anchored at
+ * zero. The two agree for every param defined today (each one's `min` is a
+ * whole number of steps), but only by accident — this form is the one that
+ * holds regardless, and it leaves a `step` of 0 alone instead of dividing by it.
+ */
+export function randomizeParams(
+  values: Record<string, number | string>,
+  def: EffectDefinition,
+): void {
+  for (const param of def.params) {
+    if (param.type === "range") {
+      const lo = param.moshMin ?? param.min;
+      const hi = param.moshMax ?? param.max;
+      const bias = 0.15 + Math.random() * 0.55;
+      const raw = lo + bias * (hi - lo);
+      values[param.key] =
+        param.step > 0
+          ? Math.round((raw - param.min) / param.step) * param.step + param.min
+          : raw;
+    } else if (param.type === "select") {
+      const opts = param.options;
+      values[param.key] = opts[Math.floor(Math.random() * opts.length)].value;
+    }
+  }
 }
 
 /**
@@ -146,20 +177,7 @@ export function generateMosh(
     if (!effect.enabled) return;
     const def = getDefinition(effect.defId);
     if (!def) return;
-    for (const param of def.params) {
-      if (param.type === "range") {
-        const lo = param.moshMin ?? param.min;
-        const hi = param.moshMax ?? param.max;
-        const range = hi - lo;
-        const bias = 0.15 + Math.random() * 0.55;
-        effect.values[param.key] =
-          Math.round((lo + bias * range) / param.step) * param.step;
-      } else if (param.type === "select") {
-        const opts = param.options;
-        effect.values[param.key] =
-          opts[Math.floor(Math.random() * opts.length)].value;
-      }
-    }
+    randomizeParams(effect.values, def);
   });
 
   if (randomizeOrder) {
