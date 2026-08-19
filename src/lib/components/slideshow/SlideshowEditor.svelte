@@ -483,6 +483,7 @@
 	// preview loop below feeds this one instead.
 	let frameTimes: number[] = [];
 	let lastFpsUpdate = 0;
+	/** Only called while the overlay is on — see GlCanvas.trackFps. */
 	function trackFps(now: number) {
 		frameTimes.push(now);
 		if (now - lastFpsUpdate < 400) return;
@@ -877,7 +878,7 @@
 			// The video-frame upload is left unawaited here: the render loop must
 			// not stall on the decoder (the export awaits it instead).
 			const nowMs = performance.now();
-			trackFps(nowMs);
+			if (showFps) trackFps(nowMs);
 			const frame = driver.advance(t);
 			if (frame.effects !== lastAppliedEffects) {
 				lastAppliedEffects = frame.effects;
