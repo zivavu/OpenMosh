@@ -66,18 +66,34 @@ type ChainOp =
  * every effect and an index at or past the end lays it over the finished frame.
  */
 function buildChainOps(
-  enabled: EffectInstance[],
+  effects: EffectInstance[],
+  enabledCount: number,
   layers: PreparedTextLayer[],
 ): ChainOp[] {
   const ops: ChainOp[] = [];
-  for (let i = 0; i <= enabled.length; i++) {
+  let i = 0;
+  for (const eff of effects) {
+    if (!eff.enabled) continue;
     for (const layer of layers) {
-      const at = Math.min(Math.max(layer.chainIndex, 0), enabled.length);
+      const at = Math.min(Math.max(layer.chainIndex, 0), enabledCount);
       if (at === i) ops.push({ kind: "layer", layer });
     }
-    if (i < enabled.length) ops.push({ kind: "effect", eff: enabled[i] });
+    ops.push({ kind: "effect", eff });
+    i++;
+  }
+  // Layers at or past the end lay over the finished frame.
+  for (const layer of layers) {
+    if (Math.min(Math.max(layer.chainIndex, 0), enabledCount) === enabledCount) {
+      ops.push({ kind: "layer", layer });
+    }
   }
   return ops;
+}
+
+function countEnabled(effects: EffectInstance[]): number {
+  let n = 0;
+  for (const e of effects) if (e.enabled) n++;
+  return n;
 }
 
 /**
@@ -103,19 +119,22 @@ function allFullWeight(layers: PostChainLayer[]): boolean {
   return layers.every((l) => l.weight >= 1);
 }
 
-/** Every instance id alive this frame, so feedback buffers survive the GC. */
-function liveInstanceIds(
-  chains: EffectInstance[][],
+/** Collect instance ids into `live`, so feedback buffers survive the GC. Fills a
+ * caller-owned set: this runs every frame, and the intermediate arrays a
+ * returning version needed were pure garbage. */
+function addInstanceIds(live: Set<string>, effects: EffectInstance[]): void {
+  for (const e of effects) live.add(e.instanceId);
+}
+
+function addLayerInstanceIds(
+  live: Set<string>,
   layers: ResolvedTextLayer[],
-): Set<string> {
-  const live = new Set<string>();
-  for (const chain of chains) {
-    for (const e of chain) live.add(e.instanceId);
-  }
-  for (const layer of layers) {
-    for (const e of layer.effects) live.add(e.instanceId);
-  }
-  return live;
+): void {
+  for (const layer of layers) addInstanceIds(live, layer.effects);
+}
+
+function addPostInstanceIds(live: Set<string>, post: PostChainLayer[]): void {
+  for (const l of post) addInstanceIds(live, l.effects);
 }
 
 export class GlRenderer {
@@ -214,6 +233,10 @@ export class GlRenderer {
   private imgW = 0;
   private imgH = 0;
   private lastTime = -1;
+  /** Refilled every frame by beginLiveIds, so the GC pass costs no allocation. */
+  private liveIds = new Set<string>();
+  /** Reused by getEffectTime; read out before the next call overwrites it. */
+  private effectTimeOut = { time: 0, delta: 0 };
   private phaseMap = new Map<string, number>();
 
   /**
@@ -509,9 +532,11 @@ export class GlRenderer {
       return;
 
     const post = livePostLayers(postLayers);
-    this.gcFxFeedback(
-      liveInstanceIds([effects, ...post.map((l) => l.effects)], textLayers),
-    );
+    const live = this.beginLiveIds();
+    addInstanceIds(live, effects);
+    addPostInstanceIds(live, post);
+    addLayerInstanceIds(live, textLayers);
+    this.gcFxFeedback(live);
     this.gcTextLayers(textLayers);
     const safeDt = this.frameDelta(time);
     this.ensurePresentBuffer();
@@ -522,10 +547,13 @@ export class GlRenderer {
     // Nothing stacked, or nothing fading: one chain, no intermediate buffers.
     // This is the path every non-sequence render takes.
     if (post.length === 0 || allFullWeight(post)) {
-      const flat =
-        post.length === 0
-          ? effects
-          : [...effects, ...post.flatMap((l) => l.effects)];
+      let flat = effects;
+      if (post.length > 0) {
+        // Built by hand rather than with flatMap, which would allocate a second
+        // array per frame just to spread it into this one.
+        flat = effects.slice();
+        for (const l of post) flat.push(...l.effects);
+      }
       const resultTex = this.renderChainTo(
         flat,
         time,
@@ -599,12 +627,12 @@ export class GlRenderer {
 
     // Every chain stays alive for the whole blend — collect feedback buffers
     // only against the union, or rendering A would drop B's history.
-    this.gcFxFeedback(
-      liveInstanceIds(
-        [effectsA, effectsB, ...post.map((l) => l.effects)],
-        textLayers,
-      ),
-    );
+    const live = this.beginLiveIds();
+    addInstanceIds(live, effectsA);
+    addInstanceIds(live, effectsB);
+    addPostInstanceIds(live, post);
+    addLayerInstanceIds(live, textLayers);
+    this.gcFxFeedback(live);
     this.gcTextLayers(textLayers);
     const safeDt = this.frameDelta(time);
 
@@ -772,6 +800,12 @@ export class GlRenderer {
   }
 
   /** Per-frame delta time for phase accumulation, guarded against discontinuities. */
+  /** The shared live-id set, emptied and ready to refill. */
+  private beginLiveIds(): Set<string> {
+    this.liveIds.clear();
+    return this.liveIds;
+  }
+
   private frameDelta(time: number): number {
     const dt = this.lastTime >= 0 ? time - this.lastTime : 0;
     this.lastTime = time;
@@ -831,9 +865,8 @@ export class GlRenderer {
     layers: PreparedTextLayer[] = [],
     srcOverride?: WebGLTexture,
   ): WebGLTexture | null {
-    const enabled = effects.filter((e) => e.enabled);
     const srcTex = srcOverride ?? this.chainSource(useAltSource);
-    const ops = buildChainOps(enabled, layers);
+    const ops = buildChainOps(effects, countEnabled(effects), layers);
 
     if (ops.length === 0) {
       if (toCanvas) {
@@ -1113,18 +1146,29 @@ export class GlRenderer {
     return pair;
   }
 
-  /** For effects with a speed param, accumulate phase so speed changes don't cause jumps. */
+  /**
+   * For effects with a speed param, accumulate phase so speed changes don't
+   * cause jumps. Writes into a shared object rather than returning a fresh one:
+   * this runs per effect per frame, and the caller reads it out immediately.
+   */
   private getEffectTime(
     eff: EffectInstance,
     time: number,
     dt: number,
   ): { time: number; delta: number } {
-    if (!("speed" in eff.values)) return { time, delta: dt };
+    const out = this.effectTimeOut;
+    if (!("speed" in eff.values)) {
+      out.time = time;
+      out.delta = dt;
+      return out;
+    }
     const speed = eff.values.speed as number;
     const prev = this.phaseMap.get(eff.instanceId) ?? 0;
     const phase = prev + dt * speed;
     this.phaseMap.set(eff.instanceId, phase);
-    return { time: phase, delta: dt * speed };
+    out.time = phase;
+    out.delta = dt * speed;
+    return out;
   }
 
   private getTrackingState(instanceId: string): TrackingState {
