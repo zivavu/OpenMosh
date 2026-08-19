@@ -28,6 +28,7 @@ import {
   type TimelineClip,
 } from "../timeline/clips";
 import type { MoshOptions } from "./mosh";
+import { putRoll } from "./roll-cache";
 import type { SegmentMoshSnapshot } from "./segment-mosh-history";
 import {
   beatsToSeconds,
@@ -356,8 +357,7 @@ function chainFor(
   let effects = cache.get(key);
   if (!effects) {
     effects = rollEffects(seed, options);
-    if (cache.size > 512) cache.clear();
-    cache.set(key, effects);
+    putRoll(cache, key, effects);
   }
   return effects;
 }

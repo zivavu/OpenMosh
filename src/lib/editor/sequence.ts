@@ -5,6 +5,7 @@ import {
   type EffectInstance,
 } from "../effects";
 import { generateMosh, type MoshOptions } from "./mosh";
+import { putRoll } from "./roll-cache";
 
 export type SequenceSegmentMode = "static" | "interval";
 
@@ -331,8 +332,7 @@ export function createSequenceEffectSource(
     let effects = cache.get(key);
     if (!effects) {
       effects = rollEffects(seed, options);
-      if (cache.size > 512) cache.clear();
-      cache.set(key, effects);
+      putRoll(cache, key, effects);
     }
     return effects;
   };

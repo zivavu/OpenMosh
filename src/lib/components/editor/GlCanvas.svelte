@@ -445,7 +445,7 @@
       // A caption font that lands after the frame was drawn changes its glyphs.
       fontTick;
       // Text edits and scrubbing both change which clip is on screen.
-      textTick;
+      readTextTimeline();
       textTime;
       // Scrubbing onto another sequence source while paused: re-upload before
       // drawing. sourceKey also ticks when a late video upload lands, which is
@@ -464,23 +464,31 @@
    let fontTick = $state(0);
    $effect(() => onFontsChanged(() => fontTick++));
 
-   /** Deep-reads the text lanes so a paused canvas redraws on any text edit. */
-   const textTick = $derived.by(() => {
-      if (!textTimeline?.enabled) return "";
-      return textTimeline.lanes
-         .map((l) =>
-            [
-               l.enabled,
-               l.chainIndex,
-               JSON.stringify(l.style),
-               l.effects
-                  .map((e) => `${e.defId}${e.enabled}${JSON.stringify(e.values)}`)
-                  .join(","),
-               ...l.clips.map((c) => `${c.id}:${c.start}:${c.end}:${c.text}`),
-            ].join("|"),
-         )
-         .join(";");
-   });
+   /**
+    * Touch every text field so a paused canvas redraws on any text edit. Read
+    * straight from the effect rather than through a derived signature: an
+    * effect re-runs whenever a dependency changes, so the string a derived had
+    * to build (and JSON.stringify its way through) only ever existed to be
+    * compared against itself.
+    */
+   function readTextTimeline() {
+      if (!textTimeline?.enabled) return;
+      for (const l of textTimeline.lanes) {
+         l.enabled;
+         l.chainIndex;
+         const style = l.style as unknown as Record<string, unknown>;
+         for (const k of Object.keys(style)) style[k];
+         for (const e of l.effects) {
+            e.enabled;
+            for (const k of Object.keys(e.values)) e.values[k];
+         }
+         for (const c of l.clips) {
+            c.start;
+            c.end;
+            c.text;
+         }
+      }
+   }
 
    $effect(() => {
       if (suspended || !renderer || !imageReady) return;
