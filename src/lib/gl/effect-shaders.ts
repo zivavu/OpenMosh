@@ -156,6 +156,24 @@ function setInt(
 	if (locs[name]) gl.uniform1i(locs[name], value);
 }
 
+/**
+ * Parsed colors, keyed by the hex string. A color only changes when its param
+ * does, but setUniforms runs every frame — so without this every frame paid a
+ * regex, a parseInt and two array allocations per color.
+ */
+const colorVecs = new Map<string, Float32Array>();
+
+function colorVec(hex: string): Float32Array {
+	let vec = colorVecs.get(hex);
+	if (!vec) {
+		vec = new Float32Array(hexToVec3(hex));
+		// Dragging a color picker mints a key per step; don't grow forever.
+		if (colorVecs.size > 256) colorVecs.clear();
+		colorVecs.set(hex, vec);
+	}
+	return vec;
+}
+
 /** Set a vec3 uniform from a hex color param. */
 function setColor(
 	gl: WebGL2RenderingContext,
@@ -163,7 +181,7 @@ function setColor(
 	name: string,
 	hex: string,
 ) {
-	if (locs[name]) gl.uniform3fv(locs[name], hexToVec3(hex));
+	if (locs[name]) gl.uniform3fv(locs[name], colorVec(hex));
 }
 
 /** Create a setUniforms that maps each key to a float uniform named u_{key}. */

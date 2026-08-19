@@ -188,6 +188,13 @@ export const FONT_OPTIONS: FontOption[] = [
 
 const loaded = new Map<string, Promise<void>>();
 
+/** Lookup table, not a scan: the renderer calls ensureFontLoaded per text layer
+ * and per caption on every frame. */
+const OPTIONS_BY_FAMILY = new Map(FONT_OPTIONS.map((f) => [f.family, f]));
+
+/** Shared, so a system or unknown family doesn't mint a promise per frame. */
+const RESOLVED = Promise.resolve();
+
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -212,8 +219,8 @@ export function onFontsChanged(cb: () => void): () => void {
  * System fonts and unknown families resolve immediately.
  */
 export function ensureFontLoaded(family: string): Promise<void> {
-   const option = FONT_OPTIONS.find((f) => f.family === family);
-   if (!option?.url) return Promise.resolve();
+   const option = OPTIONS_BY_FAMILY.get(family);
+   if (!option?.url) return RESOLVED;
 
    let promise = loaded.get(option.id);
    if (!promise) {
