@@ -188,14 +188,26 @@ export function createFxLane(name: string, settings?: FxLaneSettings): FxLane {
  */
 export const MAX_FX_LANES = 5;
 
-/** Add an empty lane, named after its position. At the cap, returns the input
- * by identity so callers can skip a history entry for a no-op. */
+/**
+ * Add a lane, named after its position. At the cap, returns the input by
+ * identity so callers can skip a history entry for a no-op.
+ *
+ * The lane starts with one clean clip across the whole timeline rather than
+ * bare: an empty lane renders nothing and offers nothing to select, so the
+ * first thing to do with one was always to draw a clip over it. A full-width
+ * clean clip is that same starting point, already there to mosh or fill from a
+ * preset — and still contributes nothing until its effects are switched on.
+ * Falls back to a bare lane when there is no timeline yet (duration 0).
+ */
 export function appendFxLane(
   lanes: FxLane[],
   settings?: FxLaneSettings,
+  duration = 0,
 ): FxLane[] {
   if (lanes.length >= MAX_FX_LANES) return lanes;
-  return [...lanes, createFxLane(`FX ${lanes.length + 1}`, settings)];
+  const lane = createFxLane(`FX ${lanes.length + 1}`, settings);
+  if (duration >= MIN_CLIP_LENGTH) lane.clips = [createFxClip(0, duration)];
+  return [...lanes, lane];
 }
 
 /**

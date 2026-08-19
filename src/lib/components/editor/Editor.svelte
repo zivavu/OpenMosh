@@ -967,7 +967,13 @@
 	}
 
 	function addFxLane() {
-		const next = appendFxLane(fxLanes, currentFxLaneSettings());
+		// Full timeline width: a new lane arrives with one clean clip to work on,
+		// rather than as bare space the user has to draw over first.
+		const next = appendFxLane(
+			fxLanes,
+			currentFxLaneSettings(),
+			seqMasterDuration,
+		);
 		// At the cap this is a no-op; recording it would leave a Ctrl+Z entry
 		// that undoes nothing.
 		if (next === fxLanes) return;
