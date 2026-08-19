@@ -580,6 +580,19 @@ describe("appendFxLane", () => {
     expect(l.clips).toEqual([]);
     expect(l.enabled).toBe(true);
   });
+
+  test("fills the new lane with one clean clip across the timeline", () => {
+    const [made] = appendFxLane([], undefined, 30);
+    expect(made.clips).toHaveLength(1);
+    expect(made.clips[0].start).toBe(0);
+    expect(made.clips[0].end).toBe(30);
+    expect(made.clips[0].label).toBe("clean");
+    expect(made.clips[0].effects.every((e) => !e.enabled)).toBe(true);
+  });
+
+  test("stays bare when there is no timeline yet", () => {
+    expect(appendFxLane([], undefined, 0)[0].clips).toEqual([]);
+  });
 });
 
 
