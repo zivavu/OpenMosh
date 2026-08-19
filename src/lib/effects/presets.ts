@@ -30,27 +30,10 @@ export function normalizePresetName(name: string): string {
   return name.trim().slice(0, PRESET_NAME_MAX_LENGTH).trim();
 }
 
-export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
-  const presets = loadPresets();
-  presets.push({
-    name: normalizePresetName(name),
-    effects: effects.map((e) => ({
-      defId: e.defId,
-      enabled: e.enabled,
-      values: { ...e.values },
-      ...(e.volumeLinks &&
-        Object.keys(e.volumeLinks).length > 0 && {
-          volumeLinks: { ...e.volumeLinks },
-        }),
-    })),
-  });
-  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
-  return presets;
-}
-
-export function updatePreset(index: number, effects: EffectInstance[]): Preset[] {
-  const presets = loadPresets();
-  presets[index].effects = effects.map((e) => ({
+/** What a preset keeps of a live chain: no instance ids, no UI state, and no
+ * empty volumeLinks key to bloat every saved entry. */
+function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
+  return effects.map((e) => ({
     defId: e.defId,
     enabled: e.enabled,
     values: { ...e.values },
@@ -59,6 +42,21 @@ export function updatePreset(index: number, effects: EffectInstance[]): Preset[]
         volumeLinks: { ...e.volumeLinks },
       }),
   }));
+}
+
+export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
+  const presets = loadPresets();
+  presets.push({
+    name: normalizePresetName(name),
+    effects: serializeEffects(effects),
+  });
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  return presets;
+}
+
+export function updatePreset(index: number, effects: EffectInstance[]): Preset[] {
+  const presets = loadPresets();
+  presets[index].effects = serializeEffects(effects);
   localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
   return presets;
 }
