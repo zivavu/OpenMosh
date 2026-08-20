@@ -1550,6 +1550,38 @@ void main() {
 		setUniforms: floats('zoom', 'spin', 'decay'),
 	},
 
+	strobe: {
+		fragment:
+			H +
+			`uniform float u_duty;
+uniform float u_amount;
+uniform int u_mode;
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  // u_time arrives as accumulated phase because the rate param is keyed
+  // "speed", so one unit is one full flash cycle and changing the rate mid-clip
+  // doesn't jump the strobe.
+  float phase = fract(u_time);
+  float on = step(phase, u_duty);
+  vec3 flash = u_mode == 1 ? vec3(1.0)
+             : u_mode == 2 ? 1.0 - c.rgb
+             : u_mode == 3 ? vec3(dot(c.rgb, vec3(0.299, 0.587, 0.114)))
+             : vec3(0.0);
+  outColor = vec4(mix(c.rgb, flash, on * u_amount), c.a);
+}`,
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_duty', v.duty as number);
+			setFloat(gl, l, 'u_amount', v.amount as number);
+			setInt(
+				gl,
+				l,
+				'u_mode',
+				v.mode === 'white' ? 1 : v.mode === 'invert' ? 2 : v.mode === 'mono' ? 3 : 0,
+			);
+		},
+	},
+
 	feedback: {
 		fragment:
 			H +
