@@ -1208,6 +1208,70 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       ],
    },
    {
+      id: 'feedback',
+      name: 'Feedback',
+      params: [
+         {
+            key: 'decay',
+            label: 'Decay',
+            type: 'range',
+            // Never quite 0: with no decay the loop never releases a frame and
+            // the image welds itself to whatever was brightest.
+            min: 0.02,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.45,
+         },
+         {
+            key: 'scale',
+            label: 'Scale',
+            type: 'range',
+            min: -1,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.12,
+         },
+         {
+            key: 'rotate',
+            label: 'Rotate',
+            type: 'range',
+            min: -90,
+            max: 90,
+            step: 1,
+            defaultValue: 0,
+         },
+         {
+            key: 'warp',
+            label: 'Warp',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0,
+         },
+         {
+            key: 'hue',
+            label: 'Hue Shift',
+            type: 'range',
+            min: -180,
+            max: 180,
+            step: 1,
+            defaultValue: 0,
+         },
+         {
+            key: 'blend',
+            label: 'Blend',
+            type: 'select',
+            defaultValue: 'max',
+            options: [
+               { label: 'Max', value: 'max' },
+               { label: 'Screen', value: 'screen' },
+               { label: 'Add', value: 'add' },
+            ],
+         },
+      ],
+   },
+   {
       id: 'halftone',
       name: 'Halftone',
       params: [
