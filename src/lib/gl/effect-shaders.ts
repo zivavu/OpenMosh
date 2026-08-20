@@ -1,4 +1,5 @@
 import { hexToVec3 } from '../color';
+import { ASCII_CHARSETS } from '../effects/definitions';
 
 export const VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec2 a_position;
@@ -233,6 +234,181 @@ void main() {
     totalW += w;
   }
   outColor = bloom / totalW;
+}`;
+
+/**
+ * One cell of the ascii glyph atlas, shaped like a terminal cell rather than a
+ * square. The shader bakes these in to pick its mip level, so
+ * GlRenderer.buildGlyphAtlas has to rasterize at exactly this size.
+ */
+export const ASCII_GLYPH_CELL = { w: 48, h: 96 };
+
+const ASCII_COLOR_MODES: Record<string, number> = {
+	color: 0,
+	green: 1,
+	amber: 2,
+	white: 3,
+	quantized: 4,
+};
+
+const ASCII_BG_MODES: Record<string, number> = { black: 0, tint: 1, image: 2 };
+
+const asciiRampLengths = new Map(
+	ASCII_CHARSETS.map((set) => [set.value, set.chars.length]),
+);
+
+function asciiRampLength(charset: string): number {
+	return asciiRampLengths.get(charset) ?? asciiRampLengths.get('classic') ?? 10;
+}
+
+/** ASCII pre-pass 1: luma, downsampled to the half-res HDR buffer with a 3x3 box. */
+const ASCII_LUMA_FRAG = `void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float l = 0.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec3 c = texture(u_texture, v_uv + vec2(float(i), float(j)) * px).rgb;
+      l += dot(c, vec3(0.299, 0.587, 0.114));
+    }
+  }
+  outColor = vec4(vec3(l / 9.0), 1.0);
+}`;
+
+/**
+ * ASCII pre-pass 2: Sobel into (gx, gy, magnitude). Magnitude is scaled to
+ * roughly 0..1 so the Edges slider maps onto a stable threshold instead of
+ * whatever range the kernel happens to produce.
+ */
+const ASCII_SOBEL_FRAG = `void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float tl = texture(u_texture, v_uv + vec2(-1.0, -1.0) * px).r;
+  float tm = texture(u_texture, v_uv + vec2( 0.0, -1.0) * px).r;
+  float tr = texture(u_texture, v_uv + vec2( 1.0, -1.0) * px).r;
+  float ml = texture(u_texture, v_uv + vec2(-1.0,  0.0) * px).r;
+  float mr = texture(u_texture, v_uv + vec2( 1.0,  0.0) * px).r;
+  float bl = texture(u_texture, v_uv + vec2(-1.0,  1.0) * px).r;
+  float bm = texture(u_texture, v_uv + vec2( 0.0,  1.0) * px).r;
+  float br = texture(u_texture, v_uv + vec2( 1.0,  1.0) * px).r;
+  float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
+  float gy = (bl + 2.0 * bm + br) - (tl + 2.0 * tm + tr);
+  outColor = vec4(gx, gy, length(vec2(gx, gy)) * 0.25, 1.0);
+}`;
+
+/**
+ * ASCII main pass. Two things separate this from a plain luminance ramp:
+ *
+ * - Every cell is averaged over a 3x3 spread rather than point-sampled at its
+ *   centre, so the glyph reflects the whole cell and stops crawling on video.
+ * - The Sobel pre-pass is binned into four orientations per cell, and a cell
+ *   whose gradient is both strong and *consistent* draws a stroke glyph instead
+ *   of a ramp glyph. That is what makes contours trace themselves out in
+ *   characters rather than dissolving into a field of dense glyphs.
+ *
+ * u_texture is the Sobel buffer (half res); u_original is the chain input.
+ */
+const ASCII_FRAG = `uniform float u_size;
+uniform float u_aspect;
+uniform float u_edges;
+uniform float u_contrast;
+uniform float u_ramp;
+uniform int u_color;
+uniform int u_bg;
+uniform sampler2D u_glyphs;
+uniform sampler2D u_original;
+uniform vec2 u_resolution;
+
+const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+const float QUARTER_PI = 0.78539816;
+
+void main() {
+  // The grid follows the render-target size, not the input texture size — the
+  // source keeps its natural dimensions while FBOs use the output size.
+  vec2 res = u_resolution;
+  vec2 cellSize = vec2(u_size, u_size * u_aspect);
+  vec2 pos = v_uv * res;
+  vec2 cellId = floor(pos / cellSize);
+
+  vec3 cell = vec3(0.0);
+  float bins[4];
+  bins[0] = 0.0; bins[1] = 0.0; bins[2] = 0.0; bins[3] = 0.0;
+  float peak = 0.0;
+  float mags = 0.0;
+  for (int j = 0; j < 3; j++) {
+    for (int i = 0; i < 3; i++) {
+      vec2 uv = (cellId + (vec2(float(i), float(j)) + 0.5) / 3.0) * cellSize / res;
+      cell += texture(u_original, uv).rgb;
+      vec3 sob = texture(u_texture, uv).rgb;
+      float m = sob.b;
+      if (m > 0.01) {
+        // The edge runs perpendicular to the gradient. Orientation is mod 180°,
+        // so four 45° bins cover it.
+        float ang = atan(sob.g, sob.r) + 1.5707963;
+        int bi = int(mod(floor(ang / QUARTER_PI + 0.5), 4.0));
+        bins[bi] += m;
+        mags += m;
+        peak = max(peak, m);
+      }
+    }
+  }
+  cell /= 9.0;
+
+  // Contrast reshapes the ramp: gamma below 1 lifts shadows into visible
+  // glyphs, above 1 crushes them back toward the sparse end.
+  float gamma = mix(1.7, 0.45, clamp(u_contrast, 0.0, 1.0));
+  float lum = clamp(pow(clamp(dot(cell, LUMA), 0.0, 1.0), gamma), 0.0, 1.0);
+
+  float total = u_ramp + 4.0;
+  float gi = floor(lum * (u_ramp - 0.001));
+
+  int best = 0;
+  float bestW = 0.0;
+  for (int b = 0; b < 4; b++) {
+    if (bins[b] > bestW) { bestW = bins[b]; best = b; }
+  }
+  // Coherence, not raw magnitude, decides: a noisy cell spreads its gradient
+  // across all four bins and stays a ramp glyph, while a clean contour piles
+  // into one and earns a stroke.
+  float coherence = mags > 0.0 ? bestW / mags : 0.0;
+  bool isEdge = u_edges > 0.0 && peak * coherence > mix(0.45, 0.03, u_edges);
+  if (isEdge) gi = u_ramp + float(best);
+
+  // Explicit LOD. Letting the hardware derive it from the atlas coordinate
+  // makes fract() spike the derivative at every cell seam, which is what turned
+  // small cells into blurred mush.
+  float lod = clamp(log2(${ASCII_GLYPH_CELL.w}.0 / max(u_size, 1.0)), 0.0, 2.0);
+  vec2 local = fract(pos / cellSize);
+  float g = clamp(textureLod(u_glyphs, vec2((gi + local.x) / total, local.y), lod).r, 0.0, 1.0);
+
+  vec3 tint;
+  if (u_color == 1) {
+    tint = vec3(0.24, 1.0, 0.36);
+  } else if (u_color == 2) {
+    tint = vec3(1.0, 0.70, 0.20);
+  } else if (u_color == 3) {
+    tint = vec3(1.0);
+  } else if (u_color == 4) {
+    float mx = max(cell.r, max(cell.g, cell.b));
+    vec3 q = mx > 0.001 ? cell / mx : vec3(1.0);
+    tint = floor(q * 3.0 + 0.5) / 3.0;
+  } else {
+    // Cell averages drift toward grey and grey glyphs read as mud. Push the
+    // saturation back out and lift the value — brightness is the ramp's job,
+    // not the tint's.
+    float l = dot(cell, LUMA);
+    vec3 sat = clamp(l + (cell - l) * 1.7, 0.0, 1.0);
+    float mx = max(sat.r, max(sat.g, sat.b));
+    tint = mx > 0.001 ? mix(sat, sat / mx, 0.6) : vec3(1.0);
+  }
+
+  vec3 bg = u_bg == 1 ? cell * 0.16
+          : u_bg == 2 ? texture(u_original, v_uv).rgb * 0.22
+          : vec3(0.0);
+
+  // Dense glyphs blaze, sparse ones stay dim but present; strokes read at full
+  // strength so contours don't fade out over dark areas.
+  float dense = clamp(gi / max(u_ramp - 1.0, 1.0), 0.0, 1.0);
+  float bright = isEdge ? 1.15 : 0.7 + dense * 0.8;
+  outColor = vec4(clamp(mix(bg, tint * bright, g), 0.0, 1.0), 1.0);
 }`;
 
 export const EFFECT_SHADERS: Record<string, EffectShaderDef> = {
@@ -1480,40 +1656,29 @@ void main() {
 	},
 
 	ascii: {
-		fragment:
-			H +
-			`uniform float u_size;
-uniform int u_color;
-uniform sampler2D u_glyphs;
-uniform vec2 u_resolution;
-void main() {
-  // Grid must follow the render-target size, not the input texture size —
-  // the source texture keeps natural dimensions while FBOs use output size.
-  vec2 res = u_resolution;
-  vec2 pos = v_uv * res;
-  vec2 cellId = floor(pos / u_size);
-  vec3 cell = texture(u_texture, (cellId + 0.5) * u_size / res).rgb;
-  float lum = dot(cell, vec3(0.299, 0.587, 0.114));
-  // Slight gamma-lift: dark cells keep sparse-but-visible glyphs,
-  // bright cells jump to dense ones
-  float gi = floor(pow(lum, 0.8) * 15.999);
-  // Organic variation: jitter the glyph choice per cell (±1 coverage step)
-  float h = fract(sin(dot(cellId, vec2(12.9898, 78.233))) * 43758.5453);
-  gi = clamp(gi + (h < 0.25 ? -1.0 : h > 0.75 ? 1.0 : 0.0), 0.0, 15.0);
-  vec2 local = fract(pos / u_size);
-  // 16x1 glyph atlas, sparsest (space) leftmost
-  float g = texture(u_glyphs, vec2((gi + local.x) / 16.0, local.y)).r;
-  vec3 tint = u_color == 1 ? vec3(0.25, 1.0, 0.35)
-            : u_color == 2 ? vec3(1.0)
-            : cell;
-  // Dense glyphs blaze, sparse glyphs stay dim but visible
-  float gf = gi / 15.0;
-  outColor = vec4(g * (tint * (1.2 + gf) + 0.07), 1.0);
-}`,
+		prePasses: [
+			// Luma at half res with a 3x3 box on top: Sobel over raw video pixels
+			// picks up sensor noise and the edge glyphs strobe cell to cell.
+			{
+				fragment: H + ASCII_LUMA_FRAG,
+				linearFilter: true,
+			},
+			{ fragment: H + ASCII_SOBEL_FRAG },
+		],
+		fragment: H + ASCII_FRAG,
 		opaqueOutput: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_size', v.size as number);
-			setInt(gl, l, 'u_color', v.color === 'green' ? 1 : v.color === 'white' ? 2 : 0);
+			const num = (key: string, fallback: number) =>
+				typeof v[key] === 'number' ? (v[key] as number) : fallback;
+			setFloat(gl, l, 'u_size', num('size', 9));
+			setFloat(gl, l, 'u_aspect', num('aspect', 2));
+			setFloat(gl, l, 'u_edges', num('edges', 0.55));
+			setFloat(gl, l, 'u_contrast', num('contrast', 0.5));
+			// Ramp length drives both the glyph index and the atlas stride, and
+			// only the charset knows it.
+			setFloat(gl, l, 'u_ramp', asciiRampLength(v.charset as string));
+			setInt(gl, l, 'u_color', ASCII_COLOR_MODES[v.color as string] ?? 0);
+			setInt(gl, l, 'u_bg', ASCII_BG_MODES[v.background as string] ?? 0);
 		},
 	},
 
