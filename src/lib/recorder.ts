@@ -562,6 +562,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				audioResponse,
 				audioGroupsRef?.current,
 			);
+			// The bars read this straight off the GPU, so the export has to push
+			// the same bins the preview's AnalyserNode would have.
+			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null);
 			if (typeof skipRender === 'function') skipRender(textLayers);
 			else if (!skipRender) renderer.render(renderEffects, time, textLayers);
 			await sink.submit(i, time);

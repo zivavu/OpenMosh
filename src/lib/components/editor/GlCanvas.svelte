@@ -92,6 +92,10 @@
       /** Drawn over the whole preview box — for states where the canvas holds
        * nothing worth looking at, like a sequence with an empty media pool. */
       overlay?: Snippet;
+      /** Live FFT bins for the audio-bars effect. The AnalyserNode mutates one
+       * array in place, so this is read fresh every rendered frame rather than
+       * reacted to. */
+      spectrum?: Uint8Array | null;
    }
 
    let {
@@ -118,6 +122,7 @@
       outgoingDriver = null,
       sourceKey = null,
       sourceAnimating = false,
+      spectrum = null,
       fullscreen = $bindable(false),
       textTimeline = null,
       textTime = 0,
@@ -240,6 +245,9 @@
    /** Render the current frame: transition blend when a segment boundary is
     * being crossed, otherwise the plain effect chain. */
    function drawFrame(now: number) {
+      // Before anything renders: the bars have to see this frame's audio, and
+      // the export driver does the same on its side.
+      renderer!.setSpectrum(spectrum);
       const layers = textTimeline ? resolveTextLayersAt(textTimeline, textTime) : [];
       const tr = transition;
       if (tr && tr.durationSec > 0) {
