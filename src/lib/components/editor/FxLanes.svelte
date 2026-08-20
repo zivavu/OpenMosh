@@ -400,7 +400,7 @@
 		if (clip.mode === 'interval') return `Re-rolls every ${label}`;
 		let active = 0;
 		for (const e of clip.effects) if (e.enabled) active++;
-		return `${clip.label} — ${active} effect${active === 1 ? '' : 's'}`;
+		return `${label} — ${active} effect${active === 1 ? '' : 's'}`;
 	}
 
 	/** Consecutive clip pairs sharing an exact edge — the draggable boundaries. */
@@ -551,7 +551,9 @@
 						{@const interval = clip.mode === 'interval'}
 						{@const label = interval
 							? intervalLabel(clip.intervalSec, clip.intervalBeats)
-							: clip.label}
+							: clip.modified
+								? `${clip.label}*`
+								: clip.label}
 						<div
 							class="clip"
 							class:selected={selectedClipIds.includes(clip.id)}

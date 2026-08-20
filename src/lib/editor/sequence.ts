@@ -1,6 +1,7 @@
 import {
   cloneEffectInstance,
   generateId,
+  getDefinition,
   loadInitialEffects,
   type EffectInstance,
 } from "../effects";
@@ -225,6 +226,27 @@ export function withSeededRandom<T>(seed: number, fn: () => T): T {
 /** Fresh all-disabled effect list (respects hidden effects). */
 export function cleanEffects(): EffectInstance[] {
   return loadInitialEffects();
+}
+
+/**
+ * Label for a chain the user built by hand: what it actually switches on, so
+ * an edited span stops reading "clean". Preset- and mosh-filled chains keep
+ * their own label instead, marked with a "*" once edited.
+ */
+export function handBuiltLabel(effects: EffectInstance[]): string {
+  const on = effects.filter((e) => e.enabled);
+  if (on.length === 0) return "clean";
+  const first = (getDefinition(on[0].defId)?.name ?? on[0].defId).toLowerCase();
+  return on.length === 1 ? first : `${first} +${on.length - 1}`;
+}
+
+/** True when a span's label is auto-derived from its chain rather than a
+ * preset name or a mosh, so a hand-edit is free to re-derive it. */
+export function isHandBuiltLabel(span: {
+  label: string;
+  presetName?: string;
+}): boolean {
+  return !span.presetName && span.label !== "mosh" && span.label !== "auto";
 }
 
 /** Deterministic mosh roll: same seed + options → same effects. */
