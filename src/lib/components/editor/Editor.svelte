@@ -61,6 +61,8 @@
 	import {
 		cloneSegmentForSplit,
 		createSequenceEffectSource,
+		handBuiltLabel,
+		isHandBuiltLabel,
 		createSequenceSegment,
 		resolveTransitionAt,
 		findSegmentAt,
@@ -1652,7 +1654,12 @@
 	// values.
 	function markPanelSegmentEdited() {
 		const target = selectedFxClip ?? panelSelectedSegment();
-		if (target && !target.modified) target.modified = true;
+		if (!target) return;
+		// A hand-built chain has no name of its own, so it takes one from what it
+		// switches on rather than sitting at "clean" forever. Preset- and
+		// mosh-filled chains keep their name and pick up the "*" instead.
+		if (isHandBuiltLabel(target)) target.label = handBuiltLabel(target.effects);
+		else if (!target.modified) target.modified = true;
 	}
 
 	// An fx clip outranks a source segment: it's the more recent selection (the
@@ -1983,7 +1990,8 @@
 		if (clip) {
 			panelBeforeEdit();
 			clearEffectsFn(clip.effects);
-			clip.modified = true;
+			if (isHandBuiltLabel(clip)) clip.label = 'clean';
+			else clip.modified = true;
 			return;
 		}
 		// In sequence mode the live effects can be the selected segment's own
@@ -1992,7 +2000,8 @@
 		if (seg && seg.effects === effects) {
 			panelBeforeEdit();
 			clearEffectsFn(effects);
-			seg.modified = true;
+			if (isHandBuiltLabel(seg)) seg.label = 'clean';
+			else seg.modified = true;
 			return;
 		}
 		clearEffectsFn(effects);
