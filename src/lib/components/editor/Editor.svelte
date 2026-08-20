@@ -35,7 +35,7 @@
 	} from '../../editor/settings';
 	import {
 		cloneEffectInstance,
-		getDefinition,
+		hydrateEffects,
 		loadInitialEffects,
 		setVolumeLink,
 		type EffectInstance,
@@ -315,7 +315,7 @@
 	function restoredEffects(): EffectInstance[] | null {
 		const saved = untrack(() => initialSession)?.effects;
 		if (!Array.isArray(saved) || saved.length === 0) return null;
-		const known = saved.filter((e) => e && getDefinition(e.defId));
+		const known = hydrateEffects(saved);
 		return known.length > 0 ? known : null;
 	}
 
@@ -777,7 +777,12 @@
 			(isSequenceMode ? seqStore.load(baseKey) : null);
 		// Entries can predate a transition being retired; remap before anything
 		// downstream tries to look up a shader that no longer exists.
-		if (entry?.segments) normalizeSegmentTransitions(entry.segments);
+		if (entry?.segments) {
+			normalizeSegmentTransitions(entry.segments);
+			// And they can predate an effect gaining a param, which the panel
+			// reads off the instance without checking.
+			for (const seg of entry.segments) seg.effects = hydrateEffects(seg.effects);
+		}
 		return entry;
 	}
 

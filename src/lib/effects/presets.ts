@@ -1,6 +1,6 @@
 import type { EffectInstance, Preset } from "./types";
 import { generateId } from "./types";
-import { EFFECT_DEFINITIONS } from "./definitions";
+import { hydrateValues } from "./hydrate";
 import { STARTER_PRESETS } from "./starter-presets";
 import { hueToHex } from "../color";
 import { readJson, readRaw, writeJson, writeRaw } from "../storage";
@@ -88,21 +88,15 @@ function migrateValues(
 }
 
 export function applyPreset(preset: Preset): EffectInstance[] {
-  return preset.effects.map((pe) => {
-    // Merge definition defaults under saved values so presets saved before a
-    // param existed still get a sane value for it.
-    const def = EFFECT_DEFINITIONS.find((d) => d.id === pe.defId);
-    const defaults = def
-      ? Object.fromEntries(def.params.map((p) => [p.key, p.defaultValue]))
-      : {};
-    return {
-      instanceId: generateId(),
-      defId: pe.defId,
-      enabled: pe.enabled,
-      locked: false,
-      expanded: false,
-      values: { ...defaults, ...migrateValues(pe.defId, pe.values) },
-      ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
-    };
-  });
+  return preset.effects.map((pe) => ({
+    instanceId: generateId(),
+    defId: pe.defId,
+    enabled: pe.enabled,
+    locked: false,
+    expanded: false,
+    // Definition defaults underneath, so a preset saved before a param existed
+    // still gets a sane value for it.
+    values: hydrateValues(pe.defId, migrateValues(pe.defId, pe.values)),
+    ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
+  }));
 }
