@@ -1208,6 +1208,53 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       ],
    },
    {
+      id: 'strobe',
+      name: 'Strobe',
+      params: [
+         {
+            // Keyed "speed" so the renderer accumulates phase for it: one unit
+            // of phase is one flash, making this literally flashes per second.
+            key: 'speed',
+            label: 'Rate',
+            type: 'range',
+            min: 0.2,
+            max: 20,
+            step: 0.1,
+            defaultValue: 5,
+         },
+         {
+            key: 'duty',
+            label: 'Duty',
+            type: 'range',
+            min: 0.05,
+            max: 0.95,
+            step: 0.01,
+            defaultValue: 0.5,
+         },
+         {
+            key: 'amount',
+            label: 'Amount',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 1,
+         },
+         {
+            key: 'mode',
+            label: 'Mode',
+            type: 'select',
+            defaultValue: 'black',
+            options: [
+               { label: 'Blackout', value: 'black' },
+               { label: 'Whiteout', value: 'white' },
+               { label: 'Invert', value: 'invert' },
+               { label: 'Mono', value: 'mono' },
+            ],
+         },
+      ],
+   },
+   {
       id: 'feedback',
       name: 'Feedback',
       params: [
