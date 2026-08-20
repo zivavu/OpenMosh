@@ -1961,78 +1961,39 @@ void main() {
 			BOUNCE_GLSL +
 			`uniform float u_amount;
 uniform float u_angle;
-void main() {
-  // Self-displacement: shift each pixel by the image's own red/green
-  // channels, so content flows along its own color field — smooth,
-  // ghosty warps instead of directional streaks.
-  vec2 off = texture(u_texture, v_uv).rg - 0.5;
-  float ang = u_angle * 3.14159265 / 180.0;
-  float ca = cos(ang);
-  float sa = sin(ang);
-  off = mat2(ca, -sa, sa, ca) * off;
-  vec2 p = v_uv + off * u_amount * 0.2;
-  outColor = texture(u_texture, vec2(bounce(p.x), bounce(p.y)));
-}`,
-		setUniforms: floats('amount', 'angle'),
-	},
-	relief: {
-		fragment:
-			H +
-			`uniform float u_amount;
-uniform float u_angle;
+uniform float u_trail;
+
+const int SMEAR_STEPS = 8;
 
 void main() {
-  vec3 lum = vec3(0.299, 0.587, 0.114);
-
+  // Self-displacement: the image's own red/green channels are read as a vector
+  // field and the pixel is walked along it, so content flows with its own
+  // colour rather than in one imposed direction. Angle turns the field.
   float rad = u_angle * 3.14159265 / 180.0;
-  vec2 dir = vec2(cos(rad), sin(rad));
+  float ca = cos(rad);
+  float sa = sin(rad);
+  mat2 rot = mat2(ca, -sa, sa, ca);
+  float stride = u_amount * 0.2 / float(SMEAR_STEPS);
 
-  // Parallax occlusion mapping: treat luma as a height field.
-  // Cast a ray descending from height=1 to 0 while stepping in dir.
-  // Track prev step so we can interpolate the exact intersection —
-  // this eliminates staircase artifacts and gives smooth ridges.
-  const int N = 64;
-  vec2  stepUV = dir * u_amount / float(N);
-  float stepH  = 1.0 / float(N);
-
-  vec2  pos      = v_uv;
-  float rayH     = 1.0;
-  vec2  prevPos  = v_uv;
-  float prevSurfH = dot(texture(u_texture, v_uv).rgb, lum);
-  vec2  hitPos   = v_uv;
-  bool  found    = false;
-
-  for (int i = 0; i < N; i++) {
-				float surfH = dot(texture(u_texture, pos).rgb, lum);
-				if (!found && surfH >= rayH) {
-					// Linearly interpolate between prev and current step for sub-step accuracy
-					float prevRayH = rayH + stepH;
-					float t = (prevRayH - prevSurfH) / max((surfH - prevSurfH) - (rayH - prevRayH), 0.0001);
-					hitPos = mix(prevPos, pos, clamp(t, 0.0, 1.0));
-					found  = true;
-				}
-				prevPos   = pos;
-				prevSurfH = surfH;
-				pos  += stepUV;
-				rayH -= stepH;
+  vec2 p = v_uv;
+  vec4 acc = vec4(0.0);
+  float total = 0.0;
+  for (int i = 0; i < SMEAR_STEPS; i++) {
+    vec4 s = texture(u_texture, vec2(bounce(p.x), bounce(p.y)));
+    float t = float(i) / float(SMEAR_STEPS - 1);
+    // Trail 0 keeps essentially the far end of the walk — one clean
+    // displacement. Trail 1 weights the whole path evenly, which is what
+    // actually reads as a smear rather than a ghost.
+    float w = mix(pow(t, 16.0), 1.0, u_trail);
+    acc += s * w;
+    total += w;
+    // Re-reading the field at each step lets the walk bend with the image
+    // instead of running straight, so streaks follow contours out of an edge.
+    p += rot * (s.rg - 0.5) * stride;
   }
-
-  outColor = texture(u_texture, hitPos);
+  outColor = acc / max(total, 1e-4);
 }`,
-		setUniforms: floats('amount', 'angle'),
-	},
-	zoom: {
-		fragment:
-			H +
-			BOUNCE_GLSL +
-			`uniform float u_amount;
-void main() {
-  float scale = pow(2.0, u_amount);
-  vec2 uv = (v_uv - 0.5) / scale + 0.5;
-  uv = vec2(bounce(uv.x), bounce(uv.y));
-  outColor = texture(u_texture, uv);
-}`,
-		setUniforms: floats('amount'),
+		setUniforms: floats('amount', 'angle', 'trail'),
 	},
 
 	'fiber-displace': {
