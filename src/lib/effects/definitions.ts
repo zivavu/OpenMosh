@@ -1,10 +1,21 @@
 import { FONT_OPTIONS } from '../text-overlay/fonts';
 import type { EffectDefinition } from './types';
 
-/** ASCII effect character sets — each exactly 16 chars, sparsest leftmost. */
+/**
+ * ASCII effect character sets. Length is free and order doesn't matter — the
+ * atlas sorts each set by the ink each glyph actually rasterizes to, so these
+ * are pools, not hand-ordered ramps. Repeats bias the ramp: 'binary' is mostly
+ * spaces, so it thresholds hard instead of shading.
+ */
 export const ASCII_CHARSETS: { label: string; value: string; chars: string }[] = [
-   { label: 'Classic', value: 'classic', chars: ' .-:;i+r*oX#%&$@' },
-   { label: 'Blocks', value: 'blocks', chars: ' .·:░░░▒▒▓▓████' },
+   { label: 'Classic', value: 'classic', chars: ' .:-=+*#%@' },
+   {
+      label: 'Detailed',
+      value: 'detailed',
+      chars:
+         " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+   },
+   { label: 'Blocks', value: 'blocks', chars: ' ░▒▓█' },
    { label: 'Binary', value: 'binary', chars: '        00001111' },
    { label: 'Numbers', value: 'numbers', chars: ' .-:;17245308#%@' },
 ];
@@ -1300,10 +1311,22 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             key: 'size',
             label: 'Cell Size',
             type: 'range',
-            min: 20,
-            max: 50,
+            min: 4,
+            max: 40,
             step: 1,
-            defaultValue: 30,
+            defaultValue: 9,
+            // Small cells are where the detail lives — give them slider width.
+            curve: 2,
+            moshMax: 22,
+         },
+         {
+            key: 'aspect',
+            label: 'Cell Aspect',
+            type: 'range',
+            min: 1,
+            max: 2.5,
+            step: 0.05,
+            defaultValue: 2,
          },
          {
             key: 'charset',
@@ -1313,6 +1336,24 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             options: ASCII_CHARSETS.map(({ label, value }) => ({ label, value })),
          },
          {
+            key: 'edges',
+            label: 'Edges',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.55,
+         },
+         {
+            key: 'contrast',
+            label: 'Contrast',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.5,
+         },
+         {
             key: 'color',
             label: 'Color',
             type: 'select',
@@ -1320,7 +1361,20 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             options: [
                { label: 'Color', value: 'color' },
                { label: 'Green', value: 'green' },
+               { label: 'Amber', value: 'amber' },
                { label: 'White', value: 'white' },
+               { label: 'Quantized', value: 'quantized' },
+            ],
+         },
+         {
+            key: 'background',
+            label: 'Background',
+            type: 'select',
+            defaultValue: 'black',
+            options: [
+               { label: 'Black', value: 'black' },
+               { label: 'Tint', value: 'tint' },
+               { label: 'Image', value: 'image' },
             ],
          },
       ],

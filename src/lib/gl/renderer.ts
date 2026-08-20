@@ -18,6 +18,7 @@ import {
   PASSTHROUGH_FRAG,
   TEXT_BLEND_FRAG,
   EFFECT_SHADERS,
+  ASCII_GLYPH_CELL,
   type EffectShaderDef,
 } from "./effect-shaders";
 import { TRANSITION_SHADERS } from "./transition-shaders";
@@ -1697,36 +1698,113 @@ export class GlRenderer {
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 
-  /** 16x1 ASCII glyph atlases (sparsest leftmost), one per charset, shared by the ascii effect. */
+  /**
+   * ASCII glyph atlases, one per charset, shared by the ascii effect. Each is a
+   * single row of {@link ASCII_GLYPH_CELL}-sized cells: the charset's glyphs
+   * sorted by the ink they actually rasterize to, then four edge strokes the
+   * shader selects by Sobel orientation.
+   */
   private glyphTextures = new Map<string, WebGLTexture>();
 
-  private buildGlyphAtlas(chars: string): WebGLTexture {
-    const cell = 64;
+  /** Measured ink coverage per character, keyed by the character. */
+  private inkCoverage = new Map<string, number>();
+
+  private static readonly GLYPH_FONT = `500 ${Math.round(
+    ASCII_GLYPH_CELL.h * 0.78,
+  )}px "Consolas", "Lucida Console", "Menlo", monospace`;
+
+  /**
+   * How much of a cell a character fills once rasterized.
+   *
+   * Hand-ordered ramps like " .-:;i+r*oX#%&$@" only look monotonic — in the
+   * actual font at the actual size, `i` and `+` and `r` don't step evenly, so
+   * the ramp has flat spots and reversals that read as noise. Measuring lets
+   * every charset be a pool the atlas sorts for itself.
+   */
+  private measureInk(ch: string): number {
+    const cached = this.inkCoverage.get(ch);
+    if (cached !== undefined) return cached;
+    const { w, h } = ASCII_GLYPH_CELL;
     const canvas = document.createElement("canvas");
-    canvas.width = cell * chars.length;
-    canvas.height = cell;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#fff";
+    ctx.font = GlRenderer.GLYPH_FONT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(ch, w / 2, h / 2);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 4) sum += data[i];
+    const coverage = sum / (w * h * 255);
+    this.inkCoverage.set(ch, coverage);
+    return coverage;
+  }
+
+  /**
+   * The four orientation glyphs, in the bin order the shader expects: 0°
+   * horizontal, 45°, 90° vertical, 135°.
+   *
+   * UV space runs y-down (nothing flips on upload), so the shader's 45° bin
+   * is the diagonal that descends to the right — a visual \ — and 135° is
+   * the one that rises. Swapping these two makes every contour draw across its
+   * own edge instead of along it.
+   *
+   * Drawn as strokes rather than the font's -, /, | and \ so they run edge to
+   * edge: a contour crossing several cells joins up instead of breaking at
+   * every glyph's side bearing. In a 1:2 cell corner-to-corner is steeper than
+   * 45°, which is exactly how a slash reads in a monospace font.
+   */
+  private drawEdgeStrokes(ctx: CanvasRenderingContext2D, x0: number) {
+    const { w, h } = ASCII_GLYPH_CELL;
+    const strokes: [number, number, number, number][] = [
+      [0, h / 2, w, h / 2],
+      [0, 0, w, h],
+      [w / 2, 0, w / 2, h],
+      [0, h, w, 0],
+    ];
+    ctx.save();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = Math.max(2, w * 0.16);
+    strokes.forEach(([ax, ay, bx, by], i) => {
+      ctx.beginPath();
+      ctx.moveTo(x0 + i * w + ax, ay);
+      ctx.lineTo(x0 + i * w + bx, by);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  private buildGlyphAtlas(chars: string): WebGLTexture {
+    const { w, h } = ASCII_GLYPH_CELL;
+    const glyphs = [...chars].sort((a, b) => this.measureInk(a) - this.measureInk(b));
+    const canvas = document.createElement("canvas");
+    canvas.width = w * (glyphs.length + 4);
+    canvas.height = h;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#fff";
-    ctx.font = `bold ${Math.floor(cell * 0.75)}px "Consolas", "Lucida Console", "Menlo", monospace`;
+    ctx.font = GlRenderer.GLYPH_FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    for (let i = 0; i < chars.length; i++) {
-      ctx.save();
-      ctx.translate(i * cell + cell / 2, cell / 2 + 1);
-      // Stretch glyphs so they nearly fill the cell: chunky characters, tight gaps
-      ctx.scale(1.9, 1.25);
-      ctx.fillText(chars[i], 0, 0);
-      ctx.restore();
+    // Natural proportions in a 1:2 cell. The old atlas stretched every glyph
+    // 1.9x wide to fill a square cell, which stopped them reading as characters.
+    for (let i = 0; i < glyphs.length; i++) {
+      ctx.fillText(glyphs[i], i * w + w / 2, h / 2);
     }
+    this.drawEdgeStrokes(ctx, glyphs.length * w);
+
     const gl = this.gl;
     const tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    // Mipmapped: without mips, small cell sizes undersample glyphs and
-    // produce dark-square moire patches.
+    // Mipmapped: without mips, small cell sizes undersample glyphs and produce
+    // dark-square moire patches. The shader picks the level explicitly.
     gl.texParameteri(
       gl.TEXTURE_2D,
       gl.TEXTURE_MIN_FILTER,
@@ -1735,15 +1813,6 @@ export class GlRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
     gl.generateMipmap(gl.TEXTURE_2D);
-    const aniso = gl.getExtension("EXT_texture_filter_anisotropic");
-    if (aniso) {
-      const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
-      gl.texParameterf(
-        gl.TEXTURE_2D,
-        aniso.TEXTURE_MAX_ANISOTROPY_EXT,
-        Math.min(4, max),
-      );
-    }
     return tex;
   }
 
