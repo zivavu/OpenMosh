@@ -18,6 +18,7 @@ import type { AudioResponse } from "../audio/auto-range";
 import {
   cloneEffectInstance,
   generateId,
+  hydrateEffects,
   type EffectInstance,
   type FreqBand,
 } from "../effects";
@@ -603,7 +604,7 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
         mode: clip.mode === "interval" ? "interval" : ("static" as SequenceSegmentMode),
         presetName: clip.presetName,
         modified: clip.modified,
-        effects: clip.effects,
+        effects: hydrateEffects(clip.effects),
         intervalSec: clip.intervalSec,
         intervalBeats: clip.intervalBeats,
         seed: clip.seed,

@@ -1,3 +1,4 @@
+import { hydrateEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { FONT_OPTIONS, type TextOverlayBlendMode } from "../text-overlay";
 import type { TimelineClip } from "../timeline/clips";
@@ -136,7 +137,7 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
             ? lane.chainIndex
             : Number.MAX_SAFE_INTEGER,
         style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
-        effects: Array.isArray(lane.effects) ? lane.effects : [],
+        effects: hydrateEffects(lane.effects),
         clips: clips.map((clip) => ({
           id: clip.id ?? nextId("clip"),
           start: clip.start ?? 0,

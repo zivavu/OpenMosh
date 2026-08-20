@@ -1,4 +1,5 @@
 export * from "./types";
+export { getDefinition, hydrateValues, hydrateEffects } from "./hydrate";
 export { EFFECT_DEFINITIONS } from "./definitions";
 export {
   loadPresets,
@@ -34,14 +35,6 @@ export function cloneEffectInstance(e: EffectInstance): EffectInstance {
     values: { ...e.values },
     volumeLinks: e.volumeLinks ? { ...e.volumeLinks } : undefined,
   };
-}
-
-/** Lookup table, not a scan: this runs per linked effect on every rAF tick and
- * every export frame. */
-const DEFINITIONS_BY_ID = new Map(EFFECT_DEFINITIONS.map((d) => [d.id, d]));
-
-export function getDefinition(defId: string): EffectDefinition | undefined {
-  return DEFINITIONS_BY_ID.get(defId);
 }
 
 export const HIDDEN_EFFECTS_KEY = "openmosh-hidden-effects";
