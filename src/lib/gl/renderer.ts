@@ -1688,6 +1688,8 @@ export class GlRenderer {
     this.fxFeedback.clear();
     for (const tex of this.glyphTextures.values()) gl.deleteTexture(tex);
     this.glyphTextures.clear();
+    if (this.spectrumTexture) gl.deleteTexture(this.spectrumTexture);
+    this.spectrumTexture = null;
     for (const entry of this.compiled.values()) {
       gl.deleteProgram(entry.program.program);
       if (entry.prePasses) {
@@ -1696,6 +1698,56 @@ export class GlRenderer {
     }
     gl.deleteVertexArray(this.quadVAO);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
+  }
+
+  /** One texel per FFT bin, R8. Refreshed every frame by whichever driver is
+   * feeding audio; the audio-bars effect samples it as u_spectrum. */
+  private spectrumTexture: WebGLTexture | null = null;
+  private spectrumW = 0;
+  private static readonly SILENCE = new Uint8Array(1);
+
+  /**
+   * Hand the renderer this frame's FFT bins.
+   *
+   * Both drivers call it and must keep calling it: the preview passes the
+   * AnalyserNode's live array, the exporter passes the frame's offline FFT. If
+   * only one did, a visualizer would preview and export differently. Null (no
+   * track loaded, or a frame before the audio starts) uploads silence, so the
+   * bars collapse instead of freezing on the last thing they saw.
+   */
+  setSpectrum(data: Uint8Array | null): void {
+    const gl = this.gl;
+    const width = data && data.length > 0 ? data.length : 1;
+    if (!this.spectrumTexture || this.spectrumW !== width) {
+      if (this.spectrumTexture) gl.deleteTexture(this.spectrumTexture);
+      this.spectrumTexture = gl.createTexture()!;
+      this.spectrumW = width;
+      gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, width, 1);
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
+    }
+    // A single row of bytes: the default 4-byte row alignment would misread
+    // any bin count that isn't a multiple of four.
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      width,
+      1,
+      gl.RED,
+      gl.UNSIGNED_BYTE,
+      (data && data.length > 0
+        ? data
+        : GlRenderer.SILENCE) as Uint8Array<ArrayBuffer>,
+    );
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
 
   /**
@@ -2237,6 +2289,15 @@ export class GlRenderer {
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, originalTex);
       gl.uniform1i(compiled.uniforms["u_original"], 3);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    if (compiled.uniforms["u_spectrum"]) {
+      // Never leave the sampler at its default unit 0 — it would read the
+      // frame itself as a spectrum and paint noise.
+      if (!this.spectrumTexture) this.setSpectrum(null);
+      gl.activeTexture(gl.TEXTURE5);
+      gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
+      gl.uniform1i(compiled.uniforms["u_spectrum"], 5);
       gl.activeTexture(gl.TEXTURE0);
     }
     if (compiled.uniforms["u_glyphs"]) {

@@ -2889,6 +2889,7 @@
 						}
 					: null}
 				overlay={noSequenceMedia ? noMediaOverlay : undefined}
+				spectrum={audio.frequencyData}
 			/>
 		</div>
 

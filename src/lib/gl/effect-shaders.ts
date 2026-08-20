@@ -1550,6 +1550,66 @@ void main() {
 		setUniforms: floats('zoom', 'spin', 'decay'),
 	},
 
+	'audio-bars': {
+		fragment:
+			H +
+			`uniform sampler2D u_spectrum;
+uniform float u_bars;
+uniform float u_height;
+uniform float u_gain;
+uniform float u_opacity;
+uniform int u_anchor;
+uniform int u_style;
+uniform vec3 u_color;
+void main() {
+  vec4 src = texture(u_texture, v_uv);
+  float bars = max(floor(u_bars), 1.0);
+  float slot = v_uv.x * bars;
+  float idx = floor(slot) / bars;
+
+  // Bass occupies a tiny slice of a linear FFT, so square the lookup to hand
+  // the low end most of the width. Sampling linearly leaves every bar past the
+  // first few sitting dead for most music.
+  float lo = idx * idx;
+  float hi = (idx + 1.0 / bars) * (idx + 1.0 / bars);
+  float level = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float f = mix(lo, hi, (float(i) + 0.5) / 8.0);
+    // Peak of the bins this bar spans, not their mean — averaging reads as mush.
+    level = max(level, texture(u_spectrum, vec2(f, 0.5)).r);
+  }
+  level = clamp(level * u_gain, 0.0, 1.0) * u_height;
+
+  // v_uv.y runs top-down, so anchoring to the bottom means measuring back up.
+  float d = u_anchor == 1 ? v_uv.y
+          : u_anchor == 2 ? abs(v_uv.y - 0.5) * 2.0
+          : 1.0 - v_uv.y;
+
+  float within = fract(slot);
+  float gap = smoothstep(0.0, 0.10, within) * (1.0 - smoothstep(0.90, 1.0, within));
+  float fill = (1.0 - smoothstep(level - 0.004, level + 0.004, d)) * gap;
+  if (u_style == 1) {
+    float seg = fract(d * 26.0);
+    fill *= 1.0 - smoothstep(0.55, 0.75, seg);
+  }
+
+  // Hot tips: a flat colour column reads as a dead bar chart.
+  float tip = 1.0 + 0.8 * (1.0 - smoothstep(0.0, 0.12, max(level - d, 0.0)));
+  vec3 col = clamp(u_color * tip, 0.0, 1.0);
+  outColor = vec4(mix(src.rgb, col, clamp(fill, 0.0, 1.0) * u_opacity), src.a);
+}`,
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_bars', v.bars as number);
+			setFloat(gl, l, 'u_height', v.height as number);
+			setFloat(gl, l, 'u_gain', v.gain as number);
+			setFloat(gl, l, 'u_opacity', v.opacity as number);
+			setInt(gl, l, 'u_anchor', v.anchor === 'top' ? 1 : v.anchor === 'center' ? 2 : 0);
+			setInt(gl, l, 'u_style', v.style === 'segmented' ? 1 : 0);
+			setColor(gl, l, 'u_color', v.color as string);
+		},
+	},
+
 	strobe: {
 		fragment:
 			H +
