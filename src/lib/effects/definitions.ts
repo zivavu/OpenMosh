@@ -56,13 +56,34 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       name: 'Solarize',
       params: [
          {
-            key: 'threshold',
-            label: 'Threshold',
+            key: 'pivot',
+            label: 'Pivot',
             type: 'range',
-            min: 0,
+            min: 0.1,
             max: 0.9,
             step: 0.01,
             defaultValue: 0.5,
+         },
+         {
+            key: 'curve',
+            label: 'Curve',
+            type: 'range',
+            min: 0.5,
+            max: 4,
+            step: 0.05,
+            defaultValue: 2,
+         },
+         {
+            key: 'colorize',
+            label: 'Colorize',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.1,
+            // The classic look sits near the bottom of the range; moshing to
+            // 0.8 just makes a hue-shifted negative.
+            moshMax: 0.4,
          },
       ],
    },
