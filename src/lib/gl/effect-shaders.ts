@@ -44,6 +44,22 @@ float fbm(vec2 p) {
 }
 `;
 
+/** Hue/sat/value conversion, shared by the effects that reason in HSV. */
+const HSV_GLSL = `vec3 rgb2hsv(vec3 c) {
+  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  return vec3(abs(q.z + (q.w - q.y) / (6.0*d + 1e-10)), d / (q.x + 1e-10), q.x);
+}
+
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+`;
+
 const HUE_ROTATE_GLSL = `vec3 hueRotate(vec3 c, float angle) {
   float rad = angle * 3.14159265 / 180.0;
   float cosA = cos(rad);
@@ -440,12 +456,33 @@ void main() {
 	solarize: {
 		fragment:
 			H +
-			`uniform float u_threshold;
+			HSV_GLSL +
+			`uniform float u_pivot;
+uniform float u_curve;
+uniform float u_colorize;
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  outColor = vec4(mix(c.rgb, 1.0 - c.rgb, step(u_threshold, c.rgb)), c.a);
+  vec3 hsv = rgb2hsv(c.rgb);
+
+  // The Sabattier fold: gamma the value channel, then reflect it about the
+  // pivot. Everything below the pivot inverts (shadows come back as
+  // highlights), everything above it climbs from black, and the pivot itself
+  // lands on zero — that dark band through the midtones is the whole effect.
+  float v = pow(hsv.z, u_curve);
+  float folded = v < u_pivot
+    ? 1.0 - v / max(u_pivot, 1e-4)
+    : (v - u_pivot) / max(u_pivot, 1e-4);
+
+  // Saturation follows how bright the pixel *was*, not what the fold turned it
+  // into, so the colour that survives tracks the original image rather than
+  // the inverted one. Scaled right down: a darkroom solarization is close to
+  // monochrome with a colour cast, and holding full saturation here just reads
+  // as a hue-shifted negative.
+  float sat = hsv.y * hsv.z * u_colorize;
+
+  outColor = vec4(clamp(hsv2rgb(vec3(hsv.x, sat, folded)), 0.0, 1.0), c.a);
 }`,
-		setUniforms: floats('threshold'),
+		setUniforms: floats('pivot', 'curve', 'colorize'),
 	},
 
 	edges: {
@@ -475,23 +512,10 @@ void main() {
 	'neon-edges': {
 		fragment:
 			H +
+			HSV_GLSL +
 			`uniform float u_strength;
 uniform float u_glow;
 uniform float u_bg;
-
-vec3 rgb2hsv(vec3 c) {
-  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
-  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-  float d = q.x - min(q.w, q.y);
-  return vec3(abs(q.z + (q.w - q.y) / (6.0*d + 1e-10)), d / (q.x + 1e-10), q.x);
-}
-
-vec3 hsv2rgb(vec3 c) {
-  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-}
 
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
