@@ -211,16 +211,15 @@
 		open = false;
 	}
 
-	function onLoad(track: StoredTrack, autoplay = false) {
-		onLoadTrack(
-			new File([track.blob], track.name, { type: track.blob.type }),
-			track.id,
-			autoplay,
-		);
-		// Communicate normalize gain to the editor. The gain cache is memory-only
-		// while normalizedIds persists, so after a reload the gain must be
-		// re-measured; applyNormalizeGain emits once it resolves (relies on
-		// activeTrackId being updated synchronously by onLoadTrack, which it is).
+	/**
+	 * Communicate this track's normalize gain to the editor.
+	 *
+	 * The gain cache is memory-only while normalizedIds persists, so after a
+	 * reload the gain must be re-measured; applyNormalizeGain emits once it
+	 * resolves. Unity is emitted first so a previous track's gain isn't left
+	 * applied to this one for the length of the measurement.
+	 */
+	function syncNormalizeGain(track: StoredTrack) {
 		if (normalizedIds.has(track.id)) {
 			if (!gainCache.has(track.id)) onNormalizeChange?.(1.0);
 			applyNormalizeGain(track);
@@ -228,6 +227,44 @@
 			onNormalizeChange?.(1.0);
 		}
 	}
+
+	function onLoad(track: StoredTrack, autoplay = false) {
+		onLoadTrack(
+			new File([track.blob], track.name, { type: track.blob.type }),
+			track.id,
+			autoplay,
+		);
+		// Relies on activeTrackId being updated synchronously by onLoadTrack,
+		// which it is.
+		syncedTrackId = track.id;
+		syncNormalizeGain(track);
+	}
+
+	/**
+	 * Whichever track ends up loaded gets its gain emitted, however it got there.
+	 *
+	 * onLoad only covers tracks picked from this drawer. A session resumed from
+	 * the upload screen adopts its track directly, so none of this ran: the
+	 * toggle rendered lit from the persisted set while the editor was still at
+	 * unity, and turning it off changed nothing because there was nothing to
+	 * turn off. Reacting to the active track covers every route in.
+	 */
+	let syncedTrackId: string | null = null;
+	$effect(() => {
+		const id = activeTrackId;
+		if (!id) {
+			syncedTrackId = null;
+			return;
+		}
+		// The list arrives from IndexedDB a tick or two after mount, and a
+		// restored session is already active by then.
+		if (!libraryLoaded || syncedTrackId === id) return;
+		const track = tracks.find((t) => t.id === id);
+		// A session whose track was since deleted stays at unity, correctly.
+		if (!track) return;
+		syncedTrackId = id;
+		syncNormalizeGain(track);
+	});
 
 	function togglePlay(track: StoredTrack) {
 		if (isTrackActive(track)) {
