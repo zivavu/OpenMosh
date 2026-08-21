@@ -480,7 +480,7 @@
 				group: GroupBoundary[];
 				nonSelected: number[];
 		  }
-		| { type: 'seek' }
+		| { type: 'static' }
 		| { type: 'seg-click'; segmentId: string }
 		| {
 				type: 'rect-select';
@@ -687,7 +687,7 @@
 		} catch {}
 	}
 
-	function startSeekDrag(e: PointerEvent) {
+	function onLanePointerDown(e: PointerEvent) {
 		if (e.button !== 0) return;
 		// Place the copied span with its first segment starting at the click
 		if (spanPasteMode) {
@@ -711,12 +711,10 @@
 		}
 		if (!onSeek) return;
 		boundaries.clearSelection();
-		// Dragging the playhead hands the view over: chasing it back to centre
-		// fights the drag.
-		stack.followPlayhead = false;
-		const time = Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX)));
-		onSeek(time);
-		dragging = { type: 'seek' };
+		// Default: place the start marker. The live playhead is moved by
+		// dragging it (or by playing), not by clicking the lane.
+		stack.seekStatic(Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))));
+		dragging = { type: 'static' };
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -785,13 +783,11 @@
 		} else if (dragging.type === 'rect-select') {
 			dragMoved = true;
 			dragging = { ...dragging, currentTime: vp.clientXToTime(e.clientX) };
-		} else if (dragging.type === 'seek') {
+		} else if (dragging.type === 'static') {
 			dragMoved = true;
-			const time = Math.max(
-				0,
-				Math.min(trackDuration, vp.clientXToTime(e.clientX)),
+			stack.seekStatic(
+				Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))),
 			);
-			onSeek?.(time);
 		}
 	}
 
@@ -966,7 +962,7 @@
 		if (boundaries.pasteMode || spanPasteMode) return 'copy';
 		if (!dragging) return onSeek ? 'crosshair' : 'default';
 		if (dragging.type === 'rect-select') return 'crosshair';
-		if (dragging.type === 'seek') return 'col-resize';
+		if (dragging.type === 'static') return 'col-resize';
 		if (dragging.type === 'boundary-group') return 'grabbing';
 		return 'ew-resize';
 	});
@@ -1016,7 +1012,7 @@
 			height={svgH}
 			class="step-svg"
 			style:cursor={svgCursor}
-			onpointerdown={startSeekDrag}
+			onpointerdown={onLanePointerDown}
 		>
 			<!-- Tails for uncovered regions, on the row's centre line -->
 			{#if segVis.length > 0}

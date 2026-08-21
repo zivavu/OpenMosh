@@ -108,7 +108,7 @@
 				snapSub: BeatSubdivision;
 				startClientY: number;
 		  }
-		| { type: 'seek' }
+		| { type: 'static' }
 		| {
 				type: 'rect-select';
 				startTime: number;
@@ -246,9 +246,9 @@
 				}
 			}
 
-			// Default: seek
+			// Default: place the start marker
 			if (onSeek && trackDuration > 0) {
-				startSeekDrag({ clientX: cx, clientY: cy, button: 0, stopPropagation: () => {}, pointerId: -1, ctrlKey: false, metaKey: false, shiftKey: false } as unknown as PointerEvent);
+				onLanePointerDown({ clientX: cx, clientY: cy, button: 0, stopPropagation: () => {}, pointerId: -1, ctrlKey: false, metaKey: false, shiftKey: false } as unknown as PointerEvent);
 			}
 		}
 
@@ -461,7 +461,7 @@
 		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
 
-	function startSeekDrag(e: PointerEvent) {
+	function onLanePointerDown(e: PointerEvent) {
 		if (e.button !== 0) return;
 		// If in paste mode, split segments at clipboard offsets from the clicked time
 		if (boundaries.pasteMode && boundaries.clipboard.length > 0) {
@@ -521,15 +521,12 @@
 			startRectSelect(e);
 			return;
 		}
-		// Default: seek
+		// Default: place the start marker. The live playhead is moved by
+		// dragging it (or by playing), not by clicking the lane.
 		if (!onSeek) return;
 		boundaries.clearSelection();
-		// Dragging the playhead hands the view over: chasing it back to centre
-		// fights the drag.
-		stack.followPlayhead = false;
-		const time = Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX)));
-		onSeek(time);
-		dragging = { type: 'seek' };
+		stack.seekStatic(Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))));
+		dragging = { type: 'static' };
 		dragMoved = false;
 		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
 	}
@@ -620,13 +617,11 @@
 					dragging = { ...dragging, snapSub: snap };
 				}
 			}
-		} else if (dragging.type === 'seek') {
+		} else if (dragging.type === 'static') {
 			dragMoved = true;
-			const time = Math.max(
-				0,
-				Math.min(trackDuration, vp.clientXToTime(e.clientX)),
+			stack.seekStatic(
+				Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))),
 			);
-			onSeek?.(time);
 		} else if (dragging.type === 'rect-select') {
 			dragMoved = true;
 			dragging = {
@@ -788,7 +783,7 @@
 		const d = dragging;
 		if (!d) return onSeek ? 'crosshair' : 'default';
 		if (d.type === 'seg-y') return 'ns-resize';
-		if (d.type === 'seek') return 'col-resize';
+		if (d.type === 'static') return 'col-resize';
 		if (d.type === 'rect-select') return 'crosshair';
 		return 'ew-resize';
 	});
@@ -828,7 +823,7 @@
 			class="step-svg"
 			style:cursor={svgCursor}
 			ondblclick={onDblClick}
-			onpointerdown={startSeekDrag}
+			onpointerdown={onLanePointerDown}
 		>
 			<!-- Subtle grid rows -->
 			{#each SUBDIVISIONS as sub}

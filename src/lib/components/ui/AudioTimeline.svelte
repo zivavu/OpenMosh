@@ -137,14 +137,11 @@
 
 	// Scrub while the button stays down, so the playhead drags rather than jumps.
 	function beginSeekDrag(startClientX: number) {
-		// Dragging the playhead hands the view over: chasing it back to centre
-		// fights the drag.
-		if (stack) stack.followPlayhead = false;
-		onSeek(timeFromClientX(startClientX));
+		dragTrackTo(startClientX);
 		seekDragging = true;
 		const onMove = (ev: PointerEvent) => {
 			ev.preventDefault();
-			onSeek(timeFromClientX(ev.clientX));
+			dragTrackTo(ev.clientX);
 		};
 		const onUp = () => {
 			seekDragging = false;
@@ -155,6 +152,16 @@
 		window.addEventListener('pointermove', onMove);
 		window.addEventListener('pointerup', onUp);
 		window.addEventListener('pointercancel', onUp);
+	}
+
+	/** One drag over the track: in a lane the track is part of the shared axis,
+	 * so the default drag places the start marker (the live playhead is moved
+	 * by grabbing it, or by playing). A standalone bar keeps its own clock, so
+	 * it keeps scrubbing that clock instead. */
+	function dragTrackTo(clientX: number) {
+		const t = timeFromClientX(clientX);
+		if (stack) stack.seekStatic(t);
+		else onSeek(t);
 	}
 
 	function beginHandleDrag(initialHandle: 'start' | 'end', startClientX: number) {
@@ -213,7 +220,7 @@
 			if (!seeking) return;
 			ev.preventDefault();
 			const touch = ev.touches[0];
-			if (touch) onSeek(timeFromClientX(touch.clientX));
+			if (touch) dragTrackTo(touch.clientX);
 		};
 		const onSeekUp = () => {
 			seeking = false;
@@ -229,7 +236,7 @@
 				beginHandleDrag(handle, touch.clientX);
 			} else {
 				seeking = true;
-				onSeek(timeFromClientX(touch.clientX));
+				dragTrackTo(touch.clientX);
 				window.addEventListener('touchmove', onSeekMove, { passive: false });
 				window.addEventListener('touchend', onSeekUp);
 			}
