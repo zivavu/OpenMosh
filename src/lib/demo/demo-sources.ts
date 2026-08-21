@@ -686,24 +686,6 @@ function drawGrain(ctx: C, rand: Rand) {
   ctx.globalAlpha = 1;
 }
 
-/** Broadcast-slate furniture, on every poster so the set reads as one series. */
-function drawSlate(ctx: C, rand: Rand, p: Palette, index: number) {
-  const pad = (n: number) => String(Math.floor(n)).padStart(2, "0");
-  mono(ctx, 13);
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "left";
-  ctx.fillStyle = p.bg;
-  ctx.fillRect(10, 10, 108, 20);
-  ctx.fillStyle = tone(p, index);
-  ctx.fillText("OPENMOSH", 18, 21);
-  const code = `${pad(index)}:${pad(rand() * 60)}:${pad(rand() * 60)}:${pad(rand() * 24)}`;
-  ctx.textAlign = "right";
-  ctx.fillStyle = p.bg;
-  ctx.fillRect(W - 118, H - 30, 108, 20);
-  ctx.fillStyle = p.ink;
-  ctx.fillText(code, W - 18, H - 19);
-}
-
 function drawPoster(index: number): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -717,7 +699,6 @@ function drawPoster(index: number): HTMLCanvasElement {
   ctx.fillStyle = p.bg;
   ctx.fillRect(0, 0, W, H);
   POSTERS[index % POSTERS.length](ctx, rand, p);
-  drawSlate(ctx, rand, p, index);
   drawGrain(ctx, rand);
 
   return canvas;
