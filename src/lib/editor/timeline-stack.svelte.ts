@@ -19,6 +19,11 @@ export class TimelineStackState {
     * only the Follow button hands it back. */
    followPlayhead = $state(true);
 
+   /** The static playhead: where the next play starts from. It never moves
+    * with the clock — only a direct drag moves it, which is why it is a
+    * separate marker rather than a second clock. */
+   staticTime = $state(0);
+
    readonly vp: TimelineViewport;
 
    /**
@@ -93,6 +98,12 @@ export class TimelineStackState {
       this.followPlayhead = false;
       const clamped = Math.max(0, Math.min(this.#getDuration(), time));
       this.#seek(clamped);
+   }
+
+   /** Move the static playhead. Unlike seekTo this never touches the master
+    * clock — the marker only decides where the next play starts from. */
+   seekStatic(time: number): void {
+      this.staticTime = Math.max(0, Math.min(this.#getDuration(), time));
    }
 
    /**

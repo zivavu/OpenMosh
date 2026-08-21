@@ -648,6 +648,11 @@
 		videoAudioUnlocked = true;
 		ensureVideoAudioGraph();
 		audio.audioContext?.resume();
+		// Start from the static marker when the video owns the timeline clock; a
+		// video slaved to a track keeps following the track instead.
+		if (timelineAxis && videoIsMaster && !videoIsPlaying) {
+			seekVideoTo(timelineAxis.staticTime);
+		}
 		if (previewPlayer) {
 			if (
 				previewPlayer.currentTime < videoSpanStart ||
@@ -1888,6 +1893,9 @@
 	}
 
 	function playSpan() {
+		// Playback starts at the static marker — the resume point — rather than
+		// wherever the clock last stopped.
+		if (timelineAxis && !audio.audioPlaying) audio.seekTo(timelineAxis.staticTime);
 		audio.playAudio();
 		if (isVideo) playVideo();
 	}
@@ -2420,6 +2428,7 @@
 
 	function toggleMasterPlay() {
 		if (textNeedsTransport) {
+			if (!stillPlaying && timelineAxis) stillClock = timelineAxis.staticTime;
 			stillPlaying = !stillPlaying;
 		} else if (seqMasterIsAudio) {
 			if (audio.audioPlaying) pauseTrack();
