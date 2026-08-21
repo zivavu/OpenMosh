@@ -1,4 +1,5 @@
 import { hexToVec3 } from '../color';
+import { DEFAULT_AUDIO_RESPONSE, punchExponent } from '../audio/auto-range';
 import { ASCII_CHARSETS } from '../effects/definitions';
 
 export const VERTEX_SHADER = `#version 300 es
@@ -1557,6 +1558,7 @@ void main() {
 uniform float u_bars;
 uniform float u_height;
 uniform float u_gain;
+uniform float u_punch;
 uniform float u_opacity;
 uniform int u_anchor;
 uniform int u_style;
@@ -1578,7 +1580,9 @@ void main() {
     // Peak of the bins this bar spans, not their mean — averaging reads as mush.
     level = max(level, texture(u_spectrum, vec2(f, 0.5)).r);
   }
-  level = clamp(level * u_gain, 0.0, 1.0) * u_height;
+  // Punch reshapes the response the same way it does for volume links: below
+  // 1 lifts quiet detail into visible movement, above 1 leaves only the hits.
+  level = clamp(pow(level, u_punch) * u_gain, 0.0, 1.0) * u_height;
 
   // v_uv.y runs top-down, so anchoring to the bottom means measuring back up.
   float d = u_anchor == 1 ? v_uv.y
@@ -1603,6 +1607,16 @@ void main() {
 			setFloat(gl, l, 'u_bars', v.bars as number);
 			setFloat(gl, l, 'u_height', v.height as number);
 			setFloat(gl, l, 'u_gain', v.gain as number);
+			// Smoothing is applied on the CPU per instance before the texture upload;
+			// only the punch curve is cheap enough to leave to the shader.
+			setFloat(
+				gl,
+				l,
+				'u_punch',
+				punchExponent(
+					typeof v.punch === 'number' ? v.punch : DEFAULT_AUDIO_RESPONSE.punch,
+				),
+			);
 			setFloat(gl, l, 'u_opacity', v.opacity as number);
 			setInt(gl, l, 'u_anchor', v.anchor === 'top' ? 1 : v.anchor === 'center' ? 2 : 0);
 			setInt(gl, l, 'u_style', v.style === 'segmented' ? 1 : 0);

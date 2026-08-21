@@ -25,6 +25,8 @@
  * previewed.
  */
 
+import { followerTaus } from "./auto-range";
+
 const CEIL_RISE_TAU = 0.3;
 const CEIL_FALL_TAU = 2.5;
 /**
@@ -62,6 +64,7 @@ export function resetSpectrumRange(): void {
   heights = null;
   out = null;
   ceil = MIN_CEIL;
+  followers.clear();
 }
 
 /** A stalled clock would otherwise snap the envelopes straight to their input. */
@@ -120,4 +123,51 @@ export function normalizeSpectrum(
     o[i] = value > 255 ? 255 : value;
   }
   return o;
+}
+
+/**
+ * Per-instance envelope followers, keyed by effect instance id.
+ *
+ * Keyed rather than global because Smoothing is a parameter on the effect, so
+ * two Audio Bars instances can legitimately want different ones off the same
+ * frame of audio.
+ */
+const followers = new Map<string, Float32Array>();
+
+/** Forget one instance's follower. Called when the effect goes away. */
+export function dropSpectrumFollower(key: string): void {
+  followers.delete(key);
+}
+
+/**
+ * Envelope-follow an already-normalized frame, writing into `dest`.
+ *
+ * Attack and release come from the same curve the volume links use, so the
+ * Smoothing slider means the same thing in both places: the rise stays quick so
+ * a kick still reads as a kick, while the fall is several times longer so bars
+ * glide back down instead of dropping out between hits.
+ */
+export function smoothSpectrum(
+  key: string,
+  src: Uint8Array,
+  dest: Uint8Array,
+  dt: number,
+  smoothing: number,
+): void {
+  const n = src.length;
+  let env = followers.get(key);
+  if (!env || env.length !== n) {
+    env = new Float32Array(n);
+    for (let i = 0; i < n; i++) env[i] = src[i];
+    followers.set(key, env);
+  }
+  const { attack, release } = followerTaus(smoothing);
+  const step = stepOf(dt);
+  const upK = 1 - Math.exp(-step / attack);
+  const downK = 1 - Math.exp(-step / release);
+  for (let i = 0; i < n; i++) {
+    const v = src[i];
+    env[i] += (v - env[i]) * (v > env[i] ? upK : downK);
+    dest[i] = env[i];
+  }
 }

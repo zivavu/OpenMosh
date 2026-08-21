@@ -1,5 +1,10 @@
 import { describe, expect, it, beforeEach } from "bun:test";
-import { normalizeSpectrum, resetSpectrumRange } from "./spectrum-range";
+import {
+  dropSpectrumFollower,
+  normalizeSpectrum,
+  resetSpectrumRange,
+  smoothSpectrum,
+} from "./spectrum-range";
 
 const BINS = 32;
 
@@ -114,5 +119,69 @@ describe("normalizeSpectrum", () => {
     // The first frame after a reset seeds the floors from itself, so nothing
     // has risen above its own resting level yet.
     expect(peak(normalizeSpectrum(frame(0.4, 0), 1 / 60)!)).toBe(0);
+  });
+});
+
+describe("smoothSpectrum", () => {
+  beforeEach(resetSpectrumRange);
+
+  /** Hold a level for `seconds`, then read what the follower reports. */
+  function hold(key: string, level: number, seconds: number, smoothing: number) {
+    const src = new Uint8Array([level]);
+    const dest = new Uint8Array(1);
+    const dt = 1 / 60;
+    for (let f = 0; f < Math.round(seconds * 60); f++) {
+      smoothSpectrum(key, src, dest, dt, smoothing);
+    }
+    return dest[0];
+  }
+
+  it("rises faster than it falls, at every smoothing setting", () => {
+    // Asymmetric on purpose: a follower quick enough to catch a transient is
+    // also quick enough to flicker on every gap between hits. Compared as
+    // ground covered in the same window, since the absolute attack does get
+    // slower as smoothing rises — it is the ratio that has to hold.
+    for (const smoothing of [0, 0.45, 1]) {
+      const key = `asym-${smoothing}`;
+      hold(key, 0, 1, smoothing);
+      const rose = hold(key, 255, 0.05, smoothing);
+      hold(key, 255, 3, smoothing);
+      const fell = 255 - hold(key, 0, 0.05, smoothing);
+      expect(rose).toBeGreaterThan(fell);
+    }
+  });
+
+  it("holds the tail longer as smoothing rises", () => {
+    const tail = (smoothing: number) => {
+      const key = `tail-${smoothing}`;
+      hold(key, 255, 1, smoothing);
+      return hold(key, 0, 0.15, smoothing);
+    };
+    expect(tail(0.9)).toBeGreaterThan(tail(0.45));
+    expect(tail(0.45)).toBeGreaterThan(tail(0));
+  });
+
+  it("keeps a separate follower per instance", () => {
+    // Two Audio Bars at different Smoothing settings read the same audio, so
+    // sharing one follower would let the slower instance drag the faster one.
+    hold("a", 255, 1, 0);
+    hold("b", 255, 1, 0.9);
+    const fast = hold("a", 0, 0.15, 0);
+    const slow = hold("b", 0, 0.15, 0.9);
+    expect(slow).toBeGreaterThan(fast);
+  });
+
+  it("seeds from the first frame rather than sweeping up from zero", () => {
+    const dest = new Uint8Array(1);
+    smoothSpectrum("seed", new Uint8Array([200]), dest, 1 / 60, 1);
+    expect(dest[0]).toBe(200);
+  });
+
+  it("forgets a dropped instance", () => {
+    hold("gone", 255, 1, 1);
+    dropSpectrumFollower("gone");
+    const dest = new Uint8Array(1);
+    smoothSpectrum("gone", new Uint8Array([10]), dest, 1 / 60, 1);
+    expect(dest[0]).toBe(10);
   });
 });

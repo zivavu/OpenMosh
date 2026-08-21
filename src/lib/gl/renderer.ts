@@ -12,7 +12,12 @@ import {
   drawCaptionToCanvas,
   readCaptionParams,
 } from "../caption";
-import { normalizeSpectrum } from "../audio/spectrum-range";
+import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
+import {
+  dropSpectrumFollower,
+  normalizeSpectrum,
+  smoothSpectrum,
+} from "../audio/spectrum-range";
 import { createProgram, getUniformLocations } from "./utils";
 import {
   VERTEX_SHADER,
@@ -831,6 +836,12 @@ export class GlRenderer {
     for (const id of this.phaseMap.keys()) {
       if (!live.has(id)) this.phaseMap.delete(id);
     }
+    for (const id of this.spectrumSmoothed.keys()) {
+      if (!live.has(id)) {
+        this.spectrumSmoothed.delete(id);
+        dropSpectrumFollower(id);
+      }
+    }
     for (const id of this.trackingStates.keys()) {
       if (!live.has(id)) this.trackingStates.delete(id);
     }
@@ -946,6 +957,8 @@ export class GlRenderer {
         }
         continue;
       }
+
+      if (entry.program.uniforms["u_spectrum"]) this.uploadSpectrumFor(eff);
 
       const { time: effectTime, delta: effectDelta } = this.getEffectTime(
         eff,
@@ -1701,11 +1714,21 @@ export class GlRenderer {
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 
-  /** One texel per FFT bin, R8. Refreshed every frame by whichever driver is
-   * feeding audio; the audio-bars effect samples it as u_spectrum. */
+  /** One texel per FFT bin, R8. Rewritten per audio-bars instance as the chain
+   * is walked, so each can follow the audio with its own Smoothing. */
   private spectrumTexture: WebGLTexture | null = null;
   private spectrumW = 0;
   private spectrumTime = -1;
+  /** This frame's normalized bins, held until the chain walk consumes them. */
+  private spectrumFrame: Uint8Array | null = null;
+  private spectrumDt = 0;
+  /** Bumped once per setSpectrum, so a chain walked twice in one frame (a
+   * transition blend, stacked lanes) doesn't step the followers twice. */
+  private spectrumSerial = 0;
+  private spectrumSmoothed = new Map<
+    string,
+    { buf: Uint8Array; serial: number }
+  >();
   private static readonly SILENCE = new Uint8Array(1);
 
   /**
@@ -1716,16 +1739,28 @@ export class GlRenderer {
    * only one did, a visualizer would preview and export differently. Null (no
    * track loaded, or a frame before the audio starts) uploads silence, so the
    * bars collapse instead of freezing on the last thing they saw.
+   *
+   * Normalization happens here because it describes the signal and every
+   * instance wants the same answer. Smoothing does not: it is a parameter on
+   * the effect, so it is applied per instance in `uploadSpectrumFor`.
    */
   setSpectrum(data: Uint8Array | null, time: number): void {
-    const gl = this.gl;
     // Its own clock, not frameDelta's: that one is consumed by render() and
     // reading it here would leave the effect chain with a zero delta.
     const raw = this.spectrumTime >= 0 ? time - this.spectrumTime : 0;
     this.spectrumTime = time;
-    const dt = raw > 0 && raw < 0.5 ? raw : 0;
-    const normalized = normalizeSpectrum(data, dt);
-    const width = normalized && normalized.length > 0 ? normalized.length : 1;
+    this.spectrumDt = raw > 0 && raw < 0.5 ? raw : 0;
+    this.spectrumFrame = normalizeSpectrum(data, this.spectrumDt);
+    this.spectrumSerial++;
+    this.uploadSpectrumTexture(this.spectrumFrame);
+  }
+
+  /** Re-point the shared texture at `data`, resizing it if the bin count moved. */
+  private uploadSpectrumTexture(data: Uint8Array | null): void {
+    const gl = this.gl;
+    const payload =
+      data && data.length > 0 ? data : (GlRenderer.SILENCE as Uint8Array);
+    const width = payload.length;
     if (!this.spectrumTexture || this.spectrumW !== width) {
       if (this.spectrumTexture) gl.deleteTexture(this.spectrumTexture);
       this.spectrumTexture = gl.createTexture()!;
@@ -1751,12 +1786,43 @@ export class GlRenderer {
       1,
       gl.RED,
       gl.UNSIGNED_BYTE,
-      (normalized && normalized.length > 0
-        ? normalized
-        : GlRenderer.SILENCE) as Uint8Array<ArrayBuffer>,
+      payload as Uint8Array<ArrayBuffer>,
     );
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
+
+  /**
+   * Put this instance's own envelope-followed copy of the frame on the texture,
+   * right before it draws. Two Audio Bars at different Smoothing settings each
+   * get their own follower off the same audio.
+   */
+  private uploadSpectrumFor(eff: EffectInstance): void {
+    const frame = this.spectrumFrame;
+    if (!frame || frame.length === 0) return;
+    const smoothing =
+      typeof eff.values.smoothing === "number"
+        ? eff.values.smoothing
+        : DEFAULT_AUDIO_RESPONSE.smoothing;
+    let entry = this.spectrumSmoothed.get(eff.instanceId);
+    if (!entry || entry.buf.length !== frame.length) {
+      entry = { buf: new Uint8Array(frame.length), serial: -1 };
+      this.spectrumSmoothed.set(eff.instanceId, entry);
+    }
+    if (entry.serial !== this.spectrumSerial) {
+      entry.serial = this.spectrumSerial;
+      smoothSpectrum(
+        eff.instanceId,
+        frame,
+        entry.buf,
+        this.spectrumDt,
+        smoothing,
+      );
+    }
+    // Re-uploaded even when the follower didn't step: another instance may have
+    // left its own buffer on the texture since.
+    this.uploadSpectrumTexture(entry.buf);
+  }
+
 
   /**
    * ASCII glyph atlases, one per charset, shared by the ascii effect. Each is a
@@ -2302,7 +2368,7 @@ export class GlRenderer {
     if (compiled.uniforms["u_spectrum"]) {
       // Never leave the sampler at its default unit 0 — it would read the
       // frame itself as a spectrum and paint noise.
-      if (!this.spectrumTexture) this.setSpectrum(null, 0);
+      if (!this.spectrumTexture) this.uploadSpectrumTexture(null);
       gl.activeTexture(gl.TEXTURE5);
       gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
       gl.uniform1i(compiled.uniforms["u_spectrum"], 5);
