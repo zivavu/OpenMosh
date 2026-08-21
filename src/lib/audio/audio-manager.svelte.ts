@@ -6,6 +6,7 @@ import {
   type AudioGraphState,
 } from './audio-controller';
 import { resetAutoRange } from './auto-range';
+import { resetSpectrumRange } from './spectrum-range';
 import type { AudioLinkGroup } from './audio-utils';
 import type { SpectrumData } from '../types';
 
@@ -311,10 +312,12 @@ export class AudioManager {
     this.trackCurrentTime = clamped;
     this.#resetClock(clamped);
     resetAutoRange();
+    resetSpectrumRange();
   }
 
   clearTrack() {
     resetAutoRange();
+    resetSpectrumRange();
     this.#audioEl?.pause();
     this.audioPlaying = false;
     this.autoplayOnLoad = false;

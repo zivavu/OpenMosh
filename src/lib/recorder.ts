@@ -14,6 +14,7 @@ import {
 	resetAutoRange,
 	type AudioResponse,
 } from './audio/auto-range';
+import { resetSpectrumRange } from './audio/spectrum-range';
 import { stretchAudioBuffer } from './audio/time-stretch';
 import {
 	resolveTextLayersAt,
@@ -541,6 +542,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	// Otherwise the output's first seconds depend on where the preview was scrubbed.
 	resetAutoRange();
+	resetSpectrumRange();
 
 	try {
 		for (let i = 0; i < totalFrames; i++) {
@@ -564,7 +566,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			);
 			// The bars read this straight off the GPU, so the export has to push
 			// the same bins the preview's AnalyserNode would have.
-			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null);
+			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null, time);
 			if (typeof skipRender === 'function') skipRender(textLayers);
 			else if (!skipRender) renderer.render(renderEffects, time, textLayers);
 			await sink.submit(i, time);

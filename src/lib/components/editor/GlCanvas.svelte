@@ -247,7 +247,7 @@
    function drawFrame(now: number) {
       // Before anything renders: the bars have to see this frame's audio, and
       // the export driver does the same on its side.
-      renderer!.setSpectrum(spectrum);
+      renderer!.setSpectrum(spectrum, now);
       const layers = textTimeline ? resolveTextLayersAt(textTimeline, textTime) : [];
       const tr = transition;
       if (tr && tr.durationSec > 0) {
