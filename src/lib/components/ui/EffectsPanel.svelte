@@ -27,6 +27,7 @@
 		type VolumeLink,
 	} from '../../effects';
 	import type { SpectrumData } from '../../types';
+	import type { AudioResponse } from '../../audio/auto-range';
 	import { moveItem, resolveMoveTarget } from '../../effects/reorder';
 	import EffectItem from './EffectItem.svelte';
 
@@ -36,6 +37,8 @@
 		effects: EffectInstance[];
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
+		/** Passed to the spectrum read-out on each volume link. */
+		response?: AudioResponse;
 		onVolumeLinkChange?: (
 			index: number,
 			paramKey: string,
@@ -67,6 +70,7 @@
 		effects = $bindable(),
 		hasTrack = false,
 		spectrumData = null,
+		response = undefined,
 		onVolumeLinkChange,
 		onEffectsReplaced,
 		onPresetUpdated,
@@ -620,6 +624,7 @@
 				onMove={(direction, toEnd) => moveEffect(pos, direction, toEnd)}
 				{hasTrack}
 				{spectrumData}
+				{response}
 				onVolumeLinkChange={onVolumeLinkChange
 					? (key, link) => onVolumeLinkChange(i, key, link)
 					: undefined}
