@@ -27,8 +27,27 @@
 
 import { followerTaus } from "./auto-range";
 
-const CEIL_RISE_TAU = 0.3;
+/**
+ * Effectively peak-hold. The ceiling has to be able to reach the top of a
+ * transient inside the transient: at 0.3 it could not, so on percussive
+ * material it sagged all the way down to MIN_CEIL, every bar clipped flat at
+ * full height, and the display stopped resolving loud from very loud. Kept just
+ * off instant so a single-frame spike still has to persist a beat to own the
+ * range.
+ */
+const CEIL_RISE_TAU = 0.03;
 const CEIL_FALL_TAU = 2.5;
+
+/**
+ * Window the per-bin floor takes its minimum over.
+ *
+ * The floor used to chase the signal itself whenever the signal sat above it,
+ * which meant a repeated note kept nudging its own floor up and each repeat
+ * read weaker than the one before even at identical volume. A minimum can only
+ * rise on evidence that the quiet level really has risen, so repeats stay put.
+ * Two windows are kept, so the effective lookback is one to two of these.
+ */
+const FLOOR_WINDOW = 2;
 /**
  * Deliberately quicker than auto-range's equivalent. Until a bin's floor comes
  * back down, its height clamps at zero, so a hard cut into a breakdown blanks
@@ -56,6 +75,10 @@ const MIN_CEIL = 0.15;
 let floors: Float32Array | null = null;
 let heights: Float32Array | null = null;
 let out: Uint8Array | null = null;
+/** Running minimum of the window in progress, and of the one before it. */
+let winMin: Float32Array | null = null;
+let prevMin: Float32Array | null = null;
+let windowT = 0;
 let ceil = MIN_CEIL;
 
 /** Call on any signal discontinuity: seek, track change, export start. */
@@ -63,6 +86,9 @@ export function resetSpectrumRange(): void {
   floors = null;
   heights = null;
   out = null;
+  winMin = null;
+  prevMin = null;
+  windowT = 0;
   ceil = MIN_CEIL;
   followers.clear();
 }
@@ -91,24 +117,54 @@ export function normalizeSpectrum(
   if (!floors || floors.length !== n) {
     floors = new Float32Array(n);
     heights = new Float32Array(n);
+    winMin = new Float32Array(n);
+    prevMin = new Float32Array(n);
     out = new Uint8Array(n);
     // Seeded from this frame so playback opens where the music actually sits
     // rather than sweeping up from zero over the first few seconds.
-    for (let i = 0; i < n; i++) floors[i] = src[i] / 255;
+    for (let i = 0; i < n; i++) {
+      const v = src[i] / 255;
+      floors[i] = v;
+      winMin[i] = v;
+      prevMin[i] = v;
+    }
+    windowT = 0;
     ceil = MIN_CEIL;
   }
   const step = stepOf(dt);
   const h = heights!;
   const o = out!;
+  const wMin = winMin!;
+  const pMin = prevMin!;
 
   let framePeak = 0;
   for (let i = 0; i < n; i++) {
     const v = src[i] / 255;
+    if (v < wMin[i]) wMin[i] = v;
+    // Target the quietest this bin has been recently, not wherever it is now:
+    // a bin that is currently loud says nothing about where its floor belongs.
+    const target = wMin[i] < pMin[i] ? wMin[i] : pMin[i];
     const f = floors[i];
-    floors[i] = approach(f, v, v < f ? FLOOR_FALL_TAU : FLOOR_RISE_TAU, step);
+    floors[i] = approach(
+      f,
+      target,
+      target < f ? FLOOR_FALL_TAU : FLOOR_RISE_TAU,
+      step,
+    );
     const height = v - floors[i];
     h[i] = height > 0 ? height : 0;
     if (h[i] > framePeak) framePeak = h[i];
+  }
+
+  // Roll the window: the one just finished becomes the comparison, and the next
+  // starts open so a genuinely raised floor can still be discovered.
+  windowT += step;
+  if (windowT >= FLOOR_WINDOW) {
+    windowT = 0;
+    for (let i = 0; i < n; i++) {
+      pMin[i] = wMin[i];
+      wMin[i] = src[i] / 255;
+    }
   }
 
   ceil = approach(

@@ -113,6 +113,67 @@ describe("normalizeSpectrum", () => {
     expect(normalizeSpectrum(empty, 1 / 60)).toBe(empty);
   });
 
+  it("draws a repeated note at the same height every time", () => {
+    // Reported symptom: the first stab of a repeating figure read strongly and
+    // every one after it a little weaker, at identical volume. Two causes, both
+    // cumulative — the floor nudged up by the note itself, and a ceiling too
+    // slow ever to reach the top of a transient.
+    const gate = (t: number) => {
+      const a = new Uint8Array(BINS);
+      const level = t % 0.5 < 0.25 ? 0.85 : 0.42;
+      for (let i = 0; i < BINS; i++) {
+        a[i] = Math.round(255 * (1 - 0.3 * (i / BINS)) * level);
+      }
+      return a;
+    };
+
+    resetSpectrumRange();
+    const dt = 1 / 60;
+    let t = 0;
+    const hits: number[] = [];
+    for (let n = 0; n < 16; n++) {
+      let high = 0;
+      for (const end = t + 0.5; t < end; t += dt) {
+        high = Math.max(high, mean(normalizeSpectrum(gate(t), dt)!));
+      }
+      hits.push(high);
+    }
+
+    // The opening hit is allowed to over-read: nothing has established the
+    // scale yet. From there it has to hold, however long the figure runs.
+    const settled = hits.slice(2);
+    expect(Math.max(...settled) - Math.min(...settled)).toBeLessThan(3);
+    // And it must not be drifting in one direction across the run.
+    expect(settled[settled.length - 1]).toBeGreaterThan(settled[0] - 2);
+  });
+
+  it("still resolves loud from quiet instead of clipping everything flat", () => {
+    // A ceiling unable to track a transient used to sag all the way to
+    // MIN_CEIL, which pinned every bar at full height and flattened dynamics.
+    const stab = (t: number, amount: number) => {
+      const a = new Uint8Array(BINS);
+      const env = Math.exp(-((t % 0.5) / 0.09));
+      for (let i = 0; i < BINS; i++) {
+        const v = (1 - 0.3 * (i / BINS)) * (0.42 + amount * env);
+        a[i] = Math.round(255 * Math.min(1, v));
+      }
+      return a;
+    };
+    const play = (amount: number, seconds: number, startT: number) => {
+      const dt = 1 / 60;
+      let t = startT;
+      let high = 0;
+      for (const end = t + seconds; t < end; t += dt) {
+        high = Math.max(high, mean(normalizeSpectrum(stab(t, amount), dt)!));
+      }
+      return { high, t };
+    };
+    resetSpectrumRange();
+    const loud = play(0.42, 3, 0);
+    const quiet = play(0.1, 3, loud.t);
+    expect(quiet.high).toBeLessThan(loud.high * 0.7);
+  });
+
   it("reseeds after a reset so a seek doesn't inherit the old envelope", () => {
     run(1, 5);
     resetSpectrumRange();
