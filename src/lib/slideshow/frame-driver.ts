@@ -1,6 +1,6 @@
 import type { MoshOptions } from "../editor/mosh";
 import { loadPresets, type EffectInstance, type Preset } from "../effects";
-import type { GlRenderer } from "../gl/renderer";
+import type { GlRenderer, SourceImage } from "../gl/renderer";
 import { beatAtTime } from "./beat-clock";
 import { cloneEffects, computeEffectsForBeat } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
@@ -11,7 +11,7 @@ const HOLD_BEAT = Number.MAX_SAFE_INTEGER;
 
 export interface SlideshowFrameSources {
   /** Decoded image for a slide; undefined while it is still loading. */
-  getImage(slide: SlideshowSlide): HTMLImageElement | undefined;
+  getImage(slide: SlideshowSlide): SourceImage | undefined;
   getSampler(slide: SlideshowSlide): SlideVideoSampler | undefined;
 }
 
@@ -106,7 +106,7 @@ export class SlideshowFrameDriver {
         const img = this.#sources.getImage(slide);
         // A slide still decoding keeps the previous texture and retries on its
         // next beat (currentSlideId only advances once the upload happened).
-        if (img?.complete) {
+        if (img) {
           this.#getRenderer().updateSourceImage(img);
           this.#currentSlideId = slide.id;
         }

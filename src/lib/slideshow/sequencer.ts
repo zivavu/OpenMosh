@@ -6,17 +6,20 @@ import {
   type MoshOptions,
 } from "../editor/mosh";
 import type { EffectInstance, Preset } from "../effects";
-import {
-  applyPreset,
-  cloneEffectInstance,
-  getDefinition,
-  loadPresets,
-} from "../effects";
+import { applyPreset, getDefinition, loadPresets } from "../effects";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
 
-/** Deep-clone an effects array, giving each instance a fresh ID. */
+/**
+ * Deep-clone an effects array for a beat, keeping each instance's ID.
+ *
+ * The IDs are what the renderer keys its per-instance state on — feedback
+ * buffer pairs, accumulated phase, tracking boxes, caption textures. Minting
+ * fresh ones every beat made it allocate and then garbage-collect a pair of
+ * full-resolution render targets per feedback effect per beat, which at 1/16
+ * and 1/32 is several a second.
+ */
 export function cloneEffects(effects: EffectInstance[]): EffectInstance[] {
-  return effects.map(cloneEffectInstance);
+  return effects.map((e) => ({ ...e, values: { ...e.values } }));
 }
 
 /**
@@ -100,7 +103,15 @@ export function computeEffectsForBeat(
     case "per-image": {
       if (slide.presetIndex !== null) {
         const preset = (presets ?? loadPresets())[slide.presetIndex];
-        if (preset) return applyPreset(preset);
+        // Derived from the slide, not minted: a slide coming back round reuses
+        // the renderer state its chain built last time instead of forcing a
+        // fresh set of feedback buffers.
+        if (preset) {
+          return applyPreset(preset).map((e, i) => ({
+            ...e,
+            instanceId: `${slide.id}:${i}`,
+          }));
+        }
       }
       return cloneEffects(baseEffects);
     }
