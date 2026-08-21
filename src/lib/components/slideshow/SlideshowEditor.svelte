@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick as domSettled, untrack } from 'svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import { readJson, writeJson } from '../../storage';
 	import {
@@ -216,7 +216,7 @@
 		videoSamplers.get(s.id)?.dispose();
 		videoSamplers.delete(s.id);
 		samplerPromises.delete(s.id);
-		imageCache.delete(s.id);
+		dropCachedImage(s.id);
 	}
 
 	/** `undoable: false` for removals the user didn't ask for (a failed decode). */
@@ -788,20 +788,134 @@
 	let previewEffects: EffectInstance[] = $state([]);
 	let previewDriver: SlideshowFrameDriver | null = null;
 
-	const imageCache = new Map<string, HTMLImageElement>();
-	const IMAGE_CACHE_SIZE = 12;
+	// ImageBitmaps, not <img>: uploading an <img> re-decodes it on every
+	// texImage2D, which at 1/16 and 1/32 beats is most of a frame's budget.
+	// A bitmap is already decoded, so the upload is a straight copy.
+	const imageCache = new Map<string, ImageBitmap>();
+	/** In-flight decodes, so a slide recurring before it lands isn't decoded twice. */
+	const imageDecodes = new Map<string, Promise<void>>();
 
-	function getCachedImage(slide: SlideshowSlide): HTMLImageElement | undefined {
-		if (imageCache.has(slide.id)) return imageCache.get(slide.id);
-		const img = new Image();
-		img.src = slide.objectUrl;
-		img.onload = () => {
-			if (imageCache.size >= IMAGE_CACHE_SIZE) {
-				const oldest = imageCache.keys().next().value;
-				if (oldest) imageCache.delete(oldest);
+	/**
+	 * Bitmaps are decoded at the size the preview actually draws, not the size
+	 * the file happens to be: a pool of camera photos would neither fit in
+	 * memory nor upload inside a frame at 1/32, and nothing above the preview's
+	 * own resolution is visible anyway. Export is unaffected — the recorder
+	 * decodes the originals itself.
+	 *
+	 * Rounded up to 512px steps so ordinary window resizing doesn't invalidate
+	 * the whole cache.
+	 */
+	const bitmapCap = $derived(
+		Math.max(
+			1024,
+			Math.ceil(
+				Math.max(previewRenderSize?.width ?? 0, previewRenderSize?.height ?? 0) /
+					512,
+			) * 512,
+		),
+	);
+
+	/** Backstop for pools too big to hold at preview size (~256 MB of RGBA). */
+	const IMAGE_CACHE_PIXELS = 64_000_000;
+	let cachedPixels = 0;
+	/** Play position of the last slide asked for — eviction measures against it. */
+	let lastRequestedIndex = 0;
+
+	function dropCachedImage(id: string) {
+		const bitmap = imageCache.get(id);
+		if (!bitmap) return;
+		cachedPixels -= bitmap.width * bitmap.height;
+		bitmap.close();
+		imageCache.delete(id);
+	}
+
+	function clearImageCache() {
+		for (const id of [...imageCache.keys()]) dropCachedImage(id);
+		cachedPixels = 0;
+	}
+
+	/** Cap the cached bitmaps were decoded against. */
+	let cachedCap = 0;
+
+	// Only a preview that outgrows the cached bitmaps forces a re-decode. A
+	// shrinking one keeps them: oversized is still correct, and entering the
+	// preview view resizes the canvas right as the pool finishes decoding.
+	$effect(() => {
+		const cap = bitmapCap;
+		untrack(() => {
+			if (cap <= cachedCap) return;
+			clearImageCache();
+			cachedCap = cap;
+		});
+	});
+
+	function evictImages() {
+		// Slides are played in order and on a loop, so the one to give up is the
+		// one furthest ahead of the playhead — dropping the oldest would throw
+		// out whatever is due next and decode the whole pool every cycle.
+		while (cachedPixels > IMAGE_CACHE_PIXELS && imageCache.size > 4) {
+			let victim: string | null = null;
+			let furthest = -1;
+			for (const id of imageCache.keys()) {
+				const i = slides.findIndex((s) => s.id === id);
+				const ahead =
+					i < 0
+						? Number.MAX_SAFE_INTEGER
+						: (i - lastRequestedIndex + slides.length) % slides.length;
+				if (ahead > furthest) {
+					furthest = ahead;
+					victim = id;
+				}
 			}
-			imageCache.set(slide.id, img);
-		};
+			if (!victim) break;
+			dropCachedImage(victim);
+		}
+	}
+
+	/** Decode a slide into the cache. Resolves once it is usable (or failed). */
+	function loadSlideBitmap(slide: SlideshowSlide): Promise<void> {
+		if (imageCache.has(slide.id)) return Promise.resolve();
+		const pending = imageDecodes.get(slide.id);
+		if (pending) return pending;
+		const cap = bitmapCap;
+		const job = fetch(slide.objectUrl)
+			.then((r) => r.blob())
+			.then((blob) => createImageBitmap(blob))
+			.then(async (full) => {
+				const scale = Math.min(1, cap / Math.max(full.width, full.height));
+				if (scale >= 1) return full;
+				const shrunk = await createImageBitmap(full, {
+					resizeWidth: Math.max(1, Math.round(full.width * scale)),
+					resizeHeight: Math.max(1, Math.round(full.height * scale)),
+					resizeQuality: "high",
+				});
+				full.close();
+				return shrunk;
+			})
+			.then((bitmap) => {
+				// Dropped while decoding, or decoded against a cap that has since
+				// changed — don't resurrect it or leak the bitmap.
+				if (!slides.some((s) => s.id === slide.id) || cap < bitmapCap) {
+					bitmap.close();
+					return;
+				}
+				imageCache.set(slide.id, bitmap);
+				cachedCap = Math.max(cachedCap, cap);
+				cachedPixels += bitmap.width * bitmap.height;
+				evictImages();
+			})
+			.catch(() => {})
+			.finally(() => imageDecodes.delete(slide.id));
+		imageDecodes.set(slide.id, job);
+		return job;
+	}
+
+	function getCachedImage(slide: SlideshowSlide): ImageBitmap | undefined {
+		const at = slides.indexOf(slide);
+		if (at >= 0) lastRequestedIndex = at;
+		const hit = imageCache.get(slide.id);
+		if (hit) return hit;
+		void loadSlideBitmap(slide);
 		return undefined;
 	}
 
@@ -810,25 +924,18 @@
 		activeView = 'preview';
 		previewPlaying = true;
 
+		// Measure the preview box now rather than waiting on the ResizeObserver:
+		// the canvas grows when the grid gives way, and a pool decoded against
+		// the grid's smaller size would be thrown out mid-playback.
+		await domSettled();
+		if (previewArea) {
+			const { width, height } = measureDisplaySize(previewArea);
+			displayW = width;
+			displayH = height;
+		}
+
 		await Promise.all([
-			...slides
-				.filter((s) => s.kind === 'image')
-				.map(
-					(slide) =>
-						new Promise<void>((resolve) => {
-							if (imageCache.has(slide.id)) {
-								resolve();
-								return;
-							}
-							const img = new Image();
-							img.onload = () => {
-								imageCache.set(slide.id, img);
-								resolve();
-							};
-							img.onerror = () => resolve();
-							img.src = slide.objectUrl;
-						}),
-				),
+			...slides.filter((s) => s.kind === 'image').map(loadSlideBitmap),
 			...slides
 				.filter((s) => s.kind === 'video')
 				.map((slide) => ensureSampler(slide).then(() => {})),

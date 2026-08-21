@@ -71,6 +71,21 @@ interface CompiledProgram {
  */
 export type SourceFit = "stretch" | "contain" | "cover";
 
+/**
+ * A still source the renderer can upload. ImageBitmap is the cheap form —
+ * already decoded, so the upload is a copy rather than a decode — and is what
+ * anything swapping stills at speed (the slideshow) should hand over.
+ */
+export type SourceImage = HTMLImageElement | ImageBitmap;
+
+function imageWidth(image: SourceImage): number {
+  return image instanceof HTMLImageElement ? image.naturalWidth : image.width;
+}
+
+function imageHeight(image: SourceImage): number {
+  return image instanceof HTMLImageElement ? image.naturalHeight : image.height;
+}
+
 /** A text layer with its own chain already rendered, ready to composite. */
 interface PreparedTextLayer {
   tex: WebGLTexture;
@@ -359,8 +374,8 @@ export class GlRenderer {
     this.canvas = canvas;
   }
 
-  loadImage(image: HTMLImageElement) {
-    if (!this.resetSource(image.naturalWidth, image.naturalHeight)) return;
+  loadImage(image: SourceImage) {
+    if (!this.resetSource(imageWidth(image), imageHeight(image))) return;
     const gl = this.gl;
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   }
@@ -436,13 +451,22 @@ export class GlRenderer {
   }
 
   /** Upload a new image to the existing source texture without re-allocating FBOs. */
-  updateSourceImage(image: HTMLImageElement) {
+  updateSourceImage(image: SourceImage) {
     if (!this.sourceTexture) return;
     const gl = this.gl;
+    const w = imageWidth(image);
+    const h = imageHeight(image);
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+    // Same fast path as updateSourceFrame: a slideshow cutting between
+    // same-sized images reuses the allocation instead of reallocating storage
+    // every beat.
+    if (w === this.srcTexW && h === this.srcTexH) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      return;
+    }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    this.srcTexW = image.naturalWidth;
-    this.srcTexH = image.naturalHeight;
+    this.srcTexW = w;
+    this.srcTexH = h;
   }
 
   // ── Outgoing source (transitions across two different media) ─────────────
@@ -452,8 +476,8 @@ export class GlRenderer {
     return !!this.altSourceTexture;
   }
 
-  updateAltSourceImage(image: HTMLImageElement) {
-    this.uploadAlt(image, image.naturalWidth, image.naturalHeight);
+  updateAltSourceImage(image: SourceImage) {
+    this.uploadAlt(image, imageWidth(image), imageHeight(image));
   }
 
   updateAltSourceFrame(source: HTMLVideoElement | VideoFrame) {
