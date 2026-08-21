@@ -126,12 +126,18 @@
 		trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100,
 	);
 
+	let staticPct = $derived(vp.toPct(stack.staticTime));
+	let staticVisible = $derived(
+		trackDuration > 0 && staticPct >= 0 && staticPct <= 100,
+	);
+
 	// ── Scrubbing ────────────────────────────────────────────────────────────
 	// Owned by the stack rather than the lanes: the playhead is drawn once over
 	// the lot, so it is grabbable once over the lot too — a lane that spends its
 	// pointer events on segments or span handles (the mosh lane, the audio lane)
 	// can't be the only way to move the clock.
 	let scrubbing = $state(false);
+	let staticDragging = $state(false);
 
 	/** Registers the scale strip with the shared axis, so it zooms with the
 	 * lanes and can measure the axis even when no lane is mounted. */
@@ -151,6 +157,29 @@
 		};
 		const onUp = () => {
 			scrubbing = false;
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		};
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
+	}
+
+	/** Drag the static playhead: only it moves — the clock is left alone, so
+	 * the marker can sit somewhere while playback runs elsewhere. */
+	function beginStaticDrag(e: PointerEvent) {
+		if (!onSeek || trackDuration <= 0 || e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		staticDragging = true;
+		stack.seekStatic(vp.clientXToTime(e.clientX));
+		const onMove = (ev: PointerEvent) => {
+			ev.preventDefault();
+			stack.seekStatic(vp.clientXToTime(ev.clientX));
+		};
+		const onUp = () => {
+			staticDragging = false;
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('pointercancel', onUp);
@@ -242,28 +271,48 @@
 			onpointerdown={beginScrub}
 		></div>
 
-		{#if playheadVisible}
+		{#if playheadVisible || staticVisible}
 			<div class="tl-playhead-layer">
-				<!-- Full-width and moved by transform rather than by `left`: a
-				     percentage translate is of this element's own width, i.e. the
-				     lane width, and it moves on the compositor without laying the
-				     layer out again every frame. -->
-				<div
-					class="tl-playhead"
-					style="transform: translate3d({playheadPct}%, 0, 0)"
-				>
-					<div class="tl-playhead-line"></div>
-					{#if onSeek}
-						<!-- The only part of the overlay that takes pointer events, and
-						     narrow, so it doesn't shadow the lane under it. -->
+				{#if playheadVisible}
+					<!-- Full-width and moved by transform rather than by `left`: a
+					     percentage translate is of this element's own width, i.e. the
+					     lane width, and it moves on the compositor without laying the
+					     layer out again every frame. -->
+					<div
+						class="tl-playhead"
+						style="transform: translate3d({playheadPct}%, 0, 0)"
+					>
+						<div class="tl-playhead-line"></div>
+						{#if onSeek}
+							<!-- The only part of the overlay that takes pointer events, and
+							     narrow, so it doesn't shadow the lane under it. -->
+							<div
+								class="tl-playhead-grab"
+								class:scrubbing
+								role="presentation"
+								onpointerdown={beginScrub}
+							></div>
+						{/if}
+					</div>
+				{/if}
+				{#if staticVisible && onSeek}
+					<!-- The static playhead: where the next play starts from. Dragging
+					     it moves only the marker — the clock follows on the next play. -->
+					<div
+						class="tl-static-playhead"
+						style="transform: translate3d({staticPct}%, 0, 0)"
+					>
+						<div class="tl-static-line"></div>
+						<div class="tl-static-handle"></div>
 						<div
-							class="tl-playhead-grab"
-							class:scrubbing
+							class="tl-static-grab"
+							class:scrubbing={staticDragging}
 							role="presentation"
-							onpointerdown={beginScrub}
+							title="Start marker — playback resumes from here; drag to move"
+							onpointerdown={beginStaticDrag}
 						></div>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -288,6 +337,7 @@
 		--tl-gutter: 110px;
 		--tl-gap: 0.35rem;
 		--tl-playhead: var(--live);
+		--tl-static-playhead: var(--start);
 		--tl-chrome-bg: var(--surface);
 		/* Height of the band under the lanes that the tick labels sit in. */
 		--tl-scale-h: 12px;
@@ -543,6 +593,56 @@
 	.tl-playhead-grab:hover,
 	.tl-playhead-grab.scrubbing {
 		background: rgba(110, 231, 192, 0.14);
+	}
+
+	.tl-static-playhead {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		will-change: transform;
+	}
+
+	/* Fainter than the live playhead, so the moving clock reads as the
+	   dominant line while the marker stays quietly where it was put. */
+	.tl-static-line {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 1px;
+		background: var(--tl-static-playhead);
+		opacity: 0.45;
+	}
+
+	/* A diamond cap marks the static playhead as a handle, not a clock — and
+	   tells it apart from the live playhead at a glance. */
+	.tl-static-handle {
+		position: absolute;
+		top: 1px;
+		left: -3px;
+		width: 7px;
+		height: 7px;
+		background: var(--tl-static-playhead);
+		border-radius: 1px;
+		transform: rotate(45deg);
+	}
+
+	.tl-static-grab {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: -5px;
+		width: 11px;
+		pointer-events: auto;
+		cursor: col-resize;
+		touch-action: none;
+	}
+
+	.tl-static-grab:hover,
+	.tl-static-grab.scrubbing {
+		background: rgba(240, 181, 104, 0.14);
 	}
 
 	/* Sits in the padding band under the lanes, over the tick labels — they are

@@ -76,6 +76,8 @@
 	--mosh-dim: #6a5080;
 	--rec: #ff5f56; /* recording, destructive */
 	--rec-dim: #7d3430;
+	--start: #f0b568; /* the static playhead — where playback starts from */
+	--start-dim: #8a6a3f;
 
 	--r-1: 3px;
 	--r-2: 6px;

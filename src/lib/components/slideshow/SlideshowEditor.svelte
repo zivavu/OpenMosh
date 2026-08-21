@@ -786,6 +786,10 @@
 	let previewPlaying = $state(false);
 	let previewRafId = $state<number | null>(null);
 	let previewEffects: EffectInstance[] = $state([]);
+	// A silent preview runs on a wall clock; these anchor it at the static
+	// marker for the duration of one run, so play resumes from there.
+	let noTrackAnchor = 0;
+	let noTrackWallStart = 0;
 	let previewDriver: SlideshowFrameDriver | null = null;
 
 	// ImageBitmaps, not <img>: uploading an <img> re-decodes it on every
@@ -947,8 +951,13 @@
 		for (const sampler of videoSamplers.values()) sampler.reset();
 
 		if (audio.trackFile) {
+			// Resume from the static marker rather than wherever it last stopped.
+			if (timelineAxis) audio.seekTo(timelineAxis.staticTime);
 			audio.playAudio();
 			selectedSegmentId = null;
+		} else {
+			noTrackAnchor = timelineAxis?.staticTime ?? textTime;
+			noTrackWallStart = performance.now() / 1000;
 		}
 
 		previewDriver?.dispose();
@@ -988,8 +997,12 @@
 			} else {
 				const fallbackInterval =
 					config.subdivision === 0 ? 1 : (60 / config.bpm) * config.subdivision;
+				const cycle = slides.length * fallbackInterval;
+				// Signed modulo, so positions before the anchor still wrap forward.
+				const elapsed = performance.now() / 1000 - noTrackWallStart;
 				t =
-					((performance.now() / 1000) % (slides.length * fallbackInterval)) +
+					((((elapsed + noTrackAnchor - config.beatOffset) % cycle) + cycle) %
+						cycle) +
 					config.beatOffset;
 			}
 
