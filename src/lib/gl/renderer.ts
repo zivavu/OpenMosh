@@ -12,6 +12,7 @@ import {
   drawCaptionToCanvas,
   readCaptionParams,
 } from "../caption";
+import { normalizeSpectrum } from "../audio/spectrum-range";
 import { createProgram, getUniformLocations } from "./utils";
 import {
   VERTEX_SHADER,
@@ -1704,6 +1705,7 @@ export class GlRenderer {
    * feeding audio; the audio-bars effect samples it as u_spectrum. */
   private spectrumTexture: WebGLTexture | null = null;
   private spectrumW = 0;
+  private spectrumTime = -1;
   private static readonly SILENCE = new Uint8Array(1);
 
   /**
@@ -1715,9 +1717,15 @@ export class GlRenderer {
    * track loaded, or a frame before the audio starts) uploads silence, so the
    * bars collapse instead of freezing on the last thing they saw.
    */
-  setSpectrum(data: Uint8Array | null): void {
+  setSpectrum(data: Uint8Array | null, time: number): void {
     const gl = this.gl;
-    const width = data && data.length > 0 ? data.length : 1;
+    // Its own clock, not frameDelta's: that one is consumed by render() and
+    // reading it here would leave the effect chain with a zero delta.
+    const raw = this.spectrumTime >= 0 ? time - this.spectrumTime : 0;
+    this.spectrumTime = time;
+    const dt = raw > 0 && raw < 0.5 ? raw : 0;
+    const normalized = normalizeSpectrum(data, dt);
+    const width = normalized && normalized.length > 0 ? normalized.length : 1;
     if (!this.spectrumTexture || this.spectrumW !== width) {
       if (this.spectrumTexture) gl.deleteTexture(this.spectrumTexture);
       this.spectrumTexture = gl.createTexture()!;
@@ -1743,8 +1751,8 @@ export class GlRenderer {
       1,
       gl.RED,
       gl.UNSIGNED_BYTE,
-      (data && data.length > 0
-        ? data
+      (normalized && normalized.length > 0
+        ? normalized
         : GlRenderer.SILENCE) as Uint8Array<ArrayBuffer>,
     );
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
@@ -2294,7 +2302,7 @@ export class GlRenderer {
     if (compiled.uniforms["u_spectrum"]) {
       // Never leave the sampler at its default unit 0 — it would read the
       // frame itself as a spectrum and paint noise.
-      if (!this.spectrumTexture) this.setSpectrum(null);
+      if (!this.spectrumTexture) this.setSpectrum(null, 0);
       gl.activeTexture(gl.TEXTURE5);
       gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
       gl.uniform1i(compiled.uniforms["u_spectrum"], 5);

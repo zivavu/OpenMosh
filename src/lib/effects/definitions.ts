@@ -1236,7 +1236,9 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             min: 0.1,
             max: 3,
             step: 0.05,
-            defaultValue: 1.2,
+            // 1.0 now that the bins arrive normalized: anything above it just
+            // clips the peaks flat against the top of the bar.
+            defaultValue: 1,
          },
          {
             key: 'opacity',

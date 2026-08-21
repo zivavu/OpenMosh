@@ -897,7 +897,7 @@
 
 			textTime = t;
 			// Slideshow drives the renderer itself, so it owns this call too.
-			glRenderer.setSpectrum(audio.frequencyData);
+			glRenderer.setSpectrum(audio.frequencyData, nowMs / 1000);
 			glRenderer.render(
 				previewEffects.length > 0 ? previewEffects : effects,
 				nowMs / 1000,

@@ -1,0 +1,118 @@
+import { describe, expect, it, beforeEach } from "bun:test";
+import { normalizeSpectrum, resetSpectrumRange } from "./spectrum-range";
+
+const BINS = 32;
+
+/**
+ * A frame shaped like real material: bins resting well above zero and well
+ * below full scale, tilted so highs are quieter, and swinging on a kick every
+ * half second so each bin has genuine frame-to-frame dynamics. `loudness`
+ * scales the whole frame.
+ */
+function frame(loudness: number, t: number): Uint8Array {
+  const a = new Uint8Array(BINS);
+  const beat = Math.exp(-((t % 0.5) / 0.12));
+  for (let i = 0; i < BINS; i++) {
+    const shape = 1 - 0.35 * (i / BINS);
+    const v = shape * loudness * (0.45 + 0.4 * beat);
+    a[i] = Math.round(255 * Math.max(0, Math.min(1, v)));
+  }
+  return a;
+}
+
+const peak = (a: Uint8Array) => a.reduce((m, v) => (v > m ? v : m), 0);
+const mean = (a: Uint8Array) => a.reduce((t, v) => t + v, 0) / a.length;
+
+/**
+ * Run a stretch of frames and report over the whole window, not on the last
+ * one: with a beat in the signal, whether any single frame is loud depends
+ * entirely on where in the bar it lands.
+ */
+function run(loudness: number, seconds: number, fps = 60, startT = 0) {
+  const dt = 1 / fps;
+  let t = startT;
+  let high = 0;
+  let low = 255;
+  let meanSum = 0;
+  const frames = Math.round(seconds * fps);
+  for (let f = 0; f < frames; f++, t += dt) {
+    const out = normalizeSpectrum(frame(loudness, t), dt)!;
+    high = Math.max(high, peak(out));
+    low = Math.min(low, peak(out));
+    meanSum += mean(out);
+  }
+  return { t, high, low, mean: meanSum / frames };
+}
+
+describe("normalizeSpectrum", () => {
+  beforeEach(resetSpectrumRange);
+
+  it("expands a narrow input band to use the full output range", () => {
+    // The bug this exists to fix: raw bins occupy a slice in the middle of the
+    // byte range and never approach either end, so the bars barely move.
+    const raw = frame(0.8, 0.4);
+    expect(peak(raw)).toBeLessThan(150);
+    expect(Math.min(...raw)).toBeGreaterThan(50);
+
+    const { high, low } = run(0.8, 4);
+    expect(high).toBeGreaterThan(230);
+    expect(low).toBeLessThan(30);
+  });
+
+  it("still moves when overall loudness changes", () => {
+    // The ceiling is shared across bins rather than per-bin, so a louder
+    // passage lifts every bar before the envelope catches up. A per-bin
+    // ceiling would pin each band at full scale and lose this entirely.
+    const settled = run(0.8, 4);
+    const quiet = run(0.8, 0.25, 60, settled.t);
+    const loud = run(1.4, 0.25, 60, quiet.t);
+    expect(loud.mean).toBeGreaterThan(quiet.mean * 1.2);
+  });
+
+  it("keeps silence silent instead of amplifying it", () => {
+    const dt = 1 / 60;
+    let out = new Uint8Array(BINS);
+    for (let f = 0; f < 300; f++) out = normalizeSpectrum(new Uint8Array(BINS), dt)!;
+    expect(peak(out)).toBe(0);
+  });
+
+  it("does not stretch near-silence into a full-scale display", () => {
+    // Room tone or a fade tail: real, but with almost no dynamics. Auto-gain
+    // will happily amplify it into a chorus unless the ceiling has a floor.
+    expect(run(0.03, 5).high).toBeLessThan(120);
+  });
+
+  it("comes back to life within a beat of a hard cut", () => {
+    // Until a bin's floor falls back to the new quiet level its height clamps
+    // at zero, so there is a blank window after any downward step. What FLOOR_
+    // FALL_TAU buys is that the floor is down again before the next kick lands,
+    // so the display resumes on that beat instead of sitting out several.
+    const settled = run(1, 5);
+    const after = run(0.45, 1, 60, settled.t);
+    expect(after.high).toBeGreaterThan(150);
+    // And it is genuinely a beat-shaped recovery, not a constant glow.
+    expect(after.low).toBe(0);
+  });
+
+  it("converges on the same envelope at 60fps and 30fps", () => {
+    // A 30fps export has to agree with the 60fps preview it was set up against.
+    const at60 = run(0.85, 4, 60);
+    resetSpectrumRange();
+    const at30 = run(0.85, 4, 30);
+    expect(Math.abs(at60.mean - at30.mean)).toBeLessThan(12);
+  });
+
+  it("passes null and empty input straight through", () => {
+    expect(normalizeSpectrum(null, 1 / 60)).toBeNull();
+    const empty = new Uint8Array(0);
+    expect(normalizeSpectrum(empty, 1 / 60)).toBe(empty);
+  });
+
+  it("reseeds after a reset so a seek doesn't inherit the old envelope", () => {
+    run(1, 5);
+    resetSpectrumRange();
+    // The first frame after a reset seeds the floors from itself, so nothing
+    // has risen above its own resting level yet.
+    expect(peak(normalizeSpectrum(frame(0.4, 0), 1 / 60)!)).toBe(0);
+  });
+});
