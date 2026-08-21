@@ -71,6 +71,7 @@
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from '../../editor/shortcut-target';
+	import { isModalKeyboardOpen } from '../../modal-keyboard';
 	import { DEFAULT_SETTINGS, loadSettings, updateSettings } from '../../editor/settings';
 	import { saveSession } from '../../editor/sessions';
 	import { pruneSequenceMedia } from '../../editor/sequence-media-store';
@@ -1340,13 +1341,23 @@
 		// Leave every other modifier combo (copy, paste, save…) to the browser.
 		if (mod) return;
 
+		// The media lightbox owns the keyboard while it's up.
+		if (isModalKeyboardOpen()) return;
+
+		// Space is the transport, whatever holds focus — a dropdown left focused
+		// by an earlier click would otherwise swallow the key and reopen its
+		// menu. A text field is the one exception: there space types a space.
+		if (e.code === 'Space') {
+			if (isTextEntryTarget(e.target)) return;
+			e.preventDefault();
+			togglePreview();
+			return;
+		}
+
 		// Bare keys belong to whichever control has focus, if any.
 		if (isInteractiveTarget(e.target)) return;
 
-		if (e.code === 'Space') {
-			e.preventDefault();
-			togglePreview();
-		} else if (e.code === 'Escape' && previewPlaying) {
+		if (e.code === 'Escape' && previewPlaying) {
 			stopPreview();
 		} else if (e.key === 'ArrowRight') {
 			e.preventDefault();
