@@ -86,6 +86,9 @@
       textTimeline?: TextTimeline | null;
       /** Master-timeline seconds the text clips are looked up at. */
       textTime?: number;
+      /** Song tempo, for beat-synced effects. 0 = unknown, they run free.
+       * The grid is anchored to the same master clock `textTime` reads. */
+      bpm?: number;
       /** Keep the animation loop running even when nothing else needs it — a
        * still image with a playing text timeline has no other reason to. */
       forceAnimation?: boolean;
@@ -126,6 +129,7 @@
       fullscreen = $bindable(false),
       textTimeline = null,
       textTime = 0,
+      bpm = 0,
       forceAnimation = false,
       overlay = undefined,
    }: Props = $props();
@@ -248,6 +252,7 @@
       // Before anything renders: the bars have to see this frame's audio, and
       // the export driver does the same on its side.
       renderer!.setSpectrum(spectrum, now);
+      renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
       const layers = textTimeline ? resolveTextLayersAt(textTimeline, textTime) : [];
       const tr = transition;
       if (tr && tr.durationSec > 0) {

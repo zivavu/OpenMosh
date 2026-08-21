@@ -1185,6 +1185,15 @@ export class GlRenderer {
       out.delta = dt;
       return out;
     }
+    // Beat-synced: phase is read off the song's grid rather than accumulated,
+    // so flashes land on beats and realign after a seek instead of drifting.
+    // No BPM (single mode, a track nobody detected) falls back to free-running.
+    if (eff.values.sync === "beat" && this.beatPhase !== null) {
+      const perBeat = Number(eff.values.division) || 1;
+      out.time = this.beatPhase * perBeat;
+      out.delta = dt * perBeat * this.beatsPerSecond;
+      return out;
+    }
     const speed = eff.values.speed as number;
     const prev = this.phaseMap.get(eff.instanceId) ?? 0;
     const phase = prev + dt * speed;
@@ -1744,6 +1753,20 @@ export class GlRenderer {
    * instance wants the same answer. Smoothing does not: it is a parameter on
    * the effect, so it is applied per instance in `uploadSpectrumFor`.
    */
+  /** Beat position of the frame being rendered, or null when no BPM is known. */
+  private beatPhase: number | null = null;
+  private beatsPerSecond = 0;
+
+  /**
+   * Hand the renderer this frame's place on the song's beat grid, in beats
+   * from the grid's origin. Like `setSpectrum`, both drivers must keep calling
+   * it or a beat-synced effect would preview and export differently.
+   */
+  setBeat(beats: number | null, beatsPerSecond = 0): void {
+    this.beatPhase = beats;
+    this.beatsPerSecond = beatsPerSecond;
+  }
+
   setSpectrum(data: Uint8Array | null, time: number): void {
     // Its own clock, not frameDelta's: that one is consumed by render() and
     // reading it here would leave the effect chain with a zero delta.

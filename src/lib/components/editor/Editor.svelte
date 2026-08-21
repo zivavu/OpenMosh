@@ -2628,6 +2628,7 @@
 					textTimeline: textTimeline.enabled ? $state.snapshot(textTimeline) as TextTimeline : null,
 					textTimeOffset,
 					textTimeScale,
+					bpm: sequenceBpm,
 					sequence:
 						isSequenceMode && sequenceSegments.length > 0
 							? {
@@ -2874,6 +2875,7 @@
 				{warmRenderer}
 				textTimeline={textTimeline.enabled ? textTimeline : null}
 				{textTime}
+				bpm={sequenceBpm}
 				forceAnimation={textTimeline.enabled && textClockRunning}
 				transition={seqTransition
 					? {
