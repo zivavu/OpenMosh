@@ -3289,6 +3289,7 @@
 					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
+					response={audioResponse}
 				/>
 			{:else}
 			<EffectsPanel
@@ -3296,6 +3297,7 @@
 				noTarget={panelNoTarget}
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
+				response={audioResponse}
 				onVolumeLinkChange={(index, paramKey, link) => {
 					panelBeforeEdit(`link:${index}:${paramKey}`);
 					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));

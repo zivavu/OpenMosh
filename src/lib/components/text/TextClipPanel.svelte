@@ -12,6 +12,7 @@
 		type TextStyle,
 	} from '../../text';
 	import type { SpectrumData } from '../../types';
+	import type { AudioResponse } from '../../audio/auto-range';
 	import ColorPicker from '../ui/ColorPicker.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
@@ -38,6 +39,8 @@
 		onClose?: () => void;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
+		/** Forwarded to the lane's effect panel for its spectrum read-out. */
+		response?: AudioResponse;
 		onVolumeLinkChange?: (
 			index: number,
 			paramKey: string,
@@ -54,6 +57,7 @@
 		onClose,
 		hasTrack = false,
 		spectrumData = null,
+		response = undefined,
 		onVolumeLinkChange,
 	}: Props = $props();
 
@@ -356,6 +360,7 @@
 			bind:effects={laneEffects}
 			{hasTrack}
 			{spectrumData}
+			{response}
 			{onVolumeLinkChange}
 			onUserEdit={commitEffects}
 			onEffectsReplaced={commitEffects}

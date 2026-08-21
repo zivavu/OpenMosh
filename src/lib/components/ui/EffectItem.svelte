@@ -21,6 +21,10 @@
 	import DualRangeSlider from './DualRangeSlider.svelte';
 	import RangeSlider from './RangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
+	import {
+		DEFAULT_AUDIO_RESPONSE,
+		type AudioResponse,
+	} from '../../audio/auto-range';
 
 	export type { SpectrumData };
 
@@ -62,6 +66,9 @@
 		effect: EffectInstance;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
+		/** How this chain follows the music — the spectrum read-out is drawn
+		 * through it, so it shows the value the parameter actually rides. */
+		response?: AudioResponse;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
 		onToggle: () => void;
 		onToggleExpand: () => void;
@@ -92,6 +99,7 @@
 		effect,
 		hasTrack = false,
 		spectrumData = null,
+		response = DEFAULT_AUDIO_RESPONSE,
 		onVolumeLinkChange,
 		onToggle,
 		onToggleExpand,
@@ -339,6 +347,7 @@
 													binCount={spectrumData.binCount}
 													freqMin={link.freqMin ?? FREQ_PRESETS.full.min}
 													freqMax={link.freqMax ?? FREQ_PRESETS.full.max}
+													{response}
 													width={200}
 													height={48}
 												/>
