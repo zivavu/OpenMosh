@@ -1241,6 +1241,26 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             defaultValue: 1,
          },
          {
+            // Both default to DEFAULT_AUDIO_RESPONSE, so the bars start out
+            // following the music the same way a volume link does.
+            key: 'smoothing',
+            label: 'Smoothing',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.45,
+         },
+         {
+            key: 'punch',
+            label: 'Punch',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.4,
+         },
+         {
             key: 'opacity',
             label: 'Opacity',
             type: 'range',

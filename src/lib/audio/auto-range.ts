@@ -97,7 +97,7 @@ function approach(current: number, target: number, tau: number, step: number): n
  * of dropping out between hits. A symmetric follower fast enough to catch the
  * transient is also fast enough to flicker on every gap in the signal.
  */
-function followerTaus(smoothing: number): { attack: number; release: number } {
+export function followerTaus(smoothing: number): { attack: number; release: number } {
    const s = clamp01(smoothing);
    return { attack: 0.02 + s * 0.08, release: 0.05 + s * s * 0.95 };
 }
