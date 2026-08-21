@@ -75,6 +75,8 @@ export interface RecordingContext {
   textTimeOffset?: number;
   /** Frame-time-to-master-clock rate (video speed). */
   textTimeScale?: number;
+  /** Song tempo, for beat-synced effects. 0 = unknown. */
+  bpm?: number;
 }
 
 export async function executeRecording(ctx: RecordingContext): Promise<void> {
@@ -104,6 +106,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     textTimeline = null,
     textTimeOffset = 0,
     textTimeScale = 1,
+    bpm = 0,
   } = ctx;
 
   const hasExplicitAudio = !!trackFile && trackDuration > 0;
@@ -426,6 +429,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       textTimeline,
       textTimeOffset,
       textTimeScale,
+      bpm,
       effects: effects.map(
         (e): EffectInstance => ({
           ...e,

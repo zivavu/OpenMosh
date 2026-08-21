@@ -79,6 +79,10 @@ export interface RecordOptions {
 	textTimeOffset?: number;
 	/** Frame-time-to-master-clock rate, for sources played back off-speed. */
 	textTimeScale?: number;
+	/** Song tempo, for beat-synced effects. 0 = unknown, they run free. */
+	bpm?: number;
+	/** Master-clock second the beat grid starts on (slideshow beat offset). */
+	beatOffset?: number;
 }
 
 /** Encoding backend that consumes rendered canvas frames. */
@@ -215,6 +219,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		textTimeline = null,
 		textTimeOffset = 0,
 		textTimeScale = 1,
+		bpm = 0,
+		beatOffset = 0,
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
@@ -567,6 +573,14 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			// The bars read this straight off the GPU, so the export has to push
 			// the same bins the preview's AnalyserNode would have.
 			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null, time);
+			// Beat-synced effects read the grid off the same master clock the
+			// text lanes do, so an export lands its flashes where the preview did.
+			renderer.setBeat(
+				bpm > 0
+					? ((textTimeOffset + time * textTimeScale - beatOffset) * bpm) / 60
+					: null,
+				bpm / 60,
+			);
 			if (typeof skipRender === 'function') skipRender(textLayers);
 			else if (!skipRender) renderer.render(renderEffects, time, textLayers);
 			await sink.submit(i, time);

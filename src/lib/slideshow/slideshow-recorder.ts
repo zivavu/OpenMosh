@@ -140,6 +140,8 @@ export async function executeSlideshowRecording(
     // clock at 0, so the offset follows the same rule the driver uses.
     textTimeline: config.text?.enabled ? config.text : null,
     textTimeOffset: audioFile ? audioStart : 0,
+    bpm: config.bpm,
+    beatOffset: audioFile ? config.beatOffset : 0,
     ...(audioFile && { audioFile, audioStart, audioEnd, normalizeGain }),
     async onBeforeRender(_frameIndex: number, time: number) {
       // time is 0..duration (recording window); segments use "seconds from

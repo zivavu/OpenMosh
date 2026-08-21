@@ -1303,6 +1303,16 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       name: 'Strobe',
       params: [
          {
+            key: 'sync',
+            label: 'Sync',
+            type: 'select',
+            defaultValue: 'free',
+            options: [
+               { label: 'Free', value: 'free' },
+               { label: 'Beat', value: 'beat' },
+            ],
+         },
+         {
             // Keyed "speed" so the renderer accumulates phase for it: one unit
             // of phase is one flash, making this literally flashes per second.
             key: 'speed',
@@ -1312,6 +1322,24 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             max: 20,
             step: 0.1,
             defaultValue: 5,
+            visibleWhen: (v) => v.sync !== 'beat',
+         },
+         {
+            // Beat sync: one flash per this many beats, read off the song grid.
+            key: 'division',
+            label: 'Division',
+            type: 'select',
+            defaultValue: '1',
+            options: [
+               { label: 'Every 4 beats', value: '0.25' },
+               { label: 'Every 2 beats', value: '0.5' },
+               { label: 'Every beat', value: '1' },
+               { label: '1/2 beat', value: '2' },
+               { label: '1/3 beat', value: '3' },
+               { label: '1/4 beat', value: '4' },
+               { label: '1/8 beat', value: '8' },
+            ],
+            visibleWhen: (v) => v.sync === 'beat',
          },
          {
             key: 'duty',

@@ -607,6 +607,7 @@
 		}
 		textTime;
 		textTimeline;
+		glRenderer.setBeat(beatsAt(textTime), config.bpm / 60);
 		glRenderer.render(effects, 0, currentTextLayers());
 	});
 
@@ -898,6 +899,7 @@
 			textTime = t;
 			// Slideshow drives the renderer itself, so it owns this call too.
 			glRenderer.setSpectrum(audio.frequencyData, nowMs / 1000);
+			glRenderer.setBeat(beatsAt(t), config.bpm / 60);
 			glRenderer.render(
 				previewEffects.length > 0 ? previewEffects : effects,
 				nowMs / 1000,
@@ -1028,6 +1030,12 @@
 	/** Layers for whatever the preview is showing right now. */
 	function currentTextLayers() {
 		return resolveTextLayersAt(textTimeline, textTime);
+	}
+
+	/** Song-grid position of master time `t`, for beat-synced effects. */
+	function beatsAt(t: number): number | null {
+		if (config.bpm <= 0) return null;
+		return ((t - config.beatOffset) * config.bpm) / 60;
 	}
 
 	function setTextTimeline(next: TextTimeline) {
