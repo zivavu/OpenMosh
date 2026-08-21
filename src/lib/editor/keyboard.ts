@@ -52,16 +52,23 @@ export function createKeyboardHandler(
       return;
     }
 
-    // Bare keys belong to whichever control has focus, if any.
-    if (isInteractiveTarget(e.target)) return;
-
+    // Space is the transport, whatever holds focus — a dropdown left focused
+    // by an earlier click would otherwise swallow the key and reopen its menu.
+    // A text field is the one exception: there space types a space.
     if (e.key === " ") {
+      if (isTextEntryTarget(e.target)) return;
       if (actions.hasTrack()) {
         e.preventDefault();
         if (actions.isPlaying()) actions.pauseTrack();
         else actions.playSpan();
       }
-    } else if (e.key === "ArrowRight") {
+      return;
+    }
+
+    // Bare keys belong to whichever control has focus, if any.
+    if (isInteractiveTarget(e.target)) return;
+
+    if (e.key === "ArrowRight") {
       e.preventDefault();
       actions.mosh();
     } else if (e.key === "ArrowLeft") {
