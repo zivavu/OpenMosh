@@ -538,9 +538,12 @@
 		}
 		const savedSeq = loadSeqEntry(trackId);
 		if (savedSeq === null) return false;
+		// The BPM comes back in both modes — single mode has no segments to time,
+		// but beat-synced effects read the same tempo. The keys are already
+		// per-mode, so neither mode reads the other's number.
+		restoreSequenceBpm(savedSeq.bpm ?? 0);
 		if (isSequenceMode) {
 			sequenceSegments = savedSeq.segments ?? [];
-			restoreSequenceBpm(savedSeq.bpm ?? 0);
 			selectedSegmentId = null;
 			restoreFxLanes(savedSeq.fx);
 		}
@@ -1824,11 +1827,12 @@
 	/** The track the automatic pass has already been spent on. */
 	let autoBpmFor: File | null = null;
 
-	// A new track detects its own tempo: the segment timing this feeds is
-	// unusable until the BPM is right, so it shouldn't wait to be asked.
+	// A new track detects its own tempo: the segment timing (and any beat-synced
+	// effect) this feeds is unusable until the BPM is right, so it shouldn't
+	// wait to be asked. Both modes — single has beat sync too.
 	$effect(() => {
 		const file = audio.trackFile;
-		if (!isSequenceMode || !file) return;
+		if (!file) return;
 		untrack(() => {
 			if (autoBpmFor === file) return;
 			autoBpmFor = file;
@@ -3271,7 +3275,7 @@
 					(v) => setFxResponse('punch', v, (g) => (audioPunch = g))}
 					targetLabel={panelFxLane?.name ?? null}
 					{hasAudio}
-					showTiming={isSequenceMode}
+					showTiming={isSequenceMode || !!audio.trackFile}
 					bpm={sequenceBpm}
 					{bpmDetecting}
 					hasTrack={!!audio.trackFile}
