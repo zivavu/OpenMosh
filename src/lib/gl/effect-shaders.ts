@@ -2160,91 +2160,86 @@ void main() {
 		fragment:
 			H +
 			BOUNCE_GLSL +
+			NOISE_GLSL +
+			HUE_ROTATE_GLSL +
 			`uniform float u_strength;
 uniform float u_density;
+uniform float u_comb;
+uniform float u_angle;
 uniform float u_chrome;
 uniform float u_smoothness;
+uniform vec2 u_resolution;
 
-// Hash functions for non-repeating pseudo-random variation
-float hash(float n) { return fract(sin(n) * 43758.5453123); }
-float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-
-// Value noise for smooth random variation
-float vnoise(float x) {
-  float i = floor(x);
-  float f = fract(x);
-  f = f * f * (3.0 - 2.0 * f); // smoothstep
-  return mix(hash(i), hash(i + 1.0), f);
-}
+#define FIBER_TAPS 14
 
 void main() {
-  vec2 ts = vec2(textureSize(u_texture, 0));
+  // Work in an aspect-corrected frame so the weave keeps its angle and the
+  // threads stay square on non-square images.
+  vec2 aspect = vec2(u_resolution.x / max(u_resolution.y, 1.0), 1.0);
+  float rad = u_angle * 3.14159265 / 180.0;
+  vec2 dir = vec2(sin(rad), cos(rad));   // along a thread
+  vec2 nrm = vec2(dir.y, -dir.x);        // across the weave
 
-  // Non-repeating fiber displacement using value noise layers
-  float x = v_uv.x * u_density;
+  vec2 p = v_uv * aspect;
+  float across = dot(p, nrm) * u_density;
+  float along = dot(p, dir);
 
-  // Multiple noise octaves at irrational frequency ratios = no visible repeat
-  float fiber = vnoise(x * 1.0) * 1.0
-              + vnoise(x * 2.37 + 5.1) * 0.5
-              + vnoise(x * 5.09 + 11.3) * 0.25
-              + vnoise(x * 10.71 + 23.7) * 0.125;
-  fiber = fiber / 0.9375 * 2.0 - 1.0; // normalize to [-1, 1]
+  // Silk: band-limited noise across the weave that also drifts down the length
+  // of each thread, so a fiber's pull changes as it runs instead of holding one
+  // flat value for the whole span.
+  float silk = fbm(vec2(across * 0.7, along * 1.7)) * 2.0 - 1.0;
 
-  // Smoothness: sample neighbors and average
-  float px = 1.0 / ts.x;
-  float sm = u_smoothness * 8.0;
-  float xL = (v_uv.x - px * sm) * u_density;
-  float xR = (v_uv.x + px * sm) * u_density;
-  float fiberL = vnoise(xL) + 0.5 * vnoise(xL * 2.37 + 5.1) + 0.25 * vnoise(xL * 5.09 + 11.3) + 0.125 * vnoise(xL * 10.71 + 23.7);
-  fiberL = fiberL / 0.9375 * 2.0 - 1.0;
-  float fiberR = vnoise(xR) + 0.5 * vnoise(xR * 2.37 + 5.1) + 0.25 * vnoise(xR * 5.09 + 11.3) + 0.125 * vnoise(xR * 10.71 + 23.7);
-  fiberR = fiberR / 0.9375 * 2.0 - 1.0;
-  fiber = mix(fiber, (fiberL + fiber + fiberR) / 3.0, u_smoothness);
+  // Shred: one constant pull per thread. The cell boundary is widened to a
+  // pixel with fwidth, so cranking density dissolves the weave into a soft
+  // grain instead of shattering into aliased confetti.
+  float cell = floor(across);
+  float aa = clamp(fwidth(across), 0.02, 1.0);
+  float w0 = vnoise(vec2(cell * 1.37, along * 1.7)) * 2.0 - 1.0;
+  float w1 = vnoise(vec2((cell + 1.0) * 1.37, along * 1.7)) * 2.0 - 1.0;
+  float shred = mix(w0, w1, smoothstep(1.0 - aa, 1.0, fract(across)));
 
-  // Displace vertically (strength 0-1 maps to 0-0.1 actual displacement)
-  float disp = fiber * u_strength * 0.1;
-  vec2 uv = vec2(v_uv.x, bounce(v_uv.y + disp));
+  float fiber = mix(shred, silk, u_smoothness);
+  float disp = fiber * u_strength * 0.18;
 
-  vec4 c = texture(u_texture, uv);
-
-  // Luminance and edge detection for specular
-  float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-  float lumUp = dot(texture(u_texture, vec2(uv.x, bounce(uv.y + 1.0 / ts.y))).rgb, vec3(0.299, 0.587, 0.114));
-  float lumDn = dot(texture(u_texture, vec2(uv.x, bounce(uv.y - 1.0 / ts.y))).rgb, vec3(0.299, 0.587, 0.114));
-  float spec = pow(clamp(abs(lumUp - lumDn) * ts.y * 0.01, 0.0, 1.0), 0.5);
-
-  // Smooth continuous phase variation — no discrete stripe boundaries
-  float phase = vnoise(v_uv.x * u_density * 0.7 + 100.0)
-              + vnoise(v_uv.x * u_density * 1.73 + 50.0) * 0.5
-              + vnoise(v_uv.y * 2.5 + v_uv.x * u_density * 0.3) * 0.2;
-
-  // 6-stop color ramp offset by unique stripe phase
-  vec3 c0 = vec3(0.02, 0.03, 0.15);  // deep blue-black
-  vec3 c1 = vec3(0.0, 0.35, 0.55);   // teal
-  vec3 c2 = vec3(0.9, 0.4, 0.08);    // warm orange
-  vec3 c3 = vec3(0.7, 0.15, 0.4);    // magenta
-  vec3 c4 = vec3(1.0, 0.82, 0.5);    // gold
-  vec3 c5 = vec3(0.95, 0.95, 1.0);   // near-white
-
-  float t = fract(lum + phase);
-  vec3 ramp;
-  if (t < 0.2) {
-    ramp = mix(c0, c1, t * 5.0);
-  } else if (t < 0.35) {
-    ramp = mix(c1, c2, (t - 0.2) * 6.667);
-  } else if (t < 0.5) {
-    ramp = mix(c2, c3, (t - 0.35) * 6.667);
-  } else if (t < 0.7) {
-    ramp = mix(c3, c4, (t - 0.5) * 5.0);
-  } else {
-    ramp = mix(c4, c5, (t - 0.7) * 3.333);
+  // Walk the pull and accumulate, so each thread reads as image drawn out along
+  // its length rather than a block shifted sideways. Each channel gets its own
+  // weight profile over the same taps: red rides the full pull, blue lags, so
+  // the fringing costs no extra fetches.
+  float d = u_chrome * 0.3;
+  vec3 centers = vec3(1.0, 1.0 - d * 0.5, 1.0 - d);
+  vec3 acc = vec3(0.0);
+  vec3 total = vec3(0.0);
+  float accA = 0.0;
+  float totalA = 0.0;
+  for (int i = 0; i < FIBER_TAPS; i++) {
+    float t = float(i) / float(FIBER_TAPS - 1);
+    vec2 uv = v_uv + dir * disp * t;
+    vec4 s = texture(u_texture, vec2(bounce(uv.x), bounce(uv.y)));
+    // Comb 0 keeps a narrow bump at the end of the walk -- one clean pull.
+    // Comb 1 weights the whole path, which is what actually reads as a
+    // combed-out fiber.
+    vec3 dt = vec3(t) - centers;
+    vec3 w = mix(exp(-60.0 * dt * dt), 1.0 - smoothstep(vec3(-0.08), vec3(0.08), dt), u_comb);
+    acc += s.rgb * w;
+    total += w;
+    accA += s.a * w.g;
+    totalA += w.g;
   }
+  vec3 col = acc / max(total, vec3(1e-4));
+  float alpha = accA / max(totalA, 1e-4);
 
-  ramp += spec * vec3(0.3, 0.25, 0.35);
+  // Sheen from the image's own colour: the tint rides the pull and the
+  // highlight lands where the weave changes fastest, so the threads catch light
+  // without a fixed palette painted over the frame.
+  float slope = clamp(fwidth(fiber) * 8.0, 0.0, 1.0);
+  float luma = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, hueRotate(col, fiber * 110.0), u_chrome * 0.8);
+  col += slope * u_chrome * (0.25 + 0.75 * luma) * vec3(1.0, 0.97, 0.92);
 
-  outColor = vec4(mix(c.rgb, ramp, u_chrome), c.a);
+  outColor = vec4(clamp(col, 0.0, 1.0), alpha);
 }`,
-		setUniforms: floats('strength', 'density', 'chrome', 'smoothness'),
+		linearFilter: true,
+		setUniforms: floats('strength', 'density', 'comb', 'angle', 'chrome', 'smoothness'),
 	},
 
 	'liquid-light': {
