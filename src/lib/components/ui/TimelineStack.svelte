@@ -255,20 +255,21 @@
 			</div>
 		{/if}
 
-		<!-- The band the tick labels sit in, doubling as a ruler: scrubbing here
-		     works in every mode, whatever the lanes above do with a pointer. -->
+		<!-- The band the tick labels sit in, doubling as a ruler: clicking here
+		     places the start marker in every mode, whatever the lanes above do
+		     with a pointer. The live playhead is moved by dragging it instead. -->
 		<div
 			class="tl-scale"
-			class:scrubbing
+			class:scrubbing={staticDragging}
 			class:seekable={!!onSeek && trackDuration > 0}
 			use:laneTrack
 			role="slider"
-			aria-label="Seek"
-			aria-valuenow={currentTime}
+			aria-label="Start marker"
+			aria-valuenow={stack.staticTime}
 			aria-valuemin={0}
 			aria-valuemax={trackDuration}
 			tabindex="-1"
-			onpointerdown={beginScrub}
+			onpointerdown={beginStaticDrag}
 		></div>
 
 		{#if playheadVisible || staticVisible}
