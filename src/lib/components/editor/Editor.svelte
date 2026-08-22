@@ -2433,6 +2433,10 @@
 								keys: ['Ctrl+Click'],
 								description: 'Create / split segment at cursor',
 							},
+							{
+								keys: ['S'],
+								description: 'Split segment at playhead',
+							},
 							{ keys: ['Click'], description: 'Select segment for editing' },
 							{
 								keys: ['←', '→'],

@@ -938,6 +938,12 @@
 			setSelection([]);
 			return;
 		}
+		// S: split the segment under the playhead in two.
+		if (e.key.toLowerCase() === 's') {
+			e.preventDefault();
+			splitAt(stack.currentTime);
+			return;
+		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
 		if (hoveredBoundary) {
 			e.preventDefault();
