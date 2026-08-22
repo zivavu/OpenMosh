@@ -143,6 +143,18 @@
 		trackDuration > 0 && staticPct >= 0 && staticPct <= 100,
 	);
 
+	/** Where to draw a marker standing at `pct` of the axis.
+	 *
+	 * A percentage alone puts the marker's left edge at the percentage, so at
+	 * the very end of the track its 1px line starts where the axis stops — half
+	 * of it over the lane's right edge, and at 100% clipped away entirely. Pull
+	 * it back by its own width in proportion to how far along it is: nothing at
+	 * the left edge, a full pixel at the right, so the line always lands on a
+	 * column inside the lane. */
+	function markerX(pct: number): string {
+		return `translate3d(calc(${pct}% - ${(pct / 100).toFixed(4)}px), 0, 0)`;
+	}
+
 	// ── Scrubbing ────────────────────────────────────────────────────────────
 	// Owned by the stack rather than the lanes: the playhead is drawn once over
 	// the lot, so it is grabbable once over the lot too — a lane that spends its
@@ -304,7 +316,7 @@
 					     layer out again every frame. -->
 					<div
 						class="tl-playhead"
-						style="transform: translate3d({playheadPct}%, 0, 0)"
+						style="transform: {markerX(playheadPct)}"
 					>
 						<div class="tl-playhead-line"></div>
 						{#if onSeek}
@@ -325,7 +337,7 @@
 					     along. -->
 					<div
 						class="tl-static-playhead"
-						style="transform: translate3d({staticPct}%, 0, 0)"
+						style="transform: {markerX(staticPct)}"
 					>
 						<div class="tl-static-line" class:sole={!isPlaying}></div>
 						<div class="tl-static-handle"></div>
