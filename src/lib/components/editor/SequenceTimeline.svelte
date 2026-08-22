@@ -1343,9 +1343,10 @@
 		<div class="seg-toolbar tl-chrome">
 			{#if selectedSegments.length > 0}
 				{@const many = selectedSegments.length > 1}
-				<!-- Centred as one run, and never taller than a row: the transition
-				     controls come and go with the type, and a wrapping bar changed the
-				     stack's height every time they did. -->
+				<!-- Three columns, never taller than a row: the middle one is centred
+				     on the bar whatever the actions column holds, and a wrapping bar
+				     changed the stack's height every time a control appeared. -->
+				<div class="seg-spacer"></div>
 				<div class="seg-groups">
 					<span class="seg-title">
 						{many ? `${selectedSegments.length} segments` : 'Segment'}
@@ -1456,7 +1457,10 @@
 						</select>
 					{/if}
 
-					<div class="tl-tool-sep"></div>
+				</div>
+				<!-- Right-aligned in their own column, so Loop coming and going with
+				     the selection size can't shift the controls above. -->
+				<div class="seg-actions">
 					{#if onToggleSegmentLoop && !many}
 						<button
 							class="tl-tool-btn"
@@ -1476,7 +1480,7 @@
 					</button>
 				</div>
 			{:else}
-				<div class="seg-groups">
+				<div class="seg-groups seg-hint-row">
 					<span class="seg-toolbar-hint">
 						{segments.length === 0
 							? 'Ctrl+click the timeline to create a segment'
@@ -1791,7 +1795,9 @@
 	   centred with an auto margin rather than justify-content, which keeps the
 	   left end reachable if it ever does overflow. */
 	.seg-toolbar {
-		display: flex;
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
 		height: 30px;
 		flex-shrink: 0;
 		overflow-x: auto;
@@ -1806,8 +1812,21 @@
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		margin: 0 auto;
 		padding: 0 0.25rem;
+	}
+
+	.seg-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		justify-self: end;
+		padding: 0 0.25rem;
+	}
+
+	/* Nothing to balance against, so the hint takes the whole bar and centres. */
+	.seg-hint-row {
+		grid-column: 1 / -1;
+		justify-content: center;
 	}
 
 	.seg-toolbar-hint {
