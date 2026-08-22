@@ -40,6 +40,10 @@ export class AudioManager {
   audioPlaying = $state(false);
   loopAudio = $state(false);
   pendingSpan = $state<{ start: number; end: number } | null>(null);
+  /** Set while the clock sits past the end of the span. The span is an export
+   * selection, not a fence: a run started beyond it (the start marker dropped
+   * there) plays on to the end of the track instead of being yanked back. */
+  pastSpan = $state(false);
   // Play as soon as the newly loaded track's metadata arrives (library play button)
   autoplayOnLoad = false;
 
@@ -209,6 +213,7 @@ export class AudioManager {
         this.spanStart = 0;
         this.spanEnd = d;
       }
+      this.pastSpan = false;
     }
     if (this.autoplayOnLoad) {
       this.autoplayOnLoad = false;
@@ -221,7 +226,11 @@ export class AudioManager {
     // While playing the rAF tick owns trackCurrentTime; writing the coarse
     // element clock here as well would drag the playhead back every ~250 ms.
     if (!this.audioPlaying) this.trackCurrentTime = this.#audioEl.currentTime;
-    if (this.audioPlaying && this.#audioEl.currentTime >= this.spanEnd) {
+    if (
+      this.audioPlaying &&
+      !this.pastSpan &&
+      this.#audioEl.currentTime >= this.spanEnd
+    ) {
       this.#audioEl.currentTime = this.spanStart;
       this.trackCurrentTime = this.spanStart;
       this.#resetClock(this.spanStart);
@@ -233,8 +242,13 @@ export class AudioManager {
   }
 
   onAudioEnded() {
-    // Natural track end can fire before timeupdate reaches spanEnd.
-    if (!this.#audioEl || !this.loopAudio) return;
+    // Natural track end can fire before timeupdate reaches spanEnd. A run past
+    // the span ends here rather than looping back into it.
+    if (!this.#audioEl) return;
+    if (!this.loopAudio || this.pastSpan) {
+      this.audioPlaying = false;
+      return;
+    }
     this.#audioEl.currentTime = this.spanStart;
     this.trackCurrentTime = this.spanStart;
     this.#resetClock(this.spanStart);
@@ -247,7 +261,10 @@ export class AudioManager {
     this.ensureAudioGraph();
     if (this.audioContext?.state === 'suspended') this.audioContext.resume();
     const t = this.#audioEl.currentTime;
-    if (t < this.spanStart || t >= this.spanEnd) {
+    // Past the span end is where the user put the marker, so it plays from
+    // there; before the span start there is nothing to hear yet, so it doesn't.
+    this.pastSpan = this.spanEnd > 0 && t >= this.spanEnd;
+    if (!this.pastSpan && t < this.spanStart) {
       this.#audioEl.currentTime = this.spanStart;
       this.trackCurrentTime = this.spanStart;
     }
@@ -310,6 +327,7 @@ export class AudioManager {
     const clamped = Math.max(0, Math.min(this.trackDuration, t));
     this.#audioEl.currentTime = clamped;
     this.trackCurrentTime = clamped;
+    this.pastSpan = this.spanEnd > 0 && clamped >= this.spanEnd;
     this.#resetClock(clamped);
     resetAutoRange();
     resetSpectrumRange();
@@ -325,6 +343,7 @@ export class AudioManager {
     this.trackDuration = 0;
     this.trackCurrentTime = 0;
     this.spanStart = 0;
+    this.pastSpan = false;
     this.spanEnd = 0;
     this.pendingSpan = null;
     this.normalizeGain = 1.0;
@@ -347,6 +366,7 @@ export class AudioManager {
     this.audioPlaying = false;
     this.trackCurrentTime = 0;
     this.spanStart = 0;
+    this.pastSpan = false;
     this.spanEnd = 0;
     this.pendingSpan = null;
   }

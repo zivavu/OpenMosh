@@ -986,7 +986,14 @@
 			if (audio.trackFile && audio.audioPlaying) {
 				audio.tickCurrentTime();
 				t = audio.trackCurrentTime;
-				if (t >= audio.spanEnd) {
+				// A run started past the span end ignores it and plays out the
+				// track; the track's own end stops it.
+				if (audio.pastSpan) {
+					if (t >= audio.trackDuration) {
+						stopPreview();
+						return;
+					}
+				} else if (t >= audio.spanEnd) {
 					if (audio.loopAudio) {
 						audio.seekTo(audio.spanStart);
 						t = audio.spanStart;
@@ -995,6 +1002,11 @@
 						return;
 					}
 				}
+			} else if (audio.trackFile && audio.trackDuration > 0) {
+				// The track stopped on its own — the preview goes with it rather
+				// than falling through to the silent clock below.
+				stopPreview();
+				return;
 			} else {
 				const fallbackInterval =
 					config.subdivision === 0 ? 1 : (60 / config.bpm) * config.subdivision;

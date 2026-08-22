@@ -3,6 +3,9 @@ import { openPlayableVideo, SampleQueue, toVideoFrame } from "../video/decode";
 
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
 const MAX_DECODE_LAG = 1;
+/** Matches the editor's VIDEO_END_EPSILON: a position this close to the span
+ * end counts as being at it. */
+const SPAN_END_EPSILON = 0.1;
 
 /**
  * WebCodecs-based video preview playback (via mediabunny), replacing the
@@ -35,6 +38,10 @@ export class VideoPreviewPlayer {
   #spanStart = 0;
   #spanEnd: number;
   #speed = 1;
+  /** Set while the position sits past the end of the span. The span is an
+   * export selection, not a fence: a run started beyond it plays out the video
+   * rather than being pulled back to the span. */
+  #pastSpan = false;
   #muted = false;
   #disposed = false;
 
@@ -119,6 +126,7 @@ export class VideoPreviewPlayer {
 
   play() {
     if (this.#disposed || this.playing) return;
+    this.#pastSpan = this.#isPastSpan(this.#baseMedia);
     this.#baseWall = performance.now();
     this.playing = true;
     this.#startAudio();
@@ -193,9 +201,16 @@ export class VideoPreviewPlayer {
     this.#queue.dispose();
   }
 
+  /** End of the span, or of the video when playback started past the span. */
   #end(): number {
+    if (this.#pastSpan) return this.duration;
     const end = this.#spanEnd > 0 ? this.#spanEnd : this.duration;
     return Math.min(end, this.duration);
+  }
+
+  #isPastSpan(t: number): boolean {
+    const end = this.#spanEnd > 0 ? this.#spanEnd : this.duration;
+    return t >= Math.min(end, this.duration) - SPAN_END_EPSILON;
   }
 
   #mediaTimeNow(): number {
@@ -226,6 +241,7 @@ export class VideoPreviewPlayer {
   }
 
   #setPosition(t: number) {
+    this.#pastSpan = this.#isPastSpan(t);
     this.#baseMedia = t;
     this.#baseWall = performance.now();
     this.currentTime = t;

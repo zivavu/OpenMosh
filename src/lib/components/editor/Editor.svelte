@@ -195,6 +195,9 @@
 	// Treat positions this close to the span end as "at the end" when deciding
 	// whether play should restart from the span start
 	const VIDEO_END_EPSILON = 0.1;
+	/** Set while the video clock sits past the end of its span — the element
+	 * path's copy of what VideoPreviewPlayer tracks for itself. */
+	let videoPastSpan = $state(false);
 	// Whether the video file has an audio track. Starts false so we don't hook a
 	// silent video into Web Audio before the probe confirms it — Firefox pins any
 	// element captured via createMediaElementSource to realtime, ignoring
@@ -650,26 +653,23 @@
 		audio.audioContext?.resume();
 		// Start from the static marker when the video owns the timeline clock; a
 		// video slaved to a track keeps following the track instead.
-		if (timelineAxis && videoIsMaster && !videoIsPlaying) {
-			seekVideoTo(timelineAxis.staticTime);
-		}
+		const fromMarker = !!timelineAxis && videoIsMaster;
+		if (fromMarker && !videoIsPlaying) seekVideoTo(timelineAxis!.staticTime);
+		// Past the span end is where the user put the marker, so it plays from
+		// there and runs on to the end of the video. Without a marker of its own
+		// a slaved video still restarts at the span. Before the span start there
+		// is nothing to watch yet either way.
+		const outOfSpan = (t: number) =>
+			t < videoSpanStart ||
+			(!fromMarker && t >= videoSpanEnd - VIDEO_END_EPSILON);
 		if (previewPlayer) {
-			if (
-				previewPlayer.currentTime < videoSpanStart ||
-				previewPlayer.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
-			) {
-				previewPlayer.seek(videoSpanStart);
-			}
+			if (outOfSpan(previewPlayer.currentTime)) previewPlayer.seek(videoSpanStart);
 			previewPlayer.play();
 			return;
 		}
 		if (!videoEl) return;
-		if (
-			videoEl.currentTime < videoSpanStart ||
-			videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON
-		) {
-			videoEl.currentTime = videoSpanStart;
-		}
+		if (outOfSpan(videoEl.currentTime)) videoEl.currentTime = videoSpanStart;
+		videoPastSpan = videoEl.currentTime >= videoSpanEnd - VIDEO_END_EPSILON;
 		videoEl.play().catch(() => {});
 	}
 
@@ -684,6 +684,7 @@
 	function seekVideoTo(t: number) {
 		if (!videoDuration) return;
 		const tClamp = Math.max(0, Math.min(videoDuration, t));
+		videoPastSpan = tClamp >= videoSpanEnd - VIDEO_END_EPSILON;
 		if (previewPlayer) {
 			previewPlayer.seek(tClamp);
 			return;
@@ -2821,6 +2822,7 @@
 					videoDuration = dur;
 					videoSpanStart = 0;
 					videoSpanEnd = dur;
+					videoPastSpan = false;
 					recordDuration = Math.round(dur * 10) / 10;
 					ensureVideoAudioGraph();
 				}}
@@ -2828,14 +2830,25 @@
 					if (previewPlayer) return;
 					videoCurrentTime = videoEl?.currentTime ?? 0;
 					// Span-loop: skip during recording (export seeks the video directly)
-					if (!recordingState.recording && videoEl && videoCurrentTime >= videoSpanEnd) {
+					if (
+						!recordingState.recording &&
+						!videoPastSpan &&
+						videoEl &&
+						videoCurrentTime >= videoSpanEnd
+					) {
 						videoEl.currentTime = videoSpanStart;
 						if (!videoLoop && !seqForceLoop) videoEl.pause();
 					}
 				}}
 				onended={() => {
 					// Natural end can fire before timeupdate reaches spanEnd
-					if (!previewPlayer && !recordingState.recording && videoEl && (videoLoop || seqForceLoop)) {
+					if (
+						!previewPlayer &&
+						!recordingState.recording &&
+						!videoPastSpan &&
+						videoEl &&
+						(videoLoop || seqForceLoop)
+					) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
 					}
