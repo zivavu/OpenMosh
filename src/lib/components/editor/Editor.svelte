@@ -2885,13 +2885,24 @@
 					</div>
 					<div class="seq-media-actions">
 						{#if sequenceSources.length > 1}
+							<!-- One button, scoped by the selection: with segments picked it
+							     deals across those, otherwise across the whole song. -->
 							<button
 								class="seq-media-btn"
-								title="Deal the pool at random across every segment. Selected segments alone shuffle from the segment bar under the timeline."
-								onclick={() => randomizeSegmentSourcesFor(sequenceSegments.map((s) => s.id))}
+								title={seqSelectedIds.length > 0
+									? 'Deal the pool at random across the selected segments'
+									: 'Deal the pool at random across every segment'}
+								onclick={() =>
+									randomizeSegmentSourcesFor(
+										seqSelectedIds.length > 0
+											? seqSelectedIds
+											: sequenceSegments.map((s) => s.id),
+									)}
 							>
 								<Shuffle size={12} />
-								Shuffle media
+								{seqSelectedIds.length > 0
+									? `Shuffle ${seqSelectedIds.length}`
+									: 'Shuffle all'}
 							</button>
 						{/if}
 						{#if sequenceSources.length > 0}
@@ -3368,7 +3379,6 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
-						onShuffleSources={isSequenceMode ? randomizeSegmentSourcesFor : undefined}
 					/>
 				{/if}
 				{#if isSequenceMode && fxLanes.length > 0}
