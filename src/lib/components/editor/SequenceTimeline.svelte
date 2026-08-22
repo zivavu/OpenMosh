@@ -361,12 +361,76 @@
 		return String(commonIntervalSec);
 	});
 
-	// ── Transition toolbar ─────────────────────────────────────────────────
-	// Each value is undefined when the selected segments disagree; the controls
-	// then render blank until the user picks a value, which applies to all.
+	// ── Transitions ────────────────────────────────────────────────────────
+	// A transition belongs to the boundary it plays on, not to a segment, so it
+	// is edited from a popover on the boundary itself. The stored value still
+	// hangs off the segment being blended into — the one to the boundary's
+	// right — which is what these targets are.
+	/** Open popover: the boundary it hangs off, and the segments it edits. */
+	let transPopover = $state<{ time: number; segIds: string[] } | null>(null);
+	let popEl: HTMLDivElement | undefined = $state();
+	/** Lane geometry at the time the popover opened, for placing it. Read once
+	 * rather than per frame: the lane only moves when the window resizes. */
+	let laneBox = $state<{ left: number; top: number; width: number } | null>(null);
+
+	let transTargets = $derived(
+		transPopover
+			? segments.filter((s) => transPopover!.segIds.includes(s.id))
+			: [],
+	);
+
+	/** Segments that start on the given boundary times. */
+	function rightSegIdsAt(times: number[]): string[] {
+		return times
+			.map((t) => segments.find((s) => Math.abs(s.startTime - t) < 0.001)?.id)
+			.filter((id): id is string => !!id);
+	}
+
+	function openTransitionPopover(rightSegId: string | null) {
+		// No right-hand segment means the track's leading edge: nothing blends in
+		// there, so there's no transition to configure.
+		if (!rightSegId) return;
+		const seg = segments.find((s) => s.id === rightSegId);
+		if (!seg) return;
+		const sel = boundaries.selectedBoundaryTimes;
+		const inSelection = sel.some((t) => Math.abs(t - seg.startTime) < 0.001);
+		const rect = getRect();
+		if (!rect) return;
+		laneBox = { left: rect.left, top: rect.top, width: rect.width };
+		transPopover = {
+			time: seg.startTime,
+			// Editing one boundary of a selected run edits the whole run, the same
+			// way dragging one of them moves them all.
+			segIds:
+				inSelection && sel.length > 1 ? rightSegIdsAt(sel) : [seg.id],
+		};
+	}
+
+	function closeTransitionPopover() {
+		transPopover = null;
+	}
+
+	// The boundary can be dragged away, merged or undone out of existence while
+	// the popover is open; it has nothing to point at then.
+	$effect(() => {
+		if (transPopover && transTargets.length === 0) closeTransitionPopover();
+	});
+
+	/** Fixed-position placement, so the lane's own overflow can't clip it. */
+	let popPos = $derived.by(() => {
+		if (!transPopover || !laneBox) return null;
+		const x = laneBox.left + (vp.toPct(transPopover.time) / 100) * laneBox.width;
+		return {
+			left: Math.max(8, Math.min(window.innerWidth - 8, x)),
+			bottom: window.innerHeight - laneBox.top + 6,
+		};
+	});
+
+	// Each value is undefined when the targeted boundaries disagree; the control
+	// then renders blank until the user picks a value, which applies to all.
 	let commonTransitionType = $derived(
 		commonValue(
-			selectedSegments.map((s): TransitionType => s.transition?.type ?? 'cut'),
+			transTargets.map((s): TransitionType => s.transition?.type ?? 'cut'),
 		),
 	);
 	let commonTransitionMeta = $derived(
@@ -375,22 +439,26 @@
 			: undefined,
 	);
 	let commonTransitionDuration = $derived(
-		commonValue(selectedSegments.map((s) => s.transition?.durationSec)),
+		commonValue(transTargets.map((s) => s.transition?.durationSec)),
 	);
 	let commonTransitionDirection = $derived(
-		commonValue(selectedSegments.map((s) => s.transition?.direction ?? 0)),
+		commonValue(transTargets.map((s) => s.transition?.direction ?? 0)),
 	);
 	let commonTransitionDensity = $derived(
-		commonValue(selectedSegments.map((s) => s.transition?.density ?? 1)),
+		commonValue(transTargets.map((s) => s.transition?.density ?? 1)),
 	);
 	let commonTransitionOnTick = $derived(
-		commonValue(selectedSegments.map((s) => s.transitionOnTick ?? false)),
+		commonValue(transTargets.map((s) => s.transitionOnTick ?? false)),
+	);
+	/** Ticks only means anything on a segment that re-rolls. */
+	let transTargetsAuto = $derived(
+		transTargets.length > 0 && transTargets.every((s) => s.mode === 'interval'),
 	);
 
 	function changeTransitionType(type: TransitionType) {
-		if (selectedSegments.length === 0) return;
+		if (transTargets.length === 0) return;
 		onTransitionChange(
-			selectedSegments.map((seg) => ({
+			transTargets.map((seg) => ({
 				segmentId: seg.id,
 				// Keep each segment's duration/seed/params when switching between
 				// non-cut types.
@@ -410,7 +478,7 @@
 	}
 
 	function patchTransition(patch: Partial<SegmentTransition>) {
-		const changes = selectedSegments
+		const changes = transTargets
 			.filter((s) => s.transition)
 			.map((seg) => ({
 				segmentId: seg.id,
@@ -421,7 +489,7 @@
 
 	/** Each segment gets its own fresh seed so layouts don't all match. */
 	function rerollTransitionSeeds() {
-		const changes = selectedSegments
+		const changes = transTargets
 			.filter((s) => s.transition)
 			.map((seg) => ({
 				segmentId: seg.id,
@@ -431,7 +499,7 @@
 	}
 
 	function setTransitionOnTick(on: boolean) {
-		const changes = selectedSegments
+		const changes = transTargets
 			.filter((s) => s.mode === 'interval')
 			.map((seg) => ({
 				segmentId: seg.id,
@@ -479,6 +547,9 @@
 		| {
 				type: 'boundary-group';
 				anchorTime: number;
+				/** The boundary actually grabbed — a click without a drag opens its
+				 * transition popover. */
+				clickTime: number;
 				group: GroupBoundary[];
 				nonSelected: number[];
 		  }
@@ -629,6 +700,7 @@
 			dragging = {
 				type: 'boundary-group',
 				anchorTime: vp.clientXToTime(e.clientX),
+				clickTime: time,
 				group: collectGroupBoundaries(segments, selected, trackDuration),
 				nonSelected: nonSelectedBoundaryTimes(segments, selected, trackDuration),
 			};
@@ -827,6 +899,14 @@
 				trackDuration,
 			);
 		}
+		// A boundary grabbed but not moved is a click on it: configure how the
+		// next segment blends in.
+		if (dragging?.type === 'boundary' && !dragMoved) {
+			openTransitionPopover(dragging.rightSegId);
+		}
+		if (dragging?.type === 'boundary-group' && !dragMoved) {
+			openTransitionPopover(rightSegIdsAt([dragging.clickTime])[0] ?? null);
+		}
 		if (dragging?.type === 'seg-click' && !dragMoved) {
 			const segId = dragging.segmentId;
 			const soleSelected = selectedIds.length === 1 && selectedIds[0] === segId;
@@ -936,6 +1016,12 @@
 			}
 		}
 
+		if (e.key === 'Escape' && transPopover) {
+			closeTransitionPopover();
+			e.stopPropagation();
+			return;
+		}
+
 		if (e.key === 'Escape' && spanPasteMode) {
 			spanPasteMode = false;
 			e.stopPropagation();
@@ -1011,6 +1097,14 @@
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onkeydowncapture={onKeydown}
+	onpointerdown={(e) => {
+		// Runs before the pointerup that opens one, so clicking a second boundary
+		// closes the first popover and then opens the new one.
+		if (transPopover && !popEl?.contains(e.target as Node)) {
+			closeTransitionPopover();
+		}
+	}}
+	onresize={closeTransitionPopover}
 />
 
 <div class="tl-container">
@@ -1179,8 +1273,8 @@
 						onpointerleave={() => (hoveredBoundary = null)}
 						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
 					><title
-							>Drag to move (whole selection if selected) · Delete to merge ·
-							Shift-drag to select</title
+							>Click to set the transition · drag to move (whole selection
+							if selected) · Delete to merge · Shift-drag to select</title
 						></rect
 					>
 				{/if}
@@ -1363,103 +1457,6 @@
 					{/if}
 
 					<div class="tl-tool-sep"></div>
-					<span class="tl-tool-label">Transition</span>
-					<select
-						class="seg-select"
-						value={commonTransitionType ?? ''}
-						title="How each selected segment blends in from the previous one"
-						onchange={(e) => {
-							const v = e.currentTarget.value;
-							if (v !== '') changeTransitionType(v as TransitionType);
-						}}
-					>
-						{#if commonTransitionType === undefined}
-							<option value="" disabled>—</option>
-						{/if}
-						{#each TRANSITION_OPTIONS as o}
-							<option value={o.value}>{o.label}</option>
-						{/each}
-					</select>
-					{#if commonTransitionType && commonTransitionType !== 'cut'}
-						<select
-							class="seg-select"
-							value={commonTransitionDuration ?? ''}
-							title="Transition duration"
-							onchange={(e) => {
-								const v = e.currentTarget.value;
-								if (v !== '') patchTransition({ durationSec: Number(v) });
-							}}
-						>
-							{#if commonTransitionDuration === undefined}
-								<option value="" disabled>—</option>
-							{/if}
-							{#each [0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.2, 2] as sec}
-								<option value={sec}>{sec}s</option>
-							{/each}
-						</select>
-						{#if commonTransitionMeta?.hasDirection}
-							<select
-								class="seg-select"
-								value={commonTransitionDirection ?? ''}
-								title="Wipe direction"
-								onchange={(e) => {
-									const v = e.currentTarget.value;
-									if (v !== '') patchTransition({ direction: Number(v) });
-								}}
-							>
-								{#if commonTransitionDirection === undefined}
-									<option value="" disabled>—</option>
-								{/if}
-								<option value={0}>→</option>
-								<option value={1}>←</option>
-								<option value={2}>↓</option>
-								<option value={3}>↑</option>
-							</select>
-						{/if}
-						{#if commonTransitionMeta?.hasDensity}
-							<select
-								class="seg-select"
-								value={commonTransitionDensity ?? ''}
-								title="Cell size"
-								onchange={(e) => {
-									const v = e.currentTarget.value;
-									if (v !== '') patchTransition({ density: Number(v) });
-								}}
-							>
-								{#if commonTransitionDensity === undefined}
-									<option value="" disabled>—</option>
-								{/if}
-								<option value={0}>coarse</option>
-								<option value={1}>med</option>
-								<option value={2}>fine</option>
-							</select>
-						{/if}
-						{#if commonTransitionMeta?.hasSeed}
-							<button
-								class="tl-tool-btn"
-								title="Re-roll transition layout"
-								onclick={rerollTransitionSeeds}
-							>
-								<Dices size={12} />
-							</button>
-						{/if}
-						{#if commonMode === 'interval'}
-							<label
-								class="seg-check"
-								title="Blend at each re-roll tick inside the segment"
-							>
-								<input
-									type="checkbox"
-									checked={commonTransitionOnTick === true}
-									indeterminate={commonTransitionOnTick === undefined}
-									onchange={(e) => setTransitionOnTick(e.currentTarget.checked)}
-								/>
-								Ticks
-							</label>
-						{/if}
-					{/if}
-
-					<div class="tl-tool-sep"></div>
 					{#if onToggleSegmentLoop && !many}
 						<button
 							class="tl-tool-btn"
@@ -1496,6 +1493,145 @@
 	{/if}
 
 </div>
+
+{#if transPopover && popPos}
+	<!-- Anchored to the boundary it belongs to, positioned fixed so the lane's
+	     own overflow can't clip it. -->
+	<div
+		bind:this={popEl}
+		class="trans-pop"
+		style:left="{popPos.left}px"
+		style:bottom="{popPos.bottom}px"
+		role="dialog"
+		aria-label="Transition"
+	>
+		<div class="trans-pop-head">
+			<span class="trans-pop-title">Transition</span>
+			{#if transTargets.length > 1}
+				<span class="trans-pop-count">{transTargets.length} boundaries</span>
+			{/if}
+			<button
+				class="trans-pop-close"
+				title="Close (Esc)"
+				onclick={closeTransitionPopover}>&#10005;</button
+			>
+		</div>
+
+		<div class="trans-row">
+			<span class="trans-label">Type</span>
+			<select
+				class="seg-select"
+				value={commonTransitionType ?? ''}
+				title="How the next segment blends in from this one"
+				onchange={(e) => {
+					const v = e.currentTarget.value;
+					if (v !== '') changeTransitionType(v as TransitionType);
+				}}
+			>
+				{#if commonTransitionType === undefined}
+					<option value="" disabled>&#8212;</option>
+				{/if}
+				{#each TRANSITION_OPTIONS as o}
+					<option value={o.value}>{o.label}</option>
+				{/each}
+			</select>
+		</div>
+
+		{#if commonTransitionType && commonTransitionType !== 'cut'}
+			<div class="trans-row">
+				<span class="trans-label">Length</span>
+				<select
+					class="seg-select"
+					value={commonTransitionDuration ?? ''}
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v !== '') patchTransition({ durationSec: Number(v) });
+					}}
+				>
+					{#if commonTransitionDuration === undefined}
+						<option value="" disabled>&#8212;</option>
+					{/if}
+					{#each [0.1, 0.15, 0.2, 0.3, 0.5, 0.8, 1.2, 2] as sec}
+						<option value={sec}>{sec}s</option>
+					{/each}
+				</select>
+			</div>
+
+			{#if commonTransitionMeta?.hasDirection}
+				<div class="trans-row">
+					<span class="trans-label">Direction</span>
+					<select
+						class="seg-select"
+						value={commonTransitionDirection ?? ''}
+						title="Wipe direction"
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							if (v !== '') patchTransition({ direction: Number(v) });
+						}}
+					>
+						{#if commonTransitionDirection === undefined}
+							<option value="" disabled>&#8212;</option>
+						{/if}
+						<option value={0}>&#8594;</option>
+						<option value={1}>&#8592;</option>
+						<option value={2}>&#8595;</option>
+						<option value={3}>&#8593;</option>
+					</select>
+				</div>
+			{/if}
+
+			{#if commonTransitionMeta?.hasDensity}
+				<div class="trans-row">
+					<span class="trans-label">Cells</span>
+					<select
+						class="seg-select"
+						value={commonTransitionDensity ?? ''}
+						title="Cell size"
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							if (v !== '') patchTransition({ density: Number(v) });
+						}}
+					>
+						{#if commonTransitionDensity === undefined}
+							<option value="" disabled>&#8212;</option>
+						{/if}
+						<option value={0}>coarse</option>
+						<option value={1}>med</option>
+						<option value={2}>fine</option>
+					</select>
+				</div>
+			{/if}
+
+			{#if commonTransitionMeta?.hasSeed}
+				<div class="trans-row">
+					<span class="trans-label">Layout</span>
+					<button
+						class="tl-tool-btn"
+						title="Re-roll transition layout"
+						onclick={rerollTransitionSeeds}
+					>
+						<Dices size={12} /> Re-roll
+					</button>
+				</div>
+			{/if}
+
+			{#if transTargetsAuto}
+				<label
+					class="seg-check trans-check"
+					title="Blend at each re-roll tick inside the segment too, not just here"
+				>
+					<input
+						type="checkbox"
+						checked={commonTransitionOnTick === true}
+						indeterminate={commonTransitionOnTick === undefined}
+						onchange={(e) => setTransitionOnTick(e.currentTarget.checked)}
+					/>
+					Also on re-roll ticks
+				</label>
+			{/if}
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.tl-container {
@@ -1740,6 +1876,79 @@
 	.seg-check input {
 		accent-color: var(--mosh);
 		margin: 0;
+	}
+
+	/* Anchored on the boundary's x, opening upwards over the preview: the lane
+	   is only 30px tall and the row below it is the segment toolbar. */
+	.trans-pop {
+		position: fixed;
+		z-index: 60;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		min-width: 172px;
+		padding: 0.45rem 0.5rem 0.5rem;
+		border: 1px solid var(--line);
+		border-radius: 5px;
+		background: #131313;
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+	}
+
+	.trans-pop-head {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		margin-bottom: 0.1rem;
+	}
+
+	.trans-pop-title {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--mosh);
+	}
+
+	.trans-pop-count {
+		font-size: 0.6rem;
+		color: var(--text-4);
+	}
+
+	.trans-pop-close {
+		margin-left: auto;
+		padding: 0 0.15rem;
+		border: none;
+		background: none;
+		color: #3d3d3d;
+		font-size: 0.7rem;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.trans-pop-close:hover {
+		color: var(--text-2);
+	}
+
+	.trans-row {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.trans-label {
+		flex: 1;
+		font-size: 0.62rem;
+		color: var(--text-4);
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+	}
+
+	.trans-row .seg-select {
+		min-width: 82px;
+	}
+
+	.trans-check {
+		font-size: 0.62rem;
+		white-space: normal;
 	}
 
 	/* Matches .tl-tool-btn, so the bar reads as one set of controls. */
