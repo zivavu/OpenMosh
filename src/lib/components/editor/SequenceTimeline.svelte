@@ -50,6 +50,8 @@
 	const SEG_H = 22;
 	/** Half-width of a boundary's invisible grab strip. */
 	const BND_GRAB = 5;
+	/** Height of the source colour band along a block's bottom edge. */
+	const SRC_BAND = 3;
 	/**
 	 * Below this a label is all ellipsis and no word — a song's worth of
 	 * quarter-note segments becomes a row of "mo…", which reads as noise. The
@@ -519,6 +521,12 @@
 		tip: string;
 		transitionType: TransitionType;
 		transitionDuration: number;
+		/** Bottom band colour tagging which source plays; null in single-source
+		 * songs, where every block would carry the same band. */
+		srcColor: string | null;
+		/** Re-rolling segments get a hatched body, so they still read as auto
+		 * once the block is too narrow for its label. */
+		auto: boolean;
 	}
 
 	function segLabel(s: SequenceSegment): string {
@@ -564,6 +572,8 @@
 					.join(' · '),
 				transitionType: trans,
 				transitionDuration: s.transition?.durationSec ?? 0,
+				srcColor: source ? sourceColor(source.n) : null,
+				auto: s.mode === 'interval',
 			};
 		}),
 	);
@@ -1027,6 +1037,20 @@
 			style:cursor={svgCursor}
 			onpointerdown={onLanePointerDown}
 		>
+			<defs>
+				<!-- 45° hatch for auto segments. userSpaceOnUse, not the default
+				     objectBoundingBox: per-object tiling would stretch the lines by
+				     each block's width and they'd stop lining up across the row. -->
+				<pattern
+					id="seg-auto-hatch"
+					width="6"
+					height="6"
+					patternUnits="userSpaceOnUse"
+				>
+					<path class="hatch-line" d="M -1 1 l 2 -2 M 0 6 l 6 -6 M 5 7 l 2 -2" />
+				</pattern>
+			</defs>
+
 			<!-- Tails for uncovered regions, on the row's centre line -->
 			{#if segVis.length > 0}
 				{@const midY = ROW_PAD + segH / 2}
@@ -1070,6 +1094,32 @@
 					rx="3"
 					onpointerdown={(e) => startSegClick(e, sv.id)}><title>{sv.tip}</title></rect
 				>
+				{#if sv.auto}
+					<rect
+						class="seg-hatch"
+						x="{sv.startX}%"
+						y={ROW_PAD}
+						width="{Math.max(0, sv.endX - sv.startX)}%"
+						height={segH}
+						rx="3"
+						fill="url(#seg-auto-hatch)"
+						pointer-events="none"
+					/>
+				{/if}
+				{#if sv.srcColor}
+					<!-- Which source this segment plays, as a band along the bottom edge:
+					     after a shuffle the whole row reads at a glance, and the colours
+					     match the grid cards' index chips. -->
+					<rect
+						class="seg-src"
+						x="{sv.startX}%"
+						y={ROW_PAD + segH - SRC_BAND}
+						width="{Math.max(0, sv.endX - sv.startX)}%"
+						height={SRC_BAND}
+						fill={sv.srcColor}
+						pointer-events="none"
+					/>
+				{/if}
 				{#if sv.label}
 					<text
 						class="seg-lbl"
@@ -1507,6 +1557,22 @@
 	.tl-track.drop-active {
 		outline: 1px dashed #3d6b5c;
 		outline-offset: -1px;
+	}
+
+	.hatch-line {
+		stroke: rgba(176, 138, 208, 0.28);
+		stroke-width: 1;
+		fill: none;
+	}
+
+	.seg-hatch {
+		pointer-events: none;
+	}
+
+	/* Sits under the block's rounded corners rather than following them: 3px of
+	   square edge at each end is invisible next to a 3px radius. */
+	.seg-src {
+		opacity: 0.85;
 	}
 
 	.seg-lbl {
