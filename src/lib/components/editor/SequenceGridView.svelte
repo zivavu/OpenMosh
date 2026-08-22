@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Plus, Shuffle, Trash2, X } from 'lucide-svelte';
+	import { Play, Plus, X } from 'lucide-svelte';
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -21,8 +21,6 @@
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
-		onShuffle?: () => void;
-		onClear?: () => void;
 	}
 
 	let {
@@ -34,8 +32,6 @@
 		onRemove,
 		onReorder,
 		onAssign,
-		onShuffle,
-		onClear,
 	}: Props = $props();
 
 	let fileInput = $state<HTMLInputElement | null>(null);
@@ -123,38 +119,6 @@
 				DRAG A SOURCE ONTO A SEGMENT, OR SELECT SEGMENTS FIRST
 			{/if}
 		</span>
-		<div class="grid-actions">
-			<!-- Only once there is a pool: the empty state carries its own -->
-			{#if onShuffle && sources.length > 1}
-				<button
-					class="grid-btn"
-					title="Deal the pool at random across every segment. Selected segments alone shuffle from the segment bar under the timeline."
-					onclick={onShuffle}
-				>
-					<Shuffle size={12} />
-					Shuffle media
-				</button>
-			{/if}
-			{#if sources.length > 0}
-				<button
-					class="grid-btn"
-					title="Add images or videos to the pool"
-					onclick={() => fileInput?.click()}
-				>
-					<Plus size={12} />
-					Add media
-				</button>
-			{/if}
-			{#if onClear && sources.length > 1}
-				<button
-					class="grid-btn danger"
-					title="Remove every added source from this song"
-					onclick={onClear}
-				>
-					<Trash2 size={12} />
-				</button>
-			{/if}
-		</div>
 	</div>
 
 	{#if sources.length === 0}
@@ -281,41 +245,6 @@
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		letter-spacing: 0.1em;
-	}
-
-	.grid-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		margin-left: auto;
-	}
-
-	.grid-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.28rem 0.6rem;
-		border: 1px solid var(--line);
-		border-radius: var(--r-1);
-		background: none;
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.64rem;
-		letter-spacing: 0.06em;
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast);
-	}
-
-	.grid-btn:hover {
-		color: var(--text);
-		border-color: var(--line-strong);
-	}
-
-	.grid-btn.danger:hover {
-		color: var(--rec);
-		border-color: var(--rec);
 	}
 
 	.empty-state {

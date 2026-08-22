@@ -10,6 +10,8 @@
 		Pause,
 		Play,
 		Plus,
+		Shuffle,
+		Trash2,
 		Type,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
@@ -2881,6 +2883,37 @@
 							onchange={(v) => (sequenceView = v as 'preview' | 'grid')}
 						/>
 					</div>
+					<div class="seq-media-actions">
+						{#if sequenceSources.length > 1}
+							<button
+								class="seq-media-btn"
+								title="Deal the pool at random across every segment. Selected segments alone shuffle from the segment bar under the timeline."
+								onclick={() => randomizeSegmentSourcesFor(sequenceSegments.map((s) => s.id))}
+							>
+								<Shuffle size={12} />
+								Shuffle media
+							</button>
+						{/if}
+						{#if sequenceSources.length > 0}
+							<button
+								class="seq-media-btn"
+								title="Add images or videos to the pool"
+								onclick={() => sourceInput?.click()}
+							>
+								<Plus size={12} />
+								Add media
+							</button>
+						{/if}
+						{#if sequenceSources.length > 1}
+							<button
+								class="seq-media-btn danger"
+								title="Remove every added source from this song"
+								onclick={() => (showClearSourcesConfirm = true)}
+							>
+								<Trash2 size={12} />
+							</button>
+						{/if}
+					</div>
 					<span class="source-count readout">
 						{sequenceSources.length} source{sequenceSources.length === 1
 							? ''
@@ -2982,9 +3015,6 @@
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
-				onShuffle={() =>
-					randomizeSegmentSourcesFor(sequenceSegments.map((s) => s.id))}
-				onClear={() => (showClearSourcesConfirm = true)}
 			/>
 		{/if}
 		<!-- Hidden, never unmounted: tearing the canvas down would take the
@@ -3551,11 +3581,47 @@
 	}
 
 	.source-count {
-		margin-left: auto;
 		font-size: 0.62rem;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text-3);
+	}
+
+	/* Media pool actions sit right of the Preview/Grid toggle, against the
+	   source count they share the bar with. */
+	.seq-media-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		margin-left: auto;
+	}
+
+	.seq-media-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.28rem 0.6rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		background: none;
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.64rem;
+		letter-spacing: 0.06em;
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast);
+	}
+
+	.seq-media-btn:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
+	.seq-media-btn.danger:hover {
+		color: var(--rec);
+		border-color: var(--rec);
 	}
 
 	/* Holds the canvas's place in the column so the grid can take the box
