@@ -521,8 +521,7 @@
 			startRectSelect(e);
 			return;
 		}
-		// Default: place the start marker. The live playhead is moved by
-		// dragging it (or by playing), not by clicking the lane.
+		// Default: place the start marker, which takes the clock with it.
 		if (!onSeek) return;
 		boundaries.clearSelection();
 		stack.seekStatic(Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))));

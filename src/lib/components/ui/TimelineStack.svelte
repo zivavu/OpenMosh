@@ -64,6 +64,8 @@
 		vp.viewStart = 0;
 		vp.viewEnd = d;
 		stack.followPlayhead = true;
+		// A shorter track would otherwise leave the marker off the end of it.
+		if (stack.staticTime > d) stack.staticTime = d;
 	});
 
 	// Keep the playhead centred: the view slides under it rather than the other
@@ -122,8 +124,10 @@
 	});
 
 	let playheadPct = $derived(vp.toPct(currentTime));
+	// Only while playing: stopped, the clock sits back on the static marker, and
+	// two lines on one spot read as a glitch rather than as two things.
 	let playheadVisible = $derived(
-		trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100,
+		isPlaying && trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100,
 	);
 
 	let staticPct = $derived(vp.toPct(stack.staticTime));
@@ -138,6 +142,17 @@
 	// can't be the only way to move the clock.
 	let scrubbing = $state(false);
 	let staticDragging = $state(false);
+
+	// Stopping puts the clock back where playback started, so the run leaves
+	// nothing behind: the live line vanishes into the marker it came out of.
+	let wasPlaying = false;
+	$effect(() => {
+		const playing = isPlaying;
+		untrack(() => {
+			if (wasPlaying && !playing) stack.returnToStatic();
+			wasPlaying = playing;
+		});
+	});
 
 	/** Registers the scale strip with the shared axis, so it zooms with the
 	 * lanes and can measure the axis even when no lane is mounted. */
@@ -166,8 +181,8 @@
 		window.addEventListener('pointercancel', onUp);
 	}
 
-	/** Drag the static playhead: only it moves — the clock is left alone, so
-	 * the marker can sit somewhere while playback runs elsewhere. */
+	/** Drag the static playhead: the clock goes with it, so a drag scrubs the
+	 * preview while paused and jumps playback while it runs. */
 	function beginStaticDrag(e: PointerEvent) {
 		if (!onSeek || trackDuration <= 0 || e.button !== 0) return;
 		e.preventDefault();
@@ -256,8 +271,8 @@
 		{/if}
 
 		<!-- The band the tick labels sit in, doubling as a ruler: clicking here
-		     places the start marker in every mode, whatever the lanes above do
-		     with a pointer. The live playhead is moved by dragging it instead. -->
+		     moves the start marker, and the clock with it, in every mode —
+		     whatever the lanes above do with a pointer. -->
 		<div
 			class="tl-scale"
 			class:scrubbing={staticDragging}
@@ -297,13 +312,14 @@
 					</div>
 				{/if}
 				{#if staticVisible && onSeek}
-					<!-- The static playhead: where the next play starts from. Dragging
-					     it moves only the marker — the clock follows on the next play. -->
+					<!-- The static playhead: where playback starts from, and where the
+					     clock is put back when it stops. Dragging it takes the clock
+					     along. -->
 					<div
 						class="tl-static-playhead"
 						style="transform: translate3d({staticPct}%, 0, 0)"
 					>
-						<div class="tl-static-line"></div>
+						<div class="tl-static-line" class:sole={!isPlaying}></div>
 						<div class="tl-static-handle"></div>
 						<div
 							class="tl-static-grab"
@@ -606,7 +622,8 @@
 	}
 
 	/* Fainter than the live playhead, so the moving clock reads as the
-	   dominant line while the marker stays quietly where it was put. */
+	   dominant line while the marker stays quietly where it was put — but full
+	   strength when it is the only line on screen. */
 	.tl-static-line {
 		position: absolute;
 		top: 0;
@@ -615,6 +632,10 @@
 		width: 1px;
 		background: var(--tl-static-playhead);
 		opacity: 0.45;
+	}
+
+	.tl-static-line.sole {
+		opacity: 0.9;
 	}
 
 	/* A diamond cap marks the static playhead as a handle, not a clock — and

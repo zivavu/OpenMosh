@@ -155,9 +155,8 @@
 	}
 
 	/** One drag over the track: in a lane the track is part of the shared axis,
-	 * so the default drag places the start marker (the live playhead is moved
-	 * by grabbing it, or by playing). A standalone bar keeps its own clock, so
-	 * it keeps scrubbing that clock instead. */
+	 * so the default drag moves the start marker, and the clock with it. A
+	 * standalone bar has no marker, so it scrubs its own clock instead. */
 	function dragTrackTo(clientX: number) {
 		const t = timeFromClientX(clientX);
 		if (stack) stack.seekStatic(t);
