@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Eye, EyeOff, GripVertical, Trash2 } from 'lucide-svelte';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { untrack } from 'svelte';
 	import {
 		createFxClip,
+		moveFxLane,
 		splitFxClipAt,
 		type FxClip,
 		type FxLane,
@@ -239,6 +240,66 @@
 	function toggleLane(lane: FxLane) {
 		onBeforeEdit?.();
 		update(lane.id, (l) => ({ ...l, enabled: !l.enabled }));
+	}
+
+	// ── Reorder by drag ───────────────────────────────────────────────────────
+	// HTML5 drag armed only from the grip: the rows also carry the clip lanes,
+	// whose own pointer drags must never start a row drag.
+	let dragFromIndex = $state<number | null>(null);
+	let dragOverIndex = $state<number | null>(null);
+	let dropPosition: 'above' | 'below' | null = $state(null);
+	let canDrag = $state(false);
+
+	function handleDragStart(index: number, e: DragEvent) {
+		if (!canDrag) {
+			e.preventDefault();
+			return;
+		}
+		canDrag = false;
+		dragFromIndex = index;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', String(index));
+		}
+	}
+
+	function handleDragOver(index: number, e: DragEvent) {
+		if (dragFromIndex === null || dragFromIndex === index) {
+			dragOverIndex = null;
+			dropPosition = null;
+			return;
+		}
+		e.preventDefault();
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const midY = rect.top + rect.height / 2;
+		dragOverIndex = index;
+		dropPosition = e.clientY < midY ? 'above' : 'below';
+	}
+
+	function handleDragLeave(index: number) {
+		if (dragOverIndex === index) {
+			dragOverIndex = null;
+			dropPosition = null;
+		}
+	}
+
+	function handleDrop(index: number) {
+		if (dragFromIndex === null || dragFromIndex === index) return;
+		let targetIndex = index;
+		if (dropPosition === 'below') targetIndex += 1;
+		if (dragFromIndex < targetIndex) targetIndex -= 1;
+		const next = moveFxLane(lanes, dragFromIndex, targetIndex);
+		clearDragState();
+		if (next === lanes) return;
+		onBeforeEdit?.();
+		onChange(next);
+	}
+
+	function clearDragState() {
+		dragFromIndex = null;
+		dragOverIndex = null;
+		dropPosition = null;
+		canDrag = false;
 	}
 
 	function addClipAt(laneId: string, time: number) {
@@ -513,9 +574,35 @@
 <svelte:window onkeydown={onKeyDown} />
 
 <div class="fx-tl">
-	{#each lanes as lane (lane.id)}
-		<div class="tl-row">
+	{#each lanes as lane, i (lane.id)}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="tl-row fx-row"
+			class:drop-above={dragOverIndex === i && dropPosition === 'above'}
+			class:drop-below={dragOverIndex === i && dropPosition === 'below'}
+			draggable={canDrag}
+			ondragstart={(e) => handleDragStart(i, e)}
+			ondragover={(e) => handleDragOver(i, e)}
+			ondragleave={() => handleDragLeave(i)}
+			ondrop={(e) => {
+				e.preventDefault();
+				handleDrop(i);
+			}}
+			ondragend={clearDragState}
+		>
 			<div class="tl-gutter">
+				{#if lanes.length > 1}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<span
+						class="lane-grip"
+						title="Drag to reorder"
+						aria-label="Drag to reorder lane"
+						onmousedown={() => (canDrag = true)}
+						onmouseup={() => (canDrag = false)}
+					>
+						<GripVertical size={12} />
+					</span>
+				{/if}
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
@@ -754,6 +841,44 @@
 
 	.lane-eye.off {
 		color: var(--text-4);
+	}
+
+	.lane-grip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.15rem;
+		color: var(--text-4);
+		cursor: grab;
+		touch-action: none;
+	}
+
+	.lane-grip:hover {
+		color: var(--text-2);
+	}
+
+	/* The row needs positioning for the drop line to sit on its edges. */
+	.fx-row {
+		position: relative;
+	}
+
+	.fx-row.drop-above::before,
+	.fx-row.drop-below::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 2px;
+		background: var(--live);
+		pointer-events: none;
+		z-index: 5;
+	}
+
+	.fx-row.drop-above::before {
+		top: -2px;
+	}
+
+	.fx-row.drop-below::after {
+		bottom: -2px;
 	}
 
 	.lane-name {

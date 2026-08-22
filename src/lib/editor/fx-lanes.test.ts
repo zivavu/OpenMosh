@@ -13,6 +13,7 @@ import {
   findFxClip,
   fxClipTick,
   MAX_FX_LANES,
+  moveFxLane,
   normalizeFxLanes,
   restoreFxClipMosh,
   rollFxClips,
@@ -592,6 +593,33 @@ describe("appendFxLane", () => {
 
   test("stays bare when there is no timeline yet", () => {
     expect(appendFxLane([], undefined, 0)[0].clips).toEqual([]);
+  });
+});
+
+describe("moveFxLane", () => {
+  test("moves a lane to a new position in chain order", () => {
+    const lanes = [lane("a", []), lane("b", []), lane("c", []), lane("d", [])];
+    expect(moveFxLane(lanes, 0, 2).map((l) => l.id)).toEqual(["b", "c", "a", "d"]);
+    expect(moveFxLane(lanes, 3, 1).map((l) => l.id)).toEqual(["a", "d", "b", "c"]);
+  });
+
+  test("a move past the end appends the lane", () => {
+    const lanes = [lane("a", []), lane("b", [])];
+    expect(moveFxLane(lanes, 0, 2).map((l) => l.id)).toEqual(["b", "a"]);
+  });
+
+  test("no-op moves return the input by identity", () => {
+    const lanes = [lane("a", []), lane("b", [])];
+    expect(moveFxLane(lanes, 0, 0)).toBe(lanes);
+    expect(moveFxLane(lanes, -1, 1)).toBe(lanes);
+    expect(moveFxLane(lanes, 0, 99)).toBe(lanes);
+  });
+
+  test("the lane is moved whole, clips and all", () => {
+    const lanes = [lane("a", [clip("c1", 0, 5, [])]), lane("b", []), lane("c", [])];
+    const out = moveFxLane(lanes, 0, 2);
+    expect(out[2]).toBe(lanes[0]);
+    expect(out[0]).toBe(lanes[1]);
   });
 });
 

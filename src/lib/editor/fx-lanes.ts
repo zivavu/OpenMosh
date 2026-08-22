@@ -212,6 +212,28 @@ export function appendFxLane(
 }
 
 /**
+ * Move a lane to a new index in the stack, which is chain order: the lanes
+ * contribute in array order, so this reorders the passes. Returns the input
+ * by identity when nothing would move, so callers can skip a history entry.
+ * `to` is an insertion index and may equal the length (move to the bottom).
+ */
+export function moveFxLane(lanes: FxLane[], from: number, to: number): FxLane[] {
+  if (
+    from === to ||
+    from < 0 ||
+    from >= lanes.length ||
+    to < 0 ||
+    to > lanes.length
+  ) {
+    return lanes;
+  }
+  const next = [...lanes];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/**
  * The clips contributing at `time`, in lane order — which is chain order, so
  * reordering lanes reorders the passes.
  *
