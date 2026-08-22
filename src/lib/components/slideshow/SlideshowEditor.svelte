@@ -1064,6 +1064,12 @@
 	function seekMaster(t: number) {
 		textTime = t;
 		if (audio.trackFile) audio.seekTo(t);
+		else if (previewPlaying) {
+			// The silent preview runs off a wall clock, so a seek mid-run has to
+			// re-anchor it or the next frame would overwrite the new position.
+			noTrackAnchor = t;
+			noTrackWallStart = performance.now() / 1000;
+		}
 	}
 
 	// ── Mosh ──

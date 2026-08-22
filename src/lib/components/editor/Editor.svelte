@@ -2384,6 +2384,8 @@
 	// supplies one: it loops the record window, which is what an export writes.
 	let stillClock = $state(0);
 	let stillPlaying = $state(false);
+	/** Bumped on every seek, so the running loop re-anchors on the new time. */
+	let stillSeekTick = $state(0);
 
 	let textDuration = $derived(
 		seqMasterDuration > 0 ? seqMasterDuration : recordDuration,
@@ -2428,7 +2430,6 @@
 
 	function toggleMasterPlay() {
 		if (textNeedsTransport) {
-			if (!stillPlaying && timelineAxis) stillClock = timelineAxis.staticTime;
 			stillPlaying = !stillPlaying;
 		} else if (seqMasterIsAudio) {
 			if (audio.audioPlaying) pauseTrack();
@@ -2441,8 +2442,10 @@
 	}
 
 	function seekMaster(t: number) {
-		if (textNeedsTransport) stillClock = t;
-		else if (seqMasterIsAudio) seekTo(t);
+		if (textNeedsTransport) {
+			stillClock = t;
+			stillSeekTick++;
+		} else if (seqMasterIsAudio) seekTo(t);
 		else seekVideoTo(t);
 	}
 
@@ -2463,6 +2466,9 @@
 
 	$effect(() => {
 		if (!stillPlaying) return;
+		// Tracked, so a seek mid-run restarts the loop on the new position — the
+		// anchor below is read once and would otherwise ignore it.
+		stillSeekTick;
 		const span = Math.max(0.1, textDuration);
 		const started = performance.now() - untrack(() => stillClock) * 1000;
 		let raf = requestAnimationFrame(function loop(now) {
