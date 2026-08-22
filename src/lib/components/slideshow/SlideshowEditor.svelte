@@ -1517,6 +1517,7 @@
 			isPlaying={previewPlaying}
 			onTogglePlay={() => (previewPlaying ? stopPreview() : startPreview())}
 			onSeek={seekMaster}
+			spanStart={audio.spanStart}
 			loopEnabled={audio.loopAudio}
 			onToggleLoop={audio.trackFile ? toggleLoop : null}
 		>

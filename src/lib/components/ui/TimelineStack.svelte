@@ -16,6 +16,9 @@
 		/** Omit to leave the transport out (a mode driven from elsewhere). */
 		onTogglePlay?: (() => void) | null;
 		onSeek?: ((time: number) => void) | null;
+		/** Start of the playback span, if the master clock has one. A track that
+		 * loads with a span saved against it parks the marker there. */
+		spanStart?: number;
 		loopEnabled?: boolean;
 		onToggleLoop?: (() => void) | null;
 		/**
@@ -36,6 +39,7 @@
 		isPlaying = false,
 		onTogglePlay = null,
 		onSeek = null,
+		spanStart = 0,
 		loopEnabled = false,
 		onToggleLoop = null,
 		toolbar,
@@ -64,8 +68,12 @@
 		vp.viewStart = 0;
 		vp.viewEnd = d;
 		stack.followPlayhead = true;
-		// A shorter track would otherwise leave the marker off the end of it.
-		if (stack.staticTime > d) stack.staticTime = d;
+		// A new track opens on its own start marker: the span it was saved with,
+		// so a restored project is ready to play its selection rather than the
+		// silence before it. The clock goes along, the same as any other move of
+		// the marker.
+		stack.staticTime = Math.max(0, Math.min(d, spanStart));
+		stack.returnToStatic();
 	});
 
 	// Keep the playhead centred: the view slides under it rather than the other

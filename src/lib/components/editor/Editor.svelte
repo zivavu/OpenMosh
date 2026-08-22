@@ -3098,6 +3098,7 @@
 				isPlaying={textClockRunning}
 				onTogglePlay={toggleMasterPlay}
 				onSeek={seekMaster}
+				spanStart={textTimeOffset}
 				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
 			>
