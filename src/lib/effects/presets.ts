@@ -2,7 +2,6 @@ import type { EffectInstance, Preset } from "./types";
 import { generateId } from "./types";
 import { hydrateValues } from "./hydrate";
 import { STARTER_PRESETS } from "./starter-presets";
-import { hueToHex } from "../color";
 import { readJson, readRaw, writeJson, writeRaw } from "../storage";
 
 const PRESETS_KEY = "openmosh-presets";
@@ -67,26 +66,6 @@ export function deletePreset(index: number): Preset[] {
   return presets;
 }
 
-/**
- * Duotone's two hue sliders became color pickers. Presets saved before that
- * carry hues only — rebuild the colors the old shader would have produced
- * (shadows were the hue at 30% brightness) so they still look the same.
- */
-function migrateValues(
-  defId: string,
-  values: Record<string, number | string>,
-): Record<string, number | string> {
-  if (defId !== "duotone") return values;
-  const migrated = { ...values };
-  if (typeof values.shadowHue === "number" && values.shadowColor == null) {
-    migrated.shadowColor = hueToHex(values.shadowHue, 0.3);
-  }
-  if (typeof values.highlightHue === "number" && values.highlightColor == null) {
-    migrated.highlightColor = hueToHex(values.highlightHue);
-  }
-  return migrated;
-}
-
 export function applyPreset(preset: Preset): EffectInstance[] {
   return preset.effects.map((pe) => ({
     instanceId: generateId(),
@@ -96,7 +75,7 @@ export function applyPreset(preset: Preset): EffectInstance[] {
     expanded: false,
     // Definition defaults underneath, so a preset saved before a param existed
     // still gets a sane value for it.
-    values: hydrateValues(pe.defId, migrateValues(pe.defId, pe.values)),
+    values: hydrateValues(pe.defId, pe.values),
     ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
   }));
 }
