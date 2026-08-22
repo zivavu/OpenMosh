@@ -390,6 +390,10 @@
 		if (!audio.audioPlaying) return;
 		let raf = requestAnimationFrame(function loop() {
 			audio.tickCurrentTime();
+			// Per frame, not per timeupdate: the span end is a visible line on the
+			// timeline, and playback has to turn round on it rather than a quarter
+			// second past it.
+			audio.checkSpanEnd();
 			raf = requestAnimationFrame(loop);
 		});
 		return () => cancelAnimationFrame(raf);

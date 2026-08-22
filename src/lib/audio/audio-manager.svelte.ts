@@ -226,18 +226,26 @@ export class AudioManager {
     // While playing the rAF tick owns trackCurrentTime; writing the coarse
     // element clock here as well would drag the playhead back every ~250 ms.
     if (!this.audioPlaying) this.trackCurrentTime = this.#audioEl.currentTime;
-    if (
-      this.audioPlaying &&
-      !this.pastSpan &&
-      this.#audioEl.currentTime >= this.spanEnd
-    ) {
-      this.#audioEl.currentTime = this.spanStart;
-      this.trackCurrentTime = this.spanStart;
-      this.#resetClock(this.spanStart);
-      if (!this.loopAudio) {
-        this.#audioEl.pause();
-        this.audioPlaying = false;
-      }
+    this.checkSpanEnd();
+  }
+
+  /**
+   * Wrap back to the span start, or stop there. `timeupdate` only fires ~4 Hz,
+   * which is a quarter second of playback past the end handle before the wrap
+   * lands — audible, and a long way across a zoomed-in timeline — so a caller
+   * with a frame loop calls this per frame as well. `currentTime` itself is
+   * current whenever it is read; it is only the event that is coarse.
+   */
+  checkSpanEnd() {
+    const el = this.#audioEl;
+    if (!el || !this.audioPlaying || this.pastSpan) return;
+    if (this.spanEnd <= 0 || el.currentTime < this.spanEnd) return;
+    el.currentTime = this.spanStart;
+    this.trackCurrentTime = this.spanStart;
+    this.#resetClock(this.spanStart);
+    if (!this.loopAudio) {
+      el.pause();
+      this.audioPlaying = false;
     }
   }
 
@@ -310,9 +318,17 @@ export class AudioManager {
 
     const est = this.#clockAnchor + (now - this.#clockWall) * rate;
     // The estimate leads the element clock by a few ms, which at the very end
-    // of a track would read as a time past the end.
-    this.trackCurrentTime =
-      this.trackDuration > 0 ? Math.min(est, this.trackDuration) : est;
+    // of a track would read as a time past the end. The span end is a limit
+    // too: the wrap back to spanStart is driven by timeupdate, which only fires
+    // ~4 Hz, so without this the playhead sails visibly past the end handle —
+    // a quarter second of track, which is a lot of pixels when zoomed in —
+    // before the wrap lands. A run that started past the span ignores it, the
+    // same as playback does.
+    const limit =
+      !this.pastSpan && this.spanEnd > 0
+        ? Math.min(this.spanEnd, this.trackDuration || this.spanEnd)
+        : this.trackDuration;
+    this.trackCurrentTime = limit > 0 ? Math.min(est, limit) : est;
   }
 
   /** Drop the interpolated clock onto `t` — after a seek, a loop or a pause. */
