@@ -71,6 +71,10 @@
 		response?: AudioResponse;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
 		onToggle: () => void;
+		/** Set when the chain's on/off state is not the user's to set — the
+		 * slideshow's rolling modes decide it per beat. The switch still shows
+		 * what is passing signal, but says why it can't be moved. */
+		rolledNote?: string | null;
 		onToggleExpand: () => void;
 		/** Hide from the effect list (a persisted preference, not a chain edit). */
 		onHide: () => void;
@@ -102,6 +106,7 @@
 		response = DEFAULT_AUDIO_RESPONSE,
 		onVolumeLinkChange,
 		onToggle,
+		rolledNote = null,
 		onToggleExpand,
 		onHide,
 		onDuplicate,
@@ -182,7 +187,8 @@
 					class="toggle"
 					class:on={effect.enabled}
 					onclick={onToggle}
-					title={effect.enabled ? 'Disable' : 'Enable'}
+					disabled={!!rolledNote}
+					title={rolledNote ?? (effect.enabled ? 'Disable' : 'Enable')}
 				>
 					<span class="toggle-knob"></span>
 				</button>
@@ -646,6 +652,13 @@
 		transition:
 			background var(--t),
 			border-color var(--t);
+	}
+
+	/* Reporting, not controlling: dimmed so it doesn't invite a click, but not
+	   so far that the live state stops reading. */
+	.toggle:disabled {
+		cursor: default;
+		opacity: 0.55;
 	}
 
 	.toggle.on {

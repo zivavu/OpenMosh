@@ -64,6 +64,11 @@
 		 * edit there is thrown away on the next re-roll. The rack stands down and
 		 * shows this instead of pretending to be that chain. */
 		noTarget?: { title: string; hint: string } | null;
+		/** Set when something else decides which effects are on — the slideshow's
+		 * random and smooth modes roll the chain every beat. The switches stand
+		 * down; everything else, hiding especially, still works, since hiding is
+		 * how an effect is kept out of the roll. */
+		rolledNote?: string | null;
 	}
 
 	let {
@@ -78,6 +83,7 @@
 		onUserEdit,
 		onBeforeUserEdit,
 		noTarget = null,
+		rolledNote = null,
 	}: Props = $props();
 
 	/** How many effects are actually passing signal, shown in the panel header. */
@@ -616,6 +622,9 @@
 	</div>
 
 	<div class="panel-scroll" bind:this={scrollEl}>
+		{#if rolledNote}
+			<p class="rolled-note">{rolledNote}</p>
+		{/if}
 		{#each filteredEffects as { effect, index: i }, pos (effect.instanceId)}
 			<EffectItem
 				{effect}
@@ -629,6 +638,7 @@
 					? (key, link) => onVolumeLinkChange(i, key, link)
 					: undefined}
 				onToggle={() => toggle(i)}
+				{rolledNote}
 				onToggleExpand={() => toggleExpand(i)}
 				onHide={() => hide(i)}
 				onDuplicate={() => duplicate(i)}
@@ -775,6 +785,16 @@
 		text-transform: uppercase;
 		cursor: pointer;
 		transition: color var(--t-fast);
+	}
+
+	.rolled-note {
+		margin: 0 0 0.4rem;
+		padding: 0.35rem 0.5rem;
+		border-left: 2px solid var(--mosh-dim);
+		background: var(--sunken);
+		color: var(--text-3);
+		font-size: 0.65rem;
+		line-height: 1.35;
 	}
 
 	.presets-header:hover,
