@@ -569,6 +569,14 @@
 	);
 
 	// ── Split / create ───────────────────────────────────────────────────────
+	// The Mosh lane splits at the playhead with S; it is also the default target
+	// until the user touches another lane, so a fresh timeline still splits here.
+	$effect(() => {
+		const unregister = stack.registerSplitter('mosh', (t) => splitAt(t));
+		if (stack.activeLaneId === null) stack.markLaneUsed('mosh');
+		return unregister;
+	});
+
 	function splitAt(time: number) {
 		if (trackDuration <= 0) return;
 		if (rawSegments.length === 0) {
@@ -938,10 +946,10 @@
 			setSelection([]);
 			return;
 		}
-		// S: split the segment under the playhead in two.
+		// S: split the item under the playhead on the lane the user last touched.
 		if (e.key.toLowerCase() === 's') {
 			e.preventDefault();
-			splitAt(stack.currentTime);
+			(stack.activeLaneSplitAt ?? splitAt)(stack.currentTime);
 			return;
 		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
@@ -1012,7 +1020,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<svg
 			bind:this={svgEl}
-			use:laneTrack
+			use:laneTrack={'mosh'}
 			width="100%"
 			height={svgH}
 			class="step-svg"

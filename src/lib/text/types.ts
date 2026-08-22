@@ -1,7 +1,12 @@
 import { hydrateEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { FONT_OPTIONS, type TextOverlayBlendMode } from "../text-overlay";
-import type { TimelineClip } from "../timeline/clips";
+import {
+  clipAt,
+  MIN_CLIP_LENGTH,
+  sortClips,
+  type TimelineClip,
+} from "../timeline/clips";
 
 export type TextAlign = "left" | "center" | "right";
 
@@ -84,6 +89,27 @@ function nextId(prefix: string): string {
 
 export function createTextClip(start: number, end: number, text = ""): TextClip {
   return { id: nextId("clip"), start, end, text };
+}
+
+/**
+ * Cut the clip covering `at` into two, each keeping the text. Returns the lane
+ * unchanged when `at` isn't inside a clip, or when either half would come out
+ * shorter than MIN_CLIP_LENGTH.
+ */
+export function splitTextClipAt(lane: TextLane, at: number): TextLane {
+  const clip = clipAt(lane, at);
+  if (!clip) return lane;
+  if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
+    return lane;
+  }
+  return {
+    ...lane,
+    clips: sortClips([
+      ...lane.clips.filter((c) => c.id !== clip.id),
+      { ...clip, id: nextId("clip"), end: at },
+      { ...clip, id: nextId("clip"), start: at },
+    ]),
+  };
 }
 
 export function createTextLane(

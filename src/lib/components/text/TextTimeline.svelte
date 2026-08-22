@@ -18,6 +18,7 @@
 		resizeClip,
 		sortClips,
 		updateLane,
+		splitTextClipAt,
 		type TextClip,
 		type TextLane,
 		type TextTimeline,
@@ -72,13 +73,16 @@
 	let trackEl = $state<HTMLElement | undefined>(undefined);
 
 	/** Registers a lane track with the shared axis and keeps a local handle on
-	 * it — every lane shares one geometry, so whichever mounted last will do. */
-	function laneTrack(node: HTMLElement) {
+	 * it — every lane shares one geometry, so whichever mounted last will do.
+	 * The lane also registers itself as a split target for the S shortcut. */
+	function laneTrack(node: HTMLElement, laneId: string) {
 		trackEl = node;
-		const shared = stack.lane(node);
+		const shared = stack.lane(node, laneId);
+		const unregister = stack.registerSplitter(laneId, (t) => splitAt(laneId, t));
 		return {
 			destroy() {
 				shared.destroy();
+				unregister();
 				if (trackEl === node) trackEl = undefined;
 			},
 		};
@@ -181,6 +185,18 @@
 		onBeforeEdit?.();
 		onChange(updateLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)));
 		selectOnly(clip.id);
+	}
+
+	/** Cut the clip under `time` on one lane in two — the S shortcut's target. */
+	function splitAt(laneId: string, time: number) {
+		const lane = laneOf(laneId);
+		if (!lane) return;
+		const next = splitTextClipAt(lane, time);
+		// Not inside a clip, or one half would be too short to keep.
+		if (next === lane) return;
+		onBeforeEdit?.();
+		onChange(updateLane(timeline, laneId, () => next));
+		deselect();
 	}
 
 	function deleteClip(laneId: string, clipId: string) {
@@ -474,7 +490,7 @@
 
 			<div
 				class="tl-lane lane-track"
-				use:laneTrack
+				use:laneTrack={lane.id}
 				style="height: {LANE_HEIGHT}px"
 				role="group"
 				aria-label="{lane.name} clips"

@@ -2437,7 +2437,7 @@
 							},
 							{
 								keys: ['S'],
-								description: 'Split segment at playhead',
+								description: 'Split the last-used lane at the playhead',
 							},
 							{ keys: ['Click'], description: 'Select segment for editing' },
 							{

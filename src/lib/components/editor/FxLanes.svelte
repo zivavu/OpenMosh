@@ -81,8 +81,16 @@
 	 * observes it once for every lane — they all share one geometry. */
 	let laneWidthPx = $derived(stack.laneWidth);
 
-	function laneTrack(node: HTMLElement) {
-		return stack.lane(node);
+	function laneTrack(node: HTMLElement, laneId: string) {
+		const shared = stack.lane(node, laneId);
+		// The lane is a split target for the S shortcut, keyed by its own id.
+		const unregister = stack.registerSplitter(laneId, (t) => splitAt(laneId, t));
+		return {
+			destroy() {
+				shared.destroy();
+				unregister();
+			},
+		};
 	}
 
 	let drag = $state<{
@@ -533,7 +541,7 @@
 
 			<div
 				class="tl-lane lane-track"
-				use:laneTrack
+				use:laneTrack={lane.id}
 				style="height: {LANE_HEIGHT}px"
 				role="group"
 				aria-label="{lane.name} clips"

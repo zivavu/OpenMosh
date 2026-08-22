@@ -24,6 +24,29 @@ export class TimelineStackState {
     * paused editor shows this marker alone. */
    staticTime = $state(0);
 
+   /** The lane the user last touched, so a bare split shortcut knows which
+    * lane to cut. Lanes that can't split (audio) never set it. */
+   activeLaneId = $state<string | null>(null);
+
+   /** Split-at-time callbacks, keyed by lane id, for lanes that support it. */
+   readonly #splitters = new Map<string, (time: number) => void>();
+
+   /** Register a lane that can split its item at a time. Returns unregister. */
+   registerSplitter(laneId: string, splitAt: (time: number) => void): () => void {
+      this.#splitters.set(laneId, splitAt);
+      return () => this.#splitters.delete(laneId);
+   }
+
+   markLaneUsed(laneId: string): void {
+      this.activeLaneId = laneId;
+   }
+
+   /** The active lane's split callback, or null when it has none. */
+   get activeLaneSplitAt(): ((time: number) => void) | null {
+      const id = this.activeLaneId;
+      return id ? this.#splitters.get(id) ?? null : null;
+   }
+
    readonly vp: TimelineViewport;
 
    /**
@@ -123,18 +146,25 @@ export class TimelineStackState {
     * axis measures against and gives it the shared wheel behaviour, so
     * scrolling over any lane zooms every lane.
     */
-   lane = (node: HTMLElement | SVGElement) => {
+   lane = (node: HTMLElement | SVGElement, laneId?: string) => {
       const el = node as HTMLElement;
       this.#trackEls.add(el);
       this.#resizeObserver.observe(el);
       if (this.laneWidth <= 0) {
          this.laneWidth = el.getBoundingClientRect().width;
       }
+      // Any touch marks the lane as the one a bare split shortcut aims at.
+      // Capture phase: boundary drags stop propagation, but they still count.
+      const markUsed = (e: PointerEvent) => {
+         if (laneId) this.markLaneUsed(laneId);
+      };
+      el.addEventListener("pointerdown", markUsed, true);
       const detachWheel = this.vp.attachWheel(node, () => {
          this.followPlayhead = false;
       });
       return {
          destroy: () => {
+            el.removeEventListener("pointerdown", markUsed, true);
             detachWheel();
             this.#resizeObserver.unobserve(el);
             this.#trackEls.delete(el);
