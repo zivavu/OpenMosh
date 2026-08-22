@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { generateId } from '../../effects';
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	import type { UndoSource } from '../../editor/undo-router';
 	import { normalizeCoverage } from '../../editor/segment-coverage';
 	import {
 		clampGroupDelta,
@@ -55,6 +56,9 @@
 		onConfigChange: (config: SlideshowConfig) => void;
 		selectedSegmentId?: string | null;
 		onSeek?: (time: number) => void;
+		/** Out: this lane's undo stack, for the editor's Ctrl+Z router — the
+		 * segments are edited here but Ctrl+Z is decided across every stack. */
+		undoSource?: UndoSource;
 	}
 
 	let {
@@ -62,6 +66,7 @@
 		onConfigChange,
 		selectedSegmentId = $bindable(null),
 		onSeek,
+		undoSource = $bindable(),
 	}: Props = $props();
 
 	// One axis for the whole stack — zoom, pan and the playhead live there.
@@ -140,6 +145,17 @@
 		captureMeta: (rightSeg) => rightSeg?.subdivision ?? config.subdivision,
 		applyMeta: (seg, subdivision) => ({ ...seg, subdivision }),
 	});
+	undoSource = {
+		get undoSeq() {
+			return boundaries.undoSeq;
+		},
+		get redoSeq() {
+			return boundaries.redoSeq;
+		},
+		undo: () => void boundaries.undo(),
+		redo: () => void boundaries.redo(),
+	};
+
 	// Tracks which interior boundary dot the pointer is currently over
 	let hoveredDot: {
 		leftSegId: string | null;

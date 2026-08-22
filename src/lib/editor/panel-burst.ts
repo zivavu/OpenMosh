@@ -36,6 +36,12 @@ export class PanelBurstController {
     this.#coalesceMs = coalesceMs;
   }
 
+  /** True while a burst is open — an edit that has been applied but not yet
+   * recorded on its stack. */
+  get open(): boolean {
+    return this.#timer !== undefined;
+  }
+
   /**
    * Call immediately before a panel edit is applied, while the pre-edit state
    * is still intact. `coalesceKey` identifies a continuously-dragged parameter;

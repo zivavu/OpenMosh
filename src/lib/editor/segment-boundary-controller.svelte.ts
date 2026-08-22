@@ -3,10 +3,12 @@
  * components that edit a flat, gapless list of time-span segments
  * (TimelineSegments.svelte and SequenceTimeline.svelte). Each caller wires
  * in its own segment shape and split behavior; this owns the mechanics
- * behind Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y, Ctrl/Cmd+C, Ctrl/Cmd+V,
- * Escape, and rectangle-select boundary math.
+ * behind Ctrl/Cmd+C, Ctrl/Cmd+V, Escape, and rectangle-select boundary math.
+ * It owns an undo/redo stack too, but not the keys: those are routed by the
+ * editor across all of its stacks (see undo-router.ts).
  */
 
+import { NO_EDIT, nextEditSeq } from './edit-clock';
 import { isInteractiveTarget, isTextEntryTarget } from './shortcut-target';
 
 export interface BoundarySegment {
@@ -45,6 +47,10 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 
 	#undoStack = $state<S[][]>([]);
 	#redoStack = $state<S[][]>([]);
+	// Edit-clock stamps, one per entry of each stack, so the editor's Ctrl+Z
+	// router can tell a boundary edit apart in time from a text or span one.
+	#undoSeqs = $state<number[]>([]);
+	#redoSeqs = $state<number[]>([]);
 	#opts: SegmentBoundaryControllerOptions<S, M>;
 
 	constructor(opts: SegmentBoundaryControllerOptions<S, M>) {
@@ -59,16 +65,30 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		return this.#redoStack.length > 0;
 	}
 
+	/** Stamp of the edit undo() would revert — see edit-clock.ts. */
+	get undoSeq(): number {
+		return this.#undoSeqs[this.#undoSeqs.length - 1] ?? NO_EDIT;
+	}
+
+	get redoSeq(): number {
+		return this.#redoSeqs[this.#redoSeqs.length - 1] ?? NO_EDIT;
+	}
+
+	#record(prev: S[]): void {
+		this.#undoStack = [...this.#undoStack, prev];
+		this.#undoSeqs = [...this.#undoSeqs, nextEditSeq()];
+		this.#redoStack = [];
+		this.#redoSeqs = [];
+	}
+
 	/** Snapshot current segments to history without changing anything — call once when a drag starts moving. */
 	snapshotForDrag(): void {
-		this.#undoStack = [...this.#undoStack, [...this.#opts.getSegments()]];
-		this.#redoStack = [];
+		this.#record([...this.#opts.getSegments()]);
 	}
 
 	/** Apply new segments and record history — use for discrete, one-shot edits. */
 	commit(segments: S[]): void {
-		this.#undoStack = [...this.#undoStack, [...this.#opts.getSegments()]];
-		this.#redoStack = [];
+		this.#record([...this.#opts.getSegments()]);
 		this.#opts.onChange(segments);
 	}
 
@@ -78,8 +98,7 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 	 * tweaks mutating a segment's effects directly.
 	 */
 	pushState(prev: S[]): void {
-		this.#undoStack = [...this.#undoStack, prev];
-		this.#redoStack = [];
+		this.#record(prev);
 	}
 
 	/**
@@ -93,9 +112,12 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 
 	undo(): boolean {
 		if (this.#undoStack.length === 0) return false;
+		// The state we step off becomes the newest thing to redo.
 		this.#redoStack = [...this.#redoStack, [...this.#opts.getSegments()]];
+		this.#redoSeqs = [...this.#redoSeqs, nextEditSeq()];
 		const prev = this.#undoStack[this.#undoStack.length - 1];
 		this.#undoStack = this.#undoStack.slice(0, -1);
+		this.#undoSeqs = this.#undoSeqs.slice(0, -1);
 		this.#opts.onChange(prev);
 		this.#opts.onRestore?.();
 		return true;
@@ -104,8 +126,10 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 	redo(): boolean {
 		if (this.#redoStack.length === 0) return false;
 		this.#undoStack = [...this.#undoStack, [...this.#opts.getSegments()]];
+		this.#undoSeqs = [...this.#undoSeqs, nextEditSeq()];
 		const next = this.#redoStack[this.#redoStack.length - 1];
 		this.#redoStack = this.#redoStack.slice(0, -1);
+		this.#redoSeqs = this.#redoSeqs.slice(0, -1);
 		this.#opts.onChange(next);
 		this.#opts.onRestore?.();
 		return true;
@@ -208,7 +232,9 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 
 	/**
 	 * Handles the shortcuts that don't depend on component-specific selection
-	 * priority (undo/redo/copy/paste/escape). Returns true if consumed —
+	 * priority (copy/paste/escape). Undo and redo are not among them: they are
+	 * routed by the editor across every stack it owns, newest edit first, so
+	 * this one must not consume them ahead of it. Returns true if consumed —
 	 * callers should e.preventDefault() and, where a competing outer keydown
 	 * handler exists, stop the event from reaching it.
 	 */
@@ -220,20 +246,6 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
 
-		if (mod && key === 'z' && !e.shiftKey) {
-			if (this.undo()) {
-				e.preventDefault();
-				return true;
-			}
-			return false;
-		}
-		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
-			if (this.redo()) {
-				e.preventDefault();
-				return true;
-			}
-			return false;
-		}
 		if (mod && key === 'c') {
 			if (this.copySelection()) {
 				e.preventDefault();
@@ -269,8 +281,6 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
 
-		if (mod && key === 'z' && !e.shiftKey) return this.canUndo;
-		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) return this.canRedo;
 		if (mod && key === 'c') return this.selectedBoundaryTimes.length > 0;
 		if (mod && key === 'v') return this.clipboard.length > 0;
 		if (e.key === 'Escape' && !isInteractiveTarget(e.target))

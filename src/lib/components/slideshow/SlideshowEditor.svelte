@@ -67,6 +67,13 @@
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
 	import { PanelBurstController } from '../../editor/panel-burst';
+	import { PENDING_EDIT } from '../../editor/edit-clock';
+	import {
+		redoLatest,
+		undoLatest,
+		type UndoSource,
+	} from '../../editor/undo-router';
+	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
 	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
@@ -1105,6 +1112,89 @@
 	const panelBeforeEdit = (coalesceKey?: string) =>
 		panelBurst.beforeEdit(coalesceKey);
 
+	// ── Span undo ────────────────────────────────────────────────────────────
+	// The span handles are an edit like any other, so a mis-drag comes back with
+	// Ctrl+Z. See Editor.svelte for the same stack.
+	interface Span {
+		start: number;
+		end: number;
+	}
+	const spanHistory = createSnapshotHistory<Span>({ start: 0, end: 0 });
+
+	/** Record the span a drag landed on. A drag that put it back where it was
+	 * is not an edit, so it doesn't leave a step behind. */
+	function pushSpanHistory() {
+		const at = spanHistory.current;
+		if (at.start === audio.spanStart && at.end === audio.spanEnd) return;
+		spanHistory.push({ start: audio.spanStart, end: audio.spanEnd });
+	}
+
+	function applySpan(span: Span | null) {
+		if (!span) return;
+		audio.spanStart = span.start;
+		audio.spanEnd = span.end;
+	}
+
+	// A track brings its own span, restored from storage: that is the baseline
+	// to undo back to, not the empty one this component started on.
+	let spannedTrack = '';
+	$effect(() => {
+		const d = audio.trackDuration;
+		if (d <= 0) return;
+		const id = `${currentTrackId ?? audio.trackFile?.name ?? ''}:${d}`;
+		if (id === spannedTrack) return;
+		spannedTrack = id;
+		untrack(() =>
+			spanHistory.reset({ start: audio.spanStart, end: audio.spanEnd }),
+		);
+	});
+
+	// ── Undo routing ─────────────────────────────────────────────────────────
+	// Ctrl+Z lands on whichever stack was edited last, not on whichever one the
+	// selection points at — see Editor.svelte and undo-router.ts.
+	let segmentUndo = $state<UndoSource | undefined>(undefined);
+	const undoSources = (): (UndoSource | undefined)[] => [
+		{
+			get undoSeq() {
+				return spanHistory.undoSeq;
+			},
+			get redoSeq() {
+				return spanHistory.redoSeq;
+			},
+			undo: () => applySpan(spanHistory.undo()),
+			redo: () => applySpan(spanHistory.redo()),
+		},
+		{
+			get undoSeq() {
+				return textHistory.undoSeq;
+			},
+			get redoSeq() {
+				return textHistory.redoSeq;
+			},
+			undo: () => {
+				const prev = textHistory.undo();
+				if (prev) setTextTimeline(prev);
+			},
+			redo: () => {
+				const next = textHistory.redo();
+				if (next) setTextTimeline(next);
+			},
+		},
+		segmentUndo,
+		{
+			get undoSeq() {
+				// A burst still inside its coalescing window is an edit that has
+				// not reached its stack yet, and it is the newest one there is.
+				return panelBurst.open ? PENDING_EDIT : moshSession.undoSeq;
+			},
+			get redoSeq() {
+				return moshSession.redoSeq;
+			},
+			undo: () => moshSession.undoEdit(),
+			redo: () => moshSession.redoEdit(),
+		},
+	];
+
 	// ── Recording ──
 	let recordFps = $state(60);
 	/** Export length for silent (no-track) recordings. */
@@ -1336,24 +1426,13 @@
 		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
-			// A selected text clip means the last thing edited was text.
-			if (selectedTextClipId && textHistory.canRedo) {
-				const next = textHistory.redo();
-				if (next) setTextTimeline(next);
-				return;
-			}
-			moshSession.redoEdit();
+			redoLatest(undoSources());
 			return;
 		}
 		if (mod && key === 'z') {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
-			if (selectedTextClipId && textHistory.canUndo) {
-				const prev = textHistory.undo();
-				if (prev) setTextTimeline(prev);
-				return;
-			}
-			moshSession.undoEdit();
+			undoLatest(undoSources());
 			return;
 		}
 		// Leave every other modifier combo (copy, paste, save…) to the browser.
@@ -1565,6 +1644,7 @@
 					onPlay={() => startPreview()}
 					onPause={stopPreview}
 					onSeek={seekMaster}
+					onSpanCommit={pushSpanHistory}
 					onSpanStartChange={(t) => (audio.spanStart = t)}
 					onSpanEndChange={(t) => (audio.spanEnd = t)}
 					onVolumeChange={(v) => audio.setOutputVolume(v)}
@@ -1586,6 +1666,7 @@
 					{config}
 					{onConfigChange}
 					bind:selectedSegmentId
+					bind:undoSource={segmentUndo}
 					onSeek={seekMaster}
 				/>
 			{/if}

@@ -92,6 +92,12 @@
 		type FxLaneSettings,
 	} from '../../editor/fx-lanes';
 	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
+	import { PENDING_EDIT } from '../../editor/edit-clock';
+	import {
+		redoLatest,
+		undoLatest,
+		type UndoSource,
+	} from '../../editor/undo-router';
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import { SequenceFrameDriver } from '../../editor/sequence-frames';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
@@ -473,6 +479,44 @@
 		if (!currentTrackId || restorePending || audio.trackDuration <= 0) return;
 		if (end <= start) return;
 		spanStore.save(currentTrackId, { spanStart: start, spanEnd: end });
+	});
+
+	// ── Span undo ────────────────────────────────────────────────────────────
+	// The span handles are an edit like any other, so a mis-drag comes back with
+	// Ctrl+Z. Its own stack because the span is neither effects nor segments;
+	// the router picks between it and the rest by when each was last touched.
+	interface Span {
+		start: number;
+		end: number;
+	}
+	const spanHistory = createSnapshotHistory<Span>({ start: 0, end: 0 });
+
+	/** Record the span a drag landed on. A drag that put it back where it was
+	 * is not an edit, so it doesn't leave a step behind. */
+	function pushSpanHistory() {
+		const at = spanHistory.current;
+		if (at.start === audio.spanStart && at.end === audio.spanEnd) return;
+		spanHistory.push({ start: audio.spanStart, end: audio.spanEnd });
+	}
+
+	function applySpan(span: Span | null) {
+		if (!span) return;
+		audio.spanStart = span.start;
+		audio.spanEnd = span.end;
+	}
+
+	// A track brings its own span, restored from storage: that is the baseline
+	// to undo back to, not the empty one this component started on.
+	let spannedTrack = '';
+	$effect(() => {
+		const d = audio.trackDuration;
+		if (d <= 0) return;
+		const id = `${currentTrackId ?? audio.trackFile?.name ?? ''}:${d}`;
+		if (id === spannedTrack) return;
+		spannedTrack = id;
+		untrack(() =>
+			spanHistory.reset({ start: audio.spanStart, end: audio.spanEnd }),
+		);
 	});
 
 	let trackInput: HTMLInputElement;
@@ -936,7 +980,7 @@
 	// ── FX lanes ─────────────────────────────────────────────────────────────
 	// Their own undo stack, for the same reason the text timeline has one: the
 	// sequence stack is typed to segments, and nudging an fx clip shouldn't
-	// rewind the source lane. Ctrl+Z routes here while an fx clip is selected.
+	// rewind the source lane. Ctrl+Z reaches it when an fx edit is the newest.
 	const fxHistory = createSnapshotHistory<FxLane[]>([]);
 
 	function pushFxHistory(coalesceKey?: string) {
@@ -1731,20 +1775,28 @@
 
 	// A segment edit records into the sequence stack (pre-edit snapshot), any
 	// other edit into the single-mode history (pushed once the burst settles).
+	/** Which stack the open burst will land on. The fx and segment stacks are
+	 * written at the start of the burst, so they carry a stamp already; the
+	 * chain's entry is only pushed when the burst closes, and until then the
+	 * router has to be told it is there. */
+	let burstOwner: 'fx' | 'segment' | 'chain' | null = null;
 	const panelBurst = new PanelBurstController({
 		onEditStart: () => {
 			// An fx clip edit belongs to the fx stack, so Ctrl+Z steps back the
 			// tweak rather than the source lane's last structural change.
 			if (selectedFxClip) {
+				burstOwner = 'fx';
 				pushFxHistory();
 				return;
 			}
 			if (panelSelectedSegment()) {
+				burstOwner = 'segment';
 				seqBoundaries.pushState(
 					$state.snapshot(sequenceSegments) as SequenceSegment[],
 				);
 				return;
 			}
+			burstOwner = 'chain';
 			return () => moshSession.pushEdit(effects);
 		},
 	});
@@ -1961,43 +2013,93 @@
 		moshSession.back();
 	}
 
-	// Ctrl+Z/Y: hand-edits only. In sequence mode that's the timeline stack,
-	// which covers both segment structure and panel tweaks on a segment.
+	// Ctrl+Z/Y: hand-edits only, across every stack the editor owns. Which one
+	// a press lands on is decided by when each was last edited, not by what is
+	// selected — the order the user worked in is the only order that reads as
+	// undo. Moshes keep their own keys (←/→) and stay out of it.
+	const undoSources: UndoSource[] = [
+		{
+			get undoSeq() {
+				return spanHistory.undoSeq;
+			},
+			get redoSeq() {
+				return spanHistory.redoSeq;
+			},
+			undo: () => applySpan(spanHistory.undo()),
+			redo: () => applySpan(spanHistory.redo()),
+		},
+		{
+			get undoSeq() {
+				return textHistory.undoSeq;
+			},
+			get redoSeq() {
+				return textHistory.redoSeq;
+			},
+			undo: () => {
+				const prev = textHistory.undo();
+				if (prev) setTextTimeline(prev);
+			},
+			redo: () => {
+				const next = textHistory.redo();
+				if (next) setTextTimeline(next);
+			},
+		},
+		{
+			get undoSeq() {
+				return burstOwner === 'fx' && panelBurst.open
+					? PENDING_EDIT
+					: fxHistory.undoSeq;
+			},
+			get redoSeq() {
+				return fxHistory.redoSeq;
+			},
+			undo: () => {
+				endPanelBurst();
+				const prev = fxHistory.undo();
+				if (prev) setFxLanes(prev);
+			},
+			redo: () => {
+				const next = fxHistory.redo();
+				if (next) setFxLanes(next);
+			},
+		},
+		{
+			get undoSeq() {
+				return burstOwner === 'segment' && panelBurst.open
+					? PENDING_EDIT
+					: seqBoundaries.undoSeq;
+			},
+			get redoSeq() {
+				return seqBoundaries.redoSeq;
+			},
+			undo: () => {
+				endPanelBurst();
+				seqBoundaries.undo();
+			},
+			redo: () => seqBoundaries.redo(),
+		},
+		{
+			get undoSeq() {
+				// A burst still inside its coalescing window is an edit that has
+				// not reached its stack yet, and it is the newest one there is.
+				return burstOwner === 'chain' && panelBurst.open
+					? PENDING_EDIT
+					: moshSession.undoSeq;
+			},
+			get redoSeq() {
+				return moshSession.redoSeq;
+			},
+			undo: () => moshSession.undoEdit(),
+			redo: () => moshSession.redoEdit(),
+		},
+	];
+
 	function undo() {
-		// A selected text clip means the last thing edited was text.
-		if (selectedTextClipId && textHistory.canUndo) {
-			const prev = textHistory.undo();
-			if (prev) textTimeline = prev;
-			return;
-		}
-		if (selectedFxClipId && fxHistory.canUndo) {
-			const prev = fxHistory.undo();
-			if (prev) fxLanes = prev;
-			return;
-		}
-		if (isSequenceMode) {
-			seqBoundaries.undo();
-			return;
-		}
-		moshSession.undoEdit();
+		undoLatest(undoSources);
 	}
 
 	function redo() {
-		if (selectedTextClipId && textHistory.canRedo) {
-			const next = textHistory.redo();
-			if (next) textTimeline = next;
-			return;
-		}
-		if (selectedFxClipId && fxHistory.canRedo) {
-			const next = fxHistory.redo();
-			if (next) fxLanes = next;
-			return;
-		}
-		if (isSequenceMode) {
-			seqBoundaries.redo();
-			return;
-		}
-		moshSession.redoEdit();
+		redoLatest(undoSources);
 	}
 
 	function clearEffects() {
@@ -2299,10 +2401,10 @@
 			shortcuts: [
 				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
 				{ keys: ['←'], description: 'Previous mosh' },
-				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo effect edit' },
+				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
 				{
 					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-					description: 'Redo effect edit',
+					description: 'Redo the last undone edit',
 				},
 				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
 				{ keys: ['Space'], description: 'Play / pause' },
@@ -2337,10 +2439,10 @@
 								description: 'Delete segment / selected boundaries',
 							},
 							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
-							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo last sequence edit' },
+							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
 							{
 								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-								description: 'Redo last sequence edit',
+								description: 'Redo the last undone edit',
 							},
 							{
 								keys: ['Shift+Drag'],
@@ -2488,8 +2590,8 @@
 	);
 
 	// Its own undo stack: the chain stacks are typed to effect arrays, and a
-	// text edit shouldn't rewind a mosh. Ctrl+Z routes here while a clip is
-	// selected, and falls back to the chain once it is not.
+	// text edit shouldn't rewind a mosh. Ctrl+Z reaches it when a text edit is
+	// the newest thing the user did.
 	const textHistory = createTextHistory();
 
 	// A restored timeline is the baseline, not an edit on top of an empty one:
@@ -3193,6 +3295,7 @@
 						onPlay={playSpan}
 						onPause={pauseTrack}
 						onSeek={seekTo}
+						onSpanCommit={pushSpanHistory}
 						onSpanStartChange={(t) => (audio.spanStart = t)}
 						onSpanEndChange={(t) => (audio.spanEnd = t)}
 						onVolumeChange={(v) => audio.setOutputVolume(v)}

@@ -16,6 +16,10 @@
 		onSeek: (t: number) => void;
 		onSpanStartChange: (t: number) => void;
 		onSpanEndChange: (t: number) => void;
+		/** Fired once when a handle drag ends, with the new span already
+		 * applied — the editor records it for undo there, one entry per drag
+		 * rather than one per pointermove. */
+		onSpanCommit?: () => void;
 		outputVolume?: number;
 		onVolumeChange?: (v: number) => void;
 		speed?: number;
@@ -45,6 +49,7 @@
 		onSeek,
 		onSpanStartChange,
 		onSpanEndChange,
+		onSpanCommit,
 		outputVolume = 1,
 		onVolumeChange,
 		speed = 1,
@@ -196,6 +201,8 @@
 		};
 		const onUp = () => {
 			dragHandle = null;
+			// One undo entry for the whole drag, recorded on the span it landed on.
+			onSpanCommit?.();
 			window.removeEventListener('pointermove', onMove as EventListener);
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('touchmove', onMove as EventListener);

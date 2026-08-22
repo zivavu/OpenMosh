@@ -78,6 +78,14 @@ export function createMoshSession(opts: MoshSessionOptions) {
     get canUndoMosh() {
       return moshHistory.canUndo;
     },
+    /** Where the hand-edit stack sits on the shared edit clock, for the
+     * Ctrl+Z router. The mosh stack has its own keys and stays out of it. */
+    get undoSeq() {
+      return history.undoSeq;
+    },
+    get redoSeq() {
+      return history.redoSeq;
+    },
     /** Anything to undo on either stack — i.e. the chain has been worked on. */
     get touched() {
       return history.canUndo || moshHistory.canUndo;
