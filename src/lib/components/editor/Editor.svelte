@@ -146,6 +146,7 @@
 	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
 	import SequenceGridView from './SequenceGridView.svelte';
+	import SourceRail from './SourceRail.svelte';
 	import SequenceTimeline from './SequenceTimeline.svelte';
 	import FxLanes from './FxLanes.svelte';
 	import MoshGroup from './MoshGroup.svelte';
@@ -3228,6 +3229,18 @@
 				</RecordGroup>
 			{/if}
 		</div>
+		{#if isSequenceMode && !sequenceGridOpen && sequenceSources.length > 0}
+			<!-- The pool, on hand while the preview is up: dragging a thumb onto a
+			     segment is the same drop the grid's cards make. -->
+			<SourceRail
+				sources={sequenceSources}
+				primarySourceId={sourceRegistry.primaryId}
+				selectedCount={seqSelectedIds.length}
+				selectedSourceId={seqSelectedSourceId}
+				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
+				onAdd={() => sourceInput?.click()}
+			/>
+		{/if}
 		{#if showVideoBar && !videoIsMaster}
 			<!-- A second clock: the video runs its own span while the track drives
 			     the timeline, so it can't share the stack's axis. -->
