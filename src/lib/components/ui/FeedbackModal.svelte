@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { X, Github } from 'lucide-svelte';
+	import { X, Github, Check } from 'lucide-svelte';
 	import ButtonGroup from './ButtonGroup.svelte';
 	import { closeFeedback } from './feedback.svelte';
-	import { showToast } from './toast.svelte';
 	import { submitFeedback, type FeedbackKind } from '../../feedback/submit';
 
 	let kind: FeedbackKind = $state('bug');
@@ -10,7 +9,12 @@
 	let email = $state('');
 	let botcheck = $state('');
 	let sending = $state(false);
+	let sent = $state(false);
 	let error: string | null = $state(null);
+
+	/** Long enough to read the confirmation, short enough not to trap anyone. */
+	const AUTO_CLOSE_MS = 3000;
+	let closeTimer = 0;
 
 	const PLACEHOLDERS: Record<FeedbackKind, string> = {
 		bug: 'What happened, and what were you doing when it did?',
@@ -24,14 +28,17 @@
 		error = null;
 		try {
 			await submitFeedback({ kind, message: message.trim(), email: email.trim(), botcheck });
-			showToast('Thanks — feedback sent.');
-			closeFeedback();
+			sent = true;
+			closeTimer = window.setTimeout(closeFeedback, AUTO_CLOSE_MS);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Something went wrong sending that.';
 		} finally {
 			sending = false;
 		}
 	}
+
+	// The modal unmounts on close, so a pending auto-close must not outlive it.
+	$effect(() => () => clearTimeout(closeTimer));
 
 	/** The editors bind their shortcuts on window, so every key pressed in here
 	 * has to stop before it gets there — Escape included, which we handle. */
@@ -58,66 +65,79 @@
 			</button>
 		</div>
 
-		<ButtonGroup
-			buttons={[
-				{ label: 'Bug', value: 'bug' },
-				{ label: 'Idea', value: 'idea' },
-				{ label: 'Other', value: 'other' },
-			]}
-			value={kind}
-			onchange={(v: FeedbackKind) => (kind = v)}
-		/>
-
-		<!-- svelte-ignore a11y_autofocus -->
-		<textarea
-			class="message-input"
-			placeholder={PLACEHOLDERS[kind]}
-			autofocus
-			bind:value={message}
-		></textarea>
-
-		<input
-			class="email-input"
-			type="email"
-			placeholder="Your email (optional, only so I can reply)"
-			bind:value={email}
-		/>
-
-		<!-- Honeypot: off-screen and tab-skipped, so only bots ever fill it. -->
-		<input
-			class="botcheck"
-			type="text"
-			tabindex="-1"
-			autocomplete="off"
-			aria-hidden="true"
-			bind:value={botcheck}
-		/>
-
-		{#if error}
-			<p class="error">{error}</p>
+		{#if sent}
+			<div class="sent-panel">
+				<div class="sent-mark"><Check size={20} /></div>
+				<p class="sent-title">Feedback sent</p>
+				<p class="sent-note">
+					{email.trim()
+						? `Thanks — I'll reply to ${email.trim()} if I need more.`
+						: 'Thanks — it landed in my inbox.'}
+				</p>
+				<button class="ghost" onclick={closeFeedback}>Close</button>
+			</div>
 		{:else}
-			<p class="hint">
-				Your browser, screen size and current effect chain are attached, so
-				bugs can be reproduced exactly.
-			</p>
-		{/if}
+			<ButtonGroup
+				buttons={[
+					{ label: 'Bug', value: 'bug' },
+					{ label: 'Idea', value: 'idea' },
+					{ label: 'Other', value: 'other' },
+				]}
+				value={kind}
+				onchange={(v: FeedbackKind) => (kind = v)}
+			/>
 
-		<div class="actions">
-			<a
-				class="ghost"
-				href="https://github.com/zivavu/OpenMosh/issues/new"
-				target="_blank"
-				rel="noopener noreferrer"
-			>
-				<Github size={12} />
-				Open an issue instead
-			</a>
-			<div class="spacer"></div>
-			<button class="ghost" onclick={closeFeedback}>Cancel</button>
-			<button class="primary" disabled={!message.trim() || sending} onclick={send}>
-				{sending ? 'Sending…' : 'Send'}
-			</button>
-		</div>
+			<!-- svelte-ignore a11y_autofocus -->
+			<textarea
+				class="message-input"
+				placeholder={PLACEHOLDERS[kind]}
+				autofocus
+				bind:value={message}
+			></textarea>
+
+			<input
+				class="email-input"
+				type="email"
+				placeholder="Your email (optional, only so I can reply)"
+				bind:value={email}
+			/>
+
+			<!-- Honeypot: off-screen and tab-skipped, so only bots ever fill it. -->
+			<input
+				class="botcheck"
+				type="text"
+				tabindex="-1"
+				autocomplete="off"
+				aria-hidden="true"
+				bind:value={botcheck}
+			/>
+
+			{#if error}
+				<p class="error">{error}</p>
+			{:else}
+				<p class="hint">
+					Your browser, screen size and current effect chain are attached, so
+					bugs can be reproduced exactly. No image is sent.
+				</p>
+			{/if}
+
+			<div class="actions">
+				<a
+					class="ghost"
+					href="https://github.com/zivavu/OpenMosh/issues/new"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					<Github size={12} />
+					Open an issue instead
+				</a>
+				<div class="spacer"></div>
+				<button class="ghost" onclick={closeFeedback}>Cancel</button>
+				<button class="primary" disabled={!message.trim() || sending} onclick={send}>
+					{sending ? 'Sending…' : 'Send'}
+				</button>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -211,6 +231,45 @@
 		opacity: 0;
 		height: 0;
 		width: 0;
+	}
+
+	.sent-panel {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 1.5rem 0.5rem 0.75rem;
+		text-align: center;
+	}
+
+	.sent-mark {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 42px;
+		height: 42px;
+		border-radius: 50%;
+		border: 1.5px solid var(--live-dim);
+		background: rgba(110, 231, 192, 0.08);
+		color: var(--live);
+	}
+
+	.sent-title {
+		margin: 0;
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--live);
+	}
+
+	.sent-note {
+		margin: 0;
+		max-width: 30ch;
+		font-size: 0.75rem;
+		line-height: 1.4;
+		color: var(--text-2);
 	}
 
 	.hint,
