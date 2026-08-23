@@ -31,7 +31,7 @@ const ANIMATED_POOL = [
 
 /** Stills that give each cut its character. Deliberately excludes the subtle
  * ones (blur, sharpen, colour correction) — at background scale they read as
- * nothing happening — and the novelty ones (ascii, thermal, kaleido, polar),
+ * nothing happening — and the novelty ones (thermal, kaleido, polar),
  * which overwrite the poster with their own gimmick instead of glitching it,
  * and pixelate, which just throws the artwork away. */
 const STATIC_POOL = [

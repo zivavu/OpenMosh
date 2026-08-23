@@ -1,6 +1,5 @@
 import { hexToVec3 } from '../color';
 import { DEFAULT_AUDIO_RESPONSE, punchExponent } from '../audio/auto-range';
-import { ASCII_CHARSETS } from '../effects/definitions';
 
 export const VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec2 a_position;
@@ -144,8 +143,8 @@ export interface EffectShaderDef {
 	hdrFeedback?: boolean;
 	/**
 	 * This shader paints its own background over the whole frame (halftone's
-	 * paper, ascii's void), so it can't preserve the transparency of what it was
-	 * handed. On a text layer it fills the frame instead of following the glyphs.
+	 * paper), so it can't preserve the transparency of what it was handed. On a
+	 * text layer it fills the frame instead of following the text.
 	 */
 	opaqueOutput?: boolean;
 	animated?: boolean;
@@ -251,181 +250,6 @@ void main() {
     totalW += w;
   }
   outColor = bloom / totalW;
-}`;
-
-/**
- * One cell of the ascii glyph atlas, shaped like a terminal cell rather than a
- * square. The shader bakes these in to pick its mip level, so
- * GlRenderer.buildGlyphAtlas has to rasterize at exactly this size.
- */
-export const ASCII_GLYPH_CELL = { w: 48, h: 96 };
-
-const ASCII_COLOR_MODES: Record<string, number> = {
-	color: 0,
-	green: 1,
-	amber: 2,
-	white: 3,
-	quantized: 4,
-};
-
-const ASCII_BG_MODES: Record<string, number> = { black: 0, tint: 1, image: 2 };
-
-const asciiRampLengths = new Map(
-	ASCII_CHARSETS.map((set) => [set.value, set.chars.length]),
-);
-
-function asciiRampLength(charset: string): number {
-	return asciiRampLengths.get(charset) ?? asciiRampLengths.get('classic') ?? 10;
-}
-
-/** ASCII pre-pass 1: luma, downsampled to the half-res HDR buffer with a 3x3 box. */
-const ASCII_LUMA_FRAG = `void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float l = 0.0;
-  for (int j = -1; j <= 1; j++) {
-    for (int i = -1; i <= 1; i++) {
-      vec3 c = texture(u_texture, v_uv + vec2(float(i), float(j)) * px).rgb;
-      l += dot(c, vec3(0.299, 0.587, 0.114));
-    }
-  }
-  outColor = vec4(vec3(l / 9.0), 1.0);
-}`;
-
-/**
- * ASCII pre-pass 2: Sobel into (gx, gy, magnitude). Magnitude is scaled to
- * roughly 0..1 so the Edges slider maps onto a stable threshold instead of
- * whatever range the kernel happens to produce.
- */
-const ASCII_SOBEL_FRAG = `void main() {
-  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float tl = texture(u_texture, v_uv + vec2(-1.0, -1.0) * px).r;
-  float tm = texture(u_texture, v_uv + vec2( 0.0, -1.0) * px).r;
-  float tr = texture(u_texture, v_uv + vec2( 1.0, -1.0) * px).r;
-  float ml = texture(u_texture, v_uv + vec2(-1.0,  0.0) * px).r;
-  float mr = texture(u_texture, v_uv + vec2( 1.0,  0.0) * px).r;
-  float bl = texture(u_texture, v_uv + vec2(-1.0,  1.0) * px).r;
-  float bm = texture(u_texture, v_uv + vec2( 0.0,  1.0) * px).r;
-  float br = texture(u_texture, v_uv + vec2( 1.0,  1.0) * px).r;
-  float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
-  float gy = (bl + 2.0 * bm + br) - (tl + 2.0 * tm + tr);
-  outColor = vec4(gx, gy, length(vec2(gx, gy)) * 0.25, 1.0);
-}`;
-
-/**
- * ASCII main pass. Two things separate this from a plain luminance ramp:
- *
- * - Every cell is averaged over a 3x3 spread rather than point-sampled at its
- *   centre, so the glyph reflects the whole cell and stops crawling on video.
- * - The Sobel pre-pass is binned into four orientations per cell, and a cell
- *   whose gradient is both strong and *consistent* draws a stroke glyph instead
- *   of a ramp glyph. That is what makes contours trace themselves out in
- *   characters rather than dissolving into a field of dense glyphs.
- *
- * u_texture is the Sobel buffer (half res); u_original is the chain input.
- */
-const ASCII_FRAG = `uniform float u_size;
-uniform float u_aspect;
-uniform float u_edges;
-uniform float u_contrast;
-uniform float u_ramp;
-uniform int u_color;
-uniform int u_bg;
-uniform sampler2D u_glyphs;
-uniform sampler2D u_original;
-uniform vec2 u_resolution;
-
-const vec3 LUMA = vec3(0.299, 0.587, 0.114);
-const float QUARTER_PI = 0.78539816;
-
-void main() {
-  // The grid follows the render-target size, not the input texture size — the
-  // source keeps its natural dimensions while FBOs use the output size.
-  vec2 res = u_resolution;
-  vec2 cellSize = vec2(u_size, u_size * u_aspect);
-  vec2 pos = v_uv * res;
-  vec2 cellId = floor(pos / cellSize);
-
-  vec3 cell = vec3(0.0);
-  float bins[4];
-  bins[0] = 0.0; bins[1] = 0.0; bins[2] = 0.0; bins[3] = 0.0;
-  float peak = 0.0;
-  float mags = 0.0;
-  for (int j = 0; j < 3; j++) {
-    for (int i = 0; i < 3; i++) {
-      vec2 uv = (cellId + (vec2(float(i), float(j)) + 0.5) / 3.0) * cellSize / res;
-      cell += texture(u_original, uv).rgb;
-      vec3 sob = texture(u_texture, uv).rgb;
-      float m = sob.b;
-      if (m > 0.01) {
-        // The edge runs perpendicular to the gradient. Orientation is mod 180°,
-        // so four 45° bins cover it.
-        float ang = atan(sob.g, sob.r) + 1.5707963;
-        int bi = int(mod(floor(ang / QUARTER_PI + 0.5), 4.0));
-        bins[bi] += m;
-        mags += m;
-        peak = max(peak, m);
-      }
-    }
-  }
-  cell /= 9.0;
-
-  // Contrast reshapes the ramp: gamma below 1 lifts shadows into visible
-  // glyphs, above 1 crushes them back toward the sparse end.
-  float gamma = mix(1.7, 0.45, clamp(u_contrast, 0.0, 1.0));
-  float lum = clamp(pow(clamp(dot(cell, LUMA), 0.0, 1.0), gamma), 0.0, 1.0);
-
-  float total = u_ramp + 4.0;
-  float gi = floor(lum * (u_ramp - 0.001));
-
-  int best = 0;
-  float bestW = 0.0;
-  for (int b = 0; b < 4; b++) {
-    if (bins[b] > bestW) { bestW = bins[b]; best = b; }
-  }
-  // Coherence, not raw magnitude, decides: a noisy cell spreads its gradient
-  // across all four bins and stays a ramp glyph, while a clean contour piles
-  // into one and earns a stroke.
-  float coherence = mags > 0.0 ? bestW / mags : 0.0;
-  bool isEdge = u_edges > 0.0 && peak * coherence > mix(0.45, 0.03, u_edges);
-  if (isEdge) gi = u_ramp + float(best);
-
-  // Explicit LOD. Letting the hardware derive it from the atlas coordinate
-  // makes fract() spike the derivative at every cell seam, which is what turned
-  // small cells into blurred mush.
-  float lod = clamp(log2(${ASCII_GLYPH_CELL.w}.0 / max(u_size, 1.0)), 0.0, 2.0);
-  vec2 local = fract(pos / cellSize);
-  float g = clamp(textureLod(u_glyphs, vec2((gi + local.x) / total, local.y), lod).r, 0.0, 1.0);
-
-  vec3 tint;
-  if (u_color == 1) {
-    tint = vec3(0.24, 1.0, 0.36);
-  } else if (u_color == 2) {
-    tint = vec3(1.0, 0.70, 0.20);
-  } else if (u_color == 3) {
-    tint = vec3(1.0);
-  } else if (u_color == 4) {
-    float mx = max(cell.r, max(cell.g, cell.b));
-    vec3 q = mx > 0.001 ? cell / mx : vec3(1.0);
-    tint = floor(q * 3.0 + 0.5) / 3.0;
-  } else {
-    // Cell averages drift toward grey and grey glyphs read as mud. Push the
-    // saturation back out and lift the value — brightness is the ramp's job,
-    // not the tint's.
-    float l = dot(cell, LUMA);
-    vec3 sat = clamp(l + (cell - l) * 1.7, 0.0, 1.0);
-    float mx = max(sat.r, max(sat.g, sat.b));
-    tint = mx > 0.001 ? mix(sat, sat / mx, 0.6) : vec3(1.0);
-  }
-
-  vec3 bg = u_bg == 1 ? cell * 0.16
-          : u_bg == 2 ? texture(u_original, v_uv).rgb * 0.22
-          : vec3(0.0);
-
-  // Dense glyphs blaze, sparse ones stay dim but present; strokes read at full
-  // strength so contours don't fade out over dark areas.
-  float dense = clamp(gi / max(u_ramp - 1.0, 1.0), 0.0, 1.0);
-  float bright = isEdge ? 1.15 : 0.7 + dense * 0.8;
-  outColor = vec4(clamp(mix(bg, tint * bright, g), 0.0, 1.0), 1.0);
 }`;
 
 export const EFFECT_SHADERS: Record<string, EffectShaderDef> = {
@@ -1730,18 +1554,7 @@ void main() {
   vec2 rp = vec2(ca * pos.x + sa * pos.y, -sa * pos.x + ca * pos.y);
 
   float ink; // 1 = inked
-  if (u_mode == 1) {
-    // Ordered 4x4 Bayer dither, one threshold per image pixel
-    const float B[16] = float[16](
-      0.0, 8.0, 2.0, 10.0,
-      12.0, 4.0, 14.0, 6.0,
-      3.0, 11.0, 1.0, 9.0,
-      15.0, 7.0, 13.0, 5.0
-    );
-    vec2 bp = floor(mod(pos, 4.0));
-    float th = (B[int(bp.y * 4.0 + bp.x)] + 0.5) / 16.0;
-    ink = step(th, lum);
-  } else if (u_mode == 2) {
+  if (u_mode == 2) {
     // Engraving lines; a second, perpendicular set joins in dark areas
     float aa = 1.5 * 3.14159265 / u_scale;
     float w1 = 0.5 + 0.5 * sin(rp.y * 3.14159265 / u_scale);
@@ -1766,7 +1579,7 @@ void main() {
 			setFloat(gl, l, 'u_angle', v.angle as number);
 			setFloat(gl, l, 'u_contrast', v.contrast as number);
 			setFloat(gl, l, 'u_invert', v.invert as number);
-			setInt(gl, l, 'u_mode', v.mode === 'dither' ? 1 : v.mode === 'lines' ? 2 : 0);
+			setInt(gl, l, 'u_mode', v.mode === 'lines' ? 2 : 0);
 		},
 	},
 
@@ -1837,33 +1650,6 @@ void main() {
   outColor = texture(u_texture, v_uv);
 }`,
 		setUniforms: floats('radius'),
-	},
-
-	ascii: {
-		prePasses: [
-			// Luma at half res with a 3x3 box on top: Sobel over raw video pixels
-			// picks up sensor noise and the edge glyphs strobe cell to cell.
-			{
-				fragment: H + ASCII_LUMA_FRAG,
-				linearFilter: true,
-			},
-			{ fragment: H + ASCII_SOBEL_FRAG },
-		],
-		fragment: H + ASCII_FRAG,
-		opaqueOutput: true,
-		setUniforms: (gl, l, v) => {
-			const num = (key: string, fallback: number) =>
-				typeof v[key] === 'number' ? (v[key] as number) : fallback;
-			setFloat(gl, l, 'u_size', num('size', 9));
-			setFloat(gl, l, 'u_aspect', num('aspect', 2));
-			setFloat(gl, l, 'u_edges', num('edges', 0.55));
-			setFloat(gl, l, 'u_contrast', num('contrast', 0.5));
-			// Ramp length drives both the glyph index and the atlas stride, and
-			// only the charset knows it.
-			setFloat(gl, l, 'u_ramp', asciiRampLength(v.charset as string));
-			setInt(gl, l, 'u_color', ASCII_COLOR_MODES[v.color as string] ?? 0);
-			setInt(gl, l, 'u_bg', ASCII_BG_MODES[v.background as string] ?? 0);
-		},
 	},
 
 	'radial-blur': {
@@ -2289,13 +2075,48 @@ void main() {
   vec3 col = acc / max(total, vec3(1e-4));
   float alpha = accA / max(totalA, 1e-4);
 
-  // Sheen from the image's own colour: the tint rides the pull and the
-  // highlight lands where the weave changes fastest, so the threads catch light
-  // without a fixed palette painted over the frame.
-  float slope = clamp(fwidth(fiber) * 8.0, 0.0, 1.0);
-  float luma = dot(col, vec3(0.299, 0.587, 0.114));
-  col = mix(col, hueRotate(col, fiber * 110.0), u_chrome * 0.8);
-  col += slope * u_chrome * (0.25 + 0.75 * luma) * vec3(1.0, 0.97, 0.92);
+  // Sheen: light each thread as a cylinder, so the highlight is a smooth band
+  // running down the fiber the way real fabric catches light. Deriving it from
+  // fwidth(fiber) instead spikes on the per-thread discontinuities and stipples
+  // aliased white dots along every cell boundary.
+  float xr = fract(across) * 2.0 - 1.0;      // position across one thread
+  float nz = sqrt(max(1.0 - xr * xr, 0.0));  // cylinder normal, facing viewer
+  float ndl = clamp(xr * -0.55 + nz * 0.84, 0.0, 1.0);
+
+  // A thread only a pixel or two wide can't carry a tight highlight, so widen
+  // and dim it as the weave goes sub-pixel rather than let it alias.
+  float thin = smoothstep(0.15, 0.6, aa);
+  float spec = pow(ndl, mix(24.0, 3.0, thin)) * mix(1.0, 0.55, thin);
+
+  // Vary the glint per thread so the weave doesn't read as one even sheet.
+  spec *= 0.4 + 0.6 * abs(fiber);
+
+  // Iridescence shifts with the angle you view the thread at, like an oil film,
+  // and stays inside a narrow arc so neighbouring threads keep a family
+  // resemblance. Swinging 110 degrees off a per-thread random instead scatters
+  // them across the whole hue wheel, which is what reads as neon plastic.
+  float shift = (xr * 0.75 + fiber * 0.25) * 24.0;
+  col = hueRotate(col, shift * u_chrome);
+
+  // The sheen carries no colour of its own: it scales the thread's existing
+  // colour, so a lit fiber keeps its hue and saturation and simply gets more
+  // light. Blending toward white instead washes the whole weave out to pastel.
+  float sh = clamp(spec * u_chrome, 0.0, 1.0);
+  col *= 1.0 + sh * 1.6;
+  col *= 1.0 - u_chrome * 0.22 * (1.0 - nz) * (1.0 - thin);
+
+  // Roll off on the brightest channel. A per-channel clamp would pin the other
+  // two below it and desaturate the peaks to white -- the thing we just avoided.
+  float peak = max(max(col.r, col.g), col.b);
+  col /= 1.0 + max(peak - 1.0, 0.0);
+
+  // Ease the threads that ended up on the gamut edge back off it. Saturation
+  // pinned at full is the other half of the plastic look, and the multiply
+  // above pushes colours there; only the worst offenders are touched.
+  float lo = min(min(col.r, col.g), col.b);
+  float sat = max(max(col.r, col.g), col.b) - lo;
+  float grey = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, vec3(grey), smoothstep(0.6, 1.0, sat) * 0.3 * u_chrome);
 
   outColor = vec4(clamp(col, 0.0, 1.0), alpha);
 }`,
@@ -2469,16 +2290,32 @@ void main() {
   // band so the terrain reads as a heat map that has gone liquid.
   vec3 quant = src * ((band + 0.5) / bands) / max(l, 0.02);
   float q = band / bands;
-  quant = hueRotate(clamp(quant, 0.0, 1.0), (q * 360.0 + u_time * 50.0) * u_cycle);
+  quant = clamp(hueRotate(clamp(quant, 0.0, 1.0), (q * 360.0 + u_time * 50.0) * u_cycle), 0.0, 1.0);
+
+  // Contour seam. fwidth gives the width the band edge actually occupies on
+  // screen, so the line stays a couple of pixels thick at any band count
+  // instead of flaring into a halo that swallows the frame.
+  float terrain = l * bands;
+  float w = max(fwidth(terrain), 1e-4);
+  float edge = fract(terrain);
+  float seam = 1.0 - smoothstep(w, w * 2.5, min(edge, 1.0 - edge));
+  seam *= smoothstep(0.0, 0.6, slope * bands * 6.0);
+
+  // Light the seam from a fixed direction so ridges facing the light catch it
+  // and the rest stay dark -- an even seam just reads as white paint.
+  vec2 n = grad / max(slope, 1e-4);
+  float lambert = 0.25 + 0.75 * clamp(dot(n, vec2(-0.6, 0.8)), 0.0, 1.0);
+
+  // Screen-blend a tinted highlight into the band colour instead of adding
+  // white, and do it before the feedback mix: added afterwards it lands in the
+  // feedback buffer and compounds every frame until the frame is flat white.
+  vec3 spec = mix(quant, vec3(1.0), 0.45);
+  float s = clamp(seam * lambert * u_sheen, 0.0, 1.0);
+  vec3 lit = 1.0 - (1.0 - quant) * (1.0 - spec * s);
 
   float blend = 1.0 - exp(-mix(9.0, 1.5, u_flow) * u_delta);
-  vec3 col = mix(prev, quant, blend);
+  vec3 col = mix(prev, lit, blend);
   float colA = mix(prevS.a, texture(u_texture, v_uv).a, blend);
-
-  // Specular seam on each band edge, brightest where the terrain is steep.
-  float edge = fract(l * bands);
-  float seam = 1.0 - smoothstep(0.0, 0.16, min(edge, 1.0 - edge));
-  col += seam * u_sheen * min(slope * 45.0, 1.0);
 
   outColor = vec4(clamp(col, 0.0, 1.0), clamp(colA, 0.0, 1.0));
 }`,
