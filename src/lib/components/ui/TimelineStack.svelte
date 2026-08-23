@@ -26,6 +26,9 @@
 		 * header row per lane. The editors fill this; see Editor.svelte.
 		 */
 		toolbar?: Snippet;
+		/** Shown in the selection bar while no lane has anything selected, so
+		 * the row is never dead space. Omit to leave it empty. */
+		selectionHint?: string | null;
 		/** The lanes, top to bottom. */
 		children: Snippet;
 		/** Out: the axis this stack owns, for editors whose window-level
@@ -43,6 +46,7 @@
 		loopEnabled = false,
 		onToggleLoop = null,
 		toolbar,
+		selectionHint = null,
 		children,
 		axis = $bindable(),
 	}: Props = $props();
@@ -364,6 +368,17 @@
 			/>
 		</div>
 	{/if}
+
+	<!-- One bar for every lane's selection, always mounted: rendering it only
+	     when something is selected made every click resize the stack. Whichever
+	     lane registered last owns it. -->
+	<div class="tl-selbar">
+		{#if stack.selectionBar}
+			{@render stack.selectionBar()}
+		{:else if selectionHint}
+			<span class="tl-selbar-hint">{selectionHint}</span>
+		{/if}
+	</div>
 </div>
 
 <style>
@@ -411,6 +426,28 @@
 
 	/* Rows that carry controls rather than time. Opaque and above the overlays,
 	   so neither the playhead nor the grid stripes them. */
+	/* Always this tall, selection or not: the lanes above must not move when
+	   one is made. */
+	.tl-selbar {
+		display: flex;
+		align-items: center;
+		height: 30px;
+		flex-shrink: 0;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.tl-selbar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.tl-selbar-hint {
+		margin: 0 auto;
+		color: var(--text-4);
+		font-size: 0.62rem;
+		letter-spacing: 0.03em;
+	}
+
 	:global(.tl-stack .tl-chrome) {
 		position: relative;
 		z-index: 6;

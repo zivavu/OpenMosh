@@ -8,7 +8,7 @@
  * read it with getTimelineStack() instead of building viewports of their own.
  */
 
-import { getContext, setContext } from "svelte";
+import { getContext, setContext, type Snippet } from "svelte";
 import { TimelineViewport } from "./timeline-viewport.svelte";
 
 const KEY = Symbol("timeline-stack");
@@ -39,6 +39,37 @@ export class TimelineStackState {
 
    markLaneUsed(laneId: string): void {
       this.activeLaneId = laneId;
+   }
+
+   /**
+    * Contextual controls for whatever each lane has selected. They render in
+    * the stack's one selection bar rather than in a row under their own lane:
+    * a bar per lane both duplicated the controls and, appearing mid-stack,
+    * pushed every lane below it down on each click.
+    *
+    * Newest registration last, and the last one wins — the lane whose
+    * selection just filled is the one on show. Same "most recent edit, not the
+    * selected one" rule the undo router follows.
+    */
+   #selectionBars = $state<{ laneId: string; render: Snippet }[]>([]);
+
+   /** Publish a lane's selection controls. Returns unregister. */
+   registerSelectionBar(laneId: string, render: Snippet): () => void {
+      this.#selectionBars = [
+         ...this.#selectionBars.filter((b) => b.laneId !== laneId),
+         { laneId, render },
+      ];
+      return () => {
+         this.#selectionBars = this.#selectionBars.filter(
+            (b) => b.laneId !== laneId,
+         );
+      };
+   }
+
+   /** The controls the selection bar should show, or null when nothing is
+    * selected anywhere. */
+   get selectionBar(): Snippet | null {
+      return this.#selectionBars.at(-1)?.render ?? null;
    }
 
    /** The active lane's split callback, or null when it has none. */
