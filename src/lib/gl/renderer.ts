@@ -414,6 +414,9 @@ export class GlRenderer {
     this.srcTexH = h;
 
     this.setupPingPong();
+    // setupPingPong binds its own textures last, so rebind before returning —
+    // callers upload straight into TEXTURE_2D.
+    gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     return true;
   }
 
