@@ -25,6 +25,7 @@ import {
   findSegmentAt,
   resolveTransitionAt,
   type SequenceSegment,
+  segmentSourceIdAt,
 } from "./sequence";
 import { createSequenceExportSources } from "./sequence-export-sources";
 import type { SequenceSource } from "./sequence-sources.svelte";
@@ -277,6 +278,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   > | null = null;
   const multiSource = (sequence?.sources?.length ?? 0) > 1;
   const primarySourceId = sequence?.sources?.find((s) => s.primary)?.id ?? null;
+  /** Registry order, same as the preview reads — see `segmentSourceIdAt`. */
+  const sourcePool = sequence?.sources?.map((src) => src.id) ?? [];
 
   /**
    * Source a transition at `t` is fading out of, or null when there is no
@@ -301,7 +304,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       tr.boundaryTime - 0.001,
       sequence.duration,
     );
-    const idA = segA?.sourceId ?? primarySourceId;
+    const idA = segmentSourceIdAt(
+      segA,
+      tr.boundaryTime - 0.001,
+      sourcePool,
+      primarySourceId,
+    );
     const idB = incomingSourceId ?? primarySourceId;
     if (!idA || idA === idB) return null;
     return { id: idA, time: Math.max(0, t - (segA?.startTime ?? 0)) };
@@ -319,7 +327,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     const seg = sequence
       ? findSegmentAt(sequence.segments, t, sequence.duration)
       : null;
-    const segSourceId = seg?.sourceId;
+    const segSourceId =
+      segmentSourceIdAt(seg, t, sourcePool, primarySourceId) ?? undefined;
     if (exportSources) {
       // Seconds into the clip, not a per-frame step: the same rule the preview
       // follows, so an export writes the frames that were previewed.

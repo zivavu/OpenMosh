@@ -69,6 +69,7 @@
 		resolveTransitionAt,
 		findSegmentAt,
 		normalizeSegmentTransitions,
+		segmentSourceIdAt,
 		type ResolvedTransition,
 		type SegmentTransitionChange,
 		type SequenceSegment,
@@ -117,6 +118,7 @@
 		clearSegments,
 		fillSegmentsFromPreset,
 		randomizeSegmentSources,
+		setSegmentsSourceRoll,
 		restoreSegmentMosh,
 		rollSegments,
 		setSegmentsMode,
@@ -1413,7 +1415,12 @@
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
 				ids.has(s.id)
-					? { ...s, sourceId: sourceId === primary ? undefined : sourceId }
+					? {
+							...s,
+							sourceId: sourceId === primary ? undefined : sourceId,
+							// Naming the clip a segment plays cancels the per-tick roll.
+							sourceRoll: undefined,
+						}
 					: s,
 			),
 		);
@@ -1433,7 +1440,13 @@
 		const picked = new Set(seqSelectedIds);
 		const played = sequenceSegments
 			.filter((s) => picked.has(s.id))
-			.map((s) => s.sourceId ?? sourceRegistry.primaryId);
+			// A rolling segment plays the whole pool, so it never agrees with
+			// anything — including another rolling segment, hence the unique id.
+			.map((s) =>
+				s.sourceRoll
+					? `roll:${s.id}`
+					: (s.sourceId ?? sourceRegistry.primaryId),
+			);
 		if (played.length === 0) return null;
 		return played.every((id) => id === played[0]) ? played[0] : null;
 	});
@@ -1467,10 +1480,37 @@
 		return findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration);
 	}
 
+	/** Pool ids in registry order — the export is handed the same array, and
+	 * a rolling segment's picks only line up if both read it the same way. */
+	let seqSourcePool = $derived(sequenceSources.map((s) => s.id));
+
+	/**
+	 * Where a segment's own clock stands. Normally the master time, but the
+	 * panel keeps a selected segment active while the playhead is elsewhere —
+	 * that one shows its first tick rather than a tick it never reaches.
+	 */
+	function segmentClockTime(seg: SequenceSegment | null | undefined): number {
+		if (!seg) return 0;
+		const end = seg.endTime ?? seqMasterDuration;
+		const t = seqMasterTime();
+		return t >= seg.startTime && t < end ? t : seg.startTime;
+	}
+
+	function sourceIdOf(seg: SequenceSegment | null | undefined): string | null {
+		return (
+			segmentSourceIdAt(
+				seg,
+				segmentClockTime(seg),
+				seqSourcePool,
+				sourceRegistry.primaryId,
+			) ?? null
+		);
+	}
+
 	function activeSourceId(): string | null {
 		const primary = sourceRegistry.primaryId;
 		if (!isSequenceMode) return primary;
-		return activeSegment()?.sourceId ?? primary;
+		return sourceIdOf(activeSegment());
 	}
 
 	/**
@@ -1506,8 +1546,7 @@
 	function driveSequenceSource(): boolean {
 		if (!isSequenceMode) return false;
 		const seg = activeSegment();
-		const id = seg?.sourceId ?? sourceRegistry.primaryId;
-		return seqFrames.advance(id, sourceTimeIn(seg));
+		return seqFrames.advance(sourceIdOf(seg), sourceTimeIn(seg));
 	}
 
 	/**
@@ -1524,7 +1563,13 @@
 			tr.boundaryTime - 0.001,
 			seqMasterDuration,
 		);
-		const idA = segA?.sourceId ?? sourceRegistry.primaryId;
+		const idA =
+			segmentSourceIdAt(
+				segA,
+				tr.boundaryTime - 0.001,
+				seqSourcePool,
+				sourceRegistry.primaryId,
+			) ?? null;
 		if (!idA || idA === activeSourceId()) return null;
 		return { id: idA, time: sourceTimeIn(segA) };
 	}
@@ -1886,6 +1931,13 @@
 				intervalSec,
 				intervalBeats,
 			),
+		);
+	}
+
+	/** Deal the pool across an auto segment's own ticks. */
+	function seqSourceRollChange(segIds: string[], on: boolean) {
+		seqBoundaries.commit(
+			setSegmentsSourceRoll(sequenceSegments, new Set(segIds), on),
 		);
 	}
 
@@ -3404,6 +3456,7 @@
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+						onSourceRollChange={seqSourceRollChange}
 					/>
 				{/if}
 				{#if isSequenceMode && fxLanes.length > 0}

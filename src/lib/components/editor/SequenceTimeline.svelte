@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Dices, Eraser, Repeat, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Repeat, Shuffle, Trash2 } from 'lucide-svelte';
 	import { loadPresets, type Preset } from '../../effects';
 	import {
 		cloneSegmentForSplit,
@@ -93,6 +93,8 @@
 		primarySourceId?: string | null;
 		/** Takes a source card dragged out of the grid view onto a segment. */
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
+		/** Deal the pool across an auto segment's re-roll ticks. */
+		onSourceRollChange?: (segmentIds: string[], on: boolean) => void;
 	}
 
 	let {
@@ -112,6 +114,7 @@
 		sources = [],
 		primarySourceId = null,
 		onAssignSource,
+		onSourceRollChange,
 	}: Props = $props();
 
 	let multiSource = $derived(sources.length > 1);
@@ -240,6 +243,9 @@
 	);
 
 	let commonMode = $derived(commonValue(selectedSegments.map((s) => s.mode)));
+	let commonSourceRoll = $derived(
+		commonValue(selectedSegments.map((s) => !!s.sourceRoll)),
+	);
 
 	// ── Drop a source onto a segment ─────────────────────────────────────────
 	// HTML5 drag events, deliberately: they're a separate stream from the
@@ -582,7 +588,8 @@
 
 	function segLabel(s: SequenceSegment): string {
 		if (s.mode === 'interval') {
-			return `auto ${intervalLabel(s.intervalSec, s.intervalBeats)}`;
+			const roll = s.sourceRoll && multiSource ? ' · media' : '';
+			return `auto ${intervalLabel(s.intervalSec, s.intervalBeats)}${roll}`;
 		}
 		// "*" = hand-edited since it was filled (preset overwrites skip it).
 		return s.modified ? `${s.label}*` : s.label;
@@ -602,9 +609,13 @@
 			const startX = vp.toPct(s.startTime);
 			const endX = vp.toPct(endTime);
 			const boxPx = ((endX - startX) / 100) * trackWidth;
-			const source = multiSource
-				? sourceIndex.get(s.sourceId ?? primarySourceId ?? '')
-				: undefined;
+			// A rolling segment plays the whole pool, so it gets no source band and
+			// no source line — either would name one clip out of the deck.
+			const rolls = multiSource && !!s.sourceRoll && s.mode === 'interval';
+			const source =
+				multiSource && !rolls
+					? sourceIndex.get(s.sourceId ?? primarySourceId ?? '')
+					: undefined;
 			const full = segLabel(s);
 			const trans = s.transition?.type ?? 'cut';
 			return {
@@ -616,6 +627,7 @@
 				label: fitLabel(full, boxPx, 6.6),
 				tip: [
 					full,
+					rolls ? 'media rolls with the mosh' : null,
 					source ? `source ${source.n}: ${source.src.name}` : null,
 					trans === 'cut' ? null : `${trans} ${s.transition?.durationSec ?? 0}s`,
 				]
@@ -1428,6 +1440,17 @@
 							<option value={String(sec)}>every {sec}s</option>
 						{/each}
 					</select>
+					{#if multiSource && onSourceRollChange}
+						<button
+							class="tl-tool-btn"
+							class:active={commonSourceRoll === true}
+							title="Cut to another clip from the pool on every re-roll"
+							onclick={() =>
+								onSourceRollChange(selectedIds, commonSourceRoll !== true)}
+						>
+							<Shuffle size={12} /> Media
+						</button>
+					{/if}
 				{/if}
 
 			</div>

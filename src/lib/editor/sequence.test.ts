@@ -9,6 +9,7 @@ import {
   findSegmentAt,
   intervalLabel,
   rollEffects,
+  segmentSourceIdAt,
   segmentTick,
   withSeededRandom,
   type SequenceSegment,
@@ -209,5 +210,73 @@ describe("beat-based re-roll spacing", () => {
     ];
     expect(applyBpmToSegments(segs, 120)).toBe(segs);
     expect(applyBpmToSegments(segs, 0)).toBe(segs);
+  });
+});
+
+describe("segmentSourceIdAt", () => {
+  const rolling = (over: Partial<SequenceSegment> = {}): SequenceSegment => ({
+    id: "s",
+    startTime: 0,
+    endTime: 100,
+    mode: "interval",
+    label: "auto",
+    effects: [],
+    intervalSec: 1,
+    seed: 12345,
+    sourceRoll: true,
+    ...over,
+  });
+  const picks = (seg: SequenceSegment, pool: string[], n: number) =>
+    Array.from({ length: n }, (_, i) => segmentSourceIdAt(seg, i, pool, "a"));
+
+  test("a segment that isn't rolling keeps its own source", () => {
+    const seg = rolling({ sourceRoll: false, sourceId: "b" });
+    expect(picks(seg, ["a", "b", "c"], 3)).toEqual(["b", "b", "b"]);
+  });
+
+  test("static segments never roll, even with the flag set", () => {
+    const seg = rolling({ mode: "static", sourceId: "c" });
+    expect(picks(seg, ["a", "b", "c"], 3)).toEqual(["c", "c", "c"]);
+  });
+
+  test("falls back to the primary while the pool is too small to deal", () => {
+    expect(picks(rolling(), ["a"], 2)).toEqual(["a", "a"]);
+  });
+
+  test("same segment and tick always pick the same source", () => {
+    const pool = ["a", "b", "c", "d"];
+    expect(picks(rolling(), pool, 20)).toEqual(picks(rolling(), pool, 20));
+  });
+
+  test("never repeats a source on consecutive ticks", () => {
+    for (const size of [2, 3, 4, 7]) {
+      const pool = Array.from({ length: size }, (_, i) => `s${i}`);
+      for (const seed of [0, 1, 7, 12345, 99999]) {
+        const out = picks(rolling({ seed }), pool, 60);
+        for (let i = 1; i < out.length; i++) expect(out[i]).not.toBe(out[i - 1]);
+      }
+    }
+  });
+
+  test("deals the whole pool before repeating any of it", () => {
+    const pool = ["a", "b", "c", "d", "e"];
+    const out = picks(rolling(), pool, 10);
+    expect(new Set(out.slice(0, 5)).size).toBe(5);
+    expect(new Set(out.slice(5)).size).toBe(5);
+  });
+
+  test("a different seed deals a different order", () => {
+    const pool = ["a", "b", "c", "d", "e"];
+    expect(picks(rolling({ seed: 1 }), pool, 10)).not.toEqual(
+      picks(rolling({ seed: 2 }), pool, 10),
+    );
+  });
+
+  test("ticks are measured from the segment start", () => {
+    const pool = ["a", "b", "c"];
+    const seg = rolling({ startTime: 10, endTime: 20 });
+    expect(segmentSourceIdAt(seg, 10.5, pool, "a")).toBe(
+      segmentSourceIdAt(rolling(), 0.5, pool, "a"),
+    );
   });
 });

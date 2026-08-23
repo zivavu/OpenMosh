@@ -5,6 +5,7 @@ import {
   loadInitialEffects,
   type EffectInstance,
 } from "../effects";
+import { shuffleInPlace } from "../utils";
 import { generateMosh, type MoshOptions } from "./mosh";
 import { putRoll } from "./roll-cache";
 
@@ -126,6 +127,10 @@ export interface SequenceSegment {
   transition?: SegmentTransition;
   /** "interval" mode: also blend at each re-roll tick inside the segment. */
   transitionOnTick?: boolean;
+  /** "interval" mode: deal the media pool across the ticks as well, so the
+   * segment cuts to another clip every time it re-rolls. `sourceId` is kept
+   * while this is on, so switching it back off restores the hand assignment. */
+  sourceRoll?: boolean;
 }
 
 export const DEFAULT_INTERVAL_SEC = 0.25;
@@ -307,6 +312,56 @@ export function findSegmentAt(
 export function segmentTick(seg: SequenceSegment, time: number): number {
   const interval = seg.intervalSec ?? DEFAULT_INTERVAL_SEC;
   return Math.max(0, Math.floor((time - seg.startTime) / interval));
+}
+
+/**
+ * Deck for one pass through the pool. Every source is dealt once before any
+ * repeats — independent per-tick picks clump, and the same clip landing on
+ * three ticks in a row reads as a stuck timeline rather than a roll.
+ */
+function sourceDeck(seed: number, cycle: number, pool: string[]): string[] {
+  const deck = withSeededRandom(seed + cycle * 104729, () =>
+    shuffleInPlace([...pool]),
+  );
+  if (cycle > 0) {
+    // Don't let a fresh deck open on the clip the last one closed with. The
+    // swap only ever touches the first two slots, so the deck this reads back
+    // still ends where the dealt one did — which is why the two-source case
+    // above can't come through here.
+    const prev = withSeededRandom(seed + (cycle - 1) * 104729, () =>
+      shuffleInPlace([...pool]),
+    );
+    if (deck[0] === prev[prev.length - 1]) [deck[0], deck[1]] = [deck[1], deck[0]];
+  }
+  return deck;
+}
+
+/**
+ * Which media a segment draws at `time` — normally the source assigned to it
+ * (or the primary), but an interval segment with `sourceRoll` on deals the
+ * pool across its ticks. Seeded off the segment like the mosh rolls are, so
+ * the preview and the export cut to the same clip on the same tick.
+ *
+ * `pool` is the whole media pool in registry order; both callers must pass it
+ * in the same order or their picks drift apart.
+ */
+export function segmentSourceIdAt(
+  seg: SequenceSegment | null | undefined,
+  time: number,
+  pool: string[],
+  primaryId?: string | null,
+): string | null | undefined {
+  if (!seg) return primaryId;
+  if (!seg.sourceRoll || seg.mode !== "interval" || pool.length < 2) {
+    return seg.sourceId ?? primaryId;
+  }
+  const tick = segmentTick(seg, time);
+  const seed = seg.seed ?? 0;
+  // Two sources can only alternate: any deck of them either repeats across the
+  // seam or is the alternation, so take the short path and say so.
+  if (pool.length === 2) return pool[(tick + (((seed % 2) + 2) % 2)) % 2];
+  const cycle = Math.floor(tick / pool.length);
+  return sourceDeck(seed, cycle, pool)[tick % pool.length];
 }
 
 export interface SequenceEffectSourceOptions {

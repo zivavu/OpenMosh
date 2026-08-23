@@ -97,6 +97,23 @@ export function setSegmentsMode(
 }
 
 /**
+ * Turn per-tick media rolling on or off. Only interval segments can roll — a
+ * static span has no ticks to deal across — and the seed is topped up here so
+ * a timeline saved before interval segments carried one still deals.
+ */
+export function setSegmentsSourceRoll(
+  segments: SequenceSegment[],
+  ids: Set<string>,
+  on: boolean,
+): SequenceSegment[] {
+  return mapIds(segments, ids, (s) =>
+    s.mode === "interval"
+      ? { ...s, sourceRoll: on || undefined, seed: s.seed ?? randomSeed() }
+      : s,
+  );
+}
+
+/**
  * Deal the pool across the given segments at random.
  *
  * Dealt from a shuffled deck rather than picked independently: independent
@@ -128,7 +145,13 @@ export function randomizeSegmentSources(
   };
   return mapIds(segments, ids, (s) => {
     const id = deal();
-    return { ...s, sourceId: id === primaryId ? undefined : id };
+    // Dealing one clip per segment is the opposite of dealing them across a
+    // segment's own ticks; leaving the roll on would ignore what was dealt.
+    return {
+      ...s,
+      sourceId: id === primaryId ? undefined : id,
+      sourceRoll: undefined,
+    };
   });
 }
 
