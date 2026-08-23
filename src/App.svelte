@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
+	import FeedbackModal from "./lib/components/ui/FeedbackModal.svelte";
 	import Editor from "./lib/components/editor/Editor.svelte";
 	import SlideshowEditor from "./lib/components/slideshow/SlideshowEditor.svelte";
 
@@ -11,6 +12,7 @@
 	import type { SessionMode } from "./lib/editor/sequence-media-store";
 	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
+	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
 
 	let file: File | null = $state(null);
 	let sequenceFiles: File[] = $state([]);
@@ -220,6 +222,10 @@
 		{warmCanvas}
 		{warmRenderer}
 	/>
+{/if}
+
+{#if isFeedbackOpen()}
+	<FeedbackModal />
 {/if}
 
 <ToastContainer />

@@ -17,6 +17,7 @@ import { Image, ListVideo, Music, Upload } from "lucide-svelte";
 import type { GlRenderer } from "../../gl/renderer";
 import DemoBackground from "./DemoBackground.svelte";
 import GithubLink from "./GithubLink.svelte";
+import FeedbackButton from "./FeedbackButton.svelte";
 import { showToast } from "./toast.svelte";
 import {
 	listSavedSequences,
@@ -503,6 +504,7 @@ function onAudioDrop(e: DragEvent) {
 
 	<div class="github-corner">
 		<GithubLink />
+		<FeedbackButton />
 	</div>
 </div>
 
@@ -527,6 +529,9 @@ function onAudioDrop(e: DragEvent) {
 		bottom: 1rem;
 		right: 1rem;
 		z-index: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 
 	.hero {

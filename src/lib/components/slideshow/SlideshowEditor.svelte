@@ -29,6 +29,7 @@
 	} from '../../text';
 	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
 	import TextTimelineLane from '../text/TextTimeline.svelte';
+	import { setFeedbackChain } from '../ui/feedback.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import type { GlRenderer, SourceFit } from '../../gl/renderer';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
@@ -471,6 +472,14 @@
 
 	// ── Effects ──
 	let effects: EffectInstance[] = $state(loadInitialEffects());
+
+	// Hand the live chain to the feedback modal, which is mounted at the app
+	// root and has no other way to see it.
+	$effect(() => {
+		setFeedbackChain(() => $state.snapshot(effects) as EffectInstance[]);
+		return () => setFeedbackChain(null);
+	});
+
 	let presets: Preset[] = $state(loadPresets());
 
 	const moshSession = createMoshSession({

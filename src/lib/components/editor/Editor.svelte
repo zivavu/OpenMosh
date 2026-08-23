@@ -138,6 +138,8 @@
 	import type { TimelineStackState } from '../../editor/timeline-stack.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
+	import { setFeedbackChain } from '../ui/feedback.svelte';
+	import FeedbackButton from '../ui/FeedbackButton.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
@@ -334,6 +336,13 @@
 	}
 
 	let effects: EffectInstance[] = $state(restoredEffects() ?? loadInitialEffects());
+
+	// Hand the live chain to the feedback modal, which is mounted at the app
+	// root and has no other way to see it.
+	$effect(() => {
+		setFeedbackChain(() => $state.snapshot(effects) as EffectInstance[]);
+		return () => setFeedbackChain(null);
+	});
 
 	const saved = loadSettings();
 	let moshMin = $state(saved.moshMin ?? DEFAULT_SETTINGS.moshMin);
@@ -2930,6 +2939,7 @@
 					</button>
 				{/if}
 				<GithubLink />
+				<FeedbackButton />
 				<div class="bar-sep"></div>
 				{#if isSequenceMode}
 					<div class="output-group">

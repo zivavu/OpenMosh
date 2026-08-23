@@ -1,6 +1,7 @@
 	<script lang="ts">
 	import { Home } from 'lucide-svelte';
 	import GithubLink from '../ui/GithubLink.svelte';
+	import FeedbackButton from '../ui/FeedbackButton.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
 
 	interface Props {
@@ -26,6 +27,7 @@
 			</button>
 		{/if}
 		<GithubLink />
+		<FeedbackButton />
 		<div class="bar-sep"></div>
 		<div class="view-group">
 			<ButtonGroup
