@@ -29,6 +29,7 @@
 	import type { SpectrumData } from '../../types';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import { moveItem, resolveMoveTarget } from '../../effects/reorder';
+	import { isMoshable } from '../../editor/mosh';
 	import EffectItem from './EffectItem.svelte';
 
 	export type { SpectrumData };
@@ -69,6 +70,16 @@
 		 * down; everything else, hiding especially, still works, since hiding is
 		 * how an effect is kept out of the roll. */
 		rolledNote?: string | null;
+		/** Set when the roll owns the whole chain, not just its switches — a
+		 * sequence auto segment rebuilds the list from scratch every tick, so a
+		 * hand reorder or param tweak there is thrown away. Drops the reorder
+		 * affordances and the param drawers; hiding still works. */
+		rolledChain?: boolean;
+		/** Which effects the roll actually owns. 'all' — the chain is rebuilt from
+		 * scratch, so nothing in it survives. 'moshable' — the roll runs over a
+		 * copy and skips non-moshable effects, so those keep the user's switch,
+		 * order and params and stay fully editable. */
+		rolledScope?: 'all' | 'moshable';
 	}
 
 	let {
@@ -84,7 +95,14 @@
 		onBeforeUserEdit,
 		noTarget = null,
 		rolledNote = null,
+		rolledChain = false,
+		rolledScope = 'all',
 	}: Props = $props();
+
+	/** False for an effect the roll leaves alone — its controls stay live. */
+	function isRolled(effect: EffectInstance): boolean {
+		return rolledScope === 'all' || isMoshable(effect);
+	}
 
 	/** How many effects are actually passing signal, shown in the panel header. */
 	let liveCount = $derived(effects.filter((e) => e.enabled).length);
@@ -155,7 +173,7 @@
 	}
 
 	// Expansion is view state, not a chain edit — deliberately out of undo.
-	const anyExpanded = $derived(effects.some((e) => e.expanded));
+	const anyExpanded = $derived(!rolledChain && effects.some((e) => e.expanded));
 
 	function collapseAll() {
 		for (const effect of effects) effect.expanded = false;
@@ -638,7 +656,8 @@
 					? (key, link) => onVolumeLinkChange(i, key, link)
 					: undefined}
 				onToggle={() => toggle(i)}
-				{rolledNote}
+				rolledNote={isRolled(effect) ? rolledNote : null}
+				rolledChain={rolledChain && isRolled(effect)}
 				onToggleExpand={() => toggleExpand(i)}
 				onHide={() => hide(i)}
 				onDuplicate={() => duplicate(i)}

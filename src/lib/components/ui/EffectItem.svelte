@@ -75,6 +75,11 @@
 		 * slideshow's rolling modes decide it per beat. The switch still shows
 		 * what is passing signal, but says why it can't be moved. */
 		rolledNote?: string | null;
+		/** Set when the whole list — order and params, not just the switches — is
+		 * rebuilt by the roll. Reordering and opening the params would both be
+		 * undone by the next tick, so those affordances go away rather than
+		 * sitting there dead. */
+		rolledChain?: boolean;
 		onToggleExpand: () => void;
 		/** Hide from the effect list (a persisted preference, not a chain edit). */
 		onHide: () => void;
@@ -107,6 +112,7 @@
 		onVolumeLinkChange,
 		onToggle,
 		rolledNote = null,
+		rolledChain = false,
 		onToggleExpand,
 		onHide,
 		onDuplicate,
@@ -175,12 +181,16 @@
 		</div>
 		<div class="strip">
 		<div class="header" role="group">
-			<button class="expand-trigger" onclick={onToggleExpand}>
-				<span class="expand-arrow" class:expanded={effect.expanded}
-					>&#9654;</span
-				>
-				<span class="name">{def.name}</span>
-			</button>
+			{#if rolledChain}
+				<span class="expand-trigger static"><span class="name">{def.name}</span></span>
+			{:else}
+				<button class="expand-trigger" onclick={onToggleExpand}>
+					<span class="expand-arrow" class:expanded={effect.expanded}
+						>&#9654;</span
+					>
+					<span class="name">{def.name}</span>
+				</button>
+			{/if}
 
 			<div class="controls">
 				<button
@@ -222,6 +232,7 @@
 					</button>
 				{/if}
 
+				{#if !rolledChain}
 				<div class="move-btns">
 					<button
 						class="move-btn"
@@ -252,10 +263,11 @@
 				>
 					<GripVertical size={14} />
 				</span>
+				{/if}
 			</div>
 		</div>
 
-		{#if effect.expanded}
+		{#if effect.expanded && !rolledChain}
 			<div class="params">
 				{#each def.params.filter((p) => !p.visibleWhen || p.visibleWhen(effect.values)) as param}
 					<div class="param-row">
@@ -562,6 +574,12 @@
 		font-size: inherit;
 		cursor: pointer;
 		padding: 0;
+	}
+
+	/* No drawer to open: keep the name in the same place, minus the affordance. */
+	.expand-trigger.static {
+		cursor: default;
+		padding-left: 1.15rem;
 	}
 
 	.expand-arrow {

@@ -1202,9 +1202,12 @@
 	 * The rack stays, though: hiding an effect is what keeps it out of the roll,
 	 * and that is worth more in these modes than in any other.
 	 */
+	/* Random rolls order and params too, so those controls stand down with the
+	 * switches; smooth only flips one switch a beat, leaving the order and every
+	 * param exactly as they were edited. */
 	let panelRolledNote = $derived(
 		config.moshMode === 'random'
-			? 'Random mode rolls the chain every beat, so the switches follow it. Hide an effect to keep it out of the roll.'
+			? 'Random mode rolls the switches, order and params every beat. Hide an effect to keep it out of the roll.'
 			: config.moshMode === 'smooth'
 				? 'Smooth mode toggles the chain as the track runs, so the switches follow it. Hide an effect to keep it out of the drift.'
 				: null,
@@ -1724,6 +1727,8 @@
 				hasTrack={!!audio.trackFile}
 				spectrumData={audio.spectrumData}
 				rolledNote={panelRolledNote}
+				rolledChain={config.moshMode === 'random'}
+				rolledScope="moshable"
 				onVolumeLinkChange={(index, paramKey, link) => {
 					panelBeforeEdit(`link:${index}:${paramKey}`);
 					effects = setVolumeLink(effects, index, paramKey, link);
