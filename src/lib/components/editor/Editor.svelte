@@ -3276,6 +3276,9 @@
 				onTogglePlay={toggleMasterPlay}
 				onSeek={seekMaster}
 				spanStart={textTimeOffset}
+				selectionHint={isSequenceMode
+					? 'Click a segment or an FX clip to edit it'
+					: null}
 				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
 			>
