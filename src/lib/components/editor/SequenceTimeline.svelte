@@ -49,6 +49,10 @@
 	const SEG_H = 22;
 	/** Half-width of a boundary's invisible grab strip. */
 	const BND_GRAB = 5;
+	/** Kept out of the markup: the formatter wraps a long <title> body across
+	 * lines, and the native tooltip renders that break as a real one. */
+	const BND_TIP =
+		'Click to set the transition · drag to move (whole selection if selected) · Delete to merge · Shift-drag to select';
 	/** Height of the source colour band along a block's bottom edge. */
 	const SRC_BAND = 3;
 	/**
@@ -1257,8 +1261,7 @@
 						onpointerleave={() => (hoveredBoundary = null)}
 						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
 					><title
-							>Click to set the transition · drag to move (whole selection
-							if selected) · Delete to merge · Shift-drag to select</title
+							>{BND_TIP}</title
 						></rect
 					>
 				{/if}
