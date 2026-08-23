@@ -1811,6 +1811,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             key: 'font',
             label: 'Font',
             type: 'select',
+            fontPicker: true,
             defaultValue: FONT_OPTIONS[0].family,
             options: FONT_OPTIONS.map((f) => ({
                label: f.label,

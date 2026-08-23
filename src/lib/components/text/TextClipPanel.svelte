@@ -3,7 +3,7 @@
 	import { untrack } from 'svelte';
 	import type { EffectInstance, VolumeLink } from '../../effects';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
-	import { ensureFontLoaded, FONT_OPTIONS } from '../../text-overlay';
+	import { ensureFontLoaded } from '../../text-overlay';
 	import {
 		DEFAULT_TEXT_STYLE,
 		type TextAlign,
@@ -15,6 +15,7 @@
 	import type { AudioResponse } from '../../audio/auto-range';
 	import ColorPicker from '../ui/ColorPicker.svelte';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
+	import FontSelect from '../ui/FontSelect.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
 
 	const BLEND_MODES = [
@@ -152,19 +153,11 @@
 			}}
 		>
 			<label for="tc-font">Font</label>
-			<select
+			<FontSelect
 				id="tc-font"
 				value={lane.style.fontFamily}
-				onchange={(e) => {
-					const family = (e.currentTarget as HTMLSelectElement).value;
-					void ensureFontLoaded(family);
-					setStyle('fontFamily', family);
-				}}
-			>
-				{#each FONT_OPTIONS as font (font.id)}
-					<option value={font.family}>{font.label}</option>
-				{/each}
-			</select>
+				onChange={(family) => setStyle('fontFamily', family)}
+			/>
 		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -515,6 +508,22 @@
 		/* The row's double-click resets the style; without this it also selects
 		   the label text. */
 		user-select: none;
+	}
+
+	.row :global(.font-select) {
+		flex: 1;
+		min-width: 0;
+	}
+
+	/* The font picker is its own component, so the row's select styling has to
+	   reach across the boundary to keep it looking like the rest of the panel. */
+	.row :global(.font-select select) {
+		padding: 0.2rem 0.3rem;
+		border-radius: 4px;
+		background: var(--surface);
+		color: var(--text);
+		font-family: inherit;
+		font-size: 0.75rem;
 	}
 
 	.row select {

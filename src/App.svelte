@@ -13,6 +13,7 @@
 	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
 	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
+	import { loadCustomFonts } from "./lib/text-overlay";
 
 	let file: File | null = $state(null);
 	let sequenceFiles: File[] = $state([]);
@@ -150,6 +151,10 @@
 	}
 
 	onMount(() => {
+		// Text layers and captions can be restored with a user font already
+		// selected, so their faces have to be registered before anything draws.
+		void loadCustomFonts();
+
 		const onPopState = () => {
 			view = hashToView(window.location.hash);
 			if (view === "upload") {

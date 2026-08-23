@@ -18,6 +18,7 @@
 	} from '../../effects';
 	import type { SpectrumData } from '../../types';
 	import ColorPicker from './ColorPicker.svelte';
+	import FontSelect from './FontSelect.svelte';
 	import DualRangeSlider from './DualRangeSlider.svelte';
 	import RangeSlider from './RangeSlider.svelte';
 	import SpectrumDisplay from './SpectrumDisplay.svelte';
@@ -422,7 +423,13 @@
 									onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
 							/>
 						{/if}
-						{#if param.type === 'select'}
+						{#if param.type === 'select' && param.fontPicker}
+							<FontSelect
+								id="{effect.instanceId}-{param.key}"
+								value={String(effect.values[param.key])}
+								onChange={(family) => onParamChange(param.key, family)}
+							/>
+						{:else if param.type === 'select'}
 							<select
 								id="{effect.instanceId}-{param.key}"
 								value={effect.values[param.key]}
@@ -978,6 +985,11 @@
 		height: 100%;
 		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
 			center/contain no-repeat;
+	}
+
+	.param-row :global(.font-select) {
+		flex: 1;
+		min-width: 0;
 	}
 
 	select {

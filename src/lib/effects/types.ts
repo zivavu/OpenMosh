@@ -29,6 +29,11 @@ export interface SelectParam {
   type: "select";
   defaultValue: string;
   options: { label: string; value: string }[];
+  /**
+   * Render with the font picker instead of a plain select, so the user's own
+   * fonts show up alongside `options` (which stays the bundled list a mosh rolls).
+   */
+  fontPicker?: boolean;
   visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 

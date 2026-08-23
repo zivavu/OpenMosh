@@ -1,3 +1,10 @@
+import {
+   bumpFontsVersion,
+   familyPromise,
+   fontsPending,
+   registerFamily,
+} from "./font-registry";
+
 /** A selectable font for the text overlay. Fonts with a url are bundled woff2 files. */
 export interface FontOption {
    id: string;
@@ -195,32 +202,24 @@ const OPTIONS_BY_FAMILY = new Map(FONT_OPTIONS.map((f) => [f.family, f]));
 /** Shared, so a system or unknown family doesn't mint a promise per frame. */
 const RESOLVED = Promise.resolve();
 
-let version = 0;
-const listeners = new Set<() => void>();
-
-/**
- * Bumped every time a bundled face lands. Renderers that cache drawn text by
- * signature mix this in, so a caption drawn with the fallback face is redrawn
- * once its real font is available.
- */
-export function fontsVersion(): number {
-   return version;
-}
-
-/** Notified when a face lands, so a paused preview can redraw. Returns an unsubscribe. */
-export function onFontsChanged(cb: () => void): () => void {
-   listeners.add(cb);
-   return () => listeners.delete(cb);
-}
-
 /**
  * Ensure the font for the given CSS family value is registered and loaded
  * into document.fonts so 2D-canvas drawing (preview and export) uses it.
- * System fonts and unknown families resolve immediately.
+ * User-added faces are looked up in the shared registry; system and unknown
+ * families resolve immediately.
  */
 export function ensureFontLoaded(family: string): Promise<void> {
    const option = OPTIONS_BY_FAMILY.get(family);
-   if (!option?.url) return RESOLVED;
+   if (!option?.url) {
+      const known = familyPromise(family);
+      if (known) return known;
+      // Saved fonts are still being read out of IndexedDB: an export started
+      // this early has to wait, or its first frames draw with a fallback.
+      const pending = fontsPending();
+      return pending
+         ? pending.then(() => familyPromise(family) ?? RESOLVED)
+         : RESOLVED;
+   }
 
    let promise = loaded.get(option.id);
    if (!promise) {
@@ -232,13 +231,13 @@ export function ensureFontLoaded(family: string): Promise<void> {
          .load()
          .then((f) => {
             document.fonts.add(f);
-            version++;
-            for (const cb of listeners) cb();
+            bumpFontsVersion();
          })
          .catch(() => {
             loaded.delete(option.id);
          });
       loaded.set(option.id, promise);
+      registerFamily(option.family, promise);
    }
    return promise;
 }
