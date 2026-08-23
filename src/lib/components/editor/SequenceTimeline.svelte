@@ -1323,132 +1323,134 @@
 </div>
 
 {#snippet segmentBar()}
-	{@const many = selectedSegments.length > 1}
-	<!-- Three columns, never taller than a row: the middle one is centred on
-	     the bar whatever the actions column holds, and a wrapping bar changed
-	     the stack's height every time a control appeared. -->
-	<div class="seg-bar">
-		<div class="seg-spacer"></div>
-		<div class="seg-groups">
-			<span class="seg-title">
-				{many ? `${selectedSegments.length} segments` : 'Segment'}
-			</span>
+	{#if selectedSegments.length > 0}
+		{@const many = selectedSegments.length > 1}
+		<!-- Three columns, never taller than a row: the middle one is centred on
+		     the bar whatever the actions column holds, and a wrapping bar changed
+		     the stack's height every time a control appeared. -->
+		<div class="seg-bar">
+			<div class="seg-spacer"></div>
+			<div class="seg-groups">
+				<span class="seg-title">
+					{many ? `${selectedSegments.length} segments` : 'Segment'}
+				</span>
 
-			<div class="tl-tool-sep"></div>
-			<span class="tl-tool-label">Fill</span>
-			<select
-				class="seg-select"
-				value={selectedPresetIndex}
-				onmousedown={() => (presetList = loadPresets())}
-				onchange={(e) => {
-					const idx = Number(e.currentTarget.value);
-					const preset = presetList[idx];
-					if (preset) onApplyPreset(selectedIds, preset);
-				}}
-			>
-				<option value={-1} disabled>Preset…</option>
-				{#each presetList as p, i}
-					<option value={i}>{p.name}</option>
-				{/each}
-			</select>
-			<button
-				class="tl-tool-btn"
-				title={commonMode === 'interval'
-					? 'New random seed'
-					: many
-						? 'Random mosh for each selected segment'
-						: 'Random mosh for this segment'}
-				onclick={() => onRoll(selectedIds)}
-			>
-				<Dices size={12} /> Mosh
-			</button>
-			<button
-				class="tl-tool-btn"
-				title={many
-					? "Clear the selected segments' effects"
-					: "Clear this segment's effects"}
-				onclick={() => onClear(selectedIds)}
-			>
-				<Eraser size={12} /> Clear
-			</button>
-
-
-			<div class="tl-tool-sep"></div>
-			<span class="tl-tool-label">Mode</span>
-			<div class="seg-mode">
-				<button
-					class="tl-tool-btn"
-					class:active={commonMode === 'static'}
-					onclick={() => onModeChange(selectedIds, 'static')}
-				>
-					Static
-				</button>
-				<button
-					class="tl-tool-btn"
-					class:active={commonMode === 'interval'}
-					onclick={switchToAuto}
-				>
-					Auto
-				</button>
-			</div>
-			{#if commonMode === 'interval'}
+				<div class="tl-tool-sep"></div>
+				<span class="tl-tool-label">Fill</span>
 				<select
 					class="seg-select"
-					value={intervalValue}
-					title="How often this segment re-rolls its mosh"
+					value={selectedPresetIndex}
+					onmousedown={() => (presetList = loadPresets())}
 					onchange={(e) => {
-						const v = e.currentTarget.value;
-						if (v === '') return;
-						if (v.startsWith('b')) {
-							const beats = Number(v.slice(1));
-							onModeChange(selectedIds, 'interval', (60 / bpm) * beats, beats);
-						} else {
-							// Picking a plain duration drops the beat link, so a later
-							// BPM change leaves it alone.
-							onModeChange(selectedIds, 'interval', Number(v), null);
-						}
+						const idx = Number(e.currentTarget.value);
+						const preset = presetList[idx];
+						if (preset) onApplyPreset(selectedIds, preset);
 					}}
 				>
-					{#if intervalValue === ''}
-						<option value="" disabled>—</option>
-					{/if}
-					{#if bpm > 0}
-						{#each BEAT_INTERVALS as opt}
-							<option value={`b${opt.beats}`}>{opt.label}</option>
-						{/each}
-					{/if}
-					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
-						<!-- String, not the number: the select's value is a string, and
-						     Svelte matches an option by strict equality — a numeric
-						     option value never matches and the picker renders blank. -->
-						<option value={String(sec)}>every {sec}s</option>
+					<option value={-1} disabled>Preset…</option>
+					{#each presetList as p, i}
+						<option value={i}>{p.name}</option>
 					{/each}
 				</select>
-			{/if}
-
-		</div>
-		<!-- Right-aligned in their own column, so Loop coming and going with
-		     the selection size can't shift the controls above. -->
-		<div class="seg-actions">
-			{#if onToggleSegmentLoop && !many}
 				<button
 					class="tl-tool-btn"
-					class:active={segmentLoop}
-					title="Loop playback inside this segment"
-					onclick={onToggleSegmentLoop}
+					title={commonMode === 'interval'
+						? 'New random seed'
+						: many
+							? 'Random mosh for each selected segment'
+							: 'Random mosh for this segment'}
+					onclick={() => onRoll(selectedIds)}
 				>
-					<Repeat size={12} />
+					<Dices size={12} /> Mosh
 				</button>
-			{/if}
-			<button
-				class="tl-tool-btn danger"
-				title={many ? 'Delete selected segments' : 'Delete segment'}
-				onclick={() => removeSegments(selectedIds)}
-			>
-				<Trash2 size={12} />
-			</button>
+				<button
+					class="tl-tool-btn"
+					title={many
+						? "Clear the selected segments' effects"
+						: "Clear this segment's effects"}
+					onclick={() => onClear(selectedIds)}
+				>
+					<Eraser size={12} /> Clear
+				</button>
+
+
+				<div class="tl-tool-sep"></div>
+				<span class="tl-tool-label">Mode</span>
+				<div class="seg-mode">
+					<button
+						class="tl-tool-btn"
+						class:active={commonMode === 'static'}
+						onclick={() => onModeChange(selectedIds, 'static')}
+					>
+						Static
+					</button>
+					<button
+						class="tl-tool-btn"
+						class:active={commonMode === 'interval'}
+						onclick={switchToAuto}
+					>
+						Auto
+					</button>
+				</div>
+				{#if commonMode === 'interval'}
+					<select
+						class="seg-select"
+						value={intervalValue}
+						title="How often this segment re-rolls its mosh"
+						onchange={(e) => {
+							const v = e.currentTarget.value;
+							if (v === '') return;
+							if (v.startsWith('b')) {
+								const beats = Number(v.slice(1));
+								onModeChange(selectedIds, 'interval', (60 / bpm) * beats, beats);
+							} else {
+								// Picking a plain duration drops the beat link, so a later
+								// BPM change leaves it alone.
+								onModeChange(selectedIds, 'interval', Number(v), null);
+							}
+						}}
+					>
+						{#if intervalValue === ''}
+							<option value="" disabled>—</option>
+						{/if}
+						{#if bpm > 0}
+							{#each BEAT_INTERVALS as opt}
+								<option value={`b${opt.beats}`}>{opt.label}</option>
+							{/each}
+						{/if}
+						{#each [0.125, 0.25, 0.5, 1, 2] as sec}
+							<!-- String, not the number: the select's value is a string, and
+							     Svelte matches an option by strict equality — a numeric
+							     option value never matches and the picker renders blank. -->
+							<option value={String(sec)}>every {sec}s</option>
+						{/each}
+					</select>
+				{/if}
+
+			</div>
+			<!-- Right-aligned in their own column, so Loop coming and going with
+			     the selection size can't shift the controls above. -->
+			<div class="seg-actions">
+				{#if onToggleSegmentLoop && !many}
+					<button
+						class="tl-tool-btn"
+						class:active={segmentLoop}
+						title="Loop playback inside this segment"
+						onclick={onToggleSegmentLoop}
+					>
+						<Repeat size={12} />
+					</button>
+				{/if}
+				<button
+					class="tl-tool-btn danger"
+					title={many ? 'Delete selected segments' : 'Delete segment'}
+					onclick={() => removeSegments(selectedIds)}
+				>
+					<Trash2 size={12} />
+				</button>
+			</div>
 		</div>
-	</div>
+	{/if}
 {/snippet}
 
 {#if transPopover && popPos}

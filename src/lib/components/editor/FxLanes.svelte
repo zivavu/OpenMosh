@@ -152,6 +152,14 @@
 	});
 
 	// ── Clip toolbar ─────────────────────────────────────────────────────────
+	// Rendered in the stack's shared selection bar rather than in a row of our
+	// own: two bars duplicated the same controls, and each one appearing on
+	// click resized the stack.
+	$effect(() => {
+		if (selectedClips.length === 0 || !onModeChange) return;
+		return stack.registerSelectionBar('fx', clipBar);
+	});
+
 	// Every action fans out over the whole selection; a value the selection
 	// disagrees on renders blank until the user picks one, which then applies to
 	// all of them — the same convention the source lane's toolbar follows.
@@ -702,8 +710,28 @@
 		</div>
 	{/each}
 
-	{#if selectedClips.length > 0 && onModeChange}
-		<div class="fx-toolbar tl-chrome">
+	{#if lanePendingDelete}
+		{@const count = lanePendingDelete.clips.length}
+		<ConfirmDialog
+			title="Delete “{lanePendingDelete.name}”?"
+			message="This removes the lane and the {count} effect clip{count === 1
+				? ''
+				: 's'} on it."
+			confirmLabel="Delete lane"
+			cancelLabel="Cancel"
+			danger
+			onConfirm={() => deleteLane(lanePendingDelete!.id)}
+			onCancel={() => (lanePendingDelete = null)}
+		/>
+	{/if}
+</div>
+
+{#snippet clipBar()}
+	{#if selectedClips.length > 0}
+		<div class="fx-bar">
+			<!-- Named, not just labelled: the bar is shared with the segment lane now,
+			     so it has to say which of the two it is driving. -->
+			<span class="fx-title">FX</span>
 			<span class="tl-tool-label">
 				{many ? `${selectedClips.length} clips` : selectedClips[0].label}
 			</span>
@@ -799,22 +827,7 @@
 			{/if}
 		</div>
 	{/if}
-
-	{#if lanePendingDelete}
-		{@const count = lanePendingDelete.clips.length}
-		<ConfirmDialog
-			title="Delete “{lanePendingDelete.name}”?"
-			message="This removes the lane and the {count} effect clip{count === 1
-				? ''
-				: 's'} on it."
-			confirmLabel="Delete lane"
-			cancelLabel="Cancel"
-			danger
-			onConfirm={() => deleteLane(lanePendingDelete!.id)}
-			onCancel={() => (lanePendingDelete = null)}
-		/>
-	{/if}
-</div>
+{/snippet}
 
 <style>
 	.fx-tl {
@@ -905,19 +918,22 @@
 		color: var(--live);
 	}
 
-	.fx-toolbar {
+	/* Fills the stack's selection bar, centred as one run. */
+	.fx-bar {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.35rem;
-		height: 30px;
-		flex-shrink: 0;
 		padding: 0 0.25rem;
-		overflow-x: auto;
-		scrollbar-width: none;
 	}
 
-	.fx-toolbar::-webkit-scrollbar {
-		display: none;
+	.fx-title {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--mosh);
+		white-space: nowrap;
 	}
 
 	.fx-mode {
