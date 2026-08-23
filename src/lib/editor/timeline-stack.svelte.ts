@@ -8,7 +8,7 @@
  * read it with getTimelineStack() instead of building viewports of their own.
  */
 
-import { getContext, setContext, type Snippet } from "svelte";
+import { getContext, setContext, untrack, type Snippet } from "svelte";
 import { TimelineViewport } from "./timeline-viewport.svelte";
 
 const KEY = Symbol("timeline-stack");
@@ -53,17 +53,26 @@ export class TimelineStackState {
     */
    #selectionBars = $state<{ laneId: string; render: Snippet }[]>([]);
 
-   /** Publish a lane's selection controls. Returns unregister. */
+   /**
+    * Publish a lane's selection controls. Returns unregister.
+    *
+    * Untracked, both ways: lanes call this from an effect, and reading the list
+    * to rebuild it would subscribe that effect to the state it is writing —
+    * which is exactly the read-write cycle Svelte aborts on.
+    */
    registerSelectionBar(laneId: string, render: Snippet): () => void {
-      this.#selectionBars = [
-         ...this.#selectionBars.filter((b) => b.laneId !== laneId),
-         { laneId, render },
-      ];
-      return () => {
-         this.#selectionBars = this.#selectionBars.filter(
-            (b) => b.laneId !== laneId,
-         );
-      };
+      untrack(() => {
+         this.#selectionBars = [
+            ...this.#selectionBars.filter((b) => b.laneId !== laneId),
+            { laneId, render },
+         ];
+      });
+      return () =>
+         untrack(() => {
+            this.#selectionBars = this.#selectionBars.filter(
+               (b) => b.laneId !== laneId,
+            );
+         });
    }
 
    /** The controls the selection bar should show, or null when nothing is
