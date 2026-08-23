@@ -30,7 +30,7 @@
 	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
 	import TextTimelineLane from '../text/TextTimeline.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
-	import type { GlRenderer } from '../../gl/renderer';
+	import type { GlRenderer, SourceFit } from '../../gl/renderer';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import { SlideshowFrameDriver } from '../../slideshow/frame-driver';
@@ -503,6 +503,13 @@
 	$effect(() => {
 		updateSettings({ showFps });
 	});
+	// Slides rarely share the output aspect, so this one matters here.
+	let sourceFit = $state<SourceFit>(
+		loadSettings().sourceFit ?? DEFAULT_SETTINGS.sourceFit,
+	);
+	$effect(() => {
+		updateSettings({ sourceFit });
+	});
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 
@@ -593,6 +600,7 @@
 		if (previewImageSrc || !glRenderer || naturalWidth == null) return;
 		if (previewRenderSize) {
 			glRenderer.resize(previewRenderSize.width, previewRenderSize.height);
+			glRenderer.setSourceFit(sourceFit);
 			if (!previewPlaying) glRenderer.render(effects, 0, currentTextLayers());
 		}
 	});
@@ -615,6 +623,9 @@
 		}
 		textTime;
 		textTimeline;
+		// Set here as well as through GlCanvas's prop: this effect can run
+		// before the child's, and a stopped preview has no later frame to fix it.
+		glRenderer.setSourceFit(sourceFit);
 		glRenderer.setBeat(beatsAt(textTime), config.bpm / 60);
 		glRenderer.render(effects, 0, currentTextLayers());
 	});
@@ -1587,6 +1598,7 @@
 				externallyDriven
 				{warmCanvas}
 				{warmRenderer}
+				{sourceFit}
 			/>
 		</div>
 
@@ -1608,6 +1620,7 @@
 			onTogglePreview={togglePreview}
 			onStartRecording={startRecording}
 			bind:showFps
+			bind:sourceFit
 			onRecordFpsChange={(fps) => (recordFps = fps)}
 			onRecordDurationChange={(d) => (recordDuration = d)}
 		/>

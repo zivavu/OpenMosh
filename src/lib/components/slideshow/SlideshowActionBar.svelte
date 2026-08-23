@@ -4,6 +4,7 @@
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
 	import { TEXT_TIMELINE_SHORTCUTS } from '../../text';
+	import type { SourceFit } from '../../gl/renderer';
 
 	interface Props {
 		previewPlaying: boolean;
@@ -17,6 +18,7 @@
 		recordFps: number;
 		recordDuration: number;
 		showFps: boolean;
+		sourceFit: SourceFit;
 		textEnabled?: boolean;
 		onToggleText?: () => void;
 		onTogglePreview: () => void;
@@ -37,6 +39,7 @@
 		recordFps,
 		recordDuration,
 		showFps = $bindable(false),
+		sourceFit = $bindable('contain'),
 		textEnabled = false,
 		onToggleText,
 		onTogglePreview,
@@ -149,6 +152,16 @@
 				<div class="setting-row">
 					<label for="ss-show-fps">Show FPS</label>
 					<input id="ss-show-fps" type="checkbox" bind:checked={showFps} />
+				</div>
+				<div class="setting-row">
+					<label for="ss-source-fit" title="How to fit slides that don't match the output aspect">
+						Fit sources
+					</label>
+					<select id="ss-source-fit" bind:value={sourceFit}>
+						<option value="contain">Contain</option>
+						<option value="cover">Cover</option>
+						<option value="stretch">Stretch</option>
+					</select>
 				</div>
 				<ResizeSettings
 					bind:width={resizeWidth}

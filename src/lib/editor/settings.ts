@@ -25,7 +25,7 @@ export interface EditorSettings {
 	outputVolume: number;
 	loopAudio: boolean;
 	loopVideo: boolean;
-	/** How sequence sources that don't match the output aspect are fitted. */
+	/** How sources that don't match the output aspect are fitted. */
 	sourceFit: "stretch" | "contain" | "cover";
 	/** Whether the upload screen's demo keeps moshing behind the UI. */
 	demoBackground: boolean;
@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	outputVolume: 1,
 	loopAudio: false,
 	loopVideo: true,
-	// Only bites with a mixed media pool; "contain" never crops the user's media.
+	// Only bites when source and output aspects differ; "contain" never crops.
 	sourceFit: "contain",
 	demoBackground: true,
 };

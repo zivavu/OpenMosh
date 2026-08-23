@@ -357,9 +357,6 @@
 	let showFps = $state(saved.showFps ?? DEFAULT_SETTINGS.showFps);
 	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
 	let sourceFit = $state<SourceFit>(saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit);
-	$effect(() => {
-		glRenderer?.setSourceFit(sourceFit);
-	});
 	let showShortcuts = $state(false);
 	let previewFullscreen = $state(false);
 	const fullscreenSupported =
@@ -3137,6 +3134,7 @@
 					: null}
 				overlay={noSequenceMedia ? noMediaOverlay : undefined}
 				spectrum={audio.frequencyData}
+				{sourceFit}
 			/>
 		</div>
 
@@ -3203,18 +3201,16 @@
 							<label for="show-fps">Show FPS</label>
 							<input id="show-fps" type="checkbox" bind:checked={showFps} />
 						</div>
-						{#if isSequenceMode}
-							<div class="mosh-setting-row">
-								<label for="source-fit" title="How to fit sources that don't match the output aspect">
-									Fit sources
-								</label>
-								<select id="source-fit" bind:value={sourceFit}>
-									<option value="contain">Contain</option>
-									<option value="cover">Cover</option>
-									<option value="stretch">Stretch</option>
-								</select>
-							</div>
-						{/if}
+						<div class="mosh-setting-row">
+							<label for="source-fit" title="How to fit sources that don't match the output aspect">
+								Fit sources
+							</label>
+							<select id="source-fit" bind:value={sourceFit}>
+								<option value="contain">Contain</option>
+								<option value="cover">Cover</option>
+								<option value="stretch">Stretch</option>
+							</select>
+						</div>
 						<div class="settings-divider"></div>
 						<ResizeSettings
 							bind:width={resizeWidth}

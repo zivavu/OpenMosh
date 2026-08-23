@@ -4,7 +4,11 @@
    import type { EffectInstance } from "../../effects";
    import { ANIMATED_EFFECTS } from "../../gl/effect-shaders";
    import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
-   import { GlRenderer, type PostChainLayer } from "../../gl/renderer";
+   import {
+      GlRenderer,
+      type PostChainLayer,
+      type SourceFit,
+   } from "../../gl/renderer";
    import { onFontsChanged } from "../../text-overlay";
    import { resolveTextLayersAt, type TextTimeline } from "../../text";
    import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
@@ -82,6 +86,8 @@
       /** Two-way: set it to enter/leave fullscreen, and it follows Esc or any
        * other way the browser drops out of it. */
       fullscreen?: boolean;
+      /** How a source that doesn't match the output aspect is fitted into it. */
+      sourceFit?: SourceFit;
       /** Optional text lanes composited into the chain at their insertion points. */
       textTimeline?: TextTimeline | null;
       /** Master-timeline seconds the text clips are looked up at. */
@@ -126,6 +132,7 @@
       sourceKey = null,
       sourceAnimating = false,
       spectrum = null,
+      sourceFit = "contain",
       fullscreen = $bindable(false),
       textTimeline = null,
       textTime = 0,
@@ -445,6 +452,12 @@
       if (!externallyDriven && !needsAnimation) drawFrame(0);
    });
 
+   // Applied here rather than by the parent so a change also repaints a paused
+   // canvas, through the static redraw driver below.
+   $effect(() => {
+      renderer?.setSourceFit(sourceFit);
+   });
+
    // Static redraw driver: subscribes to effect values and re-renders when the
    // animation loop is not running. Using a separate effect prevents double
    // renders during playback (the rAF loop already owns the frame).
@@ -455,6 +468,7 @@
          e.enabled;
          for (const k of Object.keys(e.values)) e.values[k];
       }
+      sourceFit;
       // A caption font that lands after the frame was drawn changes its glyphs.
       fontTick;
       // Text edits and scrubbing both change which clip is on screen.
