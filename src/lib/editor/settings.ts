@@ -34,8 +34,8 @@ export interface EditorSettings {
 /** What a fresh editor starts from, and what double-clicking a control restores. */
 export const DEFAULT_SETTINGS: EditorSettings = {
 	lastMode: "single",
-	moshMin: 3,
-	moshMax: 6,
+	moshMin: 2,
+	moshMax: 4,
 	randomizeOrder: true,
 	moshAudioLink: true,
 	moshAudioLinkStrength: 0.8,

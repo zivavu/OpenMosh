@@ -55,8 +55,14 @@ export function randomizeParams(
           ? Math.round((raw - param.min) / param.step) * param.step + param.min
           : raw;
     } else if (param.type === "select") {
-      const opts = param.options;
-      values[param.key] = opts[Math.floor(Math.random() * opts.length)].value;
+      // An unmatched moshOptions entry would leave nothing to pick from, so
+      // fall back to the full list rather than rolling undefined.
+      const allowed = param.moshOptions;
+      const opts = allowed?.length
+        ? param.options.filter((o) => allowed.includes(o.value))
+        : param.options;
+      const pool = opts.length > 0 ? opts : param.options;
+      values[param.key] = pool[Math.floor(Math.random() * pool.length)].value;
     }
   }
 }

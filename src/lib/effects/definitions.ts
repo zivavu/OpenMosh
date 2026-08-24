@@ -185,6 +185,10 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             max: 1,
             step: 0.01,
             defaultValue: 1,
+            // A partial mirror just reads as a blurry seam — a roll is only
+            // worth having at full strength.
+            moshMin: 1,
+            moshMax: 1,
          },
          {
             key: 'side',
@@ -1433,6 +1437,9 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
                { label: 'Screen', value: 'screen' },
                { label: 'Add', value: 'add' },
             ],
+            // Screen and add both compound the loop toward white; max is the
+            // only one that survives a random decay.
+            moshOptions: ['max'],
          },
       ],
    },

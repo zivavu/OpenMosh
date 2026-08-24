@@ -30,6 +30,12 @@ export interface SelectParam {
   defaultValue: string;
   options: { label: string; value: string }[];
   /**
+   * Values a mosh may roll, when only some of the options are worth rolling.
+   * The select counterpart to {@link RangeParam.moshMin}/`moshMax`: a single
+   * entry pins the param. Unset rolls the whole list.
+   */
+  moshOptions?: string[];
+  /**
    * Render with the font picker instead of a plain select, so the user's own
    * fonts show up alongside `options` (which stays the bundled list a mosh rolls).
    */
