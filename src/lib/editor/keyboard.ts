@@ -15,10 +15,8 @@ export interface KeyboardActions {
   toggleFullscreen: () => void;
   /** C: chase the playhead with the timeline view, or stop chasing it. */
   toggleFollowPlayhead: () => void;
-  playSpan: () => void;
-  pauseTrack: () => void;
-  hasTrack: () => boolean;
-  isPlaying: () => boolean;
+  /** Space: the master transport — a track, a video, or a still's own clock. */
+  togglePlay: () => void;
 }
 
 export function createKeyboardHandler(
@@ -57,11 +55,8 @@ export function createKeyboardHandler(
     // A text field is the one exception: there space types a space.
     if (e.key === " ") {
       if (isTextEntryTarget(e.target)) return;
-      if (actions.hasTrack()) {
-        e.preventDefault();
-        if (actions.isPlaying()) actions.pauseTrack();
-        else actions.playSpan();
-      }
+      e.preventDefault();
+      actions.togglePlay();
       return;
     }
 

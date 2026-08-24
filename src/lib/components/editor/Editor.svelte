@@ -2298,10 +2298,7 @@
 		toggleFollowPlayhead: () => {
 			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
-		playSpan,
-		pauseTrack,
-		hasTrack: () => (!!audio.trackFile && !!audioEl) || isVideo,
-		isPlaying: () => audio.audioPlaying || videoIsPlaying,
+		togglePlay: toggleMasterPlay,
 	});
 
 	function save() {
