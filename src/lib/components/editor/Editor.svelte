@@ -142,6 +142,7 @@
 	import FeedbackButton from '../ui/FeedbackButton.svelte';
 	import ButtonGroup from '../ui/ButtonGroup.svelte';
 	import MobileSheet from '../ui/MobileSheet.svelte';
+	import NumberField from '../ui/NumberField.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
@@ -2331,6 +2332,10 @@
 	let showRecordSettings = $state(false);
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
+	/** Seconds. A ceiling on typos, not a format limit — the encoder has no cap. */
+	const MAX_RECORD_DURATION = 600;
+	/** One click for the lengths people actually reach for. */
+	const RECORD_DURATION_PRESETS = [5, 10, 30, 60, 120];
 
 	/**
 	 * Which project the export settings belong to. `seqStoreKey` already carries
@@ -3258,15 +3263,31 @@
 						{#if !audio.trackFile && !isVideo}
 							<div class="mosh-setting-row">
 								<label for="rec-duration">Duration</label>
-								<input
+								<NumberField
 									id="rec-duration"
-									type="range"
-									min="1"
-									max="30"
-									step="1"
-									bind:value={recordDuration}
+									value={recordDuration}
+									min={1}
+									max={MAX_RECORD_DURATION}
+									step={1}
+									fineStep={0.5}
+									allowEmpty={false}
+									unit="duration"
+									upTitle="Longer (shift for half a second)"
+									downTitle="Shorter (shift for half a second)"
+									onChange={(v) => (recordDuration = v)}
 								/>
-								<span class="mosh-setting-val">{recordDuration}s</span>
+								<span class="rec-duration-unit">sec</span>
+							</div>
+							<div class="rec-duration-presets">
+								{#each RECORD_DURATION_PRESETS as preset (preset)}
+									<button
+										class="rec-preset-btn"
+										class:active={recordDuration === preset}
+										onclick={() => (recordDuration = preset)}
+									>
+										{preset}s
+									</button>
+								{/each}
 							</div>
 						{:else}
 							<div class="mosh-setting-row">
@@ -3949,25 +3970,6 @@
 		flex-shrink: 0;
 	}
 
-	.mosh-setting-row input[type='range'] {
-		flex: 1;
-		height: 3px;
-		appearance: none;
-		background: var(--sunken);
-		border-radius: 2px;
-		outline: none;
-		cursor: pointer;
-	}
-
-	.mosh-setting-row input[type='range']::-webkit-slider-thumb {
-		appearance: none;
-		width: 10px;
-		height: 10px;
-		border-radius: 2px;
-		background: var(--text-2);
-		cursor: pointer;
-	}
-
 	.mosh-setting-row input[type='checkbox'] {
 		appearance: none;
 		width: 14px;
@@ -3997,6 +3999,42 @@
 		height: 100%;
 		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
 			center/contain no-repeat;
+	}
+
+	.rec-duration-unit {
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--text-3);
+	}
+
+	/* Under the field, aligned past the label so the row still reads as one. */
+	.rec-duration-presets {
+		display: flex;
+		gap: 4px;
+		margin: -0.25rem 0 0 calc(72px + 0.5rem);
+	}
+
+	.rec-preset-btn {
+		padding: 0.15rem 0.4rem;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		cursor: pointer;
+	}
+
+	.rec-preset-btn:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
+	.rec-preset-btn.active {
+		color: var(--live);
+		border-color: var(--live-dim);
 	}
 
 	.mosh-setting-row select {
