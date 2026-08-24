@@ -6,6 +6,7 @@ export type { FontOption } from "./fonts";
 export { fontsVersion, onFontsChanged } from "./font-registry";
 export {
   addCustomFont,
+  addCustomFontFile,
   customFonts,
   loadCustomFonts,
   removeCustomFont,

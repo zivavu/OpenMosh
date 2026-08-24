@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Plus, Trash2, X } from 'lucide-svelte';
+	import { Plus, Trash2, Upload, X } from 'lucide-svelte';
 	import {
 		addCustomFont,
+		addCustomFontFile,
 		customFonts,
 		ensureFontLoaded,
 		FONT_OPTIONS,
@@ -21,6 +22,8 @@
 	let link = $state('');
 	let busy = $state(false);
 	let error: string | null = $state(null);
+	let dragging = $state(false);
+	let fileInput: HTMLInputElement | null = $state(null);
 
 	const custom = $derived(customFonts());
 
@@ -42,6 +45,31 @@
 		} finally {
 			busy = false;
 		}
+	}
+
+	/** Add every dropped/picked file, so a multi-select doesn't silently drop the rest. */
+	async function addFiles(files: FileList | null) {
+		if (busy || !files || files.length === 0) return;
+		busy = true;
+		error = null;
+		let last: string | null = null;
+		const failed: string[] = [];
+		for (const file of files) {
+			try {
+				last = (await addCustomFontFile(file)).family;
+			} catch (e) {
+				failed.push(e instanceof Error ? e.message : `Couldn't add ${file.name}.`);
+			}
+		}
+		if (last) select(last);
+		error = failed.length > 0 ? failed.join(' ') : null;
+		busy = false;
+	}
+
+	function onDrop(e: DragEvent) {
+		e.preventDefault();
+		dragging = false;
+		void addFiles(e.dataTransfer?.files ?? null);
 	}
 
 	async function remove(fontId: string, family: string) {
@@ -79,7 +107,7 @@
 	<button
 		type="button"
 		class="add-btn"
-		title="Add a font from a Google Fonts link"
+		title="Add a font from a link or a file"
 		aria-label="Add a font"
 		onclick={(e) => {
 			// The host row treats a double-click as "reset this style"; opening the
@@ -110,8 +138,9 @@
 					href="https://fonts.google.com"
 					target="_blank"
 					rel="noreferrer">Google Fonts</a
-				> link — the specimen page URL works. A direct .woff2, .ttf or .otf URL works
-				too. The file is saved in this browser, so it stays available offline.
+				> link — the specimen page URL works — or a direct .woff2/.ttf/.otf URL. You
+				can also drop in a font file of your own. Either way the file is saved in this
+				browser, so it stays available offline.
 			</p>
 
 			<div class="add-row">
@@ -136,6 +165,41 @@
 				>
 					{busy ? 'Adding…' : 'Add'}
 				</button>
+			</div>
+
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="drop-zone"
+				class:dragging
+				ondragover={(e) => {
+					e.preventDefault();
+					dragging = true;
+				}}
+				ondragleave={() => (dragging = false)}
+				ondrop={onDrop}
+			>
+				<Upload size={14} />
+				<span>Drop a font file here, or</span>
+				<button
+					class="browse-btn"
+					disabled={busy}
+					onclick={() => fileInput?.click()}
+				>
+					browse
+				</button>
+				<input
+					bind:this={fileInput}
+					class="file-input"
+					type="file"
+					accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf"
+					multiple
+					onchange={(e) => {
+						const input = e.currentTarget as HTMLInputElement;
+						void addFiles(input.files);
+						// Cleared so re-picking the same file still fires a change.
+						input.value = '';
+					}}
+				/>
 			</div>
 
 			{#if error}
@@ -326,6 +390,47 @@
 	.primary-btn:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+
+	.drop-zone {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		padding: 0.85rem;
+		border: 1px dashed var(--line-strong);
+		border-radius: var(--r-2);
+		color: var(--text-3);
+		font-size: 0.75rem;
+	}
+
+	.drop-zone.dragging {
+		border-color: var(--live-dim);
+		color: var(--live);
+	}
+
+	.browse-btn {
+		padding: 0;
+		background: none;
+		border: none;
+		color: var(--text-2);
+		font-family: inherit;
+		font-size: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	.browse-btn:hover:not(:disabled) {
+		color: var(--live);
+	}
+
+	.browse-btn:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+
+	.file-input {
+		display: none;
 	}
 
 	.error {

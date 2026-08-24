@@ -1,8 +1,8 @@
 /**
  * User-added fonts, pasted in as a Google Fonts link (or a direct font-file
- * URL). The file itself is stored in IndexedDB rather than the link, so a font
- * keeps working across sessions without refetching — and so an export can't
- * race a network round-trip.
+ * URL) or uploaded straight off disk. The file itself is stored in IndexedDB
+ * rather than the link, so a font keeps working across sessions without
+ * refetching — and so an export can't race a network round-trip.
  */
 import { generateId } from "../effects/types";
 import {
@@ -19,7 +19,7 @@ export interface CustomFont {
    name: string;
    /** CSS font-family value, quoted to match the bundled options. */
    family: string;
-   /** What the user pasted, kept so the list can show where it came from. */
+   /** Where it came from — the pasted link, or an uploaded file's name. */
    sourceUrl: string;
    addedAt: number;
 }
@@ -262,19 +262,50 @@ export async function addCustomFont(input: string): Promise<CustomFont> {
       );
    }
 
+   const data = await fetchBytes(fileUrl);
+   return saveFont(name, trimmed, data);
+}
+
+/**
+ * Add a font the user picked off disk. Same result as a pasted link, minus the
+ * fetch — the bytes are already here.
+ *
+ * Throws with a message meant for the user.
+ */
+export async function addCustomFontFile(file: File): Promise<CustomFont> {
+   if (!FONT_FILE_RE.test(file.name)) {
+      throw new Error("Pick a .woff2, .woff, .ttf or .otf file.");
+   }
+   const data = await file.arrayBuffer();
+   // Parse it before it goes anywhere: a file the browser can't read would
+   // otherwise sit in the list and silently draw as the fallback face.
+   try {
+      await new FontFace("OpenMoshProbe", data.slice(0)).load();
+   } catch {
+      throw new Error(`${file.name} isn't a font this browser can read.`);
+   }
+   return saveFont(nameFromFileUrl(file.name), file.name, data);
+}
+
+/** Claim a family name, register the face and persist it. */
+async function saveFont(
+   name: string,
+   sourceUrl: string,
+   data: ArrayBuffer,
+): Promise<CustomFont> {
    const family = `'${name.replace(/'/g, "")}'`;
    if (FONT_OPTIONS.some((f) => f.family === family)) {
       throw new Error(`${name} is already one of the built-in fonts.`);
    }
-   const existing = fonts.find((f) => f.family === family);
-   if (existing) throw new Error(`${name} is already added.`);
+   if (fonts.some((f) => f.family === family)) {
+      throw new Error(`${name} is already added.`);
+   }
 
-   const data = await fetchBytes(fileUrl);
    const stored: StoredFont = {
       id: generateId(),
       name,
       family,
-      sourceUrl: trimmed,
+      sourceUrl,
       addedAt: Date.now(),
       data,
    };
