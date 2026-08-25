@@ -151,11 +151,45 @@ export interface PostChainLayer {
   effects: EffectInstance[];
   /** 0 = lane absent, 1 = fully applied. */
   weight: number;
+  /** Place in the stack shared with the layers. Higher runs later, so a lane
+   * above a layer applies to the layer too. */
+  z: number;
 }
 
-/** Lanes that actually change the frame — the rest are skipped entirely. */
+/**
+ * One rung of the stack that runs over the root chain: either a layer being
+ * composited, or an fx lane's chain being applied to everything beneath it.
+ * Sorted by z, bottom first — which is what makes "this lane is above that
+ * layer" mean something.
+ */
+type StackStep =
+  | { kind: "layer"; layer: PreparedLayer }
+  | { kind: "fx"; lane: PostChainLayer };
+
+function buildStack(
+  layers: PreparedLayer[],
+  post: PostChainLayer[],
+): StackStep[] {
+  const steps: StackStep[] = [
+    ...layers.map((layer) => ({ kind: "layer" as const, layer })),
+    ...post.map((lane) => ({ kind: "fx" as const, lane })),
+  ];
+  return steps.sort((a, b) => stepZ(a) - stepZ(b));
+}
+
+function stepZ(step: StackStep): number {
+  return step.kind === "layer" ? step.layer.z : step.lane.z;
+}
+
+/**
+ * Lanes that actually change the frame, in stack order — the rest are skipped
+ * entirely. Sorted here rather than at each use: the flattened fast path
+ * concatenates them into one chain, where the array order *is* the pass order.
+ */
 function livePostLayers(layers: PostChainLayer[]): PostChainLayer[] {
-  return layers.filter((l) => l.weight > 0 && l.effects.some((e) => e.enabled));
+  return layers
+    .filter((l) => l.weight > 0 && l.effects.some((e) => e.enabled))
+    .sort((a, b) => a.z - b.z);
 }
 
 /** True when every live lane applies at full strength, so they can run as one
@@ -658,9 +692,14 @@ export class GlRenderer {
     // be finished before the main chain starts using it.
     const prepared = this.prepareLayers(textLayers, mediaLayers, time, safeDt);
 
-    // Nothing stacked, or nothing fading: one chain, no intermediate buffers.
-    // This is the path every non-sequence render takes.
-    if (post.length === 0 || allFullWeight(post)) {
+    // Layers that sit over the finished frame have to be composited after the
+    // fx lanes when a lane is under them, which the flat chain below can't
+    // express — those go through the stack walk instead.
+    const over = prepared.filter((l) => !l.underEffects);
+
+    // Nothing stacked, or nothing to interleave and nothing fading: one chain,
+    // no intermediate buffers. This is the path every non-sequence render takes.
+    if (post.length === 0 || (over.length === 0 && allFullWeight(post))) {
       let flat = effects;
       if (post.length > 0) {
         // Built by hand rather than with flatMap, which would allocate a second
@@ -682,12 +721,15 @@ export class GlRenderer {
       return;
     }
 
-    // A fading lane has to mix against its own input, so the source chain lands
-    // in a buffer rather than going straight to the canvas.
+    // A fading lane has to mix against its own input, and an interleaved layer
+    // has to composite between two lanes, so the root chain lands in a buffer
+    // rather than going straight to the canvas. Only the layers that sit
+    // *under* the effects belong in it; the rest are rungs of the stack.
     this.ensureSceneBuffers();
     const sceneFBOs = this.sceneFBOs;
     const sceneTextures = this.sceneTextures;
     if (!sceneFBOs || !sceneTextures) return;
+    const under = prepared.filter((l) => l.underEffects);
     const baseTex = this.renderChainTo(
       effects,
       time,
@@ -696,9 +738,11 @@ export class GlRenderer {
       sceneTextures[0],
       false,
       false,
-      prepared,
+      under,
     )!;
-    this.presentFrame(this.renderStack(post, baseTex, time, safeDt));
+    this.presentFrame(
+      this.renderStack(buildStack(over, post), baseTex, time, safeDt),
+    );
   }
 
   /**
@@ -827,7 +871,15 @@ export class GlRenderer {
       time,
     );
     this.presentFrame(
-      this.renderStack(post, blendTexture, time, safeDt),
+      this.renderStack(
+        buildStack(
+          prepared.filter((l) => !l.underEffects),
+          post,
+        ),
+        blendTexture,
+        time,
+        safeDt,
+      ),
     );
   }
 
@@ -2396,8 +2448,13 @@ export class GlRenderer {
    * lane's weight — so the lane arrives and leaves gradually without any of its
    * effects needing to know what "half applied" means for their parameters.
    */
+  /**
+   * Walk the stack that runs over the root chain, bottom rung first: an fx lane
+   * applies its chain to everything beneath it, a layer composites on top of
+   * it. Which is which at each rung is the whole point of the shared z order.
+   */
   private renderStack(
-    layers: PostChainLayer[],
+    steps: StackStep[],
     inputTex: WebGLTexture,
     time: number,
     safeDt: number,
@@ -2408,10 +2465,26 @@ export class GlRenderer {
     // texture — which must never be written to.
     let curIdx = -1;
 
-    for (const layer of layers) {
+    for (const step of steps) {
       const outIdx = this.freeStackIndex(curIdx, -1);
+
+      if (step.kind === "layer") {
+        this.compositeOverlayToFBO(
+          cur,
+          step.layer.tex,
+          this.stackFBOs![outIdx],
+          step.layer.opacity,
+          step.layer.blendMode,
+          step.layer.box,
+        );
+        cur = this.stackTextures![outIdx];
+        curIdx = outIdx;
+        continue;
+      }
+
+      const lane = step.lane;
       const outTex = this.renderChainTo(
-        layer.effects,
+        lane.effects,
         time,
         safeDt,
         this.stackFBOs![outIdx],
@@ -2422,7 +2495,7 @@ export class GlRenderer {
         cur,
       )!;
 
-      if (layer.weight >= 1) {
+      if (lane.weight >= 1) {
         cur = outTex;
         // renderChainTo can hand back a private feedback texture rather than
         // the buffer we named, so track where the result actually is.
@@ -2435,7 +2508,7 @@ export class GlRenderer {
         cur,
         outTex,
         this.stackFBOs![mixIdx],
-        layer.weight,
+        lane.weight,
         "normal",
       );
       cur = this.stackTextures![mixIdx];

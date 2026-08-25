@@ -7,7 +7,7 @@
  * other: only whoever owns both (the editor) can say what "one above" means.
  */
 
-export type LayerKind = "media" | "text";
+export type LayerKind = "media" | "text" | "fx";
 
 /** The part of a lane the order cares about. */
 export interface OrderedLane {
@@ -25,21 +25,26 @@ export interface LayerRef {
   z: number;
 }
 
+/** Ties resolve in this order, front first: text, then media, then fx lanes —
+ * where the three sat before their orders were merged. */
+const KIND_RANK: Record<LayerKind, number> = { text: 0, media: 1, fx: 2 };
+
 /**
- * Every layer, front first — index 0 is the one drawn on top. Ties go to text,
- * which is where captions sat before the two orders were merged.
+ * Every row of the stack, front first — index 0 is the one applied last. An fx
+ * lane belongs here alongside the layers: above one it processes that layer
+ * too, below it the layer composites over what the lane produced.
  */
 export function combinedLayerOrder(
   media: OrderedLane[],
   text: OrderedLane[],
+  fx: OrderedLane[] = [],
 ): LayerRef[] {
   const refs: LayerRef[] = [
     ...media.map((l) => ({ ...l, kind: "media" as const })),
     ...text.map((l) => ({ ...l, kind: "text" as const })),
+    ...fx.map((l) => ({ ...l, kind: "fx" as const })),
   ];
-  return refs.sort(
-    (a, b) => b.z - a.z || (a.kind === b.kind ? 0 : a.kind === "text" ? -1 : 1),
-  );
+  return refs.sort((a, b) => b.z - a.z || KIND_RANK[a.kind] - KIND_RANK[b.kind]);
 }
 
 /** Above everything currently stacked. */

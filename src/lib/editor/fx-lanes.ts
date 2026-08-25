@@ -132,6 +132,12 @@ export interface FxLane {
   name: string;
   /** Off = the lane contributes nothing, without losing its clips. */
   enabled: boolean;
+  /**
+   * Place in the stack it shares with the text and media layers. A lane above
+   * a layer applies its chain to that layer too; below it, the layer
+   * composites over whatever the lane produced.
+   */
+  z: number;
   clips: FxClip[];
   /** Absent on lanes saved before per-lane settings, and on lanes the user has
    * never opened: those follow the editor's settings, as they always did. */
@@ -178,8 +184,12 @@ export function createFxClip(start: number, end: number): FxClip {
   };
 }
 
-export function createFxLane(name: string, settings?: FxLaneSettings): FxLane {
-  return { id: generateId(), name, enabled: true, clips: [], settings };
+export function createFxLane(
+  name: string,
+  settings?: FxLaneSettings,
+  z = 0,
+): FxLane {
+  return { id: generateId(), name, enabled: true, z, clips: [], settings };
 }
 
 /**
@@ -204,34 +214,14 @@ export function appendFxLane(
   lanes: FxLane[],
   settings?: FxLaneSettings,
   duration = 0,
+  z = 0,
 ): FxLane[] {
   if (lanes.length >= MAX_FX_LANES) return lanes;
-  const lane = createFxLane(`FX ${lanes.length + 1}`, settings);
+  const lane = createFxLane(`FX ${lanes.length + 1}`, settings, z);
   if (duration >= MIN_CLIP_LENGTH) lane.clips = [createFxClip(0, duration)];
   return [...lanes, lane];
 }
 
-/**
- * Move a lane to a new index in the stack, which is chain order: the lanes
- * contribute in array order, so this reorders the passes. Returns the input
- * by identity when nothing would move, so callers can skip a history entry.
- * `to` is an insertion index and may equal the length (move to the bottom).
- */
-export function moveFxLane(lanes: FxLane[], from: number, to: number): FxLane[] {
-  if (
-    from === to ||
-    from < 0 ||
-    from >= lanes.length ||
-    to < 0 ||
-    to > lanes.length
-  ) {
-    return lanes;
-  }
-  const next = [...lanes];
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return next;
-}
 
 /**
  * The clips contributing at `time`, in lane order — which is chain order, so
@@ -285,6 +275,8 @@ export interface FxLayer {
   effects: EffectInstance[];
   /** 0 = absent, 1 = fully applied. Below 1 only while a clip's fade ramps. */
   weight: number;
+  /** Where this lane sits in the stack it shares with the layers. */
+  z: number;
   /** Whose settings this chain rolled under, and whose audio response its
    * links follow. */
   laneId: string;
@@ -331,6 +323,7 @@ export function createFxLayerSource(
     }
     const layers = parts.map(({ lane, clip }) => ({
       laneId: lane.id,
+      z: lane.z,
       effects: chainFor(clip, time, cache, clone, () =>
         laneMoshOptions(lane, getMoshOptions()),
       ),
@@ -349,7 +342,13 @@ export function createFxLayerSource(
 function sameLayers(a: FxLayer[], b: FxLayer[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].effects !== b[i].effects || a[i].weight !== b[i].weight) return false;
+    if (
+      a[i].effects !== b[i].effects ||
+      a[i].weight !== b[i].weight ||
+      a[i].z !== b[i].z
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -609,10 +608,14 @@ function normalizeLaneSettings(raw: unknown): FxLaneSettings | undefined {
 
 export function normalizeFxLanes(raw: unknown): FxLane[] {
   if (!Array.isArray(raw)) return [];
+  const lanes = raw;
   return raw.map((lane: Partial<FxLane>, i) => ({
     id: lane.id ?? generateId(),
     name: lane.name ?? `FX ${i + 1}`,
     enabled: lane.enabled !== false,
+    // Lanes saved before the shared stack existed sit under every layer, which
+    // is where they rendered: layers composited over the finished lane output.
+    z: typeof lane.z === "number" ? lane.z : i - lanes.length,
     settings: normalizeLaneSettings(lane.settings),
     clips: (Array.isArray(lane.clips) ? lane.clips : [])
       // A clip with no chain would be an invisible span that still takes up

@@ -1072,6 +1072,7 @@
 			fxLanes,
 			currentFxLaneSettings(),
 			seqMasterDuration,
+			nextLayerZ(layerOrder),
 		);
 		// At the cap this is a no-op; recording it would leave a Ctrl+Z entry
 		// that undoes nothing.
@@ -2785,7 +2786,7 @@
 	 * so the panels and the lane gutters agree on what sits over what.
 	 */
 	let layerOrder = $derived(
-		combinedLayerOrder(mediaTimeline.lanes, textTimeline.lanes),
+		combinedLayerOrder(mediaTimeline.lanes, textTimeline.lanes, fxLanes),
 	);
 
 	/**
@@ -2796,6 +2797,14 @@
 		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
 		const byId = new Map<string, number>(moves.map((m) => [m.id, m.z]));
+		if (fxLanes.some((l) => byId.has(l.id))) {
+			pushFxHistory(coalesceKey);
+			setFxLanes(
+				fxLanes.map((l) =>
+					byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
+				),
+			);
+		}
 		if (mediaTimeline.lanes.length > 0) {
 			pushMediaHistory(coalesceKey);
 			setMediaTimeline({
@@ -3749,9 +3758,10 @@
 				     the foot are the inputs, the segment lane above them is the root
 				     chain, the fx lanes stack onto that, and the layers composite over
 				     whatever it all produced. -->
-				<!-- One column for both kinds of layer: each row carries its place
-				     in the shared stack as a CSS order, so text and media
-				     interleave without either component knowing about the other. -->
+				<!-- One column for every row that stacks over the root chain: media,
+				     text and fx lanes alike. Each carries its place in the shared
+				     stack as a CSS order, so the three interleave without any of
+				     the components knowing about the others. -->
 				<div class="tl-layers">
 					{#if mediaTimeline.enabled}
 						<MediaTimelineLane
@@ -3778,21 +3788,21 @@
 							bind:lyricsOpen
 						/>
 					{/if}
+					{#if isSequenceMode && fxLanes.length > 0}
+						<FxLanes
+							lanes={fxLanes}
+							bind:selectedClipId={selectedFxClipId}
+							bind:selectedClipIds={selectedFxClipIds}
+							onChange={setFxLanes}
+							onBeforeEdit={pushFxHistory}
+							bpm={sequenceBpm}
+							bind:selectedLaneId={selectedFxLaneId}
+							onModeChange={fxModeChange}
+							onRoll={fxRoll}
+							onClear={fxClear}
+						/>
+					{/if}
 				</div>
-				{#if isSequenceMode && fxLanes.length > 0}
-					<FxLanes
-						lanes={fxLanes}
-						bind:selectedClipId={selectedFxClipId}
-						bind:selectedClipIds={selectedFxClipIds}
-						onChange={setFxLanes}
-						onBeforeEdit={pushFxHistory}
-						bpm={sequenceBpm}
-						bind:selectedLaneId={selectedFxLaneId}
-						onModeChange={fxModeChange}
-						onRoll={fxRoll}
-						onClear={fxClear}
-					/>
-				{/if}
 				{#if seqMasterDuration > 0 && isSequenceMode}
 					<SequenceTimeline
 						segments={sequenceSegments}

@@ -37,6 +37,40 @@ describe("nextLayerZ", () => {
   });
 });
 
+describe("fx lanes in the stack", () => {
+  it("orders alongside the layers rather than under them", () => {
+    const order = combinedLayerOrder(
+      [lane("m1", 0)],
+      [lane("t1", 2)],
+      [lane("fx1", 1)],
+    );
+    expect(order.map((l) => l.id)).toEqual(["t1", "fx1", "m1"]);
+    expect(order.map((l) => l.kind)).toEqual(["text", "fx", "media"]);
+  });
+
+  it("loses a tie to both layer kinds, where lanes used to render", () => {
+    const order = combinedLayerOrder(
+      [lane("m1", 1)],
+      [lane("t1", 1)],
+      [lane("fx1", 1)],
+    );
+    expect(order.map((l) => l.id)).toEqual(["t1", "m1", "fx1"]);
+  });
+
+  it("moves through the stack like any other row", () => {
+    const order = combinedLayerOrder(
+      [lane("m1", 0)],
+      [lane("t1", 2)],
+      [lane("fx1", 1)],
+    );
+    expect(moveLayerTo(order, "fx1", 0)?.map((l) => l.id)).toEqual([
+      "fx1",
+      "t1",
+      "m1",
+    ]);
+  });
+});
+
 describe("moveLayerTo", () => {
   it("renumbers the stack so index 0 draws on top", () => {
     const order = combinedLayerOrder(

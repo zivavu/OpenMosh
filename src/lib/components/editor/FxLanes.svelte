@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { Dices, Eraser, Eye, EyeOff, GripVertical, Trash2 } from 'lucide-svelte';
+	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import type { LayerRef } from '../../timeline/layer-order';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { untrack } from 'svelte';
 	import {
 		createFxClip,
-		moveFxLane,
 		splitFxClipAt,
 		type FxClip,
 		type FxLane,
@@ -57,6 +57,13 @@
 		) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
+		/** Every row of the stack, front first — this lane's place in it. */
+		layerOrder?: LayerRef[];
+		/** Starts a row drag that reorders the whole stack. The editor owns it: a
+		 * drag crosses into the text and media rows, which this can't see. */
+		onLaneDragStart?: (laneId: string, e: PointerEvent) => void;
+		/** Id of the row being dragged right now, for its lifted look. */
+		draggingLaneId?: string | null;
 	}
 
 	let {
@@ -70,6 +77,9 @@
 		onModeChange,
 		onRoll,
 		onClear,
+		layerOrder = [],
+		onLaneDragStart,
+		draggingLaneId = null,
 	}: Props = $props();
 
 	// One axis for the whole stack: zoom, pan and playhead-following all live in
@@ -250,64 +260,25 @@
 		update(lane.id, (l) => ({ ...l, enabled: !l.enabled }));
 	}
 
-	// ── Reorder by drag ───────────────────────────────────────────────────────
-	// HTML5 drag armed only from the grip: the rows also carry the clip lanes,
-	// whose own pointer drags must never start a row drag.
-	let dragFromIndex = $state<number | null>(null);
-	let dragOverIndex = $state<number | null>(null);
-	let dropPosition: 'above' | 'below' | null = $state(null);
-	let canDrag = $state(false);
-
-	function handleDragStart(index: number, e: DragEvent) {
-		if (!canDrag) {
-			e.preventDefault();
-			return;
-		}
-		canDrag = false;
-		dragFromIndex = index;
-		if (e.dataTransfer) {
-			e.dataTransfer.effectAllowed = 'move';
-			e.dataTransfer.setData('text/plain', String(index));
-		}
+	/** This lane's place in the stack it shares with the text and media rows. */
+	function stackAt(laneId: string): number {
+		return layerOrder.findIndex((l) => l.id === laneId);
 	}
 
-	function handleDragOver(index: number, e: DragEvent) {
-		if (dragFromIndex === null || dragFromIndex === index) {
-			dragOverIndex = null;
-			dropPosition = null;
-			return;
-		}
-		e.preventDefault();
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		const midY = rect.top + rect.height / 2;
-		dragOverIndex = index;
-		dropPosition = e.clientY < midY ? 'above' : 'below';
+	function stackLabel(laneId: string): string {
+		const at = stackAt(laneId);
+		return at === -1 ? '' : `${layerOrder.length - at}`;
 	}
 
-	function handleDragLeave(index: number) {
-		if (dragOverIndex === index) {
-			dragOverIndex = null;
-			dropPosition = null;
-		}
-	}
-
-	function handleDrop(index: number) {
-		if (dragFromIndex === null || dragFromIndex === index) return;
-		let targetIndex = index;
-		if (dropPosition === 'below') targetIndex += 1;
-		if (dragFromIndex < targetIndex) targetIndex -= 1;
-		const next = moveFxLane(lanes, dragFromIndex, targetIndex);
-		clearDragState();
-		if (next === lanes) return;
-		onBeforeEdit?.();
-		onChange(next);
-	}
-
-	function clearDragState() {
-		dragFromIndex = null;
-		dragOverIndex = null;
-		dropPosition = null;
-		canDrag = false;
+	function stackTitle(laneId: string): string {
+		const at = stackAt(laneId);
+		if (at === -1) return '';
+		const above = layerOrder[at - 1];
+		const below = layerOrder[at + 1];
+		if (!above && !below) return 'The only row in the stack';
+		if (!above) return `On top, over ${below.name}`;
+		if (!below) return `At the foot, under ${above.name}`;
+		return `Under ${above.name}, over ${below.name}`;
 	}
 
 	function addClipAt(laneId: string, time: number) {
@@ -583,34 +554,24 @@
 
 <div class="fx-tl">
 	{#each lanes as lane, i (lane.id)}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="tl-row fx-row"
-			class:drop-above={dragOverIndex === i && dropPosition === 'above'}
-			class:drop-below={dragOverIndex === i && dropPosition === 'below'}
-			draggable={canDrag}
-			ondragstart={(e) => handleDragStart(i, e)}
-			ondragover={(e) => handleDragOver(i, e)}
-			ondragleave={() => handleDragLeave(i)}
-			ondrop={(e) => {
-				e.preventDefault();
-				handleDrop(i);
-			}}
-			ondragend={clearDragState}
+			class:lifted={draggingLaneId === lane.id}
+			style="order: {stackAt(lane.id)}"
+			data-layer-id={lane.id}
 		>
 			<div class="tl-gutter">
-				{#if lanes.length > 1}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<span
-						class="lane-grip"
-						title="Drag to reorder"
-						aria-label="Drag to reorder lane"
-						onmousedown={() => (canDrag = true)}
-						onmouseup={() => (canDrag = false)}
-					>
-						<GripVertical size={12} />
-					</span>
-				{/if}
+				<button
+					class="lane-z"
+					class:draggable={!!onLaneDragStart}
+					title="{stackTitle(lane.id)}{onLaneDragStart
+						? ' — drag to restack'
+						: ''}"
+					aria-label="Reorder {lane.name}"
+					onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
+				>
+					{stackLabel(lane.id)}
+				</button>
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
@@ -622,7 +583,7 @@
 				<button
 					class="lane-name"
 					class:active={selectedLaneId === lane.id}
-					title="{lane.name} — runs after the lanes above. Click for its mosh and audio settings."
+					title="{lane.name} — runs on everything below it in the stack. Click for its mosh and audio settings."
 					onclick={() => toggleLaneSelection(lane)}>{lane.name}</button
 				>
 				<button
@@ -830,10 +791,10 @@
 {/snippet}
 
 <style>
+	/* No box of its own: these rows join the stack column the layer lanes render
+	   into, so one `order` per row interleaves all three kinds. */
 	.fx-tl {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		display: contents;
 	}
 
 	.lane-eye,
@@ -856,42 +817,41 @@
 		color: var(--text-4);
 	}
 
-	.lane-grip {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.15rem;
-		color: var(--text-4);
+	/* The row follows the pointer by re-ordering, not by moving, so this is the
+	   only thing that says which one is in hand. */
+	.fx-row.lifted {
+		opacity: 0.55;
+	}
+
+	/* Doubles as the drag handle: it already says where this lane sits, and the
+	   gutter has no room for a grip of its own. */
+	.lane-z {
+		flex-shrink: 0;
+		min-width: 1.35em;
+		padding: 1px 0.2em;
+		border: 1px solid transparent;
+		border-radius: 2px;
+		background: var(--ink);
+		text-align: center;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		color: var(--text-2);
+	}
+
+	.lane-z.draggable {
 		cursor: grab;
 		touch-action: none;
 	}
 
-	.lane-grip:hover {
-		color: var(--text-2);
+	.lane-z.draggable:hover {
+		border-color: var(--live);
+		color: var(--text);
 	}
 
-	/* The row needs positioning for the drop line to sit on its edges. */
-	.fx-row {
-		position: relative;
-	}
-
-	.fx-row.drop-above::before,
-	.fx-row.drop-below::after {
-		content: '';
-		position: absolute;
-		left: 0;
-		right: 0;
-		height: 2px;
-		background: var(--live);
-		pointer-events: none;
-		z-index: 5;
-	}
-
-	.fx-row.drop-above::before {
-		top: -2px;
-	}
-
-	.fx-row.drop-below::after {
-		bottom: -2px;
+	.fx-row.lifted .lane-z {
+		cursor: grabbing;
+		border-color: var(--live);
+		color: var(--live);
 	}
 
 	.lane-name {
