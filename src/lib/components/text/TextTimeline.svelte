@@ -143,13 +143,17 @@
 	}
 
 	/** This lane's place in the stack that spans both kinds of layer. */
+	function stackAt(laneId: string): number {
+		return layerOrder.findIndex((l) => l.id === laneId);
+	}
+
 	function stackLabel(laneId: string): string {
-		const at = layerOrder.findIndex((l) => l.id === laneId);
+		const at = stackAt(laneId);
 		return at === -1 ? '' : `${layerOrder.length - at}`;
 	}
 
 	function stackTitle(laneId: string): string {
-		const at = layerOrder.findIndex((l) => l.id === laneId);
+		const at = stackAt(laneId);
 		if (at === -1) return '';
 		const above = layerOrder[at - 1];
 		const below = layerOrder[at + 1];
@@ -469,7 +473,7 @@
 
 <div class="text-tl">
 	{#each timeline.lanes as lane (lane.id)}
-		<div class="tl-row">
+		<div class="tl-row" style="order: {stackAt(lane.id)}" data-layer-id={lane.id}>
 			<div class="tl-gutter">
 				<button
 					class="lane-eye"
@@ -599,10 +603,10 @@
 </div>
 
 <style>
+	/* No box of its own: the rows join the layer column their sibling component
+	   renders into, so one `order` per row interleaves the two kinds. */
 	.text-tl {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
+		display: contents;
 	}
 
 	/* Replaces the chain-position select: the number is where this layer sits in

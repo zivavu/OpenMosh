@@ -3743,6 +3743,10 @@
 						onVolumeChange={(v) => audio.setOutputVolume(v)}
 					/>
 				{/if}
+				<!-- One column for both kinds of layer: each row carries its place
+				     in the shared stack as a CSS order, so text and media
+				     interleave without either component knowing about the other. -->
+				<div class="tl-layers">
 				{#if mediaTimeline.enabled}
 					<MediaTimelineLane
 						timeline={mediaTimeline}
@@ -3764,6 +3768,7 @@
 						bind:lyricsOpen
 					/>
 				{/if}
+				</div>
 				{#if isSequenceMode && fxLanes.length > 0}
 					<FxLanes
 						lanes={fxLanes}
@@ -3987,6 +3992,14 @@
 	/* The extra pixel up top pays for the bottom border: it sits below the
 	   padding, so equal padding centres the row in the box but not between the
 	   two edges you can see. Whole pixels, so nothing rounds either. */
+	/* The lane components render straight into this (they are display:contents),
+	   so the gap and the ordering live here. */
+	.tl-layers {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
 	.top-bar {
 		display: flex;
 		align-items: center;

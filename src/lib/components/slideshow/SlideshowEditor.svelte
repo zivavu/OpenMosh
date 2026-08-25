@@ -1708,6 +1708,9 @@
 					onVolumeChange={(v) => audio.setOutputVolume(v)}
 				/>
 			{/if}
+			<!-- Same layer column as the editor's: the lane rows are
+			     display:contents, so they need one flex parent to order in. -->
+			<div class="tl-layers">
 			{#if textTimeline.enabled}
 				<TextTimelineLane
 					timeline={textTimeline}
@@ -1719,6 +1722,7 @@
 					bind:lyricsOpen
 				/>
 			{/if}
+			</div>
 			{#if audio.trackFile && audio.trackDuration > 0}
 				<TimelineSegments
 					{config}
@@ -1791,6 +1795,14 @@
 </div>
 
 <style>
+	/* The lane component renders straight into this (it is display:contents), so
+	   the gap and the row ordering live here. */
+	.tl-layers {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
 	.editor {
 		display: flex;
 		height: 100%;
