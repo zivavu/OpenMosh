@@ -337,9 +337,12 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding: 0.75rem;
+		/* Sits at the top of the sidebar, above the mosh settings: it takes the
+		   leftover height and scrolls, they keep their natural one. */
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
+		border-bottom: 1px solid var(--line);
 		width: 310px;
 		max-width: 310px;
 		box-sizing: border-box;

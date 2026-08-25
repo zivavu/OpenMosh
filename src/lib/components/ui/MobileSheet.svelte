@@ -5,9 +5,15 @@
 		children?: Snippet;
 		settings?: Snippet;
 		effectsPanel?: Snippet;
+		/**
+		 * Takes the top of the sidebar, above the settings — for an editor whose
+		 * subject the user just picked and is working on now. On mobile it takes
+		 * over the Effects tab, so the Settings tab is still one tap away.
+		 */
+		topPanel?: Snippet;
 	}
 
-	let { children, settings, effectsPanel }: Props = $props();
+	let { children, settings, effectsPanel, topPanel }: Props = $props();
 
 	const SHEET_HEIGHT_VH = 70;
 	let panelOpen = $state(false);
@@ -132,12 +138,17 @@
 		<div class="tab-content">
 			{#if activeTab === 'settings'}
 				{@render settings!()}
+			{:else if topPanel}
+				{@render topPanel()}
 			{:else}
 				{@render effectsPanel!()}
 			{/if}
 		</div>
 		<!-- Desktop: render both stacked normally -->
 		<div class="desktop-content">
+			{#if topPanel}
+				{@render topPanel()}
+			{/if}
 			{@render settings!()}
 			{@render effectsPanel!()}
 		</div>

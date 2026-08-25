@@ -3787,6 +3787,23 @@
 		/>
 	</div>
 	<MobileSheet bind:this={_mobileSheetRef}>
+		{#snippet topPanel()}
+			{#if selectedMediaClip}
+				<MediaClipPanel
+					lane={selectedMediaLane}
+					clip={selectedMediaClip}
+					sources={sequenceSources}
+					onLaneChange={updateMediaLane}
+					onClipChange={updateMediaClip}
+					onBeforeEdit={pushMediaHistory}
+					onAddSource={() => sourceInput?.click()}
+					onClose={() => (selectedMediaClipId = null)}
+					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+					spectrumData={audio.spectrumData}
+					response={audioResponse}
+				/>
+			{/if}
+		{/snippet}
 		{#snippet settings()}
 			<div class="mosh-settings-wrapper">
 				<MoshSettingsPanel
@@ -3824,21 +3841,9 @@
 			</div>
 		{/snippet}
 		{#snippet effectsPanel()}
-			{#if selectedMediaClip}
-				<MediaClipPanel
-					lane={selectedMediaLane}
-					clip={selectedMediaClip}
-					sources={sequenceSources}
-					onLaneChange={updateMediaLane}
-					onClipChange={updateMediaClip}
-					onBeforeEdit={pushMediaHistory}
-					onAddSource={() => sourceInput?.click()}
-					onClose={() => (selectedMediaClipId = null)}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
-					response={audioResponse}
-				/>
-			{:else if selectedTextClip}
+			<!-- A selected layer is edited by the top panel instead; the main
+			     chain would be a second, unrelated effect list under it. -->
+			{#if selectedTextClip}
 				<TextClipPanel
 					lane={selectedTextLane}
 					clip={selectedTextClip}
@@ -3850,7 +3855,7 @@
 					spectrumData={audio.spectrumData}
 					response={audioResponse}
 				/>
-			{:else}
+			{:else if !selectedMediaClip}
 			<EffectsPanel
 				bind:effects={getPanelEffects, setPanelEffects}
 				noTarget={panelNoTarget}
