@@ -1,5 +1,6 @@
 import type { GlRenderer } from "../gl/renderer";
 import type { ResolvedMediaLayer } from "../media";
+import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
 
 export interface MediaLayerDriverOptions {
@@ -16,9 +17,10 @@ export interface MediaLayerDriverOptions {
  * master time never depends on how playback got there — and matches what the
  * export writes.
  *
- * Video layers get their own sampler even when they point at the primary
- * source: a layer runs on its own clip time, which is not where the editor's
- * player happens to be.
+ * Video layers get a sampler each, keyed by lane rather than by source. A
+ * sampler decodes sequentially from wherever it is and drops overlapping `at()`
+ * calls, so two lanes sharing one — or a lane sharing the segment driver's —
+ * would each be handed the other's position.
  */
 export class MediaLayerDriver {
   #registry: SequenceSourceRegistry;
@@ -27,6 +29,10 @@ export class MediaLayerDriver {
 
   /** Source whose frame is on each lane's texture, keyed by lane id. */
   #uploaded = new Map<string, string>();
+  /** One decoder per video lane, and the source it was opened for. */
+  #samplers = new Map<string, { sourceId: string; sampler: SlideVideoSampler }>();
+  /** Lanes whose sampler is still being created, so we don't start a second. */
+  #creating = new Set<string>();
   #disposed = false;
 
   constructor(opts: MediaLayerDriverOptions) {
@@ -56,7 +62,7 @@ export class MediaLayerDriver {
         continue;
       }
 
-      const sampler = this.#registry.sampler(src.id);
+      const sampler = this.#samplerFor(layer.key, src.id, src.file);
       if (!sampler) continue;
       this.#uploaded.set(layer.key, src.id);
       void sampler.at(layer.sourceTime).then((frame) => {
@@ -69,13 +75,46 @@ export class MediaLayerDriver {
       });
     }
     // Lanes that stopped asking for frames drop theirs; the renderer collects
-    // the textures on its own once they leave the resolved set.
+    // the textures on its own once they leave the resolved set. The decoders
+    // are kept: a lane between two clips is about to want its own back, and
+    // reopening one mid-playback stalls the frame it happens on.
     for (const key of this.#uploaded.keys()) {
       if (!layers.some((l) => l.key === key)) this.#uploaded.delete(key);
     }
   }
 
+  /** This lane's decoder, opening one (and retiring the old) as needed. */
+  #samplerFor(
+    key: string,
+    sourceId: string,
+    file: File,
+  ): SlideVideoSampler | undefined {
+    const held = this.#samplers.get(key);
+    if (held) {
+      if (held.sourceId === sourceId) return held.sampler;
+      held.sampler.dispose();
+      this.#samplers.delete(key);
+    }
+    if (this.#creating.has(key)) return undefined;
+    this.#creating.add(key);
+    void SlideVideoSampler.create(file).then((sampler) => {
+      this.#creating.delete(key);
+      if (!sampler) return;
+      if (this.#disposed) {
+        sampler.dispose();
+        return;
+      }
+      this.#samplers.set(key, { sourceId, sampler });
+    });
+    return undefined;
+  }
+
   #release(key: string) {
+    const held = this.#samplers.get(key);
+    if (held) {
+      held.sampler.dispose();
+      this.#samplers.delete(key);
+    }
     if (!this.#uploaded.delete(key)) return;
     this.#getRenderer()?.dropLayerTexture(key);
   }
@@ -87,5 +126,7 @@ export class MediaLayerDriver {
 
   dispose() {
     this.#disposed = true;
+    for (const held of this.#samplers.values()) held.sampler.dispose();
+    this.#samplers.clear();
   }
 }

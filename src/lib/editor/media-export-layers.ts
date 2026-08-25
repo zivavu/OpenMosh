@@ -20,29 +20,32 @@ export interface MediaExportLayers {
 
 export async function createMediaExportLayers(
   sources: SequenceSource[],
-  sourceIds: string[],
+  /** The source each lane draws from, keyed by lane id. */
+  laneSources: Map<string, string>,
   renderer: GlRenderer,
 ): Promise<MediaExportLayers> {
   const byId = new Map(sources.map((s) => [s.id, s]));
-  const wanted = sourceIds
-    .map((id) => byId.get(id))
-    .filter((s): s is SequenceSource => !!s);
 
   const images = new Map<string, HTMLImageElement>();
+  /** One decoder per video *lane*: a sampler decodes sequentially from wherever
+   * it is, so two lanes on one video have to hold one each. */
   const samplers = new Map<string, SlideVideoSampler>();
   /** Source whose frame is on each lane's texture, keyed by lane. */
   const uploaded = new Map<string, string>();
 
-  // Videos are opened up front — creating a decoder mid-export would stall the
-  // frame it happens on. Layer media is a handful of files at most, unlike the
-  // sequence pool, so the images come along with them.
+  // Opened up front — creating a decoder mid-export would stall the frame it
+  // happens on. Layer media is a handful of files at most, unlike the sequence
+  // pool, so the images are decoded here too.
   await Promise.all(
-    wanted.map(async (src) => {
+    [...laneSources].map(async ([laneId, sourceId]) => {
+      const src = byId.get(sourceId);
+      if (!src) return;
       if (src.kind === "video") {
         const sampler = await SlideVideoSampler.create(src.file);
-        if (sampler) samplers.set(src.id, sampler);
+        if (sampler) samplers.set(laneId, sampler);
         return;
       }
+      if (images.has(src.id)) return;
       const img = await decodeImage(src.objectUrl);
       if (img) images.set(src.id, img);
     }),
@@ -63,7 +66,7 @@ export async function createMediaExportLayers(
           continue;
         }
 
-        const sampler = samplers.get(src.id);
+        const sampler = samplers.get(layer.key);
         if (!sampler) continue;
         uploaded.set(layer.key, src.id);
         const frame = await sampler.at(layer.sourceTime);

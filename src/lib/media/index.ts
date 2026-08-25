@@ -1,4 +1,5 @@
 export { createMediaHistory } from "./history.svelte";
+export { MEDIA_LAYER_SHORTCUTS } from "./shortcuts";
 export type { ResolvedMediaLayer } from "./resolve";
 export {
   addClip,

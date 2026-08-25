@@ -116,6 +116,7 @@
 		findMediaClip,
 		findMediaClipLane,
 		MAX_MEDIA_LANES,
+		MEDIA_LAYER_SHORTCUTS,
 		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
 		updateMediaLane as updateMediaLaneIn,
@@ -2672,6 +2673,7 @@
 				]
 			: []),
 		...(textTimeline.enabled ? [TEXT_TIMELINE_SHORTCUTS] : []),
+		...(mediaTimeline.enabled ? [MEDIA_LAYER_SHORTCUTS] : []),
 	]);
 
 	// A still image with no track has no clock at all, so the text timeline
@@ -2886,16 +2888,21 @@
 
 	function addMediaLane() {
 		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
+		const sourceId = defaultLayerSourceId();
 		pushMediaHistory();
 		setMediaTimeline(
 			appendMediaLane(
 				mediaTimeline.enabled
 					? mediaTimeline
 					: { ...mediaTimeline, enabled: true },
-				defaultLayerSourceId(),
+				sourceId,
 				textDuration,
 			),
 		);
+		// Nothing in the pool to draw: asking for the file here is the step the
+		// user was going to take anyway, and addLayerSources seats it in the lane
+		// that just appeared.
+		if (!sourceId) sourceInput?.click();
 	}
 
 	// One clip panel at a time: picking a layer clip puts the text clip down, and

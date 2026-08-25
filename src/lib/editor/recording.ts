@@ -29,11 +29,7 @@ import {
 } from "./sequence";
 import { createSequenceExportSources } from "./sequence-export-sources";
 import { createMediaExportLayers } from "./media-export-layers";
-import {
-  mediaTimelineSourceIds,
-  type MediaTimeline,
-  type ResolvedMediaLayer,
-} from "../media";
+import type { MediaTimeline, ResolvedMediaLayer } from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
 export interface RecordingContext {
@@ -450,13 +446,21 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
         renderer,
       );
     }
-    const layerIds = mediaTimeline?.enabled
-      ? mediaTimelineSourceIds(mediaTimeline)
-      : [];
-    if (layerIds.length > 0) {
+    // Keyed by lane, matching how the preview driver holds its decoders: the
+    // lane is what a layer's frames belong to, and two lanes can want two
+    // positions in one file.
+    const laneSources = new Map<string, string>();
+    if (mediaTimeline?.enabled) {
+      for (const lane of mediaTimeline.lanes) {
+        if (lane.enabled && lane.sourceId && lane.clips.length > 0) {
+          laneSources.set(lane.id, lane.sourceId);
+        }
+      }
+    }
+    if (laneSources.size > 0) {
       exportLayers = await createMediaExportLayers(
         layerSources,
-        layerIds,
+        laneSources,
         renderer,
       );
     }
