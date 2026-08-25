@@ -2999,6 +2999,14 @@
 		if (!sourceId) sourceInput?.click();
 	}
 
+	/** The rail is the media pool, so it shows wherever something can draw from
+	 * one: sequence segments, and media layers in either mode. */
+	let showSourceRail = $derived(
+		!sequenceGridOpen &&
+			sequenceSources.length > 0 &&
+			(isSequenceMode || mediaTimeline.enabled),
+	);
+
 	// One clip panel at a time: picking a layer clip puts the text clip down, and
 	// the other way round. Without this the sidebar would show whichever branch
 	// came first while the other lane still drew itself as selected.
@@ -3633,9 +3641,10 @@
 				</RecordGroup>
 			{/if}
 		</div>
-		{#if isSequenceMode && !sequenceGridOpen && sequenceSources.length > 0}
+		{#if showSourceRail}
 			<!-- The pool, on hand while the preview is up: dragging a thumb onto a
-			     segment is the same drop the grid's cards make. -->
+			     segment — or onto a media layer's row — is the same drop the grid's
+			     cards make. -->
 			<SourceRail
 				sources={sequenceSources}
 				primarySourceId={sourceRegistry.primaryId}
@@ -3906,7 +3915,6 @@
 					onLaneChange={updateMediaLane}
 					onClipChange={updateMediaClip}
 					onBeforeEdit={pushMediaHistory}
-					onAddSource={() => sourceInput?.click()}
 					onClose={() => (selectedMediaClipId = null)}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}

@@ -22,6 +22,7 @@
 		type MediaTimeline,
 	} from '../../media';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
+	import { SOURCE_DND_TYPE } from '../../editor/sequence-source-ui';
 	import type { LayerRef } from '../../timeline/layer-order';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 
@@ -56,6 +57,47 @@
 		onChange,
 		onBeforeEdit,
 	}: Props = $props();
+
+	// ── Source drops ─────────────────────────────────────────────────────────
+	// The same payload the media rail and the sequence grid send, so a thumb
+	// dragged onto a lane sets what that layer draws.
+	let dropLaneId = $state<string | null>(null);
+
+	function isSourceDrag(e: DragEvent): boolean {
+		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
+	}
+
+	function onLaneDragOver(e: DragEvent, laneId: string) {
+		if (!isSourceDrag(e)) return;
+		// Without preventDefault the browser refuses the drop entirely.
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+		dropLaneId = laneId;
+	}
+
+	function onLaneDragLeave(e: DragEvent) {
+		// Ignore the leaves fired crossing between a row's own children.
+		if (
+			e.currentTarget instanceof Element &&
+			e.relatedTarget instanceof Node &&
+			e.currentTarget.contains(e.relatedTarget)
+		) {
+			return;
+		}
+		dropLaneId = null;
+	}
+
+	function onLaneDrop(e: DragEvent, laneId: string) {
+		if (!isSourceDrag(e)) return;
+		e.preventDefault();
+		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? '';
+		dropLaneId = null;
+		if (!sourceId) return;
+		const lane = laneOf(laneId);
+		if (!lane || lane.sourceId === sourceId) return;
+		onBeforeEdit?.();
+		onChange(updateMediaLane(timeline, laneId, (l) => ({ ...l, sourceId })));
+	}
 
 	function sourceOf(lane: MediaLane): SequenceSource | undefined {
 		return sources.find((s) => s.id === lane.sourceId);
@@ -496,11 +538,16 @@
 
 <div class="media-tl">
 	{#each timeline.lanes as lane (lane.id)}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="tl-row layer-row"
 			class:lifted={draggingLaneId === lane.id}
+			class:drop-target={dropLaneId === lane.id}
 			style="order: {stackAt(lane.id)}"
 			data-layer-id={lane.id}
+			ondragover={(e) => onLaneDragOver(e, lane.id)}
+			ondragleave={onLaneDragLeave}
+			ondrop={(e) => onLaneDrop(e, lane.id)}
 		>
 			<div class="tl-gutter">
 				<button
@@ -516,7 +563,7 @@
 					class:unset={!lane.sourceId}
 					title={lane.sourceId
 						? `${laneLabel(lane)} — click to edit this layer`
-						: 'Pick a source for this layer'}
+						: 'No source — drag one here from the media rail'}
 					onclick={() => openLane(lane)}
 				>
 					{#if sourceOf(lane)?.thumbUrl}
@@ -736,6 +783,12 @@
 	   only thing that says which one is in hand. */
 	.layer-row.lifted {
 		opacity: 0.55;
+	}
+
+	/* A source is being dragged over this row and would land on it. */
+	.layer-row.drop-target .lane-track {
+		border-color: var(--live);
+		box-shadow: inset 0 0 0 1px var(--live);
 	}
 
 	.layer-row.lifted .lane-z {

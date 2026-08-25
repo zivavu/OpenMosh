@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, X } from 'lucide-svelte';
+	import { X } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import type { EffectInstance, VolumeLink } from '../../effects';
 	import {
@@ -35,8 +35,6 @@
 		onLaneChange: (lane: MediaLane) => void;
 		onClipChange: (clip: MediaClip) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
-		/** Opens the file picker that adds to the pool. */
-		onAddSource?: () => void;
 		/** Deselects the clip, which puts the image effects back in the sidebar. */
 		onClose?: () => void;
 		hasTrack?: boolean;
@@ -57,7 +55,6 @@
 		onLaneChange,
 		onClipChange,
 		onBeforeEdit,
-		onAddSource,
 		onClose,
 		hasTrack = false,
 		spectrumData = null,
@@ -129,7 +126,10 @@
 {:else}
 	<div class="clip-panel">
 		<div class="panel-head">
-			<h3 class="panel-title">{lane.name}</h3>
+			<h3 class="panel-title">
+				{lane.name}
+				{#if source}<span class="panel-src">{source.name}</span>{/if}
+			</h3>
 			{#if onClose}
 				<button
 					class="close-btn"
@@ -142,30 +142,11 @@
 			{/if}
 		</div>
 
-		<div class="src-grid">
-			{#each sources as s (s.id)}
-				<button
-					class="src-chip"
-					class:active={s.id === lane.sourceId}
-					title={s.name}
-					onclick={() => setSource(s.id)}
-				>
-					{#if s.thumbUrl}
-						<img src={s.thumbUrl} alt="" />
-					{:else}
-						<span class="src-fallback">{s.name.slice(0, 2)}</span>
-					{/if}
-					{#if s.kind === 'video'}<span class="src-kind">VID</span>{/if}
-				</button>
-			{/each}
-			{#if onAddSource}
-				<button class="src-chip add" title="Add media" onclick={onAddSource}>
-					<Plus size={14} />
-				</button>
-			{/if}
-		</div>
 		{#if !lane.sourceId}
-			<p class="warn">Pick a source above — this layer has nothing to draw.</p>
+			<p class="warn">
+				This layer has nothing to draw — drag a thumb from the media rail onto
+				its row.
+			</p>
 		{/if}
 
 		{#if source?.kind === 'video' && source.duration > 0}
@@ -396,6 +377,14 @@
 		gap: 0.5rem;
 	}
 
+	.panel-src {
+		margin-left: 0.4rem;
+		font-weight: 400;
+		letter-spacing: 0;
+		text-transform: none;
+		color: var(--text-4);
+	}
+
 	.panel-title {
 		margin: 0;
 		font-size: 0.7rem;
@@ -425,63 +414,6 @@
 
 	.close-btn:hover {
 		color: var(--text);
-	}
-
-	.src-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
-		gap: 4px;
-	}
-
-	.src-chip {
-		position: relative;
-		aspect-ratio: 1;
-		padding: 0;
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		background: var(--ink);
-		color: var(--text-3);
-		cursor: pointer;
-		overflow: hidden;
-	}
-
-	.src-chip img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-
-	.src-chip:hover {
-		border-color: var(--text-3);
-	}
-
-	.src-chip.active {
-		border-color: var(--live);
-		box-shadow: inset 0 0 0 1px var(--live);
-	}
-
-	.src-chip.add {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-style: dashed;
-	}
-
-	.src-fallback {
-		font-size: 0.65rem;
-		text-transform: uppercase;
-	}
-
-	.src-kind {
-		position: absolute;
-		right: 2px;
-		bottom: 2px;
-		padding: 0 2px;
-		border-radius: 2px;
-		background: rgba(0, 0, 0, 0.65);
-		font-size: 0.5rem;
-		letter-spacing: 0.06em;
-		color: var(--text-2);
 	}
 
 	.row {
