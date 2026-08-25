@@ -1722,25 +1722,9 @@
 					{/if}
 				{/if}
 			{/snippet}
-			{#if audio.trackFile && audio.trackDuration > 0}
-				<AudioTimeline
-					layout="lane"
-					label="AUD"
-					trackDuration={audio.trackDuration}
-					trackCurrentTime={audio.trackCurrentTime}
-					spanStart={audio.spanStart}
-					spanEnd={audio.spanEnd}
-					isPlaying={previewPlaying}
-					outputVolume={audio.outputVolume}
-					onPlay={() => startPreview()}
-					onPause={stopPreview}
-					onSeek={seekMaster}
-					onSpanCommit={pushSpanHistory}
-					onSpanStartChange={(t) => (audio.spanStart = t)}
-					onSpanEndChange={(t) => (audio.spanEnd = t)}
-					onVolumeChange={(v) => audio.setOutputVolume(v)}
-				/>
-			{/if}
+			<!-- Read bottom to top, the way a frame is built: the track at the
+			     foot is the input, the beat segments above it drive the chain,
+			     and the text layers composite over what it produced. -->
 			<!-- Same layer column as the editor's: the lane rows are
 			     display:contents, so they need one flex parent to order in. -->
 			<div class="tl-layers">
@@ -1765,6 +1749,25 @@
 					bind:selectedSegmentId
 					bind:undoSource={segmentUndo}
 					onSeek={seekMaster}
+				/>
+			{/if}
+			{#if audio.trackFile && audio.trackDuration > 0}
+				<AudioTimeline
+					layout="lane"
+					label="AUD"
+					trackDuration={audio.trackDuration}
+					trackCurrentTime={audio.trackCurrentTime}
+					spanStart={audio.spanStart}
+					spanEnd={audio.spanEnd}
+					isPlaying={previewPlaying}
+					outputVolume={audio.outputVolume}
+					onPlay={() => startPreview()}
+					onPause={stopPreview}
+					onSeek={seekMaster}
+					onSpanCommit={pushSpanHistory}
+					onSpanStartChange={(t) => (audio.spanStart = t)}
+					onSpanEndChange={(t) => (audio.spanEnd = t)}
+					onVolumeChange={(v) => audio.setOutputVolume(v)}
 				/>
 			{/if}
 		</TimelineStack>

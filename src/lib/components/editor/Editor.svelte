@@ -3745,6 +3745,75 @@
 						/>
 					{/if}
 				{/snippet}
+				<!-- Read bottom to top, the way a frame is built: the transports at
+				     the foot are the inputs, the segment lane above them is the root
+				     chain, the fx lanes stack onto that, and the layers composite over
+				     whatever it all produced. -->
+				<!-- One column for both kinds of layer: each row carries its place
+				     in the shared stack as a CSS order, so text and media
+				     interleave without either component knowing about the other. -->
+				<div class="tl-layers">
+					{#if mediaTimeline.enabled}
+						<MediaTimelineLane
+							timeline={mediaTimeline}
+							{layerOrder}
+							{draggingLaneId}
+							onLaneDragStart={startLayerDrag}
+							sources={sequenceSources}
+							bind:selectedClipId={selectedMediaClipId}
+							onChange={setMediaTimeline}
+							onBeforeEdit={pushMediaHistory}
+						/>
+					{/if}
+					{#if textTimeline.enabled}
+						<TextTimelineLane
+							timeline={textTimeline}
+							{layerOrder}
+							{draggingLaneId}
+							onLaneDragStart={startLayerDrag}
+							bind:selectedClipId={selectedTextClipId}
+							onChange={setTextTimeline}
+							onBeforeEdit={pushTextHistory}
+							{lyricsSync}
+							bind:lyricsOpen
+						/>
+					{/if}
+				</div>
+				{#if isSequenceMode && fxLanes.length > 0}
+					<FxLanes
+						lanes={fxLanes}
+						bind:selectedClipId={selectedFxClipId}
+						bind:selectedClipIds={selectedFxClipIds}
+						onChange={setFxLanes}
+						onBeforeEdit={pushFxHistory}
+						bpm={sequenceBpm}
+						bind:selectedLaneId={selectedFxLaneId}
+						onModeChange={fxModeChange}
+						onRoll={fxRoll}
+						onClear={fxClear}
+					/>
+				{/if}
+				{#if seqMasterDuration > 0 && isSequenceMode}
+					<SequenceTimeline
+						segments={sequenceSegments}
+						boundaries={seqBoundaries}
+						onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
+						bind:selectedSegmentId
+						bind:selectedSegmentIds={seqSelectedIds}
+						onApplyPreset={seqApplyPreset}
+						onRoll={seqRoll}
+						onClear={seqClear}
+						onModeChange={seqModeChange}
+						bpm={sequenceBpm}
+						onTransitionChange={seqTransitionChange}
+						segmentLoop={seqSegmentLoop}
+						onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
+						sources={sequenceSources}
+						primarySourceId={sourceRegistry.primaryId}
+						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
+						onSourceRollChange={seqSourceRollChange}
+					/>
+				{/if}
 				{#if videoIsMaster}
 					<AudioTimeline
 						layout="lane"
@@ -3783,71 +3852,6 @@
 						onSpanStartChange={(t) => (audio.spanStart = t)}
 						onSpanEndChange={(t) => (audio.spanEnd = t)}
 						onVolumeChange={(v) => audio.setOutputVolume(v)}
-					/>
-				{/if}
-				<!-- One column for both kinds of layer: each row carries its place
-				     in the shared stack as a CSS order, so text and media
-				     interleave without either component knowing about the other. -->
-				<div class="tl-layers">
-				{#if mediaTimeline.enabled}
-					<MediaTimelineLane
-						timeline={mediaTimeline}
-						{layerOrder}
-						{draggingLaneId}
-						onLaneDragStart={startLayerDrag}
-						sources={sequenceSources}
-						bind:selectedClipId={selectedMediaClipId}
-						onChange={setMediaTimeline}
-						onBeforeEdit={pushMediaHistory}
-					/>
-				{/if}
-				{#if textTimeline.enabled}
-					<TextTimelineLane
-						timeline={textTimeline}
-						{layerOrder}
-						{draggingLaneId}
-						onLaneDragStart={startLayerDrag}
-						bind:selectedClipId={selectedTextClipId}
-						onChange={setTextTimeline}
-						onBeforeEdit={pushTextHistory}
-						{lyricsSync}
-						bind:lyricsOpen
-					/>
-				{/if}
-				</div>
-				{#if isSequenceMode && fxLanes.length > 0}
-					<FxLanes
-						lanes={fxLanes}
-						bind:selectedClipId={selectedFxClipId}
-						bind:selectedClipIds={selectedFxClipIds}
-						onChange={setFxLanes}
-						onBeforeEdit={pushFxHistory}
-						bpm={sequenceBpm}
-						bind:selectedLaneId={selectedFxLaneId}
-						onModeChange={fxModeChange}
-						onRoll={fxRoll}
-						onClear={fxClear}
-					/>
-				{/if}
-				{#if seqMasterDuration > 0 && isSequenceMode}
-					<SequenceTimeline
-						segments={sequenceSegments}
-						boundaries={seqBoundaries}
-						onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
-						bind:selectedSegmentId
-						bind:selectedSegmentIds={seqSelectedIds}
-						onApplyPreset={seqApplyPreset}
-						onRoll={seqRoll}
-						onClear={seqClear}
-						onModeChange={seqModeChange}
-						bpm={sequenceBpm}
-						onTransitionChange={seqTransitionChange}
-						segmentLoop={seqSegmentLoop}
-						onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
-						sources={sequenceSources}
-						primarySourceId={sourceRegistry.primaryId}
-						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
-						onSourceRollChange={seqSourceRollChange}
 					/>
 				{/if}
 			</TimelineStack>
