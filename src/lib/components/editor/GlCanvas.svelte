@@ -11,6 +11,11 @@
    } from "../../gl/renderer";
    import { onFontsChanged } from "../../text-overlay";
    import { resolveTextLayersAt, type TextTimeline } from "../../text";
+   import {
+      resolveMediaLayersAt,
+      type MediaTimeline,
+      type ResolvedMediaLayer,
+   } from "../../media";
    import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 
    /** Active sequence transition descriptor. Progress is computed per rendered
@@ -33,6 +38,7 @@
 
    /** Shared, so the default prop doesn't mint an array per render. */
    const EMPTY_POST: PostChainLayer[] = [];
+   const EMPTY_MEDIA: ResolvedMediaLayer[] = [];
 
    interface Props {
       imageSrc: string;
@@ -90,6 +96,11 @@
       sourceFit?: SourceFit;
       /** Optional text lanes composited into the chain at their insertion points. */
       textTimeline?: TextTimeline | null;
+      /** Optional media lanes, composited the same way. */
+      mediaTimeline?: MediaTimeline | null;
+      /** Uploads each visible media layer's frame before the chain runs. Called
+       * with the layers resolved for this frame, on the master clock. */
+      mediaDriver?: ((layers: ResolvedMediaLayer[]) => void) | null;
       /** Master-timeline seconds the text clips are looked up at. */
       textTime?: number;
       /** Song tempo, for beat-synced effects. 0 = unknown, they run free.
@@ -135,6 +146,8 @@
       sourceFit = "contain",
       fullscreen = $bindable(false),
       textTimeline = null,
+      mediaTimeline = null,
+      mediaDriver = null,
       textTime = 0,
       bpm = 0,
       forceAnimation = false,
@@ -242,6 +255,15 @@
    const hasAnimatedEffects = $derived(
       effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
    );
+   /** A media lane's own chain can animate with nothing else on screen moving. */
+   const hasAnimatedLayers = $derived(
+      !!mediaTimeline?.enabled &&
+         mediaTimeline.lanes.some(
+            (l) =>
+               l.enabled &&
+               l.effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+         ),
+   );
    const needsAnimation = $derived(
       !externallyDriven &&
          !freezeAnimation &&
@@ -250,6 +272,7 @@
             videoPlaying ||
             sourceAnimating ||
             forceAnimation ||
+            hasAnimatedLayers ||
             hasAnimatedEffects),
    );
 
@@ -261,6 +284,10 @@
       renderer!.setSpectrum(spectrum, now);
       renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
       const layers = textTimeline ? resolveTextLayersAt(textTimeline, textTime) : [];
+      const media = mediaTimeline
+         ? resolveMediaLayersAt(mediaTimeline, textTime)
+         : EMPTY_MEDIA;
+      if (media.length > 0) mediaDriver?.(media);
       const tr = transition;
       if (tr && tr.durationSec > 0) {
          const p = (tr.getTime() - tr.startTime) / tr.durationSec;
@@ -283,6 +310,7 @@
                tr.useAltSource ?? false,
                layers,
                postLayers,
+               media,
             );
             return;
          }
@@ -292,7 +320,7 @@
       // which would double the stacked instances if passed whole.
       const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
       const base = stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
-      renderer!.render(base, now, layers, postLayers);
+      renderer!.render(base, now, layers, postLayers, media);
    }
 
    $effect(() => {
@@ -473,6 +501,7 @@
       fontTick;
       // Text edits and scrubbing both change which clip is on screen.
       readTextTimeline();
+      readMediaTimeline();
       textTime;
       // Scrubbing onto another sequence source while paused: re-upload before
       // drawing. sourceKey also ticks when a late video upload lands, which is
@@ -498,6 +527,28 @@
     * to build (and JSON.stringify its way through) only ever existed to be
     * compared against itself.
     */
+   /** Same purpose as readTextTimeline: touch every field a media lane draws
+    * from, so a paused canvas redraws when one is edited. */
+   function readMediaTimeline() {
+      if (!mediaTimeline?.enabled) return;
+      for (const l of mediaTimeline.lanes) {
+         l.enabled;
+         l.chainIndex;
+         l.sourceId;
+         const style = l.style as unknown as Record<string, unknown>;
+         for (const k of Object.keys(style)) style[k];
+         for (const e of l.effects) {
+            e.enabled;
+            for (const k of Object.keys(e.values)) e.values[k];
+         }
+         for (const c of l.clips) {
+            c.start;
+            c.end;
+            c.sourceStart;
+         }
+      }
+   }
+
    function readTextTimeline() {
       if (!textTimeline?.enabled) return;
       for (const l of textTimeline.lanes) {

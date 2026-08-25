@@ -23,6 +23,8 @@
 	let pendingAudioFile: File | null = $state(null);
 	/** Editor state carried in from a reopened session, cleared on exit. */
 	let restoredSingle: SingleSessionState | null = $state(null);
+	/** Media the restored session's layers draw from, alongside its source. */
+	let restoredSingleExtras: File[] = $state([]);
 	let restoredSlideshowConfig: SlideshowConfig | null = $state(null);
 	/** Library id of the song a reopened session was keyed to. */
 	let sessionTrackId: string | null = $state(null);
@@ -103,6 +105,7 @@
 		pendingAudioFile = null;
 		slideshowFiles = [];
 		restoredSingle = null;
+		restoredSingleExtras = [];
 		restoredSlideshowConfig = null;
 		sessionTrackId = null;
 	}
@@ -120,6 +123,7 @@
 		sessionTrackId = opened.trackId;
 		if (mode === 'single') {
 			restoredSingle = opened.state as SingleSessionState;
+			restoredSingleExtras = opened.files.slice(1);
 			file = opened.files[0];
 			navigateTo('editor');
 			return;
@@ -201,6 +205,7 @@
 		initialAudioFile={pendingAudioFile}
 		initialTrackId={sessionTrackId}
 		initialSession={restoredSingle}
+		extraFiles={restoredSingleExtras}
 		onfile={(f: File) => (file = f)}
 		{warmCanvas}
 		{warmRenderer}

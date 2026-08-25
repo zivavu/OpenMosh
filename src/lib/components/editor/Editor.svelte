@@ -4,6 +4,8 @@
 		Download,
 		HelpCircle,
 		Home,
+		ImagePlus,
+		Layers,
 		Library,
 		Maximize,
 		MicVocal,
@@ -104,6 +106,23 @@
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import { SequenceFrameDriver } from '../../editor/sequence-frames';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
+	import { MediaLayerDriver } from '../../editor/media-layer-driver';
+	import {
+		appendMediaLane,
+		createMediaHistory,
+		createMediaTimeline,
+		detachMediaSource,
+		EMPTY_MEDIA_TIMELINE,
+		findMediaClip,
+		findMediaClipLane,
+		MAX_MEDIA_LANES,
+		mediaTimelineSourceIds,
+		normalizeMediaTimeline,
+		updateMediaLane as updateMediaLaneIn,
+		type MediaClip,
+		type MediaLane,
+		type MediaTimeline,
+	} from '../../media';
 	import {
 		loadMediaPool,
 		pruneSequenceMedia,
@@ -147,6 +166,8 @@
 	import TrackAddBar from '../ui/TrackAddBar.svelte';
 	import TrackLibrary from '../ui/TrackLibrary.svelte';
 	import TextTimelineLane from '../text/TextTimeline.svelte';
+	import MediaTimelineLane from '../media/MediaTimeline.svelte';
+	import MediaClipPanel from '../media/MediaClipPanel.svelte';
 	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
 	import GlCanvas from './GlCanvas.svelte';
@@ -611,6 +632,7 @@
 			restoreFxLanes(savedSeq.fx);
 		}
 		restoreTextTimeline(savedSeq.text);
+		restoreMediaTimeline(savedSeq.media);
 		return true;
 	}
 
@@ -809,6 +831,8 @@
 		bpm?: number;
 		/** Absent on entries saved before the text timeline existed. */
 		text?: TextTimeline;
+		/** Absent on entries saved before media layers existed. */
+		media?: MediaTimeline;
 		/** Absent on entries saved before fx lanes existed. */
 		fx?: FxLane[];
 	}>('openmosh-sequence');
@@ -871,6 +895,7 @@
 			restoreFxLanes(saved.fx);
 		}
 		restoreTextTimeline(saved.text);
+		restoreMediaTimeline(saved.media);
 	});
 
 	/** A restored BPM wins over any detection already in flight — the segments
@@ -896,12 +921,13 @@
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const bpm = sequenceBpm;
 		const text = $state.snapshot(textTimeline) as TextTimeline;
+		const media = $state.snapshot(mediaTimeline) as MediaTimeline;
 		const fx = $state.snapshot(fxLanes) as FxLane[];
 		const key = seqStoreKey;
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { segments: segs, bpm, text, fx });
+			seqStore.save(key, { segments: segs, bpm, text, media, fx });
 		}, 300);
 	});
 
@@ -925,6 +951,7 @@
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
 			text: $state.snapshot(textTimeline) as TextTimeline,
+			media: $state.snapshot(mediaTimeline) as MediaTimeline,
 			fx: $state.snapshot(fxLanes) as FxLane[],
 		});
 	}
@@ -1247,8 +1274,18 @@
 	);
 
 	onMount(() => {
-		if (!isSequenceMode) return;
 		void (async () => {
+			// Single mode keeps its own file out of the pool: it is already what
+			// the frame under a layer shows, and `file` can be replaced from under
+			// us, which would leave a pool entry pointing at media nothing uses.
+			// Its extras are the layer media a saved session brought back.
+			if (!isSequenceMode) {
+				const layerMedia = extraFiles.filter((f) => f !== file);
+				if (layerMedia.length > 0) {
+					await sourceRegistry.add(layerMedia, { persist: false });
+				}
+				return;
+			}
 			// Not persisted: the primary belongs to the editor session, never to
 			// a song's pool, so storing it would write (possibly hundreds of MB
 			// of) video into IndexedDB that nothing would ever read back.
@@ -1366,8 +1403,32 @@
 		});
 	});
 
+	/**
+	 * Add to the pool, then seat anything the user is obviously waiting for: a
+	 * layer lane with no source adopts the first file added, so picking media
+	 * from an empty lane is one step rather than two.
+	 */
+	async function addLayerSources(files: File[]) {
+		const added = await addSequenceSources(files);
+		const first = added[0];
+		if (!first) return;
+		const unset = mediaTimeline.lanes.find((l) => !l.sourceId);
+		if (!unset) return;
+		pushMediaHistory();
+		setMediaTimeline(
+			updateMediaLaneIn(mediaTimeline, unset.id, (l) => ({
+				...l,
+				sourceId: first.id,
+			})),
+		);
+	}
+
 	async function addSequenceSources(files: File[]) {
-		const added = await sourceRegistry.add(files);
+		// Single mode's pool is session-scoped: it has no song to persist under,
+		// and the session save writes the files it actually uses.
+		const added = await sourceRegistry.add(files, {
+			persist: isSequenceMode,
+		});
 		const skipped = files.length - added.length;
 		if (skipped > 0) {
 			showToast(
@@ -1375,6 +1436,7 @@
 				'error',
 			);
 		}
+		return added;
 	}
 
 	let showClearSourcesConfirm = $state(false);
@@ -1386,6 +1448,11 @@
 	 */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
+		for (const src of sequenceSources) {
+			if (!src.primary) {
+				setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
+			}
+		}
 		sourceRegistry.clearExtras();
 		// The cleared source's frame is still on the texture, and the driver
 		// still thinks it's current — make it re-upload from the primary.
@@ -1409,6 +1476,7 @@
 	function removeSequenceSource(id: string) {
 		sourceRegistry.remove(id);
 		seqFrames.invalidate();
+		setMediaTimeline(detachMediaSource(mediaTimeline, id));
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
 				s.sourceId === id ? { ...s, sourceId: undefined } : s,
@@ -1537,6 +1605,12 @@
 		onUpload: bumpSourceTick,
 	});
 
+	const mediaLayers = new MediaLayerDriver({
+		registry: sourceRegistry,
+		getRenderer: () => glRenderer,
+		onUpload: bumpSourceTick,
+	});
+
 	let seqActiveSourceId = $derived.by(() => activeSourceId());
 	let seqActiveSource = $derived(sourceRegistry.get(seqActiveSourceId));
 	let seqSourceKey = $derived(`${seqActiveSourceId}:${sourceTick}`);
@@ -1594,6 +1668,7 @@
 	$effect(() => {
 		glRenderer;
 		seqFrames.invalidate();
+		mediaLayers.invalidate();
 	});
 
 	// The route enables sequence mode with no toggle press to seed the first
@@ -2121,6 +2196,22 @@
 		},
 		{
 			get undoSeq() {
+				return mediaHistory.undoSeq;
+			},
+			get redoSeq() {
+				return mediaHistory.redoSeq;
+			},
+			undo: () => {
+				const prev = mediaHistory.undo();
+				if (prev) setMediaTimeline(prev);
+			},
+			redo: () => {
+				const next = mediaHistory.redo();
+				if (next) setMediaTimeline(next);
+			},
+		},
+		{
+			get undoSeq() {
 				return burstOwner === 'fx' && panelBurst.open
 					? PENDING_EDIT
 					: fxHistory.undoSeq;
@@ -2412,6 +2503,18 @@
 	let selectedTextClipId = $state<string | null>(null);
 	let lyricsOpen = $state(false);
 
+	// ── Media layers ──
+	// Lanes of media over the same master clock, each with its own placement and
+	// effect chain. Off until the user turns it on, like the text timeline.
+	let mediaTimeline = $state<MediaTimeline>(
+		untrack(() =>
+			initialSession?.media
+				? normalizeMediaTimeline(initialSession.media)
+				: { ...EMPTY_MEDIA_TIMELINE },
+		),
+	);
+	let selectedMediaClipId = $state<string | null>(null);
+
 	// ── Single-mode session ──
 	// Sequence mode resumes from its song's media pool; single mode has only the
 	// one file, so the file and the work done to it are saved together and the
@@ -2426,15 +2529,22 @@
 		// Keying either the guard or the payload off it discards the whole
 		// timeline the moment the user hides it.
 		const hasText = textTimeline.lanes.length > 0;
-		if (!moshSession.touched && !hasText) return;
+		const hasMedia = mediaTimeline.lanes.length > 0;
+		if (!moshSession.touched && !hasText && !hasMedia) return;
 		const source = file;
 		const state = {
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText ? ($state.snapshot(textTimeline) as TextTimeline) : null,
+			media: hasMedia ? ($state.snapshot(mediaTimeline) as MediaTimeline) : null,
 		};
+		// The layers' media rides along with the source, so reopening the session
+		// restores what they were drawing rather than a set of blank lanes.
+		const layerFiles = mediaTimelineSourceIds(mediaTimeline)
+			.map((id) => sourceRegistry.get(id)?.file)
+			.filter((f): f is File => !!f);
 		// Keyed by the song when there is one, so the session sits alongside the
 		// text timeline and span already saved under that track id.
-		void saveSession('single', [source], state, currentTrackId)
+		void saveSession('single', [source, ...layerFiles], state, currentTrackId)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
 				// Swallowing this outright is what made the last failure invisible.
@@ -2457,6 +2567,7 @@
 		// would never re-arm the debounce.
 		$state.snapshot(effects);
 		$state.snapshot(textTimeline);
+		$state.snapshot(mediaTimeline);
 		file;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
@@ -2607,6 +2718,7 @@
 		textDuration > 0 &&
 			((isSequenceMode && seqMasterDuration > 0) ||
 				textTimeline.enabled ||
+				mediaTimeline.enabled ||
 				videoIsMaster ||
 				audioIsMaster),
 	);
@@ -2711,6 +2823,98 @@
 		selectedTextClipId = null;
 		textHistory.reset(textTimeline);
 	}
+
+	/** Its own stack, for the same reason the text timeline has one. */
+	const mediaHistory = createMediaHistory();
+
+	if (untrack(() => initialSession?.media)) {
+		mediaHistory.reset(untrack(() => mediaTimeline));
+	}
+
+	function pushMediaHistory(coalesceKey?: string) {
+		mediaHistory.push(
+			$state.snapshot(mediaTimeline) as MediaTimeline,
+			coalesceKey,
+		);
+	}
+
+	function setMediaTimeline(next: MediaTimeline) {
+		mediaTimeline = next;
+	}
+
+	function updateMediaClip(next: MediaClip) {
+		mediaTimeline = {
+			...mediaTimeline,
+			lanes: mediaTimeline.lanes.map((lane) => ({
+				...lane,
+				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
+			})),
+		};
+	}
+
+	function updateMediaLane(next: MediaLane) {
+		mediaTimeline = updateMediaLaneIn(mediaTimeline, next.id, () => next);
+	}
+
+	function restoreMediaTimeline(saved: MediaTimeline | undefined) {
+		mediaTimeline = saved
+			? normalizeMediaTimeline(saved)
+			: { ...EMPTY_MEDIA_TIMELINE };
+		selectedMediaClipId = null;
+		mediaHistory.reset(mediaTimeline);
+	}
+
+	function toggleMediaTimeline() {
+		pushMediaHistory();
+		mediaTimeline = mediaTimeline.enabled
+			? { ...mediaTimeline, enabled: false }
+			: mediaTimeline.lanes.length > 0
+				? { ...mediaTimeline, enabled: true }
+				: createMediaTimeline(defaultLayerSourceId(), textDuration);
+		if (!mediaTimeline.enabled) selectedMediaClipId = null;
+	}
+
+	/**
+	 * What a new lane starts on: anything but the primary, which is already what
+	 * the frame under the layer is showing — a layer of the same media on top of
+	 * itself looks like nothing happened.
+	 */
+	function defaultLayerSourceId(): string | null {
+		const extra = sequenceSources.find((s) => !s.primary);
+		return extra?.id ?? sequenceSources[0]?.id ?? null;
+	}
+
+	function addMediaLane() {
+		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
+		pushMediaHistory();
+		setMediaTimeline(
+			appendMediaLane(
+				mediaTimeline.enabled
+					? mediaTimeline
+					: { ...mediaTimeline, enabled: true },
+				defaultLayerSourceId(),
+				textDuration,
+			),
+		);
+	}
+
+	// One clip panel at a time: picking a layer clip puts the text clip down, and
+	// the other way round. Without this the sidebar would show whichever branch
+	// came first while the other lane still drew itself as selected.
+	$effect(() => {
+		if (selectedMediaClipId) untrack(() => (selectedTextClipId = null));
+	});
+	$effect(() => {
+		if (selectedTextClipId) untrack(() => (selectedMediaClipId = null));
+	});
+
+	let mediaChainLabels = $derived(chainLabels(renderedEffects));
+	let selectedMediaClip = $derived(
+		findMediaClip(mediaTimeline, selectedMediaClipId),
+	);
+	let selectedMediaLane = $derived(
+		findMediaClipLane(mediaTimeline, selectedMediaClipId),
+	);
 
 	function toggleTextTimeline() {
 		pushTextHistory();
@@ -3128,9 +3332,12 @@
 				{warmCanvas}
 				{warmRenderer}
 				textTimeline={textTimeline.enabled ? textTimeline : null}
+				mediaTimeline={mediaTimeline.enabled ? mediaTimeline : null}
+				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				{textTime}
 				bpm={sequenceBpm}
-				forceAnimation={textTimeline.enabled && textClockRunning}
+				forceAnimation={(textTimeline.enabled || mediaTimeline.enabled) &&
+					textClockRunning}
 				transition={seqTransition
 					? {
 							effectsA: seqTransition.effectsA,
@@ -3185,6 +3392,14 @@
 					title="Text timeline: timed text layers with their own effects"
 				>
 					<Type size={14} />
+				</button>
+				<button
+					class="help-btn"
+					class:seq-active={mediaTimeline.enabled}
+					onclick={toggleMediaTimeline}
+					title="Media layers: timed image/video layers with their own effects"
+				>
+					<Layers size={14} />
 				</button>
 				<MoshGroup
 					bind:this={moshGroupRef}
@@ -3389,6 +3604,27 @@
 							</button>
 						{/if}
 					{/if}
+					{#if mediaTimeline.enabled}
+						<div class="tl-tool-sep"></div>
+						<span class="tl-tool-label">Layers</span>
+						<button
+							class="tl-tool-btn"
+							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
+							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
+								? `${MAX_MEDIA_LANES} layers is the limit — each one is another full-frame pass, and video layers each hold a decoder`
+								: 'Add a media layer over the image'}
+							onclick={addMediaLane}
+						>
+							<Plus size={12} /> Layer
+						</button>
+						<button
+							class="tl-tool-btn"
+							title="Add image or video to draw layers from"
+							onclick={() => sourceInput?.click()}
+						>
+							<ImagePlus size={12} /> Media
+						</button>
+					{/if}
 					{#if isSequenceMode && seqMasterDuration > 0}
 						<div class="tl-tool-sep"></div>
 						<span class="tl-tool-label">FX</span>
@@ -3449,6 +3685,16 @@
 						onSpanStartChange={(t) => (audio.spanStart = t)}
 						onSpanEndChange={(t) => (audio.spanEnd = t)}
 						onVolumeChange={(v) => audio.setOutputVolume(v)}
+					/>
+				{/if}
+				{#if mediaTimeline.enabled}
+					<MediaTimelineLane
+						timeline={mediaTimeline}
+						chainLabels={mediaChainLabels}
+						sources={sequenceSources}
+						bind:selectedClipId={selectedMediaClipId}
+						onChange={setMediaTimeline}
+						onBeforeEdit={pushMediaHistory}
 					/>
 				{/if}
 				{#if textTimeline.enabled}
@@ -3512,22 +3758,22 @@
 			onchange={onTrackInputChange}
 			hidden
 		/>
-		{#if isSequenceMode}
-			<!-- Outside the timeline stack: the stack is hidden while there's no
-			     clock, and the empty-pool placeholder still needs this picker. -->
-			<input
-				bind:this={sourceInput}
-				type="file"
-				accept="image/*,video/*"
-				multiple
-				hidden
-				onchange={(e) => {
-					const picked = Array.from(e.currentTarget.files ?? []);
-					if (picked.length > 0) void addSequenceSources(picked);
-					e.currentTarget.value = '';
-				}}
-			/>
-		{/if}
+		<!-- Outside the timeline stack: the stack is hidden while there's no
+		     clock, and both the empty-pool placeholder and the layer panel still
+		     need this picker. Mounted in single mode too, where the pool holds
+		     the media the layers draw from. -->
+		<input
+			bind:this={sourceInput}
+			type="file"
+			accept="image/*,video/*"
+			multiple
+			hidden
+			onchange={(e) => {
+				const picked = Array.from(e.currentTarget.files ?? []);
+				if (picked.length > 0) void addLayerSources(picked);
+				e.currentTarget.value = '';
+			}}
+		/>
 	</div>
 	<MobileSheet bind:this={_mobileSheetRef}>
 		{#snippet settings()}
@@ -3567,7 +3813,21 @@
 			</div>
 		{/snippet}
 		{#snippet effectsPanel()}
-			{#if selectedTextClip}
+			{#if selectedMediaClip}
+				<MediaClipPanel
+					lane={selectedMediaLane}
+					clip={selectedMediaClip}
+					sources={sequenceSources}
+					onLaneChange={updateMediaLane}
+					onClipChange={updateMediaClip}
+					onBeforeEdit={pushMediaHistory}
+					onAddSource={() => sourceInput?.click()}
+					onClose={() => (selectedMediaClipId = null)}
+					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+					spectrumData={audio.spectrumData}
+					response={audioResponse}
+				/>
+			{:else if selectedTextClip}
 				<TextClipPanel
 					lane={selectedTextLane}
 					clip={selectedTextClip}

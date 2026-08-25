@@ -28,12 +28,15 @@ import {
 } from "./sequence-media-store";
 
 import type { EffectInstance } from "../effects/types";
+import type { MediaTimeline } from "../media";
 import type { TextTimeline } from "../text/types";
 
 /** What single mode stores; sequence keeps its own timeline entry instead. */
 export interface SingleSessionState {
   effects: EffectInstance[];
   text: TextTimeline | null;
+  /** Absent on sessions saved before media layers existed. */
+  media?: MediaTimeline | null;
 }
 
 export interface SavedSession {
