@@ -251,7 +251,10 @@ describe("normalizeTextTimeline", () => {
     expect(t.lanes[0].underEffects).toBe(false);
     expect(typeof t.lanes[0].z).toBe("number");
     expect(t.lanes[0].style.color).toBe("#ffffff");
-    expect(t.lanes[0].effects).toEqual([]);
+    // Backfilled rather than left empty: a lane with no chain gives its panel
+    // nothing to switch on.
+    expect(t.lanes[0].effects.length).toBeGreaterThan(0);
+    expect(t.lanes[0].effects.every((e) => !e.enabled)).toBe(true);
   });
 
   it("lifts a legacy per-clip style onto the lane", () => {

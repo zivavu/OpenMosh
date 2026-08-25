@@ -1,4 +1,4 @@
-import { hydrateEffects } from "../effects";
+import { hydrateEffects, loadInitialEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
@@ -146,7 +146,10 @@ export function createMediaLane(
     z,
     sourceId,
     style: { ...style },
-    effects: [],
+    // The same all-disabled list the main chain starts from, hidden effects
+    // respected — an empty chain gives the panel nothing to switch on, which
+    // reads as every effect being unavailable on this layer.
+    effects: loadInitialEffects(),
     clips: [],
   };
 }
@@ -202,6 +205,12 @@ export function appendMediaLane(
   };
 }
 
+/** A lane saved with no chain at all is backfilled, not left switch-less. */
+function laneEffects(saved: unknown): EffectInstance[] {
+  const hydrated = hydrateEffects(saved);
+  return hydrated.length > 0 ? hydrated : loadInitialEffects();
+}
+
 function legacyChainIndex(lane: object): number {
   const raw = (lane as { chainIndex?: unknown }).chainIndex;
   return typeof raw === "number" ? raw : Number.MAX_SAFE_INTEGER;
@@ -224,7 +233,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
       z: typeof lane.z === "number" ? lane.z : i,
       sourceId: lane.sourceId ?? null,
       style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
-      effects: hydrateEffects(lane.effects),
+      effects: laneEffects(lane.effects),
       clips: (Array.isArray(lane.clips) ? lane.clips : []).map((clip) => ({
         id: clip.id ?? nextId("mclip"),
         start: clip.start ?? 0,

@@ -92,6 +92,12 @@ describe("createFullSpanLane", () => {
     expect(lane.clips).toHaveLength(1);
     expect(lane.clips[0].end).toBe(12);
   });
+
+  it("starts with the same switches the main chain has, all off", () => {
+    const lane = createFullSpanLane("Layer 1", "src-a", 12);
+    expect(lane.effects.length).toBeGreaterThan(0);
+    expect(lane.effects.every((e) => !e.enabled)).toBe(true);
+  });
 });
 
 describe("detachMediaSource", () => {
@@ -131,7 +137,10 @@ describe("normalizeMediaTimeline", () => {
     expect(t.lanes[0].enabled).toBe(true);
     expect(t.lanes[0].style.scale).toBe(1);
     expect(t.lanes[0].clips[0].sourceStart).toBe(0);
-    expect(t.lanes[0].effects).toEqual([]);
+    // Backfilled rather than left empty: a lane with no chain gives its panel
+    // nothing to switch on.
+    expect(t.lanes[0].effects.length).toBeGreaterThan(0);
+    expect(t.lanes[0].effects.every((e) => !e.enabled)).toBe(true);
   });
 
   it("survives junk", () => {

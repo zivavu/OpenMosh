@@ -1,4 +1,4 @@
-import { hydrateEffects } from "../effects";
+import { hydrateEffects, loadInitialEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 // Straight from the module, not the barrel: that re-exports the custom-font
 // store, whose runes can't run outside a Svelte build — which took this file's
@@ -133,7 +133,9 @@ export function createTextLane(
     underEffects: false,
     z,
     style: { ...style },
-    effects: [],
+    // See createMediaLane: the same all-disabled list the main chain starts
+    // from, so the panel has something to switch on.
+    effects: loadInitialEffects(),
     clips: [],
   };
 }
@@ -166,6 +168,12 @@ export function appendTextLane(
  */
 export const TEXT_Z_BASE = 1000;
 
+/** A lane saved with no chain at all is backfilled, not left switch-less. */
+function laneEffects(saved: unknown): EffectInstance[] {
+  const hydrated = hydrateEffects(saved);
+  return hydrated.length > 0 ? hydrated : loadInitialEffects();
+}
+
 function legacyChainIndex(lane: object): number {
   const raw = (lane as { chainIndex?: unknown }).chainIndex;
   return typeof raw === "number" ? raw : Number.MAX_SAFE_INTEGER;
@@ -195,7 +203,7 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
         underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
         z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
         style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
-        effects: hydrateEffects(lane.effects),
+        effects: laneEffects(lane.effects),
         clips: clips.map((clip) => ({
           id: clip.id ?? nextId("clip"),
           start: clip.start ?? 0,
