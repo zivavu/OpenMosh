@@ -337,11 +337,10 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding: 0.75rem;
-		/* Sits at the top of the sidebar, above the mosh settings: it takes the
-		   leftover height and scrolls, they keep their natural one. */
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
+		/* Sits at the top of the sidebar and keeps its natural height: the
+		   sidebar is one scroll region, so a scrollbar here would strand the
+		   settings below it at the bottom of the window. */
+		flex: 0 0 auto;
 		border-bottom: 1px solid var(--line);
 		width: 310px;
 		max-width: 310px;
@@ -358,23 +357,6 @@
 	/* Nothing shrinks: children keep their natural height and the panel scrolls. */
 	.clip-panel > :global(*) {
 		flex-shrink: 0;
-	}
-
-	.clip-panel::-webkit-scrollbar {
-		width: 4px;
-	}
-
-	.clip-panel::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	.clip-panel::-webkit-scrollbar-thumb {
-		background: rgba(255, 255, 255, 0.07);
-		border-radius: 2px;
-	}
-
-	.clip-panel::-webkit-scrollbar-thumb:hover {
-		background: #555;
 	}
 
 	/* Full-bleed, matching the sidebar chain this panel replaces. */

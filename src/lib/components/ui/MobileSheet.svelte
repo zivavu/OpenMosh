@@ -145,7 +145,12 @@
 			{/if}
 		</div>
 		<!-- Desktop: render both stacked normally -->
-		<div class="desktop-content">
+		<!-- With a top panel the sidebar scrolls as one region: its sections are
+		     a single column of settings, and giving the panel its own scrollbar
+		     pinned the rest to the bottom of the window. Without one the panels
+		     own the height themselves (the chain scrolls, its header doesn't),
+		     so they stay direct flex children. -->
+		<div class="desktop-content" class:one-scroll={!!topPanel}>
 			{#if topPanel}
 				{@render topPanel()}
 			{/if}
@@ -177,6 +182,37 @@
 
 	.desktop-content {
 		display: contents;
+	}
+
+	.desktop-content.one-scroll {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+	}
+
+	/* Nothing shrinks: every section keeps its natural height and the column
+	   scrolls past it. */
+	.desktop-content.one-scroll > :global(*) {
+		flex-shrink: 0;
+	}
+
+	.desktop-content.one-scroll::-webkit-scrollbar {
+		width: 4px;
+	}
+
+	.desktop-content.one-scroll::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.desktop-content.one-scroll::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.07);
+		border-radius: 2px;
+	}
+
+	.desktop-content.one-scroll::-webkit-scrollbar-thumb:hover {
+		background: #555;
 	}
 
 	.tab-content {
