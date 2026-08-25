@@ -50,30 +50,26 @@ export function nextLayerZ(order: LayerRef[]): number {
 }
 
 /**
- * Move one layer `delta` steps toward the front (negative) or the back. Returns
- * the z each affected layer takes, or null when it is already at that end.
+ * Lift one layer out of the stack and drop it at `toIndex` (front-first, the
+ * same indexing `order` uses). Returns the z every layer takes afterwards, or
+ * null when nothing would move.
  *
- * The two swap z values rather than renumbering the stack: nothing else moves,
- * so a lane the user isn't touching can't change what it sits over.
+ * The whole stack is renumbered rather than two entries swapped: a drag can
+ * cross several rows at once, and consecutive integers keep the next drag from
+ * having to reason about gaps or ties.
  */
-export function swapLayerZ(
+export function moveLayerTo(
   order: LayerRef[],
   id: string,
-  delta: number,
+  toIndex: number,
 ): { id: string; z: number }[] | null {
   const from = order.findIndex((l) => l.id === id);
   if (from === -1) return null;
-  const to = from + delta;
-  if (to < 0 || to >= order.length) return null;
-  const a = order[from];
-  const b = order[to];
-  // Equal z would leave the swap invisible — the tie-break decides instead of
-  // the move. Nudge past the neighbour rather than onto it.
-  if (a.z === b.z) {
-    return [{ id: a.id, z: delta < 0 ? a.z + 1 : a.z - 1 }];
-  }
-  return [
-    { id: a.id, z: b.z },
-    { id: b.id, z: a.z },
-  ];
+  const to = Math.min(Math.max(toIndex, 0), order.length - 1);
+  if (to === from) return null;
+  const next = order.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  // Front of the list gets the highest z, so index 0 draws on top.
+  return next.map((l, i) => ({ id: l.id, z: next.length - 1 - i }));
 }

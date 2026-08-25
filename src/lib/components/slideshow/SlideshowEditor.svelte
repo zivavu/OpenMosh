@@ -33,7 +33,7 @@
 	import {
 		combinedLayerOrder,
 		nextLayerZ,
-		swapLayerZ,
+		moveLayerTo,
 	} from '../../timeline/layer-order';
 	import type { GlRenderer, SourceFit } from '../../gl/renderer';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
@@ -1294,17 +1294,50 @@
 	/** The slideshow has text lanes only, but the stack order is the same one. */
 	let layerOrder = $derived(combinedLayerOrder([], textTimeline.lanes));
 
-	function moveTextLayer(laneId: string, delta: number) {
-		const moves = swapLayerZ(layerOrder, laneId, delta);
+	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
+		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
-		const byId = new Map(moves.map((m) => [m.id, m.z]));
-		pushTextHistory();
+		const byId = new Map<string, number>(moves.map((m) => [m.id, m.z]));
+		pushTextHistory(coalesceKey);
 		setTextTimeline({
 			...textTimeline,
 			lanes: textTimeline.lanes.map((l) =>
 				byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
 			),
 		});
+	}
+
+	// Same gesture as the editor's; only text lanes exist here to move.
+	let draggingLaneId = $state<string | null>(null);
+
+	function startLayerDrag(laneId: string, e: PointerEvent) {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		draggingLaneId = laneId;
+		const handle = e.currentTarget as HTMLElement;
+		handle.setPointerCapture(e.pointerId);
+		const onMove = (ev: PointerEvent) => {
+			const el = document.elementFromPoint(
+				ev.clientX,
+				ev.clientY,
+			) as HTMLElement | null;
+			const overId = el?.closest<HTMLElement>('[data-layer-id]')?.dataset
+				.layerId;
+			if (!overId || overId === laneId) return;
+			const to = layerOrder.findIndex((l) => l.id === overId);
+			if (to !== -1) reorderLayer(laneId, to, `layer-drag-${laneId}`);
+		};
+		const onUp = (ev: PointerEvent) => {
+			draggingLaneId = null;
+			handle.releasePointerCapture?.(ev.pointerId);
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		};
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
 	}
 	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
 	/** The lane holding the selected clip — the panel edits its style. */
@@ -1715,6 +1748,8 @@
 				<TextTimelineLane
 					timeline={textTimeline}
 					{layerOrder}
+					{draggingLaneId}
+					onLaneDragStart={startLayerDrag}
 					bind:selectedClipId={selectedTextClipId}
 					onChange={setTextTimeline}
 					onBeforeEdit={pushTextHistory}
@@ -1761,8 +1796,6 @@
 					onLaneChange={updateTextLane}
 					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
-					{layerOrder}
-					onMoveLayer={(d) => moveTextLayer(selectedTextLane!.id, d)}
 					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile}
 					spectrumData={audio.spectrumData}

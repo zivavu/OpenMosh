@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { Eye, EyeOff, GripVertical, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
@@ -37,6 +37,11 @@
 		timeline: TextTimeline;
 		/** Every layer, front first — this lane's place in the stack. */
 		layerOrder?: LayerRef[];
+		/** Starts a row drag that reorders the whole layer stack. The editor owns
+		 * it: a drag crosses into the other kind's rows, which this can't see. */
+		onLaneDragStart?: (laneId: string, e: PointerEvent) => void;
+		/** Id of the row being dragged right now, for its lifted look. */
+		draggingLaneId?: string | null;
 		selectedClipId?: string | null;
 		onChange: (timeline: TextTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
@@ -51,6 +56,8 @@
 	let {
 		timeline,
 		layerOrder = [],
+		onLaneDragStart,
+		draggingLaneId = null,
 		selectedClipId = $bindable(null),
 		onChange,
 		onBeforeEdit,
@@ -473,8 +480,23 @@
 
 <div class="text-tl">
 	{#each timeline.lanes as lane (lane.id)}
-		<div class="tl-row" style="order: {stackAt(lane.id)}" data-layer-id={lane.id}>
+		<div
+			class="tl-row layer-row"
+			class:lifted={draggingLaneId === lane.id}
+			style="order: {stackAt(lane.id)}"
+			data-layer-id={lane.id}
+		>
 			<div class="tl-gutter">
+				{#if onLaneDragStart}
+					<button
+						class="lane-grip"
+						title="Drag to move this layer through the stack"
+						aria-label="Reorder {lane.name}"
+						onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
+					>
+						<GripVertical size={11} />
+					</button>
+				{/if}
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
@@ -640,6 +662,33 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.lane-grip {
+		display: inline-flex;
+		align-items: center;
+		flex-shrink: 0;
+		padding: 0.15rem 0;
+		border: none;
+		background: none;
+		color: var(--text-4);
+		cursor: grab;
+		touch-action: none;
+	}
+
+	.lane-grip:hover {
+		color: var(--text-2);
+	}
+
+	/* The row follows the pointer by re-ordering, not by moving, so this is the
+	   only thing that says which one is in hand. */
+	.layer-row.lifted {
+		opacity: 0.55;
+	}
+
+	.layer-row.lifted .lane-grip {
+		cursor: grabbing;
+		color: var(--live);
 	}
 
 	.lane-eye,

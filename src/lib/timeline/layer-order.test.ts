@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   combinedLayerOrder,
   nextLayerZ,
-  swapLayerZ,
+  moveLayerTo,
   type OrderedLane,
 } from "./layer-order";
 
@@ -37,36 +37,37 @@ describe("nextLayerZ", () => {
   });
 });
 
-describe("swapLayerZ", () => {
-  it("trades places with the neighbour and leaves the rest alone", () => {
+describe("moveLayerTo", () => {
+  it("renumbers the stack so index 0 draws on top", () => {
     const order = combinedLayerOrder(
       [lane("m1", 0), lane("m2", 1)],
       [lane("t1", 2)],
     );
-    expect(swapLayerZ(order, "m1", -1)).toEqual([
-      { id: "m1", z: 1 },
+    expect(order.map((l) => l.id)).toEqual(["t1", "m2", "m1"]);
+    expect(moveLayerTo(order, "m1", 0)).toEqual([
+      { id: "m1", z: 2 },
+      { id: "t1", z: 1 },
       { id: "m2", z: 0 },
     ]);
   });
 
-  it("reaches across the two kinds", () => {
-    const order = combinedLayerOrder([lane("m1", 0)], [lane("t1", 1)]);
-    expect(swapLayerZ(order, "t1", 1)).toEqual([
-      { id: "t1", z: 0 },
-      { id: "m1", z: 1 },
+  it("carries a layer across several rows in one move", () => {
+    const order = combinedLayerOrder(
+      [lane("m1", 0), lane("m2", 1), lane("m3", 2)],
+      [lane("t1", 3)],
+    );
+    expect(moveLayerTo(order, "t1", 3)?.map((l) => l.id)).toEqual([
+      "m3",
+      "m2",
+      "m1",
+      "t1",
     ]);
   });
 
-  it("nudges past a tie instead of swapping onto it", () => {
-    const order = combinedLayerOrder([lane("m1", 1)], [lane("t1", 1)]);
-    // t1 wins the tie-break, so moving m1 up has to actually change its z.
-    expect(swapLayerZ(order, "m1", -1)).toEqual([{ id: "m1", z: 2 }]);
-  });
-
-  it("refuses to move past either end", () => {
+  it("clamps to the ends and refuses a move that changes nothing", () => {
     const order = combinedLayerOrder([lane("m1", 0)], [lane("t1", 1)]);
-    expect(swapLayerZ(order, "t1", -1)).toBeNull();
-    expect(swapLayerZ(order, "m1", 1)).toBeNull();
-    expect(swapLayerZ(order, "gone", -1)).toBeNull();
+    expect(moveLayerTo(order, "t1", -5)).toBeNull();
+    expect(moveLayerTo(order, "m1", 9)).toBeNull();
+    expect(moveLayerTo(order, "gone", 0)).toBeNull();
   });
 });

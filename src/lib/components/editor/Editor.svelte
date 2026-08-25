@@ -107,7 +107,7 @@
 	import {
 		combinedLayerOrder,
 		nextLayerZ,
-		swapLayerZ,
+		moveLayerTo,
 	} from '../../timeline/layer-order';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import { MediaLayerDriver } from '../../editor/media-layer-driver';
@@ -2788,16 +2788,16 @@
 		combinedLayerOrder(mediaTimeline.lanes, textTimeline.lanes),
 	);
 
-	/** Move a layer through the shared stack, whichever timeline holds it. */
-	function moveLayer(laneId: string, delta: number) {
-		const moves = swapLayerZ(layerOrder, laneId, delta);
+	/**
+	 * Drop a layer at `toIndex` in the shared stack, whichever timeline holds
+	 * it. The stack is renumbered whole, so both sides may need writing.
+	 */
+	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
+		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
-		const byId = new Map(moves.map((m) => [m.id, m.z]));
-		const touchesMedia = mediaTimeline.lanes.some((l) => byId.has(l.id));
-		const touchesText = textTimeline.lanes.some((l) => byId.has(l.id));
-		// One history entry each, and only for the stack that actually moved.
-		if (touchesMedia) {
-			pushMediaHistory();
+		const byId = new Map<string, number>(moves.map((m) => [m.id, m.z]));
+		if (mediaTimeline.lanes.length > 0) {
+			pushMediaHistory(coalesceKey);
 			setMediaTimeline({
 				...mediaTimeline,
 				lanes: mediaTimeline.lanes.map((l) =>
@@ -2805,8 +2805,8 @@
 				),
 			});
 		}
-		if (touchesText) {
-			pushTextHistory();
+		if (textTimeline.lanes.length > 0) {
+			pushTextHistory(coalesceKey);
 			setTextTimeline({
 				...textTimeline,
 				lanes: textTimeline.lanes.map((l) =>
@@ -2815,6 +2815,48 @@
 			});
 		}
 	}
+
+	// ── Layer row drag ───────────────────────────────────────────────────────
+	// Owned here rather than by either lane component: a drag crosses between
+	// text and media rows, and neither can see the other's.
+	let draggingLaneId = $state<string | null>(null);
+
+	function startLayerDrag(laneId: string, e: PointerEvent) {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		draggingLaneId = laneId;
+		const handle = e.currentTarget as HTMLElement;
+		handle.setPointerCapture(e.pointerId);
+
+		// Live reorder: the row under the pointer trades places with the held one
+		// as it passes, so the stack always shows where a drop would land.
+		const onMove = (ev: PointerEvent) => {
+			const overId = layerRowIdAt(ev.clientX, ev.clientY);
+			if (!overId || overId === laneId) return;
+			const to = layerOrder.findIndex((l) => l.id === overId);
+			if (to === -1) return;
+			// One undo entry for the gesture, however many rows it crosses.
+			reorderLayer(laneId, to, `layer-drag-${laneId}`);
+		};
+		const onUp = (ev: PointerEvent) => {
+			draggingLaneId = null;
+			handle.releasePointerCapture?.(ev.pointerId);
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onUp);
+		};
+		window.addEventListener('pointermove', onMove);
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onUp);
+	}
+
+	/** The layer row under the pointer, if any. */
+	function layerRowIdAt(x: number, y: number): string | null {
+		const el = document.elementFromPoint(x, y) as HTMLElement | null;
+		return el?.closest<HTMLElement>('[data-layer-id]')?.dataset.layerId ?? null;
+	}
+
 	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
 	/** The lane holding the selected clip — the panel edits its style. */
 	let selectedTextLane = $derived(
@@ -3751,6 +3793,8 @@
 					<MediaTimelineLane
 						timeline={mediaTimeline}
 						{layerOrder}
+						{draggingLaneId}
+						onLaneDragStart={startLayerDrag}
 						sources={sequenceSources}
 						bind:selectedClipId={selectedMediaClipId}
 						onChange={setMediaTimeline}
@@ -3761,6 +3805,8 @@
 					<TextTimelineLane
 						timeline={textTimeline}
 						{layerOrder}
+						{draggingLaneId}
+						onLaneDragStart={startLayerDrag}
 						bind:selectedClipId={selectedTextClipId}
 						onChange={setTextTimeline}
 						onBeforeEdit={pushTextHistory}
@@ -3847,8 +3893,6 @@
 					onClipChange={updateMediaClip}
 					onBeforeEdit={pushMediaHistory}
 					onAddSource={() => sourceInput?.click()}
-					{layerOrder}
-					onMoveLayer={(d) => moveLayer(selectedMediaLane!.id, d)}
 					onClose={() => (selectedMediaClipId = null)}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
@@ -3902,8 +3946,6 @@
 					onLaneChange={updateTextLane}
 					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
-					{layerOrder}
-					onMoveLayer={(d) => moveLayer(selectedTextLane!.id, d)}
 					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
