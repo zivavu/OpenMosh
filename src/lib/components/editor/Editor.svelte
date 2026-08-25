@@ -3657,7 +3657,10 @@
 							</button>
 						{/if}
 					{/if}
-					{#if mediaTimeline.enabled}
+					<!-- Read bottom to top, the way the frame is built: the segment lane
+				     is the root chain, the fx lanes stack onto it, and the layers
+				     composite over what those produced. -->
+				{#if mediaTimeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<span class="tl-tool-label">Layers</span>
 						<button
@@ -3761,6 +3764,20 @@
 						bind:lyricsOpen
 					/>
 				{/if}
+				{#if isSequenceMode && fxLanes.length > 0}
+					<FxLanes
+						lanes={fxLanes}
+						bind:selectedClipId={selectedFxClipId}
+						bind:selectedClipIds={selectedFxClipIds}
+						onChange={setFxLanes}
+						onBeforeEdit={pushFxHistory}
+						bpm={sequenceBpm}
+						bind:selectedLaneId={selectedFxLaneId}
+						onModeChange={fxModeChange}
+						onRoll={fxRoll}
+						onClear={fxClear}
+					/>
+				{/if}
 				{#if seqMasterDuration > 0 && isSequenceMode}
 					<SequenceTimeline
 						segments={sequenceSegments}
@@ -3780,20 +3797,6 @@
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
 						onSourceRollChange={seqSourceRollChange}
-					/>
-				{/if}
-				{#if isSequenceMode && fxLanes.length > 0}
-					<FxLanes
-						lanes={fxLanes}
-						bind:selectedClipId={selectedFxClipId}
-						bind:selectedClipIds={selectedFxClipIds}
-						onChange={setFxLanes}
-						onBeforeEdit={pushFxHistory}
-						bpm={sequenceBpm}
-						bind:selectedLaneId={selectedFxLaneId}
-						onModeChange={fxModeChange}
-						onRoll={fxRoll}
-						onClear={fxClear}
 					/>
 				{/if}
 			</TimelineStack>
