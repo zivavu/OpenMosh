@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X } from 'lucide-svelte';
+	import { ChevronDown, ChevronUp, X } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import type { EffectInstance, VolumeLink } from '../../effects';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
@@ -14,6 +14,7 @@
 	import type { SpectrumData } from '../../types';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import ColorPicker from '../ui/ColorPicker.svelte';
+	import type { LayerRef } from '../../timeline/layer-order';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import FontSelect from '../ui/FontSelect.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
@@ -32,6 +33,10 @@
 	interface Props {
 		/** The lane the selected clip lives in; the panel edits its style. */
 		lane: TextLane | null;
+		/** Every layer, front first — the stack this one sits in. */
+		layerOrder?: LayerRef[];
+		/** Move this layer `delta` steps toward the front (negative) or back. */
+		onMoveLayer?: (delta: number) => void;
 		clip: TextClip | null;
 		onLaneChange: (lane: TextLane) => void;
 		onClipChange: (clip: TextClip) => void;
@@ -52,6 +57,8 @@
 	let {
 		lane,
 		clip,
+		layerOrder = [],
+		onMoveLayer,
 		onLaneChange,
 		onClipChange,
 		onBeforeEdit,
@@ -61,6 +68,18 @@
 		response = undefined,
 		onVolumeLinkChange,
 	}: Props = $props();
+
+	let stackAt = $derived(layerOrder.findIndex((l) => l.id === lane?.id));
+	let stackNeighbour = $derived({
+		above: stackAt > 0 ? layerOrder[stackAt - 1] : null,
+		below: stackAt >= 0 ? (layerOrder[stackAt + 1] ?? null) : null,
+	});
+
+	function setUnderEffects(under: boolean) {
+		if (!lane) return;
+		onBeforeEdit?.();
+		onLaneChange({ ...lane, underEffects: under });
+	}
 
 	function setStyle<K extends keyof TextStyle>(
 		key: K,
@@ -342,6 +361,53 @@
 			</select>
 		</div>
 
+		{#if stackAt >= 0}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="row" title="Which layers this one is drawn over">
+			<span class="row-label">Stack</span>
+			<div class="stack-ctl">
+				<button
+					class="stack-btn"
+					disabled={!onMoveLayer || stackAt <= 0}
+					title={stackNeighbour.above
+						? `Move above ${stackNeighbour.above.name}`
+						: 'Already on top'}
+					onclick={() => onMoveLayer?.(-1)}
+				>
+					<ChevronUp size={12} />
+				</button>
+				<button
+					class="stack-btn"
+					disabled={!onMoveLayer || !stackNeighbour.below}
+					title={stackNeighbour.below
+						? `Move below ${stackNeighbour.below.name}`
+						: 'Already at the back'}
+					onclick={() => onMoveLayer?.(1)}
+				>
+					<ChevronDown size={12} />
+				</button>
+				<span class="stack-pos">
+					{layerOrder.length - stackAt} of {layerOrder.length}
+				</span>
+			</div>
+		</div>
+		{/if}
+
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Composite before the image effects instead of over the finished frame, so they distort the text too"
+		>
+			<label for="tc-under">Under effects</label>
+			<input
+				id="tc-under"
+				type="checkbox"
+				checked={lane.underEffects}
+				onchange={(e) =>
+					setUnderEffects((e.currentTarget as HTMLInputElement).checked)}
+			/>
+		</div>
+
 		<h3 class="panel-title section">Text effects</h3>
 		{#if opaqueNames.length > 0}
 			<p class="warn">
@@ -500,7 +566,8 @@
 		font-size: 0.78rem;
 	}
 
-	.row label {
+	.row label,
+	.row .row-label {
 		flex-shrink: 0;
 		min-width: 84px;
 		color: var(--text-2);
@@ -542,6 +609,38 @@
 
 	.row input[type='checkbox'] {
 		accent-color: #888;
+	}
+
+	.stack-ctl {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.stack-btn {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem;
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		background: var(--surface);
+		color: var(--text-2);
+		cursor: pointer;
+	}
+
+	.stack-btn:hover:not(:disabled) {
+		border-color: var(--live);
+		color: var(--text);
+	}
+
+	.stack-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+
+	.stack-pos {
+		color: var(--text-3);
+		font-size: 0.7rem;
 	}
 
 	.val {

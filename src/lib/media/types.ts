@@ -53,11 +53,13 @@ export interface MediaLane {
   name: string;
   enabled: boolean;
   /**
-   * Where this layer meets the main effect chain, as an index into the enabled
-   * main effects. 0 composites the media before every image effect, so they all
-   * distort it; a value at or past the end lays it over the finished frame.
+   * Composite before the main chain rather than over the finished frame, so
+   * every image effect distorts this layer too. See TextLane.underEffects for
+   * why this is a flag and not an index.
    */
-  chainIndex: number;
+  underEffects: boolean;
+  /** Order among *all* layers, media and text alike. Higher sits on top. */
+  z: number;
   /** Into the media pool. Null on a lane whose source was removed. */
   sourceId: string | null;
   /** Shared by every clip in the lane. */
@@ -133,14 +135,15 @@ export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
 export function createMediaLane(
   name: string,
   sourceId: string | null = null,
-  chainIndex = Number.MAX_SAFE_INTEGER,
+  z = 0,
   style: MediaStyle = DEFAULT_MEDIA_STYLE,
 ): MediaLane {
   return {
     id: nextId("mlane"),
     name,
     enabled: true,
-    chainIndex,
+    underEffects: false,
+    z,
     sourceId,
     style: { ...style },
     effects: [],
@@ -156,8 +159,9 @@ export function createFullSpanLane(
   name: string,
   sourceId: string | null,
   duration: number,
+  z = 0,
 ): MediaLane {
-  const lane = createMediaLane(name, sourceId);
+  const lane = createMediaLane(name, sourceId, z);
   const span = Math.max(duration, MIN_CLIP_LENGTH);
   return { ...lane, clips: [createMediaClip(0, span)] };
 }
@@ -165,23 +169,42 @@ export function createFullSpanLane(
 export function createMediaTimeline(
   sourceId: string | null,
   duration: number,
+  z = 0,
 ): MediaTimeline {
-  return { enabled: true, lanes: [createFullSpanLane("Layer 1", sourceId, duration)] };
+  return {
+    enabled: true,
+    lanes: [createFullSpanLane("Layer 1", sourceId, duration, z)],
+  };
 }
 
-/** Add a lane covering the whole timeline, named after its position. */
+/**
+ * Add a lane covering the whole timeline, named after its position. `z` comes
+ * from the caller: the order spans the text lanes too, which this timeline
+ * can't see.
+ */
 export function appendMediaLane(
   timeline: MediaTimeline,
   sourceId: string | null,
   duration: number,
+  z = 0,
 ): MediaTimeline {
   return {
     ...timeline,
     lanes: [
       ...timeline.lanes,
-      createFullSpanLane(`Layer ${timeline.lanes.length + 1}`, sourceId, duration),
+      createFullSpanLane(
+        `Layer ${timeline.lanes.length + 1}`,
+        sourceId,
+        duration,
+        z,
+      ),
     ],
   };
+}
+
+function legacyChainIndex(lane: object): number {
+  const raw = (lane as { chainIndex?: unknown }).chainIndex;
+  return typeof raw === "number" ? raw : Number.MAX_SAFE_INTEGER;
 }
 
 /** Fill in anything a saved timeline predates or dropped. */
@@ -195,10 +218,10 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
       id: lane.id ?? nextId("mlane"),
       name: lane.name ?? `Layer ${i + 1}`,
       enabled: lane.enabled !== false,
-      chainIndex:
-        typeof lane.chainIndex === "number"
-          ? lane.chainIndex
-          : Number.MAX_SAFE_INTEGER,
+      // See normalizeTextTimeline: lanes saved against the old chain index
+      // carry one of those instead of these two.
+      underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
+      z: typeof lane.z === "number" ? lane.z : i,
       sourceId: lane.sourceId ?? null,
       style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
       effects: hydrateEffects(lane.effects),

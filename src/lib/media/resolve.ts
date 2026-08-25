@@ -27,7 +27,10 @@ export interface ResolvedMediaLayer {
    */
   key: string;
   laneId: string;
-  chainIndex: number;
+  /** Composite before the whole chain, or over the finished frame. */
+  underEffects: boolean;
+  /** Order among all layers, media and text alike. Higher sits on top. */
+  z: number;
   sourceId: string;
   /** Seconds into the source to show. Videos wrap; images ignore it. */
   sourceTime: number;
@@ -52,7 +55,8 @@ export function resolveMediaLayersAt(
     layers.push({
       key: lane.id,
       laneId: lane.id,
-      chainIndex: lane.chainIndex,
+      underEffects: lane.underEffects,
+      z: lane.z,
       sourceId: lane.sourceId,
       sourceTime: clip.sourceStart + (time - clip.start),
       style: lane.style,

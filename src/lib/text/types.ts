@@ -1,6 +1,10 @@
 import { hydrateEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
-import { FONT_OPTIONS, type TextOverlayBlendMode } from "../text-overlay";
+// Straight from the module, not the barrel: that re-exports the custom-font
+// store, whose runes can't run outside a Svelte build — which took this file's
+// tests down with it.
+import { FONT_OPTIONS } from "../text-overlay/fonts";
+import type { TextOverlayBlendMode } from "../text-overlay/types";
 import {
   clipAt,
   MIN_CLIP_LENGTH,
@@ -47,11 +51,16 @@ export interface TextLane {
   name: string;
   enabled: boolean;
   /**
-   * Where this layer meets the main effect chain, as an index into the enabled
-   * main effects. 0 composites the text before every image effect, so they all
-   * distort it; a value at or past the end lays it over the finished frame.
+   * Composite before the main chain rather than over the finished frame, so
+   * every image effect distorts this layer too.
+   *
+   * This replaced an index into the enabled effects: only its two ends meant
+   * anything stable, since toggling an effect, reordering the chain or rolling
+   * a mosh renumbers everything in between.
    */
-  chainIndex: number;
+  underEffects: boolean;
+  /** Order among *all* layers, text and media alike. Higher sits on top. */
+  z: number;
   /** Shared by every clip in the lane. */
   style: TextStyle;
   /** Run on the lane's text alone, before it meets the image. Shared by every
@@ -114,30 +123,52 @@ export function splitTextClipAt(lane: TextLane, at: number): TextLane {
 
 export function createTextLane(
   name: string,
-  chainIndex = Number.MAX_SAFE_INTEGER,
+  z = 0,
   style: TextStyle = DEFAULT_TEXT_STYLE,
 ): TextLane {
   return {
     id: nextId("lane"),
     name,
     enabled: true,
-    chainIndex,
+    underEffects: false,
+    z,
     style: { ...style },
     effects: [],
     clips: [],
   };
 }
 
-export function createTextTimeline(): TextTimeline {
-  return { enabled: true, lanes: [createTextLane("Text 1")] };
+export function createTextTimeline(z = TEXT_Z_BASE): TextTimeline {
+  return { enabled: true, lanes: [createTextLane("Text 1", z)] };
 }
 
-/** Add an empty lane, named after its position. */
-export function appendTextLane(timeline: TextTimeline): TextTimeline {
+/**
+ * Add an empty lane, named after its position. `z` comes from the caller: the
+ * order spans the media lanes too, and this timeline can't see those.
+ */
+export function appendTextLane(
+  timeline: TextTimeline,
+  z = TEXT_Z_BASE,
+): TextTimeline {
   return {
     ...timeline,
-    lanes: [...timeline.lanes, createTextLane(`Text ${timeline.lanes.length + 1}`)],
+    lanes: [
+      ...timeline.lanes,
+      createTextLane(`Text ${timeline.lanes.length + 1}`, z),
+    ],
   };
+}
+
+/**
+ * Where text lanes start in the shared layer order. Above the media lanes,
+ * which is where they sat before the two orders were merged — and where a
+ * caption over a layered clip wants to be anyway.
+ */
+export const TEXT_Z_BASE = 1000;
+
+function legacyChainIndex(lane: object): number {
+  const raw = (lane as { chainIndex?: unknown }).chainIndex;
+  return typeof raw === "number" ? raw : Number.MAX_SAFE_INTEGER;
 }
 
 /** Fill in anything a saved timeline predates or dropped. */
@@ -158,10 +189,11 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
         id: lane.id ?? nextId("lane"),
         name: lane.name ?? `Text ${i + 1}`,
         enabled: lane.enabled !== false,
-        chainIndex:
-          typeof lane.chainIndex === "number"
-            ? lane.chainIndex
-            : Number.MAX_SAFE_INTEGER,
+        // Timelines saved against the old chain index carry one instead of
+        // these two: index 0 was "under every effect", anything else was some
+        // position the next mosh would have invalidated anyway.
+        underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
+        z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
         style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
         effects: hydrateEffects(lane.effects),
         clips: clips.map((clip) => ({

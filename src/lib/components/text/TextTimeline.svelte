@@ -26,18 +26,17 @@
 	import LyricsSyncModal, {
 		type LyricsSyncProps,
 	} from './LyricsSyncModal.svelte';
+	import type { LayerRef } from '../../timeline/layer-order';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
 	const LANE_HEIGHT = 30;
-	/** Chain position meaning "over the finished frame". */
-	const ON_TOP = Number.MAX_SAFE_INTEGER;
 
 	interface Props {
 		timeline: TextTimeline;
-		/** Names of the enabled main effects, in order — the chain-position picker. */
-		chainLabels?: string[];
+		/** Every layer, front first — this lane's place in the stack. */
+		layerOrder?: LayerRef[];
 		selectedClipId?: string | null;
 		onChange: (timeline: TextTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
@@ -51,7 +50,7 @@
 
 	let {
 		timeline,
-		chainLabels = [],
+		layerOrder = [],
 		selectedClipId = $bindable(null),
 		onChange,
 		onBeforeEdit,
@@ -141,6 +140,23 @@
 	/** Clips are placed freely — no grid, nothing to snap to. */
 	function timeAt(clientX: number): number {
 		return vp.clientXToTime(clientX);
+	}
+
+	/** This lane's place in the stack that spans both kinds of layer. */
+	function stackLabel(laneId: string): string {
+		const at = layerOrder.findIndex((l) => l.id === laneId);
+		return at === -1 ? '' : `${layerOrder.length - at}`;
+	}
+
+	function stackTitle(laneId: string): string {
+		const at = layerOrder.findIndex((l) => l.id === laneId);
+		if (at === -1) return '';
+		const above = layerOrder[at - 1];
+		const below = layerOrder[at + 1];
+		if (!above && !below) return 'The only layer';
+		if (!above) return `On top, over ${below.name}`;
+		if (!below) return `At the back, under ${above.name}`;
+		return `Under ${above.name}, over ${below.name}`;
 	}
 
 	function laneOf(laneId: string): TextLane | undefined {
@@ -463,22 +479,10 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
-				<select
-					class="lane-chain"
-					title="Where this text meets the effect chain"
-					value={lane.chainIndex >= chainLabels.length ? ON_TOP : lane.chainIndex}
-					onchange={(e) =>
-						setLane(
-							lane.id,
-							'chainIndex',
-							+(e.currentTarget as HTMLSelectElement).value,
-						)}
-				>
-					<option value={ON_TOP}>On top</option>
-					{#each chainLabels as label, i (i)}
-						<option value={i}>From “{label}”</option>
-					{/each}
-				</select>
+				<span class="lane-name" title={stackTitle(lane.id)}>
+					<span class="lane-z">{stackLabel(lane.id)}</span>
+					<span class="lane-label">{lane.name}</span>
+				</span>
 				<button
 					class="lane-del"
 					title="Delete this lane"
@@ -601,6 +605,39 @@
 		gap: 2px;
 	}
 
+	/* Replaces the chain-position select: the number is where this layer sits in
+	   the stack, counting up from the back. */
+	.lane-z {
+		flex-shrink: 0;
+		min-width: 1.1em;
+		padding: 0 0.2em;
+		border-radius: 2px;
+		background: var(--ink);
+		text-align: center;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		color: var(--text-2);
+	}
+
+	.lane-label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.lane-name {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.65rem;
+		color: var(--text-3);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	.lane-eye,
 	.lane-del {
 		display: inline-flex;
@@ -619,27 +656,6 @@
 
 	.lane-eye.off {
 		color: var(--text-4);
-	}
-
-	/* Borderless until hovered: three framed controls per lane gutter read as
-	   more chrome than the lane itself. */
-	.lane-chain {
-		flex: 1;
-		min-width: 0;
-		padding: 0.1rem 0.15rem;
-		border: 1px solid transparent;
-		border-radius: 4px;
-		background: none;
-		color: var(--text-2);
-		font-size: 0.65rem;
-		font-family: inherit;
-	}
-
-	.lane-chain:hover,
-	.lane-chain:focus {
-		border-color: var(--line);
-		background: var(--surface);
-		color: var(--text);
 	}
 
 	.lane-track {

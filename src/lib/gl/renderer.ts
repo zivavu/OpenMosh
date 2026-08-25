@@ -90,7 +90,10 @@ function imageHeight(image: SourceImage): number {
  * media layers differ only in how `tex` was filled. */
 interface PreparedLayer {
   tex: WebGLTexture;
-  chainIndex: number;
+  /** True = composite before the first effect, so the chain distorts it. */
+  underEffects: boolean;
+  /** Order among all layers. Prepared layers arrive already sorted by it. */
+  z: number;
   opacity: number;
   blendMode: TextOverlayBlendMode;
   /** Media layers only: reapplied at composite time. See LayerBox. */
@@ -116,39 +119,26 @@ type ChainOp =
   | { kind: "layer"; layer: PreparedLayer };
 
 /**
- * Interleave text layers into the effect chain at their insertion points. A
- * layer sits *before* the effect at its index, so index 0 hands the text to
- * every effect and an index at or past the end lays it over the finished frame.
+ * Slot the layers into the effect chain. `underEffects` layers go in ahead of
+ * the first effect, so the whole chain distorts them; the rest lay over the
+ * finished frame. Within each group the array's own order decides who sits on
+ * top, so callers hand this a list already sorted by z.
  */
 function buildChainOps(
   effects: EffectInstance[],
-  enabledCount: number,
   layers: PreparedLayer[],
 ): ChainOp[] {
   const ops: ChainOp[] = [];
-  let i = 0;
-  for (const eff of effects) {
-    if (!eff.enabled) continue;
-    for (const layer of layers) {
-      const at = Math.min(Math.max(layer.chainIndex, 0), enabledCount);
-      if (at === i) ops.push({ kind: "layer", layer });
-    }
-    ops.push({ kind: "effect", eff });
-    i++;
-  }
-  // Layers at or past the end lay over the finished frame.
   for (const layer of layers) {
-    if (Math.min(Math.max(layer.chainIndex, 0), enabledCount) === enabledCount) {
-      ops.push({ kind: "layer", layer });
-    }
+    if (layer.underEffects) ops.push({ kind: "layer", layer });
+  }
+  for (const eff of effects) {
+    if (eff.enabled) ops.push({ kind: "effect", eff });
+  }
+  for (const layer of layers) {
+    if (!layer.underEffects) ops.push({ kind: "layer", layer });
   }
   return ops;
-}
-
-function countEnabled(effects: EffectInstance[]): number {
-  let n = 0;
-  for (const e of effects) if (e.enabled) n++;
-  return n;
 }
 
 /**
@@ -1002,7 +992,7 @@ export class GlRenderer {
     srcOverride?: WebGLTexture,
   ): WebGLTexture | null {
     const srcTex = srcOverride ?? this.chainSource(useAltSource);
-    const ops = buildChainOps(effects, countEnabled(effects), layers);
+    const ops = buildChainOps(effects, layers);
 
     if (ops.length === 0) {
       if (toCanvas) {
@@ -1565,7 +1555,8 @@ export class GlRenderer {
       }
       prepared.push({
         tex,
-        chainIndex: layer.chainIndex,
+        underEffects: layer.underEffects,
+        z: layer.z,
         opacity: layer.style.opacity,
         blendMode: layer.style.blendMode,
       });
@@ -1574,9 +1565,9 @@ export class GlRenderer {
   }
 
   /**
-   * Both kinds of layer for this frame, in composite order. Media sits under
-   * text at the same chain index — a caption over a layered clip is what people
-   * reach for, the other way round almost never is.
+   * Both kinds of layer for this frame, in composite order: one z order spans
+   * text and media alike, so a caption can sit under a layered clip as easily
+   * as over it.
    */
   private prepareLayers(
     textLayers: ResolvedTextLayer[],
@@ -1592,7 +1583,10 @@ export class GlRenderer {
       safeDt,
       text.length,
     );
-    return media.length === 0 ? text : media.concat(text);
+    if (media.length === 0) return text;
+    // Sorted after preparing, not before: the buffer each layer rendered into
+    // is claimed by preparation order, and only the composite cares about z.
+    return media.concat(text).sort((a, b) => a.z - b.z);
   }
 
   /**
@@ -1642,7 +1636,8 @@ export class GlRenderer {
       }
       prepared.push({
         tex,
-        chainIndex: layer.chainIndex,
+        underEffects: layer.underEffects,
+        z: layer.z,
         opacity: layer.style.opacity,
         blendMode: layer.style.blendMode,
         box,

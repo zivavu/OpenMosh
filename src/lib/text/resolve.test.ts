@@ -248,7 +248,8 @@ describe("normalizeTextTimeline", () => {
       lanes: [{ clips: [{ start: 0, end: 1 }] }],
     });
     expect(t.lanes[0].enabled).toBe(true);
-    expect(t.lanes[0].chainIndex).toBe(Number.MAX_SAFE_INTEGER);
+    expect(t.lanes[0].underEffects).toBe(false);
+    expect(typeof t.lanes[0].z).toBe("number");
     expect(t.lanes[0].style.color).toBe("#ffffff");
     expect(t.lanes[0].effects).toEqual([]);
   });

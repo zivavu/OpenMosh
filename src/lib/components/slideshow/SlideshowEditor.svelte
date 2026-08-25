@@ -13,7 +13,6 @@
 	import { MicVocal, Plus } from 'lucide-svelte';
 	import {
 		appendTextLane,
-		chainLabels,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
@@ -31,6 +30,11 @@
 	import TextTimelineLane from '../text/TextTimeline.svelte';
 	import { setFeedbackChain } from '../ui/feedback.svelte';
 	import TextClipPanel from '../text/TextClipPanel.svelte';
+	import {
+		combinedLayerOrder,
+		nextLayerZ,
+		swapLayerZ,
+	} from '../../timeline/layer-order';
 	import type { GlRenderer, SourceFit } from '../../gl/renderer';
 	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
 	import { detectBpm } from '../../slideshow/bpm-detector';
@@ -1095,7 +1099,7 @@
 
 	function addTextLane() {
 		pushTextHistory();
-		setTextTimeline(appendTextLane(textTimeline));
+		setTextTimeline(appendTextLane(textTimeline, nextLayerZ(layerOrder)));
 	}
 
 	/** Scrubbing the shared timeline axis: the audio clock when there is a
@@ -1287,7 +1291,21 @@
 			? audio.trackDuration
 			: recordDuration,
 	);
-	let textChainLabels = $derived(chainLabels(effects));
+	/** The slideshow has text lanes only, but the stack order is the same one. */
+	let layerOrder = $derived(combinedLayerOrder([], textTimeline.lanes));
+
+	function moveTextLayer(laneId: string, delta: number) {
+		const moves = swapLayerZ(layerOrder, laneId, delta);
+		if (!moves) return;
+		const byId = new Map(moves.map((m) => [m.id, m.z]));
+		pushTextHistory();
+		setTextTimeline({
+			...textTimeline,
+			lanes: textTimeline.lanes.map((l) =>
+				byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
+			),
+		});
+	}
 	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
 	/** The lane holding the selected clip — the panel edits its style. */
 	let selectedTextLane = $derived(
@@ -1337,7 +1355,7 @@
 				? { ...textTimeline, enabled: false }
 				: textTimeline.lanes.length > 0
 					? { ...textTimeline, enabled: true }
-					: createTextTimeline(),
+					: createTextTimeline(nextLayerZ(layerOrder)),
 		);
 		if (!textTimeline.enabled) {
 			selectedTextClipId = null;
@@ -1693,7 +1711,7 @@
 			{#if textTimeline.enabled}
 				<TextTimelineLane
 					timeline={textTimeline}
-					chainLabels={textChainLabels}
+					{layerOrder}
 					bind:selectedClipId={selectedTextClipId}
 					onChange={setTextTimeline}
 					onBeforeEdit={pushTextHistory}
@@ -1739,6 +1757,8 @@
 					onLaneChange={updateTextLane}
 					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
+					{layerOrder}
+					onMoveLayer={(d) => moveTextLayer(selectedTextLane!.id, d)}
 					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile}
 					spectrumData={audio.spectrumData}

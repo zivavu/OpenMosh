@@ -17,7 +17,6 @@ export type { ResolvedTextLayer } from "./resolve";
 export {
   addClip,
   allTextEffectIds,
-  chainLabels,
   findTextClip,
   findTextClipLane,
   clipAt,
@@ -50,6 +49,7 @@ export {
   MIN_CLIP_LENGTH,
   normalizeTextTimeline,
   splitTextClipAt,
+  TEXT_Z_BASE,
 } from "./types";
 
 /** Load every font the timeline needs, so an export doesn't start on a fallback face. */

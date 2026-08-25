@@ -48,7 +48,6 @@
 	} from '../../effects';
 	import {
 		appendTextLane,
-		chainLabels,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
@@ -105,6 +104,11 @@
 	} from '../../editor/undo-router';
 	import { detectBpm } from '../../slideshow/bpm-detector';
 	import { SequenceFrameDriver } from '../../editor/sequence-frames';
+	import {
+		combinedLayerOrder,
+		nextLayerZ,
+		swapLayerZ,
+	} from '../../timeline/layer-order';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import { MediaLayerDriver } from '../../editor/media-layer-driver';
 	import {
@@ -2758,7 +2762,7 @@
 
 	function addTextLane() {
 		pushTextHistory();
-		setTextTimeline(appendTextLane(textTimeline));
+		setTextTimeline(appendTextLane(textTimeline, nextLayerZ(layerOrder)));
 	}
 
 	$effect(() => {
@@ -2776,7 +2780,41 @@
 	});
 
 	/** Names of the enabled main effects — the lane chain-position picker. */
-	let textChainLabels = $derived(chainLabels(renderedEffects));
+	/**
+	 * Every layer in both timelines, front first. One order spans the two kinds,
+	 * so the panels and the lane gutters agree on what sits over what.
+	 */
+	let layerOrder = $derived(
+		combinedLayerOrder(mediaTimeline.lanes, textTimeline.lanes),
+	);
+
+	/** Move a layer through the shared stack, whichever timeline holds it. */
+	function moveLayer(laneId: string, delta: number) {
+		const moves = swapLayerZ(layerOrder, laneId, delta);
+		if (!moves) return;
+		const byId = new Map(moves.map((m) => [m.id, m.z]));
+		const touchesMedia = mediaTimeline.lanes.some((l) => byId.has(l.id));
+		const touchesText = textTimeline.lanes.some((l) => byId.has(l.id));
+		// One history entry each, and only for the stack that actually moved.
+		if (touchesMedia) {
+			pushMediaHistory();
+			setMediaTimeline({
+				...mediaTimeline,
+				lanes: mediaTimeline.lanes.map((l) =>
+					byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
+				),
+			});
+		}
+		if (touchesText) {
+			pushTextHistory();
+			setTextTimeline({
+				...textTimeline,
+				lanes: textTimeline.lanes.map((l) =>
+					byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
+				),
+			});
+		}
+	}
 	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
 	/** The lane holding the selected clip — the panel edits its style. */
 	let selectedTextLane = $derived(
@@ -2872,7 +2910,11 @@
 			? { ...mediaTimeline, enabled: false }
 			: mediaTimeline.lanes.length > 0
 				? { ...mediaTimeline, enabled: true }
-				: createMediaTimeline(defaultLayerSourceId(), textDuration);
+				: createMediaTimeline(
+						defaultLayerSourceId(),
+						textDuration,
+						nextLayerZ(layerOrder),
+					);
 		if (!mediaTimeline.enabled) selectedMediaClipId = null;
 	}
 
@@ -2897,6 +2939,7 @@
 					: { ...mediaTimeline, enabled: true },
 				sourceId,
 				textDuration,
+				nextLayerZ(layerOrder),
 			),
 		);
 		// Nothing in the pool to draw: asking for the file here is the step the
@@ -2915,7 +2958,6 @@
 		if (selectedTextClipId) untrack(() => (selectedMediaClipId = null));
 	});
 
-	let mediaChainLabels = $derived(chainLabels(renderedEffects));
 	let selectedMediaClip = $derived(
 		findMediaClip(mediaTimeline, selectedMediaClipId),
 	);
@@ -2929,7 +2971,7 @@
 			? { ...textTimeline, enabled: false }
 			: textTimeline.lanes.length > 0
 				? { ...textTimeline, enabled: true }
-				: createTextTimeline();
+				: createTextTimeline(nextLayerZ(layerOrder));
 		if (!textTimeline.enabled) {
 			selectedTextClipId = null;
 			lyricsOpen = false;
@@ -3701,7 +3743,7 @@
 				{#if mediaTimeline.enabled}
 					<MediaTimelineLane
 						timeline={mediaTimeline}
-						chainLabels={mediaChainLabels}
+						{layerOrder}
 						sources={sequenceSources}
 						bind:selectedClipId={selectedMediaClipId}
 						onChange={setMediaTimeline}
@@ -3711,7 +3753,7 @@
 				{#if textTimeline.enabled}
 					<TextTimelineLane
 						timeline={textTimeline}
-						chainLabels={textChainLabels}
+						{layerOrder}
 						bind:selectedClipId={selectedTextClipId}
 						onChange={setTextTimeline}
 						onBeforeEdit={pushTextHistory}
@@ -3797,6 +3839,8 @@
 					onClipChange={updateMediaClip}
 					onBeforeEdit={pushMediaHistory}
 					onAddSource={() => sourceInput?.click()}
+					{layerOrder}
+					onMoveLayer={(d) => moveLayer(selectedMediaLane!.id, d)}
 					onClose={() => (selectedMediaClipId = null)}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
@@ -3850,6 +3894,8 @@
 					onLaneChange={updateTextLane}
 					onClipChange={updateTextClip}
 					onBeforeEdit={pushTextHistory}
+					{layerOrder}
+					onMoveLayer={(d) => moveLayer(selectedTextLane!.id, d)}
 					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}

@@ -1,4 +1,3 @@
-import { getDefinition } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
 import type { TextClip, TextLane, TextStyle, TextTimeline } from "./types";
@@ -23,7 +22,10 @@ export interface ResolvedTextLayer {
   /** Stable across frames: keys the renderer's texture and feedback caches. */
   key: string;
   laneId: string;
-  chainIndex: number;
+  /** Composite before the whole chain, or over the finished frame. */
+  underEffects: boolean;
+  /** Order among all layers, text and media alike. Higher sits on top. */
+  z: number;
   text: string;
   style: TextStyle;
   effects: EffectInstance[];
@@ -46,7 +48,8 @@ export function resolveTextLayersAt(
     layers.push({
       key: clip.id,
       laneId: lane.id,
-      chainIndex: lane.chainIndex,
+      underEffects: lane.underEffects,
+      z: lane.z,
       text: clip.text,
       style: lane.style,
       effects: lane.effects,
@@ -75,15 +78,6 @@ export function findTextClipLane(
 ): TextLane | null {
   if (!clipId || !timeline) return null;
   return timeline.lanes.find((l) => l.clips.some((c) => c.id === clipId)) ?? null;
-}
-
-/** Names of the enabled effects, for the lane chain-position picker. */
-export function chainLabels(effects: EffectInstance[]): string[] {
-  const labels: string[] = [];
-  for (const e of effects) {
-    if (e.enabled) labels.push(getDefinition(e.defId)?.name ?? e.defId);
-  }
-  return labels;
 }
 
 /** Every effect instance held anywhere in the timeline (for feedback-buffer GC). */
