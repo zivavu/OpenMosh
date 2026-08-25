@@ -21,6 +21,17 @@ import {
 	type ResolvedTextLayer,
 	type TextTimeline,
 } from './text';
+import {
+	resolveMediaLayersAt,
+	type MediaTimeline,
+	type ResolvedMediaLayer,
+} from './media';
+
+/** Replaces the default render for a frame, and composites its own layers. */
+export type CustomRender = (
+	textLayers: ResolvedTextLayer[],
+	mediaLayers: ResolvedMediaLayer[],
+) => void;
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 
@@ -53,8 +64,8 @@ export interface RecordOptions {
 	) =>
 		| boolean
 		| void
-		| ((layers: ResolvedTextLayer[]) => void)
-		| Promise<boolean | void | ((layers: ResolvedTextLayer[]) => void)>;
+		| CustomRender
+		| Promise<boolean | void | CustomRender>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
 	/**
@@ -74,6 +85,11 @@ export interface RecordOptions {
 	audioResponse?: AudioResponse;
 	/** Text lanes composited into the chain, resolved per frame. */
 	textTimeline?: TextTimeline | null;
+	/** Media lanes, resolved per frame on the same clock as the text lanes. */
+	mediaTimeline?: MediaTimeline | null;
+	/** Uploads each visible layer's frame; awaited, so the written frame is the
+	 * one the layer asked for rather than whatever had decoded by then. */
+	mediaLayerSink?: ((layers: ResolvedMediaLayer[]) => Promise<void>) | null;
 	/** Added to the frame time to reach the timeline's clock — an export that
 	 * starts at an audio span offset still lands on the clips you placed. */
 	textTimeOffset?: number;
@@ -217,6 +233,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSpeed = 1,
 		audioResponse = DEFAULT_AUDIO_RESPONSE,
 		textTimeline = null,
+		mediaTimeline = null,
+		mediaLayerSink = null,
 		textTimeOffset = 0,
 		textTimeScale = 1,
 		bpm = 0,
@@ -558,9 +576,16 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			const renderResult = onBeforeRender?.(i, time);
 			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
+			const clockTime = textTimeOffset + time * textTimeScale;
 			const textLayers = textTimeline
-				? resolveTextLayersAt(textTimeline, textTimeOffset + time * textTimeScale)
+				? resolveTextLayersAt(textTimeline, clockTime)
 				: [];
+			const mediaLayers = mediaTimeline
+				? resolveMediaLayersAt(mediaTimeline, clockTime)
+				: [];
+			if (mediaLayers.length > 0 && mediaLayerSink) {
+				await mediaLayerSink(mediaLayers);
+			}
 			applyFrameAudio(
 				renderEffects,
 				frameAudioData,
@@ -581,8 +606,10 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					: null,
 				bpm / 60,
 			);
-			if (typeof skipRender === 'function') skipRender(textLayers);
-			else if (!skipRender) renderer.render(renderEffects, time, textLayers);
+			if (typeof skipRender === 'function') skipRender(textLayers, mediaLayers);
+			else if (!skipRender) {
+				renderer.render(renderEffects, time, textLayers, [], mediaLayers);
+			}
 			await sink.submit(i, time);
 		}
 

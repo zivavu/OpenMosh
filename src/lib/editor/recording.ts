@@ -28,6 +28,12 @@ import {
   segmentSourceIdAt,
 } from "./sequence";
 import { createSequenceExportSources } from "./sequence-export-sources";
+import { createMediaExportLayers } from "./media-export-layers";
+import {
+  mediaTimelineSourceIds,
+  type MediaTimeline,
+  type ResolvedMediaLayer,
+} from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
 export interface RecordingContext {
@@ -72,6 +78,10 @@ export interface RecordingContext {
   audioResponse?: AudioResponse;
   /** Optional text lanes, keyed to the master clock. */
   textTimeline?: TextTimeline | null;
+  /** Optional media lanes, on the same clock. */
+  mediaTimeline?: MediaTimeline | null;
+  /** The pool the media lanes draw from. Both modes have one. */
+  layerSources?: SequenceSource[];
   /** Master-clock time the export's frame 0 lands on. */
   textTimeOffset?: number;
   /** Frame-time-to-master-clock rate (video speed). */
@@ -105,6 +115,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     normalizeGain = 1.0,
     audioResponse = DEFAULT_AUDIO_RESPONSE,
     textTimeline = null,
+    mediaTimeline = null,
+    layerSources = [],
     textTimeOffset = 0,
     textTimeScale = 1,
     bpm = 0,
@@ -273,6 +285,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   // Multi-source sequences: whichever segment is under the playhead picks the
   // media for its frames. Built lazily below so single-source exports (and
   // non-sequence ones) pay nothing.
+  let exportLayers: Awaited<
+    ReturnType<typeof createMediaExportLayers>
+  > | null = null;
   let exportSources: Awaited<
     ReturnType<typeof createSequenceExportSources>
   > | null = null;
@@ -393,7 +408,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       // of it — the incoming chain is `fx` without that tail. Mirrors what
       // GlCanvas does, so an export matches what was previewed.
       const incoming = stacked.length > 0 ? base! : fx;
-      return (textLayers: ResolvedTextLayer[]) =>
+      return (
+        textLayers: ResolvedTextLayer[],
+        mediaLayers: ResolvedMediaLayer[],
+      ) =>
         renderer.renderTransition(
           tr.effectsA,
           incoming,
@@ -406,6 +424,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
           crossFade,
           textLayers,
           fxLayers,
+          mediaLayers,
         );
     }
 
@@ -416,8 +435,11 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     // the recorder writes them into effectsRef.current, which holds the very
     // same instances.
     if (fxLayers.length > 0 && base) {
-      return (textLayers: ResolvedTextLayer[]) =>
-        renderer.render(base, time, textLayers, fxLayers);
+      return (
+        textLayers: ResolvedTextLayer[],
+        mediaLayers: ResolvedMediaLayer[],
+      ) =>
+        renderer.render(base, time, textLayers, fxLayers, mediaLayers);
     }
   };
 
@@ -425,6 +447,16 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     if (seqSource && multiSource) {
       exportSources = await createSequenceExportSources(
         sequence!.sources!,
+        renderer,
+      );
+    }
+    const layerIds = mediaTimeline?.enabled
+      ? mediaTimelineSourceIds(mediaTimeline)
+      : [];
+    if (layerIds.length > 0) {
+      exportLayers = await createMediaExportLayers(
+        layerSources,
+        layerIds,
         renderer,
       );
     }
@@ -436,6 +468,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       normalizeGain,
       audioResponse,
       textTimeline,
+      mediaTimeline: exportLayers ? mediaTimeline : null,
+      mediaLayerSink: exportLayers
+        ? (layers) => exportLayers!.advance(layers)
+        : null,
       textTimeOffset,
       textTimeScale,
       bpm,
@@ -476,5 +512,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     // abort/error; no-op when the generator already ran to completion.
     void videoFrames?.return();
     exportSources?.dispose();
+    exportLayers?.dispose();
   }
 }

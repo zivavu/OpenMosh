@@ -3032,6 +3032,10 @@
 					normalizeGain: audio.normalizeGain,
 					audioResponse,
 					textTimeline: textTimeline.enabled ? $state.snapshot(textTimeline) as TextTimeline : null,
+					mediaTimeline: mediaTimeline.enabled
+						? ($state.snapshot(mediaTimeline) as MediaTimeline)
+						: null,
+					layerSources: sourceRegistry.sources,
 					textTimeOffset,
 					textTimeScale,
 					bpm: sequenceBpm,
