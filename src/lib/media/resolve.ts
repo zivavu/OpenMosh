@@ -1,0 +1,133 @@
+import type { EffectInstance } from "../effects/types";
+import { clipAt } from "../timeline/clips";
+import type { MediaClip, MediaLane, MediaStyle, MediaTimeline } from "./types";
+
+// Clip geometry is lane-shape agnostic and shared with the text and fx lanes;
+// re-exported here so the media timeline keeps importing it from one place.
+export {
+  addClip,
+  clipAt,
+  clipRange,
+  freeRangeAt,
+  moveClip,
+  moveClips,
+  removeClip,
+  resizeBoundary,
+  resizeClip,
+  sortClips,
+} from "../timeline/clips";
+
+/** One media layer to draw for a single frame. */
+export interface ResolvedMediaLayer {
+  /**
+   * Stable across frames: keys the renderer's layer texture and the lane's
+   * feedback buffers. The lane, not the clip — one texture per lane is all a
+   * lane can show at once, and re-keying at every clip edge would drop the
+   * texture on a cut the user can't see the point of.
+   */
+  key: string;
+  laneId: string;
+  chainIndex: number;
+  sourceId: string;
+  /** Seconds into the source to show. Videos wrap; images ignore it. */
+  sourceTime: number;
+  style: MediaStyle;
+  effects: EffectInstance[];
+}
+
+/**
+ * The media layers visible at `time`, in lane order. Preview and export both
+ * go through here, so what you scrub past is what gets written out.
+ */
+export function resolveMediaLayersAt(
+  timeline: MediaTimeline | null | undefined,
+  time: number,
+): ResolvedMediaLayer[] {
+  if (!timeline?.enabled) return [];
+  const layers: ResolvedMediaLayer[] = [];
+  for (const lane of timeline.lanes) {
+    if (!lane.enabled || !lane.sourceId || lane.style.opacity <= 0) continue;
+    const clip = clipAt(lane, time);
+    if (!clip) continue;
+    layers.push({
+      key: lane.id,
+      laneId: lane.id,
+      chainIndex: lane.chainIndex,
+      sourceId: lane.sourceId,
+      sourceTime: clip.sourceStart + (time - clip.start),
+      style: lane.style,
+      effects: lane.effects,
+    });
+  }
+  return layers;
+}
+
+/** The clip with this id, wherever it sits. Null when nothing is selected. */
+export function findMediaClip(
+  timeline: MediaTimeline | null | undefined,
+  clipId: string | null,
+): MediaClip | null {
+  if (!clipId || !timeline) return null;
+  for (const lane of timeline.lanes) {
+    const clip = lane.clips.find((c) => c.id === clipId);
+    if (clip) return clip;
+  }
+  return null;
+}
+
+/** The lane holding this clip — the panel edits the lane, not the clip. */
+export function findMediaClipLane(
+  timeline: MediaTimeline | null | undefined,
+  clipId: string | null,
+): MediaLane | null {
+  if (!clipId || !timeline) return null;
+  return timeline.lanes.find((l) => l.clips.some((c) => c.id === clipId)) ?? null;
+}
+
+/** Every effect instance held anywhere (for feedback-buffer GC). */
+export function allMediaEffectIds(
+  timeline: MediaTimeline | null | undefined,
+): string[] {
+  const ids: string[] = [];
+  for (const lane of timeline?.lanes ?? []) {
+    for (const eff of lane.effects) ids.push(eff.instanceId);
+  }
+  return ids;
+}
+
+/** Source ids the timeline references, so a save can persist just those. */
+export function mediaTimelineSourceIds(
+  timeline: MediaTimeline | null | undefined,
+): string[] {
+  const ids = new Set<string>();
+  for (const lane of timeline?.lanes ?? []) {
+    if (lane.sourceId) ids.add(lane.sourceId);
+  }
+  return [...ids];
+}
+
+/** Apply a lane edit inside a timeline. */
+export function updateMediaLane(
+  timeline: MediaTimeline,
+  laneId: string,
+  fn: (lane: MediaLane) => MediaLane,
+): MediaTimeline {
+  return {
+    ...timeline,
+    lanes: timeline.lanes.map((l) => (l.id === laneId ? fn(l) : l)),
+  };
+}
+
+/** Drop a removed source from every lane that pointed at it. */
+export function detachMediaSource(
+  timeline: MediaTimeline,
+  sourceId: string,
+): MediaTimeline {
+  if (!timeline.lanes.some((l) => l.sourceId === sourceId)) return timeline;
+  return {
+    ...timeline,
+    lanes: timeline.lanes.map((l) =>
+      l.sourceId === sourceId ? { ...l, sourceId: null } : l,
+    ),
+  };
+}

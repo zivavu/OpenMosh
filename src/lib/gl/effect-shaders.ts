@@ -75,6 +75,43 @@ export const PASSTHROUGH_FRAG =
   outColor = texture(u_texture, v_uv);
 }`;
 
+/** Shared by the placement pass and the composite, so the box they agree on is one copy. */
+const LAYER_BOX_GLSL = `uniform vec2 u_frameSize;
+uniform vec2 u_drawSize;
+uniform vec2 u_center;
+uniform float u_rot;
+
+/** Frame uv -> uv inside the placed media. Outside [0,1] is off the layer. */
+vec2 layerUv(vec2 uv) {
+  vec2 p = (uv - u_center) * u_frameSize;
+  float s = sin(u_rot);
+  float c = cos(u_rot);
+  vec2 r = vec2(c * p.x + s * p.y, c * p.y - s * p.x);
+  return r / max(u_drawSize, vec2(1.0)) + 0.5;
+}
+
+float insideLayer(vec2 uv) {
+  vec2 e = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+  return e.x * e.y;
+}
+`;
+
+/**
+ * Place a media layer into a full-frame buffer: fitted, scaled, rotated and
+ * centred, with everything outside its box transparent so the composite leaves
+ * the image underneath it alone.
+ */
+export const LAYER_TRANSFORM_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+in vec2 v_uv;
+out vec4 outColor;
+${LAYER_BOX_GLSL}
+void main() {
+  vec2 uv = layerUv(v_uv);
+  outColor = texture(u_texture, clamp(uv, 0.0, 1.0)) * insideLayer(uv);
+}`;
+
 /** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,4=overlay,5=difference,6=exclusion,7=subtract. u_invert: 0/1. u_opacity: 0-1. */
 export const TEXT_BLEND_FRAG = `#version 300 es
 precision highp float;
@@ -83,8 +120,11 @@ uniform sampler2D u_texture2;
 uniform int u_blendMode;
 uniform float u_invert;
 uniform float u_opacity;
+/** 1 = clip the overlay to the layer box below. Text overlays leave it 0. */
+uniform int u_maskLayer;
 in vec2 v_uv;
 out vec4 outColor;
+${LAYER_BOX_GLSL}
 void main() {
   vec4 mainC = texture(u_texture, v_uv);
   vec4 textC = texture(u_texture2, v_uv);
@@ -92,6 +132,10 @@ void main() {
     textC.rgb = 1.0 - textC.rgb;
   }
   float a = textC.a * u_opacity;
+  // Most effect shaders write alpha 1 unconditionally, so a media layer comes
+  // out of its own chain opaque everywhere and would hide the frame entirely.
+  // The box is reapplied here rather than trusted to survive the chain.
+  if (u_maskLayer == 1) a *= insideLayer(layerUv(v_uv));
   vec3 mainRgb = mainC.rgb;
   vec3 textRgb = textC.rgb;
   vec3 blended;

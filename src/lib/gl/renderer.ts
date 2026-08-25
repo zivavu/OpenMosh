@@ -5,6 +5,7 @@ import {
   textSignature,
   type ResolvedTextLayer,
 } from "../text";
+import type { MediaStyle, ResolvedMediaLayer } from "../media";
 import {
   CAPTION_EFFECT_ID,
   captionSignature,
@@ -22,6 +23,7 @@ import {
   VERTEX_SHADER,
   PASSTHROUGH_FRAG,
   TEXT_BLEND_FRAG,
+  LAYER_TRANSFORM_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
 } from "./effect-shaders";
@@ -84,17 +86,34 @@ function imageHeight(image: SourceImage): number {
   return image instanceof HTMLImageElement ? image.naturalHeight : image.height;
 }
 
-/** A text layer with its own chain already rendered, ready to composite. */
-interface PreparedTextLayer {
+/** A layer with its own chain already rendered, ready to composite. Text and
+ * media layers differ only in how `tex` was filled. */
+interface PreparedLayer {
   tex: WebGLTexture;
   chainIndex: number;
   opacity: number;
   blendMode: TextOverlayBlendMode;
+  /** Media layers only: reapplied at composite time. See LayerBox. */
+  box?: LayerBox;
+}
+
+/**
+ * Where a media layer's frame sits, in output pixels. The placement pass draws
+ * it and the composite re-clips to it, so the two have to agree.
+ */
+interface LayerBox {
+  drawW: number;
+  drawH: number;
+  /** Centre, in frame uv. */
+  cx: number;
+  cy: number;
+  /** Radians, clockwise. */
+  rot: number;
 }
 
 type ChainOp =
   | { kind: "effect"; eff: EffectInstance }
-  | { kind: "layer"; layer: PreparedTextLayer };
+  | { kind: "layer"; layer: PreparedLayer };
 
 /**
  * Interleave text layers into the effect chain at their insertion points. A
@@ -104,7 +123,7 @@ type ChainOp =
 function buildChainOps(
   effects: EffectInstance[],
   enabledCount: number,
-  layers: PreparedTextLayer[],
+  layers: PreparedLayer[],
 ): ChainOp[] {
   const ops: ChainOp[] = [];
   let i = 0;
@@ -165,6 +184,13 @@ function addInstanceIds(live: Set<string>, effects: EffectInstance[]): void {
 function addLayerInstanceIds(
   live: Set<string>,
   layers: ResolvedTextLayer[],
+): void {
+  for (const layer of layers) addInstanceIds(live, layer.effects);
+}
+
+function addMediaInstanceIds(
+  live: Set<string>,
+  layers: ResolvedMediaLayer[],
 ): void {
   for (const layer of layers) addInstanceIds(live, layer.effects);
 }
@@ -258,6 +284,13 @@ export class GlRenderer {
     }
   >();
   private textBlendProgram: CompiledProgram | null = null;
+  private layerTransformProgram: CompiledProgram | null = null;
+  /** Holds a media layer's placed frame while its own chain consumes it. One
+   * buffer for all of them: the chain reads it and is done with it. */
+  private mediaScratch: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null =
+    null;
+  /** Uploaded (pre-effect) media per media lane, keyed by lane id. */
+  private mediaLayerTextures = new Map<string, OverlayTexture>();
   /** Drawn (pre-effect) text per clip, keyed by clip id. */
   private textLayerTextures = new Map<string, OverlayTexture>();
   private textLayerCanvas: HTMLCanvasElement | null = null;
@@ -309,6 +342,7 @@ export class GlRenderer {
     this.quadVAO = this.createQuad();
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
+    this.layerTransformProgram = this.compile(LAYER_TRANSFORM_FRAG);
     this.compileAllEffects();
     for (const [id, def] of Object.entries(TRANSITION_SHADERS)) {
       try {
@@ -464,6 +498,67 @@ export class GlRenderer {
     this.srcTexH = h;
   }
 
+  // ── Media layers ─────────────────────────────────────────────────────────
+  // A layer's frame is uploaded by the caller (the preview registry or the
+  // export's twin), keyed by lane — a lane shows one clip at a time, so one
+  // texture per lane is all it can ever need.
+
+  /** True once this lane has a frame to draw. */
+  hasLayerTexture(key: string): boolean {
+    return this.mediaLayerTextures.has(key);
+  }
+
+  updateLayerImage(key: string, image: SourceImage) {
+    this.uploadLayerTexture(key, image, imageWidth(image), imageHeight(image));
+  }
+
+  updateLayerFrame(key: string, frame: VideoFrame) {
+    this.uploadLayerTexture(key, frame, frame.displayWidth, frame.displayHeight);
+  }
+
+  /** Release a lane's frame — its source was cleared, or the lane is gone. */
+  dropLayerTexture(key: string) {
+    const entry = this.mediaLayerTextures.get(key);
+    if (!entry) return;
+    this.gl.deleteTexture(entry.tex);
+    this.mediaLayerTextures.delete(key);
+  }
+
+  private uploadLayerTexture(
+    key: string,
+    source: TexImageSource,
+    w: number,
+    h: number,
+  ) {
+    if (w <= 0 || h <= 0) return;
+    const gl = this.gl;
+    let entry = this.mediaLayerTextures.get(key);
+    if (!entry) {
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      // LINEAR and clamped, unlike the chain's buffers: this one is sampled at
+      // an arbitrary scale by the placement pass, where NEAREST would alias a
+      // shrunk photo badly and a mirrored wrap would tile it outside its box.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      entry = { tex, w: 0, h: 0, sig: "" };
+      this.mediaLayerTextures.set(key, entry);
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+    }
+    // Same fast path as the source uploads: a playing video lane keeps its
+    // allocation instead of revalidating storage every frame.
+    if (entry.w === w && entry.h === h) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      entry.w = w;
+      entry.h = h;
+    }
+  }
+
   // ── Outgoing source (transitions across two different media) ─────────────
 
   /** Whether anything has been staged for the outgoing side yet. */
@@ -543,6 +638,8 @@ export class GlRenderer {
     textLayers: ResolvedTextLayer[] = [],
     /** Stacked fx lanes, run over the finished chain. See PostChainLayer. */
     postLayers: PostChainLayer[] = [],
+    /** Media lanes, composited into the chain at each lane's chain index. */
+    mediaLayers: ResolvedMediaLayer[] = [],
   ) {
     if (
       !this.sourceTexture ||
@@ -556,8 +653,10 @@ export class GlRenderer {
     addInstanceIds(live, effects);
     addPostInstanceIds(live, post);
     addLayerInstanceIds(live, textLayers);
+    addMediaInstanceIds(live, mediaLayers);
     this.gcFxFeedback(live);
     this.gcTextLayers(textLayers);
+    this.gcMediaLayers(mediaLayers);
     const safeDt = this.frameDelta(time);
     this.ensurePresentBuffer();
     const presentFBO = this.fbFBO;
@@ -565,9 +664,9 @@ export class GlRenderer {
     // Narrowed rather than asserted: createRenderTarget can genuinely fail, and
     // there is nothing to draw into if it did.
     if (!presentFBO || !presentTex) return;
-    // Text layers run their own chains through the shared ping-pong, so they
-    // have to be finished before the main chain starts using it.
-    const prepared = this.prepareTextLayers(textLayers, time, safeDt);
+    // Layers run their own chains through the shared ping-pong, so they have to
+    // be finished before the main chain starts using it.
+    const prepared = this.prepareLayers(textLayers, mediaLayers, time, safeDt);
 
     // Nothing stacked, or nothing fading: one chain, no intermediate buffers.
     // This is the path every non-sequence render takes.
@@ -639,6 +738,8 @@ export class GlRenderer {
      * each reading the other's history.
      */
     postLayers: PostChainLayer[] = [],
+    /** Media lanes, composited into both sides' chains. */
+    mediaLayers: ResolvedMediaLayer[] = [],
   ) {
     if (
       !this.sourceTexture ||
@@ -649,7 +750,7 @@ export class GlRenderer {
     const post = livePostLayers(postLayers);
     const prog = this.transitionPrograms.get(type);
     if (!prog || progress >= 1) {
-      this.render(effectsB, time, textLayers, post);
+      this.render(effectsB, time, textLayers, post, mediaLayers);
       return;
     }
 
@@ -660,13 +761,15 @@ export class GlRenderer {
     addInstanceIds(live, effectsB);
     addPostInstanceIds(live, post);
     addLayerInstanceIds(live, textLayers);
+    addMediaInstanceIds(live, mediaLayers);
     this.gcFxFeedback(live);
     this.gcTextLayers(textLayers);
+    this.gcMediaLayers(mediaLayers);
     const safeDt = this.frameDelta(time);
 
-    // One preparation feeding both sides: the text is the same layer, so it
-    // rides through the blend rather than popping in when B takes over.
-    const prepared = this.prepareTextLayers(textLayers, time, safeDt);
+    // One preparation feeding both sides: the layers are the same layers, so
+    // they ride through the blend rather than popping in when B takes over.
+    const prepared = this.prepareLayers(textLayers, mediaLayers, time, safeDt);
 
     this.ensureSceneBuffers();
     const sceneFBOs = this.sceneFBOs;
@@ -895,7 +998,7 @@ export class GlRenderer {
     finalTex: WebGLTexture,
     toCanvas: boolean,
     useAltSource = false,
-    layers: PreparedTextLayer[] = [],
+    layers: PreparedLayer[] = [],
     srcOverride?: WebGLTexture,
   ): WebGLTexture | null {
     const srcTex = srcOverride ?? this.chainSource(useAltSource);
@@ -933,6 +1036,7 @@ export class GlRenderer {
           target,
           op.layer.opacity,
           op.layer.blendMode,
+          op.layer.box,
         );
         if (isLast) {
           resultTex = finalTex;
@@ -1397,6 +1501,7 @@ export class GlRenderer {
     targetFBO: WebGLFramebuffer,
     opacity: number,
     blendMode: TextOverlayBlendMode = "normal",
+    box?: LayerBox,
   ) {
     const gl = this.gl;
     const prog = this.textBlendProgram;
@@ -1413,6 +1518,7 @@ export class GlRenderer {
     if (prog.uniforms["u_invert"]) gl.uniform1f(prog.uniforms["u_invert"], 0);
     if (prog.uniforms["u_opacity"])
       gl.uniform1f(prog.uniforms["u_opacity"], opacity);
+    this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, mainTex);
     if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
@@ -1433,9 +1539,9 @@ export class GlRenderer {
     layers: ResolvedTextLayer[],
     time: number,
     safeDt: number,
-  ): PreparedTextLayer[] {
+  ): PreparedLayer[] {
     if (layers.length === 0 || this.imgW <= 0 || this.imgH <= 0) return [];
-    const prepared: PreparedTextLayer[] = [];
+    const prepared: PreparedLayer[] = [];
     for (const layer of layers) {
       const drawn = this.textLayerTexture(layer);
       if (!drawn) continue;
@@ -1465,6 +1571,155 @@ export class GlRenderer {
       });
     }
     return prepared;
+  }
+
+  /**
+   * Both kinds of layer for this frame, in composite order. Media sits under
+   * text at the same chain index — a caption over a layered clip is what people
+   * reach for, the other way round almost never is.
+   */
+  private prepareLayers(
+    textLayers: ResolvedTextLayer[],
+    mediaLayers: ResolvedMediaLayer[],
+    time: number,
+    safeDt: number,
+  ): PreparedLayer[] {
+    const text = this.prepareTextLayers(textLayers, time, safeDt);
+    if (mediaLayers.length === 0) return text;
+    const media = this.prepareMediaLayers(
+      mediaLayers,
+      time,
+      safeDt,
+      text.length,
+    );
+    return media.length === 0 ? text : media.concat(text);
+  }
+
+  /**
+   * Place each visible media layer and run its own chain, so a layer can be
+   * moshed without the image underneath it moving. Returns them in lane order,
+   * ready to be composited into the main chain.
+   *
+   * `bufOffset` is where this frame's text layers stopped claiming scratch
+   * targets, so the two kinds never write into the same one.
+   */
+  private prepareMediaLayers(
+    layers: ResolvedMediaLayer[],
+    time: number,
+    safeDt: number,
+    bufOffset: number,
+  ): PreparedLayer[] {
+    if (layers.length === 0 || this.imgW <= 0 || this.imgH <= 0) return [];
+    const prepared: PreparedLayer[] = [];
+    for (const layer of layers) {
+      const entry = this.mediaLayerTextures.get(layer.key);
+      if (!entry || entry.w <= 0) continue;
+      const box = this.layerBox(layer.style, entry.w, entry.h);
+      const hasChain = layer.effects.some((e) => e.enabled);
+      const out = this.ensureLayerBuffer(bufOffset + prepared.length);
+      if (!out) continue;
+
+      // With a chain, the placed frame is scratch the chain consumes on the
+      // spot; without one it is the layer itself and has to survive the frame.
+      const placedFBO = hasChain ? this.ensureMediaScratch()?.fbo : out.fbo;
+      if (!placedFBO) continue;
+      this.drawLayerPlacement(entry.tex, box, placedFBO);
+
+      let tex = hasChain ? this.mediaScratch!.tex : out.tex;
+      if (hasChain) {
+        tex =
+          this.renderChainTo(
+            layer.effects,
+            time,
+            safeDt,
+            out.fbo,
+            out.tex,
+            false,
+            false,
+            [],
+            tex,
+          ) ?? out.tex;
+      }
+      prepared.push({
+        tex,
+        chainIndex: layer.chainIndex,
+        opacity: layer.style.opacity,
+        blendMode: layer.style.blendMode,
+        box,
+      });
+    }
+    return prepared;
+  }
+
+  /** Where a layer's media lands, in output pixels. */
+  private layerBox(style: MediaStyle, texW: number, texH: number): LayerBox {
+    const fw = this.imgW;
+    const fh = this.imgH;
+    let w = fw;
+    let h = fh;
+    if (style.fit !== "stretch" && texW > 0 && texH > 0) {
+      const k =
+        style.fit === "cover"
+          ? Math.max(fw / texW, fh / texH)
+          : Math.min(fw / texW, fh / texH);
+      w = texW * k;
+      h = texH * k;
+    }
+    const scale = Math.max(style.scale, 0.01);
+    return {
+      drawW: w * scale,
+      drawH: h * scale,
+      cx: style.x,
+      cy: style.y,
+      rot: (style.rotation * Math.PI) / 180,
+    };
+  }
+
+  private setLayerBoxUniforms(prog: CompiledProgram, box: LayerBox | undefined) {
+    const gl = this.gl;
+    if (prog.uniforms["u_maskLayer"]) {
+      gl.uniform1i(prog.uniforms["u_maskLayer"], box ? 1 : 0);
+    }
+    if (!box) return;
+    if (prog.uniforms["u_frameSize"]) {
+      gl.uniform2f(prog.uniforms["u_frameSize"], this.imgW, this.imgH);
+    }
+    if (prog.uniforms["u_drawSize"]) {
+      gl.uniform2f(prog.uniforms["u_drawSize"], box.drawW, box.drawH);
+    }
+    if (prog.uniforms["u_center"]) {
+      gl.uniform2f(prog.uniforms["u_center"], box.cx, box.cy);
+    }
+    if (prog.uniforms["u_rot"]) gl.uniform1f(prog.uniforms["u_rot"], box.rot);
+  }
+
+  /** Draw a layer's media into a full-frame buffer at its placement. */
+  private drawLayerPlacement(
+    tex: WebGLTexture,
+    box: LayerBox,
+    targetFBO: WebGLFramebuffer,
+  ) {
+    const gl = this.gl;
+    const prog = this.layerTransformProgram;
+    if (!prog) return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
+    gl.viewport(0, 0, this.imgW, this.imgH);
+    gl.useProgram(prog.program);
+    if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+    this.setLayerBoxUniforms(prog, box);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  private ensureMediaScratch(): { tex: WebGLTexture; fbo: WebGLFramebuffer } | null {
+    if (this.mediaScratch) return this.mediaScratch;
+    const tex = this.createTexture(this.imgW, this.imgH);
+    const fbo = this.createRenderTarget(tex);
+    if (!fbo) return null;
+    this.mediaScratch = { tex, fbo };
+    return this.mediaScratch;
   }
 
   /** The drawn (pre-effect) text for a clip, redrawn only when it changes. */
@@ -1534,6 +1789,14 @@ export class GlRenderer {
     return buf;
   }
 
+  /** Drop uploaded frames for lanes that are no longer on screen. */
+  private gcMediaLayers(layers: ResolvedMediaLayer[]) {
+    if (this.mediaLayerTextures.size === 0) return;
+    for (const key of this.mediaLayerTextures.keys()) {
+      if (!layers.some((l) => l.key === key)) this.dropLayerTexture(key);
+    }
+  }
+
   /** Drop drawn text for clips that are no longer on screen. */
   private gcTextLayers(layers: ResolvedTextLayer[]) {
     if (this.textLayerTextures.size === 0) return;
@@ -1553,6 +1816,11 @@ export class GlRenderer {
       gl.deleteFramebuffer(buf.fbo);
     }
     this.layerBuffers = [];
+    if (this.mediaScratch) {
+      gl.deleteTexture(this.mediaScratch.tex);
+      gl.deleteFramebuffer(this.mediaScratch.fbo);
+      this.mediaScratch = null;
+    }
   }
 
   private clearTextLayerTextures() {
@@ -1560,6 +1828,13 @@ export class GlRenderer {
       this.gl.deleteTexture(entry.tex);
     }
     this.textLayerTextures.clear();
+  }
+
+  private clearMediaLayerTextures() {
+    for (const entry of this.mediaLayerTextures.values()) {
+      this.gl.deleteTexture(entry.tex);
+    }
+    this.mediaLayerTextures.clear();
   }
 
   /** Draw a caption and composite it over `inputTex` into `targetFBO`. */
@@ -1693,6 +1968,7 @@ export class GlRenderer {
     this.trackingTexture = null;
     this.clearCaptionTextures();
     this.clearTextLayerTextures();
+    this.clearMediaLayerTextures();
     this.deleteLayerBuffers();
     this.abortPendingSaliency();
     if (this.salTexture) gl.deleteTexture(this.salTexture);
@@ -1704,6 +1980,10 @@ export class GlRenderer {
     this.trackingStates.clear();
     if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
     this.textBlendProgram = null;
+    if (this.layerTransformProgram) {
+      gl.deleteProgram(this.layerTransformProgram.program);
+    }
+    this.layerTransformProgram = null;
     if (this.altSourceTexture) gl.deleteTexture(this.altSourceTexture);
     this.altSourceTexture = null;
     this.deleteStageBuffer();
