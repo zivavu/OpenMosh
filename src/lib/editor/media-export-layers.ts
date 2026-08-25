@@ -58,7 +58,15 @@ export async function createMediaExportLayers(
         if (!src) continue;
 
         if (src.kind === "image") {
-          if (uploaded.get(layer.key) === src.id) continue;
+          // Same as the preview driver: the renderer collects a lane's texture
+          // whenever the lane stops resolving, so the latch alone would skip
+          // the re-upload after a gap between clips.
+          if (
+            uploaded.get(layer.key) === src.id &&
+            renderer.hasLayerTexture(layer.key)
+          ) {
+            continue;
+          }
           const img = images.get(src.id);
           if (!img) continue;
           renderer.updateLayerImage(layer.key, img);

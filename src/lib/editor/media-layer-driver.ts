@@ -43,6 +43,7 @@ export class MediaLayerDriver {
 
   advance(layers: ResolvedMediaLayer[]) {
     if (this.#disposed) return;
+    const renderer = this.#getRenderer();
     for (const layer of layers) {
       const src = this.#registry.get(layer.sourceId);
       if (!src) {
@@ -52,8 +53,17 @@ export class MediaLayerDriver {
 
       if (src.kind === "image") {
         // Still media only re-uploads when the lane's source changes; a photo
-        // layer costs nothing per frame after the first.
-        if (this.#uploaded.get(layer.key) === src.id) continue;
+        // layer costs nothing per frame after the first. Checked against the
+        // renderer, not this latch alone: it collects a lane's texture as soon
+        // as the lane stops resolving — hidden, or simply between two clips —
+        // and a latch that only tracked the source id would then skip the
+        // upload that has to bring it back.
+        if (
+          this.#uploaded.get(layer.key) === src.id &&
+          renderer?.hasLayerTexture(layer.key)
+        ) {
+          continue;
+        }
         const img = this.#registry.image(src.id);
         if (img?.complete) {
           this.#getRenderer()?.updateLayerImage(layer.key, img);
