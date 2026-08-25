@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye, EyeOff, GripVertical, Trash2 } from 'lucide-svelte';
+	import { Eye, EyeOff, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
@@ -487,16 +487,6 @@
 			data-layer-id={lane.id}
 		>
 			<div class="tl-gutter">
-				{#if onLaneDragStart}
-					<button
-						class="lane-grip"
-						title="Drag to move this layer through the stack"
-						aria-label="Reorder {lane.name}"
-						onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
-					>
-						<GripVertical size={11} />
-					</button>
-				{/if}
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
@@ -505,9 +495,19 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
-				<span class="lane-name" title={stackTitle(lane.id)}>
-					<span class="lane-z">{stackLabel(lane.id)}</span>
-					<span class="lane-label">{lane.name}</span>
+				<span class="lane-name">
+					<button
+						class="lane-z"
+						class:draggable={!!onLaneDragStart}
+						title="{stackTitle(lane.id)}{onLaneDragStart
+							? ' — drag to restack'
+							: ''}"
+						aria-label="Reorder {lane.name}"
+						onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
+					>
+						{stackLabel(lane.id)}
+					</button>
+					<span class="lane-label" title={lane.name}>{lane.name}</span>
 				</span>
 				<button
 					class="lane-del"
@@ -633,16 +633,29 @@
 
 	/* Replaces the chain-position select: the number is where this layer sits in
 	   the stack, counting up from the back. */
+	/* Doubles as the drag handle: it already says where this layer sits, and the
+	   gutter has no room for a grip of its own. */
 	.lane-z {
 		flex-shrink: 0;
-		min-width: 1.1em;
-		padding: 0 0.2em;
+		min-width: 1.35em;
+		padding: 1px 0.2em;
+		border: 1px solid transparent;
 		border-radius: 2px;
 		background: var(--ink);
 		text-align: center;
 		font-family: var(--font-mono);
 		font-size: 0.6rem;
 		color: var(--text-2);
+	}
+
+	.lane-z.draggable {
+		cursor: grab;
+		touch-action: none;
+	}
+
+	.lane-z.draggable:hover {
+		border-color: var(--live);
+		color: var(--text);
 	}
 
 	.lane-label {
@@ -664,30 +677,15 @@
 		text-overflow: ellipsis;
 	}
 
-	.lane-grip {
-		display: inline-flex;
-		align-items: center;
-		flex-shrink: 0;
-		padding: 0.15rem 0;
-		border: none;
-		background: none;
-		color: var(--text-4);
-		cursor: grab;
-		touch-action: none;
-	}
-
-	.lane-grip:hover {
-		color: var(--text-2);
-	}
-
 	/* The row follows the pointer by re-ordering, not by moving, so this is the
 	   only thing that says which one is in hand. */
 	.layer-row.lifted {
 		opacity: 0.55;
 	}
 
-	.layer-row.lifted .lane-grip {
+	.layer-row.lifted .lane-z {
 		cursor: grabbing;
+		border-color: var(--live);
 		color: var(--live);
 	}
 
