@@ -1,13 +1,7 @@
 <script lang="ts">
-	import {
-		Dices,
-		Eraser,
-		Eye,
-		EyeOff,
-		GripVertical,
-		Trash2,
-	} from 'lucide-svelte';
-	import type { LayerRef } from '../../timeline/layer-order';
+	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { stackIndex, type LayerRef } from '../../timeline/layer-order';
+	import LaneGrip from '../ui/LaneGrip.svelte';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { untrack } from 'svelte';
 	import {
@@ -269,18 +263,7 @@
 
 	/** This lane's place in the stack it shares with the text and media rows. */
 	function stackAt(laneId: string): number {
-		return layerOrder.findIndex((l) => l.id === laneId);
-	}
-
-	function stackTitle(laneId: string): string {
-		const at = stackAt(laneId);
-		if (at === -1) return '';
-		const above = layerOrder[at - 1];
-		const below = layerOrder[at + 1];
-		if (!above && !below) return 'The only row in the stack';
-		if (!above) return `On top, over ${below.name}`;
-		if (!below) return `At the foot, under ${above.name}`;
-		return `Under ${above.name}, over ${below.name}`;
+		return stackIndex(layerOrder, laneId);
 	}
 
 	function addClipAt(laneId: string, time: number) {
@@ -563,17 +546,12 @@
 			data-layer-id={lane.id}
 		>
 			<div class="tl-gutter">
-				<button
-					class="lane-grip"
-					class:draggable={!!onLaneDragStart}
-					title="{stackTitle(lane.id)}{onLaneDragStart
-						? ' — drag to restack'
-						: ''}"
-					aria-label="Reorder {lane.name}"
-					onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
-				>
-					<GripVertical size={12} />
-				</button>
+				<LaneGrip
+					{layerOrder}
+					laneId={lane.id}
+					laneName={lane.name}
+					onDragStart={onLaneDragStart}
+				/>
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}

@@ -1,11 +1,5 @@
 <script lang="ts">
-	import {
-		Eye,
-		EyeOff,
-		GripVertical,
-		Image as ImageIcon,
-		Trash2,
-	} from 'lucide-svelte';
+	import { Eye, EyeOff, Image as ImageIcon, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
@@ -30,7 +24,8 @@
 	} from '../../media';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 	import { SOURCE_DND_TYPE } from '../../editor/sequence-source-ui';
-	import type { LayerRef } from '../../timeline/layer-order';
+	import { stackIndex, type LayerRef } from '../../timeline/layer-order';
+	import LaneGrip from '../ui/LaneGrip.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
@@ -197,18 +192,7 @@
 
 	/** This lane's place in the stack that spans both kinds of layer. */
 	function stackAt(laneId: string): number {
-		return layerOrder.findIndex((l) => l.id === laneId);
-	}
-
-	function stackTitle(laneId: string): string {
-		const at = stackAt(laneId);
-		if (at === -1) return '';
-		const above = layerOrder[at - 1];
-		const below = layerOrder[at + 1];
-		if (!above && !below) return 'The only layer';
-		if (!above) return `On top, over ${below.name}`;
-		if (!below) return `At the back, under ${above.name}`;
-		return `Under ${above.name}, over ${below.name}`;
+		return stackIndex(layerOrder, laneId);
 	}
 
 	function laneOf(laneId: string): MediaLane | undefined {
@@ -554,17 +538,12 @@
 			ondrop={(e) => onLaneDrop(e, lane.id)}
 		>
 			<div class="tl-gutter">
-				<button
-					class="lane-grip"
-					class:draggable={!!onLaneDragStart}
-					title="{stackTitle(lane.id)}{onLaneDragStart
-						? ' — drag to restack'
-						: ''}"
-					aria-label="Reorder {lane.name}"
-					onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
-				>
-					<GripVertical size={12} />
-				</button>
+				<LaneGrip
+					{layerOrder}
+					laneId={lane.id}
+					laneName={lane.name}
+					onDragStart={onLaneDragStart}
+				/>
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}

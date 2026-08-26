@@ -3,6 +3,8 @@ import {
   combinedLayerOrder,
   nextLayerZ,
   moveLayerTo,
+  stackIndex,
+  stackTitle,
   type OrderedLane,
 } from "./layer-order";
 
@@ -103,5 +105,32 @@ describe("moveLayerTo", () => {
     expect(moveLayerTo(order, "t1", -5)).toBeNull();
     expect(moveLayerTo(order, "m1", 9)).toBeNull();
     expect(moveLayerTo(order, "gone", 0)).toBeNull();
+  });
+});
+
+describe("stackTitle", () => {
+  const order = combinedLayerOrder(
+    [lane("m1", 0), lane("m2", 2)],
+    [lane("t1", 1)],
+  );
+
+  it("names both neighbours of a row in the middle", () => {
+    expect(stackTitle(order, "t1")).toBe("Under m2, over m1");
+  });
+
+  it("names the one neighbour an end row has", () => {
+    expect(stackTitle(order, "m2")).toBe("On top, over t1");
+    expect(stackTitle(order, "m1")).toBe("At the foot, under t1");
+  });
+
+  it("says so when a row is the whole stack", () => {
+    const solo = combinedLayerOrder([lane("m1", 0)], []);
+    expect(stackTitle(solo, "m1")).toBe("The only row in the stack");
+  });
+
+  // A lane can outlive the order it was drawn against for a frame.
+  it("stays quiet about a row that is not stacked", () => {
+    expect(stackIndex(order, "gone")).toBe(-1);
+    expect(stackTitle(order, "gone")).toBe("");
   });
 });

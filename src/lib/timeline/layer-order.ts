@@ -47,6 +47,28 @@ export function combinedLayerOrder(
   return refs.sort((a, b) => b.z - a.z || KIND_RANK[a.kind] - KIND_RANK[b.kind]);
 }
 
+/** Where this lane sits, front-first, or -1 when it is not stacked at all. */
+export function stackIndex(order: LayerRef[], laneId: string): number {
+  return order.findIndex((l) => l.id === laneId);
+}
+
+/**
+ * What a row's reorder handle says about where it sits: its neighbours, named.
+ *
+ * In terms of rows rather than layers, because an fx lane is neither above nor
+ * below "a layer" — it is one more rung of the same stack.
+ */
+export function stackTitle(order: LayerRef[], laneId: string): string {
+  const at = stackIndex(order, laneId);
+  if (at === -1) return "";
+  const above = order[at - 1];
+  const below = order[at + 1];
+  if (!above && !below) return "The only row in the stack";
+  if (!above) return `On top, over ${below.name}`;
+  if (!below) return `At the foot, under ${above.name}`;
+  return `Under ${above.name}, over ${below.name}`;
+}
+
 /** Above everything currently stacked. */
 export function nextLayerZ(order: LayerRef[]): number {
   let top = -1;
