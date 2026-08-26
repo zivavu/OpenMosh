@@ -362,10 +362,12 @@
 		flex-shrink: 0;
 	}
 
-	/* Full-bleed, matching the sidebar chain this panel replaces. */
+	/* Full-bleed, matching the sidebar chain this panel replaces. It is the last
+	   section, so it owns the bottom edge too: padding under an edge-to-edge
+	   list reads as a dead band above the settings that follow. */
 	.clip-panel :global(aside.effects-panel) {
 		flex: 0 0 auto;
-		margin: 0 -0.75rem;
+		margin: 0 -0.75rem -0.75rem;
 		width: auto;
 		max-width: none;
 	}
