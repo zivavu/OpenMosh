@@ -417,6 +417,41 @@
 		overflow: hidden;
 	}
 
+	/* The reorder handle every stacking lane carries — media, text and fx rows
+	   all wear the same one, at the head of the gutter, so "grab here to
+	   restack" is learned once. Where a row sits in the stack is already told by
+	   where it sits in the column, so the handle only has to say "drag me": the
+	   neighbours it would land between are in its tooltip. */
+	:global(.tl-stack .lane-grip) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 14px;
+		/* Full row height: a 12px icon is a small thing to catch, and the gutter
+		   has no other use for the column it sits in. */
+		align-self: stretch;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--text-4);
+		transition: color var(--t-fast);
+	}
+
+	:global(.tl-stack .lane-grip.draggable) {
+		cursor: grab;
+		touch-action: none;
+	}
+
+	:global(.tl-stack .lane-grip.draggable:hover) {
+		color: var(--live);
+	}
+
+	:global(.tl-stack .lifted .lane-grip) {
+		cursor: grabbing;
+		color: var(--live);
+	}
+
 	:global(.tl-stack .tl-lane) {
 		position: relative;
 		flex: 1;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import { Eye, EyeOff, GripVertical, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
@@ -152,11 +152,6 @@
 	/** This lane's place in the stack that spans both kinds of layer. */
 	function stackAt(laneId: string): number {
 		return layerOrder.findIndex((l) => l.id === laneId);
-	}
-
-	function stackLabel(laneId: string): string {
-		const at = stackAt(laneId);
-		return at === -1 ? '' : `${layerOrder.length - at}`;
 	}
 
 	function stackTitle(laneId: string): string {
@@ -488,6 +483,17 @@
 		>
 			<div class="tl-gutter">
 				<button
+					class="lane-grip"
+					class:draggable={!!onLaneDragStart}
+					title="{stackTitle(lane.id)}{onLaneDragStart
+						? ' — drag to restack'
+						: ''}"
+					aria-label="Reorder {lane.name}"
+					onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
+				>
+					<GripVertical size={12} />
+				</button>
+				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
 					title={lane.enabled ? 'Hide this lane' : 'Show this lane'}
@@ -495,20 +501,7 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
-				<span class="lane-name">
-					<button
-						class="lane-z"
-						class:draggable={!!onLaneDragStart}
-						title="{stackTitle(lane.id)}{onLaneDragStart
-							? ' — drag to restack'
-							: ''}"
-						aria-label="Reorder {lane.name}"
-						onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
-					>
-						{stackLabel(lane.id)}
-					</button>
-					<span class="lane-label" title={lane.name}>{lane.name}</span>
-				</span>
+				<span class="lane-name" title={lane.name}>{lane.name}</span>
 				<button
 					class="lane-del"
 					title="Delete this lane"
@@ -631,45 +624,9 @@
 		display: contents;
 	}
 
-	/* Replaces the chain-position select: the number is where this layer sits in
-	   the stack, counting up from the back. */
-	/* Doubles as the drag handle: it already says where this layer sits, and the
-	   gutter has no room for a grip of its own. */
-	.lane-z {
-		flex-shrink: 0;
-		min-width: 1.35em;
-		padding: 1px 0.2em;
-		border: 1px solid transparent;
-		border-radius: 2px;
-		background: var(--ink);
-		text-align: center;
-		font-family: var(--font-mono);
-		font-size: 0.6rem;
-		color: var(--text-2);
-	}
-
-	.lane-z.draggable {
-		cursor: grab;
-		touch-action: none;
-	}
-
-	.lane-z.draggable:hover {
-		border-color: var(--live);
-		color: var(--text);
-	}
-
-	.lane-label {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
 	.lane-name {
 		flex: 1;
 		min-width: 0;
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
 		font-size: 0.65rem;
 		color: var(--text-3);
 		white-space: nowrap;
@@ -681,12 +638,6 @@
 	   only thing that says which one is in hand. */
 	.layer-row.lifted {
 		opacity: 0.55;
-	}
-
-	.layer-row.lifted .lane-z {
-		cursor: grabbing;
-		border-color: var(--live);
-		color: var(--live);
 	}
 
 	.lane-eye,

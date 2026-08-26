@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
+	import {
+		Dices,
+		Eraser,
+		Eye,
+		EyeOff,
+		GripVertical,
+		Trash2,
+	} from 'lucide-svelte';
 	import type { LayerRef } from '../../timeline/layer-order';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { untrack } from 'svelte';
@@ -263,11 +270,6 @@
 	/** This lane's place in the stack it shares with the text and media rows. */
 	function stackAt(laneId: string): number {
 		return layerOrder.findIndex((l) => l.id === laneId);
-	}
-
-	function stackLabel(laneId: string): string {
-		const at = stackAt(laneId);
-		return at === -1 ? '' : `${layerOrder.length - at}`;
 	}
 
 	function stackTitle(laneId: string): string {
@@ -562,7 +564,7 @@
 		>
 			<div class="tl-gutter">
 				<button
-					class="lane-z"
+					class="lane-grip"
 					class:draggable={!!onLaneDragStart}
 					title="{stackTitle(lane.id)}{onLaneDragStart
 						? ' — drag to restack'
@@ -570,7 +572,7 @@
 					aria-label="Reorder {lane.name}"
 					onpointerdown={(e) => onLaneDragStart?.(lane.id, e)}
 				>
-					{stackLabel(lane.id)}
+					<GripVertical size={12} />
 				</button>
 				<button
 					class="lane-eye"
@@ -821,37 +823,6 @@
 	   only thing that says which one is in hand. */
 	.fx-row.lifted {
 		opacity: 0.55;
-	}
-
-	/* Doubles as the drag handle: it already says where this lane sits, and the
-	   gutter has no room for a grip of its own. */
-	.lane-z {
-		flex-shrink: 0;
-		min-width: 1.35em;
-		padding: 1px 0.2em;
-		border: 1px solid transparent;
-		border-radius: 2px;
-		background: var(--ink);
-		text-align: center;
-		font-family: var(--font-mono);
-		font-size: 0.6rem;
-		color: var(--text-2);
-	}
-
-	.lane-z.draggable {
-		cursor: grab;
-		touch-action: none;
-	}
-
-	.lane-z.draggable:hover {
-		border-color: var(--live);
-		color: var(--text);
-	}
-
-	.fx-row.lifted .lane-z {
-		cursor: grabbing;
-		border-color: var(--live);
-		color: var(--live);
 	}
 
 	.lane-name {
