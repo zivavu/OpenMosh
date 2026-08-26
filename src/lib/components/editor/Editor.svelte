@@ -28,7 +28,10 @@
 	} from '../../editor/render-settings';
 	import { addTrack, getAllTracks } from '../../audio/track-library';
 	import { createKeyboardHandler } from '../../editor/keyboard';
-	import { clearEffects as clearEffectsFn } from '../../editor/mosh';
+	import {
+		clearEffects as clearEffectsFn,
+		generateMosh,
+	} from '../../editor/mosh';
 	import { executeRecording } from '../../editor/recording';
 	import { createRecordingState } from '../../editor/recording-state.svelte';
 	import { createMoshSession } from '../../editor/mosh-session';
@@ -152,7 +155,7 @@
 	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
 	import { normalizeCoverage } from '../../editor/segment-coverage';
 	import {
-		SegmentMoshHistory,
+		MoshHistory,
 		type SegmentMoshSnapshot,
 	} from '../../editor/segment-mosh-history';
 	import type { GlRenderer, SourceFit } from '../../gl/renderer';
@@ -1104,9 +1107,9 @@
 	}
 
 	// ←/→ walk one fx clip's moshes, the same way they walk a segment's. Its own
-	// stack per clip, keyed by clip id — SegmentMoshHistory is agnostic about
-	// what the id names, and an FxClip carries exactly the fields it snapshots.
-	const fxMoshHistory = new SegmentMoshHistory();
+	// stack per clip, keyed by clip id — MoshHistory is agnostic about what the
+	// id names, and an FxClip carries exactly the fields it snapshots.
+	const fxMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
 
 	/**
 	 * The fx clip the mosh gestures act on: the selected one, and only that.
@@ -1941,7 +1944,7 @@
 
 	// ←/→ in sequence mode walk the moshes of one segment: the selected one, or
 	// whichever sits under the playhead.
-	const seqMoshHistory = new SegmentMoshHistory();
+	const seqMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
 
 	function inSequenceMode(): boolean {
 		return isSequenceMode && sequenceSegments.length > 0;
@@ -2110,6 +2113,16 @@
 
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
+		// A layer lane's panel has taken the sidebar over, so the arrows belong
+		// to its chain. Ahead of the segment branch below, which would otherwise
+		// fall back to the segment under the playhead.
+		const layer = activeLayerLane();
+		if (layer) {
+			const snap = laneMoshHistory.redo(layer.lane.id);
+			if (snap) setLaneEffects(layer, snap.map(cloneEffectInstance));
+			else laneRoll(layer);
+			return;
+		}
 		// A selected fx clip is what every other panel action is aimed at, so a
 		// mosh means that clip — not a fresh roll of the whole segment chain
 		// underneath it.
@@ -2137,6 +2150,12 @@
 
 	/** ← : back through the mosh history. Never touches the edit history. */
 	function undoMosh() {
+		const layer = activeLayerLane();
+		if (layer) {
+			const snap = laneMoshHistory.undo(layer.lane.id);
+			if (snap) setLaneEffects(layer, snap.map(cloneEffectInstance));
+			return;
+		}
 		const clip = activeFxClip();
 		if (clip) {
 			const snap = fxMoshHistory.undo(clip.id);
@@ -2573,6 +2592,23 @@
 		saveSingleSession();
 	}
 
+	/** A layer group, plus the mosh arrows its selected lane answers to. */
+	function withLaneMosh(group: {
+		title: string;
+		shortcuts: { keys: string[]; description: string }[];
+	}) {
+		return {
+			...group,
+			shortcuts: [
+				...group.shortcuts,
+				{
+					keys: ['←', '→'],
+					description: "Walk the selected clip's lane through its moshes",
+				},
+			],
+		};
+	}
+
 	const shortcutGroups = $derived([
 		{
 			title: 'Editor',
@@ -2662,8 +2698,11 @@
 					},
 				]
 			: []),
-		...(textTimeline.enabled ? [TEXT_TIMELINE_SHORTCUTS] : []),
-		...(mediaTimeline.enabled ? [MEDIA_LAYER_SHORTCUTS] : []),
+		// The arrows reach a layer lane's chain here but not in the slideshow,
+		// which shares the text group — so the entry is added on this side
+		// rather than written into the shared list.
+		...(textTimeline.enabled ? [withLaneMosh(TEXT_TIMELINE_SHORTCUTS)] : []),
+		...(mediaTimeline.enabled ? [withLaneMosh(MEDIA_LAYER_SHORTCUTS)] : []),
 	]);
 
 	// A still image with no track has no clock at all, so the text timeline
@@ -2875,6 +2914,7 @@
 
 	function setTextTimeline(next: TextTimeline) {
 		textTimeline = next;
+		retainLaneMoshes();
 	}
 
 	function updateTextClip(next: TextClip) {
@@ -2916,6 +2956,7 @@
 
 	function setMediaTimeline(next: MediaTimeline) {
 		mediaTimeline = next;
+		retainLaneMoshes();
 	}
 
 	function updateMediaClip(next: MediaClip) {
@@ -3032,6 +3073,60 @@
 	$effect(() => {
 		if (selectedTextClipId) keepOnlySelection('text');
 	});
+
+	// ←/→ walk a layer lane's moshes, the same way they walk a segment's or an
+	// fx clip's. One stack for both kinds, keyed by lane id: ids are unique
+	// across the two timelines and only one lane is ever selected.
+	const laneMoshHistory = new MoshHistory<EffectInstance[]>();
+
+	/**
+	 * The layer lane the mosh gestures act on — whichever clip panel is open,
+	 * since that is the chain the sidebar is showing.
+	 *
+	 * No playhead fallback, the same as fx clips: several lanes hold a clip at
+	 * once, so "the lane under the playhead" names no single thing.
+	 */
+	type LayerLaneRef =
+		| { kind: 'media'; lane: MediaLane }
+		| { kind: 'text'; lane: TextLane };
+
+	function activeLayerLane(): LayerLaneRef | null {
+		if (selectedMediaLane) return { kind: 'media', lane: selectedMediaLane };
+		if (selectedTextLane) return { kind: 'text', lane: selectedTextLane };
+		return null;
+	}
+
+	function setLaneEffects(ref: LayerLaneRef, effects: EffectInstance[]) {
+		if (ref.kind === 'media') updateMediaLane({ ...ref.lane, effects });
+		else updateTextLane({ ...ref.lane, effects });
+	}
+
+	/**
+	 * Roll a fresh mosh onto a layer lane's chain. Mosh history only, never the
+	 * lane's edit stack — the rule every other mosh follows, so an arrow press
+	 * leaves no Ctrl+Z entry behind it.
+	 *
+	 * The chain is moshed in place on a copy rather than rolled from scratch:
+	 * a lane holds the same full library the main chain does, so this is single
+	 * mode's gesture applied to the layer.
+	 */
+	/** Deleting a lane retires its id — drop the stack so a later lane can't
+	 * inherit moshes that were never its own. */
+	function retainLaneMoshes() {
+		laneMoshHistory.retain([
+			...mediaTimeline.lanes.map((l) => l.id),
+			...textTimeline.lanes.map((l) => l.id),
+		]);
+	}
+
+	function laneRoll(ref: LayerLaneRef) {
+		const current = $state.snapshot(ref.lane.effects) as EffectInstance[];
+		laneMoshHistory.seed(ref.lane.id, current);
+		const next = current.map(cloneEffectInstance);
+		generateMosh(next, getMoshOptions());
+		setLaneEffects(ref, next);
+		laneMoshHistory.push(ref.lane.id, next);
+	}
 
 	let selectedMediaClip = $derived(
 		findMediaClip(mediaTimeline, selectedMediaClipId),

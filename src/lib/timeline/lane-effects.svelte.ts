@@ -20,6 +20,8 @@ export interface EffectLane {
 export class LaneEffects<L extends EffectLane> {
   #effects = $state<EffectInstance[]>([]);
   #loadedLaneId = $state<string | null>(null);
+  /** The array the mirror was last filled from, or last wrote back. */
+  #loadedFrom: EffectInstance[] | null = null;
   readonly #getLane: () => L | null;
   readonly #onLaneChange: (lane: L) => void;
   readonly #onBeforeEdit?: (coalesceKey?: string) => void;
@@ -43,29 +45,38 @@ export class LaneEffects<L extends EffectLane> {
   }
 
   /**
-   * Reload the mirror when the panel moves to another lane. Keyed on the lane
-   * id, so an edit to the lane already loaded does not wipe the chain the
-   * panel is mid-edit on — only actually switching lanes reloads.
+   * Reload the mirror when the panel moves to another lane, or when the lane's
+   * chain is replaced from outside — a mosh walked with ←/→ swaps the whole
+   * array, and the panel would otherwise go on showing the chain from before
+   * it.
    *
-   * Call from an effect; the untracked read is what keeps that effect from
+   * Both are identity checks, and `commit` records what it wrote: an edit made
+   * *through* the panel must not reload, or the mirror would be rebuilt under
+   * the user on every keystroke.
+   *
+   * Call from an effect; the untracked reads are what keep that effect from
    * subscribing to the state it writes.
    */
   sync(): void {
     const lane = this.#getLane();
     const id = lane?.id ?? null;
-    if (id === untrack(() => this.#loadedLaneId)) return;
+    const effects = lane?.effects ?? null;
+    const known = untrack(
+      () => id === this.#loadedLaneId && effects === this.#loadedFrom,
+    );
+    if (known) return;
     this.#loadedLaneId = id;
-    this.#effects = lane ? [...lane.effects] : [];
+    this.#loadedFrom = effects;
+    this.#effects = effects ? [...effects] : [];
   }
 
   /** Write the mirror back to the lane. */
   commit(): void {
     const lane = this.#getLane();
     if (!lane) return;
-    this.#onLaneChange({
-      ...lane,
-      effects: $state.snapshot(this.#effects) as EffectInstance[],
-    });
+    const effects = $state.snapshot(this.#effects) as EffectInstance[];
+    this.#loadedFrom = effects;
+    this.#onLaneChange({ ...lane, effects });
   }
 
   /**
