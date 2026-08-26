@@ -25,6 +25,32 @@ export interface AudioLinkGroup {
   response: AudioResponse;
 }
 
+const NO_GROUPS: AudioLinkGroup[] = [];
+
+/**
+ * One group per layer lane — media layers and text layers alike, so a layer's
+ * own chain follows the music the way the main chain and the fx lanes do.
+ *
+ * Built from the lanes rather than from the layers resolved for a frame: a
+ * lane's chain is fixed for the whole lane, not per clip, so this way preview
+ * and export advance the very same envelopes whether or not a lane happens to
+ * have a clip under the playhead. Resolving per frame instead would let a
+ * lane's auto-range drift between the two across every gap in it.
+ */
+export function layerLinkGroups(
+  lanes: readonly { id: string; effects: EffectInstance[] }[],
+  response: AudioResponse,
+): AudioLinkGroup[] {
+  if (lanes.length === 0) return NO_GROUPS;
+  // The lane id is the scope, the same way an fx lane's is: one lane's
+  // smoothing must never step another's.
+  return lanes.map((lane) => ({
+    scope: lane.id,
+    effects: lane.effects,
+    response,
+  }));
+}
+
 /**
  * `dt` and `response` must match between preview and export, or a render will
  * not look like what was previewed.

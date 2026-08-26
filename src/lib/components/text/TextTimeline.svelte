@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Eye, EyeOff, GripVertical, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
+	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
 	import {
@@ -181,6 +182,8 @@
 	function deleteLane(laneId: string) {
 		lanePendingDelete = null;
 		onBeforeEdit?.();
+		// The lane id is its audio-link scope; its envelopes outlive it otherwise.
+		dropAutoRangeScope(laneId);
 		onChange({
 			...timeline,
 			lanes: timeline.lanes.filter((l) => l.id !== laneId),

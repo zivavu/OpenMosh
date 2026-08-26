@@ -19,6 +19,7 @@
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import { layerLinkGroups } from '../../audio/audio-utils';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import {
@@ -406,7 +407,10 @@
 
 	const audio = new AudioManager({
 		// The base chain follows the editor's response; every active fx lane
-		// follows its own, under its own envelope state.
+		// follows its own, under its own envelope state. The media and text
+		// layers follow the editor's response too — they have no settings of
+		// their own — but each still gets its own scope, so one layer's
+		// smoothing never steps another's.
 		getLinkGroups: () => [
 			{ scope: '', effects: seqPlaybackEffects ?? effects, response: audioResponse },
 			...fxLayers.map((layer) => ({
@@ -414,6 +418,8 @@
 				effects: layer.effects,
 				response: fxLaneResponse(layer.laneId),
 			})),
+			...layerLinkGroups(mediaTimeline.lanes, audioResponse),
+			...layerLinkGroups(textTimeline.lanes, audioResponse),
 		],
 		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
 		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,

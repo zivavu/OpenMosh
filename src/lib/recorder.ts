@@ -8,7 +8,7 @@ import {
 	type FrameAudioData,
 } from './audio/offline-audio';
 import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
-import type { AudioLinkGroup } from './audio/audio-utils';
+import { layerLinkGroups, type AudioLinkGroup } from './audio/audio-utils';
 import {
 	DEFAULT_AUDIO_RESPONSE,
 	resetAutoRange,
@@ -126,6 +126,8 @@ function applyFrameAudio(
 	frameDuration: number,
 	response: AudioResponse,
 	groups?: AudioLinkGroup[] | null,
+	/** Groups that do not change frame to frame, so the caller builds them once. */
+	fixedGroups?: AudioLinkGroup[] | null,
 ): void {
 	if (frameAudioData.length === 0) return;
 	const frame = frameAudioData[i]!;
@@ -133,7 +135,9 @@ function applyFrameAudio(
 	// as the preview's per-frame tick does. The ungrouped case is applied
 	// directly rather than through a one-element array minted per frame — an
 	// export renders tens of thousands of them.
-	if (!groups) {
+	if (groups) {
+		applyGroups(groups, frame, sampleRate, frameDuration);
+	} else {
 		applyFrameAudioToEffects(
 			effects,
 			frame,
@@ -142,8 +146,18 @@ function applyFrameAudio(
 			frameDuration,
 			response,
 		);
-		return;
 	}
+	// The layer chains are their own groups either way: they follow the music
+	// whether or not the main chain was split into lanes.
+	if (fixedGroups) applyGroups(fixedGroups, frame, sampleRate, frameDuration);
+}
+
+function applyGroups(
+	groups: AudioLinkGroup[],
+	frame: FrameAudioData,
+	sampleRate: number,
+	frameDuration: number,
+): void {
 	for (const g of groups) {
 		applyFrameAudioToEffects(
 			g.effects,
@@ -564,6 +578,14 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
+	// The media and text layers each run their own chain, and those follow the
+	// music the same way the main chain does. Built once: an export's lanes are
+	// fixed for its whole run, and only the values written into them change.
+	const layerGroups = [
+		...layerLinkGroups(mediaTimeline?.lanes ?? [], audioResponse),
+		...layerLinkGroups(textTimeline?.lanes ?? [], audioResponse),
+	];
+
 	// Otherwise the output's first seconds depend on where the preview was scrubbed.
 	resetAutoRange();
 	resetSpectrumRange();
@@ -594,6 +616,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				frameDuration,
 				audioResponse,
 				audioGroupsRef?.current,
+				layerGroups.length > 0 ? layerGroups : null,
 			);
 			// The bars read this straight off the GPU, so the export has to push
 			// the same bins the preview's AnalyserNode would have.

@@ -63,6 +63,7 @@
 	import SlideshowGridView from './SlideshowGridView.svelte';
 	import SlideshowTopBar from './SlideshowTopBar.svelte';
 	import { AudioManager } from '../../audio/audio-manager.svelte';
+	import { layerLinkGroups } from '../../audio/audio-utils';
 	import { DEFAULT_AUDIO_RESPONSE } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
 	import {
@@ -657,6 +658,9 @@
 					previewPlaying && previewEffects.length > 0 ? previewEffects : effects,
 				response: DEFAULT_AUDIO_RESPONSE,
 			},
+			// Each text layer's own chain follows the music too, under its own
+			// envelope state — the same deal the editor gives its layers.
+			...layerLinkGroups(textTimeline.lanes, DEFAULT_AUDIO_RESPONSE),
 		],
 		initialOutputVolume: savedOutputVolume,
 		initialLoop: loadSettings().loopAudio ?? false,
@@ -1802,6 +1806,7 @@
 					onClose={() => (selectedTextClipId = null)}
 					hasTrack={!!audio.trackFile}
 					spectrumData={audio.spectrumData}
+					response={DEFAULT_AUDIO_RESPONSE}
 				/>
 			{:else}
 			<EffectsPanel

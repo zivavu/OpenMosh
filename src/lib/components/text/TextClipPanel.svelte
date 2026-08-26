@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { X } from 'lucide-svelte';
 	import { untrack } from 'svelte';
-	import type { EffectInstance, VolumeLink } from '../../effects';
+	import {
+		setVolumeLink,
+		type EffectInstance,
+		type VolumeLink,
+	} from '../../effects';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
 	import { ensureFontLoaded } from '../../text-overlay';
 	import {
@@ -42,11 +46,6 @@
 		spectrumData?: SpectrumData | null;
 		/** Forwarded to the lane's effect panel for its spectrum read-out. */
 		response?: AudioResponse;
-		onVolumeLinkChange?: (
-			index: number,
-			paramKey: string,
-			link: VolumeLink | null,
-		) => void;
 	}
 
 	let {
@@ -59,7 +58,6 @@
 		hasTrack = false,
 		spectrumData = null,
 		response = undefined,
-		onVolumeLinkChange,
 	}: Props = $props();
 
 	function setUnderEffects(under: boolean) {
@@ -116,6 +114,24 @@
 			...lane,
 			effects: $state.snapshot(laneEffects) as EffectInstance[],
 		});
+	}
+
+	/**
+	 * Link one of the chain's params to the music. Handled here rather than
+	 * handed up to the editor: the chain on show is this panel's own mirror of
+	 * the lane's, so the editor has nothing to apply the change to.
+	 *
+	 * Coalesced per param, the same way the sidebar chain does it, so dragging
+	 * a link's range leaves one undo entry rather than one per frame.
+	 */
+	function volumeLinkChange(
+		index: number,
+		paramKey: string,
+		link: VolumeLink | null,
+	) {
+		onBeforeEdit?.(`link:${lane?.id}:${index}:${paramKey}`);
+		laneEffects = setVolumeLink(laneEffects, index, paramKey, link);
+		commitEffects();
 	}
 
 	let opaqueNames = $derived(
@@ -376,7 +392,7 @@
 			{hasTrack}
 			{spectrumData}
 			{response}
-			{onVolumeLinkChange}
+			onVolumeLinkChange={volumeLinkChange}
 			onUserEdit={commitEffects}
 			onEffectsReplaced={commitEffects}
 			onBeforeUserEdit={onBeforeEdit}
