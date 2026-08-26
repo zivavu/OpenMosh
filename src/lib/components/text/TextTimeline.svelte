@@ -32,7 +32,7 @@
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
-	const DEFAULT_CLIP_LENGTH = 2;
+	const DEFAULT_CLIP_LENGTH = 6;
 	const LANE_HEIGHT = 30;
 
 	interface Props {
