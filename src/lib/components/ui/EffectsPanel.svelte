@@ -380,19 +380,19 @@
 	}
 
 	function centerOnEffect(instanceId: string) {
-		if (!scrollEl) return;
-		const el = scrollEl.querySelector<HTMLElement>(
+		const box = scrollBox();
+		const el = listEl?.querySelector<HTMLElement>(
 			`[data-effect-id="${instanceId}"]`,
 		);
-		if (!el) return;
+		if (!box || !el) return;
 		const item = el.getBoundingClientRect();
-		const container = scrollEl.getBoundingClientRect();
+		const container = box.getBoundingClientRect();
 		// Offset from the container's own scrollTop, so this works regardless of
 		// where the list sits on the page or which element is the offsetParent.
 		const delta =
 			item.top - container.top - (container.height - item.height) / 2;
-		scrollEl.scrollTo({
-			top: scrollEl.scrollTop + delta,
+		box.scrollTo({
+			top: box.scrollTop + delta,
 			behavior: 'smooth',
 		});
 	}
@@ -412,8 +412,25 @@
 	let touchDragFromIndex: number | null = $state(null);
 	// $state because the rack stands down (and the binding drops to null) when
 	// there is no chain to edit.
-	let scrollEl = $state<HTMLElement | null>(null);
+	let listEl = $state<HTMLElement | null>(null);
 	let scrollRafId: number | null = null;
+
+	/**
+	 * The scroll box this chain lives in — the sidebar column, or the mobile
+	 * sheet's tab. The chain does not scroll on its own, so the one thing that
+	 * can carry an effect into view is whatever scrolls around it.
+	 *
+	 * Walked rather than passed in: the panel sits directly in the sidebar in
+	 * one place and nested inside a clip panel in another, and which ancestor
+	 * scrolls is not something either caller should have to state.
+	 */
+	function scrollBox(): HTMLElement | null {
+		for (let el = listEl?.parentElement; el; el = el.parentElement) {
+			const overflow = getComputedStyle(el).overflowY;
+			if (overflow === 'auto' || overflow === 'scroll') return el;
+		}
+		return null;
+	}
 
 	function stopAutoScroll() {
 		if (scrollRafId !== null) {
@@ -424,19 +441,20 @@
 
 	function startAutoScroll(touchY: number) {
 		stopAutoScroll();
-		if (!scrollEl) return;
-		const rect = scrollEl.getBoundingClientRect();
+		const box = scrollBox();
+		if (!box) return;
+		const rect = box.getBoundingClientRect();
 		const zone = 60;
 		const maxSpeed = 8;
 
 		function step() {
-			if (!scrollEl || touchDragFromIndex === null) return;
+			if (touchDragFromIndex === null) return;
 			const distTop = touchY - rect.top;
 			const distBottom = rect.bottom - touchY;
 			if (distTop < zone && distTop > 0) {
-				scrollEl.scrollTop -= maxSpeed * (1 - distTop / zone);
+				box!.scrollTop -= maxSpeed * (1 - distTop / zone);
 			} else if (distBottom < zone && distBottom > 0) {
-				scrollEl.scrollTop += maxSpeed * (1 - distBottom / zone);
+				box!.scrollTop += maxSpeed * (1 - distBottom / zone);
 			} else {
 				return;
 			}
@@ -503,7 +521,7 @@
 	</header>
 
 	{#if noTarget}
-		<div class="panel-scroll">
+		<div class="panel-list">
 			<div class="list-empty">
 				<p class="empty-title">{noTarget.title}</p>
 				<p class="empty-hint">{noTarget.hint}</p>
@@ -639,7 +657,7 @@
 		{/if}
 	</div>
 
-	<div class="panel-scroll" bind:this={scrollEl}>
+	<div class="panel-list" bind:this={listEl}>
 		{#if rolledNote}
 			<p class="rolled-note">{rolledNote}</p>
 		{/if}
@@ -739,8 +757,10 @@
 
 <style>
 	.effects-panel {
-		flex: 1;
-		min-height: 0;
+		/* Natural height, never its own scrollbox: the sidebar around it scrolls
+		   as one region, and a chain that scrolled inside that would be a
+		   second scroller nested in the first. */
+		flex: 0 0 auto;
 		width: 340px;
 		max-width: 340px;
 		background: var(--surface);
@@ -1044,31 +1064,6 @@
 
 	.live-filter.on {
 		color: var(--live);
-	}
-
-	.panel-scroll {
-		flex: 1;
-		overflow-y: auto;
-		overflow-x: hidden;
-		scrollbar-width: thin;
-		scrollbar-color: var(--line-strong) transparent;
-	}
-
-	.panel-scroll::-webkit-scrollbar {
-		width: 4px;
-	}
-
-	.panel-scroll::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	.panel-scroll::-webkit-scrollbar-thumb {
-		background: var(--line-strong);
-		border-radius: 2px;
-	}
-
-	.panel-scroll::-webkit-scrollbar-thumb:hover {
-		background: var(--text-4);
 	}
 
 	/* Standing in for the list, so a filtered-to-nothing panel still says what

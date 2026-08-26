@@ -401,9 +401,6 @@
 	   goes full-bleed here — inside this panel's padding too it sat in a double
 	   inset, reading as a sunken box rather than a continuation of the panel. */
 	.clip-panel :global(aside.effects-panel) {
-		/* Its own `flex: 1` is for owning the sidebar's height; here the scroll
-		   belongs to this panel, so it takes its content height instead. */
-		flex: 0 0 auto;
 		width: auto;
 		max-width: none;
 		margin: 0 -0.75rem -0.75rem;
