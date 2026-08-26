@@ -3800,6 +3800,9 @@
 					{#if isSequenceMode && fxLanes.length > 0}
 						<FxLanes
 							lanes={fxLanes}
+							{layerOrder}
+							{draggingLaneId}
+							onLaneDragStart={startLayerDrag}
 							bind:selectedClipId={selectedFxClipId}
 							bind:selectedClipIds={selectedFxClipIds}
 							onChange={setFxLanes}
