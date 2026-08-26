@@ -120,22 +120,19 @@ uniform sampler2D u_texture2;
 uniform int u_blendMode;
 uniform float u_invert;
 uniform float u_opacity;
-/** 1 = clip the overlay to the layer box below. Text overlays leave it 0. */
-uniform int u_maskLayer;
 in vec2 v_uv;
 out vec4 outColor;
-${LAYER_BOX_GLSL}
 void main() {
   vec4 mainC = texture(u_texture, v_uv);
   vec4 textC = texture(u_texture2, v_uv);
   if (u_invert > 0.5) {
     textC.rgb = 1.0 - textC.rgb;
   }
+  // Coverage is whatever the layer's own chain produced. A media layer is
+  // placed into a transparent frame, so its chain carries that alpha with it —
+  // and an effect that displaces or blooms past the layer's edges is meant to
+  // land outside them, the same way a text layer's does.
   float a = textC.a * u_opacity;
-  // Most effect shaders write alpha 1 unconditionally, so a media layer comes
-  // out of its own chain opaque everywhere and would hide the frame entirely.
-  // The box is reapplied here rather than trusted to survive the chain.
-  if (u_maskLayer == 1) a *= insideLayer(layerUv(v_uv));
   vec3 mainRgb = mainC.rgb;
   vec3 textRgb = textC.rgb;
   vec3 blended;

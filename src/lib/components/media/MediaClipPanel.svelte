@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { X } from 'lucide-svelte';
+	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
 	import { LaneEffects } from '../../timeline/lane-effects.svelte';
 	import {
 		DEFAULT_MEDIA_STYLE,
@@ -101,6 +102,12 @@
 		(key) => onBeforeEdit?.(key),
 	);
 	$effect(() => chain.sync());
+
+	let opaqueNames = $derived(
+		chain.effects
+			.filter((e) => e.enabled && OPAQUE_OUTPUT_EFFECTS.has(e.defId))
+			.map((e) => e.defId),
+	);
 </script>
 
 {#if !clip || !lane}
@@ -300,9 +307,15 @@
 
 		<h3 class="panel-title section">Layer effects</h3>
 		<p class="hint">
-			Run on this layer alone, before it meets the image. They are clipped to
-			the layer's box.
+			Run on this layer alone, before it meets the image. One that spreads —
+			a blur, a bloom, a displacement — carries past the layer's edges.
 		</p>
+		{#if opaqueNames.length > 0}
+			<p class="warn">
+				{opaqueNames.join(', ')} paints its own background, so it fills the frame
+				instead of following the layer.
+			</p>
+		{/if}
 		<EffectsPanel
 			bind:effects={() => chain.effects, (v) => (chain.effects = v)}
 			{hasTrack}

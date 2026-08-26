@@ -96,13 +96,12 @@ interface PreparedLayer {
   z: number;
   opacity: number;
   blendMode: TextOverlayBlendMode;
-  /** Media layers only: reapplied at composite time. See LayerBox. */
-  box?: LayerBox;
 }
 
 /**
- * Where a media layer's frame sits, in output pixels. The placement pass draws
- * it and the composite re-clips to it, so the two have to agree.
+ * Where a media layer's frame sits, in output pixels. Used by the placement
+ * pass alone: it draws the media into an otherwise transparent frame, and the
+ * alpha it leaves behind is the only coverage anything downstream reads.
  */
 interface LayerBox {
   drawW: number;
@@ -1078,7 +1077,6 @@ export class GlRenderer {
           target,
           op.layer.opacity,
           op.layer.blendMode,
-          op.layer.box,
         );
         if (isLast) {
           resultTex = finalTex;
@@ -1543,7 +1541,6 @@ export class GlRenderer {
     targetFBO: WebGLFramebuffer,
     opacity: number,
     blendMode: TextOverlayBlendMode = "normal",
-    box?: LayerBox,
   ) {
     const gl = this.gl;
     const prog = this.textBlendProgram;
@@ -1560,7 +1557,6 @@ export class GlRenderer {
     if (prog.uniforms["u_invert"]) gl.uniform1f(prog.uniforms["u_invert"], 0);
     if (prog.uniforms["u_opacity"])
       gl.uniform1f(prog.uniforms["u_opacity"], opacity);
-    this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, mainTex);
     if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
@@ -1692,7 +1688,6 @@ export class GlRenderer {
         z: layer.z,
         opacity: layer.style.opacity,
         blendMode: layer.style.blendMode,
-        box,
       });
     }
     return prepared;
@@ -1722,12 +1717,8 @@ export class GlRenderer {
     };
   }
 
-  private setLayerBoxUniforms(prog: CompiledProgram, box: LayerBox | undefined) {
+  private setLayerBoxUniforms(prog: CompiledProgram, box: LayerBox) {
     const gl = this.gl;
-    if (prog.uniforms["u_maskLayer"]) {
-      gl.uniform1i(prog.uniforms["u_maskLayer"], box ? 1 : 0);
-    }
-    if (!box) return;
     if (prog.uniforms["u_frameSize"]) {
       gl.uniform2f(prog.uniforms["u_frameSize"], this.imgW, this.imgH);
     }
@@ -2475,7 +2466,6 @@ export class GlRenderer {
           this.stackFBOs![outIdx],
           step.layer.opacity,
           step.layer.blendMode,
-          step.layer.box,
         );
         cur = this.stackTextures![outIdx];
         curIdx = outIdx;
