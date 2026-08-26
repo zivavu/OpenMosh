@@ -1150,27 +1150,6 @@
 		fxLanes = clearFxClips(fxLanes, new Set(clipIds));
 	}
 
-	// The panel edits one chain at a time, so the two lane selections are
-	// mutually exclusive: picking either drops the other. Written as a pair of
-	// one-way effects rather than one arbitrating effect — each only reacts to
-	// the selection it clears against, so whichever the user just made survives
-	// and the other settles to null on the next pass.
-	$effect(() => {
-		if (!selectedFxClipId) return;
-		untrack(() => (selectedSegmentId = null));
-	});
-
-	$effect(() => {
-		if (!selectedSegmentId) return;
-		untrack(() => {
-			selectedFxClipId = null;
-			selectedFxClipIds = [];
-			// A segment rolls under the editor's settings, so a lane left picked
-			// in the gutter would have the panel showing the wrong owner's.
-			selectedFxLaneId = null;
-		});
-	});
-
 	/** The fx clip the effects panel is editing, if one is selected. */
 	let selectedFxClip = $derived(
 		isSequenceMode ? (findFxClip(fxLanes, selectedFxClipId)?.clip ?? null) : null,
@@ -3013,14 +2992,45 @@
 			(isSequenceMode || mediaTimeline.enabled),
 	);
 
-	// One clip panel at a time: picking a layer clip puts the text clip down, and
-	// the other way round. Without this the sidebar would show whichever branch
-	// came first while the other lane still drew itself as selected.
+	// One selection across the whole stack: the sidebar edits one thing at a
+	// time, so filling any lane's selection empties every other lane's. Without
+	// this the sidebar shows whichever branch came first while the other lane
+	// still draws itself as selected.
+	//
+	// The lanes bind their own selection state, so there is no setter they all
+	// pass through. Each kind gets a one-way effect instead: whichever
+	// selection the user just made survives, and the rest settle to null on the
+	// next pass.
+	type SelectionKind = 'segment' | 'fx' | 'media' | 'text';
+
+	function keepOnlySelection(keep: SelectionKind) {
+		untrack(() => {
+			// SequenceTimeline drops its own multi-selection when the primary id
+			// goes, so clearing that one is enough.
+			if (keep !== 'segment') selectedSegmentId = null;
+			if (keep !== 'fx') {
+				selectedFxClipId = null;
+				selectedFxClipIds = [];
+				// A lane picked by name aims the settings panel at it; left set,
+				// the panel would go on showing the wrong owner's settings.
+				selectedFxLaneId = null;
+			}
+			if (keep !== 'media') selectedMediaClipId = null;
+			if (keep !== 'text') selectedTextClipId = null;
+		});
+	}
+
 	$effect(() => {
-		if (selectedMediaClipId) untrack(() => (selectedTextClipId = null));
+		if (selectedSegmentId) keepOnlySelection('segment');
 	});
 	$effect(() => {
-		if (selectedTextClipId) untrack(() => (selectedMediaClipId = null));
+		if (selectedFxClipId || selectedFxLaneId) keepOnlySelection('fx');
+	});
+	$effect(() => {
+		if (selectedMediaClipId) keepOnlySelection('media');
+	});
+	$effect(() => {
+		if (selectedTextClipId) keepOnlySelection('text');
 	});
 
 	let selectedMediaClip = $derived(
