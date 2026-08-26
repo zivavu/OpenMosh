@@ -42,7 +42,15 @@
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
-	const MIN_SEGMENT_DURATION = 0.125;
+	/**
+	 * How short a boundary drag may squeeze a segment. Held in beats rather than
+	 * seconds so the floor means the same musical thing at any tempo: 1/32 of a
+	 * beat is finer than a mosh can be read at, while still keeping a drag from
+	 * collapsing a segment to nothing.
+	 */
+	const MIN_SEGMENT_BEATS = 1 / 32;
+	/** With no tempo to divide, 1/32 of a second — 1/32 beat at 60 BPM. */
+	const MIN_SEGMENT_NO_TEMPO = 1 / 32;
 	// Segments are drawn as clip blocks in one lane row, matching the text
 	// timeline's geometry: a 22px block inset in a 30px row.
 	const ROW_PAD = 4;
@@ -116,6 +124,10 @@
 		onAssignSource,
 		onSourceRollChange,
 	}: Props = $props();
+
+	let minSegmentDuration = $derived(
+		bpm > 0 ? (60 / bpm) * MIN_SEGMENT_BEATS : MIN_SEGMENT_NO_TEMPO,
+	);
 
 	let multiSource = $derived(sources.length > 1);
 	const segH = SEG_H;
@@ -829,10 +841,10 @@
 			if (leftSegId) {
 				const lseg = rawSegments.find((s) => s.id === leftSegId);
 				if (lseg) {
-					const minEnd = lseg.startTime + MIN_SEGMENT_DURATION;
+					const minEnd = lseg.startTime + minSegmentDuration;
 					const maxEnd = rightSegId
 						? (rawSegments.find((s) => s.id === rightSegId)?.endTime ??
-								trackDuration) - MIN_SEGMENT_DURATION
+								trackDuration) - minSegmentDuration
 						: trackDuration;
 					const clamped = Math.max(minEnd, Math.min(maxEnd, time));
 					updates[leftSegId] = { endTime: clamped };
@@ -842,7 +854,7 @@
 				const rseg = rawSegments.find((s) => s.id === rightSegId);
 				if (rseg) {
 					const maxStart =
-						(rseg.endTime ?? trackDuration) - MIN_SEGMENT_DURATION;
+						(rseg.endTime ?? trackDuration) - minSegmentDuration;
 					const clamped = Math.max(0, Math.min(maxStart, time));
 					updates[rightSegId] = { startTime: clamped };
 				}
@@ -863,7 +875,7 @@
 				dragging.group,
 				dragging.nonSelected,
 				trackDuration,
-				MIN_SEGMENT_DURATION,
+				minSegmentDuration,
 			);
 			const updates = groupDeltaUpdates(dragging.group, delta);
 			boundaries.live(
