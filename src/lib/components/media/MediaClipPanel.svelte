@@ -1,11 +1,6 @@
 <script lang="ts">
 	import { X } from 'lucide-svelte';
-	import { untrack } from 'svelte';
-	import {
-		setVolumeLink,
-		type EffectInstance,
-		type VolumeLink,
-	} from '../../effects';
+	import { LaneEffects } from '../../timeline/lane-effects.svelte';
 	import {
 		DEFAULT_MEDIA_STYLE,
 		MEDIA_FIT_OPTIONS,
@@ -97,44 +92,15 @@
 		onClipChange({ ...clip, sourceStart: v });
 	}
 
-	// EffectsPanel owns its array (it mutates and reassigns), so the lane's chain
-	// is mirrored into local state and written back on every edit. Keyed on the
-	// lane id so switching lanes reloads rather than cross-contaminates.
-	let laneEffects = $state<EffectInstance[]>([]);
-	let loadedLaneId = $state<string | null>(null);
-
-	$effect(() => {
-		const id = lane?.id ?? null;
-		if (id === untrack(() => loadedLaneId)) return;
-		loadedLaneId = id;
-		laneEffects = lane ? [...lane.effects] : [];
-	});
-
-	function commitEffects() {
-		if (!lane) return;
-		onLaneChange({
-			...lane,
-			effects: $state.snapshot(laneEffects) as EffectInstance[],
-		});
-	}
-
-	/**
-	 * Link one of the chain's params to the music. Handled here rather than
-	 * handed up to the editor: the chain on show is this panel's own mirror of
-	 * the lane's, so the editor has nothing to apply the change to.
-	 *
-	 * Coalesced per param, the same way the sidebar chain does it, so dragging
-	 * a link's range leaves one undo entry rather than one per frame.
-	 */
-	function volumeLinkChange(
-		index: number,
-		paramKey: string,
-		link: VolumeLink | null,
-	) {
-		onBeforeEdit?.(`link:${lane?.id}:${index}:${paramKey}`);
-		laneEffects = setVolumeLink(laneEffects, index, paramKey, link);
-		commitEffects();
-	}
+	// The lane's chain, mirrored for EffectsPanel to own and written back on
+	// every edit. Handled here rather than by the editor: the chain on show is
+	// this mirror, so the editor has nothing to apply an edit to.
+	const chain = new LaneEffects(
+		() => lane,
+		(next) => onLaneChange(next),
+		(key) => onBeforeEdit?.(key),
+	);
+	$effect(() => chain.sync());
 </script>
 
 {#if !clip || !lane}
@@ -338,13 +304,13 @@
 			the layer's box.
 		</p>
 		<EffectsPanel
-			bind:effects={laneEffects}
+			bind:effects={() => chain.effects, (v) => (chain.effects = v)}
 			{hasTrack}
 			{spectrumData}
 			{response}
-			onVolumeLinkChange={volumeLinkChange}
-			onUserEdit={commitEffects}
-			onEffectsReplaced={commitEffects}
+			onVolumeLinkChange={(i, key, link) => chain.linkChange(i, key, link)}
+			onUserEdit={() => chain.commit()}
+			onEffectsReplaced={() => chain.commit()}
 			onBeforeUserEdit={onBeforeEdit}
 		/>
 	</div>
