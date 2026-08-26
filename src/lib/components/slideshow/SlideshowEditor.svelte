@@ -1558,6 +1558,13 @@
 		} else if (key === 'c' && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
+		} else if (e.key === '+' || e.key === '=') {
+			// "=" as well as "+": on most layouts the latter needs Shift.
+			e.preventDefault();
+			timelineAxis?.vp.zoomStep(true);
+		} else if (e.key === '-' || e.key === '_') {
+			e.preventDefault();
+			timelineAxis?.vp.zoomStep(false);
 		}
 	}
 </script>

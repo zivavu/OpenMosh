@@ -2401,6 +2401,7 @@
 			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
 		togglePlay: toggleMasterPlay,
+		zoomTimeline: (inward) => timelineAxis?.vp.zoomStep(inward),
 	});
 
 	function save() {
@@ -2624,6 +2625,7 @@
 				{ keys: ['Space'], description: 'Play / pause' },
 				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
 				{ keys: ['C'], description: 'Follow the playhead on the timeline' },
+				{ keys: ['+', '-'], description: 'Zoom the timeline in / out' },
 				...(isSequenceMode
 					? []
 					: [

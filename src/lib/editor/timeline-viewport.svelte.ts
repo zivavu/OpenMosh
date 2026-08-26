@@ -10,6 +10,8 @@
  */
 
 const MIN_ZOOM_FRACTION = 1 / 200;
+/** One notch of zoom, shared by the wheel and the keyboard. */
+const ZOOM_STEP = 1.2;
 
 export class TimelineViewport {
    viewStart = $state(0);
@@ -102,6 +104,15 @@ export class TimelineViewport {
    }
 
    /**
+    * One notch of zoom from the keyboard, where there is no cursor to zoom
+    * around: the playhead holds still while it is on screen, the middle of the
+    * view once it is not.
+    */
+   zoomStep(inward: boolean): void {
+      this.zoomView(inward ? 1 / ZOOM_STEP : ZOOM_STEP, this.anchorFrac() ?? 0.5);
+   }
+
+   /**
     * Attach the shared wheel behavior (shift/horizontal → pan, vertical → zoom,
     * pinned to the playhead when it's on screen) to `el` with a non-passive
     * listener. `onPan` fires on the pan gestures only, for callers that treat a
@@ -127,7 +138,7 @@ export class TimelineViewport {
             // Pin the playhead while zooming when it's on screen, so the view
             // grows around it instead of under the cursor.
             this.zoomView(
-               e.deltaY > 0 ? 1.2 : 1 / 1.2,
+               e.deltaY > 0 ? ZOOM_STEP : 1 / ZOOM_STEP,
                this.anchorFrac() ?? cursorFrac,
             );
          }

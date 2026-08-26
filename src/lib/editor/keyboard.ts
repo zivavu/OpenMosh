@@ -17,6 +17,8 @@ export interface KeyboardActions {
   toggleFollowPlayhead: () => void;
   /** Space: the master transport — a track, a video, or a still's own clock. */
   togglePlay: () => void;
+  /** +/- : one notch of timeline zoom. */
+  zoomTimeline: (inward: boolean) => void;
 }
 
 export function createKeyboardHandler(
@@ -78,6 +80,14 @@ export function createKeyboardHandler(
     } else if (key === "c" && !mod && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       actions.toggleFollowPlayhead();
+    } else if (!mod && (e.key === "+" || e.key === "=")) {
+      // "=" as well as "+": on most layouts the latter needs Shift, and every
+      // other app zooms in on the unshifted key too.
+      e.preventDefault();
+      actions.zoomTimeline(true);
+    } else if (!mod && (e.key === "-" || e.key === "_")) {
+      e.preventDefault();
+      actions.zoomTimeline(false);
     }
   };
 }
