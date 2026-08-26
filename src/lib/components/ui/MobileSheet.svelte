@@ -145,12 +145,11 @@
 			{/if}
 		</div>
 		<!-- Desktop: render both stacked normally -->
-		<!-- With a top panel the sidebar scrolls as one region: its sections are
-		     a single column of settings, and giving the panel its own scrollbar
-		     pinned the rest to the bottom of the window. Without one the panels
-		     own the height themselves (the chain scrolls, its header doesn't),
-		     so they stay direct flex children. -->
-		<div class="desktop-content" class:one-scroll={!!topPanel}>
+		<!-- The sidebar scrolls as one region. Its sections are a single column
+		     — the clip panel, the settings, the chain — and a section that
+		     scrolls on its own strands whatever follows it at the bottom of the
+		     window, behind a scrollbar the user has to find first. -->
+		<div class="desktop-content">
 			{#if topPanel}
 				{@render topPanel()}
 			{/if}
@@ -181,10 +180,6 @@
 	}
 
 	.desktop-content {
-		display: contents;
-	}
-
-	.desktop-content.one-scroll {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
@@ -192,26 +187,29 @@
 		overflow-y: auto;
 	}
 
-	/* Nothing shrinks: every section keeps its natural height and the column
-	   scrolls past it. */
-	.desktop-content.one-scroll > :global(*) {
-		flex-shrink: 0;
+	/* Every section keeps its natural height and the column scrolls past it.
+	   Grow as well as shrink: the chain asks for `flex: 1` so it can own the
+	   sidebar's height on its own, and left to it would fill this column and
+	   scroll inside it — a second scrollbox, which is the one thing this
+	   column exists to avoid. */
+	.desktop-content > :global(*) {
+		flex: 0 0 auto;
 	}
 
-	.desktop-content.one-scroll::-webkit-scrollbar {
+	.desktop-content::-webkit-scrollbar {
 		width: 4px;
 	}
 
-	.desktop-content.one-scroll::-webkit-scrollbar-track {
+	.desktop-content::-webkit-scrollbar-track {
 		background: transparent;
 	}
 
-	.desktop-content.one-scroll::-webkit-scrollbar-thumb {
+	.desktop-content::-webkit-scrollbar-thumb {
 		background: rgba(255, 255, 255, 0.07);
 		border-radius: 2px;
 	}
 
-	.desktop-content.one-scroll::-webkit-scrollbar-thumb:hover {
+	.desktop-content::-webkit-scrollbar-thumb:hover {
 		background: #555;
 	}
 
