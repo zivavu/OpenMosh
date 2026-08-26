@@ -372,10 +372,11 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding: 0.75rem;
-		/* Keeps its natural height: the sidebar is one scroll region, so a
-		   scrollbar here would strand the settings below it at the bottom of
-		   the window. */
+		/* Sits at the top of the sidebar and keeps its natural height: the
+		   sidebar is one scroll region, so a scrollbar here would strand the
+		   settings below it at the bottom of the window. */
 		flex: 0 0 auto;
+		border-bottom: 1px solid var(--line);
 		/* Matches the effects panel this replaces. Without a width the sidebar is
 		   sized by this panel's content, and the help text alone is a single
 		   unbroken max-content line — enough to stretch the sidebar across the

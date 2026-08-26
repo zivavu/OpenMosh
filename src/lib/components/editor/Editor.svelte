@@ -4034,6 +4034,18 @@
 					spectrumData={audio.spectrumData}
 					response={audioResponse}
 				/>
+			{:else if selectedTextClip}
+				<TextClipPanel
+					lane={selectedTextLane}
+					clip={selectedTextClip}
+					onLaneChange={updateTextLane}
+					onClipChange={updateTextClip}
+					onBeforeEdit={pushTextHistory}
+					onClose={() => (selectedTextClipId = null)}
+					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+					spectrumData={audio.spectrumData}
+					response={audioResponse}
+				/>
 			{/if}
 		{/snippet}
 		{#snippet settings()}
@@ -4075,19 +4087,7 @@
 		{#snippet effectsPanel()}
 			<!-- A selected layer is edited by the top panel instead; the main
 			     chain would be a second, unrelated effect list under it. -->
-			{#if selectedTextClip}
-				<TextClipPanel
-					lane={selectedTextLane}
-					clip={selectedTextClip}
-					onLaneChange={updateTextLane}
-					onClipChange={updateTextClip}
-					onBeforeEdit={pushTextHistory}
-					onClose={() => (selectedTextClipId = null)}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
-					response={audioResponse}
-				/>
-			{:else if !selectedMediaClip}
+			{#if !selectedMediaClip && !selectedTextClip}
 			<EffectsPanel
 				bind:effects={getPanelEffects, setPanelEffects}
 				noTarget={panelNoTarget}
