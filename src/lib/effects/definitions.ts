@@ -1488,6 +1488,51 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
       ],
    },
    {
+      id: 'composite',
+      name: 'Composite',
+      params: [
+         {
+            key: 'bleed',
+            label: 'Bleed',
+            type: 'range',
+            min: 0,
+            max: 32,
+            step: 0.5,
+            defaultValue: 11,
+         },
+         {
+            key: 'crawl',
+            label: 'Crawl',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.45,
+         },
+         {
+            key: 'crush',
+            label: 'Crush',
+            type: 'range',
+            min: 0,
+            max: 0.6,
+            step: 0.01,
+            defaultValue: 0.2,
+         },
+         {
+            key: 'mix',
+            label: 'Mix',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 1,
+            // Under half this reads as a mild sharpen; the signal only falls
+            // apart once it has mostly replaced the frame.
+            moshMin: 0.65,
+         },
+      ],
+   },
+   {
       id: 'swirl',
       name: 'Swirl',
       params: [
