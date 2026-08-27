@@ -230,10 +230,11 @@
 	}
 
 	/* On the thumb rather than beside it: the rail is a scrolling strip, and a
-	   second full-width control per source would halve how many fit. */
+	   second full-width control per source would halve how many fit. Bottom
+	   corner, because the top-right one belongs to the kind and base badges. */
 	.rail-edit {
 		position: absolute;
-		top: 2px;
+		top: 18px;
 		right: 2px;
 		display: flex;
 		padding: 2px;

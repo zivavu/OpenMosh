@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X } from 'lucide-svelte';
+	import { Pause, Play, X } from 'lucide-svelte';
 	import {
 		DEFAULT_CHROMA_KEY,
 		type ChromaKey,
@@ -19,14 +19,30 @@
 	let { source, edit, onChange, onClose }: Props = $props();
 
 	/** Long edge of the preview. Small enough that keying every pixel in JS on
-	 * each slider tick stays under a frame. */
+	 * every played frame stays well inside the frame budget. */
 	const PREVIEW_MAX = 360;
 
 	let key = $derived(edit.chromaKey);
 	let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);
-	/** The decoded frame, at preview size — keyed from this every redraw. */
-	let frame = $state<HTMLCanvasElement | null>(null);
 	let loadError = $state<string | null>(null);
+	/** True once the media is decoded and its first frame is on the canvas. */
+	let ready = $state(false);
+
+	// Video transport. A duration of 0 covers both "still an image" and "not
+	// loaded yet", which are the same thing as far as the controls care.
+	let duration = $state(0);
+	let currentTime = $state(0);
+	let playing = $state(false);
+
+	/**
+	 * The current frame, unkeyed, at preview size. Everything reads from here:
+	 * the keyed preview is drawn from it, and the eyedropper samples it — off
+	 * the keyed canvas the dropper would keep landing on cut-out pixels.
+	 */
+	let raw: HTMLCanvasElement | null = null;
+	let rawCtx: CanvasRenderingContext2D | null = null;
+	/** Where frames come from. An image draws once; a video every frame. */
+	let media: HTMLImageElement | HTMLVideoElement | null = null;
 
 	function setKey<K extends keyof ChromaKey>(prop: K, value: ChromaKey[K]) {
 		onChange({ ...edit, chromaKey: { ...key, [prop]: value } });
@@ -41,43 +57,50 @@
 		});
 	}
 
-	// ── Source frame ─────────────────────────────────────────────────────────
-	// One decode per source, held while the dialog is open. A still is enough:
-	// the background is the part of the shot that doesn't move.
+	// ── Loading ──────────────────────────────────────────────────────────────
 	$effect(() => {
 		const src = source;
 		let cancelled = false;
 		loadError = null;
-		loadFrame(src)
-			.then((f) => {
-				if (!cancelled) frame = f;
+		ready = false;
+		load(src)
+			.then(() => {
+				if (cancelled) return;
+				ready = true;
+				grabFrame();
+				paint();
 			})
 			.catch(() => {
 				if (!cancelled) loadError = 'Could not read this media.';
 			});
 		return () => {
 			cancelled = true;
+			playing = false;
+			if (media && 'pause' in media) media.pause();
+			media = null;
 		};
 	});
 
-	async function loadFrame(src: SequenceSource): Promise<HTMLCanvasElement> {
+	async function load(src: SequenceSource): Promise<void> {
 		const el =
 			src.kind === 'video'
-				? await videoFrame(src.objectUrl)
-				: await imageEl(src.objectUrl);
+				? await videoElement(src.objectUrl)
+				: await imageElement(src.objectUrl);
 		const w = 'videoWidth' in el ? el.videoWidth : el.naturalWidth;
 		const h = 'videoHeight' in el ? el.videoHeight : el.naturalHeight;
 		if (!w || !h) throw new Error('no dimensions');
+		media = el;
+		duration =
+			'duration' in el && Number.isFinite(el.duration) ? el.duration : 0;
+		currentTime = 'currentTime' in el ? el.currentTime : 0;
 		const k = Math.min(PREVIEW_MAX / w, PREVIEW_MAX / h, 1);
-		const c = document.createElement('canvas');
-		c.width = Math.max(1, Math.round(w * k));
-		c.height = Math.max(1, Math.round(h * k));
-		c.getContext('2d')!.drawImage(el, 0, 0, c.width, c.height);
-		if ('pause' in el) el.pause();
-		return c;
+		raw = document.createElement('canvas');
+		raw.width = Math.max(1, Math.round(w * k));
+		raw.height = Math.max(1, Math.round(h * k));
+		rawCtx = raw.getContext('2d', { willReadFrequently: true });
 	}
 
-	function imageEl(url: string): Promise<HTMLImageElement> {
+	function imageElement(url: string): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
 			const img = new Image();
 			img.onload = () => resolve(img);
@@ -86,23 +109,69 @@
 		});
 	}
 
-	function videoFrame(url: string): Promise<HTMLVideoElement> {
+	function videoElement(url: string): Promise<HTMLVideoElement> {
 		return new Promise((resolve, reject) => {
 			const v = document.createElement('video');
+			// Silent by design: this is a colour-picking dialog, and the editor's
+			// own preview may well be playing behind it.
 			v.muted = true;
+			v.playsInline = true;
 			v.preload = 'auto';
 			v.onerror = () => reject(new Error('decode failed'));
-			v.onseeked = () => resolve(v);
+			// Repaints a scrub while paused; during playback the loop owns the
+			// frame and this just lands on top of the same picture.
+			v.onseeked = () => {
+				grabFrame();
+				paint();
+			};
+			v.onended = () => (playing = false);
 			v.onloadeddata = () => {
 				// Not frame 0: some encodes open on a black or faded lead-in, which
 				// keys to nothing useful.
 				v.currentTime = Math.min(0.1, (v.duration || 1) / 2);
+				resolve(v);
 			};
 			v.src = url;
 		});
 	}
 
-	// ── Preview ──────────────────────────────────────────────────────────────
+	// ── Playback ─────────────────────────────────────────────────────────────
+	$effect(() => {
+		if (!playing || !ready) return;
+		const v = media;
+		if (!v || !('play' in v)) return;
+		void v.play().catch(() => (playing = false));
+		let raf = requestAnimationFrame(function tick() {
+			currentTime = v.currentTime;
+			grabFrame();
+			paint();
+			raf = requestAnimationFrame(tick);
+		});
+		return () => {
+			cancelAnimationFrame(raf);
+			v.pause();
+		};
+	});
+
+	function seekTo(t: number) {
+		const v = media;
+		if (!v || !('currentTime' in v)) return;
+		currentTime = t;
+		v.currentTime = t;
+	}
+
+	function formatTime(t: number): string {
+		const s = Math.max(0, Math.floor(t));
+		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+	}
+
+	// ── Drawing ──────────────────────────────────────────────────────────────
+	/** Copy whatever the media is showing right now into the raw buffer. */
+	function grabFrame() {
+		if (!media || !raw || !rawCtx) return;
+		rawCtx.drawImage(media, 0, 0, raw.width, raw.height);
+	}
+
 	// The same chroma-distance test the placement shader runs, in JS. Two copies
 	// of one rule, so keep them in step — see LAYER_TRANSFORM_FRAG.
 	function chroma(r: number, g: number, b: number): [number, number] {
@@ -112,46 +181,50 @@
 		];
 	}
 
-	$effect(() => {
+	/** Raw buffer → visible canvas, with the key applied. */
+	function paint() {
 		const canvas = canvasEl;
-		const f = frame;
-		// Read every knob so the preview redraws when any of them moves.
-		const { enabled, color, threshold, smoothing } = key;
-		if (!canvas || !f) return;
-		canvas.width = f.width;
-		canvas.height = f.height;
-		const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+		if (!canvas || !raw || !rawCtx) return;
+		if (canvas.width !== raw.width) canvas.width = raw.width;
+		if (canvas.height !== raw.height) canvas.height = raw.height;
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		ctx.drawImage(f, 0, 0);
-		if (!enabled || threshold <= 0) return;
-		const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+		if (!key.enabled || key.threshold <= 0) {
+			ctx.drawImage(raw, 0, 0);
+			return;
+		}
+		const img = rawCtx.getImageData(0, 0, raw.width, raw.height);
 		const px = img.data;
-		const [kx, ky] = chroma(color.r, color.g, color.b);
-		const lo = threshold;
-		const hi = threshold + Math.max(smoothing, 0.0001);
+		const [kx, ky] = chroma(key.color.r, key.color.g, key.color.b);
+		const lo = key.threshold;
+		const hi = lo + Math.max(key.smoothing, 0.0001);
 		for (let i = 0; i < px.length; i += 4) {
 			const [cx, cy] = chroma(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255);
-			const d = Math.hypot(cx - kx, cy - ky);
+			const dx = cx - kx;
+			const dy = cy - ky;
+			const d = Math.sqrt(dx * dx + dy * dy);
 			const t = Math.min(1, Math.max(0, (d - lo) / (hi - lo)));
 			px[i + 3] *= t * t * (3 - 2 * t);
 		}
 		ctx.putImageData(img, 0, 0);
+	}
+
+	// Repaint when a knob moves. Playback repaints every frame on its own, so
+	// this only has to cover a paused preview.
+	$effect(() => {
+		// Read every knob, so any of them moving re-runs this.
+		void [key.enabled, key.color, key.threshold, key.smoothing];
+		if (ready && !playing) paint();
 	});
 
-	/** Sample the untouched frame, not the keyed canvas — picking off a preview
-	 * that has already cut the colour out would sample transparent pixels. */
 	function pickAt(e: MouseEvent) {
 		const canvas = canvasEl;
-		const f = frame;
-		if (!canvas || !f) return;
+		if (!canvas || !raw || !rawCtx) return;
 		const rect = canvas.getBoundingClientRect();
-		const x = Math.floor(((e.clientX - rect.left) / rect.width) * canvas.width);
-		const y = Math.floor(((e.clientY - rect.top) / rect.height) * canvas.height);
-		const probe = document.createElement('canvas');
-		probe.width = 1;
-		probe.height = 1;
-		probe.getContext('2d')!.drawImage(f, -x, -y);
-		const [r, g, b] = probe.getContext('2d')!.getImageData(0, 0, 1, 1).data;
+		const x = Math.floor(((e.clientX - rect.left) / rect.width) * raw.width);
+		const y = Math.floor(((e.clientY - rect.top) / rect.height) * raw.height);
+		const [r, g, b] = rawCtx.getImageData(x, y, 1, 1).data;
 		setColor(r / 255, g / 255, b / 255);
 	}
 
@@ -181,9 +254,18 @@
 	}
 
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key !== 'Escape') return;
-		e.preventDefault();
-		onClose();
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			onClose();
+			return;
+		}
+		// Space is the transport here as it is everywhere else — except while a
+		// control has focus, where it means "press this".
+		if (e.key === ' ' && duration > 0) {
+			if ((e.target as HTMLElement | null)?.closest('button, input')) return;
+			e.preventDefault();
+			playing = !playing;
+		}
 	}
 </script>
 
@@ -200,7 +282,12 @@
 				Edit media
 				<span class="dialog-src">{source.name}</span>
 			</h3>
-			<button class="close-btn" onclick={onClose} title="Close (Esc)" aria-label="Close">
+			<button
+				class="close-btn"
+				onclick={onClose}
+				title="Close (Esc)"
+				aria-label="Close"
+			>
 				<X size={14} />
 			</button>
 		</div>
@@ -208,7 +295,7 @@
 		<div class="preview">
 			{#if loadError}
 				<p class="warn">{loadError}</p>
-			{:else if !frame}
+			{:else if !ready}
 				<p class="warn">Reading media…</p>
 			{:else}
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -217,6 +304,32 @@
 				></canvas>
 			{/if}
 		</div>
+
+		{#if duration > 0}
+			<!-- Videos get a transport: the background to key out is rarely the
+			     same colour all the way through, so the whole clip has to be
+			     watchable with the key live on it. -->
+			<div class="transport">
+				<button
+					class="play-btn"
+					onclick={() => (playing = !playing)}
+					disabled={!ready}
+					title={playing ? 'Pause (Space)' : 'Play (Space)'}
+					aria-label={playing ? 'Pause' : 'Play'}
+				>
+					{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
+				</button>
+				<RangeSlider
+					value={Math.min(currentTime, duration)}
+					min={0}
+					max={duration}
+					step={0.01}
+					disabled={!ready}
+					oninput={seekTo}
+				/>
+				<span class="val">{formatTime(currentTime)}</span>
+			</div>
+		{/if}
 
 		<div class="rows">
 			<div class="row">
@@ -277,7 +390,6 @@
 		</div>
 	</div>
 </div>
-
 <style>
 	.edit-overlay {
 		position: fixed;
@@ -378,6 +490,32 @@
 		padding: 1rem;
 		font-size: 0.7rem;
 		color: var(--text-3);
+	}
+
+	.transport {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: -0.35rem;
+	}
+
+	.play-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
+		background: rgba(255, 255, 255, 0.04);
+		color: var(--text-2);
+		cursor: pointer;
+	}
+
+	.play-btn:hover {
+		background: rgba(255, 255, 255, 0.09);
+		color: var(--text);
 	}
 
 	.rows {
