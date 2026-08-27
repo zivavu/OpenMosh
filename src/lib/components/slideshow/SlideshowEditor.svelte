@@ -1007,6 +1007,9 @@
 				getImage: getCachedImage,
 				getSampler: (slide) => videoSamplers.get(slide.id),
 			},
+			// Preview already ignores the `ready` promise; this stops the slide's
+			// decoder stalling inside it too.
+			waitForFrames: false,
 		});
 		previewDriver = driver;
 		// Raw reference of the chain last handed to `previewEffects`; comparing

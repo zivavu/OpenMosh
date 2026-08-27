@@ -136,8 +136,13 @@ export class SlideVideoSampler {
    * caller's clock rather than of how many times it happened to call, so a
    * stalled frame, a paused preview and a playhead dropped into the middle of a
    * segment all land on the same frame the export will write.
+   *
+   * `wait` is what separates the two callers. An export needs the exact frame
+   * and can afford to stall for it. A preview must not: the lane already has a
+   * frame on screen, and blocking for a newer one only costs the render loop
+   * the frame it is on. See `#take`.
    */
-  async at(t: number): Promise<VideoFrame | null> {
+  async at(t: number, wait = true): Promise<VideoFrame | null> {
     if (this.#disposed || this.duration <= 0) return null;
     if (this.#busy) return null;
     this.#busy = true;
@@ -151,14 +156,20 @@ export class SlideVideoSampler {
         this.#delivered = false;
         this.#queue.start(want);
       }
-      return await this.#take(want);
+      return await this.#take(want, wait);
     } finally {
       this.#busy = false;
     }
   }
 
-  /** The newest queued frame due at `t`; waits for decode if none has landed. */
-  async #take(t: number): Promise<VideoFrame | null> {
+  /**
+   * The newest queued frame due at `t`. Waits for decode if none has landed
+   * and `wait` allows it — a caller that already has a frame on screen keeps
+   * it instead, so a source slower than the display doesn't drag the render
+   * loop down to its own rate. A lane that has never shown anything still
+   * waits either way: null there means a blank frame, not a held one.
+   */
+  async #take(t: number, wait: boolean): Promise<VideoFrame | null> {
     while (!this.#disposed) {
       const due = this.#queue.takeDue(t);
       if (due) {
@@ -174,6 +185,7 @@ export class SlideVideoSampler {
         return toVideoFrame(this.#queue.takeHead()!);
       }
       if (this.#queue.done) return null;
+      if (!wait && this.#delivered) return null;
       await sleep(5);
     }
     return null;

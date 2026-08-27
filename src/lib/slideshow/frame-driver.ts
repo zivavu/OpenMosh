@@ -24,6 +24,12 @@ export interface SlideshowFrameDriverOptions {
   /** Read per frame: the preview's renderer is rebuilt on WebGL context loss. */
   getRenderer: () => GlRenderer;
   sources: SlideshowFrameSources;
+  /**
+   * Whether a video slide's advance may stall waiting for its decoder. Export
+   * needs the exact frame; preview holds the one already on screen instead, so
+   * a slide slower than the display doesn't pace the render loop.
+   */
+  waitForFrames?: boolean;
 }
 
 export interface SlideshowFrame {
@@ -52,6 +58,7 @@ export class SlideshowFrameDriver {
   #getMoshOptions: () => MoshOptions;
   #getRenderer: () => GlRenderer;
   #sources: SlideshowFrameSources;
+  #waitForFrames: boolean;
 
   #smoothState: { effects: EffectInstance[] };
   #effects: EffectInstance[];
@@ -68,6 +75,7 @@ export class SlideshowFrameDriver {
     this.#getMoshOptions = opts.getMoshOptions;
     this.#getRenderer = opts.getRenderer;
     this.#sources = opts.sources;
+    this.#waitForFrames = opts.waitForFrames ?? true;
     this.#smoothState = { effects: cloneEffects(opts.baseEffects) };
     this.#effects = cloneEffects(opts.baseEffects);
   }
@@ -141,7 +149,7 @@ export class SlideshowFrameDriver {
     // The clip runs against the song rather than against its own appearances:
     // a slide that comes back shows where the track has got to, and the same
     // beat always shows the same frame.
-    return sampler.at(time).then((frame) => {
+    return sampler.at(time, this.#waitForFrames).then((frame) => {
       if (!frame) return;
       if (!this.#disposed) this.#getRenderer().updateSourceFrame(frame);
       frame.close();

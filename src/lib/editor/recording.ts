@@ -218,23 +218,34 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     if (toAlt) renderer.updateAltSourceFrame(videoEl!);
   };
 
-  // `upload` false still pulls a sample: the generator was built to yield one
-  // timestamp per recorder frame, so skipping a pull would desynchronise every
-  // later frame from `sourceTimeAt`.
-  const pullPrimaryFrame = async (upload: boolean, toAlt = false) => {
-    const { value: sample } = await videoFrames!.next();
+  // Split from the upload so the pull can be started before the frame knows
+  // whether it wants the result: it has to happen either way (see below), and
+  // starting it early overlaps it with the segment sources' own decoding.
+  const pullPrimarySample = () => videoFrames!.next();
+
+  // `upload` false still consumes the sample: the generator was built to yield
+  // one timestamp per recorder frame, so skipping a pull would desynchronise
+  // every later frame from `sourceTimeAt`.
+  const uploadPrimarySample = (
+    result: IteratorResult<import("mediabunny").VideoSample | null, void>,
+    upload: boolean,
+    toAlt = false,
+  ) => {
+    const sample = result.value;
     // null/done: no frame at this timestamp — keep the last uploaded one,
     // matching the seek path's freeze-frame behavior.
-    if (sample) {
-      if (upload || toAlt) {
-        const frame = sample.toVideoFrame();
-        if (upload) renderer.updateSourceFrame(frame);
-        if (toAlt) renderer.updateAltSourceFrame(frame);
-        frame.close();
-      }
-      sample.close();
+    if (!sample) return;
+    if (upload || toAlt) {
+      const frame = sample.toVideoFrame();
+      if (upload) renderer.updateSourceFrame(frame);
+      if (toAlt) renderer.updateAltSourceFrame(frame);
+      frame.close();
     }
+    sample.close();
   };
+
+  const pullPrimaryFrame = async (upload: boolean, toAlt = false) =>
+    uploadPrimarySample(await pullPrimarySample(), upload, toAlt);
   const decodeBeforeRender = () => pullPrimaryFrame(true);
 
   // Sequence mode: resolve effects per frame from the segment list. With an
@@ -329,6 +340,15 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
   const sequenceBeforeRender = async (frameIndex: number, time: number) => {
     const t = seqTimeAt(time);
 
+    // Started before the segment sources so the two decodes overlap. The
+    // generator queues next() calls, so this is still exactly one pull per
+    // exported frame — only the upload has to wait on the flags below.
+    const primaryPull =
+      isVideo && videoEl && videoFrames ? pullPrimarySample() : null;
+    // Nothing awaits it if a source advance throws first; keep that from
+    // surfacing as an unhandled rejection.
+    if (primaryPull) void primaryPull.catch(() => {});
+
     // A non-primary source owns this frame; the primary is still pulled (but
     // not uploaded) so its decode stays in lockstep with the frame clock.
     let primaryOwnsFrame = true;
@@ -344,20 +364,28 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       // Seconds into the clip, not a per-frame step: the same rule the preview
       // follows, so an export writes the frames that were previewed.
       const out = outgoingSourceAt(t, segSourceId);
-      primaryOwnsFrame = !(await exportSources.advance(
-        segSourceId,
-        Math.max(0, t - (seg?.startTime ?? 0)),
-      ));
-      primaryIsOutgoing = !(await exportSources.advanceOutgoing(
-        out?.id ?? null,
-        out?.time ?? 0,
-      ));
+      // Concurrent: outgoingSourceAt returns null when the outgoing source is
+      // the incoming one, so these two can never contend for a single sampler,
+      // and they write different textures.
+      const [incomingOwned, outgoingOwned] = await Promise.all([
+        exportSources.advance(
+          segSourceId,
+          Math.max(0, t - (seg?.startTime ?? 0)),
+        ),
+        exportSources.advanceOutgoing(out?.id ?? null, out?.time ?? 0),
+      ]);
+      primaryOwnsFrame = !incomingOwned;
+      primaryIsOutgoing = !outgoingOwned;
     }
 
     // Still images have no per-frame source to advance
     if (isVideo && videoEl) {
-      if (videoFrames) {
-        await pullPrimaryFrame(primaryOwnsFrame, primaryIsOutgoing);
+      if (primaryPull) {
+        uploadPrimarySample(
+          await primaryPull,
+          primaryOwnsFrame,
+          primaryIsOutgoing,
+        );
       } else if (primaryOwnsFrame || primaryIsOutgoing) {
         await seekBeforeRender(frameIndex, time, primaryOwnsFrame, primaryIsOutgoing);
       }

@@ -75,7 +75,9 @@ export class MediaLayerDriver {
       const sampler = this.#samplerFor(layer.key, src.id, src.file);
       if (!sampler) continue;
       this.#uploaded.set(layer.key, src.id);
-      void sampler.at(layer.sourceTime).then((frame) => {
+      // Non-blocking: a lane whose decoder has nothing new keeps the frame
+      // already on its texture rather than making every other lane wait on it.
+      void sampler.at(layer.sourceTime, false).then((frame) => {
         if (!frame) return;
         if (!this.#disposed) {
           this.#getRenderer()?.updateLayerFrame(layer.key, frame);

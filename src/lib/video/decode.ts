@@ -80,8 +80,11 @@ export function toVideoFrame(sample: VideoSample): VideoFrame {
  * A decode pump feeding a bounded ready-queue, shared by the editor's preview
  * player and the slideshow's slide sampler.
  *
- * Decoding runs flat-out into the queue and parks only while it is full — no
- * timer-based pacing, which can't keep up when frames come due every few ms.
+ * Decoding runs flat-out into the queue and parks only while it is full, woken
+ * by the next consumer take rather than by a timer. A poll interval here is a
+ * floor on how fast the queue can refill: at 165 Hz a consumer drains a
+ * QUEUE_DEPTH queue in well under the poll, so the decoder ends up idling on a
+ * timer while the preview starves — with no CPU or GPU load to show for it.
  * Consumers pull synchronously from the queue on their own cadence.
  */
 export class SampleQueue {
@@ -95,6 +98,8 @@ export class SampleQueue {
   #disposed = false;
   /** Timestamp of the newest decoded sample — how far ahead the decoder is. */
   #head = 0;
+  /** Resolver for a pump parked on a full queue; null when it isn't parked. */
+  #room: (() => void) | null = null;
 
   constructor(sink: VideoSampleSink, depth = QUEUE_DEPTH) {
     this.#sink = sink;
@@ -135,23 +140,37 @@ export class SampleQueue {
       chosen?.close();
       chosen = this.#samples.shift()!;
     }
+    if (chosen) this.#wake();
     return chosen;
   }
 
   /** The queue head regardless of its timestamp; null when the queue is empty. */
   takeHead(): VideoSample | null {
-    return this.#samples.shift() ?? null;
+    const sample = this.#samples.shift() ?? null;
+    if (sample) this.#wake();
+    return sample;
   }
 
   clear() {
     for (const sample of this.#samples) sample.close();
     this.#samples = [];
+    // Also covers cancellation: a parked pump has to run again to notice its
+    // generation was retired, close the sample it is holding and return.
+    this.#wake();
   }
 
   dispose() {
     this.#disposed = true;
     this.#genId++;
     this.clear();
+  }
+
+  /** Let a parked pump re-check whether there is room to decode into. */
+  #wake() {
+    const resume = this.#room;
+    if (!resume) return;
+    this.#room = null;
+    resume();
   }
 
   async #pump(startTime: number) {
@@ -165,7 +184,10 @@ export class SampleQueue {
           !this.#disposed &&
           this.#samples.length >= this.#depth
         ) {
-          await sleep(10);
+          // Parked until a consumer frees a slot. A paused preview leaves this
+          // waiting indefinitely, which is the point — no background timer per
+          // idle lane — and clear()/dispose() both wake it.
+          await new Promise<void>((resolve) => (this.#room = resolve));
         }
         if (id !== this.#genId || this.#disposed) {
           sample.close();

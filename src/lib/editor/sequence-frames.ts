@@ -71,7 +71,9 @@ export class SequenceFrameDriver {
     const sampler = this.#registry.sampler(src.id);
     if (sampler) {
       this.#currentId = src.id;
-      void sampler.at(sourceTime).then((frame) => {
+      // Non-blocking — see MediaLayerDriver. The export twin
+      // (sequence-export-sources.ts) is the one that waits.
+      void sampler.at(sourceTime, false).then((frame) => {
         if (!frame) return;
         if (!this.#disposed) {
           this.#getRenderer()?.updateSourceFrame(frame);
@@ -125,7 +127,7 @@ export class SequenceFrameDriver {
     // Measured from the *outgoing* segment's start, so the clip carries on past
     // the boundary instead of restarting under the fade.
     this.#outgoingId = src.id;
-    void sampler.at(sourceTime).then((frame) => {
+    void sampler.at(sourceTime, false).then((frame) => {
       if (!frame) return;
       if (!this.#disposed) {
         this.#getRenderer()?.updateAltSourceFrame(frame);

@@ -53,36 +53,42 @@ export async function createMediaExportLayers(
 
   return {
     async advance(layers) {
-      for (const layer of layers) {
-        const src = byId.get(layer.sourceId);
-        if (!src) continue;
+      // Run the lanes together rather than one after another. Each holds its
+      // own decoder and writes its own texture, so nothing here is ordered —
+      // and awaiting them in series made an exported frame cost the sum of
+      // every lane's decode instead of the slowest one.
+      await Promise.all(
+        layers.map(async (layer) => {
+          const src = byId.get(layer.sourceId);
+          if (!src) return;
 
-        if (src.kind === "image") {
-          // Same as the preview driver: the renderer collects a lane's texture
-          // whenever the lane stops resolving, so the latch alone would skip
-          // the re-upload after a gap between clips.
-          if (
-            uploaded.get(layer.key) === src.id &&
-            renderer.hasLayerTexture(layer.key)
-          ) {
-            continue;
+          if (src.kind === "image") {
+            // Same as the preview driver: the renderer collects a lane's
+            // texture whenever the lane stops resolving, so the latch alone
+            // would skip the re-upload after a gap between clips.
+            if (
+              uploaded.get(layer.key) === src.id &&
+              renderer.hasLayerTexture(layer.key)
+            ) {
+              return;
+            }
+            const img = images.get(src.id);
+            if (!img) return;
+            renderer.updateLayerImage(layer.key, img);
+            uploaded.set(layer.key, src.id);
+            return;
           }
-          const img = images.get(src.id);
-          if (!img) continue;
-          renderer.updateLayerImage(layer.key, img);
-          uploaded.set(layer.key, src.id);
-          continue;
-        }
 
-        const sampler = samplers.get(layer.key);
-        if (!sampler) continue;
-        uploaded.set(layer.key, src.id);
-        const frame = await sampler.at(layer.sourceTime);
-        if (frame) {
-          renderer.updateLayerFrame(layer.key, frame);
-          frame.close();
-        }
-      }
+          const sampler = samplers.get(layer.key);
+          if (!sampler) return;
+          uploaded.set(layer.key, src.id);
+          const frame = await sampler.at(layer.sourceTime);
+          if (frame) {
+            renderer.updateLayerFrame(layer.key, frame);
+            frame.close();
+          }
+        }),
+      );
     },
     dispose() {
       for (const s of samplers.values()) s.dispose();
