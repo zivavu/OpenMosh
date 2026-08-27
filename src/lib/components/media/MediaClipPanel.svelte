@@ -9,7 +9,6 @@
 		type MediaLane,
 		type MediaStyle,
 	} from '../../media';
-	import { CLIP_FADE_OPTIONS } from '../../timeline/clips';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 	import type { SpectrumData } from '../../types';
 	import type { AudioResponse } from '../../audio/auto-range';
@@ -91,7 +90,7 @@
 	/** Zero means no ramp at all, which the clip carries as an absent field. */
 	function setFade(sec: number) {
 		if (!clip) return;
-		onBeforeEdit?.();
+		onBeforeEdit?.(`mc-fade-${clip.id}`);
 		onClipChange({ ...clip, fadeSec: sec > 0 ? sec : undefined });
 	}
 
@@ -162,19 +161,27 @@
 			</div>
 		{/if}
 
-		<div class="row" title="Ramp this layer in and out at the clip's edges">
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Ramp this layer in and out at the clip's edges. Double-click to clear."
+			ondblclick={() => setFade(0)}
+		>
 			<label for="mc-fade">Fade</label>
-			<select
+			<!-- Curved: the ramps worth reaching for are fractions of a second, and
+			     a linear 0–10 track would bury all of them in its first pixels. -->
+			<RangeSlider
 				id="mc-fade"
-				value={String(clip.fadeSec ?? 0)}
-				onchange={(e) =>
-					setFade(Number((e.currentTarget as HTMLSelectElement).value))}
-			>
-				<option value="0">none</option>
-				{#each CLIP_FADE_OPTIONS as sec (sec)}
-					<option value={String(sec)}>{sec}s</option>
-				{/each}
-			</select>
+				value={clip.fadeSec ?? 0}
+				min={0}
+				max={10}
+				step={0.05}
+				curve={2}
+				oninput={setFade}
+			/>
+			<span class="val">
+				{#if clip.fadeSec}{clip.fadeSec.toFixed(2)}s{:else}none{/if}
+			</span>
 		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
