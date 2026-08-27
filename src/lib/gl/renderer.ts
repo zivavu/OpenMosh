@@ -5,7 +5,7 @@ import {
   textSignature,
   type ResolvedTextLayer,
 } from "../text";
-import type { MediaStyle, ResolvedMediaLayer } from "../media";
+import type { ChromaKey, MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
 import {
   CAPTION_EFFECT_ID,
   captionSignature,
@@ -314,6 +314,8 @@ export class GlRenderer {
     null;
   /** Uploaded (pre-effect) media per media lane, keyed by lane id. */
   private mediaLayerTextures = new Map<string, OverlayTexture>();
+  /** Per-source edits, keyed by source id. See setSourceEdits. */
+  private sourceEdits = new Map<string, SourceEdit>();
   /** Drawn (pre-effect) text per clip, keyed by clip id. */
   private textLayerTextures = new Map<string, OverlayTexture>();
   private textLayerCanvas: HTMLCanvasElement | null = null;
@@ -525,6 +527,15 @@ export class GlRenderer {
   // A layer's frame is uploaded by the caller (the preview registry or the
   // export's twin), keyed by lane — a lane shows one clip at a time, so one
   // texture per lane is all it can ever need.
+
+  /**
+   * Per-source edits, pushed in whenever they change rather than carried on
+   * each frame's resolved layers: the edit belongs to the media, so it is the
+   * same for every lane drawing it and for the export driver as well.
+   */
+  setSourceEdits(edits: Map<string, SourceEdit>) {
+    this.sourceEdits = edits;
+  }
 
   /** True once this lane has a frame to draw. */
   hasLayerTexture(key: string): boolean {
@@ -1657,6 +1668,7 @@ export class GlRenderer {
       const entry = this.mediaLayerTextures.get(layer.key);
       if (!entry || entry.w <= 0) continue;
       const box = this.layerBox(layer.style, entry.w, entry.h);
+      const key = this.sourceEdits.get(layer.sourceId)?.chromaKey;
       const hasChain = layer.effects.some((e) => e.enabled);
       const out = this.ensureLayerBuffer(bufOffset + prepared.length);
       if (!out) continue;
@@ -1665,7 +1677,7 @@ export class GlRenderer {
       // spot; without one it is the layer itself and has to survive the frame.
       const placedFBO = hasChain ? this.ensureMediaScratch()?.fbo : out.fbo;
       if (!placedFBO) continue;
-      this.drawLayerPlacement(entry.tex, box, placedFBO);
+      this.drawLayerPlacement(entry.tex, box, placedFBO, key);
 
       let tex = hasChain ? this.mediaScratch!.tex : out.tex;
       if (hasChain) {
@@ -1731,11 +1743,13 @@ export class GlRenderer {
     if (prog.uniforms["u_rot"]) gl.uniform1f(prog.uniforms["u_rot"], box.rot);
   }
 
-  /** Draw a layer's media into a full-frame buffer at its placement. */
+  /** Draw a layer's media into a full-frame buffer at its placement, keying
+   * out its background colour on the way if the lane asks for it. */
   private drawLayerPlacement(
     tex: WebGLTexture,
     box: LayerBox,
     targetFBO: WebGLFramebuffer,
+    key?: ChromaKey,
   ) {
     const gl = this.gl;
     const prog = this.layerTransformProgram;
@@ -1744,6 +1758,24 @@ export class GlRenderer {
     gl.viewport(0, 0, this.imgW, this.imgH);
     gl.useProgram(prog.program);
     if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+    const keyOn = !!key?.enabled;
+    if (prog.uniforms["u_keyColor"]) {
+      gl.uniform3f(
+        prog.uniforms["u_keyColor"],
+        key?.color.r ?? 0,
+        key?.color.g ?? 0,
+        key?.color.b ?? 0,
+      );
+    }
+    if (prog.uniforms["u_keyThreshold"]) {
+      gl.uniform1f(
+        prog.uniforms["u_keyThreshold"],
+        keyOn ? Math.max(key!.threshold, 0.0001) : 0,
+      );
+    }
+    if (prog.uniforms["u_keySmooth"]) {
+      gl.uniform1f(prog.uniforms["u_keySmooth"], key?.smoothing ?? 0);
+    }
     this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);

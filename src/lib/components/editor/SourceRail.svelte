@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { ChevronDown, ChevronUp, Play, Plus } from 'lucide-svelte';
+	import { ChevronDown, ChevronUp, Play, Plus, SlidersHorizontal } from 'lucide-svelte';
+	import { DEFAULT_SOURCE_EDIT, type SourceEdit } from '../../media';
+	import SourceEditor from './SourceEditor.svelte';
 	import { readRaw, writeRaw } from '../../storage';
 	import {
 		SOURCE_DND_TYPE,
@@ -19,6 +21,9 @@
 		selectedSourceId?: string | null;
 		onAssign: (sourceId: string) => void;
 		onAdd: () => void;
+		/** Per-source edits, keyed by source id. Sparse: only edited media. */
+		edits?: Record<string, SourceEdit>;
+		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
 	}
 
 	let {
@@ -28,12 +33,22 @@
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
+		edits = {},
+		onEditChange,
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-seq-rail-open';
 	let open = $state(readRaw(OPEN_KEY) !== '0');
 
 	let assignable = $derived(selectedCount > 0);
+
+	/** Source whose editor is open; null when the dialog is closed. */
+	let editingId = $state<string | null>(null);
+	let editingSource = $derived(sources.find((s) => s.id === editingId) ?? null);
+
+	function isEdited(src: SequenceSource): boolean {
+		return !!edits[src.id]?.chromaKey.enabled;
+	}
 
 	function toggle() {
 		open = !open;
@@ -70,38 +85,51 @@
 	{#if open}
 		<div class="rail-items">
 			{#each sources as src, i (src.id)}
-				<button
-					class="rail-item"
-					class:playing={src.id === selectedSourceId}
-					class:assignable
-					draggable="true"
-					ondragstart={(e) => onThumbDragStart(e, src)}
-					onclick={() => assignable && onAssign(src.id)}
-					title={assignable
-						? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one`
-						: `${src.name} — drag onto a segment to play it there`}
-				>
-					{#if src.thumbUrl}
-						<img
-							class="rail-thumb"
-							src={src.thumbUrl}
-							alt=""
-							loading="lazy"
-							decoding="async"
-							draggable="false"
-						/>
-					{:else}
-						<div class="rail-thumb rail-thumb-empty"></div>
+				<div class="rail-slot">
+					<button
+						class="rail-item"
+						class:playing={src.id === selectedSourceId}
+						class:assignable
+						draggable="true"
+						ondragstart={(e) => onThumbDragStart(e, src)}
+						onclick={() => assignable && onAssign(src.id)}
+						title={assignable
+							? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one`
+							: `${src.name} — drag onto a segment to play it there`}
+					>
+						{#if src.thumbUrl}
+							<img
+								class="rail-thumb"
+								src={src.thumbUrl}
+								alt=""
+								loading="lazy"
+								decoding="async"
+								draggable="false"
+							/>
+						{:else}
+							<div class="rail-thumb rail-thumb-empty"></div>
+						{/if}
+						<span class="rail-n" style:background={sourceColor(i + 1)}>{i + 1}</span>
+						{#if src.kind === 'video'}
+							<span class="rail-kind"><Play size={7} fill="currentColor" /></span>
+						{/if}
+						{#if src.id === primarySourceId}
+							<span class="rail-base">B</span>
+						{/if}
+						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
+					</button>
+					{#if onEditChange}
+						<button
+							class="rail-edit"
+							class:on={isEdited(src)}
+							onclick={() => (editingId = src.id)}
+							title="Edit “{src.name}” — remove its background"
+							aria-label="Edit {src.name}"
+						>
+							<SlidersHorizontal size={10} />
+						</button>
 					{/if}
-					<span class="rail-n" style:background={sourceColor(i + 1)}>{i + 1}</span>
-					{#if src.kind === 'video'}
-						<span class="rail-kind"><Play size={7} fill="currentColor" /></span>
-					{/if}
-					{#if src.id === primarySourceId}
-						<span class="rail-base">B</span>
-					{/if}
-					<span class="rail-name">{shortSourceName(src.name, 10)}</span>
-				</button>
+				</div>
 			{/each}
 			<button class="rail-add" onclick={onAdd} title="Add images or videos">
 				<Plus size={13} />
@@ -109,6 +137,15 @@
 		</div>
 	{/if}
 </div>
+
+{#if editingSource && onEditChange}
+	<SourceEditor
+		source={editingSource}
+		edit={edits[editingSource.id] ?? DEFAULT_SOURCE_EDIT}
+		onChange={(edit) => onEditChange(editingSource!.id, edit)}
+		onClose={() => (editingId = null)}
+	/>
+{/if}
 
 <style>
 	/* Sits between the preview and the timeline so a source can be dragged onto
@@ -160,6 +197,11 @@
 		scrollbar-width: thin;
 	}
 
+	.rail-slot {
+		position: relative;
+		flex-shrink: 0;
+	}
+
 	.rail-item {
 		position: relative;
 		flex-shrink: 0;
@@ -185,6 +227,39 @@
 	.rail-item.playing {
 		border-color: var(--mosh);
 		box-shadow: inset 0 0 0 1px var(--mosh);
+	}
+
+	/* On the thumb rather than beside it: the rail is a scrolling strip, and a
+	   second full-width control per source would halve how many fit. */
+	.rail-edit {
+		position: absolute;
+		top: 2px;
+		right: 2px;
+		display: flex;
+		padding: 2px;
+		border: none;
+		border-radius: 2px;
+		background: rgba(0, 0, 0, 0.6);
+		color: var(--text-3);
+		opacity: 0;
+		cursor: pointer;
+		transition: opacity var(--t-fast);
+	}
+
+	.rail-slot:hover .rail-edit,
+	.rail-edit:focus-visible {
+		opacity: 1;
+	}
+
+	/* A keyed source keeps its button lit, so the rail says which media has
+	   been edited without hovering every thumb. */
+	.rail-edit.on {
+		opacity: 1;
+		color: var(--mosh);
+	}
+
+	.rail-edit:hover {
+		color: var(--text);
 	}
 
 	.rail-thumb {

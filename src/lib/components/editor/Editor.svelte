@@ -131,6 +131,7 @@
 		type MediaClip,
 		type MediaLane,
 		type MediaTimeline,
+		type SourceEdit,
 	} from '../../media';
 	import {
 		loadMediaPool,
@@ -647,6 +648,7 @@
 		}
 		restoreTextTimeline(savedSeq.text);
 		restoreMediaTimeline(savedSeq.media);
+		sourceRegistry.restoreEdits(savedSeq.sourceEdits);
 		return true;
 	}
 
@@ -849,6 +851,8 @@
 		media?: MediaTimeline;
 		/** Absent on entries saved before fx lanes existed. */
 		fx?: FxLane[];
+		/** Per-source edits, keyed by source id. Sparse: only edited media. */
+		sourceEdits?: Record<string, SourceEdit>;
 	}>('openmosh-sequence');
 
 	// Keyed by master clock — that's what segment times are relative to.
@@ -910,6 +914,7 @@
 		}
 		restoreTextTimeline(saved.text);
 		restoreMediaTimeline(saved.media);
+		sourceRegistry.restoreEdits(saved.sourceEdits);
 	});
 
 	/** A restored BPM wins over any detection already in flight — the segments
@@ -937,11 +942,15 @@
 		const text = $state.snapshot(textTimeline) as TextTimeline;
 		const media = $state.snapshot(mediaTimeline) as MediaTimeline;
 		const fx = $state.snapshot(fxLanes) as FxLane[];
+		const sourceEdits = $state.snapshot(sourceRegistry.edits) as Record<
+			string,
+			SourceEdit
+		>;
 		const key = seqStoreKey;
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { segments: segs, bpm, text, media, fx });
+			seqStore.save(key, { segments: segs, bpm, text, media, fx, sourceEdits });
 		}, 300);
 	});
 
@@ -967,6 +976,10 @@
 			text: $state.snapshot(textTimeline) as TextTimeline,
 			media: $state.snapshot(mediaTimeline) as MediaTimeline,
 			fx: $state.snapshot(fxLanes) as FxLane[],
+			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
+				string,
+				SourceEdit
+			>,
 		});
 	}
 
@@ -1664,6 +1677,7 @@
 		seqFrames.invalidate();
 		mediaLayers.invalidate();
 	});
+
 
 	// The route enables sequence mode with no toggle press to seed the first
 	// segment, so do it as soon as a master clock exists.
@@ -2547,6 +2561,10 @@
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText ? ($state.snapshot(textTimeline) as TextTimeline) : null,
 			media: hasMedia ? ($state.snapshot(mediaTimeline) as MediaTimeline) : null,
+			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
+				string,
+				SourceEdit
+			>,
 		};
 		// The layers' media rides along with the source, so reopening the session
 		// restores what they were drawing rather than a set of blank lanes.
@@ -2579,6 +2597,7 @@
 		$state.snapshot(effects);
 		$state.snapshot(textTimeline);
 		$state.snapshot(mediaTimeline);
+		sourceRegistry.edits;
 		file;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
@@ -2948,6 +2967,10 @@
 	if (untrack(() => initialSession?.media)) {
 		mediaHistory.reset(untrack(() => mediaTimeline));
 	}
+
+	// The pool these key into is added a tick or two later; restoreEdits doesn't
+	// check against it, so ordering doesn't matter here.
+	sourceRegistry.restoreEdits(untrack(() => initialSession?.sourceEdits));
 
 	function pushMediaHistory(coalesceKey?: string) {
 		mediaHistory.push(
@@ -3579,6 +3602,7 @@
 				overlay={noSequenceMedia ? noMediaOverlay : undefined}
 				spectrum={audio.frequencyData}
 				{sourceFit}
+				sourceEdits={sourceRegistry.edits}
 			/>
 		</div>
 
@@ -3765,6 +3789,8 @@
 				selectedSourceId={seqSelectedSourceId}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
 				onAdd={() => sourceInput?.click()}
+				edits={sourceRegistry.edits}
+				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 			/>
 		{/if}
 		{#if showVideoBar && !videoIsMaster}

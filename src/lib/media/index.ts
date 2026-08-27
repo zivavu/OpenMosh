@@ -1,4 +1,13 @@
 export { createMediaHistory } from "./history.svelte";
+export type { ChromaKey, SourceEdit } from "./source-edit";
+export {
+  createSourceEdit,
+  DEFAULT_CHROMA_KEY,
+  DEFAULT_SOURCE_EDIT,
+  isIdleSourceEdit,
+  normalizeSourceEdit,
+  normalizeSourceEdits,
+} from "./source-edit";
 export { MEDIA_LAYER_SHORTCUTS } from "./shortcuts";
 export type { ResolvedMediaLayer } from "./resolve";
 export {

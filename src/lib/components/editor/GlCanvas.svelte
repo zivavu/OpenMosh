@@ -15,6 +15,7 @@
       resolveMediaLayersAt,
       type MediaTimeline,
       type ResolvedMediaLayer,
+      type SourceEdit,
    } from "../../media";
    import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 
@@ -39,6 +40,7 @@
    /** Shared, so the default prop doesn't mint an array per render. */
    const EMPTY_POST: PostChainLayer[] = [];
    const EMPTY_MEDIA: ResolvedMediaLayer[] = [];
+   const EMPTY_SOURCE_EDITS: Record<string, SourceEdit> = {};
 
    interface Props {
       imageSrc: string;
@@ -94,6 +96,8 @@
       fullscreen?: boolean;
       /** How a source that doesn't match the output aspect is fitted into it. */
       sourceFit?: SourceFit;
+      /** Per-source edits, keyed by source id. Sparse: only edited media. */
+      sourceEdits?: Record<string, SourceEdit>;
       /** Optional text lanes composited into the chain at their insertion points. */
       textTimeline?: TextTimeline | null;
       /** Optional media lanes, composited the same way. */
@@ -144,6 +148,7 @@
       sourceAnimating = false,
       spectrum = null,
       sourceFit = "contain",
+      sourceEdits = EMPTY_SOURCE_EDITS,
       fullscreen = $bindable(false),
       textTimeline = null,
       mediaTimeline = null,
@@ -486,6 +491,12 @@
       renderer?.setSourceFit(sourceFit);
    });
 
+   // Same reason, and pushed rather than carried on each frame's layers: an
+   // edit belongs to the media, so it is the same for every lane drawing it.
+   $effect(() => {
+      renderer?.setSourceEdits(new Map(Object.entries(sourceEdits)));
+   });
+
    // Static redraw driver: subscribes to effect values and re-renders when the
    // animation loop is not running. Using a separate effect prevents double
    // renders during playback (the rAF loop already owns the frame).
@@ -497,6 +508,7 @@
          for (const k of Object.keys(e.values)) e.values[k];
       }
       sourceFit;
+      sourceEdits;
       // A caption font that lands after the frame was drawn changes its glyphs.
       fontTick;
       // Text edits and scrubbing both change which clip is on screen.

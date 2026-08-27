@@ -104,12 +104,26 @@ float insideLayer(vec2 uv) {
 export const LAYER_TRANSFORM_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_texture;
+uniform vec3 u_keyColor;
+// <= 0 switches the key off, so an unkeyed layer costs one compare.
+uniform float u_keyThreshold;
+uniform float u_keySmooth;
 in vec2 v_uv;
 out vec4 outColor;
 ${LAYER_BOX_GLSL}
+// Chroma distance, not RGB: keying on hue alone keeps shadows and highlights
+// on the subject while still cutting a lit-unevenly backdrop.
+vec2 chroma(vec3 c) {
+  return vec2(dot(c, vec3(-0.169, -0.331, 0.5)), dot(c, vec3(0.5, -0.419, -0.081)));
+}
 void main() {
   vec2 uv = layerUv(v_uv);
-  outColor = texture(u_texture, clamp(uv, 0.0, 1.0)) * insideLayer(uv);
+  vec4 c = texture(u_texture, clamp(uv, 0.0, 1.0));
+  if (u_keyThreshold > 0.0) {
+    float d = distance(chroma(c.rgb), chroma(u_keyColor));
+    c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
+  }
+  outColor = c * insideLayer(uv);
 }`;
 
 /** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,4=overlay,5=difference,6=exclusion,7=subtract. u_invert: 0/1. u_opacity: 0-1. */

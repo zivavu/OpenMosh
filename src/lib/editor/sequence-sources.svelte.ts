@@ -1,3 +1,9 @@
+import {
+  createSourceEdit,
+  isIdleSourceEdit,
+  normalizeSourceEdits,
+  type SourceEdit,
+} from "../media";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import {
   getAllSequenceMedia,
@@ -49,6 +55,13 @@ export interface SequenceSource {
  */
 export class SequenceSourceRegistry {
   sources = $state<SequenceSource[]>([]);
+
+  /**
+   * Per-source edits, keyed by source id. Held beside the sources rather than
+   * on them: an edit belongs to the media across the whole pool, and only the
+   * handful of sources actually edited need an entry.
+   */
+  edits = $state<Record<string, SourceEdit>>({});
 
   /** Insertion-ordered LRU of decoded images — see MAX_DECODED_IMAGES. */
   #images = new Map<string, HTMLImageElement>();
@@ -153,6 +166,28 @@ export class SequenceSourceRegistry {
     this.#samplers.delete(id);
   }
 
+  /** The edit for this source, defaults included, for the editor to bind to. */
+  editFor(id: string): SourceEdit {
+    return this.edits[id] ?? createSourceEdit();
+  }
+
+  /** An idle edit is dropped rather than stored, so the map stays sparse. */
+  setEdit(id: string, edit: SourceEdit) {
+    const next = { ...this.edits };
+    if (isIdleSourceEdit(edit)) delete next[id];
+    else next[id] = edit;
+    this.edits = next;
+  }
+
+  /**
+   * Restore saved edits. Not filtered against the current pool: the pool comes
+   * back out of IndexedDB a tick or two later, so anything checked here would
+   * be checked against an empty bin. `remove` drops an edit with its source.
+   */
+  restoreEdits(raw: unknown) {
+    this.edits = normalizeSourceEdits(raw);
+  }
+
   /**
    * Drops the source from this song. The stored blob is deliberately left
    * alone: another song's pool may reference the same media, and once none
@@ -162,6 +197,11 @@ export class SequenceSourceRegistry {
     const src = this.get(id);
     if (!src) return;
     this.sources = this.sources.filter((s) => s.id !== id);
+    if (this.edits[id]) {
+      const next = { ...this.edits };
+      delete next[id];
+      this.edits = next;
+    }
     this.#samplers.get(id)?.dispose();
     this.#samplers.delete(id);
     this.#images.delete(id);

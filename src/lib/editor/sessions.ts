@@ -28,7 +28,7 @@ import {
 } from "./sequence-media-store";
 
 import type { EffectInstance } from "../effects/types";
-import type { MediaTimeline } from "../media";
+import type { MediaTimeline, SourceEdit } from "../media";
 import type { TextTimeline } from "../text/types";
 
 /** What single mode stores; sequence keeps its own timeline entry instead. */
@@ -37,6 +37,8 @@ export interface SingleSessionState {
   text: TextTimeline | null;
   /** Absent on sessions saved before media layers existed. */
   media?: MediaTimeline | null;
+  /** Per-source edits, keyed by source id. Sparse: only edited media. */
+  sourceEdits?: Record<string, SourceEdit>;
 }
 
 export interface SavedSession {
