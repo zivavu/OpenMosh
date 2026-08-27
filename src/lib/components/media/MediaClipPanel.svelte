@@ -340,8 +340,8 @@
 		   settings below it at the bottom of the window. */
 		flex: 0 0 auto;
 		border-bottom: 1px solid var(--line);
-		width: 310px;
-		max-width: 310px;
+		width: 100%;
+		max-width: var(--sidebar-w);
 		box-sizing: border-box;
 	}
 

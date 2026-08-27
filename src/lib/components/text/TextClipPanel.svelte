@@ -381,8 +381,8 @@
 		   sized by this panel's content, and the help text alone is a single
 		   unbroken max-content line — enough to stretch the sidebar across the
 		   window the moment a clip is selected. */
-		width: 310px;
-		max-width: 310px;
+		width: 100%;
+		max-width: var(--sidebar-w);
 		box-sizing: border-box;
 	}
 

@@ -162,11 +162,15 @@
 </div>
 
 <style>
+	/* Fixed width rather than sized by whatever is inside it: the sidebar swaps
+	   panels as the selection changes, and letting the content decide made it
+	   jump between widths on every click. */
 	.sheet-container {
 		display: flex;
 		flex-direction: column;
 		border-left: 1px solid var(--line);
 		height: 100%;
+		width: var(--sidebar-w);
 		flex-shrink: 0;
 		overflow: hidden;
 	}
@@ -185,6 +189,10 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
+		/* Firefox has no ::-webkit-scrollbar to narrow, so without this its
+		   full-width scrollbar takes a slice out of the column and the panels
+		   overflow sideways behind a second, horizontal one. */
+		scrollbar-width: thin;
 	}
 
 	/* Every section keeps its natural height and the column scrolls past it.
@@ -194,6 +202,9 @@
 	   column exists to avoid. */
 	.desktop-content > :global(*) {
 		flex: 0 0 auto;
+		/* The scrollbar takes its width out of this column, so the panels fill
+		   what is left rather than insisting on the full sidebar width. */
+		max-width: 100%;
 	}
 
 	.desktop-content::-webkit-scrollbar {
@@ -223,6 +234,7 @@
 			bottom: 0;
 			left: 0;
 			right: 0;
+			width: auto;
 			height: 50svh;
 			border-left: none;
 			border-top: 1px solid var(--line);

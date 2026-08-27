@@ -79,6 +79,11 @@
 	--start: #f0b568; /* the static playhead — where playback starts from */
 	--start-dim: #8a6a3f;
 
+	/* The sidebar. Every panel that can take it over has to agree on this: a
+	   narrower one caps the column and leaves the chain below it overflowing
+	   sideways behind a horizontal scrollbar. */
+	--sidebar-w: 340px;
+
 	--r-1: 3px;
 	--r-2: 6px;
 	--r-3: 10px;

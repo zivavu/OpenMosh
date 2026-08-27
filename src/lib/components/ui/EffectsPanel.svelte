@@ -761,8 +761,8 @@
 		   as one region, and a chain that scrolled inside that would be a
 		   second scroller nested in the first. */
 		flex: 0 0 auto;
-		width: 340px;
-		max-width: 340px;
+		width: 100%;
+		max-width: var(--sidebar-w);
 		background: var(--surface);
 		border-left: 1px solid var(--line);
 		display: flex;
