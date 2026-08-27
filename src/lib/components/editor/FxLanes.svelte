@@ -450,8 +450,9 @@
 		return pairs;
 	}
 
-	/** Empty lane space scrubs, matching every other lane in the stack.
-	 * Ctrl/Cmd drops a clip there instead. */
+	/** Empty lane space places the start marker and takes the clock with it,
+	 * matching every other lane in the stack. Ctrl/Cmd drops a clip there
+	 * instead. */
 	function onLanePointerDown(e: PointerEvent, laneId: string) {
 		if (e.button !== 0 || trackDuration <= 0) return;
 		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
@@ -462,11 +463,11 @@
 		}
 		scrubbing = true;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		stack.seekTo(timeAt(e.clientX));
+		stack.seekStatic(timeAt(e.clientX));
 	}
 
 	function onPointerMove(e: PointerEvent) {
-		if (scrubbing) stack.seekTo(timeAt(e.clientX));
+		if (scrubbing) stack.seekStatic(timeAt(e.clientX));
 		if (!drag) return;
 		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;

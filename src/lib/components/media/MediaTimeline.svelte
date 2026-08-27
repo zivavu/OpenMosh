@@ -424,8 +424,9 @@
 		return pairs;
 	}
 
-	/** Empty lane space scrubs: with no ruler row of its own, every lane has to
-	 * be draggable, or a text-only timeline has nothing to seek with. Ctrl/Cmd
+	/** Empty lane space places the start marker, which takes the clock with it:
+	 * with no ruler row of its own, every lane has to be draggable, or a
+	 * text-only timeline has nothing to seek with. Ctrl/Cmd
 	 * drops a clip there instead — the same gesture the sequence timeline uses,
 	 * and a one-handed alternative to double-clicking. */
 	function onLanePointerDown(e: PointerEvent, laneId: string) {
@@ -438,11 +439,11 @@
 		}
 		scrubbing = true;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		stack.seekTo(timeAt(e.clientX));
+		stack.seekStatic(timeAt(e.clientX));
 	}
 
 	function onPointerMove(e: PointerEvent) {
-		if (scrubbing) stack.seekTo(timeAt(e.clientX));
+		if (scrubbing) stack.seekStatic(timeAt(e.clientX));
 		if (!drag) return;
 		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
