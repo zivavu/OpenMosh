@@ -46,6 +46,7 @@ export {
   EMPTY_MEDIA_TIMELINE,
   MAX_MEDIA_LANES,
   MEDIA_FIT_OPTIONS,
+  mediaClipWeight,
   MIN_CLIP_LENGTH,
   normalizeMediaTimeline,
   splitMediaClipAt,

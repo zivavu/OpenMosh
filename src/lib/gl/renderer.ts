@@ -1698,7 +1698,8 @@ export class GlRenderer {
         tex,
         underEffects: layer.underEffects,
         z: layer.z,
-        opacity: layer.style.opacity,
+        // The resolved value, not the lane's: it already carries the clip fade.
+        opacity: layer.opacity,
         blendMode: layer.style.blendMode,
       });
     }

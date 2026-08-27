@@ -62,6 +62,40 @@ describe("resolveMediaLayersAt", () => {
     expect(resolveMediaLayersAt(timelineOf([clear]), 1)).toHaveLength(0);
   });
 
+  it("carries the lane's opacity through unfaded", () => {
+    const t = timelineOf([laneWith([[0, 4]])]);
+    expect(resolveMediaLayersAt(t, 1)[0].opacity).toBe(1);
+  });
+
+  it("ramps opacity across a clip's fade", () => {
+    const lane = laneWith([[0, 10]]);
+    const faded: MediaLane = {
+      ...lane,
+      style: { ...lane.style, opacity: 0.5 },
+      clips: [{ ...lane.clips[0], fadeSec: 2 }],
+    };
+    const at = (time: number) =>
+      resolveMediaLayersAt(timelineOf([faded]), time)[0].opacity;
+    expect(at(0)).toBe(0);
+    expect(at(1)).toBeCloseTo(0.25, 5);
+    expect(at(5)).toBe(0.5);
+    expect(at(9)).toBeCloseTo(0.25, 5);
+  });
+
+  it("keeps the fade through a split and a save round-trip", () => {
+    const lane = laneWith([[0, 10]]);
+    const faded: MediaLane = {
+      ...lane,
+      clips: [{ ...lane.clips[0], fadeSec: 0.5 }],
+    };
+    const split = splitMediaClipAt(faded, 5);
+    expect(split.clips.map((c) => c.fadeSec)).toEqual([0.5, 0.5]);
+    const saved = normalizeMediaTimeline(
+      JSON.parse(JSON.stringify(timelineOf([faded]))),
+    );
+    expect(saved.lanes[0].clips[0].fadeSec).toBe(0.5);
+  });
+
   it("resolves nothing while the timeline is off", () => {
     const t = { ...timelineOf([laneWith([[0, 4]])]), enabled: false };
     expect(resolveMediaLayersAt(t, 1)).toHaveLength(0);

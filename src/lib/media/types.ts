@@ -3,6 +3,7 @@ import type { EffectInstance } from "../effects/types";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
   clipAt,
+  clipFadeWeight,
   MIN_CLIP_LENGTH,
   sortClips,
   type TimelineClip,
@@ -41,6 +42,16 @@ export interface MediaStyle {
 export interface MediaClip extends TimelineClip {
   /** Seconds into the source the clip starts at. Ignored by image sources. */
   sourceStart: number;
+  /**
+   * Fade the layer in over this many seconds from the clip's start, and out
+   * over the same before its end.
+   *
+   * The media counterpart of FxClip.fadeSec, and for the same reason: a
+   * stacked lane has no other side to cross into, so what a clip boundary
+   * needs is the layer arriving rather than popping on. Here it scales the
+   * lane's opacity rather than its effects' parameters.
+   */
+  fadeSec?: number;
 }
 
 /**
@@ -105,6 +116,14 @@ export function createMediaClip(
   sourceStart = 0,
 ): MediaClip {
   return { id: nextId("mclip"), start, end, sourceStart };
+}
+
+/**
+ * How strongly the clip's layer shows at `time` — 1 unless a fade is ramping.
+ * Multiplied into the lane's opacity by the resolver.
+ */
+export function mediaClipWeight(clip: MediaClip, time: number): number {
+  return clipFadeWeight(clip, clip.fadeSec, time);
 }
 
 /**
@@ -239,6 +258,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
         start: clip.start ?? 0,
         end: clip.end ?? 0,
         sourceStart: clip.sourceStart ?? 0,
+        fadeSec: clip.fadeSec,
       })),
     })),
   };

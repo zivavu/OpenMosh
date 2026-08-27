@@ -1,6 +1,12 @@
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
-import type { MediaClip, MediaLane, MediaStyle, MediaTimeline } from "./types";
+import {
+  mediaClipWeight,
+  type MediaClip,
+  type MediaLane,
+  type MediaStyle,
+  type MediaTimeline,
+} from "./types";
 
 // Clip geometry is lane-shape agnostic and shared with the text and fx lanes;
 // re-exported here so the media timeline keeps importing it from one place.
@@ -35,6 +41,12 @@ export interface ResolvedMediaLayer {
   /** Seconds into the source to show. Videos wrap; images ignore it. */
   sourceTime: number;
   style: MediaStyle;
+  /**
+   * What the composite draws this layer at: the lane's opacity, scaled by the
+   * clip's fade while one is ramping. Separate from `style.opacity` so the
+   * per-frame value never has to clone the lane's style.
+   */
+  opacity: number;
   effects: EffectInstance[];
 }
 
@@ -60,6 +72,7 @@ export function resolveMediaLayersAt(
       sourceId: lane.sourceId,
       sourceTime: clip.sourceStart + (time - clip.start),
       style: lane.style,
+      opacity: lane.style.opacity * mediaClipWeight(clip, time),
       effects: lane.effects,
     });
   }

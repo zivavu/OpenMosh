@@ -245,3 +245,28 @@ export function updateLaneIn<L extends { id: string }>(
 ): L[] {
   return lanes.map((l) => (l.id === laneId ? fn(l) : l));
 }
+
+/** Fade lengths a clip can pick, in seconds. Shared by the fx and media UIs. */
+export const CLIP_FADE_OPTIONS = [0.1, 0.25, 0.5, 1];
+
+/**
+ * How strongly a clip applies at `time`: 1 across the body, ramping from 0 at
+ * each edge when it has a fade. Returns 1 without one, which is every clip
+ * until the user asks for a ramp. What "strength" means is the caller's — an
+ * fx lane scales its effects toward off, a media lane scales its opacity.
+ */
+export function clipFadeWeight(
+  clip: TimelineClip,
+  fadeSec: number | undefined,
+  time: number,
+): number {
+  const fade = fadeSec ?? 0;
+  if (fade <= 0) return 1;
+  // A fade longer than half the clip would have the two ramps overlap and the
+  // clip never reach full strength; meeting in the middle is the cap.
+  const ramp = Math.min(fade, (clip.end - clip.start) / 2);
+  if (ramp <= 0) return 1;
+  const inWeight = (time - clip.start) / ramp;
+  const outWeight = (clip.end - time) / ramp;
+  return Math.max(0, Math.min(1, inWeight, outWeight));
+}

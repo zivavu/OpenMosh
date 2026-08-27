@@ -24,6 +24,7 @@ import {
 } from "../effects";
 import {
   clipAt,
+  clipFadeWeight,
   MIN_CLIP_LENGTH,
   sortClips,
   type TimelineClip,
@@ -87,15 +88,7 @@ export const DEFAULT_FX_FADE = 0.25;
  * every clip until the user asks for a ramp.
  */
 export function fxClipWeight(clip: FxClip, time: number): number {
-  const fade = clip.fadeSec ?? 0;
-  if (fade <= 0) return 1;
-  // A fade longer than half the clip would have the two ramps overlap and the
-  // chain never reach full strength; meeting in the middle is the cap.
-  const ramp = Math.min(fade, (clip.end - clip.start) / 2);
-  if (ramp <= 0) return 1;
-  const inWeight = (time - clip.start) / ramp;
-  const outWeight = (clip.end - time) / ramp;
-  return Math.max(0, Math.min(1, inWeight, outWeight));
+  return clipFadeWeight(clip, clip.fadeSec, time);
 }
 
 /** 0-based re-roll tick index inside an interval clip. */
