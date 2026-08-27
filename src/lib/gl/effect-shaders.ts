@@ -624,14 +624,19 @@ void main() {
 			H +
 			`uniform float u_size;
 uniform float u_amount;
+uniform float u_transparent;
 void main() {
   vec4 c = texture(u_texture, v_uv);
   float dist = length(v_uv - 0.5);
   float radius = 1.0 - u_size;
   float vig = smoothstep(radius, radius - 0.45, dist);
-  outColor = vec4(c.rgb * mix(1.0, vig, u_amount), c.a);
+  float fade = mix(1.0, vig, u_amount);
+  // Same falloff either way; transparent spends it on alpha instead of on the
+  // colour, so whatever sits under the layer shows through the edge rather
+  // than getting painted over in black.
+  outColor = u_transparent > 0.5 ? vec4(c.rgb, c.a * fade) : vec4(c.rgb * fade, c.a);
 }`,
-		setUniforms: floats('size', 'amount'),
+		setUniforms: floats('size', 'amount', 'transparent'),
 	},
 
 	scanlines: {

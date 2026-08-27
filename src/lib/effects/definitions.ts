@@ -376,6 +376,9 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
             step: 0.01,
             defaultValue: 0.5,
          },
+         // Checkbox on purpose: a mosh only rolls range and select params, so
+         // this stays wherever the user put it.
+         { key: 'transparent', label: 'Transparent', type: 'checkbox', defaultValue: 0 },
       ],
    },
    {
