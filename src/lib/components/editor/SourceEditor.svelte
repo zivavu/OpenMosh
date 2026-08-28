@@ -172,13 +172,17 @@
 		rawCtx.drawImage(media, 0, 0, raw.width, raw.height);
 	}
 
-	// The same chroma-distance test the placement shader runs, in JS. Two copies
-	// of one rule, so keep them in step — see LAYER_TRANSFORM_FRAG.
+	// The same key test the placement shader runs, in JS. Two copies of one
+	// rule, so keep them in step — see LAYER_TRANSFORM_FRAG.
 	function chroma(r: number, g: number, b: number): [number, number] {
 		return [
 			-0.169 * r - 0.331 * g + 0.5 * b,
 			0.5 * r - 0.419 * g - 0.081 * b,
 		];
+	}
+
+	function luma(r: number, g: number, b: number): number {
+		return 0.299 * r + 0.587 * g + 0.114 * b;
 	}
 
 	/** Raw buffer → visible canvas, with the key applied. */
@@ -197,13 +201,23 @@
 		const img = rawCtx.getImageData(0, 0, raw.width, raw.height);
 		const px = img.data;
 		const [kx, ky] = chroma(key.color.r, key.color.g, key.color.b);
+		const kl = luma(key.color.r, key.color.g, key.color.b);
 		const lo = key.threshold;
 		const hi = lo + Math.max(key.smoothing, 0.0001);
+		// Brightness rescaled onto the chroma threshold — the cylinder the shader
+		// keys against.
+		const lumaScale = lo / Math.max(key.lumaRange, 0.0001);
 		for (let i = 0; i < px.length; i += 4) {
-			const [cx, cy] = chroma(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255);
+			const r = px[i] / 255;
+			const g = px[i + 1] / 255;
+			const b = px[i + 2] / 255;
+			const [cx, cy] = chroma(r, g, b);
 			const dx = cx - kx;
 			const dy = cy - ky;
-			const d = Math.sqrt(dx * dx + dy * dy);
+			const d = Math.max(
+				Math.sqrt(dx * dx + dy * dy),
+				Math.abs(luma(r, g, b) - kl) * lumaScale,
+			);
 			const t = Math.min(1, Math.max(0, (d - lo) / (hi - lo)));
 			px[i + 3] *= t * t * (3 - 2 * t);
 		}
@@ -214,7 +228,13 @@
 	// this only has to cover a paused preview.
 	$effect(() => {
 		// Read every knob, so any of them moving re-runs this.
-		void [key.enabled, key.color, key.threshold, key.smoothing];
+		void [
+			key.enabled,
+			key.color,
+			key.threshold,
+			key.smoothing,
+			key.lumaRange,
+		];
 		if (ready && !playing) paint();
 	});
 
@@ -367,6 +387,23 @@
 					oninput={(v) => setKey('threshold', v)}
 				/>
 				<span class="val">{Math.round(key.threshold * 100)}</span>
+			</div>
+
+			<div
+				class="row"
+				title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs."
+			>
+				<label for="ck-luma">Brightness range</label>
+				<RangeSlider
+					id="ck-luma"
+					value={key.lumaRange}
+					min={0.01}
+					max={1}
+					step={0.005}
+					disabled={!key.enabled}
+					oninput={(v) => setKey('lumaRange', v)}
+				/>
+				<span class="val">{Math.round(key.lumaRange * 100)}</span>
 			</div>
 
 			<div class="row">

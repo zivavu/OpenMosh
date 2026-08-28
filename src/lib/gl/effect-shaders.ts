@@ -108,19 +108,30 @@ uniform vec3 u_keyColor;
 // <= 0 switches the key off, so an unkeyed layer costs one compare.
 uniform float u_keyThreshold;
 uniform float u_keySmooth;
+// How far a pixel's brightness may differ from the key's. 1 ignores it.
+uniform float u_keyLuma;
 in vec2 v_uv;
 out vec4 outColor;
 ${LAYER_BOX_GLSL}
-// Chroma distance, not RGB: keying on hue alone keeps shadows and highlights
-// on the subject while still cutting a lit-unevenly backdrop.
 vec2 chroma(vec3 c) {
   return vec2(dot(c, vec3(-0.169, -0.331, 0.5)), dot(c, vec3(0.5, -0.419, -0.081)));
+}
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+// A cylinder in Y'CbCr: chroma within u_keyThreshold of the key's, brightness
+// within u_keyLuma. Chroma alone put every neutral at one point — white, grey
+// and black an exact match for each other — so keying a grey backdrop took the
+// highlights with it however low the threshold went. The brightness axis is
+// rescaled so |dY| == u_keyLuma lands on the threshold, leaving u_keySmooth one
+// band to soften rather than two.
+float keyDistance(vec3 c) {
+  float dY = abs(luma(c) - luma(u_keyColor)) * (u_keyThreshold / max(u_keyLuma, 0.0001));
+  return max(distance(chroma(c), chroma(u_keyColor)), dY);
 }
 void main() {
   vec2 uv = layerUv(v_uv);
   vec4 c = texture(u_texture, clamp(uv, 0.0, 1.0));
   if (u_keyThreshold > 0.0) {
-    float d = distance(chroma(c.rgb), chroma(u_keyColor));
+    float d = keyDistance(c.rgb);
     c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
   }
   outColor = c * insideLayer(uv);

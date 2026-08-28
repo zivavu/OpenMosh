@@ -14,6 +14,13 @@ export interface ChromaKey {
   threshold: number;
   /** Width of the soft band above the threshold, 0..1. 0 gives a hard edge. */
   smoothing: number;
+  /**
+   * How far a pixel's brightness may differ from the key colour's and still be
+   * cut, 0..1. 1 ignores brightness entirely, which is what the key did before
+   * this existed — and why keying a grey backdrop also took every white and
+   * black in the frame: on chroma alone every neutral is the same colour.
+   */
+  lumaRange: number;
 }
 
 /** Everything editable about a source. One field for now; more will join it. */
@@ -27,6 +34,9 @@ export const DEFAULT_CHROMA_KEY: ChromaKey = {
   color: { r: 0, g: 1, b: 0 },
   threshold: 0.3,
   smoothing: 0.1,
+  // Wide enough for the shadows and hot spots on an unevenly lit backdrop,
+  // tight enough that a mid-grey key leaves white and black alone.
+  lumaRange: 0.35,
 };
 
 export const DEFAULT_SOURCE_EDIT: SourceEdit = {
@@ -56,7 +66,8 @@ export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
     k.color.g === d.color.g &&
     k.color.b === d.color.b &&
     k.threshold === d.threshold &&
-    k.smoothing === d.smoothing
+    k.smoothing === d.smoothing &&
+    k.lumaRange === d.lumaRange
   );
 }
 
@@ -76,6 +87,7 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
       },
       threshold: num(k.threshold, DEFAULT_CHROMA_KEY.threshold),
       smoothing: num(k.smoothing, DEFAULT_CHROMA_KEY.smoothing),
+      lumaRange: num(k.lumaRange, DEFAULT_CHROMA_KEY.lumaRange),
     },
   };
 }

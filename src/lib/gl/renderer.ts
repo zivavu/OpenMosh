@@ -1777,6 +1777,9 @@ export class GlRenderer {
     if (prog.uniforms["u_keySmooth"]) {
       gl.uniform1f(prog.uniforms["u_keySmooth"], key?.smoothing ?? 0);
     }
+    if (prog.uniforms["u_keyLuma"]) {
+      gl.uniform1f(prog.uniforms["u_keyLuma"], key?.lumaRange ?? 1);
+    }
     this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
