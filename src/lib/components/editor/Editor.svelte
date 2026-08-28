@@ -1909,6 +1909,16 @@
 
 	// Loop playback inside the selected segment (edit-while-playing aid).
 	let seqSegmentLoop = $state(false);
+
+	/** R, and the timeline's Repeat button. Both need one segment picked: the
+	 * loop below has no other way to know which span to hold inside, so a flag
+	 * set without one would lie in wait for the next selection. */
+	function toggleSegmentLoop() {
+		if (!isSequenceMode || !selectedSegmentId || seqSelectedIds.length > 1) {
+			return;
+		}
+		seqSegmentLoop = !seqSegmentLoop;
+	}
 	$effect(() => {
 		if (!isSequenceMode || !seqSegmentLoop || !selectedSegmentId) return;
 		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
@@ -2497,6 +2507,7 @@
 			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
 		togglePlay: toggleMasterPlay,
+		toggleSegmentLoop,
 		zoomTimeline: (inward) => timelineAxis?.vp.zoomStep(inward),
 	});
 
@@ -2753,6 +2764,10 @@
 								description: 'Split the last-used lane at the playhead',
 							},
 							{ keys: ['Click'], description: 'Select segment for editing' },
+							{
+								keys: ['R'],
+								description: 'Loop playback inside the selected segment',
+							},
 							{
 								keys: ['←', '→'],
 								description: "Walk the selected segment's moshes",
@@ -4117,7 +4132,7 @@
 						bpm={sequenceBpm}
 						onTransitionChange={seqTransitionChange}
 						segmentLoop={seqSegmentLoop}
-						onToggleSegmentLoop={() => (seqSegmentLoop = !seqSegmentLoop)}
+						onToggleSegmentLoop={toggleSegmentLoop}
 						sources={sequenceSources}
 						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
