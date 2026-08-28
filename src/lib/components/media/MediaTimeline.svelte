@@ -7,11 +7,13 @@
 	import {
 		addClip,
 		clipRange,
+		copyMediaClips,
 		createMediaClip,
 		freeRangeAt,
 		MIN_CLIP_LENGTH,
 		moveClip,
 		moveClips,
+		pasteMediaClips,
 		removeClip,
 		resizeBoundary,
 		resizeClip,
@@ -19,6 +21,7 @@
 		splitMediaClipAt,
 		updateMediaLane,
 		type MediaClip,
+		type MediaClipboardEntry,
 		type MediaLane,
 		type MediaTimeline,
 	} from '../../media';
@@ -509,8 +512,49 @@
 		deselect();
 	}
 
+	// ── Clip clipboard ───────────────────────────────────────────────────────
+	// Local to the lanes, like the segment clipboard is to the source lane. The
+	// selections are mutually exclusive, so a Ctrl+C with clips selected can only
+	// mean these.
+	let clipboard = $state<MediaClipboardEntry[]>([]);
+
+	function copySelection(): boolean {
+		if (selectedIds.length === 0) return false;
+		clipboard = copyMediaClips(timeline, selectedIds);
+		return clipboard.length > 0;
+	}
+
+	/** Paste at the playhead, and leave the copies selected to drag from there. */
+	function pasteClipboard(): boolean {
+		if (clipboard.length === 0) return false;
+		const result = pasteMediaClips(
+			timeline,
+			clipboard,
+			stack.staticTime,
+			trackDuration,
+		);
+		if (result.clipIds.length === 0) return false;
+		onBeforeEdit?.();
+		onChange(result.timeline);
+		selectedIds = result.clipIds;
+		selectedClipId = result.clipIds[result.clipIds.length - 1];
+		return true;
+	}
+
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
+		if (e.ctrlKey || e.metaKey) {
+			const key = e.key.toLowerCase();
+			if (key === 'c' && copySelection()) {
+				e.preventDefault();
+				return;
+			}
+			if (key === 'v' && pasteClipboard()) {
+				e.preventDefault();
+				return;
+			}
+			return;
+		}
 		if (e.key === 'Escape' && selectedIds.length > 0) {
 			deselect();
 			return;
