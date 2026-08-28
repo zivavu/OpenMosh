@@ -3871,6 +3871,7 @@
 				selectedSourceId={railSourceId}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
 				onAdd={() => sourceInput?.click()}
+				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 			/>

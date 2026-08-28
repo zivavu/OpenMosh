@@ -21,6 +21,8 @@
 		selectedSourceId?: string | null;
 		onAssign: (sourceId: string) => void;
 		onAdd: () => void;
+		/** Drag one thumb onto another to move it there. */
+		onReorder?: (from: number, to: number) => void;
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		edits?: Record<string, SourceEdit>;
 		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
@@ -33,6 +35,7 @@
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
+		onReorder,
 		edits = {},
 		onEditChange,
 	}: Props = $props();
@@ -75,14 +78,33 @@
 		strip.scrollBy({ left: delta, behavior: 'smooth' });
 	});
 
-	/** The same payload the grid's cards carry, so the timeline takes a drag
-	 * from either place as the same assignment. */
-	function onThumbDragStart(e: DragEvent, src: SequenceSource) {
+	// Reorder, the same gesture the grid's cards use: a thumb carries its index
+	// for a drop in here, and its id under our own type so a drop on a lane or a
+	// segment is still read as an assignment.
+	let dragFromIndex = $state<number | null>(null);
+	let dragOverIndex = $state<number | null>(null);
+
+	function onThumbDragStart(e: DragEvent, src: SequenceSource, index: number) {
+		dragFromIndex = index;
 		if (!e.dataTransfer) return;
-		e.dataTransfer.effectAllowed = 'copy';
+		e.dataTransfer.effectAllowed = 'copyMove';
 		e.dataTransfer.setData(SOURCE_DND_TYPE, src.id);
 		// Some browsers cancel a drag that carries no standard data at all.
 		e.dataTransfer.setData('text/plain', src.id);
+	}
+
+	function endThumbDrag() {
+		dragFromIndex = null;
+		dragOverIndex = null;
+	}
+
+	function onStripDrop(e: DragEvent) {
+		if (dragFromIndex === null) return;
+		e.preventDefault();
+		if (dragOverIndex !== null && dragOverIndex !== dragFromIndex) {
+			onReorder?.(dragFromIndex, dragOverIndex);
+		}
+		endThumbDrag();
 	}
 </script>
 
@@ -103,15 +125,35 @@
 	</button>
 
 	{#if open}
-		<div class="rail-items" bind:this={itemsEl}>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="rail-items"
+			bind:this={itemsEl}
+			ondragover={(e) => dragFromIndex !== null && e.preventDefault()}
+			ondrop={onStripDrop}
+		>
 			{#each sources as src, i (src.id)}
-				<div class="rail-slot" data-source-id={src.id}>
+				<div
+					class="rail-slot"
+					class:dragging={dragFromIndex === i}
+					class:drop-before={dragOverIndex === i &&
+						dragFromIndex !== null &&
+						dragFromIndex !== i}
+					data-source-id={src.id}
+					ondragover={(e) => {
+						if (dragFromIndex === null) return;
+						e.preventDefault();
+						dragOverIndex = i;
+					}}
+					ondragend={endThumbDrag}
+					role="presentation"
+				>
 					<button
 						class="rail-item"
 						class:playing={src.id === selectedSourceId}
 						class:assignable
 						draggable="true"
-						ondragstart={(e) => onThumbDragStart(e, src)}
+						ondragstart={(e) => onThumbDragStart(e, src, i)}
 						onclick={() => assignable && onAssign(src.id)}
 						title={assignable
 							? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one`
@@ -220,6 +262,23 @@
 	.rail-slot {
 		position: relative;
 		flex-shrink: 0;
+	}
+
+	.rail-slot.dragging {
+		opacity: 0.4;
+	}
+
+	/* A line where the thumb would land, rather than the grid's dashed border:
+	   the slots sit a few pixels apart, and a border here would read as an
+	   outline on the thumb under the cursor instead of a gap before it. */
+	.rail-slot.drop-before::before {
+		content: '';
+		position: absolute;
+		inset-block: 0;
+		left: -0.2rem;
+		width: 2px;
+		background: var(--text-3);
+		border-radius: 1px;
 	}
 
 	.rail-item {
