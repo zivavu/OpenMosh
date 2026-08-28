@@ -62,6 +62,21 @@
 		e.dataTransfer.setData('text/plain', sources[index].id);
 	}
 
+	/**
+	 * Which edge of card `i` the insertion line belongs on, or null.
+	 *
+	 * reorder() splices out then back in, so a card moved rightwards lands
+	 * *after* the one it was dropped on and a card moved leftwards lands before
+	 * it. A line always on the leading edge would point at the wrong gap for
+	 * half of every drag.
+	 */
+	function dropEdge(i: number): 'before' | 'after' | null {
+		if (dragFromIndex === null || dragOverIndex !== i || dragFromIndex === i) {
+			return null;
+		}
+		return dragFromIndex < i ? 'after' : 'before';
+	}
+
 	function endCardDrag() {
 		dragFromIndex = null;
 		dragOverIndex = null;
@@ -132,14 +147,14 @@
 	{:else}
 		<div class="grid">
 			{#each sources as src, i (src.id)}
+				{@const edge = dropEdge(i)}
 				<div
 					class="card"
 					class:active={selectedSourceId === src.id}
 					class:assignable
 					class:dragging={dragFromIndex === i}
-					class:drop-before={dragOverIndex === i &&
-						dragFromIndex !== null &&
-						dragFromIndex !== i}
+					class:drop-before={edge === 'before'}
+					class:drop-after={edge === 'after'}
 					role="button"
 					tabindex="0"
 					draggable="true"
@@ -336,9 +351,25 @@
 		opacity: 0.4;
 	}
 
-	.card.drop-before {
-		border-color: var(--text-3);
-		border-style: dashed;
+	/* A line in the gap the card would land in, rather than a border on the card
+	   under the cursor — that read as "this one is selected" instead of "it goes
+	   here". Inset rather than in the grid gap: the card clips its overflow. */
+	.card.drop-before::after,
+	.card.drop-after::after {
+		content: '';
+		position: absolute;
+		inset-block: 0;
+		width: 3px;
+		background: var(--mosh);
+		z-index: 2;
+	}
+
+	.card.drop-before::after {
+		left: 0;
+	}
+
+	.card.drop-after::after {
+		right: 0;
 	}
 
 	.card-thumb {

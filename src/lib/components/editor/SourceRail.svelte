@@ -113,6 +113,15 @@
 		e.dataTransfer.setData('text/plain', src.id);
 	}
 
+	/** Which edge of slot `i` the insertion line belongs on — see the grid's
+	 * copy: a thumb moved rightwards lands after the one it was dropped on. */
+	function dropEdge(i: number): 'before' | 'after' | null {
+		if (dragFromIndex === null || dragOverIndex !== i || dragFromIndex === i) {
+			return null;
+		}
+		return dragFromIndex < i ? 'after' : 'before';
+	}
+
 	function endThumbDrag() {
 		dragFromIndex = null;
 		dragOverIndex = null;
@@ -153,12 +162,12 @@
 			ondrop={onStripDrop}
 		>
 			{#each sources as src, i (src.id)}
+				{@const edge = dropEdge(i)}
 				<div
 					class="rail-slot"
 					class:dragging={dragFromIndex === i}
-					class:drop-before={dragOverIndex === i &&
-						dragFromIndex !== null &&
-						dragFromIndex !== i}
+					class:drop-before={edge === 'before'}
+					class:drop-after={edge === 'after'}
 					data-source-id={src.id}
 					ondragover={(e) => {
 						if (dragFromIndex === null) return;
@@ -302,17 +311,26 @@
 		cursor: grabbing;
 	}
 
-	/* A line where the thumb would land, rather than the grid's dashed border:
-	   the slots sit a few pixels apart, and a border here would read as an
-	   outline on the thumb under the cursor instead of a gap before it. */
-	.rail-slot.drop-before::before {
+	/* A line in the gap the thumb would land in, rather than a border on the one
+	   under the cursor — that reads as "this is selected" instead of "it goes
+	   here". Same indicator the grid uses. */
+	.rail-slot.drop-before::before,
+	.rail-slot.drop-after::before {
 		content: '';
 		position: absolute;
 		inset-block: 0;
-		left: -0.2rem;
-		width: 2px;
-		background: var(--text-3);
+		width: 3px;
+		background: var(--mosh);
 		border-radius: 1px;
+		z-index: 2;
+	}
+
+	.rail-slot.drop-before::before {
+		left: -0.2rem;
+	}
+
+	.rail-slot.drop-after::before {
+		right: -0.2rem;
 	}
 
 	.rail-item {
