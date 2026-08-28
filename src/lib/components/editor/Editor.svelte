@@ -953,9 +953,29 @@
 		if (!key) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			seqStore.save(key, { segments: segs, bpm, text, media, fx, sourceEdits });
+			reportSeqSave(
+				seqStore.save(key, { segments: segs, bpm, text, media, fx, sourceEdits }),
+			);
 		}, 300);
 	});
+
+	/**
+	 * A save that couldn't be written is the one failure the user has to hear
+	 * about: everything still looks right on screen, and the work is gone on the
+	 * next reload. Only the transition into failure is announced, or a timeline
+	 * too big to store would toast on every debounce tick.
+	 */
+	let seqSaveFailed = false;
+	function reportSeqSave(ok: boolean) {
+		if (ok === !seqSaveFailed) return;
+		seqSaveFailed = !ok;
+		if (ok) return;
+		showToast(
+			'Out of browser storage — this timeline is not being saved. Delete a song from the library to free some up.',
+			'error',
+			10000,
+		);
+	}
 
 	/**
 	 * Write the current timeline under the current key, now.
@@ -973,17 +993,19 @@
 		clearTimeout(seqSaveTimer);
 		const key = seqStoreKey;
 		if (!key) return;
-		seqStore.save(key, {
-			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
-			bpm: sequenceBpm,
-			text: $state.snapshot(textTimeline) as TextTimeline,
-			media: $state.snapshot(mediaTimeline) as MediaTimeline,
-			fx: $state.snapshot(fxLanes) as FxLane[],
-			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
-				string,
-				SourceEdit
-			>,
-		});
+		reportSeqSave(
+			seqStore.save(key, {
+				segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
+				bpm: sequenceBpm,
+				text: $state.snapshot(textTimeline) as TextTimeline,
+				media: $state.snapshot(mediaTimeline) as MediaTimeline,
+				fx: $state.snapshot(fxLanes) as FxLane[],
+				sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
+					string,
+					SourceEdit
+				>,
+			}),
+		);
 	}
 
 	// Reloading or closing mid-playback would otherwise lose the session, for

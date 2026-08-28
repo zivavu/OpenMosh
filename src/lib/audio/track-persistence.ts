@@ -11,10 +11,34 @@ export function createTrackStore<T>(
     return all && typeof all === "object" ? all : {};
   }
 
-  function save(trackId: string, data: T) {
+  /**
+   * Write one song's entry. Returns false only when even that entry alone
+   * doesn't fit.
+   *
+   * Every song this store has ever held lives under one localStorage key, and
+   * nothing ever removed an entry — so the blob only grew. A sequence timeline
+   * is not small (every segment and every fx clip carries a full effect chain),
+   * and past a handful of songs the write started throwing on quota. That threw
+   * inside writeJson, which swallows it, so the app went on looking fine and
+   * quietly stopped persisting anything: the work was still on screen, and gone
+   * on the next reload.
+   *
+   * So a failed write now evicts, oldest first, and retries. Losing the
+   * timeline for a song that isn't open beats never again saving the one that
+   * is. The current entry is re-inserted at the end on every save, which makes
+   * the key order least-recently-saved first and the eviction order an LRU.
+   */
+  function save(trackId: string, data: T): boolean {
     const all = loadAll();
+    delete all[trackId];
     all[trackId] = data;
-    writeJson(storageKey, all);
+    if (writeJson(storageKey, all)) return true;
+    for (const key of Object.keys(all)) {
+      if (key === trackId) continue;
+      delete all[key];
+      if (writeJson(storageKey, all)) return true;
+    }
+    return false;
   }
 
   function load(trackId: string): T | null {
