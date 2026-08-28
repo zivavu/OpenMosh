@@ -323,7 +323,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Composite before the image effects instead of over the finished frame, so they distort the layer too"
+			title="When on, the layer joins the frame before the image effects run, so they distort it too. When off, it's drawn over the finished frame and they leave it alone."
 		>
 			<label for="mc-under">Under effects</label>
 			<input
@@ -337,8 +337,8 @@
 
 		<h3 class="panel-title section">Layer effects</h3>
 		<p class="hint">
-			Run on this layer alone, before it meets the image. One that spreads —
-			a blur, a bloom, a displacement — carries past the layer's edges.
+			These only run on this layer's media, before it meets the image. An
+			effect that spreads, like a blur or a bloom, bleeds past its edges.
 		</p>
 		{#if opaqueNames.length > 0}
 			<p class="warn">

@@ -334,7 +334,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Composite before the image effects instead of over the finished frame, so they distort the text too"
+			title="When on, the text joins the frame before the image effects run, so they distort it too. When off, it's drawn over the finished frame and they leave it alone."
 		>
 			<label for="tc-under">Under effects</label>
 			<input
