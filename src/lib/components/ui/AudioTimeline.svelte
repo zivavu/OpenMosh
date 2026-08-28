@@ -129,6 +129,20 @@
 		return null;
 	}
 
+	/**
+	 * Double-clicking a handle throws it back to its end of the track, so a span
+	 * trimmed too far goes back to the whole track without a drag. Same reset
+	 * gesture the panel sliders use.
+	 */
+	function onTimelineDblClick(e: MouseEvent) {
+		const handle = handleFromClientX(e.clientX);
+		if (!handle) return;
+		e.preventDefault();
+		if (handle === 'start') onSpanStartChange(0);
+		else onSpanEndChange(trackDuration);
+		onSpanCommit?.();
+	}
+
 	function onTimelinePointerDown(e: PointerEvent) {
 		if (e.pointerType === 'touch') return;
 		e.preventDefault();
@@ -280,6 +294,7 @@
 			hoverHandle = handleFromClientX(e.clientX);
 		}}
 		onpointerleave={() => (hoverHandle = null)}
+		ondblclick={onTimelineDblClick}
 	>
 		<div class="timeline-track">
 			<div
