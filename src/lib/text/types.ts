@@ -7,6 +7,7 @@ import { FONT_OPTIONS } from "../text-overlay/fonts";
 import type { TextOverlayBlendMode } from "../text-overlay/types";
 import {
   clipAt,
+  fitClipsToDuration,
   MIN_CLIP_LENGTH,
   sortClips,
   type TimelineClip,
@@ -213,4 +214,16 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
       };
     }),
   };
+}
+
+/** See fitMediaTimeline: the same re-fit, for the text lanes. */
+export function fitTextTimeline(
+  timeline: TextTimeline,
+  duration: number,
+): TextTimeline {
+  if (duration <= 0 || timeline.lanes.length === 0) return timeline;
+  const lanes = timeline.lanes.map((lane) => fitClipsToDuration(lane, duration));
+  return lanes.some((l, i) => l !== timeline.lanes[i])
+    ? { ...timeline, lanes }
+    : timeline;
 }

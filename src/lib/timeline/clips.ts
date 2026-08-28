@@ -267,3 +267,38 @@ export function clipFadeWeight(
   const outWeight = (clip.end - time) / ramp;
   return Math.max(0, Math.min(1, inWeight, outWeight));
 }
+
+/**
+ * Clamp a lane's clips into [0, duration], for when the master clock shrinks
+ * under them: swapping a 2-minute song for a 90-second one leaves every clip
+ * built against the old length hanging past the end of the timeline, where it
+ * still renders but can no longer be seen or grabbed.
+ *
+ * Clips keep their start and lose only the overhang. One left with nothing on
+ * screen, or with less than MIN_CLIP_LENGTH of it, is dropped rather than
+ * pinned to the end as a sliver the user has to find and delete.
+ *
+ * Returns the lane by identity when nothing moved, so the callers that run this
+ * on every duration read can skip the write.
+ */
+export function fitClipsToDuration<
+  C extends TimelineClip,
+  L extends ClipLane<C>,
+>(lane: L, duration: number): L {
+  if (duration <= 0) return lane;
+  let changed = false;
+  const clips: C[] = [];
+  for (const clip of lane.clips) {
+    if (clip.start > duration - MIN_CLIP_LENGTH) {
+      changed = true;
+      continue;
+    }
+    if (clip.end > duration) {
+      clips.push({ ...clip, end: duration });
+      changed = true;
+    } else {
+      clips.push(clip);
+    }
+  }
+  return changed ? { ...lane, clips } : lane;
+}

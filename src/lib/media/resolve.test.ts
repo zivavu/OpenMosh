@@ -8,6 +8,7 @@ import {
   createFullSpanLane,
   createMediaClip,
   createMediaLane,
+  fitMediaTimeline,
   normalizeMediaTimeline,
   splitMediaClipAt,
   type MediaLane,
@@ -180,5 +181,41 @@ describe("normalizeMediaTimeline", () => {
   it("survives junk", () => {
     expect(normalizeMediaTimeline(null).lanes).toHaveLength(0);
     expect(normalizeMediaTimeline("nope").enabled).toBe(false);
+  });
+});
+
+describe("fitMediaTimeline", () => {
+  it("trims a clip left hanging past a shorter track", () => {
+    const t = timelineOf([laneWith([[0, 120]])]);
+    const fitted = fitMediaTimeline(t, 90);
+    expect(fitted.lanes[0].clips[0].end).toBe(90);
+    expect(fitted.lanes[0].clips[0].start).toBe(0);
+  });
+
+  it("drops clips that fall off the end entirely", () => {
+    const t = timelineOf([
+      laneWith([
+        [0, 30],
+        [100, 120],
+      ]),
+    ]);
+    const fitted = fitMediaTimeline(t, 90);
+    expect(fitted.lanes[0].clips).toHaveLength(1);
+    expect(fitted.lanes[0].clips[0].end).toBe(30);
+  });
+
+  it("drops a clip that would be left shorter than the minimum", () => {
+    const t = timelineOf([laneWith([[89.99, 120]])]);
+    expect(fitMediaTimeline(t, 90).lanes[0].clips).toHaveLength(0);
+  });
+
+  it("keeps the timeline by identity when nothing overhangs", () => {
+    const t = timelineOf([laneWith([[0, 60]])]);
+    expect(fitMediaTimeline(t, 90)).toBe(t);
+  });
+
+  it("leaves everything alone before a duration is known", () => {
+    const t = timelineOf([laneWith([[0, 120]])]);
+    expect(fitMediaTimeline(t, 0)).toBe(t);
   });
 });

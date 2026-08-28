@@ -56,6 +56,7 @@
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
 		findTextClip,
+		fitTextTimeline,
 		findTextClipLane,
 		normalizeTextTimeline,
 		applyLyricsToTimeline,
@@ -87,6 +88,7 @@
 		clearFxClips,
 		createFxLayerSource,
 		findFxClip,
+		fitFxLanes,
 		flattenFxLayers,
 		fxClipMoshSnapshot,
 		laneAudioResponse,
@@ -123,6 +125,7 @@
 		EMPTY_MEDIA_TIMELINE,
 		findMediaClip,
 		findMediaClipLane,
+		fitMediaTimeline,
 		MAX_MEDIA_LANES,
 		MEDIA_LAYER_SHORTCUTS,
 		mediaTimelineSourceIds,
@@ -1004,6 +1007,28 @@
 		const segs = sequenceSegments;
 		const fixed = normalizeCoverage(segs, duration);
 		if (fixed !== segs) sequenceSegments = fixed;
+	});
+
+	// And pull the free-floating clip lanes back inside it. Swapping a 2-minute
+	// song for a 90-second one leaves every clip built against the old length
+	// hanging past the end of the timeline, where it still renders but the ruler
+	// can no longer reach it. Segments have normalizeCoverage for this; the
+	// media, text and fx lanes are clips, so they get the clip version.
+	//
+	// Keyed off the master clock alone, and off the timelines untracked: with no
+	// track `textDuration` falls back to the record length, and trimming clips on
+	// every nudge of that slider would eat work still in front of the user.
+	$effect(() => {
+		const duration = seqMasterDuration;
+		if (duration <= 0) return;
+		untrack(() => {
+			const media = fitMediaTimeline(mediaTimeline, duration);
+			if (media !== mediaTimeline) mediaTimeline = media;
+			const text = fitTextTimeline(textTimeline, duration);
+			if (text !== textTimeline) textTimeline = text;
+			const fx = fitFxLanes(fxLanes, duration);
+			if (fx !== fxLanes) setFxLanes(fx);
+		});
 	});
 
 	function seqMasterTime(): number {

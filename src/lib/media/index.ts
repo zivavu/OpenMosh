@@ -44,6 +44,7 @@ export {
   createMediaTimeline,
   DEFAULT_MEDIA_STYLE,
   EMPTY_MEDIA_TIMELINE,
+  fitMediaTimeline,
   MAX_MEDIA_LANES,
   MEDIA_FIT_OPTIONS,
   mediaClipWeight,

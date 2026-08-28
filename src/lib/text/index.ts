@@ -46,6 +46,7 @@ export {
   createTextTimeline,
   DEFAULT_TEXT_STYLE,
   EMPTY_TEXT_TIMELINE,
+  fitTextTimeline,
   MIN_CLIP_LENGTH,
   normalizeTextTimeline,
   splitTextClipAt,

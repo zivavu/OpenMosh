@@ -4,6 +4,7 @@ import type { TextOverlayBlendMode } from "../text-overlay";
 import {
   clipAt,
   clipFadeWeight,
+  fitClipsToDuration,
   MIN_CLIP_LENGTH,
   sortClips,
   type TimelineClip,
@@ -262,4 +263,20 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
       })),
     })),
   };
+}
+
+/**
+ * Pull every lane's clips back inside a timeline that just got shorter. Kept by
+ * identity when nothing overhangs, so the editor can run it on every duration
+ * change without writing.
+ */
+export function fitMediaTimeline(
+  timeline: MediaTimeline,
+  duration: number,
+): MediaTimeline {
+  if (duration <= 0 || timeline.lanes.length === 0) return timeline;
+  const lanes = timeline.lanes.map((lane) => fitClipsToDuration(lane, duration));
+  return lanes.some((l, i) => l !== timeline.lanes[i])
+    ? { ...timeline, lanes }
+    : timeline;
 }

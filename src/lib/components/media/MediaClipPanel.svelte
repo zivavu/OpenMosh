@@ -337,8 +337,7 @@
 
 		<h3 class="panel-title section">Layer effects</h3>
 		<p class="hint">
-			These only run on this layer's media, before it meets the image. An
-			effect that spreads, like a blur or a bloom, bleeds past its edges.
+			These effects only run on this layer's media, before it meets the image.
 		</p>
 		{#if opaqueNames.length > 0}
 			<p class="warn">

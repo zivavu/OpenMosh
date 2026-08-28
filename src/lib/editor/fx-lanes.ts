@@ -25,6 +25,7 @@ import {
 import {
   clipAt,
   clipFadeWeight,
+  fitClipsToDuration,
   MIN_CLIP_LENGTH,
   sortClips,
   type TimelineClip,
@@ -654,4 +655,11 @@ export function applyBpmToFxLanes(lanes: FxLane[], bpm: number): FxLane[] {
     return { ...lane, clips };
   });
   return changed ? out : lanes;
+}
+
+/** See fitMediaTimeline: the same re-fit, for the stacked fx lanes. */
+export function fitFxLanes(lanes: FxLane[], duration: number): FxLane[] {
+  if (duration <= 0 || lanes.length === 0) return lanes;
+  const next = lanes.map((lane) => fitClipsToDuration(lane, duration));
+  return next.some((l, i) => l !== lanes[i]) ? next : lanes;
 }
