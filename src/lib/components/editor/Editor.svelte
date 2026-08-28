@@ -22,6 +22,7 @@
 	import { layerLinkGroups } from '../../audio/audio-utils';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import { createTrackStore } from '../../audio/track-persistence';
+	import { loadTimeline, saveTimeline } from '../../editor/timeline-store';
 	import {
 		loadRenderSettings,
 		saveRenderSettings,
@@ -631,15 +632,36 @@
 	 * from the library: a track picked on the upload screen is adopted by id
 	 * only, and without a restore its timeline would sit unreachable in storage.
 	 */
-	function applySavedTrackState(trackId: string): boolean {
+	async function applySavedTrackState(
+		trackId: string,
+		/** Moving between two songs starts the new one clean when it has nothing
+		 * saved; arriving at the first song keeps what's on screen, since that
+		 * work was made for it and had nowhere else to be. */
+		clearOnMissing = false,
+	): Promise<void> {
 		const savedSpan = spanStore.load(trackId);
 		// An empty span is never something the user chose — it's an entry left
 		// behind by the overwrite above. Fall through to the whole track.
 		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
 			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
 		}
-		const savedSeq = loadSeqEntry(trackId);
-		if (savedSeq === null) return false;
+		const key = seqKeyPrefix + trackId;
+		loadedTimelineKey = null;
+		const savedSeq = await loadSeqEntry(trackId);
+		// A later switch overtook this load while it was out; that one owns the
+		// state now, and applying this would restore the song we already left.
+		if (seqStoreKey !== key) return;
+		loadedTimelineKey = key;
+		if (savedSeq === null) {
+			if (clearOnMissing) {
+				// Empty rather than a fresh segment: the seeding effect rebuilds one
+				// once the new track reports its duration.
+				sequenceSegments = [];
+				selectedSegmentId = null;
+				restoreFxLanes(undefined);
+			}
+			return;
+		}
 		// The BPM comes back in both modes — single mode has no segments to time,
 		// but beat-synced effects read the same tempo. The keys are already
 		// per-mode, so neither mode reads the other's number.
@@ -652,7 +674,6 @@
 		restoreTextTimeline(savedSeq.text);
 		restoreMediaTimeline(savedSeq.media);
 		sourceRegistry.restoreEdits(savedSeq.sourceEdits);
-		return true;
 	}
 
 	/** The editor learned a track's library id without being asked to load it —
@@ -660,7 +681,7 @@
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
-		applySavedTrackState(trackId);
+		void applySavedTrackState(trackId);
 	}
 
 	/**
@@ -698,21 +719,13 @@
 	});
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
-		// Moving between two songs starts the new one clean; arriving at the
-		// first song keeps what's on screen, since that work was made for it and
-		// had nowhere else to be saved.
 		const switchingSongs = !!currentTrackId && currentTrackId !== trackId;
 		clearTrack();
 		currentTrackId = trackId;
 		audio.trackFile = file;
-		if (!applySavedTrackState(trackId) && switchingSongs) {
-			// Empty rather than a fresh segment: the seeding effect rebuilds one
-			// once the new track reports its duration. The media pool is
-			// deliberately left alone — see the pool restore effect.
-			sequenceSegments = [];
-			selectedSegmentId = null;
-			restoreFxLanes(undefined);
-		}
+		// The media pool is deliberately left alone on a switch — see the pool
+		// restore effect.
+		void applySavedTrackState(trackId, switchingSongs);
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
@@ -844,7 +857,7 @@
 	// spacing. 0 = not detected yet.
 	let sequenceBpm = $state(0);
 
-	const seqStore = createTrackStore<{
+	interface SeqEntry {
 		segments?: SequenceSegment[];
 		/** Absent on entries saved before BPM existed. */
 		bpm?: number;
@@ -856,7 +869,7 @@
 		fx?: FxLane[];
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		sourceEdits?: Record<string, SourceEdit>;
-	}>('openmosh-sequence');
+	}
 
 	// Keyed by master clock — that's what segment times are relative to.
 	let videoSeqKey = $derived(
@@ -880,15 +893,22 @@
 	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
 
 	/**
+	 * The key whose stored timeline has landed; saving waits for the key on screen
+	 * to match. Loads are async, and a debounce firing mid-switch would write the
+	 * outgoing song's timeline under the incoming song's key.
+	 */
+	let loadedTimelineKey: string | null = null;
+
+	/**
 	 * Read this mode's entry for a song, falling back once to the legacy
 	 * un-prefixed entry. Only the sequence route falls back: those entries hold
 	 * real timelines worth keeping, whereas letting single mode read them is the
 	 * exact leak the prefix exists to stop.
 	 */
-	function loadSeqEntry(baseKey: string) {
+	async function loadSeqEntry(baseKey: string): Promise<SeqEntry | null> {
 		const entry =
-			seqStore.load(seqKeyPrefix + baseKey) ??
-			(isSequenceMode ? seqStore.load(baseKey) : null);
+			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
+			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
 		// Entries can predate a transition being retired; remap before anything
 		// downstream tries to look up a shader that no longer exists.
 		if (entry?.segments) {
@@ -907,17 +927,26 @@
 		if (!key || key === restoredSeqKey) return;
 		restoredSeqKey = key;
 		if (untrack(() => seqMasterIsAudio)) return;
-		const saved = loadSeqEntry(key);
-		if (saved === null) return;
-		if (isSequenceMode) {
-			sequenceSegments = saved.segments ?? [];
-			restoreSequenceBpm(saved.bpm ?? 0);
-			selectedSegmentId = null;
-			restoreFxLanes(saved.fx);
-		}
-		restoreTextTimeline(saved.text);
-		restoreMediaTimeline(saved.media);
-		sourceRegistry.restoreEdits(saved.sourceEdits);
+		const storeKey = seqKeyPrefix + key;
+		loadedTimelineKey = null;
+		void (async () => {
+			const saved = await loadSeqEntry(key);
+			// A song adopted while this was out owns the state now.
+			if (seqStoreKey !== storeKey) return;
+			// Marked even with nothing to restore: a video with no saved timeline
+			// still has to be able to save the one being built for it.
+			loadedTimelineKey = storeKey;
+			if (saved === null) return;
+			if (isSequenceMode) {
+				sequenceSegments = saved.segments ?? [];
+				restoreSequenceBpm(saved.bpm ?? 0);
+				selectedSegmentId = null;
+				restoreFxLanes(saved.fx);
+			}
+			restoreTextTimeline(saved.text);
+			restoreMediaTimeline(saved.media);
+			sourceRegistry.restoreEdits(saved.sourceEdits);
+		})();
 	});
 
 	/** A restored BPM wins over any detection already in flight — the segments
@@ -950,28 +979,29 @@
 			SourceEdit
 		>;
 		const key = seqStoreKey;
-		if (!key) return;
+		if (!key || key !== loadedTimelineKey) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			reportSeqSave(
-				seqStore.save(key, { segments: segs, bpm, text, media, fx, sourceEdits }),
-			);
+			void saveTimeline(key, {
+				segments: segs,
+				bpm,
+				text,
+				media,
+				fx,
+				sourceEdits,
+			}).then(reportSeqSave);
 		}, 300);
 	});
 
-	/**
-	 * A save that couldn't be written is the one failure the user has to hear
-	 * about: everything still looks right on screen, and the work is gone on the
-	 * next reload. Only the transition into failure is announced, or a timeline
-	 * too big to store would toast on every debounce tick.
-	 */
+	/** Only the transition into failure is announced, or an unsaveable timeline
+	 * would toast on every debounce tick. */
 	let seqSaveFailed = false;
 	function reportSeqSave(ok: boolean) {
 		if (ok === !seqSaveFailed) return;
 		seqSaveFailed = !ok;
 		if (ok) return;
 		showToast(
-			'Out of browser storage — this timeline is not being saved. Delete a song from the library to free some up.',
+			"Couldn't save this timeline — your recent changes may not survive a reload.",
 			'error',
 			10000,
 		);
@@ -992,20 +1022,18 @@
 	function flushSequenceSave() {
 		clearTimeout(seqSaveTimer);
 		const key = seqStoreKey;
-		if (!key) return;
-		reportSeqSave(
-			seqStore.save(key, {
-				segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
-				bpm: sequenceBpm,
-				text: $state.snapshot(textTimeline) as TextTimeline,
-				media: $state.snapshot(mediaTimeline) as MediaTimeline,
-				fx: $state.snapshot(fxLanes) as FxLane[],
-				sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
-					string,
-					SourceEdit
-				>,
-			}),
-		);
+		if (!key || key !== loadedTimelineKey) return;
+		void saveTimeline(key, {
+			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
+			bpm: sequenceBpm,
+			text: $state.snapshot(textTimeline) as TextTimeline,
+			media: $state.snapshot(mediaTimeline) as MediaTimeline,
+			fx: $state.snapshot(fxLanes) as FxLane[],
+			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
+				string,
+				SourceEdit
+			>,
+		}).then(reportSeqSave);
 	}
 
 	// Reloading or closing mid-playback would otherwise lose the session, for

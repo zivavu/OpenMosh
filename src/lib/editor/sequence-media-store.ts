@@ -32,6 +32,18 @@ export interface StoredMediaPool {
   updatedAt: number;
 }
 
+/**
+ * One song's sequence/single timeline: segments, fx lanes, text, media layers.
+ * Hundreds of kilobytes a song, which is what outgrew its old localStorage home.
+ */
+export interface StoredTimeline {
+  /** The mode-prefixed track key: `seq:<id>` or `single:<id>`. */
+  key: string;
+  /** Shape is owned by the editor, like a session's `state`. */
+  state: unknown;
+  updatedAt: number;
+}
+
 /** Modes that resume from a session record rather than a song's media pool. */
 export type SessionMode = "single" | "slideshow";
 
@@ -57,11 +69,14 @@ const DB_NAME = "openmosh-sequence-media";
 const STORE = "media";
 const POOL_STORE = "pools";
 const SESSION_STORE = "sessions";
-const DB_VERSION = 3;
+const TIMELINE_STORE = "timelines";
+const DB_VERSION = 4;
 /** Least recently used pools past this are dropped. */
 const MAX_POOLS = 20;
 /** Same, for sessions — they compete with pools for the one media store. */
 const MAX_SESSIONS = 20;
+/** Timelines are the largest records here, and only the recent ones matter. */
+const MAX_TIMELINES = 40;
 /**
  * Media belonging to no retained pool is kept up to this many entries, newest
  * first. Freshly added files land here until the pool save catches up, so this
@@ -90,7 +105,7 @@ export function stableSourceId(file: File): string {
  */
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-const REQUIRED_STORES = [STORE, POOL_STORE, SESSION_STORE];
+const REQUIRED_STORES = [STORE, POOL_STORE, SESSION_STORE, TIMELINE_STORE];
 
 function hasAllStores(db: IDBDatabase): boolean {
   return REQUIRED_STORES.every((name) => db.objectStoreNames.contains(name));
@@ -115,6 +130,9 @@ function openAt(version?: number): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(SESSION_STORE)) {
         db.createObjectStore(SESSION_STORE, { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains(TIMELINE_STORE)) {
+        db.createObjectStore(TIMELINE_STORE, { keyPath: "key" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -424,6 +442,72 @@ export async function deleteSession(key: string): Promise<void> {
   });
 }
 
+/** One song's stored timeline, or null when it has none. */
+export async function getTimeline(key: string): Promise<unknown | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TIMELINE_STORE, "readonly");
+    const req = tx.objectStore(TIMELINE_STORE).get(key);
+    let result: StoredTimeline | undefined;
+    req.onsuccess = () => {
+      result = req.result as StoredTimeline | undefined;
+    };
+    tx.oncomplete = () => {
+      resolve(result ? result.state : null);
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
+}
+
+export async function putTimeline(key: string, state: unknown): Promise<void> {
+  const entry: StoredTimeline = { key, state, updatedAt: Date.now() };
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(TIMELINE_STORE, "readwrite");
+    tx.objectStore(TIMELINE_STORE).put(entry);
+    tx.oncomplete = () => {
+      resolve();
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
+}
+
+export async function getAllTimelines(): Promise<StoredTimeline[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TIMELINE_STORE, "readonly");
+    const req = tx.objectStore(TIMELINE_STORE).getAll();
+    let result: StoredTimeline[] = [];
+    req.onsuccess = () => {
+      result = (req.result as StoredTimeline[]) ?? [];
+    };
+    tx.oncomplete = () => {
+      resolve(result);
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
+}
+
+async function deleteTimeline(key: string): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(TIMELINE_STORE, "readwrite");
+    tx.objectStore(TIMELINE_STORE).delete(key);
+    tx.oncomplete = () => {
+      resolve();
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
+}
+
 /**
  * Drops least-recently-used pools and sessions, then media neither a retained
  * pool nor a retained session references — except the newest MAX_UNREFERENCED,
@@ -452,6 +536,13 @@ export async function pruneSequenceMedia(): Promise<void> {
     .sort((a, b) => b.updatedAt - a.updatedAt);
   for (const stale of sessions.slice(MAX_SESSIONS)) {
     await deleteSession(stale.key);
+  }
+
+  const timelines = (await getAllTimelines()).sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
+  for (const stale of timelines.slice(MAX_TIMELINES)) {
+    await deleteTimeline(stale.key);
   }
 
   const referenced = new Set<string>();
