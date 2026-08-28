@@ -400,6 +400,17 @@
 		padding: 0.4rem 0.5rem;
 		border-top: 1px solid var(--line);
 		background: var(--tl-chrome-bg);
+		/* The whole stack is a drag surface — scrubbing the playhead across it
+		   otherwise sweeps a selection through the tick labels, the clock and
+		   the lane names on the way. Nothing in here is text worth copying. */
+		user-select: none;
+	}
+
+	/* …except a field, where selecting is the point. None are in the lanes
+	   today; this is so adding one doesn't inherit an unusable input. */
+	:global(.tl-stack input:not([type]), .tl-stack input[type='text']),
+	:global(.tl-stack input[type='number'], .tl-stack textarea) {
+		user-select: text;
 	}
 
 	:global(.tl-stack .tl-row) {
