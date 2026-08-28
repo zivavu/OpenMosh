@@ -2,6 +2,7 @@
 	import { ChevronDown, ChevronUp, Play, Plus, SlidersHorizontal } from 'lucide-svelte';
 	import { DEFAULT_SOURCE_EDIT, type SourceEdit } from '../../media';
 	import SourceEditor from './SourceEditor.svelte';
+	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import { readRaw, writeRaw } from '../../storage';
 	import {
 		SOURCE_DND_TYPE,
@@ -44,6 +45,25 @@
 	let open = $state(readRaw(OPEN_KEY) !== '0');
 
 	let assignable = $derived(selectedCount > 0);
+
+	/** Open thumb's index; null when the preview is closed. Same component and
+	 * same click rule the grid's cards use: a click previews, unless a segment is
+	 * selected and the click means "play this there". */
+	let lightboxIndex = $state<number | null>(null);
+	let lightboxOrigin = $state({ x: 0, y: 0 });
+
+	let lightboxItems = $derived(
+		sources.map((s) => ({ name: s.name, kind: s.kind, objectUrl: s.objectUrl })),
+	);
+
+	function openLightbox(e: MouseEvent, index: number) {
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		lightboxOrigin = {
+			x: rect.left + rect.width / 2 - window.innerWidth / 2,
+			y: rect.top + rect.height / 2 - window.innerHeight / 2,
+		};
+		lightboxIndex = index;
+	}
 
 	/** Source whose editor is open; null when the dialog is closed. */
 	let editingId = $state<string | null>(null);
@@ -154,10 +174,14 @@
 						class:assignable
 						draggable="true"
 						ondragstart={(e) => onThumbDragStart(e, src, i)}
-						onclick={() => assignable && onAssign(src.id)}
+						onclick={(e) => {
+							if (assignable) onAssign(src.id);
+							else openLightbox(e, i);
+						}}
+						ondblclick={(e) => openLightbox(e, i)}
 						title={assignable
-							? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one`
-							: `${src.name} — drag onto a segment to play it there`}
+							? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one. Double-click to preview.`
+							: `${src.name} — click to preview, or drag it onto a segment`}
 					>
 						{#if src.thumbUrl}
 							<img
@@ -206,6 +230,15 @@
 		edit={edits[editingSource.id] ?? DEFAULT_SOURCE_EDIT}
 		onChange={(edit) => onEditChange(editingSource!.id, edit)}
 		onClose={() => (editingId = null)}
+	/>
+{/if}
+
+{#if lightboxIndex !== null}
+	<MediaLightbox
+		items={lightboxItems}
+		bind:index={lightboxIndex}
+		origin={lightboxOrigin}
+		onClose={() => (lightboxIndex = null)}
 	/>
 {/if}
 

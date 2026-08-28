@@ -16,6 +16,7 @@
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
+	import { isModalKeyboardOpen } from '../../modal-keyboard';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import {
 		addClip,
@@ -525,6 +526,9 @@
 
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
+		// The media lightbox and other overlays own the keyboard while they're
+		// up: Escape and Delete must not reach the clips behind them.
+		if (isModalKeyboardOpen()) return;
 		if (e.key === 'Escape' && selectedClipIds.length > 0) {
 			deselect();
 			return;

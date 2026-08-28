@@ -4,6 +4,7 @@
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
+	import { isModalKeyboardOpen } from '../../modal-keyboard';
 	import {
 		addClip,
 		clipRange,
@@ -556,6 +557,9 @@
 
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
+		// The media lightbox and other overlays own the keyboard while they're
+		// up: Escape and Delete must not reach the clips behind them.
+		if (isModalKeyboardOpen()) return;
 		if (e.ctrlKey || e.metaKey) {
 			const key = e.key.toLowerCase();
 			if (key === 'c' && copySelection()) {
