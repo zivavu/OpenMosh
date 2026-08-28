@@ -299,6 +299,7 @@
 
 	.rail-slot.dragging {
 		opacity: 0.4;
+		cursor: grabbing;
 	}
 
 	/* A line where the thumb would land, rather than the grid's dashed border:
@@ -322,7 +323,9 @@
 		border: 1px solid var(--line);
 		border-radius: 3px;
 		background: #101010;
-		cursor: grab;
+		/* Clicking is the primary action (assign, or preview); the drag is the
+		   secondary one, so grabbing shows only once one is under way. */
+		cursor: pointer;
 		overflow: hidden;
 	}
 

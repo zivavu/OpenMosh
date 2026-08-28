@@ -326,6 +326,12 @@
 		border-color: var(--mosh);
 	}
 
+	/* Matches the rail: pointer for the click, grabbing once a drag is on. */
+	.card:active,
+	.card.dragging {
+		cursor: grabbing;
+	}
+
 	.card.dragging {
 		opacity: 0.4;
 	}
