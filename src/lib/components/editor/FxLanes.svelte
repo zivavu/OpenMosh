@@ -728,7 +728,7 @@
 					<option value="" disabled>—</option>
 				{/if}
 				<option value="0">none</option>
-				{#each [0.1, 0.25, 0.5, 1] as sec}
+				{#each [0.1, 0.25, 0.5, 1, 2, 5, 10] as sec}
 					<option value={String(sec)}>{sec}s</option>
 				{/each}
 			</select>
