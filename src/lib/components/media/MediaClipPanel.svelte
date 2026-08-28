@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { X } from 'lucide-svelte';
-	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
 	import { LaneEffects } from '../../timeline/lane-effects.svelte';
 	import {
 		clipSourceId,
@@ -123,12 +122,6 @@
 		(key) => onBeforeEdit?.(key),
 	);
 	$effect(() => chain.sync());
-
-	let opaqueNames = $derived(
-		chain.effects
-			.filter((e) => e.enabled && OPAQUE_OUTPUT_EFFECTS.has(e.defId))
-			.map((e) => e.defId),
-	);
 </script>
 
 {#if !clip || !lane}
@@ -376,12 +369,6 @@
 		<p class="hint">
 			These effects only run on this layer's media, before it meets the image.
 		</p>
-		{#if opaqueNames.length > 0}
-			<p class="warn">
-				{opaqueNames.join(', ')} paints its own background, so it fills the frame
-				instead of following the layer.
-			</p>
-		{/if}
 		<EffectsPanel
 			bind:effects={() => chain.effects, (v) => (chain.effects = v)}
 			{hasTrack}

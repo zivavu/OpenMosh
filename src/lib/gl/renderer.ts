@@ -101,7 +101,9 @@ interface PreparedLayer {
 /**
  * Where a media layer's frame sits, in output pixels. Used by the placement
  * pass alone: it draws the media into an otherwise transparent frame, and the
- * alpha it leaves behind is the only coverage anything downstream reads.
+ * alpha it leaves behind is the only coverage anything downstream reads. A
+ * layer with a chain runs it against `fullFrameBox` first and is placed after,
+ * so its effects see the media rather than the canvas.
  */
 interface LayerBox {
   drawW: number;
@@ -1673,29 +1675,47 @@ export class GlRenderer {
       const out = this.ensureLayerBuffer(bufOffset + prepared.length);
       if (!out) continue;
 
-      // With a chain, the placed frame is scratch the chain consumes on the
-      // spot; without one it is the layer itself and has to survive the frame.
-      const placedFBO = hasChain ? this.ensureMediaScratch()?.fbo : out.fbo;
-      if (!placedFBO) continue;
-      this.drawLayerPlacement(entry.tex, box, placedFBO, key);
-
-      let tex = hasChain ? this.mediaScratch!.tex : out.tex;
-      if (hasChain) {
-        tex =
+      if (!hasChain) {
+        this.drawLayerPlacement(entry.tex, box, out.fbo, key);
+      } else {
+        const scratch = this.ensureMediaScratch();
+        if (!scratch) continue;
+        // Chain first, placement second. The chain runs on the media filling
+        // the whole buffer, so every effect that asks where the centre or the
+        // edges are gets the *media's* — a vignette on a half-size layer in the
+        // corner darkens that layer's edges, not the canvas's. Placing first
+        // (which is what this did) handed the chain a frame the media happened
+        // to sit somewhere in, and no effect could tell where.
+        //
+        // The media is stretched to the buffer here and squashed back by the
+        // placement, so a circle in the chain comes out following the layer's
+        // own rectangle — which is what "as if this media were the frame" has
+        // to mean when the layer isn't the frame's shape.
+        this.drawLayerPlacement(entry.tex, this.fullFrameBox(), out.fbo, key);
+        const chained =
           this.renderChainTo(
             layer.effects,
             time,
             safeDt,
-            out.fbo,
-            out.tex,
+            scratch.fbo,
+            scratch.tex,
             false,
             false,
             [],
-            tex,
-          ) ?? out.tex;
+            out.tex,
+          ) ?? scratch.tex;
+        // Safe to write back into `out`: the chain's result lives in the
+        // scratch (or in a feedback buffer), never in the texture it read.
+        //
+        // Chain buffers are NEAREST, and this samples one at the layer's own
+        // scale — usually a downscale, where NEAREST crunches the edges. The
+        // media texture the no-chain path draws is LINEAR for the same reason.
+        this.setTextureFilter(chained, true);
+        this.drawLayerPlacement(chained, box, out.fbo);
+        this.setTextureFilter(chained, false);
       }
       prepared.push({
-        tex,
+        tex: out.tex,
         underEffects: layer.underEffects,
         z: layer.z,
         // The resolved value, not the lane's: it already carries the clip fade.
@@ -1704,6 +1724,15 @@ export class GlRenderer {
       });
     }
     return prepared;
+  }
+
+  /**
+   * The box a layer's chain runs in: the whole frame. What the placement box
+   * is measured against, and what makes an effect's idea of "the centre" the
+   * media's own.
+   */
+  private fullFrameBox(): LayerBox {
+    return { drawW: this.imgW, drawH: this.imgH, cx: 0.5, cy: 0.5, rot: 0 };
   }
 
   /** Where a layer's media lands, in output pixels. */
