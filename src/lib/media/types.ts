@@ -44,7 +44,9 @@ export interface MediaStyle {
    *
    * Paid for in resolution: the chain renders the media at 1/(1 + 2*bleed) of
    * the buffer, so a layer drawn near full-frame size softens a little. 0 is
-   * the old behaviour, sharp and hard-edged.
+   * the old behaviour, sharp and hard-edged; 1 gives a margin as wide as the
+   * media and leaves it a third of the buffer. The buffer's own edge is the
+   * ceiling either way — there is no bleed without something to spend on it.
    */
   bleed: number;
 }

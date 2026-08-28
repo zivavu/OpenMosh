@@ -257,7 +257,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Room around the media for its own effects to spread into. A blur or a glow otherwise stops dead at the media's edge. Costs a little sharpness on a layer drawn near full size. Double-click to reset."
+			title="Room around the media for its own effects to spread into, as a share of its size on each side. A blur or a glow otherwise stops dead at the media's edge. 100% gives it as much margin as the media itself, and renders the media at a third of the buffer — the sharpness is what buys the room. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'bleed')}
 		>
 			<label for="mc-bleed">Bleed</label>
@@ -265,7 +265,7 @@
 				id="mc-bleed"
 				value={lane.style.bleed}
 				min={0}
-				max={0.5}
+				max={1}
 				step={0.01}
 				oninput={(v) => setStyle('bleed', v, `mc-bleed-${lane.id}`)}
 			/>
