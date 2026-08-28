@@ -3,16 +3,17 @@
 export const TEXT_TIMELINE_SHORTCUTS = {
   title: "Text timeline",
   shortcuts: [
+    { keys: ["Dbl-click"], description: "Add a text clip to a lane" },
     {
-      keys: ["Dbl-click", "Ctrl/Cmd+Click"],
-      description: "Add a text clip to a lane",
+      keys: ["Ctrl/Cmd+Click"],
+      description: "Add a clip in empty space / split the clip at the cursor",
     },
     { keys: ["Drag"], description: "Move the clip (or the whole selection)" },
     { keys: ["Drag edge"], description: "Trim one clip" },
     { keys: ["Drag boundary"], description: "Trim both touching clips" },
     { keys: ["Shift+Click"], description: "Select a range of clips" },
     {
-      keys: ["Ctrl/Cmd+Click clip"],
+      keys: ["Ctrl/Cmd+Shift+Click"],
       description: "Add / remove one clip from the selection",
     },
     { keys: ["Delete", "Backspace"], description: "Delete selected clips" },

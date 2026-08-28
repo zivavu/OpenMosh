@@ -3235,6 +3235,13 @@
 		findMediaClipLane(mediaTimeline, selectedMediaClipId),
 	);
 
+	/** The thumb the rail lights up: what the selected segments play, or — since
+	 * the two selections are mutually exclusive — the source behind a selected
+	 * layer clip. */
+	let railSourceId = $derived(
+		seqSelectedSourceId ?? selectedMediaLane?.sourceId ?? null,
+	);
+
 	function toggleTextTimeline() {
 		pushTextHistory();
 		textTimeline = textTimeline.enabled
@@ -3619,7 +3626,7 @@
 				sources={sequenceSources}
 				primarySourceId={sourceRegistry.primaryId}
 				selectedCount={seqSelectedIds.length}
-				selectedSourceId={seqSelectedSourceId}
+				selectedSourceId={railSourceId}
 				onAddFiles={(files) => void addSequenceSources(files)}
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
@@ -3861,7 +3868,7 @@
 				sources={sequenceSources}
 				primarySourceId={sourceRegistry.primaryId}
 				selectedCount={seqSelectedIds.length}
-				selectedSourceId={seqSelectedSourceId}
+				selectedSourceId={railSourceId}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
 				onAdd={() => sourceInput?.click()}
 				edits={sourceRegistry.edits}

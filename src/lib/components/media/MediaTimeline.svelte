@@ -301,9 +301,33 @@
 		e.stopPropagation();
 		clickOnUp = null;
 
-		// Shift extends from the primary, ctrl/cmd toggles one. Neither starts a
-		// drag — they are selection gestures, and dragging from them would move
-		// clips the user was only trying to pick.
+		// Selection gestures first, and none of them start a drag — dragging from
+		// one would move clips the user was only trying to pick.
+		//
+		// Ctrl+Shift toggles a single clip in or out: the additive pick that plain
+		// Ctrl used to be, moved aside so Ctrl+Click can split the way it does on
+		// the source and fx lanes. Checked before the plain-Shift range, which
+		// would otherwise swallow it.
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === 'move') {
+			if (selectedIds.includes(clipId)) {
+				const rest = selectedIds.filter((x) => x !== clipId);
+				selectedIds = rest;
+				if (selectedClipId === clipId) selectedClipId = rest[rest.length - 1] ?? null;
+			} else {
+				selectedIds = [...selectedIds, clipId];
+				selectedClipId = clipId;
+			}
+			return;
+		}
+
+		// Ctrl+Click cuts at the cursor. Handled on the edge handles too: they sit
+		// over the clip's ends, and a cut there is no less unambiguous.
+		if (e.ctrlKey || e.metaKey) {
+			splitAt(laneId, timeAt(e.clientX));
+			return;
+		}
+
+		// Shift extends the selection from the primary.
 		if (e.shiftKey && mode === 'move') {
 			const lane = laneOf(laneId);
 			if (lane && selectedClipId) {
@@ -314,17 +338,6 @@
 				}
 			}
 			selectOnly(clipId);
-			return;
-		}
-		if ((e.ctrlKey || e.metaKey) && mode === 'move') {
-			if (selectedIds.includes(clipId)) {
-				const rest = selectedIds.filter((x) => x !== clipId);
-				selectedIds = rest;
-				if (selectedClipId === clipId) selectedClipId = rest[rest.length - 1] ?? null;
-			} else {
-				selectedIds = [...selectedIds, clipId];
-				selectedClipId = clipId;
-			}
 			return;
 		}
 

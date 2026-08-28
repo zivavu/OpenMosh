@@ -2,14 +2,20 @@
 export const MEDIA_LAYER_SHORTCUTS = {
   title: "Media layers",
   shortcuts: [
+    { keys: ["Dbl-click"], description: "Add a layer clip to a lane" },
     {
-      keys: ["Dbl-click", "Ctrl/Cmd+Click"],
-      description: "Add a layer clip to a lane",
+      keys: ["Ctrl/Cmd+Click"],
+      description: "Add a clip in empty space / split the clip at the cursor",
     },
     { keys: ["Dbl-click clip"], description: "Edit the layer's placement" },
     { keys: ["Drag"], description: "Move the clip (or the whole selection)" },
     { keys: ["Drag edge"], description: "Trim one clip" },
     { keys: ["Drag boundary"], description: "Trim both touching clips" },
+    { keys: ["Shift+Click"], description: "Select a range of clips" },
+    {
+      keys: ["Ctrl/Cmd+Shift+Click"],
+      description: "Add / remove one clip from the selection",
+    },
     { keys: ["S"], description: "Split the clip under the playhead" },
     { keys: ["Ctrl/Cmd+C"], description: "Copy selected clips" },
     {

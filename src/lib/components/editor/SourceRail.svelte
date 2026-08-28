@@ -55,6 +55,26 @@
 		writeRaw(OPEN_KEY, open ? '1' : '0');
 	}
 
+	/** The scrolling strip, for centring the highlighted thumb. */
+	let itemsEl = $state<HTMLDivElement | undefined>(undefined);
+
+	/** Follow the highlight: the rail holds more thumbs than fit, and the source
+	 * behind a newly selected clip or segment is often scrolled off it. Measured
+	 * against the strip rather than scrollIntoView, which would scroll the
+	 * editor's ancestors as well as this one. */
+	$effect(() => {
+		const id = selectedSourceId;
+		if (!id || !open) return;
+		const strip = itemsEl;
+		const el = strip?.querySelector<HTMLElement>(`[data-source-id="${id}"]`);
+		if (!strip || !el) return;
+		const strips = strip.getBoundingClientRect();
+		const item = el.getBoundingClientRect();
+		const delta = item.left + item.width / 2 - (strips.left + strips.width / 2);
+		if (Math.abs(delta) < 1) return;
+		strip.scrollBy({ left: delta, behavior: 'smooth' });
+	});
+
 	/** The same payload the grid's cards carry, so the timeline takes a drag
 	 * from either place as the same assignment. */
 	function onThumbDragStart(e: DragEvent, src: SequenceSource) {
@@ -83,9 +103,9 @@
 	</button>
 
 	{#if open}
-		<div class="rail-items">
+		<div class="rail-items" bind:this={itemsEl}>
 			{#each sources as src, i (src.id)}
-				<div class="rail-slot">
+				<div class="rail-slot" data-source-id={src.id}>
 					<button
 						class="rail-item"
 						class:playing={src.id === selectedSourceId}
