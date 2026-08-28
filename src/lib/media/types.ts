@@ -37,6 +37,16 @@ export interface MediaStyle {
   /** 0..1, applied by the GL composite. */
   opacity: number;
   blendMode: TextOverlayBlendMode;
+  /**
+   * Room around the media for its own effects to spread into, as a fraction of
+   * the media's size on each side. A blur or a glow otherwise stops dead at the
+   * media's edge, because the edge is where the layer's buffer ends.
+   *
+   * Paid for in resolution: the chain renders the media at 1/(1 + 2*bleed) of
+   * the buffer, so a layer drawn near full-frame size softens a little. 0 is
+   * the old behaviour, sharp and hard-edged.
+   */
+  bleed: number;
 }
 
 /** One span of media on a lane. */
@@ -105,6 +115,7 @@ export const DEFAULT_MEDIA_STYLE: MediaStyle = {
   fit: "contain",
   opacity: 1,
   blendMode: "normal",
+  bleed: 0.25,
 };
 
 export const EMPTY_MEDIA_TIMELINE: MediaTimeline = { enabled: false, lanes: [] };

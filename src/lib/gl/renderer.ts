@@ -1691,7 +1691,19 @@ export class GlRenderer {
         // placement, so a circle in the chain comes out following the layer's
         // own rectangle — which is what "as if this media were the frame" has
         // to mean when the layer isn't the frame's shape.
-        this.drawLayerPlacement(entry.tex, this.fullFrameBox(), out.fbo, key);
+        //
+        // Bleed keeps the media off the buffer's own edges, leaving transparent
+        // margin for a blur or a glow to spread into; the placement box grows
+        // to match, so what spread lands outside the media instead of being cut
+        // at its edge. Effects that write opaque alpha fill that margin too —
+        // they fill whatever they are given, and this gives them more.
+        const grow = this.bleedFactor(layer.style);
+        this.drawLayerPlacement(
+          entry.tex,
+          this.fullFrameBox(1 / grow),
+          out.fbo,
+          key,
+        );
         const chained =
           this.renderChainTo(
             layer.effects,
@@ -1711,7 +1723,11 @@ export class GlRenderer {
         // scale — usually a downscale, where NEAREST crunches the edges. The
         // media texture the no-chain path draws is LINEAR for the same reason.
         this.setTextureFilter(chained, true);
-        this.drawLayerPlacement(chained, box, out.fbo);
+        this.drawLayerPlacement(
+          chained,
+          { ...box, drawW: box.drawW * grow, drawH: box.drawH * grow },
+          out.fbo,
+        );
         this.setTextureFilter(chained, false);
       }
       prepared.push({
@@ -1727,12 +1743,27 @@ export class GlRenderer {
   }
 
   /**
-   * The box a layer's chain runs in: the whole frame. What the placement box
-   * is measured against, and what makes an effect's idea of "the centre" the
-   * media's own.
+   * The box a layer's chain runs in: the whole frame, or the middle `fill` of
+   * it when the style asks for bleed. What the placement box is measured
+   * against, and what makes an effect's idea of "the centre" the media's own.
    */
-  private fullFrameBox(): LayerBox {
-    return { drawW: this.imgW, drawH: this.imgH, cx: 0.5, cy: 0.5, rot: 0 };
+  private fullFrameBox(fill = 1): LayerBox {
+    return {
+      drawW: this.imgW * fill,
+      drawH: this.imgH * fill,
+      cx: 0.5,
+      cy: 0.5,
+      rot: 0,
+    };
+  }
+
+  /**
+   * Grow a placement box by the same factor the fill was shrunk by, so the
+   * media lands exactly where it would have and the margin its effects spread
+   * into hangs outside. 1 + 2*bleed: the margin is on both sides.
+   */
+  private bleedFactor(style: MediaStyle): number {
+    return 1 + 2 * Math.max(0, style.bleed ?? 0);
   }
 
   /** Where a layer's media lands, in output pixels. */

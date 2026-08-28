@@ -257,6 +257,24 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
+			title="Room around the media for its own effects to spread into. A blur or a glow otherwise stops dead at the media's edge. Costs a little sharpness on a layer drawn near full size. Double-click to reset."
+			ondblclick={(e) => resetStyle(e, 'bleed')}
+		>
+			<label for="mc-bleed">Bleed</label>
+			<RangeSlider
+				id="mc-bleed"
+				value={lane.style.bleed}
+				min={0}
+				max={0.5}
+				step={0.01}
+				oninput={(v) => setStyle('bleed', v, `mc-bleed-${lane.id}`)}
+			/>
+			<span class="val">{Math.round(lane.style.bleed * 100)}%</span>
+		</div>
+
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
 			title="Double-click to reset"
 			ondblclick={(e) => resetStyle(e, 'x')}
 		>

@@ -286,6 +286,15 @@ describe("normalizeMediaTimeline", () => {
     expect(t.lanes[0].effects.every((e) => !e.enabled)).toBe(true);
   });
 
+  it("backfills bleed on a layer saved before it existed", () => {
+    const t = normalizeMediaTimeline({
+      enabled: true,
+      lanes: [{ style: { scale: 2 }, clips: [{ start: 0, end: 2 }] }],
+    });
+    expect(t.lanes[0].style.bleed).toBe(0.25);
+    expect(t.lanes[0].style.scale).toBe(2);
+  });
+
   it("survives junk", () => {
     expect(normalizeMediaTimeline(null).lanes).toHaveLength(0);
     expect(normalizeMediaTimeline("nope").enabled).toBe(false);
