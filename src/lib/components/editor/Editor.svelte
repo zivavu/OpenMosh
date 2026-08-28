@@ -129,8 +129,10 @@
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
 		MEDIA_LAYER_SHORTCUTS,
+		clipSourceId,
 		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
+		setMediaClipSources,
 		updateMediaLane as updateMediaLaneIn,
 		type MediaClip,
 		type MediaLane,
@@ -1494,7 +1496,12 @@
 		const added = await addSequenceSources(files);
 		const first = added[0];
 		if (!first) return;
-		const unset = mediaTimeline.lanes.find((l) => !l.sourceId);
+		// Nothing anywhere on the lane to draw — a lane whose clips were each
+		// pointed somewhere is already carrying media, however empty its own
+		// picker reads.
+		const unset = mediaTimeline.lanes.find(
+			(l) => !l.sourceId && l.clips.every((c) => !c.sourceId),
+		);
 		if (!unset) return;
 		pushMediaHistory();
 		setMediaTimeline(
@@ -2614,6 +2621,8 @@
 		),
 	);
 	let selectedMediaClipId = $state<string | null>(null);
+	/** The layer-clip selection, so the media rail can assign to all of it. */
+	let selectedMediaClipIds = $state<string[]>([]);
 
 	// ── Single-mode session ──
 	// Sequence mode resumes from its song's media pool; single mode has only the
@@ -3235,12 +3244,67 @@
 		findMediaClipLane(mediaTimeline, selectedMediaClipId),
 	);
 
+	/** The source the selected layer clips draw; null when they disagree. Clips
+	 * that never chose one resolve to their lane's, so a lane's worth of plain
+	 * clips still agrees on a single thumb. */
+	let mediaSelectedSourceId = $derived.by(() => {
+		if (selectedMediaClipIds.length === 0) return null;
+		const picked = new Set(selectedMediaClipIds);
+		const drawn: (string | null)[] = [];
+		for (const lane of mediaTimeline.lanes) {
+			for (const clip of lane.clips) {
+				if (picked.has(clip.id)) drawn.push(clipSourceId(lane, clip));
+			}
+		}
+		if (drawn.length === 0) return null;
+		return drawn.every((id) => id && id === drawn[0]) ? drawn[0] : null;
+	});
+
 	/** The thumb the rail lights up: what the selected segments play, or — since
-	 * the two selections are mutually exclusive — the source behind a selected
-	 * layer clip. */
+	 * the two selections are mutually exclusive — what the selected layer clips
+	 * draw. Falls back to the lane behind the primary clip, so a lane opened
+	 * with nothing selected still says which media it is on. */
 	let railSourceId = $derived(
-		seqSelectedSourceId ?? selectedMediaLane?.sourceId ?? null,
+		seqSelectedSourceId ??
+			mediaSelectedSourceId ??
+			selectedMediaLane?.sourceId ??
+			null,
 	);
+
+	/**
+	 * What a rail click assigns to. Segments and layer clips are mutually
+	 * exclusive selections, so the rail never has to choose between them.
+	 */
+	let railTarget = $derived<'segment' | 'clip' | null>(
+		seqSelectedIds.length > 0
+			? 'segment'
+			: selectedMediaClipIds.length > 0
+				? 'clip'
+				: null,
+	);
+
+	let railTargetCount = $derived(
+		railTarget === 'segment'
+			? seqSelectedIds.length
+			: railTarget === 'clip'
+				? selectedMediaClipIds.length
+				: 0,
+	);
+
+	/** Point the selected layer clips at this source — the clip counterpart of
+	 * assignSegmentSource, and the same fan-out over the whole selection. */
+	function assignMediaClipSource(sourceId: string) {
+		if (selectedMediaClipIds.length === 0) return;
+		pushMediaHistory();
+		setMediaTimeline(
+			setMediaClipSources(mediaTimeline, selectedMediaClipIds, sourceId),
+		);
+	}
+
+	function assignRailSource(sourceId: string) {
+		if (railTarget === 'segment') assignSegmentSource(seqSelectedIds, sourceId);
+		else if (railTarget === 'clip') assignMediaClipSource(sourceId);
+	}
 
 	function toggleTextTimeline() {
 		pushTextHistory();
@@ -3867,9 +3931,10 @@
 			<SourceRail
 				sources={sequenceSources}
 				primarySourceId={sourceRegistry.primaryId}
-				selectedCount={seqSelectedIds.length}
+				selectedCount={railTargetCount}
+				selectedLabel={railTarget === 'clip' ? 'layer clip' : 'segment'}
 				selectedSourceId={railSourceId}
-				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
+				onAssign={assignRailSource}
 				onAdd={() => sourceInput?.click()}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
@@ -4002,6 +4067,7 @@
 							onLaneDragStart={startLayerDrag}
 							sources={sequenceSources}
 							bind:selectedClipId={selectedMediaClipId}
+							bind:selectedClipIds={selectedMediaClipIds}
 							onChange={setMediaTimeline}
 							onBeforeEdit={pushMediaHistory}
 						/>

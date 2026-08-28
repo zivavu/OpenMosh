@@ -8,6 +8,7 @@
 	import {
 		addClip,
 		clipRange,
+		clipSourceId,
 		copyMediaClips,
 		createMediaClip,
 		freeRangeAt,
@@ -18,6 +19,7 @@
 		removeClip,
 		resizeBoundary,
 		resizeClip,
+		setMediaClipSources,
 		sortClips,
 		splitMediaClipAt,
 		updateMediaLane,
@@ -48,6 +50,12 @@
 		/** The media pool, for naming and thumbnailing each lane's source. */
 		sources?: SequenceSource[];
 		selectedClipId?: string | null;
+		/**
+		 * The whole selection, so the media rail can assign to all of it.
+		 * `selectedClipId` stays the primary — the one the clip panel edits and
+		 * the anchor a shift-range extends from — and is always a member here.
+		 */
+		selectedClipIds?: string[];
 		onChange: (timeline: MediaTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
@@ -60,6 +68,7 @@
 		draggingLaneId = null,
 		sources = [],
 		selectedClipId = $bindable(null),
+		selectedClipIds = $bindable([]),
 		onChange,
 		onBeforeEdit,
 	}: Props = $props();
@@ -68,6 +77,8 @@
 	// The same payload the media rail and the sequence grid send, so a thumb
 	// dragged onto a lane sets what that layer draws.
 	let dropLaneId = $state<string | null>(null);
+	/** The clip a drop would retarget; null when it would set the lane instead. */
+	let dropClipId = $state<string | null>(null);
 
 	function isSourceDrag(e: DragEvent): boolean {
 		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
@@ -79,6 +90,20 @@
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
 		dropLaneId = laneId;
+		dropClipId = dropTargetClip(laneId, e.clientX)?.id ?? null;
+	}
+
+	/** The clip a drop at this x would land on, if it lands on one at all. */
+	function dropTargetClip(laneId: string, clientX: number): MediaClip | null {
+		const lane = laneOf(laneId);
+		if (!lane || !trackEl) return null;
+		const rect = trackEl.getBoundingClientRect();
+		if (clientX < rect.left || clientX > rect.right) return null;
+		return clipAtTime(lane, timeAt(clientX));
+	}
+
+	function clipAtTime(lane: MediaLane, t: number): MediaClip | null {
+		return lane.clips.find((c) => t >= c.start && t < c.end) ?? null;
 	}
 
 	function onLaneDragLeave(e: DragEvent) {
@@ -91,27 +116,65 @@
 			return;
 		}
 		dropLaneId = null;
+		dropClipId = null;
 	}
 
+	/**
+	 * A thumb dropped on a clip retargets that clip alone; one dropped on the
+	 * lane's empty space sets the lane's own source, which every clip that never
+	 * chose one follows. That split is what lets one lane hold several images
+	 * without the drop having to ask which it meant.
+	 */
 	function onLaneDrop(e: DragEvent, laneId: string) {
 		if (!isSourceDrag(e)) return;
 		e.preventDefault();
 		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? '';
+		const onClip = dropTargetClip(laneId, e.clientX);
 		dropLaneId = null;
+		dropClipId = null;
 		if (!sourceId) return;
 		const lane = laneOf(laneId);
-		if (!lane || lane.sourceId === sourceId) return;
+		if (!lane) return;
+		if (onClip) {
+			if (clipSourceId(lane, onClip) === sourceId) return;
+			onBeforeEdit?.();
+			onChange(setMediaClipSources(timeline, [onClip.id], sourceId));
+			return;
+		}
+		if (lane.sourceId === sourceId) return;
 		onBeforeEdit?.();
 		onChange(updateMediaLane(timeline, laneId, (l) => ({ ...l, sourceId })));
 	}
 
-	function sourceOf(lane: MediaLane): SequenceSource | undefined {
-		return sources.find((s) => s.id === lane.sourceId);
+	function sourceById(id: string | null): SequenceSource | undefined {
+		return id ? sources.find((s) => s.id === id) : undefined;
 	}
 
-	/** What a clip says it is showing. Lanes with no source read as unset. */
+	function sourceOf(lane: MediaLane): SequenceSource | undefined {
+		return sourceById(lane.sourceId);
+	}
+
+	/** The media a clip actually draws — its own when it was retargeted. */
+	function clipSource(
+		lane: MediaLane,
+		clip: MediaClip,
+	): SequenceSource | undefined {
+		return sourceById(clipSourceId(lane, clip));
+	}
+
+	/** What a clip says it is showing. Clips with no source read as unset. */
+	function clipLabel(lane: MediaLane, clip: MediaClip): string {
+		return clipSource(lane, clip)?.name ?? 'No source';
+	}
+
+	/** The gutter's label: the lane's own source, which its plain clips follow. */
 	function laneLabel(lane: MediaLane): string {
 		return sourceOf(lane)?.name ?? 'No source';
+	}
+
+	/** True when nothing on the lane has anything to draw. */
+	function laneUnset(lane: MediaLane): boolean {
+		return !lane.sourceId && lane.clips.every((c) => !c.sourceId);
 	}
 
 	// One axis for the whole stack: zoom, pan, playhead-following and the
@@ -149,12 +212,6 @@
 		grabOffset: number;
 	} | null>(null);
 
-	/**
-	 * The whole selection. `selectedClipId` stays the primary — the one the clip
-	 * panel edits and the anchor a shift-range extends from — and is always a
-	 * member of this list.
-	 */
-	let selectedIds = $state<string[]>([]);
 	/** Set on pointerdown when a plain click landed on an already-selected clip.
 	 * The selection has to survive until pointerup so the clip (or the group) can
 	 * still be dragged; only a click that turns out not to be a drag resolves it —
@@ -163,12 +220,12 @@
 
 	function selectOnly(clipId: string) {
 		selectedClipId = clipId;
-		selectedIds = [clipId];
+		selectedClipIds = [clipId];
 	}
 
 	function deselect() {
 		selectedClipId = null;
-		selectedIds = [];
+		selectedClipIds = [];
 	}
 
 	// Follow external changes to the primary (the panel's back button), and drop
@@ -180,12 +237,12 @@
 		);
 		untrack(() => {
 			if (!id || !alive.has(id)) {
-				if (selectedIds.length > 0) selectedIds = [];
+				if (selectedClipIds.length > 0) selectedClipIds = [];
 				return;
 			}
-			const pruned = selectedIds.filter((x) => alive.has(x));
-			if (!pruned.includes(id)) selectedIds = [id];
-			else if (pruned.length !== selectedIds.length) selectedIds = pruned;
+			const pruned = selectedClipIds.filter((x) => alive.has(x));
+			if (!pruned.includes(id)) selectedClipIds = [id];
+			else if (pruned.length !== selectedClipIds.length) selectedClipIds = pruned;
 		});
 	});
 
@@ -310,12 +367,12 @@
 		// the source and fx lanes. Checked before the plain-Shift range, which
 		// would otherwise swallow it.
 		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === 'move') {
-			if (selectedIds.includes(clipId)) {
-				const rest = selectedIds.filter((x) => x !== clipId);
-				selectedIds = rest;
+			if (selectedClipIds.includes(clipId)) {
+				const rest = selectedClipIds.filter((x) => x !== clipId);
+				selectedClipIds = rest;
 				if (selectedClipId === clipId) selectedClipId = rest[rest.length - 1] ?? null;
 			} else {
-				selectedIds = [...selectedIds, clipId];
+				selectedClipIds = [...selectedClipIds, clipId];
 				selectedClipId = clipId;
 			}
 			return;
@@ -334,7 +391,7 @@
 			if (lane && selectedClipId) {
 				const range = clipRange(lane, selectedClipId, clipId);
 				if (range.length > 0) {
-					selectedIds = range;
+					selectedClipIds = range;
 					return;
 				}
 			}
@@ -344,7 +401,7 @@
 
 		// A plain click on something already selected keeps the selection, so it
 		// can be dragged; pointerup resolves it if nothing moved.
-		if (selectedIds.includes(clipId) && mode === 'move') {
+		if (selectedClipIds.includes(clipId) && mode === 'move') {
 			selectedClipId = clipId;
 			clickOnUp = clipId;
 		} else {
@@ -471,12 +528,12 @@
 					// Dragging any member drags the whole selection with it. Measured
 					// as a delta off the grabbed clip's live position, since each move
 					// re-enters here against an already-shifted timeline.
-					if (selectedIds.length > 1 && selectedIds.includes(clipId)) {
+					if (selectedClipIds.length > 1 && selectedClipIds.includes(clipId)) {
 						const held = lane.clips.find((c) => c.id === clipId);
 						if (held) {
 							return moveClips(
 								lane,
-								selectedIds,
+								selectedClipIds,
 								t - grabOffset - held.start,
 								trackDuration,
 							);
@@ -498,7 +555,7 @@
 		if (clickOnUp) {
 			// Clicking the one selected clip again drops the selection — the same
 			// gesture the sequence timeline gives a segment.
-			const sole = selectedIds.length === 1 && selectedIds[0] === clickOnUp;
+			const sole = selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
 			if (sole) deselect();
 			else selectOnly(clickOnUp);
 			clickOnUp = null;
@@ -513,7 +570,7 @@
 
 	/** Delete every selected clip, across lanes, as one undo step. */
 	function deleteSelection() {
-		const ids = new Set(selectedIds);
+		const ids = new Set(selectedClipIds);
 		if (ids.size === 0) return;
 		onBeforeEdit?.();
 		onChange({
@@ -533,8 +590,8 @@
 	let clipboard = $state<MediaClipboardEntry[]>([]);
 
 	function copySelection(): boolean {
-		if (selectedIds.length === 0) return false;
-		clipboard = copyMediaClips(timeline, selectedIds);
+		if (selectedClipIds.length === 0) return false;
+		clipboard = copyMediaClips(timeline, selectedClipIds);
 		return clipboard.length > 0;
 	}
 
@@ -550,7 +607,7 @@
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();
 		onChange(result.timeline);
-		selectedIds = result.clipIds;
+		selectedClipIds = result.clipIds;
 		selectedClipId = result.clipIds[result.clipIds.length - 1];
 		return true;
 	}
@@ -572,12 +629,12 @@
 			}
 			return;
 		}
-		if (e.key === 'Escape' && selectedIds.length > 0) {
+		if (e.key === 'Escape' && selectedClipIds.length > 0) {
 			deselect();
 			return;
 		}
 		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-		if (selectedIds.length === 0) return;
+		if (selectedClipIds.length === 0) return;
 		e.preventDefault();
 		deleteSelection();
 	}
@@ -592,7 +649,7 @@
 		<div
 			class="tl-row layer-row"
 			class:lifted={draggingLaneId === lane.id}
-			class:drop-target={dropLaneId === lane.id}
+			class:drop-target={dropLaneId === lane.id && !dropClipId}
 			style="order: {stackAt(lane.id)}"
 			data-layer-id={lane.id}
 			ondragover={(e) => onLaneDragOver(e, lane.id)}
@@ -616,10 +673,10 @@
 				</button>
 				<button
 					class="lane-src"
-					class:unset={!lane.sourceId}
+					class:unset={laneUnset(lane)}
 					title={lane.sourceId
 						? `${laneLabel(lane)} — click to edit this layer`
-						: 'No source — drag one here from the media rail'}
+						: 'No source — drag one onto this row from the media rail'}
 					onclick={() => openLane(lane)}
 				>
 					{#if sourceOf(lane)?.thumbUrl}
@@ -654,17 +711,20 @@
 					{@const left = vp.toPct(clip.start)}
 					{@const width = vp.toPct(clip.end) - left}
 					{@const edge = edgeWidth(clip)}
+					{@const src = clipSource(lane, clip)}
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"
-							class:selected={selectedIds.includes(clip.id)}
-							class:primary={selectedIds.length > 1 &&
+							class:selected={selectedClipIds.includes(clip.id)}
+							class:primary={selectedClipIds.length > 1 &&
 								clip.id === selectedClipId}
 							class:muted={!lane.enabled}
+							class:retargeted={!!clip.sourceId}
+							class:drop-target={dropClipId === clip.id}
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
-							title="{laneLabel(lane)} — double-click to edit"
+							title="{clipLabel(lane, clip)} — double-click to edit"
 							ondblclick={() => openLane(lane)}
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
@@ -678,14 +738,14 @@
 								onpointerdown={(e) =>
 									onClipPointerDown(e, lane.id, clip.id, 'start')}
 							></span>
-							{#if sourceOf(lane)?.thumbUrl}
+							{#if src?.thumbUrl}
 								<span
 									class="clip-thumb"
-									style="background-image: url({sourceOf(lane)!.thumbUrl})"
+									style="background-image: url({src.thumbUrl})"
 								></span>
 							{/if}
 							{#if clipPx(clip) >= MIN_LABEL_PX}
-								<span class="clip-label">{laneLabel(lane)}</span>
+								<span class="clip-label">{clipLabel(lane, clip)}</span>
 							{/if}
 							<span
 								class="clip-edge end"
@@ -792,7 +852,9 @@
 		opacity: 0.55;
 	}
 
-	/* A source is being dragged over this row and would land on it. */
+	/* A source is being dragged over this row's empty space and would become the
+	   lane's own. Over a clip the clip lights instead — the drop retargets that
+	   one clip, and lighting the whole row would promise otherwise. */
 	.layer-row.drop-target .lane-track {
 		border-color: var(--live);
 		box-shadow: inset 0 0 0 1px var(--live);
@@ -858,6 +920,25 @@
 
 	.clip.muted {
 		opacity: 0.4;
+	}
+
+	/* A clip showing something other than its lane's source. Left corner, so it
+	   survives a clip narrow enough to lose its label. */
+	.clip.retargeted::after {
+		content: '';
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 3px;
+		height: 3px;
+		border-radius: 50%;
+		background: var(--mosh);
+		pointer-events: none;
+	}
+
+	.clip.drop-target {
+		border-color: var(--mosh);
+		box-shadow: inset 0 0 0 1px var(--mosh);
 	}
 
 	/* The source's thumbnail, tiled along the clip: a filmstrip reads as "this

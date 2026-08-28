@@ -3,6 +3,7 @@
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
 	import { LaneEffects } from '../../timeline/lane-effects.svelte';
 	import {
+		clipSourceId,
 		DEFAULT_MEDIA_STYLE,
 		MEDIA_FIT_OPTIONS,
 		type MediaClip,
@@ -56,7 +57,11 @@
 		response = undefined,
 	}: Props = $props();
 
-	let source = $derived(sources.find((s) => s.id === lane?.sourceId));
+	/** What the selected clip draws: its own source, or the lane's. */
+	let source = $derived(
+		lane ? sources.find((s) => s.id === clipSourceId(lane, clip)) : undefined,
+	);
+	let laneSource = $derived(sources.find((s) => s.id === lane?.sourceId));
 
 	function setUnderEffects(under: boolean) {
 		if (!lane) return;
@@ -81,10 +86,19 @@
 		setStyle(key, DEFAULT_MEDIA_STYLE[key]);
 	}
 
-	function setSource(id: string) {
-		if (!lane) return;
+	/**
+	 * Point this clip at its own media. The empty value hands it back to the
+	 * lane, so a clip that never chose keeps following the lane's picker — the
+	 * placement and the effect chain stay shared either way, which is the whole
+	 * point of cutting a lane up rather than adding another.
+	 */
+	function setClipSource(id: string) {
+		if (!clip || !lane) return;
 		onBeforeEdit?.();
-		onLaneChange({ ...lane, sourceId: id });
+		onClipChange({
+			...clip,
+			sourceId: id && id !== lane.sourceId ? id : undefined,
+		});
 	}
 
 	/** Zero means no ramp at all, which the clip carries as an absent field. */
@@ -138,10 +152,33 @@
 			{/if}
 		</div>
 
-		{#if !lane.sourceId}
+		{#if sources.length > 0}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="row"
+				title="What this clip shows. Every clip on the lane shares its placement and effects, so cutting the lane up is how one layer plays several images."
+			>
+				<label for="mc-source">Media</label>
+				<select
+					id="mc-source"
+					value={clip.sourceId ?? ''}
+					onchange={(e) =>
+						setClipSource((e.currentTarget as HTMLSelectElement).value)}
+				>
+					<option value="">
+						Lane default{laneSource ? ` — ${laneSource.name}` : ''}
+					</option>
+					{#each sources as s (s.id)}
+						<option value={s.id}>{s.name}</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
+
+		{#if !source}
 			<p class="warn">
-				This layer has nothing to draw — drag a thumb from the media rail onto
-				its row.
+				This clip has nothing to draw — pick media above, or drag a thumb from
+				the media rail onto it.
 			</p>
 		{/if}
 

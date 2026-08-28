@@ -29,6 +29,7 @@ import {
 } from "./sequence";
 import { createSequenceExportSources } from "./sequence-export-sources";
 import { createMediaExportLayers } from "./media-export-layers";
+import { laneSourceIds } from "../media";
 import type { MediaTimeline, ResolvedMediaLayer } from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
@@ -476,13 +477,14 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     }
     // Keyed by lane, matching how the preview driver holds its decoders: the
     // lane is what a layer's frames belong to, and two lanes can want two
-    // positions in one file.
-    const laneSources = new Map<string, string>();
+    // positions in one file. A lane lists every source its clips name, since
+    // they need not all be the lane's own.
+    const laneSources = new Map<string, string[]>();
     if (mediaTimeline?.enabled) {
       for (const lane of mediaTimeline.lanes) {
-        if (lane.enabled && lane.sourceId && lane.clips.length > 0) {
-          laneSources.set(lane.id, lane.sourceId);
-        }
+        if (!lane.enabled) continue;
+        const ids = laneSourceIds(lane);
+        if (ids.length > 0) laneSources.set(lane.id, ids);
       }
     }
     if (laneSources.size > 0) {

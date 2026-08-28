@@ -20,15 +20,16 @@ export interface MediaExportLayers {
 
 export async function createMediaExportLayers(
   sources: SequenceSource[],
-  /** The source each lane draws from, keyed by lane id. */
-  laneSources: Map<string, string>,
+  /** Every source a lane's clips can call for, keyed by lane id. */
+  laneSources: Map<string, string[]>,
   renderer: GlRenderer,
 ): Promise<MediaExportLayers> {
   const byId = new Map(sources.map((s) => [s.id, s]));
 
   const images = new Map<string, HTMLImageElement>();
-  /** One decoder per video *lane*: a sampler decodes sequentially from wherever
-   * it is, so two lanes on one video have to hold one each. */
+  /** One decoder per (lane, video source): a sampler decodes sequentially from
+   * wherever it is, so two lanes on one video have to hold one each — and a
+   * lane cutting between two videos can't rewind a shared one at each edge. */
   const samplers = new Map<string, SlideVideoSampler>();
   /** Source whose frame is on each lane's texture, keyed by lane. */
   const uploaded = new Map<string, string>();
@@ -37,18 +38,20 @@ export async function createMediaExportLayers(
   // happens on. Layer media is a handful of files at most, unlike the sequence
   // pool, so the images are decoded here too.
   await Promise.all(
-    [...laneSources].map(async ([laneId, sourceId]) => {
-      const src = byId.get(sourceId);
-      if (!src) return;
-      if (src.kind === "video") {
-        const sampler = await SlideVideoSampler.create(src.file);
-        if (sampler) samplers.set(laneId, sampler);
-        return;
-      }
-      if (images.has(src.id)) return;
-      const img = await decodeImage(src.objectUrl);
-      if (img) images.set(src.id, img);
-    }),
+    [...laneSources].flatMap(([laneId, sourceIds]) =>
+      sourceIds.map(async (sourceId) => {
+        const src = byId.get(sourceId);
+        if (!src) return;
+        if (src.kind === "video") {
+          const sampler = await SlideVideoSampler.create(src.file);
+          if (sampler) samplers.set(samplerKey(laneId, src.id), sampler);
+          return;
+        }
+        if (images.has(src.id)) return;
+        const img = await decodeImage(src.objectUrl);
+        if (img) images.set(src.id, img);
+      }),
+    ),
   );
 
   return {
@@ -79,7 +82,7 @@ export async function createMediaExportLayers(
             return;
           }
 
-          const sampler = samplers.get(layer.key);
+          const sampler = samplers.get(samplerKey(layer.key, src.id));
           if (!sampler) return;
           uploaded.set(layer.key, src.id);
           const frame = await sampler.at(layer.sourceTime);
@@ -97,6 +100,10 @@ export async function createMediaExportLayers(
       uploaded.clear();
     },
   };
+}
+
+function samplerKey(laneId: string, sourceId: string): string {
+  return `${laneId}|${sourceId}`;
 }
 
 function decodeImage(url: string): Promise<HTMLImageElement | null> {

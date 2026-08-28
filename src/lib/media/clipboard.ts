@@ -1,12 +1,12 @@
 /**
  * Copy/paste for media layer clips.
  *
- * A clip carries only its span and its in-point. Everything that decides what
- * it looks like — the source, the placement, the effect chain — lives on the
- * lane and is shared by every clip on it. So a copy pastes back into the lane
- * it came from, where all of that comes along by itself. Pasting onto another
- * lane would mean overwriting that lane's source and chain for the sake of one
- * clip, which is a lane edit wearing a clip's clothes.
+ * A clip carries its span, its in-point and whichever source it was retargeted
+ * to. The placement and the effect chain live on the lane and are shared by
+ * every clip on it, so a copy pastes back into the lane it came from, where
+ * both come along by themselves. Pasting onto another lane would mean
+ * overwriting that lane's chain for the sake of one clip, which is a lane edit
+ * wearing a clip's clothes.
  */
 
 import { sortClips } from "../timeline/clips";
@@ -23,6 +23,8 @@ export interface MediaClipboardEntry {
   offset: number;
   length: number;
   sourceStart: number;
+  /** The clip's own source, when it had one; absent means the lane's. */
+  sourceId?: string;
   fadeSec?: number;
 }
 
@@ -43,6 +45,7 @@ export function copyMediaClips(
         offset: clip.start,
         length: clip.end - clip.start,
         sourceStart: clip.sourceStart,
+        sourceId: clip.sourceId,
         fadeSec: clip.fadeSec,
       });
     }
@@ -134,7 +137,12 @@ export function pasteMediaClips(
   const clipIds: string[] = [];
   for (const e of live) {
     const start = Math.max(0, at) + e.offset + delta;
-    const clip = createMediaClip(start, start + e.length, e.sourceStart);
+    const clip = createMediaClip(
+      start,
+      start + e.length,
+      e.sourceStart,
+      e.sourceId,
+    );
     if (e.fadeSec !== undefined) clip.fadeSec = e.fadeSec;
     clipIds.push(clip.id);
     const list = added.get(e.laneId);

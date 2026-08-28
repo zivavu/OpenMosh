@@ -41,6 +41,13 @@ describe("copyMediaClips", () => {
     expect(entry.fadeSec).toBe(0.5);
   });
 
+  it("carries the clip's own source", () => {
+    const lane = laneWith([[0, 5]]);
+    lane.clips[0].sourceId = "src-b";
+    const [entry] = copyMediaClips(timelineOf([lane]), [lane.clips[0].id]);
+    expect(entry.sourceId).toBe("src-b");
+  });
+
   it("ignores ids that aren't in the timeline", () => {
     const lane = laneWith([[0, 5]]);
     expect(copyMediaClips(timelineOf([lane]), ["nope"])).toEqual([]);
@@ -57,6 +64,16 @@ describe("pasteMediaClips", () => {
     expect(pasted.start).toBe(20);
     expect(pasted.end).toBe(25);
     expect(pasted.sourceStart).toBe(12);
+  });
+
+  it("pastes a retargeted clip still showing its own media", () => {
+    const lane = laneWith([[0, 5]]);
+    lane.clips[0].sourceId = "src-b";
+    const t = timelineOf([lane]);
+    const copied = copyMediaClips(t, [lane.clips[0].id]);
+    const { timeline, clipIds } = pasteMediaClips(t, copied, 20, 60);
+    const pasted = timeline.lanes[0].clips.find((c) => c.id === clipIds[0])!;
+    expect(pasted.sourceId).toBe("src-b");
   });
 
   it("lands the copy after the original when the playhead is inside it", () => {

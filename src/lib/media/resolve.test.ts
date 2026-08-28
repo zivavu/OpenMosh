@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
+  clipSourceId,
   detachMediaSource,
+  laneSourceIds,
   mediaTimelineSourceIds,
   resolveMediaLayersAt,
+  setMediaClipSources,
 } from "./resolve";
 import {
   createFullSpanLane,
@@ -25,6 +28,14 @@ function laneWith(spans: [number, number, number?][]): MediaLane {
 
 function timelineOf(lanes: MediaLane[]): MediaTimeline {
   return { enabled: true, lanes };
+}
+
+/** Point the clip at `index` at its own source. */
+function retargeted(lane: MediaLane, index: number, sourceId: string): MediaLane {
+  return {
+    ...lane,
+    clips: lane.clips.map((c, i) => (i === index ? { ...c, sourceId } : c)),
+  };
 }
 
 describe("resolveMediaLayersAt", () => {
@@ -159,6 +170,103 @@ describe("mediaTimelineSourceIds", () => {
       "src-a",
       "src-b",
     ]);
+  });
+
+  it("counts what a retargeted clip draws, not just its lane", () => {
+    const lane = retargeted(
+      laneWith([
+        [0, 2],
+        [2, 4],
+      ]),
+      1,
+      "src-c",
+    );
+    expect(mediaTimelineSourceIds(timelineOf([lane]))).toEqual([
+      "src-a",
+      "src-c",
+    ]);
+  });
+});
+
+describe("per-clip sources", () => {
+  it("falls back to the lane until a clip picks its own", () => {
+    const lane = laneWith([
+      [0, 2],
+      [2, 4],
+    ]);
+    expect(clipSourceId(lane, lane.clips[0])).toBe("src-a");
+    const next = retargeted(lane, 1, "src-b");
+    expect(clipSourceId(next, next.clips[0])).toBe("src-a");
+    expect(clipSourceId(next, next.clips[1])).toBe("src-b");
+  });
+
+  it("draws each half of a split from its own source", () => {
+    const lane = retargeted(
+      laneWith([
+        [0, 2],
+        [2, 4],
+      ]),
+      1,
+      "src-b",
+    );
+    const t = timelineOf([lane]);
+    expect(resolveMediaLayersAt(t, 1)[0].sourceId).toBe("src-a");
+    expect(resolveMediaLayersAt(t, 3)[0].sourceId).toBe("src-b");
+    // Same lane, so the layer keeps one texture and one effect chain.
+    expect(resolveMediaLayersAt(t, 3)[0].key).toBe(lane.id);
+  });
+
+  it("still draws a clip whose lane has no source of its own", () => {
+    const lane: MediaLane = {
+      ...retargeted(laneWith([[0, 2]]), 0, "src-b"),
+      sourceId: null,
+    };
+    const layers = resolveMediaLayersAt(timelineOf([lane]), 1);
+    expect(layers).toHaveLength(1);
+    expect(layers[0].sourceId).toBe("src-b");
+  });
+
+  it("keeps both halves on the source the clip was split from", () => {
+    const lane = retargeted(laneWith([[0, 4]]), 0, "src-b");
+    const split = splitMediaClipAt(lane, 2);
+    expect(split.clips.map((c) => c.sourceId)).toEqual(["src-b", "src-b"]);
+  });
+
+  it("lists every source a lane can call for", () => {
+    const lane = retargeted(
+      laneWith([
+        [0, 2],
+        [2, 4],
+      ]),
+      1,
+      "src-b",
+    );
+    expect(laneSourceIds(lane).sort()).toEqual(["src-a", "src-b"]);
+  });
+
+  it("hands a clip back to its lane when they name the same source", () => {
+    const lane = retargeted(laneWith([[0, 2]]), 0, "src-b");
+    const next = setMediaClipSources(
+      timelineOf([lane]),
+      [lane.clips[0].id],
+      "src-a",
+    );
+    expect(next.lanes[0].clips[0].sourceId).toBeUndefined();
+  });
+
+  it("drops a removed source from clips as well as lanes", () => {
+    const lane = retargeted(laneWith([[0, 2]]), 0, "src-b");
+    const next = detachMediaSource(timelineOf([lane]), "src-b");
+    expect(next.lanes[0].clips[0].sourceId).toBeUndefined();
+    expect(next.lanes[0].sourceId).toBe("src-a");
+  });
+
+  it("carries a clip's own source through a save", () => {
+    const lane = retargeted(laneWith([[0, 2]]), 0, "src-b");
+    const round = normalizeMediaTimeline(
+      JSON.parse(JSON.stringify(timelineOf([lane]))),
+    );
+    expect(round.lanes[0].clips[0].sourceId).toBe("src-b");
   });
 });
 

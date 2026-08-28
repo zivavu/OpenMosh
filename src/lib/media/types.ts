@@ -44,6 +44,17 @@ export interface MediaClip extends TimelineClip {
   /** Seconds into the source the clip starts at. Ignored by image sources. */
   sourceStart: number;
   /**
+   * What this clip draws, when it isn't the lane's own source. Absent means
+   * "whatever the lane says", which is what every clip meant before a lane
+   * could hold more than one image — so a split inherits the source the whole
+   * lane was on and only the halves the user retargets carry one of these.
+   *
+   * The placement and the effect chain stay on the lane, so cutting a lane in
+   * two and dropping a different photo on each half runs both through the
+   * same chain.
+   */
+  sourceId?: string;
+  /**
    * Fade the layer in over this many seconds from the clip's start, and out
    * over the same before its end.
    *
@@ -115,8 +126,11 @@ export function createMediaClip(
   start: number,
   end: number,
   sourceStart = 0,
+  sourceId?: string,
 ): MediaClip {
-  return { id: nextId("mclip"), start, end, sourceStart };
+  const clip: MediaClip = { id: nextId("mclip"), start, end, sourceStart };
+  if (sourceId) clip.sourceId = sourceId;
+  return clip;
 }
 
 /**
@@ -129,7 +143,9 @@ export function mediaClipWeight(clip: MediaClip, time: number): number {
 
 /**
  * Cut the clip covering `at` into two. The right half picks up the source time
- * the left half reached, so splitting a video clip doesn't rewind it.
+ * the left half reached, so splitting a video clip doesn't rewind it, and both
+ * halves keep whatever source the clip was on — retargeting one of them is the
+ * next gesture, not something a split should guess at.
  */
 export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
   const clip = clipAt(lane, at);
@@ -259,6 +275,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
         start: clip.start ?? 0,
         end: clip.end ?? 0,
         sourceStart: clip.sourceStart ?? 0,
+        sourceId: clip.sourceId ?? undefined,
         fadeSec: clip.fadeSec,
       })),
     })),

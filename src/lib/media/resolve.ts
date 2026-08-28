@@ -51,6 +51,29 @@ export interface ResolvedMediaLayer {
 }
 
 /**
+ * What a clip draws: its own source when it was retargeted, the lane's
+ * otherwise. Every read of a clip's media goes through here — a clip pointing
+ * at a source that has since left the pool is the caller's problem, the same
+ * as a lane's.
+ */
+export function clipSourceId(
+  lane: MediaLane,
+  clip: MediaClip | null | undefined,
+): string | null {
+  return clip?.sourceId ?? lane.sourceId;
+}
+
+/** Distinct sources a lane's clips can call for, the lane's own included. */
+export function laneSourceIds(lane: MediaLane): string[] {
+  const ids = new Set<string>();
+  for (const clip of lane.clips) {
+    const id = clipSourceId(lane, clip);
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
  * The media layers visible at `time`, in lane order. Preview and export both
  * go through here, so what you scrub past is what gets written out.
  */
@@ -61,15 +84,17 @@ export function resolveMediaLayersAt(
   if (!timeline?.enabled) return [];
   const layers: ResolvedMediaLayer[] = [];
   for (const lane of timeline.lanes) {
-    if (!lane.enabled || !lane.sourceId || lane.style.opacity <= 0) continue;
+    if (!lane.enabled || lane.style.opacity <= 0) continue;
     const clip = clipAt(lane, time);
     if (!clip) continue;
+    const sourceId = clipSourceId(lane, clip);
+    if (!sourceId) continue;
     layers.push({
       key: lane.id,
       laneId: lane.id,
       underEffects: lane.underEffects,
       z: lane.z,
-      sourceId: lane.sourceId,
+      sourceId,
       sourceTime: clip.sourceStart + (time - clip.start),
       style: lane.style,
       opacity: lane.style.opacity * mediaClipWeight(clip, time),
@@ -119,8 +144,42 @@ export function mediaTimelineSourceIds(
   const ids = new Set<string>();
   for (const lane of timeline?.lanes ?? []) {
     if (lane.sourceId) ids.add(lane.sourceId);
+    for (const clip of lane.clips) {
+      if (clip.sourceId) ids.add(clip.sourceId);
+    }
   }
   return [...ids];
+}
+
+/**
+ * Point the given clips at `sourceId`. A clip already on its lane's source
+ * keeps no override, so the lane's own picker still moves it — that is what
+ * "this lane's default" has to keep meaning for the clips that never chose.
+ */
+export function setMediaClipSources(
+  timeline: MediaTimeline,
+  clipIds: string[],
+  sourceId: string,
+): MediaTimeline {
+  const ids = new Set(clipIds);
+  if (ids.size === 0) return timeline;
+  return {
+    ...timeline,
+    lanes: timeline.lanes.map((lane) => {
+      if (!lane.clips.some((c) => ids.has(c.id))) return lane;
+      return {
+        ...lane,
+        clips: lane.clips.map((c) =>
+          ids.has(c.id)
+            ? {
+                ...c,
+                sourceId: sourceId === lane.sourceId ? undefined : sourceId,
+              }
+            : c,
+        ),
+      };
+    }),
+  };
 }
 
 /** Apply a lane edit inside a timeline. */
@@ -135,16 +194,29 @@ export function updateMediaLane(
   };
 }
 
-/** Drop a removed source from every lane that pointed at it. */
+/**
+ * Drop a removed source from every lane and clip that pointed at it. A clip
+ * loses its override rather than gaining a null one, so it falls back to its
+ * lane the way an untouched clip does.
+ */
 export function detachMediaSource(
   timeline: MediaTimeline,
   sourceId: string,
 ): MediaTimeline {
-  if (!timeline.lanes.some((l) => l.sourceId === sourceId)) return timeline;
+  const held = (l: MediaLane) =>
+    l.sourceId === sourceId || l.clips.some((c) => c.sourceId === sourceId);
+  if (!timeline.lanes.some(held)) return timeline;
   return {
     ...timeline,
-    lanes: timeline.lanes.map((l) =>
-      l.sourceId === sourceId ? { ...l, sourceId: null } : l,
-    ),
+    lanes: timeline.lanes.map((l) => {
+      if (!held(l)) return l;
+      return {
+        ...l,
+        sourceId: l.sourceId === sourceId ? null : l.sourceId,
+        clips: l.clips.map((c) =>
+          c.sourceId === sourceId ? { ...c, sourceId: undefined } : c,
+        ),
+      };
+    }),
   };
 }

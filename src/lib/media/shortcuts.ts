@@ -8,6 +8,10 @@ export const MEDIA_LAYER_SHORTCUTS = {
       description: "Add a clip in empty space / split the clip at the cursor",
     },
     { keys: ["Dbl-click clip"], description: "Edit the layer's placement" },
+    {
+      keys: ["Drop a thumb"],
+      description: "On a clip: play that media there. On empty space: set the lane's",
+    },
     { keys: ["Drag"], description: "Move the clip (or the whole selection)" },
     { keys: ["Drag edge"], description: "Trim one clip" },
     { keys: ["Drag boundary"], description: "Trim both touching clips" },

@@ -15,8 +15,10 @@
 		sources: SequenceSource[];
 		/** Segments with no source of their own play this one. */
 		primarySourceId?: string | null;
-		/** How many segments are selected — a click assigns to all of them. */
+		/** How many things are selected — a click assigns to all of them. */
 		selectedCount?: number;
+		/** What those things are, for the tooltip: segments, or layer clips. */
+		selectedLabel?: string;
 		/** Marks the thumb the selection currently plays; null when they
 		 * disagree. */
 		selectedSourceId?: string | null;
@@ -33,6 +35,7 @@
 		sources,
 		primarySourceId = null,
 		selectedCount = 0,
+		selectedLabel = 'segment',
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
@@ -189,8 +192,8 @@
 						}}
 						ondblclick={(e) => openLightbox(e, i)}
 						title={assignable
-							? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one. Double-click to preview.`
-							: `${src.name} — click to preview, or drag it onto a segment`}
+							? `Play "${src.name}" on the selected ${selectedLabel}${selectedCount > 1 ? 's' : ''}, or drag it onto one. Double-click to preview.`
+							: `${src.name} — click to preview, or drag it onto a segment or layer clip`}
 					>
 						{#if src.thumbUrl}
 							<img

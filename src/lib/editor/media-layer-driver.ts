@@ -17,10 +17,12 @@ export interface MediaLayerDriverOptions {
  * master time never depends on how playback got there — and matches what the
  * export writes.
  *
- * Video layers get a sampler each, keyed by lane rather than by source. A
- * sampler decodes sequentially from wherever it is and drops overlapping `at()`
- * calls, so two lanes sharing one — or a lane sharing the segment driver's —
- * would each be handed the other's position.
+ * Video layers get a sampler each, keyed by lane *and* source rather than by
+ * source alone. A sampler decodes sequentially from wherever it is and drops
+ * overlapping `at()` calls, so two lanes sharing one — or a lane sharing the
+ * segment driver's — would each be handed the other's position. The source is
+ * in the key too because a lane's clips can name different videos, and a lane
+ * that kept one decoder would reopen it at every cut.
  */
 export class MediaLayerDriver {
   #registry: SequenceSourceRegistry;
@@ -29,9 +31,9 @@ export class MediaLayerDriver {
 
   /** Source whose frame is on each lane's texture, keyed by lane id. */
   #uploaded = new Map<string, string>();
-  /** One decoder per video lane, and the source it was opened for. */
-  #samplers = new Map<string, { sourceId: string; sampler: SlideVideoSampler }>();
-  /** Lanes whose sampler is still being created, so we don't start a second. */
+  /** One decoder per (lane, video source), keyed by `samplerKey`. */
+  #samplers = new Map<string, SlideVideoSampler>();
+  /** Keys whose sampler is still being created, so we don't start a second. */
   #creating = new Set<string>();
   #disposed = false;
 
@@ -95,37 +97,54 @@ export class MediaLayerDriver {
     }
   }
 
-  /** This lane's decoder, opening one (and retiring the old) as needed. */
+  /**
+   * This lane's decoder for this source, opening one as needed. Kept once open:
+   * a lane that cuts back and forth between two videos would otherwise pay a
+   * decoder open on every clip edge. The per-lane cap is what stops a lane with
+   * a dozen video clips from holding a dozen decoders.
+   */
   #samplerFor(
     key: string,
     sourceId: string,
     file: File,
   ): SlideVideoSampler | undefined {
-    const held = this.#samplers.get(key);
+    const id = samplerKey(key, sourceId);
+    const held = this.#samplers.get(id);
     if (held) {
-      if (held.sourceId === sourceId) return held.sampler;
-      held.sampler.dispose();
-      this.#samplers.delete(key);
+      // Re-inserted so the map's iteration order is least-recently-used first.
+      this.#samplers.delete(id);
+      this.#samplers.set(id, held);
+      return held;
     }
-    if (this.#creating.has(key)) return undefined;
-    this.#creating.add(key);
+    if (this.#creating.has(id)) return undefined;
+    this.#creating.add(id);
     void SlideVideoSampler.create(file).then((sampler) => {
-      this.#creating.delete(key);
+      this.#creating.delete(id);
       if (!sampler) return;
       if (this.#disposed) {
         sampler.dispose();
         return;
       }
-      this.#samplers.set(key, { sourceId, sampler });
+      this.#samplers.set(id, sampler);
+      this.#evict(key);
     });
     return undefined;
   }
 
+  /** Retire this lane's coldest decoders once it holds more than the cap. */
+  #evict(key: string) {
+    const mine = [...this.#samplers.keys()].filter((k) => laneOfKey(k) === key);
+    for (const id of mine.slice(0, mine.length - MAX_LANE_SAMPLERS)) {
+      this.#samplers.get(id)?.dispose();
+      this.#samplers.delete(id);
+    }
+  }
+
   #release(key: string) {
-    const held = this.#samplers.get(key);
-    if (held) {
-      held.sampler.dispose();
-      this.#samplers.delete(key);
+    for (const [id, sampler] of this.#samplers) {
+      if (laneOfKey(id) !== key) continue;
+      sampler.dispose();
+      this.#samplers.delete(id);
     }
     if (!this.#uploaded.delete(key)) return;
     this.#getRenderer()?.dropLayerTexture(key);
@@ -138,7 +157,23 @@ export class MediaLayerDriver {
 
   dispose() {
     this.#disposed = true;
-    for (const held of this.#samplers.values()) held.sampler.dispose();
+    for (const sampler of this.#samplers.values()) sampler.dispose();
     this.#samplers.clear();
   }
+}
+
+/**
+ * How many decoders one lane may hold at once. A lane shows one clip at a time,
+ * so anything past the handful it cuts between is memory spent on video the
+ * playhead left behind.
+ */
+const MAX_LANE_SAMPLERS = 4;
+
+/** Lane ids are generated with no "|" in them, so this splits cleanly. */
+function samplerKey(laneKey: string, sourceId: string): string {
+  return `${laneKey}|${sourceId}`;
+}
+
+function laneOfKey(key: string): string {
+  return key.slice(0, key.lastIndexOf("|"));
 }

@@ -558,6 +558,7 @@
             c.start;
             c.end;
             c.sourceStart;
+            c.sourceId;
          }
       }
    }
