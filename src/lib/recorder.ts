@@ -32,6 +32,7 @@ export type CustomRender = (
 	textLayers: ResolvedTextLayer[],
 	mediaLayers: ResolvedMediaLayer[],
 ) => void;
+import type { StreamTargetChunk } from 'mediabunny';
 import type { EffectInstance } from './effects';
 import type { GlRenderer } from './gl/renderer';
 
@@ -224,6 +225,52 @@ async function prepareFrameAudio(
 	return { frameAudioData, sampleRate: audioBuffer.sampleRate, audioBuffer };
 }
 
+// Blob's ArrayBuffer branch refuses anything over 2 GB, so a long export can't
+// be handed to it as one buffer. The muxer's writes land in fixed-size slabs
+// instead, and the Blob is built from those parts — each stays under the cap.
+const SLAB_SIZE = 64 * 1024 * 1024;
+
+class SlabBuffer {
+	private slabs: Uint8Array<ArrayBuffer>[] = [];
+	/** Highest byte offset written so far — the final file length. */
+	length = 0;
+
+	// Writes are not append-only: the muxer seeks back to patch the header and
+	// cues once the duration is known.
+	write(data: Uint8Array, position: number) {
+		const end = position + data.byteLength;
+		while (this.slabs.length * SLAB_SIZE < end) {
+			this.slabs.push(new Uint8Array(SLAB_SIZE));
+		}
+		let offset = position;
+		let read = 0;
+		while (read < data.byteLength) {
+			const slab = this.slabs[Math.floor(offset / SLAB_SIZE)]!;
+			const within = offset % SLAB_SIZE;
+			const n = Math.min(SLAB_SIZE - within, data.byteLength - read);
+			slab.set(data.subarray(read, read + n), within);
+			read += n;
+			offset += n;
+		}
+		if (end > this.length) this.length = end;
+	}
+
+	toBlob(type: string): Blob {
+		const parts: BlobPart[] = [];
+		for (let i = 0; i < this.slabs.length; i++) {
+			const start = i * SLAB_SIZE;
+			if (start >= this.length) break;
+			const n = Math.min(SLAB_SIZE, this.length - start);
+			const slab = this.slabs[i]!;
+			parts.push(n === SLAB_SIZE ? slab : slab.subarray(0, n));
+		}
+		const blob = new Blob(parts, { type });
+		// The Blob owns a copy now; drop ours so the slabs can be collected.
+		this.slabs = [];
+		return blob;
+	}
+}
+
 async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const mb = await import('mediabunny');
 
@@ -325,7 +372,16 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		);
 	}
 
-	const target = new mb.BufferTarget();
+	const slabs = new SlabBuffer();
+	// Chunked so the muxer batches its writes instead of calling us per packet.
+	const target = new mb.StreamTarget(
+		new WritableStream<StreamTargetChunk>({
+			write(chunk) {
+				slabs.write(chunk.data, chunk.position);
+			},
+		}),
+		{ chunked: true },
+	);
 	const output = new mb.Output({ format: outputFormat, target });
 
 	const wantsAudioTrack = audioBufferForMux != null;
@@ -651,8 +707,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 
-	const mimeType = 'video/webm';
-	return new Blob([target.buffer!], { type: mimeType });
+	return slabs.toBlob('video/webm');
 }
 
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {
