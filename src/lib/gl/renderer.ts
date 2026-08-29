@@ -1804,6 +1804,8 @@ export class GlRenderer {
           chained,
           { ...box, drawW: box.drawW * grow, drawH: box.drawH * grow },
           out.fbo,
+          undefined,
+          this.edgeFade(layer.style, grow),
         );
         this.setTextureFilter(chained, false);
       }
@@ -1841,6 +1843,18 @@ export class GlRenderer {
    */
   private bleedFactor(style: MediaStyle): number {
     return 1 + 2 * Math.max(0, style.bleed ?? 0);
+  }
+
+  /**
+   * The coverage ramp at the grown box's edges, in box uv. Sized from the
+   * margin alone — `(1 - 1/grow) / 2` is how much of the box each side of the
+   * margin takes — so the fade dies exactly at the media's edge at its widest
+   * and never reaches the picture.
+   */
+  private edgeFade(style: MediaStyle, grow: number): number {
+    const fade = Math.max(0, Math.min(1, style.bleedFade ?? 0));
+    if (fade <= 0 || grow <= 1) return 0;
+    return ((1 - 1 / grow) / 2) * fade;
   }
 
   /** Where a layer's media lands, in output pixels. */
@@ -1888,6 +1902,8 @@ export class GlRenderer {
     box: LayerBox,
     targetFBO: WebGLFramebuffer,
     key?: ChromaKey,
+    /** Coverage ramp at the box's edges, in box uv. 0 = hard edge. */
+    edgeFade = 0,
   ) {
     const gl = this.gl;
     const prog = this.layerTransformProgram;
@@ -1916,6 +1932,9 @@ export class GlRenderer {
     }
     if (prog.uniforms["u_keyLuma"]) {
       gl.uniform1f(prog.uniforms["u_keyLuma"], key?.lumaRange ?? 1);
+    }
+    if (prog.uniforms["u_edgeFade"]) {
+      gl.uniform1f(prog.uniforms["u_edgeFade"], edgeFade);
     }
     this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);

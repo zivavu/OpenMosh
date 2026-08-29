@@ -272,6 +272,28 @@
 			<span class="val">{Math.round(lane.style.bleed * 100)}%</span>
 		</div>
 
+		{#if lane.style.bleed > 0}
+			<!-- Only with a margin to fade: at a bleed of 0 there is nothing between
+			     the media's edge and the layer's, so the control would do nothing. -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="row"
+				title="How much of the bleed margin fades out instead of ending in a hard edge. The room the effects spill into still stops somewhere, and a glow cut off there draws the rectangle the bleed was meant to hide. Never eats into the media itself. Double-click to reset."
+				ondblclick={(e) => resetStyle(e, 'bleedFade')}
+			>
+				<label for="mc-bleed-fade">Bleed fade</label>
+				<RangeSlider
+					id="mc-bleed-fade"
+					value={lane.style.bleedFade}
+					min={0}
+					max={1}
+					step={0.01}
+					oninput={(v) => setStyle('bleedFade', v, `mc-bleedfade-${lane.id}`)}
+				/>
+				<span class="val">{Math.round(lane.style.bleedFade * 100)}%</span>
+			</div>
+		{/if}
+
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"

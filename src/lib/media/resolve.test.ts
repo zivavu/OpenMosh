@@ -292,6 +292,7 @@ describe("normalizeMediaTimeline", () => {
       lanes: [{ style: { scale: 2 }, clips: [{ start: 0, end: 2 }] }],
     });
     expect(t.lanes[0].style.bleed).toBe(0.25);
+    expect(t.lanes[0].style.bleedFade).toBe(0.5);
     expect(t.lanes[0].style.scale).toBe(2);
   });
 

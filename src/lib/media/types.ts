@@ -49,6 +49,14 @@ export interface MediaStyle {
    * ceiling either way — there is no bleed without something to spend on it.
    */
   bleed: number;
+  /**
+   * How much of that margin is a fade rather than a hard edge, 0..1. The room
+   * bleed hands the effects still ends somewhere, and a glow cut off there
+   * draws the rectangle the bleed was meant to hide; this ramps the coverage
+   * out instead. Measured within the margin alone, so it never eats into the
+   * media. Irrelevant, and hidden, at a bleed of 0.
+   */
+  bleedFade: number;
 }
 
 /** One span of media on a lane. */
@@ -118,6 +126,7 @@ export const DEFAULT_MEDIA_STYLE: MediaStyle = {
   opacity: 1,
   blendMode: "normal",
   bleed: 0.25,
+  bleedFade: 0.5,
 };
 
 export const EMPTY_MEDIA_TIMELINE: MediaTimeline = { enabled: false, lanes: [] };

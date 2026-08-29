@@ -94,6 +94,24 @@ float insideLayer(vec2 uv) {
   vec2 e = step(vec2(0.0), uv) * step(uv, vec2(1.0));
   return e.x * e.y;
 }
+
+/**
+ * The same, ramped to nothing over the outermost "fade" of the box, in box uv.
+ * Bleed hands a layer's effects room to spill into, but the room still ends,
+ * and a glow cut off at that edge draws the rectangle it was meant to hide.
+ * Ramping the coverage there lets the spill die out instead.
+ *
+ * The band never reaches the media: the caller sizes it from the margin alone,
+ * so a soft edge costs nothing off the picture itself.
+ */
+float insideLayerSoft(vec2 uv, float fade) {
+  float inside = insideLayer(uv);
+  if (fade <= 0.0) return inside;
+  vec2 d = min(uv, 1.0 - uv) / fade;
+  vec2 t = clamp(d, 0.0, 1.0);
+  vec2 sm = t * t * (3.0 - 2.0 * t);
+  return inside * sm.x * sm.y;
+}
 `;
 
 /**
@@ -110,6 +128,8 @@ uniform float u_keyThreshold;
 uniform float u_keySmooth;
 // How far a pixel's brightness may differ from the key's. 1 ignores it.
 uniform float u_keyLuma;
+// Width of the coverage ramp at the box's edges, in box uv. 0 = hard edge.
+uniform float u_edgeFade;
 in vec2 v_uv;
 out vec4 outColor;
 ${LAYER_BOX_GLSL}
@@ -134,7 +154,7 @@ void main() {
     float d = keyDistance(c.rgb);
     c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
   }
-  outColor = c * insideLayer(uv);
+  outColor = c * insideLayerSoft(uv, u_edgeFade);
 }`;
 
 /** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,4=overlay,5=difference,6=exclusion,7=subtract. u_invert: 0/1. u_opacity: 0-1. */
