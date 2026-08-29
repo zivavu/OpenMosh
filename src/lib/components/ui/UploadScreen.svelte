@@ -339,12 +339,12 @@ function onAudioDrop(e: DragEvent) {
 	</div>
 	<p class="mode-hint">
 		{#if selectedMode === 'slideshow'}
-			Upload several images or videos and cut between them on the beat
+			A pile of media and a track. It finds the BPM and cuts on the beat.
 		{:else if selectedMode === 'sequence'}
-			Upload media, lay it out on a timeline, and give every segment, layer and
-			effect lane its own mosh
+			Your song on a timeline. Cut it into segments, then stack effect lanes and
+			media layers over them.
 		{:else}
-			Upload an image or video to apply glitch effects
+			One image or video. Mosh it, then lock whatever survived and roll again.
 		{/if}
 	</p>
 
