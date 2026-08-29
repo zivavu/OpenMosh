@@ -1,12 +1,15 @@
 export { createMediaHistory } from "./history.svelte";
 export type { MediaClipboardEntry, MediaPasteResult } from "./clipboard";
 export { copyMediaClips, pasteMediaClips } from "./clipboard";
-export type { ChromaKey, SourceEdit } from "./source-edit";
+export type { ChromaKey, CropRect, SourceEdit } from "./source-edit";
 export {
   createSourceEdit,
   DEFAULT_CHROMA_KEY,
   DEFAULT_SOURCE_EDIT,
+  FULL_CROP,
+  isFullCrop,
   isIdleSourceEdit,
+  MASK_MAX,
   normalizeSourceEdit,
   normalizeSourceEdits,
 } from "./source-edit";

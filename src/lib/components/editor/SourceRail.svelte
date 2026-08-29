@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { ChevronDown, ChevronUp, Play, Plus, SlidersHorizontal } from 'lucide-svelte';
-	import { DEFAULT_SOURCE_EDIT, type SourceEdit } from '../../media';
+	import { DEFAULT_SOURCE_EDIT, isFullCrop, type SourceEdit } from '../../media';
 	import SourceEditor from './SourceEditor.svelte';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import { readRaw, writeRaw } from '../../storage';
@@ -72,8 +72,11 @@
 	let editingId = $state<string | null>(null);
 	let editingSource = $derived(sources.find((s) => s.id === editingId) ?? null);
 
+	/** Any of the three tools having been used, not just the key: the lit button
+	 * is how the rail says this media is not what the file holds. */
 	function isEdited(src: SequenceSource): boolean {
-		return !!edits[src.id]?.chromaKey.enabled;
+		const e = edits[src.id];
+		return !!e && (e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask);
 	}
 
 	function toggle() {
@@ -221,7 +224,7 @@
 							class="rail-edit"
 							class:on={isEdited(src)}
 							onclick={() => (editingId = src.id)}
-							title="Edit “{src.name}” — remove its background"
+							title="Edit “{src.name}” — crop it, erase parts, remove its background"
 							aria-label="Edit {src.name}"
 						>
 							<SlidersHorizontal size={10} />

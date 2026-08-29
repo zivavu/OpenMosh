@@ -611,6 +611,20 @@
       renderer?.setSourceEdits(new Map(Object.entries(sourceEdits)));
    });
 
+   // An erase mask is decoded from a data URL, so it lands a frame or two after
+   // the edit does. Without this a paused preview keeps the un-erased picture
+   // until something else happens to redraw it.
+   $effect(() => {
+      const r = renderer;
+      if (!r) return;
+      r.onMaskReady = () => {
+         if (!suspended && !externallyDriven) drawFrame(0);
+      };
+      return () => {
+         if (r.onMaskReady) r.onMaskReady = null;
+      };
+   });
+
    // Static redraw driver: subscribes to effect values and re-renders when the
    // animation loop is not running. Using a separate effect prevents double
    // renders during playback (the rAF loop already owns the frame).

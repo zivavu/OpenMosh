@@ -5,7 +5,7 @@ import {
   textSignature,
   type ResolvedTextLayer,
 } from "../text";
-import type { ChromaKey, MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
+import type { MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
 import {
   CAPTION_EFFECT_ID,
   captionSignature,
@@ -312,6 +312,12 @@ export class GlRenderer {
   private layerTransformProgram: CompiledProgram | null = null;
   /** Holds a media layer's placed frame while its own chain consumes it. One
    * buffer for all of them: the chain reads it and is done with it. */
+  /** One erase mask per source, and the data URL it was decoded from. */
+  private maskTextures = new Map<
+    string,
+    { tex: WebGLTexture; url: string; ready: boolean }
+  >();
+
   /** Solo: chainSource hands back black rather than the source. Requested for
    * the next render and cleared by it, so a caller that never asks — the
    * recorder, a frame save, the slideshow — can't inherit the preview's. */
@@ -585,6 +591,45 @@ export class GlRenderer {
     this.blankTex = tex;
     return tex;
   }
+
+  /**
+   * The erase mask for a source, decoding it on first use. Returns null until
+   * the image lands, so a frame drawn in the meantime shows the media whole
+   * rather than blank: an eraser that flashes the picture away while its own
+   * mask loads would read as a bug.
+   */
+  private maskTexture(sourceId: string, url: string): WebGLTexture | null {
+    const held = this.maskTextures.get(sourceId);
+    if (held && held.url === url) return held.ready ? held.tex : null;
+    if (held) {
+      this.gl.deleteTexture(held.tex);
+      this.maskTextures.delete(sourceId);
+    }
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const entry = { tex, url, ready: false };
+    this.maskTextures.set(sourceId, entry);
+    const img = new Image();
+    img.onload = () => {
+      // The edit may have moved on, or the context been rebuilt, while this
+      // decoded; only fill the texture this load was started for.
+      if (this.maskTextures.get(sourceId) !== entry) return;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      entry.ready = true;
+      this.onMaskReady?.();
+    };
+    img.src = url;
+    return null;
+  }
+
+  /** Called when a mask finishes decoding, so a paused preview redraws. */
+  onMaskReady: (() => void) | null = null;
 
   /** True once this lane has a frame to draw. */
   hasLayerTexture(key: string): boolean {
@@ -1746,14 +1791,21 @@ export class GlRenderer {
     for (const layer of layers) {
       const entry = this.mediaLayerTextures.get(layer.key);
       if (!entry || entry.w <= 0) continue;
-      const box = this.layerBox(layer.style, entry.w, entry.h);
-      const key = this.sourceEdits.get(layer.sourceId)?.chromaKey;
+      const edit = this.sourceEdits.get(layer.sourceId);
+      // Fitted against what the crop leaves, not the whole file: "contain" has
+      // to mean the visible rectangle, or cropping a photo would letterbox the
+      // part that was thrown away.
+      const box = this.layerBox(
+        layer.style,
+        entry.w * (edit?.crop?.w ?? 1),
+        entry.h * (edit?.crop?.h ?? 1),
+      );
       const hasChain = layer.effects.some((e) => e.enabled);
       const out = this.ensureLayerBuffer(bufOffset + prepared.length);
       if (!out) continue;
 
       if (!hasChain) {
-        this.drawLayerPlacement(entry.tex, box, out.fbo, key);
+        this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0, layer.sourceId);
       } else {
         const scratch = this.ensureMediaScratch();
         if (!scratch) continue;
@@ -1779,7 +1831,9 @@ export class GlRenderer {
           entry.tex,
           this.fullFrameBox(1 / grow),
           out.fbo,
-          key,
+          edit,
+          0,
+          layer.sourceId,
         );
         const chained =
           this.renderChainTo(
@@ -1901,10 +1955,14 @@ export class GlRenderer {
     tex: WebGLTexture,
     box: LayerBox,
     targetFBO: WebGLFramebuffer,
-    key?: ChromaKey,
+    /** The source's own edits: key, crop and erase mask. */
+    edit?: SourceEdit,
     /** Coverage ramp at the box's edges, in box uv. 0 = hard edge. */
     edgeFade = 0,
+    /** Which source the mask belongs to; absent skips the mask entirely. */
+    sourceId?: string,
   ) {
+    const key = edit?.chromaKey;
     const gl = this.gl;
     const prog = this.layerTransformProgram;
     if (!prog) return;
@@ -1935,6 +1993,26 @@ export class GlRenderer {
     }
     if (prog.uniforms["u_edgeFade"]) {
       gl.uniform1f(prog.uniforms["u_edgeFade"], edgeFade);
+    }
+    const crop = edit?.crop;
+    if (prog.uniforms["u_crop"]) {
+      gl.uniform4f(
+        prog.uniforms["u_crop"],
+        crop?.x ?? 0,
+        crop?.y ?? 0,
+        crop?.w ?? 1,
+        crop?.h ?? 1,
+      );
+    }
+    const mask =
+      sourceId && edit?.mask ? this.maskTexture(sourceId, edit.mask) : null;
+    if (prog.uniforms["u_hasMask"]) {
+      gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
+    }
+    if (mask && prog.uniforms["u_mask"]) {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, mask);
+      gl.uniform1i(prog.uniforms["u_mask"], 3);
     }
     this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);

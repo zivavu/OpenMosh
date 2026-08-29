@@ -23,9 +23,38 @@ export interface ChromaKey {
   lumaRange: number;
 }
 
-/** Everything editable about a source. One field for now; more will join it. */
+/** A rectangle of the source to keep, normalized to its own frame. */
+export interface CropRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
+
+/**
+ * Longest edge of a stored erase mask, in pixels. The mask rides along in the
+ * saved JSON as a data URL, so it is kept small on purpose: an eraser is for
+ * taking out a lamp post, not for cutting hair, and a full-resolution PNG per
+ * source would dwarf everything else in the save.
+ */
+export const MASK_MAX = 512;
+
+/** Everything editable about a source, applied wherever it is drawn. */
 export interface SourceEdit {
   chromaKey: ChromaKey;
+  /** What is left after cropping. Full frame by default. */
+  crop: CropRect;
+  /**
+   * Hand-erased areas, as a PNG data URL: the red channel is coverage, so
+   * white keeps a pixel and black takes it out. In *source* space, not crop
+   * space, so cropping afterwards doesn't slide the erased parts around.
+   *
+   * Null when nothing has been erased, which is the common case and worth not
+   * paying a texture for.
+   */
+  mask: string | null;
 }
 
 export const DEFAULT_CHROMA_KEY: ChromaKey = {
@@ -41,12 +70,27 @@ export const DEFAULT_CHROMA_KEY: ChromaKey = {
 
 export const DEFAULT_SOURCE_EDIT: SourceEdit = {
   chromaKey: DEFAULT_CHROMA_KEY,
+  crop: FULL_CROP,
+  mask: null,
 };
 
 export function createSourceEdit(): SourceEdit {
   return {
     chromaKey: { ...DEFAULT_CHROMA_KEY, color: { ...DEFAULT_CHROMA_KEY.color } },
+    crop: { ...FULL_CROP },
+    mask: null,
   };
+}
+
+/** True when the rectangle keeps the whole frame, so nothing has to be done. */
+export function isFullCrop(crop: CropRect | undefined): boolean {
+  if (!crop) return true;
+  return (
+    Math.abs(crop.x) < 1e-4 &&
+    Math.abs(crop.y) < 1e-4 &&
+    Math.abs(crop.w - 1) < 1e-4 &&
+    Math.abs(crop.h - 1) < 1e-4
+  );
 }
 
 /**
@@ -67,7 +111,9 @@ export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
     k.color.b === d.color.b &&
     k.threshold === d.threshold &&
     k.smoothing === d.smoothing &&
-    k.lumaRange === d.lumaRange
+    k.lumaRange === d.lumaRange &&
+    isFullCrop(edit.crop) &&
+    !edit.mask
   );
 }
 
@@ -89,6 +135,27 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
       smoothing: num(k.smoothing, DEFAULT_CHROMA_KEY.smoothing),
       lumaRange: num(k.lumaRange, DEFAULT_CHROMA_KEY.lumaRange),
     },
+    crop: normalizeCrop(e.crop),
+    // Only a data URL is any use to the loader; anything else is dropped rather
+    // than handed to an <img> that will fail asynchronously.
+    mask:
+      typeof e.mask === "string" && e.mask.startsWith("data:") ? e.mask : null,
+  };
+}
+
+function normalizeCrop(raw: unknown): CropRect {
+  const c = (raw ?? {}) as Partial<CropRect>;
+  const n = (v: unknown, fallback: number) =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  const x = Math.min(Math.max(n(c.x, 0), 0), 1);
+  const y = Math.min(Math.max(n(c.y, 0), 0), 1);
+  return {
+    x,
+    y,
+    // Clamped against the origin, so a saved rectangle can never reach past the
+    // frame and leave the placement sampling outside the texture.
+    w: Math.min(Math.max(n(c.w, 1), 0.01), 1 - x),
+    h: Math.min(Math.max(n(c.h, 1), 0.01), 1 - y),
   };
 }
 

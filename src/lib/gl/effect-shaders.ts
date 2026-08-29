@@ -130,6 +130,11 @@ uniform float u_keySmooth;
 uniform float u_keyLuma;
 // Width of the coverage ramp at the box's edges, in box uv. 0 = hard edge.
 uniform float u_edgeFade;
+// The part of the source to keep: xy = origin, zw = size, both normalized.
+uniform vec4 u_crop;
+// Hand-erased coverage in source space; red channel, 1 = keep. Off at <= 0.
+uniform sampler2D u_mask;
+uniform float u_hasMask;
 in vec2 v_uv;
 out vec4 outColor;
 ${LAYER_BOX_GLSL}
@@ -149,7 +154,13 @@ float keyDistance(vec3 c) {
 }
 void main() {
   vec2 uv = layerUv(v_uv);
-  vec4 c = texture(u_texture, clamp(uv, 0.0, 1.0));
+  // Into the source's own frame. The crop is applied here rather than by
+  // trimming the texture, so it stays a number the user can move back.
+  vec2 srcUv = clamp(uv, 0.0, 1.0) * u_crop.zw + u_crop.xy;
+  vec4 c = texture(u_texture, srcUv);
+  // Sampled in source space too, so cropping afterwards doesn't slide the
+  // erased areas around the picture.
+  if (u_hasMask > 0.0) c.a *= texture(u_mask, srcUv).r;
   if (u_keyThreshold > 0.0) {
     float d = keyDistance(c.rgb);
     c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
