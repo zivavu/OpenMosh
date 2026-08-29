@@ -301,6 +301,22 @@
 		selectOnly(clip.id);
 	}
 
+	/**
+	 * Turning solo on aims the sidebar at the lane too — the point of seeing one
+	 * layer by itself is to work on it, and hunting for its clip afterwards is
+	 * the step that was missing.
+	 *
+	 * Only ever an existing clip, unlike `openLane`: soloing is a way of looking
+	 * at the timeline, and it must not write to it.
+	 */
+	function soloLane(lane: MediaLane) {
+		const turningOn = soloLaneId !== lane.id;
+		onToggleSolo?.(lane.id);
+		if (!turningOn) return;
+		const first = sortClips(lane.clips)[0];
+		if (first) selectOnly(first.id);
+	}
+
 	function addClipAt(laneId: string, time: number) {
 		const lane = laneOf(laneId);
 		if (!lane) return;
@@ -670,7 +686,7 @@
 							? 'Stop soloing — show the whole frame again'
 							: 'Solo: show only this layer on the canvas'}
 						aria-pressed={soloLaneId === lane.id}
-						onclick={() => onToggleSolo(lane.id)}
+						onclick={() => soloLane(lane)}
 					>
 						<Focus size={12} />
 					</button>
