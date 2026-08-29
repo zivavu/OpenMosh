@@ -544,6 +544,31 @@ export class GlRenderer {
     return this.mediaLayerTextures.has(key);
   }
 
+  /**
+   * Where this lane's media lands in the output, in output pixels — for the
+   * preview's selection outline, which is DOM and so never reaches an export.
+   * Reads the same `layerBox` the placement pass draws with rather than
+   * recomputing the fit, so the outline can't drift from the media.
+   *
+   * Null until the lane has a frame: its natural size is what the fit is
+   * measured against, and that arrives with the first upload.
+   */
+  mediaLayerRect(
+    key: string,
+    style: MediaStyle,
+  ): { x: number; y: number; w: number; h: number; rot: number } | null {
+    const entry = this.mediaLayerTextures.get(key);
+    if (!entry || entry.w <= 0 || this.imgW <= 0) return null;
+    const box = this.layerBox(style, entry.w, entry.h);
+    return {
+      x: box.cx * this.imgW - box.drawW / 2,
+      y: box.cy * this.imgH - box.drawH / 2,
+      w: box.drawW,
+      h: box.drawH,
+      rot: box.rot,
+    };
+  }
+
   updateLayerImage(key: string, image: SourceImage) {
     this.uploadLayerTexture(key, image, imageWidth(image), imageHeight(image));
   }

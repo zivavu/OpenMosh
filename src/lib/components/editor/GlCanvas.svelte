@@ -9,10 +9,12 @@
       type PostChainLayer,
       type SourceFit,
    } from "../../gl/renderer";
+   import { untrack } from "svelte";
    import { onFontsChanged } from "../../text-overlay";
    import { resolveTextLayersAt, type TextTimeline } from "../../text";
    import {
       resolveMediaLayersAt,
+      type MediaLane,
       type MediaTimeline,
       type ResolvedMediaLayer,
       type SourceEdit,
@@ -102,6 +104,9 @@
       textTimeline?: TextTimeline | null;
       /** Optional media lanes, composited the same way. */
       mediaTimeline?: MediaTimeline | null;
+      /** Lane whose clip is selected: gets an outline over the preview, so the
+       * placement sliders say which part of the frame they are moving. */
+      selectedMediaLane?: MediaLane | null;
       /** Uploads each visible media layer's frame before the chain runs. Called
        * with the layers resolved for this frame, on the master clock. */
       mediaDriver?: ((layers: ResolvedMediaLayer[]) => void) | null;
@@ -152,6 +157,7 @@
       fullscreen = $bindable(false),
       textTimeline = null,
       mediaTimeline = null,
+      selectedMediaLane = null,
       mediaDriver = null,
       textTime = 0,
       bpm = 0,
@@ -176,6 +182,91 @@
    let previewArea = $state<HTMLDivElement>(null!);
    let canvas = $state<HTMLCanvasElement>(null!);
    let renderer: GlRenderer | null = $state(null);
+
+   // ── Selected-layer outline ───────────────────────────────────────────────
+   // DOM rather than a GL pass: this is an editing aid, and anything drawn into
+   // the canvas would be in the export too. Sized from the renderer's own
+   // `layerBox`, so it can't drift from where the media actually lands.
+   let outline = $state<{
+      left: number;
+      top: number;
+      w: number;
+      h: number;
+      rot: number;
+   } | null>(null);
+
+   function updateOutline() {
+      const lane = selectedMediaLane;
+      const cv = canvasEl;
+      const rect =
+         lane && cv && renderer
+            ? renderer.mediaLayerRect(lane.id, lane.style)
+            : null;
+      if (!rect || !cv || !previewArea) {
+         if (outline) outline = null;
+         return;
+      }
+      const cr = cv.getBoundingClientRect();
+      const ar = previewArea.getBoundingClientRect();
+      // Fullscreen letterboxes the frame inside the element (object-fit:
+      // contain); outside it the element is already the content box, where both
+      // ratios are equal and this reduces to the one scale.
+      const s = Math.min(cr.width / cv.width, cr.height / cv.height);
+      if (!Number.isFinite(s) || s <= 0) {
+         if (outline) outline = null;
+         return;
+      }
+      const ox = cr.left - ar.left + (cr.width - cv.width * s) / 2;
+      const oy = cr.top - ar.top + (cr.height - cv.height * s) / 2;
+      const next = {
+         left: ox + rect.x * s,
+         top: oy + rect.y * s,
+         w: rect.w * s,
+         h: rect.h * s,
+         rot: rect.rot,
+      };
+      // Compared before assigning: this runs on every drawn frame, and a fresh
+      // object each time would re-render the outline sixty times a second.
+      if (
+         outline &&
+         Math.abs(outline.left - next.left) < 0.5 &&
+         Math.abs(outline.top - next.top) < 0.5 &&
+         Math.abs(outline.w - next.w) < 0.5 &&
+         Math.abs(outline.h - next.h) < 0.5 &&
+         outline.rot === next.rot
+      ) {
+         return;
+      }
+      outline = next;
+   }
+
+   // Selecting a lane, or editing its placement, need not redraw anything —
+   // and a resize changes where the frame sits without redrawing at all.
+   $effect(() => {
+      const st = selectedMediaLane?.style;
+      void [
+         selectedMediaLane?.id,
+         st?.x,
+         st?.y,
+         st?.scale,
+         st?.rotation,
+         st?.fit,
+         canvasWidth,
+         canvasHeight,
+         fullscreen,
+      ];
+      // Untracked: the comparison inside reads `outline`, and a tracked read of
+      // what this writes would re-enter the effect on every update.
+      untrack(updateOutline);
+   });
+
+   $effect(() => {
+      const area = previewArea;
+      if (!area) return;
+      const ro = new ResizeObserver(() => updateOutline());
+      ro.observe(area);
+      return () => ro.disconnect();
+   });
    let imageReady = $state(false);
    let error: string | null = $state(null);
 
@@ -326,6 +417,9 @@
       const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
       const base = stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
       renderer!.render(base, now, layers, postLayers, media);
+      // Every draw path ends here, so the outline follows a texture arriving,
+      // the playhead moving off the clip, and an output-size change alike.
+      updateOutline();
    }
 
    $effect(() => {
@@ -642,6 +736,14 @@
          aria-label="Effect preview canvas"
       ></canvas>
    {/if}
+   {#if outline}
+      <!-- Sits under .canvas-overlay: when that is up there is nothing on the
+           canvas worth pointing at. -->
+      <div
+         class="layer-outline"
+         style="left: {outline.left}px; top: {outline.top}px; width: {outline.w}px; height: {outline.h}px; transform: rotate({outline.rot}rad)"
+      ></div>
+   {/if}
    {#if overlay}
       <div class="canvas-overlay">{@render overlay()}</div>
    {/if}
@@ -683,6 +785,20 @@
       max-height: 100%;
       border-radius: 2px;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+   }
+
+   /* Marks the selected layer's box while its clip panel is open, so the
+	   placement sliders say which part of the frame they move. Dashed and thin:
+	   it overlays live media and has to stay legible without competing with it.
+	   Never interactive — every gesture here belongs to the preview. */
+   .layer-outline {
+      position: absolute;
+      z-index: 8;
+      border: 1px dashed var(--live);
+      box-shadow:
+         0 0 0 1px rgba(0, 0, 0, 0.55),
+         inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+      pointer-events: none;
    }
 
    /* Opaque: whatever is still on the canvas underneath is stale by the time

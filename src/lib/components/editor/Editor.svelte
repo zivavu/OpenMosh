@@ -3742,6 +3742,7 @@
 				{warmRenderer}
 				textTimeline={textTimeline.enabled ? textTimeline : null}
 				mediaTimeline={mediaTimeline.enabled ? mediaTimeline : null}
+				selectedMediaLane={mediaTimeline.enabled ? selectedMediaLane : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				{textTime}
 				bpm={sequenceBpm}
