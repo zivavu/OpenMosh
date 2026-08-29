@@ -16,6 +16,10 @@
 		type SequenceSegmentMode,
 	} from '../../editor/sequence';
 	import { isTextEntryTarget } from '../../editor/shortcut-target';
+	import {
+		applyChainToFxClip,
+		chainClipboard,
+	} from '../../editor/chain-clipboard';
 	import { isModalKeyboardOpen } from '../../modal-keyboard';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
 	import {
@@ -524,11 +528,64 @@
 		deselect();
 	}
 
+	// ── Chain clipboard ──────────────────────────────────────────────────────
+	// Shared with the segment timeline, so a chain copied from a segment can be
+	// pasted onto a clip and back again. A clip's span and fade are its own —
+	// only what it *does* travels.
+
+	function copySelectedChains(): boolean {
+		const picked = new Set(selectedClipIds);
+		const clips = lanes
+			.flatMap((l) => l.clips)
+			.filter((c) => picked.has(c.id))
+			.sort((a, b) => a.start - b.start);
+		return chainClipboard.copy(clips);
+	}
+
+	/** Paste onto every selected clip; a shorter copy repeats over them. */
+	function pasteChains(): boolean {
+		if (chainClipboard.clips.length === 0 || selectedClipIds.length === 0) {
+			return false;
+		}
+		const order = lanes
+			.flatMap((l) => l.clips)
+			.filter((c) => selectedClipIds.includes(c.id))
+			.sort((a, b) => a.start - b.start)
+			.map((c) => c.id);
+		onBeforeEdit?.();
+		onChange(
+			lanes.map((lane) => ({
+				...lane,
+				clips: lane.clips.map((c) => {
+					const i = order.indexOf(c.id);
+					if (i === -1) return c;
+					const chain = chainClipboard.at(i);
+					return chain ? applyChainToFxClip(c, chain) : c;
+				}),
+			})),
+		);
+		return true;
+	}
+
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
 		// The media lightbox and other overlays own the keyboard while they're
 		// up: Escape and Delete must not reach the clips behind them.
 		if (isModalKeyboardOpen()) return;
+		if (e.ctrlKey || e.metaKey) {
+			const k = e.key.toLowerCase();
+			if (k === 'c' && copySelectedChains()) {
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+			if (k === 'v' && pasteChains()) {
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+			return;
+		}
 		if (e.key === 'Escape' && selectedClipIds.length > 0) {
 			deselect();
 			return;

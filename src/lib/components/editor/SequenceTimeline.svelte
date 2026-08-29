@@ -23,6 +23,10 @@
 		type SegmentClip,
 	} from '../../editor/sequence-clipboard';
 	import {
+		applyChainToSegment,
+		chainClipboard,
+	} from '../../editor/chain-clipboard';
+	import {
 		clampGroupDelta,
 		collectGroupBoundaries,
 		groupBoundaryTimesAfter,
@@ -514,15 +518,52 @@
 	let clipIsSpan = $state(false);
 	let spanPasteMode = $state(false);
 	let spanPasteCursor = $state(0);
+	/** chainClipboard.stamp as it stood when this clipboard was last filled, so
+	 * a paste can tell whether a chain has been copied since. */
+	let segClipStamp = $state(-1);
 
 	function copySelectedSegments(): boolean {
 		if (selectedSegments.length === 0) return false;
 		segClipboard = copySegments(selectedSegments, trackDuration);
 		clipIsSpan = boundaries.selectedBoundaryTimes.length > 0;
+		// Published to the shared clipboard as well: the same Ctrl+C has to be
+		// pasteable onto an fx clip, which can take the chain but not the span or
+		// the media that come with a whole segment.
+		chainClipboard.copy(selectedSegments);
+		segClipStamp = chainClipboard.stamp;
 		return segClipboard.length > 0;
 	}
 
+	/** True when a chain was copied elsewhere — an fx clip — since this
+	 * clipboard was filled, so that is the newer of the two. */
+	function chainIsNewer(): boolean {
+		return chainClipboard.stamp > segClipStamp;
+	}
+
+	/** Paste chains onto the selected segments, keeping their spans and media. */
+	function pasteChainsOntoSelection(): boolean {
+		if (chainClipboard.clips.length === 0 || selectedIds.length === 0) {
+			return false;
+		}
+		const order = rawSegments
+			.filter((s) => selectedIds.includes(s.id))
+			.sort((a, b) => a.startTime - b.startTime)
+			.map((s) => s.id);
+		emit(
+			rawSegments.map((s) => {
+				const i = order.indexOf(s.id);
+				if (i === -1) return s;
+				const chain = chainClipboard.at(i);
+				return chain ? applyChainToSegment(s, chain) : s;
+			}),
+		);
+		return true;
+	}
+
 	function pasteSegments(): boolean {
+		// A chain copied from an fx lane can only be pasted as a chain: it has no
+		// span to stamp and no media to bring with it.
+		if (chainIsNewer()) return pasteChainsOntoSelection();
 		if (segClipboard.length === 0) return false;
 		if (!clipIsSpan && selectedIds.length > 0) {
 			emit(pasteContentOnto(rawSegments, selectedIds, segClipboard));

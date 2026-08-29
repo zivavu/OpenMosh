@@ -2808,7 +2808,8 @@
 							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected segments' },
 							{
 								keys: ['Ctrl/Cmd+V'],
-								description: 'Paste onto selection, or click to place a copied span',
+								description:
+									'Paste onto selection, or click to place a copied span. Effects copied from an fx clip land as effects alone',
 							},
 							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
 						],
@@ -2830,6 +2831,15 @@
 							{
 								keys: ['Ctrl/Cmd+Shift+Click'],
 								description: 'Add / remove one clip from the selection',
+							},
+							{
+								keys: ['Ctrl/Cmd+C'],
+								description: "Copy the selected clips' effects",
+							},
+							{
+								keys: ['Ctrl/Cmd+V'],
+								description:
+									'Paste effects onto the selected clips (from a segment too)',
 							},
 							{ keys: ['Delete', 'Backspace'], description: 'Delete selected clips' },
 							{ keys: ['Esc'], description: 'Deselect' },
