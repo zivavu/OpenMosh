@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye, EyeOff, Focus, Image as ImageIcon, Trash2 } from 'lucide-svelte';
+	import { Eye, EyeOff, Focus, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
@@ -155,10 +155,6 @@
 		return id ? sources.find((s) => s.id === id) : undefined;
 	}
 
-	function sourceOf(lane: MediaLane): SequenceSource | undefined {
-		return sourceById(lane.sourceId);
-	}
-
 	/** The media a clip actually draws — its own when it was retargeted. */
 	function clipSource(
 		lane: MediaLane,
@@ -170,16 +166,6 @@
 	/** What a clip says it is showing. Clips with no source read as unset. */
 	function clipLabel(lane: MediaLane, clip: MediaClip): string {
 		return clipSource(lane, clip)?.name ?? 'No source';
-	}
-
-	/** The gutter's label: the lane's own source, which its plain clips follow. */
-	function laneLabel(lane: MediaLane): string {
-		return sourceOf(lane)?.name ?? 'No source';
-	}
-
-	/** True when nothing on the lane has anything to draw. */
-	function laneUnset(lane: MediaLane): boolean {
-		return !lane.sourceId && lane.clips.every((c) => !c.sourceId);
 	}
 
 	// One axis for the whole stack: zoom, pan, playhead-following and the
@@ -690,20 +676,10 @@
 					</button>
 				{/if}
 				<button
-					class="lane-src"
-					class:unset={laneUnset(lane)}
-					title={lane.sourceId
-						? `${laneLabel(lane)} — click to edit this layer`
-						: 'No source — drag one onto this row from the media rail'}
-					onclick={() => openLane(lane)}
+					class="lane-name"
+					title="{lane.name} — click to edit this layer's placement and effects"
+					onclick={() => openLane(lane)}>{lane.name}</button
 				>
-					{#if sourceOf(lane)?.thumbUrl}
-						<img src={sourceOf(lane)!.thumbUrl} alt="" />
-					{:else}
-						<ImageIcon size={11} />
-					{/if}
-				</button>
-				<span class="lane-name" title={lane.name}>{lane.name}</span>
 				<button
 					class="lane-del"
 					title="Delete this lane"
@@ -820,48 +796,27 @@
 		display: contents;
 	}
 
-	.lane-src {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 18px;
-		height: 18px;
-		flex-shrink: 0;
-		padding: 0;
-		border: 1px solid var(--line);
-		border-radius: 3px;
-		background: var(--ink);
-		color: var(--text-3);
-		cursor: pointer;
-		overflow: hidden;
-	}
-
-	.lane-src img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-
-	.lane-src:hover {
-		border-color: var(--live);
-		color: var(--text);
-	}
-
-	/* A layer with nothing to draw is the one state worth pointing at. */
-	.lane-src.unset {
-		border-style: dashed;
-		border-color: var(--live-dim);
-		color: var(--live);
-	}
-
+	/* A button, like the fx lanes' name: with the lane no longer standing for one
+	   image there is nothing to put a thumbnail on, so the name carries the
+	   click that opens the layer. */
 	.lane-name {
 		flex: 1;
 		min-width: 0;
+		border: none;
+		background: none;
+		padding: 0;
+		text-align: left;
+		cursor: pointer;
+		font-family: inherit;
 		font-size: 0.65rem;
 		color: var(--text-3);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.lane-name:hover {
+		color: var(--text);
 	}
 
 	/* The row follows the pointer by re-ordering, not by moving, so this is the
