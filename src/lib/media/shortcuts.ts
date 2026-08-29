@@ -9,6 +9,10 @@ export const MEDIA_LAYER_SHORTCUTS = {
     },
     { keys: ["Dbl-click clip"], description: "Edit the layer's placement" },
     {
+      keys: ["Solo"],
+      description: "Show one layer by itself on the canvas (preview only)",
+    },
+    {
       keys: ["Drop a thumb"],
       description: "On a clip: play that media there. On empty space: set the lane's",
     },

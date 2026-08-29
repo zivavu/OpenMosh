@@ -2635,6 +2635,25 @@
 	/** The layer-clip selection, so the media rail can assign to all of it. */
 	let selectedMediaClipIds = $state<string[]>([]);
 
+	/**
+	 * Lane shown by itself on the canvas. Deliberately not part of the timeline
+	 * data: soloing is a way of looking at the work, not a property of it, so it
+	 * neither persists nor reaches an export.
+	 */
+	let soloMediaLaneId = $state<string | null>(null);
+
+	function toggleMediaSolo(laneId: string) {
+		soloMediaLaneId = soloMediaLaneId === laneId ? null : laneId;
+	}
+
+	// A soloed lane that was deleted would leave the canvas black with nothing
+	// on screen to say why.
+	$effect(() => {
+		const id = soloMediaLaneId;
+		if (!id) return;
+		if (!mediaTimeline.lanes.some((l) => l.id === id)) soloMediaLaneId = null;
+	});
+
 	// ── Single-mode session ──
 	// Sequence mode resumes from its song's media pool; single mode has only the
 	// one file, so the file and the work done to it are saved together and the
@@ -3743,6 +3762,7 @@
 				textTimeline={textTimeline.enabled ? textTimeline : null}
 				mediaTimeline={mediaTimeline.enabled ? mediaTimeline : null}
 				selectedMediaLane={mediaTimeline.enabled ? selectedMediaLane : null}
+				soloMediaLaneId={mediaTimeline.enabled ? soloMediaLaneId : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				{textTime}
 				bpm={sequenceBpm}
@@ -4084,6 +4104,8 @@
 							sources={sequenceSources}
 							bind:selectedClipId={selectedMediaClipId}
 							bind:selectedClipIds={selectedMediaClipIds}
+							soloLaneId={soloMediaLaneId}
+							onToggleSolo={toggleMediaSolo}
 							onChange={setMediaTimeline}
 							onBeforeEdit={pushMediaHistory}
 						/>

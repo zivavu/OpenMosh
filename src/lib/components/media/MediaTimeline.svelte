@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye, EyeOff, Image as ImageIcon, Trash2 } from 'lucide-svelte';
+	import { Eye, EyeOff, Focus, Image as ImageIcon, Trash2 } from 'lucide-svelte';
 	import { untrack } from 'svelte';
 	import { dropAutoRangeScope } from '../../audio/auto-range';
 	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
@@ -49,6 +49,9 @@
 		draggingLaneId?: string | null;
 		/** The media pool, for naming and thumbnailing each lane's source. */
 		sources?: SequenceSource[];
+		/** Lane shown by itself on the canvas; null when nothing is soloed. */
+		soloLaneId?: string | null;
+		onToggleSolo?: (laneId: string) => void;
 		selectedClipId?: string | null;
 		/**
 		 * The whole selection, so the media rail can assign to all of it.
@@ -67,6 +70,8 @@
 		onLaneDragStart,
 		draggingLaneId = null,
 		sources = [],
+		soloLaneId = null,
+		onToggleSolo,
 		selectedClipId = $bindable(null),
 		selectedClipIds = $bindable([]),
 		onChange,
@@ -671,6 +676,19 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
+				{#if onToggleSolo}
+					<button
+						class="lane-eye lane-solo"
+						class:on={soloLaneId === lane.id}
+						title={soloLaneId === lane.id
+							? 'Stop soloing — show the whole frame again'
+							: 'Solo: show only this layer on the canvas'}
+						aria-pressed={soloLaneId === lane.id}
+						onclick={() => onToggleSolo(lane.id)}
+					>
+						<Focus size={12} />
+					</button>
+				{/if}
 				<button
 					class="lane-src"
 					class:unset={laneUnset(lane)}
@@ -878,6 +896,13 @@
 
 	.lane-eye.off {
 		color: var(--text-4);
+	}
+
+	/* Lit rather than dimmed, unlike the eye: solo is a mode the editor is in,
+	   and one the user has to be able to spot from across the timeline to
+	   explain why the canvas is showing one layer on black. */
+	.lane-solo.on {
+		color: var(--mosh);
 	}
 
 	.lane-track {

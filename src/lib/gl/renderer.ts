@@ -312,6 +312,12 @@ export class GlRenderer {
   private layerTransformProgram: CompiledProgram | null = null;
   /** Holds a media layer's placed frame while its own chain consumes it. One
    * buffer for all of them: the chain reads it and is done with it. */
+  /** Solo: chainSource hands back black rather than the source. Requested for
+   * the next render and cleared by it, so a caller that never asks — the
+   * recorder, a frame save, the slideshow — can't inherit the preview's. */
+  private pendingBlank = false;
+  private blankSource = false;
+  private blankTex: WebGLTexture | null = null;
   private mediaScratch: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null =
     null;
   /** Uploaded (pre-effect) media per media lane, keyed by lane id. */
@@ -539,6 +545,47 @@ export class GlRenderer {
     this.sourceEdits = edits;
   }
 
+  /**
+   * Start the *next* render's chain from black instead of the source. The solo
+   * button uses it to show one media layer by itself. One-shot by design: the
+   * preview re-asks on every frame it draws, so nothing else that renders
+   * through this instance has to know the mode exists.
+   */
+  setBlankSource(on: boolean) {
+    this.pendingBlank = on;
+  }
+
+  /** Take the pending blank request, if any. Called once per render. */
+  private takeBlankSource() {
+    this.blankSource = this.pendingBlank;
+    this.pendingBlank = false;
+  }
+
+  /** 1x1 opaque black, stretched over the frame by the sampler. */
+  private blankTexture(): WebGLTexture {
+    if (this.blankTex) return this.blankTex;
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      1,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array([0, 0, 0, 255]),
+    );
+    this.blankTex = tex;
+    return tex;
+  }
+
   /** True once this lane has a frame to draw. */
   hasLayerTexture(key: string): boolean {
     return this.mediaLayerTextures.has(key);
@@ -702,6 +749,7 @@ export class GlRenderer {
     /** Media lanes, composited into the chain at each lane's chain index. */
     mediaLayers: ResolvedMediaLayer[] = [],
   ) {
+    this.takeBlankSource();
     if (
       !this.sourceTexture ||
       !this.ppTextures ||
@@ -935,6 +983,10 @@ export class GlRenderer {
    * the ordinary single-source case pays nothing.
    */
   private chainSource(alt = false): WebGLTexture {
+    // Solo: the chain starts from black, so the soloed layer is composited onto
+    // an empty frame rather than over the picture it is meant to be told apart
+    // from. Ahead of the fit staging — there is nothing to fit.
+    if (this.blankSource) return this.blankTexture();
     const src = alt ? this.altSourceTexture : this.sourceTexture;
     if (!src) return this.sourceTexture!;
     if (this.sourceFit === "stretch") return src;

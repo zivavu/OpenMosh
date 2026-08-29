@@ -107,6 +107,10 @@
       /** Lane whose clip is selected: gets an outline over the preview, so the
        * placement sliders say which part of the frame they are moving. */
       selectedMediaLane?: MediaLane | null;
+      /** Lane being soloed: it is drawn by itself on black, with the source, the
+       * effects and every other layer left out. Preview only — an inspection
+       * mode, never a property of the work. */
+      soloMediaLaneId?: string | null;
       /** Uploads each visible media layer's frame before the chain runs. Called
        * with the layers resolved for this frame, on the master clock. */
       mediaDriver?: ((layers: ResolvedMediaLayer[]) => void) | null;
@@ -158,6 +162,7 @@
       textTimeline = null,
       mediaTimeline = null,
       selectedMediaLane = null,
+      soloMediaLaneId = null,
       mediaDriver = null,
       textTime = 0,
       bpm = 0,
@@ -379,12 +384,19 @@
       // the export driver does the same on its side.
       renderer!.setSpectrum(spectrum, now);
       renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
-      const layers = textTimeline ? resolveTextLayersAt(textTimeline, textTime) : [];
+      const solo = soloMediaLaneId;
+      const layers =
+         textTimeline && !solo ? resolveTextLayersAt(textTimeline, textTime) : [];
       const media = mediaTimeline
          ? resolveMediaLayersAt(mediaTimeline, textTime)
          : EMPTY_MEDIA;
+      // Every lane is still driven, not just the soloed one: the driver drops
+      // the frames of lanes it isn't asked about, and leaving solo would then
+      // stall on re-uploading them.
       if (media.length > 0) mediaDriver?.(media);
-      const tr = transition;
+      const shown = solo ? media.filter((l) => l.laneId === solo) : media;
+      renderer!.setBlankSource(!!solo);
+      const tr = solo ? null : transition;
       if (tr && tr.durationSec > 0) {
          const p = (tr.getTime() - tr.startTime) / tr.durationSec;
          if (p >= 0 && p < 1) {
@@ -416,7 +428,15 @@
       // which would double the stacked instances if passed whole.
       const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
       const base = stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
-      renderer!.render(base, now, layers, postLayers, media);
+      // Solo drops the image chain and the fx lanes along with the source: what
+      // is left is the lane's own media and its own effects.
+      renderer!.render(
+         solo ? [] : base,
+         now,
+         layers,
+         solo ? [] : postLayers,
+         shown,
+      );
       // Every draw path ends here, so the outline follows a texture arriving,
       // the playhead moving off the clip, and an output-size change alike.
       updateOutline();
