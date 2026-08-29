@@ -29,20 +29,46 @@
 	/** Library id of the song a reopened session was keyed to. */
 	let sessionTrackId: string | null = $state(null);
 
-	type View = "upload" | "editor" | "sequence" | "slideshow";
+	// Named for what each view *is*, not for the route it answers to — the two
+	// stopped matching when the segment editor took the "#editor" name.
+	type View = "upload" | "single" | "sequence" | "slideshow";
+
+	/**
+	 * The segment editor is "#editor" now: it grew from sequencing presets over
+	 * one video into the mode that does nearly everything, and the single-image
+	 * view it took the name from is the narrow one.
+	 *
+	 * Internally it is still "sequence" everywhere, and deliberately so — the
+	 * mode's saved timelines, media pool and sessions are all keyed under that
+	 * word, and renaming it would orphan them.
+	 */
+	const VIEW_HASH: Record<View, string> = {
+		upload: "#",
+		single: "#single",
+		sequence: "#editor",
+		slideshow: "#slideshow",
+	};
 
 	function hashToView(hash: string): View {
-		if (hash === "#slideshow") return "slideshow";
-		if (hash === "#sequence") return "sequence";
-		if (hash === "#editor") return "editor";
-		return "upload";
+		switch (hash) {
+			case "#slideshow":
+				return "slideshow";
+			// "#sequence" is the route this mode used to answer to; kept so links
+			// and bookmarks from before the rename still land in it.
+			case "#editor":
+			case "#sequence":
+				return "sequence";
+			case "#single":
+				return "single";
+			default:
+				return "upload";
+		}
 	}
 
 	let view: View = $state(hashToView(window.location.hash));
 
 	function navigateTo(v: View) {
-		const hash = v === "upload" ? "#" : `#${v}`;
-		history.pushState(null, "", hash);
+		history.pushState(null, "", VIEW_HASH[v]);
 		// A warmup still queued would land after the editor already built its own
 		// context, leaving a stray hidden one behind.
 		if (v !== "upload") cancelWarm();
@@ -125,7 +151,7 @@
 			restoredSingle = opened.state as SingleSessionState;
 			restoredSingleExtras = opened.files.slice(1);
 			file = opened.files[0];
-			navigateTo('editor');
+			navigateTo('single');
 			return;
 		}
 		const state = opened.state as { config?: SlideshowConfig } | null;
@@ -139,7 +165,7 @@
 	async function openSequenceFromSong(trackId: string) {
 		const opened = await openSavedSequence(trackId);
 		if (!opened) {
-			showToast("That sequence's media is no longer stored", 'error');
+			showToast("That song's media is no longer stored", 'error');
 			return;
 		}
 		sequenceFiles = opened.sources;
@@ -199,7 +225,7 @@
 		{warmRenderer}
 		onExit={exitToUpload}
 	/>
-{:else if view === 'editor' && file}
+{:else if view === 'single' && file}
 	<Editor
 		{file}
 		initialAudioFile={pendingAudioFile}
@@ -215,7 +241,7 @@
 	<UploadScreen
 		onfile={(f: File) => {
 			file = f;
-			navigateTo('editor');
+			navigateTo('single');
 		}}
 		onSequence={(files: File[]) => {
 			sequenceFiles = files;

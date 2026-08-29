@@ -1250,7 +1250,7 @@
 	let recordDuration = $state(10);
 
 	// Export settings ride with the song, and under their own mode prefix: the
-	// same song sequenced in #editor keeps a separate set.
+	// same song worked on in the segment editor keeps a separate set.
 	let renderKey = $derived(currentTrackId && `slideshow:${currentTrackId}`);
 	let renderKeyLoaded = $state<string | null>(null);
 

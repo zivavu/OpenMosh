@@ -327,7 +327,7 @@ function onAudioDrop(e: DragEvent) {
 	</div>
 
 	<div class="mode-toggle">
-		{#each [{ value: 'single', label: 'Single' }, { value: 'sequence', label: 'Sequence' }, { value: 'slideshow', label: 'Slideshow' }] as const as m}
+		{#each [{ value: 'single', label: 'Single' }, { value: 'sequence', label: 'Editor' }, { value: 'slideshow', label: 'Slideshow' }] as const as m}
 			<button
 				class="mode-btn"
 				class:active={selectedMode === m.value}
@@ -341,7 +341,8 @@ function onAudioDrop(e: DragEvent) {
 		{#if selectedMode === 'slideshow'}
 			Upload several images or videos and cut between them on the beat
 		{:else if selectedMode === 'sequence'}
-			Upload media, lay it out on a timeline, give each segment its own mosh
+			Upload media, lay it out on a timeline, and give every segment, layer and
+			effect lane its own mosh
 		{:else}
 			Upload an image or video to apply glitch effects
 		{/if}
@@ -457,14 +458,15 @@ function onAudioDrop(e: DragEvent) {
 	     when a mode has nothing saved is what made switching modes jump. -->
 	<div class="saved-zone">
 		{#if selectedMode === 'sequence' && savedSequences.length > 0}
-			<div class="saved-head">OR PICK UP A SONG YOU'VE SEQUENCED</div>
+			<div class="saved-head">OR PICK UP A SONG YOU'VE WORKED ON</div>
 			<div class="saved-list">
 				{#each savedSequences as seq (seq.trackId)}
 					<button
 						class="saved-item"
 						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? '' : 's'}`}
 						onclick={() => {
-							// Reopening a song is entering sequence mode too.
+							// Reopening a song is entering the editor too. The stored value
+							// stays "sequence": it is what every saved key is written under.
 							updateSettings({ lastMode: 'sequence' });
 							onSequenceFromSong(seq.trackId);
 						}}

@@ -26,7 +26,7 @@ Pick one of three modes on the upload screen.
 
 **Single** takes one image or video. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
 
-**Sequence** is a timeline. You upload a batch of media, drop the song in as the master track, then cut it into segments and give each one its own source and its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. Still rough around the edges and getting worked on. Updates mightho introduce breaking changes.
+**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then cut it into segments and give each one its own source and its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. On top of that sit stacked effect lanes, media layers with their own chains, and a text timeline. Still rough around the edges and getting worked on. Updates might introduce breaking changes.
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 

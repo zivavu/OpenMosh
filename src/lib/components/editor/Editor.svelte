@@ -887,9 +887,9 @@
 
 	/**
 	 * Single and sequence are the same component, so one un-namespaced store had
-	 * them overwriting each other: a song sequenced on #sequence came back with
-	 * its timeline (and the sequence mode) forced on in #editor, and any edit there
-	 * wrote back over the sequence work. The prefix keeps the two apart.
+	 * them overwriting each other: a song worked on in the segment editor came
+	 * back with its timeline (and the segment mode) forced on in single mode,
+	 * and any edit there wrote back over it. The prefix keeps the two apart.
 	 */
 	const seqKeyPrefix = $derived(isSequenceMode ? 'seq:' : 'single:');
 	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
@@ -2548,8 +2548,8 @@
 
 	/**
 	 * Which project the export settings belong to. `seqStoreKey` already carries
-	 * the mode prefix, so #editor and #sequence keep separate settings for the
-	 * same song. Media with no song of its own still has an identity worth
+	 * the mode prefix, so single mode and the segment editor keep separate
+	 * settings for the same song. Media with no song of its own still has an identity worth
 	 * keying by — single mode works with no audio at all — so it falls back to
 	 * the file, matching how sessions.ts keys a track-less edit.
 	 */
@@ -2772,7 +2772,7 @@
 		...(isSequenceMode
 			? [
 					{
-						title: 'Sequence timeline',
+						title: 'Segment timeline',
 						shortcuts: [
 							{
 								keys: ['Ctrl+Click'],
