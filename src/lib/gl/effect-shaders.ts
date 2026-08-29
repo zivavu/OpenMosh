@@ -1810,6 +1810,95 @@ void main() {
 		setUniforms: floats('amount', 'frequency'),
 	},
 
+	'transform-3d': {
+		fragment:
+			H +
+			BOUNCE_GLSL +
+			`uniform float u_rotX;
+uniform float u_rotY;
+uniform float u_rotZ;
+uniform float u_perspective;
+uniform float u_zoom;
+uniform float u_spin;
+uniform int u_axis;
+uniform int u_edge;
+
+const float DEG = 0.017453292;
+
+mat3 rotateX(float a) { float c = cos(a), s = sin(a);
+  return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
+mat3 rotateY(float a) { float c = cos(a), s = sin(a);
+  return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+mat3 rotateZ(float a) { float c = cos(a), s = sin(a);
+  return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+
+void main() {
+  vec2 res = vec2(textureSize(u_texture, 0));
+  float aspect = res.x / res.y;
+
+  float t = u_time * u_spin * DEG;
+  float sx = u_axis == 0 ? t : (u_axis == 3 ? t * 0.43 : 0.0);
+  float sy = u_axis == 1 ? t : (u_axis == 3 ? t : 0.0);
+  float sz = u_axis == 2 ? t : (u_axis == 3 ? t * 0.17 : 0.0);
+  mat3 R = rotateZ(u_rotZ * DEG + sz) * rotateY(u_rotY * DEG + sy)
+         * rotateX(u_rotX * DEG + sx);
+
+  // Focal length: the low end is nearly orthographic (a flat shear), the high
+  // end a wide lens where the near edge lunges at the camera. The plane sits at
+  // exactly f, so an untilted quad fills the frame whatever the lens is doing.
+  float f = mix(8.0, 0.9, u_perspective);
+  vec3 center = vec3(0.0, 0.0, f / max(u_zoom, 0.001));
+
+  // Inverse mapping: shoot a ray per output pixel and intersect the rotated
+  // plane, rather than rasterizing a quad. The ray through v_uv is (p, f), so
+  // projecting it back lands on v_uv again and zero rotation is a passthrough.
+  vec3 dir = vec3((v_uv - 0.5) * 2.0 * vec2(aspect, 1.0), f);
+  vec3 n = R * vec3(0.0, 0.0, 1.0);
+  float denom = dot(n, dir);
+  float k = dot(n, center) / denom;
+  vec3 q = transpose(R) * (k * dir - center);
+  vec2 uv = vec2(q.x / aspect, q.y) * 0.5 + 0.5;
+  // Taken before the horizon test: a derivative is only defined when the whole
+  // quad reaches it, and half of it may be about to bail out.
+  vec2 w = clamp(fwidth(uv), vec2(1e-4), vec2(0.1));
+  // Edge-on, or the intersection is behind the camera: past the horizon.
+  if (abs(denom) < 1e-5 || k <= 0.0) { outColor = vec4(0.0); return; }
+
+  if (u_edge == 1) {
+    outColor = texture(u_texture, clamp(uv, 0.0, 1.0));
+  } else if (u_edge == 2) {
+    outColor = texture(u_texture, fract(uv));
+  } else if (u_edge == 3) {
+    outColor = texture(u_texture, vec2(bounce(uv.x), bounce(uv.y)));
+  } else {
+    // Feather by one pixel of the *warped* uv so the receding edge doesn't
+    // stair-step.
+    vec2 e = smoothstep(vec2(0.0), w, uv) * smoothstep(vec2(0.0), w, 1.0 - uv);
+    float cov = e.x * e.y;
+    if (cov <= 0.0) { outColor = vec4(0.0); return; }
+    vec4 c = texture(u_texture, clamp(uv, 0.0, 1.0));
+    outColor = vec4(c.rgb, c.a * cov);
+  }
+}`,
+		animated: true,
+		linearFilter: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, 'u_rotX', v.rotX as number);
+			setFloat(gl, l, 'u_rotY', v.rotY as number);
+			setFloat(gl, l, 'u_rotZ', v.rotZ as number);
+			setFloat(gl, l, 'u_perspective', v.perspective as number);
+			setFloat(gl, l, 'u_zoom', v.zoom as number);
+			setFloat(gl, l, 'u_spin', v.spin as number);
+			setInt(gl, l, 'u_axis', v.axis === 'x' ? 0 : v.axis === 'z' ? 2 : v.axis === 'tumble' ? 3 : 1);
+			setInt(
+				gl,
+				l,
+				'u_edge',
+				v.edge === 'clamp' ? 1 : v.edge === 'tile' ? 2 : v.edge === 'mirror' ? 3 : 0,
+			);
+		},
+	},
+
 	blur: {
 		prePasses: [
 			{
