@@ -386,7 +386,10 @@
 	   renders against, so they are global — scoped to this container, which is
 	   the only place they mean anything. */
 	.tl-stack {
-		--tl-gutter: 110px;
+		/* Wide enough for a lane's name beside its controls: the media rows carry
+		   a grip, two toggles and a delete before the name starts, and "Layer 1"
+		   was ellipsing at 110px. */
+		--tl-gutter: 140px;
 		--tl-gap: 0.35rem;
 		--tl-playhead: var(--live);
 		--tl-static-playhead: var(--start);
@@ -758,7 +761,7 @@
 
 	@media (max-width: 800px) {
 		.tl-stack {
-			--tl-gutter: 96px;
+			--tl-gutter: 126px;
 			padding: 0.4rem 8px;
 		}
 	}
