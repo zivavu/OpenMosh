@@ -6,6 +6,7 @@ export type {
   ChromaKey,
   CropRect,
   Keyframe,
+  MaskKey,
   MaskTransform,
   SourceEdit,
   SourceEditAnim,

@@ -56,12 +56,6 @@ export interface Keyframe<T> {
  * Where the erase mask sits at a given moment, relative to how it was painted.
  * `x`/`y` are in source-space units (1 = the whole frame), `scale` is about the
  * mask's own centre.
- *
- * The mask keeps one painted shape and moves it, rather than holding a repaint
- * per key: two painted blobs have no meaningful in-between — cross-fading them
- * shows both at half strength, which reads as ghosting rather than as motion —
- * while a shape that slides and grows covers the thing this is actually for,
- * which is a pan, a tracking shot or an object coming closer.
  */
 export interface MaskTransform {
   x: number;
@@ -71,6 +65,24 @@ export interface MaskTransform {
 
 export const IDENTITY_MASK_TRANSFORM: MaskTransform = { x: 0, y: 0, scale: 1 };
 
+/**
+ * One key on the erase track: where the shape sits, and optionally the shape
+ * itself, so a mask can be repainted over the clip rather than only moved.
+ *
+ * The two halves interpolate differently on purpose. Position and scale blend,
+ * because there is an honest in-between for them. The painted bitmap **holds**
+ * — the shape set at a key stays until the next one replaces it. Blending two
+ * paintings shows both at half strength, which reads as ghosting rather than as
+ * motion; holding is what frame-by-frame rotoscoping does, and it is the only
+ * in-between for a hand-painted shape that doesn't invent coverage nobody drew.
+ *
+ * `mask` absent means the key says nothing about the shape and the static
+ * `SourceEdit.mask` stands; `null` means this key erases nothing.
+ */
+export interface MaskKey extends MaskTransform {
+  mask?: string | null;
+}
+
 /** The key's tunable part. `enabled` never animates: a key is on or it isn't. */
 export type AnimatedKey = Omit<ChromaKey, "enabled">;
 
@@ -78,7 +90,7 @@ export type AnimatedKey = Omit<ChromaKey, "enabled">;
 export interface SourceEditAnim {
   crop?: Keyframe<CropRect>[];
   key?: Keyframe<AnimatedKey>[];
-  mask?: Keyframe<MaskTransform>[];
+  mask?: Keyframe<MaskKey>[];
 }
 
 /** Everything editable about a source, applied wherever it is drawn. */
@@ -297,15 +309,13 @@ function blendKey(a: AnimatedKey, b: AnimatedKey, k: number): AnimatedKey {
   };
 }
 
-function blendMaskTransform(
-  a: MaskTransform,
-  b: MaskTransform,
-  k: number,
-): MaskTransform {
+function blendMaskKey(a: MaskKey, b: MaskKey, k: number): MaskKey {
   return {
     x: lerp(a.x, b.x, k),
     y: lerp(a.y, b.y, k),
     scale: lerp(a.scale, b.scale, k),
+    // Held, not blended: the shape painted at `a` stands until `b` is reached.
+    mask: a.mask,
   };
 }
 
@@ -339,14 +349,19 @@ export function sampleSourceEdit(edit: SourceEdit, time: number): SourceEdit {
   if (!anim || !hasAnimation(edit)) return edit;
   const crop = sampleTrack(anim.crop, time, blendCrop);
   const key = sampleTrack(anim.key, time, blendKey);
-  const maskTransform = sampleTrack(anim.mask, time, blendMaskTransform);
+  const maskKey = sampleTrack(anim.mask, time, blendMaskKey);
   return {
     chromaKey: key
       ? { enabled: edit.chromaKey.enabled, ...key }
       : edit.chromaKey,
     crop: crop ?? edit.crop,
-    mask: edit.mask,
-    maskTransform: maskTransform ?? undefined,
+    // A key that carries a shape replaces the static one; `null` is a key that
+    // erases nothing, so it has to win over the static mask as well — only an
+    // absent `mask` leaves the stored shape standing.
+    mask: maskKey && maskKey.mask !== undefined ? maskKey.mask : edit.mask,
+    maskTransform: maskKey
+      ? { x: maskKey.x, y: maskKey.y, scale: maskKey.scale }
+      : undefined,
   };
 }
 
@@ -405,7 +420,7 @@ function normalizeAnim(raw: unknown): SourceEditAnim | undefined {
   const a = raw as Partial<SourceEditAnim>;
   const crop = normalizeTrack(a.crop, (v) => normalizeCrop(v));
   const key = normalizeTrack(a.key, normalizeAnimatedKey);
-  const mask = normalizeTrack(a.mask, normalizeMaskTransform);
+  const mask = normalizeTrack(a.mask, normalizeMaskKey);
   if (!crop && !key && !mask) return undefined;
   return {
     ...(crop ? { crop } : {}),
@@ -444,9 +459,16 @@ function normalizeAnimatedKey(raw: unknown): AnimatedKey {
   };
 }
 
-function normalizeMaskTransform(raw: unknown): MaskTransform {
-  const m = (raw ?? {}) as Partial<MaskTransform>;
+function normalizeMaskKey(raw: unknown): MaskKey {
+  const m = (raw ?? {}) as Partial<MaskKey>;
   return {
+    // Only a data URL is any use to the loader; `null` survives as its own
+    // meaning, so a key can say "nothing erased here".
+    ...(typeof m.mask === "string" && m.mask.startsWith("data:")
+      ? { mask: m.mask }
+      : m.mask === null
+        ? { mask: null }
+        : {}),
     x: num(m.x, 0),
     y: num(m.y, 0),
     // A mask scaled to nothing erases nothing, which is indistinguishable from

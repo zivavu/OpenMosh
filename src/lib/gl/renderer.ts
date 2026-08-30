@@ -336,6 +336,10 @@ export class GlRenderer {
   } | null)[] = [null, null];
 
   /** One erase mask per source, and the data URL it was decoded from. */
+  /** How many painted shapes stay resident. A hand-keyed erase track runs to a
+   * handful; this is loose enough not to thrash one and tight enough to bound
+   * a long session. */
+  private static readonly MAX_MASK_TEXTURES = 24;
   private maskTextures = new Map<
     string,
     { tex: WebGLTexture; url: string; ready: boolean }
@@ -641,12 +645,23 @@ export class GlRenderer {
    * rather than blank: an eraser that flashes the picture away while its own
    * mask loads would read as a bug.
    */
-  private maskTexture(sourceId: string, url: string): WebGLTexture | null {
-    const held = this.maskTextures.get(sourceId);
-    if (held && held.url === url) return held.ready ? held.tex : null;
-    if (held) {
-      this.gl.deleteTexture(held.tex);
-      this.maskTextures.delete(sourceId);
+  /**
+   * Keyed by the mask itself, not by the source: a keyed erase track holds a
+   * different painted shape per key, and a one-per-source cache threw the
+   * texture away and re-decoded on every key the playhead crossed — which
+   * showed as the erase blinking off for a frame or two each time.
+   */
+  private maskTexture(url: string): WebGLTexture | null {
+    const held = this.maskTextures.get(url);
+    if (held) return held.ready ? held.tex : null;
+    // A track has as many shapes as it has keys; keeping every one a session
+    // ever painted would leak. Oldest out first — Map keeps insertion order.
+    while (this.maskTextures.size >= GlRenderer.MAX_MASK_TEXTURES) {
+      const oldest = this.maskTextures.keys().next();
+      if (oldest.done) break;
+      const drop = this.maskTextures.get(oldest.value);
+      if (drop) this.gl.deleteTexture(drop.tex);
+      this.maskTextures.delete(oldest.value);
     }
     const gl = this.gl;
     const tex = gl.createTexture()!;
@@ -656,12 +671,12 @@ export class GlRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     const entry = { tex, url, ready: false };
-    this.maskTextures.set(sourceId, entry);
+    this.maskTextures.set(url, entry);
     const img = new Image();
     img.onload = () => {
       // The edit may have moved on, or the context been rebuilt, while this
       // decoded; only fill the texture this load was started for.
-      if (this.maskTextures.get(sourceId) !== entry) return;
+      if (this.maskTextures.get(url) !== entry) return;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
       entry.ready = true;
@@ -1108,7 +1123,6 @@ export class GlRenderer {
     sh: number,
     edit: SourceEdit,
     extent: { w: number; h: number },
-    sourceId: string,
     alt: boolean,
   ): { tex: WebGLTexture; w: number; h: number } | null {
     const gl = this.gl;
@@ -1161,7 +1175,7 @@ export class GlRenderer {
     gl.viewport(0, 0, bw, bh);
     gl.useProgram(prog.program);
     if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
-    this.setSourceEditUniforms(prog, edit, sourceId);
+    this.setSourceEditUniforms(prog, edit);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, src);
     if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
@@ -1174,7 +1188,6 @@ export class GlRenderer {
   private setSourceEditUniforms(
     prog: CompiledProgram,
     edit: SourceEdit | undefined,
-    sourceId: string | undefined,
   ) {
     const gl = this.gl;
     const key = edit?.chromaKey;
@@ -1209,8 +1222,7 @@ export class GlRenderer {
         crop?.h ?? 1,
       );
     }
-    const mask =
-      sourceId && edit?.mask ? this.maskTexture(sourceId, edit.mask) : null;
+    const mask = edit?.mask ? this.maskTexture(edit.mask) : null;
     if (prog.uniforms["u_hasMask"]) {
       gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
     }
@@ -1250,7 +1262,7 @@ export class GlRenderer {
       const edit = sampleSourceEdit(stored, this.editTime(id, time));
       // Sized from the stored edit, not this instant's: see applySourceEdit.
       const extent = cropExtent(stored);
-      const edited = this.applySourceEdit(src, sw, sh, edit, extent, id, alt);
+      const edited = this.applySourceEdit(src, sw, sh, edit, extent, alt);
       if (edited) {
         src = edited.tex;
         sw = edited.w;
@@ -2032,7 +2044,7 @@ export class GlRenderer {
       if (!out) continue;
 
       if (!hasChain) {
-        this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0, layer.sourceId);
+        this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0);
       } else {
         const scratch = this.ensureMediaScratch();
         if (!scratch) continue;
@@ -2060,7 +2072,6 @@ export class GlRenderer {
           out.fbo,
           edit,
           0,
-          layer.sourceId,
         );
         const chained =
           this.renderChainTo(
@@ -2186,8 +2197,6 @@ export class GlRenderer {
     edit?: SourceEdit,
     /** Coverage ramp at the box's edges, in box uv. 0 = hard edge. */
     edgeFade = 0,
-    /** Which source the mask belongs to; absent skips the mask entirely. */
-    sourceId?: string,
   ) {
     const gl = this.gl;
     const prog = this.layerTransformProgram;
@@ -2199,7 +2208,7 @@ export class GlRenderer {
     if (prog.uniforms["u_edgeFade"]) {
       gl.uniform1f(prog.uniforms["u_edgeFade"], edgeFade);
     }
-    this.setSourceEditUniforms(prog, edit, sourceId);
+    this.setSourceEditUniforms(prog, edit);
     this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);

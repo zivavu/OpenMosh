@@ -28,6 +28,7 @@
 		type ChromaKey,
 		type CropRect,
 		type Keyframe,
+		type MaskKey,
 		type MaskTransform,
 		type SourceEdit,
 		type SourceEditAnim,
@@ -99,7 +100,7 @@
 		{
 			value: 'erase',
 			label: 'Erase',
-			hint: 'Paint over what should go. Alt paints it back. To animate it, move the shape — Shift-drag it, or use Shape X/Y',
+			hint: 'Paint over what should go; Alt paints it back. With the Erase track on, each key holds the shape painted at it — and Shift-drag or Shape X/Y moves that shape',
 		},
 	];
 
@@ -177,9 +178,9 @@
 			label: 'Erase',
 			on: !!maskKeys?.length,
 			keys: maskKeys?.map((k) => k.t) ?? [],
-			blocked: edit.mask
+			blocked: live.mask
 				? null
-				: 'Erase something first — this track moves what you painted, it does not repaint it',
+				: 'Erase something first — a key holds the shape you painted and where it sits',
 		},
 	]);
 
@@ -209,10 +210,13 @@
 	}
 
 	/** The value each track would write for the moment on screen. */
-	function valueNow(id: TrackId): CropRect | AnimatedKey | MaskTransform {
+	function valueNow(id: TrackId): CropRect | AnimatedKey | MaskKey {
 		if (id === 'crop') return { ...crop };
 		if (id === 'key') return animatedKey(key);
-		return { ...maskXform };
+		// The shape goes into the key with its position: a key that held only
+		// where the mask sits would lose the painting the moment a later key
+		// carried one of its own.
+		return { ...maskXform, mask: live.mask };
 	}
 
 	function addKey(id: TrackId, base: SourceEdit = edit, value = valueNow(id)) {
@@ -242,9 +246,10 @@
 	function flatten(id: TrackId): SourceEdit {
 		if (id === 'crop') return { ...edit, crop: { ...crop } };
 		if (id === 'key') return { ...edit, chromaKey: { ...key } };
-		// A mask has no static offset to keep — it is painted where it is — so
-		// dropping the track puts it back where it was painted.
-		return edit;
+		// The shape under the playhead becomes the static one, so switching the
+		// track off keeps the picture on screen. Its offset is not kept: a mask
+		// has no static offset — it is painted where it is.
+		return { ...edit, mask: live.mask };
 	}
 
 	function toggleTrack(id: TrackId) {
@@ -287,7 +292,9 @@
 	 * second one gives it somewhere to go.
 	 */
 	function setMaskTransform(xf: MaskTransform) {
-		addKey('mask', edit, xf);
+		// Carrying the shape through: moving a mask must not drop the painting
+		// the key it lands on was holding.
+		addKey('mask', edit, { ...xf, mask: live.mask });
 	}
 
 	// ── Loading ──────────────────────────────────────────────────────────────
@@ -460,7 +467,9 @@
 
 	/** Pull the saved mask into the working canvas, or start a clean one. */
 	function loadMask() {
-		const url = edit.mask ?? null;
+		// The shape under the playhead, not the stored one: scrubbing onto another
+		// key has to bring that key's painting into the canvas being painted on.
+		const url = live.mask ?? null;
 		if (url === maskLoaded) return;
 		maskLoaded = url;
 		maskCanvas = null;
@@ -513,11 +522,18 @@
 	}
 
 	/** Write the working canvas back into the edit. */
+	/**
+	 * The stroke just painted, stored. With the track running it lands on the
+	 * key under the playhead — repainting at a key is how the shape itself is
+	 * animated, and the key already holds where that shape sits. With no track
+	 * it is the source's one static mask, as it always was.
+	 */
 	function commitMask() {
 		if (!maskCanvas) return;
 		const url = maskCanvas.toDataURL('image/png');
 		maskLoaded = url;
-		onChange({ ...edit, mask: url });
+		if (trackOn('mask')) addKey('mask', edit, { ...maskXform, mask: url });
+		else onChange({ ...edit, mask: url });
 	}
 
 	function clearMask() {
@@ -636,10 +652,11 @@
 		return sc.getImageData(0, 0, w, h).data;
 	}
 
-	// The saved mask, into the working canvas. Runs on open and whenever the edit
-	// gains or loses one from outside (Clear, or the dialog's Reset).
+	// The saved mask, into the working canvas. Runs on open, whenever the edit
+	// gains or loses one from outside (Clear, or the dialog's Reset), and
+	// whenever the playhead crosses onto a key holding a different shape.
 	$effect(() => {
-		void edit.mask;
+		void live.mask;
 		if (ready) loadMask();
 	});
 
@@ -957,7 +974,7 @@
 			key.smoothing !== DEFAULT_CHROMA_KEY.smoothing ||
 			key.lumaRange !== DEFAULT_CHROMA_KEY.lumaRange,
 		crop: !isFullCrop(crop) || trackOn('crop'),
-		erase: !!edit.mask || trackOn('mask'),
+		erase: !!edit.mask || !!live.mask || trackOn('mask'),
 	});
 
 	/**

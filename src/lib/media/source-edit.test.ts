@@ -222,3 +222,55 @@ describe("wrapSourceTime", () => {
     expect(at(8)).toBeCloseTo(0.2, 10);
   });
 });
+
+describe("keyed erase masks", () => {
+  const PNG_B = "data:image/png;base64,AAAAAA==";
+  const edit = {
+    ...createSourceEdit(),
+    mask: PNG,
+    anim: {
+      mask: [
+        { t: 0, v: { x: 0, y: 0, scale: 1, mask: PNG } },
+        { t: 4, v: { x: 0.4, y: 0, scale: 1, mask: PNG_B } },
+      ],
+    },
+  };
+
+  it("holds each key's shape until the next one", () => {
+    // Not a cross-fade: halfway between the keys the first shape still stands,
+    // whole, rather than two paintings at half strength.
+    expect(sampleSourceEdit(edit, 0).mask).toBe(PNG);
+    expect(sampleSourceEdit(edit, 2).mask).toBe(PNG);
+    expect(sampleSourceEdit(edit, 3.99).mask).toBe(PNG);
+    expect(sampleSourceEdit(edit, 4).mask).toBe(PNG_B);
+    expect(sampleSourceEdit(edit, 9).mask).toBe(PNG_B);
+  });
+
+  it("still blends where the shape sits", () => {
+    expect(sampleSourceEdit(edit, 2).maskTransform?.x).toBeCloseTo(0.2, 10);
+  });
+
+  it("lets a key erase nothing", () => {
+    const off = {
+      ...createSourceEdit(),
+      mask: PNG,
+      anim: { mask: [{ t: 2, v: { x: 0, y: 0, scale: 1, mask: null } }] },
+    };
+    expect(sampleSourceEdit(off, 3).mask).toBeNull();
+  });
+
+  it("leaves the stored shape standing for a key that carries none", () => {
+    const moved = {
+      ...createSourceEdit(),
+      mask: PNG,
+      anim: { mask: [{ t: 0, v: { x: 0.2, y: 0, scale: 1 } }] },
+    };
+    expect(sampleSourceEdit(moved, 1).mask).toBe(PNG);
+  });
+
+  it("keeps a keyed shape across a save", () => {
+    const back = normalizeSourceEdit(edit);
+    expect(back.anim?.mask?.[1].v.mask).toBe(PNG_B);
+    expect(back.anim?.mask?.[0].v.x).toBe(0);
+  });
+});
