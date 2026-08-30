@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { Crop, Eraser, Pause, Pipette, Play, X } from 'lucide-svelte';
+	import { Crop, Eraser, Pause, Pipette, Play, Redo2, Undo2, X } from 'lucide-svelte';
+	import { onMount, untrack } from 'svelte';
+	import { pushModalKeyboard } from '../../modal-keyboard';
+	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
 	import {
 		DEFAULT_CHROMA_KEY,
 		FULL_CROP,
@@ -28,6 +31,36 @@
 
 	let key = $derived(edit.chromaKey);
 	let crop = $derived(edit.crop ?? FULL_CROP);
+
+	// The keyboard is ours while the dialog is up: Space is the transport here,
+	// and Ctrl+Z belongs to the media being edited rather than to the timeline
+	// behind it. Without this both fire at once.
+	onMount(() => pushModalKeyboard());
+
+	/**
+	 * Undo for the dialog's own edits. Every tool writes through `onChange`, so
+	 * one stack of whole-edit snapshots covers an erase stroke, a crop drag and
+	 * a slider sweep alike — and an erase stroke is the one thing in here that
+	 * was previously un-take-back-able short of clearing the entire mask.
+	 */
+	const history = createSnapshotHistory<SourceEdit>(
+		untrack(() => $state.snapshot(edit) as SourceEdit),
+	);
+
+	/** Snapshot the edit as it stands, before whatever is about to change it. */
+	function beforeEdit(coalesceKey?: string) {
+		history.push($state.snapshot(edit) as SourceEdit, coalesceKey);
+	}
+
+	function undo() {
+		const prev = history.undo();
+		if (prev) onChange(prev);
+	}
+
+	function redo() {
+		const next = history.redo();
+		if (next) onChange(next);
+	}
 
 	/** Which tool the preview's pointer belongs to. Only one can own a drag. */
 	type Tool = 'key' | 'crop' | 'erase';
@@ -64,13 +97,19 @@
 	/** Where frames come from. An image draws once; a video every frame. */
 	let media: HTMLImageElement | HTMLVideoElement | null = null;
 
-	function setKey<K extends keyof ChromaKey>(prop: K, value: ChromaKey[K]) {
+	function setKey<K extends keyof ChromaKey>(
+		prop: K,
+		value: ChromaKey[K],
+		coalesceKey?: string,
+	) {
+		beforeEdit(coalesceKey);
 		onChange({ ...edit, chromaKey: { ...key, [prop]: value } });
 	}
 
 	/** Picking a colour switches the key on: nobody reaches for the dropper to
 	 * leave it off, and the preview would show nothing otherwise. */
-	function setColor(r: number, g: number, b: number) {
+	function setColor(r: number, g: number, b: number, coalesceKey?: string) {
+		beforeEdit(coalesceKey);
 		onChange({
 			...edit,
 			chromaKey: { ...key, enabled: true, color: { r, g, b } },
@@ -83,6 +122,8 @@
 		let cancelled = false;
 		loadError = null;
 		ready = false;
+		// Another source's edits are not this one's to step back through.
+		history.reset(untrack(() => $state.snapshot(edit) as SourceEdit));
 		load(src)
 			.then(() => {
 				if (cancelled) return;
@@ -264,6 +305,7 @@
 	}
 
 	function clearMask() {
+		beforeEdit();
 		maskCanvas = null;
 		maskCtx = null;
 		maskLoaded = null;
@@ -433,6 +475,9 @@
 			return;
 		}
 		if (tool === 'erase') {
+			// One entry per stroke, taken before the first dab: undo steps back a
+			// whole stroke, which is the unit the hand thinks in.
+			beforeEdit();
 			// Alt is the transient form of the Restore toggle, the way it is in
 			// every paint program; the toggle stays where the user left it.
 			const held = restoring;
@@ -454,6 +499,9 @@
 			n.x < crop.x + crop.w &&
 			n.y > crop.y &&
 			n.y < crop.y + crop.h;
+		// Once for the gesture, before it starts: setCrop runs on every move, and
+		// an entry per move would make undo a frame-by-frame rewind.
+		beforeEdit();
 		drag = inside
 			? { kind: 'crop-move', dx: n.x - crop.x, dy: n.y - crop.y }
 			: { kind: 'crop-new', ax: n.x, ay: n.y };
@@ -520,11 +568,18 @@
 	function onHexInput(e: Event) {
 		const hex = (e.currentTarget as HTMLInputElement).value;
 		const n = parseInt(hex.slice(1), 16);
-		setColor(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+		// The picker fires as it is dragged, so the whole sweep is one entry.
+		setColor(
+			((n >> 16) & 255) / 255,
+			((n >> 8) & 255) / 255,
+			(n & 255) / 255,
+			'key-color',
+		);
 	}
 
 	/** Put every tool back: the button sits under all three, not just the key. */
 	function reset() {
+		beforeEdit();
 		maskCanvas = null;
 		maskCtx = null;
 		maskLoaded = null;
@@ -544,6 +599,18 @@
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			onClose();
+			return;
+		}
+		const mod = e.ctrlKey || e.metaKey;
+		const k = e.key.toLowerCase();
+		if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) {
+			e.preventDefault();
+			redo();
+			return;
+		}
+		if (mod && k === 'z') {
+			e.preventDefault();
+			undo();
 			return;
 		}
 		// Space is the transport here as it is everywhere else — except while a
@@ -675,7 +742,10 @@
 					<button
 						class="ghost-btn small"
 						disabled={isFullCrop(crop)}
-						onclick={() => onChange({ ...edit, crop: { ...FULL_CROP } })}
+						onclick={() => {
+							beforeEdit();
+							onChange({ ...edit, crop: { ...FULL_CROP } });
+						}}
 					>
 						Whole frame
 					</button>
@@ -744,7 +814,7 @@
 					max={1}
 					step={0.005}
 					disabled={!key.enabled}
-					oninput={(v) => setKey('threshold', v)}
+					oninput={(v) => setKey('threshold', v, 'key-threshold')}
 				/>
 				<span class="val">{Math.round(key.threshold * 100)}</span>
 			</div>
@@ -761,7 +831,7 @@
 					max={1}
 					step={0.005}
 					disabled={!key.enabled}
-					oninput={(v) => setKey('lumaRange', v)}
+					oninput={(v) => setKey('lumaRange', v, 'key-luma')}
 				/>
 				<span class="val">{Math.round(key.lumaRange * 100)}</span>
 			</div>
@@ -775,7 +845,7 @@
 					max={0.5}
 					step={0.005}
 					disabled={!key.enabled}
-					oninput={(v) => setKey('smoothing', v)}
+					oninput={(v) => setKey('smoothing', v, 'key-smoothing')}
 				/>
 				<span class="val">{Math.round(key.smoothing * 100)}</span>
 			</div>
@@ -783,6 +853,25 @@
 		</div>
 
 		<div class="dialog-foot">
+			<button
+				class="icon-btn"
+				disabled={!history.canUndo}
+				onclick={undo}
+				title="Undo (Ctrl+Z)"
+				aria-label="Undo"
+			>
+				<Undo2 size={13} />
+			</button>
+			<button
+				class="icon-btn"
+				disabled={!history.canRedo}
+				onclick={redo}
+				title="Redo (Ctrl+Shift+Z)"
+				aria-label="Redo"
+			>
+				<Redo2 size={13} />
+			</button>
+			<span class="foot-gap"></span>
 			<button class="ghost-btn" onclick={reset}>Reset</button>
 			<button class="ghost-btn" onclick={onClose}>Done</button>
 		</div>
@@ -1050,9 +1139,38 @@
 
 	.dialog-foot {
 		display: flex;
-		justify-content: flex-end;
+		align-items: center;
 		gap: 0.5rem;
 		margin-top: 0.2rem;
+	}
+
+	/* Undo and redo sit at the left, away from Reset: they are the way back from
+	   it, and one misaimed click apart is too close. */
+	.foot-gap {
+		flex: 1;
+	}
+
+	.icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
+		background: rgba(255, 255, 255, 0.04);
+		color: var(--text-2);
+		cursor: pointer;
+	}
+
+	.icon-btn:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.09);
+		color: var(--text);
+	}
+
+	.icon-btn:disabled {
+		color: var(--text-4);
+		cursor: default;
 	}
 
 	.ghost-btn {
