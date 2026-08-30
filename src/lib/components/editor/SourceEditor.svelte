@@ -663,25 +663,38 @@
 						onpointercancel={onPreviewUp}
 						aria-label="Media preview"
 					></canvas>
-					{#if tool === 'crop' && !isFullCrop(crop)}
-						<!-- Four panels rather than one outlined box: the dimming has to
+					{#if !isFullCrop(crop)}
+						{@const idle = tool !== 'crop'}
+						<!-- Shown under every tool, not just Crop: what is cropped away is
+						     gone whichever tool is in hand, and hiding it meant erasing and
+						     keying against a frame that wasn't the one being kept.
+
+						     Four panels rather than one outlined box: the dimming has to
 						     land outside the rectangle, and a border alone reads as a
 						     selection instead of as what is being thrown away. -->
-						<div class="crop-shade" style="left:0; top:0; right:0; height:{crop.y * 100}%"></div>
 						<div
 							class="crop-shade"
+							class:idle
+							style="left:0; top:0; right:0; height:{crop.y * 100}%"
+						></div>
+						<div
+							class="crop-shade"
+							class:idle
 							style="left:0; top:{(crop.y + crop.h) * 100}%; right:0; bottom:0"
 						></div>
 						<div
 							class="crop-shade"
+							class:idle
 							style="left:0; top:{crop.y * 100}%; width:{crop.x * 100}%; height:{crop.h * 100}%"
 						></div>
 						<div
 							class="crop-shade"
+							class:idle
 							style="left:{(crop.x + crop.w) * 100}%; top:{crop.y * 100}%; right:0; height:{crop.h * 100}%"
 						></div>
 						<div
 							class="crop-box"
+							class:idle
 							style="left:{crop.x * 100}%; top:{crop.y * 100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
 						></div>
 					{/if}
@@ -905,10 +918,21 @@
 		pointer-events: none;
 	}
 
+	/* Under another tool the rectangle is not being edited, so it stops looking
+	   like a handle: the discarded margin goes flatter and the outline drops to
+	   a hairline rather than the live dashes. */
+	.crop-shade.idle {
+		background: rgba(0, 0, 0, 0.75);
+	}
+
 	.crop-box {
 		position: absolute;
 		border: 1px dashed var(--live);
 		pointer-events: none;
+	}
+
+	.crop-box.idle {
+		border: 1px solid rgba(255, 255, 255, 0.25);
 	}
 
 	.tool-bar {
