@@ -31,6 +31,14 @@ import { NO_EDIT, nextEditSeq } from "../editor/edit-clock";
  */
 const COALESCE_MS = 500;
 
+/**
+ * How many steps back the stack keeps. Bounded because an entry can be large —
+ * a source edit holds a painted mask per keyframe — and an editing session that
+ * never reloads would otherwise hold every bitmap it ever replaced. Deep enough
+ * that stepping back through a stretch of work still works.
+ */
+const MAX_ENTRIES = 60;
+
 export function createSnapshotHistory<T>() {
   /** States as they were before each change, oldest first. */
   let past = $state<T[]>([]);
@@ -61,6 +69,12 @@ export function createSnapshotHistory<T>() {
     futureSeqs.length = 0;
     past.push($state.snapshot(before) as T);
     pastSeqs.push(nextEditSeq());
+    // Oldest out first: the far end of a long session is the least likely step
+    // to be wanted back, and holding it pins every bitmap it references.
+    while (past.length > MAX_ENTRIES) {
+      past.shift();
+      pastSeqs.shift();
+    }
   }
 
   function undo(current: T): T | null {

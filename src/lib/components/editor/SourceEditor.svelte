@@ -628,7 +628,12 @@
 	 * Distance fields per painted shape, so the dialog can morph between two of
 	 * them the way the shader does. Built once per shape and kept: the transform
 	 * is O(pixels) and a scrub would otherwise pay for it every frame.
+	 *
+	 * Capped, because a field is a full RGBA buffer the size of the mask — half
+	 * a megabyte each at 512² — and a keyed track can hold one per key. A morph
+	 * needs two; the rest is slack for scrubbing back and forth over a few keys.
 	 */
+	const MAX_SDF_CACHE = 8;
 	const sdfCache = new Map<
 		string,
 		{ field: MaskField; w: number; h: number } | 'pending'
@@ -636,7 +641,18 @@
 
 	function ensureSdf(url: string) {
 		const held = sdfCache.get(url);
-		if (held) return held === 'pending' ? null : held;
+		if (held) {
+			// Freshen: Map keeps insertion order, so re-inserting moves this to the
+			// young end and the next eviction takes something actually stale.
+			sdfCache.delete(url);
+			sdfCache.set(url, held);
+			return held === 'pending' ? null : held;
+		}
+		while (sdfCache.size >= MAX_SDF_CACHE) {
+			const oldest = sdfCache.keys().next();
+			if (oldest.done) break;
+			sdfCache.delete(oldest.value);
+		}
 		sdfCache.set(url, 'pending');
 		const img = new Image();
 		img.onload = () => {
