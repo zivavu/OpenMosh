@@ -91,7 +91,11 @@
 
 	const TOOLS: { value: Tool; label: string; hint: string }[] = [
 		{ value: 'key', label: 'Key', hint: 'Click the preview to pick the colour to remove' },
-		{ value: 'crop', label: 'Crop', hint: 'Drag a rectangle to keep; drag inside it to move it' },
+		{
+			value: 'crop',
+			label: 'Crop',
+			hint: 'Drag a rectangle to keep. Drag an edge or corner to resize it, inside it to move it',
+		},
 		{
 			value: 'erase',
 			label: 'Erase',
@@ -699,12 +703,78 @@
 		return gestureTime ?? currentTime;
 	}
 
+	/** Which sides of the rectangle a resize drag is holding. */
+	type Edges = { l: boolean; r: boolean; t: boolean; b: boolean };
+
 	type Drag =
 		| { kind: 'erase' }
 		| { kind: 'crop-new'; ax: number; ay: number }
 		| { kind: 'crop-move'; dx: number; dy: number }
+		| { kind: 'crop-resize'; edges: Edges; from: CropRect }
 		| { kind: 'mask-move'; ax: number; ay: number; from: MaskTransform };
 	let drag: Drag | null = null;
+
+	/** Narrowest the rectangle may get, matching the clamp in `setCrop`. */
+	const MIN_CROP = 0.01;
+
+	/**
+	 * How close to an edge counts as grabbing it, in normalized units. Taken
+	 * from the drawn size so the target is the same handful of pixels whatever
+	 * the dialog has been resized to, and capped at a third of the rectangle so
+	 * a small crop keeps a middle that can still be moved.
+	 */
+	function grabTolerance(): { x: number; y: number } {
+		const rect = canvasEl?.getBoundingClientRect();
+		const px = 10;
+		return {
+			x: Math.min(rect?.width ? px / rect.width : 0.02, crop.w / 3),
+			y: Math.min(rect?.height ? px / rect.height : 0.02, crop.h / 3),
+		};
+	}
+
+	/** The edges under the pointer, or null if it isn't near any of them. */
+	function edgesAt(n: { x: number; y: number }): Edges | null {
+		if (isFullCrop(crop)) return null;
+		const t = grabTolerance();
+		// Outside the rectangle by more than the grab distance is a new
+		// rectangle, not a resize of this one.
+		if (
+			n.x < crop.x - t.x ||
+			n.x > crop.x + crop.w + t.x ||
+			n.y < crop.y - t.y ||
+			n.y > crop.y + crop.h + t.y
+		) {
+			return null;
+		}
+		const edges: Edges = {
+			l: Math.abs(n.x - crop.x) <= t.x,
+			r: Math.abs(n.x - (crop.x + crop.w)) <= t.x,
+			t: Math.abs(n.y - crop.y) <= t.y,
+			b: Math.abs(n.y - (crop.y + crop.h)) <= t.y,
+		};
+		return edges.l || edges.r || edges.t || edges.b ? edges : null;
+	}
+
+	function insideCrop(n: { x: number; y: number }): boolean {
+		return (
+			!isFullCrop(crop) &&
+			n.x > crop.x &&
+			n.x < crop.x + crop.w &&
+			n.y > crop.y &&
+			n.y < crop.y + crop.h
+		);
+	}
+
+	function cursorFor(edges: Edges | null): string {
+		if (!edges) return '';
+		if ((edges.l && edges.t) || (edges.r && edges.b)) return 'nwse-resize';
+		if ((edges.r && edges.t) || (edges.l && edges.b)) return 'nesw-resize';
+		if (edges.l || edges.r) return 'ew-resize';
+		return 'ns-resize';
+	}
+
+	/** What the crop tool's pointer is over, so the cursor can say so. */
+	let cropCursor = $state('');
 
 	function onPreviewDown(e: PointerEvent) {
 		if (e.button !== 0) return;
@@ -745,26 +815,39 @@
 		}
 		const n = normAt(e);
 		if (!n) return;
-		// Inside the current rectangle, the drag moves it; anywhere else starts a
-		// new one. Drawing a fresh rectangle is the common gesture, so it needs no
-		// modifier and no handle to find.
-		const inside =
-			!isFullCrop(crop) &&
-			n.x > crop.x &&
-			n.x < crop.x + crop.w &&
-			n.y > crop.y &&
-			n.y < crop.y + crop.h;
+		// On an edge, the drag resizes; inside the rectangle it moves it;
+		// anywhere else starts a new one. Drawing a fresh rectangle is the common
+		// gesture, so it stays the one that needs no handle to find.
+		const edges = edgesAt(n);
+		const inside = insideCrop(n);
 		// Once for the gesture, before it starts: setCrop runs on every move, and
 		// an entry per move would make undo a frame-by-frame rewind.
 		beforeEdit();
+		if (edges) {
+			drag = { kind: 'crop-resize', edges, from: { ...crop } };
+			return;
+		}
 		drag = inside
 			? { kind: 'crop-move', dx: n.x - crop.x, dy: n.y - crop.y }
 			: { kind: 'crop-new', ax: n.x, ay: n.y };
-		if (!inside) setCrop({ x: n.x, y: n.y, w: 0.01, h: 0.01 });
+		if (!inside) setCrop({ x: n.x, y: n.y, w: MIN_CROP, h: MIN_CROP });
 	}
 
 	function onPreviewMove(e: PointerEvent) {
-		if (!drag) return;
+		if (!drag) {
+			// Nothing is being dragged, so the only job is to say what a press
+			// here would do.
+			if (tool === 'crop') {
+				const n = normAt(e);
+				const edges = n && edgesAt(n);
+				cropCursor = edges
+					? cursorFor(edges)
+					: n && insideCrop(n)
+						? 'move'
+						: '';
+			}
+			return;
+		}
 		if (drag.kind === 'mask-move') {
 			const p = atEvent(e);
 			if (!p || !raw) return;
@@ -788,6 +871,24 @@
 		}
 		const n = normAt(e);
 		if (!n) return;
+		if (drag.kind === 'crop-resize') {
+			const { edges, from } = drag;
+			// The held edges follow the pointer, the opposite ones stay where the
+			// gesture found them — read from the rectangle as it was at the start,
+			// not as it stands, so a fast drag can't drift the anchor.
+			let x0 = from.x;
+			let y0 = from.y;
+			let x1 = from.x + from.w;
+			let y1 = from.y + from.h;
+			// An edge stops at the opposite one rather than crossing it: a
+			// rectangle turned inside out is never what the hand meant.
+			if (edges.l) x0 = Math.min(n.x, x1 - MIN_CROP);
+			if (edges.r) x1 = Math.max(n.x, x0 + MIN_CROP);
+			if (edges.t) y0 = Math.min(n.y, y1 - MIN_CROP);
+			if (edges.b) y1 = Math.max(n.y, y0 + MIN_CROP);
+			setCrop({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+			return;
+		}
 		if (drag.kind === 'crop-new') {
 			setCrop({
 				x: Math.min(drag.ax, n.x),
@@ -984,6 +1085,9 @@
 							<canvas
 								bind:this={canvasEl}
 								class="tool-{tool}"
+								style:cursor={tool === 'crop' && cropCursor
+									? cropCursor
+									: undefined}
 								onpointerdown={onPreviewDown}
 								onpointermove={onPreviewMove}
 								onpointerup={onPreviewUp}
@@ -1023,7 +1127,19 @@
 									class="crop-box"
 									class:idle
 									style="left:{crop.x * 100}%; top:{crop.y * 100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
-								></div>
+								>
+									<!-- Corners only. The sides are draggable too, but marking all
+									     eight puts more furniture on a small rectangle than it can
+									     hold; the cursor is what says an edge is live. Decoration
+									     alone — the canvas under them hit-tests the edges, so they
+									     take no pointer events of their own. -->
+									{#if !idle}
+										<span class="crop-grip tl"></span>
+										<span class="crop-grip tr"></span>
+										<span class="crop-grip bl"></span>
+										<span class="crop-grip br"></span>
+									{/if}
+								</div>
 							{/if}
 						</div>
 					{/if}
@@ -1352,6 +1468,35 @@
 
 	.crop-box.idle {
 		border: 1px solid rgba(255, 255, 255, 0.25);
+	}
+
+	.crop-grip {
+		position: absolute;
+		width: 7px;
+		height: 7px;
+		background: var(--live);
+		border-radius: 1px;
+	}
+
+	/* Pulled half off the corner so the square is centred on it. */
+	.crop-grip.tl {
+		left: -4px;
+		top: -4px;
+	}
+
+	.crop-grip.tr {
+		right: -4px;
+		top: -4px;
+	}
+
+	.crop-grip.bl {
+		left: -4px;
+		bottom: -4px;
+	}
+
+	.crop-grip.br {
+		right: -4px;
+		bottom: -4px;
 	}
 
 	/* The app's segmented control, as ButtonGroup draws it — one bordered group
