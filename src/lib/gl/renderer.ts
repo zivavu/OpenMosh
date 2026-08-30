@@ -6,6 +6,14 @@ import {
   type ResolvedTextLayer,
 } from "../text";
 import {
+  MASK_SDF_RANGE,
+  MASK_SDF_SOFT,
+  type MaskCentre,
+  type MaskField,
+  maskShift,
+  maskToSdf,
+} from "../media/mask-sdf";
+import {
   cropExtent,
   isIdleSourceEdit,
   sampleSourceEdit,
@@ -340,9 +348,17 @@ export class GlRenderer {
    * handful; this is loose enough not to thrash one and tight enough to bound
    * a long session. */
   private static readonly MAX_MASK_TEXTURES = 24;
+  /** Reused for turning decoded masks into distance fields. */
+  private maskScratch: HTMLCanvasElement | null = null;
   private maskTextures = new Map<
     string,
-    { tex: WebGLTexture; url: string; ready: boolean }
+    {
+      tex: WebGLTexture;
+      url: string;
+      ready: boolean;
+      /** Middle of the erased region, for aligning a morph. See maskShift. */
+      centre: MaskCentre;
+    }
   >();
 
   /** Solo: chainSource hands back black rather than the source. Requested for
@@ -670,7 +686,7 @@ export class GlRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    const entry = { tex, url, ready: false };
+    const entry = { tex, url, ready: false, centre: null as MaskCentre };
     this.maskTextures.set(url, entry);
     const img = new Image();
     img.onload = () => {
@@ -678,12 +694,50 @@ export class GlRenderer {
       // decoded; only fill the texture this load was started for.
       if (this.maskTextures.get(url) !== entry) return;
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      // Stored as a distance field rather than as coverage, so two keys can be
+      // interpolated at their boundary. Built once per painted shape, here,
+      // where the decode already costs a frame — it is O(pixels) but it is not
+      // on the per-frame path.
+      const sdf = this.sdfPixels(img);
+      if (sdf) {
+        entry.centre = sdf.field.centre;
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          sdf.width,
+          sdf.height,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          sdf.field.data,
+        );
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      }
       entry.ready = true;
       this.onMaskReady?.();
     };
     img.src = url;
     return null;
+  }
+
+  /** The decoded mask as a distance field, or null if 2D canvas is unavailable. */
+  private sdfPixels(
+    img: HTMLImageElement,
+  ): { field: MaskField; width: number; height: number } | null {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (w <= 0 || h <= 0) return null;
+    const canvas = (this.maskScratch ??= document.createElement("canvas"));
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h);
+    return { field: maskToSdf(px.data, w, h), width: w, height: h };
   }
 
   /** Called when a mask finishes decoding, so a paused preview redraws. */
@@ -1223,8 +1277,38 @@ export class GlRenderer {
       );
     }
     const mask = edit?.mask ? this.maskTexture(edit.mask) : null;
+    // The shape being morphed into. Falls back to the one being left while it
+    // is still decoding, so a key change never blinks the erase off.
+    const nextUrl = edit?.maskNext;
+    const next = nextUrl ? this.maskTexture(nextUrl) : null;
+    const morphing = !!mask && !!next;
+    const shift =
+      morphing && edit?.mask && nextUrl
+        ? maskShift(
+            this.maskTextures.get(edit.mask)?.centre ?? null,
+            this.maskTextures.get(nextUrl)?.centre ?? null,
+          )
+        : { x: 0, y: 0 };
     if (prog.uniforms["u_hasMask"]) {
       gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
+    }
+    if (prog.uniforms["u_maskSdf"]) {
+      // Only mid-morph. On a key, and on every mask that is not animated at
+      // all, the shader reads the painting itself and the soft brush survives.
+      gl.uniform1f(prog.uniforms["u_maskSdf"], morphing ? 1 : 0);
+    }
+    if (prog.uniforms["u_maskMix"]) {
+      gl.uniform1f(prog.uniforms["u_maskMix"], morphing ? (edit?.maskMix ?? 0) : 0);
+    }
+    if (prog.uniforms["u_maskShift"]) {
+      gl.uniform2f(prog.uniforms["u_maskShift"], shift.x, shift.y);
+    }
+    if (prog.uniforms["u_maskSdfShape"]) {
+      gl.uniform2f(
+        prog.uniforms["u_maskSdfShape"],
+        MASK_SDF_SOFT,
+        MASK_SDF_RANGE,
+      );
     }
     const xf = edit?.maskTransform;
     if (prog.uniforms["u_maskXform"]) {
@@ -1239,6 +1323,14 @@ export class GlRenderer {
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, mask);
       gl.uniform1i(prog.uniforms["u_mask"], 3);
+    }
+    if (mask && prog.uniforms["u_maskNext"]) {
+      gl.activeTexture(gl.TEXTURE4);
+      // Bound to the same field when nothing is being morphed: a sampler left
+      // pointing at whatever was in the unit last is undefined, and the mix is
+      // 0 either way.
+      gl.bindTexture(gl.TEXTURE_2D, morphing ? next! : mask);
+      gl.uniform1i(prog.uniforms["u_maskNext"], 4);
     }
   }
 

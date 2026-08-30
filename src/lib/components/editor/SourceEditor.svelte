@@ -33,6 +33,12 @@
 		type SourceEdit,
 		type SourceEditAnim,
 	} from '../../media';
+	import {
+		maskShift,
+		maskToSdf,
+		sdfCoverage,
+		type MaskField,
+	} from '../../media/mask-sdf';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 	import ColorPicker from '../ui/ColorPicker.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
@@ -620,9 +626,107 @@
 	 * the shader does: the mask is opaque black-on-white, so its own alpha says
 	 * nothing.
 	 */
+	/**
+	 * Distance fields per painted shape, so the dialog can morph between two of
+	 * them the way the shader does. Built once per shape and kept: the transform
+	 * is O(pixels) and a scrub would otherwise pay for it every frame.
+	 */
+	const sdfCache = new Map<
+		string,
+		{ field: MaskField; w: number; h: number } | 'pending'
+	>();
+
+	function ensureSdf(url: string) {
+		const held = sdfCache.get(url);
+		if (held) return held === 'pending' ? null : held;
+		sdfCache.set(url, 'pending');
+		const img = new Image();
+		img.onload = () => {
+			const w = img.naturalWidth;
+			const h = img.naturalHeight;
+			const c = document.createElement('canvas');
+			c.width = w;
+			c.height = h;
+			const ctx = c.getContext('2d', { willReadFrequently: true });
+			if (!ctx || w <= 0 || h <= 0) {
+				sdfCache.delete(url);
+				return;
+			}
+			ctx.drawImage(img, 0, 0);
+			const px = ctx.getImageData(0, 0, w, h);
+			sdfCache.set(url, { field: maskToSdf(px.data, w, h), w, h });
+			// The morph was showing the shape it was leaving until this landed.
+			if (ready && !playing) paint();
+		};
+		img.src = url;
+		return null;
+	}
+
+	/**
+	 * The two shapes mid-morph, resolved to one coverage canvas — the same
+	 * boundary interpolation the shader does, so the dialog and the canvas
+	 * behind it never disagree about what is erased.
+	 *
+	 * Null whenever nothing is being morphed, which puts the painted mask back
+	 * on the fast path with its soft edge intact.
+	 */
+	let morphCanvas: HTMLCanvasElement | null = null;
+	function morphedMask(): HTMLCanvasElement | null {
+		const from = live.mask;
+		const to = live.maskNext;
+		const mix = live.maskMix ?? 0;
+		if (!from || !to) return null;
+		const a = ensureSdf(from);
+		const b = ensureSdf(to);
+		if (!a || !b || a.w !== b.w || a.h !== b.h) return null;
+		const c = (morphCanvas ??= document.createElement('canvas'));
+		if (c.width !== a.w || c.height !== a.h) {
+			c.width = a.w;
+			c.height = a.h;
+		}
+		const ctx = c.getContext('2d', { willReadFrequently: true });
+		if (!ctx) return null;
+		// The same alignment the shader does: both shapes slid onto the middle
+		// they are travelling through, so their boundaries have an in-between.
+		const shift = maskShift(a.field.centre, b.field.centre);
+		const dxA = Math.round(-shift.x * mix * a.w);
+		const dyA = Math.round(-shift.y * mix * a.h);
+		const dxB = Math.round(shift.x * (1 - mix) * b.w);
+		const dyB = Math.round(shift.y * (1 - mix) * b.h);
+		const out = ctx.createImageData(a.w, a.h);
+		// Off the edge reads as kept, which is what CLAMP_TO_EDGE gives the
+		// shader: the field saturates positive outside a painted shape.
+		const enc = (
+			f: MaskField,
+			w: number,
+			h: number,
+			x: number,
+			y: number,
+		): number => {
+			const cx = Math.min(Math.max(x, 0), w - 1);
+			const cy = Math.min(Math.max(y, 0), h - 1);
+			return f.data[(cy * w + cx) * 4 + 3] / 255;
+		};
+		for (let y = 0; y < a.h; y++) {
+			for (let x = 0; x < a.w; x++) {
+				const ea = enc(a.field, a.w, a.h, x + dxA, y + dyA);
+				const eb = enc(b.field, b.w, b.h, x + dxB, y + dyB);
+				const v = Math.round(sdfCoverage(ea + (eb - ea) * mix) * 255);
+				const i = (y * a.w + x) * 4;
+				out.data[i] = v;
+				out.data[i + 1] = v;
+				out.data[i + 2] = v;
+				out.data[i + 3] = 255;
+			}
+		}
+		ctx.putImageData(out, 0, 0);
+		return c;
+	}
+
 	let maskScratch: HTMLCanvasElement | null = null;
 	function maskPixels(): Uint8ClampedArray | null {
-		if (!maskCanvas || !raw) return null;
+		const shape = morphedMask() ?? maskCanvas;
+		if (!shape || !raw) return null;
 		if (
 			!maskScratch ||
 			maskScratch.width !== raw.width ||
@@ -643,7 +747,7 @@
 		const dw = w * maskXform.scale;
 		const dh = h * maskXform.scale;
 		sc.drawImage(
-			maskCanvas,
+			shape,
 			maskXform.x * w + (w - dw) / 2,
 			maskXform.y * h + (h - dh) / 2,
 			dw,
@@ -672,6 +776,10 @@
 			key.lumaRange,
 			edit.mask,
 			maskXform,
+			// A morph moves on with the playhead even when nothing else does:
+			// two keys can hold the same position and different shapes.
+			live.maskNext,
+			live.maskMix,
 			crop,
 		];
 		if (ready && !playing) paint();

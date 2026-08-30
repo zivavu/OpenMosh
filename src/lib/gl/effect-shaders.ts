@@ -127,6 +127,18 @@ uniform float u_keyLuma;
 // Hand-erased coverage in source space; red channel, 1 = keep. Off at <= 0.
 uniform sampler2D u_mask;
 uniform float u_hasMask;
+// The shape being morphed into, and how far along. When u_maskSdf is 0 these
+// are unused and u_mask holds plain coverage, exactly as it always did.
+uniform sampler2D u_maskNext;
+uniform float u_maskMix;
+// 1 only while a morph is in progress: the masks hold coverage in red and
+// their distance field in alpha, and this picks which one to read.
+uniform float u_maskSdf;
+// Half-width of the rebuilt edge and the range the field is encoded over, both
+// in mask pixels. Must match mask-sdf.ts.
+uniform vec2 u_maskSdfShape;
+// Where the second shape's middle sits relative to the first's, in mask uv.
+uniform vec2 u_maskShift;
 // Where the mask sits: xy = offset in source space, z = scale about its centre.
 // (0,0,1) leaves it exactly as painted, which is what a still edit sets.
 uniform vec3 u_maskXform;
@@ -161,7 +173,28 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
     // a stripe of whatever the border happened to be.
     float inside =
       step(0.0, mUv.x) * step(mUv.x, 1.0) * step(0.0, mUv.y) * step(mUv.y, 1.0);
-    c.a *= mix(1.0, texture(u_mask, mUv).r, inside);
+    float cover;
+    if (u_maskSdf > 0.0) {
+      // Mid-morph: interpolate where the edge *is*, not how opaque the two
+      // paintings are. A lerp of the fields (alpha) walks one boundary across;
+      // a lerp of the coverage (red) would show both blobs at half strength.
+      // Both shapes are slid onto the travelling middle first: two blobs that
+      // do not overlap are each far from the other everywhere, so interpolating
+      // the fields where they lie shrinks both to nothing halfway. Aligned, the
+      // boundary morphs while the middle moves.
+      // mUv is already mask space, so the shift needs no rescaling.
+      vec2 shift = u_maskShift;
+      float encA = texture(u_mask, mUv - shift * u_maskMix).a;
+      float encB = texture(u_maskNext, mUv + shift * (1.0 - u_maskMix)).a;
+      float enc = mix(encA, encB, u_maskMix);
+      float d = (enc - 0.5) * 2.0 * u_maskSdfShape.y;
+      cover = clamp(d / u_maskSdfShape.x + 0.5, 0.0, 1.0);
+    } else {
+      // Sitting on a key, or not animated at all: the painting itself, soft
+      // brush edge and all.
+      cover = texture(u_mask, mUv).r;
+    }
+    c.a *= mix(1.0, cover, inside);
   }
   if (u_keyThreshold > 0.0) {
     float d = keyDistance(c.rgb);

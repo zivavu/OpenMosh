@@ -117,6 +117,13 @@ export interface SourceEdit {
    * a stored edit carries the track and the painted mask, not one moment of it.
    */
   maskTransform?: MaskTransform;
+  /**
+   * The shape the erase track is morphing into, and how far along it is. Both
+   * filled in by `sampleSourceEdit` and never stored. Absent when nothing is
+   * being morphed, which is every still edit and every moment sitting on a key.
+   */
+  maskNext?: string | null;
+  maskMix?: number;
 }
 
 export const DEFAULT_CHROMA_KEY: ChromaKey = {
@@ -314,9 +321,51 @@ function blendMaskKey(a: MaskKey, b: MaskKey, k: number): MaskKey {
     x: lerp(a.x, b.x, k),
     y: lerp(a.y, b.y, k),
     scale: lerp(a.scale, b.scale, k),
-    // Held, not blended: the shape painted at `a` stands until `b` is reached.
+    // The shape `a` set stands as the one being left; `sampleMaskTrack` carries
+    // the one being arrived at alongside it, so the two can be morphed.
     mask: a.mask,
   };
+}
+
+/**
+ * The erase track at `time`: where the shape sits, plus the two painted shapes
+ * either side of the playhead and how far between them it is.
+ *
+ * Two shapes rather than one because a painted mask has no midpoint of its own
+ * — the boundary is interpolated downstream, in the distance fields the
+ * renderer builds, and that needs both ends.
+ */
+export interface SampledMask extends MaskTransform {
+  /** The shape being left. */
+  mask?: string | null;
+  /** The shape being arrived at; absent when there is nothing to morph into. */
+  next?: string | null;
+  /** 0 on `mask`, 1 on `next`. */
+  mix: number;
+}
+
+export function sampleMaskTrack(
+  keys: Keyframe<MaskKey>[] | undefined,
+  time: number,
+): SampledMask | null {
+  if (!keys || keys.length === 0) return null;
+  const at = (i: number, mix = 0): SampledMask => ({ ...keys[i].v, mix });
+  if (keys.length === 1 || time <= keys[0].t) return at(0);
+  const lastIndex = keys.length - 1;
+  if (time >= keys[lastIndex].t) return at(lastIndex);
+  for (let i = 1; i < keys.length; i++) {
+    const b = keys[i];
+    if (b.t < time) continue;
+    const a = keys[i - 1];
+    const span = b.t - a.t;
+    const k = span <= 0 ? 1 : (time - a.t) / span;
+    return {
+      ...blendMaskKey(a.v, b.v, k),
+      next: b.v.mask,
+      mix: k,
+    };
+  }
+  return at(lastIndex);
 }
 
 /**
@@ -349,16 +398,23 @@ export function sampleSourceEdit(edit: SourceEdit, time: number): SourceEdit {
   if (!anim || !hasAnimation(edit)) return edit;
   const crop = sampleTrack(anim.crop, time, blendCrop);
   const key = sampleTrack(anim.key, time, blendKey);
-  const maskKey = sampleTrack(anim.mask, time, blendMaskKey);
+  const maskKey = sampleMaskTrack(anim.mask, time);
+  // A key that carries a shape replaces the static one; `null` is a key that
+  // erases nothing, so it has to win over the static mask as well — only an
+  // absent `mask` leaves the stored shape standing.
+  const held = (v: string | null | undefined) => (v !== undefined ? v : edit.mask);
+  const mask = maskKey ? held(maskKey.mask) : edit.mask;
+  const next = maskKey && maskKey.next !== undefined ? held(maskKey.next) : mask;
   return {
     chromaKey: key
       ? { enabled: edit.chromaKey.enabled, ...key }
       : edit.chromaKey,
     crop: crop ?? edit.crop,
-    // A key that carries a shape replaces the static one; `null` is a key that
-    // erases nothing, so it has to win over the static mask as well — only an
-    // absent `mask` leaves the stored shape standing.
-    mask: maskKey && maskKey.mask !== undefined ? maskKey.mask : edit.mask,
+    mask,
+    // Only when there is a second shape to reach: with one shape the renderer
+    // takes the plain path and the painted softness survives untouched.
+    maskNext: next !== mask ? next : undefined,
+    maskMix: next !== mask ? maskKey!.mix : undefined,
     maskTransform: maskKey
       ? { x: maskKey.x, y: maskKey.y, scale: maskKey.scale }
       : undefined,
