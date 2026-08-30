@@ -1712,6 +1712,12 @@
 			seqPlaying(),
 	);
 
+	/** Media length per pool source, for sampling keyed edits where the frame
+	 * sampler actually is once a clip has looped. */
+	let sourceDurations = $derived(
+		Object.fromEntries(sequenceSources.map((s) => [s.id, s.duration])),
+	);
+
 	function driveSequenceSource(): boolean {
 		if (!isSequenceMode) return false;
 		const seg = activeSegment();
@@ -3794,6 +3800,7 @@
 				spectrum={audio.frequencyData}
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
+				{sourceDurations}
 				sourceEditId={isSequenceMode ? sourceIdOf(activeSegment()) : null}
 				outgoingEditId={isSequenceMode ? (outgoingSource()?.id ?? null) : null}
 				sourceEditTime={isSequenceMode ? sourceTimeIn(activeSegment()) : 0}

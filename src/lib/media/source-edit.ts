@@ -310,6 +310,23 @@ function blendMaskTransform(
 }
 
 /**
+ * Where in the media `t` really lands, for a source `duration` seconds long.
+ *
+ * A clip longer than its media loops: the sampler wraps the frame it hands back
+ * into [0, duration), so the edit has to be sampled at the same instant or the
+ * two come apart. Unwrapped, a keyed edit runs off the end of its track on the
+ * first pass and holds its last key for every loop after it — the picture back
+ * at the start with the erase mask still parked where it finished.
+ *
+ * Duration 0 covers images and media not probed yet: they have no instants to
+ * wrap into, so the time only has to be non-negative.
+ */
+export function wrapSourceTime(t: number, duration: number): number {
+  if (!(duration > 0)) return Math.max(0, t);
+  return ((t % duration) + duration) % duration;
+}
+
+/**
  * The edit as it stands at `time` seconds into the source: every track sampled
  * down to a plain value, `anim` dropped. Everything downstream takes one of
  * these and needn't know a track was ever involved.

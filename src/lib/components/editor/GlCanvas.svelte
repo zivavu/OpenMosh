@@ -43,6 +43,7 @@
    const EMPTY_POST: PostChainLayer[] = [];
    const EMPTY_MEDIA: ResolvedMediaLayer[] = [];
    const EMPTY_SOURCE_EDITS: Record<string, SourceEdit> = {};
+   const EMPTY_SOURCE_DURATIONS: Record<string, number> = {};
 
    interface Props {
       imageSrc: string;
@@ -100,6 +101,9 @@
       sourceFit?: SourceFit;
       /** Per-source edits, keyed by source id. Sparse: only edited media. */
       sourceEdits?: Record<string, SourceEdit>;
+      /** How long each source's media runs, so a keyed edit is sampled at the
+       * instant the frame sampler wrapped to. Sparse; images may be omitted. */
+      sourceDurations?: Record<string, number>;
       /** Which pool source the frame comes from, so its own edits can be found.
        * Null for media with no pool entry, which carries none. */
       sourceEditId?: string | null;
@@ -168,6 +172,7 @@
       spectrum = null,
       sourceFit = "contain",
       sourceEdits = EMPTY_SOURCE_EDITS,
+      sourceDurations = EMPTY_SOURCE_DURATIONS,
       sourceEditId = null,
       outgoingEditId = null,
       sourceEditTime = 0,
@@ -631,6 +636,10 @@
    // edit belongs to the media, so it is the same for every lane drawing it.
    $effect(() => {
       renderer?.setSourceEdits(new Map(Object.entries(sourceEdits)));
+   });
+
+   $effect(() => {
+      renderer?.setSourceDurations(new Map(Object.entries(sourceDurations)));
    });
 
    // An erase mask is decoded from a data URL, so it lands a frame or two after

@@ -5,7 +5,12 @@ import {
   textSignature,
   type ResolvedTextLayer,
 } from "../text";
-import { cropExtent, isIdleSourceEdit, sampleSourceEdit } from "../media";
+import {
+  cropExtent,
+  isIdleSourceEdit,
+  sampleSourceEdit,
+  wrapSourceTime,
+} from "../media";
 import type { MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
 import {
   CAPTION_EFFECT_ID,
@@ -348,6 +353,8 @@ export class GlRenderer {
   private mediaLayerTextures = new Map<string, OverlayTexture>();
   /** Per-source edits, keyed by source id. See setSourceEdits. */
   private sourceEdits = new Map<string, SourceEdit>();
+  /** Per-source media length, keyed by source id. See setSourceDurations. */
+  private sourceDurations = new Map<string, number>();
   /** Seconds into each source texture's own media. See setSourceIds. */
   private mainSourceTime = 0;
   private altSourceTime = 0;
@@ -570,6 +577,21 @@ export class GlRenderer {
    */
   setSourceEdits(edits: Map<string, SourceEdit>) {
     this.sourceEdits = edits;
+  }
+
+  /**
+   * How long each source's media runs, so a keyed edit can be sampled at the
+   * instant the frame sampler actually wrapped to. Pushed the same way as the
+   * edits; a source missing from the map is treated as having no duration,
+   * which is what an image is.
+   */
+  setSourceDurations(durations: Map<string, number>) {
+    this.sourceDurations = durations;
+  }
+
+  /** Seconds into a source's own media, wrapped as the frame sampler wraps it. */
+  private editTime(sourceId: string | null, time: number): number {
+    return wrapSourceTime(time, this.sourceDurations.get(sourceId ?? "") ?? 0);
   }
 
   /**
@@ -1225,7 +1247,7 @@ export class GlRenderer {
     if (stored && sw > 0 && sh > 0) {
       const id = (alt ? this.altSourceId : this.mainSourceId)!;
       const time = alt ? this.altSourceTime : this.mainSourceTime;
-      const edit = sampleSourceEdit(stored, time);
+      const edit = sampleSourceEdit(stored, this.editTime(id, time));
       // Sized from the stored edit, not this instant's: see applySourceEdit.
       const extent = cropExtent(stored);
       const edited = this.applySourceEdit(src, sw, sh, edit, extent, id, alt);
@@ -1995,7 +2017,7 @@ export class GlRenderer {
       // media at different points in it, and each wants its own instant's crop.
       const stored = this.sourceEdits.get(layer.sourceId);
       const edit = stored
-        ? sampleSourceEdit(stored, layer.sourceTime)
+        ? sampleSourceEdit(stored, this.editTime(layer.sourceId, layer.sourceTime))
         : undefined;
       // Fitted against what the crop leaves, not the whole file: "contain" has
       // to mean the visible rectangle, or cropping a photo would letterbox the

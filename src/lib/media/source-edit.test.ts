@@ -11,6 +11,7 @@ import {
   putKeyframe,
   removeKeyframe,
   sampleSourceEdit,
+  wrapSourceTime,
 } from "./source-edit";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -183,5 +184,41 @@ describe("keyframes", () => {
     expect(back.anim?.crop?.map((k) => k.t)).toEqual([1, 3]);
     // An empty track is no track at all.
     expect(back.anim?.key).toBeUndefined();
+  });
+});
+
+describe("wrapSourceTime", () => {
+  it("leaves a time inside the media alone", () => {
+    expect(wrapSourceTime(2.5, 6)).toBe(2.5);
+  });
+
+  it("wraps a looped clip back into the media, as the sampler does", () => {
+    // A 6s video under a 20s segment: at 14s the sampler is showing second 2,
+    // so the edit has to be sampled there too. Unwrapped it sat past the last
+    // key for every loop after the first.
+    expect(wrapSourceTime(14, 6)).toBeCloseTo(2, 10);
+  });
+
+  it("has no instants to wrap into without a duration", () => {
+    expect(wrapSourceTime(14, 0)).toBe(14);
+    expect(wrapSourceTime(-3, 0)).toBe(0);
+  });
+
+  it("keeps a keyed mask moving on every loop", () => {
+    const edit = {
+      ...createSourceEdit(),
+      mask: PNG,
+      anim: {
+        mask: [
+          { t: 0, v: { x: 0, y: 0, scale: 1 } },
+          { t: 4, v: { x: 0.4, y: 0, scale: 1 } },
+        ],
+      },
+    };
+    const at = (t: number) =>
+      sampleSourceEdit(edit, wrapSourceTime(t, 6)).maskTransform?.x;
+    expect(at(2)).toBeCloseTo(0.2, 10);
+    // Second time around the clip, not stuck on the last key.
+    expect(at(8)).toBeCloseTo(0.2, 10);
   });
 });

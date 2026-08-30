@@ -30,6 +30,7 @@ export {
   removeKeyframe,
   sampleSourceEdit,
   sampleTrack,
+  wrapSourceTime,
 } from "./source-edit";
 export { MEDIA_LAYER_SHORTCUTS } from "./shortcuts";
 export type { ResolvedMediaLayer } from "./resolve";
