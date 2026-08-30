@@ -546,18 +546,33 @@
 		start: number;
 		end: number;
 	}
-	const spanHistory = createSnapshotHistory<Span>({ start: 0, end: 0 });
+	const spanHistory = createSnapshotHistory<Span>();
+	/** The span as it stood before the drag in progress. The stack holds the
+	 * state each change replaced, and a drag only reports where it landed. */
+	let spanAtRest: Span = { start: 0, end: 0 };
 
 	/** Record the span a drag landed on. A drag that put it back where it was
 	 * is not an edit, so it doesn't leave a step behind. */
 	function pushSpanHistory() {
-		const at = spanHistory.current;
-		if (at.start === audio.spanStart && at.end === audio.spanEnd) return;
-		spanHistory.push({ start: audio.spanStart, end: audio.spanEnd });
+		if (
+			spanAtRest.start === audio.spanStart &&
+			spanAtRest.end === audio.spanEnd
+		) {
+			return;
+		}
+		spanHistory.push(spanAtRest);
+		spanAtRest = { start: audio.spanStart, end: audio.spanEnd };
+	}
+
+	function resetSpanHistory() {
+		spanHistory.reset();
+		spanAtRest = { start: audio.spanStart, end: audio.spanEnd };
 	}
 
 	function applySpan(span: Span | null) {
 		if (!span) return;
+		// Undo and redo move the span too, so what a later drag replaces is this.
+		spanAtRest = { ...span };
 		audio.spanStart = span.start;
 		audio.spanEnd = span.end;
 	}
@@ -572,7 +587,7 @@
 		if (id === spannedTrack) return;
 		spannedTrack = id;
 		untrack(() =>
-			spanHistory.reset({ start: audio.spanStart, end: audio.spanEnd }),
+			resetSpanHistory(),
 		);
 	});
 
@@ -1127,7 +1142,7 @@
 	// Their own undo stack, for the same reason the text timeline has one: the
 	// sequence stack is typed to segments, and nudging an fx clip shouldn't
 	// rewind the source lane. Ctrl+Z reaches it when an fx edit is the newest.
-	const fxHistory = createSnapshotHistory<FxLane[]>([]);
+	const fxHistory = createSnapshotHistory<FxLane[]>();
 
 	function pushFxHistory(coalesceKey?: string) {
 		fxHistory.push($state.snapshot(fxLanes) as FxLane[], coalesceKey);
@@ -1146,7 +1161,7 @@
 		selectedFxClipId = null;
 		selectedFxClipIds = [];
 		selectedFxLaneId = null;
-		fxHistory.reset(fxLanes);
+		fxHistory.reset();
 	}
 
 	/** What a new lane starts from: the editor's current settings, copied. From
@@ -2296,8 +2311,14 @@
 			get redoSeq() {
 				return spanHistory.redoSeq;
 			},
-			undo: () => applySpan(spanHistory.undo()),
-			redo: () => applySpan(spanHistory.redo()),
+			undo: () =>
+				applySpan(
+					spanHistory.undo({ start: audio.spanStart, end: audio.spanEnd }),
+				),
+			redo: () =>
+				applySpan(
+					spanHistory.redo({ start: audio.spanStart, end: audio.spanEnd }),
+				),
 		},
 		{
 			get undoSeq() {
@@ -2307,11 +2328,11 @@
 				return textHistory.redoSeq;
 			},
 			undo: () => {
-				const prev = textHistory.undo();
+				const prev = textHistory.undo($state.snapshot(textTimeline) as TextTimeline);
 				if (prev) setTextTimeline(prev);
 			},
 			redo: () => {
-				const next = textHistory.redo();
+				const next = textHistory.redo($state.snapshot(textTimeline) as TextTimeline);
 				if (next) setTextTimeline(next);
 			},
 		},
@@ -2323,11 +2344,11 @@
 				return mediaHistory.redoSeq;
 			},
 			undo: () => {
-				const prev = mediaHistory.undo();
+				const prev = mediaHistory.undo($state.snapshot(mediaTimeline) as MediaTimeline);
 				if (prev) setMediaTimeline(prev);
 			},
 			redo: () => {
-				const next = mediaHistory.redo();
+				const next = mediaHistory.redo($state.snapshot(mediaTimeline) as MediaTimeline);
 				if (next) setMediaTimeline(next);
 			},
 		},
@@ -2342,11 +2363,11 @@
 			},
 			undo: () => {
 				endPanelBurst();
-				const prev = fxHistory.undo();
+				const prev = fxHistory.undo($state.snapshot(fxLanes) as FxLane[]);
 				if (prev) setFxLanes(prev);
 			},
 			redo: () => {
-				const next = fxHistory.redo();
+				const next = fxHistory.redo($state.snapshot(fxLanes) as FxLane[]);
 				if (next) setFxLanes(next);
 			},
 		},
@@ -3059,7 +3080,7 @@
 	// the stack starts seeded with EMPTY, so without this the first undo would
 	// wipe the lanes that just came back.
 	if (untrack(() => initialSession?.text)) {
-		textHistory.reset(untrack(() => textTimeline));
+		textHistory.reset();
 	}
 
 	function pushTextHistory(coalesceKey?: string) {
@@ -3091,14 +3112,14 @@
 			? normalizeTextTimeline(saved)
 			: { ...EMPTY_TEXT_TIMELINE };
 		selectedTextClipId = null;
-		textHistory.reset(textTimeline);
+		textHistory.reset();
 	}
 
 	/** Its own stack, for the same reason the text timeline has one. */
 	const mediaHistory = createMediaHistory();
 
 	if (untrack(() => initialSession?.media)) {
-		mediaHistory.reset(untrack(() => mediaTimeline));
+		mediaHistory.reset();
 	}
 
 	// The pool these key into is added a tick or two later; restoreEdits doesn't
@@ -3136,7 +3157,7 @@
 			? normalizeMediaTimeline(saved)
 			: { ...EMPTY_MEDIA_TIMELINE };
 		selectedMediaClipId = null;
-		mediaHistory.reset(mediaTimeline);
+		mediaHistory.reset();
 	}
 
 	function toggleMediaTimeline() {

@@ -73,9 +73,7 @@
 	 * a slider sweep alike — and an erase stroke is the one thing in here that
 	 * was previously un-take-back-able short of clearing the entire mask.
 	 */
-	const history = createSnapshotHistory<SourceEdit>(
-		untrack(() => $state.snapshot(edit) as SourceEdit),
-	);
+	const history = createSnapshotHistory<SourceEdit>();
 
 	/** Snapshot the edit as it stands, before whatever is about to change it. */
 	function beforeEdit(coalesceKey?: string) {
@@ -83,12 +81,12 @@
 	}
 
 	function undo() {
-		const prev = history.undo();
+		const prev = history.undo($state.snapshot(edit) as SourceEdit);
 		if (prev) onChange(prev);
 	}
 
 	function redo() {
-		const next = history.redo();
+		const next = history.redo($state.snapshot(edit) as SourceEdit);
 		if (next) onChange(next);
 	}
 
@@ -310,7 +308,7 @@
 		loadError = null;
 		ready = false;
 		// Another source's edits are not this one's to step back through.
-		history.reset(untrack(() => $state.snapshot(edit) as SourceEdit));
+		history.reset();
 		load(src)
 			.then(() => {
 				if (cancelled) return;
