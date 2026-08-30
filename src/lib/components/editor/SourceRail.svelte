@@ -326,6 +326,7 @@
 	.rail-slot {
 		position: relative;
 		flex-shrink: 0;
+		line-height: 0;
 	}
 
 	.rail-slot.dragging {

@@ -1,6 +1,17 @@
 <script lang="ts">
-	import { Crop, Eraser, Pause, Pipette, Play, Redo2, Undo2, X } from 'lucide-svelte';
+	import {
+		Crop,
+		Eraser,
+		Pause,
+		Pipette,
+		Play,
+		Redo2,
+		RotateCcw,
+		Undo2,
+		X,
+	} from 'lucide-svelte';
 	import { onMount, untrack } from 'svelte';
+	import { hexToVec3 } from '../../color';
 	import { pushModalKeyboard } from '../../modal-keyboard';
 	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
 	import {
@@ -22,6 +33,7 @@
 		type SourceEditAnim,
 	} from '../../media';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
+	import ColorPicker from '../ui/ColorPicker.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
 	import SourceKeyframes, {
 		type KeyTrackView,
@@ -88,7 +100,8 @@
 	];
 
 	/** Brush width as a share of the preview's long edge. */
-	let brush = $state(0.12);
+	const BRUSH_DEFAULT = 0.12;
+	let brush = $state(BRUSH_DEFAULT);
 	/** Alt, or the toggle: paint coverage back instead of taking it away. */
 	let restoring = $state(false);
 	let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);
@@ -508,7 +521,9 @@
 		maskCanvas = null;
 		maskCtx = null;
 		maskLoaded = null;
-		onChange({ ...edit, mask: null });
+		// The track goes with the mask: keys that move a shape which is no longer
+		// painted have nothing left to move.
+		onChange(withTrack({ ...edit, mask: null }, 'mask', []));
 	}
 
 	// ── Drawing ──────────────────────────────────────────────────────────────
@@ -811,6 +826,60 @@
 		else onChange(withCrop);
 	}
 
+	/**
+	 * Resize the crop about its own centre. Anchoring at the top-left instead
+	 * would let the rectangle run off the frame, where the clamp in `setCrop`
+	 * pins the slider and it stops answering the drag.
+	 */
+	function setCropSize(dim: 'w' | 'h', v: number) {
+		beforeEdit(`crop-${dim}`);
+		const axis = dim === 'w' ? 'x' : 'y';
+		const mid = crop[axis] + crop[dim] / 2;
+		setCrop({
+			...crop,
+			[dim]: v,
+			[axis]: Math.min(Math.max(mid - v / 2, 0), 1 - v),
+		});
+	}
+
+	/**
+	 * Whether a tool has been touched at all. Its Reset is dead until it has:
+	 * a button that always looks pressable, on a tool that is already at its
+	 * default, is the thing that made "Whole frame" and "Clear" read as two
+	 * unrelated commands rather than as one idea.
+	 */
+	let dirty = $derived({
+		key:
+			key.enabled ||
+			trackOn('key') ||
+			key.threshold !== DEFAULT_CHROMA_KEY.threshold ||
+			key.smoothing !== DEFAULT_CHROMA_KEY.smoothing ||
+			key.lumaRange !== DEFAULT_CHROMA_KEY.lumaRange,
+		crop: !isFullCrop(crop) || trackOn('crop'),
+		erase: !!edit.mask || trackOn('mask'),
+	});
+
+	/**
+	 * Put one tool back where it started, its track included — the same thing
+	 * the footer's Reset does to all three, so the two agree.
+	 */
+	function resetTool(t: Tool) {
+		if (t === 'erase') {
+			clearMask();
+			return;
+		}
+		beforeEdit();
+		if (t === 'crop') {
+			onChange(withTrack({ ...edit, crop: { ...FULL_CROP } }, 'crop', []));
+		} else {
+			const chromaKey = {
+				...DEFAULT_CHROMA_KEY,
+				color: { ...DEFAULT_CHROMA_KEY.color },
+			};
+			onChange(withTrack({ ...edit, chromaKey }, 'key', []));
+		}
+	}
+
 	function toHex({ r, g, b }: ChromaKey['color']): string {
 		const h = (v: number) =>
 			Math.round(Math.min(1, Math.max(0, v)) * 255)
@@ -819,16 +888,12 @@
 		return `#${h(r)}${h(g)}${h(b)}`;
 	}
 
-	function onHexInput(e: Event) {
-		const hex = (e.currentTarget as HTMLInputElement).value;
-		const n = parseInt(hex.slice(1), 16);
+	function setHex(hex: string) {
 		// The picker fires as it is dragged, so the whole sweep is one entry.
-		setColor(
-			((n >> 16) & 255) / 255,
-			((n >> 8) & 255) / 255,
-			(n & 255) / 255,
-			'key-color',
-		);
+		// An unparseable hex — half-typed in the field — falls back to the colour
+		// already keyed rather than snapping the picture to black.
+		const [r, g, b] = hexToVec3(hex, toHex(key.color));
+		setColor(r, g, b, 'key-color');
 	}
 
 	/** Put every tool back: the button sits under all three, not just the key. */
@@ -1025,28 +1090,140 @@
 						</button>
 					{/each}
 				</div>
-				<p class="tool-hint">{TOOLS.find((t) => t.value === tool)?.hint}</p>
 
+				<!-- Every tool opens the same way: what it does, then its Reset in the
+				     one place, then its rows. Reset lives here rather than among the
+				     rows because it undoes the whole tool, not the row it sits in. -->
+				<div class="tool-head">
+					<p class="tool-hint">{TOOLS.find((t) => t.value === tool)?.hint}</p>
+					<button
+						class="icon-btn small"
+						disabled={!dirty[tool]}
+						onclick={() => resetTool(tool)}
+						title="Reset {TOOLS.find((t) => t.value === tool)?.label}"
+						aria-label="Reset {TOOLS.find((t) => t.value === tool)?.label}"
+					>
+						<RotateCcw size={12} />
+					</button>
+				</div>
+
+				<!-- Rows are label / control / readout throughout, and double-clicking
+				     one puts that control back — the same row as everywhere else in
+				     the app. -->
 				<div class="rows">
-					{#if tool === 'crop'}
+					{#if tool === 'key'}
 						<div class="row">
-							<label for="crop-size">Kept</label>
-							<span class="crop-read" id="crop-size">
-								{Math.round(crop.w * 100)}% × {Math.round(crop.h * 100)}%
-							</span>
-							<button
-								class="ghost-btn small"
-								disabled={isFullCrop(crop)}
-								onclick={() => {
-									beforeEdit();
-									onChange({ ...edit, crop: { ...FULL_CROP } });
-								}}
-							>
-								Whole frame
-							</button>
+							<label for="ck-on">Remove background</label>
+							<input
+								id="ck-on"
+								type="checkbox"
+								checked={key.enabled}
+								onchange={(e) => setKey('enabled', e.currentTarget.checked)}
+							/>
 						</div>
-					{:else if tool === 'erase'}
+
 						<div class="row">
+							<label for="ck-color">Colour</label>
+							<ColorPicker
+								id="ck-color"
+								value={toHex(key.color)}
+								defaultValue={toHex(DEFAULT_CHROMA_KEY.color)}
+								onChange={setHex}
+							/>
+						</div>
+
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="Double-click to reset"
+							ondblclick={() =>
+								setKey('threshold', DEFAULT_CHROMA_KEY.threshold)}
+						>
+							<label for="ck-thr">Threshold</label>
+							<RangeSlider
+								id="ck-thr"
+								value={key.threshold}
+								min={0.01}
+								max={1}
+								step={0.005}
+								disabled={!key.enabled}
+								oninput={(v) => setKey('threshold', v, 'key-threshold')}
+							/>
+							<span class="val">{Math.round(key.threshold * 100)}%</span>
+						</div>
+
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs. Double-click to reset."
+							ondblclick={() =>
+								setKey('lumaRange', DEFAULT_CHROMA_KEY.lumaRange)}
+						>
+							<label for="ck-luma">Brightness range</label>
+							<RangeSlider
+								id="ck-luma"
+								value={key.lumaRange}
+								min={0.01}
+								max={1}
+								step={0.005}
+								disabled={!key.enabled}
+								oninput={(v) => setKey('lumaRange', v, 'key-luma')}
+							/>
+							<span class="val">{Math.round(key.lumaRange * 100)}%</span>
+						</div>
+
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="Double-click to reset"
+							ondblclick={() =>
+								setKey('smoothing', DEFAULT_CHROMA_KEY.smoothing)}
+						>
+							<label for="ck-smooth">Smoothing</label>
+							<RangeSlider
+								id="ck-smooth"
+								value={key.smoothing}
+								min={0}
+								max={0.5}
+								step={0.005}
+								disabled={!key.enabled}
+								oninput={(v) => setKey('smoothing', v, 'key-smoothing')}
+							/>
+							<span class="val">{Math.round(key.smoothing * 100)}%</span>
+						</div>
+					{:else if tool === 'crop'}
+						<div class="row">
+							<label for="cr-w">Width</label>
+							<RangeSlider
+								id="cr-w"
+								value={crop.w}
+								min={0.01}
+								max={1}
+								step={0.005}
+								oninput={(v) => setCropSize('w', v)}
+							/>
+							<span class="val">{Math.round(crop.w * 100)}%</span>
+						</div>
+
+						<div class="row">
+							<label for="cr-h">Height</label>
+							<RangeSlider
+								id="cr-h"
+								value={crop.h}
+								min={0.01}
+								max={1}
+								step={0.005}
+								oninput={(v) => setCropSize('h', v)}
+							/>
+							<span class="val">{Math.round(crop.h * 100)}%</span>
+						</div>
+					{:else}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="Double-click to reset"
+							ondblclick={() => (brush = BRUSH_DEFAULT)}
+						>
 							<label for="er-brush">Brush</label>
 							<RangeSlider
 								id="er-brush"
@@ -1056,8 +1233,9 @@
 								step={0.01}
 								oninput={(v) => (brush = v)}
 							/>
-							<span class="val">{Math.round(brush * 100)}</span>
+							<span class="val">{Math.round(brush * 100)}%</span>
 						</div>
+
 						<div class="row">
 							<label for="er-restore">Paint back</label>
 							<input
@@ -1066,18 +1244,17 @@
 								checked={restoring}
 								onchange={(e) => (restoring = e.currentTarget.checked)}
 							/>
-							<button
-								class="ghost-btn small"
-								disabled={!edit.mask}
-								onclick={clearMask}
-							>
-								Clear
-							</button>
 						</div>
+
 						{#if edit.mask && animatable}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div
 								class="row"
-								title="How big the erased shape is drawn, against how it was painted. Keyed like its position, so a shape can grow as its subject comes closer."
+								title="How big the erased shape is drawn, against how it was painted. Keyed like its position, so a shape can grow as its subject comes closer. Double-click to reset."
+								ondblclick={() => {
+									beforeEdit();
+									setMaskTransform({ ...maskXform, scale: 1 });
+								}}
 							>
 								<label for="er-scale">Shape size</label>
 								<RangeSlider
@@ -1091,79 +1268,9 @@
 										setMaskTransform({ ...maskXform, scale: v });
 									}}
 								/>
-								<span class="val">{Math.round(maskXform.scale * 100)}</span>
+								<span class="val">{Math.round(maskXform.scale * 100)}%</span>
 							</div>
 						{/if}
-					{/if}
-
-					{#if tool === 'key'}
-					<div class="row">
-						<label for="ck-on">Remove background</label>
-						<input
-							id="ck-on"
-							type="checkbox"
-							checked={key.enabled}
-							onchange={(e) => setKey('enabled', e.currentTarget.checked)}
-						/>
-					</div>
-
-					<div class="row">
-						<label for="ck-color">Key colour</label>
-						<div class="color-cell">
-							<input
-								id="ck-color"
-								type="color"
-								value={toHex(key.color)}
-								oninput={onHexInput}
-							/>
-							<span class="hint">or click the preview to pick it</span>
-						</div>
-					</div>
-
-					<div class="row">
-						<label for="ck-thr">Threshold</label>
-						<RangeSlider
-							id="ck-thr"
-							value={key.threshold}
-							min={0.01}
-							max={1}
-							step={0.005}
-							disabled={!key.enabled}
-							oninput={(v) => setKey('threshold', v, 'key-threshold')}
-						/>
-						<span class="val">{Math.round(key.threshold * 100)}</span>
-					</div>
-
-					<div
-						class="row"
-						title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs."
-					>
-						<label for="ck-luma">Brightness range</label>
-						<RangeSlider
-							id="ck-luma"
-							value={key.lumaRange}
-							min={0.01}
-							max={1}
-							step={0.005}
-							disabled={!key.enabled}
-							oninput={(v) => setKey('lumaRange', v, 'key-luma')}
-						/>
-						<span class="val">{Math.round(key.lumaRange * 100)}</span>
-					</div>
-
-					<div class="row">
-						<label for="ck-smooth">Smoothing</label>
-						<RangeSlider
-							id="ck-smooth"
-							value={key.smoothing}
-							min={0}
-							max={0.5}
-							step={0.005}
-							disabled={!key.enabled}
-							oninput={(v) => setKey('smoothing', v, 'key-smoothing')}
-						/>
-						<span class="val">{Math.round(key.smoothing * 100)}</span>
-					</div>
 					{/if}
 				</div>
 			</div>
@@ -1247,52 +1354,71 @@
 		border: 1px solid rgba(255, 255, 255, 0.25);
 	}
 
+	/* The app's segmented control, as ButtonGroup draws it — one bordered group
+	   rather than three separate buttons. Not ButtonGroup itself only because
+	   these segments carry an icon, which it doesn't take. */
 	.tool-bar {
 		display: flex;
-		gap: 0.25rem;
+		flex-shrink: 0;
+		background: var(--glass);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		overflow: hidden;
 	}
 
 	.tool-btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.25rem;
-		flex: 1;
 		justify-content: center;
-		padding: 0.3rem 0.4rem;
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		background: var(--ink);
+		gap: 0.3rem;
+		width: 100%;
+		padding: 0.35rem 0.4rem;
+		border: none;
+		border-right: 1px solid var(--line);
+		background: none;
 		color: var(--text-3);
-		font-family: inherit;
-		font-size: 0.7rem;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
 		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.tool-btn:last-child {
+		border-right: none;
 	}
 
 	.tool-btn:hover {
-		color: var(--text);
-	}
-
-	.tool-btn.active {
-		border-color: var(--live);
-		color: var(--text);
-	}
-
-	.tool-hint {
-		margin: 0;
-		font-size: 0.68rem;
-		color: var(--text-4);
-	}
-
-	.crop-read {
-		flex: 1;
-		font-size: 0.75rem;
-		font-family: var(--font-mono);
 		color: var(--text-2);
 	}
 
-	.ghost-btn.small {
-		padding: 0.2rem 0.4rem;
+	.tool-btn.active {
+		background: rgba(255, 255, 255, 0.07);
+		color: var(--text);
+	}
+
+	.tool-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+
+	.tool-hint {
+		flex: 1;
+		margin: 0;
 		font-size: 0.68rem;
+		line-height: 1.35;
+		color: var(--text-4);
+	}
+
+	.icon-btn.small {
+		width: 1.4rem;
+		height: 1.4rem;
+		flex-shrink: 0;
 	}
 
 	.edit-overlay {
@@ -1488,35 +1614,20 @@
 		min-width: 6.5rem;
 		font-size: 0.7rem;
 		color: var(--text-2);
+		/* The row's double-click resets the control; without this it also
+		   selects the label text. */
+		user-select: none;
+	}
+
+	.row input[type='checkbox'] {
+		accent-color: #888;
 	}
 
 	.val {
-		min-width: 2.2rem;
+		min-width: 2.6rem;
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		text-align: right;
-		color: var(--text-3);
-	}
-
-	.color-cell {
-		display: flex;
-		flex: 1;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.color-cell input[type='color'] {
-		width: 2.2rem;
-		height: 1.3rem;
-		padding: 0;
-		background: none;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-1);
-		cursor: pointer;
-	}
-
-	.hint {
-		font-size: 0.62rem;
 		color: var(--text-3);
 	}
 
