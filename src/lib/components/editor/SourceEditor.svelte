@@ -99,7 +99,7 @@
 		{
 			value: 'erase',
 			label: 'Erase',
-			hint: 'Paint over what should go. Alt paints it back, Shift drags the shape',
+			hint: 'Paint over what should go. Alt paints it back. To animate it, move the shape — Shift-drag it, or use Shape X/Y',
 		},
 	];
 
@@ -1363,6 +1363,59 @@
 						</div>
 
 						{#if edit.mask && animatable}
+							<!-- Position as sliders, not only as Shift+drag on the preview.
+							     The drag is the quicker gesture but it is invisible, and
+							     without a visible way to move the shape the keyframe track
+							     could only ever be filled with identical keys — which looks
+							     exactly like the animation being broken. -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="row"
+								title="Where the erased shape sits, against where it was painted. Keyed, so the shape follows its subject across the clip. Double-click to reset."
+								ondblclick={() => {
+									beforeEdit();
+									setMaskTransform({ ...maskXform, x: 0 });
+								}}
+							>
+								<label for="er-x">Shape X</label>
+								<RangeSlider
+									id="er-x"
+									value={maskXform.x}
+									min={-1}
+									max={1}
+									step={0.005}
+									oninput={(v) => {
+										beforeEdit('mask-x');
+										setMaskTransform({ ...maskXform, x: v });
+									}}
+								/>
+								<span class="val">{Math.round(maskXform.x * 100)}%</span>
+							</div>
+
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="row"
+								title="Where the erased shape sits, against where it was painted. Keyed, so the shape follows its subject across the clip. Double-click to reset."
+								ondblclick={() => {
+									beforeEdit();
+									setMaskTransform({ ...maskXform, y: 0 });
+								}}
+							>
+								<label for="er-y">Shape Y</label>
+								<RangeSlider
+									id="er-y"
+									value={maskXform.y}
+									min={-1}
+									max={1}
+									step={0.005}
+									oninput={(v) => {
+										beforeEdit('mask-y');
+										setMaskTransform({ ...maskXform, y: v });
+									}}
+								/>
+								<span class="val">{Math.round(maskXform.y * 100)}%</span>
+							</div>
+
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div
 								class="row"
