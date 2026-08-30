@@ -4,7 +4,6 @@
 		Download,
 		HelpCircle,
 		Home,
-		ImagePlus,
 		Layers,
 		Library,
 		Maximize,
@@ -4069,13 +4068,6 @@
 							onclick={addMediaLane}
 						>
 							<Plus size={12} /> Layer
-						</button>
-						<button
-							class="tl-tool-btn"
-							title="Add image or video to draw layers from"
-							onclick={() => sourceInput?.click()}
-						>
-							<ImagePlus size={12} /> Media
 						</button>
 					{/if}
 					{#if isSequenceMode && seqMasterDuration > 0}
