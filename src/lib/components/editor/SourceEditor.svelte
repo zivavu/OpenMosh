@@ -6,14 +6,26 @@
 	import {
 		DEFAULT_CHROMA_KEY,
 		FULL_CROP,
+		IDENTITY_MASK_TRANSFORM,
 		isFullCrop,
+		keyframeAt,
 		MASK_MAX,
+		putKeyframe,
+		removeKeyframe,
+		sampleSourceEdit,
+		type AnimatedKey,
 		type ChromaKey,
 		type CropRect,
+		type Keyframe,
+		type MaskTransform,
 		type SourceEdit,
+		type SourceEditAnim,
 	} from '../../media';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
+	import SourceKeyframes, {
+		type KeyTrackView,
+	} from './SourceKeyframes.svelte';
 
 	interface Props {
 		/** The media being edited. The edit belongs to it, not to any layer. */
@@ -30,9 +42,6 @@
 	 * frame, so it stays well inside the frame budget while the picture on
 	 * screen scales to whatever room the dialog has. */
 	const PREVIEW_MAX = 640;
-
-	let key = $derived(edit.chromaKey);
-	let crop = $derived(edit.crop ?? FULL_CROP);
 
 	// The keyboard is ours while the dialog is up: Space is the transport here,
 	// and Ctrl+Z belongs to the media being edited rather than to the timeline
@@ -71,7 +80,11 @@
 	const TOOLS: { value: Tool; label: string; hint: string }[] = [
 		{ value: 'key', label: 'Key', hint: 'Click the preview to pick the colour to remove' },
 		{ value: 'crop', label: 'Crop', hint: 'Drag a rectangle to keep; drag inside it to move it' },
-		{ value: 'erase', label: 'Erase', hint: 'Paint over what should go. Hold Alt to paint it back' },
+		{
+			value: 'erase',
+			label: 'Erase',
+			hint: 'Paint over what should go. Alt paints it back, Shift drags the shape',
+		},
 	];
 
 	/** Brush width as a share of the preview's long edge. */
@@ -90,6 +103,17 @@
 	let playing = $state(false);
 
 	/**
+	 * The edit as it stands under the playhead. Everything on screen reads from
+	 * here rather than from the stored edit: with a track running, the crop
+	 * rectangle, the key's numbers and the mask's position are all functions of
+	 * where in the clip we are, and the panel has to agree with the picture.
+	 */
+	let live = $derived(sampleSourceEdit(edit, currentTime));
+	let key = $derived(live.chromaKey);
+	let crop = $derived(live.crop ?? FULL_CROP);
+	let maskXform = $derived(live.maskTransform ?? IDENTITY_MASK_TRANSFORM);
+
+	/**
 	 * The current frame, unkeyed, at preview size. Everything reads from here:
 	 * the keyed preview is drawn from it, and the eyedropper samples it — off
 	 * the keyed canvas the dropper would keep landing on cut-out pixels.
@@ -102,23 +126,151 @@
 	/** Where frames come from. An image draws once; a video every frame. */
 	let media: HTMLImageElement | HTMLVideoElement | null = null;
 
+	// ── Keyframe tracks ──────────────────────────────────────────────────────
+	// A track is on when it holds at least one key. Off, the panel's value is
+	// the whole clip's; on, every change writes a key under the playhead, which
+	// is how a property that varies gets edited without a separate mode.
+	//
+	// Only videos have anywhere to put a key: an image is one instant, and its
+	// edit is the same at every point in it.
+	type TrackId = 'crop' | 'key' | 'mask';
+
+	let anim = $derived(edit.anim);
+	let cropKeys = $derived(anim?.crop);
+	let keyKeys = $derived(anim?.key);
+	let maskKeys = $derived(anim?.mask);
+	let animatable = $derived(duration > 0);
+
+	let trackViews = $derived<KeyTrackView[]>([
+		{
+			id: 'crop',
+			label: 'Crop',
+			on: !!cropKeys?.length,
+			keys: cropKeys?.map((k) => k.t) ?? [],
+		},
+		{
+			id: 'key',
+			label: 'Key',
+			on: !!keyKeys?.length,
+			keys: keyKeys?.map((k) => k.t) ?? [],
+			blocked: key.enabled ? null : 'Switch the key on before animating it',
+		},
+		{
+			id: 'mask',
+			label: 'Erase',
+			on: !!maskKeys?.length,
+			keys: maskKeys?.map((k) => k.t) ?? [],
+			blocked: edit.mask
+				? null
+				: 'Erase something first — this track moves what you painted, it does not repaint it',
+		},
+	]);
+
+	function trackOn(id: TrackId): boolean {
+		return !!edit.anim?.[id]?.length;
+	}
+
+	/** The stored edit with one track replaced. An empty track is dropped. */
+	function withTrack(base: SourceEdit, id: TrackId, keys: Keyframe<unknown>[]): SourceEdit {
+		const next: SourceEditAnim = { ...base.anim };
+		if (keys.length === 0) delete next[id];
+		else (next as Record<string, unknown>)[id] = keys;
+		const empty = !next.crop?.length && !next.key?.length && !next.mask?.length;
+		const out = { ...base, anim: empty ? undefined : next };
+		if (empty) delete out.anim;
+		return out;
+	}
+
+	/** The animated part of the key: what it is on/off is not a keyable thing. */
+	function animatedKey(k: ChromaKey): AnimatedKey {
+		return {
+			color: { ...k.color },
+			threshold: k.threshold,
+			smoothing: k.smoothing,
+			lumaRange: k.lumaRange,
+		};
+	}
+
+	/** The value each track would write for the moment on screen. */
+	function valueNow(id: TrackId): CropRect | AnimatedKey | MaskTransform {
+		if (id === 'crop') return { ...crop };
+		if (id === 'key') return animatedKey(key);
+		return { ...maskXform };
+	}
+
+	function addKey(id: TrackId, base: SourceEdit = edit, value = valueNow(id)) {
+		const keys = putKeyframe(
+			(base.anim?.[id] ?? []) as Keyframe<unknown>[],
+			currentTime,
+			value,
+		);
+		onChange(withTrack(base, id, keys));
+	}
+
+	function removeKey(id: TrackId) {
+		const keys = removeKeyframe(
+			(edit.anim?.[id] ?? []) as Keyframe<unknown>[],
+			currentTime,
+		);
+		// Dropping the last key leaves the value it held as the static one, so
+		// switching a track off never changes the picture under the playhead.
+		onChange(withTrack(keys.length === 0 ? flatten(id) : edit, id, keys));
+	}
+
+	/**
+	 * The edit with this track's value under the playhead written back as the
+	 * static one. What "stop animating" has to mean: the frame on screen is the
+	 * one being looked at, so it is the one to keep.
+	 */
+	function flatten(id: TrackId): SourceEdit {
+		if (id === 'crop') return { ...edit, crop: { ...crop } };
+		if (id === 'key') return { ...edit, chromaKey: { ...key } };
+		// A mask has no static offset to keep — it is painted where it is — so
+		// dropping the track puts it back where it was painted.
+		return edit;
+	}
+
+	function toggleTrack(id: TrackId) {
+		beforeEdit();
+		if (trackOn(id)) onChange(withTrack(flatten(id), id, []));
+		else addKey(id);
+	}
+
 	function setKey<K extends keyof ChromaKey>(
 		prop: K,
 		value: ChromaKey[K],
 		coalesceKey?: string,
 	) {
 		beforeEdit(coalesceKey);
-		onChange({ ...edit, chromaKey: { ...key, [prop]: value } });
+		const chromaKey = { ...key, [prop]: value };
+		const next = { ...edit, chromaKey };
+		// `enabled` is the one part that is never keyed, so it alone writes
+		// straight through to the stored edit.
+		if (trackOn('key') && prop !== 'enabled') {
+			addKey('key', next, animatedKey(chromaKey));
+		} else {
+			onChange(next);
+		}
 	}
 
 	/** Picking a colour switches the key on: nobody reaches for the dropper to
 	 * leave it off, and the preview would show nothing otherwise. */
 	function setColor(r: number, g: number, b: number, coalesceKey?: string) {
 		beforeEdit(coalesceKey);
-		onChange({
-			...edit,
-			chromaKey: { ...key, enabled: true, color: { r, g, b } },
-		});
+		const chromaKey = { ...key, enabled: true, color: { r, g, b } };
+		const next = { ...edit, chromaKey };
+		if (trackOn('key')) addKey('key', next, animatedKey(chromaKey));
+		else onChange(next);
+	}
+
+	/**
+	 * Where the mask sits under the playhead. Always a key: the mask has no
+	 * static offset — it is painted where it is — so having moved it at all is
+	 * what starts the track. One key holds it there for the whole clip until a
+	 * second one gives it somewhere to go.
+	 */
+	function setMaskTransform(xf: MaskTransform) {
+		addKey('mask', edit, xf);
 	}
 
 	// ── Loading ──────────────────────────────────────────────────────────────
@@ -315,8 +467,11 @@
 	function dab(x: number, y: number) {
 		const ctx = ensureMask();
 		if (!ctx || !maskCanvas || !raw) return;
-		const sx = (x / raw.width) * maskCanvas.width;
-		const sy = (y / raw.height) * maskCanvas.height;
+		// Back through the mask's own transform: a moved mask is painted where
+		// the brush appears to be, not where the file's pixels are.
+		const u = unmoved(x / raw.width, y / raw.height);
+		const sx = u.x * maskCanvas.width;
+		const sy = u.y * maskCanvas.height;
 		const r =
 			(brush * Math.max(maskCanvas.width, maskCanvas.height)) / 2;
 		const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(r, 1));
@@ -328,6 +483,16 @@
 		ctx.beginPath();
 		ctx.arc(sx, sy, Math.max(r, 1), 0, Math.PI * 2);
 		ctx.fill();
+	}
+
+	/** A point in source space, put back into the mask's own space. The same
+	 * mapping the shader runs — see editedSource. */
+	function unmoved(x: number, y: number): { x: number; y: number } {
+		const s = Math.max(maskXform.scale, 0.0001);
+		return {
+			x: (x - maskXform.x - 0.5) / s + 0.5,
+			y: (y - maskXform.y - 0.5) / s + 0.5,
+		};
 	}
 
 	/** Write the working canvas back into the edit. */
@@ -434,9 +599,22 @@
 		}
 		const sc = maskScratch.getContext('2d', { willReadFrequently: true });
 		if (!sc) return null;
-		sc.clearRect(0, 0, maskScratch.width, maskScratch.height);
-		sc.drawImage(maskCanvas, 0, 0, maskScratch.width, maskScratch.height);
-		return sc.getImageData(0, 0, maskScratch.width, maskScratch.height).data;
+		const w = maskScratch.width;
+		const h = maskScratch.height;
+		// White first: everything the moved mask has slid off is kept, the same
+		// rule the shader follows outside the mask's own square.
+		sc.fillStyle = '#fff';
+		sc.fillRect(0, 0, w, h);
+		const dw = w * maskXform.scale;
+		const dh = h * maskXform.scale;
+		sc.drawImage(
+			maskCanvas,
+			maskXform.x * w + (w - dw) / 2,
+			maskXform.y * h + (h - dh) / 2,
+			dw,
+			dh,
+		);
+		return sc.getImageData(0, 0, w, h).data;
 	}
 
 	// The saved mask, into the working canvas. Runs on open and whenever the edit
@@ -457,6 +635,8 @@
 			key.smoothing,
 			key.lumaRange,
 			edit.mask,
+			maskXform,
+			crop,
 		];
 		if (ready && !playing) paint();
 	});
@@ -495,7 +675,8 @@
 	type Drag =
 		| { kind: 'erase' }
 		| { kind: 'crop-new'; ax: number; ay: number }
-		| { kind: 'crop-move'; dx: number; dy: number };
+		| { kind: 'crop-move'; dx: number; dy: number }
+		| { kind: 'mask-move'; ax: number; ay: number; from: MaskTransform };
 	let drag: Drag | null = null;
 
 	function onPreviewDown(e: PointerEvent) {
@@ -512,6 +693,18 @@
 			// One entry per stroke, taken before the first dab: undo steps back a
 			// whole stroke, which is the unit the hand thinks in.
 			beforeEdit();
+			// Shift drags the erased shape around instead of painting a new one —
+			// which is how the mask follows a pan without being repainted, and the
+			// only gesture that writes a key on the erase track.
+			if (e.shiftKey && edit.mask && raw) {
+				drag = {
+					kind: 'mask-move',
+					ax: p.x / raw.width,
+					ay: p.y / raw.height,
+					from: { ...maskXform },
+				};
+				return;
+			}
 			// Alt is the transient form of the Restore toggle, the way it is in
 			// every paint program; the toggle stays where the user left it.
 			const held = restoring;
@@ -544,6 +737,17 @@
 
 	function onPreviewMove(e: PointerEvent) {
 		if (!drag) return;
+		if (drag.kind === 'mask-move') {
+			const p = atEvent(e);
+			if (!p || !raw) return;
+			setMaskTransform({
+				x: drag.from.x + (p.x / raw.width - drag.ax),
+				y: drag.from.y + (p.y / raw.height - drag.ay),
+				scale: drag.from.scale,
+			});
+			paint();
+			return;
+		}
 		if (drag.kind === 'erase') {
 			const p = atEvent(e);
 			if (!p) return;
@@ -580,15 +784,17 @@
 	}
 
 	function setCrop(next: CropRect) {
-		onChange({
-			...edit,
-			crop: {
-				x: Math.min(Math.max(next.x, 0), 1),
-				y: Math.min(Math.max(next.y, 0), 1),
-				w: Math.min(Math.max(next.w, 0.01), 1 - Math.min(Math.max(next.x, 0), 1)),
-				h: Math.min(Math.max(next.h, 0.01), 1 - Math.min(Math.max(next.y, 0), 1)),
-			},
-		});
+		const crop = {
+			x: Math.min(Math.max(next.x, 0), 1),
+			y: Math.min(Math.max(next.y, 0), 1),
+			w: Math.min(Math.max(next.w, 0.01), 1 - Math.min(Math.max(next.x, 0), 1)),
+			h: Math.min(Math.max(next.h, 0.01), 1 - Math.min(Math.max(next.y, 0), 1)),
+		};
+		// The static rectangle is kept up to date even while a track owns the
+		// picture, so switching the track off lands on what was last drawn.
+		const withCrop = { ...edit, crop };
+		if (trackOn('crop')) addKey('crop', withCrop, crop);
+		else onChange(withCrop);
 	}
 
 	function toHex({ r, g, b }: ChromaKey['color']): string {
@@ -618,7 +824,6 @@
 		maskCtx = null;
 		maskLoaded = null;
 		onChange({
-			...edit,
 			chromaKey: {
 				...DEFAULT_CHROMA_KEY,
 				color: { ...DEFAULT_CHROMA_KEY.color },
@@ -626,6 +831,9 @@
 			},
 			crop: { ...FULL_CROP },
 			mask: null,
+			// Every track goes with it: Reset sits under all three tools, and a
+			// crop track left behind would keep moving a rectangle that no longer
+			// crops anything.
 		});
 	}
 
@@ -766,6 +974,24 @@
 						/>
 						<span class="val">{formatTime(currentTime)}</span>
 					</div>
+
+					<!-- Videos only: an image is one instant, and there is nowhere in it
+					     for a second key to go. -->
+					<SourceKeyframes
+						tracks={trackViews}
+						{duration}
+						{currentTime}
+						onSeek={seekTo}
+						onToggle={(id) => toggleTrack(id as TrackId)}
+						onAdd={(id) => {
+							beforeEdit();
+							addKey(id as TrackId);
+						}}
+						onRemove={(id) => {
+							beforeEdit();
+							removeKey(id as TrackId);
+						}}
+					/>
 				{/if}
 			</div>
 
@@ -834,6 +1060,26 @@
 								Clear
 							</button>
 						</div>
+						{#if edit.mask && animatable}
+							<div
+								class="row"
+								title="How big the erased shape is drawn, against how it was painted. Keyed like its position, so a shape can grow as its subject comes closer."
+							>
+								<label for="er-scale">Shape size</label>
+								<RangeSlider
+									id="er-scale"
+									value={maskXform.scale}
+									min={0.2}
+									max={3}
+									step={0.01}
+									oninput={(v) => {
+										beforeEdit('mask-scale');
+										setMaskTransform({ ...maskXform, scale: v });
+									}}
+								/>
+								<span class="val">{Math.round(maskXform.scale * 100)}</span>
+							</div>
+						{/if}
 					{/if}
 
 					{#if tool === 'key'}
