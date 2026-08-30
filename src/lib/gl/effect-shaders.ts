@@ -189,6 +189,14 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
       float enc = mix(encA, encB, u_maskMix);
       float d = (enc - 0.5) * 2.0 * u_maskSdfShape.y;
       cover = clamp(d / u_maskSdfShape.x + 0.5, 0.0, 1.0);
+      // Whatever both shapes erase stays erased the whole way across. Without
+      // this floor a mask that is painted on over the clip — every key a
+      // superset of the last, which is what continuing to erase produces —
+      // blinks out entirely in the middle: the fields of two many-blobbed
+      // shapes average to a point that is far from every blob in both.
+      float erasedInBoth =
+        min(1.0 - texture(u_mask, mUv).r, 1.0 - texture(u_maskNext, mUv).r);
+      cover = min(cover, 1.0 - erasedInBoth);
     } else {
       // Sitting on a key, or not animated at all: the painting itself, soft
       // brush edge and all.

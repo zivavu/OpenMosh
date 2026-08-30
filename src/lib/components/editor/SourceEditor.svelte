@@ -725,8 +725,17 @@
 			for (let x = 0; x < a.w; x++) {
 				const ea = enc(a.field, a.w, a.h, x + dxA, y + dyA);
 				const eb = enc(b.field, b.w, b.h, x + dxB, y + dyB);
-				const v = Math.round(sdfCoverage(ea + (eb - ea) * mix) * 255);
 				const i = (y * a.w + x) * 4;
+				// The same floor the shader applies: what both shapes erase stays
+				// erased, or a mask painted on over the clip blinks out midway.
+				const erasedInBoth = Math.min(
+					255 - a.field.data[i],
+					255 - b.field.data[i],
+				);
+				const v = Math.min(
+					Math.round(sdfCoverage(ea + (eb - ea) * mix) * 255),
+					255 - erasedInBoth,
+				);
 				out.data[i] = v;
 				out.data[i + 1] = v;
 				out.data[i + 2] = v;
@@ -735,6 +744,15 @@
 		}
 		ctx.putImageData(out, 0, 0);
 		return c;
+	}
+
+	/** Freeze the morphed shape into the canvas strokes are painted on. */
+	function bakeMorph() {
+		const morphed = morphedMask();
+		const ctx = ensureMask();
+		if (!morphed || !ctx || !maskCanvas) return;
+		ctx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+		ctx.drawImage(morphed, 0, 0, maskCanvas.width, maskCanvas.height);
 	}
 
 	let maskScratch: HTMLCanvasElement | null = null;
@@ -942,6 +960,11 @@
 				};
 				return;
 			}
+			// Mid-morph the working canvas holds the shape being left, while the
+			// screen shows the blend of it and the next one. Painting on the
+			// former would throw the blend away and land a key that reverts to an
+			// older shape — so the stroke starts from what is actually on screen.
+			bakeMorph();
 			// Alt is the transient form of the Restore toggle, the way it is in
 			// every paint program; the toggle stays where the user left it.
 			const held = restoring;
