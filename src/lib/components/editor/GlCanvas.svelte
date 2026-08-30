@@ -105,6 +105,11 @@
       sourceEditId?: string | null;
       /** The same for the outgoing side of a transition. */
       outgoingEditId?: string | null;
+      /** Seconds into that source's own media, for sampling a keyed edit. The
+       * clip's own clock, not the master's: an edit belongs to the file, so the
+       * same instant of it is edited the same way wherever it plays. */
+      sourceEditTime?: number;
+      outgoingEditTime?: number;
       /** Optional text lanes composited into the chain at their insertion points. */
       textTimeline?: TextTimeline | null;
       /** Optional media lanes, composited the same way. */
@@ -165,6 +170,8 @@
       sourceEdits = EMPTY_SOURCE_EDITS,
       sourceEditId = null,
       outgoingEditId = null,
+      sourceEditTime = 0,
+      outgoingEditTime = 0,
       fullscreen = $bindable(false),
       textTimeline = null,
       mediaTimeline = null,
@@ -392,7 +399,12 @@
       renderer!.setSpectrum(spectrum, now);
       // Which media the two source textures hold, so the chain can apply that
       // source's crop, erase mask and key before reading it.
-      renderer!.setSourceIds(sourceEditId, outgoingEditId);
+      renderer!.setSourceIds(
+         sourceEditId,
+         outgoingEditId,
+         sourceEditTime,
+         outgoingEditTime,
+      );
       renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
       const solo = soloMediaLaneId;
       const layers =
@@ -649,6 +661,9 @@
       sourceEdits;
       sourceEditId;
       outgoingEditId;
+      // Scrubbing a keyed edit moves the crop with no other reason to redraw.
+      sourceEditTime;
+      outgoingEditTime;
       // A caption font that lands after the frame was drawn changes its glyphs.
       fontTick;
       // Text edits and scrubbing both change which clip is on screen.

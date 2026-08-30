@@ -5,6 +5,7 @@
 		clipSourceId,
 		DEFAULT_MEDIA_STYLE,
 		DEFAULT_SOURCE_EDIT,
+		hasAnimation,
 		isFullCrop,
 		MEDIA_FIT_OPTIONS,
 		type MediaClip,
@@ -71,7 +72,10 @@
 	/** Whether the media this clip draws is not what its file holds. */
 	let sourceEdited = $derived.by(() => {
 		const e = source ? edits[source.id] : undefined;
-		return !!e && (e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask);
+		return (
+			!!e &&
+			(e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask || hasAnimation(e))
+		);
 	});
 
 	/** What the selected clip draws: its own source, or the lane's. */

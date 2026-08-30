@@ -3797,6 +3797,8 @@
 				sourceEdits={sourceRegistry.edits}
 				sourceEditId={isSequenceMode ? sourceIdOf(activeSegment()) : null}
 				outgoingEditId={isSequenceMode ? (outgoingSource()?.id ?? null) : null}
+				sourceEditTime={isSequenceMode ? sourceTimeIn(activeSegment()) : 0}
+				outgoingEditTime={isSequenceMode ? (outgoingSource()?.time ?? 0) : 0}
 			/>
 		</div>
 

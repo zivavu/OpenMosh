@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { ChevronDown, ChevronUp, Play, Plus, SlidersHorizontal } from 'lucide-svelte';
-	import { DEFAULT_SOURCE_EDIT, isFullCrop, type SourceEdit } from '../../media';
+	import {
+		DEFAULT_SOURCE_EDIT,
+		hasAnimation,
+		isFullCrop,
+		type SourceEdit,
+	} from '../../media';
 	import SourceEditor from './SourceEditor.svelte';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import { readRaw, writeRaw } from '../../storage';
@@ -76,7 +81,10 @@
 	 * is how the rail says this media is not what the file holds. */
 	function isEdited(src: SequenceSource): boolean {
 		const e = edits[src.id];
-		return !!e && (e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask);
+		return (
+			!!e &&
+			(e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask || hasAnimation(e))
+		);
 	}
 
 	function toggle() {

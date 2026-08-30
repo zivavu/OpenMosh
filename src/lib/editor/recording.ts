@@ -370,7 +370,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
     // export would edit whatever the preview happened to be looking at. Outside
     // the exportSources branch: a one-source sequence has no export samplers and
     // still has edits.
-    renderer.setSourceIds(segSourceId ?? null, out?.id ?? null);
+    renderer.setSourceIds(
+      segSourceId ?? null,
+      out?.id ?? null,
+      Math.max(0, t - (seg?.startTime ?? 0)),
+      out?.time ?? 0,
+    );
     if (exportSources) {
       // Concurrent: outgoingSourceAt returns null when the outgoing source is
       // the incoming one, so these two can never contend for a single sampler,

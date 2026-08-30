@@ -5,7 +5,7 @@ import {
   textSignature,
   type ResolvedTextLayer,
 } from "../text";
-import { isIdleSourceEdit } from "../media";
+import { cropExtent, isIdleSourceEdit, sampleSourceEdit } from "../media";
 import type { MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
 import {
   CAPTION_EFFECT_ID,
@@ -348,6 +348,9 @@ export class GlRenderer {
   private mediaLayerTextures = new Map<string, OverlayTexture>();
   /** Per-source edits, keyed by source id. See setSourceEdits. */
   private sourceEdits = new Map<string, SourceEdit>();
+  /** Seconds into each source texture's own media. See setSourceIds. */
+  private mainSourceTime = 0;
+  private altSourceTime = 0;
   /** Drawn (pre-effect) text per clip, keyed by clip id. */
   private textLayerTextures = new Map<string, OverlayTexture>();
   private textLayerCanvas: HTMLCanvasElement | null = null;
@@ -649,13 +652,26 @@ export class GlRenderer {
   /** Called when a mask finishes decoding, so a paused preview redraws. */
   onMaskReady: (() => void) | null = null;
 
-  /** Which pool source each of the two source textures currently holds. */
-  setSourceIds(main: string | null, alt: string | null = null) {
+  /**
+   * Which pool source each of the two source textures currently holds, and how
+   * far into its own media each one is. The time is what a keyed edit is
+   * sampled at: it belongs to the file, so the same instant of a clip carries
+   * the same crop and mask wherever it is played. Both the preview loop and the
+   * recorder set this every frame, from the same clock.
+   */
+  setSourceIds(
+    main: string | null,
+    alt: string | null = null,
+    mainTime = 0,
+    altTime = 0,
+  ) {
     this.mainSourceId = main;
     this.altSourceId = alt;
+    this.mainSourceTime = mainTime;
+    this.altSourceTime = altTime;
   }
 
-  /** The edit to run on a source texture, or null when there is nothing to do. */
+  /** The stored edit for a source texture, keys and all, or null when idle. */
   private liveSourceEdit(alt: boolean): SourceEdit | null {
     const id = alt ? this.altSourceId : this.mainSourceId;
     if (!id) return null;
@@ -1069,6 +1085,7 @@ export class GlRenderer {
     sw: number,
     sh: number,
     edit: SourceEdit,
+    extent: { w: number; h: number },
     sourceId: string,
     alt: boolean,
   ): { tex: WebGLTexture; w: number; h: number } | null {
@@ -1080,16 +1097,27 @@ export class GlRenderer {
     if (!prog) return null;
 
     const crop = edit.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+    // What the crop leaves *now* — the size this pass's result stands for, and
+    // what the fit downstream measures its aspect from.
     const w = Math.max(1, Math.round(sw * crop.w));
     const h = Math.max(1, Math.round(sh * crop.h));
+    // What to allocate: the widest and tallest the crop ever gets. A keyed crop
+    // is a different shape every frame, and a buffer re-allocated to match
+    // would throw away a texture and a framebuffer per frame. The shader maps
+    // this buffer's whole uv range onto the crop rectangle either way, so a
+    // buffer bigger than the current crop simply holds it magnified — and the
+    // fit puts it back at the aspect `w`/`h` names. For a still crop the two
+    // sizes are equal and this is the 1:1 pass it always was.
+    const bw = Math.max(w, Math.round(sw * extent.w));
+    const bh = Math.max(h, Math.round(sh * extent.h));
     const slot = alt ? 1 : 0;
     let target = this.sourceEditTargets[slot];
-    if (!target || target.w !== w || target.h !== h) {
+    if (!target || target.w !== bw || target.h !== bh) {
       if (target) {
         gl.deleteTexture(target.tex);
         gl.deleteFramebuffer(target.fbo);
       }
-      const tex = this.createTexture(w, h);
+      const tex = this.createTexture(bw, bh);
       // CLAMP and LINEAR: the fit staging samples this at an arbitrary scale,
       // where the chain buffers' NEAREST and mirrored wrap would alias and tile.
       gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -1103,12 +1131,12 @@ export class GlRenderer {
         this.sourceEditTargets[slot] = null;
         return null;
       }
-      target = { tex, fbo, w, h };
+      target = { tex, fbo, w: bw, h: bh };
       this.sourceEditTargets[slot] = target;
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
-    gl.viewport(0, 0, w, h);
+    gl.viewport(0, 0, bw, bh);
     gl.useProgram(prog.program);
     if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
     this.setSourceEditUniforms(prog, edit, sourceId);
@@ -1164,6 +1192,15 @@ export class GlRenderer {
     if (prog.uniforms["u_hasMask"]) {
       gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
     }
+    const xf = edit?.maskTransform;
+    if (prog.uniforms["u_maskXform"]) {
+      gl.uniform3f(
+        prog.uniforms["u_maskXform"],
+        xf?.x ?? 0,
+        xf?.y ?? 0,
+        xf?.scale ?? 1,
+      );
+    }
     if (mask && prog.uniforms["u_mask"]) {
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, mask);
@@ -1184,10 +1221,14 @@ export class GlRenderer {
     // The source's own edits, ahead of the fit: cropping changes the shape the
     // fit is measured against, so doing it after would fit the whole file and
     // then throw part of the result away.
-    const edit = this.liveSourceEdit(alt);
-    if (edit && sw > 0 && sh > 0) {
+    const stored = this.liveSourceEdit(alt);
+    if (stored && sw > 0 && sh > 0) {
       const id = (alt ? this.altSourceId : this.mainSourceId)!;
-      const edited = this.applySourceEdit(src, sw, sh, edit, id, alt);
+      const time = alt ? this.altSourceTime : this.mainSourceTime;
+      const edit = sampleSourceEdit(stored, time);
+      // Sized from the stored edit, not this instant's: see applySourceEdit.
+      const extent = cropExtent(stored);
+      const edited = this.applySourceEdit(src, sw, sh, edit, extent, id, alt);
       if (edited) {
         src = edited.tex;
         sw = edited.w;
@@ -1950,7 +1991,12 @@ export class GlRenderer {
     for (const layer of layers) {
       const entry = this.mediaLayerTextures.get(layer.key);
       if (!entry || entry.w <= 0) continue;
-      const edit = this.sourceEdits.get(layer.sourceId);
+      // Sampled per lane, not once for the source: two lanes can hold the same
+      // media at different points in it, and each wants its own instant's crop.
+      const stored = this.sourceEdits.get(layer.sourceId);
+      const edit = stored
+        ? sampleSourceEdit(stored, layer.sourceTime)
+        : undefined;
       // Fitted against what the crop leaves, not the whole file: "contain" has
       // to mean the visible rectangle, or cropping a photo would letterbox the
       // part that was thrown away.

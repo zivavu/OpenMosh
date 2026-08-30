@@ -127,6 +127,9 @@ uniform float u_keyLuma;
 // Hand-erased coverage in source space; red channel, 1 = keep. Off at <= 0.
 uniform sampler2D u_mask;
 uniform float u_hasMask;
+// Where the mask sits: xy = offset in source space, z = scale about its centre.
+// (0,0,1) leaves it exactly as painted, which is what a still edit sets.
+uniform vec3 u_maskXform;
 // The part of the source to keep: xy = origin, zw = size, both normalized.
 uniform vec4 u_crop;
 
@@ -151,7 +154,15 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
   vec4 c = texture(tex, srcUv);
   // Sampled in source space too, so cropping afterwards doesn't slide the
   // erased areas around the picture.
-  if (u_hasMask > 0.0) c.a *= texture(u_mask, srcUv).r;
+  if (u_hasMask > 0.0) {
+    vec2 mUv = (srcUv - u_maskXform.xy - 0.5) / max(u_maskXform.z, 0.0001) + 0.5;
+    // Everything the moved mask no longer covers is kept. Clamping instead
+    // would drag the mask's edge pixels across the frame it slid off, painting
+    // a stripe of whatever the border happened to be.
+    float inside =
+      step(0.0, mUv.x) * step(mUv.x, 1.0) * step(0.0, mUv.y) * step(mUv.y, 1.0);
+    c.a *= mix(1.0, texture(u_mask, mUv).r, inside);
+  }
   if (u_keyThreshold > 0.0) {
     float d = keyDistance(c.rgb);
     c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
