@@ -41,6 +41,46 @@ export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
  */
 export const MASK_MAX = 512;
 
+/**
+ * One keyed value, stamped in seconds into the *source's own* media time —
+ * not the timeline's. An edit is a fact about the file, so a key set 2.4s into
+ * a clip lands at that same instant everywhere the clip is used: under a
+ * segment, on a layer whose clip starts partway in, on two lanes at once.
+ */
+export interface Keyframe<T> {
+  t: number;
+  v: T;
+}
+
+/**
+ * Where the erase mask sits at a given moment, relative to how it was painted.
+ * `x`/`y` are in source-space units (1 = the whole frame), `scale` is about the
+ * mask's own centre.
+ *
+ * The mask keeps one painted shape and moves it, rather than holding a repaint
+ * per key: two painted blobs have no meaningful in-between — cross-fading them
+ * shows both at half strength, which reads as ghosting rather than as motion —
+ * while a shape that slides and grows covers the thing this is actually for,
+ * which is a pan, a tracking shot or an object coming closer.
+ */
+export interface MaskTransform {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export const IDENTITY_MASK_TRANSFORM: MaskTransform = { x: 0, y: 0, scale: 1 };
+
+/** The key's tunable part. `enabled` never animates: a key is on or it isn't. */
+export type AnimatedKey = Omit<ChromaKey, "enabled">;
+
+/** Keyed tracks over a source's own time. An absent track is simply static. */
+export interface SourceEditAnim {
+  crop?: Keyframe<CropRect>[];
+  key?: Keyframe<AnimatedKey>[];
+  mask?: Keyframe<MaskTransform>[];
+}
+
 /** Everything editable about a source, applied wherever it is drawn. */
 export interface SourceEdit {
   chromaKey: ChromaKey;
@@ -55,6 +95,16 @@ export interface SourceEdit {
    * paying a texture for.
    */
   mask: string | null;
+  /**
+   * Keyed tracks, for sources whose subject moves. Absent on a still edit,
+   * which is the common case and costs nothing to sample.
+   */
+  anim?: SourceEditAnim;
+  /**
+   * Where the mask sits *now*. Filled in by `sampleSourceEdit`; never stored —
+   * a stored edit carries the track and the painted mask, not one moment of it.
+   */
+  maskTransform?: MaskTransform;
 }
 
 export const DEFAULT_CHROMA_KEY: ChromaKey = {
@@ -113,16 +163,22 @@ export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
     k.smoothing === d.smoothing &&
     k.lumaRange === d.lumaRange &&
     isFullCrop(edit.crop) &&
-    !edit.mask
+    !edit.mask &&
+    !hasAnimation(edit)
   );
+}
+
+/** True when any track carries a key, so the edit varies over the clip. */
+export function hasAnimation(edit: SourceEdit | undefined): boolean {
+  const a = edit?.anim;
+  if (!a) return false;
+  return !!a.crop?.length || !!a.key?.length || !!a.mask?.length;
 }
 
 export function normalizeSourceEdit(raw: unknown): SourceEdit {
   const e = (raw ?? {}) as Partial<SourceEdit>;
   const k = (e.chromaKey ?? {}) as Partial<ChromaKey>;
   const c = (k.color ?? {}) as Partial<ChromaKey["color"]>;
-  const num = (v: unknown, fallback: number) =>
-    typeof v === "number" && Number.isFinite(v) ? v : fallback;
   return {
     chromaKey: {
       enabled: !!k.enabled,
@@ -136,6 +192,7 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
       lumaRange: num(k.lumaRange, DEFAULT_CHROMA_KEY.lumaRange),
     },
     crop: normalizeCrop(e.crop),
+    anim: normalizeAnim(e.anim),
     // Only a data URL is any use to the loader; anything else is dropped rather
     // than handed to an <img> that will fail asynchronously.
     mask:
@@ -145,17 +202,25 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
 
 function normalizeCrop(raw: unknown): CropRect {
   const c = (raw ?? {}) as Partial<CropRect>;
-  const n = (v: unknown, fallback: number) =>
-    typeof v === "number" && Number.isFinite(v) ? v : fallback;
-  const x = Math.min(Math.max(n(c.x, 0), 0), 1);
-  const y = Math.min(Math.max(n(c.y, 0), 0), 1);
+  return clampCrop({
+    x: num(c.x, 0),
+    y: num(c.y, 0),
+    w: num(c.w, 1),
+    h: num(c.h, 1),
+  });
+}
+
+/** A rectangle forced back inside the frame. Shared with the keyframe blend. */
+export function clampCrop(c: CropRect): CropRect {
+  const x = Math.min(Math.max(c.x, 0), 1);
+  const y = Math.min(Math.max(c.y, 0), 1);
   return {
     x,
     y,
-    // Clamped against the origin, so a saved rectangle can never reach past the
-    // frame and leave the placement sampling outside the texture.
-    w: Math.min(Math.max(n(c.w, 1), 0.01), 1 - x),
-    h: Math.min(Math.max(n(c.h, 1), 0.01), 1 - y),
+    // Clamped against the origin, so a rectangle can never reach past the frame
+    // and leave the placement sampling outside the texture.
+    w: Math.min(Math.max(c.w, 0.01), 1 - x),
+    h: Math.min(Math.max(c.h, 0.01), 1 - y),
   };
 }
 
@@ -170,4 +235,209 @@ export function normalizeSourceEdits(
     if (!isIdleSourceEdit(edit)) out[id] = edit;
   }
   return out;
+}
+
+// ── Keyframes ──────────────────────────────────────────────────────────────
+// Linear between neighbouring keys, held flat before the first and after the
+// last. No easing: the tracks here follow something in the footage, and a value
+// that eases away from where the subject actually is has to be corrected with
+// another key.
+
+/** Two keys are the same key within this many seconds. */
+export const KEY_EPSILON = 1e-3;
+
+function lerp(a: number, b: number, k: number): number {
+  return a + (b - a) * k;
+}
+
+/**
+ * The track's value at `time`, or null when the track is empty. Keys are
+ * assumed sorted — `putKeyframe` is the only way one gets in.
+ */
+export function sampleTrack<T>(
+  keys: Keyframe<T>[] | undefined,
+  time: number,
+  blend: (a: T, b: T, k: number) => T,
+): T | null {
+  if (!keys || keys.length === 0) return null;
+  if (keys.length === 1 || time <= keys[0].t) return keys[0].v;
+  const last = keys[keys.length - 1];
+  if (time >= last.t) return last.v;
+  // Linear scan: a hand-placed track is a handful of keys, and a binary search
+  // would cost more to read than it saves.
+  for (let i = 1; i < keys.length; i++) {
+    const b = keys[i];
+    if (b.t < time) continue;
+    const a = keys[i - 1];
+    const span = b.t - a.t;
+    return span <= 0 ? b.v : blend(a.v, b.v, (time - a.t) / span);
+  }
+  return last.v;
+}
+
+function blendCrop(a: CropRect, b: CropRect, k: number): CropRect {
+  return clampCrop({
+    x: lerp(a.x, b.x, k),
+    y: lerp(a.y, b.y, k),
+    w: lerp(a.w, b.w, k),
+    h: lerp(a.h, b.h, k),
+  });
+}
+
+function blendKey(a: AnimatedKey, b: AnimatedKey, k: number): AnimatedKey {
+  return {
+    color: {
+      r: lerp(a.color.r, b.color.r, k),
+      g: lerp(a.color.g, b.color.g, k),
+      b: lerp(a.color.b, b.color.b, k),
+    },
+    threshold: lerp(a.threshold, b.threshold, k),
+    smoothing: lerp(a.smoothing, b.smoothing, k),
+    lumaRange: lerp(a.lumaRange, b.lumaRange, k),
+  };
+}
+
+function blendMaskTransform(
+  a: MaskTransform,
+  b: MaskTransform,
+  k: number,
+): MaskTransform {
+  return {
+    x: lerp(a.x, b.x, k),
+    y: lerp(a.y, b.y, k),
+    scale: lerp(a.scale, b.scale, k),
+  };
+}
+
+/**
+ * The edit as it stands at `time` seconds into the source: every track sampled
+ * down to a plain value, `anim` dropped. Everything downstream takes one of
+ * these and needn't know a track was ever involved.
+ *
+ * Returns the edit itself when nothing is keyed, so a still edit allocates
+ * nothing on the way to the shader.
+ */
+export function sampleSourceEdit(edit: SourceEdit, time: number): SourceEdit {
+  const anim = edit.anim;
+  if (!anim || !hasAnimation(edit)) return edit;
+  const crop = sampleTrack(anim.crop, time, blendCrop);
+  const key = sampleTrack(anim.key, time, blendKey);
+  const maskTransform = sampleTrack(anim.mask, time, blendMaskTransform);
+  return {
+    chromaKey: key
+      ? { enabled: edit.chromaKey.enabled, ...key }
+      : edit.chromaKey,
+    crop: crop ?? edit.crop,
+    mask: edit.mask,
+    maskTransform: maskTransform ?? undefined,
+  };
+}
+
+/**
+ * The widest and tallest the crop ever gets, as a share of the source. What the
+ * renderer sizes its crop buffer from: an animated crop changes shape every
+ * frame, and a buffer re-allocated to match would mean a texture and a
+ * framebuffer thrown away per frame.
+ */
+export function cropExtent(edit: SourceEdit): { w: number; h: number } {
+  const keys = edit.anim?.crop;
+  if (!keys || keys.length === 0) return { w: edit.crop.w, h: edit.crop.h };
+  let w = 0;
+  let h = 0;
+  for (const k of keys) {
+    if (k.v.w > w) w = k.v.w;
+    if (k.v.h > h) h = k.v.h;
+  }
+  return { w: Math.min(w, 1), h: Math.min(h, 1) };
+}
+
+/**
+ * `keys` with `v` set at `time`, replacing the key already there. Returns a new
+ * array, sorted, so the caller can hand it straight to an undo snapshot.
+ */
+export function putKeyframe<T>(
+  keys: Keyframe<T>[] | undefined,
+  time: number,
+  v: T,
+): Keyframe<T>[] {
+  const t = Math.max(0, time);
+  const out = (keys ?? []).filter((k) => Math.abs(k.t - t) > KEY_EPSILON);
+  out.push({ t, v });
+  out.sort((a, b) => a.t - b.t);
+  return out;
+}
+
+/** `keys` without the one at `time`, if there is one. */
+export function removeKeyframe<T>(
+  keys: Keyframe<T>[] | undefined,
+  time: number,
+): Keyframe<T>[] {
+  return (keys ?? []).filter((k) => Math.abs(k.t - time) > KEY_EPSILON);
+}
+
+/** The key at `time`, or null. */
+export function keyframeAt<T>(
+  keys: Keyframe<T>[] | undefined,
+  time: number,
+): Keyframe<T> | null {
+  return (keys ?? []).find((k) => Math.abs(k.t - time) <= KEY_EPSILON) ?? null;
+}
+
+function normalizeAnim(raw: unknown): SourceEditAnim | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const a = raw as Partial<SourceEditAnim>;
+  const crop = normalizeTrack(a.crop, (v) => normalizeCrop(v));
+  const key = normalizeTrack(a.key, normalizeAnimatedKey);
+  const mask = normalizeTrack(a.mask, normalizeMaskTransform);
+  if (!crop && !key && !mask) return undefined;
+  return {
+    ...(crop ? { crop } : {}),
+    ...(key ? { key } : {}),
+    ...(mask ? { mask } : {}),
+  };
+}
+
+/** Sorted, de-duplicated and dropped entirely when nothing survives. */
+function normalizeTrack<T>(
+  raw: unknown,
+  value: (raw: unknown) => T,
+): Keyframe<T>[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  let out: Keyframe<T>[] = [];
+  for (const entry of raw) {
+    const t = (entry as Partial<Keyframe<T>>)?.t;
+    if (typeof t !== "number" || !Number.isFinite(t)) continue;
+    out = putKeyframe(out, t, value((entry as Keyframe<T>).v));
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeAnimatedKey(raw: unknown): AnimatedKey {
+  const k = (raw ?? {}) as Partial<AnimatedKey>;
+  const c = (k.color ?? {}) as Partial<ChromaKey["color"]>;
+  return {
+    color: {
+      r: num(c.r, DEFAULT_CHROMA_KEY.color.r),
+      g: num(c.g, DEFAULT_CHROMA_KEY.color.g),
+      b: num(c.b, DEFAULT_CHROMA_KEY.color.b),
+    },
+    threshold: num(k.threshold, DEFAULT_CHROMA_KEY.threshold),
+    smoothing: num(k.smoothing, DEFAULT_CHROMA_KEY.smoothing),
+    lumaRange: num(k.lumaRange, DEFAULT_CHROMA_KEY.lumaRange),
+  };
+}
+
+function normalizeMaskTransform(raw: unknown): MaskTransform {
+  const m = (raw ?? {}) as Partial<MaskTransform>;
+  return {
+    x: num(m.x, 0),
+    y: num(m.y, 0),
+    // A mask scaled to nothing erases nothing, which is indistinguishable from
+    // a broken save; a floor keeps it recoverable.
+    scale: Math.max(num(m.scale, 1), 0.01),
+  };
+}
+
+function num(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }

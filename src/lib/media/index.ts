@@ -1,17 +1,35 @@
 export { createMediaHistory } from "./history.svelte";
 export type { MediaClipboardEntry, MediaPasteResult } from "./clipboard";
 export { copyMediaClips, pasteMediaClips } from "./clipboard";
-export type { ChromaKey, CropRect, SourceEdit } from "./source-edit";
+export type {
+  AnimatedKey,
+  ChromaKey,
+  CropRect,
+  Keyframe,
+  MaskTransform,
+  SourceEdit,
+  SourceEditAnim,
+} from "./source-edit";
 export {
+  clampCrop,
   createSourceEdit,
+  cropExtent,
   DEFAULT_CHROMA_KEY,
   DEFAULT_SOURCE_EDIT,
   FULL_CROP,
+  hasAnimation,
+  IDENTITY_MASK_TRANSFORM,
   isFullCrop,
   isIdleSourceEdit,
+  KEY_EPSILON,
+  keyframeAt,
   MASK_MAX,
   normalizeSourceEdit,
   normalizeSourceEdits,
+  putKeyframe,
+  removeKeyframe,
+  sampleSourceEdit,
+  sampleTrack,
 } from "./source-edit";
 export { MEDIA_LAYER_SHORTCUTS } from "./shortcuts";
 export type { ResolvedMediaLayer } from "./resolve";

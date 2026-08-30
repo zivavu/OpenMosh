@@ -1,11 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import {
   createSourceEdit,
+  cropExtent,
   DEFAULT_CHROMA_KEY,
   isFullCrop,
   isIdleSourceEdit,
+  keyframeAt,
   normalizeSourceEdit,
   normalizeSourceEdits,
+  putKeyframe,
+  removeKeyframe,
+  sampleSourceEdit,
 } from "./source-edit";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -73,5 +78,110 @@ describe("normalizeSourceEdits", () => {
     });
     expect(Object.keys(map)).toEqual(["a"]);
     expect(map.a.crop.w).toBe(0.5);
+  });
+});
+
+describe("keyframes", () => {
+  const at = (t: number, x: number) => ({ t, v: { x, y: 0, w: 0.5, h: 0.5 } });
+
+  it("holds flat before the first key and after the last", () => {
+    const e = createSourceEdit();
+    e.anim = { crop: [at(1, 0.2), at(3, 0.4)] };
+    expect(sampleSourceEdit(e, 0).crop.x).toBeCloseTo(0.2, 5);
+    expect(sampleSourceEdit(e, 99).crop.x).toBeCloseTo(0.4, 5);
+  });
+
+  it("interpolates between two keys", () => {
+    const e = createSourceEdit();
+    e.anim = { crop: [at(1, 0.2), at(3, 0.4)] };
+    expect(sampleSourceEdit(e, 2).crop.x).toBeCloseTo(0.3, 5);
+  });
+
+  it("leaves a still edit exactly as it is", () => {
+    const e = createSourceEdit();
+    expect(sampleSourceEdit(e, 5)).toBe(e);
+  });
+
+  it("keeps the key's on/off state out of the interpolation", () => {
+    const e = createSourceEdit();
+    e.chromaKey.enabled = true;
+    e.anim = {
+      key: [
+        { t: 0, v: { ...DEFAULT_CHROMA_KEY, threshold: 0.1 } },
+        { t: 2, v: { ...DEFAULT_CHROMA_KEY, threshold: 0.5 } },
+      ],
+    };
+    const mid = sampleSourceEdit(e, 1);
+    expect(mid.chromaKey.threshold).toBeCloseTo(0.3, 5);
+    expect(mid.chromaKey.enabled).toBe(true);
+  });
+
+  it("moves the mask rather than repainting it", () => {
+    const e = createSourceEdit();
+    e.mask = PNG;
+    e.anim = {
+      mask: [
+        { t: 0, v: { x: 0, y: 0, scale: 1 } },
+        { t: 2, v: { x: 0.4, y: 0.2, scale: 2 } },
+      ],
+    };
+    const mid = sampleSourceEdit(e, 1);
+    expect(mid.mask).toBe(PNG);
+    expect(mid.maskTransform).toEqual({ x: 0.2, y: 0.1, scale: 1.5 });
+  });
+
+  it("keeps an interpolated rectangle inside the frame", () => {
+    const e = createSourceEdit();
+    e.anim = {
+      crop: [
+        { t: 0, v: { x: 0, y: 0, w: 1, h: 1 } },
+        { t: 2, v: { x: 0.9, y: 0.9, w: 1, h: 1 } },
+      ],
+    };
+    const mid = sampleSourceEdit(e, 1);
+    expect(mid.crop.x + mid.crop.w).toBeLessThanOrEqual(1.0001);
+    expect(mid.crop.y + mid.crop.h).toBeLessThanOrEqual(1.0001);
+  });
+
+  it("replaces the key already at a time and stays sorted", () => {
+    let keys = putKeyframe<number>(undefined, 2, 20);
+    keys = putKeyframe(keys, 1, 10);
+    keys = putKeyframe(keys, 2, 99);
+    expect(keys.map((k) => k.t)).toEqual([1, 2]);
+    expect(keys.map((k) => k.v)).toEqual([10, 99]);
+    expect(keyframeAt(keys, 2)?.v).toBe(99);
+    expect(removeKeyframe(keys, 2)).toHaveLength(1);
+  });
+
+  it("sizes the crop buffer from the widest key, not the current one", () => {
+    const e = createSourceEdit();
+    e.anim = { crop: [at(0, 0), { t: 2, v: { x: 0, y: 0, w: 0.8, h: 0.9 } }] };
+    expect(cropExtent(e)).toEqual({ w: 0.8, h: 0.9 });
+  });
+
+  it("counts a keyed edit as worth storing, and restores its tracks", () => {
+    const e = createSourceEdit();
+    e.anim = { crop: [at(1, 0.2)] };
+    expect(isIdleSourceEdit(e)).toBe(false);
+
+    const back = normalizeSourceEdit(JSON.parse(JSON.stringify(e)));
+    expect(back.anim?.crop).toHaveLength(1);
+    expect(back.anim?.crop?.[0].t).toBe(1);
+  });
+
+  it("drops junk keys and sorts what is left", () => {
+    const back = normalizeSourceEdit({
+      anim: {
+        crop: [
+          { t: 3, v: { x: 0.3, y: 0, w: 0.5, h: 0.5 } },
+          { t: "nope", v: {} },
+          { t: 1, v: { x: 0.1, y: 0, w: 0.5, h: 0.5 } },
+        ],
+        key: [],
+      },
+    });
+    expect(back.anim?.crop?.map((k) => k.t)).toEqual([1, 3]);
+    // An empty track is no track at all.
+    expect(back.anim?.key).toBeUndefined();
   });
 });

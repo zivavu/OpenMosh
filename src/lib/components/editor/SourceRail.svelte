@@ -446,7 +446,6 @@
 		color: var(--text-2);
 		font-size: 0.5rem;
 		font-weight: 700;
-		line-height: 1.5;
 	}
 
 	/* Both badges can show at once, so the BASE one steps aside. */
