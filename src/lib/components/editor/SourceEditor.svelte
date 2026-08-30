@@ -201,7 +201,7 @@
 	function addKey(id: TrackId, base: SourceEdit = edit, value = valueNow(id)) {
 		const keys = putKeyframe(
 			(base.anim?.[id] ?? []) as Keyframe<unknown>[],
-			currentTime,
+			keyTime(),
 			value,
 		);
 		onChange(withTrack(base, id, keys));
@@ -672,6 +672,18 @@
 		};
 	}
 
+	/**
+	 * Where a key written mid-gesture lands. Pinned when a drag starts, because
+	 * the playhead moves under a drag made while the clip is playing — and a
+	 * crop dragged across two seconds of video would otherwise leave a key on
+	 * every frame it crossed instead of one where the gesture began.
+	 */
+	let gestureTime: number | null = null;
+
+	function keyTime(): number {
+		return gestureTime ?? currentTime;
+	}
+
 	type Drag =
 		| { kind: 'erase' }
 		| { kind: 'crop-new'; ax: number; ay: number }
@@ -684,6 +696,7 @@
 		const p = atEvent(e);
 		if (!p) return;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		gestureTime = currentTime;
 
 		if (tool === 'key') {
 			pickAt(p.x, p.y);
@@ -780,6 +793,7 @@
 	function onPreviewUp(e: PointerEvent) {
 		if (drag?.kind === 'erase') commitMask();
 		drag = null;
+		gestureTime = null;
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}
 
