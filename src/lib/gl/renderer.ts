@@ -5,6 +5,7 @@ import {
   textSignature,
   type ResolvedTextLayer,
 } from "../text";
+import { isIdleSourceEdit } from "../media";
 import type { MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
 import {
   CAPTION_EFFECT_ID,
@@ -24,6 +25,7 @@ import {
   PASSTHROUGH_FRAG,
   TEXT_BLEND_FRAG,
   LAYER_TRANSFORM_FRAG,
+  SOURCE_EDIT_FRAG,
   EFFECT_SHADERS,
   type EffectShaderDef,
 } from "./effect-shaders";
@@ -312,6 +314,22 @@ export class GlRenderer {
   private layerTransformProgram: CompiledProgram | null = null;
   /** Holds a media layer's placed frame while its own chain consumes it. One
    * buffer for all of them: the chain reads it and is done with it. */
+  /**
+   * Which pool source is on the main and alt textures. The edits are keyed by
+   * source, so the chain has to be told what it is looking at; null means media
+   * with no pool entry (single mode's own file), which carries no edits.
+   */
+  private mainSourceId: string | null = null;
+  private altSourceId: string | null = null;
+  private sourceEditProgram: CompiledProgram | null = null;
+  /** Edited copies of the main and alt sources, sized to their crops. */
+  private sourceEditTargets: ({
+    tex: WebGLTexture;
+    fbo: WebGLFramebuffer;
+    w: number;
+    h: number;
+  } | null)[] = [null, null];
+
   /** One erase mask per source, and the data URL it was decoded from. */
   private maskTextures = new Map<
     string,
@@ -630,6 +648,20 @@ export class GlRenderer {
 
   /** Called when a mask finishes decoding, so a paused preview redraws. */
   onMaskReady: (() => void) | null = null;
+
+  /** Which pool source each of the two source textures currently holds. */
+  setSourceIds(main: string | null, alt: string | null = null) {
+    this.mainSourceId = main;
+    this.altSourceId = alt;
+  }
+
+  /** The edit to run on a source texture, or null when there is nothing to do. */
+  private liveSourceEdit(alt: boolean): SourceEdit | null {
+    const id = alt ? this.altSourceId : this.mainSourceId;
+    if (!id) return null;
+    const edit = this.sourceEdits.get(id);
+    return edit && !isIdleSourceEdit(edit) ? edit : null;
+  }
 
   /** True once this lane has a frame to draw. */
   hasLayerTexture(key: string): boolean {
@@ -1027,16 +1059,143 @@ export class GlRenderer {
    * the chain reads that instead. Matching aspects skip the copy entirely, so
    * the ordinary single-source case pays nothing.
    */
+  /**
+   * Crop, erase and key a source texture into a buffer of its cropped size,
+   * which the fit staging below then treats as the source. Returns null when
+   * there is nothing to apply, so an unedited source pays no pass at all.
+   */
+  private applySourceEdit(
+    src: WebGLTexture,
+    sw: number,
+    sh: number,
+    edit: SourceEdit,
+    sourceId: string,
+    alt: boolean,
+  ): { tex: WebGLTexture; w: number; h: number } | null {
+    const gl = this.gl;
+    if (!this.sourceEditProgram) {
+      this.sourceEditProgram = this.compile(SOURCE_EDIT_FRAG);
+    }
+    const prog = this.sourceEditProgram;
+    if (!prog) return null;
+
+    const crop = edit.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+    const w = Math.max(1, Math.round(sw * crop.w));
+    const h = Math.max(1, Math.round(sh * crop.h));
+    const slot = alt ? 1 : 0;
+    let target = this.sourceEditTargets[slot];
+    if (!target || target.w !== w || target.h !== h) {
+      if (target) {
+        gl.deleteTexture(target.tex);
+        gl.deleteFramebuffer(target.fbo);
+      }
+      const tex = this.createTexture(w, h);
+      // CLAMP and LINEAR: the fit staging samples this at an arbitrary scale,
+      // where the chain buffers' NEAREST and mirrored wrap would alias and tile.
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      const fbo = this.createRenderTarget(tex);
+      if (!fbo) {
+        gl.deleteTexture(tex);
+        this.sourceEditTargets[slot] = null;
+        return null;
+      }
+      target = { tex, fbo, w, h };
+      this.sourceEditTargets[slot] = target;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(prog.program);
+    if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+    this.setSourceEditUniforms(prog, edit, sourceId);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src);
+    if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.activeTexture(gl.TEXTURE0);
+    return { tex: target.tex, w, h };
+  }
+
+  /** The crop / mask / key uniforms both editing passes share. */
+  private setSourceEditUniforms(
+    prog: CompiledProgram,
+    edit: SourceEdit | undefined,
+    sourceId: string | undefined,
+  ) {
+    const gl = this.gl;
+    const key = edit?.chromaKey;
+    const keyOn = !!key?.enabled;
+    if (prog.uniforms["u_keyColor"]) {
+      gl.uniform3f(
+        prog.uniforms["u_keyColor"],
+        key?.color.r ?? 0,
+        key?.color.g ?? 0,
+        key?.color.b ?? 0,
+      );
+    }
+    if (prog.uniforms["u_keyThreshold"]) {
+      gl.uniform1f(
+        prog.uniforms["u_keyThreshold"],
+        keyOn ? Math.max(key!.threshold, 0.0001) : 0,
+      );
+    }
+    if (prog.uniforms["u_keySmooth"]) {
+      gl.uniform1f(prog.uniforms["u_keySmooth"], key?.smoothing ?? 0);
+    }
+    if (prog.uniforms["u_keyLuma"]) {
+      gl.uniform1f(prog.uniforms["u_keyLuma"], key?.lumaRange ?? 1);
+    }
+    const crop = edit?.crop;
+    if (prog.uniforms["u_crop"]) {
+      gl.uniform4f(
+        prog.uniforms["u_crop"],
+        crop?.x ?? 0,
+        crop?.y ?? 0,
+        crop?.w ?? 1,
+        crop?.h ?? 1,
+      );
+    }
+    const mask =
+      sourceId && edit?.mask ? this.maskTexture(sourceId, edit.mask) : null;
+    if (prog.uniforms["u_hasMask"]) {
+      gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
+    }
+    if (mask && prog.uniforms["u_mask"]) {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, mask);
+      gl.uniform1i(prog.uniforms["u_mask"], 3);
+    }
+  }
+
   private chainSource(alt = false): WebGLTexture {
     // Solo: the chain starts from black, so the soloed layer is composited onto
     // an empty frame rather than over the picture it is meant to be told apart
     // from. Ahead of the fit staging — there is nothing to fit.
     if (this.blankSource) return this.blankTexture();
-    const src = alt ? this.altSourceTexture : this.sourceTexture;
+    let src = alt ? this.altSourceTexture : this.sourceTexture;
     if (!src) return this.sourceTexture!;
+    let sw = alt ? this.altTexW : this.srcTexW;
+    let sh = alt ? this.altTexH : this.srcTexH;
+
+    // The source's own edits, ahead of the fit: cropping changes the shape the
+    // fit is measured against, so doing it after would fit the whole file and
+    // then throw part of the result away.
+    const edit = this.liveSourceEdit(alt);
+    if (edit && sw > 0 && sh > 0) {
+      const id = (alt ? this.altSourceId : this.mainSourceId)!;
+      const edited = this.applySourceEdit(src, sw, sh, edit, id, alt);
+      if (edited) {
+        src = edited.tex;
+        sw = edited.w;
+        sh = edited.h;
+      }
+    }
+
     if (this.sourceFit === "stretch") return src;
-    const sw = alt ? this.altTexW : this.srcTexW;
-    const sh = alt ? this.altTexH : this.srcTexH;
     if (sw <= 0 || sh <= 0 || this.imgW <= 0 || this.imgH <= 0) return src;
     // Sub-pixel differences aren't worth a full-screen pass.
     if (Math.abs(sw / sh - this.imgW / this.imgH) < 0.002) return src;
@@ -1962,7 +2121,6 @@ export class GlRenderer {
     /** Which source the mask belongs to; absent skips the mask entirely. */
     sourceId?: string,
   ) {
-    const key = edit?.chromaKey;
     const gl = this.gl;
     const prog = this.layerTransformProgram;
     if (!prog) return;
@@ -1970,50 +2128,10 @@ export class GlRenderer {
     gl.viewport(0, 0, this.imgW, this.imgH);
     gl.useProgram(prog.program);
     if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
-    const keyOn = !!key?.enabled;
-    if (prog.uniforms["u_keyColor"]) {
-      gl.uniform3f(
-        prog.uniforms["u_keyColor"],
-        key?.color.r ?? 0,
-        key?.color.g ?? 0,
-        key?.color.b ?? 0,
-      );
-    }
-    if (prog.uniforms["u_keyThreshold"]) {
-      gl.uniform1f(
-        prog.uniforms["u_keyThreshold"],
-        keyOn ? Math.max(key!.threshold, 0.0001) : 0,
-      );
-    }
-    if (prog.uniforms["u_keySmooth"]) {
-      gl.uniform1f(prog.uniforms["u_keySmooth"], key?.smoothing ?? 0);
-    }
-    if (prog.uniforms["u_keyLuma"]) {
-      gl.uniform1f(prog.uniforms["u_keyLuma"], key?.lumaRange ?? 1);
-    }
     if (prog.uniforms["u_edgeFade"]) {
       gl.uniform1f(prog.uniforms["u_edgeFade"], edgeFade);
     }
-    const crop = edit?.crop;
-    if (prog.uniforms["u_crop"]) {
-      gl.uniform4f(
-        prog.uniforms["u_crop"],
-        crop?.x ?? 0,
-        crop?.y ?? 0,
-        crop?.w ?? 1,
-        crop?.h ?? 1,
-      );
-    }
-    const mask =
-      sourceId && edit?.mask ? this.maskTexture(sourceId, edit.mask) : null;
-    if (prog.uniforms["u_hasMask"]) {
-      gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
-    }
-    if (mask && prog.uniforms["u_mask"]) {
-      gl.activeTexture(gl.TEXTURE3);
-      gl.bindTexture(gl.TEXTURE_2D, mask);
-      gl.uniform1i(prog.uniforms["u_mask"], 3);
-    }
+    this.setSourceEditUniforms(prog, edit, sourceId);
     this.setLayerBoxUniforms(prog, box);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);

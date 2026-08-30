@@ -100,6 +100,11 @@
       sourceFit?: SourceFit;
       /** Per-source edits, keyed by source id. Sparse: only edited media. */
       sourceEdits?: Record<string, SourceEdit>;
+      /** Which pool source the frame comes from, so its own edits can be found.
+       * Null for media with no pool entry, which carries none. */
+      sourceEditId?: string | null;
+      /** The same for the outgoing side of a transition. */
+      outgoingEditId?: string | null;
       /** Optional text lanes composited into the chain at their insertion points. */
       textTimeline?: TextTimeline | null;
       /** Optional media lanes, composited the same way. */
@@ -158,6 +163,8 @@
       spectrum = null,
       sourceFit = "contain",
       sourceEdits = EMPTY_SOURCE_EDITS,
+      sourceEditId = null,
+      outgoingEditId = null,
       fullscreen = $bindable(false),
       textTimeline = null,
       mediaTimeline = null,
@@ -383,6 +390,9 @@
       // Before anything renders: the bars have to see this frame's audio, and
       // the export driver does the same on its side.
       renderer!.setSpectrum(spectrum, now);
+      // Which media the two source textures hold, so the chain can apply that
+      // source's crop, erase mask and key before reading it.
+      renderer!.setSourceIds(sourceEditId, outgoingEditId);
       renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
       const solo = soloMediaLaneId;
       const layers =
@@ -637,6 +647,8 @@
       }
       sourceFit;
       sourceEdits;
+      sourceEditId;
+      outgoingEditId;
       // A caption font that lands after the frame was drawn changes its glyphs.
       fontTick;
       // Text edits and scrubbing both change which clip is on screen.

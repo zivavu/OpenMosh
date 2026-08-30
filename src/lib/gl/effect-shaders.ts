@@ -115,29 +115,21 @@ float insideLayerSoft(vec2 uv, float fade) {
 `;
 
 /**
- * Place a media layer into a full-frame buffer: fitted, scaled, rotated and
- * centred, with everything outside its box transparent so the composite leaves
- * the image underneath it alone.
+ * Chroma keying, shared by the layer placement and the source-edit pass. Both
+ * key the same media by the same rule, so they read from one copy.
  */
-export const LAYER_TRANSFORM_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D u_texture;
-uniform vec3 u_keyColor;
-// <= 0 switches the key off, so an unkeyed layer costs one compare.
+const CHROMA_KEY_GLSL = `uniform vec3 u_keyColor;
+// <= 0 switches the key off, so unkeyed media costs one compare.
 uniform float u_keyThreshold;
 uniform float u_keySmooth;
 // How far a pixel's brightness may differ from the key's. 1 ignores it.
 uniform float u_keyLuma;
-// Width of the coverage ramp at the box's edges, in box uv. 0 = hard edge.
-uniform float u_edgeFade;
-// The part of the source to keep: xy = origin, zw = size, both normalized.
-uniform vec4 u_crop;
 // Hand-erased coverage in source space; red channel, 1 = keep. Off at <= 0.
 uniform sampler2D u_mask;
 uniform float u_hasMask;
-in vec2 v_uv;
-out vec4 outColor;
-${LAYER_BOX_GLSL}
+// The part of the source to keep: xy = origin, zw = size, both normalized.
+uniform vec4 u_crop;
+
 vec2 chroma(vec3 c) {
   return vec2(dot(c, vec3(-0.169, -0.331, 0.5)), dot(c, vec3(0.5, -0.419, -0.081)));
 }
@@ -152,12 +144,11 @@ float keyDistance(vec3 c) {
   float dY = abs(luma(c) - luma(u_keyColor)) * (u_keyThreshold / max(u_keyLuma, 0.0001));
   return max(distance(chroma(c), chroma(u_keyColor)), dY);
 }
-void main() {
-  vec2 uv = layerUv(v_uv);
-  // Into the source's own frame. The crop is applied here rather than by
-  // trimming the texture, so it stays a number the user can move back.
-  vec2 srcUv = clamp(uv, 0.0, 1.0) * u_crop.zw + u_crop.xy;
-  vec4 c = texture(u_texture, srcUv);
+
+/** Crop, erase and key in one go. Returns the media with its coverage in .a. */
+vec4 editedSource(sampler2D tex, vec2 uv) {
+  vec2 srcUv = uv * u_crop.zw + u_crop.xy;
+  vec4 c = texture(tex, srcUv);
   // Sampled in source space too, so cropping afterwards doesn't slide the
   // erased areas around the picture.
   if (u_hasMask > 0.0) c.a *= texture(u_mask, srcUv).r;
@@ -165,6 +156,48 @@ void main() {
     float d = keyDistance(c.rgb);
     c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
   }
+  return c;
+}
+`;
+
+/**
+ * Crop, erase and key a source before the chain reads it. The layer placement
+ * does the same work inline; this exists for the frame *under* the layers,
+ * which has no box to be placed into.
+ *
+ * Coverage is flattened to black rather than kept: this is the bottom of the
+ * stack, so an erased pixel has nothing behind it to show.
+ */
+export const SOURCE_EDIT_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+in vec2 v_uv;
+out vec4 outColor;
+${CHROMA_KEY_GLSL}
+void main() {
+  vec4 c = editedSource(u_texture, v_uv);
+  outColor = vec4(c.rgb * c.a, 1.0);
+}`;
+
+/**
+ * Place a media layer into a full-frame buffer: fitted, scaled, rotated and
+ * centred, with everything outside its box transparent so the composite leaves
+ * the image underneath it alone.
+ */
+export const LAYER_TRANSFORM_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+// Width of the coverage ramp at the box's edges, in box uv. 0 = hard edge.
+uniform float u_edgeFade;
+in vec2 v_uv;
+out vec4 outColor;
+${LAYER_BOX_GLSL}
+${CHROMA_KEY_GLSL}
+void main() {
+  vec2 uv = layerUv(v_uv);
+  // Coverage is kept here, unlike the source pass: a layer has the frame
+  // underneath it to show through wherever it was erased or keyed out.
+  vec4 c = editedSource(u_texture, clamp(uv, 0.0, 1.0));
   outColor = c * insideLayerSoft(uv, u_edgeFade);
 }`;
 

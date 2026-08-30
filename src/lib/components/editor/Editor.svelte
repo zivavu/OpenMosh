@@ -3795,6 +3795,8 @@
 				spectrum={audio.frequencyData}
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
+				sourceEditId={isSequenceMode ? sourceIdOf(activeSegment()) : null}
+				outgoingEditId={isSequenceMode ? (outgoingSource()?.id ?? null) : null}
 			/>
 		</div>
 

@@ -361,10 +361,17 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
       : null;
     const segSourceId =
       segmentSourceIdAt(seg, t, sourcePool, primarySourceId) ?? undefined;
+    // Seconds into the clip, not a per-frame step: the same rule the preview
+    // follows, so an export writes the frames that were previewed.
+    const out = outgoingSourceAt(t, segSourceId);
+    // Which media each texture holds, so the chain applies that source's own
+    // crop, erase mask and key. The preview sets this every frame it draws; the
+    // recorder owns the renderer while it runs, so it has to as well, or the
+    // export would edit whatever the preview happened to be looking at. Outside
+    // the exportSources branch: a one-source sequence has no export samplers and
+    // still has edits.
+    renderer.setSourceIds(segSourceId ?? null, out?.id ?? null);
     if (exportSources) {
-      // Seconds into the clip, not a per-frame step: the same rule the preview
-      // follows, so an export writes the frames that were previewed.
-      const out = outgoingSourceAt(t, segSourceId);
       // Concurrent: outgoingSourceAt returns null when the outgoing source is
       // the incoming one, so these two can never contend for a single sampler,
       // and they write different textures.
