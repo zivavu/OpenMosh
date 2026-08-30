@@ -4260,6 +4260,8 @@
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
 					response={audioResponse}
+					edits={sourceRegistry.edits}
+					onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 				/>
 			{:else if selectedTextClip}
 				<TextClipPanel

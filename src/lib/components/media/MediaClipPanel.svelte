@@ -1,19 +1,23 @@
 <script lang="ts">
-	import { X } from 'lucide-svelte';
+	import { SlidersHorizontal, X } from 'lucide-svelte';
 	import { LaneEffects } from '../../timeline/lane-effects.svelte';
 	import {
 		clipSourceId,
 		DEFAULT_MEDIA_STYLE,
+		DEFAULT_SOURCE_EDIT,
+		isFullCrop,
 		MEDIA_FIT_OPTIONS,
 		type MediaClip,
 		type MediaLane,
 		type MediaStyle,
+		type SourceEdit,
 	} from '../../media';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 	import type { SpectrumData } from '../../types';
 	import type { AudioResponse } from '../../audio/auto-range';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
+	import SourceEditor from '../editor/SourceEditor.svelte';
 
 	const BLEND_MODES = [
 		'normal',
@@ -41,6 +45,9 @@
 		spectrumData?: SpectrumData | null;
 		/** Forwarded to the lane's effect panel for its spectrum read-out. */
 		response?: AudioResponse;
+		/** Per-source edits, keyed by source id. Sparse: only edited media. */
+		edits?: Record<string, SourceEdit>;
+		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
 	}
 
 	let {
@@ -54,7 +61,18 @@
 		hasTrack = false,
 		spectrumData = null,
 		response = undefined,
+		edits = {},
+		onEditChange,
 	}: Props = $props();
+
+	/** True while the media editor is open on this clip's source. */
+	let editingSource = $state(false);
+
+	/** Whether the media this clip draws is not what its file holds. */
+	let sourceEdited = $derived.by(() => {
+		const e = source ? edits[source.id] : undefined;
+		return !!e && (e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask);
+	});
 
 	/** What the selected clip draws: its own source, or the lane's. */
 	let source = $derived(
@@ -165,6 +183,19 @@
 						<option value={s.id}>{s.name}</option>
 					{/each}
 				</select>
+				{#if source && onEditChange}
+					<!-- The other way in is a small button on a rail thumb, which is
+					     nowhere near where the decision to crop something is made. -->
+					<button
+						class="src-edit"
+						class:on={sourceEdited}
+						onclick={() => (editingSource = true)}
+						title="Edit “{source.name}” — crop it, erase parts, remove its background. Applies everywhere this media is used."
+						aria-label="Edit {source.name}"
+					>
+						<SlidersHorizontal size={11} />
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -422,7 +453,41 @@
 	</div>
 {/if}
 
+{#if editingSource && source && onEditChange}
+	<SourceEditor
+		{source}
+		edit={edits[source.id] ?? DEFAULT_SOURCE_EDIT}
+		onChange={(edit) => onEditChange(source!.id, edit)}
+		onClose={() => (editingSource = false)}
+	/>
+{/if}
+
 <style>
+	/* Lit when the media carries an edit, the way the rail's own button is: the
+	   panel should say the file is not what it was before you open anything. */
+	.src-edit {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		background: var(--ink);
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.src-edit:hover {
+		color: var(--text);
+	}
+
+	.src-edit.on {
+		border-color: var(--live);
+		color: var(--live);
+	}
+
 	.clip-panel {
 		display: flex;
 		flex-direction: column;

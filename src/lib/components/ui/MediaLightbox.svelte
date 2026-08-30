@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronLeft, ChevronRight, X } from 'lucide-svelte';
+	import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { pushModalKeyboard } from '../../modal-keyboard';
 
@@ -19,6 +19,11 @@
 		 * Null skips the flight and the item just fades in. */
 		origin?: { x: number; y: number } | null;
 		onClose: () => void;
+		/**
+		 * Hand the item on show over to an editor. Optional: the slideshow has
+		 * nothing to hand it to, and shows no button at all.
+		 */
+		onEdit?: (index: number) => void;
 	}
 
 	let {
@@ -26,6 +31,7 @@
 		index = $bindable(),
 		origin = null,
 		onClose,
+		onEdit,
 	}: Props = $props();
 
 	let closing = $state(false);
@@ -115,9 +121,21 @@
 				<span class="lb-info">
 					{#if items.length > 1}{index + 1} / {items.length}&nbsp;·&nbsp;{/if}{item.name}
 				</span>
-				<button class="lb-close" onclick={close} title="Close (Esc)">
-					<X size={14} />
-				</button>
+				<div class="lb-actions">
+					{#if onEdit}
+						<button
+							class="lb-close"
+							onclick={() => onEdit(index)}
+							title="Edit this media — crop it, erase parts, remove its background"
+							aria-label="Edit this media"
+						>
+							<SlidersHorizontal size={14} />
+						</button>
+					{/if}
+					<button class="lb-close" onclick={close} title="Close (Esc)">
+						<X size={14} />
+					</button>
+				</div>
 			</div>
 			<div class="lb-img-wrap">
 				{#if items.length > 1}
@@ -193,6 +211,13 @@
 		justify-content: space-between;
 		width: 100%;
 		padding: 0 0.25rem;
+	}
+
+	.lb-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-shrink: 0;
 	}
 
 	.lb-info {

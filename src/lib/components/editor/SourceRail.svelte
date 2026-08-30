@@ -254,6 +254,14 @@
 		bind:index={lightboxIndex}
 		origin={lightboxOrigin}
 		onClose={() => (lightboxIndex = null)}
+		onEdit={onEditChange
+			? (i) => {
+					// Straight from previewing it to editing it: seeing the media at
+					// size is when it becomes obvious something has to come out of it.
+					lightboxIndex = null;
+					editingId = sources[i]?.id ?? null;
+				}
+			: undefined}
 	/>
 {/if}
 
