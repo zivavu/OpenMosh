@@ -25,9 +25,11 @@
 
 	let { source, edit, onChange, onClose }: Props = $props();
 
-	/** Long edge of the preview. Small enough that keying every pixel in JS on
-	 * every played frame stays well inside the frame budget. */
-	const PREVIEW_MAX = 360;
+	/** Long edge of the preview buffer. Independent of how big the preview is
+	 * drawn — the buffer is what the JS key walks pixel by pixel on every played
+	 * frame, so it stays well inside the frame budget while the picture on
+	 * screen scales to whatever room the dialog has. */
+	const PREVIEW_MAX = 640;
 
 	let key = $derived(edit.chromaKey);
 	let crop = $derived(edit.crop ?? FULL_CROP);
@@ -94,6 +96,9 @@
 	 */
 	let raw: HTMLCanvasElement | null = null;
 	let rawCtx: CanvasRenderingContext2D | null = null;
+	/** The buffer's size, mirrored into state for the fit below. */
+	let rawW = $state(0);
+	let rawH = $state(0);
 	/** Where frames come from. An image draws once; a video every frame. */
 	let media: HTMLImageElement | HTMLVideoElement | null = null;
 
@@ -158,6 +163,8 @@
 		raw = document.createElement('canvas');
 		raw.width = Math.max(1, Math.round(w * k));
 		raw.height = Math.max(1, Math.round(h * k));
+		rawW = raw.width;
+		rawH = raw.height;
 		rawCtx = raw.getContext('2d', { willReadFrequently: true });
 	}
 
@@ -211,6 +218,33 @@
 		return () => {
 			cancelAnimationFrame(raf);
 			v.pause();
+		};
+	});
+
+	// ── Stage fit ────────────────────────────────────────────────────────────
+	// The picture is sized in JS rather than by max-width/max-height: the crop
+	// overlay is positioned against the canvas's box, so that box has to be the
+	// letterboxed picture exactly and not a stretched parent with bars.
+	let stageEl = $state<HTMLDivElement | undefined>(undefined);
+	let stage = $state({ w: 0, h: 0 });
+
+	$effect(() => {
+		const el = stageEl;
+		if (!el) return;
+		const ro = new ResizeObserver(([entry]) => {
+			stage = { w: entry.contentRect.width, h: entry.contentRect.height };
+		});
+		ro.observe(el);
+		return () => ro.disconnect();
+	});
+
+	/** The buffer's aspect, fitted into the room the stage has. */
+	let fitted = $derived.by(() => {
+		if (!rawW || !rawH || stage.w <= 0 || stage.h <= 0) return null;
+		const k = Math.min(stage.w / rawW, stage.h / rawH);
+		return {
+			w: Math.max(1, Math.floor(rawW * k)),
+			h: Math.max(1, Math.floor(rawH * k)),
 		};
 	});
 
@@ -646,223 +680,233 @@
 			</button>
 		</div>
 
-		<div class="preview">
-			{#if loadError}
-				<p class="warn">{loadError}</p>
-			{:else if !ready}
-				<p class="warn">Reading media…</p>
-			{:else}
-				<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-				<div class="canvas-wrap">
-					<canvas
-						bind:this={canvasEl}
-						class="tool-{tool}"
-						onpointerdown={onPreviewDown}
-						onpointermove={onPreviewMove}
-						onpointerup={onPreviewUp}
-						onpointercancel={onPreviewUp}
-						aria-label="Media preview"
-					></canvas>
-					{#if !isFullCrop(crop)}
-						{@const idle = tool !== 'crop'}
-						<!-- Shown under every tool, not just Crop: what is cropped away is
-						     gone whichever tool is in hand, and hiding it meant erasing and
-						     keying against a frame that wasn't the one being kept.
+		<div class="dialog-body">
+			<div class="stage">
+				<div class="preview" bind:this={stageEl}>
+					{#if loadError}
+						<p class="warn">{loadError}</p>
+					{:else if !ready}
+						<p class="warn">Reading media…</p>
+					{:else}
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<div
+							class="canvas-wrap"
+							style:width={fitted ? `${fitted.w}px` : undefined}
+							style:height={fitted ? `${fitted.h}px` : undefined}
+						>
+							<canvas
+								bind:this={canvasEl}
+								class="tool-{tool}"
+								onpointerdown={onPreviewDown}
+								onpointermove={onPreviewMove}
+								onpointerup={onPreviewUp}
+								onpointercancel={onPreviewUp}
+								aria-label="Media preview"
+							></canvas>
+							{#if !isFullCrop(crop)}
+								{@const idle = tool !== 'crop'}
+								<!-- Shown under every tool, not just Crop: what is cropped away is
+								     gone whichever tool is in hand, and hiding it meant erasing and
+								     keying against a frame that wasn't the one being kept.
 
-						     Four panels rather than one outlined box: the dimming has to
-						     land outside the rectangle, and a border alone reads as a
-						     selection instead of as what is being thrown away. -->
-						<div
-							class="crop-shade"
-							class:idle
-							style="left:0; top:0; right:0; height:{crop.y * 100}%"
-						></div>
-						<div
-							class="crop-shade"
-							class:idle
-							style="left:0; top:{(crop.y + crop.h) * 100}%; right:0; bottom:0"
-						></div>
-						<div
-							class="crop-shade"
-							class:idle
-							style="left:0; top:{crop.y * 100}%; width:{crop.x * 100}%; height:{crop.h * 100}%"
-						></div>
-						<div
-							class="crop-shade"
-							class:idle
-							style="left:{(crop.x + crop.w) * 100}%; top:{crop.y * 100}%; right:0; height:{crop.h * 100}%"
-						></div>
-						<div
-							class="crop-box"
-							class:idle
-							style="left:{crop.x * 100}%; top:{crop.y * 100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
-						></div>
+								     Four panels rather than one outlined box: the dimming has to
+								     land outside the rectangle, and a border alone reads as a
+								     selection instead of as what is being thrown away. -->
+								<div
+									class="crop-shade"
+									class:idle
+									style="left:0; top:0; right:0; height:{crop.y * 100}%"
+								></div>
+								<div
+									class="crop-shade"
+									class:idle
+									style="left:0; top:{(crop.y + crop.h) * 100}%; right:0; bottom:0"
+								></div>
+								<div
+									class="crop-shade"
+									class:idle
+									style="left:0; top:{crop.y * 100}%; width:{crop.x * 100}%; height:{crop.h * 100}%"
+								></div>
+								<div
+									class="crop-shade"
+									class:idle
+									style="left:{(crop.x + crop.w) * 100}%; top:{crop.y * 100}%; right:0; height:{crop.h * 100}%"
+								></div>
+								<div
+									class="crop-box"
+									class:idle
+									style="left:{crop.x * 100}%; top:{crop.y * 100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
+								></div>
+							{/if}
+						</div>
 					{/if}
 				</div>
-			{/if}
-		</div>
 
-		{#if duration > 0}
-			<!-- Videos get a transport: the background to key out is rarely the
-			     same colour all the way through, so the whole clip has to be
-			     watchable with the key live on it. -->
-			<div class="transport">
-				<button
-					class="play-btn"
-					onclick={() => (playing = !playing)}
-					disabled={!ready}
-					title={playing ? 'Pause (Space)' : 'Play (Space)'}
-					aria-label={playing ? 'Pause' : 'Play'}
-				>
-					{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
-				</button>
-				<RangeSlider
-					value={Math.min(currentTime, duration)}
-					min={0}
-					max={duration}
-					step={0.01}
-					disabled={!ready}
-					oninput={seekTo}
-				/>
-				<span class="val">{formatTime(currentTime)}</span>
+				{#if duration > 0}
+					<!-- Videos get a transport: the background to key out is rarely the
+					     same colour all the way through, so the whole clip has to be
+					     watchable with the key live on it. -->
+					<div class="transport">
+						<button
+							class="play-btn"
+							onclick={() => (playing = !playing)}
+							disabled={!ready}
+							title={playing ? 'Pause (Space)' : 'Play (Space)'}
+							aria-label={playing ? 'Pause' : 'Play'}
+						>
+							{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
+						</button>
+						<RangeSlider
+							value={Math.min(currentTime, duration)}
+							min={0}
+							max={duration}
+							step={0.01}
+							disabled={!ready}
+							oninput={seekTo}
+						/>
+						<span class="val">{formatTime(currentTime)}</span>
+					</div>
+				{/if}
 			</div>
-		{/if}
 
-		<div class="tool-bar">
-			{#each TOOLS as t (t.value)}
-				<button
-					class="tool-btn"
-					class:active={tool === t.value}
-					title={t.hint}
-					onclick={() => (tool = t.value)}
-				>
-					{#if t.value === 'key'}<Pipette size={12} />
-					{:else if t.value === 'crop'}<Crop size={12} />
-					{:else}<Eraser size={12} />{/if}
-					{t.label}
-				</button>
-			{/each}
-		</div>
-		<p class="tool-hint">{TOOLS.find((t) => t.value === tool)?.hint}</p>
+			<div class="side">
+				<div class="tool-bar">
+					{#each TOOLS as t (t.value)}
+						<button
+							class="tool-btn"
+							class:active={tool === t.value}
+							title={t.hint}
+							onclick={() => (tool = t.value)}
+						>
+							{#if t.value === 'key'}<Pipette size={12} />
+							{:else if t.value === 'crop'}<Crop size={12} />
+							{:else}<Eraser size={12} />{/if}
+							{t.label}
+						</button>
+					{/each}
+				</div>
+				<p class="tool-hint">{TOOLS.find((t) => t.value === tool)?.hint}</p>
 
-		<div class="rows">
-			{#if tool === 'crop'}
-				<div class="row">
-					<label for="crop-size">Kept</label>
-					<span class="crop-read" id="crop-size">
-						{Math.round(crop.w * 100)}% × {Math.round(crop.h * 100)}%
-					</span>
-					<button
-						class="ghost-btn small"
-						disabled={isFullCrop(crop)}
-						onclick={() => {
-							beforeEdit();
-							onChange({ ...edit, crop: { ...FULL_CROP } });
-						}}
+				<div class="rows">
+					{#if tool === 'crop'}
+						<div class="row">
+							<label for="crop-size">Kept</label>
+							<span class="crop-read" id="crop-size">
+								{Math.round(crop.w * 100)}% × {Math.round(crop.h * 100)}%
+							</span>
+							<button
+								class="ghost-btn small"
+								disabled={isFullCrop(crop)}
+								onclick={() => {
+									beforeEdit();
+									onChange({ ...edit, crop: { ...FULL_CROP } });
+								}}
+							>
+								Whole frame
+							</button>
+						</div>
+					{:else if tool === 'erase'}
+						<div class="row">
+							<label for="er-brush">Brush</label>
+							<RangeSlider
+								id="er-brush"
+								value={brush}
+								min={0.02}
+								max={0.5}
+								step={0.01}
+								oninput={(v) => (brush = v)}
+							/>
+							<span class="val">{Math.round(brush * 100)}</span>
+						</div>
+						<div class="row">
+							<label for="er-restore">Paint back</label>
+							<input
+								id="er-restore"
+								type="checkbox"
+								checked={restoring}
+								onchange={(e) => (restoring = e.currentTarget.checked)}
+							/>
+							<button
+								class="ghost-btn small"
+								disabled={!edit.mask}
+								onclick={clearMask}
+							>
+								Clear
+							</button>
+						</div>
+					{/if}
+
+					{#if tool === 'key'}
+					<div class="row">
+						<label for="ck-on">Remove background</label>
+						<input
+							id="ck-on"
+							type="checkbox"
+							checked={key.enabled}
+							onchange={(e) => setKey('enabled', e.currentTarget.checked)}
+						/>
+					</div>
+
+					<div class="row">
+						<label for="ck-color">Key colour</label>
+						<div class="color-cell">
+							<input
+								id="ck-color"
+								type="color"
+								value={toHex(key.color)}
+								oninput={onHexInput}
+							/>
+							<span class="hint">or click the preview to pick it</span>
+						</div>
+					</div>
+
+					<div class="row">
+						<label for="ck-thr">Threshold</label>
+						<RangeSlider
+							id="ck-thr"
+							value={key.threshold}
+							min={0.01}
+							max={1}
+							step={0.005}
+							disabled={!key.enabled}
+							oninput={(v) => setKey('threshold', v, 'key-threshold')}
+						/>
+						<span class="val">{Math.round(key.threshold * 100)}</span>
+					</div>
+
+					<div
+						class="row"
+						title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs."
 					>
-						Whole frame
-					</button>
-				</div>
-			{:else if tool === 'erase'}
-				<div class="row">
-					<label for="er-brush">Brush</label>
-					<RangeSlider
-						id="er-brush"
-						value={brush}
-						min={0.02}
-						max={0.5}
-						step={0.01}
-						oninput={(v) => (brush = v)}
-					/>
-					<span class="val">{Math.round(brush * 100)}</span>
-				</div>
-				<div class="row">
-					<label for="er-restore">Paint back</label>
-					<input
-						id="er-restore"
-						type="checkbox"
-						checked={restoring}
-						onchange={(e) => (restoring = e.currentTarget.checked)}
-					/>
-					<button
-						class="ghost-btn small"
-						disabled={!edit.mask}
-						onclick={clearMask}
-					>
-						Clear
-					</button>
-				</div>
-			{/if}
+						<label for="ck-luma">Brightness range</label>
+						<RangeSlider
+							id="ck-luma"
+							value={key.lumaRange}
+							min={0.01}
+							max={1}
+							step={0.005}
+							disabled={!key.enabled}
+							oninput={(v) => setKey('lumaRange', v, 'key-luma')}
+						/>
+						<span class="val">{Math.round(key.lumaRange * 100)}</span>
+					</div>
 
-			{#if tool === 'key'}
-			<div class="row">
-				<label for="ck-on">Remove background</label>
-				<input
-					id="ck-on"
-					type="checkbox"
-					checked={key.enabled}
-					onchange={(e) => setKey('enabled', e.currentTarget.checked)}
-				/>
-			</div>
-
-			<div class="row">
-				<label for="ck-color">Key colour</label>
-				<div class="color-cell">
-					<input
-						id="ck-color"
-						type="color"
-						value={toHex(key.color)}
-						oninput={onHexInput}
-					/>
-					<span class="hint">or click the preview to pick it</span>
+					<div class="row">
+						<label for="ck-smooth">Smoothing</label>
+						<RangeSlider
+							id="ck-smooth"
+							value={key.smoothing}
+							min={0}
+							max={0.5}
+							step={0.005}
+							disabled={!key.enabled}
+							oninput={(v) => setKey('smoothing', v, 'key-smoothing')}
+						/>
+						<span class="val">{Math.round(key.smoothing * 100)}</span>
+					</div>
+					{/if}
 				</div>
 			</div>
-
-			<div class="row">
-				<label for="ck-thr">Threshold</label>
-				<RangeSlider
-					id="ck-thr"
-					value={key.threshold}
-					min={0.01}
-					max={1}
-					step={0.005}
-					disabled={!key.enabled}
-					oninput={(v) => setKey('threshold', v, 'key-threshold')}
-				/>
-				<span class="val">{Math.round(key.threshold * 100)}</span>
-			</div>
-
-			<div
-				class="row"
-				title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs."
-			>
-				<label for="ck-luma">Brightness range</label>
-				<RangeSlider
-					id="ck-luma"
-					value={key.lumaRange}
-					min={0.01}
-					max={1}
-					step={0.005}
-					disabled={!key.enabled}
-					oninput={(v) => setKey('lumaRange', v, 'key-luma')}
-				/>
-				<span class="val">{Math.round(key.lumaRange * 100)}</span>
-			</div>
-
-			<div class="row">
-				<label for="ck-smooth">Smoothing</label>
-				<RangeSlider
-					id="ck-smooth"
-					value={key.smoothing}
-					min={0}
-					max={0.5}
-					step={0.005}
-					disabled={!key.enabled}
-					oninput={(v) => setKey('smoothing', v, 'key-smoothing')}
-				/>
-				<span class="val">{Math.round(key.smoothing * 100)}</span>
-			</div>
-			{/if}
 		</div>
 
 		<div class="dialog-foot">
@@ -896,8 +940,16 @@
 	   picture, not the padding. */
 	.canvas-wrap {
 		position: relative;
-		display: inline-flex;
+		display: block;
 		line-height: 0;
+		max-width: 100%;
+		max-height: 100%;
+	}
+
+	.canvas-wrap canvas {
+		display: block;
+		width: 100%;
+		height: 100%;
 	}
 
 	.canvas-wrap canvas.tool-crop {
@@ -997,10 +1049,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		width: 420px;
-		max-width: calc(100vw - 2rem);
-		max-height: calc(100vh - 3rem);
-		overflow: auto;
+		/* Big on purpose: cropping and erasing are aiming tasks, and the old
+		   420px column left the picture smaller than the controls under it. */
+		width: min(1080px, calc(100vw - 3rem));
+		height: min(720px, calc(100vh - 3rem));
 		padding: 1.1rem;
 		background: var(--surface);
 		border: 1px solid var(--line-strong);
@@ -1047,12 +1099,39 @@
 		color: var(--text);
 	}
 
+	/* The picture and its transport on the left, every control on the right, so
+	   the preview keeps the room instead of splitting it with a stack of rows. */
+	.dialog-body {
+		display: flex;
+		flex: 1;
+		gap: 1rem;
+		min-height: 0;
+	}
+
+	.stage {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: 0.6rem;
+		min-width: 0;
+	}
+
+	.side {
+		display: flex;
+		flex-direction: column;
+		flex-shrink: 0;
+		gap: 0.6rem;
+		width: 17rem;
+		overflow-y: auto;
+	}
+
 	/* Checkerboard, so a cut-out reads as transparent rather than as black. */
 	.preview {
 		display: flex;
+		flex: 1;
 		align-items: center;
 		justify-content: center;
-		min-height: 7rem;
+		min-height: 0;
 		border: 1px solid var(--line);
 		border-radius: var(--r-2);
 		overflow: hidden;
@@ -1071,10 +1150,30 @@
 	}
 
 	.preview canvas {
-		display: block;
-		max-width: 100%;
-		height: auto;
 		cursor: crosshair;
+	}
+
+	/* Below this the two columns won't both hold their width, so they stack and
+	   the dialog goes back to being a scrolling sheet. */
+	@media (max-width: 720px) {
+		.edit-dialog {
+			height: auto;
+			max-height: calc(100vh - 3rem);
+			overflow-y: auto;
+		}
+
+		.dialog-body {
+			flex-direction: column;
+		}
+
+		.side {
+			width: auto;
+			overflow: visible;
+		}
+
+		.preview {
+			min-height: 14rem;
+		}
 	}
 
 	.warn {
@@ -1088,7 +1187,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-top: -0.35rem;
+		flex-shrink: 0;
 	}
 
 	.play-btn {
@@ -1126,7 +1225,7 @@
 
 	.row label {
 		flex-shrink: 0;
-		min-width: 7.5rem;
+		min-width: 6.5rem;
 		font-size: 0.7rem;
 		color: var(--text-2);
 	}
