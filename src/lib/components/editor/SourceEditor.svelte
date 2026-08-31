@@ -19,6 +19,7 @@
 		FULL_CROP,
 		IDENTITY_MASK_TRANSFORM,
 		isFullCrop,
+		KEY_NEAR,
 		keyframeAt,
 		MASK_MAX,
 		putKeyframe,
@@ -93,6 +94,9 @@
 	/** Which tool the preview's pointer belongs to. Only one can own a drag. */
 	type Tool = 'key' | 'crop' | 'erase';
 	let tool = $state<Tool>('key');
+	/** The track each tool animates, for shortcuts that act on "this" track. */
+	const TOOL_TRACK = { key: 'key', crop: 'crop', erase: 'mask' } as const satisfies
+		Record<Tool, TrackId>;
 
 	const TOOLS: { value: Tool; label: string; hint: string }[] = [
 		{ value: 'key', label: 'Key', hint: 'Click the preview to pick the colour to remove' },
@@ -232,10 +236,25 @@
 		onChange(withTrack(base, id, keys));
 	}
 
+	/**
+	 * The key under the playhead, if one is close enough to count. Nearest
+	 * rather than first: the strip draws a diamond a few pixels wide, and the
+	 * playhead lands wherever the video seeked to, not on the exact key time.
+	 */
+	function keyHere(id: TrackId): Keyframe<unknown> | null {
+		let best: Keyframe<unknown> | null = null;
+		for (const k of (edit.anim?.[id] ?? []) as Keyframe<unknown>[]) {
+			const d = Math.abs(k.t - currentTime);
+			if (d > KEY_NEAR) continue;
+			if (!best || d < Math.abs(best.t - currentTime)) best = k;
+		}
+		return best;
+	}
+
 	function removeKey(id: TrackId) {
 		const keys = removeKeyframe(
 			(edit.anim?.[id] ?? []) as Keyframe<unknown>[],
-			currentTime,
+			keyHere(id)?.t ?? currentTime,
 		);
 		// Dropping the last key leaves the value it held as the static one, so
 		// switching a track off never changes the picture under the playhead.
@@ -1230,6 +1249,19 @@
 			undo();
 			return;
 		}
+		// Delete takes out the key under the playhead. Which track: the one the
+		// open tool owns, falling back to any other that has a key there, so a
+		// key is never left behind because the wrong tool was selected.
+		if (e.key === 'Delete' && duration > 0) {
+			if ((e.target as HTMLElement | null)?.closest('input, textarea')) return;
+			const order: TrackId[] = [TOOL_TRACK[tool], 'crop', 'key', 'mask'];
+			const id = order.find((t) => keyHere(t));
+			if (!id) return;
+			e.preventDefault();
+			beforeEdit();
+			removeKey(id);
+			return;
+		}
 		// Space is the transport here as it is everywhere else — except while a
 		// control has focus, where it means "press this".
 		if (e.key === ' ' && duration > 0) {
@@ -1373,8 +1405,11 @@
 						{currentTime}
 						onSeek={seekTo}
 						onToggle={(id) => toggleTrack(id as TrackId)}
-						onAdd={(id) => {
+						onAdd={(id, at) => {
 							beforeEdit();
+							// Seek first: the key lands under the playhead, holding the
+							// value the tracks sample there.
+							if (at !== undefined) seekTo(at);
 							addKey(id as TrackId);
 						}}
 						onRemove={(id) => {

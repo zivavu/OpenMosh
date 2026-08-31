@@ -23,6 +23,7 @@ export {
   isFullCrop,
   isIdleSourceEdit,
   KEY_EPSILON,
+  KEY_NEAR,
   keyframeAt,
   MASK_MAX,
   normalizeSourceEdit,

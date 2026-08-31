@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Diamond, Minus, Plus } from 'lucide-svelte';
+	import { KEY_NEAR } from '../../media/source-edit';
 
 	/** One editable track, as the dialog sees it. */
 	export interface KeyTrackView {
@@ -20,7 +21,8 @@
 		currentTime: number;
 		onSeek: (t: number) => void;
 		onToggle: (id: string) => void;
-		onAdd: (id: string) => void;
+		/** `at` places the key somewhere other than the playhead. */
+		onAdd: (id: string, at?: number) => void;
 		onRemove: (id: string) => void;
 	}
 
@@ -34,21 +36,26 @@
 		onRemove,
 	}: Props = $props();
 
-	/** Two keys closer than this share a pixel; also what counts as "on" one. */
-	const NEAR = 0.02;
-
 	function pct(t: number): number {
 		return duration > 0 ? Math.min(Math.max(t / duration, 0), 1) * 100 : 0;
 	}
 
 	function keyAtPlayhead(track: KeyTrackView): boolean {
-		return track.keys.some((t) => Math.abs(t - currentTime) <= NEAR);
+		return track.keys.some((t) => Math.abs(t - currentTime) <= KEY_NEAR);
 	}
 
-	function seekFromEvent(e: MouseEvent) {
+	function onTrackClick(e: MouseEvent, track: KeyTrackView) {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		if (rect.width <= 0) return;
-		onSeek(((e.clientX - rect.left) / rect.width) * duration);
+		const t = ((e.clientX - rect.left) / rect.width) * duration;
+		// Ctrl-click drops a key where it was clicked: the same as seeking there
+		// and pressing +, which is what it does.
+		if (e.ctrlKey || e.metaKey) {
+			if (track.blocked && !track.on) return;
+			onAdd(track.id, t);
+			return;
+		}
+		onSeek(t);
 	}
 </script>
 
@@ -72,13 +79,13 @@
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
-			<div class="key-track" onclick={seekFromEvent}>
+			<div class="key-track" onclick={(e) => onTrackClick(e, track)}>
 				<div class="key-line"></div>
 				{#each track.keys as t (t)}
 					<!-- svelte-ignore a11y_consider_explicit_label -->
 					<button
 						class="key-mark"
-						class:here={Math.abs(t - currentTime) <= NEAR}
+						class:here={Math.abs(t - currentTime) <= KEY_NEAR}
 						style:left="{pct(t)}%"
 						onclick={(e) => {
 							e.stopPropagation();

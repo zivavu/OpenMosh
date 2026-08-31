@@ -265,6 +265,14 @@ export function normalizeSourceEdits(
 /** Two keys are the same key within this many seconds. */
 export const KEY_EPSILON = 1e-3;
 
+/**
+ * How close the playhead has to be to count as sitting *on* a key, for the
+ * editing UI. Wider than `KEY_EPSILON` because that one asks whether two keys
+ * are the same key, and this one asks whether a person aiming at a diamond a
+ * few pixels wide hit it.
+ */
+export const KEY_NEAR = 0.02;
+
 function lerp(a: number, b: number, k: number): number {
   return a + (b - a) * k;
 }
