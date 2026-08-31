@@ -183,12 +183,8 @@
 		return ((cy - r.top) / r.height) * SVG_H;
 	}
 
-	// ── Touch handler (non-passive, handles dots + double-tap + seg/seek drags) ──
+	// ── Touch handler (non-passive, handles dots + seg/seek drags) ──
 	const DOT_HIT_PX = 28; // pixel radius for dot hit detection on touch
-	let lastTapTime = 0;
-	let lastTapPos = { x: 0, y: 0 };
-	const DOUBLE_TAP_MS = 350;
-	const DOUBLE_TAP_PX = 30;
 
 	$effect(() => {
 		const el = svgEl;
@@ -239,17 +235,6 @@
 					}
 				}
 			}
-
-			// Double-tap detection → create segment
-			const now = performance.now();
-			const distFromLast = Math.sqrt((cx - lastTapPos.x) ** 2 + (cy - lastTapPos.y) ** 2);
-			if (now - lastTapTime < DOUBLE_TAP_MS && distFromLast < DOUBLE_TAP_PX) {
-				lastTapTime = 0;
-				onDblClick({ clientX: cx, clientY: cy } as MouseEvent);
-				return;
-			}
-			lastTapTime = now;
-			lastTapPos = { x: cx, y: cy };
 
 			// Check seg-y drag (hit a segment line)
 			for (const sv of segVis) {
@@ -340,55 +325,6 @@
 	);
 
 	// ── Event handlers ───────────────────────────────────────────────────────────
-	function onDblClick(e: MouseEvent) {
-		if (trackDuration <= 0) return;
-		const time = vp.clientXToTime(e.clientX);
-		const svgY = clientYToSvgY(e.clientY);
-
-		if (config.segments.length === 0) {
-			emit({
-				segments: [
-					{
-						id: generateId(),
-						startTime: 0,
-						endTime: trackDuration,
-						subdivision: yToSub(svgY),
-					},
-				],
-			});
-			return;
-		}
-
-		const sorted = [...config.segments].sort(
-			(a, b) => a.startTime - b.startTime,
-		);
-		const hit = sorted.find((s) => {
-			const end = s.endTime ?? trackDuration;
-			return time > s.startTime + 0.01 && time < end - 0.01;
-		});
-		if (!hit) return;
-
-		const end = hit.endTime ?? trackDuration;
-		emit({
-			segments: config.segments
-				.filter((s) => s.id !== hit.id)
-				.concat([
-					{
-						id: generateId(),
-						startTime: hit.startTime,
-						endTime: time,
-						subdivision: hit.subdivision,
-					},
-					{
-						id: generateId(),
-						startTime: time,
-						endTime: end,
-						subdivision: hit.subdivision,
-					},
-				]),
-		});
-	}
-
 	function startBndDrag(
 		e: PointerEvent,
 		leftSegId: string | null,
@@ -837,7 +773,6 @@
 			height={SVG_H}
 			class="step-svg"
 			style:cursor={svgCursor}
-			ondblclick={onDblClick}
 			onpointerdown={onLanePointerDown}
 		>
 			<!-- Subtle grid rows -->
@@ -1021,7 +956,7 @@
 			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
-					Double-click to create · drag bar up/down to change beat · drag dot to
+					Ctrl+click to create · drag bar up/down to change beat · drag dot to
 					move boundary
 				</text>
 			{/if}

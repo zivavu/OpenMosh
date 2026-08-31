@@ -78,7 +78,7 @@
 			title: 'Timeline editing',
 			shortcuts: [
 				{
-					keys: ['Dbl-click', 'Ctrl+Click'],
+					keys: ['Ctrl+Click'],
 					description: 'Create / split segment at cursor',
 				},
 				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
