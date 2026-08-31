@@ -685,6 +685,10 @@
 	 * on the fast path with its soft edge intact.
 	 */
 	let morphCanvas: HTMLCanvasElement | null = null;
+	// What morphCanvas currently holds, so an unchanged frame skips the pass.
+	let morphFrom: string | null = null;
+	let morphTo: string | null = null;
+	let morphMix = -1;
 	function morphedMask(): HTMLCanvasElement | null {
 		const from = live.mask;
 		const to = live.maskNext;
@@ -700,6 +704,23 @@
 		}
 		const ctx = c.getContext('2d', { willReadFrequently: true });
 		if (!ctx) return null;
+		// One pass over every mask pixel, so it is worth not repeating it for a
+		// playhead that has not moved — paint() runs on every frame and on every
+		// knob.
+		// Compared by reference first — sampling hands back the same string object
+		// for an unchanged key, so this is a pointer check on the common path.
+		if (
+			from === morphFrom &&
+			to === morphTo &&
+			mix === morphMix &&
+			c.width === a.w &&
+			c.height === a.h
+		) {
+			return c;
+		}
+		morphFrom = from;
+		morphTo = to;
+		morphMix = mix;
 		// The same alignment the shader does: both shapes slid onto the middle
 		// they are travelling through, so their boundaries have an in-between.
 		const shift = maskShift(a.field.centre, b.field.centre);
@@ -746,6 +767,9 @@
 		return c;
 	}
 
+	/** True while a brush stroke is in flight. See maskPixels. */
+	let painting = false;
+
 	/** Freeze the morphed shape into the canvas strokes are painted on. */
 	function bakeMorph() {
 		const morphed = morphedMask();
@@ -757,7 +781,12 @@
 
 	let maskScratch: HTMLCanvasElement | null = null;
 	function maskPixels(): Uint8ClampedArray | null {
-		const shape = morphedMask() ?? maskCanvas;
+		// Mid-stroke the working canvas *is* the shape: the morph was baked into
+		// it when the stroke began, and every dab since has gone there. Reading
+		// the morph instead means a drag paints into a canvas nothing is showing
+		// and the strokes only appear on release, when committing a key collapses
+		// the morph — which is exactly how this looked.
+		const shape = (painting ? null : morphedMask()) ?? maskCanvas;
 		if (!shape || !raw) return null;
 		if (
 			!maskScratch ||
@@ -965,6 +994,7 @@
 			// former would throw the blend away and land a key that reverts to an
 			// older shape — so the stroke starts from what is actually on screen.
 			bakeMorph();
+			painting = true;
 			// Alt is the transient form of the Restore toggle, the way it is in
 			// every paint program; the toggle stays where the user left it.
 			const held = restoring;
@@ -1069,7 +1099,10 @@
 	}
 
 	function onPreviewUp(e: PointerEvent) {
-		if (drag?.kind === 'erase') commitMask();
+		if (drag?.kind === 'erase') {
+			commitMask();
+			painting = false;
+		}
 		drag = null;
 		gestureTime = null;
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
