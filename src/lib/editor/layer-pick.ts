@@ -26,11 +26,14 @@ export interface LayerHitBox {
   rot: number;
 }
 
-/** What a click on the preview landed on. */
-export interface LayerPick {
-  kind: "media" | "text";
-  laneId: string;
-}
+/**
+ * What a click on the preview landed on: a layer, or the image every layer
+ * sits over. "base" carries no id — what that image belongs to is the editor's
+ * question, and it answers differently per mode.
+ */
+export type LayerPick =
+  | { kind: "media" | "text"; laneId: string }
+  | { kind: "base" };
 
 /** Where a media lane's placement lands, in output pixels. */
 export interface MediaRect {

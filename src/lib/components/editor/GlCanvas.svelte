@@ -148,9 +148,11 @@
       /** Drawn over the whole preview box — for states where the canvas holds
        * nothing worth looking at, like a sequence with an empty media pool. */
       overlay?: Snippet;
-      /** Clicking the preview picks the layer drawn on top at that point;
-       * misses report null, so a click on bare image can clear the selection.
-       * Absent means the preview isn't a way of selecting anything. */
+      /** Clicking the preview picks the layer drawn on top at that point, or
+       * the base image when the click lands past every layer. Null means the
+       * click found nothing at all — off the frame, or on a soloed lane's
+       * blanked background. Absent means the preview isn't a way of selecting
+       * anything. */
       onPickLayer?: ((pick: LayerPick | null) => void) | null;
       /** Live FFT bins for the audio-bars effect. The AnalyserNode mutates one
        * array in place, so this is read fresh every rendered frame rather than
@@ -334,19 +336,32 @@
       if (!renderer || !canvasEl || e.target !== canvasEl) return;
       const fit = frameFit();
       if (!fit) return;
-      const boxes = layerHitBoxes(
-         pickable.media,
-         pickable.text,
-         canvasEl.width,
-         canvasEl.height,
-         (layer) => renderer!.mediaLayerRect(layer.key, layer.style),
-      );
+      const x = (e.clientX - fit.left) / fit.s;
+      const y = (e.clientY - fit.top) / fit.s;
+      // Fullscreen letterboxes the frame inside the element, so a click can
+      // land on the canvas and still be off the picture.
+      if (x < 0 || y < 0 || x >= canvasEl.width || y >= canvasEl.height) {
+         onPickLayer(null);
+         return;
+      }
       const hit = pickTopLayer(
-         boxes,
-         (e.clientX - fit.left) / fit.s,
-         (e.clientY - fit.top) / fit.s,
+         layerHitBoxes(
+            pickable.media,
+            pickable.text,
+            canvasEl.width,
+            canvasEl.height,
+            (layer) => renderer!.mediaLayerRect(layer.key, layer.style),
+         ),
+         x,
+         y,
       );
-      onPickLayer(hit ? { kind: hit.kind, laneId: hit.laneId } : null);
+      if (hit) {
+         onPickLayer({ kind: hit.kind, laneId: hit.laneId });
+         return;
+      }
+      // Past every layer is the image they sit over — except under solo, where
+      // the source is blanked and that is bare black, belonging to nothing.
+      onPickLayer(soloMediaLaneId ? null : { kind: "base" });
    }
    let imageReady = $state(false);
    let error: string | null = $state(null);

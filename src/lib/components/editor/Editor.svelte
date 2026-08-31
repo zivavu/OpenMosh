@@ -3270,31 +3270,40 @@
 	});
 
 	/**
-	 * Select the layer the preview was clicked on. The pick names a lane; which
+	 * Select what the preview was clicked on. A layer pick names a lane; which
 	 * of its clips to open is whatever is on screen at the playhead, since that
 	 * is the one the click was aimed at.
 	 *
-	 * A miss clears the layer selections and nothing else: segments and fx clips
-	 * aren't drawn on the canvas, so there is no bare canvas to click them off.
+	 * Clicking past every layer lands on the base image. What that image belongs
+	 * to depends on the mode: a segment in sequence mode, and in single mode the
+	 * main chain — which is already what the rack shows once no layer is in the
+	 * way, so there dropping the layer selection is the whole gesture.
 	 */
 	function pickLayer(pick: LayerPick | null) {
-		if (!pick) {
-			selectedMediaClipId = null;
-			selectedMediaClipIds = [];
-			selectedTextClipId = null;
-			return;
-		}
-		if (pick.kind === 'media') {
+		if (pick?.kind === 'media') {
 			const lane = mediaTimeline.lanes.find((l) => l.id === pick.laneId);
 			const clip = lane ? clipAt(lane, textTime) : null;
 			if (!clip) return;
 			selectedMediaClipId = clip.id;
 			selectedMediaClipIds = [clip.id];
-		} else {
+			return;
+		}
+		if (pick?.kind === 'text') {
 			const lane = textTimeline.lanes.find((l) => l.id === pick.laneId);
 			const clip = lane ? clipAt(lane, textTime) : null;
 			if (clip) selectedTextClipId = clip.id;
+			return;
 		}
+		selectedMediaClipId = null;
+		selectedMediaClipIds = [];
+		selectedTextClipId = null;
+		if (pick?.kind !== 'base' || !isSequenceMode) return;
+		// The segment the canvas is drawing, which is the one just clicked —
+		// activeSegment() is what the preview itself is fed.
+		const seg = activeSegment();
+		if (!seg) return;
+		selectedSegmentId = seg.id;
+		seqSelectedIds = [seg.id];
 	}
 
 	// ←/→ walk a layer lane's moshes, the same way they walk a segment's or an
