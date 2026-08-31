@@ -10,8 +10,17 @@
       type SourceFit,
    } from "../../gl/renderer";
    import { untrack } from "svelte";
+   import {
+      layerHitBoxes,
+      pickTopLayer,
+      type LayerPick,
+   } from "../../editor/layer-pick";
    import { onFontsChanged } from "../../text-overlay";
-   import { resolveTextLayersAt, type TextTimeline } from "../../text";
+   import {
+      resolveTextLayersAt,
+      type ResolvedTextLayer,
+      type TextTimeline,
+   } from "../../text";
    import {
       resolveMediaLayersAt,
       type MediaLane,
@@ -139,6 +148,10 @@
       /** Drawn over the whole preview box — for states where the canvas holds
        * nothing worth looking at, like a sequence with an empty media pool. */
       overlay?: Snippet;
+      /** Clicking the preview picks the layer drawn on top at that point;
+       * misses report null, so a click on bare image can clear the selection.
+       * Absent means the preview isn't a way of selecting anything. */
+      onPickLayer?: ((pick: LayerPick | null) => void) | null;
       /** Live FFT bins for the audio-bars effect. The AnalyserNode mutates one
        * array in place, so this is read fresh every rendered frame rather than
        * reacted to. */
@@ -187,6 +200,7 @@
       bpm = 0,
       forceAnimation = false,
       overlay = undefined,
+      onPickLayer = null,
    }: Props = $props();
 
    let frameTimes: number[] = [];
@@ -219,34 +233,44 @@
       rot: number;
    } | null>(null);
 
+   /**
+    * Where the rendered frame sits in client space and what it was scaled by:
+    * an output pixel lands at `left + x * s`. Both the outline and the layer
+    * picking go through here, so a click can't land somewhere the outline says
+    * it didn't.
+    *
+    * Fullscreen letterboxes the frame inside the element (object-fit:
+    * contain); outside it the element is already the content box, where both
+    * ratios are equal and this reduces to the one scale.
+    */
+   function frameFit(): { left: number; top: number; s: number } | null {
+      const cv = canvasEl;
+      if (!cv || cv.width <= 0 || cv.height <= 0) return null;
+      const cr = cv.getBoundingClientRect();
+      const s = Math.min(cr.width / cv.width, cr.height / cv.height);
+      if (!Number.isFinite(s) || s <= 0) return null;
+      return {
+         left: cr.left + (cr.width - cv.width * s) / 2,
+         top: cr.top + (cr.height - cv.height * s) / 2,
+         s,
+      };
+   }
+
    function updateOutline() {
       const lane = selectedMediaLane;
-      const cv = canvasEl;
       const rect =
-         lane && cv && renderer
-            ? renderer.mediaLayerRect(lane.id, lane.style)
-            : null;
-      if (!rect || !cv || !previewArea) {
+         lane && renderer ? renderer.mediaLayerRect(lane.id, lane.style) : null;
+      const fit = rect ? frameFit() : null;
+      if (!rect || !fit || !previewArea) {
          if (outline) outline = null;
          return;
       }
-      const cr = cv.getBoundingClientRect();
       const ar = previewArea.getBoundingClientRect();
-      // Fullscreen letterboxes the frame inside the element (object-fit:
-      // contain); outside it the element is already the content box, where both
-      // ratios are equal and this reduces to the one scale.
-      const s = Math.min(cr.width / cv.width, cr.height / cv.height);
-      if (!Number.isFinite(s) || s <= 0) {
-         if (outline) outline = null;
-         return;
-      }
-      const ox = cr.left - ar.left + (cr.width - cv.width * s) / 2;
-      const oy = cr.top - ar.top + (cr.height - cv.height * s) / 2;
       const next = {
-         left: ox + rect.x * s,
-         top: oy + rect.y * s,
-         w: rect.w * s,
-         h: rect.h * s,
+         left: fit.left - ar.left + rect.x * fit.s,
+         top: fit.top - ar.top + rect.y * fit.s,
+         w: rect.w * fit.s,
+         h: rect.h * fit.s,
          rot: rect.rot,
       };
       // Compared before assigning: this runs on every drawn frame, and a fresh
@@ -291,6 +315,39 @@
       ro.observe(area);
       return () => ro.disconnect();
    });
+
+   // ── Click to select a layer ──────────────────────────────────────────────
+   // Written by the draw loop, read only when a click arrives: the layers this
+   // frame put on screen, which is the only honest answer to what was clicked.
+   let pickable: { media: ResolvedMediaLayer[]; text: ResolvedTextLayer[] } = {
+      media: EMPTY_MEDIA,
+      text: [],
+   };
+
+   /** Hand the layer under the pointer to the editor. Pointerdown rather than
+    * click, matching the timeline lanes, and left button only — the canvas has
+    * no menu of its own to compete with. */
+   function pickLayerAt(e: PointerEvent) {
+      if (!onPickLayer || e.button !== 0) return;
+      // Anything else in the preview box is its own control, and the overlay
+      // covers a canvas whose contents are stale by the time it is up.
+      if (!renderer || !canvasEl || e.target !== canvasEl) return;
+      const fit = frameFit();
+      if (!fit) return;
+      const boxes = layerHitBoxes(
+         pickable.media,
+         pickable.text,
+         canvasEl.width,
+         canvasEl.height,
+         (layer) => renderer!.mediaLayerRect(layer.key, layer.style),
+      );
+      const hit = pickTopLayer(
+         boxes,
+         (e.clientX - fit.left) / fit.s,
+         (e.clientY - fit.top) / fit.s,
+      );
+      onPickLayer(hit ? { kind: hit.kind, laneId: hit.laneId } : null);
+   }
    let imageReady = $state(false);
    let error: string | null = $state(null);
 
@@ -422,6 +479,9 @@
       // stall on re-uploading them.
       if (media.length > 0) mediaDriver?.(media);
       const shown = solo ? media.filter((l) => l.laneId === solo) : media;
+      // What a click can land on is what the frame actually drew, so a soloed
+      // lane's hidden neighbours can't be picked out of the black.
+      pickable = { media: shown, text: layers };
       renderer!.setBlankSource(!!solo);
       const tr = solo ? null : transition;
       if (tr && tr.durationSec > 0) {
@@ -798,7 +858,11 @@
    });
 </script>
 
-<div class="preview-area" bind:this={previewArea}>
+<!-- Selecting by pointer is a shortcut, not the only way in: every layer the
+     canvas can be clicked on is also selectable from its timeline lane, which
+     is where the keyboard and the screen reader work. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="preview-area" bind:this={previewArea} onpointerdown={pickLayerAt}>
    {#if !warmCanvas}
       <canvas
          bind:this={canvas}

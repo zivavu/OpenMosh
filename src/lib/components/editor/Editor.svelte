@@ -115,6 +115,8 @@
 		nextLayerZ,
 		moveLayerTo,
 	} from '../../timeline/layer-order';
+	import { clipAt } from '../../timeline/clips';
+	import type { LayerPick } from '../../editor/layer-pick';
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import { MediaLayerDriver } from '../../editor/media-layer-driver';
 	import {
@@ -3267,6 +3269,34 @@
 		if (selectedTextClipId) keepOnlySelection('text');
 	});
 
+	/**
+	 * Select the layer the preview was clicked on. The pick names a lane; which
+	 * of its clips to open is whatever is on screen at the playhead, since that
+	 * is the one the click was aimed at.
+	 *
+	 * A miss clears the layer selections and nothing else: segments and fx clips
+	 * aren't drawn on the canvas, so there is no bare canvas to click them off.
+	 */
+	function pickLayer(pick: LayerPick | null) {
+		if (!pick) {
+			selectedMediaClipId = null;
+			selectedMediaClipIds = [];
+			selectedTextClipId = null;
+			return;
+		}
+		if (pick.kind === 'media') {
+			const lane = mediaTimeline.lanes.find((l) => l.id === pick.laneId);
+			const clip = lane ? clipAt(lane, textTime) : null;
+			if (!clip) return;
+			selectedMediaClipId = clip.id;
+			selectedMediaClipIds = [clip.id];
+		} else {
+			const lane = textTimeline.lanes.find((l) => l.id === pick.laneId);
+			const clip = lane ? clipAt(lane, textTime) : null;
+			if (clip) selectedTextClipId = clip.id;
+		}
+	}
+
 	// ←/→ walk a layer lane's moshes, the same way they walk a segment's or an
 	// fx clip's. One stack for both kinds, keyed by lane id: ids are unique
 	// across the two timelines and only one lane is ever selected.
@@ -3839,6 +3869,7 @@
 				{sourceDurations}
 				sourceEditId={isSequenceMode ? sourceIdOf(activeSegment()) : null}
 				outgoingEditId={isSequenceMode ? (outgoingSource()?.id ?? null) : null}
+				onPickLayer={pickLayer}
 				sourceEditTime={isSequenceMode ? sourceTimeIn(activeSegment()) : 0}
 				outgoingEditTime={isSequenceMode ? (outgoingSource()?.time ?? 0) : 0}
 			/>

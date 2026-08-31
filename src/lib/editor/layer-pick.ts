@@ -26,6 +26,12 @@ export interface LayerHitBox {
   rot: number;
 }
 
+/** What a click on the preview landed on. */
+export interface LayerPick {
+  kind: "media" | "text";
+  laneId: string;
+}
+
 /** Where a media lane's placement lands, in output pixels. */
 export interface MediaRect {
   x: number;
