@@ -11,9 +11,21 @@
 		 * over the Effects tab, so the Settings tab is still one tap away.
 		 */
 		topPanel?: Snippet;
+		/**
+		 * The top panel renders `settings` itself, so the sidebar shouldn't. For
+		 * a panel that ends in an effect chain of its own, which the settings
+		 * have to sit above. Mobile is unaffected: its tabs never show both.
+		 */
+		settingsInTopPanel?: boolean;
 	}
 
-	let { children, settings, effectsPanel, topPanel }: Props = $props();
+	let {
+		children,
+		settings,
+		effectsPanel,
+		topPanel,
+		settingsInTopPanel = false,
+	}: Props = $props();
 
 	const SHEET_HEIGHT_VH = 70;
 	let panelOpen = $state(false);
@@ -153,7 +165,9 @@
 			{#if topPanel}
 				{@render topPanel()}
 			{/if}
-			{@render settings!()}
+			{#if !settingsInTopPanel}
+				{@render settings!()}
+			{/if}
 			{@render effectsPanel!()}
 		</div>
 	{:else if children}

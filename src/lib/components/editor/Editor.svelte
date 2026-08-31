@@ -4284,7 +4284,47 @@
 			}}
 		/>
 	</div>
-	<MobileSheet bind:this={_mobileSheetRef}>
+	{#snippet moshSettings()}
+		<div class="mosh-settings-wrapper">
+			<MoshSettingsPanel
+				bind:moshMin={() => fxSetting('moshMin', moshMin),
+				(v) => setFxSetting('moshMin', v, (g) => (moshMin = g))}
+				bind:moshMax={() => fxSetting('moshMax', moshMax),
+				(v) => setFxSetting('moshMax', v, (g) => (moshMax = g))}
+				bind:randomizeOrder={() => fxSetting('randomizeOrder', randomizeOrder),
+				(v) => setFxSetting('randomizeOrder', v, (g) => (randomizeOrder = g))}
+				bind:moshAudioLink={() => fxSetting('moshAudioLink', moshAudioLink),
+				(v) => setFxSetting('moshAudioLink', v, (g) => (moshAudioLink = g))}
+				bind:moshAudioLinkStrength={() =>
+					fxSetting('moshAudioLinkStrength', moshAudioLinkStrength),
+				(v) =>
+					setFxSetting(
+						'moshAudioLinkStrength',
+						v,
+						(g) => (moshAudioLinkStrength = g),
+					)}
+				bind:moshLinkBand={() => fxSetting('moshLinkBand', moshLinkBand),
+				(v) => setFxSetting('moshLinkBand', v, (g) => (moshLinkBand = g))}
+				bind:audioSmoothing={() => fxResponse('smoothing', audioSmoothing),
+				(v) => setFxResponse('smoothing', v, (g) => (audioSmoothing = g))}
+				bind:audioPunch={() => fxResponse('punch', audioPunch),
+				(v) => setFxResponse('punch', v, (g) => (audioPunch = g))}
+				targetLabel={panelFxLane?.name ?? null}
+				{hasAudio}
+				showTiming={isSequenceMode || !!audio.trackFile}
+				bpm={sequenceBpm}
+				{bpmDetecting}
+				hasTrack={!!audio.trackFile}
+				onDetectBpm={runSequenceBpmDetection}
+				onBpmChange={setSequenceBpm}
+			/>
+		</div>
+	{/snippet}
+
+	<MobileSheet
+		bind:this={_mobileSheetRef}
+		settingsInTopPanel={!!selectedMediaClip}
+	>
 		{#snippet topPanel()}
 			{#if selectedMediaClip}
 				<MediaClipPanel
@@ -4301,6 +4341,7 @@
 					edits={sourceRegistry.edits}
 					onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 					onEditingChange={onSourceEditingChange}
+					settings={moshSettings}
 				/>
 			{:else if selectedTextClip}
 				<TextClipPanel
@@ -4317,40 +4358,7 @@
 			{/if}
 		{/snippet}
 		{#snippet settings()}
-			<div class="mosh-settings-wrapper">
-				<MoshSettingsPanel
-					bind:moshMin={() => fxSetting('moshMin', moshMin),
-					(v) => setFxSetting('moshMin', v, (g) => (moshMin = g))}
-					bind:moshMax={() => fxSetting('moshMax', moshMax),
-					(v) => setFxSetting('moshMax', v, (g) => (moshMax = g))}
-					bind:randomizeOrder={() => fxSetting('randomizeOrder', randomizeOrder),
-					(v) => setFxSetting('randomizeOrder', v, (g) => (randomizeOrder = g))}
-					bind:moshAudioLink={() => fxSetting('moshAudioLink', moshAudioLink),
-					(v) => setFxSetting('moshAudioLink', v, (g) => (moshAudioLink = g))}
-					bind:moshAudioLinkStrength={() =>
-						fxSetting('moshAudioLinkStrength', moshAudioLinkStrength),
-					(v) =>
-						setFxSetting(
-							'moshAudioLinkStrength',
-							v,
-							(g) => (moshAudioLinkStrength = g),
-						)}
-					bind:moshLinkBand={() => fxSetting('moshLinkBand', moshLinkBand),
-					(v) => setFxSetting('moshLinkBand', v, (g) => (moshLinkBand = g))}
-					bind:audioSmoothing={() => fxResponse('smoothing', audioSmoothing),
-					(v) => setFxResponse('smoothing', v, (g) => (audioSmoothing = g))}
-					bind:audioPunch={() => fxResponse('punch', audioPunch),
-					(v) => setFxResponse('punch', v, (g) => (audioPunch = g))}
-					targetLabel={panelFxLane?.name ?? null}
-					{hasAudio}
-					showTiming={isSequenceMode || !!audio.trackFile}
-					bpm={sequenceBpm}
-					{bpmDetecting}
-					hasTrack={!!audio.trackFile}
-					onDetectBpm={runSequenceBpmDetection}
-					onBpmChange={setSequenceBpm}
-				/>
-			</div>
+			{@render moshSettings()}
 		{/snippet}
 		{#snippet effectsPanel()}
 			<!-- A selected layer is edited by the top panel instead; the main
