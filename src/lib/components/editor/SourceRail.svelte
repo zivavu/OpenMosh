@@ -34,6 +34,10 @@
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		edits?: Record<string, SourceEdit>;
 		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
+		/** Fired as the media edit modal opens and closes. The editor stops
+		 * playback while it is up: the modal has its own transport, and a clip
+		 * running behind it fights the one being scrubbed inside. */
+		onEditingChange?: (open: boolean) => void;
 	}
 
 	let {
@@ -47,6 +51,7 @@
 		onReorder,
 		edits = {},
 		onEditChange,
+		onEditingChange,
 	}: Props = $props();
 
 	const OPEN_KEY = 'openmosh-seq-rail-open';
@@ -76,6 +81,9 @@
 	/** Source whose editor is open; null when the dialog is closed. */
 	let editingId = $state<string | null>(null);
 	let editingSource = $derived(sources.find((s) => s.id === editingId) ?? null);
+
+	// Report the modal's state up, so the editor can stop the preview behind it.
+	$effect(() => onEditingChange?.(!!editingSource));
 
 	/** Any of the three tools having been used, not just the key: the lit button
 	 * is how the rail says this media is not what the file holds. */

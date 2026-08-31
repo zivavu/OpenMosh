@@ -49,6 +49,10 @@
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		edits?: Record<string, SourceEdit>;
 		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
+		/** Fired as the media edit modal opens and closes. The editor stops
+		 * playback while it is up: the modal has its own transport, and a clip
+		 * running behind it fights the one being scrubbed inside. */
+		onEditingChange?: (open: boolean) => void;
 	}
 
 	let {
@@ -64,10 +68,14 @@
 		response = undefined,
 		edits = {},
 		onEditChange,
+		onEditingChange,
 	}: Props = $props();
 
 	/** True while the media editor is open on this clip's source. */
 	let editingSource = $state(false);
+
+	// Report the modal's state up, so the editor can stop the preview behind it.
+	$effect(() => onEditingChange?.(editingSource));
 
 	/** Whether the media this clip draws is not what its file holds. */
 	let sourceEdited = $derived.by(() => {

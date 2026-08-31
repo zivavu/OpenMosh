@@ -2228,6 +2228,20 @@
 		if (isVideo) pauseVideo();
 	}
 
+	/** True while the media edit modal is up. */
+	let sourceEditOpen = $state(false);
+
+	/**
+	 * The modal carries its own transport and scrubs the media frame by frame.
+	 * Leaving the preview running behind it means two players fighting over the
+	 * same clip, and the canvas is covered anyway — so playback stops and the
+	 * render loop idles until the modal closes.
+	 */
+	function onSourceEditingChange(open: boolean) {
+		sourceEditOpen = open;
+		if (open) pauseTrack();
+	}
+
 	function seekTo(t: number) {
 		audio.seekTo(t);
 	}
@@ -3792,7 +3806,8 @@
 				freezeAnimation={isImageFormat}
 				suspended={recordingState.recording ||
 					noSequenceMedia ||
-					sequenceGridOpen}
+					sequenceGridOpen ||
+					sourceEditOpen}
 				{warmCanvas}
 				{warmRenderer}
 				textTimeline={textTimeline.enabled ? textTimeline : null}
@@ -4016,6 +4031,7 @@
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
+				onEditingChange={onSourceEditingChange}
 			/>
 		{/if}
 		{#if showVideoBar && !videoIsMaster}
@@ -4284,6 +4300,7 @@
 					response={audioResponse}
 					edits={sourceRegistry.edits}
 					onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
+					onEditingChange={onSourceEditingChange}
 				/>
 			{:else if selectedTextClip}
 				<TextClipPanel
