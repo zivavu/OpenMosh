@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { X } from 'lucide-svelte';
 	import { LaneEffects } from '../../timeline/lane-effects.svelte';
 	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
@@ -41,6 +42,13 @@
 		spectrumData?: SpectrumData | null;
 		/** Forwarded to the lane's effect panel for its spectrum read-out. */
 		response?: AudioResponse;
+		/**
+		 * The sidebar's own settings, rendered between this clip's controls and
+		 * its effect chain. They belong to the sidebar, not to the clip — but a
+		 * selected lane puts a chain in the middle of that column, and settings
+		 * stranded below it read as belonging to the text's effects.
+		 */
+		settings?: Snippet;
 	}
 
 	let {
@@ -53,6 +61,7 @@
 		hasTrack = false,
 		spectrumData = null,
 		response = undefined,
+		settings,
 	}: Props = $props();
 
 	function setUnderEffects(under: boolean) {
@@ -346,7 +355,11 @@
 			/>
 		</div>
 
-		<h3 class="panel-title section">Text effects</h3>
+		{#if settings}
+			<div class="settings-slot">{@render settings()}</div>
+		{/if}
+
+		<h3 class="panel-title section" class:no-rule={!!settings}>Text effects</h3>
 		{#if opaqueNames.length > 0}
 			<p class="warn">
 				{opaqueNames.join(', ')} paints its own background, so it fills the frame
@@ -450,6 +463,27 @@
 		margin-top: 0.5rem;
 		padding-top: 0.6rem;
 		border-top: 1px solid var(--line);
+	}
+
+	/* The settings above already close with a rule of their own. */
+	.section.no-rule {
+		margin-top: 0.75rem;
+		padding-top: 0;
+		border-top: none;
+	}
+
+	/* Edge to edge, like the chain below it: it is a sidebar section on loan,
+	   and it should read as one rather than as a boxed-in row of this panel. */
+	.settings-slot {
+		margin: 0.5rem -0.75rem 0;
+		border-top: 1px solid var(--line);
+	}
+
+	/* Mobile keeps them on the Settings tab, where they always were. */
+	@media (max-width: 800px) {
+		.settings-slot {
+			display: none;
+		}
 	}
 
 

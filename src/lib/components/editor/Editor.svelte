@@ -4363,7 +4363,7 @@
 
 	<MobileSheet
 		bind:this={_mobileSheetRef}
-		settingsInTopPanel={!!selectedMediaClip}
+		settingsInTopPanel={!!selectedMediaClip || !!selectedTextClip}
 	>
 		{#snippet topPanel()}
 			{#if selectedMediaClip}
@@ -4394,6 +4394,7 @@
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
 					response={audioResponse}
+					settings={moshSettings}
 				/>
 			{/if}
 		{/snippet}
