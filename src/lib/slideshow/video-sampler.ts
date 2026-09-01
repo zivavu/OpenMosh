@@ -1,9 +1,5 @@
-import {
-  openPlayableVideo,
-  SampleQueue,
-  sleep,
-  toVideoFrame,
-} from "../video/decode";
+import { openPlayableVideo, sleep, toVideoFrame, type FrameQueue } from "../video/decode";
+import { openVideoFrameSource } from "../video/frame-source";
 
 export interface SlideVideoProbe {
   duration: number;
@@ -76,6 +72,8 @@ async function drawThumb(frame: VideoFrame, size: number): Promise<Blob | null> 
 
 /** Forward jump past this many seconds is seeked to rather than decoded through. */
 const SEEK_AHEAD = 0.75;
+/** If decode falls this far (media seconds) behind a preview, keyframe-jump. */
+const MAX_DECODE_LAG = 0.5;
 /** Backward slack, so float noise in a clock doesn't trigger a seek. */
 const BACK_EPS = 0.001;
 
@@ -96,7 +94,7 @@ export class SlideVideoSampler {
   /** Where the sampler currently is, wrapped into [0, duration). */
   position = 0;
 
-  #queue: SampleQueue;
+  #queue: FrameQueue;
   /** Whether a frame has been returned since the last (re)start at 0. */
   #delivered = false;
   /** Guards against overlapping at() calls from the preview rAF loop. */
@@ -104,7 +102,7 @@ export class SlideVideoSampler {
   #disposed = false;
 
   private constructor(
-    queue: SampleQueue,
+    queue: FrameQueue,
     duration: number,
     width: number,
     height: number,
@@ -117,10 +115,10 @@ export class SlideVideoSampler {
 
   /** Returns null when the file can't drive the WebCodecs path. */
   static async create(file: File): Promise<SlideVideoSampler | null> {
-    const opened = await openPlayableVideo(file);
+    const opened = await openVideoFrameSource(file);
     if (!opened) return null;
     return new SlideVideoSampler(
-      new SampleQueue(opened.sink),
+      opened.queue,
       opened.duration,
       opened.width,
       opened.height,
@@ -161,6 +159,19 @@ export class SlideVideoSampler {
       if (!this.#queue.started || delta < -BACK_EPS || delta > SEEK_AHEAD) {
         this.#delivered = false;
         this.#queue.start(want);
+      } else if (
+        !wait &&
+        this.#delivered &&
+        !this.#queue.done &&
+        this.#queue.size === 0 &&
+        want - this.#queue.head > MAX_DECODE_LAG
+      ) {
+        // Decode has fallen behind the clock with nothing queued to catch up
+        // from. Every frame it decodes from here is one the playhead has
+        // already passed, so it can only lose more ground — jump to a keyframe
+        // near the clock instead. Previews only: an export is allowed to take
+        // as long as it needs, and must not skip.
+        this.#queue.start(want);
       }
       return await this.#take(want, wait);
     } finally {
@@ -180,7 +191,7 @@ export class SlideVideoSampler {
       const due = this.#queue.takeDue(t);
       if (due) {
         this.#delivered = true;
-        return toVideoFrame(due);
+        return due;
       }
       if (this.#queue.size > 0) {
         // Head is in the future. If we've already shown a frame it's still
@@ -188,7 +199,7 @@ export class SlideVideoSampler {
         // the slide isn't blank on its first beat.
         if (this.#delivered) return null;
         this.#delivered = true;
-        return toVideoFrame(this.#queue.takeHead()!);
+        return this.#queue.takeHead()!;
       }
       if (this.#queue.done) return null;
       if (!wait && this.#delivered) return null;

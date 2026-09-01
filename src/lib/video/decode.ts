@@ -1,5 +1,6 @@
 import type {
   Input,
+  InputAudioTrack,
   InputVideoTrack,
   VideoSample,
   VideoSampleSink,
@@ -8,7 +9,7 @@ import type {
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Decode-ahead queue depth; absorbs consumer/decoder cadence mismatch. */
-const QUEUE_DEPTH = 8;
+export const QUEUE_DEPTH = 8;
 
 export interface DecodableVideo {
   /** Kept open so callers can reach other tracks (e.g. the audio track). */
@@ -69,6 +70,30 @@ export async function openPlayableVideo(
   }
 }
 
+/**
+ * Open a file's primary audio track. The input is the caller's to dispose once
+ * it has read what it needs — nothing else here holds it.
+ */
+export async function openAudioTrack(
+  file: File,
+): Promise<{ input: Input; track: InputAudioTrack } | null> {
+  try {
+    const mb = await import("mediabunny");
+    const input = new mb.Input({
+      source: new mb.BlobSource(file),
+      formats: mb.ALL_FORMATS,
+    });
+    const track = await input.getPrimaryAudioTrack();
+    if (!track || !(await track.canDecode())) {
+      input.dispose();
+      return null;
+    }
+    return { input, track };
+  } catch {
+    return null;
+  }
+}
+
 /** Convert a decoded sample to a VideoFrame and release the sample. */
 export function toVideoFrame(sample: VideoSample): VideoFrame {
   const frame = sample.toVideoFrame();
@@ -77,8 +102,36 @@ export function toVideoFrame(sample: VideoSample): VideoFrame {
 }
 
 /**
- * A decode pump feeding a bounded ready-queue, shared by the editor's preview
- * player and the slideshow's slide sampler.
+ * A bounded queue of decoded frames fed by a decode pump, drained
+ * synchronously by a render loop. Implemented on the main thread by
+ * `SampleQueue` and off it by `WorkerFrameQueue` — see `openVideoFrameSource`,
+ * which picks between them.
+ *
+ * Timestamps are seconds throughout the interface, matching the clocks the
+ * consumers keep. Frames handed out are the caller's to close.
+ */
+export interface FrameQueue {
+  /** True once the source is exhausted and no more frames will arrive. */
+  readonly done: boolean;
+  readonly started: boolean;
+  readonly size: number;
+  /** Timestamp of the newest decoded frame — how far ahead the decoder is. */
+  readonly head: number;
+  /** (Re)start decoding from `startTime`, dropping anything already queued. */
+  start(startTime: number): void;
+  /**
+   * The newest frame due at `t`. Older due frames are stale and dropped, so a
+   * consumer that falls behind catches up instead of playing in slow motion.
+   */
+  takeDue(t: number): VideoFrame | null;
+  /** The queue head regardless of its timestamp; null when the queue is empty. */
+  takeHead(): VideoFrame | null;
+  dispose(): void;
+}
+
+/**
+ * Main-thread decode pump feeding a bounded ready-queue — the fallback for
+ * browsers where the worker path can't be used.
  *
  * Decoding runs flat-out into the queue and parks only while it is full, woken
  * by the next consumer take rather than by a timer. A poll interval here is a
@@ -87,16 +140,15 @@ export function toVideoFrame(sample: VideoSample): VideoFrame {
  * timer while the preview starves — with no CPU or GPU load to show for it.
  * Consumers pull synchronously from the queue on their own cadence.
  */
-export class SampleQueue {
+export class SampleQueue implements FrameQueue {
   #sink: VideoSampleSink;
   #depth: number;
-  #samples: VideoSample[] = [];
+  #frames: VideoFrame[] = [];
   /** Bumping cancels the in-flight pump loop. */
   #genId = 0;
   #started = false;
   #done = false;
   #disposed = false;
-  /** Timestamp of the newest decoded sample — how far ahead the decoder is. */
   #head = 0;
   /** Resolver for a pump parked on a full queue; null when it isn't parked. */
   #room: (() => void) | null = null;
@@ -106,7 +158,6 @@ export class SampleQueue {
     this.#depth = depth;
   }
 
-  /** True once the source is exhausted and no more samples will arrive. */
   get done() {
     return this.#done;
   }
@@ -116,53 +167,47 @@ export class SampleQueue {
   }
 
   get size() {
-    return this.#samples.length;
+    return this.#frames.length;
   }
 
   get head() {
     return this.#head;
   }
 
-  /** (Re)start decoding from `startTime`, dropping anything already queued. */
   start(startTime: number) {
-    this.clear();
+    this.#clear();
     this.#started = true;
     void this.#pump(startTime);
   }
 
-  /**
-   * The newest sample due at `t`. Older due samples are stale and dropped, so
-   * a consumer that falls behind catches up instead of playing in slow motion.
-   */
-  takeDue(t: number): VideoSample | null {
-    let chosen: VideoSample | null = null;
-    while (this.#samples.length > 0 && this.#samples[0].timestamp <= t) {
+  takeDue(t: number): VideoFrame | null {
+    let chosen: VideoFrame | null = null;
+    while (this.#frames.length > 0 && this.#frames[0].timestamp <= t * 1e6) {
       chosen?.close();
-      chosen = this.#samples.shift()!;
+      chosen = this.#frames.shift()!;
     }
     if (chosen) this.#wake();
     return chosen;
   }
 
-  /** The queue head regardless of its timestamp; null when the queue is empty. */
-  takeHead(): VideoSample | null {
-    const sample = this.#samples.shift() ?? null;
-    if (sample) this.#wake();
-    return sample;
-  }
-
-  clear() {
-    for (const sample of this.#samples) sample.close();
-    this.#samples = [];
-    // Also covers cancellation: a parked pump has to run again to notice its
-    // generation was retired, close the sample it is holding and return.
-    this.#wake();
+  takeHead(): VideoFrame | null {
+    const frame = this.#frames.shift() ?? null;
+    if (frame) this.#wake();
+    return frame;
   }
 
   dispose() {
     this.#disposed = true;
     this.#genId++;
-    this.clear();
+    this.#clear();
+  }
+
+  #clear() {
+    for (const frame of this.#frames) frame.close();
+    this.#frames = [];
+    // Also covers cancellation: a parked pump has to run again to notice its
+    // generation was retired, close the sample it is holding and return.
+    this.#wake();
   }
 
   /** Let a parked pump re-check whether there is room to decode into. */
@@ -182,19 +227,19 @@ export class SampleQueue {
         while (
           id === this.#genId &&
           !this.#disposed &&
-          this.#samples.length >= this.#depth
+          this.#frames.length >= this.#depth
         ) {
           // Parked until a consumer frees a slot. A paused preview leaves this
           // waiting indefinitely, which is the point — no background timer per
-          // idle lane — and clear()/dispose() both wake it.
+          // idle lane — and dispose()/restart both wake it.
           await new Promise<void>((resolve) => (this.#room = resolve));
         }
         if (id !== this.#genId || this.#disposed) {
           sample.close();
           return;
         }
-        this.#samples.push(sample);
         this.#head = sample.timestamp;
+        this.#frames.push(toVideoFrame(sample));
       }
       if (id === this.#genId) this.#done = true;
     } catch {

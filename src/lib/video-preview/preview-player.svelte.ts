@@ -1,5 +1,6 @@
 import type { InputAudioTrack } from "mediabunny";
-import { openPlayableVideo, SampleQueue, toVideoFrame } from "../video/decode";
+import { openAudioTrack, type FrameQueue } from "../video/decode";
+import { openVideoFrameSource } from "../video/frame-source";
 
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
 const MAX_DECODE_LAG = 1;
@@ -34,7 +35,7 @@ export class VideoPreviewPlayer {
   /** Whether looping at the span end is enabled (set by the editor). */
   loop = true;
 
-  #queue: SampleQueue;
+  #queue: FrameQueue;
   #spanStart = 0;
   #spanEnd: number;
   #speed = 1;
@@ -58,7 +59,7 @@ export class VideoPreviewPlayer {
   #audioSrc: AudioBufferSourceNode | null = null;
 
   private constructor(
-    queue: SampleQueue,
+    queue: FrameQueue,
     width: number,
     height: number,
     duration: number,
@@ -72,28 +73,32 @@ export class VideoPreviewPlayer {
 
   /** Returns null when the file can't drive the WebCodecs preview path. */
   static async create(file: File): Promise<VideoPreviewPlayer | null> {
-    const opened = await openPlayableVideo(file);
+    const opened = await openVideoFrameSource(file);
     if (!opened) return null;
 
     const player = new VideoPreviewPlayer(
-      new SampleQueue(opened.sink),
+      opened.queue,
       opened.width,
       opened.height,
       opened.duration,
     );
 
     // Decode the audio track in the background; playback starts silent and
-    // sound joins in once ready (usually well under a second).
+    // sound joins in once ready (usually well under a second). Its own input:
+    // the video is decoded elsewhere (a worker, usually), and this one is
+    // finished with the moment the buffer exists.
     void (async () => {
+      const audio = await openAudioTrack(file);
+      if (!audio) return;
       try {
-        const audioTrack = await opened.input.getPrimaryAudioTrack();
-        if (!audioTrack || !(await audioTrack.canDecode())) return;
-        const buffer = await decodeAudioTrackToBuffer(audioTrack);
+        const buffer = await decodeAudioTrackToBuffer(audio.track);
         if (player.#disposed || !buffer) return;
         player.#audioBuffer = buffer;
         if (player.playing) player.#startAudio();
       } catch {
         // Silent preview; export decodes audio separately
+      } finally {
+        audio.input.dispose();
       }
     })();
 
@@ -189,8 +194,7 @@ export class VideoPreviewPlayer {
       return null;
     }
 
-    const due = this.#queue.takeDue(t);
-    return due ? toVideoFrame(due) : null;
+    return this.#queue.takeDue(t);
   }
 
   dispose() {
