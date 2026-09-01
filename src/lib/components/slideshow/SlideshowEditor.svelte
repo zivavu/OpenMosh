@@ -46,6 +46,7 @@
 		probeSlideVideo,
 		SlideVideoSampler,
 	} from '../../slideshow/video-sampler';
+	import { PREVIEW_MAX_PIXELS } from '../../video/decode';
 	import { showToast } from '../ui/toast.svelte';
 	import { shuffleInPlace } from '../../utils';
 	import GlCanvas from '../editor/GlCanvas.svelte';
@@ -382,7 +383,7 @@
 	function ensureSampler(slide: SlideshowSlide): Promise<SlideVideoSampler | null> {
 		let p = samplerPromises.get(slide.id);
 		if (!p) {
-			p = SlideVideoSampler.create(slide.file).then((s) => {
+			p = SlideVideoSampler.create(slide.file, PREVIEW_MAX_PIXELS).then((s) => {
 				if (s) videoSamplers.set(slide.id, s);
 				return s;
 			});

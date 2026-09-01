@@ -20,7 +20,14 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from "mediabunny";
 
 export type DecodeWorkerRequest =
-  | { type: "open"; id: number; file: File; depth: number }
+  | {
+      type: "open";
+      id: number;
+      file: File;
+      depth: number;
+      /** Cap on frame area; 0 hands frames over at their own size. */
+      maxPixels: number;
+    }
   | { type: "start"; id: number; gen: number; startTime: number }
   | { type: "credit"; id: number; gen: number; n: number }
   | { type: "close"; id: number };
@@ -32,6 +39,9 @@ export type DecodeWorkerResponse =
       duration: number;
       width: number;
       height: number;
+      /** Size frames actually arrive at, once `maxPixels` has been applied. */
+      frameWidth: number;
+      frameHeight: number;
     }
   | { type: "unsupported"; id: number }
   | { type: "frame"; id: number; gen: number; frame: VideoFrame }
@@ -48,6 +58,38 @@ interface Stream {
   credit: number;
   /** Resolver for a pump parked on zero credit; null when it isn't parked. */
   wake: (() => void) | null;
+  /** Where frames are shrunk to on the way out, or null to pass them through. */
+  shrink: Shrink | null;
+}
+
+interface Shrink {
+  width: number;
+  height: number;
+  canvas: OffscreenCanvas;
+  ctx: OffscreenCanvasRenderingContext2D;
+}
+
+/**
+ * A preview draws the source at a few hundred pixels; handing it a 4K frame
+ * means uploading and sampling ~19x the pixels it can show, on top of moving
+ * every one of them across a thread boundary. Shrinking here instead keeps all
+ * of that off the main thread and lets the decoder's own frame go back into its
+ * pool immediately, which is what a 4K decoder is shortest of.
+ *
+ * Preview only — `maxPixels` is 0 on the export paths, which need the frame the
+ * file actually holds.
+ */
+function planShrink(w: number, h: number, maxPixels: number): Shrink | null {
+  if (maxPixels <= 0 || w * h <= maxPixels) return null;
+  const k = Math.sqrt(maxPixels / (w * h));
+  // Even dimensions: odd ones are a needless edge case for anything that later
+  // wants the frame in a chroma-subsampled format.
+  const width = Math.max(2, Math.round((w * k) / 2) * 2);
+  const height = Math.max(2, Math.round((h * k) / 2) * 2);
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d", { alpha: false });
+  if (!ctx) return null;
+  return { width, height, canvas, ctx };
 }
 
 const streams = new Map<number, Stream>();
@@ -68,7 +110,7 @@ function wake(stream: Stream) {
 self.onmessage = (e: MessageEvent<DecodeWorkerRequest>) => {
   const msg = e.data;
   if (msg.type === "open") {
-    void open(msg.id, msg.file, msg.depth);
+    void open(msg.id, msg.file, msg.depth, msg.maxPixels);
     return;
   }
   const stream = streams.get(msg.id);
@@ -99,7 +141,12 @@ self.onmessage = (e: MessageEvent<DecodeWorkerRequest>) => {
   }
 };
 
-async function open(id: number, file: File, depth: number) {
+async function open(
+  id: number,
+  file: File,
+  depth: number,
+  maxPixels: number,
+) {
   try {
     const input = new Input({
       source: new BlobSource(file),
@@ -123,6 +170,11 @@ async function open(id: number, file: File, depth: number) {
       post({ type: "unsupported", id });
       return;
     }
+    const shrink = planShrink(
+      track.displayWidth,
+      track.displayHeight,
+      maxPixels,
+    );
     streams.set(id, {
       input,
       sink: new VideoSampleSink(track),
@@ -130,6 +182,7 @@ async function open(id: number, file: File, depth: number) {
       gen: 0,
       credit: 0,
       wake: null,
+      shrink,
     });
     post({
       type: "opened",
@@ -137,6 +190,8 @@ async function open(id: number, file: File, depth: number) {
       duration,
       width: track.displayWidth,
       height: track.displayHeight,
+      frameWidth: shrink?.width ?? track.displayWidth,
+      frameHeight: shrink?.height ?? track.displayHeight,
     });
   } catch {
     post({ type: "unsupported", id });
@@ -163,7 +218,7 @@ async function pump(
         sample.close();
         return;
       }
-      const frame = sample.toVideoFrame();
+      const frame = shrunk(sample.toVideoFrame(), stream.shrink);
       sample.close();
       stream.credit--;
       post({ type: "frame", id, gen, frame }, [frame]);
@@ -173,5 +228,22 @@ async function pump(
     // Decode failure mid-stream, or the input disposed under us: the consumer
     // keeps the last frame it got.
     if (stream.gen === gen) post({ type: "done", id, gen });
+  }
+}
+
+/** `frame` at the stream's preview size, or `frame` itself when it isn't capped. */
+function shrunk(frame: VideoFrame, shrink: Shrink | null): VideoFrame {
+  if (!shrink) return frame;
+  try {
+    shrink.ctx.drawImage(frame, 0, 0, shrink.width, shrink.height);
+    const scaled = new VideoFrame(shrink.canvas, {
+      timestamp: frame.timestamp,
+      duration: frame.duration ?? undefined,
+    });
+    frame.close();
+    return scaled;
+  } catch {
+    // Nothing here is worth dropping a frame over: hand over the full one.
+    return frame;
   }
 }

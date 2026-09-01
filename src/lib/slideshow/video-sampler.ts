@@ -113,9 +113,18 @@ export class SlideVideoSampler {
     this.height = height;
   }
 
-  /** Returns null when the file can't drive the WebCodecs path. */
-  static async create(file: File): Promise<SlideVideoSampler | null> {
-    const opened = await openVideoFrameSource(file);
+  /**
+   * Returns null when the file can't drive the WebCodecs path.
+   *
+   * `maxPixels` caps the frames a preview is handed — see
+   * `PREVIEW_MAX_PIXELS`. Exports leave it at 0: they write the frame the file
+   * actually holds.
+   */
+  static async create(
+    file: File,
+    maxPixels = 0,
+  ): Promise<SlideVideoSampler | null> {
+    const opened = await openVideoFrameSource(file, maxPixels);
     if (!opened) return null;
     return new SlideVideoSampler(
       opened.queue,

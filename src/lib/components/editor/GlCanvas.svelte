@@ -674,7 +674,10 @@
    // WebCodecs preview — dimensions are known upfront, no element to wait on
    $effect(() => {
       if (!renderer || !frameSource) return;
-      renderer.initVideoSource(frameSource.width, frameSource.height);
+      // The texture is sized to the frames that will land in it, which for a
+      // large source is smaller than the media — but the media's own size is
+      // what the UI reports and what the output defaults to.
+      renderer.initVideoSource(frameSource.frameWidth, frameSource.frameHeight);
       naturalWidth = frameSource.width;
       naturalHeight = frameSource.height;
       imageReady = true;

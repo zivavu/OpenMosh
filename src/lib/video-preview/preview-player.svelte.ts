@@ -1,5 +1,9 @@
 import type { InputAudioTrack } from "mediabunny";
-import { openAudioTrack, type FrameQueue } from "../video/decode";
+import {
+  openAudioTrack,
+  PREVIEW_MAX_PIXELS,
+  type FrameQueue,
+} from "../video/decode";
 import { openVideoFrameSource } from "../video/frame-source";
 
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
@@ -29,8 +33,12 @@ export class VideoPreviewPlayer {
   playing = $state(false);
 
   readonly duration: number;
+  /** The media's own size, which is what an export writes. */
   readonly width: number;
   readonly height: number;
+  /** Size the frames arrive at — smaller than the media for a large source. */
+  readonly frameWidth: number;
+  readonly frameHeight: number;
 
   /** Whether looping at the span end is enabled (set by the editor). */
   loop = true;
@@ -62,24 +70,30 @@ export class VideoPreviewPlayer {
     queue: FrameQueue,
     width: number,
     height: number,
+    frameWidth: number,
+    frameHeight: number,
     duration: number,
   ) {
     this.#queue = queue;
     this.width = width;
     this.height = height;
+    this.frameWidth = frameWidth;
+    this.frameHeight = frameHeight;
     this.duration = duration;
     this.#spanEnd = duration;
   }
 
   /** Returns null when the file can't drive the WebCodecs preview path. */
   static async create(file: File): Promise<VideoPreviewPlayer | null> {
-    const opened = await openVideoFrameSource(file);
+    const opened = await openVideoFrameSource(file, PREVIEW_MAX_PIXELS);
     if (!opened) return null;
 
     const player = new VideoPreviewPlayer(
       opened.queue,
       opened.width,
       opened.height,
+      opened.frameWidth,
+      opened.frameHeight,
       opened.duration,
     );
 
