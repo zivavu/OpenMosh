@@ -103,5 +103,7 @@
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text-3);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 </style>

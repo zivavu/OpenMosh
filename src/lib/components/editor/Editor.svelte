@@ -3692,9 +3692,12 @@
 									)}
 							>
 								<Shuffle size={12} />
-								{seqSelectedIds.length > 0
-									? `Shuffle ${seqSelectedIds.length}`
-									: 'Shuffle all'}
+								<span class="btn-label">Shuffle</span>
+								{#if seqSelectedIds.length > 0}
+									<span class="btn-scope">{seqSelectedIds.length}</span>
+								{:else}
+									<span class="btn-label">all</span>
+								{/if}
 							</button>
 						{/if}
 						{#if sequenceSources.length > 0}
@@ -3704,7 +3707,7 @@
 								onclick={() => sourceInput?.click()}
 							>
 								<Plus size={12} />
-								Add media
+								<span class="btn-label">Add media</span>
 							</button>
 						{/if}
 						{#if sequenceSources.length > 1}
@@ -4506,6 +4509,7 @@
 
 	.toolbar {
 		flex: 1;
+		min-width: 0;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -4525,6 +4529,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		line-height: 1;
+		flex-shrink: 0;
 	}
 
 	.source-count {
@@ -4532,6 +4537,8 @@
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text-3);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	/* Media pool actions sit right of the Preview/Grid toggle, against the
@@ -4541,6 +4548,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		margin-left: auto;
+		flex-shrink: 0;
 	}
 
 	.seq-media-btn {
@@ -4548,6 +4556,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		padding: 0.28rem 0.6rem;
+		white-space: nowrap;
 		border: 1px solid var(--line);
 		border-radius: var(--r-1);
 		background: none;
@@ -4569,6 +4578,48 @@
 	.seq-media-btn.danger:hover {
 		color: var(--rec);
 		border-color: var(--rec);
+	}
+
+	/* The count a shuffle is scoped to survives the label being dropped — it is
+	   the part that changes with the selection. */
+	.btn-scope {
+		color: var(--text-2);
+	}
+
+	/* Below this the bar has no room for words: the media actions keep their
+	   icons and lose their labels, and the spacing tightens with them. */
+	@media (max-width: 1000px) {
+		.top-bar {
+			padding: 7px 8px 6px;
+		}
+
+		.toolbar {
+			gap: 0.35rem;
+		}
+
+		.bar-sep {
+			margin: 0;
+		}
+
+		.seq-media-actions {
+			gap: 0.25rem;
+		}
+
+		.seq-media-btn {
+			padding: 0.28rem 0.45rem;
+		}
+
+		.seq-media-btn .btn-label {
+			display: none;
+		}
+	}
+
+	/* Narrower still, the readout goes too — the pool's size is on the source
+	   list a tap away. */
+	@media (max-width: 800px) {
+		.source-count {
+			display: none;
+		}
 	}
 
 	/* Holds the canvas's place in the column so the grid can take the box
