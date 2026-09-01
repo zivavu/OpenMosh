@@ -927,10 +927,12 @@
    {#if error}
       <p class="error">{error}</p>
    {:else if showFps}
+      <!-- The breakdown comes from this component's own loop, so it says
+           nothing when a parent is driving the renderer instead. -->
       <span class="fps-overlay">
-         {fps} FPS · dec {decodeFps} · src {sourceMs.toFixed(1)}ms · gl {drawMs.toFixed(
-            1,
-         )}ms
+         {fps} FPS{#if !externallyDriven} · dec {decodeFps} · src {sourceMs.toFixed(
+               1,
+            )}ms · gl {drawMs.toFixed(1)}ms{/if}
       </span>
    {/if}
    {#if fullscreen}
