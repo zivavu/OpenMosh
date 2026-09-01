@@ -146,6 +146,7 @@ class WorkerFrameQueue implements FrameQueue {
   #started = false;
   #done = false;
   #head = 0;
+  #received = 0;
   #disposed = false;
 
   constructor(target: Worker, id: number) {
@@ -167,6 +168,10 @@ class WorkerFrameQueue implements FrameQueue {
 
   get head() {
     return this.#head;
+  }
+
+  get received() {
+    return this.#received;
   }
 
   start(startTime: number) {
@@ -216,6 +221,7 @@ class WorkerFrameQueue implements FrameQueue {
     }
     this.#frames.push(frame);
     this.#head = frame.timestamp / 1e6;
+    this.#received++;
   }
 
   finish(gen: number) {

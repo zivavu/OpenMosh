@@ -117,6 +117,8 @@ export interface FrameQueue {
   readonly size: number;
   /** Timestamp of the newest decoded frame — how far ahead the decoder is. */
   readonly head: number;
+  /** Frames that have landed since the queue was created, for a decode rate. */
+  readonly received: number;
   /** (Re)start decoding from `startTime`, dropping anything already queued. */
   start(startTime: number): void;
   /**
@@ -150,6 +152,7 @@ export class SampleQueue implements FrameQueue {
   #done = false;
   #disposed = false;
   #head = 0;
+  #received = 0;
   /** Resolver for a pump parked on a full queue; null when it isn't parked. */
   #room: (() => void) | null = null;
 
@@ -172,6 +175,10 @@ export class SampleQueue implements FrameQueue {
 
   get head() {
     return this.#head;
+  }
+
+  get received() {
+    return this.#received;
   }
 
   start(startTime: number) {
@@ -239,6 +246,7 @@ export class SampleQueue implements FrameQueue {
           return;
         }
         this.#head = sample.timestamp;
+        this.#received++;
         this.#frames.push(toVideoFrame(sample));
       }
       if (id === this.#genId) this.#done = true;

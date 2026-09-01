@@ -207,16 +207,43 @@
 
    let frameTimes: number[] = [];
    let lastFpsUpdate = 0;
+   // Where a rendered frame's time went, split at the point the source texture
+   // is up to date. The loop never waits on decode, so a low FPS is always one
+   // of these two — this says which without reaching for a profiler.
+   let sourceMs = $state(0);
+   let drawMs = $state(0);
+   /** Frames the decoder produced per second, however few the loop drew. */
+   let decodeFps = $state(0);
+   let sourceTotal = 0;
+   let drawTotal = 0;
+   let sampled = 0;
+   let lastDecoded = 0;
 
    /** Only called while the overlay is on: with it hidden, the sampling and its
     * `fps` write were reactive churn nobody could see. */
-   function trackFps(now: number) {
+   function trackFps(now: number, sourceDone: number) {
       frameTimes.push(now);
+      sourceTotal += sourceDone - now;
+      drawTotal += performance.now() - sourceDone;
+      sampled++;
       if (now - lastFpsUpdate < 400) return;
+      const elapsed = (now - lastFpsUpdate) / 1000;
       lastFpsUpdate = now;
       const cutoff = now - 1000;
       frameTimes = frameTimes.filter((t) => t > cutoff);
       fps = frameTimes.length;
+      sourceMs = sourceTotal / sampled;
+      drawMs = drawTotal / sampled;
+      sourceTotal = 0;
+      drawTotal = 0;
+      sampled = 0;
+      const decoded = frameSource?.framesDecoded ?? 0;
+      // The first window starts from a zeroed counter, so it would read as the
+      // whole backlog at once.
+      if (elapsed > 0 && elapsed < 5) {
+         decodeFps = Math.round((decoded - lastDecoded) / elapsed);
+      }
+      lastDecoded = decoded;
    }
 
    let previewArea = $state<HTMLDivElement>(null!);
@@ -863,8 +890,9 @@
                if (altFromPrimary) renderer!.updateAltSourceFrame(videoEl);
             }
          }
+         const sourceDone = showFps ? performance.now() : 0;
          drawFrame(nowMs / 1000);
-         if (showFps) trackFps(nowMs);
+         if (showFps) trackFps(nowMs, sourceDone);
          rafId = requestAnimationFrame(loop);
       };
       rafId = requestAnimationFrame(loop);
@@ -899,7 +927,11 @@
    {#if error}
       <p class="error">{error}</p>
    {:else if showFps}
-      <span class="fps-overlay">{fps} FPS</span>
+      <span class="fps-overlay">
+         {fps} FPS · dec {decodeFps} · src {sourceMs.toFixed(1)}ms · gl {drawMs.toFixed(
+            1,
+         )}ms
+      </span>
    {/if}
    {#if fullscreen}
       <button
