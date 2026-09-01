@@ -422,7 +422,14 @@ export class GlRenderer {
   } | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
-    const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true });
+    // antialias defaults to true, which multisamples the default framebuffer
+    // and resolves it on every present. Nothing here has an edge to smooth —
+    // every pass is a quad covering the whole viewport — so that resolve buys
+    // nothing and costs the most where the canvas is biggest, during export.
+    const gl = canvas.getContext("webgl2", {
+      preserveDrawingBuffer: true,
+      antialias: false,
+    });
     if (!gl) throw new Error("WebGL2 not supported");
     this.gl = gl;
     gl.getExtension("EXT_color_buffer_float");
