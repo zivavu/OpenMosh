@@ -364,7 +364,12 @@
 		raw.height = Math.max(1, Math.round(h * k));
 		rawW = raw.width;
 		rawH = raw.height;
-		rawCtx = raw.getContext('2d', { willReadFrequently: true });
+		// Accelerated, not willReadFrequently: every frame is drawn into this
+		// buffer, and only a key or a mask ever reads it back. A CPU-backed
+		// buffer made the common case — neither of those on — pull a full frame
+		// out of the GPU per repaint, which is most of what a laptop had to
+		// spend to play a 1080p clip in here.
+		rawCtx = raw.getContext('2d');
 	}
 
 	function imageElement(url: string): Promise<HTMLImageElement> {
@@ -408,14 +413,23 @@
 		const v = media;
 		if (!v || !('play' in v)) return;
 		void v.play().catch(() => (playing = false));
-		let raf = requestAnimationFrame(function tick() {
+		// Once per decoded frame rather than once per display refresh: a repaint
+		// costs a full-frame draw out of the video either way, and on a display
+		// faster than the clip most of them landed on the picture already shown.
+		const perFrame = 'requestVideoFrameCallback' in v;
+		let handle = 0;
+		const step = () => {
 			currentTime = v.currentTime;
 			grabFrame();
 			paint();
-			raf = requestAnimationFrame(tick);
-		});
+			handle = perFrame
+				? v.requestVideoFrameCallback(step)
+				: requestAnimationFrame(step);
+		};
+		step();
 		return () => {
-			cancelAnimationFrame(raf);
+			if (perFrame) v.cancelVideoFrameCallback(handle);
+			else cancelAnimationFrame(handle);
 			v.pause();
 		};
 	});
