@@ -540,6 +540,22 @@ export class GlRenderer {
     return true;
   }
 
+  /**
+   * Wall-clock ms spent uploading frames since the reader last zeroed it, and
+   * the switch that collects it. Off by default: a sequence lane uploads from
+   * a promise callback, so the preview loop can't time these from outside, and
+   * a stat nobody is showing shouldn't cost a clock read per upload.
+   */
+  measureUploads = false;
+  uploadMs = 0;
+
+  #timeUpload(upload: () => void) {
+    if (!this.measureUploads) return upload();
+    const started = performance.now();
+    upload();
+    this.uploadMs += performance.now() - started;
+  }
+
   updateSourceFrame(source: HTMLVideoElement | VideoFrame) {
     if (!this.sourceTexture) return;
     // Skip uploads while the element has no decoded frame (seeking/stalled) —
@@ -564,13 +580,15 @@ export class GlRenderer {
     // case — a video plays at constant dimensions). texImage2D would reallocate
     // and revalidate storage every frame. Reallocate only on an actual size
     // change (e.g. a mixed-size slideshow switching source mid-preview).
-    if (w === this.srcTexW && h === this.srcTexH) {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-      this.srcTexW = w;
-      this.srcTexH = h;
-    }
+    this.#timeUpload(() => {
+      if (w === this.srcTexW && h === this.srcTexH) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        this.srcTexW = w;
+        this.srcTexH = h;
+      }
+    });
   }
 
   /** Upload a new image to the existing source texture without re-allocating FBOs. */
@@ -849,13 +867,16 @@ export class GlRenderer {
     }
     // Same fast path as the source uploads: a playing video lane keeps its
     // allocation instead of revalidating storage every frame.
-    if (entry.w === w && entry.h === h) {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-      entry.w = w;
-      entry.h = h;
-    }
+    const held = entry;
+    this.#timeUpload(() => {
+      if (held.w === w && held.h === h) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        held.w = w;
+        held.h = h;
+      }
+    });
   }
 
   // ── Outgoing source (transitions across two different media) ─────────────
@@ -910,14 +931,16 @@ export class GlRenderer {
       this.altTexH = h;
     }
     gl.bindTexture(gl.TEXTURE_2D, this.altSourceTexture);
-    if (w === this.altTexW && h === this.altTexH) {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-      this.altTexW = w;
-      this.altTexH = h;
-      this.deleteAltStageBuffer();
-    }
+    this.#timeUpload(() => {
+      if (w === this.altTexW && h === this.altTexH) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        this.altTexW = w;
+        this.altTexH = h;
+        this.deleteAltStageBuffer();
+      }
+    });
   }
 
   /** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */

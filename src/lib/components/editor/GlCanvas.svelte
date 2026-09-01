@@ -29,6 +29,7 @@
       type SourceEdit,
    } from "../../media";
    import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
+   import { decodeStats } from "../../video/decode";
 
    /** Active sequence transition descriptor. Progress is computed per rendered
     * frame from `getTime()` so the blend stays smooth even when the editor's
@@ -207,16 +208,22 @@
 
    let frameTimes: number[] = [];
    let lastFpsUpdate = 0;
-   // Where a rendered frame's time went, split at the point the source texture
-   // is up to date. The loop never waits on decode, so a low FPS is always one
-   // of these two — this says which without reaching for a profiler.
+   // Where a frame's time went. `src` and `gl` only cover the work this loop
+   // issues; GL calls return once the commands are queued, so anything the GPU
+   // or the compositor spends lands in `wait` instead — which is the whole
+   // point of showing it. `up` is measured inside the renderer, because a
+   // sequence lane uploads from a promise callback this loop can't wrap.
    let sourceMs = $state(0);
    let drawMs = $state(0);
-   /** Frames the decoder produced per second, however few the loop drew. */
+   let uploadMs = $state(0);
+   let waitMs = $state(0);
+   /** Frames every decoder produced per second, however few the loop drew. */
    let decodeFps = $state(0);
    let sourceTotal = 0;
    let drawTotal = 0;
+   let waitTotal = 0;
    let sampled = 0;
+   let lastLoopEnd = 0;
    let lastDecoded = 0;
 
    /** Only called while the overlay is on: with it hidden, the sampling and its
@@ -225,25 +232,30 @@
       frameTimes.push(now);
       sourceTotal += sourceDone - now;
       drawTotal += performance.now() - sourceDone;
+      if (lastLoopEnd > 0) waitTotal += now - lastLoopEnd;
       sampled++;
-      if (now - lastFpsUpdate < 400) return;
-      const elapsed = (now - lastFpsUpdate) / 1000;
-      lastFpsUpdate = now;
-      const cutoff = now - 1000;
-      frameTimes = frameTimes.filter((t) => t > cutoff);
-      fps = frameTimes.length;
-      sourceMs = sourceTotal / sampled;
-      drawMs = drawTotal / sampled;
-      sourceTotal = 0;
-      drawTotal = 0;
-      sampled = 0;
-      const decoded = frameSource?.framesDecoded ?? 0;
-      // The first window starts from a zeroed counter, so it would read as the
-      // whole backlog at once.
-      if (elapsed > 0 && elapsed < 5) {
-         decodeFps = Math.round((decoded - lastDecoded) / elapsed);
+      if (now - lastFpsUpdate >= 400) {
+         const elapsed = (now - lastFpsUpdate) / 1000;
+         lastFpsUpdate = now;
+         frameTimes = frameTimes.filter((t) => t > now - 1000);
+         fps = frameTimes.length;
+         sourceMs = sourceTotal / sampled;
+         drawMs = drawTotal / sampled;
+         waitMs = waitTotal / sampled;
+         uploadMs = renderer ? renderer.uploadMs / sampled : 0;
+         if (renderer) renderer.uploadMs = 0;
+         sourceTotal = 0;
+         drawTotal = 0;
+         waitTotal = 0;
+         sampled = 0;
+         // The first window starts from a counter that has been running since
+         // the file was opened, so it would read as the whole backlog at once.
+         if (elapsed > 0 && elapsed < 5) {
+            decodeFps = Math.round((decodeStats.frames - lastDecoded) / elapsed);
+         }
+         lastDecoded = decodeStats.frames;
       }
-      lastDecoded = decoded;
+      lastLoopEnd = performance.now();
    }
 
    let previewArea = $state<HTMLDivElement>(null!);
@@ -731,6 +743,10 @@
    // Applied here rather than by the parent so a change also repaints a paused
    // canvas, through the static redraw driver below.
    $effect(() => {
+      if (renderer) renderer.measureUploads = showFps;
+   });
+
+   $effect(() => {
       renderer?.setSourceFit(sourceFit);
    });
 
@@ -932,7 +948,9 @@
       <span class="fps-overlay">
          {fps} FPS{#if !externallyDriven} · dec {decodeFps} · src {sourceMs.toFixed(
                1,
-            )}ms · gl {drawMs.toFixed(1)}ms{/if}
+            )} gl {drawMs.toFixed(1)} up {uploadMs.toFixed(1)} · wait {waitMs.toFixed(
+               1,
+            )}ms{/if}
       </span>
    {/if}
    {#if fullscreen}

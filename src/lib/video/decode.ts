@@ -11,6 +11,13 @@ export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 /** Decode-ahead queue depth; absorbs consumer/decoder cadence mismatch. */
 export const QUEUE_DEPTH = 8;
 
+/**
+ * Frames every queue has produced, for the preview's FPS overlay. Counted here
+ * rather than per player so the reading means the same thing whichever path
+ * the preview is on — one video, a sequence segment, or a media lane.
+ */
+export const decodeStats = { frames: 0 };
+
 export interface DecodableVideo {
   /** Kept open so callers can reach other tracks (e.g. the audio track). */
   input: Input;
@@ -247,6 +254,7 @@ export class SampleQueue implements FrameQueue {
         }
         this.#head = sample.timestamp;
         this.#received++;
+        decodeStats.frames++;
         this.#frames.push(toVideoFrame(sample));
       }
       if (id === this.#genId) this.#done = true;

@@ -35,11 +35,6 @@ export class VideoPreviewPlayer {
   /** Whether looping at the span end is enabled (set by the editor). */
   loop = true;
 
-  /** Frames decoded so far, for the preview's FPS overlay. */
-  get framesDecoded() {
-    return this.#queue.received;
-  }
-
   #queue: FrameQueue;
   #spanStart = 0;
   #spanEnd: number;

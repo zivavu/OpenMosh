@@ -3,6 +3,7 @@ import type {
   DecodeWorkerResponse,
 } from "./decode-worker";
 import {
+  decodeStats,
   openPlayableVideo,
   QUEUE_DEPTH,
   SampleQueue,
@@ -222,6 +223,7 @@ class WorkerFrameQueue implements FrameQueue {
     this.#frames.push(frame);
     this.#head = frame.timestamp / 1e6;
     this.#received++;
+    decodeStats.frames++;
   }
 
   finish(gen: number) {
