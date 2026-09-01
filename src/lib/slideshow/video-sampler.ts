@@ -28,14 +28,20 @@ export async function probeSlideVideo(
 
   let thumb: Blob | null = null;
   try {
-    const sample = await opened.sink.getSample(0);
-    if (sample) {
+    // Iterated rather than getSample(0): that returns null whenever the track's
+    // first frame sits past zero — an edit list or a phone/camera muxer is
+    // enough — which left those files permanently thumbless.
+    for await (const sample of opened.sink.samples()) {
       const frame = toVideoFrame(sample);
       thumb = await drawThumb(frame, thumbSize);
       frame.close();
+      break;
     }
   } catch {
     // Thumbless slide is fine — grid shows the loading placeholder
+  } finally {
+    // Nothing here outlives the probe: callers get plain data back.
+    opened.input.dispose();
   }
   return {
     duration: opened.duration,
