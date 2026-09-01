@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { ChevronDown, ChevronUp, Play, Plus, SlidersHorizontal } from 'lucide-svelte';
+	import {
+		ChevronDown,
+		ChevronUp,
+		ImageOff,
+		Play,
+		Plus,
+		SlidersHorizontal,
+	} from 'lucide-svelte';
 	import {
 		DEFAULT_SOURCE_EDIT,
 		hasAnimation,
@@ -224,7 +231,11 @@
 								draggable="false"
 							/>
 						{:else}
-							<div class="rail-thumb rail-thumb-empty"></div>
+							<div class="rail-thumb rail-thumb-empty">
+								{#if !src.thumbPending}
+									<ImageOff size={11} />
+								{/if}
+							</div>
 						{/if}
 						<span class="rail-n" style:background={sourceColor(i + 1)}>{i + 1}</span>
 						{#if src.kind === 'video'}
@@ -435,7 +446,11 @@
 	}
 
 	.rail-thumb-empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		background: #1a1a1a;
+		color: var(--text-4);
 	}
 
 	.rail-n {

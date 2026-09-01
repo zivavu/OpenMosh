@@ -137,6 +137,7 @@
 					file,
 					objectUrl: URL.createObjectURL(file),
 					thumbUrl: null,
+					thumbPending: true,
 					presetIndex: null,
 					kind: 'image',
 				};
@@ -148,6 +149,7 @@
 					file,
 					objectUrl: URL.createObjectURL(file),
 					thumbUrl: null,
+					thumbPending: true,
 					presetIndex: null,
 					kind: 'video',
 				};
@@ -172,6 +174,8 @@
 		s.width = probe.width;
 		s.height = probe.height;
 		if (probe.thumb) s.thumbUrl = URL.createObjectURL(probe.thumb);
+		// Settled either way: the probe is the only shot at a video thumbnail.
+		s.thumbPending = false;
 	}
 
 	async function generateThumb(id: string, file: File, objectUrl: string) {
@@ -208,7 +212,10 @@
 			thumbUrl = objectUrl;
 		}
 		const s = slides.find((s) => s.id === id);
-		if (s) s.thumbUrl = thumbUrl;
+		if (s) {
+			s.thumbUrl = thumbUrl;
+			s.thumbPending = false;
+		}
 	}
 
 	/** How long a removed slide stays restorable — matches its toast's lifetime. */

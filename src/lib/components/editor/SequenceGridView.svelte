@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Plus, X } from 'lucide-svelte';
+	import { ImageOff, Play, Plus, X } from 'lucide-svelte';
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -188,8 +188,12 @@
 							decoding="async"
 							draggable="false"
 						/>
-					{:else}
+					{:else if src.thumbPending}
 						<div class="thumb-loading"></div>
+					{:else}
+						<div class="thumb-none" title="No preview — the media still works">
+							<ImageOff size={14} />
+						</div>
 					{/if}
 					<span
 						class="card-index"
@@ -380,12 +384,17 @@
 		pointer-events: none;
 	}
 
-	.thumb-loading {
+	.thumb-loading,
+	.thumb-none {
 		position: absolute;
 		inset: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+
+	.thumb-none {
+		color: var(--text-4);
 	}
 
 	.thumb-loading::after {

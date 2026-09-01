@@ -38,7 +38,7 @@ export async function probeSlideVideo(
       break;
     }
   } catch {
-    // Thumbless slide is fine — grid shows the loading placeholder
+    // Thumbless is survivable — the chip falls back to its no-preview state.
   } finally {
     // Nothing here outlives the probe: callers get plain data back.
     opened.input.dispose();

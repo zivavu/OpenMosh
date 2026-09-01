@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Shuffle, X, Plus, Play } from 'lucide-svelte';
+	import { ImageOff, Shuffle, X, Plus, Play } from 'lucide-svelte';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
@@ -181,8 +181,12 @@
 				>
 					{#if slide.thumbUrl}
 						<img class="slide-thumb" src={slide.thumbUrl} alt="Slide {i + 1}" />
-					{:else}
+					{:else if slide.thumbPending}
 						<div class="thumb-loading"></div>
+					{:else}
+						<div class="thumb-none" title="No preview — the media still works">
+							<ImageOff size={14} />
+						</div>
 					{/if}
 					<div class="slide-index">{i + 1}</div>
 					{#if slide.kind === 'video'}
@@ -347,12 +351,17 @@
 		pointer-events: none;
 	}
 
-	.thumb-loading {
+	.thumb-loading,
+	.thumb-none {
 		position: absolute;
 		inset: 0;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+
+	.thumb-none {
+		color: var(--text-4);
 	}
 
 	.thumb-loading::after {

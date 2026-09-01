@@ -34,6 +34,8 @@ export interface SlideshowSlide {
   objectUrl: string;
   /** 100×100 thumbnail blob URL for grid display. null until generated. */
   thumbUrl: string | null;
+  /** Whether a thumbnail is still coming — see SequenceSource.thumbPending. */
+  thumbPending: boolean;
   /** Index into the presets array — only used in 'per-image' mode. */
   presetIndex: number | null;
   kind: "image" | "video";

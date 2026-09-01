@@ -32,6 +32,12 @@ export interface SequenceSource {
   /** Grid thumbnail. Null until generated — images fill theirs in after the
    * chip is already on screen. */
   thumbUrl: string | null;
+  /**
+   * Whether a thumbnail is still coming. Null `thumbUrl` alone can't say: an
+   * image's is pending, while a video that couldn't be thumbed never gets one,
+   * and the two need to read differently on the chip.
+   */
+  thumbPending: boolean;
   /** Videos only, from the add-time probe. Images enter the pool without
    * touching their pixels, so they carry no dimensions. */
   width?: number;
@@ -371,6 +377,7 @@ export class SequenceSourceRegistry {
         }
         // `sources` is $state, so assigning through the proxy updates the chip.
         live.thumbUrl = url;
+        live.thumbPending = false;
       }
     };
     await Promise.all(
@@ -395,6 +402,7 @@ export class SequenceSourceRegistry {
       primary,
       kind: "image",
       thumbUrl: null,
+      thumbPending: true,
       duration: 0,
     };
   }
@@ -417,6 +425,8 @@ export class SequenceSourceRegistry {
       primary,
       kind: "video",
       thumbUrl: probe.thumb ? URL.createObjectURL(probe.thumb) : null,
+      // Settled either way: the probe is the only shot at a video thumbnail.
+      thumbPending: false,
       width: probe.width,
       height: probe.height,
       duration: probe.duration,
