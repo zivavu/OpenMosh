@@ -617,33 +617,88 @@
          // live, even if it was rebuilt by onContextRestored below.
          const current = { renderer: r };
 
+         /** A canvas this component made to recover onto; Svelte owns the other. */
+         let spareCanvas: HTMLCanvasElement | null = null;
+         let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+
+         const attach = (el: HTMLCanvasElement) => {
+            el.addEventListener("webglcontextlost", onContextLost);
+            el.addEventListener("webglcontextrestored", onContextRestored);
+         };
+         const detach = (el: HTMLCanvasElement) => {
+            el.removeEventListener("webglcontextlost", onContextLost);
+            el.removeEventListener("webglcontextrestored", onContextRestored);
+         };
+         const adopt = (el: HTMLCanvasElement, next: GlRenderer) => {
+            current.renderer = next;
+            activeCanvas = el;
+            renderer = next;
+            canvasEl = el;
+            glRenderer = next;
+            error = null;
+         };
+
+         /**
+          * Rebuild onto a brand-new element. A canvas that lost its context
+          * never hands out another one, and when the loss came from the GPU
+          * process going down — a driver reset, which is what the whole window
+          * greying out is — Chrome may never fire webglcontextrestored at all.
+          * Waiting on that event alone is why a lost preview used to stay lost
+          * until the page was reloaded.
+          */
+         const rebuildOnFreshCanvas = () => {
+            const old = activeCanvas;
+            const fresh = document.createElement("canvas");
+            fresh.className = "preview-canvas";
+            fresh.setAttribute("aria-label", "Effect preview canvas");
+            let next: GlRenderer;
+            try {
+               previewArea.appendChild(fresh);
+               next = new GlRenderer(fresh);
+            } catch {
+               fresh.remove();
+               error =
+                  "Lost the WebGL context and could not rebuild it. Reload the page.";
+               return;
+            }
+            // Hidden rather than removed: Svelte owns the original element and
+            // takes it out itself on teardown, which it can't do if we already
+            // pulled it from under it.
+            old.style.display = "none";
+            detach(old);
+            attach(fresh);
+            try {
+               current.renderer.destroy();
+            } catch {
+               // The context is already gone; there is nothing left to release.
+            }
+            spareCanvas?.remove();
+            spareCanvas = fresh;
+            adopt(fresh, next);
+         };
+
          const onContextLost = (ev: Event) => {
             // preventDefault() is required for the browser to attempt automatic
             // restoration; without it, webglcontextrestored never fires.
             ev.preventDefault();
-            error =
-               "Lost the WebGL context. Trying to recover. If this keeps happening, reload the page.";
+            error = "Lost the WebGL context. Rebuilding…";
+            clearTimeout(rebuildTimer);
+            rebuildTimer = setTimeout(rebuildOnFreshCanvas, 1200);
          };
          const onContextRestored = () => {
-            const newRenderer = new GlRenderer(activeCanvas);
-            current.renderer = newRenderer;
-            renderer = newRenderer;
-            canvasEl = activeCanvas;
-            glRenderer = newRenderer;
-            error = null;
+            clearTimeout(rebuildTimer);
+            try {
+               adopt(activeCanvas, new GlRenderer(activeCanvas));
+            } catch {
+               rebuildOnFreshCanvas();
+            }
          };
-         activeCanvas.addEventListener("webglcontextlost", onContextLost);
-         activeCanvas.addEventListener(
-            "webglcontextrestored",
-            onContextRestored,
-         );
+         attach(activeCanvas);
 
          return () => {
-            activeCanvas.removeEventListener("webglcontextlost", onContextLost);
-            activeCanvas.removeEventListener(
-               "webglcontextrestored",
-               onContextRestored,
-            );
+            clearTimeout(rebuildTimer);
+            detach(activeCanvas);
+            spareCanvas?.remove();
             current.renderer.destroy();
             renderer = null;
             canvasEl = null;
