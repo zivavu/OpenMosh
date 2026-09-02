@@ -217,6 +217,8 @@
    let drawMs = $state(0);
    let uploadMs = $state(0);
    let waitMs = $state(0);
+   /** "chain size <- source texture size", the two the overlay can't infer. */
+   let sizes = $state("");
    /** Frames every decoder produced per second, however few the loop drew. */
    let decodeFps = $state(0);
    let sourceTotal = 0;
@@ -243,7 +245,11 @@
          drawMs = drawTotal / sampled;
          waitMs = waitTotal / sampled;
          uploadMs = renderer ? renderer.uploadMs / sampled : 0;
-         if (renderer) renderer.uploadMs = 0;
+         if (renderer) {
+            renderer.uploadMs = 0;
+            const s = renderer.sizes;
+            sizes = `${s.w}x${s.h} <- ${s.srcW}x${s.srcH}`;
+         }
          sourceTotal = 0;
          drawTotal = 0;
          waitTotal = 0;
@@ -949,7 +955,7 @@
       <!-- The breakdown comes from this component's own loop, so it says
            nothing when a parent is driving the renderer instead. -->
       <span class="fps-overlay">
-         {fps} FPS{#if !externallyDriven} · dec {decodeFps} · src {sourceMs.toFixed(
+         {fps} FPS{#if !externallyDriven} · {sizes} · dec {decodeFps} · src {sourceMs.toFixed(
                1,
             )} gl {drawMs.toFixed(1)} up {uploadMs.toFixed(1)} · wait {waitMs.toFixed(
                1,

@@ -549,6 +549,21 @@ export class GlRenderer {
   measureUploads = false;
   uploadMs = 0;
 
+  /**
+   * What the chain actually runs at, and what the source texture holds. The
+   * two come from different places — the preview render size and whatever the
+   * decoder hands over — and a preview drawing far more pixels than it shows
+   * is invisible from the outside without them.
+   */
+  get sizes() {
+    return {
+      w: this.imgW,
+      h: this.imgH,
+      srcW: this.srcTexW,
+      srcH: this.srcTexH,
+    };
+  }
+
   #timeUpload(upload: () => void) {
     if (!this.measureUploads) return upload();
     const started = performance.now();
