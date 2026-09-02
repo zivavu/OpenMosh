@@ -1,7 +1,6 @@
 import type { GlRenderer } from "../gl/renderer";
 import type { ResolvedMediaLayer } from "../media";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
-import { PREVIEW_MAX_PIXELS } from "../video/decode";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
 
 export interface MediaLayerDriverOptions {
@@ -119,7 +118,7 @@ export class MediaLayerDriver {
     }
     if (this.#creating.has(id)) return undefined;
     this.#creating.add(id);
-    void SlideVideoSampler.create(file, PREVIEW_MAX_PIXELS).then((sampler) => {
+    void SlideVideoSampler.create(file).then((sampler) => {
       this.#creating.delete(id);
       if (!sampler) return;
       if (this.#disposed) {

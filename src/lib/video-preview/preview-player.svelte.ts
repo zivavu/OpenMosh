@@ -1,9 +1,5 @@
 import type { InputAudioTrack } from "mediabunny";
-import {
-  openAudioTrack,
-  PREVIEW_MAX_PIXELS,
-  type FrameQueue,
-} from "../video/decode";
+import { openAudioTrack, type FrameQueue } from "../video/decode";
 import { openVideoFrameSource } from "../video/frame-source";
 
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
@@ -85,7 +81,7 @@ export class VideoPreviewPlayer {
 
   /** Returns null when the file can't drive the WebCodecs preview path. */
   static async create(file: File): Promise<VideoPreviewPlayer | null> {
-    const opened = await openVideoFrameSource(file, PREVIEW_MAX_PIXELS);
+    const opened = await openVideoFrameSource(file);
     if (!opened) return null;
 
     const player = new VideoPreviewPlayer(

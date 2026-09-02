@@ -5,7 +5,6 @@ import {
   type SourceEdit,
 } from "../media";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
-import { PREVIEW_MAX_PIXELS } from "../video/decode";
 import {
   getAllSequenceMedia,
   putSequenceMedia,
@@ -313,7 +312,7 @@ export class SequenceSourceRegistry {
     const src = this.get(id);
     if (!src || src.kind !== "video") return undefined;
     this.#creating.add(id);
-    void SlideVideoSampler.create(src.file, PREVIEW_MAX_PIXELS).then((sampler) => {
+    void SlideVideoSampler.create(src.file).then((sampler) => {
       this.#creating.delete(id);
       if (!sampler) return;
       if (this.#disposed || !this.get(id)) {

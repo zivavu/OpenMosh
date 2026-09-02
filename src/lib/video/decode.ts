@@ -12,15 +12,6 @@ export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 export const QUEUE_DEPTH = 8;
 
 /**
- * Frame area a preview is handed at most, matching the largest source that
- * plays smoothly at full size. Beyond it the decoder shrinks frames on its way
- * out — the preview renders at display size anyway, so the pixels past this
- * were only ever uploaded to be thrown away by the sampler. Export paths pass
- * no cap and get the file's own frames.
- */
-export const PREVIEW_MAX_PIXELS = 1920 * 1080;
-
-/**
  * Frames every queue has produced, for the preview's FPS overlay. Counted here
  * rather than per player so the reading means the same thing whichever path
  * the preview is on — one video, a sequence segment, or a media lane.

@@ -16,7 +16,7 @@ export interface VideoFrameSource {
   /** The media's own size — what an export writes and the UI reports. */
   width: number;
   height: number;
-  /** Size the frames actually arrive at; smaller when `maxPixels` capped them. */
+  /** Size the frames actually arrive at, which the source texture is sized to. */
   frameWidth: number;
   frameHeight: number;
 }
@@ -27,18 +27,15 @@ export interface VideoFrameSource {
  * the WebCodecs path at all, which is the caller's cue to fall back to a
  * <video> element.
  *
- * `maxPixels` caps the frame area a preview is handed; pass 0 (the default) for
- * the frames the file actually holds, which is what an export needs. The cap is
- * only honoured on the worker path: shrinking on the main thread would cost
- * about what the upload it saves costs, on the very thread being spared.
+ * Frames arrive at the size the file holds on both paths — see the decode
+ * worker for why they are no longer downscaled on the way out.
  */
 export async function openVideoFrameSource(
   file: File,
-  maxPixels = 0,
 ): Promise<VideoFrameSource | null> {
   const worker = getWorker();
   if (worker) {
-    const viaWorker = await openInWorker(worker, file, maxPixels);
+    const viaWorker = await openInWorker(worker, file);
     // "unsupported" is the file's verdict, not the worker's, and the
     // main-thread path applies the same rules — so don't pay to re-check.
     if (viaWorker !== "no-worker") return viaWorker;
@@ -98,7 +95,6 @@ function getWorker(): Worker | null {
 async function openInWorker(
   target: Worker,
   file: File,
-  maxPixels: number,
 ): Promise<VideoFrameSource | null | "no-worker"> {
   const id = nextStreamId++;
   const opened = await new Promise<OpenResult>((resolve) => {
@@ -108,7 +104,6 @@ async function openInWorker(
       id,
       file,
       depth: QUEUE_DEPTH,
-      maxPixels,
     } satisfies DecodeWorkerRequest);
   });
   // The worker dying mid-open is the one case where the file may still be fine.
@@ -121,8 +116,14 @@ async function openInWorker(
 function route(msg: DecodeWorkerResponse) {
   switch (msg.type) {
     case "opened": {
-      const { duration, width, height, frameWidth, frameHeight } = msg;
-      opens.get(msg.id)?.({ duration, width, height, frameWidth, frameHeight });
+      const { duration, width, height } = msg;
+      opens.get(msg.id)?.({
+        duration,
+        width,
+        height,
+        frameWidth: width,
+        frameHeight: height,
+      });
       opens.delete(msg.id);
       break;
     }
