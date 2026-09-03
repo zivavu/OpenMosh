@@ -23,6 +23,11 @@ export interface StoredSequenceMedia {
    * before this field existed.
    */
   lastModified?: number;
+  /**
+   * Optional ≤1080p preview re-encode of `blob` (see video/proxy.ts). Rides
+   * inside the entry so it prunes with the media it belongs to.
+   */
+  proxy?: Blob;
 }
 
 /** The set of media one song's timeline draws from. */
@@ -258,12 +263,36 @@ export async function getSequenceMediaByIds(
 }
 
 /**
+ * The stored preview proxy for this exact file, if one was persisted — keyed
+ * by the same content-derived id as the media itself, so a proxy survives
+ * reloads without its own identity anywhere.
+ */
+export async function getSequenceMediaProxy(file: File): Promise<File | null> {
+  try {
+    const db = await openDb();
+    if (!hasAllStores(db)) return null;
+    const entry = await new Promise<StoredSequenceMedia | undefined>(
+      (resolve, reject) => {
+        const tx = db.transaction(STORE, "readonly");
+        const req = tx.objectStore(STORE).get(stableSourceId(file));
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      },
+    );
+    if (!entry?.proxy) return null;
+    return new File([entry.proxy], file.name, { type: "video/mp4" });
+  } catch {
+    return null;
+  }
+}
+
+/**
  * One connection and one transaction for the whole batch. Writing a few
  * hundred files one call at a time meant a few hundred database opens, which
  * took longer than everything else about adding them put together.
  */
 export async function putSequenceMedia(
-  entries: { id: string; file: File }[],
+  entries: { id: string; file: File; proxy?: Blob }[],
 ): Promise<void> {
   if (entries.length === 0) return;
   const addedAt = Date.now();
@@ -271,7 +300,7 @@ export async function putSequenceMedia(
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const store = tx.objectStore(STORE);
-    for (const { id, file } of entries) {
+    for (const { id, file, proxy } of entries) {
       const entry: StoredSequenceMedia = {
         id,
         name: file.name,
@@ -279,6 +308,7 @@ export async function putSequenceMedia(
         type: file.type,
         addedAt,
         lastModified: file.lastModified,
+        ...(proxy ? { proxy } : {}),
       };
       store.put(entry);
     }
