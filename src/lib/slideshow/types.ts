@@ -44,6 +44,18 @@ export interface SlideshowSlide {
   /** Video only: display dimensions (probed at add time). */
   width?: number;
   height?: number;
+  /**
+   * ≤1080p stand-in the preview decodes instead of an oversized original
+   * (see video/proxy.ts). Absent until the transcode lands; export keeps
+   * reading `file` either way.
+   */
+  proxyFile?: File;
+  /** A proxy is being built (or looked up in storage) for this slide. */
+  proxyPending?: boolean;
+  /** 0–1, while `proxyPending`. */
+  proxyProgress?: number;
+  /** Transcoding failed — the chip shows a warning; previews stay on the original. */
+  proxyFailed?: boolean;
 }
 
 import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "../text";

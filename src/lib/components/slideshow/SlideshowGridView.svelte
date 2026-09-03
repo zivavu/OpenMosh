@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { ImageOff, Shuffle, X, Plus, Play } from 'lucide-svelte';
+	import {
+		ImageOff,
+		Shuffle,
+		X,
+		Plus,
+		Play,
+		TriangleAlert,
+	} from 'lucide-svelte';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
@@ -193,6 +200,21 @@
 						<div class="video-badge" title="Video">
 							<Play size={10} fill="currentColor" />
 						</div>
+						{#if slide.proxyPending}
+							<div
+								class="proxy-badge"
+								title={`Optimizing for smooth preview — ${Math.round((slide.proxyProgress ?? 0) * 100)}%`}
+							>
+								{Math.round((slide.proxyProgress ?? 0) * 100)}%
+							</div>
+						{:else if slide.proxyFailed}
+							<div
+								class="proxy-badge warn"
+								title="Preview optimization failed — playback may be slow on this machine"
+							>
+								<TriangleAlert size={10} />
+							</div>
+						{/if}
 					{/if}
 					<button
 						class="remove-btn"
@@ -404,6 +426,22 @@
 		background: rgba(0, 0, 0, 0.6);
 		padding: 2px 3px;
 		border-radius: 3px;
+	}
+
+	.proxy-badge {
+		position: absolute;
+		bottom: 4px;
+		left: 30px;
+		color: var(--text-3);
+		background: rgba(0, 0, 0, 0.6);
+		padding: 2px 3px;
+		border-radius: 3px;
+		font-family: var(--font-mono);
+		font-size: 0.55rem;
+	}
+
+	.proxy-badge.warn {
+		color: var(--start);
 	}
 
 	.remove-btn {

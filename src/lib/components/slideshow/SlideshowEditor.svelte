@@ -87,7 +87,15 @@
 	import { isModalKeyboardOpen } from '../../modal-keyboard';
 	import { DEFAULT_SETTINGS, loadSettings, updateSettings } from '../../editor/settings';
 	import { saveSession } from '../../editor/sessions';
-	import { pruneSequenceMedia } from '../../editor/sequence-media-store';
+	import {
+		getSequenceMediaProxy,
+		pruneSequenceMedia,
+	} from '../../editor/sequence-media-store';
+	import {
+		needsProxy,
+		startProxyJob,
+		type ProxyJob,
+	} from '../../video/proxy';
 
 	interface Props {
 		initialFiles: File[];
@@ -176,6 +184,52 @@
 		if (probe.thumb) s.thumbUrl = URL.createObjectURL(probe.thumb);
 		// Settled either way: the probe is the only shot at a video thumbnail.
 		s.thumbPending = false;
+		if (needsProxy(probe.width, probe.height)) {
+			s.proxyPending = true;
+			void makeSlideProxy(s.id, file, probe.width, probe.height);
+		}
+	}
+
+	/**
+	 * Attach a ≤1080p preview proxy to a video slide: reuse the one persisted
+	 * beside the original, or transcode one in the background. The slide
+	 * previews from the original either way until the proxy lands.
+	 */
+	async function makeSlideProxy(id: string, file: File, w: number, h: number) {
+		const stored = await getSequenceMediaProxy(file);
+		let proxy = stored;
+		if (!proxy) {
+			const job = startProxyJob(file, w, h, (progress) => {
+				const live = slides.find((s) => s.id === id);
+				if (live) live.proxyProgress = progress;
+			});
+			proxyJobs.set(id, job);
+			proxy = await job.promise;
+			proxyJobs.delete(id);
+		}
+		// A proxy that won't open is worse than none — the preview would freeze
+		// on this slide instead of grinding through the original — so it gets the
+		// same decodability check an added file gets before it is trusted.
+		if (proxy) {
+			const sampler = await SlideVideoSampler.create(proxy);
+			sampler?.dispose();
+			if (!sampler) proxy = null;
+		}
+		const live = slides.find((s) => s.id === id);
+		if (!live) return;
+		if (proxy) {
+			live.proxyFile = proxy;
+			live.proxyPending = false;
+			live.proxyProgress = undefined;
+			// A sampler decoding the original costs 4× the per-frame work; drop it
+			// so the next ensureSampler reopens on the proxy.
+			videoSamplers.get(id)?.dispose();
+			videoSamplers.delete(id);
+			samplerPromises.delete(id);
+		} else {
+			live.proxyPending = false;
+			live.proxyFailed = true;
+		}
 	}
 
 	async function generateThumb(id: string, file: File, objectUrl: string) {
@@ -245,6 +299,8 @@
 		const i = slides.findIndex((s) => s.id === id);
 		if (i === -1) return;
 		const [slide] = slides.splice(i, 1);
+		proxyJobs.get(id)?.cancel();
+		proxyJobs.delete(id);
 		if (!undoable) {
 			disposeSlide(slide);
 			return;
@@ -300,6 +356,12 @@
 	function saveSlideshowSession() {
 		const files = slides.map((s) => s.file);
 		if (files.length === 0) return;
+		// Proxies ride along with their originals, so a reopened session previews
+		// smoothly instead of re-transcoding everything it holds.
+		const proxies = new Map<File, File>();
+		for (const s of slides) {
+			if (s.proxyFile) proxies.set(s.file, s.proxyFile);
+		}
 		// Keyed by the song when there is one, so the session sits alongside the
 		// segments and text already saved under that track id.
 		void saveSession(
@@ -307,6 +369,7 @@
 			files,
 			{ config: $state.snapshot(config) as SlideshowConfig },
 			currentTrackId,
+			proxies,
 		)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
@@ -369,6 +432,8 @@
 					URL.revokeObjectURL(slide.thumbUrl);
 			}
 			pendingRemovals.clear();
+			for (const job of proxyJobs.values()) job.cancel();
+			proxyJobs.clear();
 			for (const sampler of videoSamplers.values()) sampler.dispose();
 			videoSamplers.clear();
 			samplerPromises.clear();
@@ -378,12 +443,25 @@
 	// ── Video slide samplers (shared decode engine for preview; export creates its own) ──
 	const videoSamplers = new Map<string, SlideVideoSampler>();
 	const samplerPromises = new Map<string, Promise<SlideVideoSampler | null>>();
+	/** In-flight proxy transcodes, keyed by slide id, so removeSlide can stop one. */
+	const proxyJobs = new Map<string, ProxyJob>();
 
 	function ensureSampler(slide: SlideshowSlide): Promise<SlideVideoSampler | null> {
 		let p = samplerPromises.get(slide.id);
 		if (!p) {
-			p = SlideVideoSampler.create(slide.file).then((s) => {
-				if (s) videoSamplers.set(slide.id, s);
+			// The proxy decodes at a fraction of the per-frame cost; the original is
+			// only what's left to decode while a proxy is still being built.
+			const file = slide.proxyFile ?? slide.file;
+			p = SlideVideoSampler.create(file).then((s) => {
+				if (s) {
+					// A proxy landed while this creation was in flight: the sampler is
+					// already obsolete, and keeping it would pin the slow path.
+					if (slide.proxyFile && slide.proxyFile !== file) {
+						s.dispose();
+						return null;
+					}
+					videoSamplers.set(slide.id, s);
+				}
 				return s;
 			});
 			samplerPromises.set(slide.id, p);
