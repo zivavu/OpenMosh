@@ -80,17 +80,26 @@ export class VideoPreviewPlayer {
   }
 
   /** Returns null when the file can't drive the WebCodecs preview path. */
-  static async create(file: File): Promise<VideoPreviewPlayer | null> {
+  static async create(
+    file: File,
+    /**
+     * The original media's size and duration, when `file` is a preview proxy:
+     * frames arrive at the proxy's smaller size, but the media's own size is
+     * what the UI reports and what the output defaults to, and the clock is
+     * anchored to the original's duration.
+     */
+    media?: { width: number; height: number; duration: number },
+  ): Promise<VideoPreviewPlayer | null> {
     const opened = await openVideoFrameSource(file);
     if (!opened) return null;
 
     const player = new VideoPreviewPlayer(
       opened.queue,
-      opened.width,
-      opened.height,
+      media?.width || opened.width,
+      media?.height || opened.height,
       opened.frameWidth,
       opened.frameHeight,
-      opened.duration,
+      media?.duration || opened.duration,
     );
 
     // Decode the audio track in the background; playback starts silent and

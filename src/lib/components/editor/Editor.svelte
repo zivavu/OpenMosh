@@ -120,6 +120,12 @@
 	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
 	import { MediaLayerDriver } from '../../editor/media-layer-driver';
 	import {
+		needsProxy,
+		startProxyJob,
+		type ProxyJob,
+	} from '../../video/proxy';
+	import { openVideoFrameSource } from '../../video/frame-source';
+	import {
 		appendMediaLane,
 		createMediaHistory,
 		createMediaTimeline,
@@ -141,6 +147,7 @@
 		type SourceEdit,
 	} from '../../media';
 	import {
+		getSequenceMediaProxy,
 		loadMediaPool,
 		pruneSequenceMedia,
 		saveMediaPool,
@@ -274,24 +281,69 @@
 		previewPlayer ? previewPlayer.playing : videoPlaying,
 	);
 
+	// The file the current preview player was built for — plain, so the proxy
+	// swap below can tell "same media, better decoder" from "new media".
+	let playerFile: File | null = null;
+
 	$effect(() => {
 		if (!isVideo) return;
+		// Sequence mode previews the primary through this player, so its proxy —
+		// once the registry has one — is what decodes. Single mode's file never
+		// enters the pool, so its proxy is managed just below.
+		const primary = isSequenceMode
+			? sourceRegistry.get(sourceRegistry.primaryId)
+			: null;
+		const proxy =
+			primary && primary.file === file
+				? primary.proxyFile
+				: singleProxyFor === file
+					? singleProxy
+					: null;
+		const previewFile = proxy ?? file;
+		// Frames arrive at the proxy's size, but the media's own size and
+		// duration are what the UI reports and what the output defaults to —
+		// anchored to the original so the swap moves nothing. Read untracked:
+		// these describe the outgoing player, and tracking them would rebuild
+		// the player each time the swap writes them back.
+		const media = proxy
+			? untrack(() => ({
+					width: naturalWidth ?? 0,
+					height: naturalHeight ?? 0,
+					duration: videoDuration,
+				}))
+			: undefined;
+		const swap = playerFile === file && !!proxy;
+		const resume = untrack(() => ({
+			time: previewPlayer?.currentTime ?? 0,
+			spanStart: videoSpanStart,
+			spanEnd: videoSpanEnd,
+			recordDuration: recordDuration,
+		}));
 		let cancelled = false;
 		let player: VideoPreviewPlayer | null = null;
-		VideoPreviewPlayer.create(file).then((p) => {
+		VideoPreviewPlayer.create(previewFile, media).then((p) => {
 			if (cancelled || !p) {
 				p?.dispose();
 				return;
 			}
 			player = p;
+			playerFile = file;
 			previewPlayer = p;
 			// Player owns the preview now — the element is only a recording fallback
 			videoEl?.pause();
 			if (videoEl) videoEl.muted = true;
 			videoDuration = p.duration;
-			videoSpanStart = 0;
-			videoSpanEnd = p.duration;
-			recordDuration = Math.round(p.duration * 10) / 10;
+			if (swap) {
+				// Same media, cheaper decoder: keep the span and the playhead.
+				videoSpanStart = resume.spanStart;
+				videoSpanEnd = resume.spanEnd;
+				recordDuration = resume.recordDuration;
+				if (resume.time > 0.05) p.seek(resume.time);
+			} else {
+				videoSpanStart = 0;
+				videoSpanEnd = p.duration;
+				recordDuration = Math.round(p.duration * 10) / 10;
+			}
 			// If the videoHasAudio probe finished first, ensureVideoAudioGraph
 			// already built an element-sourced graph for the now-inert element —
 			// tear it down and rebuild sourceless for the player.
@@ -304,6 +356,65 @@
 			player?.dispose();
 			previewPlayer = null;
 		};
+	});
+
+	// ── Single-mode preview proxy ──────────────────────────────────────────
+	// Single mode keeps its file out of the pool, so its proxy has no registry
+	// to live in: one job per file, swapped into the player when it lands.
+	let singleProxy = $state<File | null>(null);
+	/** The file `singleProxy` belongs to — plain, so a stale proxy can't leak
+	 * into the player effect after the file changed under it. */
+	let singleProxyFor: File | null = null;
+	let singleJob: ProxyJob | null = null;
+	let singleJobFor: File | null = null;
+
+	$effect(() => {
+		if (isSequenceMode || !isVideo) return;
+		const f = file;
+		if (singleJobFor !== f) {
+			// Different media: drop the previous file's proxy and job.
+			singleJob?.cancel();
+			singleJob = null;
+			singleJobFor = null;
+			singleProxy = null;
+			singleProxyFor = null;
+		}
+		// The player is the gate as well as the size source: files on the
+		// <video>-element fallback (rotation metadata, undecodable) decode
+		// through the browser's own hardware stack and don't need a proxy.
+		const player = previewPlayer;
+		const w = player?.width ?? 0;
+		const h = player?.height ?? 0;
+		if (!player || !needsProxy(w, h)) return;
+		if (singleJobFor === f || singleProxyFor === f) return;
+		singleJobFor = f;
+		void (async () => {
+			const stored = await getSequenceMediaProxy(f);
+			let proxy = stored;
+			if (!stored) {
+				const job = startProxyJob(f, w, h);
+				singleJob = job;
+				proxy = await job.promise;
+			}
+			if (f !== file) return;
+			// A proxy that won't open is worse than none — the preview would freeze
+			// instead of grinding through the original — so it gets the same
+			// decodability check an added file gets before it is trusted.
+			if (proxy) {
+				const opened = await openVideoFrameSource(proxy);
+				opened?.queue.dispose();
+				if (!opened) proxy = null;
+			}
+			if (proxy) {
+				singleProxy = proxy;
+				singleProxyFor = f;
+			} else {
+				showToast(
+					`Couldn't optimize "${f.name}" — preview may be slow`,
+					'error',
+				);
+			}
+		})();
 	});
 
 	// Push editor state into the player
@@ -2727,9 +2838,23 @@
 		const layerFiles = mediaTimelineSourceIds(mediaTimeline)
 			.map((id) => sourceRegistry.get(id)?.file)
 			.filter((f): f is File => !!f);
+		// Proxies ride along with their originals, so a reopened session previews
+		// smoothly instead of re-transcoding everything it holds.
+		const proxies = new Map<File, File>();
+		if (singleProxyFor === source && singleProxy) proxies.set(source, singleProxy);
+		for (const f of layerFiles) {
+			const proxy = sourceRegistry.proxyFor(f);
+			if (proxy) proxies.set(f, proxy);
+		}
 		// Keyed by the song when there is one, so the session sits alongside the
 		// text timeline and span already saved under that track id.
-		void saveSession('single', [source, ...layerFiles], state, currentTrackId)
+		void saveSession(
+			'single',
+			[source, ...layerFiles],
+			state,
+			currentTrackId,
+			proxies,
+		)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
 				// Swallowing this outright is what made the last failure invisible.
