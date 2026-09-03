@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ImageOff, Play, Plus, X } from 'lucide-svelte';
+	import { ImageOff, Play, Plus, TriangleAlert, X } from 'lucide-svelte';
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -205,6 +205,21 @@
 						<span class="card-kind" title="Video">
 							<Play size={9} fill="currentColor" />
 						</span>
+						{#if src.proxyPending}
+							<span
+								class="card-proxy"
+								title={`Optimizing for smooth preview — ${Math.round((src.proxyProgress ?? 0) * 100)}%`}
+							>
+								{Math.round((src.proxyProgress ?? 0) * 100)}%
+							</span>
+						{:else if src.proxyFailed}
+							<span
+								class="card-proxy warn"
+								title="Preview optimization failed — playback may be slow on this machine"
+							>
+								<TriangleAlert size={9} />
+							</span>
+						{/if}
 					{/if}
 					{#if src.id === primarySourceId}
 						<span class="card-base" title="Segments with no source of their own play this one">BASE</span>
@@ -436,6 +451,23 @@
 		border-radius: 2px;
 		background: rgba(0, 0, 0, 0.65);
 		color: var(--text-2);
+	}
+
+	.card-proxy {
+		position: absolute;
+		top: 4px;
+		left: 52px;
+		padding: 1px 4px;
+		border-radius: 2px;
+		background: rgba(0, 0, 0, 0.65);
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.55rem;
+		line-height: 1.5;
+	}
+
+	.card-proxy.warn {
+		color: var(--start);
 	}
 
 	.card-base {

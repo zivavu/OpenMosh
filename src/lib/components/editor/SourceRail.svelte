@@ -6,6 +6,7 @@
 		Play,
 		Plus,
 		SlidersHorizontal,
+		TriangleAlert,
 	} from 'lucide-svelte';
 	import {
 		DEFAULT_SOURCE_EDIT,
@@ -240,6 +241,21 @@
 						<span class="rail-n" style:background={sourceColor(i + 1)}>{i + 1}</span>
 						{#if src.kind === 'video'}
 							<span class="rail-kind"><Play size={7} fill="currentColor" /></span>
+							{#if src.proxyPending}
+								<span
+									class="rail-proxy"
+									title={`Optimizing for smooth preview — ${Math.round((src.proxyProgress ?? 0) * 100)}%`}
+								>
+									{Math.round((src.proxyProgress ?? 0) * 100)}%
+								</span>
+							{:else if src.proxyFailed}
+								<span
+									class="rail-proxy warn"
+									title="Preview optimization failed — playback may be slow on this machine"
+								>
+									<TriangleAlert size={7} />
+								</span>
+						{/if}
 						{/if}
 						{#if src.id === primarySourceId}
 							<span class="rail-base">B</span>
@@ -483,6 +499,22 @@
 	/* Both badges can show at once, so the BASE one steps aside. */
 	.rail-kind ~ .rail-base {
 		right: 16px;
+	}
+
+	.rail-proxy {
+		position: absolute;
+		top: 2px;
+		right: 16px;
+		padding: 0 2px;
+		border-radius: 2px;
+		background: rgba(0, 0, 0, 0.65);
+		color: var(--text-3);
+		font-size: 0.5rem;
+		font-weight: 700;
+	}
+
+	.rail-proxy.warn {
+		color: var(--start);
 	}
 
 	.rail-name {

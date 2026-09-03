@@ -5,8 +5,10 @@ import {
   type SourceEdit,
 } from "../media";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
+import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
 import {
   getAllSequenceMedia,
+  getSequenceMediaProxy,
   putSequenceMedia,
   stableSourceId,
   storedMediaToFile,
@@ -45,6 +47,18 @@ export interface SequenceSource {
   /** Videos only; 0 for images. */
   duration: number;
   /**
+   * ≤1080p stand-in the preview decodes instead of an oversized original
+   * (see video/proxy.ts). Absent until the transcode lands; exports keep
+   * reading `file` either way.
+   */
+  proxyFile?: File;
+  /** A proxy is being built (or looked up in storage) for this source. */
+  proxyPending?: boolean;
+  /** 0–1, while `proxyPending`. */
+  proxyProgress?: number;
+  /** Transcoding failed — the chip shows a warning; previews stay on the original. */
+  proxyFailed?: boolean;
+  /**
    * The file the editor was opened with. It owns the master clock and (when
    * it's a video) the preview audio, so its frames still come from the
    * editor's own player rather than from a sampler here.
@@ -77,6 +91,8 @@ export class SequenceSourceRegistry {
   #samplers = new Map<string, SlideVideoSampler>();
   /** Samplers whose create() is in flight, so we don't start a second one. */
   #creating = new Set<string>();
+  /** In-flight proxy transcodes, keyed by source id, so remove() can stop one. */
+  #proxyJobs = new Map<string, ProxyJob>();
   #disposed = false;
   #onReady: (() => void) | undefined;
 
@@ -140,6 +156,12 @@ export class SequenceSourceRegistry {
         const batch = this.#accept(built);
         if (this.#disposed) return [];
         ok.push(...batch);
+        // Started only once the source is actually in the pool: the job's
+        // callbacks resolve the source by id, and a proxy that lands before
+        // the append would have nowhere to land itself.
+        for (const s of batch) {
+          if (s.proxyPending) void this.#makeProxy(s.id, s.file, persist);
+        }
       }
     } finally {
       // Released only after the appends, so a call waiting behind this one
@@ -202,6 +224,8 @@ export class SequenceSourceRegistry {
   remove(id: string) {
     const src = this.get(id);
     if (!src) return;
+    this.#proxyJobs.get(id)?.cancel();
+    this.#proxyJobs.delete(id);
     this.sources = this.sources.filter((s) => s.id !== id);
     if (this.edits[id]) {
       const next = { ...this.edits };
@@ -311,11 +335,21 @@ export class SequenceSourceRegistry {
     if (this.#creating.has(id)) return undefined;
     const src = this.get(id);
     if (!src || src.kind !== "video") return undefined;
+    // The proxy decodes at a fraction of the per-frame cost; the original is
+    // only what's left to decode while a proxy is still being built.
+    const file = src.proxyFile ?? src.file;
     this.#creating.add(id);
-    void SlideVideoSampler.create(src.file).then((sampler) => {
+    void SlideVideoSampler.create(file).then((sampler) => {
       this.#creating.delete(id);
       if (!sampler) return;
       if (this.#disposed || !this.get(id)) {
+        sampler.dispose();
+        return;
+      }
+      // A proxy landed while this creation was in flight: the sampler is
+      // already obsolete, and keeping it would pin the slow path for the
+      // whole session.
+      if (this.get(id)!.proxyFile && this.get(id)!.proxyFile !== file) {
         sampler.dispose();
         return;
       }
@@ -324,8 +358,15 @@ export class SequenceSourceRegistry {
     return undefined;
   }
 
+  /** The preview proxy held for this exact file, if one has landed. */
+  proxyFor(file: File): File | null {
+    return this.sources.find((s) => s.file === file)?.proxyFile ?? null;
+  }
+
   dispose() {
     this.#disposed = true;
+    for (const job of this.#proxyJobs.values()) job.cancel();
+    this.#proxyJobs.clear();
     for (const s of this.#samplers.values()) s.dispose();
     this.#samplers.clear();
     this.#images.clear();
@@ -430,7 +471,63 @@ export class SequenceSourceRegistry {
       width: probe.width,
       height: probe.height,
       duration: probe.duration,
+      // The job itself starts after the append — see add().
+      proxyPending: needsProxy(probe.width, probe.height),
     };
+  }
+
+  /**
+   * Attach a ≤1080p preview proxy to a video source: reuse the one persisted
+   * beside the original, or transcode one in the background. The source
+   * previews from the original either way until the proxy lands.
+   */
+  async #makeProxy(id: string, file: File, persist: boolean) {
+    const stored = await getSequenceMediaProxy(file);
+    let proxy = stored;
+    if (!proxy) {
+      const src = this.get(id);
+      const job = startProxyJob(
+        file,
+        src?.width ?? 0,
+        src?.height ?? 0,
+        (progress) => {
+          const live = this.get(id);
+          if (live) live.proxyProgress = progress;
+        },
+      );
+      this.#proxyJobs.set(id, job);
+      proxy = await job.promise;
+      this.#proxyJobs.delete(id);
+    }
+    if (this.#disposed) return;
+    // A proxy that won't open is worse than none — the preview would freeze on
+    // this source instead of grinding through the original — so it gets the
+    // same decodability check an added file gets before it is trusted.
+    if (proxy) {
+      const sampler = await SlideVideoSampler.create(proxy);
+      sampler?.dispose();
+      if (!sampler) proxy = null;
+    }
+    const live = this.get(id);
+    if (!live) return;
+    if (proxy) {
+      live.proxyFile = proxy;
+      live.proxyPending = false;
+      live.proxyProgress = undefined;
+      // A sampler decoding the original costs 4× the per-frame work; drop it
+      // so the next tick reopens on the proxy.
+      this.#samplers.get(id)?.dispose();
+      this.#samplers.delete(id);
+      // Persisted beside the original so the next session skips the transcode.
+      // A persist:false add (the session-scoped primary) is written by the
+      // session save instead, which carries the proxy explicitly.
+      if (persist && !stored) {
+        void putSequenceMedia([{ id, file, proxy }]).catch(() => {});
+      }
+    } else {
+      live.proxyPending = false;
+      live.proxyFailed = true;
+    }
   }
 }
 

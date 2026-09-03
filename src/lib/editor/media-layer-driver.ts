@@ -32,7 +32,7 @@ export class MediaLayerDriver {
   /** Source whose frame is on each lane's texture, keyed by lane id. */
   #uploaded = new Map<string, string>();
   /** One decoder per (lane, video source), keyed by `samplerKey`. */
-  #samplers = new Map<string, SlideVideoSampler>();
+  #samplers = new Map<string, { sampler: SlideVideoSampler; file: File }>();
   /** Keys whose sampler is still being created, so we don't start a second. */
   #creating = new Set<string>();
   #disposed = false;
@@ -74,7 +74,11 @@ export class MediaLayerDriver {
         continue;
       }
 
-      const sampler = this.#samplerFor(layer.key, src.id, src.file);
+      const sampler = this.#samplerFor(
+        layer.key,
+        src.id,
+        src.proxyFile ?? src.file,
+      );
       if (!sampler) continue;
       this.#uploaded.set(layer.key, src.id);
       // Non-blocking: a lane whose decoder has nothing new keeps the frame
@@ -102,6 +106,10 @@ export class MediaLayerDriver {
    * a lane that cuts back and forth between two videos would otherwise pay a
    * decoder open on every clip edge. The per-lane cap is what stops a lane with
    * a dozen video clips from holding a dozen decoders.
+   *
+   * The decoder is pinned to the file it was opened on: a proxy landing
+   * mid-playback retires it, so the lane doesn't spend the rest of the session
+   * on the 4×-costlier original.
    */
   #samplerFor(
     key: string,
@@ -111,10 +119,15 @@ export class MediaLayerDriver {
     const id = samplerKey(key, sourceId);
     const held = this.#samplers.get(id);
     if (held) {
-      // Re-inserted so the map's iteration order is least-recently-used first.
-      this.#samplers.delete(id);
-      this.#samplers.set(id, held);
-      return held;
+      if (held.file !== file) {
+        held.sampler.dispose();
+        this.#samplers.delete(id);
+      } else {
+        // Re-inserted so the map's iteration order is least-recently-used first.
+        this.#samplers.delete(id);
+        this.#samplers.set(id, held);
+        return held.sampler;
+      }
     }
     if (this.#creating.has(id)) return undefined;
     this.#creating.add(id);
@@ -125,7 +138,7 @@ export class MediaLayerDriver {
         sampler.dispose();
         return;
       }
-      this.#samplers.set(id, sampler);
+      this.#samplers.set(id, { sampler, file });
       this.#evict(key);
     });
     return undefined;
@@ -135,15 +148,15 @@ export class MediaLayerDriver {
   #evict(key: string) {
     const mine = [...this.#samplers.keys()].filter((k) => laneOfKey(k) === key);
     for (const id of mine.slice(0, mine.length - MAX_LANE_SAMPLERS)) {
-      this.#samplers.get(id)?.dispose();
+      this.#samplers.get(id)?.sampler.dispose();
       this.#samplers.delete(id);
     }
   }
 
   #release(key: string) {
-    for (const [id, sampler] of this.#samplers) {
+    for (const [id, held] of this.#samplers) {
       if (laneOfKey(id) !== key) continue;
-      sampler.dispose();
+      held.sampler.dispose();
       this.#samplers.delete(id);
     }
     if (!this.#uploaded.delete(key)) return;
@@ -157,7 +170,7 @@ export class MediaLayerDriver {
 
   dispose() {
     this.#disposed = true;
-    for (const sampler of this.#samplers.values()) sampler.dispose();
+    for (const { sampler } of this.#samplers.values()) sampler.dispose();
     this.#samplers.clear();
   }
 }
