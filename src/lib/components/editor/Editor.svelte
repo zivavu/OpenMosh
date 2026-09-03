@@ -368,6 +368,9 @@
 	let singleProxyFor: File | null = null;
 	let singleJob: ProxyJob | null = null;
 	let singleJobFor: File | null = null;
+	/** Set when optimization failed, so it isn't retried in a loop; the toast's
+	 * Retry action clears it. */
+	let singleProxyFailed = $state(false);
 
 	$effect(() => {
 		if (isSequenceMode || !isVideo) return;
@@ -379,6 +382,7 @@
 			singleJobFor = null;
 			singleProxy = null;
 			singleProxyFor = null;
+			singleProxyFailed = false;
 		}
 		// The player is the gate as well as the size source: files on the
 		// <video>-element fallback (rotation metadata, undecodable) decode
@@ -387,7 +391,8 @@
 		const w = player?.width ?? 0;
 		const h = player?.height ?? 0;
 		if (!player || !needsProxy(w, h)) return;
-		if (singleJobFor === f || singleProxyFor === f) return;
+		if (singleJobFor === f || singleProxyFor === f || singleProxyFailed)
+			return;
 		singleJobFor = f;
 		void (async () => {
 			const stored = await getSequenceMediaProxy(f);
@@ -414,9 +419,20 @@
 				singleProxy = proxy;
 				singleProxyFor = f;
 			} else {
+				// Not auto-retried: a persistent failure would loop. The toast's
+				// action is the explicit way back.
+				singleProxyFailed = true;
 				showToast(
 					`Couldn't optimize "${f.name}" — preview may be slow`,
 					'error',
+					8000,
+					{
+						label: 'Retry',
+						run: () => {
+							singleJobFor = null;
+							singleProxyFailed = false;
+						},
+					},
 				);
 			}
 		})();
@@ -3937,6 +3953,7 @@
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
+				onRetryProxy={(id) => sourceRegistry.retryProxy(id)}
 			/>
 		{/if}
 		<!-- Hidden, never unmounted: tearing the canvas down would take the

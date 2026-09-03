@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ImageOff, Play, Plus, TriangleAlert, X } from 'lucide-svelte';
+	import { ImageOff, Play, Plus, TriangleAlert, X, Zap } from 'lucide-svelte';
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -21,6 +21,7 @@
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
+		onRetryProxy: (sourceId: string) => void;
 	}
 
 	let {
@@ -32,6 +33,7 @@
 		onRemove,
 		onReorder,
 		onAssign,
+		onRetryProxy,
 	}: Props = $props();
 
 	let fileInput = $state<HTMLInputElement | null>(null);
@@ -213,11 +215,22 @@
 								{Math.round((src.proxyProgress ?? 0) * 100)}%
 							</span>
 						{:else if src.proxyFailed}
-							<span
+							<button
 								class="card-proxy warn"
-								title="Preview optimization failed — playback may be slow on this machine"
+								title="Preview optimization failed — click to retry"
+								onclick={(e) => {
+									e.stopPropagation();
+									onRetryProxy(src.id);
+								}}
 							>
 								<TriangleAlert size={9} />
+							</button>
+						{:else if src.proxyFile}
+							<span
+								class="card-proxy ok"
+								title="Preview optimized — decodes from a smaller copy"
+							>
+								<Zap size={9} fill="currentColor" />
 							</span>
 						{/if}
 					{/if}
@@ -457,13 +470,24 @@
 		position: absolute;
 		top: 4px;
 		left: 52px;
+		display: flex;
+		align-items: center;
 		padding: 1px 4px;
+		border: none;
 		border-radius: 2px;
 		background: rgba(0, 0, 0, 0.65);
 		color: var(--text-3);
 		font-family: var(--font-mono);
 		font-size: 0.55rem;
 		line-height: 1.5;
+	}
+
+	button.card-proxy {
+		cursor: pointer;
+	}
+
+	.card-proxy.ok {
+		color: var(--live);
 	}
 
 	.card-proxy.warn {

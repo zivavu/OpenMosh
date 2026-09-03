@@ -359,6 +359,19 @@ export class SequenceSourceRegistry {
     return undefined;
   }
 
+  /**
+   * Retry a failed proxy transcode for this source — the chip's warning badge
+   * is the entry point. A no-op when there is nothing to retry.
+   */
+  retryProxy(id: string) {
+    const src = this.get(id);
+    if (!src || src.kind !== "video" || !src.proxyFailed) return;
+    if (!src.width || !src.height) return;
+    src.proxyFailed = false;
+    src.proxyPending = true;
+    void this.#makeProxy(id, src.file);
+  }
+
   dispose() {
     this.#disposed = true;
     for (const job of this.#proxyJobs.values()) job.cancel();

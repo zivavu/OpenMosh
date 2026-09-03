@@ -6,6 +6,7 @@
 		Plus,
 		Play,
 		TriangleAlert,
+		Zap,
 	} from 'lucide-svelte';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
@@ -20,6 +21,7 @@
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
 		onShuffleSlides: () => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
+		onRetryProxy: (slideId: string) => void;
 	}
 
 	let {
@@ -31,6 +33,7 @@
 		onReorderSlides,
 		onShuffleSlides,
 		onSetPresetIndex,
+		onRetryProxy,
 	}: Props = $props();
 
 	let fileInput: HTMLInputElement;
@@ -208,11 +211,22 @@
 								{Math.round((slide.proxyProgress ?? 0) * 100)}%
 							</div>
 						{:else if slide.proxyFailed}
-							<div
+							<button
 								class="proxy-badge warn"
-								title="Preview optimization failed — playback may be slow on this machine"
+								title="Preview optimization failed — click to retry"
+								onclick={(e) => {
+									e.stopPropagation();
+									onRetryProxy(slide.id);
+								}}
 							>
 								<TriangleAlert size={10} />
+							</button>
+						{:else if slide.proxyFile}
+							<div
+								class="proxy-badge ok"
+								title="Preview optimized — decodes from a smaller copy"
+							>
+								<Zap size={10} fill="currentColor" />
 							</div>
 						{/if}
 					{/if}
@@ -432,12 +446,23 @@
 		position: absolute;
 		bottom: 4px;
 		left: 30px;
+		display: flex;
+		align-items: center;
 		color: var(--text-3);
 		background: rgba(0, 0, 0, 0.6);
 		padding: 2px 3px;
+		border: none;
 		border-radius: 3px;
 		font-family: var(--font-mono);
 		font-size: 0.55rem;
+	}
+
+	button.proxy-badge {
+		cursor: pointer;
+	}
+
+	.proxy-badge.ok {
+		color: var(--live);
 	}
 
 	.proxy-badge.warn {

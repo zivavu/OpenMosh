@@ -236,6 +236,16 @@
 		}
 	}
 
+	/** Retry a failed proxy transcode for a slide — the badge's click action. */
+	function retrySlideProxy(id: string) {
+		const s = slides.find((x) => x.id === id);
+		if (!s || s.kind !== 'video' || !s.proxyFailed) return;
+		if (!s.width || !s.height) return;
+		s.proxyFailed = false;
+		s.proxyPending = true;
+		void makeSlideProxy(s.id, s.file, s.width, s.height);
+	}
+
 	async function generateThumb(id: string, file: File, objectUrl: string) {
 		const SIZE = 100;
 		let thumbUrl: string;
@@ -1754,6 +1764,7 @@
 				onReorderSlides={reorderSlides}
 				onShuffleSlides={shuffleSlides}
 				onSetPresetIndex={setPresetIndex}
+				onRetryProxy={(id) => retrySlideProxy(id)}
 			/>
 		{/if}
 		<div

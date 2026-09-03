@@ -7,6 +7,7 @@
 		Plus,
 		SlidersHorizontal,
 		TriangleAlert,
+		Zap,
 	} from 'lucide-svelte';
 	import {
 		DEFAULT_SOURCE_EDIT,
@@ -255,7 +256,14 @@
 								>
 									<TriangleAlert size={7} />
 								</span>
-						{/if}
+							{:else if src.proxyFile}
+								<span
+									class="rail-proxy ok"
+									title="Preview optimized — decodes from a smaller copy"
+								>
+									<Zap size={7} fill="currentColor" />
+								</span>
+							{/if}
 						{/if}
 						{#if src.id === primarySourceId}
 							<span class="rail-base">B</span>
@@ -511,6 +519,10 @@
 		color: var(--text-3);
 		font-size: 0.5rem;
 		font-weight: 700;
+	}
+
+	.rail-proxy.ok {
+		color: var(--live);
 	}
 
 	.rail-proxy.warn {
