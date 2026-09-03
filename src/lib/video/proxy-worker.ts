@@ -29,7 +29,7 @@ export type ProxyWorkerRequest =
 export type ProxyWorkerResponse =
 	| { type: "progress"; id: number; progress: number }
 	| { type: "done"; id: number; blob: Blob }
-	| { type: "failed"; id: number };
+	| { type: "failed"; id: number; reason: string };
 
 const conversions = new Map<number, Conversion>();
 
@@ -67,10 +67,24 @@ async function convert(id: number, file: File, width: number, height: number) {
 				height,
 				fit: "fill",
 				quality: new Quality("medium"),
-				hardwareAcceleration: "prefer-hardware",
+				// Deliberately no hardwareAcceleration hint: mediabunny picks the
+				// codec by probing what the browser can actually encode, but the hint
+				// rides into the encoder config afterwards, where a browser without
+				// hardware encoding for that codec (Firefox has no H.264 encoder at
+				// all) rejects the config and the whole conversion dies. A background
+				// proxy is happy to encode in software.
 			},
 		});
 		conversions.set(id, conversion);
+		// A discarded video track (no encodable codec, undecodable source) leaves
+		// an audio-only or empty conversion — execute() would throw a bare
+		// "invalid", so surface the real reason instead.
+		if (!conversion.isValid) {
+			const reasons = conversion.discardedTracks
+				.map((t) => `${t.track.type}: ${t.reason}`)
+				.join(", ");
+			throw new Error(`no usable tracks — discarded: ${reasons || "none"}`);
+		}
 		conversion.onProgress = (progress) =>
 			post({ type: "progress", id, progress });
 		await conversion.execute();
@@ -81,9 +95,11 @@ async function convert(id: number, file: File, width: number, height: number) {
 			id,
 			blob: new Blob([target.buffer], { type: "video/mp4" }),
 		});
-	} catch {
+	} catch (error) {
 		// Cancel or a mid-stream decode/encode failure — both read as "no proxy".
+		// The error is otherwise invisible: nothing here logs on its own.
 		conversions.delete(id);
-		post({ type: "failed", id });
+		console.error(`[proxy] conversion ${id} failed`, error);
+		post({ type: "failed", id, reason: String(error) });
 	}
 }

@@ -48,6 +48,9 @@ export interface ProxyJob {
 let worker: Worker | null = null;
 let workerUnavailable = false;
 
+/** Jobs waiting on the worker, keyed by id — resolved if the worker dies. */
+const pending = new Map<number, (file: File | null) => void>();
+
 function getWorker(): Worker | null {
 	if (worker) return worker;
 	if (workerUnavailable) return null;
@@ -59,11 +62,14 @@ function getWorker(): Worker | null {
 		const spawned = new Worker(new URL("./proxy-worker.ts", import.meta.url), {
 			type: "module",
 		});
-		spawned.onerror = () => {
-			// A worker that failed to load can't answer anything; every waiting job
-			// resolves null and future ones skip straight to that verdict.
+		spawned.onerror = (event) => {
+			// A worker that failed to load can't answer anything asked of it —
+			// without this, every queued job would sit at 0% forever.
 			workerUnavailable = true;
 			worker = null;
+			console.error("[proxy] worker failed to load", spawned, event.message);
+			for (const settle of pending.values()) settle(null);
+			pending.clear();
 		};
 		worker = spawned;
 		return worker;
@@ -90,18 +96,27 @@ export function startProxyJob(
 	const target = proxyTargetSize(width, height);
 
 	const promise = new Promise<File | null>((resolve) => {
+		// Resolved directly if the worker dies before this job's slot opens; the
+		// running slot replaces it with a settle that also releases the chain.
+		pending.set(id, resolve);
 		chain = chain.then(
 			() =>
 				new Promise<void>((release) => {
-					if (canceled) {
-						resolve(null);
+					const settle = (result: File | null) => {
+						pending.delete(id);
+						resolve(result);
 						release();
+					};
+					// While this job runs, a worker death must release the chain slot
+					// too — the creation-time entry could only resolve the promise.
+					pending.set(id, settle);
+					if (canceled) {
+						settle(null);
 						return;
 					}
 					const target_ = getWorker();
 					if (!target_) {
-						resolve(null);
-						release();
+						settle(null);
 						return;
 					}
 					const onMessage = (e: MessageEvent<ProxyWorkerResponse>) => {
@@ -113,11 +128,13 @@ export function startProxyJob(
 						}
 						target_.removeEventListener("message", onMessage);
 						if (msg.type === "done") {
-							resolve(new File([msg.blob], file.name, { type: "video/mp4" }));
+							settle(new File([msg.blob], file.name, { type: "video/mp4" }));
 						} else {
-							resolve(null);
+							// The worker logs the underlying error; this is what ties it
+							// back to the file the user is looking at.
+							console.warn(`[proxy] "${file.name}": ${msg.reason}`);
+							settle(null);
 						}
-						release();
 					};
 					target_.addEventListener("message", onMessage);
 					target_.postMessage({
