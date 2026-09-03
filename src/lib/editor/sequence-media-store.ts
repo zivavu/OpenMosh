@@ -23,11 +23,19 @@ export interface StoredSequenceMedia {
    * before this field existed.
    */
   lastModified?: number;
-  /**
-   * Optional ≤1080p preview re-encode of `blob` (see video/proxy.ts). Rides
-   * inside the entry so it prunes with the media it belongs to.
-   */
-  proxy?: Blob;
+}
+
+/**
+ * A ≤1080p preview re-encode of some media (see video/proxy.ts), keyed by the
+ * same content-derived id as its source. Its own store rather than a field on
+ * the media entry: the sources that most need a proxy — the sequence primary,
+ * a single-mode file — are deliberately not persisted, and a proxy that died
+ * with that decision would re-transcode on every start.
+ */
+export interface StoredSequenceProxy {
+  id: string;
+  blob: Blob;
+  addedAt: number;
 }
 
 /** The set of media one song's timeline draws from. */
@@ -75,7 +83,8 @@ const STORE = "media";
 const POOL_STORE = "pools";
 const SESSION_STORE = "sessions";
 const TIMELINE_STORE = "timelines";
-const DB_VERSION = 4;
+const PROXY_STORE = "proxies";
+const DB_VERSION = 5;
 /** Least recently used pools past this are dropped. */
 const MAX_POOLS = 20;
 /** Same, for sessions — they compete with pools for the one media store. */
@@ -88,6 +97,14 @@ const MAX_TIMELINES = 40;
  * must not be so tight that an add races its own eviction.
  */
 const MAX_UNREFERENCED = 64;
+
+/**
+ * Proxies belonging to no referenced media are kept up to this many entries,
+ * newest first — a session-scoped source (the sequence primary, a single-mode
+ * file) has no pool or session pointing at it, and its proxy is the one thing
+ * worth keeping between runs.
+ */
+const MAX_UNREFERENCED_PROXIES = 16;
 
 /**
  * Stable across reloads for the same file, without hashing its contents.
@@ -110,7 +127,7 @@ export function stableSourceId(file: File): string {
  */
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-const REQUIRED_STORES = [STORE, POOL_STORE, SESSION_STORE, TIMELINE_STORE];
+const REQUIRED_STORES = [STORE, POOL_STORE, SESSION_STORE, TIMELINE_STORE, PROXY_STORE];
 
 function hasAllStores(db: IDBDatabase): boolean {
   return REQUIRED_STORES.every((name) => db.objectStoreNames.contains(name));
@@ -138,6 +155,9 @@ function openAt(version?: number): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(TIMELINE_STORE)) {
         db.createObjectStore(TIMELINE_STORE, { keyPath: "key" });
+      }
+      if (!db.objectStoreNames.contains(PROXY_STORE)) {
+        db.createObjectStore(PROXY_STORE, { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -271,19 +291,74 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
   try {
     const db = await openDb();
     if (!hasAllStores(db)) return null;
-    const entry = await new Promise<StoredSequenceMedia | undefined>(
+    const entry = await new Promise<StoredSequenceProxy | undefined>(
       (resolve, reject) => {
-        const tx = db.transaction(STORE, "readonly");
-        const req = tx.objectStore(STORE).get(stableSourceId(file));
+        const tx = db.transaction(PROXY_STORE, "readonly");
+        const req = tx.objectStore(PROXY_STORE).get(stableSourceId(file));
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       },
     );
-    if (!entry?.proxy) return null;
-    return new File([entry.proxy], file.name, { type: "video/mp4" });
+    if (!entry?.blob) return null;
+    return new File([entry.blob], file.name, { type: "video/mp4" });
   } catch {
     return null;
   }
+}
+
+/** Stores the preview proxy for this exact file, keyed by its source id. */
+export async function putSequenceMediaProxy(
+  file: File,
+  proxy: Blob,
+): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PROXY_STORE, "readwrite");
+    const entry: StoredSequenceProxy = {
+      id: stableSourceId(file),
+      blob: proxy,
+      addedAt: Date.now(),
+    };
+    tx.objectStore(PROXY_STORE).put(entry);
+    tx.oncomplete = () => {
+      resolve();
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
+}
+
+async function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PROXY_STORE, "readonly");
+    const req = tx.objectStore(PROXY_STORE).getAll();
+    let result: StoredSequenceProxy[] = [];
+    req.onsuccess = () => {
+      result = req.result as StoredSequenceProxy[];
+    };
+    tx.oncomplete = () => {
+      resolve(result);
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
+}
+
+async function deleteSequenceProxy(id: string): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PROXY_STORE, "readwrite");
+    tx.objectStore(PROXY_STORE).delete(id);
+    tx.oncomplete = () => {
+      resolve();
+    };
+    tx.onerror = () => {
+      reject(tx.error);
+    };
+  });
 }
 
 /**
@@ -292,7 +367,7 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
  * took longer than everything else about adding them put together.
  */
 export async function putSequenceMedia(
-  entries: { id: string; file: File; proxy?: Blob }[],
+  entries: { id: string; file: File }[],
 ): Promise<void> {
   if (entries.length === 0) return;
   const addedAt = Date.now();
@@ -300,7 +375,7 @@ export async function putSequenceMedia(
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     const store = tx.objectStore(STORE);
-    for (const { id, file, proxy } of entries) {
+    for (const { id, file } of entries) {
       const entry: StoredSequenceMedia = {
         id,
         name: file.name,
@@ -308,7 +383,6 @@ export async function putSequenceMedia(
         type: file.type,
         addedAt,
         lastModified: file.lastModified,
-        ...(proxy ? { proxy } : {}),
       };
       store.put(entry);
     }
@@ -591,6 +665,19 @@ export async function pruneSequenceMedia(): Promise<void> {
   );
   for (const entry of unreferenced.slice(0, -MAX_UNREFERENCED)) {
     await deleteSequenceMedia(entry.id);
+  }
+
+  // A proxy whose source is gone can never be looked up against again — its
+  // id is derived from the source file — so past the newest few, they are
+  // disk spent on nothing.
+  const proxies = (await getAllSequenceProxies()).sort(
+    (a, b) => b.addedAt - a.addedAt,
+  );
+  const staleProxies = proxies
+    .filter((p) => !referenced.has(p.id))
+    .slice(MAX_UNREFERENCED_PROXIES);
+  for (const entry of staleProxies) {
+    await deleteSequenceProxy(entry.id);
   }
 }
 

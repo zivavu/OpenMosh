@@ -150,6 +150,7 @@
 		getSequenceMediaProxy,
 		loadMediaPool,
 		pruneSequenceMedia,
+		putSequenceMediaProxy,
 		saveMediaPool,
 	} from '../../editor/sequence-media-store';
 	import {
@@ -406,6 +407,10 @@
 				if (!opened) proxy = null;
 			}
 			if (proxy) {
+				// Persisted under the file's own id, so re-opening the same video
+				// skips the transcode even though single mode saves no session until
+				// it has been edited.
+				if (!stored) void putSequenceMediaProxy(f, proxy).catch(() => {});
 				singleProxy = proxy;
 				singleProxyFor = f;
 			} else {
@@ -2838,23 +2843,9 @@
 		const layerFiles = mediaTimelineSourceIds(mediaTimeline)
 			.map((id) => sourceRegistry.get(id)?.file)
 			.filter((f): f is File => !!f);
-		// Proxies ride along with their originals, so a reopened session previews
-		// smoothly instead of re-transcoding everything it holds.
-		const proxies = new Map<File, File>();
-		if (singleProxyFor === source && singleProxy) proxies.set(source, singleProxy);
-		for (const f of layerFiles) {
-			const proxy = sourceRegistry.proxyFor(f);
-			if (proxy) proxies.set(f, proxy);
-		}
 		// Keyed by the song when there is one, so the session sits alongside the
 		// text timeline and span already saved under that track id.
-		void saveSession(
-			'single',
-			[source, ...layerFiles],
-			state,
-			currentTrackId,
-			proxies,
-		)
+		void saveSession('single', [source, ...layerFiles], state, currentTrackId)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
 				// Swallowing this outright is what made the last failure invisible.

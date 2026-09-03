@@ -10,6 +10,7 @@ import {
   getAllSequenceMedia,
   getSequenceMediaProxy,
   putSequenceMedia,
+  putSequenceMediaProxy,
   stableSourceId,
   storedMediaToFile,
   type StoredSequenceMedia,
@@ -160,7 +161,7 @@ export class SequenceSourceRegistry {
         // callbacks resolve the source by id, and a proxy that lands before
         // the append would have nowhere to land itself.
         for (const s of batch) {
-          if (s.proxyPending) void this.#makeProxy(s.id, s.file, persist);
+          if (s.proxyPending) void this.#makeProxy(s.id, s.file);
         }
       }
     } finally {
@@ -358,11 +359,6 @@ export class SequenceSourceRegistry {
     return undefined;
   }
 
-  /** The preview proxy held for this exact file, if one has landed. */
-  proxyFor(file: File): File | null {
-    return this.sources.find((s) => s.file === file)?.proxyFile ?? null;
-  }
-
   dispose() {
     this.#disposed = true;
     for (const job of this.#proxyJobs.values()) job.cancel();
@@ -481,7 +477,7 @@ export class SequenceSourceRegistry {
    * beside the original, or transcode one in the background. The source
    * previews from the original either way until the proxy lands.
    */
-  async #makeProxy(id: string, file: File, persist: boolean) {
+  async #makeProxy(id: string, file: File) {
     const stored = await getSequenceMediaProxy(file);
     let proxy = stored;
     if (!proxy) {
@@ -518,11 +514,11 @@ export class SequenceSourceRegistry {
       // so the next tick reopens on the proxy.
       this.#samplers.get(id)?.dispose();
       this.#samplers.delete(id);
-      // Persisted beside the original so the next session skips the transcode.
-      // A persist:false add (the session-scoped primary) is written by the
-      // session save instead, which carries the proxy explicitly.
-      if (persist && !stored) {
-        void putSequenceMedia([{ id, file, proxy }]).catch(() => {});
+      // Persisted under the source's own id so the next run skips the
+      // transcode — whether or not the source itself is persisted, which for
+      // the session-scoped primary it deliberately isn't.
+      if (!stored) {
+        void putSequenceMediaProxy(file, proxy).catch(() => {});
       }
     } else {
       live.proxyPending = false;

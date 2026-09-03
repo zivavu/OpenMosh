@@ -90,15 +90,10 @@ export async function saveSession(
   files: File[],
   state: unknown,
   trackId?: string | null,
-  /** Preview proxies to store beside their originals, keyed by file identity. */
-  proxies?: Map<File, File>,
 ): Promise<void> {
   const key = sessionKey(mode, files, trackId);
   if (!key) return;
-  const entries = files.map((file) => {
-    const proxy = proxies?.get(file);
-    return { id: stableSourceId(file), file, ...(proxy ? { proxy } : {}) };
-  });
+  const entries = files.map((file) => ({ id: stableSourceId(file), file }));
   await putSequenceMedia(entries);
   // A song-keyed session is named after the song, matching how the sequence
   // list reads; the media only names it when there's no song to name it after.

@@ -90,6 +90,7 @@
 	import {
 		getSequenceMediaProxy,
 		pruneSequenceMedia,
+		putSequenceMediaProxy,
 	} from '../../editor/sequence-media-store';
 	import {
 		needsProxy,
@@ -218,6 +219,9 @@
 		const live = slides.find((s) => s.id === id);
 		if (!live) return;
 		if (proxy) {
+			// Persisted under the slide file's own id so the next run skips the
+			// transcode.
+			if (!stored) void putSequenceMediaProxy(file, proxy).catch(() => {});
 			live.proxyFile = proxy;
 			live.proxyPending = false;
 			live.proxyProgress = undefined;
@@ -356,12 +360,6 @@
 	function saveSlideshowSession() {
 		const files = slides.map((s) => s.file);
 		if (files.length === 0) return;
-		// Proxies ride along with their originals, so a reopened session previews
-		// smoothly instead of re-transcoding everything it holds.
-		const proxies = new Map<File, File>();
-		for (const s of slides) {
-			if (s.proxyFile) proxies.set(s.file, s.proxyFile);
-		}
 		// Keyed by the song when there is one, so the session sits alongside the
 		// segments and text already saved under that track id.
 		void saveSession(
@@ -369,7 +367,6 @@
 			files,
 			{ config: $state.snapshot(config) as SlideshowConfig },
 			currentTrackId,
-			proxies,
 		)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
