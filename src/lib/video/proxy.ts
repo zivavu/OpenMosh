@@ -8,8 +8,10 @@ import type { ProxyWorkerRequest, ProxyWorkerResponse } from "./proxy-worker";
  * texture upload and queue memory all scale with pixel count, so this is the
  * one lever that makes QHD/4K previews smooth on machines that can't decode
  * them in real time — the renderer already runs at display resolution and
- * can't help. Exports are untouched: they keep reading the original file, so
- * output quality never drops.
+ * can't help. The worker profiles decode speed per file and drops the proxy
+ * to HD on machines that can't decode the source at twice realtime. Exports
+ * are untouched: they keep reading the original file, so output quality never
+ * drops.
  */
 
 /** Long-edge ceiling of a preview proxy. */

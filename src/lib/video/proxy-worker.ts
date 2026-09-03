@@ -8,6 +8,11 @@
  * scales with pixel count. The original is never modified (exports keep
  * reading it), so the proxy only has to be fast to build and cheap to decode.
  *
+ * The proxy's size is picked per file: a short decode benchmark runs against
+ * the source first, and a machine that can't push it through at twice
+ * realtime gets an HD proxy instead of Full HD — a proxy the machine still
+ * can't decode comfortably would miss the point.
+ *
  * The resize is done by a registered VideoSampleTransformer rather than
  * mediabunny's built-in one: its path draws decoded frames with 2D-canvas
  * drawImage, which Firefox rejects for some hardware-decoded streams (HDR
@@ -31,6 +36,7 @@ import {
 	Quality,
 	registerVideoSampleTransformer,
 	VideoSample,
+	VideoSampleSink,
 	type VideoSampleTransformationDescription,
 } from "mediabunny";
 
@@ -47,6 +53,61 @@ const conversions = new Map<number, Conversion>();
 
 function post(msg: ProxyWorkerResponse, transfer?: Transferable[]) {
 	(self as unknown as Worker).postMessage(msg, transfer ?? []);
+}
+
+/** Long-edge ceiling of a preview proxy on machines that decode comfortably. */
+const FHD_LONG_EDGE = 1920;
+/** Long-edge ceiling on machines that can't decode the source at 2× realtime. */
+const HD_LONG_EDGE = 1280;
+/** How much source media the benchmark decodes before judging speed. */
+const BENCH_MEDIA_SECONDS = 2;
+/** Wall-clock cap on the benchmark — past this the verdict is already clear. */
+const BENCH_WALL_MS = 1500;
+
+/**
+ * Decode the first moments of the source and time it: a machine that can't
+ * push the source through at twice realtime gets an HD proxy instead of Full
+ * HD. Measured per file rather than cached per device — decode cost depends
+ * on the source as much as on the machine, and the check costs at most
+ * BENCH_WALL_MS. Decoder warmup skews the first frames slow, which biases
+ * toward HD; the safe direction for a preview aid.
+ */
+async function pickLongEdge(input: Input): Promise<number> {
+	try {
+		const track = await input.getPrimaryVideoTrack();
+		if (!track) return FHD_LONG_EDGE;
+		const sink = new VideoSampleSink(track);
+		const start = performance.now();
+		let media = 0;
+		for await (const sample of sink.samples(0, BENCH_MEDIA_SECONDS)) {
+			media = sample.timestamp + sample.duration;
+			sample.close();
+			if (performance.now() - start > BENCH_WALL_MS) break;
+		}
+		const wall = (performance.now() - start) / 1000;
+		if (media <= 0) return FHD_LONG_EDGE;
+		const realtime = media / Math.max(wall, 0.001);
+		const weak = realtime < 2;
+		console.info(
+			`[proxy] decoded ${media.toFixed(2)}s in ${wall.toFixed(2)}s (${realtime.toFixed(1)}× realtime) — ${weak ? "HD" : "Full HD"} proxy`,
+		);
+		return weak ? HD_LONG_EDGE : FHD_LONG_EDGE;
+	} catch (error) {
+		console.warn(
+			"[proxy] decode benchmark failed, assuming a strong device",
+			error,
+		);
+		return FHD_LONG_EDGE;
+	}
+}
+
+/** Even-dimensioned shrink of already-even dims to a smaller long-edge cap. */
+function shrinkToLongEdge(width: number, height: number, longEdge: number) {
+	const scale = Math.min(1, longEdge / Math.max(width, height));
+	return {
+		width: Math.max(2, Math.round((width * scale) / 2) * 2),
+		height: Math.max(2, Math.round((height * scale) / 2) * 2),
+	};
 }
 
 /** Index of the draw path that last worked; starts on mediabunny's own. */
@@ -218,6 +279,8 @@ async function convert(id: number, file: File, width: number, height: number) {
 			source: new BlobSource(file),
 			formats: ALL_FORMATS,
 		});
+		const longEdge = await pickLongEdge(input);
+		const size = shrinkToLongEdge(width, height, longEdge);
 		const target = new BufferTarget();
 		const output = new Output({ format: new Mp4OutputFormat(), target });
 		const conversion = await Conversion.init({
@@ -226,8 +289,8 @@ async function convert(id: number, file: File, width: number, height: number) {
 			video: {
 				// The caller's dims preserve the aspect ratio, so a sub-pixel rounding
 				// difference is all "fill" can stretch by — "contain" would letterbox.
-				width,
-				height,
+				width: size.width,
+				height: size.height,
 				fit: "fill",
 				quality: new Quality("medium"),
 				// Deliberately no hardwareAcceleration hint: mediabunny picks the
