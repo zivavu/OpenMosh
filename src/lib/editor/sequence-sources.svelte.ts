@@ -367,7 +367,6 @@ export class SequenceSourceRegistry {
   retryProxy(id: string) {
     const src = this.get(id);
     if (!src || src.kind !== "video" || !src.proxyFailed) return;
-    if (!src.width || !src.height) return;
     src.proxyFailed = false;
     src.proxyPending = true;
     void this.#makeProxy(id, src.file);
@@ -495,16 +494,10 @@ export class SequenceSourceRegistry {
     const stored = await getSequenceMediaProxy(file);
     let proxy = stored;
     if (!proxy) {
-      const src = this.get(id);
-      const job = startProxyJob(
-        file,
-        src?.width ?? 0,
-        src?.height ?? 0,
-        (progress) => {
-          const live = this.get(id);
-          if (live) live.proxyProgress = progress;
-        },
-      );
+      const job = startProxyJob(file, (progress) => {
+        const live = this.get(id);
+        if (live) live.proxyProgress = progress;
+      });
       this.#proxyJobs.set(id, job);
       proxy = await job.promise;
       this.#proxyJobs.delete(id);

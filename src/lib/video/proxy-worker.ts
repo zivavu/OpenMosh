@@ -31,6 +31,7 @@ import {
 	BufferTarget,
 	Conversion,
 	Input,
+	type InputVideoTrack,
 	Mp4OutputFormat,
 	Output,
 	Quality,
@@ -41,7 +42,7 @@ import {
 } from "mediabunny";
 
 export type ProxyWorkerRequest =
-	| { type: "convert"; id: number; file: File; width: number; height: number }
+	| { type: "convert"; id: number; file: File }
 	| { type: "cancel"; id: number };
 
 export type ProxyWorkerResponse =
@@ -72,10 +73,8 @@ const BENCH_WALL_MS = 1500;
  * BENCH_WALL_MS. Decoder warmup skews the first frames slow, which biases
  * toward HD; the safe direction for a preview aid.
  */
-async function pickLongEdge(input: Input): Promise<number> {
+async function pickLongEdge(track: InputVideoTrack): Promise<number> {
 	try {
-		const track = await input.getPrimaryVideoTrack();
-		if (!track) return FHD_LONG_EDGE;
 		const sink = new VideoSampleSink(track);
 		const start = performance.now();
 		let media = 0;
@@ -101,7 +100,10 @@ async function pickLongEdge(input: Input): Promise<number> {
 	}
 }
 
-/** Even-dimensioned shrink of already-even dims to a smaller long-edge cap. */
+/**
+ * Even-dimensioned size capping the long edge, never upscaling. Even because
+ * H.264 encoders reject odd dimensions.
+ */
 function shrinkToLongEdge(width: number, height: number, longEdge: number) {
 	const scale = Math.min(1, longEdge / Math.max(width, height));
 	return {
@@ -110,7 +112,11 @@ function shrinkToLongEdge(width: number, height: number, longEdge: number) {
 	};
 }
 
-/** Index of the draw path that last worked; starts on mediabunny's own. */
+/**
+ * Index of the draw path that last worked; starts on mediabunny's own and is
+ * reset per conversion, since what one file's frames reject the next one's may
+ * well accept.
+ */
 let drawTier = 0;
 /** Logged once per tier, so a machine where every path fails stays readable. */
 const loggedTier = new Set<number>();
@@ -218,6 +224,9 @@ async function drawViaPixels(
 	}
 }
 
+/** Tail of the transform queue — see the transformer below. */
+let transforms: Promise<void> = Promise.resolve();
+
 /**
  * The transformer mediabunny will call instead of its own canvas path. Only
  * the simple case is handled — upright frame, fill fit, no crop — which is
@@ -238,17 +247,22 @@ registerVideoSampleTransformer((sample, description) => {
 		return null;
 	}
 	const canvas = resizeCanvas(description.width, description.height);
-	const result = drawResized(sample, canvas, description);
-	// drawResized is async only because its fallbacks are; the first tier is
-	// synchronous, and a transformer may return a promise.
-	return result.then(
-		() =>
-			new VideoSample(canvas, {
-				timestamp: sample.timestamp,
-				duration: sample.duration,
-				rotation: 0,
-			}),
+	// One frame at a time: the canvas is shared across frames and the fallback
+	// tiers await, so two transforms in flight could hand one frame's pixels to
+	// the other's sample. A transformer may return a promise.
+	const result = transforms.then(async () => {
+		await drawResized(sample, canvas, description);
+		return new VideoSample(canvas, {
+			timestamp: sample.timestamp,
+			duration: sample.duration,
+			rotation: 0,
+		});
+	});
+	transforms = result.then(
+		() => {},
+		() => {},
 	);
+	return result;
 });
 
 /**
@@ -270,7 +284,7 @@ function resizeCanvas(width: number, height: number): OffscreenCanvas {
 self.onmessage = (e: MessageEvent<ProxyWorkerRequest>) => {
 	const msg = e.data;
 	if (msg.type === "convert") {
-		void convert(msg.id, msg.file, msg.width, msg.height);
+		void convert(msg.id, msg.file);
 		return;
 	}
 	conversions
@@ -279,21 +293,28 @@ self.onmessage = (e: MessageEvent<ProxyWorkerRequest>) => {
 		.catch(() => {});
 };
 
-async function convert(id: number, file: File, width: number, height: number) {
+async function convert(id: number, file: File) {
 	try {
+		drawTier = 0;
+		loggedTier.clear();
 		const input = new Input({
 			source: new BlobSource(file),
 			formats: ALL_FORMATS,
 		});
-		const longEdge = await pickLongEdge(input);
-		const size = shrinkToLongEdge(width, height, longEdge);
+		const track = await input.getPrimaryVideoTrack();
+		if (!track) throw new Error("no video track to proxy");
+		const size = shrinkToLongEdge(
+			track.displayWidth,
+			track.displayHeight,
+			await pickLongEdge(track),
+		);
 		const target = new BufferTarget();
 		const output = new Output({ format: new Mp4OutputFormat(), target });
 		const conversion = await Conversion.init({
 			input,
 			output,
 			video: {
-				// The caller's dims preserve the aspect ratio, so a sub-pixel rounding
+				// The size is the track's own, scaled, so a sub-pixel rounding
 				// difference is all "fill" can stretch by — "contain" would letterbox.
 				width: size.width,
 				height: size.height,

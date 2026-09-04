@@ -188,7 +188,7 @@
 		s.thumbPending = false;
 		if (needsProxy(probe.width, probe.height)) {
 			s.proxyPending = true;
-			void makeSlideProxy(s.id, file, probe.width, probe.height);
+			void makeSlideProxy(s.id, file);
 		}
 	}
 
@@ -197,11 +197,11 @@
 	 * beside the original, or transcode one in the background. The slide
 	 * previews from the original either way until the proxy lands.
 	 */
-	async function makeSlideProxy(id: string, file: File, w: number, h: number) {
+	async function makeSlideProxy(id: string, file: File) {
 		const stored = await getSequenceMediaProxy(file);
 		let proxy = stored;
 		if (!proxy) {
-			const job = startProxyJob(file, w, h, (progress) => {
+			const job = startProxyJob(file, (progress) => {
 				const live = slides.find((s) => s.id === id);
 				if (live) live.proxyProgress = progress;
 			});
@@ -246,10 +246,9 @@
 	function retrySlideProxy(id: string) {
 		const s = slides.find((x) => x.id === id);
 		if (!s || s.kind !== 'video' || !s.proxyFailed) return;
-		if (!s.width || !s.height) return;
 		s.proxyFailed = false;
 		s.proxyPending = true;
-		void makeSlideProxy(s.id, s.file, s.width, s.height);
+		void makeSlideProxy(s.id, s.file);
 	}
 
 	async function generateThumb(id: string, file: File, objectUrl: string) {

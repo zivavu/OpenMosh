@@ -14,29 +14,11 @@ import type { ProxyWorkerRequest, ProxyWorkerResponse } from "./proxy-worker";
  * drops.
  */
 
-/** Long-edge ceiling of a preview proxy. */
-export const PROXY_LONG_EDGE = 1920;
-
 /** Sources at or under this many pixels preview fine as-is. */
 const PROXY_MAX_PIXELS = 1920 * 1080;
 
 export function needsProxy(width: number, height: number): boolean {
 	return width > 0 && height > 0 && width * height > PROXY_MAX_PIXELS;
-}
-
-/**
- * Even-dimensioned proxy size capping the long edge, never upscaling. Even
- * because H.264 encoders reject odd dimensions.
- */
-export function proxyTargetSize(
-	width: number,
-	height: number,
-): { width: number; height: number } {
-	const scale = Math.min(1, PROXY_LONG_EDGE / Math.max(width, height));
-	return {
-		width: Math.max(2, Math.round((width * scale) / 2) * 2),
-		height: Math.max(2, Math.round((height * scale) / 2) * 2),
-	};
 }
 
 export interface ProxyJob {
@@ -89,13 +71,10 @@ let nextJobId = 1;
 
 export function startProxyJob(
 	file: File,
-	width: number,
-	height: number,
 	onProgress?: (progress: number) => void,
 ): ProxyJob {
 	const id = nextJobId++;
 	let canceled = false;
-	const target = proxyTargetSize(width, height);
 
 	const promise = new Promise<File | null>((resolve) => {
 		// Resolved directly if the worker dies before this job's slot opens; the
@@ -139,12 +118,12 @@ export function startProxyJob(
 						}
 					};
 					target_.addEventListener("message", onMessage);
+					// The worker sizes the proxy itself: it has the track, and the
+					// size depends on how fast the machine decodes it.
 					target_.postMessage({
 						type: "convert",
 						id,
 						file,
-						width: target.width,
-						height: target.height,
 					} satisfies ProxyWorkerRequest);
 				}),
 		);

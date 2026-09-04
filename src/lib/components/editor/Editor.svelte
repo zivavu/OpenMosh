@@ -403,7 +403,7 @@
 			const stored = await getSequenceMediaProxy(f);
 			let proxy = stored;
 			if (!stored) {
-				const job = startProxyJob(f, w, h);
+				const job = startProxyJob(f);
 				singleJob = job;
 				proxy = await job.promise;
 			}
