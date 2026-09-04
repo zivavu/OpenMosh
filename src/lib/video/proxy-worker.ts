@@ -192,9 +192,15 @@ async function drawViaPixels(
 ): Promise<void> {
 	const frame = sample.toVideoFrame();
 	try {
+		// The copy is laid out over the visible rect, which for an anamorphic
+		// source is not the display size — sizing the canvas off the latter makes
+		// ImageData reject the buffer outright.
+		const rect = frame.visibleRect;
+		const width = rect?.width ?? frame.codedWidth;
+		const height = rect?.height ?? frame.codedHeight;
 		const buffer = new Uint8Array(frame.allocationSize({ format: "RGBA" }));
 		await frame.copyTo(buffer, { format: "RGBA" });
-		const temp = new OffscreenCanvas(frame.displayWidth, frame.displayHeight);
+		const temp = new OffscreenCanvas(width, height);
 		const tempCtx = temp.getContext("2d", { alpha: false });
 		if (!tempCtx) throw new Error("proxy pixel canvas has no 2d context");
 		tempCtx.putImageData(

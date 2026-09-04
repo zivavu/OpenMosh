@@ -88,6 +88,7 @@
 	import { DEFAULT_SETTINGS, loadSettings, updateSettings } from '../../editor/settings';
 	import { saveSession } from '../../editor/sessions';
 	import {
+		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
 		pruneSequenceMedia,
 		putSequenceMediaProxy,
@@ -214,7 +215,12 @@
 		if (proxy) {
 			const sampler = await SlideVideoSampler.create(proxy);
 			sampler?.dispose();
-			if (!sampler) proxy = null;
+			if (!sampler) {
+				proxy = null;
+				// A stored one that no longer opens has to go, or the retry would
+				// find it again and fail the same way.
+				if (stored) void deleteSequenceMediaProxy(file).catch(() => {});
+			}
 		}
 		const live = slides.find((s) => s.id === id);
 		if (!live) return;

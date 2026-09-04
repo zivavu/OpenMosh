@@ -147,6 +147,7 @@
 		type SourceEdit,
 	} from '../../media';
 	import {
+		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
 		loadMediaPool,
 		pruneSequenceMedia,
@@ -303,13 +304,17 @@
 		const previewFile = proxy ?? file;
 		// Frames arrive at the proxy's size, but the media's own size and
 		// duration are what the UI reports and what the output defaults to —
-		// anchored to the original so the swap moves nothing. Read untracked:
-		// these describe the outgoing player, and tracking them would rebuild
-		// the player each time the swap writes them back.
+		// anchored to the original so the swap moves nothing. The source's own
+		// probe first, then the outgoing player: `naturalWidth` is written from
+		// whichever player ran last, so opening straight onto a stored proxy
+		// would find it unset and let the proxy's size become the media's.
+		// Read untracked: these describe the outgoing player, and tracking them
+		// would rebuild the player each time the swap writes them back.
 		const media = proxy
 			? untrack(() => ({
-					width: naturalWidth ?? 0,
-					height: naturalHeight ?? 0,
+					width: primary?.width ?? previewPlayer?.width ?? naturalWidth ?? 0,
+					height:
+						primary?.height ?? previewPlayer?.height ?? naturalHeight ?? 0,
 					duration: videoDuration,
 				}))
 			: undefined;
@@ -409,7 +414,12 @@
 			if (proxy) {
 				const opened = await openVideoFrameSource(proxy);
 				opened?.queue.dispose();
-				if (!opened) proxy = null;
+				if (!opened) {
+					proxy = null;
+					// A stored one that no longer opens has to go, or the retry would
+					// find it again and fail the same way.
+					if (stored) void deleteSequenceMediaProxy(f).catch(() => {});
+				}
 			}
 			if (proxy) {
 				// Persisted under the file's own id, so re-opening the same video

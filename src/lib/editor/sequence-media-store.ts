@@ -329,6 +329,15 @@ export async function putSequenceMediaProxy(
   });
 }
 
+/**
+ * Drops the stored proxy for this file. The one caller is a proxy that came
+ * back from storage and then wouldn't open: kept, it would fail the same way
+ * on every retry, since a retry looks in storage first.
+ */
+export async function deleteSequenceMediaProxy(file: File): Promise<void> {
+  await deleteSequenceProxy(stableSourceId(file));
+}
+
 async function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
   const db = await openDb();
   return new Promise((resolve, reject) => {

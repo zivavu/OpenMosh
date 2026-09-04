@@ -7,6 +7,7 @@ import {
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
 import {
+  deleteSequenceMediaProxy,
   getAllSequenceMedia,
   getSequenceMediaProxy,
   putSequenceMedia,
@@ -515,7 +516,12 @@ export class SequenceSourceRegistry {
     if (proxy) {
       const sampler = await SlideVideoSampler.create(proxy);
       sampler?.dispose();
-      if (!sampler) proxy = null;
+      if (!sampler) {
+        proxy = null;
+        // A stored one that no longer opens has to go, or the retry would find
+        // it again and fail the same way.
+        if (stored) void deleteSequenceMediaProxy(file).catch(() => {});
+      }
     }
     const live = this.get(id);
     if (!live) return;
