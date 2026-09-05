@@ -29,6 +29,7 @@ import {
 	ALL_FORMATS,
 	BlobSource,
 	BufferTarget,
+	canEncodeVideo,
 	Conversion,
 	Input,
 	type InputVideoTrack,
@@ -37,6 +38,7 @@ import {
 	Quality,
 	registerVideoSampleTransformer,
 	VideoSample,
+	type VideoCodec,
 	VideoSampleSink,
 	type VideoSampleTransformationDescription,
 } from "mediabunny";
@@ -66,14 +68,14 @@ const BENCH_MEDIA_SECONDS = 2;
 const BENCH_WALL_MS = 1500;
 
 /**
- * Decode the first moments of the source and time it: a machine that can't
- * push the source through at twice realtime gets an HD proxy instead of Full
- * HD. Measured per file rather than cached per device — decode cost depends
- * on the source as much as on the machine, and the check costs at most
- * BENCH_WALL_MS. Decoder warmup skews the first frames slow, which biases
- * toward HD; the safe direction for a preview aid.
+ * Decode the first moments of a track and time it, as a multiple of realtime —
+ * null when the track can't be decoded at all. Measured per file rather than
+ * cached per device: decode cost depends on the media as much as on the
+ * machine, and the check costs at most BENCH_WALL_MS. Decoder warmup skews the
+ * first frames slow, so the number reads low; the safe direction for both
+ * things it decides.
  */
-async function pickLongEdge(track: InputVideoTrack): Promise<number> {
+async function benchmarkDecode(track: InputVideoTrack): Promise<number | null> {
 	try {
 		const sink = new VideoSampleSink(track);
 		const start = performance.now();
@@ -84,19 +86,120 @@ async function pickLongEdge(track: InputVideoTrack): Promise<number> {
 			if (performance.now() - start > BENCH_WALL_MS) break;
 		}
 		const wall = (performance.now() - start) / 1000;
-		if (media <= 0) return FHD_LONG_EDGE;
-		const realtime = media / Math.max(wall, 0.001);
-		const weak = realtime < 2;
-		console.info(
-			`[proxy] decoded ${media.toFixed(2)}s in ${wall.toFixed(2)}s (${realtime.toFixed(1)}× realtime) — ${weak ? "HD" : "Full HD"} proxy`,
-		);
-		return weak ? HD_LONG_EDGE : FHD_LONG_EDGE;
+		if (media <= 0) return null;
+		return media / Math.max(wall, 0.001);
 	} catch (error) {
-		console.warn(
-			"[proxy] decode benchmark failed, assuming a strong device",
-			error,
-		);
-		return FHD_LONG_EDGE;
+		console.warn("[proxy] decode benchmark failed", error);
+		return null;
+	}
+}
+
+/**
+ * A machine that can't push the source through at twice realtime gets an HD
+ * proxy instead of Full HD — a proxy the machine still can't decode
+ * comfortably would miss the point. An unmeasurable source is assumed strong.
+ */
+function pickLongEdge(realtime: number | null): number {
+	if (realtime === null) return FHD_LONG_EDGE;
+	const weak = realtime < 2;
+	console.info(
+		`[proxy] source decodes at ${realtime.toFixed(1)}× realtime — ${weak ? "HD" : "Full HD"} proxy`,
+	);
+	return weak ? HD_LONG_EDGE : FHD_LONG_EDGE;
+}
+
+/**
+ * Quality of the re-encode.
+ *
+ * `preferBitrate` is what makes it a *quality* setting rather than a
+ * quantizer: left alone, mediabunny encodes a qualitative level with
+ * quantizer-based rate control, which puts no ceiling on the result — a
+ * QP-based re-encode of clean footage can land above the delivery bitrate of
+ * the original, so the proxy ends up more expensive per frame to demux and
+ * decode than the thing it stands in for. Bitrate mode pins it near 3 Mbps at
+ * 1080p, which is plenty for a preview.
+ */
+const PROXY_QUALITY = new Quality({ quality: "medium", preferBitrate: true });
+
+/**
+ * Seconds between key frames in the proxy, against mediabunny's default of 2.
+ *
+ * Previews seek constantly — every scrub, every clip edge, and every time a
+ * sampler notices decode has fallen behind the clock and jumps to a key frame
+ * to catch up (see SlideVideoSampler). Each of those decodes from the
+ * preceding key frame forward, so a long interval means a jump can land a
+ * couple of seconds of frames away from where the playhead already is; for a
+ * sampler that only jumped because it was behind, that is a hole it can dig
+ * itself deeper into. Denser key frames cost bitrate, which a preview proxy
+ * has to spare.
+ */
+const KEY_FRAME_INTERVAL = 1;
+
+/**
+ * Codecs a proxy may be encoded in, ordered by how likely a decoder is to be
+ * cheap. Every one of them is legal in MP4.
+ */
+const PROXY_CODECS: VideoCodec[] = ["avc", "hevc", "vp9", "av1", "vp8"];
+
+/**
+ * Representative codec strings for asking whether a decoder exists in
+ * hardware. The proxy's own stream will differ in profile and level, but not
+ * in the thing being asked — whether this machine decodes this codec at this
+ * size without falling back to the CPU.
+ */
+const DECODE_PROBES: Record<VideoCodec, string | null> = {
+	avc: "avc1.640028", // High 4.0
+	hevc: "hvc1.1.6.L120.90", // Main 4.0
+	vp9: "vp09.00.10.08", // Profile 0, 8-bit
+	av1: "av01.0.05M.08", // Main, level 3.1, 8-bit
+	vp8: "vp8",
+	prores: null, // Not a browser codec; never a proxy target.
+};
+
+/**
+ * The codec to encode the proxy in: the first one this machine can both encode
+ * *and* decode in hardware. Null hands the choice back to mediabunny.
+ *
+ * Encodability alone is what mediabunny picks on, and that is how a proxy ends
+ * up costing more to play than the source it replaced: a browser with no H.264
+ * encoder (Firefox has none) falls through to VP9 or AV1, whose decoders are
+ * far more often software-only, while the untouched source was hardware-decoded
+ * H.264 the whole time. Downscaling can't win back what a software decoder
+ * gives away, so the codec has to be chosen from the playback side.
+ */
+async function pickCodec(width: number, height: number): Promise<VideoCodec | null> {
+	for (const codec of PROXY_CODECS) {
+		if (!(await canHardwareDecode(codec, width, height))) continue;
+		if (!(await canEncodeVideo(codec, { width, height, quality: PROXY_QUALITY }))) {
+			continue;
+		}
+		console.info(`[proxy] encoding in ${codec} (hardware-decodable here)`);
+		return codec;
+	}
+	// Nothing decodes in hardware — a machine where the proxy's win has to come
+	// from pixel count alone. Let mediabunny pick whatever it can encode.
+	console.info("[proxy] no hardware-decodable codec, deferring the choice");
+	return null;
+}
+
+async function canHardwareDecode(
+	codec: VideoCodec,
+	width: number,
+	height: number,
+): Promise<boolean> {
+	const probe = DECODE_PROBES[codec];
+	if (!probe || typeof VideoDecoder === "undefined") return false;
+	try {
+		const support = await VideoDecoder.isConfigSupported({
+			codec: probe,
+			codedWidth: width,
+			codedHeight: height,
+			hardwareAcceleration: "prefer-hardware",
+		});
+		return support.supported === true;
+	} catch {
+		// A config the browser won't even consider reads as "no".
+		return false;
 	}
 }
 
@@ -293,6 +396,50 @@ self.onmessage = (e: MessageEvent<ProxyWorkerRequest>) => {
 		.catch(() => {});
 };
 
+/**
+ * Log what the proxy actually came out as, next to the source it replaces.
+ *
+ * The whole point of a proxy is that it decodes cheaper, and every input to
+ * that — codec, bitrate, whether a hardware decoder took it — is decided by
+ * probes and browser fallbacks rather than by anything stated here. Without a
+ * number measured on the finished file, a proxy that decodes *slower* than its
+ * source looks exactly like one that works. Costs one benchmark per file, and
+ * only after the transcode the user was already waiting on.
+ */
+async function reportProxy(blob: Blob, sourceRealtime: number | null) {
+	try {
+		const input = new Input({
+			source: new BlobSource(blob),
+			formats: ALL_FORMATS,
+		});
+		try {
+			const track = await input.getPrimaryVideoTrack();
+			if (!track) return;
+			const duration = await track.computeDuration();
+			const mbps = duration > 0 ? (blob.size * 8) / duration / 1e6 : 0;
+			const realtime = await benchmarkDecode(track);
+			const versus =
+				realtime !== null && sourceRealtime !== null
+					? ` (source: ${sourceRealtime.toFixed(1)}×)`
+					: "";
+			console.info(
+				`[proxy] ${await track.getCodecParameterString()} ${track.displayWidth}×${track.displayHeight}` +
+					` @ ${mbps.toFixed(1)} Mbps, decodes at ${realtime?.toFixed(1) ?? "?"}× realtime${versus}`,
+			);
+			if (realtime !== null && sourceRealtime !== null && realtime < sourceRealtime) {
+				console.warn(
+					"[proxy] the proxy decodes slower than the source it replaces",
+				);
+			}
+		} finally {
+			input.dispose();
+		}
+	} catch (error) {
+		// Diagnostics only — a proxy that resists measurement still plays.
+		console.warn("[proxy] could not measure the finished proxy", error);
+	}
+}
+
 async function convert(id: number, file: File) {
 	try {
 		drawTier = 0;
@@ -303,11 +450,13 @@ async function convert(id: number, file: File) {
 		});
 		const track = await input.getPrimaryVideoTrack();
 		if (!track) throw new Error("no video track to proxy");
+		const sourceRealtime = await benchmarkDecode(track);
 		const size = shrinkToLongEdge(
 			track.displayWidth,
 			track.displayHeight,
-			await pickLongEdge(track),
+			pickLongEdge(sourceRealtime),
 		);
+		const codec = await pickCodec(size.width, size.height);
 		const target = new BufferTarget();
 		const output = new Output({ format: new Mp4OutputFormat(), target });
 		const conversion = await Conversion.init({
@@ -319,7 +468,9 @@ async function convert(id: number, file: File) {
 				width: size.width,
 				height: size.height,
 				fit: "fill",
-				quality: new Quality("medium"),
+				quality: PROXY_QUALITY,
+				keyFrameInterval: KEY_FRAME_INTERVAL,
+				...(codec ? { codec } : {}),
 				// Deliberately no hardwareAcceleration hint: mediabunny picks the
 				// codec by probing what the browser can actually encode, but the hint
 				// rides into the encoder config afterwards, where a browser without
@@ -343,11 +494,9 @@ async function convert(id: number, file: File) {
 		await conversion.execute();
 		conversions.delete(id);
 		if (!target.buffer) throw new Error("proxy produced no data");
-		post({
-			type: "done",
-			id,
-			blob: new Blob([target.buffer], { type: "video/mp4" }),
-		});
+		const blob = new Blob([target.buffer], { type: "video/mp4" });
+		await reportProxy(blob, sourceRealtime);
+		post({ type: "done", id, blob });
 	} catch (error) {
 		// Cancel or a mid-stream decode/encode failure — both read as "no proxy".
 		// The error is otherwise invisible: nothing here logs on its own.

@@ -19,6 +19,9 @@ docs
 .superpowers
 .claude
 
+#misc
+ZEN*
+
 # Editor directories and files
 .vscode/*
 .cursor/*
