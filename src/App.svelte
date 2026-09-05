@@ -3,8 +3,14 @@
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
 	import FeedbackModal from "./lib/components/ui/FeedbackModal.svelte";
-	import Editor from "./lib/components/editor/Editor.svelte";
-	import SlideshowEditor from "./lib/components/slideshow/SlideshowEditor.svelte";
+	import { lazy } from "./lib/lazy";
+
+	// The editors are the bulk of the bundle and none of it is needed to paint
+	// the upload screen, so they load with the route instead of with the app.
+	const loadEditor = lazy(() => import("./lib/components/editor/Editor.svelte"));
+	const loadSlideshowEditor = lazy(
+		() => import("./lib/components/slideshow/SlideshowEditor.svelte"),
+	);
 
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
@@ -124,6 +130,20 @@
 		});
 	}
 
+	/** Warm the editor chunks once the upload screen goes idle, so picking a
+	 * mode doesn't wait on the network. */
+	function prefetchEditors() {
+		const pull = () => {
+			void loadEditor();
+			void loadSlideshowEditor();
+		};
+		if ("requestIdleCallback" in window) {
+			requestIdleCallback(pull, { timeout: 3000 });
+		} else {
+			setTimeout(pull, 2000);
+		}
+	}
+
 	function resetFiles() {
 		file = null;
 		sequenceFiles = [];
@@ -195,6 +215,7 @@
 		window.addEventListener("popstate", onPopState);
 
 		scheduleWarm();
+		prefetchEditors();
 
 		return () => {
 			cancelWarm();
@@ -204,39 +225,45 @@
 </script>
 
 {#if view === 'slideshow' && slideshowFiles.length > 0}
-	<SlideshowEditor
-		initialFiles={slideshowFiles}
-		initialAudioFile={pendingAudioFile}
-		initialTrackId={sessionTrackId}
-		initialConfig={restoredSlideshowConfig}
-		{warmCanvas}
-		{warmRenderer}
-		onExit={exitToUpload}
-	/>
+	{#await loadSlideshowEditor() then SlideshowEditor}
+		<SlideshowEditor
+			initialFiles={slideshowFiles}
+			initialAudioFile={pendingAudioFile}
+			initialTrackId={sessionTrackId}
+			initialConfig={restoredSlideshowConfig}
+			{warmCanvas}
+			{warmRenderer}
+			onExit={exitToUpload}
+		/>
+	{/await}
 {:else if view === 'sequence' && sequenceFiles.length > 0}
-	<Editor
-		mode="sequence"
-		file={sequenceFiles[0]}
-		extraFiles={sequenceFiles.slice(1)}
-		initialAudioFile={pendingAudioFile}
-		initialTrackId={sequenceTrackId}
-		onfile={(f: File) => (sequenceFiles = [f, ...sequenceFiles.slice(1)])}
-		{warmCanvas}
-		{warmRenderer}
-		onExit={exitToUpload}
-	/>
+	{#await loadEditor() then Editor}
+		<Editor
+			mode="sequence"
+			file={sequenceFiles[0]}
+			extraFiles={sequenceFiles.slice(1)}
+			initialAudioFile={pendingAudioFile}
+			initialTrackId={sequenceTrackId}
+			onfile={(f: File) => (sequenceFiles = [f, ...sequenceFiles.slice(1)])}
+			{warmCanvas}
+			{warmRenderer}
+			onExit={exitToUpload}
+		/>
+	{/await}
 {:else if view === 'single' && file}
-	<Editor
-		{file}
-		initialAudioFile={pendingAudioFile}
-		initialTrackId={sessionTrackId}
-		initialSession={restoredSingle}
-		extraFiles={restoredSingleExtras}
-		onfile={(f: File) => (file = f)}
-		{warmCanvas}
-		{warmRenderer}
-		onExit={exitToUpload}
-	/>
+	{#await loadEditor() then Editor}
+		<Editor
+			{file}
+			initialAudioFile={pendingAudioFile}
+			initialTrackId={sessionTrackId}
+			initialSession={restoredSingle}
+			extraFiles={restoredSingleExtras}
+			onfile={(f: File) => (file = f)}
+			{warmCanvas}
+			{warmRenderer}
+			onExit={exitToUpload}
+		/>
+	{/await}
 {:else}
 	<UploadScreen
 		onfile={(f: File) => {
