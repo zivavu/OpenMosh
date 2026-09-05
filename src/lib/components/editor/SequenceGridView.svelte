@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { ImageOff, Play, Plus, TriangleAlert, X, Zap } from 'lucide-svelte';
+	import { ImageOff, Play, Plus, TriangleAlert, X, Zap, ZapOff } from 'lucide-svelte';
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
 		sourceColor,
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import { proxyStatus } from '../../video/proxy-status';
+	import { proxyStatus, type ProxyAction } from '../../video/proxy-status';
 	import { lazy } from '../../lazy';
 
 	// Preview overlay: nothing loads it until a card is opened.
@@ -25,7 +25,8 @@
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
-		onRetryProxy: (sourceId: string) => void;
+		/** Click on a source's proxy badge — see proxyStatus's `action`. */
+		onProxyAction: (sourceId: string, action: ProxyAction['kind']) => void;
 	}
 
 	let {
@@ -37,7 +38,7 @@
 		onRemove,
 		onReorder,
 		onAssign,
-		onRetryProxy,
+		onProxyAction,
 	}: Props = $props();
 
 	let fileInput = $state<HTMLInputElement | null>(null);
@@ -212,24 +213,30 @@
 							<Play size={9} fill="currentColor" />
 						</span>
 						{@const proxy = proxyStatus(src)}
-						{#if proxy.kind === 'pending'}
-							<span class="card-proxy" title={proxy.title}>{proxy.badge}</span>
-						{:else if proxy.kind === 'failed'}
+						{#if proxy.kind !== 'none'}
 							<button
-								class="card-proxy warn"
-								title={`${proxy.title} Click to try again.`}
+								class="card-proxy"
+								class:ok={proxy.kind === 'ready'}
+								class:warn={proxy.kind === 'failed'}
+								class:off={proxy.kind === 'off'}
+								title={`${proxy.title} ${proxy.action.hint}`}
 								onclick={(e) => {
 									e.stopPropagation();
-									onRetryProxy(src.id);
+									onProxyAction(src.id, proxy.action.kind);
 								}}
 							>
-								<TriangleAlert size={9} />
+								{#if proxy.kind === 'ready'}
+									<Zap size={9} fill="currentColor" />
+									{proxy.badge}
+								{:else if proxy.kind === 'off'}
+									<ZapOff size={9} />
+									{proxy.badge}
+								{:else if proxy.kind === 'failed'}
+									<TriangleAlert size={9} />
+								{:else}
+									{proxy.badge}
+								{/if}
 							</button>
-						{:else if proxy.kind === 'ready'}
-							<span class="card-proxy ok" title={proxy.title}>
-								<Zap size={9} fill="currentColor" />
-								{proxy.badge}
-							</span>
 						{/if}
 					{/if}
 					{#if src.id === primarySourceId}
@@ -481,9 +488,6 @@
 		font-family: var(--font-mono);
 		font-size: 0.55rem;
 		line-height: 1.5;
-	}
-
-	button.card-proxy {
 		cursor: pointer;
 	}
 
@@ -493,6 +497,10 @@
 
 	.card-proxy.warn {
 		color: var(--start);
+	}
+
+	.card-proxy.off {
+		color: var(--text-4);
 	}
 
 	.card-base {

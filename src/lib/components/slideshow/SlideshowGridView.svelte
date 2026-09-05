@@ -7,10 +7,11 @@
 		Play,
 		TriangleAlert,
 		Zap,
+		ZapOff,
 	} from 'lucide-svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
-	import { proxyStatus } from '../../video/proxy-status';
+	import { proxyStatus, type ProxyAction } from '../../video/proxy-status';
 	import { lazy } from '../../lazy';
 
 	// Preview overlay: nothing loads it until a slide is opened.
@@ -25,7 +26,8 @@
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
 		onShuffleSlides: () => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
-		onRetryProxy: (slideId: string) => void;
+		/** Click on a slide's proxy badge — see proxyStatus's `action`. */
+		onProxyAction: (slideId: string, action: ProxyAction['kind']) => void;
 	}
 
 	let {
@@ -37,7 +39,7 @@
 		onReorderSlides,
 		onShuffleSlides,
 		onSetPresetIndex,
-		onRetryProxy,
+		onProxyAction,
 	}: Props = $props();
 
 	let fileInput: HTMLInputElement;
@@ -208,24 +210,30 @@
 							<Play size={10} fill="currentColor" />
 						</div>
 						{@const proxy = proxyStatus(slide)}
-						{#if proxy.kind === 'pending'}
-							<div class="proxy-badge" title={proxy.title}>{proxy.badge}</div>
-						{:else if proxy.kind === 'failed'}
+						{#if proxy.kind !== 'none'}
 							<button
-								class="proxy-badge warn"
-								title={`${proxy.title} Click to try again.`}
+								class="proxy-badge"
+								class:ok={proxy.kind === 'ready'}
+								class:warn={proxy.kind === 'failed'}
+								class:off={proxy.kind === 'off'}
+								title={`${proxy.title} ${proxy.action.hint}`}
 								onclick={(e) => {
 									e.stopPropagation();
-									onRetryProxy(slide.id);
+									onProxyAction(slide.id, proxy.action.kind);
 								}}
 							>
-								<TriangleAlert size={10} />
+								{#if proxy.kind === 'ready'}
+									<Zap size={10} fill="currentColor" />
+									{proxy.badge}
+								{:else if proxy.kind === 'off'}
+									<ZapOff size={10} />
+									{proxy.badge}
+								{:else if proxy.kind === 'failed'}
+									<TriangleAlert size={10} />
+								{:else}
+									{proxy.badge}
+								{/if}
 							</button>
-						{:else if proxy.kind === 'ready'}
-							<div class="proxy-badge ok" title={proxy.title}>
-								<Zap size={10} fill="currentColor" />
-								{proxy.badge}
-							</div>
 						{/if}
 					{/if}
 					<button
@@ -456,9 +464,6 @@
 		border-radius: 3px;
 		font-family: var(--font-mono);
 		font-size: 0.55rem;
-	}
-
-	button.proxy-badge {
 		cursor: pointer;
 	}
 
@@ -468,6 +473,10 @@
 
 	.proxy-badge.warn {
 		color: var(--start);
+	}
+
+	.proxy-badge.off {
+		color: var(--text-4);
 	}
 
 	.remove-btn {

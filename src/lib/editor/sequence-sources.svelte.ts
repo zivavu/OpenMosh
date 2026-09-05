@@ -6,6 +6,7 @@ import {
 } from "../media";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
+import { isProxyDisabled, setProxyDisabled } from "../video/proxy-preference";
 import {
   deleteSequenceMediaProxy,
   getAllSequenceMedia,
@@ -69,6 +70,12 @@ export interface SequenceSource {
   proxyFailed?: boolean;
   /** Why it failed, for the chip to say something more useful than that it did. */
   proxyReason?: string;
+  /**
+   * The user asked this video to preview from the original — see
+   * video/proxy-preference.ts. Only set on sources a proxy would otherwise be
+   * built for, so the chip can treat it as "the choice applies here".
+   */
+  proxyDisabled?: boolean;
   /**
    * The file the editor was opened with. It owns the master clock and (when
    * it's a video) the preview audio, so its frames still come from the
@@ -370,6 +377,35 @@ export class SequenceSourceRegistry {
   }
 
   /**
+   * Turn the preview proxy for this source on or off — the chip's badge is the
+   * entry point. Off drops any proxy already attached and stops one being
+   * built, so the preview decodes the original the user asked for; the choice
+   * is remembered for this file across sessions and modes.
+   */
+  setProxyEnabled(id: string, enabled: boolean) {
+    const src = this.get(id);
+    if (!src || src.kind !== "video") return;
+    setProxyDisabled(src.file, !enabled);
+    this.#proxyJobs.get(id)?.cancel();
+    this.#proxyJobs.delete(id);
+    src.proxyFile = undefined;
+    src.proxyWidth = undefined;
+    src.proxyHeight = undefined;
+    src.proxyProgress = undefined;
+    src.proxyFailed = false;
+    src.proxyReason = undefined;
+    src.proxyDisabled = !enabled;
+    // Whichever file the sampler was opened on is now the wrong one, in either
+    // direction; the next tick reopens on the one this choice asks for.
+    this.#samplers.get(id)?.dispose();
+    this.#samplers.delete(id);
+    const wanted =
+      enabled && needsProxy(src.width ?? 0, src.height ?? 0);
+    src.proxyPending = wanted;
+    if (wanted) void this.#makeProxy(id, src.file);
+  }
+
+  /**
    * Retry a failed proxy transcode for this source — the chip's warning badge
    * is the entry point. A no-op when there is nothing to retry.
    */
@@ -479,6 +515,10 @@ export class SequenceSourceRegistry {
       URL.revokeObjectURL(objectUrl);
       return null;
     }
+    const eligible = needsProxy(probe.width, probe.height);
+    // Read here rather than when the job would start: the user's choice is
+    // what decides whether there is a job at all.
+    const optedOut = eligible && isProxyDisabled(file);
     return {
       id: stableSourceId(file),
       file,
@@ -493,7 +533,8 @@ export class SequenceSourceRegistry {
       height: probe.height,
       duration: probe.duration,
       // The job itself starts after the append — see add().
-      proxyPending: needsProxy(probe.width, probe.height),
+      proxyPending: eligible && !optedOut,
+      proxyDisabled: eligible && optedOut,
     };
   }
 
@@ -548,6 +589,9 @@ export class SequenceSourceRegistry {
     }
     const live = this.get(id);
     if (!live) return;
+    // Turned off while the transcode ran: the file is still worth storing for
+    // a later change of mind, but nothing here may touch the source's state.
+    if (live.proxyDisabled) return;
     if (proxy) {
       live.proxyFile = proxy;
       live.proxyWidth = opened?.width;

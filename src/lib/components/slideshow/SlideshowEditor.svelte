@@ -98,6 +98,7 @@
 		startProxyJob,
 		type ProxyJob,
 	} from '../../video/proxy';
+	import { isProxyDisabled, setProxyDisabled } from '../../video/proxy-preference';
 
 	interface Props {
 		initialFiles: File[];
@@ -187,8 +188,14 @@
 		// Settled either way: the probe is the only shot at a video thumbnail.
 		s.thumbPending = false;
 		if (needsProxy(probe.width, probe.height)) {
-			s.proxyPending = true;
-			void makeSlideProxy(s.id, file);
+			// The user's standing choice for this file decides whether there is a
+			// transcode at all; the badge is where it can be changed.
+			if (isProxyDisabled(file)) {
+				s.proxyDisabled = true;
+			} else {
+				s.proxyPending = true;
+				void makeSlideProxy(s.id, file);
+			}
 		}
 	}
 
@@ -242,6 +249,9 @@
 		}
 		const live = slides.find((s) => s.id === id);
 		if (!live) return;
+		// Turned off while the transcode ran: the file is still worth storing for
+		// a later change of mind, but nothing here may touch the slide's state.
+		if (live.proxyDisabled) return;
 		if (proxy) {
 			// Persisted under the slide file's own id so the next run skips the
 			// transcode.
@@ -260,6 +270,35 @@
 			live.proxyPending = false;
 			live.proxyFailed = true;
 		}
+	}
+
+	/**
+	 * Turn the preview proxy for a slide on or off — the badge's click action.
+	 * Off drops any proxy already attached and stops one being built, so the
+	 * preview decodes the original the user asked for; the choice is remembered
+	 * for this file across sessions and modes.
+	 */
+	function setSlideProxyEnabled(id: string, enabled: boolean) {
+		const s = slides.find((x) => x.id === id);
+		if (!s || s.kind !== 'video') return;
+		setProxyDisabled(s.file, !enabled);
+		proxyJobs.get(id)?.cancel();
+		proxyJobs.delete(id);
+		s.proxyFile = undefined;
+		s.proxyWidth = undefined;
+		s.proxyHeight = undefined;
+		s.proxyProgress = undefined;
+		s.proxyFailed = false;
+		s.proxyReason = undefined;
+		s.proxyDisabled = !enabled;
+		// Whichever file the sampler was opened on is now the wrong one, in either
+		// direction; the next ensureSampler reopens on the one this choice asks for.
+		videoSamplers.get(id)?.dispose();
+		videoSamplers.delete(id);
+		samplerPromises.delete(id);
+		const wanted = enabled && needsProxy(s.width ?? 0, s.height ?? 0);
+		s.proxyPending = wanted;
+		if (wanted) void makeSlideProxy(s.id, s.file);
 	}
 
 	/** Retry a failed proxy transcode for a slide — the badge's click action. */
@@ -1792,7 +1831,10 @@
 				onReorderSlides={reorderSlides}
 				onShuffleSlides={shuffleSlides}
 				onSetPresetIndex={setPresetIndex}
-				onRetryProxy={(id) => retrySlideProxy(id)}
+				onProxyAction={(id, action) => {
+					if (action === 'retry') retrySlideProxy(id);
+					else setSlideProxyEnabled(id, action === 'enable');
+				}}
 			/>
 		{/if}
 		<div

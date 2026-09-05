@@ -8,6 +8,7 @@
 		SlidersHorizontal,
 		TriangleAlert,
 		Zap,
+		ZapOff,
 	} from 'lucide-svelte';
 	import {
 		DEFAULT_SOURCE_EDIT,
@@ -256,6 +257,13 @@
 							{:else if proxy.kind === 'ready'}
 								<span class="rail-proxy ok" title={proxy.title}>
 									<Zap size={7} fill="currentColor" />
+									{proxy.badge}
+								</span>
+							{:else if proxy.kind === 'off'}
+								<!-- Display only: the chip is itself a button, so the toggle
+								     lives on the grid's badge and over the single preview. -->
+								<span class="rail-proxy off" title={proxy.title}>
+									<ZapOff size={7} />
 									{proxy.badge}
 								</span>
 							{/if}
@@ -535,6 +543,10 @@
 
 	.rail-proxy.warn {
 		color: var(--start);
+	}
+
+	.rail-proxy.off {
+		color: var(--text-4);
 	}
 
 	.rail-name {

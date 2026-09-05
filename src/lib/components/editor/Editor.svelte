@@ -16,6 +16,7 @@
 		TriangleAlert,
 		Type,
 		Zap,
+		ZapOff,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
@@ -128,6 +129,7 @@
 	} from '../../video/proxy';
 	import { openVideoFrameSource } from '../../video/frame-source';
 	import { proxyStatus } from '../../video/proxy-status';
+	import { isProxyDisabled, setProxyDisabled } from '../../video/proxy-preference';
 	import {
 		appendMediaLane,
 		createMediaHistory,
@@ -388,6 +390,10 @@
 	let singleProxyProgress = $state<number | undefined>(undefined);
 	let singleProxySize = $state<{ width: number; height: number } | null>(null);
 	let singleProxyReason = $state<string | undefined>(undefined);
+	/** The user asked this video to preview from the original — see
+	 * video/proxy-preference.ts. Read back from there per file, so the choice
+	 * survives a reload and follows the file into the other modes. */
+	let singleProxyDisabled = $state(false);
 	const singleProxyStatus = $derived(
 		proxyStatus({
 			width: previewPlayer?.width,
@@ -399,8 +405,39 @@
 			proxyProgress: singleProxyProgress,
 			proxyFailed: singleProxyFailed,
 			proxyReason: singleProxyReason,
+			// Only meaningful for media a proxy would be built for; a smaller
+			// video says nothing either way.
+			proxyDisabled:
+				singleProxyDisabled &&
+				needsProxy(previewPlayer?.width ?? 0, previewPlayer?.height ?? 0),
 		}),
 	);
+
+	/**
+	 * Turn the preview proxy for the single-mode file on or off — the badge over
+	 * the preview is the entry point. Off drops the proxy the player is on, so
+	 * the next frame comes from the original; the choice is remembered for this
+	 * file across sessions and modes.
+	 */
+	function setSingleProxyEnabled(enabled: boolean) {
+		const f = file;
+		if (!f) return;
+		setProxyDisabled(f, !enabled);
+		// Cleared rather than set directly: the effect below re-runs off the back
+		// of this and reads the choice back out, which is the one place that
+		// decides whether a job starts.
+		singleJob?.cancel();
+		singleJob = null;
+		singleJobFor = null;
+		singleProxy = null;
+		singleProxyFor = null;
+		singleProxyFailed = false;
+		singleProxyPending = false;
+		singleProxyProgress = undefined;
+		singleProxySize = null;
+		singleProxyReason = undefined;
+		singleProxyDisabled = !enabled;
+	}
 
 	$effect(() => {
 		if (isSequenceMode || !isVideo) return;
@@ -417,6 +454,7 @@
 			singleProxyProgress = undefined;
 			singleProxySize = null;
 			singleProxyReason = undefined;
+			singleProxyDisabled = isProxyDisabled(f);
 		}
 		// The player is the gate as well as the size source: files on the
 		// <video>-element fallback (rotation metadata, undecodable) decode
@@ -425,6 +463,8 @@
 		const w = player?.width ?? 0;
 		const h = player?.height ?? 0;
 		if (!player || !needsProxy(w, h)) return;
+		// The user asked for the original: no job, and the badge says so.
+		if (singleProxyDisabled) return;
 		if (singleJobFor === f || singleProxyFor === f || singleProxyFailed)
 			return;
 		singleJobFor = f;
@@ -4018,7 +4058,10 @@
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
-				onRetryProxy={(id) => sourceRegistry.retryProxy(id)}
+				onProxyAction={(id, action) => {
+					if (action === 'retry') sourceRegistry.retryProxy(id);
+					else sourceRegistry.setProxyEnabled(id, action === 'enable');
+				}}
 			/>
 		{/if}
 		<!-- Hidden, never unmounted: tearing the canvas down would take the
@@ -4027,19 +4070,32 @@
 			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== 'none'}
 				<!-- Single mode has no source chip, so the one thing that would
 				     otherwise happen silently to the user's video says so here. -->
-				<span
+				<button
 					class="preview-proxy"
 					class:ok={singleProxyStatus.kind === 'ready'}
 					class:warn={singleProxyStatus.kind === 'failed'}
-					title={singleProxyStatus.title}
+					class:off={singleProxyStatus.kind === 'off'}
+					title={`${singleProxyStatus.title} ${singleProxyStatus.action.hint}`}
+					onclick={() => {
+						const action = singleProxyStatus.action.kind;
+						if (action === 'retry') {
+							singleJobFor = null;
+							singleProxyFailed = false;
+							singleProxyReason = undefined;
+						} else {
+							setSingleProxyEnabled(action === 'enable');
+						}
+					}}
 				>
 					{#if singleProxyStatus.kind === 'ready'}
 						<Zap size={9} fill="currentColor" />
+					{:else if singleProxyStatus.kind === 'off'}
+						<ZapOff size={9} />
 					{:else if singleProxyStatus.kind === 'failed'}
 						<TriangleAlert size={9} />
 					{/if}
-					{singleProxyStatus.badge}
-				</span>
+					{singleProxyStatus.kind === 'failed' ? '' : singleProxyStatus.badge}
+				</button>
 			{/if}
 			<GlCanvas
 				{imageSrc}
@@ -4851,6 +4907,8 @@
 
 	.preview-proxy {
 		position: absolute;
+		border: none;
+		cursor: pointer;
 		z-index: 2;
 		top: 6px;
 		left: 6px;
@@ -4873,6 +4931,10 @@
 
 	.preview-proxy.warn {
 		color: var(--start);
+	}
+
+	.preview-proxy.off {
+		color: var(--text-4);
 	}
 
 	.preview-slot.hidden {

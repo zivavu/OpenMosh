@@ -67,6 +67,36 @@ describe("proxyStatus", () => {
     expect(status.kind === "failed" && status.title).toContain("2560×1440");
   });
 
+  test("says the preview is on the original once the user turns it off", () => {
+    const status = proxyStatus({ ...SOURCE, proxyDisabled: true });
+    expect(status).toMatchObject({ kind: "off", badge: "1440p" });
+    expect(status.kind === "off" && status.title).toContain("2560×1440");
+    expect(status.kind === "off" && status.action.kind).toBe("enable");
+  });
+
+  test("the choice outranks a transcode still winding down", () => {
+    const status = proxyStatus({
+      ...SOURCE,
+      proxyDisabled: true,
+      proxyPending: true,
+      proxyProgress: 0.6,
+      proxyFile: FILE,
+    });
+    expect(status.kind).toBe("off");
+  });
+
+  test("offers to turn it off while running and once it has landed", () => {
+    const running = proxyStatus({ ...SOURCE, proxyPending: true });
+    const ready = proxyStatus({ ...SOURCE, proxyFile: FILE });
+    expect(running.kind === "pending" && running.action.kind).toBe("disable");
+    expect(ready.kind === "ready" && ready.action.kind).toBe("disable");
+  });
+
+  test("offers a retry, not a toggle, after a failure", () => {
+    const status = proxyStatus({ ...SOURCE, proxyFailed: true });
+    expect(status.kind === "failed" && status.action.kind).toBe("retry");
+  });
+
   test("falls back to 'full size' for media with no probed dimensions", () => {
     const status = proxyStatus({ proxyFailed: true });
     expect(status.kind === "failed" && status.title).toContain("full size");

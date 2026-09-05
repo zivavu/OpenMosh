@@ -65,6 +65,12 @@ export interface SlideshowSlide {
   proxyFailed?: boolean;
   /** Why it failed, for the badge to say something more useful than that it did. */
   proxyReason?: string;
+  /**
+   * The user asked this video to preview from the original — see
+   * video/proxy-preference.ts. Only set on slides a proxy would otherwise be
+   * built for, so the badge can treat it as "the choice applies here".
+   */
+  proxyDisabled?: boolean;
 }
 
 import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "../text";
