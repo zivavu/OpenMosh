@@ -48,6 +48,8 @@ export type ProxyWorkerRequest =
 	| { type: "cancel"; id: number };
 
 export type ProxyWorkerResponse =
+	/** The size the proxy will be, decided before the first frame is encoded. */
+	| { type: "sized"; id: number; width: number; height: number }
 	| { type: "progress"; id: number; progress: number }
 	| { type: "done"; id: number; blob: Blob }
 	| { type: "failed"; id: number; reason: string };
@@ -457,6 +459,9 @@ async function convert(id: number, file: File) {
 			pickLongEdge(sourceRealtime),
 		);
 		const codec = await pickCodec(size.width, size.height);
+		// Before the encode, not after: the size is what the UI has to show for
+		// however long the transcode takes.
+		post({ type: "sized", id, width: size.width, height: size.height });
 		const target = new BufferTarget();
 		const output = new Output({ format: new Mp4OutputFormat(), target });
 		const conversion = await Conversion.init({

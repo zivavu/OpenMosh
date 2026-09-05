@@ -11,6 +11,7 @@
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
+	import { proxyStatus } from '../../video/proxy-status';
 
 	interface Props {
 		slides: SlideshowSlide[];
@@ -203,17 +204,13 @@
 						<div class="video-badge" title="Video">
 							<Play size={10} fill="currentColor" />
 						</div>
-						{#if slide.proxyPending}
-							<div
-								class="proxy-badge"
-								title={`Optimizing for smooth preview — ${Math.round((slide.proxyProgress ?? 0) * 100)}%`}
-							>
-								{Math.round((slide.proxyProgress ?? 0) * 100)}%
-							</div>
-						{:else if slide.proxyFailed}
+						{@const proxy = proxyStatus(slide)}
+						{#if proxy.kind === 'pending'}
+							<div class="proxy-badge" title={proxy.title}>{proxy.badge}</div>
+						{:else if proxy.kind === 'failed'}
 							<button
 								class="proxy-badge warn"
-								title="Preview optimization failed — click to retry"
+								title={`${proxy.title} Click to try again.`}
 								onclick={(e) => {
 									e.stopPropagation();
 									onRetryProxy(slide.id);
@@ -221,12 +218,10 @@
 							>
 								<TriangleAlert size={10} />
 							</button>
-						{:else if slide.proxyFile}
-							<div
-								class="proxy-badge ok"
-								title="Preview optimized — decodes from a smaller copy"
-							>
+						{:else if proxy.kind === 'ready'}
+							<div class="proxy-badge ok" title={proxy.title}>
 								<Zap size={10} fill="currentColor" />
+								{proxy.badge}
 							</div>
 						{/if}
 					{/if}
@@ -448,6 +443,7 @@
 		left: 30px;
 		display: flex;
 		align-items: center;
+		gap: 3px;
 		color: var(--text-3);
 		background: rgba(0, 0, 0, 0.6);
 		padding: 2px 3px;

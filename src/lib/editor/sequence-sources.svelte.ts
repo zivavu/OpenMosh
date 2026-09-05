@@ -54,12 +54,21 @@ export interface SequenceSource {
    * reading `file` either way.
    */
   proxyFile?: File;
+  /**
+   * The proxy's size: what the transcode is aiming at while it runs, and what
+   * the finished file turned out to be once it lands. Absent until the worker
+   * has picked one, which is what the chip reads as "still looking".
+   */
+  proxyWidth?: number;
+  proxyHeight?: number;
   /** A proxy is being built (or looked up in storage) for this source. */
   proxyPending?: boolean;
   /** 0–1, while `proxyPending`. */
   proxyProgress?: number;
   /** Transcoding failed — the chip shows a warning; previews stay on the original. */
   proxyFailed?: boolean;
+  /** Why it failed, for the chip to say something more useful than that it did. */
+  proxyReason?: string;
   /**
    * The file the editor was opened with. It owns the master clock and (when
    * it's a video) the preview audio, so its frames still come from the
@@ -368,6 +377,9 @@ export class SequenceSourceRegistry {
     const src = this.get(id);
     if (!src || src.kind !== "video" || !src.proxyFailed) return;
     src.proxyFailed = false;
+    src.proxyReason = undefined;
+    src.proxyWidth = undefined;
+    src.proxyHeight = undefined;
     src.proxyPending = true;
     void this.#makeProxy(id, src.file);
   }
@@ -494,9 +506,22 @@ export class SequenceSourceRegistry {
     const stored = await getSequenceMediaProxy(file);
     let proxy = stored;
     if (!proxy) {
-      const job = startProxyJob(file, (progress) => {
-        const live = this.get(id);
-        if (live) live.proxyProgress = progress;
+      const job = startProxyJob(file, {
+        onProgress: (progress) => {
+          const live = this.get(id);
+          if (live) live.proxyProgress = progress;
+        },
+        onSized: (width, height) => {
+          const live = this.get(id);
+          if (live) {
+            live.proxyWidth = width;
+            live.proxyHeight = height;
+          }
+        },
+        onFailed: (reason) => {
+          const live = this.get(id);
+          if (live) live.proxyReason = reason;
+        },
       });
       this.#proxyJobs.set(id, job);
       proxy = await job.promise;
@@ -506,8 +531,13 @@ export class SequenceSourceRegistry {
     // A proxy that won't open is worse than none — the preview would freeze on
     // this source instead of grinding through the original — so it gets the
     // same decodability check an added file gets before it is trusted.
+    // Opening it is also where its real size comes from, which is the one the
+    // chip reports: a stored proxy never announced one, and a fresh one only
+    // announced the size it was aiming at.
+    let opened: { width: number; height: number } | null = null;
     if (proxy) {
       const sampler = await SlideVideoSampler.create(proxy);
+      if (sampler) opened = { width: sampler.width, height: sampler.height };
       sampler?.dispose();
       if (!sampler) {
         proxy = null;
@@ -520,6 +550,8 @@ export class SequenceSourceRegistry {
     if (!live) return;
     if (proxy) {
       live.proxyFile = proxy;
+      live.proxyWidth = opened?.width;
+      live.proxyHeight = opened?.height;
       live.proxyPending = false;
       live.proxyProgress = undefined;
       // A sampler decoding the original costs 4× the per-frame work; drop it

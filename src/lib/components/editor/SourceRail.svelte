@@ -24,6 +24,7 @@
 		sourceColor,
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
+	import { proxyStatus } from '../../video/proxy-status';
 
 	interface Props {
 		sources: SequenceSource[];
@@ -242,26 +243,17 @@
 						<span class="rail-n" style:background={sourceColor(i + 1)}>{i + 1}</span>
 						{#if src.kind === 'video'}
 							<span class="rail-kind"><Play size={7} fill="currentColor" /></span>
-							{#if src.proxyPending}
-								<span
-									class="rail-proxy"
-									title={`Optimizing for smooth preview — ${Math.round((src.proxyProgress ?? 0) * 100)}%`}
-								>
-									{Math.round((src.proxyProgress ?? 0) * 100)}%
-								</span>
-							{:else if src.proxyFailed}
-								<span
-									class="rail-proxy warn"
-									title="Preview optimization failed — playback may be slow on this machine"
-								>
+							{@const proxy = proxyStatus(src)}
+							{#if proxy.kind === 'pending'}
+								<span class="rail-proxy" title={proxy.title}>{proxy.badge}</span>
+							{:else if proxy.kind === 'failed'}
+								<span class="rail-proxy warn" title={proxy.title}>
 									<TriangleAlert size={7} />
 								</span>
-							{:else if src.proxyFile}
-								<span
-									class="rail-proxy ok"
-									title="Preview optimized — decodes from a smaller copy"
-								>
+							{:else if proxy.kind === 'ready'}
+								<span class="rail-proxy ok" title={proxy.title}>
 									<Zap size={7} fill="currentColor" />
+									{proxy.badge}
 								</span>
 							{/if}
 						{/if}
@@ -513,6 +505,9 @@
 		position: absolute;
 		top: 2px;
 		right: 16px;
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
 		padding: 0 2px;
 		border-radius: 2px;
 		background: rgba(0, 0, 0, 0.65);

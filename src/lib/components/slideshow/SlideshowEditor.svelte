@@ -201,9 +201,22 @@
 		const stored = await getSequenceMediaProxy(file);
 		let proxy = stored;
 		if (!proxy) {
-			const job = startProxyJob(file, (progress) => {
-				const live = slides.find((s) => s.id === id);
-				if (live) live.proxyProgress = progress;
+			const job = startProxyJob(file, {
+				onProgress: (progress) => {
+					const live = slides.find((s) => s.id === id);
+					if (live) live.proxyProgress = progress;
+				},
+				onSized: (width, height) => {
+					const live = slides.find((s) => s.id === id);
+					if (live) {
+						live.proxyWidth = width;
+						live.proxyHeight = height;
+					}
+				},
+				onFailed: (reason) => {
+					const live = slides.find((s) => s.id === id);
+					if (live) live.proxyReason = reason;
+				},
 			});
 			proxyJobs.set(id, job);
 			proxy = await job.promise;
@@ -212,8 +225,13 @@
 		// A proxy that won't open is worse than none — the preview would freeze
 		// on this slide instead of grinding through the original — so it gets the
 		// same decodability check an added file gets before it is trusted.
+		// Opening it is also where its real size comes from, which is the one the
+		// badge reports: a stored proxy never announced one, and a fresh one only
+		// announced the size it was aiming at.
+		let opened: { width: number; height: number } | null = null;
 		if (proxy) {
 			const sampler = await SlideVideoSampler.create(proxy);
+			if (sampler) opened = { width: sampler.width, height: sampler.height };
 			sampler?.dispose();
 			if (!sampler) {
 				proxy = null;
@@ -229,6 +247,8 @@
 			// transcode.
 			if (!stored) void putSequenceMediaProxy(file, proxy).catch(() => {});
 			live.proxyFile = proxy;
+			live.proxyWidth = opened?.width;
+			live.proxyHeight = opened?.height;
 			live.proxyPending = false;
 			live.proxyProgress = undefined;
 			// A sampler decoding the original costs 4× the per-frame work; drop it
@@ -247,6 +267,9 @@
 		const s = slides.find((x) => x.id === id);
 		if (!s || s.kind !== 'video' || !s.proxyFailed) return;
 		s.proxyFailed = false;
+		s.proxyReason = undefined;
+		s.proxyWidth = undefined;
+		s.proxyHeight = undefined;
 		s.proxyPending = true;
 		void makeSlideProxy(s.id, s.file);
 	}

@@ -13,7 +13,9 @@
 		Plus,
 		Shuffle,
 		Trash2,
+		TriangleAlert,
 		Type,
+		Zap,
 	} from 'lucide-svelte';
 	import { fileDrop } from '../../actions/file-drop';
 	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
@@ -125,6 +127,7 @@
 		type ProxyJob,
 	} from '../../video/proxy';
 	import { openVideoFrameSource } from '../../video/frame-source';
+	import { proxyStatus } from '../../video/proxy-status';
 	import {
 		appendMediaLane,
 		createMediaHistory,
@@ -376,6 +379,25 @@
 	/** Set when optimization failed, so it isn't retried in a loop; the toast's
 	 * Retry action clears it. */
 	let singleProxyFailed = $state(false);
+	/** Single mode has no chip to hang the proxy's state on, so it keeps the
+	 * same fields a pooled source carries and shows them over the preview. */
+	let singleProxyPending = $state(false);
+	let singleProxyProgress = $state<number | undefined>(undefined);
+	let singleProxySize = $state<{ width: number; height: number } | null>(null);
+	let singleProxyReason = $state<string | undefined>(undefined);
+	const singleProxyStatus = $derived(
+		proxyStatus({
+			width: previewPlayer?.width,
+			height: previewPlayer?.height,
+			proxyFile: singleProxy ?? undefined,
+			proxyWidth: singleProxySize?.width,
+			proxyHeight: singleProxySize?.height,
+			proxyPending: singleProxyPending,
+			proxyProgress: singleProxyProgress,
+			proxyFailed: singleProxyFailed,
+			proxyReason: singleProxyReason,
+		}),
+	);
 
 	$effect(() => {
 		if (isSequenceMode || !isVideo) return;
@@ -388,6 +410,10 @@
 			singleProxy = null;
 			singleProxyFor = null;
 			singleProxyFailed = false;
+			singleProxyPending = false;
+			singleProxyProgress = undefined;
+			singleProxySize = null;
+			singleProxyReason = undefined;
 		}
 		// The player is the gate as well as the size source: files on the
 		// <video>-element fallback (rotation metadata, undecodable) decode
@@ -399,11 +425,22 @@
 		if (singleJobFor === f || singleProxyFor === f || singleProxyFailed)
 			return;
 		singleJobFor = f;
+		singleProxyPending = true;
 		void (async () => {
 			const stored = await getSequenceMediaProxy(f);
 			let proxy = stored;
 			if (!stored) {
-				const job = startProxyJob(f);
+				const job = startProxyJob(f, {
+					onProgress: (progress) => {
+						if (f === file) singleProxyProgress = progress;
+					},
+					onSized: (width, height) => {
+						if (f === file) singleProxySize = { width, height };
+					},
+					onFailed: (reason) => {
+						if (f === file) singleProxyReason = reason;
+					},
+				});
 				singleJob = job;
 				proxy = await job.promise;
 			}
@@ -411,8 +448,15 @@
 			// A proxy that won't open is worse than none — the preview would freeze
 			// instead of grinding through the original — so it gets the same
 			// decodability check an added file gets before it is trusted.
+			let openedSize: { width: number; height: number } | null = null;
 			if (proxy) {
 				const opened = await openVideoFrameSource(proxy);
+				if (opened) {
+					// The real size of the finished file, which is what the preview
+					// reports: a stored proxy never announced one, and a fresh one only
+					// announced the size it was aiming at.
+					openedSize = { width: opened.width, height: opened.height };
+				}
 				opened?.queue.dispose();
 				if (!opened) {
 					proxy = null;
@@ -428,19 +472,27 @@
 				if (!stored) void putSequenceMediaProxy(f, proxy).catch(() => {});
 				singleProxy = proxy;
 				singleProxyFor = f;
+				singleProxySize = openedSize;
+				singleProxyPending = false;
+				singleProxyProgress = undefined;
 			} else {
 				// Not auto-retried: a persistent failure would loop. The toast's
 				// action is the explicit way back.
 				singleProxyFailed = true;
+				singleProxyPending = false;
+				singleProxyProgress = undefined;
+				singleProxySize = null;
 				showToast(
-					`Couldn't optimize "${f.name}" — preview may be slow`,
+					`No smaller copy of "${f.name}" could be made. The preview plays the` +
+						' original, which may stutter. Export is unaffected.',
 					'error',
 					8000,
 					{
-						label: 'Retry',
+						label: 'Try again',
 						run: () => {
 							singleJobFor = null;
 							singleProxyFailed = false;
+							singleProxyReason = undefined;
 						},
 					},
 				);
@@ -3969,6 +4021,23 @@
 		<!-- Hidden, never unmounted: tearing the canvas down would take the
 		     renderer (and the pre-warmed context it adopted) with it. -->
 		<div class="preview-slot" class:hidden={sequenceGridOpen}>
+			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== 'none'}
+				<!-- Single mode has no source chip, so the one thing that would
+				     otherwise happen silently to the user's video says so here. -->
+				<span
+					class="preview-proxy"
+					class:ok={singleProxyStatus.kind === 'ready'}
+					class:warn={singleProxyStatus.kind === 'failed'}
+					title={singleProxyStatus.title}
+				>
+					{#if singleProxyStatus.kind === 'ready'}
+						<Zap size={9} fill="currentColor" />
+					{:else if singleProxyStatus.kind === 'failed'}
+						<TriangleAlert size={9} />
+					{/if}
+					{singleProxyStatus.badge}
+				</span>
+			{/if}
 			<GlCanvas
 				{imageSrc}
 				effects={renderedEffects}
@@ -4768,10 +4837,37 @@
 	/* Holds the canvas's place in the column so the grid can take the box
 	   without the preview being torn down. */
 	.preview-slot {
+		position: relative;
 		flex: 1;
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+	}
+
+	.preview-proxy {
+		position: absolute;
+		z-index: 2;
+		top: 6px;
+		left: 6px;
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 1px 5px;
+		border-radius: 2px;
+		background: rgba(0, 0, 0, 0.65);
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.55rem;
+		line-height: 1.6;
+		pointer-events: auto;
+	}
+
+	.preview-proxy.ok {
+		color: var(--live);
+	}
+
+	.preview-proxy.warn {
+		color: var(--start);
 	}
 
 	.preview-slot.hidden {

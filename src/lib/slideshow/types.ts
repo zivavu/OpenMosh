@@ -50,12 +50,21 @@ export interface SlideshowSlide {
    * reading `file` either way.
    */
   proxyFile?: File;
+  /**
+   * The proxy's size: what the transcode is aiming at while it runs, and what
+   * the finished file turned out to be once it lands. Absent until the worker
+   * has picked one, which is what the badge reads as "still looking".
+   */
+  proxyWidth?: number;
+  proxyHeight?: number;
   /** A proxy is being built (or looked up in storage) for this slide. */
   proxyPending?: boolean;
   /** 0–1, while `proxyPending`. */
   proxyProgress?: number;
   /** Transcoding failed — the chip shows a warning; previews stay on the original. */
   proxyFailed?: boolean;
+  /** Why it failed, for the badge to say something more useful than that it did. */
+  proxyReason?: string;
 }
 
 import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "../text";

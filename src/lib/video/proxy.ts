@@ -27,6 +27,24 @@ export interface ProxyJob {
 	cancel(): void;
 }
 
+/**
+ * What a caller can be told while a transcode runs. All optional: the job
+ * resolves to the same file either way, and a caller with nowhere to show
+ * progress can ignore every one of them.
+ */
+export interface ProxyJobHandlers {
+	/** 0–1. */
+	onProgress?: (progress: number) => void;
+	/**
+	 * The size the proxy will be, known once the worker has benchmarked the
+	 * source and before the encode starts — so the wait can say what it is
+	 * waiting for rather than only how far along it is.
+	 */
+	onSized?: (width: number, height: number) => void;
+	/** Why the transcode failed, for a message that says more than "failed". */
+	onFailed?: (reason: string) => void;
+}
+
 // ── Worker plumbing ──────────────────────────────────────────────────────────
 
 let worker: Worker | null = null;
@@ -71,7 +89,7 @@ let nextJobId = 1;
 
 export function startProxyJob(
 	file: File,
-	onProgress?: (progress: number) => void,
+	handlers: ProxyJobHandlers = {},
 ): ProxyJob {
 	const id = nextJobId++;
 	let canceled = false;
@@ -104,7 +122,11 @@ export function startProxyJob(
 						const msg = e.data;
 						if (msg.id !== id) return;
 						if (msg.type === "progress") {
-							onProgress?.(msg.progress);
+							handlers.onProgress?.(msg.progress);
+							return;
+						}
+						if (msg.type === "sized") {
+							handlers.onSized?.(msg.width, msg.height);
 							return;
 						}
 						target_.removeEventListener("message", onMessage);
@@ -114,6 +136,7 @@ export function startProxyJob(
 							// The worker logs the underlying error; this is what ties it
 							// back to the file the user is looking at.
 							console.warn(`[proxy] "${file.name}": ${msg.reason}`);
+							handlers.onFailed?.(msg.reason);
 							settle(null);
 						}
 					};

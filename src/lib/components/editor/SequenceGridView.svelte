@@ -6,6 +6,7 @@
 		sourceColor,
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
+	import { proxyStatus } from '../../video/proxy-status';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 
 	interface Props {
@@ -207,17 +208,13 @@
 						<span class="card-kind" title="Video">
 							<Play size={9} fill="currentColor" />
 						</span>
-						{#if src.proxyPending}
-							<span
-								class="card-proxy"
-								title={`Optimizing for smooth preview — ${Math.round((src.proxyProgress ?? 0) * 100)}%`}
-							>
-								{Math.round((src.proxyProgress ?? 0) * 100)}%
-							</span>
-						{:else if src.proxyFailed}
+						{@const proxy = proxyStatus(src)}
+						{#if proxy.kind === 'pending'}
+							<span class="card-proxy" title={proxy.title}>{proxy.badge}</span>
+						{:else if proxy.kind === 'failed'}
 							<button
 								class="card-proxy warn"
-								title="Preview optimization failed — click to retry"
+								title={`${proxy.title} Click to try again.`}
 								onclick={(e) => {
 									e.stopPropagation();
 									onRetryProxy(src.id);
@@ -225,12 +222,10 @@
 							>
 								<TriangleAlert size={9} />
 							</button>
-						{:else if src.proxyFile}
-							<span
-								class="card-proxy ok"
-								title="Preview optimized — decodes from a smaller copy"
-							>
+						{:else if proxy.kind === 'ready'}
+							<span class="card-proxy ok" title={proxy.title}>
 								<Zap size={9} fill="currentColor" />
+								{proxy.badge}
 							</span>
 						{/if}
 					{/if}
@@ -472,6 +467,7 @@
 		left: 52px;
 		display: flex;
 		align-items: center;
+		gap: 3px;
 		padding: 1px 4px;
 		border: none;
 		border-radius: 2px;
