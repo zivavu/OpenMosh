@@ -2,9 +2,12 @@
 	import { HelpCircle, Pause, Play, Settings, Type } from 'lucide-svelte';
 	import RecordGroup from '../editor/RecordGroup.svelte';
 	import ResizeSettings from '../ui/ResizeSettings.svelte';
-	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
 	import { TEXT_TIMELINE_SHORTCUTS } from '../../text';
 	import type { SourceFit } from '../../gl/renderer';
+	import { lazy } from '../../lazy';
+
+	// An overlay behind a key; its chunk waits until someone asks for help.
+	const loadShortcutsModal = lazy(() => import('../ui/ShortcutsModal.svelte'));
 
 	interface Props {
 		previewPlaying: boolean;
@@ -246,7 +249,9 @@
 </div>
 
 {#if showShortcuts}
-	<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+	{#await loadShortcutsModal() then ShortcutsModal}
+		<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+	{/await}
 {/if}
 
 <style>

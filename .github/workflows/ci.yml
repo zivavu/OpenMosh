@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - run: bun install --frozen-lockfile
+
+      # svelte-check + tsc over both tsconfigs.
+      - run: bun run check
+
+      - run: bun test
+
+      # A green type-check doesn't prove the bundle builds.
+      - run: bun run build

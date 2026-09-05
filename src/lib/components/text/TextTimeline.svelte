@@ -25,12 +25,15 @@
 		type TextLane,
 		type TextTimeline,
 	} from '../../text';
-	import LyricsSyncModal, {
-		type LyricsSyncProps,
-	} from './LyricsSyncModal.svelte';
+	import type { LyricsSyncProps } from './LyricsSyncModal.svelte';
+	import { lazy } from '../../lazy';
 	import { stackIndex, type LayerRef } from '../../timeline/layer-order';
 	import LaneGrip from '../ui/LaneGrip.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+
+	// Only fetched when the sync modal is actually opened; it reseeds itself from
+	// the timeline on every open, so mounting it late costs nothing.
+	const loadLyricsSyncModal = lazy(() => import('./LyricsSyncModal.svelte'));
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 6;
@@ -605,21 +608,23 @@
 		/>
 	{/if}
 
-	{#if lyricsSync}
-		<LyricsSyncModal
-			open={lyricsOpen}
-			currentTime={stack.currentTime}
-			isPlaying={lyricsSync.isPlaying}
-			spanStart={lyricsSync.spanStart}
-			spanEnd={lyricsSync.spanEnd}
-			getCurrentTime={lyricsSync.getCurrentTime}
-			existing={lyricsDraft}
-			onPlay={lyricsSync.onPlay}
-			onPause={lyricsSync.onPause}
-			onSeek={lyricsSync.onSeek}
-			onApply={lyricsSync.onApply}
-			onClose={() => (lyricsOpen = false)}
-		/>
+	{#if lyricsSync && lyricsOpen}
+		{#await loadLyricsSyncModal() then LyricsSyncModal}
+			<LyricsSyncModal
+				open={lyricsOpen}
+				currentTime={stack.currentTime}
+				isPlaying={lyricsSync.isPlaying}
+				spanStart={lyricsSync.spanStart}
+				spanEnd={lyricsSync.spanEnd}
+				getCurrentTime={lyricsSync.getCurrentTime}
+				existing={lyricsDraft}
+				onPlay={lyricsSync.onPlay}
+				onPause={lyricsSync.onPause}
+				onSeek={lyricsSync.onSeek}
+				onApply={lyricsSync.onApply}
+				onClose={() => (lyricsOpen = false)}
+			/>
+		{/await}
 	{/if}
 </div>
 

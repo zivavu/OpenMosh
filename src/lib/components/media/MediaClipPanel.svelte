@@ -19,7 +19,10 @@
 	import type { AudioResponse } from '../../audio/auto-range';
 	import EffectsPanel from '../ui/EffectsPanel.svelte';
 	import RangeSlider from '../ui/RangeSlider.svelte';
-	import SourceEditor from '../editor/SourceEditor.svelte';
+	import { lazy } from '../../lazy';
+
+	// Same chunk the source rail opens; only fetched when an edit starts.
+	const loadSourceEditor = lazy(() => import('../editor/SourceEditor.svelte'));
 
 	const BLEND_MODES = [
 		'normal',
@@ -479,12 +482,14 @@
 {/if}
 
 {#if editingSource && source && onEditChange}
-	<SourceEditor
-		{source}
-		edit={edits[source.id] ?? DEFAULT_SOURCE_EDIT}
-		onChange={(edit) => onEditChange(source!.id, edit)}
-		onClose={() => (editingSource = false)}
-	/>
+	{#await loadSourceEditor() then SourceEditor}
+		<SourceEditor
+			{source}
+			edit={edits[source.id] ?? DEFAULT_SOURCE_EDIT}
+			onChange={(edit) => onEditChange(source!.id, edit)}
+			onClose={() => (editingSource = false)}
+		/>
+	{/await}
 {/if}
 
 <style>

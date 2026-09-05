@@ -8,10 +8,13 @@
 		TriangleAlert,
 		Zap,
 	} from 'lucide-svelte';
-	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
 	import type { Preset } from '../../effects';
 	import { proxyStatus } from '../../video/proxy-status';
+	import { lazy } from '../../lazy';
+
+	// Preview overlay: nothing loads it until a slide is opened.
+	const loadMediaLightbox = lazy(() => import('../ui/MediaLightbox.svelte'));
 
 	interface Props {
 		slides: SlideshowSlide[];
@@ -267,12 +270,14 @@
 	{/if}
 
 	{#if lightboxIndex !== null}
-		<MediaLightbox
-			items={lightboxItems}
-			bind:index={lightboxIndex}
-			origin={lightboxOrigin}
-			onClose={() => (lightboxIndex = null)}
-		/>
+		{#await loadMediaLightbox() then MediaLightbox}
+			<MediaLightbox
+				items={lightboxItems}
+				bind:index={lightboxIndex}
+				origin={lightboxOrigin}
+				onClose={() => (lightboxIndex = null)}
+			/>
+		{/await}
 	{/if}
 </div>
 

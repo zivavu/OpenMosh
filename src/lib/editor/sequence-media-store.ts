@@ -11,6 +11,8 @@
  * or the source video when there's no track), so the two always swap together.
  */
 
+import { requestPersistentStorage } from "../persistent-storage";
+
 export interface StoredSequenceMedia {
   id: string;
   name: string;
@@ -379,6 +381,8 @@ export async function putSequenceMedia(
   entries: { id: string; file: File }[],
 ): Promise<void> {
   if (entries.length === 0) return;
+  // First save of real work: ask to be exempt from quota eviction.
+  void requestPersistentStorage();
   const addedAt = Date.now();
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -442,6 +446,8 @@ export async function saveMediaPool(
   key: string,
   sourceIds: string[],
 ): Promise<void> {
+  // First save of real work: ask to be exempt from quota eviction.
+  void requestPersistentStorage();
   const entry: StoredMediaPool = { key, sourceIds, updatedAt: Date.now() };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -527,6 +533,8 @@ export async function getSession(key: string): Promise<StoredSession | null> {
 export async function putSession(
   entry: Omit<StoredSession, "updatedAt">,
 ): Promise<void> {
+  // First save of real work: ask to be exempt from quota eviction.
+  void requestPersistentStorage();
   const record: StoredSession = { ...entry, updatedAt: Date.now() };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -575,6 +583,8 @@ export async function getTimeline(key: string): Promise<unknown | null> {
 }
 
 export async function putTimeline(key: string, state: unknown): Promise<void> {
+  // First save of real work: ask to be exempt from quota eviction.
+  void requestPersistentStorage();
   const entry: StoredTimeline = { key, state, updatedAt: Date.now() };
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
