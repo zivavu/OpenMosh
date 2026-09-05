@@ -2,15 +2,7 @@
 	import { onMount } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
-	import FeedbackModal from "./lib/components/ui/FeedbackModal.svelte";
 	import { lazy } from "./lib/lazy";
-
-	// The editors are the bulk of the bundle and none of it is needed to paint
-	// the upload screen, so they load with the route instead of with the app.
-	const loadEditor = lazy(() => import("./lib/components/editor/Editor.svelte"));
-	const loadSlideshowEditor = lazy(
-		() => import("./lib/components/slideshow/SlideshowEditor.svelte"),
-	);
 
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
@@ -20,6 +12,16 @@
 	import { showToast } from "./lib/components/ui/toast.svelte";
 	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
+
+	// The editors are the bulk of the bundle and none of it is needed to paint
+	// the upload screen, so they load with the route instead of with the app.
+	const loadEditor = lazy(() => import("./lib/components/editor/Editor.svelte"));
+	const loadSlideshowEditor = lazy(
+		() => import("./lib/components/slideshow/SlideshowEditor.svelte"),
+	);
+	const loadFeedbackModal = lazy(
+		() => import("./lib/components/ui/FeedbackModal.svelte"),
+	);
 
 	let file: File | null = $state(null);
 	let sequenceFiles: File[] = $state([]);
@@ -288,7 +290,9 @@
 {/if}
 
 {#if isFeedbackOpen()}
-	<FeedbackModal />
+	{#await loadFeedbackModal() then FeedbackModal}
+		<FeedbackModal />
+	{/await}
 {/if}
 
 <ToastContainer />

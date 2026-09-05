@@ -6,7 +6,10 @@
 		sourceColor,
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import MediaLightbox from '../ui/MediaLightbox.svelte';
+	import { lazy } from '../../lazy';
+
+	// Preview overlay: nothing loads it until a card is opened.
+	const loadMediaLightbox = lazy(() => import('../ui/MediaLightbox.svelte'));
 
 	interface Props {
 		sources: SequenceSource[];
@@ -262,12 +265,14 @@
 	{/if}
 
 	{#if lightboxIndex !== null}
-		<MediaLightbox
-			items={lightboxItems}
-			bind:index={lightboxIndex}
-			origin={lightboxOrigin}
-			onClose={() => (lightboxIndex = null)}
-		/>
+		{#await loadMediaLightbox() then MediaLightbox}
+			<MediaLightbox
+				items={lightboxItems}
+				bind:index={lightboxIndex}
+				origin={lightboxOrigin}
+				onClose={() => (lightboxIndex = null)}
+			/>
+		{/await}
 	{/if}
 </div>
 

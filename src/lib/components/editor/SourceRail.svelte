@@ -16,7 +16,6 @@
 		type SourceEdit,
 	} from '../../media';
 	import { lazy } from '../../lazy';
-	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import { readRaw, writeRaw } from '../../storage';
 	import {
 		SOURCE_DND_TYPE,
@@ -25,8 +24,9 @@
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
 
-	// A modal-sized chunk of its own; nothing needs it until a source is opened.
+	// Both are overlays: neither chunk is needed until one is actually opened.
 	const loadSourceEditor = lazy(() => import('./SourceEditor.svelte'));
+	const loadMediaLightbox = lazy(() => import('../ui/MediaLightbox.svelte'));
 
 	interface Props {
 		sources: SequenceSource[];
@@ -305,20 +305,22 @@
 {/if}
 
 {#if lightboxIndex !== null}
-	<MediaLightbox
-		items={lightboxItems}
-		bind:index={lightboxIndex}
-		origin={lightboxOrigin}
-		onClose={() => (lightboxIndex = null)}
-		onEdit={onEditChange
-			? (i) => {
-					// Straight from previewing it to editing it: seeing the media at
-					// size is when it becomes obvious something has to come out of it.
-					lightboxIndex = null;
-					editingId = sources[i]?.id ?? null;
-				}
-			: undefined}
-	/>
+	{#await loadMediaLightbox() then MediaLightbox}
+		<MediaLightbox
+			items={lightboxItems}
+			bind:index={lightboxIndex}
+			origin={lightboxOrigin}
+			onClose={() => (lightboxIndex = null)}
+			onEdit={onEditChange
+				? (i) => {
+						// Straight from previewing it to editing it: seeing the media at
+						// size is when it becomes obvious something has to come out of it.
+						lightboxIndex = null;
+						editingId = sources[i]?.id ?? null;
+					}
+				: undefined}
+		/>
+	{/await}
 {/if}
 
 <style>

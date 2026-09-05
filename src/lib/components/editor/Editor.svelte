@@ -206,8 +206,11 @@
 	import RecordGroup from './RecordGroup.svelte';
 	import RecordOverlay from './RecordOverlay.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
-	import ShortcutsModal from '../ui/ShortcutsModal.svelte';
 	import { showToast } from '../ui/toast.svelte';
+	import { lazy } from '../../lazy';
+
+	// An overlay behind a key; its chunk waits until someone asks for help.
+	const loadShortcutsModal = lazy(() => import('../ui/ShortcutsModal.svelte'));
 
 	interface Props {
 		file: File;
@@ -4595,7 +4598,9 @@
 	{/if}
 
 	{#if showShortcuts}
-		<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+		{#await loadShortcutsModal() then ShortcutsModal}
+			<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+		{/await}
 	{/if}
 
 	{#if showClearSourcesConfirm}
