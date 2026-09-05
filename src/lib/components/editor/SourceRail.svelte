@@ -392,6 +392,7 @@
 	}
 
 	.rail-item {
+		--rail-thumb-h: 34px;
 		position: relative;
 		flex-shrink: 0;
 		width: 62px;
@@ -457,7 +458,7 @@
 	.rail-thumb {
 		display: block;
 		width: 100%;
-		height: 34px;
+		height: var(--rail-thumb-h);
 		object-fit: cover;
 	}
 
@@ -501,10 +502,15 @@
 		right: 16px;
 	}
 
+	/* Bottom-left of the thumb. The top edge already carries the index, the
+	   kind and base badges and the edit button, and this one is the widest of
+	   them. Anchored by its own bottom rather than by a top offset, so the text
+	   inside it can't push it past the thumb and onto the name. */
 	.rail-proxy {
 		position: absolute;
-		top: 2px;
-		right: 16px;
+		top: calc(var(--rail-thumb-h) - 2px);
+		left: 2px;
+		transform: translateY(-100%);
 		display: inline-flex;
 		align-items: center;
 		gap: 2px;
