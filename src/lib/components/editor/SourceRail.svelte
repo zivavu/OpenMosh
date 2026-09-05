@@ -15,7 +15,7 @@
 		isFullCrop,
 		type SourceEdit,
 	} from '../../media';
-	import SourceEditor from './SourceEditor.svelte';
+	import { lazy } from '../../lazy';
 	import MediaLightbox from '../ui/MediaLightbox.svelte';
 	import { readRaw, writeRaw } from '../../storage';
 	import {
@@ -24,6 +24,9 @@
 		sourceColor,
 	} from '../../editor/sequence-source-ui';
 	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
+
+	// A modal-sized chunk of its own; nothing needs it until a source is opened.
+	const loadSourceEditor = lazy(() => import('./SourceEditor.svelte'));
 
 	interface Props {
 		sources: SequenceSource[];
@@ -291,12 +294,14 @@
 </div>
 
 {#if editingSource && onEditChange}
-	<SourceEditor
-		source={editingSource}
-		edit={edits[editingSource.id] ?? DEFAULT_SOURCE_EDIT}
-		onChange={(edit) => onEditChange(editingSource!.id, edit)}
-		onClose={() => (editingId = null)}
-	/>
+	{#await loadSourceEditor() then SourceEditor}
+		<SourceEditor
+			source={editingSource}
+			edit={edits[editingSource.id] ?? DEFAULT_SOURCE_EDIT}
+			onChange={(edit) => onEditChange(editingSource!.id, edit)}
+			onClose={() => (editingId = null)}
+		/>
+	{/await}
 {/if}
 
 {#if lightboxIndex !== null}
