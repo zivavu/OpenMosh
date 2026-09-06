@@ -29,7 +29,7 @@
 		loadRenderSettings,
 		saveRenderSettings,
 	} from '../../editor/render-settings';
-	import { addTrack, getAllTracks } from '../../audio/track-library';
+	import { addTrack } from '../../audio/track-library';
 	import { createKeyboardHandler } from '../../editor/keyboard';
 	import {
 		clearEffects as clearEffectsFn,
@@ -948,7 +948,7 @@
 	 * session's timeline, text and span were silently never written: `seqStoreKey`
 	 * is null with no track id, and every save path returns early on that.
 	 *
-	 * Matched against the library by name and size first, so re-picking a file
+	 * addTrack matches the library by name and size first, so re-picking a file
 	 * reopens the work already saved for it instead of forking a second identity.
 	 */
 	let registeringTrack: File | null = null;
@@ -958,10 +958,7 @@
 		registeringTrack = f;
 		void (async () => {
 			try {
-				const existing = (await getAllTracks()).find(
-					(t) => t.name === f.name && t.blob.size === f.size,
-				);
-				const track = existing ?? (await addTrack(f));
+				const track = await addTrack(f);
 				// Swapped or cleared while the lookup was out; that song owns the id now.
 				if (audio.trackFile !== f) return;
 				adoptLibraryTrack(track.id);

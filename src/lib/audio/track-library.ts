@@ -63,20 +63,41 @@ export async function getTrack(id: string): Promise<StoredTrack | null> {
   });
 }
 
+/**
+ * Save the file, or hand back the entry it was already saved as.
+ *
+ * The lookup runs inside the write transaction on purpose. Two callers can ask
+ * to save the same song at once — the editor registering the loaded track and
+ * the library drawer auto-saving it — and a lookup done before the transaction
+ * misses a write still in flight, so both would store it and the song would
+ * show up twice under one name. IndexedDB runs overlapping readwrite
+ * transactions on a store one after another, so checking in here means the
+ * second caller sees the first caller's track and returns that instead.
+ */
 export async function addTrack(file: File): Promise<StoredTrack> {
-  const track: StoredTrack = {
-    id: generateId(),
-    name: file.name,
-    blob: file,
-    addedAt: Date.now(),
-  };
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(track);
+    const store = tx.objectStore(STORE);
+    const existing = store.getAll();
+    let track: StoredTrack | undefined;
+    existing.onsuccess = () => {
+      track = (existing.result as StoredTrack[]).find(
+        (t) => t.name === file.name && t.blob.size === file.size,
+      );
+      if (track) return;
+      track = {
+        id: generateId(),
+        name: file.name,
+        blob: file,
+        addedAt: Date.now(),
+      };
+      store.put(track);
+    };
     tx.oncomplete = () => {
       db.close();
-      resolve(track);
+      if (track) resolve(track);
+      else reject(new Error("Track lookup never ran"));
     };
     tx.onerror = () => {
       db.close();

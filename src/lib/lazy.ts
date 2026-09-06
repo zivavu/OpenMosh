@@ -4,6 +4,6 @@
  * re-entering its pending state on every re-render.
  */
 export function lazy<T>(load: () => Promise<{ default: T }>): () => Promise<T> {
-  let pending: Promise<T> | null = null;
-  return () => (pending ??= load().then((m) => m.default));
+	let pending: Promise<T> | null = null;
+	return () => (pending ??= load().then((m) => m.default));
 }

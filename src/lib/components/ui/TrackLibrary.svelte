@@ -75,7 +75,9 @@
 	$effect(() => {
 		const f = pendingTrack;
 		if (!f || !libraryLoaded) return;
-		const existing = tracks.find((t) => t.name === f.name);
+		const existing = tracks.find(
+			(t) => t.name === f.name && t.blob.size === f.size,
+		);
 		if (existing) {
 			// Already saved from an earlier visit. Still report it: this is the
 			// only place the editor learns the id of a track picked on the upload
@@ -86,8 +88,11 @@
 		}
 		addTrack(f)
 			.then((track) => {
-				tracks = [...tracks, track];
 				onAutoAdded?.(track.id);
+				// addTrack returns the existing entry when the song is already
+				// saved, so only list and normalize what is genuinely new.
+				if (tracks.some((t) => t.id === track.id)) return;
+				tracks = [...tracks, track];
 				autoNormalize(track);
 			})
 			.catch((e) => console.error('Failed to auto-save track:', e));
@@ -168,6 +173,7 @@
 		fileInput.value = '';
 		try {
 			const track = await addTrack(f);
+			if (tracks.some((t) => t.id === track.id)) return;
 			tracks = [...tracks, track];
 			autoNormalize(track);
 		} catch (e) {
