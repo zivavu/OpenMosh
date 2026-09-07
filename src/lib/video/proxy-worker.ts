@@ -295,7 +295,16 @@ async function drawViaBitmap(
 	}
 }
 
-/** Last resort: read the raw pixels and assemble them ourselves. */
+/**
+ * Last resort: read the raw pixels and assemble them ourselves.
+ *
+ * RGBA first, since a canvas takes those directly. Firefox refuses that
+ * conversion for some hardware-decoded frames — "Failed to convert videoframe
+ * in the defined format" — while still handing the pixels over untouched, so
+ * the second try copies in the frame's own format and rewraps them in a
+ * buffer-backed VideoFrame, which by construction has the surface data the
+ * decoded one was missing.
+ */
 async function drawViaPixels(
 	sample: VideoSample,
 	ctx: OffscreenCanvasRenderingContext2D,
@@ -303,30 +312,64 @@ async function drawViaPixels(
 ): Promise<void> {
 	const frame = sample.toVideoFrame();
 	try {
-		// The copy is laid out over the visible rect, which for an anamorphic
-		// source is not the display size — sizing the canvas off the latter makes
-		// ImageData reject the buffer outright.
-		const rect = frame.visibleRect;
-		const width = rect?.width ?? frame.codedWidth;
-		const height = rect?.height ?? frame.codedHeight;
-		const buffer = new Uint8Array(frame.allocationSize({ format: "RGBA" }));
-		await frame.copyTo(buffer, { format: "RGBA" });
-		const temp = new OffscreenCanvas(width, height);
-		const tempCtx = temp.getContext("2d", { alpha: false });
-		if (!tempCtx) throw new Error("proxy pixel canvas has no 2d context");
-		tempCtx.putImageData(
-			new ImageData(
-				new Uint8ClampedArray(buffer.buffer),
-				temp.width,
-				temp.height,
-			),
-			0,
-			0,
-		);
-		ctx.drawImage(temp, 0, 0, description.width, description.height);
+		let source: OffscreenCanvas | VideoFrame;
+		try {
+			source = await copyToCanvas(frame);
+		} catch (error) {
+			if (!frame.format) throw error;
+			source = await copyToFrame(frame, frame.format);
+		}
+		try {
+			ctx.drawImage(source, 0, 0, description.width, description.height);
+		} finally {
+			if (source instanceof VideoFrame) source.close();
+		}
 	} finally {
 		frame.close();
 	}
+}
+
+/** The frame's pixels converted to RGBA and put on a canvas. */
+async function copyToCanvas(frame: VideoFrame): Promise<OffscreenCanvas> {
+	// The copy is laid out over the visible rect, which for an anamorphic
+	// source is not the display size — sizing the canvas off the latter makes
+	// ImageData reject the buffer outright.
+	const rect = frame.visibleRect;
+	const canvas = new OffscreenCanvas(
+		rect?.width ?? frame.codedWidth,
+		rect?.height ?? frame.codedHeight,
+	);
+	const ctx = canvas.getContext("2d", { alpha: false });
+	if (!ctx) throw new Error("proxy pixel canvas has no 2d context");
+	const buffer = new Uint8Array(frame.allocationSize({ format: "RGBA" }));
+	await frame.copyTo(buffer, { format: "RGBA" });
+	ctx.putImageData(
+		new ImageData(
+			new Uint8ClampedArray(buffer.buffer),
+			canvas.width,
+			canvas.height,
+		),
+		0,
+		0,
+	);
+	return canvas;
+}
+
+/** The frame's pixels in its own format, rewrapped so a canvas can take them. */
+async function copyToFrame(
+	frame: VideoFrame,
+	format: VideoPixelFormat,
+): Promise<VideoFrame> {
+	const rect = frame.visibleRect;
+	const buffer = new Uint8Array(frame.allocationSize());
+	const layout = await frame.copyTo(buffer);
+	return new VideoFrame(buffer, {
+		format,
+		codedWidth: rect?.width ?? frame.codedWidth,
+		codedHeight: rect?.height ?? frame.codedHeight,
+		layout,
+		timestamp: frame.timestamp,
+	});
 }
 
 /** Tail of the transform queue — see the transformer below. */
