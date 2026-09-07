@@ -80,13 +80,18 @@ export class MediaLayerDriver {
         src.proxyFile ?? src.file,
       );
       if (!sampler) continue;
-      this.#uploaded.set(layer.key, src.id);
+      const { key } = layer;
+      const wanted = src.id;
+      this.#uploaded.set(key, wanted);
       // Non-blocking: a lane whose decoder has nothing new keeps the frame
       // already on its texture rather than making every other lane wait on it.
       void sampler.at(layer.sourceTime, false).then((frame) => {
         if (!frame) return;
-        if (!this.#disposed) {
-          this.#getRenderer()?.updateLayerFrame(layer.key, frame);
+        // A request that outlived the clip it was made for: the sampler blocks
+        // across frames for the first frame after a seek, and the lane can
+        // reach the next clip — or stop resolving — before it lands.
+        if (!this.#disposed && this.#uploaded.get(key) === wanted) {
+          this.#getRenderer()?.updateLayerFrame(key, frame);
           this.#onUpload?.();
         }
         frame.close();

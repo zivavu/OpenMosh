@@ -70,12 +70,17 @@ export class SequenceFrameDriver {
 
     const sampler = this.#registry.sampler(src.id);
     if (sampler) {
-      this.#currentId = src.id;
+      const wanted = src.id;
+      this.#currentId = wanted;
       // Non-blocking — see MediaLayerDriver. The export twin
       // (sequence-export-sources.ts) is the one that waits.
       void sampler.at(sourceTime, false).then((frame) => {
         if (!frame) return;
-        if (!this.#disposed) {
+        // A request that outlived the segment it was made for: the sampler
+        // blocks across frames for the first frame after a seek, and the
+        // playhead can reach the next clip before it lands. Uploading it now
+        // would paint one frame of the wrong source over this one.
+        if (!this.#disposed && this.#currentId === wanted) {
           this.#getRenderer()?.updateSourceFrame(frame);
           this.#onUpload?.();
         }
@@ -126,10 +131,11 @@ export class SequenceFrameDriver {
     if (!sampler) return true;
     // Measured from the *outgoing* segment's start, so the clip carries on past
     // the boundary instead of restarting under the fade.
-    this.#outgoingId = src.id;
+    const wanted = src.id;
+    this.#outgoingId = wanted;
     void sampler.at(sourceTime, false).then((frame) => {
       if (!frame) return;
-      if (!this.#disposed) {
+      if (!this.#disposed && this.#outgoingId === wanted) {
         this.#getRenderer()?.updateAltSourceFrame(frame);
         this.#onUpload?.();
       }
