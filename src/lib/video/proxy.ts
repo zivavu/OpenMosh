@@ -14,6 +14,14 @@ import type { ProxyWorkerRequest, ProxyWorkerResponse } from "./proxy-worker";
  * drops.
  */
 
+/**
+ * Which build of the transcoder made a proxy. Stored beside every proxy, and
+ * bumped whenever a change here would produce a different file — a stored
+ * proxy is otherwise reused for the life of the browser profile, so a fix to
+ * the worker never reaches the videos that already have one.
+ */
+export const PROXY_BUILD = 2;
+
 /** Sources at or under this many pixels preview fine as-is. */
 const PROXY_MAX_PIXELS = 1920 * 1080;
 

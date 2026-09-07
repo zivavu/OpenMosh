@@ -12,6 +12,7 @@
  */
 
 import { requestPersistentStorage } from "../persistent-storage";
+import { PROXY_BUILD } from "../video/proxy";
 
 export interface StoredSequenceMedia {
   id: string;
@@ -38,6 +39,9 @@ export interface StoredSequenceProxy {
   id: string;
   blob: Blob;
   addedAt: number;
+  /** The transcoder build that made it — see PROXY_BUILD. Absent on entries
+   * written before proxies were stamped, which is itself reason to rebuild. */
+  build?: number;
 }
 
 /** The set of media one song's timeline draws from. */
@@ -302,6 +306,12 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
       },
     );
     if (!entry?.blob) return null;
+    // Made by an older transcoder: drop it and let the caller build a current
+    // one, rather than previewing from a file this build would never produce.
+    if (entry.build !== PROXY_BUILD) {
+      void deleteSequenceProxy(entry.id).catch(() => {});
+      return null;
+    }
     return new File([entry.blob], file.name, { type: "video/mp4" });
   } catch {
     return null;
@@ -320,6 +330,7 @@ export async function putSequenceMediaProxy(
       id: stableSourceId(file),
       blob: proxy,
       addedAt: Date.now(),
+      build: PROXY_BUILD,
     };
     tx.objectStore(PROXY_STORE).put(entry);
     tx.oncomplete = () => {
