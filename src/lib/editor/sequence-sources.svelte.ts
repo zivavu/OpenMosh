@@ -101,6 +101,17 @@ export class SequenceSourceRegistry {
    */
   edits = $state<Record<string, SourceEdit>>({});
 
+  /**
+   * Files the in-flight `add` calls are working through, and how many of them
+   * are done. Both 0 when nothing is being ingested. Probing a batch of large
+   * videos takes a while and leaves the preview with nothing to draw, so the
+   * editor puts a placeholder over the canvas while these are non-zero.
+   */
+  loadingTotal = $state(0);
+  loadingDone = $state(0);
+  /** Overlapping loads share the counters; the last one out clears them. */
+  #loads = 0;
+
   /** Insertion-ordered LRU of decoded images — see MAX_DECODED_IMAGES. */
   #images = new Map<string, HTMLImageElement>();
   #decoding = new Set<string>();
@@ -133,6 +144,19 @@ export class SequenceSourceRegistry {
    * already in the pool (ids are content-derived, so re-adding is idempotent).
    * `persist` false is for entries coming back out of the store.
    */
+  #beginLoad(count: number) {
+    this.#loads++;
+    this.loadingTotal += count;
+  }
+
+  #endLoad(done: number) {
+    this.loadingDone += done;
+    if (--this.#loads === 0) {
+      this.loadingTotal = 0;
+      this.loadingDone = 0;
+    }
+  }
+
   async add(
     files: File[],
     { primary = false, persist = true } = {},
@@ -153,6 +177,7 @@ export class SequenceSourceRegistry {
     const videos = fresh.filter((f) => f.type.startsWith("video/"));
 
     const ok: SequenceSource[] = [];
+    this.#beginLoad(fresh.length);
     try {
       // Nothing about an image source needs its pixels — the dimensions were
       // never read, and the thumbnail can arrive later. So they go into the
@@ -162,16 +187,21 @@ export class SequenceSourceRegistry {
         const batch = this.#accept(images.map((f) => this.#buildImage(f, primary)));
         if (this.#disposed) return [];
         ok.push(...batch);
+        this.loadingDone += images.length;
         void this.#fillThumbnails(batch).catch(() => {});
       }
 
       // Videos still need probing up front: it's what rejects undecodable
       // files and supplies the duration, and a pool rarely holds many.
       for (let i = 0; i < videos.length; i += ADD_BATCH_SIZE) {
+        const slice = videos.slice(i, i + ADD_BATCH_SIZE);
         const built = await Promise.all(
-          videos.slice(i, i + ADD_BATCH_SIZE).map((f) => this.#buildVideo(f, primary)),
+          slice.map((f) => this.#buildVideo(f, primary)),
         );
         const batch = this.#accept(built);
+        // Counted per file probed, not per source accepted: a file that failed
+        // to decode is still one the user is no longer waiting on.
+        this.loadingDone += slice.length;
         if (this.#disposed) return [];
         ok.push(...batch);
         // Started only once the source is actually in the pool: the job's
@@ -185,6 +215,7 @@ export class SequenceSourceRegistry {
       // Released only after the appends, so a call waiting behind this one
       // sees the sources in the pool rather than re-adding them.
       for (const f of fresh) this.#pendingIds.delete(stableSourceId(f));
+      this.#endLoad(0);
     }
 
     if (persist) {
@@ -300,10 +331,15 @@ export class SequenceSourceRegistry {
     for (const s of this.sources) wanted.delete(s.id);
     if (wanted.size === 0) return;
     let stored: StoredSequenceMedia[];
+    // Reading a song's pool back out of storage is part of the wait the
+    // placeholder covers, so it counts alongside the add that follows it.
+    this.#beginLoad(wanted.size);
     try {
       stored = await getAllSequenceMedia();
     } catch {
       return;
+    } finally {
+      this.#endLoad(wanted.size);
     }
     const files = stored
       .filter((e) => wanted.has(e.id))
@@ -430,6 +466,8 @@ export class SequenceSourceRegistry {
     this.#creating.clear();
     this.#decoding.clear();
     this.#pendingIds.clear();
+    this.loadingTotal = 0;
+    this.loadingDone = 0;
     for (const s of this.sources) this.#revoke(s);
     this.sources = [];
   }

@@ -1606,6 +1606,15 @@
 	let noSequenceMedia = $derived(
 		isSequenceMode && poolFilled && sequenceSources.length === 0,
 	);
+	/** Media is being probed and nothing has landed in the pool yet, so the
+	 * canvas is black — the placeholder says so instead of the user guessing.
+	 * Once a first source is in, the frame is worth more than an overlay and
+	 * the grid's own chips carry the rest of the progress. */
+	let mediaLoading = $derived(
+		isSequenceMode &&
+			sourceRegistry.loadingTotal > 0 &&
+			sequenceSources.length === 0,
+	);
 
 	onMount(() => {
 		void (async () => {
@@ -3983,6 +3992,25 @@
 			</div>
 		</div>
 
+		{#snippet loadingOverlay()}
+			<div class="no-media">
+				<div class="media-spinner"></div>
+				<span class="no-media-label">LOADING MEDIA</span>
+				<p class="no-media-text">
+					Decoding what you dropped in. High-resolution videos take a moment —
+					the preview starts as soon as the first one is ready.
+				</p>
+				{#if sourceRegistry.loadingTotal > 1}
+					<span class="no-media-hint">
+						{Math.min(
+							sourceRegistry.loadingDone + 1,
+							sourceRegistry.loadingTotal,
+						)} / {sourceRegistry.loadingTotal} FILES
+					</span>
+				{/if}
+			</div>
+		{/snippet}
+
 		{#snippet noMediaOverlay()}
 			<div class="no-media">
 				<span class="no-media-label">NO MEDIA</span>
@@ -4149,7 +4177,11 @@
 							useAltSource: seqCrossFades,
 						}
 					: null}
-				overlay={noSequenceMedia ? noMediaOverlay : undefined}
+				overlay={mediaLoading
+					? loadingOverlay
+					: noSequenceMedia
+						? noMediaOverlay
+						: undefined}
 				spectrum={audio.frequencyData}
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
@@ -5023,6 +5055,21 @@
 		border-radius: var(--r-3);
 		background: var(--surface);
 		text-align: center;
+	}
+
+	.media-spinner {
+		width: 18px;
+		height: 18px;
+		border: 2px solid var(--line);
+		border-top-color: var(--mosh);
+		border-radius: 50%;
+		animation: spin 0.7s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.no-media-label {
