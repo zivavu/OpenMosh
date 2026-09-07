@@ -1848,6 +1848,13 @@
 	let sequenceView = $state<'preview' | 'grid'>('preview');
 	let sequenceGridOpen = $derived(isSequenceMode && sequenceView === 'grid');
 
+	// Starting playback from the grid means the user wants to watch it, so the
+	// preview comes back up. Only on the transition into playing — switching to
+	// the grid mid-play is a deliberate move and stays put.
+	$effect(() => {
+		if (isSequenceMode && seqPlaying()) sequenceView = 'preview';
+	});
+
 	/** The source the selection plays, for the grid's highlight; null when the
 	 * selected segments disagree or nothing is selected. */
 	let seqSelectedSourceId = $derived.by(() => {
