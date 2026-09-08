@@ -51,7 +51,10 @@ function migrateValues(
 function reconcile(param: EffectParam, value: number | string): number | string {
   switch (param.type) {
     case "range": {
-      const n = Number(value);
+      // Not Number() alone: it reads "" and "   " as 0, which pins the slider
+      // to its min instead of falling back to the value the effect shipped with.
+      const blank = typeof value === "string" && value.trim() === "";
+      const n = blank ? NaN : Number(value);
       if (!Number.isFinite(n)) return param.defaultValue;
       return Math.min(param.max, Math.max(param.min, n));
     }
