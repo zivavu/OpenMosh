@@ -555,6 +555,9 @@
             // outrank the :fullscreen overrides below.
             warmCanvas.style.cssText = "";
             warmCanvas.className = "preview-canvas";
+            // The markup below carries this; the warmed-up canvas was built in
+            // App before there was a preview to name, so it needs it applied.
+            warmCanvas.setAttribute("aria-label", "Effect preview canvas");
             previewArea.appendChild(warmCanvas);
             warmRenderer.adoptCanvas(warmCanvas);
             r = warmRenderer;
