@@ -20,7 +20,9 @@ jobs:
       # svelte-check + tsc over the app, the node config and the e2e suite.
       - run: bun run check
 
-      - run: bun run test
+      # Coverage is printed, not gated: the number is a baseline to watch, and
+      # a threshold would only ever be met by testing what is easy to test.
+      - run: bun run test:coverage
 
       # A green type-check doesn't prove the bundle builds.
       - run: bun run build
