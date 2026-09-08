@@ -1,4 +1,4 @@
-import type { EffectInstance, Preset } from "./types";
+import type { EffectInstance, Preset, VolumeLink } from "./types";
 import { generateId } from "./types";
 import { hydrateValues } from "./hydrate";
 import { STARTER_PRESETS } from "./starter-presets";
@@ -28,6 +28,14 @@ export function normalizePresetName(name: string): string {
   return name.trim().slice(0, PRESET_NAME_MAX_LENGTH).trim();
 }
 
+/** A spread alone leaves every link object shared with the chain it came from,
+ * so dragging a link's range afterwards edits both sides. */
+function copyLinks(links: Record<string, VolumeLink>): Record<string, VolumeLink> {
+  return Object.fromEntries(
+    Object.entries(links).map(([key, link]) => [key, { ...link }]),
+  );
+}
+
 /** What a preset keeps of a live chain: no instance ids, no UI state, and no
  * empty volumeLinks key to bloat every saved entry. */
 function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
@@ -37,7 +45,7 @@ function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
     values: { ...e.values },
     ...(e.volumeLinks &&
       Object.keys(e.volumeLinks).length > 0 && {
-        volumeLinks: { ...e.volumeLinks },
+        volumeLinks: copyLinks(e.volumeLinks),
       }),
   }));
 }
@@ -76,6 +84,6 @@ export function applyPreset(preset: Preset): EffectInstance[] {
     // Definition defaults underneath, so a preset saved before a param existed
     // still gets a sane value for it.
     values: hydrateValues(pe.defId, pe.values),
-    ...(pe.volumeLinks && { volumeLinks: { ...pe.volumeLinks } }),
+    ...(pe.volumeLinks && { volumeLinks: copyLinks(pe.volumeLinks) }),
   }));
 }
