@@ -17,10 +17,36 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # svelte-check + tsc over both tsconfigs.
+      # svelte-check + tsc over the app, the node config and the e2e suite.
       - run: bun run check
 
-      - run: bun test
+      - run: bun run test
 
       # A green type-check doesn't prove the bundle builds.
       - run: bun run build
+
+  # Separate job: it needs a browser download and takes minutes, and a failure
+  # here means something different from a failing unit test.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - run: bun install --frozen-lockfile
+
+      # --with-deps: the runner image is missing the shared libraries Chromium
+      # needs to start at all.
+      - run: bunx playwright install --with-deps chromium
+
+      - run: bun run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

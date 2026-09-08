@@ -24,7 +24,9 @@ export default defineConfig({
   // Every worker is another software-rendered WebGL2 context and its own
   // decode threads; more of them makes the whole run slower, not faster.
   workers: process.env.CI ? 1 : 2,
-  reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
+  reporter: process.env.CI
+    ? [["github"], ["list"], ["html", { open: "never" }]]
+    : [["list"]],
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
