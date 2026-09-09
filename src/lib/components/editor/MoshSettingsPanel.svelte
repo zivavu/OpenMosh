@@ -1,12 +1,8 @@
 <script lang="ts">
-   import { CircleQuestionMark } from "lucide-svelte";
    import { DEFAULT_SETTINGS } from "../../editor/settings";
    import type { FreqBand } from "../../effects";
    import BpmControl from "../ui/BpmControl.svelte";
    import RangeSlider from "../ui/RangeSlider.svelte";
-
-   /** Id of the row whose help popover is open, if any. */
-   let openHelp = $state<string | null>(null);
 
    /** Mirrors the per-param Freq row on a linked effect. */
    const BANDS = [
@@ -70,45 +66,6 @@
       reset();
    }
 </script>
-
-<svelte:window
-   onkeydown={(e) => {
-      if (e.key === "Escape") openHelp = null;
-   }}
-   onpointerdown={(e) => {
-      if (!openHelp) return;
-      // The toggle counts as "inside" only so its own click toggles rather than
-      // fights this handler.
-      if ((e.target as HTMLElement).closest?.(".help-toggle, .help-popover"))
-         return;
-      openHelp = null;
-   }}
-/>
-
-{#snippet helpToggle(id: string, label: string)}
-   <button
-      class="help-toggle"
-      class:active={openHelp === id}
-      onclick={() => (openHelp = openHelp === id ? null : id)}
-      aria-expanded={openHelp === id}
-      aria-label={label}
-   >
-      <CircleQuestionMark size={13} />
-   </button>
-{/snippet}
-
-{#snippet helpBody(id: string, paras: { term?: string; text: string }[])}
-   {#if openHelp === id}
-      <div class="help-popover" role="tooltip">
-         {#each paras as p}
-            <p>
-               {#if p.term}<strong>{p.term}</strong>:
-               {/if}{p.text}
-            </p>
-         {/each}
-      </div>
-   {/if}
-{/snippet}
 
 <!-- Whose settings these are: an fx lane's, or (unlabelled) the editor's own. -->
 {#snippet moshHeading()}
@@ -252,13 +209,12 @@
       <h3 class="panel-title section-title">Audio response</h3>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-         class="config-row help-row"
-         title="How fast an effect falls back after a hit. Double-click to reset."
+         class="config-row"
+         title="How long an effect takes to ease back down after a hit. The rise is always quick, so this stretches the fall only — higher rides over the gaps between hits, lower snaps back at once and flickers on busy music. Double-click to reset."
          ondblclick={(e) =>
             resetRow(e, () => (audioSmoothing = DEFAULT_SETTINGS.audioSmoothing))}
       >
          <label for="audio-smoothing">Smoothing</label>
-         {@render helpToggle("smoothing", "What is smoothing?")}
          <RangeSlider
             id="audio-smoothing"
             bind:value={audioSmoothing}
@@ -267,29 +223,15 @@
             step={0.05}
          />
          <span class="val">{Math.round(audioSmoothing * 100)}%</span>
-         {@render helpBody("smoothing", [
-            {
-               text: "How fast an effect drops back after a hit. Hits are always caught quickly, this is the fall.",
-            },
-            {
-               term: "Low",
-               text: "effects snap frame by frame. Sharp, but it flickers on busy music.",
-            },
-            {
-               term: "High",
-               text: "effects ease down over most of a second. Smoother, but close hits blur together.",
-            },
-         ])}
       </div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-         class="config-row help-row"
-         title="How the audio level maps onto an effect's value. Double-click to reset."
+         class="config-row"
+         title="How hard an effect has to be hit before it moves far. Higher leaves it near the bottom until the loud hits land, lower lets the quiet parts move it too and keeps it busy the whole track. Double-click to reset."
          ondblclick={(e) =>
             resetRow(e, () => (audioPunch = DEFAULT_SETTINGS.audioPunch))}
       >
          <label for="audio-punch">Punch</label>
-         {@render helpToggle("punch", "What is punch?")}
          <RangeSlider
             id="audio-punch"
             bind:value={audioPunch}
@@ -298,19 +240,6 @@
             step={0.05}
          />
          <span class="val">{Math.round(audioPunch * 100)}%</span>
-         {@render helpBody("punch", [
-            {
-               text: "How the audio level maps onto the effect's value.",
-            },
-            {
-               term: "Low",
-               text: "quiet parts count too, so effects stay busy the whole track.",
-            },
-            {
-               term: "High",
-               text: "only the loud hits move an effect far. It rests near the bottom in between.",
-            },
-         ])}
       </div>
    {/if}
 </div>
@@ -407,57 +336,5 @@
       color: var(--live);
       border-color: var(--live-dim);
       background: rgba(110, 231, 192, 0.12);
-   }
-
-   .help-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      border: none;
-      background: none;
-      color: var(--text-3);
-      cursor: pointer;
-      flex-shrink: 0;
-   }
-
-   .help-toggle:hover,
-   .help-toggle.active {
-      color: var(--text-2);
-   }
-
-   .help-row {
-      position: relative;
-   }
-
-   /* Spans the row and overlays downward: out of flow, so it can't resize the
-      shrink-to-fit panel, and never wider than it, so MobileSheet can't clip it. */
-   .help-popover {
-      position: absolute;
-      top: calc(100% + 0.4rem);
-      left: 0;
-      right: 0;
-      z-index: 30;
-      padding: 0.6rem 0.7rem;
-      background: var(--raised);
-      border: 1px solid var(--line-strong);
-      border-radius: var(--r-2);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-      color: var(--text-2);
-      font-size: 0.68rem;
-      line-height: 1.5;
-   }
-
-   .help-popover p {
-      margin: 0;
-   }
-
-   .help-popover p + p {
-      margin-top: 0.45rem;
-   }
-
-   .help-popover strong {
-      color: var(--text);
-      font-weight: 600;
    }
 </style>
