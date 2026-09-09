@@ -187,6 +187,7 @@
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
 	import GithubLink from "../ui/GithubLink.svelte";
+	import YoutubeLink from "../ui/YoutubeLink.svelte";
 	import { setFeedbackChain } from "../ui/feedback.svelte";
 	import FeedbackButton from "../ui/FeedbackButton.svelte";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
@@ -3969,6 +3970,7 @@
 					</button>
 				{/if}
 				<GithubLink />
+				<YoutubeLink />
 				<FeedbackButton />
 				<div class="bar-sep"></div>
 				{#if isSequenceMode}
