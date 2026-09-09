@@ -143,7 +143,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Typeface this clip is drawn in. Double-click to reset."
 			ondblclick={(e) => {
 				void ensureFontLoaded(DEFAULT_TEXT_STYLE.fontFamily);
 				resetStyle(e, 'fontFamily');
@@ -160,7 +160,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Height of the text as a share of the frame, so it holds at any export size. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'size')}
 		>
 			<label for="tc-size">Size</label>
@@ -178,7 +178,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Which side of the position the text runs from. It also sets the edge several lines line up on. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'align')}
 		>
 			<label for="tc-align">Align</label>
@@ -200,7 +200,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Where the text is anchored across the frame — 0 at the left edge, 100 at the right. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'x')}
 		>
 			<label for="tc-x">Position X</label>
@@ -218,7 +218,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Where the text is anchored down the frame — 0 at the top edge, 100 at the bottom. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'y')}
 		>
 			<label for="tc-y">Position Y</label>
@@ -236,7 +236,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Fill colour of the text. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'color')}
 		>
 			<label for="tc-color">Color</label>
@@ -251,7 +251,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Draw a stroke around each letter, which is what keeps text readable over a busy shot. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'outline')}
 		>
 			<label for="tc-outline">Outline</label>
@@ -268,7 +268,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Double-click to reset"
+				title="Colour of the stroke. The most contrast with the fill gives the most readable text. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, 'outlineColor')}
 			>
 				<label for="tc-outline-color">Outline color</label>
@@ -282,7 +282,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Double-click to reset"
+				title="Thickness of the stroke, in pixels at 720p and scaled from there. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, 'outlineWidth')}
 			>
 				<label for="tc-outline-w">Outline width</label>
@@ -301,7 +301,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="How much of the text shows, against what is under it. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'opacity')}
 		>
 			<label for="tc-opacity">Opacity</label>
@@ -319,7 +319,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="How the text's colours mix with the layers underneath instead of simply covering them. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'blendMode')}
 		>
 			<label for="tc-blend">Blend</label>

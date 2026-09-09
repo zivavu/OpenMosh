@@ -134,7 +134,7 @@
    <!-- svelte-ignore a11y_no_static_element_interactions -->
    <div
       class="config-row"
-      title="Double-click to reset"
+      title="The fewest effects a mosh may switch on at once. Double-click to reset."
       ondblclick={(e) =>
          resetRow(e, () => {
             moshMin = DEFAULT_SETTINGS.moshMin;
@@ -157,7 +157,7 @@
    <!-- svelte-ignore a11y_no_static_element_interactions -->
    <div
       class="config-row"
-      title="Double-click to reset"
+      title="The most effects a mosh may switch on at once. Each roll picks a count between this and the minimum. Double-click to reset."
       ondblclick={(e) =>
          resetRow(e, () => {
             moshMax = DEFAULT_SETTINGS.moshMax;
@@ -180,7 +180,7 @@
    <!-- svelte-ignore a11y_no_static_element_interactions -->
    <div
       class="config-row"
-      title="Double-click to reset"
+      title="Let a mosh reorder the chain as well as re-roll it. Order changes the look — a blur before a glitch is not the same as a glitch before a blur. Double-click to reset."
       ondblclick={(e) =>
          resetRow(e, () => (randomizeOrder = DEFAULT_SETTINGS.randomizeOrder))}
    >
@@ -192,7 +192,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row"
-         title="Double-click to reset"
+         title="Wire some of the moshed parameters to the track's volume on every roll, so they move with the music. Double-click to reset."
          ondblclick={(e) =>
             resetRow(e, () => (moshAudioLink = DEFAULT_SETTINGS.moshAudioLink))}
       >
@@ -208,7 +208,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row"
-         title="Double-click to reset"
+         title="How much of the mosh follows the audio. Low links a parameter here and there over a narrow range; high links most of them and swings them across their full range. Double-click to reset."
          ondblclick={(e) =>
             resetRow(
                e,
@@ -229,7 +229,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row"
-         title="Double-click to reset"
+         title="Which part of the mix the new links listen to. Low follows the kick and bass, high the hats and air, full the level of everything at once. Double-click to reset."
          ondblclick={(e) =>
             resetRow(e, () => (moshLinkBand = DEFAULT_SETTINGS.moshLinkBand))}
       >
@@ -253,7 +253,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row help-row"
-         title="Double-click to reset"
+         title="How fast an effect falls back after a hit. Double-click to reset."
          ondblclick={(e) =>
             resetRow(e, () => (audioSmoothing = DEFAULT_SETTINGS.audioSmoothing))}
       >
@@ -284,7 +284,7 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
          class="config-row help-row"
-         title="Double-click to reset"
+         title="How the audio level maps onto an effect's value. Double-click to reset."
          ondblclick={(e) =>
             resetRow(e, () => (audioPunch = DEFAULT_SETTINGS.audioPunch))}
       >

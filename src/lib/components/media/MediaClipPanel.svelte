@@ -272,7 +272,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="How the media fills its layer. Contain keeps all of it in frame, cover fills the frame and crops what hangs over, stretch bends it to the frame's shape. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'fit')}
 		>
 			<label for="mc-fit">Fit</label>
@@ -294,7 +294,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Size of the media on top of whatever the fit gave it. 100% is the fitted size. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'scale')}
 		>
 			<label for="mc-scale">Scale</label>
@@ -352,7 +352,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Where the layer's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'x')}
 		>
 			<label for="mc-x">Position X</label>
@@ -370,7 +370,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Where the layer's centre sits down the frame — 0 at the top edge, 100 at the bottom. Past either takes it off screen. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'y')}
 		>
 			<label for="mc-y">Position Y</label>
@@ -388,7 +388,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="Turns the layer around its own centre, in degrees. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'rotation')}
 		>
 			<label for="mc-rot">Rotation</label>
@@ -406,7 +406,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="How much of the layer shows, against the layers under it. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'opacity')}
 		>
 			<label for="mc-opacity">Opacity</label>
@@ -424,7 +424,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Double-click to reset"
+			title="How this layer's colours mix with the ones underneath instead of simply covering them. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, 'blendMode')}
 		>
 			<label for="mc-blend">Blend</label>

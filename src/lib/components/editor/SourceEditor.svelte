@@ -1495,7 +1495,7 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="Double-click to reset"
+							title="How close a pixel's colour has to be to the key colour to be cut away. Raise it until the background goes; drop it if the subject starts going with it. Double-click to reset."
 							ondblclick={() =>
 								setKey('threshold', DEFAULT_CHROMA_KEY.threshold)}
 						>
@@ -1535,7 +1535,7 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="Double-click to reset"
+							title="How soft the edge of the cut is. A little feathering hides the jagged step the key leaves behind, too much eats into the subject. Double-click to reset."
 							ondblclick={() =>
 								setKey('smoothing', DEFAULT_CHROMA_KEY.smoothing)}
 						>
@@ -1581,7 +1581,7 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="Double-click to reset"
+							title="Size of the erase brush, as a share of the frame. Double-click to reset."
 							ondblclick={() => (brush = BRUSH_DEFAULT)}
 						>
 							<label for="er-brush">Brush</label>
