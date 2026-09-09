@@ -17,6 +17,7 @@
 	import type { GlRenderer } from "../../gl/renderer";
 	import DemoBackground from "./DemoBackground.svelte";
 	import GithubLink from "./GithubLink.svelte";
+	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { showToast } from "./toast.svelte";
 	import {
@@ -507,6 +508,7 @@
 
 	<div class="github-corner">
 		<GithubLink />
+		<YoutubeLink />
 		<FeedbackButton />
 	</div>
 </div>
