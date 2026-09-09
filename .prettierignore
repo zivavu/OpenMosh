@@ -1,0 +1,5 @@
+bun.lock
+dist
+test-results
+playwright-report
+public
