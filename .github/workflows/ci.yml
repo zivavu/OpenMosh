@@ -40,9 +40,17 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # --with-deps: the runner image is missing the shared libraries Chromium
-      # needs to start at all.
-      - run: bunx playwright install --with-deps chromium
+      # --with-deps pulls the shared libraries Chromium needs to start at all,
+      # which means an apt-get update — and that fails the whole job whenever
+      # one of the third-party sources the runner image ships happens to serve
+      # an index that doesn't match its own hashes. Google's Chrome repo does
+      # this periodically. Playwright's dependencies all come from Ubuntu's own
+      # repos, so dropping the extras costs nothing and removes the failure.
+      - name: Install Chromium and its libraries
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/microsoft-prod.list
+          bunx playwright install --with-deps chromium
 
       - run: bun run test:e2e
 
