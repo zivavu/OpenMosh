@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import type { Snippet } from "svelte";
 
 	interface Props {
 		children?: Snippet;
@@ -32,7 +32,7 @@
 	let sheetDragOffset = $state(0);
 	let sheetDragging = $state(false);
 	let sheetHandleEl = $state<HTMLButtonElement>();
-	let activeTab = $state<'settings' | 'effects'>('effects');
+	let activeTab = $state<"settings" | "effects">("effects");
 
 	export function openSheet() {
 		panelOpen = true;
@@ -41,12 +41,12 @@
 	$effect(() => {
 		const el = sheetHandleEl;
 		if (!el) return;
-		el.addEventListener('touchstart', onSheetTouchStart, { passive: false });
-		return () => el.removeEventListener('touchstart', onSheetTouchStart);
+		el.addEventListener("touchstart", onSheetTouchStart, { passive: false });
+		return () => el.removeEventListener("touchstart", onSheetTouchStart);
 	});
 
 	function onSheetPointerDown(e: PointerEvent) {
-		if (e.pointerType === 'touch') return;
+		if (e.pointerType === "touch") return;
 		beginSheetDrag(e.clientY);
 	}
 
@@ -70,7 +70,7 @@
 
 		function onMove(ev: TouchEvent | PointerEvent) {
 			const clientY =
-				'touches' in ev ? (ev.touches[0]?.clientY ?? startY) : ev.clientY;
+				"touches" in ev ? (ev.touches[0]?.clientY ?? startY) : ev.clientY;
 			const delta = clientY - startY;
 			if (Math.abs(delta) > 4) moved = true;
 			sheetDragOffset = Math.max(
@@ -80,14 +80,14 @@
 		}
 
 		function onUp(ev: TouchEvent | PointerEvent) {
-			window.removeEventListener('touchmove', onMove as EventListener);
-			window.removeEventListener('touchend', onUp as EventListener);
-			window.removeEventListener('pointermove', onMove as EventListener);
-			window.removeEventListener('pointerup', onUp as EventListener);
+			window.removeEventListener("touchmove", onMove as EventListener);
+			window.removeEventListener("touchend", onUp as EventListener);
+			window.removeEventListener("pointermove", onMove as EventListener);
+			window.removeEventListener("pointerup", onUp as EventListener);
 			sheetDragging = false;
 			sheetDragOffset = 0;
 			const clientY =
-				'changedTouches' in ev
+				"changedTouches" in ev
 					? (ev.changedTouches[0]?.clientY ?? startY)
 					: (ev as PointerEvent).clientY;
 			const delta = clientY - startY;
@@ -99,12 +99,12 @@
 			}
 		}
 
-		window.addEventListener('touchmove', onMove as EventListener, {
+		window.addEventListener("touchmove", onMove as EventListener, {
 			passive: false,
 		});
-		window.addEventListener('touchend', onUp as EventListener);
-		window.addEventListener('pointermove', onMove as EventListener);
-		window.addEventListener('pointerup', onUp as EventListener);
+		window.addEventListener("touchend", onUp as EventListener);
+		window.addEventListener("pointermove", onMove as EventListener);
+		window.addEventListener("pointerup", onUp as EventListener);
 	}
 
 	const hasTabs = $derived(!!(settings && effectsPanel));
@@ -121,7 +121,7 @@
 	class="sheet-container"
 	class:sheet-open={panelOpen && !sheetDragging}
 	class:sheet-dragging={sheetDragging}
-	style={sheetDragging ? `transform: translateY(${sheetDragOffset}px)` : ''}
+	style={sheetDragging ? `transform: translateY(${sheetDragOffset}px)` : ""}
 >
 	<button
 		class="sheet-handle-row"
@@ -138,17 +138,17 @@
 		<div class="tab-bar">
 			<button
 				class="tab-btn"
-				class:active={activeTab === 'settings'}
-				onclick={() => (activeTab = 'settings')}>Settings</button
+				class:active={activeTab === "settings"}
+				onclick={() => (activeTab = "settings")}>Settings</button
 			>
 			<button
 				class="tab-btn"
-				class:active={activeTab === 'effects'}
-				onclick={() => (activeTab = 'effects')}>Effects</button
+				class:active={activeTab === "effects"}
+				onclick={() => (activeTab = "effects")}>Effects</button
 			>
 		</div>
 		<div class="tab-content">
-			{#if activeTab === 'settings'}
+			{#if activeTab === "settings"}
 				{@render settings!()}
 			{:else if topPanel}
 				{@render topPanel()}

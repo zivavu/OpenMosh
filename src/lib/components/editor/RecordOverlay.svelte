@@ -6,7 +6,8 @@
 		onCancel: () => void;
 	}
 
-	let { recording, recordProgress, recordFinalizing, onCancel }: Props = $props();
+	let { recording, recordProgress, recordFinalizing, onCancel }: Props =
+		$props();
 </script>
 
 {#if recording}
@@ -14,12 +15,14 @@
 		<div class="record-modal">
 			<p class="record-title">
 				<span class="tally" class:steady={recordFinalizing}></span>
-				{recordFinalizing ? 'Writing file' : 'Recording'}
+				{recordFinalizing ? "Writing file" : "Recording"}
 			</p>
 			<div class="progress-track" class:finalizing={recordFinalizing}>
 				<div
 					class="progress-fill"
-					style="width: {recordFinalizing ? '100%' : `${Math.round(recordProgress * 100)}%`}"
+					style="width: {recordFinalizing
+						? '100%'
+						: `${Math.round(recordProgress * 100)}%`}"
 				></div>
 			</div>
 			{#if !recordFinalizing}

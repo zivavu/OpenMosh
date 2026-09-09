@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { tick as domSettled, untrack } from 'svelte';
-	import { fileDrop } from '../../actions/file-drop';
-	import { readJson, writeJson } from '../../storage';
+	import { tick as domSettled, untrack } from "svelte";
+	import { fileDrop } from "../../actions/file-drop";
+	import { readJson, writeJson } from "../../storage";
 	import {
 		generateId,
 		loadInitialEffects,
@@ -9,8 +9,8 @@
 		setVolumeLink,
 		type EffectInstance,
 		type Preset,
-	} from '../../effects';
-	import { MicVocal, Plus } from 'lucide-svelte';
+	} from "../../effects";
+	import { MicVocal, Plus } from "lucide-svelte";
 	import {
 		appendTextLane,
 		createTextHistory,
@@ -25,80 +25,83 @@
 		type TextClip,
 		type TextLane,
 		type TextTimeline,
-	} from '../../text';
-	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
-	import TextTimelineLane from '../text/TextTimeline.svelte';
-	import { setFeedbackChain } from '../ui/feedback.svelte';
-	import TextClipPanel from '../text/TextClipPanel.svelte';
+	} from "../../text";
+	import type { LyricsSyncProps } from "../text/LyricsSyncModal.svelte";
+	import TextTimelineLane from "../text/TextTimeline.svelte";
+	import { setFeedbackChain } from "../ui/feedback.svelte";
+	import TextClipPanel from "../text/TextClipPanel.svelte";
 	import {
 		combinedLayerOrder,
 		nextLayerZ,
 		moveLayerTo,
-	} from '../../timeline/layer-order';
-	import type { GlRenderer, SourceFit } from '../../gl/renderer';
-	import { fitPreviewSize, measureDisplaySize } from '../../gl/preview-size';
-	import { detectBpm } from '../../slideshow/bpm-detector';
-	import { SlideshowFrameDriver } from '../../slideshow/frame-driver';
-	import { executeSlideshowRecording } from '../../slideshow/slideshow-recorder';
-	import type { SlideshowConfig, SlideshowSlide } from '../../slideshow/types';
-	import { DEFAULT_SLIDESHOW_CONFIG } from '../../slideshow/types';
+	} from "../../timeline/layer-order";
+	import type { GlRenderer, SourceFit } from "../../gl/renderer";
+	import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
+	import { detectBpm } from "../../slideshow/bpm-detector";
+	import { SlideshowFrameDriver } from "../../slideshow/frame-driver";
+	import { executeSlideshowRecording } from "../../slideshow/slideshow-recorder";
+	import type { SlideshowConfig, SlideshowSlide } from "../../slideshow/types";
+	import { DEFAULT_SLIDESHOW_CONFIG } from "../../slideshow/types";
 	import {
 		probeSlideVideo,
 		SlideVideoSampler,
-	} from '../../slideshow/video-sampler';
-	import { showToast } from '../ui/toast.svelte';
-	import { shuffleInPlace } from '../../utils';
-	import GlCanvas from '../editor/GlCanvas.svelte';
-	import RecordOverlay from '../editor/RecordOverlay.svelte';
-	import AudioTimeline from '../ui/AudioTimeline.svelte';
-	import TimelineStack from '../ui/TimelineStack.svelte';
-	import type { TimelineStackState } from '../../editor/timeline-stack.svelte';
-	import TimelineSegments from './TimelineSegments.svelte';
-	import EffectsPanel from '../ui/EffectsPanel.svelte';
-	import MobileSheet from '../ui/MobileSheet.svelte';
-	import TrackAddBar from '../ui/TrackAddBar.svelte';
-	import TrackLibrary from '../ui/TrackLibrary.svelte';
-	import SlideshowActionBar from './SlideshowActionBar.svelte';
-	import SlideshowConfigPanel from './SlideshowConfigPanel.svelte';
-	import SlideshowGridView from './SlideshowGridView.svelte';
-	import SlideshowTopBar from './SlideshowTopBar.svelte';
-	import { AudioManager } from '../../audio/audio-manager.svelte';
-	import { layerLinkGroups } from '../../audio/audio-utils';
-	import { DEFAULT_AUDIO_RESPONSE } from '../../audio/auto-range';
-	import { createTrackStore } from '../../audio/track-persistence';
+	} from "../../slideshow/video-sampler";
+	import { showToast } from "../ui/toast.svelte";
+	import { shuffleInPlace } from "../../utils";
+	import GlCanvas from "../editor/GlCanvas.svelte";
+	import RecordOverlay from "../editor/RecordOverlay.svelte";
+	import AudioTimeline from "../ui/AudioTimeline.svelte";
+	import TimelineStack from "../ui/TimelineStack.svelte";
+	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
+	import TimelineSegments from "./TimelineSegments.svelte";
+	import EffectsPanel from "../ui/EffectsPanel.svelte";
+	import MobileSheet from "../ui/MobileSheet.svelte";
+	import TrackAddBar from "../ui/TrackAddBar.svelte";
+	import TrackLibrary from "../ui/TrackLibrary.svelte";
+	import SlideshowActionBar from "./SlideshowActionBar.svelte";
+	import SlideshowConfigPanel from "./SlideshowConfigPanel.svelte";
+	import SlideshowGridView from "./SlideshowGridView.svelte";
+	import SlideshowTopBar from "./SlideshowTopBar.svelte";
+	import { AudioManager } from "../../audio/audio-manager.svelte";
+	import { layerLinkGroups } from "../../audio/audio-utils";
+	import { DEFAULT_AUDIO_RESPONSE } from "../../audio/auto-range";
+	import { createTrackStore } from "../../audio/track-persistence";
 	import {
 		loadRenderSettings,
 		saveRenderSettings,
-	} from '../../editor/render-settings';
-	import { createRecordingState } from '../../editor/recording-state.svelte';
-	import { createMoshSession } from '../../editor/mosh-session';
-	import { PanelBurstController } from '../../editor/panel-burst';
-	import { PENDING_EDIT } from '../../editor/edit-clock';
+	} from "../../editor/render-settings";
+	import { createRecordingState } from "../../editor/recording-state.svelte";
+	import { createMoshSession } from "../../editor/mosh-session";
+	import { PanelBurstController } from "../../editor/panel-burst";
+	import { PENDING_EDIT } from "../../editor/edit-clock";
 	import {
 		redoLatest,
 		undoLatest,
 		type UndoSource,
-	} from '../../editor/undo-router';
-	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
+	} from "../../editor/undo-router";
+	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
 	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
-	} from '../../editor/shortcut-target';
-	import { isModalKeyboardOpen } from '../../modal-keyboard';
-	import { DEFAULT_SETTINGS, loadSettings, updateSettings } from '../../editor/settings';
-	import { saveSession } from '../../editor/sessions';
+	} from "../../editor/shortcut-target";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
+	import {
+		DEFAULT_SETTINGS,
+		loadSettings,
+		updateSettings,
+	} from "../../editor/settings";
+	import { saveSession } from "../../editor/sessions";
 	import {
 		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
 		pruneSequenceMedia,
 		putSequenceMediaProxy,
-	} from '../../editor/sequence-media-store';
+	} from "../../editor/sequence-media-store";
+	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
 	import {
-		needsProxy,
-		startProxyJob,
-		type ProxyJob,
-	} from '../../video/proxy';
-	import { isProxyDisabled, setProxyDisabled } from '../../video/proxy-preference';
+		isProxyDisabled,
+		setProxyDisabled,
+	} from "../../video/proxy-preference";
 
 	interface Props {
 		initialFiles: File[];
@@ -108,7 +111,7 @@
 		/** Config restored from a saved session, if reopened from one. */
 		initialConfig?: SlideshowConfig | null;
 		warmCanvas?: HTMLCanvasElement | null;
-		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
+		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
 	}
 
@@ -126,8 +129,8 @@
 	let slides: SlideshowSlide[] = $state([]);
 
 	function addFiles(files: FileList | File[]) {
-		const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-		const videoTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+		const imageTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+		const videoTypes = ["video/mp4", "video/webm", "video/quicktime"];
 		const all = Array.from(files);
 		const skipped = all.filter(
 			(f) => !imageTypes.includes(f.type) && !videoTypes.includes(f.type),
@@ -135,9 +138,9 @@
 		if (skipped.length > 0) {
 			showToast(
 				skipped.length === all.length
-					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : 'those files'}. Supported formats: PNG, JPG, WEBP, GIF, MP4, WEBM, MOV`
-					: `Skipped ${skipped.length} unsupported file${skipped.length === 1 ? '' : 's'}`,
-				skipped.length === all.length ? 'error' : 'info',
+					? `Can't add ${skipped.length === 1 ? `"${skipped[0].name}"` : "those files"}. Supported formats: PNG, JPG, WEBP, GIF, MP4, WEBM, MOV`
+					: `Skipped ${skipped.length} unsupported file${skipped.length === 1 ? "" : "s"}`,
+				skipped.length === all.length ? "error" : "info",
 				6000,
 			);
 		}
@@ -150,7 +153,7 @@
 					thumbUrl: null,
 					thumbPending: true,
 					presetIndex: null,
-					kind: 'image',
+					kind: "image",
 				};
 				slides.push(slide);
 				generateThumb(slide.id, slide.file, slide.objectUrl);
@@ -162,7 +165,7 @@
 					thumbUrl: null,
 					thumbPending: true,
 					presetIndex: null,
-					kind: 'video',
+					kind: "video",
 				};
 				slides.push(slide);
 				void probeVideoSlide(slide.id, file);
@@ -176,7 +179,7 @@
 		const i = slides.findIndex((s) => s.id === id);
 		if (i === -1) return;
 		if (!probe) {
-			showToast(`Couldn't decode video "${file.name}"`, 'error');
+			showToast(`Couldn't decode video "${file.name}"`, "error");
 			removeSlide(id, false);
 			return;
 		}
@@ -280,7 +283,7 @@
 	 */
 	function setSlideProxyEnabled(id: string, enabled: boolean) {
 		const s = slides.find((x) => x.id === id);
-		if (!s || s.kind !== 'video') return;
+		if (!s || s.kind !== "video") return;
 		setProxyDisabled(s.file, !enabled);
 		proxyJobs.get(id)?.cancel();
 		proxyJobs.delete(id);
@@ -304,7 +307,7 @@
 	/** Retry a failed proxy transcode for a slide — the badge's click action. */
 	function retrySlideProxy(id: string) {
 		const s = slides.find((x) => x.id === id);
-		if (!s || s.kind !== 'video' || !s.proxyFailed) return;
+		if (!s || s.kind !== "video" || !s.proxyFailed) return;
 		s.proxyFailed = false;
 		s.proxyReason = undefined;
 		s.proxyWidth = undefined;
@@ -332,14 +335,14 @@
 			const resized = await createImageBitmap(cropped, {
 				resizeWidth: SIZE,
 				resizeHeight: SIZE,
-				resizeQuality: 'medium',
+				resizeQuality: "medium",
 			});
 			cropped.close();
 			const canvas = new OffscreenCanvas(SIZE, SIZE);
-			canvas.getContext('2d')!.drawImage(resized, 0, 0);
+			canvas.getContext("2d")!.drawImage(resized, 0, 0);
 			resized.close();
 			const blob = await canvas.convertToBlob({
-				type: 'image/jpeg',
+				type: "image/jpeg",
 				quality: 0.8,
 			});
 			thumbUrl = URL.createObjectURL(blob);
@@ -391,8 +394,8 @@
 			disposeSlide(slide);
 		}, UNDO_WINDOW_MS);
 		pendingRemovals.set(id, { slide, index: i, timer });
-		showToast(`Removed "${slide.file.name}"`, 'info', UNDO_WINDOW_MS, {
-			label: 'Undo',
+		showToast(`Removed "${slide.file.name}"`, "info", UNDO_WINDOW_MS, {
+			label: "Undo",
 			run: () => restoreSlide(id),
 		});
 	}
@@ -413,8 +416,8 @@
 	function shuffleSlides() {
 		const previousOrder = slides.map((s) => s.id);
 		shuffleInPlace(slides);
-		showToast('Slides shuffled', 'info', UNDO_WINDOW_MS, {
-			label: 'Undo',
+		showToast("Slides shuffled", "info", UNDO_WINDOW_MS, {
+			label: "Undo",
 			run: () => restoreOrder(previousOrder),
 		});
 	}
@@ -440,7 +443,7 @@
 		// Keyed by the song when there is one, so the session sits alongside the
 		// segments and text already saved under that track id.
 		void saveSession(
-			'slideshow',
+			"slideshow",
 			files,
 			{ config: $state.snapshot(config) as SlideshowConfig },
 			currentTrackId,
@@ -448,7 +451,8 @@
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
 				// Swallowing this outright is what made the last failure invisible.
-				if (import.meta.env.DEV) console.error('Slideshow session save failed:', e);
+				if (import.meta.env.DEV)
+					console.error("Slideshow session save failed:", e);
 			});
 	}
 
@@ -469,8 +473,8 @@
 		if (!onExit) return;
 		if (recordingState.recording) {
 			showToast(
-				'Cancel or wait for the recording to finish before exiting',
-				'error',
+				"Cancel or wait for the recording to finish before exiting",
+				"error",
 			);
 			return;
 		}
@@ -520,7 +524,9 @@
 	/** In-flight proxy transcodes, keyed by slide id, so removeSlide can stop one. */
 	const proxyJobs = new Map<string, ProxyJob>();
 
-	function ensureSampler(slide: SlideshowSlide): Promise<SlideVideoSampler | null> {
+	function ensureSampler(
+		slide: SlideshowSlide,
+	): Promise<SlideVideoSampler | null> {
 		let p = samplerPromises.get(slide.id);
 		if (!p) {
 			// The proxy decodes at a fraction of the per-frame cost; the original is
@@ -544,7 +550,7 @@
 	}
 
 	// ── Config ──
-	const CONFIG_KEY = 'openmosh-slideshow-config';
+	const CONFIG_KEY = "openmosh-slideshow-config";
 	function loadConfig(): SlideshowConfig {
 		// A reopened session carries its own config; the global key is only the
 		// "whatever was set last" default for a brand-new slideshow.
@@ -575,7 +581,7 @@
 	let currentTrackId = $state<string | null>(null);
 
 	interface SegmentsEntry {
-		segments: SlideshowConfig['segments'];
+		segments: SlideshowConfig["segments"];
 		bpm?: number;
 		/** Absent on entries saved before the text timeline existed. */
 		text?: TextTimeline;
@@ -584,7 +590,7 @@
 	}
 
 	const segmentsStore = createTrackStore<SegmentsEntry>(
-		'openmosh-track-segments',
+		"openmosh-track-segments",
 		// Backward compat: old format stored the segments array directly
 		(raw) => (Array.isArray(raw) ? { segments: raw } : (raw as SegmentsEntry)),
 	);
@@ -596,7 +602,9 @@
 	 * restore still in flight is the real value; failing that, keep whatever
 	 * was already stored rather than replacing it with an empty span.
 	 */
-	function spanForSave(trackId: string): Pick<SegmentsEntry, 'spanStart' | 'spanEnd'> {
+	function spanForSave(
+		trackId: string,
+	): Pick<SegmentsEntry, "spanStart" | "spanEnd"> {
 		const pending = audio.pendingSpan;
 		if (pending) return { spanStart: pending.start, spanEnd: pending.end };
 		if (audio.trackDuration > 0 && audio.spanEnd > audio.spanStart) {
@@ -736,11 +744,11 @@
 
 	// Size the preview canvas from the first slide, matching the export:
 	// image → GlCanvas image loading; video → probed dimensions.
-	let previewImageSrc = $state('');
+	let previewImageSrc = $state("");
 	$effect(() => {
 		const first = slides[0];
 		if (!first) return;
-		if (first.kind === 'image') {
+		if (first.kind === "image") {
 			if (!previewImageSrc) previewImageSrc = first.objectUrl;
 			return;
 		}
@@ -812,9 +820,11 @@
 		// per-lane responses to keep apart.
 		getLinkGroups: () => [
 			{
-				scope: '',
+				scope: "",
 				effects:
-					previewPlaying && previewEffects.length > 0 ? previewEffects : effects,
+					previewPlaying && previewEffects.length > 0
+						? previewEffects
+						: effects,
 				response: DEFAULT_AUDIO_RESPONSE,
 			},
 			// Each text layer's own chain follows the music too, under its own
@@ -835,7 +845,9 @@
 
 	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
-	$effect(() => { audio.setAudioEl(audioEl); });
+	$effect(() => {
+		audio.setAudioEl(audioEl);
+	});
 
 	// Seed track from audio selected on the upload screen
 	$effect(() => {
@@ -861,7 +873,7 @@
 			// measurement reports the new track's own.
 			audio.setNormalizeGain(1.0);
 			audio.trackFile = f;
-			trackInput.value = '';
+			trackInput.value = "";
 		}
 	}
 
@@ -962,11 +974,11 @@
 			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			config = { ...config, bpm: result.bpm, beatOffset: result.offset };
 		} catch (e) {
-			if (!(e instanceof DOMException && e.name === 'AbortError')) {
-				console.error('BPM detection failed:', e);
+			if (!(e instanceof DOMException && e.name === "AbortError")) {
+				console.error("BPM detection failed:", e);
 				showToast(
 					"Couldn't detect the BPM for this track. Set it by hand or use Tap.",
-					'error',
+					"error",
 					6000,
 				);
 			}
@@ -977,7 +989,7 @@
 	}
 
 	// ── Preview ──
-	let activeView: 'grid' | 'preview' = $state('grid');
+	let activeView: "grid" | "preview" = $state("grid");
 	let previewPlaying = $state(false);
 	let previewRafId = $state<number | null>(null);
 	let previewEffects: EffectInstance[] = $state([]);
@@ -1008,8 +1020,10 @@
 		Math.max(
 			1024,
 			Math.ceil(
-				Math.max(previewRenderSize?.width ?? 0, previewRenderSize?.height ?? 0) /
-					512,
+				Math.max(
+					previewRenderSize?.width ?? 0,
+					previewRenderSize?.height ?? 0,
+				) / 512,
 			) * 512,
 		),
 	);
@@ -1120,7 +1134,7 @@
 
 	async function startPreview() {
 		if (slides.length === 0) return;
-		activeView = 'preview';
+		activeView = "preview";
 		previewPlaying = true;
 
 		// Measure the preview box now rather than waiting on the ResizeObserver:
@@ -1134,9 +1148,9 @@
 		}
 
 		await Promise.all([
-			...slides.filter((s) => s.kind === 'image').map(loadSlideBitmap),
+			...slides.filter((s) => s.kind === "image").map(loadSlideBitmap),
 			...slides
-				.filter((s) => s.kind === 'video')
+				.filter((s) => s.kind === "video")
 				.map((slide) => ensureSampler(slide).then(() => {})),
 		]);
 
@@ -1342,16 +1356,14 @@
 
 	// A track brings its own span, restored from storage: that is the baseline
 	// to undo back to, not the empty one this component started on.
-	let spannedTrack = '';
+	let spannedTrack = "";
 	$effect(() => {
 		const d = audio.trackDuration;
 		if (d <= 0) return;
-		const id = `${currentTrackId ?? audio.trackFile?.name ?? ''}:${d}`;
+		const id = `${currentTrackId ?? audio.trackFile?.name ?? ""}:${d}`;
 		if (id === spannedTrack) return;
 		spannedTrack = id;
-		untrack(() =>
-			resetSpanHistory(),
-		);
+		untrack(() => resetSpanHistory());
 	});
 
 	// ── Undo routing ─────────────────────────────────────────────────────────
@@ -1421,10 +1433,10 @@
 	 * switches; smooth only flips one switch a beat, leaving the order and every
 	 * param exactly as they were edited. */
 	let panelRolledNote = $derived(
-		config.moshMode === 'random'
-			? 'Random mode rolls the switches, order and params every beat. Hide an effect to keep it out of the roll.'
-			: config.moshMode === 'smooth'
-				? 'Smooth mode toggles the chain as the track runs, so the switches follow it. Hide an effect to keep it out of the drift.'
+		config.moshMode === "random"
+			? "Random mode rolls the switches, order and params every beat. Hide an effect to keep it out of the roll."
+			: config.moshMode === "smooth"
+				? "Smooth mode toggles the chain as the track runs, so the switches follow it. Hide an effect to keep it out of the drift."
 				: null,
 	);
 
@@ -1513,8 +1525,8 @@
 				ev.clientX,
 				ev.clientY,
 			) as HTMLElement | null;
-			const overId = el?.closest<HTMLElement>('[data-layer-id]')?.dataset
-				.layerId;
+			const overId =
+				el?.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId;
 			if (!overId || overId === laneId) return;
 			const to = layerOrder.findIndex((l) => l.id === overId);
 			if (to !== -1) reorderLayer(laneId, to, `layer-drag-${laneId}`);
@@ -1522,15 +1534,17 @@
 		const onUp = (ev: PointerEvent) => {
 			draggingLaneId = null;
 			handle.releasePointerCapture?.(ev.pointerId);
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onUp);
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
 		};
-		window.addEventListener('pointermove', onMove);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('pointercancel', onUp);
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	}
-	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
+	let selectedTextClip = $derived(
+		findTextClip(textTimeline, selectedTextClipId),
+	);
 	/** The lane holding the selected clip — the panel edits its style. */
 	let selectedTextLane = $derived(
 		findTextClipLane(textTimeline, selectedTextClipId),
@@ -1587,25 +1601,24 @@
 		}
 	}
 
-
 	/** Transport for the lyrics-sync modal: the preview drives the same audio
 	 * clock the beats and text timeline run on. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
 		textTimeline.enabled
 			? {
-				isPlaying: previewPlaying,
-				spanStart: audio.spanStart,
-				spanEnd: audio.spanEnd,
-				getCurrentTime: () => textTime,
-				onPlay: () => void startPreview(),
-				onPause: stopPreview,
-				onSeek: (t) => {
-					textTime = t;
-					if (audio.trackFile) audio.seekTo(t);
-				},
-				onApply: applyLyrics,
-			}
-		: null,
+					isPlaying: previewPlaying,
+					spanStart: audio.spanStart,
+					spanEnd: audio.spanEnd,
+					getCurrentTime: () => textTime,
+					onPlay: () => void startPreview(),
+					onPause: stopPreview,
+					onSeek: (t) => {
+						textTime = t;
+						if (audio.trackFile) audio.seekTo(t);
+					},
+					onApply: applyLyrics,
+				}
+			: null,
 	);
 
 	/** Drop the synced lines into the lyrics lane and select the first one. */
@@ -1618,7 +1631,12 @@
 	const recordingState = createRecordingState();
 
 	async function startRecording() {
-		if (!canvasEl || !glRenderer || recordingState.recording || slides.length === 0)
+		if (
+			!canvasEl ||
+			!glRenderer ||
+			recordingState.recording ||
+			slides.length === 0
+		)
 			return;
 
 		if (previewPlaying) stopPreview();
@@ -1656,10 +1674,10 @@
 				}),
 			{
 				onError: (message) =>
-					import('../../components/ui/toast.svelte').then(({ showToast }) =>
-						showToast(message, 'error'),
+					import("../../components/ui/toast.svelte").then(({ showToast }) =>
+						showToast(message, "error"),
 					),
-				fallbackErrorMessage: 'Recording failed.',
+				fallbackErrorMessage: "Recording failed.",
 			},
 		);
 
@@ -1681,7 +1699,7 @@
 
 	/** Audio replaces the track; anything else is added as slides. */
 	function handleDroppedFiles(files: FileList) {
-		if (files[0].type.startsWith('audio/')) {
+		if (files[0].type.startsWith("audio/")) {
 			clearTrack();
 			audio.trackFile = files[0];
 		} else {
@@ -1703,13 +1721,13 @@
 
 		// Undo/redo reach the app even while a dropdown or slider holds focus;
 		// only a text field owns Ctrl+Z.
-		if (mod && (key === 'y' || (key === 'z' && e.shiftKey))) {
+		if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
 			redoLatest(undoSources());
 			return;
 		}
-		if (mod && key === 'z') {
+		if (mod && key === "z") {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
 			undoLatest(undoSources());
@@ -1724,7 +1742,7 @@
 		// Space is the transport, whatever holds focus — a dropdown left focused
 		// by an earlier click would otherwise swallow the key and reopen its
 		// menu. A text field is the one exception: there space types a space.
-		if (e.code === 'Space') {
+		if (e.code === "Space") {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
 			togglePreview();
@@ -1734,22 +1752,23 @@
 		// Bare keys belong to whichever control has focus, if any.
 		if (isInteractiveTarget(e.target)) return;
 
-		if (e.code === 'Escape' && previewPlaying) {
+		if (e.code === "Escape" && previewPlaying) {
 			stopPreview();
-		} else if (e.key === 'ArrowRight') {
+		} else if (e.key === "ArrowRight") {
 			e.preventDefault();
 			moshSession.forward();
-		} else if (e.key === 'ArrowLeft') {
+		} else if (e.key === "ArrowLeft") {
 			e.preventDefault();
 			moshSession.back();
-		} else if (key === 'c' && !e.altKey && !e.shiftKey) {
+		} else if (key === "c" && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
-			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
-		} else if (e.key === '+' || e.key === '=') {
+			if (timelineAxis)
+				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
+		} else if (e.key === "+" || e.key === "=") {
 			// "=" as well as "+": on most layouts the latter needs Shift.
 			e.preventDefault();
 			timelineAxis?.vp.zoomStep(true);
-		} else if (e.key === '-' || e.key === '_') {
+		} else if (e.key === "-" || e.key === "_") {
 			e.preventDefault();
 			timelineAxis?.vp.zoomStep(false);
 		}
@@ -1766,7 +1785,7 @@
 		bind:this={audioEl}
 		src={audio.trackObjectUrl}
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
-		onerror={() => showToast('Could not load this audio track', 'error')}
+		onerror={() => showToast("Could not load this audio track", "error")}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
 		onended={() => audio.onAudioEnded()}
 		onplay={() => {
@@ -1816,12 +1835,12 @@
 			slideCount={slides.length}
 			onViewChange={(view) => {
 				activeView = view;
-				if (view === 'grid' && previewPlaying) stopPreview();
+				if (view === "grid" && previewPlaying) stopPreview();
 			}}
 			onExit={onExit ? handleExit : undefined}
 		/>
 
-		{#if activeView === 'grid'}
+		{#if activeView === "grid"}
 			<SlideshowGridView
 				{slides}
 				{config}
@@ -1832,14 +1851,14 @@
 				onShuffleSlides={shuffleSlides}
 				onSetPresetIndex={setPresetIndex}
 				onProxyAction={(id, action) => {
-					if (action === 'retry') retrySlideProxy(id);
-					else setSlideProxyEnabled(id, action === 'enable');
+					if (action === "retry") retrySlideProxy(id);
+					else setSlideProxyEnabled(id, action === "enable");
 				}}
 			/>
 		{/if}
 		<div
 			class="preview-area"
-			class:hidden={activeView === 'grid'}
+			class:hidden={activeView === "grid"}
 			bind:this={previewArea}
 		>
 			<GlCanvas
@@ -1909,7 +1928,11 @@
 				{#if textTimeline.enabled}
 					<div class="tl-tool-sep"></div>
 					<span class="tl-tool-label">Text</span>
-					<button class="tl-tool-btn" title="Add a text lane" onclick={addTextLane}>
+					<button
+						class="tl-tool-btn"
+						title="Add a text lane"
+						onclick={addTextLane}
+					>
 						<Plus size={12} /> Lane
 					</button>
 					{#if lyricsSync}
@@ -1930,19 +1953,19 @@
 			<!-- Same layer column as the editor's: the lane rows are
 			     display:contents, so they need one flex parent to order in. -->
 			<div class="tl-layers">
-			{#if textTimeline.enabled}
-				<TextTimelineLane
-					timeline={textTimeline}
-					{layerOrder}
-					{draggingLaneId}
-					onLaneDragStart={startLayerDrag}
-					bind:selectedClipId={selectedTextClipId}
-					onChange={setTextTimeline}
-					onBeforeEdit={pushTextHistory}
-					{lyricsSync}
-					bind:lyricsOpen
-				/>
-			{/if}
+				{#if textTimeline.enabled}
+					<TextTimelineLane
+						timeline={textTimeline}
+						{layerOrder}
+						{draggingLaneId}
+						onLaneDragStart={startLayerDrag}
+						bind:selectedClipId={selectedTextClipId}
+						onChange={setTextTimeline}
+						onBeforeEdit={pushTextHistory}
+						{lyricsSync}
+						bind:lyricsOpen
+					/>
+				{/if}
 			</div>
 			{#if audio.trackFile && audio.trackDuration > 0}
 				<TimelineSegments
@@ -2007,20 +2030,20 @@
 					response={DEFAULT_AUDIO_RESPONSE}
 				/>
 			{:else}
-			<EffectsPanel
-				bind:effects
-				hasTrack={!!audio.trackFile}
-				spectrumData={audio.spectrumData}
-				rolledNote={panelRolledNote}
-				rolledChain={config.moshMode === 'random'}
-				rolledScope="moshable"
-				onVolumeLinkChange={(index, paramKey, link) => {
-					panelBeforeEdit(`link:${index}:${paramKey}`);
-					effects = setVolumeLink(effects, index, paramKey, link);
-				}}
-				onBeforeUserEdit={panelBeforeEdit}
-				onEffectsReplaced={endPanelBurst}
-			/>
+				<EffectsPanel
+					bind:effects
+					hasTrack={!!audio.trackFile}
+					spectrumData={audio.spectrumData}
+					rolledNote={panelRolledNote}
+					rolledChain={config.moshMode === "random"}
+					rolledScope="moshable"
+					onVolumeLinkChange={(index, paramKey, link) => {
+						panelBeforeEdit(`link:${index}:${paramKey}`);
+						effects = setVolumeLink(effects, index, paramKey, link);
+					}}
+					onBeforeUserEdit={panelBeforeEdit}
+					onEffectsReplaced={endPanelBurst}
+				/>
 			{/if}
 		{/snippet}
 	</MobileSheet>
@@ -2030,7 +2053,6 @@
 			<span>Drop to add images or replace audio</span>
 		</div>
 	{/if}
-
 </div>
 
 <style>
@@ -2076,7 +2098,7 @@
 	}
 
 	.editor.drag-over::before {
-		content: '';
+		content: "";
 		position: absolute;
 		inset: 0;
 		z-index: 99;

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Disc } from 'lucide-svelte';
-	import type { Snippet } from 'svelte';
+	import { Disc } from "lucide-svelte";
+	import type { Snippet } from "svelte";
 
 	interface Props {
 		recording: boolean;

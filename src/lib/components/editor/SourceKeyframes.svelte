@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Diamond, Minus, Plus } from 'lucide-svelte';
-	import { KEY_NEAR } from '../../media/source-edit';
+	import { Diamond, Minus, Plus } from "lucide-svelte";
+	import { KEY_NEAR } from "../../media/source-edit";
 
 	/** One editable track, as the dialog sees it. */
 	export interface KeyTrackView {

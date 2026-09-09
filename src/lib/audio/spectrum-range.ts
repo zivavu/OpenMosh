@@ -83,23 +83,28 @@ let ceil = MIN_CEIL;
 
 /** Call on any signal discontinuity: seek, track change, export start. */
 export function resetSpectrumRange(): void {
-  floors = null;
-  heights = null;
-  out = null;
-  winMin = null;
-  prevMin = null;
-  windowT = 0;
-  ceil = MIN_CEIL;
-  followers.clear();
+	floors = null;
+	heights = null;
+	out = null;
+	winMin = null;
+	prevMin = null;
+	windowT = 0;
+	ceil = MIN_CEIL;
+	followers.clear();
 }
 
 /** A stalled clock would otherwise snap the envelopes straight to their input. */
 function stepOf(dt: number): number {
-  return Math.max(0, Math.min(dt, 0.25));
+	return Math.max(0, Math.min(dt, 0.25));
 }
 
-function approach(current: number, target: number, tau: number, step: number): number {
-  return current + (target - current) * (1 - Math.exp(-step / tau));
+function approach(
+	current: number,
+	target: number,
+	tau: number,
+	step: number,
+): number {
+	return current + (target - current) * (1 - Math.exp(-step / tau));
 }
 
 /**
@@ -109,76 +114,76 @@ function approach(current: number, target: number, tau: number, step: number): n
  * immediately and never retained.
  */
 export function normalizeSpectrum(
-  src: Uint8Array | null,
-  dt: number,
+	src: Uint8Array | null,
+	dt: number,
 ): Uint8Array | null {
-  if (!src || src.length === 0) return src;
-  const n = src.length;
-  if (!floors || floors.length !== n) {
-    floors = new Float32Array(n);
-    heights = new Float32Array(n);
-    winMin = new Float32Array(n);
-    prevMin = new Float32Array(n);
-    out = new Uint8Array(n);
-    // Seeded from this frame so playback opens where the music actually sits
-    // rather than sweeping up from zero over the first few seconds.
-    for (let i = 0; i < n; i++) {
-      const v = src[i] / 255;
-      floors[i] = v;
-      winMin[i] = v;
-      prevMin[i] = v;
-    }
-    windowT = 0;
-    ceil = MIN_CEIL;
-  }
-  const step = stepOf(dt);
-  const h = heights!;
-  const o = out!;
-  const wMin = winMin!;
-  const pMin = prevMin!;
+	if (!src || src.length === 0) return src;
+	const n = src.length;
+	if (!floors || floors.length !== n) {
+		floors = new Float32Array(n);
+		heights = new Float32Array(n);
+		winMin = new Float32Array(n);
+		prevMin = new Float32Array(n);
+		out = new Uint8Array(n);
+		// Seeded from this frame so playback opens where the music actually sits
+		// rather than sweeping up from zero over the first few seconds.
+		for (let i = 0; i < n; i++) {
+			const v = src[i] / 255;
+			floors[i] = v;
+			winMin[i] = v;
+			prevMin[i] = v;
+		}
+		windowT = 0;
+		ceil = MIN_CEIL;
+	}
+	const step = stepOf(dt);
+	const h = heights!;
+	const o = out!;
+	const wMin = winMin!;
+	const pMin = prevMin!;
 
-  let framePeak = 0;
-  for (let i = 0; i < n; i++) {
-    const v = src[i] / 255;
-    if (v < wMin[i]) wMin[i] = v;
-    // Target the quietest this bin has been recently, not wherever it is now:
-    // a bin that is currently loud says nothing about where its floor belongs.
-    const target = wMin[i] < pMin[i] ? wMin[i] : pMin[i];
-    const f = floors[i];
-    floors[i] = approach(
-      f,
-      target,
-      target < f ? FLOOR_FALL_TAU : FLOOR_RISE_TAU,
-      step,
-    );
-    const height = v - floors[i];
-    h[i] = height > 0 ? height : 0;
-    if (h[i] > framePeak) framePeak = h[i];
-  }
+	let framePeak = 0;
+	for (let i = 0; i < n; i++) {
+		const v = src[i] / 255;
+		if (v < wMin[i]) wMin[i] = v;
+		// Target the quietest this bin has been recently, not wherever it is now:
+		// a bin that is currently loud says nothing about where its floor belongs.
+		const target = wMin[i] < pMin[i] ? wMin[i] : pMin[i];
+		const f = floors[i];
+		floors[i] = approach(
+			f,
+			target,
+			target < f ? FLOOR_FALL_TAU : FLOOR_RISE_TAU,
+			step,
+		);
+		const height = v - floors[i];
+		h[i] = height > 0 ? height : 0;
+		if (h[i] > framePeak) framePeak = h[i];
+	}
 
-  // Roll the window: the one just finished becomes the comparison, and the next
-  // starts open so a genuinely raised floor can still be discovered.
-  windowT += step;
-  if (windowT >= FLOOR_WINDOW) {
-    windowT = 0;
-    for (let i = 0; i < n; i++) {
-      pMin[i] = wMin[i];
-      wMin[i] = src[i] / 255;
-    }
-  }
+	// Roll the window: the one just finished becomes the comparison, and the next
+	// starts open so a genuinely raised floor can still be discovered.
+	windowT += step;
+	if (windowT >= FLOOR_WINDOW) {
+		windowT = 0;
+		for (let i = 0; i < n; i++) {
+			pMin[i] = wMin[i];
+			wMin[i] = src[i] / 255;
+		}
+	}
 
-  ceil = approach(
-    ceil,
-    framePeak,
-    framePeak > ceil ? CEIL_RISE_TAU : CEIL_FALL_TAU,
-    step,
-  );
-  const scale = 255 / Math.max(ceil, MIN_CEIL);
-  for (let i = 0; i < n; i++) {
-    const value = h[i] * scale;
-    o[i] = value > 255 ? 255 : value;
-  }
-  return o;
+	ceil = approach(
+		ceil,
+		framePeak,
+		framePeak > ceil ? CEIL_RISE_TAU : CEIL_FALL_TAU,
+		step,
+	);
+	const scale = 255 / Math.max(ceil, MIN_CEIL);
+	for (let i = 0; i < n; i++) {
+		const value = h[i] * scale;
+		o[i] = value > 255 ? 255 : value;
+	}
+	return o;
 }
 
 /**
@@ -192,7 +197,7 @@ const followers = new Map<string, Float32Array>();
 
 /** Forget one instance's follower. Called when the effect goes away. */
 export function dropSpectrumFollower(key: string): void {
-  followers.delete(key);
+	followers.delete(key);
 }
 
 /**
@@ -204,26 +209,26 @@ export function dropSpectrumFollower(key: string): void {
  * glide back down instead of dropping out between hits.
  */
 export function smoothSpectrum(
-  key: string,
-  src: Uint8Array,
-  dest: Uint8Array,
-  dt: number,
-  smoothing: number,
+	key: string,
+	src: Uint8Array,
+	dest: Uint8Array,
+	dt: number,
+	smoothing: number,
 ): void {
-  const n = src.length;
-  let env = followers.get(key);
-  if (!env || env.length !== n) {
-    env = new Float32Array(n);
-    for (let i = 0; i < n; i++) env[i] = src[i];
-    followers.set(key, env);
-  }
-  const { attack, release } = followerTaus(smoothing);
-  const step = stepOf(dt);
-  const upK = 1 - Math.exp(-step / attack);
-  const downK = 1 - Math.exp(-step / release);
-  for (let i = 0; i < n; i++) {
-    const v = src[i];
-    env[i] += (v - env[i]) * (v > env[i] ? upK : downK);
-    dest[i] = env[i];
-  }
+	const n = src.length;
+	let env = followers.get(key);
+	if (!env || env.length !== n) {
+		env = new Float32Array(n);
+		for (let i = 0; i < n; i++) env[i] = src[i];
+		followers.set(key, env);
+	}
+	const { attack, release } = followerTaus(smoothing);
+	const step = stepOf(dt);
+	const upK = 1 - Math.exp(-step / attack);
+	const downK = 1 - Math.exp(-step / release);
+	for (let i = 0; i < n; i++) {
+		const v = src[i];
+		env[i] += (v - env[i]) * (v > env[i] ? upK : downK);
+		dest[i] = env[i];
+	}
 }

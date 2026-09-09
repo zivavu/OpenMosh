@@ -9,26 +9,26 @@
 		TriangleAlert,
 		Zap,
 		ZapOff,
-	} from 'lucide-svelte';
+	} from "lucide-svelte";
 	import {
 		DEFAULT_SOURCE_EDIT,
 		hasAnimation,
 		isFullCrop,
 		type SourceEdit,
-	} from '../../media';
-	import { lazy } from '../../lazy';
-	import { readRaw, writeRaw } from '../../storage';
+	} from "../../media";
+	import { lazy } from "../../lazy";
+	import { readRaw, writeRaw } from "../../storage";
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
 		sourceColor,
-	} from '../../editor/sequence-source-ui';
-	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import { proxyStatus } from '../../video/proxy-status';
+	} from "../../editor/sequence-source-ui";
+	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import { proxyStatus } from "../../video/proxy-status";
 
 	// Both are overlays: neither chunk is needed until one is actually opened.
-	const loadSourceEditor = lazy(() => import('./SourceEditor.svelte'));
-	const loadMediaLightbox = lazy(() => import('../ui/MediaLightbox.svelte'));
+	const loadSourceEditor = lazy(() => import("./SourceEditor.svelte"));
+	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
 
 	interface Props {
 		sources: SequenceSource[];
@@ -58,7 +58,7 @@
 		sources,
 		primarySourceId = null,
 		selectedCount = 0,
-		selectedLabel = 'segment',
+		selectedLabel = "segment",
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
@@ -68,8 +68,8 @@
 		onEditingChange,
 	}: Props = $props();
 
-	const OPEN_KEY = 'openmosh-seq-rail-open';
-	let open = $state(readRaw(OPEN_KEY) !== '0');
+	const OPEN_KEY = "openmosh-seq-rail-open";
+	let open = $state(readRaw(OPEN_KEY) !== "0");
 
 	let assignable = $derived(selectedCount > 0);
 
@@ -80,7 +80,11 @@
 	let lightboxOrigin = $state({ x: 0, y: 0 });
 
 	let lightboxItems = $derived(
-		sources.map((s) => ({ name: s.name, kind: s.kind, objectUrl: s.objectUrl })),
+		sources.map((s) => ({
+			name: s.name,
+			kind: s.kind,
+			objectUrl: s.objectUrl,
+		})),
 	);
 
 	function openLightbox(e: MouseEvent, index: number) {
@@ -105,13 +109,16 @@
 		const e = edits[src.id];
 		return (
 			!!e &&
-			(e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask || hasAnimation(e))
+			(e.chromaKey.enabled ||
+				!isFullCrop(e.crop) ||
+				!!e.mask ||
+				hasAnimation(e))
 		);
 	}
 
 	function toggle() {
 		open = !open;
-		writeRaw(OPEN_KEY, open ? '1' : '0');
+		writeRaw(OPEN_KEY, open ? "1" : "0");
 	}
 
 	/** The scrolling strip, for centring the highlighted thumb. */
@@ -131,7 +138,7 @@
 		const item = el.getBoundingClientRect();
 		const delta = item.left + item.width / 2 - (strips.left + strips.width / 2);
 		if (Math.abs(delta) < 1) return;
-		strip.scrollBy({ left: delta, behavior: 'smooth' });
+		strip.scrollBy({ left: delta, behavior: "smooth" });
 	});
 
 	// Reorder, the same gesture the grid's cards use: a thumb carries its index
@@ -143,19 +150,19 @@
 	function onThumbDragStart(e: DragEvent, src: SequenceSource, index: number) {
 		dragFromIndex = index;
 		if (!e.dataTransfer) return;
-		e.dataTransfer.effectAllowed = 'copyMove';
+		e.dataTransfer.effectAllowed = "copyMove";
 		e.dataTransfer.setData(SOURCE_DND_TYPE, src.id);
 		// Some browsers cancel a drag that carries no standard data at all.
-		e.dataTransfer.setData('text/plain', src.id);
+		e.dataTransfer.setData("text/plain", src.id);
 	}
 
 	/** Which edge of slot `i` the insertion line belongs on — see the grid's
 	 * copy: a thumb moved rightwards lands after the one it was dropped on. */
-	function dropEdge(i: number): 'before' | 'after' | null {
+	function dropEdge(i: number): "before" | "after" | null {
 		if (dragFromIndex === null || dragOverIndex !== i || dragFromIndex === i) {
 			return null;
 		}
-		return dragFromIndex < i ? 'after' : 'before';
+		return dragFromIndex < i ? "after" : "before";
 	}
 
 	function endThumbDrag() {
@@ -177,7 +184,7 @@
 	<button
 		class="rail-toggle"
 		onclick={toggle}
-		title={open ? 'Hide the media rail' : 'Show the media rail'}
+		title={open ? "Hide the media rail" : "Show the media rail"}
 		aria-expanded={open}
 	>
 		{#if open}
@@ -202,8 +209,8 @@
 				<div
 					class="rail-slot"
 					class:dragging={dragFromIndex === i}
-					class:drop-before={edge === 'before'}
-					class:drop-after={edge === 'after'}
+					class:drop-before={edge === "before"}
+					class:drop-after={edge === "after"}
 					data-source-id={src.id}
 					ondragover={(e) => {
 						if (dragFromIndex === null) return;
@@ -225,7 +232,7 @@
 						}}
 						ondblclick={(e) => openLightbox(e, i)}
 						title={assignable
-							? `Play "${src.name}" on the selected ${selectedLabel}${selectedCount > 1 ? 's' : ''}, or drag it onto one. Double-click to preview.`
+							? `Play "${src.name}" on the selected ${selectedLabel}${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
 							: `${src.name} — click to preview, or drag it onto a segment or layer clip`}
 					>
 						{#if src.thumbUrl}
@@ -244,22 +251,27 @@
 								{/if}
 							</div>
 						{/if}
-						<span class="rail-n" style:background={sourceColor(i + 1)}>{i + 1}</span>
-						{#if src.kind === 'video'}
-							<span class="rail-kind"><Play size={7} fill="currentColor" /></span>
+						<span class="rail-n" style:background={sourceColor(i + 1)}
+							>{i + 1}</span
+						>
+						{#if src.kind === "video"}
+							<span class="rail-kind"
+								><Play size={7} fill="currentColor" /></span
+							>
 							{@const proxy = proxyStatus(src)}
-							{#if proxy.kind === 'pending'}
-								<span class="rail-proxy" title={proxy.title}>{proxy.badge}</span>
-							{:else if proxy.kind === 'failed'}
+							{#if proxy.kind === "pending"}
+								<span class="rail-proxy" title={proxy.title}>{proxy.badge}</span
+								>
+							{:else if proxy.kind === "failed"}
 								<span class="rail-proxy warn" title={proxy.title}>
 									<TriangleAlert size={7} />
 								</span>
-							{:else if proxy.kind === 'ready'}
+							{:else if proxy.kind === "ready"}
 								<span class="rail-proxy ok" title={proxy.title}>
 									<Zap size={7} fill="currentColor" />
 									{proxy.badge}
 								</span>
-							{:else if proxy.kind === 'off'}
+							{:else if proxy.kind === "off"}
 								<!-- Display only: the chip is itself a button, so the toggle
 								     lives on the grid's badge and over the single preview. -->
 								<span class="rail-proxy off" title={proxy.title}>
@@ -389,7 +401,7 @@
 	   here". Same indicator the grid uses. */
 	.rail-slot.drop-before::before,
 	.rail-slot.drop-after::before {
-		content: '';
+		content: "";
 		position: absolute;
 		inset-block: 0;
 		width: 3px;

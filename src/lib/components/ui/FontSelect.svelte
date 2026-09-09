@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, Trash2, Upload, X } from 'lucide-svelte';
+	import { Plus, Trash2, Upload, X } from "lucide-svelte";
 	import {
 		addCustomFont,
 		addCustomFontFile,
@@ -7,7 +7,7 @@
 		ensureFontLoaded,
 		FONT_OPTIONS,
 		removeCustomFont,
-	} from '../../text-overlay';
+	} from "../../text-overlay";
 
 	interface Props {
 		id?: string;
@@ -19,7 +19,7 @@
 	let { id, value, onChange }: Props = $props();
 
 	let open = $state(false);
-	let link = $state('');
+	let link = $state("");
 	let busy = $state(false);
 	let error: string | null = $state(null);
 	let dragging = $state(false);
@@ -38,7 +38,7 @@
 		error = null;
 		try {
 			const font = await addCustomFont(link);
-			link = '';
+			link = "";
 			select(font.family);
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Couldn't add that font.";
@@ -58,11 +58,13 @@
 			try {
 				last = (await addCustomFontFile(file)).family;
 			} catch (e) {
-				failed.push(e instanceof Error ? e.message : `Couldn't add ${file.name}.`);
+				failed.push(
+					e instanceof Error ? e.message : `Couldn't add ${file.name}.`,
+				);
 			}
 		}
 		if (last) select(last);
-		error = failed.length > 0 ? failed.join(' ') : null;
+		error = failed.length > 0 ? failed.join(" ") : null;
 		busy = false;
 	}
 
@@ -81,7 +83,7 @@
 	/** The editors bind their shortcuts on window, so keys pressed in here must stop first. */
 	function onKeydown(e: KeyboardEvent) {
 		e.stopPropagation();
-		if (e.key === 'Escape') open = false;
+		if (e.key === "Escape") open = false;
 	}
 </script>
 
@@ -123,7 +125,11 @@
 {#if open}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="font-overlay" onclick={() => (open = false)} onkeydown={onKeydown}>
+	<div
+		class="font-overlay"
+		onclick={() => (open = false)}
+		onkeydown={onKeydown}
+	>
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="font-modal" onclick={(e) => e.stopPropagation()}>
 			<div class="header">
@@ -139,8 +145,8 @@
 					target="_blank"
 					rel="noreferrer">Google Fonts</a
 				> link — the specimen page URL works — or a direct .woff2/.ttf/.otf URL. You
-				can also drop in a font file of your own. Either way the file is saved in this
-				browser, so it stays available offline.
+				can also drop in a font file of your own. Either way the file is saved in
+				this browser, so it stays available offline.
 			</p>
 
 			<div class="add-row">
@@ -152,7 +158,7 @@
 					placeholder="https://fonts.google.com/specimen/Rubik+Glitch"
 					bind:value={link}
 					onkeydown={(e) => {
-						if (e.key === 'Enter') {
+						if (e.key === "Enter") {
 							e.preventDefault();
 							void add();
 						}
@@ -163,7 +169,7 @@
 					disabled={busy || !link.trim()}
 					onclick={() => void add()}
 				>
-					{busy ? 'Adding…' : 'Add'}
+					{busy ? "Adding…" : "Add"}
 				</button>
 			</div>
 
@@ -197,7 +203,7 @@
 						const input = e.currentTarget as HTMLInputElement;
 						void addFiles(input.files);
 						// Cleared so re-picking the same file still fires a change.
-						input.value = '';
+						input.value = "";
 					}}
 				/>
 			</div>

@@ -8,7 +8,9 @@
 
 	let { speed, onSpeedChange }: Props = $props();
 
-	let label = $derived((speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + '×');
+	let label = $derived(
+		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + "×",
+	);
 
 	function onInput(e: Event) {
 		// Log₂ slider (−2…2 → 0.25×…4×) so 1× sits at center; snap near center.

@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { X, Github, Check } from 'lucide-svelte';
-	import ButtonGroup from './ButtonGroup.svelte';
-	import { closeFeedback } from './feedback.svelte';
-	import { submitFeedback, type FeedbackKind } from '../../feedback/submit';
+	import { X, Github, Check } from "lucide-svelte";
+	import ButtonGroup from "./ButtonGroup.svelte";
+	import { closeFeedback } from "./feedback.svelte";
+	import { submitFeedback, type FeedbackKind } from "../../feedback/submit";
 
-	let kind: FeedbackKind = $state('bug');
-	let message = $state('');
-	let email = $state('');
-	let botcheck = $state('');
+	let kind: FeedbackKind = $state("bug");
+	let message = $state("");
+	let email = $state("");
+	let botcheck = $state("");
 	let sending = $state(false);
 	let sent = $state(false);
 	let error: string | null = $state(null);
@@ -17,9 +17,9 @@
 	let closeTimer = 0;
 
 	const PLACEHOLDERS: Record<FeedbackKind, string> = {
-		bug: 'What happened, and what were you doing when it did?',
-		idea: 'What would you like OpenMosh to do?',
-		other: 'Anything you want to tell me.',
+		bug: "What happened, and what were you doing when it did?",
+		idea: "What would you like OpenMosh to do?",
+		other: "Anything you want to tell me.",
 	};
 
 	async function send() {
@@ -27,11 +27,17 @@
 		sending = true;
 		error = null;
 		try {
-			await submitFeedback({ kind, message: message.trim(), email: email.trim(), botcheck });
+			await submitFeedback({
+				kind,
+				message: message.trim(),
+				email: email.trim(),
+				botcheck,
+			});
 			sent = true;
 			closeTimer = window.setTimeout(closeFeedback, AUTO_CLOSE_MS);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Something went wrong sending that.';
+			error =
+				e instanceof Error ? e.message : "Something went wrong sending that.";
 		} finally {
 			sending = false;
 		}
@@ -44,9 +50,9 @@
 	 * has to stop before it gets there — Escape included, which we handle. */
 	function onKeydown(e: KeyboardEvent) {
 		e.stopPropagation();
-		if (e.key === 'Escape') {
+		if (e.key === "Escape") {
 			closeFeedback();
-		} else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+		} else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
 			e.preventDefault();
 			void send();
 		}
@@ -72,16 +78,16 @@
 				<p class="sent-note">
 					{email.trim()
 						? `Thanks — I'll reply to ${email.trim()} if I need more.`
-						: 'Thanks — it landed in my inbox.'}
+						: "Thanks — it landed in my inbox."}
 				</p>
 				<button class="ghost" onclick={closeFeedback}>Close</button>
 			</div>
 		{:else}
 			<ButtonGroup
 				buttons={[
-					{ label: 'Bug', value: 'bug' },
-					{ label: 'Idea', value: 'idea' },
-					{ label: 'Other', value: 'other' },
+					{ label: "Bug", value: "bug" },
+					{ label: "Idea", value: "idea" },
+					{ label: "Other", value: "other" },
 				]}
 				value={kind}
 				onchange={(v: FeedbackKind) => (kind = v)}
@@ -92,8 +98,7 @@
 				class="message-input"
 				placeholder={PLACEHOLDERS[kind]}
 				autofocus
-				bind:value={message}
-			></textarea>
+				bind:value={message}></textarea>
 
 			<input
 				class="email-input"
@@ -133,8 +138,12 @@
 				</a>
 				<div class="spacer"></div>
 				<button class="ghost" onclick={closeFeedback}>Cancel</button>
-				<button class="primary" disabled={!message.trim() || sending} onclick={send}>
-					{sending ? 'Sending…' : 'Send'}
+				<button
+					class="primary"
+					disabled={!message.trim() || sending}
+					onclick={send}
+				>
+					{sending ? "Sending…" : "Send"}
 				</button>
 			</div>
 		{/if}

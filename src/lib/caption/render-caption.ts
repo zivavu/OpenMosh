@@ -7,26 +7,20 @@ import type { CaptionParams } from "./types";
  * and blend mode are deliberately *not* applied here.
  */
 export function drawCaptionToCanvas(
-  canvas: HTMLCanvasElement,
-  width: number,
-  height: number,
-  params: CaptionParams,
+	canvas: HTMLCanvasElement,
+	width: number,
+	height: number,
+	params: CaptionParams,
 ): void {
-  drawOverlayText(canvas, width, height, params.text, params);
+	drawOverlayText(canvas, width, height, params.text, params);
 }
 
 /** Everything drawCaptionToCanvas would put on screen — see overlayTextSignature. */
 export function captionSignature(
-  params: CaptionParams,
-  width: number,
-  height: number,
-  fontsVersion: number,
+	params: CaptionParams,
+	width: number,
+	height: number,
+	fontsVersion: number,
 ): string {
-  return overlayTextSignature(
-    params.text,
-    params,
-    width,
-    height,
-    fontsVersion,
-  );
+	return overlayTextSignature(params.text, params, width, height, fontsVersion);
 }

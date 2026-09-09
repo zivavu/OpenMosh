@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import NumberField from './NumberField.svelte';
+	import { onDestroy } from "svelte";
+	import NumberField from "./NumberField.svelte";
 
 	interface Props {
 		bpm: number;
@@ -19,7 +19,7 @@
 		bpmDetecting = false,
 		hasTrack = false,
 		onDetectBpm,
-		id = 'bpm',
+		id = "bpm",
 	}: Props = $props();
 
 	const MIN_BPM = 20;
@@ -88,7 +88,7 @@
 		{/if}
 	</button>
 	<button class="detect-btn" onclick={handleTap}>
-		Tap{tapTimes.length >= 2 ? ` (${tapTimes.length})` : ''}
+		Tap{tapTimes.length >= 2 ? ` (${tapTimes.length})` : ""}
 	</button>
 </div>
 

@@ -1,13 +1,18 @@
 <script lang="ts">
-	import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-svelte';
-	import { onDestroy, onMount } from 'svelte';
-	import { pushModalKeyboard } from '../../modal-keyboard';
+	import {
+		ChevronLeft,
+		ChevronRight,
+		SlidersHorizontal,
+		X,
+	} from "lucide-svelte";
+	import { onDestroy, onMount } from "svelte";
+	import { pushModalKeyboard } from "../../modal-keyboard";
 
 	/** Anything with a name and an object URL can be shown here: slideshow
 	 * slides, sequence sources. */
 	export interface LightboxItem {
 		name: string;
-		kind: 'image' | 'video';
+		kind: "image" | "video";
 		objectUrl: string;
 	}
 
@@ -60,7 +65,7 @@
 		if (closeTimer) clearTimeout(closeTimer);
 		const version = ++closeVersion;
 		imageEl?.addEventListener(
-			'transitionend',
+			"transitionend",
 			() => {
 				if (closeVersion === version) finish();
 			},
@@ -97,9 +102,9 @@
 	onMount(() => pushModalKeyboard());
 
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'ArrowRight') next();
-		else if (e.key === 'ArrowLeft') prev();
-		else if (e.key === 'Escape') close();
+		if (e.key === "ArrowRight") next();
+		else if (e.key === "ArrowLeft") prev();
+		else if (e.key === "Escape") close();
 		else return;
 		// Both editors bind these keys at the window (mosh history, segment
 		// deletes) — while the lightbox is up it consumes them outright.
@@ -147,7 +152,7 @@
 						<ChevronLeft size={18} />
 					</button>
 				{/if}
-				{#if item.kind === 'video'}
+				{#if item.kind === "video"}
 					<!-- svelte-ignore a11y_media_has_caption -->
 					<video
 						class="lb-img"

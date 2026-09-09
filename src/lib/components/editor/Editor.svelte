@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack } from "svelte";
 	import {
 		Download,
 		HelpCircle,
@@ -17,33 +17,36 @@
 		Type,
 		Zap,
 		ZapOff,
-	} from 'lucide-svelte';
-	import { fileDrop } from '../../actions/file-drop';
-	import { createAudioGraph, createOutputAudioGraph } from '../../audio/audio-controller';
-	import { AudioManager } from '../../audio/audio-manager.svelte';
-	import { layerLinkGroups } from '../../audio/audio-utils';
-	import type { AudioResponse } from '../../audio/auto-range';
-	import { createTrackStore } from '../../audio/track-persistence';
-	import { loadTimeline, saveTimeline } from '../../editor/timeline-store';
+	} from "lucide-svelte";
+	import { fileDrop } from "../../actions/file-drop";
+	import {
+		createAudioGraph,
+		createOutputAudioGraph,
+	} from "../../audio/audio-controller";
+	import { AudioManager } from "../../audio/audio-manager.svelte";
+	import { layerLinkGroups } from "../../audio/audio-utils";
+	import type { AudioResponse } from "../../audio/auto-range";
+	import { createTrackStore } from "../../audio/track-persistence";
+	import { loadTimeline, saveTimeline } from "../../editor/timeline-store";
 	import {
 		loadRenderSettings,
 		saveRenderSettings,
-	} from '../../editor/render-settings';
-	import { addTrack } from '../../audio/track-library';
-	import { createKeyboardHandler } from '../../editor/keyboard';
+	} from "../../editor/render-settings";
+	import { addTrack } from "../../audio/track-library";
+	import { createKeyboardHandler } from "../../editor/keyboard";
 	import {
 		clearEffects as clearEffectsFn,
 		generateMosh,
-	} from '../../editor/mosh';
-	import { executeRecording } from '../../editor/recording';
-	import { createRecordingState } from '../../editor/recording-state.svelte';
-	import { createMoshSession } from '../../editor/mosh-session';
-	import { PanelBurstController } from '../../editor/panel-burst';
+	} from "../../editor/mosh";
+	import { executeRecording } from "../../editor/recording";
+	import { createRecordingState } from "../../editor/recording-state.svelte";
+	import { createMoshSession } from "../../editor/mosh-session";
+	import { PanelBurstController } from "../../editor/panel-burst";
 	import {
 		DEFAULT_SETTINGS,
 		loadSettings,
 		updateSettings,
-	} from '../../editor/settings';
+	} from "../../editor/settings";
 	import {
 		cloneEffectInstance,
 		hydrateEffects,
@@ -52,7 +55,7 @@
 		type EffectInstance,
 		type FreqBand,
 		type Preset,
-	} from '../../effects';
+	} from "../../effects";
 	import {
 		appendTextLane,
 		createTextHistory,
@@ -68,7 +71,7 @@
 		type TextClip,
 		type TextLane,
 		type TextTimeline,
-	} from '../../text';
+	} from "../../text";
 	import {
 		cloneSegmentForSplit,
 		createSequenceEffectSource,
@@ -84,7 +87,7 @@
 		type SequenceSegment,
 		type SequenceSegmentMode,
 		applyBpmToSegments,
-	} from '../../editor/sequence';
+	} from "../../editor/sequence";
 	import {
 		appendFxLane,
 		applyBpmToFxLanes,
@@ -103,33 +106,32 @@
 		type FxClip,
 		type FxLane,
 		type FxLaneSettings,
-	} from '../../editor/fx-lanes';
-	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
-	import { PENDING_EDIT } from '../../editor/edit-clock';
+	} from "../../editor/fx-lanes";
+	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
+	import { PENDING_EDIT } from "../../editor/edit-clock";
 	import {
 		redoLatest,
 		undoLatest,
 		type UndoSource,
-	} from '../../editor/undo-router';
-	import { detectBpm } from '../../slideshow/bpm-detector';
-	import { SequenceFrameDriver } from '../../editor/sequence-frames';
+	} from "../../editor/undo-router";
+	import { detectBpm } from "../../slideshow/bpm-detector";
+	import { SequenceFrameDriver } from "../../editor/sequence-frames";
 	import {
 		combinedLayerOrder,
 		nextLayerZ,
 		moveLayerTo,
-	} from '../../timeline/layer-order';
-	import { clipAt } from '../../timeline/clips';
-	import type { LayerPick } from '../../editor/layer-pick';
-	import { SequenceSourceRegistry } from '../../editor/sequence-sources.svelte';
-	import { MediaLayerDriver } from '../../editor/media-layer-driver';
+	} from "../../timeline/layer-order";
+	import { clipAt } from "../../timeline/clips";
+	import type { LayerPick } from "../../editor/layer-pick";
+	import { SequenceSourceRegistry } from "../../editor/sequence-sources.svelte";
+	import { MediaLayerDriver } from "../../editor/media-layer-driver";
+	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
+	import { openVideoFrameSource } from "../../video/frame-source";
+	import { proxyStatus } from "../../video/proxy-status";
 	import {
-		needsProxy,
-		startProxyJob,
-		type ProxyJob,
-	} from '../../video/proxy';
-	import { openVideoFrameSource } from '../../video/frame-source';
-	import { proxyStatus } from '../../video/proxy-status';
-	import { isProxyDisabled, setProxyDisabled } from '../../video/proxy-preference';
+		isProxyDisabled,
+		setProxyDisabled,
+	} from "../../video/proxy-preference";
 	import {
 		appendMediaLane,
 		createMediaHistory,
@@ -150,7 +152,7 @@
 		type MediaLane,
 		type MediaTimeline,
 		type SourceEdit,
-	} from '../../media';
+	} from "../../media";
 	import {
 		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
@@ -158,11 +160,8 @@
 		pruneSequenceMedia,
 		putSequenceMediaProxy,
 		saveMediaPool,
-	} from '../../editor/sequence-media-store';
-	import {
-		saveSession,
-		type SingleSessionState,
-	} from '../../editor/sessions';
+	} from "../../editor/sequence-media-store";
+	import { saveSession, type SingleSessionState } from "../../editor/sessions";
 	import {
 		applyTransitionChanges,
 		clearSegments,
@@ -173,49 +172,49 @@
 		rollSegments,
 		setSegmentsMode,
 		syncSegmentsToPreset,
-	} from '../../editor/segment-edits';
-	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
-	import { normalizeCoverage } from '../../editor/segment-coverage';
+	} from "../../editor/segment-edits";
+	import { SegmentBoundaryController } from "../../editor/segment-boundary-controller.svelte";
+	import { normalizeCoverage } from "../../editor/segment-coverage";
 	import {
 		MoshHistory,
 		type SegmentMoshSnapshot,
-	} from '../../editor/segment-mosh-history';
-	import type { GlRenderer, SourceFit } from '../../gl/renderer';
-	import { VideoPreviewPlayer } from '../../video-preview/preview-player.svelte';
-	import AudioTimeline from '../ui/AudioTimeline.svelte';
-	import SpeedControl from '../ui/SpeedControl.svelte';
-	import TimelineStack from '../ui/TimelineStack.svelte';
-	import type { TimelineStackState } from '../../editor/timeline-stack.svelte';
-	import EffectsPanel from '../ui/EffectsPanel.svelte';
-	import GithubLink from '../ui/GithubLink.svelte';
-	import { setFeedbackChain } from '../ui/feedback.svelte';
-	import FeedbackButton from '../ui/FeedbackButton.svelte';
-	import ButtonGroup from '../ui/ButtonGroup.svelte';
-	import MobileSheet from '../ui/MobileSheet.svelte';
-	import NumberField from '../ui/NumberField.svelte';
-	import ResizeSettings from '../ui/ResizeSettings.svelte';
-	import TrackAddBar from '../ui/TrackAddBar.svelte';
-	import TrackLibrary from '../ui/TrackLibrary.svelte';
-	import TextTimelineLane from '../text/TextTimeline.svelte';
-	import MediaTimelineLane from '../media/MediaTimeline.svelte';
-	import MediaClipPanel from '../media/MediaClipPanel.svelte';
-	import type { LyricsSyncProps } from '../text/LyricsSyncModal.svelte';
-	import TextClipPanel from '../text/TextClipPanel.svelte';
-	import GlCanvas from './GlCanvas.svelte';
-	import SequenceGridView from './SequenceGridView.svelte';
-	import SourceRail from './SourceRail.svelte';
-	import SequenceTimeline from './SequenceTimeline.svelte';
-	import FxLanes from './FxLanes.svelte';
-	import MoshGroup from './MoshGroup.svelte';
-	import MoshSettingsPanel from './MoshSettingsPanel.svelte';
-	import RecordGroup from './RecordGroup.svelte';
-	import RecordOverlay from './RecordOverlay.svelte';
-	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
-	import { showToast } from '../ui/toast.svelte';
-	import { lazy } from '../../lazy';
+	} from "../../editor/segment-mosh-history";
+	import type { GlRenderer, SourceFit } from "../../gl/renderer";
+	import { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
+	import AudioTimeline from "../ui/AudioTimeline.svelte";
+	import SpeedControl from "../ui/SpeedControl.svelte";
+	import TimelineStack from "../ui/TimelineStack.svelte";
+	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
+	import EffectsPanel from "../ui/EffectsPanel.svelte";
+	import GithubLink from "../ui/GithubLink.svelte";
+	import { setFeedbackChain } from "../ui/feedback.svelte";
+	import FeedbackButton from "../ui/FeedbackButton.svelte";
+	import ButtonGroup from "../ui/ButtonGroup.svelte";
+	import MobileSheet from "../ui/MobileSheet.svelte";
+	import NumberField from "../ui/NumberField.svelte";
+	import ResizeSettings from "../ui/ResizeSettings.svelte";
+	import TrackAddBar from "../ui/TrackAddBar.svelte";
+	import TrackLibrary from "../ui/TrackLibrary.svelte";
+	import TextTimelineLane from "../text/TextTimeline.svelte";
+	import MediaTimelineLane from "../media/MediaTimeline.svelte";
+	import MediaClipPanel from "../media/MediaClipPanel.svelte";
+	import type { LyricsSyncProps } from "../text/LyricsSyncModal.svelte";
+	import TextClipPanel from "../text/TextClipPanel.svelte";
+	import GlCanvas from "./GlCanvas.svelte";
+	import SequenceGridView from "./SequenceGridView.svelte";
+	import SourceRail from "./SourceRail.svelte";
+	import SequenceTimeline from "./SequenceTimeline.svelte";
+	import FxLanes from "./FxLanes.svelte";
+	import MoshGroup from "./MoshGroup.svelte";
+	import MoshSettingsPanel from "./MoshSettingsPanel.svelte";
+	import RecordGroup from "./RecordGroup.svelte";
+	import RecordOverlay from "./RecordOverlay.svelte";
+	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
+	import { showToast } from "../ui/toast.svelte";
+	import { lazy } from "../../lazy";
 
 	// An overlay behind a key; its chunk waits until someone asks for help.
-	const loadShortcutsModal = lazy(() => import('../ui/ShortcutsModal.svelte'));
+	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
 
 	interface Props {
 		file: File;
@@ -227,11 +226,11 @@
 		initialTrackId?: string | null;
 		/** The segment timeline belongs to 'sequence' alone — 'single' is one
 		 * source and one effect chain, and the two persist separately. */
-		mode?: 'single' | 'sequence';
+		mode?: "single" | "sequence";
 		/** Single mode: work restored from a saved session, if reopened from one. */
 		initialSession?: SingleSessionState | null;
 		warmCanvas?: HTMLCanvasElement | null;
-		warmRenderer?: import('../../gl/renderer').GlRenderer | null;
+		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
 	}
 
@@ -241,19 +240,19 @@
 		extraFiles = [],
 		initialAudioFile = null,
 		initialTrackId = null,
-		mode = 'single',
+		mode = "single",
 		initialSession = null,
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
 	}: Props = $props();
 
-	let isSequenceMode = $derived(mode === 'sequence');
+	let isSequenceMode = $derived(mode === "sequence");
 	let dragging = $state(false);
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
-	let isVideo = $derived(file.type.startsWith('video/'));
-	const isMobile = window.matchMedia('(pointer: coarse)').matches;
+	let isVideo = $derived(file.type.startsWith("video/"));
+	const isMobile = window.matchMedia("(pointer: coarse)").matches;
 	let videoEl = $state<HTMLVideoElement | null>(null);
 	let videoDuration = $state(0);
 	let videoCurrentTime = $state(0);
@@ -465,8 +464,7 @@
 		if (!player || !needsProxy(w, h)) return;
 		// The user asked for the original: no job, and the badge says so.
 		if (singleProxyDisabled) return;
-		if (singleJobFor === f || singleProxyFor === f || singleProxyFailed)
-			return;
+		if (singleJobFor === f || singleProxyFor === f || singleProxyFailed) return;
 		singleJobFor = f;
 		singleProxyPending = true;
 		void (async () => {
@@ -527,11 +525,11 @@
 				singleProxySize = null;
 				showToast(
 					`No smaller copy of "${f.name}" could be made. The preview plays the` +
-						' original, which may stutter. Export is unaffected.',
-					'error',
+						" original, which may stutter. Export is unaffected.",
+					"error",
 					8000,
 					{
-						label: 'Try again',
+						label: "Try again",
 						run: () => {
 							singleJobFor = null;
 							singleProxyFailed = false;
@@ -570,7 +568,7 @@
 		videoHasAudio = false;
 		(async () => {
 			try {
-				const mb = await import('mediabunny');
+				const mb = await import("mediabunny");
 				const input = new mb.Input({
 					source: new mb.BlobSource(probed),
 					formats: mb.ALL_FORMATS,
@@ -583,15 +581,14 @@
 		})();
 	});
 
-
 	// Sequence mode has no still to save — a segment timeline is a video by
 	// definition — so it skips the picker and stays on WebM.
-	let format = $state<'png' | 'jpg' | 'webm'>(
-		isMobile && untrack(() => mode) !== 'sequence' ? 'png' : 'webm',
+	let format = $state<"png" | "jpg" | "webm">(
+		isMobile && untrack(() => mode) !== "sequence" ? "png" : "webm",
 	);
-	let isImageFormat = $derived(format === 'png' || format === 'jpg');
-	let isVideoFormat = $derived(format === 'webm');
-	let imageSrc = $state('');
+	let isImageFormat = $derived(format === "png" || format === "jpg");
+	let isVideoFormat = $derived(format === "webm");
+	let imageSrc = $state("");
 	$effect(() => {
 		const url = URL.createObjectURL(file);
 		imageSrc = url;
@@ -611,7 +608,9 @@
 		return known.length > 0 ? known : null;
 	}
 
-	let effects: EffectInstance[] = $state(restoredEffects() ?? loadInitialEffects());
+	let effects: EffectInstance[] = $state(
+		restoredEffects() ?? loadInitialEffects(),
+	);
 
 	// Hand the live chain to the feedback modal, which is mounted at the app
 	// root and has no other way to see it.
@@ -623,16 +622,22 @@
 	const saved = loadSettings();
 	let moshMin = $state(saved.moshMin ?? DEFAULT_SETTINGS.moshMin);
 	let moshMax = $state(saved.moshMax ?? DEFAULT_SETTINGS.moshMax);
-	let randomizeOrder = $state(saved.randomizeOrder ?? DEFAULT_SETTINGS.randomizeOrder);
+	let randomizeOrder = $state(
+		saved.randomizeOrder ?? DEFAULT_SETTINGS.randomizeOrder,
+	);
 	let showMoshSettings = $state(false);
-	let moshAudioLink = $state(saved.moshAudioLink ?? DEFAULT_SETTINGS.moshAudioLink);
+	let moshAudioLink = $state(
+		saved.moshAudioLink ?? DEFAULT_SETTINGS.moshAudioLink,
+	);
 	let moshAudioLinkStrength = $state(
 		saved.moshAudioLinkStrength ?? DEFAULT_SETTINGS.moshAudioLinkStrength,
 	);
 	let moshLinkBand = $state<FreqBand>(
 		saved.moshLinkBand ?? DEFAULT_SETTINGS.moshLinkBand,
 	);
-	let audioSmoothing = $state(saved.audioSmoothing ?? DEFAULT_SETTINGS.audioSmoothing);
+	let audioSmoothing = $state(
+		saved.audioSmoothing ?? DEFAULT_SETTINGS.audioSmoothing,
+	);
 	let audioPunch = $state(saved.audioPunch ?? DEFAULT_SETTINGS.audioPunch);
 	// One object so the preview tick and the export are fed the same thing.
 	const audioResponse = $derived<AudioResponse>({
@@ -641,11 +646,13 @@
 	});
 	let showFps = $state(saved.showFps ?? DEFAULT_SETTINGS.showFps);
 	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
-	let sourceFit = $state<SourceFit>(saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit);
+	let sourceFit = $state<SourceFit>(
+		saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit,
+	);
 	let showShortcuts = $state(false);
 	let previewFullscreen = $state(false);
 	const fullscreenSupported =
-		typeof document !== 'undefined' && document.fullscreenEnabled;
+		typeof document !== "undefined" && document.fullscreenEnabled;
 
 	// The record overlay and progress live outside the fullscreen element, so
 	// staying in it during an export would hide every control the user needs.
@@ -660,7 +667,11 @@
 		// their own — but each still gets its own scope, so one layer's
 		// smoothing never steps another's.
 		getLinkGroups: () => [
-			{ scope: '', effects: seqPlaybackEffects ?? effects, response: audioResponse },
+			{
+				scope: "",
+				effects: seqPlaybackEffects ?? effects,
+				response: audioResponse,
+			},
 			...fxLayers.map((layer) => ({
 				scope: layer.laneId,
 				effects: layer.effects,
@@ -693,7 +704,9 @@
 
 	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
-	$effect(() => { audio.setAudioEl(audioEl); });
+	$effect(() => {
+		audio.setAudioEl(audioEl);
+	});
 
 	// Seed track from audio selected on the upload screen
 	$effect(() => {
@@ -756,12 +769,12 @@
 	let currentTrackId = $state<string | null>(null);
 
 	const spanStore = createTrackStore<{ spanStart: number; spanEnd: number }>(
-		'openmosh-single-span',
+		"openmosh-single-span",
 	);
 	/** Read-only now: output size moved into the per-project render settings.
 	 * Entries written before that still restore through the fallback below. */
 	const sizeStore = createTrackStore<{ width: number; height: number }>(
-		'openmosh-single-size',
+		"openmosh-single-size",
 	);
 
 	// Persist span changes for library tracks. The span sits at 0/0 from the
@@ -818,16 +831,14 @@
 
 	// A track brings its own span, restored from storage: that is the baseline
 	// to undo back to, not the empty one this component started on.
-	let spannedTrack = '';
+	let spannedTrack = "";
 	$effect(() => {
 		const d = audio.trackDuration;
 		if (d <= 0) return;
-		const id = `${currentTrackId ?? audio.trackFile?.name ?? ''}:${d}`;
+		const id = `${currentTrackId ?? audio.trackFile?.name ?? ""}:${d}`;
 		if (id === spannedTrack) return;
 		spannedTrack = id;
-		untrack(() =>
-			resetSpanHistory(),
-		);
+		untrack(() => resetSpanHistory());
 	});
 
 	let trackInput: HTMLInputElement;
@@ -863,7 +874,7 @@
 		if (f) {
 			clearTrack();
 			audio.trackFile = f;
-			trackInput.value = '';
+			trackInput.value = "";
 		}
 	}
 
@@ -898,7 +909,10 @@
 		// An empty span is never something the user chose — it's an entry left
 		// behind by the overwrite above. Fall through to the whole track.
 		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
-			audio.pendingSpan = { start: savedSpan.spanStart, end: savedSpan.spanEnd };
+			audio.pendingSpan = {
+				start: savedSpan.spanStart,
+				end: savedSpan.spanEnd,
+			};
 		}
 		const key = seqKeyPrefix + trackId;
 		loadedTimelineKey = null;
@@ -963,7 +977,7 @@
 				if (audio.trackFile !== f) return;
 				adoptLibraryTrack(track.id);
 			} catch (e) {
-				console.error('Failed to register track:', e);
+				console.error("Failed to register track:", e);
 			} finally {
 				registeringTrack = null;
 			}
@@ -1029,7 +1043,8 @@
 			t < videoSpanStart ||
 			(!fromMarker && t >= videoSpanEnd - VIDEO_END_EPSILON);
 		if (previewPlayer) {
-			if (outOfSpan(previewPlayer.currentTime)) previewPlayer.seek(videoSpanStart);
+			if (outOfSpan(previewPlayer.currentTime))
+				previewPlayer.seek(videoSpanStart);
 			previewPlayer.play();
 			return;
 		}
@@ -1141,7 +1156,7 @@
 	 * back with its timeline (and the segment mode) forced on in single mode,
 	 * and any edit there wrote back over it. The prefix keeps the two apart.
 	 */
-	const seqKeyPrefix = $derived(isSequenceMode ? 'seq:' : 'single:');
+	const seqKeyPrefix = $derived(isSequenceMode ? "seq:" : "single:");
 	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
 
 	/**
@@ -1167,7 +1182,8 @@
 			normalizeSegmentTransitions(entry.segments);
 			// And they can predate an effect gaining a param, which the panel
 			// reads off the instance without checking.
-			for (const seg of entry.segments) seg.effects = hydrateEffects(seg.effects);
+			for (const seg of entry.segments)
+				seg.effects = hydrateEffects(seg.effects);
 		}
 		return entry;
 	}
@@ -1254,7 +1270,7 @@
 		if (ok) return;
 		showToast(
 			"Couldn't save this timeline — your recent changes may not survive a reload.",
-			'error',
+			"error",
 			10000,
 		);
 	}
@@ -1296,9 +1312,9 @@
 			flushMediaPoolSave();
 			flushSingleSessionSave();
 		};
-		window.addEventListener('pagehide', onHide);
+		window.addEventListener("pagehide", onHide);
 		return () => {
-			window.removeEventListener('pagehide', onHide);
+			window.removeEventListener("pagehide", onHide);
 			onHide();
 		};
 	});
@@ -1337,7 +1353,6 @@
 		if (seqMasterIsAudio) return audio.trackCurrentTime;
 		return videoClock;
 	}
-
 
 	// Owns undo/redo + boundary selection/clipboard for every sequenceSegments
 	// edit — timeline drags/splits (in SequenceTimeline.svelte) as well as
@@ -1472,11 +1487,17 @@
 	function fxRoll(clipIds: string[]) {
 		const ids = new Set(clipIds);
 		for (const clip of fxClipsById(ids)) {
-			fxMoshHistory.seed(clip.id, fxClipMoshSnapshot($state.snapshot(clip) as FxClip));
+			fxMoshHistory.seed(
+				clip.id,
+				fxClipMoshSnapshot($state.snapshot(clip) as FxClip),
+			);
 		}
 		fxLanes = rollFxClips(fxLanes, ids, getMoshOptions());
 		for (const clip of fxClipsById(ids)) {
-			fxMoshHistory.push(clip.id, fxClipMoshSnapshot($state.snapshot(clip) as FxClip));
+			fxMoshHistory.push(
+				clip.id,
+				fxClipMoshSnapshot($state.snapshot(clip) as FxClip),
+			);
 		}
 	}
 
@@ -1495,7 +1516,9 @@
 
 	/** The fx clip the effects panel is editing, if one is selected. */
 	let selectedFxClip = $derived(
-		isSequenceMode ? (findFxClip(fxLanes, selectedFxClipId)?.clip ?? null) : null,
+		isSequenceMode
+			? (findFxClip(fxLanes, selectedFxClipId)?.clip ?? null)
+			: null,
 	);
 
 	// Same resolver the export builds, so interval rolls reproduce exactly.
@@ -1535,7 +1558,10 @@
 			setGlobal(value);
 			return;
 		}
-		lane.settings = { ...(lane.settings ?? currentFxLaneSettings()), [key]: value };
+		lane.settings = {
+			...(lane.settings ?? currentFxLaneSettings()),
+			[key]: value,
+		};
 	}
 
 	/** The three audio-response sliders, which sit one level down. */
@@ -1780,8 +1806,8 @@
 		const skipped = files.length - added.length;
 		if (skipped > 0) {
 			showToast(
-				`Skipped ${skipped} file${skipped === 1 ? '' : 's'} that couldn't be decoded`,
-				'error',
+				`Skipped ${skipped} file${skipped === 1 ? "" : "s"} that couldn't be decoded`,
+				"error",
 			);
 		}
 		return added;
@@ -1854,14 +1880,14 @@
 
 	/** Grid replaces the preview while the pool is being arranged; the timeline
 	 * stays put under it, so a card can still be dragged onto a segment. */
-	let sequenceView = $state<'preview' | 'grid'>('preview');
-	let sequenceGridOpen = $derived(isSequenceMode && sequenceView === 'grid');
+	let sequenceView = $state<"preview" | "grid">("preview");
+	let sequenceGridOpen = $derived(isSequenceMode && sequenceView === "grid");
 
 	// Starting playback from the grid means the user wants to watch it, so the
 	// preview comes back up. Only on the transition into playing — switching to
 	// the grid mid-play is a deliberate move and stays put.
 	$effect(() => {
-		if (isSequenceMode && seqPlaying()) sequenceView = 'preview';
+		if (isSequenceMode && seqPlaying()) sequenceView = "preview";
 	});
 
 	/** The source the selection plays, for the grid's highlight; null when the
@@ -1974,7 +2000,7 @@
 	// at one master time, so the canvas has nothing to re-upload — a late decode
 	// bumps `sourceTick` and redraws through the static path instead.
 	let seqSourceAnimating = $derived(
-		seqActiveSource?.kind === 'video' &&
+		seqActiveSource?.kind === "video" &&
 			!seqActiveSource.primary &&
 			seqPlaying(),
 	);
@@ -2032,7 +2058,6 @@
 		mediaLayers.invalidate();
 	});
 
-
 	// The route enables sequence mode with no toggle press to seed the first
 	// segment, so do it as soon as a master clock exists.
 	$effect(() => {
@@ -2040,7 +2065,7 @@
 		if (untrack(() => sequenceSegments).length > 0) return;
 		const seg = createSequenceSegment(0, null);
 		seg.effects = untrack(() => effects).map(cloneEffectInstance);
-		seg.label = 'current';
+		seg.label = "current";
 		sequenceSegments = [seg];
 	});
 
@@ -2061,8 +2086,7 @@
 		// loop instead of pinning to the span start (which caused a seek-back
 		// stutter when the playhead sat left of the span).
 		const elapsed = audio.trackCurrentTime - audio.spanStart;
-		const wrapped =
-			(((elapsed * videoSpeed) % vDur) + vDur) % vDur;
+		const wrapped = (((elapsed * videoSpeed) % vDur) + vDur) % vDur;
 		const target = videoSpanStart + wrapped;
 		const audioPlaying = audio.audioPlaying;
 		untrack(() => {
@@ -2119,7 +2143,7 @@
 			const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
 			if (seg) {
 				next =
-					seg.mode === 'static' ? seg.effects : previewSeqSource(seg.startTime);
+					seg.mode === "static" ? seg.effects : previewSeqSource(seg.startTime);
 			}
 		}
 		if (!next) {
@@ -2209,7 +2233,7 @@
 	function panelSelectedSegment(): SequenceSegment | null {
 		if (!isSequenceMode || !selectedSegmentId) return null;
 		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
-		return seg && seg.mode === 'static' ? seg : null;
+		return seg && seg.mode === "static" ? seg : null;
 	}
 
 	// A hand-edit to a preset-filled segment or fx clip: the label gains a "*"
@@ -2230,7 +2254,9 @@
 	// lanes clear their selection when a segment is picked, and vice versa), and
 	// it's the only thing the panel could mean while one is highlighted.
 	function getPanelEffects(): EffectInstance[] {
-		return selectedFxClip?.effects ?? panelSelectedSegment()?.effects ?? effects;
+		return (
+			selectedFxClip?.effects ?? panelSelectedSegment()?.effects ?? effects
+		);
 	}
 
 	/**
@@ -2243,15 +2269,16 @@
 	let panelIntervalSegment = $derived.by(() => {
 		if (!isSequenceMode || selectedFxClip || !selectedSegmentId) return null;
 		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
-		return seg && seg.mode !== 'static' ? seg : null;
+		return seg && seg.mode !== "static" ? seg : null;
 	});
 
 	let panelNoTarget = $derived.by(() => {
 		if (!isSequenceMode || sequenceSegments.length === 0) return null;
-		if (selectedFxClip || panelSelectedSegment() || panelIntervalSegment) return null;
+		if (selectedFxClip || panelSelectedSegment() || panelIntervalSegment)
+			return null;
 		return {
-			title: 'Nothing selected',
-			hint: 'Click a segment on the timeline to edit its chain, or an fx clip to edit that one.',
+			title: "Nothing selected",
+			hint: "Click a segment on the timeline to edit its chain, or an fx clip to edit that one.",
 		};
 	});
 
@@ -2262,7 +2289,7 @@
 	 */
 	let panelRolledNote = $derived(
 		panelIntervalSegment
-			? 'Auto segment re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the segment to Static in the segment bar to build a chain by hand.'
+			? "Auto segment re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the segment to Static in the segment bar to build a chain by hand."
 			: null,
 	);
 
@@ -2294,24 +2321,24 @@
 	 * written at the start of the burst, so they carry a stamp already; the
 	 * chain's entry is only pushed when the burst closes, and until then the
 	 * router has to be told it is there. */
-	let burstOwner: 'fx' | 'segment' | 'chain' | null = null;
+	let burstOwner: "fx" | "segment" | "chain" | null = null;
 	const panelBurst = new PanelBurstController({
 		onEditStart: () => {
 			// An fx clip edit belongs to the fx stack, so Ctrl+Z steps back the
 			// tweak rather than the source lane's last structural change.
 			if (selectedFxClip) {
-				burstOwner = 'fx';
+				burstOwner = "fx";
 				pushFxHistory();
 				return;
 			}
 			if (panelSelectedSegment()) {
-				burstOwner = 'segment';
+				burstOwner = "segment";
 				seqBoundaries.pushState(
 					$state.snapshot(sequenceSegments) as SequenceSegment[],
 				);
 				return;
 			}
-			burstOwner = 'chain';
+			burstOwner = "chain";
 			return () => moshSession.pushEdit(effects);
 		},
 	});
@@ -2435,11 +2462,11 @@
 			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			setSequenceBpm(Math.round(result.bpm));
 		} catch (e) {
-			if (!(e instanceof DOMException && e.name === 'AbortError')) {
-				console.error('BPM detection failed:', e);
+			if (!(e instanceof DOMException && e.name === "AbortError")) {
+				console.error("BPM detection failed:", e);
 				showToast(
 					"Couldn't detect the BPM for this track. Set it by hand instead.",
-					'error',
+					"error",
 					6000,
 				);
 			}
@@ -2470,7 +2497,8 @@
 	function playSpan() {
 		// Playback starts at the static marker — the resume point — rather than
 		// wherever the clock last stopped.
-		if (timelineAxis && !audio.audioPlaying) audio.seekTo(timelineAxis.staticTime);
+		if (timelineAxis && !audio.audioPlaying)
+			audio.seekTo(timelineAxis.staticTime);
 		audio.playAudio();
 		if (isVideo) playVideo();
 	}
@@ -2594,11 +2622,15 @@
 				return textHistory.redoSeq;
 			},
 			undo: () => {
-				const prev = textHistory.undo($state.snapshot(textTimeline) as TextTimeline);
+				const prev = textHistory.undo(
+					$state.snapshot(textTimeline) as TextTimeline,
+				);
 				if (prev) setTextTimeline(prev);
 			},
 			redo: () => {
-				const next = textHistory.redo($state.snapshot(textTimeline) as TextTimeline);
+				const next = textHistory.redo(
+					$state.snapshot(textTimeline) as TextTimeline,
+				);
 				if (next) setTextTimeline(next);
 			},
 		},
@@ -2610,17 +2642,21 @@
 				return mediaHistory.redoSeq;
 			},
 			undo: () => {
-				const prev = mediaHistory.undo($state.snapshot(mediaTimeline) as MediaTimeline);
+				const prev = mediaHistory.undo(
+					$state.snapshot(mediaTimeline) as MediaTimeline,
+				);
 				if (prev) setMediaTimeline(prev);
 			},
 			redo: () => {
-				const next = mediaHistory.redo($state.snapshot(mediaTimeline) as MediaTimeline);
+				const next = mediaHistory.redo(
+					$state.snapshot(mediaTimeline) as MediaTimeline,
+				);
 				if (next) setMediaTimeline(next);
 			},
 		},
 		{
 			get undoSeq() {
-				return burstOwner === 'fx' && panelBurst.open
+				return burstOwner === "fx" && panelBurst.open
 					? PENDING_EDIT
 					: fxHistory.undoSeq;
 			},
@@ -2639,7 +2675,7 @@
 		},
 		{
 			get undoSeq() {
-				return burstOwner === 'segment' && panelBurst.open
+				return burstOwner === "segment" && panelBurst.open
 					? PENDING_EDIT
 					: seqBoundaries.undoSeq;
 			},
@@ -2656,7 +2692,7 @@
 			get undoSeq() {
 				// A burst still inside its coalescing window is an edit that has
 				// not reached its stack yet, and it is the newest one there is.
-				return burstOwner === 'chain' && panelBurst.open
+				return burstOwner === "chain" && panelBurst.open
 					? PENDING_EDIT
 					: moshSession.undoSeq;
 			},
@@ -2684,7 +2720,7 @@
 		if (clip) {
 			panelBeforeEdit();
 			clearEffectsFn(clip.effects);
-			if (isHandBuiltLabel(clip)) clip.label = 'clean';
+			if (isHandBuiltLabel(clip)) clip.label = "clean";
 			else clip.modified = true;
 			return;
 		}
@@ -2694,7 +2730,7 @@
 		if (seg && seg.effects === effects) {
 			panelBeforeEdit();
 			clearEffectsFn(effects);
-			if (isHandBuiltLabel(seg)) seg.label = 'clean';
+			if (isHandBuiltLabel(seg)) seg.label = "clean";
 			else seg.modified = true;
 			return;
 		}
@@ -2706,8 +2742,8 @@
 		if (!onExit) return;
 		if (recordingState.recording) {
 			showToast(
-				'Cancel or wait for the recording to finish before exiting',
-				'error',
+				"Cancel or wait for the recording to finish before exiting",
+				"error",
 			);
 			return;
 		}
@@ -2724,7 +2760,10 @@
 	 * passed `done`. Feedback-effect history resets across the resize (buffers
 	 * are reallocated), same as any manual resize.
 	 */
-	function captureAtOutputRes(time: number, capture: (done: () => void) => void) {
+	function captureAtOutputRes(
+		time: number,
+		capture: (done: () => void) => void,
+	) {
 		if (!canvasEl || !glRenderer) return;
 		const r = glRenderer;
 		const prevW = canvasEl.width;
@@ -2765,21 +2804,21 @@
 					return;
 				}
 				const newFile = new File([blob], `openmosh-reinput-${Date.now()}.png`, {
-					type: 'image/png',
+					type: "image/png",
 				});
 				effects.forEach((e) => (e.enabled = false));
 				moshSession.resetEdits(effects);
 				// No restore: loading the new file re-initializes the renderer
 				onfile(newFile);
-				showToast('Using this frame as the new source', 'info', 8000, {
-					label: 'Undo',
+				showToast("Using this frame as the new source", "info", 8000, {
+					label: "Undo",
 					run: () => {
 						effects = prevEffects.map(cloneEffectInstance);
 						moshSession.resetEdits(effects);
 						onfile(prevFile);
 					},
 				});
-			}, 'image/png');
+			}, "image/png");
 		});
 	}
 
@@ -2796,7 +2835,8 @@
 		reInput,
 		toggleFullscreen: () => (previewFullscreen = !previewFullscreen),
 		toggleFollowPlayhead: () => {
-			if (timelineAxis) timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
+			if (timelineAxis)
+				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
 		togglePlay: toggleMasterPlay,
 		toggleSegmentLoop,
@@ -2806,11 +2846,11 @@
 	function save() {
 		if (!canvasEl) return;
 		if (noSequenceMedia) {
-			showToast('Add media before saving a frame', 'info');
+			showToast("Add media before saving a frame", "info");
 			return;
 		}
-		const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
-		const ext = format === 'jpg' ? 'jpg' : 'png';
+		const mimeType = format === "jpg" ? "image/jpeg" : "image/png";
+		const ext = format === "jpg" ? "jpg" : "png";
 		// Image formats render frozen at time 0 (matches the preview's drawFrame)
 		captureAtOutputRes(0, (done) => {
 			canvasEl!.toBlob(
@@ -2818,14 +2858,14 @@
 					done();
 					if (!blob) return;
 					const url = URL.createObjectURL(blob);
-					const a = document.createElement('a');
+					const a = document.createElement("a");
 					a.href = url;
 					a.download = `openmosh-${Date.now()}.${ext}`;
 					a.click();
 					URL.revokeObjectURL(url);
 				},
 				mimeType,
-				format === 'jpg' ? 0.92 : undefined,
+				format === "jpg" ? 0.92 : undefined,
 			);
 		});
 	}
@@ -2966,7 +3006,9 @@
 		const state = {
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText ? ($state.snapshot(textTimeline) as TextTimeline) : null,
-			media: hasMedia ? ($state.snapshot(mediaTimeline) as MediaTimeline) : null,
+			media: hasMedia
+				? ($state.snapshot(mediaTimeline) as MediaTimeline)
+				: null,
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
 				SourceEdit
@@ -2979,11 +3021,11 @@
 			.filter((f): f is File => !!f);
 		// Keyed by the song when there is one, so the session sits alongside the
 		// text timeline and span already saved under that track id.
-		void saveSession('single', [source, ...layerFiles], state, currentTrackId)
+		void saveSession("single", [source, ...layerFiles], state, currentTrackId)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
 				// Swallowing this outright is what made the last failure invisible.
-				if (import.meta.env.DEV) console.error('Session save failed:', e);
+				if (import.meta.env.DEV) console.error("Session save failed:", e);
 			});
 	}
 
@@ -3028,7 +3070,7 @@
 			shortcuts: [
 				...group.shortcuts,
 				{
-					keys: ['←', '→'],
+					keys: ["←", "→"],
 					description: "Walk the selected clip's lane through its moshes",
 				},
 			],
@@ -3037,26 +3079,26 @@
 
 	const shortcutGroups = $derived([
 		{
-			title: 'Editor',
+			title: "Editor",
 			shortcuts: [
-				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
-				{ keys: ['←'], description: 'Previous mosh' },
-				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
+				{ keys: ["→"], description: "Next mosh, or roll a new one" },
+				{ keys: ["←"], description: "Previous mosh" },
+				{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
 				{
-					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-					description: 'Redo the last undone edit',
+					keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"],
+					description: "Redo the last undone edit",
 				},
-				{ keys: ['Ctrl/Cmd+S'], description: 'Save current frame' },
-				{ keys: ['Space'], description: 'Play / pause' },
-				{ keys: ['F'], description: 'Fullscreen preview (Esc to exit)' },
-				{ keys: ['C'], description: 'Follow the playhead on the timeline' },
-				{ keys: ['+', '-'], description: 'Zoom the timeline in / out' },
+				{ keys: ["Ctrl/Cmd+S"], description: "Save current frame" },
+				{ keys: ["Space"], description: "Play / pause" },
+				{ keys: ["F"], description: "Fullscreen preview (Esc to exit)" },
+				{ keys: ["C"], description: "Follow the playhead on the timeline" },
+				{ keys: ["+", "-"], description: "Zoom the timeline in / out" },
 				...(isSequenceMode
 					? []
 					: [
 							{
-								keys: ['V'],
-								description: 'Bake current frame as the new source (undoable)',
+								keys: ["V"],
+								description: "Bake current frame as the new source (undoable)",
 							},
 						]),
 			],
@@ -3064,46 +3106,49 @@
 		...(isSequenceMode
 			? [
 					{
-						title: 'Segment timeline',
+						title: "Segment timeline",
 						shortcuts: [
 							{
-								keys: ['Ctrl+Click'],
-								description: 'Create / split segment at cursor',
+								keys: ["Ctrl+Click"],
+								description: "Create / split segment at cursor",
 							},
 							{
-								keys: ['S'],
-								description: 'Split the last-used lane at the playhead',
+								keys: ["S"],
+								description: "Split the last-used lane at the playhead",
 							},
-							{ keys: ['Click'], description: 'Select segment for editing' },
+							{ keys: ["Click"], description: "Select segment for editing" },
 							{
-								keys: ['R'],
-								description: 'Loop playback inside the selected segment',
+								keys: ["R"],
+								description: "Loop playback inside the selected segment",
 							},
 							{
-								keys: ['←', '→'],
+								keys: ["←", "→"],
 								description: "Walk the selected segment's moshes",
 							},
 							{
-								keys: ['Delete', 'Backspace'],
-								description: 'Delete segment / selected boundaries',
+								keys: ["Delete", "Backspace"],
+								description: "Delete segment / selected boundaries",
 							},
-							{ keys: ['Esc'], description: 'Deselect / cancel paste' },
-							{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
+							{ keys: ["Esc"], description: "Deselect / cancel paste" },
+							{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
 							{
-								keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-								description: 'Redo the last undone edit',
+								keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"],
+								description: "Redo the last undone edit",
 							},
 							{
-								keys: ['Shift+Drag'],
-								description: 'Rectangle-select segments and boundaries',
+								keys: ["Shift+Drag"],
+								description: "Rectangle-select segments and boundaries",
 							},
-							{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected segments' },
+							{ keys: ["Ctrl/Cmd+C"], description: "Copy selected segments" },
 							{
-								keys: ['Ctrl/Cmd+V'],
+								keys: ["Ctrl/Cmd+V"],
 								description:
-									'Paste onto selection, or click to place a copied span. Effects copied from an fx clip land as effects alone',
+									"Paste onto selection, or click to place a copied span. Effects copied from an fx clip land as effects alone",
 							},
-							{ keys: ['Scroll', 'Shift+Scroll'], description: 'Zoom / pan timeline' },
+							{
+								keys: ["Scroll", "Shift+Scroll"],
+								description: "Zoom / pan timeline",
+							},
 						],
 					},
 				]
@@ -3111,30 +3156,37 @@
 		...(isSequenceMode && fxLanes.length > 0
 			? [
 					{
-						title: 'FX lanes',
+						title: "FX lanes",
 						shortcuts: [
 							{
-								keys: ['Ctrl+Click'],
-								description: 'Create clip in empty space / split the clip at cursor',
-							},
-							{ keys: ['Double-click'], description: 'Create clip in empty space' },
-							{ keys: ['Click'], description: 'Select clip for editing' },
-							{ keys: ['Shift+Click'], description: 'Select a range of clips' },
-							{
-								keys: ['Ctrl/Cmd+Shift+Click'],
-								description: 'Add / remove one clip from the selection',
+								keys: ["Ctrl+Click"],
+								description:
+									"Create clip in empty space / split the clip at cursor",
 							},
 							{
-								keys: ['Ctrl/Cmd+C'],
+								keys: ["Double-click"],
+								description: "Create clip in empty space",
+							},
+							{ keys: ["Click"], description: "Select clip for editing" },
+							{ keys: ["Shift+Click"], description: "Select a range of clips" },
+							{
+								keys: ["Ctrl/Cmd+Shift+Click"],
+								description: "Add / remove one clip from the selection",
+							},
+							{
+								keys: ["Ctrl/Cmd+C"],
 								description: "Copy the selected clips' effects",
 							},
 							{
-								keys: ['Ctrl/Cmd+V'],
+								keys: ["Ctrl/Cmd+V"],
 								description:
-									'Paste effects onto the selected clips (from a segment too)',
+									"Paste effects onto the selected clips (from a segment too)",
 							},
-							{ keys: ['Delete', 'Backspace'], description: 'Delete selected clips' },
-							{ keys: ['Esc'], description: 'Deselect' },
+							{
+								keys: ["Delete", "Backspace"],
+								description: "Delete selected clips",
+							},
+							{ keys: ["Esc"], description: "Deselect" },
 						],
 					},
 				]
@@ -3265,9 +3317,7 @@
 		if (fxLanes.some((l) => byId.has(l.id))) {
 			pushFxHistory(coalesceKey);
 			setFxLanes(
-				fxLanes.map((l) =>
-					byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
-				),
+				fxLanes.map((l) => (byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l)),
 			);
 		}
 		if (mediaTimeline.lanes.length > 0) {
@@ -3316,22 +3366,24 @@
 		const onUp = (ev: PointerEvent) => {
 			draggingLaneId = null;
 			handle.releasePointerCapture?.(ev.pointerId);
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onUp);
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
 		};
-		window.addEventListener('pointermove', onMove);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('pointercancel', onUp);
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	}
 
 	/** The layer row under the pointer, if any. */
 	function layerRowIdAt(x: number, y: number): string | null {
 		const el = document.elementFromPoint(x, y) as HTMLElement | null;
-		return el?.closest<HTMLElement>('[data-layer-id]')?.dataset.layerId ?? null;
+		return el?.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ?? null;
 	}
 
-	let selectedTextClip = $derived(findTextClip(textTimeline, selectedTextClipId));
+	let selectedTextClip = $derived(
+		findTextClip(textTimeline, selectedTextClipId),
+	);
 	/** The lane holding the selected clip — the panel edits its style. */
 	let selectedTextLane = $derived(
 		findTextClipLane(textTimeline, selectedTextClipId),
@@ -3350,7 +3402,10 @@
 	}
 
 	function pushTextHistory(coalesceKey?: string) {
-		textHistory.push($state.snapshot(textTimeline) as TextTimeline, coalesceKey);
+		textHistory.push(
+			$state.snapshot(textTimeline) as TextTimeline,
+			coalesceKey,
+		);
 	}
 
 	function setTextTimeline(next: TextTimeline) {
@@ -3487,36 +3542,36 @@
 	// pass through. Each kind gets a one-way effect instead: whichever
 	// selection the user just made survives, and the rest settle to null on the
 	// next pass.
-	type SelectionKind = 'segment' | 'fx' | 'media' | 'text';
+	type SelectionKind = "segment" | "fx" | "media" | "text";
 
 	function keepOnlySelection(keep: SelectionKind) {
 		untrack(() => {
 			// SequenceTimeline drops its own multi-selection when the primary id
 			// goes, so clearing that one is enough.
-			if (keep !== 'segment') selectedSegmentId = null;
-			if (keep !== 'fx') {
+			if (keep !== "segment") selectedSegmentId = null;
+			if (keep !== "fx") {
 				selectedFxClipId = null;
 				selectedFxClipIds = [];
 				// A lane picked by name aims the settings panel at it; left set,
 				// the panel would go on showing the wrong owner's settings.
 				selectedFxLaneId = null;
 			}
-			if (keep !== 'media') selectedMediaClipId = null;
-			if (keep !== 'text') selectedTextClipId = null;
+			if (keep !== "media") selectedMediaClipId = null;
+			if (keep !== "text") selectedTextClipId = null;
 		});
 	}
 
 	$effect(() => {
-		if (selectedSegmentId) keepOnlySelection('segment');
+		if (selectedSegmentId) keepOnlySelection("segment");
 	});
 	$effect(() => {
-		if (selectedFxClipId || selectedFxLaneId) keepOnlySelection('fx');
+		if (selectedFxClipId || selectedFxLaneId) keepOnlySelection("fx");
 	});
 	$effect(() => {
-		if (selectedMediaClipId) keepOnlySelection('media');
+		if (selectedMediaClipId) keepOnlySelection("media");
 	});
 	$effect(() => {
-		if (selectedTextClipId) keepOnlySelection('text');
+		if (selectedTextClipId) keepOnlySelection("text");
 	});
 
 	/**
@@ -3530,7 +3585,7 @@
 	 * way, so there dropping the layer selection is the whole gesture.
 	 */
 	function pickLayer(pick: LayerPick | null) {
-		if (pick?.kind === 'media') {
+		if (pick?.kind === "media") {
 			const lane = mediaTimeline.lanes.find((l) => l.id === pick.laneId);
 			const clip = lane ? clipAt(lane, textTime) : null;
 			if (!clip) return;
@@ -3538,7 +3593,7 @@
 			selectedMediaClipIds = [clip.id];
 			return;
 		}
-		if (pick?.kind === 'text') {
+		if (pick?.kind === "text") {
 			const lane = textTimeline.lanes.find((l) => l.id === pick.laneId);
 			const clip = lane ? clipAt(lane, textTime) : null;
 			if (clip) selectedTextClipId = clip.id;
@@ -3547,7 +3602,7 @@
 		selectedMediaClipId = null;
 		selectedMediaClipIds = [];
 		selectedTextClipId = null;
-		if (pick?.kind !== 'base' || !isSequenceMode) return;
+		if (pick?.kind !== "base" || !isSequenceMode) return;
 		// The segment the canvas is drawing, which is the one just clicked —
 		// activeSegment() is what the preview itself is fed.
 		const seg = activeSegment();
@@ -3569,17 +3624,16 @@
 	 * once, so "the lane under the playhead" names no single thing.
 	 */
 	type LayerLaneRef =
-		| { kind: 'media'; lane: MediaLane }
-		| { kind: 'text'; lane: TextLane };
+		{ kind: "media"; lane: MediaLane } | { kind: "text"; lane: TextLane };
 
 	function activeLayerLane(): LayerLaneRef | null {
-		if (selectedMediaLane) return { kind: 'media', lane: selectedMediaLane };
-		if (selectedTextLane) return { kind: 'text', lane: selectedTextLane };
+		if (selectedMediaLane) return { kind: "media", lane: selectedMediaLane };
+		if (selectedTextLane) return { kind: "text", lane: selectedTextLane };
 		return null;
 	}
 
 	function setLaneEffects(ref: LayerLaneRef, effects: EffectInstance[]) {
-		if (ref.kind === 'media') updateMediaLane({ ...ref.lane, effects });
+		if (ref.kind === "media") updateMediaLane({ ...ref.lane, effects });
 		else updateTextLane({ ...ref.lane, effects });
 	}
 
@@ -3648,18 +3702,18 @@
 	 * What a rail click assigns to. Segments and layer clips are mutually
 	 * exclusive selections, so the rail never has to choose between them.
 	 */
-	let railTarget = $derived<'segment' | 'clip' | null>(
+	let railTarget = $derived<"segment" | "clip" | null>(
 		seqSelectedIds.length > 0
-			? 'segment'
+			? "segment"
 			: selectedMediaClipIds.length > 0
-				? 'clip'
+				? "clip"
 				: null,
 	);
 
 	let railTargetCount = $derived(
-		railTarget === 'segment'
+		railTarget === "segment"
 			? seqSelectedIds.length
-			: railTarget === 'clip'
+			: railTarget === "clip"
 				? selectedMediaClipIds.length
 				: 0,
 	);
@@ -3675,8 +3729,8 @@
 	}
 
 	function assignRailSource(sourceId: string) {
-		if (railTarget === 'segment') assignSegmentSource(seqSelectedIds, sourceId);
-		else if (railTarget === 'clip') assignMediaClipSource(sourceId);
+		if (railTarget === "segment") assignSegmentSource(seqSelectedIds, sourceId);
+		else if (railTarget === "clip") assignMediaClipSource(sourceId);
 	}
 
 	function toggleTextTimeline() {
@@ -3692,49 +3746,48 @@
 		}
 	}
 
-
 	/** Transport for the lyrics-sync modal, on whichever clock owns the master
 	 * timeline here: the track, the video, or the still-image loop. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
 		textTimeline.enabled
 			? {
-				isPlaying: textNeedsTransport
-					? stillPlaying
-					: audio.audioPlaying || videoIsPlaying,
-				spanStart: textNeedsTransport
-					? 0
-					: seqMasterIsAudio
-						? audio.spanStart
-						: videoSpanStart,
-				spanEnd: textNeedsTransport
-					? textDuration
-					: seqMasterIsAudio
-						? audio.spanEnd
-						: videoSpanEnd,
-				getCurrentTime: () =>
-					textNeedsTransport
-						? stillClock
+					isPlaying: textNeedsTransport
+						? stillPlaying
+						: audio.audioPlaying || videoIsPlaying,
+					spanStart: textNeedsTransport
+						? 0
 						: seqMasterIsAudio
-							? audio.trackCurrentTime
-							: videoClock,
-				onPlay: textNeedsTransport
-					? () => (stillPlaying = true)
-					: seqMasterIsAudio
-						? playSpan
-						: playVideo,
-				onPause: textNeedsTransport
-					? () => (stillPlaying = false)
-					: seqMasterIsAudio
-						? pauseTrack
-						: pauseVideo,
-				onSeek: textNeedsTransport
-					? (t) => (stillClock = t)
-					: seqMasterIsAudio
-						? seekTo
-						: seekVideoTo,
-				onApply: applyLyrics,
-			}
-		: null,
+							? audio.spanStart
+							: videoSpanStart,
+					spanEnd: textNeedsTransport
+						? textDuration
+						: seqMasterIsAudio
+							? audio.spanEnd
+							: videoSpanEnd,
+					getCurrentTime: () =>
+						textNeedsTransport
+							? stillClock
+							: seqMasterIsAudio
+								? audio.trackCurrentTime
+								: videoClock,
+					onPlay: textNeedsTransport
+						? () => (stillPlaying = true)
+						: seqMasterIsAudio
+							? playSpan
+							: playVideo,
+					onPause: textNeedsTransport
+						? () => (stillPlaying = false)
+						: seqMasterIsAudio
+							? pauseTrack
+							: pauseVideo,
+					onSeek: textNeedsTransport
+						? (t) => (stillClock = t)
+						: seqMasterIsAudio
+							? seekTo
+							: seekVideoTo,
+					onApply: applyLyrics,
+				}
+			: null,
 	);
 
 	/** Drop the synced lines into the lyrics lane and select the first one. */
@@ -3745,7 +3798,9 @@
 		selectedTextClipId = clips[0].id;
 	}
 	let effectiveDuration = $derived(
-		audio.trackFile && audio.trackDuration > 0 && audio.spanEnd - audio.spanStart > 0
+		audio.trackFile &&
+			audio.trackDuration > 0 &&
+			audio.spanEnd - audio.spanStart > 0
 			? audio.spanEnd - audio.spanStart
 			: isVideo && videoDuration > 0
 				? (videoSpanEnd - videoSpanStart) / videoSpeed
@@ -3756,7 +3811,7 @@
 	async function startRecording() {
 		if (!canvasEl || !glRenderer || recordingState.recording) return;
 		if (noSequenceMedia) {
-			showToast('Add media before recording', 'info');
+			showToast("Add media before recording", "info");
 			return;
 		}
 		showRecordSettings = false;
@@ -3794,7 +3849,9 @@
 					file,
 					normalizeGain: audio.normalizeGain,
 					audioResponse,
-					textTimeline: textTimeline.enabled ? $state.snapshot(textTimeline) as TextTimeline : null,
+					textTimeline: textTimeline.enabled
+						? ($state.snapshot(textTimeline) as TextTimeline)
+						: null,
 					mediaTimeline: mediaTimeline.enabled
 						? ($state.snapshot(mediaTimeline) as MediaTimeline)
 						: null,
@@ -3805,7 +3862,9 @@
 					sequence:
 						isSequenceMode && sequenceSegments.length > 0
 							? {
-									segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
+									segments: $state.snapshot(
+										sequenceSegments,
+									) as SequenceSegment[],
 									moshOptions: getMoshOptions(),
 									duration: seqMasterDuration,
 									masterIsAudio: seqMasterIsAudio,
@@ -3822,9 +3881,9 @@
 					signal,
 				}),
 			{
-				onError: (message) => showToast(message, 'error'),
+				onError: (message) => showToast(message, "error"),
 				fallbackErrorMessage:
-					'Recording failed. Check the browser console for details.',
+					"Recording failed. Check the browser console for details.",
 			},
 		);
 
@@ -3843,13 +3902,13 @@
 	 * mode it joins the pool, since segments can each pick their own. */
 	function handleDroppedFiles(files: FileList) {
 		const all = Array.from(files);
-		const audioFile = all.find((f) => f.type.startsWith('audio/'));
+		const audioFile = all.find((f) => f.type.startsWith("audio/"));
 		if (audioFile) {
 			clearTrack();
 			audio.trackFile = audioFile;
 		}
 		const media = all.filter(
-			(f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
+			(f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
 		);
 		if (media.length === 0) return;
 		if (isSequenceMode) void addSequenceSources(media);
@@ -3871,7 +3930,7 @@
 		bind:this={audioEl}
 		src={audio.trackObjectUrl}
 		onloadedmetadata={() => audio.onAudioLoadedMetadata()}
-		onerror={() => showToast('Could not load this audio track', 'error')}
+		onerror={() => showToast("Could not load this audio track", "error")}
 		ontimeupdate={() => audio.onAudioTimeUpdate()}
 		onended={() => audio.onAudioEnded()}
 		onplay={() => (audio.audioPlaying = true)}
@@ -3879,8 +3938,6 @@
 		hidden
 	></audio>
 {/if}
-
-
 
 <div
 	class="editor"
@@ -3918,11 +3975,11 @@
 					<div class="output-group">
 						<ButtonGroup
 							buttons={[
-								{ label: 'Preview', value: 'preview' },
-								{ label: 'Grid', value: 'grid' },
+								{ label: "Preview", value: "preview" },
+								{ label: "Grid", value: "grid" },
 							]}
 							value={sequenceView}
-							onchange={(v) => (sequenceView = v as 'preview' | 'grid')}
+							onchange={(v) => (sequenceView = v as "preview" | "grid")}
 						/>
 					</div>
 					<div class="seq-media-actions">
@@ -3932,8 +3989,8 @@
 							<button
 								class="seq-media-btn"
 								title={seqSelectedIds.length > 0
-									? 'Deal the pool at random across the selected segments'
-									: 'Deal the pool at random across every segment'}
+									? "Deal the pool at random across the selected segments"
+									: "Deal the pool at random across every segment"}
 								onclick={() =>
 									randomizeSegmentSourcesFor(
 										seqSelectedIds.length > 0
@@ -3972,17 +4029,17 @@
 					</div>
 					<span class="source-count readout">
 						{sequenceSources.length} source{sequenceSources.length === 1
-							? ''
-							: 's'}
+							? ""
+							: "s"}
 					</span>
 				{:else}
 					<div class="output-group">
 						<span class="rack-label">Output</span>
 						<ButtonGroup
 							buttons={[
-								{ label: 'PNG', value: 'png' },
-								{ label: 'JPG', value: 'jpg' },
-								{ label: 'WebM', value: 'webm' },
+								{ label: "PNG", value: "png" },
+								{ label: "JPG", value: "jpg" },
+								{ label: "WebM", value: "webm" },
 							]}
 							value={format}
 							onchange={(v) => (format = v)}
@@ -4091,42 +4148,42 @@
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
 				onProxyAction={(id, action) => {
-					if (action === 'retry') sourceRegistry.retryProxy(id);
-					else sourceRegistry.setProxyEnabled(id, action === 'enable');
+					if (action === "retry") sourceRegistry.retryProxy(id);
+					else sourceRegistry.setProxyEnabled(id, action === "enable");
 				}}
 			/>
 		{/if}
 		<!-- Hidden, never unmounted: tearing the canvas down would take the
 		     renderer (and the pre-warmed context it adopted) with it. -->
 		<div class="preview-slot" class:hidden={sequenceGridOpen}>
-			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== 'none'}
+			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== "none"}
 				<!-- Single mode has no source chip, so the one thing that would
 				     otherwise happen silently to the user's video says so here. -->
 				<button
 					class="preview-proxy"
-					class:ok={singleProxyStatus.kind === 'ready'}
-					class:warn={singleProxyStatus.kind === 'failed'}
-					class:off={singleProxyStatus.kind === 'off'}
+					class:ok={singleProxyStatus.kind === "ready"}
+					class:warn={singleProxyStatus.kind === "failed"}
+					class:off={singleProxyStatus.kind === "off"}
 					title={`${singleProxyStatus.title} ${singleProxyStatus.action.hint}`}
 					onclick={() => {
 						const action = singleProxyStatus.action.kind;
-						if (action === 'retry') {
+						if (action === "retry") {
 							singleJobFor = null;
 							singleProxyFailed = false;
 							singleProxyReason = undefined;
 						} else {
-							setSingleProxyEnabled(action === 'enable');
+							setSingleProxyEnabled(action === "enable");
 						}
 					}}
 				>
-					{#if singleProxyStatus.kind === 'ready'}
+					{#if singleProxyStatus.kind === "ready"}
 						<Zap size={9} fill="currentColor" />
-					{:else if singleProxyStatus.kind === 'off'}
+					{:else if singleProxyStatus.kind === "off"}
 						<ZapOff size={9} />
-					{:else if singleProxyStatus.kind === 'failed'}
+					{:else if singleProxyStatus.kind === "failed"}
 						<TriangleAlert size={9} />
 					{/if}
-					{singleProxyStatus.kind === 'failed' ? '' : singleProxyStatus.badge}
+					{singleProxyStatus.kind === "failed" ? "" : singleProxyStatus.badge}
 				</button>
 			{/if}
 			<GlCanvas
@@ -4252,9 +4309,9 @@
 						{#if !isSequenceMode}
 							<ButtonGroup
 								buttons={[
-									{ label: 'PNG', value: 'png' },
-									{ label: 'JPG', value: 'jpg' },
-									{ label: 'WebM', value: 'webm' },
+									{ label: "PNG", value: "png" },
+									{ label: "JPG", value: "jpg" },
+									{ label: "WebM", value: "webm" },
 								]}
 								value={format}
 								onchange={(v) => (format = v)}
@@ -4266,7 +4323,10 @@
 							<input id="show-fps" type="checkbox" bind:checked={showFps} />
 						</div>
 						<div class="mosh-setting-row">
-							<label for="source-fit" title="How to fit sources that don't match the output aspect">
+							<label
+								for="source-fit"
+								title="How to fit sources that don't match the output aspect"
+							>
 								Fit sources
 							</label>
 							<select id="source-fit" bind:value={sourceFit}>
@@ -4374,7 +4434,7 @@
 				sources={sequenceSources}
 				primarySourceId={sourceRegistry.primaryId}
 				selectedCount={railTargetCount}
-				selectedLabel={railTarget === 'clip' ? 'layer clip' : 'segment'}
+				selectedLabel={railTarget === "clip" ? "layer clip" : "segment"}
 				selectedSourceId={railSourceId}
 				onAssign={assignRailSource}
 				onAdd={() => sourceInput?.click()}
@@ -4420,7 +4480,7 @@
 				onSeek={seekMaster}
 				spanStart={textTimeOffset}
 				selectionHint={isSequenceMode
-					? 'Click a segment or an FX clip to edit it'
+					? "Click a segment or an FX clip to edit it"
 					: null}
 				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
@@ -4450,7 +4510,7 @@
 					<!-- Read bottom to top, the way the frame is built: the segment lane
 				     is the root chain, the fx lanes stack onto it, and the layers
 				     composite over what those produced. -->
-				{#if mediaTimeline.enabled}
+					{#if mediaTimeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<span class="tl-tool-label">Layers</span>
 						<button
@@ -4458,7 +4518,7 @@
 							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
 							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
 								? `${MAX_MEDIA_LANES} layers is the limit — each one is another full-frame pass, and video layers each hold a decoder`
-								: 'Add a media layer over the image'}
+								: "Add a media layer over the image"}
 							onclick={addMediaLane}
 						>
 							<Plus size={12} /> Layer
@@ -4578,7 +4638,9 @@
 						onSpanEndChange={(t) => (videoSpanEnd = t)}
 						ariaLabel="Video timeline"
 						outputVolume={audio.outputVolume}
-						onVolumeChange={videoHasAudio && audio.analyserNode && !audio.trackFile
+						onVolumeChange={videoHasAudio &&
+						audio.analyserNode &&
+						!audio.trackFile
 							? (v) => audio.setOutputVolume(v)
 							: undefined}
 					/>
@@ -4630,35 +4692,50 @@
 			onchange={(e) => {
 				const picked = Array.from(e.currentTarget.files ?? []);
 				if (picked.length > 0) void addLayerSources(picked);
-				e.currentTarget.value = '';
+				e.currentTarget.value = "";
 			}}
 		/>
 	</div>
 	{#snippet moshSettings()}
 		<div class="mosh-settings-wrapper">
 			<MoshSettingsPanel
-				bind:moshMin={() => fxSetting('moshMin', moshMin),
-				(v) => setFxSetting('moshMin', v, (g) => (moshMin = g))}
-				bind:moshMax={() => fxSetting('moshMax', moshMax),
-				(v) => setFxSetting('moshMax', v, (g) => (moshMax = g))}
-				bind:randomizeOrder={() => fxSetting('randomizeOrder', randomizeOrder),
-				(v) => setFxSetting('randomizeOrder', v, (g) => (randomizeOrder = g))}
-				bind:moshAudioLink={() => fxSetting('moshAudioLink', moshAudioLink),
-				(v) => setFxSetting('moshAudioLink', v, (g) => (moshAudioLink = g))}
-				bind:moshAudioLinkStrength={() =>
-					fxSetting('moshAudioLinkStrength', moshAudioLinkStrength),
-				(v) =>
-					setFxSetting(
-						'moshAudioLinkStrength',
-						v,
-						(g) => (moshAudioLinkStrength = g),
-					)}
-				bind:moshLinkBand={() => fxSetting('moshLinkBand', moshLinkBand),
-				(v) => setFxSetting('moshLinkBand', v, (g) => (moshLinkBand = g))}
-				bind:audioSmoothing={() => fxResponse('smoothing', audioSmoothing),
-				(v) => setFxResponse('smoothing', v, (g) => (audioSmoothing = g))}
-				bind:audioPunch={() => fxResponse('punch', audioPunch),
-				(v) => setFxResponse('punch', v, (g) => (audioPunch = g))}
+				bind:moshMin={
+					() => fxSetting("moshMin", moshMin),
+					(v) => setFxSetting("moshMin", v, (g) => (moshMin = g))
+				}
+				bind:moshMax={
+					() => fxSetting("moshMax", moshMax),
+					(v) => setFxSetting("moshMax", v, (g) => (moshMax = g))
+				}
+				bind:randomizeOrder={
+					() => fxSetting("randomizeOrder", randomizeOrder),
+					(v) => setFxSetting("randomizeOrder", v, (g) => (randomizeOrder = g))
+				}
+				bind:moshAudioLink={
+					() => fxSetting("moshAudioLink", moshAudioLink),
+					(v) => setFxSetting("moshAudioLink", v, (g) => (moshAudioLink = g))
+				}
+				bind:moshAudioLinkStrength={
+					() => fxSetting("moshAudioLinkStrength", moshAudioLinkStrength),
+					(v) =>
+						setFxSetting(
+							"moshAudioLinkStrength",
+							v,
+							(g) => (moshAudioLinkStrength = g),
+						)
+				}
+				bind:moshLinkBand={
+					() => fxSetting("moshLinkBand", moshLinkBand),
+					(v) => setFxSetting("moshLinkBand", v, (g) => (moshLinkBand = g))
+				}
+				bind:audioSmoothing={
+					() => fxResponse("smoothing", audioSmoothing),
+					(v) => setFxResponse("smoothing", v, (g) => (audioSmoothing = g))
+				}
+				bind:audioPunch={
+					() => fxResponse("punch", audioPunch),
+					(v) => setFxResponse("punch", v, (g) => (audioPunch = g))
+				}
 				targetLabel={panelFxLane?.name ?? null}
 				{hasAudio}
 				showTiming={isSequenceMode || !!audio.trackFile}
@@ -4715,32 +4792,34 @@
 			<!-- A selected layer is edited by the top panel instead; the main
 			     chain would be a second, unrelated effect list under it. -->
 			{#if !selectedMediaClip && !selectedTextClip}
-			<EffectsPanel
-				bind:effects={getPanelEffects, setPanelEffects}
-				noTarget={panelNoTarget}
-				rolledNote={panelRolledNote}
-				rolledChain={!!panelIntervalSegment}
-				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-				spectrumData={audio.spectrumData}
-				response={audioResponse}
-				onVolumeLinkChange={(index, paramKey, link) => {
-					panelBeforeEdit(`link:${index}:${paramKey}`);
-					setPanelEffects(setVolumeLink(getPanelEffects(), index, paramKey, link));
-					markPanelSegmentEdited();
-				}}
-				onEffectsReplaced={endPanelBurst}
-				onPresetUpdated={seqSyncPreset}
-				onPresetApplied={(preset) => {
-					const target = selectedFxClip ?? panelSelectedSegment();
-					if (target) {
-						target.label = preset.name;
-						target.presetName = preset.name;
-						target.modified = false;
-					}
-				}}
-				onUserEdit={markPanelSegmentEdited}
-				onBeforeUserEdit={panelBeforeEdit}
-			/>
+				<EffectsPanel
+					bind:effects={getPanelEffects, setPanelEffects}
+					noTarget={panelNoTarget}
+					rolledNote={panelRolledNote}
+					rolledChain={!!panelIntervalSegment}
+					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+					spectrumData={audio.spectrumData}
+					response={audioResponse}
+					onVolumeLinkChange={(index, paramKey, link) => {
+						panelBeforeEdit(`link:${index}:${paramKey}`);
+						setPanelEffects(
+							setVolumeLink(getPanelEffects(), index, paramKey, link),
+						);
+						markPanelSegmentEdited();
+					}}
+					onEffectsReplaced={endPanelBurst}
+					onPresetUpdated={seqSyncPreset}
+					onPresetApplied={(preset) => {
+						const target = selectedFxClip ?? panelSelectedSegment();
+						if (target) {
+							target.label = preset.name;
+							target.presetName = preset.name;
+							target.modified = false;
+						}
+					}}
+					onUserEdit={markPanelSegmentEdited}
+					onBeforeUserEdit={panelBeforeEdit}
+				/>
 			{/if}
 		{/snippet}
 	</MobileSheet>
@@ -4760,7 +4839,10 @@
 
 	{#if showShortcuts}
 		{#await loadShortcutsModal() then ShortcutsModal}
-			<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+			<ShortcutsModal
+				groups={shortcutGroups}
+				onClose={() => (showShortcuts = false)}
+			/>
 		{/await}
 	{/if}
 
@@ -4814,7 +4896,6 @@
 		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
-
 
 	.toolbar {
 		flex: 1;
@@ -5099,7 +5180,9 @@
 		font-size: 0.68rem;
 		letter-spacing: 0.12em;
 		cursor: pointer;
-		transition: border-color var(--t-fast), color var(--t-fast);
+		transition:
+			border-color var(--t-fast),
+			color var(--t-fast);
 	}
 
 	.no-media-btn:hover {
@@ -5211,7 +5294,7 @@
 		flex-shrink: 0;
 	}
 
-	.mosh-setting-row input[type='checkbox'] {
+	.mosh-setting-row input[type="checkbox"] {
 		appearance: none;
 		width: 14px;
 		height: 14px;
@@ -5223,17 +5306,17 @@
 		flex-shrink: 0;
 	}
 
-	.mosh-setting-row input[type='checkbox']:hover {
+	.mosh-setting-row input[type="checkbox"]:hover {
 		border-color: var(--text-3);
 	}
 
-	.mosh-setting-row input[type='checkbox']:checked {
+	.mosh-setting-row input[type="checkbox"]:checked {
 		background: rgba(110, 231, 192, 0.15);
 		border-color: var(--live-dim);
 	}
 
-	.mosh-setting-row input[type='checkbox']:checked::after {
-		content: '';
+	.mosh-setting-row input[type="checkbox"]:checked::after {
+		content: "";
 		position: absolute;
 		inset: 0;
 		width: 100%;
@@ -5305,7 +5388,7 @@
 	}
 
 	.editor.drag-over::before {
-		content: '';
+		content: "";
 		position: absolute;
 		inset: 0;
 		z-index: 99;

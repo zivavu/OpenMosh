@@ -9,81 +9,86 @@ const PRESETS_KEY = "openmosh-presets";
 const SEEDED_KEY = "openmosh-presets-seeded";
 
 export function loadPresets(): Preset[] {
-  const stored = readJson<Preset[] | null>(PRESETS_KEY, null);
-  if (stored !== null) return stored;
-  // First run: seed the starters as ordinary, editable user presets. Guarded
-  // by its own key so a user who deletes them all doesn't get them back.
-  if (readRaw(SEEDED_KEY) === null) {
-    writeRaw(SEEDED_KEY, "1");
-    writeJson(PRESETS_KEY, STARTER_PRESETS);
-    return structuredClone(STARTER_PRESETS) as Preset[];
-  }
-  return [];
+	const stored = readJson<Preset[] | null>(PRESETS_KEY, null);
+	if (stored !== null) return stored;
+	// First run: seed the starters as ordinary, editable user presets. Guarded
+	// by its own key so a user who deletes them all doesn't get them back.
+	if (readRaw(SEEDED_KEY) === null) {
+		writeRaw(SEEDED_KEY, "1");
+		writeJson(PRESETS_KEY, STARTER_PRESETS);
+		return structuredClone(STARTER_PRESETS) as Preset[];
+	}
+	return [];
 }
 
 /** Names only ever render in narrow one-line rows. */
 export const PRESET_NAME_MAX_LENGTH = 40;
 
 export function normalizePresetName(name: string): string {
-  return name.trim().slice(0, PRESET_NAME_MAX_LENGTH).trim();
+	return name.trim().slice(0, PRESET_NAME_MAX_LENGTH).trim();
 }
 
 /** A spread alone leaves every link object shared with the chain it came from,
  * so dragging a link's range afterwards edits both sides. */
-function copyLinks(links: Record<string, VolumeLink>): Record<string, VolumeLink> {
-  return Object.fromEntries(
-    Object.entries(links).map(([key, link]) => [key, { ...link }]),
-  );
+function copyLinks(
+	links: Record<string, VolumeLink>,
+): Record<string, VolumeLink> {
+	return Object.fromEntries(
+		Object.entries(links).map(([key, link]) => [key, { ...link }]),
+	);
 }
 
 /** What a preset keeps of a live chain: no instance ids, no UI state, and no
  * empty volumeLinks key to bloat every saved entry. */
 function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
-  return effects.map((e) => ({
-    defId: e.defId,
-    enabled: e.enabled,
-    values: { ...e.values },
-    ...(e.volumeLinks &&
-      Object.keys(e.volumeLinks).length > 0 && {
-        volumeLinks: copyLinks(e.volumeLinks),
-      }),
-  }));
+	return effects.map((e) => ({
+		defId: e.defId,
+		enabled: e.enabled,
+		values: { ...e.values },
+		...(e.volumeLinks &&
+			Object.keys(e.volumeLinks).length > 0 && {
+				volumeLinks: copyLinks(e.volumeLinks),
+			}),
+	}));
 }
 
 export function savePreset(name: string, effects: EffectInstance[]): Preset[] {
-  const presets = loadPresets();
-  presets.push({
-    name: normalizePresetName(name),
-    effects: serializeEffects(effects),
-  });
-  writeJson(PRESETS_KEY, presets);
-  return presets;
+	const presets = loadPresets();
+	presets.push({
+		name: normalizePresetName(name),
+		effects: serializeEffects(effects),
+	});
+	writeJson(PRESETS_KEY, presets);
+	return presets;
 }
 
-export function updatePreset(index: number, effects: EffectInstance[]): Preset[] {
-  const presets = loadPresets();
-  presets[index].effects = serializeEffects(effects);
-  writeJson(PRESETS_KEY, presets);
-  return presets;
+export function updatePreset(
+	index: number,
+	effects: EffectInstance[],
+): Preset[] {
+	const presets = loadPresets();
+	presets[index].effects = serializeEffects(effects);
+	writeJson(PRESETS_KEY, presets);
+	return presets;
 }
 
 export function deletePreset(index: number): Preset[] {
-  const presets = loadPresets();
-  presets.splice(index, 1);
-  writeJson(PRESETS_KEY, presets);
-  return presets;
+	const presets = loadPresets();
+	presets.splice(index, 1);
+	writeJson(PRESETS_KEY, presets);
+	return presets;
 }
 
 export function applyPreset(preset: Preset): EffectInstance[] {
-  return preset.effects.map((pe) => ({
-    instanceId: generateId(),
-    defId: pe.defId,
-    enabled: pe.enabled,
-    locked: false,
-    expanded: false,
-    // Definition defaults underneath, so a preset saved before a param existed
-    // still gets a sane value for it.
-    values: hydrateValues(pe.defId, pe.values),
-    ...(pe.volumeLinks && { volumeLinks: copyLinks(pe.volumeLinks) }),
-  }));
+	return preset.effects.map((pe) => ({
+		instanceId: generateId(),
+		defId: pe.defId,
+		enabled: pe.enabled,
+		locked: false,
+		expanded: false,
+		// Definition defaults underneath, so a preset saved before a param existed
+		// still gets a sane value for it.
+		values: hydrateValues(pe.defId, pe.values),
+		...(pe.volumeLinks && { volumeLinks: copyLinks(pe.volumeLinks) }),
+	}));
 }

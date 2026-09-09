@@ -8,14 +8,14 @@
 		TriangleAlert,
 		Zap,
 		ZapOff,
-	} from 'lucide-svelte';
-	import type { SlideshowSlide, SlideshowConfig } from '../../slideshow/types';
-	import type { Preset } from '../../effects';
-	import { proxyStatus, type ProxyAction } from '../../video/proxy-status';
-	import { lazy } from '../../lazy';
+	} from "lucide-svelte";
+	import type { SlideshowSlide, SlideshowConfig } from "../../slideshow/types";
+	import type { Preset } from "../../effects";
+	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
+	import { lazy } from "../../lazy";
 
 	// Preview overlay: nothing loads it until a slide is opened.
-	const loadMediaLightbox = lazy(() => import('../ui/MediaLightbox.svelte'));
+	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
 
 	interface Props {
 		slides: SlideshowSlide[];
@@ -27,7 +27,7 @@
 		onShuffleSlides: () => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
 		/** Click on a slide's proxy badge — see proxyStatus's `action`. */
-		onProxyAction: (slideId: string, action: ProxyAction['kind']) => void;
+		onProxyAction: (slideId: string, action: ProxyAction["kind"]) => void;
 	}
 
 	let {
@@ -58,13 +58,13 @@
 	);
 
 	const MEDIA_TYPES = [
-		'image/png',
-		'image/jpeg',
-		'image/webp',
-		'image/gif',
-		'video/mp4',
-		'video/webm',
-		'video/quicktime',
+		"image/png",
+		"image/jpeg",
+		"image/webp",
+		"image/gif",
+		"video/mp4",
+		"video/webm",
+		"video/quicktime",
 	];
 
 	function onDrop(e: DragEvent) {
@@ -105,7 +105,7 @@
 	function onItemDragStart(e: DragEvent, index: number) {
 		dragFromIndex = index;
 		if (e.dataTransfer) {
-			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.effectAllowed = "move";
 		}
 	}
 
@@ -119,7 +119,7 @@
 		if (input.files && input.files.length > 0) {
 			onAddFiles(input.files);
 		}
-		input.value = '';
+		input.value = "";
 	}
 
 	function openLightbox(e: MouseEvent | KeyboardEvent, index: number) {
@@ -147,7 +147,7 @@
 	<input
 		bind:this={fileInput}
 		type="file"
-		accept={MEDIA_TYPES.join(',')}
+		accept={MEDIA_TYPES.join(",")}
 		multiple
 		onchange={onInputChange}
 		hidden
@@ -156,8 +156,7 @@
 	{#if slides.length === 0}
 		<div class="empty-state">
 			<p>
-				Nothing here yet. Drop images or videos in, or use the button
-				below.
+				Nothing here yet. Drop images or videos in, or use the button below.
 			</p>
 			<button class="add-btn" onclick={() => fileInput.click()}
 				>Add media</button
@@ -192,7 +191,7 @@
 					}}
 					onclick={(e) => openLightbox(e, i)}
 					onkeydown={(e) => {
-						if (e.key === 'Enter') openLightbox(e, i);
+						if (e.key === "Enter") openLightbox(e, i);
 					}}
 				>
 					{#if slide.thumbUrl}
@@ -205,30 +204,30 @@
 						</div>
 					{/if}
 					<div class="slide-index">{i + 1}</div>
-					{#if slide.kind === 'video'}
+					{#if slide.kind === "video"}
 						<div class="video-badge" title="Video">
 							<Play size={10} fill="currentColor" />
 						</div>
 						{@const proxy = proxyStatus(slide)}
-						{#if proxy.kind !== 'none'}
+						{#if proxy.kind !== "none"}
 							<button
 								class="proxy-badge"
-								class:ok={proxy.kind === 'ready'}
-								class:warn={proxy.kind === 'failed'}
-								class:off={proxy.kind === 'off'}
+								class:ok={proxy.kind === "ready"}
+								class:warn={proxy.kind === "failed"}
+								class:off={proxy.kind === "off"}
 								title={`${proxy.title} ${proxy.action.hint}`}
 								onclick={(e) => {
 									e.stopPropagation();
 									onProxyAction(slide.id, proxy.action.kind);
 								}}
 							>
-								{#if proxy.kind === 'ready'}
+								{#if proxy.kind === "ready"}
 									<Zap size={10} fill="currentColor" />
 									{proxy.badge}
-								{:else if proxy.kind === 'off'}
+								{:else if proxy.kind === "off"}
 									<ZapOff size={10} />
 									{proxy.badge}
-								{:else if proxy.kind === 'failed'}
+								{:else if proxy.kind === "failed"}
 									<TriangleAlert size={10} />
 								{:else}
 									{proxy.badge}
@@ -247,14 +246,14 @@
 						<X size={12} />
 					</button>
 
-					{#if config.moshMode === 'per-image'}
+					{#if config.moshMode === "per-image"}
 						<select
 							class="preset-select"
-							value={slide.presetIndex ?? ''}
+							value={slide.presetIndex ?? ""}
 							onchange={(e) => {
 								e.stopPropagation();
 								const val = (e.currentTarget as HTMLSelectElement).value;
-								onSetPresetIndex(slide.id, val === '' ? null : +val);
+								onSetPresetIndex(slide.id, val === "" ? null : +val);
 							}}
 							onclick={(e) => e.stopPropagation()}
 						>
@@ -409,7 +408,7 @@
 	}
 
 	.thumb-loading::after {
-		content: '';
+		content: "";
 		width: 16px;
 		height: 16px;
 		border: 2px solid var(--line);

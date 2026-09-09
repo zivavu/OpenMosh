@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
-	import { hexToHsv, hsvToHex, normalizeHex, type Hsv } from '../../color';
+	import { untrack } from "svelte";
+	import { hexToHsv, hsvToHex, normalizeHex, type Hsv } from "../../color";
 
 	interface Props {
 		value: string;
@@ -14,16 +14,16 @@
 
 	/** Fixed palette — the app's usual glitch primaries plus the neutrals. */
 	const SWATCHES = [
-		'#000000',
-		'#ffffff',
-		'#ff0000',
-		'#ff7a00',
-		'#ffe600',
-		'#00ff66',
-		'#00e5ff',
-		'#0066ff',
-		'#7a00ff',
-		'#ff00c8',
+		"#000000",
+		"#ffffff",
+		"#ff0000",
+		"#ff7a00",
+		"#ffe600",
+		"#00ff66",
+		"#00e5ff",
+		"#0066ff",
+		"#7a00ff",
+		"#ff00c8",
 	];
 
 	let open = $state(false);
@@ -40,16 +40,16 @@
 			if (!root?.contains(e.target as Node)) open = false;
 		};
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key !== 'Escape') return;
+			if (e.key !== "Escape") return;
 			open = false;
-			(root?.querySelector('.swatch') as HTMLElement | null)?.focus();
+			(root?.querySelector(".swatch") as HTMLElement | null)?.focus();
 		};
 
-		document.addEventListener('pointerdown', onPointerDown, true);
-		document.addEventListener('keydown', onKeyDown, true);
+		document.addEventListener("pointerdown", onPointerDown, true);
+		document.addEventListener("keydown", onKeyDown, true);
 		return () => {
-			document.removeEventListener('pointerdown', onPointerDown, true);
-			document.removeEventListener('keydown', onKeyDown, true);
+			document.removeEventListener("pointerdown", onPointerDown, true);
+			document.removeEventListener("keydown", onKeyDown, true);
 		};
 	});
 
@@ -76,29 +76,36 @@
 		el.setPointerCapture(e.pointerId);
 		const apply = (ev: PointerEvent) => {
 			const rect = el.getBoundingClientRect();
-			const fx = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
-			const fy = Math.min(1, Math.max(0, (ev.clientY - rect.top) / rect.height));
+			const fx = Math.min(
+				1,
+				Math.max(0, (ev.clientX - rect.left) / rect.width),
+			);
+			const fy = Math.min(
+				1,
+				Math.max(0, (ev.clientY - rect.top) / rect.height),
+			);
 			update(fx, fy);
 		};
 		apply(e);
 		const onMove = (ev: PointerEvent) => apply(ev);
 		const onUp = () => {
-			el.removeEventListener('pointermove', onMove);
-			el.removeEventListener('pointerup', onUp);
-			el.removeEventListener('pointercancel', onUp);
+			el.removeEventListener("pointermove", onMove);
+			el.removeEventListener("pointerup", onUp);
+			el.removeEventListener("pointercancel", onUp);
 		};
-		el.addEventListener('pointermove', onMove);
-		el.addEventListener('pointerup', onUp);
-		el.addEventListener('pointercancel', onUp);
+		el.addEventListener("pointermove", onMove);
+		el.addEventListener("pointerup", onUp);
+		el.addEventListener("pointercancel", onUp);
 	}
 
 	function onAreaKey(e: KeyboardEvent) {
 		const step = e.shiftKey ? 0.1 : 0.02;
-		if (e.key === 'ArrowLeft') commit({ ...hsv, s: Math.max(0, hsv.s - step) });
-		else if (e.key === 'ArrowRight')
+		if (e.key === "ArrowLeft") commit({ ...hsv, s: Math.max(0, hsv.s - step) });
+		else if (e.key === "ArrowRight")
 			commit({ ...hsv, s: Math.min(1, hsv.s + step) });
-		else if (e.key === 'ArrowUp') commit({ ...hsv, v: Math.min(1, hsv.v + step) });
-		else if (e.key === 'ArrowDown')
+		else if (e.key === "ArrowUp")
+			commit({ ...hsv, v: Math.min(1, hsv.v + step) });
+		else if (e.key === "ArrowDown")
 			commit({ ...hsv, v: Math.max(0, hsv.v - step) });
 		else return;
 		e.preventDefault();
@@ -106,8 +113,10 @@
 
 	function onHueKey(e: KeyboardEvent) {
 		const step = e.shiftKey ? 30 : 5;
-		if (e.key === 'ArrowLeft') commit({ ...hsv, h: (hsv.h - step + 360) % 360 });
-		else if (e.key === 'ArrowRight') commit({ ...hsv, h: (hsv.h + step) % 360 });
+		if (e.key === "ArrowLeft")
+			commit({ ...hsv, h: (hsv.h - step + 360) % 360 });
+		else if (e.key === "ArrowRight")
+			commit({ ...hsv, h: (hsv.h + step) % 360 });
 		else return;
 		e.preventDefault();
 	}
@@ -120,7 +129,7 @@
 			type="button"
 			class="swatch"
 			style="background: {swatchColor}"
-			title={open ? 'Close picker' : 'Pick a color'}
+			title={open ? "Close picker" : "Pick a color"}
 			aria-label="Pick a color"
 			aria-expanded={open}
 			onclick={() => (open = !open)}
@@ -250,8 +259,7 @@
 		touch-action: none;
 		background:
 			linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
-			linear-gradient(to right, #fff, rgba(255, 255, 255, 0)),
-			var(--hue);
+			linear-gradient(to right, #fff, rgba(255, 255, 255, 0)), var(--hue);
 	}
 
 	.sv-area:focus-visible,

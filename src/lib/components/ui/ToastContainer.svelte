@@ -1,15 +1,20 @@
 <script lang="ts">
-	import { getToasts, dismissToast, runToastAction } from './toast.svelte';
+	import { getToasts, dismissToast, runToastAction } from "./toast.svelte";
 
 	const toasts = getToasts();
 </script>
 
-<div class="toast-container" role="status" aria-live="polite" aria-atomic="true">
+<div
+	class="toast-container"
+	role="status"
+	aria-live="polite"
+	aria-atomic="true"
+>
 	{#each toasts as toast (toast.id)}
 		<div
 			class="toast"
-			class:error={toast.type === 'error'}
-			class:info={toast.type === 'info'}
+			class:error={toast.type === "error"}
+			class:info={toast.type === "info"}
 		>
 			<span class="message">{toast.message}</span>
 			{#if toast.action}

@@ -44,8 +44,7 @@ import {
 } from "mediabunny";
 
 export type ProxyWorkerRequest =
-	| { type: "convert"; id: number; file: File }
-	| { type: "cancel"; id: number };
+	{ type: "convert"; id: number; file: File } | { type: "cancel"; id: number };
 
 export type ProxyWorkerResponse =
 	/** The size the proxy will be, decided before the first frame is encoded. */
@@ -169,10 +168,15 @@ const DECODE_PROBES: Record<VideoCodec, string | null> = {
  * H.264 the whole time. Downscaling can't win back what a software decoder
  * gives away, so the codec has to be chosen from the playback side.
  */
-async function pickCodec(width: number, height: number): Promise<VideoCodec | null> {
+async function pickCodec(
+	width: number,
+	height: number,
+): Promise<VideoCodec | null> {
 	for (const codec of PROXY_CODECS) {
 		if (!(await canHardwareDecode(codec, width, height))) continue;
-		if (!(await canEncodeVideo(codec, { width, height, quality: PROXY_QUALITY }))) {
+		if (
+			!(await canEncodeVideo(codec, { width, height, quality: PROXY_QUALITY }))
+		) {
 			continue;
 		}
 		console.info(`[proxy] encoding in ${codec} (hardware-decodable here)`);
@@ -471,7 +475,11 @@ async function reportProxy(blob: Blob, sourceRealtime: number | null) {
 				`[proxy] ${await track.getCodecParameterString()} ${track.displayWidth}×${track.displayHeight}` +
 					` @ ${mbps.toFixed(1)} Mbps, decodes at ${realtime?.toFixed(1) ?? "?"}× realtime${versus}`,
 			);
-			if (realtime !== null && sourceRealtime !== null && realtime < sourceRealtime) {
+			if (
+				realtime !== null &&
+				sourceRealtime !== null &&
+				realtime < sourceRealtime
+			) {
 				console.warn(
 					"[proxy] the proxy decodes slower than the source it replaces",
 				);

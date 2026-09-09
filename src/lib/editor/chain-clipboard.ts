@@ -23,56 +23,56 @@ import type { SequenceSegment, SequenceSegmentMode } from "./sequence";
 
 /** The behaviour a segment and an fx clip both understand. */
 export interface ChainClip {
-  label: string;
-  mode?: SequenceSegmentMode;
-  presetName?: string;
-  modified?: boolean;
-  effects: EffectInstance[];
-  intervalSec?: number;
-  intervalBeats?: number;
-  seed?: number;
+	label: string;
+	mode?: SequenceSegmentMode;
+	presetName?: string;
+	modified?: boolean;
+	effects: EffectInstance[];
+	intervalSec?: number;
+	intervalBeats?: number;
+	seed?: number;
 }
 
 function capture(src: SequenceSegment | FxClip): ChainClip {
-  return {
-    label: src.label,
-    mode: src.mode,
-    presetName: src.presetName,
-    modified: src.modified,
-    // Cloned on the way in as well as out: the copy has to survive the source
-    // being edited or deleted before it is pasted.
-    effects: src.effects.map(cloneEffectInstance),
-    intervalSec: src.intervalSec,
-    intervalBeats: src.intervalBeats,
-    seed: src.seed,
-  };
+	return {
+		label: src.label,
+		mode: src.mode,
+		presetName: src.presetName,
+		modified: src.modified,
+		// Cloned on the way in as well as out: the copy has to survive the source
+		// being edited or deleted before it is pasted.
+		effects: src.effects.map(cloneEffectInstance),
+		intervalSec: src.intervalSec,
+		intervalBeats: src.intervalBeats,
+		seed: src.seed,
+	};
 }
 
 class ChainClipboard {
-  clips: ChainClip[] = [];
+	clips: ChainClip[] = [];
 
-  /**
-   * Bumped on every copy. The segment timeline keeps its own richer clipboard
-   * (whole segments, with their spans and media), so a paste there has to know
-   * which of the two was filled last — the same "newest wins" rule Ctrl+Z
-   * follows across the undo stacks.
-   */
-  stamp = 0;
+	/**
+	 * Bumped on every copy. The segment timeline keeps its own richer clipboard
+	 * (whole segments, with their spans and media), so a paste there has to know
+	 * which of the two was filled last — the same "newest wins" rule Ctrl+Z
+	 * follows across the undo stacks.
+	 */
+	stamp = 0;
 
-  /** Snapshot chains in the order given; the caller sorts by time. */
-  copy(items: (SequenceSegment | FxClip)[]) {
-    if (items.length === 0) return false;
-    this.clips = items.map(capture);
-    this.stamp++;
-    return true;
-  }
+	/** Snapshot chains in the order given; the caller sorts by time. */
+	copy(items: (SequenceSegment | FxClip)[]) {
+		if (items.length === 0) return false;
+		this.clips = items.map(capture);
+		this.stamp++;
+		return true;
+	}
 
-  /** Fresh instance ids each paste, so two pasted copies never share state. */
-  at(i: number): ChainClip | null {
-    const clip = this.clips[i % this.clips.length];
-    if (!clip) return null;
-    return { ...clip, effects: clip.effects.map(cloneEffectInstance) };
-  }
+	/** Fresh instance ids each paste, so two pasted copies never share state. */
+	at(i: number): ChainClip | null {
+		const clip = this.clips[i % this.clips.length];
+		if (!clip) return null;
+		return { ...clip, effects: clip.effects.map(cloneEffectInstance) };
+	}
 }
 
 export const chainClipboard = new ChainClipboard();
@@ -82,33 +82,33 @@ export const chainClipboard = new ChainClipboard();
  * media it plays, and the transition into it all stay put.
  */
 export function applyChainToSegment(
-  seg: SequenceSegment,
-  chain: ChainClip,
+	seg: SequenceSegment,
+	chain: ChainClip,
 ): SequenceSegment {
-  return {
-    ...seg,
-    label: chain.label,
-    mode: chain.mode ?? "static",
-    presetName: chain.presetName,
-    modified: chain.modified,
-    effects: chain.effects,
-    intervalSec: chain.intervalSec,
-    intervalBeats: chain.intervalBeats,
-    seed: chain.seed,
-  };
+	return {
+		...seg,
+		label: chain.label,
+		mode: chain.mode ?? "static",
+		presetName: chain.presetName,
+		modified: chain.modified,
+		effects: chain.effects,
+		intervalSec: chain.intervalSec,
+		intervalBeats: chain.intervalBeats,
+		seed: chain.seed,
+	};
 }
 
 /** The same, for an fx clip: its span and its fade are its own. */
 export function applyChainToFxClip(clip: FxClip, chain: ChainClip): FxClip {
-  return {
-    ...clip,
-    label: chain.label,
-    mode: chain.mode ?? "static",
-    presetName: chain.presetName,
-    modified: chain.modified,
-    effects: chain.effects,
-    intervalSec: chain.intervalSec,
-    intervalBeats: chain.intervalBeats,
-    seed: chain.seed,
-  };
+	return {
+		...clip,
+		label: chain.label,
+		mode: chain.mode ?? "static",
+		presetName: chain.presetName,
+		modified: chain.modified,
+		effects: chain.effects,
+		intervalSec: chain.intervalSec,
+		intervalBeats: chain.intervalBeats,
+		seed: chain.seed,
+	};
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { GripVertical } from 'lucide-svelte';
-	import { stackTitle, type LayerRef } from '../../timeline/layer-order';
+	import { GripVertical } from "lucide-svelte";
+	import { stackTitle, type LayerRef } from "../../timeline/layer-order";
 
 	interface Props {
 		/** Every row of the stack, front first — for naming this one's neighbours. */
@@ -16,7 +16,7 @@
 	let { layerOrder, laneId, laneName, onDragStart }: Props = $props();
 
 	let title = $derived(
-		`${stackTitle(layerOrder, laneId)}${onDragStart ? ' — drag to restack' : ''}`,
+		`${stackTitle(layerOrder, laneId)}${onDragStart ? " — drag to restack" : ""}`,
 	);
 </script>
 

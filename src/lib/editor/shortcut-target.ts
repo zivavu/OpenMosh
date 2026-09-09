@@ -12,35 +12,35 @@
 
 /** Input types that behave like a text field: caret, typing, native undo. */
 const TEXT_INPUT_TYPES = new Set([
-  "text",
-  "search",
-  "url",
-  "tel",
-  "email",
-  "password",
-  "number",
-  "date",
-  "datetime-local",
-  "month",
-  "week",
-  "time",
+	"text",
+	"search",
+	"url",
+	"tel",
+	"email",
+	"password",
+	"number",
+	"date",
+	"datetime-local",
+	"month",
+	"week",
+	"time",
 ]);
 
 /** Nearest enclosing form control / editable region, if any. */
 function closestControl(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof HTMLElement)) return null;
-  return target.closest<HTMLElement>(
-    'input, textarea, select, [contenteditable=""], [contenteditable="true"]',
-  );
+	if (!(target instanceof HTMLElement)) return null;
+	return target.closest<HTMLElement>(
+		'input, textarea, select, [contenteditable=""], [contenteditable="true"]',
+	);
 }
 
 /** The focused element edits text — leave every shortcut to it. */
 export function isTextEntryTarget(target: EventTarget | null): boolean {
-  const el = closestControl(target);
-  if (!el) return false;
-  if (el instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(el.type);
-  if (el instanceof HTMLSelectElement) return false;
-  return true; // textarea, or contenteditable region
+	const el = closestControl(target);
+	if (!el) return false;
+	if (el instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(el.type);
+	if (el instanceof HTMLSelectElement) return false;
+	return true; // textarea, or contenteditable region
 }
 
 /**
@@ -48,5 +48,5 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
  * so unmodified shortcuts must not also fire.
  */
 export function isInteractiveTarget(target: EventTarget | null): boolean {
-  return closestControl(target) !== null;
+	return closestControl(target) !== null;
 }

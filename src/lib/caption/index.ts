@@ -11,13 +11,13 @@ export { drawCaptionToCanvas, captionSignature } from "./render-caption";
  * first frames aren't rendered with a fallback face.
  */
 export async function preloadCaptionFonts(
-  effects: EffectInstance[],
+	effects: EffectInstance[],
 ): Promise<void> {
-  const families = new Set<string>();
-  for (const e of effects) {
-    if (e.enabled && e.defId === CAPTION_EFFECT_ID) {
-      families.add(String(e.values.font ?? ""));
-    }
-  }
-  await Promise.all([...families].map((f) => ensureFontLoaded(f)));
+	const families = new Set<string>();
+	for (const e of effects) {
+		if (e.enabled && e.defId === CAPTION_EFFECT_ID) {
+			families.add(String(e.values.font ?? ""));
+		}
+	}
+	await Promise.all([...families].map((f) => ensureFontLoaded(f)));
 }

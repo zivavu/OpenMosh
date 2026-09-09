@@ -1,5 +1,5 @@
-import { hexToVec3 } from '../color';
-import { DEFAULT_AUDIO_RESPONSE, punchExponent } from '../audio/auto-range';
+import { hexToVec3 } from "../color";
+import { DEFAULT_AUDIO_RESPONSE, punchExponent } from "../audio/auto-range";
 
 export const VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec2 a_position;
@@ -384,7 +384,7 @@ function setColor(
 }
 
 /** Create a setUniforms that maps each key to a float uniform named u_{key}. */
-function floats(...keys: string[]): EffectShaderDef['setUniforms'] {
+function floats(...keys: string[]): EffectShaderDef["setUniforms"] {
 	return (gl, l, v) => {
 		for (const key of keys) setFloat(gl, l, `u_${key}`, v[key] as number);
 	};
@@ -445,7 +445,7 @@ void main() {
   vec2 cell = (floor(v_uv * ts / cs) + 0.5) * cs;
   outColor = texture(u_texture, cell / ts);
 }`,
-		setUniforms: floats('size'),
+		setUniforms: floats("size"),
 	},
 
 	posterize: {
@@ -457,7 +457,7 @@ void main() {
   float n = max(2.0, u_levels);
   outColor = vec4(floor(c.rgb * n + 0.5) / n, c.a);
 }`,
-		setUniforms: floats('levels'),
+		setUniforms: floats("levels"),
 	},
 
 	solarize: {
@@ -489,7 +489,7 @@ void main() {
 
   outColor = vec4(clamp(hsv2rgb(vec3(hsv.x, sat, folded)), 0.0, 1.0), c.a);
 }`,
-		setUniforms: floats('pivot', 'curve', 'colorize'),
+		setUniforms: floats("pivot", "curve", "colorize"),
 	},
 
 	edges: {
@@ -513,10 +513,10 @@ void main() {
   vec4 orig = texture(u_texture, v_uv);
   outColor = vec4(mix(orig.rgb, edge.rgb, u_mix), orig.a);
 }`,
-		setUniforms: floats('strength', 'mix'),
+		setUniforms: floats("strength", "mix"),
 	},
 
-	'neon-edges': {
+	"neon-edges": {
 		fragment:
 			H +
 			HSV_GLSL +
@@ -574,7 +574,7 @@ void main() {
   vec3 result = neon * edge + glowAccum * sqrt(edge) * u_glow * 0.4 + bg;
   outColor = vec4(clamp(result, 0.0, 1.0), orig.a);
 }`,
-		setUniforms: floats('strength', 'glow', 'bg'),
+		setUniforms: floats("strength", "glow", "bg"),
 	},
 
 	bleach: {
@@ -587,7 +587,7 @@ void main() {
   vec3 b = (vec3(luma) - 0.5) * 1.5 + 0.5;
   outColor = vec4(mix(c.rgb, clamp(b, 0.0, 1.0), u_amount), c.a);
 }`,
-		setUniforms: floats('amount'),
+		setUniforms: floats("amount"),
 	},
 
 	sharpen: {
@@ -619,7 +619,7 @@ void main() {
   vec3 mask = step(vec3(u_threshold), abs(detail));
   outColor = vec4(clamp(c.rgb + detail * u_amount * mask, 0.0, 1.0), c.a);
 }`,
-		setUniforms: floats('amount', 'radius', 'threshold'),
+		setUniforms: floats("amount", "radius", "threshold"),
 	},
 
 	mirror: {
@@ -638,9 +638,9 @@ void main() {
   outColor = mix(texture(u_texture, v_uv), texture(u_texture, uv), u_amount);
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setInt(gl, l, 'u_side', v.side as number);
-			setFloat(gl, l, 'u_position', v.position as number);
+			setFloat(gl, l, "u_amount", v.amount as number);
+			setInt(gl, l, "u_side", v.side as number);
+			setFloat(gl, l, "u_position", v.position as number);
 		},
 	},
 
@@ -662,10 +662,10 @@ void main() {
   kUV = vec2(bounce(kUV.x), bounce(kUV.y));
   outColor = mix(texture(u_texture, v_uv), texture(u_texture, kUV), u_amount);
 }`,
-		setUniforms: floats('amount', 'sides', 'angle'),
+		setUniforms: floats("amount", "sides", "angle"),
 	},
 
-	'channel-split': {
+	"channel-split": {
 		fragment:
 			H +
 			`uniform int u_mode;
@@ -729,17 +729,17 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
-			const mode = v.mode === 'radial' ? 1 : v.mode === 'prismatic' ? 2 : 0;
-			setInt(gl, l, 'u_mode', mode);
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-			setFloat(gl, l, 'u_falloff', v.falloff as number);
-			setFloat(gl, l, 'u_saturation', v.saturation as number);
-			setFloat(gl, l, 'u_speed', v.speed as number);
+			const mode = v.mode === "radial" ? 1 : v.mode === "prismatic" ? 2 : 0;
+			setInt(gl, l, "u_mode", mode);
+			setFloat(gl, l, "u_amount", v.amount as number);
+			setFloat(gl, l, "u_angle", v.angle as number);
+			setFloat(gl, l, "u_falloff", v.falloff as number);
+			setFloat(gl, l, "u_saturation", v.saturation as number);
+			setFloat(gl, l, "u_speed", v.speed as number);
 		},
 	},
 
-	'color-correction': {
+	"color-correction": {
 		fragment:
 			H +
 			HUE_ROTATE_GLSL +
@@ -757,7 +757,7 @@ void main() {
   rgb = mix(vec3(luma), rgb, 1.0 + u_saturation);
   outColor = vec4(clamp(rgb, 0.0, 1.0), c.a);
 }`,
-		setUniforms: floats('brightness', 'contrast', 'hue', 'saturation'),
+		setUniforms: floats("brightness", "contrast", "hue", "saturation"),
 	},
 
 	vignette: {
@@ -777,7 +777,7 @@ void main() {
   // than getting painted over in black.
   outColor = u_transparent > 0.5 ? vec4(c.rgb, c.a * fade) : vec4(c.rgb * fade, c.a);
 }`,
-		setUniforms: floats('size', 'amount', 'transparent'),
+		setUniforms: floats("size", "amount", "transparent"),
 	},
 
 	scanlines: {
@@ -791,7 +791,7 @@ void main() {
   outColor = vec4(c.rgb * mix(1.0, line, u_amount), c.a);
 }`,
 		animated: true,
-		setUniforms: floats('count', 'amount'),
+		setUniforms: floats("count", "amount"),
 	},
 
 	bulge: {
@@ -810,7 +810,7 @@ void main() {
   }
   outColor = texture(u_texture, uv + center);
 }`,
-		setUniforms: floats('amount', 'radius'),
+		setUniforms: floats("amount", "radius"),
 	},
 
 	jitter: {
@@ -830,7 +830,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount'),
+		setUniforms: floats("amount"),
 	},
 
 	wobble: {
@@ -876,7 +876,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'frequency', 'speed'),
+		setUniforms: floats("amount", "frequency", "speed"),
 	},
 
 	slices: {
@@ -899,9 +899,9 @@ void main() {
   outColor = texture(u_texture, uv);
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_count', v.count as number);
-			setFloat(gl, l, 'u_offset', v.offset as number);
-			setInt(gl, l, 'u_direction', v.direction === 'vertical' ? 1 : 0);
+			setFloat(gl, l, "u_count", v.count as number);
+			setFloat(gl, l, "u_offset", v.offset as number);
+			setInt(gl, l, "u_direction", v.direction === "vertical" ? 1 : 0);
 		},
 	},
 
@@ -921,7 +921,7 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'speed'),
+		setUniforms: floats("amount", "speed"),
 	},
 
 	glow: {
@@ -976,10 +976,10 @@ void main() {
   float halo = dot(bloom * u_amount, vec3(0.299, 0.587, 0.114));
   outColor = vec4(orig.rgb + bloom * u_amount, clamp(max(orig.a, halo), 0.0, 1.0));
 }`,
-		setUniforms: floats('amount', 'cutoff', 'radius'),
+		setUniforms: floats("amount", "cutoff", "radius"),
 	},
 
-	'soft-glitch': {
+	"soft-glitch": {
 		fragment:
 			H +
 			`uniform float u_amount;
@@ -1075,10 +1075,10 @@ void main() {
   outColor = s;
 }`,
 		animated: true,
-		setUniforms: floats('amount'),
+		setUniforms: floats("amount"),
 	},
 
-	'optical-flow': {
+	"optical-flow": {
 		fragment:
 			H +
 			`uniform float u_amount;
@@ -1141,7 +1141,7 @@ void main() {
   outColor = vec4(clamp(avg, 0.0, 1.0), acc.a);
 }`,
 		animated: true,
-		setUniforms: floats('amount'),
+		setUniforms: floats("amount"),
 	},
 
 	vhs: {
@@ -1242,8 +1242,8 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_noise', v.static as number);
-			setFloat(gl, l, 'u_tracking', v.tracking as number);
+			setFloat(gl, l, "u_noise", v.static as number);
+			setFloat(gl, l, "u_tracking", v.tracking as number);
 		},
 	},
 
@@ -1260,9 +1260,9 @@ void main() {
   outColor = vec4(mix(c.rgb, duo, u_intensity), c.a);
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_intensity', v.intensity as number);
-			setColor(gl, l, 'u_shadowColor', v.shadowColor as string);
-			setColor(gl, l, 'u_highlightColor', v.highlightColor as string);
+			setFloat(gl, l, "u_intensity", v.intensity as number);
+			setColor(gl, l, "u_shadowColor", v.shadowColor as string);
+			setColor(gl, l, "u_highlightColor", v.highlightColor as string);
 		},
 	},
 
@@ -1312,11 +1312,11 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_amount', v.amount as number);
-			setFloat(gl, l, 'u_rgb', v.rgb as number);
+			setFloat(gl, l, "u_amount", v.amount as number);
+			setFloat(gl, l, "u_rgb", v.rgb as number);
 			const mode =
-				v.blendMode === 'softlight' ? 1 : v.blendMode === 'multiply' ? 2 : 0;
-			setInt(gl, l, 'u_blendMode', mode);
+				v.blendMode === "softlight" ? 1 : v.blendMode === "multiply" ? 2 : 0;
+			setInt(gl, l, "u_blendMode", mode);
 		},
 	},
 
@@ -1333,7 +1333,7 @@ void main() {
   vec2 polarUV = vec2(fract(a), bounce(r));
   outColor = mix(texture(u_texture, v_uv), texture(u_texture, polarUV), u_amount);
 }`,
-		setUniforms: floats('amount', 'angle'),
+		setUniforms: floats("amount", "angle"),
 	},
 
 	tile: {
@@ -1354,10 +1354,10 @@ void main() {
   outColor = texture(u_texture, mirrored);
 }`,
 		animated: true,
-		setUniforms: floats('size', 'offset', 'angle'),
+		setUniforms: floats("size", "offset", "angle"),
 	},
 
-	'data-bend': {
+	"data-bend": {
 		fragment:
 			H +
 			`uniform float u_intensity;
@@ -1449,7 +1449,7 @@ void main() {
   outColor = vec4(col, alpha);
 }`,
 		animated: true,
-		setUniforms: floats('intensity', 'corruption', 'channelShift'),
+		setUniforms: floats("intensity", "corruption", "channelShift"),
 	},
 
 	melt: {
@@ -1531,7 +1531,7 @@ void main() {
   outColor = vec4(clamp(col, 0.0, 1.0), mix(freshS.a, meltedA, meltOn));
 }`,
 		animated: true,
-		setUniforms: floats('amount'),
+		setUniforms: floats("amount"),
 	},
 
 	tunnel: {
@@ -1559,10 +1559,10 @@ void main() {
                   clamp(max(fresh.a, prev.a), 0.0, 1.0));
 }`,
 		animated: true,
-		setUniforms: floats('zoom', 'spin', 'decay'),
+		setUniforms: floats("zoom", "spin", "decay"),
 	},
 
-	'audio-bars': {
+	"audio-bars": {
 		fragment:
 			H +
 			`uniform sampler2D u_spectrum;
@@ -1615,23 +1615,28 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_bars', v.bars as number);
-			setFloat(gl, l, 'u_height', v.height as number);
-			setFloat(gl, l, 'u_gain', v.gain as number);
+			setFloat(gl, l, "u_bars", v.bars as number);
+			setFloat(gl, l, "u_height", v.height as number);
+			setFloat(gl, l, "u_gain", v.gain as number);
 			// Smoothing is applied on the CPU per instance before the texture upload;
 			// only the punch curve is cheap enough to leave to the shader.
 			setFloat(
 				gl,
 				l,
-				'u_punch',
+				"u_punch",
 				punchExponent(
-					typeof v.punch === 'number' ? v.punch : DEFAULT_AUDIO_RESPONSE.punch,
+					typeof v.punch === "number" ? v.punch : DEFAULT_AUDIO_RESPONSE.punch,
 				),
 			);
-			setFloat(gl, l, 'u_opacity', v.opacity as number);
-			setInt(gl, l, 'u_anchor', v.anchor === 'top' ? 1 : v.anchor === 'center' ? 2 : 0);
-			setInt(gl, l, 'u_style', v.style === 'segmented' ? 1 : 0);
-			setColor(gl, l, 'u_color', v.color as string);
+			setFloat(gl, l, "u_opacity", v.opacity as number);
+			setInt(
+				gl,
+				l,
+				"u_anchor",
+				v.anchor === "top" ? 1 : v.anchor === "center" ? 2 : 0,
+			);
+			setInt(gl, l, "u_style", v.style === "segmented" ? 1 : 0);
+			setColor(gl, l, "u_color", v.color as string);
 		},
 	},
 
@@ -1656,13 +1661,19 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_duty', v.duty as number);
-			setFloat(gl, l, 'u_amount', v.amount as number);
+			setFloat(gl, l, "u_duty", v.duty as number);
+			setFloat(gl, l, "u_amount", v.amount as number);
 			setInt(
 				gl,
 				l,
-				'u_mode',
-				v.mode === 'white' ? 1 : v.mode === 'invert' ? 2 : v.mode === 'mono' ? 3 : 0,
+				"u_mode",
+				v.mode === "white"
+					? 1
+					: v.mode === "invert"
+						? 2
+						: v.mode === "mono"
+							? 3
+							: 0,
 			);
 		},
 	},
@@ -1712,12 +1723,17 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_decay', v.decay as number);
-			setFloat(gl, l, 'u_scale', v.scale as number);
-			setFloat(gl, l, 'u_rotate', v.rotate as number);
-			setFloat(gl, l, 'u_warp', v.warp as number);
-			setFloat(gl, l, 'u_hue', v.hue as number);
-			setInt(gl, l, 'u_blend', v.blend === 'screen' ? 1 : v.blend === 'add' ? 2 : 0);
+			setFloat(gl, l, "u_decay", v.decay as number);
+			setFloat(gl, l, "u_scale", v.scale as number);
+			setFloat(gl, l, "u_rotate", v.rotate as number);
+			setFloat(gl, l, "u_warp", v.warp as number);
+			setFloat(gl, l, "u_hue", v.hue as number);
+			setInt(
+				gl,
+				l,
+				"u_blend",
+				v.blend === "screen" ? 1 : v.blend === "add" ? 2 : 0,
+			);
 		},
 	},
 
@@ -1762,11 +1778,11 @@ void main() {
 }`,
 		opaqueOutput: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_scale', v.scale as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
-			setFloat(gl, l, 'u_contrast', v.contrast as number);
-			setFloat(gl, l, 'u_invert', v.invert as number);
-			setInt(gl, l, 'u_mode', v.mode === 'lines' ? 2 : 0);
+			setFloat(gl, l, "u_scale", v.scale as number);
+			setFloat(gl, l, "u_angle", v.angle as number);
+			setFloat(gl, l, "u_contrast", v.contrast as number);
+			setFloat(gl, l, "u_invert", v.invert as number);
+			setInt(gl, l, "u_mode", v.mode === "lines" ? 2 : 0);
 		},
 	},
 
@@ -1873,7 +1889,7 @@ void main() {
   outColor = vec4(mix(src.rgb, col, u_mix), src.a);
 }`,
 		animated: true,
-		setUniforms: floats('bleed', 'crawl', 'crush', 'mix'),
+		setUniforms: floats("bleed", "crawl", "crush", "mix"),
 	},
 
 	swirl: {
@@ -1902,7 +1918,7 @@ void main() {
 }`,
 		animated: true,
 		linearFilter: true,
-		setUniforms: floats('angle', 'radius'),
+		setUniforms: floats("angle", "radius"),
 	},
 
 	ripple: {
@@ -1923,10 +1939,10 @@ void main() {
   outColor = texture(u_texture, uv);
 }`,
 		animated: true,
-		setUniforms: floats('amount', 'frequency'),
+		setUniforms: floats("amount", "frequency"),
 	},
 
-	'transform-3d': {
+	"transform-3d": {
 		fragment:
 			H +
 			BOUNCE_GLSL +
@@ -1999,18 +2015,29 @@ void main() {
 		animated: true,
 		linearFilter: true,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_rotX', v.rotX as number);
-			setFloat(gl, l, 'u_rotY', v.rotY as number);
-			setFloat(gl, l, 'u_rotZ', v.rotZ as number);
-			setFloat(gl, l, 'u_perspective', v.perspective as number);
-			setFloat(gl, l, 'u_zoom', v.zoom as number);
-			setFloat(gl, l, 'u_spin', v.spin as number);
-			setInt(gl, l, 'u_axis', v.axis === 'x' ? 0 : v.axis === 'z' ? 2 : v.axis === 'tumble' ? 3 : 1);
+			setFloat(gl, l, "u_rotX", v.rotX as number);
+			setFloat(gl, l, "u_rotY", v.rotY as number);
+			setFloat(gl, l, "u_rotZ", v.rotZ as number);
+			setFloat(gl, l, "u_perspective", v.perspective as number);
+			setFloat(gl, l, "u_zoom", v.zoom as number);
+			setFloat(gl, l, "u_spin", v.spin as number);
 			setInt(
 				gl,
 				l,
-				'u_edge',
-				v.edge === 'clamp' ? 1 : v.edge === 'tile' ? 2 : v.edge === 'mirror' ? 3 : 0,
+				"u_axis",
+				v.axis === "x" ? 0 : v.axis === "z" ? 2 : v.axis === "tumble" ? 3 : 1,
+			);
+			setInt(
+				gl,
+				l,
+				"u_edge",
+				v.edge === "clamp"
+					? 1
+					: v.edge === "tile"
+						? 2
+						: v.edge === "mirror"
+							? 3
+							: 0,
 			);
 		},
 	},
@@ -2031,10 +2058,10 @@ void main() {
 			`void main() {
   outColor = texture(u_texture, v_uv);
 }`,
-		setUniforms: floats('radius'),
+		setUniforms: floats("radius"),
 	},
 
-	'radial-blur': {
+	"radial-blur": {
 		fragment:
 			H +
 			`uniform float u_strength;
@@ -2050,7 +2077,7 @@ void main() {
   }
   outColor = col / total;
 }`,
-		setUniforms: floats('strength'),
+		setUniforms: floats("strength"),
 	},
 
 	emboss: {
@@ -2071,7 +2098,7 @@ void main() {
   vec4 orig = texture(u_texture, v_uv);
   outColor = vec4(mix(orig.rgb, emboss, u_mix), orig.a);
 }`,
-		setUniforms: floats('strength', 'angle', 'mix'),
+		setUniforms: floats("strength", "angle", "mix"),
 	},
 
 	thermal: {
@@ -2129,18 +2156,18 @@ void main() {
   outColor = vec4(mix(c.rgb, ramp, u_intensity), c.a);
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_intensity', v.intensity as number);
+			setFloat(gl, l, "u_intensity", v.intensity as number);
 			const p = v.palette as string;
 			setInt(
 				gl,
 				l,
-				'u_palette',
-				p === 'infrared' ? 1 : p === 'night-vision' ? 2 : 0,
+				"u_palette",
+				p === "infrared" ? 1 : p === "night-vision" ? 2 : 0,
 			);
 		},
 	},
 
-	'color-halves': {
+	"color-halves": {
 		fragment:
 			H +
 			HUE_ROTATE_GLSL +
@@ -2172,22 +2199,22 @@ void main() {
   outColor = vec4(result, orig.a);
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_position', v.position as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
+			setFloat(gl, l, "u_position", v.position as number);
+			setFloat(gl, l, "u_angle", v.angle as number);
 			const m = v.mode as string;
 			setInt(
 				gl,
 				l,
-				'u_mode',
-				m === 'hue-shift'
+				"u_mode",
+				m === "hue-shift"
 					? 1
-					: m === 'desaturate'
+					: m === "desaturate"
 						? 2
-						: m === 'high-contrast'
+						: m === "high-contrast"
 							? 3
 							: 0,
 			);
-			setFloat(gl, l, 'u_amount', v.amount as number);
+			setFloat(gl, l, "u_amount", v.amount as number);
 		},
 	},
 
@@ -2239,22 +2266,22 @@ void main() {
   }
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_depth', v.depth as number);
-			setFloat(gl, l, 'u_angle', v.angle as number);
+			setFloat(gl, l, "u_depth", v.depth as number);
+			setFloat(gl, l, "u_angle", v.angle as number);
 			const m = v.mode as string;
-			setInt(gl, l, 'u_mode', m === 'color-split' ? 1 : 0);
+			setInt(gl, l, "u_mode", m === "color-split" ? 1 : 0);
 			const ds = v.depthSource as string;
 			setInt(
 				gl,
 				l,
-				'u_depthSource',
-				ds === 'edges' ? 1 : ds === 'flat' ? 2 : 0,
+				"u_depthSource",
+				ds === "edges" ? 1 : ds === "flat" ? 2 : 0,
 			);
-			setFloat(gl, l, 'u_focus', v.focus as number);
+			setFloat(gl, l, "u_focus", v.focus as number);
 		},
 	},
 
-	'pixel-sort': {
+	"pixel-sort": {
 		fragment:
 			H +
 			`uniform float u_threshold;
@@ -2276,11 +2303,11 @@ void main() {
   outColor = texture(u_texture, v_uv + offset);
 }`,
 		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, 'u_threshold', v.threshold as number);
-			setFloat(gl, l, 'u_ceiling', v.ceiling as number);
-			setFloat(gl, l, 'u_range', v.range as number);
-			setInt(gl, l, 'u_direction', v.direction === 'vertical' ? 1 : 0);
-			setFloat(gl, l, 'u_reverse', v.reverse as number);
+			setFloat(gl, l, "u_threshold", v.threshold as number);
+			setFloat(gl, l, "u_ceiling", v.ceiling as number);
+			setFloat(gl, l, "u_range", v.range as number);
+			setInt(gl, l, "u_direction", v.direction === "vertical" ? 1 : 0);
+			setFloat(gl, l, "u_reverse", v.reverse as number);
 		},
 	},
 	smear: {
@@ -2321,7 +2348,7 @@ void main() {
   }
   outColor = acc / max(total, 1e-4);
 }`,
-		setUniforms: floats('amount', 'angle', 'trail'),
+		setUniforms: floats("amount", "angle", "trail"),
 	},
 
 	relief: {
@@ -2368,7 +2395,7 @@ void main() {
 
   outColor = texture(u_texture, hitPos);
 }`,
-		setUniforms: floats('amount', 'angle'),
+		setUniforms: floats("amount", "angle"),
 	},
 
 	zoom: {
@@ -2382,10 +2409,10 @@ void main() {
   uv = vec2(bounce(uv.x), bounce(uv.y));
   outColor = texture(u_texture, uv);
 }`,
-		setUniforms: floats('amount'),
+		setUniforms: floats("amount"),
 	},
 
-	'fiber-displace': {
+	"fiber-displace": {
 		fragment:
 			H +
 			BOUNCE_GLSL +
@@ -2503,10 +2530,17 @@ void main() {
   outColor = vec4(clamp(col, 0.0, 1.0), alpha);
 }`,
 		linearFilter: true,
-		setUniforms: floats('strength', 'density', 'comb', 'angle', 'chrome', 'smoothness'),
+		setUniforms: floats(
+			"strength",
+			"density",
+			"comb",
+			"angle",
+			"chrome",
+			"smoothness",
+		),
 	},
 
-	'liquid-light': {
+	"liquid-light": {
 		fragment:
 			H +
 			NOISE_GLSL +
@@ -2561,7 +2595,7 @@ void main() {
 }`,
 		animated: true,
 		linearFilter: true,
-		setUniforms: floats('scale', 'flow', 'refraction', 'dispersion'),
+		setUniforms: floats("scale", "flow", "refraction", "dispersion"),
 	},
 
 	petri: {
@@ -2631,10 +2665,10 @@ void main() {
 }`,
 		animated: true,
 		hdrFeedback: true,
-		setUniforms: floats('reaction', 'drift', 'scale', 'takeover'),
+		setUniforms: floats("reaction", "drift", "scale", "takeover"),
 	},
 
-	'flow-contours': {
+	"flow-contours": {
 		fragment:
 			H +
 			HUE_ROTATE_GLSL +
@@ -2702,7 +2736,7 @@ void main() {
   outColor = vec4(clamp(col, 0.0, 1.0), clamp(colA, 0.0, 1.0));
 }`,
 		animated: true,
-		setUniforms: floats('bands', 'flow', 'cycle', 'sheen'),
+		setUniforms: floats("bands", "flow", "cycle", "sheen"),
 	},
 };
 
@@ -2713,7 +2747,7 @@ export const ANIMATED_EFFECTS = new Set(
 );
 // Tracking is a 2D-canvas overlay (no shader) but animates every frame
 // (jitter / glitch-jumps / data scramble), so the render loop must keep running.
-ANIMATED_EFFECTS.add('tracking');
+ANIMATED_EFFECTS.add("tracking");
 
 /** Effects that paint their own background, so they can't sit on a text layer
  * without filling the frame. The text panel warns before one is added. */

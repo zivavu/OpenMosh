@@ -7,17 +7,17 @@
 		Play,
 		Plus,
 		X,
-	} from 'lucide-svelte';
-	import { onMount } from 'svelte';
-	import { readJson, readRaw, writeJson, writeRaw } from '../../storage';
-	import { getDecodedAudioBuffer } from '../../audio/audio-buffer-cache';
-	import { computeNormalizeGain, measureLoudness } from '../../audio/loudness';
+	} from "lucide-svelte";
+	import { onMount } from "svelte";
+	import { readJson, readRaw, writeJson, writeRaw } from "../../storage";
+	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
+	import { computeNormalizeGain, measureLoudness } from "../../audio/loudness";
 	import {
 		addTrack,
 		deleteTrack,
 		getAllTracks,
 		type StoredTrack,
-	} from '../../audio/track-library';
+	} from "../../audio/track-library";
 
 	interface Props {
 		activeTrackName: string | null;
@@ -48,14 +48,14 @@
 		onAutoAdded,
 	}: Props = $props();
 
-	const OPEN_KEY = 'openmosh-library-open';
-	let open = $state(readRaw(OPEN_KEY) === 'true');
+	const OPEN_KEY = "openmosh-library-open";
+	let open = $state(readRaw(OPEN_KEY) === "true");
 	let tracks = $state<StoredTrack[]>([]);
 	let libraryLoaded = $state(false);
 	let fileInput: HTMLInputElement;
 	let libraryEl: HTMLDivElement;
 
-	const NORMALIZE_KEY = 'openmosh-library-normalize';
+	const NORMALIZE_KEY = "openmosh-library-normalize";
 	let normalizedIds = $state<Set<string>>(
 		new Set(readJson<string[]>(NORMALIZE_KEY, [])),
 	);
@@ -95,7 +95,7 @@
 				tracks = [...tracks, track];
 				autoNormalize(track);
 			})
-			.catch((e) => console.error('Failed to auto-save track:', e));
+			.catch((e) => console.error("Failed to auto-save track:", e));
 	});
 
 	onMount(async () => {
@@ -103,7 +103,7 @@
 			const loaded = await getAllTracks();
 			tracks = loaded.sort((a, b) => a.addedAt - b.addedAt);
 		} catch (e) {
-			console.error('Failed to load tracks:', e);
+			console.error("Failed to load tracks:", e);
 		} finally {
 			libraryLoaded = true;
 		}
@@ -119,8 +119,8 @@
 				open = false;
 			}
 		}
-		document.addEventListener('pointerdown', onPointerDown);
-		return () => document.removeEventListener('pointerdown', onPointerDown);
+		document.addEventListener("pointerdown", onPointerDown);
+		return () => document.removeEventListener("pointerdown", onPointerDown);
 	});
 
 	/**
@@ -148,16 +148,14 @@
 				if (track.id === activeTrackId) onNormalizeChange?.(gain);
 			})
 			.catch((e) => {
-				console.error('Failed to measure track loudness:', e);
+				console.error("Failed to measure track loudness:", e);
 				normalizedIds = new Set(
 					[...normalizedIds].filter((x) => x !== track.id),
 				);
 				if (track.id === activeTrackId) onNormalizeChange?.(1.0);
 			})
 			.finally(() => {
-				measuringIds = new Set(
-					[...measuringIds].filter((x) => x !== track.id),
-				);
+				measuringIds = new Set([...measuringIds].filter((x) => x !== track.id));
 			});
 	}
 
@@ -170,14 +168,14 @@
 	async function onFileChange() {
 		const f = fileInput?.files?.[0];
 		if (!f) return;
-		fileInput.value = '';
+		fileInput.value = "";
 		try {
 			const track = await addTrack(f);
 			if (tracks.some((t) => t.id === track.id)) return;
 			tracks = [...tracks, track];
 			autoNormalize(track);
 		} catch (e) {
-			console.error('Failed to save track:', e);
+			console.error("Failed to save track:", e);
 		}
 	}
 
@@ -188,7 +186,7 @@
 			normalizedIds = new Set([...normalizedIds].filter((x) => x !== id));
 			gainCache.delete(id);
 		} catch (e) {
-			console.error('Failed to delete track:', e);
+			console.error("Failed to delete track:", e);
 		}
 	}
 
@@ -344,7 +342,7 @@
 						<button
 							class="preview-btn"
 							onclick={() => togglePlay(track)}
-							title={isPlaying ? 'Pause' : 'Play'}
+							title={isPlaying ? "Pause" : "Play"}
 						>
 							{#if isPlaying}
 								<Pause size={10} fill="currentColor" stroke="none" />
@@ -359,15 +357,15 @@
 							disabled={measuringIds.has(track.id)}
 							onclick={() => toggleNormalize(track)}
 							title={normalizedIds.has(track.id)
-								? 'Remove normalization'
-								: 'Normalize to -14 LUFS'}
+								? "Remove normalization"
+								: "Normalize to -14 LUFS"}
 						>
 							<AudioLines size={10} />
 						</button>
 						<button
 							class="name-btn"
 							onclick={() => toggleLoad(track)}
-							title={isActive ? 'Unload track' : 'Load track'}
+							title={isActive ? "Unload track" : "Load track"}
 						>
 							{track.name}
 						</button>

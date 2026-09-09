@@ -16,20 +16,20 @@
 
 /** How the raw band level is turned into the number a volume link rides. */
 export interface AudioResponse {
-   /** 0 = twitchy and immediate, 1 = slow and glidey. Sets the follower's release. */
-   smoothing: number;
-   /** Response curve. Low lifts quiet detail, high leaves only the big hits. */
-   punch: number;
+	/** 0 = twitchy and immediate, 1 = slow and glidey. Sets the follower's release. */
+	smoothing: number;
+	/** Response curve. Low lifts quiet detail, high leaves only the big hits. */
+	punch: number;
 }
 
 export const DEFAULT_AUDIO_RESPONSE: AudioResponse = {
-   smoothing: 0.45,
-   punch: 0.4,
+	smoothing: 0.45,
+	punch: 0.4,
 };
 
 /** Exponent applied after auto-ranging. 0.4 reproduces the old fixed 1.5. */
 export function punchExponent(punch: number): number {
-   return 0.5 + clamp01(punch) * 2.5;
+	return 0.5 + clamp01(punch) * 2.5;
 }
 
 const CEIL_DECAY_TAU = 2.5;
@@ -48,8 +48,8 @@ const FLOOR_FALL_TAU = 0.3;
 const MIN_SPAN = 0.06;
 
 interface BandEnvelope {
-   floor: number;
-   ceil: number;
+	floor: number;
+	ceil: number;
 }
 
 const envelopes = new Map<string, BandEnvelope>();
@@ -57,8 +57,8 @@ const smoothed = new Map<string, number>();
 
 /** Call on any signal discontinuity: seek, track change, export start. */
 export function resetAutoRange(): void {
-   envelopes.clear();
-   smoothed.clear();
+	envelopes.clear();
+	smoothed.clear();
 }
 
 /**
@@ -67,26 +67,31 @@ export function resetAutoRange(): void {
  * happened to reuse the id would inherit them.
  */
 export function dropAutoRangeScope(scope: string): void {
-   const prefix = `${scope}|`;
-   for (const key of envelopes.keys()) {
-      if (key.startsWith(prefix)) envelopes.delete(key);
-   }
-   for (const key of smoothed.keys()) {
-      if (key.startsWith(prefix)) smoothed.delete(key);
-   }
+	const prefix = `${scope}|`;
+	for (const key of envelopes.keys()) {
+		if (key.startsWith(prefix)) envelopes.delete(key);
+	}
+	for (const key of smoothed.keys()) {
+		if (key.startsWith(prefix)) smoothed.delete(key);
+	}
 }
 
 function clamp01(v: number): number {
-   return v < 0 ? 0 : v > 1 ? 1 : v;
+	return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 /** A stalled clock would otherwise snap a follower straight to its input. */
 function stepOf(dt: number): number {
-   return Math.max(0, Math.min(dt, 0.25));
+	return Math.max(0, Math.min(dt, 0.25));
 }
 
-function approach(current: number, target: number, tau: number, step: number): number {
-   return current + (target - current) * (1 - Math.exp(-step / tau));
+function approach(
+	current: number,
+	target: number,
+	tau: number,
+	step: number,
+): number {
+	return current + (target - current) * (1 - Math.exp(-step / tau));
 }
 
 /**
@@ -97,9 +102,12 @@ function approach(current: number, target: number, tau: number, step: number): n
  * of dropping out between hits. A symmetric follower fast enough to catch the
  * transient is also fast enough to flicker on every gap in the signal.
  */
-export function followerTaus(smoothing: number): { attack: number; release: number } {
-   const s = clamp01(smoothing);
-   return { attack: 0.02 + s * 0.08, release: 0.05 + s * s * 0.95 };
+export function followerTaus(smoothing: number): {
+	attack: number;
+	release: number;
+} {
+	const s = clamp01(smoothing);
+	return { attack: 0.02 + s * 0.08, release: 0.05 + s * s * 0.95 };
 }
 
 /**
@@ -112,59 +120,59 @@ export function followerTaus(smoothing: number): { attack: number; release: numb
  * on the monitor's refresh rate.
  */
 export function smoothBandLevel(
-   key: string,
-   level: number,
-   dt: number,
-   smoothing: number = DEFAULT_AUDIO_RESPONSE.smoothing,
+	key: string,
+	level: number,
+	dt: number,
+	smoothing: number = DEFAULT_AUDIO_RESPONSE.smoothing,
 ): number {
-   const prev = smoothed.get(key);
-   if (prev === undefined) {
-      smoothed.set(key, level);
-      return level;
-   }
-   const { attack, release } = followerTaus(smoothing);
-   const next = approach(
-      prev,
-      level,
-      level > prev ? attack : release,
-      stepOf(dt),
-   );
-   smoothed.set(key, next);
-   return next;
+	const prev = smoothed.get(key);
+	if (prev === undefined) {
+		smoothed.set(key, level);
+		return level;
+	}
+	const { attack, release } = followerTaus(smoothing);
+	const next = approach(
+		prev,
+		level,
+		level > prev ? attack : release,
+		stepOf(dt),
+	);
+	smoothed.set(key, next);
+	return next;
 }
 
 /** Position of `level` in the band's recent range, in [0, 1]. */
 export function autoRangeLevel(key: string, level: number, dt: number): number {
-   let env = envelopes.get(key);
-   if (!env) {
-      // Seeded around the first sample so playback starts mid-scale, not at 0.
-      env = { floor: level - MIN_SPAN / 2, ceil: level + MIN_SPAN / 2 };
-      envelopes.set(key, env);
-   }
+	let env = envelopes.get(key);
+	if (!env) {
+		// Seeded around the first sample so playback starts mid-scale, not at 0.
+		env = { floor: level - MIN_SPAN / 2, ceil: level + MIN_SPAN / 2 };
+		envelopes.set(key, env);
+	}
 
-   const step = stepOf(dt);
+	const step = stepOf(dt);
 
-   // Asymmetric: reach for new extremes quickly, drift back from them slowly.
-   env.ceil = approach(
-      env.ceil,
-      level,
-      level > env.ceil ? CEIL_RISE_TAU : CEIL_DECAY_TAU,
-      step,
-   );
-   env.floor = approach(
-      env.floor,
-      level,
-      level < env.floor ? FLOOR_FALL_TAU : FLOOR_RISE_TAU,
-      step,
-   );
+	// Asymmetric: reach for new extremes quickly, drift back from them slowly.
+	env.ceil = approach(
+		env.ceil,
+		level,
+		level > env.ceil ? CEIL_RISE_TAU : CEIL_DECAY_TAU,
+		step,
+	);
+	env.floor = approach(
+		env.floor,
+		level,
+		level < env.floor ? FLOOR_FALL_TAU : FLOOR_RISE_TAU,
+		step,
+	);
 
-   // A band with no dynamics used to bail out at 0, snapping every param linked
-   // to it to the bottom of its range the moment the music went steady. Instead
-   // the ranged reading fades back into the raw level as the span closes, so a
-   // steady band reads steady where it actually sits — and silence still reads
-   // as silence rather than as the bottom of a meaningless window.
-   const span = env.ceil - env.floor;
-   const pos = clamp01((level - env.floor) / Math.max(span, MIN_SPAN));
-   const confidence = clamp01(span / MIN_SPAN);
-   return pos * confidence + clamp01(level) * (1 - confidence);
+	// A band with no dynamics used to bail out at 0, snapping every param linked
+	// to it to the bottom of its range the moment the music went steady. Instead
+	// the ranged reading fades back into the raw level as the span closes, so a
+	// steady band reads steady where it actually sits — and silence still reads
+	// as silence rather than as the bottom of a meaningless window.
+	const span = env.ceil - env.floor;
+	const pos = clamp01((level - env.floor) / Math.max(span, MIN_SPAN));
+	const confidence = clamp01(span / MIN_SPAN);
+	return pos * confidence + clamp01(level) * (1 - confidence);
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import { readJson, writeJson } from '../../storage';
+	import { tick } from "svelte";
+	import { readJson, writeJson } from "../../storage";
 	import {
 		Check,
 		ChevronsDownUp,
@@ -9,7 +9,7 @@
 		Save,
 		Search,
 		X,
-	} from 'lucide-svelte';
+	} from "lucide-svelte";
 	import {
 		EFFECT_DEFINITIONS,
 		HIDDEN_EFFECTS_KEY,
@@ -25,12 +25,12 @@
 		type EffectInstance,
 		type Preset,
 		type VolumeLink,
-	} from '../../effects';
-	import type { SpectrumData } from '../../types';
-	import type { AudioResponse } from '../../audio/auto-range';
-	import { moveItem, resolveMoveTarget } from '../../effects/reorder';
-	import { isMoshable } from '../../editor/mosh';
-	import EffectItem from './EffectItem.svelte';
+	} from "../../effects";
+	import type { SpectrumData } from "../../types";
+	import type { AudioResponse } from "../../audio/auto-range";
+	import { moveItem, resolveMoveTarget } from "../../effects/reorder";
+	import { isMoshable } from "../../editor/mosh";
+	import EffectItem from "./EffectItem.svelte";
 
 	export type { SpectrumData };
 
@@ -79,7 +79,7 @@
 		 * scratch, so nothing in it survives. 'moshable' — the roll runs over a
 		 * copy and skips non-moshable effects, so those keep the user's switch,
 		 * order and params and stay fully editable. */
-		rolledScope?: 'all' | 'moshable';
+		rolledScope?: "all" | "moshable";
 	}
 
 	let {
@@ -96,12 +96,12 @@
 		noTarget = null,
 		rolledNote = null,
 		rolledChain = false,
-		rolledScope = 'all',
+		rolledScope = "all",
 	}: Props = $props();
 
 	/** False for an effect the roll leaves alone — its controls stay live. */
 	function isRolled(effect: EffectInstance): boolean {
-		return rolledScope === 'all' || isMoshable(effect);
+		return rolledScope === "all" || isMoshable(effect);
 	}
 
 	/** How many effects are actually passing signal, shown in the panel header. */
@@ -112,7 +112,7 @@
 	// chain below is what the panel is for.
 	let showPresets = $state(false);
 	let saving = $state(false);
-	let presetName = $state('');
+	let presetName = $state("");
 
 	// Warn only near the cap, so the row stays quiet for ordinary short names.
 	const NAME_COUNTER_FROM = PRESET_NAME_MAX_LENGTH - 8;
@@ -123,7 +123,7 @@
 		const name = normalizePresetName(presetName);
 		if (!name) return;
 		presets = savePreset(name, $state.snapshot(effects));
-		presetName = '';
+		presetName = "";
 		saving = false;
 	}
 
@@ -160,7 +160,7 @@
 
 	let dragFromIndex: number | null = $state(null);
 	let dragOverIndex: number | null = $state(null);
-	let dropPosition: 'above' | 'below' | null = $state(null);
+	let dropPosition: "above" | "below" | null = $state(null);
 
 	function toggle(index: number) {
 		onBeforeUserEdit?.();
@@ -199,8 +199,8 @@
 	const stashedValues = new Map<
 		string,
 		{
-			values: EffectInstance['values'];
-			volumeLinks: EffectInstance['volumeLinks'];
+			values: EffectInstance["values"];
+			volumeLinks: EffectInstance["volumeLinks"];
 		}
 	>();
 
@@ -237,10 +237,10 @@
 			return;
 		}
 		stashedValues.set(effect.defId, {
-			values: $state.snapshot(effect.values) as EffectInstance['values'],
+			values: $state.snapshot(effect.values) as EffectInstance["values"],
 			volumeLinks: $state.snapshot(
 				effect.volumeLinks,
-			) as EffectInstance['volumeLinks'],
+			) as EffectInstance["volumeLinks"],
 		});
 		hiddenIds = new Set([...hiddenIds, effect.defId]);
 		persistHiddenIds();
@@ -257,7 +257,7 @@
 
 	let showHidden = $state(false);
 
-	let searchQuery = $state('');
+	let searchQuery = $state("");
 
 	// Narrows the list to the effects actually passing signal — the working set
 	// once a mosh has filled the chain with things you don't want to scroll past.
@@ -297,7 +297,8 @@
 		const stashed = stashedValues.get(defId);
 		if (stashed) {
 			instance.values = { ...instance.values, ...stashed.values };
-			if (stashed.volumeLinks) instance.volumeLinks = { ...stashed.volumeLinks };
+			if (stashed.volumeLinks)
+				instance.volumeLinks = { ...stashed.volumeLinks };
 			stashedValues.delete(defId);
 		}
 		effects.push(instance);
@@ -314,8 +315,8 @@
 	function handleDragStart(index: number, e: DragEvent) {
 		dragFromIndex = index;
 		if (e.dataTransfer) {
-			e.dataTransfer.effectAllowed = 'move';
-			e.dataTransfer.setData('text/plain', String(index));
+			e.dataTransfer.effectAllowed = "move";
+			e.dataTransfer.setData("text/plain", String(index));
 		}
 	}
 
@@ -328,7 +329,7 @@
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const midY = rect.top + rect.height / 2;
 		dragOverIndex = index;
-		dropPosition = e.clientY < midY ? 'above' : 'below';
+		dropPosition = e.clientY < midY ? "above" : "below";
 	}
 
 	function handleDragLeave(index: number) {
@@ -342,7 +343,7 @@
 		if (dragFromIndex === null || dragFromIndex === index) return;
 
 		let targetIndex = index;
-		if (dropPosition === 'below') targetIndex += 1;
+		if (dropPosition === "below") targetIndex += 1;
 		if (dragFromIndex < targetIndex) targetIndex -= 1;
 
 		onBeforeUserEdit?.();
@@ -393,7 +394,7 @@
 			item.top - container.top - (container.height - item.height) / 2;
 		box.scrollTo({
 			top: box.scrollTop + delta,
-			behavior: 'smooth',
+			behavior: "smooth",
 		});
 	}
 
@@ -403,7 +404,7 @@
 		dropPosition = null;
 	}
 
-	function getDropIndicator(index: number): 'above' | 'below' | null {
+	function getDropIndicator(index: number): "above" | "below" | null {
 		if (dragOverIndex !== index) return null;
 		return dropPosition;
 	}
@@ -427,7 +428,7 @@
 	function scrollBox(): HTMLElement | null {
 		for (let el = listEl?.parentElement; el; el = el.parentElement) {
 			const overflow = getComputedStyle(el).overflowY;
-			if (overflow === 'auto' || overflow === 'scroll') return el;
+			if (overflow === "auto" || overflow === "scroll") return el;
 		}
 		return null;
 	}
@@ -471,7 +472,7 @@
 		startAutoScroll(touch.clientY);
 		const el = document.elementFromPoint(touch.clientX, touch.clientY);
 		if (!el) return;
-		const itemEl = el.closest?.('[data-effect-index]') as HTMLElement | null;
+		const itemEl = el.closest?.("[data-effect-index]") as HTMLElement | null;
 		if (!itemEl) {
 			dragOverIndex = null;
 			dropPosition = null;
@@ -486,7 +487,7 @@
 		const rect = itemEl.getBoundingClientRect();
 		const midY = rect.top + rect.height / 2;
 		dragOverIndex = idx;
-		dropPosition = touch.clientY < midY ? 'above' : 'below';
+		dropPosition = touch.clientY < midY ? "above" : "below";
 	}
 
 	function onDocTouchEnd() {
@@ -495,18 +496,18 @@
 		if (dragOverIndex !== null) handleDrop(dragOverIndex);
 		touchDragFromIndex = null;
 		clearDragState();
-		document.removeEventListener('touchmove', onDocTouchMove);
-		document.removeEventListener('touchend', onDocTouchEnd);
-		document.removeEventListener('touchcancel', onDocTouchEnd);
+		document.removeEventListener("touchmove", onDocTouchMove);
+		document.removeEventListener("touchend", onDocTouchEnd);
+		document.removeEventListener("touchcancel", onDocTouchEnd);
 	}
 
 	function handleTouchDragStart(index: number, e: TouchEvent) {
 		e.preventDefault();
 		touchDragFromIndex = index;
 		dragFromIndex = index;
-		document.addEventListener('touchmove', onDocTouchMove, { passive: false });
-		document.addEventListener('touchend', onDocTouchEnd);
-		document.addEventListener('touchcancel', onDocTouchEnd);
+		document.addEventListener("touchmove", onDocTouchMove, { passive: false });
+		document.addEventListener("touchend", onDocTouchEnd);
+		document.addEventListener("touchcancel", onDocTouchEnd);
 	}
 </script>
 
@@ -528,230 +529,242 @@
 			</div>
 		</div>
 	{:else}
-	<div class="presets-section">
-		<button class="presets-header" onclick={() => (showPresets = !showPresets)}>
-			<span class="presets-arrow" class:expanded={showPresets}>&#9654;</span>
-			<span>Presets{presets.length > 0 ? ` (${presets.length})` : ''}</span>
-		</button>
+		<div class="presets-section">
+			<button
+				class="presets-header"
+				onclick={() => (showPresets = !showPresets)}
+			>
+				<span class="presets-arrow" class:expanded={showPresets}>&#9654;</span>
+				<span>Presets{presets.length > 0 ? ` (${presets.length})` : ""}</span>
+			</button>
 
-		{#if showPresets}
-			<div class="presets-body">
-				{#if saving}
-					<!-- svelte-ignore a11y_autofocus -->
-					<form
-						class="preset-save-row"
-						onsubmit={(e) => {
-							e.preventDefault();
-							handleSavePreset();
-						}}
-					>
-						<input
-							class="preset-name-input"
-							type="text"
-							placeholder="Preset name..."
-							maxlength={PRESET_NAME_MAX_LENGTH}
-							bind:value={presetName}
-							autofocus
-						/>
-						{#if showNameCounter}
-							<span
-								class="preset-name-count"
-								class:at-max={presetName.length >= PRESET_NAME_MAX_LENGTH}
-							>
-								{presetName.length}/{PRESET_NAME_MAX_LENGTH}
-							</span>
-						{/if}
-						<button class="preset-confirm-btn" type="submit" title="Save" aria-label="Save preset">
-							<Check size={14} />
-						</button>
-						<button
-							class="preset-cancel-btn"
-							type="button"
-							onclick={() => {
-								saving = false;
-								presetName = '';
+			{#if showPresets}
+				<div class="presets-body">
+					{#if saving}
+						<!-- svelte-ignore a11y_autofocus -->
+						<form
+							class="preset-save-row"
+							onsubmit={(e) => {
+								e.preventDefault();
+								handleSavePreset();
 							}}
-							title="Cancel"
 						>
-							<X size={14} />
-						</button>
-					</form>
-				{:else}
-					<button class="preset-save-trigger" onclick={() => (saving = true)}>
-						<Plus size={12} />
-						Save current
-					</button>
-				{/if}
-
-				{#each presets as preset, i (i)}
-					<div class="preset-item">
-						<button
-							class="preset-load-btn"
-							onclick={() => handleLoadPreset(i)}
-							title="Load preset"
-						>
-							{preset.name}
-						</button>
-						<button
-							class="preset-delete-btn preset-update-btn"
-							onclick={() => handleUpdatePreset(i)}
-							title="Overwrite with current effects"
-						>
-							<Save size={11} />
-						</button>
-						<button
-							class="preset-delete-btn"
-							onclick={() => handleDeletePreset(i)}
-							title="Delete preset"
-						>
-							<X size={12} />
-						</button>
-					</div>
-				{/each}
-
-				{#if presets.length === 0 && !saving}
-					<div class="preset-empty">No saved presets</div>
-				{/if}
-			</div>
-		{/if}
-	</div>
-
-	<div class="search-bar">
-		<Search class="search-icon" size={13} />
-		<input
-			class="search-input"
-			type="text"
-			placeholder="Search effects..."
-			bind:value={searchQuery}
-		/>
-		{#if searchQuery}
-			<button
-				class="search-clear"
-				onclick={() => (searchQuery = '')}
-				title="Clear"
-			>
-				<X size={12} />
-			</button>
-		{/if}
-		<button
-			class="search-clear live-filter"
-			class:on={onlyLive}
-			onclick={() => (onlyLive = !onlyLive)}
-			title={onlyLive
-				? 'Showing live effects only — click to show the whole chain'
-				: 'Show live effects only'}
-			aria-pressed={onlyLive}
-			aria-label="Show live effects only"
-		>
-			<Filter size={13} />
-		</button>
-		{#if anyExpanded}
-			<button
-				class="search-clear"
-				onclick={collapseAll}
-				title="Collapse all open effects"
-				aria-label="Collapse all effects"
-			>
-				<ChevronsDownUp size={13} />
-			</button>
-		{/if}
-	</div>
-
-	<div class="panel-list" bind:this={listEl}>
-		{#if rolledNote}
-			<p class="rolled-note">{rolledNote}</p>
-		{/if}
-		{#each filteredEffects as { effect, index: i }, pos (effect.instanceId)}
-			<EffectItem
-				{effect}
-				canMoveUp={pos > 0}
-				canMoveDown={pos < filteredEffects.length - 1}
-				onMove={(direction, toEnd) => moveEffect(pos, direction, toEnd)}
-				{hasTrack}
-				{spectrumData}
-				{response}
-				onVolumeLinkChange={onVolumeLinkChange
-					? (key, link) => onVolumeLinkChange(i, key, link)
-					: undefined}
-				onToggle={() => toggle(i)}
-				rolledNote={isRolled(effect) ? rolledNote : null}
-				rolledChain={rolledChain && isRolled(effect)}
-				onToggleExpand={() => toggleExpand(i)}
-				onHide={() => hide(i)}
-				onDuplicate={() => duplicate(i)}
-				isCopy={isCopy(effect)}
-				onParamChange={(key, value) => paramChange(i, key, value)}
-				isDragging={dragFromIndex === i}
-				dropIndicator={getDropIndicator(i)}
-				onDragStart={(e) => handleDragStart(i, e)}
-				onDragOver={(e) => handleDragOver(i, e)}
-				onDragLeave={() => handleDragLeave(i)}
-				onDrop={() => handleDrop(i)}
-				onDragEnd={clearDragState}
-				onTouchDragStart={(e) => handleTouchDragStart(i, e)}
-				effectIndex={i}
-			/>
-		{/each}
-
-		{#if filteredEffects.length === 0}
-			<div class="list-empty">
-				{#if onlyLive && searchQuery}
-					<p class="empty-title">No live match</p>
-					<p class="empty-hint">
-						Nothing switched on is called “{searchQuery}”.
-					</p>
-					<button class="empty-action" onclick={() => (onlyLive = false)}>
-						Show the whole chain
-					</button>
-				{:else if onlyLive}
-					<p class="empty-title">Nothing is live</p>
-					<p class="empty-hint">
-						Switch an effect on, or hit MOSH to fill the chain for you.
-					</p>
-					<button class="empty-action" onclick={() => (onlyLive = false)}>
-						Show the whole chain
-					</button>
-				{:else if searchQuery}
-					<p class="empty-title">No match</p>
-					<p class="empty-hint">Nothing here is called “{searchQuery}”.</p>
-					<button class="empty-action" onclick={() => (searchQuery = '')}>
-						Clear the search
-					</button>
-				{:else}
-					<p class="empty-title">The chain is empty</p>
-					<p class="empty-hint">
-						Add effects from the list below to start building a look.
-					</p>
-				{/if}
-			</div>
-		{/if}
-
-		{#if filteredHiddenDefs.length > 0}
-			<button class="hidden-header" onclick={() => (showHidden = !showHidden)}>
-				<span class="hidden-arrow" class:expanded={showHidden || !!searchQuery}
-					>&#9654;</span
-				>
-				<span>Hidden effects ({filteredHiddenDefs.length})</span>
-			</button>
-
-			{#if showHidden || searchQuery}
-				<div class="hidden-list">
-					{#each filteredHiddenDefs as def (def.id)}
-						<div class="hidden-item">
-							<span class="hidden-name">{def.name}</span>
+							<input
+								class="preset-name-input"
+								type="text"
+								placeholder="Preset name..."
+								maxlength={PRESET_NAME_MAX_LENGTH}
+								bind:value={presetName}
+								autofocus
+							/>
+							{#if showNameCounter}
+								<span
+									class="preset-name-count"
+									class:at-max={presetName.length >= PRESET_NAME_MAX_LENGTH}
+								>
+									{presetName.length}/{PRESET_NAME_MAX_LENGTH}
+								</span>
+							{/if}
 							<button
-								class="add-btn"
-								onclick={() => addEffect(def.id)}
-								title="Add to chain"
+								class="preset-confirm-btn"
+								type="submit"
+								title="Save"
+								aria-label="Save preset"
 							>
-								<Plus size={14} />
+								<Check size={14} />
+							</button>
+							<button
+								class="preset-cancel-btn"
+								type="button"
+								onclick={() => {
+									saving = false;
+									presetName = "";
+								}}
+								title="Cancel"
+							>
+								<X size={14} />
+							</button>
+						</form>
+					{:else}
+						<button class="preset-save-trigger" onclick={() => (saving = true)}>
+							<Plus size={12} />
+							Save current
+						</button>
+					{/if}
+
+					{#each presets as preset, i (i)}
+						<div class="preset-item">
+							<button
+								class="preset-load-btn"
+								onclick={() => handleLoadPreset(i)}
+								title="Load preset"
+							>
+								{preset.name}
+							</button>
+							<button
+								class="preset-delete-btn preset-update-btn"
+								onclick={() => handleUpdatePreset(i)}
+								title="Overwrite with current effects"
+							>
+								<Save size={11} />
+							</button>
+							<button
+								class="preset-delete-btn"
+								onclick={() => handleDeletePreset(i)}
+								title="Delete preset"
+							>
+								<X size={12} />
 							</button>
 						</div>
 					{/each}
+
+					{#if presets.length === 0 && !saving}
+						<div class="preset-empty">No saved presets</div>
+					{/if}
 				</div>
 			{/if}
-		{/if}
-	</div>
+		</div>
+
+		<div class="search-bar">
+			<Search class="search-icon" size={13} />
+			<input
+				class="search-input"
+				type="text"
+				placeholder="Search effects..."
+				bind:value={searchQuery}
+			/>
+			{#if searchQuery}
+				<button
+					class="search-clear"
+					onclick={() => (searchQuery = "")}
+					title="Clear"
+				>
+					<X size={12} />
+				</button>
+			{/if}
+			<button
+				class="search-clear live-filter"
+				class:on={onlyLive}
+				onclick={() => (onlyLive = !onlyLive)}
+				title={onlyLive
+					? "Showing live effects only — click to show the whole chain"
+					: "Show live effects only"}
+				aria-pressed={onlyLive}
+				aria-label="Show live effects only"
+			>
+				<Filter size={13} />
+			</button>
+			{#if anyExpanded}
+				<button
+					class="search-clear"
+					onclick={collapseAll}
+					title="Collapse all open effects"
+					aria-label="Collapse all effects"
+				>
+					<ChevronsDownUp size={13} />
+				</button>
+			{/if}
+		</div>
+
+		<div class="panel-list" bind:this={listEl}>
+			{#if rolledNote}
+				<p class="rolled-note">{rolledNote}</p>
+			{/if}
+			{#each filteredEffects as { effect, index: i }, pos (effect.instanceId)}
+				<EffectItem
+					{effect}
+					canMoveUp={pos > 0}
+					canMoveDown={pos < filteredEffects.length - 1}
+					onMove={(direction, toEnd) => moveEffect(pos, direction, toEnd)}
+					{hasTrack}
+					{spectrumData}
+					{response}
+					onVolumeLinkChange={onVolumeLinkChange
+						? (key, link) => onVolumeLinkChange(i, key, link)
+						: undefined}
+					onToggle={() => toggle(i)}
+					rolledNote={isRolled(effect) ? rolledNote : null}
+					rolledChain={rolledChain && isRolled(effect)}
+					onToggleExpand={() => toggleExpand(i)}
+					onHide={() => hide(i)}
+					onDuplicate={() => duplicate(i)}
+					isCopy={isCopy(effect)}
+					onParamChange={(key, value) => paramChange(i, key, value)}
+					isDragging={dragFromIndex === i}
+					dropIndicator={getDropIndicator(i)}
+					onDragStart={(e) => handleDragStart(i, e)}
+					onDragOver={(e) => handleDragOver(i, e)}
+					onDragLeave={() => handleDragLeave(i)}
+					onDrop={() => handleDrop(i)}
+					onDragEnd={clearDragState}
+					onTouchDragStart={(e) => handleTouchDragStart(i, e)}
+					effectIndex={i}
+				/>
+			{/each}
+
+			{#if filteredEffects.length === 0}
+				<div class="list-empty">
+					{#if onlyLive && searchQuery}
+						<p class="empty-title">No live match</p>
+						<p class="empty-hint">
+							Nothing switched on is called “{searchQuery}”.
+						</p>
+						<button class="empty-action" onclick={() => (onlyLive = false)}>
+							Show the whole chain
+						</button>
+					{:else if onlyLive}
+						<p class="empty-title">Nothing is live</p>
+						<p class="empty-hint">
+							Switch an effect on, or hit MOSH to fill the chain for you.
+						</p>
+						<button class="empty-action" onclick={() => (onlyLive = false)}>
+							Show the whole chain
+						</button>
+					{:else if searchQuery}
+						<p class="empty-title">No match</p>
+						<p class="empty-hint">Nothing here is called “{searchQuery}”.</p>
+						<button class="empty-action" onclick={() => (searchQuery = "")}>
+							Clear the search
+						</button>
+					{:else}
+						<p class="empty-title">The chain is empty</p>
+						<p class="empty-hint">
+							Add effects from the list below to start building a look.
+						</p>
+					{/if}
+				</div>
+			{/if}
+
+			{#if filteredHiddenDefs.length > 0}
+				<button
+					class="hidden-header"
+					onclick={() => (showHidden = !showHidden)}
+				>
+					<span
+						class="hidden-arrow"
+						class:expanded={showHidden || !!searchQuery}>&#9654;</span
+					>
+					<span>Hidden effects ({filteredHiddenDefs.length})</span>
+				</button>
+
+				{#if showHidden || searchQuery}
+					<div class="hidden-list">
+						{#each filteredHiddenDefs as def (def.id)}
+							<div class="hidden-item">
+								<span class="hidden-name">{def.name}</span>
+								<button
+									class="add-btn"
+									onclick={() => addEffect(def.id)}
+									title="Add to chain"
+								>
+									<Plus size={14} />
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			{/if}
+		</div>
 	{/if}
 </aside>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Dices, Eraser, Repeat, Shuffle, Trash2 } from 'lucide-svelte';
-	import { loadPresets, type Preset } from '../../effects';
+	import { Dices, Eraser, Repeat, Shuffle, Trash2 } from "lucide-svelte";
+	import { loadPresets, type Preset } from "../../effects";
 	import {
 		cloneSegmentForSplit,
 		createSequenceSegment,
@@ -14,18 +14,18 @@
 		type SequenceSegment,
 		type SequenceSegmentMode,
 		type TransitionType,
-	} from '../../editor/sequence';
-	import type { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
+	} from "../../editor/sequence";
+	import type { SegmentBoundaryController } from "../../editor/segment-boundary-controller.svelte";
 	import {
 		copySegments,
 		pasteClipsAt,
 		pasteContentOnto,
 		type SegmentClip,
-	} from '../../editor/sequence-clipboard';
+	} from "../../editor/sequence-clipboard";
 	import {
 		applyChainToSegment,
 		chainClipboard,
-	} from '../../editor/chain-clipboard';
+	} from "../../editor/chain-clipboard";
 	import {
 		clampGroupDelta,
 		collectGroupBoundaries,
@@ -33,18 +33,18 @@
 		groupDeltaUpdates,
 		nonSelectedBoundaryTimes,
 		type GroupBoundary,
-	} from '../../editor/boundary-group-drag';
+	} from "../../editor/boundary-group-drag";
 	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
-	} from '../../editor/shortcut-target';
-	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
-	import { isModalKeyboardOpen } from '../../modal-keyboard';
+	} from "../../editor/shortcut-target";
+	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import {
 		SOURCE_DND_TYPE,
 		sourceColor,
-	} from '../../editor/sequence-source-ui';
-	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
+	} from "../../editor/sequence-source-ui";
+	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 
 	/**
 	 * How short a boundary drag may squeeze a segment. Held in beats rather than
@@ -64,7 +64,7 @@
 	/** Kept out of the markup: the formatter wraps a long <title> body across
 	 * lines, and the native tooltip renders that break as a real one. */
 	const BND_TIP =
-		'Click to set the transition · drag to move (whole selection if selected) · Delete to merge · Shift-drag to select';
+		"Click to set the transition · drag to move (whole selection if selected) · Delete to merge · Shift-drag to select";
 	/** Height of the source colour band along a block's bottom edge. */
 	const SRC_BAND = 3;
 	/**
@@ -145,9 +145,8 @@
 	);
 
 	function sourceOf(s: SequenceSegment): SequenceSource | undefined {
-		return sourceIndex.get(s.sourceId ?? primarySourceId ?? '')?.src;
+		return sourceIndex.get(s.sourceId ?? primarySourceId ?? "")?.src;
 	}
-
 
 	let svgEl: SVGSVGElement | undefined = $state();
 	/** Track width in px, for sizing labels to their blocks. */
@@ -194,7 +193,8 @@
 	let selectionAnchorId = $state<string | null>(null);
 
 	function toggleInSelection(id: string) {
-		if (selectedIds.includes(id)) setSelection(selectedIds.filter((x) => x !== id));
+		if (selectedIds.includes(id))
+			setSelection(selectedIds.filter((x) => x !== id));
 		else setSelection([...selectedIds, id]);
 		selectionAnchorId = id;
 	}
@@ -225,7 +225,10 @@
 	$effect(() => {
 		const alive = new Set(rawSegments.map((s) => s.id));
 		if (selectedIds.some((id) => !alive.has(id))) {
-			setSelection(selectedIds.filter((id) => alive.has(id)), true);
+			setSelection(
+				selectedIds.filter((id) => alive.has(id)),
+				true,
+			);
 		}
 	});
 
@@ -302,7 +305,7 @@
 		if (!isSourceDrag(e)) return;
 		// Without preventDefault the browser refuses the drop entirely.
 		e.preventDefault();
-		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+		if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
 		sourceDragOver = true;
 		dropSegId = segmentAtTime(vp.clientXToTime(e.clientX))?.id ?? null;
 	}
@@ -322,7 +325,7 @@
 	function onTimelineDrop(e: DragEvent) {
 		if (!isSourceDrag(e)) return;
 		e.preventDefault();
-		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? '';
+		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? "";
 		const targets = dropTargetIds;
 		endSourceDrag();
 		if (sourceId && targets.length > 0) onAssignSource?.(targets, sourceId);
@@ -350,15 +353,15 @@
 	 * Auto keep the spacing they had.
 	 */
 	function switchToAuto() {
-		if (hasInterval) onModeChange(selectedIds, 'interval');
-		else if (bpm > 0) onModeChange(selectedIds, 'interval', 60 / bpm, 1);
-		else onModeChange(selectedIds, 'interval', 1, null);
+		if (hasInterval) onModeChange(selectedIds, "interval");
+		else if (bpm > 0) onModeChange(selectedIds, "interval", 60 / bpm, 1);
+		else onModeChange(selectedIds, "interval", 1, null);
 	}
 
 	let intervalValue = $derived.by(() => {
 		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
 		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
-			return '';
+			return "";
 		}
 		return String(commonIntervalSec);
 	});
@@ -373,7 +376,9 @@
 	let popEl: HTMLDivElement | undefined = $state();
 	/** Lane geometry at the time the popover opened, for placing it. Read once
 	 * rather than per frame: the lane only moves when the window resizes. */
-	let laneBox = $state<{ left: number; top: number; width: number } | null>(null);
+	let laneBox = $state<{ left: number; top: number; width: number } | null>(
+		null,
+	);
 
 	let transTargets = $derived(
 		transPopover
@@ -403,8 +408,7 @@
 			time: seg.startTime,
 			// Editing one boundary of a selected run edits the whole run, the same
 			// way dragging one of them moves them all.
-			segIds:
-				inSelection && sel.length > 1 ? rightSegIdsAt(sel) : [seg.id],
+			segIds: inSelection && sel.length > 1 ? rightSegIdsAt(sel) : [seg.id],
 		};
 	}
 
@@ -421,7 +425,8 @@
 	/** Fixed-position placement, so the lane's own overflow can't clip it. */
 	let popPos = $derived.by(() => {
 		if (!transPopover || !laneBox) return null;
-		const x = laneBox.left + (vp.toPct(transPopover.time) / 100) * laneBox.width;
+		const x =
+			laneBox.left + (vp.toPct(transPopover.time) / 100) * laneBox.width;
 		return {
 			left: Math.max(8, Math.min(window.innerWidth - 8, x)),
 			bottom: window.innerHeight - laneBox.top + 6,
@@ -432,7 +437,7 @@
 	// then renders blank until the user picks a value, which applies to all.
 	let commonTransitionType = $derived(
 		commonValue(
-			transTargets.map((s): TransitionType => s.transition?.type ?? 'cut'),
+			transTargets.map((s): TransitionType => s.transition?.type ?? "cut"),
 		),
 	);
 	let commonTransitionMeta = $derived(
@@ -454,7 +459,7 @@
 	);
 	/** Ticks only means anything on a segment that re-rolls. */
 	let transTargetsAuto = $derived(
-		transTargets.length > 0 && transTargets.every((s) => s.mode === 'interval'),
+		transTargets.length > 0 && transTargets.every((s) => s.mode === "interval"),
 	);
 
 	function changeTransitionType(type: TransitionType) {
@@ -465,7 +470,7 @@
 				// Keep each segment's duration/seed/params when switching between
 				// non-cut types.
 				transition:
-					type === 'cut'
+					type === "cut"
 						? null
 						: {
 								type,
@@ -502,7 +507,7 @@
 
 	function setTransitionOnTick(on: boolean) {
 		const changes = transTargets
-			.filter((s) => s.mode === 'interval')
+			.filter((s) => s.mode === "interval")
 			.map((seg) => ({
 				segmentId: seg.id,
 				transition: seg.transition ?? null,
@@ -582,9 +587,9 @@
 
 	// ── Drag state ───────────────────────────────────────────────────────────
 	type DragState =
-		| { type: 'boundary'; leftSegId: string | null; rightSegId: string | null }
+		| { type: "boundary"; leftSegId: string | null; rightSegId: string | null }
 		| {
-				type: 'boundary-group';
+				type: "boundary-group";
 				anchorTime: number;
 				/** The boundary actually grabbed — a click without a drag opens its
 				 * transition popover. */
@@ -592,17 +597,17 @@
 				group: GroupBoundary[];
 				nonSelected: number[];
 		  }
-		| { type: 'static' }
-		| { type: 'seg-click'; segmentId: string }
+		| { type: "static" }
+		| { type: "seg-click"; segmentId: string }
 		| {
-				type: 'rect-select';
+				type: "rect-select";
 				startTime: number;
 				currentTime: number;
 				/** Segment under the pointer at drag start. Without a drag the
 				 * gesture is a click on it: shift extends the selection to it,
 				 * alt toggles it. */
 				clickSegId?: string;
-				clickAction?: 'range' | 'toggle';
+				clickAction?: "range" | "toggle";
 		  }
 		| null;
 
@@ -640,8 +645,8 @@
 	}
 
 	function segLabel(s: SequenceSegment): string {
-		if (s.mode === 'interval') {
-			const roll = s.sourceRoll && multiSource ? ' · media' : '';
+		if (s.mode === "interval") {
+			const roll = s.sourceRoll && multiSource ? " · media" : "";
 			return `auto ${intervalLabel(s.intervalSec, s.intervalBeats)}${roll}`;
 		}
 		// "*" = hand-edited since it was filled (preset overwrites skip it).
@@ -651,7 +656,7 @@
 	/** Trim a label to what fits inside its block, so text can't spill onto the
 	 * neighbouring segments. Nothing at all below MIN_LABEL_PX — see there. */
 	function fitLabel(text: string, boxPx: number, charPx: number): string {
-		if (boxPx < MIN_LABEL_PX) return '';
+		if (boxPx < MIN_LABEL_PX) return "";
 		const max = Math.floor((boxPx - 6) / charPx);
 		return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 	}
@@ -664,13 +669,13 @@
 			const boxPx = ((endX - startX) / 100) * trackWidth;
 			// A rolling segment plays the whole pool, so it gets no source band and
 			// no source line — either would name one clip out of the deck.
-			const rolls = multiSource && !!s.sourceRoll && s.mode === 'interval';
+			const rolls = multiSource && !!s.sourceRoll && s.mode === "interval";
 			const source =
 				multiSource && !rolls
-					? sourceIndex.get(s.sourceId ?? primarySourceId ?? '')
+					? sourceIndex.get(s.sourceId ?? primarySourceId ?? "")
 					: undefined;
 			const full = segLabel(s);
-			const trans = s.transition?.type ?? 'cut';
+			const trans = s.transition?.type ?? "cut";
 			return {
 				id: s.id,
 				startX,
@@ -680,16 +685,18 @@
 				label: fitLabel(full, boxPx, 6.6),
 				tip: [
 					full,
-					rolls ? 'media rolls with the mosh' : null,
+					rolls ? "media rolls with the mosh" : null,
 					source ? `source ${source.n}: ${source.src.name}` : null,
-					trans === 'cut' ? null : `${trans} ${s.transition?.durationSec ?? 0}s`,
+					trans === "cut"
+						? null
+						: `${trans} ${s.transition?.durationSec ?? 0}s`,
 				]
 					.filter(Boolean)
-					.join(' · '),
+					.join(" · "),
 				transitionType: trans,
 				transitionDuration: s.transition?.durationSec ?? 0,
 				srcColor: source ? sourceColor(source.n) : null,
-				auto: s.mode === 'interval',
+				auto: s.mode === "interval",
 			};
 		}),
 	);
@@ -699,15 +706,15 @@
 	// keeps the lanes below from being pushed down on every click.
 	$effect(() => {
 		if (selectedSegments.length === 0) return;
-		return stack.registerSelectionBar('mosh', segmentBar);
+		return stack.registerSelectionBar("mosh", segmentBar);
 	});
 
 	// ── Split / create ───────────────────────────────────────────────────────
 	// The Mosh lane splits at the playhead with S; it is also the default target
 	// until the user touches another lane, so a fresh timeline still splits here.
 	$effect(() => {
-		const unregister = stack.registerSplitter('mosh', (t) => splitAt(t));
-		if (stack.activeLaneId === null) stack.markLaneUsed('mosh');
+		const unregister = stack.registerSplitter("mosh", (t) => splitAt(t));
+		if (stack.activeLaneId === null) stack.markLaneUsed("mosh");
 		return unregister;
 	});
 
@@ -751,14 +758,18 @@
 			selected.some((t) => Math.abs(t - time) < 0.001)
 		) {
 			dragging = {
-				type: 'boundary-group',
+				type: "boundary-group",
 				anchorTime: vp.clientXToTime(e.clientX),
 				clickTime: time,
 				group: collectGroupBoundaries(segments, selected, trackDuration),
-				nonSelected: nonSelectedBoundaryTimes(segments, selected, trackDuration),
+				nonSelected: nonSelectedBoundaryTimes(
+					segments,
+					selected,
+					trackDuration,
+				),
 			};
 		} else {
-			dragging = { type: 'boundary', leftSegId, rightSegId };
+			dragging = { type: "boundary", leftSegId, rightSegId };
 		}
 		dragMoved = false;
 		try {
@@ -784,12 +795,12 @@
 	function startRectSelect(
 		e: PointerEvent,
 		clickSegId?: string,
-		clickAction: 'range' | 'toggle' = 'range',
+		clickAction: "range" | "toggle" = "range",
 	) {
 		e.stopPropagation();
 		const time = vp.clientXToTime(e.clientX);
 		dragging = {
-			type: 'rect-select',
+			type: "rect-select",
 			startTime: time,
 			currentTime: time,
 			clickSegId,
@@ -816,14 +827,14 @@
 		// drag — same gesture as on the empty timeline. Alt picks a single
 		// segment in or out, which shift used to do; Ctrl is taken by the split.
 		if (e.altKey) {
-			startRectSelect(e, segId, 'toggle');
+			startRectSelect(e, segId, "toggle");
 			return;
 		}
 		if (e.shiftKey) {
-			startRectSelect(e, segId, 'range');
+			startRectSelect(e, segId, "range");
 			return;
 		}
-		dragging = { type: 'seg-click', segmentId: segId };
+		dragging = { type: "seg-click", segmentId: segId };
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -855,8 +866,10 @@
 		if (!onSeek) return;
 		boundaries.clearSelection();
 		// Default: place the start marker, which takes the clock with it.
-		stack.seekStatic(Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))));
-		dragging = { type: 'static' };
+		stack.seekStatic(
+			Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))),
+		);
+		dragging = { type: "static" };
 		dragMoved = false;
 		try {
 			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -872,7 +885,7 @@
 		}
 		if (!dragging) return;
 
-		if (dragging.type === 'boundary') {
+		if (dragging.type === "boundary") {
 			if (!dragMoved) boundaries.snapshotForDrag();
 			dragMoved = true;
 			const time = vp.clientXToTime(e.clientX);
@@ -894,8 +907,7 @@
 			} else if (rightSegId) {
 				const rseg = rawSegments.find((s) => s.id === rightSegId);
 				if (rseg) {
-					const maxStart =
-						(rseg.endTime ?? trackDuration) - minSegmentDuration;
+					const maxStart = (rseg.endTime ?? trackDuration) - minSegmentDuration;
 					const clamped = Math.max(0, Math.min(maxStart, time));
 					updates[rightSegId] = { startTime: clamped };
 				}
@@ -908,7 +920,7 @@
 					),
 				);
 			}
-		} else if (dragging.type === 'boundary-group') {
+		} else if (dragging.type === "boundary-group") {
 			if (!dragMoved) boundaries.snapshotForDrag();
 			dragMoved = true;
 			const delta = clampGroupDelta(
@@ -920,12 +932,14 @@
 			);
 			const updates = groupDeltaUpdates(dragging.group, delta);
 			boundaries.live(
-				rawSegments.map((s) => (updates[s.id] ? { ...s, ...updates[s.id] } : s)),
+				rawSegments.map((s) =>
+					updates[s.id] ? { ...s, ...updates[s.id] } : s,
+				),
 			);
-		} else if (dragging.type === 'rect-select') {
+		} else if (dragging.type === "rect-select") {
 			dragMoved = true;
 			dragging = { ...dragging, currentTime: vp.clientXToTime(e.clientX) };
-		} else if (dragging.type === 'static') {
+		} else if (dragging.type === "static") {
 			dragMoved = true;
 			stack.seekStatic(
 				Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))),
@@ -944,7 +958,7 @@
 	}
 
 	function onPointerUp() {
-		if (dragging?.type === 'boundary-group' && dragMoved) {
+		if (dragging?.type === "boundary-group" && dragMoved) {
 			// Follow the boundaries to their new times so the selection survives.
 			boundaries.selectedBoundaryTimes = groupBoundaryTimesAfter(
 				dragging.group,
@@ -954,19 +968,19 @@
 		}
 		// A boundary grabbed but not moved is a click on it: configure how the
 		// next segment blends in.
-		if (dragging?.type === 'boundary' && !dragMoved) {
+		if (dragging?.type === "boundary" && !dragMoved) {
 			openTransitionPopover(dragging.rightSegId);
 		}
-		if (dragging?.type === 'boundary-group' && !dragMoved) {
+		if (dragging?.type === "boundary-group" && !dragMoved) {
 			openTransitionPopover(rightSegIdsAt([dragging.clickTime])[0] ?? null);
 		}
-		if (dragging?.type === 'seg-click' && !dragMoved) {
+		if (dragging?.type === "seg-click" && !dragMoved) {
 			const segId = dragging.segmentId;
 			const soleSelected = selectedIds.length === 1 && selectedIds[0] === segId;
 			setSelection(soleSelected ? [] : [segId]);
 			selectionAnchorId = soleSelected ? null : segId;
 		}
-		if (dragging?.type === 'rect-select') {
+		if (dragging?.type === "rect-select") {
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
@@ -976,7 +990,8 @@
 				// A later shift+click extends from where the drag began.
 				selectionAnchorId = ids[0] ?? null;
 			} else if (dragging.clickSegId) {
-				if (dragging.clickAction === 'toggle') toggleInSelection(dragging.clickSegId);
+				if (dragging.clickAction === "toggle")
+					toggleInSelection(dragging.clickSegId);
 				else selectRangeTo(dragging.clickSegId);
 			} else {
 				boundaries.clearSelection();
@@ -1002,7 +1017,8 @@
 				break;
 			}
 			const deleted = sorted[idx];
-			const neighbour = idx < sorted.length - 1 ? sorted[idx + 1] : sorted[idx - 1];
+			const neighbour =
+				idx < sorted.length - 1 ? sorted[idx + 1] : sorted[idx - 1];
 			const merged: SequenceSegment = {
 				...neighbour,
 				startTime: Math.min(deleted.startTime, neighbour.startTime),
@@ -1025,7 +1041,11 @@
 		if (!left || !right) return;
 		if (selectedIds.includes(rightSegId)) {
 			setSelection(
-				[...new Set(selectedIds.map((id) => (id === rightSegId ? leftSegId : id)))],
+				[
+					...new Set(
+						selectedIds.map((id) => (id === rightSegId ? leftSegId : id)),
+					),
+				],
 				true,
 			);
 		}
@@ -1036,8 +1056,10 @@
 		);
 	}
 
-	let hoveredBoundary: { leftSegId: string | null; rightSegId: string | null } | null =
-		$state(null);
+	let hoveredBoundary: {
+		leftSegId: string | null;
+		rightSegId: string | null;
+	} | null = $state(null);
 
 	/**
 	 * Runs in the capture phase (see the `onkeydowncapture` binding below) so it
@@ -1057,25 +1079,25 @@
 		// Outranks the boundary clipboard; falls through when nothing is selected.
 		const key = e.key.toLowerCase();
 		if (e.ctrlKey || e.metaKey) {
-			if (key === 'c' && copySelectedSegments()) {
+			if (key === "c" && copySelectedSegments()) {
 				e.preventDefault();
 				e.stopPropagation();
 				return;
 			}
-			if (key === 'v' && pasteSegments()) {
+			if (key === "v" && pasteSegments()) {
 				e.preventDefault();
 				e.stopPropagation();
 				return;
 			}
 		}
 
-		if (e.key === 'Escape' && transPopover) {
+		if (e.key === "Escape" && transPopover) {
 			closeTransitionPopover();
 			e.stopPropagation();
 			return;
 		}
 
-		if (e.key === 'Escape' && spanPasteMode) {
+		if (e.key === "Escape" && spanPasteMode) {
 			spanPasteMode = false;
 			e.stopPropagation();
 			return;
@@ -1091,17 +1113,17 @@
 		// The rest are bare keys — they belong to a focused control.
 		if (isInteractiveTarget(e.target)) return;
 
-		if (e.key === 'Escape' && selectedIds.length > 0) {
+		if (e.key === "Escape" && selectedIds.length > 0) {
 			setSelection([]);
 			return;
 		}
 		// S: split the item under the playhead on the lane the user last touched.
-		if (e.key.toLowerCase() === 's') {
+		if (e.key.toLowerCase() === "s") {
 			e.preventDefault();
 			(stack.activeLaneSplitAt ?? splitAt)(stack.currentTime);
 			return;
 		}
-		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		if (e.key !== "Delete" && e.key !== "Backspace") return;
 		if (hoveredBoundary) {
 			e.preventDefault();
 			mergeBoundary(hoveredBoundary.leftSegId, hoveredBoundary.rightSegId);
@@ -1121,17 +1143,17 @@
 	let showHint = $derived(segments.length === 0);
 
 	let svgCursor = $derived.by(() => {
-		if (boundaries.pasteMode || spanPasteMode) return 'copy';
-		if (!dragging) return onSeek ? 'crosshair' : 'default';
-		if (dragging.type === 'rect-select') return 'crosshair';
-		if (dragging.type === 'static') return 'col-resize';
-		if (dragging.type === 'boundary-group') return 'grabbing';
-		return 'ew-resize';
+		if (boundaries.pasteMode || spanPasteMode) return "copy";
+		if (!dragging) return onSeek ? "crosshair" : "default";
+		if (dragging.type === "rect-select") return "crosshair";
+		if (dragging.type === "static") return "col-resize";
+		if (dragging.type === "boundary-group") return "grabbing";
+		return "ew-resize";
 	});
 
 	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
 	let rectHoverTimes = $derived.by((): number[] => {
-		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
+		if (dragging?.type !== "rect-select" || !dragMoved) return [];
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 		return boundaries.boundaryTimesInRange(minTime, maxTime);
@@ -1139,7 +1161,7 @@
 
 	// Segment ids the in-progress rect-select drag would select
 	let rectHoverSegIds = $derived.by((): string[] => {
-		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
+		if (dragging?.type !== "rect-select" || !dragMoved) return [];
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 		return segmentIdsInRange(minTime, maxTime);
@@ -1174,220 +1196,239 @@
 			ondrop={onTimelineDrop}
 			role="presentation"
 		>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<svg
-			bind:this={svgEl}
-			use:laneTrack={'mosh'}
-			width="100%"
-			height={svgH}
-			class="step-svg"
-			style:cursor={svgCursor}
-			onpointerdown={onLanePointerDown}
-		>
-			<defs>
-				<!-- 45° hatch for auto segments. userSpaceOnUse, not the default
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<svg
+				bind:this={svgEl}
+				use:laneTrack={"mosh"}
+				width="100%"
+				height={svgH}
+				class="step-svg"
+				style:cursor={svgCursor}
+				onpointerdown={onLanePointerDown}
+			>
+				<defs>
+					<!-- 45° hatch for auto segments. userSpaceOnUse, not the default
 				     objectBoundingBox: per-object tiling would stretch the lines by
 				     each block's width and they'd stop lining up across the row. -->
-				<pattern
-					id="seg-auto-hatch"
-					width="6"
-					height="6"
-					patternUnits="userSpaceOnUse"
-				>
-					<path class="hatch-line" d="M -1 1 l 2 -2 M 0 6 l 6 -6 M 5 7 l 2 -2" />
-				</pattern>
-			</defs>
-
-			<!-- Tails for uncovered regions, on the row's centre line -->
-			{#if segVis.length > 0}
-				{@const midY = ROW_PAD + segH / 2}
-				{#if segVis[0].startTime > 0.001}
-					<line
-						class="tail"
-						x1="{vp.toPct(0)}%"
-						y1={midY}
-						x2="{segVis[0].startX}%"
-						y2={midY}
-					/>
-				{/if}
-				{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
-					<!-- Drawn end→start so the dash pattern anchors at the track end;
-					     with start-anchored dashes the phase could leave a gap there -->
-					<line
-						class="tail"
-						x1="{vp.toPct(trackDuration)}%"
-						y1={midY}
-						x2="{segVis[segVis.length - 1].endX}%"
-						y2={midY}
-					/>
-				{/if}
-			{/if}
-
-			<!-- Segment blocks + labels. The block is its own hit area. -->
-			{#each segVis as sv}
-				{@const sel =
-					selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
-				{@const drop = dropTargetIds.includes(sv.id)}
-				{@const midX = (sv.startX + sv.endX) / 2}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<rect
-					class="seg"
-					class:sel
-					class:drop
-					x="{sv.startX}%"
-					y={ROW_PAD}
-					width="{Math.max(0, sv.endX - sv.startX)}%"
-					height={segH}
-					rx="3"
-					onpointerdown={(e) => startSegClick(e, sv.id)}><title>{sv.tip}</title></rect
-				>
-				{#if sv.auto}
-					<rect
-						class="seg-hatch"
-						x="{sv.startX}%"
-						y={ROW_PAD}
-						width="{Math.max(0, sv.endX - sv.startX)}%"
-						height={segH}
-						rx="3"
-						fill="url(#seg-auto-hatch)"
-						pointer-events="none"
-					/>
-				{/if}
-				{#if sv.srcColor}
-					<!-- Which source this segment plays, as a band along the bottom edge:
-					     after a shuffle the whole row reads at a glance, and the colours
-					     match the grid cards' index chips. -->
-					<rect
-						class="seg-src"
-						x="{sv.startX}%"
-						y={ROW_PAD + segH - SRC_BAND}
-						width="{Math.max(0, sv.endX - sv.startX)}%"
-						height={SRC_BAND}
-						fill={sv.srcColor}
-						pointer-events="none"
-					/>
-				{/if}
-				{#if sv.label}
-					<text
-						class="seg-lbl"
-						class:sel
-						class:drop
-						x="{midX}%"
-						y={labelY}
-						text-anchor="middle">{sv.label}</text
+					<pattern
+						id="seg-auto-hatch"
+						width="6"
+						height="6"
+						patternUnits="userSpaceOnUse"
 					>
-				{/if}
-			{/each}
-
-			<!-- Interior boundaries (draggable) + transition markers -->
-			{#each segVis as sv, i}
-				{#if sv.startTime > 0.001}
-					{@const lId = i > 0 ? segVis[i - 1].id : null}
-					{@const hovered =
-						hoveredBoundary?.leftSegId === lId &&
-						hoveredBoundary?.rightSegId === sv.id}
-					{@const bndSel =
-						boundaries.selectedBoundaryTimes.some(
-							(t) => Math.abs(t - sv.startTime) < 0.001,
-						) || rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
-					{#if sv.transitionType !== 'cut'}
-						<!-- Lightning zigzag inside the block's leading edge: this segment
-						     blends in rather than cutting -->
 						<path
-							class="trans-mark"
-							d="M {sv.startX}% {ROW_PAD + 3} l 3 4 l -2 0 l 3 4"
-						>
-							<title
-								>{sv.transitionType} transition · {sv.transitionDuration}s</title
-							>
-						</path>
+							class="hatch-line"
+							d="M -1 1 l 2 -2 M 0 6 l 6 -6 M 5 7 l 2 -2"
+						/>
+					</pattern>
+				</defs>
+
+				<!-- Tails for uncovered regions, on the row's centre line -->
+				{#if segVis.length > 0}
+					{@const midY = ROW_PAD + segH / 2}
+					{#if segVis[0].startTime > 0.001}
+						<line
+							class="tail"
+							x1="{vp.toPct(0)}%"
+							y1={midY}
+							x2="{segVis[0].startX}%"
+							y2={midY}
+						/>
 					{/if}
-					<line
-						class="bnd"
-						class:hovered
-						class:sel={bndSel}
-						x1="{sv.startX}%"
-						y1={ROW_PAD}
-						x2="{sv.startX}%"
-						y2={ROW_PAD + segH}
-					/>
-					<!-- Grab strip, wider than the line it draws — same trick as the text
-					     timeline's clip boundaries. -->
+					{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
+						<!-- Drawn end→start so the dash pattern anchors at the track end;
+					     with start-anchored dashes the phase could leave a gap there -->
+						<line
+							class="tail"
+							x1="{vp.toPct(trackDuration)}%"
+							y1={midY}
+							x2="{segVis[segVis.length - 1].endX}%"
+							y2={midY}
+						/>
+					{/if}
+				{/if}
+
+				<!-- Segment blocks + labels. The block is its own hit area. -->
+				{#each segVis as sv}
+					{@const sel =
+						selectedIds.includes(sv.id) || rectHoverSegIds.includes(sv.id)}
+					{@const drop = dropTargetIds.includes(sv.id)}
+					{@const midX = (sv.startX + sv.endX) / 2}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<rect
-						class="bnd-hit"
+						class="seg"
+						class:sel
+						class:drop
 						x="{sv.startX}%"
 						y={ROW_PAD}
-						width={BND_GRAB * 2}
-						height={segH}
-						transform="translate({-BND_GRAB},0)"
-						onpointerenter={() =>
-							(hoveredBoundary = { leftSegId: lId, rightSegId: sv.id })}
-						onpointerleave={() => (hoveredBoundary = null)}
-						onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
-					><title
-							>{BND_TIP}</title
-						></rect
-					>
-				{/if}
-			{/each}
-
-			{#if showHint}
-				<text class="hint" x="50%" y={ROW_PAD + segH / 2 + 4} text-anchor="middle">
-					Ctrl+click to create a segment · click a segment to edit its effects
-				</text>
-			{/if}
-
-			<!-- Rectangle selection overlay -->
-			{#if dragging?.type === 'rect-select' && dragMoved}
-				{@const minX = Math.min(vp.toPct(dragging.startTime), vp.toPct(dragging.currentTime))}
-				{@const maxX = Math.max(vp.toPct(dragging.startTime), vp.toPct(dragging.currentTime))}
-				<rect
-					class="select-rect"
-					x="{minX}%"
-					y="0"
-					width="{maxX - minX}%"
-					height={svgH}
-					pointer-events="none"
-				/>
-			{/if}
-
-			<!-- Ghost paste preview (copied segment spans) -->
-			{#if spanPasteMode}
-				{#each segClipboard as clip}
-					{@const gStart = vp.toPct(spanPasteCursor + clip.offsetStart)}
-					{@const gEnd = vp.toPct(spanPasteCursor + clip.offsetEnd)}
-					<rect
-						class="ghost-span"
-						x="{gStart}%"
-						y={ROW_PAD}
-						width="{Math.max(0, gEnd - gStart)}%"
+						width="{Math.max(0, sv.endX - sv.startX)}%"
 						height={segH}
 						rx="3"
+						onpointerdown={(e) => startSegClick(e, sv.id)}
+						><title>{sv.tip}</title></rect
+					>
+					{#if sv.auto}
+						<rect
+							class="seg-hatch"
+							x="{sv.startX}%"
+							y={ROW_PAD}
+							width="{Math.max(0, sv.endX - sv.startX)}%"
+							height={segH}
+							rx="3"
+							fill="url(#seg-auto-hatch)"
+							pointer-events="none"
+						/>
+					{/if}
+					{#if sv.srcColor}
+						<!-- Which source this segment plays, as a band along the bottom edge:
+					     after a shuffle the whole row reads at a glance, and the colours
+					     match the grid cards' index chips. -->
+						<rect
+							class="seg-src"
+							x="{sv.startX}%"
+							y={ROW_PAD + segH - SRC_BAND}
+							width="{Math.max(0, sv.endX - sv.startX)}%"
+							height={SRC_BAND}
+							fill={sv.srcColor}
+							pointer-events="none"
+						/>
+					{/if}
+					{#if sv.label}
+						<text
+							class="seg-lbl"
+							class:sel
+							class:drop
+							x="{midX}%"
+							y={labelY}
+							text-anchor="middle">{sv.label}</text
+						>
+					{/if}
+				{/each}
+
+				<!-- Interior boundaries (draggable) + transition markers -->
+				{#each segVis as sv, i}
+					{#if sv.startTime > 0.001}
+						{@const lId = i > 0 ? segVis[i - 1].id : null}
+						{@const hovered =
+							hoveredBoundary?.leftSegId === lId &&
+							hoveredBoundary?.rightSegId === sv.id}
+						{@const bndSel =
+							boundaries.selectedBoundaryTimes.some(
+								(t) => Math.abs(t - sv.startTime) < 0.001,
+							) ||
+							rectHoverTimes.some((t) => Math.abs(t - sv.startTime) < 0.001)}
+						{#if sv.transitionType !== "cut"}
+							<!-- Lightning zigzag inside the block's leading edge: this segment
+						     blends in rather than cutting -->
+							<path
+								class="trans-mark"
+								d="M {sv.startX}% {ROW_PAD + 3} l 3 4 l -2 0 l 3 4"
+							>
+								<title
+									>{sv.transitionType} transition · {sv.transitionDuration}s</title
+								>
+							</path>
+						{/if}
+						<line
+							class="bnd"
+							class:hovered
+							class:sel={bndSel}
+							x1="{sv.startX}%"
+							y1={ROW_PAD}
+							x2="{sv.startX}%"
+							y2={ROW_PAD + segH}
+						/>
+						<!-- Grab strip, wider than the line it draws — same trick as the text
+					     timeline's clip boundaries. -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<rect
+							class="bnd-hit"
+							x="{sv.startX}%"
+							y={ROW_PAD}
+							width={BND_GRAB * 2}
+							height={segH}
+							transform="translate({-BND_GRAB},0)"
+							onpointerenter={() =>
+								(hoveredBoundary = { leftSegId: lId, rightSegId: sv.id })}
+							onpointerleave={() => (hoveredBoundary = null)}
+							onpointerdown={(e) => startBndDrag(e, lId, sv.id)}
+							><title>{BND_TIP}</title></rect
+						>
+					{/if}
+				{/each}
+
+				{#if showHint}
+					<text
+						class="hint"
+						x="50%"
+						y={ROW_PAD + segH / 2 + 4}
+						text-anchor="middle"
+					>
+						Ctrl+click to create a segment · click a segment to edit its effects
+					</text>
+				{/if}
+
+				<!-- Rectangle selection overlay -->
+				{#if dragging?.type === "rect-select" && dragMoved}
+					{@const minX = Math.min(
+						vp.toPct(dragging.startTime),
+						vp.toPct(dragging.currentTime),
+					)}
+					{@const maxX = Math.max(
+						vp.toPct(dragging.startTime),
+						vp.toPct(dragging.currentTime),
+					)}
+					<rect
+						class="select-rect"
+						x="{minX}%"
+						y="0"
+						width="{maxX - minX}%"
+						height={svgH}
 						pointer-events="none"
 					/>
-					<line
-						class="ghost-split-line"
-						x1="{gStart}%"
-						y1="0"
-						x2="{gStart}%"
-						y2={svgH}
-					/>
-				{/each}
-			{/if}
+				{/if}
 
-			<!-- Ghost paste preview (boundary splits) -->
-			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
-				{#each boundaries.clipboard as { offset }}
-					{@const ghostTime = boundaries.pasteCursorTime + offset}
-					{@const gx = vp.toPct(ghostTime)}
-					<line class="ghost-split-line" x1="{gx}%" y1="0" x2="{gx}%" y2={svgH} />
-				{/each}
-			{/if}
-		</svg>
+				<!-- Ghost paste preview (copied segment spans) -->
+				{#if spanPasteMode}
+					{#each segClipboard as clip}
+						{@const gStart = vp.toPct(spanPasteCursor + clip.offsetStart)}
+						{@const gEnd = vp.toPct(spanPasteCursor + clip.offsetEnd)}
+						<rect
+							class="ghost-span"
+							x="{gStart}%"
+							y={ROW_PAD}
+							width="{Math.max(0, gEnd - gStart)}%"
+							height={segH}
+							rx="3"
+							pointer-events="none"
+						/>
+						<line
+							class="ghost-split-line"
+							x1="{gStart}%"
+							y1="0"
+							x2="{gStart}%"
+							y2={svgH}
+						/>
+					{/each}
+				{/if}
+
+				<!-- Ghost paste preview (boundary splits) -->
+				{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
+					{#each boundaries.clipboard as { offset }}
+						{@const ghostTime = boundaries.pasteCursorTime + offset}
+						{@const gx = vp.toPct(ghostTime)}
+						<line
+							class="ghost-split-line"
+							x1="{gx}%"
+							y1="0"
+							x2="{gx}%"
+							y2={svgH}
+						/>
+					{/each}
+				{/if}
+			</svg>
 		</div>
 	</div>
-
 </div>
 
 {#snippet segmentBar()}
@@ -1400,7 +1441,7 @@
 			<div class="seg-spacer"></div>
 			<div class="seg-groups">
 				<span class="seg-title">
-					{many ? `${selectedSegments.length} segments` : 'Segment'}
+					{many ? `${selectedSegments.length} segments` : "Segment"}
 				</span>
 
 				<div class="tl-tool-sep"></div>
@@ -1422,11 +1463,11 @@
 				</select>
 				<button
 					class="tl-tool-btn"
-					title={commonMode === 'interval'
-						? 'New random seed'
+					title={commonMode === "interval"
+						? "New random seed"
 						: many
-							? 'Random mosh for each selected segment'
-							: 'Random mosh for this segment'}
+							? "Random mosh for each selected segment"
+							: "Random mosh for this segment"}
 					onclick={() => onRoll(selectedIds)}
 				>
 					<Dices size={12} /> Mosh
@@ -1441,44 +1482,48 @@
 					<Eraser size={12} /> Clear
 				</button>
 
-
 				<div class="tl-tool-sep"></div>
 				<span class="tl-tool-label">Mode</span>
 				<div class="seg-mode">
 					<button
 						class="tl-tool-btn"
-						class:active={commonMode === 'static'}
-						onclick={() => onModeChange(selectedIds, 'static')}
+						class:active={commonMode === "static"}
+						onclick={() => onModeChange(selectedIds, "static")}
 					>
 						Static
 					</button>
 					<button
 						class="tl-tool-btn"
-						class:active={commonMode === 'interval'}
+						class:active={commonMode === "interval"}
 						onclick={switchToAuto}
 					>
 						Auto
 					</button>
 				</div>
-				{#if commonMode === 'interval'}
+				{#if commonMode === "interval"}
 					<select
 						class="seg-select"
 						value={intervalValue}
 						title="How often this segment re-rolls its mosh"
 						onchange={(e) => {
 							const v = e.currentTarget.value;
-							if (v === '') return;
-							if (v.startsWith('b')) {
+							if (v === "") return;
+							if (v.startsWith("b")) {
 								const beats = Number(v.slice(1));
-								onModeChange(selectedIds, 'interval', (60 / bpm) * beats, beats);
+								onModeChange(
+									selectedIds,
+									"interval",
+									(60 / bpm) * beats,
+									beats,
+								);
 							} else {
 								// Picking a plain duration drops the beat link, so a later
 								// BPM change leaves it alone.
-								onModeChange(selectedIds, 'interval', Number(v), null);
+								onModeChange(selectedIds, "interval", Number(v), null);
 							}
 						}}
 					>
-						{#if intervalValue === ''}
+						{#if intervalValue === ""}
 							<option value="" disabled>—</option>
 						{/if}
 						{#if bpm > 0}
@@ -1505,7 +1550,6 @@
 						</button>
 					{/if}
 				{/if}
-
 			</div>
 			<!-- Right-aligned in their own column, so Loop coming and going with
 			     the selection size can't shift the controls above. -->
@@ -1522,7 +1566,7 @@
 				{/if}
 				<button
 					class="tl-tool-btn danger"
-					title={many ? 'Delete selected segments' : 'Delete segment'}
+					title={many ? "Delete selected segments" : "Delete segment"}
 					onclick={() => removeSegments(selectedIds)}
 				>
 					<Trash2 size={12} />
@@ -1559,11 +1603,11 @@
 			<span class="trans-label">Type</span>
 			<select
 				class="seg-select"
-				value={commonTransitionType ?? ''}
+				value={commonTransitionType ?? ""}
 				title="How the next segment blends in from this one"
 				onchange={(e) => {
 					const v = e.currentTarget.value;
-					if (v !== '') changeTransitionType(v as TransitionType);
+					if (v !== "") changeTransitionType(v as TransitionType);
 				}}
 			>
 				{#if commonTransitionType === undefined}
@@ -1575,15 +1619,15 @@
 			</select>
 		</div>
 
-		{#if commonTransitionType && commonTransitionType !== 'cut'}
+		{#if commonTransitionType && commonTransitionType !== "cut"}
 			<div class="trans-row">
 				<span class="trans-label">Length</span>
 				<select
 					class="seg-select"
-					value={commonTransitionDuration ?? ''}
+					value={commonTransitionDuration ?? ""}
 					onchange={(e) => {
 						const v = e.currentTarget.value;
-						if (v !== '') patchTransition({ durationSec: Number(v) });
+						if (v !== "") patchTransition({ durationSec: Number(v) });
 					}}
 				>
 					{#if commonTransitionDuration === undefined}
@@ -1600,11 +1644,11 @@
 					<span class="trans-label">Direction</span>
 					<select
 						class="seg-select"
-						value={commonTransitionDirection ?? ''}
+						value={commonTransitionDirection ?? ""}
 						title="Wipe direction"
 						onchange={(e) => {
 							const v = e.currentTarget.value;
-							if (v !== '') patchTransition({ direction: Number(v) });
+							if (v !== "") patchTransition({ direction: Number(v) });
 						}}
 					>
 						{#if commonTransitionDirection === undefined}
@@ -1623,11 +1667,11 @@
 					<span class="trans-label">Cells</span>
 					<select
 						class="seg-select"
-						value={commonTransitionDensity ?? ''}
+						value={commonTransitionDensity ?? ""}
 						title="Cell size"
 						onchange={(e) => {
 							const v = e.currentTarget.value;
-							if (v !== '') patchTransition({ density: Number(v) });
+							if (v !== "") patchTransition({ density: Number(v) });
 						}}
 					>
 						{#if commonTransitionDensity === undefined}
@@ -1823,7 +1867,6 @@
 		user-select: none;
 	}
 
-
 	/* Fills the stack's selection bar. Three columns so the middle run stays put
 	   whatever the actions column holds, and never taller than a row — a
 	   wrapping bar resized the stack every time a control appeared. */
@@ -1992,5 +2035,4 @@
 	.seg-select:focus {
 		border-color: var(--text-4);
 	}
-
 </style>

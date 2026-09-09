@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X } from 'lucide-svelte';
+	import { X } from "lucide-svelte";
 
 	interface ShortcutGroup {
 		title: string;
@@ -14,7 +14,7 @@
 	let { groups, onClose }: Props = $props();
 
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') onClose();
+		if (e.key === "Escape") onClose();
 	}
 </script>
 

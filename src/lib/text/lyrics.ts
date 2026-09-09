@@ -1,12 +1,12 @@
 import { sortClips } from "./resolve";
 import {
-  createTextClip,
-  createTextLane,
-  DEFAULT_TEXT_STYLE,
-  MIN_CLIP_LENGTH,
-  type TextClip,
-  type TextLane,
-  type TextTimeline,
+	createTextClip,
+	createTextLane,
+	DEFAULT_TEXT_STYLE,
+	MIN_CLIP_LENGTH,
+	type TextClip,
+	type TextLane,
+	type TextTimeline,
 } from "./types";
 
 /** The lane a lyrics sync writes its timed lines into. */
@@ -28,55 +28,57 @@ export const LYRICS_STYLE = { x: 0.5, y: 0.85, size: 0.075 } as const;
  * anything keyed on it stays put.
  */
 export function createLyricsClips(
-  lines: string[],
-  timings: number[],
-  spanEnd: number,
-  previous: TextClip[] = [],
+	lines: string[],
+	timings: number[],
+	spanEnd: number,
+	previous: TextClip[] = [],
 ): TextClip[] {
-  const starts: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    // Hold back enough room for every line still to come, so the tail keeps
-    // its clips inside the span instead of running off the end.
-    const latest = spanEnd - (lines.length - i) * MIN_CLIP_LENGTH;
-    const capped = Math.min(timings[i], latest);
-    starts.push(i > 0 ? Math.max(capped, starts[i - 1] + MIN_CLIP_LENGTH) : capped);
-  }
-  // Claimed one at a time, so a line repeated twice reuses two distinct clips.
-  const spare = [...previous];
-  return lines.map((text, i) => {
-    const start = starts[i];
-    const end =
-      i + 1 < lines.length
-        ? starts[i + 1]
-        : Math.max(spanEnd, start + MIN_CLIP_LENGTH);
-    const at = spare.findIndex((c) => c.text === text);
-    if (at === -1) return createTextClip(start, end, text);
-    const [kept] = spare.splice(at, 1);
-    return { ...kept, start, end };
-  });
+	const starts: number[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		// Hold back enough room for every line still to come, so the tail keeps
+		// its clips inside the span instead of running off the end.
+		const latest = spanEnd - (lines.length - i) * MIN_CLIP_LENGTH;
+		const capped = Math.min(timings[i], latest);
+		starts.push(
+			i > 0 ? Math.max(capped, starts[i - 1] + MIN_CLIP_LENGTH) : capped,
+		);
+	}
+	// Claimed one at a time, so a line repeated twice reuses two distinct clips.
+	const spare = [...previous];
+	return lines.map((text, i) => {
+		const start = starts[i];
+		const end =
+			i + 1 < lines.length
+				? starts[i + 1]
+				: Math.max(spanEnd, start + MIN_CLIP_LENGTH);
+		const at = spare.findIndex((c) => c.text === text);
+		if (at === -1) return createTextClip(start, end, text);
+		const [kept] = spare.splice(at, 1);
+		return { ...kept, start, end };
+	});
 }
 
 /** The lines and timings a sync left in the lane, for reopening the modal on
  * what the timeline actually holds. Null before the first sync lands. */
 export function lyricsDraftFromTimeline(
-  timeline: TextTimeline,
+	timeline: TextTimeline,
 ): { lines: string[]; timings: number[]; clips: TextClip[] } | null {
-  const lane = lyricsLane(timeline);
-  if (!lane) return null;
-  // A blank clip is no line at all. Dropping it here keeps lines and timings
-  // index-aligned, which everything downstream assumes.
-  const clips = sortClips(lane.clips).filter((c) => c.text.trim());
-  if (clips.length === 0) return null;
-  return {
-    lines: clips.map((c) => c.text),
-    timings: clips.map((c) => c.start),
-    clips,
-  };
+	const lane = lyricsLane(timeline);
+	if (!lane) return null;
+	// A blank clip is no line at all. Dropping it here keeps lines and timings
+	// index-aligned, which everything downstream assumes.
+	const clips = sortClips(lane.clips).filter((c) => c.text.trim());
+	if (clips.length === 0) return null;
+	return {
+		lines: clips.map((c) => c.text),
+		timings: clips.map((c) => c.start),
+		clips,
+	};
 }
 
 /** The timeline's lyrics lane, or undefined before the first sync lands. */
 export function lyricsLane(timeline: TextTimeline): TextLane | undefined {
-  return timeline.lanes.find((l) => l.name === LYRICS_LANE_NAME);
+	return timeline.lanes.find((l) => l.name === LYRICS_LANE_NAME);
 }
 
 /**
@@ -84,22 +86,22 @@ export function lyricsLane(timeline: TextTimeline): TextLane | undefined {
  * Re-applying replaces the previous sync rather than stacking on top of it.
  */
 export function applyLyricsToTimeline(
-  timeline: TextTimeline,
-  clips: TextClip[],
+	timeline: TextTimeline,
+	clips: TextClip[],
 ): TextTimeline {
-  const existing = lyricsLane(timeline);
-  const lane: TextLane = existing
-    ? { ...existing, enabled: true, clips }
-    : {
-        ...createTextLane(LYRICS_LANE_NAME),
-        style: { ...DEFAULT_TEXT_STYLE, ...LYRICS_STYLE },
-        clips,
-      };
-  return {
-    ...timeline,
-    enabled: true,
-    lanes: existing
-      ? timeline.lanes.map((l) => (l.id === lane.id ? lane : l))
-      : [...timeline.lanes, lane],
-  };
+	const existing = lyricsLane(timeline);
+	const lane: TextLane = existing
+		? { ...existing, enabled: true, clips }
+		: {
+				...createTextLane(LYRICS_LANE_NAME),
+				style: { ...DEFAULT_TEXT_STYLE, ...LYRICS_STYLE },
+				clips,
+			};
+	return {
+		...timeline,
+		enabled: true,
+		lanes: existing
+			? timeline.lanes.map((l) => (l.id === lane.id ? lane : l))
+			: [...timeline.lanes, lane],
+	};
 }

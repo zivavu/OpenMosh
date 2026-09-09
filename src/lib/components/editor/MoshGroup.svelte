@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { RotateCcw, Settings, X, Zap } from 'lucide-svelte';
-	import type { Snippet } from 'svelte';
+	import { RotateCcw, Settings, X, Zap } from "lucide-svelte";
+	import type { Snippet } from "svelte";
 
 	interface Props {
 		onMosh: () => void;
@@ -48,7 +48,13 @@
 		</button>
 	{/if}
 	{#if !hideActions}
-		<button class="settings-btn" onclick={onClear} disabled={!canClear} title="Clear all effects" aria-label="Clear all effects">
+		<button
+			class="settings-btn"
+			onclick={onClear}
+			disabled={!canClear}
+			title="Clear all effects"
+			aria-label="Clear all effects"
+		>
 			<X size={14} />
 		</button>
 		<button

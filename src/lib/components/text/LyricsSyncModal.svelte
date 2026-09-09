@@ -116,8 +116,7 @@
 		if (!list || phase !== "sync") return;
 		// Past the end once every line is timed: hold on the last one.
 		const item = list.children[Math.min(i, list.children.length - 1)] as
-			| HTMLElement
-			| undefined;
+			HTMLElement | undefined;
 		if (!item) return;
 		const listBox = list.getBoundingClientRect();
 		const itemBox = item.getBoundingClientRect();
@@ -315,8 +314,7 @@
 					lyricsText = (e.currentTarget as HTMLTextAreaElement).value;
 					timings = [];
 					applied = false;
-				}}
-			></textarea>
+				}}></textarea>
 			<p class="hint">
 				{lines.length > 0
 					? `${lines.length} line${lines.length === 1 ? "" : "s"} to time.`
@@ -334,11 +332,7 @@
 			</div>
 		{:else}
 			<div class="transport">
-				<button
-					class="play-btn"
-					title="Play / pause (P)"
-					onclick={togglePlay}
-				>
+				<button class="play-btn" title="Play / pause (P)" onclick={togglePlay}>
 					{#if isPlaying}<Pause size={14} />{:else}<Play size={14} />{/if}
 				</button>
 				<button
@@ -392,8 +386,8 @@
 			</ol>
 			<p class="hint" class:ok={applied}>
 				{#if applied}
-					On the timeline as the Lyrics lane — keep nudging and apply again,
-					or close.
+					On the timeline as the Lyrics lane — keep nudging and apply again, or
+					close.
 				{:else}
 					Space marks this line · Backspace steps back · P plays or pauses ·
 					click a line to re-time it

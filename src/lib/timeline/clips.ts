@@ -13,29 +13,29 @@
 export const MIN_CLIP_LENGTH = 0.05;
 
 export interface TimelineClip {
-  id: string;
-  /** Seconds on the mode's master timeline. */
-  start: number;
-  end: number;
+	id: string;
+	/** Seconds on the mode's master timeline. */
+	start: number;
+	end: number;
 }
 
 export interface ClipLane<C extends TimelineClip> {
-  clips: C[];
+	clips: C[];
 }
 
 export function sortClips<C extends TimelineClip>(clips: C[]): C[] {
-  return [...clips].sort((a, b) => a.start - b.start);
+	return [...clips].sort((a, b) => a.start - b.start);
 }
 
 /** The clip covering `time`, or null. Clips are half-open: [start, end). */
 export function clipAt<C extends TimelineClip>(
-  lane: ClipLane<C>,
-  time: number,
+	lane: ClipLane<C>,
+	time: number,
 ): C | null {
-  for (const clip of lane.clips) {
-    if (time >= clip.start && time < clip.end) return clip;
-  }
-  return null;
+	for (const clip of lane.clips) {
+		if (time >= clip.start && time < clip.end) return clip;
+	}
+	return null;
 }
 
 /**
@@ -43,17 +43,17 @@ export function clipAt<C extends TimelineClip>(
  * Both must be in this lane; otherwise only `toId` is in range.
  */
 export function clipRange<C extends TimelineClip>(
-  lane: ClipLane<C>,
-  fromId: string,
-  toId: string,
+	lane: ClipLane<C>,
+	fromId: string,
+	toId: string,
 ): string[] {
-  const ordered = sortClips(lane.clips);
-  const a = ordered.findIndex((c) => c.id === fromId);
-  const b = ordered.findIndex((c) => c.id === toId);
-  if (b === -1) return [];
-  if (a === -1) return [toId];
-  const [lo, hi] = a <= b ? [a, b] : [b, a];
-  return ordered.slice(lo, hi + 1).map((c) => c.id);
+	const ordered = sortClips(lane.clips);
+	const a = ordered.findIndex((c) => c.id === fromId);
+	const b = ordered.findIndex((c) => c.id === toId);
+	if (b === -1) return [];
+	if (a === -1) return [toId];
+	const [lo, hi] = a <= b ? [a, b] : [b, a];
+	return ordered.slice(lo, hi + 1).map((c) => c.id);
 }
 
 /**
@@ -61,18 +61,18 @@ export function clipRange<C extends TimelineClip>(
  * [0, duration]. Null when `time` already sits on a clip.
  */
 export function freeRangeAt<C extends TimelineClip>(
-  lane: ClipLane<C>,
-  time: number,
-  duration: number,
+	lane: ClipLane<C>,
+	time: number,
+	duration: number,
 ): { start: number; end: number } | null {
-  if (clipAt(lane, time)) return null;
-  let start = 0;
-  let end = duration;
-  for (const clip of lane.clips) {
-    if (clip.end <= time) start = Math.max(start, clip.end);
-    if (clip.start > time) end = Math.min(end, clip.start);
-  }
-  return end - start >= MIN_CLIP_LENGTH ? { start, end } : null;
+	if (clipAt(lane, time)) return null;
+	let start = 0;
+	let end = duration;
+	for (const clip of lane.clips) {
+		if (clip.end <= time) start = Math.max(start, clip.end);
+		if (clip.start > time) end = Math.min(end, clip.start);
+	}
+	return end - start >= MIN_CLIP_LENGTH ? { start, end } : null;
 }
 
 /**
@@ -80,23 +80,26 @@ export function freeRangeAt<C extends TimelineClip>(
  * neighbour it runs into — a drag can't reorder or overwrite the lane.
  */
 export function moveClip<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  clipId: string,
-  newStart: number,
-  duration: number,
+	lane: L,
+	clipId: string,
+	newStart: number,
+	duration: number,
 ): L {
-  const clip = lane.clips.find((c) => c.id === clipId);
-  if (!clip) return lane;
-  const length = clip.end - clip.start;
-  const others = sortClips(lane.clips.filter((c) => c.id !== clipId));
-  let lower = 0;
-  let upper = duration;
-  for (const other of others) {
-    if (other.end <= clip.start) lower = Math.max(lower, other.end);
-    else if (other.start >= clip.end) upper = Math.min(upper, other.start);
-  }
-  const start = Math.min(Math.max(newStart, lower), Math.max(lower, upper - length));
-  return replaceClip(lane, { ...clip, start, end: start + length });
+	const clip = lane.clips.find((c) => c.id === clipId);
+	if (!clip) return lane;
+	const length = clip.end - clip.start;
+	const others = sortClips(lane.clips.filter((c) => c.id !== clipId));
+	let lower = 0;
+	let upper = duration;
+	for (const other of others) {
+		if (other.end <= clip.start) lower = Math.max(lower, other.end);
+		else if (other.start >= clip.end) upper = Math.min(upper, other.start);
+	}
+	const start = Math.min(
+		Math.max(newStart, lower),
+		Math.max(lower, upper - length),
+	);
+	return replaceClip(lane, { ...clip, start, end: start + length });
 }
 
 /**
@@ -106,39 +109,41 @@ export function moveClip<C extends TimelineClip, L extends ClipLane<C>>(
  * to other lanes are ignored.
  */
 export function moveClips<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  clipIds: string[],
-  delta: number,
-  duration: number,
+	lane: L,
+	clipIds: string[],
+	delta: number,
+	duration: number,
 ): L {
-  const ids = new Set(clipIds);
-  const moving = lane.clips.filter((c) => ids.has(c.id));
-  if (moving.length === 0) return lane;
-  const fixed = lane.clips.filter((c) => !ids.has(c.id));
+	const ids = new Set(clipIds);
+	const moving = lane.clips.filter((c) => ids.has(c.id));
+	if (moving.length === 0) return lane;
+	const fixed = lane.clips.filter((c) => !ids.has(c.id));
 
-  // The tightest limit any one member imposes governs the whole group.
-  let lower = -Infinity;
-  let upper = Infinity;
-  for (const clip of moving) {
-    lower = Math.max(lower, -clip.start);
-    upper = Math.min(upper, duration - clip.end);
-    for (const other of fixed) {
-      if (other.end <= clip.start) lower = Math.max(lower, other.end - clip.start);
-      else if (other.start >= clip.end) upper = Math.min(upper, other.start - clip.end);
-    }
-  }
-  if (lower > upper) return lane;
+	// The tightest limit any one member imposes governs the whole group.
+	let lower = -Infinity;
+	let upper = Infinity;
+	for (const clip of moving) {
+		lower = Math.max(lower, -clip.start);
+		upper = Math.min(upper, duration - clip.end);
+		for (const other of fixed) {
+			if (other.end <= clip.start)
+				lower = Math.max(lower, other.end - clip.start);
+			else if (other.start >= clip.end)
+				upper = Math.min(upper, other.start - clip.end);
+		}
+	}
+	if (lower > upper) return lane;
 
-  const step = Math.min(Math.max(delta, lower), upper);
-  if (step === 0) return lane;
-  return {
-    ...lane,
-    clips: sortClips(
-      lane.clips.map((c) =>
-        ids.has(c.id) ? { ...c, start: c.start + step, end: c.end + step } : c,
-      ),
-    ),
-  };
+	const step = Math.min(Math.max(delta, lower), upper);
+	if (step === 0) return lane;
+	return {
+		...lane,
+		clips: sortClips(
+			lane.clips.map((c) =>
+				ids.has(c.id) ? { ...c, start: c.start + step, end: c.end + step } : c,
+			),
+		),
+	};
 }
 
 /**
@@ -147,29 +152,29 @@ export function moveClips<C extends TimelineClip, L extends ClipLane<C>>(
  * pulls it away from a flush neighbour, leaving a gap.
  */
 export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  clipId: string,
-  edge: "start" | "end",
-  time: number,
-  duration: number,
+	lane: L,
+	clipId: string,
+	edge: "start" | "end",
+	time: number,
+	duration: number,
 ): L {
-  const clip = lane.clips.find((c) => c.id === clipId);
-  if (!clip) return lane;
-  const others = sortClips(lane.clips.filter((c) => c.id !== clipId));
-  if (edge === "start") {
-    let lower = 0;
-    for (const other of others) {
-      if (other.end <= clip.start) lower = Math.max(lower, other.end);
-    }
-    const start = Math.min(Math.max(time, lower), clip.end - MIN_CLIP_LENGTH);
-    return replaceClip(lane, { ...clip, start });
-  }
-  let upper = duration;
-  for (const other of others) {
-    if (other.start >= clip.end) upper = Math.min(upper, other.start);
-  }
-  const end = Math.max(Math.min(time, upper), clip.start + MIN_CLIP_LENGTH);
-  return replaceClip(lane, { ...clip, end });
+	const clip = lane.clips.find((c) => c.id === clipId);
+	if (!clip) return lane;
+	const others = sortClips(lane.clips.filter((c) => c.id !== clipId));
+	if (edge === "start") {
+		let lower = 0;
+		for (const other of others) {
+			if (other.end <= clip.start) lower = Math.max(lower, other.end);
+		}
+		const start = Math.min(Math.max(time, lower), clip.end - MIN_CLIP_LENGTH);
+		return replaceClip(lane, { ...clip, start });
+	}
+	let upper = duration;
+	for (const other of others) {
+		if (other.start >= clip.end) upper = Math.min(upper, other.start);
+	}
+	const end = Math.max(Math.min(time, upper), clip.start + MIN_CLIP_LENGTH);
+	return replaceClip(lane, { ...clip, end });
 }
 
 /**
@@ -177,30 +182,30 @@ export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
  * `time`, each keeping at least MIN_CLIP_LENGTH.
  */
 export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  leftId: string,
-  rightId: string,
-  time: number,
+	lane: L,
+	leftId: string,
+	rightId: string,
+	time: number,
 ): L {
-  const left = lane.clips.find((c) => c.id === leftId);
-  const right = lane.clips.find((c) => c.id === rightId);
-  if (!left || !right) return lane;
-  const t = Math.max(
-    left.start + MIN_CLIP_LENGTH,
-    Math.min(time, right.end - MIN_CLIP_LENGTH),
-  );
-  return {
-    ...lane,
-    clips: sortClips(
-      lane.clips.map((c) =>
-        c.id === left.id
-          ? { ...left, end: t }
-          : c.id === right.id
-            ? { ...right, start: t }
-            : c,
-      ),
-    ),
-  };
+	const left = lane.clips.find((c) => c.id === leftId);
+	const right = lane.clips.find((c) => c.id === rightId);
+	if (!left || !right) return lane;
+	const t = Math.max(
+		left.start + MIN_CLIP_LENGTH,
+		Math.min(time, right.end - MIN_CLIP_LENGTH),
+	);
+	return {
+		...lane,
+		clips: sortClips(
+			lane.clips.map((c) =>
+				c.id === left.id
+					? { ...left, end: t }
+					: c.id === right.id
+						? { ...right, start: t }
+						: c,
+			),
+		),
+	};
 }
 
 /**
@@ -208,42 +213,45 @@ export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
  * when there is no room.
  */
 export function addClip<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  clip: C,
-  duration: number,
+	lane: L,
+	clip: C,
+	duration: number,
 ): L {
-  const range = freeRangeAt(lane, clip.start, duration);
-  if (!range) return lane;
-  const start = Math.max(clip.start, range.start);
-  const end = Math.min(clip.end, range.end);
-  if (end - start < MIN_CLIP_LENGTH) return lane;
-  return { ...lane, clips: sortClips([...lane.clips, { ...clip, start, end }]) };
+	const range = freeRangeAt(lane, clip.start, duration);
+	if (!range) return lane;
+	const start = Math.max(clip.start, range.start);
+	const end = Math.min(clip.end, range.end);
+	if (end - start < MIN_CLIP_LENGTH) return lane;
+	return {
+		...lane,
+		clips: sortClips([...lane.clips, { ...clip, start, end }]),
+	};
 }
 
 export function removeClip<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  clipId: string,
+	lane: L,
+	clipId: string,
 ): L {
-  return { ...lane, clips: lane.clips.filter((c) => c.id !== clipId) };
+	return { ...lane, clips: lane.clips.filter((c) => c.id !== clipId) };
 }
 
 function replaceClip<C extends TimelineClip, L extends ClipLane<C>>(
-  lane: L,
-  clip: C,
+	lane: L,
+	clip: C,
 ): L {
-  return {
-    ...lane,
-    clips: sortClips(lane.clips.map((c) => (c.id === clip.id ? clip : c))),
-  };
+	return {
+		...lane,
+		clips: sortClips(lane.clips.map((c) => (c.id === clip.id ? clip : c))),
+	};
 }
 
 /** Apply a lane edit inside a list of lanes. */
 export function updateLaneIn<L extends { id: string }>(
-  lanes: L[],
-  laneId: string,
-  fn: (lane: L) => L,
+	lanes: L[],
+	laneId: string,
+	fn: (lane: L) => L,
 ): L[] {
-  return lanes.map((l) => (l.id === laneId ? fn(l) : l));
+	return lanes.map((l) => (l.id === laneId ? fn(l) : l));
 }
 
 /**
@@ -253,19 +261,19 @@ export function updateLaneIn<L extends { id: string }>(
  * fx lane scales its effects toward off, a media lane scales its opacity.
  */
 export function clipFadeWeight(
-  clip: TimelineClip,
-  fadeSec: number | undefined,
-  time: number,
+	clip: TimelineClip,
+	fadeSec: number | undefined,
+	time: number,
 ): number {
-  const fade = fadeSec ?? 0;
-  if (fade <= 0) return 1;
-  // A fade longer than half the clip would have the two ramps overlap and the
-  // clip never reach full strength; meeting in the middle is the cap.
-  const ramp = Math.min(fade, (clip.end - clip.start) / 2);
-  if (ramp <= 0) return 1;
-  const inWeight = (time - clip.start) / ramp;
-  const outWeight = (clip.end - time) / ramp;
-  return Math.max(0, Math.min(1, inWeight, outWeight));
+	const fade = fadeSec ?? 0;
+	if (fade <= 0) return 1;
+	// A fade longer than half the clip would have the two ramps overlap and the
+	// clip never reach full strength; meeting in the middle is the cap.
+	const ramp = Math.min(fade, (clip.end - clip.start) / 2);
+	if (ramp <= 0) return 1;
+	const inWeight = (time - clip.start) / ramp;
+	const outWeight = (clip.end - time) / ramp;
+	return Math.max(0, Math.min(1, inWeight, outWeight));
 }
 
 /**
@@ -282,23 +290,23 @@ export function clipFadeWeight(
  * on every duration read can skip the write.
  */
 export function fitClipsToDuration<
-  C extends TimelineClip,
-  L extends ClipLane<C>,
+	C extends TimelineClip,
+	L extends ClipLane<C>,
 >(lane: L, duration: number): L {
-  if (duration <= 0) return lane;
-  let changed = false;
-  const clips: C[] = [];
-  for (const clip of lane.clips) {
-    if (clip.start > duration - MIN_CLIP_LENGTH) {
-      changed = true;
-      continue;
-    }
-    if (clip.end > duration) {
-      clips.push({ ...clip, end: duration });
-      changed = true;
-    } else {
-      clips.push(clip);
-    }
-  }
-  return changed ? { ...lane, clips } : lane;
+	if (duration <= 0) return lane;
+	let changed = false;
+	const clips: C[] = [];
+	for (const clip of lane.clips) {
+		if (clip.start > duration - MIN_CLIP_LENGTH) {
+			changed = true;
+			continue;
+		}
+		if (clip.end > duration) {
+			clips.push({ ...clip, end: duration });
+			changed = true;
+		} else {
+			clips.push(clip);
+		}
+	}
+	return changed ? { ...lane, clips } : lane;
 }

@@ -1,32 +1,32 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { X } from 'lucide-svelte';
-	import { LaneEffects } from '../../timeline/lane-effects.svelte';
-	import { OPAQUE_OUTPUT_EFFECTS } from '../../gl/effect-shaders';
-	import { ensureFontLoaded } from '../../text-overlay';
+	import type { Snippet } from "svelte";
+	import { X } from "lucide-svelte";
+	import { LaneEffects } from "../../timeline/lane-effects.svelte";
+	import { OPAQUE_OUTPUT_EFFECTS } from "../../gl/effect-shaders";
+	import { ensureFontLoaded } from "../../text-overlay";
 	import {
 		DEFAULT_TEXT_STYLE,
 		type TextAlign,
 		type TextClip,
 		type TextLane,
 		type TextStyle,
-	} from '../../text';
-	import type { SpectrumData } from '../../types';
-	import type { AudioResponse } from '../../audio/auto-range';
-	import ColorPicker from '../ui/ColorPicker.svelte';
-	import EffectsPanel from '../ui/EffectsPanel.svelte';
-	import FontSelect from '../ui/FontSelect.svelte';
-	import RangeSlider from '../ui/RangeSlider.svelte';
+	} from "../../text";
+	import type { SpectrumData } from "../../types";
+	import type { AudioResponse } from "../../audio/auto-range";
+	import ColorPicker from "../ui/ColorPicker.svelte";
+	import EffectsPanel from "../ui/EffectsPanel.svelte";
+	import FontSelect from "../ui/FontSelect.svelte";
+	import RangeSlider from "../ui/RangeSlider.svelte";
 
 	const BLEND_MODES = [
-		'normal',
-		'multiply',
-		'screen',
-		'overlay',
-		'add',
-		'subtract',
-		'difference',
-		'exclusion',
+		"normal",
+		"multiply",
+		"screen",
+		"overlay",
+		"add",
+		"subtract",
+		"difference",
+		"exclusion",
 	] as const;
 
 	interface Props {
@@ -146,14 +146,14 @@
 			title="Typeface this clip is drawn in. Double-click to reset."
 			ondblclick={(e) => {
 				void ensureFontLoaded(DEFAULT_TEXT_STYLE.fontFamily);
-				resetStyle(e, 'fontFamily');
+				resetStyle(e, "fontFamily");
 			}}
 		>
 			<label for="tc-font">Font</label>
 			<FontSelect
 				id="tc-font"
 				value={lane.style.fontFamily}
-				onChange={(family) => setStyle('fontFamily', family)}
+				onChange={(family) => setStyle("fontFamily", family)}
 			/>
 		</div>
 
@@ -161,7 +161,7 @@
 		<div
 			class="row"
 			title="Height of the text as a share of the frame, so it holds at any export size. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'size')}
+			ondblclick={(e) => resetStyle(e, "size")}
 		>
 			<label for="tc-size">Size</label>
 			<RangeSlider
@@ -170,7 +170,7 @@
 				min={0.02}
 				max={0.5}
 				step={0.005}
-				oninput={(v) => setStyle('size', v, `tc-size-${clip.id}`)}
+				oninput={(v) => setStyle("size", v, `tc-size-${clip.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.size * 100)}%</span>
 		</div>
@@ -179,7 +179,7 @@
 		<div
 			class="row"
 			title="Which side of the position the text runs from. It also sets the edge several lines line up on. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'align')}
+			ondblclick={(e) => resetStyle(e, "align")}
 		>
 			<label for="tc-align">Align</label>
 			<select
@@ -187,7 +187,7 @@
 				value={lane.style.align}
 				onchange={(e) =>
 					setStyle(
-						'align',
+						"align",
 						(e.currentTarget as HTMLSelectElement).value as TextAlign,
 					)}
 			>
@@ -201,7 +201,7 @@
 		<div
 			class="row"
 			title="Where the text is anchored across the frame — 0 at the left edge, 100 at the right. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'x')}
+			ondblclick={(e) => resetStyle(e, "x")}
 		>
 			<label for="tc-x">Position X</label>
 			<RangeSlider
@@ -210,7 +210,7 @@
 				min={0}
 				max={1}
 				step={0.01}
-				oninput={(v) => setStyle('x', v, `tc-x-${clip.id}`)}
+				oninput={(v) => setStyle("x", v, `tc-x-${clip.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.x * 100)}</span>
 		</div>
@@ -219,7 +219,7 @@
 		<div
 			class="row"
 			title="Where the text is anchored down the frame — 0 at the top edge, 100 at the bottom. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'y')}
+			ondblclick={(e) => resetStyle(e, "y")}
 		>
 			<label for="tc-y">Position Y</label>
 			<RangeSlider
@@ -228,7 +228,7 @@
 				min={0}
 				max={1}
 				step={0.01}
-				oninput={(v) => setStyle('y', v, `tc-y-${clip.id}`)}
+				oninput={(v) => setStyle("y", v, `tc-y-${clip.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.y * 100)}</span>
 		</div>
@@ -237,14 +237,14 @@
 		<div
 			class="row"
 			title="Fill colour of the text. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'color')}
+			ondblclick={(e) => resetStyle(e, "color")}
 		>
 			<label for="tc-color">Color</label>
 			<ColorPicker
 				id="tc-color"
 				value={lane.style.color}
 				defaultValue="#ffffff"
-				onChange={(hex) => setStyle('color', hex)}
+				onChange={(hex) => setStyle("color", hex)}
 			/>
 		</div>
 
@@ -252,7 +252,7 @@
 		<div
 			class="row"
 			title="Draw a stroke around each letter, which is what keeps text readable over a busy shot. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'outline')}
+			ondblclick={(e) => resetStyle(e, "outline")}
 		>
 			<label for="tc-outline">Outline</label>
 			<input
@@ -260,7 +260,7 @@
 				type="checkbox"
 				checked={lane.style.outline}
 				onchange={(e) =>
-					setStyle('outline', (e.currentTarget as HTMLInputElement).checked)}
+					setStyle("outline", (e.currentTarget as HTMLInputElement).checked)}
 			/>
 		</div>
 
@@ -269,21 +269,21 @@
 			<div
 				class="row"
 				title="Colour of the stroke. The most contrast with the fill gives the most readable text. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, 'outlineColor')}
+				ondblclick={(e) => resetStyle(e, "outlineColor")}
 			>
 				<label for="tc-outline-color">Outline color</label>
 				<ColorPicker
 					id="tc-outline-color"
 					value={lane.style.outlineColor}
 					defaultValue="#000000"
-					onChange={(hex) => setStyle('outlineColor', hex)}
+					onChange={(hex) => setStyle("outlineColor", hex)}
 				/>
 			</div>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
 				title="Thickness of the stroke, in pixels at 720p and scaled from there. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, 'outlineWidth')}
+				ondblclick={(e) => resetStyle(e, "outlineWidth")}
 			>
 				<label for="tc-outline-w">Outline width</label>
 				<RangeSlider
@@ -292,7 +292,7 @@
 					min={0}
 					max={8}
 					step={0.5}
-					oninput={(v) => setStyle('outlineWidth', v, `tc-ow-${clip.id}`)}
+					oninput={(v) => setStyle("outlineWidth", v, `tc-ow-${clip.id}`)}
 				/>
 				<span class="val">{lane.style.outlineWidth}</span>
 			</div>
@@ -302,7 +302,7 @@
 		<div
 			class="row"
 			title="How much of the text shows, against what is under it. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'opacity')}
+			ondblclick={(e) => resetStyle(e, "opacity")}
 		>
 			<label for="tc-opacity">Opacity</label>
 			<RangeSlider
@@ -311,7 +311,7 @@
 				min={0}
 				max={1}
 				step={0.01}
-				oninput={(v) => setStyle('opacity', v, `tc-op-${clip.id}`)}
+				oninput={(v) => setStyle("opacity", v, `tc-op-${clip.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.opacity * 100)}%</span>
 		</div>
@@ -320,7 +320,7 @@
 		<div
 			class="row"
 			title="How the text's colours mix with the layers underneath instead of simply covering them. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'blendMode')}
+			ondblclick={(e) => resetStyle(e, "blendMode")}
 		>
 			<label for="tc-blend">Blend</label>
 			<select
@@ -328,9 +328,9 @@
 				value={lane.style.blendMode}
 				onchange={(e) =>
 					setStyle(
-						'blendMode',
+						"blendMode",
 						(e.currentTarget as HTMLSelectElement)
-							.value as TextStyle['blendMode'],
+							.value as TextStyle["blendMode"],
 					)}
 			>
 				{#each BLEND_MODES as mode (mode)}
@@ -338,7 +338,6 @@
 				{/each}
 			</select>
 		</div>
-
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -362,7 +361,7 @@
 		<h3 class="panel-title section" class:no-rule={!!settings}>Text effects</h3>
 		{#if opaqueNames.length > 0}
 			<p class="warn">
-				{opaqueNames.join(', ')} paints its own background, so it fills the frame
+				{opaqueNames.join(", ")} paints its own background, so it fills the frame
 				instead of following the letters.
 			</p>
 		{/if}
@@ -486,7 +485,6 @@
 		}
 	}
 
-
 	.warn {
 		color: #d9a441;
 		font-size: 0.68rem;
@@ -556,7 +554,7 @@
 		font-family: inherit;
 	}
 
-	.row input[type='checkbox'] {
+	.row input[type="checkbox"] {
 		accent-color: #888;
 	}
 

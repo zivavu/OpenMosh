@@ -9,23 +9,23 @@
 		Music,
 		Trash2,
 		X,
-	} from 'lucide-svelte';
+	} from "lucide-svelte";
 	import {
 		FREQ_PRESETS,
 		getDefinition,
 		type EffectInstance,
 		type VolumeLink,
-	} from '../../effects';
-	import type { SpectrumData } from '../../types';
-	import ColorPicker from './ColorPicker.svelte';
-	import FontSelect from './FontSelect.svelte';
-	import DualRangeSlider from './DualRangeSlider.svelte';
-	import RangeSlider from './RangeSlider.svelte';
-	import SpectrumDisplay from './SpectrumDisplay.svelte';
+	} from "../../effects";
+	import type { SpectrumData } from "../../types";
+	import ColorPicker from "./ColorPicker.svelte";
+	import FontSelect from "./FontSelect.svelte";
+	import DualRangeSlider from "./DualRangeSlider.svelte";
+	import RangeSlider from "./RangeSlider.svelte";
+	import SpectrumDisplay from "./SpectrumDisplay.svelte";
 	import {
 		DEFAULT_AUDIO_RESPONSE,
 		type AudioResponse,
-	} from '../../audio/auto-range';
+	} from "../../audio/auto-range";
 
 	export type { SpectrumData };
 
@@ -42,22 +42,27 @@
 
 	const FREQ_PRESET_BUTTONS = [
 		// Full stores no band on the link; it resolves to FREQ_PRESETS.full.
-		{ label: 'Full', title: 'Full spectrum (20–16k Hz)', min: undefined, max: undefined },
 		{
-			label: 'Low',
-			title: 'Low (20–500 Hz)',
+			label: "Full",
+			title: "Full spectrum (20–16k Hz)",
+			min: undefined,
+			max: undefined,
+		},
+		{
+			label: "Low",
+			title: "Low (20–500 Hz)",
 			min: FREQ_PRESETS.low.min,
 			max: FREQ_PRESETS.low.max,
 		},
 		{
-			label: 'Mid',
-			title: 'Mid (500–4000 Hz)',
+			label: "Mid",
+			title: "Mid (500–4000 Hz)",
 			min: FREQ_PRESETS.mid.min,
 			max: FREQ_PRESETS.mid.max,
 		},
 		{
-			label: 'High',
-			title: 'High (4k–16k Hz)',
+			label: "High",
+			title: "High (4k–16k Hz)",
 			min: FREQ_PRESETS.high.min,
 			max: FREQ_PRESETS.high.max,
 		},
@@ -95,7 +100,7 @@
 		canMoveDown: boolean;
 		onParamChange: (key: string, value: number | string) => void;
 		isDragging: boolean;
-		dropIndicator: 'above' | 'below' | null;
+		dropIndicator: "above" | "below" | null;
 		onDragStart: (e: DragEvent) => void;
 		onDragOver: (e: DragEvent) => void;
 		onDragLeave: () => void;
@@ -153,8 +158,8 @@
 		class="effect-item"
 		class:enabled={effect.enabled}
 		class:is-dragging={isDragging}
-		class:drop-above={dropIndicator === 'above'}
-		class:drop-below={dropIndicator === 'below'}
+		class:drop-above={dropIndicator === "above"}
+		class:drop-below={dropIndicator === "below"}
 		data-effect-index={effectIndex}
 		data-effect-id={effect.instanceId}
 		draggable={canDrag}
@@ -177,293 +182,302 @@
 		     the chain reads as one continuous path down the panel. -->
 		<div class="rail" aria-hidden="true">
 			<span class="rail-index readout"
-				>{String((effectIndex ?? 0) + 1).padStart(2, '0')}</span
+				>{String((effectIndex ?? 0) + 1).padStart(2, "0")}</span
 			>
 		</div>
 		<div class="strip">
-		<div class="header" role="group">
-			{#if rolledChain}
-				<span class="expand-trigger static"><span class="name">{def.name}</span></span>
-			{:else}
-				<button class="expand-trigger" onclick={onToggleExpand}>
-					<span class="expand-arrow" class:expanded={effect.expanded}
-						>&#9654;</span
+			<div class="header" role="group">
+				{#if rolledChain}
+					<span class="expand-trigger static"
+						><span class="name">{def.name}</span></span
 					>
-					<span class="name">{def.name}</span>
-				</button>
-			{/if}
-
-			<div class="controls">
-				<button
-					class="toggle"
-					class:on={effect.enabled}
-					onclick={onToggle}
-					disabled={!!rolledNote}
-					title={rolledNote ?? (effect.enabled ? 'Disable' : 'Enable')}
-				>
-					<span class="toggle-knob"></span>
-				</button>
-
-				<button
-					class="icon-btn"
-					onclick={onDuplicate}
-					title="Duplicate: adds an independent copy below"
-					aria-label="Duplicate effect"
-				>
-					<Copy size={13} />
-				</button>
-
-				{#if isCopy}
-					<button
-						class="icon-btn"
-						onclick={onHide}
-						title="Remove this copy"
-						aria-label="Remove effect copy"
-					>
-						<Trash2 size={14} />
-					</button>
 				{:else}
+					<button class="expand-trigger" onclick={onToggleExpand}>
+						<span class="expand-arrow" class:expanded={effect.expanded}
+							>&#9654;</span
+						>
+						<span class="name">{def.name}</span>
+					</button>
+				{/if}
+
+				<div class="controls">
+					<button
+						class="toggle"
+						class:on={effect.enabled}
+						onclick={onToggle}
+						disabled={!!rolledNote}
+						title={rolledNote ?? (effect.enabled ? "Disable" : "Enable")}
+					>
+						<span class="toggle-knob"></span>
+					</button>
+
 					<button
 						class="icon-btn"
-						onclick={onHide}
-						title="Hide from the list. It stays hidden next session; restore it under Hidden effects."
-						aria-label="Hide effect"
+						onclick={onDuplicate}
+						title="Duplicate: adds an independent copy below"
+						aria-label="Duplicate effect"
 					>
-						<EyeOff size={14} />
+						<Copy size={13} />
 					</button>
-				{/if}
 
-				{#if !rolledChain}
-				<div class="move-btns">
-					<button
-						class="move-btn"
-						disabled={!canMoveUp}
-						onclick={(e) => onMove(-1, e.shiftKey)}
-						title="Move up (shift-click to send it to the top)"
-						aria-label="Move effect up"
-					>
-						<ChevronUp size={13} />
-					</button>
-					<button
-						class="move-btn"
-						disabled={!canMoveDown}
-						onclick={(e) => onMove(1, e.shiftKey)}
-						title="Move down (shift-click to send it to the bottom)"
-						aria-label="Move effect down"
-					>
-						<ChevronDown size={13} />
-					</button>
-				</div>
-
-				<span
-					class="drag-handle"
-					title="Drag to reorder"
-					onmousedown={() => (canDrag = true)}
-					onmouseup={() => (canDrag = false)}
-					ontouchstart={onTouchDragStart}
-				>
-					<GripVertical size={14} />
-				</span>
-				{/if}
-			</div>
-		</div>
-
-		{#if effect.expanded && !rolledChain}
-			<div class="params">
-				{#each def.params.filter((p) => !p.visibleWhen || p.visibleWhen(effect.values)) as param}
-					<div class="param-row">
-						<label class="param-label" for="{effect.instanceId}-{param.key}"
-							>{param.label}</label
+					{#if isCopy}
+						<button
+							class="icon-btn"
+							onclick={onHide}
+							title="Remove this copy"
+							aria-label="Remove effect copy"
 						>
-						{#if param.type === 'range'}
-							<div class="param-range-wrap">
-								<RangeSlider
-									id="{effect.instanceId}-{param.key}"
-									value={+effect.values[param.key]}
-									min={param.min}
-									max={param.max}
-									step={param.step}
-									curve={param.curve}
-									disabled={!!effect.volumeLinks?.[param.key]}
-									oninput={(v) => onParamChange(param.key, v)}
-									ondblclick={() =>
-										onParamChange(param.key, param.defaultValue)}
-								/>
-								<span class="param-value"
-									>{parseFloat(effect.values[param.key].toString()).toFixed(
-										2,
-									)}</span
-								>
-								{#if hasTrack && onVolumeLinkChange}
-									{#if effect.volumeLinks?.[param.key]}
-										{@const link = effect.volumeLinks[param.key]}
-										<div class="volume-link-row">
-											<span class="volume-link-label">Vol →</span>
-											<div class="volume-link-slider">
-												<DualRangeSlider
-													min={param.min}
-													max={param.max}
-													step={param.step}
-													valueLow={link.min}
-													valueHigh={link.max}
-													onChangeLow={(v) =>
-														onVolumeLinkChange(param.key, { ...link, min: v })}
-													onChangeHigh={(v) =>
-														onVolumeLinkChange(param.key, { ...link, max: v })}
-													formatValue={(v) =>
-														parseFloat(v.toString()).toFixed(2)}
-												/>
-											</div>
-											<button
-												type="button"
-												class="volume-invert-btn"
-												class:active={link.inverted}
-												title={link.inverted
-													? 'Inverted: low volume = high effect'
-													: 'Normal: high volume = high effect'}
-												onclick={() =>
-													onVolumeLinkChange(param.key, {
-														...link,
-														inverted: !link.inverted,
-													})}
-											>
-												<ArrowUpDown size={12} />
-											</button>
-											<button
-												type="button"
-												class="volume-unlink-btn"
-												title="Unlink from volume"
-												onclick={() => onVolumeLinkChange(param.key, null)}
-											>
-												<X size={12} />
-											</button>
-										</div>
-										<div class="volume-freq-row">
-											<span class="volume-link-label">Freq</span>
-											<div class="freq-presets">
-												{#each FREQ_PRESET_BUTTONS as preset}
-													<button
-														type="button"
-														class="freq-preset-btn"
-														class:active={link.freqMin == preset.min &&
-															link.freqMax == preset.max}
-														title={preset.title}
-														onclick={() =>
+							<Trash2 size={14} />
+						</button>
+					{:else}
+						<button
+							class="icon-btn"
+							onclick={onHide}
+							title="Hide from the list. It stays hidden next session; restore it under Hidden effects."
+							aria-label="Hide effect"
+						>
+							<EyeOff size={14} />
+						</button>
+					{/if}
+
+					{#if !rolledChain}
+						<div class="move-btns">
+							<button
+								class="move-btn"
+								disabled={!canMoveUp}
+								onclick={(e) => onMove(-1, e.shiftKey)}
+								title="Move up (shift-click to send it to the top)"
+								aria-label="Move effect up"
+							>
+								<ChevronUp size={13} />
+							</button>
+							<button
+								class="move-btn"
+								disabled={!canMoveDown}
+								onclick={(e) => onMove(1, e.shiftKey)}
+								title="Move down (shift-click to send it to the bottom)"
+								aria-label="Move effect down"
+							>
+								<ChevronDown size={13} />
+							</button>
+						</div>
+
+						<span
+							class="drag-handle"
+							title="Drag to reorder"
+							onmousedown={() => (canDrag = true)}
+							onmouseup={() => (canDrag = false)}
+							ontouchstart={onTouchDragStart}
+						>
+							<GripVertical size={14} />
+						</span>
+					{/if}
+				</div>
+			</div>
+
+			{#if effect.expanded && !rolledChain}
+				<div class="params">
+					{#each def.params.filter((p) => !p.visibleWhen || p.visibleWhen(effect.values)) as param}
+						<div class="param-row">
+							<label class="param-label" for="{effect.instanceId}-{param.key}"
+								>{param.label}</label
+							>
+							{#if param.type === "range"}
+								<div class="param-range-wrap">
+									<RangeSlider
+										id="{effect.instanceId}-{param.key}"
+										value={+effect.values[param.key]}
+										min={param.min}
+										max={param.max}
+										step={param.step}
+										curve={param.curve}
+										disabled={!!effect.volumeLinks?.[param.key]}
+										oninput={(v) => onParamChange(param.key, v)}
+										ondblclick={() =>
+											onParamChange(param.key, param.defaultValue)}
+									/>
+									<span class="param-value"
+										>{parseFloat(effect.values[param.key].toString()).toFixed(
+											2,
+										)}</span
+									>
+									{#if hasTrack && onVolumeLinkChange}
+										{#if effect.volumeLinks?.[param.key]}
+											{@const link = effect.volumeLinks[param.key]}
+											<div class="volume-link-row">
+												<span class="volume-link-label">Vol →</span>
+												<div class="volume-link-slider">
+													<DualRangeSlider
+														min={param.min}
+														max={param.max}
+														step={param.step}
+														valueLow={link.min}
+														valueHigh={link.max}
+														onChangeLow={(v) =>
 															onVolumeLinkChange(param.key, {
 																...link,
-																freqMin: preset.min,
-																freqMax: preset.max,
-															})}>{preset.label}</button
-													>
-												{/each}
+																min: v,
+															})}
+														onChangeHigh={(v) =>
+															onVolumeLinkChange(param.key, {
+																...link,
+																max: v,
+															})}
+														formatValue={(v) =>
+															parseFloat(v.toString()).toFixed(2)}
+													/>
+												</div>
+												<button
+													type="button"
+													class="volume-invert-btn"
+													class:active={link.inverted}
+													title={link.inverted
+														? "Inverted: low volume = high effect"
+														: "Normal: high volume = high effect"}
+													onclick={() =>
+														onVolumeLinkChange(param.key, {
+															...link,
+															inverted: !link.inverted,
+														})}
+												>
+													<ArrowUpDown size={12} />
+												</button>
+												<button
+													type="button"
+													class="volume-unlink-btn"
+													title="Unlink from volume"
+													onclick={() => onVolumeLinkChange(param.key, null)}
+												>
+													<X size={12} />
+												</button>
 											</div>
-										</div>
-										{#if link.freqMin != null && link.freqMax != null && spectrumData}
-											<div class="spectrum-wrap">
-												<SpectrumDisplay
-													data={spectrumData.data}
-													sampleRate={spectrumData.sampleRate}
-													binCount={spectrumData.binCount}
-													freqMin={link.freqMin ?? FREQ_PRESETS.full.min}
-													freqMax={link.freqMax ?? FREQ_PRESETS.full.max}
-													{response}
-													width={200}
-													height={48}
-												/>
-												<div class="spectrum-inputs">
-													<span class="spectrum-label">Freq</span>
-													<div class="spectrum-slider">
-														<DualRangeSlider
-															min={0}
-															max={1000}
-															step={1}
-															valueLow={freqToSlider(link.freqMin ?? 20)}
-															valueHigh={freqToSlider(link.freqMax ?? 20000)}
-															onChangeLow={(v) =>
+											<div class="volume-freq-row">
+												<span class="volume-link-label">Freq</span>
+												<div class="freq-presets">
+													{#each FREQ_PRESET_BUTTONS as preset}
+														<button
+															type="button"
+															class="freq-preset-btn"
+															class:active={link.freqMin == preset.min &&
+																link.freqMax == preset.max}
+															title={preset.title}
+															onclick={() =>
 																onVolumeLinkChange(param.key, {
 																	...link,
-																	freqMin: sliderToFreq(v),
-																})}
-															onChangeHigh={(v) =>
-																onVolumeLinkChange(param.key, {
-																	...link,
-																	freqMax: sliderToFreq(v),
-																})}
-															formatValue={(v) =>
-																`${Math.round(sliderToFreq(v))} Hz`}
-														/>
-													</div>
+																	freqMin: preset.min,
+																	freqMax: preset.max,
+																})}>{preset.label}</button
+														>
+													{/each}
 												</div>
 											</div>
+											{#if link.freqMin != null && link.freqMax != null && spectrumData}
+												<div class="spectrum-wrap">
+													<SpectrumDisplay
+														data={spectrumData.data}
+														sampleRate={spectrumData.sampleRate}
+														binCount={spectrumData.binCount}
+														freqMin={link.freqMin ?? FREQ_PRESETS.full.min}
+														freqMax={link.freqMax ?? FREQ_PRESETS.full.max}
+														{response}
+														width={200}
+														height={48}
+													/>
+													<div class="spectrum-inputs">
+														<span class="spectrum-label">Freq</span>
+														<div class="spectrum-slider">
+															<DualRangeSlider
+																min={0}
+																max={1000}
+																step={1}
+																valueLow={freqToSlider(link.freqMin ?? 20)}
+																valueHigh={freqToSlider(link.freqMax ?? 20000)}
+																onChangeLow={(v) =>
+																	onVolumeLinkChange(param.key, {
+																		...link,
+																		freqMin: sliderToFreq(v),
+																	})}
+																onChangeHigh={(v) =>
+																	onVolumeLinkChange(param.key, {
+																		...link,
+																		freqMax: sliderToFreq(v),
+																	})}
+																formatValue={(v) =>
+																	`${Math.round(sliderToFreq(v))} Hz`}
+															/>
+														</div>
+													</div>
+												</div>
+											{/if}
+										{:else}
+											<button
+												type="button"
+												class="volume-link-btn"
+												title="Link to music volume (the slider follows the volume within a range)"
+												onclick={() =>
+													onVolumeLinkChange(param.key, {
+														min: param.min,
+														max: param.max,
+													})}
+											>
+												<Music size={12} />
+												Link
+											</button>
 										{/if}
-									{:else}
-										<button
-											type="button"
-											class="volume-link-btn"
-											title="Link to music volume (the slider follows the volume within a range)"
-											onclick={() =>
-												onVolumeLinkChange(param.key, {
-													min: param.min,
-													max: param.max,
-												})}
-										>
-											<Music size={12} />
-											Link
-										</button>
 									{/if}
-								{/if}
-							</div>
-						{/if}
-						{#if param.type === 'checkbox'}
-							<input
-								id="{effect.instanceId}-{param.key}"
-								type="checkbox"
-								checked={effect.values[param.key] === 1}
-								onchange={(e) =>
-									onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
-							/>
-						{/if}
-						{#if param.type === 'select' && param.fontPicker}
-							<FontSelect
-								id="{effect.instanceId}-{param.key}"
-								value={String(effect.values[param.key])}
-								onChange={(family) => onParamChange(param.key, family)}
-							/>
-						{:else if param.type === 'select'}
-							<select
-								id="{effect.instanceId}-{param.key}"
-								value={effect.values[param.key]}
-								onchange={(e) =>
-									onParamChange(param.key, e.currentTarget.value)}
-							>
-								{#each param.options as opt}
-									<option value={opt.value}>{opt.label}</option>
-								{/each}
-							</select>
-						{/if}
-						{#if param.type === 'text'}
-							<input
-								id="{effect.instanceId}-{param.key}"
-								class="text-input"
-								type="text"
-								value={effect.values[param.key]}
-								maxlength={param.maxLength}
-								placeholder={param.placeholder ?? ''}
-								oninput={(e) => onParamChange(param.key, e.currentTarget.value)}
-							/>
-						{/if}
-						{#if param.type === 'color'}
-							<ColorPicker
-								id="{effect.instanceId}-{param.key}"
-								value={String(effect.values[param.key])}
-								defaultValue={param.defaultValue}
-								onChange={(hex) => onParamChange(param.key, hex)}
-							/>
-						{/if}
-					</div>
-				{/each}
-			</div>
-		{/if}
+								</div>
+							{/if}
+							{#if param.type === "checkbox"}
+								<input
+									id="{effect.instanceId}-{param.key}"
+									type="checkbox"
+									checked={effect.values[param.key] === 1}
+									onchange={(e) =>
+										onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
+								/>
+							{/if}
+							{#if param.type === "select" && param.fontPicker}
+								<FontSelect
+									id="{effect.instanceId}-{param.key}"
+									value={String(effect.values[param.key])}
+									onChange={(family) => onParamChange(param.key, family)}
+								/>
+							{:else if param.type === "select"}
+								<select
+									id="{effect.instanceId}-{param.key}"
+									value={effect.values[param.key]}
+									onchange={(e) =>
+										onParamChange(param.key, e.currentTarget.value)}
+								>
+									{#each param.options as opt}
+										<option value={opt.value}>{opt.label}</option>
+									{/each}
+								</select>
+							{/if}
+							{#if param.type === "text"}
+								<input
+									id="{effect.instanceId}-{param.key}"
+									class="text-input"
+									type="text"
+									value={effect.values[param.key]}
+									maxlength={param.maxLength}
+									placeholder={param.placeholder ?? ""}
+									oninput={(e) =>
+										onParamChange(param.key, e.currentTarget.value)}
+								/>
+							{/if}
+							{#if param.type === "color"}
+								<ColorPicker
+									id="{effect.instanceId}-{param.key}"
+									value={String(effect.values[param.key])}
+									defaultValue={param.defaultValue}
+									onChange={(hex) => onParamChange(param.key, hex)}
+								/>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -486,7 +500,7 @@
 	}
 
 	.rail::after {
-		content: '';
+		content: "";
 		position: absolute;
 		top: 0;
 		bottom: -1px;
@@ -531,7 +545,7 @@
 
 	.effect-item.drop-above::before,
 	.effect-item.drop-below::after {
-		content: '';
+		content: "";
 		position: absolute;
 		left: 0;
 		right: 0;
@@ -953,7 +967,7 @@
 		min-width: 0;
 	}
 
-	input[type='checkbox'] {
+	input[type="checkbox"] {
 		appearance: none;
 		width: 14px;
 		height: 14px;
@@ -965,17 +979,17 @@
 		flex-shrink: 0;
 	}
 
-	input[type='checkbox']:hover {
+	input[type="checkbox"]:hover {
 		border-color: var(--text-3);
 	}
 
-	input[type='checkbox']:checked {
+	input[type="checkbox"]:checked {
 		background: rgba(110, 231, 192, 0.15);
 		border-color: var(--live-dim);
 	}
 
-	input[type='checkbox']:checked::after {
-		content: '';
+	input[type="checkbox"]:checked::after {
+		content: "";
 		position: absolute;
 		inset: 0;
 		display: flex;

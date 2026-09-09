@@ -15,33 +15,33 @@ const listeners = new Set<() => void>();
  * real font is available.
  */
 export function fontsVersion(): number {
-   return version;
+	return version;
 }
 
 /** Notified when a face lands, so a paused preview can redraw. Returns an unsubscribe. */
 export function onFontsChanged(cb: () => void): () => void {
-   listeners.add(cb);
-   return () => listeners.delete(cb);
+	listeners.add(cb);
+	return () => listeners.delete(cb);
 }
 
 /** Tell every listener a face landed (or went away) and invalidate cached draws. */
 export function bumpFontsVersion(): void {
-   version++;
-   for (const cb of listeners) cb();
+	version++;
+	for (const cb of listeners) cb();
 }
 
 /** Record the in-flight load for a CSS family value, so a second ask reuses it. */
 export function registerFamily(family: string, promise: Promise<void>): void {
-   families.set(family, promise);
+	families.set(family, promise);
 }
 
 export function unregisterFamily(family: string): void {
-   families.delete(family);
+	families.delete(family);
 }
 
 /** The pending/settled load for a family, or undefined if nothing claims it. */
 export function familyPromise(family: string): Promise<void> | undefined {
-   return families.get(family);
+	return families.get(family);
 }
 
 let pending: Promise<void> | null = null;
@@ -52,17 +52,17 @@ let pending: Promise<void> | null = null;
  * for it — and so the per-frame path costs nothing once it has.
  */
 export function setFontsPending(p: Promise<void>): void {
-   pending = p;
-   void p.then(
-      () => {
-         if (pending === p) pending = null;
-      },
-      () => {
-         if (pending === p) pending = null;
-      },
-   );
+	pending = p;
+	void p.then(
+		() => {
+			if (pending === p) pending = null;
+		},
+		() => {
+			if (pending === p) pending = null;
+		},
+	);
 }
 
 export function fontsPending(): Promise<void> | null {
-   return pending;
+	return pending;
 }

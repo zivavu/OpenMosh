@@ -27,7 +27,8 @@
 	const TRACK_STEPS = 1000;
 
 	function valueToTrack(v: number): number {
-		if (curve === 1 || max === min) return ((v - min) / (max - min)) * TRACK_STEPS;
+		if (curve === 1 || max === min)
+			return ((v - min) / (max - min)) * TRACK_STEPS;
 		const t = Math.pow((v - min) / (max - min), 1 / curve);
 		return t * TRACK_STEPS;
 	}
@@ -76,7 +77,7 @@
 {/if}
 
 <style>
-	input[type='range'] {
+	input[type="range"] {
 		flex: 1;
 		width: 0;
 		min-width: 0;
@@ -90,7 +91,7 @@
 		cursor: pointer;
 	}
 
-	input[type='range']::-webkit-slider-thumb {
+	input[type="range"]::-webkit-slider-thumb {
 		appearance: none;
 		-webkit-appearance: none;
 		width: 9px;
@@ -101,11 +102,11 @@
 		transition: background var(--t-fast);
 	}
 
-	input[type='range']::-webkit-slider-thumb:hover {
+	input[type="range"]::-webkit-slider-thumb:hover {
 		background: var(--text);
 	}
 
-	input[type='range']::-moz-range-thumb {
+	input[type="range"]::-moz-range-thumb {
 		width: 9px;
 		height: 13px;
 		border-radius: 4px;
@@ -115,17 +116,17 @@
 		transition: background var(--t-fast);
 	}
 
-	input[type='range']::-moz-range-thumb:hover {
+	input[type="range"]::-moz-range-thumb:hover {
 		background: var(--text);
 	}
 
 	@media (max-width: 800px) {
-		input[type='range']::-webkit-slider-thumb {
+		input[type="range"]::-webkit-slider-thumb {
 			width: 14px;
 			height: 20px;
 		}
 
-		input[type='range']::-moz-range-thumb {
+		input[type="range"]::-moz-range-thumb {
 			width: 14px;
 			height: 20px;
 		}

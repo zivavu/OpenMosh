@@ -10,40 +10,40 @@
 
 /** The stored value at `key`, or `fallback` when it's missing or unparseable. */
 export function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+	try {
+		const raw = localStorage.getItem(key);
+		if (raw === null) return fallback;
+		return JSON.parse(raw) as T;
+	} catch {
+		return fallback;
+	}
 }
 
 /** Store `value` as JSON. Returns false when it couldn't be written. */
 export function writeJson(key: string, value: unknown): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch {
-    return false;
-  }
+	try {
+		localStorage.setItem(key, JSON.stringify(value));
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export function readRaw(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
 }
 
 export function writeRaw(key: string, value: string): boolean {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
+	try {
+		localStorage.setItem(key, value);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -56,16 +56,16 @@ export function writeRaw(key: string, value: string): boolean {
  * read, since anything could be sitting under the key.
  */
 export function createListCache<T>(
-  key: string,
-  isValid: (value: unknown) => value is T,
+	key: string,
+	isValid: (value: unknown) => value is T,
 ) {
-  return {
-    read(): T[] {
-      const parsed = readJson<unknown>(key, null);
-      return Array.isArray(parsed) ? parsed.filter(isValid) : [];
-    },
-    write(list: T[]): void {
-      writeJson(key, list);
-    },
-  };
+	return {
+		read(): T[] {
+			const parsed = readJson<unknown>(key, null);
+			return Array.isArray(parsed) ? parsed.filter(isValid) : [];
+		},
+		write(list: T[]): void {
+			writeJson(key, list);
+		},
+	};
 }

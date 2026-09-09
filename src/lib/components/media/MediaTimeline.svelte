@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { Eye, EyeOff, Focus, Trash2 } from 'lucide-svelte';
-	import { untrack } from 'svelte';
-	import { dropAutoRangeScope } from '../../audio/auto-range';
-	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
-	import { isTextEntryTarget } from '../../editor/shortcut-target';
-	import { isModalKeyboardOpen } from '../../modal-keyboard';
+	import { Eye, EyeOff, Focus, Trash2 } from "lucide-svelte";
+	import { untrack } from "svelte";
+	import { dropAutoRangeScope } from "../../audio/auto-range";
+	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
+	import { isTextEntryTarget } from "../../editor/shortcut-target";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import {
 		addClip,
 		clipRange,
@@ -27,12 +27,12 @@
 		type MediaClipboardEntry,
 		type MediaLane,
 		type MediaTimeline,
-	} from '../../media';
-	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import { SOURCE_DND_TYPE } from '../../editor/sequence-source-ui';
-	import { stackIndex, type LayerRef } from '../../timeline/layer-order';
-	import LaneGrip from '../ui/LaneGrip.svelte';
-	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+	} from "../../media";
+	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import { SOURCE_DND_TYPE } from "../../editor/sequence-source-ui";
+	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
+	import LaneGrip from "../ui/LaneGrip.svelte";
+	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
@@ -93,7 +93,7 @@
 		if (!isSourceDrag(e)) return;
 		// Without preventDefault the browser refuses the drop entirely.
 		e.preventDefault();
-		if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+		if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
 		dropLaneId = laneId;
 		dropClipId = dropTargetClip(laneId, e.clientX)?.id ?? null;
 	}
@@ -133,7 +133,7 @@
 	function onLaneDrop(e: DragEvent, laneId: string) {
 		if (!isSourceDrag(e)) return;
 		e.preventDefault();
-		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? '';
+		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? "";
 		const onClip = dropTargetClip(laneId, e.clientX);
 		dropLaneId = null;
 		dropClipId = null;
@@ -165,7 +165,7 @@
 
 	/** What a clip says it is showing. Clips with no source read as unset. */
 	function clipLabel(lane: MediaLane, clip: MediaClip): string {
-		return clipSource(lane, clip)?.name ?? 'No source';
+		return clipSource(lane, clip)?.name ?? "No source";
 	}
 
 	// One axis for the whole stack: zoom, pan, playhead-following and the
@@ -183,7 +183,9 @@
 	function laneTrack(node: HTMLElement, laneId: string) {
 		trackEl = node;
 		const shared = stack.lane(node, laneId);
-		const unregister = stack.registerSplitter(laneId, (t) => splitAt(laneId, t));
+		const unregister = stack.registerSplitter(laneId, (t) =>
+			splitAt(laneId, t),
+		);
 		return {
 			destroy() {
 				shared.destroy();
@@ -198,7 +200,7 @@
 		clipId: string;
 		/** The clip on the far side of a shared-boundary drag. */
 		otherId?: string;
-		mode: 'move' | 'start' | 'end' | 'boundary';
+		mode: "move" | "start" | "end" | "boundary";
 		/** Seconds between the pointer and the clip's start, for move drags. */
 		grabOffset: number;
 	} | null>(null);
@@ -233,7 +235,8 @@
 			}
 			const pruned = selectedClipIds.filter((x) => alive.has(x));
 			if (!pruned.includes(id)) selectedClipIds = [id];
-			else if (pruned.length !== selectedClipIds.length) selectedClipIds = pruned;
+			else if (pruned.length !== selectedClipIds.length)
+				selectedClipIds = pruned;
 		});
 	});
 
@@ -277,7 +280,9 @@
 		value: MediaLane[K],
 	) {
 		onBeforeEdit?.();
-		onChange(updateMediaLane(timeline, laneId, (l) => ({ ...l, [key]: value })));
+		onChange(
+			updateMediaLane(timeline, laneId, (l) => ({ ...l, [key]: value })),
+		);
 	}
 
 	/**
@@ -296,7 +301,9 @@
 		const clip = createMediaClip(0, trackDuration);
 		onBeforeEdit?.();
 		onChange(
-			updateMediaLane(timeline, lane.id, (l) => addClip(l, clip, trackDuration)),
+			updateMediaLane(timeline, lane.id, (l) =>
+				addClip(l, clip, trackDuration),
+			),
 		);
 		selectOnly(clip.id);
 	}
@@ -322,11 +329,16 @@
 		if (!lane) return;
 		const gap = freeRangeAt(lane, time, trackDuration);
 		if (!gap) return;
-		const start = Math.max(gap.start, Math.min(time, gap.end - MIN_CLIP_LENGTH));
+		const start = Math.max(
+			gap.start,
+			Math.min(time, gap.end - MIN_CLIP_LENGTH),
+		);
 		const end = Math.min(start + DEFAULT_CLIP_LENGTH, gap.end);
 		const clip = createMediaClip(start, end);
 		onBeforeEdit?.();
-		onChange(updateMediaLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)));
+		onChange(
+			updateMediaLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)),
+		);
 		selectOnly(clip.id);
 	}
 
@@ -352,7 +364,7 @@
 		if (trackDuration <= 0) return;
 		// A double-click inside a clip is the clip's business; only empty lane
 		// space drops a new clip.
-		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		addClipAt(laneId, timeAt(e.clientX));
 	}
 
@@ -360,7 +372,7 @@
 		e: PointerEvent,
 		laneId: string,
 		clipId: string,
-		mode: 'move' | 'start' | 'end',
+		mode: "move" | "start" | "end",
 	) {
 		if (e.button !== 0) return;
 		e.stopPropagation();
@@ -373,11 +385,12 @@
 		// Ctrl used to be, moved aside so Ctrl+Click can split the way it does on
 		// the source and fx lanes. Checked before the plain-Shift range, which
 		// would otherwise swallow it.
-		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === 'move') {
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
 			if (selectedClipIds.includes(clipId)) {
 				const rest = selectedClipIds.filter((x) => x !== clipId);
 				selectedClipIds = rest;
-				if (selectedClipId === clipId) selectedClipId = rest[rest.length - 1] ?? null;
+				if (selectedClipId === clipId)
+					selectedClipId = rest[rest.length - 1] ?? null;
 			} else {
 				selectedClipIds = [...selectedClipIds, clipId];
 				selectedClipId = clipId;
@@ -393,7 +406,7 @@
 		}
 
 		// Shift extends the selection from the primary.
-		if (e.shiftKey && mode === 'move') {
+		if (e.shiftKey && mode === "move") {
 			const lane = laneOf(laneId);
 			if (lane && selectedClipId) {
 				const range = clipRange(lane, selectedClipId, clipId);
@@ -408,7 +421,7 @@
 
 		// A plain click on something already selected keeps the selection, so it
 		// can be dragged; pointerup resolves it if nothing moved.
-		if (selectedClipIds.includes(clipId) && mode === 'move') {
+		if (selectedClipIds.includes(clipId) && mode === "move") {
 			selectedClipId = clipId;
 			clickOnUp = clipId;
 		} else {
@@ -441,7 +454,7 @@
 			laneId,
 			clipId: leftId,
 			otherId: rightId,
-			mode: 'boundary',
+			mode: "boundary",
 			grabOffset: 0,
 		};
 		// One undo entry per gesture, not per pointermove.
@@ -512,7 +525,7 @@
 	 * and a one-handed alternative to double-clicking. */
 	function onLanePointerDown(e: PointerEvent, laneId: string) {
 		if (e.button !== 0 || trackDuration <= 0) return;
-		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		if (e.ctrlKey || e.metaKey) {
 			e.preventDefault();
 			addClipAt(laneId, timeAt(e.clientX));
@@ -531,7 +544,7 @@
 		clickOnUp = null;
 		onChange(
 			updateMediaLane(timeline, laneId, (lane) => {
-				if (mode === 'move') {
+				if (mode === "move") {
 					// Dragging any member drags the whole selection with it. Measured
 					// as a delta off the grabbed clip's live position, since each move
 					// re-enters here against an already-shifted timeline.
@@ -550,7 +563,7 @@
 				}
 				// A boundary drag moves both clips' facing edges; the per-clip edges
 				// (resizeClip) trim one clip and can pull it away from its neighbour.
-				if (mode === 'boundary') {
+				if (mode === "boundary") {
 					return resizeBoundary(lane, clipId, otherId!, t);
 				}
 				return resizeClip(lane, clipId, mode, t, trackDuration);
@@ -562,7 +575,8 @@
 		if (clickOnUp) {
 			// Clicking the one selected clip again drops the selection — the same
 			// gesture the sequence timeline gives a segment.
-			const sole = selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
+			const sole =
+				selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
 			if (sole) deselect();
 			else selectOnly(clickOnUp);
 			clickOnUp = null;
@@ -626,26 +640,25 @@
 		if (isModalKeyboardOpen()) return;
 		if (e.ctrlKey || e.metaKey) {
 			const key = e.key.toLowerCase();
-			if (key === 'c' && copySelection()) {
+			if (key === "c" && copySelection()) {
 				e.preventDefault();
 				return;
 			}
-			if (key === 'v' && pasteClipboard()) {
+			if (key === "v" && pasteClipboard()) {
 				e.preventDefault();
 				return;
 			}
 			return;
 		}
-		if (e.key === 'Escape' && selectedClipIds.length > 0) {
+		if (e.key === "Escape" && selectedClipIds.length > 0) {
 			deselect();
 			return;
 		}
-		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		if (e.key !== "Delete" && e.key !== "Backspace") return;
 		if (selectedClipIds.length === 0) return;
 		e.preventDefault();
 		deleteSelection();
 	}
-
 </script>
 
 <svelte:window onkeydown={onKeyDown} />
@@ -673,8 +686,8 @@
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
-					title={lane.enabled ? 'Hide this lane' : 'Show this lane'}
-					onclick={() => setLane(lane.id, 'enabled', !lane.enabled)}
+					title={lane.enabled ? "Hide this lane" : "Show this lane"}
+					onclick={() => setLane(lane.id, "enabled", !lane.enabled)}
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
@@ -683,8 +696,8 @@
 						class="lane-eye lane-solo"
 						class:on={soloLaneId === lane.id}
 						title={soloLaneId === lane.id
-							? 'Stop soloing — show the whole frame again'
-							: 'Solo: show only this layer on the canvas'}
+							? "Stop soloing — show the whole frame again"
+							: "Solo: show only this layer on the canvas"}
 						aria-pressed={soloLaneId === lane.id}
 						onclick={() => soloLane(lane)}
 					>
@@ -739,14 +752,14 @@
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
-								onClipPointerDown(e, lane.id, clip.id, 'move')}
+								onClipPointerDown(e, lane.id, clip.id, "move")}
 						>
 							<span
 								class="clip-edge start"
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, 'start')}
+									onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
 							{#if src?.thumbUrl}
 								<span
@@ -762,7 +775,7 @@
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, 'end')}
+									onClipPointerDown(e, lane.id, clip.id, "end")}
 							></span>
 						</div>
 					{/if}
@@ -802,7 +815,6 @@
 			onCancel={() => (lanePendingDelete = null)}
 		/>
 	{/if}
-
 </div>
 
 <style>
@@ -921,7 +933,7 @@
 	/* A clip showing something other than its lane's source. Left corner, so it
 	   survives a clip narrow enough to lose its label. */
 	.clip.retargeted::after {
-		content: '';
+		content: "";
 		position: absolute;
 		top: 2px;
 		left: 2px;
@@ -996,7 +1008,7 @@
 
 	/* Centred in the grab area, which is wider than the line and sized inline. */
 	.clip-boundary::after {
-		content: '';
+		content: "";
 		position: absolute;
 		top: 0;
 		bottom: 0;
@@ -1010,5 +1022,4 @@
 		width: 2px;
 		background: var(--live);
 	}
-
 </style>

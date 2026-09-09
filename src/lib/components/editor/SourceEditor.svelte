@@ -9,11 +9,11 @@
 		RotateCcw,
 		Undo2,
 		X,
-	} from 'lucide-svelte';
-	import { onMount, untrack } from 'svelte';
-	import { hexToVec3 } from '../../color';
-	import { pushModalKeyboard } from '../../modal-keyboard';
-	import { createSnapshotHistory } from '../../timeline/snapshot-history.svelte';
+	} from "lucide-svelte";
+	import { onMount, untrack } from "svelte";
+	import { hexToVec3 } from "../../color";
+	import { pushModalKeyboard } from "../../modal-keyboard";
+	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
 	import {
 		DEFAULT_CHROMA_KEY,
 		FULL_CROP,
@@ -33,19 +33,17 @@
 		type MaskTransform,
 		type SourceEdit,
 		type SourceEditAnim,
-	} from '../../media';
+	} from "../../media";
 	import {
 		maskShift,
 		maskToSdf,
 		sdfCoverage,
 		type MaskField,
-	} from '../../media/mask-sdf';
-	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import ColorPicker from '../ui/ColorPicker.svelte';
-	import RangeSlider from '../ui/RangeSlider.svelte';
-	import SourceKeyframes, {
-		type KeyTrackView,
-	} from './SourceKeyframes.svelte';
+	} from "../../media/mask-sdf";
+	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import ColorPicker from "../ui/ColorPicker.svelte";
+	import RangeSlider from "../ui/RangeSlider.svelte";
+	import SourceKeyframes, { type KeyTrackView } from "./SourceKeyframes.svelte";
 
 	interface Props {
 		/** The media being edited. The edit belongs to it, not to any layer. */
@@ -92,23 +90,30 @@
 	}
 
 	/** Which tool the preview's pointer belongs to. Only one can own a drag. */
-	type Tool = 'key' | 'crop' | 'erase';
-	let tool = $state<Tool>('key');
+	type Tool = "key" | "crop" | "erase";
+	let tool = $state<Tool>("key");
 	/** The track each tool animates, for shortcuts that act on "this" track. */
-	const TOOL_TRACK = { key: 'key', crop: 'crop', erase: 'mask' } as const satisfies
-		Record<Tool, TrackId>;
+	const TOOL_TRACK = {
+		key: "key",
+		crop: "crop",
+		erase: "mask",
+	} as const satisfies Record<Tool, TrackId>;
 
 	const TOOLS: { value: Tool; label: string; hint: string }[] = [
-		{ value: 'key', label: 'Key', hint: 'Click the preview to pick the colour to remove' },
 		{
-			value: 'crop',
-			label: 'Crop',
-			hint: 'Drag a rectangle to keep. Drag an edge or corner to resize it, inside it to move it',
+			value: "key",
+			label: "Key",
+			hint: "Click the preview to pick the colour to remove",
 		},
 		{
-			value: 'erase',
-			label: 'Erase',
-			hint: 'Paint over what should go; Alt paints it back. With the Erase track on, each key holds the shape painted at it — and Shift-drag or Shape X/Y moves that shape',
+			value: "crop",
+			label: "Crop",
+			hint: "Drag a rectangle to keep. Drag an edge or corner to resize it, inside it to move it",
+		},
+		{
+			value: "erase",
+			label: "Erase",
+			hint: "Paint over what should go; Alt paints it back. With the Erase track on, each key holds the shape painted at it — and Shift-drag or Shape X/Y moves that shape",
 		},
 	];
 
@@ -159,7 +164,7 @@
 	//
 	// Only videos have anywhere to put a key: an image is one instant, and its
 	// edit is the same at every point in it.
-	type TrackId = 'crop' | 'key' | 'mask';
+	type TrackId = "crop" | "key" | "mask";
 
 	let anim = $derived(edit.anim);
 	let cropKeys = $derived(anim?.crop);
@@ -169,26 +174,26 @@
 
 	let trackViews = $derived<KeyTrackView[]>([
 		{
-			id: 'crop',
-			label: 'Crop',
+			id: "crop",
+			label: "Crop",
 			on: !!cropKeys?.length,
 			keys: cropKeys?.map((k) => k.t) ?? [],
 		},
 		{
-			id: 'key',
-			label: 'Key',
+			id: "key",
+			label: "Key",
 			on: !!keyKeys?.length,
 			keys: keyKeys?.map((k) => k.t) ?? [],
-			blocked: key.enabled ? null : 'Switch the key on before animating it',
+			blocked: key.enabled ? null : "Switch the key on before animating it",
 		},
 		{
-			id: 'mask',
-			label: 'Erase',
+			id: "mask",
+			label: "Erase",
 			on: !!maskKeys?.length,
 			keys: maskKeys?.map((k) => k.t) ?? [],
 			blocked: live.mask
 				? null
-				: 'Erase something first — a key holds the shape you painted and where it sits',
+				: "Erase something first — a key holds the shape you painted and where it sits",
 		},
 	]);
 
@@ -197,7 +202,11 @@
 	}
 
 	/** The stored edit with one track replaced. An empty track is dropped. */
-	function withTrack(base: SourceEdit, id: TrackId, keys: Keyframe<unknown>[]): SourceEdit {
+	function withTrack(
+		base: SourceEdit,
+		id: TrackId,
+		keys: Keyframe<unknown>[],
+	): SourceEdit {
 		const next: SourceEditAnim = { ...base.anim };
 		if (keys.length === 0) delete next[id];
 		else (next as Record<string, unknown>)[id] = keys;
@@ -219,8 +228,8 @@
 
 	/** The value each track would write for the moment on screen. */
 	function valueNow(id: TrackId): CropRect | AnimatedKey | MaskKey {
-		if (id === 'crop') return { ...crop };
-		if (id === 'key') return animatedKey(key);
+		if (id === "crop") return { ...crop };
+		if (id === "key") return animatedKey(key);
 		// The shape goes into the key with its position: a key that held only
 		// where the mask sits would lose the painting the moment a later key
 		// carried one of its own.
@@ -267,8 +276,8 @@
 	 * one being looked at, so it is the one to keep.
 	 */
 	function flatten(id: TrackId): SourceEdit {
-		if (id === 'crop') return { ...edit, crop: { ...crop } };
-		if (id === 'key') return { ...edit, chromaKey: { ...key } };
+		if (id === "crop") return { ...edit, crop: { ...crop } };
+		if (id === "key") return { ...edit, chromaKey: { ...key } };
 		// The shape under the playhead becomes the static one, so switching the
 		// track off keeps the picture on screen. Its offset is not kept: a mask
 		// has no static offset — it is painted where it is.
@@ -291,8 +300,8 @@
 		const next = { ...edit, chromaKey };
 		// `enabled` is the one part that is never keyed, so it alone writes
 		// straight through to the stored edit.
-		if (trackOn('key') && prop !== 'enabled') {
-			addKey('key', next, animatedKey(chromaKey));
+		if (trackOn("key") && prop !== "enabled") {
+			addKey("key", next, animatedKey(chromaKey));
 		} else {
 			onChange(next);
 		}
@@ -304,7 +313,7 @@
 		beforeEdit(coalesceKey);
 		const chromaKey = { ...key, enabled: true, color: { r, g, b } };
 		const next = { ...edit, chromaKey };
-		if (trackOn('key')) addKey('key', next, animatedKey(chromaKey));
+		if (trackOn("key")) addKey("key", next, animatedKey(chromaKey));
 		else onChange(next);
 	}
 
@@ -317,7 +326,7 @@
 	function setMaskTransform(xf: MaskTransform) {
 		// Carrying the shape through: moving a mask must not drop the painting
 		// the key it lands on was holding.
-		addKey('mask', edit, { ...xf, mask: live.mask });
+		addKey("mask", edit, { ...xf, mask: live.mask });
 	}
 
 	// ── Loading ──────────────────────────────────────────────────────────────
@@ -336,30 +345,30 @@
 				paint();
 			})
 			.catch(() => {
-				if (!cancelled) loadError = 'Could not read this media.';
+				if (!cancelled) loadError = "Could not read this media.";
 			});
 		return () => {
 			cancelled = true;
 			playing = false;
-			if (media && 'pause' in media) media.pause();
+			if (media && "pause" in media) media.pause();
 			media = null;
 		};
 	});
 
 	async function load(src: SequenceSource): Promise<void> {
 		const el =
-			src.kind === 'video'
+			src.kind === "video"
 				? await videoElement(src.objectUrl)
 				: await imageElement(src.objectUrl);
-		const w = 'videoWidth' in el ? el.videoWidth : el.naturalWidth;
-		const h = 'videoHeight' in el ? el.videoHeight : el.naturalHeight;
-		if (!w || !h) throw new Error('no dimensions');
+		const w = "videoWidth" in el ? el.videoWidth : el.naturalWidth;
+		const h = "videoHeight" in el ? el.videoHeight : el.naturalHeight;
+		if (!w || !h) throw new Error("no dimensions");
 		media = el;
 		duration =
-			'duration' in el && Number.isFinite(el.duration) ? el.duration : 0;
-		currentTime = 'currentTime' in el ? el.currentTime : 0;
+			"duration" in el && Number.isFinite(el.duration) ? el.duration : 0;
+		currentTime = "currentTime" in el ? el.currentTime : 0;
 		const k = Math.min(PREVIEW_MAX / w, PREVIEW_MAX / h, 1);
-		raw = document.createElement('canvas');
+		raw = document.createElement("canvas");
 		raw.width = Math.max(1, Math.round(w * k));
 		raw.height = Math.max(1, Math.round(h * k));
 		rawW = raw.width;
@@ -369,27 +378,27 @@
 		// buffer made the common case — neither of those on — pull a full frame
 		// out of the GPU per repaint, which is most of what a laptop had to
 		// spend to play a 1080p clip in here.
-		rawCtx = raw.getContext('2d');
+		rawCtx = raw.getContext("2d");
 	}
 
 	function imageElement(url: string): Promise<HTMLImageElement> {
 		return new Promise((resolve, reject) => {
 			const img = new Image();
 			img.onload = () => resolve(img);
-			img.onerror = () => reject(new Error('decode failed'));
+			img.onerror = () => reject(new Error("decode failed"));
 			img.src = url;
 		});
 	}
 
 	function videoElement(url: string): Promise<HTMLVideoElement> {
 		return new Promise((resolve, reject) => {
-			const v = document.createElement('video');
+			const v = document.createElement("video");
 			// Silent by design: this is a colour-picking dialog, and the editor's
 			// own preview may well be playing behind it.
 			v.muted = true;
 			v.playsInline = true;
-			v.preload = 'auto';
-			v.onerror = () => reject(new Error('decode failed'));
+			v.preload = "auto";
+			v.onerror = () => reject(new Error("decode failed"));
 			// Repaints a scrub while paused; during playback the loop owns the
 			// frame and this just lands on top of the same picture.
 			v.onseeked = () => {
@@ -411,12 +420,12 @@
 	$effect(() => {
 		if (!playing || !ready) return;
 		const v = media;
-		if (!v || !('play' in v)) return;
+		if (!v || !("play" in v)) return;
 		void v.play().catch(() => (playing = false));
 		// Once per decoded frame rather than once per display refresh: a repaint
 		// costs a full-frame draw out of the video either way, and on a display
 		// faster than the clip most of them landed on the picture already shown.
-		const perFrame = 'requestVideoFrameCallback' in v;
+		const perFrame = "requestVideoFrameCallback" in v;
 		let handle = 0;
 		const step = () => {
 			currentTime = v.currentTime;
@@ -463,14 +472,14 @@
 
 	function seekTo(t: number) {
 		const v = media;
-		if (!v || !('currentTime' in v)) return;
+		if (!v || !("currentTime" in v)) return;
 		currentTime = t;
 		v.currentTime = t;
 	}
 
 	function formatTime(t: number): string {
 		const s = Math.max(0, Math.floor(t));
-		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 	}
 
 	// ── Erase mask ───────────────────────────────────────────────────────────
@@ -490,14 +499,14 @@
 		const h = raw?.height ?? 0;
 		if (w <= 0 || h <= 0) return null;
 		const k = Math.min(MASK_MAX / Math.max(w, h), 1);
-		maskCanvas = document.createElement('canvas');
+		maskCanvas = document.createElement("canvas");
 		maskCanvas.width = Math.max(1, Math.round(w * k));
 		maskCanvas.height = Math.max(1, Math.round(h * k));
-		maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+		maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
 		if (!maskCtx) return null;
 		// White is "keep": the shader multiplies coverage by the red channel, so
 		// an untouched mask has to be opaque white rather than empty.
-		maskCtx.fillStyle = '#fff';
+		maskCtx.fillStyle = "#fff";
 		maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
 		return maskCtx;
 	}
@@ -535,13 +544,12 @@
 		const u = unmoved(x / raw.width, y / raw.height);
 		const sx = u.x * maskCanvas.width;
 		const sy = u.y * maskCanvas.height;
-		const r =
-			(brush * Math.max(maskCanvas.width, maskCanvas.height)) / 2;
+		const r = (brush * Math.max(maskCanvas.width, maskCanvas.height)) / 2;
 		const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(r, 1));
 		const on = restoring;
-		grad.addColorStop(0, on ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)');
-		grad.addColorStop(0.6, on ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)');
-		grad.addColorStop(1, on ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)');
+		grad.addColorStop(0, on ? "rgba(255,255,255,1)" : "rgba(0,0,0,1)");
+		grad.addColorStop(0.6, on ? "rgba(255,255,255,1)" : "rgba(0,0,0,1)");
+		grad.addColorStop(1, on ? "rgba(255,255,255,0)" : "rgba(0,0,0,0)");
 		ctx.fillStyle = grad;
 		ctx.beginPath();
 		ctx.arc(sx, sy, Math.max(r, 1), 0, Math.PI * 2);
@@ -567,9 +575,9 @@
 	 */
 	function commitMask() {
 		if (!maskCanvas) return;
-		const url = maskCanvas.toDataURL('image/png');
+		const url = maskCanvas.toDataURL("image/png");
 		maskLoaded = url;
-		if (trackOn('mask')) addKey('mask', edit, { ...maskXform, mask: url });
+		if (trackOn("mask")) addKey("mask", edit, { ...maskXform, mask: url });
 		else onChange({ ...edit, mask: url });
 	}
 
@@ -580,7 +588,7 @@
 		maskLoaded = null;
 		// The track goes with the mask: keys that move a shape which is no longer
 		// painted have nothing left to move.
-		onChange(withTrack({ ...edit, mask: null }, 'mask', []));
+		onChange(withTrack({ ...edit, mask: null }, "mask", []));
 	}
 
 	// ── Drawing ──────────────────────────────────────────────────────────────
@@ -593,10 +601,7 @@
 	// The same key test the placement shader runs, in JS. Two copies of one
 	// rule, so keep them in step — see LAYER_TRANSFORM_FRAG.
 	function chroma(r: number, g: number, b: number): [number, number] {
-		return [
-			-0.169 * r - 0.331 * g + 0.5 * b,
-			0.5 * r - 0.419 * g - 0.081 * b,
-		];
+		return [-0.169 * r - 0.331 * g + 0.5 * b, 0.5 * r - 0.419 * g - 0.081 * b];
 	}
 
 	function luma(r: number, g: number, b: number): number {
@@ -609,7 +614,7 @@
 		if (!canvas || !raw || !rawCtx) return;
 		if (canvas.width !== raw.width) canvas.width = raw.width;
 		if (canvas.height !== raw.height) canvas.height = raw.height;
-		const ctx = canvas.getContext('2d');
+		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		const keying = key.enabled && key.threshold > 0;
@@ -669,7 +674,7 @@
 	const MAX_SDF_CACHE = 8;
 	const sdfCache = new Map<
 		string,
-		{ field: MaskField; w: number; h: number } | 'pending'
+		{ field: MaskField; w: number; h: number } | "pending"
 	>();
 
 	function ensureSdf(url: string) {
@@ -679,22 +684,22 @@
 			// young end and the next eviction takes something actually stale.
 			sdfCache.delete(url);
 			sdfCache.set(url, held);
-			return held === 'pending' ? null : held;
+			return held === "pending" ? null : held;
 		}
 		while (sdfCache.size >= MAX_SDF_CACHE) {
 			const oldest = sdfCache.keys().next();
 			if (oldest.done) break;
 			sdfCache.delete(oldest.value);
 		}
-		sdfCache.set(url, 'pending');
+		sdfCache.set(url, "pending");
 		const img = new Image();
 		img.onload = () => {
 			const w = img.naturalWidth;
 			const h = img.naturalHeight;
-			const c = document.createElement('canvas');
+			const c = document.createElement("canvas");
 			c.width = w;
 			c.height = h;
-			const ctx = c.getContext('2d', { willReadFrequently: true });
+			const ctx = c.getContext("2d", { willReadFrequently: true });
 			if (!ctx || w <= 0 || h <= 0) {
 				sdfCache.delete(url);
 				return;
@@ -730,12 +735,12 @@
 		const a = ensureSdf(from);
 		const b = ensureSdf(to);
 		if (!a || !b || a.w !== b.w || a.h !== b.h) return null;
-		const c = (morphCanvas ??= document.createElement('canvas'));
+		const c = (morphCanvas ??= document.createElement("canvas"));
 		if (c.width !== a.w || c.height !== a.h) {
 			c.width = a.w;
 			c.height = a.h;
 		}
-		const ctx = c.getContext('2d', { willReadFrequently: true });
+		const ctx = c.getContext("2d", { willReadFrequently: true });
 		if (!ctx) return null;
 		// One pass over every mask pixel, so it is worth not repeating it for a
 		// playhead that has not moved — paint() runs on every frame and on every
@@ -826,17 +831,17 @@
 			maskScratch.width !== raw.width ||
 			maskScratch.height !== raw.height
 		) {
-			maskScratch = document.createElement('canvas');
+			maskScratch = document.createElement("canvas");
 			maskScratch.width = raw.width;
 			maskScratch.height = raw.height;
 		}
-		const sc = maskScratch.getContext('2d', { willReadFrequently: true });
+		const sc = maskScratch.getContext("2d", { willReadFrequently: true });
 		if (!sc) return null;
 		const w = maskScratch.width;
 		const h = maskScratch.height;
 		// White first: everything the moved mask has slid off is kept, the same
 		// rule the shader follows outside the mask's own square.
-		sc.fillStyle = '#fff';
+		sc.fillStyle = "#fff";
 		sc.fillRect(0, 0, w, h);
 		const dw = w * maskXform.scale;
 		const dh = h * maskXform.scale;
@@ -881,7 +886,12 @@
 
 	function pickAt(x: number, y: number) {
 		if (!rawCtx) return;
-		const [r, g, b] = rawCtx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+		const [r, g, b] = rawCtx.getImageData(
+			Math.floor(x),
+			Math.floor(y),
+			1,
+			1,
+		).data;
 		setColor(r / 255, g / 255, b / 255);
 	}
 
@@ -926,11 +936,11 @@
 	type Edges = { l: boolean; r: boolean; t: boolean; b: boolean };
 
 	type Drag =
-		| { kind: 'erase' }
-		| { kind: 'crop-new'; ax: number; ay: number }
-		| { kind: 'crop-move'; dx: number; dy: number }
-		| { kind: 'crop-resize'; edges: Edges; from: CropRect }
-		| { kind: 'mask-move'; ax: number; ay: number; from: MaskTransform };
+		| { kind: "erase" }
+		| { kind: "crop-new"; ax: number; ay: number }
+		| { kind: "crop-move"; dx: number; dy: number }
+		| { kind: "crop-resize"; edges: Edges; from: CropRect }
+		| { kind: "mask-move"; ax: number; ay: number; from: MaskTransform };
 	let drag: Drag | null = null;
 
 	/** Narrowest the rectangle may get, matching the clamp in `setCrop`. */
@@ -985,15 +995,15 @@
 	}
 
 	function cursorFor(edges: Edges | null): string {
-		if (!edges) return '';
-		if ((edges.l && edges.t) || (edges.r && edges.b)) return 'nwse-resize';
-		if ((edges.r && edges.t) || (edges.l && edges.b)) return 'nesw-resize';
-		if (edges.l || edges.r) return 'ew-resize';
-		return 'ns-resize';
+		if (!edges) return "";
+		if ((edges.l && edges.t) || (edges.r && edges.b)) return "nwse-resize";
+		if ((edges.r && edges.t) || (edges.l && edges.b)) return "nesw-resize";
+		if (edges.l || edges.r) return "ew-resize";
+		return "ns-resize";
 	}
 
 	/** What the crop tool's pointer is over, so the cursor can say so. */
-	let cropCursor = $state('');
+	let cropCursor = $state("");
 
 	function onPreviewDown(e: PointerEvent) {
 		if (e.button !== 0) return;
@@ -1002,11 +1012,11 @@
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		gestureTime = currentTime;
 
-		if (tool === 'key') {
+		if (tool === "key") {
 			pickAt(p.x, p.y);
 			return;
 		}
-		if (tool === 'erase') {
+		if (tool === "erase") {
 			// One entry per stroke, taken before the first dab: undo steps back a
 			// whole stroke, which is the unit the hand thinks in.
 			beforeEdit();
@@ -1015,7 +1025,7 @@
 			// only gesture that writes a key on the erase track.
 			if (e.shiftKey && edit.mask && raw) {
 				drag = {
-					kind: 'mask-move',
+					kind: "mask-move",
 					ax: p.x / raw.width,
 					ay: p.y / raw.height,
 					from: { ...maskXform },
@@ -1032,7 +1042,7 @@
 			// every paint program; the toggle stays where the user left it.
 			const held = restoring;
 			if (e.altKey) restoring = !restoring;
-			drag = { kind: 'erase' };
+			drag = { kind: "erase" };
 			dab(p.x, p.y);
 			paint();
 			if (e.altKey) restoring = held;
@@ -1049,12 +1059,12 @@
 		// an entry per move would make undo a frame-by-frame rewind.
 		beforeEdit();
 		if (edges) {
-			drag = { kind: 'crop-resize', edges, from: { ...crop } };
+			drag = { kind: "crop-resize", edges, from: { ...crop } };
 			return;
 		}
 		drag = inside
-			? { kind: 'crop-move', dx: n.x - crop.x, dy: n.y - crop.y }
-			: { kind: 'crop-new', ax: n.x, ay: n.y };
+			? { kind: "crop-move", dx: n.x - crop.x, dy: n.y - crop.y }
+			: { kind: "crop-new", ax: n.x, ay: n.y };
 		if (!inside) setCrop({ x: n.x, y: n.y, w: MIN_CROP, h: MIN_CROP });
 	}
 
@@ -1062,18 +1072,18 @@
 		if (!drag) {
 			// Nothing is being dragged, so the only job is to say what a press
 			// here would do.
-			if (tool === 'crop') {
+			if (tool === "crop") {
 				const n = normAt(e);
 				const edges = n && edgesAt(n);
 				cropCursor = edges
 					? cursorFor(edges)
 					: n && insideCrop(n)
-						? 'move'
-						: '';
+						? "move"
+						: "";
 			}
 			return;
 		}
-		if (drag.kind === 'mask-move') {
+		if (drag.kind === "mask-move") {
 			const p = atEvent(e);
 			if (!p || !raw) return;
 			setMaskTransform({
@@ -1084,7 +1094,7 @@
 			paint();
 			return;
 		}
-		if (drag.kind === 'erase') {
+		if (drag.kind === "erase") {
 			const p = atEvent(e);
 			if (!p) return;
 			const held = restoring;
@@ -1096,7 +1106,7 @@
 		}
 		const n = normAt(e);
 		if (!n) return;
-		if (drag.kind === 'crop-resize') {
+		if (drag.kind === "crop-resize") {
 			const { edges, from } = drag;
 			// The held edges follow the pointer, the opposite ones stay where the
 			// gesture found them — read from the rectangle as it was at the start,
@@ -1114,7 +1124,7 @@
 			setCrop({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
 			return;
 		}
-		if (drag.kind === 'crop-new') {
+		if (drag.kind === "crop-new") {
 			setCrop({
 				x: Math.min(drag.ax, n.x),
 				y: Math.min(drag.ay, n.y),
@@ -1132,7 +1142,7 @@
 	}
 
 	function onPreviewUp(e: PointerEvent) {
-		if (drag?.kind === 'erase') {
+		if (drag?.kind === "erase") {
 			commitMask();
 			painting = false;
 		}
@@ -1151,7 +1161,7 @@
 		// The static rectangle is kept up to date even while a track owns the
 		// picture, so switching the track off lands on what was last drawn.
 		const withCrop = { ...edit, crop };
-		if (trackOn('crop')) addKey('crop', withCrop, crop);
+		if (trackOn("crop")) addKey("crop", withCrop, crop);
 		else onChange(withCrop);
 	}
 
@@ -1160,9 +1170,9 @@
 	 * would let the rectangle run off the frame, where the clamp in `setCrop`
 	 * pins the slider and it stops answering the drag.
 	 */
-	function setCropSize(dim: 'w' | 'h', v: number) {
+	function setCropSize(dim: "w" | "h", v: number) {
 		beforeEdit(`crop-${dim}`);
-		const axis = dim === 'w' ? 'x' : 'y';
+		const axis = dim === "w" ? "x" : "y";
 		const mid = crop[axis] + crop[dim] / 2;
 		setCrop({
 			...crop,
@@ -1180,12 +1190,12 @@
 	let dirty = $derived({
 		key:
 			key.enabled ||
-			trackOn('key') ||
+			trackOn("key") ||
 			key.threshold !== DEFAULT_CHROMA_KEY.threshold ||
 			key.smoothing !== DEFAULT_CHROMA_KEY.smoothing ||
 			key.lumaRange !== DEFAULT_CHROMA_KEY.lumaRange,
-		crop: !isFullCrop(crop) || trackOn('crop'),
-		erase: !!edit.mask || !!live.mask || trackOn('mask'),
+		crop: !isFullCrop(crop) || trackOn("crop"),
+		erase: !!edit.mask || !!live.mask || trackOn("mask"),
 	});
 
 	/**
@@ -1193,27 +1203,27 @@
 	 * the footer's Reset does to all three, so the two agree.
 	 */
 	function resetTool(t: Tool) {
-		if (t === 'erase') {
+		if (t === "erase") {
 			clearMask();
 			return;
 		}
 		beforeEdit();
-		if (t === 'crop') {
-			onChange(withTrack({ ...edit, crop: { ...FULL_CROP } }, 'crop', []));
+		if (t === "crop") {
+			onChange(withTrack({ ...edit, crop: { ...FULL_CROP } }, "crop", []));
 		} else {
 			const chromaKey = {
 				...DEFAULT_CHROMA_KEY,
 				color: { ...DEFAULT_CHROMA_KEY.color },
 			};
-			onChange(withTrack({ ...edit, chromaKey }, 'key', []));
+			onChange(withTrack({ ...edit, chromaKey }, "key", []));
 		}
 	}
 
-	function toHex({ r, g, b }: ChromaKey['color']): string {
+	function toHex({ r, g, b }: ChromaKey["color"]): string {
 		const h = (v: number) =>
 			Math.round(Math.min(1, Math.max(0, v)) * 255)
 				.toString(16)
-				.padStart(2, '0');
+				.padStart(2, "0");
 		return `#${h(r)}${h(g)}${h(b)}`;
 	}
 
@@ -1222,7 +1232,7 @@
 		// An unparseable hex — half-typed in the field — falls back to the colour
 		// already keyed rather than snapping the picture to black.
 		const [r, g, b] = hexToVec3(hex, toHex(key.color));
-		setColor(r, g, b, 'key-color');
+		setColor(r, g, b, "key-color");
 	}
 
 	/** Put every tool back: the button sits under all three, not just the key. */
@@ -1246,19 +1256,19 @@
 	}
 
 	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
+		if (e.key === "Escape") {
 			e.preventDefault();
 			onClose();
 			return;
 		}
 		const mod = e.ctrlKey || e.metaKey;
 		const k = e.key.toLowerCase();
-		if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) {
+		if (mod && (k === "y" || (k === "z" && e.shiftKey))) {
 			e.preventDefault();
 			redo();
 			return;
 		}
-		if (mod && k === 'z') {
+		if (mod && k === "z") {
 			e.preventDefault();
 			undo();
 			return;
@@ -1266,9 +1276,9 @@
 		// Delete takes out the key under the playhead. Which track: the one the
 		// open tool owns, falling back to any other that has a key there, so a
 		// key is never left behind because the wrong tool was selected.
-		if (e.key === 'Delete' && duration > 0) {
-			if ((e.target as HTMLElement | null)?.closest('input, textarea')) return;
-			const order: TrackId[] = [TOOL_TRACK[tool], 'crop', 'key', 'mask'];
+		if (e.key === "Delete" && duration > 0) {
+			if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
+			const order: TrackId[] = [TOOL_TRACK[tool], "crop", "key", "mask"];
 			const id = order.find((t) => keyHere(t));
 			if (!id) return;
 			e.preventDefault();
@@ -1278,8 +1288,8 @@
 		}
 		// Space is the transport here as it is everywhere else — except while a
 		// control has focus, where it means "press this".
-		if (e.key === ' ' && duration > 0) {
-			if ((e.target as HTMLElement | null)?.closest('button, input')) return;
+		if (e.key === " " && duration > 0) {
+			if ((e.target as HTMLElement | null)?.closest("button, input")) return;
 			e.preventDefault();
 			playing = !playing;
 		}
@@ -1326,7 +1336,7 @@
 							<canvas
 								bind:this={canvasEl}
 								class="tool-{tool}"
-								style:cursor={tool === 'crop' && cropCursor
+								style:cursor={tool === "crop" && cropCursor
 									? cropCursor
 									: undefined}
 								onpointerdown={onPreviewDown}
@@ -1336,7 +1346,7 @@
 								aria-label="Media preview"
 							></canvas>
 							{#if !isFullCrop(crop)}
-								{@const idle = tool !== 'crop'}
+								{@const idle = tool !== "crop"}
 								<!-- Shown under every tool, not just Crop: what is cropped away is
 								     gone whichever tool is in hand, and hiding it meant erasing and
 								     keying against a frame that wasn't the one being kept.
@@ -1352,22 +1362,26 @@
 								<div
 									class="crop-shade"
 									class:idle
-									style="left:0; top:{(crop.y + crop.h) * 100}%; right:0; bottom:0"
+									style="left:0; top:{(crop.y + crop.h) *
+										100}%; right:0; bottom:0"
 								></div>
 								<div
 									class="crop-shade"
 									class:idle
-									style="left:0; top:{crop.y * 100}%; width:{crop.x * 100}%; height:{crop.h * 100}%"
+									style="left:0; top:{crop.y * 100}%; width:{crop.x *
+										100}%; height:{crop.h * 100}%"
 								></div>
 								<div
 									class="crop-shade"
 									class:idle
-									style="left:{(crop.x + crop.w) * 100}%; top:{crop.y * 100}%; right:0; height:{crop.h * 100}%"
+									style="left:{(crop.x + crop.w) * 100}%; top:{crop.y *
+										100}%; right:0; height:{crop.h * 100}%"
 								></div>
 								<div
 									class="crop-box"
 									class:idle
-									style="left:{crop.x * 100}%; top:{crop.y * 100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
+									style="left:{crop.x * 100}%; top:{crop.y *
+										100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
 								>
 									<!-- Corners only. The sides are draggable too, but marking all
 									     eight puts more furniture on a small rectangle than it can
@@ -1395,8 +1409,8 @@
 							class="play-btn"
 							onclick={() => (playing = !playing)}
 							disabled={!ready}
-							title={playing ? 'Pause (Space)' : 'Play (Space)'}
-							aria-label={playing ? 'Pause' : 'Play'}
+							title={playing ? "Pause (Space)" : "Play (Space)"}
+							aria-label={playing ? "Pause" : "Play"}
 						>
 							{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
 						</button>
@@ -1443,8 +1457,8 @@
 							title={t.hint}
 							onclick={() => (tool = t.value)}
 						>
-							{#if t.value === 'key'}<Pipette size={12} />
-							{:else if t.value === 'crop'}<Crop size={12} />
+							{#if t.value === "key"}<Pipette size={12} />
+							{:else if t.value === "crop"}<Crop size={12} />
 							{:else}<Eraser size={12} />{/if}
 							{t.label}
 						</button>
@@ -1471,14 +1485,14 @@
 				     one puts that control back — the same row as everywhere else in
 				     the app. -->
 				<div class="rows">
-					{#if tool === 'key'}
+					{#if tool === "key"}
 						<div class="row">
 							<label for="ck-on">Remove background</label>
 							<input
 								id="ck-on"
 								type="checkbox"
 								checked={key.enabled}
-								onchange={(e) => setKey('enabled', e.currentTarget.checked)}
+								onchange={(e) => setKey("enabled", e.currentTarget.checked)}
 							/>
 						</div>
 
@@ -1497,7 +1511,7 @@
 							class="row"
 							title="How close a pixel's colour has to be to the key colour to be cut away. Raise it until the background goes; drop it if the subject starts going with it. Double-click to reset."
 							ondblclick={() =>
-								setKey('threshold', DEFAULT_CHROMA_KEY.threshold)}
+								setKey("threshold", DEFAULT_CHROMA_KEY.threshold)}
 						>
 							<label for="ck-thr">Threshold</label>
 							<RangeSlider
@@ -1507,7 +1521,7 @@
 								max={1}
 								step={0.005}
 								disabled={!key.enabled}
-								oninput={(v) => setKey('threshold', v, 'key-threshold')}
+								oninput={(v) => setKey("threshold", v, "key-threshold")}
 							/>
 							<span class="val">{Math.round(key.threshold * 100)}%</span>
 						</div>
@@ -1517,7 +1531,7 @@
 							class="row"
 							title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs. Double-click to reset."
 							ondblclick={() =>
-								setKey('lumaRange', DEFAULT_CHROMA_KEY.lumaRange)}
+								setKey("lumaRange", DEFAULT_CHROMA_KEY.lumaRange)}
 						>
 							<label for="ck-luma">Brightness range</label>
 							<RangeSlider
@@ -1527,7 +1541,7 @@
 								max={1}
 								step={0.005}
 								disabled={!key.enabled}
-								oninput={(v) => setKey('lumaRange', v, 'key-luma')}
+								oninput={(v) => setKey("lumaRange", v, "key-luma")}
 							/>
 							<span class="val">{Math.round(key.lumaRange * 100)}%</span>
 						</div>
@@ -1537,7 +1551,7 @@
 							class="row"
 							title="How soft the edge of the cut is. A little feathering hides the jagged step the key leaves behind, too much eats into the subject. Double-click to reset."
 							ondblclick={() =>
-								setKey('smoothing', DEFAULT_CHROMA_KEY.smoothing)}
+								setKey("smoothing", DEFAULT_CHROMA_KEY.smoothing)}
 						>
 							<label for="ck-smooth">Smoothing</label>
 							<RangeSlider
@@ -1547,11 +1561,11 @@
 								max={0.5}
 								step={0.005}
 								disabled={!key.enabled}
-								oninput={(v) => setKey('smoothing', v, 'key-smoothing')}
+								oninput={(v) => setKey("smoothing", v, "key-smoothing")}
 							/>
 							<span class="val">{Math.round(key.smoothing * 100)}%</span>
 						</div>
-					{:else if tool === 'crop'}
+					{:else if tool === "crop"}
 						<div class="row">
 							<label for="cr-w">Width</label>
 							<RangeSlider
@@ -1560,7 +1574,7 @@
 								min={0.01}
 								max={1}
 								step={0.005}
-								oninput={(v) => setCropSize('w', v)}
+								oninput={(v) => setCropSize("w", v)}
 							/>
 							<span class="val">{Math.round(crop.w * 100)}%</span>
 						</div>
@@ -1573,7 +1587,7 @@
 								min={0.01}
 								max={1}
 								step={0.005}
-								oninput={(v) => setCropSize('h', v)}
+								oninput={(v) => setCropSize("h", v)}
 							/>
 							<span class="val">{Math.round(crop.h * 100)}%</span>
 						</div>
@@ -1629,7 +1643,7 @@
 									max={1}
 									step={0.005}
 									oninput={(v) => {
-										beforeEdit('mask-x');
+										beforeEdit("mask-x");
 										setMaskTransform({ ...maskXform, x: v });
 									}}
 								/>
@@ -1653,7 +1667,7 @@
 									max={1}
 									step={0.005}
 									oninput={(v) => {
-										beforeEdit('mask-y');
+										beforeEdit("mask-y");
 										setMaskTransform({ ...maskXform, y: v });
 									}}
 								/>
@@ -1677,7 +1691,7 @@
 									max={3}
 									step={0.01}
 									oninput={(v) => {
-										beforeEdit('mask-scale');
+										beforeEdit("mask-scale");
 										setMaskTransform({ ...maskXform, scale: v });
 									}}
 								/>
@@ -1714,6 +1728,7 @@
 		</div>
 	</div>
 </div>
+
 <style>
 	/* The crop overlay is positioned against this, not against the preview box:
 	   the canvas is letterboxed inside it and the rectangle has to track the
@@ -2061,7 +2076,7 @@
 		user-select: none;
 	}
 
-	.row input[type='checkbox'] {
+	.row input[type="checkbox"] {
 		accent-color: #888;
 	}
 

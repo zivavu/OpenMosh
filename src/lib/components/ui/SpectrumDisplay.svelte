@@ -7,9 +7,9 @@
 		punchExponent,
 		smoothBandLevel,
 		type AudioResponse,
-	} from '../../audio/auto-range';
-	import { getLevelFromFrequencyRange } from '../../audio/audio-utils';
-	import { FREQ_PRESETS, generateId } from '../../effects/types';
+	} from "../../audio/auto-range";
+	import { getLevelFromFrequencyRange } from "../../audio/audio-utils";
+	import { FREQ_PRESETS, generateId } from "../../effects/types";
 
 	interface Props {
 		data: Uint8Array;
@@ -100,7 +100,7 @@
 	$effect(() => {
 		const canvas = canvasEl;
 		if (!canvas || !data.length) return;
-		const ctx = canvas.getContext('2d');
+		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 		const w = width;
 		const h = height;
@@ -120,7 +120,7 @@
 			const dt = Math.min((now - lastFrame) / 1000, 0.25);
 			lastFrame = now;
 			const { attack, release } = followerTaus(response.smoothing);
-			ctx.fillStyle = '#1a1a1a';
+			ctx.fillStyle = "#1a1a1a";
 			ctx.fillRect(0, 0, w, h);
 			for (let i = 0; i < bars; i++) {
 				const loHz = barFreq(i / bars);
@@ -145,8 +145,8 @@
 				const level = shown[i] / 255;
 				const inRange = hiHz >= freqMin && loHz <= freqMax;
 				ctx.fillStyle = inRange
-					? 'rgba(120, 180, 255, 0.8)'
-					: 'rgba(80, 80, 80, 0.9)';
+					? "rgba(120, 180, 255, 0.8)"
+					: "rgba(80, 80, 80, 0.9)";
 				const barH = Math.max(2, level * h * 0.9);
 				ctx.fillRect(i * barW, h - barH, barW - 1, barH);
 			}
@@ -156,9 +156,9 @@
 			const x0 = freqToX(freqMin, w);
 			const x1 = freqToX(freqMax, w);
 			const y = h - modulationLevel(dt) * h * 0.9;
-			ctx.fillStyle = 'rgba(110, 231, 192, 0.16)';
+			ctx.fillStyle = "rgba(110, 231, 192, 0.16)";
 			ctx.fillRect(x0, y, Math.max(1, x1 - x0), h - y);
-			ctx.fillStyle = '#6ee7c0';
+			ctx.fillStyle = "#6ee7c0";
 			ctx.fillRect(x0, Math.min(h - 2, y - 1), Math.max(1, x1 - x0), 2);
 
 			rafId = requestAnimationFrame(draw);

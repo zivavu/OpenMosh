@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown, ChevronUp } from 'lucide-svelte';
+	import { ChevronDown, ChevronUp } from "lucide-svelte";
 
 	interface Props {
 		id?: string;
@@ -30,10 +30,10 @@
 		max,
 		step = 1,
 		fineStep,
-		placeholder = '—',
+		placeholder = "—",
 		emptyValue,
 		allowEmpty = true,
-		unit = 'value',
+		unit = "value",
 		upTitle,
 		downTitle,
 		onChange,
@@ -68,19 +68,19 @@
 		{min}
 		{max}
 		step={fineStep ?? step}
-		value={value > 0 ? value : ''}
+		value={value > 0 ? value : ""}
 		oninput={(e) => {
 			const raw = (e.currentTarget as HTMLInputElement).value;
 			// Only the ceiling is enforced while typing: clamping up to `min`
 			// would fight the first digit of a bigger number.
-			onChange(raw === '' ? 0 : Math.min(max, +raw));
+			onChange(raw === "" ? 0 : Math.min(max, +raw));
 		}}
 		onblur={() => {
 			// Whatever half-typed text is in the field, leaving it shows the
 			// number the rest of the app is actually using.
 			const next = value > 0 ? Math.max(min, value) : allowEmpty ? 0 : min;
 			if (next !== value) onChange(next);
-			if (inputEl) inputEl.value = next > 0 ? String(next) : '';
+			if (inputEl) inputEl.value = next > 0 ? String(next) : "";
 		}}
 	/>
 	<div class="stepper">
@@ -116,7 +116,7 @@
 
 	/* Reads as an instrument display: a number you check at a glance, so it sits
 	   in a sunken well in tabular mono. */
-	.number-field input[type='number'] {
+	.number-field input[type="number"] {
 		width: 62px;
 		padding: 0.25rem 0.45rem;
 		border: 1px solid var(--line);
@@ -138,21 +138,21 @@
 			box-shadow var(--t-fast);
 	}
 
-	.number-field input[type='number']:hover {
+	.number-field input[type="number"]:hover {
 		border-color: var(--line-strong);
 	}
 
-	.number-field input[type='number']:focus {
+	.number-field input[type="number"]:focus {
 		border-color: var(--live-dim);
 		box-shadow: 0 0 0 2px rgba(110, 231, 192, 0.12);
 	}
 
-	.number-field input[type='number']::placeholder {
+	.number-field input[type="number"]::placeholder {
 		color: var(--text-4);
 	}
 
-	.number-field input[type='number']::-webkit-inner-spin-button,
-	.number-field input[type='number']::-webkit-outer-spin-button {
+	.number-field input[type="number"]::-webkit-inner-spin-button,
+	.number-field input[type="number"]::-webkit-outer-spin-button {
 		appearance: none;
 		-webkit-appearance: none;
 		margin: 0;

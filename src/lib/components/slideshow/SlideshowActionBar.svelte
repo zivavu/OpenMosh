@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { HelpCircle, Pause, Play, Settings, Type } from 'lucide-svelte';
-	import RecordGroup from '../editor/RecordGroup.svelte';
-	import ResizeSettings from '../ui/ResizeSettings.svelte';
-	import { TEXT_TIMELINE_SHORTCUTS } from '../../text';
-	import type { SourceFit } from '../../gl/renderer';
-	import { lazy } from '../../lazy';
+	import { HelpCircle, Pause, Play, Settings, Type } from "lucide-svelte";
+	import RecordGroup from "../editor/RecordGroup.svelte";
+	import ResizeSettings from "../ui/ResizeSettings.svelte";
+	import { TEXT_TIMELINE_SHORTCUTS } from "../../text";
+	import type { SourceFit } from "../../gl/renderer";
+	import { lazy } from "../../lazy";
 
 	// An overlay behind a key; its chunk waits until someone asks for help.
-	const loadShortcutsModal = lazy(() => import('../ui/ShortcutsModal.svelte'));
+	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
 
 	interface Props {
 		previewPlaying: boolean;
@@ -42,7 +42,7 @@
 		recordFps,
 		recordDuration,
 		showFps = $bindable(false),
-		sourceFit = $bindable('contain'),
+		sourceFit = $bindable("contain"),
 		textEnabled = false,
 		onToggleText,
 		onTogglePreview,
@@ -51,47 +51,47 @@
 		onRecordDurationChange,
 	}: Props = $props();
 
-	const isMobile = window.matchMedia('(pointer: coarse)').matches;
+	const isMobile = window.matchMedia("(pointer: coarse)").matches;
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
 	let showShortcuts = $state(false);
 
 	const shortcutGroups = [
 		{
-			title: 'Preview',
+			title: "Preview",
 			shortcuts: [
-				{ keys: ['Space'], description: 'Play / pause preview' },
-				{ keys: ['Esc'], description: 'Stop preview' },
-				{ keys: ['C'], description: 'Follow the playhead on the timeline' },
+				{ keys: ["Space"], description: "Play / pause preview" },
+				{ keys: ["Esc"], description: "Stop preview" },
+				{ keys: ["C"], description: "Follow the playhead on the timeline" },
 			],
 		},
 		{
-			title: 'Effects',
+			title: "Effects",
 			shortcuts: [
-				{ keys: ['→'], description: 'Next mosh, or roll a new one' },
-				{ keys: ['←'], description: 'Previous mosh' },
-				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
+				{ keys: ["→"], description: "Next mosh, or roll a new one" },
+				{ keys: ["←"], description: "Previous mosh" },
+				{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
 				{
-					keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'],
-					description: 'Redo effect edit',
+					keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"],
+					description: "Redo effect edit",
 				},
 			],
 		},
 		{
-			title: 'Timeline editing',
+			title: "Timeline editing",
 			shortcuts: [
 				{
-					keys: ['Ctrl+Click'],
-					description: 'Create / split segment at cursor',
+					keys: ["Ctrl+Click"],
+					description: "Create / split segment at cursor",
 				},
-				{ keys: ['Ctrl/Cmd+Z'], description: 'Undo the last edit' },
-				{ keys: ['Ctrl/Cmd+Shift+Z', 'Ctrl/Cmd+Y'], description: 'Redo' },
-				{ keys: ['Shift+Drag'], description: 'Rectangle-select boundaries' },
-				{ keys: ['Ctrl/Cmd+C'], description: 'Copy selected boundaries' },
-				{ keys: ['Ctrl/Cmd+V'], description: 'Paste boundaries' },
-				{ keys: ['Delete', 'Backspace'], description: 'Delete selection' },
-				{ keys: ['Esc'], description: 'Cancel paste / clear selection' },
-				{ keys: ['Shift+Scroll'], description: 'Pan timeline view' },
+				{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
+				{ keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"], description: "Redo" },
+				{ keys: ["Shift+Drag"], description: "Rectangle-select boundaries" },
+				{ keys: ["Ctrl/Cmd+C"], description: "Copy selected boundaries" },
+				{ keys: ["Ctrl/Cmd+V"], description: "Paste boundaries" },
+				{ keys: ["Delete", "Backspace"], description: "Delete selection" },
+				{ keys: ["Esc"], description: "Cancel paste / clear selection" },
+				{ keys: ["Shift+Scroll"], description: "Pan timeline view" },
 			],
 		},
 		TEXT_TIMELINE_SHORTCUTS,
@@ -111,8 +111,8 @@
 				showOptionsPanel = false;
 			}
 		}
-		window.addEventListener('pointerdown', handlePointerDown);
-		return () => window.removeEventListener('pointerdown', handlePointerDown);
+		window.addEventListener("pointerdown", handlePointerDown);
+		return () => window.removeEventListener("pointerdown", handlePointerDown);
 	});
 </script>
 
@@ -157,7 +157,10 @@
 					<input id="ss-show-fps" type="checkbox" bind:checked={showFps} />
 				</div>
 				<div class="setting-row">
-					<label for="ss-source-fit" title="How to fit slides that don't match the output aspect">
+					<label
+						for="ss-source-fit"
+						title="How to fit slides that don't match the output aspect"
+					>
 						Fit sources
 					</label>
 					<select id="ss-source-fit" bind:value={sourceFit}>
@@ -191,66 +194,71 @@
 	</button>
 
 	{#if !isMobile}
-	<RecordGroup
-		bind:this={recordGroupRef}
-		{recording}
-		disabled={slidesEmpty}
-		bind:showSettings={showRecordSettings}
-	>
-		{#snippet settingsContent()}
-			{#if trackFile}
+		<RecordGroup
+			bind:this={recordGroupRef}
+			{recording}
+			disabled={slidesEmpty}
+			bind:showSettings={showRecordSettings}
+		>
+			{#snippet settingsContent()}
+				{#if trackFile}
+					<div class="setting-row">
+						<span class="setting-label">Duration</span>
+						<span class="setting-val">{recordDuration.toFixed(1)}s</span>
+					</div>
+				{:else}
+					<div class="setting-row">
+						<label for="ss-rec-duration">Duration</label>
+						<input
+							id="ss-rec-duration"
+							type="range"
+							min="1"
+							max="60"
+							step="1"
+							value={recordDuration}
+							oninput={(e) =>
+								onRecordDurationChange(
+									+(e.currentTarget as HTMLInputElement).value,
+								)}
+						/>
+						<span class="setting-val">{recordDuration.toFixed(0)}s</span>
+					</div>
+				{/if}
 				<div class="setting-row">
-					<span class="setting-label">Duration</span>
-					<span class="setting-val">{recordDuration.toFixed(1)}s</span>
+					<label for="ss-rec-fps">FPS</label>
+					<select
+						id="ss-rec-fps"
+						value={recordFps}
+						onchange={(e) =>
+							onRecordFpsChange(+(e.currentTarget as HTMLSelectElement).value)}
+					>
+						<option value={15}>15</option>
+						<option value={24}>24</option>
+						<option value={30}>30</option>
+						<option value={60}>60</option>
+						<option value={120}>120</option>
+					</select>
 				</div>
-			{:else}
-				<div class="setting-row">
-					<label for="ss-rec-duration">Duration</label>
-					<input
-						id="ss-rec-duration"
-						type="range"
-						min="1"
-						max="60"
-						step="1"
-						value={recordDuration}
-						oninput={(e) =>
-							onRecordDurationChange(+(e.currentTarget as HTMLInputElement).value)}
-					/>
-					<span class="setting-val">{recordDuration.toFixed(0)}s</span>
-				</div>
-			{/if}
-			<div class="setting-row">
-				<label for="ss-rec-fps">FPS</label>
-				<select
-					id="ss-rec-fps"
-					value={recordFps}
-					onchange={(e) =>
-						onRecordFpsChange(+(e.currentTarget as HTMLSelectElement).value)}
+				<button
+					class="start-btn"
+					onclick={() => {
+						showRecordSettings = false;
+						onStartRecording();
+					}}
 				>
-					<option value={15}>15</option>
-					<option value={24}>24</option>
-					<option value={30}>30</option>
-					<option value={60}>60</option>
-					<option value={120}>120</option>
-				</select>
-			</div>
-			<button
-				class="start-btn"
-				onclick={() => {
-					showRecordSettings = false;
-					onStartRecording();
-				}}
-			>
-				Start Recording{trackFile ? '' : ' (silent)'}
-			</button>
-		{/snippet}
-	</RecordGroup>
+					Start Recording{trackFile ? "" : " (silent)"}
+				</button>
+			{/snippet}
+		</RecordGroup>
 	{/if}
 </div>
 
 {#if showShortcuts}
 	{#await loadShortcutsModal() then ShortcutsModal}
-		<ShortcutsModal groups={shortcutGroups} onClose={() => (showShortcuts = false)} />
+		<ShortcutsModal
+			groups={shortcutGroups}
+			onClose={() => (showShortcuts = false)}
+		/>
 	{/await}
 {/if}
 
@@ -376,7 +384,7 @@
 		color: var(--text-3);
 	}
 
-	.setting-row input[type='checkbox'] {
+	.setting-row input[type="checkbox"] {
 		appearance: none;
 		width: 14px;
 		height: 14px;
@@ -388,17 +396,17 @@
 		flex-shrink: 0;
 	}
 
-	.setting-row input[type='checkbox']:hover {
+	.setting-row input[type="checkbox"]:hover {
 		border-color: var(--text-3);
 	}
 
-	.setting-row input[type='checkbox']:checked {
+	.setting-row input[type="checkbox"]:checked {
 		background: rgba(110, 231, 192, 0.15);
 		border-color: var(--live-dim);
 	}
 
-	.setting-row input[type='checkbox']:checked::after {
-		content: '';
+	.setting-row input[type="checkbox"]:checked::after {
+		content: "";
 		position: absolute;
 		inset: 0;
 		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
@@ -423,7 +431,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.setting-row input[type='range'] {
+	.setting-row input[type="range"] {
 		flex: 1;
 		height: 3px;
 		appearance: none;
@@ -433,7 +441,7 @@
 		cursor: pointer;
 	}
 
-	.setting-row input[type='range']::-webkit-slider-thumb {
+	.setting-row input[type="range"]::-webkit-slider-thumb {
 		appearance: none;
 		width: 9px;
 		height: 13px;
@@ -442,7 +450,7 @@
 		cursor: pointer;
 	}
 
-	.setting-row input[type='range']::-moz-range-thumb {
+	.setting-row input[type="range"]::-moz-range-thumb {
 		width: 9px;
 		height: 13px;
 		border-radius: 1px;

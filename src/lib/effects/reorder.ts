@@ -5,9 +5,9 @@
  */
 
 export interface MovableRow {
-  /** Position in the full effects array. */
-  index: number;
-  enabled: boolean;
+	/** Position in the full effects array. */
+	index: number;
+	enabled: boolean;
 }
 
 /**
@@ -26,27 +26,27 @@ export interface MovableRow {
  * possible (already at that end).
  */
 export function resolveMoveTarget(
-  visible: MovableRow[],
-  pos: number,
-  direction: -1 | 1,
-  toEnd: boolean,
+	visible: MovableRow[],
+	pos: number,
+	direction: -1 | 1,
+	toEnd: boolean,
 ): number | null {
-  if (pos < 0 || pos >= visible.length) return null;
-  const from = visible[pos].index;
-  const lastPos = visible.length - 1;
+	if (pos < 0 || pos >= visible.length) return null;
+	const from = visible[pos].index;
+	const lastPos = visible.length - 1;
 
-  let targetPos = direction === -1 ? 0 : lastPos;
-  if (!toEnd) {
-    for (let p = pos + direction; p >= 0 && p <= lastPos; p += direction) {
-      if (visible[p].enabled) {
-        targetPos = p;
-        break;
-      }
-    }
-  }
+	let targetPos = direction === -1 ? 0 : lastPos;
+	if (!toEnd) {
+		for (let p = pos + direction; p >= 0 && p <= lastPos; p += direction) {
+			if (visible[p].enabled) {
+				targetPos = p;
+				break;
+			}
+		}
+	}
 
-  const to = visible[targetPos].index;
-  return to === from ? null : to;
+	const to = visible[targetPos].index;
+	return to === from ? null : to;
 }
 
 /**
@@ -57,7 +57,7 @@ export function resolveMoveTarget(
  * visible neighbour of a downward move means.
  */
 export function moveItem<T>(items: T[], from: number, to: number): void {
-  if (from === to) return;
-  const [moved] = items.splice(from, 1);
-  items.splice(to, 0, moved);
+	if (from === to) return;
+	const [moved] = items.splice(from, 1);
+	items.splice(to, 0, moved);
 }

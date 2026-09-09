@@ -71,16 +71,20 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<void> {
 	try {
 		res = await fetch(ENDPOINT, {
 			method: "POST",
-			headers: { "Content-Type": "application/json", Accept: "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			},
 			body: JSON.stringify(body),
 		});
 	} catch {
 		throw new Error("Couldn't reach the server — check your connection.");
 	}
 
-	const data = (await res.json().catch(() => null)) as
-		| { success?: boolean; message?: string }
-		| null;
+	const data = (await res.json().catch(() => null)) as {
+		success?: boolean;
+		message?: string;
+	} | null;
 	if (!res.ok || !data?.success) {
 		throw new Error(data?.message || "Something went wrong sending that.");
 	}

@@ -12,18 +12,18 @@ import type { ResolvedTextLayer } from "../text";
  * layer is clickable across its whole box.
  */
 export interface LayerHitBox {
-  kind: "media" | "text";
-  laneId: string;
-  /** Composited ahead of the main chain, so always beneath the layers that
-   * aren't — the one ordering `z` alone doesn't say. */
-  underEffects: boolean;
-  z: number;
-  /** Centre, size and rotation in output pixels. */
-  cx: number;
-  cy: number;
-  w: number;
-  h: number;
-  rot: number;
+	kind: "media" | "text";
+	laneId: string;
+	/** Composited ahead of the main chain, so always beneath the layers that
+	 * aren't — the one ordering `z` alone doesn't say. */
+	underEffects: boolean;
+	z: number;
+	/** Centre, size and rotation in output pixels. */
+	cx: number;
+	cy: number;
+	w: number;
+	h: number;
+	rot: number;
 }
 
 /**
@@ -32,30 +32,33 @@ export interface LayerHitBox {
  * question, and it answers differently per mode.
  */
 export type LayerPick =
-  | { kind: "media" | "text"; laneId: string }
-  | { kind: "base" };
+	{ kind: "media" | "text"; laneId: string } | { kind: "base" };
 
 /** Where a media lane's placement lands, in output pixels. */
 export interface MediaRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  rot: number;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	rot: number;
 }
 
-export function pointInLayer(box: LayerHitBox, px: number, py: number): boolean {
-  if (box.w <= 0 || box.h <= 0) return false;
-  const dx = px - box.cx;
-  const dy = py - box.cy;
-  // Into the box's own frame, so a rotated layer is hit where it looks like it
-  // is rather than across the axis-aligned span it covers.
-  const cos = Math.cos(-box.rot);
-  const sin = Math.sin(-box.rot);
-  return (
-    Math.abs(dx * cos - dy * sin) <= box.w / 2 &&
-    Math.abs(dx * sin + dy * cos) <= box.h / 2
-  );
+export function pointInLayer(
+	box: LayerHitBox,
+	px: number,
+	py: number,
+): boolean {
+	if (box.w <= 0 || box.h <= 0) return false;
+	const dx = px - box.cx;
+	const dy = py - box.cy;
+	// Into the box's own frame, so a rotated layer is hit where it looks like it
+	// is rather than across the axis-aligned span it covers.
+	const cos = Math.cos(-box.rot);
+	const sin = Math.sin(-box.rot);
+	return (
+		Math.abs(dx * cos - dy * sin) <= box.w / 2 &&
+		Math.abs(dx * sin + dy * cos) <= box.h / 2
+	);
 }
 
 /**
@@ -64,23 +67,23 @@ export function pointInLayer(box: LayerHitBox, px: number, py: number): boolean 
  * click misses every layer.
  */
 export function pickTopLayer(
-  boxes: LayerHitBox[],
-  px: number,
-  py: number,
+	boxes: LayerHitBox[],
+	px: number,
+	py: number,
 ): LayerHitBox | null {
-  let top: LayerHitBox | null = null;
-  for (const box of boxes) {
-    if (!pointInLayer(box, px, py)) continue;
-    if (!top || drawnAfter(box, top)) top = box;
-  }
-  return top;
+	let top: LayerHitBox | null = null;
+	for (const box of boxes) {
+		if (!pointInLayer(box, px, py)) continue;
+		if (!top || drawnAfter(box, top)) top = box;
+	}
+	return top;
 }
 
 /** Composite order between two layers: over the chain beats under it, then z,
  * and ties go to whichever the caller listed later. */
 function drawnAfter(box: LayerHitBox, other: LayerHitBox): boolean {
-  if (box.underEffects !== other.underEffects) return !box.underEffects;
-  return box.z >= other.z;
+	if (box.underEffects !== other.underEffects) return !box.underEffects;
+	return box.z >= other.z;
 }
 
 /**
@@ -90,42 +93,42 @@ function drawnAfter(box: LayerHitBox, other: LayerHitBox): boolean {
  * frame hasn't arrived.
  */
 export function layerHitBoxes(
-  media: ResolvedMediaLayer[],
-  text: ResolvedTextLayer[],
-  frameW: number,
-  frameH: number,
-  mediaRect: (layer: ResolvedMediaLayer) => MediaRect | null,
+	media: ResolvedMediaLayer[],
+	text: ResolvedTextLayer[],
+	frameW: number,
+	frameH: number,
+	mediaRect: (layer: ResolvedMediaLayer) => MediaRect | null,
 ): LayerHitBox[] {
-  const boxes: LayerHitBox[] = [];
-  for (const layer of media) {
-    const rect = mediaRect(layer);
-    if (!rect) continue;
-    boxes.push({
-      kind: "media",
-      laneId: layer.laneId,
-      underEffects: layer.underEffects,
-      z: layer.z,
-      cx: rect.x + rect.w / 2,
-      cy: rect.y + rect.h / 2,
-      w: rect.w,
-      h: rect.h,
-      rot: rect.rot,
-    });
-  }
-  for (const layer of text) {
-    const box = overlayTextBox(frameW, frameH, layer.text, layer.style);
-    if (!box) continue;
-    boxes.push({
-      kind: "text",
-      laneId: layer.laneId,
-      underEffects: layer.underEffects,
-      z: layer.z,
-      cx: box.x + box.w / 2,
-      cy: box.y + box.h / 2,
-      w: box.w,
-      h: box.h,
-      rot: 0,
-    });
-  }
-  return boxes;
+	const boxes: LayerHitBox[] = [];
+	for (const layer of media) {
+		const rect = mediaRect(layer);
+		if (!rect) continue;
+		boxes.push({
+			kind: "media",
+			laneId: layer.laneId,
+			underEffects: layer.underEffects,
+			z: layer.z,
+			cx: rect.x + rect.w / 2,
+			cy: rect.y + rect.h / 2,
+			w: rect.w,
+			h: rect.h,
+			rot: rect.rot,
+		});
+	}
+	for (const layer of text) {
+		const box = overlayTextBox(frameW, frameH, layer.text, layer.style);
+		if (!box) continue;
+		boxes.push({
+			kind: "text",
+			laneId: layer.laneId,
+			underEffects: layer.underEffects,
+			z: layer.z,
+			cx: box.x + box.w / 2,
+			cy: box.y + box.h / 2,
+			w: box.w,
+			h: box.h,
+			rot: 0,
+		});
+	}
+	return boxes;
 }

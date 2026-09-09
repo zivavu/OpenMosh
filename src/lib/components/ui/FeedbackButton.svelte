@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { MessageSquare } from 'lucide-svelte';
-	import { openFeedback } from './feedback.svelte';
+	import { MessageSquare } from "lucide-svelte";
+	import { openFeedback } from "./feedback.svelte";
 </script>
 
 <button

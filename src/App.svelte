@@ -15,7 +15,9 @@
 
 	// The editors are the bulk of the bundle and none of it is needed to paint
 	// the upload screen, so they load with the route instead of with the app.
-	const loadEditor = lazy(() => import("./lib/components/editor/Editor.svelte"));
+	const loadEditor = lazy(
+		() => import("./lib/components/editor/Editor.svelte"),
+	);
 	const loadSlideshowEditor = lazy(
 		() => import("./lib/components/slideshow/SlideshowEditor.svelte"),
 	);
@@ -173,24 +175,24 @@
 	async function openSessionByKey(mode: SessionMode, key: string) {
 		const opened = await openSession(key);
 		if (!opened) {
-			showToast("That session's media is no longer stored", 'error');
+			showToast("That session's media is no longer stored", "error");
 			return;
 		}
 		// The song comes back too, so the per-song text timeline and segments
 		// the editor restores have the track they're keyed to.
 		pendingAudioFile = opened.trackFile;
 		sessionTrackId = opened.trackId;
-		if (mode === 'single') {
+		if (mode === "single") {
 			restoredSingle = opened.state as SingleSessionState;
 			restoredSingleExtras = opened.files.slice(1);
 			file = opened.files[0];
-			navigateTo('single');
+			navigateTo("single");
 			return;
 		}
 		const state = opened.state as { config?: SlideshowConfig } | null;
 		restoredSlideshowConfig = state?.config ?? null;
 		slideshowFiles = opened.files;
-		navigateTo('slideshow');
+		navigateTo("slideshow");
 	}
 
 	/** Reopen a song's saved sequence: its media becomes the pool, and the song
@@ -198,13 +200,13 @@
 	async function openSequenceFromSong(trackId: string) {
 		const opened = await openSavedSequence(trackId);
 		if (!opened) {
-			showToast("That song's media is no longer stored", 'error');
+			showToast("That song's media is no longer stored", "error");
 			return;
 		}
 		sequenceFiles = opened.sources;
 		pendingAudioFile = opened.trackFile;
 		sequenceTrackId = opened.trackId;
-		navigateTo('sequence');
+		navigateTo("sequence");
 	}
 
 	function exitToUpload() {
@@ -237,7 +239,7 @@
 	});
 </script>
 
-{#if view === 'slideshow' && slideshowFiles.length > 0}
+{#if view === "slideshow" && slideshowFiles.length > 0}
 	{#await loadSlideshowEditor() then SlideshowEditor}
 		<SlideshowEditor
 			initialFiles={slideshowFiles}
@@ -249,7 +251,7 @@
 			onExit={exitToUpload}
 		/>
 	{/await}
-{:else if view === 'sequence' && sequenceFiles.length > 0}
+{:else if view === "sequence" && sequenceFiles.length > 0}
 	{#await loadEditor() then Editor}
 		<Editor
 			mode="sequence"
@@ -263,7 +265,7 @@
 			onExit={exitToUpload}
 		/>
 	{/await}
-{:else if view === 'single' && file}
+{:else if view === "single" && file}
 	{#await loadEditor() then Editor}
 		<Editor
 			{file}
@@ -281,18 +283,18 @@
 	<UploadScreen
 		onfile={(f: File) => {
 			file = f;
-			navigateTo('single');
+			navigateTo("single");
 		}}
 		onSequence={(files: File[]) => {
 			sequenceFiles = files;
-			navigateTo('sequence');
+			navigateTo("sequence");
 		}}
 		onSequenceFromSong={(trackId: string) => void openSequenceFromSong(trackId)}
 		onSessionOpen={(mode: SessionMode, key: string) =>
 			void openSessionByKey(mode, key)}
 		onSlideshow={(files: File[]) => {
 			slideshowFiles = files;
-			navigateTo('slideshow');
+			navigateTo("slideshow");
 		}}
 		onaudio={(f: File) => (pendingAudioFile = f)}
 		{warmCanvas}

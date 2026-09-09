@@ -12,7 +12,7 @@ export const SOURCE_DND_TYPE = "application/x-openmosh-source";
 
 /** A stable colour per position in the pool. */
 export function sourceColor(n: number): string {
-  return `hsl(${(n * 57) % 360} 45% 52%)`;
+	return `hsl(${(n * 57) % 360} 45% 52%)`;
 }
 
 /**
@@ -20,11 +20,11 @@ export function sourceColor(n: number): string {
  * the extension) rather than truncating from the right.
  */
 export function shortSourceName(name: string, max = 16): string {
-  if (name.length <= max) return name;
-  const dot = name.lastIndexOf(".");
-  const ext = dot > 0 && name.length - dot <= 5 ? name.slice(dot) : "";
-  const stem = ext ? name.slice(0, dot) : name;
-  // A slice(0) would return the whole stem, so never let the budget hit 0.
-  const keep = Math.max(1, max - ext.length - 1);
-  return `…${stem.slice(-keep)}${ext}`;
+	if (name.length <= max) return name;
+	const dot = name.lastIndexOf(".");
+	const ext = dot > 0 && name.length - dot <= 5 ? name.slice(dot) : "";
+	const stem = ext ? name.slice(0, dot) : name;
+	// A slice(0) would return the whole stem, so never let the budget hit 0.
+	const keep = Math.max(1, max - ext.length - 1);
+	return `…${stem.slice(-keep)}${ext}`;
 }

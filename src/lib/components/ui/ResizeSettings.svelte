@@ -2,15 +2,15 @@
 	const MAX_RESIZE = 10000;
 
 	const RATIO_PRESETS = [
-		{ label: 'Free', value: 'free', ratio: null },
-		{ label: '1:1', value: '1:1', ratio: 1 },
-		{ label: '4:3', value: '4:3', ratio: 4 / 3 },
-		{ label: '16:9', value: '16:9', ratio: 16 / 9 },
-		{ label: '9:16', value: '9:16', ratio: 9 / 16 },
-		{ label: '21:9', value: '21:9', ratio: 21 / 9 },
+		{ label: "Free", value: "free", ratio: null },
+		{ label: "1:1", value: "1:1", ratio: 1 },
+		{ label: "4:3", value: "4:3", ratio: 4 / 3 },
+		{ label: "16:9", value: "16:9", ratio: 16 / 9 },
+		{ label: "9:16", value: "9:16", ratio: 9 / 16 },
+		{ label: "21:9", value: "21:9", ratio: 21 / 9 },
 	] as const;
 
-	type RatioValue = (typeof RATIO_PRESETS)[number]['value'];
+	type RatioValue = (typeof RATIO_PRESETS)[number]["value"];
 
 	interface Props {
 		naturalWidth: number | undefined;
@@ -26,7 +26,7 @@
 		height = $bindable(0),
 	}: Props = $props();
 
-	let selectedRatio = $state<RatioValue>('free');
+	let selectedRatio = $state<RatioValue>("free");
 	let lockAspect = $state(true);
 
 	function getPresetRatio(): number | null {
@@ -68,7 +68,7 @@
 
 	function selectRatio(value: RatioValue) {
 		selectedRatio = value;
-		if (value !== 'free') lockAspect = false;
+		if (value !== "free") lockAspect = false;
 		const preset = RATIO_PRESETS.find((p) => p.value === value);
 		if (preset?.ratio !== null && preset?.ratio !== undefined && width > 0) {
 			height = Math.min(
@@ -83,7 +83,7 @@
 			width = naturalWidth;
 			height = naturalHeight;
 		}
-		selectedRatio = 'free';
+		selectedRatio = "free";
 		lockAspect = false;
 	}
 </script>
@@ -116,9 +116,9 @@
 		class:active={lockAspect}
 		onclick={() => {
 			lockAspect = !lockAspect;
-			if (lockAspect) selectedRatio = 'free';
+			if (lockAspect) selectedRatio = "free";
 		}}
-		title={lockAspect ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+		title={lockAspect ? "Unlock aspect ratio" : "Lock aspect ratio"}
 	>
 		{#if lockAspect}
 			<svg

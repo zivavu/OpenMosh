@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { Crosshair, Pause, Play, Repeat } from 'lucide-svelte';
-	import { untrack, type Snippet } from 'svelte';
-	import { formatTime, formatTimeMs } from '../../audio/audio-utils';
+	import { Crosshair, Pause, Play, Repeat } from "lucide-svelte";
+	import { untrack, type Snippet } from "svelte";
+	import { formatTime, formatTimeMs } from "../../audio/audio-utils";
 	import {
 		setTimelineStack,
 		TimelineStackState,
-	} from '../../editor/timeline-stack.svelte';
-	import TimelineScrollbar from './TimelineScrollbar.svelte';
+	} from "../../editor/timeline-stack.svelte";
+	import TimelineScrollbar from "./TimelineScrollbar.svelte";
 
 	interface Props {
 		/** The master clock every lane maps against. */
@@ -101,7 +101,8 @@
 			// playhead drift and catch it up on the frame the drift is visible.
 			// Zoomed far enough in a frame's worth of time is more than a pixel,
 			// where this passes every frame and the view scrolls as it did.
-			const perPixel = stack.laneWidth > 0 ? vp.viewDuration / stack.laneWidth : 0;
+			const perPixel =
+				stack.laneWidth > 0 ? vp.viewDuration / stack.laneWidth : 0;
 			if (Math.abs(centred) >= perPixel) vp.panView(centred);
 		});
 	});
@@ -196,13 +197,13 @@
 		};
 		const onUp = () => {
 			scrubbing = false;
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onUp);
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
 		};
-		window.addEventListener('pointermove', onMove);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('pointercancel', onUp);
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	}
 
 	/** Drag the static playhead: the clock goes with it, so a drag scrubs the
@@ -219,13 +220,13 @@
 		};
 		const onUp = () => {
 			staticDragging = false;
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onUp);
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
 		};
-		window.addEventListener('pointermove', onMove);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('pointercancel', onUp);
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	}
 </script>
 
@@ -235,7 +236,7 @@
 			<button
 				class="tl-transport-btn"
 				onclick={onTogglePlay}
-				title={isPlaying ? 'Pause' : 'Play'}
+				title={isPlaying ? "Pause" : "Play"}
 			>
 				{#if isPlaying}
 					<Pause size={13} fill="currentColor" stroke="none" />
@@ -249,7 +250,7 @@
 				class="tl-transport-btn"
 				class:loop-on={loopEnabled}
 				onclick={onToggleLoop}
-				title={loopEnabled ? 'Loop: on' : 'Loop: off'}
+				title={loopEnabled ? "Loop: on" : "Loop: off"}
 				aria-pressed={loopEnabled}
 			>
 				<Repeat size={12} />
@@ -271,8 +272,8 @@
 				class:active={stack.followPlayhead}
 				onclick={() => (stack.followPlayhead = !stack.followPlayhead)}
 				title={stack.followPlayhead
-					? 'Following the playhead (C) — scroll or drag the scrollbar to look elsewhere'
-					: 'Follow the playhead again (C)'}
+					? "Following the playhead (C) — scroll or drag the scrollbar to look elsewhere"
+					: "Follow the playhead again (C)"}
 			>
 				<Crosshair size={12} />
 			</button>
@@ -318,10 +319,7 @@
 					     percentage translate is of this element's own width, i.e. the
 					     lane width, and it moves on the compositor without laying the
 					     layer out again every frame. -->
-					<div
-						class="tl-playhead"
-						style="transform: {markerX(playheadPct)}"
-					>
+					<div class="tl-playhead" style="transform: {markerX(playheadPct)}">
 						<div class="tl-playhead-line"></div>
 						{#if onSeek}
 							<!-- The only part of the overlay that takes pointer events, and
@@ -411,8 +409,8 @@
 
 	/* …except a field, where selecting is the point. None are in the lanes
 	   today; this is so adding one doesn't inherit an unusable input. */
-	:global(.tl-stack input:not([type]), .tl-stack input[type='text']),
-	:global(.tl-stack input[type='number'], .tl-stack textarea) {
+	:global(.tl-stack input:not([type]), .tl-stack input[type="text"]),
+	:global(.tl-stack input[type="number"], .tl-stack textarea) {
 		user-select: text;
 	}
 

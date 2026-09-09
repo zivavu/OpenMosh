@@ -17,7 +17,7 @@
 let tick = 0;
 
 export function nextEditSeq(): number {
-   return ++tick;
+	return ++tick;
 }
 
 /** Below every real stamp: a stack with nothing to undo never wins. */

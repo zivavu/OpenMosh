@@ -1,16 +1,24 @@
 <script lang="ts">
-	import { ImageOff, Play, Plus, TriangleAlert, X, Zap, ZapOff } from 'lucide-svelte';
+	import {
+		ImageOff,
+		Play,
+		Plus,
+		TriangleAlert,
+		X,
+		Zap,
+		ZapOff,
+	} from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
 		sourceColor,
-	} from '../../editor/sequence-source-ui';
-	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import { proxyStatus, type ProxyAction } from '../../video/proxy-status';
-	import { lazy } from '../../lazy';
+	} from "../../editor/sequence-source-ui";
+	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
+	import { lazy } from "../../lazy";
 
 	// Preview overlay: nothing loads it until a card is opened.
-	const loadMediaLightbox = lazy(() => import('../ui/MediaLightbox.svelte'));
+	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
 
 	interface Props {
 		sources: SequenceSource[];
@@ -26,7 +34,7 @@
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
 		/** Click on a source's proxy badge — see proxyStatus's `action`. */
-		onProxyAction: (sourceId: string, action: ProxyAction['kind']) => void;
+		onProxyAction: (sourceId: string, action: ProxyAction["kind"]) => void;
 	}
 
 	let {
@@ -63,10 +71,10 @@
 	function onCardDragStart(e: DragEvent, index: number) {
 		dragFromIndex = index;
 		if (!e.dataTransfer) return;
-		e.dataTransfer.effectAllowed = 'copyMove';
+		e.dataTransfer.effectAllowed = "copyMove";
 		e.dataTransfer.setData(SOURCE_DND_TYPE, sources[index].id);
 		// Some browsers cancel a drag that carries no standard data at all.
-		e.dataTransfer.setData('text/plain', sources[index].id);
+		e.dataTransfer.setData("text/plain", sources[index].id);
 	}
 
 	/**
@@ -77,11 +85,11 @@
 	 * it. A line always on the leading edge would point at the wrong gap for
 	 * half of every drag.
 	 */
-	function dropEdge(i: number): 'before' | 'after' | null {
+	function dropEdge(i: number): "before" | "after" | null {
 		if (dragFromIndex === null || dragOverIndex !== i || dragFromIndex === i) {
 			return null;
 		}
-		return dragFromIndex < i ? 'after' : 'before';
+		return dragFromIndex < i ? "after" : "before";
 	}
 
 	function endCardDrag() {
@@ -116,7 +124,7 @@
 		const input = e.currentTarget as HTMLInputElement;
 		const picked = Array.from(input.files ?? []);
 		if (picked.length > 0) onAddFiles(picked);
-		input.value = '';
+		input.value = "";
 	}
 </script>
 
@@ -136,7 +144,7 @@
 			{#if assignable}
 				CLICK A SOURCE TO PLAY IT ON {selectedCount > 1
 					? `${selectedCount} SEGMENTS`
-					: 'THE SELECTED SEGMENT'}
+					: "THE SELECTED SEGMENT"}
 			{:else}
 				DRAG A SOURCE ONTO A SEGMENT, OR SELECT SEGMENTS FIRST
 			{/if}
@@ -160,13 +168,13 @@
 					class:active={selectedSourceId === src.id}
 					class:assignable
 					class:dragging={dragFromIndex === i}
-					class:drop-before={edge === 'before'}
-					class:drop-after={edge === 'after'}
+					class:drop-before={edge === "before"}
+					class:drop-after={edge === "after"}
 					role="button"
 					tabindex="0"
 					draggable="true"
 					title={assignable
-						? `Play "${src.name}" on the selected segment${selectedCount > 1 ? 's' : ''}, or drag it onto one. Double-click to preview.`
+						? `Play "${src.name}" on the selected segment${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
 						: `${src.name}. Click to preview, or drag it onto a segment.`}
 					ondragstart={(e) => onCardDragStart(e, i)}
 					ondragover={(e) => {
@@ -181,7 +189,7 @@
 					}}
 					ondblclick={(e) => openLightbox(e, i)}
 					onkeydown={(e) => {
-						if (e.key !== 'Enter' && e.key !== ' ') return;
+						if (e.key !== "Enter" && e.key !== " ") return;
 						e.preventDefault();
 						if (assignable) onAssign(src.id);
 					}}
@@ -208,30 +216,30 @@
 					>
 						{i + 1}
 					</span>
-					{#if src.kind === 'video'}
+					{#if src.kind === "video"}
 						<span class="card-kind" title="Video">
 							<Play size={9} fill="currentColor" />
 						</span>
 						{@const proxy = proxyStatus(src)}
-						{#if proxy.kind !== 'none'}
+						{#if proxy.kind !== "none"}
 							<button
 								class="card-proxy"
-								class:ok={proxy.kind === 'ready'}
-								class:warn={proxy.kind === 'failed'}
-								class:off={proxy.kind === 'off'}
+								class:ok={proxy.kind === "ready"}
+								class:warn={proxy.kind === "failed"}
+								class:off={proxy.kind === "off"}
 								title={`${proxy.title} ${proxy.action.hint}`}
 								onclick={(e) => {
 									e.stopPropagation();
 									onProxyAction(src.id, proxy.action.kind);
 								}}
 							>
-								{#if proxy.kind === 'ready'}
+								{#if proxy.kind === "ready"}
 									<Zap size={9} fill="currentColor" />
 									{proxy.badge}
-								{:else if proxy.kind === 'off'}
+								{:else if proxy.kind === "off"}
 									<ZapOff size={9} />
 									{proxy.badge}
-								{:else if proxy.kind === 'failed'}
+								{:else if proxy.kind === "failed"}
 									<TriangleAlert size={9} />
 								{:else}
 									{proxy.badge}
@@ -240,7 +248,11 @@
 						{/if}
 					{/if}
 					{#if src.id === primarySourceId}
-						<span class="card-base" title="Segments with no source of their own play this one">BASE</span>
+						<span
+							class="card-base"
+							title="Segments with no source of their own play this one"
+							>BASE</span
+						>
 					{/if}
 					<span class="card-name">{shortSourceName(src.name, 20)}</span>
 					<button
@@ -395,7 +407,7 @@
 	   here". Inset rather than in the grid gap: the card clips its overflow. */
 	.card.drop-before::after,
 	.card.drop-after::after {
-		content: '';
+		content: "";
 		position: absolute;
 		inset-block: 0;
 		width: 3px;
@@ -433,7 +445,7 @@
 	}
 
 	.thumb-loading::after {
-		content: '';
+		content: "";
 		width: 14px;
 		height: 14px;
 		border: 2px solid var(--line);

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { generateId } from '../../effects';
-	import { SegmentBoundaryController } from '../../editor/segment-boundary-controller.svelte';
-	import type { UndoSource } from '../../editor/undo-router';
-	import { normalizeCoverage } from '../../editor/segment-coverage';
+	import { generateId } from "../../effects";
+	import { SegmentBoundaryController } from "../../editor/segment-boundary-controller.svelte";
+	import type { UndoSource } from "../../editor/undo-router";
+	import { normalizeCoverage } from "../../editor/segment-coverage";
 	import {
 		clampGroupDelta,
 		collectGroupBoundaries,
@@ -10,17 +10,17 @@
 		groupDeltaUpdates,
 		nonSelectedBoundaryTimes,
 		type GroupBoundary,
-	} from '../../editor/boundary-group-drag';
+	} from "../../editor/boundary-group-drag";
 	import {
 		isInteractiveTarget,
 		isTextEntryTarget,
-	} from '../../editor/shortcut-target';
-	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
+	} from "../../editor/shortcut-target";
+	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import type {
 		BeatSubdivision,
 		SlideshowConfig,
 		TimelineSegment,
-	} from '../../slideshow/types';
+	} from "../../slideshow/types";
 
 	const MIN_SEGMENT_DURATION = 0.125;
 
@@ -28,7 +28,7 @@
 	const SUBDIVISIONS: BeatSubdivision[] = [
 		0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 0,
 	];
-	const SUBLABELS = ['¹⁄₃₂', '¹⁄₁₆', '⅛', '¼', '½', '1', '2', '4', '■'];
+	const SUBLABELS = ["¹⁄₃₂", "¹⁄₁₆", "⅛", "¼", "½", "1", "2", "4", "■"];
 
 	const SVG_H = 100;
 	const PAD_V = 10;
@@ -100,22 +100,22 @@
 
 	// ── Drag state ───────────────────────────────────────────────────────────────
 	type DragState =
-		| { type: 'boundary'; leftSegId: string | null; rightSegId: string | null }
+		| { type: "boundary"; leftSegId: string | null; rightSegId: string | null }
 		| {
-				type: 'boundary-group';
+				type: "boundary-group";
 				anchorTime: number;
 				boundaries: GroupBoundary[];
 				nonSelectedBoundaries: number[];
 		  }
 		| {
-				type: 'seg-y';
+				type: "seg-y";
 				segmentId: string;
 				snapSub: BeatSubdivision;
 				startClientY: number;
 		  }
-		| { type: 'static' }
+		| { type: "static" }
 		| {
-				type: 'rect-select';
+				type: "rect-select";
 				startTime: number;
 				startSvgY: number;
 				currentTime: number;
@@ -127,7 +127,10 @@
 	let dragMoved = $state(false);
 
 	// ── Selection / clipboard / undo-redo (boundary dots) ────────────────────
-	const boundaries = new SegmentBoundaryController<TimelineSegment, BeatSubdivision>({
+	const boundaries = new SegmentBoundaryController<
+		TimelineSegment,
+		BeatSubdivision
+	>({
 		getSegments: () => config.segments,
 		getTrackDuration: () => trackDuration,
 		onChange: (segments) =>
@@ -138,8 +141,18 @@
 		splitSegment: (seg, at) => {
 			const end = seg.endTime ?? trackDuration;
 			return [
-				{ id: generateId(), startTime: seg.startTime, endTime: at, subdivision: seg.subdivision },
-				{ id: generateId(), startTime: at, endTime: end, subdivision: seg.subdivision },
+				{
+					id: generateId(),
+					startTime: seg.startTime,
+					endTime: at,
+					subdivision: seg.subdivision,
+				},
+				{
+					id: generateId(),
+					startTime: at,
+					endTime: end,
+					subdivision: seg.subdivision,
+				},
 			];
 		},
 		captureMeta: (rightSeg) => rightSeg?.subdivision ?? config.subdivision,
@@ -220,7 +233,16 @@
 					if (Math.sqrt(dx * dx + dy * dy) < DOT_HIT_PX) {
 						const lConn = connectors.find((c) => c.rightSegId === sv.id);
 						const lId = lConn?.leftSegId ?? null;
-						startBndDrag({ clientX: cx, clientY: cy, stopPropagation: () => {}, pointerId: -1 } as unknown as PointerEvent, lId, sv.id);
+						startBndDrag(
+							{
+								clientX: cx,
+								clientY: cy,
+								stopPropagation: () => {},
+								pointerId: -1,
+							} as unknown as PointerEvent,
+							lId,
+							sv.id,
+						);
 						return;
 					}
 				}
@@ -230,7 +252,16 @@
 					if (Math.sqrt(dx * dx + dy * dy) < DOT_HIT_PX) {
 						const rConn = connectors.find((c) => c.leftSegId === sv.id);
 						const rId = rConn?.rightSegId ?? null;
-						startBndDrag({ clientX: cx, clientY: cy, stopPropagation: () => {}, pointerId: -1 } as unknown as PointerEvent, sv.id, rId);
+						startBndDrag(
+							{
+								clientX: cx,
+								clientY: cy,
+								stopPropagation: () => {},
+								pointerId: -1,
+							} as unknown as PointerEvent,
+							sv.id,
+							rId,
+						);
 						return;
 					}
 				}
@@ -241,20 +272,43 @@
 				const startPx = (sv.startX / 100) * rect.width;
 				const endPx = (sv.endX / 100) * rect.width;
 				const dotY_px = (sv.y / SVG_H) * rect.height;
-				if (svgX >= startPx && svgX <= endPx && Math.abs(svgY_px - dotY_px) < 14) {
-					startSegYDrag({ clientX: cx, clientY: cy, stopPropagation: () => {}, pointerId: -1, ctrlKey: false, metaKey: false } as unknown as PointerEvent, sv.id);
+				if (
+					svgX >= startPx &&
+					svgX <= endPx &&
+					Math.abs(svgY_px - dotY_px) < 14
+				) {
+					startSegYDrag(
+						{
+							clientX: cx,
+							clientY: cy,
+							stopPropagation: () => {},
+							pointerId: -1,
+							ctrlKey: false,
+							metaKey: false,
+						} as unknown as PointerEvent,
+						sv.id,
+					);
 					return;
 				}
 			}
 
 			// Default: place the start marker
 			if (onSeek && trackDuration > 0) {
-				onLanePointerDown({ clientX: cx, clientY: cy, button: 0, stopPropagation: () => {}, pointerId: -1, ctrlKey: false, metaKey: false, shiftKey: false } as unknown as PointerEvent);
+				onLanePointerDown({
+					clientX: cx,
+					clientY: cy,
+					button: 0,
+					stopPropagation: () => {},
+					pointerId: -1,
+					ctrlKey: false,
+					metaKey: false,
+					shiftKey: false,
+				} as unknown as PointerEvent);
 			}
 		}
 
-		el.addEventListener('touchstart', handler, { passive: false });
-		return () => el.removeEventListener('touchstart', handler);
+		el.addEventListener("touchstart", handler, { passive: false });
+		return () => el.removeEventListener("touchstart", handler);
 	});
 
 	// ── Derived visuals ──────────────────────────────────────────────────────────
@@ -271,7 +325,7 @@
 	let segVis = $derived.by((): SegVis[] =>
 		segments.map((s) => {
 			const activeSub =
-				dragging?.type === 'seg-y' && dragging.segmentId === s.id
+				dragging?.type === "seg-y" && dragging.segmentId === s.id
 					? dragging.snapSub
 					: s.subdivision;
 			const endTime = Math.min(trackDuration, s.endTime ?? trackDuration);
@@ -346,11 +400,13 @@
 		if (
 			boundaryTime !== null &&
 			boundaries.selectedBoundaryTimes.length > 1 &&
-			boundaries.selectedBoundaryTimes.some((t) => Math.abs(t - boundaryTime!) < 0.001)
+			boundaries.selectedBoundaryTimes.some(
+				(t) => Math.abs(t - boundaryTime!) < 0.001,
+			)
 		) {
 			const selected = boundaries.selectedBoundaryTimes;
 			dragging = {
-				type: 'boundary-group',
+				type: "boundary-group",
 				anchorTime: vp.clientXToTime(e.clientX),
 				boundaries: collectGroupBoundaries(
 					config.segments,
@@ -364,13 +420,17 @@
 				),
 			};
 			dragMoved = false;
-			try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
+			try {
+				(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+			} catch {}
 			return;
 		}
 
-		dragging = { type: 'boundary', leftSegId, rightSegId };
+		dragging = { type: "boundary", leftSegId, rightSegId };
 		dragMoved = false;
-		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
+		try {
+			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		} catch {}
 	}
 
 	function startSegYDrag(e: PointerEvent, segId: string) {
@@ -404,13 +464,15 @@
 		const seg = config.segments.find((s) => s.id === segId);
 		if (!seg) return;
 		dragging = {
-			type: 'seg-y',
+			type: "seg-y",
 			segmentId: segId,
 			snapSub: seg.subdivision,
 			startClientY: e.clientY,
 		};
 		dragMoved = false;
-		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
+		try {
+			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		} catch {}
 	}
 
 	function onLanePointerDown(e: PointerEvent) {
@@ -476,10 +538,14 @@
 		// Default: place the start marker, which takes the clock with it.
 		if (!onSeek) return;
 		boundaries.clearSelection();
-		stack.seekStatic(Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))));
-		dragging = { type: 'static' };
+		stack.seekStatic(
+			Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))),
+		);
+		dragging = { type: "static" };
 		dragMoved = false;
-		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
+		try {
+			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		} catch {}
 	}
 
 	function startRectSelect(e: PointerEvent) {
@@ -487,14 +553,16 @@
 		const time = vp.clientXToTime(e.clientX);
 		const svgY = clientYToSvgY(e.clientY);
 		dragging = {
-			type: 'rect-select',
+			type: "rect-select",
 			startTime: time,
 			startSvgY: svgY,
 			currentTime: time,
 			currentSvgY: svgY,
 		};
 		dragMoved = false;
-		try { (e.currentTarget as SVGElement).setPointerCapture(e.pointerId); } catch {}
+		try {
+			(e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+		} catch {}
 	}
 
 	function onPointerMove(e: PointerEvent) {
@@ -503,7 +571,7 @@
 		}
 		if (!dragging) return;
 
-		if (dragging.type === 'boundary') {
+		if (dragging.type === "boundary") {
 			if (!dragMoved) {
 				boundaries.snapshotForDrag();
 			}
@@ -541,7 +609,7 @@
 					),
 				});
 			}
-		} else if (dragging.type === 'boundary-group') {
+		} else if (dragging.type === "boundary-group") {
 			if (!dragMoved) {
 				boundaries.snapshotForDrag();
 			}
@@ -560,7 +628,7 @@
 					updates[s.id] ? { ...s, ...updates[s.id] } : s,
 				),
 			});
-		} else if (dragging.type === 'seg-y') {
+		} else if (dragging.type === "seg-y") {
 			if (Math.abs(e.clientY - dragging.startClientY) > DRAG_THRESHOLD_PX) {
 				dragMoved = true;
 				const snap = yToSub(clientYToSvgY(e.clientY));
@@ -568,12 +636,12 @@
 					dragging = { ...dragging, snapSub: snap };
 				}
 			}
-		} else if (dragging.type === 'static') {
+		} else if (dragging.type === "static") {
 			dragMoved = true;
 			stack.seekStatic(
 				Math.max(0, Math.min(trackDuration, vp.clientXToTime(e.clientX))),
 			);
-		} else if (dragging.type === 'rect-select') {
+		} else if (dragging.type === "rect-select") {
 			dragMoved = true;
 			dragging = {
 				...dragging,
@@ -584,7 +652,7 @@
 	}
 
 	function onPointerUp() {
-		if (dragging?.type === 'rect-select') {
+		if (dragging?.type === "rect-select") {
 			if (dragMoved) {
 				const minTime = Math.min(dragging.startTime, dragging.currentTime);
 				const maxTime = Math.max(dragging.startTime, dragging.currentTime);
@@ -593,14 +661,14 @@
 				boundaries.clearSelection();
 			}
 		}
-		if (dragging?.type === 'boundary-group' && dragMoved) {
+		if (dragging?.type === "boundary-group" && dragMoved) {
 			boundaries.selectedBoundaryTimes = groupBoundaryTimesAfter(
 				dragging.boundaries,
 				config.segments,
 				trackDuration,
 			);
 		}
-		if (dragging?.type === 'seg-y') {
+		if (dragging?.type === "seg-y") {
 			if (!dragMoved) {
 				const segId = dragging.segmentId;
 				selectedSegmentId = selectedSegmentId === segId ? null : segId;
@@ -691,7 +759,7 @@
 		// Delete / Backspace — existing local priority: hovered dot, then
 		// selected boundaries, then the selected whole segment.
 		if (isInteractiveTarget(e.target)) return;
-		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		if (e.key !== "Delete" && e.key !== "Backspace") return;
 		if (hoveredDot) {
 			e.preventDefault();
 			mergeDot(hoveredDot.leftSegId, hoveredDot.rightSegId);
@@ -711,7 +779,7 @@
 
 	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
 	let rectHoverTimes = $derived.by((): number[] => {
-		if (dragging?.type !== 'rect-select' || !dragMoved) return [];
+		if (dragging?.type !== "rect-select" || !dragMoved) return [];
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
 		const maxTime = Math.max(dragging.startTime, dragging.currentTime);
 		const times = new Set<number>();
@@ -730,13 +798,13 @@
 	});
 
 	let svgCursor = $derived.by(() => {
-		if (boundaries.pasteMode) return 'copy';
+		if (boundaries.pasteMode) return "copy";
 		const d = dragging;
-		if (!d) return onSeek ? 'crosshair' : 'default';
-		if (d.type === 'seg-y') return 'ns-resize';
-		if (d.type === 'static') return 'col-resize';
-		if (d.type === 'rect-select') return 'crosshair';
-		return 'ew-resize';
+		if (!d) return onSeek ? "crosshair" : "default";
+		if (d.type === "seg-y") return "ns-resize";
+		if (d.type === "static") return "col-resize";
+		if (d.type === "rect-select") return "crosshair";
+		return "ew-resize";
 	});
 </script>
 
@@ -879,7 +947,12 @@
 			{/each}
 
 			<!-- Fixed anchor dots at time=0 and time=trackDuration -->
-			<circle class="dot-anchor" cx="{vp.toPct(0)}%" cy={anchorStartY} r={DOT_R} />
+			<circle
+				class="dot-anchor"
+				cx="{vp.toPct(0)}%"
+				cy={anchorStartY}
+				r={DOT_R}
+			/>
 			<circle
 				class="dot-anchor"
 				cx="{vp.toPct(trackDuration)}%"
@@ -962,7 +1035,7 @@
 			{/if}
 
 			<!-- Rectangle selection overlay -->
-			{#if dragging?.type === 'rect-select' && dragMoved}
+			{#if dragging?.type === "rect-select" && dragMoved}
 				{@const minX = Math.min(
 					vp.toPct(dragging.startTime),
 					vp.toPct(dragging.currentTime),
@@ -1118,5 +1191,4 @@
 		pointer-events: none;
 		user-select: none;
 	}
-
 </style>

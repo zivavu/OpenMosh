@@ -1,27 +1,27 @@
 <script lang="ts">
-	import { Dices, Eraser, Eye, EyeOff, Trash2 } from 'lucide-svelte';
-	import { stackIndex, type LayerRef } from '../../timeline/layer-order';
-	import LaneGrip from '../ui/LaneGrip.svelte';
-	import { dropAutoRangeScope } from '../../audio/auto-range';
-	import { untrack } from 'svelte';
+	import { Dices, Eraser, Eye, EyeOff, Trash2 } from "lucide-svelte";
+	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
+	import LaneGrip from "../ui/LaneGrip.svelte";
+	import { dropAutoRangeScope } from "../../audio/auto-range";
+	import { untrack } from "svelte";
 	import {
 		createFxClip,
 		splitFxClipAt,
 		type FxClip,
 		type FxLane,
-	} from '../../editor/fx-lanes';
+	} from "../../editor/fx-lanes";
 	import {
 		BEAT_INTERVALS,
 		intervalLabel,
 		type SequenceSegmentMode,
-	} from '../../editor/sequence';
-	import { isTextEntryTarget } from '../../editor/shortcut-target';
+	} from "../../editor/sequence";
+	import { isTextEntryTarget } from "../../editor/shortcut-target";
 	import {
 		applyChainToFxClip,
 		chainClipboard,
-	} from '../../editor/chain-clipboard';
-	import { isModalKeyboardOpen } from '../../modal-keyboard';
-	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
+	} from "../../editor/chain-clipboard";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
+	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
 		addClip,
 		clipRange,
@@ -33,8 +33,8 @@
 		resizeClip,
 		sortClips,
 		updateLaneIn,
-	} from '../../timeline/clips';
-	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+	} from "../../timeline/clips";
+	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 6;
@@ -101,7 +101,9 @@
 	function laneTrack(node: HTMLElement, laneId: string) {
 		const shared = stack.lane(node, laneId);
 		// The lane is a split target for the S shortcut, keyed by its own id.
-		const unregister = stack.registerSplitter(laneId, (t) => splitAt(laneId, t));
+		const unregister = stack.registerSplitter(laneId, (t) =>
+			splitAt(laneId, t),
+		);
 		return {
 			destroy() {
 				shared.destroy();
@@ -115,7 +117,7 @@
 		clipId: string;
 		/** The clip on the far side of a shared-boundary drag. */
 		otherId?: string;
-		mode: 'move' | 'start' | 'end' | 'boundary';
+		mode: "move" | "start" | "end" | "boundary";
 		/** Seconds between the pointer and the clip's start, for move drags. */
 		grabOffset: number;
 	} | null>(null);
@@ -163,7 +165,8 @@
 			}
 			const pruned = selectedClipIds.filter((x) => alive.has(x));
 			if (!pruned.includes(id)) selectedClipIds = [id];
-			else if (pruned.length !== selectedClipIds.length) selectedClipIds = pruned;
+			else if (pruned.length !== selectedClipIds.length)
+				selectedClipIds = pruned;
 		});
 	});
 
@@ -173,7 +176,7 @@
 	// click resized the stack.
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
-		return stack.registerSelectionBar('fx', clipBar);
+		return stack.registerSelectionBar("fx", clipBar);
 	});
 
 	// Every action fans out over the whole selection; a value the selection
@@ -189,7 +192,7 @@
 	}
 
 	let commonMode = $derived(
-		commonValue(selectedClips.map((c) => c.mode ?? 'static')),
+		commonValue(selectedClips.map((c) => c.mode ?? "static")),
 	);
 	let commonIntervalSec = $derived(
 		commonValue(selectedClips.map((c) => c.intervalSec)),
@@ -204,12 +207,14 @@
 	let intervalValue = $derived.by(() => {
 		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
 		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
-			return '';
+			return "";
 		}
 		return String(commonIntervalSec);
 	});
 
-	let commonFade = $derived(commonValue(selectedClips.map((c) => c.fadeSec ?? 0)));
+	let commonFade = $derived(
+		commonValue(selectedClips.map((c) => c.fadeSec ?? 0)),
+	);
 
 	function setFade(sec: number) {
 		const ids = new Set(selectedClipIds);
@@ -226,9 +231,9 @@
 
 	/** A clip with no spacing yet takes one beat, or a flat second without a BPM. */
 	function switchToAuto() {
-		if (hasInterval) onModeChange?.(selectedClipIds, 'interval');
-		else if (bpm > 0) onModeChange?.(selectedClipIds, 'interval', 60 / bpm, 1);
-		else onModeChange?.(selectedClipIds, 'interval', 1, null);
+		if (hasInterval) onModeChange?.(selectedClipIds, "interval");
+		else if (bpm > 0) onModeChange?.(selectedClipIds, "interval", 60 / bpm, 1);
+		else onModeChange?.(selectedClipIds, "interval", 1, null);
 	}
 
 	/** Clips are placed freely — no grid, nothing to snap to. */
@@ -276,7 +281,10 @@
 		if (!lane) return;
 		const gap = freeRangeAt(lane, time, trackDuration);
 		if (!gap) return;
-		const start = Math.max(gap.start, Math.min(time, gap.end - MIN_CLIP_LENGTH));
+		const start = Math.max(
+			gap.start,
+			Math.min(time, gap.end - MIN_CLIP_LENGTH),
+		);
 		const end = Math.min(start + DEFAULT_CLIP_LENGTH, gap.end);
 		const clip = createFxClip(start, end);
 		onBeforeEdit?.();
@@ -306,7 +314,7 @@
 		if (trackDuration <= 0) return;
 		// A double-click inside a clip is the clip's business; only empty lane
 		// space drops a new clip.
-		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		addClipAt(laneId, timeAt(e.clientX));
 	}
 
@@ -314,7 +322,7 @@
 		e: PointerEvent,
 		laneId: string,
 		clipId: string,
-		mode: 'move' | 'start' | 'end',
+		mode: "move" | "start" | "end",
 	) {
 		if (e.button !== 0) return;
 		e.stopPropagation();
@@ -327,7 +335,7 @@
 		// plain Ctrl used to be, moved aside so Ctrl+Click can split the way it
 		// does on the source lane. Checked before the plain-Shift range, which
 		// would otherwise swallow it.
-		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === 'move') {
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
 			if (selectedClipIds.includes(clipId)) {
 				const rest = selectedClipIds.filter((x) => x !== clipId);
 				selectedClipIds = rest;
@@ -349,7 +357,7 @@
 		}
 
 		// Shift extends the selection from the primary.
-		if (e.shiftKey && mode === 'move') {
+		if (e.shiftKey && mode === "move") {
 			const lane = laneOf(laneId);
 			if (lane && selectedClipId) {
 				const range = clipRange(lane, selectedClipId, clipId);
@@ -364,7 +372,7 @@
 
 		// A plain click on something already selected keeps the selection, so it
 		// can be dragged; pointerup resolves it if nothing moved.
-		if (selectedClipIds.includes(clipId) && mode === 'move') {
+		if (selectedClipIds.includes(clipId) && mode === "move") {
 			selectedClipId = clipId;
 			clickOnUp = clipId;
 		} else {
@@ -393,7 +401,13 @@
 		if (e.button !== 0) return;
 		e.preventDefault();
 		e.stopPropagation();
-		drag = { laneId, clipId: leftId, otherId: rightId, mode: 'boundary', grabOffset: 0 };
+		drag = {
+			laneId,
+			clipId: leftId,
+			otherId: rightId,
+			mode: "boundary",
+			grabOffset: 0,
+		};
 		onBeforeEdit?.(`fx-boundary-${leftId}`);
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
@@ -435,10 +449,10 @@
 	 * aria-label of its own, so nothing depends on this to be named.
 	 */
 	function clipTitle(clip: FxClip, label: string): string {
-		if (clip.mode === 'interval') return `Re-rolls every ${label}`;
+		if (clip.mode === "interval") return `Re-rolls every ${label}`;
 		let active = 0;
 		for (const e of clip.effects) if (e.enabled) active++;
-		return `${label} — ${active} effect${active === 1 ? '' : 's'}`;
+		return `${label} — ${active} effect${active === 1 ? "" : "s"}`;
 	}
 
 	/** Consecutive clip pairs sharing an exact edge — the draggable boundaries. */
@@ -460,7 +474,7 @@
 	 * instead. */
 	function onLanePointerDown(e: PointerEvent, laneId: string) {
 		if (e.button !== 0 || trackDuration <= 0) return;
-		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		if (e.ctrlKey || e.metaKey) {
 			e.preventDefault();
 			addClipAt(laneId, timeAt(e.clientX));
@@ -478,7 +492,7 @@
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
 		clickOnUp = null;
 		update(laneId, (lane) => {
-			if (mode === 'move') {
+			if (mode === "move") {
 				// Dragging any member drags the whole selection with it. Measured as
 				// a delta off the grabbed clip's live position, since each move
 				// re-enters here against an already-shifted lane.
@@ -497,7 +511,7 @@
 			}
 			// A boundary drag moves both clips' facing edges; the per-clip edges
 			// trim one clip and can pull it away from its neighbour.
-			if (mode === 'boundary') return resizeBoundary(lane, clipId, otherId!, t);
+			if (mode === "boundary") return resizeBoundary(lane, clipId, otherId!, t);
 			return resizeClip(lane, clipId, mode, t, trackDuration);
 		});
 	}
@@ -506,7 +520,8 @@
 		if (clickOnUp) {
 			// Clicking the one selected clip again drops the selection — the same
 			// gesture the source lane gives a segment.
-			const sole = selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
+			const sole =
+				selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
 			if (sole) deselect();
 			else selectOnly(clickOnUp);
 			clickOnUp = null;
@@ -523,7 +538,10 @@
 		if (ids.size === 0) return;
 		onBeforeEdit?.();
 		onChange(
-			lanes.map((l) => ({ ...l, clips: l.clips.filter((c) => !ids.has(c.id)) })),
+			lanes.map((l) => ({
+				...l,
+				clips: l.clips.filter((c) => !ids.has(c.id)),
+			})),
 		);
 		deselect();
 	}
@@ -574,23 +592,23 @@
 		if (isModalKeyboardOpen()) return;
 		if (e.ctrlKey || e.metaKey) {
 			const k = e.key.toLowerCase();
-			if (k === 'c' && copySelectedChains()) {
+			if (k === "c" && copySelectedChains()) {
 				e.preventDefault();
 				e.stopPropagation();
 				return;
 			}
-			if (k === 'v' && pasteChains()) {
+			if (k === "v" && pasteChains()) {
 				e.preventDefault();
 				e.stopPropagation();
 				return;
 			}
 			return;
 		}
-		if (e.key === 'Escape' && selectedClipIds.length > 0) {
+		if (e.key === "Escape" && selectedClipIds.length > 0) {
 			deselect();
 			return;
 		}
-		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		if (e.key !== "Delete" && e.key !== "Backspace") return;
 		if (selectedClipIds.length === 0) return;
 		e.preventDefault();
 		deleteSelection();
@@ -617,7 +635,7 @@
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
-					title={lane.enabled ? 'Mute this lane' : 'Unmute this lane'}
+					title={lane.enabled ? "Mute this lane" : "Unmute this lane"}
 					onclick={() => toggleLane(lane)}
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
@@ -654,7 +672,7 @@
 					{@const width = vp.toPct(clip.end) - left}
 					{@const edge = edgeWidth(clip)}
 					{#if left < 100 && left + width > 0}
-						{@const interval = clip.mode === 'interval'}
+						{@const interval = clip.mode === "interval"}
 						{@const label = interval
 							? intervalLabel(clip.intervalSec, clip.intervalBeats)
 							: clip.modified
@@ -673,15 +691,17 @@
 							aria-label="{label} clip on {lane.name}"
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
-							onpointerenter={(e) => (e.currentTarget.title = clipTitle(clip, label))}
-							onpointerdown={(e) => onClipPointerDown(e, lane.id, clip.id, 'move')}
+							onpointerenter={(e) =>
+								(e.currentTarget.title = clipTitle(clip, label))}
+							onpointerdown={(e) =>
+								onClipPointerDown(e, lane.id, clip.id, "move")}
 						>
 							<span
 								class="clip-edge start"
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, 'start')}
+									onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
 							{#if clipPx(clip) >= MIN_LABEL_PX}
 								<span class="clip-label">{label}</span>
@@ -690,7 +710,8 @@
 								class="clip-edge end"
 								style="width: {edge}px"
 								role="presentation"
-								onpointerdown={(e) => onClipPointerDown(e, lane.id, clip.id, 'end')}
+								onpointerdown={(e) =>
+									onClipPointerDown(e, lane.id, clip.id, "end")}
 							></span>
 						</div>
 					{/if}
@@ -701,7 +722,10 @@
 					{#if left >= 0 && left <= 100}
 						<div
 							class="clip-boundary"
-							style="left: {left}%; width: {boundaryWidth(pair.left, pair.right)}px"
+							style="left: {left}%; width: {boundaryWidth(
+								pair.left,
+								pair.right,
+							)}px"
 							role="presentation"
 							title="Drag to trim both clips"
 							onpointerdown={(e) =>
@@ -740,18 +764,20 @@
 			</span>
 			<button
 				class="tl-tool-btn"
-				title={commonMode === 'interval'
-					? 'New random seed'
+				title={commonMode === "interval"
+					? "New random seed"
 					: many
-						? 'Random mosh for each selected clip'
-						: 'Random mosh for this clip'}
+						? "Random mosh for each selected clip"
+						: "Random mosh for this clip"}
 				onclick={() => onRoll?.(selectedClipIds)}
 			>
 				<Dices size={12} /> Mosh
 			</button>
 			<button
 				class="tl-tool-btn"
-				title={many ? "Clear the selected clips' effects" : "Clear this clip's effects"}
+				title={many
+					? "Clear the selected clips' effects"
+					: "Clear this clip's effects"}
 				onclick={() => onClear?.(selectedClipIds)}
 			>
 				<Eraser size={12} /> Clear
@@ -761,14 +787,14 @@
 			<div class="fx-mode">
 				<button
 					class="tl-tool-btn"
-					class:active={commonMode === 'static'}
-					onclick={() => onModeChange?.(selectedClipIds, 'static')}
+					class:active={commonMode === "static"}
+					onclick={() => onModeChange?.(selectedClipIds, "static")}
 				>
 					Static
 				</button>
 				<button
 					class="tl-tool-btn"
-					class:active={commonMode === 'interval'}
+					class:active={commonMode === "interval"}
 					onclick={switchToAuto}
 				>
 					Auto
@@ -778,11 +804,11 @@
 			<span class="tl-tool-label">Fade</span>
 			<select
 				class="fx-select"
-				value={commonFade === undefined ? '' : String(commonFade)}
+				value={commonFade === undefined ? "" : String(commonFade)}
 				title="Ramp this lane's effects in and out at the clip's edges"
 				onchange={(e) => {
 					const v = e.currentTarget.value;
-					if (v !== '') setFade(Number(v));
+					if (v !== "") setFade(Number(v));
 				}}
 			>
 				{#if commonFade === undefined}
@@ -794,25 +820,30 @@
 				{/each}
 			</select>
 
-			{#if commonMode === 'interval'}
+			{#if commonMode === "interval"}
 				<select
 					class="fx-select"
 					value={intervalValue}
 					title="How often this clip re-rolls its mosh"
 					onchange={(e) => {
 						const v = e.currentTarget.value;
-						if (v === '') return;
-						if (v.startsWith('b')) {
+						if (v === "") return;
+						if (v.startsWith("b")) {
 							const beats = Number(v.slice(1));
-							onModeChange?.(selectedClipIds, 'interval', (60 / bpm) * beats, beats);
+							onModeChange?.(
+								selectedClipIds,
+								"interval",
+								(60 / bpm) * beats,
+								beats,
+							);
 						} else {
 							// Picking a plain duration drops the beat link, so a later BPM
 							// change leaves it alone.
-							onModeChange?.(selectedClipIds, 'interval', Number(v), null);
+							onModeChange?.(selectedClipIds, "interval", Number(v), null);
 						}
 					}}
 				>
-					{#if intervalValue === ''}
+					{#if intervalValue === ""}
 						<option value="" disabled>—</option>
 					{/if}
 					{#if bpm > 0}
@@ -1024,7 +1055,7 @@
 	}
 
 	.clip-boundary::after {
-		content: '';
+		content: "";
 		position: absolute;
 		top: 0;
 		bottom: 0;

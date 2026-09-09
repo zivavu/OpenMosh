@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
-	import { SlidersHorizontal, X } from 'lucide-svelte';
-	import { LaneEffects } from '../../timeline/lane-effects.svelte';
+	import type { Snippet } from "svelte";
+	import { SlidersHorizontal, X } from "lucide-svelte";
+	import { LaneEffects } from "../../timeline/lane-effects.svelte";
 	import {
 		clipSourceId,
 		DEFAULT_MEDIA_STYLE,
@@ -13,26 +13,26 @@
 		type MediaLane,
 		type MediaStyle,
 		type SourceEdit,
-	} from '../../media';
-	import type { SequenceSource } from '../../editor/sequence-sources.svelte';
-	import type { SpectrumData } from '../../types';
-	import type { AudioResponse } from '../../audio/auto-range';
-	import EffectsPanel from '../ui/EffectsPanel.svelte';
-	import RangeSlider from '../ui/RangeSlider.svelte';
-	import { lazy } from '../../lazy';
+	} from "../../media";
+	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import type { SpectrumData } from "../../types";
+	import type { AudioResponse } from "../../audio/auto-range";
+	import EffectsPanel from "../ui/EffectsPanel.svelte";
+	import RangeSlider from "../ui/RangeSlider.svelte";
+	import { lazy } from "../../lazy";
 
 	// Same chunk the source rail opens; only fetched when an edit starts.
-	const loadSourceEditor = lazy(() => import('../editor/SourceEditor.svelte'));
+	const loadSourceEditor = lazy(() => import("../editor/SourceEditor.svelte"));
 
 	const BLEND_MODES = [
-		'normal',
-		'multiply',
-		'screen',
-		'overlay',
-		'add',
-		'subtract',
-		'difference',
-		'exclusion',
+		"normal",
+		"multiply",
+		"screen",
+		"overlay",
+		"add",
+		"subtract",
+		"difference",
+		"exclusion",
 	] as const;
 
 	interface Props {
@@ -94,7 +94,10 @@
 		const e = source ? edits[source.id] : undefined;
 		return (
 			!!e &&
-			(e.chromaKey.enabled || !isFullCrop(e.crop) || !!e.mask || hasAnimation(e))
+			(e.chromaKey.enabled ||
+				!isFullCrop(e.crop) ||
+				!!e.mask ||
+				hasAnimation(e))
 		);
 	});
 
@@ -196,12 +199,12 @@
 				<label for="mc-source">Media</label>
 				<select
 					id="mc-source"
-					value={clip.sourceId ?? ''}
+					value={clip.sourceId ?? ""}
 					onchange={(e) =>
 						setClipSource((e.currentTarget as HTMLSelectElement).value)}
 				>
 					<option value="">
-						Lane default{laneSource ? ` — ${laneSource.name}` : ''}
+						Lane default{laneSource ? ` — ${laneSource.name}` : ""}
 					</option>
 					{#each sources as s (s.id)}
 						<option value={s.id}>{s.name}</option>
@@ -230,7 +233,7 @@
 			</p>
 		{/if}
 
-		{#if source?.kind === 'video' && source.duration > 0}
+		{#if source?.kind === "video" && source.duration > 0}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="row" title="Where in the video this clip starts">
 				<label for="mc-in">Start at</label>
@@ -273,7 +276,7 @@
 		<div
 			class="row"
 			title="How the media fills its layer. Contain keeps all of it in frame, cover fills the frame and crops what hangs over, stretch bends it to the frame's shape. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'fit')}
+			ondblclick={(e) => resetStyle(e, "fit")}
 		>
 			<label for="mc-fit">Fit</label>
 			<select
@@ -281,8 +284,8 @@
 				value={lane.style.fit}
 				onchange={(e) =>
 					setStyle(
-						'fit',
-						(e.currentTarget as HTMLSelectElement).value as MediaStyle['fit'],
+						"fit",
+						(e.currentTarget as HTMLSelectElement).value as MediaStyle["fit"],
 					)}
 			>
 				{#each MEDIA_FIT_OPTIONS as opt (opt.value)}
@@ -295,7 +298,7 @@
 		<div
 			class="row"
 			title="Size of the media on top of whatever the fit gave it. 100% is the fitted size. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'scale')}
+			ondblclick={(e) => resetStyle(e, "scale")}
 		>
 			<label for="mc-scale">Scale</label>
 			<RangeSlider
@@ -304,7 +307,7 @@
 				min={0.05}
 				max={3}
 				step={0.01}
-				oninput={(v) => setStyle('scale', v, `mc-scale-${lane.id}`)}
+				oninput={(v) => setStyle("scale", v, `mc-scale-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.scale * 100)}%</span>
 		</div>
@@ -313,7 +316,7 @@
 		<div
 			class="row"
 			title="Room around the media for its own effects to spread into, as a share of its size on each side. A blur or a glow otherwise stops dead at the media's edge. 100% gives it as much margin as the media itself, and renders the media at a third of the buffer — the sharpness is what buys the room. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'bleed')}
+			ondblclick={(e) => resetStyle(e, "bleed")}
 		>
 			<label for="mc-bleed">Bleed</label>
 			<RangeSlider
@@ -322,7 +325,7 @@
 				min={0}
 				max={1}
 				step={0.01}
-				oninput={(v) => setStyle('bleed', v, `mc-bleed-${lane.id}`)}
+				oninput={(v) => setStyle("bleed", v, `mc-bleed-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.bleed * 100)}%</span>
 		</div>
@@ -334,7 +337,7 @@
 			<div
 				class="row"
 				title="How much of the bleed margin fades out instead of ending in a hard edge. The room the effects spill into still stops somewhere, and a glow cut off there draws the rectangle the bleed was meant to hide. Never eats into the media itself. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, 'bleedFade')}
+				ondblclick={(e) => resetStyle(e, "bleedFade")}
 			>
 				<label for="mc-bleed-fade">Bleed fade</label>
 				<RangeSlider
@@ -343,7 +346,7 @@
 					min={0}
 					max={1}
 					step={0.01}
-					oninput={(v) => setStyle('bleedFade', v, `mc-bleedfade-${lane.id}`)}
+					oninput={(v) => setStyle("bleedFade", v, `mc-bleedfade-${lane.id}`)}
 				/>
 				<span class="val">{Math.round(lane.style.bleedFade * 100)}%</span>
 			</div>
@@ -353,7 +356,7 @@
 		<div
 			class="row"
 			title="Where the layer's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'x')}
+			ondblclick={(e) => resetStyle(e, "x")}
 		>
 			<label for="mc-x">Position X</label>
 			<RangeSlider
@@ -362,7 +365,7 @@
 				min={-0.5}
 				max={1.5}
 				step={0.005}
-				oninput={(v) => setStyle('x', v, `mc-x-${lane.id}`)}
+				oninput={(v) => setStyle("x", v, `mc-x-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.x * 100)}</span>
 		</div>
@@ -371,7 +374,7 @@
 		<div
 			class="row"
 			title="Where the layer's centre sits down the frame — 0 at the top edge, 100 at the bottom. Past either takes it off screen. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'y')}
+			ondblclick={(e) => resetStyle(e, "y")}
 		>
 			<label for="mc-y">Position Y</label>
 			<RangeSlider
@@ -380,7 +383,7 @@
 				min={-0.5}
 				max={1.5}
 				step={0.005}
-				oninput={(v) => setStyle('y', v, `mc-y-${lane.id}`)}
+				oninput={(v) => setStyle("y", v, `mc-y-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.y * 100)}</span>
 		</div>
@@ -389,7 +392,7 @@
 		<div
 			class="row"
 			title="Turns the layer around its own centre, in degrees. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'rotation')}
+			ondblclick={(e) => resetStyle(e, "rotation")}
 		>
 			<label for="mc-rot">Rotation</label>
 			<RangeSlider
@@ -398,7 +401,7 @@
 				min={-180}
 				max={180}
 				step={1}
-				oninput={(v) => setStyle('rotation', v, `mc-rot-${lane.id}`)}
+				oninput={(v) => setStyle("rotation", v, `mc-rot-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.rotation)}°</span>
 		</div>
@@ -407,7 +410,7 @@
 		<div
 			class="row"
 			title="How much of the layer shows, against the layers under it. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'opacity')}
+			ondblclick={(e) => resetStyle(e, "opacity")}
 		>
 			<label for="mc-opacity">Opacity</label>
 			<RangeSlider
@@ -416,7 +419,7 @@
 				min={0}
 				max={1}
 				step={0.01}
-				oninput={(v) => setStyle('opacity', v, `mc-op-${lane.id}`)}
+				oninput={(v) => setStyle("opacity", v, `mc-op-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.opacity * 100)}%</span>
 		</div>
@@ -425,7 +428,7 @@
 		<div
 			class="row"
 			title="How this layer's colours mix with the ones underneath instead of simply covering them. Double-click to reset."
-			ondblclick={(e) => resetStyle(e, 'blendMode')}
+			ondblclick={(e) => resetStyle(e, "blendMode")}
 		>
 			<label for="mc-blend">Blend</label>
 			<select
@@ -433,9 +436,9 @@
 				value={lane.style.blendMode}
 				onchange={(e) =>
 					setStyle(
-						'blendMode',
+						"blendMode",
 						(e.currentTarget as HTMLSelectElement)
-							.value as MediaStyle['blendMode'],
+							.value as MediaStyle["blendMode"],
 					)}
 			>
 				{#each BLEND_MODES as mode (mode)}
@@ -443,7 +446,6 @@
 				{/each}
 			</select>
 		</div>
-
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
@@ -464,7 +466,9 @@
 			<div class="settings-slot">{@render settings()}</div>
 		{/if}
 
-		<h3 class="panel-title section" class:no-rule={!!settings}>Layer effects</h3>
+		<h3 class="panel-title section" class:no-rule={!!settings}>
+			Layer effects
+		</h3>
 		<p class="hint">
 			These effects only run on this layer's media, before it meets the image.
 		</p>

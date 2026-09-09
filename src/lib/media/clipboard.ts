@@ -18,56 +18,56 @@ const EPSILON = 1e-6;
 
 /** One copied clip, placed relative to the earliest one in the copy. */
 export interface MediaClipboardEntry {
-  laneId: string;
-  /** Seconds from the copy anchor. */
-  offset: number;
-  length: number;
-  sourceStart: number;
-  /** The clip's own source, when it had one; absent means the lane's. */
-  sourceId?: string;
-  fadeSec?: number;
+	laneId: string;
+	/** Seconds from the copy anchor. */
+	offset: number;
+	length: number;
+	sourceStart: number;
+	/** The clip's own source, when it had one; absent means the lane's. */
+	sourceId?: string;
+	fadeSec?: number;
 }
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
 export function copyMediaClips(
-  timeline: MediaTimeline,
-  clipIds: string[],
+	timeline: MediaTimeline,
+	clipIds: string[],
 ): MediaClipboardEntry[] {
-  const ids = new Set(clipIds);
-  const found: MediaClipboardEntry[] = [];
-  let anchor = Infinity;
-  for (const lane of timeline.lanes) {
-    for (const clip of lane.clips) {
-      if (!ids.has(clip.id)) continue;
-      anchor = Math.min(anchor, clip.start);
-      found.push({
-        laneId: lane.id,
-        offset: clip.start,
-        length: clip.end - clip.start,
-        sourceStart: clip.sourceStart,
-        sourceId: clip.sourceId,
-        fadeSec: clip.fadeSec,
-      });
-    }
-  }
-  if (found.length === 0) return [];
-  return found
-    .map((e) => ({ ...e, offset: e.offset - anchor }))
-    .sort((a, b) => a.offset - b.offset);
+	const ids = new Set(clipIds);
+	const found: MediaClipboardEntry[] = [];
+	let anchor = Infinity;
+	for (const lane of timeline.lanes) {
+		for (const clip of lane.clips) {
+			if (!ids.has(clip.id)) continue;
+			anchor = Math.min(anchor, clip.start);
+			found.push({
+				laneId: lane.id,
+				offset: clip.start,
+				length: clip.end - clip.start,
+				sourceStart: clip.sourceStart,
+				sourceId: clip.sourceId,
+				fadeSec: clip.fadeSec,
+			});
+		}
+	}
+	if (found.length === 0) return [];
+	return found
+		.map((e) => ({ ...e, offset: e.offset - anchor }))
+		.sort((a, b) => a.offset - b.offset);
 }
 
 /** Room for [start, end) on this lane, with nothing already there. */
 function fits(
-  lane: MediaLane,
-  start: number,
-  end: number,
-  duration: number,
+	lane: MediaLane,
+	start: number,
+	end: number,
+	duration: number,
 ): boolean {
-  if (start < -EPSILON || end > duration + EPSILON) return false;
-  for (const c of lane.clips) {
-    if (start < c.end - EPSILON && end > c.start + EPSILON) return false;
-  }
-  return true;
+	if (start < -EPSILON || end > duration + EPSILON) return false;
+	for (const c of lane.clips) {
+		if (start < c.end - EPSILON && end > c.start + EPSILON) return false;
+	}
+	return true;
 }
 
 /**
@@ -79,32 +79,32 @@ function fits(
  * that puts some entry flush against the clip it was overlapping.
  */
 function firstFreeDelta(
-  entries: MediaClipboardEntry[],
-  lanes: Map<string, MediaLane>,
-  at: number,
-  duration: number,
+	entries: MediaClipboardEntry[],
+	lanes: Map<string, MediaLane>,
+	at: number,
+	duration: number,
 ): number | null {
-  const candidates = new Set<number>([0]);
-  for (const e of entries) {
-    for (const c of lanes.get(e.laneId)!.clips) {
-      const delta = c.end - (at + e.offset);
-      if (delta > 0) candidates.add(delta);
-    }
-  }
-  for (const delta of [...candidates].sort((a, b) => a - b)) {
-    const clear = entries.every((e) => {
-      const start = at + e.offset + delta;
-      return fits(lanes.get(e.laneId)!, start, start + e.length, duration);
-    });
-    if (clear) return delta;
-  }
-  return null;
+	const candidates = new Set<number>([0]);
+	for (const e of entries) {
+		for (const c of lanes.get(e.laneId)!.clips) {
+			const delta = c.end - (at + e.offset);
+			if (delta > 0) candidates.add(delta);
+		}
+	}
+	for (const delta of [...candidates].sort((a, b) => a - b)) {
+		const clear = entries.every((e) => {
+			const start = at + e.offset + delta;
+			return fits(lanes.get(e.laneId)!, start, start + e.length, duration);
+		});
+		if (clear) return delta;
+	}
+	return null;
 }
 
 export interface MediaPasteResult {
-  timeline: MediaTimeline;
-  /** The clips that landed, for the caller to select. Empty on a no-op. */
-  clipIds: string[];
+	timeline: MediaTimeline;
+	/** The clips that landed, for the caller to select. Empty on a no-op. */
+	clipIds: string[];
 }
 
 /**
@@ -117,47 +117,49 @@ export interface MediaPasteResult {
  * copy directly after it. When nothing downstream has room, nothing is pasted.
  */
 export function pasteMediaClips(
-  timeline: MediaTimeline,
-  entries: MediaClipboardEntry[],
-  at: number,
-  duration: number,
+	timeline: MediaTimeline,
+	entries: MediaClipboardEntry[],
+	at: number,
+	duration: number,
 ): MediaPasteResult {
-  const unchanged: MediaPasteResult = { timeline, clipIds: [] };
-  if (entries.length === 0 || duration <= 0) return unchanged;
+	const unchanged: MediaPasteResult = { timeline, clipIds: [] };
+	if (entries.length === 0 || duration <= 0) return unchanged;
 
-  const lanes = new Map(timeline.lanes.map((l) => [l.id, l]));
-  // A lane deleted since the copy takes its clips with it.
-  const live = entries.filter((e) => lanes.has(e.laneId));
-  if (live.length === 0) return unchanged;
+	const lanes = new Map(timeline.lanes.map((l) => [l.id, l]));
+	// A lane deleted since the copy takes its clips with it.
+	const live = entries.filter((e) => lanes.has(e.laneId));
+	if (live.length === 0) return unchanged;
 
-  const delta = firstFreeDelta(live, lanes, Math.max(0, at), duration);
-  if (delta === null) return unchanged;
+	const delta = firstFreeDelta(live, lanes, Math.max(0, at), duration);
+	if (delta === null) return unchanged;
 
-  const added = new Map<string, MediaClip[]>();
-  const clipIds: string[] = [];
-  for (const e of live) {
-    const start = Math.max(0, at) + e.offset + delta;
-    const clip = createMediaClip(
-      start,
-      start + e.length,
-      e.sourceStart,
-      e.sourceId,
-    );
-    if (e.fadeSec !== undefined) clip.fadeSec = e.fadeSec;
-    clipIds.push(clip.id);
-    const list = added.get(e.laneId);
-    if (list) list.push(clip);
-    else added.set(e.laneId, [clip]);
-  }
+	const added = new Map<string, MediaClip[]>();
+	const clipIds: string[] = [];
+	for (const e of live) {
+		const start = Math.max(0, at) + e.offset + delta;
+		const clip = createMediaClip(
+			start,
+			start + e.length,
+			e.sourceStart,
+			e.sourceId,
+		);
+		if (e.fadeSec !== undefined) clip.fadeSec = e.fadeSec;
+		clipIds.push(clip.id);
+		const list = added.get(e.laneId);
+		if (list) list.push(clip);
+		else added.set(e.laneId, [clip]);
+	}
 
-  return {
-    timeline: {
-      ...timeline,
-      lanes: timeline.lanes.map((lane) => {
-        const list = added.get(lane.id);
-        return list ? { ...lane, clips: sortClips([...lane.clips, ...list]) } : lane;
-      }),
-    },
-    clipIds,
-  };
+	return {
+		timeline: {
+			...timeline,
+			lanes: timeline.lanes.map((lane) => {
+				const list = added.get(lane.id);
+				return list
+					? { ...lane, clips: sortClips([...lane.clips, ...list]) }
+					: lane;
+			}),
+		},
+		clipIds,
+	};
 }

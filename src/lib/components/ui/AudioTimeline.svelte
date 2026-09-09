@@ -1,8 +1,15 @@
 <script lang="ts">
-	import { Pause, Play, Repeat, Volume1, Volume2, VolumeX } from 'lucide-svelte';
-	import { formatTime } from '../../audio/audio-utils';
-	import { tryGetTimelineStack } from '../../editor/timeline-stack.svelte';
-	import SpeedControl from './SpeedControl.svelte';
+	import {
+		Pause,
+		Play,
+		Repeat,
+		Volume1,
+		Volume2,
+		VolumeX,
+	} from "lucide-svelte";
+	import { formatTime } from "../../audio/audio-utils";
+	import { tryGetTimelineStack } from "../../editor/timeline-stack.svelte";
+	import SpeedControl from "./SpeedControl.svelte";
 
 	interface Props {
 		label: string;
@@ -34,7 +41,7 @@
 		 * the stack's master (a video playing under its own span while a track
 		 * drives the timeline).
 		 */
-		layout?: 'bar' | 'lane';
+		layout?: "bar" | "lane";
 	}
 
 	let {
@@ -56,14 +63,14 @@
 		onSpeedChange,
 		loopEnabled = false,
 		onToggleLoop,
-		ariaLabel = 'Timeline',
-		layout = 'bar',
+		ariaLabel = "Timeline",
+		layout = "bar",
 	}: Props = $props();
 
 	// Present whenever this is mounted inside a stack; used only in lane layout,
 	// so a bar keeps its own axis even when it sits next to one.
 	const enclosingStack = tryGetTimelineStack();
-	let stack = $derived(layout === 'lane' ? enclosingStack : undefined);
+	let stack = $derived(layout === "lane" ? enclosingStack : undefined);
 
 	let timelineTrackEl = $state<HTMLDivElement | undefined>(undefined);
 	let seekDragging = $state(false);
@@ -111,21 +118,21 @@
 
 	// The handles are hit-tested by proximity and drawn with pointer-events off,
 	// so :hover can't reach them — which handle is live is tracked here instead.
-	let hoverHandle = $state<'start' | 'end' | null>(null);
-	let dragHandle = $state<'start' | 'end' | null>(null);
+	let hoverHandle = $state<"start" | "end" | null>(null);
+	let dragHandle = $state<"start" | "end" | null>(null);
 	/** The handle to light up: the dragged one wins, since the pointer wanders
 	 * off the grab zone once a drag is under way. */
 	let liveHandle = $derived(dragHandle ?? hoverHandle);
 
-	function handleFromClientX(clientX: number): 'start' | 'end' | null {
+	function handleFromClientX(clientX: number): "start" | "end" | null {
 		if (!timelineTrackEl || trackDuration === 0) return null;
 		const rect = timelineTrackEl.getBoundingClientRect();
 		const x = clientX - rect.left;
 		const startX = (pct(spanStart) / 100) * rect.width;
 		const endX = (pct(spanEnd) / 100) * rect.width;
 		const radius = 14;
-		if (Math.abs(x - startX) <= radius) return 'start';
-		if (Math.abs(x - endX) <= radius) return 'end';
+		if (Math.abs(x - startX) <= radius) return "start";
+		if (Math.abs(x - endX) <= radius) return "end";
 		return null;
 	}
 
@@ -138,13 +145,13 @@
 		const handle = handleFromClientX(e.clientX);
 		if (!handle) return;
 		e.preventDefault();
-		if (handle === 'start') onSpanStartChange(0);
+		if (handle === "start") onSpanStartChange(0);
 		else onSpanEndChange(trackDuration);
 		onSpanCommit?.();
 	}
 
 	function onTimelinePointerDown(e: PointerEvent) {
-		if (e.pointerType === 'touch') return;
+		if (e.pointerType === "touch") return;
 		e.preventDefault();
 		const handle = handleFromClientX(e.clientX);
 		if (handle) {
@@ -164,13 +171,13 @@
 		};
 		const onUp = () => {
 			seekDragging = false;
-			window.removeEventListener('pointermove', onMove);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('pointercancel', onUp);
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
 		};
-		window.addEventListener('pointermove', onMove);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('pointercancel', onUp);
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
 	}
 
 	/** One drag over the track: in a lane the track is part of the shared axis,
@@ -182,15 +189,18 @@
 		else onSeek(t);
 	}
 
-	function beginHandleDrag(initialHandle: 'start' | 'end', startClientX: number) {
-		let handle: 'start' | 'end' = initialHandle;
+	function beginHandleDrag(
+		initialHandle: "start" | "end",
+		startClientX: number,
+	) {
+		let handle: "start" | "end" = initialHandle;
 		dragHandle = handle;
 		function applyPosition(clientX: number) {
 			const t = timeFromClientX(clientX);
-			if (handle === 'start') {
+			if (handle === "start") {
 				if (t >= spanEnd) {
 					// Swapped: start becomes the new end
-					handle = 'end';
+					handle = "end";
 					onSpanEndChange(t);
 				} else {
 					onSpanStartChange(Math.max(0, t));
@@ -198,7 +208,7 @@
 			} else {
 				if (t <= spanStart) {
 					// Swapped: end becomes the new start
-					handle = 'start';
+					handle = "start";
 					onSpanStartChange(t);
 				} else {
 					onSpanEndChange(Math.min(trackDuration, t));
@@ -210,24 +220,24 @@
 
 		const onMove = (ev: PointerEvent | TouchEvent) => {
 			const clientX =
-				'touches' in ev ? (ev.touches[0]?.clientX ?? startClientX) : ev.clientX;
+				"touches" in ev ? (ev.touches[0]?.clientX ?? startClientX) : ev.clientX;
 			applyPosition(clientX);
 		};
 		const onUp = () => {
 			dragHandle = null;
 			// One undo entry for the whole drag, recorded on the span it landed on.
 			onSpanCommit?.();
-			window.removeEventListener('pointermove', onMove as EventListener);
-			window.removeEventListener('pointerup', onUp);
-			window.removeEventListener('touchmove', onMove as EventListener);
-			window.removeEventListener('touchend', onUp);
+			window.removeEventListener("pointermove", onMove as EventListener);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("touchmove", onMove as EventListener);
+			window.removeEventListener("touchend", onUp);
 		};
-		window.addEventListener('pointermove', onMove as EventListener);
-		window.addEventListener('pointerup', onUp);
-		window.addEventListener('touchmove', onMove as EventListener, {
+		window.addEventListener("pointermove", onMove as EventListener);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("touchmove", onMove as EventListener, {
 			passive: false,
 		});
-		window.addEventListener('touchend', onUp);
+		window.addEventListener("touchend", onUp);
 	}
 
 	// Non-passive touchstart on timeline track — handles seek and handle drag via proximity
@@ -244,8 +254,8 @@
 		};
 		const onSeekUp = () => {
 			seeking = false;
-			window.removeEventListener('touchmove', onSeekMove);
-			window.removeEventListener('touchend', onSeekUp);
+			window.removeEventListener("touchmove", onSeekMove);
+			window.removeEventListener("touchend", onSeekUp);
 		};
 		const onTrackTouch = (e: TouchEvent) => {
 			e.preventDefault();
@@ -257,18 +267,17 @@
 			} else {
 				seeking = true;
 				dragTrackTo(touch.clientX);
-				window.addEventListener('touchmove', onSeekMove, { passive: false });
-				window.addEventListener('touchend', onSeekUp);
+				window.addEventListener("touchmove", onSeekMove, { passive: false });
+				window.addEventListener("touchend", onSeekUp);
 			}
 		};
-		trackEl.addEventListener('touchstart', onTrackTouch, { passive: false });
+		trackEl.addEventListener("touchstart", onTrackTouch, { passive: false });
 		return () => {
-			trackEl.removeEventListener('touchstart', onTrackTouch);
-			window.removeEventListener('touchmove', onSeekMove);
-			window.removeEventListener('touchend', onSeekUp);
+			trackEl.removeEventListener("touchstart", onTrackTouch);
+			window.removeEventListener("touchmove", onSeekMove);
+			window.removeEventListener("touchend", onSeekUp);
 		};
 	});
-
 </script>
 
 <!-- The track itself, identical either way: only the chrome around it differs.
@@ -279,7 +288,7 @@
 		class="timeline-track-wrap"
 		class:seeking={seekDragging}
 		class:over-handle={!!liveHandle}
-		class:tl-lane={layout === 'lane'}
+		class:tl-lane={layout === "lane"}
 		bind:this={timelineTrackEl}
 		use:laneTrack
 		role="slider"
@@ -290,7 +299,7 @@
 		tabindex="0"
 		onpointerdown={(e) => onTimelinePointerDown(e)}
 		onpointermove={(e) => {
-			if (e.pointerType === 'touch' || dragHandle) return;
+			if (e.pointerType === "touch" || dragHandle) return;
 			hoverHandle = handleFromClientX(e.clientX);
 		}}
 		onpointerleave={() => (hoverHandle = null)}
@@ -304,8 +313,8 @@
 			{#if onScreen(spanStart)}
 				<div
 					class="timeline-handle timeline-handle-start"
-					class:live={liveHandle === 'start'}
-					class:dragging={dragHandle === 'start'}
+					class:live={liveHandle === "start"}
+					class:dragging={dragHandle === "start"}
 					style="left: {spanL}%"
 					aria-hidden="true"
 				></div>
@@ -313,13 +322,13 @@
 			{#if onScreen(spanEnd)}
 				<div
 					class="timeline-handle timeline-handle-end"
-					class:live={liveHandle === 'end'}
-					class:dragging={dragHandle === 'end'}
+					class:live={liveHandle === "end"}
+					class:dragging={dragHandle === "end"}
 					style="left: {spanR}%"
 					aria-hidden="true"
 				></div>
 			{/if}
-			{#if layout === 'bar'}
+			{#if layout === "bar"}
 				<div
 					class="timeline-playhead"
 					style="left: {pct(trackCurrentTime)}%"
@@ -330,7 +339,7 @@
 	</div>
 {/snippet}
 
-{#if layout === 'lane'}
+{#if layout === "lane"}
 	<div class="tl-row">
 		<div class="tl-gutter audio-gutter">
 			<span class="tl-gutter-label">{label}</span>
@@ -359,7 +368,7 @@
 		<button
 			class="timeline-play-btn"
 			onclick={isPlaying ? onPause : onPlay}
-			title={isPlaying ? 'Pause' : 'Play'}
+			title={isPlaying ? "Pause" : "Play"}
 		>
 			{#if isPlaying}
 				<Pause size={14} fill="currentColor" stroke="none" />
@@ -372,7 +381,7 @@
 				class="timeline-play-btn timeline-loop-btn"
 				class:loop-on={loopEnabled}
 				onclick={onToggleLoop}
-				title={loopEnabled ? 'Loop: on' : 'Loop: off'}
+				title={loopEnabled ? "Loop: on" : "Loop: off"}
 				aria-pressed={loopEnabled}
 			>
 				<Repeat size={13} />
@@ -513,7 +522,7 @@
 		overflow: hidden;
 	}
 
-.timeline-playhead {
+	.timeline-playhead {
 		position: absolute;
 		top: 0;
 		bottom: 0;
@@ -553,7 +562,7 @@
 	/* Two grip lines, so it reads as something to drag rather than a boundary
 	   the span happens to end at. */
 	.timeline-handle::after {
-		content: '';
+		content: "";
 		position: absolute;
 		inset: 5px 3px;
 		border-left: 1px solid var(--text-2);
@@ -641,5 +650,4 @@
 			gap: 0.25rem;
 		}
 	}
-
 </style>

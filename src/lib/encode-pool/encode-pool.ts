@@ -1,11 +1,11 @@
 import type {
 	EncodeWorkerRequest,
 	EncodeWorkerResponse,
-} from './encode-worker';
+} from "./encode-worker";
 
 export interface PoolPacket {
 	data: Uint8Array;
-	type: 'key' | 'delta';
+	type: "key" | "delta";
 	/** Seconds. */
 	timestamp: number;
 	/** Seconds. */
@@ -44,9 +44,9 @@ export class EncoderPool {
 
 	static isSupported(): boolean {
 		return (
-			typeof Worker !== 'undefined' &&
-			typeof VideoFrame !== 'undefined' &&
-			typeof VideoEncoder !== 'undefined'
+			typeof Worker !== "undefined" &&
+			typeof VideoFrame !== "undefined" &&
+			typeof VideoEncoder !== "undefined"
 		);
 	}
 
@@ -61,30 +61,30 @@ export class EncoderPool {
 		const readies: Promise<void>[] = [];
 		for (let i = 0; i < this.opts.workerCount; i++) {
 			const worker = new Worker(
-				new URL('./encode-worker.ts', import.meta.url),
-				{ type: 'module' },
+				new URL("./encode-worker.ts", import.meta.url),
+				{ type: "module" },
 			);
 			this.workers.push(worker);
 			readies.push(
 				new Promise<void>((resolve, reject) => {
 					const onReady = (e: MessageEvent<EncodeWorkerResponse>) => {
-						if (e.data.type === 'ready') {
-							worker.removeEventListener('message', onReady);
-							worker.addEventListener('message', (ev) =>
+						if (e.data.type === "ready") {
+							worker.removeEventListener("message", onReady);
+							worker.addEventListener("message", (ev) =>
 								this.handleMessage(ev.data as EncodeWorkerResponse),
 							);
 							resolve();
-						} else if (e.data.type === 'error') {
+						} else if (e.data.type === "error") {
 							reject(new Error(e.data.message));
 						}
 					};
-					worker.addEventListener('message', onReady);
-					worker.addEventListener('error', (e) =>
-						reject(new Error(e.message || 'Encode worker failed to start')),
+					worker.addEventListener("message", onReady);
+					worker.addEventListener("error", (e) =>
+						reject(new Error(e.message || "Encode worker failed to start")),
 					);
 				}),
 			);
-			this.post(worker, { type: 'init', config: this.opts.config });
+			this.post(worker, { type: "init", config: this.opts.config });
 		}
 		try {
 			await Promise.all(readies);
@@ -119,7 +119,7 @@ export class EncoderPool {
 		this.post(
 			worker,
 			{
-				type: 'encode',
+				type: "encode",
 				frame,
 				frameIndex,
 				keyFrame: frameIndex % this.opts.chunkSize === 0,
@@ -134,7 +134,7 @@ export class EncoderPool {
 		await new Promise<void>((resolve, reject) => {
 			this.flushWaiter = resolve;
 			this.failureWaiters.push(reject);
-			for (const worker of this.workers) this.post(worker, { type: 'flush' });
+			for (const worker of this.workers) this.post(worker, { type: "flush" });
 		});
 		this.throwIfFailed();
 		if (this.pending.size > 0 || this.inFlight > 0) {
@@ -159,7 +159,7 @@ export class EncoderPool {
 	}
 
 	private handleMessage(msg: EncodeWorkerResponse) {
-		if (msg.type === 'packet') {
+		if (msg.type === "packet") {
 			this.inFlight--;
 			this.slotWaiters.shift()?.();
 			this.pending.set(msg.frameIndex, {
@@ -176,10 +176,10 @@ export class EncoderPool {
 				this.opts.onPacket(packet);
 			}
 			this.checkFlushed();
-		} else if (msg.type === 'flushed') {
+		} else if (msg.type === "flushed") {
 			this.flushedCount++;
 			this.checkFlushed();
-		} else if (msg.type === 'error') {
+		} else if (msg.type === "error") {
 			this.fail(new Error(msg.message));
 		}
 	}

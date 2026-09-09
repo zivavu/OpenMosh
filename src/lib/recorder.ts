@@ -1,40 +1,41 @@
+import { getDecodedAudioBuffer } from "./audio/audio-buffer-cache";
+import { type AudioLinkGroup, layerLinkGroups } from "./audio/audio-utils";
 import {
-	FFT_SIZE,
+	type AudioResponse,
+	DEFAULT_AUDIO_RESPONSE,
+	resetAutoRange,
+} from "./audio/auto-range";
+import {
 	analyzeFrames,
 	applyFrameAudioToEffects,
 	decodeAudioFile,
+	FFT_SIZE,
+	type FrameAudioData,
 	loopAudioBuffer,
 	trimAudioBuffer,
-	type FrameAudioData,
-} from './audio/offline-audio';
-import { getDecodedAudioBuffer } from './audio/audio-buffer-cache';
-import { layerLinkGroups, type AudioLinkGroup } from './audio/audio-utils';
+} from "./audio/offline-audio";
+import { resetSpectrumRange } from "./audio/spectrum-range";
+import { stretchAudioBuffer } from "./audio/time-stretch";
 import {
-	DEFAULT_AUDIO_RESPONSE,
-	resetAutoRange,
-	type AudioResponse,
-} from './audio/auto-range';
-import { resetSpectrumRange } from './audio/spectrum-range';
-import { stretchAudioBuffer } from './audio/time-stretch';
-import {
-	resolveTextLayersAt,
-	type ResolvedTextLayer,
-	type TextTimeline,
-} from './text';
-import {
-	resolveMediaLayersAt,
 	type MediaTimeline,
 	type ResolvedMediaLayer,
-} from './media';
+	resolveMediaLayersAt,
+} from "./media";
+import {
+	type ResolvedTextLayer,
+	resolveTextLayersAt,
+	type TextTimeline,
+} from "./text";
 
 /** Replaces the default render for a frame, and composites its own layers. */
 export type CustomRender = (
 	textLayers: ResolvedTextLayer[],
 	mediaLayers: ResolvedMediaLayer[],
 ) => void;
-import type { StreamTargetChunk } from 'mediabunny';
-import type { EffectInstance } from './effects';
-import type { GlRenderer } from './gl/renderer';
+
+import type { StreamTargetChunk } from "mediabunny";
+import type { EffectInstance } from "./effects";
+import type { GlRenderer } from "./gl/renderer";
 
 export interface RecordOptions {
 	duration: number;
@@ -62,11 +63,7 @@ export interface RecordOptions {
 	onBeforeRender?: (
 		frameIndex: number,
 		time: number,
-	) =>
-		| boolean
-		| void
-		| CustomRender
-		| Promise<boolean | void | CustomRender>;
+	) => boolean | void | CustomRender | Promise<boolean | void | CustomRender>;
 	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
 	effectsRef?: { current: EffectInstance[] };
 	/**
@@ -116,7 +113,7 @@ interface FrameSink {
 
 function checkAbort(signal?: AbortSignal) {
 	if (signal?.aborted)
-		throw new DOMException('Recording cancelled', 'AbortError');
+		throw new DOMException("Recording cancelled", "AbortError");
 }
 
 function applyFrameAudio(
@@ -272,7 +269,7 @@ class SlabBuffer {
 }
 
 async function recordWebM(opts: RecordOptions): Promise<Blob> {
-	const mb = await import('mediabunny');
+	const mb = await import("mediabunny");
 
 	const {
 		duration,
@@ -334,7 +331,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	// Prefer a hardware encoder (VP9/AV1 on most modern GPUs): far faster than
 	// software VP8 and equal-or-better quality at these bitrates.
-	const hwCandidates = (['vp9', 'av1'] as const).filter((c) =>
+	const hwCandidates = (["vp9", "av1"] as const).filter((c) =>
 		containerCodecs.includes(c as any),
 	);
 	let selectedCodec: string | null = null;
@@ -345,7 +342,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				width: canvas.width,
 				height: canvas.height,
 				bitrate: 8_000_000,
-				hardwareAcceleration: 'prefer-hardware',
+				hardwareAcceleration: "prefer-hardware",
 			})
 		) {
 			selectedCodec = c;
@@ -354,7 +351,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		}
 	}
 
-	const swCandidates = (['vp8', 'vp9', 'av1'] as const).filter((c) =>
+	const swCandidates = (["vp8", "vp9", "av1"] as const).filter((c) =>
 		containerCodecs.includes(c as any),
 	);
 	if (!selectedCodec) {
@@ -368,7 +365,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	if (!selectedCodec) {
 		throw new Error(
 			`This browser can't encode WEBM video. ` +
-				`Tried ${swCandidates.join(', ')}. Try another browser.`,
+				`Tried ${swCandidates.join(", ")}. Try another browser.`,
 		);
 	}
 
@@ -391,7 +388,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const reportPacket = () => {
 		encodedFrames++;
 		// Audio analysis gets the first 15% of the bar; encoding fills the rest.
-		onProgress?.(Math.min(0.15 + encodedFrames / totalFrames * 0.85, 1));
+		onProgress?.(Math.min(0.15 + (encodedFrames / totalFrames) * 0.85, 1));
 	};
 
 	const makeCanvasSink = (): FrameSink => {
@@ -421,18 +418,18 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		const abortPromise = signal
 			? new Promise<never>((_, reject) => {
 					if (signal.aborted) {
-						reject(new DOMException('Recording cancelled', 'AbortError'));
+						reject(new DOMException("Recording cancelled", "AbortError"));
 						return;
 					}
 					signal.addEventListener(
-						'abort',
+						"abort",
 						() => {
-							reject(new DOMException('Recording cancelled', 'AbortError'));
+							reject(new DOMException("Recording cancelled", "AbortError"));
 							abortWait();
 						},
 						{ once: true },
 					);
-			  })
+				})
 			: null;
 		const abortOrNever = abortPromise ?? never;
 		const videoSource = new mb.CanvasSource(canvas, {
@@ -441,8 +438,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			// speed; the higher bitrate compensates so visual quality holds.
 			bitrate: hardware ? 8_000_000 : 12_000_000,
 			...(hardware
-				? { hardwareAcceleration: 'prefer-hardware' as const }
-				: { latencyMode: 'realtime' as const }),
+				? { hardwareAcceleration: "prefer-hardware" as const }
+				: { latencyMode: "realtime" as const }),
 			onEncodedPacket: () => {
 				resolveFirstPacket?.();
 				resolveFirstPacket = null;
@@ -458,7 +455,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			rejectQueueError = reject;
 		});
 		return {
-			label: hardware ? 'hardware' : 'software',
+			label: hardware ? "hardware" : "software",
 			async submit(frameIndex, time) {
 				if (queueError) throw queueError;
 				checkAbort(signal);
@@ -485,11 +482,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					]);
 				}
 				if (queue.length >= 8) {
-					await Promise.race([
-						queue.shift()!,
-						abortOrNever,
-						queueErrorPromise,
-					]);
+					await Promise.race([queue.shift()!, abortOrNever, queueErrorPromise]);
 				}
 				while (frameIndex - encodedFrames > MAX_BACKLOG) {
 					checkAbort(signal);
@@ -522,9 +515,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	// Chunks of frames go round-robin to workers; each chunk starts with a
 	// forced keyframe so the interleaved streams stay valid.
 	const makePoolSink = async (): Promise<FrameSink> => {
-		const { EncoderPool } = await import('./encode-pool/encode-pool');
+		const { EncoderPool } = await import("./encode-pool/encode-pool");
 		if (!EncoderPool.isSupported())
-			throw new Error('Workers or WebCodecs unavailable');
+			throw new Error("Workers or WebCodecs unavailable");
 		const CHUNK_SIZE = 24;
 		const workerCount = Math.min(
 			4,
@@ -532,19 +525,19 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			Math.max(1, Math.ceil(totalFrames / CHUNK_SIZE)),
 		);
 		if (workerCount < 2)
-			throw new Error('Export too short to benefit from the encode pool');
+			throw new Error("Export too short to benefit from the encode pool");
 		let packetSource: InstanceType<typeof mb.EncodedVideoPacketSource>;
 		let drain: Promise<void> = Promise.resolve();
 		let drainError: unknown = null;
 		let first = true;
 		const pool = new EncoderPool({
 			config: {
-				codec: 'vp8',
+				codec: "vp8",
 				width: canvas.width,
 				height: canvas.height,
 				// Match the software canvas-sink bitrate so exports are consistent.
 				bitrate: 12_000_000,
-				latencyMode: 'realtime',
+				latencyMode: "realtime",
 			},
 			workerCount,
 			chunkSize: CHUNK_SIZE,
@@ -552,7 +545,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				const meta = first
 					? {
 							decoderConfig: p.decoderConfig ?? {
-								codec: 'vp8',
+								codec: "vp8",
 								codedWidth: canvas.width,
 								codedHeight: canvas.height,
 							},
@@ -574,7 +567,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		// Init before adding the track: if workers fail to start we fall back to
 		// the canvas sink, and the output must not end up with two video tracks.
 		await pool.init();
-		packetSource = new mb.EncodedVideoPacketSource('vp8');
+		packetSource = new mb.EncodedVideoPacketSource("vp8");
 		output.addVideoTrack(packetSource);
 		return {
 			label: `worker-pool x${workerCount}`,
@@ -592,7 +585,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	};
 
 	let sink: FrameSink;
-	if (!hardware && selectedCodec === 'vp8') {
+	if (!hardware && selectedCodec === "vp8") {
 		try {
 			sink = await makePoolSink();
 		} catch {
@@ -606,7 +599,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
 	if (wantsAudioTrack && audioBufferForMux) {
 		const supportedAudio = outputFormat.getSupportedAudioCodecs();
-		const preferredAudio = ['opus', 'vorbis'] as const;
+		const preferredAudio = ["opus", "vorbis"] as const;
 		const audioCandidates = preferredAudio.filter((c) =>
 			supportedAudio.includes(c as any),
 		);
@@ -652,7 +645,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 			const time = i * frameDuration;
 			const renderResult = onBeforeRender?.(i, time);
-			const skipRender = renderResult instanceof Promise ? await renderResult : renderResult;
+			const skipRender =
+				renderResult instanceof Promise ? await renderResult : renderResult;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
 			const clockTime = textTimeOffset + time * textTimeScale;
 			const textLayers = textTimeline
@@ -685,7 +679,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					: null,
 				bpm / 60,
 			);
-			if (typeof skipRender === 'function') skipRender(textLayers, mediaLayers);
+			if (typeof skipRender === "function") skipRender(textLayers, mediaLayers);
 			else if (!skipRender) {
 				renderer.render(renderEffects, time, textLayers, [], mediaLayers);
 			}
@@ -707,7 +701,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 
-	return slabs.toBlob('video/webm');
+	return slabs.toBlob("video/webm");
 }
 
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {
@@ -716,7 +710,7 @@ export async function recordVideo(opts: RecordOptions): Promise<Blob> {
 
 export function downloadBlob(blob: Blob) {
 	const url = URL.createObjectURL(blob);
-	const a = document.createElement('a');
+	const a = document.createElement("a");
 	a.href = url;
 	a.download = `openmosh-${Date.now()}.webm`;
 	a.click();

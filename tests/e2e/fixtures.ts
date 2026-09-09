@@ -10,34 +10,34 @@ import { deflateSync } from "node:zlib";
  */
 
 const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
-  }
-  return table;
+	const table = new Uint32Array(256);
+	for (let n = 0; n < 256; n++) {
+		let c = n;
+		for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+		table[n] = c >>> 0;
+	}
+	return table;
 })();
 
 function crc32(bytes: Buffer): number {
-  let c = 0xffffffff;
-  for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
+	let c = 0xffffffff;
+	for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+	return (c ^ 0xffffffff) >>> 0;
 }
 
 function pngChunk(type: string, data: Buffer): Buffer {
-  const head = Buffer.alloc(8);
-  head.writeUInt32BE(data.length, 0);
-  head.write(type, 4, "ascii");
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])), 0);
-  return Buffer.concat([head, data, crc]);
+	const head = Buffer.alloc(8);
+	head.writeUInt32BE(data.length, 0);
+	head.write(type, 4, "ascii");
+	const crc = Buffer.alloc(4);
+	crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])), 0);
+	return Buffer.concat([head, data, crc]);
 }
 
 export interface Rgb {
-  r: number;
-  g: number;
-  b: number;
+	r: number;
+	g: number;
+	b: number;
 }
 
 /**
@@ -46,35 +46,35 @@ export interface Rgb {
  * something ambiguous.
  */
 export function pngBytes(color: Rgb, size = 64): Buffer {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // truecolour
-  const raw = Buffer.alloc(size * (size * 3 + 1));
-  for (let y = 0; y < size; y++) {
-    const row = y * (size * 3 + 1);
-    raw[row] = 0; // no filter
-    for (let x = 0; x < size; x++) {
-      const px = row + 1 + x * 3;
-      raw[px] = color.r;
-      raw[px + 1] = color.g;
-      raw[px + 2] = color.b;
-    }
-  }
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", deflateSync(raw)),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
+	const ihdr = Buffer.alloc(13);
+	ihdr.writeUInt32BE(size, 0);
+	ihdr.writeUInt32BE(size, 4);
+	ihdr[8] = 8; // bit depth
+	ihdr[9] = 2; // truecolour
+	const raw = Buffer.alloc(size * (size * 3 + 1));
+	for (let y = 0; y < size; y++) {
+		const row = y * (size * 3 + 1);
+		raw[row] = 0; // no filter
+		for (let x = 0; x < size; x++) {
+			const px = row + 1 + x * 3;
+			raw[px] = color.r;
+			raw[px + 1] = color.g;
+			raw[px + 2] = color.b;
+		}
+	}
+	return Buffer.concat([
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+		pngChunk("IHDR", ihdr),
+		pngChunk("IDAT", deflateSync(raw)),
+		pngChunk("IEND", Buffer.alloc(0)),
+	]);
 }
 
 export interface WavOptions {
-  seconds?: number;
-  /** Clicks per minute. Gives the track a tempo something can lock onto. */
-  bpm?: number;
-  sampleRate?: number;
+	seconds?: number;
+	/** Clicks per minute. Gives the track a tempo something can lock onto. */
+	bpm?: number;
+	sampleRate?: number;
 }
 
 /**
@@ -85,42 +85,42 @@ export interface WavOptions {
  * a spec can say where a downbeat falls.
  */
 export function wavBytes({
-  seconds = 8,
-  bpm = 120,
-  sampleRate = 44100,
+	seconds = 8,
+	bpm = 120,
+	sampleRate = 44100,
 }: WavOptions = {}): Buffer {
-  const frames = Math.floor(seconds * sampleRate);
-  const samplesPerBeat = (60 / bpm) * sampleRate;
-  const data = Buffer.alloc(frames * 2);
-  for (let i = 0; i < frames; i++) {
-    const tone = Math.sin((2 * Math.PI * 220 * i) / sampleRate) * 0.15;
-    // A short decaying burst at each beat, well above the tone.
-    const sinceBeat = i % samplesPerBeat;
-    const click =
-      sinceBeat < sampleRate * 0.02
-        ? Math.sin((2 * Math.PI * 1800 * i) / sampleRate) *
-          0.8 *
-          (1 - sinceBeat / (sampleRate * 0.02))
-        : 0;
-    const value = Math.max(-1, Math.min(1, tone + click));
-    data.writeInt16LE(Math.round(value * 32767), i * 2);
-  }
+	const frames = Math.floor(seconds * sampleRate);
+	const samplesPerBeat = (60 / bpm) * sampleRate;
+	const data = Buffer.alloc(frames * 2);
+	for (let i = 0; i < frames; i++) {
+		const tone = Math.sin((2 * Math.PI * 220 * i) / sampleRate) * 0.15;
+		// A short decaying burst at each beat, well above the tone.
+		const sinceBeat = i % samplesPerBeat;
+		const click =
+			sinceBeat < sampleRate * 0.02
+				? Math.sin((2 * Math.PI * 1800 * i) / sampleRate) *
+					0.8 *
+					(1 - sinceBeat / (sampleRate * 0.02))
+				: 0;
+		const value = Math.max(-1, Math.min(1, tone + click));
+		data.writeInt16LE(Math.round(value * 32767), i * 2);
+	}
 
-  const header = Buffer.alloc(44);
-  header.write("RIFF", 0, "ascii");
-  header.writeUInt32LE(36 + data.length, 4);
-  header.write("WAVE", 8, "ascii");
-  header.write("fmt ", 12, "ascii");
-  header.writeUInt32LE(16, 16); // PCM chunk size
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(1, 22); // mono
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28); // byte rate
-  header.writeUInt16LE(2, 32); // block align
-  header.writeUInt16LE(16, 34); // bits per sample
-  header.write("data", 36, "ascii");
-  header.writeUInt32LE(data.length, 40);
-  return Buffer.concat([header, data]);
+	const header = Buffer.alloc(44);
+	header.write("RIFF", 0, "ascii");
+	header.writeUInt32LE(36 + data.length, 4);
+	header.write("WAVE", 8, "ascii");
+	header.write("fmt ", 12, "ascii");
+	header.writeUInt32LE(16, 16); // PCM chunk size
+	header.writeUInt16LE(1, 20); // PCM
+	header.writeUInt16LE(1, 22); // mono
+	header.writeUInt32LE(sampleRate, 24);
+	header.writeUInt32LE(sampleRate * 2, 28); // byte rate
+	header.writeUInt16LE(2, 32); // block align
+	header.writeUInt16LE(16, 34); // bits per sample
+	header.write("data", 36, "ascii");
+	header.writeUInt32LE(data.length, 40);
+	return Buffer.concat([header, data]);
 }
 
 export const RED: Rgb = { r: 220, g: 30, b: 30 };
@@ -129,9 +129,9 @@ export const BLUE: Rgb = { r: 40, g: 70, b: 230 };
 
 /** What `setInputFiles` wants, for a source of the given colour. */
 export function imageFile(name: string, color: Rgb, size = 64) {
-  return { name, mimeType: "image/png", buffer: pngBytes(color, size) };
+	return { name, mimeType: "image/png", buffer: pngBytes(color, size) };
 }
 
 export function trackFile(name = "track.wav", options: WavOptions = {}) {
-  return { name, mimeType: "audio/wav", buffer: wavBytes(options) };
+	return { name, mimeType: "audio/wav", buffer: wavBytes(options) };
 }

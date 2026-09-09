@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { TimelineViewport } from '../../editor/timeline-viewport.svelte';
+	import type { TimelineViewport } from "../../editor/timeline-viewport.svelte";
 
 	interface Props {
 		vp: TimelineViewport;

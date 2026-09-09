@@ -8,10 +8,7 @@
 	import { untrack } from "svelte";
 	import { Play, Square } from "lucide-svelte";
 	import { GlRenderer } from "../../gl/renderer";
-	import {
-		demoBackgroundEnabled,
-		updateSettings,
-	} from "../../editor/settings";
+	import { demoBackgroundEnabled, updateSettings } from "../../editor/settings";
 	import { loadDemoSources } from "../../demo/demo-sources";
 	import {
 		getDemoDirector,
@@ -167,8 +164,7 @@
 			fadeT = 0;
 			holder.style.opacity = "0";
 		};
-		const onVisibility = () =>
-			document.hidden || !playing ? stop() : start();
+		const onVisibility = () => (document.hidden || !playing ? stop() : start());
 
 		// Prime the canvas so the first painted frame isn't a fade-in from
 		// nothing. Skipped when switched off, since off means a black screen
@@ -217,8 +213,8 @@
 		class="demo-toggle"
 		onclick={togglePlaying}
 		title={playing
-			? 'Black out the background demo'
-			: 'Resume the background demo'}
+			? "Black out the background demo"
+			: "Resume the background demo"}
 	>
 		{#if playing}
 			<Square size={12} />

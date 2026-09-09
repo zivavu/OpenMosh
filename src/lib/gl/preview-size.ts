@@ -10,8 +10,8 @@
  */
 
 export interface PreviewSize {
-  width: number;
-  height: number;
+	width: number;
+	height: number;
 }
 
 /**
@@ -32,31 +32,34 @@ const UNMEASURED_MAX_PIXELS = 1280 * 720;
  * output size — see UNMEASURED_MAX_PIXELS.
  */
 export function fitPreviewSize(
-  outputWidth: number | undefined,
-  outputHeight: number | undefined,
-  displayWidth: number,
-  displayHeight: number,
+	outputWidth: number | undefined,
+	outputHeight: number | undefined,
+	displayWidth: number,
+	displayHeight: number,
 ): PreviewSize | null {
-  if (!outputWidth || !outputHeight || outputWidth <= 0 || outputHeight <= 0) {
-    return null;
-  }
-  const scale =
-    displayWidth <= 0 || displayHeight <= 0
-      ? Math.sqrt(UNMEASURED_MAX_PIXELS / (outputWidth * outputHeight))
-      : Math.min(displayWidth / outputWidth, displayHeight / outputHeight);
-  const k = Math.min(1, scale);
-  return {
-    width: Math.max(2, Math.round(outputWidth * k)),
-    height: Math.max(2, Math.round(outputHeight * k)),
-  };
+	if (!outputWidth || !outputHeight || outputWidth <= 0 || outputHeight <= 0) {
+		return null;
+	}
+	const scale =
+		displayWidth <= 0 || displayHeight <= 0
+			? Math.sqrt(UNMEASURED_MAX_PIXELS / (outputWidth * outputHeight))
+			: Math.min(displayWidth / outputWidth, displayHeight / outputHeight);
+	const k = Math.min(1, scale);
+	return {
+		width: Math.max(2, Math.round(outputWidth * k)),
+		height: Math.max(2, Math.round(outputHeight * k)),
+	};
 }
 
 /** Displayed size of an element in device pixels. */
 export function measureDisplaySize(el: Element): {
-  width: number;
-  height: number;
+	width: number;
+	height: number;
 } {
-  const r = el.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  return { width: Math.round(r.width * dpr), height: Math.round(r.height * dpr) };
+	const r = el.getBoundingClientRect();
+	const dpr = window.devicePixelRatio || 1;
+	return {
+		width: Math.round(r.width * dpr),
+		height: Math.round(r.height * dpr),
+	};
 }

@@ -1,22 +1,17 @@
-	<script lang="ts">
-	import { Home } from 'lucide-svelte';
-	import GithubLink from '../ui/GithubLink.svelte';
-	import FeedbackButton from '../ui/FeedbackButton.svelte';
-	import ButtonGroup from '../ui/ButtonGroup.svelte';
+<script lang="ts">
+	import { Home } from "lucide-svelte";
+	import GithubLink from "../ui/GithubLink.svelte";
+	import FeedbackButton from "../ui/FeedbackButton.svelte";
+	import ButtonGroup from "../ui/ButtonGroup.svelte";
 
 	interface Props {
-		activeView: 'grid' | 'preview';
+		activeView: "grid" | "preview";
 		slideCount: number;
-		onViewChange: (view: 'grid' | 'preview') => void;
+		onViewChange: (view: "grid" | "preview") => void;
 		onExit?: () => void;
 	}
 
-	let {
-		activeView,
-		slideCount,
-		onViewChange,
-		onExit,
-	}: Props = $props();
+	let { activeView, slideCount, onViewChange, onExit }: Props = $props();
 </script>
 
 <div class="top-bar">
@@ -32,8 +27,8 @@
 		<div class="view-group">
 			<ButtonGroup
 				buttons={[
-					{ label: 'Grid', value: 'grid' },
-					{ label: 'Preview', value: 'preview' },
+					{ label: "Grid", value: "grid" },
+					{ label: "Preview", value: "preview" },
 				]}
 				value={activeView}
 				onchange={onViewChange}

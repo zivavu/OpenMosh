@@ -3,5 +3,5 @@ import type { MediaTimeline } from "./types";
 
 /** Undo stack for the media timeline. See createSnapshotHistory. */
 export function createMediaHistory() {
-  return createSnapshotHistory<MediaTimeline>();
+	return createSnapshotHistory<MediaTimeline>();
 }

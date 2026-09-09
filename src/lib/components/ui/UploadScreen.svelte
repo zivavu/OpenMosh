@@ -1,313 +1,313 @@
 <script lang="ts">
-interface Props {
-	onfile: (file: File) => void;
-	onSequence: (files: File[]) => void;
-	/** Reopen a song's saved sequence — no media picking needed. */
-	onSequenceFromSong: (trackId: string) => void;
-	/** Reopen a saved single or slideshow session by its key. */
-	onSessionOpen: (mode: SessionMode, key: string) => void;
-	onSlideshow: (files: File[]) => void;
-	onaudio?: (file: File) => void;
-	/** Pre-warmed context, borrowed for the demo until the editor claims it. */
-	warmCanvas?: HTMLCanvasElement | null;
-	warmRenderer?: GlRenderer | null;
-}
+	interface Props {
+		onfile: (file: File) => void;
+		onSequence: (files: File[]) => void;
+		/** Reopen a song's saved sequence — no media picking needed. */
+		onSequenceFromSong: (trackId: string) => void;
+		/** Reopen a saved single or slideshow session by its key. */
+		onSessionOpen: (mode: SessionMode, key: string) => void;
+		onSlideshow: (files: File[]) => void;
+		onaudio?: (file: File) => void;
+		/** Pre-warmed context, borrowed for the demo until the editor claims it. */
+		warmCanvas?: HTMLCanvasElement | null;
+		warmRenderer?: GlRenderer | null;
+	}
 
-import { Image, ListVideo, Music, Upload } from "lucide-svelte";
-import type { GlRenderer } from "../../gl/renderer";
-import DemoBackground from "./DemoBackground.svelte";
-import GithubLink from "./GithubLink.svelte";
-import FeedbackButton from "./FeedbackButton.svelte";
-import { showToast } from "./toast.svelte";
-import {
-	listSavedSequences,
-	readCachedSavedSequences,
-	type SavedSequence,
-} from "../../editor/saved-sequences";
-import {
-	listSavedSessions,
-	readCachedSessions,
-	type SavedSession,
-} from "../../editor/sessions";
-import type { SessionMode } from "../../editor/sequence-media-store";
-import {
-	DEFAULT_SETTINGS,
-	demoBackgroundEnabled,
-	loadSettings,
-	updateSettings,
-	type UploadMode,
-} from "../../editor/settings";
+	import { Image, ListVideo, Music, Upload } from "lucide-svelte";
+	import type { GlRenderer } from "../../gl/renderer";
+	import DemoBackground from "./DemoBackground.svelte";
+	import GithubLink from "./GithubLink.svelte";
+	import FeedbackButton from "./FeedbackButton.svelte";
+	import { showToast } from "./toast.svelte";
+	import {
+		listSavedSequences,
+		readCachedSavedSequences,
+		type SavedSequence,
+	} from "../../editor/saved-sequences";
+	import {
+		listSavedSessions,
+		readCachedSessions,
+		type SavedSession,
+	} from "../../editor/sessions";
+	import type { SessionMode } from "../../editor/sequence-media-store";
+	import {
+		DEFAULT_SETTINGS,
+		demoBackgroundEnabled,
+		loadSettings,
+		updateSettings,
+		type UploadMode,
+	} from "../../editor/settings";
 
-let {
-	onfile,
-	onSequence,
-	onSequenceFromSong,
-	onSessionOpen,
-	onSlideshow,
-	onaudio,
-	warmCanvas = null,
-	warmRenderer = null,
-}: Props = $props();
+	let {
+		onfile,
+		onSequence,
+		onSequenceFromSong,
+		onSessionOpen,
+		onSlideshow,
+		onaudio,
+		warmCanvas = null,
+		warmRenderer = null,
+	}: Props = $props();
 
-// Work already done, offered as a way back in that skips picking media. All
-// three lists are painted from their cache so the section is there on the first
-// frame, then reconciled against IndexedDB.
-let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
-let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
-let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
-$effect(() => {
-	void listSavedSequences().then((list) => (savedSequences = list));
-	void listSavedSessions("single").then((list) => (savedSingle = list));
-	void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
-});
+	// Work already done, offered as a way back in that skips picking media. All
+	// three lists are painted from their cache so the section is there on the first
+	// frame, then reconciled against IndexedDB.
+	let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
+	let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
+	let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
+	$effect(() => {
+		void listSavedSequences().then((list) => (savedSequences = list));
+		void listSavedSessions("single").then((list) => (savedSingle = list));
+		void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
+	});
 
-// Owned here rather than inside the demo, so STOP quiets the wordmark's tear
-// along with the background it belongs to.
-let demoPlaying = $state(demoBackgroundEnabled());
+	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear
+	// along with the background it belongs to.
+	let demoPlaying = $state(demoBackgroundEnabled());
 
-// Opens on whichever mode was last launched: coming back for a second pass at
-// the same kind of edit is the common case.
-let selectedMode: UploadMode = $state(
-	loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode,
-);
-
-function setMode(mode: UploadMode) {
-	selectedMode = mode;
-	updateSettings({ lastMode: mode });
-	// Staged media belongs to the mode it was dropped on: single takes one file
-	// and needs no song, so holding a set across the switch would misrepresent
-	// what's about to happen.
-	stagedMedia = null;
-}
-/** Modes that take a whole set of media rather than one file. */
-let isMultiMode = $derived(selectedMode !== "single");
-
-/** The session list backing whichever mode is showing. Sequence keeps its own
- * list, keyed by song rather than by media. */
-let savedForMode = $derived<SavedSession[]>(
-	selectedMode === "single"
-		? savedSingle
-		: selectedMode === "slideshow"
-			? savedSlideshow
-			: [],
-);
-let savedHead = $derived(
-	selectedMode === "single"
-		? "OR PICK UP SOMETHING YOU WERE MOSHING"
-		: "OR PICK UP A SLIDESHOW YOU WERE BUILDING",
-);
-let dragging = $state(false);
-let fileInput: HTMLInputElement;
-
-const AUDIO_TYPES = [
-	"audio/mpeg",
-	"audio/wav",
-	"audio/ogg",
-	"audio/flac",
-	"audio/mp4",
-	"audio/aac",
-];
-let pendingAudio = $state<File | null>(null);
-let audioDragging = $state(false);
-let audioInput = $state<HTMLInputElement>(undefined!);
-
-const ACCEPTED_TYPES = [
-	"image/png",
-	"image/jpeg",
-	"image/jpg",
-	"image/webp",
-	"image/gif",
-	"image/heic",
-	"image/heif",
-	"video/mp4",
-	"video/webm",
-	"video/quicktime",
-];
-const ACCEPTED_EXTENSIONS = [
-	".png",
-	".jpg",
-	".jpeg",
-	".webp",
-	".gif",
-	".heic",
-	".heif",
-	".mp4",
-	".webm",
-	".mov",
-];
-function getExtension(name: string) {
-	return name.slice(name.lastIndexOf(".")).toLowerCase();
-}
-
-function isAcceptedFile(file: File) {
-	if (file.type) return ACCEPTED_TYPES.includes(file.type);
-	return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
-}
-
-function isAudioFile(file: File) {
-	return AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/");
-}
-
-const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
-
-function rejectFile(file: File) {
-	showToast(
-		`Can't open "${file.name}". Supported formats: ${SUPPORTED_LABEL}`,
-		"error",
-		6000,
+	// Opens on whichever mode was last launched: coming back for a second pass at
+	// the same kind of edit is the common case.
+	let selectedMode: UploadMode = $state(
+		loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode,
 	);
-}
 
-function handleFile(file: File) {
-	if (!isAcceptedFile(file)) {
-		rejectFile(file);
-		return;
+	function setMode(mode: UploadMode) {
+		selectedMode = mode;
+		updateSettings({ lastMode: mode });
+		// Staged media belongs to the mode it was dropped on: single takes one file
+		// and needs no song, so holding a set across the switch would misrepresent
+		// what's about to happen.
+		stagedMedia = null;
 	}
-	onfile(file);
-}
+	/** Modes that take a whole set of media rather than one file. */
+	let isMultiMode = $derived(selectedMode !== "single");
 
-function handleMultiFiles(files: FileList | File[]) {
-	const all = Array.from(files);
-	const accepted = all.filter((f) => isAcceptedFile(f));
-	if (accepted.length === 0) {
-		if (all.length === 1) rejectFile(all[0]);
-		else
-			showToast(
-				`None of those ${all.length} files are supported. Try ${SUPPORTED_LABEL}`,
-				"error",
-				6000,
-			);
-		return;
+	/** The session list backing whichever mode is showing. Sequence keeps its own
+	 * list, keyed by song rather than by media. */
+	let savedForMode = $derived<SavedSession[]>(
+		selectedMode === "single"
+			? savedSingle
+			: selectedMode === "slideshow"
+				? savedSlideshow
+				: [],
+	);
+	let savedHead = $derived(
+		selectedMode === "single"
+			? "OR PICK UP SOMETHING YOU WERE MOSHING"
+			: "OR PICK UP A SLIDESHOW YOU WERE BUILDING",
+	);
+	let dragging = $state(false);
+	let fileInput: HTMLInputElement;
+
+	const AUDIO_TYPES = [
+		"audio/mpeg",
+		"audio/wav",
+		"audio/ogg",
+		"audio/flac",
+		"audio/mp4",
+		"audio/aac",
+	];
+	let pendingAudio = $state<File | null>(null);
+	let audioDragging = $state(false);
+	let audioInput = $state<HTMLInputElement>(undefined!);
+
+	const ACCEPTED_TYPES = [
+		"image/png",
+		"image/jpeg",
+		"image/jpg",
+		"image/webp",
+		"image/gif",
+		"image/heic",
+		"image/heif",
+		"video/mp4",
+		"video/webm",
+		"video/quicktime",
+	];
+	const ACCEPTED_EXTENSIONS = [
+		".png",
+		".jpg",
+		".jpeg",
+		".webp",
+		".gif",
+		".heic",
+		".heif",
+		".mp4",
+		".webm",
+		".mov",
+	];
+	function getExtension(name: string) {
+		return name.slice(name.lastIndexOf(".")).toLowerCase();
 	}
-	const skipped = all.length - accepted.length;
-	if (skipped > 0) {
+
+	function isAcceptedFile(file: File) {
+		if (file.type) return ACCEPTED_TYPES.includes(file.type);
+		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
+	}
+
+	function isAudioFile(file: File) {
+		return AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/");
+	}
+
+	const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
+
+	function rejectFile(file: File) {
 		showToast(
-			`Skipped ${skipped} unsupported file${skipped === 1 ? "" : "s"}`,
-			"info",
-		);
-	}
-	// Both multi modes cut media to a track — there is nothing to time against
-	// without one. Rather than reject the drop and make the user find the files
-	// again, hold them until a song arrives and start the moment it does.
-	if (!pendingAudio) {
-		stagedMedia = accepted;
-		showToast(
-			`${accepted.length} file${accepted.length === 1 ? '' : 's'} ready — add a song to start`,
-			"info",
-		);
-		return;
-	}
-	launchMultiMode(accepted);
-}
-
-/** Media held back waiting on the song a multi mode requires. */
-let stagedMedia = $state<File[] | null>(null);
-
-function launchMultiMode(files: File[]) {
-	stagedMedia = null;
-	if (selectedMode === "sequence") onSequence(files);
-	else onSlideshow(files);
-}
-
-/** Single mode takes one file — say so rather than silently dropping the rest. */
-function handleSingleFile(files: FileList | File[]) {
-	const all = Array.from(files);
-	const file = all[0];
-	if (!file) return;
-	if (all.length > 1 && isAcceptedFile(file)) {
-		showToast(
-			`Loaded "${file.name}" only. Switch to Sequence or Slideshow mode to use all ${all.length}`,
-			"info",
+			`Can't open "${file.name}". Supported formats: ${SUPPORTED_LABEL}`,
+			"error",
 			6000,
 		);
 	}
-	handleFile(file);
-}
 
-function onDrop(e: DragEvent) {
-	dragging = false;
-	const files = e.dataTransfer?.files;
-	if (!files || files.length === 0) return;
-
-	// A track dropped on the media zone is far likelier to be a track than a
-	// mistake worth a toast about, so route by what landed rather than reject.
-	const all = Array.from(files);
-	const audio = all.filter(isAudioFile);
-	const media = all.filter((f) => !isAudioFile(f));
-	if (audio.length > 0) handleAudioFile(audio[0]);
-	if (media.length === 0) return;
-
-	if (isMultiMode) {
-		handleMultiFiles(media);
-	} else {
-		handleSingleFile(media);
+	function handleFile(file: File) {
+		if (!isAcceptedFile(file)) {
+			rejectFile(file);
+			return;
+		}
+		onfile(file);
 	}
-}
 
-function onDragOver(_e: DragEvent) {
-	dragging = true;
-}
+	function handleMultiFiles(files: FileList | File[]) {
+		const all = Array.from(files);
+		const accepted = all.filter((f) => isAcceptedFile(f));
+		if (accepted.length === 0) {
+			if (all.length === 1) rejectFile(all[0]);
+			else
+				showToast(
+					`None of those ${all.length} files are supported. Try ${SUPPORTED_LABEL}`,
+					"error",
+					6000,
+				);
+			return;
+		}
+		const skipped = all.length - accepted.length;
+		if (skipped > 0) {
+			showToast(
+				`Skipped ${skipped} unsupported file${skipped === 1 ? "" : "s"}`,
+				"info",
+			);
+		}
+		// Both multi modes cut media to a track — there is nothing to time against
+		// without one. Rather than reject the drop and make the user find the files
+		// again, hold them until a song arrives and start the moment it does.
+		if (!pendingAudio) {
+			stagedMedia = accepted;
+			showToast(
+				`${accepted.length} file${accepted.length === 1 ? "" : "s"} ready — add a song to start`,
+				"info",
+			);
+			return;
+		}
+		launchMultiMode(accepted);
+	}
 
-function onDragLeave(e: DragEvent) {
-	if (
-		e.currentTarget instanceof HTMLElement &&
-		!e.currentTarget.contains(e.relatedTarget as Node)
-	) {
+	/** Media held back waiting on the song a multi mode requires. */
+	let stagedMedia = $state<File[] | null>(null);
+
+	function launchMultiMode(files: File[]) {
+		stagedMedia = null;
+		if (selectedMode === "sequence") onSequence(files);
+		else onSlideshow(files);
+	}
+
+	/** Single mode takes one file — say so rather than silently dropping the rest. */
+	function handleSingleFile(files: FileList | File[]) {
+		const all = Array.from(files);
+		const file = all[0];
+		if (!file) return;
+		if (all.length > 1 && isAcceptedFile(file)) {
+			showToast(
+				`Loaded "${file.name}" only. Switch to Sequence or Slideshow mode to use all ${all.length}`,
+				"info",
+				6000,
+			);
+		}
+		handleFile(file);
+	}
+
+	function onDrop(e: DragEvent) {
 		dragging = false;
+		const files = e.dataTransfer?.files;
+		if (!files || files.length === 0) return;
+
+		// A track dropped on the media zone is far likelier to be a track than a
+		// mistake worth a toast about, so route by what landed rather than reject.
+		const all = Array.from(files);
+		const audio = all.filter(isAudioFile);
+		const media = all.filter((f) => !isAudioFile(f));
+		if (audio.length > 0) handleAudioFile(audio[0]);
+		if (media.length === 0) return;
+
+		if (isMultiMode) {
+			handleMultiFiles(media);
+		} else {
+			handleSingleFile(media);
+		}
 	}
-}
 
-function onInputChange(e: Event) {
-	const input = e.target as HTMLInputElement;
-	if (!input.files || input.files.length === 0) return;
-
-	if (isMultiMode) {
-		handleMultiFiles(input.files);
-	} else {
-		handleSingleFile(input.files);
+	function onDragOver(_e: DragEvent) {
+		dragging = true;
 	}
-	input.value = "";
-}
 
-function openFilePicker() {
-	fileInput.click();
-}
-
-function getAcceptTypes() {
-	return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
-}
-function getIsMultiple() {
-	return isMultiMode;
-}
-
-function handleAudioFile(file: File) {
-	if (!isAudioFile(file)) {
-		showToast(`"${file.name}" isn't an audio file`, "error");
-		return;
+	function onDragLeave(e: DragEvent) {
+		if (
+			e.currentTarget instanceof HTMLElement &&
+			!e.currentTarget.contains(e.relatedTarget as Node)
+		) {
+			dragging = false;
+		}
 	}
-	pendingAudio = file;
-	onaudio?.(file);
-	// The song was the only thing missing — go, rather than making the user
-	// re-drop media they already picked.
-	if (stagedMedia && isMultiMode) launchMultiMode(stagedMedia);
-}
 
-function openAudioPicker() {
-	audioInput.click();
-}
+	function onInputChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		if (!input.files || input.files.length === 0) return;
 
-function onAudioInputChange(e: Event) {
-	const input = e.target as HTMLInputElement;
-	const file = input.files?.[0];
-	if (file) handleAudioFile(file);
-	input.value = "";
-}
+		if (isMultiMode) {
+			handleMultiFiles(input.files);
+		} else {
+			handleSingleFile(input.files);
+		}
+		input.value = "";
+	}
 
-function onAudioDrop(e: DragEvent) {
-	audioDragging = false;
-	const file = e.dataTransfer?.files?.[0];
-	if (file) handleAudioFile(file);
-}
+	function openFilePicker() {
+		fileInput.click();
+	}
+
+	function getAcceptTypes() {
+		return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
+	}
+	function getIsMultiple() {
+		return isMultiMode;
+	}
+
+	function handleAudioFile(file: File) {
+		if (!isAudioFile(file)) {
+			showToast(`"${file.name}" isn't an audio file`, "error");
+			return;
+		}
+		pendingAudio = file;
+		onaudio?.(file);
+		// The song was the only thing missing — go, rather than making the user
+		// re-drop media they already picked.
+		if (stagedMedia && isMultiMode) launchMultiMode(stagedMedia);
+	}
+
+	function openAudioPicker() {
+		audioInput.click();
+	}
+
+	function onAudioInputChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (file) handleAudioFile(file);
+		input.value = "";
+	}
+
+	function onAudioDrop(e: DragEvent) {
+		audioDragging = false;
+		const file = e.dataTransfer?.files?.[0];
+		if (file) handleAudioFile(file);
+	}
 </script>
 
 <DemoBackground {warmCanvas} {warmRenderer} bind:playing={demoPlaying} />
@@ -327,7 +327,7 @@ function onAudioDrop(e: DragEvent) {
 	</div>
 
 	<div class="mode-toggle">
-		{#each [{ value: 'single', label: 'Single' }, { value: 'sequence', label: 'Editor' }, { value: 'slideshow', label: 'Slideshow' }] as const as m}
+		{#each [{ value: "single", label: "Single" }, { value: "sequence", label: "Editor" }, { value: "slideshow", label: "Slideshow" }] as const as m}
 			<button
 				class="mode-btn"
 				class:active={selectedMode === m.value}
@@ -338,9 +338,9 @@ function onAudioDrop(e: DragEvent) {
 		{/each}
 	</div>
 	<p class="mode-hint">
-		{#if selectedMode === 'slideshow'}
+		{#if selectedMode === "slideshow"}
 			A pile of media and a track. It finds the BPM and cuts on the beat.
-		{:else if selectedMode === 'sequence'}
+		{:else if selectedMode === "sequence"}
 			Your song on a timeline. Cut it into segments, then stack effect lanes and
 			media layers over them.
 		{:else}
@@ -364,7 +364,7 @@ function onAudioDrop(e: DragEvent) {
 		}}
 		ondragleave={onDragLeave}
 		onkeydown={(e) => {
-			if (e.key === 'Enter' || e.key === ' ') openFilePicker();
+			if (e.key === "Enter" || e.key === " ") openFilePicker();
 		}}
 	>
 		<label class="load-btn">
@@ -377,7 +377,7 @@ function onAudioDrop(e: DragEvent) {
 				style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
 			/>
 			<Upload size={18} />
-			{isMultiMode ? 'LOAD FILES' : 'LOAD A FILE'}
+			{isMultiMode ? "LOAD FILES" : "LOAD A FILE"}
 		</label>
 
 		<div class="separator">
@@ -389,7 +389,8 @@ function onAudioDrop(e: DragEvent) {
 		<div class="drop-hint" class:staged={stagedMedia}>
 			<Image size={16} />
 			{#if stagedMedia}
-				{stagedMedia.length} FILE{stagedMedia.length === 1 ? '' : 'S'} READY · ADD A SONG TO START
+				{stagedMedia.length} FILE{stagedMedia.length === 1 ? "" : "S"} READY · ADD
+				A SONG TO START
 			{:else if isMultiMode}
 				DRAG AND DROP IMAGES AND VIDEOS HERE
 			{:else}
@@ -401,7 +402,7 @@ function onAudioDrop(e: DragEvent) {
 	<input
 		bind:this={audioInput}
 		type="file"
-		accept={AUDIO_TYPES.join(',')}
+		accept={AUDIO_TYPES.join(",")}
 		onchange={onAudioInputChange}
 		hidden
 	/>
@@ -442,7 +443,7 @@ function onAudioDrop(e: DragEvent) {
 				}
 			}}
 			onkeydown={(e) => {
-				if (e.key === 'Enter' || e.key === ' ') openAudioPicker();
+				if (e.key === "Enter" || e.key === " ") openAudioPicker();
 			}}
 		>
 			<Music size={14} />
@@ -457,17 +458,17 @@ function onAudioDrop(e: DragEvent) {
 	<!-- Always rendered at a fixed height, for every mode: this block collapsing
 	     when a mode has nothing saved is what made switching modes jump. -->
 	<div class="saved-zone">
-		{#if selectedMode === 'sequence' && savedSequences.length > 0}
+		{#if selectedMode === "sequence" && savedSequences.length > 0}
 			<div class="saved-head">OR PICK UP A SONG YOU'VE WORKED ON</div>
 			<div class="saved-list">
 				{#each savedSequences as seq (seq.trackId)}
 					<button
 						class="saved-item"
-						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? '' : 's'}`}
+						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`}
 						onclick={() => {
 							// Reopening a song is entering the editor too. The stored value
 							// stays "sequence": it is what every saved key is written under.
-							updateSettings({ lastMode: 'sequence' });
+							updateSettings({ lastMode: "sequence" });
 							onSequenceFromSong(seq.trackId);
 						}}
 					>
@@ -477,7 +478,7 @@ function onAudioDrop(e: DragEvent) {
 					</button>
 				{/each}
 			</div>
-		{:else if selectedMode !== 'sequence' && savedForMode.length > 0}
+		{:else if selectedMode !== "sequence" && savedForMode.length > 0}
 			<div class="saved-head">{savedHead}</div>
 			<div class="saved-list">
 				{#each savedForMode as session (session.key)}
@@ -489,13 +490,13 @@ function onAudioDrop(e: DragEvent) {
 							onSessionOpen(session.mode, session.key);
 						}}
 					>
-						{#if session.mode === 'single'}
+						{#if session.mode === "single"}
 							<Image size={13} />
 						{:else}
 							<ListVideo size={13} />
 						{/if}
 						<span class="saved-name">{session.label}</span>
-						{#if session.mode === 'slideshow'}
+						{#if session.mode === "slideshow"}
 							<span class="saved-count">{session.sourceCount}</span>
 						{/if}
 					</button>

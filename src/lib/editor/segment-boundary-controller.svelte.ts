@@ -8,8 +8,8 @@
  * editor across all of its stacks (see undo-router.ts).
  */
 
-import { NO_EDIT, nextEditSeq } from './edit-clock';
-import { isInteractiveTarget, isTextEntryTarget } from './shortcut-target';
+import { NO_EDIT, nextEditSeq } from "./edit-clock";
+import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
 
 export interface BoundarySegment {
 	id: string;
@@ -39,7 +39,10 @@ interface ClipboardEntry<M> {
 	meta: M;
 }
 
-export class SegmentBoundaryController<S extends BoundarySegment, M = undefined> {
+export class SegmentBoundaryController<
+	S extends BoundarySegment,
+	M = undefined,
+> {
 	selectedBoundaryTimes = $state<number[]>([]);
 	clipboard = $state<ClipboardEntry<M>[]>([]);
 	pasteMode = $state(false);
@@ -217,7 +220,11 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const duration = this.#opts.getTrackDuration();
 		const times = new Set<number>();
 		for (const s of this.#opts.getSegments()) {
-			if (s.startTime > 0.001 && s.startTime >= minTime && s.startTime <= maxTime)
+			if (
+				s.startTime > 0.001 &&
+				s.startTime >= minTime &&
+				s.startTime <= maxTime
+			)
 				times.add(s.startTime);
 			const end = s.endTime ?? duration;
 			if (end < duration - 0.001 && end >= minTime && end <= maxTime)
@@ -246,21 +253,21 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
 
-		if (mod && key === 'c') {
+		if (mod && key === "c") {
 			if (this.copySelection()) {
 				e.preventDefault();
 				return true;
 			}
 			return false;
 		}
-		if (mod && key === 'v') {
+		if (mod && key === "v") {
 			if (this.enterPasteMode()) {
 				e.preventDefault();
 				return true;
 			}
 			return false;
 		}
-		if (e.key === 'Escape' && !isInteractiveTarget(e.target)) {
+		if (e.key === "Escape" && !isInteractiveTarget(e.target)) {
 			if (this.pasteMode) {
 				this.cancelPaste();
 				return true;
@@ -281,9 +288,9 @@ export class SegmentBoundaryController<S extends BoundarySegment, M = undefined>
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
 
-		if (mod && key === 'c') return this.selectedBoundaryTimes.length > 0;
-		if (mod && key === 'v') return this.clipboard.length > 0;
-		if (e.key === 'Escape' && !isInteractiveTarget(e.target))
+		if (mod && key === "c") return this.selectedBoundaryTimes.length > 0;
+		if (mod && key === "v") return this.clipboard.length > 0;
+		if (e.key === "Escape" && !isInteractiveTarget(e.target))
 			return this.pasteMode || this.selectedBoundaryTimes.length > 0;
 		return false;
 	}

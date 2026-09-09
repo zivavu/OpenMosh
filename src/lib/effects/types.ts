@@ -1,103 +1,99 @@
 export function generateId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
+	if (typeof crypto !== "undefined" && crypto.randomUUID) {
+		return crypto.randomUUID();
+	}
+	return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+		const r = (Math.random() * 16) | 0;
+		return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+	});
 }
 
 export interface RangeParam {
-  key: string;
-  label: string;
-  type: "range";
-  min: number;
-  max: number;
-  step: number;
-  defaultValue: number;
-  moshMin?: number;
-  moshMax?: number;
-  /** Optional exponent (>1) for a non-linear slider: low end of [min, max] spans more of the slider's width. */
-  curve?: number;
-  visibleWhen?: (values: Record<string, number | string>) => boolean;
+	key: string;
+	label: string;
+	type: "range";
+	min: number;
+	max: number;
+	step: number;
+	defaultValue: number;
+	moshMin?: number;
+	moshMax?: number;
+	/** Optional exponent (>1) for a non-linear slider: low end of [min, max] spans more of the slider's width. */
+	curve?: number;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export interface SelectParam {
-  key: string;
-  label: string;
-  type: "select";
-  defaultValue: string;
-  options: { label: string; value: string }[];
-  /**
-   * Values a mosh may roll, when only some of the options are worth rolling.
-   * The select counterpart to {@link RangeParam.moshMin}/`moshMax`: a single
-   * entry pins the param. Unset rolls the whole list.
-   */
-  moshOptions?: string[];
-  /**
-   * Render with the font picker instead of a plain select, so the user's own
-   * fonts show up alongside `options` (which stays the bundled list a mosh rolls).
-   */
-  fontPicker?: boolean;
-  visibleWhen?: (values: Record<string, number | string>) => boolean;
+	key: string;
+	label: string;
+	type: "select";
+	defaultValue: string;
+	options: { label: string; value: string }[];
+	/**
+	 * Values a mosh may roll, when only some of the options are worth rolling.
+	 * The select counterpart to {@link RangeParam.moshMin}/`moshMax`: a single
+	 * entry pins the param. Unset rolls the whole list.
+	 */
+	moshOptions?: string[];
+	/**
+	 * Render with the font picker instead of a plain select, so the user's own
+	 * fonts show up alongside `options` (which stays the bundled list a mosh rolls).
+	 */
+	fontPicker?: boolean;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export interface CheckboxParam {
-  key: string;
-  label: string;
-  type: "checkbox";
-  defaultValue: number;
-  visibleWhen?: (values: Record<string, number | string>) => boolean;
+	key: string;
+	label: string;
+	type: "checkbox";
+	defaultValue: number;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export interface TextParam {
-  key: string;
-  label: string;
-  type: "text";
-  defaultValue: string;
-  maxLength?: number;
-  placeholder?: string;
-  visibleWhen?: (values: Record<string, number | string>) => boolean;
+	key: string;
+	label: string;
+	type: "text";
+	defaultValue: string;
+	maxLength?: number;
+	placeholder?: string;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 /** A hex color (#rrggbb), edited with a swatch + text field. */
 export interface ColorParam {
-  key: string;
-  label: string;
-  type: "color";
-  defaultValue: string;
-  visibleWhen?: (values: Record<string, number | string>) => boolean;
+	key: string;
+	label: string;
+	type: "color";
+	defaultValue: string;
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
 export type EffectParam =
-  | RangeParam
-  | SelectParam
-  | CheckboxParam
-  | TextParam
-  | ColorParam;
+	RangeParam | SelectParam | CheckboxParam | TextParam | ColorParam;
 
 export interface EffectDefinition {
-  id: string;
-  name: string;
-  params: EffectParam[];
-  /**
-   * Exclude from random moshing (treated as permanently locked). For effects
-   * whose output is driven by content the user typed in, which a roll can only
-   * scramble or blank out.
-   */
-  moshable?: false;
+	id: string;
+	name: string;
+	params: EffectParam[];
+	/**
+	 * Exclude from random moshing (treated as permanently locked). For effects
+	 * whose output is driven by content the user typed in, which a roll can only
+	 * scramble or blank out.
+	 */
+	moshable?: false;
 }
 
 /** When set, this range param is driven by music volume in [min, max]. */
 export interface VolumeLink {
-  min: number;
-  max: number;
-  /** Optional frequency range in Hz; when set, level is from this band only. */
-  freqMin?: number;
-  freqMax?: number;
-  /** When true, lower volume produces higher effect value. */
-  inverted?: boolean;
+	min: number;
+	max: number;
+	/** Optional frequency range in Hz; when set, level is from this band only. */
+	freqMin?: number;
+	freqMax?: number;
+	/** When true, lower volume produces higher effect value. */
+	inverted?: boolean;
 }
 
 /**
@@ -111,31 +107,31 @@ export interface VolumeLink {
  * range an unbanded link resolves to in applyVolumeLinksToEffects.
  */
 export const FREQ_PRESETS = {
-  full: { min: 20, max: 16000 },
-  low: { min: 20, max: 500 },
-  mid: { min: 500, max: 4000 },
-  high: { min: 4000, max: 16000 },
+	full: { min: 20, max: 16000 },
+	low: { min: 20, max: 500 },
+	mid: { min: 500, max: 4000 },
+	high: { min: 4000, max: 16000 },
 } as const;
 
 export type FreqBand = keyof typeof FREQ_PRESETS;
 
 export interface EffectInstance {
-  instanceId: string;
-  defId: string;
-  enabled: boolean;
-  locked: boolean;
-  expanded: boolean;
-  values: Record<string, number | string>;
-  /** For range params: key = param key, value = range (min/max) volume maps to. */
-  volumeLinks?: Record<string, VolumeLink>;
+	instanceId: string;
+	defId: string;
+	enabled: boolean;
+	locked: boolean;
+	expanded: boolean;
+	values: Record<string, number | string>;
+	/** For range params: key = param key, value = range (min/max) volume maps to. */
+	volumeLinks?: Record<string, VolumeLink>;
 }
 
 export interface Preset {
-  name: string;
-  effects: {
-    defId: string;
-    enabled: boolean;
-    values: Record<string, number | string>;
-    volumeLinks?: Record<string, VolumeLink>;
-  }[];
+	name: string;
+	effects: {
+		defId: string;
+		enabled: boolean;
+		values: Record<string, number | string>;
+		volumeLinks?: Record<string, VolumeLink>;
+	}[];
 }

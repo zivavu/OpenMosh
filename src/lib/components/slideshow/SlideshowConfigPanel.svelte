@@ -1,7 +1,7 @@
 <script lang="ts">
-	import BpmControl from '../ui/BpmControl.svelte';
-	import RangeSlider from '../ui/RangeSlider.svelte';
-	import type { BeatSubdivision, SlideshowConfig } from '../../slideshow/types';
+	import BpmControl from "../ui/BpmControl.svelte";
+	import RangeSlider from "../ui/RangeSlider.svelte";
+	import type { BeatSubdivision, SlideshowConfig } from "../../slideshow/types";
 
 	interface Props {
 		config: SlideshowConfig;
@@ -45,7 +45,6 @@
 	) {
 		onConfigChange({ ...config, [key]: value });
 	}
-
 </script>
 
 <div class="config-panel">
@@ -54,7 +53,7 @@
 	<BpmControl
 		id="ss-bpm"
 		bpm={config.bpm}
-		onBpmChange={(v) => set('bpm', v)}
+		onBpmChange={(v) => set("bpm", v)}
 		{bpmDetecting}
 		{hasTrack}
 		{onDetectBpm}
@@ -76,7 +75,7 @@
 						),
 					});
 				} else {
-					set('subdivision', val);
+					set("subdivision", val);
 				}
 			}}
 		>
@@ -101,9 +100,9 @@
 			value={config.moshMode}
 			onchange={(e) =>
 				set(
-					'moshMode',
+					"moshMode",
 					(e.currentTarget as HTMLSelectElement)
-						.value as SlideshowConfig['moshMode'],
+						.value as SlideshowConfig["moshMode"],
 				)}
 		>
 			<option value="random">Random</option>
@@ -113,7 +112,7 @@
 		</select>
 	</div>
 
-	{#if config.moshMode === 'random' || config.moshMode === 'smooth'}
+	{#if config.moshMode === "random" || config.moshMode === "smooth"}
 		<div class="config-row">
 			<label for="ss-mosh-min">Min effects</label>
 			<RangeSlider
@@ -123,8 +122,8 @@
 				max={20}
 				step={1}
 				oninput={(v) => {
-					set('moshMin', v);
-					if (config.moshMax < v) set('moshMax', v);
+					set("moshMin", v);
+					if (config.moshMax < v) set("moshMax", v);
 				}}
 			/>
 			<span class="val">{config.moshMin}</span>
@@ -138,15 +137,15 @@
 				max={20}
 				step={1}
 				oninput={(v) => {
-					set('moshMax', v);
-					if (config.moshMin > v) set('moshMin', v);
+					set("moshMax", v);
+					if (config.moshMin > v) set("moshMin", v);
 				}}
 			/>
 			<span class="val">{config.moshMax}</span>
 		</div>
 	{/if}
 
-	{#if config.moshMode === 'smooth'}
+	{#if config.moshMode === "smooth"}
 		<div class="config-row">
 			<label for="ss-smooth-speed">Change rate</label>
 			<RangeSlider
@@ -155,13 +154,13 @@
 				min={1}
 				max={5}
 				step={1}
-				oninput={(v) => set('smoothSpeed', v)}
+				oninput={(v) => set("smoothSpeed", v)}
 			/>
 			<span class="val">{config.smoothSpeed ?? 1}</span>
 		</div>
 	{/if}
 
-	{#if hasTrack && (config.moshMode === 'random' || config.moshMode === 'smooth')}
+	{#if hasTrack && (config.moshMode === "random" || config.moshMode === "smooth")}
 		<div class="config-row">
 			<label for="ss-audio-link">Random audio links</label>
 			<input
@@ -169,7 +168,7 @@
 				type="checkbox"
 				checked={config.moshAudioLink}
 				onchange={(e) =>
-					set('moshAudioLink', (e.currentTarget as HTMLInputElement).checked)}
+					set("moshAudioLink", (e.currentTarget as HTMLInputElement).checked)}
 			/>
 		</div>
 
@@ -182,9 +181,11 @@
 					min={0}
 					max={1}
 					step={0.05}
-					oninput={(v) => set('moshAudioLinkStrength', v)}
+					oninput={(v) => set("moshAudioLinkStrength", v)}
 				/>
-				<span class="val">{Math.round(config.moshAudioLinkStrength * 100)}%</span>
+				<span class="val"
+					>{Math.round(config.moshAudioLinkStrength * 100)}%</span
+				>
 			</div>
 		{/if}
 	{/if}
@@ -198,10 +199,9 @@
 			type="checkbox"
 			checked={config.loop}
 			onchange={(e) =>
-				set('loop', (e.currentTarget as HTMLInputElement).checked)}
+				set("loop", (e.currentTarget as HTMLInputElement).checked)}
 		/>
 	</div>
-
 </div>
 
 <style>
@@ -253,7 +253,7 @@
 		font-family: inherit;
 	}
 
-	.config-row input[type='checkbox'] {
+	.config-row input[type="checkbox"] {
 		accent-color: var(--live);
 	}
 
@@ -263,5 +263,4 @@
 		color: var(--text-3);
 		font-size: 0.75rem;
 	}
-
 </style>

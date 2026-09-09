@@ -2,97 +2,97 @@ import { isModalKeyboardOpen } from "../modal-keyboard";
 import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
 
 export interface KeyboardActions {
-  save: () => void;
-  /** → : step forward through the mosh history, or roll a new mosh at its top. */
-  mosh: () => void;
-  /** ← : step back through the mosh history. */
-  undoMosh: () => void;
-  /** Ctrl/Cmd+Z: undo an edit (effects panel / timeline), never a mosh. */
-  undo: () => void;
-  redo: () => void;
-  reInput: () => void;
-  /** F: fill the screen with the preview. */
-  toggleFullscreen: () => void;
-  /** C: chase the playhead with the timeline view, or stop chasing it. */
-  toggleFollowPlayhead: () => void;
-  /** Space: the master transport — a track, a video, or a still's own clock. */
-  togglePlay: () => void;
-  /** R: loop playback inside the selected segment. */
-  toggleSegmentLoop: () => void;
-  /** +/- : one notch of timeline zoom. */
-  zoomTimeline: (inward: boolean) => void;
+	save: () => void;
+	/** → : step forward through the mosh history, or roll a new mosh at its top. */
+	mosh: () => void;
+	/** ← : step back through the mosh history. */
+	undoMosh: () => void;
+	/** Ctrl/Cmd+Z: undo an edit (effects panel / timeline), never a mosh. */
+	undo: () => void;
+	redo: () => void;
+	reInput: () => void;
+	/** F: fill the screen with the preview. */
+	toggleFullscreen: () => void;
+	/** C: chase the playhead with the timeline view, or stop chasing it. */
+	toggleFollowPlayhead: () => void;
+	/** Space: the master transport — a track, a video, or a still's own clock. */
+	togglePlay: () => void;
+	/** R: loop playback inside the selected segment. */
+	toggleSegmentLoop: () => void;
+	/** +/- : one notch of timeline zoom. */
+	zoomTimeline: (inward: boolean) => void;
 }
 
 export function createKeyboardHandler(
-  actions: KeyboardActions,
+	actions: KeyboardActions,
 ): (e: KeyboardEvent) => void {
-  return (e: KeyboardEvent) => {
-    // An overlay (the media lightbox) has the keyboard.
-    if (isModalKeyboardOpen()) return;
+	return (e: KeyboardEvent) => {
+		// An overlay (the media lightbox) has the keyboard.
+		if (isModalKeyboardOpen()) return;
 
-    if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      actions.save();
-      return;
-    }
+		if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
+			e.preventDefault();
+			actions.save();
+			return;
+		}
 
-    const key = e.key.toLowerCase();
-    const mod = e.ctrlKey || e.metaKey;
+		const key = e.key.toLowerCase();
+		const mod = e.ctrlKey || e.metaKey;
 
-    // Undo/redo reach the app even while a dropdown or slider holds focus —
-    // they have nothing of their own to undo — but never from a text field.
-    if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
-      if (isTextEntryTarget(e.target)) return;
-      e.preventDefault();
-      actions.redo();
-      return;
-    }
-    if (mod && key === "z") {
-      if (isTextEntryTarget(e.target)) return;
-      e.preventDefault();
-      actions.undo();
-      return;
-    }
+		// Undo/redo reach the app even while a dropdown or slider holds focus —
+		// they have nothing of their own to undo — but never from a text field.
+		if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
+			if (isTextEntryTarget(e.target)) return;
+			e.preventDefault();
+			actions.redo();
+			return;
+		}
+		if (mod && key === "z") {
+			if (isTextEntryTarget(e.target)) return;
+			e.preventDefault();
+			actions.undo();
+			return;
+		}
 
-    // Space is the transport, whatever holds focus — a dropdown left focused
-    // by an earlier click would otherwise swallow the key and reopen its menu.
-    // A text field is the one exception: there space types a space.
-    if (e.key === " ") {
-      if (isTextEntryTarget(e.target)) return;
-      e.preventDefault();
-      actions.togglePlay();
-      return;
-    }
+		// Space is the transport, whatever holds focus — a dropdown left focused
+		// by an earlier click would otherwise swallow the key and reopen its menu.
+		// A text field is the one exception: there space types a space.
+		if (e.key === " ") {
+			if (isTextEntryTarget(e.target)) return;
+			e.preventDefault();
+			actions.togglePlay();
+			return;
+		}
 
-    // Bare keys belong to whichever control has focus, if any.
-    if (isInteractiveTarget(e.target)) return;
+		// Bare keys belong to whichever control has focus, if any.
+		if (isInteractiveTarget(e.target)) return;
 
-    if (e.key === "ArrowRight") {
-      e.preventDefault();
-      actions.mosh();
-    } else if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      actions.undoMosh();
-    } else if (key === "v" && !mod && !e.altKey) {
-      e.preventDefault();
-      actions.reInput();
-    } else if (key === "f" && !mod && !e.altKey && !e.shiftKey) {
-      e.preventDefault();
-      actions.toggleFullscreen();
-    } else if (key === "c" && !mod && !e.altKey && !e.shiftKey) {
-      e.preventDefault();
-      actions.toggleFollowPlayhead();
-    } else if (key === "r" && !mod && !e.altKey && !e.shiftKey) {
-      e.preventDefault();
-      actions.toggleSegmentLoop();
-    } else if (!mod && (e.key === "+" || e.key === "=")) {
-      // "=" as well as "+": on most layouts the latter needs Shift, and every
-      // other app zooms in on the unshifted key too.
-      e.preventDefault();
-      actions.zoomTimeline(true);
-    } else if (!mod && (e.key === "-" || e.key === "_")) {
-      e.preventDefault();
-      actions.zoomTimeline(false);
-    }
-  };
+		if (e.key === "ArrowRight") {
+			e.preventDefault();
+			actions.mosh();
+		} else if (e.key === "ArrowLeft") {
+			e.preventDefault();
+			actions.undoMosh();
+		} else if (key === "v" && !mod && !e.altKey) {
+			e.preventDefault();
+			actions.reInput();
+		} else if (key === "f" && !mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			actions.toggleFullscreen();
+		} else if (key === "c" && !mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			actions.toggleFollowPlayhead();
+		} else if (key === "r" && !mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			actions.toggleSegmentLoop();
+		} else if (!mod && (e.key === "+" || e.key === "=")) {
+			// "=" as well as "+": on most layouts the latter needs Shift, and every
+			// other app zooms in on the unshifted key too.
+			e.preventDefault();
+			actions.zoomTimeline(true);
+		} else if (!mod && (e.key === "-" || e.key === "_")) {
+			e.preventDefault();
+			actions.zoomTimeline(false);
+		}
+	};
 }

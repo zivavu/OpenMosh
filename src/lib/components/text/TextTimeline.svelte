@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { Eye, EyeOff, Trash2 } from 'lucide-svelte';
-	import { untrack } from 'svelte';
-	import { dropAutoRangeScope } from '../../audio/auto-range';
-	import { getTimelineStack } from '../../editor/timeline-stack.svelte';
-	import { isTextEntryTarget } from '../../editor/shortcut-target';
-	import { isModalKeyboardOpen } from '../../modal-keyboard';
+	import { Eye, EyeOff, Trash2 } from "lucide-svelte";
+	import { untrack } from "svelte";
+	import { dropAutoRangeScope } from "../../audio/auto-range";
+	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
+	import { isTextEntryTarget } from "../../editor/shortcut-target";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import {
 		addClip,
 		clipRange,
@@ -24,16 +24,16 @@
 		type TextClip,
 		type TextLane,
 		type TextTimeline,
-	} from '../../text';
-	import type { LyricsSyncProps } from './LyricsSyncModal.svelte';
-	import { lazy } from '../../lazy';
-	import { stackIndex, type LayerRef } from '../../timeline/layer-order';
-	import LaneGrip from '../ui/LaneGrip.svelte';
-	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+	} from "../../text";
+	import type { LyricsSyncProps } from "./LyricsSyncModal.svelte";
+	import { lazy } from "../../lazy";
+	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
+	import LaneGrip from "../ui/LaneGrip.svelte";
+	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 
 	// Only fetched when the sync modal is actually opened; it reseeds itself from
 	// the timeline on every open, so mounting it late costs nothing.
-	const loadLyricsSyncModal = lazy(() => import('./LyricsSyncModal.svelte'));
+	const loadLyricsSyncModal = lazy(() => import("./LyricsSyncModal.svelte"));
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 6;
@@ -90,7 +90,9 @@
 	function laneTrack(node: HTMLElement, laneId: string) {
 		trackEl = node;
 		const shared = stack.lane(node, laneId);
-		const unregister = stack.registerSplitter(laneId, (t) => splitAt(laneId, t));
+		const unregister = stack.registerSplitter(laneId, (t) =>
+			splitAt(laneId, t),
+		);
 		return {
 			destroy() {
 				shared.destroy();
@@ -105,7 +107,7 @@
 		clipId: string;
 		/** The clip on the far side of a shared-boundary drag. */
 		otherId?: string;
-		mode: 'move' | 'start' | 'end' | 'boundary';
+		mode: "move" | "start" | "end" | "boundary";
 		/** Seconds between the pointer and the clip's start, for move drags. */
 		grabOffset: number;
 	} | null>(null);
@@ -198,11 +200,16 @@
 		if (!lane) return;
 		const gap = freeRangeAt(lane, time, trackDuration);
 		if (!gap) return;
-		const start = Math.max(gap.start, Math.min(time, gap.end - MIN_CLIP_LENGTH));
+		const start = Math.max(
+			gap.start,
+			Math.min(time, gap.end - MIN_CLIP_LENGTH),
+		);
 		const end = Math.min(start + DEFAULT_CLIP_LENGTH, gap.end);
-		const clip = createTextClip(start, end, 'TEXT');
+		const clip = createTextClip(start, end, "TEXT");
 		onBeforeEdit?.();
-		onChange(updateLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)));
+		onChange(
+			updateLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)),
+		);
 		selectOnly(clip.id);
 	}
 
@@ -228,7 +235,7 @@
 		if (trackDuration <= 0) return;
 		// A double-click inside a clip is the clip's business; only empty lane
 		// space drops a new clip.
-		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		addClipAt(laneId, timeAt(e.clientX));
 	}
 
@@ -236,7 +243,7 @@
 		e: PointerEvent,
 		laneId: string,
 		clipId: string,
-		mode: 'move' | 'start' | 'end',
+		mode: "move" | "start" | "end",
 	) {
 		if (e.button !== 0) return;
 		e.stopPropagation();
@@ -249,11 +256,12 @@
 		// Ctrl used to be, moved aside so Ctrl+Click can split the way it does on
 		// the source and fx lanes. Checked before the plain-Shift range, which
 		// would otherwise swallow it.
-		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === 'move') {
+		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
 			if (selectedIds.includes(clipId)) {
 				const rest = selectedIds.filter((x) => x !== clipId);
 				selectedIds = rest;
-				if (selectedClipId === clipId) selectedClipId = rest[rest.length - 1] ?? null;
+				if (selectedClipId === clipId)
+					selectedClipId = rest[rest.length - 1] ?? null;
 			} else {
 				selectedIds = [...selectedIds, clipId];
 				selectedClipId = clipId;
@@ -269,7 +277,7 @@
 		}
 
 		// Shift extends the selection from the primary.
-		if (e.shiftKey && mode === 'move') {
+		if (e.shiftKey && mode === "move") {
 			const lane = laneOf(laneId);
 			if (lane && selectedClipId) {
 				const range = clipRange(lane, selectedClipId, clipId);
@@ -284,7 +292,7 @@
 
 		// A plain click on something already selected keeps the selection, so it
 		// can be dragged; pointerup resolves it if nothing moved.
-		if (selectedIds.includes(clipId) && mode === 'move') {
+		if (selectedIds.includes(clipId) && mode === "move") {
 			selectedClipId = clipId;
 			clickOnUp = clipId;
 		} else {
@@ -317,7 +325,7 @@
 			laneId,
 			clipId: leftId,
 			otherId: rightId,
-			mode: 'boundary',
+			mode: "boundary",
 			grabOffset: 0,
 		};
 		// One undo entry per gesture, not per pointermove.
@@ -390,7 +398,7 @@
 	 * and a one-handed alternative to double-clicking. */
 	function onLanePointerDown(e: PointerEvent, laneId: string) {
 		if (e.button !== 0 || trackDuration <= 0) return;
-		if ((e.target as HTMLElement | null)?.closest?.('.clip')) return;
+		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		if (e.ctrlKey || e.metaKey) {
 			e.preventDefault();
 			addClipAt(laneId, timeAt(e.clientX));
@@ -409,7 +417,7 @@
 		clickOnUp = null;
 		onChange(
 			updateLane(timeline, laneId, (lane) => {
-				if (mode === 'move') {
+				if (mode === "move") {
 					// Dragging any member drags the whole selection with it. Measured
 					// as a delta off the grabbed clip's live position, since each move
 					// re-enters here against an already-shifted timeline.
@@ -428,7 +436,7 @@
 				}
 				// A boundary drag moves both clips' facing edges; the per-clip edges
 				// (resizeClip) trim one clip and can pull it away from its neighbour.
-				if (mode === 'boundary') {
+				if (mode === "boundary") {
 					return resizeBoundary(lane, clipId, otherId!, t);
 				}
 				return resizeClip(lane, clipId, mode, t, trackDuration);
@@ -473,16 +481,15 @@
 		// The media lightbox and other overlays own the keyboard while they're
 		// up: Escape and Delete must not reach the clips behind them.
 		if (isModalKeyboardOpen()) return;
-		if (e.key === 'Escape' && selectedIds.length > 0) {
+		if (e.key === "Escape" && selectedIds.length > 0) {
 			deselect();
 			return;
 		}
-		if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+		if (e.key !== "Delete" && e.key !== "Backspace") return;
 		if (selectedIds.length === 0) return;
 		e.preventDefault();
 		deleteSelection();
 	}
-
 </script>
 
 <svelte:window onkeydown={onKeyDown} />
@@ -505,8 +512,8 @@
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
-					title={lane.enabled ? 'Hide this lane' : 'Show this lane'}
-					onclick={() => setLane(lane.id, 'enabled', !lane.enabled)}
+					title={lane.enabled ? "Hide this lane" : "Show this lane"}
+					onclick={() => setLane(lane.id, "enabled", !lane.enabled)}
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
@@ -550,24 +557,24 @@
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
-								onClipPointerDown(e, lane.id, clip.id, 'move')}
+								onClipPointerDown(e, lane.id, clip.id, "move")}
 						>
 							<span
 								class="clip-edge start"
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, 'start')}
+									onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
 							{#if clipPx(clip) >= MIN_LABEL_PX}
-								<span class="clip-label">{clip.text || '—'}</span>
+								<span class="clip-label">{clip.text || "—"}</span>
 							{/if}
 							<span
 								class="clip-edge end"
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, 'end')}
+									onClipPointerDown(e, lane.id, clip.id, "end")}
 							></span>
 						</div>
 					{/if}
@@ -759,7 +766,7 @@
 
 	/* Centred in the grab area, which is wider than the line and sized inline. */
 	.clip-boundary::after {
-		content: '';
+		content: "";
 		position: absolute;
 		top: 0;
 		bottom: 0;
@@ -773,5 +780,4 @@
 		width: 2px;
 		background: var(--live);
 	}
-
 </style>
