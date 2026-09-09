@@ -106,6 +106,7 @@
 			const w = GlRenderer.warmup();
 			warmCanvas = w.canvas;
 			warmRenderer = w.renderer;
+			void w.renderer.warmShaders();
 		} catch {
 			// WebGL2 not available; Editor will fall back to creating its own context
 		}
@@ -113,22 +114,32 @@
 
 	let warmRaf = 0;
 	let warmTimer = 0;
+	/** Bumped by every cancel so an in-flight `fonts.ready` can tell it's stale. */
+	let warmGeneration = 0;
 
 	function cancelWarm() {
 		if (warmRaf) cancelAnimationFrame(warmRaf);
 		if (warmTimer) clearTimeout(warmTimer);
 		warmRaf = 0;
 		warmTimer = 0;
+		warmGeneration++;
 	}
 
-	/** Linking every shader stalls the main thread, so warm up only after the
-	 * upload screen has had a frame to paint. Its demo starts on nulls anyway. */
+	/** Warm up only once the upload screen has painted its text. `warmShaders`
+	 * slices the linking, but the context and its core programs still cost a
+	 * frame, and holding for the webfont keeps that frame from being the one
+	 * with every label still inside its swap period. */
 	function scheduleWarm() {
 		cancelWarm();
 		disposeWarm();
 		warmRaf = requestAnimationFrame(() => {
 			warmRaf = 0;
-			warmTimer = window.setTimeout(createWarm, 0);
+			const generation = warmGeneration;
+			const start = () => {
+				if (generation !== warmGeneration) return;
+				warmTimer = window.setTimeout(createWarm, 0);
+			};
+			document.fonts.ready.then(start, start);
 		});
 	}
 

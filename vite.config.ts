@@ -1,11 +1,10 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig, type Plugin } from "vite";
 
-// The same two subsets in dev, where nothing is hashed yet. These match the
-// URLs Vite rewrites the stylesheet's url() to, so the preload is reused.
+// The dev URL, where nothing is hashed yet. This matches the URL Vite rewrites
+// the stylesheet's url() to, so the preload is reused.
 const DEV_LATIN_FONTS = [
 	"/node_modules/@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2",
-	"/node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2",
 ];
 
 // The fonts are only referenced from the stylesheet, so the browser doesn't
@@ -14,6 +13,10 @@ const DEV_LATIN_FONTS = [
 // whole UI shows up with invisible text (Firefox is the worst about this).
 // Preload the latin subsets ahead of the stylesheet link so the preload scanner
 // puts them in flight first.
+// Only Archivo. The mono is for readouts and rack labels inside the editor —
+// nothing on the upload screen resolves to it, so preloading it just spent
+// bandwidth ahead of the stylesheet and earned a "preloaded but not used"
+// warning. It loads on demand, under the same font-display: swap.
 function preloadLatinFonts(): Plugin {
 	let base = "/";
 	return {
@@ -27,7 +30,7 @@ function preloadLatinFonts(): Plugin {
 				const hrefs = ctx.bundle
 					? Object.keys(ctx.bundle)
 							.filter((file) =>
-								/-latin-wght-normal-[\w-]+\.woff2$/.test(file),
+								/archivo-latin-wght-normal-[\w-]+\.woff2$/.test(file),
 							)
 							.map((file) => base + file)
 					: DEV_LATIN_FONTS;

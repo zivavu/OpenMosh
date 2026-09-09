@@ -437,14 +437,9 @@ export class GlRenderer {
     this.passthrough = this.compile(PASSTHROUGH_FRAG);
     this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
     this.layerTransformProgram = this.compile(LAYER_TRANSFORM_FRAG);
-    this.compileAllEffects();
-    for (const [id, def] of Object.entries(TRANSITION_SHADERS)) {
-      try {
-        this.transitionPrograms.set(id, this.compile(def.fragment));
-      } catch (e) {
-        console.error(`Failed to compile transition "${id}":`, e);
-      }
-    }
+    // Effect and transition programs compile on first use, not here. Linking
+    // all ~60 of them costs Firefox nearly two seconds on the main thread, and
+    // a constructor is the one place that time can't be broken up.
   }
 
   /**
@@ -1096,7 +1091,7 @@ export class GlRenderer {
     )
       return;
     const post = livePostLayers(postLayers);
-    const prog = this.transitionPrograms.get(type);
+    const prog = this.transitionProgram(type);
     if (!prog || progress >= 1) {
       this.render(effectsB, time, textLayers, post, mediaLayers);
       return;
@@ -1616,7 +1611,7 @@ export class GlRenderer {
         continue;
       }
 
-      const entry = this.compiled.get(eff.defId);
+      const entry = this.effectEntry(eff.defId);
       if (!entry) {
         // A stale preset or a deleted effect. Skipping is right — reporting it
         // once is what makes "my preset does nothing" diagnosable.
@@ -2656,6 +2651,8 @@ export class GlRenderer {
         for (const pp of entry.prePasses) gl.deleteProgram(pp.program.program);
       }
     }
+    this.compiled.clear();
+    this.warmCancelled = true;
     gl.deleteVertexArray(this.quadVAO);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
@@ -2809,23 +2806,83 @@ export class GlRenderer {
     return { program, uniforms };
   }
 
-  private compileAllEffects() {
-    for (const [id, def] of Object.entries(EFFECT_SHADERS)) {
-      try {
-        const program = this.compile(def.fragment);
-        let prePasses:
-          | { program: CompiledProgram; linearFilter?: boolean }[]
-          | undefined;
-        if (def.prePasses) {
-          prePasses = def.prePasses.map((pp) => ({
-            program: this.compile(pp.fragment),
-            linearFilter: pp.linearFilter,
-          }));
-        }
-        this.compiled.set(id, { program, def, prePasses });
-      } catch (e) {
-        console.error(`Failed to compile effect "${id}":`, e);
+  /** Effects whose shader threw once already — don't relink them every frame. */
+  private failedEffects = new Set<string>();
+
+  /**
+   * The compiled entry for an effect, linking it on first use. Returns
+   * undefined for an id that isn't a known effect (a stale preset) or one whose
+   * shader failed to link, which the caller reports as a skipped effect.
+   */
+  private effectEntry(id: string) {
+    const cached = this.compiled.get(id);
+    if (cached) return cached;
+    const def = EFFECT_SHADERS[id as keyof typeof EFFECT_SHADERS] as
+      | EffectShaderDef
+      | undefined;
+    if (!def || this.failedEffects.has(id)) return undefined;
+    try {
+      const program = this.compile(def.fragment);
+      let prePasses:
+        | { program: CompiledProgram; linearFilter?: boolean }[]
+        | undefined;
+      if (def.prePasses) {
+        prePasses = def.prePasses.map((pp) => ({
+          program: this.compile(pp.fragment),
+          linearFilter: pp.linearFilter,
+        }));
       }
+      const entry = { program, def, prePasses };
+      this.compiled.set(id, entry);
+      return entry;
+    } catch (e) {
+      console.error(`Failed to compile effect "${id}":`, e);
+      this.failedEffects.add(id);
+      return undefined;
+    }
+  }
+
+  /** The compiled program for a transition, linking it on first use. */
+  private transitionProgram(id: string): CompiledProgram | undefined {
+    const cached = this.transitionPrograms.get(id);
+    if (cached) return cached;
+    const def = TRANSITION_SHADERS[id as keyof typeof TRANSITION_SHADERS] as
+      | { fragment: string }
+      | undefined;
+    if (!def) return undefined;
+    try {
+      const program = this.compile(def.fragment);
+      this.transitionPrograms.set(id, program);
+      return program;
+    } catch (e) {
+      console.error(`Failed to compile transition "${id}":`, e);
+      return undefined;
+    }
+  }
+
+  private warmCancelled = false;
+
+  /**
+   * Link every remaining effect and transition ahead of the first real render,
+   * a few milliseconds at a time. Yielding between slices is the whole point:
+   * done in one go this blocks Firefox's main thread long enough that whatever
+   * was on screen when it started — including text still inside a webfont's
+   * swap period — stays frozen there until it finishes.
+   */
+  async warmShaders(sliceMs = 6): Promise<void> {
+    const ids = [
+      ...Object.keys(EFFECT_SHADERS).map((id) => () => this.effectEntry(id)),
+      ...Object.keys(TRANSITION_SHADERS).map(
+        (id) => () => this.transitionProgram(id),
+      ),
+    ];
+    let slice = performance.now();
+    for (const link of ids) {
+      if (this.warmCancelled) return;
+      link();
+      if (performance.now() - slice < sliceMs) continue;
+      await new Promise((r) => setTimeout(r, 0));
+      slice = performance.now();
     }
   }
 
