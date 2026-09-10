@@ -390,8 +390,9 @@ export class SequenceSourceRegistry {
 	}
 
 	/**
-	 * Returns undefined while the sampler is still being created — the caller
-	 * holds the previous frame and retries next tick.
+	 * Returns undefined while the sampler is still being created — same
+	 * contract as `image`: the caller holds the previous frame and is called
+	 * back via `onReady`, which is the only tick a paused preview gets.
 	 */
 	sampler(id: string): SlideVideoSampler | undefined {
 		const existing = this.#samplers.get(id);
@@ -418,6 +419,7 @@ export class SequenceSourceRegistry {
 				return;
 			}
 			this.#samplers.set(id, sampler);
+			this.#onReady?.();
 		});
 		return undefined;
 	}
