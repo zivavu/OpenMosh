@@ -1,5 +1,11 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { imageFile, trackFile, type Rgb, type WavOptions } from "./fixtures";
+import {
+	imageFile,
+	patternImageFile,
+	trackFile,
+	type Rgb,
+	type WavOptions,
+} from "./fixtures";
 
 /**
  * The moves every editor spec makes, in the app's own vocabulary.
@@ -133,8 +139,13 @@ export function nearestColor(mean: Rgb, palette: Record<string, Rgb>): string {
 }
 
 export interface OpenEditorOptions {
-	/** Pool sources, as [name, colour] pairs. */
-	sources: [string, Rgb][];
+	/**
+	 * Pool sources, as [name, colour] pairs. `"pattern"` in place of a colour
+	 * gives that source the detailed test image instead of a flat fill — which
+	 * a spec needs whenever it asserts that the preview *changed*, since a flat
+	 * source comes out of a spatial effect looking exactly the same.
+	 */
+	sources: [string, Rgb | "pattern"][];
 	track?: WavOptions & { name?: string };
 }
 
@@ -158,7 +169,11 @@ export async function openEditor(
 		.setInputFiles(trackFile(name, wav));
 	await page
 		.locator('input[type="file"]:not([accept*="audio"])')
-		.setInputFiles(sources.map(([file, color]) => imageFile(file, color)));
+		.setInputFiles(
+			sources.map(([file, color]) =>
+				color === "pattern" ? patternImageFile(file) : imageFile(file, color),
+			),
+		);
 
 	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
 }

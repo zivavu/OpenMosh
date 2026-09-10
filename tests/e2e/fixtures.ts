@@ -178,6 +178,11 @@ export function imageFile(name: string, color: Rgb, size = 64) {
 	return { name, mimeType: "image/png", buffer: pngBytes(color, size) };
 }
 
+/** The detailed pattern as an upload, for specs that assert the frame changed. */
+export function patternImageFile(name: string, size = 128) {
+	return { name, mimeType: "image/png", buffer: patternPngBytes(size) };
+}
+
 export function trackFile(name = "track.wav", options: WavOptions = {}) {
 	return { name, mimeType: "audio/wav", buffer: wavBytes(options) };
 }

@@ -124,7 +124,10 @@ test.describe("a segment's chain", () => {
 	test("a mosh switches effects on and changes what's on screen", async ({
 		page,
 	}) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
+		// The patterned source, not a flat colour: a mosh that happens to roll
+		// only spatial effects leaves a flat fill looking exactly as it was, so
+		// this asserted nothing about half the rolls and flaked on them.
+		await openEditor(page, { sources: [["pattern.png", "pattern"]] });
 		const clean = await waitForRender(page);
 
 		await selectSegment(page, 0);
