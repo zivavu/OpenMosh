@@ -70,6 +70,52 @@ export function pngBytes(color: Rgb, size = 64): Buffer {
 	]);
 }
 
+/**
+ * The source image the renderer specs draw through.
+ *
+ * A flat colour is useless here: an effect that only displaces pixels has
+ * nothing to move, and one that only shifts colour has nothing to shift. This
+ * carries a full ramp in both axes for the colour effects and hard checker
+ * edges for the spatial ones, so "the frame changed" means something whatever
+ * an effect does.
+ */
+export function patternPngBytes(size = 128): Buffer {
+	const ihdr = Buffer.alloc(13);
+	ihdr.writeUInt32BE(size, 0);
+	ihdr.writeUInt32BE(size, 4);
+	ihdr[8] = 8;
+	ihdr[9] = 2;
+	const raw = Buffer.alloc(size * (size * 3 + 1));
+	for (let y = 0; y < size; y++) {
+		const row = y * (size * 3 + 1);
+		raw[row] = 0;
+		for (let x = 0; x < size; x++) {
+			const px = row + 1 + x * 3;
+			const checker = Math.floor(x / 8) % 2 === Math.floor(y / 8) % 2 ? 255 : 0;
+			if (checker) {
+				raw[px] = 255;
+				raw[px + 1] = 255;
+				raw[px + 2] = 255;
+			} else {
+				raw[px] = Math.round((x / (size - 1)) * 255);
+				raw[px + 1] = Math.round((y / (size - 1)) * 255);
+				raw[px + 2] = 255 - Math.round(((x + y) / (2 * (size - 1))) * 255);
+			}
+		}
+	}
+	return Buffer.concat([
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+		pngChunk("IHDR", ihdr),
+		pngChunk("IDAT", deflateSync(raw)),
+		pngChunk("IEND", Buffer.alloc(0)),
+	]);
+}
+
+/** The same image as base64, for handing to `page.evaluate`. */
+export function patternPngBase64(size = 128): string {
+	return patternPngBytes(size).toString("base64");
+}
+
 export interface WavOptions {
 	seconds?: number;
 	/** Clicks per minute. Gives the track a tempo something can lock onto. */
