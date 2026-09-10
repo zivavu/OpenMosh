@@ -2,6 +2,7 @@ import { devices, expect, test } from "@playwright/test";
 import {
 	actionBar,
 	effectItems,
+	laneGutters,
 	layerButtons,
 	modeToggle,
 	openEditor,
@@ -11,6 +12,7 @@ import {
 	sheetContent,
 	sheetHandle,
 	sheetTab,
+	timelineStack,
 	waitForRender,
 } from "./app";
 import { RED } from "./fixtures";
@@ -94,6 +96,24 @@ test.describe("action bar", () => {
 			expect(box.right).toBeLessThanOrEqual(barBox.x + barBox.width);
 			expect(box.top - barBox.y).toBeLessThan(barBox.height / 2);
 		}
+	});
+});
+
+test.describe("timeline", () => {
+	test("gives the whole width to the lanes", async ({ page }) => {
+		await openSingle(page, "red.png", RED, { track: {} });
+		const stack = timelineStack(page);
+		await expect(stack).toBeVisible();
+		await expect(laneGutters(page).first()).toBeAttached();
+		for (const gutter of await laneGutters(page).all()) {
+			await expect(gutter).toBeHidden();
+		}
+		// The lane, not merely the row, spans the stack: a gutter collapsed to
+		// zero but still laid out would leave its gap in front of the lane.
+		const lane = stack.locator(".tl-lane").first();
+		const laneBox = (await lane.boundingBox())!;
+		const stackBox = (await stack.boundingBox())!;
+		expect(laneBox.width).toBeGreaterThan(stackBox.width * 0.9);
 	});
 });
 

@@ -243,8 +243,15 @@ export async function openSingle(
 	page: Page,
 	file: string,
 	color: Rgb | "pattern",
+	{ track }: { track?: WavOptions & { name?: string } } = {},
 ): Promise<void> {
 	await page.goto("/");
+	if (track) {
+		const { name = "track.wav", ...wav } = track;
+		await page
+			.locator('input[type="file"][accept*="audio"]')
+			.setInputFiles(trackFile(name, wav));
+	}
 	await page
 		.locator('input[type="file"]:not([accept*="audio"])')
 		.setInputFiles(
@@ -289,4 +296,14 @@ export function layerButtons(page: Page): Locator {
 /** The toolbar under the stack for the selected segment(s). */
 export function segmentBar(page: Page): Locator {
 	return page.locator(".seg-bar");
+}
+
+/** The stack of lanes under the preview, once a clock is driving it. */
+export function timelineStack(page: Page): Locator {
+	return page.locator(".tl-stack");
+}
+
+/** The caption column beside every lane. */
+export function laneGutters(page: Page): Locator {
+	return page.locator(".tl-stack .tl-gutter");
 }
