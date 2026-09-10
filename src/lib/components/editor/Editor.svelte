@@ -1240,8 +1240,14 @@
 		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const bpm = sequenceBpm;
-		const text = $state.snapshot(textTimeline) as TextTimeline;
-		const media = $state.snapshot(mediaTimeline) as MediaTimeline;
+		const text = layersAsLoaded(
+			$state.snapshot(textTimeline) as TextTimeline,
+			"text",
+		);
+		const media = layersAsLoaded(
+			$state.snapshot(mediaTimeline) as MediaTimeline,
+			"media",
+		);
 		const fx = $state.snapshot(fxLanes) as FxLane[];
 		const sourceEdits = $state.snapshot(sourceRegistry.edits) as Record<
 			string,
@@ -1295,8 +1301,14 @@
 		void saveTimeline(key, {
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
-			text: $state.snapshot(textTimeline) as TextTimeline,
-			media: $state.snapshot(mediaTimeline) as MediaTimeline,
+			text: layersAsLoaded(
+				$state.snapshot(textTimeline) as TextTimeline,
+				"text",
+			),
+			media: layersAsLoaded(
+				$state.snapshot(mediaTimeline) as MediaTimeline,
+				"media",
+			),
 			fx: $state.snapshot(fxLanes) as FxLane[],
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
@@ -2943,11 +2955,37 @@
 	// Optional lanes of text clips over the master clock. Off until the user
 	// turns it on, so nothing about the existing editor changes for people who
 	// don't want text.
+
+	/**
+	 * Layer lanes are desktop work — the buttons that turn them on are not
+	 * offered on a phone, and neither is anything a lane draws or edits. What
+	 * a desktop built still comes back through here, only switched off: the
+	 * `enabled` flag is all the lanes key off. The flag as loaded is kept so
+	 * a save from the phone hands the lanes back exactly as they were, rather
+	 * than hidden the next time the desktop opens them.
+	 */
+	const loadedLayerFlags = { text: false, media: false };
+	function layersOffOnMobile<T extends { enabled: boolean }>(
+		timeline: T,
+		kind: keyof typeof loadedLayerFlags,
+	): T {
+		if (!isMobile) return timeline;
+		loadedLayerFlags[kind] = timeline.enabled;
+		return { ...timeline, enabled: false };
+	}
+	function layersAsLoaded<T extends { enabled: boolean }>(
+		timeline: T,
+		kind: keyof typeof loadedLayerFlags,
+	): T {
+		if (!isMobile) return timeline;
+		return { ...timeline, enabled: loadedLayerFlags[kind] };
+	}
+
 	// Seed only — a later change to the prop shouldn't overwrite live edits.
 	let textTimeline = $state<TextTimeline>(
 		untrack(() =>
 			initialSession?.text
-				? normalizeTextTimeline(initialSession.text)
+				? layersOffOnMobile(normalizeTextTimeline(initialSession.text), "text")
 				: { ...EMPTY_TEXT_TIMELINE },
 		),
 	);
@@ -2960,7 +2998,10 @@
 	let mediaTimeline = $state<MediaTimeline>(
 		untrack(() =>
 			initialSession?.media
-				? normalizeMediaTimeline(initialSession.media)
+				? layersOffOnMobile(
+						normalizeMediaTimeline(initialSession.media),
+						"media",
+					)
 				: { ...EMPTY_MEDIA_TIMELINE },
 		),
 	);
@@ -3006,9 +3047,14 @@
 		const source = file;
 		const state = {
 			effects: $state.snapshot(effects) as EffectInstance[],
-			text: hasText ? ($state.snapshot(textTimeline) as TextTimeline) : null,
+			text: hasText
+				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
+				: null,
 			media: hasMedia
-				? ($state.snapshot(mediaTimeline) as MediaTimeline)
+				? layersAsLoaded(
+						$state.snapshot(mediaTimeline) as MediaTimeline,
+						"media",
+					)
 				: null,
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
@@ -3431,7 +3477,7 @@
 	/** Adopt a saved timeline, or clear back to empty when a track has none. */
 	function restoreTextTimeline(saved: TextTimeline | undefined) {
 		textTimeline = saved
-			? normalizeTextTimeline(saved)
+			? layersOffOnMobile(normalizeTextTimeline(saved), "text")
 			: { ...EMPTY_TEXT_TIMELINE };
 		selectedTextClipId = null;
 		textHistory.reset();
@@ -3476,7 +3522,7 @@
 
 	function restoreMediaTimeline(saved: MediaTimeline | undefined) {
 		mediaTimeline = saved
-			? normalizeMediaTimeline(saved)
+			? layersOffOnMobile(normalizeMediaTimeline(saved), "media")
 			: { ...EMPTY_MEDIA_TIMELINE };
 		selectedMediaClipId = null;
 		mediaHistory.reset();
@@ -4281,9 +4327,8 @@
 						<Maximize size={14} />
 					</button>
 				{/if}
-				<!-- Layer lanes are timeline work, which a phone has neither the
-				     width nor the pointer for — and the two buttons are what
-				     pushed the bar past a narrow screen. -->
+				<!-- Layer lanes are off on a phone altogether — see
+				     layersOffOnMobile — so their switches go too. -->
 				{#if !isMobile}
 					<button
 						class="help-btn"
