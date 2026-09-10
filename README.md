@@ -44,19 +44,6 @@ There are 53 effects, from the tame ones (pixelate, posterize, blur) through the
 
 Keyboard shortcuts live behind the shortcuts button in the app.
 
----
-
-## What can it produce?
-
-> [!WARNING]
-> **Epilepsy warning:** the videos below and the app itself produce rapidly flashing images and stroboscopic effects. Use with caution if you're sensitive to flashing lights or have photosensitive epilepsy.
-
-https://github.com/user-attachments/assets/ce69b06b-1d9a-4d72-8518-e86f14cfdaa2
-
-https://github.com/user-attachments/assets/e1f3a112-63ce-4a7c-bb64-a89ee9c21453
-
----
-
 ## Requirements
 
 A recent Chromium browser (Chrome, Edge, Brave, Arc) is what OpenMosh is built and tested against. Firefox and Safari may load it, but export is the wall: it needs `VideoEncoder`, and support there is newer and patchier.
