@@ -13,10 +13,14 @@ bun install        # Install dependencies
 bun dev            # Start dev server (Vite)
 bun build          # Production build
 bun preview        # Preview the production build
-bun check          # TypeScript + Svelte type-check (svelte-check + tsc)
+bun check          # TypeScript + Svelte type-check
+bun test           # Unit suite (bun:test)
+bun test:e2e       # End-to-end suite (Playwright, needs `bunx playwright install chromium` once)
 ```
 
 Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxing, `essentia.js` does the BPM detection.
+
+Rendering needs WebGL2 with float color buffers, and export needs WebCodecs, so a recent Chromium browser is the safe bet.
 
 ---
 
@@ -30,7 +34,7 @@ Pick one of three modes on the upload screen.
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 
-Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
+There are 53 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that track motion or the salient region of the frame. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
 
 Keyboard shortcuts live behind the shortcuts button in the app.
 
