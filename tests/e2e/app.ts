@@ -285,3 +285,8 @@ export function actionBar(page: Page): Locator {
 export function layerButtons(page: Page): Locator {
 	return page.getByTitle(/^(Text timeline|Media layers):/);
 }
+
+/** The toolbar under the stack for the selected segment(s). */
+export function segmentBar(page: Page): Locator {
+	return page.locator(".seg-bar");
+}

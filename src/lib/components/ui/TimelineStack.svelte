@@ -762,5 +762,12 @@
 			--tl-gutter: 126px;
 			padding: 0.4rem 8px;
 		}
+
+		/* A selection bar that wraps needs the room: the fixed row is what
+		   kept the stack's height steady, and at this width it clipped instead. */
+		.tl-selbar {
+			height: auto;
+			min-height: 30px;
+		}
 	}
 </style>

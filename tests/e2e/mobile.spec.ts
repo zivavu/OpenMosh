@@ -4,7 +4,10 @@ import {
 	effectItems,
 	layerButtons,
 	modeToggle,
+	openEditor,
 	openSingle,
+	segmentBar,
+	selectSegment,
 	sheetContent,
 	sheetHandle,
 	sheetTab,
@@ -44,8 +47,6 @@ test.describe("bottom sheet", () => {
 
 		await sheetHandle(page).click();
 		await expect(sheetTab(page, "Effects")).toHaveClass(/active/);
-		// Scoped to the tab: the desktop column is still in the DOM, just not
-		// displayed, and its chain would satisfy an unscoped query.
 		const chain = effectItems(sheetContent(page));
 		// The whole registry is listed, enabled or not — an empty tab means the
 		// chain never rendered, not that nothing is switched on.
@@ -92,6 +93,34 @@ test.describe("action bar", () => {
 			expect(box.left).toBeGreaterThanOrEqual(barBox.x);
 			expect(box.right).toBeLessThanOrEqual(barBox.x + barBox.width);
 			expect(box.top - barBox.y).toBeLessThan(barBox.height / 2);
+		}
+	});
+});
+
+test.describe("segment bar in a narrow window", () => {
+	// A desktop browser squeezed narrow, not a phone: the editor is not on
+	// offer to a touch device, but a small window still reaches its bars.
+	test.use({
+		isMobile: false,
+		hasTouch: false,
+		viewport: { width: 400, height: 800 },
+	});
+
+	test("wraps instead of running off the edge", async ({ page }) => {
+		await openEditor(page, { sources: [["red.png", RED]] });
+		await waitForRender(page);
+		await selectSegment(page, 0);
+
+		const bar = segmentBar(page);
+		await expect(bar).toBeVisible();
+		const width = page.viewportSize()!.width;
+		for (const box of await bar
+			.locator("button, select")
+			.evaluateAll((els) =>
+				els.map((el) => el.getBoundingClientRect().toJSON()),
+			)) {
+			expect(box.left).toBeGreaterThanOrEqual(0);
+			expect(box.right).toBeLessThanOrEqual(width);
 		}
 	});
 });

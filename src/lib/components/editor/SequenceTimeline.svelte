@@ -1893,6 +1893,36 @@
 		padding: 0 0.25rem;
 	}
 
+	/* Too narrow for one row of everything: the groups wrap into as many rows
+	   as they need, with the captions and dividers gone — the controls read on
+	   their own, and it's their space the row is short of. */
+	@media (max-width: 800px) {
+		.seg-bar {
+			display: flex;
+			flex-wrap: wrap;
+			row-gap: 0.3rem;
+			padding: 0.3rem 0;
+		}
+
+		.seg-spacer {
+			display: none;
+		}
+
+		.seg-groups {
+			flex-wrap: wrap;
+			row-gap: 0.3rem;
+		}
+
+		.seg-groups > :global(.tl-tool-label),
+		.seg-groups > :global(.tl-tool-sep) {
+			display: none;
+		}
+
+		.seg-actions {
+			margin-left: auto;
+		}
+	}
+
 	.seg-title {
 		font-size: 0.68rem;
 		font-weight: 600;
