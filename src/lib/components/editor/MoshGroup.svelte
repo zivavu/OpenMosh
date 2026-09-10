@@ -177,4 +177,22 @@
 			height: 26px;
 		}
 	}
+
+	/* Same step down as the action bar around it takes at this width. */
+	@media (max-width: 450px) {
+		.mosh-group {
+			gap: 0.25rem;
+		}
+
+		.action-btn {
+			gap: 0.35rem;
+			padding: 0.5rem 0.8rem;
+			font-size: 0.62rem;
+		}
+
+		.settings-btn {
+			width: 24px;
+			height: 24px;
+		}
+	}
 </style>

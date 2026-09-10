@@ -276,3 +276,12 @@ export function sheetContent(page: Page): Locator {
 export function effectItems(within: Page | Locator): Locator {
 	return within.locator(".effect-item");
 }
+
+/** The row of controls under the preview: library, mosh group, save. */
+export function actionBar(page: Page): Locator {
+	return page.locator(".action-bar");
+}
+
+export function layerButtons(page: Page): Locator {
+	return page.getByTitle(/^(Text timeline|Media layers):/);
+}

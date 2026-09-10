@@ -1,6 +1,8 @@
 import { devices, expect, test } from "@playwright/test";
 import {
+	actionBar,
 	effectItems,
+	layerButtons,
 	modeToggle,
 	openSingle,
 	sheetContent,
@@ -63,5 +65,33 @@ test.describe("bottom sheet", () => {
 
 		await sheetTab(page, "Effects").click();
 		await expect(effectItems(sheetContent(page)).first()).toBeVisible();
+	});
+});
+
+test.describe("action bar", () => {
+	// Narrower than the Pixel 5, at the width the bar used to overrun.
+	test.use({ viewport: { width: 360, height: 740 } });
+
+	test("keeps the layer lanes off a phone", async ({ page }) => {
+		await openSingle(page, "red.png", RED);
+		await expect(layerButtons(page)).toHaveCount(0);
+	});
+
+	test("fits every control on one row", async ({ page }) => {
+		await openSingle(page, "red.png", RED);
+		const bar = actionBar(page);
+		await expect(bar).toBeVisible();
+		const buttons = bar.locator("button");
+		expect(await buttons.count()).toBeGreaterThan(2);
+		const barBox = (await bar.boundingBox())!;
+		for (const box of await buttons.evaluateAll((els) =>
+			els.map((el) => el.getBoundingClientRect().toJSON()),
+		)) {
+			// Inside the bar's box horizontally, and all on the bar's first line:
+			// the wrap rule is a fallback, not the layout at this width.
+			expect(box.left).toBeGreaterThanOrEqual(barBox.x);
+			expect(box.right).toBeLessThanOrEqual(barBox.x + barBox.width);
+			expect(box.top - barBox.y).toBeLessThan(barBox.height / 2);
+		}
 	});
 });

@@ -4281,22 +4281,27 @@
 						<Maximize size={14} />
 					</button>
 				{/if}
-				<button
-					class="help-btn"
-					class:seq-active={textTimeline.enabled}
-					onclick={toggleTextTimeline}
-					title="Text timeline: timed text layers with their own effects"
-				>
-					<Type size={14} />
-				</button>
-				<button
-					class="help-btn"
-					class:seq-active={mediaTimeline.enabled}
-					onclick={toggleMediaTimeline}
-					title="Media layers: timed image/video layers with their own effects"
-				>
-					<Layers size={14} />
-				</button>
+				<!-- Layer lanes are timeline work, which a phone has neither the
+				     width nor the pointer for — and the two buttons are what
+				     pushed the bar past a narrow screen. -->
+				{#if !isMobile}
+					<button
+						class="help-btn"
+						class:seq-active={textTimeline.enabled}
+						onclick={toggleTextTimeline}
+						title="Text timeline: timed text layers with their own effects"
+					>
+						<Type size={14} />
+					</button>
+					<button
+						class="help-btn"
+						class:seq-active={mediaTimeline.enabled}
+						onclick={toggleMediaTimeline}
+						title="Media layers: timed image/video layers with their own effects"
+					>
+						<Layers size={14} />
+					</button>
+				{/if}
 				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
@@ -5116,6 +5121,27 @@
 		}
 	}
 
+	/* Below this the bar's controls, at their phone size, still overrun a
+	   narrow viewport: every gap and pad comes in, and the sizes match the
+	   mosh group's own step down. Wrapping is the last resort for anything
+	   narrower still, so no control is ever clipped off the edge. */
+	@media (max-width: 450px) {
+		.action-bar {
+			flex-wrap: wrap;
+			gap: 0.25rem;
+			padding: 0.5rem;
+		}
+
+		.mosh-group-wrap {
+			gap: 0.25rem;
+		}
+
+		.help-btn {
+			width: 24px;
+			height: 24px;
+		}
+	}
+
 	.settings-divider {
 		height: 1px;
 		background: var(--line);
@@ -5219,11 +5245,6 @@
 			gap: 0.4rem;
 		}
 
-		.action-btn {
-			padding: 0.6rem 1.2rem;
-			font-size: 0.7rem;
-		}
-
 		.library-btn {
 			display: flex;
 			align-items: center;
@@ -5270,6 +5291,27 @@
 	.action-btn:hover {
 		border-color: var(--text-3);
 		color: var(--text);
+	}
+
+	/* Both after the base rule: a media rule written above it loses to it
+	   at the same specificity, which is how the phone size went unapplied. */
+	@media (max-width: 800px) {
+		.action-btn {
+			padding: 0.6rem 1.2rem;
+		}
+	}
+
+	@media (max-width: 450px) {
+		.library-btn {
+			width: 24px;
+			height: 24px;
+		}
+
+		.action-btn {
+			gap: 0.35rem;
+			padding: 0.5rem 0.8rem;
+			font-size: 0.62rem;
+		}
 	}
 
 	.save-btn:hover {
