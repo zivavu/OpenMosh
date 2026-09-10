@@ -233,3 +233,46 @@ export async function selectSegment(page: Page, index: number): Promise<void> {
 export function segmentMoshButton(page: Page): Locator {
 	return page.getByTitle("Random mosh for this segment");
 }
+
+/**
+ * Take the upload screen through to single mode with one image. No mode
+ * button is pressed: single is the default, and on a touch device it is the
+ * only mode there is.
+ */
+export async function openSingle(
+	page: Page,
+	file: string,
+	color: Rgb | "pattern",
+): Promise<void> {
+	await page.goto("/");
+	await page
+		.locator('input[type="file"]:not([accept*="audio"])')
+		.setInputFiles(
+			color === "pattern" ? patternImageFile(file) : imageFile(file, color),
+		);
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+}
+
+/** The upload screen's Single / Editor / Slideshow pill. */
+export function modeToggle(page: Page): Locator {
+	return page.locator(".mode-toggle");
+}
+
+/** Drag handle of the bottom sheet the sidebar becomes on a phone. */
+export function sheetHandle(page: Page): Locator {
+	return page.getByRole("button", { name: "Toggle panel" });
+}
+
+export function sheetTab(page: Page, name: "Settings" | "Effects"): Locator {
+	return page.locator(".tab-btn", { hasText: name });
+}
+
+/** Whatever the active sheet tab is showing. */
+export function sheetContent(page: Page): Locator {
+	return page.locator(".tab-content");
+}
+
+/** Every effect the chain lists, live or not. */
+export function effectItems(within: Page | Locator): Locator {
+	return within.locator(".effect-item");
+}

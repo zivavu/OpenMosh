@@ -4750,43 +4750,48 @@
 		</div>
 	{/snippet}
 
+	<!-- Passed only while a clip is selected. The sheet takes any top panel
+	     as "show this instead of the chain", so an always-present snippet that
+	     merely rendered nothing left the mobile Effects tab empty. -->
+	{#snippet layerPanel()}
+		{#if selectedMediaClip}
+			<MediaClipPanel
+				lane={selectedMediaLane}
+				clip={selectedMediaClip}
+				sources={sequenceSources}
+				onLaneChange={updateMediaLane}
+				onClipChange={updateMediaClip}
+				onBeforeEdit={pushMediaHistory}
+				onClose={() => (selectedMediaClipId = null)}
+				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+				spectrumData={audio.spectrumData}
+				response={audioResponse}
+				edits={sourceRegistry.edits}
+				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
+				onEditingChange={onSourceEditingChange}
+				settings={moshSettings}
+			/>
+		{:else if selectedTextClip}
+			<TextClipPanel
+				lane={selectedTextLane}
+				clip={selectedTextClip}
+				onLaneChange={updateTextLane}
+				onClipChange={updateTextClip}
+				onBeforeEdit={pushTextHistory}
+				onClose={() => (selectedTextClipId = null)}
+				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+				spectrumData={audio.spectrumData}
+				response={audioResponse}
+				settings={moshSettings}
+			/>
+		{/if}
+	{/snippet}
+
 	<MobileSheet
 		bind:this={_mobileSheetRef}
+		topPanel={selectedMediaClip || selectedTextClip ? layerPanel : undefined}
 		settingsInTopPanel={!!selectedMediaClip || !!selectedTextClip}
 	>
-		{#snippet topPanel()}
-			{#if selectedMediaClip}
-				<MediaClipPanel
-					lane={selectedMediaLane}
-					clip={selectedMediaClip}
-					sources={sequenceSources}
-					onLaneChange={updateMediaLane}
-					onClipChange={updateMediaClip}
-					onBeforeEdit={pushMediaHistory}
-					onClose={() => (selectedMediaClipId = null)}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
-					response={audioResponse}
-					edits={sourceRegistry.edits}
-					onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
-					onEditingChange={onSourceEditingChange}
-					settings={moshSettings}
-				/>
-			{:else if selectedTextClip}
-				<TextClipPanel
-					lane={selectedTextLane}
-					clip={selectedTextClip}
-					onLaneChange={updateTextLane}
-					onClipChange={updateTextClip}
-					onBeforeEdit={pushTextHistory}
-					onClose={() => (selectedTextClipId = null)}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
-					response={audioResponse}
-					settings={moshSettings}
-				/>
-			{/if}
-		{/snippet}
 		{#snippet settings()}
 			{@render moshSettings()}
 		{/snippet}
