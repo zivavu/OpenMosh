@@ -20,6 +20,7 @@
 		IDENTITY_MASK_TRANSFORM,
 		isFullCrop,
 		KEY_NEAR,
+		keyCoverage,
 		keyframeAt,
 		MASK_MAX,
 		putKeyframe,
@@ -598,16 +599,6 @@
 		rawCtx.drawImage(media, 0, 0, raw.width, raw.height);
 	}
 
-	// The same key test the placement shader runs, in JS. Two copies of one
-	// rule, so keep them in step — see LAYER_TRANSFORM_FRAG.
-	function chroma(r: number, g: number, b: number): [number, number] {
-		return [-0.169 * r - 0.331 * g + 0.5 * b, 0.5 * r - 0.419 * g - 0.081 * b];
-	}
-
-	function luma(r: number, g: number, b: number): number {
-		return 0.299 * r + 0.587 * g + 0.114 * b;
-	}
-
 	/** Raw buffer → visible canvas, with the key applied. */
 	function paint() {
 		const canvas = canvasEl;
@@ -631,26 +622,11 @@
 			ctx.putImageData(img, 0, 0);
 			return;
 		}
-		const [kx, ky] = chroma(key.color.r, key.color.g, key.color.b);
-		const kl = luma(key.color.r, key.color.g, key.color.b);
-		const lo = key.threshold;
-		const hi = lo + Math.max(key.smoothing, 0.0001);
-		// Brightness rescaled onto the chroma threshold — the cylinder the shader
-		// keys against.
-		const lumaScale = lo / Math.max(key.lumaRange, 0.0001);
+		// Plain copy: the loop reads the key per pixel and a proxy would pay for
+		// every read.
+		const k = $state.snapshot(key);
 		for (let i = 0; i < px.length; i += 4) {
-			const r = px[i] / 255;
-			const g = px[i + 1] / 255;
-			const b = px[i + 2] / 255;
-			const [cx, cy] = chroma(r, g, b);
-			const dx = cx - kx;
-			const dy = cy - ky;
-			const d = Math.max(
-				Math.sqrt(dx * dx + dy * dy),
-				Math.abs(luma(r, g, b) - kl) * lumaScale,
-			);
-			const t = Math.min(1, Math.max(0, (d - lo) / (hi - lo)));
-			px[i + 3] *= t * t * (3 - 2 * t);
+			px[i + 3] *= keyCoverage(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255, k);
 			if (maskPx) px[i + 3] *= maskPx[i] / 255;
 		}
 		ctx.putImageData(img, 0, 0);

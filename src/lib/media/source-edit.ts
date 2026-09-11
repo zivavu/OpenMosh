@@ -23,6 +23,45 @@ export interface ChromaKey {
 	lumaRange: number;
 }
 
+/** Y'CbCr chroma of an rgb colour, 0..1 per channel in. */
+export function chromaOf(r: number, g: number, b: number): [number, number] {
+	return [-0.169 * r - 0.331 * g + 0.5 * b, 0.5 * r - 0.419 * g - 0.081 * b];
+}
+
+export function lumaOf(r: number, g: number, b: number): number {
+	return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function smoothstep(lo: number, hi: number, x: number): number {
+	const t = Math.min(1, Math.max(0, (x - lo) / (hi - lo)));
+	return t * t * (3 - 2 * t);
+}
+
+/**
+ * How much of a pixel the key leaves, 1 = keep. The same rule as keyCoverage()
+ * in the placement shader — two copies of one test, so keep them in step. Each
+ * axis is softened in its own units and a pixel outside on either is kept;
+ * softening once on a combined distance let the smoothing band swallow the
+ * brightness range at low thresholds.
+ */
+export function keyCoverage(
+	r: number,
+	g: number,
+	b: number,
+	key: Omit<ChromaKey, "enabled">,
+): number {
+	const k = key.color;
+	const [cx, cy] = chromaOf(r, g, b);
+	const [kx, ky] = chromaOf(k.r, k.g, k.b);
+	const dC = Math.hypot(cx - kx, cy - ky);
+	const dY = Math.abs(lumaOf(r, g, b) - lumaOf(k.r, k.g, k.b));
+	const s = Math.max(key.smoothing, 0.0001);
+	return Math.max(
+		smoothstep(key.threshold, key.threshold + s, dC),
+		smoothstep(key.lumaRange, key.lumaRange + s, dY),
+	);
+}
+
 /** A rectangle of the source to keep, normalized to its own frame. */
 export interface CropRect {
 	x: number;

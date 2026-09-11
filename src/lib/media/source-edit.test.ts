@@ -5,6 +5,7 @@ import {
 	DEFAULT_CHROMA_KEY,
 	isFullCrop,
 	isIdleSourceEdit,
+	keyCoverage,
 	keyframeAt,
 	normalizeSourceEdit,
 	normalizeSourceEdits,
@@ -272,5 +273,43 @@ describe("keyed erase masks", () => {
 		const back = normalizeSourceEdit(edit);
 		expect(back.anim?.mask?.[1].v.mask).toBe(PNG_B);
 		expect(back.anim?.mask?.[0].v.x).toBe(0);
+	});
+});
+
+describe("keyCoverage", () => {
+	const grey = { color: { r: 0.5, g: 0.5, b: 0.5 }, threshold: 0.01, smoothing: 0.1, lumaRange: 0.35 };
+	const green = { ...grey, color: { r: 0, g: 1, b: 0 }, threshold: 0.3 };
+
+	it("cuts the key colour itself", () => {
+		expect(keyCoverage(0.5, 0.5, 0.5, grey)).toBe(0);
+		expect(keyCoverage(0, 1, 0, green)).toBe(0);
+	});
+
+	it("keeps white and black under a grey key at the lowest threshold", () => {
+		// Same chroma as the key; only brightness tells them apart, and the
+		// smoothing band must not widen the brightness range.
+		expect(keyCoverage(1, 1, 1, grey)).toBe(1);
+		expect(keyCoverage(0, 0, 0, grey)).toBe(1);
+	});
+
+	it("cuts shades of the key within the brightness range", () => {
+		expect(keyCoverage(0.4, 0.4, 0.4, grey)).toBe(0);
+		expect(keyCoverage(0, 0.6, 0, green)).toBe(0);
+	});
+
+	it("keeps colours off the key's chroma", () => {
+		expect(keyCoverage(1, 0, 0, green)).toBe(1);
+		expect(keyCoverage(0.5, 0.5, 0.8, grey)).toBe(1);
+	});
+
+	it("feathers only inside the smoothing band", () => {
+		// Grey slightly bluer than the key: past the threshold, inside the band.
+		const c = keyCoverage(0.5, 0.5, 0.56, grey);
+		expect(c).toBeGreaterThan(0);
+		expect(c).toBeLessThan(1);
+		// Brightness just past the range, inside its band.
+		const y = keyCoverage(0.9, 0.9, 0.9, grey);
+		expect(y).toBeGreaterThan(0);
+		expect(y).toBeLessThan(1);
 	});
 });

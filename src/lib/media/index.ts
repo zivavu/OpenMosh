@@ -24,6 +24,7 @@ export {
 	isIdleSourceEdit,
 	KEY_EPSILON,
 	KEY_NEAR,
+	keyCoverage,
 	keyframeAt,
 	MASK_MAX,
 	normalizeSourceEdit,

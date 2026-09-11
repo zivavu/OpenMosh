@@ -152,12 +152,18 @@ float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 // A cylinder in Y'CbCr: chroma within u_keyThreshold of the key's, brightness
 // within u_keyLuma. Chroma alone put every neutral at one point — white, grey
 // and black an exact match for each other — so keying a grey backdrop took the
-// highlights with it however low the threshold went. The brightness axis is
-// rescaled so |dY| == u_keyLuma lands on the threshold, leaving u_keySmooth one
-// band to soften rather than two.
-float keyDistance(vec3 c) {
-  float dY = abs(luma(c) - luma(u_keyColor)) * (u_keyThreshold / max(u_keyLuma, 0.0001));
-  return max(distance(chroma(c), chroma(u_keyColor)), dY);
+// highlights with it however low the threshold went. Each axis is softened in
+// its own units and a pixel outside on either is kept: folding brightness onto
+// the chroma axis and softening once blew the brightness band up by
+// smoothing/threshold, so at a low threshold the key ignored brightness again.
+// Returns coverage, 1 = keep. Mirrored in keyCoverage() in source-edit.ts.
+float keyCoverage(vec3 c) {
+  float s = max(u_keySmooth, 0.0001);
+  float dC = distance(chroma(c), chroma(u_keyColor));
+  float dY = abs(luma(c) - luma(u_keyColor));
+  return max(
+    smoothstep(u_keyThreshold, u_keyThreshold + s, dC),
+    smoothstep(u_keyLuma, u_keyLuma + s, dY));
 }
 
 /** Crop, erase and key in one go. Returns the media with its coverage in .a. */
@@ -204,10 +210,7 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
     }
     c.a *= mix(1.0, cover, inside);
   }
-  if (u_keyThreshold > 0.0) {
-    float d = keyDistance(c.rgb);
-    c.a *= smoothstep(u_keyThreshold, u_keyThreshold + max(u_keySmooth, 0.0001), d);
-  }
+  if (u_keyThreshold > 0.0) c.a *= keyCoverage(c.rgb);
   return c;
 }
 `;
