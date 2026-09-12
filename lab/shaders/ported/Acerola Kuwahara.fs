@@ -95,15 +95,15 @@ vec4 generalized(vec2 px) {
 			}
 		}
 	}
-	vec4 output = vec4(0.0);
+	vec4 result = vec4(0.0);
 	for (int k = 0; k < N; ++k) {
 		m[k].rgb /= m[k].w;
 		s[k] = abs(s[k] / m[k].w - m[k].rgb * m[k].rgb);
 		float sigma2 = s[k].r + s[k].g + s[k].b;
 		float w = 1.0 / (1.0 + pow(abs(1000.0 * sigma2), 0.5 * sharpness));
-		output += vec4(m[k].rgb * w, w);
+		result += vec4(m[k].rgb * w, w);
 	}
-	return output / output.w;
+	return result / result.w;
 }
 
 // --- Anisotropic -----------------------------------------------------------
@@ -158,15 +158,15 @@ vec4 anisotropic(vec2 px) {
 			}
 		}
 	}
-	vec4 output = vec4(0.0);
+	vec4 result = vec4(0.0);
 	for (int k = 0; k < N; ++k) {
 		m[k].rgb /= m[k].w;
 		s[k] = abs(s[k] / m[k].w - m[k].rgb * m[k].rgb);
 		float sigma2 = s[k].r + s[k].g + s[k].b;
 		float w = 1.0 / (1.0 + pow(abs(1000.0 * sigma2), 0.5 * sharpness));
-		output += vec4(m[k].rgb * w, w);
+		result += vec4(m[k].rgb * w, w);
 	}
-	return output / output.w;
+	return result / result.w;
 }
 
 void main() {

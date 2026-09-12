@@ -6,7 +6,7 @@
 	"CATEGORIES": ["Stylize", "Blur", "Kino"],
 	"INPUTS": [
 		{ "NAME": "inputImage", "TYPE": "image" },
-		{ "NAME": "threshold", "TYPE": "float", "MIN": 0.0, "MAX": 5.0, "DEFAULT": 1.0 },
+		{ "NAME": "threshold", "TYPE": "float", "MIN": 0.0, "MAX": 5.0, "DEFAULT": 0.6 },
 		{ "NAME": "stretch", "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.75 },
 		{ "NAME": "intensity", "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.3 },
 		{ "NAME": "tint", "TYPE": "color", "DEFAULT": [0.55, 0.55, 1.0, 1.0] }

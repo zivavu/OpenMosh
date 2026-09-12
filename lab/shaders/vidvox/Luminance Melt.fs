@@ -153,8 +153,7 @@ float luminance(vec4 color){
   return color.r*0.299+color.g*0.587+color.b*0.114;
 }
 
-vec2 center = vec2(1.0, direction);
-
+#define center (vec2(1.0, direction))
 vec4 transition(vec2 uv) {
   vec2 p = uv.xy / vec2(1.0).xy;
   if (progress == 0.0) {

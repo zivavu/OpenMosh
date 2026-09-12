@@ -51,24 +51,21 @@
 
 
 const float MaxPointCount = 5.0;
-float divisions = 1.0 / sizeSpread;
-
-
-
+#define divisions (1.0 / sizeSpread)
 float rand(vec2 co){
     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
 }
 
-float sign(vec2 p1, vec2 p2, vec2 p3)	{
+float sign3(vec2 p1, vec2 p2, vec2 p3)	{
 	return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 }
 
 bool PointInTriangle(vec2 pt, vec2 v1, vec2 v2, vec2 v3)	{
 	bool b1, b2, b3;
 
-	b1 = sign(pt, v1, v2) < 0.0;
-	b2 = sign(pt, v2, v3) < 0.0;
-	b3 = sign(pt, v3, v1) < 0.0;
+	b1 = sign3(pt, v1, v2) < 0.0;
+	b2 = sign3(pt, v2, v3) < 0.0;
+	b3 = sign3(pt, v3, v1) < 0.0;
 
 	return ((b1 == b2) && (b2 == b3));
 }

@@ -75,17 +75,15 @@ in vec2 texCoord;
 
 const float MIN_AMOUNT = -0.16;
 const float MAX_AMOUNT = 1.5;
-float amount = progress * (MAX_AMOUNT - MIN_AMOUNT) + MIN_AMOUNT;
-
+#define amount (progress * (MAX_AMOUNT - MIN_AMOUNT) + MIN_AMOUNT)
 const float PI = 3.141592653589793;
 
 const float scale = 512.0;
 const float sharpness = 3.0;
 
-float cylinderCenter = amount;
+#define cylinderCenter (amount)
 // 360 degrees * amount
-float cylinderAngle = 2.0 * PI * amount;
-
+#define cylinderAngle (2.0 * PI * amount)
 const float cylinderRadius = 1.0 / PI / 2.0;
 
 vec3 hitPoint(float hitAngle, float yc, vec3 point, mat3 rrotation)

@@ -219,22 +219,22 @@ void main() {
 			D = (1.0 + p) * (col.r * 100.0) - p * (col.g * 100.0);
 		}
 		D = max(0.0, D);
-		vec4 output = vec4(D);
-		if (thresholding == 0) output /= 100.0;
-		if (thresholding == 1) output = vec4((D >= threshold) ? 1.0 : 1.0 + tanh(phi * (D - threshold)));
+		vec4 result = vec4(D);
+		if (thresholding == 0) result /= 100.0;
+		if (thresholding == 1) result = vec4((D >= threshold) ? 1.0 : 1.0 + tanh(phi * (D - threshold)));
 		if (thresholding == 2) {
 			float a = 1.0 / float(thresholds);
 			float b = threshold / 100.0;
 			float x = D / 100.0;
-			output = vec4((x >= b) ? 1.0 : a * floor((pow(abs(x), phi) - (a * b / 2.0)) / (a * b) + 0.5));
+			result = vec4((x >= b) ? 1.0 : a * floor((pow(abs(x), phi) - (a * b / 2.0)) / (a * b) + 0.5));
 		}
 		if (thresholding == 3) {
 			float x = D / 100.0;
 			float qn = floor(x * float(thresholds) + 0.5) / float(thresholds);
 			float qs = smoothstep(-2.0, 2.0, phi * (x - qn) * 10.0) - 0.5;
-			output = vec4(qn + qs / float(thresholds));
+			result = vec4(qn + qs / float(thresholds));
 		}
-		gl_FragColor = saturate(output);
+		gl_FragColor = saturate(result);
 	} else if (PASSINDEX == 6) {
 		if (smoothEdges) {
 			float kernelSize = sigmaA * 2.0;
@@ -268,13 +268,13 @@ void main() {
 	} else {
 		vec4 col = IMG_NORM_PIXEL(inputImage, uv);
 		float D = IMG_NORM_PIXEL(dogAA, uv).r * termStrength;
-		vec3 output;
-		if (blendMode == 0) output = mix(minColor.rgb, maxColor.rgb, D);
-		else if (blendMode == 1) output = mix(minColor.rgb, col.rgb, D);
+		vec3 result;
+		if (blendMode == 0) result = mix(minColor.rgb, maxColor.rgb, D);
+		else if (blendMode == 1) result = mix(minColor.rgb, col.rgb, D);
 		else {
-			if (D < 0.5) output = mix(minColor.rgb, col.rgb, D * 2.0);
-			else output = mix(col.rgb, maxColor.rgb, (D - 0.5) * 2.0);
+			if (D < 0.5) result = mix(minColor.rgb, col.rgb, D * 2.0);
+			else result = mix(col.rgb, maxColor.rgb, (D - 0.5) * 2.0);
 		}
-		gl_FragColor = vec4(saturate(mix(col.rgb, output, blendStrength)), 1.0);
+		gl_FragColor = vec4(saturate(mix(col.rgb, result, blendStrength)), 1.0);
 	}
 }

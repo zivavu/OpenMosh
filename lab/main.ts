@@ -70,7 +70,7 @@ const saveNotes = () => localStorage.setItem("lab-notes", JSON.stringify(notes))
 // --- GL setup --------------------------------------------------------------------
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
-const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: false, antialias: false, premultipliedAlpha: false })!;
+const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false })!;
 if (!gl) throw new Error("WebGL2 required");
 
 function makeTexture(): WebGLTexture {
@@ -239,6 +239,72 @@ function select(entry: Entry) {
 	renderList();
 	location.hash = encodeURIComponent(entry.name);
 	listEl.querySelector(".item.active")?.scrollIntoView({ block: "nearest" });
+	scheduleNoopCheck();
+}
+
+// Many library shaders ship with amount/progress at 0 and look like a no-op.
+// After a few frames, compare against the source; if nothing changed, push
+// sliders sitting at their minimum to mid-range and say so.
+let noopTimer = 0;
+const scratch = { fbo: gl.createFramebuffer()!, tex: makeTexture(), w: 0, h: 0 };
+function scheduleNoopCheck() {
+	clearTimeout(noopTimer);
+	noopTimer = window.setTimeout(checkNoop, 700);
+}
+function readCanvas(): Uint8Array {
+	const px = new Uint8Array(canvas.width * canvas.height * 4);
+	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+	return px;
+}
+function checkNoop() {
+	const cur = current;
+	const a = mediaA.binding;
+	if (!cur?.effect || !a || bypass) return;
+	const out = readCanvas();
+	const { w, h } = { w: canvas.width, h: canvas.height };
+	if (scratch.w !== w || scratch.h !== h) {
+		gl.bindTexture(gl.TEXTURE_2D, scratch.tex);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.fbo);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scratch.tex, 0);
+		scratch.w = w;
+		scratch.h = h;
+	}
+	passthrough.render({}, { inputImage: a }, performance.now() / 1000, scratch.fbo, w, h);
+	const src = new Uint8Array(w * h * 4);
+	gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.fbo);
+	gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, src);
+	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	let diff = 0;
+	let n = 0;
+	for (let i = 0; i < out.length; i += 16) {
+		diff += Math.abs(out[i] - src[i]) + Math.abs(out[i + 1] - src[i + 1]) + Math.abs(out[i + 2] - src[i + 2]);
+		n += 3;
+	}
+	if (diff / n > 0.5) return;
+	const bumped: string[] = [];
+	for (const input of cur.entry.header.INPUTS ?? []) {
+		if (input.TYPE === "event") {
+			cur.events.add(input.NAME);
+			continue;
+		}
+		if (input.TYPE !== "float") continue;
+		const min = typeof input.MIN === "number" ? input.MIN : 0;
+		const max = typeof input.MAX === "number" ? input.MAX : 1;
+		const v = cur.params[input.NAME] as number;
+		// Zero at the bottom of the range, or the neutral point of a bipolar one.
+		if (v <= min || (min < 0 && max > 0 && v === 0)) {
+			cur.params[input.NAME] = min + (max - min) * (min < 0 ? 0.7 : 0.5);
+			bumped.push(input.LABEL ?? input.NAME);
+		}
+	}
+	if (bumped.length) {
+		renderParams();
+		showError(`Defaults were a no-op on this footage — bumped to 50%: ${bumped.join(", ")}. Reset restores the originals.`);
+	} else {
+		showError("No visible change at these settings (needs motion, a second image, or specific colors).");
+	}
 }
 
 // --- List ------------------------------------------------------------------------
@@ -646,6 +712,17 @@ window.addEventListener("keyup", (e) => {
 });
 
 // --- Boot --------------------------------------------------------------------------------------
+
+// Debug hook for the Playwright harness.
+(window as unknown as { __lab: unknown }).__lab = {
+	entries,
+	select,
+	get current() { return current; },
+	setBypass,
+	gl,
+	canvas,
+	mediaA,
+};
 
 fitCanvas();
 renderList();

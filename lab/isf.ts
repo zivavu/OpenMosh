@@ -166,7 +166,7 @@ function uniformDecl(input: IsfInput): string {
 		case "point2D":
 			return `uniform vec2 ${input.NAME};`;
 		case "image":
-			return `uniform sampler2D ${input.NAME};\nuniform vec2 _${input.NAME}_imgSize;`;
+			return `uniform sampler2D ${input.NAME};\nuniform vec2 _${input.NAME}_imgSize;\nuniform vec4 _${input.NAME}_imgRect;`;
 		default:
 			return "";
 	}
@@ -187,7 +187,7 @@ function commonPrelude(header: IsfHeader, targets: string[]): string {
 	];
 	for (const input of header.INPUTS ?? []) lines.push(uniformDecl(input));
 	for (const t of targets)
-		lines.push(`uniform sampler2D ${t};`, `uniform vec2 _${t}_imgSize;`);
+		lines.push(`uniform sampler2D ${t};`, `uniform vec2 _${t}_imgSize;`, `uniform vec4 _${t}_imgRect;`);
 	return lines.join("\n");
 }
 
@@ -202,6 +202,7 @@ export function buildFragmentSource(
 		"in vec2 isf_FragNormCoord;",
 		"out vec4 isf_FragColor;",
 		"#define gl_FragColor isf_FragColor",
+		"#define vv_FragNormCoord isf_FragNormCoord",
 		"#define varying in",
 		"#line 1",
 		expandImgMacros(body),
@@ -373,6 +374,8 @@ export class IsfEffect {
 	private ensureTarget(t: Target, w: number, h: number) {
 		if (t.width === w && t.height === h) return;
 		const gl = this.gl;
+		// Scratch unit, so (re)allocating never clobbers a sampler binding.
+		gl.activeTexture(gl.TEXTURE15);
 		t.width = w;
 		t.height = h;
 		for (const tex of [t.read, t.write]) {
@@ -391,6 +394,7 @@ export class IsfEffect {
 			gl.clearColor(0, 0, 0, 0);
 			gl.clear(gl.COLOR_BUFFER_BIT);
 		}
+		gl.bindTexture(gl.TEXTURE_2D, null);
 	}
 
 	private setParam(name: string, input: IsfInput, value: ParamValue) {
@@ -483,11 +487,13 @@ export class IsfEffect {
 		const bindTex = (name: string, tex: WebGLTexture, w: number, h: number) => {
 			const l = u(name);
 			const sl = u(`_${name}_imgSize`);
-			if (!l && !sl) return;
+			const rl = u(`_${name}_imgRect`);
+			if (!l && !sl && !rl) return;
 			gl.activeTexture(gl.TEXTURE0 + unit);
 			gl.bindTexture(gl.TEXTURE_2D, tex);
 			if (l) gl.uniform1i(l, unit);
 			if (sl) gl.uniform2f(sl, w, h);
+			if (rl) gl.uniform4f(rl, 0, 0, w, h);
 			unit++;
 		};
 		for (const input of this.header.INPUTS ?? []) {

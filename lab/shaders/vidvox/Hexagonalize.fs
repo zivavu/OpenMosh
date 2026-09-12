@@ -50,7 +50,7 @@ vec4 getToColor(vec2 inUV)	{
 
 
 
-float ratio = RENDERSIZE.x/RENDERSIZE.y;
+#define ratio (RENDERSIZE.x/RENDERSIZE.y)
 // Author: Fernando Kuteken
 // License: MIT
 // Hexagonal math from: http://www.redblobgames.com/grids/hexagons/
@@ -114,7 +114,7 @@ vec2 pointFromHexagon(Hexagon hex, float size) {
 vec4 transition (vec2 uv) {
   
   float dist = 2.0 * min(progress, 1.0 - progress);
-  dist = steps > 0 ? ceil(dist * float(steps)) / float(steps) : dist;
+  dist = steps > 0.0 ? ceil(dist * steps) / steps : dist;
   
   float size = (sqrt(3.0) / 3.0) * dist / horizontalHexagons;
   

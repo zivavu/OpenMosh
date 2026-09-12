@@ -66,8 +66,7 @@ vec4 getToColor(vec2 inUV)	{
 
 // The code proper --------
 
-float ratio = RENDERSIZE.x/RENDERSIZE.y;
-
+#define ratio (RENDERSIZE.x/RENDERSIZE.y)
 vec4 transition(vec2 uv) {
   // Massage parameters
   float phase = progress < 0.5 ? progress * 2.0 : (progress - 0.5) * 2.0;

@@ -23,15 +23,15 @@ void main() {
 	crtUV = crtUV + crtUV * offset * offset;
 	crtUV = crtUV * 0.5 + 0.5;
 	vec4 col = IMG_NORM_PIXEL(inputImage, crtUV);
-	vec3 output = saturate(col.rgb);
-	if (crtUV.x <= 0.0 || 1.0 <= crtUV.x || crtUV.y <= 0.0 || 1.0 <= crtUV.y) output = vec3(0.0);
+	vec3 result = saturate(col.rgb);
+	if (crtUV.x <= 0.0 || 1.0 <= crtUV.x || crtUV.y <= 0.0 || 1.0 <= crtUV.y) result = vec3(0.0);
 	crtUV = crtUV * 2.0 - 1.0;
 	vec2 vignette = vignetteWidth / RENDERSIZE;
 	vignette = smoothstep(vec2(0.0), vignette, 1.0 - abs(crtUV));
 	vignette = saturate(vignette);
 	float lines = RENDERSIZE.y / exp2(float(lineSize));
-	output.g *= (sin(uv.y * lines * 2.0) + 1.0) * 0.15 * lineStrength + 1.0 + brightnessAdjust;
-	output.rb *= (cos(uv.y * lines * 2.0) + 1.0) * 0.135 * lineStrength + 1.0 + brightnessAdjust;
-	output = saturate(output) * vignette.x * vignette.y;
-	gl_FragColor = vec4(output, col.a);
+	result.g *= (sin(uv.y * lines * 2.0) + 1.0) * 0.15 * lineStrength + 1.0 + brightnessAdjust;
+	result.rb *= (cos(uv.y * lines * 2.0) + 1.0) * 0.135 * lineStrength + 1.0 + brightnessAdjust;
+	result = saturate(result) * vignette.x * vignette.y;
+	gl_FragColor = vec4(result, col.a);
 }

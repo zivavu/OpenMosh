@@ -90,16 +90,16 @@ void main() {
 	else if (mode == 1) noise = getBayer4(x, y);
 	else if (mode == 2) noise = getBayer8(x, y);
 	else noise = ign(vec2(x, y) + (animateNoise ? floor(TIME * 60.0 * animationSpeed) * vec2(5.588238, 3.2) : vec2(0.0)));
-	vec4 output = saturate(col) + spread * noise;
+	vec4 result = saturate(col) + spread * noise;
 	if (colorSpace == 1) {
-		output.rgb = rgb2hsl(output.rgb - spread * noise) + spread * noise;
+		result.rgb = rgb2hsl(result.rgb - spread * noise) + spread * noise;
 	}
-	output.r = floor((float(redColorCount) - 1.0) * output.r + 0.5) / (float(redColorCount) - 1.0);
-	output.g = floor((float(greenColorCount) - 1.0) * output.g + 0.5) / (float(greenColorCount) - 1.0);
-	output.b = floor((float(blueColorCount) - 1.0) * output.b + 0.5) / (float(blueColorCount) - 1.0);
+	result.r = floor((float(redColorCount) - 1.0) * result.r + 0.5) / (float(redColorCount) - 1.0);
+	result.g = floor((float(greenColorCount) - 1.0) * result.g + 0.5) / (float(greenColorCount) - 1.0);
+	result.b = floor((float(blueColorCount) - 1.0) * result.b + 0.5) / (float(blueColorCount) - 1.0);
 	if (colorSpace == 1) {
-		output.gb = saturate(output.gb);
-		output.rgb = hsl2rgb(output.rgb);
+		result.gb = saturate(result.gb);
+		result.rgb = hsl2rgb(result.rgb);
 	}
-	gl_FragColor = vec4(saturate(output.rgb), 1.0);
+	gl_FragColor = vec4(saturate(result.rgb), 1.0);
 }

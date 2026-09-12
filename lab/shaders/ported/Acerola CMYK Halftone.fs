@@ -63,10 +63,10 @@ void main() {
 		float m = IMG_NORM_PIXEL(inks, uv + magentaOffset * texel).g;
 		float y = IMG_NORM_PIXEL(inks, uv + yellowOffset * texel).b;
 		float k = IMG_NORM_PIXEL(inks, uv + blackOffset * texel).a;
-		vec3 output = vec3(1.0);
-		output.r -= c * float(printCyan);
-		output.g -= m * float(printMagenta);
-		output.b -= y * float(printYellow);
-		gl_FragColor = vec4(saturate(output - k * float(printBlack)), 1.0);
+		vec3 result = vec3(1.0);
+		result.r -= c * float(printCyan);
+		result.g -= m * float(printMagenta);
+		result.b -= y * float(printYellow);
+		gl_FragColor = vec4(saturate(result - k * float(printBlack)), 1.0);
 	}
 }
