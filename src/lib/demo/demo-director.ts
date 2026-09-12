@@ -65,6 +65,7 @@ const TRANSITION_POOL = [
 	"shatter",
 	"burn",
 	"crosswarp",
+	"crosszoom",
 	"cube",
 ];
 

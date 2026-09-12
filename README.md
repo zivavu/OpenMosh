@@ -40,7 +40,7 @@ Pick one of three modes on the upload screen.
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 
-There are 68 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Segments in the editor blend into each other through seven transitions. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
+There are 68 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Segments in the editor blend into each other through eight transitions. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
 
 Keyboard shortcuts live behind the shortcuts button in the app.
 
@@ -76,7 +76,7 @@ Your media never leaves the machine. There is no backend, no account and no uplo
 
 ## Status
 
-Version 0.7.3. Single and slideshow modes are settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
+Version 0.7.4. Single and slideshow modes are settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
 
 MP4 and GIF export were both removed on purpose and aren't coming back.
 
@@ -96,7 +96,7 @@ Issues and pull requests are welcome. The conventions worth knowing up front:
 
 ## Credits
 
-[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp and cube transitions come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, [essentia.js](https://mtg.github.io/essentia.js/) the BPM detection, and [lucide](https://lucide.dev/) the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
+[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp, cross zoom and cube transitions come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, [essentia.js](https://mtg.github.io/essentia.js/) the BPM detection, and [lucide](https://lucide.dev/) the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
 
 ---
 

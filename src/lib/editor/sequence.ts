@@ -20,6 +20,7 @@ export type TransitionType =
 	| "shatter"
 	| "burn"
 	| "crosswarp"
+	| "crosszoom"
 	| "cube";
 
 export interface SegmentTransition {
@@ -49,6 +50,7 @@ export const TRANSITION_OPTIONS: {
 	{ value: "shatter", label: "shatter", hasDensity: true, hasSeed: true },
 	{ value: "burn", label: "burn", hasSeed: true },
 	{ value: "crosswarp", label: "crosswarp", hasDirection: true },
+	{ value: "crosszoom", label: "cross zoom" },
 	{ value: "cube", label: "cube", hasDirection: true },
 ];
 

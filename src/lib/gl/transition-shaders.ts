@@ -239,6 +239,48 @@ const CROSSWARP_FRAG = frag(
 	ORIENT_GLSL,
 );
 
+/** rectalogic's cross zoom: both frames zoom-blur towards a centre that drifts
+ * across the frame while dissolving into each other — the camera breathing
+ * between two shots. Deliberately directionless: the blur is radially symmetric
+ * about the frame centre and the drift is symmetric about it too, so a direction
+ * transform would cancel out and change nothing. The lab's 40-tap loop is
+ * trimmed to 24; the dithered tap offsets hide the difference, and transitions
+ * render on phones too. */
+const CROSSZOOM_HELPERS = `/** The original's exponential in-out dissolve: reluctant off both ends. */
+float dissolveCurve(float p) {
+  if (p <= 0.0) return 0.0;
+  if (p >= 1.0) return 1.0;
+  p *= 2.0;
+  return p < 1.0
+    ? 0.5 * pow(2.0, 10.0 * (p - 1.0))
+    : 1.0 - 0.5 * pow(2.0, -10.0 * (p - 1.0));
+}
+`;
+
+const CROSSZOOM_FRAG = frag(
+	`  // The zoom centre drifts across the middle half of the frame, so the pull
+  // travels instead of pulsing in place.
+  vec2 center = vec2(0.25 + u_progress * 0.5, 0.5);
+  float dissolve = dissolveCurve(u_progress);
+  // Mirrored sinusoidal loop: the blur breathes in and back out, peaking at
+  // the lab's 0.4 strength halfway through.
+  float str = (1.0 - cos(u_progress * 6.2831853)) * 0.2;
+  vec2 toCenter = center - v_uv;
+  // Dithered taps hide the banding a short zoom-blur loop would show.
+  float offset = hash12(v_uv * u_resolution);
+  vec3 col = vec3(0.0);
+  float total = 0.0;
+  for (int i = 0; i < 24; i++) {
+    float percent = (float(i) + offset) / 24.0;
+    float weight = 4.0 * (percent - percent * percent);
+    vec2 uv = v_uv + toCenter * percent * str;
+    col += mix(texture(u_texture, uv), texture(u_texture2, uv), dissolve).rgb * weight;
+    total += weight;
+  }
+  outColor = vec4(col / total, 1.0);`,
+	CROSSZOOM_HELPERS,
+);
+
 /** gre's cube: the two frames are faces of a box turning past the camera,
  * pulled back a little mid-turn and reflected off the floor beneath. */
 const CUBE_HELPERS = `${ORIENT_GLSL}
@@ -298,5 +340,6 @@ export const TRANSITION_SHADERS: Record<string, TransitionShaderDef> = {
 	shatter: { fragment: SHATTER_FRAG },
 	burn: { fragment: BURN_FRAG },
 	crosswarp: { fragment: CROSSWARP_FRAG },
+	crosszoom: { fragment: CROSSZOOM_FRAG },
 	cube: { fragment: CUBE_FRAG },
 };
