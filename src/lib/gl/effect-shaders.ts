@@ -3270,7 +3270,6 @@ void main() {
 			HASH_GLSL +
 			HSV_GLSL +
 			`uniform float u_level;
-uniform float u_rate;
 uniform float u_count;
 uniform int u_mode;
 uniform vec2 u_resolution;
@@ -3297,8 +3296,9 @@ vec4 stylize(vec4 col, int style) {
 }
 void main() {
   vec4 col = texture(u_texture, v_uv);
-  if (u_rate > 0.0 && u_level > 0.0) {
-    float tick = floor(120.0 * u_time * u_rate);
+  if (u_level > 0.0) {
+    // One re-roll per unit of phase, so a beat division re-rolls on the beat.
+    float tick = floor(u_time);
     for (int i = 0; i < 10; i++) {
       if (float(i) >= u_count) break;
       vec4 rc = rand4((float(i) + tick) * vec4(0.2123, 0.34517, 0.53428, 0.7431));
@@ -3317,7 +3317,6 @@ void main() {
 		animated: true,
 		setUniforms: (gl, l, v) => {
 			setFloat(gl, l, "u_level", v.level as number);
-			setFloat(gl, l, "u_rate", v.rate as number);
 			setFloat(gl, l, "u_count", v.count as number);
 			setInt(
 				gl,

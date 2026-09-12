@@ -1,5 +1,59 @@
 import { FONT_OPTIONS } from "../text-overlay/fonts";
-import type { EffectDefinition } from "./types";
+import type { EffectDefinition, EffectParam } from "./types";
+
+/**
+ * A clock the renderer can run free or off the song grid: the "speed" key is
+ * what makes it accumulate phase, and "sync"/"division" are what it reads to
+ * lock that phase to beats instead. One unit of phase is one cycle of
+ * whatever the effect does, so a division is literally cycles per beat.
+ */
+function clockParams(
+	label: string,
+	speed: {
+		min: number;
+		max: number;
+		step: number;
+		defaultValue: number;
+		moshMax?: number;
+	},
+	unit = "cycle",
+): EffectParam[] {
+	return [
+		{
+			key: "sync",
+			label: "Sync",
+			type: "select",
+			defaultValue: "free",
+			options: [
+				{ label: "Free", value: "free" },
+				{ label: "Beat", value: "beat" },
+			],
+		},
+		{
+			key: "speed",
+			label,
+			type: "range",
+			...speed,
+			visibleWhen: (v) => v.sync !== "beat",
+		},
+		{
+			key: "division",
+			label: "Division",
+			type: "select",
+			defaultValue: "1",
+			options: [
+				{ label: `1 ${unit} / 4 beats`, value: "0.25" },
+				{ label: `1 ${unit} / 2 beats`, value: "0.5" },
+				{ label: `1 ${unit} / beat`, value: "1" },
+				{ label: `2 ${unit}s / beat`, value: "2" },
+				{ label: `3 ${unit}s / beat`, value: "3" },
+				{ label: `4 ${unit}s / beat`, value: "4" },
+				{ label: `8 ${unit}s / beat`, value: "8" },
+			],
+			visibleWhen: (v) => v.sync === "beat",
+		},
+	];
+}
 
 export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
@@ -1872,16 +1926,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.05,
 				defaultValue: 3,
 			},
-			{
-				key: "speed",
-				label: "Speed",
-				type: "range",
-				min: 0,
-				max: 10,
-				step: 0.1,
-				defaultValue: 1,
-				moshMax: 4,
-			},
+			...clockParams(
+				"Speed",
+				{ min: 0, max: 10, step: 0.1, defaultValue: 1, moshMax: 4 },
+				"burst",
+			),
 		],
 	},
 	{
@@ -1907,15 +1956,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0.5,
 			},
-			{
-				key: "speed",
-				label: "Speed",
-				type: "range",
-				min: 0,
-				max: 5,
-				step: 0.05,
-				defaultValue: 1,
-			},
+			...clockParams(
+				"Speed",
+				{ min: 0, max: 5, step: 0.05, defaultValue: 1 },
+				"roll",
+			),
 		],
 	},
 	{
@@ -1995,16 +2040,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		id: "rgb-strobe",
 		name: "RGB Strobe",
 		params: [
-			{
-				// Keyed "speed" so the renderer accumulates phase: flashes per second.
-				key: "speed",
-				label: "Rate",
-				type: "range",
-				min: 0.2,
-				max: 20,
-				step: 0.1,
-				defaultValue: 4,
-			},
+			...clockParams(
+				"Rate",
+				{ min: 0.2, max: 20, step: 0.1, defaultValue: 4 },
+				"flash",
+			),
 			{
 				key: "stagger",
 				label: "Stagger",
@@ -2192,16 +2232,13 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0,
 			},
-			{
-				key: "speed",
-				label: "Speed",
-				type: "range",
+			...clockParams("Speed", {
 				min: 0,
 				max: 3,
 				step: 0.05,
 				defaultValue: 0.3,
 				moshMax: 1,
-			},
+			}),
 			{
 				key: "mode",
 				label: "Mode",
@@ -2254,17 +2291,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		id: "shockwave",
 		name: "Shockwave",
 		params: [
-			{
-				// Keyed "speed" so the renderer accumulates phase: pulses per second.
-				key: "speed",
-				label: "Rate",
-				type: "range",
-				min: 0.1,
-				max: 4,
-				step: 0.05,
-				defaultValue: 0.5,
-				moshMax: 2,
-			},
+			...clockParams(
+				"Rate",
+				{ min: 0.1, max: 4, step: 0.05, defaultValue: 0.5, moshMax: 2 },
+				"pulse",
+			),
 			{
 				key: "magnitude",
 				label: "Magnitude",
@@ -2460,16 +2491,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0.3,
 			},
-			{
-				// Keyed "speed" so the renderer accumulates phase: rolls per second.
-				key: "speed",
-				label: "Rate",
-				type: "range",
-				min: 1,
-				max: 60,
-				step: 1,
-				defaultValue: 20,
-			},
+			...clockParams(
+				"Rate",
+				{ min: 1, max: 60, step: 1, defaultValue: 20 },
+				"roll",
+			),
 			{
 				key: "levelX",
 				label: "Level X",
@@ -2545,15 +2571,11 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 0.01,
 				defaultValue: 0.5,
 			},
-			{
-				key: "rate",
-				label: "Glitch Rate",
-				type: "range",
-				min: 0,
-				max: 1,
-				step: 0.01,
-				defaultValue: 0.25,
-			},
+			...clockParams(
+				"Glitch Rate",
+				{ min: 1, max: 120, step: 1, defaultValue: 30 },
+				"roll",
+			),
 			{
 				key: "count",
 				label: "Count",
