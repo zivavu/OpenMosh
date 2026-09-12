@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>OpenMosh — Shader Lab</title>
+		<style>
+			:root {
+				--bg: #0e0f11;
+				--panel: #16181c;
+				--line: #262a31;
+				--text: #d7dae0;
+				--dim: #7d8490;
+				--accent: #ffb454;
+				--bad: #ff5c5c;
+				--good: #6fdc8c;
+				font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+				font-size: 13px;
+			}
+			* { box-sizing: border-box; }
+			html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+			body { display: grid; grid-template-columns: 300px 1fr 340px; grid-template-rows: 100%; height: 100vh; overflow: hidden; }
+			aside, section { min-height: 0; }
+			.panel { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+			.panel.right { border-right: 0; border-left: 1px solid var(--line); }
+			.panel header { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; }
+			.panel header input[type="search"] { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; font: inherit; }
+			#list { overflow-y: auto; flex: 1; padding: 6px 0 20px; }
+			#list h4 { margin: 12px 12px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); font-weight: 600; }
+			#list .item { display: flex; align-items: center; gap: 6px; padding: 4px 12px; cursor: pointer; user-select: none; }
+			#list .item:hover { background: #1d2026; }
+			#list .item.active { background: #23272f; color: #fff; }
+			#list .item.bad .name { color: var(--bad); }
+			#list .item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+			#list .item .star { color: var(--dim); font-size: 14px; width: 16px; text-align: center; }
+			#list .item.fav .star { color: var(--accent); }
+			#list .item .cats { color: var(--dim); font-size: 10px; }
+			main { display: flex; flex-direction: column; min-width: 0; }
+			#stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; position: relative; min-height: 0; }
+			#stage canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+			#drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--dim); text-align: center; pointer-events: none; padding: 40px; }
+			#drop.hidden { display: none; }
+			#drop b { color: var(--text); }
+			#stage.dragover { outline: 2px dashed var(--accent); outline-offset: -8px; }
+			#toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--panel); }
+			#toolbar input[type="range"] { flex: 1; min-width: 120px; }
+			button, select { background: #1f232a; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 9px; font: inherit; cursor: pointer; }
+			button:hover { border-color: #3a404b; }
+			button.on { border-color: var(--accent); color: var(--accent); }
+			#fps { color: var(--dim); font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
+			#params { overflow-y: auto; flex: 1; padding: 10px 12px 24px; }
+			.ctl { margin-bottom: 9px; }
+			.ctl label { display: flex; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
+			.ctl label .val { color: var(--text); font-variant-numeric: tabular-nums; }
+			.ctl input[type="range"] { width: 100%; }
+			.ctl.row { display: flex; align-items: center; gap: 8px; }
+			.ctl.row label { margin: 0; flex: 1; }
+			.ctl select { width: 100%; }
+			.ctl input[type="color"] { width: 40px; height: 24px; padding: 0; border: 1px solid var(--line); background: none; }
+			.info { border-top: 1px solid var(--line); padding: 10px 12px; color: var(--dim); font-size: 12px; line-height: 1.45; }
+			.info b { color: var(--text); }
+			.info a { color: var(--accent); text-decoration: none; }
+			.info .desc { color: var(--text); margin: 4px 0 6px; }
+			#error { white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--bad); padding: 8px 12px; border-top: 1px solid var(--line); max-height: 200px; overflow: auto; display: none; }
+			#error.show { display: block; }
+			textarea { width: 100%; min-height: 56px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 6px; font: inherit; resize: vertical; }
+			.actions { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--line); }
+			kbd { background: #23272f; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 10px; }
+			.hint { padding: 6px 12px; color: var(--dim); font-size: 11px; border-top: 1px solid var(--line); }
+		</style>
+	</head>
+	<body>
+		<aside class="panel">
+			<header>
+				<input id="search" type="search" placeholder="Search shaders…" />
+				<button id="favOnly" title="Show favorites only">★</button>
+			</header>
+			<div id="list"></div>
+			<div class="hint">
+				<kbd>↑</kbd><kbd>↓</kbd> shader · <kbd>Space</kbd> play · <kbd>F</kbd> star · hold <kbd>B</kbd> bypass · <kbd>R</kbd> reset
+			</div>
+			<div class="actions">
+				<button id="compileAll" title="Compile every shader and flag failures">Compile all</button>
+				<button id="exportList" title="Copy favorites + notes as markdown">Copy shortlist</button>
+			</div>
+		</aside>
+		<main>
+			<div id="stage">
+				<canvas id="gl"></canvas>
+				<div id="drop">
+					<div>
+						<b>Drop a video or image here</b><br />
+						or use <b>Load media</b> below. Everything stays in the browser.
+					</div>
+				</div>
+			</div>
+			<div id="toolbar">
+				<button id="loadMedia">Load media</button>
+				<button id="loadB" title="Second image/video for shaders with a second image input (transitions, displacement maps, light leaks)">Load B</button>
+				<button id="webcam">Webcam</button>
+				<button id="play">Play</button>
+				<input id="seek" type="range" min="0" max="1" step="0.001" value="0" />
+				<button id="mute" class="on">Muted</button>
+				<select id="scale" title="Render resolution">
+					<option value="1">100%</option>
+					<option value="0.5" selected>50%</option>
+					<option value="0.25">25%</option>
+				</select>
+				<button id="bypass" title="Hold to see the source">Bypass</button>
+				<span id="fps"></span>
+			</div>
+			<input id="file" type="file" accept="video/*,image/*" hidden />
+			<input id="fileB" type="file" accept="video/*,image/*" hidden />
+		</main>
+		<aside class="panel right">
+			<header>
+				<b id="title" style="flex:1">—</b>
+				<button id="reset" title="Defaults + restart buffers">Reset</button>
+				<button id="random" title="Randomize sliders">Rnd</button>
+			</header>
+			<div id="params"></div>
+			<div id="error"></div>
+			<div class="info" id="info"></div>
+			<div class="info">
+				<label style="color:var(--dim);font-size:11px">Notes for this shader (saved locally)</label>
+				<textarea id="notes" placeholder="Fits? What would it need? Which params matter?"></textarea>
+			</div>
+		</aside>
+		<script type="module" src="./main.ts"></script>
+	</body>
+</html>
