@@ -29,8 +29,8 @@
 		<div class="view-group">
 			<ButtonGroup
 				buttons={[
-					{ label: "Grid", value: "grid" },
 					{ label: "Preview", value: "preview" },
+					{ label: "Grid", value: "grid" },
 				]}
 				value={activeView}
 				onchange={onViewChange}

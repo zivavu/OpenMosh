@@ -145,6 +145,9 @@ export class MediaLayerDriver {
 			}
 			this.#samplers.set(id, { sampler, file });
 			this.#evict(key);
+			// A paused canvas only redraws when told to; without this the lane
+			// stays blank until playback's own loop asks again.
+			this.#onUpload?.();
 		});
 		return undefined;
 	}

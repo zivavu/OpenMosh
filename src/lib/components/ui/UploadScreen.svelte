@@ -66,10 +66,17 @@
 	// along with the background it belongs to.
 	let demoPlaying = $state(demoBackgroundEnabled());
 
+	// Editor and Slideshow are timeline work — lanes, clips, keyboard shortcuts
+	// and a screen wide enough to scrub — so on a touch device only Single is
+	// offered. Same check the editors themselves use for their own mobile layout.
+	const isMobile = window.matchMedia("(pointer: coarse)").matches;
+
 	// Opens on whichever mode was last launched: coming back for a second pass at
-	// the same kind of edit is the common case.
+	// the same kind of edit is the common case. Mobile always opens on Single
+	// without writing that back, so a desktop's remembered mode survives a
+	// phone visit.
 	let selectedMode: UploadMode = $state(
-		loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode,
+		isMobile ? "single" : (loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode),
 	);
 
 	function setMode(mode: UploadMode) {
@@ -217,7 +224,9 @@
 		if (!file) return;
 		if (all.length > 1 && isAcceptedFile(file)) {
 			showToast(
-				`Loaded "${file.name}" only. Switch to Sequence or Slideshow mode to use all ${all.length}`,
+				isMobile
+					? `Loaded "${file.name}" only. Editor and Slideshow, which take a set, need a desktop browser`
+					: `Loaded "${file.name}" only. Switch to Sequence or Slideshow mode to use all ${all.length}`,
 				"info",
 				6000,
 			);
@@ -327,19 +336,24 @@
 		<p class="subtitle">Open-source image & video glitching in the browser.</p>
 	</div>
 
-	<div class="mode-toggle">
-		{#each [{ value: "single", label: "Single" }, { value: "sequence", label: "Editor" }, { value: "slideshow", label: "Slideshow" }] as const as m}
-			<button
-				class="mode-btn"
-				class:active={selectedMode === m.value}
-				onclick={() => setMode(m.value)}
-			>
-				{m.label}
-			</button>
-		{/each}
-	</div>
+	{#if !isMobile}
+		<div class="mode-toggle">
+			{#each [{ value: "single", label: "Single" }, { value: "sequence", label: "Editor" }, { value: "slideshow", label: "Slideshow" }] as const as m}
+				<button
+					class="mode-btn"
+					class:active={selectedMode === m.value}
+					onclick={() => setMode(m.value)}
+				>
+					{m.label}
+				</button>
+			{/each}
+		</div>
+	{/if}
 	<p class="mode-hint">
-		{#if selectedMode === "slideshow"}
+		{#if isMobile}
+			One image or video. The Editor and Slideshow modes are built for a
+			desktop browser, so they're not offered here.
+		{:else if selectedMode === "slideshow"}
 			A pile of media and a track. It finds the BPM and cuts on the beat.
 		{:else if selectedMode === "sequence"}
 			Your song on a timeline. Cut it into segments, then stack effect lanes and

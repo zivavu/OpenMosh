@@ -149,12 +149,21 @@ export class SequenceSourceRegistry {
 		this.loadingTotal += count;
 	}
 
-	#endLoad(done: number) {
-		this.loadingDone += done;
+	#endLoad() {
 		if (--this.#loads === 0) {
 			this.loadingTotal = 0;
 			this.loadingDone = 0;
 		}
+	}
+
+	/**
+	 * Ends a span whose files are being handed to another load. The reservation
+	 * goes with them: the load taking over reserves them itself, and leaving
+	 * this one's behind would count every file twice in the total.
+	 */
+	#handOffLoad(count: number) {
+		this.loadingTotal -= count;
+		this.#endLoad();
 	}
 
 	async add(
@@ -217,7 +226,7 @@ export class SequenceSourceRegistry {
 			// Released only after the appends, so a call waiting behind this one
 			// sees the sources in the pool rather than re-adding them.
 			for (const f of fresh) this.#pendingIds.delete(stableSourceId(f));
-			this.#endLoad(0);
+			this.#endLoad();
 		}
 
 		if (persist) {
@@ -334,14 +343,15 @@ export class SequenceSourceRegistry {
 		if (wanted.size === 0) return;
 		let stored: StoredSequenceMedia[];
 		// Reading a song's pool back out of storage is part of the wait the
-		// placeholder covers, so it counts alongside the add that follows it.
+		// placeholder covers, so it holds the counters open until the add below
+		// takes them over — the files themselves are only ever counted there.
 		this.#beginLoad(wanted.size);
 		try {
 			stored = await getAllSequenceMedia();
 		} catch {
 			return;
 		} finally {
-			this.#endLoad(wanted.size);
+			this.#handOffLoad(wanted.size);
 		}
 		const files = stored.filter((e) => wanted.has(e.id)).map(storedMediaToFile);
 		if (files.length > 0) await this.add(files, { persist: false });
@@ -380,8 +390,9 @@ export class SequenceSourceRegistry {
 	}
 
 	/**
-	 * Returns undefined while the sampler is still being created — the caller
-	 * holds the previous frame and retries next tick.
+	 * Returns undefined while the sampler is still being created — same
+	 * contract as `image`: the caller holds the previous frame and is called
+	 * back via `onReady`, which is the only tick a paused preview gets.
 	 */
 	sampler(id: string): SlideVideoSampler | undefined {
 		const existing = this.#samplers.get(id);
@@ -408,6 +419,7 @@ export class SequenceSourceRegistry {
 				return;
 			}
 			this.#samplers.set(id, sampler);
+			this.#onReady?.();
 		});
 		return undefined;
 	}

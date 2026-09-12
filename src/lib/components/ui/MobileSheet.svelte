@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { MediaQuery } from "svelte/reactivity";
 
 	interface Props {
 		children?: Snippet;
@@ -108,6 +109,11 @@
 	}
 
 	const hasTabs = $derived(!!(settings && effectsPanel));
+	/* The breakpoint the styles below fold the sidebar into a sheet at. Only
+	   the layout in use is rendered: mounting both put a second, undisplayed
+	   effect chain in the DOM — a whole panel's worth of work for nothing, and
+	   a duplicate for anything that looks the chain up. */
+	const narrow = new MediaQuery("max-width: 800px");
 </script>
 
 {#if panelOpen}
@@ -133,7 +139,7 @@
 		<div class="sheet-handle"></div>
 	</button>
 
-	{#if hasTabs}
+	{#if hasTabs && narrow.current}
 		<!-- Mobile tab bar (only rendered when both snippets provided) -->
 		<div class="tab-bar">
 			<button
@@ -156,6 +162,7 @@
 				{@render effectsPanel!()}
 			{/if}
 		</div>
+	{:else if hasTabs}
 		<!-- Desktop: render both stacked normally -->
 		<!-- The sidebar scrolls as one region. Its sections are a single column
 		     — the clip panel, the settings, the chain — and a section that

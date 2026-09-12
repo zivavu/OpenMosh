@@ -989,7 +989,11 @@
 	}
 
 	// ── Preview ──
-	let activeView: "grid" | "preview" = $state("grid");
+	// A reopened show is there to be watched, so it lands on the preview; a
+	// fresh pile of media starts on the grid, where what just landed is laid out.
+	let activeView: "grid" | "preview" = $state(
+		untrack(() => initialConfig) ? "preview" : "grid",
+	);
 	let previewPlaying = $state(false);
 	let previewRafId = $state<number | null>(null);
 	let previewEffects: EffectInstance[] = $state([]);

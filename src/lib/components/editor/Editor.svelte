@@ -1240,8 +1240,14 @@
 		if (playing) return;
 		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const bpm = sequenceBpm;
-		const text = $state.snapshot(textTimeline) as TextTimeline;
-		const media = $state.snapshot(mediaTimeline) as MediaTimeline;
+		const text = layersAsLoaded(
+			$state.snapshot(textTimeline) as TextTimeline,
+			"text",
+		);
+		const media = layersAsLoaded(
+			$state.snapshot(mediaTimeline) as MediaTimeline,
+			"media",
+		);
 		const fx = $state.snapshot(fxLanes) as FxLane[];
 		const sourceEdits = $state.snapshot(sourceRegistry.edits) as Record<
 			string,
@@ -1295,8 +1301,14 @@
 		void saveTimeline(key, {
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
-			text: $state.snapshot(textTimeline) as TextTimeline,
-			media: $state.snapshot(mediaTimeline) as MediaTimeline,
+			text: layersAsLoaded(
+				$state.snapshot(textTimeline) as TextTimeline,
+				"text",
+			),
+			media: layersAsLoaded(
+				$state.snapshot(mediaTimeline) as MediaTimeline,
+				"media",
+			),
 			fx: $state.snapshot(fxLanes) as FxLane[],
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
@@ -2943,11 +2955,37 @@
 	// Optional lanes of text clips over the master clock. Off until the user
 	// turns it on, so nothing about the existing editor changes for people who
 	// don't want text.
+
+	/**
+	 * Layer lanes are desktop work — the buttons that turn them on are not
+	 * offered on a phone, and neither is anything a lane draws or edits. What
+	 * a desktop built still comes back through here, only switched off: the
+	 * `enabled` flag is all the lanes key off. The flag as loaded is kept so
+	 * a save from the phone hands the lanes back exactly as they were, rather
+	 * than hidden the next time the desktop opens them.
+	 */
+	const loadedLayerFlags = { text: false, media: false };
+	function layersOffOnMobile<T extends { enabled: boolean }>(
+		timeline: T,
+		kind: keyof typeof loadedLayerFlags,
+	): T {
+		if (!isMobile) return timeline;
+		loadedLayerFlags[kind] = timeline.enabled;
+		return { ...timeline, enabled: false };
+	}
+	function layersAsLoaded<T extends { enabled: boolean }>(
+		timeline: T,
+		kind: keyof typeof loadedLayerFlags,
+	): T {
+		if (!isMobile) return timeline;
+		return { ...timeline, enabled: loadedLayerFlags[kind] };
+	}
+
 	// Seed only — a later change to the prop shouldn't overwrite live edits.
 	let textTimeline = $state<TextTimeline>(
 		untrack(() =>
 			initialSession?.text
-				? normalizeTextTimeline(initialSession.text)
+				? layersOffOnMobile(normalizeTextTimeline(initialSession.text), "text")
 				: { ...EMPTY_TEXT_TIMELINE },
 		),
 	);
@@ -2960,7 +2998,10 @@
 	let mediaTimeline = $state<MediaTimeline>(
 		untrack(() =>
 			initialSession?.media
-				? normalizeMediaTimeline(initialSession.media)
+				? layersOffOnMobile(
+						normalizeMediaTimeline(initialSession.media),
+						"media",
+					)
 				: { ...EMPTY_MEDIA_TIMELINE },
 		),
 	);
@@ -3006,9 +3047,14 @@
 		const source = file;
 		const state = {
 			effects: $state.snapshot(effects) as EffectInstance[],
-			text: hasText ? ($state.snapshot(textTimeline) as TextTimeline) : null,
+			text: hasText
+				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
+				: null,
 			media: hasMedia
-				? ($state.snapshot(mediaTimeline) as MediaTimeline)
+				? layersAsLoaded(
+						$state.snapshot(mediaTimeline) as MediaTimeline,
+						"media",
+					)
 				: null,
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
@@ -3431,7 +3477,7 @@
 	/** Adopt a saved timeline, or clear back to empty when a track has none. */
 	function restoreTextTimeline(saved: TextTimeline | undefined) {
 		textTimeline = saved
-			? normalizeTextTimeline(saved)
+			? layersOffOnMobile(normalizeTextTimeline(saved), "text")
 			: { ...EMPTY_TEXT_TIMELINE };
 		selectedTextClipId = null;
 		textHistory.reset();
@@ -3476,7 +3522,7 @@
 
 	function restoreMediaTimeline(saved: MediaTimeline | undefined) {
 		mediaTimeline = saved
-			? normalizeMediaTimeline(saved)
+			? layersOffOnMobile(normalizeMediaTimeline(saved), "media")
 			: { ...EMPTY_MEDIA_TIMELINE };
 		selectedMediaClipId = null;
 		mediaHistory.reset();
@@ -4281,22 +4327,26 @@
 						<Maximize size={14} />
 					</button>
 				{/if}
-				<button
-					class="help-btn"
-					class:seq-active={textTimeline.enabled}
-					onclick={toggleTextTimeline}
-					title="Text timeline: timed text layers with their own effects"
-				>
-					<Type size={14} />
-				</button>
-				<button
-					class="help-btn"
-					class:seq-active={mediaTimeline.enabled}
-					onclick={toggleMediaTimeline}
-					title="Media layers: timed image/video layers with their own effects"
-				>
-					<Layers size={14} />
-				</button>
+				<!-- Layer lanes are off on a phone altogether — see
+				     layersOffOnMobile — so their switches go too. -->
+				{#if !isMobile}
+					<button
+						class="help-btn"
+						class:seq-active={textTimeline.enabled}
+						onclick={toggleTextTimeline}
+						title="Text timeline: timed text layers with their own effects"
+					>
+						<Type size={14} />
+					</button>
+					<button
+						class="help-btn"
+						class:seq-active={mediaTimeline.enabled}
+						onclick={toggleMediaTimeline}
+						title="Media layers: timed image/video layers with their own effects"
+					>
+						<Layers size={14} />
+					</button>
+				{/if}
 				<MoshGroup
 					bind:this={moshGroupRef}
 					onMosh={mosh}
@@ -4750,43 +4800,48 @@
 		</div>
 	{/snippet}
 
+	<!-- Passed only while a clip is selected. The sheet takes any top panel
+	     as "show this instead of the chain", so an always-present snippet that
+	     merely rendered nothing left the mobile Effects tab empty. -->
+	{#snippet layerPanel()}
+		{#if selectedMediaClip}
+			<MediaClipPanel
+				lane={selectedMediaLane}
+				clip={selectedMediaClip}
+				sources={sequenceSources}
+				onLaneChange={updateMediaLane}
+				onClipChange={updateMediaClip}
+				onBeforeEdit={pushMediaHistory}
+				onClose={() => (selectedMediaClipId = null)}
+				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+				spectrumData={audio.spectrumData}
+				response={audioResponse}
+				edits={sourceRegistry.edits}
+				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
+				onEditingChange={onSourceEditingChange}
+				settings={moshSettings}
+			/>
+		{:else if selectedTextClip}
+			<TextClipPanel
+				lane={selectedTextLane}
+				clip={selectedTextClip}
+				onLaneChange={updateTextLane}
+				onClipChange={updateTextClip}
+				onBeforeEdit={pushTextHistory}
+				onClose={() => (selectedTextClipId = null)}
+				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
+				spectrumData={audio.spectrumData}
+				response={audioResponse}
+				settings={moshSettings}
+			/>
+		{/if}
+	{/snippet}
+
 	<MobileSheet
 		bind:this={_mobileSheetRef}
+		topPanel={selectedMediaClip || selectedTextClip ? layerPanel : undefined}
 		settingsInTopPanel={!!selectedMediaClip || !!selectedTextClip}
 	>
-		{#snippet topPanel()}
-			{#if selectedMediaClip}
-				<MediaClipPanel
-					lane={selectedMediaLane}
-					clip={selectedMediaClip}
-					sources={sequenceSources}
-					onLaneChange={updateMediaLane}
-					onClipChange={updateMediaClip}
-					onBeforeEdit={pushMediaHistory}
-					onClose={() => (selectedMediaClipId = null)}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
-					response={audioResponse}
-					edits={sourceRegistry.edits}
-					onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
-					onEditingChange={onSourceEditingChange}
-					settings={moshSettings}
-				/>
-			{:else if selectedTextClip}
-				<TextClipPanel
-					lane={selectedTextLane}
-					clip={selectedTextClip}
-					onLaneChange={updateTextLane}
-					onClipChange={updateTextClip}
-					onBeforeEdit={pushTextHistory}
-					onClose={() => (selectedTextClipId = null)}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
-					response={audioResponse}
-					settings={moshSettings}
-				/>
-			{/if}
-		{/snippet}
 		{#snippet settings()}
 			{@render moshSettings()}
 		{/snippet}
@@ -5111,6 +5166,27 @@
 		}
 	}
 
+	/* Below this the bar's controls, at their phone size, still overrun a
+	   narrow viewport: every gap and pad comes in, and the sizes match the
+	   mosh group's own step down. Wrapping is the last resort for anything
+	   narrower still, so no control is ever clipped off the edge. */
+	@media (max-width: 450px) {
+		.action-bar {
+			flex-wrap: wrap;
+			gap: 0.25rem;
+			padding: 0.5rem;
+		}
+
+		.mosh-group-wrap {
+			gap: 0.25rem;
+		}
+
+		.help-btn {
+			width: 24px;
+			height: 24px;
+		}
+	}
+
 	.settings-divider {
 		height: 1px;
 		background: var(--line);
@@ -5214,11 +5290,6 @@
 			gap: 0.4rem;
 		}
 
-		.action-btn {
-			padding: 0.6rem 1.2rem;
-			font-size: 0.7rem;
-		}
-
 		.library-btn {
 			display: flex;
 			align-items: center;
@@ -5265,6 +5336,27 @@
 	.action-btn:hover {
 		border-color: var(--text-3);
 		color: var(--text);
+	}
+
+	/* Both after the base rule: a media rule written above it loses to it
+	   at the same specificity, which is how the phone size went unapplied. */
+	@media (max-width: 800px) {
+		.action-btn {
+			padding: 0.6rem 1.2rem;
+		}
+	}
+
+	@media (max-width: 450px) {
+		.library-btn {
+			width: 24px;
+			height: 24px;
+		}
+
+		.action-btn {
+			gap: 0.35rem;
+			padding: 0.5rem 0.8rem;
+			font-size: 0.62rem;
+		}
 	}
 
 	.save-btn:hover {

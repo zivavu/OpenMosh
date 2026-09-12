@@ -758,9 +758,25 @@
 	}
 
 	@media (max-width: 800px) {
+		/* No gutter at all: a third of a phone's width for a lane's caption
+		   is the axis's to have. The lanes a phone gets — audio, the video bar —
+		   carry nothing there a touch user needs. Both variables go to zero so
+		   the overlays still start where the lanes do. */
 		.tl-stack {
-			--tl-gutter: 126px;
+			--tl-gutter: 0px;
+			--tl-gap: 0px;
 			padding: 0.4rem 8px;
+		}
+
+		:global(.tl-stack .tl-gutter) {
+			display: none;
+		}
+
+		/* A selection bar that wraps needs the room: the fixed row is what
+		   kept the stack's height steady, and at this width it clipped instead. */
+		.tl-selbar {
+			height: auto;
+			min-height: 30px;
 		}
 	}
 </style>
