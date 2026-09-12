@@ -71,16 +71,20 @@ vec2 axisOf(int d) {
 }
 `;
 
-const SEED_GLSL = `float SEED = mod(u_seed, 997.0);`;
+/** Part of the shared prefix rather than a local in main(): the e2e suite
+ * recovers each body as whatever follows the prefix common to all fragments,
+ * and a SEED line there would read as every transition using the seed. */
+const SEED_GLSL = `#define SEED mod(u_seed, 997.0)
+`;
 
 export interface TransitionShaderDef {
 	fragment: string;
 }
 
-function frag(body: string) {
-	return `${H}${LIB}
+/** Header, helpers and one body; `helpers` are the body's own functions. */
+function frag(body: string, helpers = "") {
+	return `${H}${LIB}${SEED_GLSL}${helpers}
 void main() {
-  ${SEED_GLSL}
 ${body}
 }`;
 }
@@ -225,19 +229,19 @@ vec4 toColor(vec2 c) { return texture(u_texture2, toScreen(c)); }
 
 /** Eke Péter's crosswarp: a front sweeps across, and on either side of it the
  * outgoing frame collapses to the centre while the incoming one grows out. */
-const CROSSWARP_FRAG = `${H}${LIB}${ORIENT_GLSL}
-void main() {
-  vec2 p = toSpace(v_uv);
+const CROSSWARP_FRAG = frag(
+	`  vec2 p = toSpace(v_uv);
   // The front finishes at x=0 first, so it travels along +x like the cube.
   float x = smoothstep(0.0, 1.0, u_progress * 2.0 - p.x);
   vec4 a = fromColor((p - 0.5) * (1.0 - x) + 0.5);
   vec4 b = toColor((p - 0.5) * x + 0.5);
-  outColor = vec4(mix(a, b, x).rgb, 1.0);
-}`;
+  outColor = vec4(mix(a, b, x).rgb, 1.0);`,
+	ORIENT_GLSL,
+);
 
 /** gre's cube: the two frames are faces of a box turning past the camera,
  * pulled back a little mid-turn and reflected off the floor beneath. */
-const CUBE_FRAG = `${H}${LIB}${ORIENT_GLSL}
+const CUBE_HELPERS = `${ORIENT_GLSL}
 const float REFLECTION = 0.4;
 const float PERSP = 0.7;
 const float UNZOOM = 0.3;
@@ -265,8 +269,10 @@ vec2 xskew(vec2 p, float persp, float center) {
     * vec2(0.5 / distance(center, 0.5) * (center < 0.5 ? 1.0 : -1.0), 1.0)
     + vec2(center < 0.5 ? 0.0 : 1.0, 0.0);
 }
-void main() {
-  float progress = u_progress;
+`;
+
+const CUBE_FRAG = frag(
+	`  float progress = u_progress;
   vec2 op = toSpace(v_uv);
   float uz = UNZOOM * 2.0 * (0.5 - distance(0.5, progress));
   vec2 p = -uz * 0.5 + (1.0 + uz) * op;
@@ -281,8 +287,9 @@ void main() {
   vec4 col = inBounds(fromP) ? fromColor(fromP)
     : inBounds(toP) ? toColor(toP)
     : bgColor(fromP, toP);
-  outColor = vec4(col.rgb, 1.0);
-}`;
+  outColor = vec4(col.rgb, 1.0);`,
+	CUBE_HELPERS,
+);
 
 export const TRANSITION_SHADERS: Record<string, TransitionShaderDef> = {
 	rgbslip: { fragment: RGBSLIP_FRAG },

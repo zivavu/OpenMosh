@@ -3420,18 +3420,22 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_threshold;
+uniform float u_still;
 uniform float u_showMask;
 uniform float u_hardCutoff;
 uniform sampler2D u_original;
 void main() {
   vec4 src = texture(u_original, v_uv);
   float m = texture(u_texture, v_uv).r;
-  vec4 res = vec4(0.0);
-  if (m > u_threshold) {
-    res = u_showMask > 0.5 ? vec4(1.0) : src;
-    if (u_hardCutoff < 0.5) res *= clamp(m, 0.0, 1.0);
+  // What holds still shows through at u_still; nothing at all at 0.
+  vec4 base = src * u_still;
+  if (m <= u_threshold) {
+    outColor = base;
+    return;
   }
-  outColor = res;
+  vec4 moving = u_showMask > 0.5 ? vec4(1.0) : src;
+  float w = u_hardCutoff > 0.5 ? 1.0 : clamp(m, 0.0, 1.0);
+  outColor = mix(base, moving, w);
 }`,
 		animated: true,
 		setUniforms: floats(
@@ -3439,6 +3443,7 @@ void main() {
 			"persistence",
 			"erode",
 			"blur",
+			"still",
 			"showMask",
 			"hardCutoff",
 		),

@@ -2610,6 +2610,15 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				defaultValue: 0,
 			},
 			{
+				key: "still",
+				label: "Still",
+				type: "range",
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 0,
+			},
+			{
 				key: "showMask",
 				label: "Output Mask",
 				type: "checkbox",
