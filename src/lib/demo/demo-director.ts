@@ -10,7 +10,7 @@ import type { EffectInstance } from "../effects/types";
 import { generateMosh } from "../editor/mosh";
 import { ANIMATED_EFFECTS } from "../gl/effect-shaders";
 
-export const DEMO_BPM = 40;
+export const DEMO_BPM = 20;
 
 /** Effects that keep moving between cuts, so the background never sits still.
  * Excludes the per-frame noise ones (shake, jitter): moshed speeds run them at
@@ -69,10 +69,10 @@ const TRANSITION_POOL = [
 ];
 
 /** How much of the beat the blend occupies. Tuned for how long a blend should
- * feel (~0.45s), not as a fixed share of the bar: at 40 BPM a beat is 1.5s, and
- * the old 0.55 would have stretched every slam and whip past three quarters of
- * a second, which is the sluggishness these were rewritten to fix. */
-const TRANSITION_BEATS = 0.3;
+ * feel (~0.45s), not as a fixed share of the bar: at 20 BPM a beat is 3s, and
+ * anything much wider would stretch every slam and whip past a second, which
+ * is the sluggishness these were rewritten to fix. */
+const TRANSITION_BEATS = 0.15;
 
 /** Sources cut on the beat, never per frame: the posters differ in palette as
  * much as in layout, so swapping them at frame rate is a strobe no chain can
