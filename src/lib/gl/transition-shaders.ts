@@ -202,10 +202,94 @@ const BURN_FRAG = frag(`  float p = u_progress;
   col += (grain - 0.5) * 0.10 * blow;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);`);
 
+// Two ports from gl-transitions (MIT, via the Vidvox ISF-Files lab set). Both
+// work in a y-up space with the motion along +x, so the direction handling is
+// one map from screen uv into that space and its inverse for the samples.
+
+/** Maps screen uv (y down) into the transition's y-up, rightward space. */
+const ORIENT_GLSL = `vec2 toSpace(vec2 s) {
+  return u_direction == 1 ? vec2(1.0 - s.x, 1.0 - s.y)
+    : u_direction == 2 ? vec2(s.y, 1.0 - s.x)
+    : u_direction == 3 ? vec2(1.0 - s.y, s.x)
+    : vec2(s.x, 1.0 - s.y);
+}
+vec2 toScreen(vec2 c) {
+  return u_direction == 1 ? vec2(1.0 - c.x, 1.0 - c.y)
+    : u_direction == 2 ? vec2(1.0 - c.y, c.x)
+    : u_direction == 3 ? vec2(c.y, 1.0 - c.x)
+    : vec2(c.x, 1.0 - c.y);
+}
+vec4 fromColor(vec2 c) { return texture(u_texture, toScreen(c)); }
+vec4 toColor(vec2 c) { return texture(u_texture2, toScreen(c)); }
+`;
+
+/** Eke Péter's crosswarp: a front sweeps across, and on either side of it the
+ * outgoing frame collapses to the centre while the incoming one grows out. */
+const CROSSWARP_FRAG = `${H}${LIB}${ORIENT_GLSL}
+void main() {
+  vec2 p = toSpace(v_uv);
+  // The front finishes at x=0 first, so it travels along +x like the cube.
+  float x = smoothstep(0.0, 1.0, u_progress * 2.0 - p.x);
+  vec4 a = fromColor((p - 0.5) * (1.0 - x) + 0.5);
+  vec4 b = toColor((p - 0.5) * x + 0.5);
+  outColor = vec4(mix(a, b, x).rgb, 1.0);
+}`;
+
+/** gre's cube: the two frames are faces of a box turning past the camera,
+ * pulled back a little mid-turn and reflected off the floor beneath. */
+const CUBE_FRAG = `${H}${LIB}${ORIENT_GLSL}
+const float REFLECTION = 0.4;
+const float PERSP = 0.7;
+const float UNZOOM = 0.3;
+const float FLOATING = 3.0;
+
+vec2 project(vec2 p) {
+  return p * vec2(1.0, -1.2) + vec2(0.0, -FLOATING / 100.0);
+}
+bool inBounds(vec2 p) {
+  return all(lessThan(vec2(0.0), p)) && all(lessThan(p, vec2(1.0)));
+}
+vec4 bgColor(vec2 pfr, vec2 pto) {
+  vec4 c = vec4(0.0, 0.0, 0.0, 1.0);
+  pfr = project(pfr);
+  if (inBounds(pfr)) c += fromColor(pfr) * REFLECTION * (1.0 - pfr.y);
+  pto = project(pto);
+  if (inBounds(pto)) c += toColor(pto) * REFLECTION * (1.0 - pto.y);
+  return c;
+}
+// Skews a face into perspective about one of its vertical edges.
+vec2 xskew(vec2 p, float persp, float center) {
+  float x = mix(p.x, 1.0 - p.x, center);
+  return (vec2(x, (p.y - 0.5 * (1.0 - persp) * x) / (1.0 + (persp - 1.0) * x))
+      - vec2(0.5 - distance(center, 0.5), 0.0))
+    * vec2(0.5 / distance(center, 0.5) * (center < 0.5 ? 1.0 : -1.0), 1.0)
+    + vec2(center < 0.5 ? 0.0 : 1.0, 0.0);
+}
+void main() {
+  float progress = u_progress;
+  vec2 op = toSpace(v_uv);
+  float uz = UNZOOM * 2.0 * (0.5 - distance(0.5, progress));
+  vec2 p = -uz * 0.5 + (1.0 + uz) * op;
+  vec2 fromP = xskew(
+    (p - vec2(progress, 0.0)) / vec2(1.0 - progress, 1.0),
+    1.0 - mix(progress, 0.0, PERSP),
+    0.0);
+  vec2 toP = xskew(
+    p / vec2(progress, 1.0),
+    mix(pow(progress, 2.0), 1.0, PERSP),
+    1.0);
+  vec4 col = inBounds(fromP) ? fromColor(fromP)
+    : inBounds(toP) ? toColor(toP)
+    : bgColor(fromP, toP);
+  outColor = vec4(col.rgb, 1.0);
+}`;
+
 export const TRANSITION_SHADERS: Record<string, TransitionShaderDef> = {
 	rgbslip: { fragment: RGBSLIP_FRAG },
 	slam: { fragment: SLAM_FRAG },
 	whip: { fragment: WHIP_FRAG },
 	shatter: { fragment: SHATTER_FRAG },
 	burn: { fragment: BURN_FRAG },
+	crosswarp: { fragment: CROSSWARP_FRAG },
+	cube: { fragment: CUBE_FRAG },
 };

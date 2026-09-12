@@ -58,7 +58,15 @@ const STATIC_POOL = [
 /** Every transition the app ships, so the upload screen is an honest sample of
  * what a sequence can do. "cut" is excluded — the demo already cuts whenever a
  * blend is not running. */
-const TRANSITION_POOL = ["rgbslip", "slam", "whip", "shatter", "burn"];
+const TRANSITION_POOL = [
+	"rgbslip",
+	"slam",
+	"whip",
+	"shatter",
+	"burn",
+	"crosswarp",
+	"cube",
+];
 
 /** How much of the beat the blend occupies. Tuned for how long a blend should
  * feel (~0.45s), not as a fixed share of the bar: at 40 BPM a beat is 1.5s, and

@@ -13,7 +13,14 @@ export type SequenceSegmentMode = "static" | "interval";
 
 /** Artistic blend rendered between two segments' effect chains. */
 export type TransitionType =
-	"cut" | "rgbslip" | "slam" | "whip" | "shatter" | "burn";
+	| "cut"
+	| "rgbslip"
+	| "slam"
+	| "whip"
+	| "shatter"
+	| "burn"
+	| "crosswarp"
+	| "cube";
 
 export interface SegmentTransition {
 	type: TransitionType;
@@ -21,7 +28,7 @@ export interface SegmentTransition {
 	durationSec: number;
 	/** Seeded layouts (shatter/whip) stay identical between preview/export. */
 	seed: number;
-	/** "whip": 0=→ 1=← 2=↓ 3=↑. */
+	/** "whip", "crosswarp", "cube": 0=→ 1=← 2=↓ 3=↑. */
 	direction?: number;
 	/** "shatter" cell size: 0=coarse 1=medium 2=fine. */
 	density?: number;
@@ -41,6 +48,8 @@ export const TRANSITION_OPTIONS: {
 	{ value: "whip", label: "whip", hasDirection: true, hasSeed: true },
 	{ value: "shatter", label: "shatter", hasDensity: true, hasSeed: true },
 	{ value: "burn", label: "burn", hasSeed: true },
+	{ value: "crosswarp", label: "crosswarp", hasDirection: true },
+	{ value: "cube", label: "cube", hasDirection: true },
 ];
 
 /** Half a second, not the third it used to be: the reworked shaders all carry

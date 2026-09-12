@@ -312,6 +312,13 @@ export interface PrePassDef {
 	fragment: string;
 	/** Use LINEAR texture filtering for this pass (smoother sampling). */
 	linearFilter?: boolean;
+	/**
+	 * Keep this pass's output as private full-res history and hand it back as
+	 * u_feedback next frame. Its output becomes the next pass's input, so an
+	 * effect can carry state (a background estimate, a held keyframe) apart
+	 * from the main pass's own feedback.
+	 */
+	feedback?: boolean;
 }
 
 export interface EffectShaderDef {
@@ -2740,6 +2747,702 @@ void main() {
 }`,
 		animated: true,
 		setUniforms: floats("bands", "flow", "cycle", "sheen"),
+	},
+
+	// --- Ports from the shader lab (lab/shaders): X-PostProcessing-Library and
+	// Vidvox ISF-Files, both MIT. Matched by behaviour; time-driven randomness
+	// is quantised to ticks so preview and export roll the same.
+
+	/** XPL GlitchRGBSplitV5: noise bursts throw each channel a different way.
+	 * The RGBA noise texture is a bilinear value noise here. */
+	"rgb-burst": {
+		fragment:
+			H +
+			`uniform float u_amplitude;
+vec4 hash4(vec2 p) {
+  vec4 q = vec4(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)),
+                dot(p, vec2(419.2, 371.9)), dot(p, vec2(233.7, 97.3)));
+  return fract(sin(q) * 43758.5453123);
+}
+vec4 noise4(vec2 p) {
+  p *= 64.0;
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash4(i), hash4(i + vec2(1.0, 0.0)), f.x),
+             mix(hash4(i + vec2(0.0, 1.0)), hash4(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void main() {
+  vec4 n = noise4(vec2(u_time, 2.0 * u_time / 25.0));
+  // pow 8 keeps the split near zero most of the time, so it reads as bursts.
+  vec4 split = pow(n, vec4(8.0)) * vec4(vec3(u_amplitude), 1.0);
+  split *= 2.0 * split.w - 1.0;
+  float r = texture(u_texture, v_uv + vec2(split.x, -split.y)).r;
+  float g = texture(u_texture, v_uv + vec2(split.y, -split.z)).g;
+  float b = texture(u_texture, v_uv + vec2(split.z, -split.x)).b;
+  outColor = vec4(r, g, b, texture(u_texture, v_uv).a);
+}`,
+		animated: true,
+		setUniforms: floats("amplitude"),
+	},
+
+	/** XPL GlitchScreenJump: the frame rolls like a lost vertical hold. */
+	"screen-jump": {
+		fragment:
+			H +
+			`uniform float u_intensity;
+uniform int u_direction;
+void main() {
+  vec2 uv = v_uv;
+  // Rolls upward on screen (v_uv.y is top-down), like a real vertical hold.
+  if (u_direction == 0) {
+    uv.x = mix(uv.x, fract(uv.x + u_time), u_intensity);
+  } else {
+    uv.y = mix(uv.y, fract(uv.y - u_time), u_intensity);
+  }
+  outColor = texture(u_texture, fract(uv));
+}`,
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, "u_intensity", v.intensity as number);
+			setInt(gl, l, "u_direction", v.direction === "vertical" ? 1 : 0);
+		},
+	},
+
+	/** XPL EdgeDetectionSobelNeonV2: the Sobel gradient kept in colour. */
+	"sobel-neon": {
+		fragment:
+			H +
+			`uniform float u_width;
+uniform float u_neon;
+uniform float u_brightness;
+uniform float u_bgFade;
+uniform vec3 u_bgColor;
+uniform vec2 u_resolution;
+vec3 sobel(vec2 st, vec2 c) {
+  vec3 tl = texture(u_texture, c + vec2(-st.x, st.y)).rgb;
+  vec3 ml = texture(u_texture, c + vec2(-st.x, 0.0)).rgb;
+  vec3 bl = texture(u_texture, c + vec2(-st.x, -st.y)).rgb;
+  vec3 mt = texture(u_texture, c + vec2(0.0, st.y)).rgb;
+  vec3 mb = texture(u_texture, c + vec2(0.0, -st.y)).rgb;
+  vec3 tr = texture(u_texture, c + vec2(st.x, st.y)).rgb;
+  vec3 mr = texture(u_texture, c + vec2(st.x, 0.0)).rgb;
+  vec3 br = texture(u_texture, c + vec2(st.x, -st.y)).rgb;
+  vec3 gx = tl + 2.0 * ml + bl - tr - 2.0 * mr - br;
+  vec3 gy = -tl - 2.0 * mt - tr + bl + 2.0 * mb + br;
+  return sqrt(gx * gx + gy * gy);
+}
+void main() {
+  vec4 scene = texture(u_texture, v_uv);
+  vec3 grad = sobel(u_width / u_resolution, v_uv);
+  vec3 bg = mix(u_bgColor, scene.rgb, u_bgFade);
+  vec3 col = mix(bg, grad, u_neon) * u_brightness;
+  outColor = vec4(clamp(col, 0.0, 1.0), scene.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, "u_width", v.width as number);
+			setFloat(gl, l, "u_neon", v.neon as number);
+			setFloat(gl, l, "u_brightness", v.brightness as number);
+			setFloat(gl, l, "u_bgFade", v.bgFade as number);
+			setColor(gl, l, "u_bgColor", v.bgColor as string);
+		},
+	},
+
+	/** Vidvox HSVtoRGB: read the channels as the other colour space. */
+	"hsv-swap": {
+		fragment:
+			H +
+			HSV_GLSL +
+			`uniform int u_mode;
+uniform float u_amount;
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  vec3 o = u_mode == 0 ? hsv2rgb(c.rgb) : rgb2hsv(c.rgb);
+  outColor = vec4(mix(c.rgb, o, u_amount), c.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setInt(gl, l, "u_mode", v.mode === "rgb-as-hsv" ? 0 : 1);
+			setFloat(gl, l, "u_amount", v.amount as number);
+		},
+	},
+
+	/** Vidvox RGB Strobe: each channel inverts on its own clock. Rates are
+	 * one phase with a per-channel stagger, in place of the original's
+	 * per-channel periods, so a mosh can roll it. */
+	"rgb-strobe": {
+		fragment:
+			H +
+			`uniform float u_red;
+uniform float u_green;
+uniform float u_blue;
+uniform float u_stagger;
+uniform float u_duty;
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  vec3 phase = fract(vec3(u_time) + vec3(0.0, 1.0, 2.0) * u_stagger);
+  vec3 on = step(phase, vec3(u_duty)) * vec3(u_red, u_green, u_blue);
+  outColor = vec4(mix(c.rgb, 1.0 - c.rgb, on), c.a);
+}`,
+		animated: true,
+		setUniforms: floats("red", "green", "blue", "stagger", "duty"),
+	},
+
+	/** Vidvox Trio Tone: three-stop luminance ramp, black at the bottom. */
+	"trio-tone": {
+		fragment:
+			H +
+			`uniform vec3 u_darkColor;
+uniform vec3 u_midColor;
+uniform vec3 u_brightColor;
+uniform float u_intensity;
+void main() {
+  vec4 c = texture(u_texture, v_uv);
+  float lum = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+  vec3 lo = vec3(0.0);
+  vec3 hi = u_darkColor;
+  float ix = 0.0;
+  if (lum > 0.66) {
+    lo = u_midColor;
+    hi = u_brightColor;
+    ix = 2.0;
+  } else if (lum > 0.33) {
+    lo = u_darkColor;
+    hi = u_midColor;
+    ix = 1.0;
+  }
+  vec3 tone = mix(lo, hi, clamp((lum - ix * 0.33) / 0.33, 0.0, 1.0));
+  outColor = vec4(mix(c.rgb, tone, u_intensity), c.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setColor(gl, l, "u_darkColor", v.darkColor as string);
+			setColor(gl, l, "u_midColor", v.midColor as string);
+			setColor(gl, l, "u_brightColor", v.brightColor as string);
+			setFloat(gl, l, "u_intensity", v.intensity as number);
+		},
+	},
+
+	/** Vidvox Circle Warp: the frame's height is fitted into a circle. */
+	"circle-warp": {
+		fragment:
+			H +
+			`uniform float u_radius;
+uniform float u_width;
+uniform float u_rotation;
+uniform vec2 u_resolution;
+void main() {
+  vec2 ct = vec2(0.5);
+  vec2 pt = v_uv;
+  pt.x = (pt.x - 0.5) / u_width + 0.5;
+  // Square coordinates: the shorter side spans [0,1], the longer is centred.
+  vec2 r = u_resolution;
+  pt = r.x >= r.y
+    ? vec2((pt.x * r.x - r.x * 0.5 + r.y * 0.5) / r.y, pt.y)
+    : vec2(pt.x, (pt.y * r.y - r.y * 0.5 + r.x * 0.5) / r.x);
+  float a = u_rotation * 6.28318530718;
+  vec2 d = pt - ct;
+  pt = vec2(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a)) + ct;
+  if (distance(pt, ct) >= u_radius) {
+    outColor = vec4(0.0);
+    return;
+  }
+  float chord = 2.0 * sqrt(max(u_radius * u_radius - (pt.x - 0.5) * (pt.x - 0.5), 1e-6));
+  pt.y = (pt.y - 0.5) / chord + 0.5;
+  outColor = texture(u_texture, pt);
+}`,
+		linearFilter: true,
+		setUniforms: floats("radius", "width", "rotation"),
+	},
+
+	/** Vidvox Pixel Shifter: rows and columns slide by a wave of the other axis. */
+	"pixel-shifter": {
+		fragment:
+			H +
+			HASH_GLSL +
+			`uniform float u_hPhase;
+uniform float u_hFrequency;
+uniform float u_hRandom;
+uniform float u_vPhase;
+uniform float u_vFrequency;
+uniform float u_vRandom;
+uniform float u_sinusoidal;
+uniform float u_mirror;
+const float PI = 3.14159265359;
+void main() {
+  vec2 loc = v_uv;
+  float modVal = u_mirror > 0.5 ? 2.0 : 1.0;
+  // Column shift depends on the row it sits in; the row shift then uses the
+  // shifted column, as the original does.
+  if (u_sinusoidal > 0.5) {
+    loc.x = mod(u_hRandom * hash(vec2(u_time * 0.127, loc.x)) + loc.x
+      + sign(u_hFrequency) * 0.5 * (1.0 + cos(2.0 * PI * (u_hPhase + u_hFrequency * loc.y))), modVal);
+  } else {
+    loc.x = mod(u_hRandom * hash(vec2(u_time * 0.129, loc.x)) + loc.x
+      + u_hFrequency * loc.y + u_hPhase, modVal);
+  }
+  if (u_sinusoidal > 0.5) {
+    loc.y = mod(u_vRandom * hash(vec2(u_time * 0.273, loc.y)) + loc.y
+      + sign(u_vFrequency) * 0.5 * (1.0 + cos(2.0 * PI * (u_vPhase + u_vFrequency * loc.x))), modVal);
+  } else {
+    loc.y = mod(u_vRandom * hash(vec2(u_time * 0.341, loc.y)) + loc.y
+      + u_vFrequency * loc.x + u_vPhase, modVal);
+  }
+  if (loc.x > 1.0) loc.x = 2.0 - loc.x;
+  if (loc.y > 1.0) loc.y = 2.0 - loc.y;
+  outColor = texture(u_texture, loc);
+}`,
+		animated: true,
+		setUniforms: floats(
+			"hPhase",
+			"hFrequency",
+			"hRandom",
+			"vPhase",
+			"vFrequency",
+			"vRandom",
+			"sinusoidal",
+			"mirror",
+		),
+	},
+
+	/** Vidvox Ripples: concentric rings fold the radius in and out. */
+	"ring-warp": {
+		fragment:
+			H +
+			`uniform float u_rings;
+uniform float u_offset;
+uniform float u_xSmear;
+uniform float u_ySmear;
+uniform float u_centerX;
+uniform float u_centerY;
+uniform int u_mode;
+uniform vec2 u_resolution;
+const float PI = 3.14159265359;
+void main() {
+  vec2 tc = v_uv * u_resolution;
+  vec2 c = vec2(u_centerX, u_centerY) * u_resolution;
+  float R = length(u_resolution);
+  float r = distance(c, tc);
+  float a = atan(tc.y - c.y, tc.x - c.x);
+  tc -= c;
+  if (r < R) {
+    float pct = r / R;
+    float off = (u_offset + u_time) * 2.0 * PI;
+    float wave = u_mode == 0
+      ? sin(pct * u_rings * 2.0 * PI + off)
+      : sin(pct * u_rings * 2.0 * PI * cos(off + pct * pct * u_rings * 2.0 * PI));
+    float rr = r * (1.0 + wave) * 0.5;
+    tc = vec2(rr * cos(a), rr * sin(a));
+    tc.x = mix(v_uv.x * u_resolution.x - c.x, tc.x, max(1.0 - u_xSmear, 0.001));
+    tc.y = mix(v_uv.y * u_resolution.y - c.y, tc.y, max(1.0 - u_ySmear, 0.001));
+  }
+  vec2 loc = (tc + c) / u_resolution;
+  if (any(lessThan(loc, vec2(0.0))) || any(greaterThan(loc, vec2(1.0)))) {
+    outColor = vec4(0.0);
+  } else {
+    outColor = texture(u_texture, loc);
+  }
+}`,
+		animated: true,
+		linearFilter: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, "u_rings", v.rings as number);
+			setFloat(gl, l, "u_offset", v.offset as number);
+			setFloat(gl, l, "u_xSmear", v.xSmear as number);
+			setFloat(gl, l, "u_ySmear", v.ySmear as number);
+			setFloat(gl, l, "u_centerX", v.centerX as number);
+			setFloat(gl, l, "u_centerY", v.centerY as number);
+			setInt(gl, l, "u_mode", v.mode === "double" ? 1 : 0);
+		},
+	},
+
+	/** Vidvox Shockwave Pulse: a ring of displacement travelling out from the
+	 * centre. The original fires on an event; this one repeats on its clock. */
+	shockwave: {
+		fragment:
+			H +
+			`uniform float u_magnitude;
+uniform float u_distortion;
+uniform float u_centerX;
+uniform float u_centerY;
+uniform vec2 u_resolution;
+void main() {
+  vec2 c = vec2(u_centerX, u_centerY);
+  // Measured in a square space so the ring stays round on a wide frame.
+  vec2 asp = vec2(u_resolution.x / u_resolution.y, 1.0);
+  vec2 rel = (v_uv - c) * asp;
+  float d = length(rel);
+  float t = fract(u_time) * (1.0 + d);
+  vec2 uv = v_uv;
+  if (d <= t + u_magnitude && d >= t - u_magnitude) {
+    float diff = d - t;
+    float powDiff = 1.0 - pow(abs(diff * u_distortion), 0.8);
+    vec2 dir = rel / max(d, 1e-5) / asp;
+    uv = v_uv + dir * diff * powDiff;
+  }
+  outColor = texture(u_texture, uv);
+}`,
+		animated: true,
+		linearFilter: true,
+		setUniforms: floats("magnitude", "distortion", "centerX", "centerY"),
+	},
+
+	/** Vidvox Ghosting: thresholded copies of the frame, spread toward a point
+	 * and tinted, as a lens throws ghosts of a bright light. */
+	ghosting: {
+		prePasses: [
+			{
+				fragment:
+					H +
+					`uniform float u_bias;
+uniform float u_scale;
+void main() {
+  outColor = max(vec4(0.0), texture(u_texture, v_uv) + u_bias) * u_scale;
+}`,
+				linearFilter: true,
+			},
+		],
+		fragment:
+			H +
+			`uniform float u_ghosts;
+uniform float u_dispersal;
+uniform float u_additive;
+uniform float u_dirX;
+uniform float u_dirY;
+uniform vec3 u_lensColor;
+uniform sampler2D u_original;
+void main() {
+  vec2 dir = vec2(1.0) - vec2(u_dirX, u_dirY);
+  vec2 ghostVec = (dir - v_uv) * u_dispersal;
+  vec3 ghosts = vec3(0.0);
+  for (int i = 0; i < 5; i++) {
+    if (float(i) >= u_ghosts) break;
+    vec2 off = fract(v_uv + ghostVec * float(i));
+    ghosts += texture(u_texture, off).rgb * u_lensColor;
+  }
+  vec4 orig = texture(u_original, v_uv);
+  vec3 col = u_additive > 0.5 ? orig.rgb + ghosts : orig.rgb * ghosts;
+  outColor = vec4(clamp(col, 0.0, 1.0), orig.a);
+}`,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, "u_bias", v.bias as number);
+			setFloat(gl, l, "u_scale", v.scale as number);
+			setFloat(gl, l, "u_ghosts", v.ghosts as number);
+			setFloat(gl, l, "u_dispersal", v.dispersal as number);
+			setFloat(gl, l, "u_additive", v.additive as number);
+			setFloat(gl, l, "u_dirX", v.dirX as number);
+			setFloat(gl, l, "u_dirY", v.dirY as number);
+			setColor(gl, l, "u_lensColor", v.lensColor as string);
+		},
+	},
+
+	/** Vidvox FastMosh: the frame-to-frame difference is painted onto a blocky
+	 * keyframe that can be held, which is the whole datamosh look without the
+	 * codec. The keyframe lives in a stateful pre-pass; the main pass feeds
+	 * back its own output. */
+	"fast-mosh": {
+		prePasses: [
+			{
+				fragment:
+					H +
+					`uniform float u_hold;
+uniform sampler2D u_feedback;
+void main() {
+  outColor = u_hold > 0.5 ? texture(u_feedback, v_uv) : texture(u_texture, v_uv);
+}`,
+				feedback: true,
+			},
+		],
+		fragment:
+			H +
+			`uniform float u_rate;
+uniform float u_sharpen;
+uniform float u_blur;
+uniform float u_posterize;
+uniform float u_block;
+uniform int u_mode;
+uniform vec2 u_resolution;
+uniform sampler2D u_original;
+uniform sampler2D u_feedback;
+// The keyframe read as if it were a 1/block-size buffer scaled back up with
+// bilinear filtering: point-sampled cells, blended between their centres.
+vec4 keyAt(vec2 uv) {
+  vec2 cells = max(u_resolution / u_block, vec2(1.0));
+  vec2 g = uv * cells - 0.5;
+  vec2 i = floor(g);
+  vec2 f = fract(g);
+  vec4 a = texture(u_texture, (i + 0.5) / cells);
+  vec4 b = texture(u_texture, (i + vec2(1.5, 0.5)) / cells);
+  vec4 c = texture(u_texture, (i + vec2(0.5, 1.5)) / cells);
+  vec4 d = texture(u_texture, (i + 1.5) / cells);
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+void main() {
+  vec2 px = 1.0 / u_resolution;
+  vec4 color = texture(u_original, v_uv);
+  vec4 cl = texture(u_original, v_uv + vec2(-px.x, 0.0));
+  vec4 cr = texture(u_original, v_uv + vec2(px.x, 0.0));
+  vec4 ca = texture(u_original, v_uv + vec2(0.0, px.y));
+  vec4 cb = texture(u_original, v_uv + vec2(0.0, -px.y));
+  vec4 cla = texture(u_original, v_uv + vec2(-px.x, px.y));
+  vec4 cra = texture(u_original, v_uv + px);
+  vec4 clb = texture(u_original, v_uv - px);
+  vec4 crb = texture(u_original, v_uv + vec2(px.x, -px.y));
+  vec4 ring = cl + cr + ca + cb + cla + cra + clb + crb;
+  vec4 key = keyAt(v_uv);
+  vec4 prev = texture(u_feedback, v_uv);
+  vec4 diff = color - prev;
+  if (u_blur > 0.0) diff = diff * (1.0 - u_blur) + ring * (u_blur / 8.0);
+  vec4 fin;
+  if (u_mode == 0) fin = mix(prev, diff + key, u_rate);
+  else if (u_mode == 1) fin = mix(prev, abs(diff) + key, u_rate);
+  else fin = mix(prev, abs(diff + prev) * key, u_rate);
+  if (u_posterize > 0.0) {
+    float q = 128.0 - u_posterize * 126.0;
+    fin = floor(fin * q) / q;
+  }
+  if (u_sharpen > 0.0) fin += u_sharpen * (8.0 * color - ring);
+  outColor = vec4(clamp(fin.rgb, 0.0, 1.0), color.a);
+}`,
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, "u_hold", v.hold as number);
+			setFloat(gl, l, "u_rate", v.rate as number);
+			setFloat(gl, l, "u_sharpen", v.sharpen as number);
+			setFloat(gl, l, "u_blur", v.blur as number);
+			setFloat(gl, l, "u_posterize", v.posterize as number);
+			setFloat(gl, l, "u_block", v.block as number);
+			setInt(
+				gl,
+				l,
+				"u_mode",
+				v.mode === "absolute" ? 1 : v.mode === "difference" ? 2 : 0,
+			);
+		},
+	},
+
+	/** Vidvox Resize Glitch: the frame re-scales about a point on random ticks. */
+	"resize-glitch": {
+		fragment:
+			H +
+			HASH_GLSL +
+			`uniform float u_chance;
+uniform float u_levelX;
+uniform float u_levelY;
+uniform float u_centerX;
+uniform float u_centerY;
+uniform float u_randomWidth;
+uniform float u_randomHeight;
+uniform float u_randomCenter;
+void main() {
+  float tick = floor(u_time);
+  vec2 c = u_randomCenter > 0.5
+    ? vec2(hash(vec2(tick * 1.24, 0.234)), hash(vec2(tick * 2.93, 1.234)))
+    : vec2(u_centerX, u_centerY);
+  vec2 scale = vec2(1.0);
+  if (u_chance >= 1.0 || hash(vec2(tick, 0.2321)) <= u_chance) {
+    scale.x = u_randomWidth > 0.5 ? u_levelX * hash(vec2(tick + 0.315, 32.0)) : u_levelX;
+    scale.y = u_randomHeight > 0.5 ? u_levelY * hash(vec2(tick + 0.942, 43.0)) : u_levelY;
+  }
+  vec2 loc = (v_uv - c) / max(scale, vec2(0.01)) + c;
+  if (any(lessThan(loc, vec2(0.0))) || any(greaterThan(loc, vec2(1.0)))) {
+    outColor = vec4(0.0);
+  } else {
+    outColor = texture(u_texture, loc);
+  }
+}`,
+		animated: true,
+		setUniforms: floats(
+			"chance",
+			"levelX",
+			"levelY",
+			"centerX",
+			"centerY",
+			"randomWidth",
+			"randomHeight",
+			"randomCenter",
+		),
+	},
+
+	/** Vidvox Stylize Glitch: random rectangles get inverted, dithered or hue
+	 * shifted. The 8x8 Bayer threshold is computed rather than tabled. */
+	"stylize-glitch": {
+		fragment:
+			H +
+			HASH_GLSL +
+			HSV_GLSL +
+			`uniform float u_level;
+uniform float u_rate;
+uniform float u_count;
+uniform int u_mode;
+uniform vec2 u_resolution;
+vec4 rand4(vec4 co) {
+  return vec4(hash(co.rg), hash(co.gb), hash(co.ba), hash(co.rb));
+}
+float bayer8(vec2 p) {
+  ivec2 ip = ivec2(mod(p, 8.0));
+  int a = ip.x ^ ip.y;
+  int b = ip.y;
+  int r = ((a & 1) << 5) | ((b & 1) << 4) | ((a & 2) << 2) | ((b & 2) << 1)
+        | ((a & 4) >> 1) | ((b & 4) >> 2);
+  return (float(r) + 1.0) / 64.0;
+}
+vec4 stylize(vec4 col, int style) {
+  if (style == 0) return vec4(1.0 - col.rgb, col.a);
+  if (style == 1) {
+    float luma = (col.r + col.g + col.b) / 3.0;
+    return vec4(col.rgb * step(bayer8(v_uv * u_resolution), luma), col.a);
+  }
+  vec3 hsv = rgb2hsv(col.rgb);
+  hsv.x = mod(hsv.x + 0.333, 1.0);
+  return vec4(hsv2rgb(hsv), col.a);
+}
+void main() {
+  vec4 col = texture(u_texture, v_uv);
+  if (u_rate > 0.0 && u_level > 0.0) {
+    float tick = floor(120.0 * u_time * u_rate);
+    for (int i = 0; i < 10; i++) {
+      if (float(i) >= u_count) break;
+      vec4 rc = rand4((float(i) + tick) * vec4(0.2123, 0.34517, 0.53428, 0.7431));
+      rc.zw *= u_level;
+      rc.zw = min(rc.zw, 1.0 - rc.xy);
+      if (all(greaterThanEqual(v_uv, rc.xy)) && all(lessThanEqual(v_uv, rc.xy + rc.zw))) {
+        int style = u_mode == 0
+          ? int(min(3.0 * hash(vec2(2.7413 + float(i), 1.325821 * tick)), 2.0))
+          : u_mode - 1;
+        col = stylize(col, style);
+      }
+    }
+  }
+  outColor = col;
+}`,
+		animated: true,
+		setUniforms: (gl, l, v) => {
+			setFloat(gl, l, "u_level", v.level as number);
+			setFloat(gl, l, "u_rate", v.rate as number);
+			setFloat(gl, l, "u_count", v.count as number);
+			setInt(
+				gl,
+				l,
+				"u_mode",
+				v.mode === "invert"
+					? 1
+					: v.mode === "dither"
+						? 2
+						: v.mode === "hue"
+							? 3
+							: 0,
+			);
+		},
+	},
+
+	/** Vidvox Motion Mask: only what differs from a slowly settling background
+	 * estimate shows through. The estimate is a stateful pre-pass; the mask is
+	 * eroded and blurred at half res before the cut. */
+	"motion-mask": {
+		prePasses: [
+			{
+				fragment:
+					H +
+					`uniform float u_persistence;
+uniform sampler2D u_feedback;
+void main() {
+  outColor = mix(texture(u_texture, v_uv), texture(u_feedback, v_uv), u_persistence);
+}`,
+				feedback: true,
+			},
+			{
+				fragment:
+					H +
+					`uniform sampler2D u_original;
+void main() {
+  vec3 s = texture(u_original, v_uv).rgb;
+  vec3 b = texture(u_texture, v_uv).rgb;
+  outColor = vec4(abs(s.r - b.r) + abs(s.g - b.g) + abs(s.b - b.b));
+}`,
+			},
+			{
+				fragment:
+					H +
+					`uniform float u_erode;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float m = 1e9;
+  for (int i = -6; i <= 6; i++) {
+    if (abs(float(i)) > u_erode) continue;
+    m = min(m, texture(u_texture, v_uv + vec2(float(i) * px.x, 0.0)).r);
+  }
+  outColor = vec4(m);
+}`,
+			},
+			{
+				fragment:
+					H +
+					`uniform float u_erode;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float m = 1e9;
+  for (int i = -6; i <= 6; i++) {
+    if (abs(float(i)) > u_erode) continue;
+    m = min(m, texture(u_texture, v_uv + vec2(0.0, float(i) * px.y)).r);
+  }
+  outColor = vec4(m);
+}`,
+			},
+			{
+				fragment:
+					H +
+					`uniform float u_blur;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float r = floor(u_blur);
+  float sum = 0.0;
+  for (int i = -6; i <= 6; i++) {
+    if (abs(float(i)) > r) continue;
+    sum += texture(u_texture, v_uv + vec2(float(i) * px.x, 0.0)).r;
+  }
+  outColor = vec4(sum / (2.0 * r + 1.0));
+}`,
+			},
+			{
+				fragment:
+					H +
+					`uniform float u_blur;
+void main() {
+  vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
+  float r = floor(u_blur);
+  float sum = 0.0;
+  for (int i = -6; i <= 6; i++) {
+    if (abs(float(i)) > r) continue;
+    sum += texture(u_texture, v_uv + vec2(0.0, float(i) * px.y)).r;
+  }
+  outColor = vec4(sum / (2.0 * r + 1.0));
+}`,
+			},
+		],
+		fragment:
+			H +
+			`uniform float u_threshold;
+uniform float u_showMask;
+uniform float u_hardCutoff;
+uniform sampler2D u_original;
+void main() {
+  vec4 src = texture(u_original, v_uv);
+  float m = texture(u_texture, v_uv).r;
+  vec4 res = vec4(0.0);
+  if (m > u_threshold) {
+    res = u_showMask > 0.5 ? vec4(1.0) : src;
+    if (u_hardCutoff < 0.5) res *= clamp(m, 0.0, 1.0);
+  }
+  outColor = res;
+}`,
+		animated: true,
+		setUniforms: floats(
+			"threshold",
+			"persistence",
+			"erode",
+			"blur",
+			"showMask",
+			"hardCutoff",
+		),
 	},
 };
 

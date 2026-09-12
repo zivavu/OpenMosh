@@ -320,7 +320,11 @@ export class GlRenderer {
 		{
 			program: CompiledProgram;
 			def: EffectShaderDef;
-			prePasses?: { program: CompiledProgram; linearFilter?: boolean }[];
+			prePasses?: {
+				program: CompiledProgram;
+				linearFilter?: boolean;
+				feedback?: boolean;
+			}[];
 		}
 	>();
 	private textBlendProgram: CompiledProgram | null = null;
@@ -1545,7 +1549,9 @@ export class GlRenderer {
 	 * without this the latter three grow unbounded across a long session. */
 	private gcFxFeedback(live: Set<string>) {
 		for (const [id, pair] of this.fxFeedback) {
-			if (!live.has(id)) {
+			// Stateful pre-passes key their history as "<instanceId>:<pass>".
+			const owner = id.includes(":") ? id.slice(0, id.indexOf(":")) : id;
+			if (!live.has(owner)) {
 				this.deleteTexturePair(pair.textures);
 				this.deleteFBOPair(pair.fbos);
 				this.fxFeedback.delete(id);
@@ -1692,7 +1698,34 @@ export class GlRenderer {
 			if (entry.prePasses) {
 				this.ensureHdrBuffers();
 				let hdrIdx = 0;
-				for (const pp of entry.prePasses) {
+				for (let p = 0; p < entry.prePasses.length; p++) {
+					const pp = entry.prePasses[p];
+					// A stateful pre-pass keeps its own full-res history (a background
+					// estimate, a held keyframe) that the main pass then reads as its
+					// input, separate from the main pass's own u_feedback.
+					if (pp.feedback) {
+						const pair = this.getFxFeedback(
+							`${eff.instanceId}:${p}`,
+							input,
+							time,
+						);
+						const writeSlot = 1 - pair.idx;
+						this.drawPass(
+							pp.program,
+							pair.fbos[writeSlot],
+							input,
+							1.0,
+							effectTime,
+							entry.def,
+							eff.values,
+							originalInput,
+							effectDelta,
+							pair.textures[pair.idx],
+						);
+						pair.idx = writeSlot as 0 | 1;
+						input = pair.textures[writeSlot];
+						continue;
+					}
 					if (pp.linearFilter) this.setTextureFilter(input, true);
 					this.drawPass(
 						pp.program,
@@ -1702,7 +1735,7 @@ export class GlRenderer {
 						effectTime,
 						entry.def,
 						eff.values,
-						undefined,
+						originalInput,
 						undefined,
 						undefined,
 						this.hdrW,
@@ -2888,11 +2921,17 @@ export class GlRenderer {
 		try {
 			const program = this.compile(def.fragment);
 			let prePasses:
-				{ program: CompiledProgram; linearFilter?: boolean }[] | undefined;
+				| {
+						program: CompiledProgram;
+						linearFilter?: boolean;
+						feedback?: boolean;
+				  }[]
+				| undefined;
 			if (def.prePasses) {
 				prePasses = def.prePasses.map((pp) => ({
 					program: this.compile(pp.fragment),
 					linearFilter: pp.linearFilter,
+					feedback: pp.feedback,
 				}));
 			}
 			const entry = { program, def, prePasses };
