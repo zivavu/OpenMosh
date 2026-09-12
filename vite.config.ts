@@ -53,7 +53,26 @@ function preloadLatinFonts(): Plugin {
 	};
 }
 
+// `/lab` without the slash would fall through to the SPA fallback and land in
+// the app; the lab page only resolves at `/lab/`.
+function labRedirect(): Plugin {
+	return {
+		name: "openmosh:lab-redirect",
+		configureServer(server) {
+			server.middlewares.use((req, res, next) => {
+				if (req.url === "/lab" || req.url?.startsWith("/lab?") || req.url?.startsWith("/lab#")) {
+					res.statusCode = 302;
+					res.setHeader("Location", "/lab/" + req.url.slice(4));
+					res.end();
+					return;
+				}
+				next();
+			});
+		},
+	};
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [svelte(), preloadLatinFonts()],
+	plugins: [svelte(), preloadLatinFonts(), labRedirect()],
 });
