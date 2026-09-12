@@ -14,8 +14,16 @@ import {
 
 // --- Shader catalogue --------------------------------------------------------
 
-const fsFiles = import.meta.glob("./shaders/**/*.fs", { query: "?raw", eager: true, import: "default" }) as Record<string, string>;
-const vsFiles = import.meta.glob("./shaders/**/*.vs", { query: "?raw", eager: true, import: "default" }) as Record<string, string>;
+const fsFiles = import.meta.glob("./shaders/**/*.fs", {
+	query: "?raw",
+	eager: true,
+	import: "default",
+}) as Record<string, string>;
+const vsFiles = import.meta.glob("./shaders/**/*.vs", {
+	query: "?raw",
+	eager: true,
+	import: "default",
+}) as Record<string, string>;
 
 interface Entry {
 	id: string;
@@ -28,21 +36,11 @@ interface Entry {
 	imageInputs: string[];
 }
 
-function groupFor(path: string, header: IsfHeader): string {
-	if (path.includes("/ported/")) {
-		const credit = header.CREDIT ?? "";
-		if (credit.includes("X-PostProcessing")) return "Ported · X-PostProcessing (MIT)";
-		if (credit.includes("Acerola")) return "Ported · AcerolaFX (MIT)";
-		if (credit.includes("Keijiro")) return "Ported · Kino (Unlicense/MIT)";
-		if (credit.includes("godotshaders")) return "Ported · Godot (CC0)";
-		return "Ported";
-	}
-	const cats = header.CATEGORIES ?? [];
-	const primary =
-		["Glitch", "Feedback", "Distortion", "Distortion Effect", "Retro", "Film", "Stylize", "Halftone Effect", "Tile Effect", "Kaleidoscope", "Blur", "Noise", "Color Effect", "Color"].find((c) => cats.includes(c)) ??
-		cats[0] ??
-		"Other";
-	return `Vidvox · ${primary.replace(" Effect", "")}`;
+function groupFor(path: string): string {
+	if (path.includes("/keijiro/")) return "Keijiro · Japan (Unlicense)";
+	if (path.includes("/gl-transitions/")) return "gl-transitions (MIT)";
+	if (path.includes("/pixi/")) return "PixiJS filters (MIT)";
+	return "Unsorted";
 }
 
 const entries: Entry[] = Object.entries(fsFiles)
@@ -50,27 +48,55 @@ const entries: Entry[] = Object.entries(fsFiles)
 		const name = path.split("/").pop()!.replace(/\.fs$/, "");
 		try {
 			const { header, body } = parseIsf(src);
-			const imageInputs = (header.INPUTS ?? []).filter((i) => i.TYPE === "image").map((i) => i.NAME);
-			return { id: path, name, group: groupFor(path, header), header, body, vs: vsFiles[path.replace(/\.fs$/, ".vs")], imageInputs };
+			const imageInputs = (header.INPUTS ?? [])
+				.filter((i) => i.TYPE === "image")
+				.map((i) => i.NAME);
+			return {
+				id: path,
+				name,
+				group: groupFor(path),
+				header,
+				body,
+				vs: vsFiles[path.replace(/\.fs$/, ".vs")],
+				imageInputs,
+			};
 		} catch (e) {
-			return { id: path, name, group: "Broken", header: {}, body: "", error: String(e), imageInputs: [] };
+			return {
+				id: path,
+				name,
+				group: "Broken",
+				header: {},
+				body: "",
+				error: String(e),
+				imageInputs: [],
+			};
 		}
 	})
-	.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
-// Ported shaders first — they are the point of the lab.
-entries.sort((a, b) => Number(b.group.startsWith("Ported")) - Number(a.group.startsWith("Ported")));
+	.sort(
+		(a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name),
+	);
 
 // --- Persistence ---------------------------------------------------------------
 
-const favs = new Set<string>(JSON.parse(localStorage.getItem("lab-favs") ?? "[]"));
-const notes: Record<string, string> = JSON.parse(localStorage.getItem("lab-notes") ?? "{}");
-const saveFavs = () => localStorage.setItem("lab-favs", JSON.stringify([...favs]));
-const saveNotes = () => localStorage.setItem("lab-notes", JSON.stringify(notes));
+const favs = new Set<string>(
+	JSON.parse(localStorage.getItem("lab-favs") ?? "[]"),
+);
+const notes: Record<string, string> = JSON.parse(
+	localStorage.getItem("lab-notes") ?? "{}",
+);
+const saveFavs = () =>
+	localStorage.setItem("lab-favs", JSON.stringify([...favs]));
+const saveNotes = () =>
+	localStorage.setItem("lab-notes", JSON.stringify(notes));
 
 // --- GL setup --------------------------------------------------------------------
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
-const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false })!;
+const gl = canvas.getContext("webgl2", {
+	preserveDrawingBuffer: true,
+	antialias: false,
+	premultipliedAlpha: false,
+})!;
 if (!gl) throw new Error("WebGL2 required");
 
 function makeTexture(): WebGLTexture {
@@ -95,12 +121,17 @@ class MediaSlot {
 	constructor(private readonly onLoad?: () => void) {}
 
 	get binding(): ImageBinding | undefined {
-		return this.width ? { texture: this.texture, width: this.width, height: this.height } : undefined;
+		return this.width
+			? { texture: this.texture, width: this.width, height: this.height }
+			: undefined;
 	}
 
 	clear() {
 		this.video?.pause();
-		if (this.video?.srcObject) (this.video.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+		if (this.video?.srcObject)
+			(this.video.srcObject as MediaStream)
+				.getTracks()
+				.forEach((t) => t.stop());
 		this.video = undefined;
 		this.image = undefined;
 		this.width = this.height = 0;
@@ -137,7 +168,10 @@ class MediaSlot {
 
 	async loadWebcam() {
 		this.clear();
-		const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+		const stream = await navigator.mediaDevices.getUserMedia({
+			video: { width: 1280, height: 720 },
+			audio: false,
+		});
 		const v = document.createElement("video");
 		v.srcObject = stream;
 		v.muted = true;
@@ -158,10 +192,24 @@ class MediaSlot {
 		if (this.video && this.video.readyState >= 2) {
 			if (this.video.currentTime !== this.lastTime || this.video.srcObject) {
 				this.lastTime = this.video.currentTime;
-				gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.video);
+				gl.texImage2D(
+					gl.TEXTURE_2D,
+					0,
+					gl.RGBA,
+					gl.RGBA,
+					gl.UNSIGNED_BYTE,
+					this.video,
+				);
 			}
 		} else if (this.image && !this.imageUploaded) {
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.image);
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				this.image,
+			);
 			this.imageUploaded = true;
 		}
 		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -176,8 +224,11 @@ const mediaA = new MediaSlot(() => {
 const mediaB = new MediaSlot();
 
 // Bypass renders the source through the simplest possible ISF.
-const passthrough = new IsfEffect(gl, parseIsf(`/*{"INPUTS":[{"NAME":"inputImage","TYPE":"image"}]}*/
-void main(){ gl_FragColor = IMG_THIS_NORM_PIXEL(inputImage); }`));
+const passthrough = new IsfEffect(
+	gl,
+	parseIsf(`/*{"INPUTS":[{"NAME":"inputImage","TYPE":"image"}]}*/
+void main(){ gl_FragColor = IMG_THIS_NORM_PIXEL(inputImage); }`),
+);
 
 // --- State -------------------------------------------------------------------
 
@@ -222,13 +273,18 @@ function showError(msg?: string) {
 function select(entry: Entry) {
 	current?.effect?.dispose();
 	const params: Record<string, ParamValue> = {};
-	for (const input of entry.header.INPUTS ?? []) if (input.TYPE !== "image") params[input.NAME] = defaultValue(input);
+	for (const input of entry.header.INPUTS ?? [])
+		if (input.TYPE !== "image") params[input.NAME] = defaultValue(input);
 	current = { entry, params, events: new Set() };
 	titleEl.textContent = entry.name;
 	notesEl.value = notes[entry.id] ?? "";
 	try {
 		if (entry.error) throw new Error(entry.error);
-		current.effect = new IsfEffect(gl, { header: entry.header, body: entry.body }, entry.vs);
+		current.effect = new IsfEffect(
+			gl,
+			{ header: entry.header, body: entry.body },
+			entry.vs,
+		);
 		showError();
 	} catch (e) {
 		entry.error = (e as Error).message;
@@ -246,7 +302,12 @@ function select(entry: Entry) {
 // After a few frames, compare against the source; if nothing changed, push
 // sliders sitting at their minimum to mid-range and say so.
 let noopTimer = 0;
-const scratch = { fbo: gl.createFramebuffer()!, tex: makeTexture(), w: 0, h: 0 };
+const scratch = {
+	fbo: gl.createFramebuffer()!,
+	tex: makeTexture(),
+	w: 0,
+	h: 0,
+};
 function scheduleNoopCheck() {
 	clearTimeout(noopTimer);
 	noopTimer = window.setTimeout(checkNoop, 700);
@@ -254,7 +315,15 @@ function scheduleNoopCheck() {
 function readCanvas(): Uint8Array {
 	const px = new Uint8Array(canvas.width * canvas.height * 4);
 	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-	gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+	gl.readPixels(
+		0,
+		0,
+		canvas.width,
+		canvas.height,
+		gl.RGBA,
+		gl.UNSIGNED_BYTE,
+		px,
+	);
 	return px;
 }
 function checkNoop() {
@@ -265,13 +334,36 @@ function checkNoop() {
 	const { w, h } = { w: canvas.width, h: canvas.height };
 	if (scratch.w !== w || scratch.h !== h) {
 		gl.bindTexture(gl.TEXTURE_2D, scratch.tex);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA8,
+			w,
+			h,
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			null,
+		);
 		gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.fbo);
-		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scratch.tex, 0);
+		gl.framebufferTexture2D(
+			gl.FRAMEBUFFER,
+			gl.COLOR_ATTACHMENT0,
+			gl.TEXTURE_2D,
+			scratch.tex,
+			0,
+		);
 		scratch.w = w;
 		scratch.h = h;
 	}
-	passthrough.render({}, { inputImage: a }, performance.now() / 1000, scratch.fbo, w, h);
+	passthrough.render(
+		{},
+		{ inputImage: a },
+		performance.now() / 1000,
+		scratch.fbo,
+		w,
+		h,
+	);
 	const src = new Uint8Array(w * h * 4);
 	gl.bindFramebuffer(gl.FRAMEBUFFER, scratch.fbo);
 	gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, src);
@@ -279,7 +371,10 @@ function checkNoop() {
 	let diff = 0;
 	let n = 0;
 	for (let i = 0; i < out.length; i += 16) {
-		diff += Math.abs(out[i] - src[i]) + Math.abs(out[i + 1] - src[i + 1]) + Math.abs(out[i + 2] - src[i + 2]);
+		diff +=
+			Math.abs(out[i] - src[i]) +
+			Math.abs(out[i + 1] - src[i + 1]) +
+			Math.abs(out[i + 2] - src[i + 2]);
 		n += 3;
 	}
 	if (diff / n > 0.5) return;
@@ -301,9 +396,13 @@ function checkNoop() {
 	}
 	if (bumped.length) {
 		renderParams();
-		showError(`Defaults were a no-op on this footage — bumped to 50%: ${bumped.join(", ")}. Reset restores the originals.`);
+		showError(
+			`Defaults were a no-op on this footage — bumped to 50%: ${bumped.join(", ")}. Reset restores the originals.`,
+		);
 	} else {
-		showError("No visible change at these settings (needs motion, a second image, or specific colors).");
+		showError(
+			"No visible change at these settings (needs motion, a second image, or specific colors).",
+		);
 	}
 }
 
@@ -316,7 +415,13 @@ function renderList() {
 	let lastGroup = "";
 	for (const e of entries) {
 		if (favOnly && !favs.has(e.id)) continue;
-		if (q && !`${e.name} ${e.group} ${(e.header.CATEGORIES ?? []).join(" ")} ${e.header.DESCRIPTION ?? ""}`.toLowerCase().includes(q)) continue;
+		if (
+			q &&
+			!`${e.name} ${e.group} ${(e.header.CATEGORIES ?? []).join(" ")} ${e.header.DESCRIPTION ?? ""}`
+				.toLowerCase()
+				.includes(q)
+		)
+			continue;
 		if (e.group !== lastGroup) {
 			const h = document.createElement("h4");
 			h.textContent = e.group;
@@ -341,7 +446,9 @@ function renderList() {
 		name.title = e.header.DESCRIPTION ?? "";
 		const cats = document.createElement("span");
 		cats.className = "cats";
-		cats.textContent = e.header.PASSES?.length ? `${e.header.PASSES.length}p` : "";
+		cats.textContent = e.header.PASSES?.length
+			? `${e.header.PASSES.length}p`
+			: "";
 		item.append(star, name, cats);
 		item.onclick = () => select(e);
 		listEl.appendChild(item);
@@ -358,7 +465,11 @@ function toggleFav(e: Entry) {
 // --- Params UI ---------------------------------------------------------------------
 
 function fmt(v: number) {
-	return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(3);
+	return Math.abs(v) >= 100
+		? v.toFixed(0)
+		: Math.abs(v) >= 10
+			? v.toFixed(1)
+			: v.toFixed(3);
 }
 
 function renderParams() {
@@ -492,7 +603,8 @@ function renderParams() {
 					r.max = String(max[axis]);
 					r.step = String((max[axis] - min[axis]) / 1000);
 					r.value = String(v[axis]);
-					r.oninput = () => ((params[input.NAME] as number[])[axis] = Number(r.value));
+					r.oninput = () =>
+						((params[input.NAME] as number[])[axis] = Number(r.value));
 					wrap.append(r);
 				}
 				break;
@@ -506,7 +618,17 @@ function renderParams() {
 }
 
 function rgbToHex(v: number[]) {
-	return "#" + v.slice(0, 3).map((x) => Math.round(Math.min(1, Math.max(0, x)) * 255).toString(16).padStart(2, "0")).join("");
+	return (
+		"#" +
+		v
+			.slice(0, 3)
+			.map((x) =>
+				Math.round(Math.min(1, Math.max(0, x)) * 255)
+					.toString(16)
+					.padStart(2, "0"),
+			)
+			.join("")
+	);
 }
 function hexToRgb(h: string) {
 	return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -515,17 +637,22 @@ function hexToRgb(h: string) {
 function renderInfo() {
 	if (!current) return;
 	const h = current.entry.header;
-	const src = h.SOURCE ? `<a href="${h.SOURCE}" target="_blank" rel="noreferrer">source</a>` : "";
+	const src = h.SOURCE
+		? `<a href="${h.SOURCE}" target="_blank" rel="noreferrer">source</a>`
+		: "";
 	infoEl.innerHTML = `
 		<div class="desc">${escapeHtml(h.DESCRIPTION ?? "")}</div>
 		<div><b>Credit:</b> ${escapeHtml(h.CREDIT ?? "—")}</div>
-		<div><b>License:</b> ${escapeHtml(h.LICENSE ?? (current.entry.id.includes("/vidvox/") ? "MIT (Vidvox ISF-Files)" : "—"))} ${src}</div>
+		<div><b>License:</b> ${escapeHtml(h.LICENSE ?? "—")} ${src}</div>
 		<div><b>Categories:</b> ${escapeHtml((h.CATEGORIES ?? []).join(", "))}</div>
-		${h.PASSES?.length ? `<div><b>Passes:</b> ${h.PASSES.map((p) => p.TARGET ? `${p.TARGET}${p.PERSISTENT ? "*" : ""}` : "out").join(" → ")}</div>` : ""}
+		${h.PASSES?.length ? `<div><b>Passes:</b> ${h.PASSES.map((p) => (p.TARGET ? `${p.TARGET}${p.PERSISTENT ? "*" : ""}` : "out")).join(" → ")}</div>` : ""}
 	`;
 }
 function escapeHtml(s: string) {
-	return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+	return s.replace(
+		/[&<>"]/g,
+		(c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
+	);
 }
 
 // --- Render loop -----------------------------------------------------------------------
@@ -543,7 +670,9 @@ function frame(now: number) {
 	const t0 = performance.now();
 	const images: Record<string, ImageBinding> = { inputImage: a, startImage: a };
 	const b = mediaB.binding;
-	if (current) for (const n of current.entry.imageInputs) if (n !== "inputImage" && n !== "startImage" && b) images[n] = b;
+	if (current)
+		for (const n of current.entry.imageInputs)
+			if (n !== "inputImage" && n !== "startImage" && b) images[n] = b;
 	gl.viewport(0, 0, canvas.width, canvas.height);
 	const effect = bypass || !current?.effect ? passthrough : current.effect;
 	const params = { ...(current?.params ?? {}) };
@@ -552,7 +681,14 @@ function frame(now: number) {
 		current.events.clear();
 	}
 	try {
-		effect.render(params, images, now / 1000, null, canvas.width, canvas.height);
+		effect.render(
+			params,
+			images,
+			now / 1000,
+			null,
+			canvas.width,
+			canvas.height,
+		);
 	} catch (e) {
 		showError(String(e));
 	}
@@ -577,8 +713,10 @@ const fileBEl = document.getElementById("fileB") as HTMLInputElement;
 document.getElementById("loadMedia")!.onclick = () => fileEl.click();
 document.getElementById("loadB")!.onclick = () => fileBEl.click();
 fileEl.onchange = () => fileEl.files?.[0] && mediaA.loadFile(fileEl.files[0]);
-fileBEl.onchange = () => fileBEl.files?.[0] && mediaB.loadFile(fileBEl.files[0]);
-document.getElementById("webcam")!.onclick = () => mediaA.loadWebcam().catch((e) => showError(String(e)));
+fileBEl.onchange = () =>
+	fileBEl.files?.[0] && mediaB.loadFile(fileBEl.files[0]);
+document.getElementById("webcam")!.onclick = () =>
+	mediaA.loadWebcam().catch((e) => showError(String(e)));
 
 stage.ondragover = (e) => {
 	e.preventDefault();
@@ -624,7 +762,9 @@ bypassBtn.onpointerup = bypassBtn.onpointerleave = () => setBypass(false);
 document.getElementById("reset")!.onclick = () => current && resetCurrent();
 function resetCurrent() {
 	if (!current) return;
-	for (const input of current.entry.header.INPUTS ?? []) if (input.TYPE !== "image") current.params[input.NAME] = defaultValue(input);
+	for (const input of current.entry.header.INPUTS ?? [])
+		if (input.TYPE !== "image")
+			current.params[input.NAME] = defaultValue(input);
 	current.effect?.reset();
 	renderParams();
 }
@@ -636,7 +776,8 @@ document.getElementById("random")!.onclick = () => {
 			const max = typeof input.MAX === "number" ? input.MAX : 1;
 			current.params[input.NAME] = min + Math.random() * (max - min);
 		} else if (input.TYPE === "long" && input.VALUES?.length) {
-			current.params[input.NAME] = input.VALUES[Math.floor(Math.random() * input.VALUES.length)];
+			current.params[input.NAME] =
+				input.VALUES[Math.floor(Math.random() * input.VALUES.length)];
 		} else if (input.TYPE === "bool") {
 			current.params[input.NAME] = Math.random() < 0.5;
 		}
@@ -672,7 +813,11 @@ document.getElementById("compileAll")!.onclick = () => {
 		}
 	}
 	renderList();
-	showError(bad ? `${bad} of ${entries.length} shaders failed to compile — they are marked red. Select one to see its log.` : `All ${entries.length} shaders compile.`);
+	showError(
+		bad
+			? `${bad} of ${entries.length} shaders failed to compile — they are marked red. Select one to see its log.`
+			: `All ${entries.length} shaders compile.`,
+	);
 };
 
 document.getElementById("exportList")!.onclick = async () => {
@@ -697,7 +842,13 @@ window.addEventListener("keydown", (e) => {
 	const idx = visible.findIndex((el) => el.classList.contains("active"));
 	if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 		e.preventDefault();
-		const next = visible[Math.min(visible.length - 1, Math.max(0, idx + (e.key === "ArrowDown" ? 1 : -1)))];
+		const next =
+			visible[
+				Math.min(
+					visible.length - 1,
+					Math.max(0, idx + (e.key === "ArrowDown" ? 1 : -1)),
+				)
+			];
 		next?.click();
 		next?.scrollIntoView({ block: "nearest" });
 	} else if (e.key === " ") {
@@ -717,7 +868,9 @@ window.addEventListener("keyup", (e) => {
 (window as unknown as { __lab: unknown }).__lab = {
 	entries,
 	select,
-	get current() { return current; },
+	get current() {
+		return current;
+	},
 	setBypass,
 	gl,
 	canvas,

@@ -10,5 +10,6 @@
 		"skipLibCheck": true,
 		"noUncheckedIndexedAccess": false
 	},
-	"include": ["*.ts"]
+	"include": ["*.ts"],
+	"exclude": ["check.ts"]
 }

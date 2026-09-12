@@ -8,10 +8,9 @@ bun dev   →   http://localhost:5173/lab/
 ```
 
 Drop a video or image on the stage (Shift-drop loads it as "media B", used by
-shaders with a second image input such as transitions and light leaks).
-Pick a shader on the left, tweak on the right, hold **B** to compare with the
-source, star (**F**) what fits, write notes — **Copy shortlist** exports stars
-and notes as markdown.
+transitions as `endImage`). Pick a shader on the left, tweak on the right, hold
+**B** to compare with the source, star (**F**) what fits, write notes —
+**Copy shortlist** exports stars and notes as markdown.
 
 **Compile all** builds every shader once and marks the ones that fail red.
 
@@ -20,12 +19,14 @@ and notes as markdown.
 - `isf.ts` — a small ISF (Interactive Shader Format) runtime for WebGL2:
   JSON header parsing, `IMG_*` macro expansion, multi-pass with persistent /
   float targets and `WIDTH`/`HEIGHT` expressions, custom `.vs` files.
-- `shaders/vidvox/` — filters copied verbatim from
-  [Vidvox/ISF-Files](https://github.com/Vidvox/ISF-Files) (MIT). Generators,
-  wipes, audio and utility shaders were left out.
-- `shaders/ported/` — hand ports to ISF from other MIT/CC0 sources:
-  X-PostProcessing-Library (glitch family, pixelizers), AcerolaFX (Kuwahara,
-  XDoG, dither, CMYK halftone, CRT), Kino (Tube, Streak, Hatch, Aqua) and two
-  godotshaders.com CC0 shaders. Each header carries `CREDIT`, `LICENSE` and
-  `SOURCE`; a `NOTES`-style remark in `DESCRIPTION` says where a port had to
-  substitute something (e.g. a noise texture).
+- `shaders/keijiro/` — hand ports from Keijiro Takahashi's Unity effects
+  (Unlicense): KinoDatamosh, FlashGlitch, KinoFeedback. Ports that had to
+  substitute something (camera motion vectors, manual triggers) say so in
+  `DESCRIPTION`.
+- `shaders/gl-transitions/` — transitions from
+  [gl-transitions](https://github.com/gl-transitions/gl-transitions) (MIT),
+  wrapped as ISF with `startImage`/`endImage` and a `progress` slider.
+- `shaders/pixi/` — ports from [pixi-filters](https://github.com/pixijs/filters)
+  (MIT): Godray, Reflection.
+
+Every header carries `CREDIT`, `LICENSE` and `SOURCE`.
