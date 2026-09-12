@@ -17,6 +17,7 @@ function clockParams(
 		moshMax?: number;
 	},
 	unit = "cycle",
+	plural = `${unit}s`,
 ): EffectParam[] {
 	return [
 		{
@@ -45,10 +46,10 @@ function clockParams(
 				{ label: `1 ${unit} / 4 beats`, value: "0.25" },
 				{ label: `1 ${unit} / 2 beats`, value: "0.5" },
 				{ label: `1 ${unit} / beat`, value: "1" },
-				{ label: `2 ${unit}s / beat`, value: "2" },
-				{ label: `3 ${unit}s / beat`, value: "3" },
-				{ label: `4 ${unit}s / beat`, value: "4" },
-				{ label: `8 ${unit}s / beat`, value: "8" },
+				{ label: `2 ${plural} / beat`, value: "2" },
+				{ label: `3 ${plural} / beat`, value: "3" },
+				{ label: `4 ${plural} / beat`, value: "4" },
+				{ label: `8 ${plural} / beat`, value: "8" },
 			],
 			visibleWhen: (v) => v.sync === "beat",
 		},
@@ -1367,45 +1368,12 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		id: "strobe",
 		name: "Strobe",
 		params: [
-			{
-				key: "sync",
-				label: "Sync",
-				type: "select",
-				defaultValue: "free",
-				options: [
-					{ label: "Free", value: "free" },
-					{ label: "Beat", value: "beat" },
-				],
-			},
-			{
-				// Keyed "speed" so the renderer accumulates phase for it: one unit
-				// of phase is one flash, making this literally flashes per second.
-				key: "speed",
-				label: "Rate",
-				type: "range",
-				min: 0.2,
-				max: 20,
-				step: 0.1,
-				defaultValue: 5,
-				visibleWhen: (v) => v.sync !== "beat",
-			},
-			{
-				// Beat sync: one flash per this many beats, read off the song grid.
-				key: "division",
-				label: "Division",
-				type: "select",
-				defaultValue: "1",
-				options: [
-					{ label: "Every 4 beats", value: "0.25" },
-					{ label: "Every 2 beats", value: "0.5" },
-					{ label: "Every beat", value: "1" },
-					{ label: "1/2 beat", value: "2" },
-					{ label: "1/3 beat", value: "3" },
-					{ label: "1/4 beat", value: "4" },
-					{ label: "1/8 beat", value: "8" },
-				],
-				visibleWhen: (v) => v.sync === "beat",
-			},
+			...clockParams(
+				"Rate",
+				{ min: 0.2, max: 20, step: 0.1, defaultValue: 5 },
+				"flash",
+				"flashes",
+			),
 			{
 				key: "duty",
 				label: "Duty",
@@ -2044,6 +2012,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				"Rate",
 				{ min: 0.2, max: 20, step: 0.1, defaultValue: 4 },
 				"flash",
+				"flashes",
 			),
 			{
 				key: "stagger",
