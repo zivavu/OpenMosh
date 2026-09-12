@@ -1,4 +1,4 @@
-import { hydrateEffects, loadInitialEffects } from "../effects";
+import { loadInitialEffects, restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
@@ -268,7 +268,7 @@ export function appendMediaLane(
 
 /** A lane saved with no chain at all is backfilled, not left switch-less. */
 function laneEffects(saved: unknown): EffectInstance[] {
-	const hydrated = hydrateEffects(saved);
+	const hydrated = restoreEffects(saved);
 	return hydrated.length > 0 ? hydrated : loadInitialEffects();
 }
 

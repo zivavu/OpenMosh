@@ -14,6 +14,7 @@ export {
 import type { EffectDefinition, EffectInstance, VolumeLink } from "./types";
 import { generateId } from "./types";
 import { EFFECT_DEFINITIONS } from "./definitions";
+import { hydrateEffects } from "./hydrate";
 import { readJson } from "../storage";
 
 export function createEffectInstance(def: EffectDefinition): EffectInstance {
@@ -47,6 +48,26 @@ export function loadInitialEffects(): EffectInstance[] {
 	return EFFECT_DEFINITIONS.filter((def) => !hiddenIds.has(def.id)).map(
 		createEffectInstance,
 	);
+}
+
+/**
+ * Append a disabled instance for every effect the chain lacks, unless the user
+ * hid it. A stored chain is only as long as the registry was the day it was
+ * saved, so without this each new effect surfaces under "hidden" instead of
+ * in the pool.
+ */
+export function addNewEffects(effects: EffectInstance[]): EffectInstance[] {
+	const hidden = new Set(readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null));
+	const present = new Set(effects.map((e) => e.defId));
+	const added = EFFECT_DEFINITIONS.filter(
+		(def) => !present.has(def.id) && !hidden.has(def.id),
+	).map(createEffectInstance);
+	return added.length > 0 ? [...effects, ...added] : effects;
+}
+
+/** hydrateEffects, then the effects the chain predates. */
+export function restoreEffects(saved: unknown): EffectInstance[] {
+	return addNewEffects(hydrateEffects(saved));
 }
 
 export function setVolumeLink(

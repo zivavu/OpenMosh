@@ -1,4 +1,4 @@
-import { hydrateEffects, loadInitialEffects } from "../effects";
+import { loadInitialEffects, restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 // Straight from the module, not the barrel: that re-exports the custom-font
 // store, whose runes can't run outside a Svelte build — which took this file's
@@ -175,7 +175,7 @@ export const TEXT_Z_BASE = 1000;
 
 /** A lane saved with no chain at all is backfilled, not left switch-less. */
 function laneEffects(saved: unknown): EffectInstance[] {
-	const hydrated = hydrateEffects(saved);
+	const hydrated = restoreEffects(saved);
 	return hydrated.length > 0 ? hydrated : loadInitialEffects();
 }
 

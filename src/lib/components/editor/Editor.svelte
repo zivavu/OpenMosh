@@ -49,8 +49,8 @@
 	} from "../../editor/settings";
 	import {
 		cloneEffectInstance,
-		hydrateEffects,
 		loadInitialEffects,
+		restoreEffects,
 		setVolumeLink,
 		type EffectInstance,
 		type FreqBand,
@@ -605,7 +605,7 @@
 	function restoredEffects(): EffectInstance[] | null {
 		const saved = untrack(() => initialSession)?.effects;
 		if (!Array.isArray(saved) || saved.length === 0) return null;
-		const known = hydrateEffects(saved);
+		const known = restoreEffects(saved);
 		return known.length > 0 ? known : null;
 	}
 
@@ -1184,7 +1184,7 @@
 			// And they can predate an effect gaining a param, which the panel
 			// reads off the instance without checking.
 			for (const seg of entry.segments)
-				seg.effects = hydrateEffects(seg.effects);
+				seg.effects = restoreEffects(seg.effects);
 		}
 		return entry;
 	}
