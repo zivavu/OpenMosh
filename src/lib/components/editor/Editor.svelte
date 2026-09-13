@@ -5114,8 +5114,9 @@
 	}
 
 	/* Below this the bar has no room for words: the media actions keep their
-	   icons and lose their labels, and the spacing tightens with them. */
-	@media (max-width: 1000px) {
+	   icons and lose their labels, and the spacing tightens with them. Four of
+	   them plus the count against a 340px sidebar needs the full 1200. */
+	@media (max-width: 1200px) {
 		.top-bar {
 			padding: 7px 8px 6px;
 		}
