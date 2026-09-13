@@ -1871,20 +1871,19 @@
 	let showClearSourcesConfirm = $state(false);
 
 	/**
-	 * Empty the pool back to the primary source. The segment reset goes through
+	 * Empty the pool, primary included: the preview sits on its no-media
+	 * placeholder until something is added back. The segment reset goes through
 	 * seqBoundaries so Ctrl+Z restores the assignments — the media itself is
 	 * deleted from storage though, so re-adding the files is on the user.
 	 */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
 		for (const src of sequenceSources) {
-			if (!src.primary) {
-				setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
-			}
+			setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
 		}
-		sourceRegistry.clearExtras();
+		sourceRegistry.clear();
 		// The cleared source's frame is still on the texture, and the driver
-		// still thinks it's current — make it re-upload from the primary.
+		// still thinks it's current — make it forget it.
 		seqFrames.invalidate();
 		restoreAttempted.clear();
 		if (sequenceSegments.some((s) => s.sourceId)) {
@@ -4119,10 +4118,10 @@
 								<span class="btn-label">Generate</span>
 							</button>
 						{/if}
-						{#if sequenceSources.length > 1}
+						{#if sequenceSources.length > 0}
 							<button
 								class="seq-media-btn danger"
-								title="Remove every added source from this song"
+								title="Remove every source from this song"
 								onclick={() => (showClearSourcesConfirm = true)}
 							>
 								<Trash2 size={12} />
@@ -4986,7 +4985,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Every source but the one marked BASE is removed from this song, and its segments go back to playing the base. Media that other songs still use is kept."
+			message="Every source is removed from this song, the base included, and its segments are left with nothing to play until media is added back. Media that other songs still use is kept."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger

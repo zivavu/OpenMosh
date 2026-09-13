@@ -347,11 +347,9 @@ export class SequenceSourceRegistry {
 		this.sources = list;
 	}
 
-	/** Drop every added source, keeping the primary. */
-	clearExtras() {
-		for (const s of [...this.sources]) {
-			if (!s.primary) this.remove(s.id);
-		}
+	/** Drop every source, the primary included. */
+	clear() {
+		for (const s of [...this.sources]) this.remove(s.id);
 	}
 
 	/**
