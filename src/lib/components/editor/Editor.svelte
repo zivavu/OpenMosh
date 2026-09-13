@@ -11,6 +11,7 @@
 		Pause,
 		Play,
 		Plus,
+		Sparkles,
 		Shuffle,
 		Trash2,
 		TriangleAlert,
@@ -213,9 +214,13 @@
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 	import { showToast } from "../ui/toast.svelte";
 	import { lazy } from "../../lazy";
+	import { GeneratedSizeSync, readGenerated } from "../../generators";
 
 	// An overlay behind a key; its chunk waits until someone asks for help.
 	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
+	const loadGeneratePanel = lazy(
+		() => import("../generators/GeneratePanel.svelte"),
+	);
 
 	interface Props {
 		file: File;
@@ -595,6 +600,43 @@
 		imageSrc = url;
 		return () => URL.revokeObjectURL(url);
 	});
+
+	// A generated file re-renders at the output size; the preview reads the
+	// re-render while `file` (the identity sessions key on) stays put. Sequence
+	// mode's pool does the same for its own entries — this is only for the file
+	// the editor's own player shows.
+	let generatedSrc = $state<string | null>(null);
+	const primarySync = new GeneratedSizeSync((_, url) => {
+		if (generatedSrc) URL.revokeObjectURL(generatedSrc);
+		generatedSrc = url;
+	});
+	$effect(() => {
+		const f = file;
+		primarySync.untrack("primary");
+		// Untracked: a re-render landing must not count as a change of file.
+		untrack(() => {
+			if (generatedSrc) URL.revokeObjectURL(generatedSrc);
+			generatedSrc = null;
+		});
+		void readGenerated(f).then((info) => {
+			if (info && f === file)
+				primarySync.track("primary", info.spec, info.width, info.height);
+		});
+		return () => primarySync.untrack("primary");
+	});
+	$effect(() => {
+		primarySync.resize(resizeWidth, resizeHeight);
+		sourceRegistry.setOutputSize(resizeWidth, resizeHeight);
+	});
+	$effect(() => () => primarySync.dispose());
+
+	let generateOpen = $state(false);
+
+	function useGenerated(files: File[]) {
+		generateOpen = false;
+		if (isSequenceMode) void addSequenceSources(files);
+		else onfile(files[0]);
+	}
 	let canvasEl: HTMLCanvasElement | null = $state(null);
 	let glRenderer: GlRenderer | null = $state(null);
 	/**
@@ -3868,6 +3910,10 @@
 		previewPlayer?.pause();
 		if (isVideo && videoEl) videoEl.pause();
 
+		// Generated sources may still be catching up with a size change.
+		await primarySync.settle();
+		await sourceRegistry.settleGenerated();
+
 		// Preview runs at display resolution — export at the real output size.
 		// GlCanvas restores the preview size when `suspended` clears.
 		if (resizeWidth > 0 && resizeHeight > 0) {
@@ -4064,6 +4110,14 @@
 								<Plus size={12} />
 								<span class="btn-label">Add media</span>
 							</button>
+							<button
+								class="seq-media-btn"
+								title="Generate images into the pool"
+								onclick={() => (generateOpen = true)}
+							>
+								<Sparkles size={12} />
+								<span class="btn-label">Generate</span>
+							</button>
 						{/if}
 						{#if sequenceSources.length > 1}
 							<button
@@ -4081,6 +4135,13 @@
 							: "s"}
 					</span>
 				{:else}
+					<button
+						class="help-btn"
+						title="Generate a new source image"
+						onclick={() => (generateOpen = true)}
+					>
+						<Sparkles size={14} />
+					</button>
 					<div class="output-group">
 						<span class="rack-label">Output</span>
 						<ButtonGroup
@@ -4123,9 +4184,14 @@
 					Every source is gone from this song. Add an image or a video and the
 					segments have something to play again.
 				</p>
-				<button class="no-media-btn" onclick={() => sourceInput?.click()}>
-					<Plus size={14} /> ADD MEDIA
-				</button>
+				<div class="no-media-actions">
+					<button class="no-media-btn" onclick={() => sourceInput?.click()}>
+						<Plus size={14} /> ADD MEDIA
+					</button>
+					<button class="no-media-btn" onclick={() => (generateOpen = true)}>
+						<Sparkles size={14} /> GENERATE
+					</button>
+				</div>
 				<span class="no-media-hint">or drop files anywhere</span>
 			</div>
 		{/snippet}
@@ -4192,6 +4258,7 @@
 				selectedCount={seqSelectedIds.length}
 				selectedSourceId={railSourceId}
 				onAddFiles={(files) => void addSequenceSources(files)}
+				onGenerate={() => (generateOpen = true)}
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
@@ -4235,7 +4302,7 @@
 				</button>
 			{/if}
 			<GlCanvas
-				{imageSrc}
+				imageSrc={generatedSrc ?? imageSrc}
 				effects={renderedEffects}
 				postLayers={fxLayers}
 				canvasWidth={resizeWidth || undefined}
@@ -4894,6 +4961,19 @@
 		</div>
 	{/if}
 
+	{#if generateOpen}
+		{#await loadGeneratePanel() then GeneratePanel}
+			<GeneratePanel
+				single={!isSequenceMode}
+				size={resizeWidth > 0 && resizeHeight > 0
+					? { width: resizeWidth, height: resizeHeight }
+					: null}
+				onUse={useGenerated}
+				onClose={() => (generateOpen = false)}
+			/>
+		{/await}
+	{/if}
+
 	{#if showShortcuts}
 		{#await loadShortcutsModal() then ShortcutsModal}
 			<ShortcutsModal
@@ -5243,6 +5323,11 @@
 		color: var(--text-3);
 		font-size: 0.82rem;
 		line-height: 1.5;
+	}
+
+	.no-media-actions {
+		display: flex;
+		gap: 0.5rem;
 	}
 
 	.no-media-btn {

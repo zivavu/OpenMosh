@@ -3,6 +3,7 @@
 		ImageOff,
 		Play,
 		Plus,
+		Sparkles,
 		TriangleAlert,
 		X,
 		Zap,
@@ -30,6 +31,8 @@
 		 * disagree. */
 		selectedSourceId?: string | null;
 		onAddFiles: (files: File[]) => void;
+		/** Open the image generator, which adds what it makes to the pool. */
+		onGenerate: () => void;
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
@@ -43,6 +46,7 @@
 		selectedCount = 0,
 		selectedSourceId = null,
 		onAddFiles,
+		onGenerate,
 		onRemove,
 		onReorder,
 		onAssign,
@@ -155,9 +159,14 @@
 		<div class="empty-state">
 			<span class="empty-label">NO MEDIA</span>
 			<p>Drop images or videos in, or use the button below.</p>
-			<button class="add-btn" onclick={() => fileInput?.click()}>
-				<Plus size={14} /> ADD MEDIA
-			</button>
+			<div class="empty-actions">
+				<button class="add-btn" onclick={() => fileInput?.click()}>
+					<Plus size={14} /> ADD MEDIA
+				</button>
+				<button class="add-btn" onclick={onGenerate}>
+					<Sparkles size={14} /> GENERATE
+				</button>
+			</div>
 		</div>
 	{:else}
 		<div class="grid">
@@ -357,6 +366,11 @@
 	.add-btn:hover {
 		border-color: var(--mosh);
 		color: var(--mosh);
+	}
+
+	.empty-actions {
+		display: flex;
+		gap: 0.5rem;
 	}
 
 	.grid {

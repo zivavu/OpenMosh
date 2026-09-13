@@ -13,8 +13,9 @@
 		warmRenderer?: GlRenderer | null;
 	}
 
-	import { Image, ListVideo, Music, Upload } from "lucide-svelte";
+	import { Image, ListVideo, Music, Sparkles, Upload } from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
+	import { lazy } from "../../lazy";
 	import DemoBackground from "./DemoBackground.svelte";
 	import GithubLink from "./GithubLink.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
@@ -211,6 +212,19 @@
 	/** Media held back waiting on the song a multi mode requires. */
 	let stagedMedia = $state<File[] | null>(null);
 
+	// Procedural images instead of an upload: they come back as ordinary
+	// files, so they take the same road in as a drop would.
+	const loadGeneratePanel = lazy(
+		() => import("../generators/GeneratePanel.svelte"),
+	);
+	let generateOpen = $state(false);
+
+	function useGenerated(files: File[]) {
+		generateOpen = false;
+		if (isMultiMode) handleMultiFiles(files);
+		else handleFile(files[0]);
+	}
+
 	function launchMultiMode(files: File[]) {
 		stagedMedia = null;
 		if (selectedMode === "sequence") onSequence(files);
@@ -382,18 +396,28 @@
 			if (e.key === "Enter" || e.key === " ") openFilePicker();
 		}}
 	>
-		<label class="load-btn">
-			<input
-				bind:this={fileInput}
-				type="file"
-				accept={getAcceptTypes()}
-				multiple={getIsMultiple()}
-				onchange={onInputChange}
-				style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
-			/>
-			<Upload size={18} />
-			{isMultiMode ? "LOAD FILES" : "LOAD A FILE"}
-		</label>
+		<div class="load-row">
+			<label class="load-btn">
+				<input
+					bind:this={fileInput}
+					type="file"
+					accept={getAcceptTypes()}
+					multiple={getIsMultiple()}
+					onchange={onInputChange}
+					style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
+				/>
+				<Upload size={18} />
+				{isMultiMode ? "LOAD FILES" : "LOAD A FILE"}
+			</label>
+			<button
+				class="load-btn generate-btn"
+				onclick={() => (generateOpen = true)}
+				onkeydown={(e) => e.stopPropagation()}
+			>
+				<Sparkles size={18} />
+				GENERATE
+			</button>
+		</div>
 
 		<div class="separator">
 			<span class="line"></span>
@@ -421,6 +445,16 @@
 		onchange={onAudioInputChange}
 		hidden
 	/>
+
+	{#if generateOpen}
+		{#await loadGeneratePanel() then GeneratePanel}
+			<GeneratePanel
+				single={!isMultiMode}
+				onUse={useGenerated}
+				onClose={() => (generateOpen = false)}
+			/>
+		{/await}
+	{/if}
 
 	{#if pendingAudio}
 		<div class="music-zone music-zone--selected">
@@ -918,6 +952,23 @@
 		border-color: rgba(255, 255, 255, 0.6);
 		color: #fff;
 		background-color: rgba(255, 255, 255, 0.1);
+	}
+
+	.load-row {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.75rem;
+	}
+
+	.generate-btn {
+		border-color: color-mix(in srgb, var(--mosh) 45%, transparent);
+		color: var(--mosh);
+	}
+	.generate-btn:hover {
+		border-color: var(--mosh);
+		color: var(--mosh);
+		background-color: color-mix(in srgb, var(--mosh) 12%, transparent);
 	}
 
 	.separator {

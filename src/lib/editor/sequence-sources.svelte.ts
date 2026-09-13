@@ -4,6 +4,7 @@ import {
 	normalizeSourceEdits,
 	type SourceEdit,
 } from "../media";
+import { GeneratedSizeSync, readGenerated } from "../generators";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
 import { isProxyDisabled, setProxyDisabled } from "../video/proxy-preference";
@@ -124,6 +125,23 @@ export class SequenceSourceRegistry {
 	#proxyJobs = new Map<string, ProxyJob>();
 	#disposed = false;
 	#onReady: (() => void) | undefined;
+	/**
+	 * Generated images follow the output size (see `setOutputSize`): a
+	 * re-render replaces the source's object URL and drops its decode, while the
+	 * File — the id — stays as it was.
+	 */
+	#sizeSync = new GeneratedSizeSync((id, url) => {
+		const live = this.get(id);
+		if (!live || this.#disposed) {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		const old = live.objectUrl;
+		live.objectUrl = url;
+		this.#images.delete(id);
+		URL.revokeObjectURL(old);
+		this.#onReady?.();
+	});
 
 	/** Notified when a lazy decode lands, so a paused preview can redraw. */
 	constructor(onReady?: () => void) {
@@ -200,6 +218,12 @@ export class SequenceSourceRegistry {
 				ok.push(...batch);
 				this.loadingDone += images.length;
 				void this.#fillThumbnails(batch).catch(() => {});
+				for (const s of batch) {
+					void readGenerated(s.file).then((info) => {
+						if (info && !this.#disposed && this.get(s.id))
+							this.#sizeSync.track(s.id, info.spec, info.width, info.height);
+					});
+				}
 			}
 
 			// Videos still need probing up front: it's what rejects undecodable
@@ -295,7 +319,18 @@ export class SequenceSourceRegistry {
 		this.#samplers.get(id)?.dispose();
 		this.#samplers.delete(id);
 		this.#images.delete(id);
+		this.#sizeSync.untrack(id);
 		this.#revoke(src);
+	}
+
+	/** The size generated images should render at — the editor's output size. */
+	setOutputSize(width: number, height: number) {
+		this.#sizeSync.resize(width, height);
+	}
+
+	/** Wait for any generated image still catching up with a size change. */
+	settleGenerated(): Promise<void> {
+		return this.#sizeSync.settle();
 	}
 
 	/**
@@ -469,6 +504,7 @@ export class SequenceSourceRegistry {
 
 	dispose() {
 		this.#disposed = true;
+		this.#sizeSync.dispose();
 		for (const job of this.#proxyJobs.values()) job.cancel();
 		this.#proxyJobs.clear();
 		for (const s of this.#samplers.values()) s.dispose();

@@ -5,6 +5,7 @@
 		X,
 		Plus,
 		Play,
+		Sparkles,
 		TriangleAlert,
 		Zap,
 		ZapOff,
@@ -22,6 +23,8 @@
 		config: SlideshowConfig;
 		presets: Preset[];
 		onAddFiles: (files: FileList) => void;
+		/** Open the image generator, which adds what it makes to the pool. */
+		onGenerate: () => void;
 		onRemoveSlide: (id: string) => void;
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
 		onShuffleSlides: () => void;
@@ -35,6 +38,7 @@
 		config,
 		presets,
 		onAddFiles,
+		onGenerate,
 		onRemoveSlide,
 		onReorderSlides,
 		onShuffleSlides,
@@ -158,9 +162,14 @@
 			<p>
 				Nothing here yet. Drop images or videos in, or use the button below.
 			</p>
-			<button class="add-btn" onclick={() => fileInput.click()}
-				>Add media</button
-			>
+			<div class="empty-actions">
+				<button class="add-btn" onclick={() => fileInput.click()}
+					>Add media</button
+				>
+				<button class="add-btn generate" onclick={onGenerate}
+					><Sparkles size={13} /> Generate</button
+				>
+			</div>
 		</div>
 	{:else}
 		<div class="grid-toolbar">
@@ -272,6 +281,13 @@
 				title="Add more media"
 			>
 				<Plus size={24} />
+			</button>
+			<button
+				class="add-card generate"
+				onclick={onGenerate}
+				title="Generate more images"
+			>
+				<Sparkles size={22} />
 			</button>
 		</div>
 	{/if}
@@ -536,5 +552,26 @@
 	.add-card:hover {
 		border-color: var(--text-4);
 		color: var(--text-3);
+	}
+
+	.add-card.generate {
+		color: var(--mosh-dim);
+	}
+	.add-card.generate:hover {
+		border-color: var(--mosh-dim);
+		color: var(--mosh);
+	}
+
+	.empty-actions {
+		display: flex;
+		gap: 0.5rem;
+		justify-content: center;
+	}
+
+	.add-btn.generate {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		color: var(--mosh);
 	}
 </style>

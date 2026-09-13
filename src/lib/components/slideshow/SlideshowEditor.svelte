@@ -48,6 +48,8 @@
 	} from "../../slideshow/video-sampler";
 	import { showToast } from "../ui/toast.svelte";
 	import { shuffleInPlace } from "../../utils";
+	import { lazy } from "../../lazy";
+	import { GeneratedSizeSync, readGenerated } from "../../generators";
 	import GlCanvas from "../editor/GlCanvas.svelte";
 	import RecordOverlay from "../editor/RecordOverlay.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
@@ -157,6 +159,10 @@
 				};
 				slides.push(slide);
 				generateThumb(slide.id, slide.file, slide.objectUrl);
+				void readGenerated(file).then((info) => {
+					if (info && slides.some((s) => s.id === slide.id))
+						sizeSync.track(slide.id, info.spec, info.width, info.height);
+				});
 			} else if (videoTypes.includes(file.type)) {
 				const slide: SlideshowSlide = {
 					id: generateId(),
@@ -368,7 +374,33 @@
 	 * Their object URLs stay alive until then, so a restore is a plain re-insert. */
 	const pendingRemovals = new Map<string, PendingRemoval>();
 
+	// Generated slides follow the output size: a re-render lands as a fresh
+	// object URL on the slide, the File (its identity) stays put.
+	const sizeSync = new GeneratedSizeSync((id, url) => {
+		const s = slides.find((s) => s.id === id) ?? pendingRemovals.get(id)?.slide;
+		if (!s) {
+			URL.revokeObjectURL(url);
+			return;
+		}
+		const old = s.objectUrl;
+		s.objectUrl = url;
+		if (previewImageSrc === old) previewImageSrc = url;
+		dropCachedImage(id);
+		URL.revokeObjectURL(old);
+	});
+
+	$effect(() => {
+		sizeSync.resize(resizeWidth, resizeHeight);
+	});
+
+	// ── Generator ──
+	const loadGeneratePanel = lazy(
+		() => import("../generators/GeneratePanel.svelte"),
+	);
+	let generateOpen = $state(false);
+
 	function disposeSlide(s: SlideshowSlide) {
+		sizeSync.untrack(s.id);
 		URL.revokeObjectURL(s.objectUrl);
 		if (s.thumbUrl && s.thumbUrl !== s.objectUrl)
 			URL.revokeObjectURL(s.thumbUrl);
@@ -510,6 +542,7 @@
 					URL.revokeObjectURL(slide.thumbUrl);
 			}
 			pendingRemovals.clear();
+			sizeSync.dispose();
 			for (const job of proxyJobs.values()) job.cancel();
 			proxyJobs.clear();
 			for (const sampler of videoSamplers.values()) sampler.dispose();
@@ -1644,6 +1677,8 @@
 			return;
 
 		if (previewPlaying) stopPreview();
+		// Generated slides may still be catching up with a size change.
+		await sizeSync.settle();
 
 		await recordingState.run(
 			(signal) =>
@@ -1850,6 +1885,7 @@
 				{config}
 				{presets}
 				onAddFiles={(files) => addFiles(files)}
+				onGenerate={() => (generateOpen = true)}
 				onRemoveSlide={removeSlide}
 				onReorderSlides={reorderSlides}
 				onShuffleSlides={shuffleSlides}
@@ -2056,6 +2092,22 @@
 		<div class="drop-overlay">
 			<span>Drop to add images or replace audio</span>
 		</div>
+	{/if}
+
+	{#if generateOpen}
+		{#await loadGeneratePanel() then GeneratePanel}
+			<GeneratePanel
+				single={false}
+				size={resizeWidth > 0 && resizeHeight > 0
+					? { width: resizeWidth, height: resizeHeight }
+					: null}
+				onUse={(files) => {
+					generateOpen = false;
+					addFiles(files);
+				}}
+				onClose={() => (generateOpen = false)}
+			/>
+		{/await}
 	{/if}
 </div>
 
