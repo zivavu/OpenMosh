@@ -4,6 +4,7 @@
  * restore, a download dragged back in — with no side table to keep in sync.
  */
 
+import { isFieldSpec } from "./field/spec";
 import { isGradientSpec } from "./gradient/spec";
 import { SPEC_KEYWORD, type GeneratedSpec } from "./types";
 
@@ -96,7 +97,7 @@ async function parseGenerated(file: File): Promise<GeneratedInfo | null> {
 					const parsed = JSON.parse(
 						new TextDecoder().decode(body.subarray(nul + 1)),
 					);
-					return isGradientSpec(parsed)
+					return isGradientSpec(parsed) || isFieldSpec(parsed)
 						? { spec: parsed, width, height }
 						: null;
 				}

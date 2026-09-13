@@ -1,14 +1,20 @@
-import { planGradientBatch, GRADIENT_PALETTES } from "./gradient/plan";
 import { embedSpec, rememberGenerated } from "./png-meta";
 import { renderSpec } from "./render";
-import type { BatchOptions, GeneratedSpec } from "./types";
+import type { GeneratedSpec } from "./types";
 
-export { GRADIENT_PALETTES, planGradientBatch };
+export { PALETTES } from "./palette";
+export { planBatch } from "./plan";
+export { FIELD_KINDS, type FieldKind } from "./field/spec";
 export { readGenerated, type GeneratedInfo } from "./png-meta";
 export { renderSpec } from "./render";
 export { GeneratedSizeSync } from "./size-sync";
 export { mulberry32, randomSeed } from "./rng";
-export type { BatchOptions, GeneratedSpec, Variety } from "./types";
+export type {
+	BatchOptions,
+	GeneratedSpec,
+	GeneratorKind,
+	Variety,
+} from "./types";
 
 /** Output shapes offered by the panel; `base` is the short side in pixels. */
 export const RATIOS = [
@@ -35,10 +41,6 @@ export function ratioSize(
 
 /** The short side generated files are rendered at. */
 export const GENERATED_SHORT_SIDE = 1080;
-
-export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
-	return planGradientBatch(seed, opts);
-}
 
 /** Render to a self-describing PNG the rest of the app treats as an upload. */
 export async function specToFile(

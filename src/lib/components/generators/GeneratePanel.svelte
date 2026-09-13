@@ -3,7 +3,7 @@
 	import { onDestroy, onMount } from "svelte";
 	import {
 		GENERATED_SHORT_SIDE,
-		GRADIENT_PALETTES,
+		PALETTES,
 		RATIOS,
 		planBatch,
 		randomSeed,
@@ -11,6 +11,7 @@
 		renderSpec,
 		specsToFiles,
 		type GeneratedSpec,
+		type GeneratorKind,
 		type RatioLabel,
 		type Variety,
 	} from "../../generators";
@@ -37,6 +38,14 @@
 		{ label: "32", value: "32" },
 		{ label: "64", value: "64" },
 	];
+	const KINDS: { label: string; value: GeneratorKind }[] = [
+		{ label: "Mix", value: "mix" },
+		{ label: "Gradient", value: "gradient" },
+		{ label: "Voronoi", value: "voronoi" },
+		{ label: "Stripes", value: "stripes" },
+		{ label: "Plasma", value: "plasma" },
+		{ label: "Rings", value: "rings" },
+	];
 	const VARIETIES: { label: string; value: Variety }[] = [
 		{ label: "Wild", value: "wild" },
 		{ label: "Cohesive", value: "cohesive" },
@@ -50,10 +59,11 @@
 	let ratio = $state<RatioLabel>("16:9");
 	let palette = $state<string>("");
 	let variety = $state<Variety>("wild");
+	let kind = $state<GeneratorKind>("mix");
 
 	let total = $derived(single ? 1 : Number(count));
 	let specs = $derived(
-		planBatch(seed, { count: total, variety, palette: palette || null }),
+		planBatch(seed, { count: total, variety, kind, palette: palette || null }),
 	);
 	let target = $derived(size ?? ratioSize(ratio, GENERATED_SHORT_SIDE));
 	let aspect = $derived(target.width / target.height);
@@ -145,7 +155,7 @@
 	>
 		<div class="head">
 			<span class="title"><Sparkles size={12} /> Generate</span>
-			<span class="sub">Gradient · {target.width} × {target.height}</span>
+			<span class="sub">{target.width} × {target.height}</span>
 			<button
 				class="close"
 				onclick={onClose}
@@ -157,6 +167,14 @@
 		</div>
 
 		<div class="controls">
+			<div class="ctrl">
+				<span class="label">Field</span>
+				<ButtonGroup
+					buttons={KINDS}
+					value={kind}
+					onchange={(v) => (kind = v)}
+				/>
+			</div>
 			{#if !single}
 				<div class="ctrl">
 					<span class="label">Count</span>
@@ -181,7 +199,7 @@
 				<span class="label">Palette</span>
 				<select bind:value={palette}>
 					<option value="">Random</option>
-					{#each Object.keys(GRADIENT_PALETTES) as name}
+					{#each Object.keys(PALETTES) as name}
 						<option value={name}>{name}</option>
 					{/each}
 				</select>

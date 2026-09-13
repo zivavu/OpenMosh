@@ -1,3 +1,5 @@
+import type { Colors } from "../palette";
+
 /** Everything the gradient shader needs to reproduce one image. */
 export interface GradientSpec {
 	gen: "gradient";
@@ -15,8 +17,7 @@ export interface GradientSpec {
 	contrast: number;
 	gamma: number;
 	grain: number;
-	/** Five hex stops, dark to bright. */
-	colors: [string, string, string, string, string];
+	colors: Colors;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
