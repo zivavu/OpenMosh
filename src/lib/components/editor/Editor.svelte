@@ -5143,8 +5143,9 @@
 	}
 
 	/* Narrower still, the readout goes too — the pool's size is on the source
-	   list a tap away. */
-	@media (max-width: 800px) {
+	   list a tap away. It is the first thing to spill onto the sidebar, which
+	   stays docked down to 800. */
+	@media (max-width: 1000px) {
 		.source-count {
 			display: none;
 		}
