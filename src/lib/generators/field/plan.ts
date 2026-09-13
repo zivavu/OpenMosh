@@ -50,19 +50,19 @@ const DOMAIN_WEIGHTS: Record<FieldKind, [Domain, number][]> = {
 /** A random look per kind; `near` reuses another look's structure for cohesion. */
 const LOOKS: Record<FieldKind, (rng: Rand, near?: Look) => Look> = {
 	voronoi(rng, near) {
+		const look = near ? near.params[2] : rng() < 0.4 ? 0 : rng() < 0.6 ? 1 : 2;
+		// square-ish metrics facet the smooth blobs; they suit the edged looks
 		const metric = near
 			? near.params[1]
-			: rng() < 0.6
+			: look === 0 || rng() < 0.7
 				? 0
 				: rng() < 0.5
 					? 1
 					: 2;
-		const look = near ? near.params[2] : rng() < 0.4 ? 0 : rng() < 0.6 ? 1 : 2;
 		return {
 			scale: near ? near.scale * randLog(rng, 0.8, 1.25) : randLog(rng, 3, 8),
 			params: [randIn(rng, 0.6, 1), metric, look, randIn(rng, 0, 1.5)],
-			// flat cells only need their edges picked out
-			light: look === 2 ? [0.4, 1.5] : [1.5, 4],
+			light: [0.6, 2],
 			cycles: near ? near.cycles : rng() < 0.8 ? 1 : randIn(rng, 2, 3),
 		};
 	},

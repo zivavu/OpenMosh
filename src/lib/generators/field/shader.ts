@@ -65,18 +65,30 @@ float fieldVoronoi(vec2 p){
   float jitter=uParams.x; int metric=int(uParams.y+0.5); int look=int(uParams.z+0.5);
   p+=(vec2(fbm(p*0.5+uSeed),fbm(p*0.5+vec2(3.1,7.7)+uSeed))-0.5)*uParams.w;
   vec2 n=floor(p), f=fract(p);
-  float f1=8., f2=8.; vec2 id=vec2(0);
-  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+  float f1=8., f2=8., soft=0.; vec2 id=vec2(0);
+  // 5×5 so the smooth-min below has settled to nothing by the window's edge;
+  // a 3×3 leaves a faint grid where cells drop out of the sum
+  for(int y=-2;y<=2;y++) for(int x=-2;x<=2;x++){
     vec2 g=vec2(float(x),float(y));
     vec2 o=hash22(n+g+uSeed)*jitter;
     vec2 r=g+o-f;
     float d = metric==1 ? abs(r.x)+abs(r.y) : metric==2 ? max(abs(r.x),abs(r.y)) : dot(r,r);
     if(d<f1){ f2=f1; f1=d; id=n+g; } else if(d<f2){ f2=d; }
+    // smooth-min of every distance: blobs with no ridge where the nearest
+    // cell changes hands, which is where the crease lighting bites
+    soft+=exp2(-8.0*(metric==0?sqrt(d):d));
   }
   if(metric==0){ f1=sqrt(f1); f2=sqrt(f2); }
+  if(look==0) return clamp(-log2(soft)/8.0*1.4,0.,1.);
   if(look==1) return clamp((f2-f1)*1.6,0.,1.);
-  if(look==2) return hash21(id*1.3+uSeed);
-  return clamp(f1*1.1,0.,1.);
+  if(look==2){
+    // flat cells: a soft fall-off toward the seam instead of a hard id step,
+    // which the derivative lighting would otherwise pick out as a dotted line
+    float seam=smoothstep(0.0,0.12,f2-f1);
+    float tone=hash21(id*1.3+uSeed);
+    return mix(0.15,1.0,seam)*(tone*0.8+0.2)*(1.0-0.25*f1);
+  }
+  return 0.0;
 }
 
 float fieldStripes(vec2 p){
@@ -125,8 +137,10 @@ void main(){
           : uField==2 ? fieldPlasma(p)
           : fieldRings(p);
 
+  // flat cells carry their own shading; derivative lighting only adds seams
+  float lightAmt = (uField==0 && int(uParams.z+0.5)==2) ? 0.0 : uLight;
   vec2 g=vec2(dFdx(h),dFdy(h))*uRes.y;
-  vec3 n=normalize(vec3(-g*uLight,1.));
+  vec3 n=normalize(vec3(-g*lightAmt,1.));
   vec2 ld=vec2(cos(uAngle),sin(uAngle));
   float lam=dot(n,normalize(vec3(ld,0.7)))*0.5+0.5;
 

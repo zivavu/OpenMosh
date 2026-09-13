@@ -126,7 +126,7 @@ export function drawSpec(
 	spec: GeneratedSpec,
 	w: number,
 	h: number,
-	aa = 2,
+	aa = 3,
 ): OffscreenCanvas {
 	const c = getCtx();
 	const { gl } = c;
@@ -190,7 +190,7 @@ export function renderSpec(
 	width: number,
 	height: number,
 	type: "image/png" | "image/jpeg" = "image/png",
-	aa = 2,
+	aa = 3,
 ): Promise<Blob> {
 	const canvas = drawSpec(spec, width, height, aa);
 	return canvas.convertToBlob(
