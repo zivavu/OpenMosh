@@ -8,6 +8,7 @@
 		DEFAULT_TRANSITION_DURATION,
 		intervalLabel,
 		randomSeed,
+		RANDOM_DIRECTION,
 		TRANSITION_OPTIONS,
 		type SegmentTransition,
 		type SegmentTransitionChange,
@@ -1658,6 +1659,7 @@
 						<option value={1}>&#8592;</option>
 						<option value={2}>&#8595;</option>
 						<option value={3}>&#8593;</option>
+						<option value={RANDOM_DIRECTION}>random</option>
 					</select>
 				</div>
 			{/if}

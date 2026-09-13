@@ -470,7 +470,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 					tr.transition.type,
 					progress,
 					tr.transition.seed,
-					tr.transition.direction ?? 0,
+					tr.direction,
 					tr.transition.density ?? 1,
 					time,
 					crossFade,

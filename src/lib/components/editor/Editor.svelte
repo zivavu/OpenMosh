@@ -4340,7 +4340,7 @@
 							effectsA: seqTransition.effectsA,
 							type: seqTransition.transition.type,
 							seed: seqTransition.transition.seed,
-							direction: seqTransition.transition.direction ?? 0,
+							direction: seqTransition.direction,
 							density: seqTransition.transition.density ?? 1,
 							startTime: seqTransition.boundaryTime,
 							durationSec: seqTransition.transition.durationSec,
