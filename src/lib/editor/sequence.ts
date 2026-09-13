@@ -21,7 +21,9 @@ export type TransitionType =
 	| "burn"
 	| "crosswarp"
 	| "crosszoom"
-	| "cube";
+	| "cube"
+	/** Picks one of the blends above per boundary, seeded. */
+	| "random";
 
 export interface SegmentTransition {
 	type: TransitionType;
@@ -38,21 +40,42 @@ export interface SegmentTransition {
 /** `direction` sentinel: pick a side per blend, seeded so export matches. */
 export const RANDOM_DIRECTION = -1;
 
+/** What one blend actually renders once any random picks are made. */
+export interface ConcreteTransition {
+	type: Exclude<TransitionType, "random">;
+	direction: number;
+	density: number;
+}
+
 /**
- * Concrete 0–3 direction for one blend. A random direction is drawn from the
- * seed plus the boundary time, so on-tick transitions roll a fresh side each
+ * Concrete type/direction/density for one blend. Random picks are drawn from
+ * the seed plus the boundary time, so on-tick transitions roll fresh each
  * tick while a given tick always lands the same way in preview and export.
+ * A random type rolls its direction and density too — the stored ones belong
+ * to whatever type was picked in the UI before.
  */
-export function resolveTransitionDirection(
+export function resolveConcreteTransition(
 	transition: SegmentTransition,
 	boundaryTime: number,
-): number {
-	const d = transition.direction ?? 0;
-	if (d !== RANDOM_DIRECTION) return d;
+): ConcreteTransition {
 	const rng = mulberry32(
 		(transition.seed ^ Math.round(boundaryTime * 1000)) >>> 0,
 	);
-	return Math.floor(rng() * 4);
+	const randomType = transition.type === "random";
+	const type =
+		transition.type === "random"
+			? RANDOM_TYPE_POOL[Math.floor(rng() * RANDOM_TYPE_POOL.length)]
+			: transition.type;
+	const direction = transition.direction ?? 0;
+	const density = transition.density ?? 1;
+	return {
+		type,
+		direction:
+			randomType || direction === RANDOM_DIRECTION
+				? Math.floor(rng() * 4)
+				: direction,
+		density: randomType ? Math.floor(rng() * 3) : density,
+	};
 }
 
 /** UI metadata for the transition picker. */
@@ -72,7 +95,12 @@ export const TRANSITION_OPTIONS: {
 	{ value: "crosswarp", label: "crosswarp", hasDirection: true },
 	{ value: "crosszoom", label: "cross zoom" },
 	{ value: "cube", label: "cube", hasDirection: true },
+	{ value: "random", label: "random", hasSeed: true },
 ];
+
+const RANDOM_TYPE_POOL = TRANSITION_OPTIONS.map((o) => o.value).filter(
+	(t): t is ConcreteTransition["type"] => t !== "cut" && t !== "random",
+);
 
 /** Half a second, not the third it used to be: the reworked shaders all carry
  * a motion beat, and 0.3s cut them off before it read. */
@@ -450,8 +478,8 @@ export interface ResolvedTransition {
 	/** Master time where the blend starts. */
 	boundaryTime: number;
 	transition: SegmentTransition;
-	/** Concrete side for this blend; `transition.direction` may be random. */
-	direction: number;
+	/** What this blend renders; `transition` itself may hold random picks. */
+	concrete: ConcreteTransition;
 }
 
 /**
@@ -492,6 +520,6 @@ export function resolveTransitionAt(
 		effectsA,
 		boundaryTime: boundary,
 		transition: seg.transition,
-		direction: resolveTransitionDirection(seg.transition, boundary),
+		concrete: resolveConcreteTransition(seg.transition, boundary),
 	};
 }

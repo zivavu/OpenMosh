@@ -1691,7 +1691,7 @@
 					<span class="trans-label">Layout</span>
 					<button
 						class="tl-tool-btn"
-						title="Re-roll transition layout"
+						title="Re-roll transition layout (and the random pick)"
 						onclick={rerollTransitionSeeds}
 					>
 						<Dices size={12} /> Re-roll

@@ -4338,10 +4338,10 @@
 				transition={seqTransition
 					? {
 							effectsA: seqTransition.effectsA,
-							type: seqTransition.transition.type,
+							type: seqTransition.concrete.type,
 							seed: seqTransition.transition.seed,
-							direction: seqTransition.direction,
-							density: seqTransition.transition.density ?? 1,
+							direction: seqTransition.concrete.direction,
+							density: seqTransition.concrete.density,
 							startTime: seqTransition.boundaryTime,
 							durationSec: seqTransition.transition.durationSec,
 							getTime: seqMasterTime,
