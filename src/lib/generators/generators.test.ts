@@ -22,7 +22,7 @@ describe("planGradientBatch", () => {
 		}
 	});
 
-	it("deals modes and masks in proportion rather than by luck", () => {
+	it("deals modes in proportion rather than by luck, and never masks", () => {
 		const specs = planGradientBatch(3, {
 			count: 32,
 			variety: "wild",
@@ -32,8 +32,7 @@ describe("planGradientBatch", () => {
 		const masked = specs.filter((s) => s.thresh > 0).length;
 		expect(scatter).toBeGreaterThanOrEqual(10);
 		expect(scatter).toBeLessThanOrEqual(16);
-		expect(masked).toBeGreaterThanOrEqual(8);
-		expect(masked).toBeLessThanOrEqual(12);
+		expect(masked).toBe(0);
 	});
 
 	it("keeps a named palette on every image", () => {
@@ -45,14 +44,13 @@ describe("planGradientBatch", () => {
 		for (const s of specs) expect(s.colors[2]).toBe("#e8197a");
 	});
 
-	it("keeps a cohesive batch to one mode and mask", () => {
+	it("keeps a cohesive batch to one mode", () => {
 		const specs = planGradientBatch(9, {
 			count: 16,
 			variety: "cohesive",
 			palette: null,
 		});
 		expect(new Set(specs.map((s) => s.mode)).size).toBe(1);
-		expect(new Set(specs.map((s) => s.thresh > 0)).size).toBe(1);
 	});
 });
 

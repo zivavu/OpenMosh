@@ -1,9 +1,10 @@
 /**
  * Batch planning: the part that decides what N gradients look like *together*.
  * Drawing every knob independently gives "samey with the odd ugly one", so the
- * axes people actually notice — hue, mode, mask, lightness — are dealt out in
- * fixed proportions and shuffled, and hues step around the wheel by the golden
- * angle so any N covers it evenly.
+ * axes people actually notice — hue, mode, lightness — are dealt out in fixed
+ * proportions and shuffled, and hues step around the wheel by the golden angle
+ * so any N covers it evenly. The shader's blob mask is left off: a cut-out on
+ * black reads as a missing image once the effects hit it.
  */
 
 import { mulberry32, pick, randIn, randLog, shuffle, type Rand } from "../rng";
@@ -110,7 +111,6 @@ function deal<T>(rng: Rand, n: number, weights: [T, number][]): T[] {
 
 interface Look {
 	mode: 0 | 1;
-	masked: boolean;
 	scale: number;
 }
 
@@ -123,9 +123,9 @@ function texture(rng: Rand, look: Look): Omit<GradientSpec, "gen" | "colors"> {
 		warp: look.mode === 1 ? randIn(rng, 1, 4) : randIn(rng, 0.5, 6),
 		angle: rng() * Math.PI * 2,
 		light: randIn(rng, 0.6, 3.5),
-		spread: look.masked ? randIn(rng, 0.15, 0.6) : 0.6,
-		thresh: look.masked ? randIn(rng, 0.35, 0.6) : 0,
-		soft: look.masked ? randIn(rng, 0.03, 0.25) : 0.01,
+		spread: 0.6,
+		thresh: 0,
+		soft: 0.01,
 		contrast: randIn(rng, 1.0, 1.7),
 		gamma: randIn(rng, 0.8, 1.4),
 		grain: rng() < 0.5 ? 0 : randIn(rng, 0.5, 3),
@@ -189,10 +189,6 @@ function planWild(
 		[1, 0.4],
 		[0, 0.6],
 	]);
-	const masks = deal(rng, n, [
-		[true, 0.3],
-		[false, 0.7],
-	]);
 	const hues: number[] = [];
 	const specs = Array.from({ length: n }, (_, i): GradientSpec => {
 		const hue = h0 + i * GOLDEN_ANGLE;
@@ -206,7 +202,6 @@ function planWild(
 			colors,
 			...texture(rng, {
 				mode: modes[i],
-				masked: masks[i],
 				scale: randLog(rng, 0.6, 12),
 			}),
 		};
@@ -227,7 +222,6 @@ function planCohesive(
 		rng() < 0.1,
 	);
 	const mode: 0 | 1 = rng() < 0.4 ? 1 : 0;
-	const masked = rng() < 0.3;
 	const baseScale = randLog(rng, 0.8, 8);
 	return Array.from({ length: n }, (): GradientSpec => {
 		const colors = preset ?? makeRamp(baseHue + randIn(rng, -10, 10), shape);
@@ -236,7 +230,6 @@ function planCohesive(
 			colors,
 			...texture(rng, {
 				mode,
-				masked,
 				scale: baseScale * randLog(rng, 0.6, 1.6),
 			}),
 		};
