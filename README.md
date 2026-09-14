@@ -30,7 +30,7 @@ Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxi
 
 Pick one of three modes on the upload screen.
 
-**Single** takes one image or video. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
+**Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.png)
 
@@ -76,7 +76,7 @@ Your media never leaves the machine. There is no backend, no account and no uplo
 
 ## Status
 
-Version 0.7.5. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
+Version 0.7.6. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
 
 MP4 and GIF export were both removed on purpose and aren't coming back.
 
