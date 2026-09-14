@@ -100,6 +100,7 @@
 		putSequenceMediaProxy,
 	} from "../../editor/sequence-media-store";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
+	import { gifsToVideo } from "../../media/gif";
 	import {
 		isProxyDisabled,
 		setProxyDisabled,
@@ -130,10 +131,10 @@
 	// ── Slides ──
 	let slides: SlideshowSlide[] = $state([]);
 
-	function addFiles(files: FileList | File[]) {
+	async function addFiles(files: FileList | File[]) {
 		const imageTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 		const videoTypes = ["video/mp4", "video/webm", "video/quicktime"];
-		const all = Array.from(files);
+		const all = await gifsToVideo(Array.from(files));
 		const skipped = all.filter(
 			(f) => !imageTypes.includes(f.type) && !videoTypes.includes(f.type),
 		);

@@ -10,6 +10,7 @@
 	import type { SessionMode } from "./lib/editor/sequence-media-store";
 	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
+	import { gifsToVideo, gifToVideo } from "./lib/media/gif";
 	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
 
@@ -184,14 +185,15 @@
 		sessionTrackId = opened.trackId;
 		if (mode === "single") {
 			restoredSingle = opened.state as SingleSessionState;
-			restoredSingleExtras = opened.files.slice(1);
-			file = opened.files[0];
+			const files = await gifsToVideo(opened.files);
+			restoredSingleExtras = files.slice(1);
+			file = files[0];
 			navigateTo("single");
 			return;
 		}
 		const state = opened.state as { config?: SlideshowConfig } | null;
 		restoredSlideshowConfig = state?.config ?? null;
-		slideshowFiles = opened.files;
+		slideshowFiles = await gifsToVideo(opened.files);
 		navigateTo("slideshow");
 	}
 
@@ -203,7 +205,7 @@
 			showToast("That song's media is no longer stored", "error");
 			return;
 		}
-		sequenceFiles = opened.sources;
+		sequenceFiles = await gifsToVideo(opened.sources);
 		pendingAudioFile = opened.trackFile;
 		sequenceTrackId = opened.trackId;
 		navigateTo("sequence");
@@ -259,7 +261,8 @@
 			extraFiles={sequenceFiles.slice(1)}
 			initialAudioFile={pendingAudioFile}
 			initialTrackId={sequenceTrackId}
-			onfile={(f: File) => (sequenceFiles = [f, ...sequenceFiles.slice(1)])}
+			onfile={async (f: File) =>
+				(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
 			{warmCanvas}
 			{warmRenderer}
 			onExit={exitToUpload}
@@ -273,7 +276,7 @@
 			initialTrackId={sessionTrackId}
 			initialSession={restoredSingle}
 			extraFiles={restoredSingleExtras}
-			onfile={(f: File) => (file = f)}
+			onfile={async (f: File) => (file = await gifToVideo(f))}
 			{warmCanvas}
 			{warmRenderer}
 			onExit={exitToUpload}
@@ -281,19 +284,19 @@
 	{/await}
 {:else}
 	<UploadScreen
-		onfile={(f: File) => {
-			file = f;
+		onfile={async (f: File) => {
+			file = await gifToVideo(f);
 			navigateTo("single");
 		}}
-		onSequence={(files: File[]) => {
-			sequenceFiles = files;
+		onSequence={async (files: File[]) => {
+			sequenceFiles = await gifsToVideo(files);
 			navigateTo("sequence");
 		}}
 		onSequenceFromSong={(trackId: string) => void openSequenceFromSong(trackId)}
 		onSessionOpen={(mode: SessionMode, key: string) =>
 			void openSessionByKey(mode, key)}
-		onSlideshow={(files: File[]) => {
-			slideshowFiles = files;
+		onSlideshow={async (files: File[]) => {
+			slideshowFiles = await gifsToVideo(files);
 			navigateTo("slideshow");
 		}}
 		onaudio={(f: File) => (pendingAudioFile = f)}

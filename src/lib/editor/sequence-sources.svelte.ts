@@ -5,6 +5,7 @@ import {
 	type SourceEdit,
 } from "../media";
 import { GeneratedSizeSync, readGenerated } from "../generators";
+import { gifsToVideo } from "../media/gif";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
 import { isProxyDisabled, setProxyDisabled } from "../video/proxy-preference";
@@ -188,6 +189,9 @@ export class SequenceSourceRegistry {
 		files: File[],
 		{ primary = false, persist = true } = {},
 	): Promise<SequenceSource[]> {
+		// Animated GIFs become videos here, before anything is keyed on the file.
+		// Stored media is already converted, so restores don't pay for this.
+		files = await gifsToVideo(files);
 		// Ids are reserved before the first await, not just checked against the
 		// current pool. Probing and decoding are async, so two overlapping calls —
 		// the per-song pool restore and the segment-driven restore both pulling the
