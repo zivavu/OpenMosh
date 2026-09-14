@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createTrackStore } from "./track-persistence";
+import {
+	createTrackStore,
+	forgetAllTrackEntries,
+	forgetTrackEntries,
+} from "./track-persistence";
 
 /** localStorage with a byte cap, so a write can be pushed over quota. */
 function installStorage(limit: number) {
@@ -69,5 +73,56 @@ describe("createTrackStore", () => {
 		installStorage(10);
 		const store = createTrackStore<{ pad: string }>(KEY);
 		expect(store.save("a", { pad: "x".repeat(100) })).toBe(false);
+	});
+});
+
+describe("forgetTrackEntries", () => {
+	beforeEach(() => installStorage(1_000_000));
+	afterEach(() => {
+		delete (globalThis as { localStorage?: unknown }).localStorage;
+	});
+
+	it("drops the named ids from every per-song store and nothing else", () => {
+		const span = createTrackStore<{ n: number }>("openmosh-single-span");
+		const segs = createTrackStore<{ n: number }>("openmosh-track-segments");
+		const render = createTrackStore<{ n: number }>("openmosh-render-settings");
+		span.save("t1", { n: 1 });
+		span.save("t2", { n: 2 });
+		segs.save("t1", { n: 3 });
+		render.save("seq:t1", { n: 4 });
+		render.save("single:t1", { n: 5 });
+		render.save("seq:t2", { n: 6 });
+
+		forgetTrackEntries(["t1", "seq:t1", "single:t1"]);
+
+		expect(span.load("t1")).toBeNull();
+		expect(span.load("t2")).toEqual({ n: 2 });
+		expect(segs.load("t1")).toBeNull();
+		expect(render.load("seq:t1")).toBeNull();
+		expect(render.load("single:t1")).toBeNull();
+		expect(render.load("seq:t2")).toEqual({ n: 6 });
+	});
+
+	it("tolerates stores that were never written", () => {
+		expect(() => forgetTrackEntries(["t1"])).not.toThrow();
+	});
+
+	it("leaves a store untouched when none of the ids are in it", () => {
+		const data = installStorage(1_000_000);
+		const span = createTrackStore<{ n: number }>("openmosh-single-span");
+		span.save("t1", { n: 1 });
+		const before = data.get("openmosh-single-span");
+		forgetTrackEntries(["absent"]);
+		expect(data.get("openmosh-single-span")).toBe(before);
+	});
+
+	it("forgetAllTrackEntries empties every per-song store", () => {
+		const span = createTrackStore<{ n: number }>("openmosh-single-span");
+		const render = createTrackStore<{ n: number }>("openmosh-render-settings");
+		span.save("t1", { n: 1 });
+		render.save("seq:t1", { n: 2 });
+		forgetAllTrackEntries();
+		expect(span.load("t1")).toBeNull();
+		expect(render.load("seq:t1")).toBeNull();
 	});
 });
