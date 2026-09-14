@@ -104,6 +104,12 @@ function deleteStored(id: string): Promise<void> {
 
 let fonts: CustomFont[] = $state([]);
 
+/** Bytes stored per font id, for the storage manager. */
+export async function getCustomFontSizes(): Promise<Map<string, number>> {
+	const stored = await getAllStored();
+	return new Map(stored.map((f) => [f.id, f.data.byteLength]));
+}
+
 /** Every font the user has added, newest last. Reactive. */
 export function customFonts(): CustomFont[] {
 	return fonts;

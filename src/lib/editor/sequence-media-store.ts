@@ -357,7 +357,7 @@ export async function deleteSequenceMediaProxy(file: File): Promise<void> {
 	await deleteSequenceProxy(stableSourceId(file));
 }
 
-async function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
+export async function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
 	const db = await openDb();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(PROXY_STORE, "readonly");
@@ -375,7 +375,7 @@ async function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
 	});
 }
 
-async function deleteSequenceProxy(id: string): Promise<void> {
+export async function deleteSequenceProxy(id: string): Promise<void> {
 	const db = await openDb();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(PROXY_STORE, "readwrite");
@@ -425,8 +425,9 @@ export async function putSequenceMedia(
 	});
 }
 
-/** Only pruning deletes blobs — removing a source just unlinks it from a pool. */
-async function deleteSequenceMedia(id: string): Promise<void> {
+/** Only pruning and the storage manager delete blobs — removing a source from
+ * the editor just unlinks it from a pool. */
+export async function deleteSequenceMedia(id: string): Promise<void> {
 	const db = await openDb();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(STORE, "readwrite");
@@ -497,7 +498,7 @@ export async function getAllMediaPools(): Promise<StoredMediaPool[]> {
 	});
 }
 
-async function deleteMediaPool(key: string): Promise<void> {
+export async function deleteMediaPool(key: string): Promise<void> {
 	const db = await openDb();
 	return new Promise((resolve, reject) => {
 		const tx = db.transaction(POOL_STORE, "readwrite");
@@ -634,7 +635,7 @@ export async function getAllTimelines(): Promise<StoredTimeline[]> {
 	});
 }
 
-async function deleteTimeline(key: string): Promise<void> {
+export async function deleteTimeline(key: string): Promise<void> {
 	const db = await openDb();
 	await new Promise<void>((resolve, reject) => {
 		const tx = db.transaction(TIMELINE_STORE, "readwrite");
@@ -739,4 +740,23 @@ export function storedMediaToFile(entry: StoredSequenceMedia): File {
 function lastModifiedFromId(id: string): number {
 	const n = Number(id.slice(id.lastIndexOf(":") + 1));
 	return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Empties every store at once, for the storage manager's "delete everything".
+ * Clears rather than deleting the database: this module holds its connection
+ * open, and `deleteDatabase` would sit blocked behind it.
+ */
+export async function clearAllSequenceStores(): Promise<void> {
+	const db = await openDb();
+	await new Promise<void>((resolve, reject) => {
+		const tx = db.transaction(REQUIRED_STORES, "readwrite");
+		for (const name of REQUIRED_STORES) tx.objectStore(name).clear();
+		tx.oncomplete = () => {
+			resolve();
+		};
+		tx.onerror = () => {
+			reject(tx.error);
+		};
+	});
 }

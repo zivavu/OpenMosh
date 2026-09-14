@@ -121,3 +121,20 @@ export async function deleteTrack(id: string): Promise<void> {
 		};
 	});
 }
+
+/** Every song at once, for the storage manager's "delete everything". */
+export async function clearTracks(): Promise<void> {
+	const db = await openDb();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(STORE, "readwrite");
+		tx.objectStore(STORE).clear();
+		tx.oncomplete = () => {
+			db.close();
+			resolve();
+		};
+		tx.onerror = () => {
+			db.close();
+			reject(tx.error);
+		};
+	});
+}

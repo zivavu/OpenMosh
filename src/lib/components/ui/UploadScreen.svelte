@@ -13,7 +13,14 @@
 		warmRenderer?: GlRenderer | null;
 	}
 
-	import { Image, ListVideo, Music, Sparkles, Upload } from "lucide-svelte";
+	import {
+		HardDrive,
+		Image,
+		ListVideo,
+		Music,
+		Sparkles,
+		Upload,
+	} from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import { lazy } from "../../lazy";
 	import DemoBackground from "./DemoBackground.svelte";
@@ -57,11 +64,17 @@
 	let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
 	let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
 	let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
-	$effect(() => {
+	function refreshSaved() {
 		void listSavedSequences().then((list) => (savedSequences = list));
 		void listSavedSessions("single").then((list) => (savedSingle = list));
 		void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
-	});
+	}
+	$effect(refreshSaved);
+
+	// Everything stored, with a way to delete it — the one place that shows
+	// what the browser is holding on to for this site.
+	const loadStorageModal = lazy(() => import("./StorageModal.svelte"));
+	let storageOpen = $state(false);
 
 	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear
 	// along with the background it belongs to.
@@ -77,7 +90,9 @@
 	// without writing that back, so a desktop's remembered mode survives a
 	// phone visit.
 	let selectedMode: UploadMode = $state(
-		isMobile ? "single" : (loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode),
+		isMobile
+			? "single"
+			: (loadSettings().lastMode ?? DEFAULT_SETTINGS.lastMode),
 	);
 
 	function setMode(mode: UploadMode) {
@@ -365,8 +380,8 @@
 	{/if}
 	<p class="mode-hint">
 		{#if isMobile}
-			One image or video. The Editor and Slideshow modes are built for a
-			desktop browser, so they're not offered here.
+			One image or video. The Editor and Slideshow modes are built for a desktop
+			browser, so they're not offered here.
 		{:else if selectedMode === "slideshow"}
 			A pile of media and a track. It finds the BPM and cuts on the beat.
 		{:else if selectedMode === "sequence"}
@@ -555,10 +570,27 @@
 	</div>
 
 	<div class="github-corner">
+		<button
+			class="storage-btn"
+			onclick={() => (storageOpen = true)}
+			title="Manage stored projects and media"
+			aria-label="Manage storage"
+		>
+			<HardDrive size={14} />
+		</button>
 		<GithubLink />
 		<YoutubeLink />
 		<FeedbackButton />
 	</div>
+
+	{#if storageOpen}
+		{#await loadStorageModal() then StorageModal}
+			<StorageModal
+				onClose={() => (storageOpen = false)}
+				onChanged={refreshSaved}
+			/>
+		{/await}
+	{/if}
 </div>
 
 <style>
@@ -585,6 +617,31 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	/* Same shape as the links beside it. */
+	.storage-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		padding: 0;
+		border-radius: 50%;
+		background: rgba(18, 18, 18, 0.85);
+		border: 1.5px solid var(--line-strong);
+		color: var(--text-3);
+		flex-shrink: 0;
+		box-sizing: border-box;
+		cursor: pointer;
+		transition:
+			border-color 0.2s,
+			color 0.2s;
+	}
+
+	.storage-btn:hover {
+		border-color: var(--text-3);
+		color: var(--text);
 	}
 
 	.hero {

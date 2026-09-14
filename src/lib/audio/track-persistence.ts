@@ -41,3 +41,39 @@ export function createTrackStore<T>(
 
 	return { save, load };
 }
+
+/**
+ * Every per-song localStorage key, so a song deleted from the storage manager
+ * takes its span, segments and render settings with it. Render settings are
+ * keyed by the mode-prefixed timeline key rather than the bare track id; the
+ * legacy timeline blob is keyed both ways, from before the prefix existed.
+ */
+const TRACK_KEYED_STORES = [
+	"openmosh-single-span",
+	"openmosh-single-size",
+	"openmosh-track-segments",
+	"openmosh-render-settings",
+	"openmosh-sequence",
+];
+
+/** Drop the entries stored under any of these ids, in every per-song store. */
+export function forgetTrackEntries(ids: string[]): void {
+	const wanted = new Set(ids);
+	for (const storageKey of TRACK_KEYED_STORES) {
+		const all = readJson<Record<string, unknown>>(storageKey, {});
+		if (!all || typeof all !== "object") continue;
+		let changed = false;
+		for (const key of Object.keys(all)) {
+			if (wanted.has(key)) {
+				delete all[key];
+				changed = true;
+			}
+		}
+		if (changed) writeJson(storageKey, all);
+	}
+}
+
+/** Empty every per-song store. */
+export function forgetAllTrackEntries(): void {
+	for (const storageKey of TRACK_KEYED_STORES) writeJson(storageKey, {});
+}
