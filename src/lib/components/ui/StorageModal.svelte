@@ -43,6 +43,10 @@
 	let changed = false;
 	/** Rows whose media list is unfolded. */
 	let expanded = $state<Set<string>>(new Set());
+	/** Checked rows, by the same `p:`/`e:` keys as `expanded`. */
+	let selected = $state<Set<string>>(new Set());
+	/** The last row checked, so shift-click can extend from it. */
+	let lastPicked: string | null = null;
 	let keepRefused = $state(false);
 
 	interface PendingAction {
@@ -91,6 +95,10 @@
 			await action.run();
 			changed = true;
 			await refresh();
+			// Whatever survived the deletion stays checked; the rest is gone.
+			selected = new Set(
+				[...selected].filter((k) => selectableKeys.includes(k)),
+			);
 		} catch (e) {
 			console.error(e);
 			showToast("Couldn't delete that — storage refused the write", "error");
@@ -107,6 +115,86 @@
 		} else {
 			keepRefused = true;
 		}
+	}
+
+	// ── Selection ──
+
+	/** Every checkable row, in display order, so a shift-click has a range. */
+	let selectableKeys = $derived<string[]>(
+		inventory
+			? [
+					...inventory.projects.map((p) => `p:${p.trackId}`),
+					...inventory.looseEdits.map((e) => `e:${e.key}`),
+				]
+			: [],
+	);
+
+	function pick(key: string, e: MouseEvent) {
+		const next = new Set(selected);
+		const on = !next.has(key);
+		if (e.shiftKey && lastPicked && lastPicked !== key) {
+			const a = selectableKeys.indexOf(lastPicked);
+			const b = selectableKeys.indexOf(key);
+			if (a !== -1 && b !== -1) {
+				const range = selectableKeys.slice(Math.min(a, b), Math.max(a, b) + 1);
+				for (const k of range) {
+					if (on) next.add(k);
+					else next.delete(k);
+				}
+			}
+		} else if (on) next.add(key);
+		else next.delete(key);
+		lastPicked = key;
+		selected = next;
+	}
+
+	/** Checks the whole section, or clears it when every row is already in. */
+	function pickAll(keys: string[]) {
+		const next = new Set(selected);
+		const all = keys.every((k) => next.has(k));
+		for (const k of keys) {
+			if (all) next.delete(k);
+			else next.add(k);
+		}
+		selected = next;
+	}
+
+	function sectionState(keys: string[]): "none" | "some" | "all" {
+		const n = keys.filter((k) => selected.has(k)).length;
+		return n === 0 ? "none" : n === keys.length ? "all" : "some";
+	}
+
+	let projectKeys = $derived(
+		inventory?.projects.map((p) => `p:${p.trackId}`) ?? [],
+	);
+	let looseKeys = $derived(
+		inventory?.looseEdits.map((e) => `e:${e.key}`) ?? [],
+	);
+	let selectedProjects = $derived(
+		inventory?.projects.filter((p) => selected.has(`p:${p.trackId}`)) ?? [],
+	);
+	let selectedLoose = $derived(
+		inventory?.looseEdits.filter((e) => selected.has(`e:${e.key}`)) ?? [],
+	);
+	let selectedCount = $derived(selectedProjects.length + selectedLoose.length);
+	let selectedSize = $derived(
+		selectedProjects.reduce(
+			(n, p) => n + p.mediaSize + p.trackSize + p.workSize,
+			0,
+		) + selectedLoose.reduce((n, e) => n + e.mediaSize + e.workSize, 0),
+	);
+
+	function askDeleteSelected() {
+		const projects = selectedProjects;
+		const loose = selectedLoose;
+		pending = {
+			title: "Delete selected",
+			message: `Removes ${fmtCount(selectedCount, "item")} — songs, timelines, sessions and any media only they use. Files shared with unselected projects stay. This can't be undone.`,
+			run: async () => {
+				for (const p of projects) await deleteProject(p);
+				for (const e of loose) await deleteLooseEdit(e);
+			},
+		};
 	}
 
 	// ── Actions ──
@@ -337,6 +425,14 @@
 			{#if inventory.projects.length > 0}
 				<section>
 					<div class="section-head">
+						<input
+							type="checkbox"
+							class="check"
+							checked={sectionState(projectKeys) === "all"}
+							indeterminate={sectionState(projectKeys) === "some"}
+							aria-label="Select all projects"
+							onclick={() => pickAll(projectKeys)}
+						/>
 						<span class="section-title">Projects</span>
 						<span class="section-meta">{inventory.projects.length}</span>
 					</div>
@@ -344,7 +440,18 @@
 						{#each inventory.projects as p (p.trackId)}
 							{@const key = `p:${p.trackId}`}
 							{@const open = expanded.has(key)}
-							<li class="row" class:open>
+							<li
+								class="row selectable"
+								class:open
+								class:picked={selected.has(key)}
+							>
+								<input
+									type="checkbox"
+									class="check"
+									checked={selected.has(key)}
+									aria-label={`Select ${p.name}`}
+									onclick={(e) => pick(key, e)}
+								/>
 								<button
 									class="row-main"
 									onclick={() => toggle(key)}
@@ -420,6 +527,14 @@
 			{#if inventory.looseEdits.length > 0}
 				<section>
 					<div class="section-head">
+						<input
+							type="checkbox"
+							class="check"
+							checked={sectionState(looseKeys) === "all"}
+							indeterminate={sectionState(looseKeys) === "some"}
+							aria-label="Select all song-less edits"
+							onclick={() => pickAll(looseKeys)}
+						/>
 						<span class="section-title">Without a song</span>
 						<span class="section-meta">{inventory.looseEdits.length}</span>
 					</div>
@@ -427,7 +542,18 @@
 						{#each inventory.looseEdits as e (e.key)}
 							{@const key = `e:${e.key}`}
 							{@const open = expanded.has(key)}
-							<li class="row" class:open>
+							<li
+								class="row selectable"
+								class:open
+								class:picked={selected.has(key)}
+							>
+								<input
+									type="checkbox"
+									class="check"
+									checked={selected.has(key)}
+									aria-label={`Select ${e.label}`}
+									onclick={(ev) => pick(key, ev)}
+								/>
 								<button
 									class="row-main"
 									onclick={() => toggle(key)}
@@ -583,6 +709,26 @@
 						{/each}
 					</ul>
 				</section>
+			{/if}
+
+			{#if selectedCount > 0}
+				<div class="bulk">
+					<span class="bulk-text">
+						<strong>{selectedCount}</strong> selected · {fmtBytes(selectedSize)}
+					</span>
+					<span class="bulk-actions">
+						<button class="text-btn" onclick={() => (selected = new Set())}>
+							Clear
+						</button>
+						<button
+							class="text-btn danger outline"
+							disabled={busy}
+							onclick={askDeleteSelected}
+						>
+							Delete selected
+						</button>
+					</span>
+				</div>
 			{/if}
 
 			{#if !isEmpty}
@@ -856,7 +1002,7 @@
 
 	.section-head {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: 0.5rem;
 	}
 
@@ -892,6 +1038,73 @@
 
 	.row:first-child {
 		border-top: none;
+	}
+
+	.row.selectable {
+		grid-template-columns: auto 1fr auto;
+	}
+
+	.row.picked {
+		background: rgba(255, 255, 255, 0.035);
+	}
+
+	.check {
+		width: 13px;
+		height: 13px;
+		margin: 0 0 0 0.6rem;
+		accent-color: var(--live);
+		cursor: pointer;
+	}
+
+	.section-head .check {
+		margin: 0 0.1rem 0 0;
+	}
+
+	.row.selectable .row-main {
+		padding-left: 0.35rem;
+	}
+
+	/* Sticks to the bottom of the scroll so the action is reachable from any
+	   row, on a solid backing so rows don't show through. */
+	.bulk {
+		position: sticky;
+		bottom: -1.25rem;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid var(--live-dim);
+		border-radius: var(--r-2);
+		background: var(--raised);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+	}
+
+	.bulk-text {
+		font-size: 0.72rem;
+		color: var(--text-2);
+	}
+
+	.bulk-text strong {
+		font-family: var(--font-mono);
+		font-weight: 600;
+		color: var(--live);
+	}
+
+	.bulk-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.bulk-actions .text-btn {
+		margin: 0;
+	}
+
+	.text-btn:not(.danger):hover:not(:disabled) {
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.06);
 	}
 
 	.row-main {
