@@ -15,6 +15,7 @@
 		pickTopLayer,
 		type LayerPick,
 	} from "../../editor/layer-pick";
+	import { MIN_SCALE, scaleFromHandle } from "../../editor/layer-drag";
 	import { onFontsChanged } from "../../text-overlay";
 	import {
 		resolveTextLayersAt,
@@ -427,9 +428,6 @@
 	/** Client pixels of slack before a press turns into a move, so a click that
 	 * wobbles doesn't nudge the layer it was only meant to select. */
 	const MOVE_SLOP = 3;
-	/** The slider's floor, so a handle can't drag a layer past where the
-	 * panel could bring it back from. */
-	const MIN_SCALE = 0.05;
 
 	function laneStyle(laneId: string): MediaStyle | null {
 		const lane = mediaTimeline?.lanes.find((l) => l.id === laneId);
@@ -494,40 +492,7 @@
 			}
 			next = { ...from, x: from.x + dx / fw, y: from.y + dy / fh };
 		} else {
-			const { hx, hy, cx, cy, rot, c0x, c0y } = drag;
-			// The pointer in the box's own frame, so a rotated layer scales along
-			// its own edges rather than the screen's.
-			const dx = px - cx;
-			const dy = py - cy;
-			const cos = Math.cos(rot);
-			const sin = Math.sin(rot);
-			const lx = dx * cos + dy * sin;
-			const ly = -dx * sin + dy * cos;
-			// A corner scales uniformly by how far the pointer is along the
-			// handle's own diagonal; a side scales its one axis.
-			let fx = 1;
-			let fy = 1;
-			next = { ...from };
-			if (hx !== 0 && hy !== 0) {
-				const f = (lx * c0x + ly * c0y) / (c0x * c0x + c0y * c0y);
-				fx = fy = Math.max(f, MIN_SCALE / from.scale);
-				next.scale = from.scale * fx;
-			} else if (hx !== 0) {
-				fx = Math.max(lx / c0x, MIN_SCALE / from.scaleX);
-				next.scaleX = from.scaleX * fx;
-			} else {
-				fy = Math.max(ly / c0y, MIN_SCALE / from.scaleY);
-				next.scaleY = from.scaleY * fy;
-			}
-			// The opposite side stays put unless Alt asks for the centre to: the
-			// handle's offset grows by the factor, and the centre moves by the
-			// difference, turned back into frame space.
-			if (!e.altKey) {
-				const mx = (fx - 1) * c0x;
-				const my = (fy - 1) * c0y;
-				next.x = from.x + (mx * cos - my * sin) / fw;
-				next.y = from.y + (mx * sin + my * cos) / fh;
-			}
+			next = scaleFromHandle(from, drag, px, py, fw, fh, e.altKey);
 		}
 		if (!drag.moved) {
 			drag.moved = true;

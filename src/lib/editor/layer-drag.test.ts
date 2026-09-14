@@ -1,0 +1,115 @@
+import { describe, expect, test } from "bun:test";
+import { DEFAULT_MEDIA_STYLE, type MediaStyle } from "../media/types";
+import { MIN_SCALE, scaleFromHandle, type HandleFrame } from "./layer-drag";
+
+const FW = 400;
+const FH = 300;
+
+/** A 100×80 box centred at (200, 150): rect (150, 110, 100, 80). */
+const FROM: MediaStyle = {
+	...DEFAULT_MEDIA_STYLE,
+	x: 0.5,
+	y: 0.5,
+	scale: 1,
+	scaleX: 1,
+	scaleY: 1,
+	rotation: 0,
+};
+
+/** The box's centre and half-extents a style lands at, in output pixels. */
+function boxOf(style: MediaStyle) {
+	return {
+		cx: style.x * FW,
+		cy: style.y * FH,
+		hw: (100 * style.scale * style.scaleX) / 2,
+		hh: (80 * style.scale * style.scaleY) / 2,
+	};
+}
+
+function frame(g: Partial<HandleFrame> = {}): HandleFrame {
+	return { hx: 1, hy: 1, cx: 200, cy: 150, rot: 0, c0x: 50, c0y: 40, ...g };
+}
+
+describe("scaleFromHandle", () => {
+	test("a press on the handle changes nothing", () => {
+		expect(scaleFromHandle(FROM, frame(), 250, 190, FW, FH, false)).toEqual(
+			FROM,
+		);
+	});
+
+	test("a dragged corner lands on the cursor and the opposite one stays put", () => {
+		for (const t of [0.5, 1.25, 2]) {
+			const next = scaleFromHandle(
+				FROM,
+				frame(),
+				200 + 50 * t,
+				150 + 40 * t,
+				FW,
+				FH,
+				false,
+			);
+			const b = boxOf(next);
+			expect(b.cx + b.hw).toBeCloseTo(200 + 50 * t);
+			expect(b.cy + b.hh).toBeCloseTo(150 + 40 * t);
+			expect(b.cx - b.hw).toBeCloseTo(150);
+			expect(b.cy - b.hh).toBeCloseTo(110);
+		}
+	});
+
+	test("a dragged side moves its one edge, keeping the other axis", () => {
+		const next = scaleFromHandle(FROM, frame({ hy: 0, c0y: 0 }), 275, 190, FW, FH, false);
+		const b = boxOf(next);
+		expect(b.cx + b.hw).toBeCloseTo(275);
+		expect(b.cx - b.hw).toBeCloseTo(150);
+		expect(b.cy - b.hh).toBeCloseTo(110);
+		expect(b.cy + b.hh).toBeCloseTo(190);
+		expect(next.scaleY).toBe(1);
+	});
+
+	test("Alt keeps the centre and puts the corner on the cursor", () => {
+		const next = scaleFromHandle(FROM, frame(), 275, 210, FW, FH, true);
+		const b = boxOf(next);
+		expect(b.cx).toBeCloseTo(200);
+		expect(b.cy).toBeCloseTo(150);
+		expect(b.cx + b.hw).toBeCloseTo(275);
+		expect(b.cy + b.hh).toBeCloseTo(210);
+	});
+
+	test("a rotated layer scales along its own edges", () => {
+		const rot = Math.PI / 2;
+		// The right-side handle sits below the centre once turned; the cursor
+		// drags it further down.
+		const next = scaleFromHandle(
+			FROM,
+			frame({ hy: 0, rot, c0x: 50, c0y: 0 }),
+			200,
+			250,
+			FW,
+			FH,
+			false,
+		);
+		const b = boxOf(next);
+		// The side's midpoint, turned the way the box is.
+		const mx = b.hw * Math.cos(rot);
+		const my = b.hw * Math.sin(rot);
+		expect(b.cx + mx).toBeCloseTo(200);
+		expect(b.cy + my).toBeCloseTo(250);
+		expect(b.cx - mx).toBeCloseTo(200);
+		expect(b.cy - my).toBeCloseTo(100);
+		expect(next.scaleY).toBe(1);
+	});
+
+	test("a side cannot drag past the slider's floor", () => {
+		const from = { ...FROM, scaleX: 0.06 };
+		const next = scaleFromHandle(
+			from,
+			frame({ hy: 0, c0x: 50, c0y: 0 }),
+			151,
+			150,
+			FW,
+			FH,
+			false,
+		);
+		expect(next.scaleX).toBe(MIN_SCALE);
+	});
+});
