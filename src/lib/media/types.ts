@@ -31,6 +31,10 @@ export interface MediaStyle {
 	y: number;
 	/** Multiplier on the fitted size. 1 = exactly the fit. */
 	scale: number;
+	/** Per-axis stretch on top of `scale`, so a layer can be squashed without
+	 * losing its uniform size. 1 = none. */
+	scaleX: number;
+	scaleY: number;
 	/** Clockwise, in degrees. */
 	rotation: number;
 	fit: MediaFit;
@@ -121,6 +125,8 @@ export const DEFAULT_MEDIA_STYLE: MediaStyle = {
 	x: 0.5,
 	y: 0.5,
 	scale: 1,
+	scaleX: 1,
+	scaleY: 1,
 	rotation: 0,
 	fit: "contain",
 	opacity: 1,

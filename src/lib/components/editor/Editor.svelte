@@ -4360,6 +4360,12 @@
 				sourceEditId={isSequenceMode ? sourceIdOf(activeSegment()) : null}
 				outgoingEditId={isSequenceMode ? (outgoingSource()?.id ?? null) : null}
 				onPickLayer={pickLayer}
+				onLayerDragStart={() => pushMediaHistory()}
+				onLayerStyleChange={(id, style) =>
+					(mediaTimeline = updateMediaLaneIn(mediaTimeline, id, (l) => ({
+						...l,
+						style,
+					})))}
 				sourceEditTime={isSequenceMode ? sourceTimeIn(activeSegment()) : 0}
 				outgoingEditTime={isSequenceMode ? (outgoingSource()?.time ?? 0) : 0}
 			/>

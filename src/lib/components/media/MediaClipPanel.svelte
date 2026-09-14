@@ -297,7 +297,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Size of the media on top of whatever the fit gave it. 100% is the fitted size. Double-click to reset."
+			title="Size of the media on top of whatever the fit gave it. 100% is the fitted size. Dragging a corner handle on the preview moves this. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, "scale")}
 		>
 			<label for="mc-scale">Scale</label>
@@ -310,6 +310,42 @@
 				oninput={(v) => setStyle("scale", v, `mc-scale-${lane.id}`)}
 			/>
 			<span class="val">{Math.round(lane.style.scale * 100)}%</span>
+		</div>
+
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Stretch across, on top of the scale. Dragging a side handle on the preview moves this. Double-click to reset."
+			ondblclick={(e) => resetStyle(e, "scaleX")}
+		>
+			<label for="mc-scale-x">Scale X</label>
+			<RangeSlider
+				id="mc-scale-x"
+				value={lane.style.scaleX}
+				min={0.05}
+				max={3}
+				step={0.01}
+				oninput={(v) => setStyle("scaleX", v, `mc-scale-x-${lane.id}`)}
+			/>
+			<span class="val">{Math.round(lane.style.scaleX * 100)}%</span>
+		</div>
+
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Stretch down, on top of the scale. Dragging a top or bottom handle on the preview moves this. Double-click to reset."
+			ondblclick={(e) => resetStyle(e, "scaleY")}
+		>
+			<label for="mc-scale-y">Scale Y</label>
+			<RangeSlider
+				id="mc-scale-y"
+				value={lane.style.scaleY}
+				min={0.05}
+				max={3}
+				step={0.01}
+				oninput={(v) => setStyle("scaleY", v, `mc-scale-y-${lane.id}`)}
+			/>
+			<span class="val">{Math.round(lane.style.scaleY * 100)}%</span>
 		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -355,7 +391,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Where the layer's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Double-click to reset."
+			title="Where the layer's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Dragging the layer on the preview moves this too. Double-click to reset."
 			ondblclick={(e) => resetStyle(e, "x")}
 		>
 			<label for="mc-x">Position X</label>

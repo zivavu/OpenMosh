@@ -24,6 +24,7 @@
 	import {
 		resolveMediaLayersAt,
 		type MediaLane,
+		type MediaStyle,
 		type MediaTimeline,
 		type ResolvedMediaLayer,
 		type SourceEdit,
@@ -154,6 +155,14 @@
 		 * blanked background. Absent means the preview isn't a way of selecting
 		 * anything. */
 		onPickLayer?: ((pick: LayerPick | null) => void) | null;
+		/** Dragging a media layer, or one of the selected layer's handles, moves
+		 * its placement live. Fired with the lane's whole style so the editor
+		 * writes it the same way the panel's sliders do. Absent means the
+		 * preview only picks. */
+		onLayerStyleChange?: ((laneId: string, style: MediaStyle) => void) | null;
+		/** Called once per drag gesture, before its first change lands, so the
+		 * editor can push one undo entry for the whole drag. */
+		onLayerDragStart?: ((laneId: string) => void) | null;
 		/** Live FFT bins for the audio-bars effect. The AnalyserNode mutates one
 		 * array in place, so this is read fresh every rendered frame rather than
 		 * reacted to. */
@@ -203,6 +212,8 @@
 		forceAnimation = false,
 		overlay = undefined,
 		onPickLayer = null,
+		onLayerStyleChange = null,
+		onLayerDragStart = null,
 	}: Props = $props();
 
 	let frameTimes: number[] = [];
@@ -299,6 +310,8 @@
 			st?.x,
 			st?.y,
 			st?.scale,
+			st?.scaleX,
+			st?.scaleY,
 			st?.rotation,
 			st?.fit,
 			canvasWidth,
@@ -334,17 +347,41 @@
 		// Anything else in the preview box is its own control, and the overlay
 		// covers a canvas whose contents are stale by the time it is up.
 		if (!renderer || !canvasEl || e.target !== canvasEl) return;
-		const fit = frameFit();
-		if (!fit) return;
-		const x = (e.clientX - fit.left) / fit.s;
-		const y = (e.clientY - fit.top) / fit.s;
+		const p = framePoint(e);
 		// Fullscreen letterboxes the frame inside the element, so a click can
 		// land on the canvas and still be off the picture.
-		if (x < 0 || y < 0 || x >= canvasEl.width || y >= canvasEl.height) {
+		if (!p) {
 			onPickLayer(null);
 			return;
 		}
-		const hit = pickTopLayer(
+		const hit = hitAt(p.x, p.y);
+		if (hit) {
+			onPickLayer({ kind: hit.kind, laneId: hit.laneId });
+			// Selecting and moving are one gesture: the press that picked a media
+			// layer keeps hold of it, and dragging on from here moves it.
+			if (hit.kind === "media") startMove(e, hit.laneId, p);
+			return;
+		}
+		// Past every layer is the image they sit over — except under solo, where
+		// the source is blanked and that is bare black, belonging to nothing.
+		onPickLayer(soloMediaLaneId ? null : { kind: "base" });
+	}
+
+	/** The pointer in output pixels, or null when it is off the picture. */
+	function framePoint(e: PointerEvent): { x: number; y: number } | null {
+		const fit = frameFit();
+		if (!fit || !canvasEl) return null;
+		const x = (e.clientX - fit.left) / fit.s;
+		const y = (e.clientY - fit.top) / fit.s;
+		if (x < 0 || y < 0 || x >= canvasEl.width || y >= canvasEl.height) {
+			return null;
+		}
+		return { x, y };
+	}
+
+	function hitAt(x: number, y: number) {
+		if (!renderer || !canvasEl) return null;
+		return pickTopLayer(
 			layerHitBoxes(
 				pickable.media,
 				pickable.text,
@@ -355,14 +392,180 @@
 			x,
 			y,
 		);
-		if (hit) {
-			onPickLayer({ kind: hit.kind, laneId: hit.laneId });
+	}
+
+	// ── Drag to place a layer ────────────────────────────────────────────────
+	// Both gestures work in output pixels, the space `mediaLayerRect` reports
+	// in, and only convert to the style's normalized units when writing. The
+	// style is read once, at the press: every move is measured from there, so
+	// a fast drag can't accumulate rounding.
+	type LayerDrag = {
+		laneId: string;
+		from: MediaStyle;
+		/** True once the first change has been reported, and history pushed. */
+		moved: boolean;
+	} & (
+		| { kind: "move"; x0: number; y0: number }
+		| {
+				kind: "scale";
+				/** Which handle: -1/0/1 per axis, corners on both. */
+				hx: -1 | 0 | 1;
+				hy: -1 | 0 | 1;
+				/** Box centre, rotation and the handle's offset from the centre in
+				 * the box's own frame, all at the press. */
+				cx: number;
+				cy: number;
+				rot: number;
+				c0x: number;
+				c0y: number;
+		  }
+	);
+	let drag: LayerDrag | null = null;
+	/** Set on the preview box while the pointer is over something draggable. */
+	let hoverCursor = $state("");
+
+	/** Client pixels of slack before a press turns into a move, so a click that
+	 * wobbles doesn't nudge the layer it was only meant to select. */
+	const MOVE_SLOP = 3;
+	/** The slider's floor, so a handle can't drag a layer past where the
+	 * panel could bring it back from. */
+	const MIN_SCALE = 0.05;
+
+	function laneStyle(laneId: string): MediaStyle | null {
+		const lane = mediaTimeline?.lanes.find((l) => l.id === laneId);
+		return lane ? { ...lane.style } : null;
+	}
+
+	function startMove(
+		e: PointerEvent,
+		laneId: string,
+		p: { x: number; y: number },
+	) {
+		if (!onLayerStyleChange) return;
+		const from = laneStyle(laneId);
+		if (!from) return;
+		drag = { kind: "move", laneId, from, moved: false, x0: p.x, y0: p.y };
+		previewArea.setPointerCapture(e.pointerId);
+	}
+
+	function startScale(e: PointerEvent, hx: -1 | 0 | 1, hy: -1 | 0 | 1) {
+		const lane = selectedMediaLane;
+		if (!onLayerStyleChange || !lane || !renderer || e.button !== 0) return;
+		const rect = renderer.mediaLayerRect(lane.id, lane.style);
+		if (!rect) return;
+		e.stopPropagation();
+		drag = {
+			kind: "scale",
+			laneId: lane.id,
+			from: { ...lane.style },
+			moved: false,
+			hx,
+			hy,
+			cx: rect.x + rect.w / 2,
+			cy: rect.y + rect.h / 2,
+			rot: rect.rot,
+			c0x: (hx * rect.w) / 2,
+			c0y: (hy * rect.h) / 2,
+		};
+		previewArea.setPointerCapture(e.pointerId);
+	}
+
+	function dragMove(e: PointerEvent) {
+		if (!drag) {
+			updateHoverCursor(e);
 			return;
 		}
-		// Past every layer is the image they sit over — except under solo, where
-		// the source is blanked and that is bare black, belonging to nothing.
-		onPickLayer(soloMediaLaneId ? null : { kind: "base" });
+		const fit = frameFit();
+		if (!fit || !canvasEl) return;
+		const px = (e.clientX - fit.left) / fit.s;
+		const py = (e.clientY - fit.top) / fit.s;
+		const fw = canvasEl.width;
+		const fh = canvasEl.height;
+		const { from } = drag;
+		let next: MediaStyle;
+		if (drag.kind === "move") {
+			let dx = px - drag.x0;
+			let dy = py - drag.y0;
+			if (!drag.moved && Math.hypot(dx, dy) * fit.s < MOVE_SLOP) return;
+			// Shift holds the drag to whichever axis it has gone further along.
+			if (e.shiftKey) {
+				if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+				else dx = 0;
+			}
+			next = { ...from, x: from.x + dx / fw, y: from.y + dy / fh };
+		} else {
+			const { hx, hy, cx, cy, rot, c0x, c0y } = drag;
+			// The pointer in the box's own frame, so a rotated layer scales along
+			// its own edges rather than the screen's.
+			const dx = px - cx;
+			const dy = py - cy;
+			const cos = Math.cos(rot);
+			const sin = Math.sin(rot);
+			const lx = dx * cos + dy * sin;
+			const ly = -dx * sin + dy * cos;
+			// A corner scales uniformly by how far the pointer is along the
+			// handle's own diagonal; a side scales its one axis.
+			let fx = 1;
+			let fy = 1;
+			next = { ...from };
+			if (hx !== 0 && hy !== 0) {
+				const f = (lx * c0x + ly * c0y) / (c0x * c0x + c0y * c0y);
+				fx = fy = Math.max(f, MIN_SCALE / from.scale);
+				next.scale = from.scale * fx;
+			} else if (hx !== 0) {
+				fx = Math.max(lx / c0x, MIN_SCALE / from.scaleX);
+				next.scaleX = from.scaleX * fx;
+			} else {
+				fy = Math.max(ly / c0y, MIN_SCALE / from.scaleY);
+				next.scaleY = from.scaleY * fy;
+			}
+			// The opposite side stays put unless Alt asks for the centre to: the
+			// handle's offset grows by the factor, and the centre moves by the
+			// difference, turned back into frame space.
+			if (!e.altKey) {
+				const mx = (fx - 1) * c0x;
+				const my = (fy - 1) * c0y;
+				next.x = from.x + (mx * cos - my * sin) / fw;
+				next.y = from.y + (mx * sin + my * cos) / fh;
+			}
+		}
+		if (!drag.moved) {
+			drag.moved = true;
+			onLayerDragStart?.(drag.laneId);
+		}
+		onLayerStyleChange?.(drag.laneId, next);
 	}
+
+	function endDrag(e: PointerEvent) {
+		if (!drag) return;
+		drag = null;
+		if (previewArea.hasPointerCapture(e.pointerId)) {
+			previewArea.releasePointerCapture(e.pointerId);
+		}
+	}
+
+	/** A move cursor over any media layer, since a press there drags it. */
+	function updateHoverCursor(e: PointerEvent) {
+		let cursor = "";
+		if (onLayerStyleChange && e.target === canvasEl) {
+			const p = framePoint(e);
+			const hit = p && hitAt(p.x, p.y);
+			if (hit?.kind === "media") cursor = "move";
+		}
+		if (cursor !== hoverCursor) hoverCursor = cursor;
+	}
+
+	/** The eight handles, corners first so they sit over the sides' ends. */
+	const HANDLES: { hx: -1 | 0 | 1; hy: -1 | 0 | 1; cursor: string }[] = [
+		{ hx: -1, hy: -1, cursor: "nwse-resize" },
+		{ hx: 1, hy: -1, cursor: "nesw-resize" },
+		{ hx: 1, hy: 1, cursor: "nwse-resize" },
+		{ hx: -1, hy: 1, cursor: "nesw-resize" },
+		{ hx: 0, hy: -1, cursor: "ns-resize" },
+		{ hx: 1, hy: 0, cursor: "ew-resize" },
+		{ hx: 0, hy: 1, cursor: "ns-resize" },
+		{ hx: -1, hy: 0, cursor: "ew-resize" },
+	];
 	let imageReady = $state(false);
 	let error: string | null = $state(null);
 
@@ -939,7 +1142,16 @@
      canvas can be clicked on is also selectable from its timeline lane, which
      is where the keyboard and the screen reader work. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="preview-area" bind:this={previewArea} onpointerdown={pickLayerAt}>
+<div
+	class="preview-area"
+	bind:this={previewArea}
+	style:cursor={hoverCursor || null}
+	onpointerdown={pickLayerAt}
+	onpointermove={dragMove}
+	onpointerup={endDrag}
+	onpointercancel={endDrag}
+	onpointerleave={() => !drag && hoverCursor && (hoverCursor = "")}
+>
 	{#if !warmCanvas}
 		<canvas
 			bind:this={canvas}
@@ -953,7 +1165,20 @@
 		<div
 			class="layer-outline"
 			style="left: {outline.left}px; top: {outline.top}px; width: {outline.w}px; height: {outline.h}px; transform: rotate({outline.rot}rad)"
-		></div>
+		>
+			{#if onLayerStyleChange}
+				<!-- Children of the rotated box, so they turn with it and a drag
+				     along a side is a drag along that side. -->
+				{#each HANDLES as h (h.hx * 3 + h.hy)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="layer-handle"
+						style="left: {(h.hx + 1) * 50}%; top: {(h.hy + 1) * 50}%; cursor: {h.cursor}"
+						onpointerdown={(e) => startScale(e, h.hx, h.hy)}
+					></div>
+				{/each}
+			{/if}
+		</div>
 	{/if}
 	{#if overlay}
 		<div class="canvas-overlay">{@render overlay()}</div>
@@ -1001,7 +1226,8 @@
 	/* Marks the selected layer's box while its clip panel is open, so the
 	   placement sliders say which part of the frame they move. Dashed and thin:
 	   it overlays live media and has to stay legible without competing with it.
-	   Never interactive — every gesture here belongs to the preview. */
+	   The box itself takes no pointer: a press inside it goes to the canvas,
+	   which drags the layer; only the handles catch anything. */
 	.layer-outline {
 		position: absolute;
 		z-index: 8;
@@ -1010,6 +1236,18 @@
 			0 0 0 1px rgba(0, 0, 0, 0.55),
 			inset 0 0 0 1px rgba(0, 0, 0, 0.55);
 		pointer-events: none;
+	}
+
+	.layer-handle {
+		position: absolute;
+		width: 9px;
+		height: 9px;
+		margin: -5px 0 0 -5px;
+		background: var(--live);
+		border: 1px solid rgba(0, 0, 0, 0.7);
+		box-sizing: border-box;
+		pointer-events: auto;
+		touch-action: none;
 	}
 
 	/* Opaque: whatever is still on the canvas underneath is stale by the time
@@ -1129,6 +1367,7 @@
 		padding: 0.2rem 0.5rem;
 		border-radius: 4px;
 		pointer-events: none;
+		user-select: none;
 		z-index: 10;
 		letter-spacing: 0.04em;
 	}

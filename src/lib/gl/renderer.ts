@@ -2387,8 +2387,8 @@ export class GlRenderer {
 		}
 		const scale = Math.max(style.scale, 0.01);
 		return {
-			drawW: w * scale,
-			drawH: h * scale,
+			drawW: w * scale * Math.max(style.scaleX ?? 1, 0.01),
+			drawH: h * scale * Math.max(style.scaleY ?? 1, 0.01),
 			cx: style.x,
 			cy: style.y,
 			rot: (style.rotation * Math.PI) / 180,
