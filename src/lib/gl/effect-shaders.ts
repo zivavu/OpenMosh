@@ -778,9 +778,14 @@ uniform float u_amount;
 uniform float u_transparent;
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  float dist = length(v_uv - 0.5);
-  float radius = 1.0 - u_size;
-  float vig = smoothstep(radius, radius - 0.45, dist);
+  // Squircle norm instead of a circle so the falloff hugs all four edges
+  // evenly (edge midpoints hit 1.0, corners only ~1.19) rather than pooling
+  // in the corners.
+  vec2 d = abs(v_uv - 0.5) * 2.0;
+  vec2 d4 = d * d * d * d;
+  float dist = pow(d4.x + d4.y, 0.25);
+  float edge = 1.2 - u_size;
+  float vig = smoothstep(edge, edge - 0.6, dist);
   float fade = mix(1.0, vig, u_amount);
   // Same falloff either way; transparent spends it on alpha instead of on the
   // colour, so whatever sits under the layer shows through the edge rather
