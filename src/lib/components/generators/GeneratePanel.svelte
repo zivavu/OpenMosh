@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { RefreshCw, Sparkles, X } from "lucide-svelte";
-	import { onDestroy, onMount } from "svelte";
+	import { onDestroy, onMount, untrack } from "svelte";
 	import {
 		GENERATED_SHORT_SIDE,
 		PALETTES,
@@ -38,14 +38,15 @@
 		{ label: "32", value: "32" },
 		{ label: "64", value: "64" },
 	];
-	const KINDS: { label: string; value: GeneratorKind }[] = [
-		{ label: "Mix", value: "mix" },
+	// Mix deals kinds across a batch; with one image it just hides a random pick.
+	const KINDS: { label: string; value: GeneratorKind }[] = $derived([
+		...(single ? [] : [{ label: "Mix", value: "mix" as const }]),
 		{ label: "Gradient", value: "gradient" },
 		{ label: "Voronoi", value: "voronoi" },
 		{ label: "Stripes", value: "stripes" },
 		{ label: "Plasma", value: "plasma" },
 		{ label: "Rings", value: "rings" },
-	];
+	]);
 	const VARIETIES: { label: string; value: Variety }[] = [
 		{ label: "Wild", value: "wild" },
 		{ label: "Cohesive", value: "cohesive" },
@@ -59,7 +60,7 @@
 	let ratio = $state<RatioLabel>("16:9");
 	let palette = $state<string>("");
 	let variety = $state<Variety>("wild");
-	let kind = $state<GeneratorKind>("mix");
+	let kind = $state<GeneratorKind>(untrack(() => (single ? "gradient" : "mix")));
 
 	let total = $derived(single ? 1 : Number(count));
 	let specs = $derived(
