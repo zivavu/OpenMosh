@@ -382,7 +382,6 @@
 		min-width: 0;
 		padding: 0.3rem 0 0;
 		overflow-x: auto;
-		scrollbar-width: thin;
 	}
 
 	.rail-slot {

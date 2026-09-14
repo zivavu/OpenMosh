@@ -779,7 +779,6 @@
 		max-width: calc(100vw - 2rem);
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
-		scrollbar-width: thin;
 		padding: 1.25rem;
 		background: var(--surface);
 		border: 1px solid var(--line-strong);
@@ -1292,7 +1291,6 @@
 		list-style: none;
 		max-height: 190px;
 		overflow-y: auto;
-		scrollbar-width: thin;
 	}
 
 	.media {

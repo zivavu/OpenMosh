@@ -62,6 +62,35 @@
 	-webkit-tap-highlight-color: transparent;
 }
 
+/* Scrollbars: a bare thumb on a transparent track, everywhere. Chrome drops
+   the ::-webkit rules on any element that also sets scrollbar-width, so the
+   standard properties are reserved for engines without them (Firefox). */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--text-4);
+	border-radius: var(--r-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-3);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--text-4) transparent;
+	}
+}
+
 /* The app is a signal path: media enters, passes a chain of effects, leaves as a
    file. The chrome is built like the rack around that signal — near-black
    surfaces, engraved uppercase labels, mono for anything a number. Color is

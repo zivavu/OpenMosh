@@ -1093,7 +1093,6 @@
 		   music zone off the screen, and a short one shouldn't pull it up. */
 		height: 108px;
 		overflow-y: auto;
-		scrollbar-width: thin;
 	}
 
 	.saved-item {

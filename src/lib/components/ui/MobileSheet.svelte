@@ -210,10 +210,6 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		/* Firefox has no ::-webkit-scrollbar to narrow, so without this its
-		   full-width scrollbar takes a slice out of the column and the panels
-		   overflow sideways behind a second, horizontal one. */
-		scrollbar-width: thin;
 	}
 
 	/* Every section keeps its natural height and the column scrolls past it.
@@ -228,22 +224,6 @@
 		max-width: 100%;
 	}
 
-	.desktop-content::-webkit-scrollbar {
-		width: 4px;
-	}
-
-	.desktop-content::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	.desktop-content::-webkit-scrollbar-thumb {
-		background: rgba(255, 255, 255, 0.07);
-		border-radius: 2px;
-	}
-
-	.desktop-content::-webkit-scrollbar-thumb:hover {
-		background: #555;
-	}
 
 	.tab-content {
 		display: none;
