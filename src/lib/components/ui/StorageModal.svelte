@@ -923,8 +923,15 @@
 		outline-offset: -1px;
 	}
 
+	/* Long names would otherwise crush the icons to a different width per row. */
+	.row-main > :global(svg),
+	.media > :global(svg) {
+		flex-shrink: 0;
+	}
+
 	.chev {
 		display: flex;
+		flex-shrink: 0;
 		color: var(--text-4);
 		transition: transform var(--t-fast);
 	}
