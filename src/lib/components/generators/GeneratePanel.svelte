@@ -219,10 +219,12 @@
 
 		<div class="strip" class:single style:--aspect={aspect}>
 			{#each specs.slice(0, PREVIEW_MAX) as _, i (i)}
-				<div class="thumb" class:pending={!previews[i]}>
-					{#if previews[i]}
-						<img src={previews[i]} alt="" />
-					{/if}
+				<div class="cell">
+					<div class="thumb" class:pending={!previews[i]}>
+						{#if previews[i]}
+							<img src={previews[i]} alt="" />
+						{/if}
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -356,20 +358,30 @@
 		outline: none;
 	}
 
+	/* Cells are fixed boxes so a ratio change never resizes the panel. */
 	.strip {
 		display: grid;
+		--cell-h: 150px;
 		grid-template-columns: repeat(3, 1fr);
+		grid-auto-rows: var(--cell-h);
 		gap: 0.4rem;
 	}
 	.strip.single {
+		--cell-h: 260px;
 		grid-template-columns: minmax(0, 420px);
 		justify-content: center;
 	}
 
+	.cell {
+		display: grid;
+		place-items: center;
+		min-width: 0;
+		min-height: 0;
+	}
+
 	.thumb {
 		aspect-ratio: var(--aspect);
-		max-height: 220px;
-		width: 100%;
+		width: min(100%, calc(var(--cell-h) * var(--aspect)));
 		border-radius: var(--r-2);
 		overflow: hidden;
 		background: var(--sunken);
