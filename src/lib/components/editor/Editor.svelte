@@ -34,6 +34,7 @@
 		saveRenderSettings,
 	} from "../../editor/render-settings";
 	import { addTrack } from "../../audio/track-library";
+	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
 	import {
 		clearEffects as clearEffectsFn,
@@ -67,7 +68,6 @@
 		findTextClipLane,
 		normalizeTextTimeline,
 		applyLyricsToTimeline,
-		TEXT_TIMELINE_SHORTCUTS,
 		updateLane,
 		type TextClip,
 		type TextLane,
@@ -143,7 +143,6 @@
 		findMediaClipLane,
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
-		MEDIA_LAYER_SHORTCUTS,
 		clipSourceId,
 		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
@@ -3148,153 +3147,14 @@
 		saveSingleSession();
 	}
 
-	/** A layer group, plus the mosh arrows its selected lane answers to. */
-	function withLaneMosh(group: {
-		title: string;
-		shortcuts: { keys: string[]; description: string }[];
-	}) {
-		return {
-			...group,
-			shortcuts: [
-				...group.shortcuts,
-				{
-					keys: ["←", "→"],
-					description: "Walk the selected clip's lane through its moshes",
-				},
-			],
-		};
-	}
-
-	const shortcutGroups = $derived([
-		{
-			title: "Editor",
-			shortcuts: [
-				{ keys: ["→"], description: "Next mosh, or roll a new one" },
-				{ keys: ["←"], description: "Previous mosh" },
-				{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
-				{
-					keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"],
-					description: "Redo the last undone edit",
-				},
-				{ keys: ["Ctrl/Cmd+S"], description: "Save current frame" },
-				{ keys: ["Space"], description: "Play / pause" },
-				{ keys: ["F"], description: "Fullscreen preview (Esc to exit)" },
-				{ keys: ["C"], description: "Follow the playhead on the timeline" },
-				{ keys: ["+", "-"], description: "Zoom the timeline in / out" },
-				...(isSequenceMode
-					? []
-					: [
-							{
-								keys: ["V"],
-								description: "Bake current frame as the new source (undoable)",
-							},
-						]),
-			],
-		},
-		...(isSequenceMode
-			? [
-					{
-						title: "Segment timeline",
-						shortcuts: [
-							{
-								keys: ["Ctrl+Click"],
-								description: "Create / split segment at cursor",
-							},
-							{
-								keys: ["S"],
-								description: "Split the last-used lane at the playhead",
-							},
-							{ keys: ["Click"], description: "Select segment for editing" },
-							{
-								keys: ["R"],
-								description: "Loop playback inside the selected segment",
-							},
-							{
-								keys: ["←", "→"],
-								description: "Walk the selected segment's moshes",
-							},
-							{
-								keys: ["Delete", "Backspace"],
-								description: "Delete segment / selected boundaries",
-							},
-							{ keys: ["Esc"], description: "Deselect / cancel paste" },
-							{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
-							{
-								keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"],
-								description: "Redo the last undone edit",
-							},
-							{
-								keys: ["Shift+Drag"],
-								description: "Rectangle-select segments and boundaries",
-							},
-							{
-								keys: ["Alt+Drag"],
-								description:
-									"Move a boundary without snapping to other edges or beats",
-							},
-							{ keys: ["Ctrl/Cmd+C"], description: "Copy selected segments" },
-							{
-								keys: ["Ctrl/Cmd+V"],
-								description:
-									"Paste onto selection, or click to place a copied span. Effects copied from an fx clip land as effects alone",
-							},
-							{
-								keys: ["Scroll", "Shift+Scroll"],
-								description: "Zoom / pan timeline",
-							},
-						],
-					},
-				]
-			: []),
-		...(isSequenceMode && fxLanes.length > 0
-			? [
-					{
-						title: "FX lanes",
-						shortcuts: [
-							{
-								keys: ["Ctrl+Click"],
-								description:
-									"Create clip in empty space / split the clip at cursor",
-							},
-							{
-								keys: ["Double-click"],
-								description: "Create clip in empty space",
-							},
-							{ keys: ["Click"], description: "Select clip for editing" },
-							{ keys: ["Shift+Click"], description: "Select a range of clips" },
-							{
-								keys: ["Ctrl/Cmd+Shift+Click"],
-								description: "Add / remove one clip from the selection",
-							},
-							{
-								keys: ["Alt+Drag"],
-								description:
-									"Move / resize a clip without snapping to other edges or beats",
-							},
-							{
-								keys: ["Ctrl/Cmd+C"],
-								description: "Copy the selected clips",
-							},
-							{
-								keys: ["Ctrl/Cmd+V"],
-								description:
-									"Paste effects onto the selected clips (from a segment too), or with nothing selected stamp whole copies at the start marker",
-							},
-							{
-								keys: ["Delete", "Backspace"],
-								description: "Delete selected clips",
-							},
-							{ keys: ["Esc"], description: "Deselect" },
-						],
-					},
-				]
-			: []),
-		// The arrows reach a layer lane's chain here but not in the slideshow,
-		// which shares the text group — so the entry is added on this side
-		// rather than written into the shared list.
-		...(textTimeline.enabled ? [withLaneMosh(TEXT_TIMELINE_SHORTCUTS)] : []),
-		...(mediaTimeline.enabled ? [withLaneMosh(MEDIA_LAYER_SHORTCUTS)] : []),
-	]);
+	const shortcutGroups = $derived(
+		editorShortcutGroups({
+			sequence: isSequenceMode,
+			fxLanes: fxLanes.length > 0,
+			text: textTimeline.enabled,
+			media: mediaTimeline.enabled,
+		}),
+	);
 
 	// A still image with no track has no clock at all, so the text timeline
 	// supplies one: it loops the record window, which is what an export writes.

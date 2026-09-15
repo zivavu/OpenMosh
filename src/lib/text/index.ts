@@ -12,7 +12,6 @@ export {
 	lyricsLane,
 } from "./lyrics";
 export { drawTextToCanvas, textSignature } from "./render-text-clip";
-export { TEXT_TIMELINE_SHORTCUTS } from "./shortcuts";
 export type { ResolvedTextLayer } from "./resolve";
 export {
 	addClip,

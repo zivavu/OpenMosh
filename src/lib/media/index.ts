@@ -39,7 +39,6 @@ export {
 	sampleTrack,
 	wrapSourceTime,
 } from "./source-edit";
-export { MEDIA_LAYER_SHORTCUTS } from "./shortcuts";
 export type { ResolvedMediaLayer } from "./resolve";
 export {
 	addClip,

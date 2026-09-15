@@ -45,7 +45,7 @@
 								<span class="description">{shortcut.description}</span>
 								<span class="keys">
 									{#each shortcut.keys as key, i (key)}
-										{#if i > 0}<span class="key-sep">or</span>{/if}
+										{#if i > 0}<span class="key-sep">/</span>{/if}
 										<kbd>{key}</kbd>
 									{/each}
 								</span>

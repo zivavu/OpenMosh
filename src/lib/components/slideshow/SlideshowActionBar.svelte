@@ -2,7 +2,7 @@
 	import { HelpCircle, Pause, Play, Settings, Type } from "lucide-svelte";
 	import RecordGroup from "../editor/RecordGroup.svelte";
 	import ResizeSettings from "../ui/ResizeSettings.svelte";
-	import { TEXT_TIMELINE_SHORTCUTS } from "../../text";
+	import { slideshowShortcutGroups } from "../../editor/shortcut-groups";
 	import type { SourceFit } from "../../gl/renderer";
 	import { lazy } from "../../lazy";
 
@@ -56,46 +56,9 @@
 	let showRecordSettings = $state(false);
 	let showShortcuts = $state(false);
 
-	const shortcutGroups = [
-		{
-			title: "Preview",
-			shortcuts: [
-				{ keys: ["Space"], description: "Play / pause preview" },
-				{ keys: ["Esc"], description: "Stop preview" },
-				{ keys: ["C"], description: "Follow the playhead on the timeline" },
-			],
-		},
-		{
-			title: "Effects",
-			shortcuts: [
-				{ keys: ["→"], description: "Next mosh, or roll a new one" },
-				{ keys: ["←"], description: "Previous mosh" },
-				{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
-				{
-					keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"],
-					description: "Redo effect edit",
-				},
-			],
-		},
-		{
-			title: "Timeline editing",
-			shortcuts: [
-				{
-					keys: ["Ctrl+Click"],
-					description: "Create / split segment at cursor",
-				},
-				{ keys: ["Ctrl/Cmd+Z"], description: "Undo the last edit" },
-				{ keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"], description: "Redo" },
-				{ keys: ["Shift+Drag"], description: "Rectangle-select boundaries" },
-				{ keys: ["Ctrl/Cmd+C"], description: "Copy selected boundaries" },
-				{ keys: ["Ctrl/Cmd+V"], description: "Paste boundaries" },
-				{ keys: ["Delete", "Backspace"], description: "Delete selection" },
-				{ keys: ["Esc"], description: "Cancel paste / clear selection" },
-				{ keys: ["Shift+Scroll"], description: "Pan timeline view" },
-			],
-		},
-		TEXT_TIMELINE_SHORTCUTS,
-	];
+	const shortcutGroups = $derived(
+		slideshowShortcutGroups({ text: textEnabled }),
+	);
 	let optionsGroupEl: HTMLDivElement | undefined;
 	// svelte-ignore non_reactive_update
 	let recordGroupRef: RecordGroup | undefined = undefined;
