@@ -63,7 +63,7 @@ const MEDIA_LAYERS: ShortcutRow[] = [
 	{
 		keys: ["Ctrl/Cmd+C", "Ctrl/Cmd+V"],
 		description:
-			"Copy the selection; paste onto selected clips, or with nothing selected stamp copies at the start marker",
+			"Copy the selection; paste onto selected clips, or with nothing selected stamp copies at the start marker on the last-clicked lane",
 	},
 ];
 
@@ -72,7 +72,7 @@ const FX_LANES: ShortcutRow[] = [
 	{
 		keys: ["Ctrl/Cmd+C", "Ctrl/Cmd+V"],
 		description:
-			"Copy the selection; paste effects onto selected clips (from a segment too), or with nothing selected stamp copies at the start marker",
+			"Copy the selection; paste effects onto selected clips (from a segment too), or with nothing selected stamp copies at the start marker on the last-clicked lane",
 	},
 ];
 

@@ -362,6 +362,36 @@ export function firstFreeDelta(
 	return null;
 }
 
+/**
+ * Move a copied block onto other lanes: the block's first lane (in `laneIds`
+ * order) becomes `targetLaneId`, and the rest keep their spacing below it.
+ * Entries pushed past the last lane are dropped. Unchanged when the target
+ * isn't one of the lanes, or is already the block's first lane.
+ */
+export function retargetClipBlock<E extends ClipBlockEntry>(
+	entries: E[],
+	laneIds: string[],
+	targetLaneId: string | null | undefined,
+): E[] {
+	if (!targetLaneId) return entries;
+	const to = laneIds.indexOf(targetLaneId);
+	if (to === -1) return entries;
+	let from = Infinity;
+	for (const e of entries) {
+		const i = laneIds.indexOf(e.laneId);
+		if (i !== -1) from = Math.min(from, i);
+	}
+	if (from === Infinity || from === to) return entries;
+	const out: E[] = [];
+	for (const e of entries) {
+		const i = laneIds.indexOf(e.laneId);
+		if (i === -1) continue;
+		const j = i - from + to;
+		if (j < laneIds.length) out.push({ ...e, laneId: laneIds[j] });
+	}
+	return out;
+}
+
 /** Where one copied entry lands. */
 export interface ClipPlacement<E extends ClipBlockEntry> {
 	entry: E;

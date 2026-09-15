@@ -153,6 +153,37 @@ describe("pasteMediaClips", () => {
 	});
 });
 
+describe("pasteMediaClips onto another lane", () => {
+	it("lands on the target lane, pinning the source it showed", () => {
+		const a = laneWith([[0, 4]], "Layer 1");
+		const b = { ...laneWith([], "Layer 2"), sourceId: "src-b" };
+		const t = timelineOf([a, b]);
+		const copied = copyMediaClips(t, [a.clips[0].id]);
+		const result = pasteMediaClips(t, copied, 0, 10, b.id);
+		expect(result.timeline.lanes[0].clips).toHaveLength(1);
+		const [pasted] = result.timeline.lanes[1].clips;
+		expect([pasted.start, pasted.end]).toEqual([0, 4]);
+		expect(pasted.sourceId).toBe("src-a");
+	});
+
+	it("leaves the source unpinned when the target lane shows the same", () => {
+		const a = laneWith([[0, 4]], "Layer 1");
+		const b = laneWith([], "Layer 2");
+		const t = timelineOf([a, b]);
+		const copied = copyMediaClips(t, [a.clips[0].id]);
+		const result = pasteMediaClips(t, copied, 0, 10, b.id);
+		expect(result.timeline.lanes[1].clips[0].sourceId).toBeUndefined();
+	});
+
+	it("keeps a clip following its lane when pasted back onto it", () => {
+		const a = laneWith([[0, 4]], "Layer 1");
+		const t = timelineOf([a]);
+		const copied = copyMediaClips(t, [a.clips[0].id]);
+		const result = pasteMediaClips(t, copied, 6, 10, a.id);
+		expect(result.timeline.lanes[0].clips[1].sourceId).toBeUndefined();
+	});
+});
+
 describe("pasteMediaContentOnto", () => {
 	it("puts the source and in-point into the targets, keeping their spans", () => {
 		const from = laneWith([[0, 5, 30]]);

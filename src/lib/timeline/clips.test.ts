@@ -12,6 +12,7 @@ import {
 	moveClipsToLane,
 	placeClipBlock,
 	removeClip,
+	retargetClipBlock,
 	resizeBoundary,
 	resizeClip,
 	sortClips,
@@ -330,6 +331,28 @@ describe("placeClipBlock", () => {
 		expect(
 			placeClipBlock([entry("x", 0, 2), entry("gone", 0, 2)], lanes, 0, 10),
 		).toEqual([]);
+	});
+});
+
+describe("retargetClipBlock", () => {
+	const laneIds = ["a", "b", "c"];
+	const e = (laneId: string) => ({ laneId, offset: 0, length: 1 });
+
+	it("moves the block so its first lane is the target, keeping spacing", () => {
+		const out = retargetClipBlock([e("a"), e("b")], laneIds, "b");
+		expect(out.map((x) => x.laneId)).toEqual(["b", "c"]);
+	});
+
+	it("drops entries pushed past the last lane", () => {
+		const out = retargetClipBlock([e("a"), e("b")], laneIds, "c");
+		expect(out.map((x) => x.laneId)).toEqual(["c"]);
+	});
+
+	it("is the input when the target is unknown, absent, or already first", () => {
+		const entries = [e("a")];
+		expect(retargetClipBlock(entries, laneIds, "mosh")).toBe(entries);
+		expect(retargetClipBlock(entries, laneIds, null)).toBe(entries);
+		expect(retargetClipBlock(entries, laneIds, "a")).toBe(entries);
 	});
 });
 

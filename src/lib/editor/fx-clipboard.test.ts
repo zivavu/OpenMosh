@@ -76,6 +76,15 @@ describe("pasteFxClips", () => {
 		]);
 	});
 
+	it("lands on the target lane when given one", () => {
+		const a = laneWith([[0, 2]]);
+		const b = laneWith([], "FX 2");
+		const entries = copyFxClips([a], [a.clips[0].id]);
+		const { lanes } = pasteFxClips([a, b], entries, 5, 60, b.id);
+		expect(lanes[0].clips).toHaveLength(1);
+		expect(lanes[1].clips.map((c) => [c.start, c.end])).toEqual([[5, 7]]);
+	});
+
 	it("pastes nothing when the lane is full", () => {
 		const lane = laneWith([[0, 6]]);
 		const entries = copyFxClips([lane], [lane.clips[0].id]);

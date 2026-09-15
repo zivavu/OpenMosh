@@ -4,14 +4,16 @@
  * chainClipboard, which is what a paste *onto* a clip uses; this is the paste
  * that makes new clips.
  *
- * Clips land back on the lane they came from, the same way media clips do:
- * a lane rolls its moshes under its own settings, and a clip's chain was
- * rolled under the lane it sat on.
+ * Clips land on the lane last clicked, or back where they came from. A
+ * static clip's chain is concrete and goes anywhere; an interval clip re-rolls
+ * under whichever lane's settings it lands on, which is what a lane's settings
+ * are for.
  */
 
 import { cloneEffectInstance } from "../effects";
 import {
 	placeClipBlock,
+	retargetClipBlock,
 	sortClips,
 	type ClipBlockEntry,
 } from "../timeline/clips";
@@ -60,20 +62,28 @@ export interface FxPasteResult {
 }
 
 /**
- * Stamp the clipboard down with its earliest clip at `at`; see placeClipBlock
- * for where the copies land when the space is short. Fresh clip ids and
- * effect instance ids each paste, so two copies never share feedback state.
+ * Stamp the clipboard down with its earliest clip at `at`, on `targetLaneId`
+ * when that is an fx lane (the block's other lanes follow below it) and
+ * otherwise back where it was copied from. See placeClipBlock for where the
+ * copies land when the space is short. Fresh clip ids and effect instance ids
+ * each paste, so two copies never share feedback state.
  */
 export function pasteFxClips(
 	lanes: FxLane[],
 	entries: FxClipboardEntry[],
 	at: number,
 	duration: number,
+	targetLaneId?: string | null,
 ): FxPasteResult {
 	const unchanged: FxPasteResult = { lanes, clipIds: [] };
 	if (entries.length === 0 || duration <= 0) return unchanged;
 	const byId = new Map<string, FxLane>(lanes.map((l) => [l.id, l]));
-	const placed = placeClipBlock(entries, byId, at, duration);
+	const moved = retargetClipBlock(
+		entries,
+		lanes.map((l) => l.id),
+		targetLaneId,
+	);
+	const placed = placeClipBlock(moved, byId, at, duration);
 	if (placed.length === 0) return unchanged;
 
 	const added = new Map<string, FxClip[]>();

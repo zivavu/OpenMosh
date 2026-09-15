@@ -661,14 +661,16 @@
 		return pasteClips();
 	}
 
-	/** Stamp the copied clips at the start marker, and leave the copies
-	 * selected to drag from there. */
+	/** Stamp the copied clips at the start marker, on the lane last clicked —
+	 * the same click that put the marker there — and leave the copies selected
+	 * to drag from there. */
 	function pasteClips(): boolean {
 		const result = pasteMediaClips(
 			timeline,
 			clipboard,
 			stack.staticTime,
 			trackDuration,
+			stack.activeLaneId,
 		);
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();

@@ -3,18 +3,19 @@
  *
  * A clip carries its span, its in-point and whichever source it was retargeted
  * to. The placement and the effect chain live on the lane and are shared by
- * every clip on it, so a whole-clip paste lands back in the lane it came
- * from, where both come along by themselves. Pasting onto another lane would
- * mean overwriting that lane's chain for the sake of one clip, which is a lane
- * edit wearing a clip's clothes.
+ * every clip on it, so a whole-clip paste brings the clip and not those: on
+ * another lane the copy takes that lane's placement and chain, and keeps only
+ * what it showed. Overwriting the lane's chain for the sake of one clip would
+ * be a lane edit wearing a clip's clothes.
  *
  * Pasting *onto* a clip is the other half: what the copied clip showed — its
  * source and in-point — dropped into a clip that keeps its own span, fade and
- * lane. That one can cross lanes, since it changes nothing about the lane.
+ * lane.
  */
 
 import {
 	placeClipBlock,
+	retargetClipBlock,
 	sortClips,
 	type ClipBlockEntry,
 } from "../timeline/clips";
@@ -69,13 +70,22 @@ export interface MediaPasteResult {
 	clipIds: string[];
 }
 
-/** Stamp the clipboard down with its earliest clip at `at`; see
- * placeClipBlock for where the copies land when the space is short. */
+/**
+ * Stamp the clipboard down with its earliest clip at `at`, on `targetLaneId`
+ * when that is a media lane (the block's other lanes follow below it) and
+ * otherwise back where it was copied from. See placeClipBlock for where the
+ * copies land when the space is short.
+ *
+ * A copy landing on another lane keeps showing what it showed: its source is
+ * pinned unless it is already what the new lane shows. On its own lane it
+ * stays as copied — one that followed the lane still follows it.
+ */
 export function pasteMediaClips(
 	timeline: MediaTimeline,
 	entries: MediaClipboardEntry[],
 	at: number,
 	duration: number,
+	targetLaneId?: string | null,
 ): MediaPasteResult {
 	const unchanged: MediaPasteResult = { timeline, clipIds: [] };
 	if (entries.length === 0 || duration <= 0) return unchanged;
@@ -83,14 +93,25 @@ export function pasteMediaClips(
 	const lanes = new Map<string, MediaLane>(
 		timeline.lanes.map((l) => [l.id, l]),
 	);
+	const moved = retargetClipBlock(
+		entries,
+		timeline.lanes.map((l) => l.id),
+		targetLaneId,
+	);
 	// A lane deleted since the copy takes its clips with it.
-	const placed = placeClipBlock(entries, lanes, at, duration);
+	const placed = placeClipBlock(moved, lanes, at, duration);
 	if (placed.length === 0) return unchanged;
 
 	const added = new Map<string, MediaClip[]>();
 	const clipIds: string[] = [];
 	for (const { entry: e, start, end } of placed) {
-		const clip = createMediaClip(start, end, e.sourceStart, e.sourceId);
+		let sourceId = e.sourceId;
+		if (moved !== entries) {
+			const resolved = e.resolvedSourceId ?? undefined;
+			sourceId =
+				resolved === lanes.get(e.laneId)!.sourceId ? undefined : resolved;
+		}
+		const clip = createMediaClip(start, end, e.sourceStart, sourceId);
 		if (e.fadeSec !== undefined) clip.fadeSec = e.fadeSec;
 		clipIds.push(clip.id);
 		const list = added.get(e.laneId);
