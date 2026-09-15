@@ -632,8 +632,10 @@
 	// copied clips showed, into clips that keep their spans — and otherwise
 	// stamps whole clips down at the start marker.
 	let clipboard = $state<MediaClipboardEntry[]>([]);
-	/** What the clipboard was copied from: pasting onto exactly those would
-	 * change nothing, so that gesture stamps new copies instead. */
+	/** What the clipboard was copied from, plus every copy stamped from it
+	 * since: pasting onto exactly those would change nothing, so that gesture
+	 * stamps new copies instead — which is what makes a second Ctrl+V, with
+	 * the first paste still selected, lay down another copy. */
 	let copiedIds = new Set<string>();
 	/** The copy stamp when the clipboard was last filled: a paste answers only
 	 * if nothing was copied on another lane since. */
@@ -675,6 +677,7 @@
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();
 		onChange(result.timeline);
+		for (const id of result.clipIds) copiedIds.add(id);
 		selectedClipIds = result.clipIds;
 		selectedClipId = result.clipIds[result.clipIds.length - 1];
 		return true;

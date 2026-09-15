@@ -579,8 +579,10 @@
 	 * tell whether anything was copied since. A segment's chain copied later
 	 * has no span to stamp, so it can only go onto a selection. */
 	let clipClipStamp = -1;
-	/** What the clip clipboard was copied from: pasting onto exactly those
-	 * would change nothing, so that gesture stamps new copies instead. */
+	/** What the clip clipboard was copied from, plus every copy stamped from
+	 * it since: pasting onto exactly those would change nothing, so that
+	 * gesture stamps new copies instead — which is what makes a second Ctrl+V,
+	 * with the first paste still selected, lay down another copy. */
 	let copiedIds = new Set<string>();
 
 	function copySelectedChains(): boolean {
@@ -626,6 +628,7 @@
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();
 		onChange(result.lanes);
+		for (const id of result.clipIds) copiedIds.add(id);
 		selectedClipIds = result.clipIds;
 		selectedClipId = result.clipIds[result.clipIds.length - 1];
 		return true;
