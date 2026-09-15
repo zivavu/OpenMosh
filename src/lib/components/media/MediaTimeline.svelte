@@ -15,6 +15,7 @@
 		MIN_CLIP_LENGTH,
 		moveClip,
 		moveClips,
+		moveClipsToLane,
 		pasteMediaClips,
 		removeClip,
 		resizeBoundary,
@@ -542,6 +543,40 @@
 		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
 		clickOnUp = null;
+		// A move that crossed into another media row carries the clips over, if
+		// they fit there; otherwise they keep sliding on the row they came from.
+		// From then on the drag belongs to the new lane.
+		if (mode === "move") {
+			const over = stack.laneIdAt(e.clientY);
+			const held = laneOf(laneId)?.clips.find((c) => c.id === clipId);
+			if (over && over !== laneId && laneOf(over) && held) {
+				const group = selectedClipIds.includes(clipId)
+					? selectedClipIds
+					: [clipId];
+				const lanes = moveClipsToLane(
+					timeline.lanes,
+					laneId,
+					over,
+					group,
+					t - grabOffset - held.start,
+					trackDuration,
+					// A clip keeps showing what it showed: one that inherited its old
+					// lane's source has it pinned, unless the new lane shows the same.
+					(clip, from, to) => {
+						const sourceId = clip.sourceId ?? from.sourceId ?? undefined;
+						return {
+							...clip,
+							sourceId: sourceId === to.sourceId ? undefined : sourceId,
+						};
+					},
+				);
+				if (lanes !== timeline.lanes) {
+					drag.laneId = over;
+					onChange({ ...timeline, lanes });
+					return;
+				}
+			}
+		}
 		onChange(
 			updateMediaLane(timeline, laneId, (lane) => {
 				if (mode === "move") {

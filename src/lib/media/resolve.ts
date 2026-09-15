@@ -17,6 +17,7 @@ export {
 	freeRangeAt,
 	moveClip,
 	moveClips,
+	moveClipsToLane,
 	removeClip,
 	resizeBoundary,
 	resizeClip,

@@ -184,6 +184,23 @@ export class TimelineStackState {
 		this.#seek(Math.max(0, Math.min(this.#getDuration(), this.staticTime)));
 	}
 
+	/** Track elements by lane id, for hit-testing a drag against the rows. */
+	readonly #laneEls = new Map<HTMLElement, string>();
+
+	/**
+	 * The lane whose track spans `y`, or null between rows. Measured from the
+	 * rects rather than elementFromPoint: a clip drag holds pointer capture,
+	 * and the row under the pointer is the only thing that matters — not
+	 * whatever the pointer happens to be over inside it.
+	 */
+	laneIdAt(y: number): string | null {
+		for (const [el, id] of this.#laneEls) {
+			const r = el.getBoundingClientRect();
+			if (y >= r.top && y < r.bottom) return id;
+		}
+		return null;
+	}
+
 	/**
 	 * Svelte action for a lane's track element. Registers it as the geometry the
 	 * axis measures against and gives it the shared wheel behaviour, so
@@ -192,6 +209,7 @@ export class TimelineStackState {
 	lane = (node: HTMLElement | SVGElement, laneId?: string) => {
 		const el = node as HTMLElement;
 		this.#trackEls.add(el);
+		if (laneId) this.#laneEls.set(el, laneId);
 		this.#resizeObserver.observe(el);
 		if (this.laneWidth <= 0) {
 			this.laneWidth = el.getBoundingClientRect().width;
@@ -211,6 +229,7 @@ export class TimelineStackState {
 				detachWheel();
 				this.#resizeObserver.unobserve(el);
 				this.#trackEls.delete(el);
+				this.#laneEls.delete(el);
 			},
 		};
 	};

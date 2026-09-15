@@ -51,6 +51,7 @@ export {
 	mediaTimelineSourceIds,
 	moveClip,
 	moveClips,
+	moveClipsToLane,
 	removeClip,
 	resizeBoundary,
 	resizeClip,

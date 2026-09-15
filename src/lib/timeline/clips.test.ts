@@ -9,6 +9,7 @@ import {
 	MIN_CLIP_LENGTH,
 	moveClip,
 	moveClips,
+	moveClipsToLane,
 	removeClip,
 	resizeBoundary,
 	resizeClip,
@@ -207,6 +208,61 @@ describe("moveClips", () => {
 	it("leaves the lane alone for a drag that resolves to no movement", () => {
 		const lane = laneOf(clip("a", 0, 1));
 		expect(moveClips(lane, ["a"], 0, 10)).toBe(lane);
+	});
+});
+
+describe("moveClipsToLane", () => {
+	const idLane = (id: string, ...clips: TimelineClip[]) => ({ id, clips });
+
+	it("carries the group over, shifted, when it lands clear", () => {
+		const lanes = [
+			idLane("x", clip("a", 0, 1), clip("b", 2, 3)),
+			idLane("y", clip("c", 0, 1)),
+		];
+		const next = moveClipsToLane(lanes, "x", "y", ["a", "b"], 2, 10);
+		expect(spans(next[0])).toEqual([]);
+		expect(spans(next[1])).toEqual([
+			["c", 0, 1],
+			["a", 2, 3],
+			["b", 4, 5],
+		]);
+	});
+
+	it("stays put when any member would overlap the target's clips", () => {
+		const lanes = [
+			idLane("x", clip("a", 0, 1), clip("b", 2, 3)),
+			idLane("y", clip("c", 4, 5)),
+		];
+		expect(moveClipsToLane(lanes, "x", "y", ["a", "b"], 2, 10)).toBe(lanes);
+	});
+
+	it("stays put when the shift runs off the timeline", () => {
+		const lanes = [idLane("x", clip("a", 0, 1)), idLane("y")];
+		expect(moveClipsToLane(lanes, "x", "y", ["a"], -0.5, 10)).toBe(lanes);
+		expect(moveClipsToLane(lanes, "x", "y", ["a"], 9.5, 10)).toBe(lanes);
+	});
+
+	it("ignores ids that aren't on the source lane, and same-lane moves", () => {
+		const lanes = [idLane("x", clip("a", 0, 1)), idLane("y", clip("c", 4, 5))];
+		expect(moveClipsToLane(lanes, "x", "y", ["c"], 1, 10)).toBe(lanes);
+		expect(moveClipsToLane(lanes, "x", "x", ["a"], 1, 10)).toBe(lanes);
+	});
+
+	it("lets the caller rewrite clips for the lane they land on", () => {
+		const lanes = [idLane("x", clip("a", 0, 1)), idLane("y")];
+		const next = moveClipsToLane(
+			lanes,
+			"x",
+			"y",
+			["a"],
+			0,
+			10,
+			(c, from, to) => ({
+				...c,
+				id: `${c.id}:${from.id}>${to.id}`,
+			}),
+		);
+		expect(spans(next[1])).toEqual([["a:x>y", 0, 1]]);
 	});
 });
 

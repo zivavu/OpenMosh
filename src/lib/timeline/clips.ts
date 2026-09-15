@@ -147,6 +147,56 @@ export function moveClips<C extends TimelineClip, L extends ClipLane<C>>(
 }
 
 /**
+ * Carry clips from one lane to another, shifted by `delta` — a drag that
+ * crossed into a neighbouring row. Lands only when every clip fits inside
+ * [0, duration] clear of the target's own clips; otherwise returns the input
+ * by identity, and the caller keeps dragging them on the lane they came from.
+ * `adapt` rewrites each clip for the lane it lands on. Ids not on `fromId`
+ * are ignored.
+ */
+export function moveClipsToLane<
+	L extends ClipLane<TimelineClip> & { id: string },
+>(
+	lanes: L[],
+	fromId: string,
+	toId: string,
+	clipIds: string[],
+	delta: number,
+	duration: number,
+	adapt?: (clip: L["clips"][number], from: L, to: L) => L["clips"][number],
+): L[] {
+	if (fromId === toId) return lanes;
+	const from = lanes.find((l) => l.id === fromId);
+	const to = lanes.find((l) => l.id === toId);
+	if (!from || !to) return lanes;
+	const ids = new Set(clipIds);
+	const moving = from.clips.filter((c) => ids.has(c.id));
+	if (moving.length === 0) return lanes;
+
+	const placed = moving.map((c) => ({
+		...c,
+		start: c.start + delta,
+		end: c.end + delta,
+	}));
+	for (const clip of placed) {
+		if (clip.start < 0 || clip.end > duration) return lanes;
+		for (const other of to.clips) {
+			if (clip.start < other.end && other.start < clip.end) return lanes;
+		}
+	}
+
+	const landed = adapt ? placed.map((c) => adapt(c, from, to)) : placed;
+	return lanes.map((l) => {
+		if (l.id === fromId) {
+			return { ...l, clips: l.clips.filter((c) => !ids.has(c.id)) };
+		}
+		if (l.id === toId)
+			return { ...l, clips: sortClips([...l.clips, ...landed]) };
+		return l;
+	});
+}
+
+/**
  * Drag one edge. The clip keeps at least MIN_CLIP_LENGTH and stops at its
  * neighbours, so edges can meet but never cross — dragging one edge alone
  * pulls it away from a flush neighbour, leaving a gap.

@@ -29,6 +29,7 @@
 		MIN_CLIP_LENGTH,
 		moveClip,
 		moveClips,
+		moveClipsToLane,
 		resizeBoundary,
 		resizeClip,
 		sortClips,
@@ -491,6 +492,31 @@
 		const t = timeAt(e.clientX);
 		const { laneId, clipId, otherId, mode, grabOffset } = drag;
 		clickOnUp = null;
+		// A move that crossed into another fx row carries the clips over, if
+		// they fit there; otherwise they keep sliding on the row they came from.
+		// From then on the drag belongs to the new lane.
+		if (mode === "move") {
+			const over = stack.laneIdAt(e.clientY);
+			const held = laneOf(laneId)?.clips.find((c) => c.id === clipId);
+			if (over && over !== laneId && laneOf(over) && held) {
+				const group = selectedClipIds.includes(clipId)
+					? selectedClipIds
+					: [clipId];
+				const next = moveClipsToLane(
+					lanes,
+					laneId,
+					over,
+					group,
+					t - grabOffset - held.start,
+					trackDuration,
+				);
+				if (next !== lanes) {
+					drag.laneId = over;
+					onChange(next);
+					return;
+				}
+			}
+		}
 		update(laneId, (lane) => {
 			if (mode === "move") {
 				// Dragging any member drags the whole selection with it. Measured as
