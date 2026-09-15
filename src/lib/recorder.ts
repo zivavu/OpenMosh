@@ -318,6 +318,13 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
+
+	// 4:2:0 video encoders reject odd frame sizes; drop a pixel rather than fail.
+	const evenW = Math.max(2, canvas.width & ~1);
+	const evenH = Math.max(2, canvas.height & ~1);
+	if (evenW !== canvas.width || evenH !== canvas.height) {
+		renderer.resize(evenW, evenH);
+	}
 	const bitrate = targetVideoBitrate(canvas.width, canvas.height, fps);
 
 	// Resolve audio buffer and per-frame analysis when user provided audio
