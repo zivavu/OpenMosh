@@ -458,23 +458,31 @@ export function updateLaneIn<L extends { id: string }>(
 
 /**
  * How strongly a clip applies at `time`: 1 across the body, ramping from 0 at
- * each edge when it has a fade. Returns 1 without one, which is every clip
- * until the user asks for a ramp. What "strength" means is the caller's — an
- * fx lane scales its effects toward off, a media lane scales its opacity.
+ * each edge that has a fade. Returns 1 without one, which is every clip until
+ * the user asks for a ramp. What "strength" means is the caller's — an fx lane
+ * scales its effects toward off, a media lane scales its opacity.
  */
 export function clipFadeWeight(
 	clip: TimelineClip,
-	fadeSec: number | undefined,
+	fadeInSec: number | undefined,
+	fadeOutSec: number | undefined,
 	time: number,
 ): number {
-	const fade = fadeSec ?? 0;
-	if (fade <= 0) return 1;
-	// A fade longer than half the clip would have the two ramps overlap and the
-	// clip never reach full strength; meeting in the middle is the cap.
-	const ramp = Math.min(fade, (clip.end - clip.start) / 2);
-	if (ramp <= 0) return 1;
-	const inWeight = (time - clip.start) / ramp;
-	const outWeight = (clip.end - time) / ramp;
+	let fadeIn = Math.max(0, fadeInSec ?? 0);
+	let fadeOut = Math.max(0, fadeOutSec ?? 0);
+	if (fadeIn <= 0 && fadeOut <= 0) return 1;
+	const length = clip.end - clip.start;
+	if (length <= 0) return 1;
+	// Ramps that together outlast the clip would overlap and never let it
+	// reach full strength; shrinking both in proportion has them meet instead.
+	if (fadeIn + fadeOut > length) {
+		const scale = length / (fadeIn + fadeOut);
+		fadeIn *= scale;
+		fadeOut *= scale;
+	}
+	if (time < clip.start || time > clip.end) return 0;
+	const inWeight = fadeIn > 0 ? (time - clip.start) / fadeIn : 1;
+	const outWeight = fadeOut > 0 ? (clip.end - time) / fadeOut : 1;
 	return Math.max(0, Math.min(1, inWeight, outWeight));
 }
 

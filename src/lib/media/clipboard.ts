@@ -32,7 +32,8 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	 * came from has since been repointed or deleted. Null for a clip on a lane
 	 * with no source yet. */
 	resolvedSourceId: string | null;
-	fadeSec?: number;
+	fadeInSec?: number;
+	fadeOutSec?: number;
 }
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
@@ -54,7 +55,8 @@ export function copyMediaClips(
 				sourceStart: clip.sourceStart,
 				sourceId: clip.sourceId,
 				resolvedSourceId: clip.sourceId ?? lane.sourceId,
-				fadeSec: clip.fadeSec,
+				fadeInSec: clip.fadeInSec,
+				fadeOutSec: clip.fadeOutSec,
 			});
 		}
 	}
@@ -112,7 +114,8 @@ export function pasteMediaClips(
 				resolved === lanes.get(e.laneId)!.sourceId ? undefined : resolved;
 		}
 		const clip = createMediaClip(start, end, e.sourceStart, sourceId);
-		if (e.fadeSec !== undefined) clip.fadeSec = e.fadeSec;
+		if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
+		if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 		clipIds.push(clip.id);
 		const list = added.get(e.laneId);
 		if (list) list.push(clip);

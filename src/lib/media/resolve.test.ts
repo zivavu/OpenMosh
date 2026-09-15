@@ -88,28 +88,39 @@ describe("resolveMediaLayersAt", () => {
 		const faded: MediaLane = {
 			...lane,
 			style: { ...lane.style, opacity: 0.5 },
-			clips: [{ ...lane.clips[0], fadeSec: 2 }],
+			clips: [{ ...lane.clips[0], fadeInSec: 2, fadeOutSec: 4 }],
 		};
 		const at = (time: number) =>
 			resolveMediaLayersAt(timelineOf([faded]), time)[0].opacity;
 		expect(at(0)).toBe(0);
 		expect(at(1)).toBeCloseTo(0.25, 5);
 		expect(at(5)).toBe(0.5);
-		expect(at(9)).toBeCloseTo(0.25, 5);
+		expect(at(8)).toBeCloseTo(0.25, 5);
 	});
 
 	it("keeps the fade through a split and a save round-trip", () => {
 		const lane = laneWith([[0, 10]]);
 		const faded: MediaLane = {
 			...lane,
-			clips: [{ ...lane.clips[0], fadeSec: 0.5 }],
+			clips: [{ ...lane.clips[0], fadeInSec: 0.5, fadeOutSec: 1 }],
 		};
 		const split = splitMediaClipAt(faded, 5);
-		expect(split.clips.map((c) => c.fadeSec)).toEqual([0.5, 0.5]);
+		expect(split.clips.map((c) => c.fadeInSec)).toEqual([0.5, 0.5]);
+		expect(split.clips.map((c) => c.fadeOutSec)).toEqual([1, 1]);
 		const saved = normalizeMediaTimeline(
 			JSON.parse(JSON.stringify(timelineOf([faded]))),
 		);
-		expect(saved.lanes[0].clips[0].fadeSec).toBe(0.5);
+		expect(saved.lanes[0].clips[0].fadeInSec).toBe(0.5);
+		expect(saved.lanes[0].clips[0].fadeOutSec).toBe(1);
+	});
+
+	it("reads a legacy single fade into both edges", () => {
+		const lane = laneWith([[0, 10]]);
+		const raw = JSON.parse(JSON.stringify(timelineOf([lane])));
+		raw.lanes[0].clips[0].fadeSec = 0.5;
+		const clip = normalizeMediaTimeline(raw).lanes[0].clips[0];
+		expect(clip.fadeInSec).toBe(0.5);
+		expect(clip.fadeOutSec).toBe(0.5);
 	});
 
 	it("resolves nothing while the timeline is off", () => {

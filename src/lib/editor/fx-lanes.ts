@@ -89,7 +89,7 @@ export const DEFAULT_FX_FADE = 0.25;
  * every clip until the user asks for a ramp.
  */
 export function fxClipWeight(clip: FxClip, time: number): number {
-	return clipFadeWeight(clip, clip.fadeSec, time);
+	return clipFadeWeight(clip, clip.fadeSec, clip.fadeSec, time);
 }
 
 /** 0-based re-roll tick index inside an interval clip. */

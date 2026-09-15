@@ -146,10 +146,10 @@
 	}
 
 	/** Zero means no ramp at all, which the clip carries as an absent field. */
-	function setFade(sec: number) {
+	function setFade(edge: "fadeInSec" | "fadeOutSec", sec: number) {
 		if (!clip) return;
-		onBeforeEdit?.(`mc-fade-${clip.id}`);
-		onClipChange({ ...clip, fadeSec: sec > 0 ? sec : undefined });
+		onBeforeEdit?.(`mc-${edge}-${clip.id}`);
+		onClipChange({ ...clip, [edge]: sec > 0 ? sec : undefined });
 	}
 
 	function setSourceStart(v: number) {
@@ -249,26 +249,47 @@
 			</div>
 		{/if}
 
+		<!-- Curved: the ramps worth reaching for are fractions of a second, and
+		     a linear 0–10 track would bury all of them in its first pixels. -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="row"
-			title="Ramp this layer in and out at the clip's edges. Double-click to clear."
-			ondblclick={() => setFade(0)}
+			title="Ramp this layer in from the clip's start. Double-click to clear."
+			ondblclick={() => setFade("fadeInSec", 0)}
 		>
-			<label for="mc-fade">Fade</label>
-			<!-- Curved: the ramps worth reaching for are fractions of a second, and
-			     a linear 0–10 track would bury all of them in its first pixels. -->
+			<label for="mc-fade-in">Fade in</label>
 			<RangeSlider
-				id="mc-fade"
-				value={clip.fadeSec ?? 0}
+				id="mc-fade-in"
+				value={clip.fadeInSec ?? 0}
 				min={0}
 				max={10}
 				step={0.05}
 				curve={2}
-				oninput={setFade}
+				oninput={(v) => setFade("fadeInSec", v)}
 			/>
 			<span class="val">
-				{#if clip.fadeSec}{clip.fadeSec.toFixed(2)}s{:else}none{/if}
+				{#if clip.fadeInSec}{clip.fadeInSec.toFixed(2)}s{:else}none{/if}
+			</span>
+		</div>
+
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="row"
+			title="Ramp this layer out into the clip's end. Double-click to clear."
+			ondblclick={() => setFade("fadeOutSec", 0)}
+		>
+			<label for="mc-fade-out">Fade out</label>
+			<RangeSlider
+				id="mc-fade-out"
+				value={clip.fadeOutSec ?? 0}
+				min={0}
+				max={10}
+				step={0.05}
+				curve={2}
+				oninput={(v) => setFade("fadeOutSec", v)}
+			/>
+			<span class="val">
+				{#if clip.fadeOutSec}{clip.fadeOutSec.toFixed(2)}s{:else}none{/if}
 			</span>
 		</div>
 

@@ -80,14 +80,16 @@ export interface MediaClip extends TimelineClip {
 	sourceId?: string;
 	/**
 	 * Fade the layer in over this many seconds from the clip's start, and out
-	 * over the same before its end.
+	 * over `fadeOutSec` before its end — each edge on its own, so a layer can
+	 * arrive slowly and cut, or the reverse.
 	 *
 	 * The media counterpart of FxClip.fadeSec, and for the same reason: a
 	 * stacked lane has no other side to cross into, so what a clip boundary
 	 * needs is the layer arriving rather than popping on. Here it scales the
 	 * lane's opacity rather than its effects' parameters.
 	 */
-	fadeSec?: number;
+	fadeInSec?: number;
+	fadeOutSec?: number;
 }
 
 /**
@@ -169,7 +171,7 @@ export function createMediaClip(
  * Multiplied into the lane's opacity by the resolver.
  */
 export function mediaClipWeight(clip: MediaClip, time: number): number {
-	return clipFadeWeight(clip, clip.fadeSec, time);
+	return clipFadeWeight(clip, clip.fadeInSec, clip.fadeOutSec, time);
 }
 
 /**
@@ -301,14 +303,19 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
 			effects: laneEffects(lane.effects),
-			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((clip) => ({
-				id: clip.id ?? nextId("mclip"),
-				start: clip.start ?? 0,
-				end: clip.end ?? 0,
-				sourceStart: clip.sourceStart ?? 0,
-				sourceId: clip.sourceId ?? undefined,
-				fadeSec: clip.fadeSec,
-			})),
+			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((raw) => {
+				const clip = raw as MediaClip & { fadeSec?: number };
+				return {
+					id: clip.id ?? nextId("mclip"),
+					start: clip.start ?? 0,
+					end: clip.end ?? 0,
+					sourceStart: clip.sourceStart ?? 0,
+					sourceId: clip.sourceId ?? undefined,
+					// Saved before the two edges split, `fadeSec` ramped both.
+					fadeInSec: clip.fadeInSec ?? clip.fadeSec,
+					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,
+				};
+			}),
 		})),
 	};
 }

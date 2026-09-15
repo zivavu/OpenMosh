@@ -42,10 +42,12 @@ describe("copyMediaClips", () => {
 
 	it("carries the in-point and the fade", () => {
 		const lane = laneWith([[0, 5, 30]]);
-		lane.clips[0].fadeSec = 0.5;
+		lane.clips[0].fadeInSec = 0.5;
+		lane.clips[0].fadeOutSec = 0.2;
 		const [entry] = copyMediaClips(timelineOf([lane]), [lane.clips[0].id]);
 		expect(entry.sourceStart).toBe(30);
-		expect(entry.fadeSec).toBe(0.5);
+		expect(entry.fadeInSec).toBe(0.5);
+		expect(entry.fadeOutSec).toBe(0.2);
 	});
 
 	it("carries the clip's own source", () => {
@@ -187,16 +189,16 @@ describe("pasteMediaClips onto another lane", () => {
 describe("pasteMediaContentOnto", () => {
 	it("puts the source and in-point into the targets, keeping their spans", () => {
 		const from = laneWith([[0, 5, 30]]);
-		from.clips[0].fadeSec = 0.5;
+		from.clips[0].fadeInSec = 0.5;
 		const to = laneWith([[10, 12]], "Layer 2");
-		to.clips[0].fadeSec = 0.1;
+		to.clips[0].fadeInSec = 0.1;
 		const tl = timelineOf([from, to]);
 		const entries = copyMediaClips(tl, [from.clips[0].id]);
 		const next = pasteMediaContentOnto(tl, [to.clips[0].id], entries);
 		const target = next.lanes[1].clips[0];
 		expect([target.start, target.end]).toEqual([10, 12]);
 		expect(target.sourceStart).toBe(30);
-		expect(target.fadeSec).toBe(0.1);
+		expect(target.fadeInSec).toBe(0.1);
 	});
 
 	it("pins the source it showed when the target lane shows something else", () => {

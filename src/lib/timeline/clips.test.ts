@@ -519,36 +519,45 @@ describe("clipFadeWeight", () => {
 	const c = clip("a", 0, 10);
 
 	it("is full strength across a clip with no fade", () => {
-		expect(clipFadeWeight(c, undefined, 0)).toBe(1);
-		expect(clipFadeWeight(c, 0, 5)).toBe(1);
+		expect(clipFadeWeight(c, undefined, undefined, 0)).toBe(1);
+		expect(clipFadeWeight(c, 0, 0, 5)).toBe(1);
 	});
 
 	it("ramps up from the head and down into the tail", () => {
-		expect(clipFadeWeight(c, 2, 0)).toBe(0);
-		expect(clipFadeWeight(c, 2, 1)).toBe(0.5);
-		expect(clipFadeWeight(c, 2, 2)).toBe(1);
-		expect(clipFadeWeight(c, 2, 9)).toBe(0.5);
-		expect(clipFadeWeight(c, 2, 10)).toBe(0);
+		expect(clipFadeWeight(c, 2, 2, 0)).toBe(0);
+		expect(clipFadeWeight(c, 2, 2, 1)).toBe(0.5);
+		expect(clipFadeWeight(c, 2, 2, 2)).toBe(1);
+		expect(clipFadeWeight(c, 2, 2, 9)).toBe(0.5);
+		expect(clipFadeWeight(c, 2, 2, 10)).toBe(0);
+	});
+
+	it("ramps each edge on its own", () => {
+		expect(clipFadeWeight(c, 2, undefined, 1)).toBe(0.5);
+		expect(clipFadeWeight(c, 2, undefined, 10)).toBe(1);
+		expect(clipFadeWeight(c, undefined, 4, 0)).toBe(1);
+		expect(clipFadeWeight(c, undefined, 4, 8)).toBe(0.5);
 	});
 
 	it("holds full strength between the two ramps", () => {
-		expect(clipFadeWeight(c, 2, 5)).toBe(1);
+		expect(clipFadeWeight(c, 2, 2, 5)).toBe(1);
 	});
 
-	it("caps an over-long fade at half the clip, peaking in the middle", () => {
-		// A 20s fade on a 10s clip would otherwise have the ramps overlap and the
-		// clip never reach full strength.
-		expect(clipFadeWeight(c, 20, 5)).toBe(1);
-		expect(clipFadeWeight(c, 20, 2.5)).toBe(0.5);
+	it("shrinks over-long fades in proportion so they meet", () => {
+		// 20s each on a 10s clip would otherwise overlap and never reach full.
+		expect(clipFadeWeight(c, 20, 20, 5)).toBe(1);
+		expect(clipFadeWeight(c, 20, 20, 2.5)).toBe(0.5);
+		// 30s in + 10s out on 10s meet at 7.5.
+		expect(clipFadeWeight(c, 30, 10, 7.5)).toBe(1);
+		expect(clipFadeWeight(c, 30, 10, 3.75)).toBe(0.5);
 	});
 
 	it("is zero outside the clip", () => {
-		expect(clipFadeWeight(c, 2, -1)).toBe(0);
-		expect(clipFadeWeight(c, 2, 11)).toBe(0);
+		expect(clipFadeWeight(c, 2, 2, -1)).toBe(0);
+		expect(clipFadeWeight(c, 2, 2, 11)).toBe(0);
 	});
 
 	it("is full strength on a clip too short to ramp", () => {
-		expect(clipFadeWeight(clip("a", 5, 5), 1, 5)).toBe(1);
+		expect(clipFadeWeight(clip("a", 5, 5), 1, 1, 5)).toBe(1);
 	});
 });
 
