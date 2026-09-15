@@ -3,28 +3,34 @@
  *
  * A clip carries its span, its in-point and whichever source it was retargeted
  * to. The placement and the effect chain live on the lane and are shared by
- * every clip on it, so a copy pastes back into the lane it came from, where
- * both come along by themselves. Pasting onto another lane would mean
- * overwriting that lane's chain for the sake of one clip, which is a lane edit
- * wearing a clip's clothes.
+ * every clip on it, so a whole-clip paste lands back in the lane it came
+ * from, where both come along by themselves. Pasting onto another lane would
+ * mean overwriting that lane's chain for the sake of one clip, which is a lane
+ * edit wearing a clip's clothes.
+ *
+ * Pasting *onto* a clip is the other half: what the copied clip showed — its
+ * source and in-point — dropped into a clip that keeps its own span, fade and
+ * lane. That one can cross lanes, since it changes nothing about the lane.
  */
 
-import { sortClips } from "../timeline/clips";
+import {
+	firstFreeDelta,
+	sortClips,
+	type ClipBlockEntry,
+} from "../timeline/clips";
 import { createMediaClip, type MediaClip, type MediaLane } from "./types";
 import type { MediaTimeline } from "./types";
 
-/** Sub-frame slop, so a clip butted against its neighbour still counts as free. */
-const EPSILON = 1e-6;
-
 /** One copied clip, placed relative to the earliest one in the copy. */
-export interface MediaClipboardEntry {
-	laneId: string;
-	/** Seconds from the copy anchor. */
-	offset: number;
-	length: number;
+export interface MediaClipboardEntry extends ClipBlockEntry {
 	sourceStart: number;
 	/** The clip's own source, when it had one; absent means the lane's. */
 	sourceId?: string;
+	/** What the clip showed, resolved through its lane at copy time — so a
+	 * paste onto a clip elsewhere shows the same picture even if the lane it
+	 * came from has since been repointed or deleted. Null for a clip on a lane
+	 * with no source yet. */
+	resolvedSourceId: string | null;
 	fadeSec?: number;
 }
 
@@ -46,6 +52,7 @@ export function copyMediaClips(
 				length: clip.end - clip.start,
 				sourceStart: clip.sourceStart,
 				sourceId: clip.sourceId,
+				resolvedSourceId: clip.sourceId ?? lane.sourceId,
 				fadeSec: clip.fadeSec,
 			});
 		}
@@ -56,51 +63,6 @@ export function copyMediaClips(
 		.sort((a, b) => a.offset - b.offset);
 }
 
-/** Room for [start, end) on this lane, with nothing already there. */
-function fits(
-	lane: MediaLane,
-	start: number,
-	end: number,
-	duration: number,
-): boolean {
-	if (start < -EPSILON || end > duration + EPSILON) return false;
-	for (const c of lane.clips) {
-		if (start < c.end - EPSILON && end > c.start + EPSILON) return false;
-	}
-	return true;
-}
-
-/**
- * How far the whole block has to slide right to land clear of everything, or
- * null when it never does.
- *
- * Only the ends of the clips in the way are worth trying: between two of them
- * nothing changes about what blocks what, so the first delta that works is one
- * that puts some entry flush against the clip it was overlapping.
- */
-function firstFreeDelta(
-	entries: MediaClipboardEntry[],
-	lanes: Map<string, MediaLane>,
-	at: number,
-	duration: number,
-): number | null {
-	const candidates = new Set<number>([0]);
-	for (const e of entries) {
-		for (const c of lanes.get(e.laneId)!.clips) {
-			const delta = c.end - (at + e.offset);
-			if (delta > 0) candidates.add(delta);
-		}
-	}
-	for (const delta of [...candidates].sort((a, b) => a - b)) {
-		const clear = entries.every((e) => {
-			const start = at + e.offset + delta;
-			return fits(lanes.get(e.laneId)!, start, start + e.length, duration);
-		});
-		if (clear) return delta;
-	}
-	return null;
-}
-
 export interface MediaPasteResult {
 	timeline: MediaTimeline;
 	/** The clips that landed, for the caller to select. Empty on a no-op. */
@@ -108,13 +70,9 @@ export interface MediaPasteResult {
 }
 
 /**
- * Stamp the clipboard down with its earliest clip at `at`.
- *
- * Lanes can't hold overlapping clips, and trimming the paste to whatever gap it
- * happened to land in would quietly hand back a shorter clip than the one that
- * was copied. Instead the whole block slides right to the first place it fits
- * at full length, so pasting with the playhead inside the original drops the
- * copy directly after it. When nothing downstream has room, nothing is pasted.
+ * Stamp the clipboard down with its earliest clip at `at`, slid right to the
+ * first place the whole block fits (see firstFreeDelta). When nothing
+ * downstream has room, nothing is pasted.
  */
 export function pasteMediaClips(
 	timeline: MediaTimeline,
@@ -125,11 +83,11 @@ export function pasteMediaClips(
 	const unchanged: MediaPasteResult = { timeline, clipIds: [] };
 	if (entries.length === 0 || duration <= 0) return unchanged;
 
-	const lanes = new Map(timeline.lanes.map((l) => [l.id, l]));
+	const lanes = new Map<string, MediaLane>(
+		timeline.lanes.map((l) => [l.id, l]),
+	);
 	// A lane deleted since the copy takes its clips with it.
 	const live = entries.filter((e) => lanes.has(e.laneId));
-	if (live.length === 0) return unchanged;
-
 	const delta = firstFreeDelta(live, lanes, Math.max(0, at), duration);
 	if (delta === null) return unchanged;
 
@@ -161,5 +119,47 @@ export function pasteMediaClips(
 			}),
 		},
 		clipIds,
+	};
+}
+
+/**
+ * Put what the copied clips showed into the selected clips, in time order; a
+ * shorter copy repeats over them. Each target keeps its span, fade and lane
+ * and takes the source and in-point. The source is pinned on the clip unless
+ * it is already what its lane shows, so the lane's own picker keeps meaning
+ * "this lane's default" for the clips that never chose.
+ */
+export function pasteMediaContentOnto(
+	timeline: MediaTimeline,
+	clipIds: string[],
+	entries: MediaClipboardEntry[],
+): MediaTimeline {
+	if (entries.length === 0 || clipIds.length === 0) return timeline;
+	const targets = new Set(clipIds);
+	const order = timeline.lanes
+		.flatMap((l) => l.clips)
+		.filter((c) => targets.has(c.id))
+		.sort((a, b) => a.start - b.start)
+		.map((c) => c.id);
+	if (order.length === 0) return timeline;
+	return {
+		...timeline,
+		lanes: timeline.lanes.map((lane) => {
+			if (!lane.clips.some((c) => targets.has(c.id))) return lane;
+			return {
+				...lane,
+				clips: lane.clips.map((c) => {
+					const i = order.indexOf(c.id);
+					if (i === -1) return c;
+					const e = entries[i % entries.length];
+					const sourceId = e.resolvedSourceId ?? undefined;
+					return {
+						...c,
+						sourceStart: e.sourceStart,
+						sourceId: sourceId === lane.sourceId ? undefined : sourceId,
+					};
+				}),
+			};
+		}),
 	};
 }

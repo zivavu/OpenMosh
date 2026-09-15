@@ -20,6 +20,11 @@
 		applyChainToFxClip,
 		chainClipboard,
 	} from "../../editor/chain-clipboard";
+	import {
+		copyFxClips,
+		pasteFxClips,
+		type FxClipboardEntry,
+	} from "../../editor/fx-clipboard";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
@@ -560,10 +565,22 @@
 		deselect();
 	}
 
-	// ── Chain clipboard ──────────────────────────────────────────────────────
-	// Shared with the segment timeline, so a chain copied from a segment can be
-	// pasted onto a clip and back again. A clip's span and fade are its own —
-	// only what it *does* travels.
+	// ── Clipboards ───────────────────────────────────────────────────────────
+	// Two things a Ctrl+C here fills. The chain clipboard is shared with the
+	// segment timeline, so a chain copied from a segment can be pasted onto a
+	// clip and back again — a paste onto a selection takes only what a clip
+	// *does*; the target's span and fade are its own. The clip clipboard keeps
+	// the whole clips, for a paste with nothing selected to stamp down at the
+	// start marker.
+
+	let clipClipboard = $state<FxClipboardEntry[]>([]);
+	/** chainClipboard.stamp when the clip clipboard was last filled, so a paste
+	 * can tell whether a segment's chain was copied since — that one has no
+	 * span to stamp, so it can only go onto a selection. */
+	let clipClipStamp = -1;
+	/** What the clip clipboard was copied from: pasting onto exactly those
+	 * would change nothing, so that gesture stamps new copies instead. */
+	let copiedIds = new Set<string>();
 
 	function copySelectedChains(): boolean {
 		const picked = new Set(selectedClipIds);
@@ -571,7 +588,41 @@
 			.flatMap((l) => l.clips)
 			.filter((c) => picked.has(c.id))
 			.sort((a, b) => a.start - b.start);
-		return chainClipboard.copy(clips);
+		if (!chainClipboard.copy(clips)) return false;
+		clipClipboard = copyFxClips(lanes, selectedClipIds);
+		clipClipStamp = chainClipboard.stamp;
+		copiedIds = picked;
+		return true;
+	}
+
+	/** Onto the selection when there is one that isn't just the copied clips
+	 * themselves; otherwise whole clips at the start marker. */
+	function paste(): boolean {
+		const ontoSelf =
+			selectedClipIds.length > 0 &&
+			selectedClipIds.every((id) => copiedIds.has(id));
+		if (selectedClipIds.length > 0 && !ontoSelf) return pasteChains();
+		return pasteClips();
+	}
+
+	/** Stamp the copied clips at the start marker, and leave the copies
+	 * selected to drag from there. */
+	function pasteClips(): boolean {
+		if (clipClipboard.length === 0 || chainClipboard.stamp !== clipClipStamp) {
+			return false;
+		}
+		const result = pasteFxClips(
+			lanes,
+			clipClipboard,
+			stack.staticTime,
+			trackDuration,
+		);
+		if (result.clipIds.length === 0) return false;
+		onBeforeEdit?.();
+		onChange(result.lanes);
+		selectedClipIds = result.clipIds;
+		selectedClipId = result.clipIds[result.clipIds.length - 1];
+		return true;
 	}
 
 	/** Paste onto every selected clip; a shorter copy repeats over them. */
@@ -611,7 +662,7 @@
 				e.stopPropagation();
 				return;
 			}
-			if (k === "v" && pasteChains()) {
+			if (k === "v" && paste()) {
 				e.preventDefault();
 				e.stopPropagation();
 				return;

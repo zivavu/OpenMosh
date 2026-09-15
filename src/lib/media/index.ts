@@ -1,6 +1,10 @@
 export { createMediaHistory } from "./history.svelte";
 export type { MediaClipboardEntry, MediaPasteResult } from "./clipboard";
-export { copyMediaClips, pasteMediaClips } from "./clipboard";
+export {
+	copyMediaClips,
+	pasteMediaClips,
+	pasteMediaContentOnto,
+} from "./clipboard";
 export type {
 	AnimatedKey,
 	ChromaKey,

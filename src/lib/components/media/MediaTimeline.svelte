@@ -20,6 +20,7 @@
 		MIN_CLIP_LENGTH,
 		moveClipsToLane,
 		pasteMediaClips,
+		pasteMediaContentOnto,
 		removeClip,
 		setMediaClipSources,
 		sortClips,
@@ -626,18 +627,37 @@
 	// ── Clip clipboard ───────────────────────────────────────────────────────
 	// Local to the lanes, like the segment clipboard is to the source lane. The
 	// selections are mutually exclusive, so a Ctrl+C with clips selected can only
-	// mean these.
+	// mean these. A paste goes onto the selection when there is one — what the
+	// copied clips showed, into clips that keep their spans — and otherwise
+	// stamps whole clips down at the start marker.
 	let clipboard = $state<MediaClipboardEntry[]>([]);
+	/** What the clipboard was copied from: pasting onto exactly those would
+	 * change nothing, so that gesture stamps new copies instead. */
+	let copiedIds = new Set<string>();
 
 	function copySelection(): boolean {
 		if (selectedClipIds.length === 0) return false;
 		clipboard = copyMediaClips(timeline, selectedClipIds);
+		copiedIds = new Set(selectedClipIds);
 		return clipboard.length > 0;
 	}
 
-	/** Paste at the playhead, and leave the copies selected to drag from there. */
 	function pasteClipboard(): boolean {
 		if (clipboard.length === 0) return false;
+		const ontoSelf =
+			selectedClipIds.length > 0 &&
+			selectedClipIds.every((id) => copiedIds.has(id));
+		if (selectedClipIds.length > 0 && !ontoSelf) {
+			onBeforeEdit?.();
+			onChange(pasteMediaContentOnto(timeline, selectedClipIds, clipboard));
+			return true;
+		}
+		return pasteClips();
+	}
+
+	/** Stamp the copied clips at the start marker, and leave the copies
+	 * selected to drag from there. */
+	function pasteClips(): boolean {
 		const result = pasteMediaClips(
 			timeline,
 			clipboard,

@@ -3273,12 +3273,12 @@
 							},
 							{
 								keys: ["Ctrl/Cmd+C"],
-								description: "Copy the selected clips' effects",
+								description: "Copy the selected clips",
 							},
 							{
 								keys: ["Ctrl/Cmd+V"],
 								description:
-									"Paste effects onto the selected clips (from a segment too)",
+									"Paste effects onto the selected clips (from a segment too), or with nothing selected stamp whole copies at the start marker",
 							},
 							{
 								keys: ["Delete", "Backspace"],

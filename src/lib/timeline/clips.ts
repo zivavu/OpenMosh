@@ -295,6 +295,73 @@ function replaceClip<C extends TimelineClip, L extends ClipLane<C>>(
 	};
 }
 
+/** A copied clip's place in its block: which lane, and where relative to
+ * the block's earliest clip. What the clip carries is the caller's. */
+export interface ClipBlockEntry {
+	laneId: string;
+	/** Seconds from the block's anchor. */
+	offset: number;
+	length: number;
+}
+
+/** Sub-frame slop, so a clip butted against its neighbour still counts as free. */
+const FIT_EPSILON = 1e-6;
+
+/** Room for [start, end) on this lane, with nothing already there. */
+function fits(
+	lane: ClipLane<TimelineClip>,
+	start: number,
+	end: number,
+	duration: number,
+): boolean {
+	if (start < -FIT_EPSILON || end > duration + FIT_EPSILON) return false;
+	for (const c of lane.clips) {
+		if (start < c.end - FIT_EPSILON && end > c.start + FIT_EPSILON)
+			return false;
+	}
+	return true;
+}
+
+/**
+ * How far a block of copied clips has to slide right from `at` to land clear
+ * of everything on its lanes, or null when it never does.
+ *
+ * Lanes can't hold overlapping clips, and trimming a paste to whatever gap it
+ * happened to land in would quietly hand back a shorter clip than the one
+ * that was copied. So the whole block keeps its shape and slides to the first
+ * place it fits at full length — pasting with the playhead inside the
+ * original drops the copy directly after it.
+ *
+ * Only the ends of the clips in the way are worth trying: between two of them
+ * nothing changes about what blocks what, so the first delta that works is
+ * one that puts some entry flush against the clip it was overlapping.
+ * Entries whose lane is missing are ignored.
+ */
+export function firstFreeDelta(
+	entries: ClipBlockEntry[],
+	lanes: ReadonlyMap<string, ClipLane<TimelineClip>>,
+	at: number,
+	duration: number,
+): number | null {
+	const live = entries.filter((e) => lanes.has(e.laneId));
+	if (live.length === 0) return null;
+	const candidates = new Set<number>([0]);
+	for (const e of live) {
+		for (const c of lanes.get(e.laneId)!.clips) {
+			const delta = c.end - (at + e.offset);
+			if (delta > 0) candidates.add(delta);
+		}
+	}
+	for (const delta of [...candidates].sort((a, b) => a - b)) {
+		const clear = live.every((e) => {
+			const start = at + e.offset + delta;
+			return fits(lanes.get(e.laneId)!, start, start + e.length, duration);
+		});
+		if (clear) return delta;
+	}
+	return null;
+}
+
 /** Apply a lane edit inside a list of lanes. */
 export function updateLaneIn<L extends { id: string }>(
 	lanes: L[],

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { copyMediaClips, pasteMediaClips } from "./clipboard";
+import {
+	copyMediaClips,
+	pasteMediaClips,
+	pasteMediaContentOnto,
+} from "./clipboard";
 import {
 	createMediaClip,
 	createMediaLane,
@@ -136,5 +140,60 @@ describe("pasteMediaClips", () => {
 		);
 		expect(clipIds).toHaveLength(1);
 		expect(timeline.lanes[0].clips.some((c) => c.start === 26)).toBe(true);
+	});
+});
+
+describe("pasteMediaContentOnto", () => {
+	it("puts the source and in-point into the targets, keeping their spans", () => {
+		const from = laneWith([[0, 5, 30]]);
+		from.clips[0].fadeSec = 0.5;
+		const to = laneWith([[10, 12]], "Layer 2");
+		to.clips[0].fadeSec = 0.1;
+		const tl = timelineOf([from, to]);
+		const entries = copyMediaClips(tl, [from.clips[0].id]);
+		const next = pasteMediaContentOnto(tl, [to.clips[0].id], entries);
+		const target = next.lanes[1].clips[0];
+		expect([target.start, target.end]).toEqual([10, 12]);
+		expect(target.sourceStart).toBe(30);
+		expect(target.fadeSec).toBe(0.1);
+	});
+
+	it("pins the source it showed when the target lane shows something else", () => {
+		const from = laneWith([[0, 5]]);
+		const to = { ...laneWith([[10, 12]], "Layer 2"), sourceId: "src-b" };
+		const tl = timelineOf([from, to]);
+		const entries = copyMediaClips(tl, [from.clips[0].id]);
+		const next = pasteMediaContentOnto(tl, [to.clips[0].id], entries);
+		expect(next.lanes[1].clips[0].sourceId).toBe("src-a");
+	});
+
+	it("leaves the source unpinned when the target lane already shows it", () => {
+		const from = laneWith([[0, 5]]);
+		from.clips[0].sourceId = "src-b";
+		const to = { ...laneWith([[10, 12]], "Layer 2"), sourceId: "src-b" };
+		const tl = timelineOf([from, to]);
+		const entries = copyMediaClips(tl, [from.clips[0].id]);
+		const next = pasteMediaContentOnto(tl, [to.clips[0].id], entries);
+		expect(next.lanes[1].clips[0].sourceId).toBeUndefined();
+	});
+
+	it("repeats a shorter copy over the targets in time order", () => {
+		const lane = laneWith([
+			[0, 1, 5],
+			[2, 3, 6],
+			[4, 5, 0],
+			[6, 7, 0],
+			[8, 9, 0],
+		]);
+		const tl = timelineOf([lane]);
+		const entries = copyMediaClips(tl, [lane.clips[0].id, lane.clips[1].id]);
+		const next = pasteMediaContentOnto(
+			tl,
+			[lane.clips[4].id, lane.clips[2].id, lane.clips[3].id],
+			entries,
+		);
+		expect(next.lanes[0].clips.slice(2).map((c) => c.sourceStart)).toEqual([
+			5, 6, 5,
+		]);
 	});
 });

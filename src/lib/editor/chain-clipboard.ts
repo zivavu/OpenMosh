@@ -33,7 +33,8 @@ export interface ChainClip {
 	seed?: number;
 }
 
-function capture(src: SequenceSegment | FxClip): ChainClip {
+/** The chain and its rolling, cloned so the copy outlives the source. */
+export function captureChain(src: SequenceSegment | FxClip): ChainClip {
 	return {
 		label: src.label,
 		mode: src.mode,
@@ -62,7 +63,7 @@ class ChainClipboard {
 	/** Snapshot chains in the order given; the caller sorts by time. */
 	copy(items: (SequenceSegment | FxClip)[]) {
 		if (items.length === 0) return false;
-		this.clips = items.map(capture);
+		this.clips = items.map(captureChain);
 		this.stamp++;
 		return true;
 	}
