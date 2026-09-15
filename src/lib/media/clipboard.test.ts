@@ -106,11 +106,21 @@ describe("pasteMediaClips", () => {
 		expect(pasted.end).toBe(40);
 	});
 
-	it("pastes nothing when the rest of the timeline has no room", () => {
+	it("fills what room there is when the copy is longer than the gap", () => {
 		const lane = laneWith([[0, 10]]);
 		const t = timelineOf([lane]);
 		const copied = copyMediaClips(t, [lane.clips[0].id]);
 		const result = pasteMediaClips(t, copied, 5, 15);
+		expect(result.clipIds).toHaveLength(1);
+		const pasted = result.timeline.lanes[0].clips[1];
+		expect([pasted.start, pasted.end]).toEqual([10, 15]);
+	});
+
+	it("pastes nothing when the lane is full", () => {
+		const lane = laneWith([[0, 10]]);
+		const t = timelineOf([lane]);
+		const copied = copyMediaClips(t, [lane.clips[0].id]);
+		const result = pasteMediaClips(t, copied, 5, 10);
 		expect(result.clipIds).toEqual([]);
 		expect(result.timeline).toBe(t);
 	});

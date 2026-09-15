@@ -362,6 +362,61 @@ export function firstFreeDelta(
 	return null;
 }
 
+/** Where one copied entry lands. */
+export interface ClipPlacement<E extends ClipBlockEntry> {
+	entry: E;
+	start: number;
+	end: number;
+}
+
+/**
+ * Where a pasted block of clips goes, with its earliest clip at `at`.
+ *
+ * At full length if anywhere downstream has room (see firstFreeDelta). When
+ * nothing does, the block stays at `at` and each clip is cut down to the free
+ * space it lands in — a copy longer than the gap it is pasted into fills the
+ * gap rather than going nowhere. A clip whose spot is taken moves to the next
+ * gap on its lane; one left with less than MIN_CLIP_LENGTH is dropped.
+ * Entries whose lane is missing are dropped.
+ */
+export function placeClipBlock<E extends ClipBlockEntry>(
+	entries: E[],
+	lanes: ReadonlyMap<string, ClipLane<TimelineClip>>,
+	at: number,
+	duration: number,
+): ClipPlacement<E>[] {
+	at = Math.max(0, at);
+	const live = entries.filter((e) => lanes.has(e.laneId));
+	const delta = firstFreeDelta(live, lanes, at, duration);
+	if (delta !== null) {
+		return live.map((entry) => ({
+			entry,
+			start: at + entry.offset + delta,
+			end: at + entry.offset + delta + entry.length,
+		}));
+	}
+
+	// Earlier entries take their room before later ones look for theirs.
+	const taken = new Map<string, TimelineClip[]>();
+	for (const [id, lane] of lanes) taken.set(id, [...lane.clips]);
+	const out: ClipPlacement<E>[] = [];
+	for (const entry of live) {
+		const clips = taken.get(entry.laneId)!;
+		const lane = { clips };
+		let start = at + entry.offset;
+		for (let c = clipAt(lane, start); c; c = clipAt(lane, start)) {
+			start = c.end;
+		}
+		const range = freeRangeAt(lane, start, duration);
+		if (!range) continue;
+		const end = Math.min(start + entry.length, range.end);
+		if (end - start < MIN_CLIP_LENGTH) continue;
+		clips.push({ id: "placed-" + out.length, start, end });
+		out.push({ entry, start, end });
+	}
+	return out;
+}
+
 /** Apply a lane edit inside a list of lanes. */
 export function updateLaneIn<L extends { id: string }>(
 	lanes: L[],

@@ -14,7 +14,7 @@
  */
 
 import {
-	firstFreeDelta,
+	placeClipBlock,
 	sortClips,
 	type ClipBlockEntry,
 } from "../timeline/clips";
@@ -69,11 +69,8 @@ export interface MediaPasteResult {
 	clipIds: string[];
 }
 
-/**
- * Stamp the clipboard down with its earliest clip at `at`, slid right to the
- * first place the whole block fits (see firstFreeDelta). When nothing
- * downstream has room, nothing is pasted.
- */
+/** Stamp the clipboard down with its earliest clip at `at`; see
+ * placeClipBlock for where the copies land when the space is short. */
 export function pasteMediaClips(
 	timeline: MediaTimeline,
 	entries: MediaClipboardEntry[],
@@ -87,20 +84,13 @@ export function pasteMediaClips(
 		timeline.lanes.map((l) => [l.id, l]),
 	);
 	// A lane deleted since the copy takes its clips with it.
-	const live = entries.filter((e) => lanes.has(e.laneId));
-	const delta = firstFreeDelta(live, lanes, Math.max(0, at), duration);
-	if (delta === null) return unchanged;
+	const placed = placeClipBlock(entries, lanes, at, duration);
+	if (placed.length === 0) return unchanged;
 
 	const added = new Map<string, MediaClip[]>();
 	const clipIds: string[] = [];
-	for (const e of live) {
-		const start = Math.max(0, at) + e.offset + delta;
-		const clip = createMediaClip(
-			start,
-			start + e.length,
-			e.sourceStart,
-			e.sourceId,
-		);
+	for (const { entry: e, start, end } of placed) {
+		const clip = createMediaClip(start, end, e.sourceStart, e.sourceId);
 		if (e.fadeSec !== undefined) clip.fadeSec = e.fadeSec;
 		clipIds.push(clip.id);
 		const list = added.get(e.laneId);

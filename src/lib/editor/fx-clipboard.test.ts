@@ -61,8 +61,23 @@ describe("pasteFxClips", () => {
 		]);
 	});
 
-	it("pastes nothing when nothing downstream has room", () => {
-		const lane = laneWith([[0, 4]]);
+	it("fills the gap at the marker when nothing has room at full length", () => {
+		const lane = laneWith([
+			[0, 4],
+			[7, 10],
+		]);
+		const entries = copyFxClips([lane], [lane.clips[0].id]);
+		const { lanes, clipIds } = pasteFxClips([lane], entries, 5, 10);
+		expect(clipIds).toHaveLength(1);
+		expect(lanes[0].clips.map((c) => [c.start, c.end])).toEqual([
+			[0, 4],
+			[5, 7],
+			[7, 10],
+		]);
+	});
+
+	it("pastes nothing when the lane is full", () => {
+		const lane = laneWith([[0, 6]]);
 		const entries = copyFxClips([lane], [lane.clips[0].id]);
 		const result = pasteFxClips([lane], entries, 2, 6);
 		expect(result.clipIds).toEqual([]);

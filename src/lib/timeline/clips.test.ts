@@ -10,6 +10,7 @@ import {
 	moveClip,
 	moveClips,
 	moveClipsToLane,
+	placeClipBlock,
 	removeClip,
 	resizeBoundary,
 	resizeClip,
@@ -263,6 +264,72 @@ describe("moveClipsToLane", () => {
 			}),
 		);
 		expect(spans(next[1])).toEqual([["a:x>y", 0, 1]]);
+	});
+});
+
+describe("placeClipBlock", () => {
+	const entry = (laneId: string, offset: number, length: number) => ({
+		laneId,
+		offset,
+		length,
+	});
+	const lanesOf = (...lanes: (ClipLane<TimelineClip> & { id: string })[]) =>
+		new Map(lanes.map((l) => [l.id, l]));
+	const spansOf = (placed: { start: number; end: number }[]) =>
+		placed.map((p) => [p.start, p.end]);
+
+	it("keeps the block whole, sliding right past what is in the way", () => {
+		const lanes = lanesOf({ id: "x", clips: [clip("a", 0, 4)] });
+		const placed = placeClipBlock(
+			[entry("x", 0, 2), entry("x", 3, 1)],
+			lanes,
+			2,
+			20,
+		);
+		expect(spansOf(placed)).toEqual([
+			[4, 6],
+			[7, 8],
+		]);
+	});
+
+	it("trims to the gap at the anchor when nothing fits at full length", () => {
+		const lanes = lanesOf({
+			id: "x",
+			clips: [clip("a", 0, 4), clip("b", 7, 10)],
+		});
+		const placed = placeClipBlock([entry("x", 0, 5)], lanes, 5, 10);
+		expect(spansOf(placed)).toEqual([[5, 7]]);
+	});
+
+	it("moves a trimmed clip past the clip covering its spot", () => {
+		const lanes = lanesOf({
+			id: "x",
+			clips: [clip("a", 0, 4), clip("b", 6, 10)],
+		});
+		const placed = placeClipBlock([entry("x", 0, 8)], lanes, 2, 10);
+		expect(spansOf(placed)).toEqual([[4, 6]]);
+	});
+
+	it("lets earlier entries take their room before later ones", () => {
+		const lanes = lanesOf({ id: "x", clips: [clip("a", 6, 10)] });
+		const placed = placeClipBlock(
+			[entry("x", 0, 5), entry("x", 5, 5)],
+			lanes,
+			0,
+			10,
+		);
+		// The second entry gets what is left between the first and the clip.
+		expect(spansOf(placed)).toEqual([
+			[0, 5],
+			[5, 6],
+		]);
+	});
+
+	it("drops entries with no room and ones on missing lanes", () => {
+		const lanes = lanesOf({ id: "x", clips: [clip("a", 0, 10)] });
+		expect(
+			placeClipBlock([entry("x", 0, 2), entry("gone", 0, 2)], lanes, 0, 10),
+		).toEqual([]);
 	});
 });
 

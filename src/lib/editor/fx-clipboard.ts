@@ -11,7 +11,7 @@
 
 import { cloneEffectInstance } from "../effects";
 import {
-	firstFreeDelta,
+	placeClipBlock,
 	sortClips,
 	type ClipBlockEntry,
 } from "../timeline/clips";
@@ -60,8 +60,8 @@ export interface FxPasteResult {
 }
 
 /**
- * Stamp the clipboard down with its earliest clip at `at`, slid right to the
- * first place the whole block fits (see firstFreeDelta). Fresh clip ids and
+ * Stamp the clipboard down with its earliest clip at `at`; see placeClipBlock
+ * for where the copies land when the space is short. Fresh clip ids and
  * effect instance ids each paste, so two copies never share feedback state.
  */
 export function pasteFxClips(
@@ -73,15 +73,13 @@ export function pasteFxClips(
 	const unchanged: FxPasteResult = { lanes, clipIds: [] };
 	if (entries.length === 0 || duration <= 0) return unchanged;
 	const byId = new Map<string, FxLane>(lanes.map((l) => [l.id, l]));
-	const delta = firstFreeDelta(entries, byId, Math.max(0, at), duration);
-	if (delta === null) return unchanged;
+	const placed = placeClipBlock(entries, byId, at, duration);
+	if (placed.length === 0) return unchanged;
 
 	const added = new Map<string, FxClip[]>();
 	const clipIds: string[] = [];
-	for (const e of entries) {
-		if (!byId.has(e.laneId)) continue;
-		const start = Math.max(0, at) + e.offset + delta;
-		const clip = applyChainToFxClip(createFxClip(start, start + e.length), {
+	for (const { entry: e, start, end } of placed) {
+		const clip = applyChainToFxClip(createFxClip(start, end), {
 			...e.chain,
 			effects: e.chain.effects.map(cloneEffectInstance),
 		});
