@@ -39,6 +39,7 @@
 		isInteractiveTarget,
 		isTextEntryTarget,
 	} from "../../editor/shortcut-target";
+	import { latestCopy } from "../../editor/copy-stamp";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import {
@@ -567,6 +568,9 @@
 	}
 
 	function pasteSegments(): boolean {
+		// Something copied on a lane with no chain to share — media clips — is
+		// the newest: that lane pastes, not this one.
+		if (latestCopy() > chainClipboard.stamp) return false;
 		// A chain copied from an fx lane can only be pasted as a chain: it has no
 		// span to stamp and no media to bring with it.
 		if (chainIsNewer()) return pasteChainsOntoSelection();

@@ -26,6 +26,7 @@
 		type FxClipboardEntry,
 	} from "../../editor/fx-clipboard";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
+	import { latestCopy } from "../../editor/copy-stamp";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
 		dragClipsStep,
@@ -574,9 +575,9 @@
 	// start marker.
 
 	let clipClipboard = $state<FxClipboardEntry[]>([]);
-	/** chainClipboard.stamp when the clip clipboard was last filled, so a paste
-	 * can tell whether a segment's chain was copied since — that one has no
-	 * span to stamp, so it can only go onto a selection. */
+	/** The copy stamp when the clip clipboard was last filled, so a paste can
+	 * tell whether anything was copied since. A segment's chain copied later
+	 * has no span to stamp, so it can only go onto a selection. */
 	let clipClipStamp = -1;
 	/** What the clip clipboard was copied from: pasting onto exactly those
 	 * would change nothing, so that gesture stamps new copies instead. */
@@ -598,6 +599,9 @@
 	/** Onto the selection when there is one that isn't just the copied clips
 	 * themselves; otherwise whole clips at the start marker. */
 	function paste(): boolean {
+		// Something copied on a lane that shares no chain — media clips — is the
+		// newest: that lane pastes, not this one.
+		if (latestCopy() > chainClipboard.stamp) return false;
 		const ontoSelf =
 			selectedClipIds.length > 0 &&
 			selectedClipIds.every((id) => copiedIds.has(id));
@@ -608,7 +612,7 @@
 	/** Stamp the copied clips at the start marker, and leave the copies
 	 * selected to drag from there. */
 	function pasteClips(): boolean {
-		if (clipClipboard.length === 0 || chainClipboard.stamp !== clipClipStamp) {
+		if (clipClipboard.length === 0 || latestCopy() !== clipClipStamp) {
 			return false;
 		}
 		const result = pasteFxClips(

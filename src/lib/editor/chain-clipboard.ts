@@ -18,6 +18,7 @@
  */
 
 import { cloneEffectInstance, type EffectInstance } from "../effects";
+import { markCopied } from "./copy-stamp";
 import type { FxClip } from "./fx-lanes";
 import type { SequenceSegment, SequenceSegmentMode } from "./sequence";
 
@@ -52,19 +53,16 @@ export function captureChain(src: SequenceSegment | FxClip): ChainClip {
 class ChainClipboard {
 	clips: ChainClip[] = [];
 
-	/**
-	 * Bumped on every copy. The segment timeline keeps its own richer clipboard
-	 * (whole segments, with their spans and media), so a paste there has to know
-	 * which of the two was filled last — the same "newest wins" rule Ctrl+Z
-	 * follows across the undo stacks.
-	 */
+	/** The copy stamp (see copy-stamp.ts) of the last fill. The segment and
+	 * fx timelines keep richer clipboards of their own, filled by the same
+	 * Ctrl+C, so a paste has to know which was filled last. */
 	stamp = 0;
 
 	/** Snapshot chains in the order given; the caller sorts by time. */
 	copy(items: (SequenceSegment | FxClip)[]) {
 		if (items.length === 0) return false;
 		this.clips = items.map(captureChain);
-		this.stamp++;
+		this.stamp = markCopied();
 		return true;
 	}
 

@@ -2,6 +2,7 @@
 	import { Eye, EyeOff, Focus, Trash2 } from "lucide-svelte";
 	import { untrack } from "svelte";
 	import { dropAutoRangeScope } from "../../audio/auto-range";
+	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
 		dragClipsStep,
@@ -634,16 +635,21 @@
 	/** What the clipboard was copied from: pasting onto exactly those would
 	 * change nothing, so that gesture stamps new copies instead. */
 	let copiedIds = new Set<string>();
+	/** The copy stamp when the clipboard was last filled: a paste answers only
+	 * if nothing was copied on another lane since. */
+	let clipStamp = -1;
 
 	function copySelection(): boolean {
 		if (selectedClipIds.length === 0) return false;
 		clipboard = copyMediaClips(timeline, selectedClipIds);
 		copiedIds = new Set(selectedClipIds);
-		return clipboard.length > 0;
+		if (clipboard.length === 0) return false;
+		clipStamp = markCopied();
+		return true;
 	}
 
 	function pasteClipboard(): boolean {
-		if (clipboard.length === 0) return false;
+		if (clipboard.length === 0 || latestCopy() !== clipStamp) return false;
 		const ontoSelf =
 			selectedClipIds.length > 0 &&
 			selectedClipIds.every((id) => copiedIds.has(id));
@@ -681,10 +687,12 @@
 			const key = e.key.toLowerCase();
 			if (key === "c" && copySelection()) {
 				e.preventDefault();
+				e.stopPropagation();
 				return;
 			}
 			if (key === "v" && pasteClipboard()) {
 				e.preventDefault();
+				e.stopPropagation();
 				return;
 			}
 			return;
