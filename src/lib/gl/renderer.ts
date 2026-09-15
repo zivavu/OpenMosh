@@ -2114,9 +2114,21 @@ export class GlRenderer {
 		this.processSalBuf(state, params, time);
 	}
 
-	private abortPendingSaliency() {
+	/**
+	 * Drop an in-flight readback. With `drain`, the PBO is read (and the result
+	 * discarded) so the driver's pending readback copy is consumed; skipping
+	 * that and writing the PBO again trips Firefox's READ-usage buffer warning.
+	 * Callers that delete the PBO right after don't need to drain.
+	 */
+	private abortPendingSaliency(drain = false) {
+		const gl = this.gl;
 		if (this.salFence) {
-			this.gl.deleteSync(this.salFence);
+			if (drain && this.salPBO && this.salBuf) {
+				gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
+				gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.salBuf);
+				gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+			}
+			gl.deleteSync(this.salFence);
 			this.salFence = null;
 		}
 		this.salPending = null;
@@ -2623,7 +2635,7 @@ export class GlRenderer {
 		if (state.lastAnalyze < 0 || time < state.lastAnalyze) {
 			// First frame or time reset: blocking analyze so a single-frame render
 			// shows a populated HUD.
-			this.abortPendingSaliency();
+			this.abortPendingSaliency(true);
 			this.analyzeSaliencySync(state, params, inputTex, time);
 			state.lastAnalyze = time;
 		} else {
