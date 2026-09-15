@@ -719,6 +719,17 @@
 		return unregister;
 	});
 
+	// Every boundary is a snap target for drags on any lane. Read live rather
+	// than derived: this runs only while something is being dragged.
+	$effect(() =>
+		stack.registerSnapSource("mosh", () =>
+			rawSegments.flatMap((s) => [
+				{ time: s.startTime, ownerId: s.id },
+				{ time: s.endTime ?? trackDuration, ownerId: s.id },
+			]),
+		),
+	);
+
 	function splitAt(time: number) {
 		if (trackDuration <= 0) return;
 		if (rawSegments.length === 0) {
@@ -889,8 +900,10 @@
 		if (dragging.type === "boundary") {
 			if (!dragMoved) boundaries.snapshotForDrag();
 			dragMoved = true;
-			const time = vp.clientXToTime(e.clientX);
 			const { leftSegId, rightSegId } = dragging;
+			// Both segments' edges belong to this boundary: neither may pull on it.
+			const own = new Set([leftSegId, rightSegId].filter((id) => id !== null));
+			const time = stack.snapTime(vp.clientXToTime(e.clientX), own, e.altKey);
 			const updates: Record<string, Partial<SequenceSegment>> = {};
 
 			if (leftSegId) {
@@ -921,11 +934,21 @@
 					),
 				);
 			}
+			stack.confirmSnap(
+				Object.values(updates).map((u) => u.endTime ?? u.startTime ?? -1),
+			);
 		} else if (dragging.type === "boundary-group") {
 			if (!dragMoved) boundaries.snapshotForDrag();
 			dragMoved = true;
+			const rawDelta = vp.clientXToTime(e.clientX) - dragging.anchorTime;
+			const own = new Set<string>();
+			for (const b of dragging.group) {
+				if (b.leftSegId) own.add(b.leftSegId);
+				if (b.rightSegId) own.add(b.rightSegId);
+			}
+			const wanted = dragging.group.map((b) => b.time + rawDelta);
 			const delta = clampGroupDelta(
-				vp.clientXToTime(e.clientX) - dragging.anchorTime,
+				rawDelta + stack.snapShift(wanted, own, e.altKey),
 				dragging.group,
 				dragging.nonSelected,
 				trackDuration,
@@ -937,6 +960,7 @@
 					updates[s.id] ? { ...s, ...updates[s.id] } : s,
 				),
 			);
+			stack.confirmSnap(dragging.group.map((b) => b.time + delta));
 		} else if (dragging.type === "rect-select") {
 			dragMoved = true;
 			dragging = { ...dragging, currentTime: vp.clientXToTime(e.clientX) };
@@ -1000,6 +1024,7 @@
 		}
 		dragging = null;
 		dragMoved = false;
+		stack.endSnap();
 	}
 
 	// ── Remove ───────────────────────────────────────────────────────────────

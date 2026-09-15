@@ -29,6 +29,8 @@
 		/** Shown in the selection bar while no lane has anything selected, so
 		 * the row is never dead space. Omit to leave it empty. */
 		selectionHint?: string | null;
+		/** Tempo of the master track, when known: drags snap to its beats. */
+		bpm?: number;
 		/** The lanes, top to bottom. */
 		children: Snippet;
 		/** Out: the axis this stack owns, for editors whose window-level
@@ -47,6 +49,7 @@
 		onToggleLoop = null,
 		toolbar,
 		selectionHint = null,
+		bpm = 0,
 		children,
 		axis = $bindable(),
 	}: Props = $props();
@@ -58,6 +61,10 @@
 	);
 	setTimelineStack(stack);
 	axis = stack;
+
+	$effect(() => {
+		stack.bpm = bpm;
+	});
 	const vp = stack.vp;
 
 	// Follow the track: any new duration opens the window onto the whole thing.
@@ -312,6 +319,16 @@
 			onpointerdown={beginStaticDrag}
 		></div>
 
+		{#if stack.snapGuide !== null}
+			<!-- What the drag is snapped to, across every lane: the pull is only
+			     ever as clear as the thing causing it. -->
+			<div class="tl-playhead-layer">
+				<div
+					class="tl-snap-guide"
+					style="transform: {markerX(vp.toPct(stack.snapGuide))}"
+				></div>
+			</div>
+		{/if}
 		{#if playheadVisible || staticVisible}
 			<div class="tl-playhead-layer">
 				{#if playheadVisible}
@@ -651,6 +668,19 @@
 		bottom: 0;
 		left: 0;
 		width: 100%;
+		will-change: transform;
+	}
+
+	/* Under the playheads, over the lanes. Dashed and faint: a hint about the
+	   drag, not a third marker. */
+	.tl-snap-guide {
+		position: absolute;
+		top: 0;
+		bottom: var(--tl-scale-h);
+		left: 0;
+		width: 100%;
+		border-left: 1px dashed var(--tl-playhead);
+		opacity: 0.55;
 		will-change: transform;
 	}
 

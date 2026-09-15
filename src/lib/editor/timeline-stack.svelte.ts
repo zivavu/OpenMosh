@@ -9,7 +9,14 @@
  */
 
 import { getContext, setContext, untrack, type Snippet } from "svelte";
+import { findSnap, landedAt, type SnapPoint } from "../timeline/snap";
 import { TimelineViewport } from "./timeline-viewport.svelte";
+
+/** How close, on screen, a dragged edge has to come to a target to snap. */
+const SNAP_PX = 7;
+/** Beats closer together than this on screen are left out of the targets:
+ * zoomed out, they would quantise every drag to a grid that isn't drawn. */
+const MIN_BEAT_PX = 24;
 
 const KEY = Symbol("timeline-stack");
 
@@ -42,6 +49,81 @@ export class TimelineStackState {
 
 	markLaneUsed(laneId: string): void {
 		this.activeLaneId = laneId;
+	}
+
+	// ── Snapping ─────────────────────────────────────────────────────────────
+	// Every lane publishes the edges it holds; a drag on any lane can land on
+	// any of them, plus the track ends, the start marker and the beat grid.
+
+	/** Tempo of the master track, for the beat grid. 0 = none known. */
+	bpm = $state(0);
+
+	/** The target the current drag is snapped to, for the guide line drawn
+	 * across the stack. Null when nothing is snapped. */
+	snapGuide = $state<number | null>(null);
+
+	readonly #snapSources = new Map<string, () => SnapPoint[]>();
+
+	/** Register a lane's edges as snap targets. Returns unregister. */
+	registerSnapSource(laneId: string, edges: () => SnapPoint[]): () => void {
+		this.#snapSources.set(laneId, edges);
+		return () => this.#snapSources.delete(laneId);
+	}
+
+	/**
+	 * The shift that lands one of `edges` (a drag's clips' edges, at where the
+	 * pointer wants them) on the nearest target, or 0 when none is within
+	 * reach. `exclude` holds the ids of whatever is being dragged, so its own
+	 * edges never pull on it. Alt (`bypass`) turns snapping off for the drag.
+	 *
+	 * Sets the guide provisionally; confirmSnap() settles it once the caller
+	 * knows where the edges actually ended up.
+	 */
+	snapShift(
+		edges: number[],
+		exclude: ReadonlySet<string>,
+		bypass = false,
+	): number {
+		if (bypass || this.laneWidth <= 0) {
+			this.snapGuide = null;
+			return 0;
+		}
+		const secPerPx = this.vp.viewDuration / this.laneWidth;
+		const duration = this.#getDuration();
+		const targets: SnapPoint[] = [
+			{ time: 0, ownerId: null },
+			{ time: duration, ownerId: null },
+			{ time: this.staticTime, ownerId: null },
+		];
+		for (const source of this.#snapSources.values()) targets.push(...source());
+		const beatSec = this.bpm > 0 ? 60 / this.bpm : 0;
+		const hit = findSnap(
+			edges,
+			targets,
+			SNAP_PX * secPerPx,
+			exclude,
+			beatSec / secPerPx >= MIN_BEAT_PX ? beatSec : 0,
+		);
+		this.snapGuide = hit?.at ?? null;
+		return hit?.shift ?? 0;
+	}
+
+	/** snapShift() for a single edge: the time it should land on. */
+	snapTime(time: number, exclude: ReadonlySet<string>, bypass = false): number {
+		return time + this.snapShift([time], exclude, bypass);
+	}
+
+	/** Keep the guide only if one of the dragged edges reached it — a
+	 * neighbour or the minimum length can stop the drag short of the target. */
+	confirmSnap(edges: number[]): void {
+		if (this.snapGuide !== null && !landedAt(edges, this.snapGuide)) {
+			this.snapGuide = null;
+		}
+	}
+
+	/** The drag is over; the guide goes with it. */
+	endSnap(): void {
+		this.snapGuide = null;
 	}
 
 	/**

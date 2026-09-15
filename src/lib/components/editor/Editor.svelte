@@ -3227,6 +3227,11 @@
 								keys: ["Shift+Drag"],
 								description: "Rectangle-select segments and boundaries",
 							},
+							{
+								keys: ["Alt+Drag"],
+								description:
+									"Move a boundary without snapping to other edges or beats",
+							},
 							{ keys: ["Ctrl/Cmd+C"], description: "Copy selected segments" },
 							{
 								keys: ["Ctrl/Cmd+V"],
@@ -3260,6 +3265,11 @@
 							{
 								keys: ["Ctrl/Cmd+Shift+Click"],
 								description: "Add / remove one clip from the selection",
+							},
+							{
+								keys: ["Alt+Drag"],
+								description:
+									"Move / resize a clip without snapping to other edges or beats",
 							},
 							{
 								keys: ["Ctrl/Cmd+C"],
@@ -4603,6 +4613,7 @@
 				onTogglePlay={toggleMasterPlay}
 				onSeek={seekMaster}
 				spanStart={textTimeOffset}
+				bpm={isSequenceMode ? sequenceBpm : 0}
 				selectionHint={isSequenceMode
 					? "Click a segment or an FX clip to edit it"
 					: null}

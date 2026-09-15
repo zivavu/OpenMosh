@@ -23,15 +23,16 @@
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
+		dragClipsStep,
+		laneSnapPoints,
+		type ClipDrag,
+	} from "../../timeline/clip-drag";
+	import {
 		addClip,
 		clipRange,
 		freeRangeAt,
 		MIN_CLIP_LENGTH,
-		moveClip,
-		moveClips,
 		moveClipsToLane,
-		resizeBoundary,
-		resizeClip,
 		sortClips,
 		updateLaneIn,
 	} from "../../timeline/clips";
@@ -105,23 +106,20 @@
 		const unregister = stack.registerSplitter(laneId, (t) =>
 			splitAt(laneId, t),
 		);
+		// Its clip edges are snap targets for drags on any lane.
+		const unsnap = stack.registerSnapSource(laneId, () =>
+			laneSnapPoints(laneOf(laneId)),
+		);
 		return {
 			destroy() {
 				shared.destroy();
 				unregister();
+				unsnap();
 			},
 		};
 	}
 
-	let drag = $state<{
-		laneId: string;
-		clipId: string;
-		/** The clip on the far side of a shared-boundary drag. */
-		otherId?: string;
-		mode: "move" | "start" | "end" | "boundary";
-		/** Seconds between the pointer and the clip's start, for move drags. */
-		grabOffset: number;
-	} | null>(null);
+	let drag = $state<ClipDrag | null>(null);
 	let scrubbing = $state(false);
 
 	/**
@@ -237,7 +235,7 @@
 		else onModeChange?.(selectedClipIds, "interval", 1, null);
 	}
 
-	/** Clips are placed freely — no grid, nothing to snap to. */
+	/** The raw pointer time; a drag snaps it against the stack in dragClipsStep. */
 	function timeAt(clientX: number): number {
 		return vp.clientXToTime(clientX);
 	}
@@ -490,7 +488,7 @@
 		if (scrubbing) stack.seekStatic(timeAt(e.clientX));
 		if (!drag) return;
 		const t = timeAt(e.clientX);
-		const { laneId, clipId, otherId, mode, grabOffset } = drag;
+		const { laneId, clipId, mode, grabOffset } = drag;
 		clickOnUp = null;
 		// A move that crossed into another fx row carries the clips over, if
 		// they fit there; otherwise they keep sliding on the row they came from.
@@ -517,29 +515,18 @@
 				}
 			}
 		}
-		update(laneId, (lane) => {
-			if (mode === "move") {
-				// Dragging any member drags the whole selection with it. Measured as
-				// a delta off the grabbed clip's live position, since each move
-				// re-enters here against an already-shifted lane.
-				if (selectedClipIds.length > 1 && selectedClipIds.includes(clipId)) {
-					const held = lane.clips.find((c) => c.id === clipId);
-					if (held) {
-						return moveClips(
-							lane,
-							selectedClipIds,
-							t - grabOffset - held.start,
-							trackDuration,
-						);
-					}
-				}
-				return moveClip(lane, clipId, t - grabOffset, trackDuration);
-			}
-			// A boundary drag moves both clips' facing edges; the per-clip edges
-			// trim one clip and can pull it away from its neighbour.
-			if (mode === "boundary") return resizeBoundary(lane, clipId, otherId!, t);
-			return resizeClip(lane, clipId, mode, t, trackDuration);
-		});
+		// Dragging any member drags the whole selection with it. Alt holds the
+		// snap off.
+		const step = dragClipsStep(
+			laneOf(laneId)!,
+			drag,
+			t,
+			selectedClipIds,
+			trackDuration,
+			(edges, exclude) => stack.snapShift(edges, exclude, e.altKey),
+		);
+		update(laneId, () => step.lane);
+		stack.confirmSnap(step.edges);
 	}
 
 	function onPointerUp(e: PointerEvent) {
@@ -555,6 +542,7 @@
 		scrubbing = false;
 		if (!drag) return;
 		drag = null;
+		stack.endSnap();
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}
 
