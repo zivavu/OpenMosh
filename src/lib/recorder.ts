@@ -37,6 +37,24 @@ import type { StreamTargetChunk } from "mediabunny";
 import type { EffectInstance } from "./effects";
 import type { GlRenderer } from "./gl/renderer";
 
+/**
+ * Export bitrate scales with the output size — a fixed rate starves big
+ * canvases and bloats small ones. Chrome honors the target; Firefox clamps
+ * it regardless of what's asked. Mosh content is noise-heavy, so err generous.
+ */
+const BITS_PER_PIXEL = 0.2;
+const MIN_VIDEO_BITRATE = 3_000_000;
+const MAX_VIDEO_BITRATE = 60_000_000;
+
+function targetVideoBitrate(width: number, height: number, fps: number): number {
+	return Math.round(
+		Math.min(
+			MAX_VIDEO_BITRATE,
+			Math.max(MIN_VIDEO_BITRATE, width * height * fps * BITS_PER_PIXEL),
+		),
+	);
+}
+
 export interface RecordOptions {
 	duration: number;
 	fps: number;
@@ -300,6 +318,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	} = opts;
 	const totalFrames = Math.ceil(duration * fps);
 	const frameDuration = 1 / fps;
+	const bitrate = targetVideoBitrate(canvas.width, canvas.height, fps);
 
 	// Resolve audio buffer and per-frame analysis when user provided audio
 	let audioBufferForMux: AudioBuffer | null = null;
@@ -341,7 +360,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			await mb.canEncodeVideo(c as any, {
 				width: canvas.width,
 				height: canvas.height,
-				bitrate: 8_000_000,
+				bitrate,
 				hardwareAcceleration: "prefer-hardware",
 			})
 		) {
@@ -358,7 +377,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates as any, {
 			width: canvas.width,
 			height: canvas.height,
-			bitrate: 12_000_000,
+			bitrate,
 		});
 	}
 
@@ -434,9 +453,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		const abortOrNever = abortPromise ?? never;
 		const videoSource = new mb.CanvasSource(canvas, {
 			codec: selectedCodec as any,
-			// Software realtime mode trades some per-frame efficiency for multithreaded
-			// speed; the higher bitrate compensates so visual quality holds.
-			bitrate: hardware ? 8_000_000 : 12_000_000,
+			bitrate,
 			...(hardware
 				? { hardwareAcceleration: "prefer-hardware" as const }
 				: { latencyMode: "realtime" as const }),
@@ -535,8 +552,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				codec: "vp8",
 				width: canvas.width,
 				height: canvas.height,
-				// Match the software canvas-sink bitrate so exports are consistent.
-				bitrate: 12_000_000,
+				bitrate,
 				latencyMode: "realtime",
 			},
 			workerCount,

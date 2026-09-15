@@ -145,7 +145,7 @@ export const EMPTY_MEDIA_TIMELINE: MediaTimeline = {
  * video lanes each hold a decoder — past a handful the preview stops keeping up
  * long before VRAM runs out.
  */
-export const MAX_MEDIA_LANES = 6;
+export const MAX_MEDIA_LANES = 10;
 
 let idCounter = 0;
 function nextId(prefix: string): string {

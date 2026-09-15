@@ -2009,9 +2009,6 @@ export class GlRenderer {
 		this.salBuf = new Uint8Array(targetW * targetH * 4);
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		this.salPBO = gl.createBuffer()!;
-		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
-		gl.bufferData(gl.PIXEL_PACK_BUFFER, this.salBuf.byteLength, gl.STREAM_READ);
-		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
 	}
 
 	/** Downsample `srcTex` into the small saliency FBO (leaves it bound). */
@@ -2085,9 +2082,13 @@ export class GlRenderer {
 	) {
 		const gl = this.gl;
 		this.ensureSalResources();
-		if (!this.salFBO || !this.salPBO) return;
+		if (!this.salFBO || !this.salPBO || !this.salBuf) return;
 		this.drawSaliencyPass(srcTex);
 		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
+		// Orphan the store every read. Chromium keeps a readback shadow per
+		// READ-usage buffer from the fence on and only drops it on bufferData or
+		// delete, so reusing the store warns on every cycle.
+		gl.bufferData(gl.PIXEL_PACK_BUFFER, this.salBuf.byteLength, gl.STREAM_READ);
 		gl.readPixels(0, 0, this.salW, this.salH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
 		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
 		this.salFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
