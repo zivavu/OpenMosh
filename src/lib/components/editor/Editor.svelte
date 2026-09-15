@@ -49,6 +49,7 @@
 		loadSettings,
 		updateSettings,
 	} from "../../editor/settings";
+	import { linkBand } from "../../editor/link-band.svelte";
 	import {
 		cloneEffectInstance,
 		loadInitialEffects,
@@ -674,9 +675,6 @@
 	let moshAudioLinkStrength = $state(
 		saved.moshAudioLinkStrength ?? DEFAULT_SETTINGS.moshAudioLinkStrength,
 	);
-	let moshLinkBand = $state<FreqBand>(
-		saved.moshLinkBand ?? DEFAULT_SETTINGS.moshLinkBand,
-	);
 	let audioSmoothing = $state(
 		saved.audioSmoothing ?? DEFAULT_SETTINGS.audioSmoothing,
 	);
@@ -776,7 +774,7 @@
 		randomizeOrder;
 		moshAudioLink;
 		moshAudioLinkStrength;
-		moshLinkBand;
+		linkBand.value;
 		audioSmoothing;
 		audioPunch;
 		showFps;
@@ -791,7 +789,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
-			moshLinkBand,
+			moshLinkBand: linkBand.value,
 			audioSmoothing,
 			audioPunch,
 			showFps,
@@ -1128,7 +1126,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
-			moshLinkBand,
+			moshLinkBand: linkBand.value,
 			hasAudio,
 		};
 	}
@@ -1478,7 +1476,7 @@
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
-			moshLinkBand,
+			moshLinkBand: linkBand.value,
 			audioResponse: { ...audioResponse },
 		};
 	}
@@ -4720,8 +4718,9 @@
 						)
 				}
 				bind:moshLinkBand={
-					() => fxSetting("moshLinkBand", moshLinkBand),
-					(v) => setFxSetting("moshLinkBand", v, (g) => (moshLinkBand = g))
+					() => fxSetting("moshLinkBand", linkBand.value),
+					(v) =>
+						setFxSetting("moshLinkBand", v, (g) => (linkBand.value = g))
 				}
 				bind:audioSmoothing={
 					() => fxResponse("smoothing", audioSmoothing),
@@ -4807,9 +4806,6 @@
 						);
 						markPanelSegmentEdited();
 					}}
-					linkBand={fxSetting("moshLinkBand", moshLinkBand)}
-					onLinkBandChange={(band) =>
-						setFxSetting("moshLinkBand", band, (g) => (moshLinkBand = g))}
 					onEffectsReplaced={endPanelBurst}
 					onPresetUpdated={seqSyncPreset}
 					onPresetApplied={(preset) => {

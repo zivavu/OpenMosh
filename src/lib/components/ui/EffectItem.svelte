@@ -18,6 +18,7 @@
 		type VolumeLink,
 	} from "../../effects";
 	import type { SpectrumData } from "../../types";
+	import { linkBand } from "../../editor/link-band.svelte";
 	import ColorPicker from "./ColorPicker.svelte";
 	import FontSelect from "./FontSelect.svelte";
 	import DualRangeSlider from "./DualRangeSlider.svelte";
@@ -87,12 +88,6 @@
 		 * through it, so it shows the value the parameter actually rides. */
 		response?: AudioResponse;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
-		/** Band a fresh Link starts on — the last one picked anywhere, so a
-		 * chain of links doesn't need the same preset clicked on each. */
-		linkBand?: FreqBand;
-		/** Called when a preset is picked on a link's Freq row, so the next link
-		 * (manual or moshed) follows it. */
-		onLinkBandChange?: (band: FreqBand) => void;
 		onToggle: () => void;
 		/** Set when the chain's on/off state is not the user's to set — the
 		 * slideshow's rolling modes decide it per beat. The switch still shows
@@ -133,8 +128,6 @@
 		spectrumData = null,
 		response = DEFAULT_AUDIO_RESPONSE,
 		onVolumeLinkChange,
-		linkBand = "full",
-		onLinkBandChange,
 		onToggle,
 		rolledNote = null,
 		rolledChain = false,
@@ -386,7 +379,8 @@
 																	freqMin: preset.min,
 																	freqMax: preset.max,
 																});
-																onLinkBandChange?.(preset.id);
+																// Every next link, here or in any other panel, starts on it.
+																linkBand.value = preset.id;
 															}}>{preset.label}</button
 														>
 													{/each}
@@ -439,11 +433,11 @@
 													onVolumeLinkChange(param.key, {
 														min: param.min,
 														max: param.max,
-														...(linkBand === "full"
+														...(linkBand.value === "full"
 															? {}
 															: {
-																	freqMin: FREQ_PRESETS[linkBand].min,
-																	freqMax: FREQ_PRESETS[linkBand].max,
+																	freqMin: FREQ_PRESETS[linkBand.value].min,
+																	freqMax: FREQ_PRESETS[linkBand.value].max,
 																}),
 													})}
 											>

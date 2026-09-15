@@ -92,6 +92,7 @@
 		loadSettings,
 		updateSettings,
 	} from "../../editor/settings";
+	import { linkBand } from "../../editor/link-band.svelte";
 	import { saveSession } from "../../editor/sessions";
 	import {
 		deleteSequenceMediaProxy,
@@ -1341,6 +1342,7 @@
 			randomizeOrder: true,
 			moshAudioLink: config.moshAudioLink,
 			moshAudioLinkStrength: config.moshAudioLinkStrength,
+			moshLinkBand: linkBand.value,
 			hasAudio: !!audio.trackFile && !!audio.audioContext,
 		};
 	}

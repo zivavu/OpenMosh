@@ -23,7 +23,6 @@
 		savePreset,
 		updatePreset,
 		type EffectInstance,
-		type FreqBand,
 		type Preset,
 		type VolumeLink,
 	} from "../../effects";
@@ -46,9 +45,6 @@
 			paramKey: string,
 			link: VolumeLink | null,
 		) => void;
-		/** Band new links start on; see EffectItem. */
-		linkBand?: FreqBand;
-		onLinkBandChange?: (band: FreqBand) => void;
 		/** Called after `effects` is replaced wholesale (e.g. preset load), so callers can push undo history. */
 		onEffectsReplaced?: () => void;
 		/** Called after a preset is explicitly overwritten via its save icon. */
@@ -92,8 +88,6 @@
 		spectrumData = null,
 		response = undefined,
 		onVolumeLinkChange,
-		linkBand = "full",
-		onLinkBandChange,
 		onEffectsReplaced,
 		onPresetUpdated,
 		onPresetApplied,
@@ -688,8 +682,6 @@
 					onVolumeLinkChange={onVolumeLinkChange
 						? (key, link) => onVolumeLinkChange(i, key, link)
 						: undefined}
-					{linkBand}
-					{onLinkBandChange}
 					onToggle={() => toggle(i)}
 					rolledNote={isRolled(effect) ? rolledNote : null}
 					rolledChain={rolledChain && isRolled(effect)}
