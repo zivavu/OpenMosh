@@ -14,6 +14,7 @@
 		FREQ_PRESETS,
 		getDefinition,
 		type EffectInstance,
+		type FreqBand,
 		type VolumeLink,
 	} from "../../effects";
 	import type { SpectrumData } from "../../types";
@@ -43,30 +44,40 @@
 	const FREQ_PRESET_BUTTONS = [
 		// Full stores no band on the link; it resolves to FREQ_PRESETS.full.
 		{
+			id: "full",
 			label: "Full",
 			title: "Full spectrum (20–16k Hz)",
 			min: undefined,
 			max: undefined,
 		},
 		{
+			id: "low",
 			label: "Low",
 			title: "Low (20–500 Hz)",
 			min: FREQ_PRESETS.low.min,
 			max: FREQ_PRESETS.low.max,
 		},
 		{
+			id: "mid",
 			label: "Mid",
 			title: "Mid (500–4000 Hz)",
 			min: FREQ_PRESETS.mid.min,
 			max: FREQ_PRESETS.mid.max,
 		},
 		{
+			id: "high",
 			label: "High",
 			title: "High (4k–16k Hz)",
 			min: FREQ_PRESETS.high.min,
 			max: FREQ_PRESETS.high.max,
 		},
-	] as const;
+	] as const satisfies {
+		id: FreqBand;
+		label: string;
+		title: string;
+		min?: number;
+		max?: number;
+	}[];
 
 	interface Props {
 		effect: EffectInstance;
@@ -76,6 +87,12 @@
 		 * through it, so it shows the value the parameter actually rides. */
 		response?: AudioResponse;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
+		/** Band a fresh Link starts on — the last one picked anywhere, so a
+		 * chain of links doesn't need the same preset clicked on each. */
+		linkBand?: FreqBand;
+		/** Called when a preset is picked on a link's Freq row, so the next link
+		 * (manual or moshed) follows it. */
+		onLinkBandChange?: (band: FreqBand) => void;
 		onToggle: () => void;
 		/** Set when the chain's on/off state is not the user's to set — the
 		 * slideshow's rolling modes decide it per beat. The switch still shows
@@ -116,6 +133,8 @@
 		spectrumData = null,
 		response = DEFAULT_AUDIO_RESPONSE,
 		onVolumeLinkChange,
+		linkBand = "full",
+		onLinkBandChange,
 		onToggle,
 		rolledNote = null,
 		rolledChain = false,
@@ -361,12 +380,14 @@
 															class:active={link.freqMin == preset.min &&
 																link.freqMax == preset.max}
 															title={preset.title}
-															onclick={() =>
+															onclick={() => {
 																onVolumeLinkChange(param.key, {
 																	...link,
 																	freqMin: preset.min,
 																	freqMax: preset.max,
-																})}>{preset.label}</button
+																});
+																onLinkBandChange?.(preset.id);
+															}}>{preset.label}</button
 														>
 													{/each}
 												</div>
@@ -418,6 +439,12 @@
 													onVolumeLinkChange(param.key, {
 														min: param.min,
 														max: param.max,
+														...(linkBand === "full"
+															? {}
+															: {
+																	freqMin: FREQ_PRESETS[linkBand].min,
+																	freqMax: FREQ_PRESETS[linkBand].max,
+																}),
 													})}
 											>
 												<Music size={12} />

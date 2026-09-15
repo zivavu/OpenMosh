@@ -4807,6 +4807,9 @@
 						);
 						markPanelSegmentEdited();
 					}}
+					linkBand={fxSetting("moshLinkBand", moshLinkBand)}
+					onLinkBandChange={(band) =>
+						setFxSetting("moshLinkBand", band, (g) => (moshLinkBand = g))}
 					onEffectsReplaced={endPanelBurst}
 					onPresetUpdated={seqSyncPreset}
 					onPresetApplied={(preset) => {
