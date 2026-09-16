@@ -134,7 +134,7 @@
 	--glass: rgba(12, 12, 16, 0.62);
 	--blur: blur(18px) saturate(0.75);
 
-	--t-fast: 0.12s ease;
+	--t-fast: 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
 	--t: 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 
 	--font-ui:

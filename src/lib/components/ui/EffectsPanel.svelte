@@ -3,9 +3,9 @@
 	import { readJson, writeJson } from "../../storage";
 	import {
 		Check,
+		ChevronDown,
 		ChevronsDownUp,
 		Filter,
-		Pencil,
 		Plus,
 		Save,
 		Search,
@@ -115,10 +115,16 @@
 	let presets: Preset[] = $state(loadPresets());
 	let saving = $state(false);
 	let presetName = $state("");
-	/** Chips show overwrite and delete only while this is on. */
-	let managing = $state(false);
 	/** The preset the chain was last set from, lit until the chain is edited. */
 	let appliedIndex = $state<number | null>(null);
+
+	/** The picker is a disclosure: one line closed, a full-width list open. */
+	let presetsOpen = $state(false);
+
+	/** The preset the chain was last set from, by name, for the trigger. */
+	let activePresetName = $derived(
+		appliedIndex === null ? null : (presets[appliedIndex]?.name ?? null),
+	);
 
 	// Warn only near the cap, so the row stays quiet for ordinary short names.
 	const NAME_COUNTER_FROM = PRESET_NAME_MAX_LENGTH - 8;
@@ -544,6 +550,20 @@
 
 		{#if !noTarget}
 			<div class="presets-row">
+				<div class="presets-head">
+					<span class="rack-label">Presets</span>
+					<div class="presets-tools">
+						<button
+							class="preset-tool"
+							onclick={() => (saving = true)}
+							title="Save the current chain as a preset"
+							aria-label="Save preset"
+						>
+							<Plus size={12} />
+						</button>
+					</div>
+				</div>
+
 				{#if saving}
 					<!-- svelte-ignore a11y_autofocus -->
 					<form
@@ -595,29 +615,54 @@
 							<X size={13} />
 						</button>
 					</form>
+				{:else if presets.length === 0}
+					<div class="preset-empty">
+						<span>No presets yet</span>
+						<button class="preset-empty-action" onclick={() => (saving = true)}>
+							Save this chain
+						</button>
+					</div>
 				{:else}
 					<button
-						class="preset-chip preset-add"
-						onclick={() => (saving = true)}
-						title="Save the current chain as a preset"
+						class="preset-trigger"
+						class:loaded={activePresetName !== null}
+						onclick={() => (presetsOpen = !presetsOpen)}
+						aria-expanded={presetsOpen}
+						title={presetsOpen ? "Hide presets" : "Show presets"}
 					>
-						<Plus size={11} />
-						Save
+						<span class="preset-trigger-name">
+							{activePresetName ?? "Choose a preset"}
+						</span>
+						<span class="preset-trigger-count readout">{presets.length}</span>
+						<span class="preset-trigger-chevron">
+							<ChevronDown size={13} />
+						</span>
 					</button>
-					<div class="preset-chips">
-						{#each presets as preset, i (i)}
-							<span class="preset-chip" class:active={appliedIndex === i}>
-								<button
-									class="preset-load"
-									onclick={() => handleLoadPreset(i)}
-									title="Load preset"
-								>
-									{preset.name}
-								</button>
-								{#if managing}
+
+					{#if presetsOpen}
+						<ul class="preset-list">
+							{#each presets as preset, index (index)}
+								<li class="preset-row" class:active={appliedIndex === index}>
+									<button
+										class="preset-row-load"
+										onclick={() => {
+											handleLoadPreset(index);
+											presetsOpen = false;
+										}}
+										title={`Load ${preset.name}`}
+										aria-pressed={appliedIndex === index}
+									>
+										<span class="preset-row-index readout">
+											{String(index + 1).padStart(2, "0")}
+										</span>
+										<span class="preset-row-name">{preset.name}</span>
+										<span class="preset-row-count readout">
+											{preset.effects.filter((e) => e.enabled).length} fx
+										</span>
+									</button>
 									<button
 										class="preset-mini"
-										onclick={() => handleUpdatePreset(i)}
+										onclick={() => handleUpdatePreset(index)}
 										title="Overwrite with the current chain"
 										aria-label="Overwrite preset"
 									>
@@ -625,30 +670,15 @@
 									</button>
 									<button
 										class="preset-mini preset-mini--rec"
-										onclick={() => handleDeletePreset(i)}
+										onclick={() => handleDeletePreset(index)}
 										title="Delete preset"
 										aria-label="Delete preset"
 									>
 										<X size={10} />
 									</button>
-								{/if}
-							</span>
-						{/each}
-						{#if presets.length === 0}
-							<span class="preset-empty">No presets yet</span>
-						{/if}
-					</div>
-					{#if presets.length > 0}
-						<button
-							class="preset-tool"
-							class:on={managing}
-							onclick={() => (managing = !managing)}
-							title={managing ? "Done" : "Overwrite or delete presets"}
-							aria-pressed={managing}
-							aria-label="Manage presets"
-						>
-							<Pencil size={11} />
-						</button>
+								</li>
+							{/each}
+						</ul>
 					{/if}
 				{/if}
 			</div>
@@ -868,84 +898,164 @@
 
 	.presets-row {
 		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.4rem 0.6rem;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0.5rem 0.6rem 0.55rem;
 		border-bottom: 1px solid var(--line);
 	}
 
-	/* One row, scrolled sideways, faded at the cut. */
-	.preset-chips {
+	.presets-head {
 		display: flex;
 		align-items: center;
-		gap: 0.3rem;
-		flex: 1;
-		min-width: 0;
-		padding: 2px 0;
-		overflow-x: auto;
-		scrollbar-width: none;
-		mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+		justify-content: space-between;
+		gap: 0.35rem;
 	}
 
-	.preset-chips::-webkit-scrollbar {
-		display: none;
-	}
-
-	.preset-chip {
-		display: inline-flex;
+	.presets-tools {
+		display: flex;
 		align-items: center;
-		flex-shrink: 0;
-		height: 22px;
+		gap: 0.15rem;
+	}
+
+	/* The picker: one line closed, a full-width list open. */
+	.preset-trigger {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		width: 100%;
+		height: 28px;
+		padding: 0 0.5rem 0 0.6rem;
+		background: var(--sunken);
 		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
-		background: none;
-		color: var(--text-2);
+		border-radius: var(--r-2);
+		color: var(--text-3);
 		font-family: inherit;
-		font-size: 0.7rem;
-		overflow: hidden;
+		font-size: 0.72rem;
+		text-align: left;
+		cursor: pointer;
 		transition:
 			color var(--t-fast),
 			border-color var(--t-fast),
 			background var(--t-fast);
 	}
 
-	.preset-chip:hover {
-		color: var(--text);
+	.preset-trigger:hover {
+		color: var(--text-2);
 		border-color: var(--line-strong);
 	}
 
-	/* The chain is this preset, untouched. */
-	.preset-chip.active {
+	/* A chain that came from a preset says so. */
+	.preset-trigger.loaded {
 		color: var(--mosh);
 		border-color: var(--mosh-dim);
+		background: color-mix(in srgb, var(--mosh) 8%, var(--sunken));
+	}
+
+	.preset-trigger-name {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.preset-trigger-count {
+		flex-shrink: 0;
+		font-size: 0.6rem;
+		color: var(--text-4);
+	}
+
+	.preset-trigger-chevron {
+		display: flex;
+		flex-shrink: 0;
+		color: var(--text-4);
+		transition: transform var(--t-fast);
+	}
+
+	.preset-trigger[aria-expanded="true"] .preset-trigger-chevron {
+		transform: rotate(180deg);
+	}
+
+	.preset-list {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		overflow: hidden;
+	}
+
+	.preset-row {
+		display: flex;
+		align-items: center;
+		border-top: 1px solid var(--line);
+	}
+
+	.preset-row:first-child {
+		border-top: none;
+	}
+
+	.preset-row-load {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex: 1;
+		min-width: 0;
+		height: 28px;
+		padding: 0 0.6rem;
+		background: none;
+		border: none;
+		color: var(--text-2);
+		font-family: inherit;
+		font-size: 0.72rem;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.preset-row-load:hover {
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	/* The chain is this preset, untouched. */
+	.preset-row.active .preset-row-load {
+		color: var(--mosh);
 		background: color-mix(in srgb, var(--mosh) 10%, transparent);
 	}
 
-	.preset-add {
-		gap: 0.25rem;
-		padding: 0 0.6rem 0 0.45rem;
-		border-style: dashed;
-		color: var(--text-3);
-		cursor: pointer;
+	/* The list clips its own corners, so the ring has to draw inside them. */
+	.preset-row-load:focus-visible {
+		outline-offset: -2px;
 	}
 
-	.preset-add:hover {
-		color: var(--mosh);
-		border-color: var(--mosh-dim);
+	.preset-row-index {
+		flex-shrink: 0;
+		font-size: 0.6rem;
+		color: var(--text-4);
 	}
 
-	.preset-load {
-		max-width: 140px;
-		padding: 0 0.6rem;
-		height: 100%;
-		background: none;
-		border: none;
-		color: inherit;
-		font: inherit;
-		white-space: nowrap;
+	.preset-row.active .preset-row-index {
+		color: var(--mosh-dim);
+	}
+
+	.preset-row-name {
+		flex: 1;
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.preset-row-count {
+		flex-shrink: 0;
+		font-size: 0.6rem;
+		color: var(--text-4);
 	}
 
 	.preset-mini {
@@ -993,17 +1103,22 @@
 			background var(--t-fast);
 	}
 
-	.preset-tool:hover,
-	.preset-tool.on {
+	.preset-tool:hover {
 		color: var(--text);
 		background: rgba(255, 255, 255, 0.06);
 	}
 
+	/* The save row is the trigger's box, with the field sitting inside it. */
 	.preset-save-row {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
-		flex: 1;
+		gap: 0.15rem;
+		width: 100%;
+		height: 28px;
+		padding: 0 0.25rem 0 0.6rem;
+		background: var(--sunken);
+		border: 1px solid var(--mosh-dim);
+		border-radius: var(--r-2);
 	}
 
 	.preset-name-count {
@@ -1021,26 +1136,37 @@
 	.preset-name-input {
 		flex: 1;
 		min-width: 0;
-		height: 22px;
-		padding: 0 0.6rem;
-		background: var(--sunken);
-		border: 1px solid var(--line);
-		border-radius: var(--r-pill);
+		height: 100%;
+		padding: 0;
+		background: none;
+		border: none;
 		color: var(--text);
-		font-size: 0.72rem;
 		font-family: inherit;
+		font-size: 0.72rem;
 		outline: none;
 	}
 
-	.preset-name-input:focus {
-		border-color: var(--mosh-dim);
+	.preset-name-input::placeholder {
+		color: var(--text-4);
 	}
 
 	.preset-empty {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 		font-size: 0.68rem;
 		color: var(--text-4);
-		padding: 0 0.3rem;
-		white-space: nowrap;
+	}
+
+	.preset-empty-action {
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--mosh);
+		font: inherit;
+		cursor: pointer;
+		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 
 	.rolled-note {
