@@ -619,7 +619,7 @@
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		gap: 2.5rem;
+		gap: 1.75rem;
 		padding: 2rem;
 	}
 
@@ -1200,7 +1200,6 @@
 		width: 100%;
 		max-width: 520px;
 		height: 2.1rem;
-		margin-top: -1.25rem;
 	}
 
 	.recent-label {
