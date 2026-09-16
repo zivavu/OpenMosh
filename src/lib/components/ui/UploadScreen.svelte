@@ -20,6 +20,7 @@
 		Music,
 		Sparkles,
 		Upload,
+		X,
 	} from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import { lazy } from "../../lazy";
@@ -28,6 +29,8 @@
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { showToast } from "./toast.svelte";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
+	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import {
 		listSavedSequences,
 		readCachedSavedSequences,
@@ -106,6 +109,22 @@
 	/** Modes that take a whole set of media rather than one file. */
 	let isMultiMode = $derived(selectedMode !== "single");
 
+	const MODES = [
+		{ value: "single", label: "Single" },
+		{ value: "sequence", label: "Editor" },
+		{ value: "slideshow", label: "Slideshow" },
+	] as const;
+
+	// 1, 2, 3 pick a mode, the way they pick a group in the shortcuts sheet.
+	function onModeKey(e: KeyboardEvent) {
+		if (isMobile || generateOpen || storageOpen || isModalKeyboardOpen())
+			return;
+		if (e.ctrlKey || e.metaKey || e.altKey || isInteractiveTarget(e.target))
+			return;
+		const n = Number(e.key);
+		if (n >= 1 && n <= MODES.length) setMode(MODES[n - 1].value);
+	}
+
 	/** The session list backing whichever mode is showing. Sequence keeps its own
 	 * list, keyed by song rather than by media. */
 	let savedForMode = $derived<SavedSession[]>(
@@ -117,8 +136,8 @@
 	);
 	let savedHead = $derived(
 		selectedMode === "single"
-			? "OR PICK UP SOMETHING YOU WERE MOSHING"
-			: "OR PICK UP A SLIDESHOW YOU WERE BUILDING",
+			? "Or pick up something you were moshing"
+			: "Or pick up a slideshow you were building",
 	);
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
@@ -349,6 +368,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={onModeKey} />
+
 <DemoBackground {warmCanvas} {warmRenderer} bind:playing={demoPlaying} />
 
 <div class="upload-screen">
@@ -366,13 +387,16 @@
 	</div>
 
 	{#if !isMobile}
-		<div class="mode-toggle">
-			{#each [{ value: "single", label: "Single" }, { value: "sequence", label: "Editor" }, { value: "slideshow", label: "Slideshow" }] as const as m}
+		<div class="mode-toggle" role="tablist">
+			{#each MODES as m, i (m.value)}
 				<button
 					class="mode-btn"
 					class:active={selectedMode === m.value}
+					role="tab"
+					aria-selected={selectedMode === m.value}
 					onclick={() => setMode(m.value)}
 				>
+					<span class="mode-n">{i + 1}</span>
 					{m.label}
 				</button>
 			{/each}
@@ -392,12 +416,13 @@
 		{/if}
 	</p>
 
+	<!-- One panel: media on top, the song strip along its foot. The strip
+	     stops its own drag events so a track dropped on it isn't also read
+	     by the panel. -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="drop-zone"
+		class="panel"
 		class:dragging
-		role="button"
-		tabindex="0"
-		aria-label="Drop zone for image or video files"
 		ondrop={(e) => {
 			e.preventDefault();
 			onDrop(e);
@@ -407,50 +432,89 @@
 			onDragOver(e);
 		}}
 		ondragleave={onDragLeave}
-		onkeydown={(e) => {
-			if (e.key === "Enter" || e.key === " ") openFilePicker();
-		}}
 	>
-		<div class="load-row">
-			<label class="load-btn">
-				<input
-					bind:this={fileInput}
-					type="file"
-					accept={getAcceptTypes()}
-					multiple={getIsMultiple()}
-					onchange={onInputChange}
-					style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
-				/>
-				<Upload size={18} />
-				{isMultiMode ? "LOAD FILES" : "LOAD A FILE"}
-			</label>
+		<div class="panel-main">
+			<div class="load-row">
+				<label class="load-btn">
+					<input
+						bind:this={fileInput}
+						type="file"
+						accept={getAcceptTypes()}
+						multiple={getIsMultiple()}
+						onchange={onInputChange}
+						style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
+					/>
+					<Upload size={16} />
+					{isMultiMode ? "Load files" : "Load a file"}
+				</label>
+				<button
+					class="load-btn generate-btn"
+					onclick={() => (generateOpen = true)}
+					onkeydown={(e) => e.stopPropagation()}
+				>
+					<Sparkles size={16} />
+					Generate
+				</button>
+			</div>
+
+			<p class="drop-hint" class:staged={stagedMedia}>
+				{#if stagedMedia}
+					{stagedMedia.length} file{stagedMedia.length === 1 ? "" : "s"} ready. Add
+					a song to start.
+				{:else if isMultiMode}
+					or drop images and videos anywhere on this panel
+				{:else}
+					or drop an image or video anywhere on this panel
+				{/if}
+			</p>
+		</div>
+
+		{#if pendingAudio}
+			<div class="song-strip song-strip--set">
+				<Music size={14} />
+				<span class="song-name">{pendingAudio.name}</span>
+				<button
+					class="song-clear"
+					onclick={() => {
+						pendingAudio = null;
+					}}
+					aria-label="Remove audio"
+				>
+					<X size={12} />
+				</button>
+			</div>
+		{:else}
 			<button
-				class="load-btn generate-btn"
-				onclick={() => (generateOpen = true)}
-				onkeydown={(e) => e.stopPropagation()}
+				class="song-strip"
+				class:song-dragging={audioDragging}
+				onclick={openAudioPicker}
+				ondrop={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					onAudioDrop(e);
+				}}
+				ondragover={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					audioDragging = true;
+				}}
+				ondragleave={(e) => {
+					e.stopPropagation();
+					if (
+						e.currentTarget instanceof HTMLElement &&
+						!e.currentTarget.contains(e.relatedTarget as Node)
+					) {
+						audioDragging = false;
+					}
+				}}
 			>
-				<Sparkles size={18} />
-				GENERATE
+				<Music size={14} />
+				<span>Add a song</span>
+				<span class="song-tag" class:required={isMultiMode}>
+					{isMultiMode ? "required" : "optional"}
+				</span>
 			</button>
-		</div>
-
-		<div class="separator">
-			<span class="line"></span>
-			<span class="or">OR</span>
-			<span class="line"></span>
-		</div>
-
-		<div class="drop-hint" class:staged={stagedMedia}>
-			<Image size={16} />
-			{#if stagedMedia}
-				{stagedMedia.length} FILE{stagedMedia.length === 1 ? "" : "S"} READY · ADD
-				A SONG TO START
-			{:else if isMultiMode}
-				DRAG AND DROP IMAGES AND VIDEOS HERE
-			{:else}
-				DRAG AND DROP AN IMAGE OR VIDEO HERE
-			{/if}
-		</div>
+		{/if}
 	</div>
 
 	<input
@@ -471,59 +535,11 @@
 		{/await}
 	{/if}
 
-	{#if pendingAudio}
-		<div class="music-zone music-zone--selected">
-			<Music size={14} />
-			<span class="music-filename">{pendingAudio.name}</span>
-			<button
-				class="music-clear"
-				onclick={() => {
-					pendingAudio = null;
-				}}
-				aria-label="Remove audio">✕</button
-			>
-		</div>
-	{:else}
-		<div
-			class="music-zone"
-			class:music-dragging={audioDragging}
-			role="button"
-			tabindex="0"
-			onclick={openAudioPicker}
-			ondrop={(e) => {
-				e.preventDefault();
-				onAudioDrop(e);
-			}}
-			ondragover={(e) => {
-				e.preventDefault();
-				audioDragging = true;
-			}}
-			ondragleave={(e) => {
-				if (
-					e.currentTarget instanceof HTMLElement &&
-					!e.currentTarget.contains(e.relatedTarget as Node)
-				) {
-					audioDragging = false;
-				}
-			}}
-			onkeydown={(e) => {
-				if (e.key === "Enter" || e.key === " ") openAudioPicker();
-			}}
-		>
-			<Music size={14} />
-			{#if isMultiMode}
-				<span>ADD MUSIC <span class="required">(REQUIRED)</span></span>
-			{:else}
-				<span>ADD MUSIC <span class="optional">(OPTIONAL)</span></span>
-			{/if}
-		</div>
-	{/if}
-
 	<!-- Always rendered at a fixed height, for every mode: this block collapsing
 	     when a mode has nothing saved is what made switching modes jump. -->
 	<div class="saved-zone">
 		{#if selectedMode === "sequence" && savedSequences.length > 0}
-			<div class="saved-head">OR PICK UP A SONG YOU'VE WORKED ON</div>
+			<div class="saved-head">Or pick up a song you've worked on</div>
 			<div class="saved-list">
 				{#each savedSequences as seq (seq.trackId)}
 					<button
@@ -906,164 +922,283 @@
 
 	.subtitle {
 		font-size: 0.95rem;
-		color: #9a9a9a;
-		font-weight: 400;
+		color: var(--text-2);
 		text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
 	}
 
+	/* ── Entry ────────────────────────────────────────────────────────────── */
+	/* Each block rises in after the one above it, on the app's curve. */
+	.hero,
+	.mode-toggle,
+	.mode-hint,
+	.panel,
+	.saved-zone {
+		animation: rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+		animation-delay: calc(var(--i, 0) * 70ms);
+	}
+
+	.mode-toggle {
+		--i: 1;
+	}
+	.mode-hint {
+		--i: 2;
+	}
+	.panel {
+		--i: 3;
+	}
+	.saved-zone {
+		--i: 4;
+	}
+
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(12px);
+		}
+	}
+
+	/* ── Mode ─────────────────────────────────────────────────────────────── */
 	.mode-toggle {
 		display: flex;
 		flex-shrink: 0;
-		gap: 0;
-		border: 1.5px solid rgba(255, 255, 255, 0.16);
-		border-radius: 999px;
-		overflow: hidden;
-		background: rgba(10, 10, 12, 0.55);
-		backdrop-filter: blur(16px);
-		-webkit-backdrop-filter: blur(16px);
+		padding: 3px;
+		gap: 2px;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
 	}
 
 	.mode-btn {
-		padding: 0.45rem 1.5rem;
-		border: none;
-		background: transparent;
-		color: #8a8a8a;
-		font-size: 0.78rem;
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		cursor: pointer;
-		transition:
-			color 0.2s,
-			background-color 0.2s;
-		font-family: inherit;
-	}
-
-	.mode-btn:hover {
-		color: #ccc;
-	}
-
-	.mode-btn.active {
-		background: rgba(255, 255, 255, 0.14);
-		color: #fff;
-	}
-
-	.mode-hint {
-		font-size: 0.8rem;
-		color: #8a8a8a;
-		margin-top: -1.5rem;
-		text-align: center;
-		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
-	}
-
-	.drop-zone {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1.5rem;
-		padding: 2.5rem 3rem;
-		border: 1.5px dashed rgba(255, 255, 255, 0.18);
-		border-radius: 12px;
-		width: 100%;
-		max-width: 520px;
-		background: rgba(10, 10, 12, 0.5);
-		backdrop-filter: blur(20px) saturate(0.7);
-		-webkit-backdrop-filter: blur(20px) saturate(0.7);
-		transition:
-			border-color 0.2s,
-			background-color 0.2s;
-		cursor: pointer;
-		outline: none;
-	}
-
-	.drop-zone:hover,
-	.drop-zone:focus-visible {
-		border-color: rgba(255, 255, 255, 0.35);
-	}
-
-	.drop-zone.dragging {
-		border-color: rgba(255, 255, 255, 0.6);
-		background-color: rgba(20, 20, 24, 0.68);
-	}
-
-	.load-btn {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.7rem 2rem;
-		border: 1.5px solid rgba(255, 255, 255, 0.28);
-		border-radius: 999px;
+		padding: 0.4rem 1.1rem 0.4rem 0.9rem;
+		border: none;
+		border-radius: var(--r-pill);
 		background: transparent;
-		color: #e4e4e4;
+		color: var(--text-3);
+		font-family: inherit;
 		font-size: 0.8rem;
 		font-weight: 600;
-		letter-spacing: 0.08em;
 		cursor: pointer;
 		transition:
-			border-color 0.2s,
-			color 0.2s,
-			background-color 0.2s;
-		font-family: inherit;
+			color var(--t),
+			background-color var(--t);
 	}
 
-	.load-btn:hover {
-		border-color: rgba(255, 255, 255, 0.6);
-		color: #fff;
-		background-color: rgba(255, 255, 255, 0.1);
+	.mode-btn:hover {
+		color: var(--text-2);
+	}
+
+	.mode-btn.active {
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.09);
+	}
+
+	.mode-btn:active {
+		transform: scale(0.98);
+	}
+
+	/* The number is the key that picks it; it goes live with the mode. */
+	.mode-n {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		color: var(--text-4);
+		transition: color var(--t);
+	}
+
+	.mode-btn.active .mode-n {
+		color: var(--live);
+	}
+
+	.mode-hint {
+		max-width: 44ch;
+		margin-top: -1.5rem;
+		font-size: 0.8rem;
+		line-height: 1.5;
+		color: var(--text-3);
+		text-align: center;
+		text-wrap: balance;
+		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
+	}
+
+	/* ── Panel ────────────────────────────────────────────────────────────── */
+	/* A solid plate with an inner highlight along its top edge; the dashed
+	   line is the drag state, not the resting frame. */
+	.panel {
+		width: 100%;
+		max-width: 520px;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-3);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.06),
+			0 24px 60px rgba(0, 0, 0, 0.45);
+		overflow: hidden;
+		transition:
+			border-color var(--t),
+			box-shadow var(--t);
+	}
+
+	.panel.dragging {
+		border-color: var(--live);
+		border-style: dashed;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.06),
+			0 0 0 4px color-mix(in srgb, var(--live) 18%, transparent),
+			0 24px 60px rgba(0, 0, 0, 0.45);
+	}
+
+	.panel-main {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.1rem;
+		padding: 2.25rem 2rem 1.75rem;
 	}
 
 	.load-row {
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: center;
-		gap: 0.75rem;
+		gap: 0.6rem;
+	}
+
+	.load-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.65rem 1.5rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-pill);
+		background: rgba(255, 255, 255, 0.04);
+		color: var(--text);
+		font-family: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			border-color var(--t),
+			background-color var(--t),
+			transform var(--t-fast);
+	}
+
+	.load-btn:hover {
+		border-color: var(--text-3);
+		background-color: rgba(255, 255, 255, 0.1);
+	}
+
+	.load-btn:active {
+		transform: scale(0.98);
 	}
 
 	.generate-btn {
-		border-color: color-mix(in srgb, var(--mosh) 45%, transparent);
+		border-color: var(--mosh-dim);
+		background: color-mix(in srgb, var(--mosh) 6%, transparent);
 		color: var(--mosh);
 	}
+
 	.generate-btn:hover {
 		border-color: var(--mosh);
-		color: var(--mosh);
-		background-color: color-mix(in srgb, var(--mosh) 12%, transparent);
-	}
-
-	.separator {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		width: 100%;
-	}
-
-	.line {
-		flex: 1;
-		height: 1px;
-		background: rgba(255, 255, 255, 0.14);
-	}
-
-	.or {
-		font-size: 0.7rem;
-		color: #777;
-		letter-spacing: 0.05em;
-		font-weight: 500;
+		background-color: color-mix(in srgb, var(--mosh) 14%, transparent);
 	}
 
 	.drop-hint {
+		margin: 0;
+		font-size: 0.78rem;
+		color: var(--text-3);
+		text-align: center;
+		transition: color var(--t);
+	}
+
+	.panel.dragging .drop-hint {
+		color: var(--live);
+	}
+
+	/* Media is picked and waiting on the song: a live state, in the mosh
+	   colour the launch belongs to. */
+	.drop-hint.staged {
+		color: var(--mosh);
+	}
+
+	/* ── Song strip ───────────────────────────────────────────────────────── */
+	.song-strip {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		color: #7d7d7d;
-		font-size: 0.75rem;
-		font-weight: 600;
+		gap: 0.6rem;
+		width: 100%;
+		padding: 0.7rem 1.25rem;
+		border: none;
+		border-top: 1px solid var(--line);
+		background: rgba(0, 0, 0, 0.25);
+		color: var(--text-3);
+		font-family: inherit;
+		font-size: 0.78rem;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			color var(--t),
+			background-color var(--t);
+	}
+
+	.song-strip:not(.song-strip--set):hover,
+	.song-strip:not(.song-strip--set):focus-visible,
+	.song-dragging {
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.05);
+	}
+
+	.song-dragging {
+		color: var(--live);
+	}
+
+	.song-strip--set {
+		color: var(--text-2);
+		cursor: default;
+	}
+
+	.song-tag {
+		margin-left: auto;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
 		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-4);
 	}
 
-	/* Media is picked and waiting on the song, so this is a live state rather
-	   than the idle instruction it replaces. */
-	.drop-hint.staged {
-		color: #b193cc;
+	/* The one thing standing between staged media and the editor. */
+	.song-tag.required {
+		color: var(--mosh);
 	}
 
+	.song-name {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.song-clear {
+		display: flex;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r-1);
+		background: none;
+		color: var(--text-3);
+		cursor: pointer;
+		transition: color var(--t-fast);
+	}
+
+	.song-clear:hover {
+		color: var(--text);
+	}
+
+	/* ── Saved ────────────────────────────────────────────────────────────── */
 	/* Fixed, not min-height: a mode with one saved row and a mode with three
 	   would otherwise still shift past each other. The list scrolls inside. */
 	.saved-zone {
@@ -1077,10 +1212,8 @@
 	}
 
 	.saved-head {
-		font-size: 0.66rem;
-		color: #7d7d7d;
-		letter-spacing: 0.08em;
-		font-weight: 600;
+		font-size: 0.74rem;
+		color: var(--text-3);
 		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
@@ -1089,8 +1222,8 @@
 		flex-wrap: wrap;
 		align-content: flex-start;
 		gap: 0.4rem;
-		/* Three rows or so, then scroll — a long history shouldn't push the
-		   music zone off the screen, and a short one shouldn't pull it up. */
+		/* Three rows or so, then scroll: a long history shouldn't push the
+		   screen down, and a short one shouldn't pull it up. */
 		height: 108px;
 		overflow-y: auto;
 	}
@@ -1099,24 +1232,29 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.4rem 0.7rem;
-		border: 1.5px solid #3d3049;
-		border-radius: 999px;
-		background: rgba(10, 10, 12, 0.5);
-		backdrop-filter: blur(16px);
-		-webkit-backdrop-filter: blur(16px);
-		color: #b193cc;
-		font-size: 0.72rem;
+		padding: 0.4rem 0.75rem;
+		border: 1px solid var(--mosh-dim);
+		border-radius: var(--r-pill);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		color: var(--mosh);
 		font-family: inherit;
+		font-size: 0.74rem;
 		cursor: pointer;
 		transition:
-			border-color 0.2s,
-			color 0.2s;
+			border-color var(--t),
+			background-color var(--t),
+			transform var(--t-fast);
 	}
 
 	.saved-item:hover {
-		border-color: #6a5080;
-		color: #d8b8f8;
+		border-color: var(--mosh);
+		background: color-mix(in srgb, var(--mosh) 10%, var(--glass));
+	}
+
+	.saved-item:active {
+		transform: scale(0.98);
 	}
 
 	.saved-name {
@@ -1128,81 +1266,11 @@
 
 	.saved-count {
 		padding: 0 0.35rem;
-		border-radius: 999px;
-		background: #221a2c;
-		color: #b08ad0;
+		border-radius: var(--r-pill);
+		background: color-mix(in srgb, var(--mosh) 18%, transparent);
+		color: var(--mosh);
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
-		font-family: monospace;
-	}
-
-	.music-zone {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		/* Pulled up against the drop box — the screen's 2.5rem rhythm reads as
-		   too loose between a zone and the one it belongs to. */
-		margin-top: -1rem;
-		padding: 0.75rem 1.5rem;
-		border: 1.5px dashed rgba(255, 255, 255, 0.12);
-		border-radius: 10px;
-		width: 100%;
-		max-width: 520px;
-		background: rgba(10, 10, 12, 0.42);
-		backdrop-filter: blur(16px);
-		-webkit-backdrop-filter: blur(16px);
-		color: #6e6e6e;
-		font-size: 0.72rem;
-		font-weight: 600;
-		letter-spacing: 0.07em;
-		cursor: pointer;
-		transition:
-			border-color 0.2s,
-			color 0.2s;
-		outline: none;
-	}
-
-	.music-zone:not(.music-zone--selected):hover,
-	.music-zone:not(.music-zone--selected):focus-visible,
-	.music-dragging {
-		border-color: rgba(255, 255, 255, 0.3);
-		color: #a0a0a0;
-	}
-
-	.music-zone--selected {
-		border-color: rgba(255, 255, 255, 0.16);
-		color: #909090;
-		cursor: default;
-	}
-
-	.optional {
-		color: #565656;
-	}
-
-	/* Reads as a live requirement rather than a footnote — it's the one thing
-	   standing between staged media and the editor. */
-	.required {
-		color: #b193cc;
-	}
-
-	.music-filename {
-		flex: 1;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.music-clear {
-		background: none;
-		border: none;
-		color: #555;
-		cursor: pointer;
-		font-size: 0.75rem;
-		padding: 0 0.2rem;
-		line-height: 1;
-	}
-
-	.music-clear:hover {
-		color: #999;
 	}
 
 	@media (max-width: 800px) {
@@ -1214,16 +1282,12 @@
 			gap: 0.4rem;
 		}
 
-		.drop-zone {
-			padding: 1.5rem 1.25rem;
+		.panel-main {
+			padding: 1.5rem 1.25rem 1.25rem;
 		}
 
 		.mode-btn {
-			padding: 0.45rem 1rem;
-		}
-
-		.separator {
-			display: none;
+			padding: 0.4rem 0.8rem;
 		}
 
 		.drop-hint {
