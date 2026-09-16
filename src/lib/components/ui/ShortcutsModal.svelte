@@ -24,11 +24,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="shortcuts-overlay" onclick={onClose}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="shortcuts-modal"
-		style="--cols: {groups.length}"
-		onclick={(e) => e.stopPropagation()}
-	>
+	<div class="shortcuts-modal" onclick={(e) => e.stopPropagation()}>
 		<div class="header">
 			<span class="title">Keyboard shortcuts</span>
 			<button class="close-btn" onclick={onClose} title="Close">
@@ -42,13 +38,13 @@
 					<ul class="shortcut-list">
 						{#each group.shortcuts as shortcut (shortcut.description)}
 							<li class="shortcut-row">
-								<span class="description">{shortcut.description}</span>
 								<span class="keys">
 									{#each shortcut.keys as key, i (key)}
 										{#if i > 0}<span class="key-sep">/</span>{/if}
 										<kbd>{key}</kbd>
 									{/each}
 								</span>
+								<span class="description">{shortcut.description}</span>
 							</li>
 						{/each}
 					</ul>
@@ -73,15 +69,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-		/* One column per group, so every group sits in a single row rather than
-		   wrapping — sequence mode with the text timeline on has three. The floor
-		   keeps a lone group from collapsing to a cramped 326px; max-width still
-		   wins on small screens, where the grid falls back to wrapping. */
-		width: max(
-			420px,
-			calc(var(--cols) * 286px + (var(--cols) - 1) * 1.75rem + 2.5rem)
-		);
-		max-width: calc(100vw - 2rem);
+		width: min(940px, 100vw - 2rem);
 		max-height: calc(100vh - 2rem);
 		overflow-y: auto;
 		padding: 1.25rem;
@@ -122,11 +110,16 @@
 		color: var(--text);
 	}
 
+	/* Groups pack like a magazine page: a short group sits under another short
+	   one instead of leaving a tall empty column. */
 	.groups {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-		gap: 1rem 1.75rem;
-		align-items: start;
+		columns: 270px;
+		column-gap: 1.75rem;
+	}
+
+	.group {
+		break-inside: avoid;
+		padding-bottom: 1rem;
 	}
 
 	.group-title {
@@ -140,19 +133,22 @@
 		margin-bottom: 0.4rem;
 	}
 
+	/* Keys in one fixed-width column, descriptions ragged-right beside them —
+	   both left-aligned so the eye scans a straight edge. */
 	.shortcut-list {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: fit-content(10.5rem) 1fr;
+		column-gap: 0.75rem;
 	}
 
 	.shortcut-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
+		display: grid;
+		grid-template-columns: subgrid;
+		grid-column: 1 / -1;
+		align-items: baseline;
 		padding: 0.3rem 0;
 		border-bottom: 1px solid var(--line);
 	}
@@ -163,9 +159,12 @@
 
 	.keys {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.3rem;
-		flex-shrink: 0;
+	}
+
+	kbd {
 		white-space: nowrap;
 	}
 
