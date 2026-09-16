@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { DEFAULT_SETTINGS } from "../../editor/settings";
 	import type { FreqBand } from "../../effects";
+	import { RotateCcw } from "lucide-svelte";
 	import BpmControl from "../ui/BpmControl.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 
@@ -70,14 +71,50 @@
 </script>
 
 <!-- Whose settings these are: an fx lane's, or (unlabelled) the editor's own. -->
-{#snippet moshHeading()}
-	Mosh settings{#if targetLabel}
-		- <span class="scope-name">{targetLabel}</span>{/if}
+{#snippet head(title: string)}
+	<div class="section-head">
+		<span class="rack-label">{title}</span>
+		{#if title === "Mosh" && targetLabel}
+			<span class="scope-name">{targetLabel}</span>
+		{/if}
+	</div>
+{/snippet}
+
+<!-- A setting: label, control, and a reset that shows once the value has
+     left its default. Double-clicking the row resets it too. -->
+{#snippet row(
+	id: string,
+	label: string,
+	hint: string,
+	off: boolean,
+	reset: () => void,
+	control: import("svelte").Snippet,
+)}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="config-row"
+		class:off
+		title="{hint} Double-click to reset."
+		ondblclick={(e) => resetRow(e, reset)}
+	>
+		<label for={id}>{label}</label>
+		{@render control()}
+		<button
+			class="reset"
+			type="button"
+			tabindex={off ? 0 : -1}
+			title="Reset to default"
+			aria-label="Reset {label}"
+			onclick={reset}
+		>
+			<RotateCcw size={10} />
+		</button>
+	</div>
 {/snippet}
 
 <div class="config-panel">
 	{#if showTiming}
-		<h3 class="panel-title">Timing</h3>
+		{@render head("Timing")}
 		<BpmControl
 			id="seq-bpm"
 			{bpm}
@@ -86,21 +123,10 @@
 			{hasTrack}
 			{onDetectBpm}
 		/>
-		<h3 class="panel-title section-title">{@render moshHeading()}</h3>
-	{:else}
-		<h3 class="panel-title">{@render moshHeading()}</h3>
 	{/if}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="config-row"
-		title="The fewest effects a mosh may switch on at once. Double-click to reset."
-		ondblclick={(e) =>
-			resetRow(e, () => {
-				moshMin = DEFAULT_SETTINGS.moshMin;
-				if (moshMax < moshMin) moshMax = moshMin;
-			})}
-	>
-		<label for="mosh-min">Min effects</label>
+
+	{@render head("Mosh")}
+	{#snippet minCtl()}
 		<RangeSlider
 			id="mosh-min"
 			bind:value={moshMin}
@@ -112,18 +138,19 @@
 			}}
 		/>
 		<span class="val">{moshMin}</span>
-	</div>
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="config-row"
-		title="The most effects a mosh may switch on at once. Each roll picks a count between this and the minimum. Double-click to reset."
-		ondblclick={(e) =>
-			resetRow(e, () => {
-				moshMax = DEFAULT_SETTINGS.moshMax;
-				if (moshMin > moshMax) moshMin = moshMax;
-			})}
-	>
-		<label for="mosh-max">Max effects</label>
+	{/snippet}
+	{@render row(
+		"mosh-min",
+		"Min effects",
+		"The fewest effects a mosh may switch on at once.",
+		moshMin !== DEFAULT_SETTINGS.moshMin,
+		() => {
+			moshMin = DEFAULT_SETTINGS.moshMin;
+			if (moshMax < moshMin) moshMax = moshMin;
+		},
+		minCtl,
+	)}
+	{#snippet maxCtl()}
 		<RangeSlider
 			id="mosh-max"
 			bind:value={moshMax}
@@ -135,88 +162,92 @@
 			}}
 		/>
 		<span class="val">{moshMax}</span>
-	</div>
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="config-row"
-		title="Let a mosh reorder the chain as well as re-roll it. Order changes the look — a blur before a glitch is not the same as a glitch before a blur. Double-click to reset."
-		ondblclick={(e) =>
-			resetRow(e, () => (randomizeOrder = DEFAULT_SETTINGS.randomizeOrder))}
-	>
-		<label for="mosh-shuffle">Shuffle effects order</label>
+	{/snippet}
+	{@render row(
+		"mosh-max",
+		"Max effects",
+		"The most effects a mosh may switch on at once. Each roll picks a count between this and the minimum.",
+		moshMax !== DEFAULT_SETTINGS.moshMax,
+		() => {
+			moshMax = DEFAULT_SETTINGS.moshMax;
+			if (moshMin > moshMax) moshMin = moshMax;
+		},
+		maxCtl,
+	)}
+	{#snippet shuffleCtl()}
 		<input id="mosh-shuffle" type="checkbox" bind:checked={randomizeOrder} />
-	</div>
+	{/snippet}
+	{@render row(
+		"mosh-shuffle",
+		"Shuffle order",
+		"Let a mosh reorder the chain as well as re-roll it. Order changes the look: a blur before a glitch is not the same as a glitch before a blur.",
+		randomizeOrder !== DEFAULT_SETTINGS.randomizeOrder,
+		() => (randomizeOrder = DEFAULT_SETTINGS.randomizeOrder),
+		shuffleCtl,
+	)}
+
 	{#if hasAudio}
-		<h3 class="panel-title section-title">Random audio links</h3>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="config-row"
-			title="Wire some of the moshed parameters to the track's volume on every roll, so they move with the music. Double-click to reset."
-			ondblclick={(e) =>
-				resetRow(e, () => (moshAudioLink = DEFAULT_SETTINGS.moshAudioLink))}
-		>
-			<label for="mosh-audio-link">Link on mosh</label>
+		{@render head("Audio links")}
+		{#snippet linkCtl()}
 			<input
 				id="mosh-audio-link"
 				type="checkbox"
 				bind:checked={moshAudioLink}
 			/>
-		</div>
-	{/if}
-	{#if hasAudio && moshAudioLink}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="config-row"
-			title="How much of the mosh follows the audio. Low links a parameter here and there over a narrow range; high links most of them and swings them across their full range. Double-click to reset."
-			ondblclick={(e) =>
-				resetRow(
-					e,
-					() =>
-						(moshAudioLinkStrength = DEFAULT_SETTINGS.moshAudioLinkStrength),
-				)}
-		>
-			<label for="mosh-audio-link-strength">Strength</label>
-			<RangeSlider
-				id="mosh-audio-link-strength"
-				bind:value={moshAudioLinkStrength}
-				min={0}
-				max={1}
-				step={0.05}
-			/>
-			<span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
-		</div>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="config-row"
-			title="Which part of the mix the new links listen to. Low follows the kick and bass, high the hats and air, full the level of everything at once. Double-click to reset."
-			ondblclick={(e) =>
-				resetRow(e, () => (moshLinkBand = DEFAULT_SETTINGS.moshLinkBand))}
-		>
-			<span class="row-label">Freq</span>
-			<div class="band-presets" role="group" aria-label="Link frequency band">
-				{#each BANDS as band}
-					<button
-						type="button"
-						class="band-btn"
-						class:active={moshLinkBand === band.id}
-						title={band.title}
-						onclick={() => (moshLinkBand = band.id)}>{band.label}</button
-					>
-				{/each}
-			</div>
-		</div>
-	{/if}
-	<!-- Not gated on moshAudioLink: these shape every link, hand-made ones too. -->
-	{#if hasAudio}
-		<h3 class="panel-title section-title">Audio response</h3>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="config-row"
-			title="How long an effect takes to ease back down after a hit. The rise is always quick, so this stretches the fall only — higher rides over the gaps between hits, lower snaps back at once and flickers on busy music. Double-click to reset."
-			ondblclick={(e) =>
-				resetRow(e, () => (audioSmoothing = DEFAULT_SETTINGS.audioSmoothing))}
-		>
-			<label for="audio-smoothing">Smoothing</label>
+		{/snippet}
+		{@render row(
+			"mosh-audio-link",
+			"Link on mosh",
+			"Wire some of the moshed parameters to the track's volume on every roll, so they move with the music.",
+			moshAudioLink !== DEFAULT_SETTINGS.moshAudioLink,
+			() => (moshAudioLink = DEFAULT_SETTINGS.moshAudioLink),
+			linkCtl,
+		)}
+		{#if moshAudioLink}
+			{#snippet strengthCtl()}
+				<RangeSlider
+					id="mosh-audio-link-strength"
+					bind:value={moshAudioLinkStrength}
+					min={0}
+					max={1}
+					step={0.05}
+				/>
+				<span class="val">{Math.round(moshAudioLinkStrength * 100)}%</span>
+			{/snippet}
+			{@render row(
+				"mosh-audio-link-strength",
+				"Strength",
+				"How much of the mosh follows the audio. Low links a parameter here and there over a narrow range; high links most of them and swings them across their full range.",
+				moshAudioLinkStrength !== DEFAULT_SETTINGS.moshAudioLinkStrength,
+				() => (moshAudioLinkStrength = DEFAULT_SETTINGS.moshAudioLinkStrength),
+				strengthCtl,
+			)}
+			{#snippet bandCtl()}
+				<div class="band-presets" role="group" aria-label="Link frequency band">
+					{#each BANDS as band (band.id)}
+						<button
+							type="button"
+							class="band-btn"
+							class:active={moshLinkBand === band.id}
+							title={band.title}
+							onclick={() => (moshLinkBand = band.id)}>{band.label}</button
+						>
+					{/each}
+				</div>
+			{/snippet}
+			{@render row(
+				"mosh-link-band",
+				"Band",
+				"Which part of the mix the new links listen to. Low follows the kick and bass, high the hats and air, full the level of everything at once.",
+				moshLinkBand !== DEFAULT_SETTINGS.moshLinkBand,
+				() => (moshLinkBand = DEFAULT_SETTINGS.moshLinkBand),
+				bandCtl,
+			)}
+		{/if}
+
+		<!-- Not gated on moshAudioLink: these shape every link, hand-made ones too. -->
+		{@render head("Audio response")}
+		{#snippet smoothCtl()}
 			<RangeSlider
 				id="audio-smoothing"
 				bind:value={audioSmoothing}
@@ -225,15 +256,16 @@
 				step={0.05}
 			/>
 			<span class="val">{Math.round(audioSmoothing * 100)}%</span>
-		</div>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="config-row"
-			title="How hard an effect has to be hit before it moves far. Higher leaves it near the bottom until the loud hits land, lower lets the quiet parts move it too and keeps it busy the whole track. Double-click to reset."
-			ondblclick={(e) =>
-				resetRow(e, () => (audioPunch = DEFAULT_SETTINGS.audioPunch))}
-		>
-			<label for="audio-punch">Punch</label>
+		{/snippet}
+		{@render row(
+			"audio-smoothing",
+			"Smoothing",
+			"How long an effect takes to ease back down after a hit. The rise is always quick, so this stretches the fall only: higher rides over the gaps between hits, lower snaps back at once and flickers on busy music.",
+			audioSmoothing !== DEFAULT_SETTINGS.audioSmoothing,
+			() => (audioSmoothing = DEFAULT_SETTINGS.audioSmoothing),
+			smoothCtl,
+		)}
+		{#snippet punchCtl()}
 			<RangeSlider
 				id="audio-punch"
 				bind:value={audioPunch}
@@ -242,7 +274,15 @@
 				step={0.05}
 			/>
 			<span class="val">{Math.round(audioPunch * 100)}%</span>
-		</div>
+		{/snippet}
+		{@render row(
+			"audio-punch",
+			"Punch",
+			"How hard an effect has to be hit before it moves far. Higher leaves it near the bottom until the loud hits land, lower lets the quiet parts move it too and keeps it busy the whole track.",
+			audioPunch !== DEFAULT_SETTINGS.audioPunch,
+			() => (audioPunch = DEFAULT_SETTINGS.audioPunch),
+			punchCtl,
+		)}
 	{/if}
 </div>
 
@@ -250,48 +290,58 @@
 	.config-panel {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		padding: 0.75rem;
-		border-bottom: 1px solid var(--line);
+		gap: 0.3rem;
+		padding: 0.5rem 0.75rem 1rem;
 		max-width: 100%;
 	}
 
-	.section-title {
-		margin-top: 0.75rem;
+	/* A rack label with a hairline running off it. */
+	.section-head {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin: 0.85rem 0 0.35rem;
+	}
+
+	.section-head:first-child {
+		margin-top: 0.35rem;
+	}
+
+	.section-head::after {
+		content: "";
+		flex: 1;
+		height: 1px;
+		background: var(--line);
 	}
 
 	.scope-name {
-		color: var(--live);
-	}
-
-	.panel-title {
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
-		font-weight: 600;
-		letter-spacing: 0.16em;
-		color: var(--text-3);
-		text-transform: uppercase;
-		margin-bottom: 0.25rem;
+		color: var(--live);
 	}
 
 	.config-row {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		min-height: 26px;
+		margin: 0 -0.4rem;
+		padding: 0 0.4rem;
+		border-radius: var(--r-2);
 		font-size: 0.78rem;
+		transition: background var(--t-fast);
 	}
 
-	.config-row label,
-	.config-row .row-label {
-		min-width: 84px;
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		font-weight: 500;
-		letter-spacing: 0.09em;
-		text-transform: uppercase;
+	.config-row:hover {
+		background: rgba(255, 255, 255, 0.03);
+	}
+
+	.config-row label {
+		min-width: 92px;
+		color: var(--text-2);
+		font-size: 0.76rem;
 		/* The row's double-click resets the setting; without this it also
-         selects the label text. */
+		   selects the label text. */
 		user-select: none;
 	}
 
@@ -300,10 +350,43 @@
 	}
 
 	.val {
+		min-width: 2.4em;
+		text-align: right;
 		color: var(--text-2);
 		font-family: var(--font-mono);
 		font-size: 0.66rem;
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* Only there once the value has moved, and only under the pointer. */
+	.reset {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		margin-left: auto;
+		padding: 0;
+		background: none;
+		border: none;
+		border-radius: var(--r-1);
+		color: var(--text-4);
+		cursor: pointer;
+		opacity: 0;
+		pointer-events: none;
+		transition:
+			opacity var(--t-fast),
+			color var(--t-fast);
+	}
+
+	.config-row.off:hover .reset,
+	.config-row.off .reset:focus-visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.reset:hover {
+		color: var(--text);
 	}
 
 	.band-presets {

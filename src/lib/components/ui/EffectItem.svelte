@@ -2,6 +2,7 @@
 	import {
 		ArrowUpDown,
 		ChevronDown,
+		ChevronRight,
 		ChevronUp,
 		Copy,
 		EyeOff,
@@ -169,6 +170,7 @@
 	<div
 		class="effect-item"
 		class:enabled={effect.enabled}
+		class:expanded={effect.expanded && !rolledChain}
 		class:is-dragging={isDragging}
 		class:drop-above={dropIndicator === "above"}
 		class:drop-below={dropIndicator === "below"}
@@ -205,24 +207,14 @@
 					>
 				{:else}
 					<button class="expand-trigger" onclick={onToggleExpand}>
-						<span class="expand-arrow" class:expanded={effect.expanded}
-							>&#9654;</span
-						>
+						<span class="expand-arrow" class:expanded={effect.expanded}>
+							<ChevronRight size={12} />
+						</span>
 						<span class="name">{def.name}</span>
 					</button>
 				{/if}
 
 				<div class="controls">
-					<button
-						class="toggle"
-						class:on={effect.enabled}
-						onclick={onToggle}
-						disabled={!!rolledNote}
-						title={rolledNote ?? (effect.enabled ? "Disable" : "Enable")}
-					>
-						<span class="toggle-knob"></span>
-					</button>
-
 					<button
 						class="icon-btn"
 						onclick={onDuplicate}
@@ -284,6 +276,15 @@
 							<GripVertical size={14} />
 						</span>
 					{/if}
+					<button
+						class="toggle"
+						class:on={effect.enabled}
+						onclick={onToggle}
+						disabled={!!rolledNote}
+						title={rolledNote ?? (effect.enabled ? "Disable" : "Enable")}
+					>
+						<span class="toggle-knob"></span>
+					</button>
 				</div>
 			</div>
 
@@ -625,7 +626,7 @@
 	}
 
 	.expand-arrow {
-		font-size: 0.5rem;
+		display: flex;
 		color: var(--text-4);
 		transition:
 			transform var(--t),
@@ -708,7 +709,7 @@
 		border: 1px solid var(--line);
 		cursor: pointer;
 		padding: 0;
-		margin-right: 0.15rem;
+		margin-left: 0.3rem;
 		transition:
 			background var(--t),
 			border-color var(--t);
@@ -783,6 +784,37 @@
 
 	.drag-handle:hover {
 		color: var(--text-2);
+	}
+
+	/* At rest a strip is its number, its name and its switch. The rest of the
+	   tools keep their space but only show for the strip under the pointer, the
+	   one with focus, or an open one, so the chain reads as a list rather than
+	   a control panel. Touch has no hover, so there they are always on. */
+	.icon-btn,
+	.move-btns,
+	.drag-handle {
+		opacity: 0;
+		transition: opacity var(--t-fast);
+	}
+
+	.effect-item:hover .icon-btn,
+	.effect-item:hover .move-btns,
+	.effect-item:hover .drag-handle,
+	.effect-item:focus-within .icon-btn,
+	.effect-item:focus-within .move-btns,
+	.effect-item:focus-within .drag-handle,
+	.effect-item.expanded .icon-btn,
+	.effect-item.expanded .move-btns,
+	.effect-item.expanded .drag-handle {
+		opacity: 1;
+	}
+
+	@media (pointer: coarse) {
+		.icon-btn,
+		.move-btns,
+		.drag-handle {
+			opacity: 1;
+		}
 	}
 
 	/* Params panel */

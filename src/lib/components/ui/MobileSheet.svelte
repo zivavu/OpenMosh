@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
-	import { MediaQuery } from "svelte/reactivity";
 
 	interface Props {
 		children?: Snippet;
@@ -18,6 +17,10 @@
 		 * have to sit above. Mobile is unaffected: its tabs never show both.
 		 */
 		settingsInTopPanel?: boolean;
+		/** Tab names. The first tab is the top panel's while one is showing. */
+		settingsLabel?: string;
+		effectsLabel?: string;
+		topPanelLabel?: string;
 	}
 
 	let {
@@ -26,6 +29,9 @@
 		effectsPanel,
 		topPanel,
 		settingsInTopPanel = false,
+		settingsLabel = "Settings",
+		effectsLabel = "Chain",
+		topPanelLabel = "Layer",
 	}: Props = $props();
 
 	const SHEET_HEIGHT_VH = 70;
@@ -34,6 +40,11 @@
 	let sheetDragging = $state(false);
 	let sheetHandleEl = $state<HTMLButtonElement>();
 	let activeTab = $state<"settings" | "effects">("effects");
+
+	// Picking a clip is asking for its panel, whichever tab was open.
+	$effect(() => {
+		if (topPanel) activeTab = "effects";
+	});
 
 	export function openSheet() {
 		panelOpen = true;
@@ -109,11 +120,6 @@
 	}
 
 	const hasTabs = $derived(!!(settings && effectsPanel));
-	/* The breakpoint the styles below fold the sidebar into a sheet at. Only
-	   the layout in use is rendered: mounting both put a second, undisplayed
-	   effect chain in the DOM — a whole panel's worth of work for nothing, and
-	   a duplicate for anything that looks the chain up. */
-	const narrow = new MediaQuery("max-width: 800px");
 </script>
 
 {#if panelOpen}
@@ -139,18 +145,25 @@
 		<div class="sheet-handle"></div>
 	</button>
 
-	{#if hasTabs && narrow.current}
-		<!-- Mobile tab bar (only rendered when both snippets provided) -->
-		<div class="tab-bar">
-			<button
-				class="tab-btn"
-				class:active={activeTab === "settings"}
-				onclick={() => (activeTab = "settings")}>Settings</button
-			>
+	{#if hasTabs}
+		<!-- One tab at a time, on every width. The chain is the working
+		     surface, so it gets the full height; the settings are one tab
+		     away rather than a block it has to scroll past. -->
+		<div class="tab-bar" role="tablist">
 			<button
 				class="tab-btn"
 				class:active={activeTab === "effects"}
-				onclick={() => (activeTab = "effects")}>Effects</button
+				role="tab"
+				aria-selected={activeTab === "effects"}
+				onclick={() => (activeTab = "effects")}
+				>{topPanel ? topPanelLabel : effectsLabel}</button
+			>
+			<button
+				class="tab-btn"
+				class:active={activeTab === "settings"}
+				role="tab"
+				aria-selected={activeTab === "settings"}
+				onclick={() => (activeTab = "settings")}>{settingsLabel}</button
 			>
 		</div>
 		<div class="tab-content">
@@ -161,21 +174,6 @@
 			{:else}
 				{@render effectsPanel!()}
 			{/if}
-		</div>
-	{:else if hasTabs}
-		<!-- Desktop: render both stacked normally -->
-		<!-- The sidebar scrolls as one region. Its sections are a single column
-		     — the clip panel, the settings, the chain — and a section that
-		     scrolls on its own strands whatever follows it at the bottom of the
-		     window, behind a scrollbar the user has to find first. -->
-		<div class="desktop-content">
-			{#if topPanel}
-				{@render topPanel()}
-			{/if}
-			{#if !settingsInTopPanel}
-				{@render settings!()}
-			{/if}
-			{@render effectsPanel!()}
 		</div>
 	{:else if children}
 		{@render children()}
@@ -201,10 +199,55 @@
 	}
 
 	.tab-bar {
-		display: none;
+		display: flex;
+		flex-shrink: 0;
+		padding: 0.4rem 0.5rem 0;
+		gap: 0.25rem;
+		border-bottom: 1px solid var(--line);
 	}
 
-	.desktop-content {
+	/* A rack label per tab; the live bar under the open one. */
+	.tab-btn {
+		position: relative;
+		padding: 0.5rem 0.6rem 0.6rem;
+		background: none;
+		border: none;
+		color: var(--text-4);
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		cursor: pointer;
+		transition: color var(--t);
+	}
+
+	.tab-btn::after {
+		content: "";
+		position: absolute;
+		left: 0.6rem;
+		right: 0.6rem;
+		bottom: -1px;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--live);
+		transform: scaleX(0);
+		transition: transform var(--t);
+	}
+
+	.tab-btn.active {
+		color: var(--text);
+	}
+
+	.tab-btn.active::after {
+		transform: scaleX(1);
+	}
+
+	.tab-btn:hover:not(.active) {
+		color: var(--text-2);
+	}
+
+	.tab-content {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
@@ -212,21 +255,15 @@
 		overflow-y: auto;
 	}
 
-	/* Every section keeps its natural height and the column scrolls past it.
-	   Grow as well as shrink: the chain asks for `flex: 1` so it can own the
-	   sidebar's height on its own, and left to it would fill this column and
-	   scroll inside it — a second scrollbox, which is the one thing this
-	   column exists to avoid. */
-	.desktop-content > :global(*) {
+	.tab-content > :global(*) {
 		flex: 0 0 auto;
-		/* The scrollbar takes its width out of this column, so the panels fill
-		   what is left rather than insisting on the full sidebar width. */
 		max-width: 100%;
 	}
 
-
-	.tab-content {
-		display: none;
+	/* The chain owns the tab's height and scrolls inside it. */
+	.tab-content > :global(.effects-panel) {
+		flex: 1 1 auto;
+		min-height: 0;
 	}
 
 	@media (max-width: 800px) {
@@ -287,44 +324,11 @@
 		}
 
 		.tab-bar {
-			display: flex;
-			flex-shrink: 0;
-			border-bottom: 1px solid var(--line);
+			justify-content: center;
 		}
 
 		.tab-btn {
 			flex: 1;
-			padding: 0.55rem;
-			background: none;
-			border: none;
-			color: var(--text-4);
-			font-size: 0.72rem;
-			font-weight: 600;
-			letter-spacing: 0.05em;
-			cursor: pointer;
-			font-family: inherit;
-			transition: color 0.15s;
-		}
-
-		.tab-btn.active {
-			color: var(--text);
-			border-bottom: 2px solid var(--text-4);
-		}
-
-		.tab-btn:hover:not(.active) {
-			color: var(--text-3);
-		}
-
-		.tab-content {
-			display: flex;
-			flex-direction: column;
-			flex: 1;
-			min-height: 0;
-			overflow-y: auto;
-		}
-
-		.desktop-content {
-			display: none;
 		}
 	}
 </style>

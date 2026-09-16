@@ -2074,6 +2074,7 @@
 				/>
 			{:else}
 				<EffectsPanel
+					headless
 					bind:effects
 					hasTrack={!!audio.trackFile}
 					spectrumData={audio.spectrumData}

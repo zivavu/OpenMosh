@@ -4719,8 +4719,7 @@
 				}
 				bind:moshLinkBand={
 					() => fxSetting("moshLinkBand", linkBand.value),
-					(v) =>
-						setFxSetting("moshLinkBand", v, (g) => (linkBand.value = g))
+					(v) => setFxSetting("moshLinkBand", v, (g) => (linkBand.value = g))
 				}
 				bind:audioSmoothing={
 					() => fxResponse("smoothing", audioSmoothing),
@@ -4783,6 +4782,8 @@
 		bind:this={_mobileSheetRef}
 		topPanel={selectedMediaClip || selectedTextClip ? layerPanel : undefined}
 		settingsInTopPanel={!!selectedMediaClip || !!selectedTextClip}
+		settingsLabel="Mosh"
+		topPanelLabel={selectedMediaClip ? "Media clip" : "Text clip"}
 	>
 		{#snippet settings()}
 			{@render moshSettings()}
@@ -4792,6 +4793,7 @@
 			     chain would be a second, unrelated effect list under it. -->
 			{#if !selectedMediaClip && !selectedTextClip}
 				<EffectsPanel
+					headless
 					bind:effects={getPanelEffects, setPanelEffects}
 					noTarget={panelNoTarget}
 					rolledNote={panelRolledNote}

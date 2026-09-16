@@ -5,6 +5,7 @@
 		Check,
 		ChevronsDownUp,
 		Filter,
+		Pencil,
 		Plus,
 		Save,
 		Search,
@@ -36,6 +37,9 @@
 
 	interface Props {
 		effects: EffectInstance[];
+		/** No "Signal chain" head: the sidebar tab already names it. The live
+		 * count moves into the search row. */
+		headless?: boolean;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
 		/** Passed to the spectrum read-out on each volume link. */
@@ -97,6 +101,7 @@
 		rolledNote = null,
 		rolledChain = false,
 		rolledScope = "all",
+		headless = false,
 	}: Props = $props();
 
 	/** False for an effect the roll leaves alone — its controls stay live. */
@@ -108,11 +113,12 @@
 	let liveCount = $derived(effects.filter((e) => e.enabled).length);
 
 	let presets: Preset[] = $state(loadPresets());
-	// Collapsed: the count in the header says they're there, and the effect
-	// chain below is what the panel is for.
-	let showPresets = $state(false);
 	let saving = $state(false);
 	let presetName = $state("");
+	/** Chips show overwrite and delete only while this is on. */
+	let managing = $state(false);
+	/** The preset the chain was last set from, lit until the chain is edited. */
+	let appliedIndex = $state<number | null>(null);
 
 	// Warn only near the cap, so the row stays quiet for ordinary short names.
 	const NAME_COUNTER_FROM = PRESET_NAME_MAX_LENGTH - 8;
@@ -145,17 +151,21 @@
 				expanded: false,
 			}));
 		effects = [...applied, ...rest];
+		appliedIndex = index;
 		onEffectsReplaced?.();
 		onPresetApplied?.($state.snapshot(presets[index]) as Preset);
 	}
 
 	function handleUpdatePreset(index: number) {
 		presets = updatePreset(index, $state.snapshot(effects));
+		appliedIndex = index;
 		onPresetUpdated?.($state.snapshot(presets[index]) as Preset);
 	}
 
 	function handleDeletePreset(index: number) {
 		presets = deletePreset(index);
+		if (appliedIndex === index) appliedIndex = null;
+		else if (appliedIndex !== null && appliedIndex > index) appliedIndex--;
 	}
 
 	let dragFromIndex: number | null = $state(null);
@@ -165,6 +175,7 @@
 	function toggle(index: number) {
 		onBeforeUserEdit?.();
 		effects[index].enabled = !effects[index].enabled;
+		appliedIndex = null;
 		onUserEdit?.();
 	}
 
@@ -217,6 +228,7 @@
 		);
 		copy.expanded = true;
 		effects.splice(index + 1, 0, copy);
+		appliedIndex = null;
 		onUserEdit?.();
 	}
 
@@ -233,6 +245,7 @@
 		if (isCopy(effect)) {
 			onBeforeUserEdit?.();
 			effects.splice(index, 1);
+			appliedIndex = null;
 			onUserEdit?.();
 			return;
 		}
@@ -302,6 +315,7 @@
 			stashedValues.delete(defId);
 		}
 		effects.push(instance);
+		appliedIndex = null;
 		onUserEdit?.();
 	}
 
@@ -309,6 +323,7 @@
 		onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
 		effects[index].values[key] = value;
 		if (!effects[index].enabled) effects[index].enabled = true;
+		appliedIndex = null;
 		onUserEdit?.();
 	}
 
@@ -350,6 +365,7 @@
 		const [moved] = effects.splice(dragFromIndex, 1);
 		effects.splice(targetIndex, 0, moved);
 		clearDragState();
+		appliedIndex = null;
 		onUserEdit?.();
 	}
 
@@ -372,6 +388,7 @@
 
 		onBeforeUserEdit?.();
 		moveItem(effects, visible[pos].index, to);
+		appliedIndex = null;
 		onUserEdit?.();
 
 		// Keep the effect the user is working on under their eye — after a jump
@@ -512,14 +529,177 @@
 </script>
 
 <aside class="effects-panel">
-	<header class="panel-head">
-		<span class="rack-label">Signal chain</span>
-		{#if !noTarget}
-			<span class="chain-count readout" class:live={liveCount > 0}>
-				{liveCount} live
-			</span>
+	<!-- Head, presets and search stay put while the chain scrolls under them. -->
+	<div class="panel-tools">
+		{#if !headless}
+			<header class="panel-head">
+				<span class="rack-label">Signal chain</span>
+				{#if !noTarget}
+					<span class="chain-count readout" class:live={liveCount > 0}>
+						{liveCount} live
+					</span>
+				{/if}
+			</header>
 		{/if}
-	</header>
+
+		{#if !noTarget}
+			<div class="presets-row">
+				{#if saving}
+					<!-- svelte-ignore a11y_autofocus -->
+					<form
+						class="preset-save-row"
+						onsubmit={(e) => {
+							e.preventDefault();
+							handleSavePreset();
+						}}
+					>
+						<input
+							class="preset-name-input"
+							type="text"
+							placeholder="Name this chain"
+							maxlength={PRESET_NAME_MAX_LENGTH}
+							bind:value={presetName}
+							onkeydown={(e) => {
+								if (e.key === "Escape") {
+									saving = false;
+									presetName = "";
+								}
+							}}
+							autofocus
+						/>
+						{#if showNameCounter}
+							<span
+								class="preset-name-count"
+								class:at-max={presetName.length >= PRESET_NAME_MAX_LENGTH}
+							>
+								{presetName.length}/{PRESET_NAME_MAX_LENGTH}
+							</span>
+						{/if}
+						<button
+							class="preset-tool"
+							type="submit"
+							title="Save"
+							aria-label="Save preset"
+						>
+							<Check size={13} />
+						</button>
+						<button
+							class="preset-tool"
+							type="button"
+							onclick={() => {
+								saving = false;
+								presetName = "";
+							}}
+							title="Cancel"
+						>
+							<X size={13} />
+						</button>
+					</form>
+				{:else}
+					<button
+						class="preset-chip preset-add"
+						onclick={() => (saving = true)}
+						title="Save the current chain as a preset"
+					>
+						<Plus size={11} />
+						Save
+					</button>
+					<div class="preset-chips">
+						{#each presets as preset, i (i)}
+							<span class="preset-chip" class:active={appliedIndex === i}>
+								<button
+									class="preset-load"
+									onclick={() => handleLoadPreset(i)}
+									title="Load preset"
+								>
+									{preset.name}
+								</button>
+								{#if managing}
+									<button
+										class="preset-mini"
+										onclick={() => handleUpdatePreset(i)}
+										title="Overwrite with the current chain"
+										aria-label="Overwrite preset"
+									>
+										<Save size={10} />
+									</button>
+									<button
+										class="preset-mini preset-mini--rec"
+										onclick={() => handleDeletePreset(i)}
+										title="Delete preset"
+										aria-label="Delete preset"
+									>
+										<X size={10} />
+									</button>
+								{/if}
+							</span>
+						{/each}
+						{#if presets.length === 0}
+							<span class="preset-empty">No presets yet</span>
+						{/if}
+					</div>
+					{#if presets.length > 0}
+						<button
+							class="preset-tool"
+							class:on={managing}
+							onclick={() => (managing = !managing)}
+							title={managing ? "Done" : "Overwrite or delete presets"}
+							aria-pressed={managing}
+							aria-label="Manage presets"
+						>
+							<Pencil size={11} />
+						</button>
+					{/if}
+				{/if}
+			</div>
+
+			<div class="search-bar">
+				<Search class="search-icon" size={13} />
+				<input
+					class="search-input"
+					type="text"
+					placeholder="Search effects"
+					bind:value={searchQuery}
+				/>
+				{#if searchQuery}
+					<button
+						class="search-clear"
+						onclick={() => (searchQuery = "")}
+						title="Clear"
+					>
+						<X size={12} />
+					</button>
+				{/if}
+				{#if headless}
+					<span class="chain-count readout" class:live={liveCount > 0}>
+						{liveCount} live
+					</span>
+				{/if}
+				<button
+					class="search-clear live-filter"
+					class:on={onlyLive}
+					onclick={() => (onlyLive = !onlyLive)}
+					title={onlyLive
+						? "Showing live effects only — click to show the whole chain"
+						: "Show live effects only"}
+					aria-pressed={onlyLive}
+					aria-label="Show live effects only"
+				>
+					<Filter size={13} />
+				</button>
+				{#if anyExpanded}
+					<button
+						class="search-clear"
+						onclick={collapseAll}
+						title="Collapse all open effects"
+						aria-label="Collapse all effects"
+					>
+						<ChevronsDownUp size={13} />
+					</button>
+				{/if}
+			</div>
+		{/if}
+	</div>
 
 	{#if noTarget}
 		<div class="panel-list">
@@ -529,143 +709,6 @@
 			</div>
 		</div>
 	{:else}
-		<div class="presets-section">
-			<button
-				class="presets-header"
-				onclick={() => (showPresets = !showPresets)}
-			>
-				<span class="presets-arrow" class:expanded={showPresets}>&#9654;</span>
-				<span>Presets{presets.length > 0 ? ` (${presets.length})` : ""}</span>
-			</button>
-
-			{#if showPresets}
-				<div class="presets-body">
-					{#if saving}
-						<!-- svelte-ignore a11y_autofocus -->
-						<form
-							class="preset-save-row"
-							onsubmit={(e) => {
-								e.preventDefault();
-								handleSavePreset();
-							}}
-						>
-							<input
-								class="preset-name-input"
-								type="text"
-								placeholder="Preset name..."
-								maxlength={PRESET_NAME_MAX_LENGTH}
-								bind:value={presetName}
-								autofocus
-							/>
-							{#if showNameCounter}
-								<span
-									class="preset-name-count"
-									class:at-max={presetName.length >= PRESET_NAME_MAX_LENGTH}
-								>
-									{presetName.length}/{PRESET_NAME_MAX_LENGTH}
-								</span>
-							{/if}
-							<button
-								class="preset-confirm-btn"
-								type="submit"
-								title="Save"
-								aria-label="Save preset"
-							>
-								<Check size={14} />
-							</button>
-							<button
-								class="preset-cancel-btn"
-								type="button"
-								onclick={() => {
-									saving = false;
-									presetName = "";
-								}}
-								title="Cancel"
-							>
-								<X size={14} />
-							</button>
-						</form>
-					{:else}
-						<button class="preset-save-trigger" onclick={() => (saving = true)}>
-							<Plus size={12} />
-							Save current
-						</button>
-					{/if}
-
-					{#each presets as preset, i (i)}
-						<div class="preset-item">
-							<button
-								class="preset-load-btn"
-								onclick={() => handleLoadPreset(i)}
-								title="Load preset"
-							>
-								{preset.name}
-							</button>
-							<button
-								class="preset-delete-btn preset-update-btn"
-								onclick={() => handleUpdatePreset(i)}
-								title="Overwrite with current effects"
-							>
-								<Save size={11} />
-							</button>
-							<button
-								class="preset-delete-btn"
-								onclick={() => handleDeletePreset(i)}
-								title="Delete preset"
-							>
-								<X size={12} />
-							</button>
-						</div>
-					{/each}
-
-					{#if presets.length === 0 && !saving}
-						<div class="preset-empty">No saved presets</div>
-					{/if}
-				</div>
-			{/if}
-		</div>
-
-		<div class="search-bar">
-			<Search class="search-icon" size={13} />
-			<input
-				class="search-input"
-				type="text"
-				placeholder="Search effects..."
-				bind:value={searchQuery}
-			/>
-			{#if searchQuery}
-				<button
-					class="search-clear"
-					onclick={() => (searchQuery = "")}
-					title="Clear"
-				>
-					<X size={12} />
-				</button>
-			{/if}
-			<button
-				class="search-clear live-filter"
-				class:on={onlyLive}
-				onclick={() => (onlyLive = !onlyLive)}
-				title={onlyLive
-					? "Showing live effects only — click to show the whole chain"
-					: "Show live effects only"}
-				aria-pressed={onlyLive}
-				aria-label="Show live effects only"
-			>
-				<Filter size={13} />
-			</button>
-			{#if anyExpanded}
-				<button
-					class="search-clear"
-					onclick={collapseAll}
-					title="Collapse all open effects"
-					aria-label="Collapse all effects"
-				>
-					<ChevronsDownUp size={13} />
-				</button>
-			{/if}
-		</div>
-
 		<div class="panel-list" bind:this={listEl}>
 			{#if rolledNote}
 				<p class="rolled-note">{rolledNote}</p>
@@ -777,7 +820,6 @@
 		width: 100%;
 		max-width: var(--sidebar-w);
 		background: var(--surface);
-		border-left: 1px solid var(--line);
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;
@@ -791,13 +833,22 @@
 		}
 	}
 
+	/* Pinned to whatever scrolls around the panel, so the tools are always
+	   in reach however long the chain runs. */
+	.panel-tools {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		background: var(--surface);
+		flex-shrink: 0;
+	}
+
 	.panel-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.55rem 0.75rem;
 		border-bottom: 1px solid var(--line);
-		flex-shrink: 0;
 	}
 
 	.chain-count {
@@ -815,12 +866,193 @@
 		color: var(--live);
 	}
 
-	.presets-section {
+	.presets-row {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.4rem 0.6rem;
 		border-bottom: 1px solid var(--line);
-		flex-shrink: 0;
 	}
 
-	.presets-header,
+	/* One row, scrolled sideways, faded at the cut. */
+	.preset-chips {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		flex: 1;
+		min-width: 0;
+		padding: 2px 0;
+		overflow-x: auto;
+		scrollbar-width: none;
+		mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+	}
+
+	.preset-chips::-webkit-scrollbar {
+		display: none;
+	}
+
+	.preset-chip {
+		display: inline-flex;
+		align-items: center;
+		flex-shrink: 0;
+		height: 22px;
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
+		background: none;
+		color: var(--text-2);
+		font-family: inherit;
+		font-size: 0.7rem;
+		overflow: hidden;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.preset-chip:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
+	/* The chain is this preset, untouched. */
+	.preset-chip.active {
+		color: var(--mosh);
+		border-color: var(--mosh-dim);
+		background: color-mix(in srgb, var(--mosh) 10%, transparent);
+	}
+
+	.preset-add {
+		gap: 0.25rem;
+		padding: 0 0.6rem 0 0.45rem;
+		border-style: dashed;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.preset-add:hover {
+		color: var(--mosh);
+		border-color: var(--mosh-dim);
+	}
+
+	.preset-load {
+		max-width: 140px;
+		padding: 0 0.6rem;
+		height: 100%;
+		background: none;
+		border: none;
+		color: inherit;
+		font: inherit;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: pointer;
+	}
+
+	.preset-mini {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 100%;
+		background: none;
+		border: none;
+		border-left: 1px solid var(--line);
+		color: var(--text-4);
+		cursor: pointer;
+		padding: 0;
+		transition:
+			color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.preset-mini:hover {
+		color: var(--live);
+		background: rgba(110, 231, 192, 0.1);
+	}
+
+	.preset-mini--rec:hover {
+		color: var(--rec);
+		background: rgba(255, 95, 86, 0.1);
+	}
+
+	.preset-tool {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 22px;
+		height: 22px;
+		background: none;
+		border: none;
+		border-radius: var(--r-1);
+		color: var(--text-4);
+		cursor: pointer;
+		padding: 0;
+		transition:
+			color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.preset-tool:hover,
+	.preset-tool.on {
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.preset-save-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		flex: 1;
+	}
+
+	.preset-name-count {
+		flex-shrink: 0;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		color: var(--text-3);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.preset-name-count.at-max {
+		color: var(--rec);
+	}
+
+	.preset-name-input {
+		flex: 1;
+		min-width: 0;
+		height: 22px;
+		padding: 0 0.6rem;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
+		color: var(--text);
+		font-size: 0.72rem;
+		font-family: inherit;
+		outline: none;
+	}
+
+	.preset-name-input:focus {
+		border-color: var(--mosh-dim);
+	}
+
+	.preset-empty {
+		font-size: 0.68rem;
+		color: var(--text-4);
+		padding: 0 0.3rem;
+		white-space: nowrap;
+	}
+
+	.rolled-note {
+		margin: 0 0 0.4rem;
+		padding: 0.35rem 0.5rem;
+		border-left: 2px solid var(--mosh-dim);
+		background: var(--sunken);
+		color: var(--text-3);
+		font-size: 0.65rem;
+		line-height: 1.35;
+	}
+
 	.hidden-header {
 		display: flex;
 		align-items: center;
@@ -839,190 +1071,17 @@
 		transition: color var(--t-fast);
 	}
 
-	.rolled-note {
-		margin: 0 0 0.4rem;
-		padding: 0.35rem 0.5rem;
-		border-left: 2px solid var(--mosh-dim);
-		background: var(--sunken);
-		color: var(--text-3);
-		font-size: 0.65rem;
-		line-height: 1.35;
-	}
-
-	.presets-header:hover,
 	.hidden-header:hover {
 		color: var(--mosh);
 	}
 
-	.presets-arrow,
 	.hidden-arrow {
 		font-size: 0.5rem;
 		transition: transform var(--t);
 	}
 
-	.presets-arrow.expanded,
 	.hidden-arrow.expanded {
 		transform: rotate(90deg);
-	}
-
-	.presets-body {
-		padding: 0 0.6rem 0.55rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.preset-save-trigger {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.5rem;
-		background: none;
-		border: 1px dashed var(--line-strong);
-		border-radius: var(--r-2);
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast);
-	}
-
-	.preset-save-trigger:hover {
-		color: var(--mosh);
-		border-color: var(--mosh-dim);
-	}
-
-	.preset-save-row {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-
-	.preset-name-count {
-		flex-shrink: 0;
-		font-family: var(--font-mono);
-		font-size: 0.58rem;
-		color: var(--text-3);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.preset-name-count.at-max {
-		color: var(--rec);
-	}
-
-	.preset-name-input {
-		flex: 1;
-		min-width: 0;
-		padding: 0.3rem 0.5rem;
-		background: var(--sunken);
-		border: 1px solid var(--line);
-		border-radius: var(--r-2);
-		color: var(--text);
-		font-size: 0.72rem;
-		font-family: inherit;
-		outline: none;
-	}
-
-	.preset-name-input:focus {
-		border-color: var(--mosh-dim);
-	}
-
-	.preset-confirm-btn,
-	.preset-cancel-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 26px;
-		height: 26px;
-		background: none;
-		border: 1px solid var(--line);
-		border-radius: var(--r-2);
-		color: var(--text-3);
-		cursor: pointer;
-		padding: 0;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast);
-	}
-
-	.preset-confirm-btn:hover {
-		color: var(--live);
-		border-color: var(--live-dim);
-	}
-
-	.preset-cancel-btn:hover {
-		color: var(--rec);
-		border-color: var(--rec-dim);
-	}
-
-	.preset-item {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-
-	.preset-load-btn {
-		flex: 1;
-		padding: 0.35rem 0.55rem;
-		background: rgba(198, 162, 234, 0.05);
-		border: 1px solid var(--line);
-		border-radius: var(--r-2);
-		color: var(--text-2);
-		font-size: 0.72rem;
-		font-family: inherit;
-		text-align: left;
-		cursor: pointer;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.preset-load-btn:hover {
-		color: var(--mosh);
-		border-color: var(--mosh-dim);
-		background: rgba(198, 162, 234, 0.1);
-	}
-
-	.preset-delete-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		background: none;
-		border: none;
-		color: var(--text-4);
-		cursor: pointer;
-		border-radius: var(--r-1);
-		padding: 0;
-		flex-shrink: 0;
-		transition:
-			color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.preset-delete-btn:hover {
-		color: var(--rec);
-		background: rgba(255, 95, 86, 0.1);
-	}
-
-	.preset-update-btn:hover {
-		color: var(--live);
-		background: rgba(110, 231, 192, 0.1);
-	}
-
-	.preset-empty {
-		font-size: 0.68rem;
-		color: var(--text-4);
-		padding: 0.2rem 0.5rem;
 	}
 
 	.search-bar {
