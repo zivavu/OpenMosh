@@ -2047,7 +2047,26 @@
 		{/if}
 	</div>
 
-	<MobileSheet bind:this={_mobileSheetRef}>
+	{#snippet textPanel(section: "clip" | "chain")}
+		<TextClipPanel
+			lane={selectedTextLane}
+			clip={selectedTextClip}
+			onLaneChange={updateTextLane}
+			onClipChange={updateTextClip}
+			onBeforeEdit={pushTextHistory}
+			onClose={() => (selectedTextClipId = null)}
+			hasTrack={!!audio.trackFile}
+			spectrumData={audio.spectrumData}
+			response={DEFAULT_AUDIO_RESPONSE}
+			{section}
+		/>
+	{/snippet}
+
+	<MobileSheet
+		bind:this={_mobileSheetRef}
+		topPanel={selectedTextClip ? textPanel : undefined}
+		topPanelLabel="Text clip"
+	>
 		{#snippet settings()}
 			<SlideshowConfigPanel
 				{config}
@@ -2060,35 +2079,21 @@
 			/>
 		{/snippet}
 		{#snippet effectsPanel()}
-			{#if selectedTextClip}
-				<TextClipPanel
-					lane={selectedTextLane}
-					clip={selectedTextClip}
-					onLaneChange={updateTextLane}
-					onClipChange={updateTextClip}
-					onBeforeEdit={pushTextHistory}
-					onClose={() => (selectedTextClipId = null)}
-					hasTrack={!!audio.trackFile}
-					spectrumData={audio.spectrumData}
-					response={DEFAULT_AUDIO_RESPONSE}
-				/>
-			{:else}
-				<EffectsPanel
-					headless
-					bind:effects
-					hasTrack={!!audio.trackFile}
-					spectrumData={audio.spectrumData}
-					rolledNote={panelRolledNote}
-					rolledChain={config.moshMode === "random"}
-					rolledScope="moshable"
-					onVolumeLinkChange={(index, paramKey, link) => {
-						panelBeforeEdit(`link:${index}:${paramKey}`);
-						effects = setVolumeLink(effects, index, paramKey, link);
-					}}
-					onBeforeUserEdit={panelBeforeEdit}
-					onEffectsReplaced={endPanelBurst}
-				/>
-			{/if}
+			<EffectsPanel
+				headless
+				bind:effects
+				hasTrack={!!audio.trackFile}
+				spectrumData={audio.spectrumData}
+				rolledNote={panelRolledNote}
+				rolledChain={config.moshMode === "random"}
+				rolledScope="moshable"
+				onVolumeLinkChange={(index, paramKey, link) => {
+					panelBeforeEdit(`link:${index}:${paramKey}`);
+					effects = setVolumeLink(effects, index, paramKey, link);
+				}}
+				onBeforeUserEdit={panelBeforeEdit}
+				onEffectsReplaced={endPanelBurst}
+			/>
 		{/snippet}
 	</MobileSheet>
 

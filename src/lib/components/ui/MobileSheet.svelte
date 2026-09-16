@@ -6,17 +6,11 @@
 		settings?: Snippet;
 		effectsPanel?: Snippet;
 		/**
-		 * Takes the top of the sidebar, above the settings — for an editor whose
-		 * subject the user just picked and is working on now. On mobile it takes
-		 * over the Effects tab, so the Settings tab is still one tap away.
+		 * An editor for whatever the user just picked, a clip say. While one is
+		 * showing it takes two tabs of its own, its controls and its chain, in
+		 * front of the settings; the main chain waits behind them.
 		 */
-		topPanel?: Snippet;
-		/**
-		 * The top panel renders `settings` itself, so the sidebar shouldn't. For
-		 * a panel that ends in an effect chain of its own, which the settings
-		 * have to sit above. Mobile is unaffected: its tabs never show both.
-		 */
-		settingsInTopPanel?: boolean;
+		topPanel?: Snippet<[section: "clip" | "chain"]>;
 		/** Tab names. The first tab is the top panel's while one is showing. */
 		settingsLabel?: string;
 		effectsLabel?: string;
@@ -28,7 +22,6 @@
 		settings,
 		effectsPanel,
 		topPanel,
-		settingsInTopPanel = false,
 		settingsLabel = "Settings",
 		effectsLabel = "Chain",
 		topPanelLabel = "Layer",
@@ -39,11 +32,13 @@
 	let sheetDragOffset = $state(0);
 	let sheetDragging = $state(false);
 	let sheetHandleEl = $state<HTMLButtonElement>();
-	let activeTab = $state<"settings" | "effects">("effects");
+	let activeTab = $state<"clip" | "effects" | "settings">("effects");
 
-	// Picking a clip is asking for its panel, whichever tab was open.
+	// Picking a clip is asking for its panel, whichever tab was open; losing
+	// it lands on the chain, not on a tab that no longer exists.
 	$effect(() => {
-		if (topPanel) activeTab = "effects";
+		if (topPanel) activeTab = "clip";
+		else if (activeTab === "clip") activeTab = "effects";
 	});
 
 	export function openSheet() {
@@ -150,13 +145,21 @@
 		     surface, so it gets the full height; the settings are one tab
 		     away rather than a block it has to scroll past. -->
 		<div class="tab-bar" role="tablist">
+			{#if topPanel}
+				<button
+					class="tab-btn"
+					class:active={activeTab === "clip"}
+					role="tab"
+					aria-selected={activeTab === "clip"}
+					onclick={() => (activeTab = "clip")}>{topPanelLabel}</button
+				>
+			{/if}
 			<button
 				class="tab-btn"
 				class:active={activeTab === "effects"}
 				role="tab"
 				aria-selected={activeTab === "effects"}
-				onclick={() => (activeTab = "effects")}
-				>{topPanel ? topPanelLabel : effectsLabel}</button
+				onclick={() => (activeTab = "effects")}>{effectsLabel}</button
 			>
 			<button
 				class="tab-btn"
@@ -170,7 +173,7 @@
 			{#if activeTab === "settings"}
 				{@render settings!()}
 			{:else if topPanel}
-				{@render topPanel()}
+				{@render topPanel(activeTab === "clip" ? "clip" : "chain")}
 			{:else}
 				{@render effectsPanel!()}
 			{/if}

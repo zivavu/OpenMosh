@@ -4744,7 +4744,7 @@
 	<!-- Passed only while a clip is selected. The sheet takes any top panel
 	     as "show this instead of the chain", so an always-present snippet that
 	     merely rendered nothing left the mobile Effects tab empty. -->
-	{#snippet layerPanel()}
+	{#snippet layerPanel(section: "clip" | "chain")}
 		{#if selectedMediaClip}
 			<MediaClipPanel
 				lane={selectedMediaLane}
@@ -4760,7 +4760,7 @@
 				edits={sourceRegistry.edits}
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 				onEditingChange={onSourceEditingChange}
-				settings={moshSettings}
+				{section}
 			/>
 		{:else if selectedTextClip}
 			<TextClipPanel
@@ -4773,7 +4773,7 @@
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
 				response={audioResponse}
-				settings={moshSettings}
+				{section}
 			/>
 		{/if}
 	{/snippet}
@@ -4781,7 +4781,6 @@
 	<MobileSheet
 		bind:this={_mobileSheetRef}
 		topPanel={selectedMediaClip || selectedTextClip ? layerPanel : undefined}
-		settingsInTopPanel={!!selectedMediaClip || !!selectedTextClip}
 		settingsLabel="Mosh"
 		topPanelLabel={selectedMediaClip ? "Media clip" : "Text clip"}
 	>
