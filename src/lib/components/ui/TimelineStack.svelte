@@ -31,6 +31,9 @@
 		selectionHint?: string | null;
 		/** Tempo of the master track, when known: drags snap to its beats. */
 		bpm?: number;
+		/** The editor's dragged split, in px. Left out, the stack takes its own
+		 * height under its cap. */
+		height?: number | null;
 		/** The lanes, top to bottom. */
 		children: Snippet;
 		/** Out: the axis this stack owns, for editors whose window-level
@@ -50,6 +53,7 @@
 		toolbar,
 		selectionHint = null,
 		bpm = 0,
+		height = null,
 		children,
 		axis = $bindable(),
 	}: Props = $props();
@@ -237,7 +241,7 @@
 	}
 </script>
 
-<div class="tl-stack">
+<div class="tl-stack" style:height={height === null ? null : `${height}px`}>
 	<div class="tl-toolbar">
 		{#if onTogglePlay}
 			<button
@@ -401,10 +405,10 @@
 	   renders against, so they are global — scoped to this container, which is
 	   the only place they mean anything. */
 	.tl-stack {
-		/* Wide enough for a lane's name beside its controls: the media rows carry
-		   a grip, two toggles and a delete before the name starts, and "Layer 1"
-		   was ellipsing at 110px. */
-		--tl-gutter: 140px;
+		/* Wide enough for a lane's name beside its controls: the media rows carry a
+		   fold toggle, a grip, two toggles and a delete before the name starts, and
+		   "Layer 1" was ellipsing at 110px. */
+		--tl-gutter: 158px;
 		--tl-gap: 0.35rem;
 		--tl-playhead: var(--live);
 		--tl-static-playhead: var(--start);
@@ -622,8 +626,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		/* Lets the lanes give way to the stack's cap rather than pushing it open. */
+		/* Lets the lanes give way to the stack's cap rather than pushing it open,
+		   and take the extra when a dragged split hands the stack more room. */
 		min-height: 0;
+		flex: 1 1 auto;
 		/* The band the tick labels live in — cheaper than a ruler row, and it
 		   doubles as breathing room above the scrollbar. */
 		padding-bottom: var(--tl-scale-h);

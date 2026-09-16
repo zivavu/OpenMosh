@@ -33,6 +33,7 @@
 		loadRenderSettings,
 		saveRenderSettings,
 	} from "../../editor/render-settings";
+	import { readJson, readRaw, writeJson, writeRaw } from "../../storage";
 	import { addTrack } from "../../audio/track-library";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
@@ -2897,6 +2898,137 @@
 		return () => observer.disconnect();
 	});
 
+	// ── The timeline split ───────────────────────────────────────────────────
+	/** Which side of the column deserves the room is the user's call, not a
+	 * rule's: building a look wants the preview, arranging a stack wants the
+	 * lanes. Their answer is remembered. */
+	const SPLIT_KEY = "openmosh-timeline-split";
+	/** Enough for the toolbar, the ruler, the selection bar and a lane or two. */
+	const SPLIT_MIN = 150;
+	/** A lane row is 30px, and the split never leaves less than one of them. */
+	const LANE_MIN_H = 30;
+	/** What the preview keeps however far the split is dragged. */
+	const PREVIEW_MIN = 200;
+
+	function loadSplit(): number | null {
+		const raw = readRaw(SPLIT_KEY);
+		const px = raw === null ? Number.NaN : Number(raw);
+		return Number.isFinite(px) && px > 0 ? px : null;
+	}
+
+	/** null is automatic: the stack's own height, under its cap. */
+	let timelineSplit = $state<number | null>(loadSplit());
+	let splitDragging = $state(false);
+	let mainAreaEl = $state<HTMLElement | null>(null);
+	let previewSlotEl = $state<HTMLElement | null>(null);
+
+	function splitStack(): HTMLElement | null {
+		return mainAreaEl?.querySelector<HTMLElement>(".tl-stack") ?? null;
+	}
+
+	/** The tallest the timeline may go right now: its own share of the column,
+	 * and never so far that the preview is left with nothing. */
+	function splitCeiling(startSplit: number): number {
+		const area = mainAreaEl;
+		if (!area) return startSplit;
+		const cap = area.clientHeight * 0.45;
+		const preview = previewSlotEl;
+		const previewH =
+			preview && !preview.classList.contains("hidden")
+				? preview.getBoundingClientRect().height
+				: 0;
+		// With the preview away in grid mode there is no floor to keep, so the
+		// cap is the whole answer.
+		const byPreview =
+			previewH > 0 ? startSplit + Math.max(0, previewH - PREVIEW_MIN) : cap;
+		return Math.max(SPLIT_MIN, Math.min(cap, byPreview));
+	}
+
+	/** The shortest the timeline may go: its fixed chrome — toolbar, ruler band,
+	 * scrollbar row, selection bar — plus one lane left showing. Taken from the
+	 * live split rather than a constant, since the chrome is what it is. */
+	function splitFloor(startSplit: number): number {
+		const lanes = mainAreaEl?.querySelector<HTMLElement>(".tl-layers");
+		const lanesH = lanes?.getBoundingClientRect().height ?? 0;
+		return Math.max(SPLIT_MIN, startSplit - lanesH + LANE_MIN_H);
+	}
+
+	function commitSplit() {
+		writeRaw(SPLIT_KEY, timelineSplit === null ? "" : String(timelineSplit));
+	}
+
+	function beginSplitDrag(e: PointerEvent) {
+		if (e.button !== 0) return;
+		const stack = splitStack();
+		if (!stack) return;
+		e.preventDefault();
+		const startY = e.clientY;
+		const startSplit = stack.getBoundingClientRect().height;
+		const ceiling = splitCeiling(startSplit);
+		const floor = splitFloor(startSplit);
+		splitDragging = true;
+
+		const move = (ev: PointerEvent) => {
+			const next = startSplit - (ev.clientY - startY);
+			timelineSplit = Math.round(Math.min(ceiling, Math.max(floor, next)));
+		};
+		const up = () => {
+			splitDragging = false;
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", up);
+			window.removeEventListener("pointercancel", up);
+			commitSplit();
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", up);
+		window.addEventListener("pointercancel", up);
+	}
+
+	function resetSplit() {
+		timelineSplit = null;
+		commitSplit();
+	}
+
+	function onSplitKeydown(e: KeyboardEvent) {
+		const stack = splitStack();
+		if (!stack) return;
+		const current = stack.getBoundingClientRect().height;
+		const step = e.shiftKey ? 48 : 16;
+		const floor = splitFloor(current);
+		if (e.key === "ArrowUp") {
+			timelineSplit = Math.round(
+				Math.min(splitCeiling(current), Math.max(floor, current + step)),
+			);
+		} else if (e.key === "ArrowDown") {
+			timelineSplit = Math.round(Math.max(floor, current - step));
+		} else if (e.key === "Home") {
+			e.preventDefault();
+			resetSplit();
+			return;
+		} else {
+			return;
+		}
+		e.preventDefault();
+		commitSplit();
+	}
+
+	// ── Folded lanes ─────────────────────────────────────────────────────────
+	/** Lanes folded to a strip. A view choice like solo, so it stays out of the
+	 * saved timeline — but it outlives the session, because a stack worth folding
+	 * is one worth coming back to folded. */
+	const FOLD_KEY = "openmosh-folded-lanes";
+	let foldedLaneIds = $state<Set<string>>(
+		new Set(readJson<string[]>(FOLD_KEY, [])),
+	);
+
+	function toggleLaneFold(laneId: string) {
+		const next = new Set(foldedLaneIds);
+		if (next.has(laneId)) next.delete(laneId);
+		else next.add(laneId);
+		foldedLaneIds = next;
+		writeJson(FOLD_KEY, [...next]);
+	}
+
 	const handleKeydown = createKeyboardHandler({
 		save,
 		mosh,
@@ -3940,7 +4072,11 @@
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
 	/>
-	<div class="main-area" style="--tl-vscroll: {laneScrollbar}px">
+	<div
+		class="main-area"
+		bind:this={mainAreaEl}
+		style="--tl-vscroll: {laneScrollbar}px"
+	>
 		<div class="top-bar">
 			<div class="toolbar">
 				{#if onExit}
@@ -4157,7 +4293,11 @@
 		{/if}
 		<!-- Hidden, never unmounted: tearing the canvas down would take the
 		     renderer (and the pre-warmed context it adopted) with it. -->
-		<div class="preview-slot" class:hidden={sequenceGridOpen}>
+		<div
+			class="preview-slot"
+			class:hidden={sequenceGridOpen}
+			bind:this={previewSlotEl}
+		>
 			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== "none"}
 				<!-- Single mode has no source chip, so the one thing that would
 				     otherwise happen silently to the user's video says so here. -->
@@ -4483,7 +4623,28 @@
 			/>
 		{/if}
 		{#if showStack}
+			<!-- The split between the output and the lanes. Its hit area is taller
+			     than the grip it draws, so the target is not a hairline. -->
+			<!-- A separator is a window splitter when it is focusable, which is
+			     exactly the case here — so both of these are the rule misfiring. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<div
+				class="tl-split"
+				class:held={splitDragging}
+				role="separator"
+				aria-orientation="horizontal"
+				aria-label="Resize the timeline"
+				title="Drag to resize the timeline · double-click to reset"
+				tabindex="0"
+				onpointerdown={beginSplitDrag}
+				ondblclick={resetSplit}
+				onkeydown={onSplitKeydown}
+			>
+				<span class="tl-split-grip"></span>
+			</div>
 			<TimelineStack
+				height={timelineSplit}
 				bind:axis={timelineAxis}
 				trackDuration={textDuration}
 				currentTime={textTime}
@@ -4571,6 +4732,8 @@
 					{#if mediaTimeline.enabled}
 						<MediaTimelineLane
 							timeline={mediaTimeline}
+							{foldedLaneIds}
+							onToggleFold={toggleLaneFold}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
@@ -4586,6 +4749,8 @@
 					{#if textTimeline.enabled}
 						<TextTimelineLane
 							timeline={textTimeline}
+							{foldedLaneIds}
+							onToggleFold={toggleLaneFold}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
@@ -4599,6 +4764,8 @@
 					{#if isSequenceMode && fxLanes.length > 0}
 						<FxLanes
 							lanes={fxLanes}
+							{foldedLaneIds}
+							onToggleFold={toggleLaneFold}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
@@ -4922,7 +5089,9 @@
 		gap: 2px;
 		/* The stack caps its own height, so the lanes are the part that gives:
 		   past a screenful they scroll under the axis instead of pushing the
-		   preview out of the column. */
+		   preview out of the column. A dragged split that hands the stack more
+		   room comes back the same way, and the lanes take it. */
+		flex: 1 1 auto;
 		min-height: 0;
 		overflow-y: auto;
 		/* Reserved whether or not it is scrolling, so the axis does not jump
@@ -4936,7 +5105,7 @@
 	.top-bar {
 		display: flex;
 		align-items: center;
-		padding: 7px 12px 6px;
+		padding: 4px 12px;
 		border-bottom: 1px solid var(--line);
 		flex-shrink: 0;
 	}
@@ -5066,7 +5235,6 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		margin-top: 8px;
 	}
 
 	.preview-proxy {
@@ -5189,7 +5357,45 @@
 		align-items: center;
 		justify-content: center;
 		gap: 0.75rem;
-		padding: 1rem;
+		/* Was a full rem each way, which made the row 69px tall around 37px of
+		   buttons. The air here is padding, and the preview pays for it. */
+		padding: 0.5rem 1rem;
+	}
+
+	/* The timeline's top edge, grabbed to rebalance the column. */
+	.tl-split {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		/* Taller than the grip it draws: a 2px target is not one. */
+		height: 9px;
+		cursor: ns-resize;
+		touch-action: none;
+	}
+
+	.tl-split-grip {
+		width: 28px;
+		height: 2px;
+		border-radius: 1px;
+		background: var(--line-strong);
+		transition:
+			width var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.tl-split:hover .tl-split-grip,
+	.tl-split:focus-visible .tl-split-grip,
+	.tl-split.held .tl-split-grip {
+		width: 44px;
+		background: var(--live);
+	}
+
+	/* The sheet owns the layout on a phone; there is no split to drag. */
+	@media (max-width: 800px) {
+		.tl-split {
+			display: none;
+		}
 	}
 
 	/* Stands in for the preview while the sequence pool is empty. */

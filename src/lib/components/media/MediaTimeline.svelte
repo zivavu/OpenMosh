@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Eye, EyeOff, Focus, Trash2 } from "lucide-svelte";
+	import { ChevronDown, Eye, EyeOff, Focus, Trash2 } from "lucide-svelte";
 	import { untrack } from "svelte";
 	import { dropAutoRangeScope } from "../../audio/auto-range";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
@@ -41,6 +41,11 @@
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
 	const LANE_HEIGHT = 30;
+	/** A folded lane: its clips are still there to read, but not at a height that
+	 * pays for the text inside them. */
+	const LANE_FOLDED_HEIGHT = 14;
+	/** Shared so an unfolded panel allocates nothing per instance. */
+	const NO_FOLDS: ReadonlySet<string> = new Set();
 
 	interface Props {
 		timeline: MediaTimeline;
@@ -51,6 +56,10 @@
 		onLaneDragStart?: (laneId: string, e: PointerEvent) => void;
 		/** Id of the row being dragged right now, for its lifted look. */
 		draggingLaneId?: string | null;
+		/** Lanes the user has folded to a strip, by lane id. */
+		foldedLaneIds?: ReadonlySet<string>;
+		/** Fired when a lane's fold toggle is clicked. */
+		onToggleFold?: (laneId: string) => void;
 		/** The media pool, for naming and thumbnailing each lane's source. */
 		sources?: SequenceSource[];
 		/** Lane shown by itself on the canvas; null when nothing is soloed. */
@@ -73,6 +82,8 @@
 		layerOrder = [],
 		onLaneDragStart,
 		draggingLaneId = null,
+		foldedLaneIds = NO_FOLDS,
+		onToggleFold,
 		sources = [],
 		soloLaneId = null,
 		onToggleSolo,
@@ -722,6 +733,7 @@
 			class="tl-row layer-row"
 			class:lifted={draggingLaneId === lane.id}
 			class:drop-target={dropLaneId === lane.id && !dropClipId}
+			class:folded={foldedLaneIds.has(lane.id)}
 			style="order: {stackAt(lane.id)}"
 			data-layer-id={lane.id}
 			ondragover={(e) => onLaneDragOver(e, lane.id)}
@@ -735,6 +747,17 @@
 					laneName={lane.name}
 					onDragStart={onLaneDragStart}
 				/>
+				<button
+					class="lane-fold"
+					class:folded={foldedLaneIds.has(lane.id)}
+					title={foldedLaneIds.has(lane.id)
+						? "Unfold this lane"
+						: "Fold this lane to a strip"}
+					aria-expanded={!foldedLaneIds.has(lane.id)}
+					onclick={() => onToggleFold?.(lane.id)}
+				>
+					<ChevronDown size={11} />
+				</button>
 				<button
 					class="lane-eye"
 					class:off={!lane.enabled}
@@ -773,7 +796,9 @@
 			<div
 				class="tl-lane lane-track"
 				use:laneTrack={lane.id}
-				style="height: {LANE_HEIGHT}px"
+				style="height: {foldedLaneIds.has(lane.id)
+					? LANE_FOLDED_HEIGHT
+					: LANE_HEIGHT}px"
 				role="group"
 				aria-label="{lane.name} clips"
 				ondblclick={(e) => onTrackDblClick(e, lane.id)}
@@ -914,7 +939,8 @@
 	}
 
 	.lane-eye,
-	.lane-del {
+	.lane-del,
+	.lane-fold {
 		display: inline-flex;
 		align-items: center;
 		padding: 0.15rem;
@@ -922,6 +948,21 @@
 		background: none;
 		color: var(--text-3);
 		cursor: pointer;
+	}
+
+	.lane-fold {
+		transition:
+			color var(--t-fast),
+			transform var(--t-fast);
+	}
+
+	.lane-fold:hover {
+		color: var(--text);
+	}
+
+	/* Points right when the lane is folded, down when it is open. */
+	.lane-fold.folded {
+		transform: rotate(-90deg);
 	}
 
 	.lane-eye:hover,
