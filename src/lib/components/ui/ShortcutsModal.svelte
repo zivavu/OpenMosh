@@ -55,36 +55,31 @@
 	};
 	const MODIFIER_KEYS = new Set(["Control", "Meta", "Shift", "Alt"]);
 
-	/** The rows a keypress names, as "group:row" ids. */
+	/**
+	 * The rows a keypress names, as "group:row" ids. What's held must be part
+	 * of the combo, not all of it: C lights C and Ctrl+C, Ctrl+C lights only
+	 * Ctrl+C, and a bare Shift lights every Shift combo, Shift+Drag included.
+	 */
 	function rowsFor(e: KeyboardEvent): Set<string> {
 		const hits = new Set<string>();
-		const heldMod = MODIFIER_KEYS.has(e.key);
-		const name =
-			KEY_NAMES[e.key] ?? (e.key.length === 1 ? e.key.toUpperCase() : e.key);
-		const wantMod = e.ctrlKey || e.metaKey;
+		const name = MODIFIER_KEYS.has(e.key)
+			? null
+			: (KEY_NAMES[e.key] ??
+				(e.key.length === 1 ? e.key.toUpperCase() : e.key));
+		// "+" is Shift+= on most layouts, so that Shift isn't a demand.
+		const held = [
+			...(e.ctrlKey || e.metaKey ? ["Ctrl/Cmd"] : []),
+			...(e.shiftKey && name !== "+" ? ["Shift"] : []),
+			...(e.altKey ? ["Alt"] : []),
+		];
 		groups.forEach((g, gi) => {
 			g.shortcuts.forEach((row, ri) => {
 				const matched = row.keys.some((combo) => {
 					const parts = combo.length === 1 ? [combo] : combo.split("+");
-					if (parts.some((p) => GESTURE.test(p))) return false;
-					if (heldMod) {
-						// A bare modifier: show everything it takes part in.
-						const want =
-							e.key === "Shift"
-								? "Shift"
-								: e.key === "Alt"
-									? "Alt"
-									: "Ctrl/Cmd";
-						return parts.includes(want);
-					}
+					if (!held.every((m) => parts.includes(m))) return false;
+					if (name === null) return held.length > 0;
 					const key = parts[parts.length - 1];
-					// "+" is Shift+= on most layouts, so Shift doesn't count against it.
-					return (
-						key.toUpperCase() === name &&
-						parts.includes("Ctrl/Cmd") === wantMod &&
-						(name === "+" || parts.includes("Shift") === e.shiftKey) &&
-						parts.includes("Alt") === e.altKey
-					);
+					return !GESTURE.test(key) && key.toUpperCase() === name;
 				});
 				if (matched) hits.add(`${gi}:${ri}`);
 			});
