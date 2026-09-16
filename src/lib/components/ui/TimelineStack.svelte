@@ -411,7 +411,16 @@
 		--tl-chrome-bg: var(--surface);
 		/* Height of the band under the lanes that the tick labels sit in. */
 		--tl-scale-h: 12px;
+		/* --tl-vscroll is set by the editor, from what the lane list's own
+		   scrollbar actually costs it: the overlays have to give up the same
+		   width or the playhead lands past the lane it is meant to be over. */
 		flex-shrink: 0;
+		/* The lane area has no natural ceiling — one more lane is one more row —
+		   and without this the stack simply eats the column, leaving the preview
+		   whatever is left over. The preview is the output; the lanes are how you
+		   get there. Past this share they scroll under the axis instead. */
+		max-height: 45%;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -613,6 +622,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+		/* Lets the lanes give way to the stack's cap rather than pushing it open. */
+		min-height: 0;
 		/* The band the tick labels live in — cheaper than a ruler row, and it
 		   doubles as breathing room above the scrollbar. */
 		padding-bottom: var(--tl-scale-h);
@@ -626,7 +637,9 @@
 		top: 0;
 		bottom: 0;
 		left: calc(var(--tl-gutter) + var(--tl-gap));
-		right: 0;
+		/* Clear of the lane scrollbar, or the playhead would sit a scrollbar's
+		   width past the lane it is supposed to be over. */
+		right: var(--tl-vscroll, 0px);
 		pointer-events: none;
 		/* A tick label sitting on the last gridline would otherwise hang past the
 		   axis, over whatever panel is beside the timeline. */

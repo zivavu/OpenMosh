@@ -2877,6 +2877,26 @@
 	 * fires from the window, outside the context the stack puts it in. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
 
+	/** The lane list, so the width its own scrollbar takes can be measured. */
+	let laneListEl = $state<HTMLElement | null>(null);
+	/** What the lane list's vertical scrollbar costs it — zero wherever
+	 * scrollbars overlay their content instead of displacing it. The timeline's
+	 * grid and playhead are drawn over the lanes from outside that scroller, so
+	 * they have to give up the same width or the playhead lands a scrollbar's
+	 * width past the lane it is marking. Measured rather than assumed, because
+	 * the answer is a platform's, not ours. */
+	let laneScrollbar = $state(0);
+
+	$effect(() => {
+		const el = laneListEl;
+		if (!el) return;
+		const measure = () => (laneScrollbar = el.offsetWidth - el.clientWidth);
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(el);
+		return () => observer.disconnect();
+	});
+
 	const handleKeydown = createKeyboardHandler({
 		save,
 		mosh,
@@ -3920,7 +3940,7 @@
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
 	/>
-	<div class="main-area">
+	<div class="main-area" style="--tl-vscroll: {laneScrollbar}px">
 		<div class="top-bar">
 			<div class="toolbar">
 				{#if onExit}
@@ -4547,7 +4567,7 @@
 				     text and fx lanes alike. Each carries its place in the shared
 				     stack as a CSS order, so the three interleave without any of
 				     the components knowing about the others. -->
-				<div class="tl-layers">
+				<div class="tl-layers" bind:this={laneListEl}>
 					{#if mediaTimeline.enabled}
 						<MediaTimelineLane
 							timeline={mediaTimeline}
@@ -4900,6 +4920,17 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+		/* The stack caps its own height, so the lanes are the part that gives:
+		   past a screenful they scroll under the axis instead of pushing the
+		   preview out of the column. */
+		min-height: 0;
+		overflow-y: auto;
+		/* Reserved whether or not it is scrolling, so the axis does not jump
+		   sideways the moment a lane is added. */
+		scrollbar-gutter: stable;
+		/* The same thumb the horizontal scrollbar below the lanes uses. */
+		scrollbar-width: thin;
+		scrollbar-color: var(--live-dim) var(--sunken);
 	}
 
 	.top-bar {
