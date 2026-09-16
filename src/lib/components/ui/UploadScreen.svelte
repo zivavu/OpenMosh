@@ -134,11 +134,6 @@
 				? savedSlideshow
 				: [],
 	);
-	let savedHead = $derived(
-		selectedMode === "single"
-			? "Or pick up something you were moshing"
-			: "Or pick up a slideshow you were building",
-	);
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
 
@@ -402,19 +397,6 @@
 			{/each}
 		</div>
 	{/if}
-	<p class="mode-hint">
-		{#if isMobile}
-			One image or video. The Editor and Slideshow modes are built for a desktop
-			browser, so they're not offered here.
-		{:else if selectedMode === "slideshow"}
-			A pile of media and a track. It finds the BPM and cuts on the beat.
-		{:else if selectedMode === "sequence"}
-			Your song on a timeline. Cut it into segments, then stack effect lanes and
-			media layers over them.
-		{:else}
-			One image or video. Mosh it, then lock whatever survived and roll again.
-		{/if}
-	</p>
 
 	<!-- One panel: media on top, the song strip along its foot. The strip
 	     stops its own drag events so a track dropped on it isn't also read
@@ -434,6 +416,21 @@
 		ondragleave={onDragLeave}
 	>
 		<div class="panel-main">
+			<p class="panel-hint">
+				{#if isMobile}
+					One image or video. The Editor and Slideshow modes are built for a
+					desktop browser, so they're not offered here.
+				{:else if selectedMode === "slideshow"}
+					A pile of media and a track. It finds the BPM and cuts on the beat.
+				{:else if selectedMode === "sequence"}
+					Your song on a timeline. Cut it into segments, then stack effect lanes
+					and media layers over them.
+				{:else}
+					One image or video. Mosh it, then lock whatever survived and roll
+					again.
+				{/if}
+			</p>
+
 			<div class="load-row">
 				<label class="load-btn">
 					<input
@@ -535,12 +532,13 @@
 		{/await}
 	{/if}
 
-	<!-- Always rendered at a fixed height, for every mode: this block collapsing
-	     when a mode has nothing saved is what made switching modes jump. -->
-	<div class="saved-zone">
+	<!-- One row at a fixed height for every mode, empty or not: a block that
+	     collapsed when a mode had nothing saved is what made switching jump.
+	     The chips scroll sideways rather than wrapping. -->
+	<div class="recent">
 		{#if selectedMode === "sequence" && savedSequences.length > 0}
-			<div class="saved-head">Or pick up a song you've worked on</div>
-			<div class="saved-list">
+			<span class="recent-label rack-label">Recent</span>
+			<div class="recent-list">
 				{#each savedSequences as seq (seq.trackId)}
 					<button
 						class="saved-item"
@@ -559,8 +557,8 @@
 				{/each}
 			</div>
 		{:else if selectedMode !== "sequence" && savedForMode.length > 0}
-			<div class="saved-head">{savedHead}</div>
-			<div class="saved-list">
+			<span class="recent-label rack-label">Recent</span>
+			<div class="recent-list">
 				{#each savedForMode as session (session.key)}
 					<button
 						class="saved-item"
@@ -930,9 +928,8 @@
 	/* Each block rises in after the one above it, on the app's curve. */
 	.hero,
 	.mode-toggle,
-	.mode-hint,
 	.panel,
-	.saved-zone {
+	.recent {
 		animation: rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 		animation-delay: calc(var(--i, 0) * 70ms);
 	}
@@ -940,14 +937,11 @@
 	.mode-toggle {
 		--i: 1;
 	}
-	.mode-hint {
+	.panel {
 		--i: 2;
 	}
-	.panel {
+	.recent {
 		--i: 3;
-	}
-	.saved-zone {
-		--i: 4;
 	}
 
 	@keyframes rise {
@@ -1014,17 +1008,6 @@
 		color: var(--live);
 	}
 
-	.mode-hint {
-		max-width: 44ch;
-		margin-top: -1.5rem;
-		font-size: 0.8rem;
-		line-height: 1.5;
-		color: var(--text-3);
-		text-align: center;
-		text-wrap: balance;
-		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
-	}
-
 	/* ── Panel ────────────────────────────────────────────────────────────── */
 	/* A solid plate with an inner highlight along its top edge; the dashed
 	   line is the drag state, not the resting frame. */
@@ -1059,7 +1042,18 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 1.1rem;
-		padding: 2.25rem 2rem 1.75rem;
+		padding: 1.75rem 2rem;
+	}
+
+	/* What this mode does, as the panel's first line. */
+	.panel-hint {
+		max-width: 40ch;
+		margin: 0 0 0.35rem;
+		font-size: 0.82rem;
+		line-height: 1.5;
+		color: var(--text-2);
+		text-align: center;
+		text-wrap: balance;
 	}
 
 	.load-row {
@@ -1198,41 +1192,50 @@
 		color: var(--text);
 	}
 
-	/* ── Saved ────────────────────────────────────────────────────────────── */
-	/* Fixed, not min-height: a mode with one saved row and a mode with three
-	   would otherwise still shift past each other. The list scrolls inside. */
-	.saved-zone {
+	/* ── Recent ───────────────────────────────────────────────────────────── */
+	.recent {
 		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
+		align-items: center;
+		gap: 0.75rem;
 		width: 100%;
 		max-width: 520px;
-		height: 132px;
-		margin-top: -1.5rem;
+		height: 2.1rem;
+		margin-top: -1.25rem;
 	}
 
-	.saved-head {
-		font-size: 0.74rem;
+	.recent-label {
+		flex-shrink: 0;
 		color: var(--text-3);
 		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
-	.saved-list {
+	/* One row, scrolled sideways; the ends fade so the cut is soft. */
+	.recent-list {
 		display: flex;
-		flex-wrap: wrap;
-		align-content: flex-start;
 		gap: 0.4rem;
-		/* Three rows or so, then scroll: a long history shouldn't push the
-		   screen down, and a short one shouldn't pull it up. */
-		height: 108px;
-		overflow-y: auto;
+		min-width: 0;
+		padding: 2px;
+		overflow-x: auto;
+		scrollbar-width: none;
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			#000 12px,
+			#000 calc(100% - 24px),
+			transparent
+		);
+	}
+
+	.recent-list::-webkit-scrollbar {
+		display: none;
 	}
 
 	.saved-item {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.4rem 0.75rem;
+		flex-shrink: 0;
+		padding: 0.35rem 0.75rem;
 		border: 1px solid var(--mosh-dim);
 		border-radius: var(--r-pill);
 		background: var(--glass);
