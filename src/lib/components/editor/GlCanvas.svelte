@@ -348,6 +348,11 @@
 		// Anything else in the preview box is its own control, and the overlay
 		// covers a canvas whose contents are stale by the time it is up.
 		if (!renderer || !canvasEl || e.target !== canvasEl) return;
+		// Claim the press: without this the browser reads the drag as a text
+		// selection sweep, and with a selection already standing it drags that
+		// selection instead, cancelling the pointer under our layer move.
+		e.preventDefault();
+		window.getSelection()?.removeAllRanges();
 		const p = framePoint(e);
 		// Fullscreen letterboxes the frame inside the element, so a click can
 		// land on the canvas and still be off the picture.
@@ -1177,6 +1182,7 @@
 		justify-content: center;
 		overflow: hidden;
 		background: var(--ink);
+		user-select: none;
 	}
 
 	/* :global — the pre-warmed canvas is moved in via the DOM, so it never gets
