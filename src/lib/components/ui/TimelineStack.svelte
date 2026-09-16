@@ -241,7 +241,10 @@
 	}
 </script>
 
-<div class="tl-stack" style:height={height === null ? null : `${height}px`}>
+<div
+	class="tl-stack"
+	style:max-height={height === null ? null : `min(${height}px, var(--tl-cap))`}
+>
 	<div class="tl-toolbar">
 		{#if onTogglePlay}
 			<button
@@ -415,16 +418,19 @@
 		--tl-chrome-bg: var(--surface);
 		/* Height of the band under the lanes that the tick labels sit in. */
 		--tl-scale-h: 12px;
+		/* The lane area has no natural ceiling — one more lane is one more row —
+		   and without a cap the stack simply eats the column, leaving the preview
+		   whatever is left over. The preview is the output; the lanes are how you
+		   get there. Past this share they scroll under the axis instead. */
+		--tl-cap: 45%;
 		/* --tl-vscroll is set by the editor, from what the lane list's own
 		   scrollbar actually costs it: the overlays have to give up the same
 		   width or the playhead lands past the lane it is meant to be over. */
 		flex-shrink: 0;
-		/* The lane area has no natural ceiling — one more lane is one more row —
-		   and without this the stack simply eats the column, leaving the preview
-		   whatever is left over. The preview is the output; the lanes are how you
-		   get there. Past this share they scroll under the axis instead. */
-		max-height: 45%;
+		max-height: var(--tl-cap);
 		min-height: 0;
+		/* The split grip hangs off the top edge without taking a row of its own. */
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -464,6 +470,13 @@
 		flex: 1;
 		min-width: 0;
 		touch-action: none;
+	}
+
+	/* A folded lane keeps its clips as bars — where the lane has material is still
+	   worth seeing — but drops the text inside them, which has no room to read
+	   and only muddies the strip. */
+	:global(.tl-stack .tl-row.folded .clip-label) {
+		display: none;
 	}
 
 	/* Rows that carry controls rather than time. Opaque and above the overlays,
@@ -626,10 +639,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		/* Lets the lanes give way to the stack's cap rather than pushing it open,
-		   and take the extra when a dragged split hands the stack more room. */
+		/* Lets the lanes give way to the stack's cap rather than pushing it open.
+		   It does not grow: a stack shorter than its cap is a stack with nothing
+		   left to show, and padding it out to the cap is dead space. */
 		min-height: 0;
-		flex: 1 1 auto;
+		flex: 0 1 auto;
 		/* The band the tick labels live in — cheaper than a ruler row, and it
 		   doubles as breathing room above the scrollbar. */
 		padding-bottom: var(--tl-scale-h);

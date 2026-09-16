@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, untrack } from "svelte";
 	import {
+		ChevronsDownUp,
+		ChevronsUpDown,
 		Download,
 		HelpCircle,
 		Home,
@@ -3210,6 +3212,28 @@
 		soloMediaLaneId = soloMediaLaneId === laneId ? null : laneId;
 	}
 
+	/** Every lane on the stack, whatever kind it is — the fold-all control works
+	 * on the lot, so it has to see all three kinds at once. */
+	let laneIds = $derived([
+		...mediaTimeline.lanes.map((lane) => lane.id),
+		...textTimeline.lanes.map((lane) => lane.id),
+		...fxLanes.map((lane) => lane.id),
+	]);
+
+	let allLanesFolded = $derived(
+		laneIds.length > 0 && laneIds.every((id) => foldedLaneIds.has(id)),
+	);
+
+	function toggleAllFolds() {
+		const next = new Set(foldedLaneIds);
+		for (const id of laneIds) {
+			if (allLanesFolded) next.delete(id);
+			else next.add(id);
+		}
+		foldedLaneIds = next;
+		writeJson(FOLD_KEY, [...next]);
+	}
+
 	// A soloed lane that was deleted would leave the canvas black with nothing
 	// on screen to say why.
 	$effect(() => {
@@ -4629,19 +4653,18 @@
 			     exactly the case here — so both of these are the rule misfiring. -->
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<div
-				class="tl-split"
-				class:held={splitDragging}
-				role="separator"
-				aria-orientation="horizontal"
-				aria-label="Resize the timeline"
-				title="Drag to resize the timeline · double-click to reset"
-				tabindex="0"
-				onpointerdown={beginSplitDrag}
-				ondblclick={resetSplit}
-				onkeydown={onSplitKeydown}
-			>
-				<span class="tl-split-grip"></span>
+			<div class="tl-split" class:held={splitDragging}>
+				<span
+					class="tl-split-grip"
+					role="separator"
+					aria-orientation="horizontal"
+					aria-label="Resize the timeline"
+					title="Drag to resize the timeline · double-click to reset"
+					tabindex="0"
+					onpointerdown={beginSplitDrag}
+					ondblclick={resetSplit}
+					onkeydown={onSplitKeydown}
+				></span>
 			</div>
 			<TimelineStack
 				height={timelineSplit}
@@ -4710,6 +4733,22 @@
 							onclick={addFxLane}
 						>
 							<Plus size={12} /> Lane
+						</button>
+					{/if}
+					{#if laneIds.length > 0}
+						<div class="tl-tool-sep"></div>
+						<button
+							class="tl-tool-btn"
+							title={allLanesFolded
+								? "Unfold every lane"
+								: "Fold every lane to a strip"}
+							onclick={toggleAllFolds}
+						>
+							{#if allLanesFolded}
+								<ChevronsUpDown size={12} /> Unfold all
+							{:else}
+								<ChevronsDownUp size={12} /> Fold all
+							{/if}
 						</button>
 					{/if}
 					{#if videoIsMaster}
@@ -5089,9 +5128,9 @@
 		gap: 2px;
 		/* The stack caps its own height, so the lanes are the part that gives:
 		   past a screenful they scroll under the axis instead of pushing the
-		   preview out of the column. A dragged split that hands the stack more
-		   room comes back the same way, and the lanes take it. */
-		flex: 1 1 auto;
+		   preview out of the column. It does not grow — folding every lane should
+		   hand the room straight back, not leave a gap under the strips. */
+		flex: 0 1 auto;
 		min-height: 0;
 		overflow-y: auto;
 		/* Reserved whether or not it is scrolling, so the axis does not jump
@@ -5362,32 +5401,49 @@
 		padding: 0.5rem 1rem;
 	}
 
-	/* The timeline's top edge, grabbed to rebalance the column. */
+	/* The timeline's top edge, grabbed to rebalance the column. The band pulls the
+	   stack back up over itself, so it costs no height at all: the rail above it
+	   keeps the size it had. */
 	.tl-split {
+		position: relative;
+		z-index: 3;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		/* Taller than the grip it draws: a 2px target is not one. */
 		height: 9px;
+		margin-bottom: -9px;
+		/* Only the grip takes the pointer, so the band cannot shadow the toolbar
+		   it lies over. */
+		pointer-events: none;
+	}
+
+	.tl-split-grip {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 132px;
+		height: 9px;
+		pointer-events: auto;
 		cursor: ns-resize;
 		touch-action: none;
 	}
 
-	.tl-split-grip {
-		width: 28px;
+	.tl-split-grip::before {
+		content: "";
+		width: 44px;
 		height: 2px;
 		border-radius: 1px;
-		background: var(--line-strong);
+		background: var(--text-4);
 		transition:
 			width var(--t-fast),
 			background var(--t-fast);
 	}
 
-	.tl-split:hover .tl-split-grip,
-	.tl-split:focus-visible .tl-split-grip,
-	.tl-split.held .tl-split-grip {
-		width: 44px;
+	.tl-split-grip:hover::before,
+	.tl-split-grip:focus-visible::before,
+	.tl-split.held .tl-split-grip::before {
+		width: 68px;
 		background: var(--live);
 	}
 
