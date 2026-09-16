@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_MEDIA_STYLE, type MediaStyle } from "../media/types";
-import { MIN_SCALE, scaleFromHandle, type HandleFrame } from "./layer-drag";
+import {
+	clampMove,
+	KEEP_PX,
+	MIN_SCALE,
+	scaleFromHandle,
+	type HandleFrame,
+} from "./layer-drag";
 
 const FW = 400;
 const FH = 300;
@@ -111,5 +117,28 @@ describe("scaleFromHandle", () => {
 			false,
 		);
 		expect(next.scaleX).toBe(MIN_SCALE);
+	});
+});
+describe("clampMove", () => {
+	// The 100×80 box: half-extents 50×40.
+	test("a move inside the frame is unchanged", () => {
+		expect(clampMove(FROM, 30, -20, 50, 40, FW, FH)).toEqual({
+			x: 230 / FW,
+			y: 130 / FH,
+		});
+	});
+
+	test("a drag off the frame stops with a grabbable strip left on it", () => {
+		const { x, y } = clampMove(FROM, -1000, 1000, 50, 40, FW, FH);
+		// Right edge of the box sits KEEP_PX in from the left of the frame.
+		expect(x * FW + 50).toBeCloseTo(KEEP_PX);
+		// Top edge sits KEEP_PX up from the bottom.
+		expect(y * FH - 40).toBeCloseTo(FH - KEEP_PX);
+	});
+
+	test("a box smaller than the strip stays wholly on the frame", () => {
+		const { x, y } = clampMove(FROM, 1000, -1000, 10, 8, FW, FH);
+		expect(x * FW + 10).toBeCloseTo(FW);
+		expect(y * FH - 8).toBeCloseTo(0);
 	});
 });

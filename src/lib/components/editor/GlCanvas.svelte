@@ -15,7 +15,11 @@
 		pickTopLayer,
 		type LayerPick,
 	} from "../../editor/layer-pick";
-	import { MIN_SCALE, scaleFromHandle } from "../../editor/layer-drag";
+	import {
+		clampMove,
+		MIN_SCALE,
+		scaleFromHandle,
+	} from "../../editor/layer-drag";
 	import { onFontsChanged } from "../../text-overlay";
 	import {
 		resolveTextLayersAt,
@@ -411,7 +415,14 @@
 		/** True once the first change has been reported, and history pushed. */
 		moved: boolean;
 	} & (
-		| { kind: "move"; x0: number; y0: number }
+		| {
+				kind: "move";
+				x0: number;
+				y0: number;
+				/** Half-extents of the box's axis-aligned bounds at the press. */
+				hw: number;
+				hh: number;
+		  }
 		| {
 				kind: "scale";
 				/** Which handle: -1/0/1 per axis, corners on both. */
@@ -444,10 +455,23 @@
 		laneId: string,
 		p: { x: number; y: number },
 	) {
-		if (!onLayerStyleChange) return;
+		if (!onLayerStyleChange || !renderer) return;
 		const from = laneStyle(laneId);
 		if (!from) return;
-		drag = { kind: "move", laneId, from, moved: false, x0: p.x, y0: p.y };
+		const rect = renderer.mediaLayerRect(laneId, from);
+		if (!rect) return;
+		const cos = Math.abs(Math.cos(rect.rot));
+		const sin = Math.abs(Math.sin(rect.rot));
+		drag = {
+			kind: "move",
+			laneId,
+			from,
+			moved: false,
+			x0: p.x,
+			y0: p.y,
+			hw: (rect.w * cos + rect.h * sin) / 2,
+			hh: (rect.w * sin + rect.h * cos) / 2,
+		};
 		previewArea.setPointerCapture(e.pointerId);
 	}
 
@@ -495,7 +519,9 @@
 				if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
 				else dx = 0;
 			}
-			next = { ...from, x: from.x + dx / fw, y: from.y + dy / fh };
+			// Held to the frame: a layer dragged clean off it can only be got back
+			// from the panel, so a grabbable strip always stays on screen.
+			next = { ...from, ...clampMove(from, dx, dy, drag.hw, drag.hh, fw, fh) };
 		} else {
 			next = scaleFromHandle(from, drag, px, py, fw, fh, e.altKey);
 		}

@@ -4,6 +4,32 @@ import type { MediaStyle } from "../media/types";
  * panel could bring it back from. */
 export const MIN_SCALE = 0.05;
 
+/** Output pixels of a layer a drag must leave on the frame, so it can always
+ * be grabbed again. Layers smaller than this stay wholly inside. */
+export const KEEP_PX = 32;
+
+/**
+ * A move clamped so the box keeps at least `KEEP_PX` on the frame per axis.
+ * `hw`/`hh` are the half-extents of the box's axis-aligned bounds at the
+ * press, in output pixels; a rotated layer is held by its bounds, not its
+ * corners, which is close enough for a guard.
+ */
+export function clampMove(
+	from: MediaStyle,
+	dx: number,
+	dy: number,
+	hw: number,
+	hh: number,
+	fw: number,
+	fh: number,
+): { x: number; y: number } {
+	const kx = Math.min(KEEP_PX, 2 * hw);
+	const ky = Math.min(KEEP_PX, 2 * hh);
+	const cx = Math.min(Math.max(from.x * fw + dx, kx - hw), fw + hw - kx);
+	const cy = Math.min(Math.max(from.y * fh + dy, ky - hh), fh + hh - ky);
+	return { x: cx / fw, y: cy / fh };
+}
+
 /** The box's geometry at the press, in output pixels — what `mediaLayerRect`
  * reports, with the pressed handle's offset from the centre kept in the box's
  * own (pre-rotation) frame. */
