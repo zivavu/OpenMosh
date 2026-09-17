@@ -4450,119 +4450,131 @@
 		</div>
 
 		<div class="action-bar">
-			<button
-				class="library-btn"
-				onclick={() => trackLibraryRef?.openLibrary()}
-				title="Track library"
-			>
-				<Library size={12} />
-			</button>
-			<div class="mosh-group-wrap">
-				{#if !isMobile}
-					<button
-						class="help-btn"
-						onclick={() => (showShortcuts = true)}
-						title="Keyboard shortcuts"
-					>
-						<HelpCircle size={14} />
-					</button>
-				{/if}
-				{#if fullscreenSupported}
-					<button
-						class="help-btn"
-						class:seq-active={previewFullscreen}
-						onclick={() => (previewFullscreen = !previewFullscreen)}
-						title="Fullscreen preview (F)"
-					>
-						<Maximize size={14} />
-					</button>
-				{/if}
-				<!-- Layer lanes are off on a phone altogether — see
-				     layersOffOnMobile — so their switches go too. -->
-				{#if !isMobile}
-					<button
-						class="help-btn"
-						class:seq-active={textTimeline.enabled}
-						onclick={toggleTextTimeline}
-						title="Text timeline: timed text layers with their own effects"
-					>
-						<Type size={14} />
-					</button>
-					<button
-						class="help-btn"
-						class:seq-active={mediaTimeline.enabled}
-						onclick={toggleMediaTimeline}
-						title="Media layers: timed image/video layers with their own effects"
-					>
-						<Layers size={14} />
-					</button>
-				{/if}
-				<MoshGroup
-					bind:this={moshGroupRef}
-					onMosh={mosh}
-					onClear={clearEffects}
-					onUndo={undoMosh}
-					canUndo={moshSession.canUndoMosh}
-					canClear={moshSession.touched}
-					hideActions={isSequenceMode && seqMasterDuration > 0}
-					bind:showSettings={showMoshSettings}
+			<!-- The pool lives in a sheet on a phone; this is the way into it. -->
+			<div class="bar-cluster library-cluster">
+				<button
+					class="bar-icon"
+					onclick={() => trackLibraryRef?.openLibrary()}
+					title="Track library"
+					aria-label="Track library"
 				>
-					{#snippet settingsContent()}
-						{#if !isSequenceMode}
-							<ButtonGroup
-								buttons={[
-									{ label: "PNG", value: "png" },
-									{ label: "JPG", value: "jpg" },
-									{ label: "WebM", value: "webm" },
-								]}
-								value={format}
-								onchange={(v) => (format = v)}
-							/>
-							<div class="settings-divider"></div>
-						{/if}
-						<div class="mosh-setting-row">
-							<label for="show-fps">Show FPS</label>
-							<input id="show-fps" type="checkbox" bind:checked={showFps} />
-						</div>
-						<div class="mosh-setting-row">
-							<label
-								for="source-fit"
-								title="How to fit sources that don't match the output aspect"
-							>
-								Fit sources
-							</label>
-							<select id="source-fit" bind:value={sourceFit}>
-								<option value="contain">Contain</option>
-								<option value="cover">Cover</option>
-								<option value="stretch">Stretch</option>
-							</select>
-						</div>
-						<div class="settings-divider"></div>
-						<ResizeSettings
-							bind:width={resizeWidth}
-							bind:height={resizeHeight}
-							{naturalWidth}
-							{naturalHeight}
-						/>
-					{/snippet}
-				</MoshGroup>
+					<Library size={13} />
+				</button>
 			</div>
+			<!-- The view switches. Layer lanes are off on a phone altogether — see
+			     layersOffOnMobile — so their switches go too, and the cluster
+			     with them if fullscreen can't fill it. -->
+			{#if !isMobile || fullscreenSupported}
+				<div class="bar-cluster">
+					{#if !isMobile}
+						<button
+							class="bar-icon"
+							onclick={() => (showShortcuts = true)}
+							title="Keyboard shortcuts"
+							aria-label="Keyboard shortcuts"
+						>
+							<HelpCircle size={14} />
+						</button>
+					{/if}
+					{#if fullscreenSupported}
+						<button
+							class="bar-icon"
+							class:on={previewFullscreen}
+							onclick={() => (previewFullscreen = !previewFullscreen)}
+							title="Fullscreen preview (F)"
+							aria-label="Fullscreen preview"
+						>
+							<Maximize size={14} />
+						</button>
+					{/if}
+					{#if !isMobile}
+						<button
+							class="bar-icon"
+							class:on={textTimeline.enabled}
+							onclick={toggleTextTimeline}
+							title="Text timeline: timed text layers with their own effects"
+							aria-label="Text timeline"
+						>
+							<Type size={14} />
+						</button>
+						<button
+							class="bar-icon"
+							class:on={mediaTimeline.enabled}
+							onclick={toggleMediaTimeline}
+							title="Media layers: timed image/video layers with their own effects"
+							aria-label="Media layers"
+						>
+							<Layers size={14} />
+						</button>
+					{/if}
+				</div>
+				<div class="bar-sep"></div>
+			{/if}
+			<MoshGroup
+				bind:this={moshGroupRef}
+				onMosh={mosh}
+				onClear={clearEffects}
+				onUndo={undoMosh}
+				canUndo={moshSession.canUndoMosh}
+				canClear={moshSession.touched}
+				hideActions={isSequenceMode && seqMasterDuration > 0}
+				bind:showSettings={showMoshSettings}
+			>
+				{#snippet settingsContent()}
+					{#if !isSequenceMode}
+						<ButtonGroup
+							buttons={[
+								{ label: "PNG", value: "png" },
+								{ label: "JPG", value: "jpg" },
+								{ label: "WebM", value: "webm" },
+							]}
+							value={format}
+							onchange={(v) => (format = v)}
+						/>
+						<div class="settings-divider"></div>
+					{/if}
+					<div class="mosh-setting-row">
+						<label for="show-fps">Show FPS</label>
+						<input id="show-fps" type="checkbox" bind:checked={showFps} />
+					</div>
+					<div class="mosh-setting-row">
+						<label
+							for="source-fit"
+							title="How to fit sources that don't match the output aspect"
+						>
+							Fit sources
+						</label>
+						<select id="source-fit" bind:value={sourceFit}>
+							<option value="contain">Contain</option>
+							<option value="cover">Cover</option>
+							<option value="stretch">Stretch</option>
+						</select>
+					</div>
+					<div class="settings-divider"></div>
+					<ResizeSettings
+						bind:width={resizeWidth}
+						bind:height={resizeHeight}
+						{naturalWidth}
+						{naturalHeight}
+					/>
+				{/snippet}
+			</MoshGroup>
 			{#if showStack}
 				<!-- The same transport as the timeline toolbar's, at the size the
 				     slideshow gives it: playing back is a main action here too. -->
-				<button class="action-btn play-btn" onclick={toggleMasterPlay}>
+				<button class="bar-key live" onclick={toggleMasterPlay}>
 					{#if textClockRunning}
-						<Pause size={16} fill="currentColor" stroke="none" />
+						<Pause size={14} fill="currentColor" stroke="none" />
 						STOP
 					{:else}
-						<Play size={16} fill="currentColor" stroke="none" />
+						<Play size={14} fill="currentColor" stroke="none" />
 						PLAY
 					{/if}
 				</button>
 			{/if}
 			{#if isImageFormat}
-				<button class="action-btn save-btn" onclick={save}>
-					<Download size={16} />
+				<button class="bar-key live" onclick={save}>
+					<Download size={14} />
 					SAVE
 				</button>
 			{/if}
@@ -5183,15 +5195,6 @@
 		gap: 0.5rem;
 	}
 
-	/* Splits the navigation icons from the output controls: two jobs, one bar. */
-	.bar-sep {
-		width: 1px;
-		height: 18px;
-		margin: 0 0.15rem;
-		background: var(--line);
-		flex-shrink: 0;
-	}
-
 	.output-group {
 		display: flex;
 		align-items: center;
@@ -5264,10 +5267,6 @@
 
 		.toolbar {
 			gap: 0.35rem;
-		}
-
-		.bar-sep {
-			margin: 0;
 		}
 
 		.seq-media-actions {
@@ -5344,12 +5343,6 @@
 		}
 	}
 
-	.mosh-group-wrap {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-	}
-
 	.help-btn {
 		display: flex;
 		align-items: center;
@@ -5376,12 +5369,6 @@
 		color: var(--text);
 	}
 
-	.help-btn.seq-active {
-		border-color: var(--live-dim);
-		color: var(--live);
-		background: rgba(110, 231, 192, 0.1);
-	}
-
 	@media (max-width: 800px) {
 		.help-btn {
 			width: 26px;
@@ -5389,24 +5376,14 @@
 		}
 	}
 
-	/* Below this the bar's controls, at their phone size, still overrun a
-	   narrow viewport: every gap and pad comes in, and the sizes match the
-	   mosh group's own step down. Wrapping is the last resort for anything
-	   narrower still, so no control is ever clipped off the edge. */
+	/* Below this the strip's controls, at their phone size, still overrun a
+	   narrow viewport: every gap comes in, and wrapping is the last resort for
+	   anything narrower still, so no control is ever clipped off the edge. */
 	@media (max-width: 450px) {
 		.action-bar {
 			flex-wrap: wrap;
-			gap: 0.25rem;
-			padding: 0.5rem;
-		}
-
-		.mosh-group-wrap {
-			gap: 0.25rem;
-		}
-
-		.help-btn {
-			width: 24px;
-			height: 24px;
+			gap: 0.3rem;
+			padding: 0.4rem 0.5rem;
 		}
 	}
 
@@ -5416,15 +5393,17 @@
 		margin: 0.15rem 0;
 	}
 
-	/* Action bar */
+	/* The strip under the preview. A hairline off the canvas, then the switch
+	   clusters and keys centred on one line; the air is padding, and the
+	   preview pays for every pixel of it. */
 	.action-bar {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.75rem;
-		/* Was a full rem each way, which made the row 69px tall around 37px of
-		   buttons. The air here is padding, and the preview pays for it. */
-		padding: 0.5rem 1rem;
+		gap: 0.6rem;
+		padding: 0.45rem 0.75rem;
+		border-top: 1px solid var(--line);
+		flex-shrink: 0;
 	}
 
 	/* The timeline's top edge, grabbed to rebalance the column. The band pulls the
@@ -5558,99 +5537,19 @@
 		letter-spacing: 0.1em;
 	}
 
-	.library-btn {
+	.library-cluster {
 		display: none;
-	}
-
-	.library-btn:hover {
-		border-color: var(--text-3);
-		color: var(--text);
 	}
 
 	@media (max-width: 800px) {
 		.action-bar {
-			padding: 0.6rem 0.5rem;
 			gap: 0.4rem;
+			padding: 0.5rem;
 		}
 
-		.library-btn {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			width: 26px;
-			height: 26px;
-			border-radius: 50%;
-			background: none;
-			border: 1.5px solid var(--line-strong);
-			color: var(--text-3);
-			cursor: pointer;
-			flex-shrink: 0;
-			padding: 0;
-			box-sizing: border-box;
-			transition:
-				border-color var(--t),
-				color var(--t);
+		.library-cluster {
+			display: inline-flex;
 		}
-	}
-
-	.action-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.6rem 2rem;
-		border: 1.5px solid var(--line-strong);
-		border-radius: var(--r-pill);
-		background: var(--glass);
-		backdrop-filter: var(--blur);
-		-webkit-backdrop-filter: var(--blur);
-		color: var(--text-2);
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		cursor: pointer;
-		transition:
-			border-color var(--t),
-			color var(--t),
-			background var(--t);
-	}
-
-	.action-btn:hover {
-		border-color: var(--text-3);
-		color: var(--text);
-	}
-
-	/* Both after the base rule: a media rule written above it loses to it
-	   at the same specificity, which is how the phone size went unapplied. */
-	@media (max-width: 800px) {
-		.action-btn {
-			padding: 0.6rem 1.2rem;
-		}
-	}
-
-	@media (max-width: 450px) {
-		.library-btn {
-			width: 24px;
-			height: 24px;
-		}
-
-		.action-btn {
-			gap: 0.35rem;
-			padding: 0.5rem 0.8rem;
-			font-size: 0.62rem;
-		}
-	}
-
-	.save-btn:hover {
-		border-color: var(--live-dim);
-		color: var(--live);
-	}
-
-	.play-btn:hover {
-		border-color: var(--live-dim);
-		color: var(--live);
-		background: rgba(110, 231, 192, 0.1);
 	}
 
 	.mosh-setting-row {

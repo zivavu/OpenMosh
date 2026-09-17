@@ -80,41 +80,45 @@
 </script>
 
 <div class="action-bar">
-	{#if !isMobile}
-		<button
-			class="icon-btn"
-			onclick={() => (showShortcuts = true)}
-			title="Keyboard shortcuts"
-			aria-label="Keyboard shortcuts"
-		>
-			<HelpCircle size={14} />
-		</button>
-	{/if}
-
-	{#if onToggleText}
-		<button
-			class="icon-btn"
-			class:on={textEnabled}
-			onclick={onToggleText}
-			title="Text timeline: timed text layers with their own effects"
-			aria-label="Text timeline"
-		>
-			<Type size={14} />
-		</button>
-	{/if}
-
+	<!-- The switches, then the options gear. The sheet hangs off the wrapper,
+	     not the cluster, which clips to its corners. -->
 	<div class="options-group" bind:this={optionsGroupEl}>
-		<button
-			class="icon-btn options-btn"
-			class:active={showOptionsPanel}
-			onclick={() => (showOptionsPanel = !showOptionsPanel)}
-			title="Options"
-			aria-label="Options"
-		>
-			<Settings size={14} />
-		</button>
+		<div class="bar-cluster">
+			{#if !isMobile}
+				<button
+					class="bar-icon"
+					onclick={() => (showShortcuts = true)}
+					title="Keyboard shortcuts"
+					aria-label="Keyboard shortcuts"
+				>
+					<HelpCircle size={14} />
+				</button>
+			{/if}
+
+			{#if onToggleText}
+				<button
+					class="bar-icon"
+					class:on={textEnabled}
+					onclick={onToggleText}
+					title="Text timeline: timed text layers with their own effects"
+					aria-label="Text timeline"
+				>
+					<Type size={14} />
+				</button>
+			{/if}
+
+			<button
+				class="bar-icon"
+				class:open={showOptionsPanel}
+				onclick={() => (showOptionsPanel = !showOptionsPanel)}
+				title="Options"
+				aria-label="Options"
+			>
+				<Settings size={14} />
+			</button>
+		</div>
 		{#if showOptionsPanel}
-			<div class="options-panel">
+			<div class="bar-pop options-panel">
 				<div class="setting-row">
 					<label for="ss-show-fps">Show FPS</label>
 					<input id="ss-show-fps" type="checkbox" bind:checked={showFps} />
@@ -141,17 +145,14 @@
 			</div>
 		{/if}
 	</div>
+	<div class="bar-sep"></div>
 
-	<button
-		class="action-btn play-btn"
-		onclick={onTogglePreview}
-		disabled={slidesEmpty}
-	>
+	<button class="bar-key live" onclick={onTogglePreview} disabled={slidesEmpty}>
 		{#if previewPlaying}
-			<Pause size={16} fill="currentColor" stroke="none" />
+			<Pause size={14} fill="currentColor" stroke="none" />
 			STOP
 		{:else}
-			<Play size={16} fill="currentColor" stroke="none" />
+			<Play size={14} fill="currentColor" stroke="none" />
 			PLAY
 		{/if}
 	</button>
@@ -230,103 +231,20 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
+		gap: 0.6rem;
+		padding: 0.45rem 0.75rem;
 		border-top: 1px solid var(--line);
 		flex-shrink: 0;
-	}
-
-	.action-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.6rem 2rem;
-		border: 1.5px solid var(--line-strong);
-		border-radius: var(--r-pill);
-		background: var(--glass);
-		backdrop-filter: var(--blur);
-		-webkit-backdrop-filter: var(--blur);
-		color: var(--text-2);
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		cursor: pointer;
-		transition:
-			border-color var(--t),
-			color var(--t),
-			background var(--t);
-	}
-
-	.action-btn:hover:not(:disabled) {
-		border-color: var(--text-3);
-		color: var(--text);
-	}
-
-	.action-btn:disabled {
-		opacity: 0.4;
-		cursor: default;
-	}
-
-	.play-btn:hover:not(:disabled) {
-		border-color: var(--live-dim);
-		color: var(--live);
-		background: rgba(110, 231, 192, 0.1);
-	}
-
-	.icon-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: var(--glass);
-		backdrop-filter: var(--blur);
-		-webkit-backdrop-filter: var(--blur);
-		border: 1.5px solid var(--line-strong);
-		color: var(--text-3);
-		cursor: pointer;
-		flex-shrink: 0;
-		padding: 0;
-		transition:
-			border-color var(--t),
-			color var(--t);
-	}
-
-	.icon-btn:hover,
-	.icon-btn.active {
-		border-color: var(--text-3);
-		color: var(--text);
-	}
-
-	/* Lit while the timeline is on, matching the editor's own text toggle. */
-	.icon-btn.on {
-		border-color: var(--live);
-		color: var(--live);
 	}
 
 	.options-group {
 		position: relative;
 		display: flex;
-		align-items: center;
 	}
 
 	.options-panel {
-		position: absolute;
-		bottom: calc(100% + 0.5rem);
 		left: 0;
-		background: var(--raised);
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-3);
-		padding: 0.75rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
 		min-width: 200px;
-		z-index: 20;
-		box-shadow: 0 10px 34px rgba(0, 0, 0, 0.65);
 	}
 
 	.setting-row {

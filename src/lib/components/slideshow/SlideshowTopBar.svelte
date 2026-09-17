@@ -54,15 +54,6 @@
 		min-height: 30px;
 	}
 
-	/* Splits the navigation icons from the view controls: two jobs, one bar. */
-	.bar-sep {
-		width: 1px;
-		height: 18px;
-		margin: 0 0.15rem;
-		background: var(--line);
-		flex-shrink: 0;
-	}
-
 	.view-group {
 		display: flex;
 		align-items: center;
