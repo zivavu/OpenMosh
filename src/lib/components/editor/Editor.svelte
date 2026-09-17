@@ -4745,7 +4745,7 @@
 							class="tl-tool-btn"
 							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
 							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
-								? `${MAX_MEDIA_LANES} layers is the limit — each one is another full-frame pass, and video layers each hold a decoder`
+								? `${MAX_MEDIA_LANES} layers is the limit`
 								: "Add a media layer over the image"}
 							onclick={addMediaLane}
 						>
@@ -4759,7 +4759,7 @@
 							class="tl-tool-btn"
 							disabled={fxLanes.length >= MAX_FX_LANES}
 							title={fxLanes.length >= MAX_FX_LANES
-								? `${MAX_FX_LANES} lanes is the limit — each effect on a lane is another full-screen pass`
+								? `${MAX_FX_LANES} lanes is the limit`
 								: "Add a stacked effect lane — its clips run after the segment's own chain"}
 							onclick={addFxLane}
 						>

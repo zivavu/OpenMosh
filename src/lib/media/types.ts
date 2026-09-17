@@ -142,12 +142,10 @@ export const EMPTY_MEDIA_TIMELINE: MediaTimeline = {
 	lanes: [],
 };
 
-/**
- * Each live lane costs a full-frame buffer plus its own chain every frame, and
- * video lanes each hold a decoder — past a handful the preview stops keeping up
- * long before VRAM runs out.
- */
-export const MAX_MEDIA_LANES = 10;
+/** A sanity cap, not a frame budget: each lane is a full-frame buffer and video
+ * lanes each hold a decoder, but the preview keeps up with far more than anyone
+ * stacks on purpose. */
+export const MAX_MEDIA_LANES = 20;
 
 let idCounter = 0;
 function nextId(prefix: string): string {

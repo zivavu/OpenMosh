@@ -186,12 +186,9 @@ export function createFxLane(
 	return { id: generateId(), name, enabled: true, z, clips: [], settings };
 }
 
-/**
- * Most stacked lanes at once. Every enabled effect on a lane is another
- * full-screen pass on top of the segment's own chain, so this is a frame-budget
- * limit rather than a modelling one.
- */
-export const MAX_FX_LANES = 5;
+/** Most stacked lanes at once. A sanity cap, not a frame budget: the renderer
+ * keeps up with far more passes than anyone stacks on purpose. */
+export const MAX_FX_LANES = 20;
 
 /**
  * Add a lane, named after its position. At the cap, returns the input by
