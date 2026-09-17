@@ -2144,14 +2144,15 @@
 		color: var(--text-2);
 	}
 
-	/* Off the end of the transport, the width the video bar gives it. */
+	/* Off the end of the transport. Wider than the video bar's: 0.25×–4× on a
+	   log track is four octaves, and a short slider lands between the stops. */
 	.speed {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.5rem;
 		flex-shrink: 0;
-		width: 6.5rem;
-		padding-left: 0.5rem;
+		width: 11rem;
+		padding-left: 0.6rem;
 		border-left: 1px solid var(--line);
 	}
 
