@@ -63,9 +63,7 @@ test("a song worked on is offered back on the upload screen", async ({
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
-	await expect(
-		page.getByText("OR PICK UP A SONG YOU'VE WORKED ON"),
-	).toBeVisible();
+	await expect(page.locator(".recent-label")).toHaveText("Recent");
 	await expect(page.locator(".saved-item")).toHaveCount(1);
 	await expect(page.locator(".saved-item")).toContainText("track.wav");
 });

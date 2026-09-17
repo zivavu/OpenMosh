@@ -281,7 +281,13 @@ export function sheetHandle(page: Page): Locator {
 	return page.getByRole("button", { name: "Toggle panel" });
 }
 
-export function sheetTab(page: Page, name: "Settings" | "Effects"): Locator {
+/** A tab of that sheet, by the label it actually carries: the settings tab is
+ * "Mosh" in the editor and "Settings" in the slideshow, and the chain tab is
+ * "Chain" in both. */
+export function sheetTab(
+	page: Page,
+	name: "Mosh" | "Settings" | "Chain",
+): Locator {
 	return page.locator(".tab-btn", { hasText: name });
 }
 
