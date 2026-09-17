@@ -34,7 +34,7 @@ Pick one of three modes on the upload screen.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.png)
 
-**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then cut it into segments and give each one its own source and its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. On top of that sit stacked effect lanes, media layers with their own chains, and a text timeline. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once.
+**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then cut it into segments and give each one its own source and its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. On top of that sit stacked effect lanes, media layers with their own chains, and a text timeline. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once.
 
 ![Editor mode, timeline cut into segments](assets/screenshots/editor.png)
 
@@ -76,7 +76,7 @@ Your media never leaves the machine. There is no backend, no account and no uplo
 
 ## Status
 
-Version 0.7.8. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
+Version 0.7.9. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
 
 MP4 and GIF export were both removed on purpose and aren't coming back.
 
