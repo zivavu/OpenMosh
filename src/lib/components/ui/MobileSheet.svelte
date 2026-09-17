@@ -32,14 +32,15 @@
 	let sheetDragOffset = $state(0);
 	let sheetDragging = $state(false);
 	let sheetHandleEl = $state<HTMLButtonElement>();
-	let activeTab = $state<"clip" | "effects" | "settings">("effects");
-
-	// Picking a clip is asking for its panel, whichever tab was open; losing
-	// it lands on the chain, not on a tab that no longer exists.
-	$effect(() => {
-		if (topPanel) activeTab = "clip";
-		else if (activeTab === "clip") activeTab = "effects";
-	});
+	type Tab = "clip" | "effects" | "settings";
+	/** The tab last picked by hand. Every selection opens in it, so a chain
+	 * edit across many clips is one click on Chain rather than one per clip. */
+	let preferredTab = $state<Tab>("effects");
+	// Only a layer clip has a clip tab: a segment picked while it is preferred
+	// shows its chain instead, and the preference waits for the next clip.
+	const activeTab = $derived<Tab>(
+		preferredTab === "clip" && !topPanel ? "effects" : preferredTab,
+	);
 
 	export function openSheet() {
 		panelOpen = true;
@@ -151,7 +152,7 @@
 					class:active={activeTab === "clip"}
 					role="tab"
 					aria-selected={activeTab === "clip"}
-					onclick={() => (activeTab = "clip")}>{topPanelLabel}</button
+					onclick={() => (preferredTab = "clip")}>{topPanelLabel}</button
 				>
 			{/if}
 			<button
@@ -159,14 +160,14 @@
 				class:active={activeTab === "effects"}
 				role="tab"
 				aria-selected={activeTab === "effects"}
-				onclick={() => (activeTab = "effects")}>{effectsLabel}</button
+				onclick={() => (preferredTab = "effects")}>{effectsLabel}</button
 			>
 			<button
 				class="tab-btn"
 				class:active={activeTab === "settings"}
 				role="tab"
 				aria-selected={activeTab === "settings"}
-				onclick={() => (activeTab = "settings")}>{settingsLabel}</button
+				onclick={() => (preferredTab = "settings")}>{settingsLabel}</button
 			>
 		</div>
 		<div class="tab-content">
