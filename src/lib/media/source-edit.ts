@@ -80,6 +80,10 @@ export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
  */
 export const MASK_MAX = 512;
 
+/** The speed range the edit dialog offers, and what a stored rate is held to. */
+export const SPEED_MIN = 0.25;
+export const SPEED_MAX = 4;
+
 /**
  * One keyed value, stamped in seconds into the *source's own* media time —
  * not the timeline's. An edit is a fact about the file, so a key set 2.4s into
@@ -146,6 +150,12 @@ export interface SourceEdit {
 	 * paying a texture for.
 	 */
 	mask: string | null;
+	/**
+	 * Playback rate, 1 = as shot. Absent means 1. Scales how fast a clip walks
+	 * through its media; keyframes stay on media time, so they still land on
+	 * the frames they were set on.
+	 */
+	speed?: number;
 	/**
 	 * Keyed tracks, for sources whose subject moves. Absent on a still edit,
 	 * which is the common case and costs nothing to sample.
@@ -225,8 +235,28 @@ export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
 		k.lumaRange === d.lumaRange &&
 		isFullCrop(edit.crop) &&
 		!edit.mask &&
+		sourceSpeed(edit) === 1 &&
 		!hasAnimation(edit)
 	);
+}
+
+/** The edit's playback rate, 1 when it has none. */
+export function sourceSpeed(edit: SourceEdit | undefined): number {
+	return edit?.speed ?? 1;
+}
+
+/**
+ * Seconds into the media after `elapsed` seconds of a clip, from its in-point.
+ * Every clip-time-to-media-time conversion goes through here so the speed is
+ * applied in exactly one way: the in-point is a place in the media and stays
+ * put, and only the walk from it runs at the edit's rate.
+ */
+export function sourceTimeAt(
+	edit: SourceEdit | undefined,
+	elapsed: number,
+	start = 0,
+): number {
+	return start + elapsed * sourceSpeed(edit);
 }
 
 /** True when any track carries a key, so the edit varies over the clip. */
@@ -254,6 +284,9 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
 		},
 		crop: normalizeCrop(e.crop),
 		anim: normalizeAnim(e.anim),
+		...(typeof e.speed === "number" && e.speed !== 1
+			? { speed: Math.min(SPEED_MAX, Math.max(SPEED_MIN, e.speed)) }
+			: {}),
 		// Only a data URL is any use to the loader; anything else is dropped rather
 		// than handed to an <img> that will fail asynchronously.
 		mask:

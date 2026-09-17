@@ -29,8 +29,12 @@ import {
 } from "./sequence";
 import { createSequenceExportSources } from "./sequence-export-sources";
 import { createMediaExportLayers } from "./media-export-layers";
-import { laneSourceIds } from "../media";
-import type { MediaTimeline, ResolvedMediaLayer } from "../media";
+import { laneSourceIds, sourceTimeAt as mediaTimeAt } from "../media";
+import type {
+	MediaTimeline,
+	ResolvedMediaLayer,
+	SourceEdit,
+} from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
 export interface RecordingContext {
@@ -79,6 +83,9 @@ export interface RecordingContext {
 	mediaTimeline?: MediaTimeline | null;
 	/** The pool the media lanes draw from. Both modes have one. */
 	layerSources?: SequenceSource[];
+	/** Per-source edits: the rate each segment or clip walks its media at.
+	 * The crop, key and mask are already on the renderer. */
+	sourceEdits?: Record<string, SourceEdit>;
 	/** Master-clock time the export's frame 0 lands on. */
 	textTimeOffset?: number;
 	/** Frame-time-to-master-clock rate (video speed). */
@@ -113,6 +120,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		audioResponse = DEFAULT_AUDIO_RESPONSE,
 		textTimeline = null,
 		mediaTimeline = null,
+		sourceEdits = {},
 		layerSources = [],
 		textTimeOffset = 0,
 		textTimeScale = 1,
@@ -338,8 +346,20 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		);
 		const idB = incomingSourceId ?? primarySourceId;
 		if (!idA || idA === idB) return null;
-		return { id: idA, time: Math.max(0, t - (segA?.startTime ?? 0)) };
+		return { id: idA, time: segmentSourceTime(segA, idA, t) };
 	};
+
+	/** Seconds into its media a segment's source should be at master time `t`:
+	 * the preview's `sourceTimeIn`, so an export writes the frames previewed. */
+	const segmentSourceTime = (
+		seg: SequenceSegment | null | undefined,
+		sourceId: string | null | undefined,
+		t: number,
+	): number =>
+		mediaTimeAt(
+			sourceId ? sourceEdits[sourceId] : undefined,
+			Math.max(0, t - (seg?.startTime ?? 0)),
+		);
 
 	const sequenceBeforeRender = async (frameIndex: number, time: number) => {
 		const t = seqTimeAt(time);
@@ -367,6 +387,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		// Seconds into the clip, not a per-frame step: the same rule the preview
 		// follows, so an export writes the frames that were previewed.
 		const out = outgoingSourceAt(t, segSourceId);
+		const segTime = segmentSourceTime(seg, segSourceId, t);
 		// Which media each texture holds, so the chain applies that source's own
 		// crop, erase mask and key. The preview sets this every frame it draws; the
 		// recorder owns the renderer while it runs, so it has to as well, or the
@@ -376,7 +397,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		renderer.setSourceIds(
 			segSourceId ?? null,
 			out?.id ?? null,
-			Math.max(0, t - (seg?.startTime ?? 0)),
+			segTime,
 			out?.time ?? 0,
 		);
 		if (exportSources) {
@@ -384,10 +405,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			// the incoming one, so these two can never contend for a single sampler,
 			// and they write different textures.
 			const [incomingOwned, outgoingOwned] = await Promise.all([
-				exportSources.advance(
-					segSourceId,
-					Math.max(0, t - (seg?.startTime ?? 0)),
-				),
+				exportSources.advance(segSourceId, segTime),
 				exportSources.advanceOutgoing(out?.id ?? null, out?.time ?? 0),
 			]);
 			primaryOwnsFrame = !incomingOwned;
@@ -529,6 +547,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			audioResponse,
 			textTimeline,
 			mediaTimeline: exportLayers ? mediaTimeline : null,
+			sourceEdits,
 			mediaLayerSink: exportLayers
 				? (layers) => exportLayers!.advance(layers)
 				: null,

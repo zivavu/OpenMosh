@@ -151,6 +151,7 @@
 		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
 		setMediaClipSources,
+		sourceTimeAt,
 		updateMediaLane as updateMediaLaneIn,
 		type MediaClip,
 		type MediaLane,
@@ -2056,13 +2057,20 @@
 
 	/**
 	 * How far into its clip a segment's video should be: the master clock minus
-	 * the segment's start, so every source frame is a function of song position
-	 * alone. Playback that stalls, a scrub, and the export all land on the same
-	 * frame — and a paused preview holds instead of running on.
+	 * the segment's start, at the source's own speed, so every source frame is
+	 * a function of song position alone. Playback that stalls, a scrub, and the
+	 * export all land on the same frame — and a paused preview holds instead of
+	 * running on. Mirrored by `segmentSourceTime` in recording.ts.
 	 */
-	function sourceTimeIn(seg: SequenceSegment | null | undefined): number {
+	function sourceTimeIn(
+		seg: SequenceSegment | null | undefined,
+		sourceId: string | null = sourceIdOf(seg),
+	): number {
 		if (!seg) return 0;
-		return Math.max(0, seqMasterTime() - seg.startTime);
+		return sourceTimeAt(
+			sourceId ? sourceRegistry.edits[sourceId] : undefined,
+			Math.max(0, seqMasterTime() - seg.startTime),
+		);
 	}
 
 	const seqFrames = new SequenceFrameDriver({
@@ -2099,7 +2107,8 @@
 	function driveSequenceSource(): boolean {
 		if (!isSequenceMode) return false;
 		const seg = activeSegment();
-		return seqFrames.advance(sourceIdOf(seg), sourceTimeIn(seg));
+		const id = sourceIdOf(seg);
+		return seqFrames.advance(id, sourceTimeIn(seg, id));
 	}
 
 	/**
@@ -2124,7 +2133,7 @@
 				sourceRegistry.primaryId,
 			) ?? null;
 		if (!idA || idA === activeSourceId()) return null;
-		return { id: idA, time: sourceTimeIn(segA) };
+		return { id: idA, time: sourceTimeIn(segA, idA) };
 	}
 
 	function driveOutgoingSource(): boolean {
@@ -4018,6 +4027,10 @@
 						? ($state.snapshot(mediaTimeline) as MediaTimeline)
 						: null,
 					layerSources: sourceRegistry.sources,
+					sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
+						string,
+						SourceEdit
+					>,
 					textTimeOffset,
 					textTimeScale,
 					bpm: sequenceBpm,

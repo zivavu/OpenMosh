@@ -20,6 +20,7 @@ import {
 	type MediaTimeline,
 	type ResolvedMediaLayer,
 	resolveMediaLayersAt,
+	type SourceEdit,
 } from "./media";
 import {
 	type ResolvedTextLayer,
@@ -103,6 +104,8 @@ export interface RecordOptions {
 	textTimeline?: TextTimeline | null;
 	/** Media lanes, resolved per frame on the same clock as the text lanes. */
 	mediaTimeline?: MediaTimeline | null;
+	/** Per-source edits, for the rate each media clip runs at. */
+	sourceEdits?: Record<string, SourceEdit>;
 	/** Uploads each visible layer's frame; awaited, so the written frame is the
 	 * one the layer asked for rather than whatever had decoded by then. */
 	mediaLayerSink?: ((layers: ResolvedMediaLayer[]) => Promise<void>) | null;
@@ -310,6 +313,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioResponse = DEFAULT_AUDIO_RESPONSE,
 		textTimeline = null,
 		mediaTimeline = null,
+		sourceEdits,
 		mediaLayerSink = null,
 		textTimeOffset = 0,
 		textTimeScale = 1,
@@ -676,7 +680,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				? resolveTextLayersAt(textTimeline, clockTime)
 				: [];
 			const mediaLayers = mediaTimeline
-				? resolveMediaLayersAt(mediaTimeline, clockTime)
+				? resolveMediaLayersAt(mediaTimeline, clockTime, sourceEdits)
 				: [];
 			if (mediaLayers.length > 0 && mediaLayerSink) {
 				await mediaLayerSink(mediaLayers);

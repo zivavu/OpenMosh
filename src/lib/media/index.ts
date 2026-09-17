@@ -38,6 +38,10 @@ export {
 	sampleSourceEdit,
 	sampleTrack,
 	wrapSourceTime,
+	sourceSpeed,
+	sourceTimeAt,
+	SPEED_MIN,
+	SPEED_MAX,
 } from "./source-edit";
 export type { ResolvedMediaLayer } from "./resolve";
 export {

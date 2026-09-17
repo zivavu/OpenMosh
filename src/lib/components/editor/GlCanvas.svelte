@@ -686,7 +686,7 @@
 		const layers =
 			textTimeline && !solo ? resolveTextLayersAt(textTimeline, textTime) : [];
 		const media = mediaTimeline
-			? resolveMediaLayersAt(mediaTimeline, textTime)
+			? resolveMediaLayersAt(mediaTimeline, textTime, sourceEdits)
 			: EMPTY_MEDIA;
 		// Every lane is still driven, not just the soloed one: the driver drops
 		// the frames of lanes it isn't asked about, and leaving solo would then

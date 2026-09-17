@@ -1,5 +1,6 @@
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
+import { sourceTimeAt, type SourceEdit } from "./source-edit";
 import {
 	mediaClipWeight,
 	type MediaClip,
@@ -82,6 +83,8 @@ export function laneSourceIds(lane: MediaLane): string[] {
 export function resolveMediaLayersAt(
 	timeline: MediaTimeline | null | undefined,
 	time: number,
+	/** Per-source edits, for the rate each clip walks its media at. */
+	edits?: Record<string, SourceEdit>,
 ): ResolvedMediaLayer[] {
 	if (!timeline?.enabled) return [];
 	const layers: ResolvedMediaLayer[] = [];
@@ -97,7 +100,11 @@ export function resolveMediaLayersAt(
 			underEffects: lane.underEffects,
 			z: lane.z,
 			sourceId,
-			sourceTime: clip.sourceStart + (time - clip.start),
+			sourceTime: sourceTimeAt(
+				edits?.[sourceId],
+				time - clip.start,
+				clip.sourceStart,
+			),
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
 			effects: lane.effects,

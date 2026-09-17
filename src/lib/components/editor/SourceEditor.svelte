@@ -26,6 +26,9 @@
 		putKeyframe,
 		removeKeyframe,
 		sampleSourceEdit,
+		sourceSpeed,
+		SPEED_MAX,
+		SPEED_MIN,
 		type AnimatedKey,
 		type ChromaKey,
 		type CropRect,
@@ -1220,6 +1223,34 @@
 	}
 
 	/** Put every tool back: the button sits under all three, not just the key. */
+	// ── Speed ────────────────────────────────────────────────────────────────
+	// A clip property rather than a tool: it changes how fast the media is
+	// walked, not what is in it. Not offered on the primary source — in the
+	// editor that video is the master clock and has its own speed control.
+	const speed = $derived(sourceSpeed(edit));
+	const speedLabel = $derived(
+		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + "×",
+	);
+	const showSpeed = $derived(duration > 0 && !source.primary);
+
+	function setSpeed(next: number) {
+		beforeEdit("speed");
+		const { speed: _, ...rest } = edit;
+		onChange(next === 1 ? rest : { ...rest, speed: next });
+	}
+
+	/** Log₂ slider, as the video bar's: 1× sits at the centre, snapped to. */
+	function setSpeedFromTrack(v: number) {
+		setSpeed(Math.abs(v) < 0.08 ? 1 : 2 ** v);
+	}
+
+	// The dialog's own playback runs at the edited rate, so the clip can be
+	// watched the way the timeline will run it.
+	$effect(() => {
+		const v = media;
+		if (v && "playbackRate" in v) v.playbackRate = speed;
+	});
+
 	function reset() {
 		beforeEdit();
 		maskCanvas = null;
@@ -1419,6 +1450,23 @@
 							oninput={seekTo}
 						/>
 						<span class="val clock">{formatTime(currentTime)}</span>
+						{#if showSpeed}
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div
+								class="speed"
+								title="Playback speed: {speedLabel}. Double-click to reset."
+								ondblclick={() => setSpeed(1)}
+							>
+								<span class="val">{speedLabel}</span>
+								<RangeSlider
+									value={Math.log2(speed)}
+									min={Math.log2(SPEED_MIN)}
+									max={Math.log2(SPEED_MAX)}
+									step={0.05}
+									oninput={setSpeedFromTrack}
+								/>
+							</div>
+						{/if}
 					</div>
 
 					<!-- Videos only: an image is one instant, and there is nowhere in it
@@ -2064,6 +2112,17 @@
 
 	.clock {
 		color: var(--text-2);
+	}
+
+	/* Off the end of the transport, the width the video bar gives it. */
+	.speed {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-shrink: 0;
+		width: 6.5rem;
+		padding-left: 0.5rem;
+		border-left: 1px solid var(--line);
 	}
 
 	.rows {
