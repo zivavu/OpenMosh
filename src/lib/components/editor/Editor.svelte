@@ -1687,14 +1687,40 @@
 	let noSequenceMedia = $derived(
 		isSequenceMode && poolFilled && sequenceSources.length === 0,
 	);
+	/**
+	 * Held from mount until everything the editor opens with is in the pool:
+	 * the files it was handed, the song's stored pool, and the thumbnails the
+	 * grid draws them with. Opening on the first source alone left the rest
+	 * landing one by one behind a live preview, which read as broken rather
+	 * than loading. Proxies are deliberately not waited on — a transcode runs
+	 * for minutes and the chip already carries its progress. Sequence-only
+	 * through `mediaLoading`; single mode never shows the overlay.
+	 */
+	let openingMedia = $state(true);
+	/** The mount-time adds (primary + handed-over extras) have finished. */
+	let mountMediaDone = $state(false);
+	$effect(() => {
+		if (!openingMedia) return;
+		// A song being registered has no key yet; its pool restore is still to
+		// come, so the key is only settled once there is one or nothing to wait
+		// for.
+		const keySettled = !!seqBaseKey || !audio.trackFile;
+		const settled =
+			mountMediaDone &&
+			keySettled &&
+			(poolReady || !seqBaseKey) &&
+			sourceRegistry.loadingTotal === 0 &&
+			!sequenceSources.some((s) => s.thumbPending);
+		if (settled) openingMedia = false;
+	});
 	/** Media is being probed and nothing has landed in the pool yet, so the
 	 * canvas is black — the placeholder says so instead of the user guessing.
-	 * Once a first source is in, the frame is worth more than an overlay and
-	 * the grid's own chips carry the rest of the progress. */
+	 * After the opening load, a first source is enough: the frame is worth
+	 * more than an overlay and the grid's own chips carry the rest. */
 	let mediaLoading = $derived(
 		isSequenceMode &&
-			sourceRegistry.loadingTotal > 0 &&
-			sequenceSources.length === 0,
+			(openingMedia ||
+				(sourceRegistry.loadingTotal > 0 && sequenceSources.length === 0)),
 	);
 
 	onMount(() => {
@@ -1710,16 +1736,21 @@
 				}
 				return;
 			}
-			// Not persisted: the primary belongs to the editor session, never to
-			// a song's pool, so storing it would write (possibly hundreds of MB
-			// of) video into IndexedDB that nothing would ever read back.
-			await sourceRegistry.add([file], { primary: true, persist: false });
-			poolFilled = true;
-			const extras = extraFiles.filter((f) => f !== file);
-			// Opened from a saved song: these blobs came straight out of storage,
-			// so writing them back would rewrite the whole pool for nothing.
-			if (extras.length > 0) {
-				await sourceRegistry.add(extras, { persist: !initialTrackId });
+			try {
+				// Not persisted: the primary belongs to the editor session, never
+				// to a song's pool, so storing it would write (possibly hundreds of
+				// MB of) video into IndexedDB that nothing would ever read back.
+				await sourceRegistry.add([file], { primary: true, persist: false });
+				poolFilled = true;
+				const extras = extraFiles.filter((f) => f !== file);
+				// Opened from a saved song: these blobs came straight out of
+				// storage, so writing them back would rewrite the whole pool for
+				// nothing.
+				if (extras.length > 0) {
+					await sourceRegistry.add(extras, { persist: !initialTrackId });
+				}
+			} finally {
+				mountMediaDone = true;
 			}
 		})();
 		return () => sourceRegistry.dispose();
@@ -4211,7 +4242,7 @@
 				<span class="no-media-label">LOADING MEDIA</span>
 				<p class="no-media-text">
 					Decoding what you dropped in. High-resolution videos take a moment —
-					the preview starts as soon as the first one is ready.
+					the preview starts once everything is in.
 				</p>
 				{#if sourceRegistry.loadingTotal > 1}
 					<span class="no-media-hint">
