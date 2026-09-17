@@ -6,6 +6,7 @@ import {
 	PREVIEW_CANVAS,
 	segmentMoshButton,
 	segments,
+	selectMode,
 	selectSegment,
 	splitSegmentAt,
 	waitForRender,
@@ -33,7 +34,7 @@ const SAVE_SETTLE_MS = 2500;
 /** Back to the upload screen and into the list of songs worked on. */
 async function reopenSavedSong(page: import("@playwright/test").Page) {
 	await page.goto("/");
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await page.locator(".saved-item").first().click();
 	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
 	await waitForRender(page);
@@ -61,7 +62,7 @@ test("a song worked on is offered back on the upload screen", async ({
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
 	await page.goto("/");
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await expect(
 		page.getByText("OR PICK UP A SONG YOU'VE WORKED ON"),
 	).toBeVisible();
@@ -122,7 +123,7 @@ test("keeps the source the editor opened on out of the song's pool", async ({
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
 	await page.goto("/");
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item .saved-count")).toHaveText("2");
 });
 
@@ -137,7 +138,7 @@ test("a sequence with nothing pooled is never offered back", async ({
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
 	await page.goto("/");
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item")).toHaveCount(0);
 });
 
@@ -165,6 +166,6 @@ test("starts clean when there's nothing stored yet", async ({ page }) => {
 	// Guards the specs above: they'd pass on a database left behind by an
 	// earlier run just as happily as on the state they actually created.
 	await page.goto("/");
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item")).toHaveCount(0);
 });

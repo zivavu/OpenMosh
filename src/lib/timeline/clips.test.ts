@@ -10,6 +10,7 @@ import {
 	moveClip,
 	moveClips,
 	moveClipsToLane,
+	newClipSpan,
 	placeClipBlock,
 	removeClip,
 	retargetClipBlock,
@@ -107,6 +108,85 @@ describe("freeRangeAt", () => {
 			clip("b", 1 + MIN_CLIP_LENGTH / 2, 4),
 		);
 		expect(freeRangeAt(tight, 1, 10)).toBeNull();
+	});
+});
+
+describe("newClipSpan", () => {
+	it("starts under the pointer and runs for the length asked for", () => {
+		expect(newClipSpan(laneOf(), 3, 10, 2)).toEqual({ start: 3, end: 5 });
+	});
+
+	it("keeps its length and backs up off the next clip", () => {
+		// Not truncated where it was aimed: the same bargain moveClip strikes, so
+		// a dropped clip and a dragged one come to rest the same way.
+		const lane = laneOf(clip("a", 4, 8));
+		expect(newClipSpan(lane, 3, 10, 2)).toEqual({ start: 2, end: 4 });
+	});
+
+	it("backs up off the end of the timeline", () => {
+		expect(newClipSpan(laneOf(), 9, 10, 5)).toEqual({ start: 5, end: 10 });
+	});
+
+	it("lands flush against a neighbour when aimed at the last sliver of a gap", () => {
+		// Dropping nothing there would read as the gesture having missed.
+		const lane = laneOf(clip("a", 0, 2), clip("b", 4, 6));
+		expect(newClipSpan(lane, 3.99, 10, 2)).toEqual({ start: 2, end: 4 });
+	});
+
+	it("is trimmed only by a gap shorter than the clip itself", () => {
+		const lane = laneOf(clip("a", 0, 2), clip("b", 3, 6));
+		expect(newClipSpan(lane, 2.2, 10, 5)).toEqual({ start: 2, end: 3 });
+	});
+
+	it("never starts before the gap does", () => {
+		const lane = laneOf(clip("a", 0, 5));
+		// A pointer time behind the gap's start can't drag the clip under its
+		// neighbour — freeRangeAt bounds it either way.
+		expect(newClipSpan(lane, 5, 10, 2)).toEqual({ start: 5, end: 7 });
+	});
+
+	it("widens a length shorter than the minimum", () => {
+		const span = newClipSpan(laneOf(), 1, 10, MIN_CLIP_LENGTH / 4)!;
+		expect(span.end - span.start).toBeCloseTo(MIN_CLIP_LENGTH, 10);
+	});
+
+	it("is null on an occupied time", () => {
+		expect(newClipSpan(laneOf(clip("a", 0, 5)), 2, 10, 2)).toBeNull();
+	});
+
+	it("is null where the gap is too short to hold anything", () => {
+		const tight = laneOf(clip("a", 0, 1), clip("b", 1 + MIN_CLIP_LENGTH / 2, 4));
+		expect(newClipSpan(tight, 1, 10, 2)).toBeNull();
+	});
+
+	it("takes the whole gap when the pointer is pinned against its tail", () => {
+		// MIN_CLIP_LENGTH has no exact binary form, so a span derived by
+		// subtracting it off the gap's end and adding it back used to land a
+		// rounding step under it — which addClip refused, making the drop preview
+		// a clip and then do nothing.
+		const lane = laneOf(clip("a", 0, 2), clip("b", 4, 6));
+		const span = newClipSpan(lane, 4 - MIN_CLIP_LENGTH, 10, 2)!;
+		expect(span.end).toBe(4);
+		expect(addClip(lane, { id: "new", ...span }, 10).clips).toHaveLength(3);
+	});
+
+	it("always yields a span addClip will accept", () => {
+		// The two have to agree: a ghost drawn for a span addClip then refuses is
+		// a drop that previews and does nothing. Swept rather than sampled —
+		// the failure was a floating-point edge no hand-picked case found.
+		const lane = laneOf(clip("a", 0, 2), clip("b", 4, 6));
+		for (let step = 0; step <= 400; step++) {
+			const t = 2 + (step / 400) * 2;
+			for (const want of [MIN_CLIP_LENGTH / 3, 0.1, 1, 2, 30]) {
+				const span = newClipSpan(lane, t, 10, want);
+				if (!span) continue;
+				expect(addClip(lane, { id: "new", ...span }, 10).clips).toHaveLength(
+					3,
+				);
+				expect(span.start).toBeGreaterThanOrEqual(2);
+				expect(span.end).toBeLessThanOrEqual(4);
+			}
+		}
 	});
 });
 

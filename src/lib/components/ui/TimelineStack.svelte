@@ -6,6 +6,7 @@
 		setTimelineStack,
 		TimelineStackState,
 	} from "../../editor/timeline-stack.svelte";
+	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import TimelineScrollbar from "./TimelineScrollbar.svelte";
 
 	interface Props {
@@ -337,7 +338,13 @@
 			</div>
 		{/if}
 		{#if playheadVisible || staticVisible}
-			<div class="tl-playhead-layer">
+			<!-- A source in the air falls through the grab handles: they sit over
+			     the lanes, and a drop aimed at the playhead — the most natural
+			     place to put media — would otherwise land on nothing. -->
+			<div
+				class="tl-playhead-layer"
+				class:source-drag={draggedSourceId() !== null}
+			>
 				{#if playheadVisible}
 					<!-- Full-width and moved by transform rather than by `left`: a
 					     percentage translate is of this element's own width, i.e. the
@@ -737,6 +744,11 @@
 		pointer-events: auto;
 		cursor: col-resize;
 		touch-action: none;
+	}
+
+	.tl-playhead-layer.source-drag .tl-playhead-grab,
+	.tl-playhead-layer.source-drag .tl-static-grab {
+		pointer-events: none;
 	}
 
 	.tl-playhead-grab:hover,

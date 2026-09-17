@@ -18,6 +18,7 @@ export {
 	moveClip,
 	moveClips,
 	moveClipsToLane,
+	newClipSpan,
 	removeClip,
 	resizeBoundary,
 	resizeClip,

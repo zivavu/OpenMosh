@@ -497,6 +497,7 @@
 			class:folded={foldedLaneIds.has(lane.id)}
 			style="order: {stackAt(lane.id)}"
 			data-layer-id={lane.id}
+			data-lane-kind="text"
 		>
 			<div class="tl-gutter">
 				<LaneGrip

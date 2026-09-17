@@ -12,6 +12,21 @@
 /** Shortest clip a lane will create or leave behind after a resize. */
 export const MIN_CLIP_LENGTH = 0.05;
 
+/**
+ * Float dust, in seconds, allowed under MIN_CLIP_LENGTH.
+ *
+ * 0.05 has no exact binary form, so a span built by subtracting it off a gap's
+ * end and adding it back lands a rounding step short of it. Compared exactly,
+ * that span is refused — which is a drop that previews a clip and then quietly
+ * does nothing. A nanosecond is far below anything a frame can express.
+ */
+const LENGTH_EPSILON = 1e-9;
+
+/** Whether a span is long enough to keep, rounding aside. */
+export function isKeepableLength(start: number, end: number): boolean {
+	return end - start >= MIN_CLIP_LENGTH - LENGTH_EPSILON;
+}
+
 export interface TimelineClip {
 	id: string;
 	/** Seconds on the mode's master timeline. */
@@ -73,6 +88,37 @@ export function freeRangeAt<C extends TimelineClip>(
 		if (clip.start > time) end = Math.min(end, clip.start);
 	}
 	return end - start >= MIN_CLIP_LENGTH ? { start, end } : null;
+}
+
+/**
+ * Where a clip placed at `time` lands: it starts under the pointer and runs for
+ * `want` seconds, held inside the gap it fell in. Null when `time` is already
+ * covered, or its gap is too small to hold anything.
+ *
+ * A clip that would overrun the gap keeps its length and backs up off the
+ * neighbour, rather than being truncated where it was aimed — the same bargain
+ * moveClip strikes for a clip already on the lane, so a dropped clip and a
+ * dragged one come to rest the same way. Only a gap shorter than the clip
+ * itself trims it, and one shorter than MIN_CLIP_LENGTH refuses it outright.
+ */
+export function newClipSpan<C extends TimelineClip>(
+	lane: ClipLane<C>,
+	time: number,
+	duration: number,
+	want: number,
+): { start: number; end: number } | null {
+	const gap = freeRangeAt(lane, time, duration);
+	if (!gap) return null;
+	const room = gap.end - gap.start;
+	const len = Math.min(Math.max(want, MIN_CLIP_LENGTH), room);
+	// Pinned against the gap's tail — including a clip that wants the whole of
+	// it — the gap's own end is the anchor, so the span ends exactly where the
+	// neighbour begins instead of a rounding step inside or past it.
+	if (time + len >= gap.end) {
+		return { start: Math.max(gap.start, gap.end - len), end: gap.end };
+	}
+	const start = Math.max(gap.start, time);
+	return { start, end: start + len };
 }
 
 /**
@@ -271,7 +317,7 @@ export function addClip<C extends TimelineClip, L extends ClipLane<C>>(
 	if (!range) return lane;
 	const start = Math.max(clip.start, range.start);
 	const end = Math.min(clip.end, range.end);
-	if (end - start < MIN_CLIP_LENGTH) return lane;
+	if (!isKeepableLength(start, end)) return lane;
 	return {
 		...lane,
 		clips: sortClips([...lane.clips, { ...clip, start, end }]),

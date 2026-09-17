@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { openEditor, openSingle, splitSegmentAt, waitForRender } from "./app";
+import {
+	openEditor,
+	openSingle,
+	selectMode,
+	splitSegmentAt,
+	waitForRender,
+} from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
 /**
@@ -132,7 +138,7 @@ test("deleting a project empties the database and the upload screen's offer", as
 	// the song it no longer has.
 	await modal.getByRole("button", { name: "Close" }).click();
 	await expect(modal).toHaveCount(0);
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item")).toHaveCount(0);
 });
 
@@ -242,7 +248,7 @@ test("Delete everything wipes projects and song-less edits together", async ({
 	expect(await storedTrackNames(page)).toEqual([]);
 	await modal.getByRole("button", { name: "Close" }).click();
 	await expect(page.locator(".saved-item")).toHaveCount(0);
-	await page.getByRole("button", { name: "Editor", exact: true }).click();
+	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item")).toHaveCount(0);
 });
 

@@ -18,7 +18,7 @@
 		copyMediaClips,
 		createMediaClip,
 		freeRangeAt,
-		MIN_CLIP_LENGTH,
+		newClipSpan,
 		moveClipsToLane,
 		pasteMediaClips,
 		pasteMediaContentOnto,
@@ -142,20 +142,25 @@
 		clientX: number,
 	): { laneId: string; start: number; end: number } | null {
 		const lane = laneOf(laneId);
-		if (!lane || !trackEl || trackDuration <= 0) return null;
-		const rect = trackEl.getBoundingClientRect();
-		if (clientX < rect.left || clientX > rect.right) return null;
-		const span = newClipSpan(lane, timeAt(clientX), draggedSourceId());
+		if (!lane || trackDuration <= 0 || !overTrack(clientX)) return null;
+		const span = clipSpanAt(lane, timeAt(clientX), draggedSourceId());
 		return span && { laneId, ...span };
 	}
 
 	/** The clip a drop at this x would land on, if it lands on one at all. */
 	function dropTargetClip(laneId: string, clientX: number): MediaClip | null {
 		const lane = laneOf(laneId);
-		if (!lane || !trackEl) return null;
-		const rect = trackEl.getBoundingClientRect();
-		if (clientX < rect.left || clientX > rect.right) return null;
+		if (!lane || !overTrack(clientX)) return null;
 		return clipAtTime(lane, timeAt(clientX));
+	}
+
+	/** Over the track rather than the row's gutter. A pixel of slack either
+	 * side: the mouse lands on whole pixels, and a box edge that falls between
+	 * two would otherwise refuse a drop aimed at the very start of the lane. */
+	function overTrack(clientX: number): boolean {
+		if (!trackEl) return false;
+		const rect = trackEl.getBoundingClientRect();
+		return clientX >= rect.left - 1 && clientX <= rect.right + 1;
 	}
 
 	function clipAtTime(lane: MediaLane, t: number): MediaClip | null {
@@ -387,34 +392,28 @@
 	}
 
 	/**
-	 * The span a clip added at `time` gets: it starts under the pointer and runs
-	 * for as long as the gap it fell in allows. A video asks for its own length,
-	 * so dropping one lays down the whole shot rather than a stub.
+	 * The span a clip added at `time` gets. A video asks for its own length, so
+	 * dropping one lays down the whole shot rather than a stub; everything else
+	 * takes the default.
 	 */
-	function newClipSpan(
+	function clipSpanAt(
 		lane: MediaLane,
 		time: number,
 		sourceId?: string | null,
 	): { start: number; end: number } | null {
-		const gap = freeRangeAt(lane, time, trackDuration);
-		if (!gap) return null;
 		const duration = sourceById(sourceId ?? null)?.duration ?? 0;
-		const want = duration > 0 ? duration : DEFAULT_CLIP_LENGTH;
-		const start = Math.max(
-			gap.start,
-			Math.min(time, gap.end - MIN_CLIP_LENGTH),
+		return newClipSpan(
+			lane,
+			time,
+			trackDuration,
+			duration > 0 ? duration : DEFAULT_CLIP_LENGTH,
 		);
-		const end = Math.min(
-			Math.max(start + want, start + MIN_CLIP_LENGTH),
-			gap.end,
-		);
-		return { start, end };
 	}
 
 	function addClipAt(laneId: string, time: number) {
 		const lane = laneOf(laneId);
 		if (!lane) return;
-		const span = newClipSpan(lane, time);
+		const span = clipSpanAt(lane, time);
 		if (!span) return;
 		const clip = createMediaClip(span.start, span.end);
 		onBeforeEdit?.();
@@ -806,6 +805,7 @@
 			class:folded={foldedLaneIds.has(lane.id)}
 			style="order: {stackAt(lane.id)}"
 			data-layer-id={lane.id}
+			data-lane-kind="media"
 			ondragover={(e) => onLaneDragOver(e, lane.id)}
 			ondragleave={onLaneDragLeave}
 			ondrop={(e) => onLaneDrop(e, lane.id)}
