@@ -127,6 +127,8 @@
 	let loadError = $state<string | null>(null);
 	/** True once the media is decoded and its first frame is on the canvas. */
 	let ready = $state(false);
+	/** The media's own pixels, for the head's readout. */
+	let mediaSize = $state<{ w: number; h: number } | null>(null);
 
 	// Video transport. A duration of 0 covers both "still an image" and "not
 	// loaded yet", which are the same thing as far as the controls care.
@@ -365,6 +367,7 @@
 		const h = "videoHeight" in el ? el.videoHeight : el.naturalHeight;
 		if (!w || !h) throw new Error("no dimensions");
 		media = el;
+		mediaSize = { w, h };
 		duration =
 			"duration" in el && Number.isFinite(el.duration) ? el.duration : 0;
 		currentTime = "currentTime" in el ? el.currentTime : 0;
@@ -626,7 +629,12 @@
 		// every read.
 		const k = $state.snapshot(key);
 		for (let i = 0; i < px.length; i += 4) {
-			px[i + 3] *= keyCoverage(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255, k);
+			px[i + 3] *= keyCoverage(
+				px[i] / 255,
+				px[i + 1] / 255,
+				px[i + 2] / 255,
+				k,
+			);
 			if (maskPx) px[i + 3] *= maskPx[i] / 255;
 		}
 		ctx.putImageData(img, 0, 0);
@@ -1281,18 +1289,27 @@
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div class="edit-dialog" onclick={(e) => e.stopPropagation()}>
 		<div class="dialog-head">
-			<h3>
-				Edit media
-				<span class="dialog-src">{source.name}</span>
-			</h3>
-			<button
-				class="close-btn"
-				onclick={onClose}
-				title="Close (Esc)"
-				aria-label="Close"
-			>
-				<X size={14} />
-			</button>
+			<div class="dialog-title">
+				<span class="rack-label">Edit media</span>
+				<h3 class="dialog-src" title={source.name}>{source.name}</h3>
+			</div>
+			<!-- What is on the bench: its pixels, and its length if it runs. -->
+			{#if mediaSize}
+				<span class="dialog-meta readout">
+					{mediaSize.w}×{mediaSize.h}{#if duration > 0}
+						<span class="meta-sep">·</span>{formatTime(duration)}{/if}
+				</span>
+			{/if}
+			<div class="bar-cluster">
+				<button
+					class="bar-icon"
+					onclick={onClose}
+					title="Close (Esc)"
+					aria-label="Close"
+				>
+					<X size={14} />
+				</button>
+			</div>
 		</div>
 
 		<div class="dialog-body">
@@ -1381,15 +1398,18 @@
 					     same colour all the way through, so the whole clip has to be
 					     watchable with the key live on it. -->
 					<div class="transport">
-						<button
-							class="play-btn"
-							onclick={() => (playing = !playing)}
-							disabled={!ready}
-							title={playing ? "Pause (Space)" : "Play (Space)"}
-							aria-label={playing ? "Pause" : "Play"}
-						>
-							{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
-						</button>
+						<div class="bar-cluster">
+							<button
+								class="bar-icon"
+								class:on={playing}
+								onclick={() => (playing = !playing)}
+								disabled={!ready}
+								title={playing ? "Pause (Space)" : "Play (Space)"}
+								aria-label={playing ? "Pause" : "Play"}
+							>
+								{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
+							</button>
+						</div>
 						<RangeSlider
 							value={Math.min(currentTime, duration)}
 							min={0}
@@ -1398,7 +1418,7 @@
 							disabled={!ready}
 							oninput={seekTo}
 						/>
-						<span class="val">{formatTime(currentTime)}</span>
+						<span class="val clock">{formatTime(currentTime)}</span>
 					</div>
 
 					<!-- Videos only: an image is one instant, and there is nowhere in it
@@ -1425,11 +1445,11 @@
 			</div>
 
 			<div class="side">
-				<div class="tool-bar">
+				<div class="bar-cluster tool-bar">
 					{#each TOOLS as t (t.value)}
 						<button
 							class="tool-btn"
-							class:active={tool === t.value}
+							class:open={tool === t.value}
 							title={t.hint}
 							onclick={() => (tool = t.value)}
 						>
@@ -1446,15 +1466,17 @@
 				     rows because it undoes the whole tool, not the row it sits in. -->
 				<div class="tool-head">
 					<p class="tool-hint">{TOOLS.find((t) => t.value === tool)?.hint}</p>
-					<button
-						class="icon-btn small"
-						disabled={!dirty[tool]}
-						onclick={() => resetTool(tool)}
-						title="Reset {TOOLS.find((t) => t.value === tool)?.label}"
-						aria-label="Reset {TOOLS.find((t) => t.value === tool)?.label}"
-					>
-						<RotateCcw size={12} />
-					</button>
+					<div class="bar-cluster">
+						<button
+							class="bar-icon"
+							disabled={!dirty[tool]}
+							onclick={() => resetTool(tool)}
+							title="Reset {TOOLS.find((t) => t.value === tool)?.label}"
+							aria-label="Reset {TOOLS.find((t) => t.value === tool)?.label}"
+						>
+							<RotateCcw size={12} />
+						</button>
+					</div>
 				</div>
 
 				<!-- Rows are label / control / readout throughout, and double-clicking
@@ -1680,27 +1702,29 @@
 		</div>
 
 		<div class="dialog-foot">
-			<button
-				class="icon-btn"
-				disabled={!history.canUndo}
-				onclick={undo}
-				title="Undo (Ctrl+Z)"
-				aria-label="Undo"
-			>
-				<Undo2 size={13} />
-			</button>
-			<button
-				class="icon-btn"
-				disabled={!history.canRedo}
-				onclick={redo}
-				title="Redo (Ctrl+Shift+Z)"
-				aria-label="Redo"
-			>
-				<Redo2 size={13} />
-			</button>
+			<div class="bar-cluster">
+				<button
+					class="bar-icon"
+					disabled={!history.canUndo}
+					onclick={undo}
+					title="Undo (Ctrl+Z)"
+					aria-label="Undo"
+				>
+					<Undo2 size={13} />
+				</button>
+				<button
+					class="bar-icon"
+					disabled={!history.canRedo}
+					onclick={redo}
+					title="Redo (Ctrl+Shift+Z)"
+					aria-label="Redo"
+				>
+					<Redo2 size={13} />
+				</button>
+			</div>
 			<span class="foot-gap"></span>
-			<button class="ghost-btn" onclick={reset}>Reset</button>
-			<button class="ghost-btn" onclick={onClose}>Done</button>
+			<button class="bar-key rec" onclick={reset}>Reset</button>
+			<button class="bar-key done" onclick={onClose}>Done</button>
 		</div>
 	</div>
 </div>
@@ -1787,27 +1811,24 @@
 		bottom: -4px;
 	}
 
-	/* The app's segmented control, as ButtonGroup draws it — one bordered group
-	   rather than three separate buttons. Not ButtonGroup itself only because
-	   these segments carry an icon, which it doesn't take. */
+	/* The tools as one segmented strip, the width of the column. The picked
+	   one is held down the way the button group marks its pick; the pointer's
+	   mode is a selection, not a switch that is on. */
 	.tool-bar {
 		display: flex;
 		flex-shrink: 0;
-		background: var(--glass);
-		border: 1px solid var(--line);
-		border-radius: var(--r-2);
-		overflow: hidden;
 	}
 
 	.tool-btn {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 0.3rem;
-		width: 100%;
-		padding: 0.35rem 0.4rem;
+		gap: 0.35rem;
+		flex: 1;
+		height: 28px;
+		padding: 0 0.4rem;
 		border: none;
-		border-right: 1px solid var(--line);
+		border-left: 1px solid var(--line);
 		background: none;
 		color: var(--text-3);
 		font-family: var(--font-mono);
@@ -1821,37 +1842,35 @@
 			background var(--t-fast);
 	}
 
-	.tool-btn:last-child {
-		border-right: none;
+	.tool-btn:first-child {
+		border-left: none;
 	}
 
 	.tool-btn:hover {
-		color: var(--text-2);
+		color: var(--text);
+		background: rgba(255, 255, 255, 0.05);
 	}
 
-	.tool-btn.active {
-		background: rgba(255, 255, 255, 0.07);
+	.tool-btn.open {
+		background: rgba(255, 255, 255, 0.08);
 		color: var(--text);
 	}
 
+	/* What the tool does, with its Reset beside it. */
 	.tool-head {
 		display: flex;
 		align-items: flex-start;
-		gap: 0.5rem;
+		gap: 0.6rem;
+		padding-bottom: 0.7rem;
+		border-bottom: 1px solid var(--line);
 	}
 
 	.tool-hint {
 		flex: 1;
 		margin: 0;
-		font-size: 0.68rem;
-		line-height: 1.35;
-		color: var(--text-4);
-	}
-
-	.icon-btn.small {
-		width: 1.4rem;
-		height: 1.4rem;
-		flex-shrink: 0;
+		font-size: 0.7rem;
+		line-height: 1.45;
+		color: var(--text-3);
 	}
 
 	.edit-overlay {
@@ -1861,61 +1880,85 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(0, 0, 0, 0.7);
+		background: rgba(4, 4, 8, 0.72);
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px);
+		animation: overlay-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 	}
 
+	/* A module lifted out of the rack: one surface, hairlines between its
+	   head, bench and foot, and a top edge the light catches. Big on purpose —
+	   cropping and erasing are aiming tasks, and the old 420px column left the
+	   picture smaller than the controls under it. */
 	.edit-dialog {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
-		/* Big on purpose: cropping and erasing are aiming tasks, and the old
-		   420px column left the picture smaller than the controls under it. */
 		width: min(1080px, calc(100vw - 3rem));
 		height: min(720px, calc(100vh - 3rem));
-		padding: 1.1rem;
 		background: var(--surface);
 		border: 1px solid var(--line-strong);
 		border-radius: var(--r-3);
-		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.05),
+			0 24px 64px rgba(4, 4, 8, 0.75);
+		overflow: hidden;
+		animation: dialog-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+
+	@keyframes overlay-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@keyframes dialog-in {
+		from {
+			opacity: 0;
+			transform: translateY(6px) scale(0.985);
+		}
 	}
 
 	.dialog-head {
 		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.5rem;
+		align-items: center;
+		gap: 0.75rem;
+		flex-shrink: 0;
+		padding: 0.7rem 0.85rem 0.7rem 1rem;
+		border-bottom: 1px solid var(--line);
 	}
 
-	.dialog-head h3 {
-		margin: 0;
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-		color: var(--text);
+	/* The engraved label, then the file it is about — the thing that changes
+	   from one opening to the next gets the size. */
+	.dialog-title {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		flex: 1;
+		min-width: 0;
 	}
 
 	.dialog-src {
-		margin-left: 0.4rem;
-		font-size: 0.62rem;
-		letter-spacing: 0;
-		text-transform: none;
-		color: var(--text-3);
-	}
-
-	.close-btn {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.15rem;
-		border: none;
-		background: none;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-
-	.close-btn:hover {
+		margin: 0;
+		font-size: 0.82rem;
+		font-weight: 500;
+		line-height: 1.25;
 		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.dialog-meta {
+		flex-shrink: 0;
+		font-size: 0.62rem;
+		letter-spacing: 0.06em;
+		color: var(--text-3);
+		white-space: nowrap;
+	}
+
+	.meta-sep {
+		margin: 0 0.35rem;
+		color: var(--text-4);
 	}
 
 	/* The picture and its transport on the left, every control on the right, so
@@ -1923,7 +1966,6 @@
 	.dialog-body {
 		display: flex;
 		flex: 1;
-		gap: 1rem;
 		min-height: 0;
 	}
 
@@ -1933,15 +1975,20 @@
 		flex-direction: column;
 		gap: 0.6rem;
 		min-width: 0;
+		padding: 0.85rem 1rem;
 	}
 
+	/* The controls, in a column off the bench with a hairline between. */
 	.side {
 		display: flex;
 		flex-direction: column;
 		flex-shrink: 0;
-		gap: 0.6rem;
-		width: 17rem;
+		gap: 0.7rem;
+		width: 17.5rem;
+		padding: 0.85rem 1rem;
+		border-left: 1px solid var(--line);
 		overflow-y: auto;
+		scrollbar-width: thin;
 	}
 
 	/* Checkerboard, so a cut-out reads as transparent rather than as black. */
@@ -1988,10 +2035,16 @@
 		.side {
 			width: auto;
 			overflow: visible;
+			border-left: none;
+			border-top: 1px solid var(--line);
 		}
 
 		.preview {
 			min-height: 14rem;
+		}
+
+		.dialog-meta {
+			display: none;
 		}
 	}
 
@@ -2009,23 +2062,8 @@
 		flex-shrink: 0;
 	}
 
-	.play-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		width: 1.5rem;
-		height: 1.5rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-1);
-		background: rgba(255, 255, 255, 0.04);
+	.clock {
 		color: var(--text-2);
-		cursor: pointer;
-	}
-
-	.play-btn:hover {
-		background: rgba(255, 255, 255, 0.09);
-		color: var(--text);
 	}
 
 	.rows {
@@ -2052,13 +2090,44 @@
 		user-select: none;
 	}
 
+	/* The app's own tick, not the platform's. */
 	.row input[type="checkbox"] {
-		accent-color: #888;
+		appearance: none;
+		width: 14px;
+		height: 14px;
+		margin: 0;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-1);
+		background: var(--sunken);
+		cursor: pointer;
+		position: relative;
+		flex-shrink: 0;
+		transition:
+			border-color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.row input[type="checkbox"]:hover {
+		border-color: var(--text-3);
+	}
+
+	.row input[type="checkbox"]:checked {
+		background: rgba(110, 231, 192, 0.15);
+		border-color: var(--live-dim);
+	}
+
+	.row input[type="checkbox"]:checked::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+			center/contain no-repeat;
 	}
 
 	.val {
 		min-width: 2.6rem;
 		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.62rem;
 		text-align: right;
 		color: var(--text-3);
@@ -2068,7 +2137,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-top: 0.2rem;
+		flex-shrink: 0;
+		padding: 0.6rem 1rem;
+		border-top: 1px solid var(--line);
 	}
 
 	/* Undo and redo sit at the left, away from Reset: they are the way back from
@@ -2077,47 +2148,9 @@
 		flex: 1;
 	}
 
-	.icon-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.6rem;
-		height: 1.6rem;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-1);
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--text-2);
-		cursor: pointer;
-	}
-
-	.icon-btn:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.09);
-		color: var(--text);
-	}
-
-	.icon-btn:disabled {
-		color: var(--text-4);
-		cursor: default;
-	}
-
-	.ghost-btn {
-		padding: 0.35rem 0.8rem;
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-2);
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--text-2);
-		cursor: pointer;
-		transition:
-			background var(--t-fast),
-			color var(--t-fast);
-	}
-
-	.ghost-btn:hover {
-		background: rgba(255, 255, 255, 0.09);
+	/* The one filled key: the way out. */
+	.done {
+		background: rgba(255, 255, 255, 0.08);
 		color: var(--text);
 	}
 </style>
