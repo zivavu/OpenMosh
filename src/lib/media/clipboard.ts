@@ -9,8 +9,10 @@
  * be a lane edit wearing a clip's clothes.
  *
  * Pasting *onto* a clip is the other half: what the copied clip showed — its
- * source and in-point — dropped into a clip that keeps its own span, fade and
- * lane.
+ * source, in-point and the chain it ran through — dropped into a clip that
+ * keeps its own span, fade and lane. The chain is the one lane edit a paste
+ * makes: "make this clip look like that one" has to bring the effects along,
+ * and the lane is where they live.
  */
 
 import {
@@ -19,6 +21,8 @@ import {
 	sortClips,
 	type ClipBlockEntry,
 } from "../timeline/clips";
+import { cloneEffectInstance } from "../effects";
+import type { EffectInstance } from "../effects/types";
 import { createMediaClip, type MediaClip, type MediaLane } from "./types";
 import type { MediaTimeline } from "./types";
 
@@ -32,6 +36,8 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	 * came from has since been repointed or deleted. Null for a clip on a lane
 	 * with no source yet. */
 	resolvedSourceId: string | null;
+	/** The lane's chain at copy time, for a paste onto a clip elsewhere. */
+	effects: EffectInstance[];
 	fadeInSec?: number;
 	fadeOutSec?: number;
 }
@@ -55,6 +61,7 @@ export function copyMediaClips(
 				sourceStart: clip.sourceStart,
 				sourceId: clip.sourceId,
 				resolvedSourceId: clip.sourceId ?? lane.sourceId,
+				effects: lane.effects.map(cloneEffectInstance),
 				fadeInSec: clip.fadeInSec,
 				fadeOutSec: clip.fadeOutSec,
 			});
@@ -142,6 +149,11 @@ export function pasteMediaClips(
  * and takes the source and in-point. The source is pinned on the clip unless
  * it is already what its lane shows, so the lane's own picker keeps meaning
  * "this lane's default" for the clips that never chose.
+ *
+ * The target's lane takes the copied chain too. A lane holds one chain, so
+ * when several targets on it draw from different copies the earliest target's
+ * wins — the one the paste reads as "onto" first. Fresh instance ids, since
+ * the renderer keys per-effect state by them and two lanes must not share.
  */
 export function pasteMediaContentOnto(
 	timeline: MediaTimeline,
@@ -160,8 +172,13 @@ export function pasteMediaContentOnto(
 		...timeline,
 		lanes: timeline.lanes.map((lane) => {
 			if (!lane.clips.some((c) => targets.has(c.id))) return lane;
+			const first = order.findIndex((id) =>
+				lane.clips.some((c) => c.id === id),
+			);
+			const chain = entries[first % entries.length].effects;
 			return {
 				...lane,
+				effects: chain.map(cloneEffectInstance),
 				clips: lane.clips.map((c) => {
 					const i = order.indexOf(c.id);
 					if (i === -1) return c;
