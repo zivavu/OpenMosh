@@ -221,53 +221,32 @@ export function createMediaLane(
 	};
 }
 
-/**
- * A new lane covering the whole timeline. A layer you can't see is a dead end —
- * the lane arrives visible, and trimming it is the opt-in step.
- */
-export function createFullSpanLane(
-	name: string,
-	sourceId: string | null,
-	duration: number,
-	z = 0,
-): MediaLane {
-	const lane = createMediaLane(name, sourceId, z);
-	const span = Math.max(duration, MIN_CLIP_LENGTH);
-	return { ...lane, clips: [createMediaClip(0, span)] };
-}
-
 export function createMediaTimeline(
 	sourceId: string | null,
-	duration: number,
 	z = 0,
 ): MediaTimeline {
 	return {
 		enabled: true,
-		lanes: [createFullSpanLane("Layer 1", sourceId, duration, z)],
+		lanes: [createMediaLane("Layer 1", sourceId, z)],
 	};
 }
 
 /**
- * Add a lane covering the whole timeline, named after its position. `z` comes
- * from the caller: the order spans the text lanes too, which this timeline
- * can't see.
+ * Add an empty lane, named after its position: what goes on it is the user's
+ * call, and a clip they never asked for is one they have to trim or delete. `z`
+ * comes from the caller: the order spans the text lanes too, which this
+ * timeline can't see.
  */
 export function appendMediaLane(
 	timeline: MediaTimeline,
 	sourceId: string | null,
-	duration: number,
 	z = 0,
 ): MediaTimeline {
 	return {
 		...timeline,
 		lanes: [
 			...timeline.lanes,
-			createFullSpanLane(
-				`Layer ${timeline.lanes.length + 1}`,
-				sourceId,
-				duration,
-				z,
-			),
+			createMediaLane(`Layer ${timeline.lanes.length + 1}`, sourceId, z),
 		],
 	};
 }

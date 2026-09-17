@@ -3650,11 +3650,7 @@
 			? { ...mediaTimeline, enabled: false }
 			: mediaTimeline.lanes.length > 0
 				? { ...mediaTimeline, enabled: true }
-				: createMediaTimeline(
-						defaultLayerSourceId(),
-						textDuration,
-						nextLayerZ(layerOrder),
-					);
+				: createMediaTimeline(defaultLayerSourceId(), nextLayerZ(layerOrder));
 		if (!mediaTimeline.enabled) selectedMediaClipId = null;
 	}
 
@@ -3678,7 +3674,6 @@
 					? mediaTimeline
 					: { ...mediaTimeline, enabled: true },
 				sourceId,
-				textDuration,
 				nextLayerZ(layerOrder),
 			),
 		);

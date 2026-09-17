@@ -8,7 +8,7 @@ import {
 	setMediaClipSources,
 } from "./resolve";
 import {
-	createFullSpanLane,
+	appendMediaLane,
 	createMediaClip,
 	createMediaLane,
 	fitMediaTimeline,
@@ -147,15 +147,16 @@ describe("splitMediaClipAt", () => {
 	});
 });
 
-describe("createFullSpanLane", () => {
-	it("arrives visible for the whole timeline", () => {
-		const lane = createFullSpanLane("Layer 1", "src-a", 12);
-		expect(lane.clips).toHaveLength(1);
-		expect(lane.clips[0].end).toBe(12);
+describe("appendMediaLane", () => {
+	it("arrives empty", () => {
+		const next = appendMediaLane(timelineOf([]), "src-a");
+		expect(next.lanes).toHaveLength(1);
+		expect(next.lanes[0].clips).toHaveLength(0);
+		expect(next.lanes[0].sourceId).toBe("src-a");
 	});
 
 	it("starts with the same switches the main chain has, all off", () => {
-		const lane = createFullSpanLane("Layer 1", "src-a", 12);
+		const lane = createMediaLane("Layer 1", "src-a");
 		expect(lane.effects.length).toBeGreaterThan(0);
 		expect(lane.effects.every((e) => !e.enabled)).toBe(true);
 	});

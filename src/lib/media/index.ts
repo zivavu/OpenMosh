@@ -73,7 +73,6 @@ export type {
 } from "./types";
 export {
 	appendMediaLane,
-	createFullSpanLane,
 	createMediaClip,
 	createMediaLane,
 	createMediaTimeline,
