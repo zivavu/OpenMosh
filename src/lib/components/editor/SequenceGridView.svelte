@@ -14,6 +14,10 @@
 		shortSourceName,
 		sourceColor,
 	} from "../../editor/sequence-source-ui";
+	import {
+		beginSourceDrag,
+		endSourceDrag,
+	} from "../../editor/source-drag.svelte";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
@@ -74,6 +78,7 @@
 	 * same drag as an assignment. */
 	function onCardDragStart(e: DragEvent, index: number) {
 		dragFromIndex = index;
+		beginSourceDrag(sources[index].id);
 		if (!e.dataTransfer) return;
 		e.dataTransfer.effectAllowed = "copyMove";
 		e.dataTransfer.setData(SOURCE_DND_TYPE, sources[index].id);
@@ -97,6 +102,7 @@
 	}
 
 	function endCardDrag() {
+		endSourceDrag();
 		dragFromIndex = null;
 		dragOverIndex = null;
 	}

@@ -23,6 +23,10 @@
 		shortSourceName,
 		sourceColor,
 	} from "../../editor/sequence-source-ui";
+	import {
+		beginSourceDrag,
+		endSourceDrag,
+	} from "../../editor/source-drag.svelte";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import { proxyStatus } from "../../video/proxy-status";
 
@@ -149,6 +153,8 @@
 
 	function onThumbDragStart(e: DragEvent, src: SequenceSource, index: number) {
 		dragFromIndex = index;
+		// So a lane can draw what is coming before the drop hands it over.
+		beginSourceDrag(src.id);
 		if (!e.dataTransfer) return;
 		e.dataTransfer.effectAllowed = "copyMove";
 		e.dataTransfer.setData(SOURCE_DND_TYPE, src.id);
@@ -166,6 +172,7 @@
 	}
 
 	function endThumbDrag() {
+		endSourceDrag();
 		dragFromIndex = null;
 		dragOverIndex = null;
 	}

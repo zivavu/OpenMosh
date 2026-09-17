@@ -34,6 +34,7 @@
 	} from "../../media";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import { SOURCE_DND_TYPE } from "../../editor/sequence-source-ui";
+	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import LaneGrip from "../ui/LaneGrip.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
@@ -95,22 +96,57 @@
 
 	// ── Source drops ─────────────────────────────────────────────────────────
 	// The same payload the media rail and the sequence grid send, so a thumb
-	// dragged onto a lane sets what that layer draws.
+	// dragged onto a lane either retargets the clip it lands on or lays down a
+	// new one in the gap it fell in.
 	let dropLaneId = $state<string | null>(null);
-	/** The clip a drop would retarget; null when it would set the lane instead. */
+	/** The clip a drop would retarget; null when it would make a new one. */
 	let dropClipId = $state<string | null>(null);
+	/** Where a drop on empty space would put its clip. Drawn as a ghost, so the
+	 * span is settled before the media lands rather than after. */
+	let dropGhost = $state<{
+		laneId: string;
+		start: number;
+		end: number;
+	} | null>(null);
+	/** The media in the air — the drag payload itself is sealed until the drop. */
+	let ghostSource = $derived(sourceById(draggedSourceId()));
 
 	function isSourceDrag(e: DragEvent): boolean {
 		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
+	}
+
+	function clearDrop() {
+		dropLaneId = null;
+		dropClipId = null;
+		dropGhost = null;
 	}
 
 	function onLaneDragOver(e: DragEvent, laneId: string) {
 		if (!isSourceDrag(e)) return;
 		// Without preventDefault the browser refuses the drop entirely.
 		e.preventDefault();
-		if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+		const onClip = dropTargetClip(laneId, e.clientX);
 		dropLaneId = laneId;
-		dropClipId = dropTargetClip(laneId, e.clientX)?.id ?? null;
+		dropClipId = onClip?.id ?? null;
+		dropGhost = onClip ? null : ghostAt(laneId, e.clientX);
+		// "none" over a gap too narrow to hold a clip: the cursor is the only
+		// thing that can say so before the drop does nothing.
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = onClip || dropGhost ? "copy" : "none";
+		}
+	}
+
+	/** Where the clip a drop at this x would create lands, or null if none fits. */
+	function ghostAt(
+		laneId: string,
+		clientX: number,
+	): { laneId: string; start: number; end: number } | null {
+		const lane = laneOf(laneId);
+		if (!lane || !trackEl || trackDuration <= 0) return null;
+		const rect = trackEl.getBoundingClientRect();
+		if (clientX < rect.left || clientX > rect.right) return null;
+		const span = newClipSpan(lane, timeAt(clientX), draggedSourceId());
+		return span && { laneId, ...span };
 	}
 
 	/** The clip a drop at this x would land on, if it lands on one at all. */
@@ -135,35 +171,49 @@
 		) {
 			return;
 		}
-		dropLaneId = null;
-		dropClipId = null;
+		clearDrop();
 	}
 
 	/**
 	 * A thumb dropped on a clip retargets that clip alone; one dropped on the
-	 * lane's empty space sets the lane's own source, which every clip that never
-	 * chose one follows. That split is what lets one lane hold several images
-	 * without the drop having to ask which it meant.
+	 * lane's empty space lays down a new clip there showing it. That split is
+	 * what lets one lane hold several images without the drop having to ask
+	 * which it meant.
 	 */
 	function onLaneDrop(e: DragEvent, laneId: string) {
 		if (!isSourceDrag(e)) return;
 		e.preventDefault();
 		const sourceId = e.dataTransfer?.getData(SOURCE_DND_TYPE) ?? "";
 		const onClip = dropTargetClip(laneId, e.clientX);
-		dropLaneId = null;
-		dropClipId = null;
-		if (!sourceId) return;
+		const ghost = dropGhost;
+		clearDrop();
 		const lane = laneOf(laneId);
-		if (!lane) return;
+		if (!sourceId || !lane) return;
 		if (onClip) {
 			if (clipSourceId(lane, onClip) === sourceId) return;
 			onBeforeEdit?.();
 			onChange(setMediaClipSources(timeline, [onClip.id], sourceId));
 			return;
 		}
-		if (lane.sourceId === sourceId) return;
+		if (!ghost || ghost.laneId !== laneId) return;
+		// A lane with no media of its own takes the drop as its default too, so
+		// its picker has something to name and later clips inherit it; after
+		// that the new clip carries the source itself and the lane is left be.
+		const inherits = lane.sourceId === null || lane.sourceId === sourceId;
+		const clip = createMediaClip(
+			ghost.start,
+			ghost.end,
+			0,
+			inherits ? undefined : sourceId,
+		);
 		onBeforeEdit?.();
-		onChange(updateMediaLane(timeline, laneId, (l) => ({ ...l, sourceId })));
+		onChange(
+			updateMediaLane(timeline, laneId, (l) => ({
+				...addClip(l, clip, trackDuration),
+				sourceId: inherits ? sourceId : l.sourceId,
+			})),
+		);
+		selectOnly(clip.id);
 	}
 
 	function sourceById(id: string | null): SequenceSource | undefined {
@@ -336,17 +386,37 @@
 		if (first) selectOnly(first.id);
 	}
 
-	function addClipAt(laneId: string, time: number) {
-		const lane = laneOf(laneId);
-		if (!lane) return;
+	/**
+	 * The span a clip added at `time` gets: it starts under the pointer and runs
+	 * for as long as the gap it fell in allows. A video asks for its own length,
+	 * so dropping one lays down the whole shot rather than a stub.
+	 */
+	function newClipSpan(
+		lane: MediaLane,
+		time: number,
+		sourceId?: string | null,
+	): { start: number; end: number } | null {
 		const gap = freeRangeAt(lane, time, trackDuration);
-		if (!gap) return;
+		if (!gap) return null;
+		const duration = sourceById(sourceId ?? null)?.duration ?? 0;
+		const want = duration > 0 ? duration : DEFAULT_CLIP_LENGTH;
 		const start = Math.max(
 			gap.start,
 			Math.min(time, gap.end - MIN_CLIP_LENGTH),
 		);
-		const end = Math.min(start + DEFAULT_CLIP_LENGTH, gap.end);
-		const clip = createMediaClip(start, end);
+		const end = Math.min(
+			Math.max(start + want, start + MIN_CLIP_LENGTH),
+			gap.end,
+		);
+		return { start, end };
+	}
+
+	function addClipAt(laneId: string, time: number) {
+		const lane = laneOf(laneId);
+		if (!lane) return;
+		const span = newClipSpan(lane, time);
+		if (!span) return;
+		const clip = createMediaClip(span.start, span.end);
 		onBeforeEdit?.();
 		onChange(
 			updateMediaLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)),
@@ -496,11 +566,11 @@
 		return Math.max(1, Math.min(EDGE_GRAB, px / 3));
 	}
 
-	/** The clip's on-screen width. */
-	function clipPx(clip: MediaClip): number {
+	/** A span's on-screen width. */
+	function clipPx(span: { start: number; end: number }): number {
 		const px = trackEl?.getBoundingClientRect().width ?? 0;
 		if (px <= 0) return 0;
-		return ((clip.end - clip.start) / vp.viewDuration) * px;
+		return ((span.end - span.start) / vp.viewDuration) * px;
 	}
 
 	/**
@@ -858,6 +928,22 @@
 					{/if}
 				{/each}
 
+				{#if dropGhost?.laneId === lane.id}
+					{@const left = vp.toPct(dropGhost.start)}
+					{@const width = vp.toPct(dropGhost.end) - left}
+					<div class="clip ghost" style="left: {left}%; width: {width}%">
+						{#if ghostSource?.thumbUrl}
+							<span
+								class="clip-thumb"
+								style="background-image: url({ghostSource.thumbUrl})"
+							></span>
+						{/if}
+						{#if clipPx(dropGhost) >= MIN_LABEL_PX}
+							<span class="clip-label">{ghostSource?.name ?? "New clip"}</span>
+						{/if}
+					</div>
+				{/if}
+
 				{#each adjacentPairs(lane) as pair (pair.left.id)}
 					{@const left = vp.toPct(pair.at)}
 					{#if left >= 0 && left <= 100}
@@ -930,8 +1016,8 @@
 		opacity: 0.55;
 	}
 
-	/* A source is being dragged over this row's empty space and would become the
-	   lane's own. Over a clip the clip lights instead — the drop retargets that
+	/* A source is being dragged over this row's empty space and a clip would be
+	   cut for it. Over a clip the clip lights instead — the drop retargets that
 	   one clip, and lighting the whole row would promise otherwise. */
 	.layer-row.drop-target .lane-track {
 		border-color: var(--live);
@@ -1034,6 +1120,17 @@
 		height: 3px;
 		border-radius: 50%;
 		background: var(--mosh);
+		pointer-events: none;
+	}
+
+	/* The clip a drop would make, at the span it would get: the gesture has to
+	   say where the media lands while there is still time to move it. Dashed
+	   and pale so it never reads as a clip that is already there. */
+	.clip.ghost {
+		border-style: dashed;
+		border-color: var(--mosh);
+		background: rgba(0, 0, 0, 0.35);
+		color: var(--text-2);
 		pointer-events: none;
 	}
 
