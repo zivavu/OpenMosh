@@ -43,7 +43,8 @@
 	const DEFAULT_CLIP_LENGTH = 2;
 	const LANE_HEIGHT = 30;
 	/** A folded lane: its clips are still there to read, but not at a height that
-	 * pays for the text inside them. */
+	 * pays for the text inside them. A floor, not a height: the strip fills its
+	 * row, so the gutter controls never leave slack under it. */
 	const LANE_FOLDED_HEIGHT = 14;
 	/** Shared so an unfolded panel allocates nothing per instance. */
 	const NO_FOLDS: ReadonlySet<string> = new Set();
@@ -866,9 +867,9 @@
 			<div
 				class="tl-lane lane-track"
 				use:laneTrack={lane.id}
-				style="height: {foldedLaneIds.has(lane.id)
-					? LANE_FOLDED_HEIGHT
-					: LANE_HEIGHT}px"
+				style={foldedLaneIds.has(lane.id)
+					? `min-height: ${LANE_FOLDED_HEIGHT}px`
+					: `height: ${LANE_HEIGHT}px`}
 				role="group"
 				aria-label="{lane.name} clips"
 				ondblclick={(e) => onTrackDblClick(e, lane.id)}

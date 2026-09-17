@@ -486,6 +486,15 @@
 		display: none;
 	}
 
+	/* A folded row is as short as its gutter lets it be, and the strip fills
+	   that: the buttons' vertical padding was what set the row height, and the
+	   14px strip sat at the top of an 18px row, so the slack read as a gap
+	   nearly half the strip's own height. */
+	:global(.tl-stack .tl-row.folded .tl-gutter button) {
+		padding-top: 0;
+		padding-bottom: 0;
+	}
+
 	/* Rows that carry controls rather than time. Opaque and above the overlays,
 	   so neither the playhead nor the grid stripes them. */
 	/* Always this tall, selection or not: the lanes above must not move when
