@@ -1245,8 +1245,11 @@
 	}
 
 	// The dialog's own playback runs at the edited rate, so the clip can be
-	// watched the way the timeline will run it.
+	// watched the way the timeline will run it. Keyed on `ready`, not the
+	// element: it lands after the load, and a clip opened with a speed already
+	// on it has to start at that speed, not at 1× until the slider moves.
 	$effect(() => {
+		if (!ready) return;
 		const v = media;
 		if (v && "playbackRate" in v) v.playbackRate = speed;
 	});
