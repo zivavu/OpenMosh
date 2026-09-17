@@ -486,6 +486,14 @@
 		display: none;
 	}
 
+	/* And the clips run edge to edge: the 3px inset that gives an open lane's
+	   bars some air would leave a 14px strip with a 6px bar in it. */
+	:global(.tl-stack .tl-row.folded .clip) {
+		top: 0;
+		bottom: 0;
+		border-radius: 3px;
+	}
+
 	/* A folded row is as short as its gutter lets it be, and the strip fills
 	   that: the buttons' vertical padding was what set the row height, and the
 	   14px strip sat at the top of an 18px row, so the slack read as a gap
