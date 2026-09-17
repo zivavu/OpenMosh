@@ -993,11 +993,16 @@ void main() {
 uniform sampler2D u_original;
 void main() {
   vec4 orig = texture(u_original, v_uv);
-  vec3 bloom = texture(u_texture, v_uv).rgb;
+  vec3 bloom = texture(u_texture, v_uv).rgb * u_amount;
   // The halo carries its own coverage, so glow spreads past the edge of a text
-  // layer instead of being clipped to the glyphs. No-op on an opaque image.
-  float halo = dot(bloom * u_amount, vec3(0.299, 0.587, 0.114));
-  outColor = vec4(orig.rgb + bloom * u_amount, clamp(max(orig.a, halo), 0.0, 1.0));
+  // layer or a cut-out instead of being clipped to it. Summed premultiplied
+  // and divided back out: the composite mixes by alpha, so leaving the halo's
+  // colour straight would scale it by its own coverage twice and the spill
+  // would all but vanish off the edge. No-op on an opaque image.
+  float halo = dot(bloom, vec3(0.299, 0.587, 0.114));
+  float a = clamp(max(orig.a, halo), 0.0, 1.0);
+  vec3 lit = orig.rgb * orig.a + bloom;
+  outColor = vec4(a > 0.0 ? lit / a : vec3(0.0), a);
 }`,
 		setUniforms: floats("amount", "cutoff", "radius"),
 	},
