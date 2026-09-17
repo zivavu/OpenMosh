@@ -253,6 +253,11 @@ void main() {
   // Coverage is kept here, unlike the source pass: a layer has the frame
   // underneath it to show through wherever it was erased or keyed out.
   vec4 c = editedSource(u_texture, clamp(uv, 0.0, 1.0));
+  // What the edit removed goes in colour too, not only in coverage. The chain
+  // reads rgb straight, so a keyed backdrop that kept its green would bloom
+  // and smear right back through the hole. Alpha stays straight: the
+  // composite mixes by it, and premultiplying would darken the soft edge.
+  c.rgb *= step(0.001, c.a);
   outColor = c * insideLayerSoft(uv, u_edgeFade);
 }`;
 
@@ -961,7 +966,10 @@ void main() {
     float fi = float(i) * step;
     float w = exp(-fi * fi * invSigma2);
     vec2 off = vec2(fi * px.x, 0.0);
-    vec3 s = texture(u_texture, v_uv + off).rgb;
+    // Weighted by coverage, so a half-erased edge blooms half as much and a
+    // cut-out's soft rim doesn't glow with the colour it was keyed out of.
+    vec4 s4 = texture(u_texture, v_uv + off);
+    vec3 s = s4.rgb * s4.a;
     float luma = dot(s, vec3(0.299, 0.587, 0.114));
     float contrib = max(0.0, luma - u_cutoff);
     bloom += s * contrib * contrib * w;
