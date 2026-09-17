@@ -1,3 +1,7 @@
+<script module lang="ts">
+	let loopPreference = false;
+</script>
+
 <script lang="ts">
 	import {
 		Crop,
@@ -6,6 +10,7 @@
 		Pipette,
 		Play,
 		Redo2,
+		Repeat,
 		RotateCcw,
 		Undo2,
 		X,
@@ -138,6 +143,9 @@
 	let duration = $state(0);
 	let currentTime = $state(0);
 	let playing = $state(false);
+	/** Wrap at the end instead of stopping. Remembered across openings: it is
+	 * a way of watching, not a property of the clip. */
+	let loop = $state(loopPreference);
 
 	/**
 	 * The edit as it stands under the playhead. Everything on screen reads from
@@ -412,6 +420,7 @@
 				grabFrame();
 				paint();
 			};
+			// Looping is the element's own: it never fires ended.
 			v.onended = () => (playing = false);
 			v.onloadeddata = () => {
 				// Not frame 0: some encodes open on a black or faded lead-in, which
@@ -1254,6 +1263,13 @@
 		if (v && "playbackRate" in v) v.playbackRate = speed;
 	});
 
+	$effect(() => {
+		loopPreference = loop;
+		if (!ready) return;
+		const v = media;
+		if (v && "loop" in v) v.loop = loop;
+	});
+
 	function reset() {
 		beforeEdit();
 		maskCanvas = null;
@@ -1442,6 +1458,17 @@
 								aria-label={playing ? "Pause" : "Play"}
 							>
 								{#if playing}<Pause size={12} />{:else}<Play size={12} />{/if}
+							</button>
+							<button
+								class="bar-icon"
+								class:on={loop}
+								onclick={() => (loop = !loop)}
+								disabled={!ready}
+								title={loop ? "Repeat: on" : "Repeat: off"}
+								aria-label="Repeat"
+								aria-pressed={loop}
+							>
+								<Repeat size={12} />
 							</button>
 						</div>
 						<RangeSlider
