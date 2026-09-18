@@ -29,6 +29,7 @@
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { showToast } from "./toast.svelte";
+	import { fmtAgo } from "../../utils";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import {
@@ -133,6 +134,48 @@
 			: selectedMode === "slideshow"
 				? savedSlideshow
 				: [],
+	);
+
+	/** One shape for the list, whichever store the mode reads from. Sequence
+	 * rows have no session key: reopening is keyed by song. Single rows carry
+	 * no count — there is always exactly one source. */
+	interface RecentRow {
+		key: string;
+		mode: SessionMode;
+		label: string;
+		sourceCount: number | null;
+		updatedAt: number;
+		title: string;
+		open: () => void;
+	}
+	let recentRows = $derived<RecentRow[]>(
+		selectedMode === "sequence"
+			? savedSequences.map((seq) => ({
+					key: seq.trackId,
+					mode: "sequence" as const,
+					label: seq.trackName,
+					sourceCount: seq.sourceCount,
+					updatedAt: seq.updatedAt,
+					title: `Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`,
+					open: () => {
+						// Reopening a song is entering the editor too. The stored value
+						// stays "sequence": it is what every saved key is written under.
+						updateSettings({ lastMode: "sequence" });
+						onSequenceFromSong(seq.trackId);
+					},
+				}))
+			: savedForMode.map((session) => ({
+					key: session.key,
+					mode: session.mode,
+					label: session.label,
+					sourceCount: session.mode === "slideshow" ? session.sourceCount : null,
+					updatedAt: session.updatedAt,
+					title: `Reopen "${session.label}" with the work already done on it`,
+					open: () => {
+						updateSettings({ lastMode: selectedMode });
+						onSessionOpen(session.mode, session.key);
+					},
+				})),
 	);
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
@@ -532,51 +575,30 @@
 		{/await}
 	{/if}
 
-	<!-- One row at a fixed height for every mode, empty or not: a block that
-	     collapsed when a mode had nothing saved is what made switching jump.
-	     The chips scroll sideways rather than wrapping. -->
+	<!-- A rack of rows at a fixed height for every mode, empty or not: a block
+	     that collapsed when a mode had nothing saved is what made switching
+	     jump. Three rows show; the rest scroll under the fade. -->
 	<div class="recent">
-		{#if selectedMode === "sequence" && savedSequences.length > 0}
-			<span class="recent-label rack-label">Recent</span>
-			<div class="recent-list">
-				{#each savedSequences as seq (seq.trackId)}
-					<button
-						class="saved-item"
-						title={`Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`}
-						onclick={() => {
-							// Reopening a song is entering the editor too. The stored value
-							// stays "sequence": it is what every saved key is written under.
-							updateSettings({ lastMode: "sequence" });
-							onSequenceFromSong(seq.trackId);
-						}}
-					>
-						<ListVideo size={13} />
-						<span class="saved-name">{seq.trackName}</span>
-						<span class="saved-count">{seq.sourceCount}</span>
-					</button>
-				{/each}
+		{#if recentRows.length > 0}
+			<div class="recent-head">
+				<span class="rack-label">Recent</span>
+				<span class="recent-count">{recentRows.length}</span>
 			</div>
-		{:else if selectedMode !== "sequence" && savedForMode.length > 0}
-			<span class="recent-label rack-label">Recent</span>
 			<div class="recent-list">
-				{#each savedForMode as session (session.key)}
-					<button
-						class="saved-item"
-						title={`Reopen "${session.label}" with the work already done on it`}
-						onclick={() => {
-							updateSettings({ lastMode: selectedMode });
-							onSessionOpen(session.mode, session.key);
-						}}
-					>
-						{#if session.mode === "single"}
+				{#each recentRows as row (row.key)}
+					<button class="saved-item" title={row.title} onclick={row.open}>
+						{#if row.mode === "single"}
 							<Image size={13} />
 						{:else}
 							<ListVideo size={13} />
 						{/if}
-						<span class="saved-name">{session.label}</span>
-						{#if session.mode === "slideshow"}
-							<span class="saved-count">{session.sourceCount}</span>
+						<span class="saved-name">{row.label}</span>
+						{#if row.sourceCount !== null}
+							<span class="saved-count"
+								>{row.sourceCount} src{row.sourceCount === 1 ? "" : "s"}</span
+							>
 						{/if}
+						<span class="saved-when">{fmtAgo(row.updatedAt)}</span>
 					</button>
 				{/each}
 			</div>
@@ -1193,86 +1215,133 @@
 	}
 
 	/* ── Recent ───────────────────────────────────────────────────────────── */
+	/* Sized for the head plus three rows, so the list is the same height with
+	   one row, ten, or none. */
 	.recent {
+		--row-h: 2.1rem;
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
+		flex-direction: column;
 		width: 100%;
 		max-width: 520px;
-		height: 2.1rem;
+		height: calc(1.5rem + var(--row-h) * 3);
 	}
 
-	.recent-label {
-		flex-shrink: 0;
-		color: var(--text-3);
+	.recent-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		height: 1.5rem;
+		padding: 0 0.25rem;
 		text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
 	}
 
-	/* One row, scrolled sideways; the ends fade so the cut is soft. */
+	.recent-count {
+		padding: 0 0.4rem;
+		border-radius: var(--r-pill);
+		background: rgba(255, 255, 255, 0.08);
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		line-height: 1.5;
+	}
+
+	/* A glass rack of hairline-split rows. Overflow scrolls vertically under
+	   a fade at the foot; the scrollbar stays hidden since the fade already
+	   says there is more. */
 	.recent-list {
-		display: flex;
-		gap: 0.4rem;
-		min-width: 0;
-		padding: 2px;
-		overflow-x: auto;
+		flex: 1;
+		min-height: 0;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-2);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		-webkit-backdrop-filter: var(--blur);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		scrollbar-width: none;
-		mask-image: linear-gradient(
-			to right,
-			transparent,
-			#000 12px,
-			#000 calc(100% - 24px),
-			transparent
-		);
 	}
 
 	.recent-list::-webkit-scrollbar {
 		display: none;
 	}
 
-	.saved-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		flex-shrink: 0;
-		padding: 0.35rem 0.75rem;
-		border: 1px solid var(--mosh-dim);
-		border-radius: var(--r-pill);
-		background: var(--glass);
-		backdrop-filter: var(--blur);
-		-webkit-backdrop-filter: var(--blur);
-		color: var(--mosh);
-		font-family: inherit;
-		font-size: 0.74rem;
-		cursor: pointer;
-		transition:
-			border-color var(--t),
-			background-color var(--t),
-			transform var(--t-fast);
+	.recent-list:has(.saved-item:nth-child(4)) {
+		mask-image: linear-gradient(to bottom, #000 calc(100% - 1.2rem), transparent);
 	}
 
-	.saved-item:hover {
-		border-color: var(--mosh);
-		background: color-mix(in srgb, var(--mosh) 10%, var(--glass));
+	.saved-item {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		width: 100%;
+		height: var(--row-h);
+		padding: 0 0.85rem;
+		border: none;
+		border-bottom: 1px solid var(--line);
+		background: transparent;
+		color: var(--text-2);
+		font-family: inherit;
+		font-size: 0.76rem;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			color var(--t),
+			background-color var(--t);
+	}
+
+	.saved-item:last-child {
+		border-bottom: none;
+	}
+
+	.saved-item:hover,
+	.saved-item:focus-visible {
+		color: var(--mosh);
+		background: color-mix(in srgb, var(--mosh) 8%, transparent);
+		outline: none;
 	}
 
 	.saved-item:active {
-		transform: scale(0.98);
+		background: color-mix(in srgb, var(--mosh) 14%, transparent);
+	}
+
+	.saved-item :global(svg) {
+		flex-shrink: 0;
+		color: var(--text-3);
+		transition: color var(--t);
+	}
+
+	.saved-item:hover :global(svg),
+	.saved-item:focus-visible :global(svg) {
+		color: var(--mosh);
 	}
 
 	.saved-name {
-		max-width: 200px;
+		flex: 1;
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.saved-count {
-		padding: 0 0.35rem;
-		border-radius: var(--r-pill);
-		background: color-mix(in srgb, var(--mosh) 18%, transparent);
-		color: var(--mosh);
+	.saved-count,
+	.saved-when {
+		flex-shrink: 0;
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
+		color: var(--text-3);
+	}
+
+	.saved-count {
+		padding: 0 0.4rem;
+		border-radius: var(--r-pill);
+		background: rgba(255, 255, 255, 0.07);
+		line-height: 1.6;
+	}
+
+	.saved-when {
+		min-width: 3.6rem;
+		text-align: right;
 	}
 
 	@media (max-width: 800px) {
