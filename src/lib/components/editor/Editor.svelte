@@ -4773,15 +4773,17 @@
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
 			>
 				{#snippet toolbar()}
+					<!-- Each button names the lane it adds in full: with three kinds of
+					     lane side by side, "+ Lane" under a group label read as the
+					     same button three times. -->
 					{#if textTimeline.enabled}
 						<div class="tl-tool-sep"></div>
-						<span class="tl-tool-label">Text</span>
 						<button
 							class="tl-tool-btn"
-							title="Add a text lane"
+							title="Add a lane of timed text over the frame"
 							onclick={addTextLane}
 						>
-							<Plus size={12} /> Lane
+							<Plus size={12} /> Text lane
 						</button>
 						{#if lyricsSync}
 							<button
@@ -4799,30 +4801,28 @@
 				     composite over what those produced. -->
 					{#if mediaTimeline.enabled}
 						<div class="tl-tool-sep"></div>
-						<span class="tl-tool-label">Layers</span>
 						<button
 							class="tl-tool-btn"
 							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
 							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
 								? `${MAX_MEDIA_LANES} layers is the limit`
-								: "Add a media layer over the image"}
+								: "Add a layer of images or videos from the pool, each clip with its own effects"}
 							onclick={addMediaLane}
 						>
-							<Plus size={12} /> Layer
+							<Plus size={12} /> Media layer
 						</button>
 					{/if}
 					{#if isSequenceMode && seqMasterDuration > 0}
 						<div class="tl-tool-sep"></div>
-						<span class="tl-tool-label">FX</span>
 						<button
 							class="tl-tool-btn"
 							disabled={fxLanes.length >= MAX_FX_LANES}
 							title={fxLanes.length >= MAX_FX_LANES
 								? `${MAX_FX_LANES} lanes is the limit`
-								: "Add a stacked effect lane — its clips run after the segment's own chain"}
+								: "Add a lane of extra effects that run over the whole frame, after the segment's own chain"}
 							onclick={addFxLane}
 						>
-							<Plus size={12} /> Lane
+							<Plus size={12} /> FX lane
 						</button>
 					{/if}
 					{#if laneIds.length > 0}
