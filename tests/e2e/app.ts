@@ -353,20 +353,10 @@ export function mediaDropGhost(page: Page, lane = 0): Locator {
 	return mediaLaneTrack(page, lane).locator(".clip.ghost");
 }
 
-/** Turn the media layer stack on. It arrives as one lane, full-span. */
+/** Turn the media layer stack on. It arrives as one lane, empty. */
 export async function enableMediaLayers(page: Page): Promise<void> {
 	await page.getByTitle(/^Media layers:/).click();
 	await expect(mediaLanes(page)).toHaveCount(1);
-}
-
-/** Clear a lane out, so its whole span is empty space to drop into. */
-export async function emptyMediaLane(page: Page, lane = 0): Promise<void> {
-	const clips = mediaClips(page, lane);
-	for (let guard = 0; (await clips.count()) > 0 && guard < 10; guard++) {
-		await clips.first().click({ force: true });
-		await page.keyboard.press("Delete");
-	}
-	await expect(clips).toHaveCount(0);
 }
 
 /** A point `fraction` of the way across a lane's track, in page coordinates. */

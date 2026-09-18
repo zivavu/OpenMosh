@@ -5,7 +5,6 @@ import {
 	dragAwayFromLanes,
 	dragSourceToLane,
 	dropHeldSource,
-	emptyMediaLane,
 	enableMediaLayers,
 	mediaClips,
 	mediaDropGhost,
@@ -47,25 +46,21 @@ async function openLayers(page: Parameters<typeof openEditor>[0]) {
 }
 
 test.describe("a new layer", () => {
-	test("arrives full-span, leaving no empty space to drop into", async ({
+	test("arrives empty, so the whole lane is space to drop into", async ({
 		page,
 	}) => {
 		await openLayers(page);
 
-		// Worth pinning: it means the drop-to-create gesture is unreachable on a
-		// fresh layer until something is trimmed or deleted. Every test below has
-		// to clear the lane first for exactly this reason.
-		await expect(mediaClips(page)).toHaveCount(1);
-		const span = await clipSpanFraction(page, mediaClips(page).first());
-		expect(span.start).toBeLessThan(0.02);
-		expect(span.end).toBeGreaterThan(0.98);
+		// Worth pinning: a clip the user never asked for is one they have to
+		// trim or delete, and every drop-to-create test below leans on the lane
+		// starting clear.
+		await expect(mediaClips(page)).toHaveCount(0);
 	});
 });
 
 test.describe("dropping onto empty space", () => {
 	test("cuts a new clip where the drop landed", async ({ page }) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		await dragSourceToLane(page, { thumb: 1, fraction: 0.3 });
 
@@ -77,7 +72,6 @@ test.describe("dropping onto empty space", () => {
 
 	test("shows a ghost of the clip before the drop", async ({ page }) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		await dragSourceToLane(page, { thumb: 1, fraction: 0.4, hold: true });
 
@@ -93,7 +87,6 @@ test.describe("dropping onto empty space", () => {
 
 	test("puts the clip exactly where the ghost promised", async ({ page }) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		await dragSourceToLane(page, { thumb: 1, fraction: 0.45, hold: true });
 		const ghost = await clipSpanFraction(page, mediaDropGhost(page));
@@ -110,7 +103,6 @@ test.describe("dropping onto empty space", () => {
 		page,
 	}) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		await dragSourceToLane(page, { thumb: 2, fraction: 0.3 });
 
@@ -121,7 +113,6 @@ test.describe("dropping onto empty space", () => {
 		page,
 	}) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		await dragSourceToLane(page, { thumb: 1, fraction: 0.4, hold: true });
 		await expect(mediaDropGhost(page)).toBeVisible();
@@ -138,7 +129,6 @@ test.describe("dropping onto empty space", () => {
 		page,
 	}) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		await dragSourceToLane(page, { thumb: 1, fraction: 0.2 });
 		await expect(mediaClips(page)).toHaveCount(1);
@@ -154,12 +144,19 @@ test.describe("dropping onto empty space", () => {
 });
 
 test.describe("dropping onto a clip", () => {
+	/** Lay one clip down and return a point inside it, as a lane fraction. */
+	async function layClip(page: Parameters<typeof openEditor>[0]) {
+		await dragSourceToLane(page, { thumb: 1, fraction: 0.3 });
+		await expect(mediaClips(page)).toHaveCount(1);
+		const span = await clipSpanFraction(page, mediaClips(page).first());
+		return (span.start + span.end) / 2;
+	}
+
 	test("retargets that clip instead of cutting a new one", async ({ page }) => {
 		await openLayers(page);
-		// The lane arrives full-span, so anywhere on it is a clip.
-		await expect(mediaClips(page)).toHaveCount(1);
+		const onClip = await layClip(page);
 
-		await dragSourceToLane(page, { thumb: 2, fraction: 0.5 });
+		await dragSourceToLane(page, { thumb: 2, fraction: onClip });
 
 		await expect(mediaClips(page)).toHaveCount(1);
 		await expect(mediaClips(page).first()).toContainText("green.png");
@@ -167,8 +164,9 @@ test.describe("dropping onto a clip", () => {
 
 	test("shows no ghost — nothing new is being made", async ({ page }) => {
 		await openLayers(page);
+		const onClip = await layClip(page);
 
-		await dragSourceToLane(page, { thumb: 2, fraction: 0.5, hold: true });
+		await dragSourceToLane(page, { thumb: 2, fraction: onClip, hold: true });
 
 		await expect(mediaDropGhost(page)).toHaveCount(0);
 		// The clip under the cursor lights instead, so the gesture still reads.
@@ -180,7 +178,6 @@ test.describe("dropping onto a clip", () => {
 test.describe("dropping on the playhead", () => {
 	test("lands under it rather than on its grab handle", async ({ page }) => {
 		await openLayers(page);
-		await emptyMediaLane(page);
 
 		// The start marker sits at the head, and its grab handle is drawn over
 		// the lanes. A drop there used to hit the handle and do nothing — at the
@@ -196,10 +193,8 @@ test.describe("dropping on the playhead", () => {
 test.describe("what the preview draws", () => {
 	test("shows the dropped media on the layer", async ({ page }) => {
 		await openLayers(page);
-		// The lane arrives showing the second source, so the frame is its blue
-		// over the segment's red; emptied, the red comes back. The drop has to
-		// take it to blue again.
-		await emptyMediaLane(page);
+		// The lane arrives empty, so the frame is the segment's red. The drop
+		// has to take it to the layer's blue.
 		await expect
 			.poll(async () => nearestColor((await canvasStats(page)).mean, PALETTE))
 			.toBe("red");
