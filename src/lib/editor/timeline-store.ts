@@ -1,7 +1,7 @@
 /**
  * Per-song timeline persistence, in IndexedDB.
  *
- * Every segment and fx clip carries a full effect chain, so these run to
+ * Every media and fx clip carries a full effect chain, so these run to
  * hundreds of kilobytes a song — enough that a few of them filled localStorage's
  * 5 MB cap, after which the writes failed silently. The cost of moving is async
  * reads: see `loadedTimelineKey` in Editor.svelte, which holds off saving until

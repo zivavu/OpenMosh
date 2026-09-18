@@ -82,7 +82,7 @@
 	import {
 		handBuiltLabel,
 		isHandBuiltLabel,
-		type SequenceSegmentMode,
+		type ChainMode,
 	} from "../../editor/sequence";
 	import {
 		appendFxLane,
@@ -174,10 +174,7 @@
 		migrateLegacySegments,
 		prependMediaLane,
 	} from "../../editor/legacy-segments";
-	import {
-		MoshHistory,
-		type SegmentMoshSnapshot,
-	} from "../../editor/segment-mosh-history";
+	import { MoshHistory, type MoshSnapshot } from "../../editor/mosh-history";
 	import type { GlRenderer, SourceFit } from "../../gl/renderer";
 	import { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
@@ -227,7 +224,7 @@
 		initialAudioFile?: File | null;
 		/** Library id of `initialAudioFile`, when it came from a saved sequence. */
 		initialTrackId?: string | null;
-		/** The segment timeline belongs to 'sequence' alone — 'single' is one
+		/** The lane timeline belongs to 'sequence' alone — 'single' is one
 		 * source and one effect chain, and the two persist separately. */
 		mode?: "single" | "sequence";
 		/** Single mode: work restored from a saved session, if reopened from one. */
@@ -575,7 +572,7 @@
 		})();
 	});
 
-	// Sequence mode has no still to save — a segment timeline is a video by
+	// Sequence mode has no still to save — a lane timeline is a video by
 	// definition — so it skips the picker and stays on WebM.
 	let format = $state<"png" | "jpg" | "webm">(
 		isMobile && untrack(() => mode) !== "sequence" ? "png" : "webm",
@@ -833,7 +830,7 @@
 
 	// ── Span undo ────────────────────────────────────────────────────────────
 	// The span handles are an edit like any other, so a mis-drag comes back with
-	// Ctrl+Z. Its own stack because the span is neither effects nor segments;
+	// Ctrl+Z. Its own stack because the span is neither effects nor clips;
 	// the router picks between it and the rest by when each was last touched.
 	interface Span {
 		start: number;
@@ -1138,14 +1135,14 @@
 
 	// With an external track the audio is the master clock (matches export,
 	// where the audio span sets the duration and the video loops inside it).
-	// Segments then live on the audio timeline, not the video's.
+	// Clips then live on the audio timeline, not the video's.
 	//
 	// Loading a track file is enough to make it master — deliberately not
 	// "…and its duration is known". The duration lands a beat after the file
 	// does, and treating that window as video-mastered corrupted the save: the
 	// store key fell back to the video's (so a reload restored a stale
-	// video-keyed entry over the song's), and the coverage invariant re-fitted
-	// segments built against a 3-minute song onto a 10-second clip. Until the
+	// video-keyed entry over the song's), and the fit re-trimmed clips built
+	// against a 3-minute song onto a 10-second one. Until the
 	// duration arrives `seqMasterDuration` is simply 0, which every consumer
 	// already reads as "no timeline yet".
 	let seqMasterIsAudio = $derived(!!audio.trackFile);
@@ -1211,7 +1208,7 @@
 		});
 	});
 
-	// Keyed by master clock — that's what segment times are relative to.
+	// Keyed by master clock — that's what clip times are relative to.
 	let videoSeqKey = $derived(
 		isVideo ? `video:${file.name}:${file.size}:${file.lastModified}` : null,
 	);
@@ -1225,8 +1222,8 @@
 
 	/**
 	 * Single and sequence are the same component, so one un-namespaced store had
-	 * them overwriting each other: a song worked on in the segment editor came
-	 * back with its timeline (and the segment mode) forced on in single mode,
+	 * them overwriting each other: a song worked on in the lane editor came
+	 * back with its timeline (and the sequence mode) forced on in single mode,
 	 * and any edit there wrote back over it. The prefix keeps the two apart.
 	 */
 	const seqKeyPrefix = $derived(isSequenceMode ? "seq:" : "single:");
@@ -1472,7 +1469,7 @@
 
 	function fxModeChange(
 		clipIds: string[],
-		mode: SequenceSegmentMode,
+		mode: ChainMode,
 		intervalSec?: number,
 		intervalBeats?: number | null,
 	) {
@@ -1489,7 +1486,7 @@
 	// ←/→ walk one fx clip's moshes. Its own stack per clip, keyed by clip id
 	// — MoshHistory is agnostic about what the id names, and an FxClip carries
 	// exactly the fields it snapshots.
-	const fxMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
+	const fxMoshHistory = new MoshHistory<MoshSnapshot>();
 
 	/**
 	 * The fx clip the mosh gestures act on: the selected one, and only that.
@@ -1528,7 +1525,7 @@
 		return fxLanes.flatMap((l) => l.clips.filter((c) => ids.has(c.id)));
 	}
 
-	function applyFxClipMosh(clipId: string, snap: SegmentMoshSnapshot) {
+	function applyFxClipMosh(clipId: string, snap: MoshSnapshot) {
 		fxLanes = restoreFxClipMosh(fxLanes, clipId, snap);
 	}
 
@@ -1719,7 +1716,7 @@
 	// track brings back both the lanes and the media they were built from.
 	let poolKey: string | null = null;
 	let poolReady = $state(false);
-	/** Segment source ids already looked for in storage; see the effect below. */
+	/** Clip source ids already looked for in storage; see the effect below. */
 	const restoreAttempted = new Set<string>();
 
 	$effect(() => {
@@ -1955,7 +1952,7 @@
 	// A hand-edit to a preset-filled fx clip: the label gains a "*" and explicit
 	// preset overwrites stop clobbering it. Driven by explicit edit callbacks
 	// (not data watching) — the audio volume-link tick also mutates values.
-	function markPanelSegmentEdited() {
+	function markPanelClipEdited() {
 		const target = selectedFxClip;
 		if (!target) return;
 		// A hand-built chain has no name of its own, so it takes one from what it
@@ -2192,8 +2189,7 @@
 			return;
 		}
 		// A selected fx clip is what every other panel action is aimed at, so a
-		// mosh means that clip — not a fresh roll of the whole segment chain
-		// underneath it.
+		// mosh means that clip.
 		const clip = activeFxClip();
 		if (clip) {
 			const snap = fxMoshHistory.redo(clip.id);
@@ -2339,8 +2335,7 @@
 
 	function clearEffects() {
 		// A selected fx clip is what the panel is showing, so it's what a clear
-		// means — and unlike a segment its chain is never `effects`, so this has
-		// to be checked before the identity test below.
+		// means; its chain is never `effects`.
 		const clip = selectedFxClip;
 		if (clip) {
 			panelBeforeEdit();
@@ -2407,8 +2402,8 @@
 	 */
 	function reInput() {
 		if (!canvasEl) return;
-		// Single mode only: sequence draws from a pool of sources with a chain per
-		// segment, so there is no one source for a baked frame to replace.
+		// Single mode only: sequence draws from a pool of sources through its
+		// layers, so there is no one source for a baked frame to replace.
 		if (isSequenceMode) return;
 		const prevFile = file;
 		const prevEffects = $state.snapshot(effects) as EffectInstance[];
@@ -2646,7 +2641,7 @@
 
 	/**
 	 * Which project the export settings belong to. `seqStoreKey` already carries
-	 * the mode prefix, so single mode and the segment editor keep separate
+	 * the mode prefix, so single mode and the lane editor keep separate
 	 * settings for the same song. Media with no song of its own still has an identity worth
 	 * keying by — single mode works with no audio at all — so it falls back to
 	 * the file, matching how sessions.ts keys a track-less edit.
@@ -2899,8 +2894,8 @@
 	);
 
 	// ── Timeline stack ───────────────────────────────────────────────────────
-	// Every lane shares the master clock's axis: the segment lane, the text
-	// lanes and whichever transport is the master. A video playing under its own
+	// Every lane shares the master clock's axis: the media, text and fx lanes
+	// and whichever transport is the master. A video playing under its own
 	// span while a track drives the timeline is a second clock, so it stays a
 	// standalone bar above the stack rather than joining the axis.
 	let showVideoBar = $derived(
@@ -3165,8 +3160,7 @@
 		if (!sourceId) sourceInput?.click();
 	}
 
-	/** The rail is the media pool: sequence mode's segments and layers draw
-	 * from it. */
+	/** The rail is the media pool: sequence mode's layers draw from it. */
 	let showSourceRail = $derived(
 		isSequenceMode && !sequenceGridOpen && sequenceSources.length > 0,
 	);
@@ -3235,8 +3229,8 @@
 		selectedTextClipId = null;
 	}
 
-	// ←/→ walk a text lane's moshes, the same way they walk a segment's or an
-	// fx clip's. Keyed by lane id; the media lanes' clips have their own stack.
+	// ←/→ walk a text lane's moshes, the same way they walk an fx clip's.
+	// Keyed by lane id; the media lanes' clips have their own stack.
 	const laneMoshHistory = new MoshHistory<EffectInstance[]>();
 
 	/**
@@ -3278,13 +3272,13 @@
 	}
 
 	// ── Media clip chains ──
-	// Fill, mosh, clear and static/auto on a media clip: the same gestures a
-	// segment or an fx clip takes, over the same shared rules (chain-clip.ts).
+	// Fill, mosh, clear and static/auto on a media clip: the same gestures an
+	// fx clip takes, over the same shared rules (chain-clip.ts).
 	// Same resolver the export builds, so interval rolls reproduce exactly.
 	const previewMediaChains = createMediaChainSource(getMoshOptions);
 
 	/** ←/→ walk one media clip's moshes, keyed by clip id. */
-	const mediaMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
+	const mediaMoshHistory = new MoshHistory<MoshSnapshot>();
 
 	function mediaClipsById(ids: Set<string>): MediaClip[] {
 		return mediaTimeline.lanes.flatMap((l) =>
@@ -3310,7 +3304,7 @@
 		}
 	}
 
-	function applyMediaClipMosh(clipId: string, snap: SegmentMoshSnapshot) {
+	function applyMediaClipMosh(clipId: string, snap: MoshSnapshot) {
 		mediaTimeline = restoreMediaClipMosh(mediaTimeline, clipId, snap);
 	}
 
@@ -3330,7 +3324,7 @@
 
 	function mediaModeChange(
 		clipIds: string[],
-		mode: SequenceSegmentMode,
+		mode: ChainMode,
 		intervalSec?: number,
 		intervalBeats?: number | null,
 	) {
@@ -3570,7 +3564,7 @@
 	}
 
 	/** Audio sets the track. Media replaces the file in single mode; in sequence
-	 * mode it joins the pool, since segments can each pick their own. */
+	 * mode it joins the pool, since clips can each pick their own. */
 	function handleDroppedFiles(files: FileList) {
 		const all = Array.from(files);
 		const audioFile = all.find((f) => f.type.startsWith("audio/"));
@@ -3759,7 +3753,7 @@
 				<span class="no-media-label">NO MEDIA</span>
 				<p class="no-media-text">
 					Every source is gone from this song. Add an image or a video and the
-					segments have something to play again.
+					layers have something to show again.
 				</p>
 				<div class="no-media-actions">
 					<button class="no-media-btn" onclick={() => sourceInput?.click()}>
@@ -4118,12 +4112,10 @@
 		</div>
 		{#if showSourceRail}
 			<!-- The pool, on hand while the preview is up: dragging a thumb onto a
-			     segment — or onto a media layer's row — is the same drop the grid's
-			     cards make. -->
+			     media layer's row is the same drop the grid's cards make. -->
 			<SourceRail
 				sources={sequenceSources}
 				selectedCount={railTargetCount}
-				selectedLabel="layer clip"
 				selectedSourceId={railSourceId}
 				onAssign={assignMediaClipSource}
 				onAdd={() => sourceInput?.click()}
@@ -4219,9 +4211,8 @@
 							</button>
 						{/if}
 					{/if}
-					<!-- Read bottom to top, the way the frame is built: the segment lane
-				     is the root chain, the fx lanes stack onto it, and the layers
-				     composite over what those produced. -->
+					<!-- Read bottom to top, the way the frame is built: the layers
+				     composite onto the base, and the fx lanes run over the result. -->
 					{#if mediaTimeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<button
@@ -4242,7 +4233,7 @@
 							disabled={fxLanes.length >= MAX_FX_LANES}
 							title={fxLanes.length >= MAX_FX_LANES
 								? `${MAX_FX_LANES} lanes is the limit`
-								: "Add a lane of extra effects that run over the whole frame, after the segment's own chain"}
+								: "Add a lane of extra effects that run over the whole frame, layers included"}
 							onclick={addFxLane}
 						>
 							<Plus size={12} /> FX lane
@@ -4273,11 +4264,9 @@
 					{/if}
 				{/snippet}
 				<!-- Read bottom to top, the way a frame is built: the transports at
-				     the foot are the inputs, the segment lane above them is the root
-				     chain, the fx lanes stack onto that, and the layers composite over
-				     whatever it all produced. -->
-				<!-- One column for every row that stacks over the root chain: media,
-				     text and fx lanes alike. Each carries its place in the shared
+				     the foot are the inputs, and everything stacks over them. -->
+				<!-- One column for every row of the stack: media, text and fx lanes
+				     alike. Each carries its place in the shared
 				     stack as a CSS order, so the three interleave without any of
 				     the components knowing about the others. -->
 				<div class="tl-layers" bind:this={laneListEl}>
@@ -4528,7 +4517,7 @@
 						setPanelEffects(
 							setVolumeLink(getPanelEffects(), index, paramKey, link),
 						);
-						markPanelSegmentEdited();
+						markPanelClipEdited();
 					}}
 					onEffectsReplaced={endPanelBurst}
 					onPresetUpdated={seqSyncPreset}
@@ -4540,7 +4529,7 @@
 							target.modified = false;
 						}
 					}}
-					onUserEdit={markPanelSegmentEdited}
+					onUserEdit={markPanelClipEdited}
 					onBeforeUserEdit={panelBeforeEdit}
 				/>
 			{/if}
@@ -4585,7 +4574,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Every source is removed from this song, the base included, and its segments are left with nothing to play until media is added back. Media that other songs still use is kept."
+			message="Every source is removed from this song, and its layer clips are left with nothing to show until media is added back. Media that other songs still use is kept."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger

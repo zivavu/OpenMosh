@@ -36,7 +36,7 @@
 	/** The tab last picked by hand. Every selection opens in it, so a chain
 	 * edit across many clips is one click on Chain rather than one per clip. */
 	let preferredTab = $state<Tab>("effects");
-	// Only a layer clip has a clip tab: a segment picked while it is preferred
+	// Only a layer clip has a clip tab: an fx clip picked while it is preferred
 	// shows its chain instead, and the preference waits for the next clip.
 	const activeTab = $derived<Tab>(
 		preferredTab === "clip" && !topPanel ? "effects" : preferredTab,

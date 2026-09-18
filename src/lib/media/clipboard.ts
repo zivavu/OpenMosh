@@ -19,7 +19,7 @@ import {
 } from "../timeline/clips";
 import { cloneEffectInstance } from "../effects";
 import type { EffectInstance } from "../effects/types";
-import type { SequenceSegmentMode } from "../editor/sequence";
+import type { ChainMode } from "../editor/sequence";
 import { createMediaClip, type MediaClip, type MediaLane } from "./types";
 import type { MediaTimeline } from "./types";
 
@@ -36,7 +36,7 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	/** The clip's chain and how it rolls, so a paste renders the same. */
 	effects: EffectInstance[];
 	label: string;
-	mode?: SequenceSegmentMode;
+	mode?: ChainMode;
 	presetName?: string;
 	modified?: boolean;
 	intervalSec?: number;

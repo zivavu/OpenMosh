@@ -17,7 +17,7 @@ export interface KeyboardActions {
 	toggleFollowPlayhead: () => void;
 	/** Space: the master transport — a track, a video, or a still's own clock. */
 	togglePlay: () => void;
-	/** R: loop playback inside the selected segment. */
+	/** R: loop playback inside the selected clip. */
 	toggleClipLoop: () => void;
 	/** +/- : one notch of timeline zoom. */
 	zoomTimeline: (inward: boolean) => void;

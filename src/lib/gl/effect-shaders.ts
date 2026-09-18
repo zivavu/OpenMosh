@@ -216,25 +216,6 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
 `;
 
 /**
- * Crop, erase and key a source before the chain reads it. The layer placement
- * does the same work inline; this exists for the frame *under* the layers,
- * which has no box to be placed into.
- *
- * Coverage is flattened to black rather than kept: this is the bottom of the
- * stack, so an erased pixel has nothing behind it to show.
- */
-export const SOURCE_EDIT_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D u_texture;
-in vec2 v_uv;
-out vec4 outColor;
-${CHROMA_KEY_GLSL}
-void main() {
-  vec4 c = editedSource(u_texture, v_uv);
-  outColor = vec4(c.rgb * c.a, 1.0);
-}`;
-
-/**
  * Place a media layer into a full-frame buffer: fitted, scaled, rotated and
  * centred, with everything outside its box transparent so the composite leaves
  * the image underneath it alone.

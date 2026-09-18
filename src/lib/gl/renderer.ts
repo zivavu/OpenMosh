@@ -13,12 +13,7 @@ import {
 	maskShift,
 	maskToSdf,
 } from "../media/mask-sdf";
-import {
-	cropExtent,
-	isIdleSourceEdit,
-	sampleSourceEdit,
-	wrapSourceTime,
-} from "../media";
+import { sampleSourceEdit, wrapSourceTime } from "../media";
 import type { MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
 import {
 	CAPTION_EFFECT_ID,
@@ -38,7 +33,6 @@ import {
 	PASSTHROUGH_FRAG,
 	TEXT_BLEND_FRAG,
 	LAYER_TRANSFORM_FRAG,
-	SOURCE_EDIT_FRAG,
 	EFFECT_SHADERS,
 	type EffectShaderDef,
 } from "./effect-shaders";
@@ -248,9 +242,9 @@ export class GlRenderer {
 	private sourceTexture: WebGLTexture | null = null;
 	private sourceFit: SourceFit = "contain";
 	/**
-	 * Second source texture, holding the *outgoing* segment's media while a
-	 * transition runs. Only allocated once a transition actually crosses two
-	 * different sources.
+	 * Second source texture, holding the *outgoing* media while a transition
+	 * runs (the demo background's). Only allocated once a transition actually
+	 * crosses two different sources.
 	 */
 	private altSourceTexture: WebGLTexture | null = null;
 	private altTexW = 0;
@@ -334,22 +328,6 @@ export class GlRenderer {
 	private layerTransformProgram: CompiledProgram | null = null;
 	/** Holds a media layer's placed frame while its own chain consumes it. One
 	 * buffer for all of them: the chain reads it and is done with it. */
-	/**
-	 * Which pool source is on the main and alt textures. The edits are keyed by
-	 * source, so the chain has to be told what it is looking at; null means media
-	 * with no pool entry (single mode's own file), which carries no edits.
-	 */
-	private mainSourceId: string | null = null;
-	private altSourceId: string | null = null;
-	private sourceEditProgram: CompiledProgram | null = null;
-	/** Edited copies of the main and alt sources, sized to their crops. */
-	private sourceEditTargets: ({
-		tex: WebGLTexture;
-		fbo: WebGLFramebuffer;
-		w: number;
-		h: number;
-	} | null)[] = [null, null];
-
 	/** One erase mask per source, and the data URL it was decoded from. */
 	/** How many painted shapes stay resident. A hand-keyed erase track runs to a
 	 * handful; this is loose enough not to thrash one and tight enough to bound
@@ -382,9 +360,6 @@ export class GlRenderer {
 	private sourceEdits = new Map<string, SourceEdit>();
 	/** Per-source media length, keyed by source id. See setSourceDurations. */
 	private sourceDurations = new Map<string, number>();
-	/** Seconds into each source texture's own media. See setSourceIds. */
-	private mainSourceTime = 0;
-	private altSourceTime = 0;
 	/** Drawn (pre-effect) text per clip, keyed by clip id. */
 	private textLayerTextures = new Map<string, OverlayTexture>();
 	private textLayerCanvas: HTMLCanvasElement | null = null;
@@ -518,9 +493,8 @@ export class GlRenderer {
 
 	/**
 	 * Size the frame to `w`×`h` with nothing on the source texture: the
-	 * sequence editor's base, which draws only what a segment names and is
-	 * otherwise black under the layers. The frame keeps its size; the texture
-	 * holds one black pixel until a source lands on it.
+	 * sequence editor's base, black under the layers. The frame keeps its size;
+	 * the texture holds one black pixel.
 	 */
 	initBlankSource(w: number, h: number) {
 		if (!this.resetSource(w, h)) return;
@@ -848,33 +822,6 @@ export class GlRenderer {
 	/** Called when a mask finishes decoding, so a paused preview redraws. */
 	onMaskReady: (() => void) | null = null;
 
-	/**
-	 * Which pool source each of the two source textures currently holds, and how
-	 * far into its own media each one is. The time is what a keyed edit is
-	 * sampled at: it belongs to the file, so the same instant of a clip carries
-	 * the same crop and mask wherever it is played. Both the preview loop and the
-	 * recorder set this every frame, from the same clock.
-	 */
-	setSourceIds(
-		main: string | null,
-		alt: string | null = null,
-		mainTime = 0,
-		altTime = 0,
-	) {
-		this.mainSourceId = main;
-		this.altSourceId = alt;
-		this.mainSourceTime = mainTime;
-		this.altSourceTime = altTime;
-	}
-
-	/** The stored edit for a source texture, keys and all, or null when idle. */
-	private liveSourceEdit(alt: boolean): SourceEdit | null {
-		const id = alt ? this.altSourceId : this.mainSourceId;
-		if (!id) return null;
-		const edit = this.sourceEdits.get(id);
-		return edit && !isIdleSourceEdit(edit) ? edit : null;
-	}
-
 	/** True once this lane has a frame to draw. */
 	hasLayerTexture(key: string): boolean {
 		return this.mediaLayerTextures.has(key);
@@ -1166,7 +1113,7 @@ export class GlRenderer {
 		density: number,
 		time = 0,
 		/** Render chain A from the outgoing source texture — set when the two
-		 * segments draw from different media, so the media cross-fades too. */
+		 * sides draw from different media, so the media cross-fades too. */
 		useAltSourceForA = false,
 		textLayers: ResolvedTextLayer[] = [],
 		/**
@@ -1297,79 +1244,7 @@ export class GlRenderer {
 	 * the chain reads that instead. Matching aspects skip the copy entirely, so
 	 * the ordinary single-source case pays nothing.
 	 */
-	/**
-	 * Crop, erase and key a source texture into a buffer of its cropped size,
-	 * which the fit staging below then treats as the source. Returns null when
-	 * there is nothing to apply, so an unedited source pays no pass at all.
-	 */
-	private applySourceEdit(
-		src: WebGLTexture,
-		sw: number,
-		sh: number,
-		edit: SourceEdit,
-		extent: { w: number; h: number },
-		alt: boolean,
-	): { tex: WebGLTexture; w: number; h: number } | null {
-		const gl = this.gl;
-		if (!this.sourceEditProgram) {
-			this.sourceEditProgram = this.compile(SOURCE_EDIT_FRAG);
-		}
-		const prog = this.sourceEditProgram;
-		if (!prog) return null;
-
-		const crop = edit.crop ?? { x: 0, y: 0, w: 1, h: 1 };
-		// What the crop leaves *now* — the size this pass's result stands for, and
-		// what the fit downstream measures its aspect from.
-		const w = Math.max(1, Math.round(sw * crop.w));
-		const h = Math.max(1, Math.round(sh * crop.h));
-		// What to allocate: the widest and tallest the crop ever gets. A keyed crop
-		// is a different shape every frame, and a buffer re-allocated to match
-		// would throw away a texture and a framebuffer per frame. The shader maps
-		// this buffer's whole uv range onto the crop rectangle either way, so a
-		// buffer bigger than the current crop simply holds it magnified — and the
-		// fit puts it back at the aspect `w`/`h` names. For a still crop the two
-		// sizes are equal and this is the 1:1 pass it always was.
-		const bw = Math.max(w, Math.round(sw * extent.w));
-		const bh = Math.max(h, Math.round(sh * extent.h));
-		const slot = alt ? 1 : 0;
-		let target = this.sourceEditTargets[slot];
-		if (!target || target.w !== bw || target.h !== bh) {
-			if (target) {
-				gl.deleteTexture(target.tex);
-				gl.deleteFramebuffer(target.fbo);
-			}
-			const tex = this.createTexture(bw, bh);
-			// CLAMP and LINEAR: the fit staging samples this at an arbitrary scale,
-			// where the chain buffers' NEAREST and mirrored wrap would alias and tile.
-			gl.bindTexture(gl.TEXTURE_2D, tex);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-			const fbo = this.createRenderTarget(tex);
-			if (!fbo) {
-				gl.deleteTexture(tex);
-				this.sourceEditTargets[slot] = null;
-				return null;
-			}
-			target = { tex, fbo, w: bw, h: bh };
-			this.sourceEditTargets[slot] = target;
-		}
-
-		gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
-		gl.viewport(0, 0, bw, bh);
-		gl.useProgram(prog.program);
-		if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
-		this.setSourceEditUniforms(prog, edit);
-		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_2D, src);
-		if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
-		gl.drawArrays(gl.TRIANGLES, 0, 6);
-		gl.activeTexture(gl.TEXTURE0);
-		return { tex: target.tex, w, h };
-	}
-
-	/** The crop / mask / key uniforms both editing passes share. */
+	/** The crop / mask / key uniforms of the layer placement pass. */
 	private setSourceEditUniforms(
 		prog: CompiledProgram,
 		edit: SourceEdit | undefined,
@@ -1475,26 +1350,8 @@ export class GlRenderer {
 		if (this.blankSource) return this.blankTexture();
 		let src = alt ? this.altSourceTexture : this.sourceTexture;
 		if (!src) return this.sourceTexture!;
-		let sw = alt ? this.altTexW : this.srcTexW;
-		let sh = alt ? this.altTexH : this.srcTexH;
-
-		// The source's own edits, ahead of the fit: cropping changes the shape the
-		// fit is measured against, so doing it after would fit the whole file and
-		// then throw part of the result away.
-		const stored = this.liveSourceEdit(alt);
-		if (stored && sw > 0 && sh > 0) {
-			const id = (alt ? this.altSourceId : this.mainSourceId)!;
-			const time = alt ? this.altSourceTime : this.mainSourceTime;
-			const edit = sampleSourceEdit(stored, this.editTime(id, time));
-			// Sized from the stored edit, not this instant's: see applySourceEdit.
-			const extent = cropExtent(stored);
-			const edited = this.applySourceEdit(src, sw, sh, edit, extent, alt);
-			if (edited) {
-				src = edited.tex;
-				sw = edited.w;
-				sh = edited.h;
-			}
-		}
+		const sw = alt ? this.altTexW : this.srcTexW;
+		const sh = alt ? this.altTexH : this.srcTexH;
 
 		if (this.sourceFit === "stretch") return src;
 		if (sw <= 0 || sh <= 0 || this.imgW <= 0 || this.imgH <= 0) return src;

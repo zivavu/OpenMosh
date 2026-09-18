@@ -1,6 +1,6 @@
 /**
  * One counter every timeline clipboard bumps on copy. The lanes each keep
- * their own clipboard (segments, fx clips, media clips, and the chain the
+ * their own clipboard (fx clips, media clips, text clips, and the chain the
  * first two share), and their selections are mutually exclusive — but the
  * clipboards aren't, so after a copy on one lane and then another, a paste
  * with nothing selected would have two of them answer at once. A clipboard

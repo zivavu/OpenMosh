@@ -4,9 +4,9 @@
  * clip *carries* — only where it sits — so both callers get the same drag,
  * resize and gap-finding behaviour without a second copy of the math.
  *
- * Contrast with segment-coverage.ts, which holds the opposite invariant: the
- * source lane partitions [0, duration] with no gaps, because every frame has to
- * come from somewhere. A lane of clips is allowed to be empty.
+ * Contrast with segment-coverage.ts, which holds the opposite invariant for
+ * the slideshow: its lane partitions [0, duration] with no gaps, because every
+ * beat has to come from somewhere. A lane of clips is allowed to be empty.
  */
 
 /** Shortest clip a lane will create or leave behind after a resize. */

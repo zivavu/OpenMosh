@@ -13,8 +13,8 @@ import {
 	withChainMosh,
 } from "../editor/chain-clip";
 import type { MoshOptions } from "../editor/mosh";
-import type { SegmentMoshSnapshot } from "../editor/segment-mosh-history";
-import { beatsToSeconds, type SequenceSegmentMode } from "../editor/sequence";
+import type { MoshSnapshot } from "../editor/mosh-history";
+import { beatsToSeconds, type ChainMode } from "../editor/sequence";
 import type { Preset } from "../effects";
 import { shuffleInPlace } from "../utils";
 import { updateMediaClips } from "./resolve";
@@ -23,7 +23,7 @@ import type { MediaTimeline } from "./types";
 export function setMediaClipsMode(
 	timeline: MediaTimeline,
 	clipIds: Set<string>,
-	mode: SequenceSegmentMode,
+	mode: ChainMode,
 	intervalSec?: number,
 	intervalBeats?: number | null,
 ): MediaTimeline {
@@ -103,7 +103,7 @@ export function applyBpmToMediaClips(
 export function restoreMediaClipMosh(
 	timeline: MediaTimeline,
 	clipId: string,
-	snap: SegmentMoshSnapshot,
+	snap: MoshSnapshot,
 ): MediaTimeline {
 	return updateMediaClips(timeline, new Set([clipId]), (clip) =>
 		withChainMosh(clip, snap),

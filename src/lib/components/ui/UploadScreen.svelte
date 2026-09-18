@@ -468,7 +468,7 @@
 					A pile of media and a track. It finds the BPM and cuts on the beat.
 				{:else if selectedMode === "sequence"}
 					Your song on a timeline. The media goes on layers, cut into clips with
-					their own effects; segments and FX lanes mosh the whole frame.
+					their own effects; FX lanes mosh the whole frame.
 				{:else}
 					One image or video. Mosh it, then lock whatever survived and roll
 					again.

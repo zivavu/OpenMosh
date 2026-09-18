@@ -36,10 +36,8 @@
 
 	interface Props {
 		sources: SequenceSource[];
-		/** How many things are selected — a click assigns to all of them. */
+		/** How many layer clips are selected — a click assigns to all of them. */
 		selectedCount?: number;
-		/** What those things are, for the tooltip: segments, or layer clips. */
-		selectedLabel?: string;
 		/** Marks the thumb the selection currently plays; null when they
 		 * disagree. */
 		selectedSourceId?: string | null;
@@ -59,7 +57,6 @@
 	let {
 		sources,
 		selectedCount = 0,
-		selectedLabel = "layer clip",
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
@@ -75,8 +72,8 @@
 	let assignable = $derived(selectedCount > 0);
 
 	/** Open thumb's index; null when the preview is closed. Same component and
-	 * same click rule the grid's cards use: a click previews, unless a segment is
-	 * selected and the click means "play this there". */
+	 * same click rule the grid's cards use: a click previews, unless a clip is
+	 * selected and the click means "show this there". */
 	let lightboxIndex = $state<number | null>(null);
 	let lightboxOrigin = $state({ x: 0, y: 0 });
 
@@ -126,7 +123,7 @@
 	let itemsEl = $state<HTMLDivElement | undefined>(undefined);
 
 	/** Follow the highlight: the rail holds more thumbs than fit, and the source
-	 * behind a newly selected clip or segment is often scrolled off it. Measured
+	 * behind a newly selected clip is often scrolled off it. Measured
 	 * against the strip rather than scrollIntoView, which would scroll the
 	 * editor's ancestors as well as this one. */
 	$effect(() => {
@@ -143,8 +140,8 @@
 	});
 
 	// Reorder, the same gesture the grid's cards use: a thumb carries its index
-	// for a drop in here, and its id under our own type so a drop on a lane or a
-	// segment is still read as an assignment.
+	// for a drop in here, and its id under our own type so a drop on a lane is
+	// still read as an assignment.
 	let dragFromIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
 
@@ -236,7 +233,7 @@
 						}}
 						ondblclick={(e) => openLightbox(e, i)}
 						title={assignable
-							? `Play "${src.name}" on the selected ${selectedLabel}${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
+							? `Show "${src.name}" on the selected layer clip${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
 							: `${src.name} — click to preview, or drag it onto a layer clip`}
 					>
 						{#if src.thumbUrl}
@@ -338,7 +335,7 @@
 
 <style>
 	/* Sits between the preview and the timeline so a source can be dragged onto
-	   a segment without swapping the preview out for the grid. */
+	   a lane without swapping the preview out for the grid. */
 	.rail {
 		display: flex;
 		align-items: stretch;
@@ -441,8 +438,8 @@
 		border-color: var(--mosh);
 	}
 
-	/* What the selected segments already play — the same accent the segment
-	   blocks use for selection. */
+	/* What the selected clips already show — the same accent the clip blocks
+	   use for selection. */
 	.rail-item.playing {
 		border-color: var(--mosh);
 		box-shadow: inset 0 0 0 1px var(--mosh);

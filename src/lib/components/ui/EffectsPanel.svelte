@@ -65,17 +65,16 @@
 		 * be merged into a single undo entry; discrete edits pass nothing. */
 		onBeforeUserEdit?: (coalesceKey?: string) => void;
 		/** Set when `effects` is not a chain the user can edit — sequence mode
-		 * with nothing selected renders the segment under the playhead, and any
-		 * edit there is thrown away on the next re-roll. The rack stands down and
-		 * shows this instead of pretending to be that chain. */
+		 * with nothing selected has no clip for an edit to land on. The rack
+		 * stands down and shows this instead of pretending to be a chain. */
 		noTarget?: { title: string; hint: string } | null;
 		/** Set when something else decides which effects are on — the slideshow's
 		 * random and smooth modes roll the chain every beat. The switches stand
 		 * down; everything else, hiding especially, still works, since hiding is
 		 * how an effect is kept out of the roll. */
 		rolledNote?: string | null;
-		/** Set when the roll owns the whole chain, not just its switches — a
-		 * sequence auto segment rebuilds the list from scratch every tick, so a
+		/** Set when the roll owns the whole chain, not just its switches — an
+		 * auto clip rebuilds the list from scratch every tick, so a
 		 * hand reorder or param tweak there is thrown away. Drops the reorder
 		 * affordances and the param drawers; hiding still works. */
 		rolledChain?: boolean;
@@ -198,8 +197,8 @@
 
 	// Hidden effects are tracked as an explicit set of ids the user chose to
 	// hide, *not* as "every definition missing from the current chain". The
-	// panel's chain is often a subset of the library — a preset-filled sequence
-	// segment, say — and deriving the set from it would silently mark the whole
+	// panel's chain is often a subset of the library — a preset-filled clip,
+	// say — and deriving the set from it would silently mark the whole
 	// rest of the library as permanently hidden.
 	function loadHiddenEffectIds(): Set<string> {
 		return new Set(readJson<string[]>(HIDDEN_EFFECTS_KEY, []));

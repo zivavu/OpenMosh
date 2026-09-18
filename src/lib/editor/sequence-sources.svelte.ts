@@ -29,7 +29,7 @@ const THUMB_CONCURRENCY = 6;
 /** Chip thumbnail edge, matching probeSlideVideo's default for videos. */
 const THUMB_SIZE = 100;
 
-/** One piece of media a sequence segment can draw from. */
+/** One piece of media a layer clip can draw from. */
 export interface SequenceSource {
 	id: string;
 	file: File;
@@ -177,7 +177,7 @@ export class SequenceSourceRegistry {
 		files = await gifsToVideo(files);
 		// Ids are reserved before the first await, not just checked against the
 		// current pool. Probing and decoding are async, so two overlapping calls —
-		// the per-song pool restore and the segment-driven restore both pulling the
+		// the per-song pool restore and the clip-driven restore both pulling the
 		// same media out of storage on load — would each see an empty pool and
 		// append the same source, which is a duplicate key in the bin's keyed each.
 		const fresh = files.filter((f) => {
@@ -334,7 +334,7 @@ export class SequenceSourceRegistry {
 
 	/**
 	 * Pulls previously-stored media back into the pool. Only ids that saved
-	 * segments actually reference are restored, so an unrelated earlier session's
+	 * clips actually reference are restored, so an unrelated earlier session's
 	 * files don't pile into the bin.
 	 */
 	async restore(wantedIds: Iterable<string>): Promise<void> {

@@ -1,6 +1,6 @@
 /**
- * One time axis per editor, shared by every lane stacked under it (segments,
- * beat subdivisions, text lanes, the audio track). Owns the single
+ * One time axis per editor, shared by every lane stacked under it (media, fx
+ * and text lanes, beat subdivisions, the audio track). Owns the single
  * TimelineViewport all of them map through, so zooming or panning over any lane
  * moves the whole stack, and whether the view chases the playhead.
  *

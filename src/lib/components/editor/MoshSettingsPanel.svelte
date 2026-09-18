@@ -24,9 +24,9 @@
 		audioPunch: number;
 		hasAudio: boolean;
 		/** Name of the fx lane these settings belong to, when one is selected.
-		 * Null = the editor's own settings, which segments and single mode use. */
+		 * Null = the editor's own settings, which media clips and single mode use. */
 		targetLabel?: string | null;
-		/** The song's tempo: what AUTO segments re-roll against in sequence mode,
+		/** The song's tempo: what auto clips re-roll against in sequence mode,
 		 * and what beat-synced effects follow in either mode. */
 		showTiming?: boolean;
 		bpm?: number;

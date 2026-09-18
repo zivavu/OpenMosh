@@ -13,7 +13,7 @@ import {
 } from "../effects";
 import { generateMosh, type MoshOptions } from "./mosh";
 
-export type SequenceSegmentMode = "static" | "interval";
+export type ChainMode = "static" | "interval";
 
 export const DEFAULT_INTERVAL_SEC = 0.25;
 

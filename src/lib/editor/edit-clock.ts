@@ -2,7 +2,7 @@
  * One clock for every undo stack in an editor.
  *
  * An editor keeps several stacks — the effect chain, the text timeline, the fx
- * lanes, the segment boundaries, the audio span — because the things they hold
+ * lanes, the media lanes, the audio span — because the things they hold
  * are different shapes. Ctrl+Z, though, is one key: it has to step back through
  * what the user actually did, not through whichever stack the current selection
  * happens to point at. Every stack stamps each entry with a tick from here, and

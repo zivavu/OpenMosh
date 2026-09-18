@@ -1,6 +1,6 @@
 /**
- * Bounded cache for generated mosh rolls, shared by the sequence segments and
- * the fx-lane clips. Both key a roll by seed plus the mosh options it was
+ * Bounded cache for generated mosh rolls, shared by the fx and media clips.
+ * Both key a roll by seed plus the mosh options it was
  * generated under, and both have to hand back the *same* instances every frame
  * a clip is on screen — re-rolling would restart every feedback effect.
  */

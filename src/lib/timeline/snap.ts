@@ -7,7 +7,7 @@
 /** Something a dragged edge can land on. */
 export interface SnapPoint {
 	time: number;
-	/** The clip or segment this edge belongs to, so a drag can leave its own
+	/** The clip this edge belongs to, so a drag can leave its own
 	 * edges out. Null for points that belong to nobody: the ends of the
 	 * timeline, the start marker. */
 	ownerId: string | null;

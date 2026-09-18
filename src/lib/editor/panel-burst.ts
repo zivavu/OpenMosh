@@ -7,7 +7,7 @@
  * `coalesceMs`); discrete edits like toggles each get their own undo entry, so
  * undoing after flipping five effects on takes five steps rather than one.
  *
- * The two undo stacks in the app want opposite timing: a sequence segment
+ * The two kinds of undo stack in the app want opposite timing: a lane's stack
  * stores the state *before* an edit, while the plain effect history stores the
  * state *after* one. `onEditStart` covers both — take the pre-edit snapshot
  * there and return nothing, or return a closure to record once the burst

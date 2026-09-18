@@ -20,7 +20,7 @@
 	import {
 		BEAT_INTERVALS,
 		intervalLabel,
-		type SequenceSegmentMode,
+		type ChainMode,
 	} from "../../editor/sequence";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
 	import { applyChainTo, chainClipboard } from "../../editor/chain-clipboard";
@@ -75,7 +75,7 @@
 		bpm?: number;
 		onModeChange?: (
 			clipIds: string[],
-			mode: SequenceSegmentMode,
+			mode: ChainMode,
 			intervalSec?: number,
 			intervalBeats?: number | null,
 		) => void;
@@ -202,7 +202,7 @@
 
 	// Every action fans out over the whole selection; a value the selection
 	// disagrees on renders blank until the user picks one, which then applies to
-	// all of them — the same convention the source lane's toolbar follows.
+	// all of them — the same convention the media lanes' toolbar follows.
 	let selectedClips = $derived(
 		lanes.flatMap((l) => l.clips.filter((c) => selectedClipIds.includes(c.id))),
 	);
@@ -315,8 +315,8 @@
 
 	/**
 	 * Cut the clip under the cursor in two. Ctrl+Click over empty lane space
-	 * creates a clip instead (see onLanePointerDown), which together give the
-	 * source lane's one "create / split at cursor" gesture.
+	 * creates a clip instead (see onLanePointerDown), which together give one
+	 * "create / split at cursor" gesture.
 	 */
 	function splitAt(laneId: string, time: number) {
 		const lane = laneOf(laneId);
@@ -353,8 +353,8 @@
 		// one would move clips the user was only trying to pick.
 		//
 		// Ctrl+Shift toggles a single clip in or out: the additive pick that
-		// plain Ctrl used to be, moved aside so Ctrl+Click can split the way it
-		// does on the source lane. Checked before the plain-Shift range, which
+		// plain Ctrl used to be, moved aside so Ctrl+Click can split. Checked
+		// before the plain-Shift range, which
 		// would otherwise swallow it.
 		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
 			if (selectedClipIds.includes(clipId)) {
@@ -553,8 +553,7 @@
 
 	function onPointerUp(e: PointerEvent) {
 		if (clickOnUp) {
-			// Clicking the one selected clip again drops the selection — the same
-			// gesture the source lane gives a segment.
+			// Clicking the one selected clip again drops the selection.
 			const sole =
 				selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
 			if (sole) deselect();
@@ -583,17 +582,16 @@
 	}
 
 	// ── Clipboards ───────────────────────────────────────────────────────────
-	// Two things a Ctrl+C here fills. The chain clipboard is shared with the
-	// segment timeline, so a chain copied from a segment can be pasted onto a
-	// clip and back again — a paste onto a selection takes only what a clip
-	// *does*; the target's span and fade are its own. The clip clipboard keeps
-	// the whole clips, for a paste with nothing selected to stamp down at the
-	// start marker.
+	// Two things a Ctrl+C here fills. The chain clipboard is shared across the
+	// lane kinds, so a chain can be pasted onto a clip anywhere — a paste onto a
+	// selection takes only what a clip *does*; the target's span and fade are
+	// its own. The clip clipboard keeps the whole clips, for a paste with
+	// nothing selected to stamp down at the start marker.
 
 	let clipClipboard = $state<FxClipboardEntry[]>([]);
 	/** The copy stamp when the clip clipboard was last filled, so a paste can
-	 * tell whether anything was copied since. A segment's chain copied later
-	 * has no span to stamp, so it can only go onto a selection. */
+	 * tell whether anything was copied since. A chain copied later from another
+	 * lane kind has no span to stamp, so it can only go onto a selection. */
 	let clipClipStamp = -1;
 	/** What the clip clipboard was copied from, plus every copy stamped from
 	 * it since: pasting onto exactly those would change nothing, so that

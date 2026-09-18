@@ -1,6 +1,6 @@
 /**
  * Presentation helpers shared by everything that shows the sequence media pool
- * — the grid view and the segment blocks that tag which source they play.
+ * — the grid view and the rail.
  */
 
 /**

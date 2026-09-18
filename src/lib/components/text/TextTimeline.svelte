@@ -441,8 +441,7 @@
 
 	function onPointerUp(e: PointerEvent) {
 		if (clickOnUp) {
-			// Clicking the one selected clip again drops the selection — the same
-			// gesture the sequence timeline gives a segment.
+			// Clicking the one selected clip again drops the selection.
 			const sole = selectedIds.length === 1 && selectedIds[0] === clickOnUp;
 			if (sole) deselect();
 			else selectOnly(clickOnUp);

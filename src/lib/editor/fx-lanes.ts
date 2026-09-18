@@ -1,17 +1,16 @@
 /**
  * Stacked effect lanes for sequence mode.
  *
- * The source lane (SequenceTimeline) says which media a span of time draws
- * from and what chain runs over it. An fx lane says only "also run these
- * effects here" — it takes no media, and where it holds nothing, it costs
- * nothing. That makes it a lane of free-floating clips (see timeline/clips.ts)
- * rather than a second gapless partition.
+ * The media layers say what a span of time shows. An fx lane says only "also
+ * run these effects over the frame here" — it takes no media, and where it
+ * holds nothing, it costs nothing. That makes it a lane of free-floating clips
+ * (see timeline/clips.ts).
  *
  * Composition is plain concatenation. GlRenderer runs an EffectInstance[]
  * sequentially through its ping-pong FBOs and keys every piece of per-effect
- * state (feedback buffers, phase, tracking) by instanceId, so appending a
- * lane's chain to the source lane's is exactly "and then run these too" — two
- * lanes can even hold the same effect without colliding.
+ * state (feedback buffers, phase, tracking) by instanceId, so appending one
+ * lane's chain to another's is exactly "and then run these too" — two lanes
+ * can even hold the same effect without colliding.
  */
 
 import type { AudioResponse } from "../audio/auto-range";
@@ -42,12 +41,8 @@ import {
 	type ChainClip,
 } from "./chain-clip";
 import type { MoshOptions } from "./mosh";
-import type { SegmentMoshSnapshot } from "./segment-mosh-history";
-import {
-	beatsToSeconds,
-	cleanEffects,
-	type SequenceSegmentMode,
-} from "./sequence";
+import type { MoshSnapshot } from "./mosh-history";
+import { beatsToSeconds, cleanEffects, type ChainMode } from "./sequence";
 
 /**
  * One span of extra effects on an fx lane: a chain clip (see chain-clip.ts)
@@ -58,12 +53,11 @@ export interface FxClip extends ChainClip {
 	 * Fade the lane's contribution in over this many seconds from the clip's
 	 * start, and out over the same before its end.
 	 *
-	 * Deliberately not the source lane's transition set. Those blend two whole
-	 * scenes, which needs both sides rendered separately — and a stacked lane has
-	 * no "other side": before the clip the lane contributes nothing at all. What
-	 * a clip boundary needs is the chain arriving rather than snapping on, so
-	 * this scales the parameters of the lane's own effects toward their disabled
-	 * state instead of compositing anything.
+	 * Not a scene transition: a stacked lane has no "other side" — before the
+	 * clip the lane contributes nothing at all. What a clip boundary needs is
+	 * the chain arriving rather than snapping on, so this scales the parameters
+	 * of the lane's own effects toward their disabled state instead of
+	 * compositing anything.
 	 */
 	fadeSec?: number;
 }
@@ -261,8 +255,7 @@ export interface FxEffectSourceOptions {
 	/**
 	 * Serve static clips as cached deep clones, so the export can write each
 	 * frame's audio-link values into the chain it renders without those values
-	 * landing in the clips the user is still editing. Same contract
-	 * createSequenceEffectSource offers for static segments.
+	 * landing in the clips the user is still editing.
 	 */
 	clone?: boolean;
 }
@@ -371,7 +364,7 @@ export function updateFxClips(
 export function setFxClipsMode(
 	lanes: FxLane[],
 	clipIds: Set<string>,
-	mode: SequenceSegmentMode,
+	mode: ChainMode,
 	intervalSec?: number,
 	intervalBeats?: number | null,
 ): FxLane[] {
@@ -420,8 +413,7 @@ export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
 }
 
 /**
- * Cut the clip covering `at` into two, matching the source lane's Ctrl+Click
- * split. Both halves keep the chain — deep-copied, so editing one no longer
+ * Cut the clip covering `at` into two (Ctrl+Click). Both halves keep the chain — deep-copied, so editing one no longer
  * touches the other — along with the mode, interval spacing and seed.
  *
  * Returns the lane unchanged when `at` isn't inside a clip, or when either half
@@ -459,7 +451,7 @@ export function splitFxClipAt(lane: FxLane, at: number): FxLane {
 export function restoreFxClipMosh(
 	lanes: FxLane[],
 	clipId: string,
-	snap: SegmentMoshSnapshot,
+	snap: MoshSnapshot,
 ): FxLane[] {
 	return updateFxClips(lanes, new Set([clipId]), (clip) =>
 		withChainMosh(clip, snap),
@@ -467,7 +459,7 @@ export function restoreFxClipMosh(
 }
 
 /** The mosh-relevant slice of a clip, for the ←/→ history. */
-export const fxClipMoshSnapshot: (clip: FxClip) => SegmentMoshSnapshot =
+export const fxClipMoshSnapshot: (clip: FxClip) => MoshSnapshot =
 	chainClipMoshSnapshot;
 
 /** The lane holding `clipId`, and the clip itself. */
@@ -540,10 +532,7 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
 				start: clip.start ?? 0,
 				end: clip.end ?? 0,
 				label: clip.label ?? "clean",
-				mode:
-					clip.mode === "interval"
-						? "interval"
-						: ("static" as SequenceSegmentMode),
+				mode: clip.mode === "interval" ? "interval" : ("static" as ChainMode),
 				presetName: clip.presetName,
 				modified: clip.modified,
 				effects: restoreEffects(clip.effects),
@@ -558,8 +547,7 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
 /**
  * Re-derive `intervalSec` for every clip whose interval was set in beats, so
  * correcting the BPM retimes them. Returns the input by identity when nothing
- * moves, so callers can skip a redundant commit — the same contract
- * applyBpmToSegments holds for the source lane.
+ * moves, so callers can skip a redundant commit.
  */
 export function applyBpmToFxLanes(lanes: FxLane[], bpm: number): FxLane[] {
 	if (bpm <= 0) return lanes;

@@ -1,6 +1,6 @@
 /**
- * Shared zoom/pan viewport for the segment and text timelines (single-editor
- * sequence timeline, slideshow beat timeline, text timeline). Owns the visible
+ * Shared zoom/pan viewport for every timeline (the editor's lane stack, the
+ * slideshow beat timeline, the text timeline). Owns the visible
  * [viewStart, viewEnd] window over a track of `getTrackDuration()` seconds and
  * the coordinate mapping between client-x pixels and track time.
  *

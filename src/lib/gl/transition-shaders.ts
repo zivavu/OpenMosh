@@ -1,5 +1,5 @@
 /**
- * Fragment shaders for sequence segment transitions. Each blends the outgoing
+ * Fragment shaders for scene transitions (the demo background). Each blends the outgoing
  * chain output (u_texture) into the incoming one (u_texture2) along
  * u_progress (0→1). All randomness derives from (u_seed, u_progress) — never
  * u_time — so preview and export produce identical blends frame for frame.

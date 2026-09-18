@@ -3,7 +3,7 @@
  *
  * Keyed the way sequence mode keys its media pool: by the song when there is
  * one, falling back to the media itself when there isn't. That matters because
- * the rest of a mode's per-song work — the text timeline, segments, BPM, the
+ * the rest of a mode's per-song work — the text timeline, lanes, BPM, the
  * playback span — is already stored against the track id. Keying the media any
  * other way would split one edit across two identities, and reopening a song
  * would restore its text over somebody else's images.
@@ -49,7 +49,7 @@ export interface SavedSession {
 /**
  * What identifies a resumable edit.
  *
- * The song, whenever there is one: that's what the text timeline and segments
+ * The song, whenever there is one: that's what the text timeline and lanes
  * are already stored under.
  *
  * Slideshow has no fallback. The upload screen requires a track before it will
@@ -141,7 +141,7 @@ export async function openSession(key: string): Promise<OpenedSession | null> {
 	if (files.length === 0) return null;
 
 	// The song comes back with the media: without it the editor would restore a
-	// text timeline and segments keyed to a track that isn't loaded.
+	// text timeline and lanes keyed to a track that isn't loaded.
 	let trackFile: File | null = null;
 	if (session.trackId) {
 		const track = await getTrack(session.trackId).catch(() => null);

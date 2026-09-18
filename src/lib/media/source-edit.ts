@@ -87,8 +87,8 @@ export const SPEED_MAX = 4;
 /**
  * One keyed value, stamped in seconds into the *source's own* media time —
  * not the timeline's. An edit is a fact about the file, so a key set 2.4s into
- * a clip lands at that same instant everywhere the clip is used: under a
- * segment, on a layer whose clip starts partway in, on two lanes at once.
+ * a clip lands at that same instant everywhere the clip is used: on a layer
+ * whose clip starts partway in, on two lanes at once.
  */
 export interface Keyframe<T> {
 	t: number;

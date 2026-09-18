@@ -175,7 +175,7 @@
 	// ── Scrubbing ────────────────────────────────────────────────────────────
 	// Owned by the stack rather than the lanes: the playhead is drawn once over
 	// the lot, so it is grabbable once over the lot too — a lane that spends its
-	// pointer events on segments or span handles (the mosh lane, the audio lane)
+	// pointer events on clips or span handles (the layer lanes, the audio lane)
 	// can't be the only way to move the clock.
 	let scrubbing = $state(false);
 	let staticDragging = $state(false);

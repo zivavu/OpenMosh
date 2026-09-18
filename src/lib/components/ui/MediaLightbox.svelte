@@ -98,7 +98,7 @@
 	}
 
 	// While we're up the editors' own shortcuts stand down — Delete would take
-	// the segment behind us, and the arrows are ours to walk the pool with.
+	// the clip behind us, and the arrows are ours to walk the pool with.
 	onMount(() => pushModalKeyboard());
 
 	function onKeydown(e: KeyboardEvent) {
@@ -106,7 +106,7 @@
 		else if (e.key === "ArrowLeft") prev();
 		else if (e.key === "Escape") close();
 		else return;
-		// Both editors bind these keys at the window (mosh history, segment
+		// Both editors bind these keys at the window (mosh history, clip
 		// deletes) — while the lightbox is up it consumes them outright.
 		e.preventDefault();
 		e.stopPropagation();

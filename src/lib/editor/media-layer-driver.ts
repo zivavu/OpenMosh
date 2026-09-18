@@ -19,8 +19,8 @@ export interface MediaLayerDriverOptions {
  *
  * Video layers get a sampler each, keyed by lane *and* source rather than by
  * source alone. A sampler decodes sequentially from wherever it is and drops
- * overlapping `at()` calls, so two lanes sharing one — or a lane sharing the
- * segment driver's — would each be handed the other's position. The source is
+ * overlapping `at()` calls, so two lanes sharing one would each be handed the
+ * other's position. The source is
  * in the key too because a lane's clips can name different videos, and a lane
  * that kept one decoder would reopen it at every cut.
  */

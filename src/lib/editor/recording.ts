@@ -70,7 +70,7 @@ export interface RecordingContext {
 	moshOptions?: MoshOptions;
 	/** The pool the media lanes draw from. Both modes have one. */
 	layerSources?: SequenceSource[];
-	/** Per-source edits: the rate each segment or clip walks its media at.
+	/** Per-source edits: the rate each clip walks its media at.
 	 * The crop, key and mask are already on the renderer. */
 	sourceEdits?: Record<string, SourceEdit>;
 	/** Master-clock time the export's frame 0 lands on. */
@@ -226,7 +226,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		sample.close();
 	};
 
-	// Sequence mode: resolve effects per frame from the segment list. With an
 	// Sequence mode: fx lanes over a blank base. Clip times live on the audio
 	// timeline (master clock); a video-mastered sequence keys by source time.
 	const sequence = ctx.sequence;

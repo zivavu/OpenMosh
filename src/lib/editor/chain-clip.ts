@@ -1,8 +1,7 @@
 /**
  * A clip that carries its own effect chain — the shape the fx lanes and the
- * media lanes share. Segments carry the same fields under different timing
- * (a gapless partition rather than free clips), so the roll, fill, clear and
- * mode rules live here once and the three lane kinds call them.
+ * media lanes share, so the roll, fill, clear and mode rules live here once
+ * and both lane kinds call them.
  *
  * "static": `effects` is the concrete, user-editable chain for the whole span.
  * "interval": the chain is re-rolled deterministically every `intervalSec`
@@ -18,21 +17,21 @@ import {
 import type { TimelineClip } from "../timeline/clips";
 import type { MoshOptions } from "./mosh";
 import { putRoll } from "./roll-cache";
-import type { SegmentMoshSnapshot } from "./segment-mosh-history";
+import type { MoshSnapshot } from "./mosh-history";
 import {
 	cleanEffects,
 	DEFAULT_INTERVAL_SEC,
 	randomSeed,
 	rollEffects,
-	type SequenceSegmentMode,
+	type ChainMode,
 } from "./sequence";
 
 export interface ChainClip extends TimelineClip {
 	/** Display label: preset name, "mosh", "clean", … */
 	label: string;
 	/** Absent on clips saved before interval mode; treated as "static". */
-	mode?: SequenceSegmentMode;
-	/** Preset this clip was filled from, for the same re-sync rule as segments. */
+	mode?: ChainMode;
+	/** Preset this clip was filled from; an explicit overwrite re-syncs it. */
 	presetName?: string;
 	/** Set once the user hand-edits a preset-filled clip. */
 	modified?: boolean;
@@ -59,7 +58,7 @@ export function chainClipTick(clip: ChainClip, time: number): number {
  */
 export function withChainMode<C extends ChainClip>(
 	clip: C,
-	mode: SequenceSegmentMode,
+	mode: ChainMode,
 	intervalSec?: number,
 	intervalBeats?: number | null,
 ): C {
@@ -140,7 +139,7 @@ export function syncedChainClip<C extends ChainClip>(
 }
 
 /** The mosh-relevant slice of a clip, for the ←/→ history. */
-export function chainClipMoshSnapshot(clip: ChainClip): SegmentMoshSnapshot {
+export function chainClipMoshSnapshot(clip: ChainClip): MoshSnapshot {
 	return {
 		effects: clip.effects,
 		seed: clip.seed,
@@ -151,13 +150,13 @@ export function chainClipMoshSnapshot(clip: ChainClip): SegmentMoshSnapshot {
 }
 
 /**
- * Put a clip back to a remembered mosh. Timing is deliberately excluded, the
- * same way restoreSegmentMosh leaves a segment's span alone: walking the mosh
- * history must change what a clip renders, never where it sits.
+ * Put a clip back to a remembered mosh. Timing is deliberately excluded:
+ * walking the mosh history must change what a clip renders, never where it
+ * sits.
  */
 export function withChainMosh<C extends ChainClip>(
 	clip: C,
-	snap: SegmentMoshSnapshot,
+	snap: MoshSnapshot,
 ): C {
 	return {
 		...clip,

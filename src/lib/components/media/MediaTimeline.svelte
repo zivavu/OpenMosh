@@ -12,10 +12,7 @@
 	import { dropAutoRangeScope } from "../../audio/auto-range";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import { loadPresets, type Preset } from "../../effects";
-	import {
-		BEAT_INTERVALS,
-		type SequenceSegmentMode,
-	} from "../../editor/sequence";
+	import { BEAT_INTERVALS, type ChainMode } from "../../editor/sequence";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
 		dragClipsStep,
@@ -92,14 +89,14 @@
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		/** Beats per minute, when known — unlocks the beat-spaced re-roll options. */
 		bpm?: number;
-		// The clip chain gestures, the same set a segment and an fx clip take.
+		// The clip chain gestures, the same set an fx clip takes.
 		// All optional: without them the bar isn't offered at all.
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
 		onModeChange?: (
 			clipIds: string[],
-			mode: SequenceSegmentMode,
+			mode: ChainMode,
 			intervalSec?: number,
 			intervalBeats?: number | null,
 		) => void;
@@ -769,8 +766,7 @@
 
 	function onPointerUp(e: PointerEvent) {
 		if (clickOnUp) {
-			// Clicking the one selected clip again drops the selection — the same
-			// gesture the sequence timeline gives a segment.
+			// Clicking the one selected clip again drops the selection.
 			const sole =
 				selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
 			if (sole) deselect();
@@ -802,8 +798,7 @@
 	}
 
 	// ── Clip clipboard ───────────────────────────────────────────────────────
-	// Local to the lanes, like the segment clipboard is to the source lane. The
-	// selections are mutually exclusive, so a Ctrl+C with clips selected can only
+	// Local to the lanes. The selections are mutually exclusive, so a Ctrl+C with clips selected can only
 	// mean these. A paste goes onto the selection when there is one — what the
 	// copied clips showed, into clips that keep their spans — and otherwise
 	// stamps whole clips down at the start marker.

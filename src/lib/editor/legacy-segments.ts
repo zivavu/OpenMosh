@@ -12,7 +12,7 @@
 
 import { restoreEffects, type EffectInstance } from "../effects";
 import { normalizeChainFields } from "./chain-clip";
-import type { SequenceSegmentMode } from "./sequence";
+import type { ChainMode } from "./sequence";
 import { createFxClip, createFxLane, type FxLane } from "./fx-lanes";
 import {
 	createMediaClip,
@@ -29,7 +29,7 @@ interface LegacySegment {
 	sourceId?: string;
 	effects?: unknown;
 	label?: string;
-	mode?: SequenceSegmentMode;
+	mode?: ChainMode;
 	presetName?: string;
 	modified?: boolean;
 	intervalSec?: number;
