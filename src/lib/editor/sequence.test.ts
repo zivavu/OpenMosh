@@ -1,18 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { MoshOptions } from "./mosh";
 import {
-	applyBpmToSegments,
 	beatsToSeconds,
-	createSequenceEffectSource,
-	createSequenceSegment,
 	DEFAULT_INTERVAL_SEC,
-	findSegmentAt,
 	intervalLabel,
 	rollEffects,
-	segmentSourceIdAt,
-	segmentTick,
 	withSeededRandom,
-	type SequenceSegment,
 } from "./sequence";
 
 const OPTIONS: MoshOptions = {
@@ -86,105 +79,6 @@ describe("rollEffects determinism (preview/export contract)", () => {
 	});
 });
 
-describe("findSegmentAt", () => {
-	const segs: SequenceSegment[] = [
-		createSequenceSegment(0, 2),
-		createSequenceSegment(2, 5),
-	];
-
-	test("returns the segment covering the time", () => {
-		expect(findSegmentAt(segs, 1, 5)?.startTime).toBe(0);
-		expect(findSegmentAt(segs, 3, 5)?.startTime).toBe(2);
-	});
-
-	test("end is exclusive, start inclusive", () => {
-		expect(findSegmentAt(segs, 2, 5)?.startTime).toBe(2);
-	});
-
-	test("returns null outside all segments", () => {
-		expect(findSegmentAt(segs, 6, 5)).toBeNull();
-	});
-
-	test("later start wins on overlap", () => {
-		const overlap: SequenceSegment[] = [
-			createSequenceSegment(0, 5),
-			createSequenceSegment(1, 3),
-		];
-		expect(findSegmentAt(overlap, 2, 5)?.startTime).toBe(1);
-	});
-});
-
-describe("segmentTick", () => {
-	test("0-based tick index by interval from segment start", () => {
-		const seg = createSequenceSegment(1, 5);
-		seg.mode = "interval";
-		seg.intervalSec = 0.25;
-		expect(segmentTick(seg, 1)).toBe(0);
-		expect(segmentTick(seg, 1.24)).toBe(0);
-		expect(segmentTick(seg, 1.25)).toBe(1);
-		expect(segmentTick(seg, 2)).toBe(4);
-	});
-});
-
-describe("createSequenceEffectSource", () => {
-	test("interval rolls are identical across independently built sources (preview == export)", () => {
-		const seg = createSequenceSegment(0, 4);
-		seg.mode = "interval";
-		seg.intervalSec = 0.5;
-		seg.seed = 99;
-		const segs = [seg];
-
-		const preview = createSequenceEffectSource(
-			() => segs,
-			() => 4,
-			() => OPTIONS,
-		);
-		const exportSrc = createSequenceEffectSource(
-			() => segs,
-			() => 4,
-			() => OPTIONS,
-			{ cloneStatic: true },
-		);
-
-		for (const t of [0, 0.5, 1.0, 2.25, 3.9]) {
-			expect(renderShape(preview(t)!)).toEqual(renderShape(exportSrc(t)!));
-		}
-	});
-
-	test("static segments return the segment's own effects (no clone) by default", () => {
-		const seg = createSequenceSegment(0, 4);
-		const src = createSequenceEffectSource(
-			() => [seg],
-			() => 4,
-			() => OPTIONS,
-		);
-		expect(src(1)).toBe(seg.effects);
-	});
-
-	test("cloneStatic returns a stable clone, not the original array", () => {
-		const seg = createSequenceSegment(0, 4);
-		const src = createSequenceEffectSource(
-			() => [seg],
-			() => 4,
-			() => OPTIONS,
-			{ cloneStatic: true },
-		);
-		const first = src(1);
-		expect(first).not.toBe(seg.effects);
-		expect(src(2)).toBe(first); // cached per segment
-	});
-
-	test("returns null on a gap", () => {
-		const seg = createSequenceSegment(0, 2);
-		const src = createSequenceEffectSource(
-			() => [seg],
-			() => 5,
-			() => OPTIONS,
-		);
-		expect(src(3)).toBeNull();
-	});
-});
-
 describe("beat-based re-roll spacing", () => {
 	test("converts beats to seconds at the given tempo", () => {
 		expect(beatsToSeconds(1, 120)).toBeCloseTo(0.5, 6);
@@ -194,24 +88,6 @@ describe("beat-based re-roll spacing", () => {
 
 	test("falls back to the default rather than dividing by a missing tempo", () => {
 		expect(beatsToSeconds(1, 0)).toBe(DEFAULT_INTERVAL_SEC);
-	});
-
-	test("a tempo change retimes only the segments set in beats", () => {
-		const beatSeg: SequenceSegment = {
-			...createSequenceSegment(0, 10),
-			mode: "interval",
-			intervalBeats: 1,
-			intervalSec: 0.5,
-		};
-		const secondsSeg: SequenceSegment = {
-			...createSequenceSegment(10, 20),
-			mode: "interval",
-			intervalSec: 0.25,
-		};
-		const out = applyBpmToSegments([beatSeg, secondsSeg], 60);
-		expect(out[0].intervalSec).toBeCloseTo(1, 6);
-		expect(out[1].intervalSec).toBe(0.25);
-		expect(out[1]).toBe(secondsSeg);
 	});
 
 	test("labels beat spacings as beats, not their BPM division in seconds", () => {
@@ -228,87 +104,5 @@ describe("beat-based re-roll spacing", () => {
 		expect(intervalLabel(2)).toBe("2s");
 		expect(intervalLabel(1.1428571428571428)).toBe("1.143s");
 		expect(intervalLabel(undefined)).toBe(`${DEFAULT_INTERVAL_SEC}s`);
-	});
-
-	test("returns the same array when nothing moves, so no redundant commit", () => {
-		const segs: SequenceSegment[] = [
-			{
-				...createSequenceSegment(0, 10),
-				mode: "interval",
-				intervalBeats: 1,
-				intervalSec: 0.5,
-			},
-		];
-		expect(applyBpmToSegments(segs, 120)).toBe(segs);
-		expect(applyBpmToSegments(segs, 0)).toBe(segs);
-	});
-});
-
-describe("segmentSourceIdAt", () => {
-	const rolling = (over: Partial<SequenceSegment> = {}): SequenceSegment => ({
-		id: "s",
-		startTime: 0,
-		endTime: 100,
-		mode: "interval",
-		label: "auto",
-		effects: [],
-		intervalSec: 1,
-		seed: 12345,
-		sourceRoll: true,
-		...over,
-	});
-	const picks = (seg: SequenceSegment, pool: string[], n: number) =>
-		Array.from({ length: n }, (_, i) => segmentSourceIdAt(seg, i, pool, "a"));
-
-	test("a segment that isn't rolling keeps its own source", () => {
-		const seg = rolling({ sourceRoll: false, sourceId: "b" });
-		expect(picks(seg, ["a", "b", "c"], 3)).toEqual(["b", "b", "b"]);
-	});
-
-	test("static segments never roll, even with the flag set", () => {
-		const seg = rolling({ mode: "static", sourceId: "c" });
-		expect(picks(seg, ["a", "b", "c"], 3)).toEqual(["c", "c", "c"]);
-	});
-
-	test("falls back to the primary while the pool is too small to deal", () => {
-		expect(picks(rolling(), ["a"], 2)).toEqual(["a", "a"]);
-	});
-
-	test("same segment and tick always pick the same source", () => {
-		const pool = ["a", "b", "c", "d"];
-		expect(picks(rolling(), pool, 20)).toEqual(picks(rolling(), pool, 20));
-	});
-
-	test("never repeats a source on consecutive ticks", () => {
-		for (const size of [2, 3, 4, 7]) {
-			const pool = Array.from({ length: size }, (_, i) => `s${i}`);
-			for (const seed of [0, 1, 7, 12345, 99999]) {
-				const out = picks(rolling({ seed }), pool, 60);
-				for (let i = 1; i < out.length; i++)
-					expect(out[i]).not.toBe(out[i - 1]);
-			}
-		}
-	});
-
-	test("deals the whole pool before repeating any of it", () => {
-		const pool = ["a", "b", "c", "d", "e"];
-		const out = picks(rolling(), pool, 10);
-		expect(new Set(out.slice(0, 5)).size).toBe(5);
-		expect(new Set(out.slice(5)).size).toBe(5);
-	});
-
-	test("a different seed deals a different order", () => {
-		const pool = ["a", "b", "c", "d", "e"];
-		expect(picks(rolling({ seed: 1 }), pool, 10)).not.toEqual(
-			picks(rolling({ seed: 2 }), pool, 10),
-		);
-	});
-
-	test("ticks are measured from the segment start", () => {
-		const pool = ["a", "b", "c"];
-		const seg = rolling({ startTime: 10, endTime: 20 });
-		expect(segmentSourceIdAt(seg, 10.5, pool, "a")).toBe(
-			segmentSourceIdAt(rolling(), 0.5, pool, "a"),
-		);
 	});
 });

@@ -81,11 +81,10 @@ export interface SequenceSource {
 }
 
 /**
- * The media pool behind sequence mode. Owns object URLs, decoded images and
- * lazily-created video samplers; segments reference entries by id.
- *
- * Videos reuse the slideshow's `SlideVideoSampler` — sequential, caller-driven
- * decode with no clock of its own, which is exactly what a segment needs.
+ * The media pool behind sequence mode. Owns object URLs, decoded images,
+ * thumbnails and proxies; the layers' clips reference entries by id. Video
+ * decoding is the layer driver's (see media-layer-driver.ts), one decoder per
+ * lane, since two lanes on one file want two positions in it.
  */
 export class SequenceSourceRegistry {
 	sources = $state<SequenceSource[]>([]);
@@ -113,9 +112,6 @@ export class SequenceSourceRegistry {
 	#decoding = new Set<string>();
 	/** Ids an in-flight `add` has claimed but not appended yet. */
 	#pendingIds = new Set<string>();
-	#samplers = new Map<string, SlideVideoSampler>();
-	/** Samplers whose create() is in flight, so we don't start a second one. */
-	#creating = new Set<string>();
 	/** In-flight proxy transcodes, keyed by source id, so remove() can stop one. */
 	#proxyJobs = new Map<string, ProxyJob>();
 	#disposed = false;
@@ -290,8 +286,6 @@ export class SequenceSourceRegistry {
 			delete next[id];
 			this.edits = next;
 		}
-		this.#samplers.get(id)?.dispose();
-		this.#samplers.delete(id);
 		this.#images.delete(id);
 		this.#sizeSync.untrack(id);
 		this.#revoke(src);
@@ -364,9 +358,8 @@ export class SequenceSourceRegistry {
 	}
 
 	/**
-	 * Returns undefined while the image is still being decoded — same contract
-	 * as `sampler`: the caller holds the previous frame and is called back via
-	 * `onReady`. Decoding eagerly at add time would pin every source's full
+	 * Returns undefined while the image is still being decoded: the caller
+	 * holds the previous frame and is called back via `onReady`. Decoding eagerly at add time would pin every source's full
 	 * bitmap in memory, which a few hundred screenshots will not survive.
 	 */
 	image(id: string): HTMLImageElement | undefined {
@@ -396,41 +389,6 @@ export class SequenceSourceRegistry {
 	}
 
 	/**
-	 * Returns undefined while the sampler is still being created — same
-	 * contract as `image`: the caller holds the previous frame and is called
-	 * back via `onReady`, which is the only tick a paused preview gets.
-	 */
-	sampler(id: string): SlideVideoSampler | undefined {
-		const existing = this.#samplers.get(id);
-		if (existing) return existing;
-		if (this.#creating.has(id)) return undefined;
-		const src = this.get(id);
-		if (!src || src.kind !== "video") return undefined;
-		// The proxy decodes at a fraction of the per-frame cost; the original is
-		// only what's left to decode while a proxy is still being built.
-		const file = src.proxyFile ?? src.file;
-		this.#creating.add(id);
-		void SlideVideoSampler.create(file).then((sampler) => {
-			this.#creating.delete(id);
-			if (!sampler) return;
-			if (this.#disposed || !this.get(id)) {
-				sampler.dispose();
-				return;
-			}
-			// A proxy landed while this creation was in flight: the sampler is
-			// already obsolete, and keeping it would pin the slow path for the
-			// whole session.
-			if (this.get(id)!.proxyFile && this.get(id)!.proxyFile !== file) {
-				sampler.dispose();
-				return;
-			}
-			this.#samplers.set(id, sampler);
-			this.#onReady?.();
-		});
-		return undefined;
-	}
-
-	/**
 	 * Turn the preview proxy for this source on or off — the chip's badge is the
 	 * entry point. Off drops any proxy already attached and stops one being
 	 * built, so the preview decodes the original the user asked for; the choice
@@ -449,10 +407,6 @@ export class SequenceSourceRegistry {
 		src.proxyFailed = false;
 		src.proxyReason = undefined;
 		src.proxyDisabled = !enabled;
-		// Whichever file the sampler was opened on is now the wrong one, in either
-		// direction; the next tick reopens on the one this choice asks for.
-		this.#samplers.get(id)?.dispose();
-		this.#samplers.delete(id);
 		const wanted = enabled && needsProxy(src.width ?? 0, src.height ?? 0);
 		src.proxyPending = wanted;
 		if (wanted) void this.#makeProxy(id, src.file);
@@ -478,10 +432,7 @@ export class SequenceSourceRegistry {
 		this.#sizeSync.dispose();
 		for (const job of this.#proxyJobs.values()) job.cancel();
 		this.#proxyJobs.clear();
-		for (const s of this.#samplers.values()) s.dispose();
-		this.#samplers.clear();
 		this.#images.clear();
-		this.#creating.clear();
 		this.#decoding.clear();
 		this.#pendingIds.clear();
 		this.loadingTotal = 0;
@@ -653,10 +604,6 @@ export class SequenceSourceRegistry {
 			live.proxyHeight = opened?.height;
 			live.proxyPending = false;
 			live.proxyProgress = undefined;
-			// A sampler decoding the original costs 4× the per-frame work; drop it
-			// so the next tick reopens on the proxy.
-			this.#samplers.get(id)?.dispose();
-			this.#samplers.delete(id);
 			// Persisted under the source's own id so the next run skips the
 			// transcode, whether or not the source itself is persisted.
 			if (!stored) {

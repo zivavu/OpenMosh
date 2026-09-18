@@ -37,24 +37,6 @@
 	} from "../../media";
 	import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 
-	/** Active sequence transition descriptor. Progress is computed per rendered
-	 * frame from `getTime()` so the blend stays smooth even when the editor's
-	 * reactive clock ticks slower than the rAF loop. */
-	export interface CanvasTransition {
-		effectsA: EffectInstance[];
-		type: string;
-		seed: number;
-		direction: number;
-		density: number;
-		/** Master-clock time where the blend starts. */
-		startTime: number;
-		durationSec: number;
-		getTime: () => number;
-		/** Chain A draws from the outgoing source texture — set when the two
-		 * segments use different media, so the media cross-fades too. */
-		useAltSource?: boolean;
-	}
-
 	/** Shared, so the default prop doesn't mint an array per render. */
 	const EMPTY_POST: PostChainLayer[] = [];
 	const EMPTY_MEDIA: ResolvedMediaLayer[] = [];
@@ -86,30 +68,16 @@
 		externallyDriven?: boolean;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: GlRenderer | null;
-		/** Sequence segment transition in progress; `effects` is the incoming chain. */
-		transition?: CanvasTransition | null;
 		/**
-		 * Sequence fx lanes: stacked over whatever the source lane produced, so
-		 * during a transition they run over the finished blend rather than on
-		 * each side of it, and so a fading lane can mix against its own input.
-		 * `effects` still carries their instances flat, for the animation check
-		 * and the audio-link tick — the renderer is handed the layers.
+		 * Sequence fx lanes: stacked over the base, so a fading lane can mix
+		 * against its own input. `effects` still carries their instances flat,
+		 * for the animation check and the audio-link tick — the renderer is
+		 * handed the layers.
 		 */
 		postLayers?: PostChainLayer[];
-		/** Sequence multi-source: uploads the active segment's frame for wherever
-		 * the master clock is (the driver reads it — this loop's wall-clock time
-		 * would make the same song position show different frames). Returning
-		 * true means it owned the source texture, so the primary image/video
-		 * upload is skipped. */
-		sourceDriver?: (() => boolean) | null;
-		/** Uploads the outgoing segment's frame during a transition. Returning
-		 * false means the primary's frame is the outgoing one, so this component
-		 * has to route it to the alt texture itself. */
-		outgoingDriver?: (() => boolean) | null;
-		/** Changes whenever the driven source does, retriggering a paused redraw. */
+		/** Changes whenever a layer's late upload lands, retriggering a paused
+		 * redraw. */
 		sourceKey?: string | null;
-		/** True while the driven source needs a per-frame upload (a video). */
-		sourceAnimating?: boolean;
 		/** Two-way: set it to enter/leave fullscreen, and it follows Esc or any
 		 * other way the browser drops out of it. */
 		fullscreen?: boolean;
@@ -120,16 +88,6 @@
 		/** How long each source's media runs, so a keyed edit is sampled at the
 		 * instant the frame sampler wrapped to. Sparse; images may be omitted. */
 		sourceDurations?: Record<string, number>;
-		/** Which pool source the frame comes from, so its own edits can be found.
-		 * Null for media with no pool entry, which carries none. */
-		sourceEditId?: string | null;
-		/** The same for the outgoing side of a transition. */
-		outgoingEditId?: string | null;
-		/** Seconds into that source's own media, for sampling a keyed edit. The
-		 * clip's own clock, not the master's: an edit belongs to the file, so the
-		 * same instant of it is edited the same way wherever it plays. */
-		sourceEditTime?: number;
-		outgoingEditTime?: number;
 		/** Optional text lanes composited into the chain at their insertion points. */
 		textTimeline?: TextTimeline | null;
 		/** Optional media lanes, composited the same way. */
@@ -149,8 +107,8 @@
 		mediaChains?: MediaChainSource | null;
 		/**
 		 * Sequence mode: the frame's size, with no media of its own. The base
-		 * starts black at this size and `sourceDriver` puts a segment's media on
-		 * it when one names some; `imageSrc` and the video props are ignored.
+		 * stays black at this size under the layers; `imageSrc` and the video
+		 * props are ignored.
 		 */
 		baseSize?: { width: number; height: number } | null;
 		/** Master-timeline seconds the text clips are looked up at. */
@@ -202,20 +160,12 @@
 		externallyDriven = false,
 		warmCanvas = null,
 		warmRenderer = null,
-		transition = null,
 		postLayers = EMPTY_POST,
-		sourceDriver = null,
-		outgoingDriver = null,
 		sourceKey = null,
-		sourceAnimating = false,
 		spectrum = null,
 		sourceFit = "contain",
 		sourceEdits = EMPTY_SOURCE_EDITS,
 		sourceDurations = EMPTY_SOURCE_DURATIONS,
-		sourceEditId = null,
-		outgoingEditId = null,
-		sourceEditTime = 0,
-		outgoingEditTime = 0,
 		fullscreen = $bindable(false),
 		textTimeline = null,
 		mediaTimeline = null,
@@ -676,28 +626,17 @@
 		!externallyDriven &&
 			!freezeAnimation &&
 			(!!frameSource ||
-				!!transition ||
 				videoPlaying ||
-				sourceAnimating ||
 				forceAnimation ||
 				hasAnimatedLayers ||
 				hasAnimatedEffects),
 	);
 
-	/** Render the current frame: transition blend when a segment boundary is
-	 * being crossed, otherwise the plain effect chain. */
+	/** Render the current frame. */
 	function drawFrame(now: number) {
 		// Before anything renders: the bars have to see this frame's audio, and
 		// the export driver does the same on its side.
 		renderer!.setSpectrum(spectrum, now);
-		// Which media the two source textures hold, so the chain can apply that
-		// source's crop, erase mask and key before reading it.
-		renderer!.setSourceIds(
-			sourceEditId,
-			outgoingEditId,
-			sourceEditTime,
-			outgoingEditTime,
-		);
 		renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
 		const solo = soloMediaLaneId;
 		const layers =
@@ -719,34 +658,7 @@
 		// lane's hidden neighbours can't be picked out of the black.
 		pickable = { media: shown, text: layers };
 		renderer!.setBlankSource(!!solo);
-		const tr = solo ? null : transition;
-		if (tr && tr.durationSec > 0) {
-			const p = (tr.getTime() - tr.startTime) / tr.durationSec;
-			if (p >= 0 && p < 1) {
-				// `effects` already ends with the stacked lanes' instances; the
-				// incoming chain is what's left once that tail is peeled off, since
-				// the lanes run over the blend rather than inside either side.
-				const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
-				const incoming =
-					stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
-				renderer!.renderTransition(
-					tr.effectsA,
-					incoming,
-					tr.type,
-					p,
-					tr.seed,
-					tr.direction,
-					tr.density,
-					now,
-					tr.useAltSource ?? false,
-					layers,
-					postLayers,
-					media,
-				);
-				return;
-			}
-		}
-		// The plain path hands over the source chain alone plus the layers, so a
+		// The render hands over the source chain alone plus the layers, so a
 		// fading lane can be mixed against its input; `effects` is the flat form,
 		// which would double the stacked instances if passed whole.
 		const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
@@ -1037,28 +949,15 @@
 		}
 		sourceFit;
 		sourceEdits;
-		sourceEditId;
-		outgoingEditId;
-		// Scrubbing a keyed edit moves the crop with no other reason to redraw.
-		sourceEditTime;
-		outgoingEditTime;
 		// A caption font that lands after the frame was drawn changes its glyphs.
 		fontTick;
 		// Text edits and scrubbing both change which clip is on screen.
 		readTextTimeline();
 		readMediaTimeline();
 		textTime;
-		// Scrubbing onto another sequence source while paused: re-upload before
-		// drawing. sourceKey also ticks when a late video upload lands, which is
-		// what gets that frame onto a paused canvas.
+		// A late layer upload landing while paused is what gets that frame onto
+		// the canvas.
 		sourceKey;
-		// Same hand-back problem as the animation loop, minus the frameSource
-		// case (which always keeps that loop running). Gated on there being a
-		// driver at all: without one nothing can have overwritten the texture,
-		// and uploading here would cost a frame upload per slider tick.
-		if (sourceDriver && !sourceDriver() && videoEl && !frameSource) {
-			renderer.updateSourceFrame(videoEl);
-		}
 		drawFrame(0);
 	});
 
@@ -1125,39 +1024,19 @@
 
 		let rafId: number;
 		let lastVideoTime = -1;
-		let driverOwned = false;
 		const loop = () => {
 			const nowMs = performance.now();
-			const owned = !!sourceDriver?.();
-			// False means the primary is the outgoing side of a transition, so its
-			// frame has to reach the alt texture as well as (or instead of) the
-			// main one.
-			const altFromPrimary = !!outgoingDriver && !outgoingDriver();
-			// The frame a sequence segment borrowed the source texture for is
-			// still on it. Both primary paths below only upload when something
-			// changed, so without forcing one here a paused preview would keep
-			// showing the other segment's media after the playhead left it.
-			const handedBack = driverOwned && !owned;
-			driverOwned = owned;
-			if (!owned || altFromPrimary) {
-				if (frameSource) {
-					const frame = frameSource.takeFrame();
-					if (frame) {
-						if (!owned) renderer!.updateSourceFrame(frame);
-						if (altFromPrimary) renderer!.updateAltSourceFrame(frame);
-						frame.close();
-					} else if (handedBack) {
-						// The player only hands out newly-due frames; re-seeking to
-						// where it already is makes the next tick produce one.
-						frameSource.seek(frameSource.currentTime);
-					}
-				} else if (videoEl) {
-					const t = videoEl.currentTime;
-					if (!owned && (handedBack || t !== lastVideoTime)) {
-						renderer!.updateSourceFrame(videoEl);
-						lastVideoTime = t;
-					}
-					if (altFromPrimary) renderer!.updateAltSourceFrame(videoEl);
+			if (frameSource) {
+				const frame = frameSource.takeFrame();
+				if (frame) {
+					renderer!.updateSourceFrame(frame);
+					frame.close();
+				}
+			} else if (videoEl) {
+				const t = videoEl.currentTime;
+				if (t !== lastVideoTime) {
+					renderer!.updateSourceFrame(videoEl);
+					lastVideoTime = t;
 				}
 			}
 			drawFrame(nowMs / 1000);

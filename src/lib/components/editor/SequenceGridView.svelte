@@ -186,8 +186,8 @@
 					tabindex="0"
 					draggable="true"
 					title={assignable
-						? `Play "${src.name}" on the selected segment${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
-						: `${src.name}. Click to preview, or drag it onto a segment.`}
+						? `Show "${src.name}" on the selected layer clip${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
+						: `${src.name}. Click to preview, or drag it onto a layer.`}
 					ondragstart={(e) => onCardDragStart(e, i)}
 					ondragover={(e) => {
 						if (dragFromIndex === null) return;

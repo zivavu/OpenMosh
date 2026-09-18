@@ -59,7 +59,7 @@
 	let {
 		sources,
 		selectedCount = 0,
-		selectedLabel = "segment",
+		selectedLabel = "layer clip",
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
@@ -237,7 +237,7 @@
 						ondblclick={(e) => openLightbox(e, i)}
 						title={assignable
 							? `Play "${src.name}" on the selected ${selectedLabel}${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
-							: `${src.name} — click to preview, or drag it onto a segment or layer clip`}
+							: `${src.name} — click to preview, or drag it onto a layer clip`}
 					>
 						{#if src.thumbUrl}
 							<img

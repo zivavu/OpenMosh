@@ -31,9 +31,8 @@ export interface StoredSequenceMedia {
 /**
  * A ≤1080p preview re-encode of some media (see video/proxy.ts), keyed by the
  * same content-derived id as its source. Its own store rather than a field on
- * the media entry: the sources that most need a proxy — the sequence primary,
- * a single-mode file — are deliberately not persisted, and a proxy that died
- * with that decision would re-transcode on every start.
+ * the media entry: a single-mode file is deliberately not persisted, and a
+ * proxy that died with that decision would re-transcode on every start.
  */
 export interface StoredSequenceProxy {
 	id: string;
@@ -106,9 +105,9 @@ const MAX_UNREFERENCED = 64;
 
 /**
  * Proxies belonging to no referenced media are kept up to this many entries,
- * newest first — a session-scoped source (the sequence primary, a single-mode
- * file) has no pool or session pointing at it, and its proxy is the one thing
- * worth keeping between runs.
+ * newest first — a session-scoped source (a single-mode file) has no pool or
+ * session pointing at it, and its proxy is the one thing worth keeping
+ * between runs.
  */
 const MAX_UNREFERENCED_PROXIES = 16;
 

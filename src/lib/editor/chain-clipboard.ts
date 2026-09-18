@@ -1,41 +1,27 @@
 /**
- * One clipboard for effect chains, shared by the source lane's segments and the
- * fx lanes' clips.
+ * One clipboard for effect chains, shared by every lane whose clips carry one
+ * (see chain-clip.ts): "copy these effects onto that" means the same thing on
+ * an fx clip and a media clip, so this carries the behaviour they share and
+ * nothing else. Pasting never moves a clip's media, its fade or its span,
+ * because none of that is an effect.
  *
- * A segment and an fx clip are different things — one says which media plays,
- * the other only adds effects — but the chain and the way it is rolled are
- * identical in both, which is what makes "copy these effects onto that" mean
- * something across the two. So this carries the behaviour they share and
- * nothing else: pasting never moves a segment's media, its transition or its
- * span, because none of that is an effect.
- *
- * Module-level rather than a prop: the two timelines are siblings with mutually
+ * Module-level rather than a prop: the timelines are siblings with mutually
  * exclusive selections (see keepOnlySelection), so a copy in one is always
  * followed by a paste in the other with no common parent state in between.
  *
- * Plain state, no runes: nothing renders from this. Both timelines read it from
+ * Plain state, no runes: nothing renders from this. The timelines read it from
  * a keydown handler, which is not a reactive context.
  */
 
-import { cloneEffectInstance, type EffectInstance } from "../effects";
+import { cloneEffectInstance } from "../effects";
+import type { ChainClip } from "./chain-clip";
 import { markCopied } from "./copy-stamp";
-import type { FxClip } from "./fx-lanes";
-import type { SequenceSegment, SequenceSegmentMode } from "./sequence";
 
-/** The behaviour a segment and an fx clip both understand. */
-export interface ChainClip {
-	label: string;
-	mode?: SequenceSegmentMode;
-	presetName?: string;
-	modified?: boolean;
-	effects: EffectInstance[];
-	intervalSec?: number;
-	intervalBeats?: number;
-	seed?: number;
-}
+/** The chain and how it rolls — a clip minus its span. */
+export type CopiedChain = Omit<ChainClip, "id" | "start" | "end">;
 
 /** The chain and its rolling, cloned so the copy outlives the source. */
-export function captureChain(src: SequenceSegment | FxClip): ChainClip {
+export function captureChain(src: ChainClip): CopiedChain {
 	return {
 		label: src.label,
 		mode: src.mode,
@@ -51,15 +37,15 @@ export function captureChain(src: SequenceSegment | FxClip): ChainClip {
 }
 
 class ChainClipboard {
-	clips: ChainClip[] = [];
+	clips: CopiedChain[] = [];
 
-	/** The copy stamp (see copy-stamp.ts) of the last fill. The segment and
-	 * fx timelines keep richer clipboards of their own, filled by the same
-	 * Ctrl+C, so a paste has to know which was filled last. */
+	/** The copy stamp (see copy-stamp.ts) of the last fill. The timelines keep
+	 * richer clipboards of their own, filled by the same Ctrl+C, so a paste
+	 * has to know which was filled last. */
 	stamp = 0;
 
 	/** Snapshot chains in the order given; the caller sorts by time. */
-	copy(items: (SequenceSegment | FxClip)[]) {
+	copy(items: ChainClip[]) {
 		if (items.length === 0) return false;
 		this.clips = items.map(captureChain);
 		this.stamp = markCopied();
@@ -67,7 +53,7 @@ class ChainClipboard {
 	}
 
 	/** Fresh instance ids each paste, so two pasted copies never share state. */
-	at(i: number): ChainClip | null {
+	at(i: number): CopiedChain | null {
 		const clip = this.clips[i % this.clips.length];
 		if (!clip) return null;
 		return { ...clip, effects: clip.effects.map(cloneEffectInstance) };
@@ -76,29 +62,12 @@ class ChainClipboard {
 
 export const chainClipboard = new ChainClipboard();
 
-/**
- * Overwrite what a segment does, keeping what it *is*: its id, its span, the
- * media it plays, and the transition into it all stay put.
- */
-export function applyChainToSegment(
-	seg: SequenceSegment,
-	chain: ChainClip,
-): SequenceSegment {
-	return {
-		...seg,
-		label: chain.label,
-		mode: chain.mode ?? "static",
-		presetName: chain.presetName,
-		modified: chain.modified,
-		effects: chain.effects,
-		intervalSec: chain.intervalSec,
-		intervalBeats: chain.intervalBeats,
-		seed: chain.seed,
-	};
-}
-
-/** The same, for an fx clip: its span and its fade are its own. */
-export function applyChainToFxClip(clip: FxClip, chain: ChainClip): FxClip {
+/** Overwrite what a clip does, keeping what it *is*: its id, its span and
+ * whatever else its lane kind hangs on it. */
+export function applyChainTo<C extends ChainClip>(
+	clip: C,
+	chain: CopiedChain,
+): C {
 	return {
 		...clip,
 		label: chain.label,

@@ -48,6 +48,11 @@ const CLIPS: ShortcutGroup = {
 			description: "Add a clip in empty space",
 		},
 		{ keys: ["Ctrl/Cmd+Click a clip"], description: "Split it at the cursor" },
+		{
+			keys: ["S"],
+			description: "Split the lane you last touched at the playhead",
+		},
+		{ keys: ["R"], description: "Loop playback inside the selected clip" },
 		{ keys: ["Drag"], description: "Move the selection" },
 		{ keys: ["Drag an edge"], description: "Trim one clip" },
 		{ keys: ["Drag a boundary"], description: "Trim both clips it joins" },
@@ -88,40 +93,6 @@ const MEDIA_LAYERS: ShortcutGroup = {
 	],
 };
 
-const SEGMENTS: ShortcutGroup = {
-	title: "Segments",
-	shortcuts: [
-		{
-			keys: ["Ctrl/Cmd+Click"],
-			description: "Create or split a segment at the cursor",
-		},
-		{
-			keys: ["S"],
-			description: "Split the lane you last touched at the playhead",
-		},
-		{
-			keys: ["Alt+Click"],
-			description: "Add or remove one segment from the selection",
-		},
-		{
-			keys: ["Shift+Drag"],
-			description: "Rectangle-select segments and boundaries",
-		},
-		{ keys: ["R"], description: "Loop playback inside the selected segment" },
-		{
-			keys: ["Delete", "Backspace"],
-			description: "Over a boundary: merge the segments it joins",
-		},
-		COPY,
-		{
-			keys: ["Ctrl/Cmd+V"],
-			description:
-				"Paste effects onto the selection, or click where the span lands",
-		},
-		{ keys: ["Esc"], description: "Cancel a paste" },
-	],
-};
-
 export function editorShortcutGroups(opts: {
 	sequence: boolean;
 	fxLanes: boolean;
@@ -137,8 +108,7 @@ export function editorShortcutGroups(opts: {
 				sequence
 					? {
 							keys: MOSH.keys,
-							description:
-								"Previous or next mosh of the selected segment or clip",
+							description: "Previous or next mosh of the selected clip",
 						}
 					: MOSH,
 				...UNDO,
@@ -159,7 +129,6 @@ export function editorShortcutGroups(opts: {
 		},
 		VIEW,
 		...(sequence || text || media ? [CLIPS] : []),
-		...(sequence ? [SEGMENTS] : []),
 		...(sequence && fxLanes ? [FX_LANES] : []),
 		...(media ? [MEDIA_LAYERS] : []),
 	];

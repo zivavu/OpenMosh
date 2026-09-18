@@ -1,6 +1,8 @@
 export { createMediaHistory } from "./history.svelte";
 export {
+	applyBpmToMediaClips,
 	clearMediaClips,
+	dealMediaClipSources,
 	fillMediaClipsFromPreset,
 	restoreMediaClipMosh,
 	rollMediaClips,

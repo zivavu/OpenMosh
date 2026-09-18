@@ -23,10 +23,7 @@
 		type SequenceSegmentMode,
 	} from "../../editor/sequence";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
-	import {
-		applyChainToFxClip,
-		chainClipboard,
-	} from "../../editor/chain-clipboard";
+	import { applyChainTo, chainClipboard } from "../../editor/chain-clipboard";
 	import {
 		copyFxClips,
 		pasteFxClips,
@@ -671,7 +668,7 @@
 					const i = order.indexOf(c.id);
 					if (i === -1) return c;
 					const chain = chainClipboard.at(i);
-					return chain ? applyChainToFxClip(c, chain) : c;
+					return chain ? applyChainTo(c, chain) : c;
 				}),
 			})),
 		);
@@ -863,7 +860,7 @@
 {#snippet clipBar()}
 	{#if selectedClips.length > 0}
 		<div class="fx-bar">
-			<!-- Named, not just labelled: the bar is shared with the segment lane now,
+			<!-- Named, not just labelled: the bar is shared with the media lanes,
 			     so it has to say which of the two it is driving. -->
 			<span class="fx-title">FX</span>
 			<span class="tl-tool-label">

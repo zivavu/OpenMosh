@@ -20,20 +20,8 @@ import {
 	type FxLane,
 } from "./fx-lanes";
 import type { MoshOptions } from "./mosh";
-import {
-	createSequenceEffectSource,
-	findSegmentAt,
-	resolveTransitionAt,
-	type SequenceSegment,
-	segmentSourceIdAt,
-} from "./sequence";
-import { createSequenceExportSources } from "./sequence-export-sources";
 import { createMediaExportLayers } from "./media-export-layers";
-import {
-	createMediaChainSource,
-	laneSourceIds,
-	sourceTimeAt as mediaTimeAt,
-} from "../media";
+import { createMediaChainSource, laneSourceIds } from "../media";
 import type { MediaTimeline, ResolvedMediaLayer, SourceEdit } from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
@@ -57,17 +45,14 @@ export interface RecordingContext {
 	/** Video playback speed factor (1 = normal). Defaults to 1. */
 	videoSpeed?: number;
 	file: File;
-	/** Sequence mode: per-time effect segments over the master timeline. */
+	/** Sequence mode: fx lanes over a blank base, on the master timeline. */
 	sequence?: {
-		segments: SequenceSegment[];
 		moshOptions: MoshOptions;
 		/** Master timeline length (audio track duration when masterIsAudio, else video duration). */
 		duration: number;
-		/** True when an external track drives the clock — segments are keyed to audio time. */
+		/** True when an external track drives the clock — clips are keyed to audio time. */
 		masterIsAudio: boolean;
-		/** Media pool segments draw from. Empty/absent = every segment uses `file`. */
-		sources?: SequenceSource[];
-		/** Stacked effect lanes, appended to each segment's chain in lane order. */
+		/** Stacked effect lanes, run in lane order over the layers. */
 		fxLanes?: FxLane[];
 	} | null;
 	onProgress: (p: number) => void;
@@ -179,11 +164,16 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
 	if (isVideo && videoEl) videoEl.pause();
 
-	// Sequence segments carry their own chains, so captions can live outside the
-	// base one too.
+	// Every clip carries its own chain, so captions can live outside the base
+	// one too.
 	await preloadCaptionFonts([
 		...effects,
-		...(ctx.sequence?.segments.flatMap((s) => s.effects) ?? []),
+		...(ctx.sequence?.fxLanes ?? []).flatMap((l) =>
+			l.clips.flatMap((c) => c.effects),
+		),
+		...(mediaTimeline?.lanes ?? []).flatMap((l) =>
+			l.clips.flatMap((c) => c.effects),
+		),
 	]);
 	await preloadTextTimelineFonts(textTimeline);
 
@@ -237,41 +227,28 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	};
 
 	// Sequence mode: resolve effects per frame from the segment list. With an
-	// external track segments live on the audio timeline (master clock) — this
-	// covers still images too, where the track is the only clock; otherwise
-	// they're keyed by source-video time, honoring speed/looping.
+	// Sequence mode: fx lanes over a blank base. Clip times live on the audio
+	// timeline (master clock); a video-mastered sequence keys by source time.
 	const sequence = ctx.sequence;
-	const seqSource =
-		sequence && sequence.segments.length > 0
-			? createSequenceEffectSource(
-					() => sequence.segments,
-					() => sequence.duration,
-					() => sequence.moshOptions,
-					{ cloneStatic: true },
-				)
-			: null;
 	const seqTimeAt = (time: number): number =>
 		sequence?.masterIsAudio ? audioStart + time : sourceTimeAt(time);
 
-	// Stacked lanes append to whatever the source lane resolved. Cloned for the
-	// same reason static segments are: this chain gets each frame's audio-link
-	// values written into it, and those must not reach the user's clips.
+	// Cloned: this chain gets each frame's audio-link values written into it,
+	// and those must not reach the user's clips.
 	const fxSource =
-		seqSource && (sequence?.fxLanes?.length ?? 0) > 0
+		sequence && (sequence.fxLanes?.length ?? 0) > 0
 			? createFxLayerSource(
-					() => sequence!.fxLanes,
-					() => sequence!.moshOptions,
-					{
-						clone: true,
-					},
+					() => sequence.fxLanes,
+					() => sequence.moshOptions,
+					{ clone: true },
 				)
 			: null;
-	/** Rebuilt per frame: the base chain under the editor's response, then each
-	 * active lane under its own — the split the preview's tick makes. */
+	/** Rebuilt per frame: each active lane under its own response — the split
+	 * the preview's tick makes. */
 	const audioGroupsRef: { current: AudioLinkGroup[] | null } = {
 		current: null,
 	};
-	const effectsRef = seqSource
+	const effectsRef = sequence
 		? {
 				current: effects.map((e): EffectInstance => ({
 					...e,
@@ -281,174 +258,40 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			}
 		: undefined;
 
-	// Sequences: whichever segment is under the playhead picks the media for
-	// its frames. Built lazily below so single-mode exports pay nothing.
 	let exportLayers: Awaited<ReturnType<typeof createMediaExportLayers>> | null =
 		null;
-	let exportSources: Awaited<
-		ReturnType<typeof createSequenceExportSources>
-	> | null = null;
-	/** Registry order, same as the preview reads — see `segmentSourceIdAt`. */
-	const sourcePool = sequence?.sources?.map((src) => src.id) ?? [];
 
-	/**
-	 * Source a transition at `t` is fading out of, or null when there is no
-	 * transition or both sides use the same media. Mirrors the preview's
-	 * `outgoingSourceId` — the two must agree or exports drift from what was
-	 * previewed.
-	 */
-	const outgoingSourceAt = (
-		t: number,
-		incomingSourceId: string | undefined,
-	): { id: string; time: number } | null => {
-		if (!sequence || !seqSource) return null;
-		const tr = resolveTransitionAt(
-			sequence.segments,
-			t,
-			sequence.duration,
-			seqSource,
-		);
-		if (!tr) return null;
-		const segA = findSegmentAt(
-			sequence.segments,
-			tr.boundaryTime - 0.001,
-			sequence.duration,
-		);
-		const idA = segmentSourceIdAt(segA, tr.boundaryTime - 0.001, sourcePool);
-		if (!idA || idA === incomingSourceId) return null;
-		return { id: idA, time: segmentSourceTime(segA, idA, t) };
-	};
-
-	/** Seconds into its media a segment's source should be at master time `t`:
-	 * the preview's `sourceTimeIn`, so an export writes the frames previewed. */
-	const segmentSourceTime = (
-		seg: SequenceSegment | null | undefined,
-		sourceId: string | null | undefined,
-		t: number,
-	): number =>
-		mediaTimeAt(
-			sourceId ? sourceEdits[sourceId] : undefined,
-			Math.max(0, t - (seg?.startTime ?? 0)),
-		);
-
-	const sequenceBeforeRender = async (frameIndex: number, time: number) => {
+	const sequenceBeforeRender = async (_frameIndex: number, time: number) => {
 		const t = seqTimeAt(time);
-
-		const seg = sequence
-			? findSegmentAt(sequence.segments, t, sequence.duration)
-			: null;
-		const segSourceId = segmentSourceIdAt(seg, t, sourcePool) ?? undefined;
-		// Seconds into the clip, not a per-frame step: the same rule the preview
-		// follows, so an export writes the frames that were previewed.
-		const out = outgoingSourceAt(t, segSourceId);
-		const segTime = segmentSourceTime(seg, segSourceId, t);
-		// Which media each texture holds, so the chain applies that source's own
-		// crop, erase mask and key. The preview sets this every frame it draws; the
-		// recorder owns the renderer while it runs, so it has to as well, or the
-		// export would edit whatever the preview happened to be looking at.
-		renderer.setSourceIds(
-			segSourceId ?? null,
-			out?.id ?? null,
-			segTime,
-			out?.time ?? 0,
-		);
-		// Concurrent: outgoingSourceAt returns null when the outgoing source is
-		// the incoming one, so these two can never contend for a single sampler,
-		// and they write different textures.
-		await Promise.all([
-			exportSources!.advance(segSourceId, segTime),
-			exportSources!.advanceOutgoing(out?.id ?? null, out?.time ?? 0),
-		]);
-		// On a gap (no segment) keep the previous frame's effects.
-		const base = seqSource!(t);
-		// The stacked lanes run after the segment's own chain. `effectsRef.current`
-		// is the flat form, which is what the recorder writes this frame's
+		// The base is black; the layers are the picture. `effectsRef.current` is
+		// the flat form, which is what the recorder writes this frame's
 		// audio-link values into — the layers hold the same instances, so the
 		// renderer sees those values too.
 		const fxLayers = fxSource?.(t) ?? [];
-		const stacked = flattenFxLayers(fxLayers);
-		const fx = base && stacked.length > 0 ? [...base, ...stacked] : base;
-		if (fx) effectsRef!.current = fx;
+		effectsRef!.current = flattenFxLayers(fxLayers);
 		audioGroupsRef.current =
-			base && fxLayers.length > 0
-				? [
-						{ scope: "", effects: base, response: audioResponse },
-						...fxLayers.map((layer) => {
-							const lane = sequence!.fxLanes!.find(
-								(l) => l.id === layer.laneId,
-							);
-							return {
-								scope: layer.laneId,
-								effects: layer.effects,
-								response: lane
-									? laneAudioResponse(lane, audioResponse)
-									: audioResponse,
-							};
-						}),
-					]
+			fxLayers.length > 0
+				? fxLayers.map((layer) => {
+						const lane = sequence!.fxLanes!.find((l) => l.id === layer.laneId);
+						return {
+							scope: layer.laneId,
+							effects: layer.effects,
+							response: lane
+								? laneAudioResponse(lane, audioResponse)
+								: audioResponse,
+						};
+					})
 				: null;
-		// Transition window at a segment boundary: blend the outgoing chain into
-		// the incoming one. Returned as a closure so the recorder applies this
-		// frame's audio data to `effectsRef.current` (the incoming chain) before
-		// the custom render runs; the outgoing chain keeps its boundary-frame
-		// values and fades out.
-		const tr =
-			fx && sequence
-				? resolveTransitionAt(
-						sequence.segments,
-						t,
-						sequence.duration,
-						seqSource!,
-					)
-				: null;
-		if (tr && fx) {
-			const progress = (t - tr.boundaryTime) / tr.transition.durationSec;
-			const crossFade = outgoingSourceAt(t, segSourceId) !== null;
-			// The stacked lanes run over the finished blend, not inside either side
-			// of it — the incoming chain is `fx` without that tail. Mirrors what
-			// GlCanvas does, so an export matches what was previewed.
-			const incoming = stacked.length > 0 ? base! : fx;
-			return (
-				textLayers: ResolvedTextLayer[],
-				mediaLayers: ResolvedMediaLayer[],
-			) =>
-				renderer.renderTransition(
-					tr.effectsA,
-					incoming,
-					tr.concrete.type,
-					progress,
-					tr.transition.seed,
-					tr.concrete.direction,
-					tr.concrete.density,
-					time,
-					crossFade,
-					textLayers,
-					fxLayers,
-					mediaLayers,
-				);
-		}
-
-		// No transition, but lanes are stacked: render through the same layered
-		// call the preview uses, so a lane's fade ramps in the export too. The
-		// default path would flatten it into one chain and apply every lane at
-		// full strength. `base` carries this frame's audio-link values already —
-		// the recorder writes them into effectsRef.current, which holds the very
-		// same instances.
-		if (fxLayers.length > 0 && base) {
-			return (
-				textLayers: ResolvedTextLayer[],
-				mediaLayers: ResolvedMediaLayer[],
-			) => renderer.render(base, time, textLayers, fxLayers, mediaLayers);
-		}
+		// Rendered through the same layered call the preview uses, so a lane's
+		// fade ramps in the export too. The default path would flatten it into
+		// one chain and apply every lane at full strength.
+		return (
+			textLayers: ResolvedTextLayer[],
+			mediaLayers: ResolvedMediaLayer[],
+		) => renderer.render([], time, textLayers, fxLayers, mediaLayers);
 	};
 
 	try {
-		if (seqSource) {
-			exportSources = await createSequenceExportSources(
-				sequence!.sources ?? [],
-				renderer,
-			);
-		}
 		// Keyed by lane, matching how the preview driver holds its decoders: the
 		// lane is what a layer's frames belong to, and two lanes can want two
 		// positions in one file. A lane lists every source its clips name, since
@@ -513,7 +356,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 				audioSpeed: videoSpeed,
 				...(loopVideo && { loopAudio: true }),
 			}),
-			...(seqSource
+			...(sequence
 				? { onBeforeRender: sequenceBeforeRender }
 				: isVideo && videoEl
 					? {
@@ -529,7 +372,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		// Stops mediabunny's pre-decode pipeline and closes its decoder on
 		// abort/error; no-op when the generator already ran to completion.
 		void videoFrames?.return();
-		exportSources?.dispose();
 		exportLayers?.dispose();
 	}
 }

@@ -80,20 +80,9 @@
 		type TextTimeline,
 	} from "../../text";
 	import {
-		cloneSegmentForSplit,
-		createSequenceEffectSource,
 		handBuiltLabel,
 		isHandBuiltLabel,
-		createSequenceSegment,
-		resolveTransitionAt,
-		findSegmentAt,
-		normalizeSegmentTransitions,
-		segmentSourceIdAt,
-		type ResolvedTransition,
-		type SegmentTransitionChange,
-		type SequenceSegment,
 		type SequenceSegmentMode,
-		applyBpmToSegments,
 	} from "../../editor/sequence";
 	import {
 		appendFxLane,
@@ -110,6 +99,7 @@
 		normalizeFxLanes,
 		rollFxClips,
 		setFxClipsMode,
+		syncFxClipsToPreset,
 		type FxClip,
 		type FxLane,
 		type FxLaneSettings,
@@ -122,7 +112,6 @@
 		type UndoSource,
 	} from "../../editor/undo-router";
 	import { detectBpm } from "../../slideshow/bpm-detector";
-	import { SequenceFrameDriver } from "../../editor/sequence-frames";
 	import {
 		combinedLayerOrder,
 		nextLayerZ,
@@ -141,7 +130,9 @@
 	} from "../../video/proxy-preference";
 	import {
 		appendMediaLane,
+		applyBpmToMediaClips,
 		clearMediaClips,
+		dealMediaClipSources,
 		createMediaChainSource,
 		createMediaClip,
 		createMediaHistory,
@@ -154,13 +145,13 @@
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
 		clipSourceId,
+		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
 		resolveMediaLayersAt,
 		restoreMediaClipMosh,
 		rollMediaClips,
 		setMediaClipsMode,
 		setMediaClipSources,
-		sourceTimeAt,
 		syncMediaClipsToPreset,
 		updateMediaLane as updateMediaLaneIn,
 		type MediaClip,
@@ -180,18 +171,9 @@
 	} from "../../editor/sequence-media-store";
 	import { saveSession, type SingleSessionState } from "../../editor/sessions";
 	import {
-		applyTransitionChanges,
-		clearSegments,
-		fillSegmentsFromPreset,
-		randomizeSegmentSources,
-		setSegmentsSourceRoll,
-		restoreSegmentMosh,
-		rollSegments,
-		setSegmentsMode,
-		syncSegmentsToPreset,
-	} from "../../editor/segment-edits";
-	import { SegmentBoundaryController } from "../../editor/segment-boundary-controller.svelte";
-	import { normalizeCoverage } from "../../editor/segment-coverage";
+		migrateLegacySegments,
+		prependMediaLane,
+	} from "../../editor/legacy-segments";
 	import {
 		MoshHistory,
 		type SegmentMoshSnapshot,
@@ -221,7 +203,6 @@
 	import GlCanvas from "./GlCanvas.svelte";
 	import SequenceGridView from "./SequenceGridView.svelte";
 	import SourceRail from "./SourceRail.svelte";
-	import SequenceTimeline from "./SequenceTimeline.svelte";
 	import FxLanes from "./FxLanes.svelte";
 	import MoshGroup from "./MoshGroup.svelte";
 	import MoshSettingsPanel from "./MoshSettingsPanel.svelte";
@@ -559,7 +540,7 @@
 		previewPlayer?.setSpeed(videoSpeed);
 	});
 	$effect(() => {
-		if (previewPlayer) previewPlayer.loop = videoLoop || seqForceLoop;
+		if (previewPlayer) previewPlayer.loop = videoLoop;
 	});
 	$effect(() => {
 		previewPlayer?.setSpan(videoSpanStart, videoSpanEnd);
@@ -717,7 +698,7 @@
 		getLinkGroups: (): AudioLinkGroup[] => [
 			{
 				scope: "",
-				effects: seqPlaybackEffects ?? effects,
+				effects,
 				response: audioResponse,
 			},
 			...fxLayers.map((layer) => ({
@@ -982,28 +963,23 @@
 		if (seqStoreKey !== key) return;
 		loadedTimelineKey = key;
 		if (savedSeq === null) {
-			if (clearOnMissing) {
-				// Empty rather than a fresh segment: the seeding effect rebuilds one
-				// once the new track reports its duration.
-				sequenceSegments = [];
-				selectedSegmentId = null;
-				restoreFxLanes(undefined);
-			}
+			if (clearOnMissing) restoreFxLanes(undefined);
 			seedLayerKey = key;
 			return;
 		}
-		// The BPM comes back in both modes — single mode has no segments to time,
+		// The BPM comes back in both modes — single mode has no clips to time,
 		// but beat-synced effects read the same tempo. The keys are already
 		// per-mode, so neither mode reads the other's number.
 		restoreSequenceBpm(savedSeq.bpm ?? 0);
-		if (isSequenceMode) {
-			sequenceSegments = savedSeq.segments ?? [];
-			selectedSegmentId = null;
-			restoreFxLanes(savedSeq.fx);
-		}
+		if (isSequenceMode) restoreFxLanes(savedSeq.fx);
 		restoreTextTimeline(savedSeq.text);
 		restoreMediaTimeline(savedSeq.media);
 		sourceRegistry.restoreEdits(savedSeq.sourceEdits);
+		// Segments fold into the lanes once the song's length is known.
+		legacySegments =
+			isSequenceMode && savedSeq.segments?.length
+				? { key, segments: savedSeq.segments }
+				: null;
 	}
 
 	/** The editor learned a track's library id without being asked to load it —
@@ -1152,14 +1128,10 @@
 		};
 	}
 
-	// ── Sequence mode: timeline of preset/mosh segments over the video ───────
-	// Only ever populated on the sequence route; single mode has no timeline.
-	let sequenceSegments = $state<SequenceSegment[]>([]);
-	let selectedSegmentId = $state<string | null>(null);
-
-	// Stacked effect lanes over the source lane above. They carry no media — a
-	// clip only says "also run these effects here" — and their chains are
-	// appended to the source segment's, in lane order. See editor/fx-lanes.ts.
+	// ── Sequence mode ────────────────────────────────────────────────────────
+	// Stacked effect lanes over the frame. They carry no media — a clip only
+	// says "also run these effects here" — and their chains run in lane order
+	// over what the media layers composited. See editor/fx-lanes.ts.
 	let fxLanes = $state<FxLane[]>([]);
 	let selectedFxClipId = $state<string | null>(null);
 	let selectedFxClipIds = $state<string[]>([]);
@@ -1181,7 +1153,7 @@
 		seqMasterIsAudio ? audio.trackDuration : videoDuration,
 	);
 
-	// Beats per minute for this song, feeding the AUTO segments' re-roll
+	// Beats per minute for this song, feeding the auto clips' re-roll
 	// spacing. 0 = not detected yet.
 	let sequenceBpm = $state(0);
 
@@ -1192,7 +1164,9 @@
 		 * otherwise, so loading one of them pins it on — see loadSeqEntry.
 		 */
 		v?: number;
-		segments?: SequenceSegment[];
+		/** The segment lane, on entries from before it was retired. Folded into
+		 * the fx and media lanes on load (see legacy-segments.ts), never saved. */
+		segments?: LegacySegmentEntry[];
 		/** Absent on entries saved before BPM existed. */
 		bpm?: number;
 		/** Absent on entries saved before the text timeline existed. */
@@ -1207,6 +1181,35 @@
 
 	/** Bumped when what a saved entry means changes — see SeqEntry.v. */
 	const SEQ_ENTRY_VERSION = 2;
+
+	/** As much of a saved segment as the migration reads. */
+	interface LegacySegmentEntry {
+		sourceId?: string;
+		[key: string]: unknown;
+	}
+
+	/** Segments waiting for the song's duration to be folded into the lanes. */
+	let legacySegments = $state<{
+		key: string;
+		segments: LegacySegmentEntry[];
+	} | null>(null);
+	$effect(() => {
+		const pending = legacySegments;
+		if (!pending || pending.key !== seqStoreKey) return;
+		const duration = seqMasterDuration;
+		if (duration <= 0) return;
+		legacySegments = null;
+		const { fxLane, mediaLane } = migrateLegacySegments(
+			pending.segments,
+			duration,
+		);
+		untrack(() => {
+			if (fxLane) setFxLanes([fxLane, ...fxLanes]);
+			if (mediaLane) mediaTimeline = prependMediaLane(mediaTimeline, mediaLane);
+			fxHistory.reset();
+			mediaHistory.reset();
+		});
+	});
 
 	// Keyed by master clock — that's what segment times are relative to.
 	let videoSeqKey = $derived(
@@ -1246,22 +1249,13 @@
 		const entry =
 			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
 			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
-		// Entries can predate a transition being retired; remap before anything
-		// downstream tries to look up a shader that no longer exists.
-		if (entry?.segments) {
-			normalizeSegmentTransitions(entry.segments);
-			// And they can predate an effect gaining a param, which the panel
-			// reads off the instance without checking.
-			for (const seg of entry.segments)
-				seg.effects = restoreEffects(seg.effects);
-			// Before the layers took the media over, a segment with no source of
-			// its own drew the file the editor opened with — which is the first
-			// of a saved pool, and so the file this editor opened with. Pin it,
-			// or every such segment would go black.
-			if (!entry.v) {
-				const opened = stableSourceId(file);
-				for (const seg of entry.segments) seg.sourceId ??= opened;
-			}
+		// Before the layers took the media over, a segment with no source of its
+		// own drew the file the editor opened with — which is the first of a
+		// saved pool, and so the file this editor opened with. Pin it, or every
+		// such segment would migrate to a clip showing nothing.
+		if (entry?.segments && !entry.v) {
+			const opened = stableSourceId(file);
+			for (const seg of entry.segments) seg.sourceId ??= opened;
 		}
 		return entry;
 	}
@@ -1283,19 +1277,13 @@
 			// still has to be able to save the one being built for it.
 			loadedTimelineKey = storeKey;
 			if (saved === null) return;
-			if (isSequenceMode) {
-				sequenceSegments = saved.segments ?? [];
-				restoreSequenceBpm(saved.bpm ?? 0);
-				selectedSegmentId = null;
-				restoreFxLanes(saved.fx);
-			}
 			restoreTextTimeline(saved.text);
 			restoreMediaTimeline(saved.media);
 			sourceRegistry.restoreEdits(saved.sourceEdits);
 		})();
 	});
 
-	/** A restored BPM wins over any detection already in flight — the segments
+	/** A restored BPM wins over any detection already in flight — the clips
 	 * were built against it, so re-deriving it would retime them. Restoring
 	 * nothing leaves the detection to land. */
 	function restoreSequenceBpm(bpm: number) {
@@ -1304,18 +1292,16 @@
 	}
 
 	// Persist the sequence timeline per library track (deep read via snapshot,
-	// so segment/effect edits are captured too). Skipped while playing: static
-	// segments share identity with the live `effects`, so the per-frame
-	// volume-link tick mutates values inside `sequenceSegments` — an ungated
-	// deep read here re-ran the snapshot + localStorage JSON round-trip every
-	// frame, tanking preview FPS proportionally to segment count. Persisting
-	// settles on pause; the debounce keeps slider/segment drags from writing
+	// so clip/effect edits are captured too). Skipped while playing: the
+	// per-frame volume-link tick mutates values inside the clips' chains — an
+	// ungated deep read here re-ran the snapshot + localStorage JSON round-trip
+	// every frame, tanking preview FPS proportionally to clip count. Persisting
+	// settles on pause; the debounce keeps slider/clip drags from writing
 	// localStorage per input event.
 	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		const playing = audio.audioPlaying || videoIsPlaying;
 		if (playing) return;
-		const segs = $state.snapshot(sequenceSegments) as SequenceSegment[];
 		const bpm = sequenceBpm;
 		const text = layersAsLoaded(
 			$state.snapshot(textTimeline) as TextTimeline,
@@ -1333,7 +1319,6 @@
 		seqSaveTimer = setTimeout(() => {
 			void saveTimeline(key, {
 				v: SEQ_ENTRY_VERSION,
-				segments: segs,
 				bpm,
 				text,
 				media,
@@ -1362,7 +1347,7 @@
 	 *
 	 * The effect above can't cover a track switch on its own. Svelte batches the
 	 * whole switch into one update, so by the time it re-runs `seqStoreKey` is
-	 * already the *new* track and `sequenceSegments` may already have been
+	 * already the *new* track and the lanes may already have been
 	 * replaced — the outgoing track's edits were never written, and any pending
 	 * debounce for it gets cancelled on the way past. Worse, the effect is gated
 	 * on playback, so editing while the track plays (the normal way to use this)
@@ -1375,7 +1360,6 @@
 		if (!key || key !== loadedTimelineKey) return;
 		void saveTimeline(key, {
 			v: SEQ_ENTRY_VERSION,
-			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
 			text: layersAsLoaded(
 				$state.snapshot(textTimeline) as TextTimeline,
@@ -1405,19 +1389,10 @@
 		};
 	});
 
-	// Re-fit segments when the master clock changes (track loaded/swapped/cleared).
-	$effect(() => {
-		const duration = seqMasterDuration;
-		const segs = sequenceSegments;
-		const fixed = normalizeCoverage(segs, duration);
-		if (fixed !== segs) sequenceSegments = fixed;
-	});
-
-	// And pull the free-floating clip lanes back inside it. Swapping a 2-minute
-	// song for a 90-second one leaves every clip built against the old length
-	// hanging past the end of the timeline, where it still renders but the ruler
-	// can no longer reach it. Segments have normalizeCoverage for this; the
-	// media, text and fx lanes are clips, so they get the clip version.
+	// Pull the clip lanes back inside the master clock when it changes (track
+	// loaded/swapped/cleared). Swapping a 2-minute song for a 90-second one
+	// leaves every clip built against the old length hanging past the end of
+	// the timeline, where it still renders but the ruler can no longer reach it.
 	//
 	// Keyed off the master clock alone, and off the timelines untracked: with no
 	// track `textDuration` falls back to the record length, and trimming clips on
@@ -1440,45 +1415,9 @@
 		return videoClock;
 	}
 
-	// Owns undo/redo + boundary selection/clipboard for every sequenceSegments
-	// edit — timeline drags/splits (in SequenceTimeline.svelte) as well as
-	// preset/mosh/mode changes made from the segment toolbar below, so Ctrl+Z
-	// in SEQ mode undoes the last sequence edit regardless of where it came from.
-	const seqBoundaries = new SegmentBoundaryController<SequenceSegment>({
-		getSegments: () => sequenceSegments,
-		getTrackDuration: () => seqMasterDuration,
-		onChange: (segments) => {
-			// Every edit funnels through here — the one place to hold the invariant.
-			const fitted = normalizeCoverage(segments, seqMasterDuration);
-			sequenceSegments = fitted;
-			// Splits/merges/undo can retire segment ids — drop their mosh stacks
-			// so a later segment reusing an id can't inherit stale rolls.
-			seqMoshHistory.retain(fitted.map((s) => s.id));
-		},
-		// A panel-edit burst must not record on top of the state an undo/redo
-		// just restored — drop it so the next edit snapshots fresh.
-		onRestore: () => cancelPanelBurst(),
-		splitSegment: (seg, at) => {
-			const end = seg.endTime ?? seqMasterDuration;
-			const tail = cloneSegmentForSplit(seg, at, end);
-			// The tail continues the same region — a transition configured for
-			// entering `seg` from its predecessor must not replay at the split.
-			tail.transition = undefined;
-			tail.transitionOnTick = undefined;
-			return [cloneSegmentForSplit(seg, seg.startTime, at), tail];
-		},
-	});
-
-	const previewSeqSource = createSequenceEffectSource(
-		() => sequenceSegments,
-		() => seqMasterDuration,
-		getMoshOptions,
-	);
-
 	// ── FX lanes ─────────────────────────────────────────────────────────────
-	// Their own undo stack, for the same reason the text timeline has one: the
-	// sequence stack is typed to segments, and nudging an fx clip shouldn't
-	// rewind the source lane. Ctrl+Z reaches it when an fx edit is the newest.
+	// Their own undo stack, for the same reason the text timeline has one.
+	// Ctrl+Z reaches it when an fx edit is the newest.
 	const fxHistory = createSnapshotHistory<FxLane[]>();
 
 	function pushFxHistory(coalesceKey?: string) {
@@ -1547,18 +1486,16 @@
 		);
 	}
 
-	// ←/→ walk one fx clip's moshes, the same way they walk a segment's. Its own
-	// stack per clip, keyed by clip id — MoshHistory is agnostic about what the
-	// id names, and an FxClip carries exactly the fields it snapshots.
+	// ←/→ walk one fx clip's moshes. Its own stack per clip, keyed by clip id
+	// — MoshHistory is agnostic about what the id names, and an FxClip carries
+	// exactly the fields it snapshots.
 	const fxMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
 
 	/**
 	 * The fx clip the mosh gestures act on: the selected one, and only that.
 	 *
-	 * No playhead fallback, unlike segments — several lanes can hold a clip at
-	 * one time, so "the clip under the playhead" names no single thing. With
-	 * nothing selected the gestures stay with the source lane, which is what
-	 * they did before fx lanes existed.
+	 * No playhead fallback: several lanes can hold a clip at one time, so "the
+	 * clip under the playhead" names no single thing.
 	 */
 	function activeFxClip(): FxClip | null {
 		return selectedFxClip;
@@ -1568,7 +1505,7 @@
 	 * Roll the given clips. Mosh history only — never the fx edit stack: a mosh
 	 * is not a hand-edit, and recording it would leave a Ctrl+Z entry behind
 	 * every arrow press, with the two histories driving each other. Same rule
-	 * applySegmentMosh follows for the source lane.
+	 * every other mosh follows.
 	 */
 	function fxRoll(clipIds: string[]) {
 		const ids = new Set(clipIds);
@@ -1613,7 +1550,7 @@
 	/**
 	 * Which lane the settings panel is aimed at: the selected clip's lane, or a
 	 * lane picked by its name in the gutter. Null means the editor's own
-	 * settings, which is what segments and single mode always roll under.
+	 * settings, which is what media clips and single mode always roll under.
 	 */
 	let selectedFxLaneId = $state<string | null>(null);
 	let panelFxLane = $derived.by(() => {
@@ -1697,8 +1634,8 @@
 	let fxChain = $derived(flattenFxLayers(fxLayers));
 
 	// ── Sequence media pool ──────────────────────────────────────────────────
-	// Every piece of media the project can draw: the layers' clips and the
-	// segments pick from here. The file the editor opened with is one entry
+	// Every piece of media the project can draw: the layers' clips pick from
+	// here. The file the editor opened with is one entry
 	// among the rest — a new project lands it on the first layer (see the
 	// seeding effect below) and nothing else about it is special.
 	// Bumped when a late upload — a video frame or a lazily-decoded image —
@@ -1779,7 +1716,7 @@
 
 	// ── Per-song media pool ──────────────────────────────────────────────────
 	// Keyed the same way as the sequence timeline (seqBaseKey), so loading a
-	// track brings back both the segments and the media they were built from.
+	// track brings back both the lanes and the media they were built from.
 	let poolKey: string | null = null;
 	let poolReady = $state(false);
 	/** Segment source ids already looked for in storage; see the effect below. */
@@ -1841,17 +1778,14 @@
 	}
 
 	// A restored timeline references sources by id. Pull any the pool is missing
-	// back out of IndexedDB, so a reload shows each segment's own media instead
-	// of a black frame. Ids that aren't in the store are remembered as
-	// attempted, otherwise this would retry them forever.
+	// back out of IndexedDB, so a reload shows each clip's own media instead of
+	// nothing. Ids that aren't in the store are remembered as attempted,
+	// otherwise this would retry them forever.
 	$effect(() => {
 		if (!isSequenceMode) return;
-		const missing = sequenceSegments
-			.map((s) => s.sourceId)
-			.filter(
-				(id): id is string =>
-					!!id && !sourceRegistry.get(id) && !restoreAttempted.has(id),
-			);
+		const missing = mediaTimelineSourceIds(mediaTimeline).filter(
+			(id) => !sourceRegistry.get(id) && !restoreAttempted.has(id),
+		);
 		if (missing.length === 0) return;
 		for (const id of missing) restoreAttempted.add(id);
 		void sourceRegistry.restore(missing);
@@ -1902,9 +1836,9 @@
 
 	/**
 	 * Empty the pool: the preview sits on its no-media placeholder until
-	 * something is added back. The segment reset goes through
-	 * seqBoundaries so Ctrl+Z restores the assignments — the media itself is
-	 * deleted from storage though, so re-adding the files is on the user.
+	 * something is added back. The clips that drew from it lose their media;
+	 * the media itself is deleted from storage, so re-adding the files is on
+	 * the user.
 	 */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
@@ -1912,56 +1846,19 @@
 			setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
 		}
 		sourceRegistry.clear();
-		// The cleared source's frame is still on the texture, and the driver
-		// still thinks it's current — make it forget it.
-		seqFrames.invalidate();
 		restoreAttempted.clear();
-		if (sequenceSegments.some((s) => s.sourceId)) {
-			seqBoundaries.commit(
-				sequenceSegments.map((s) =>
-					s.sourceId ? { ...s, sourceId: undefined } : s,
-				),
-			);
-		}
 	}
 
-	/**
-	 * Segments pointing at a removed source draw nothing from then on, and
+	/** Clips pointing at a removed source draw nothing from then on, and
 	 * emptying the pool entirely leaves the preview on its no-media placeholder
-	 * until something is added back.
-	 */
+	 * until something is added back. */
 	function removeSequenceSource(id: string) {
 		sourceRegistry.remove(id);
-		seqFrames.invalidate();
 		setMediaTimeline(detachMediaSource(mediaTimeline, id));
-		seqBoundaries.commit(
-			sequenceSegments.map((s) =>
-				s.sourceId === id ? { ...s, sourceId: undefined } : s,
-			),
-		);
 	}
-
-	function assignSegmentSource(segIds: string[], sourceId: string) {
-		const ids = new Set(segIds);
-		seqBoundaries.commit(
-			sequenceSegments.map((s) =>
-				ids.has(s.id)
-					? {
-							...s,
-							sourceId,
-							// Naming the clip a segment plays cancels the per-tick roll.
-							sourceRoll: undefined,
-						}
-					: s,
-			),
-		);
-	}
-
-	/** The timeline's whole selection, so the stack toolbar can act on it too. */
-	let seqSelectedIds = $state<string[]>([]);
 
 	/** Grid replaces the preview while the pool is being arranged; the timeline
-	 * stays put under it, so a card can still be dragged onto a segment. */
+	 * stays put under it, so a card can still be dragged onto a lane. */
 	let sequenceView = $state<"preview" | "grid">("preview");
 	let sequenceGridOpen = $derived(isSequenceMode && sequenceView === "grid");
 
@@ -1972,91 +1869,9 @@
 		if (isSequenceMode && seqPlaying()) sequenceView = "preview";
 	});
 
-	/** The source the selection plays, for the grid's highlight; null when the
-	 * selected segments disagree or nothing is selected. */
-	let seqSelectedSourceId = $derived.by(() => {
-		const picked = new Set(seqSelectedIds);
-		const played = sequenceSegments
-			.filter((s) => picked.has(s.id))
-			// A rolling segment plays the whole pool, so it never agrees with
-			// anything — including another rolling segment, hence the unique id.
-			.map((s) => (s.sourceRoll ? `roll:${s.id}` : (s.sourceId ?? null)));
-		if (played.length === 0) return null;
-		return played.every((id) => id === played[0]) ? played[0] : null;
-	});
-
-	/** Deal the pool across the given segments — the grid passes the whole lane,
-	 * the segment bar passes the selection. */
-	function randomizeSegmentSourcesFor(segIds: string[]) {
-		const pool = sequenceSources.map((s) => s.id);
-		if (pool.length < 2 || segIds.length === 0) return;
-		seqBoundaries.commit(
-			randomizeSegmentSources(sequenceSegments, new Set(segIds), pool),
-		);
-	}
-
 	function seqPlaying(): boolean {
 		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
 	}
-
-	/** Segment under the playhead — or, while paused, the selected one, matching
-	 * which chain the panel is editing. */
-	function activeSegment(): SequenceSegment | null {
-		if (!seqPlaying() && selectedSegmentId) {
-			const sel = sequenceSegments.find((s) => s.id === selectedSegmentId);
-			if (sel) return sel;
-		}
-		return findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration);
-	}
-
-	/** Pool ids in registry order — the export is handed the same array, and
-	 * a rolling segment's picks only line up if both read it the same way. */
-	let seqSourcePool = $derived(sequenceSources.map((s) => s.id));
-
-	/**
-	 * Where a segment's own clock stands. Normally the master time, but the
-	 * panel keeps a selected segment active while the playhead is elsewhere —
-	 * that one shows its first tick rather than a tick it never reaches.
-	 */
-	function segmentClockTime(seg: SequenceSegment | null | undefined): number {
-		if (!seg) return 0;
-		const end = seg.endTime ?? seqMasterDuration;
-		const t = seqMasterTime();
-		return t >= seg.startTime && t < end ? t : seg.startTime;
-	}
-
-	function sourceIdOf(seg: SequenceSegment | null | undefined): string | null {
-		return segmentSourceIdAt(seg, segmentClockTime(seg), seqSourcePool) ?? null;
-	}
-
-	function activeSourceId(): string | null {
-		if (!isSequenceMode) return null;
-		return sourceIdOf(activeSegment());
-	}
-
-	/**
-	 * How far into its clip a segment's video should be: the master clock minus
-	 * the segment's start, at the source's own speed, so every source frame is
-	 * a function of song position alone. Playback that stalls, a scrub, and the
-	 * export all land on the same frame — and a paused preview holds instead of
-	 * running on. Mirrored by `segmentSourceTime` in recording.ts.
-	 */
-	function sourceTimeIn(
-		seg: SequenceSegment | null | undefined,
-		sourceId: string | null = sourceIdOf(seg),
-	): number {
-		if (!seg) return 0;
-		return sourceTimeAt(
-			sourceId ? sourceRegistry.edits[sourceId] : undefined,
-			Math.max(0, seqMasterTime() - seg.startTime),
-		);
-	}
-
-	const seqFrames = new SequenceFrameDriver({
-		registry: sourceRegistry,
-		getRenderer: () => glRenderer,
-		onUpload: bumpSourceTick,
-	});
 
 	const mediaLayers = new MediaLayerDriver({
 		registry: sourceRegistry,
@@ -2064,62 +1879,16 @@
 		onUpload: bumpSourceTick,
 	});
 
-	let seqActiveSourceId = $derived.by(() => activeSourceId());
-	let seqActiveSource = $derived(sourceRegistry.get(seqActiveSourceId));
-	let seqSourceKey = $derived(`${seqActiveSourceId}:${sourceTick}`);
-	// Only while the master runs: a paused source sits at one master time, so
-	// the canvas has nothing to re-upload — a late decode bumps `sourceTick`
-	// and redraws through the static path instead.
-	let seqSourceAnimating = $derived(
-		seqActiveSource?.kind === "video" && seqPlaying(),
-	);
-
 	/** Media length per pool source, for sampling keyed edits where the frame
 	 * sampler actually is once a clip has looped. */
 	let sourceDurations = $derived(
 		Object.fromEntries(sequenceSources.map((s) => [s.id, s.duration])),
 	);
 
-	function driveSequenceSource(): boolean {
-		if (!isSequenceMode) return false;
-		const seg = activeSegment();
-		const id = sourceIdOf(seg);
-		return seqFrames.advance(id, sourceTimeIn(seg, id));
-	}
-
-	/**
-	 * Source the running transition is fading *out* of, with how far into its
-	 * clip it should be. Null when there isn't one or both sides draw from the
-	 * same media (nothing to cross-fade, so the effect chains blend over one
-	 * texture as before).
-	 */
-	function outgoingSource(): { id: string; time: number } | null {
-		const tr = seqTransition;
-		if (!tr) return null;
-		const segA = findSegmentAt(
-			sequenceSegments,
-			tr.boundaryTime - 0.001,
-			seqMasterDuration,
-		);
-		const idA =
-			segmentSourceIdAt(segA, tr.boundaryTime - 0.001, seqSourcePool) ?? null;
-		if (!idA || idA === activeSourceId()) return null;
-		return { id: idA, time: sourceTimeIn(segA, idA) };
-	}
-
-	function driveOutgoingSource(): boolean {
-		if (!isSequenceMode) return true;
-		const out = outgoingSource();
-		return seqFrames.advanceOutgoing(out?.id ?? null, out?.time ?? 0);
-	}
-
-	let seqCrossFades = $derived.by(() => outgoingSource() !== null);
-
-	// A rebuilt renderer (context loss) has a blank source texture; make the
-	// driver re-upload instead of holding a texture that no longer exists.
+	// A rebuilt renderer (context loss) has blank layer textures; make the
+	// driver re-upload instead of holding textures that no longer exist.
 	$effect(() => {
 		glRenderer;
-		seqFrames.invalidate();
 		mediaLayers.invalidate();
 	});
 
@@ -2143,13 +1912,6 @@
 			seqBaseSize = { width: first.width, height: first.height };
 		}
 	});
-	// A new size reallocates the source texture, and with it whatever segment
-	// media was on it.
-	$effect(() => {
-		seqBaseSize;
-		seqFrames.invalidate();
-	});
-
 	/**
 	 * A song with nothing saved yet: the file the editor opened with goes on a
 	 * first layer, running the whole song, under the effects. Set by the load
@@ -2174,191 +1936,27 @@
 		mediaHistory.reset();
 	});
 
-	// The route enables sequence mode with no toggle press to seed the first
-	// segment, so do it as soon as a master clock exists.
-	$effect(() => {
-		if (!isSequenceMode || seqMasterDuration <= 0) return;
-		if (untrack(() => sequenceSegments).length > 0) return;
-		const seg = createSequenceSegment(0, null);
-		seg.effects = untrack(() => effects).map(cloneEffectInstance);
-		seg.label = "current";
-		sequenceSegments = [seg];
-	});
-
-	// While audio is master the video must always loop its span, regardless of
-	// the user's loop toggle — master positions past the video length land
-	// inside the loop instead of on a paused last frame.
-	let seqForceLoop = $derived(isSequenceMode && seqMasterIsAudio);
-
-	// Single playhead: audio master drives the video. Runs only on the ~4 Hz
-	// audio clock ticks — video position/play-state are read untracked, so this
-	// never re-runs per rendered frame (a reactive read of the video clock here
-	// caused a seek storm that thrashed the decoder down to a few FPS).
-	$effect(() => {
-		if (!isSequenceMode || !seqMasterIsAudio || !isVideo) return;
-		const vDur = videoSpanEnd - videoSpanStart;
-		if (vDur <= 0) return;
-		// Signed modulo: positions before the audio span still map onto the video
-		// loop instead of pinning to the span start (which caused a seek-back
-		// stutter when the playhead sat left of the span).
-		const elapsed = audio.trackCurrentTime - audio.spanStart;
-		const wrapped = (((elapsed * videoSpeed) % vDur) + vDur) % vDur;
-		const target = videoSpanStart + wrapped;
-		const audioPlaying = audio.audioPlaying;
-		untrack(() => {
-			const cur = previewPlayer
-				? previewPlayer.currentTime
-				: (videoEl?.currentTime ?? 0);
-			// Circular distance: near the loop wrap cur≈end vs target≈start is
-			// alignment, not drift.
-			const diff = Math.abs(cur - target);
-			const drift = Math.min(diff, vDur - diff);
-			if (drift > 0.35) seekVideoTo(target);
-			const vPlaying = previewPlayer ? previewPlayer.playing : videoPlaying;
-			if (audioPlaying && !vPlaying) playVideo();
-			else if (!audioPlaying && vPlaying) pauseVideo();
-		});
-	});
-
-	// Playhead / selection → active effects. While playing the playhead wins;
-	// while paused a clicked segment is loaded into the panel for editing.
-	// Identity latch is a plain variable: `effects = next` wraps plain arrays in
-	// a $state proxy, so comparing against `effects` would never settle.
-	let lastSeqApplied: EffectInstance[] | null = null;
-	let lastSeqWasPlaying = false;
 	/**
-	 * The chain the canvas renders while a sequence plays, kept out of the
-	 * panel-bound `effects`. Raw rather than deep state: the render loop reads
-	 * it every frame anyway, so proxying 39 objects per re-roll buys nothing.
+	 * What is actually on screen right now: the main chain (single mode's; in
+	 * sequence mode it stays clean), then each fx lane's, in lane order.
+	 * GlRenderer runs a chain sequentially and keys per-effect state by
+	 * instanceId, so appending is exactly "and then run these too".
 	 */
-	let seqPlaybackEffects = $state.raw<EffectInstance[] | null>(null);
-	/**
-	 * What is actually on screen right now: the source lane's chain, then each
-	 * fx lane's, in lane order. GlRenderer runs a chain sequentially and keys
-	 * per-effect state by instanceId, so appending is exactly "and then run
-	 * these too".
-	 */
-	let renderedEffects = $derived.by(() => {
-		const base = seqPlaybackEffects ?? effects;
-		return fxChain.length === 0 ? base : [...base, ...fxChain];
-	});
-	let seqTransition = $state<ResolvedTransition | null>(null);
-	$effect(() => {
-		if (
-			!isSequenceMode ||
-			sequenceSegments.length === 0 ||
-			seqMasterDuration <= 0
-		) {
-			seqTransition = null;
-			return;
-		}
-		const playing = seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
-		const t = seqMasterTime();
-		let next: EffectInstance[] | null = null;
-		if (!playing && selectedSegmentId) {
-			const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
-			if (seg) {
-				next =
-					seg.mode === "static" ? seg.effects : previewSeqSource(seg.startTime);
-			}
-		}
-		if (!next) {
-			next = previewSeqSource(t);
-			// Only the playhead path blends — a segment selected for editing shows
-			// its own chain plainly so tweaks aren't hidden mid-fade.
-			seqTransition = resolveTransitionAt(
-				sequenceSegments,
-				t,
-				seqMasterDuration,
-				previewSeqSource,
-			);
-		} else {
-			seqTransition = null;
-		}
-		// While playing, the rolled chain goes to the canvas only. Writing it to
-		// `effects` would re-render the whole effects sidebar (which is bound to
-		// it) on every re-roll — at a 1/32-beat spacing that's ~68 times a
-		// second — and deep-proxy 39 fresh objects each time. The slideshow
-		// keeps its per-beat chain off the panel for the same reason.
-		if (next && (next !== lastSeqApplied || playing !== lastSeqWasPlaying)) {
-			lastSeqApplied = next;
-			lastSeqWasPlaying = playing;
-			if (playing) {
-				seqPlaybackEffects = next;
-			} else {
-				// Back to a still: hand the chain to the panel and stop overriding.
-				seqPlaybackEffects = null;
-				effects = next;
-			}
-		}
-	});
-
-	// Fallback <video> path only (WebCodecs player ticks its own clock per
-	// frame): pull the element clock into state while playing so the effect
-	// above notices transition windows at frame rate, not at the 4 Hz
-	// timeupdate cadence.
-	$effect(() => {
-		if (!isSequenceMode || seqMasterIsAudio || previewPlayer || !videoPlaying)
-			return;
-		let raf = requestAnimationFrame(function loop() {
-			videoCurrentTime = videoEl?.currentTime ?? 0;
-			raf = requestAnimationFrame(loop);
-		});
-		return () => cancelAnimationFrame(raf);
-	});
-
-	function seqApplyPreset(segIds: string[], preset: Preset) {
-		seqBoundaries.commit(
-			fillSegmentsFromPreset(sequenceSegments, new Set(segIds), preset),
-		);
-	}
-
+	let renderedEffects = $derived.by(() =>
+		fxChain.length === 0 ? effects : [...effects, ...fxChain],
+	);
 	// A preset was explicitly overwritten in the panel — overwriting never
-	// re-assigns the preset to the selected segment, so this isn't an edit.
+	// re-assigns the preset to the selected clip, so this isn't an edit.
 	function seqSyncPreset(preset: Preset) {
-		sequenceSegments = syncSegmentsToPreset(sequenceSegments, preset);
 		mediaTimeline = syncMediaClipsToPreset(mediaTimeline, preset);
+		fxLanes = syncFxClipsToPreset(fxLanes, preset);
 	}
 
-	// Loop playback inside the selected segment (edit-while-playing aid).
-	let seqSegmentLoop = $state(false);
-
-	/** R, and the timeline's Repeat button. Both need one segment picked: the
-	 * loop below has no other way to know which span to hold inside, so a flag
-	 * set without one would lie in wait for the next selection. */
-	function toggleSegmentLoop() {
-		if (!isSequenceMode || !selectedSegmentId || seqSelectedIds.length > 1) {
-			return;
-		}
-		seqSegmentLoop = !seqSegmentLoop;
-	}
-	$effect(() => {
-		if (!isSequenceMode || !seqSegmentLoop || !selectedSegmentId) return;
-		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
-		if (!seg) return;
-		const end = seg.endTime ?? seqMasterDuration;
-		const t = seqMasterTime();
-		if (t < seg.startTime - 0.05 || t >= end) {
-			if (seqMasterIsAudio) seekTo(seg.startTime);
-			else seekVideoTo(seg.startTime);
-		}
-	});
-
-	// Effects panel target: while a static segment is selected in sequence mode
-	// the panel edits that segment — even during playback, when the canvas keeps
-	// following the playhead. Otherwise the panel edits the live effects.
-	function panelSelectedSegment(): SequenceSegment | null {
-		if (!isSequenceMode || !selectedSegmentId) return null;
-		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
-		return seg && seg.mode === "static" ? seg : null;
-	}
-
-	// A hand-edit to a preset-filled segment or fx clip: the label gains a "*"
-	// and explicit preset overwrites stop clobbering it. Driven by explicit edit
-	// callbacks (not data watching) — the audio volume-link tick also mutates
-	// values.
+	// A hand-edit to a preset-filled fx clip: the label gains a "*" and explicit
+	// preset overwrites stop clobbering it. Driven by explicit edit callbacks
+	// (not data watching) — the audio volume-link tick also mutates values.
 	function markPanelSegmentEdited() {
-		const target = selectedFxClip ?? panelSelectedSegment();
+		const target = selectedFxClip;
 		if (!target) return;
 		// A hand-built chain has no name of its own, so it takes one from what it
 		// switches on rather than sitting at "clean" forever. Preset- and
@@ -2367,61 +1965,44 @@
 		else if (!target.modified) target.modified = true;
 	}
 
-	// An fx clip outranks a source segment: it's the more recent selection (the
-	// lanes clear their selection when a segment is picked, and vice versa), and
-	// it's the only thing the panel could mean while one is highlighted.
+	/** The selected fx clip's chain, or single mode's main chain. */
 	function getPanelEffects(): EffectInstance[] {
-		return (
-			selectedFxClip?.effects ?? panelSelectedSegment()?.effects ?? effects
-		);
+		return selectedFxClip?.effects ?? effects;
 	}
 
 	/**
-	 * Sequence mode only: with segments on the timeline and nothing selected,
-	 * `effects` is whatever the playhead last landed on — a chain that renders
-	 * but belongs to nothing, so an edit to it is silently dropped on the next
-	 * re-roll. The rack shows a standing-down note rather than that chain.
+	 * Sequence mode only: with nothing selected the rack has no chain to edit —
+	 * the main chain belongs to single mode, and every chain here lives on a
+	 * clip. The rack shows a standing-down note rather than an inert chain.
 	 */
-	/** The selected segment when it rolls its own chain (interval mode). */
-	let panelIntervalSegment = $derived.by(() => {
-		if (!isSequenceMode || selectedFxClip || !selectedSegmentId) return null;
-		const seg = sequenceSegments.find((s) => s.id === selectedSegmentId);
-		return seg && seg.mode !== "static" ? seg : null;
-	});
-
 	let panelNoTarget = $derived.by(() => {
-		if (!isSequenceMode || sequenceSegments.length === 0) return null;
-		if (selectedFxClip || panelSelectedSegment() || panelIntervalSegment)
-			return null;
+		if (!isSequenceMode || selectedFxClip) return null;
 		return {
 			title: "Nothing selected",
-			hint: "Click a segment, a layer clip or an fx clip on the timeline to edit its chain.",
+			hint: "Click a layer clip or an FX clip on the timeline to edit its chain.",
 		};
 	});
 
+	/** The selected fx clip when it rolls its own chain (interval mode). */
+	let panelIntervalClip = $derived(
+		selectedFxClip?.mode === "interval" ? selectedFxClip : null,
+	);
+
 	/**
-	 * An interval segment rolls its own chain, so the switches would be setting
+	 * An interval clip rolls its own chain, so the switches would be setting
 	 * something the next tick overwrites. The rack stays: the roll draws from
 	 * the un-hidden effects, so hiding is how an effect is kept out of it.
 	 */
 	let panelRolledNote = $derived(
-		panelIntervalSegment
-			? "Auto segment re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the segment to Static in the segment bar to build a chain by hand."
+		panelIntervalClip
+			? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the clip to Static in the clip bar to build a chain by hand."
 			: null,
 	);
 
 	function setPanelEffects(v: EffectInstance[]) {
 		const clip = selectedFxClip;
-		if (clip) {
-			clip.effects = v;
-			return;
-		}
-		const seg = panelSelectedSegment();
-		if (seg) {
-			seg.effects = v;
-		} else {
-			effects = v;
-		}
+		if (clip) clip.effects = v;
+		else effects = v;
 	}
 
 	const moshSession = createMoshSession({
@@ -2432,27 +2013,20 @@
 		endBurst: () => panelBurst.end(),
 	});
 
-	// A segment edit records into the sequence stack (pre-edit snapshot), any
-	// other edit into the single-mode history (pushed once the burst settles).
-	/** Which stack the open burst will land on. The fx and segment stacks are
-	 * written at the start of the burst, so they carry a stamp already; the
-	 * chain's entry is only pushed when the burst closes, and until then the
-	 * router has to be told it is there. */
-	let burstOwner: "fx" | "segment" | "chain" | null = null;
+	// An fx clip edit records into the fx stack (pre-edit snapshot), any other
+	// edit into the single-mode history (pushed once the burst settles).
+	/** Which stack the open burst will land on. The fx stack is written at the
+	 * start of the burst, so it carries a stamp already; the chain's entry is
+	 * only pushed when the burst closes, and until then the router has to be
+	 * told it is there. */
+	let burstOwner: "fx" | "chain" | null = null;
 	const panelBurst = new PanelBurstController({
 		onEditStart: () => {
 			// An fx clip edit belongs to the fx stack, so Ctrl+Z steps back the
-			// tweak rather than the source lane's last structural change.
+			// tweak rather than the lane's last structural change.
 			if (selectedFxClip) {
 				burstOwner = "fx";
 				pushFxHistory();
-				return;
-			}
-			if (panelSelectedSegment()) {
-				burstOwner = "segment";
-				seqBoundaries.pushState(
-					$state.snapshot(sequenceSegments) as SequenceSegment[],
-				);
 				return;
 			}
 			burstOwner = "chain";
@@ -2464,85 +2038,10 @@
 	const panelBeforeEdit = (coalesceKey?: string) =>
 		panelBurst.beforeEdit(coalesceKey);
 
-	// ←/→ in sequence mode walk the moshes of one segment: the selected one, or
-	// whichever sits under the playhead.
-	const seqMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
-
-	function inSequenceMode(): boolean {
-		return isSequenceMode && sequenceSegments.length > 0;
-	}
-
-	function activeSequenceSegment(): SequenceSegment | null {
-		if (!inSequenceMode()) return null;
-		return (
-			(selectedSegmentId
-				? sequenceSegments.find((s) => s.id === selectedSegmentId)
-				: null) ??
-			findSegmentAt(sequenceSegments, seqMasterTime(), seqMasterDuration)
-		);
-	}
-
-	function segmentMoshSnapshot(seg: SequenceSegment): SegmentMoshSnapshot {
-		return {
-			effects: $state.snapshot(seg.effects) as EffectInstance[],
-			seed: seg.seed,
-			label: seg.label,
-			presetName: seg.presetName,
-			modified: seg.modified,
-		};
-	}
-
-	// Applied with live(), not commit(): a mosh is not an edit, so it must stay
-	// out of the timeline's undo stack. Otherwise every arrow press would leave
-	// a Ctrl+Z entry behind and the two histories would drive each other.
-	function applySegmentMosh(segId: string, snap: SegmentMoshSnapshot) {
-		seqBoundaries.live(restoreSegmentMosh(sequenceSegments, segId, snap));
-	}
-
-	/** Roll a new mosh for each segment. Mosh history only — see applySegmentMosh. */
-	function seqRoll(segIds: string[]) {
-		const ids = new Set(segIds);
-		for (const s of sequenceSegments) {
-			if (ids.has(s.id)) seqMoshHistory.seed(s.id, segmentMoshSnapshot(s));
-		}
-		seqBoundaries.live(rollSegments(sequenceSegments, ids, getMoshOptions()));
-		for (const s of sequenceSegments) {
-			if (ids.has(s.id)) seqMoshHistory.push(s.id, segmentMoshSnapshot(s));
-		}
-	}
-
-	function seqClear(segIds: string[]) {
-		seqBoundaries.commit(clearSegments(sequenceSegments, new Set(segIds)));
-	}
-
-	function seqModeChange(
-		segIds: string[],
-		mode: SequenceSegmentMode,
-		intervalSec?: number,
-		intervalBeats?: number | null,
-	) {
-		seqBoundaries.commit(
-			setSegmentsMode(
-				sequenceSegments,
-				new Set(segIds),
-				mode,
-				intervalSec,
-				intervalBeats,
-			),
-		);
-	}
-
-	/** Deal the pool across an auto segment's own ticks. */
-	function seqSourceRollChange(segIds: string[], on: boolean) {
-		seqBoundaries.commit(
-			setSegmentsSourceRoll(sequenceSegments, new Set(segIds), on),
-		);
-	}
-
 	// ── BPM ──────────────────────────────────────────────────────────────────
 	// Same detector the slideshow uses: decode to mono 44.1 kHz, then
 	// essentia's RhythmExtractor2013 in a shared worker. Here it feeds the
-	// AUTO segments' re-roll spacing rather than a slide clock.
+	// auto clips' re-roll spacing rather than a slide clock.
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = null;
 	/** Bumped whenever the BPM is settled from elsewhere — a restored song, a
@@ -2551,7 +2050,7 @@
 	/** The track the automatic pass has already been spent on. */
 	let autoBpmFor: File | null = null;
 
-	// A new track detects its own tempo: the segment timing (and any beat-synced
+	// A new track detects its own tempo: the clip timing (and any beat-synced
 	// effect) this feeds is unusable until the BPM is right, so it shouldn't
 	// wait to be asked. Both modes — single has beat sync too.
 	$effect(() => {
@@ -2593,23 +2092,46 @@
 		}
 	}
 
-	/** Correcting the BPM retimes every segment — and every fx clip — whose
-	 * spacing was set in beats. */
+	/** Correcting the BPM retimes every clip whose spacing was set in beats. */
 	function setSequenceBpm(bpm: number) {
 		bpmEpoch++;
 		sequenceBpm = bpm;
-		const retimed = applyBpmToSegments(sequenceSegments, bpm);
-		if (retimed !== sequenceSegments) seqBoundaries.commit(retimed);
 		const retimedFx = applyBpmToFxLanes(fxLanes, bpm);
 		if (retimedFx !== fxLanes) {
 			pushFxHistory();
 			fxLanes = retimedFx;
 		}
+		const retimedMedia = applyBpmToMediaClips(mediaTimeline, bpm);
+		if (retimedMedia !== mediaTimeline) {
+			pushMediaHistory();
+			mediaTimeline = retimedMedia;
+		}
 	}
 
-	function seqTransitionChange(changes: SegmentTransitionChange[]) {
-		seqBoundaries.commit(applyTransitionChanges(sequenceSegments, changes));
+	// Loop playback inside the selected clip (edit-while-playing aid).
+	let clipLoop = $state(false);
+
+	/** The span the loop holds inside: whichever clip is selected. */
+	let loopSpan = $derived.by(() => {
+		const clip = selectedMediaClip ?? selectedFxClip ?? selectedTextClip;
+		return clip ? { start: clip.start, end: clip.end } : null;
+	});
+
+	/** R. Needs one clip picked: the loop has no other way to know which span
+	 * to hold inside, so a flag set without one would lie in wait. */
+	function toggleClipLoop() {
+		if (!loopSpan) return;
+		clipLoop = !clipLoop;
 	}
+	$effect(() => {
+		const span = loopSpan;
+		if (!clipLoop || !span) return;
+		const t = seqMasterTime();
+		if (t < span.start - 0.05 || t >= span.end) {
+			if (seqMasterIsAudio) seekTo(span.start);
+			else seekVideoTo(span.start);
+		}
+	});
 
 	function playSpan() {
 		// Playback starts at the static marker — the resume point — rather than
@@ -2651,8 +2173,7 @@
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
 		// A layer's panel has taken the sidebar over, so the arrows belong to
-		// its chain. Ahead of the segment branch below, which would otherwise
-		// fall back to the segment under the playhead.
+		// its chain.
 		const mediaClip = selectedMediaClip;
 		if (mediaClip) {
 			const snap = mediaMoshHistory.redo(mediaClip.id);
@@ -2680,18 +2201,9 @@
 			else fxRoll([clip.id]);
 			return;
 		}
-		// Sequence mode: the mosh group is hidden, so the arrows drive the
-		// selected (or playhead-active) segment's own mosh history instead. The
-		// single-mode stack stays out of it even when no segment is active —
-		// `effects` belongs to the segment resolver here.
-		if (inSequenceMode()) {
-			const seg = activeSequenceSegment();
-			if (!seg) return;
-			const snap = seqMoshHistory.redo(seg.id);
-			if (snap) applySegmentMosh(seg.id, snap);
-			else seqRoll([seg.id]);
-			return;
-		}
+		// Sequence mode: the mosh group is hidden and every chain lives on a
+		// clip, so with nothing selected the arrows have nothing to roll.
+		if (isSequenceMode) return;
 		moshSession.forward();
 	}
 
@@ -2717,14 +2229,7 @@
 			if (snap) applyFxClipMosh(clip.id, snap);
 			return;
 		}
-		if (inSequenceMode()) {
-			const seg = activeSequenceSegment();
-			if (seg) {
-				const snap = seqMoshHistory.undo(seg.id);
-				if (snap) applySegmentMosh(seg.id, snap);
-			}
-			return;
-		}
+		if (isSequenceMode) return;
 		moshSession.back();
 	}
 
@@ -2810,21 +2315,6 @@
 		},
 		{
 			get undoSeq() {
-				return burstOwner === "segment" && panelBurst.open
-					? PENDING_EDIT
-					: seqBoundaries.undoSeq;
-			},
-			get redoSeq() {
-				return seqBoundaries.redoSeq;
-			},
-			undo: () => {
-				endPanelBurst();
-				seqBoundaries.undo();
-			},
-			redo: () => seqBoundaries.redo(),
-		},
-		{
-			get undoSeq() {
 				// A burst still inside its coalescing window is an edit that has
 				// not reached its stack yet, and it is the newest one there is.
 				return burstOwner === "chain" && panelBurst.open
@@ -2857,16 +2347,6 @@
 			clearEffectsFn(clip.effects);
 			if (isHandBuiltLabel(clip)) clip.label = "clean";
 			else clip.modified = true;
-			return;
-		}
-		// In sequence mode the live effects can be the selected segment's own
-		// array — a clear is a hand-edit to that segment.
-		const seg = panelSelectedSegment();
-		if (seg && seg.effects === effects) {
-			panelBeforeEdit();
-			clearEffectsFn(effects);
-			if (isHandBuiltLabel(seg)) seg.label = "clean";
-			else seg.modified = true;
 			return;
 		}
 		clearEffectsFn(effects);
@@ -3125,7 +2605,7 @@
 				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
 		togglePlay: toggleMasterPlay,
-		toggleSegmentLoop,
+		toggleClipLoop,
 		zoomTimeline: (inward) => timelineAxis?.vp.zoomStep(inward),
 	});
 
@@ -3700,13 +3180,10 @@
 	// pass through. Each kind gets a one-way effect instead: whichever
 	// selection the user just made survives, and the rest settle to null on the
 	// next pass.
-	type SelectionKind = "segment" | "fx" | "media" | "text";
+	type SelectionKind = "fx" | "media" | "text";
 
 	function keepOnlySelection(keep: SelectionKind) {
 		untrack(() => {
-			// SequenceTimeline drops its own multi-selection when the primary id
-			// goes, so clearing that one is enough.
-			if (keep !== "segment") selectedSegmentId = null;
 			if (keep !== "fx") {
 				selectedFxClipId = null;
 				selectedFxClipIds = [];
@@ -3719,9 +3196,6 @@
 		});
 	}
 
-	$effect(() => {
-		if (selectedSegmentId) keepOnlySelection("segment");
-	});
 	$effect(() => {
 		if (selectedFxClipId || selectedFxLaneId) keepOnlySelection("fx");
 	});
@@ -3737,10 +3211,9 @@
 	 * of its clips to open is whatever is on screen at the playhead, since that
 	 * is the one the click was aimed at.
 	 *
-	 * Clicking past every layer lands on the base image. What that image belongs
-	 * to depends on the mode: a segment in sequence mode, and in single mode the
-	 * main chain — which is already what the rack shows once no layer is in the
-	 * way, so there dropping the layer selection is the whole gesture.
+	 * Clicking past every layer lands on the base: in single mode the main
+	 * chain, which is already what the rack shows once no layer is in the way,
+	 * so dropping the layer selection is the whole gesture.
 	 */
 	function pickLayer(pick: LayerPick | null) {
 		if (pick?.kind === "media") {
@@ -3760,13 +3233,6 @@
 		selectedMediaClipId = null;
 		selectedMediaClipIds = [];
 		selectedTextClipId = null;
-		if (pick?.kind !== "base" || !isSequenceMode) return;
-		// The segment the canvas is drawing, which is the one just clicked —
-		// activeSegment() is what the preview itself is fed.
-		const seg = activeSegment();
-		if (!seg) return;
-		selectedSegmentId = seg.id;
-		seqSelectedIds = [seg.id];
 	}
 
 	// ←/→ walk a text lane's moshes, the same way they walk a segment's or an
@@ -3901,39 +3367,18 @@
 		return drawn.every((id) => id && id === drawn[0]) ? drawn[0] : null;
 	});
 
-	/** The thumb the rail lights up: what the selected segments play, or — since
-	 * the two selections are mutually exclusive — what the selected layer clips
-	 * draw. Falls back to the lane behind the primary clip, so a lane opened
-	 * with nothing selected still says which media it is on. */
+	/** The thumb the rail lights up: what the selected layer clips draw. Falls
+	 * back to the lane behind the primary clip, so a lane opened with nothing
+	 * selected still says which media it is on. */
 	let railSourceId = $derived(
-		seqSelectedSourceId ??
-			mediaSelectedSourceId ??
-			selectedMediaLane?.sourceId ??
-			null,
+		mediaSelectedSourceId ?? selectedMediaLane?.sourceId ?? null,
 	);
 
-	/**
-	 * What a rail click assigns to. Segments and layer clips are mutually
-	 * exclusive selections, so the rail never has to choose between them.
-	 */
-	let railTarget = $derived<"segment" | "clip" | null>(
-		seqSelectedIds.length > 0
-			? "segment"
-			: selectedMediaClipIds.length > 0
-				? "clip"
-				: null,
-	);
+	/** How many clips a rail click assigns to. */
+	let railTargetCount = $derived(selectedMediaClipIds.length);
 
-	let railTargetCount = $derived(
-		railTarget === "segment"
-			? seqSelectedIds.length
-			: railTarget === "clip"
-				? selectedMediaClipIds.length
-				: 0,
-	);
-
-	/** Point the selected layer clips at this source — the clip counterpart of
-	 * assignSegmentSource, and the same fan-out over the whole selection. */
+	/** Point the selected layer clips at this source, fanned out over the whole
+	 * selection. */
 	function assignMediaClipSource(sourceId: string) {
 		if (selectedMediaClipIds.length === 0) return;
 		pushMediaHistory();
@@ -3942,9 +3387,17 @@
 		);
 	}
 
-	function assignRailSource(sourceId: string) {
-		if (railTarget === "segment") assignSegmentSource(seqSelectedIds, sourceId);
-		else if (railTarget === "clip") assignMediaClipSource(sourceId);
+	/** Deal the pool across the selected layer clips, or every layer clip. */
+	function dealMediaSources() {
+		const pool = sequenceSources.map((s) => s.id);
+		if (pool.length < 2) return;
+		const ids =
+			selectedMediaClipIds.length > 0
+				? selectedMediaClipIds
+				: mediaTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id));
+		if (ids.length === 0) return;
+		pushMediaHistory();
+		setMediaTimeline(dealMediaClipSources(mediaTimeline, new Set(ids), pool));
 	}
 
 	function toggleTextTimeline() {
@@ -4082,19 +3535,14 @@
 					textTimeOffset,
 					textTimeScale,
 					bpm: sequenceBpm,
-					sequence:
-						isSequenceMode && sequenceSegments.length > 0
-							? {
-									segments: $state.snapshot(
-										sequenceSegments,
-									) as SequenceSegment[],
-									moshOptions: getMoshOptions(),
-									duration: seqMasterDuration,
-									masterIsAudio: seqMasterIsAudio,
-									sources: sourceRegistry.sources,
-									fxLanes: $state.snapshot(fxLanes) as FxLane[],
-								}
-							: null,
+					sequence: isSequenceMode
+						? {
+								moshOptions: getMoshOptions(),
+								duration: seqMasterDuration,
+								masterIsAudio: seqMasterIsAudio,
+								fxLanes: $state.snapshot(fxLanes) as FxLane[],
+							}
+						: null,
 					onProgress: (p) => {
 						recordingState.recordProgress = p;
 					},
@@ -4212,24 +3660,19 @@
 					</div>
 					<div class="seq-media-actions">
 						{#if sequenceSources.length > 1}
-							<!-- One button, scoped by the selection: with segments picked it
-							     deals across those, otherwise across the whole song. -->
+							<!-- One button, scoped by the selection: with layer clips picked
+							     it deals across those, otherwise across every layer clip. -->
 							<button
 								class="seq-media-btn"
-								title={seqSelectedIds.length > 0
-									? "Deal the pool at random across the selected segments"
-									: "Deal the pool at random across every segment"}
-								onclick={() =>
-									randomizeSegmentSourcesFor(
-										seqSelectedIds.length > 0
-											? seqSelectedIds
-											: sequenceSegments.map((s) => s.id),
-									)}
+								title={selectedMediaClipIds.length > 0
+									? "Deal the pool at random across the selected layer clips"
+									: "Deal the pool at random across every layer clip"}
+								onclick={dealMediaSources}
 							>
 								<Shuffle size={12} />
 								<span class="btn-label">Shuffle</span>
-								{#if seqSelectedIds.length > 0}
-									<span class="btn-scope">{seqSelectedIds.length}</span>
+								{#if selectedMediaClipIds.length > 0}
+									<span class="btn-scope">{selectedMediaClipIds.length}</span>
 								{:else}
 									<span class="btn-label">all</span>
 								{/if}
@@ -4360,7 +3803,7 @@
 						videoCurrentTime >= videoSpanEnd
 					) {
 						videoEl.currentTime = videoSpanStart;
-						if (!videoLoop && !seqForceLoop) videoEl.pause();
+						if (!videoLoop) videoEl.pause();
 					}
 				}}
 				onended={() => {
@@ -4370,7 +3813,7 @@
 						!recordingState.recording &&
 						!videoPastSpan &&
 						videoEl &&
-						(videoLoop || seqForceLoop)
+						videoLoop
 					) {
 						videoEl.currentTime = videoSpanStart;
 						videoEl.play().catch(() => {});
@@ -4388,13 +3831,13 @@
 		{#if sequenceGridOpen}
 			<SequenceGridView
 				sources={sequenceSources}
-				selectedCount={seqSelectedIds.length}
+				selectedCount={selectedMediaClipIds.length}
 				selectedSourceId={railSourceId}
 				onAddFiles={(files) => void addSequenceSources(files)}
 				onGenerate={() => (generateOpen = true)}
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
-				onAssign={(id) => assignSegmentSource(seqSelectedIds, id)}
+				onAssign={assignMediaClipSource}
 				onProxyAction={(id, action) => {
 					if (action === "retry") sourceRegistry.retryProxy(id);
 					else sourceRegistry.setProxyEnabled(id, action === "enable");
@@ -4453,10 +3896,7 @@
 				showFps={showFps && !isImageFormat}
 				videoEl={isVideo && !previewPlayer ? videoEl : null}
 				frameSource={previewPlayer}
-				sourceDriver={isSequenceMode ? driveSequenceSource : null}
-				outgoingDriver={isSequenceMode ? driveOutgoingSource : null}
-				sourceKey={seqSourceKey}
-				sourceAnimating={seqSourceAnimating}
+				sourceKey={String(sourceTick)}
 				freezeAnimation={isImageFormat}
 				suspended={recordingState.recording ||
 					noSequenceMedia ||
@@ -4475,19 +3915,6 @@
 				bpm={sequenceBpm}
 				forceAnimation={(textTimeline.enabled || mediaTimeline.enabled) &&
 					textClockRunning}
-				transition={seqTransition
-					? {
-							effectsA: seqTransition.effectsA,
-							type: seqTransition.concrete.type,
-							seed: seqTransition.transition.seed,
-							direction: seqTransition.concrete.direction,
-							density: seqTransition.concrete.density,
-							startTime: seqTransition.boundaryTime,
-							durationSec: seqTransition.transition.durationSec,
-							getTime: seqMasterTime,
-							useAltSource: seqCrossFades,
-						}
-					: null}
 				overlay={mediaLoading
 					? loadingOverlay
 					: noSequenceMedia
@@ -4497,8 +3924,6 @@
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
 				{sourceDurations}
-				sourceEditId={isSequenceMode ? sourceIdOf(activeSegment()) : null}
-				outgoingEditId={isSequenceMode ? (outgoingSource()?.id ?? null) : null}
 				onPickLayer={pickLayer}
 				onLayerDragStart={() => pushMediaHistory()}
 				onLayerStyleChange={(id, style) =>
@@ -4506,8 +3931,6 @@
 						...l,
 						style,
 					})))}
-				sourceEditTime={isSequenceMode ? sourceTimeIn(activeSegment()) : 0}
-				outgoingEditTime={isSequenceMode ? (outgoingSource()?.time ?? 0) : 0}
 			/>
 		</div>
 
@@ -4700,9 +4123,9 @@
 			<SourceRail
 				sources={sequenceSources}
 				selectedCount={railTargetCount}
-				selectedLabel={railTarget === "clip" ? "layer clip" : "segment"}
+				selectedLabel="layer clip"
 				selectedSourceId={railSourceId}
-				onAssign={assignRailSource}
+				onAssign={assignMediaClipSource}
 				onAdd={() => sourceInput?.click()}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				edits={sourceRegistry.edits}
@@ -4767,7 +4190,7 @@
 				spanStart={textTimeOffset}
 				bpm={isSequenceMode ? sequenceBpm : 0}
 				selectionHint={isSequenceMode
-					? "Click a segment, a layer clip or an FX clip to edit it"
+					? "Click a layer clip or an FX clip to edit it"
 					: null}
 				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
@@ -4915,26 +4338,6 @@
 						/>
 					{/if}
 				</div>
-				{#if seqMasterDuration > 0 && isSequenceMode}
-					<SequenceTimeline
-						segments={sequenceSegments}
-						boundaries={seqBoundaries}
-						onSeek={(t) => (seqMasterIsAudio ? seekTo(t) : seekVideoTo(t))}
-						bind:selectedSegmentId
-						bind:selectedSegmentIds={seqSelectedIds}
-						onApplyPreset={seqApplyPreset}
-						onRoll={seqRoll}
-						onClear={seqClear}
-						onModeChange={seqModeChange}
-						bpm={sequenceBpm}
-						onTransitionChange={seqTransitionChange}
-						segmentLoop={seqSegmentLoop}
-						onToggleSegmentLoop={toggleSegmentLoop}
-						sources={sequenceSources}
-						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
-						onSourceRollChange={seqSourceRollChange}
-					/>
-				{/if}
 				{#if videoIsMaster}
 					<AudioTimeline
 						layout="lane"
@@ -5116,7 +4519,7 @@
 					bind:effects={getPanelEffects, setPanelEffects}
 					noTarget={panelNoTarget}
 					rolledNote={panelRolledNote}
-					rolledChain={!!panelIntervalSegment}
+					rolledChain={!!panelIntervalClip}
 					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 					spectrumData={audio.spectrumData}
 					response={audioResponse}
@@ -5130,7 +4533,7 @@
 					onEffectsReplaced={endPanelBurst}
 					onPresetUpdated={seqSyncPreset}
 					onPresetApplied={(preset) => {
-						const target = selectedFxClip ?? panelSelectedSegment();
+						const target = selectedFxClip;
 						if (target) {
 							target.label = preset.name;
 							target.presetName = preset.name;

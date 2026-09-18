@@ -20,6 +20,7 @@ import {
 	restoreEffects,
 	type EffectInstance,
 	type FreqBand,
+	type Preset,
 } from "../effects";
 import {
 	clipAt,
@@ -35,6 +36,7 @@ import {
 	clearedChainClip,
 	cloneChainEffects,
 	rolledChainClip,
+	syncedChainClip,
 	withChainMode,
 	withChainMosh,
 	type ChainClip,
@@ -399,6 +401,17 @@ export function rollFxClips(
 			),
 		};
 	});
+}
+
+/** A preset was overwritten: refresh every unmodified clip filled from it. */
+export function syncFxClipsToPreset(lanes: FxLane[], preset: Preset): FxLane[] {
+	const ids = new Set(
+		lanes.flatMap((l) =>
+			l.clips.filter((c) => c.presetName === preset.name).map((c) => c.id),
+		),
+	);
+	if (ids.size === 0) return lanes;
+	return updateFxClips(lanes, ids, (clip) => syncedChainClip(clip, preset));
 }
 
 /** Reset clips to an all-disabled chain. */

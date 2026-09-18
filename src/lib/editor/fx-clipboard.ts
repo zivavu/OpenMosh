@@ -18,14 +18,14 @@ import {
 	type ClipBlockEntry,
 } from "../timeline/clips";
 import {
-	applyChainToFxClip,
+	applyChainTo,
 	captureChain,
-	type ChainClip,
+	type CopiedChain,
 } from "./chain-clipboard";
 import { createFxClip, type FxClip, type FxLane } from "./fx-lanes";
 
 export interface FxClipboardEntry extends ClipBlockEntry {
-	chain: ChainClip;
+	chain: CopiedChain;
 	fadeSec?: number;
 }
 
@@ -89,7 +89,7 @@ export function pasteFxClips(
 	const added = new Map<string, FxClip[]>();
 	const clipIds: string[] = [];
 	for (const { entry: e, start, end } of placed) {
-		const clip = applyChainToFxClip(createFxClip(start, end), {
+		const clip = applyChainTo(createFxClip(start, end), {
 			...e.chain,
 			effects: e.chain.effects.map(cloneEffectInstance),
 		});
