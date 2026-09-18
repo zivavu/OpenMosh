@@ -2395,7 +2395,7 @@
 			return null;
 		return {
 			title: "Nothing selected",
-			hint: "Click a segment on the timeline to edit its chain, or an fx clip to edit that one.",
+			hint: "Click a segment, a layer clip or an fx clip on the timeline to edit its chain.",
 		};
 	});
 
@@ -4767,7 +4767,7 @@
 				spanStart={textTimeOffset}
 				bpm={isSequenceMode ? sequenceBpm : 0}
 				selectionHint={isSequenceMode
-					? "Click a segment or an FX clip to edit it"
+					? "Click a segment, a layer clip or an FX clip to edit it"
 					: null}
 				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
