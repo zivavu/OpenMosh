@@ -1,8 +1,21 @@
 <script lang="ts">
-	import { ChevronDown, Eye, EyeOff, Focus, Trash2 } from "lucide-svelte";
+	import {
+		ChevronDown,
+		Dices,
+		Eraser,
+		Eye,
+		EyeOff,
+		Focus,
+		Trash2,
+	} from "lucide-svelte";
 	import { untrack } from "svelte";
 	import { dropAutoRangeScope } from "../../audio/auto-range";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
+	import { loadPresets, type Preset } from "../../effects";
+	import {
+		BEAT_INTERVALS,
+		type SequenceSegmentMode,
+	} from "../../editor/sequence";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
 		dragClipsStep,
@@ -77,6 +90,19 @@
 		onChange: (timeline: MediaTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
+		/** Beats per minute, when known — unlocks the beat-spaced re-roll options. */
+		bpm?: number;
+		// The clip chain gestures, the same set a segment and an fx clip take.
+		// All optional: without them the bar isn't offered at all.
+		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
+		onRoll?: (clipIds: string[]) => void;
+		onClear?: (clipIds: string[]) => void;
+		onModeChange?: (
+			clipIds: string[],
+			mode: SequenceSegmentMode,
+			intervalSec?: number,
+			intervalBeats?: number | null,
+		) => void;
 	}
 
 	let {
@@ -93,7 +119,69 @@
 		selectedClipIds = $bindable([]),
 		onChange,
 		onBeforeEdit,
+		bpm = 0,
+		onApplyPreset,
+		onRoll,
+		onClear,
+		onModeChange,
 	}: Props = $props();
+
+	// ── Clip toolbar ─────────────────────────────────────────────────────────
+	// Rendered in the stack's shared selection bar, like the fx lanes' — one
+	// bar for whichever lane holds the selection, so the stack never resizes.
+	$effect(() => {
+		if (selectedClips.length === 0 || !onModeChange) return;
+		return stack.registerSelectionBar("media", clipBar);
+	});
+
+	/** Every action fans out over the whole selection; a value the selection
+	 * disagrees on renders blank until the user picks one. */
+	let selectedClips = $derived(
+		timeline.lanes.flatMap((l) =>
+			l.clips.filter((c) => selectedClipIds.includes(c.id)),
+		),
+	);
+	let manySelected = $derived(selectedClips.length > 1);
+
+	function commonValue<T>(values: T[]): T | undefined {
+		return values.every((v) => v === values[0]) ? values[0] : undefined;
+	}
+
+	let commonMode = $derived(
+		commonValue(selectedClips.map((c) => c.mode ?? "static")),
+	);
+	let commonIntervalSec = $derived(
+		commonValue(selectedClips.map((c) => c.intervalSec)),
+	);
+	let commonIntervalBeats = $derived(
+		commonValue(selectedClips.map((c) => c.intervalBeats)),
+	);
+	let hasInterval = $derived(
+		selectedClips.every((c) => c.intervalSec !== undefined),
+	);
+	let intervalValue = $derived.by(() => {
+		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
+		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
+			return "";
+		}
+		return String(commonIntervalSec);
+	});
+
+	/** Read on open, not at mount — presets saved meanwhile show up. */
+	let presetList = $state<Preset[]>([]);
+	let selectedPresetIndex = $derived.by(() => {
+		const name = commonValue(selectedClips.map((c) => c.presetName));
+		if (!name) return -1;
+		const i = presetList.findIndex((p) => p.name === name);
+		return i === -1 ? -1 : i;
+	});
+
+	/** A clip with no spacing yet takes one beat, or a flat second without a BPM. */
+	function switchToAuto() {
+		if (hasInterval) onModeChange?.(selectedClipIds, "interval");
+		else if (bpm > 0) onModeChange?.(selectedClipIds, "interval", 60 / bpm, 1);
+		else onModeChange?.(selectedClipIds, "interval", 1, null);
+	}
 
 	// ── Source drops ─────────────────────────────────────────────────────────
 	// The same payload the media rail and the sequence grid send, so a thumb
@@ -237,6 +325,13 @@
 	/** What a clip says it is showing. Clips with no source read as unset. */
 	function clipLabel(lane: MediaLane, clip: MediaClip): string {
 		return clipSource(lane, clip)?.name ?? "No source";
+	}
+
+	/** The chain's label, unless it is the default a fresh clip carries — a
+	 * row of "clean" says nothing the empty rack doesn't. */
+	function chainLabel(clip: MediaClip): string | null {
+		if (clip.label === "clean" && !clip.modified) return null;
+		return clip.modified ? `${clip.label}*` : clip.label;
 	}
 
 	// One axis for the whole stack: zoom, pan, playhead-following and the
@@ -916,7 +1011,12 @@
 								></span>
 							{/if}
 							{#if clipPx(clip) >= MIN_LABEL_PX}
-								<span class="clip-label">{clipLabel(lane, clip)}</span>
+								<span class="clip-label">
+									{clipLabel(lane, clip)}
+									{#if chainLabel(clip)}
+										<span class="clip-chain">{chainLabel(clip)}</span>
+									{/if}
+								</span>
 							{/if}
 							<span
 								class="clip-edge end"
@@ -981,7 +1081,172 @@
 	{/if}
 </div>
 
+{#snippet clipBar()}
+	{#if selectedClips.length > 0}
+		<div class="mc-bar">
+			<span class="mc-title">Layer</span>
+			<span class="tl-tool-label">
+				{manySelected
+					? `${selectedClips.length} clips`
+					: (chainLabel(selectedClips[0]) ?? "clean")}
+			</span>
+
+			<div class="tl-tool-sep"></div>
+			<span class="tl-tool-label">Fill</span>
+			<select
+				class="mc-select"
+				value={selectedPresetIndex}
+				onmousedown={() => (presetList = loadPresets())}
+				onchange={(e) => {
+					const idx = Number(e.currentTarget.value);
+					const preset = presetList[idx];
+					if (preset) onApplyPreset?.(selectedClipIds, preset);
+				}}
+			>
+				<option value={-1} disabled>Preset…</option>
+				{#each presetList as p, i}
+					<option value={i}>{p.name}</option>
+				{/each}
+			</select>
+			<button
+				class="tl-tool-btn"
+				title={commonMode === "interval"
+					? "New random seed"
+					: manySelected
+						? "Random mosh for each selected clip"
+						: "Random mosh for this clip"}
+				onclick={() => onRoll?.(selectedClipIds)}
+			>
+				<Dices size={12} /> Mosh
+			</button>
+			<button
+				class="tl-tool-btn"
+				title={manySelected
+					? "Clear the selected clips' effects"
+					: "Clear this clip's effects"}
+				onclick={() => onClear?.(selectedClipIds)}
+			>
+				<Eraser size={12} /> Clear
+			</button>
+
+			<div class="tl-tool-sep"></div>
+			<span class="tl-tool-label">Mode</span>
+			<div class="mc-mode">
+				<button
+					class="tl-tool-btn"
+					class:active={commonMode === "static"}
+					onclick={() => onModeChange?.(selectedClipIds, "static")}
+				>
+					Static
+				</button>
+				<button
+					class="tl-tool-btn"
+					class:active={commonMode === "interval"}
+					onclick={switchToAuto}
+				>
+					Auto
+				</button>
+			</div>
+			{#if commonMode === "interval"}
+				<select
+					class="mc-select"
+					value={intervalValue}
+					title="How often this clip re-rolls its mosh"
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v === "") return;
+						if (v.startsWith("b")) {
+							const beats = Number(v.slice(1));
+							onModeChange?.(
+								selectedClipIds,
+								"interval",
+								(60 / bpm) * beats,
+								beats,
+							);
+						} else {
+							// Picking a plain duration drops the beat link, so a later BPM
+							// change leaves it alone.
+							onModeChange?.(selectedClipIds, "interval", Number(v), null);
+						}
+					}}
+				>
+					{#if intervalValue === ""}
+						<option value="" disabled>—</option>
+					{/if}
+					{#if bpm > 0}
+						{#each BEAT_INTERVALS as opt}
+							<option value={`b${opt.beats}`}>{opt.label}</option>
+						{/each}
+					{/if}
+					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
+						<!-- String, not the number: the select's value is a string and Svelte
+						     matches an option by strict equality, so a numeric option value
+						     never matches and the picker renders blank. -->
+						<option value={String(sec)}>every {sec}s</option>
+					{/each}
+				</select>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <style>
+	.mc-bar {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		padding: 0 0.25rem;
+	}
+
+	.mc-title {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--mosh);
+		white-space: nowrap;
+	}
+
+	.mc-mode {
+		display: flex;
+	}
+
+	.mc-mode :global(.tl-tool-btn:first-child) {
+		border-right-color: transparent;
+		border-radius: 4px 0 0 4px;
+	}
+
+	.mc-mode :global(.tl-tool-btn:last-child) {
+		border-radius: 0 4px 4px 0;
+	}
+
+	/* The lane's own accent, rather than the stack toolbar's blue. */
+	.mc-mode :global(.tl-tool-btn.active) {
+		border-color: var(--mosh);
+		background: rgba(198, 162, 234, 0.12);
+		color: var(--mosh);
+	}
+
+	.mc-select {
+		max-width: 9rem;
+		padding: 0.15rem 0.25rem;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--surface);
+		color: var(--text-2);
+		font-size: 0.65rem;
+		font-family: inherit;
+	}
+
+	/* The chain rides after the media name, dimmer: what it shows first, what
+	   runs on it second. */
+	.clip-chain {
+		margin-left: 0.35rem;
+		color: var(--mosh);
+		opacity: 0.85;
+	}
+
 	/* No box of its own: the rows join the layer column their sibling component
 	   renders into, so one `order` per row interleaves the two kinds. */
 	.media-tl {

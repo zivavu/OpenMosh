@@ -1,5 +1,11 @@
-import { loadInitialEffects, restoreEffects } from "../effects";
+import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
+import {
+	cloneChainEffects,
+	normalizeChainFields,
+	type ChainClip,
+} from "../editor/chain-clip";
+import { cleanEffects } from "../editor/sequence";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
 	clipAt,
@@ -7,7 +13,6 @@ import {
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
 	sortClips,
-	type TimelineClip,
 } from "../timeline/clips";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
@@ -63,8 +68,12 @@ export interface MediaStyle {
 	bleedFade: number;
 }
 
-/** One span of media on a lane. */
-export interface MediaClip extends TimelineClip {
+/**
+ * One span of media on a lane. A chain clip (see chain-clip.ts): the effects
+ * run on this clip's media alone, so a lane cut in two can mosh each half
+ * differently, fill one from a preset and leave the other clean.
+ */
+export interface MediaClip extends ChainClip {
 	/** Seconds into the source the clip starts at. Ignored by image sources. */
 	sourceStart: number;
 	/**
@@ -73,9 +82,8 @@ export interface MediaClip extends TimelineClip {
 	 * could hold more than one image — so a split inherits the source the whole
 	 * lane was on and only the halves the user retargets carry one of these.
 	 *
-	 * The placement and the effect chain stay on the lane, so cutting a lane in
-	 * two and dropping a different photo on each half runs both through the
-	 * same chain.
+	 * The placement stays on the lane, so cutting a lane in two and dropping a
+	 * different photo on each half keeps both in the same place on screen.
 	 */
 	sourceId?: string;
 	/**
@@ -94,7 +102,7 @@ export interface MediaClip extends TimelineClip {
 
 /**
  * A media layer: a source from the pool, drawn with the lane's placement and
- * run through the lane's own effect chain before it meets the image. Clips
+ * run through the clip's own effect chain before it meets the image. Clips
  * within a lane never overlap, so a lane shows at most one at a time.
  */
 export interface MediaLane {
@@ -113,8 +121,6 @@ export interface MediaLane {
 	sourceId: string | null;
 	/** Shared by every clip in the lane. */
 	style: MediaStyle;
-	/** Run on the layer alone, before it meets the image. */
-	effects: EffectInstance[];
 	clips: MediaClip[];
 }
 
@@ -159,7 +165,18 @@ export function createMediaClip(
 	sourceStart = 0,
 	sourceId?: string,
 ): MediaClip {
-	const clip: MediaClip = { id: nextId("mclip"), start, end, sourceStart };
+	const clip: MediaClip = {
+		id: nextId("mclip"),
+		start,
+		end,
+		sourceStart,
+		mode: "static",
+		label: "clean",
+		// The same all-disabled list the main chain starts from, hidden effects
+		// respected — an empty chain gives the panel nothing to switch on, which
+		// reads as every effect being unavailable on this clip.
+		effects: cleanEffects(),
+	};
 	if (sourceId) clip.sourceId = sourceId;
 	return clip;
 }
@@ -176,7 +193,8 @@ export function mediaClipWeight(clip: MediaClip, time: number): number {
  * Cut the clip covering `at` into two. The right half picks up the source time
  * the left half reached, so splitting a video clip doesn't rewind it, and both
  * halves keep whatever source the clip was on — retargeting one of them is the
- * next gesture, not something a split should guess at.
+ * next gesture, not something a split should guess at. The chain is deep-copied
+ * into each half so editing one no longer touches the other.
  */
 export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
 	const clip = clipAt(lane, at);
@@ -188,12 +206,18 @@ export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
 		...lane,
 		clips: sortClips([
 			...lane.clips.filter((c) => c.id !== clip.id),
-			{ ...clip, id: nextId("mclip"), end: at },
+			{
+				...clip,
+				id: nextId("mclip"),
+				end: at,
+				effects: cloneChainEffects(clip.effects),
+			},
 			{
 				...clip,
 				id: nextId("mclip"),
 				start: at,
 				sourceStart: clip.sourceStart + (at - clip.start),
+				effects: cloneChainEffects(clip.effects),
 			},
 		]),
 	};
@@ -213,10 +237,6 @@ export function createMediaLane(
 		z,
 		sourceId,
 		style: { ...style },
-		// The same all-disabled list the main chain starts from, hidden effects
-		// respected — an empty chain gives the panel nothing to switch on, which
-		// reads as every effect being unavailable on this layer.
-		effects: loadInitialEffects(),
 		clips: [],
 	};
 }
@@ -251,10 +271,10 @@ export function appendMediaLane(
 	};
 }
 
-/** A lane saved with no chain at all is backfilled, not left switch-less. */
-function laneEffects(saved: unknown): EffectInstance[] {
+/** A clip saved with no chain at all is backfilled, not left switch-less. */
+function clipEffects(saved: unknown): EffectInstance[] {
 	const hydrated = restoreEffects(saved);
-	return hydrated.length > 0 ? hydrated : loadInitialEffects();
+	return hydrated.length > 0 ? hydrated : cleanEffects();
 }
 
 function legacyChainIndex(lane: object): number {
@@ -279,9 +299,15 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			z: typeof lane.z === "number" ? lane.z : i,
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
-			effects: laneEffects(lane.effects),
 			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((raw) => {
-				const clip = raw as MediaClip & { fadeSec?: number };
+				const clip = raw as Partial<MediaClip> & { fadeSec?: number };
+				// Lanes saved before clips carried their own chain held one for the
+				// whole lane: every clip inherits it, a copy each, so the split the
+				// user made back then keeps rendering as it did.
+				const legacyChain = (lane as { effects?: unknown }).effects;
+				const effects = Array.isArray(clip.effects)
+					? clipEffects(clip.effects)
+					: clipEffects(legacyChain);
 				return {
 					id: clip.id ?? nextId("mclip"),
 					start: clip.start ?? 0,
@@ -291,6 +317,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					// Saved before the two edges split, `fadeSec` ramped both.
 					fadeInSec: clip.fadeInSec ?? clip.fadeSec,
 					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,
+					...normalizeChainFields(clip, effects),
 				};
 			}),
 		})),

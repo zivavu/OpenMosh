@@ -17,6 +17,7 @@ import {
 import { resetSpectrumRange } from "./audio/spectrum-range";
 import { stretchAudioBuffer } from "./audio/time-stretch";
 import {
+	type MediaChainSource,
 	type MediaTimeline,
 	type ResolvedMediaLayer,
 	resolveMediaLayersAt,
@@ -47,7 +48,11 @@ const BITS_PER_PIXEL = 0.2;
 const MIN_VIDEO_BITRATE = 3_000_000;
 const MAX_VIDEO_BITRATE = 60_000_000;
 
-function targetVideoBitrate(width: number, height: number, fps: number): number {
+function targetVideoBitrate(
+	width: number,
+	height: number,
+	fps: number,
+): number {
 	return Math.round(
 		Math.min(
 			MAX_VIDEO_BITRATE,
@@ -109,6 +114,8 @@ export interface RecordOptions {
 	/** Uploads each visible layer's frame; awaited, so the written frame is the
 	 * one the layer asked for rather than whatever had decoded by then. */
 	mediaLayerSink?: ((layers: ResolvedMediaLayer[]) => Promise<void>) | null;
+	/** Chain per media clip and frame, the export's own — see recording.ts. */
+	mediaChains?: MediaChainSource | null;
 	/** Added to the frame time to reach the timeline's clock — an export that
 	 * starts at an audio span offset still lands on the clips you placed. */
 	textTimeOffset?: number;
@@ -315,6 +322,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		mediaTimeline = null,
 		sourceEdits,
 		mediaLayerSink = null,
+		mediaChains = null,
 		textTimeOffset = 0,
 		textTimeScale = 1,
 		bpm = 0,
@@ -654,13 +662,11 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
-	// The media and text layers each run their own chain, and those follow the
-	// music the same way the main chain does. Built once: an export's lanes are
-	// fixed for its whole run, and only the values written into them change.
-	const layerGroups = [
-		...layerLinkGroups(mediaTimeline?.lanes ?? [], audioResponse),
-		...layerLinkGroups(textTimeline?.lanes ?? [], audioResponse),
-	];
+	// The text layers each run their own chain, and those follow the music the
+	// same way the main chain does. Built once: an export's lanes are fixed for
+	// its whole run, and only the values written into them change. The media
+	// layers' chains are per clip, so theirs are built per frame below.
+	const textGroups = layerLinkGroups(textTimeline?.lanes ?? [], audioResponse);
 
 	// Otherwise the output's first seconds depend on where the preview was scrubbed.
 	resetAutoRange();
@@ -680,11 +686,29 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				? resolveTextLayersAt(textTimeline, clockTime)
 				: [];
 			const mediaLayers = mediaTimeline
-				? resolveMediaLayersAt(mediaTimeline, clockTime, sourceEdits)
+				? resolveMediaLayersAt(
+						mediaTimeline,
+						clockTime,
+						sourceEdits,
+						mediaChains ?? undefined,
+					)
 				: [];
 			if (mediaLayers.length > 0 && mediaLayerSink) {
 				await mediaLayerSink(mediaLayers);
 			}
+			// The lane is the scope, as in the preview: one lane's smoothing must
+			// never step another's, whichever clip it is on.
+			const layerGroups =
+				mediaLayers.length > 0
+					? [
+							...mediaLayers.map((l) => ({
+								scope: l.laneId,
+								effects: l.effects,
+								response: audioResponse,
+							})),
+							...textGroups,
+						]
+					: textGroups;
 			applyFrameAudio(
 				renderEffects,
 				frameAudioData,

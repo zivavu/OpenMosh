@@ -1,3 +1,5 @@
+import { chainClipEffectsAt } from "../editor/chain-clip";
+import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
 import { sourceTimeAt, type SourceEdit } from "./source-edit";
@@ -36,6 +38,8 @@ export interface ResolvedMediaLayer {
 	 */
 	key: string;
 	laneId: string;
+	/** The clip on screen, whose chain `effects` is (or was rolled from). */
+	clipId: string;
 	/** Composite before the whole chain, or over the finished frame. */
 	underEffects: boolean;
 	/** Order among all layers, media and text alike. Higher sits on top. */
@@ -76,15 +80,43 @@ export function laneSourceIds(lane: MediaLane): string[] {
 	return [...ids];
 }
 
+/** The chain a media clip contributes at a time — see createMediaChainSource. */
+export type MediaChainSource = (
+	clip: MediaClip,
+	time: number,
+) => EffectInstance[];
+
+/**
+ * Clip → chain resolver, one per preview and one per export. Static clips
+ * hand back their own chain; interval clips roll per tick through a bounded
+ * cache keyed by seed and mosh options, so a fresh source built from the same
+ * inputs reproduces the preview exactly. `clone` serves static chains as
+ * cached deep copies, so an export can write per-frame audio-link values into
+ * what it renders without them landing in the clips the user is editing.
+ */
+export function createMediaChainSource(
+	getMoshOptions: () => MoshOptions,
+	{ clone = false } = {},
+): MediaChainSource {
+	const cache = new Map<string, EffectInstance[]>();
+	return (clip, time) =>
+		chainClipEffectsAt(clip, time, cache, clone, getMoshOptions);
+}
+
 /**
  * The media layers visible at `time`, in lane order. Preview and export both
  * go through here, so what you scrub past is what gets written out.
+ *
+ * Without `chains`, every clip contributes its stored chain — enough for
+ * anything that only needs to know which layers are on screen, not what runs
+ * on them. Anything that draws passes one, or an interval clip renders clean.
  */
 export function resolveMediaLayersAt(
 	timeline: MediaTimeline | null | undefined,
 	time: number,
 	/** Per-source edits, for the rate each clip walks its media at. */
 	edits?: Record<string, SourceEdit>,
+	chains?: MediaChainSource,
 ): ResolvedMediaLayer[] {
 	if (!timeline?.enabled) return [];
 	const layers: ResolvedMediaLayer[] = [];
@@ -97,6 +129,7 @@ export function resolveMediaLayersAt(
 		layers.push({
 			key: lane.id,
 			laneId: lane.id,
+			clipId: clip.id,
 			underEffects: lane.underEffects,
 			z: lane.z,
 			sourceId,
@@ -107,7 +140,7 @@ export function resolveMediaLayersAt(
 			),
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
-			effects: lane.effects,
+			effects: chains ? chains(clip, time) : clip.effects,
 		});
 	}
 	return layers;
@@ -143,9 +176,45 @@ export function allMediaEffectIds(
 ): string[] {
 	const ids: string[] = [];
 	for (const lane of timeline?.lanes ?? []) {
-		for (const eff of lane.effects) ids.push(eff.instanceId);
+		for (const clip of lane.clips) {
+			for (const eff of clip.effects) ids.push(eff.instanceId);
+		}
 	}
 	return ids;
+}
+
+/** Apply an edit to every clip in `clipIds`, across lanes. */
+export function updateMediaClips(
+	timeline: MediaTimeline,
+	clipIds: Set<string>,
+	fn: (clip: MediaClip) => MediaClip,
+): MediaTimeline {
+	if (!timeline.lanes.some((l) => l.clips.some((c) => clipIds.has(c.id)))) {
+		return timeline;
+	}
+	return {
+		...timeline,
+		lanes: timeline.lanes.map((lane) => {
+			if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
+			return {
+				...lane,
+				clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)),
+			};
+		}),
+	};
+}
+
+/** The lane holding `clipId`, and the clip itself. */
+export function findMediaClipIn(
+	timeline: MediaTimeline | null | undefined,
+	clipId: string | null | undefined,
+): { lane: MediaLane; clip: MediaClip } | null {
+	if (!clipId || !timeline) return null;
+	for (const lane of timeline.lanes) {
+		const clip = lane.clips.find((c) => c.id === clipId);
+		if (clip) return { lane, clip };
+	}
+	return null;
 }
 
 /** Source ids the timeline references, so a save can persist just those. */

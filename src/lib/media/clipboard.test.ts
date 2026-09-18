@@ -201,23 +201,26 @@ describe("pasteMediaContentOnto", () => {
 		expect(target.fadeInSec).toBe(0.1);
 	});
 
-	it("brings the copied lane's chain onto the target's lane, with fresh ids", () => {
+	it("brings the copied clip's chain onto the target, with fresh ids", () => {
 		const from = laneWith([[0, 5]]);
-		from.effects = from.effects.map((e, i) =>
+		const src = from.clips[0];
+		src.effects = src.effects.map((e, i) =>
 			i === 0
 				? { ...e, enabled: true, values: { ...e.values, amount: 0.7 } }
 				: e,
 		);
+		src.label = "mosh";
 		const to = laneWith([[10, 12]], "Layer 2");
 		const tl = timelineOf([from, to]);
-		const entries = copyMediaClips(tl, [from.clips[0].id]);
+		const entries = copyMediaClips(tl, [src.id]);
 		const next = pasteMediaContentOnto(tl, [to.clips[0].id], entries);
-		const chain = next.lanes[1].effects;
-		expect(chain[0].enabled).toBe(true);
-		expect(chain[0].values.amount).toBe(0.7);
-		expect(chain[0].instanceId).not.toBe(from.effects[0].instanceId);
-		// The source lane is untouched.
-		expect(next.lanes[0].effects).toBe(from.effects);
+		const target = next.lanes[1].clips[0];
+		expect(target.effects[0].enabled).toBe(true);
+		expect(target.effects[0].values.amount).toBe(0.7);
+		expect(target.effects[0].instanceId).not.toBe(src.effects[0].instanceId);
+		expect(target.label).toBe("mosh");
+		// The source clip is untouched.
+		expect(next.lanes[0].clips[0].effects).toBe(src.effects);
 	});
 
 	it("pins the source it showed when the target lane shows something else", () => {

@@ -1,4 +1,12 @@
 export { createMediaHistory } from "./history.svelte";
+export {
+	clearMediaClips,
+	fillMediaClipsFromPreset,
+	restoreMediaClipMosh,
+	rollMediaClips,
+	setMediaClipsMode,
+	syncMediaClipsToPreset,
+} from "./chain";
 export type { MediaClipboardEntry, MediaPasteResult } from "./clipboard";
 export {
 	copyMediaClips,
@@ -43,15 +51,17 @@ export {
 	SPEED_MIN,
 	SPEED_MAX,
 } from "./source-edit";
-export type { ResolvedMediaLayer } from "./resolve";
+export type { MediaChainSource, ResolvedMediaLayer } from "./resolve";
 export {
 	addClip,
 	allMediaEffectIds,
+	createMediaChainSource,
 	clipAt,
 	clipRange,
 	clipSourceId,
 	detachMediaSource,
 	findMediaClip,
+	findMediaClipIn,
 	findMediaClipLane,
 	freeRangeAt,
 	laneSourceIds,
@@ -66,6 +76,7 @@ export {
 	resolveMediaLayersAt,
 	setMediaClipSources,
 	sortClips,
+	updateMediaClips,
 	updateMediaLane,
 } from "./resolve";
 export type {

@@ -155,10 +155,11 @@ describe("appendMediaLane", () => {
 		expect(next.lanes[0].sourceId).toBe("src-a");
 	});
 
-	it("starts with the same switches the main chain has, all off", () => {
-		const lane = createMediaLane("Layer 1", "src-a");
-		expect(lane.effects.length).toBeGreaterThan(0);
-		expect(lane.effects.every((e) => !e.enabled)).toBe(true);
+	it("gives a new clip the same switches the main chain has, all off", () => {
+		const clip = createMediaClip(0, 2);
+		expect(clip.effects.length).toBeGreaterThan(0);
+		expect(clip.effects.every((e) => !e.enabled)).toBe(true);
+		expect(clip.label).toBe("clean");
 	});
 });
 
@@ -296,10 +297,35 @@ describe("normalizeMediaTimeline", () => {
 		expect(t.lanes[0].enabled).toBe(true);
 		expect(t.lanes[0].style.scale).toBe(1);
 		expect(t.lanes[0].clips[0].sourceStart).toBe(0);
-		// Backfilled rather than left empty: a lane with no chain gives its panel
+		// Backfilled rather than left empty: a clip with no chain gives its panel
 		// nothing to switch on.
-		expect(t.lanes[0].effects.length).toBeGreaterThan(0);
-		expect(t.lanes[0].effects.every((e) => !e.enabled)).toBe(true);
+		const clip = t.lanes[0].clips[0];
+		expect(clip.effects.length).toBeGreaterThan(0);
+		expect(clip.effects.every((e) => !e.enabled)).toBe(true);
+		expect(clip.label).toBe("clean");
+	});
+
+	it("hands a lane-level chain saved before per-clip chains to every clip", () => {
+		const t = normalizeMediaTimeline({
+			enabled: true,
+			lanes: [
+				{
+					effects: [{ defId: "pixelate", enabled: true, values: {} }],
+					clips: [
+						{ start: 0, end: 2 },
+						{ start: 2, end: 4 },
+					],
+				},
+			],
+		});
+		const [a, b] = t.lanes[0].clips;
+		expect(a.effects.some((e) => e.defId === "pixelate" && e.enabled)).toBe(
+			true,
+		);
+		expect(b.effects.some((e) => e.defId === "pixelate" && e.enabled)).toBe(
+			true,
+		);
+		expect(a.effects).not.toBe(b.effects);
 	});
 
 	it("backfills bleed on a layer saved before it existed", () => {

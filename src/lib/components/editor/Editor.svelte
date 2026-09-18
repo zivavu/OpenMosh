@@ -27,7 +27,10 @@
 		createOutputAudioGraph,
 	} from "../../audio/audio-controller";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
-	import { layerLinkGroups } from "../../audio/audio-utils";
+	import {
+		layerLinkGroups,
+		type AudioLinkGroup,
+	} from "../../audio/audio-utils";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
 	import { loadTimeline, saveTimeline } from "../../editor/timeline-store";
@@ -139,10 +142,13 @@
 	} from "../../video/proxy-preference";
 	import {
 		appendMediaLane,
+		clearMediaClips,
+		createMediaChainSource,
 		createMediaHistory,
 		createMediaTimeline,
 		detachMediaSource,
 		EMPTY_MEDIA_TIMELINE,
+		fillMediaClipsFromPreset,
 		findMediaClip,
 		findMediaClipLane,
 		fitMediaTimeline,
@@ -150,14 +156,20 @@
 		clipSourceId,
 		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
+		resolveMediaLayersAt,
+		restoreMediaClipMosh,
+		rollMediaClips,
+		setMediaClipsMode,
 		setMediaClipSources,
 		sourceTimeAt,
+		syncMediaClipsToPreset,
 		updateMediaLane as updateMediaLaneIn,
 		type MediaClip,
 		type MediaLane,
 		type MediaTimeline,
 		type SourceEdit,
 	} from "../../media";
+	import { chainClipMoshSnapshot } from "../../editor/chain-clip";
 	import {
 		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
@@ -710,7 +722,7 @@
 		// layers follow the editor's response too — they have no settings of
 		// their own — but each still gets its own scope, so one layer's
 		// smoothing never steps another's.
-		getLinkGroups: () => [
+		getLinkGroups: (): AudioLinkGroup[] => [
 			{
 				scope: "",
 				effects: seqPlaybackEffects ?? effects,
@@ -721,7 +733,19 @@
 				effects: layer.effects,
 				response: fxLaneResponse(layer.laneId),
 			})),
-			...layerLinkGroups(mediaTimeline.lanes, audioResponse),
+			// The chain on each media lane is its clip's under the playhead — or
+			// the roll an auto clip made for this tick — so it is read off the
+			// resolved layers rather than the lanes. The lane stays the scope.
+			...resolveMediaLayersAt(
+				mediaTimeline,
+				textTime,
+				sourceRegistry.edits,
+				previewMediaChains,
+			).map((layer) => ({
+				scope: layer.laneId,
+				effects: layer.effects,
+				response: audioResponse,
+			})),
 			...layerLinkGroups(textTimeline.lanes, audioResponse),
 		],
 		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
@@ -2295,6 +2319,7 @@
 	// re-assigns the preset to the selected segment, so this isn't an edit.
 	function seqSyncPreset(preset: Preset) {
 		sequenceSegments = syncSegmentsToPreset(sequenceSegments, preset);
+		mediaTimeline = syncMediaClipsToPreset(mediaTimeline, preset);
 	}
 
 	// Loop playback inside the selected segment (edit-while-playing aid).
@@ -2627,14 +2652,24 @@
 
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
-		// A layer lane's panel has taken the sidebar over, so the arrows belong
-		// to its chain. Ahead of the segment branch below, which would otherwise
+		// A layer's panel has taken the sidebar over, so the arrows belong to
+		// its chain. Ahead of the segment branch below, which would otherwise
 		// fall back to the segment under the playhead.
-		const layer = activeLayerLane();
-		if (layer) {
-			const snap = laneMoshHistory.redo(layer.lane.id);
-			if (snap) setLaneEffects(layer, snap.map(cloneEffectInstance));
-			else laneRoll(layer);
+		const mediaClip = selectedMediaClip;
+		if (mediaClip) {
+			const snap = mediaMoshHistory.redo(mediaClip.id);
+			if (snap) applyMediaClipMosh(mediaClip.id, snap);
+			else mediaRoll([mediaClip.id]);
+			return;
+		}
+		const textLane = activeTextLane();
+		if (textLane) {
+			const snap = laneMoshHistory.redo(textLane.id);
+			if (snap) {
+				updateTextLane({ ...textLane, effects: snap.map(cloneEffectInstance) });
+			} else {
+				laneRoll(textLane);
+			}
 			return;
 		}
 		// A selected fx clip is what every other panel action is aimed at, so a
@@ -2664,10 +2699,18 @@
 
 	/** ← : back through the mosh history. Never touches the edit history. */
 	function undoMosh() {
-		const layer = activeLayerLane();
-		if (layer) {
-			const snap = laneMoshHistory.undo(layer.lane.id);
-			if (snap) setLaneEffects(layer, snap.map(cloneEffectInstance));
+		const mediaClip = selectedMediaClip;
+		if (mediaClip) {
+			const snap = mediaMoshHistory.undo(mediaClip.id);
+			if (snap) applyMediaClipMosh(mediaClip.id, snap);
+			return;
+		}
+		const textLane = activeTextLane();
+		if (textLane) {
+			const snap = laneMoshHistory.undo(textLane.id);
+			if (snap) {
+				updateTextLane({ ...textLane, effects: snap.map(cloneEffectInstance) });
+			}
 			return;
 		}
 		const clip = activeFxClip();
@@ -3778,34 +3821,32 @@
 		seqSelectedIds = [seg.id];
 	}
 
-	// ←/→ walk a layer lane's moshes, the same way they walk a segment's or an
-	// fx clip's. One stack for both kinds, keyed by lane id: ids are unique
-	// across the two timelines and only one lane is ever selected.
+	// ←/→ walk a text lane's moshes, the same way they walk a segment's or an
+	// fx clip's. Keyed by lane id; the media lanes' clips have their own stack.
 	const laneMoshHistory = new MoshHistory<EffectInstance[]>();
 
 	/**
-	 * The layer lane the mosh gestures act on — whichever clip panel is open,
-	 * since that is the chain the sidebar is showing.
+	 * The text lane the mosh gestures act on — the one whose clip panel is
+	 * open, since that is the chain the sidebar is showing.
 	 *
 	 * No playhead fallback, the same as fx clips: several lanes hold a clip at
 	 * once, so "the lane under the playhead" names no single thing.
 	 */
-	type LayerLaneRef =
-		{ kind: "media"; lane: MediaLane } | { kind: "text"; lane: TextLane };
-
-	function activeLayerLane(): LayerLaneRef | null {
-		if (selectedMediaLane) return { kind: "media", lane: selectedMediaLane };
-		if (selectedTextLane) return { kind: "text", lane: selectedTextLane };
-		return null;
+	function activeTextLane(): TextLane | null {
+		return selectedTextLane;
 	}
 
-	function setLaneEffects(ref: LayerLaneRef, effects: EffectInstance[]) {
-		if (ref.kind === "media") updateMediaLane({ ...ref.lane, effects });
-		else updateTextLane({ ...ref.lane, effects });
+	/** Deleting a lane retires its id — drop the stack so a later lane can't
+	 * inherit moshes that were never its own. */
+	function retainLaneMoshes() {
+		laneMoshHistory.retain(textTimeline.lanes.map((l) => l.id));
+		mediaMoshHistory.retain(
+			mediaTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
+		);
 	}
 
 	/**
-	 * Roll a fresh mosh onto a layer lane's chain. Mosh history only, never the
+	 * Roll a fresh mosh onto a text lane's chain. Mosh history only, never the
 	 * lane's edit stack — the rule every other mosh follows, so an arrow press
 	 * leaves no Ctrl+Z entry behind it.
 	 *
@@ -3813,22 +3854,80 @@
 	 * a lane holds the same full library the main chain does, so this is single
 	 * mode's gesture applied to the layer.
 	 */
-	/** Deleting a lane retires its id — drop the stack so a later lane can't
-	 * inherit moshes that were never its own. */
-	function retainLaneMoshes() {
-		laneMoshHistory.retain([
-			...mediaTimeline.lanes.map((l) => l.id),
-			...textTimeline.lanes.map((l) => l.id),
-		]);
-	}
-
-	function laneRoll(ref: LayerLaneRef) {
-		const current = $state.snapshot(ref.lane.effects) as EffectInstance[];
-		laneMoshHistory.seed(ref.lane.id, current);
+	function laneRoll(lane: TextLane) {
+		const current = $state.snapshot(lane.effects) as EffectInstance[];
+		laneMoshHistory.seed(lane.id, current);
 		const next = current.map(cloneEffectInstance);
 		generateMosh(next, getMoshOptions());
-		setLaneEffects(ref, next);
-		laneMoshHistory.push(ref.lane.id, next);
+		updateTextLane({ ...lane, effects: next });
+		laneMoshHistory.push(lane.id, next);
+	}
+
+	// ── Media clip chains ──
+	// Fill, mosh, clear and static/auto on a media clip: the same gestures a
+	// segment or an fx clip takes, over the same shared rules (chain-clip.ts).
+	// Same resolver the export builds, so interval rolls reproduce exactly.
+	const previewMediaChains = createMediaChainSource(getMoshOptions);
+
+	/** ←/→ walk one media clip's moshes, keyed by clip id. */
+	const mediaMoshHistory = new MoshHistory<SegmentMoshSnapshot>();
+
+	function mediaClipsById(ids: Set<string>): MediaClip[] {
+		return mediaTimeline.lanes.flatMap((l) =>
+			l.clips.filter((c) => ids.has(c.id)),
+		);
+	}
+
+	/** Mosh history only — never the media edit stack; see fxRoll. */
+	function mediaRoll(clipIds: string[]) {
+		const ids = new Set(clipIds);
+		for (const clip of mediaClipsById(ids)) {
+			mediaMoshHistory.seed(
+				clip.id,
+				chainClipMoshSnapshot($state.snapshot(clip) as MediaClip),
+			);
+		}
+		mediaTimeline = rollMediaClips(mediaTimeline, ids, getMoshOptions());
+		for (const clip of mediaClipsById(ids)) {
+			mediaMoshHistory.push(
+				clip.id,
+				chainClipMoshSnapshot($state.snapshot(clip) as MediaClip),
+			);
+		}
+	}
+
+	function applyMediaClipMosh(clipId: string, snap: SegmentMoshSnapshot) {
+		mediaTimeline = restoreMediaClipMosh(mediaTimeline, clipId, snap);
+	}
+
+	function mediaClear(clipIds: string[]) {
+		pushMediaHistory();
+		mediaTimeline = clearMediaClips(mediaTimeline, new Set(clipIds));
+	}
+
+	function mediaApplyPreset(clipIds: string[], preset: Preset) {
+		pushMediaHistory();
+		mediaTimeline = fillMediaClipsFromPreset(
+			mediaTimeline,
+			new Set(clipIds),
+			preset,
+		);
+	}
+
+	function mediaModeChange(
+		clipIds: string[],
+		mode: SequenceSegmentMode,
+		intervalSec?: number,
+		intervalBeats?: number | null,
+	) {
+		pushMediaHistory();
+		mediaTimeline = setMediaClipsMode(
+			mediaTimeline,
+			new Set(clipIds),
+			mode,
+			intervalSec,
+			intervalBeats,
+		);
 	}
 
 	let selectedMediaClip = $derived(
@@ -4026,6 +4125,7 @@
 					mediaTimeline: mediaTimeline.enabled
 						? ($state.snapshot(mediaTimeline) as MediaTimeline)
 						: null,
+					moshOptions: getMoshOptions(),
 					layerSources: sourceRegistry.sources,
 					sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 						string,
@@ -4422,6 +4522,7 @@
 				selectedMediaLane={mediaTimeline.enabled ? selectedMediaLane : null}
 				soloMediaLaneId={mediaTimeline.enabled ? soloMediaLaneId : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
+				mediaChains={previewMediaChains}
 				{textTime}
 				bpm={sequenceBpm}
 				forceAnimation={(textTimeline.enabled || mediaTimeline.enabled) &&
@@ -4834,6 +4935,11 @@
 							onToggleSolo={toggleMediaSolo}
 							onChange={setMediaTimeline}
 							onBeforeEdit={pushMediaHistory}
+							bpm={sequenceBpm}
+							onApplyPreset={mediaApplyPreset}
+							onRoll={mediaRoll}
+							onClear={mediaClear}
+							onModeChange={mediaModeChange}
 						/>
 					{/if}
 					{#if textTimeline.enabled}

@@ -16,7 +16,6 @@
 
 import type { AudioResponse } from "../audio/auto-range";
 import {
-	cloneEffectInstance,
 	generateId,
 	restoreEffects,
 	type EffectInstance,
@@ -28,44 +27,31 @@ import {
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
 	sortClips,
-	type TimelineClip,
 } from "../timeline/clips";
+import {
+	chainClipEffectsAt,
+	chainClipMoshSnapshot,
+	chainClipTick,
+	clearedChainClip,
+	cloneChainEffects,
+	rolledChainClip,
+	withChainMode,
+	withChainMosh,
+	type ChainClip,
+} from "./chain-clip";
 import type { MoshOptions } from "./mosh";
-import { putRoll } from "./roll-cache";
 import type { SegmentMoshSnapshot } from "./segment-mosh-history";
 import {
 	beatsToSeconds,
 	cleanEffects,
-	DEFAULT_INTERVAL_SEC,
-	randomSeed,
-	rollEffects,
 	type SequenceSegmentMode,
 } from "./sequence";
 
 /**
- * One span of extra effects on an fx lane.
- *
- * "static": `effects` is the concrete, user-editable chain for the whole span.
- * "interval": the chain is re-rolled deterministically every `intervalSec` from
- * `seed`, exactly as an interval segment is — so preview and export agree.
+ * One span of extra effects on an fx lane: a chain clip (see chain-clip.ts)
+ * plus a fade of its own.
  */
-export interface FxClip extends TimelineClip {
-	/** Display label: preset name, "mosh", "clean", … */
-	label: string;
-	/** Absent on clips saved before interval mode; treated as "static". */
-	mode?: SequenceSegmentMode;
-	/** Preset this clip was filled from, for the same re-sync rule as segments. */
-	presetName?: string;
-	/** Set once the user hand-edits a preset-filled clip. */
-	modified?: boolean;
-	effects: EffectInstance[];
-	/** "interval" mode: seconds between re-rolls. */
-	intervalSec?: number;
-	/** "interval" mode: the spacing in beats, when picked that way, so a later
-	 * BPM correction can re-derive the seconds. */
-	intervalBeats?: number;
-	/** "interval" mode: base seed for per-tick rolls. */
-	seed?: number;
+export interface FxClip extends ChainClip {
 	/**
 	 * Fade the lane's contribution in over this many seconds from the clip's
 	 * start, and out over the same before its end.
@@ -93,10 +79,7 @@ export function fxClipWeight(clip: FxClip, time: number): number {
 }
 
 /** 0-based re-roll tick index inside an interval clip. */
-export function fxClipTick(clip: FxClip, time: number): number {
-	const interval = clip.intervalSec ?? DEFAULT_INTERVAL_SEC;
-	return Math.max(0, Math.floor((time - clip.start) / interval));
-}
+export const fxClipTick: (clip: FxClip, time: number) => number = chainClipTick;
 
 /**
  * How one lane rolls its moshes and how its links follow the music.
@@ -314,7 +297,7 @@ export function createFxLayerSource(
 		const layers = parts.map(({ lane, clip }) => ({
 			laneId: lane.id,
 			z: lane.z,
-			effects: chainFor(clip, time, cache, clone, () =>
+			effects: chainClipEffectsAt(clip, time, cache, clone, () =>
 				laneMoshOptions(lane, getMoshOptions()),
 			),
 			// A clip pinned in for editing shows at full strength: the fade is about
@@ -350,40 +333,6 @@ export function flattenFxLayers(layers: FxLayer[]): EffectInstance[] {
 	let out: EffectInstance[] | null = null;
 	for (const layer of layers) (out ??= []).push(...layer.effects);
 	return out ?? EMPTY;
-}
-
-function chainFor(
-	clip: FxClip,
-	time: number,
-	cache: Map<string, EffectInstance[]>,
-	clone: boolean,
-	getMoshOptions: () => MoshOptions,
-): EffectInstance[] {
-	if (clip.mode !== "interval") {
-		if (!clone) return clip.effects;
-		// Cached per clip, not per frame: a static clip's chain is the same objects
-		// for its whole span, and re-cloning 39 effects per frame is not free.
-		let cloned = cache.get(clip.id);
-		if (!cloned) {
-			cloned = cloneFxEffects(clip.effects);
-			cache.set(clip.id, cloned);
-		}
-		return cloned;
-	}
-
-	const options = getMoshOptions();
-	const tick = fxClipTick(clip, time);
-	const seed = (clip.seed ?? 0) + tick * 7919;
-	// Options participate in the key so a settings change can't serve rolls
-	// generated under different mosh parameters — the preview/export mismatch
-	// createSequenceEffectSource guards against for the same reason.
-	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}`;
-	let effects = cache.get(key);
-	if (!effects) {
-		effects = rollEffects(seed, options);
-		putRoll(cache, key, effects);
-	}
-	return effects;
 }
 
 /** Every effect instance held anywhere in the lanes (for feedback-buffer GC). */
@@ -424,24 +373,9 @@ export function setFxClipsMode(
 	intervalSec?: number,
 	intervalBeats?: number | null,
 ): FxLane[] {
-	return updateFxClips(lanes, clipIds, (clip) => {
-		if (mode === "static") {
-			return { ...clip, mode: "static", label: clip.presetName ?? clip.label };
-		}
-		return {
-			...clip,
-			mode: "interval",
-			label: "auto",
-			seed: clip.seed ?? randomSeed(),
-			intervalSec: intervalSec ?? clip.intervalSec ?? DEFAULT_INTERVAL_SEC,
-			// null explicitly drops the beat link, so a later BPM change leaves a
-			// hand-picked duration alone; undefined leaves whatever was there.
-			intervalBeats:
-				intervalBeats === null
-					? undefined
-					: (intervalBeats ?? clip.intervalBeats),
-		};
-	});
+	return updateFxClips(lanes, clipIds, (clip) =>
+		withChainMode(clip, mode, intervalSec, intervalBeats),
+	);
 }
 
 /**
@@ -460,31 +394,16 @@ export function rollFxClips(
 		const laneOptions = laneMoshOptions(lane, options);
 		return {
 			...lane,
-			clips: lane.clips.map((clip) => {
-				if (!clipIds.has(clip.id)) return clip;
-				if (clip.mode === "interval") return { ...clip, seed: randomSeed() };
-				return {
-					...clip,
-					effects: rollEffects(randomSeed(), laneOptions),
-					label: "mosh",
-					presetName: undefined,
-					modified: false,
-				};
-			}),
+			clips: lane.clips.map((clip) =>
+				clipIds.has(clip.id) ? rolledChainClip(clip, laneOptions) : clip,
+			),
 		};
 	});
 }
 
 /** Reset clips to an all-disabled chain. */
 export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
-	return updateFxClips(lanes, clipIds, (clip) => ({
-		...clip,
-		mode: "static",
-		effects: cleanEffects(),
-		label: "clean",
-		presetName: undefined,
-		modified: false,
-	}));
+	return updateFxClips(lanes, clipIds, clearedChainClip);
 }
 
 /**
@@ -523,36 +442,20 @@ export function splitFxClipAt(lane: FxLane, at: number): FxLane {
 	};
 }
 
-/**
- * Put a clip back to a remembered mosh. Timing is deliberately excluded, the
- * same way restoreSegmentMosh leaves a segment's span alone: walking the mosh
- * history must change what a clip renders, never where it sits.
- */
+/** Put a clip back to a remembered mosh — see withChainMosh. */
 export function restoreFxClipMosh(
 	lanes: FxLane[],
 	clipId: string,
 	snap: SegmentMoshSnapshot,
 ): FxLane[] {
-	return updateFxClips(lanes, new Set([clipId]), (clip) => ({
-		...clip,
-		effects: snap.effects.map(cloneEffectInstance),
-		seed: snap.seed,
-		label: snap.label,
-		presetName: snap.presetName,
-		modified: snap.modified,
-	}));
+	return updateFxClips(lanes, new Set([clipId]), (clip) =>
+		withChainMosh(clip, snap),
+	);
 }
 
 /** The mosh-relevant slice of a clip, for the ←/→ history. */
-export function fxClipMoshSnapshot(clip: FxClip): SegmentMoshSnapshot {
-	return {
-		effects: clip.effects,
-		seed: clip.seed,
-		label: clip.label,
-		presetName: clip.presetName,
-		modified: clip.modified,
-	};
-}
+export const fxClipMoshSnapshot: (clip: FxClip) => SegmentMoshSnapshot =
+	chainClipMoshSnapshot;
 
 /** The lane holding `clipId`, and the clip itself. */
 export function findFxClip(
@@ -572,9 +475,8 @@ export function findFxClip(
  * into the chain it renders and must not write them back into the clips the
  * user is editing.
  */
-export function cloneFxEffects(effects: EffectInstance[]): EffectInstance[] {
-	return effects.map(cloneEffectInstance);
-}
+export const cloneFxEffects: (effects: EffectInstance[]) => EffectInstance[] =
+	cloneChainEffects;
 
 /** Fill in anything a saved lane list predates or dropped. */
 /** A stored settings block is kept only if it is complete — a half-written one

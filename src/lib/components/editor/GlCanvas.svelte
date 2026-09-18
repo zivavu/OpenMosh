@@ -28,6 +28,7 @@
 	} from "../../text";
 	import {
 		resolveMediaLayersAt,
+		type MediaChainSource,
 		type MediaLane,
 		type MediaStyle,
 		type MediaTimeline,
@@ -143,6 +144,9 @@
 		/** Uploads each visible media layer's frame before the chain runs. Called
 		 * with the layers resolved for this frame, on the master clock. */
 		mediaDriver?: ((layers: ResolvedMediaLayer[]) => void) | null;
+		/** Chain per media clip and time — an auto clip's roll for the tick.
+		 * Without one every clip renders its stored chain. */
+		mediaChains?: MediaChainSource | null;
 		/** Master-timeline seconds the text clips are looked up at. */
 		textTime?: number;
 		/** Song tempo, for beat-synced effects. 0 = unknown, they run free.
@@ -212,6 +216,7 @@
 		selectedMediaLane = null,
 		soloMediaLaneId = null,
 		mediaDriver = null,
+		mediaChains = null,
 		textTime = 0,
 		bpm = 0,
 		forceAnimation = false,
@@ -646,13 +651,18 @@
 	const hasAnimatedEffects = $derived(
 		effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
 	);
-	/** A media lane's own chain can animate with nothing else on screen moving. */
+	/** A media clip's own chain can animate with nothing else on screen moving.
+	 * Read off the resolved layers: the chain on screen is the clip's under
+	 * the playhead, or the roll an auto clip made for this tick. */
 	const hasAnimatedLayers = $derived(
 		!!mediaTimeline?.enabled &&
-			mediaTimeline.lanes.some(
-				(l) =>
-					l.enabled &&
-					l.effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+			resolveMediaLayersAt(
+				mediaTimeline,
+				textTime,
+				sourceEdits,
+				mediaChains ?? undefined,
+			).some((l) =>
+				l.effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
 			),
 	);
 	const needsAnimation = $derived(
@@ -686,7 +696,12 @@
 		const layers =
 			textTimeline && !solo ? resolveTextLayersAt(textTimeline, textTime) : [];
 		const media = mediaTimeline
-			? resolveMediaLayersAt(mediaTimeline, textTime, sourceEdits)
+			? resolveMediaLayersAt(
+					mediaTimeline,
+					textTime,
+					sourceEdits,
+					mediaChains ?? undefined,
+				)
 			: EMPTY_MEDIA;
 		// Every lane is still driven, not just the soloed one: the driver drops
 		// the frames of lanes it isn't asked about, and leaving solo would then
@@ -1050,15 +1065,18 @@
 			l.sourceId;
 			const style = l.style as unknown as Record<string, unknown>;
 			for (const k of Object.keys(style)) style[k];
-			for (const e of l.effects) {
-				e.enabled;
-				for (const k of Object.keys(e.values)) e.values[k];
-			}
 			for (const c of l.clips) {
 				c.start;
 				c.end;
 				c.sourceStart;
 				c.sourceId;
+				c.mode;
+				c.seed;
+				c.intervalSec;
+				for (const e of c.effects) {
+					e.enabled;
+					for (const k of Object.keys(e.values)) e.values[k];
+				}
 			}
 		}
 	}
@@ -1169,7 +1187,8 @@
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="layer-handle"
-						style="left: {(h.hx + 1) * 50}%; top: {(h.hy + 1) * 50}%; cursor: {h.cursor}"
+						style="left: {(h.hx + 1) * 50}%; top: {(h.hy + 1) *
+							50}%; cursor: {h.cursor}"
 						onpointerdown={(e) => startScale(e, h.hx, h.hy)}
 					></div>
 				{/each}

@@ -1,18 +1,14 @@
 /**
  * Copy/paste for media layer clips.
  *
- * A clip carries its span, its in-point and whichever source it was retargeted
- * to. The placement and the effect chain live on the lane and are shared by
- * every clip on it, so a whole-clip paste brings the clip and not those: on
- * another lane the copy takes that lane's placement and chain, and keeps only
- * what it showed. Overwriting the lane's chain for the sake of one clip would
- * be a lane edit wearing a clip's clothes.
+ * A clip carries its span, its in-point, whichever source it was retargeted
+ * to and its own chain. The placement lives on the lane and is shared by every
+ * clip on it, so a whole-clip paste brings the clip and not that: on another
+ * lane the copy takes that lane's placement and keeps what it showed and ran.
  *
  * Pasting *onto* a clip is the other half: what the copied clip showed — its
- * source, in-point and the chain it ran through — dropped into a clip that
- * keeps its own span, fade and lane. The chain is the one lane edit a paste
- * makes: "make this clip look like that one" has to bring the effects along,
- * and the lane is where they live.
+ * source, in-point and chain — dropped into a clip that keeps its own span,
+ * fade and lane.
  */
 
 import {
@@ -23,6 +19,7 @@ import {
 } from "../timeline/clips";
 import { cloneEffectInstance } from "../effects";
 import type { EffectInstance } from "../effects/types";
+import type { SequenceSegmentMode } from "../editor/sequence";
 import { createMediaClip, type MediaClip, type MediaLane } from "./types";
 import type { MediaTimeline } from "./types";
 
@@ -36,10 +33,33 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	 * came from has since been repointed or deleted. Null for a clip on a lane
 	 * with no source yet. */
 	resolvedSourceId: string | null;
-	/** The lane's chain at copy time, for a paste onto a clip elsewhere. */
+	/** The clip's chain and how it rolls, so a paste renders the same. */
 	effects: EffectInstance[];
+	label: string;
+	mode?: SequenceSegmentMode;
+	presetName?: string;
+	modified?: boolean;
+	intervalSec?: number;
+	intervalBeats?: number;
+	seed?: number;
 	fadeInSec?: number;
 	fadeOutSec?: number;
+}
+
+/** The chain fields of an entry, as a clip takes them: fresh instance ids,
+ * since the renderer keys per-effect state by them and two clips must not
+ * share. */
+function chainOf(e: MediaClipboardEntry) {
+	return {
+		effects: e.effects.map(cloneEffectInstance),
+		label: e.label,
+		mode: e.mode,
+		presetName: e.presetName,
+		modified: e.modified,
+		intervalSec: e.intervalSec,
+		intervalBeats: e.intervalBeats,
+		seed: e.seed,
+	};
 }
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
@@ -61,7 +81,14 @@ export function copyMediaClips(
 				sourceStart: clip.sourceStart,
 				sourceId: clip.sourceId,
 				resolvedSourceId: clip.sourceId ?? lane.sourceId,
-				effects: lane.effects.map(cloneEffectInstance),
+				effects: clip.effects.map(cloneEffectInstance),
+				label: clip.label,
+				mode: clip.mode,
+				presetName: clip.presetName,
+				modified: clip.modified,
+				intervalSec: clip.intervalSec,
+				intervalBeats: clip.intervalBeats,
+				seed: clip.seed,
 				fadeInSec: clip.fadeInSec,
 				fadeOutSec: clip.fadeOutSec,
 			});
@@ -120,7 +147,10 @@ export function pasteMediaClips(
 			sourceId =
 				resolved === lanes.get(e.laneId)!.sourceId ? undefined : resolved;
 		}
-		const clip = createMediaClip(start, end, e.sourceStart, sourceId);
+		const clip: MediaClip = {
+			...createMediaClip(start, end, e.sourceStart, sourceId),
+			...chainOf(e),
+		};
 		if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
 		if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 		clipIds.push(clip.id);
@@ -148,12 +178,8 @@ export function pasteMediaClips(
  * shorter copy repeats over them. Each target keeps its span, fade and lane
  * and takes the source and in-point. The source is pinned on the clip unless
  * it is already what its lane shows, so the lane's own picker keeps meaning
- * "this lane's default" for the clips that never chose.
- *
- * The target's lane takes the copied chain too. A lane holds one chain, so
- * when several targets on it draw from different copies the earliest target's
- * wins — the one the paste reads as "onto" first. Fresh instance ids, since
- * the renderer keys per-effect state by them and two lanes must not share.
+ * "this lane's default" for the clips that never chose. The chain comes with
+ * it, fresh instance ids and all.
  */
 export function pasteMediaContentOnto(
 	timeline: MediaTimeline,
@@ -172,13 +198,8 @@ export function pasteMediaContentOnto(
 		...timeline,
 		lanes: timeline.lanes.map((lane) => {
 			if (!lane.clips.some((c) => targets.has(c.id))) return lane;
-			const first = order.findIndex((id) =>
-				lane.clips.some((c) => c.id === id),
-			);
-			const chain = entries[first % entries.length].effects;
 			return {
 				...lane,
-				effects: chain.map(cloneEffectInstance),
 				clips: lane.clips.map((c) => {
 					const i = order.indexOf(c.id);
 					if (i === -1) return c;
@@ -188,6 +209,7 @@ export function pasteMediaContentOnto(
 						...c,
 						sourceStart: e.sourceStart,
 						sourceId: sourceId === lane.sourceId ? undefined : sourceId,
+						...chainOf(e),
 					};
 				}),
 			};

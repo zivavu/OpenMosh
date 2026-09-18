@@ -29,12 +29,12 @@ import {
 } from "./sequence";
 import { createSequenceExportSources } from "./sequence-export-sources";
 import { createMediaExportLayers } from "./media-export-layers";
-import { laneSourceIds, sourceTimeAt as mediaTimeAt } from "../media";
-import type {
-	MediaTimeline,
-	ResolvedMediaLayer,
-	SourceEdit,
+import {
+	createMediaChainSource,
+	laneSourceIds,
+	sourceTimeAt as mediaTimeAt,
 } from "../media";
+import type { MediaTimeline, ResolvedMediaLayer, SourceEdit } from "../media";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
 export interface RecordingContext {
@@ -81,6 +81,8 @@ export interface RecordingContext {
 	textTimeline?: TextTimeline | null;
 	/** Optional media lanes, on the same clock. */
 	mediaTimeline?: MediaTimeline | null;
+	/** What the media clips roll under — an auto clip re-rolls per tick. */
+	moshOptions?: MoshOptions;
 	/** The pool the media lanes draw from. Both modes have one. */
 	layerSources?: SequenceSource[];
 	/** Per-source edits: the rate each segment or clip walks its media at.
@@ -120,6 +122,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		audioResponse = DEFAULT_AUDIO_RESPONSE,
 		textTimeline = null,
 		mediaTimeline = null,
+		moshOptions,
 		sourceEdits = {},
 		layerSources = [],
 		textTimeOffset = 0,
@@ -538,6 +541,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 				renderer,
 			);
 		}
+		// Same resolver the preview builds, so interval rolls reproduce exactly;
+		// cloned, so this frame's audio-link values stay out of the clips.
+		const mediaChains =
+			mediaTimeline && moshOptions
+				? createMediaChainSource(() => moshOptions, { clone: true })
+				: null;
 		const blob = await recordVideo({
 			duration: exportDuration,
 			fps,
@@ -547,6 +556,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			audioResponse,
 			textTimeline,
 			mediaTimeline: exportLayers ? mediaTimeline : null,
+			mediaChains,
 			sourceEdits,
 			mediaLayerSink: exportLayers
 				? (layers) => exportLayers!.advance(layers)
