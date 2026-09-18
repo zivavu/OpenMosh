@@ -34,8 +34,6 @@
 	let pendingAudioFile: File | null = $state(null);
 	/** Editor state carried in from a reopened session, cleared on exit. */
 	let restoredSingle: SingleSessionState | null = $state(null);
-	/** Media the restored session's layers draw from, alongside its source. */
-	let restoredSingleExtras: File[] = $state([]);
 	let restoredSlideshowConfig: SlideshowConfig | null = $state(null);
 	/** Library id of the song a reopened session was keyed to. */
 	let sessionTrackId: string | null = $state(null);
@@ -167,7 +165,6 @@
 		pendingAudioFile = null;
 		slideshowFiles = [];
 		restoredSingle = null;
-		restoredSingleExtras = [];
 		restoredSlideshowConfig = null;
 		sessionTrackId = null;
 	}
@@ -185,9 +182,9 @@
 		sessionTrackId = opened.trackId;
 		if (mode === "single") {
 			restoredSingle = opened.state as SingleSessionState;
-			const files = await gifsToVideo(opened.files);
-			restoredSingleExtras = files.slice(1);
-			file = files[0];
+			// Older single sessions stored layer media after the source; only
+			// the source is wanted now.
+			file = await gifToVideo(opened.files[0]);
 			navigateTo("single");
 			return;
 		}
@@ -275,7 +272,6 @@
 			initialAudioFile={pendingAudioFile}
 			initialTrackId={sessionTrackId}
 			initialSession={restoredSingle}
-			extraFiles={restoredSingleExtras}
 			onfile={async (f: File) => (file = await gifToVideo(f))}
 			{warmCanvas}
 			{warmRenderer}

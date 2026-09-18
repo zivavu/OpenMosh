@@ -6,7 +6,6 @@
 		Download,
 		HelpCircle,
 		Home,
-		Layers,
 		Library,
 		Maximize,
 		MicVocal,
@@ -145,7 +144,6 @@
 		clearMediaClips,
 		createMediaChainSource,
 		createMediaHistory,
-		createMediaTimeline,
 		detachMediaSource,
 		EMPTY_MEDIA_TIMELINE,
 		fillMediaClipsFromPreset,
@@ -154,7 +152,6 @@
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
 		clipSourceId,
-		mediaTimelineSourceIds,
 		normalizeMediaTimeline,
 		resolveMediaLayersAt,
 		restoreMediaClipMosh,
@@ -1311,10 +1308,7 @@
 			$state.snapshot(textTimeline) as TextTimeline,
 			"text",
 		);
-		const media = layersAsLoaded(
-			$state.snapshot(mediaTimeline) as MediaTimeline,
-			"media",
-		);
+		const media = $state.snapshot(mediaTimeline) as MediaTimeline;
 		const fx = $state.snapshot(fxLanes) as FxLane[];
 		const sourceEdits = $state.snapshot(sourceRegistry.edits) as Record<
 			string,
@@ -1372,10 +1366,7 @@
 				$state.snapshot(textTimeline) as TextTimeline,
 				"text",
 			),
-			media: layersAsLoaded(
-				$state.snapshot(mediaTimeline) as MediaTimeline,
-				"media",
-			),
+			media: $state.snapshot(mediaTimeline) as MediaTimeline,
 			fx: $state.snapshot(fxLanes) as FxLane[],
 			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
 				string,
@@ -1750,17 +1741,9 @@
 
 	onMount(() => {
 		void (async () => {
-			// Single mode keeps its own file out of the pool: it is already what
-			// the frame under a layer shows, and `file` can be replaced from under
-			// us, which would leave a pool entry pointing at media nothing uses.
-			// Its extras are the layer media a saved session brought back.
-			if (!isSequenceMode) {
-				const layerMedia = extraFiles.filter((f) => f !== file);
-				if (layerMedia.length > 0) {
-					await sourceRegistry.add(layerMedia, { persist: false });
-				}
-				return;
-			}
+			// Single mode has no pool: its one file is the frame, and `file` can
+			// be replaced from under us.
+			if (!isSequenceMode) return;
 			try {
 				// Not persisted: the primary belongs to the editor session, never
 				// to a song's pool, so storing it would write (possibly hundreds of
@@ -3239,7 +3222,7 @@
 	 * a save from the phone hands the lanes back exactly as they were, rather
 	 * than hidden the next time the desktop opens them.
 	 */
-	const loadedLayerFlags = { text: false, media: false };
+	const loadedLayerFlags = { text: false };
 	function layersOffOnMobile<T extends { enabled: boolean }>(
 		timeline: T,
 		kind: keyof typeof loadedLayerFlags,
@@ -3268,17 +3251,12 @@
 	let lyricsOpen = $state(false);
 
 	// ── Media layers ──
-	// Lanes of media over the same master clock, each with its own placement and
-	// effect chain. Off until the user turns it on, like the text timeline.
+	// Lanes of media over the same master clock, each with its own placement,
+	// its clips each with their own chain. Sequence mode only, and always on
+	// there: the layers are where the media goes, not an extra to switch on.
+	// Single mode is the one-file editor and stays out of it entirely.
 	let mediaTimeline = $state<MediaTimeline>(
-		untrack(() =>
-			initialSession?.media
-				? layersOffOnMobile(
-						normalizeMediaTimeline(initialSession.media),
-						"media",
-					)
-				: { ...EMPTY_MEDIA_TIMELINE },
-		),
+		untrack(() => ({ ...EMPTY_MEDIA_TIMELINE, enabled: isSequenceMode })),
 	);
 	let selectedMediaClipId = $state<string | null>(null);
 	/** The layer-clip selection, so the media rail can assign to all of it. */
@@ -3339,33 +3317,17 @@
 		// Keying either the guard or the payload off it discards the whole
 		// timeline the moment the user hides it.
 		const hasText = textTimeline.lanes.length > 0;
-		const hasMedia = mediaTimeline.lanes.length > 0;
-		if (!moshSession.touched && !hasText && !hasMedia) return;
+		if (!moshSession.touched && !hasText) return;
 		const source = file;
-		const state = {
+		const state: SingleSessionState = {
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText
 				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
 				: null,
-			media: hasMedia
-				? layersAsLoaded(
-						$state.snapshot(mediaTimeline) as MediaTimeline,
-						"media",
-					)
-				: null,
-			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
-				string,
-				SourceEdit
-			>,
 		};
-		// The layers' media rides along with the source, so reopening the session
-		// restores what they were drawing rather than a set of blank lanes.
-		const layerFiles = mediaTimelineSourceIds(mediaTimeline)
-			.map((id) => sourceRegistry.get(id)?.file)
-			.filter((f): f is File => !!f);
 		// Keyed by the song when there is one, so the session sits alongside the
 		// text timeline and span already saved under that track id.
-		void saveSession("single", [source, ...layerFiles], state, currentTrackId)
+		void saveSession("single", [source], state, currentTrackId)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
 				// Swallowing this outright is what made the last failure invisible.
@@ -3388,8 +3350,6 @@
 		// would never re-arm the debounce.
 		$state.snapshot(effects);
 		$state.snapshot(textTimeline);
-		$state.snapshot(mediaTimeline);
-		sourceRegistry.edits;
 		file;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
@@ -3654,14 +3614,6 @@
 	/** Its own stack, for the same reason the text timeline has one. */
 	const mediaHistory = createMediaHistory();
 
-	if (untrack(() => initialSession?.media)) {
-		mediaHistory.reset();
-	}
-
-	// The pool these key into is added a tick or two later; restoreEdits doesn't
-	// check against it, so ordering doesn't matter here.
-	sourceRegistry.restoreEdits(untrack(() => initialSession?.sourceEdits));
-
 	function pushMediaHistory(coalesceKey?: string) {
 		mediaHistory.push(
 			$state.snapshot(mediaTimeline) as MediaTimeline,
@@ -3688,22 +3640,16 @@
 		mediaTimeline = updateMediaLaneIn(mediaTimeline, next.id, () => next);
 	}
 
+	/** Adopt a saved timeline, or clear back to empty when a song has none.
+	 * Always on in sequence mode: entries saved while the layers could still be
+	 * switched off come back switched on. */
 	function restoreMediaTimeline(saved: MediaTimeline | undefined) {
-		mediaTimeline = saved
-			? layersOffOnMobile(normalizeMediaTimeline(saved), "media")
-			: { ...EMPTY_MEDIA_TIMELINE };
+		mediaTimeline = {
+			...(saved ? normalizeMediaTimeline(saved) : EMPTY_MEDIA_TIMELINE),
+			enabled: isSequenceMode,
+		};
 		selectedMediaClipId = null;
 		mediaHistory.reset();
-	}
-
-	function toggleMediaTimeline() {
-		pushMediaHistory();
-		mediaTimeline = mediaTimeline.enabled
-			? { ...mediaTimeline, enabled: false }
-			: mediaTimeline.lanes.length > 0
-				? { ...mediaTimeline, enabled: true }
-				: createMediaTimeline(defaultLayerSourceId(), nextLayerZ(layerOrder));
-		if (!mediaTimeline.enabled) selectedMediaClipId = null;
 	}
 
 	/**
@@ -3721,13 +3667,7 @@
 		const sourceId = defaultLayerSourceId();
 		pushMediaHistory();
 		setMediaTimeline(
-			appendMediaLane(
-				mediaTimeline.enabled
-					? mediaTimeline
-					: { ...mediaTimeline, enabled: true },
-				sourceId,
-				nextLayerZ(layerOrder),
-			),
+			appendMediaLane(mediaTimeline, sourceId, nextLayerZ(layerOrder)),
 		);
 		// Nothing in the pool to draw: asking for the file here is the step the
 		// user was going to take anyway, and addLayerSources seats it in the lane
@@ -3735,12 +3675,10 @@
 		if (!sourceId) sourceInput?.click();
 	}
 
-	/** The rail is the media pool, so it shows wherever something can draw from
-	 * one: sequence segments, and media layers in either mode. */
+	/** The rail is the media pool: sequence mode's segments and layers draw
+	 * from it. */
 	let showSourceRail = $derived(
-		!sequenceGridOpen &&
-			sequenceSources.length > 0 &&
-			(isSequenceMode || mediaTimeline.enabled),
+		isSequenceMode && !sequenceGridOpen && sequenceSources.length > 0,
 	);
 
 	// One selection across the whole stack: the sidebar edits one thing at a
@@ -4610,15 +4548,6 @@
 							aria-label="Text timeline"
 						>
 							<Type size={14} />
-						</button>
-						<button
-							class="bar-icon"
-							class:on={mediaTimeline.enabled}
-							onclick={toggleMediaTimeline}
-							title="Media layers: timed image/video layers with their own effects"
-							aria-label="Media layers"
-						>
-							<Layers size={14} />
 						</button>
 					{/if}
 				</div>
