@@ -182,13 +182,14 @@ export function recordButton(page: Page): Locator {
 	return page.getByRole("button", { name: "RECORD" });
 }
 
-/** The source lane, where segments are made and picked. */
+/** The media lane, where clips are made, cut and picked. */
 export function moshLane(page: Page): Locator {
-	return page.locator(".step-svg").first();
+	return mediaLaneTrack(page, 0);
 }
 
+/** The clips on that lane — the segment lane's successor. */
 export function segments(page: Page): Locator {
-	return page.locator("rect.seg");
+	return mediaClips(page, 0);
 }
 
 /**
@@ -221,17 +222,15 @@ export async function splitSegmentAt(
 	});
 }
 
-/** Open a segment's chain in the sidebar. */
+/** Open a clip's chain in the sidebar. */
 export async function selectSegment(page: Page, index: number): Promise<void> {
-	// force: the rects are inside an SVG that draws its own hit targets over
-	// them, and Playwright's actionability check lands on the wrong one.
-	await segments(page).nth(index).click({ force: true });
+	await segments(page).nth(index).click();
 	await expect(page.locator(".chain-count")).toBeVisible();
 }
 
-/** Roll a random chain onto the selected segment. */
+/** Roll a random chain onto the selected clip. */
 export function segmentMoshButton(page: Page): Locator {
-	return page.getByTitle("Random mosh for this segment");
+	return page.getByTitle("Random mosh for this clip");
 }
 
 /**
@@ -306,13 +305,16 @@ export function actionBar(page: Page): Locator {
 	return page.locator(".action-bar");
 }
 
+/** The editor's layer controls: the text timeline toggle and the add-layer buttons. */
 export function layerButtons(page: Page): Locator {
-	return page.getByTitle(/^(Text timeline|Media layers):/);
+	return page.getByTitle(
+		/^(Text timeline:|Add a layer of images or videos|Add a lane of extra effects)/,
+	);
 }
 
-/** The toolbar under the stack for the selected segment(s). */
+/** The toolbar under the stack for the selected clip(s). */
 export function segmentBar(page: Page): Locator {
-	return page.locator(".seg-bar");
+	return page.locator(".mc-bar");
 }
 
 /** The stack of lanes under the preview, once a clock is driving it. */
@@ -353,10 +355,11 @@ export function mediaDropGhost(page: Page, lane = 0): Locator {
 	return mediaLaneTrack(page, lane).locator(".clip.ghost");
 }
 
-/** Turn the media layer stack on. It arrives as one lane, empty. */
-export async function enableMediaLayers(page: Page): Promise<void> {
-	await page.getByTitle(/^Media layers:/).click();
+/** Add an empty media lane over the one the editor opened onto. */
+export async function addMediaLayer(page: Page): Promise<void> {
 	await expect(mediaLanes(page)).toHaveCount(1);
+	await page.getByRole("button", { name: "Media layer" }).click();
+	await expect(mediaLanes(page)).toHaveCount(2);
 }
 
 /** A point `fraction` of the way across a lane's track, in page coordinates. */

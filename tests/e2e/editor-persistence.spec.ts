@@ -21,11 +21,10 @@ import { BLUE, GREEN, RED } from "./fixtures";
  * answer. None of it is reachable from the unit suite, and the failure mode is
  * the worst one the app has: work that looks saved and isn't.
  *
- * Note the source counts. The source the editor opens on is the session's, not
- * the song's, and is deliberately never written to storage — it can be hundreds
- * of megabytes of video that nothing would read back. So a sequence started
- * from three files is a saved sequence of two, and one started from a single
- * file has no pool at all and never appears here.
+ * Note the source counts. The pool belongs to the song, the file the editor
+ * opened with included — the media layer draws from it, so it has to come back
+ * with the rest. A sequence started from three files is a saved sequence of
+ * three, and one started from a single file is a sequence of one.
  */
 
 /** The debounce behind the timeline write, plus room for the round-trip. */
@@ -63,7 +62,7 @@ test("a song worked on is offered back on the upload screen", async ({
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
-	await expect(page.locator(".recent-label")).toHaveText("Recent");
+	await expect(page.locator(".recent-head .rack-label")).toHaveText("Recent");
 	await expect(page.locator(".saved-item")).toHaveCount(1);
 	await expect(page.locator(".saved-item")).toContainText("track.wav");
 });
@@ -92,8 +91,8 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 
 	// The cut survived.
 	await expect(segments(page)).toHaveCount(2);
-	// Both pooled sources came back, not just the one the segments point at.
-	await expect(page.getByText("2 SOURCES")).toBeVisible();
+	// The whole pool came back, not just the source the clips point at.
+	await expect(page.getByText("3 SOURCES")).toBeVisible();
 	// And the chain is the one that was rolled, effect for effect.
 	await selectSegment(page, 0);
 	expect(await liveEffectNames(page)).toEqual(rolled);
@@ -103,12 +102,12 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 	await expect(liveEffects(page)).toHaveCount(0);
 });
 
-test("keeps the source the editor opened on out of the song's pool", async ({
+test("counts every source the editor opened with in the song's pool", async ({
 	page,
 }) => {
-	// Not incidental: writing the primary would put the user's whole video in
-	// IndexedDB on every edit. The count on the saved entry is the pool's, so
-	// three files in is an offer of two.
+	// The pool belongs to the song now, the file the editor opened with
+	// included: the media layer draws from it, so it has to come back with the
+	// rest. Three files in is an offer of three.
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],
@@ -122,14 +121,14 @@ test("keeps the source the editor opened on out of the song's pool", async ({
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
-	await expect(page.locator(".saved-item .saved-count")).toHaveText("2");
+	await expect(page.locator(".saved-item .saved-count")).toHaveText("3 srcs");
 });
 
-test("a sequence with nothing pooled is never offered back", async ({
+test("a sequence opened from one file is offered back with it", async ({
 	page,
 }) => {
-	// One file is the primary and the primary isn't stored, so there is no pool
-	// to reopen — the upload screen must not advertise one.
+	// The one file is the whole pool, and the pool is the song's — so a
+	// single-file edit is as resumable as any other.
 	await openEditor(page, { sources: [["red.png", RED]] });
 	await waitForRender(page);
 	await splitSegmentAt(page, 0.5);
@@ -137,7 +136,8 @@ test("a sequence with nothing pooled is never offered back", async ({
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
-	await expect(page.locator(".saved-item")).toHaveCount(0);
+	await expect(page.locator(".saved-item")).toHaveCount(1);
+	await expect(page.locator(".saved-item .saved-count")).toHaveText("1 src");
 });
 
 test("a reload mid-edit doesn't lose the last change", async ({ page }) => {

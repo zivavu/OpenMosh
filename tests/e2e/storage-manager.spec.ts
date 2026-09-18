@@ -103,12 +103,16 @@ test("a song worked on is listed as a project with its pooled media", async ({
 	const row = modal.locator(".row", { hasText: "track.wav" });
 	await expect(row).toHaveCount(1);
 	await expect(row.locator(".mode")).toHaveText(["Editor"]);
-	// The source the editor opened on is never stored, so three in is two.
-	await expect(row).toContainText("2 files");
+	// The pool belongs to the song, the opening file included: three in is three.
+	await expect(row).toContainText("3 files");
 
 	await row.locator(".row-main").click();
-	await expect(row.locator(".media")).toHaveCount(2);
-	await expect(row.locator(".media")).toContainText(["green.png", "blue.png"]);
+	await expect(row.locator(".media")).toHaveCount(3);
+	await expect(row.locator(".media")).toContainText([
+		"red.png",
+		"green.png",
+		"blue.png",
+	]);
 
 	// The usage readout agrees that there's a song and media on disk.
 	await expect(

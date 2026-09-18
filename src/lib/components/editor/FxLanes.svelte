@@ -1049,6 +1049,22 @@
 		padding: 0 0.25rem;
 	}
 
+	/* Too narrow for one row of everything: the controls wrap into as many rows
+	   as they need, with the captions and dividers gone — it's their space the
+	   row is short of. */
+	@media (max-width: 800px) {
+		.fx-bar {
+			flex-wrap: wrap;
+			row-gap: 0.3rem;
+			padding: 0.3rem 0;
+		}
+
+		.fx-bar > :global(.tl-tool-label),
+		.fx-bar > :global(.tl-tool-sep) {
+			display: none;
+		}
+	}
+
 	.fx-title {
 		font-size: 0.68rem;
 		font-weight: 600;
