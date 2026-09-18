@@ -4,6 +4,9 @@ import type {
 	SequenceSourceRegistry,
 } from "./sequence-sources.svelte";
 
+/** Marks the texture as cleared to black, as opposed to "unknown" (null). */
+const BLANK = "\0blank";
+
 export interface SequenceFrameDriverOptions {
 	registry: SequenceSourceRegistry;
 	/** Read per call: the renderer is rebuilt on WebGL context loss. */
@@ -19,17 +22,16 @@ export interface SequenceFrameDriverOptions {
  * so the frame shown at a given master time never depends on how playback got
  * there — and matches what the export writes.
  *
- * `advance` returns false only for the primary video, which the editor's own
- * player already drives (it owns the master clock and the preview audio) —
- * every other case is handled here, including "still decoding", where holding
- * the previous texture beats letting the primary paint over it.
+ * Every case is handled here, including "still decoding", where holding the
+ * previous texture beats flashing black, and "no source", where the segment
+ * draws nothing and the frame starts from black — the layers are what fill it.
  */
 export class SequenceFrameDriver {
 	#registry: SequenceSourceRegistry;
 	#getRenderer: () => GlRenderer | null;
 	#onUpload: (() => void) | undefined;
 
-	/** Source whose frame is currently on the texture. */
+	/** Source whose frame is currently on the texture; BLANK once cleared. */
 	#currentId: string | null = null;
 	/** Same latch for the outgoing (transition) source texture. */
 	#outgoingId: string | null = null;
@@ -42,22 +44,20 @@ export class SequenceFrameDriver {
 	}
 
 	/**
-	 * True when this driver owns the source texture for this frame. `sourceTime`
-	 * is where in the clip the segment wants to be — seconds since the segment
-	 * started, wrapped by the sampler.
+	 * Upload the source texture for this frame. `sourceTime` is where in the
+	 * clip the segment wants to be — seconds since the segment started, wrapped
+	 * by the sampler. Always true: this driver owns the texture.
 	 */
 	advance(sourceId: string | null, sourceTime: number): boolean {
 		const src = this.#registry.get(sourceId);
 		if (!src) {
-			this.#currentId = null;
-			return false;
-		}
-
-		if (src.primary && src.kind === "video") {
-			// The editor's player is already uploading this video's frames. Forget
-			// the texture state so returning to another source re-uploads it.
-			this.#currentId = null;
-			return false;
+			// Nothing to draw here. Cleared once, when the last source leaves the
+			// texture, rather than on every frame of the gap.
+			if (this.#currentId !== BLANK) {
+				this.#currentId = BLANK;
+				this.#getRenderer()?.clearSource();
+			}
+			return true;
 		}
 
 		if (src.kind === "image") {
@@ -98,10 +98,9 @@ export class SequenceFrameDriver {
 	 * texture, so a transition across two different sources cross-fades the
 	 * media and not just the effect chains.
 	 *
-	 * Returns false when the caller has to supply it instead — the primary video
-	 * is decoded by the editor's own player, which is the only place its current
-	 * frame exists. Pass `null` when no transition is running, which releases the
-	 * texture so a later one can't blend from a stale frame.
+	 * Pass `null` when no transition is running, which releases the texture so
+	 * a later one can't blend from a stale frame. Always true: nothing else
+	 * supplies the outgoing frame.
 	 */
 	advanceOutgoing(sourceId: string | null, sourceTime: number): boolean {
 		if (!sourceId) {
@@ -113,11 +112,6 @@ export class SequenceFrameDriver {
 		}
 		const src = this.#registry.get(sourceId);
 		if (!src) return true;
-
-		if (src.primary && src.kind === "video") {
-			this.#outgoingId = src.id;
-			return false;
-		}
 
 		if (src.kind === "image") {
 			if (this.#outgoingId !== src.id) {

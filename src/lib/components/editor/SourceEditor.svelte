@@ -1234,13 +1234,12 @@
 	/** Put every tool back: the button sits under all three, not just the key. */
 	// ── Speed ────────────────────────────────────────────────────────────────
 	// A clip property rather than a tool: it changes how fast the media is
-	// walked, not what is in it. Not offered on the primary source — in the
-	// editor that video is the master clock and has its own speed control.
+	// walked, not what is in it.
 	const speed = $derived(sourceSpeed(edit));
 	const speedLabel = $derived(
 		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + "×",
 	);
-	const showSpeed = $derived(duration > 0 && !source.primary);
+	const showSpeed = $derived(duration > 0);
 
 	function setSpeed(next: number) {
 		beforeEdit("speed");

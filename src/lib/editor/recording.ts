@@ -214,51 +214,27 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		}
 	}
 
-	const seekBeforeRender = async (
-		_frameIndex: number,
-		time: number,
-		toMain = true,
-		toAlt = false,
-	) => {
+	const seekBeforeRender = async (_frameIndex: number, time: number) => {
 		videoEl!.currentTime = sourceTimeAt(time);
 		await new Promise<void>((resolve) => {
 			videoEl!.addEventListener("seeked", () => resolve(), {
 				once: true,
 			});
 		});
-		if (toMain) renderer.updateSourceFrame(videoEl!);
-		if (toAlt) renderer.updateAltSourceFrame(videoEl!);
+		renderer.updateSourceFrame(videoEl!);
 	};
 
-	// Split from the upload so the pull can be started before the frame knows
-	// whether it wants the result: it has to happen either way (see below), and
-	// starting it early overlaps it with the segment sources' own decoding.
-	const pullPrimarySample = () => videoFrames!.next();
-
-	// `upload` false still consumes the sample: the generator was built to yield
-	// one timestamp per recorder frame, so skipping a pull would desynchronise
-	// every later frame from `sourceTimeAt`.
-	const uploadPrimarySample = (
-		result: IteratorResult<import("mediabunny").VideoSample | null, void>,
-		upload: boolean,
-		toAlt = false,
-	) => {
-		const sample = result.value;
-		// null/done: no frame at this timestamp — keep the last uploaded one,
-		// matching the seek path's freeze-frame behavior.
+	// Single mode's video: one sample per recorder frame, uploaded as it lands.
+	// null/done means no frame at this timestamp — keep the last uploaded one,
+	// matching the seek path's freeze-frame behavior.
+	const decodeBeforeRender = async () => {
+		const sample = (await videoFrames!.next()).value;
 		if (!sample) return;
-		if (upload || toAlt) {
-			const frame = sample.toVideoFrame();
-			if (upload) renderer.updateSourceFrame(frame);
-			if (toAlt) renderer.updateAltSourceFrame(frame);
-			frame.close();
-		}
+		const frame = sample.toVideoFrame();
+		renderer.updateSourceFrame(frame);
+		frame.close();
 		sample.close();
 	};
-
-	const pullPrimaryFrame = async (upload: boolean, toAlt = false) =>
-		uploadPrimarySample(await pullPrimarySample(), upload, toAlt);
-	const decodeBeforeRender = () => pullPrimaryFrame(true);
 
 	// Sequence mode: resolve effects per frame from the segment list. With an
 	// external track segments live on the audio timeline (master clock) — this
@@ -305,16 +281,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			}
 		: undefined;
 
-	// Multi-source sequences: whichever segment is under the playhead picks the
-	// media for its frames. Built lazily below so single-source exports (and
-	// non-sequence ones) pay nothing.
+	// Sequences: whichever segment is under the playhead picks the media for
+	// its frames. Built lazily below so single-mode exports pay nothing.
 	let exportLayers: Awaited<ReturnType<typeof createMediaExportLayers>> | null =
 		null;
 	let exportSources: Awaited<
 		ReturnType<typeof createSequenceExportSources>
 	> | null = null;
-	const multiSource = (sequence?.sources?.length ?? 0) > 1;
-	const primarySourceId = sequence?.sources?.find((s) => s.primary)?.id ?? null;
 	/** Registry order, same as the preview reads — see `segmentSourceIdAt`. */
 	const sourcePool = sequence?.sources?.map((src) => src.id) ?? [];
 
@@ -341,14 +314,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			tr.boundaryTime - 0.001,
 			sequence.duration,
 		);
-		const idA = segmentSourceIdAt(
-			segA,
-			tr.boundaryTime - 0.001,
-			sourcePool,
-			primarySourceId,
-		);
-		const idB = incomingSourceId ?? primarySourceId;
-		if (!idA || idA === idB) return null;
+		const idA = segmentSourceIdAt(segA, tr.boundaryTime - 0.001, sourcePool);
+		if (!idA || idA === incomingSourceId) return null;
 		return { id: idA, time: segmentSourceTime(segA, idA, t) };
 	};
 
@@ -367,26 +334,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	const sequenceBeforeRender = async (frameIndex: number, time: number) => {
 		const t = seqTimeAt(time);
 
-		// Started before the segment sources so the two decodes overlap. The
-		// generator queues next() calls, so this is still exactly one pull per
-		// exported frame — only the upload has to wait on the flags below.
-		const primaryPull =
-			isVideo && videoEl && videoFrames ? pullPrimarySample() : null;
-		// Nothing awaits it if a source advance throws first; keep that from
-		// surfacing as an unhandled rejection.
-		if (primaryPull) void primaryPull.catch(() => {});
-
-		// A non-primary source owns this frame; the primary is still pulled (but
-		// not uploaded) so its decode stays in lockstep with the frame clock.
-		let primaryOwnsFrame = true;
-		// Set when the primary is the *outgoing* side of a transition, so its frame
-		// has to reach the alt texture too.
-		let primaryIsOutgoing = false;
 		const seg = sequence
 			? findSegmentAt(sequence.segments, t, sequence.duration)
 			: null;
-		const segSourceId =
-			segmentSourceIdAt(seg, t, sourcePool, primarySourceId) ?? undefined;
+		const segSourceId = segmentSourceIdAt(seg, t, sourcePool) ?? undefined;
 		// Seconds into the clip, not a per-frame step: the same rule the preview
 		// follows, so an export writes the frames that were previewed.
 		const out = outgoingSourceAt(t, segSourceId);
@@ -394,44 +345,20 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		// Which media each texture holds, so the chain applies that source's own
 		// crop, erase mask and key. The preview sets this every frame it draws; the
 		// recorder owns the renderer while it runs, so it has to as well, or the
-		// export would edit whatever the preview happened to be looking at. Outside
-		// the exportSources branch: a one-source sequence has no export samplers and
-		// still has edits.
+		// export would edit whatever the preview happened to be looking at.
 		renderer.setSourceIds(
 			segSourceId ?? null,
 			out?.id ?? null,
 			segTime,
 			out?.time ?? 0,
 		);
-		if (exportSources) {
-			// Concurrent: outgoingSourceAt returns null when the outgoing source is
-			// the incoming one, so these two can never contend for a single sampler,
-			// and they write different textures.
-			const [incomingOwned, outgoingOwned] = await Promise.all([
-				exportSources.advance(segSourceId, segTime),
-				exportSources.advanceOutgoing(out?.id ?? null, out?.time ?? 0),
-			]);
-			primaryOwnsFrame = !incomingOwned;
-			primaryIsOutgoing = !outgoingOwned;
-		}
-
-		// Still images have no per-frame source to advance
-		if (isVideo && videoEl) {
-			if (primaryPull) {
-				uploadPrimarySample(
-					await primaryPull,
-					primaryOwnsFrame,
-					primaryIsOutgoing,
-				);
-			} else if (primaryOwnsFrame || primaryIsOutgoing) {
-				await seekBeforeRender(
-					frameIndex,
-					time,
-					primaryOwnsFrame,
-					primaryIsOutgoing,
-				);
-			}
-		}
+		// Concurrent: outgoingSourceAt returns null when the outgoing source is
+		// the incoming one, so these two can never contend for a single sampler,
+		// and they write different textures.
+		await Promise.all([
+			exportSources!.advance(segSourceId, segTime),
+			exportSources!.advanceOutgoing(out?.id ?? null, out?.time ?? 0),
+		]);
 		// On a gap (no segment) keep the previous frame's effects.
 		const base = seqSource!(t);
 		// The stacked lanes run after the segment's own chain. `effectsRef.current`
@@ -516,9 +443,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	};
 
 	try {
-		if (seqSource && multiSource) {
+		if (seqSource) {
 			exportSources = await createSequenceExportSources(
-				sequence!.sources!,
+				sequence!.sources ?? [],
 				renderer,
 			);
 		}

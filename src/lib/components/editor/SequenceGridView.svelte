@@ -27,8 +27,6 @@
 
 	interface Props {
 		sources: SequenceSource[];
-		/** Segments with no source of their own play this one. */
-		primarySourceId?: string | null;
 		/** How many segments are selected — a click assigns to all of them. */
 		selectedCount?: number;
 		/** Highlights the card the selection currently plays; null when they
@@ -46,7 +44,6 @@
 
 	let {
 		sources,
-		primarySourceId = null,
 		selectedCount = 0,
 		selectedSourceId = null,
 		onAddFiles,
@@ -261,13 +258,6 @@
 								{/if}
 							</button>
 						{/if}
-					{/if}
-					{#if src.id === primarySourceId}
-						<span
-							class="card-base"
-							title="Segments with no source of their own play this one"
-							>BASE</span
-						>
 					{/if}
 					<span class="card-name">{shortSourceName(src.name, 20)}</span>
 					<button
@@ -533,20 +523,6 @@
 
 	.card-proxy.off {
 		color: var(--text-4);
-	}
-
-	.card-base {
-		position: absolute;
-		bottom: 20px;
-		left: 4px;
-		padding: 0 4px;
-		border-radius: 2px;
-		background: rgba(0, 0, 0, 0.65);
-		color: var(--mosh);
-		font-family: var(--font-mono);
-		font-size: 0.55rem;
-		letter-spacing: 0.1em;
-		line-height: 1.6;
 	}
 
 	.card-name {

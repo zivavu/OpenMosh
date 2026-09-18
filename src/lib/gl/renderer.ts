@@ -239,6 +239,9 @@ function addPostInstanceIds(live: Set<string>, post: PostChainLayer[]): void {
 	for (const l of post) addInstanceIds(live, l.effects);
 }
 
+/** One opaque black texel — see GlRenderer.clearSource. */
+const BLACK_PIXEL = new Uint8Array([0, 0, 0, 255]);
+
 export class GlRenderer {
 	private gl: WebGL2RenderingContext;
 	private quadVAO: WebGLVertexArrayObject;
@@ -511,6 +514,39 @@ export class GlRenderer {
 	 */
 	initVideoSource(w: number, h: number) {
 		this.resetSource(w, h);
+	}
+
+	/**
+	 * Size the frame to `w`×`h` with nothing on the source texture: the
+	 * sequence editor's base, which draws only what a segment names and is
+	 * otherwise black under the layers. The frame keeps its size; the texture
+	 * holds one black pixel until a source lands on it.
+	 */
+	initBlankSource(w: number, h: number) {
+		if (!this.resetSource(w, h)) return;
+		this.clearSource();
+	}
+
+	/** Put one opaque black pixel on the source texture, stretched over the
+	 * frame by the fit. Cheaper than clearing a full-size texture, and the fit
+	 * of a 1×1 is black either way. */
+	clearSource() {
+		if (!this.sourceTexture) return;
+		const gl = this.gl;
+		gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA,
+			1,
+			1,
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			BLACK_PIXEL,
+		);
+		this.srcTexW = 1;
+		this.srcTexH = 1;
 	}
 
 	/**

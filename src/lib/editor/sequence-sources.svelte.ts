@@ -78,12 +78,6 @@ export interface SequenceSource {
 	 * built for, so the chip can treat it as "the choice applies here".
 	 */
 	proxyDisabled?: boolean;
-	/**
-	 * The file the editor was opened with. It owns the master clock and (when
-	 * it's a video) the preview audio, so its frames still come from the
-	 * editor's own player rather than from a sampler here.
-	 */
-	primary?: boolean;
 }
 
 /**
@@ -154,10 +148,6 @@ export class SequenceSourceRegistry {
 		return this.sources.find((s) => s.id === id);
 	}
 
-	get primaryId(): string | null {
-		return this.sources.find((s) => s.primary)?.id ?? null;
-	}
-
 	/**
 	 * Adds files in the given order, skipping any that can't be decoded and any
 	 * already in the pool (ids are content-derived, so re-adding is idempotent).
@@ -185,10 +175,7 @@ export class SequenceSourceRegistry {
 		this.#endLoad();
 	}
 
-	async add(
-		files: File[],
-		{ primary = false, persist = true } = {},
-	): Promise<SequenceSource[]> {
+	async add(files: File[], { persist = true } = {}): Promise<SequenceSource[]> {
 		// Animated GIFs become videos here, before anything is keyed on the file.
 		// Stored media is already converted, so restores don't pay for this.
 		files = await gifsToVideo(files);
@@ -215,9 +202,7 @@ export class SequenceSourceRegistry {
 			// pool synchronously and a few hundred chips appear in one frame instead
 			// of waiting on a full-resolution decode and a JPEG encode each.
 			if (images.length > 0) {
-				const batch = this.#accept(
-					images.map((f) => this.#buildImage(f, primary)),
-				);
+				const batch = this.#accept(images.map((f) => this.#buildImage(f)));
 				if (this.#disposed) return [];
 				ok.push(...batch);
 				this.loadingDone += images.length;
@@ -234,9 +219,7 @@ export class SequenceSourceRegistry {
 			// files and supplies the duration, and a pool rarely holds many.
 			for (let i = 0; i < videos.length; i += ADD_BATCH_SIZE) {
 				const slice = videos.slice(i, i + ADD_BATCH_SIZE);
-				const built = await Promise.all(
-					slice.map((f) => this.#buildVideo(f, primary)),
-				);
+				const built = await Promise.all(slice.map((f) => this.#buildVideo(f)));
 				const batch = this.#accept(built);
 				// Counted per file probed, not per source accepted: a file that failed
 				// to decode is still one the user is no longer waiting on.
@@ -267,19 +250,6 @@ export class SequenceSourceRegistry {
 			);
 		}
 		return ok;
-	}
-
-	/**
-	 * Hands primary status to another pooled source, or to nothing when the pool
-	 * is empty. The caller is responsible for pointing the editor's own player at
-	 * the new primary's file — that's what makes it the primary. Its sampler and
-	 * decoded bitmap go with it: the player owns those frames now.
-	 */
-	setPrimary(id: string | null) {
-		for (const s of this.sources) s.primary = s.id === id;
-		if (!id) return;
-		this.#samplers.get(id)?.dispose();
-		this.#samplers.delete(id);
 	}
 
 	/** The edit for this source, defaults included, for the editor to bind to. */
@@ -351,20 +321,19 @@ export class SequenceSourceRegistry {
 		this.sources = list;
 	}
 
-	/** Drop every source, the primary included. */
+	/** Drop every source. */
 	clear() {
 		for (const s of [...this.sources]) this.remove(s.id);
 	}
 
 	/**
-	 * Make the non-primary pool exactly `ids`, pulling any missing ones out of
-	 * storage. Used when the song changes: the primary source belongs to the
-	 * editor session, everything else belongs to the song.
+	 * Make the pool exactly `ids`, pulling any missing ones out of storage.
+	 * Used when the song changes: the pool belongs to the song.
 	 */
-	async setExtras(ids: string[]): Promise<void> {
+	async setPool(ids: string[]): Promise<void> {
 		const want = new Set(ids);
 		for (const s of [...this.sources]) {
-			if (!s.primary && !want.has(s.id)) this.remove(s.id);
+			if (!want.has(s.id)) this.remove(s.id);
 		}
 		await this.restore(ids);
 	}
@@ -549,20 +518,24 @@ export class SequenceSourceRegistry {
 		const worker = async () => {
 			while (next < list.length && !this.#disposed) {
 				const src = list[next++];
-				const url = await makeThumbUrl(src.file);
+				const thumb = await makeThumbUrl(src.file);
 				// Removed while we were decoding, or the registry is gone.
 				const live = this.#disposed ? undefined : this.get(src.id);
 				if (!live) {
-					if (url) URL.revokeObjectURL(url);
+					if (thumb) URL.revokeObjectURL(thumb.url);
 					continue;
 				}
-				if (!url) {
+				if (!thumb) {
 					this.remove(src.id);
 					continue;
 				}
 				// `sources` is $state, so assigning through the proxy updates the chip.
-				live.thumbUrl = url;
+				// The decode is also the one place an image's size is read, and the
+				// editor sizes its frame off the first source's.
+				live.thumbUrl = thumb.url;
 				live.thumbPending = false;
+				live.width = thumb.width;
+				live.height = thumb.height;
 			}
 		};
 		await Promise.all(
@@ -578,13 +551,12 @@ export class SequenceSourceRegistry {
 	}
 
 	/** Synchronous — an image needs no decoding to become a pool entry. */
-	#buildImage(file: File, primary: boolean): SequenceSource {
+	#buildImage(file: File): SequenceSource {
 		return {
 			id: stableSourceId(file),
 			file,
 			name: file.name,
 			objectUrl: URL.createObjectURL(file),
-			primary,
 			kind: "image",
 			thumbUrl: null,
 			thumbPending: true,
@@ -592,10 +564,7 @@ export class SequenceSourceRegistry {
 		};
 	}
 
-	async #buildVideo(
-		file: File,
-		primary: boolean,
-	): Promise<SequenceSource | null> {
+	async #buildVideo(file: File): Promise<SequenceSource | null> {
 		const objectUrl = URL.createObjectURL(file);
 		const probe = await probeSlideVideo(file);
 		if (!probe) {
@@ -611,7 +580,6 @@ export class SequenceSourceRegistry {
 			file,
 			name: file.name,
 			objectUrl,
-			primary,
 			kind: "video",
 			thumbUrl: probe.thumb ? URL.createObjectURL(probe.thumb) : null,
 			// Settled either way: the probe is the only shot at a video thumbnail.
@@ -690,8 +658,7 @@ export class SequenceSourceRegistry {
 			this.#samplers.get(id)?.dispose();
 			this.#samplers.delete(id);
 			// Persisted under the source's own id so the next run skips the
-			// transcode — whether or not the source itself is persisted, which for
-			// the session-scoped primary it deliberately isn't.
+			// transcode, whether or not the source itself is persisted.
 			if (!stored) {
 				void putSequenceMediaProxy(file, proxy).catch(() => {});
 			}
@@ -714,7 +681,7 @@ export class SequenceSourceRegistry {
 async function makeThumbUrl(
 	file: File,
 	size = THUMB_SIZE,
-): Promise<string | null> {
+): Promise<{ url: string; width: number; height: number } | null> {
 	let bitmap: ImageBitmap | undefined;
 	try {
 		bitmap = await createImageBitmap(file);
@@ -741,7 +708,7 @@ async function makeThumbUrl(
 			type: "image/jpeg",
 			quality: 0.8,
 		});
-		return URL.createObjectURL(blob);
+		return { url: URL.createObjectURL(blob), width: w, height: h };
 	} catch {
 		// Not a decodable image, or no OffscreenCanvas.
 		return null;

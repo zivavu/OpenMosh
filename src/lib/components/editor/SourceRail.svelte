@@ -36,8 +36,6 @@
 
 	interface Props {
 		sources: SequenceSource[];
-		/** Segments with no source of their own play this one. */
-		primarySourceId?: string | null;
 		/** How many things are selected — a click assigns to all of them. */
 		selectedCount?: number;
 		/** What those things are, for the tooltip: segments, or layer clips. */
@@ -60,7 +58,6 @@
 
 	let {
 		sources,
-		primarySourceId = null,
 		selectedCount = 0,
 		selectedLabel = "segment",
 		selectedSourceId = null,
@@ -286,9 +283,6 @@
 									{proxy.badge}
 								</span>
 							{/if}
-						{/if}
-						{#if src.id === primarySourceId}
-							<span class="rail-base">B</span>
 						{/if}
 						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
 					</button>
@@ -516,24 +510,8 @@
 	}
 
 	.rail-kind,
-	.rail-base {
-		position: absolute;
-		top: 2px;
-		right: 2px;
-		display: flex;
-		align-items: center;
-		padding: 0 2px;
-		border-radius: 2px;
-		background: rgba(0, 0, 0, 0.65);
-		color: var(--text-2);
-		font-size: 0.5rem;
-		font-weight: 700;
-	}
 
 	/* Both badges can show at once, so the BASE one steps aside. */
-	.rail-kind ~ .rail-base {
-		right: 16px;
-	}
 
 	/* Bottom-left of the thumb. The top edge already carries the index, the
 	   kind and base badges and the edit button, and this one is the widest of

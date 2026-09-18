@@ -143,7 +143,9 @@
 		appendMediaLane,
 		clearMediaClips,
 		createMediaChainSource,
+		createMediaClip,
 		createMediaHistory,
+		createMediaLane,
 		detachMediaSource,
 		EMPTY_MEDIA_TIMELINE,
 		fillMediaClipsFromPreset,
@@ -174,6 +176,7 @@
 		pruneSequenceMedia,
 		putSequenceMediaProxy,
 		saveMediaPool,
+		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import { saveSession, type SingleSessionState } from "../../editor/sessions";
 	import {
@@ -270,7 +273,11 @@
 	let dragging = $state(false);
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
-	let isVideo = $derived(file.type.startsWith("video/"));
+	// Sequence mode never plays `file` itself: the media there all comes from
+	// the pool, through the frame drivers, and the frame starts black. So the
+	// editor's own player — and everything that hangs off it, from the span
+	// bar to the export's decode loop — is single mode's alone.
+	let isVideo = $derived(!isSequenceMode && file.type.startsWith("video/"));
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
 	let videoEl = $state<HTMLVideoElement | null>(null);
 	let videoDuration = $state(0);
@@ -315,32 +322,19 @@
 
 	$effect(() => {
 		if (!isVideo) return;
-		// Sequence mode previews the primary through this player, so its proxy —
-		// once the registry has one — is what decodes. Single mode's file never
-		// enters the pool, so its proxy is managed just below.
-		const primary = isSequenceMode
-			? sourceRegistry.get(sourceRegistry.primaryId)
-			: null;
-		const proxy =
-			primary && primary.file === file
-				? primary.proxyFile
-				: singleProxyFor === file
-					? singleProxy
-					: null;
+		// The file's proxy, once one has landed — see the single-mode proxy
+		// below.
+		const proxy = singleProxyFor === file ? singleProxy : null;
 		const previewFile = proxy ?? file;
 		// Frames arrive at the proxy's size, but the media's own size and
 		// duration are what the UI reports and what the output defaults to —
-		// anchored to the original so the swap moves nothing. The source's own
-		// probe first, then the outgoing player: `naturalWidth` is written from
-		// whichever player ran last, so opening straight onto a stored proxy
-		// would find it unset and let the proxy's size become the media's.
-		// Read untracked: these describe the outgoing player, and tracking them
-		// would rebuild the player each time the swap writes them back.
+		// anchored to the original so the swap moves nothing. Read untracked:
+		// these describe the outgoing player, and tracking them would rebuild
+		// the player each time the swap writes them back.
 		const media = proxy
 			? untrack(() => ({
-					width: primary?.width ?? previewPlayer?.width ?? naturalWidth ?? 0,
-					height:
-						primary?.height ?? previewPlayer?.height ?? naturalHeight ?? 0,
+					width: previewPlayer?.width ?? naturalWidth ?? 0,
+					height: previewPlayer?.height ?? naturalHeight ?? 0,
 					duration: videoDuration,
 				}))
 			: undefined;
@@ -624,6 +618,7 @@
 		generatedSrc = url;
 	});
 	$effect(() => {
+		if (isSequenceMode) return;
 		const f = file;
 		primarySync.untrack("primary");
 		// Untracked: a re-render landing must not count as a change of file.
@@ -994,6 +989,7 @@
 				selectedSegmentId = null;
 				restoreFxLanes(undefined);
 			}
+			seedLayerKey = key;
 			return;
 		}
 		// The BPM comes back in both modes — single mode has no segments to time,
@@ -1190,6 +1186,12 @@
 	let sequenceBpm = $state(0);
 
 	interface SeqEntry {
+		/**
+		 * Absent on entries saved while the file the editor opened with was the
+		 * segments' implicit media. Those segments render that file until told
+		 * otherwise, so loading one of them pins it on — see loadSeqEntry.
+		 */
+		v?: number;
 		segments?: SequenceSegment[];
 		/** Absent on entries saved before BPM existed. */
 		bpm?: number;
@@ -1202,6 +1204,9 @@
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		sourceEdits?: Record<string, SourceEdit>;
 	}
+
+	/** Bumped when what a saved entry means changes — see SeqEntry.v. */
+	const SEQ_ENTRY_VERSION = 2;
 
 	// Keyed by master clock — that's what segment times are relative to.
 	let videoSeqKey = $derived(
@@ -1249,6 +1254,14 @@
 			// reads off the instance without checking.
 			for (const seg of entry.segments)
 				seg.effects = restoreEffects(seg.effects);
+			// Before the layers took the media over, a segment with no source of
+			// its own drew the file the editor opened with — which is the first
+			// of a saved pool, and so the file this editor opened with. Pin it,
+			// or every such segment would go black.
+			if (!entry.v) {
+				const opened = stableSourceId(file);
+				for (const seg of entry.segments) seg.sourceId ??= opened;
+			}
 		}
 		return entry;
 	}
@@ -1319,6 +1332,7 @@
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
 			void saveTimeline(key, {
+				v: SEQ_ENTRY_VERSION,
 				segments: segs,
 				bpm,
 				text,
@@ -1360,6 +1374,7 @@
 		const key = seqStoreKey;
 		if (!key || key !== loadedTimelineKey) return;
 		void saveTimeline(key, {
+			v: SEQ_ENTRY_VERSION,
 			segments: $state.snapshot(sequenceSegments) as SequenceSegment[],
 			bpm: sequenceBpm,
 			text: layersAsLoaded(
@@ -1682,10 +1697,10 @@
 	let fxChain = $derived(flattenFxLayers(fxLayers));
 
 	// ── Sequence media pool ──────────────────────────────────────────────────
-	// Segments pick their source from here. The primary entry is the file the
-	// editor was opened with: it keeps owning the master clock and (as a video)
-	// the preview audio, so the frame driver hands its frames back to the
-	// existing player rather than sampling it a second time.
+	// Every piece of media the project can draw: the layers' clips and the
+	// segments pick from here. The file the editor opened with is one entry
+	// among the rest — a new project lands it on the first layer (see the
+	// seeding effect below) and nothing else about it is special.
 	// Bumped when a late upload — a video frame or a lazily-decoded image —
 	// lands while paused, so the canvas redraws with it. Gated on paused:
 	// during playback the rAF loop already redraws, and ticking state per
@@ -1713,7 +1728,7 @@
 	 * through `mediaLoading`; single mode never shows the overlay.
 	 */
 	let openingMedia = $state(true);
-	/** The mount-time adds (primary + handed-over extras) have finished. */
+	/** The mount-time adds (the opened file and its extras) have finished. */
 	let mountMediaDone = $state(false);
 	$effect(() => {
 		if (!openingMedia) return;
@@ -1745,17 +1760,15 @@
 			// be replaced from under us.
 			if (!isSequenceMode) return;
 			try {
-				// Not persisted: the primary belongs to the editor session, never
-				// to a song's pool, so storing it would write (possibly hundreds of
-				// MB of) video into IndexedDB that nothing would ever read back.
-				await sourceRegistry.add([file], { primary: true, persist: false });
-				poolFilled = true;
-				const extras = extraFiles.filter((f) => f !== file);
 				// Opened from a saved song: these blobs came straight out of
 				// storage, so writing them back would rewrite the whole pool for
 				// nothing.
+				const persist = !initialTrackId;
+				await sourceRegistry.add([file], { persist });
+				poolFilled = true;
+				const extras = extraFiles.filter((f) => f !== file);
 				if (extras.length > 0) {
-					await sourceRegistry.add(extras, { persist: !initialTrackId });
+					await sourceRegistry.add(extras, { persist });
 				}
 			} finally {
 				mountMediaDone = true;
@@ -1767,8 +1780,6 @@
 	// ── Per-song media pool ──────────────────────────────────────────────────
 	// Keyed the same way as the sequence timeline (seqBaseKey), so loading a
 	// track brings back both the segments and the media they were built from.
-	// The primary source belongs to the editor session, not the song, and is
-	// left alone by all of this.
 	let poolKey: string | null = null;
 	let poolReady = $state(false);
 	/** Segment source ids already looked for in storage; see the effect below. */
@@ -1797,18 +1808,13 @@
 			// once no pool references those blobs, pruning deletes them for good.
 			// Keeping them strands nothing either way: a reset timeline holds no
 			// source ids at all.
-			if (ids) await sourceRegistry.setExtras(ids);
+			if (ids) await sourceRegistry.setPool(ids);
 			if (poolKey === key) poolReady = true;
 		})();
 	});
 
 	// Persist the pool for the current song. Debounced because a multi-file add
 	// appends in batches and would otherwise write once per batch.
-	//
-	// The primary is listed too. Opening a saved sequence promotes the pool's
-	// first entry to primary, so excluding primaries would drop one source from
-	// the pool every time the song was reopened. Restoring skips ids already
-	// present, and the primary is never removed, so listing it costs nothing.
 	let poolSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		if (!isSequenceMode || !poolReady) return;
@@ -1836,8 +1842,8 @@
 
 	// A restored timeline references sources by id. Pull any the pool is missing
 	// back out of IndexedDB, so a reload shows each segment's own media instead
-	// of silently falling back to the primary. Ids that aren't in the store are
-	// remembered as attempted, otherwise this would retry them forever.
+	// of a black frame. Ids that aren't in the store are remembered as
+	// attempted, otherwise this would retry them forever.
 	$effect(() => {
 		if (!isSequenceMode) return;
 		const missing = sequenceSegments
@@ -1849,21 +1855,6 @@
 		if (missing.length === 0) return;
 		for (const id of missing) restoreAttempted.add(id);
 		void sourceRegistry.restore(missing);
-	});
-
-	// A non-empty pool always has a primary: segments carrying no source of
-	// their own resolve to it, and the editor's own player is what decodes it.
-	// This covers every path that refills a pool the user emptied — the picker,
-	// a drop, and the restore that follows a song change.
-	$effect(() => {
-		if (!isSequenceMode || sourceRegistry.primaryId) return;
-		const next = sourceRegistry.sources[0];
-		if (!next) return;
-		untrack(() => {
-			sourceRegistry.setPrimary(next.id);
-			onfile(next.file);
-			seqFrames.invalidate();
-		});
 	});
 
 	/**
@@ -1910,8 +1901,8 @@
 	let showClearSourcesConfirm = $state(false);
 
 	/**
-	 * Empty the pool, primary included: the preview sits on its no-media
-	 * placeholder until something is added back. The segment reset goes through
+	 * Empty the pool: the preview sits on its no-media placeholder until
+	 * something is added back. The segment reset goes through
 	 * seqBoundaries so Ctrl+Z restores the assignments — the media itself is
 	 * deleted from storage though, so re-adding the files is on the user.
 	 */
@@ -1935,10 +1926,9 @@
 	}
 
 	/**
-	 * Segments pointing at a removed source fall back to the primary. The primary
-	 * goes the same way as the rest: the effect above re-seats it on whatever is
-	 * left, and emptying the pool entirely leaves the preview on its no-media
-	 * placeholder until something is added back.
+	 * Segments pointing at a removed source draw nothing from then on, and
+	 * emptying the pool entirely leaves the preview on its no-media placeholder
+	 * until something is added back.
 	 */
 	function removeSequenceSource(id: string) {
 		sourceRegistry.remove(id);
@@ -1953,13 +1943,12 @@
 
 	function assignSegmentSource(segIds: string[], sourceId: string) {
 		const ids = new Set(segIds);
-		const primary = sourceRegistry.primaryId;
 		seqBoundaries.commit(
 			sequenceSegments.map((s) =>
 				ids.has(s.id)
 					? {
 							...s,
-							sourceId: sourceId === primary ? undefined : sourceId,
+							sourceId,
 							// Naming the clip a segment plays cancels the per-tick roll.
 							sourceRoll: undefined,
 						}
@@ -1991,11 +1980,7 @@
 			.filter((s) => picked.has(s.id))
 			// A rolling segment plays the whole pool, so it never agrees with
 			// anything — including another rolling segment, hence the unique id.
-			.map((s) =>
-				s.sourceRoll
-					? `roll:${s.id}`
-					: (s.sourceId ?? sourceRegistry.primaryId),
-			);
+			.map((s) => (s.sourceRoll ? `roll:${s.id}` : (s.sourceId ?? null)));
 		if (played.length === 0) return null;
 		return played.every((id) => id === played[0]) ? played[0] : null;
 	});
@@ -2006,12 +1991,7 @@
 		const pool = sequenceSources.map((s) => s.id);
 		if (pool.length < 2 || segIds.length === 0) return;
 		seqBoundaries.commit(
-			randomizeSegmentSources(
-				sequenceSegments,
-				new Set(segIds),
-				pool,
-				sourceRegistry.primaryId,
-			),
+			randomizeSegmentSources(sequenceSegments, new Set(segIds), pool),
 		);
 	}
 
@@ -2046,19 +2026,11 @@
 	}
 
 	function sourceIdOf(seg: SequenceSegment | null | undefined): string | null {
-		return (
-			segmentSourceIdAt(
-				seg,
-				segmentClockTime(seg),
-				seqSourcePool,
-				sourceRegistry.primaryId,
-			) ?? null
-		);
+		return segmentSourceIdAt(seg, segmentClockTime(seg), seqSourcePool) ?? null;
 	}
 
 	function activeSourceId(): string | null {
-		const primary = sourceRegistry.primaryId;
-		if (!isSequenceMode) return primary;
+		if (!isSequenceMode) return null;
 		return sourceIdOf(activeSegment());
 	}
 
@@ -2095,14 +2067,11 @@
 	let seqActiveSourceId = $derived.by(() => activeSourceId());
 	let seqActiveSource = $derived(sourceRegistry.get(seqActiveSourceId));
 	let seqSourceKey = $derived(`${seqActiveSourceId}:${sourceTick}`);
-	// The primary video is driven by the editor's own player, which GlCanvas
-	// already keeps animating. Only while the master runs: a paused source sits
-	// at one master time, so the canvas has nothing to re-upload — a late decode
-	// bumps `sourceTick` and redraws through the static path instead.
+	// Only while the master runs: a paused source sits at one master time, so
+	// the canvas has nothing to re-upload — a late decode bumps `sourceTick`
+	// and redraws through the static path instead.
 	let seqSourceAnimating = $derived(
-		seqActiveSource?.kind === "video" &&
-			!seqActiveSource.primary &&
-			seqPlaying(),
+		seqActiveSource?.kind === "video" && seqPlaying(),
 	);
 
 	/** Media length per pool source, for sampling keyed edits where the frame
@@ -2133,12 +2102,7 @@
 			seqMasterDuration,
 		);
 		const idA =
-			segmentSourceIdAt(
-				segA,
-				tr.boundaryTime - 0.001,
-				seqSourcePool,
-				sourceRegistry.primaryId,
-			) ?? null;
+			segmentSourceIdAt(segA, tr.boundaryTime - 0.001, seqSourcePool) ?? null;
 		if (!idA || idA === activeSourceId()) return null;
 		return { id: idA, time: sourceTimeIn(segA, idA) };
 	}
@@ -2157,6 +2121,57 @@
 		glRenderer;
 		seqFrames.invalidate();
 		mediaLayers.invalidate();
+	});
+
+	/**
+	 * The frame's size. With no media of its own, the base takes the size of
+	 * the first source that lands — the file the editor opened with, or what
+	 * came first out of a saved pool — and keeps it: the frame resizing under a
+	 * project because a pool entry was removed would move every layer. Only an
+	 * emptied pool lets go of it, so the next media in can size a fresh frame.
+	 */
+	let seqBaseSize = $state<{ width: number; height: number } | null>(null);
+	$effect(() => {
+		if (!isSequenceMode) return;
+		if (sequenceSources.length === 0) {
+			seqBaseSize = null;
+			return;
+		}
+		if (seqBaseSize) return;
+		const first = sequenceSources[0];
+		if (first.width && first.height) {
+			seqBaseSize = { width: first.width, height: first.height };
+		}
+	});
+	// A new size reallocates the source texture, and with it whatever segment
+	// media was on it.
+	$effect(() => {
+		seqBaseSize;
+		seqFrames.invalidate();
+	});
+
+	/**
+	 * A song with nothing saved yet: the file the editor opened with goes on a
+	 * first layer, running the whole song, under the effects. Set by the load
+	 * that found nothing and consumed here once the pool holds the file and the
+	 * song has a length — the two land in either order.
+	 */
+	let seedLayerKey = $state<string | null>(null);
+	$effect(() => {
+		if (!isSequenceMode || !seedLayerKey || seedLayerKey !== seqStoreKey) {
+			return;
+		}
+		const duration = seqMasterDuration;
+		if (duration <= 0) return;
+		const source = sourceRegistry.get(stableSourceId(file));
+		if (!source) return;
+		seedLayerKey = null;
+		if (untrack(() => mediaTimeline).lanes.length > 0) return;
+		const lane = createMediaLane("Layer 1", source.id, 0);
+		lane.underEffects = true;
+		lane.clips = [createMediaClip(0, duration)];
+		mediaTimeline = { enabled: true, lanes: [lane] };
+		mediaHistory.reset();
 	});
 
 	// The route enables sequence mode with no toggle press to seed the first
@@ -3652,14 +3667,9 @@
 		mediaHistory.reset();
 	}
 
-	/**
-	 * What a new lane starts on: anything but the primary, which is already what
-	 * the frame under the layer is showing — a layer of the same media on top of
-	 * itself looks like nothing happened.
-	 */
+	/** What a new lane starts on: the first thing in the pool. */
 	function defaultLayerSourceId(): string | null {
-		const extra = sequenceSources.find((s) => !s.primary);
-		return extra?.id ?? sequenceSources[0]?.id ?? null;
+		return sequenceSources[0]?.id ?? null;
 	}
 
 	function addMediaLane() {
@@ -4378,7 +4388,6 @@
 		{#if sequenceGridOpen}
 			<SequenceGridView
 				sources={sequenceSources}
-				primarySourceId={sourceRegistry.primaryId}
 				selectedCount={seqSelectedIds.length}
 				selectedSourceId={railSourceId}
 				onAddFiles={(files) => void addSequenceSources(files)}
@@ -4461,6 +4470,7 @@
 				soloMediaLaneId={mediaTimeline.enabled ? soloMediaLaneId : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				mediaChains={previewMediaChains}
+				baseSize={isSequenceMode ? seqBaseSize : null}
 				{textTime}
 				bpm={sequenceBpm}
 				forceAnimation={(textTimeline.enabled || mediaTimeline.enabled) &&
@@ -4689,7 +4699,6 @@
 			     cards make. -->
 			<SourceRail
 				sources={sequenceSources}
-				primarySourceId={sourceRegistry.primaryId}
 				selectedCount={railTargetCount}
 				selectedLabel={railTarget === "clip" ? "layer clip" : "segment"}
 				selectedSourceId={railSourceId}
@@ -4922,7 +4931,6 @@
 						segmentLoop={seqSegmentLoop}
 						onToggleSegmentLoop={toggleSegmentLoop}
 						sources={sequenceSources}
-						primarySourceId={sourceRegistry.primaryId}
 						onAssignSource={isSequenceMode ? assignSegmentSource : undefined}
 						onSourceRollChange={seqSourceRollChange}
 					/>

@@ -103,8 +103,6 @@
 		/** Media pool the segments draw from, for their number and colour band.
 		 * The pool itself is arranged in the grid view, not in here. */
 		sources?: SequenceSource[];
-		/** Segments with no explicit sourceId render as this one. */
-		primarySourceId?: string | null;
 		/** Takes a source card dragged out of the grid view onto a segment. */
 		onAssignSource?: (segmentIds: string[], sourceId: string) => void;
 		/** Deal the pool across an auto segment's re-roll ticks. */
@@ -126,7 +124,6 @@
 		segmentLoop = false,
 		onToggleSegmentLoop,
 		sources = [],
-		primarySourceId = null,
 		onAssignSource,
 		onSourceRollChange,
 	}: Props = $props();
@@ -147,7 +144,7 @@
 	);
 
 	function sourceOf(s: SequenceSegment): SequenceSource | undefined {
-		return sourceIndex.get(s.sourceId ?? primarySourceId ?? "")?.src;
+		return sourceIndex.get(s.sourceId ?? "")?.src;
 	}
 
 	let svgEl: SVGSVGElement | undefined = $state();
@@ -676,9 +673,7 @@
 			// no source line — either would name one clip out of the deck.
 			const rolls = multiSource && !!s.sourceRoll && s.mode === "interval";
 			const source =
-				multiSource && !rolls
-					? sourceIndex.get(s.sourceId ?? primarySourceId ?? "")
-					: undefined;
+				multiSource && !rolls ? sourceIndex.get(s.sourceId ?? "") : undefined;
 			const full = segLabel(s);
 			const trans = s.transition?.type ?? "cut";
 			return {

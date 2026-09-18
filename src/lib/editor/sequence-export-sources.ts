@@ -18,19 +18,17 @@ const MAX_DECODED_IMAGES = 16;
 export interface SequenceExportSources {
 	/**
 	 * Upload the frame for `sourceId`, taking a video source to `sourceTime`
-	 * seconds into its clip. Returns false when the caller should upload the
-	 * primary file itself.
+	 * seconds into its clip. No source clears the texture to black.
 	 */
-	advance(sourceId: string | undefined, sourceTime: number): Promise<boolean>;
+	advance(sourceId: string | undefined, sourceTime: number): Promise<void>;
 	/**
 	 * Upload the outgoing side of a transition into the renderer's second source
-	 * texture. Returns false when the primary is the outgoing source, which the
-	 * recorder's own decode loop has to supply. `null` releases it.
+	 * texture. `null` releases it.
 	 */
 	advanceOutgoing(
 		sourceId: string | null | undefined,
 		sourceTime: number,
-	): Promise<boolean>;
+	): Promise<void>;
 	dispose(): void;
 }
 
@@ -39,7 +37,6 @@ export async function createSequenceExportSources(
 	renderer: GlRenderer,
 ): Promise<SequenceExportSources> {
 	const byId = new Map(sources.map((s) => [s.id, s]));
-	const primaryId = sources.find((s) => s.primary)?.id ?? null;
 
 	const images = new Map<string, HTMLImageElement>();
 	const samplers = new Map<string, SlideVideoSampler>();
@@ -50,14 +47,16 @@ export async function createSequenceExportSources(
 	// an export is what actually runs the tab out of memory.
 	await Promise.all(
 		sources
-			.filter((src) => src.kind === "video" && !src.primary)
+			.filter((src) => src.kind === "video")
 			.map(async (src) => {
 				const sampler = await SlideVideoSampler.create(src.file);
 				if (sampler) samplers.set(src.id, sampler);
 			}),
 	);
 
-	let currentId: string | null = null;
+	/** Unknown at first: the preview left whatever it was showing on the
+	 * texture, so the first frame clears or uploads either way. */
+	let currentId: string | null | undefined = undefined;
 	let outgoingId: string | null = null;
 
 	/** Shared by both sides; `images` is the cache, bounded below. */
@@ -78,37 +77,33 @@ export async function createSequenceExportSources(
 
 	return {
 		async advance(sourceId, sourceTime) {
-			const id = sourceId ?? primaryId;
-			const src = id ? byId.get(id) : undefined;
+			const src = sourceId ? byId.get(sourceId) : undefined;
 			if (!src) {
-				currentId = null;
-				return false;
-			}
-
-			if (src.primary && src.kind === "video") {
-				currentId = null;
-				return false;
+				if (currentId !== null) {
+					currentId = null;
+					renderer.clearSource();
+				}
+				return;
 			}
 
 			if (src.kind === "image") {
 				if (currentId !== src.id) {
 					const img = await resolveImage(src);
-					if (!img) return false;
+					if (!img) return;
 					renderer.updateSourceImage(img);
 					currentId = src.id;
 				}
-				return true;
+				return;
 			}
 
 			const sampler = samplers.get(src.id);
-			if (!sampler) return false;
+			if (!sampler) return;
 			currentId = src.id;
 			const frame = await sampler.at(sourceTime);
 			if (frame) {
 				renderer.updateSourceFrame(frame);
 				frame.close();
 			}
-			return true;
 		},
 		async advanceOutgoing(sourceId, sourceTime) {
 			if (!sourceId) {
@@ -116,28 +111,23 @@ export async function createSequenceExportSources(
 					outgoingId = null;
 					renderer.clearAltSource();
 				}
-				return true;
+				return;
 			}
 			const src = byId.get(sourceId);
-			if (!src) return true;
-
-			if (src.primary && src.kind === "video") {
-				outgoingId = src.id;
-				return false;
-			}
+			if (!src) return;
 
 			if (src.kind === "image") {
 				if (outgoingId !== src.id) {
 					const img = await resolveImage(src);
-					if (!img) return true;
+					if (!img) return;
 					renderer.updateAltSourceImage(img);
 					outgoingId = src.id;
 				}
-				return true;
+				return;
 			}
 
 			const sampler = samplers.get(src.id);
-			if (!sampler) return true;
+			if (!sampler) return;
 			// Measured from the outgoing segment's start, so the clip carries on past
 			// the boundary instead of restarting under the fade.
 			outgoingId = src.id;
@@ -146,7 +136,6 @@ export async function createSequenceExportSources(
 				renderer.updateAltSourceFrame(frame);
 				frame.close();
 			}
-			return true;
 		},
 		dispose() {
 			for (const s of samplers.values()) s.dispose();

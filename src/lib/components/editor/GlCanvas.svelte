@@ -147,6 +147,12 @@
 		/** Chain per media clip and time — an auto clip's roll for the tick.
 		 * Without one every clip renders its stored chain. */
 		mediaChains?: MediaChainSource | null;
+		/**
+		 * Sequence mode: the frame's size, with no media of its own. The base
+		 * starts black at this size and `sourceDriver` puts a segment's media on
+		 * it when one names some; `imageSrc` and the video props are ignored.
+		 */
+		baseSize?: { width: number; height: number } | null;
 		/** Master-timeline seconds the text clips are looked up at. */
 		textTime?: number;
 		/** Song tempo, for beat-synced effects. 0 = unknown, they run free.
@@ -217,6 +223,7 @@
 		soloMediaLaneId = null,
 		mediaDriver = null,
 		mediaChains = null,
+		baseSize = null,
 		textTime = 0,
 		bpm = 0,
 		forceAnimation = false,
@@ -885,9 +892,20 @@
 		}
 	});
 
+	// A blank base at a stated size: the sequence editor's, whose media all
+	// comes through the drivers. Re-run when the size changes, which reallocates
+	// the FBOs the same way a new file would.
+	$effect(() => {
+		if (!renderer || !baseSize) return;
+		renderer.initBlankSource(baseSize.width, baseSize.height);
+		naturalWidth = baseSize.width;
+		naturalHeight = baseSize.height;
+		imageReady = true;
+	});
+
 	// Image loading — skipped when a video source is active
 	$effect(() => {
-		if (!renderer || videoEl || frameSource) return;
+		if (!renderer || videoEl || frameSource || baseSize) return;
 		imageReady = false;
 		const img = new Image();
 		let cancelled = false;
