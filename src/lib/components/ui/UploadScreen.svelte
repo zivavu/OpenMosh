@@ -141,7 +141,7 @@
 	 * no count — there is always exactly one source. */
 	interface RecentRow {
 		key: string;
-		mode: SessionMode;
+		mode: SessionMode | "sequence";
 		label: string;
 		sourceCount: number | null;
 		updatedAt: number;
@@ -168,7 +168,8 @@
 					key: session.key,
 					mode: session.mode,
 					label: session.label,
-					sourceCount: session.mode === "slideshow" ? session.sourceCount : null,
+					sourceCount:
+						session.mode === "slideshow" ? session.sourceCount : null,
 					updatedAt: session.updatedAt,
 					title: `Reopen "${session.label}" with the work already done on it`,
 					open: () => {
@@ -1267,7 +1268,11 @@
 	}
 
 	.recent-list:has(.saved-item:nth-child(4)) {
-		mask-image: linear-gradient(to bottom, #000 calc(100% - 1.2rem), transparent);
+		mask-image: linear-gradient(
+			to bottom,
+			#000 calc(100% - 1.2rem),
+			transparent
+		);
 	}
 
 	.saved-item {

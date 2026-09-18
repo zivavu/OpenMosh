@@ -33,6 +33,7 @@
 	} from "../../editor/storage-inventory";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import { showToast } from "./toast.svelte";
+	import { fmtAgo } from "../../utils";
 
 	let { onClose, onChanged }: Props = $props();
 
@@ -269,16 +270,6 @@
 			i++;
 		}
 		return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
-	}
-
-	function fmtAgo(t: number): string {
-		if (!t) return "";
-		const s = Math.max(0, (Date.now() - t) / 1000);
-		if (s < 60) return "just now";
-		if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-		if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-		if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
-		return new Date(t).toLocaleDateString();
 	}
 
 	function fmtCount(n: number, noun: string): string {
