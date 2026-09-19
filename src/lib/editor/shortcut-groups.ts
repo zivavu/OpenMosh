@@ -101,6 +101,15 @@ const CLIP_ROWS: ShortcutRow[] = [
 	},
 	{ keys: ["R"], description: "Loop playback inside the selected clip" },
 	{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
+	{
+		keys: ["Ctrl/Cmd+C"],
+		description: "Copy the selected clips",
+	},
+	{
+		keys: ["Ctrl/Cmd+V"],
+		description:
+			"Paste onto the selected clips — the text, the effects, or what the copies showed; with none selected, stamp copies at the start marker on the lane you last touched",
+	},
 	{ keys: ["Esc"], description: "Deselect" },
 	{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
 ];
@@ -113,24 +122,6 @@ const CLIP_MOSH: ShortcutRow = {
 	keys: MOSH.keys,
 	description:
 		"Previous or next mosh of the selected clip; → past the newest rolls a fresh one. Nothing selected, nothing rolls",
-};
-
-/** Copy/paste is per lane kind; the newest copy is the one a paste answers. */
-const COPY: ShortcutRow = {
-	keys: ["Ctrl/Cmd+C"],
-	description: "Copy the selected clips",
-};
-
-const FX_LANES: ShortcutGroup = {
-	title: "FX lanes",
-	shortcuts: [
-		COPY,
-		{
-			keys: ["Ctrl/Cmd+V"],
-			description:
-				"Paste the copied effects onto the selected clips; with none selected, stamp copies at the start marker on the lane you last touched",
-		},
-	],
 };
 
 const MEDIA_LAYERS: ShortcutGroup = {
@@ -146,22 +137,15 @@ const MEDIA_LAYERS: ShortcutGroup = {
 			keys: ["Dbl-click a thumb"],
 			description: "Preview it full size; ← → step through, Esc closes",
 		},
-		COPY,
-		{
-			keys: ["Ctrl/Cmd+V"],
-			description:
-				"Paste what the copies showed onto the selected clips; with none selected, stamp copies at the start marker on the lane you last touched",
-		},
 	],
 };
 
 export function editorShortcutGroups(opts: {
 	sequence: boolean;
-	fxLanes: boolean;
 	text: boolean;
 	media: boolean;
 }): ShortcutGroup[] {
-	const { sequence, fxLanes, text, media } = opts;
+	const { sequence, text, media } = opts;
 	return [
 		{
 			title: "Editor",
@@ -190,7 +174,6 @@ export function editorShortcutGroups(opts: {
 			: text || media
 				? [CLIPS]
 				: []),
-		...(sequence && fxLanes ? [FX_LANES] : []),
 		...(media ? [MEDIA_LAYERS] : []),
 	];
 }

@@ -4,6 +4,12 @@ import type { TextTimeline } from "./types";
 
 export { createTextHistory } from "./history.svelte";
 export {
+	copyTextClips,
+	pasteTextClips,
+	pasteTextOnto,
+	type TextClipboardEntry,
+} from "./clipboard";
+export {
 	applyLyricsToTimeline,
 	createLyricsClips,
 	LYRICS_LANE_NAME,

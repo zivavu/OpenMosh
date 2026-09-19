@@ -8,21 +8,26 @@
 		laneSnapPoints,
 		type ClipDrag,
 	} from "../../timeline/clip-drag";
+	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import {
 		addClip,
 		clipRange,
+		copyTextClips,
 		createTextClip,
 		createTextLane,
 		freeRangeAt,
 		lyricsDraftFromTimeline,
 		MIN_CLIP_LENGTH,
+		pasteTextClips,
+		pasteTextOnto,
 		removeClip,
 		sortClips,
 		updateLane,
 		splitTextClipAt,
 		type TextClip,
+		type TextClipboardEntry,
 		type TextLane,
 		type TextTimeline,
 	} from "../../text";
@@ -472,11 +477,77 @@
 		deselect();
 	}
 
+	// ── Clip clipboard ───────────────────────────────────────────────────────
+	// Same shape as the media lane's: a paste goes onto the selection when
+	// there is one — the words, into clips that keep their spans — and
+	// otherwise stamps whole clips down at the start marker.
+	let clipboard: TextClipboardEntry[] = [];
+	/** What the clipboard was copied from, plus every copy stamped from it
+	 * since: pasting onto exactly those would change nothing, so that gesture
+	 * stamps new copies instead. */
+	let copiedIds = new Set<string>();
+	/** The copy stamp when the clipboard was last filled: a paste answers only
+	 * if nothing was copied on another lane since. */
+	let clipStamp = -1;
+
+	function copySelection(): boolean {
+		clipboard = copyTextClips(timeline, selectedIds);
+		if (clipboard.length === 0) return false;
+		copiedIds = new Set(selectedIds);
+		clipStamp = markCopied();
+		return true;
+	}
+
+	function pasteClipboard(): boolean {
+		if (clipboard.length === 0 || latestCopy() !== clipStamp) return false;
+		const ontoSelf =
+			selectedIds.length > 0 && selectedIds.every((id) => copiedIds.has(id));
+		if (selectedIds.length > 0 && !ontoSelf) {
+			onBeforeEdit?.();
+			onChange(pasteTextOnto(timeline, selectedIds, clipboard));
+			return true;
+		}
+		return pasteClips();
+	}
+
+	/** Stamp the copied clips at the start marker, on the lane last clicked,
+	 * and leave the copies selected to drag from there. */
+	function pasteClips(): boolean {
+		const result = pasteTextClips(
+			timeline,
+			clipboard,
+			stack.staticTime,
+			trackDuration,
+			stack.activeLaneId,
+		);
+		if (result.clipIds.length === 0) return false;
+		onBeforeEdit?.();
+		onChange(result.timeline);
+		for (const id of result.clipIds) copiedIds.add(id);
+		selectedIds = result.clipIds;
+		selectedClipId = result.clipIds[result.clipIds.length - 1];
+		return true;
+	}
+
 	function onKeyDown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
 		// The media lightbox and other overlays own the keyboard while they're
 		// up: Escape and Delete must not reach the clips behind them.
 		if (isModalKeyboardOpen()) return;
+		if (e.ctrlKey || e.metaKey) {
+			const key = e.key.toLowerCase();
+			if (key === "c" && copySelection()) {
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+			if (key === "v" && pasteClipboard()) {
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+			return;
+		}
 		if (e.key === "Escape" && selectedIds.length > 0) {
 			deselect();
 			return;

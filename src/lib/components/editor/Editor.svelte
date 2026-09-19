@@ -2859,7 +2859,6 @@
 	const shortcutGroups = $derived(
 		editorShortcutGroups({
 			sequence: isSequenceMode,
-			fxLanes: fxLanes.length > 0,
 			text: textTimeline.enabled,
 			media: mediaTimeline.enabled,
 		}),
