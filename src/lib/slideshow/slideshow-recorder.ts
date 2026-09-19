@@ -3,7 +3,7 @@ import type { EffectInstance } from "../effects";
 import type { GlRenderer } from "../gl/renderer";
 import { downloadBlob, recordVideo } from "../recorder";
 import { preloadCaptionFonts } from "../caption";
-import { preloadTextTimelineFonts } from "../text";
+import { createTextChainSource, preloadTextTimelineFonts } from "../text";
 import { SlideshowFrameDriver } from "./frame-driver";
 import { cloneEffects } from "./sequencer";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
@@ -139,6 +139,7 @@ export async function executeSlideshowRecording(
 			// Clips are placed against audio time; a silent export starts its beat
 			// clock at 0, so the offset follows the same rule the driver uses.
 			textTimeline: config.text?.enabled ? config.text : null,
+			textChains: createTextChainSource(() => moshOptions, { clone: true }),
 			textTimeOffset: audioFile ? audioStart : 0,
 			bpm: config.bpm,
 			beatOffset: audioFile ? config.beatOffset : 0,

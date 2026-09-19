@@ -13,6 +13,7 @@
 	import { MicVocal, Plus } from "lucide-svelte";
 	import {
 		appendTextLane,
+		createTextChainSource,
 		createTextHistory,
 		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
@@ -65,7 +66,6 @@
 	import SlideshowGridView from "./SlideshowGridView.svelte";
 	import SlideshowTopBar from "./SlideshowTopBar.svelte";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
-	import { layerLinkGroups } from "../../audio/audio-utils";
 	import { DEFAULT_AUDIO_RESPONSE } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
 	import {
@@ -863,8 +863,13 @@
 				response: DEFAULT_AUDIO_RESPONSE,
 			},
 			// Each text layer's own chain follows the music too, under its own
-			// envelope state — the same deal the editor gives its layers.
-			...layerLinkGroups(textTimeline.lanes, DEFAULT_AUDIO_RESPONSE),
+			// envelope state — the same deal the editor gives its layers. Read off
+			// the resolved layers: the chain is the clip's under the playhead.
+			...currentTextLayers().map((layer) => ({
+				scope: layer.laneId,
+				effects: layer.effects,
+				response: DEFAULT_AUDIO_RESPONSE,
+			})),
 		],
 		initialOutputVolume: savedOutputVolume,
 		initialLoop: loadSettings().loopAudio ?? false,
@@ -1590,9 +1595,12 @@
 		findTextClipLane(textTimeline, selectedTextClipId),
 	);
 
+	// Same resolver the export builds, so an auto clip's rolls reproduce.
+	const previewTextChains = createTextChainSource(getMoshOptions);
+
 	/** Layers for whatever the preview is showing right now. */
 	function currentTextLayers() {
-		return resolveTextLayersAt(textTimeline, textTime);
+		return resolveTextLayersAt(textTimeline, textTime, previewTextChains);
 	}
 
 	/** Song-grid position of master time `t`, for beat-synced effects. */

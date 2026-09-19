@@ -53,6 +53,21 @@ describe("pasteTextClips", () => {
 		expect(pasted.id).not.toBe(lane.clips[0].id);
 	});
 
+	it("carries the chain, with fresh effect instances", () => {
+		const lane = laneWith([[0, 5, "hi"]]);
+		lane.clips[0].label = "mosh";
+		lane.clips[0].effects[0].enabled = true;
+		const t = timelineOf([lane]);
+		const copied = copyTextClips(t, [lane.clips[0].id]);
+		const { timeline, clipIds } = pasteTextClips(t, copied, 20, 60);
+		const pasted = timeline.lanes[0].clips.find((c) => c.id === clipIds[0])!;
+		expect(pasted.label).toBe("mosh");
+		expect(pasted.effects[0].enabled).toBe(true);
+		expect(pasted.effects[0].instanceId).not.toBe(
+			lane.clips[0].effects[0].instanceId,
+		);
+	});
+
 	it("carries the fades along", () => {
 		const lane = laneWith([[0, 5, "hi"]]);
 		lane.clips[0].fadeInSec = 0.5;
@@ -121,5 +136,8 @@ describe("pasteTextOnto", () => {
 			[4, 9, "a"],
 		]);
 		expect(out.lanes[0]).toBe(src);
+		// The chain comes with the words; the target keeps its own id.
+		expect(out.lanes[1].clips[0].id).toBe(dst.clips[0].id);
+		expect(out.lanes[1].clips[0].effects).not.toBe(src.clips[0].effects);
 	});
 });

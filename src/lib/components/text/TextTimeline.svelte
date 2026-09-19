@@ -1,6 +1,15 @@
 <script lang="ts">
-	import { ChevronDown, Eye, EyeOff, Trash2 } from "lucide-svelte";
+	import {
+		ChevronDown,
+		Dices,
+		Eraser,
+		Eye,
+		EyeOff,
+		Trash2,
+	} from "lucide-svelte";
 	import { untrack } from "svelte";
+	import { loadPresets, type Preset } from "../../effects";
+	import { BEAT_INTERVALS, type ChainMode } from "../../editor/sequence";
 	import { dropAutoRangeScope } from "../../audio/auto-range";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import {
@@ -67,9 +76,27 @@
 		/** Fired when a lane's fold toggle is clicked. */
 		onToggleFold?: (laneId: string) => void;
 		selectedClipId?: string | null;
+		/** The whole selection. `selectedClipId` stays the primary — the one
+		 * the clip panel edits and the anchor a shift-range extends from — and
+		 * is always a member of this list. */
+		selectedClipIds?: string[];
 		onChange: (timeline: TextTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
+		/** Song tempo, for interval clips spaced in beats. 0 = unknown. */
+		bpm?: number;
+		/** The clip toolbar's actions, fanned out over the selection. Without
+		 * `onModeChange` the bar stays hidden — a mode with no chain gestures
+		 * (the slideshow) has nothing to put in it. */
+		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
+		onRoll?: (clipIds: string[]) => void;
+		onClear?: (clipIds: string[]) => void;
+		onModeChange?: (
+			clipIds: string[],
+			mode: ChainMode,
+			intervalSec?: number,
+			intervalBeats?: number | null,
+		) => void;
 		/** When provided, the header grows a Lyrics button that opens the sync
 		 * modal, wired to the mode's own transport. */
 		lyricsSync?: LyricsSyncProps | null;
@@ -85,8 +112,14 @@
 		foldedLaneIds = NO_FOLDS,
 		onToggleFold,
 		selectedClipId = $bindable(null),
+		selectedClipIds = $bindable([]),
 		onChange,
 		onBeforeEdit,
+		bpm = 0,
+		onApplyPreset,
+		onRoll,
+		onClear,
+		onModeChange,
 		lyricsSync = null,
 		lyricsOpen = $bindable(false),
 	}: Props = $props();
@@ -129,12 +162,69 @@
 
 	let drag = $state<ClipDrag | null>(null);
 
-	/**
-	 * The whole selection. `selectedClipId` stays the primary — the one the clip
-	 * panel edits and the anchor a shift-range extends from — and is always a
-	 * member of this list.
-	 */
-	let selectedIds = $state<string[]>([]);
+	// ── Clip toolbar ─────────────────────────────────────────────────────────
+	// Rendered in the stack's shared selection bar, like the media lanes' — one
+	// bar for whichever lane holds the selection, so the stack never resizes.
+	$effect(() => {
+		if (selectedClips.length === 0 || !onModeChange) return;
+		return stack.registerSelectionBar("text", clipBar);
+	});
+
+	/** Every action fans out over the whole selection; a value the selection
+	 * doesn't agree on shows blank until it is changed. */
+	let selectedClips = $derived(
+		timeline.lanes.flatMap((l) =>
+			l.clips.filter((c) => selectedClipIds.includes(c.id)),
+		),
+	);
+	let manySelected = $derived(selectedClips.length > 1);
+
+	function commonValue<T>(values: T[]): T | undefined {
+		return values.every((v) => v === values[0]) ? values[0] : undefined;
+	}
+
+	let commonMode = $derived(
+		commonValue(selectedClips.map((c) => c.mode ?? "static")),
+	);
+	let commonIntervalSec = $derived(
+		commonValue(selectedClips.map((c) => c.intervalSec)),
+	);
+	let commonIntervalBeats = $derived(
+		commonValue(selectedClips.map((c) => c.intervalBeats)),
+	);
+	let hasInterval = $derived(
+		selectedClips.every((c) => c.intervalSec !== undefined),
+	);
+	let intervalValue = $derived.by(() => {
+		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
+		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
+			return "";
+		}
+		return String(commonIntervalSec);
+	});
+
+	/** Read on open, not at mount — presets saved meanwhile show up. */
+	let presetList = $state<Preset[]>([]);
+	let selectedPresetIndex = $derived.by(() => {
+		const name = commonValue(selectedClips.map((c) => c.presetName));
+		if (!name) return -1;
+		const i = presetList.findIndex((p) => p.name === name);
+		return i === -1 ? -1 : i;
+	});
+
+	/** A clip with no spacing yet takes one beat, or a flat second without a BPM. */
+	function switchToAuto() {
+		if (hasInterval) onModeChange?.(selectedClipIds, "interval");
+		else if (bpm > 0) onModeChange?.(selectedClipIds, "interval", 60 / bpm, 1);
+		else onModeChange?.(selectedClipIds, "interval", 1, null);
+	}
+
+	/** The chain's label, unless it is the default a fresh clip carries — a
+	 * row of "clean" says nothing the empty rack doesn't. */
+	function chainLabel(clip: TextClip): string | null {
+		if (clip.label === "clean" && !clip.modified) return null;
+		return clip.modified ? `${clip.label}*` : clip.label;
+	}
 	/** Set on pointerdown when a plain click landed on an already-selected clip.
 	 * The selection has to survive until pointerup so the clip (or the group) can
 	 * still be dragged; only a click that turns out not to be a drag resolves it —
@@ -143,12 +233,12 @@
 
 	function selectOnly(clipId: string) {
 		selectedClipId = clipId;
-		selectedIds = [clipId];
+		selectedClipIds = [clipId];
 	}
 
 	function deselect() {
 		selectedClipId = null;
-		selectedIds = [];
+		selectedClipIds = [];
 	}
 
 	// Follow external changes to the primary (applying lyrics, the panel's back
@@ -160,12 +250,13 @@
 		);
 		untrack(() => {
 			if (!id || !alive.has(id)) {
-				if (selectedIds.length > 0) selectedIds = [];
+				if (selectedClipIds.length > 0) selectedClipIds = [];
 				return;
 			}
-			const pruned = selectedIds.filter((x) => alive.has(x));
-			if (!pruned.includes(id)) selectedIds = [id];
-			else if (pruned.length !== selectedIds.length) selectedIds = pruned;
+			const pruned = selectedClipIds.filter((x) => alive.has(x));
+			if (!pruned.includes(id)) selectedClipIds = [id];
+			else if (pruned.length !== selectedClipIds.length)
+				selectedClipIds = pruned;
 		});
 	});
 
@@ -292,13 +383,13 @@
 		// the source and fx lanes. Checked before the plain-Shift range, which
 		// would otherwise swallow it.
 		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
-			if (selectedIds.includes(clipId)) {
-				const rest = selectedIds.filter((x) => x !== clipId);
-				selectedIds = rest;
+			if (selectedClipIds.includes(clipId)) {
+				const rest = selectedClipIds.filter((x) => x !== clipId);
+				selectedClipIds = rest;
 				if (selectedClipId === clipId)
 					selectedClipId = rest[rest.length - 1] ?? null;
 			} else {
-				selectedIds = [...selectedIds, clipId];
+				selectedClipIds = [...selectedClipIds, clipId];
 				selectedClipId = clipId;
 			}
 			return;
@@ -317,7 +408,7 @@
 			if (lane && selectedClipId) {
 				const range = clipRange(lane, selectedClipId, clipId);
 				if (range.length > 0) {
-					selectedIds = range;
+					selectedClipIds = range;
 					return;
 				}
 			}
@@ -327,7 +418,7 @@
 
 		// A plain click on something already selected keeps the selection, so it
 		// can be dragged; pointerup resolves it if nothing moved.
-		if (selectedIds.includes(clipId) && mode === "move") {
+		if (selectedClipIds.includes(clipId) && mode === "move") {
 			selectedClipId = clipId;
 			clickOnUp = clipId;
 		} else {
@@ -458,7 +549,9 @@
 			const over = stack.laneIdAt(e.clientY);
 			const held = laneOf(laneId)?.clips.find((c) => c.id === clipId);
 			if (over && over !== laneId && laneOf(over) && held) {
-				const group = selectedIds.includes(clipId) ? selectedIds : [clipId];
+				const group = selectedClipIds.includes(clipId)
+					? selectedClipIds
+					: [clipId];
 				const lanes = moveClipsToLane(
 					timeline.lanes,
 					laneId,
@@ -466,6 +559,10 @@
 					group,
 					t - grabOffset - held.start,
 					trackDuration,
+					undefined,
+					stack.crossLaneTolerance(
+						laneOf(laneId)!.clips.filter((c) => group.includes(c.id)),
+					),
 				);
 				if (lanes !== timeline.lanes) {
 					drag.laneId = over;
@@ -480,7 +577,7 @@
 			laneOf(laneId)!,
 			drag,
 			t,
-			selectedIds,
+			selectedClipIds,
 			trackDuration,
 			(edges, exclude) => stack.snapShift(edges, exclude, e.altKey),
 		);
@@ -491,7 +588,8 @@
 	function onPointerUp(e: PointerEvent) {
 		if (clickOnUp) {
 			// Clicking the one selected clip again drops the selection.
-			const sole = selectedIds.length === 1 && selectedIds[0] === clickOnUp;
+			const sole =
+				selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
 			if (sole) deselect();
 			else selectOnly(clickOnUp);
 			clickOnUp = null;
@@ -507,7 +605,7 @@
 
 	/** Delete every selected clip, across lanes, as one undo step. */
 	function deleteSelection() {
-		const ids = new Set(selectedIds);
+		const ids = new Set(selectedClipIds);
 		if (ids.size === 0) return;
 		onBeforeEdit?.();
 		onChange({
@@ -534,9 +632,9 @@
 	let clipStamp = -1;
 
 	function copySelection(): boolean {
-		clipboard = copyTextClips(timeline, selectedIds);
+		clipboard = copyTextClips(timeline, selectedClipIds);
 		if (clipboard.length === 0) return false;
-		copiedIds = new Set(selectedIds);
+		copiedIds = new Set(selectedClipIds);
 		clipStamp = markCopied();
 		return true;
 	}
@@ -544,10 +642,11 @@
 	function pasteClipboard(): boolean {
 		if (clipboard.length === 0 || latestCopy() !== clipStamp) return false;
 		const ontoSelf =
-			selectedIds.length > 0 && selectedIds.every((id) => copiedIds.has(id));
-		if (selectedIds.length > 0 && !ontoSelf) {
+			selectedClipIds.length > 0 &&
+			selectedClipIds.every((id) => copiedIds.has(id));
+		if (selectedClipIds.length > 0 && !ontoSelf) {
 			onBeforeEdit?.();
-			onChange(pasteTextOnto(timeline, selectedIds, clipboard));
+			onChange(pasteTextOnto(timeline, selectedClipIds, clipboard));
 			return true;
 		}
 		return pasteClips();
@@ -567,7 +666,7 @@
 		onBeforeEdit?.();
 		onChange(result.timeline);
 		for (const id of result.clipIds) copiedIds.add(id);
-		selectedIds = result.clipIds;
+		selectedClipIds = result.clipIds;
 		selectedClipId = result.clipIds[result.clipIds.length - 1];
 		return true;
 	}
@@ -591,12 +690,12 @@
 			}
 			return;
 		}
-		if (e.key === "Escape" && selectedIds.length > 0) {
+		if (e.key === "Escape" && selectedClipIds.length > 0) {
 			deselect();
 			return;
 		}
 		if (e.key !== "Delete" && e.key !== "Backspace") return;
-		if (selectedIds.length === 0) return;
+		if (selectedClipIds.length === 0) return;
 		e.preventDefault();
 		deleteSelection();
 	}
@@ -676,8 +775,8 @@
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"
-							class:selected={selectedIds.includes(clip.id)}
-							class:primary={selectedIds.length > 1 &&
+							class:selected={selectedClipIds.includes(clip.id)}
+							class:primary={selectedClipIds.length > 1 &&
 								clip.id === selectedClipId}
 							class:muted={!lane.enabled}
 							style="left: {left}%; width: {width}%"
@@ -697,7 +796,12 @@
 									onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
 							{#if clipPx(clip) >= MIN_LABEL_PX}
-								<span class="clip-label">{clip.text || "—"}</span>
+								<span class="clip-label">
+									{clip.text || "—"}
+									{#if chainLabel(clip)}
+										<span class="clip-chain">{chainLabel(clip)}</span>
+									{/if}
+								</span>
 							{/if}
 							<span
 								class="clip-edge end"
@@ -765,7 +869,187 @@
 	{/if}
 </div>
 
+{#snippet clipBar()}
+	{#if selectedClips.length > 0}
+		<div class="tc-bar">
+			<span class="tc-title">Text</span>
+			<span class="tl-tool-label">
+				{manySelected
+					? `${selectedClips.length} clips`
+					: (chainLabel(selectedClips[0]) ?? "clean")}
+			</span>
+
+			<div class="tl-tool-sep"></div>
+			<span class="tl-tool-label">Fill</span>
+			<select
+				class="tc-select"
+				value={selectedPresetIndex}
+				onmousedown={() => (presetList = loadPresets())}
+				onchange={(e) => {
+					const idx = Number(e.currentTarget.value);
+					const preset = presetList[idx];
+					if (preset) onApplyPreset?.(selectedClipIds, preset);
+				}}
+			>
+				<option value={-1} disabled>Preset…</option>
+				{#each presetList as p, i}
+					<option value={i}>{p.name}</option>
+				{/each}
+			</select>
+			<button
+				class="tl-tool-btn"
+				title={commonMode === "interval"
+					? "New random seed"
+					: manySelected
+						? "Random mosh for each selected clip"
+						: "Random mosh for this clip"}
+				onclick={() => onRoll?.(selectedClipIds)}
+			>
+				<Dices size={12} /> Mosh
+			</button>
+			<button
+				class="tl-tool-btn"
+				title={manySelected
+					? "Clear the selected clips' effects"
+					: "Clear this clip's effects"}
+				onclick={() => onClear?.(selectedClipIds)}
+			>
+				<Eraser size={12} /> Clear
+			</button>
+
+			<div class="tl-tool-sep"></div>
+			<span class="tl-tool-label">Mode</span>
+			<div class="tc-mode">
+				<button
+					class="tl-tool-btn"
+					class:active={commonMode === "static"}
+					onclick={() => onModeChange?.(selectedClipIds, "static")}
+				>
+					Static
+				</button>
+				<button
+					class="tl-tool-btn"
+					class:active={commonMode === "interval"}
+					onclick={switchToAuto}
+				>
+					Auto
+				</button>
+			</div>
+			{#if commonMode === "interval"}
+				<select
+					class="tc-select"
+					value={intervalValue}
+					title="How often this clip re-rolls its mosh"
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v === "") return;
+						if (v.startsWith("b")) {
+							const beats = Number(v.slice(1));
+							onModeChange?.(
+								selectedClipIds,
+								"interval",
+								(60 / bpm) * beats,
+								beats,
+							);
+						} else {
+							// Picking a plain duration drops the beat link, so a later BPM
+							// change leaves it alone.
+							onModeChange?.(selectedClipIds, "interval", Number(v), null);
+						}
+					}}
+				>
+					{#if intervalValue === ""}
+						<option value="" disabled>—</option>
+					{/if}
+					{#if bpm > 0}
+						{#each BEAT_INTERVALS as opt}
+							<option value={`b${opt.beats}`}>{opt.label}</option>
+						{/each}
+					{/if}
+					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
+						<!-- String, not the number: the select's value is a string and Svelte
+						     matches an option by strict equality, so a numeric option value
+						     never matches and the picker renders blank. -->
+						<option value={String(sec)}>every {sec}s</option>
+					{/each}
+				</select>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <style>
+	.tc-bar {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		padding: 0 0.25rem;
+	}
+
+	/* Too narrow for one row of everything: the controls wrap into as many rows
+	   as they need, with the captions and dividers gone — it's their space the
+	   row is short of. */
+	@media (max-width: 800px) {
+		.tc-bar {
+			flex-wrap: wrap;
+			row-gap: 0.3rem;
+			padding: 0.3rem 0;
+		}
+
+		.tc-bar > :global(.tl-tool-label),
+		.tc-bar > :global(.tl-tool-sep) {
+			display: none;
+		}
+	}
+
+	.tc-title {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--mosh);
+		white-space: nowrap;
+	}
+
+	.tc-mode {
+		display: flex;
+	}
+
+	.tc-mode :global(.tl-tool-btn:first-child) {
+		border-right-color: transparent;
+		border-radius: 4px 0 0 4px;
+	}
+
+	.tc-mode :global(.tl-tool-btn:last-child) {
+		border-radius: 0 4px 4px 0;
+	}
+
+	/* The lane's own accent, rather than the stack toolbar's blue. */
+	.tc-mode :global(.tl-tool-btn.active) {
+		border-color: var(--mosh);
+		background: rgba(198, 162, 234, 0.12);
+		color: var(--mosh);
+	}
+
+	.tc-select {
+		max-width: 9rem;
+		padding: 0.15rem 0.25rem;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--surface);
+		color: var(--text-2);
+		font-size: 0.65rem;
+		font-family: inherit;
+	}
+
+	/* The chain rides after the words, dimmer: what it says first, what runs
+	   on it second. */
+	.clip-chain {
+		margin-left: 0.35rem;
+		color: var(--mosh);
+		opacity: 0.85;
+	}
 	/* No box of its own: the rows join the layer column their sibling component
 	   renders into, so one `order` per row interleaves the two kinds. */
 	.text-tl {

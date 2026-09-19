@@ -24,6 +24,7 @@
 	import {
 		resolveTextLayersAt,
 		type ResolvedTextLayer,
+		type TextChainSource,
 		type TextTimeline,
 	} from "../../text";
 	import {
@@ -105,6 +106,8 @@
 		/** Chain per media clip and time — an auto clip's roll for the tick.
 		 * Without one every clip renders its stored chain. */
 		mediaChains?: MediaChainSource | null;
+		/** The same, per text clip. */
+		textChains?: TextChainSource | null;
 		/**
 		 * Sequence mode: the frame's size, with no media of its own. The base
 		 * stays black at this size under the layers; `imageSrc` and the video
@@ -173,6 +176,7 @@
 		soloMediaLaneId = null,
 		mediaDriver = null,
 		mediaChains = null,
+		textChains = null,
 		baseSize = null,
 		textTime = 0,
 		bpm = 0,
@@ -612,7 +616,7 @@
 	 * Read off the resolved layers: the chain on screen is the clip's under
 	 * the playhead, or the roll an auto clip made for this tick. */
 	const hasAnimatedLayers = $derived(
-		!!mediaTimeline?.enabled &&
+		(!!mediaTimeline?.enabled &&
 			resolveMediaLayersAt(
 				mediaTimeline,
 				textTime,
@@ -620,7 +624,15 @@
 				mediaChains ?? undefined,
 			).some((l) =>
 				l.effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
-			),
+			)) ||
+			(!!textTimeline?.enabled &&
+				resolveTextLayersAt(
+					textTimeline,
+					textTime,
+					textChains ?? undefined,
+				).some((l) =>
+					l.effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
+				)),
 	);
 	const needsAnimation = $derived(
 		!externallyDriven &&
@@ -640,7 +652,9 @@
 		renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
 		const solo = soloMediaLaneId;
 		const layers =
-			textTimeline && !solo ? resolveTextLayersAt(textTimeline, textTime) : [];
+			textTimeline && !solo
+				? resolveTextLayersAt(textTimeline, textTime, textChains ?? undefined)
+				: [];
 		const media = mediaTimeline
 			? resolveMediaLayersAt(
 					mediaTimeline,
@@ -1006,14 +1020,19 @@
 			l.z;
 			const style = l.style as unknown as Record<string, unknown>;
 			for (const k of Object.keys(style)) style[k];
-			for (const e of l.effects) {
-				e.enabled;
-				for (const k of Object.keys(e.values)) e.values[k];
-			}
 			for (const c of l.clips) {
 				c.start;
 				c.end;
 				c.text;
+				c.fadeInSec;
+				c.fadeOutSec;
+				c.mode;
+				c.seed;
+				c.intervalSec;
+				for (const e of c.effects) {
+					e.enabled;
+					for (const k of Object.keys(e.values)) e.values[k];
+				}
 			}
 		}
 	}

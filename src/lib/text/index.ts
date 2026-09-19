@@ -4,6 +4,15 @@ import type { TextTimeline } from "./types";
 
 export { createTextHistory } from "./history.svelte";
 export {
+	applyBpmToTextClips,
+	clearTextClips,
+	fillTextClipsFromPreset,
+	restoreTextClipMosh,
+	rollTextClips,
+	setTextClipsMode,
+	syncTextClipsToPreset,
+} from "./chain";
+export {
 	copyTextClips,
 	pasteTextClips,
 	pasteTextOnto,
@@ -18,7 +27,7 @@ export {
 	lyricsLane,
 } from "./lyrics";
 export { drawTextToCanvas, textSignature } from "./render-text-clip";
-export type { ResolvedTextLayer } from "./resolve";
+export type { ResolvedTextLayer, TextChainSource } from "./resolve";
 export {
 	addClip,
 	allTextEffectIds,
@@ -26,6 +35,7 @@ export {
 	findTextClipLane,
 	clipAt,
 	clipRange,
+	createTextChainSource,
 	freeRangeAt,
 	moveClip,
 	moveClips,
@@ -37,6 +47,7 @@ export {
 	sortClips,
 	textTimelineFonts,
 	updateLane,
+	updateTextClips,
 } from "./resolve";
 export type {
 	TextAlign,

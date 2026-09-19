@@ -267,10 +267,33 @@ describe("normalizeTextTimeline", () => {
 		expect(t.lanes[0].underEffects).toBe(false);
 		expect(typeof t.lanes[0].z).toBe("number");
 		expect(t.lanes[0].style.color).toBe("#ffffff");
-		// Backfilled rather than left empty: a lane with no chain gives its panel
+		// Backfilled rather than left empty: a clip with no chain gives its panel
 		// nothing to switch on.
-		expect(t.lanes[0].effects.length).toBeGreaterThan(0);
-		expect(t.lanes[0].effects.every((e) => !e.enabled)).toBe(true);
+		const clip = t.lanes[0].clips[0];
+		expect(clip.effects.length).toBeGreaterThan(0);
+		expect(clip.effects.every((e) => !e.enabled)).toBe(true);
+		expect(clip.label).toBe("clean");
+	});
+
+	it("hands a legacy lane chain to every clip, a copy each", () => {
+		const t = normalizeTextTimeline({
+			enabled: true,
+			lanes: [
+				{
+					effects: [{ defId: "pixelate", enabled: true, values: {} }],
+					clips: [
+						{ start: 0, end: 1 },
+						{ start: 1, end: 2 },
+					],
+				},
+			],
+		});
+		const [a, b] = t.lanes[0].clips;
+		expect(a.effects.find((e) => e.defId === "pixelate")?.enabled).toBe(true);
+		expect(b.effects.find((e) => e.defId === "pixelate")?.enabled).toBe(true);
+		expect(a.effects).not.toBe(b.effects);
+		expect(a.label).toBe("pixelate");
+		expect(t.lanes[0]).not.toHaveProperty("effects");
 	});
 
 	it("keeps a clip's fades and drops zeroed ones", () => {

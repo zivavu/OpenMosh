@@ -210,6 +210,9 @@ export function moveClipsToLane<
 	delta: number,
 	duration: number,
 	adapt?: (clip: L["clips"][number], from: L, to: L) => L["clips"][number],
+	/** How far (seconds) the group may slide from `delta` to find room on the
+	 * new lane. 0 means only an exact fit carries it over. */
+	tolerance = 0,
 ): L[] {
 	if (fromId === toId) return lanes;
 	const from = lanes.find((l) => l.id === fromId);
@@ -219,17 +222,13 @@ export function moveClipsToLane<
 	const moving = from.clips.filter((c) => ids.has(c.id));
 	if (moving.length === 0) return lanes;
 
+	const shift = nearestFitDelta(moving, to, delta, duration, tolerance);
+	if (shift === null) return lanes;
 	const placed = moving.map((c) => ({
 		...c,
-		start: c.start + delta,
-		end: c.end + delta,
+		start: c.start + shift,
+		end: c.end + shift,
 	}));
-	for (const clip of placed) {
-		if (clip.start < 0 || clip.end > duration) return lanes;
-		for (const other of to.clips) {
-			if (clip.start < other.end && other.start < clip.end) return lanes;
-		}
-	}
 
 	const landed = adapt ? placed.map((c) => adapt(c, from, to)) : placed;
 	return lanes.map((l) => {
@@ -240,6 +239,57 @@ export function moveClipsToLane<
 			return { ...l, clips: sortClips([...l.clips, ...landed]) };
 		return l;
 	});
+}
+
+/** Room for the whole group, shifted by `delta`, with nothing else on the lane. */
+function groupFits(
+	group: readonly TimelineClip[],
+	lane: ClipLane<TimelineClip>,
+	delta: number,
+	duration: number,
+): boolean {
+	return group.every((c) =>
+		fits(lane, c.start + delta, c.end + delta, duration),
+	);
+}
+
+/**
+ * The shift closest to `wanted` at which `group` lands clear on `lane`, or
+ * null when nothing within `tolerance` of it does.
+ *
+ * A drag into another row rarely lands the group exactly in a gap: the
+ * pointer is where the user's eye is, not where the neighbours' edges are.
+ * So rather than refusing the row until the pixels line up, the group slides
+ * to the nearest spot that holds it — flush against whichever clip it was
+ * overlapping, or the track's ends. Only those ends are worth trying: between
+ * two of them nothing changes about what blocks what.
+ */
+export function nearestFitDelta(
+	group: readonly TimelineClip[],
+	lane: ClipLane<TimelineClip>,
+	wanted: number,
+	duration: number,
+	tolerance: number,
+): number | null {
+	if (groupFits(group, lane, wanted, duration)) return wanted;
+	if (tolerance <= 0) return null;
+	const minStart = Math.min(...group.map((c) => c.start));
+	const maxEnd = Math.max(...group.map((c) => c.end));
+	const candidates = new Set<number>([-minStart, duration - maxEnd]);
+	for (const m of group) {
+		for (const o of lane.clips) {
+			candidates.add(o.end - m.start);
+			candidates.add(o.start - m.end);
+		}
+	}
+	let best: number | null = null;
+	for (const d of candidates) {
+		if (Math.abs(d - wanted) > tolerance) continue;
+		if (best !== null && Math.abs(d - wanted) >= Math.abs(best - wanted))
+			continue;
+		if (groupFits(group, lane, d, duration)) best = d;
+	}
+	return best;
 }
 
 /**

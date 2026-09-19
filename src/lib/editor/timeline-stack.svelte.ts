@@ -14,6 +14,8 @@ import { TimelineViewport } from "./timeline-viewport.svelte";
 
 /** How close, on screen, a dragged edge has to come to a target to snap. */
 const SNAP_PX = 7;
+/** The least a group dragged across rows may slide to find room, on screen. */
+const CROSS_LANE_PX = 32;
 /** Beats closer together than this on screen are left out of the targets:
  * zoomed out, they would quantise every drag to a grid that isn't drawn. */
 const MIN_BEAT_PX = 24;
@@ -106,6 +108,21 @@ export class TimelineStackState {
 		);
 		this.snapGuide = hit?.at ?? null;
 		return hit?.shift ?? 0;
+	}
+
+	/**
+	 * How far a group dragged into another row may slide to find room there:
+	 * its own length, or a thumb's width of screen when the clips are tiny.
+	 * Its own length because that is what a drop over a taken spot reads as —
+	 * "put it next to that one" — while a longer jump lands out of sight.
+	 */
+	crossLaneTolerance(group: readonly { start: number; end: number }[]): number {
+		const secPerPx =
+			this.laneWidth > 0 ? this.vp.viewDuration / this.laneWidth : 0;
+		const length =
+			Math.max(...group.map((c) => c.end)) -
+			Math.min(...group.map((c) => c.start));
+		return Math.max(length, secPerPx * CROSS_LANE_PX);
 	}
 
 	/** snapShift() for a single edge: the time it should land on. */

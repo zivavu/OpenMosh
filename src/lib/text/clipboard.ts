@@ -1,10 +1,17 @@
 /**
- * Copy/paste for text clips. A clip is its span and its text — the style is
- * the lane's — so a whole-clip paste stamps the words down elsewhere in the
- * lane's own look, and a paste *onto* a clip swaps its words and keeps its
- * span. The same two gestures the media and fx lanes answer to.
+ * Copy/paste for text clips. A clip is its span, its words and its chain —
+ * the style is the lane's — so a whole-clip paste stamps the words and chain
+ * down elsewhere in the lane's own look, and a paste *onto* a clip swaps its
+ * words and chain and keeps its span. The same two gestures the media and fx
+ * lanes answer to.
  */
 
+import {
+	applyChainTo,
+	captureChain,
+	type CopiedChain,
+} from "../editor/chain-clipboard";
+import { cloneChainEffects } from "../editor/chain-clip";
 import {
 	placeClipBlock,
 	retargetClipBlock,
@@ -15,8 +22,16 @@ import { createTextClip, type TextClip, type TextTimeline } from "./types";
 
 export interface TextClipboardEntry extends ClipBlockEntry {
 	text: string;
+	/** The clip's chain and how it rolls, so a paste renders the same. */
+	chain: CopiedChain;
 	fadeInSec?: number;
 	fadeOutSec?: number;
+}
+
+/** A pasted chain, with fresh instance ids: the renderer keys per-effect
+ * state by them and two clips must not share. */
+function chainOf(e: TextClipboardEntry): CopiedChain {
+	return { ...e.chain, effects: cloneChainEffects(e.chain.effects) };
 }
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
@@ -36,6 +51,7 @@ export function copyTextClips(
 				offset: clip.start,
 				length: clip.end - clip.start,
 				text: clip.text,
+				chain: captureChain(clip),
 				fadeInSec: clip.fadeInSec,
 				fadeOutSec: clip.fadeOutSec,
 			});
@@ -79,7 +95,7 @@ export function pasteTextClips(
 	const added = new Map<string, TextClip[]>();
 	const clipIds: string[] = [];
 	for (const { entry: e, start, end } of placed) {
-		const clip = createTextClip(start, end, e.text);
+		const clip = applyChainTo(createTextClip(start, end, e.text), chainOf(e));
 		if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
 		if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 		clipIds.push(clip.id);
@@ -101,8 +117,8 @@ export function pasteTextClips(
 	};
 }
 
-/** Put the copied words into the selected clips, in time order; a shorter
- * copy repeats over them. Each target keeps its span and lane. */
+/** Put the copied words and chain into the selected clips, in time order; a
+ * shorter copy repeats over them. Each target keeps its span, fade and lane. */
 export function pasteTextOnto(
 	timeline: TextTimeline,
 	clipIds: string[],
@@ -124,9 +140,9 @@ export function pasteTextOnto(
 				...lane,
 				clips: lane.clips.map((c) => {
 					const i = order.indexOf(c.id);
-					return i === -1
-						? c
-						: { ...c, text: entries[i % entries.length].text };
+					if (i === -1) return c;
+					const e = entries[i % entries.length];
+					return applyChainTo({ ...c, text: e.text }, chainOf(e));
 				}),
 			};
 		}),

@@ -155,7 +155,10 @@ describe("newClipSpan", () => {
 	});
 
 	it("is null where the gap is too short to hold anything", () => {
-		const tight = laneOf(clip("a", 0, 1), clip("b", 1 + MIN_CLIP_LENGTH / 2, 4));
+		const tight = laneOf(
+			clip("a", 0, 1),
+			clip("b", 1 + MIN_CLIP_LENGTH / 2, 4),
+		);
 		expect(newClipSpan(tight, 1, 10, 2)).toBeNull();
 	});
 
@@ -180,9 +183,7 @@ describe("newClipSpan", () => {
 			for (const want of [MIN_CLIP_LENGTH / 3, 0.1, 1, 2, 30]) {
 				const span = newClipSpan(lane, t, 10, want);
 				if (!span) continue;
-				expect(addClip(lane, { id: "new", ...span }, 10).clips).toHaveLength(
-					3,
-				);
+				expect(addClip(lane, { id: "new", ...span }, 10).clips).toHaveLength(3);
 				expect(span.start).toBeGreaterThanOrEqual(2);
 				expect(span.end).toBeLessThanOrEqual(4);
 			}
@@ -322,6 +323,48 @@ describe("moveClipsToLane", () => {
 		const lanes = [idLane("x", clip("a", 0, 1)), idLane("y")];
 		expect(moveClipsToLane(lanes, "x", "y", ["a"], -0.5, 10)).toBe(lanes);
 		expect(moveClipsToLane(lanes, "x", "y", ["a"], 9.5, 10)).toBe(lanes);
+	});
+
+	it("slides to the nearest free spot within the tolerance", () => {
+		const lanes = [
+			idLane("x", clip("a", 0, 1), clip("b", 2, 3)),
+			idLane("y", clip("c", 4, 5)),
+		];
+		// Wanted lands b on c; flush after c is the closest place the pair fits.
+		const next = moveClipsToLane(
+			lanes,
+			"x",
+			"y",
+			["a", "b"],
+			2,
+			10,
+			undefined,
+			3,
+		);
+		expect(spans(next[1])).toEqual([
+			["a", 3, 4],
+			["c", 4, 5],
+			["b", 5, 6],
+		]);
+		// Tighter than the shift needed: nothing moves.
+		expect(
+			moveClipsToLane(lanes, "x", "y", ["a", "b"], 2, 10, undefined, 0.5),
+		).toBe(lanes);
+	});
+
+	it("slides back inside the timeline's ends", () => {
+		const lanes = [idLane("x", clip("a", 0, 1)), idLane("y")];
+		const next = moveClipsToLane(lanes, "x", "y", ["a"], 9.5, 10, undefined, 1);
+		expect(spans(next[1])).toEqual([["a", 9, 10]]);
+	});
+
+	it("prefers the exact spot when it is free", () => {
+		const lanes = [idLane("x", clip("a", 0, 1)), idLane("y", clip("c", 4, 5))];
+		const next = moveClipsToLane(lanes, "x", "y", ["a"], 2, 10, undefined, 5);
+		expect(spans(next[1])).toEqual([
+			["a", 2, 3],
+			["c", 4, 5],
+		]);
 	});
 
 	it("ignores ids that aren't on the source lane, and same-lane moves", () => {

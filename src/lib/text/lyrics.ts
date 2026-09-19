@@ -1,3 +1,4 @@
+import { applyChainTo, captureChain } from "../editor/chain-clipboard";
 import { sortClips } from "./resolve";
 import {
 	createTextClip,
@@ -45,6 +46,9 @@ export function createLyricsClips(
 	}
 	// Claimed one at a time, so a line repeated twice reuses two distinct clips.
 	const spare = [...previous];
+	// A new line takes the look the lane already has: the lyrics were moshed
+	// as one, and one fresh line reading clean among them is a hole.
+	const template = previous[0];
 	return lines.map((text, i) => {
 		const start = starts[i];
 		const end =
@@ -52,7 +56,10 @@ export function createLyricsClips(
 				? starts[i + 1]
 				: Math.max(spanEnd, start + MIN_CLIP_LENGTH);
 		const at = spare.findIndex((c) => c.text === text);
-		if (at === -1) return createTextClip(start, end, text);
+		if (at === -1) {
+			const fresh = createTextClip(start, end, text);
+			return template ? applyChainTo(fresh, captureChain(template)) : fresh;
+		}
 		const [kept] = spare.splice(at, 1);
 		return { ...kept, start, end };
 	});

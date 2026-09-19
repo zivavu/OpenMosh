@@ -7,6 +7,7 @@ import {
 import { downloadBlob, recordVideo } from "../recorder";
 import { preloadCaptionFonts } from "../caption";
 import {
+	createTextChainSource,
 	preloadTextTimelineFonts,
 	type ResolvedTextLayer,
 	type TextTimeline,
@@ -316,6 +317,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			mediaTimeline && moshOptions
 				? createMediaChainSource(() => moshOptions, { clone: true })
 				: null;
+		const textChains =
+			textTimeline && moshOptions
+				? createTextChainSource(() => moshOptions, { clone: true })
+				: null;
 		const blob = await recordVideo({
 			duration: exportDuration,
 			fps,
@@ -326,6 +331,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			textTimeline,
 			mediaTimeline: exportLayers ? mediaTimeline : null,
 			mediaChains,
+			textChains,
 			sourceEdits,
 			mediaLayerSink: exportLayers
 				? (layers) => exportLayers!.advance(layers)

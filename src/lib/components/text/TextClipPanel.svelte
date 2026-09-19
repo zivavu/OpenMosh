@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { X } from "lucide-svelte";
 	import { LaneEffects } from "../../timeline/lane-effects.svelte";
+	import { handBuiltLabel, isHandBuiltLabel } from "../../editor/sequence";
 	import { OPAQUE_OUTPUT_EFFECTS } from "../../gl/effect-shaders";
 	import { ensureFontLoaded } from "../../text-overlay";
 	import {
@@ -101,15 +102,29 @@
 		onClipChange({ ...clip, [edge]: sec > 0 ? sec : undefined });
 	}
 
-	// The lane's chain, mirrored for EffectsPanel to own and written back on
+	// The clip's chain, mirrored for EffectsPanel to own and written back on
 	// every edit. Handled here rather than by the editor: the chain on show is
 	// this mirror, so the editor has nothing to apply an edit to.
 	const chain = new LaneEffects(
-		() => lane,
-		(next) => onLaneChange(next),
+		() => clip,
+		(next) => onClipChange(next),
 		(key) => onBeforeEdit?.(key),
 	);
 	$effect(() => chain.sync());
+
+	/** A hand-edit to a preset-filled clip: the label gains a "*" and explicit
+	 * preset overwrites stop clobbering it. A hand-built chain takes its name
+	 * from what it switches on instead. */
+	function onChainEdited() {
+		chain.commit();
+		if (!clip) return;
+		const next = $state.snapshot(clip) as TextClip;
+		if (isHandBuiltLabel(next)) next.label = handBuiltLabel(next.effects);
+		else if (!next.modified) next.modified = true;
+		if (next.label !== clip.label || next.modified !== clip.modified) {
+			onClipChange({ ...clip, label: next.label, modified: next.modified });
+		}
+	}
 
 	let opaqueNames = $derived(
 		chain.effects
@@ -409,15 +424,33 @@
 					instead of following the letters.
 				</p>
 			{/if}
+			<p class="hint">
+				These effects only run on this clip's text, before it meets the frame.
+			</p>
 			<EffectsPanel
 				headless
 				bind:effects={() => chain.effects, (v) => (chain.effects = v)}
+				rolledNote={clip.mode === "interval"
+					? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the clip to Static in the clip bar to build a chain by hand."
+					: null}
+				rolledChain={clip.mode === "interval"}
 				{hasTrack}
 				{spectrumData}
 				{response}
-				onVolumeLinkChange={(i, key, link) => chain.linkChange(i, key, link)}
-				onUserEdit={() => chain.commit()}
+				onVolumeLinkChange={(i, key, link) => {
+					chain.linkChange(i, key, link);
+					onChainEdited();
+				}}
+				onUserEdit={onChainEdited}
 				onEffectsReplaced={() => chain.commit()}
+				onPresetApplied={(preset) =>
+					onClipChange({
+						...clip,
+						effects: $state.snapshot(chain.effects) as TextClip["effects"],
+						label: preset.name,
+						presetName: preset.name,
+						modified: false,
+					})}
 				onBeforeUserEdit={onBeforeEdit}
 			/>
 		{/if}
@@ -504,10 +537,16 @@
 		text-transform: uppercase;
 	}
 
+	.hint,
 	.warn {
-		color: #d9a441;
+		margin: 0;
 		font-size: 0.68rem;
 		line-height: 1.35;
+		color: var(--text-3);
+	}
+
+	.warn {
+		color: #d9a441;
 	}
 
 	.text-input {

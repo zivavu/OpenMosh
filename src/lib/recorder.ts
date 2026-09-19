@@ -1,5 +1,5 @@
 import { getDecodedAudioBuffer } from "./audio/audio-buffer-cache";
-import { type AudioLinkGroup, layerLinkGroups } from "./audio/audio-utils";
+import type { AudioLinkGroup } from "./audio/audio-utils";
 import {
 	type AudioResponse,
 	DEFAULT_AUDIO_RESPONSE,
@@ -26,6 +26,7 @@ import {
 import {
 	type ResolvedTextLayer,
 	resolveTextLayersAt,
+	type TextChainSource,
 	type TextTimeline,
 } from "./text";
 
@@ -116,6 +117,8 @@ export interface RecordOptions {
 	mediaLayerSink?: ((layers: ResolvedMediaLayer[]) => Promise<void>) | null;
 	/** Chain per media clip and frame, the export's own — see recording.ts. */
 	mediaChains?: MediaChainSource | null;
+	/** The same, per text clip. */
+	textChains?: TextChainSource | null;
 	/** Added to the frame time to reach the timeline's clock — an export that
 	 * starts at an audio span offset still lands on the clips you placed. */
 	textTimeOffset?: number;
@@ -323,6 +326,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		sourceEdits,
 		mediaLayerSink = null,
 		mediaChains = null,
+		textChains = null,
 		textTimeOffset = 0,
 		textTimeScale = 1,
 		bpm = 0,
@@ -662,12 +666,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioSource.close();
 	}
 
-	// The text layers each run their own chain, and those follow the music the
-	// same way the main chain does. Built once: an export's lanes are fixed for
-	// its whole run, and only the values written into them change. The media
-	// layers' chains are per clip, so theirs are built per frame below.
-	const textGroups = layerLinkGroups(textTimeline?.lanes ?? [], audioResponse);
-
 	// Otherwise the output's first seconds depend on where the preview was scrubbed.
 	resetAutoRange();
 	resetSpectrumRange();
@@ -683,7 +681,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			const renderEffects = effectsRef ? effectsRef.current : effects;
 			const clockTime = textTimeOffset + time * textTimeScale;
 			const textLayers = textTimeline
-				? resolveTextLayersAt(textTimeline, clockTime)
+				? resolveTextLayersAt(textTimeline, clockTime, textChains ?? undefined)
 				: [];
 			const mediaLayers = mediaTimeline
 				? resolveMediaLayersAt(
@@ -696,19 +694,16 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			if (mediaLayers.length > 0 && mediaLayerSink) {
 				await mediaLayerSink(mediaLayers);
 			}
-			// The lane is the scope, as in the preview: one lane's smoothing must
-			// never step another's, whichever clip it is on.
-			const layerGroups =
-				mediaLayers.length > 0
-					? [
-							...mediaLayers.map((l) => ({
-								scope: l.laneId,
-								effects: l.effects,
-								response: audioResponse,
-							})),
-							...textGroups,
-						]
-					: textGroups;
+			// The layers' chains are per clip — the one under the playhead, or the
+			// roll an auto clip made for this tick — so they are read off the
+			// resolved layers every frame. The lane is the scope, as in the
+			// preview: one lane's smoothing must never step another's, whichever
+			// clip it is on.
+			const layerGroups = [...mediaLayers, ...textLayers].map((l) => ({
+				scope: l.laneId,
+				effects: l.effects,
+				response: audioResponse,
+			}));
 			applyFrameAudio(
 				renderEffects,
 				frameAudioData,

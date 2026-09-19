@@ -1,3 +1,5 @@
+import { chainClipEffectsAt } from "../editor/chain-clip";
+import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
 import {
@@ -29,6 +31,7 @@ export interface ResolvedTextLayer {
 	/** Stable across frames: keys the renderer's texture and feedback caches. */
 	key: string;
 	laneId: string;
+	clipId: string;
 	/** Composite before the whole chain, or over the finished frame. */
 	underEffects: boolean;
 	/** Order among all layers, text and media alike. Higher sits on top. */
@@ -38,13 +41,39 @@ export interface ResolvedTextLayer {
 	effects: EffectInstance[];
 }
 
+/** The chain a text clip contributes at a time — see createTextChainSource. */
+export type TextChainSource = (
+	clip: TextClip,
+	time: number,
+) => EffectInstance[];
+
+/**
+ * Clip → chain resolver, one per preview and one per export; the same rules
+ * as createMediaChainSource. Static clips hand back their own chain; interval
+ * clips roll per tick through a bounded cache keyed by seed and mosh options.
+ * `clone` serves static chains as cached deep copies, so an export can write
+ * per-frame audio-link values without them landing in the clips being edited.
+ */
+export function createTextChainSource(
+	getMoshOptions: () => MoshOptions,
+	{ clone = false } = {},
+): TextChainSource {
+	const cache = new Map<string, EffectInstance[]>();
+	return (clip, time) =>
+		chainClipEffectsAt(clip, time, cache, clone, getMoshOptions);
+}
+
 /**
  * The text layers visible at `time`, in lane order. Preview and export both go
  * through here, so what you scrub past is what gets written out.
+ *
+ * Without `chains`, every clip contributes its stored chain; anything that
+ * draws passes one, or an interval clip renders clean.
  */
 export function resolveTextLayersAt(
 	timeline: TextTimeline | null | undefined,
 	time: number,
+	chains?: TextChainSource,
 ): ResolvedTextLayer[] {
 	if (!timeline?.enabled) return [];
 	const layers: ResolvedTextLayer[] = [];
@@ -59,6 +88,7 @@ export function resolveTextLayersAt(
 		layers.push({
 			key: clip.id,
 			laneId: lane.id,
+			clipId: clip.id,
 			underEffects: lane.underEffects,
 			z: lane.z,
 			text: clip.text,
@@ -66,7 +96,7 @@ export function resolveTextLayersAt(
 				weight < 1
 					? { ...lane.style, opacity: lane.style.opacity * weight }
 					: lane.style,
-			effects: lane.effects,
+			effects: chains ? chains(clip, time) : clip.effects,
 		});
 	}
 	return layers;
@@ -103,9 +133,33 @@ export function allTextEffectIds(
 	if (!timeline) return [];
 	const ids: string[] = [];
 	for (const lane of timeline.lanes) {
-		for (const eff of lane.effects) ids.push(eff.instanceId);
+		for (const clip of lane.clips) {
+			for (const eff of clip.effects) ids.push(eff.instanceId);
+		}
 	}
 	return ids;
+}
+
+/** Apply one edit to every clip in `clipIds`; the same timeline back when
+ * none of them is here. */
+export function updateTextClips(
+	timeline: TextTimeline,
+	clipIds: Set<string>,
+	fn: (clip: TextClip) => TextClip,
+): TextTimeline {
+	if (!timeline.lanes.some((l) => l.clips.some((c) => clipIds.has(c.id)))) {
+		return timeline;
+	}
+	return {
+		...timeline,
+		lanes: timeline.lanes.map((lane) => {
+			if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
+			return {
+				...lane,
+				clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)),
+			};
+		}),
+	};
 }
 
 /** Fonts every clip needs, so an export can await them before frame 0. */

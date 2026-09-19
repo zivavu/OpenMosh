@@ -743,6 +743,9 @@
 							sourceId: sourceId === to.sourceId ? undefined : sourceId,
 						};
 					},
+					stack.crossLaneTolerance(
+						laneOf(laneId)!.clips.filter((c) => group.includes(c.id)),
+					),
 				);
 				if (lanes !== timeline.lanes) {
 					drag.laneId = over;

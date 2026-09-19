@@ -1,5 +1,11 @@
-import { loadInitialEffects, restoreEffects } from "../effects";
+import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
+import {
+	cloneChainEffects,
+	normalizeChainFields,
+	type ChainClip,
+} from "../editor/chain-clip";
+import { cleanEffects, handBuiltLabel } from "../editor/sequence";
 // Straight from the module, not the barrel: that re-exports the custom-font
 // store, whose runes can't run outside a Svelte build — which took this file's
 // tests down with it.
@@ -39,8 +45,10 @@ export interface TextStyle {
 	blendMode: TextOverlayBlendMode;
 }
 
-/** One span of text on a lane. */
-export interface TextClip extends TimelineClip {
+/** One span of text on a lane. A chain clip (see chain-clip.ts): the effects
+ * run on this clip's text alone, before it meets the image, and roll, fill
+ * and clear the same way a media clip's do. */
+export interface TextClip extends ChainClip {
 	text: string;
 	/** Ramp the layer in over `fadeInSec` after its start and out over
 	 * `fadeOutSec` before its end — each edge on its own, the same as a media
@@ -76,9 +84,6 @@ export interface TextLane {
 	z: number;
 	/** Shared by every clip in the lane. */
 	style: TextStyle;
-	/** Run on the lane's text alone, before it meets the image. Shared by every
-	 * clip in the lane, like the style is. */
-	effects: EffectInstance[];
 	clips: TextClip[];
 }
 
@@ -114,7 +119,17 @@ export function createTextClip(
 	end: number,
 	text = "",
 ): TextClip {
-	return { id: nextId("clip"), start, end, text };
+	return {
+		id: nextId("clip"),
+		start,
+		end,
+		text,
+		mode: "static",
+		label: "clean",
+		// See createMediaClip: the same all-disabled list the main chain starts
+		// from, so the panel has something to switch on.
+		effects: cleanEffects(),
+	};
 }
 
 /**
@@ -132,8 +147,18 @@ export function splitTextClipAt(lane: TextLane, at: number): TextLane {
 		...lane,
 		clips: sortClips([
 			...lane.clips.filter((c) => c.id !== clip.id),
-			{ ...clip, id: nextId("clip"), end: at },
-			{ ...clip, id: nextId("clip"), start: at },
+			{
+				...clip,
+				id: nextId("clip"),
+				end: at,
+				effects: cloneChainEffects(clip.effects),
+			},
+			{
+				...clip,
+				id: nextId("clip"),
+				start: at,
+				effects: cloneChainEffects(clip.effects),
+			},
 		]),
 	};
 }
@@ -150,9 +175,6 @@ export function createTextLane(
 		underEffects: false,
 		z,
 		style: { ...style },
-		// See createMediaLane: the same all-disabled list the main chain starts
-		// from, so the panel has something to switch on.
-		effects: loadInitialEffects(),
 		clips: [],
 	};
 }
@@ -185,10 +207,10 @@ export function appendTextLane(
  */
 export const TEXT_Z_BASE = 1000;
 
-/** A lane saved with no chain at all is backfilled, not left switch-less. */
-function laneEffects(saved: unknown): EffectInstance[] {
+/** A clip saved with no chain at all is backfilled, not left switch-less. */
+function clipEffects(saved: unknown): EffectInstance[] {
 	const hydrated = restoreEffects(saved);
-	return hydrated.length > 0 ? hydrated : loadInitialEffects();
+	return hydrated.length > 0 ? hydrated : cleanEffects();
 }
 
 function legacyChainIndex(lane: object): number {
@@ -220,14 +242,25 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 				underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
 				z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
 				style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
-				effects: laneEffects(lane.effects),
 				clips: clips.map((clip) => {
+					// Lanes saved before clips carried their own chain held one for
+					// the whole lane: every clip inherits it, a copy each, so the
+					// lane keeps rendering as it did.
+					const legacyChain = (lane as { effects?: unknown }).effects;
+					const effects = Array.isArray(clip.effects)
+						? clipEffects(clip.effects)
+						: clipEffects(legacyChain);
 					const out: TextClip = {
 						id: clip.id ?? nextId("clip"),
 						start: clip.start ?? 0,
 						end: clip.end ?? 0,
 						text: clip.text ?? "",
+						...normalizeChainFields(clip, effects),
 					};
+					// An inherited chain has no label of its own: name it by what
+					// it switches on rather than calling a moshed lane "clean".
+					if (!Array.isArray(clip.effects) && !clip.label)
+						out.label = handBuiltLabel(effects);
 					if (clip.fadeInSec! > 0) out.fadeInSec = clip.fadeInSec;
 					if (clip.fadeOutSec! > 0) out.fadeOutSec = clip.fadeOutSec;
 					return out;

@@ -535,6 +535,10 @@
 					group,
 					t - grabOffset - held.start,
 					trackDuration,
+					undefined,
+					stack.crossLaneTolerance(
+						laneOf(laneId)!.clips.filter((c) => group.includes(c.id)),
+					),
 				);
 				if (next !== lanes) {
 					drag.laneId = over;
