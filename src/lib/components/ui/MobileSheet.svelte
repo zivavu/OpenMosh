@@ -264,12 +264,6 @@
 		max-width: 100%;
 	}
 
-	/* The chain owns the tab's height and scrolls inside it. */
-	.tab-content > :global(.effects-panel) {
-		flex: 1 1 auto;
-		min-height: 0;
-	}
-
 	@media (max-width: 800px) {
 		.sheet-container {
 			position: fixed;
