@@ -13,12 +13,10 @@
  * can even hold the same effect without colliding.
  */
 
-import type { AudioResponse } from "../audio/auto-range";
 import {
 	generateId,
 	restoreEffects,
 	type EffectInstance,
-	type FreqBand,
 	type Preset,
 } from "../effects";
 import {
@@ -39,7 +37,12 @@ import {
 	withChainMode,
 	withChainMosh,
 	type ChainClip,
+	laneAudioResponse,
+	laneMoshOptions,
+	type LaneSettings,
+	normalizeLaneSettings,
 } from "./chain-clip";
+export { laneAudioResponse, laneMoshOptions };
 import type { MoshOptions } from "./mosh";
 import type { MoshSnapshot } from "./mosh-history";
 import { beatsToSeconds, cleanEffects, type ChainMode } from "./sequence";
@@ -77,24 +80,8 @@ export function fxClipWeight(clip: FxClip, time: number): number {
 /** 0-based re-roll tick index inside an interval clip. */
 export const fxClipTick: (clip: FxClip, time: number) => number = chainClipTick;
 
-/**
- * How one lane rolls its moshes and how its links follow the music.
- *
- * A lane is its own instrument: a slow-breathing wash on lane 1 and a hard
- * per-hit stutter on lane 2 want opposite settings, and one global set could
- * only ever serve one of them. Snapshotted from the editor's settings when the
- * lane is created, then the lane's own.
- */
-export interface FxLaneSettings {
-	moshMin: number;
-	moshMax: number;
-	randomizeOrder: boolean;
-	moshAudioLink: boolean;
-	moshAudioLinkStrength: number;
-	moshLinkBand: FreqBand;
-	/** How this lane's linked params follow the band they listen to. */
-	audioResponse: AudioResponse;
-}
+/** See LaneSettings — the fx lanes were the first to carry their own. */
+export type FxLaneSettings = LaneSettings;
 
 /**
  * A stacked effect layer. Clips within a lane never overlap, so a lane
@@ -115,35 +102,6 @@ export interface FxLane {
 	/** Absent on lanes saved before per-lane settings, and on lanes the user has
 	 * never opened: those follow the editor's settings, as they always did. */
 	settings?: FxLaneSettings;
-}
-
-/** The options a lane rolls under: its own settings, or the editor's. */
-export function laneMoshOptions(
-	lane: FxLane,
-	fallback: MoshOptions,
-): MoshOptions {
-	const s = lane.settings;
-	if (!s) return fallback;
-	return {
-		moshMin: s.moshMin,
-		moshMax: s.moshMax,
-		randomizeOrder: s.randomizeOrder,
-		moshAudioLink: s.moshAudioLink,
-		moshAudioLinkStrength: s.moshAudioLinkStrength,
-		moshLinkBand: s.moshLinkBand,
-		// Not the lane's to decide: whether a track is loaded at all, and whether
-		// the roll is restricted to what is already switched on, are the session's.
-		hasAudio: fallback.hasAudio,
-		onlyMoshEnabled: fallback.onlyMoshEnabled,
-	};
-}
-
-/** How a lane's links follow the music: its own response, or the editor's. */
-export function laneAudioResponse(
-	lane: FxLane,
-	fallback: AudioResponse,
-): AudioResponse {
-	return lane.settings?.audioResponse ?? fallback;
 }
 
 export function createFxClip(start: number, end: number): FxClip {
@@ -484,34 +442,6 @@ export const cloneFxEffects: (effects: EffectInstance[]) => EffectInstance[] =
 	cloneChainEffects;
 
 /** Fill in anything a saved lane list predates or dropped. */
-/** A stored settings block is kept only if it is complete — a half-written one
- * would leave the lane rolling under a mix of its own values and the
- * editor's, which is neither of the two things the user set up. */
-function normalizeLaneSettings(raw: unknown): FxLaneSettings | undefined {
-	const s = raw as Partial<FxLaneSettings> | undefined;
-	if (!s || typeof s !== "object") return undefined;
-	const r = s.audioResponse;
-	if (
-		typeof s.moshMin !== "number" ||
-		typeof s.moshMax !== "number" ||
-		typeof s.moshAudioLinkStrength !== "number" ||
-		!r ||
-		typeof r.smoothing !== "number" ||
-		typeof r.punch !== "number"
-	) {
-		return undefined;
-	}
-	return {
-		moshMin: s.moshMin,
-		moshMax: s.moshMax,
-		randomizeOrder: s.randomizeOrder !== false,
-		moshAudioLink: s.moshAudioLink !== false,
-		moshAudioLinkStrength: s.moshAudioLinkStrength,
-		moshLinkBand: s.moshLinkBand ?? "full",
-		audioResponse: { smoothing: r.smoothing, punch: r.punch },
-	};
-}
-
 export function normalizeFxLanes(raw: unknown): FxLane[] {
 	if (!Array.isArray(raw)) return [];
 	const lanes = raw;

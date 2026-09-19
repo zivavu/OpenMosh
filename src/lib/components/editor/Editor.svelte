@@ -693,11 +693,11 @@
 	});
 
 	const audio = new AudioManager({
-		// The base chain follows the editor's response; every active fx lane
-		// follows its own, under its own envelope state. The media and text
-		// layers follow the editor's response too — they have no settings of
-		// their own — but each still gets its own scope, so one layer's
-		// smoothing never steps another's.
+		// The base chain follows the editor's response; every active fx and
+		// media lane follows its own, under its own envelope state. The text
+		// layers follow the editor's response — they have no settings of their
+		// own — but each still gets its own scope, so one layer's smoothing
+		// never steps another's.
 		getLinkGroups: (): AudioLinkGroup[] => [
 			{
 				scope: "",
@@ -720,7 +720,7 @@
 			).map((layer) => ({
 				scope: layer.laneId,
 				effects: layer.effects,
-				response: audioResponse,
+				response: layer.response ?? audioResponse,
 			})),
 			...resolveTextLayersAt(textTimeline, textTime, previewTextChains).map(
 				(layer) => ({
@@ -1557,16 +1557,18 @@
 	const previewFxSource = createFxLayerSource(() => fxLanes, getMoshOptions);
 
 	/**
-	 * Which lane the settings panel is aimed at: the selected clip's lane, or a
-	 * lane picked by its name in the gutter. Null means the editor's own
-	 * settings, which is what media clips and single mode always roll under.
+	 * Which lane the settings panel is aimed at: the selected clip's lane (fx
+	 * or media), or an fx lane picked by its name in the gutter. Null means the
+	 * editor's own settings, which is what single mode always rolls under.
 	 */
 	let selectedFxLaneId = $state<string | null>(null);
-	let panelFxLane = $derived.by(() => {
+	let panelLane = $derived.by((): FxLane | MediaLane | null => {
 		if (!isSequenceMode) return null;
 		const byClip = findFxClip(fxLanes, selectedFxClipId)?.lane;
 		if (byClip) return byClip;
-		return fxLanes.find((l) => l.id === selectedFxLaneId) ?? null;
+		return (
+			fxLanes.find((l) => l.id === selectedFxLaneId) ?? selectedMediaLane
+		);
 	});
 
 	/** Panel value: the lane's, or the editor's for lanes without settings yet. */
@@ -1574,7 +1576,7 @@
 		key: K,
 		global: FxLaneSettings[K],
 	): FxLaneSettings[K] {
-		return panelFxLane?.settings?.[key] ?? global;
+		return panelLane?.settings?.[key] ?? global;
 	}
 
 	/** Panel edit: writes to the lane when one is selected, otherwise to the
@@ -1585,7 +1587,7 @@
 		value: FxLaneSettings[K],
 		setGlobal: (v: FxLaneSettings[K]) => void,
 	) {
-		const lane = panelFxLane;
+		const lane = panelLane;
 		if (!lane) {
 			setGlobal(value);
 			return;
@@ -1596,12 +1598,18 @@
 		};
 	}
 
+	/** Hand a lane back to the editor's settings: drops its own, so the panel
+	 * reads the editor's again and the lane rolls under whatever they become. */
+	function followEditorSettings() {
+		if (panelLane) panelLane.settings = undefined;
+	}
+
 	/** The three audio-response sliders, which sit one level down. */
 	function fxResponse<K extends keyof AudioResponse>(
 		key: K,
 		global: number,
 	): number {
-		return panelFxLane?.settings?.audioResponse[key] ?? global;
+		return panelLane?.settings?.audioResponse[key] ?? global;
 	}
 
 	function setFxResponse<K extends keyof AudioResponse>(
@@ -1609,7 +1617,7 @@
 		value: number,
 		setGlobal: (v: number) => void,
 	) {
-		const lane = panelFxLane;
+		const lane = panelLane;
 		if (!lane) {
 			setGlobal(value);
 			return;
@@ -4499,7 +4507,9 @@
 					() => fxResponse("punch", audioPunch),
 					(v) => setFxResponse("punch", v, (g) => (audioPunch = g))
 				}
-				targetLabel={panelFxLane?.name ?? null}
+				targetLabel={panelLane?.name ?? null}
+				targetOwnsSettings={!!panelLane?.settings}
+				onFollowEditor={followEditorSettings}
 				{hasAudio}
 				showTiming={isSequenceMode || !!audio.trackFile}
 				bpm={sequenceBpm}
@@ -4526,7 +4536,9 @@
 				onClose={() => (selectedMediaClipId = null)}
 				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
 				spectrumData={audio.spectrumData}
-				response={audioResponse}
+				response={selectedMediaLane
+					? laneAudioResponse(selectedMediaLane, audioResponse)
+					: audioResponse}
 				edits={sourceRegistry.edits}
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 				onEditingChange={onSourceEditingChange}

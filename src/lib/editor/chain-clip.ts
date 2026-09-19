@@ -8,10 +8,12 @@
  * from `seed`, so preview and export always agree.
  */
 
+import type { AudioResponse } from "../audio/auto-range";
 import { applyPreset } from "../effects";
 import {
 	cloneEffectInstance,
 	type EffectInstance,
+	type FreqBand,
 	type Preset,
 } from "../effects";
 import type { TimelineClip } from "../timeline/clips";
@@ -228,4 +230,84 @@ export function normalizeChainFields(
 		out.intervalBeats = raw.intervalBeats;
 	if (typeof raw.seed === "number") out.seed = raw.seed;
 	return out;
+}
+
+/**
+ * How one lane rolls its moshes and how its links follow the music.
+ *
+ * A lane is its own instrument: a slow-breathing wash on one lane and a hard
+ * per-hit stutter on another want opposite settings, and one global set could
+ * only ever serve one of them. Shared by the fx and media lanes.
+ */
+export interface LaneSettings {
+	moshMin: number;
+	moshMax: number;
+	randomizeOrder: boolean;
+	moshAudioLink: boolean;
+	moshAudioLinkStrength: number;
+	moshLinkBand: FreqBand;
+	/** How this lane's linked params follow the band they listen to. */
+	audioResponse: AudioResponse;
+}
+
+/** A lane that may carry its own settings. Absent = it follows the editor's. */
+export interface SettingsOwner {
+	settings?: LaneSettings;
+}
+
+/** The options a lane rolls under: its own settings, or the editor's. */
+export function laneMoshOptions(
+	lane: SettingsOwner,
+	fallback: MoshOptions,
+): MoshOptions {
+	const s = lane.settings;
+	if (!s) return fallback;
+	return {
+		moshMin: s.moshMin,
+		moshMax: s.moshMax,
+		randomizeOrder: s.randomizeOrder,
+		moshAudioLink: s.moshAudioLink,
+		moshAudioLinkStrength: s.moshAudioLinkStrength,
+		moshLinkBand: s.moshLinkBand,
+		// Not the lane's to decide: whether a track is loaded at all, and whether
+		// the roll is restricted to what is already switched on, are the session's.
+		hasAudio: fallback.hasAudio,
+		onlyMoshEnabled: fallback.onlyMoshEnabled,
+	};
+}
+
+/** How a lane's links follow the music: its own response, or the editor's. */
+export function laneAudioResponse(
+	lane: SettingsOwner,
+	fallback: AudioResponse,
+): AudioResponse {
+	return lane.settings?.audioResponse ?? fallback;
+}
+
+/** A stored settings block is kept only if it is complete — a half-written one
+ * would leave the lane rolling under a mix of its own values and the
+ * editor's, which is neither of the two things the user set up. */
+export function normalizeLaneSettings(raw: unknown): LaneSettings | undefined {
+	const s = raw as Partial<LaneSettings> | undefined;
+	if (!s || typeof s !== "object") return undefined;
+	const r = s.audioResponse;
+	if (
+		typeof s.moshMin !== "number" ||
+		typeof s.moshMax !== "number" ||
+		typeof s.moshAudioLinkStrength !== "number" ||
+		!r ||
+		typeof r.smoothing !== "number" ||
+		typeof r.punch !== "number"
+	) {
+		return undefined;
+	}
+	return {
+		moshMin: s.moshMin,
+		moshMax: s.moshMax,
+		randomizeOrder: s.randomizeOrder !== false,
+		moshAudioLink: s.moshAudioLink !== false,
+		moshAudioLinkStrength: s.moshAudioLinkStrength,
+		moshLinkBand: s.moshLinkBand ?? "full",
+		audioResponse: { smoothing: r.smoothing, punch: r.punch },
+	};
 }

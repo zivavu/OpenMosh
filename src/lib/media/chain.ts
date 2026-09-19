@@ -7,6 +7,7 @@
 import {
 	clearedChainClip,
 	filledChainClip,
+	laneMoshOptions,
 	rolledChainClip,
 	syncedChainClip,
 	withChainMode,
@@ -37,8 +38,10 @@ export function rollMediaClips(
 	clipIds: Set<string>,
 	options: MoshOptions,
 ): MediaTimeline {
-	return updateMediaClips(timeline, clipIds, (clip) =>
-		rolledChainClip(clip, options),
+	// Per lane, as rollFxClips: one Mosh over a selection spanning lanes gives
+	// each lane the mosh it is set up for.
+	return updateMediaClips(timeline, clipIds, (clip, lane) =>
+		rolledChainClip(clip, laneMoshOptions(lane, options)),
 	);
 }
 

@@ -1,4 +1,5 @@
-import { chainClipEffectsAt } from "../editor/chain-clip";
+import type { AudioResponse } from "../audio/auto-range";
+import { chainClipEffectsAt, laneMoshOptions } from "../editor/chain-clip";
 import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
@@ -55,6 +56,8 @@ export interface ResolvedMediaLayer {
 	 */
 	opacity: number;
 	effects: EffectInstance[];
+	/** The lane's own audio response; absent when it follows the editor's. */
+	response?: AudioResponse;
 }
 
 /**
@@ -82,6 +85,7 @@ export function laneSourceIds(lane: MediaLane): string[] {
 
 /** The chain a media clip contributes at a time — see createMediaChainSource. */
 export type MediaChainSource = (
+	lane: MediaLane,
 	clip: MediaClip,
 	time: number,
 ) => EffectInstance[];
@@ -99,8 +103,12 @@ export function createMediaChainSource(
 	{ clone = false } = {},
 ): MediaChainSource {
 	const cache = new Map<string, EffectInstance[]>();
-	return (clip, time) =>
-		chainClipEffectsAt(clip, time, cache, clone, getMoshOptions);
+	// Each lane rolls under its own settings, so an auto clip on a lane set up
+	// for a slow wash never comes out as the hard stutter of the lane above.
+	return (lane, clip, time) =>
+		chainClipEffectsAt(clip, time, cache, clone, () =>
+			laneMoshOptions(lane, getMoshOptions()),
+		);
 }
 
 /**
@@ -140,7 +148,8 @@ export function resolveMediaLayersAt(
 			),
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
-			effects: chains ? chains(clip, time) : clip.effects,
+			effects: chains ? chains(lane, clip, time) : clip.effects,
+			response: lane.settings?.audioResponse,
 		});
 	}
 	return layers;
@@ -187,7 +196,7 @@ export function allMediaEffectIds(
 export function updateMediaClips(
 	timeline: MediaTimeline,
 	clipIds: Set<string>,
-	fn: (clip: MediaClip) => MediaClip,
+	fn: (clip: MediaClip, lane: MediaLane) => MediaClip,
 ): MediaTimeline {
 	if (!timeline.lanes.some((l) => l.clips.some((c) => clipIds.has(c.id)))) {
 		return timeline;
@@ -198,7 +207,7 @@ export function updateMediaClips(
 			if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
 			return {
 				...lane,
-				clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)),
+				clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c, lane) : c)),
 			};
 		}),
 	};

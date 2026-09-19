@@ -3,7 +3,9 @@ import type { EffectInstance } from "../effects/types";
 import {
 	cloneChainEffects,
 	normalizeChainFields,
+	normalizeLaneSettings,
 	type ChainClip,
+	type LaneSettings,
 } from "../editor/chain-clip";
 import { cleanEffects } from "../editor/sequence";
 import type { TextOverlayBlendMode } from "../text-overlay";
@@ -122,6 +124,9 @@ export interface MediaLane {
 	/** Shared by every clip in the lane. */
 	style: MediaStyle;
 	clips: MediaClip[];
+	/** How this lane's auto clips roll and its links follow the music. Absent
+	 * = the editor's settings, as on lanes saved before lanes had their own. */
+	settings?: LaneSettings;
 }
 
 export interface MediaTimeline {
@@ -299,6 +304,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			z: typeof lane.z === "number" ? lane.z : i,
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
+			settings: normalizeLaneSettings(lane.settings),
 			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((raw) => {
 				const clip = raw as Partial<MediaClip> & { fadeSec?: number };
 				// Lanes saved before clips carried their own chain held one for the

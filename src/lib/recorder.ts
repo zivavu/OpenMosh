@@ -699,11 +699,18 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			// resolved layers every frame. The lane is the scope, as in the
 			// preview: one lane's smoothing must never step another's, whichever
 			// clip it is on.
-			const layerGroups = [...mediaLayers, ...textLayers].map((l) => ({
-				scope: l.laneId,
-				effects: l.effects,
-				response: audioResponse,
-			}));
+			const layerGroups = [
+				...mediaLayers.map((l) => ({
+					scope: l.laneId,
+					effects: l.effects,
+					response: l.response ?? audioResponse,
+				})),
+				...textLayers.map((l) => ({
+					scope: l.laneId,
+					effects: l.effects,
+					response: audioResponse,
+				})),
+			];
 			applyFrameAudio(
 				renderEffects,
 				frameAudioData,

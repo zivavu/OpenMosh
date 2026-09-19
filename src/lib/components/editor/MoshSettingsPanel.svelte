@@ -23,9 +23,14 @@
 		audioSmoothing: number;
 		audioPunch: number;
 		hasAudio: boolean;
-		/** Name of the fx lane these settings belong to, when one is selected.
-		 * Null = the editor's own settings, which media clips and single mode use. */
+		/** Name of the lane (fx or media) these settings belong to, when one is
+		 * selected. Null = the editor's own settings, which single mode uses. */
 		targetLabel?: string | null;
+		/** Whether that lane carries its own settings, or is still following the
+		 * editor's — the first edit here pins the whole set to the lane. */
+		targetOwnsSettings?: boolean;
+		/** Drop the lane's own settings so it follows the editor's again. */
+		onFollowEditor?: () => void;
 		/** The song's tempo: what auto clips re-roll against in sequence mode,
 		 * and what beat-synced effects follow in either mode. */
 		showTiming?: boolean;
@@ -47,6 +52,8 @@
 		audioPunch = $bindable(),
 		hasAudio,
 		targetLabel = null,
+		targetOwnsSettings = false,
+		onFollowEditor,
 		showTiming = false,
 		bpm = 0,
 		bpmDetecting = false,
@@ -70,12 +77,30 @@
 	}
 </script>
 
-<!-- Whose settings these are: an fx lane's, or (unlabelled) the editor's own. -->
+<!-- Whose settings these are: a lane's, or (unlabelled) the editor's own. A
+     lane that hasn't been edited yet shows the editor's values and says so;
+     once it has its own, a click hands it back. -->
 {#snippet head(title: string)}
 	<div class="section-head">
 		<span class="rack-label">{title}</span>
 		{#if title === "Mosh" && targetLabel}
 			<span class="scope-name">{targetLabel}</span>
+			{#if targetOwnsSettings}
+				<button
+					class="scope-mode own"
+					title="This lane has its own settings. Click to drop them and follow the editor's again."
+					onclick={onFollowEditor}
+				>
+					own
+				</button>
+			{:else}
+				<span
+					class="scope-mode"
+					title="This lane follows the editor's settings. Changing anything here gives it its own."
+				>
+					follows editor
+				</span>
+			{/if}
 		{/if}
 	</div>
 {/snippet}
@@ -318,6 +343,29 @@
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		color: var(--live);
+	}
+
+	.scope-mode {
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		line-height: 1;
+		padding: 2px 4px;
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		color: var(--text-4);
+		background: none;
+		white-space: nowrap;
+	}
+
+	.scope-mode.own {
+		color: var(--live);
+		border-color: var(--live);
+		cursor: pointer;
+	}
+
+	.scope-mode.own:hover {
+		color: var(--text);
+		border-color: var(--text);
 	}
 
 	.config-row {
