@@ -578,7 +578,7 @@
 
 	<!-- A rack of rows at a fixed height for every mode, empty or not: a block
 	     that collapsed when a mode had nothing saved is what made switching
-	     jump. Three rows show; the rest scroll under the fade. -->
+	     jump. The rack itself hugs its rows up to five; the rest scroll. -->
 	<div class="recent">
 		{#if recentRows.length > 0}
 			<div class="recent-head">
@@ -1216,15 +1216,15 @@
 	}
 
 	/* ── Recent ───────────────────────────────────────────────────────────── */
-	/* Sized for the head plus three rows, so the list is the same height with
-	   one row, ten, or none. */
+	/* Reserves the head plus five rows, so the block takes the same space with
+	   one row, ten, or none; only the rack inside hugs its rows. */
 	.recent {
 		--row-h: 2.1rem;
 		display: flex;
 		flex-direction: column;
 		width: 100%;
 		max-width: 520px;
-		height: calc(1.5rem + var(--row-h) * 3);
+		height: calc(1.5rem + var(--row-h) * 5);
 	}
 
 	.recent-head {
@@ -1246,11 +1246,13 @@
 		line-height: 1.5;
 	}
 
-	/* A glass rack of hairline-split rows. Overflow scrolls vertically with a
-	   mosh-tinted thumb inset from the rounded edge. */
+	/* A glass rack of hairline-split rows, as tall as its rows up to five.
+	   Overflow scrolls vertically with a mosh-tinted thumb inset from the
+	   rounded edge. */
 	.recent-list {
-		flex: 1;
+		flex: 0 1 auto;
 		min-height: 0;
+		max-height: calc(var(--row-h) * 5 + 2px);
 		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		background: var(--glass);
