@@ -13,11 +13,29 @@ export interface AudioGraphState {
 	binCount: number;
 }
 
+// A media element can be captured by one MediaElementSourceNode ever — a
+// second createMediaElementSource throws, even after the first context closed.
+// So each element keeps its context + source for life, and disposing a graph
+// only detaches and suspends them.
+const captures = new WeakMap<
+	HTMLMediaElement,
+	{ ctx: AudioContext; source: MediaElementAudioSourceNode }
+>();
+const captureSources = new WeakMap<AudioContext, MediaElementAudioSourceNode>();
+
 export function createAudioGraph(
 	element: HTMLAudioElement | HTMLVideoElement,
 ): AudioGraphState {
-	const ctx = new AudioContext();
-	return buildGraph(ctx, ctx.createMediaElementSource(element));
+	let cap = captures.get(element);
+	if (!cap || cap.ctx.state === "closed") {
+		const ctx = new AudioContext();
+		cap = { ctx, source: ctx.createMediaElementSource(element) };
+		captures.set(element, cap);
+		captureSources.set(ctx, cap.source);
+	}
+	cap.source.disconnect();
+	if (cap.ctx.state === "suspended") cap.ctx.resume().catch(() => {});
+	return buildGraph(cap.ctx, cap.source);
 }
 
 /**
@@ -60,7 +78,13 @@ function buildGraph(
 
 /** Tearing down the graph is just closing its context; the nodes go with it. */
 export function disposeAudioGraph(context: AudioContext): void {
-	context.close();
+	const source = captureSources.get(context);
+	if (!source) {
+		context.close();
+		return;
+	}
+	source.disconnect();
+	context.suspend().catch(() => {});
 }
 
 export function computeVolumeLevel(
