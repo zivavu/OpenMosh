@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from "svelte";
+	import { SvelteSet } from "svelte/reactivity";
 	import { readJson, writeJson } from "../../storage";
 	import {
 		Check,
@@ -180,6 +181,8 @@
 	function toggle(index: number) {
 		onBeforeUserEdit?.();
 		effects[index].enabled = !effects[index].enabled;
+		if (onlyLive && !effects[index].enabled)
+			livePinned.add(effects[index].instanceId);
 		appliedIndex = null;
 		onUserEdit?.();
 	}
@@ -280,12 +283,24 @@
 	// Narrows the list to the effects actually passing signal — the working set
 	// once a mosh has filled the chain with things you don't want to scroll past.
 	let onlyLive = $state(false);
+	// Effects the live filter keeps around even once switched off: the set that
+	// was live when the filter came on, plus anything toggled off under it. So
+	// switching an effect off doesn't yank it out from under the pointer; the
+	// list only tightens when the filter is switched off and on again.
+	let livePinned = new SvelteSet<string>();
+
+	function setOnlyLive(on: boolean) {
+		livePinned.clear();
+		if (on) for (const e of effects) if (e.enabled) livePinned.add(e.instanceId);
+		onlyLive = on;
+	}
 
 	let filteredEffects = $derived(
 		effects
 			.map((e, i) => ({ effect: e, index: i }))
 			.filter(({ effect }) => {
-				if (onlyLive && !effect.enabled) return false;
+				if (onlyLive && !effect.enabled && !livePinned.has(effect.instanceId))
+					return false;
 				if (!searchQuery) return true;
 				const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
 				return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -707,7 +722,7 @@
 				<button
 					class="search-clear live-filter"
 					class:on={onlyLive}
-					onclick={() => (onlyLive = !onlyLive)}
+					onclick={() => setOnlyLive(!onlyLive)}
 					title={onlyLive
 						? "Showing live effects only — click to show the whole chain"
 						: "Show live effects only"}
@@ -781,7 +796,7 @@
 						<p class="empty-hint">
 							Nothing switched on is called “{searchQuery}”.
 						</p>
-						<button class="empty-action" onclick={() => (onlyLive = false)}>
+						<button class="empty-action" onclick={() => setOnlyLive(false)}>
 							Show the whole chain
 						</button>
 					{:else if onlyLive}
@@ -789,7 +804,7 @@
 						<p class="empty-hint">
 							Switch an effect on, or hit MOSH to fill the chain for you.
 						</p>
-						<button class="empty-action" onclick={() => (onlyLive = false)}>
+						<button class="empty-action" onclick={() => setOnlyLive(false)}>
 							Show the whole chain
 						</button>
 					{:else if searchQuery}
