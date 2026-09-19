@@ -53,6 +53,17 @@ describe("pasteTextClips", () => {
 		expect(pasted.id).not.toBe(lane.clips[0].id);
 	});
 
+	it("carries the fades along", () => {
+		const lane = laneWith([[0, 5, "hi"]]);
+		lane.clips[0].fadeInSec = 0.5;
+		const t = timelineOf([lane]);
+		const copied = copyTextClips(t, [lane.clips[0].id]);
+		const { timeline, clipIds } = pasteTextClips(t, copied, 20, 60);
+		const pasted = timeline.lanes[0].clips.find((c) => c.id === clipIds[0])!;
+		expect(pasted.fadeInSec).toBe(0.5);
+		expect(pasted).not.toHaveProperty("fadeOutSec");
+	});
+
 	it("lands after the original when the marker is inside it", () => {
 		const lane = laneWith([[0, 10, "hi"]]);
 		const t = timelineOf([lane]);

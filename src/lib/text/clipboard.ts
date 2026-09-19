@@ -15,6 +15,8 @@ import { createTextClip, type TextClip, type TextTimeline } from "./types";
 
 export interface TextClipboardEntry extends ClipBlockEntry {
 	text: string;
+	fadeInSec?: number;
+	fadeOutSec?: number;
 }
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
@@ -34,6 +36,8 @@ export function copyTextClips(
 				offset: clip.start,
 				length: clip.end - clip.start,
 				text: clip.text,
+				fadeInSec: clip.fadeInSec,
+				fadeOutSec: clip.fadeOutSec,
 			});
 		}
 	}
@@ -76,6 +80,8 @@ export function pasteTextClips(
 	const clipIds: string[] = [];
 	for (const { entry: e, start, end } of placed) {
 		const clip = createTextClip(start, end, e.text);
+		if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
+		if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 		clipIds.push(clip.id);
 		const list = added.get(e.laneId);
 		if (list) list.push(clip);

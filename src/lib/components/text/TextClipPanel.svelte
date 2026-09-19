@@ -94,6 +94,13 @@
 		onClipChange({ ...clip, text });
 	}
 
+	/** Zero means no ramp at all, which the clip carries as an absent field. */
+	function setFade(edge: "fadeInSec" | "fadeOutSec", sec: number) {
+		if (!clip) return;
+		onBeforeEdit?.(`tc-${edge}-${clip.id}`);
+		onClipChange({ ...clip, [edge]: sec > 0 ? sec : undefined });
+	}
+
 	// The lane's chain, mirrored for EffectsPanel to own and written back on
 	// every edit. Handled here rather than by the editor: the chain on show is
 	// this mirror, so the editor has nothing to apply an edit to.
@@ -135,6 +142,50 @@
 				value={clip.text}
 				oninput={(e) => setText((e.currentTarget as HTMLTextAreaElement).value)}
 			></textarea>
+
+			<!-- Curved: the ramps worth reaching for are fractions of a second, and
+			     a linear 0–10 track would bury all of them in its first pixels. -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="row"
+				title="Ramp this text in from the clip's start. Double-click to clear."
+				ondblclick={() => setFade("fadeInSec", 0)}
+			>
+				<label for="tc-fade-in">Fade in</label>
+				<RangeSlider
+					id="tc-fade-in"
+					value={clip.fadeInSec ?? 0}
+					min={0}
+					max={10}
+					step={0.05}
+					curve={2}
+					oninput={(v) => setFade("fadeInSec", v)}
+				/>
+				<span class="val">
+					{#if clip.fadeInSec}{clip.fadeInSec.toFixed(2)}s{:else}none{/if}
+				</span>
+			</div>
+
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="row"
+				title="Ramp this text out into the clip's end. Double-click to clear."
+				ondblclick={() => setFade("fadeOutSec", 0)}
+			>
+				<label for="tc-fade-out">Fade out</label>
+				<RangeSlider
+					id="tc-fade-out"
+					value={clip.fadeOutSec ?? 0}
+					min={0}
+					max={10}
+					step={0.05}
+					curve={2}
+					oninput={(v) => setFade("fadeOutSec", v)}
+				/>
+				<span class="val">
+					{#if clip.fadeOutSec}{clip.fadeOutSec.toFixed(2)}s{:else}none{/if}
+				</span>
+			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div

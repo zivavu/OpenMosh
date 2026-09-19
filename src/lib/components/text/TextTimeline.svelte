@@ -20,6 +20,7 @@
 		freeRangeAt,
 		lyricsDraftFromTimeline,
 		MIN_CLIP_LENGTH,
+		moveClipsToLane,
 		pasteTextClips,
 		pasteTextOnto,
 		removeClip,
@@ -209,6 +210,24 @@
 	) {
 		onBeforeEdit?.();
 		onChange(updateLane(timeline, laneId, (l) => ({ ...l, [key]: value })));
+	}
+
+	/** Aim the sidebar at the lane: its first clip, or a fresh one spanning
+	 * the track when it has none — the style and chain are the lane's, so any
+	 * clip opens them. */
+	function openLane(lane: TextLane) {
+		const first = sortClips(lane.clips)[0];
+		if (first) {
+			selectOnly(first.id);
+			return;
+		}
+		if (trackDuration <= 0) return;
+		const clip = createTextClip(0, trackDuration, "TEXT");
+		onBeforeEdit?.();
+		onChange(
+			updateLane(timeline, lane.id, (l) => addClip(l, clip, trackDuration)),
+		);
+		selectOnly(clip.id);
 	}
 
 	function addClipAt(laneId: string, time: number) {
@@ -429,8 +448,32 @@
 		if (scrubbing) stack.seekStatic(timeAt(e.clientX));
 		if (!drag) return;
 		const t = timeAt(e.clientX);
-		const { laneId } = drag;
+		const { laneId, clipId, mode, grabOffset } = drag;
 		clickOnUp = null;
+		// A move that crossed into another text row carries the clips over, if
+		// they fit there; otherwise they keep sliding on the row they came from.
+		// From then on the drag belongs to the new lane. The words travel and
+		// the look stays: style is the lane's, so the clip takes the new one's.
+		if (mode === "move") {
+			const over = stack.laneIdAt(e.clientY);
+			const held = laneOf(laneId)?.clips.find((c) => c.id === clipId);
+			if (over && over !== laneId && laneOf(over) && held) {
+				const group = selectedIds.includes(clipId) ? selectedIds : [clipId];
+				const lanes = moveClipsToLane(
+					timeline.lanes,
+					laneId,
+					over,
+					group,
+					t - grabOffset - held.start,
+					trackDuration,
+				);
+				if (lanes !== timeline.lanes) {
+					drag.laneId = over;
+					onChange({ ...timeline, lanes });
+					return;
+				}
+			}
+		}
 		// Dragging any member drags the whole selection with it. Alt holds the
 		// snap off.
 		const step = dragClipsStep(
@@ -599,7 +642,8 @@
 				</button>
 				<LaneName
 					name={lane.name}
-					title="{lane.name}."
+					title="{lane.name} — click to edit this lane's style and effects."
+					onclick={() => openLane(lane)}
 					onRename={(name) => setLane(lane.id, "name", name)}
 				/>
 				<button

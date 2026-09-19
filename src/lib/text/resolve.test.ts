@@ -66,6 +66,22 @@ describe("resolveTextLayersAt", () => {
 		expect(layers[0].laneId).toBe(visible.id);
 	});
 
+	it("ramps the lane's opacity through a clip's fades", () => {
+		const lane = laneWith([[0, 10]]);
+		lane.style = { ...lane.style, opacity: 0.8 };
+		lane.clips[0].fadeInSec = 2;
+		lane.clips[0].fadeOutSec = 4;
+		const at = (t: number) =>
+			resolveTextLayersAt(timelineOf([lane]), t)[0]?.style.opacity;
+		expect(at(1)).toBeCloseTo(0.4);
+		expect(at(5)).toBe(0.8);
+		expect(at(8)).toBeCloseTo(0.4);
+		// Flat in the middle, the lane's own style object goes through untouched.
+		expect(resolveTextLayersAt(timelineOf([lane]), 5)[0].style).toBe(
+			lane.style,
+		);
+	});
+
 	it("carries one layer per lane in lane order", () => {
 		const a = laneWith([[0, 5]], "a");
 		const b = laneWith([[0, 5]], "b");
@@ -255,6 +271,23 @@ describe("normalizeTextTimeline", () => {
 		// nothing to switch on.
 		expect(t.lanes[0].effects.length).toBeGreaterThan(0);
 		expect(t.lanes[0].effects.every((e) => !e.enabled)).toBe(true);
+	});
+
+	it("keeps a clip's fades and drops zeroed ones", () => {
+		const t = normalizeTextTimeline({
+			enabled: true,
+			lanes: [
+				{
+					clips: [
+						{ start: 0, end: 1, fadeInSec: 0.5, fadeOutSec: 0 },
+						{ start: 1, end: 2 },
+					],
+				},
+			],
+		});
+		expect(t.lanes[0].clips[0].fadeInSec).toBe(0.5);
+		expect(t.lanes[0].clips[0]).not.toHaveProperty("fadeOutSec");
+		expect(t.lanes[0].clips[1]).not.toHaveProperty("fadeInSec");
 	});
 
 	it("lifts a legacy per-clip style onto the lane", () => {

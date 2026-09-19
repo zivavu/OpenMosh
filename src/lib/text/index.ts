@@ -29,6 +29,7 @@ export {
 	freeRangeAt,
 	moveClip,
 	moveClips,
+	moveClipsToLane,
 	removeClip,
 	resizeBoundary,
 	resizeClip,
@@ -56,6 +57,7 @@ export {
 	normalizeTextTimeline,
 	splitTextClipAt,
 	TEXT_Z_BASE,
+	textClipWeight,
 } from "./types";
 
 /** Load every font the timeline needs, so an export doesn't start on a fallback face. */

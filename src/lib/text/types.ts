@@ -7,6 +7,7 @@ import { FONT_OPTIONS } from "../text-overlay/fonts";
 import type { TextOverlayBlendMode } from "../text-overlay/types";
 import {
 	clipAt,
+	clipFadeWeight,
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
 	sortClips,
@@ -41,6 +42,17 @@ export interface TextStyle {
 /** One span of text on a lane. */
 export interface TextClip extends TimelineClip {
 	text: string;
+	/** Ramp the layer in over `fadeInSec` after its start and out over
+	 * `fadeOutSec` before its end — each edge on its own, the same as a media
+	 * clip. Absent means no ramp. */
+	fadeInSec?: number;
+	fadeOutSec?: number;
+}
+
+/** How strongly the clip shows at `time` — 1 unless a fade is ramping.
+ * Multiplied into the lane's opacity by the resolver. */
+export function textClipWeight(clip: TextClip, time: number): number {
+	return clipFadeWeight(clip, clip.fadeInSec, clip.fadeOutSec, time);
 }
 
 /**
@@ -209,12 +221,17 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 				z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
 				style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
 				effects: laneEffects(lane.effects),
-				clips: clips.map((clip) => ({
-					id: clip.id ?? nextId("clip"),
-					start: clip.start ?? 0,
-					end: clip.end ?? 0,
-					text: clip.text ?? "",
-				})),
+				clips: clips.map((clip) => {
+					const out: TextClip = {
+						id: clip.id ?? nextId("clip"),
+						start: clip.start ?? 0,
+						end: clip.end ?? 0,
+						text: clip.text ?? "",
+					};
+					if (clip.fadeInSec! > 0) out.fadeInSec = clip.fadeInSec;
+					if (clip.fadeOutSec! > 0) out.fadeOutSec = clip.fadeOutSec;
+					return out;
+				}),
 			};
 		}),
 	};

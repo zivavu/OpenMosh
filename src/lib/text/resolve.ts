@@ -1,6 +1,12 @@
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
-import type { TextClip, TextLane, TextStyle, TextTimeline } from "./types";
+import {
+	textClipWeight,
+	type TextClip,
+	type TextLane,
+	type TextStyle,
+	type TextTimeline,
+} from "./types";
 
 // Clip geometry is lane-shape agnostic and shared with the sequence fx lanes;
 // re-exported here so the text timeline keeps importing it from one place.
@@ -11,6 +17,7 @@ export {
 	freeRangeAt,
 	moveClip,
 	moveClips,
+	moveClipsToLane,
 	removeClip,
 	resizeBoundary,
 	resizeClip,
@@ -45,13 +52,20 @@ export function resolveTextLayersAt(
 		if (!lane.enabled) continue;
 		const clip = clipAt(lane, time);
 		if (!clip || !clip.text.trim() || lane.style.opacity <= 0) continue;
+		// Opacity is applied by the GL composite, not baked into the raster, so
+		// a fading clip reuses the lane's texture frame after frame.
+		const weight = textClipWeight(clip, time);
+		if (weight <= 0) continue;
 		layers.push({
 			key: clip.id,
 			laneId: lane.id,
 			underEffects: lane.underEffects,
 			z: lane.z,
 			text: clip.text,
-			style: lane.style,
+			style:
+				weight < 1
+					? { ...lane.style, opacity: lane.style.opacity * weight }
+					: lane.style,
 			effects: lane.effects,
 		});
 	}
