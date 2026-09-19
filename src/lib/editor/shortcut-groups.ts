@@ -22,10 +22,7 @@ const MOSH: ShortcutRow = {
 };
 
 const UNDO: ShortcutRow[] = [
-	{
-		keys: ["Ctrl/Cmd+Z"],
-		description: "Undo the last edit (moshes don't count)",
-	},
+	{ keys: ["Ctrl/Cmd+Z"], description: "Undo" },
 	{ keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"], description: "Redo" },
 ];
 
@@ -68,48 +65,54 @@ const TIMELINE: ShortcutGroup = {
 
 /** Selection and editing that every clip lane answers to the same way —
  * text, media and FX lanes alike, so it is listed once. */
-const CLIPS: ShortcutGroup = {
-	title: "Clips",
-	shortcuts: [
-		{
-			keys: ["Click"],
-			description:
-				"Select a clip and open its panel; click it again to deselect",
-		},
-		{
-			keys: ["Shift+Click"],
-			description: "Select every clip between it and the last one picked",
-		},
-		{
-			keys: ["Ctrl/Cmd+Shift+Click"],
-			description: "Add or remove one clip from the selection",
-		},
-		{
-			keys: ["Dbl-click", "Ctrl/Cmd+Click"],
-			description: "Add a clip in empty lane space",
-		},
-		{ keys: ["Ctrl/Cmd+Click a clip"], description: "Split it at the cursor" },
-		{
-			keys: ["S"],
-			description:
-				"Split the clip under the playhead on the lane you last touched",
-		},
-		{
-			keys: ["Drag"],
-			description:
-				"Move the selection; media and FX clips can cross to another lane",
-		},
-		{ keys: ["Drag an edge"], description: "Trim one clip" },
-		{ keys: ["Drag a boundary"], description: "Trim both clips it joins" },
-		{
-			keys: ["Alt+Drag"],
-			description: "Hold the snap off (edges, beats, marker)",
-		},
-		{ keys: ["R"], description: "Loop playback inside the selected clip" },
-		{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
-		{ keys: ["Esc"], description: "Deselect" },
-		{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
-	],
+const CLIP_ROWS: ShortcutRow[] = [
+	{
+		keys: ["Click"],
+		description: "Select a clip and open its panel; click it again to deselect",
+	},
+	{
+		keys: ["Shift+Click"],
+		description: "Select every clip between it and the last one picked",
+	},
+	{
+		keys: ["Ctrl/Cmd+Shift+Click"],
+		description: "Add or remove one clip from the selection",
+	},
+	{
+		keys: ["Dbl-click", "Ctrl/Cmd+Click"],
+		description: "Add a clip in empty lane space",
+	},
+	{ keys: ["Ctrl/Cmd+Click a clip"], description: "Split it at the cursor" },
+	{
+		keys: ["S"],
+		description:
+			"Split the clip under the playhead on the lane you last touched",
+	},
+	{
+		keys: ["Drag"],
+		description:
+			"Move the selection; media and FX clips can cross to another lane",
+	},
+	{ keys: ["Drag an edge"], description: "Trim one clip" },
+	{ keys: ["Drag a boundary"], description: "Trim both clips it joins" },
+	{
+		keys: ["Alt+Drag"],
+		description: "Hold the snap off (edges, beats, marker)",
+	},
+	{ keys: ["R"], description: "Loop playback inside the selected clip" },
+	{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
+	{ keys: ["Esc"], description: "Deselect" },
+	{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
+];
+
+const CLIPS: ShortcutGroup = { title: "Clips", shortcuts: CLIP_ROWS };
+
+/** Every clip carries its own chain, so in the editor the arrows mosh the
+ * selected one — a clip row, not an editor row. */
+const CLIP_MOSH: ShortcutRow = {
+	keys: MOSH.keys,
+	description:
+		"Previous or next mosh of the selected clip; → past the newest rolls a fresh one. Nothing selected, nothing rolls",
 };
 
 /** Copy/paste is per lane kind; the newest copy is the one a paste answers. */
@@ -167,13 +170,7 @@ export function editorShortcutGroups(opts: {
 					keys: ["Space"],
 					description: "Play or pause, from the start marker",
 				},
-				sequence
-					? {
-							keys: MOSH.keys,
-							description:
-								"Previous or next mosh of the selected clip; → past the newest rolls a fresh one. Nothing selected, nothing rolls",
-						}
-					: MOSH,
+				...(sequence ? [] : [MOSH]),
 				...UNDO,
 				SAVE_FRAME,
 				...(sequence
@@ -188,7 +185,11 @@ export function editorShortcutGroups(opts: {
 			],
 		},
 		TIMELINE,
-		...(sequence || text || media ? [CLIPS] : []),
+		...(sequence
+			? [{ title: "Clips", shortcuts: [CLIP_MOSH, ...CLIP_ROWS] }]
+			: text || media
+				? [CLIPS]
+				: []),
 		...(sequence && fxLanes ? [FX_LANES] : []),
 		...(media ? [MEDIA_LAYERS] : []),
 	];
