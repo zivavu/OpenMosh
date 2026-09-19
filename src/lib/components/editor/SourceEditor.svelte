@@ -1,5 +1,5 @@
 <script module lang="ts">
-	let loopPreference = false;
+	let loopPreference = true;
 </script>
 
 <script lang="ts">
