@@ -35,12 +35,14 @@
 		removeClip,
 		setMediaClipSources,
 		sortClips,
+		sourcePlayLength,
 		splitMediaClipAt,
 		updateMediaLane,
 		type MediaClip,
 		type MediaClipboardEntry,
 		type MediaLane,
 		type MediaTimeline,
+		type SourceEdit,
 	} from "../../media";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import { SOURCE_DND_TYPE } from "../../editor/sequence-source-ui";
@@ -75,6 +77,8 @@
 		onToggleFold?: (laneId: string) => void;
 		/** The media pool, for naming and thumbnailing each lane's source. */
 		sources?: SequenceSource[];
+		/** Per-source edits, for how long a dropped video actually runs. */
+		edits?: Record<string, SourceEdit>;
 		/** Lane shown by itself on the canvas; null when nothing is soloed. */
 		soloLaneId?: string | null;
 		onToggleSolo?: (laneId: string) => void;
@@ -111,6 +115,7 @@
 		foldedLaneIds = NO_FOLDS,
 		onToggleFold,
 		sources = [],
+		edits = {},
 		soloLaneId = null,
 		onToggleSolo,
 		selectedClipId = $bindable(null),
@@ -486,16 +491,20 @@
 	}
 
 	/**
-	 * The span a clip added at `time` gets. A video asks for its own length, so
-	 * dropping one lays down the whole shot rather than a stub; everything else
-	 * takes the default.
+	 * The span a clip added at `time` gets. A video asks for its own length —
+	 * as trimmed and at its speed, the stretch it takes to play through once —
+	 * so dropping one lays down the whole shot rather than a stub; everything
+	 * else takes the default.
 	 */
 	function clipSpanAt(
 		lane: MediaLane,
 		time: number,
 		sourceId?: string | null,
 	): { start: number; end: number } | null {
-		const duration = sourceById(sourceId ?? null)?.duration ?? 0;
+		const source = sourceById(sourceId ?? null);
+		const duration = source
+			? sourcePlayLength(edits[source.id], source.duration ?? 0)
+			: 0;
 		return newClipSpan(
 			lane,
 			time,

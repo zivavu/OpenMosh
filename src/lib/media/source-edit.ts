@@ -80,6 +80,15 @@ export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
  */
 export const MASK_MAX = 512;
 
+/** A stretch of a source's own time, seconds from its start. */
+export interface SourceSpan {
+	start: number;
+	end: number;
+}
+
+/** Shortest span the dialog lets the handles close to. */
+export const SPAN_MIN = 0.1;
+
 /** The speed range the edit dialog offers, and what a stored rate is held to. */
 export const SPEED_MIN = 0.25;
 export const SPEED_MAX = 4;
@@ -156,6 +165,13 @@ export interface SourceEdit {
 	 * the frames they were set on.
 	 */
 	speed?: number;
+	/**
+	 * The stretch of the media a clip plays, in the media's own seconds. Absent
+	 * means all of it. A clip starts at the in-point and loops inside the span,
+	 * so trimming a lead-in or a tail off a shot is done once, on the file, and
+	 * every clip drawing it stops showing it. Keyframes stay on media time.
+	 */
+	span?: SourceSpan;
 	/**
 	 * Keyed tracks, for sources whose subject moves. Absent on a still edit,
 	 * which is the common case and costs nothing to sample.
@@ -236,6 +252,7 @@ export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
 		isFullCrop(edit.crop) &&
 		!edit.mask &&
 		sourceSpeed(edit) === 1 &&
+		!edit.span &&
 		!hasAnimation(edit)
 	);
 }
@@ -250,13 +267,56 @@ export function sourceSpeed(edit: SourceEdit | undefined): number {
  * Every clip-time-to-media-time conversion goes through here so the speed is
  * applied in exactly one way: the in-point is a place in the media and stays
  * put, and only the walk from it runs at the edit's rate.
+ *
+ * With a span on the edit the walk stays inside it: an in-point before the
+ * span starts at the span instead, and a clip that outruns it wraps back to
+ * the span's start rather than to the file's. Without one the time runs on
+ * unbounded, and the frame sampler wraps it to the file's length.
  */
 export function sourceTimeAt(
 	edit: SourceEdit | undefined,
 	elapsed: number,
 	start = 0,
 ): number {
-	return start + elapsed * sourceSpeed(edit);
+	const span = edit?.span;
+	if (!span) return start + elapsed * sourceSpeed(edit);
+	const len = span.end - span.start;
+	if (!(len > 0)) return span.start;
+	const from = Math.max(start, span.start);
+	return (
+		span.start +
+		wrapSourceTime(from - span.start + elapsed * sourceSpeed(edit), len)
+	);
+}
+
+/** The span an edit plays, or the whole file when it has none. */
+export function sourceSpan(
+	edit: SourceEdit | undefined,
+	duration: number,
+): SourceSpan {
+	return edit?.span ?? { start: 0, end: duration };
+}
+
+/** Seconds of timeline a clip needs to play the source through once. */
+export function sourcePlayLength(
+	edit: SourceEdit | undefined,
+	duration: number,
+): number {
+	const s = sourceSpan(edit, duration);
+	return Math.max(0, s.end - s.start) / sourceSpeed(edit);
+}
+
+/** A span forced sane: in order, at least SPAN_MIN long, inside the file when
+ * its length is known. Null when nothing is cut off, so it needn't be stored. */
+export function clampSpan(
+	span: SourceSpan,
+	duration = Infinity,
+): SourceSpan | null {
+	const max = duration > 0 ? duration : Infinity;
+	const start = Math.min(Math.max(span.start, 0), Math.max(0, max - SPAN_MIN));
+	const end = Math.min(Math.max(span.end, start + SPAN_MIN), max);
+	if (start <= 0 && end >= max) return null;
+	return { start, end };
 }
 
 /** True when any track carries a key, so the edit varies over the clip. */
@@ -287,11 +347,28 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
 		...(typeof e.speed === "number" && e.speed !== 1
 			? { speed: Math.min(SPEED_MAX, Math.max(SPEED_MIN, e.speed)) }
 			: {}),
+		...normalizeSpan(e.span),
 		// Only a data URL is any use to the loader; anything else is dropped rather
 		// than handed to an <img> that will fail asynchronously.
 		mask:
 			typeof e.mask === "string" && e.mask.startsWith("data:") ? e.mask : null,
 	};
+}
+
+/** A stored span is kept only when it is a real, ordered pair of numbers. */
+function normalizeSpan(raw: unknown): { span?: SourceSpan } {
+	const s = raw as Partial<SourceSpan> | undefined;
+	if (
+		!s ||
+		typeof s.start !== "number" ||
+		typeof s.end !== "number" ||
+		!Number.isFinite(s.start) ||
+		!Number.isFinite(s.end)
+	) {
+		return {};
+	}
+	const span = clampSpan({ start: s.start, end: s.end });
+	return span ? { span } : {};
 }
 
 function normalizeCrop(raw: unknown): CropRect {

@@ -9,6 +9,7 @@
 		hasAnimation,
 		isFullCrop,
 		MEDIA_FIT_OPTIONS,
+		sourceSpan,
 		type MediaClip,
 		type MediaLane,
 		type MediaStyle,
@@ -93,6 +94,7 @@
 			(e.chromaKey.enabled ||
 				!isFullCrop(e.crop) ||
 				!!e.mask ||
+				!!e.span ||
 				hasAnimation(e))
 		);
 	});
@@ -245,14 +247,17 @@
 			{/if}
 
 			{#if source?.kind === "video" && source.duration > 0}
+				{@const span = sourceSpan(edits[source.id], source.duration)}
+				<!-- Bounded by the trim: an in-point before it starts at the trim's
+				     start anyway, and one past it would never be reached. -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="row" title="Where in the video this clip starts">
 					<label for="mc-in">Start at</label>
 					<RangeSlider
 						id="mc-in"
-						value={Math.min(clip.sourceStart, source.duration)}
-						min={0}
-						max={source.duration}
+						value={Math.min(Math.max(clip.sourceStart, span.start), span.end)}
+						min={span.start}
+						max={span.end}
 						step={0.05}
 						oninput={setSourceStart}
 					/>

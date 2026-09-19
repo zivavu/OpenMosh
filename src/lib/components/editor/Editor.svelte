@@ -1566,9 +1566,7 @@
 		if (!isSequenceMode) return null;
 		const byClip = findFxClip(fxLanes, selectedFxClipId)?.lane;
 		if (byClip) return byClip;
-		return (
-			fxLanes.find((l) => l.id === selectedFxLaneId) ?? selectedMediaLane
-		);
+		return fxLanes.find((l) => l.id === selectedFxLaneId) ?? selectedMediaLane;
 	});
 
 	/** Panel value: the lane's, or the editor's for lanes without settings yet. */
@@ -4339,6 +4337,7 @@
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
 							sources={sequenceSources}
+							edits={sourceRegistry.edits}
 							bind:selectedClipId={selectedMediaClipId}
 							bind:selectedClipIds={selectedMediaClipIds}
 							soloLaneId={soloMediaLaneId}

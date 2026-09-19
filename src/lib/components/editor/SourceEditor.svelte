@@ -31,6 +31,7 @@
 		putKeyframe,
 		removeKeyframe,
 		sampleSourceEdit,
+		sourceSpan,
 		sourceSpeed,
 		SPEED_MAX,
 		SPEED_MIN,
@@ -42,6 +43,7 @@
 		type MaskTransform,
 		type SourceEdit,
 		type SourceEditAnim,
+		type SourceSpan,
 	} from "../../media";
 	import {
 		maskShift,
@@ -53,6 +55,7 @@
 	import ColorPicker from "../ui/ColorPicker.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import SourceKeyframes, { type KeyTrackView } from "./SourceKeyframes.svelte";
+	import SourceTrim from "./SourceTrim.svelte";
 
 	interface Props {
 		/** The media being edited. The edit belongs to it, not to any layer. */
@@ -437,6 +440,11 @@
 		if (!playing || !ready) return;
 		const v = media;
 		if (!v || !("play" in v)) return;
+		// Playback starts inside the trim, and wraps (or stops) at its out point
+		// the way the element itself would at the file's end.
+		const s = untrack(() => span);
+		if (v.currentTime < s.start || v.currentTime >= s.end)
+			v.currentTime = s.start;
 		void v.play().catch(() => (playing = false));
 		// Once per decoded frame rather than once per display refresh: a repaint
 		// costs a full-frame draw out of the video either way, and on a display
@@ -444,6 +452,15 @@
 		const perFrame = "requestVideoFrameCallback" in v;
 		let handle = 0;
 		const step = () => {
+			const s = untrack(() => span);
+			if (untrack(() => trimmed) && v.currentTime >= s.end) {
+				if (untrack(() => loop)) v.currentTime = s.start;
+				else {
+					v.currentTime = s.end;
+					playing = false;
+					return;
+				}
+			}
 			currentTime = v.currentTime;
 			grabFrame();
 			paint();
@@ -1252,6 +1269,21 @@
 		setSpeed(Math.abs(v) < 0.08 ? 1 : 2 ** v);
 	}
 
+	// ── Trim ─────────────────────────────────────────────────────────────────
+	// Which stretch of the file the clips play. Like speed, a property of the
+	// media rather than a tool: it changes how much of it is walked, not what
+	// is in it. The dialog's playback stays inside it, so the loop can be
+	// watched as the timeline will run it — while scrubbing is free to go
+	// outside, since the cut edges are set by looking at what is past them.
+	const span = $derived<SourceSpan>(sourceSpan(edit, duration));
+	const trimmed = $derived(!!edit.span);
+	let trim = $state<SourceTrim | undefined>(undefined);
+
+	function setSpan(next: SourceSpan | null) {
+		const { span: _, ...rest } = edit;
+		onChange(next ? { ...rest, span: next } : rest);
+	}
+
 	// The dialog's own playback runs at the edited rate, so the clip can be
 	// watched the way the timeline will run it. Keyed on `ready`, not the
 	// element: it lands after the load, and a clip opened with a speed already
@@ -1317,6 +1349,14 @@
 			e.preventDefault();
 			beforeEdit();
 			removeKey(id);
+			return;
+		}
+		// [ and ] cut the file at the playhead, as in every NLE.
+		if ((e.key === "[" || e.key === "]") && duration > 0 && trim) {
+			if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
+			e.preventDefault();
+			if (e.key === "[") trim.setInHere();
+			else trim.setOutHere();
 			return;
 		}
 		// Space is the transport here as it is everywhere else — except while a
@@ -1497,6 +1537,17 @@
 							</div>
 						{/if}
 					</div>
+
+					<SourceTrim
+						bind:this={trim}
+						{duration}
+						{currentTime}
+						{span}
+						{trimmed}
+						onSeek={seekTo}
+						onBeforeEdit={beforeEdit}
+						onChange={setSpan}
+					/>
 
 					<!-- Videos only: an image is one instant, and there is nowhere in it
 					     for a second key to go. -->

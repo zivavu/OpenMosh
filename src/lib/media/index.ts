@@ -24,6 +24,7 @@ export type {
 	MaskTransform,
 	SourceEdit,
 	SourceEditAnim,
+	SourceSpan,
 } from "./source-edit";
 export {
 	clampCrop,
@@ -48,8 +49,12 @@ export {
 	sampleSourceEdit,
 	sampleTrack,
 	wrapSourceTime,
+	clampSpan,
+	sourcePlayLength,
+	sourceSpan,
 	sourceSpeed,
 	sourceTimeAt,
+	SPAN_MIN,
 	SPEED_MIN,
 	SPEED_MAX,
 } from "./source-edit";

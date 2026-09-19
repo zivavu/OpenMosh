@@ -13,6 +13,9 @@ import {
 	removeKeyframe,
 	sampleSourceEdit,
 	wrapSourceTime,
+	clampSpan,
+	sourcePlayLength,
+	sourceTimeAt,
 } from "./source-edit";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -188,6 +191,61 @@ describe("keyframes", () => {
 	});
 });
 
+describe("sourceTimeAt with a span", () => {
+	const edit = { ...createSourceEdit(), span: { start: 2, end: 5 } };
+
+	it("starts at the in-point and walks from it", () => {
+		expect(sourceTimeAt(edit, 1, 3)).toBeCloseTo(4, 10);
+	});
+
+	it("lifts an in-point before the span up to its start", () => {
+		expect(sourceTimeAt(edit, 0, 0)).toBeCloseTo(2, 10);
+		expect(sourceTimeAt(edit, 1, 0)).toBeCloseTo(3, 10);
+	});
+
+	it("loops inside the span rather than the file", () => {
+		// 3s long: 4s in from its start lands 1s in on the second pass.
+		expect(sourceTimeAt(edit, 4, 0)).toBeCloseTo(3, 10);
+		expect(sourceTimeAt(edit, 3, 0)).toBeCloseTo(2, 10);
+	});
+
+	it("walks the span at the edit's speed", () => {
+		expect(sourceTimeAt({ ...edit, speed: 2 }, 1, 0)).toBeCloseTo(4, 10);
+		expect(sourceTimeAt({ ...edit, speed: 2 }, 2, 0)).toBeCloseTo(3, 10);
+	});
+
+	it("runs on unbounded without one", () => {
+		expect(sourceTimeAt(createSourceEdit(), 14, 0)).toBe(14);
+	});
+
+	it("takes the span's length, at speed, to play through once", () => {
+		expect(sourcePlayLength(edit, 10)).toBeCloseTo(3, 10);
+		expect(sourcePlayLength({ ...edit, speed: 2 }, 10)).toBeCloseTo(1.5, 10);
+		expect(sourcePlayLength(undefined, 10)).toBe(10);
+	});
+});
+
+describe("clampSpan", () => {
+	it("is null when nothing is cut off", () => {
+		expect(clampSpan({ start: 0, end: 10 }, 10)).toBeNull();
+		expect(clampSpan({ start: -1, end: 12 }, 10)).toBeNull();
+	});
+
+	it("keeps the edges in order and inside the file", () => {
+		expect(clampSpan({ start: 4, end: 3 }, 10)).toEqual({ start: 4, end: 4.1 });
+		expect(clampSpan({ start: 2, end: 12 }, 10)).toEqual({ start: 2, end: 10 });
+	});
+
+	it("survives a restore round trip", () => {
+		const e = normalizeSourceEdit({ span: { start: 1, end: 2 } });
+		expect(e.span).toEqual({ start: 1, end: 2 });
+		expect(
+			normalizeSourceEdit({ span: { start: "1", end: 2 } }).span,
+		).toBeUndefined();
+		expect(isIdleSourceEdit(e)).toBe(false);
+	});
+});
+
 describe("wrapSourceTime", () => {
 	it("leaves a time inside the media alone", () => {
 		expect(wrapSourceTime(2.5, 6)).toBe(2.5);
@@ -277,7 +335,12 @@ describe("keyed erase masks", () => {
 });
 
 describe("keyCoverage", () => {
-	const grey = { color: { r: 0.5, g: 0.5, b: 0.5 }, threshold: 0.01, smoothing: 0.1, lumaRange: 0.35 };
+	const grey = {
+		color: { r: 0.5, g: 0.5, b: 0.5 },
+		threshold: 0.01,
+		smoothing: 0.1,
+		lumaRange: 0.35,
+	};
 	const green = { ...grey, color: { r: 0, g: 1, b: 0 }, threshold: 0.3 };
 
 	it("cuts the key colour itself", () => {
