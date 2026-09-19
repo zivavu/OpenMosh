@@ -9,6 +9,7 @@
 	} from "lucide-svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import LaneGrip from "../ui/LaneGrip.svelte";
+	import LaneName from "../ui/LaneName.svelte";
 	import { dropAutoRangeScope } from "../../audio/auto-range";
 	import { untrack } from "svelte";
 	import {
@@ -290,6 +291,11 @@
 	function toggleLane(lane: FxLane) {
 		onBeforeEdit?.();
 		update(lane.id, (l) => ({ ...l, enabled: !l.enabled }));
+	}
+
+	function renameLane(lane: FxLane, name: string) {
+		onBeforeEdit?.();
+		update(lane.id, (l) => ({ ...l, name }));
 	}
 
 	/** This lane's place in the stack it shares with the text and media rows. */
@@ -740,12 +746,13 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
-				<button
-					class="lane-name"
-					class:active={selectedLaneId === lane.id}
+				<LaneName
+					name={lane.name}
+					active={selectedLaneId === lane.id}
 					title="{lane.name} — runs on everything below it in the stack. Click for its mosh and audio settings."
-					onclick={() => toggleLaneSelection(lane)}>{lane.name}</button
-				>
+					onclick={() => toggleLaneSelection(lane)}
+					onRename={(name) => renameLane(lane, name)}
+				/>
 				<button
 					class="lane-del"
 					title="Delete this lane"
@@ -1012,30 +1019,6 @@
 	   only thing that says which one is in hand. */
 	.fx-row.lifted {
 		opacity: 0.55;
-	}
-
-	.lane-name {
-		flex: 1;
-		min-width: 0;
-		border: none;
-		background: none;
-		padding: 0;
-		text-align: left;
-		cursor: pointer;
-		color: var(--text-2);
-		font-family: inherit;
-		font-size: 0.65rem;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.lane-name:hover {
-		color: var(--text);
-	}
-
-	.lane-name.active {
-		color: var(--live);
 	}
 
 	/* Fills the stack's selection bar, centred as one run. */

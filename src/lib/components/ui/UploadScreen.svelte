@@ -1246,9 +1246,8 @@
 		line-height: 1.5;
 	}
 
-	/* A glass rack of hairline-split rows. Overflow scrolls vertically under
-	   a fade at the foot; the scrollbar stays hidden since the fade already
-	   says there is more. */
+	/* A glass rack of hairline-split rows. Overflow scrolls vertically with a
+	   mosh-tinted thumb inset from the rounded edge. */
 	.recent-list {
 		flex: 1;
 		min-height: 0;
@@ -1260,19 +1259,23 @@
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		scrollbar-width: none;
 	}
 
-	.recent-list::-webkit-scrollbar {
-		display: none;
+	.recent-list::-webkit-scrollbar-thumb {
+		background: color-mix(in srgb, var(--mosh) 45%, transparent);
+		border: 1px solid transparent;
+		background-clip: padding-box;
 	}
 
-	.recent-list:has(.saved-item:nth-child(4)) {
-		mask-image: linear-gradient(
-			to bottom,
-			#000 calc(100% - 1.2rem),
-			transparent
-		);
+	.recent-list::-webkit-scrollbar-thumb:hover {
+		background-color: var(--mosh);
+	}
+
+	@supports not selector(::-webkit-scrollbar) {
+		.recent-list {
+			scrollbar-color: color-mix(in srgb, var(--mosh) 45%, transparent)
+				transparent;
+		}
 	}
 
 	.saved-item {

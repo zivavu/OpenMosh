@@ -30,6 +30,7 @@
 	import { lazy } from "../../lazy";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import LaneGrip from "../ui/LaneGrip.svelte";
+	import LaneName from "../ui/LaneName.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 
 	// Only fetched when the sync modal is actually opened; it reseeds itself from
@@ -525,7 +526,11 @@
 				>
 					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 				</button>
-				<span class="lane-name" title={lane.name}>{lane.name}</span>
+				<LaneName
+					name={lane.name}
+					title="{lane.name}."
+					onRename={(name) => setLane(lane.id, "name", name)}
+				/>
 				<button
 					class="lane-del"
 					title="Delete this lane"
@@ -650,16 +655,6 @@
 	   renders into, so one `order` per row interleaves the two kinds. */
 	.text-tl {
 		display: contents;
-	}
-
-	.lane-name {
-		flex: 1;
-		min-width: 0;
-		font-size: 0.65rem;
-		color: var(--text-3);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
 	/* The row follows the pointer by re-ordering, not by moving, so this is the

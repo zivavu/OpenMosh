@@ -47,6 +47,7 @@
 	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import LaneGrip from "../ui/LaneGrip.svelte";
+	import LaneName from "../ui/LaneName.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
@@ -940,11 +941,12 @@
 						<Focus size={12} />
 					</button>
 				{/if}
-				<button
-					class="lane-name"
-					title="{lane.name} — click to edit this layer's placement and effects"
-					onclick={() => openLane(lane)}>{lane.name}</button
-				>
+				<LaneName
+					name={lane.name}
+					title="{lane.name} — click to edit this layer's placement and effects."
+					onclick={() => openLane(lane)}
+					onRename={(name) => setLane(lane.id, "name", name)}
+				/>
 				<button
 					class="lane-del"
 					title="Delete this lane"
@@ -1267,26 +1269,6 @@
 	/* A button, like the fx lanes' name: with the lane no longer standing for one
 	   image there is nothing to put a thumbnail on, so the name carries the
 	   click that opens the layer. */
-	.lane-name {
-		flex: 1;
-		min-width: 0;
-		border: none;
-		background: none;
-		padding: 0;
-		text-align: left;
-		cursor: pointer;
-		font-family: inherit;
-		font-size: 0.65rem;
-		color: var(--text-3);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.lane-name:hover {
-		color: var(--text);
-	}
-
 	/* The row follows the pointer by re-ordering, not by moving, so this is the
 	   only thing that says which one is in hand. */
 	.layer-row.lifted {
