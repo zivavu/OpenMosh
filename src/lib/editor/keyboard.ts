@@ -19,6 +19,8 @@ export interface KeyboardActions {
 	togglePlay: () => void;
 	/** R: loop playback inside the selected clip. */
 	toggleClipLoop: () => void;
+	/** S: cut the clip under the playhead on the lane last touched. */
+	splitAtPlayhead: () => void;
 	/** +/- : one notch of timeline zoom. */
 	zoomTimeline: (inward: boolean) => void;
 }
@@ -85,6 +87,9 @@ export function createKeyboardHandler(
 		} else if (key === "r" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.toggleClipLoop();
+		} else if (key === "s" && !mod && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			actions.splitAtPlayhead();
 		} else if (!mod && (e.key === "+" || e.key === "=")) {
 			// "=" as well as "+": on most layouts the latter needs Shift, and every
 			// other app zooms in on the unshifted key too.

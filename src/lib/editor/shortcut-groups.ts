@@ -1,6 +1,10 @@
 /** The rows behind the shortcuts modal, in one place so every mode lists the
  * same gesture the same way. Keys in one row are alternatives. Every
- * description is one short line: the modal is a cheat sheet, not the docs. */
+ * description is one short line: the modal is a cheat sheet, not the docs.
+ *
+ * Each row names what the code does, including the case where it does
+ * nothing — a sheet that promises more than the keys deliver is worse than
+ * none. When a binding changes, this file changes with it. */
 
 export interface ShortcutRow {
 	keys: string[];
@@ -18,17 +22,47 @@ const MOSH: ShortcutRow = {
 };
 
 const UNDO: ShortcutRow[] = [
-	{ keys: ["Ctrl/Cmd+Z"], description: "Undo" },
+	{
+		keys: ["Ctrl/Cmd+Z"],
+		description: "Undo the last edit (moshes don't count)",
+	},
 	{ keys: ["Ctrl/Cmd+Shift+Z", "Ctrl/Cmd+Y"], description: "Redo" },
 ];
 
-const VIEW: ShortcutGroup = {
-	title: "View",
+const SAVE_FRAME: ShortcutRow = {
+	keys: ["Ctrl/Cmd+S"],
+	description: "Save the frame on screen as an image",
+};
+
+const FULLSCREEN: ShortcutRow = {
+	keys: ["F"],
+	description: "Fullscreen preview; Esc leaves it",
+};
+
+/** The shared axis: every lane is the ruler, and the view is one viewport. */
+const TIMELINE: ShortcutGroup = {
+	title: "Timeline",
 	shortcuts: [
-		{ keys: ["C"], description: "Follow the playhead" },
-		{ keys: ["+", "-"], description: "Zoom the timeline" },
-		{ keys: ["Scroll"], description: "Zoom the timeline at the cursor" },
-		{ keys: ["Shift+Scroll"], description: "Pan the timeline" },
+		{
+			keys: ["Click empty space"],
+			description: "Put the start marker there; playback begins from it",
+		},
+		{ keys: ["Drag empty space"], description: "Scrub" },
+		{
+			keys: ["Drag a song handle"],
+			description: "Trim the playback span; dbl-click a handle resets it",
+		},
+		{
+			keys: ["Scroll"],
+			description: "Zoom around the playhead, or the cursor",
+		},
+		{ keys: ["Shift+Scroll"], description: "Pan" },
+		{ keys: ["+", "-"], description: "Zoom one notch" },
+		{
+			keys: ["C"],
+			description:
+				"Follow the playhead, or stop; a scroll or scrub stops it too",
+		},
 	],
 };
 
@@ -37,34 +71,51 @@ const VIEW: ShortcutGroup = {
 const CLIPS: ShortcutGroup = {
 	title: "Clips",
 	shortcuts: [
-		{ keys: ["Click"], description: "Select a clip" },
-		{ keys: ["Shift+Click"], description: "Select a range of clips" },
+		{
+			keys: ["Click"],
+			description:
+				"Select a clip and open its panel; click it again to deselect",
+		},
+		{
+			keys: ["Shift+Click"],
+			description: "Select every clip between it and the last one picked",
+		},
 		{
 			keys: ["Ctrl/Cmd+Shift+Click"],
 			description: "Add or remove one clip from the selection",
 		},
 		{
 			keys: ["Dbl-click", "Ctrl/Cmd+Click"],
-			description: "Add a clip in empty space",
+			description: "Add a clip in empty lane space",
 		},
 		{ keys: ["Ctrl/Cmd+Click a clip"], description: "Split it at the cursor" },
 		{
 			keys: ["S"],
-			description: "Split the lane you last touched at the playhead",
+			description:
+				"Split the clip under the playhead on the lane you last touched",
 		},
-		{ keys: ["R"], description: "Loop playback inside the selected clip" },
-		{ keys: ["Drag"], description: "Move the selection" },
+		{
+			keys: ["Drag"],
+			description:
+				"Move the selection; media and FX clips can cross to another lane",
+		},
 		{ keys: ["Drag an edge"], description: "Trim one clip" },
 		{ keys: ["Drag a boundary"], description: "Trim both clips it joins" },
-		{ keys: ["Alt+Drag"], description: "Move without snapping" },
+		{
+			keys: ["Alt+Drag"],
+			description: "Hold the snap off (edges, beats, marker)",
+		},
+		{ keys: ["R"], description: "Loop playback inside the selected clip" },
 		{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
 		{ keys: ["Esc"], description: "Deselect" },
+		{ keys: ["Dbl-click a lane name"], description: "Rename the lane" },
 	],
 };
 
+/** Copy/paste is per lane kind; the newest copy is the one a paste answers. */
 const COPY: ShortcutRow = {
 	keys: ["Ctrl/Cmd+C"],
-	description: "Copy the selection",
+	description: "Copy the selected clips",
 };
 
 const FX_LANES: ShortcutGroup = {
@@ -73,7 +124,8 @@ const FX_LANES: ShortcutGroup = {
 		COPY,
 		{
 			keys: ["Ctrl/Cmd+V"],
-			description: "Paste effects onto the selection, or stamp at the marker",
+			description:
+				"Paste the copied effects onto the selected clips; with none selected, stamp copies at the start marker on the lane you last touched",
 		},
 	],
 };
@@ -81,14 +133,21 @@ const FX_LANES: ShortcutGroup = {
 const MEDIA_LAYERS: ShortcutGroup = {
 	title: "Media layers",
 	shortcuts: [
-		{ keys: ["Dbl-click a clip"], description: "Edit the layer's placement" },
-		{ keys: ["Solo"], description: "Preview one layer by itself" },
-		{ keys: ["Drop on a clip"], description: "Play that media there" },
-		{ keys: ["Drop on a lane"], description: "Make it the lane's media" },
+		{
+			keys: ["Click a thumb"],
+			description: "Show it on the selected clips; with none, preview it",
+		},
+		{ keys: ["Drag a thumb onto a clip"], description: "Show it on that clip" },
+		{ keys: ["Drag a thumb into a gap"], description: "Add a clip showing it" },
+		{
+			keys: ["Dbl-click a thumb"],
+			description: "Preview it full size; ← → step through, Esc closes",
+		},
 		COPY,
 		{
 			keys: ["Ctrl/Cmd+V"],
-			description: "Paste onto the selection, or stamp at the marker",
+			description:
+				"Paste what the copies showed onto the selected clips; with none selected, stamp copies at the start marker on the lane you last touched",
 		},
 	],
 };
@@ -104,18 +163,19 @@ export function editorShortcutGroups(opts: {
 		{
 			title: "Editor",
 			shortcuts: [
-				{ keys: ["Space"], description: "Play or pause" },
+				{
+					keys: ["Space"],
+					description: "Play or pause, from the start marker",
+				},
 				sequence
 					? {
 							keys: MOSH.keys,
-							description: "Previous or next mosh of the selected clip",
+							description:
+								"Previous or next mosh of the selected clip; → past the newest rolls a fresh one. Nothing selected, nothing rolls",
 						}
 					: MOSH,
 				...UNDO,
-				{
-					keys: ["Ctrl/Cmd+S"],
-					description: "Save the current frame as an image",
-				},
+				SAVE_FRAME,
 				...(sequence
 					? []
 					: [
@@ -124,10 +184,10 @@ export function editorShortcutGroups(opts: {
 								description: "Bake the current frame as the new source",
 							},
 						]),
-				{ keys: ["F"], description: "Fullscreen preview; Esc leaves it" },
+				FULLSCREEN,
 			],
 		},
-		VIEW,
+		TIMELINE,
 		...(sequence || text || media ? [CLIPS] : []),
 		...(sequence && fxLanes ? [FX_LANES] : []),
 		...(media ? [MEDIA_LAYERS] : []),
@@ -147,7 +207,7 @@ export function slideshowShortcutGroups(opts: {
 				...UNDO,
 			],
 		},
-		VIEW,
+		TIMELINE,
 		{
 			title: "Segments",
 			shortcuts: [

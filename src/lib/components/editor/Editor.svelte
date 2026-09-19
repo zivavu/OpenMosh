@@ -2601,6 +2601,8 @@
 		},
 		togglePlay: toggleMasterPlay,
 		toggleClipLoop,
+		splitAtPlayhead: () =>
+			timelineAxis?.activeLaneSplitAt?.(timelineAxis.currentTime),
 		zoomTimeline: (inward) => timelineAxis?.vp.zoomStep(inward),
 	});
 
