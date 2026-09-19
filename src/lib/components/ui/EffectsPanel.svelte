@@ -887,6 +887,12 @@
 		flex-shrink: 0;
 	}
 
+	/* Own stacking context, so slider thumbs and drop lines can't ride over
+	   the pinned tools while the chain scrolls under them. */
+	.panel-list {
+		isolation: isolate;
+	}
+
 	.panel-head {
 		display: flex;
 		align-items: center;
