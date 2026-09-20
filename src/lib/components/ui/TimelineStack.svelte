@@ -180,6 +180,17 @@
 	let scrubbing = $state(false);
 	let staticDragging = $state(false);
 
+	// Ctrl-click on a lane splits or creates a clip, and the grab handles sit
+	// over the lanes — so while the modifier is down they fall through, or the
+	// spot under the playhead would be the one place a lane can't be clicked.
+	let modifierHeld = $state(false);
+	function trackModifier(e: KeyboardEvent) {
+		modifierHeld = e.ctrlKey || e.metaKey;
+	}
+	function releaseModifier() {
+		modifierHeld = false;
+	}
+
 	// Stopping puts the clock back where playback started, so the run leaves
 	// nothing behind: the live line vanishes into the marker it came out of.
 	let wasPlaying = false;
@@ -241,6 +252,13 @@
 		window.addEventListener("pointercancel", onUp);
 	}
 </script>
+
+<!-- Blur too: a Ctrl+Tab away never sends the keyup. -->
+<svelte:window
+	onkeydown={trackModifier}
+	onkeyup={trackModifier}
+	onblur={releaseModifier}
+/>
 
 <div
 	class="tl-stack"
@@ -344,6 +362,7 @@
 			<div
 				class="tl-playhead-layer"
 				class:source-drag={draggedSourceId() !== null}
+				class:fall-through={modifierHeld}
 			>
 				{#if playheadVisible}
 					<!-- Full-width and moved by transform rather than by `left`: a
@@ -764,7 +783,9 @@
 	}
 
 	.tl-playhead-layer.source-drag .tl-playhead-grab,
-	.tl-playhead-layer.source-drag .tl-static-grab {
+	.tl-playhead-layer.source-drag .tl-static-grab,
+	.tl-playhead-layer.fall-through .tl-playhead-grab,
+	.tl-playhead-layer.fall-through .tl-static-grab {
 		pointer-events: none;
 	}
 
