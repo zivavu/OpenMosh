@@ -21,6 +21,7 @@
 		trackFileName,
 		type StoredTrack,
 	} from "../../audio/track-library";
+	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
 
 	interface Props {
@@ -183,12 +184,25 @@
 		}
 	}
 
-	async function onDelete(id: string) {
+	/** The track the confirm dialog is asking about. */
+	let pendingDelete = $state<StoredTrack | null>(null);
+
+	/** Removing the loaded track hands the editor its neighbour first, so it
+	 * never sits on a file that is gone: the one below, else the one above,
+	 * else nothing. Playback carries over. */
+	async function onDelete(track: StoredTrack) {
+		pendingDelete = null;
+		if (isTrackActive(track)) {
+			const i = tracks.indexOf(track);
+			const next = tracks[i + 1] ?? tracks[i - 1];
+			if (next) onLoad(next, mainPlaying);
+			else onUnloadTrack?.();
+		}
 		try {
-			await deleteTrack(id);
-			tracks = tracks.filter((t) => t.id !== id);
-			normalizedIds = new Set([...normalizedIds].filter((x) => x !== id));
-			gainCache.delete(id);
+			await deleteTrack(track.id);
+			tracks = tracks.filter((t) => t.id !== track.id);
+			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
+			gainCache.delete(track.id);
 		} catch (e) {
 			console.error("Failed to delete track:", e);
 		}
@@ -404,25 +418,33 @@
 								<Pencil size={10} />
 							</button>
 						{/if}
-						<!-- Deleting the loaded track strands the editor and races the auto-save -->
-						{#if !isActive}
-							<button
-								class="delete-btn"
-								onclick={() => onDelete(track.id)}
-								title="Remove"
-							>
-								<X size={10} />
-							</button>
-						{:else}
-							<!-- Keeps the name column the same width as every other row -->
-							<span class="delete-spacer" aria-hidden="true"></span>
-						{/if}
+						<button
+							class="delete-btn"
+							onclick={() => (pendingDelete = track)}
+							title="Remove"
+						>
+							<X size={10} />
+						</button>
 					</li>
 				{/each}
 			</ul>
 		{/if}
 	</div>
 </div>
+
+{#if pendingDelete}
+	<ConfirmDialog
+		title="Remove “{pendingDelete.name}”?"
+		message={isTrackActive(pendingDelete)
+			? "It's the loaded track. The next one in the library takes its place."
+			: "This removes the track from the library."}
+		confirmLabel="Remove track"
+		cancelLabel="Cancel"
+		danger
+		onConfirm={() => onDelete(pendingDelete!)}
+		onCancel={() => (pendingDelete = null)}
+	/>
+{/if}
 
 <style>
 	.library {
@@ -607,11 +629,6 @@
 	}
 	.delete-btn:hover {
 		color: #e06060;
-	}
-
-	.delete-spacer {
-		flex-shrink: 0;
-		width: 14px;
 	}
 
 	.name-btn {
