@@ -430,7 +430,9 @@
 							{#if !keepRefused}
 								<button class="link-btn" onclick={keep}>Protect</button>
 							{:else if installable}
-								<button class="link-btn" onclick={installAndKeep}>Install app</button>
+								<button class="link-btn" onclick={installAndKeep}
+									>Install app</button
+								>
 							{:else}
 								<button class="link-btn" onclick={keep}>Retry</button>
 							{/if}
@@ -446,9 +448,9 @@
 						{:else if isChromium}
 							Chrome decides this itself, without asking. It says yes to sites
 							you've installed as an app or bookmarked, so
-							{installable ? "install it" : "bookmark this page"} and try again.
-							If it still says no, check that Chrome isn't set to clear site
-							data on close.
+							{installable ? "install it" : "bookmark this page"} and try again. If
+							it still says no, check that Chrome isn't set to clear site data on
+							close.
 						{:else}
 							The browser turned the request down. It may ask again on a later
 							visit.
@@ -544,24 +546,26 @@
 									</span>
 									<span class="row-when">{fmtAgo(p.updatedAt)}</span>
 								</svelte:element>
-								<button
-									class="icon-btn"
-									title="Rename project"
-									aria-label={`Rename ${p.name}`}
-									disabled={busy}
-									onclick={() => (renaming = key)}
-								>
-									<Pencil size={13} />
-								</button>
-								<button
-									class="icon-btn danger"
-									title="Delete project"
-									aria-label={`Delete ${p.name}`}
-									disabled={busy}
-									onclick={() => askDeleteProject(p)}
-								>
-									<Trash2 size={13} />
-								</button>
+								<span class="row-actions">
+									<button
+										class="icon-btn"
+										title="Rename project"
+										aria-label={`Rename ${p.name}`}
+										disabled={busy}
+										onclick={() => (renaming = key)}
+									>
+										<Pencil size={13} />
+									</button>
+									<button
+										class="icon-btn danger"
+										title="Delete project"
+										aria-label={`Delete ${p.name}`}
+										disabled={busy}
+										onclick={() => askDeleteProject(p)}
+									>
+										<Trash2 size={13} />
+									</button>
+								</span>
 								{#if open}
 									<ul class="media-list">
 										{#each p.media as m (m.id)}
@@ -664,24 +668,26 @@
 									</span>
 									<span class="row-when">{fmtAgo(e.updatedAt)}</span>
 								</svelte:element>
-								<button
-									class="icon-btn"
-									title="Rename edit"
-									aria-label={`Rename ${e.label}`}
-									disabled={busy}
-									onclick={() => (renaming = key)}
-								>
-									<Pencil size={13} />
-								</button>
-								<button
-									class="icon-btn danger"
-									title="Delete edit"
-									aria-label={`Delete ${e.label}`}
-									disabled={busy}
-									onclick={() => askDeleteLoose(e)}
-								>
-									<Trash2 size={13} />
-								</button>
+								<span class="row-actions">
+									<button
+										class="icon-btn"
+										title="Rename edit"
+										aria-label={`Rename ${e.label}`}
+										disabled={busy}
+										onclick={() => (renaming = key)}
+									>
+										<Pencil size={13} />
+									</button>
+									<button
+										class="icon-btn danger"
+										title="Delete edit"
+										aria-label={`Delete ${e.label}`}
+										disabled={busy}
+										onclick={() => askDeleteLoose(e)}
+									>
+										<Trash2 size={13} />
+									</button>
+								</span>
 								{#if open}
 									<ul class="media-list">
 										{#each e.media as m (m.id)}
@@ -1259,9 +1265,13 @@
 		color: var(--text);
 	}
 
-	/* Two icon buttons sit at the row's end; only the outer one keeps the margin. */
-	.icon-btn + .icon-btn {
-		margin-left: -0.35rem;
+	/* Rename and delete share the row's one action column. */
+	.row-actions {
+		display: flex;
+	}
+
+	.row-actions .icon-btn:not(:last-child) {
+		margin-right: 0;
 	}
 
 	.modes {

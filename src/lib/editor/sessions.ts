@@ -14,7 +14,7 @@
  * layout jumps when it arrives.
  */
 
-import { getTrack } from "../audio/track-library";
+import { getAllTracks, getTrack } from "../audio/track-library";
 import { createListCache } from "../storage";
 import {
 	getAllSessions,
@@ -161,13 +161,16 @@ export async function openSession(key: string): Promise<OpenedSession | null> {
 export async function listSavedSessions(
 	mode: SessionMode,
 ): Promise<SavedSession[]> {
-	let sessions;
+	let sessions, tracks;
 	try {
-		sessions = await getAllSessions();
+		[sessions, tracks] = await Promise.all([getAllSessions(), getAllTracks()]);
 	} catch {
 		// A transient failure shouldn't blank the section.
 		return readCachedSessions(mode);
 	}
+	// The stored label is the song's name as of the last save; a song renamed
+	// in the library since should read as it does everywhere else.
+	const trackName = new Map(tracks.map((t) => [t.id, t.name]));
 	const out = sessions
 		.filter((s) => s.mode === mode)
 		// Song-less slideshow entries predate the track requirement. They're
@@ -177,7 +180,7 @@ export async function listSavedSessions(
 		.map((s) => ({
 			key: s.key,
 			mode: s.mode,
-			label: s.label,
+			label: (s.trackId && trackName.get(s.trackId)) || s.label,
 			sourceCount: s.sourceIds.length,
 			updatedAt: s.updatedAt,
 		}))
