@@ -364,6 +364,24 @@ async function refreshListCaches(): Promise<void> {
 	]);
 }
 
+/** What deleting the project takes with it, worded for the confirm dialog. */
+export function describeProjectDeletion(p: StorageProject): string {
+	const own = p.media.filter((m) => m.refs <= 1).length;
+	const shared = p.media.length - own;
+	return (
+		`Removes "${p.name}" from the library along with its timelines, sessions` +
+		(own > 0 ? ` and ${own} media file${own === 1 ? "" : "s"}` : "") +
+		(shared > 0
+			? `. ${shared} file${shared === 1 ? "" : "s"} shared with other projects stay${shared === 1 ? "s" : ""}.`
+			: ".") +
+		" This can't be undone."
+	);
+}
+
+export function describeLooseEditDeletion(e: StorageLooseEdit): string {
+	return `Removes the saved work on "${e.label}" and any media only it uses. This can't be undone.`;
+}
+
 /** The song and everything keyed to it, in every mode. */
 export async function deleteProject(project: StorageProject): Promise<void> {
 	const id = project.trackId;

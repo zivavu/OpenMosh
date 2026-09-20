@@ -20,6 +20,7 @@
 		Music,
 		Pencil,
 		Sparkles,
+		Trash2,
 		Upload,
 		X,
 	} from "lucide-svelte";
@@ -50,6 +51,13 @@
 		setProjectName,
 	} from "../../editor/project-names";
 	import RenameInput from "./RenameInput.svelte";
+	import {
+		deleteLooseEdit,
+		deleteProject,
+		describeLooseEditDeletion,
+		describeProjectDeletion,
+		loadStorageInventory,
+	} from "../../editor/storage-inventory";
 	import {
 		DEFAULT_SETTINGS,
 		demoBackgroundEnabled,
@@ -197,6 +205,65 @@
 					};
 				}),
 	);
+
+	// Deleting from here is the storage manager's deletion: the same lookup,
+	// the same wording, the same confirm — just reached without opening it.
+	const loadConfirmDialog = lazy(() => import("./ConfirmDialog.svelte"));
+	interface PendingDelete {
+		title: string;
+		message: string;
+		run: () => Promise<void>;
+	}
+	let pendingDelete = $state<PendingDelete | null>(null);
+	let deleting = $state(false);
+
+	async function askDeleteRow(row: RecentRow) {
+		let inventory;
+		try {
+			inventory = await loadStorageInventory();
+		} catch {
+			showToast("Couldn't read storage", "error");
+			return;
+		}
+		const project = inventory.projects.find(
+			(p) => p.trackId === row.projectKey,
+		);
+		if (project) {
+			pendingDelete = {
+				title: "Delete project",
+				message: describeProjectDeletion(project),
+				run: () => deleteProject(project),
+			};
+			return;
+		}
+		const edit = inventory.looseEdits.find((e) => e.key === row.key);
+		if (!edit) {
+			// Already gone underneath the cached list; repaint to match.
+			refreshSaved();
+			return;
+		}
+		pendingDelete = {
+			title: "Delete edit",
+			message: describeLooseEditDeletion(edit),
+			run: () => deleteLooseEdit(edit),
+		};
+	}
+
+	async function runPendingDelete() {
+		const action = pendingDelete;
+		if (!action || deleting) return;
+		pendingDelete = null;
+		deleting = true;
+		try {
+			await action.run();
+		} catch (e) {
+			console.error(e);
+			showToast("Couldn't delete that — storage refused the write", "error");
+		} finally {
+			deleting = false;
+			refreshSaved();
+		}
+	}
 
 	/** The row whose name is a field right now. Blank clears the custom name,
 	 * so the row reads as its song again. */
@@ -648,12 +715,21 @@
 								<span class="saved-when">{fmtAgo(row.updatedAt)}</span>
 							</button>
 							<button
-								class="saved-rename"
+								class="saved-action"
 								title="Rename"
 								aria-label={`Rename ${row.label}`}
 								onclick={() => (renamingKey = row.key)}
 							>
 								<Pencil size={12} />
+							</button>
+							<button
+								class="saved-action danger"
+								title="Delete"
+								aria-label={`Delete ${row.label}`}
+								disabled={deleting}
+								onclick={() => askDeleteRow(row)}
+							>
+								<Trash2 size={12} />
 							</button>
 						{/if}
 					</div>
@@ -675,6 +751,19 @@
 		<YoutubeLink />
 		<FeedbackButton />
 	</div>
+
+	{#if pendingDelete}
+		{#await loadConfirmDialog() then ConfirmDialog}
+			<ConfirmDialog
+				title={pendingDelete.title}
+				message={pendingDelete.message}
+				confirmLabel="Delete"
+				danger
+				onConfirm={runPendingDelete}
+				onCancel={() => (pendingDelete = null)}
+			/>
+		{/await}
+	{/if}
 
 	{#if storageOpen}
 		{#await loadStorageModal() then StorageModal}
@@ -1378,11 +1467,11 @@
 			background-color var(--t);
 	}
 
-	/* In flow, so it never covers the timestamp; only lit for the row under
+	/* In flow, so they never cover the timestamp; only lit for the row under
 	   the pointer. */
-	.saved-rename {
+	.saved-action {
 		flex-shrink: 0;
-		margin: 0 0.45rem 0 -0.4rem;
+		margin: 0 0 0 -0.4rem;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1400,15 +1489,24 @@
 			color var(--t);
 	}
 
-	.saved-row:hover .saved-rename,
-	.saved-rename:focus-visible {
+	.saved-action:last-child {
+		margin-right: 0.45rem;
+	}
+
+	.saved-row:hover .saved-action,
+	.saved-action:focus-visible {
 		opacity: 1;
 	}
 
-	.saved-rename:hover,
-	.saved-rename:focus-visible {
+	.saved-action:hover,
+	.saved-action:focus-visible {
 		color: var(--mosh);
 		outline: none;
+	}
+
+	.saved-action.danger:hover,
+	.saved-action.danger:focus-visible {
+		color: var(--rec);
 	}
 
 	.saved-row.renaming .saved-item {

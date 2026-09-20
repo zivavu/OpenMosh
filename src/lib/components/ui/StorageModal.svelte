@@ -25,6 +25,8 @@
 		deleteLooseEdit,
 		deleteProject,
 		deleteUnassignedMedia,
+		describeLooseEditDeletion,
+		describeProjectDeletion,
 		keepStorage,
 		loadStorageInventory,
 		type ProjectMode,
@@ -243,17 +245,9 @@
 	// ── Actions ──
 
 	function askDeleteProject(p: StorageProject) {
-		const own = p.media.filter((m) => m.refs <= 1).length;
-		const shared = p.media.length - own;
 		pending = {
 			title: "Delete project",
-			message:
-				`Removes "${p.name}" from the library along with its timelines, sessions` +
-				(own > 0 ? ` and ${own} media file${own === 1 ? "" : "s"}` : "") +
-				(shared > 0
-					? `. ${shared} file${shared === 1 ? "" : "s"} shared with other projects stay${shared === 1 ? "s" : ""}.`
-					: ".") +
-				" This can't be undone.",
+			message: describeProjectDeletion(p),
 			run: () => deleteProject(p),
 		};
 	}
@@ -261,7 +255,7 @@
 	function askDeleteLoose(e: StorageLooseEdit) {
 		pending = {
 			title: "Delete edit",
-			message: `Removes the saved work on "${e.label}" and any media only it uses. This can't be undone.`,
+			message: describeLooseEditDeletion(e),
 			run: () => deleteLooseEdit(e),
 		};
 	}
