@@ -370,6 +370,23 @@ button:active {
 	outline-offset: 2px;
 }
 
+/* Sliders drop the outline (a box around the whole track reads as a bug) and
+   light the thumb instead. `:not(:disabled)` is there to outrank each
+   component's scoped hover rule. */
+input[type="range"]:focus-visible {
+	outline: none;
+}
+
+input[type="range"]:focus-visible:not(:disabled)::-webkit-slider-thumb {
+	background: var(--live);
+	box-shadow: 0 0 0 3px rgba(110, 231, 192, 0.28);
+}
+
+input[type="range"]:focus-visible:not(:disabled)::-moz-range-thumb {
+	background: var(--live);
+	box-shadow: 0 0 0 3px rgba(110, 231, 192, 0.28);
+}
+
 #app {
 	width: 100%;
 	height: 100svh;
