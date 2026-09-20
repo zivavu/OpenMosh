@@ -1336,10 +1336,22 @@
 		}
 	}
 
+	/* The row, not the button, carries the hover: the pencil sits beside the
+	   button and the highlight has to run under it too. */
 	.saved-row {
 		display: flex;
 		align-items: center;
 		border-bottom: 1px solid var(--line);
+		transition: background-color var(--t);
+	}
+
+	.saved-row:hover,
+	.saved-row:has(.saved-item:focus-visible) {
+		background: color-mix(in srgb, var(--mosh) 8%, transparent);
+	}
+
+	.saved-row:has(.saved-item:active) {
+		background: color-mix(in srgb, var(--mosh) 14%, transparent);
 	}
 
 	.saved-row:last-child {
@@ -1409,15 +1421,10 @@
 		min-width: 0;
 	}
 
-	.saved-item:hover,
+	.saved-row:hover .saved-item,
 	.saved-item:focus-visible {
 		color: var(--mosh);
-		background: color-mix(in srgb, var(--mosh) 8%, transparent);
 		outline: none;
-	}
-
-	.saved-item:active {
-		background: color-mix(in srgb, var(--mosh) 14%, transparent);
 	}
 
 	.saved-item :global(svg) {
@@ -1426,7 +1433,7 @@
 		transition: color var(--t);
 	}
 
-	.saved-item:hover :global(svg),
+	.saved-row:hover .saved-item :global(svg),
 	.saved-item:focus-visible :global(svg) {
 		color: var(--mosh);
 	}
