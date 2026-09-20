@@ -659,10 +659,7 @@
 								<li class="preset-row" class:active={appliedIndex === index}>
 									<button
 										class="preset-row-load"
-										onclick={() => {
-											handleLoadPreset(index);
-											presetsOpen = false;
-										}}
+										onclick={() => handleLoadPreset(index)}
 										title={`Load ${preset.name}`}
 										aria-pressed={appliedIndex === index}
 									>
