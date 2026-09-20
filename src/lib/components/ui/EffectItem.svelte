@@ -21,6 +21,7 @@
 	} from "../../effects";
 	import type { SpectrumData } from "../../types";
 	import { linkBand } from "../../editor/link-band.svelte";
+	import { showSpectrum } from "../../editor/show-spectrum.svelte";
 	import ColorPicker from "./ColorPicker.svelte";
 	import FontSelect from "./FontSelect.svelte";
 	import DualRangeSlider from "./DualRangeSlider.svelte";
@@ -390,16 +391,18 @@
 											</div>
 											{#if link.freqMin != null && link.freqMax != null && spectrumData}
 												<div class="spectrum-wrap">
-													<SpectrumDisplay
-														data={spectrumData.data}
-														sampleRate={spectrumData.sampleRate}
-														binCount={spectrumData.binCount}
-														freqMin={link.freqMin ?? FREQ_PRESETS.full.min}
-														freqMax={link.freqMax ?? FREQ_PRESETS.full.max}
-														{response}
-														width={200}
-														height={48}
-													/>
+													{#if showSpectrum.value}
+														<SpectrumDisplay
+															data={spectrumData.data}
+															sampleRate={spectrumData.sampleRate}
+															binCount={spectrumData.binCount}
+															freqMin={link.freqMin ?? FREQ_PRESETS.full.min}
+															freqMax={link.freqMax ?? FREQ_PRESETS.full.max}
+															{response}
+															width={200}
+															height={48}
+														/>
+													{/if}
 													<div class="spectrum-inputs">
 														<span class="spectrum-label">Freq</span>
 														<div class="spectrum-slider">

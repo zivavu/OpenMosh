@@ -22,6 +22,8 @@ export interface EditorSettings {
 	/** Response curve of a linked param: low lifts quiet detail, high keeps only hits. */
 	audioPunch: number;
 	showFps: boolean;
+	/** Whether audio links draw their live spectrum; off saves a canvas per link. */
+	showSpectrum: boolean;
 	outputVolume: number;
 	loopAudio: boolean;
 	loopVideo: boolean;
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	audioSmoothing: DEFAULT_AUDIO_RESPONSE.smoothing,
 	audioPunch: DEFAULT_AUDIO_RESPONSE.punch,
 	showFps: false,
+	showSpectrum: true,
 	outputVolume: 1,
 	loopAudio: false,
 	loopVideo: true,

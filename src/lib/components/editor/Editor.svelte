@@ -53,6 +53,7 @@
 		updateSettings,
 	} from "../../editor/settings";
 	import { linkBand } from "../../editor/link-band.svelte";
+	import { showSpectrum } from "../../editor/show-spectrum.svelte";
 	import {
 		cloneEffectInstance,
 		loadInitialEffects,
@@ -789,6 +790,7 @@
 		audioSmoothing;
 		audioPunch;
 		showFps;
+		showSpectrum.value;
 		audio.outputVolume;
 		audio.loopAudio;
 		videoLoop;
@@ -804,6 +806,7 @@
 			audioSmoothing,
 			audioPunch,
 			showFps,
+			showSpectrum: showSpectrum.value,
 			outputVolume: audio.outputVolume,
 			loopAudio: audio.loopAudio,
 			loopVideo: videoLoop,
@@ -4065,6 +4068,15 @@
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<Checkbox id="show-fps" bind:checked={showFps} />
+					</div>
+					<div class="mosh-setting-row">
+						<label
+							for="show-spectrum"
+							title="Draw the live spectrum under each audio link"
+						>
+							Show spectrum
+						</label>
+						<Checkbox id="show-spectrum" bind:checked={showSpectrum.value} />
 					</div>
 					<div class="mosh-setting-row">
 						<label
