@@ -285,13 +285,17 @@ void main() {
   } else {
     blended = mix(mainRgb, textRgb, a);
   }
-  // Source-over coverage rather than a flat 1.0. Over the image this is still
-  // 1.0 (the frame is opaque), but this same pass runs inside a text layer's
-  // own chain — tracking and captions composite through it — where the input is
-  // the transparent drawn text. Forcing alpha there made the whole layer opaque,
-  // so compositing it back over the frame hid the image completely.
+  // Source-over, in straight alpha. The mode above already folds the layer's
+  // coverage into an opaque base; where the base is clear — the editor's blank
+  // frame, the fit's bars, or a text layer's own chain, which this same pass
+  // runs inside — the layer shows through as itself, not darkened by the
+  // nothing it landed on.
   float outA = mainC.a + a * (1.0 - mainC.a);
-  outColor = vec4(clamp(blended, 0.0, 1.0), clamp(outA, 0.0, 1.0));
+  vec3 over = (1.0 - mainC.a) * a * textRgb + mainC.a * blended;
+  outColor = vec4(
+    outA > 0.0 ? clamp(over / outA, 0.0, 1.0) : vec3(0.0),
+    clamp(outA, 0.0, 1.0)
+  );
 }`;
 
 export interface PrePassDef {

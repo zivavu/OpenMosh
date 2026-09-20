@@ -233,8 +233,8 @@ function addPostInstanceIds(live: Set<string>, post: PostChainLayer[]): void {
 	for (const l of post) addInstanceIds(live, l.effects);
 }
 
-/** One opaque black texel — see GlRenderer.clearSource. */
-const BLACK_PIXEL = new Uint8Array([0, 0, 0, 255]);
+/** One clear texel — see GlRenderer.clearSource. */
+const CLEAR_PIXEL = new Uint8Array([0, 0, 0, 0]);
 
 export class GlRenderer {
 	private gl: WebGL2RenderingContext;
@@ -411,6 +411,11 @@ export class GlRenderer {
 		const gl = canvas.getContext("webgl2", {
 			preserveDrawingBuffer: true,
 			antialias: false,
+			// The chain carries straight alpha through to the canvas: a blank
+			// base and the fit's bars are clear, and a layer's soft edge is its
+			// own colour at partial coverage. Left premultiplied, the page would
+			// read every such pixel as brighter than it is.
+			premultipliedAlpha: false,
 		});
 		if (!gl) throw new Error("WebGL2 not supported");
 		this.gl = gl;
@@ -501,9 +506,9 @@ export class GlRenderer {
 		this.clearSource();
 	}
 
-	/** Put one opaque black pixel on the source texture, stretched over the
-	 * frame by the fit. Cheaper than clearing a full-size texture, and the fit
-	 * of a 1×1 is black either way. */
+	/** Put one clear pixel on the source texture, stretched over the frame by
+	 * the fit. Cheaper than clearing a full-size texture, and the fit of a 1×1
+	 * is clear either way: nothing under the layers is transparent. */
 	clearSource() {
 		if (!this.sourceTexture) return;
 		const gl = this.gl;
@@ -517,7 +522,7 @@ export class GlRenderer {
 			0,
 			gl.RGBA,
 			gl.UNSIGNED_BYTE,
-			BLACK_PIXEL,
+			CLEAR_PIXEL,
 		);
 		this.srcTexW = 1;
 		this.srcTexH = 1;
@@ -1386,9 +1391,9 @@ export class GlRenderer {
 
 		gl.bindFramebuffer(gl.FRAMEBUFFER, stageFbo);
 		// Clear at full size first, then draw into the fitted rect — "contain"
-		// leaves the bars black, "cover" simply clips outside the viewport.
+		// leaves the bars transparent, "cover" simply clips outside the viewport.
 		gl.viewport(0, 0, this.imgW, this.imgH);
-		gl.clearColor(0, 0, 0, 1);
+		gl.clearColor(0, 0, 0, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.viewport(x, y, w, h);
 		gl.useProgram(this.passthrough.program);

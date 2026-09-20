@@ -1153,6 +1153,16 @@
 		max-height: 100%;
 		border-radius: 2px;
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+		/* Checkerboard under the frame: whatever the chain leaves clear — the
+		   blank base, the fit's bars, a keyed-out backdrop — reads as clear
+		   rather than as black paint. */
+		background:
+			repeating-conic-gradient(
+					rgba(255, 255, 255, 0.07) 0 25%,
+					transparent 0 50%
+				)
+				0 0 / 16px 16px,
+			var(--ink);
 	}
 
 	/* Marks the selected layer's box while its clip panel is open, so the
