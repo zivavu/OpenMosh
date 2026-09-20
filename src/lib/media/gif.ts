@@ -5,15 +5,6 @@
  * an <img> but can't seek one, and Firefox has no ImageDecoder, so the frames
  * come from the small decoder below.
  */
-import {
-	BufferTarget,
-	CanvasSource,
-	getFirstEncodableVideoCodec,
-	Mp4OutputFormat,
-	Output,
-	QUALITY_VERY_HIGH,
-} from "mediabunny";
-
 export interface GifFrame {
 	/** Full-canvas RGBA, disposal already applied. */
 	pixels: Uint8ClampedArray<ArrayBuffer>;
@@ -43,6 +34,16 @@ export async function gifToVideo(file: File): Promise<File> {
 	try {
 		const gif = decodeGif(new Uint8Array(await file.arrayBuffer()));
 		if (gif.frames.length < 2) return file;
+		// Deferred like every other mediabunny user: a static import here would
+		// put the whole library in the entry chunk.
+		const {
+			BufferTarget,
+			CanvasSource,
+			getFirstEncodableVideoCodec,
+			Mp4OutputFormat,
+			Output,
+			QUALITY_VERY_HIGH,
+		} = await import("mediabunny");
 		const codec = await getFirstEncodableVideoCodec(["vp9", "vp8", "av1"], {
 			width: gif.width,
 			height: gif.height,
