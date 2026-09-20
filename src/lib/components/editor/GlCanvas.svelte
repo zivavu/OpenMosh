@@ -314,6 +314,14 @@
 	 * click, matching the timeline lanes, and left button only — the canvas has
 	 * no menu of its own to compete with. */
 	function pickLayerAt(e: PointerEvent) {
+		// A press on the preview takes focus off whatever control had it. The
+		// preventDefault below keeps the browser from doing that itself, so a
+		// slider just dragged would otherwise still own the arrow keys and eat
+		// the mosh shortcut.
+		const active = document.activeElement;
+		if (active instanceof HTMLElement && !previewArea?.contains(active)) {
+			active.blur();
+		}
 		if (!onPickLayer || e.button !== 0) return;
 		// Anything else in the preview box is its own control, and the overlay
 		// covers a canvas whose contents are stale by the time it is up.
