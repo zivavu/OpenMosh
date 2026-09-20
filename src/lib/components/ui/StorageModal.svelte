@@ -31,6 +31,11 @@
 		type StorageMediaItem,
 		type StorageProject,
 	} from "../../editor/storage-inventory";
+	import {
+		canInstall,
+		onInstallableChange,
+		promptInstall,
+	} from "../../install-prompt";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
@@ -49,6 +54,9 @@
 	/** The last row checked, so shift-click can extend from it. */
 	let lastPicked: string | null = null;
 	let keepRefused = $state(false);
+	/** Chrome offered an install we can trigger � the one lever that flips its refusal. */
+	let installable = $state(canInstall());
+	const isChromium = "chrome" in window;
 
 	interface PendingAction {
 		title: string;
@@ -65,6 +73,8 @@
 			failed = true;
 		}
 	}
+
+	onMount(() => onInstallableChange(() => (installable = canInstall())));
 
 	onMount(() => {
 		void refresh();
@@ -111,11 +121,18 @@
 	async function keep() {
 		const ok = await keepStorage();
 		if (ok) {
+			keepRefused = false;
 			showToast("Your work is now exempt from browser cleanup");
 			await refresh();
 		} else {
 			keepRefused = true;
 		}
+	}
+
+	/** Install as an app, then ask again � Chrome grants installed apps outright. */
+	async function installAndKeep() {
+		if (!(await promptInstall())) return;
+		await keep();
 	}
 
 	// ── Selection ──
@@ -387,14 +404,28 @@
 							>
 								Evictable
 							</span>
-							{#if keepRefused}
-								<span class="note">Browser declined</span>
-							{:else}
+							{#if !keepRefused}
 								<button class="link-btn" onclick={keep}>Protect</button>
+							{:else if installable}
+								<button class="link-btn" onclick={installAndKeep}>Install app</button>
+							{:else}
+								<button class="link-btn" onclick={keep}>Retry</button>
 							{/if}
 						</span>
 					{/if}
 				</div>
+				{#if keepRefused}
+					<p class="note">
+						{#if isChromium}
+							Chrome decides this itself, without asking. It says yes to sites
+							you've installed as an app or bookmarked, so
+							{installable ? "install it" : "bookmark this page"} and try again.
+						{:else}
+							The browser turned the request down. It may ask again on a later
+							visit.
+						{/if}
+					</p>
+				{/if}
 				<div class="legend">
 					{#each segments as seg (seg.key)}
 						<span class="legend-item" class:dim={seg.size === 0}>
