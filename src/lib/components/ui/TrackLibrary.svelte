@@ -119,7 +119,9 @@
 	}
 
 	onMount(() => {
+		// The confirm dialog sits outside the panel; clicks in it aren't "away".
 		function onPointerDown(e: PointerEvent) {
+			if (pendingDelete) return;
 			if (open && libraryEl && !libraryEl.contains(e.target as Node)) {
 				open = false;
 			}
