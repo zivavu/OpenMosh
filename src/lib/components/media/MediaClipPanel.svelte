@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SlidersHorizontal, X } from "lucide-svelte";
+	import Checkbox from "../ui/Checkbox.svelte";
 	import { LaneEffects } from "../../timeline/lane-effects.svelte";
 	import { handBuiltLabel, isHandBuiltLabel } from "../../editor/sequence";
 	import {
@@ -526,9 +527,8 @@
 				title="When on, the layer joins the frame before the image effects run, so they distort it too. When off, it's drawn over the finished frame and they leave it alone."
 			>
 				<label for="mc-under">Under effects</label>
-				<input
+				<Checkbox
 					id="mc-under"
-					type="checkbox"
 					checked={lane.underEffects}
 					onchange={(e) =>
 						setUnderEffects((e.currentTarget as HTMLInputElement).checked)}

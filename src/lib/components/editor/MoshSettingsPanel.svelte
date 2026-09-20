@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { DEFAULT_SETTINGS } from "../../editor/settings";
+	import Checkbox from "../ui/Checkbox.svelte";
 	import type { FreqBand } from "../../effects";
 	import { RotateCcw } from "lucide-svelte";
 	import BpmControl from "../ui/BpmControl.svelte";
@@ -200,7 +201,7 @@
 		maxCtl,
 	)}
 	{#snippet shuffleCtl()}
-		<input id="mosh-shuffle" type="checkbox" bind:checked={randomizeOrder} />
+		<Checkbox id="mosh-shuffle" bind:checked={randomizeOrder} />
 	{/snippet}
 	{@render row(
 		"mosh-shuffle",
@@ -214,11 +215,7 @@
 	{#if hasAudio}
 		{@render head("Audio links")}
 		{#snippet linkCtl()}
-			<input
-				id="mosh-audio-link"
-				type="checkbox"
-				bind:checked={moshAudioLink}
-			/>
+			<Checkbox id="mosh-audio-link" bind:checked={moshAudioLink} />
 		{/snippet}
 		{@render row(
 			"mosh-audio-link",
@@ -391,10 +388,6 @@
 		/* The row's double-click resets the setting; without this it also
 		   selects the label text. */
 		user-select: none;
-	}
-
-	.config-row input[type="checkbox"] {
-		accent-color: var(--live);
 	}
 
 	.val {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BpmControl from "../ui/BpmControl.svelte";
+	import Checkbox from "../ui/Checkbox.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import type { BeatSubdivision, SlideshowConfig } from "../../slideshow/types";
 
@@ -163,9 +164,8 @@
 	{#if hasTrack && (config.moshMode === "random" || config.moshMode === "smooth")}
 		<div class="config-row">
 			<label for="ss-audio-link">Random audio links</label>
-			<input
+			<Checkbox
 				id="ss-audio-link"
-				type="checkbox"
 				checked={config.moshAudioLink}
 				onchange={(e) =>
 					set("moshAudioLink", (e.currentTarget as HTMLInputElement).checked)}
@@ -194,9 +194,8 @@
 
 	<div class="config-row">
 		<label for="ss-loop">Loop images</label>
-		<input
+		<Checkbox
 			id="ss-loop"
-			type="checkbox"
 			checked={config.loop}
 			onchange={(e) =>
 				set("loop", (e.currentTarget as HTMLInputElement).checked)}
@@ -251,10 +250,6 @@
 		color: var(--text);
 		font-size: 0.75rem;
 		font-family: inherit;
-	}
-
-	.config-row input[type="checkbox"] {
-		accent-color: var(--live);
 	}
 
 	.val {

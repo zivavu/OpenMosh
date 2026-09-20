@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+	import Checkbox from "../ui/Checkbox.svelte";
 	import {
 		Crop,
 		Eraser,
@@ -1614,9 +1615,8 @@
 					{#if tool === "key"}
 						<div class="row">
 							<label for="ck-on">Remove background</label>
-							<input
+							<Checkbox
 								id="ck-on"
-								type="checkbox"
 								checked={key.enabled}
 								onchange={(e) => setKey("enabled", e.currentTarget.checked)}
 							/>
@@ -1738,9 +1738,8 @@
 
 						<div class="row">
 							<label for="er-restore">Paint back</label>
-							<input
+							<Checkbox
 								id="er-restore"
-								type="checkbox"
 								checked={restoring}
 								onchange={(e) => (restoring = e.currentTarget.checked)}
 							/>
@@ -2228,40 +2227,6 @@
 		/* The row's double-click resets the control; without this it also
 		   selects the label text. */
 		user-select: none;
-	}
-
-	/* The app's own tick, not the platform's. */
-	.row input[type="checkbox"] {
-		appearance: none;
-		width: 14px;
-		height: 14px;
-		margin: 0;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-1);
-		background: var(--sunken);
-		cursor: pointer;
-		position: relative;
-		flex-shrink: 0;
-		transition:
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-
-	.row input[type="checkbox"]:hover {
-		border-color: var(--text-3);
-	}
-
-	.row input[type="checkbox"]:checked {
-		background: rgba(110, 231, 192, 0.15);
-		border-color: var(--live-dim);
-	}
-
-	.row input[type="checkbox"]:checked::after {
-		content: "";
-		position: absolute;
-		inset: 0;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
-			center/contain no-repeat;
 	}
 
 	.val {

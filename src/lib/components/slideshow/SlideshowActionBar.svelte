@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { HelpCircle, Pause, Play, Settings, Type } from "lucide-svelte";
+	import Checkbox from "../ui/Checkbox.svelte";
 	import RecordGroup from "../editor/RecordGroup.svelte";
 	import ResizeSettings from "../ui/ResizeSettings.svelte";
 	import { slideshowShortcutGroups } from "../../editor/shortcut-groups";
@@ -121,7 +122,7 @@
 			<div class="bar-pop options-panel">
 				<div class="setting-row">
 					<label for="ss-show-fps">Show FPS</label>
-					<input id="ss-show-fps" type="checkbox" bind:checked={showFps} />
+					<Checkbox id="ss-show-fps" bind:checked={showFps} />
 				</div>
 				<div class="setting-row">
 					<label
@@ -263,35 +264,6 @@
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--text-3);
-	}
-
-	.setting-row input[type="checkbox"] {
-		appearance: none;
-		width: 14px;
-		height: 14px;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-1);
-		background: var(--sunken);
-		cursor: pointer;
-		position: relative;
-		flex-shrink: 0;
-	}
-
-	.setting-row input[type="checkbox"]:hover {
-		border-color: var(--text-3);
-	}
-
-	.setting-row input[type="checkbox"]:checked {
-		background: rgba(110, 231, 192, 0.15);
-		border-color: var(--live-dim);
-	}
-
-	.setting-row input[type="checkbox"]:checked::after {
-		content: "";
-		position: absolute;
-		inset: 0;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
-			center/contain no-repeat;
 	}
 
 	.setting-row select {

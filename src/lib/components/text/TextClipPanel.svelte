@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { X } from "lucide-svelte";
+	import Checkbox from "../ui/Checkbox.svelte";
 	import { LaneEffects } from "../../timeline/lane-effects.svelte";
 	import { handBuiltLabel, isHandBuiltLabel } from "../../editor/sequence";
 	import { OPAQUE_OUTPUT_EFFECTS } from "../../gl/effect-shaders";
@@ -317,9 +318,8 @@
 				ondblclick={(e) => resetStyle(e, "outline")}
 			>
 				<label for="tc-outline">Outline</label>
-				<input
+				<Checkbox
 					id="tc-outline"
-					type="checkbox"
 					checked={lane.style.outline}
 					onchange={(e) =>
 						setStyle("outline", (e.currentTarget as HTMLInputElement).checked)}
@@ -407,9 +407,8 @@
 				title="When on, the text joins the frame before the image effects run, so they distort it too. When off, it's drawn over the finished frame and they leave it alone."
 			>
 				<label for="tc-under">Under effects</label>
-				<input
+				<Checkbox
 					id="tc-under"
-					type="checkbox"
 					checked={lane.underEffects}
 					onchange={(e) =>
 						setUnderEffects((e.currentTarget as HTMLInputElement).checked)}
@@ -610,10 +609,6 @@
 		color: var(--text);
 		font-size: 0.75rem;
 		font-family: inherit;
-	}
-
-	.row input[type="checkbox"] {
-		accent-color: #888;
 	}
 
 	.val {

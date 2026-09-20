@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Checkbox from "./Checkbox.svelte";
 	import {
 		ArrowUpDown,
 		ChevronDown,
@@ -450,9 +451,8 @@
 								</div>
 							{/if}
 							{#if param.type === "checkbox"}
-								<input
+								<Checkbox
 									id="{effect.instanceId}-{param.key}"
-									type="checkbox"
 									checked={effect.values[param.key] === 1}
 									onchange={(e) =>
 										onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
@@ -1018,40 +1018,6 @@
 	.spectrum-slider {
 		flex: 1;
 		min-width: 0;
-	}
-
-	input[type="checkbox"] {
-		appearance: none;
-		width: 14px;
-		height: 14px;
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-2);
-		background: var(--sunken);
-		cursor: pointer;
-		position: relative;
-		flex-shrink: 0;
-	}
-
-	input[type="checkbox"]:hover {
-		border-color: var(--text-3);
-	}
-
-	input[type="checkbox"]:checked {
-		background: rgba(110, 231, 192, 0.15);
-		border-color: var(--live-dim);
-	}
-
-	input[type="checkbox"]:checked::after {
-		content: "";
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 100%;
-		height: 100%;
-		background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6l2.5 2.5 4.5-5' stroke='%236ee7c0' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
-			center/contain no-repeat;
 	}
 
 	.param-row :global(.font-select) {

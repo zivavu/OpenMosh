@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Checkbox from "./Checkbox.svelte";
 	interface Props {
 		onClose: () => void;
 		/** Fired after anything was deleted or renamed, so the opener can repaint its lists. */
@@ -478,9 +479,7 @@
 			{#if inventory.projects.length > 0}
 				<section>
 					<div class="section-head">
-						<input
-							type="checkbox"
-							class="check"
+						<Checkbox
 							checked={sectionState(projectKeys) === "all"}
 							indeterminate={sectionState(projectKeys) === "some"}
 							aria-label="Select all projects"
@@ -498,9 +497,7 @@
 								class:open
 								class:picked={selected.has(key)}
 							>
-								<input
-									type="checkbox"
-									class="check"
+								<Checkbox
 									checked={selected.has(key)}
 									aria-label={`Select ${p.name}`}
 									onclick={(e) => pick(key, e)}
@@ -603,9 +600,7 @@
 			{#if inventory.looseEdits.length > 0}
 				<section>
 					<div class="section-head">
-						<input
-							type="checkbox"
-							class="check"
+						<Checkbox
 							checked={sectionState(looseKeys) === "all"}
 							indeterminate={sectionState(looseKeys) === "some"}
 							aria-label="Select all song-less edits"
@@ -623,9 +618,7 @@
 								class:open
 								class:picked={selected.has(key)}
 							>
-								<input
-									type="checkbox"
-									class="check"
+								<Checkbox
 									checked={selected.has(key)}
 									aria-label={`Select ${e.label}`}
 									onclick={(ev) => pick(key, ev)}
@@ -1146,16 +1139,12 @@
 		background: rgba(255, 255, 255, 0.035);
 	}
 
-	.check {
-		width: 13px;
-		height: 13px;
-		margin: 0 0 0 0.6rem;
-		accent-color: var(--live);
-		cursor: pointer;
+	.row.selectable > :global(.cb) {
+		margin-left: 0.6rem;
 	}
 
-	.section-head .check {
-		margin: 0 0.1rem 0 0;
+	.section-head > :global(.cb) {
+		margin-right: 0.1rem;
 	}
 
 	.row.selectable .row-main {
