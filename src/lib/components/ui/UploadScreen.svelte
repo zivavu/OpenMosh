@@ -18,6 +18,7 @@
 		Image,
 		ListVideo,
 		Music,
+		Pencil,
 		Sparkles,
 		Upload,
 		X,
@@ -44,6 +45,12 @@
 	} from "../../editor/sessions";
 	import type { SessionMode } from "../../editor/sequence-media-store";
 	import {
+		projectKeyForSession,
+		readProjectNames,
+		setProjectName,
+	} from "../../editor/project-names";
+	import RenameInput from "./RenameInput.svelte";
+	import {
 		DEFAULT_SETTINGS,
 		demoBackgroundEnabled,
 		loadSettings,
@@ -68,7 +75,11 @@
 	let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
 	let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
 	let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
+	// The user's own names, over the song's. Re-read whenever the lists are,
+	// since the storage modal renames too.
+	let projectNames = $state(readProjectNames());
 	function refreshSaved() {
+		projectNames = readProjectNames();
 		void listSavedSequences().then((list) => (savedSequences = list));
 		void listSavedSessions("single").then((list) => (savedSingle = list));
 		void listSavedSessions("slideshow").then((list) => (savedSlideshow = list));
@@ -141,6 +152,8 @@
 	 * no count — there is always exactly one source. */
 	interface RecentRow {
 		key: string;
+		/** What a rename is stored under: the song, or the session itself. */
+		projectKey: string;
 		mode: SessionMode | "sequence";
 		label: string;
 		sourceCount: number | null;
@@ -152,11 +165,12 @@
 		selectedMode === "sequence"
 			? savedSequences.map((seq) => ({
 					key: seq.trackId,
+					projectKey: seq.trackId,
 					mode: "sequence" as const,
-					label: seq.trackName,
+					label: projectNames[seq.trackId] ?? seq.trackName,
 					sourceCount: seq.sourceCount,
 					updatedAt: seq.updatedAt,
-					title: `Reopen "${seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`,
+					title: `Reopen "${projectNames[seq.trackId] ?? seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`,
 					open: () => {
 						// Reopening a song is entering the editor too. The stored value
 						// stays "sequence": it is what every saved key is written under.
@@ -164,20 +178,32 @@
 						onSequenceFromSong(seq.trackId);
 					},
 				}))
-			: savedForMode.map((session) => ({
-					key: session.key,
-					mode: session.mode,
-					label: session.label,
-					sourceCount:
-						session.mode === "slideshow" ? session.sourceCount : null,
-					updatedAt: session.updatedAt,
-					title: `Reopen "${session.label}" with the work already done on it`,
-					open: () => {
-						updateSettings({ lastMode: selectedMode });
-						onSessionOpen(session.mode, session.key);
-					},
-				})),
+			: savedForMode.map((session) => {
+					const projectKey = projectKeyForSession(session.key);
+					const label = projectNames[projectKey] ?? session.label;
+					return {
+						key: session.key,
+						projectKey,
+						mode: session.mode,
+						label,
+						sourceCount:
+							session.mode === "slideshow" ? session.sourceCount : null,
+						updatedAt: session.updatedAt,
+						title: `Reopen "${label}" with the work already done on it`,
+						open: () => {
+							updateSettings({ lastMode: selectedMode });
+							onSessionOpen(session.mode, session.key);
+						},
+					};
+				}),
 	);
+
+	/** The row whose name is a field right now. */
+	let renamingKey = $state<string | null>(null);
+	function renameRow(row: RecentRow, name: string) {
+		setProjectName(row.projectKey, name);
+		projectNames = readProjectNames();
+	}
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement;
 
@@ -587,20 +613,49 @@
 			</div>
 			<div class="recent-list">
 				{#each recentRows as row (row.key)}
-					<button class="saved-item" title={row.title} onclick={row.open}>
-						{#if row.mode === "single"}
-							<Image size={13} />
+					<div class="saved-row" class:renaming={renamingKey === row.key}>
+						{#if renamingKey === row.key}
+							<div class="saved-item">
+								{#if row.mode === "single"}
+									<Image size={13} />
+								{:else}
+									<ListVideo size={13} />
+								{/if}
+								<RenameInput
+									value={row.label}
+									label="Project name"
+									class="saved-name"
+									onRename={(name) => renameRow(row, name)}
+									onDone={() => (renamingKey = null)}
+								/>
+							</div>
 						{:else}
-							<ListVideo size={13} />
-						{/if}
-						<span class="saved-name">{row.label}</span>
-						{#if row.sourceCount !== null}
-							<span class="saved-count"
-								>{row.sourceCount} src{row.sourceCount === 1 ? "" : "s"}</span
+							<button class="saved-item" title={row.title} onclick={row.open}>
+								{#if row.mode === "single"}
+									<Image size={13} />
+								{:else}
+									<ListVideo size={13} />
+								{/if}
+								<span class="saved-name">{row.label}</span>
+								{#if row.sourceCount !== null}
+									<span class="saved-count"
+										>{row.sourceCount} src{row.sourceCount === 1
+											? ""
+											: "s"}</span
+									>
+								{/if}
+								<span class="saved-when">{fmtAgo(row.updatedAt)}</span>
+							</button>
+							<button
+								class="saved-rename"
+								title="Rename"
+								aria-label={`Rename ${row.label}`}
+								onclick={() => (renamingKey = row.key)}
 							>
+								<Pencil size={12} />
+							</button>
 						{/if}
-						<span class="saved-when">{fmtAgo(row.updatedAt)}</span>
-					</button>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -1280,15 +1335,25 @@
 		}
 	}
 
+	.saved-row {
+		display: flex;
+		align-items: center;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.saved-row:last-child {
+		border-bottom: none;
+	}
+
 	.saved-item {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		height: var(--row-h);
 		padding: 0 0.85rem;
 		border: none;
-		border-bottom: 1px solid var(--line);
 		background: transparent;
 		color: var(--text-2);
 		font-family: inherit;
@@ -1300,8 +1365,47 @@
 			background-color var(--t);
 	}
 
-	.saved-item:last-child {
-		border-bottom: none;
+	/* In flow, so it never covers the timestamp; only lit for the row under
+	   the pointer. */
+	.saved-rename {
+		flex-shrink: 0;
+		margin: 0 0.45rem 0 -0.4rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border: none;
+		border-radius: var(--r-1);
+		background: transparent;
+		color: var(--text-3);
+		cursor: pointer;
+		opacity: 0;
+		transition:
+			opacity var(--t),
+			color var(--t);
+	}
+
+	.saved-row:hover .saved-rename,
+	.saved-rename:focus-visible {
+		opacity: 1;
+	}
+
+	.saved-rename:hover,
+	.saved-rename:focus-visible {
+		color: var(--mosh);
+		outline: none;
+	}
+
+	.saved-row.renaming .saved-item {
+		cursor: default;
+		color: var(--text);
+	}
+
+	.saved-row :global(.saved-name) {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.saved-item:hover,

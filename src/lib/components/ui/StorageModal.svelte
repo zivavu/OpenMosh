@@ -1,7 +1,7 @@
 <script lang="ts">
 	interface Props {
 		onClose: () => void;
-		/** Fired after anything was deleted, so the opener can repaint its lists. */
+		/** Fired after anything was deleted or renamed, so the opener can repaint its lists. */
 		onChanged?: () => void;
 	}
 
@@ -11,6 +11,7 @@
 		Image,
 		ListVideo,
 		Music,
+		Pencil,
 		Trash2,
 		Type,
 		X,
@@ -36,7 +37,12 @@
 		onInstallableChange,
 		promptInstall,
 	} from "../../install-prompt";
+	import {
+		projectKeyForSession,
+		setProjectName,
+	} from "../../editor/project-names";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
+	import RenameInput from "./RenameInput.svelte";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
 
@@ -54,7 +60,7 @@
 	/** The last row checked, so shift-click can extend from it. */
 	let lastPicked: string | null = null;
 	let keepRefused = $state(false);
-	/** Chrome offered an install we can trigger — the one lever that flips its refusal. */
+	/** Chrome offered an install we can trigger â€” the one lever that flips its refusal. */
 	let installable = $state(canInstall());
 	const isChromium = "chrome" in window;
 	/** Chrome keys its trust signals on the registrable domain, and localhost has none. */
@@ -90,6 +96,21 @@
 	function onKeydown(e: KeyboardEvent) {
 		// The confirm dialog handles its own Escape.
 		if (e.key === "Escape" && !pending) close();
+	}
+
+	/** The `p:`/`e:` row whose name is a field right now. */
+	let renaming = $state<string | null>(null);
+
+	function renameProject(p: StorageProject, name: string) {
+		setProjectName(p.trackId, name);
+		p.name = name;
+		changed = true;
+	}
+
+	function renameLoose(e: StorageLooseEdit, name: string) {
+		setProjectName(projectKeyForSession(e.key), name);
+		e.label = name;
+		changed = true;
 	}
 
 	function toggle(key: string) {
@@ -131,7 +152,7 @@
 		}
 	}
 
-	/** Install as an app, then ask again — Chrome grants installed apps outright. */
+	/** Install as an app, then ask again â€” Chrome grants installed apps outright. */
 	async function installAndKeep() {
 		if (!(await promptInstall())) return;
 		await keep();
@@ -482,9 +503,11 @@
 									aria-label={`Select ${p.name}`}
 									onclick={(e) => pick(key, e)}
 								/>
-								<button
+								<svelte:element
+									this={renaming === key ? "div" : "button"}
 									class="row-main"
-									onclick={() => toggle(key)}
+									class:static={renaming === key}
+									onclick={() => renaming !== key && toggle(key)}
 									disabled={p.media.length === 0}
 									aria-expanded={open}
 								>
@@ -492,7 +515,17 @@
 										<ChevronRight size={12} />
 									</span>
 									<Music size={13} />
-									<span class="row-name" title={p.name}>{p.name}</span>
+									{#if renaming === key}
+										<RenameInput
+											value={p.name}
+											label="Project name"
+											class="row-name"
+											onRename={(name) => renameProject(p, name)}
+											onDone={() => (renaming = null)}
+										/>
+									{:else}
+										<span class="row-name" title={p.name}>{p.name}</span>
+									{/if}
 									<span class="modes">
 										{#each p.modes as m (m)}
 											<span class="mode mode--{m}">{MODE_LABEL[m]}</span>
@@ -510,6 +543,15 @@
 										song {fmtBytes(p.trackSize)}
 									</span>
 									<span class="row-when">{fmtAgo(p.updatedAt)}</span>
+								</svelte:element>
+								<button
+									class="icon-btn"
+									title="Rename project"
+									aria-label={`Rename ${p.name}`}
+									disabled={busy}
+									onclick={() => (renaming = key)}
+								>
+									<Pencil size={13} />
 								</button>
 								<button
 									class="icon-btn danger"
@@ -584,9 +626,11 @@
 									aria-label={`Select ${e.label}`}
 									onclick={(ev) => pick(key, ev)}
 								/>
-								<button
+								<svelte:element
+									this={renaming === key ? "div" : "button"}
 									class="row-main"
-									onclick={() => toggle(key)}
+									class:static={renaming === key}
+									onclick={() => renaming !== key && toggle(key)}
 									disabled={e.media.length === 0}
 									aria-expanded={open}
 								>
@@ -598,7 +642,17 @@
 									{:else}
 										<ListVideo size={13} />
 									{/if}
-									<span class="row-name" title={e.label}>{e.label}</span>
+									{#if renaming === key}
+										<RenameInput
+											value={e.label}
+											label="Edit name"
+											class="row-name"
+											onRename={(name) => renameLoose(e, name)}
+											onDone={() => (renaming = null)}
+										/>
+									{:else}
+										<span class="row-name" title={e.label}>{e.label}</span>
+									{/if}
 									<span class="modes">
 										<span class="mode mode--{e.mode}">{MODE_LABEL[e.mode]}</span
 										>
@@ -609,6 +663,15 @@
 										)}
 									</span>
 									<span class="row-when">{fmtAgo(e.updatedAt)}</span>
+								</svelte:element>
+								<button
+									class="icon-btn"
+									title="Rename edit"
+									aria-label={`Rename ${e.label}`}
+									disabled={busy}
+									onclick={() => (renaming = key)}
+								>
+									<Pencil size={13} />
 								</button>
 								<button
 									class="icon-btn danger"
@@ -1186,13 +1249,19 @@
 		visibility: hidden;
 	}
 
-	.row-name {
+	.row-name,
+	.row-main :global(.row-name) {
 		flex: 1 1 auto;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 		color: var(--text);
+	}
+
+	/* Two icon buttons sit at the row's end; only the outer one keeps the margin. */
+	.icon-btn + .icon-btn {
+		margin-left: -0.35rem;
 	}
 
 	.modes {

@@ -4,6 +4,7 @@
 		ChevronLeft,
 		Library,
 		Pause,
+		Pencil,
 		Play,
 		Plus,
 		X,
@@ -16,8 +17,11 @@
 		addTrack,
 		deleteTrack,
 		getAllTracks,
+		renameTrack,
+		trackFileName,
 		type StoredTrack,
 	} from "../../audio/track-library";
+	import RenameInput from "./RenameInput.svelte";
 
 	interface Props {
 		activeTrackName: string | null;
@@ -76,7 +80,7 @@
 		const f = pendingTrack;
 		if (!f || !libraryLoaded) return;
 		const existing = tracks.find(
-			(t) => t.name === f.name && t.blob.size === f.size,
+			(t) => trackFileName(t) === f.name && t.blob.size === f.size,
 		);
 		if (existing) {
 			// Already saved from an earlier visit. Still report it: this is the
@@ -187,6 +191,20 @@
 			gainCache.delete(id);
 		} catch (e) {
 			console.error("Failed to delete track:", e);
+		}
+	}
+
+	/** The track whose name is a field right now. */
+	let renamingId = $state<string | null>(null);
+
+	async function onRename(track: StoredTrack, name: string) {
+		try {
+			await renameTrack(track.id, name);
+			tracks = tracks.map((t) =>
+				t.id === track.id ? { ...t, fileName: trackFileName(t), name } : t,
+			);
+		} catch (e) {
+			console.error("Failed to rename track:", e);
 		}
 	}
 
@@ -362,13 +380,30 @@
 						>
 							<AudioLines size={10} />
 						</button>
-						<button
-							class="name-btn"
-							onclick={() => toggleLoad(track)}
-							title={isActive ? "Unload track" : "Load track"}
-						>
-							{track.name}
-						</button>
+						{#if renamingId === track.id}
+							<RenameInput
+								value={track.name}
+								label="Track name"
+								class="name-input"
+								onRename={(name) => onRename(track, name)}
+								onDone={() => (renamingId = null)}
+							/>
+						{:else}
+							<button
+								class="name-btn"
+								onclick={() => toggleLoad(track)}
+								title={isActive ? "Unload track" : "Load track"}
+							>
+								{track.name}
+							</button>
+							<button
+								class="rename-btn"
+								onclick={() => (renamingId = track.id)}
+								title="Rename"
+							>
+								<Pencil size={10} />
+							</button>
+						{/if}
 						<!-- Deleting the loaded track strands the editor and races the auto-save -->
 						{#if !isActive}
 							<button
@@ -537,6 +572,7 @@
 	}
 
 	.preview-btn,
+	.rename-btn,
 	.delete-btn {
 		flex-shrink: 0;
 		background: none;
@@ -550,8 +586,24 @@
 		border-radius: 2px;
 	}
 
-	.preview-btn:hover {
+	.preview-btn:hover,
+	.rename-btn:hover {
 		color: var(--text-2);
+	}
+
+	/* Only offered on the row under the pointer; every row lit was noise. */
+	.rename-btn {
+		color: var(--text-4);
+		opacity: 0;
+	}
+
+	.track-row:hover .rename-btn,
+	.rename-btn:focus-visible {
+		opacity: 1;
+	}
+
+	.track-row :global(.name-input) {
+		font-size: 0.65rem;
 	}
 	.delete-btn:hover {
 		color: #e06060;

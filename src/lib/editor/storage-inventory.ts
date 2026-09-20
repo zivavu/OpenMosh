@@ -21,6 +21,12 @@ import {
 	getCustomFontSizes,
 	removeCustomFont,
 } from "../text-overlay/custom-fonts.svelte";
+import {
+	clearProjectNames,
+	forgetProjectNames,
+	projectKeyForSession,
+	readProjectNames,
+} from "./project-names";
 import { listSavedSequences } from "./saved-sequences";
 import {
 	clearAllSequenceStores,
@@ -55,6 +61,7 @@ export interface StorageMediaItem {
 
 export interface StorageProject {
 	trackId: string;
+	/** The user's name for it, else the song's. */
 	name: string;
 	/** Bytes of the song itself. */
 	trackSize: number;
@@ -195,6 +202,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 	const sizeOf = (items: StorageMediaItem[]) =>
 		items.reduce((n, m) => n + m.size + m.proxySize, 0);
 
+	const names = readProjectNames();
 	const poolByKey = new Map(pools.map((p) => [p.key, p]));
 	const sessionByKey = new Map(sessions.map((s) => [s.key, s]));
 	const timelineByKey = new Map(timelines.map((t) => [t.key, t]));
@@ -228,7 +236,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 		].filter((r) => r !== undefined);
 		return {
 			trackId: id,
-			name: track.name,
+			name: names[id] ?? track.name,
 			trackSize: track.blob.size,
 			modes,
 			media: mediaItems,
@@ -254,7 +262,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 			key: session.key,
 			kind: "session",
 			mode: session.mode,
-			label: session.label,
+			label: names[projectKeyForSession(session.key)] ?? session.label,
 			media: items,
 			mediaSize: sizeOf(items),
 			workSize: jsonSize(session.state),
@@ -268,7 +276,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 			key: pool.key,
 			kind: "pool",
 			mode: "sequence",
-			label: nameFromSourceId(pool.key),
+			label: names[pool.key] ?? nameFromSourceId(pool.key),
 			media: items,
 			mediaSize: sizeOf(items),
 			workSize:
@@ -366,6 +374,7 @@ export async function deleteProject(project: StorageProject): Promise<void> {
 	await deleteSession(SESSION_TRACK_PREFIX.slideshow + id);
 	await deleteTrack(id);
 	forgetTrackEntries([id, `seq:${id}`, `single:${id}`]);
+	forgetProjectNames([id]);
 	await dropOrphanedMedia(project.media.map((m) => m.id));
 	await refreshListCaches();
 }
@@ -386,6 +395,7 @@ export async function deleteLooseEdit(edit: StorageLooseEdit): Promise<void> {
 		keys.push(renderKeyFromSourceId(first.id));
 	}
 	forgetTrackEntries(keys);
+	forgetProjectNames([projectKeyForSession(edit.key)]);
 	await dropOrphanedMedia(edit.media.map((m) => m.id));
 	await refreshListCaches();
 }
@@ -417,6 +427,7 @@ export async function deleteEverything(): Promise<void> {
 	await clearTracks();
 	for (const font of customFonts()) await removeCustomFont(font.id);
 	forgetAllTrackEntries();
+	clearProjectNames();
 	await refreshListCaches();
 }
 
