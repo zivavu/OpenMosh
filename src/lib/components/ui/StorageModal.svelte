@@ -57,6 +57,8 @@
 	/** Chrome offered an install we can trigger — the one lever that flips its refusal. */
 	let installable = $state(canInstall());
 	const isChromium = "chrome" in window;
+	/** Chrome keys its trust signals on the registrable domain, and localhost has none. */
+	const isLocalhost = location.hostname === "localhost";
 
 	interface PendingAction {
 		title: string;
@@ -416,10 +418,16 @@
 				</div>
 				{#if keepRefused}
 					<p class="note">
-						{#if isChromium}
+						{#if isChromium && isLocalhost}
+							Chrome ignores bookmarks and installs on localhost. Open the app
+							at 127.0.0.1 instead, bookmark that, and try again. Storage is
+							per-origin, so projects saved here won't follow.
+						{:else if isChromium}
 							Chrome decides this itself, without asking. It says yes to sites
 							you've installed as an app or bookmarked, so
 							{installable ? "install it" : "bookmark this page"} and try again.
+							If it still says no, check that Chrome isn't set to clear site
+							data on close.
 						{:else}
 							The browser turned the request down. It may ask again on a later
 							visit.
