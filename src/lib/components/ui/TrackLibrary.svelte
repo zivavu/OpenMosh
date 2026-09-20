@@ -216,9 +216,11 @@
 	async function onRename(track: StoredTrack, name: string) {
 		try {
 			await renameTrack(track.id, name);
-			tracks = tracks.map((t) =>
-				t.id === track.id ? { ...t, fileName: trackFileName(t), name } : t,
-			);
+			tracks = tracks.map((t) => {
+				if (t.id !== track.id) return t;
+				const fileName = trackFileName(t);
+				return { ...t, fileName, name: name.trim() || fileName };
+			});
 		} catch (e) {
 			console.error("Failed to rename track:", e);
 		}

@@ -102,16 +102,17 @@
 	/** The `p:`/`e:` row whose name is a field right now. */
 	let renaming = $state<string | null>(null);
 
+	// Blank clears the custom name; the reload is what brings the song's back.
 	function renameProject(p: StorageProject, name: string) {
 		setProjectName(p.trackId, name);
-		p.name = name;
 		changed = true;
+		void refresh();
 	}
 
 	function renameLoose(e: StorageLooseEdit, name: string) {
 		setProjectName(projectKeyForSession(e.key), name);
-		e.label = name;
 		changed = true;
+		void refresh();
 	}
 
 	function toggle(key: string) {

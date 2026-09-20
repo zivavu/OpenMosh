@@ -6,6 +6,7 @@
 		label: string;
 		/** Styled by the row it sits in: the field inherits font and colour. */
 		class?: string;
+		/** Blank means "back to the default name". */
 		onRename: (name: string) => void;
 		/** Fired once, however the edit ends, so the row can swap the label back. */
 		onDone: () => void;
@@ -21,12 +22,12 @@
 
 	onMount(() => input?.select());
 
-	// Blank or unchanged keeps the old name; a row never ends up nameless.
+	// Clearing the field is how a custom name is dropped, so blank goes through.
 	function commit() {
 		if (done) return;
 		done = true;
 		const next = draft.trim();
-		if (next && next !== value) onRename(next);
+		if (next !== value) onRename(next);
 		onDone();
 	}
 

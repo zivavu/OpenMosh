@@ -114,7 +114,8 @@ export async function addTrack(file: File): Promise<StoredTrack> {
 	});
 }
 
-/** Give the track a display name; the file name it dedupes by is kept. */
+/** Give the track a display name; the file name it dedupes by is kept, and
+ * a blank name goes back to it. */
 export async function renameTrack(id: string, name: string): Promise<void> {
 	const db = await openDb();
 	return new Promise((resolve, reject) => {
@@ -124,7 +125,8 @@ export async function renameTrack(id: string, name: string): Promise<void> {
 		req.onsuccess = () => {
 			const track = req.result as StoredTrack | undefined;
 			if (!track) return;
-			store.put({ ...track, fileName: trackFileName(track), name });
+			const fileName = trackFileName(track);
+			store.put({ ...track, fileName, name: name.trim() || fileName });
 		};
 		tx.oncomplete = () => {
 			db.close();

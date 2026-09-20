@@ -198,7 +198,8 @@
 				}),
 	);
 
-	/** The row whose name is a field right now. */
+	/** The row whose name is a field right now. Blank clears the custom name,
+	 * so the row reads as its song again. */
 	let renamingKey = $state<string | null>(null);
 	function renameRow(row: RecentRow, name: string) {
 		setProjectName(row.projectKey, name);
