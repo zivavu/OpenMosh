@@ -118,7 +118,7 @@
 		endCardDrag();
 	}
 
-	function openLightbox(e: MouseEvent, index: number) {
+	function openLightbox(e: Event, index: number) {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		lightboxOrigin = {
 			x: rect.left + rect.width / 2 - window.innerWidth / 2,
@@ -149,9 +149,9 @@
 	<div class="grid-head">
 		<span class="grid-hint">
 			{#if assignable}
-				CLICK A SOURCE TO PLAY IT ON {selectedCount > 1
-					? `${selectedCount} SEGMENTS`
-					: "THE SELECTED SEGMENT"}
+				DRAG A SOURCE ONTO {selectedCount > 1
+					? `THE ${selectedCount} SELECTED SEGMENTS`
+					: "THE SELECTED SEGMENT"}, OR FOCUS ONE AND PRESS ENTER
 			{:else}
 				DRAG A SOURCE ONTO A SEGMENT, OR SELECT SEGMENTS FIRST
 			{/if}
@@ -178,7 +178,6 @@
 				<div
 					class="card"
 					class:active={selectedSourceId === src.id}
-					class:assignable
 					class:dragging={dragFromIndex === i}
 					class:drop-before={edge === "before"}
 					class:drop-after={edge === "after"}
@@ -186,7 +185,7 @@
 					tabindex="0"
 					draggable="true"
 					title={assignable
-						? `Show "${src.name}" on the selected layer clip${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
+						? `${src.name}. Click to preview. Drag it onto the selected layer clip${selectedCount > 1 ? "s" : ""}, or press Enter to show it there.`
 						: `${src.name}. Click to preview, or drag it onto a layer.`}
 					ondragstart={(e) => onCardDragStart(e, i)}
 					ondragover={(e) => {
@@ -195,15 +194,12 @@
 						dragOverIndex = i;
 					}}
 					ondragend={endCardDrag}
-					onclick={(e) => {
-						if (assignable) onAssign(src.id);
-						else openLightbox(e, i);
-					}}
-					ondblclick={(e) => openLightbox(e, i)}
+					onclick={(e) => openLightbox(e, i)}
 					onkeydown={(e) => {
 						if (e.key !== "Enter" && e.key !== " ") return;
 						e.preventDefault();
-						if (assignable) onAssign(src.id);
+						if (e.key === "Enter" && assignable) onAssign(src.id);
+						else openLightbox(e, i);
 					}}
 				>
 					{#if src.thumbUrl}
@@ -392,10 +388,6 @@
 
 	.card:hover {
 		border-color: var(--line-strong);
-	}
-
-	.card.assignable:hover {
-		border-color: var(--mosh);
 	}
 
 	.card.active {

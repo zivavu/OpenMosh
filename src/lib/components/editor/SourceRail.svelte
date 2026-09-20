@@ -36,7 +36,8 @@
 
 	interface Props {
 		sources: SequenceSource[];
-		/** How many layer clips are selected — a click assigns to all of them. */
+		/** How many layer clips are selected — Enter on a thumb assigns to all
+		 * of them. */
 		selectedCount?: number;
 		/** Marks the thumb the selection currently plays; null when they
 		 * disagree. */
@@ -72,8 +73,8 @@
 	let assignable = $derived(selectedCount > 0);
 
 	/** Open thumb's index; null when the preview is closed. Same component and
-	 * same click rule the grid's cards use: a click previews, unless a clip is
-	 * selected and the click means "show this there". */
+	 * same rule the grid's cards use: a click previews; putting media on a clip
+	 * is a drag, or Enter on the thumb while the clip is selected. */
 	let lightboxIndex = $state<number | null>(null);
 	let lightboxOrigin = $state({ x: 0, y: 0 });
 
@@ -224,16 +225,16 @@
 					<button
 						class="rail-item"
 						class:playing={src.id === selectedSourceId}
-						class:assignable
 						draggable="true"
 						ondragstart={(e) => onThumbDragStart(e, src, i)}
-						onclick={(e) => {
-							if (assignable) onAssign(src.id);
-							else openLightbox(e, i);
+						onclick={(e) => openLightbox(e, i)}
+						onkeydown={(e) => {
+							if (e.key !== "Enter" || !assignable) return;
+							e.preventDefault();
+							onAssign(src.id);
 						}}
-						ondblclick={(e) => openLightbox(e, i)}
 						title={assignable
-							? `Show "${src.name}" on the selected layer clip${selectedCount > 1 ? "s" : ""}, or drag it onto one. Double-click to preview.`
+							? `${src.name} — click to preview. Drag it onto the selected layer clip${selectedCount > 1 ? "s" : ""}, or press Enter to show it there.`
 							: `${src.name} — click to preview, or drag it onto a layer clip`}
 					>
 						{#if src.thumbUrl}
@@ -432,10 +433,6 @@
 
 	.rail-item:active {
 		cursor: grabbing;
-	}
-
-	.rail-item.assignable:hover {
-		border-color: var(--mosh);
 	}
 
 	/* What the selected clips already show — the same accent the clip blocks
