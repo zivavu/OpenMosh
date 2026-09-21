@@ -14,7 +14,7 @@ import {
 	PALETTES,
 	wildColors,
 } from "./palette";
-import { mulberry32, type Rand } from "./rng";
+import { mulberry32, type Rand } from "../rng";
 import type {
 	BatchOptions,
 	GeneratedSpec,

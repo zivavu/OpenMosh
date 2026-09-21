@@ -6,6 +6,8 @@
  * blocks also happen to be what the shaders chew on best.
  */
 
+import { mulberry32, type Rand } from "../rng";
+
 export const DEMO_WIDTH = 640;
 export const DEMO_HEIGHT = 360;
 
@@ -14,18 +16,6 @@ const H = DEMO_HEIGHT;
 const TAU = Math.PI * 2;
 
 type C = CanvasRenderingContext2D;
-type Rand = () => number;
-
-/** Deterministic RNG so a given poster index always looks the same. */
-function mulberry32(seed: number): Rand {
-	let a = seed >>> 0;
-	return () => {
-		a = (a + 0x6d2b79f5) >>> 0;
-		let t = Math.imul(a ^ (a >>> 15), 1 | a);
-		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-}
 
 interface Palette {
 	bg: string;

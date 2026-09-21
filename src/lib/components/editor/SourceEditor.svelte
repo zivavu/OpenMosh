@@ -18,6 +18,7 @@
 	} from "lucide-svelte";
 	import { onMount, untrack } from "svelte";
 	import { hexToVec3 } from "../../color";
+	import { formatTime } from "../../audio/audio-utils";
 	import { pushModalKeyboard } from "../../modal-keyboard";
 	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
 	import {
@@ -509,11 +510,6 @@
 		if (!v || !("currentTime" in v)) return;
 		currentTime = t;
 		v.currentTime = t;
-	}
-
-	function formatTime(t: number): string {
-		const s = Math.max(0, Math.floor(t));
-		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 	}
 
 	// ── Erase mask ───────────────────────────────────────────────────────────

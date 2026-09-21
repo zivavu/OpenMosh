@@ -28,6 +28,7 @@
 	} from "../../audio/audio-controller";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
+	import { downloadBlob } from "../../recorder";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
 	import { loadTimeline, saveTimeline } from "../../editor/timeline-store";
@@ -2729,13 +2730,7 @@
 			canvasEl!.toBlob(
 				(blob) => {
 					done();
-					if (!blob) return;
-					const url = URL.createObjectURL(blob);
-					const a = document.createElement("a");
-					a.href = url;
-					a.download = `openmosh-${Date.now()}.${ext}`;
-					a.click();
-					URL.revokeObjectURL(url);
+					if (blob) downloadBlob(blob, ext);
 				},
 				mimeType,
 				format === "jpg" ? 0.92 : undefined,

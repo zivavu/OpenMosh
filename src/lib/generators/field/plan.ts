@@ -5,7 +5,7 @@
  */
 
 import { deal } from "../palette";
-import { randIn, randLog, type Rand } from "../rng";
+import { randIn, randLog, type Rand } from "../../rng";
 import type { Variety } from "../types";
 import type { Domain, FieldKind, FieldSpec } from "./spec";
 

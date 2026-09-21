@@ -761,11 +761,11 @@ export async function recordVideo(opts: RecordOptions): Promise<Blob> {
 	return recordWebM(opts);
 }
 
-export function downloadBlob(blob: Blob) {
+export function downloadBlob(blob: Blob, ext = "webm") {
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement("a");
 	a.href = url;
-	a.download = `openmosh-${Date.now()}.webm`;
+	a.download = `openmosh-${Date.now()}.${ext}`;
 	a.click();
 	// Deleting the object URL immediately can cancel the download in some browsers.
 	setTimeout(() => URL.revokeObjectURL(url), 1000);

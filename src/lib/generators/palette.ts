@@ -4,7 +4,7 @@
  * midtones — the structure all the good presets share.
  */
 
-import { randIn, shuffle, type Rand } from "./rng";
+import { randIn, shuffle, type Rand } from "../rng";
 
 export type Colors = [string, string, string, string, string];
 
