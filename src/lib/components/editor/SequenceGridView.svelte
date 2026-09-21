@@ -282,6 +282,20 @@
 			>
 				<Plus size={20} />
 			</button>
+			<button
+				class="add-card generate"
+				title="Generate images into the pool"
+				onclick={onGenerate}
+			>
+				<Sparkles size={18} />
+			</button>
+			<button
+				class="add-card generate"
+				title="Record a webcam take to the song, from the playhead"
+				onclick={onRecord}
+			>
+				<Camera size={18} />
+			</button>
 		</div>
 	{/if}
 
@@ -585,5 +599,9 @@
 	.add-card:hover {
 		border-color: var(--mosh);
 		color: var(--mosh);
+	}
+
+	.add-card.generate {
+		color: var(--mosh-dim);
 	}
 </style>
