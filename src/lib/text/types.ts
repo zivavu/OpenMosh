@@ -1,8 +1,8 @@
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
-	cloneChainEffects,
 	normalizeChainFields,
+	splitChainClipAt,
 	type ChainClip,
 } from "../editor/chain-clip";
 import { cleanEffects, handBuiltLabel } from "../editor/sequence";
@@ -12,11 +12,8 @@ import { cleanEffects, handBuiltLabel } from "../editor/sequence";
 import { FONT_OPTIONS } from "../text-overlay/fonts";
 import type { TextOverlayBlendMode } from "../text-overlay/types";
 import {
-	clipAt,
 	clipFadeWeight,
 	fitClipsToDuration,
-	MIN_CLIP_LENGTH,
-	sortClips,
 	type TimelineClip,
 } from "../timeline/clips";
 
@@ -138,29 +135,7 @@ export function createTextClip(
  * shorter than MIN_CLIP_LENGTH.
  */
 export function splitTextClipAt(lane: TextLane, at: number): TextLane {
-	const clip = clipAt(lane, at);
-	if (!clip) return lane;
-	if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
-		return lane;
-	}
-	return {
-		...lane,
-		clips: sortClips([
-			...lane.clips.filter((c) => c.id !== clip.id),
-			{
-				...clip,
-				id: nextId("clip"),
-				end: at,
-				effects: cloneChainEffects(clip.effects),
-			},
-			{
-				...clip,
-				id: nextId("clip"),
-				start: at,
-				effects: cloneChainEffects(clip.effects),
-			},
-		]),
-	};
+	return splitChainClipAt(lane, at, () => nextId("clip"));
 }
 
 export function createTextLane(

@@ -16,7 +16,13 @@ import {
 	type FreqBand,
 	type Preset,
 } from "../effects";
-import type { TimelineClip } from "../timeline/clips";
+import {
+	clipAt,
+	MIN_CLIP_LENGTH,
+	sortClips,
+	type ClipLane,
+	type TimelineClip,
+} from "../timeline/clips";
 import type { MoshOptions } from "./mosh";
 import { putRoll } from "./roll-cache";
 import type { MoshSnapshot } from "./mosh-history";
@@ -172,6 +178,50 @@ export function withChainMosh<C extends ChainClip>(
 
 export function cloneChainEffects(effects: EffectInstance[]): EffectInstance[] {
 	return effects.map(cloneEffectInstance);
+}
+
+/**
+ * Cut the clip covering `at` in two. The lane comes back unchanged when `at`
+ * isn't inside a clip, or when either half would be shorter than
+ * MIN_CLIP_LENGTH. Each half gets an id from `newId` and its own deep copy of
+ * the chain, so editing one no longer touches the other; `tail` lets a lane
+ * kind adjust the right half, given the clip it came from (a media clip
+ * advances its in-point by the cut).
+ */
+export function splitChainClipAt<
+	L extends ClipLane<ChainClip>,
+	C extends ChainClip = L["clips"][number],
+>(
+	lane: L,
+	at: number,
+	newId: () => string,
+	tail: (half: C, original: C) => C = (half) => half,
+): L {
+	const clip = clipAt(lane, at) as C | null;
+	if (!clip) return lane;
+	if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
+		return lane;
+	}
+	const head: C = {
+		...clip,
+		id: newId(),
+		end: at,
+		effects: cloneChainEffects(clip.effects),
+	};
+	const rest: C = {
+		...clip,
+		id: newId(),
+		start: at,
+		effects: cloneChainEffects(clip.effects),
+	};
+	return {
+		...lane,
+		clips: sortClips([
+			...lane.clips.filter((c) => c.id !== clip.id),
+			head,
+			tail(rest, clip),
+		]),
+	};
 }
 
 /**

@@ -24,7 +24,6 @@ import {
 	clipFadeWeight,
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
-	sortClips,
 } from "../timeline/clips";
 import {
 	chainClipEffectsAt,
@@ -32,6 +31,7 @@ import {
 	chainClipTick,
 	clearedChainClip,
 	cloneChainEffects,
+	splitChainClipAt,
 	rolledChainClip,
 	syncedChainClip,
 	withChainMode,
@@ -378,31 +378,7 @@ export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
  * would come out shorter than MIN_CLIP_LENGTH.
  */
 export function splitFxClipAt(lane: FxLane, at: number): FxLane {
-	const clip = clipAt(lane, at);
-	if (!clip) return lane;
-	if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
-		return lane;
-	}
-	const head: FxClip = {
-		...clip,
-		id: generateId(),
-		end: at,
-		effects: cloneFxEffects(clip.effects),
-	};
-	const tail: FxClip = {
-		...clip,
-		id: generateId(),
-		start: at,
-		effects: cloneFxEffects(clip.effects),
-	};
-	return {
-		...lane,
-		clips: sortClips([
-			...lane.clips.filter((c) => c.id !== clip.id),
-			head,
-			tail,
-		]),
-	};
+	return splitChainClipAt(lane, at, generateId);
 }
 
 /** Put a clip back to a remembered mosh — see withChainMosh. */

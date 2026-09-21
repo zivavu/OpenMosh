@@ -1,21 +1,15 @@
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
-	cloneChainEffects,
 	normalizeChainFields,
 	normalizeLaneSettings,
 	type ChainClip,
+	splitChainClipAt,
 	type LaneSettings,
 } from "../editor/chain-clip";
 import { cleanEffects } from "../editor/sequence";
 import type { TextOverlayBlendMode } from "../text-overlay";
-import {
-	clipAt,
-	clipFadeWeight,
-	fitClipsToDuration,
-	MIN_CLIP_LENGTH,
-	sortClips,
-} from "../timeline/clips";
+import { clipFadeWeight, fitClipsToDuration } from "../timeline/clips";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
@@ -202,30 +196,15 @@ export function mediaClipWeight(clip: MediaClip, time: number): number {
  * into each half so editing one no longer touches the other.
  */
 export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
-	const clip = clipAt(lane, at);
-	if (!clip) return lane;
-	if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
-		return lane;
-	}
-	return {
-		...lane,
-		clips: sortClips([
-			...lane.clips.filter((c) => c.id !== clip.id),
-			{
-				...clip,
-				id: nextId("mclip"),
-				end: at,
-				effects: cloneChainEffects(clip.effects),
-			},
-			{
-				...clip,
-				id: nextId("mclip"),
-				start: at,
-				sourceStart: clip.sourceStart + (at - clip.start),
-				effects: cloneChainEffects(clip.effects),
-			},
-		]),
-	};
+	return splitChainClipAt(
+		lane,
+		at,
+		() => nextId("mclip"),
+		(half, clip) => ({
+			...half,
+			sourceStart: clip.sourceStart + (at - clip.start),
+		}),
+	);
 }
 
 export function createMediaLane(
