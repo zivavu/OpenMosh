@@ -179,7 +179,8 @@ export async function openEditor(
 }
 
 export function recordButton(page: Page): Locator {
-	return page.getByRole("button", { name: "RECORD" });
+	// Exact and case-sensitive: the pool's webcam take button is also a "Record".
+	return page.getByRole("button", { name: "RECORD", exact: true });
 }
 
 /** The media lane, where clips are made, cut and picked. */
@@ -314,7 +315,7 @@ export function layerButtons(page: Page): Locator {
 
 /** The toolbar under the stack for the selected clip(s). */
 export function segmentBar(page: Page): Locator {
-	return page.locator(".mc-bar");
+	return page.locator(".chain-bar");
 }
 
 /** The stack of lanes under the preview, once a clock is driving it. */
@@ -337,7 +338,7 @@ export function railThumbs(page: Page): Locator {
 }
 
 export function mediaLanes(page: Page): Locator {
-	return page.locator('.layer-row[data-lane-kind="media"]');
+	return page.locator('.tl-row[data-lane-kind="media"]');
 }
 
 /** A lane's clip track: the drop target, and the box every x is measured in. */
