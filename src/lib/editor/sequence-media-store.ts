@@ -11,6 +11,7 @@
  * or the source video when there's no track), so the two always swap together.
  */
 
+import { request, transact } from "../idb";
 import { requestPersistentStorage } from "../persistent-storage";
 import { PROXY_BUILD } from "../video/proxy";
 
@@ -182,6 +183,29 @@ function openAt(version?: number): Promise<IDBDatabase> {
 	});
 }
 
+/** Every record in a store. */
+async function readAll<T>(store: string): Promise<T[]> {
+	const db = await openDb();
+	return transact(db, store, "readonly", (tx) =>
+		request(tx.objectStore(store).getAll() as IDBRequest<T[]>),
+	);
+}
+
+async function readOne<T>(store: string, key: string): Promise<T | undefined> {
+	const db = await openDb();
+	return transact(db, store, "readonly", (tx) =>
+		request(tx.objectStore(store).get(key) as IDBRequest<T | undefined>),
+	);
+}
+
+async function write(
+	store: string,
+	body: (store: IDBObjectStore) => void,
+): Promise<void> {
+	const db = await openDb();
+	await transact(db, store, "readwrite", (tx) => body(tx.objectStore(store)));
+}
+
 function openDb(): Promise<IDBDatabase> {
 	if (dbPromise) return dbPromise;
 	dbPromise = (async () => {
@@ -221,22 +245,8 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 export async function getAllSequenceMedia(): Promise<StoredSequenceMedia[]> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, "readonly");
-		const req = tx.objectStore(STORE).getAll();
-		let result: StoredSequenceMedia[] = [];
-		req.onsuccess = () => {
-			result = req.result as StoredSequenceMedia[];
-		};
-		tx.oncomplete = () => {
-			result.sort((a, b) => a.addedAt - b.addedAt);
-			resolve(result);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+	const all = await readAll<StoredSequenceMedia>(STORE);
+	return all.sort((a, b) => a.addedAt - b.addedAt);
 }
 
 /**
@@ -247,20 +257,10 @@ export async function getAllSequenceMedia(): Promise<StoredSequenceMedia[]> {
  */
 export async function getAllSequenceMediaIds(): Promise<Set<string>> {
 	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, "readonly");
-		const req = tx.objectStore(STORE).getAllKeys();
-		let result: IDBValidKey[] = [];
-		req.onsuccess = () => {
-			result = req.result;
-		};
-		tx.oncomplete = () => {
-			resolve(new Set(result.map(String)));
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+	const keys = await transact(db, STORE, "readonly", (tx) =>
+		request(tx.objectStore(STORE).getAllKeys()),
+	);
+	return new Set(keys.map(String));
 }
 
 /**
@@ -273,24 +273,15 @@ export async function getSequenceMediaByIds(
 ): Promise<StoredSequenceMedia[]> {
 	if (ids.length === 0) return [];
 	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, "readonly");
+	const found = await transact(db, STORE, "readonly", (tx) => {
 		const store = tx.objectStore(STORE);
-		const found = new Map<string, StoredSequenceMedia>();
-		for (const id of ids) {
-			const req = store.get(id);
-			req.onsuccess = () => {
-				const entry = req.result as StoredSequenceMedia | undefined;
-				if (entry) found.set(id, entry);
-			};
-		}
-		tx.oncomplete = () => {
-			resolve(ids.map((id) => found.get(id)).filter((m) => m !== undefined));
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+		return Promise.all(
+			ids.map((id) =>
+				request(store.get(id) as IDBRequest<StoredSequenceMedia | undefined>),
+			),
+		);
 	});
+	return found.filter((m) => m !== undefined);
 }
 
 /**
@@ -302,13 +293,9 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
 	try {
 		const db = await openDb();
 		if (!hasAllStores(db)) return null;
-		const entry = await new Promise<StoredSequenceProxy | undefined>(
-			(resolve, reject) => {
-				const tx = db.transaction(PROXY_STORE, "readonly");
-				const req = tx.objectStore(PROXY_STORE).get(stableSourceId(file));
-				req.onsuccess = () => resolve(req.result);
-				req.onerror = () => reject(req.error);
-			},
+		const entry = await readOne<StoredSequenceProxy>(
+			PROXY_STORE,
+			stableSourceId(file),
 		);
 		if (!entry?.blob) return null;
 		// Made by an older transcoder: drop it and let the caller build a current
@@ -324,26 +311,15 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
 }
 
 /** Stores the preview proxy for this exact file, keyed by its source id. */
-export async function putSequenceMediaProxy(
-	file: File,
-	proxy: Blob,
-): Promise<void> {
-	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(PROXY_STORE, "readwrite");
-		const entry: StoredSequenceProxy = {
-			id: stableSourceId(file),
-			blob: proxy,
-			addedAt: Date.now(),
-			build: PROXY_BUILD,
-		};
-		tx.objectStore(PROXY_STORE).put(entry);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+export function putSequenceMediaProxy(file: File, proxy: Blob): Promise<void> {
+	const entry: StoredSequenceProxy = {
+		id: stableSourceId(file),
+		blob: proxy,
+		addedAt: Date.now(),
+		build: PROXY_BUILD,
+	};
+	return write(PROXY_STORE, (store) => {
+		store.put(entry);
 	});
 }
 
@@ -356,35 +332,13 @@ export async function deleteSequenceMediaProxy(file: File): Promise<void> {
 	await deleteSequenceProxy(stableSourceId(file));
 }
 
-export async function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(PROXY_STORE, "readonly");
-		const req = tx.objectStore(PROXY_STORE).getAll();
-		let result: StoredSequenceProxy[] = [];
-		req.onsuccess = () => {
-			result = req.result as StoredSequenceProxy[];
-		};
-		tx.oncomplete = () => {
-			resolve(result);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+export function getAllSequenceProxies(): Promise<StoredSequenceProxy[]> {
+	return readAll<StoredSequenceProxy>(PROXY_STORE);
 }
 
-export async function deleteSequenceProxy(id: string): Promise<void> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(PROXY_STORE, "readwrite");
-		tx.objectStore(PROXY_STORE).delete(id);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+export function deleteSequenceProxy(id: string): Promise<void> {
+	return write(PROXY_STORE, (store) => {
+		store.delete(id);
 	});
 }
 
@@ -400,10 +354,7 @@ export async function putSequenceMedia(
 	// First save of real work: ask to be exempt from quota eviction.
 	void requestPersistentStorage();
 	const addedAt = Date.now();
-	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(STORE, "readwrite");
-		const store = tx.objectStore(STORE);
+	await write(STORE, (store) => {
 		for (const { id, file } of entries) {
 			const entry: StoredSequenceMedia = {
 				id,
@@ -415,236 +366,89 @@ export async function putSequenceMedia(
 			};
 			store.put(entry);
 		}
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
 	});
 }
 
 /** Only pruning and the storage manager delete blobs — removing a source from
  * the editor just unlinks it from a pool. */
-export async function deleteSequenceMedia(id: string): Promise<void> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(STORE, "readwrite");
-		tx.objectStore(STORE).delete(id);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+export function deleteSequenceMedia(id: string): Promise<void> {
+	return write(STORE, (store) => {
+		store.delete(id);
 	});
 }
 
 /** The media ids saved for a song, or null when it has no pool yet. */
 export async function loadMediaPool(key: string): Promise<string[] | null> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(POOL_STORE, "readonly");
-		const req = tx.objectStore(POOL_STORE).get(key);
-		let result: StoredMediaPool | undefined;
-		req.onsuccess = () => {
-			result = req.result as StoredMediaPool | undefined;
-		};
-		tx.oncomplete = () => {
-			resolve(result ? result.sourceIds : null);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+	const pool = await readOne<StoredMediaPool>(POOL_STORE, key);
+	return pool ? pool.sourceIds : null;
 }
 
-export async function saveMediaPool(
-	key: string,
-	sourceIds: string[],
-): Promise<void> {
+export function saveMediaPool(key: string, sourceIds: string[]): Promise<void> {
 	// First save of real work: ask to be exempt from quota eviction.
 	void requestPersistentStorage();
 	const entry: StoredMediaPool = { key, sourceIds, updatedAt: Date.now() };
-	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(POOL_STORE, "readwrite");
-		tx.objectStore(POOL_STORE).put(entry);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+	return write(POOL_STORE, (store) => {
+		store.put(entry);
 	});
 }
 
-export async function getAllMediaPools(): Promise<StoredMediaPool[]> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(POOL_STORE, "readonly");
-		const req = tx.objectStore(POOL_STORE).getAll();
-		let result: StoredMediaPool[] = [];
-		req.onsuccess = () => {
-			result = req.result as StoredMediaPool[];
-		};
-		tx.oncomplete = () => {
-			resolve(result);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+export function getAllMediaPools(): Promise<StoredMediaPool[]> {
+	return readAll<StoredMediaPool>(POOL_STORE);
+}
+
+export function deleteMediaPool(key: string): Promise<void> {
+	return write(POOL_STORE, (store) => {
+		store.delete(key);
 	});
 }
 
-export async function deleteMediaPool(key: string): Promise<void> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(POOL_STORE, "readwrite");
-		tx.objectStore(POOL_STORE).delete(key);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
-}
-
-export async function getAllSessions(): Promise<StoredSession[]> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(SESSION_STORE, "readonly");
-		const req = tx.objectStore(SESSION_STORE).getAll();
-		let result: StoredSession[] = [];
-		req.onsuccess = () => {
-			result = req.result as StoredSession[];
-		};
-		tx.oncomplete = () => {
-			resolve(result);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+export function getAllSessions(): Promise<StoredSession[]> {
+	return readAll<StoredSession>(SESSION_STORE);
 }
 
 export async function getSession(key: string): Promise<StoredSession | null> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(SESSION_STORE, "readonly");
-		const req = tx.objectStore(SESSION_STORE).get(key);
-		let result: StoredSession | undefined;
-		req.onsuccess = () => {
-			result = req.result as StoredSession | undefined;
-		};
-		tx.oncomplete = () => {
-			resolve(result ?? null);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+	return (await readOne<StoredSession>(SESSION_STORE, key)) ?? null;
 }
 
-export async function putSession(
+export function putSession(
 	entry: Omit<StoredSession, "updatedAt">,
 ): Promise<void> {
 	// First save of real work: ask to be exempt from quota eviction.
 	void requestPersistentStorage();
 	const record: StoredSession = { ...entry, updatedAt: Date.now() };
-	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(SESSION_STORE, "readwrite");
-		tx.objectStore(SESSION_STORE).put(record);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+	return write(SESSION_STORE, (store) => {
+		store.put(record);
 	});
 }
 
-export async function deleteSession(key: string): Promise<void> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(SESSION_STORE, "readwrite");
-		tx.objectStore(SESSION_STORE).delete(key);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+export function deleteSession(key: string): Promise<void> {
+	return write(SESSION_STORE, (store) => {
+		store.delete(key);
 	});
 }
 
 /** One song's stored timeline, or null when it has none. */
 export async function getTimeline(key: string): Promise<unknown | null> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(TIMELINE_STORE, "readonly");
-		const req = tx.objectStore(TIMELINE_STORE).get(key);
-		let result: StoredTimeline | undefined;
-		req.onsuccess = () => {
-			result = req.result as StoredTimeline | undefined;
-		};
-		tx.oncomplete = () => {
-			resolve(result ? result.state : null);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+	const entry = await readOne<StoredTimeline>(TIMELINE_STORE, key);
+	return entry ? entry.state : null;
 }
 
-export async function putTimeline(key: string, state: unknown): Promise<void> {
+export function putTimeline(key: string, state: unknown): Promise<void> {
 	// First save of real work: ask to be exempt from quota eviction.
 	void requestPersistentStorage();
 	const entry: StoredTimeline = { key, state, updatedAt: Date.now() };
-	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(TIMELINE_STORE, "readwrite");
-		tx.objectStore(TIMELINE_STORE).put(entry);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+	return write(TIMELINE_STORE, (store) => {
+		store.put(entry);
 	});
 }
 
 export async function getAllTimelines(): Promise<StoredTimeline[]> {
-	const db = await openDb();
-	return new Promise((resolve, reject) => {
-		const tx = db.transaction(TIMELINE_STORE, "readonly");
-		const req = tx.objectStore(TIMELINE_STORE).getAll();
-		let result: StoredTimeline[] = [];
-		req.onsuccess = () => {
-			result = (req.result as StoredTimeline[]) ?? [];
-		};
-		tx.oncomplete = () => {
-			resolve(result);
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
-	});
+	return (await readAll<StoredTimeline>(TIMELINE_STORE)) ?? [];
 }
 
-export async function deleteTimeline(key: string): Promise<void> {
-	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(TIMELINE_STORE, "readwrite");
-		tx.objectStore(TIMELINE_STORE).delete(key);
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
+export function deleteTimeline(key: string): Promise<void> {
+	return write(TIMELINE_STORE, (store) => {
+		store.delete(key);
 	});
 }
 
@@ -748,14 +552,7 @@ function lastModifiedFromId(id: string): number {
  */
 export async function clearAllSequenceStores(): Promise<void> {
 	const db = await openDb();
-	await new Promise<void>((resolve, reject) => {
-		const tx = db.transaction(REQUIRED_STORES, "readwrite");
+	await transact(db, REQUIRED_STORES, "readwrite", (tx) => {
 		for (const name of REQUIRED_STORES) tx.objectStore(name).clear();
-		tx.oncomplete = () => {
-			resolve();
-		};
-		tx.onerror = () => {
-			reject(tx.error);
-		};
 	});
 }

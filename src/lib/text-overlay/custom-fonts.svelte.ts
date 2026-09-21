@@ -5,6 +5,7 @@
  * refetching — and so an export can't race a network round-trip.
  */
 import { generateId } from "../effects/types";
+import { simpleStore } from "../idb";
 import {
 	bumpFontsVersion,
 	registerFamily,
@@ -29,77 +30,18 @@ interface StoredFont extends CustomFont {
 	data: ArrayBuffer;
 }
 
-const DB_NAME = "openmosh-fonts";
-const STORE = "fonts";
-const DB_VERSION = 1;
-
-function openDb(): Promise<IDBDatabase> {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open(DB_NAME, DB_VERSION);
-		req.onupgradeneeded = () => {
-			req.result.createObjectStore(STORE, { keyPath: "id" });
-		};
-		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => reject(req.error);
-	});
-}
+const db = simpleStore("openmosh-fonts", "fonts");
 
 function getAllStored(): Promise<StoredFont[]> {
-	return openDb().then(
-		(db) =>
-			new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE, "readonly");
-				const req = tx.objectStore(STORE).getAll();
-				let result: StoredFont[] = [];
-				req.onsuccess = () => {
-					result = req.result as StoredFont[];
-				};
-				tx.oncomplete = () => {
-					db.close();
-					resolve(result);
-				};
-				tx.onerror = () => {
-					db.close();
-					reject(tx.error);
-				};
-			}),
-	);
+	return db.getAll<StoredFont>();
 }
 
 function putStored(font: StoredFont): Promise<void> {
-	return openDb().then(
-		(db) =>
-			new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE, "readwrite");
-				tx.objectStore(STORE).put(font);
-				tx.oncomplete = () => {
-					db.close();
-					resolve();
-				};
-				tx.onerror = () => {
-					db.close();
-					reject(tx.error);
-				};
-			}),
-	);
+	return db.put(font);
 }
 
 function deleteStored(id: string): Promise<void> {
-	return openDb().then(
-		(db) =>
-			new Promise((resolve, reject) => {
-				const tx = db.transaction(STORE, "readwrite");
-				tx.objectStore(STORE).delete(id);
-				tx.oncomplete = () => {
-					db.close();
-					resolve();
-				};
-				tx.onerror = () => {
-					db.close();
-					reject(tx.error);
-				};
-			}),
-	);
+	return db.delete(id);
 }
 
 let fonts: CustomFont[] = $state([]);
