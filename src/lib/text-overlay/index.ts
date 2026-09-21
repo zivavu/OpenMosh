@@ -1,3 +1,4 @@
+export { BLEND_MODES } from "./types";
 export type { TextOverlayBlendMode } from "./types";
 export { drawOverlayText, overlayTextBox, overlayTextSignature } from "./draw";
 export type { CanvasTextStyle, OverlayTextBox } from "./draw";

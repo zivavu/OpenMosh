@@ -1,8 +1,5 @@
 <script lang="ts">
-	import { SlidersHorizontal, X } from "lucide-svelte";
-	import Checkbox from "../ui/Checkbox.svelte";
-	import { LaneEffects } from "../../timeline/lane-effects.svelte";
-	import { handBuiltLabel, isHandBuiltLabel } from "../../editor/sequence";
+	import { SlidersHorizontal } from "lucide-svelte";
 	import {
 		clipSourceId,
 		DEFAULT_MEDIA_STYLE,
@@ -19,23 +16,15 @@
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import type { SpectrumData } from "../../types";
 	import type { AudioResponse } from "../../audio/auto-range";
-	import EffectsPanel from "../ui/EffectsPanel.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
+	import ClipChainSection from "../timeline/ClipChainSection.svelte";
+	import ClipPanel from "../timeline/ClipPanel.svelte";
+	import FadeRows from "../timeline/FadeRows.svelte";
+	import LayerCompositeRows from "../timeline/LayerCompositeRows.svelte";
 	import { lazy } from "../../lazy";
 
 	// Same chunk the source rail opens; only fetched when an edit starts.
 	const loadSourceEditor = lazy(() => import("../editor/SourceEditor.svelte"));
-
-	const BLEND_MODES = [
-		"normal",
-		"multiply",
-		"screen",
-		"overlay",
-		"add",
-		"subtract",
-		"difference",
-		"exclusion",
-	] as const;
 
 	interface Props {
 		/** The lane the selected clip lives in; the panel edits its style. */
@@ -156,54 +145,19 @@
 		onBeforeEdit?.(`media-in-${clip.id}`);
 		onClipChange({ ...clip, sourceStart: v });
 	}
-
-	// The clip's chain, mirrored for EffectsPanel to own and written back on
-	// every edit. Handled here rather than by the editor: the chain on show is
-	// this mirror, so the editor has nothing to apply an edit to.
-	const chain = new LaneEffects(
-		() => clip,
-		(next) => onClipChange(next),
-		(key) => onBeforeEdit?.(key),
-	);
-	$effect(() => chain.sync());
-
-	/** A hand-edit to a preset-filled clip: the label gains a "*" and explicit
-	 * preset overwrites stop clobbering it. A hand-built chain takes its name
-	 * from what it switches on instead. */
-	function onChainEdited() {
-		chain.commit();
-		if (!clip) return;
-		const next = $state.snapshot(clip) as MediaClip;
-		if (isHandBuiltLabel(next)) next.label = handBuiltLabel(next.effects);
-		else if (!next.modified) next.modified = true;
-		if (next.label !== clip.label || next.modified !== clip.modified) {
-			onClipChange({ ...clip, label: next.label, modified: next.modified });
-		}
-	}
 </script>
 
-{#if !clip || !lane}
-	<p class="empty">Select a layer clip to edit it.</p>
-{:else}
-	<div class="clip-panel">
-		{#if section === "clip"}
-			<div class="panel-head">
-				<h3 class="panel-title">
-					{lane.name}
-					{#if source}<span class="panel-src">{source.name}</span>{/if}
-				</h3>
-				{#if onClose}
-					<button
-						class="close-btn"
-						onclick={onClose}
-						title="Close (Esc)"
-						aria-label="Close layer clip"
-					>
-						<X size={14} />
-					</button>
-				{/if}
-			</div>
-
+<ClipPanel
+	open={!!clip && !!lane}
+	emptyText="Select a layer clip to edit it."
+	{section}
+	title={lane?.name ?? ""}
+	subtitle={source?.name}
+	{onClose}
+	closeLabel="Close layer clip"
+>
+	{#snippet controls()}
+		{#if clip && lane}
 			{#if sources.length > 0}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
@@ -266,49 +220,7 @@
 				</div>
 			{/if}
 
-			<!-- Curved: the ramps worth reaching for are fractions of a second, and
-		     a linear 0–10 track would bury all of them in its first pixels. -->
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				title="Ramp this layer in from the clip's start. Double-click to clear."
-				ondblclick={() => setFade("fadeInSec", 0)}
-			>
-				<label for="mc-fade-in">Fade in</label>
-				<RangeSlider
-					id="mc-fade-in"
-					value={clip.fadeInSec ?? 0}
-					min={0}
-					max={10}
-					step={0.05}
-					curve={2}
-					oninput={(v) => setFade("fadeInSec", v)}
-				/>
-				<span class="val">
-					{#if clip.fadeInSec}{clip.fadeInSec.toFixed(2)}s{:else}none{/if}
-				</span>
-			</div>
-
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				title="Ramp this layer out into the clip's end. Double-click to clear."
-				ondblclick={() => setFade("fadeOutSec", 0)}
-			>
-				<label for="mc-fade-out">Fade out</label>
-				<RangeSlider
-					id="mc-fade-out"
-					value={clip.fadeOutSec ?? 0}
-					min={0}
-					max={10}
-					step={0.05}
-					curve={2}
-					oninput={(v) => setFade("fadeOutSec", v)}
-				/>
-				<span class="val">
-					{#if clip.fadeOutSec}{clip.fadeOutSec.toFixed(2)}s{:else}none{/if}
-				</span>
-			</div>
+			<FadeRows {clip} noun="this layer" idPrefix="mc" onFade={setFade} />
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -480,95 +392,33 @@
 				<span class="val">{Math.round(lane.style.rotation)}°</span>
 			</div>
 
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				title="How much of the layer shows, against the layers under it. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, "opacity")}
-			>
-				<label for="mc-opacity">Opacity</label>
-				<RangeSlider
-					id="mc-opacity"
-					value={lane.style.opacity}
-					min={0}
-					max={1}
-					step={0.01}
-					oninput={(v) => setStyle("opacity", v, `mc-op-${lane.id}`)}
-				/>
-				<span class="val">{Math.round(lane.style.opacity * 100)}%</span>
-			</div>
-
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				title="How this layer's colours mix with the ones underneath instead of simply covering them. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, "blendMode")}
-			>
-				<label for="mc-blend">Blend</label>
-				<select
-					id="mc-blend"
-					value={lane.style.blendMode}
-					onchange={(e) =>
-						setStyle(
-							"blendMode",
-							(e.currentTarget as HTMLSelectElement)
-								.value as MediaStyle["blendMode"],
-						)}
-				>
-					{#each BLEND_MODES as mode (mode)}
-						<option value={mode}>{mode}</option>
-					{/each}
-				</select>
-			</div>
-
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				title="When on, the layer joins the frame before the image effects run, so they distort it too. When off, it's drawn over the finished frame and they leave it alone."
-			>
-				<label for="mc-under">Under effects</label>
-				<Checkbox
-					id="mc-under"
-					checked={lane.underEffects}
-					onchange={(e) =>
-						setUnderEffects((e.currentTarget as HTMLInputElement).checked)}
-				/>
-			</div>
+			<LayerCompositeRows
+				style={lane.style}
+				underEffects={lane.underEffects}
+				noun="the layer"
+				idPrefix="mc"
+				onStyle={(key, value, coalesceKey) =>
+					setStyle(key, value as never, coalesceKey)}
+				onReset={resetStyle}
+				onUnderEffects={setUnderEffects}
+			/>
 		{/if}
+	{/snippet}
 
-		{#if section === "chain"}
-			<p class="hint">
-				These effects only run on this clip's media, before it meets the frame.
-			</p>
-			<EffectsPanel
-				headless
-				bind:effects={() => chain.effects, (v) => (chain.effects = v)}
-				rolledNote={clip.mode === "interval"
-					? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the clip to Static in the clip bar to build a chain by hand."
-					: null}
-				rolledChain={clip.mode === "interval"}
+	{#snippet chain()}
+		{#if clip}
+			<ClipChainSection
+				{clip}
+				{onClipChange}
+				{onBeforeEdit}
 				{hasTrack}
 				{spectrumData}
 				{response}
-				onVolumeLinkChange={(i, key, link) => {
-					chain.linkChange(i, key, link);
-					onChainEdited();
-				}}
-				onUserEdit={onChainEdited}
-				onEffectsReplaced={() => chain.commit()}
-				onPresetApplied={(preset) =>
-					onClipChange({
-						...clip,
-						effects: $state.snapshot(chain.effects) as MediaClip["effects"],
-						label: preset.name,
-						presetName: preset.name,
-						modified: false,
-					})}
-				onBeforeUserEdit={onBeforeEdit}
+				hint="this clip's media"
 			/>
 		{/if}
-	</div>
-{/if}
+	{/snippet}
+</ClipPanel>
 
 {#if editingSource && source && onEditChange}
 	{#await loadSourceEditor() then SourceEditor}
@@ -605,135 +455,5 @@
 	.src-edit.on {
 		border-color: var(--live);
 		color: var(--live);
-	}
-
-	.clip-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		padding: 0.75rem;
-		/* Sits at the top of the sidebar and keeps its natural height: the
-		   sidebar is one scroll region, so a scrollbar here would strand the
-		   settings below it at the bottom of the window. */
-		flex: 0 0 auto;
-		border-bottom: 1px solid var(--line);
-		width: 100%;
-		max-width: var(--sidebar-w);
-		box-sizing: border-box;
-	}
-
-	@media (max-width: 800px) {
-		.clip-panel {
-			width: 100%;
-			max-width: 100%;
-		}
-	}
-
-	/* Nothing shrinks: children keep their natural height and the panel scrolls. */
-	.clip-panel > :global(*) {
-		flex-shrink: 0;
-	}
-
-	/* Full-bleed, matching the sidebar chain this panel replaces. It is the last
-	   section, so it owns the bottom edge too: padding under an edge-to-edge
-	   list reads as a dead band above the settings that follow. */
-	.clip-panel :global(aside.effects-panel) {
-		margin: 0 -0.75rem -0.75rem;
-		width: auto;
-		max-width: none;
-	}
-
-	.panel-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-
-	.panel-src {
-		margin-left: 0.4rem;
-		font-weight: 400;
-		letter-spacing: 0;
-		text-transform: none;
-		color: var(--text-4);
-	}
-
-	.panel-title {
-		margin: 0;
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-3);
-	}
-
-	.close-btn {
-		display: flex;
-		align-items: center;
-		flex-shrink: 0;
-		padding: 2px;
-		border: none;
-		border-radius: 4px;
-		background: none;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-
-	.close-btn:hover {
-		color: var(--text);
-	}
-
-	.row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.78rem;
-	}
-
-	.row label {
-		flex-shrink: 0;
-		min-width: 84px;
-		color: var(--text-2);
-		font-size: 0.75rem;
-		/* The row's double-click resets the style; without this it also selects
-		   the label text. */
-		user-select: none;
-	}
-
-	.row select {
-		flex: 1;
-		min-width: 0;
-		padding: 0.2rem 0.3rem;
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		background: var(--surface);
-		color: var(--text);
-		font-size: 0.75rem;
-		font-family: inherit;
-	}
-
-	.val {
-		min-width: 40px;
-		text-align: right;
-		color: var(--text-3);
-		font-size: 0.75rem;
-	}
-
-	.hint,
-	.warn {
-		margin: 0;
-		font-size: 0.68rem;
-		line-height: 1.35;
-		color: var(--text-3);
-	}
-
-	.warn {
-		color: #d9a441;
-	}
-
-	.empty {
-		padding: 1rem;
-		font-size: 0.75rem;
-		color: var(--text-3);
 	}
 </style>

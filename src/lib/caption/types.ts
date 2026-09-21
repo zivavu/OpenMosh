@@ -1,4 +1,4 @@
-import type { TextOverlayBlendMode } from "../text-overlay";
+import { BLEND_MODES, type TextOverlayBlendMode } from "../text-overlay/types";
 
 /** The defId this overlay effect is registered under in EFFECT_DEFINITIONS. */
 export const CAPTION_EFFECT_ID = "caption";
@@ -24,17 +24,6 @@ export interface CaptionParams {
 	opacity: number;
 	blendMode: TextOverlayBlendMode;
 }
-
-const BLEND_MODES: TextOverlayBlendMode[] = [
-	"normal",
-	"multiply",
-	"screen",
-	"overlay",
-	"add",
-	"subtract",
-	"difference",
-	"exclusion",
-];
 
 export function readCaptionParams(
 	values: Record<string, number | string>,
