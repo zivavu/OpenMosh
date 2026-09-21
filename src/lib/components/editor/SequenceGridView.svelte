@@ -22,6 +22,7 @@
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
+	import MediaAddCards from "../ui/MediaAddCards.svelte";
 
 	// Preview overlay: nothing loads it until a card is opened.
 	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
@@ -275,27 +276,12 @@
 				</div>
 			{/each}
 
-			<button
-				class="add-card"
-				title="Add images or videos to the pool"
-				onclick={() => fileInput?.click()}
-			>
-				<Plus size={20} />
-			</button>
-			<button
-				class="add-card generate"
-				title="Generate images into the pool"
-				onclick={onGenerate}
-			>
-				<Sparkles size={18} />
-			</button>
-			<button
-				class="add-card generate"
-				title="Record a webcam take to the song, from the playhead"
-				onclick={onRecord}
-			>
-				<Camera size={18} />
-			</button>
+			<MediaAddCards
+				recordTitle="Record a webcam take to the song, from the playhead"
+				onAdd={() => fileInput?.click()}
+				{onGenerate}
+				onRecord={onRecord}
+			/>
 		</div>
 	{/if}
 
@@ -579,29 +565,5 @@
 	.card-remove:hover {
 		background: var(--rec);
 		color: var(--text);
-	}
-
-	.add-card {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		aspect-ratio: 1;
-		border: 1px dashed var(--line-strong);
-		border-radius: var(--r-2);
-		background: none;
-		color: var(--text-4);
-		cursor: pointer;
-		transition:
-			border-color var(--t-fast),
-			color var(--t-fast);
-	}
-
-	.add-card:hover {
-		border-color: var(--mosh);
-		color: var(--mosh);
-	}
-
-	.add-card.generate {
-		color: var(--mosh-dim);
 	}
 </style>

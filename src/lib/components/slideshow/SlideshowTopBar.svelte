@@ -4,15 +4,31 @@
 	import YoutubeLink from "../ui/YoutubeLink.svelte";
 	import FeedbackButton from "../ui/FeedbackButton.svelte";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
+	import MediaPoolActions from "../ui/MediaPoolActions.svelte";
 
 	interface Props {
 		activeView: "grid" | "preview";
 		slideCount: number;
 		onViewChange: (view: "grid" | "preview") => void;
+		onShuffle: () => void;
+		onAdd: () => void;
+		onGenerate: () => void;
+		onSnap: () => void;
+		onClear: () => void;
 		onExit?: () => void;
 	}
 
-	let { activeView, slideCount, onViewChange, onExit }: Props = $props();
+	let {
+		activeView,
+		slideCount,
+		onViewChange,
+		onShuffle,
+		onAdd,
+		onGenerate,
+		onSnap,
+		onClear,
+		onExit,
+	}: Props = $props();
 </script>
 
 <div class="top-bar">
@@ -36,7 +52,18 @@
 				onchange={onViewChange}
 			/>
 		</div>
-		<span class="slide-count readout">{slideCount} images</span>
+		<MediaPoolActions
+			count={slideCount}
+			noun="image"
+			recordLabel="Snap"
+			shuffleTitle="Shuffle the order"
+			recordTitle="Snap webcam stills on the beat"
+			{onShuffle}
+			{onAdd}
+			{onGenerate}
+			onRecord={onSnap}
+			{onClear}
+		/>
 	</div>
 </div>
 
@@ -85,13 +112,4 @@
 		color: var(--text);
 	}
 
-	.slide-count {
-		margin-left: auto;
-		font-size: 0.62rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		color: var(--text-3);
-		white-space: nowrap;
-		flex-shrink: 0;
-	}
 </style>

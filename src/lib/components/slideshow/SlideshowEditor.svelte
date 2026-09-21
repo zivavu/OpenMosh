@@ -65,6 +65,7 @@
 	import SlideshowConfigPanel from "./SlideshowConfigPanel.svelte";
 	import SlideshowGridView from "./SlideshowGridView.svelte";
 	import SlideshowTopBar from "./SlideshowTopBar.svelte";
+	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import { DEFAULT_AUDIO_RESPONSE } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
@@ -465,6 +466,15 @@
 		clearTimeout(pending.timer);
 		pendingRemovals.delete(id);
 		slides.splice(Math.min(pending.index, slides.length), 0, pending.slide);
+	}
+
+	let showClearSlidesConfirm = $state(false);
+	let slideInput = $state<HTMLInputElement | undefined>(undefined);
+
+	/** Empties the pool outright — too many to hand back one toast at a time. */
+	function clearSlides() {
+		showClearSlidesConfirm = false;
+		for (const slide of [...slides]) removeSlide(slide.id, false);
 	}
 
 	function reorderSlides(from: number, to: number) {
@@ -1912,7 +1922,24 @@
 				activeView = view;
 				if (view === "grid" && previewPlaying) stopPreview();
 			}}
+			onShuffle={shuffleSlides}
+			onAdd={() => slideInput?.click()}
+			onGenerate={() => (generateOpen = true)}
+			onSnap={() => (webcamOpen = true)}
+			onClear={() => (showClearSlidesConfirm = true)}
 			onExit={onExit ? handleExit : undefined}
+		/>
+		<input
+			bind:this={slideInput}
+			type="file"
+			accept="image/*,video/*"
+			multiple
+			hidden
+			onchange={(e) => {
+				const picked = Array.from(e.currentTarget.files ?? []);
+				if (picked.length > 0) void addFiles(picked);
+				e.currentTarget.value = "";
+			}}
 		/>
 
 		{#if activeView === "grid"}
@@ -1925,7 +1952,6 @@
 				onSnap={() => (webcamOpen = true)}
 				onRemoveSlide={removeSlide}
 				onReorderSlides={reorderSlides}
-				onShuffleSlides={shuffleSlides}
 				onSetPresetIndex={setPresetIndex}
 				onProxyAction={(id, action) => {
 					if (action === "retry") retrySlideProxy(id);
@@ -2135,6 +2161,18 @@
 		<div class="drop-overlay">
 			<span>Drop to add images or replace audio</span>
 		</div>
+	{/if}
+
+	{#if showClearSlidesConfirm}
+		<ConfirmDialog
+			title="Clear all images?"
+			message="Every image and video is removed from this slideshow. The files stay where they came from."
+			confirmLabel="Clear images"
+			cancelLabel="Cancel"
+			danger
+			onConfirm={clearSlides}
+			onCancel={() => (showClearSlidesConfirm = false)}
+		/>
 	{/if}
 
 	{#if webcamOpen}

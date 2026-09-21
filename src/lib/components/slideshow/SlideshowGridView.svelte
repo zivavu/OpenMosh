@@ -2,9 +2,7 @@
 	import {
 		Camera,
 		ImageOff,
-		Shuffle,
 		X,
-		Plus,
 		Play,
 		Sparkles,
 		TriangleAlert,
@@ -15,6 +13,7 @@
 	import type { Preset } from "../../effects";
 	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
+	import MediaAddCards from "../ui/MediaAddCards.svelte";
 
 	// Preview overlay: nothing loads it until a slide is opened.
 	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
@@ -29,7 +28,6 @@
 		onSnap: () => void;
 		onRemoveSlide: (id: string) => void;
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
-		onShuffleSlides: () => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
 		/** Click on a slide's proxy badge — see proxyStatus's `action`. */
 		onProxyAction: (slideId: string, action: ProxyAction["kind"]) => void;
@@ -44,7 +42,6 @@
 		onSnap,
 		onRemoveSlide,
 		onReorderSlides,
-		onShuffleSlides,
 		onSetPresetIndex,
 		onProxyAction,
 	}: Props = $props();
@@ -178,16 +175,6 @@
 			</div>
 		</div>
 	{:else}
-		<div class="grid-toolbar">
-			<button
-				class="toolbar-btn"
-				onclick={onShuffleSlides}
-				title="Shuffle order"
-			>
-				<Shuffle size={13} />
-				Shuffle
-			</button>
-		</div>
 		<div class="grid">
 			{#each slides as slide, i (slide.id)}
 				<div
@@ -281,27 +268,12 @@
 				</div>
 			{/each}
 
-			<button
-				class="add-card"
-				onclick={() => fileInput.click()}
-				title="Add more media"
-			>
-				<Plus size={24} />
-			</button>
-			<button
-				class="add-card generate"
-				onclick={onGenerate}
-				title="Generate more images"
-			>
-				<Sparkles size={22} />
-			</button>
-			<button
-				class="add-card generate"
-				onclick={onSnap}
-				title="Snap webcam stills on the beat"
-			>
-				<Camera size={22} />
-			</button>
+			<MediaAddCards
+				recordTitle="Snap webcam stills on the beat"
+				onAdd={() => fileInput.click()}
+				{onGenerate}
+				onRecord={onSnap}
+			/>
 		</div>
 	{/if}
 
@@ -355,36 +327,6 @@
 	.add-btn:hover {
 		border-color: var(--text-3);
 		color: var(--text);
-	}
-
-	.grid-toolbar {
-		display: flex;
-		gap: 0.4rem;
-		margin-bottom: 0.6rem;
-	}
-
-	.toolbar-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.25rem 0.6rem;
-		font-size: 0.65rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		font-family: inherit;
-		background: none;
-		border: 1px solid var(--line);
-		border-radius: 5px;
-		color: var(--text-3);
-		cursor: pointer;
-		transition:
-			color 0.15s,
-			border-color 0.15s;
-	}
-
-	.toolbar-btn:hover {
-		color: var(--text-2);
-		border-color: var(--text-4);
 	}
 
 	.grid {
@@ -545,34 +487,6 @@
 		color: var(--text);
 		font-size: 0.6rem;
 		font-family: inherit;
-	}
-
-	.add-card {
-		aspect-ratio: 1;
-		border: 1.5px dashed var(--line);
-		border-radius: 6px;
-		background: transparent;
-		color: var(--text-4);
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition:
-			border-color 0.15s,
-			color 0.15s;
-	}
-
-	.add-card:hover {
-		border-color: var(--text-4);
-		color: var(--text-3);
-	}
-
-	.add-card.generate {
-		color: var(--mosh-dim);
-	}
-	.add-card.generate:hover {
-		border-color: var(--mosh-dim);
-		color: var(--mosh);
 	}
 
 	.empty-actions {

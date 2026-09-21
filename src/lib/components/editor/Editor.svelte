@@ -17,8 +17,6 @@
 		Play,
 		Plus,
 		Sparkles,
-		Shuffle,
-		Trash2,
 		TriangleAlert,
 		Type,
 		Zap,
@@ -213,6 +211,7 @@
 	import TextClipPanel from "../text/TextClipPanel.svelte";
 	import GlCanvas from "./GlCanvas.svelte";
 	import SequenceGridView from "./SequenceGridView.svelte";
+	import MediaPoolActions from "../ui/MediaPoolActions.svelte";
 	import SourceRail from "./SourceRail.svelte";
 	import FxLanes from "./FxLanes.svelte";
 	import MoshGroup from "./MoshGroup.svelte";
@@ -3818,67 +3817,21 @@
 							onchange={(v) => (sequenceView = v as "preview" | "grid")}
 						/>
 					</div>
-					<div class="seq-media-actions">
-						{#if sequenceSources.length > 1}
-							<!-- One button, scoped by the selection: with layer clips picked
-							     it deals across those, otherwise across every layer clip. -->
-							<button
-								class="seq-media-btn"
-								title={selectedMediaClipIds.length > 0
-									? "Deal the pool at random across the selected layer clips"
-									: "Deal the pool at random across every layer clip"}
-								onclick={dealMediaSources}
-							>
-								<Shuffle size={12} />
-								<span class="btn-label">Shuffle</span>
-								{#if selectedMediaClipIds.length > 0}
-									<span class="btn-scope">{selectedMediaClipIds.length}</span>
-								{:else}
-									<span class="btn-label">all</span>
-								{/if}
-							</button>
-						{/if}
-						{#if sequenceSources.length > 0}
-							<button
-								class="seq-media-btn"
-								title="Add images or videos to the pool"
-								onclick={() => sourceInput?.click()}
-							>
-								<Plus size={12} />
-								<span class="btn-label">Add media</span>
-							</button>
-							<button
-								class="seq-media-btn"
-								title="Generate images into the pool"
-								onclick={() => (generateOpen = true)}
-							>
-								<Sparkles size={12} />
-								<span class="btn-label">Generate</span>
-							</button>
-							<button
-								class="seq-media-btn"
-								title="Record a webcam take to the song, from the playhead"
-								onclick={() => (webcamOpen = true)}
-							>
-								<Camera size={12} />
-								<span class="btn-label">Record</span>
-							</button>
-						{/if}
-						{#if sequenceSources.length > 0}
-							<button
-								class="seq-media-btn danger"
-								title="Remove every source from this song"
-								onclick={() => (showClearSourcesConfirm = true)}
-							>
-								<Trash2 size={12} />
-							</button>
-						{/if}
-					</div>
-					<span class="source-count readout">
-						{sequenceSources.length} source{sequenceSources.length === 1
-							? ""
-							: "s"}
-					</span>
+					<!-- Shuffle is scoped by the selection: with layer clips picked it
+					     deals across those, otherwise across every layer clip. -->
+					<MediaPoolActions
+						count={sequenceSources.length}
+						shuffleScope={selectedMediaClipIds.length}
+						shuffleTitle={selectedMediaClipIds.length > 0
+							? "Deal the pool at random across the selected layer clips"
+							: "Deal the pool at random across every layer clip"}
+						recordTitle="Record a webcam take to the song, from the playhead"
+						onShuffle={dealMediaSources}
+						onAdd={() => sourceInput?.click()}
+						onGenerate={() => (generateOpen = true)}
+						onRecord={() => (webcamOpen = true)}
+						onClear={() => (showClearSourcesConfirm = true)}
+					/>
 				{:else}
 					<button
 						class="help-btn"
@@ -4889,63 +4842,7 @@
 		flex-shrink: 0;
 	}
 
-	.source-count {
-		font-size: 0.62rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		color: var(--text-3);
-		white-space: nowrap;
-		flex-shrink: 0;
-	}
-
-	/* Media pool actions sit right of the Preview/Grid toggle, against the
-	   source count they share the bar with. */
-	.seq-media-actions {
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		margin-left: auto;
-		flex-shrink: 0;
-	}
-
-	.seq-media-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.28rem 0.6rem;
-		white-space: nowrap;
-		border: 1px solid var(--line);
-		border-radius: var(--r-1);
-		background: none;
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.64rem;
-		letter-spacing: 0.06em;
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast);
-	}
-
-	.seq-media-btn:hover {
-		color: var(--text);
-		border-color: var(--line-strong);
-	}
-
-	.seq-media-btn.danger:hover {
-		color: var(--rec);
-		border-color: var(--rec);
-	}
-
-	/* The count a shuffle is scoped to survives the label being dropped — it is
-	   the part that changes with the selection. */
-	.btn-scope {
-		color: var(--text-2);
-	}
-
-	/* Below this the bar has no room for words: the media actions keep their
-	   icons and lose their labels, and the spacing tightens with them. Four of
-	   them plus the count against a 340px sidebar needs the full 1200. */
+	/* Below this the bar tightens with the pool actions dropping their labels. */
 	@media (max-width: 1200px) {
 		.top-bar {
 			padding: 7px 8px 6px;
@@ -4953,27 +4850,6 @@
 
 		.toolbar {
 			gap: 0.35rem;
-		}
-
-		.seq-media-actions {
-			gap: 0.25rem;
-		}
-
-		.seq-media-btn {
-			padding: 0.28rem 0.45rem;
-		}
-
-		.seq-media-btn .btn-label {
-			display: none;
-		}
-	}
-
-	/* Narrower still, the readout goes too — the pool's size is on the source
-	   list a tap away. It is the first thing to spill onto the sidebar, which
-	   stays docked down to 800. */
-	@media (max-width: 1000px) {
-		.source-count {
-			display: none;
 		}
 	}
 
