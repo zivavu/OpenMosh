@@ -41,11 +41,13 @@ export {
 	moveClips,
 	moveClipsToLane,
 	removeClip,
+	replaceTextClip,
 	resizeBoundary,
 	resizeClip,
 	resolveTextLayersAt,
 	sortClips,
 	textTimelineFonts,
+	toggledTextTimeline,
 	updateLane,
 	updateTextClips,
 } from "./resolve";

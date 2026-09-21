@@ -102,3 +102,57 @@ export function moveLayerTo(
 	// Front of the list gets the highest z, so index 0 draws on top.
 	return next.map((l, i) => ({ id: l.id, z: next.length - 1 - i }));
 }
+
+/** The lanes with the z each move gave them; untouched lanes come back as is. */
+export function applyLayerMoves<L extends { id: string; z: number }>(
+	lanes: L[],
+	moves: { id: string; z: number }[],
+): L[] {
+	const byId = new Map(moves.map((m) => [m.id, m.z]));
+	return lanes.map((l) => (byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l));
+}
+
+/** The layer row under a point, by the `data-layer-id` every row carries. */
+export function layerRowIdAt(x: number, y: number): string | null {
+	const el = document.elementFromPoint(x, y) as HTMLElement | null;
+	return el?.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ?? null;
+}
+
+/**
+ * A grip drag that restacks a layer row. Live reorder: the row under the
+ * pointer trades places with the held one as it passes, so the stack always
+ * shows where a drop would land. One undo entry for the gesture, however
+ * many rows it crosses — `reorder` gets the same coalesce key every tick.
+ */
+export function startLayerRowDrag(
+	e: PointerEvent,
+	laneId: string,
+	opts: {
+		order: () => LayerRef[];
+		reorder: (laneId: string, toIndex: number, coalesceKey: string) => void;
+		setDragging: (laneId: string | null) => void;
+	},
+): void {
+	if (e.button !== 0) return;
+	e.preventDefault();
+	e.stopPropagation();
+	opts.setDragging(laneId);
+	const handle = e.currentTarget as HTMLElement;
+	handle.setPointerCapture(e.pointerId);
+	const onMove = (ev: PointerEvent) => {
+		const overId = layerRowIdAt(ev.clientX, ev.clientY);
+		if (!overId || overId === laneId) return;
+		const to = opts.order().findIndex((l) => l.id === overId);
+		if (to !== -1) opts.reorder(laneId, to, `layer-drag-${laneId}`);
+	};
+	const onUp = (ev: PointerEvent) => {
+		opts.setDragging(null);
+		handle.releasePointerCapture?.(ev.pointerId);
+		window.removeEventListener("pointermove", onMove);
+		window.removeEventListener("pointerup", onUp);
+		window.removeEventListener("pointercancel", onUp);
+	};
+	window.addEventListener("pointermove", onMove);
+	window.addEventListener("pointerup", onUp);
+	window.addEventListener("pointercancel", onUp);
+}

@@ -22,7 +22,8 @@
  * one entry and one undo threw away both.
  */
 
-import { NO_EDIT, nextEditSeq } from "../editor/edit-clock";
+import { NO_EDIT, PENDING_EDIT, nextEditSeq } from "../editor/edit-clock";
+import type { UndoSource } from "../editor/undo-router";
 
 /**
  * How long a coalesce key stays live. Longer than the gap between the ticks of
@@ -130,5 +131,37 @@ export function createSnapshotHistory<T>() {
 		undo,
 		redo,
 		reset,
+	};
+}
+
+export type SnapshotHistory<T> = ReturnType<typeof createSnapshotHistory<T>>;
+
+/**
+ * The stack as the undo router sees it: `get` hands over the live state for
+ * the stack to swap out, `set` puts the restored one back. `pending` marks an
+ * edit still on its way to the stack (a coalescing burst) as the newest edit
+ * there is, so Ctrl+Z waits for it rather than skipping past.
+ */
+export function snapshotUndoSource<T>(
+	history: SnapshotHistory<T>,
+	get: () => T,
+	set: (state: T) => void,
+	pending: () => boolean = () => false,
+): UndoSource {
+	return {
+		get undoSeq() {
+			return pending() ? PENDING_EDIT : history.undoSeq;
+		},
+		get redoSeq() {
+			return history.redoSeq;
+		},
+		undo: () => {
+			const prev = history.undo(get());
+			if (prev) set(prev);
+		},
+		redo: () => {
+			const next = history.redo(get());
+			if (next) set(next);
+		},
 	};
 }

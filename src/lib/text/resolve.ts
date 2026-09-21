@@ -3,6 +3,7 @@ import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
 import { clipAt } from "../timeline/clips";
 import {
+	createTextTimeline,
 	textClipWeight,
 	type TextClip,
 	type TextLane,
@@ -183,4 +184,28 @@ export function updateLane(
 		...timeline,
 		lanes: timeline.lanes.map((l) => (l.id === laneId ? fn(l) : l)),
 	};
+}
+
+/** The timeline with one clip swapped for its edited self, wherever it is. */
+export function replaceTextClip(
+	timeline: TextTimeline,
+	next: TextClip,
+): TextTimeline {
+	return {
+		...timeline,
+		lanes: timeline.lanes.map((lane) => ({
+			...lane,
+			clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
+		})),
+	};
+}
+
+/** Text on or off. Turning it on with no lanes yet makes the first, at `z`. */
+export function toggledTextTimeline(
+	timeline: TextTimeline,
+	z: number,
+): TextTimeline {
+	if (timeline.enabled) return { ...timeline, enabled: false };
+	if (timeline.lanes.length > 0) return { ...timeline, enabled: true };
+	return createTextTimeline(z);
 }

@@ -70,7 +70,6 @@
 		clearTextClips,
 		createTextChainSource,
 		createTextHistory,
-		createTextTimeline,
 		EMPTY_TEXT_TIMELINE,
 		fillTextClipsFromPreset,
 		findTextClip,
@@ -78,11 +77,13 @@
 		findTextClipLane,
 		normalizeTextTimeline,
 		applyLyricsToTimeline,
+		replaceTextClip,
 		resolveTextLayersAt,
 		restoreTextClipMosh,
 		rollTextClips,
 		setTextClipsMode,
 		syncTextClipsToPreset,
+		toggledTextTimeline,
 		updateLane,
 		type TextClip,
 		type TextLane,
@@ -113,7 +114,11 @@
 		type FxLane,
 		type FxLaneSettings,
 	} from "../../editor/fx-lanes";
-	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
+	import {
+		createSnapshotHistory,
+		snapshotUndoSource,
+	} from "../../timeline/snapshot-history.svelte";
+	import { createSpanHistory } from "../../audio/span-history.svelte";
 	import { PENDING_EDIT } from "../../editor/edit-clock";
 	import {
 		redoLatest,
@@ -122,9 +127,11 @@
 	} from "../../editor/undo-router";
 	import { detectBpm } from "../../slideshow/bpm-detector";
 	import {
+		applyLayerMoves,
 		combinedLayerOrder,
 		nextLayerZ,
 		moveLayerTo,
+		startLayerRowDrag,
 	} from "../../timeline/layer-order";
 	import { clipAt } from "../../timeline/clips";
 	import type { LayerPick } from "../../editor/layer-pick";
@@ -933,55 +940,9 @@
 	});
 
 	// ── Span undo ────────────────────────────────────────────────────────────
-	// The span handles are an edit like any other, so a mis-drag comes back with
-	// Ctrl+Z. Its own stack because the span is neither effects nor clips;
-	// the router picks between it and the rest by when each was last touched.
-	interface Span {
-		start: number;
-		end: number;
-	}
-	const spanHistory = createSnapshotHistory<Span>();
-	/** The span as it stood before the drag in progress. The stack holds the
-	 * state each change replaced, and a drag only reports where it landed. */
-	let spanAtRest: Span = { start: 0, end: 0 };
-
-	/** Record the span a drag landed on. A drag that put it back where it was
-	 * is not an edit, so it doesn't leave a step behind. */
-	function pushSpanHistory() {
-		if (
-			spanAtRest.start === audio.spanStart &&
-			spanAtRest.end === audio.spanEnd
-		) {
-			return;
-		}
-		spanHistory.push(spanAtRest);
-		spanAtRest = { start: audio.spanStart, end: audio.spanEnd };
-	}
-
-	function resetSpanHistory() {
-		spanHistory.reset();
-		spanAtRest = { start: audio.spanStart, end: audio.spanEnd };
-	}
-
-	function applySpan(span: Span | null) {
-		if (!span) return;
-		// Undo and redo move the span too, so what a later drag replaces is this.
-		spanAtRest = { ...span };
-		audio.spanStart = span.start;
-		audio.spanEnd = span.end;
-	}
-
-	// A track brings its own span, restored from storage: that is the baseline
-	// to undo back to, not the empty one this component started on.
-	let spannedTrack = "";
-	$effect(() => {
-		const d = audio.trackDuration;
-		if (d <= 0) return;
-		const id = `${currentTrackId ?? audio.trackFile?.name ?? ""}:${d}`;
-		if (id === spannedTrack) return;
-		spannedTrack = id;
-		untrack(() => resetSpanHistory());
-	});
+	// The span handles are an edit like any other — see span-history.svelte.ts.
+	const spanHistory = createSpanHistory(audio);
+	$effect(() => spanHistory.trackChanged(currentTrackId));
 
 	let trackInput: HTMLInputElement;
 
@@ -2344,80 +2305,30 @@
 	// a press lands on is decided by when each was last edited, not by what is
 	// selected — the order the user worked in is the only order that reads as
 	// undo. Moshes keep their own keys (←/→) and stay out of it.
-	const undoSources: UndoSource[] = [
+	const fxUndo = snapshotUndoSource(
+		fxHistory,
+		() => $state.snapshot(fxLanes) as FxLane[],
+		setFxLanes,
+		() => burstOwner === "fx" && panelBurst.open,
+	);
+	// Built per press: the text and media stacks are declared further down.
+	const undoSources = (): UndoSource[] => [
+		spanHistory.undoSource,
+		snapshotUndoSource(
+			textHistory,
+			() => $state.snapshot(textTimeline) as TextTimeline,
+			setTextTimeline,
+		),
+		snapshotUndoSource(
+			mediaHistory,
+			() => $state.snapshot(mediaTimeline) as MediaTimeline,
+			setMediaTimeline,
+		),
 		{
-			get undoSeq() {
-				return spanHistory.undoSeq;
-			},
-			get redoSeq() {
-				return spanHistory.redoSeq;
-			},
-			undo: () =>
-				applySpan(
-					spanHistory.undo({ start: audio.spanStart, end: audio.spanEnd }),
-				),
-			redo: () =>
-				applySpan(
-					spanHistory.redo({ start: audio.spanStart, end: audio.spanEnd }),
-				),
-		},
-		{
-			get undoSeq() {
-				return textHistory.undoSeq;
-			},
-			get redoSeq() {
-				return textHistory.redoSeq;
-			},
-			undo: () => {
-				const prev = textHistory.undo(
-					$state.snapshot(textTimeline) as TextTimeline,
-				);
-				if (prev) setTextTimeline(prev);
-			},
-			redo: () => {
-				const next = textHistory.redo(
-					$state.snapshot(textTimeline) as TextTimeline,
-				);
-				if (next) setTextTimeline(next);
-			},
-		},
-		{
-			get undoSeq() {
-				return mediaHistory.undoSeq;
-			},
-			get redoSeq() {
-				return mediaHistory.redoSeq;
-			},
-			undo: () => {
-				const prev = mediaHistory.undo(
-					$state.snapshot(mediaTimeline) as MediaTimeline,
-				);
-				if (prev) setMediaTimeline(prev);
-			},
-			redo: () => {
-				const next = mediaHistory.redo(
-					$state.snapshot(mediaTimeline) as MediaTimeline,
-				);
-				if (next) setMediaTimeline(next);
-			},
-		},
-		{
-			get undoSeq() {
-				return burstOwner === "fx" && panelBurst.open
-					? PENDING_EDIT
-					: fxHistory.undoSeq;
-			},
-			get redoSeq() {
-				return fxHistory.redoSeq;
-			},
+			...fxUndo,
 			undo: () => {
 				endPanelBurst();
-				const prev = fxHistory.undo($state.snapshot(fxLanes) as FxLane[]);
-				if (prev) setFxLanes(prev);
-			},
-			redo: () => {
-				const next = fxHistory.redo($state.snapshot(fxLanes) as FxLane[]);
-				if (next) setFxLanes(next);
+				fxUndo.undo();
 			},
 		},
 		{
@@ -2437,11 +2348,11 @@
 	];
 
 	function undo() {
-		undoLatest(undoSources);
+		undoLatest(undoSources());
 	}
 
 	function redo() {
-		redoLatest(undoSources);
+		redoLatest(undoSources());
 	}
 
 	function clearEffects() {
@@ -3086,29 +2997,22 @@
 	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
 		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
-		const byId = new Map<string, number>(moves.map((m) => [m.id, m.z]));
-		if (fxLanes.some((l) => byId.has(l.id))) {
+		if (fxLanes.some((l) => moves.some((m) => m.id === l.id))) {
 			pushFxHistory(coalesceKey);
-			setFxLanes(
-				fxLanes.map((l) => (byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l)),
-			);
+			setFxLanes(applyLayerMoves(fxLanes, moves));
 		}
 		if (mediaTimeline.lanes.length > 0) {
 			pushMediaHistory(coalesceKey);
 			setMediaTimeline({
 				...mediaTimeline,
-				lanes: mediaTimeline.lanes.map((l) =>
-					byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
-				),
+				lanes: applyLayerMoves(mediaTimeline.lanes, moves),
 			});
 		}
 		if (textTimeline.lanes.length > 0) {
 			pushTextHistory(coalesceKey);
 			setTextTimeline({
 				...textTimeline,
-				lanes: textTimeline.lanes.map((l) =>
-					byId.has(l.id) ? { ...l, z: byId.get(l.id)! } : l,
-				),
+				lanes: applyLayerMoves(textTimeline.lanes, moves),
 			});
 		}
 	}
@@ -3119,39 +3023,11 @@
 	let draggingLaneId = $state<string | null>(null);
 
 	function startLayerDrag(laneId: string, e: PointerEvent) {
-		if (e.button !== 0) return;
-		e.preventDefault();
-		e.stopPropagation();
-		draggingLaneId = laneId;
-		const handle = e.currentTarget as HTMLElement;
-		handle.setPointerCapture(e.pointerId);
-
-		// Live reorder: the row under the pointer trades places with the held one
-		// as it passes, so the stack always shows where a drop would land.
-		const onMove = (ev: PointerEvent) => {
-			const overId = layerRowIdAt(ev.clientX, ev.clientY);
-			if (!overId || overId === laneId) return;
-			const to = layerOrder.findIndex((l) => l.id === overId);
-			if (to === -1) return;
-			// One undo entry for the gesture, however many rows it crosses.
-			reorderLayer(laneId, to, `layer-drag-${laneId}`);
-		};
-		const onUp = (ev: PointerEvent) => {
-			draggingLaneId = null;
-			handle.releasePointerCapture?.(ev.pointerId);
-			window.removeEventListener("pointermove", onMove);
-			window.removeEventListener("pointerup", onUp);
-			window.removeEventListener("pointercancel", onUp);
-		};
-		window.addEventListener("pointermove", onMove);
-		window.addEventListener("pointerup", onUp);
-		window.addEventListener("pointercancel", onUp);
-	}
-
-	/** The layer row under the pointer, if any. */
-	function layerRowIdAt(x: number, y: number): string | null {
-		const el = document.elementFromPoint(x, y) as HTMLElement | null;
-		return el?.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ?? null;
+		startLayerRowDrag(e, laneId, {
+			order: () => layerOrder,
+			reorder: reorderLayer,
+			setDragging: (id) => (draggingLaneId = id),
+		});
 	}
 
 	let selectedTextClip = $derived(
@@ -3187,13 +3063,7 @@
 	}
 
 	function updateTextClip(next: TextClip) {
-		textTimeline = {
-			...textTimeline,
-			lanes: textTimeline.lanes.map((lane) => ({
-				...lane,
-				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
-			})),
-		};
+		textTimeline = replaceTextClip(textTimeline, next);
 	}
 
 	function updateTextLane(next: TextLane) {
@@ -3540,11 +3410,7 @@
 
 	function toggleTextTimeline() {
 		pushTextHistory();
-		textTimeline = textTimeline.enabled
-			? { ...textTimeline, enabled: false }
-			: textTimeline.lanes.length > 0
-				? { ...textTimeline, enabled: true }
-				: createTextTimeline(nextLayerZ(layerOrder));
+		textTimeline = toggledTextTimeline(textTimeline, nextLayerZ(layerOrder));
 		if (!textTimeline.enabled) {
 			selectedTextClipId = null;
 			lyricsOpen = false;
@@ -4520,7 +4386,7 @@
 						onPlay={playSpan}
 						onPause={pauseTrack}
 						onSeek={seekTo}
-						onSpanCommit={pushSpanHistory}
+						onSpanCommit={spanHistory.push}
 						onSpanStartChange={(t) => (audio.spanStart = t)}
 						onSpanEndChange={(t) => (audio.spanEnd = t)}
 						onVolumeChange={(v) => audio.setOutputVolume(v)}
