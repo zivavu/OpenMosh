@@ -12,16 +12,23 @@
  */
 
 import {
-	placeClipBlock,
-	retargetClipBlock,
-	sortClips,
-	type ClipBlockEntry,
-} from "../timeline/clips";
-import { cloneEffectInstance } from "../effects";
-import type { EffectInstance } from "../effects/types";
-import type { ChainMode } from "../editor/sequence";
-import { createMediaClip, type MediaClip, type MediaLane } from "./types";
-import type { MediaTimeline } from "./types";
+	applyChainTo,
+	captureChain,
+	type CopiedChain,
+} from "../editor/chain-clipboard";
+import { cloneChainEffects } from "../editor/chain-clip";
+import {
+	copyClipBlock,
+	pasteClipBlock,
+	pasteOntoClips,
+} from "../timeline/clip-clipboard";
+import type { ClipBlockEntry } from "../timeline/clips";
+import {
+	createMediaClip,
+	type MediaClip,
+	type MediaLane,
+	type MediaTimeline,
+} from "./types";
 
 /** One copied clip, placed relative to the earliest one in the copy. */
 export interface MediaClipboardEntry extends ClipBlockEntry {
@@ -34,32 +41,26 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	 * with no source yet. */
 	resolvedSourceId: string | null;
 	/** The clip's chain and how it rolls, so a paste renders the same. */
-	effects: EffectInstance[];
-	label: string;
-	mode?: ChainMode;
-	presetName?: string;
-	modified?: boolean;
-	intervalSec?: number;
-	intervalBeats?: number;
-	seed?: number;
+	chain: CopiedChain;
 	fadeInSec?: number;
 	fadeOutSec?: number;
 }
 
-/** The chain fields of an entry, as a clip takes them: fresh instance ids,
- * since the renderer keys per-effect state by them and two clips must not
- * share. */
-function chainOf(e: MediaClipboardEntry) {
-	return {
-		effects: e.effects.map(cloneEffectInstance),
-		label: e.label,
-		mode: e.mode,
-		presetName: e.presetName,
-		modified: e.modified,
-		intervalSec: e.intervalSec,
-		intervalBeats: e.intervalBeats,
-		seed: e.seed,
-	};
+/** A pasted chain, with fresh instance ids: the renderer keys per-effect
+ * state by them and two clips must not share. */
+function chainOf(e: MediaClipboardEntry): CopiedChain {
+	return { ...e.chain, effects: cloneChainEffects(e.chain.effects) };
+}
+
+/** The source a copy shows on `lane`: pinned on the clip unless it is already
+ * what the lane shows, so the lane's own picker keeps meaning "this lane's
+ * default" for the clips that never chose. */
+function pinnedSource(
+	e: MediaClipboardEntry,
+	lane: MediaLane,
+): string | undefined {
+	const resolved = e.resolvedSourceId ?? undefined;
+	return resolved === lane.sourceId ? undefined : resolved;
 }
 
 /** Snapshot the given clips, anchored at the earliest one's start. */
@@ -67,37 +68,18 @@ export function copyMediaClips(
 	timeline: MediaTimeline,
 	clipIds: string[],
 ): MediaClipboardEntry[] {
-	const ids = new Set(clipIds);
-	const found: MediaClipboardEntry[] = [];
-	let anchor = Infinity;
-	for (const lane of timeline.lanes) {
-		for (const clip of lane.clips) {
-			if (!ids.has(clip.id)) continue;
-			anchor = Math.min(anchor, clip.start);
-			found.push({
-				laneId: lane.id,
-				offset: clip.start,
-				length: clip.end - clip.start,
-				sourceStart: clip.sourceStart,
-				sourceId: clip.sourceId,
-				resolvedSourceId: clip.sourceId ?? lane.sourceId,
-				effects: clip.effects.map(cloneEffectInstance),
-				label: clip.label,
-				mode: clip.mode,
-				presetName: clip.presetName,
-				modified: clip.modified,
-				intervalSec: clip.intervalSec,
-				intervalBeats: clip.intervalBeats,
-				seed: clip.seed,
-				fadeInSec: clip.fadeInSec,
-				fadeOutSec: clip.fadeOutSec,
-			});
-		}
-	}
-	if (found.length === 0) return [];
-	return found
-		.map((e) => ({ ...e, offset: e.offset - anchor }))
-		.sort((a, b) => a.offset - b.offset);
+	return copyClipBlock<MediaClip, MediaLane, MediaClipboardEntry>(
+		timeline.lanes,
+		clipIds,
+		(clip, lane) => ({
+			sourceStart: clip.sourceStart,
+			sourceId: clip.sourceId,
+			resolvedSourceId: clip.sourceId ?? lane.sourceId,
+			chain: captureChain(clip),
+			fadeInSec: clip.fadeInSec,
+			fadeOutSec: clip.fadeOutSec,
+		}),
+	);
 }
 
 export interface MediaPasteResult {
@@ -107,10 +89,8 @@ export interface MediaPasteResult {
 }
 
 /**
- * Stamp the clipboard down with its earliest clip at `at`, on `targetLaneId`
- * when that is a media lane (the block's other lanes follow below it) and
- * otherwise back where it was copied from. See placeClipBlock for where the
- * copies land when the space is short.
+ * Stamp the clipboard down with its earliest clip at `at` — see
+ * pasteClipBlock.
  *
  * A copy landing on another lane keeps showing what it showed: its source is
  * pinned unless it is already what the new lane shows. On its own lane it
@@ -123,52 +103,25 @@ export function pasteMediaClips(
 	duration: number,
 	targetLaneId?: string | null,
 ): MediaPasteResult {
-	const unchanged: MediaPasteResult = { timeline, clipIds: [] };
-	if (entries.length === 0 || duration <= 0) return unchanged;
-
-	const lanes = new Map<string, MediaLane>(
-		timeline.lanes.map((l) => [l.id, l]),
-	);
-	const moved = retargetClipBlock(
+	const { lanes, clipIds } = pasteClipBlock(
+		timeline.lanes,
 		entries,
-		timeline.lanes.map((l) => l.id),
+		at,
+		duration,
 		targetLaneId,
-	);
-	// A lane deleted since the copy takes its clips with it.
-	const placed = placeClipBlock(moved, lanes, at, duration);
-	if (placed.length === 0) return unchanged;
-
-	const added = new Map<string, MediaClip[]>();
-	const clipIds: string[] = [];
-	for (const { entry: e, start, end } of placed) {
-		let sourceId = e.sourceId;
-		if (moved !== entries) {
-			const resolved = e.resolvedSourceId ?? undefined;
-			sourceId =
-				resolved === lanes.get(e.laneId)!.sourceId ? undefined : resolved;
-		}
-		const clip: MediaClip = {
-			...createMediaClip(start, end, e.sourceStart, sourceId),
-			...chainOf(e),
-		};
-		if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
-		if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
-		clipIds.push(clip.id);
-		const list = added.get(e.laneId);
-		if (list) list.push(clip);
-		else added.set(e.laneId, [clip]);
-	}
-
-	return {
-		timeline: {
-			...timeline,
-			lanes: timeline.lanes.map((lane) => {
-				const list = added.get(lane.id);
-				return list
-					? { ...lane, clips: sortClips([...lane.clips, ...list]) }
-					: lane;
-			}),
+		(e, start, end, lane, retargeted) => {
+			const sourceId = retargeted ? pinnedSource(e, lane) : e.sourceId;
+			const clip = applyChainTo(
+				createMediaClip(start, end, e.sourceStart, sourceId),
+				chainOf(e),
+			);
+			if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
+			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
+			return clip;
 		},
+	);
+	return {
+		timeline: lanes === timeline.lanes ? timeline : { ...timeline, lanes },
 		clipIds,
 	};
 }
@@ -176,43 +129,22 @@ export function pasteMediaClips(
 /**
  * Put what the copied clips showed into the selected clips, in time order; a
  * shorter copy repeats over them. Each target keeps its span, fade and lane
- * and takes the source and in-point. The source is pinned on the clip unless
- * it is already what its lane shows, so the lane's own picker keeps meaning
- * "this lane's default" for the clips that never chose. The chain comes with
- * it, fresh instance ids and all.
+ * and takes the source, in-point and chain — fresh instance ids and all.
  */
 export function pasteMediaContentOnto(
 	timeline: MediaTimeline,
 	clipIds: string[],
 	entries: MediaClipboardEntry[],
 ): MediaTimeline {
-	if (entries.length === 0 || clipIds.length === 0) return timeline;
-	const targets = new Set(clipIds);
-	const order = timeline.lanes
-		.flatMap((l) => l.clips)
-		.filter((c) => targets.has(c.id))
-		.sort((a, b) => a.start - b.start)
-		.map((c) => c.id);
-	if (order.length === 0) return timeline;
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((lane) => {
-			if (!lane.clips.some((c) => targets.has(c.id))) return lane;
-			return {
-				...lane,
-				clips: lane.clips.map((c) => {
-					const i = order.indexOf(c.id);
-					if (i === -1) return c;
-					const e = entries[i % entries.length];
-					const sourceId = e.resolvedSourceId ?? undefined;
-					return {
-						...c,
-						sourceStart: e.sourceStart,
-						sourceId: sourceId === lane.sourceId ? undefined : sourceId,
-						...chainOf(e),
-					};
-				}),
-			};
-		}),
-	};
+	const lanes = pasteOntoClips<MediaClip, MediaLane, MediaClipboardEntry>(
+		timeline.lanes,
+		clipIds,
+		entries,
+		(c, e, lane) =>
+			applyChainTo(
+				{ ...c, sourceStart: e.sourceStart, sourceId: pinnedSource(e, lane) },
+				chainOf(e),
+			),
+	);
+	return lanes === timeline.lanes ? timeline : { ...timeline, lanes };
 }

@@ -13,12 +13,17 @@ import {
 } from "../editor/chain-clipboard";
 import { cloneChainEffects } from "../editor/chain-clip";
 import {
-	placeClipBlock,
-	retargetClipBlock,
-	sortClips,
-	type ClipBlockEntry,
-} from "../timeline/clips";
-import { createTextClip, type TextClip, type TextTimeline } from "./types";
+	copyClipBlock,
+	pasteClipBlock,
+	pasteOntoClips,
+} from "../timeline/clip-clipboard";
+import type { ClipBlockEntry } from "../timeline/clips";
+import {
+	createTextClip,
+	type TextClip,
+	type TextLane,
+	type TextTimeline,
+} from "./types";
 
 export interface TextClipboardEntry extends ClipBlockEntry {
 	text: string;
@@ -39,27 +44,16 @@ export function copyTextClips(
 	timeline: TextTimeline,
 	clipIds: string[],
 ): TextClipboardEntry[] {
-	const ids = new Set(clipIds);
-	const found: TextClipboardEntry[] = [];
-	let anchor = Infinity;
-	for (const lane of timeline.lanes) {
-		for (const clip of lane.clips) {
-			if (!ids.has(clip.id)) continue;
-			anchor = Math.min(anchor, clip.start);
-			found.push({
-				laneId: lane.id,
-				offset: clip.start,
-				length: clip.end - clip.start,
-				text: clip.text,
-				chain: captureChain(clip),
-				fadeInSec: clip.fadeInSec,
-				fadeOutSec: clip.fadeOutSec,
-			});
-		}
-	}
-	return found
-		.map((e) => ({ ...e, offset: e.offset - anchor }))
-		.sort((a, b) => a.offset - b.offset);
+	return copyClipBlock<TextClip, TextLane, TextClipboardEntry>(
+		timeline.lanes,
+		clipIds,
+		(clip) => ({
+			text: clip.text,
+			chain: captureChain(clip),
+			fadeInSec: clip.fadeInSec,
+			fadeOutSec: clip.fadeOutSec,
+		}),
+	);
 }
 
 export interface TextPasteResult {
@@ -68,12 +62,8 @@ export interface TextPasteResult {
 	clipIds: string[];
 }
 
-/**
- * Stamp the clipboard down with its earliest clip at `at`, on `targetLaneId`
- * when that is a text lane (the block's other lanes follow below it) and
- * otherwise back where it was copied from. See placeClipBlock for where the
- * copies land when the space is short.
- */
+/** Stamp the clipboard down with its earliest clip at `at` — see
+ * pasteClipBlock. */
 export function pasteTextClips(
 	timeline: TextTimeline,
 	entries: TextClipboardEntry[],
@@ -81,38 +71,21 @@ export function pasteTextClips(
 	duration: number,
 	targetLaneId?: string | null,
 ): TextPasteResult {
-	const unchanged: TextPasteResult = { timeline, clipIds: [] };
-	if (entries.length === 0 || duration <= 0) return unchanged;
-	const byId = new Map(timeline.lanes.map((l) => [l.id, l]));
-	const moved = retargetClipBlock(
+	const { lanes, clipIds } = pasteClipBlock(
+		timeline.lanes,
 		entries,
-		timeline.lanes.map((l) => l.id),
+		at,
+		duration,
 		targetLaneId,
-	);
-	const placed = placeClipBlock(moved, byId, at, duration);
-	if (placed.length === 0) return unchanged;
-
-	const added = new Map<string, TextClip[]>();
-	const clipIds: string[] = [];
-	for (const { entry: e, start, end } of placed) {
-		const clip = applyChainTo(createTextClip(start, end, e.text), chainOf(e));
-		if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
-		if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
-		clipIds.push(clip.id);
-		const list = added.get(e.laneId);
-		if (list) list.push(clip);
-		else added.set(e.laneId, [clip]);
-	}
-	return {
-		timeline: {
-			...timeline,
-			lanes: timeline.lanes.map((lane) => {
-				const list = added.get(lane.id);
-				return list
-					? { ...lane, clips: sortClips([...lane.clips, ...list]) }
-					: lane;
-			}),
+		(e, start, end) => {
+			const clip = applyChainTo(createTextClip(start, end, e.text), chainOf(e));
+			if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
+			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
+			return clip;
 		},
+	);
+	return {
+		timeline: lanes === timeline.lanes ? timeline : { ...timeline, lanes },
 		clipIds,
 	};
 }
@@ -124,27 +97,11 @@ export function pasteTextOnto(
 	clipIds: string[],
 	entries: TextClipboardEntry[],
 ): TextTimeline {
-	if (entries.length === 0 || clipIds.length === 0) return timeline;
-	const targets = new Set(clipIds);
-	const order = timeline.lanes
-		.flatMap((l) => l.clips)
-		.filter((c) => targets.has(c.id))
-		.sort((a, b) => a.start - b.start)
-		.map((c) => c.id);
-	if (order.length === 0) return timeline;
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((lane) => {
-			if (!lane.clips.some((c) => targets.has(c.id))) return lane;
-			return {
-				...lane,
-				clips: lane.clips.map((c) => {
-					const i = order.indexOf(c.id);
-					if (i === -1) return c;
-					const e = entries[i % entries.length];
-					return applyChainTo({ ...c, text: e.text }, chainOf(e));
-				}),
-			};
-		}),
-	};
+	const lanes = pasteOntoClips<TextClip, TextLane, TextClipboardEntry>(
+		timeline.lanes,
+		clipIds,
+		entries,
+		(c, e) => applyChainTo({ ...c, text: e.text }, chainOf(e)),
+	);
+	return lanes === timeline.lanes ? timeline : { ...timeline, lanes };
 }
