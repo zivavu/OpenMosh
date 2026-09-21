@@ -76,7 +76,7 @@ Your media never leaves the machine. There is no backend, no account and no uplo
 
 ## Status
 
-Version 0.8.0. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
+Version 0.9.0. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable.
 
 MP4 and GIF export were both removed on purpose and aren't coming back.
 
