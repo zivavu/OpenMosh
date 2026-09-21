@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { RefreshCw, Sparkles, X } from "lucide-svelte";
+	import { RefreshCw, Sparkles } from "lucide-svelte";
 	import { onDestroy, onMount, untrack } from "svelte";
 	import {
 		GENERATED_SHORT_SIDE,
@@ -15,8 +15,8 @@
 		type RatioLabel,
 		type Variety,
 	} from "../../generators";
-	import { pushModalKeyboard } from "../../modal-keyboard";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
+	import PanelModal from "../ui/PanelModal.svelte";
 
 	interface Props {
 		/** Single mode makes one image; the multi modes make a set. */
@@ -60,7 +60,9 @@
 	let ratio = $state<RatioLabel>("16:9");
 	let palette = $state<string>("");
 	let variety = $state<Variety>("wild");
-	let kind = $state<GeneratorKind>(untrack(() => (single ? "gradient" : "mix")));
+	let kind = $state<GeneratorKind>(
+		untrack(() => (single ? "gradient" : "mix")),
+	);
 
 	let total = $derived(single ? 1 : Number(count));
 	let specs = $derived(
@@ -124,8 +126,6 @@
 		}
 	}
 
-	onMount(() => pushModalKeyboard());
-
 	function onKeydown(e: KeyboardEvent) {
 		if (e.key === "Escape") {
 			e.preventDefault();
@@ -143,188 +143,100 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="overlay" onclick={() => !busy && onClose()}>
-	<div
-		class="panel"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Generate images"
-		tabindex="-1"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<div class="head">
-			<span class="title"><Sparkles size={12} /> Generate</span>
-			<span class="sub">{target.width} × {target.height}</span>
-			<button
-				class="close"
-				onclick={onClose}
-				disabled={busy}
-				aria-label="Close"
-			>
-				<X size={14} />
-			</button>
+<PanelModal
+	title="Generate"
+	label="Generate images"
+	sub="{target.width} × {target.height}"
+	{busy}
+	{onClose}
+>
+	{#snippet icon()}<Sparkles size={12} />{/snippet}
+	<div class="controls">
+		<div class="ctrl">
+			<span class="label">Field</span>
+			<ButtonGroup buttons={KINDS} value={kind} onchange={(v) => (kind = v)} />
 		</div>
-
-		<div class="controls">
+		{#if !single}
 			<div class="ctrl">
-				<span class="label">Field</span>
+				<span class="label">Count</span>
 				<ButtonGroup
-					buttons={KINDS}
-					value={kind}
-					onchange={(v) => (kind = v)}
+					buttons={COUNTS}
+					value={count}
+					onchange={(v) => (count = v)}
 				/>
 			</div>
-			{#if !single}
-				<div class="ctrl">
-					<span class="label">Count</span>
-					<ButtonGroup
-						buttons={COUNTS}
-						value={count}
-						onchange={(v) => (count = v)}
-					/>
-				</div>
-			{/if}
-			{#if !size}
-				<div class="ctrl">
-					<span class="label">Ratio</span>
-					<ButtonGroup
-						buttons={RATIOS.map((r) => ({ label: r.label, value: r.label }))}
-						value={ratio}
-						onchange={(v) => (ratio = v)}
-					/>
-				</div>
-			{/if}
-			<div class="ctrl">
-				<span class="label">Palette</span>
-				<select bind:value={palette}>
-					<option value="">Random</option>
-					{#each Object.keys(PALETTES) as name}
-						<option value={name}>{name}</option>
-					{/each}
-				</select>
-			</div>
-			{#if !single}
-				<div class="ctrl">
-					<span class="label">Variety</span>
-					<ButtonGroup
-						buttons={VARIETIES}
-						value={variety}
-						onchange={(v) => (variety = v)}
-					/>
-				</div>
-			{/if}
-		</div>
-
-		<div class="strip" class:single style:--aspect={aspect}>
-			{#each specs.slice(0, PREVIEW_MAX) as _, i (i)}
-				<div class="cell">
-					<div class="thumb" class:pending={!previews[i]}>
-						{#if previews[i]}
-							<img src={previews[i]} alt="" />
-						{/if}
-					</div>
-				</div>
-			{/each}
-		</div>
-		{#if !single && total > PREVIEW_MAX}
-			<p class="hint">
-				First {PREVIEW_MAX} of {total}. Reroll to see another set.
-			</p>
 		{/if}
-
-		<div class="actions">
-			<button
-				class="btn"
-				onclick={() => (seed = randomSeed())}
-				disabled={busy}
-				title="Reroll (Space)"
-			>
-				<RefreshCw size={12} class={previewing ? "spin" : ""} />
-				Reroll
-			</button>
-			<span class="spacer"></span>
-			<button class="btn" onclick={onClose} disabled={busy}>Cancel</button>
-			<button class="btn use" onclick={use} disabled={busy}>
-				{#if busy}
-					Rendering {done}/{total}…
-				{:else}
-					Use {single ? "image" : `${total} images`}
-				{/if}
-			</button>
+		{#if !size}
+			<div class="ctrl">
+				<span class="label">Ratio</span>
+				<ButtonGroup
+					buttons={RATIOS.map((r) => ({ label: r.label, value: r.label }))}
+					value={ratio}
+					onchange={(v) => (ratio = v)}
+				/>
+			</div>
+		{/if}
+		<div class="ctrl">
+			<span class="label">Palette</span>
+			<select bind:value={palette}>
+				<option value="">Random</option>
+				{#each Object.keys(PALETTES) as name}
+					<option value={name}>{name}</option>
+				{/each}
+			</select>
 		</div>
+		{#if !single}
+			<div class="ctrl">
+				<span class="label">Variety</span>
+				<ButtonGroup
+					buttons={VARIETIES}
+					value={variety}
+					onchange={(v) => (variety = v)}
+				/>
+			</div>
+		{/if}
 	</div>
-</div>
+
+	<div class="strip" class:single style:--aspect={aspect}>
+		{#each specs.slice(0, PREVIEW_MAX) as _, i (i)}
+			<div class="cell">
+				<div class="thumb" class:pending={!previews[i]}>
+					{#if previews[i]}
+						<img src={previews[i]} alt="" />
+					{/if}
+				</div>
+			</div>
+		{/each}
+	</div>
+	{#if !single && total > PREVIEW_MAX}
+		<p class="hint">
+			First {PREVIEW_MAX} of {total}. Reroll to see another set.
+		</p>
+	{/if}
+
+	<div class="actions">
+		<button
+			class="btn"
+			onclick={() => (seed = randomSeed())}
+			disabled={busy}
+			title="Reroll (Space)"
+		>
+			<RefreshCw size={12} class={previewing ? "spin" : ""} />
+			Reroll
+		</button>
+		<span class="spacer"></span>
+		<button class="btn" onclick={onClose} disabled={busy}>Cancel</button>
+		<button class="btn use" onclick={use} disabled={busy}>
+			{#if busy}
+				Rendering {done}/{total}…
+			{:else}
+				Use {single ? "image" : `${total} images`}
+			{/if}
+		</button>
+	</div>
+</PanelModal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 300;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: rgba(0, 0, 0, 0.7);
-	}
-
-	.panel {
-		display: flex;
-		flex-direction: column;
-		gap: 0.8rem;
-		width: 640px;
-		max-width: calc(100vw - 2rem);
-		max-height: calc(100vh - 2rem);
-		padding: 1rem 1.1rem 1.1rem;
-		background: var(--surface);
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-3);
-		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-		overflow: auto;
-	}
-
-	.head {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-	}
-
-	.title {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		font-weight: 600;
-		color: var(--mosh);
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-	}
-
-	.sub {
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		color: var(--text-3);
-		letter-spacing: 0.08em;
-	}
-
-	.close {
-		margin-left: auto;
-		display: grid;
-		place-items: center;
-		width: 24px;
-		height: 24px;
-		border: none;
-		border-radius: var(--r-1);
-		background: transparent;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-	.close:hover {
-		color: var(--text);
-		background: rgba(255, 255, 255, 0.06);
-	}
-
 	.controls {
 		display: flex;
 		flex-wrap: wrap;
@@ -335,14 +247,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.3rem;
-	}
-
-	.label {
-		font-family: var(--font-mono);
-		font-size: 0.58rem;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: var(--text-3);
 	}
 
 	select {
@@ -418,42 +322,6 @@
 	}
 	.spacer {
 		flex: 1;
-	}
-
-	.btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.4rem 0.85rem;
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		border-radius: var(--r-2);
-		border: 1px solid var(--line-strong);
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--text-2);
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-	.btn:hover:not(:disabled) {
-		color: var(--text);
-		border-color: var(--text-3);
-	}
-	.btn:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.btn.use {
-		color: var(--ink);
-		background: var(--mosh);
-		border-color: var(--mosh);
-	}
-	.btn.use:hover:not(:disabled) {
-		filter: brightness(1.1);
 	}
 
 	:global(.spin) {

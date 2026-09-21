@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Camera, Circle, Square, X } from "lucide-svelte";
+	import { Camera, Circle, Square } from "lucide-svelte";
 	import { onDestroy, onMount } from "svelte";
-	import { pushModalKeyboard } from "../../modal-keyboard";
+	import PanelModal from "../ui/PanelModal.svelte";
 	import {
 		createLiveFile,
 		listCameras,
@@ -78,6 +78,11 @@
 				? "Record a take"
 				: "Snap on the beat",
 	);
+	/** The camera's own frame size, once it is open. */
+	let streamSize = $derived.by(() => {
+		const s = stream?.getVideoTracks()[0]?.getSettings();
+		return s ? `${s.width ?? "?"} × ${s.height ?? "?"}` : undefined;
+	});
 
 	async function open(id: string | null) {
 		opening = true;
@@ -102,7 +107,6 @@
 
 	onMount(() => {
 		void open(null);
-		return pushModalKeyboard();
 	});
 
 	onDestroy(() => {
@@ -240,200 +244,107 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="overlay" onclick={() => !busy && onClose()}>
-	<div
-		class="panel"
-		role="dialog"
-		aria-modal="true"
-		aria-label={title}
-		tabindex="-1"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<div class="head">
-			<span class="title"><Camera size={12} /> {title}</span>
-			{#if stream}
-				{@const s = stream.getVideoTracks()[0]?.getSettings()}
-				<span class="sub">{s?.width ?? "?"} × {s?.height ?? "?"}</span>
-			{/if}
-			<button
-				class="close"
-				onclick={onClose}
-				disabled={busy}
-				aria-label="Close"
-			>
-				<X size={14} />
-			</button>
-		</div>
-
-		<div class="preview" class:capturing={phase === "capturing"}>
-			<video bind:this={videoEl} autoplay muted playsinline></video>
-			{#if error}
-				<p class="state error">{error}</p>
-			{:else if opening}
-				<p class="state">Opening camera…</p>
-			{/if}
-			{#if phase === "countdown"}
-				<span class="count">{countdown}</span>
-			{:else if phase === "capturing"}
-				<span class="tally">
-					<span class="dot"></span>
-					{#if mode === "record"}
-						{elapsed.toFixed(1)}s
-					{:else}
-						{snapped} / {beatCount}
-					{/if}
-				</span>
-			{:else if phase === "saving"}
-				<p class="state">Saving…</p>
-			{/if}
-		</div>
-
-		<div class="controls">
-			<div class="ctrl">
-				<span class="label">Camera</span>
-				<select
-					value={deviceId ?? ""}
-					disabled={busy || cameras.length < 2}
-					onchange={(e) => void open(e.currentTarget.value || null)}
-				>
-					{#each cameras as c (c.deviceId)}
-						<option value={c.deviceId}>{c.label}</option>
-					{/each}
-				</select>
-			</div>
-			{#if mode === "burst"}
-				<div class="ctrl">
-					<span class="label">Snaps</span>
-					<ButtonGroup
-						buttons={BEAT_COUNTS}
-						value={beatCount}
-						onchange={(v) => (beatCount = v)}
-					/>
-				</div>
-				<div class="ctrl">
-					<span class="label">Every</span>
-					<ButtonGroup
-						buttons={EVERY}
-						value={every}
-						onchange={(v) => (every = v)}
-					/>
-				</div>
-			{/if}
-		</div>
-
-		<p class="hint">
-			{#if mode === "live"}
-				The camera becomes the source: mosh it live, and export what the camera
-				sees while the export runs.
-			{:else if mode === "record"}
-				Counts in from three, then the song plays from the playhead while you
-				record. The take lands on the timeline where the playhead was.
-			{:else}
-				Counts in from three, then snaps a still on every beat of the song into
-				the pool.
-			{/if}
-		</p>
-
-		<div class="actions">
-			<span class="spacer"></span>
-			<button class="btn" onclick={onClose} disabled={busy}>Cancel</button>
-			{#if mode === "live"}
-				<button class="btn use" onclick={goLive} disabled={!stream || busy}>
-					<Camera size={12} /> Go live
-				</button>
-			{:else if mode === "record"}
-				{#if phase === "capturing"}
-					<button class="btn rec" onclick={stopRecording}>
-						<Square size={12} /> Stop
-					</button>
+<PanelModal {title} sub={streamSize} {busy} {onClose}>
+	{#snippet icon()}<Camera size={12} />{/snippet}
+	<div class="preview" class:capturing={phase === "capturing"}>
+		<video bind:this={videoEl} autoplay muted playsinline></video>
+		{#if error}
+			<p class="state error">{error}</p>
+		{:else if opening}
+			<p class="state">Opening camera…</p>
+		{/if}
+		{#if phase === "countdown"}
+			<span class="count">{countdown}</span>
+		{:else if phase === "capturing"}
+			<span class="tally">
+				<span class="dot"></span>
+				{#if mode === "record"}
+					{elapsed.toFixed(1)}s
 				{:else}
-					<button
-						class="btn use"
-						onclick={startRecording}
-						disabled={!stream || busy}
-					>
-						<Circle size={12} /> Record
-					</button>
+					{snapped} / {beatCount}
 				{/if}
+			</span>
+		{:else if phase === "saving"}
+			<p class="state">Saving…</p>
+		{/if}
+	</div>
+
+	<div class="controls">
+		<div class="ctrl">
+			<span class="label">Camera</span>
+			<select
+				value={deviceId ?? ""}
+				disabled={busy || cameras.length < 2}
+				onchange={(e) => void open(e.currentTarget.value || null)}
+			>
+				{#each cameras as c (c.deviceId)}
+					<option value={c.deviceId}>{c.label}</option>
+				{/each}
+			</select>
+		</div>
+		{#if mode === "burst"}
+			<div class="ctrl">
+				<span class="label">Snaps</span>
+				<ButtonGroup
+					buttons={BEAT_COUNTS}
+					value={beatCount}
+					onchange={(v) => (beatCount = v)}
+				/>
+			</div>
+			<div class="ctrl">
+				<span class="label">Every</span>
+				<ButtonGroup
+					buttons={EVERY}
+					value={every}
+					onchange={(v) => (every = v)}
+				/>
+			</div>
+		{/if}
+	</div>
+
+	<p class="hint">
+		{#if mode === "live"}
+			The camera becomes the source: mosh it live, and export what the camera
+			sees while the export runs.
+		{:else if mode === "record"}
+			Counts in from three, then the song plays from the playhead while you
+			record. The take lands on the timeline where the playhead was.
+		{:else}
+			Counts in from three, then snaps a still on every beat of the song into
+			the pool.
+		{/if}
+	</p>
+
+	<div class="actions">
+		<span class="spacer"></span>
+		<button class="btn" onclick={onClose} disabled={busy}>Cancel</button>
+		{#if mode === "live"}
+			<button class="btn use" onclick={goLive} disabled={!stream || busy}>
+				<Camera size={12} /> Go live
+			</button>
+		{:else if mode === "record"}
+			{#if phase === "capturing"}
+				<button class="btn rec" onclick={stopRecording}>
+					<Square size={12} /> Stop
+				</button>
 			{:else}
-				<button class="btn use" onclick={startBurst} disabled={!stream || busy}>
-					<Camera size={12} /> Snap {beatCount}
+				<button
+					class="btn use"
+					onclick={startRecording}
+					disabled={!stream || busy}
+				>
+					<Circle size={12} /> Record
 				</button>
 			{/if}
-		</div>
+		{:else}
+			<button class="btn use" onclick={startBurst} disabled={!stream || busy}>
+				<Camera size={12} /> Snap {beatCount}
+			</button>
+		{/if}
 	</div>
-</div>
+</PanelModal>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 300;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: rgba(0, 0, 0, 0.7);
-	}
-
-	.panel {
-		display: flex;
-		flex-direction: column;
-		gap: 0.8rem;
-		width: 640px;
-		max-width: calc(100vw - 2rem);
-		max-height: calc(100vh - 2rem);
-		padding: 1rem 1.1rem 1.1rem;
-		background: var(--surface);
-		border: 1px solid var(--line-strong);
-		border-radius: var(--r-3);
-		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-		overflow: auto;
-	}
-
-	.head {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-	}
-
-	.title {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		font-weight: 600;
-		color: var(--mosh);
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-	}
-
-	.sub {
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		color: var(--text-3);
-		letter-spacing: 0.08em;
-	}
-
-	.close {
-		margin-left: auto;
-		display: grid;
-		place-items: center;
-		width: 24px;
-		height: 24px;
-		border: none;
-		border-radius: var(--r-1);
-		background: transparent;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-	.close:hover {
-		color: var(--text);
-		background: rgba(255, 255, 255, 0.06);
-	}
-
 	.preview {
 		position: relative;
 		aspect-ratio: 16 / 9;
@@ -525,14 +436,6 @@
 		gap: 0.3rem;
 	}
 
-	.label {
-		font-family: var(--font-mono);
-		font-size: 0.58rem;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
-		color: var(--text-3);
-	}
-
 	select {
 		max-width: 260px;
 		background: var(--sunken);
@@ -569,44 +472,11 @@
 		flex: 1;
 	}
 
-	.btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.4rem 0.85rem;
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		border-radius: var(--r-2);
-		border: 1px solid var(--line-strong);
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--text-2);
-		cursor: pointer;
-		transition:
-			color var(--t-fast),
-			border-color var(--t-fast),
-			background var(--t-fast);
-	}
-	.btn:hover:not(:disabled) {
-		color: var(--text);
-		border-color: var(--text-3);
-	}
-	.btn:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.btn.use {
-		color: var(--ink);
-		background: var(--mosh);
-		border-color: var(--mosh);
-	}
 	.btn.rec {
 		color: var(--text);
 		background: var(--rec);
 		border-color: var(--rec);
 	}
-	.btn.use:hover:not(:disabled),
 	.btn.rec:hover:not(:disabled) {
 		filter: brightness(1.1);
 	}
