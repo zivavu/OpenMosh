@@ -78,6 +78,7 @@ export {
 	moveClipsToLane,
 	newClipSpan,
 	removeClip,
+	replaceMediaClip,
 	resizeBoundary,
 	resizeClip,
 	resolveMediaLayersAt,

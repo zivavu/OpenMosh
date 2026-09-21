@@ -1,7 +1,12 @@
 import { chainClipEffectsAt } from "../editor/chain-clip";
 import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
-import { clipAt } from "../timeline/clips";
+import {
+	clipAt,
+	replaceClipIn,
+	updateClipsIn,
+	updateLaneIn,
+} from "../timeline/clips";
 import {
 	createTextTimeline,
 	textClipWeight,
@@ -148,19 +153,8 @@ export function updateTextClips(
 	clipIds: Set<string>,
 	fn: (clip: TextClip) => TextClip,
 ): TextTimeline {
-	if (!timeline.lanes.some((l) => l.clips.some((c) => clipIds.has(c.id)))) {
-		return timeline;
-	}
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((lane) => {
-			if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
-			return {
-				...lane,
-				clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)),
-			};
-		}),
-	};
+	const lanes = updateClipsIn(timeline.lanes, clipIds, fn);
+	return lanes === timeline.lanes ? timeline : { ...timeline, lanes };
 }
 
 /** Fonts every clip needs, so an export can await them before frame 0. */
@@ -180,10 +174,7 @@ export function updateLane(
 	laneId: string,
 	fn: (lane: TextLane) => TextLane,
 ): TextTimeline {
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((l) => (l.id === laneId ? fn(l) : l)),
-	};
+	return { ...timeline, lanes: updateLaneIn(timeline.lanes, laneId, fn) };
 }
 
 /** The timeline with one clip swapped for its edited self, wherever it is. */
@@ -191,13 +182,7 @@ export function replaceTextClip(
 	timeline: TextTimeline,
 	next: TextClip,
 ): TextTimeline {
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((lane) => ({
-			...lane,
-			clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
-		})),
-	};
+	return { ...timeline, lanes: replaceClipIn(timeline.lanes, next) };
 }
 
 /** Text on or off. Turning it on with no lanes yet makes the first, at `z`. */

@@ -166,6 +166,7 @@
 		mediaTimelineSourceIds,
 		newClipSpan,
 		normalizeMediaTimeline,
+		replaceMediaClip,
 		resolveMediaLayersAt,
 		restoreMediaClipMosh,
 		rollMediaClips,
@@ -3095,13 +3096,7 @@
 	}
 
 	function updateMediaClip(next: MediaClip) {
-		mediaTimeline = {
-			...mediaTimeline,
-			lanes: mediaTimeline.lanes.map((lane) => ({
-				...lane,
-				clips: lane.clips.map((c) => (c.id === next.id ? next : c)),
-			})),
-		};
+		mediaTimeline = replaceMediaClip(mediaTimeline, next);
 	}
 
 	function updateMediaLane(next: MediaLane) {

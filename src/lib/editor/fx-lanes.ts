@@ -24,6 +24,7 @@ import {
 	clipFadeWeight,
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
+	updateClipsIn,
 } from "../timeline/clips";
 import {
 	chainClipEffectsAt,
@@ -305,13 +306,7 @@ export function updateFxClips(
 	clipIds: Set<string>,
 	fn: (clip: FxClip) => FxClip,
 ): FxLane[] {
-	return lanes.map((lane) => {
-		if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
-		return {
-			...lane,
-			clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c) : c)),
-		};
-	});
+	return updateClipsIn(lanes, clipIds, fn);
 }
 
 /**

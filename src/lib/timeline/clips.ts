@@ -552,6 +552,31 @@ export function updateLaneIn<L extends { id: string }>(
 	return lanes.map((l) => (l.id === laneId ? fn(l) : l));
 }
 
+/** Apply one edit to every clip in `clipIds`, across lanes; the same lanes
+ * back (by identity) when none of them is here. */
+export function updateClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
+	lanes: L[],
+	clipIds: ReadonlySet<string>,
+	fn: (clip: C, lane: L) => C,
+): L[] {
+	if (!lanes.some((l) => l.clips.some((c) => clipIds.has(c.id)))) return lanes;
+	return lanes.map((lane) => {
+		if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
+		return {
+			...lane,
+			clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c, lane) : c)),
+		};
+	});
+}
+
+/** The lanes with one clip swapped for its edited self, wherever it is. */
+export function replaceClipIn<C extends TimelineClip, L extends ClipLane<C>>(
+	lanes: L[],
+	next: C,
+): L[] {
+	return updateClipsIn(lanes, new Set([next.id]), () => next);
+}
+
 /**
  * How strongly a clip applies at `time`: 1 across the body, ramping from 0 at
  * each edge that has a fade. Returns 1 without one, which is every clip until

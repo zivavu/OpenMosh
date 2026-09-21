@@ -2,7 +2,12 @@ import type { AudioResponse } from "../audio/auto-range";
 import { chainClipEffectsAt, laneMoshOptions } from "../editor/chain-clip";
 import type { MoshOptions } from "../editor/mosh";
 import type { EffectInstance } from "../effects/types";
-import { clipAt } from "../timeline/clips";
+import {
+	clipAt,
+	replaceClipIn,
+	updateClipsIn,
+	updateLaneIn,
+} from "../timeline/clips";
 import { sourceTimeAt, type SourceEdit } from "./source-edit";
 import {
 	mediaClipWeight,
@@ -198,19 +203,16 @@ export function updateMediaClips(
 	clipIds: Set<string>,
 	fn: (clip: MediaClip, lane: MediaLane) => MediaClip,
 ): MediaTimeline {
-	if (!timeline.lanes.some((l) => l.clips.some((c) => clipIds.has(c.id)))) {
-		return timeline;
-	}
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((lane) => {
-			if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
-			return {
-				...lane,
-				clips: lane.clips.map((c) => (clipIds.has(c.id) ? fn(c, lane) : c)),
-			};
-		}),
-	};
+	const lanes = updateClipsIn(timeline.lanes, clipIds, fn);
+	return lanes === timeline.lanes ? timeline : { ...timeline, lanes };
+}
+
+/** The timeline with one clip swapped for its edited self, wherever it is. */
+export function replaceMediaClip(
+	timeline: MediaTimeline,
+	next: MediaClip,
+): MediaTimeline {
+	return { ...timeline, lanes: replaceClipIn(timeline.lanes, next) };
 }
 
 /** The lane holding `clipId`, and the clip itself. */
@@ -277,10 +279,7 @@ export function updateMediaLane(
 	laneId: string,
 	fn: (lane: MediaLane) => MediaLane,
 ): MediaTimeline {
-	return {
-		...timeline,
-		lanes: timeline.lanes.map((l) => (l.id === laneId ? fn(l) : l)),
-	};
+	return { ...timeline, lanes: updateLaneIn(timeline.lanes, laneId, fn) };
 }
 
 /**
