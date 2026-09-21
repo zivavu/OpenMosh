@@ -6,9 +6,6 @@
 		Play,
 		Plus,
 		SlidersHorizontal,
-		TriangleAlert,
-		Zap,
-		ZapOff,
 	} from "lucide-svelte";
 	import {
 		DEFAULT_SOURCE_EDIT,
@@ -28,7 +25,8 @@
 		endSourceDrag,
 	} from "../../editor/source-drag.svelte";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
-	import { proxyStatus } from "../../video/proxy-status";
+	import { createLightbox } from "../ui/lightbox.svelte";
+	import ProxyBadge from "../ui/ProxyBadge.svelte";
 
 	// Both are overlays: neither chunk is needed until one is actually opened.
 	const loadSourceEditor = lazy(() => import("./SourceEditor.svelte"));
@@ -75,8 +73,7 @@
 	/** Open thumb's index; null when the preview is closed. Same component and
 	 * same rule the grid's cards use: a click previews; putting media on a clip
 	 * is a drag, or Enter on the thumb while the clip is selected. */
-	let lightboxIndex = $state<number | null>(null);
-	let lightboxOrigin = $state({ x: 0, y: 0 });
+	const lightbox = createLightbox();
 
 	let lightboxItems = $derived(
 		sources.map((s) => ({
@@ -85,15 +82,6 @@
 			objectUrl: s.objectUrl,
 		})),
 	);
-
-	function openLightbox(e: MouseEvent, index: number) {
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		lightboxOrigin = {
-			x: rect.left + rect.width / 2 - window.innerWidth / 2,
-			y: rect.top + rect.height / 2 - window.innerHeight / 2,
-		};
-		lightboxIndex = index;
-	}
 
 	/** Source whose editor is open; null when the dialog is closed. */
 	let editingId = $state<string | null>(null);
@@ -227,7 +215,7 @@
 						class:playing={src.id === selectedSourceId}
 						draggable="true"
 						ondragstart={(e) => onThumbDragStart(e, src, i)}
-						onclick={(e) => openLightbox(e, i)}
+						onclick={(e) => lightbox.open(e, i)}
 						onkeydown={(e) => {
 							if (e.key !== "Enter" || !assignable) return;
 							e.preventDefault();
@@ -260,27 +248,9 @@
 							<span class="rail-kind"
 								><Play size={7} fill="currentColor" /></span
 							>
-							{@const proxy = proxyStatus(src)}
-							{#if proxy.kind === "pending"}
-								<span class="rail-proxy" title={proxy.title}>{proxy.badge}</span
-								>
-							{:else if proxy.kind === "failed"}
-								<span class="rail-proxy warn" title={proxy.title}>
-									<TriangleAlert size={7} />
-								</span>
-							{:else if proxy.kind === "ready"}
-								<span class="rail-proxy ok" title={proxy.title}>
-									<Zap size={7} fill="currentColor" />
-									{proxy.badge}
-								</span>
-							{:else if proxy.kind === "off"}
-								<!-- Display only: the chip is itself a button, so the toggle
-								     lives on the grid's badge and over the single preview. -->
-								<span class="rail-proxy off" title={proxy.title}>
-									<ZapOff size={7} />
-									{proxy.badge}
-								</span>
-							{/if}
+							<!-- Display only: the chip is itself a button, so the toggle
+							     lives on the grid's badge and over the single preview. -->
+							<ProxyBadge source={src} size={7} />
 						{/if}
 						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
 					</button>
@@ -315,18 +285,18 @@
 	{/await}
 {/if}
 
-{#if lightboxIndex !== null}
+{#if lightbox.index !== null}
 	{#await loadMediaLightbox() then MediaLightbox}
 		<MediaLightbox
 			items={lightboxItems}
-			bind:index={lightboxIndex}
-			origin={lightboxOrigin}
-			onClose={() => (lightboxIndex = null)}
+			bind:index={lightbox.index}
+			origin={lightbox.origin}
+			onClose={lightbox.close}
 			onEdit={onEditChange
 				? (i) => {
 						// Straight from previewing it to editing it: seeing the media at
 						// size is when it becomes obvious something has to come out of it.
-						lightboxIndex = null;
+						lightbox.close();
 						editingId = sources[i]?.id ?? null;
 					}
 				: undefined}
@@ -511,32 +481,15 @@
 	   kind and base badges and the edit button, and this one is the widest of
 	   them. Anchored by its own bottom rather than by a top offset, so the text
 	   inside it can't push it past the thumb and onto the name. */
-	.rail-proxy {
+	.rail-item :global(.proxy-badge) {
 		position: absolute;
 		top: calc(var(--rail-thumb-h) - 2px);
 		left: 2px;
 		transform: translateY(-100%);
-		display: inline-flex;
-		align-items: center;
 		gap: 2px;
 		padding: 0 2px;
-		border-radius: 2px;
-		background: rgba(0, 0, 0, 0.65);
-		color: var(--text-3);
 		font-size: 0.5rem;
 		font-weight: 700;
-	}
-
-	.rail-proxy.ok {
-		color: var(--live);
-	}
-
-	.rail-proxy.warn {
-		color: var(--start);
-	}
-
-	.rail-proxy.off {
-		color: var(--text-4);
 	}
 
 	.rail-name {

@@ -1,19 +1,13 @@
 <script lang="ts">
-	import {
-		Camera,
-		ImageOff,
-		X,
-		Play,
-		Sparkles,
-		TriangleAlert,
-		Zap,
-		ZapOff,
-	} from "lucide-svelte";
+	import { Camera, X, Play, Sparkles } from "lucide-svelte";
 	import type { SlideshowSlide, SlideshowConfig } from "../../slideshow/types";
 	import type { Preset } from "../../effects";
-	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
+	import type { ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
+	import { createLightbox } from "../ui/lightbox.svelte";
 	import MediaAddCards from "../ui/MediaAddCards.svelte";
+	import MediaThumb from "../ui/MediaThumb.svelte";
+	import ProxyBadge from "../ui/ProxyBadge.svelte";
 
 	// Preview overlay: nothing loads it until a slide is opened.
 	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
@@ -50,8 +44,7 @@
 	let dragging = $state(false);
 	let dragFromIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
-	let lightboxIndex = $state<number | null>(null);
-	let lightboxOrigin = $state({ x: 0, y: 0 });
+	const lightbox = createLightbox();
 
 	let lightboxItems = $derived(
 		slides.map((s) => ({
@@ -125,16 +118,6 @@
 		}
 		input.value = "";
 	}
-
-	function openLightbox(e: MouseEvent | KeyboardEvent, index: number) {
-		const card = e.currentTarget as HTMLElement;
-		const rect = card.getBoundingClientRect();
-		lightboxOrigin = {
-			x: rect.left + rect.width / 2 - window.innerWidth / 2,
-			y: rect.top + rect.height / 2 - window.innerHeight / 2,
-		};
-		lightboxIndex = index;
-	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -191,51 +174,26 @@
 						dragFromIndex = null;
 						dragOverIndex = null;
 					}}
-					onclick={(e) => openLightbox(e, i)}
+					onclick={(e) => lightbox.open(e, i)}
 					onkeydown={(e) => {
-						if (e.key === "Enter") openLightbox(e, i);
+						if (e.key === "Enter") lightbox.open(e, i);
 					}}
 				>
-					{#if slide.thumbUrl}
-						<img class="slide-thumb" src={slide.thumbUrl} alt="Slide {i + 1}" />
-					{:else if slide.thumbPending}
-						<div class="thumb-loading"></div>
-					{:else}
-						<div class="thumb-none" title="No preview — the media still works">
-							<ImageOff size={14} />
-						</div>
-					{/if}
+					<MediaThumb
+						thumbUrl={slide.thumbUrl}
+						thumbPending={slide.thumbPending}
+						alt="Slide {i + 1}"
+					/>
 					<div class="slide-index">{i + 1}</div>
 					{#if slide.kind === "video"}
 						<div class="video-badge" title="Video">
 							<Play size={10} fill="currentColor" />
 						</div>
-						{@const proxy = proxyStatus(slide)}
-						{#if proxy.kind !== "none"}
-							<button
-								class="proxy-badge"
-								class:ok={proxy.kind === "ready"}
-								class:warn={proxy.kind === "failed"}
-								class:off={proxy.kind === "off"}
-								title={`${proxy.title} ${proxy.action.hint}`}
-								onclick={(e) => {
-									e.stopPropagation();
-									onProxyAction(slide.id, proxy.action.kind);
-								}}
-							>
-								{#if proxy.kind === "ready"}
-									<Zap size={10} fill="currentColor" />
-									{proxy.badge}
-								{:else if proxy.kind === "off"}
-									<ZapOff size={10} />
-									{proxy.badge}
-								{:else if proxy.kind === "failed"}
-									<TriangleAlert size={10} />
-								{:else}
-									{proxy.badge}
-								{/if}
-							</button>
-						{/if}
+						<ProxyBadge
+							source={slide}
+							size={10}
+							onAction={(action) => onProxyAction(slide.id, action)}
+						/>
 					{/if}
 					<button
 						class="remove-btn"
@@ -277,13 +235,13 @@
 		</div>
 	{/if}
 
-	{#if lightboxIndex !== null}
+	{#if lightbox.index !== null}
 		{#await loadMediaLightbox() then MediaLightbox}
 			<MediaLightbox
 				items={lightboxItems}
-				bind:index={lightboxIndex}
-				origin={lightboxOrigin}
-				onClose={() => (lightboxIndex = null)}
+				bind:index={lightbox.index}
+				origin={lightbox.origin}
+				onClose={lightbox.close}
 			/>
 		{/await}
 	{/if}
@@ -357,43 +315,6 @@
 		border-style: dashed;
 	}
 
-	.slide-thumb {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-		pointer-events: none;
-	}
-
-	.thumb-loading,
-	.thumb-none {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.thumb-none {
-		color: var(--text-4);
-	}
-
-	.thumb-loading::after {
-		content: "";
-		width: 16px;
-		height: 16px;
-		border: 2px solid var(--line);
-		border-top-color: var(--text-4);
-		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	.slide-index {
 		position: absolute;
 		top: 4px;
@@ -420,33 +341,12 @@
 		border-radius: 3px;
 	}
 
-	.proxy-badge {
+	.slide-card :global(.proxy-badge) {
 		position: absolute;
 		bottom: 4px;
 		left: 30px;
-		display: flex;
-		align-items: center;
-		gap: 3px;
-		color: var(--text-3);
-		background: rgba(0, 0, 0, 0.6);
 		padding: 2px 3px;
-		border: none;
 		border-radius: 3px;
-		font-family: var(--font-mono);
-		font-size: 0.55rem;
-		cursor: pointer;
-	}
-
-	.proxy-badge.ok {
-		color: var(--live);
-	}
-
-	.proxy-badge.warn {
-		color: var(--start);
-	}
-
-	.proxy-badge.off {
-		color: var(--text-4);
 	}
 
 	.remove-btn {

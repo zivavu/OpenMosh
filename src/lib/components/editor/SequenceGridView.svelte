@@ -1,15 +1,5 @@
 <script lang="ts">
-	import {
-		ImageOff,
-		Play,
-		Plus,
-		Camera,
-		Sparkles,
-		TriangleAlert,
-		X,
-		Zap,
-		ZapOff,
-	} from "lucide-svelte";
+	import { Play, Plus, Camera, Sparkles, X } from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -20,9 +10,12 @@
 		endSourceDrag,
 	} from "../../editor/source-drag.svelte";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
-	import { proxyStatus, type ProxyAction } from "../../video/proxy-status";
+	import type { ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
+	import { createLightbox } from "../ui/lightbox.svelte";
 	import MediaAddCards from "../ui/MediaAddCards.svelte";
+	import MediaThumb from "../ui/MediaThumb.svelte";
+	import ProxyBadge from "../ui/ProxyBadge.svelte";
 
 	// Preview overlay: nothing loads it until a card is opened.
 	const loadMediaLightbox = lazy(() => import("../ui/MediaLightbox.svelte"));
@@ -61,8 +54,7 @@
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let dragFromIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
-	let lightboxIndex = $state<number | null>(null);
-	let lightboxOrigin = $state({ x: 0, y: 0 });
+	const lightbox = createLightbox();
 
 	let assignable = $derived(selectedCount > 0);
 
@@ -120,15 +112,6 @@
 		e.preventDefault();
 		if (dragOverIndex !== null) onReorder(dragFromIndex, dragOverIndex);
 		endCardDrag();
-	}
-
-	function openLightbox(e: Event, index: number) {
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		lightboxOrigin = {
-			x: rect.left + rect.width / 2 - window.innerWidth / 2,
-			y: rect.top + rect.height / 2 - window.innerHeight / 2,
-		};
-		lightboxIndex = index;
 	}
 
 	function onInputChange(e: Event) {
@@ -201,30 +184,15 @@
 						dragOverIndex = i;
 					}}
 					ondragend={endCardDrag}
-					onclick={(e) => openLightbox(e, i)}
+					onclick={(e) => lightbox.open(e, i)}
 					onkeydown={(e) => {
 						if (e.key !== "Enter" && e.key !== " ") return;
 						e.preventDefault();
 						if (e.key === "Enter" && assignable) onAssign(src.id);
-						else openLightbox(e, i);
+						else lightbox.open(e, i);
 					}}
 				>
-					{#if src.thumbUrl}
-						<img
-							class="card-thumb"
-							src={src.thumbUrl}
-							alt=""
-							loading="lazy"
-							decoding="async"
-							draggable="false"
-						/>
-					{:else if src.thumbPending}
-						<div class="thumb-loading"></div>
-					{:else}
-						<div class="thumb-none" title="No preview — the media still works">
-							<ImageOff size={14} />
-						</div>
-					{/if}
+					<MediaThumb thumbUrl={src.thumbUrl} thumbPending={src.thumbPending} />
 					<span
 						class="card-index"
 						style:border-left="3px solid {sourceColor(i + 1)}"
@@ -235,32 +203,10 @@
 						<span class="card-kind" title="Video">
 							<Play size={9} fill="currentColor" />
 						</span>
-						{@const proxy = proxyStatus(src)}
-						{#if proxy.kind !== "none"}
-							<button
-								class="card-proxy"
-								class:ok={proxy.kind === "ready"}
-								class:warn={proxy.kind === "failed"}
-								class:off={proxy.kind === "off"}
-								title={`${proxy.title} ${proxy.action.hint}`}
-								onclick={(e) => {
-									e.stopPropagation();
-									onProxyAction(src.id, proxy.action.kind);
-								}}
-							>
-								{#if proxy.kind === "ready"}
-									<Zap size={9} fill="currentColor" />
-									{proxy.badge}
-								{:else if proxy.kind === "off"}
-									<ZapOff size={9} />
-									{proxy.badge}
-								{:else if proxy.kind === "failed"}
-									<TriangleAlert size={9} />
-								{:else}
-									{proxy.badge}
-								{/if}
-							</button>
-						{/if}
+						<ProxyBadge
+							source={src}
+							onAction={(action) => onProxyAction(src.id, action)}
+						/>
 					{/if}
 					<span class="card-name">{shortSourceName(src.name, 20)}</span>
 					<button
@@ -280,18 +226,18 @@
 				recordTitle="Record a webcam take to the song, from the playhead"
 				onAdd={() => fileInput?.click()}
 				{onGenerate}
-				onRecord={onRecord}
+				{onRecord}
 			/>
 		</div>
 	{/if}
 
-	{#if lightboxIndex !== null}
+	{#if lightbox.index !== null}
 		{#await loadMediaLightbox() then MediaLightbox}
 			<MediaLightbox
 				items={lightboxItems}
-				bind:index={lightboxIndex}
-				origin={lightboxOrigin}
-				onClose={() => (lightboxIndex = null)}
+				bind:index={lightbox.index}
+				origin={lightbox.origin}
+				onClose={lightbox.close}
 			/>
 		{/await}
 	{/if}
@@ -431,43 +377,6 @@
 		right: 0;
 	}
 
-	.card-thumb {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-		pointer-events: none;
-	}
-
-	.thumb-loading,
-	.thumb-none {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.thumb-none {
-		color: var(--text-4);
-	}
-
-	.thumb-loading::after {
-		content: "";
-		width: 14px;
-		height: 14px;
-		border: 2px solid var(--line);
-		border-top-color: var(--text-4);
-		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	.card-index {
 		position: absolute;
 		top: 4px;
@@ -493,34 +402,10 @@
 		color: var(--text-2);
 	}
 
-	.card-proxy {
+	.card :global(.proxy-badge) {
 		position: absolute;
 		top: 4px;
 		left: 52px;
-		display: flex;
-		align-items: center;
-		gap: 3px;
-		padding: 1px 4px;
-		border: none;
-		border-radius: 2px;
-		background: rgba(0, 0, 0, 0.65);
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.55rem;
-		line-height: 1.5;
-		cursor: pointer;
-	}
-
-	.card-proxy.ok {
-		color: var(--live);
-	}
-
-	.card-proxy.warn {
-		color: var(--start);
-	}
-
-	.card-proxy.off {
-		color: var(--text-4);
 	}
 
 	.card-name {
