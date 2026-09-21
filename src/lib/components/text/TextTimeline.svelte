@@ -134,14 +134,13 @@
 	const vp = stack.vp;
 	let trackDuration = $derived(stack.trackDuration);
 
-	/** The lane geometry, for sizing grab handles against their clips. */
-	let trackEl = $state<HTMLElement | undefined>(undefined);
+	/** Lane width in px, for sizing grab handles and gating labels. The stack
+	 * observes it once for every lane — they all share one geometry. */
+	let laneWidthPx = $derived(stack.laneWidth);
 
-	/** Registers a lane track with the shared axis and keeps a local handle on
-	 * it — every lane shares one geometry, so whichever mounted last will do.
-	 * The lane also registers itself as a split target for the S shortcut. */
+	/** Registers a lane track with the shared axis. The lane also registers
+	 * itself as a split target for the S shortcut. */
 	function laneTrack(node: HTMLElement, laneId: string) {
-		trackEl = node;
 		const shared = stack.lane(node, laneId);
 		const unregister = stack.registerSplitter(laneId, (t) =>
 			splitAt(laneId, t),
@@ -155,7 +154,6 @@
 				shared.destroy();
 				unregister();
 				unsnap();
-				if (trackEl === node) trackEl = undefined;
 			},
 		};
 	}
@@ -484,9 +482,8 @@
 
 	/** The clip's on-screen width. */
 	function clipPx(clip: TextClip): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
-		if (px <= 0) return 0;
-		return ((clip.end - clip.start) / vp.viewDuration) * px;
+		if (laneWidthPx <= 0) return 0;
+		return ((clip.end - clip.start) / vp.viewDuration) * laneWidthPx;
 	}
 
 	/**
@@ -496,10 +493,9 @@
 	 * the narrower neighbour.
 	 */
 	function boundaryWidth(left: TextClip, right: TextClip): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
-		if (px <= 0) return BOUNDARY_GRAB;
+		if (laneWidthPx <= 0) return BOUNDARY_GRAB;
 		const narrower = Math.min(left.end - left.start, right.end - right.start);
-		const narrowerPx = (narrower / vp.viewDuration) * px;
+		const narrowerPx = (narrower / vp.viewDuration) * laneWidthPx;
 		return Math.max(2, Math.min(BOUNDARY_GRAB, narrowerPx / 3));
 	}
 

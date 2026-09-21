@@ -343,8 +343,14 @@
 	const vp = stack.vp;
 	let trackDuration = $derived(stack.trackDuration);
 
-	/** The lane geometry, for sizing grab handles against their clips. */
-	let trackEl = $state<HTMLElement | undefined>(undefined);
+	/** Lane width in px, for sizing grab handles and gating labels. Read from
+	 * the stack's ResizeObserver rather than measured here: a one-shot
+	 * getBoundingClientRect() taken before the row had laid out stayed 0, and
+	 * nothing re-asked, so clips kept their labels hidden until a zoom. */
+	let laneWidthPx = $derived(stack.laneWidth);
+
+	/** The lane geometry, for hit-testing drops against the track. */
+	let trackEl: HTMLElement | undefined;
 
 	/** Registers a lane track with the shared axis and keeps a local handle on
 	 * it — every lane shares one geometry, so whichever mounted last will do.
@@ -670,9 +676,8 @@
 
 	/** A span's on-screen width. */
 	function clipPx(span: { start: number; end: number }): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
-		if (px <= 0) return 0;
-		return ((span.end - span.start) / vp.viewDuration) * px;
+		if (laneWidthPx <= 0) return 0;
+		return ((span.end - span.start) / vp.viewDuration) * laneWidthPx;
 	}
 
 	/**
@@ -681,10 +686,9 @@
 	 * more than a third of the narrower neighbour.
 	 */
 	function boundaryWidth(left: MediaClip, right: MediaClip): number {
-		const px = trackEl?.getBoundingClientRect().width ?? 0;
-		if (px <= 0) return BOUNDARY_GRAB;
+		if (laneWidthPx <= 0) return BOUNDARY_GRAB;
 		const narrower = Math.min(left.end - left.start, right.end - right.start);
-		const narrowerPx = (narrower / vp.viewDuration) * px;
+		const narrowerPx = (narrower / vp.viewDuration) * laneWidthPx;
 		return Math.max(2, Math.min(BOUNDARY_GRAB, narrowerPx / 3));
 	}
 
