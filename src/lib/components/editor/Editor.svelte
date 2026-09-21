@@ -8,7 +8,6 @@
 		Download,
 		Camera,
 		HelpCircle,
-		Home,
 		Library,
 		Stamp,
 		Maximize,
@@ -194,10 +193,7 @@
 	import TimelineStack from "../ui/TimelineStack.svelte";
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
-	import GithubLink from "../ui/GithubLink.svelte";
-	import YoutubeLink from "../ui/YoutubeLink.svelte";
 	import { setFeedbackChain } from "../ui/feedback.svelte";
-	import FeedbackButton from "../ui/FeedbackButton.svelte";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
 	import MobileSheet from "../ui/MobileSheet.svelte";
 	import NumberField from "../ui/NumberField.svelte";
@@ -212,6 +208,7 @@
 	import GlCanvas from "./GlCanvas.svelte";
 	import SequenceGridView from "./SequenceGridView.svelte";
 	import MediaPoolActions from "../ui/MediaPoolActions.svelte";
+	import TopBar from "../ui/TopBar.svelte";
 	import SourceRail from "./SourceRail.svelte";
 	import FxLanes from "./FxLanes.svelte";
 	import MoshGroup from "./MoshGroup.svelte";
@@ -3795,66 +3792,55 @@
 		bind:this={mainAreaEl}
 		style="--tl-vscroll: {laneScrollbar}px"
 	>
-		<div class="top-bar">
-			<div class="toolbar">
-				{#if onExit}
-					<button class="help-btn" onclick={handleExit} title="Back to upload">
-						<Home size={14} />
-					</button>
-				{/if}
-				<GithubLink />
-				<YoutubeLink />
-				<FeedbackButton />
-				<div class="bar-sep"></div>
-				{#if isSequenceMode}
-					<div class="output-group">
-						<ButtonGroup
-							buttons={[
-								{ label: "Preview", value: "preview" },
-								{ label: "Grid", value: "grid" },
-							]}
-							value={sequenceView}
-							onchange={(v) => (sequenceView = v as "preview" | "grid")}
-						/>
-					</div>
-					<!-- Shuffle is scoped by the selection: with layer clips picked it
-					     deals across those, otherwise across every layer clip. -->
-					<MediaPoolActions
-						count={sequenceSources.length}
-						shuffleScope={selectedMediaClipIds.length}
-						shuffleTitle={selectedMediaClipIds.length > 0
-							? "Deal the pool at random across the selected layer clips"
-							: "Deal the pool at random across every layer clip"}
-						recordTitle="Record a webcam take to the song, from the playhead"
-						onShuffle={dealMediaSources}
-						onAdd={() => sourceInput?.click()}
-						onGenerate={() => (generateOpen = true)}
-						onRecord={() => (webcamOpen = true)}
-						onClear={() => (showClearSourcesConfirm = true)}
+		<TopBar onExit={onExit ? handleExit : undefined}>
+			{#if isSequenceMode}
+				<div class="output-group">
+					<ButtonGroup
+						buttons={[
+							{ label: "Preview", value: "preview" },
+							{ label: "Grid", value: "grid" },
+						]}
+						value={sequenceView}
+						onchange={(v) => (sequenceView = v as "preview" | "grid")}
 					/>
-				{:else}
-					<button
-						class="help-btn"
-						title="Generate a new source image"
-						onclick={() => (generateOpen = true)}
-					>
-						<Sparkles size={14} />
-					</button>
-					<div class="output-group">
-						<span class="rack-label">Output</span>
-						<ButtonGroup
-							buttons={[
-								{ label: "PNG", value: "png" },
-								{ label: "JPG", value: "jpg" },
-								{ label: "WebM", value: "webm" },
-							]}
-							value={format}
-							onchange={(v) => (format = v)}
-						/>
-					</div>
-				{/if}
-			</div>
-		</div>
+				</div>
+				<!-- Shuffle is scoped by the selection: with layer clips picked it
+					     deals across those, otherwise across every layer clip. -->
+				<MediaPoolActions
+					count={sequenceSources.length}
+					shuffleScope={selectedMediaClipIds.length}
+					shuffleTitle={selectedMediaClipIds.length > 0
+						? "Deal the pool at random across the selected layer clips"
+						: "Deal the pool at random across every layer clip"}
+					recordTitle="Record a webcam take to the song, from the playhead"
+					onShuffle={dealMediaSources}
+					onAdd={() => sourceInput?.click()}
+					onGenerate={() => (generateOpen = true)}
+					onRecord={() => (webcamOpen = true)}
+					onClear={() => (showClearSourcesConfirm = true)}
+				/>
+			{:else}
+				<button
+					class="help-btn"
+					title="Generate a new source image"
+					onclick={() => (generateOpen = true)}
+				>
+					<Sparkles size={14} />
+				</button>
+				<div class="output-group">
+					<span class="rack-label">Output</span>
+					<ButtonGroup
+						buttons={[
+							{ label: "PNG", value: "png" },
+							{ label: "JPG", value: "jpg" },
+							{ label: "WebM", value: "webm" },
+						]}
+						value={format}
+						onchange={(v) => (format = v)}
+					/>
+				</div>
+			{/if}
+		</TopBar>
 
 		{#snippet loadingOverlay()}
 			<div class="no-media">
@@ -4818,39 +4804,12 @@
 		scrollbar-color: var(--live-dim) var(--sunken);
 	}
 
-	.top-bar {
-		display: flex;
-		align-items: center;
-		padding: 4px 12px;
-		border-bottom: 1px solid var(--line);
-		flex-shrink: 0;
-	}
-
-	.toolbar {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
 	.output-group {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		line-height: 1;
 		flex-shrink: 0;
-	}
-
-	/* Below this the bar tightens with the pool actions dropping their labels. */
-	@media (max-width: 1200px) {
-		.top-bar {
-			padding: 7px 8px 6px;
-		}
-
-		.toolbar {
-			gap: 0.35rem;
-		}
 	}
 
 	/* Holds the canvas's place in the column so the grid can take the box
@@ -4902,39 +4861,6 @@
 	@media (max-width: 800px) {
 		.output-group :global(.rack-label) {
 			display: none;
-		}
-	}
-
-	.help-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: var(--glass);
-		backdrop-filter: var(--blur);
-		-webkit-backdrop-filter: var(--blur);
-		border: 1.5px solid var(--line-strong);
-		color: var(--text-3);
-		cursor: pointer;
-		flex-shrink: 0;
-		padding: 0;
-		box-sizing: border-box;
-		transition:
-			border-color var(--t),
-			color var(--t);
-	}
-
-	.help-btn:hover {
-		border-color: var(--text-3);
-		color: var(--text);
-	}
-
-	@media (max-width: 800px) {
-		.help-btn {
-			width: 26px;
-			height: 26px;
 		}
 	}
 
