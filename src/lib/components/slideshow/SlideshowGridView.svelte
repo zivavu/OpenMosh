@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		Camera,
 		ImageOff,
 		Shuffle,
 		X,
@@ -25,6 +26,7 @@
 		onAddFiles: (files: FileList) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
 		onGenerate: () => void;
+		onSnap: () => void;
 		onRemoveSlide: (id: string) => void;
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
 		onShuffleSlides: () => void;
@@ -39,6 +41,7 @@
 		presets,
 		onAddFiles,
 		onGenerate,
+		onSnap,
 		onRemoveSlide,
 		onReorderSlides,
 		onShuffleSlides,
@@ -169,6 +172,9 @@
 				<button class="add-btn generate" onclick={onGenerate}
 					><Sparkles size={13} /> Generate</button
 				>
+				<button class="add-btn generate" onclick={onSnap}
+					><Camera size={13} /> Snap</button
+				>
 			</div>
 		</div>
 	{:else}
@@ -288,6 +294,13 @@
 				title="Generate more images"
 			>
 				<Sparkles size={22} />
+			</button>
+			<button
+				class="add-card generate"
+				onclick={onSnap}
+				title="Snap webcam stills on the beat"
+			>
+				<Camera size={22} />
 			</button>
 		</div>
 	{/if}

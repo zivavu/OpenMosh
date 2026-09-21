@@ -401,6 +401,31 @@
 	);
 	let generateOpen = $state(false);
 
+	// ── Webcam burst ──
+	// A photo booth on the beat: the song plays from where it sits and the
+	// panel snaps a still per beat into the pool. Audio alone drives it — the
+	// preview needs slides, and an empty pool is exactly when this is useful.
+	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
+	let webcamOpen = $state(false);
+	let burstWallStart = 0;
+
+	function burstTransport(playing: boolean) {
+		burstWallStart = performance.now();
+		if (playing) audio.playAudio();
+		else audio.pauseAudio();
+	}
+
+	/** The beat the burst is on: the song's grid, or the tempo on the wall
+	 * clock without one. Null with no tempo at all. */
+	function burstBeat(): number | null {
+		if (config.bpm <= 0) return null;
+		if (audio.trackFile && audio.audioPlaying) {
+			audio.tickCurrentTime();
+			return beatsAt(audio.trackCurrentTime);
+		}
+		return ((performance.now() - burstWallStart) / 1000) * (config.bpm / 60);
+	}
+
 	function disposeSlide(s: SlideshowSlide) {
 		sizeSync.untrack(s.id);
 		URL.revokeObjectURL(s.objectUrl);
@@ -1897,6 +1922,7 @@
 				{presets}
 				onAddFiles={(files) => addFiles(files)}
 				onGenerate={() => (generateOpen = true)}
+				onSnap={() => (webcamOpen = true)}
 				onRemoveSlide={removeSlide}
 				onReorderSlides={reorderSlides}
 				onShuffleSlides={shuffleSlides}
@@ -2109,6 +2135,18 @@
 		<div class="drop-overlay">
 			<span>Drop to add images or replace audio</span>
 		</div>
+	{/if}
+
+	{#if webcamOpen}
+		{#await loadWebcamPanel() then WebcamPanel}
+			<WebcamPanel
+				mode="burst"
+				onTransport={burstTransport}
+				beatAt={burstBeat}
+				onSnaps={(files) => void addFiles(files)}
+				onClose={() => (webcamOpen = false)}
+			/>
+		{/await}
 	{/if}
 
 	{#if generateOpen}
