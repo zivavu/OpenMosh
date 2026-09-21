@@ -1,40 +1,19 @@
 <script lang="ts">
-	import {
-		ChevronDown,
-		Dices,
-		Eraser,
-		Eye,
-		EyeOff,
-		Focus,
-		Trash2,
-	} from "lucide-svelte";
-	import { untrack } from "svelte";
-	import { dropAutoRangeScope } from "../../audio/auto-range";
+	import { Focus } from "lucide-svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
-	import { loadPresets, type Preset } from "../../effects";
-	import { BEAT_INTERVALS, type ChainMode } from "../../editor/sequence";
+	import type { Preset } from "../../effects";
+	import type { ChainMode } from "../../editor/sequence";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
-	import {
-		dragClipsStep,
-		laneSnapPoints,
-		type ClipDrag,
-	} from "../../timeline/clip-drag";
-	import { isTextEntryTarget } from "../../editor/shortcut-target";
-	import { isModalKeyboardOpen } from "../../modal-keyboard";
+	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import {
 		addClip,
-		clipRange,
 		clipSourceId,
 		copyMediaClips,
 		createMediaClip,
-		freeRangeAt,
 		newClipSpan,
-		moveClipsToLane,
 		pasteMediaClips,
 		pasteMediaContentOnto,
-		removeClip,
 		setMediaClipSources,
-		sortClips,
 		sourcePlayLength,
 		splitMediaClipAt,
 		updateMediaLane,
@@ -48,9 +27,10 @@
 	import { SOURCE_DND_TYPE } from "../../editor/sequence-source-ui";
 	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
-	import LaneGrip from "../ui/LaneGrip.svelte";
-	import LaneName from "../ui/LaneName.svelte";
-	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
+	import ChainClipBar from "../timeline/ChainClipBar.svelte";
+	import ClipBoundaries from "../timeline/ClipBoundaries.svelte";
+	import ClipLaneGutter from "../timeline/ClipLaneGutter.svelte";
+	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
 
 	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
@@ -61,6 +41,11 @@
 	const LANE_FOLDED_HEIGHT = 14;
 	/** Shared so an unfolded panel allocates nothing per instance. */
 	const NO_FOLDS: ReadonlySet<string> = new Set();
+	/**
+	 * Below this the label is all ellipsis and no word. The clip's tooltip still
+	 * names its source, and the thumbnail strip still reads at any width.
+	 */
+	const MIN_LABEL_PX = 44;
 
 	interface Props {
 		timeline: MediaTimeline;
@@ -129,62 +114,62 @@
 		onModeChange,
 	}: Props = $props();
 
+	// One axis for the whole stack: zoom, pan, playhead-following and the
+	// duration-change reset all live in TimelineStack.
+	const stack = getTimelineStack();
+	const vp = stack.vp;
+	let trackDuration = $derived(stack.trackDuration);
+
+	// Selection, drags, scrubbing, split/add/delete and the keyboard — the
+	// gestures every clip lane shares. Reads the props live through the getters.
+	const ctrl = new ClipLaneController<MediaClip, MediaLane>(
+		{
+			kind: "media",
+			defaultClipLength: DEFAULT_CLIP_LENGTH,
+			get lanes() {
+				return timeline.lanes;
+			},
+			setLanes: (lanes) => onChange({ ...timeline, lanes }),
+			onBeforeEdit: (key) => onBeforeEdit?.(key),
+			get selectedClipId() {
+				return selectedClipId;
+			},
+			set selectedClipId(v) {
+				selectedClipId = v;
+			},
+			get selectedClipIds() {
+				return selectedClipIds;
+			},
+			set selectedClipIds(v) {
+				selectedClipIds = v;
+			},
+			createClip: (start, end) => createMediaClip(start, end),
+			splitClipAt: splitMediaClipAt,
+			clipSpanAt: (lane, time) => clipSpanAt(lane, time),
+			// A clip keeps showing what it showed: one that inherited its old
+			// lane's source has it pinned, unless the new lane shows the same.
+			remapOnLaneChange: (clip, from, to) => {
+				const sourceId = clip.sourceId ?? from.sourceId ?? undefined;
+				return {
+					...clip,
+					sourceId: sourceId === to.sourceId ? undefined : sourceId,
+				};
+			},
+			copy: copySelection,
+			paste: pasteClipboard,
+		},
+		stack,
+	);
+	$effect(() => ctrl.syncSelection());
+
 	// ── Clip toolbar ─────────────────────────────────────────────────────────
 	// Rendered in the stack's shared selection bar, like the fx lanes' — one
 	// bar for whichever lane holds the selection, so the stack never resizes.
+	let selectedClips = $derived(ctrl.selectedClips);
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
 		return stack.registerSelectionBar("media", clipBar);
 	});
-
-	/** Every action fans out over the whole selection; a value the selection
-	 * disagrees on renders blank until the user picks one. */
-	let selectedClips = $derived(
-		timeline.lanes.flatMap((l) =>
-			l.clips.filter((c) => selectedClipIds.includes(c.id)),
-		),
-	);
-	let manySelected = $derived(selectedClips.length > 1);
-
-	function commonValue<T>(values: T[]): T | undefined {
-		return values.every((v) => v === values[0]) ? values[0] : undefined;
-	}
-
-	let commonMode = $derived(
-		commonValue(selectedClips.map((c) => c.mode ?? "static")),
-	);
-	let commonIntervalSec = $derived(
-		commonValue(selectedClips.map((c) => c.intervalSec)),
-	);
-	let commonIntervalBeats = $derived(
-		commonValue(selectedClips.map((c) => c.intervalBeats)),
-	);
-	let hasInterval = $derived(
-		selectedClips.every((c) => c.intervalSec !== undefined),
-	);
-	let intervalValue = $derived.by(() => {
-		if (commonIntervalBeats) return `b${commonIntervalBeats}`;
-		if (commonIntervalBeats === undefined || commonIntervalSec === undefined) {
-			return "";
-		}
-		return String(commonIntervalSec);
-	});
-
-	/** Read on open, not at mount — presets saved meanwhile show up. */
-	let presetList = $state<Preset[]>([]);
-	let selectedPresetIndex = $derived.by(() => {
-		const name = commonValue(selectedClips.map((c) => c.presetName));
-		if (!name) return -1;
-		const i = presetList.findIndex((p) => p.name === name);
-		return i === -1 ? -1 : i;
-	});
-
-	/** A clip with no spacing yet takes one beat, or a flat second without a BPM. */
-	function switchToAuto() {
-		if (hasInterval) onModeChange?.(selectedClipIds, "interval");
-		else if (bpm > 0) onModeChange?.(selectedClipIds, "interval", 60 / bpm, 1);
-		else onModeChange?.(selectedClipIds, "interval", 1, null);
-	}
 
 	// ── Source drops ─────────────────────────────────────────────────────────
 	// The same payload the media rail and the sequence grid send, so a thumb
@@ -233,29 +218,17 @@
 		laneId: string,
 		clientX: number,
 	): { laneId: string; start: number; end: number } | null {
-		const lane = laneOf(laneId);
-		if (!lane || trackDuration <= 0 || !overTrack(clientX)) return null;
-		const span = clipSpanAt(lane, timeAt(clientX), draggedSourceId());
+		const lane = ctrl.laneOf(laneId);
+		if (!lane || trackDuration <= 0 || !ctrl.overTrack(clientX)) return null;
+		const span = clipSpanAt(lane, ctrl.timeAt(clientX), draggedSourceId());
 		return span && { laneId, ...span };
 	}
 
 	/** The clip a drop at this x would land on, if it lands on one at all. */
 	function dropTargetClip(laneId: string, clientX: number): MediaClip | null {
-		const lane = laneOf(laneId);
-		if (!lane || !overTrack(clientX)) return null;
-		return clipAtTime(lane, timeAt(clientX));
-	}
-
-	/** Over the track rather than the row's gutter. A pixel of slack either
-	 * side: the mouse lands on whole pixels, and a box edge that falls between
-	 * two would otherwise refuse a drop aimed at the very start of the lane. */
-	function overTrack(clientX: number): boolean {
-		if (!trackEl) return false;
-		const rect = trackEl.getBoundingClientRect();
-		return clientX >= rect.left - 1 && clientX <= rect.right + 1;
-	}
-
-	function clipAtTime(lane: MediaLane, t: number): MediaClip | null {
+		const lane = ctrl.laneOf(laneId);
+		if (!lane || !ctrl.overTrack(clientX)) return null;
+		const t = ctrl.timeAt(clientX);
 		return lane.clips.find((c) => t >= c.start && t < c.end) ?? null;
 	}
 
@@ -284,7 +257,7 @@
 		const onClip = dropTargetClip(laneId, e.clientX);
 		const ghost = dropGhost;
 		clearDrop();
-		const lane = laneOf(laneId);
+		const lane = ctrl.laneOf(laneId);
 		if (!sourceId || !lane) return;
 		if (onClip) {
 			if (clipSourceId(lane, onClip) === sourceId) return;
@@ -310,7 +283,7 @@
 				sourceId: inherits ? sourceId : l.sourceId,
 			})),
 		);
-		selectOnly(clip.id);
+		ctrl.selectOnly(clip.id);
 	}
 
 	function sourceById(id: string | null): SequenceSource | undefined {
@@ -337,149 +310,6 @@
 		return clip.modified ? `${clip.label}*` : clip.label;
 	}
 
-	// One axis for the whole stack: zoom, pan, playhead-following and the
-	// duration-change reset all live in TimelineStack.
-	const stack = getTimelineStack();
-	const vp = stack.vp;
-	let trackDuration = $derived(stack.trackDuration);
-
-	/** Lane width in px, for sizing grab handles and gating labels. Read from
-	 * the stack's ResizeObserver rather than measured here: a one-shot
-	 * getBoundingClientRect() taken before the row had laid out stayed 0, and
-	 * nothing re-asked, so clips kept their labels hidden until a zoom. */
-	let laneWidthPx = $derived(stack.laneWidth);
-
-	/** The lane geometry, for hit-testing drops against the track. */
-	let trackEl: HTMLElement | undefined;
-
-	/** Registers a lane track with the shared axis and keeps a local handle on
-	 * it — every lane shares one geometry, so whichever mounted last will do.
-	 * The lane also registers itself as a split target for the S shortcut. */
-	function laneTrack(node: HTMLElement, laneId: string) {
-		trackEl = node;
-		const shared = stack.lane(node, laneId);
-		const unregister = stack.registerSplitter(laneId, (t) =>
-			splitAt(laneId, t),
-		);
-		// Its clip edges are snap targets for drags on any lane.
-		const unsnap = stack.registerSnapSource(laneId, () =>
-			laneSnapPoints(laneOf(laneId)),
-		);
-		return {
-			destroy() {
-				shared.destroy();
-				unregister();
-				unsnap();
-				if (trackEl === node) trackEl = undefined;
-			},
-		};
-	}
-
-	let drag = $state<ClipDrag | null>(null);
-
-	/** Set on pointerdown when a plain click landed on an already-selected clip.
-	 * The selection has to survive until pointerup so the clip (or the group) can
-	 * still be dragged; only a click that turns out not to be a drag resolves it —
-	 * a group collapses to the one clicked, a lone clip deselects. */
-	let clickOnUp: string | null = null;
-
-	function selectOnly(clipId: string) {
-		selectedClipId = clipId;
-		selectedClipIds = [clipId];
-	}
-
-	function deselect() {
-		selectedClipId = null;
-		selectedClipIds = [];
-	}
-
-	// Follow external changes to the primary (the panel's back button), and drop
-	// ids whose clips are gone.
-	$effect(() => {
-		const id = selectedClipId;
-		const alive = new Set(
-			timeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
-		);
-		untrack(() => {
-			if (!id || !alive.has(id)) {
-				if (selectedClipIds.length > 0) selectedClipIds = [];
-				return;
-			}
-			const pruned = selectedClipIds.filter((x) => alive.has(x));
-			if (!pruned.includes(id)) selectedClipIds = [id];
-			else if (pruned.length !== selectedClipIds.length)
-				selectedClipIds = pruned;
-		});
-	});
-
-	/** The raw pointer time; a drag snaps it against the stack in dragClipsStep. */
-	function timeAt(clientX: number): number {
-		return vp.clientXToTime(clientX);
-	}
-
-	/** This lane's place in the stack that spans both kinds of layer. */
-	function stackAt(laneId: string): number {
-		return stackIndex(layerOrder, laneId);
-	}
-
-	function laneOf(laneId: string): MediaLane | undefined {
-		return timeline.lanes.find((l) => l.id === laneId);
-	}
-
-	/** Lane the delete button is asking about; null when nothing is pending. */
-	let lanePendingDelete = $state<MediaLane | null>(null);
-
-	/** An empty lane takes nothing with it, so it goes without asking. */
-	function requestDeleteLane(lane: MediaLane) {
-		if (lane.clips.length === 0) deleteLane(lane.id);
-		else lanePendingDelete = lane;
-	}
-
-	function deleteLane(laneId: string) {
-		lanePendingDelete = null;
-		onBeforeEdit?.();
-		// The lane id is its audio-link scope; its envelopes outlive it otherwise.
-		dropAutoRangeScope(laneId);
-		onChange({
-			...timeline,
-			lanes: timeline.lanes.filter((l) => l.id !== laneId),
-		});
-	}
-
-	function setLane<K extends keyof MediaLane>(
-		laneId: string,
-		key: K,
-		value: MediaLane[K],
-	) {
-		onBeforeEdit?.();
-		onChange(
-			updateMediaLane(timeline, laneId, (l) => ({ ...l, [key]: value })),
-		);
-	}
-
-	/**
-	 * Put the panel on this lane. A lane whose clips were all deleted has nothing
-	 * to select and no other way back, so it gets a full-length one first —
-	 * which is also the only state where a layer is invisible with no way to say
-	 * where it should be.
-	 */
-	function openLane(lane: MediaLane) {
-		const first = sortClips(lane.clips)[0];
-		if (first) {
-			selectOnly(first.id);
-			return;
-		}
-		if (trackDuration <= 0) return;
-		const clip = createMediaClip(0, trackDuration);
-		onBeforeEdit?.();
-		onChange(
-			updateMediaLane(timeline, lane.id, (l) =>
-				addClip(l, clip, trackDuration),
-			),
-		);
-		selectOnly(clip.id);
-	}
-
 	/**
 	 * Turning solo on aims the sidebar at the lane too — the point of seeing one
 	 * layer by itself is to work on it, and hunting for its clip afterwards is
@@ -492,8 +322,8 @@
 		const turningOn = soloLaneId !== lane.id;
 		onToggleSolo?.(lane.id);
 		if (!turningOn) return;
-		const first = sortClips(lane.clips)[0];
-		if (first) selectOnly(first.id);
+		const first = [...lane.clips].sort((a, b) => a.start - b.start)[0];
+		if (first) ctrl.selectOnly(first.id);
 	}
 
 	/**
@@ -519,306 +349,11 @@
 		);
 	}
 
-	function addClipAt(laneId: string, time: number) {
-		const lane = laneOf(laneId);
-		if (!lane) return;
-		const span = clipSpanAt(lane, time);
-		if (!span) return;
-		const clip = createMediaClip(span.start, span.end);
-		onBeforeEdit?.();
-		onChange(
-			updateMediaLane(timeline, laneId, (l) => addClip(l, clip, trackDuration)),
-		);
-		selectOnly(clip.id);
-	}
-
-	/** Cut the clip under `time` on one lane in two — the S shortcut's target. */
-	function splitAt(laneId: string, time: number) {
-		const lane = laneOf(laneId);
-		if (!lane) return;
-		const next = splitMediaClipAt(lane, time);
-		// Not inside a clip, or one half would be too short to keep.
-		if (next === lane) return;
-		onBeforeEdit?.();
-		onChange(updateMediaLane(timeline, laneId, () => next));
-		deselect();
-	}
-
-	function deleteClip(laneId: string, clipId: string) {
-		onBeforeEdit?.();
-		onChange(updateMediaLane(timeline, laneId, (l) => removeClip(l, clipId)));
-		if (selectedClipId === clipId) selectedClipId = null;
-	}
-
-	function onTrackDblClick(e: MouseEvent, laneId: string) {
-		if (trackDuration <= 0) return;
-		// A double-click inside a clip is the clip's business; only empty lane
-		// space drops a new clip.
-		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
-		addClipAt(laneId, timeAt(e.clientX));
-	}
-
-	function onClipPointerDown(
-		e: PointerEvent,
-		laneId: string,
-		clipId: string,
-		mode: "move" | "start" | "end",
-	) {
-		if (e.button !== 0) return;
-		e.stopPropagation();
-		clickOnUp = null;
-
-		// Selection gestures first, and none of them start a drag — dragging from
-		// one would move clips the user was only trying to pick.
-		//
-		// Ctrl+Shift toggles a single clip in or out: the additive pick that plain
-		// Ctrl used to be, moved aside so Ctrl+Click can split the way it does on
-		// the source and fx lanes. Checked before the plain-Shift range, which
-		// would otherwise swallow it.
-		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
-			if (selectedClipIds.includes(clipId)) {
-				const rest = selectedClipIds.filter((x) => x !== clipId);
-				selectedClipIds = rest;
-				if (selectedClipId === clipId)
-					selectedClipId = rest[rest.length - 1] ?? null;
-			} else {
-				selectedClipIds = [...selectedClipIds, clipId];
-				selectedClipId = clipId;
-			}
-			return;
-		}
-
-		// Ctrl+Click cuts at the cursor. Handled on the edge handles too: they sit
-		// over the clip's ends, and a cut there is no less unambiguous.
-		if (e.ctrlKey || e.metaKey) {
-			splitAt(laneId, timeAt(e.clientX));
-			return;
-		}
-
-		// Shift extends the selection from the primary.
-		if (e.shiftKey && mode === "move") {
-			const lane = laneOf(laneId);
-			if (lane && selectedClipId) {
-				const range = clipRange(lane, selectedClipId, clipId);
-				if (range.length > 0) {
-					selectedClipIds = range;
-					return;
-				}
-			}
-			selectOnly(clipId);
-			return;
-		}
-
-		// A plain click on something already selected keeps the selection, so it
-		// can be dragged; pointerup resolves it if nothing moved.
-		if (selectedClipIds.includes(clipId) && mode === "move") {
-			selectedClipId = clipId;
-			clickOnUp = clipId;
-		} else {
-			selectOnly(clipId);
-		}
-
-		const clip = laneOf(laneId)?.clips.find((c) => c.id === clipId);
-		if (!clip) return;
-		drag = {
-			laneId,
-			clipId,
-			mode,
-			grabOffset: vp.clientXToTime(e.clientX) - clip.start,
-		};
-		// One undo entry per gesture, not per pointermove.
-		onBeforeEdit?.(`media-${mode}-${clipId}`);
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-	}
-
-	function onBoundaryPointerDown(
-		e: PointerEvent,
-		laneId: string,
-		leftId: string,
-		rightId: string,
-	) {
-		if (e.button !== 0) return;
-		e.preventDefault();
-		e.stopPropagation();
-		drag = {
-			laneId,
-			clipId: leftId,
-			otherId: rightId,
-			mode: "boundary",
-			grabOffset: 0,
-		};
-		// One undo entry per gesture, not per pointermove.
-		onBeforeEdit?.(`media-boundary-${leftId}`);
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-	}
-
-	/** Comfortable grab width for a shared boundary, in px. */
-	const BOUNDARY_GRAB = 12;
-	/** Comfortable grab width for a clip's own start/end handles, in px. */
-	const EDGE_GRAB = 10;
-	/**
-	 * Below this the label is all ellipsis and no word. The clip's tooltip still
-	 * names its source, and the thumbnail strip still reads at any width.
-	 */
-	const MIN_LABEL_PX = 44;
-
-	/**
-	 * Sized against the clip rather than fixed. At a flat 10px each, two handles
-	 * overrun any clip under 20px wide and the right one is clipped away
-	 * entirely — text set very small does exactly that. A third each keeps both
-	 * edges grabbable at any width, and leaves the middle third to drag by.
-	 */
-	function edgeWidth(clip: MediaClip): number {
-		const px = clipPx(clip);
-		if (px <= 0) return EDGE_GRAB;
-		return Math.max(1, Math.min(EDGE_GRAB, px / 3));
-	}
-
-	/** A span's on-screen width. */
-	function clipPx(span: { start: number; end: number }): number {
-		if (laneWidthPx <= 0) return 0;
-		return ((span.end - span.start) / vp.viewDuration) * laneWidthPx;
-	}
-
-	/**
-	 * A boundary is drawn over the clips either side of it, so a fixed grab area
-	 * would blanket short clips entirely and leave nothing to click. Never take
-	 * more than a third of the narrower neighbour.
-	 */
-	function boundaryWidth(left: MediaClip, right: MediaClip): number {
-		if (laneWidthPx <= 0) return BOUNDARY_GRAB;
-		const narrower = Math.min(left.end - left.start, right.end - right.start);
-		const narrowerPx = (narrower / vp.viewDuration) * laneWidthPx;
-		return Math.max(2, Math.min(BOUNDARY_GRAB, narrowerPx / 3));
-	}
-
-	/** Consecutive clip pairs sharing an exact edge — the draggable boundaries. */
-	function adjacentPairs(
-		lane: MediaLane,
-	): { left: MediaClip; right: MediaClip; at: number }[] {
-		const clips = sortClips(lane.clips);
-		const pairs: { left: MediaClip; right: MediaClip; at: number }[] = [];
-		for (let i = 0; i + 1 < clips.length; i++) {
-			if (clips[i].end === clips[i + 1].start) {
-				pairs.push({ left: clips[i], right: clips[i + 1], at: clips[i].end });
-			}
-		}
-		return pairs;
-	}
-
-	/** Empty lane space places the start marker, which takes the clock with it:
-	 * with no ruler row of its own, every lane has to be draggable, or a
-	 * text-only timeline has nothing to seek with. Ctrl/Cmd
-	 * drops a clip there instead — the same gesture the sequence timeline uses,
-	 * and a one-handed alternative to double-clicking. */
-	function onLanePointerDown(e: PointerEvent, laneId: string) {
-		if (e.button !== 0 || trackDuration <= 0) return;
-		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
-		if (e.ctrlKey || e.metaKey) {
-			e.preventDefault();
-			addClipAt(laneId, timeAt(e.clientX));
-			return;
-		}
-		scrubbing = true;
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		stack.seekStatic(timeAt(e.clientX));
-	}
-
-	function onPointerMove(e: PointerEvent) {
-		if (scrubbing) stack.seekStatic(timeAt(e.clientX));
-		if (!drag) return;
-		const t = timeAt(e.clientX);
-		const { laneId, clipId, mode, grabOffset } = drag;
-		clickOnUp = null;
-		// A move that crossed into another media row carries the clips over, if
-		// they fit there; otherwise they keep sliding on the row they came from.
-		// From then on the drag belongs to the new lane.
-		if (mode === "move") {
-			const over = stack.laneIdAt(e.clientY);
-			const held = laneOf(laneId)?.clips.find((c) => c.id === clipId);
-			if (over && over !== laneId && laneOf(over) && held) {
-				const group = selectedClipIds.includes(clipId)
-					? selectedClipIds
-					: [clipId];
-				const lanes = moveClipsToLane(
-					timeline.lanes,
-					laneId,
-					over,
-					group,
-					t - grabOffset - held.start,
-					trackDuration,
-					// A clip keeps showing what it showed: one that inherited its old
-					// lane's source has it pinned, unless the new lane shows the same.
-					(clip, from, to) => {
-						const sourceId = clip.sourceId ?? from.sourceId ?? undefined;
-						return {
-							...clip,
-							sourceId: sourceId === to.sourceId ? undefined : sourceId,
-						};
-					},
-					stack.crossLaneTolerance(
-						laneOf(laneId)!.clips.filter((c) => group.includes(c.id)),
-					),
-				);
-				if (lanes !== timeline.lanes) {
-					drag.laneId = over;
-					onChange({ ...timeline, lanes });
-					return;
-				}
-			}
-		}
-		// Dragging any member drags the whole selection with it. Alt holds the
-		// snap off.
-		const step = dragClipsStep(
-			laneOf(laneId)!,
-			drag,
-			t,
-			selectedClipIds,
-			trackDuration,
-			(edges, exclude) => stack.snapShift(edges, exclude, e.altKey),
-		);
-		onChange(updateMediaLane(timeline, laneId, () => step.lane));
-		stack.confirmSnap(step.edges);
-	}
-
-	function onPointerUp(e: PointerEvent) {
-		if (clickOnUp) {
-			// Clicking the one selected clip again drops the selection.
-			const sole =
-				selectedClipIds.length === 1 && selectedClipIds[0] === clickOnUp;
-			if (sole) deselect();
-			else selectOnly(clickOnUp);
-			clickOnUp = null;
-		}
-		scrubbing = false;
-		if (!drag) return;
-		drag = null;
-		stack.endSnap();
-		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-	}
-
-	let scrubbing = $state(false);
-
-	/** Delete every selected clip, across lanes, as one undo step. */
-	function deleteSelection() {
-		const ids = new Set(selectedClipIds);
-		if (ids.size === 0) return;
-		onBeforeEdit?.();
-		onChange({
-			...timeline,
-			lanes: timeline.lanes.map((l) => ({
-				...l,
-				clips: l.clips.filter((c) => !ids.has(c.id)),
-			})),
-		});
-		deselect();
-	}
-
 	// ── Clip clipboard ───────────────────────────────────────────────────────
-	// Local to the lanes. The selections are mutually exclusive, so a Ctrl+C with clips selected can only
-	// mean these. A paste goes onto the selection when there is one — what the
-	// copied clips showed, into clips that keep their spans — and otherwise
-	// stamps whole clips down at the start marker.
+	// Local to the lanes. The selections are mutually exclusive, so a Ctrl+C
+	// with clips selected can only mean these. A paste goes onto the selection
+	// when there is one — what the copied clips showed, into clips that keep
+	// their spans — and otherwise stamps whole clips down at the start marker.
 	let clipboard = $state<MediaClipboardEntry[]>([]);
 	/** What the clipboard was copied from, plus every copy stamped from it
 	 * since: pasting onto exactly those would change nothing, so that gesture
@@ -870,83 +405,40 @@
 		selectedClipId = result.clipIds[result.clipIds.length - 1];
 		return true;
 	}
-
-	function onKeyDown(e: KeyboardEvent) {
-		if (isTextEntryTarget(e.target)) return;
-		// The media lightbox and other overlays own the keyboard while they're
-		// up: Escape and Delete must not reach the clips behind them.
-		if (isModalKeyboardOpen()) return;
-		if (e.ctrlKey || e.metaKey) {
-			const key = e.key.toLowerCase();
-			if (key === "c" && copySelection()) {
-				e.preventDefault();
-				e.stopPropagation();
-				return;
-			}
-			if (key === "v" && pasteClipboard()) {
-				e.preventDefault();
-				e.stopPropagation();
-				return;
-			}
-			return;
-		}
-		if (e.key === "Escape" && selectedClipIds.length > 0) {
-			deselect();
-			return;
-		}
-		if (e.key !== "Delete" && e.key !== "Backspace") return;
-		if (selectedClipIds.length === 0) return;
-		e.preventDefault();
-		deleteSelection();
-	}
 </script>
 
-<svelte:window onkeydown={onKeyDown} />
+<svelte:window onkeydown={(e) => ctrl.onKeyDown(e)} />
 
 <div class="media-tl">
 	{#each timeline.lanes as lane (lane.id)}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="tl-row layer-row"
+			class="tl-row"
 			class:lifted={draggingLaneId === lane.id}
 			class:drop-target={dropLaneId === lane.id && !dropClipId}
 			class:folded={foldedLaneIds.has(lane.id)}
-			style="order: {stackAt(lane.id)}"
+			style="order: {stackIndex(layerOrder, lane.id)}"
 			data-layer-id={lane.id}
 			data-lane-kind="media"
 			ondragover={(e) => onLaneDragOver(e, lane.id)}
 			ondragleave={onLaneDragLeave}
 			ondrop={(e) => onLaneDrop(e, lane.id)}
 		>
-			<div class="tl-gutter">
-				<LaneGrip
-					{layerOrder}
-					laneId={lane.id}
-					laneName={lane.name}
-					onDragStart={onLaneDragStart}
-				/>
-				<button
-					class="lane-fold"
-					class:folded={foldedLaneIds.has(lane.id)}
-					title={foldedLaneIds.has(lane.id)
-						? "Unfold this lane"
-						: "Fold this lane to a strip"}
-					aria-expanded={!foldedLaneIds.has(lane.id)}
-					onclick={() => onToggleFold?.(lane.id)}
-				>
-					<ChevronDown size={11} />
-				</button>
-				<button
-					class="lane-eye"
-					class:off={!lane.enabled}
-					title={lane.enabled ? "Hide this lane" : "Show this lane"}
-					onclick={() => setLane(lane.id, "enabled", !lane.enabled)}
-				>
-					{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
-				</button>
+			<ClipLaneGutter
+				{lane}
+				{layerOrder}
+				{onLaneDragStart}
+				folded={foldedLaneIds.has(lane.id)}
+				{onToggleFold}
+				onToggleEnabled={() => ctrl.setLane(lane.id, "enabled", !lane.enabled)}
+				nameTitle="{lane.name} — click to edit this layer's placement and effects."
+				onNameClick={() => ctrl.openLane(lane)}
+				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
+				onDelete={() => ctrl.requestDeleteLane(lane)}
+			>
 				{#if onToggleSolo}
 					<button
-						class="lane-eye lane-solo"
+						class="lane-solo"
 						class:on={soloLaneId === lane.id}
 						title={soloLaneId === lane.id
 							? "Stop soloing — show the whole frame again"
@@ -957,39 +449,26 @@
 						<Focus size={12} />
 					</button>
 				{/if}
-				<LaneName
-					name={lane.name}
-					title="{lane.name} — click to edit this layer's placement and effects."
-					onclick={() => openLane(lane)}
-					onRename={(name) => setLane(lane.id, "name", name)}
-				/>
-				<button
-					class="lane-del"
-					title="Delete this lane"
-					onclick={() => requestDeleteLane(lane)}
-				>
-					<Trash2 size={12} />
-				</button>
-			</div>
+			</ClipLaneGutter>
 
 			<div
 				class="tl-lane lane-track"
-				use:laneTrack={lane.id}
+				use:ctrl.laneTrack={lane.id}
 				style={foldedLaneIds.has(lane.id)
 					? `min-height: ${LANE_FOLDED_HEIGHT}px`
 					: `height: ${LANE_HEIGHT}px`}
 				role="group"
 				aria-label="{lane.name} clips"
-				ondblclick={(e) => onTrackDblClick(e, lane.id)}
-				onpointerdown={(e) => onLanePointerDown(e, lane.id)}
-				onpointermove={onPointerMove}
-				onpointerup={onPointerUp}
-				onpointercancel={onPointerUp}
+				ondblclick={(e) => ctrl.onTrackDblClick(e, lane.id)}
+				onpointerdown={(e) => ctrl.onLanePointerDown(e, lane.id)}
+				onpointermove={(e) => ctrl.onPointerMove(e)}
+				onpointerup={(e) => ctrl.onPointerUp(e)}
+				onpointercancel={(e) => ctrl.onPointerUp(e)}
 			>
 				{#each lane.clips as clip (clip.id)}
 					{@const left = vp.toPct(clip.start)}
 					{@const width = vp.toPct(clip.end) - left}
-					{@const edge = edgeWidth(clip)}
+					{@const edge = ctrl.edgeWidth(clip)}
 					{@const src = clipSource(lane, clip)}
 					{#if left < 100 && left + width > 0}
 						<div
@@ -1004,18 +483,18 @@
 							role="button"
 							tabindex="0"
 							title="{clipLabel(lane, clip)} — double-click to edit"
-							ondblclick={() => openLane(lane)}
+							ondblclick={() => ctrl.openLane(lane)}
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
-								onClipPointerDown(e, lane.id, clip.id, "move")}
+								ctrl.onClipPointerDown(e, lane.id, clip.id, "move")}
 						>
 							<span
 								class="clip-edge start"
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, "start")}
+									ctrl.onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
 							{#if src?.thumbUrl}
 								<span
@@ -1023,7 +502,7 @@
 									style="background-image: url({src.thumbUrl})"
 								></span>
 							{/if}
-							{#if clipPx(clip) >= MIN_LABEL_PX}
+							{#if ctrl.clipPx(clip) >= MIN_LABEL_PX}
 								<span class="clip-label">
 									{clipLabel(lane, clip)}
 									{#if chainLabel(clip)}
@@ -1036,7 +515,7 @@
 								style="width: {edge}px"
 								role="presentation"
 								onpointerdown={(e) =>
-									onClipPointerDown(e, lane.id, clip.id, "end")}
+									ctrl.onClipPointerDown(e, lane.id, clip.id, "end")}
 							></span>
 						</div>
 					{/if}
@@ -1052,222 +531,41 @@
 								style="background-image: url({ghostSource.thumbUrl})"
 							></span>
 						{/if}
-						{#if clipPx(dropGhost) >= MIN_LABEL_PX}
+						{#if ctrl.clipPx(dropGhost) >= MIN_LABEL_PX}
 							<span class="clip-label">{ghostSource?.name ?? "New clip"}</span>
 						{/if}
 					</div>
 				{/if}
 
-				{#each adjacentPairs(lane) as pair (pair.left.id)}
-					{@const left = vp.toPct(pair.at)}
-					{#if left >= 0 && left <= 100}
-						<div
-							class="clip-boundary"
-							style="left: {left}%; width: {boundaryWidth(
-								pair.left,
-								pair.right,
-							)}px"
-							role="presentation"
-							title="Drag to trim both clips"
-							onpointerdown={(e) =>
-								onBoundaryPointerDown(e, lane.id, pair.left.id, pair.right.id)}
-						></div>
-					{/if}
-				{/each}
+				<ClipBoundaries {ctrl} {lane} />
 			</div>
 		</div>
 	{/each}
 
-	{#if lanePendingDelete}
-		{@const count = lanePendingDelete.clips.length}
-		<ConfirmDialog
-			title="Delete “{lanePendingDelete.name}”?"
-			message="This removes the layer and the {count} clip{count === 1
-				? ''
-				: 's'} on it."
-			confirmLabel="Delete lane"
-			cancelLabel="Cancel"
-			danger
-			onConfirm={() => deleteLane(lanePendingDelete!.id)}
-			onCancel={() => (lanePendingDelete = null)}
+	{#if ctrl.lanePendingDelete}
+		<LaneDeleteDialog
+			lane={ctrl.lanePendingDelete}
+			laneNoun="layer"
+			onConfirm={(id) => ctrl.deleteLane(id)}
+			onCancel={() => (ctrl.lanePendingDelete = null)}
 		/>
 	{/if}
 </div>
 
 {#snippet clipBar()}
-	{#if selectedClips.length > 0}
-		<div class="mc-bar">
-			<span class="mc-title">Layer</span>
-			<span class="tl-tool-label">
-				{manySelected
-					? `${selectedClips.length} clips`
-					: (chainLabel(selectedClips[0]) ?? "clean")}
-			</span>
-
-			<div class="tl-tool-sep"></div>
-			<span class="tl-tool-label">Fill</span>
-			<select
-				class="mc-select"
-				value={selectedPresetIndex}
-				onmousedown={() => (presetList = loadPresets())}
-				onchange={(e) => {
-					const idx = Number(e.currentTarget.value);
-					const preset = presetList[idx];
-					if (preset) onApplyPreset?.(selectedClipIds, preset);
-				}}
-			>
-				<option value={-1} disabled>Preset…</option>
-				{#each presetList as p, i}
-					<option value={i}>{p.name}</option>
-				{/each}
-			</select>
-			<button
-				class="tl-tool-btn"
-				title={commonMode === "interval"
-					? "New random seed"
-					: manySelected
-						? "Random mosh for each selected clip"
-						: "Random mosh for this clip"}
-				onclick={() => onRoll?.(selectedClipIds)}
-			>
-				<Dices size={12} /> Mosh
-			</button>
-			<button
-				class="tl-tool-btn"
-				title={manySelected
-					? "Clear the selected clips' effects"
-					: "Clear this clip's effects"}
-				onclick={() => onClear?.(selectedClipIds)}
-			>
-				<Eraser size={12} /> Clear
-			</button>
-
-			<div class="tl-tool-sep"></div>
-			<span class="tl-tool-label">Mode</span>
-			<div class="mc-mode">
-				<button
-					class="tl-tool-btn"
-					class:active={commonMode === "static"}
-					onclick={() => onModeChange?.(selectedClipIds, "static")}
-				>
-					Static
-				</button>
-				<button
-					class="tl-tool-btn"
-					class:active={commonMode === "interval"}
-					onclick={switchToAuto}
-				>
-					Auto
-				</button>
-			</div>
-			{#if commonMode === "interval"}
-				<select
-					class="mc-select"
-					value={intervalValue}
-					title="How often this clip re-rolls its mosh"
-					onchange={(e) => {
-						const v = e.currentTarget.value;
-						if (v === "") return;
-						if (v.startsWith("b")) {
-							const beats = Number(v.slice(1));
-							onModeChange?.(
-								selectedClipIds,
-								"interval",
-								(60 / bpm) * beats,
-								beats,
-							);
-						} else {
-							// Picking a plain duration drops the beat link, so a later BPM
-							// change leaves it alone.
-							onModeChange?.(selectedClipIds, "interval", Number(v), null);
-						}
-					}}
-				>
-					{#if intervalValue === ""}
-						<option value="" disabled>—</option>
-					{/if}
-					{#if bpm > 0}
-						{#each BEAT_INTERVALS as opt}
-							<option value={`b${opt.beats}`}>{opt.label}</option>
-						{/each}
-					{/if}
-					{#each [0.125, 0.25, 0.5, 1, 2] as sec}
-						<!-- String, not the number: the select's value is a string and Svelte
-						     matches an option by strict equality, so a numeric option value
-						     never matches and the picker renders blank. -->
-						<option value={String(sec)}>every {sec}s</option>
-					{/each}
-				</select>
-			{/if}
-		</div>
-	{/if}
+	<ChainClipBar
+		title="Layer"
+		{selectedClips}
+		label={(c) => chainLabel(c as MediaClip) ?? "clean"}
+		{bpm}
+		{onApplyPreset}
+		{onRoll}
+		{onClear}
+		{onModeChange}
+	/>
 {/snippet}
 
 <style>
-	.mc-bar {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.35rem;
-		padding: 0 0.25rem;
-	}
-
-	/* Too narrow for one row of everything: the controls wrap into as many rows
-	   as they need, with the captions and dividers gone — it's their space the
-	   row is short of. */
-	@media (max-width: 800px) {
-		.mc-bar {
-			flex-wrap: wrap;
-			row-gap: 0.3rem;
-			padding: 0.3rem 0;
-		}
-
-		.mc-bar > :global(.tl-tool-label),
-		.mc-bar > :global(.tl-tool-sep) {
-			display: none;
-		}
-	}
-
-	.mc-title {
-		font-size: 0.68rem;
-		font-weight: 600;
-		color: var(--mosh);
-		white-space: nowrap;
-	}
-
-	.mc-mode {
-		display: flex;
-	}
-
-	.mc-mode :global(.tl-tool-btn:first-child) {
-		border-right-color: transparent;
-		border-radius: 4px 0 0 4px;
-	}
-
-	.mc-mode :global(.tl-tool-btn:last-child) {
-		border-radius: 0 4px 4px 0;
-	}
-
-	/* The lane's own accent, rather than the stack toolbar's blue. */
-	.mc-mode :global(.tl-tool-btn.active) {
-		border-color: var(--mosh);
-		background: rgba(198, 162, 234, 0.12);
-		color: var(--mosh);
-	}
-
-	.mc-select {
-		max-width: 9rem;
-		padding: 0.15rem 0.25rem;
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		background: var(--surface);
-		color: var(--text-2);
-		font-size: 0.65rem;
-		font-family: inherit;
-	}
-
 	/* The chain rides after the media name, dimmer: what it shows first, what
 	   runs on it second. */
 	.clip-chain {
@@ -1282,106 +580,23 @@
 		display: contents;
 	}
 
-	/* A button, like the fx lanes' name: with the lane no longer standing for one
-	   image there is nothing to put a thumbnail on, so the name carries the
-	   click that opens the layer. */
-	/* The row follows the pointer by re-ordering, not by moving, so this is the
-	   only thing that says which one is in hand. */
-	.layer-row.lifted {
-		opacity: 0.55;
-	}
-
 	/* A source is being dragged over this row's empty space and a clip would be
 	   cut for it. Over a clip the clip lights instead — the drop retargets that
 	   one clip, and lighting the whole row would promise otherwise. */
-	.layer-row.drop-target .lane-track {
+	.tl-row.drop-target .lane-track {
 		border-color: var(--live);
 		box-shadow: inset 0 0 0 1px var(--live);
-	}
-
-	.lane-eye,
-	.lane-del,
-	.lane-fold {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.15rem;
-		border: none;
-		background: none;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-
-	.lane-fold {
-		transition:
-			color var(--t-fast),
-			transform var(--t-fast);
-	}
-
-	.lane-fold:hover {
-		color: var(--text);
-	}
-
-	/* Points right when the lane is folded, down when it is open. */
-	.lane-fold.folded {
-		transform: rotate(-90deg);
-	}
-
-	.lane-eye:hover,
-	.lane-del:hover {
-		color: var(--text);
-	}
-
-	.lane-eye.off {
-		color: var(--text-4);
 	}
 
 	/* Lit rather than dimmed, unlike the eye: solo is a mode the editor is in,
 	   and one the user has to be able to spot from across the timeline to
 	   explain why the canvas is showing one layer on black. */
+	.lane-solo:hover {
+		color: var(--text);
+	}
+
 	.lane-solo.on {
 		color: var(--mosh);
-	}
-
-	.lane-track {
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		background: var(--ink);
-		overflow: hidden;
-		touch-action: none;
-	}
-
-	.clip {
-		position: absolute;
-		top: 3px;
-		bottom: 3px;
-		display: flex;
-		align-items: center;
-		border: 1px solid var(--live-dim);
-		border-radius: 3px;
-		background: #24384d;
-		color: #dce8f2;
-		font-size: 0.68rem;
-		cursor: grab;
-		overflow: hidden;
-		/* A clip is dragged with pointer events, so the browser's own drag — the
-		   translucent copy that trails the cursor — is never wanted. Covers the
-		   label and edges too. */
-		user-select: none;
-		-webkit-user-drag: none;
-	}
-
-	.clip.selected {
-		border-color: var(--live);
-		background: var(--live-dim);
-	}
-
-	/* Which of a multi-selection the clip panel is editing. */
-	.clip.primary {
-		box-shadow: inset 0 0 0 1px var(--live);
-	}
-
-	.clip.muted {
-		opacity: 0.4;
 	}
 
 	/* A clip showing something other than its lane's source. Left corner, so it
@@ -1424,67 +639,5 @@
 		background-repeat: repeat-x;
 		opacity: 0.35;
 		pointer-events: none;
-	}
-
-	.clip-label {
-		position: relative;
-		flex: 1;
-		min-width: 0;
-		padding: 0 0.4rem;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		pointer-events: none;
-	}
-
-	/* Width is set inline, against the clip's own width — see edgeWidth. At full
-	   size that is EDGE_GRAB, wider than the boundary's half-width, so a flush
-	   junction still leaves a strip that trims one clip and opens a gap.
-	   Positioned rather than laid out in the flex row: as flex items they
-	   competed with the label, whose padding cannot shrink, so on a narrow clip
-	   they were pushed into overflow and the end handle was clipped away. */
-	.clip-edge {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		cursor: ew-resize;
-	}
-
-	.clip-edge.start {
-		left: 0;
-	}
-
-	.clip-edge.end {
-		right: 0;
-	}
-
-	.clip-edge:hover {
-		background: var(--live);
-	}
-
-	.clip-boundary {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		transform: translateX(-50%);
-		cursor: ew-resize;
-		z-index: 3;
-	}
-
-	/* Centred in the grab area, which is wider than the line and sized inline. */
-	.clip-boundary::after {
-		content: "";
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: 50%;
-		width: 1px;
-		transform: translateX(-50%);
-		background: rgba(255, 255, 255, 0.3);
-	}
-
-	.clip-boundary:hover::after {
-		width: 2px;
-		background: var(--live);
 	}
 </style>

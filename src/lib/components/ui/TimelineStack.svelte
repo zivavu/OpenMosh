@@ -449,6 +449,12 @@
 		   whatever is left over. The preview is the output; the lanes are how you
 		   get there. Past this share they scroll under the axis instead. */
 		--tl-cap: 45%;
+		/* The clip lanes' look. One set of rules for every lane kind, with the
+		   kind setting the accent on its rows — the fx lanes go mosh-purple. */
+		--clip-accent: var(--live);
+		--clip-accent-dim: var(--live-dim);
+		--clip-bg: #24384d;
+		--clip-fg: #dce8f2;
 		/* --tl-vscroll is set by the editor, from what the lane list's own
 		   scrollbar actually costs it: the overlays have to give up the same
 		   width or the playhead lands past the lane it is meant to be over. */
@@ -520,6 +526,120 @@
 	:global(.tl-stack .tl-row.folded .tl-gutter button) {
 		padding-top: 0;
 		padding-bottom: 0;
+	}
+
+	/* ── Clip lanes ─────────────────────────────────────────────────────────
+	   Shared by the fx, media and text rows; each renders into this column
+	   with `display: contents` so one `order` per row interleaves the kinds. */
+
+	/* The row follows the pointer by re-ordering, not by moving, so this is
+	   the only thing that says which one is in hand. */
+	:global(.tl-stack .tl-row.lifted) {
+		opacity: 0.55;
+	}
+
+	:global(.tl-stack .lane-track) {
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--ink);
+		overflow: hidden;
+		touch-action: none;
+	}
+
+	:global(.tl-stack .clip) {
+		position: absolute;
+		top: 3px;
+		bottom: 3px;
+		display: flex;
+		align-items: center;
+		border: 1px solid var(--clip-accent-dim);
+		border-radius: 3px;
+		background: var(--clip-bg);
+		color: var(--clip-fg);
+		font-size: 0.68rem;
+		cursor: grab;
+		overflow: hidden;
+		/* A clip is dragged with pointer events, so the browser's own drag — the
+		   translucent copy that trails the cursor — is never wanted. Covers the
+		   label and edges too. */
+		user-select: none;
+		-webkit-user-drag: none;
+	}
+
+	:global(.tl-stack .clip.selected) {
+		border-color: var(--clip-accent);
+		background: var(--clip-accent-dim);
+	}
+
+	/* Which of a multi-selection the panel is editing. */
+	:global(.tl-stack .clip.primary) {
+		box-shadow: inset 0 0 0 1px var(--clip-accent);
+	}
+
+	:global(.tl-stack .clip.muted) {
+		opacity: 0.4;
+	}
+
+	:global(.tl-stack .clip-label) {
+		position: relative;
+		flex: 1;
+		min-width: 0;
+		padding: 0 0.4rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		pointer-events: none;
+	}
+
+	/* Width is set inline, against the clip's own width — see edgeWidth. At
+	   full size that is EDGE_GRAB, wider than the boundary's half-width, so a
+	   flush junction still leaves a strip that trims one clip and opens a gap.
+	   Positioned rather than laid out in the flex row: as flex items they
+	   competed with the label, whose padding cannot shrink, so on a narrow clip
+	   they were pushed into overflow and the end handle was clipped away. */
+	:global(.tl-stack .clip-edge) {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		cursor: ew-resize;
+	}
+
+	:global(.tl-stack .clip-edge.start) {
+		left: 0;
+	}
+
+	:global(.tl-stack .clip-edge.end) {
+		right: 0;
+	}
+
+	:global(.tl-stack .clip-edge:hover) {
+		background: var(--clip-accent);
+	}
+
+	:global(.tl-stack .clip-boundary) {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		transform: translateX(-50%);
+		cursor: ew-resize;
+		z-index: 3;
+	}
+
+	/* Centred in the grab area, which is wider than the line and sized inline. */
+	:global(.tl-stack .clip-boundary::after) {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 50%;
+		width: 1px;
+		transform: translateX(-50%);
+		background: rgba(255, 255, 255, 0.3);
+	}
+
+	:global(.tl-stack .clip-boundary:hover::after) {
+		width: 2px;
+		background: var(--clip-accent);
 	}
 
 	/* Rows that carry controls rather than time. Opaque and above the overlays,
