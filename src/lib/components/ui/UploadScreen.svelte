@@ -14,6 +14,7 @@
 	}
 
 	import {
+		Camera,
 		HardDrive,
 		Image,
 		ListVideo,
@@ -392,6 +393,12 @@
 		else handleFile(files[0]);
 	}
 
+	// Single mode's live camera. Wrapped as a file, so it takes the same road
+	// in; the editor tells it apart and runs the stream instead of a player.
+	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
+	let webcamOpen = $state(false);
+	const hasCamera = !!navigator.mediaDevices?.getUserMedia;
+
 	function launchMultiMode(files: File[]) {
 		stagedMedia = null;
 		if (selectedMode === "sequence") onSequence(files);
@@ -590,6 +597,16 @@
 					<Sparkles size={16} />
 					Generate
 				</button>
+				{#if !isMultiMode && hasCamera}
+					<button
+						class="load-btn generate-btn"
+						onclick={() => (webcamOpen = true)}
+						onkeydown={(e) => e.stopPropagation()}
+					>
+						<Camera size={16} />
+						Webcam
+					</button>
+				{/if}
 			</div>
 
 			<p class="drop-hint" class:staged={stagedMedia}>
@@ -659,6 +676,19 @@
 		onchange={onAudioInputChange}
 		hidden
 	/>
+
+	{#if webcamOpen}
+		{#await loadWebcamPanel() then WebcamPanel}
+			<WebcamPanel
+				mode="live"
+				onLive={(file) => {
+					webcamOpen = false;
+					onfile(file);
+				}}
+				onClose={() => (webcamOpen = false)}
+			/>
+		{/await}
+	{/if}
 
 	{#if generateOpen}
 		{#await loadGeneratePanel() then GeneratePanel}

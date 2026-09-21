@@ -46,6 +46,15 @@ export interface RecordingContext {
 	/** Video playback speed factor (1 = normal). Defaults to 1. */
 	videoSpeed?: number;
 	file: File;
+	/**
+	 * Single mode's webcam. The export then runs in real time: each frame
+	 * waits for its moment on the wall clock and takes what the camera shows.
+	 * An encoder slower than the frame rate stretches the take — frames are
+	 * stamped by count, not by when they were grabbed.
+	 */
+	live?: HTMLVideoElement | null;
+	/** Fired as the first live frame is taken, so the host can start the song. */
+	onLiveStart?: () => void;
 	/** Sequence mode: fx lanes over a blank base, on the master timeline. */
 	sequence?: {
 		moshOptions: MoshOptions;
@@ -101,6 +110,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		videoSpanEnd,
 		videoSpeed = 1,
 		file,
+		live = null,
+		onLiveStart,
 		onProgress,
 		onFinalizing,
 		signal,
@@ -225,6 +236,18 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		renderer.updateSourceFrame(frame);
 		frame.close();
 		sample.close();
+	};
+
+	// Live camera: the frame is due at `start + time`; wait for it, then grab.
+	let liveStart = 0;
+	const liveBeforeRender = async (_frameIndex: number, time: number) => {
+		if (!liveStart) {
+			liveStart = performance.now();
+			onLiveStart?.();
+		}
+		const wait = liveStart + time * 1000 - performance.now();
+		if (wait > 0) await new Promise<void>((r) => setTimeout(r, wait));
+		renderer.updateSourceFrame(live!);
 	};
 
 	// Sequence mode: fx lanes over a blank base. Clip times live on the audio
@@ -363,13 +386,15 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			}),
 			...(sequence
 				? { onBeforeRender: sequenceBeforeRender }
-				: isVideo && videoEl
-					? {
-							onBeforeRender: videoFrames
-								? decodeBeforeRender
-								: seekBeforeRender,
-						}
-					: {}),
+				: live
+					? { onBeforeRender: liveBeforeRender }
+					: isVideo && videoEl
+						? {
+								onBeforeRender: videoFrames
+									? decodeBeforeRender
+									: seekBeforeRender,
+							}
+						: {}),
 			...(effectsRef && { effectsRef, audioGroupsRef }),
 		});
 		downloadBlob(blob);

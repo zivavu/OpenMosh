@@ -215,6 +215,7 @@
 	import RecordOverlay from "./RecordOverlay.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 	import { showToast } from "../ui/toast.svelte";
+	import { isLiveFile, liveStreamOf, stopLiveFile } from "../../webcam/camera";
 	import { lazy } from "../../lazy";
 	import { GeneratedSizeSync, readGenerated } from "../../generators";
 
@@ -264,6 +265,37 @@
 	// editor's own player — and everything that hangs off it, from the span
 	// bar to the export's decode loop — is single mode's alone.
 	let isVideo = $derived(!isSequenceMode && file.type.startsWith("video/"));
+	// The webcam, live: a `<video>` on the camera stream stands in for the file's
+	// player. No span, no seeking, no session — the export runs in real time
+	// off whatever the camera shows while it records.
+	let isLive = $derived(!isSequenceMode && isLiveFile(file));
+	let liveVideoEl = $state<HTMLVideoElement | null>(null);
+	let liveStream = $state<MediaStream | null>(null);
+	$effect(() => {
+		if (!isLive) return;
+		const f = file;
+		let dropped = false;
+		void liveStreamOf(f)
+			.then((stream) => {
+				if (dropped) return;
+				liveStream = stream;
+				if (!stream) showToast("The camera is gone", "error");
+			})
+			.catch((e) => {
+				if (!dropped)
+					showToast(e instanceof Error ? e.message : String(e), "error");
+			});
+		return () => {
+			dropped = true;
+			liveStream = null;
+			// Swapped out for a file — re-input's frame, a drop: the camera is let
+			// go. Undo hands the live file back, and its lookup re-opens it.
+			stopLiveFile(f);
+		};
+	});
+	$effect(() => {
+		if (liveVideoEl) liveVideoEl.srcObject = liveStream;
+	});
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
 	let videoEl = $state<HTMLVideoElement | null>(null);
 	let videoDuration = $state(0);
@@ -2827,7 +2859,8 @@
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function saveSingleSession() {
-		if (isSequenceMode) return;
+		// A camera can't be reopened from a saved session.
+		if (isSequenceMode || isLive) return;
 		// Lane presence, not `enabled`: that flag is the layer's visibility
 		// toggle and survives being switched off with the lanes still there.
 		// Keying either the guard or the payload off it discards the whole
@@ -3542,6 +3575,10 @@
 		audio.pauseAudio();
 		previewPlayer?.pause();
 		if (isVideo && videoEl) videoEl.pause();
+		if (isLive && !liveVideoEl?.srcObject) {
+			showToast("The camera isn't open", "error");
+			return;
+		}
 
 		// Generated sources may still be catching up with a size change.
 		await primarySync.settle();
@@ -3573,6 +3610,14 @@
 					videoSpanEnd,
 					videoSpeed,
 					file,
+					live: isLive ? liveVideoEl : null,
+					// A live export is a performance: the song has to be heard from
+					// the span it is exporting, so the take can follow it.
+					onLiveStart: () => {
+						if (!audio.trackFile) return;
+						audio.seekTo(audio.spanStart);
+						audio.playAudio();
+					},
 					normalizeGain: audio.normalizeGain,
 					audioResponse,
 					textTimeline: textTimeline.enabled
@@ -3615,6 +3660,7 @@
 
 		// Left paused: an export ends with the file saved and the user reading a
 		// toast, not wanting the song to start up again on its own.
+		if (isLive) audio.pauseAudio();
 		if (canvasEl && glRenderer) {
 			glRenderer.render(renderedEffects, performance.now() / 1000);
 		}
@@ -3828,6 +3874,16 @@
 			</div>
 		{/snippet}
 
+		{#if isLive}
+			<video
+				bind:this={liveVideoEl}
+				autoplay
+				muted
+				playsinline
+				style="display:none"
+			></video>
+		{/if}
+
 		{#if isVideo}
 			<video
 				bind:this={videoEl}
@@ -3949,7 +4005,11 @@
 				bind:fps={currentFps}
 				bind:fullscreen={previewFullscreen}
 				showFps={showFps && !isImageFormat}
-				videoEl={isVideo && !previewPlayer ? videoEl : null}
+				videoEl={isLive
+					? liveVideoEl
+					: isVideo && !previewPlayer
+						? videoEl
+						: null}
 				frameSource={previewPlayer}
 				sourceKey={String(sourceTick)}
 				freezeAnimation={isImageFormat}
@@ -3969,8 +4029,8 @@
 				baseSize={isSequenceMode ? seqBaseSize : null}
 				{textTime}
 				bpm={sequenceBpm}
-				forceAnimation={(textTimeline.enabled || mediaTimeline.enabled) &&
-					textClockRunning}
+				forceAnimation={isLive ||
+					((textTimeline.enabled || mediaTimeline.enabled) && textClockRunning)}
 				overlay={mediaLoading
 					? loadingOverlay
 					: noSequenceMedia
