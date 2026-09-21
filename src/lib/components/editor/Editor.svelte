@@ -5,6 +5,7 @@
 		ChevronsDownUp,
 		ChevronsUpDown,
 		Download,
+		Camera,
 		HelpCircle,
 		Home,
 		Library,
@@ -137,6 +138,7 @@
 		setProxyDisabled,
 	} from "../../video/proxy-preference";
 	import {
+		addClip,
 		appendMediaLane,
 		applyBpmToMediaClips,
 		clearMediaClips,
@@ -152,8 +154,10 @@
 		findMediaClipLane,
 		fitMediaTimeline,
 		MAX_MEDIA_LANES,
+		MIN_CLIP_LENGTH,
 		clipSourceId,
 		mediaTimelineSourceIds,
+		newClipSpan,
 		normalizeMediaTimeline,
 		resolveMediaLayersAt,
 		restoreMediaClipMosh,
@@ -657,6 +661,59 @@
 	$effect(() => () => primarySync.dispose());
 
 	let generateOpen = $state(false);
+
+	// ── Webcam take ──
+	// A take is a performance to the song: the panel counts in, the song plays
+	// from the playhead while the camera records, and the take lands on the
+	// timeline at the second it started — on the selected lane if it has room
+	// there, else on a lane of its own. From then on it is any other clip.
+	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
+	let webcamOpen = $state(false);
+	let takeStart = 0;
+
+	function takeTransport(playing: boolean) {
+		if (playing) {
+			takeStart = timelineAxis?.staticTime ?? seqMasterTime();
+			playSpan();
+		} else {
+			pauseTrack();
+		}
+	}
+
+	async function useTake(file: File) {
+		const [source] = await addSequenceSources([file]);
+		if (!source) return;
+		const duration = seqMasterDuration;
+		if (duration <= 0) return;
+		const want = source.duration > 0 ? source.duration : MIN_CLIP_LENGTH;
+		const start = Math.min(takeStart, Math.max(0, duration - MIN_CLIP_LENGTH));
+		pushMediaHistory();
+		const picked = selectedMediaLane;
+		let laneId = picked?.id ?? null;
+		let span = picked ? newClipSpan(picked, start, duration, want) : null;
+		let next = mediaTimeline;
+		if (!span) {
+			if (next.lanes.length >= MAX_MEDIA_LANES) {
+				showToast("No room for the take: every lane is full", "error");
+				return;
+			}
+			next = appendMediaLane(next, source.id, nextLayerZ(layerOrder));
+			const lane = next.lanes[next.lanes.length - 1]!;
+			laneId = lane.id;
+			span = newClipSpan(lane, start, duration, want);
+			if (!span) return;
+		}
+		const clip = createMediaClip(span.start, span.end, 0, source.id);
+		setMediaTimeline(
+			updateMediaLaneIn(next, laneId!, (l) => addClip(l, clip, duration)),
+		);
+		selectedMediaClipId = clip.id;
+		selectedMediaClipIds = [clip.id];
+		showToast(
+			`Take on ${next.lanes.find((l) => l.id === laneId)?.name}`,
+			"info",
+		);
+	}
 
 	function useGenerated(files: File[]) {
 		generateOpen = false;
@@ -3796,6 +3853,14 @@
 								<Sparkles size={12} />
 								<span class="btn-label">Generate</span>
 							</button>
+							<button
+								class="seq-media-btn"
+								title="Record a webcam take to the song, from the playhead"
+								onclick={() => (webcamOpen = true)}
+							>
+								<Camera size={12} />
+								<span class="btn-label">Record</span>
+							</button>
 						{/if}
 						{#if sequenceSources.length > 0}
 							<button
@@ -3868,6 +3933,9 @@
 					</button>
 					<button class="no-media-btn" onclick={() => (generateOpen = true)}>
 						<Sparkles size={14} /> GENERATE
+					</button>
+					<button class="no-media-btn" onclick={() => (webcamOpen = true)}>
+						<Camera size={14} /> RECORD
 					</button>
 				</div>
 				<span class="no-media-hint">or drop files anywhere</span>
@@ -3946,6 +4014,7 @@
 				selectedSourceId={railSourceId}
 				onAddFiles={(files) => void addSequenceSources(files)}
 				onGenerate={() => (generateOpen = true)}
+				onRecord={() => (webcamOpen = true)}
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={assignMediaClipSource}
@@ -4689,6 +4758,17 @@
 		<div class="drop-overlay">
 			<span>Drop image/video to replace · Drop audio to set track</span>
 		</div>
+	{/if}
+
+	{#if webcamOpen}
+		{#await loadWebcamPanel() then WebcamPanel}
+			<WebcamPanel
+				mode="record"
+				onTransport={takeTransport}
+				onTake={(file) => void useTake(file)}
+				onClose={() => (webcamOpen = false)}
+			/>
+		{/await}
 	{/if}
 
 	{#if generateOpen}

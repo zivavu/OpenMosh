@@ -3,6 +3,7 @@
 		ImageOff,
 		Play,
 		Plus,
+		Camera,
 		Sparkles,
 		TriangleAlert,
 		X,
@@ -35,6 +36,7 @@
 		onAddFiles: (files: File[]) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
 		onGenerate: () => void;
+		onRecord: () => void;
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
@@ -48,6 +50,7 @@
 		selectedSourceId = null,
 		onAddFiles,
 		onGenerate,
+		onRecord,
 		onRemove,
 		onReorder,
 		onAssign,
@@ -168,6 +171,9 @@
 				</button>
 				<button class="add-btn" onclick={onGenerate}>
 					<Sparkles size={14} /> GENERATE
+				</button>
+				<button class="add-btn" onclick={onRecord}>
+					<Camera size={14} /> RECORD
 				</button>
 			</div>
 		</div>
