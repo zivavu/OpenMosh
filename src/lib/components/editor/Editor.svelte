@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from "svelte";
+	import { hasKeyboard } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
 		ChevronsDownUp,
@@ -9,6 +10,7 @@
 		HelpCircle,
 		Home,
 		Library,
+		Stamp,
 		Maximize,
 		MicVocal,
 		Pause,
@@ -4136,7 +4138,7 @@
 			     with them if fullscreen can't fill it. -->
 			{#if !isMobile || fullscreenSupported}
 				<div class="bar-cluster">
-					{#if !isMobile}
+					{#if hasKeyboard}
 						<button
 							class="bar-icon"
 							onclick={() => (showShortcuts = true)}
@@ -4229,6 +4231,20 @@
 					/>
 				{/snippet}
 			</MoshGroup>
+			{#if !isSequenceMode}
+				<!-- Re-input is a bare V on a keyboard; a phone has no other way to it. -->
+				<div class="bar-cluster">
+					<button
+						class="bar-icon"
+						onclick={reInput}
+						disabled={mediaLoading || recordingState.recording}
+						title="Re-input: use this frame as the new source (V)"
+						aria-label="Use this frame as the new source"
+					>
+						<Stamp size={14} />
+					</button>
+				</div>
+			{/if}
 			{#if showStack}
 				<!-- The same transport as the timeline toolbar's, at the size the
 				     slideshow gives it: playing back is a main action here too. -->

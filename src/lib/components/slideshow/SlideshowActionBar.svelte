@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { HelpCircle, Pause, Play, Settings, Type } from "lucide-svelte";
+	import { hasKeyboard } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import RecordGroup from "../editor/RecordGroup.svelte";
 	import ResizeSettings from "../ui/ResizeSettings.svelte";
@@ -85,7 +86,7 @@
 	     not the cluster, which clips to its corners. -->
 	<div class="options-group" bind:this={optionsGroupEl}>
 		<div class="bar-cluster">
-			{#if !isMobile}
+			{#if hasKeyboard}
 				<button
 					class="bar-icon"
 					onclick={() => (showShortcuts = true)}
