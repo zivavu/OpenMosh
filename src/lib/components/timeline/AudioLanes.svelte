@@ -261,59 +261,62 @@
 </div>
 
 {#snippet clipBar()}
-	<div class="audio-bar">
-		<span class="audio-title">Audio</span>
-		<span class="tl-tool-label">
-			{selectedClips.length > 1
-				? `${selectedClips.length} clips`
-				: clipLabel(selectedClips[0])}
-		</span>
-		<div class="tl-tool-sep"></div>
-		<span class="tl-tool-label">Volume</span>
-		<input
-			type="range"
-			class="audio-gain"
-			min="0"
-			max={MAX_GAIN}
-			step="0.01"
-			value={commonGain ?? 1}
-			class:mixed={commonGain === undefined}
-			title="Volume of the selected clips. Double-click to reset."
-			oninput={(e) => {
-				const v = +e.currentTarget.value;
-				updateSelected(
-					(c) => ({ ...c, gain: v === 1 ? undefined : v }),
-					`audio-gain-${selectedClipIds.join(",")}`,
-				);
-			}}
-			ondblclick={() => updateSelected((c) => ({ ...c, gain: undefined }))}
-		/>
-		<span class="tl-tool-label audio-val">
-			{commonGain === undefined ? "—" : `${Math.round(commonGain * 100)}%`}
-		</span>
-		<div class="tl-tool-sep"></div>
-		{#each [["Fade in", "fadeInSec", commonFadeIn], ["Fade out", "fadeOutSec", commonFadeOut]] as const as [label, key, value] (key)}
-			<span class="tl-tool-label">{label}</span>
-			<select
-				class="audio-select"
-				value={value === undefined ? "" : String(value)}
-				onchange={(e) => {
-					const v = e.currentTarget.value;
-					if (v === "") return;
-					const sec = Number(v);
-					updateSelected((c) => ({ ...c, [key]: sec > 0 ? sec : undefined }));
+	<!-- Can outlive the selection by a frame, while the bar is being taken down. -->
+	{#if selectedClips.length > 0}
+		<div class="audio-bar">
+			<span class="audio-title">Audio</span>
+			<span class="tl-tool-label">
+				{selectedClips.length > 1
+					? `${selectedClips.length} clips`
+					: clipLabel(selectedClips[0])}
+			</span>
+			<div class="tl-tool-sep"></div>
+			<span class="tl-tool-label">Volume</span>
+			<input
+				type="range"
+				class="audio-gain"
+				min="0"
+				max={MAX_GAIN}
+				step="0.01"
+				value={commonGain ?? 1}
+				class:mixed={commonGain === undefined}
+				title="Volume of the selected clips. Double-click to reset."
+				oninput={(e) => {
+					const v = +e.currentTarget.value;
+					updateSelected(
+						(c) => ({ ...c, gain: v === 1 ? undefined : v }),
+						`audio-gain-${selectedClipIds.join(",")}`,
+					);
 				}}
-			>
-				{#if value === undefined}
-					<option value="" disabled>—</option>
-				{/if}
-				<option value="0">none</option>
-				{#each FADES as sec}
-					<option value={String(sec)}>{sec}s</option>
-				{/each}
-			</select>
-		{/each}
-	</div>
+				ondblclick={() => updateSelected((c) => ({ ...c, gain: undefined }))}
+			/>
+			<span class="tl-tool-label audio-val">
+				{commonGain === undefined ? "—" : `${Math.round(commonGain * 100)}%`}
+			</span>
+			<div class="tl-tool-sep"></div>
+			{#each [["Fade in", "fadeInSec", commonFadeIn], ["Fade out", "fadeOutSec", commonFadeOut]] as const as [label, key, value] (key)}
+				<span class="tl-tool-label">{label}</span>
+				<select
+					class="audio-select"
+					value={value === undefined ? "" : String(value)}
+					onchange={(e) => {
+						const v = e.currentTarget.value;
+						if (v === "") return;
+						const sec = Number(v);
+						updateSelected((c) => ({ ...c, [key]: sec > 0 ? sec : undefined }));
+					}}
+				>
+					{#if value === undefined}
+						<option value="" disabled>—</option>
+					{/if}
+					<option value="0">none</option>
+					{#each FADES as sec}
+						<option value={String(sec)}>{sec}s</option>
+					{/each}
+				</select>
+			{/each}
+		</div>
+	{/if}
 {/snippet}
 
 <style>
