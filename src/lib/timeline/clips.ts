@@ -82,8 +82,8 @@ export function newClipSpan<C extends TimelineClip>(
 	if (!gap) return null;
 	const room = gap.end - gap.start;
 	const len = Math.min(Math.max(want, MIN_CLIP_LENGTH), room);
-		// Pinned against the gap's tail, so the span ends where the neighbour begins.
-		if (time + len >= gap.end) {
+	// Pinned against the gap's tail, so the span ends where the neighbour begins.
+	if (time + len >= gap.end) {
 		return { start: Math.max(gap.start, gap.end - len), end: gap.end };
 	}
 	const start = Math.max(gap.start, time);
@@ -498,7 +498,7 @@ export function clipFadeWeight(
 	if (fadeIn <= 0 && fadeOut <= 0) return 1;
 	const length = clip.end - clip.start;
 	if (length <= 0) return 1;
-		// Ramps that outlast the clip would never reach full strength; shrink both to meet.
+	// Ramps that outlast the clip would never reach full strength; shrink both to meet.
 	if (fadeIn + fadeOut > length) {
 		const scale = length / (fadeIn + fadeOut);
 		fadeIn *= scale;

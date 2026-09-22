@@ -252,7 +252,8 @@
 
 	function setOnlyLive(on: boolean) {
 		livePinned.clear();
-		if (on) for (const e of effects) if (e.enabled) livePinned.add(e.instanceId);
+		if (on)
+			for (const e of effects) if (e.enabled) livePinned.add(e.instanceId);
 		onlyLive = on;
 	}
 

@@ -17,7 +17,11 @@
 	}: Props = $props();
 </script>
 
-<button class="add-card" title="Add images or videos to the pool" onclick={onAdd}>
+<button
+	class="add-card"
+	title="Add images or videos to the pool"
+	onclick={onAdd}
+>
 	<Plus size={20} />
 </button>
 <button

@@ -108,7 +108,6 @@ function poly(ctx: C, pts: number[][]) {
 	ctx.fill();
 }
 
-
 function testCard(ctx: C, rand: Rand, p: Palette) {
 	const cols = [
 		p.ink,

@@ -1526,7 +1526,6 @@
 		}
 	}
 
-
 	/** The timeline's shared axis, once mounted: the C shortcut fires from the window. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
 

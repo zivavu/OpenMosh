@@ -60,7 +60,11 @@ function labRedirect(): Plugin {
 		name: "openmosh:lab-redirect",
 		configureServer(server) {
 			server.middlewares.use((req, res, next) => {
-				if (req.url === "/lab" || req.url?.startsWith("/lab?") || req.url?.startsWith("/lab#")) {
+				if (
+					req.url === "/lab" ||
+					req.url?.startsWith("/lab?") ||
+					req.url?.startsWith("/lab#")
+				) {
 					res.statusCode = 302;
 					res.setHeader("Location", "/lab/" + req.url.slice(4));
 					res.end();

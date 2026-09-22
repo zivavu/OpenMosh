@@ -10,10 +10,7 @@ import { cleanEffects, handBuiltLabel } from "../editor/sequence";
 // runes break outside a Svelte build.
 import { FONT_OPTIONS } from "../text-overlay/fonts";
 import type { TextOverlayBlendMode } from "../text-overlay/types";
-import {
-	clipFadeWeight,
-	fitClipsToDuration,
-} from "../timeline/clips";
+import { clipFadeWeight, fitClipsToDuration } from "../timeline/clips";
 
 export type TextAlign = "left" | "center" | "right";
 

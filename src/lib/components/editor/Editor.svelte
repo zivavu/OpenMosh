@@ -708,7 +708,6 @@
 	const fullscreenSupported =
 		typeof document !== "undefined" && document.fullscreenEnabled;
 
-
 	const audio = new AudioManager({
 		// Base chain and text layers follow the editor's response; each lane follows its own.
 		getLinkGroups: (): AudioLinkGroup[] => [
@@ -797,7 +796,7 @@
 		audio.outputVolume;
 		audio.loopAudio;
 		videoLoop;
-			// Merged, not replaced: the upload screen writes its mode under the same key.
+		// Merged, not replaced: the upload screen writes its mode under the same key.
 		updateSettings({
 			moshMin,
 			moshMax,
@@ -1131,7 +1130,7 @@
 		const entry =
 			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
 			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
-			// Before layers took the media over, a segment with no source drew the opened file.
+		// Before layers took the media over, a segment with no source drew the opened file.
 		if (entry?.segments && !entry.v) {
 			const opened = stableSourceId(file);
 			for (const seg of entry.segments) seg.sourceId ??= opened;
@@ -3168,7 +3167,7 @@
 						onchange={(v) => (sequenceView = v as "preview" | "grid")}
 					/>
 				</div>
-					<!-- Scoped by the selection: with layer clips picked it deals across those. -->
+				<!-- Scoped by the selection: with layer clips picked it deals across those. -->
 				<MediaPoolActions
 					count={sequenceSources.length}
 					shuffleScope={selectedMediaClipIds.length}
@@ -3781,7 +3780,7 @@
 							edits={sourceRegistry.edits}
 							bind:selectedClipId={selectedMediaClipId}
 							bind:selectedClipIds={selectedMediaClipIds}
-							soloLaneId={soloLaneId}
+							{soloLaneId}
 							onToggleSolo={toggleMediaSolo}
 							onChange={setMediaTimeline}
 							onBeforeEdit={pushMediaHistory}

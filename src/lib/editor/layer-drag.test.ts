@@ -63,7 +63,15 @@ describe("scaleFromHandle", () => {
 	});
 
 	test("a dragged side moves its one edge, keeping the other axis", () => {
-		const next = scaleFromHandle(FROM, frame({ hy: 0, c0y: 0 }), 275, 190, FW, FH, false);
+		const next = scaleFromHandle(
+			FROM,
+			frame({ hy: 0, c0y: 0 }),
+			275,
+			190,
+			FW,
+			FH,
+			false,
+		);
 		const b = boxOf(next);
 		expect(b.cx + b.hw).toBeCloseTo(275);
 		expect(b.cx - b.hw).toBeCloseTo(150);

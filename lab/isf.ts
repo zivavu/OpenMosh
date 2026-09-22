@@ -3,7 +3,15 @@
 
 export interface IsfInput {
 	NAME: string;
-	TYPE: "float" | "bool" | "long" | "color" | "point2D" | "event" | "image" | string;
+	TYPE:
+		| "float"
+		| "bool"
+		| "long"
+		| "color"
+		| "point2D"
+		| "event"
+		| "image"
+		| string;
 	LABEL?: string;
 	DEFAULT?: number | boolean | number[];
 	MIN?: number | number[];
@@ -182,7 +190,11 @@ function commonPrelude(header: IsfHeader, targets: string[]): string {
 	];
 	for (const input of header.INPUTS ?? []) lines.push(uniformDecl(input));
 	for (const t of targets)
-		lines.push(`uniform sampler2D ${t};`, `uniform vec2 _${t}_imgSize;`, `uniform vec4 _${t}_imgRect;`);
+		lines.push(
+			`uniform sampler2D ${t};`,
+			`uniform vec2 _${t}_imgSize;`,
+			`uniform vec4 _${t}_imgRect;`,
+		);
 	return lines.join("\n");
 }
 
@@ -261,9 +273,18 @@ function compileExpr(expr: string | number | undefined): SizeExpr | null {
 	if (!fn) {
 		// `$WIDTH`, `$HEIGHT` and `$inputName` are the only variables ISF allows.
 		const js = key.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, n) =>
-			n === "WIDTH" ? "__w" : n === "HEIGHT" ? "__h" : `(__p[${JSON.stringify(n)}] ?? 0)`,
+			n === "WIDTH"
+				? "__w"
+				: n === "HEIGHT"
+					? "__h"
+					: `(__p[${JSON.stringify(n)}] ?? 0)`,
 		);
-		fn = new Function("__w", "__h", "__p", `with (Math) { return (${js}); }`) as SizeExpr;
+		fn = new Function(
+			"__w",
+			"__h",
+			"__p",
+			`with (Math) { return (${js}); }`,
+		) as SizeExpr;
 		exprCache.set(key, fn);
 	}
 	return fn;
@@ -290,10 +311,13 @@ export class IsfEffect {
 		vertexBody?: string,
 	) {
 		this.header = parsed.header;
-		const passesRaw = parsed.header.PASSES?.length ? parsed.header.PASSES : [{}];
+		const passesRaw = parsed.header.PASSES?.length
+			? parsed.header.PASSES
+			: [{}];
 		const targetNames: string[] = [];
 		this.passes = passesRaw.map((p) => {
-			if (p.TARGET && !targetNames.includes(p.TARGET)) targetNames.push(p.TARGET);
+			if (p.TARGET && !targetNames.includes(p.TARGET))
+				targetNames.push(p.TARGET);
 			return {
 				target: p.TARGET,
 				widthExpr: p.WIDTH === undefined ? undefined : String(p.WIDTH),
@@ -319,7 +343,10 @@ export class IsfEffect {
 		const vs = buildVertexSource(parsed.header, targetNames, vertexBody);
 		const fs = buildFragmentSource(parsed.header, parsed.body, targetNames);
 		this.program = linkProgram(gl, vs, fs);
-		const count = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS) as number;
+		const count = gl.getProgramParameter(
+			this.program,
+			gl.ACTIVE_UNIFORMS,
+		) as number;
 		for (let i = 0; i < count; i++) {
 			const info = gl.getActiveUniform(this.program, i);
 			if (!info) continue;
@@ -354,7 +381,17 @@ export class IsfEffect {
 
 		this.blackTex = gl.createTexture()!;
 		gl.bindTexture(gl.TEXTURE_2D, this.blackTex);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA,
+			1,
+			1,
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			new Uint8Array(4),
+		);
 	}
 
 	reset() {
@@ -378,11 +415,38 @@ export class IsfEffect {
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 			if (t.float)
-				gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
-			else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+				gl.texImage2D(
+					gl.TEXTURE_2D,
+					0,
+					gl.RGBA16F,
+					w,
+					h,
+					0,
+					gl.RGBA,
+					gl.HALF_FLOAT,
+					null,
+				);
+			else
+				gl.texImage2D(
+					gl.TEXTURE_2D,
+					0,
+					gl.RGBA8,
+					w,
+					h,
+					0,
+					gl.RGBA,
+					gl.UNSIGNED_BYTE,
+					null,
+				);
 			// Persistent buffers start out black, like a fresh ISF host.
 			gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
-			gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT0,
+				gl.TEXTURE_2D,
+				tex,
+				0,
+			);
 			gl.clearColor(0, 0, 0, 0);
 			gl.clear(gl.COLOR_BUFFER_BIT);
 		}
@@ -456,7 +520,10 @@ export class IsfEffect {
 				d.getFullYear(),
 				d.getMonth() + 1,
 				d.getDate(),
-				d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000,
+				d.getHours() * 3600 +
+					d.getMinutes() * 60 +
+					d.getSeconds() +
+					d.getMilliseconds() / 1000,
 			);
 		const fl = u("FRAMEINDEX");
 		if (fl) gl.uniform1i(fl, this.frameIndex);
@@ -493,8 +560,12 @@ export class IsfEffect {
 		}
 		const targetUnits = new Map<string, number>();
 		for (const t of this.targets.values()) {
-			const wf = compileExpr(this.passes.find((p) => p.target === t.name)?.widthExpr);
-			const hf = compileExpr(this.passes.find((p) => p.target === t.name)?.heightExpr);
+			const wf = compileExpr(
+				this.passes.find((p) => p.target === t.name)?.widthExpr,
+			);
+			const hf = compileExpr(
+				this.passes.find((p) => p.target === t.name)?.heightExpr,
+			);
 			const w = Math.max(1, Math.floor(wf ? wf(outW, outH, numeric) : outW));
 			const h = Math.max(1, Math.floor(hf ? hf(outW, outH, numeric) : outH));
 			this.ensureTarget(t, w, h);
@@ -510,7 +581,13 @@ export class IsfEffect {
 			const isOutput = i === last;
 			if (t) {
 				gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
-				gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.write, 0);
+				gl.framebufferTexture2D(
+					gl.FRAMEBUFFER,
+					gl.COLOR_ATTACHMENT0,
+					gl.TEXTURE_2D,
+					t.write,
+					0,
+				);
 				gl.viewport(0, 0, t.width, t.height);
 				const rl = u("RENDERSIZE");
 				if (rl) gl.uniform2f(rl, t.width, t.height);
@@ -560,19 +637,29 @@ export class IsfEffect {
 	}
 }
 
-function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
+function compile(
+	gl: WebGL2RenderingContext,
+	type: number,
+	src: string,
+): WebGLShader {
 	const sh = gl.createShader(type)!;
 	gl.shaderSource(sh, src);
 	gl.compileShader(sh);
 	if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
 		const log = gl.getShaderInfoLog(sh) ?? "";
 		gl.deleteShader(sh);
-		throw new Error(`${type === gl.VERTEX_SHADER ? "Vertex" : "Fragment"} shader:\n${log}`);
+		throw new Error(
+			`${type === gl.VERTEX_SHADER ? "Vertex" : "Fragment"} shader:\n${log}`,
+		);
 	}
 	return sh;
 }
 
-function linkProgram(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
+function linkProgram(
+	gl: WebGL2RenderingContext,
+	vs: string,
+	fs: string,
+): WebGLProgram {
 	const v = compile(gl, gl.VERTEX_SHADER, vs);
 	const f = compile(gl, gl.FRAGMENT_SHADER, fs);
 	const p = gl.createProgram()!;

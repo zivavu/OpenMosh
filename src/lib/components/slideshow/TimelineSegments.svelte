@@ -836,7 +836,7 @@
 					/>
 				{/if}
 				{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
-			<!-- Drawn end to start so the dash pattern anchors at the end dot. -->
+					<!-- Drawn end to start so the dash pattern anchors at the end dot. -->
 					<line
 						class="tail"
 						x1="{vp.toPct(trackDuration)}%"

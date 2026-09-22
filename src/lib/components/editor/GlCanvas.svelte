@@ -15,10 +15,7 @@
 		pickTopLayer,
 		type LayerPick,
 	} from "../../editor/layer-pick";
-	import {
-		clampMove,
-		scaleFromHandle,
-	} from "../../editor/layer-drag";
+	import { clampMove, scaleFromHandle } from "../../editor/layer-drag";
 	import { onFontsChanged } from "../../text-overlay";
 	import {
 		resolveTextLayersAt,

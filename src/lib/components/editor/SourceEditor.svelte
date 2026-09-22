@@ -221,7 +221,7 @@
 	function valueNow(id: TrackId): CropRect | AnimatedKey | MaskKey {
 		if (id === "crop") return { ...crop };
 		if (id === "key") return animatedKey(key);
-			// The shape goes into the key with its position.
+		// The shape goes into the key with its position.
 		return { ...maskXform, mask: live.mask };
 	}
 
@@ -258,7 +258,7 @@
 	function flatten(id: TrackId): SourceEdit {
 		if (id === "crop") return { ...edit, crop: { ...crop } };
 		if (id === "key") return { ...edit, chromaKey: { ...key } };
-			// The shape under the playhead becomes the static one; its offset is not kept.
+		// The shape under the playhead becomes the static one; its offset is not kept.
 		return { ...edit, mask: live.mask };
 	}
 
