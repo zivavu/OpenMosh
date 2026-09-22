@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
+	import AppError from "./lib/components/ui/AppError.svelte";
 	import { lazy } from "./lib/lazy";
 
 	import { GlRenderer } from "./lib/gl/renderer";
@@ -229,6 +230,14 @@
 	});
 </script>
 
+{#snippet loadFailed(err: unknown)}
+	<AppError
+		title="Couldn't load the editor"
+		message="Part of the app failed to download. Check your connection and reload; your saved projects are safe."
+		detail={err instanceof Error ? err.message : String(err)}
+	/>
+{/snippet}
+
 {#if view === "slideshow" && slideshowFiles.length > 0}
 	{#await loadSlideshowEditor() then SlideshowEditor}
 		<SlideshowEditor
@@ -240,6 +249,8 @@
 			{warmRenderer}
 			onExit={exitToUpload}
 		/>
+	{:catch err}
+		{@render loadFailed(err)}
 	{/await}
 {:else if view === "sequence" && sequenceFiles.length > 0}
 	{#await loadEditor() then Editor}
@@ -255,6 +266,8 @@
 			{warmRenderer}
 			onExit={exitToUpload}
 		/>
+	{:catch err}
+		{@render loadFailed(err)}
 	{/await}
 {:else if view === "single" && file}
 	{#await loadEditor() then Editor}
@@ -268,6 +281,8 @@
 			{warmRenderer}
 			onExit={exitToUpload}
 		/>
+	{:catch err}
+		{@render loadFailed(err)}
 	{/await}
 {:else}
 	<UploadScreen
