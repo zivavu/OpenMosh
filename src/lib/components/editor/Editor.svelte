@@ -784,11 +784,6 @@
 	const fullscreenSupported =
 		typeof document !== "undefined" && document.fullscreenEnabled;
 
-	// The record overlay and progress live outside the fullscreen element, so
-	// staying in it during an export would hide every control the user needs.
-	$effect(() => {
-		if (recordingState.recording) previewFullscreen = false;
-	});
 
 	const audio = new AudioManager({
 		// The base chain follows the editor's response; every active fx and
@@ -2806,12 +2801,13 @@
 	}
 
 	// A soloed lane that was deleted would leave the canvas black with nothing
-	// on screen to say why.
-	$effect(() => {
-		const id = soloMediaLaneId;
-		if (!id) return;
-		if (!mediaTimeline.lanes.some((l) => l.id === id)) soloMediaLaneId = null;
-	});
+	// on screen to say why, so solo only counts while its lane is on the stack.
+	// The id itself is kept: undoing the delete brings the solo back with it.
+	let soloLaneId = $derived(
+		mediaTimeline.lanes.some((l) => l.id === soloMediaLaneId)
+			? soloMediaLaneId
+			: null,
+	);
 
 	// ── Single-mode session ──
 	// Sequence mode resumes from its song's media pool; single mode has only the
@@ -3481,6 +3477,9 @@
 			return;
 		}
 		showRecordSettings = false;
+		// The record overlay and progress live outside the fullscreen element, so
+		// staying in it during an export would hide every control the user needs.
+		previewFullscreen = false;
 
 		// Pause playback while recording
 		audio.pauseAudio();
@@ -3888,7 +3887,7 @@
 				textTimeline={textTimeline.enabled ? textTimeline : null}
 				mediaTimeline={mediaTimeline.enabled ? mediaTimeline : null}
 				selectedMediaLane={mediaTimeline.enabled ? selectedMediaLane : null}
-				soloMediaLaneId={mediaTimeline.enabled ? soloMediaLaneId : null}
+				soloMediaLaneId={mediaTimeline.enabled ? soloLaneId : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				mediaChains={previewMediaChains}
 				textChains={previewTextChains}
@@ -4293,7 +4292,7 @@
 							edits={sourceRegistry.edits}
 							bind:selectedClipId={selectedMediaClipId}
 							bind:selectedClipIds={selectedMediaClipIds}
-							soloLaneId={soloMediaLaneId}
+							soloLaneId={soloLaneId}
 							onToggleSolo={toggleMediaSolo}
 							onChange={setMediaTimeline}
 							onBeforeEdit={pushMediaHistory}
