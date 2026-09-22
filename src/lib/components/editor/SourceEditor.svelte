@@ -1425,7 +1425,7 @@
 								aria-label="Media preview"
 							></canvas>
 							{#if !isFullCrop(crop)}
-								{@const idle = tool !== "crop"}
+								{const idle = tool !== "crop"}
 								<!-- Shown under every tool, not just Crop: what is cropped away is
 								     gone whichever tool is in hand, and hiding it meant erasing and
 								     keying against a frame that wasn't the one being kept.

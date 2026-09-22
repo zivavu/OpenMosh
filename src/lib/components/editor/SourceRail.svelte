@@ -195,7 +195,7 @@
 			ondrop={onStripDrop}
 		>
 			{#each sources as src, i (src.id)}
-				{@const edge = dropEdge(i)}
+				{const edge = dropEdge(i)}
 				<div
 					class="rail-slot"
 					class:dragging={dragFromIndex === i}

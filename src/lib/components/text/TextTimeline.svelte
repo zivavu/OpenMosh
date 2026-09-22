@@ -255,9 +255,9 @@
 				onpointercancel={(e) => ctrl.onPointerUp(e)}
 			>
 				{#each lane.clips as clip (clip.id)}
-					{@const left = vp.toPct(clip.start)}
-					{@const width = vp.toPct(clip.end) - left}
-					{@const edge = ctrl.edgeWidth(clip)}
+					{const left = vp.toPct(clip.start)}
+					{const width = vp.toPct(clip.end) - left}
+					{const edge = ctrl.edgeWidth(clip)}
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"

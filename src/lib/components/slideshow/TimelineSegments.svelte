@@ -845,7 +845,7 @@
 		>
 			<!-- Subtle grid rows -->
 			{#each SUBDIVISIONS as sub}
-				{@const y = subToY(sub)}
+				{const y = subToY(sub)}
 				<line class="grid-row" x1="0%" y1={y} x2="100%" y2={y} />
 			{/each}
 
@@ -874,7 +874,7 @@
 			{:else}
 				<!-- Two halves, each dash-anchored at its end dot, so both dots
 				     stay connected; any phase seam lands mid-track -->
-				{@const tailMid = (vp.toPct(0) + vp.toPct(trackDuration)) / 2}
+				{const tailMid = (vp.toPct(0) + vp.toPct(trackDuration)) / 2}
 				<line
 					class="tail"
 					x1="{vp.toPct(0)}%"
@@ -926,7 +926,7 @@
 					y2={sv.y}
 				/>
 				{#if sv.endX - sv.startX > 4}
-					{@const midX = (sv.startX + sv.endX) / 2}
+					{const midX = (sv.startX + sv.endX) / 2}
 					<line
 						class="seg-mid"
 						x1="{midX}%"
@@ -935,7 +935,7 @@
 						y2={sv.y + 4}
 						pointer-events="none"
 					/>
-					{@const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX))}
+					{const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX))}
 					<text
 						class="seg-lbl"
 						x="{lblX}%"
@@ -962,12 +962,12 @@
 
 			<!-- Interior boundary dots (draggable) -->
 			{#each segVis as sv}
-				{@const leftConn = connectors.find((c) => c.rightSegId === sv.id)}
-				{@const rightConn = connectors.find((c) => c.leftSegId === sv.id)}
+				{const leftConn = connectors.find((c) => c.rightSegId === sv.id)}
+				{const rightConn = connectors.find((c) => c.leftSegId === sv.id)}
 
 				<!-- Start dot: only when not at the absolute track start -->
 				{#if sv.startTime > 0.001}
-					{@const lId = leftConn?.leftSegId ?? null}
+					{const lId = leftConn?.leftSegId ?? null}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						class="dot-hit"
@@ -997,7 +997,7 @@
 
 				<!-- End dot: only when not at the absolute track end -->
 				{#if sv.endTime < trackDuration - 0.001}
-					{@const rId = rightConn?.rightSegId ?? null}
+					{const rId = rightConn?.rightSegId ?? null}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						class="dot-hit"
@@ -1036,16 +1036,16 @@
 
 			<!-- Rectangle selection overlay -->
 			{#if dragging?.type === "rect-select" && dragMoved}
-				{@const minX = Math.min(
+				{const minX = Math.min(
 					vp.toPct(dragging.startTime),
 					vp.toPct(dragging.currentTime),
 				)}
-				{@const maxX = Math.max(
+				{const maxX = Math.max(
 					vp.toPct(dragging.startTime),
 					vp.toPct(dragging.currentTime),
 				)}
-				{@const minY = Math.min(dragging.startSvgY, dragging.currentSvgY)}
-				{@const maxY = Math.max(dragging.startSvgY, dragging.currentSvgY)}
+				{const minY = Math.min(dragging.startSvgY, dragging.currentSvgY)}
+				{const maxY = Math.max(dragging.startSvgY, dragging.currentSvgY)}
 				<rect
 					class="select-rect"
 					x="{minX}%"
@@ -1059,8 +1059,8 @@
 			<!-- Ghost paste preview (boundary splits) -->
 			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
 				{#each boundaries.clipboard as { offset }}
-					{@const ghostTime = boundaries.pasteCursorTime + offset}
-					{@const gx = vp.toPct(ghostTime)}
+					{const ghostTime = boundaries.pasteCursorTime + offset}
+					{const gx = vp.toPct(ghostTime)}
 					<line
 						class="ghost-split-line"
 						x1="{gx}%"

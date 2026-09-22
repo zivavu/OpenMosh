@@ -318,7 +318,7 @@
 									>
 									{#if hasTrack && onVolumeLinkChange}
 										{#if effect.volumeLinks?.[param.key]}
-											{@const link = effect.volumeLinks[param.key]}
+											{const link = effect.volumeLinks[param.key]}
 											<div class="volume-link-row">
 												<span class="volume-link-label">Vol →</span>
 												<div class="volume-link-slider">

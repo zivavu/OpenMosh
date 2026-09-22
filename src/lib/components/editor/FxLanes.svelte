@@ -309,12 +309,12 @@
 				onpointercancel={(e) => ctrl.onPointerUp(e)}
 			>
 				{#each lane.clips as clip (clip.id)}
-					{@const left = vp.toPct(clip.start)}
-					{@const width = vp.toPct(clip.end) - left}
-					{@const edge = ctrl.edgeWidth(clip)}
+					{const left = vp.toPct(clip.start)}
+					{const width = vp.toPct(clip.end) - left}
+					{const edge = ctrl.edgeWidth(clip)}
 					{#if left < 100 && left + width > 0}
-						{@const interval = clip.mode === "interval"}
-						{@const label = interval
+						{const interval = clip.mode === "interval"}
+						{const label = interval
 							? intervalLabel(clip.intervalSec, clip.intervalBeats)
 							: clip.modified
 								? `${clip.label}*`

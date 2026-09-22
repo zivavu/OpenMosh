@@ -202,7 +202,7 @@
 			{/if}
 
 			{#if source?.kind === "video" && source.duration > 0}
-				{@const span = sourceSpan(edits[source.id], source.duration)}
+				{const span = sourceSpan(edits[source.id], source.duration)}
 				<!-- Bounded by the trim: an in-point before it starts at the trim's
 				     start anyway, and one past it would never be reached. -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
