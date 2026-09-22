@@ -488,7 +488,10 @@ export class SequenceSourceRegistry {
 		}
 		const live = this.get(id);
 		if (!live) return;
-		// Turned off while the transcode ran: still worth storing, but don't touch the source's state.
+		// Persisted under the source's own id so the next run skips the transcode.
+		if (proxy && !stored)
+			void putSequenceMediaProxy(file, proxy).catch(() => {});
+		// Turned off while the transcode ran: stored above, but the source's state stays put.
 		if (live.proxyDisabled) return;
 		if (proxy) {
 			live.proxyFile = proxy;
@@ -496,10 +499,6 @@ export class SequenceSourceRegistry {
 			live.proxyHeight = opened?.height;
 			live.proxyPending = false;
 			live.proxyProgress = undefined;
-			// Persisted under the source's own id so the next run skips the transcode.
-			if (!stored) {
-				void putSequenceMediaProxy(file, proxy).catch(() => {});
-			}
 		} else {
 			live.proxyPending = false;
 			live.proxyFailed = true;

@@ -251,11 +251,12 @@
 		}
 		const live = slides.find((s) => s.id === id);
 		if (!live) return;
-		// Turned off during the transcode: nothing here may touch the slide's state.
+		// Persisted under the slide file's own id so the next run skips the transcode.
+		if (proxy && !stored)
+			void putSequenceMediaProxy(file, proxy).catch(() => {});
+		// Turned off during the transcode: stored above, but the slide's state stays put.
 		if (live.proxyDisabled) return;
 		if (proxy) {
-			// Persisted under the slide file's own id so the next run skips the transcode.
-			if (!stored) void putSequenceMediaProxy(file, proxy).catch(() => {});
 			live.proxyFile = proxy;
 			live.proxyWidth = opened?.width;
 			live.proxyHeight = opened?.height;
