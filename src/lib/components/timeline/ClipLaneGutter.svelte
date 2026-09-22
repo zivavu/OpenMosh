@@ -1,6 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
-	import { ChevronDown, Eye, EyeOff, Trash2 } from "lucide-svelte";
+	import {
+		ChevronDown,
+		Eye,
+		EyeOff,
+		Trash2,
+		Volume2,
+		VolumeX,
+	} from "lucide-svelte";
 	import type { LayerRef } from "../../timeline/layer-order";
 	import LaneGrip from "../ui/LaneGrip.svelte";
 	import LaneName from "../ui/LaneName.svelte";
@@ -15,6 +22,8 @@
 		onToggleFold?: (laneId: string) => void;
 		/** "Hide"/"Show" for a layer, "Mute"/"Unmute" for an fx lane. */
 		eyeTitles?: [on: string, off: string];
+		/** A sound-only lane mutes rather than hides, so it shows a speaker. */
+		eyeIcon?: "eye" | "sound";
 		onToggleEnabled: () => void;
 		nameTitle: string;
 		nameActive?: boolean;
@@ -31,6 +40,7 @@
 		folded,
 		onToggleFold,
 		eyeTitles = ["Hide this lane", "Show this lane"],
+		eyeIcon = "eye",
 		onToggleEnabled,
 		nameTitle,
 		nameActive = false,
@@ -63,7 +73,9 @@
 		title={lane.enabled ? eyeTitles[0] : eyeTitles[1]}
 		onclick={onToggleEnabled}
 	>
-		{#if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+		{#if eyeIcon === "sound"}
+			{#if lane.enabled}<Volume2 size={12} />{:else}<VolumeX size={12} />{/if}
+		{:else if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 	</button>
 	{@render children?.()}
 	<LaneName

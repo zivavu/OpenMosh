@@ -148,6 +148,7 @@
 				folded={foldedLaneIds.has(lane.id)}
 				{onToggleFold}
 				eyeTitles={["Mute this lane", "Unmute this lane"]}
+				eyeIcon="sound"
 				onToggleEnabled={() => ctrl.setLane(lane.id, "enabled", !lane.enabled)}
 				nameTitle="{lane.name} — sound only. Double-click to rename."
 				onNameClick={() => {
@@ -168,6 +169,26 @@
 				>
 					<Activity size={12} />
 				</button>
+				<input
+					type="range"
+					class="lane-gain"
+					min="0"
+					max={MAX_GAIN}
+					step="0.01"
+					value={lane.gain}
+					title="Lane volume: {Math.round(
+						lane.gain * 100,
+					)}% — double-click to reset"
+					aria-label="{lane.name} volume"
+					oninput={(e) => {
+						onBeforeEdit?.(`audio-lane-gain-${lane.id}`);
+						ctrl.update(lane.id, (l) => ({
+							...l,
+							gain: +e.currentTarget.value,
+						}));
+					}}
+					ondblclick={() => ctrl.setLane(lane.id, "gain", 1)}
+				/>
 			</ClipLaneGutter>
 
 			<div
@@ -328,6 +349,15 @@
 
 	.lane-drives.on {
 		color: var(--mosh);
+	}
+
+	/* Narrow: the name keeps the rest of the gutter. */
+	.lane-gain {
+		flex-shrink: 0;
+		width: 40px;
+		height: 12px;
+		margin: 0 2px;
+		accent-color: var(--live);
 	}
 
 	.audio-bar {

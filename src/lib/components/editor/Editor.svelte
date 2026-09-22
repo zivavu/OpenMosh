@@ -47,6 +47,7 @@
 		createAudioClip,
 		createAudioLane,
 		MAX_AUDIO_LANES,
+		nextAudioLaneName,
 		removeAudioSource,
 		retargetAudioSource,
 		trackIdOf,
@@ -1905,7 +1906,7 @@
 			songLength > 0 &&
 			!lanes.some((l) => l.clips.some((c) => c.sourceId === songId))
 		) {
-			const lane = createAudioLane("Music", true);
+			const lane = createAudioLane(nextAudioLaneName(lanes), true);
 			lane.clips = [createAudioClip(0, Math.min(songLength, length), songId)];
 			next = { ...next, audioLanes: [lane, ...lanes] };
 		}
@@ -2030,8 +2031,7 @@
 				if (isSong) dropSong();
 				continue;
 			}
-			const name = isSong ? "Music" : f.name.replace(/\.[^.]+$/, "");
-			placeAudio(sourceId, buffer.duration, isSong ? 0 : at, name, isSong);
+			placeAudio(sourceId, buffer.duration, isSong ? 0 : at, isSong);
 		}
 	}
 
@@ -2041,7 +2041,6 @@
 		sourceId: string,
 		length: number,
 		at: number,
-		name: string,
 		drives: boolean,
 	) {
 		const lanes = mediaTimeline.audioLanes ?? [];
@@ -2067,7 +2066,7 @@
 		}
 		const duration = mixer.duration;
 		const start = Math.min(at, Math.max(0, duration - MIN_CLIP_LENGTH));
-		const lane = createAudioLane(name, drives);
+		const lane = createAudioLane(nextAudioLaneName(lanes), drives);
 		lane.clips = [
 			createAudioClip(start, Math.min(duration, start + length), sourceId),
 		];
@@ -2098,7 +2097,7 @@
 		void audioBank.settle([to]).then(() => {
 			const buffer = audioBank.buffer(to);
 			if (buffer && currentTrackId === trackId) {
-				placeAudio(to, buffer.duration, 0, "Music", true);
+				placeAudio(to, buffer.duration, 0, true);
 			}
 		});
 	}
@@ -2160,7 +2159,7 @@
 				)
 			: [
 					...lanes,
-					{ ...createAudioLane(`${lane.name} sound`), clips: [detached] },
+					{ ...createAudioLane(nextAudioLaneName(lanes)), clips: [detached] },
 				];
 		pushMediaHistory();
 		setMediaTimeline({

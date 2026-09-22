@@ -406,7 +406,7 @@
 				onDelete={() => ctrl.requestDeleteLane(lane)}
 			>
 				{#if plan && laneHasVideo(lane)}
-					{const muted = lane.audio?.muted ?? false}
+					{const muted = $derived(lane.audio?.muted ?? false)}
 					<button
 						class="lane-sound"
 						class:off={muted}

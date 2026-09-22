@@ -81,6 +81,14 @@ export function createAudioClip(
 	return { id: nextId("aclip"), start, end, sourceStart, sourceId };
 }
 
+/** "Audio N", the lowest N no lane already goes by. */
+export function nextAudioLaneName(lanes: AudioLane[]): string {
+	const taken = new Set(lanes.map((l) => l.name));
+	let n = 1;
+	while (taken.has(`Audio ${n}`)) n++;
+	return `Audio ${n}`;
+}
+
 export function createAudioLane(name: string, drives = false): AudioLane {
 	return {
 		id: nextId("alane"),
