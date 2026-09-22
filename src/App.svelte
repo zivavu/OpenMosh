@@ -238,74 +238,85 @@
 	/>
 {/snippet}
 
-{#if view === "slideshow" && slideshowFiles.length > 0}
-	{#await loadSlideshowEditor() then SlideshowEditor}
-		<SlideshowEditor
-			initialFiles={slideshowFiles}
-			initialAudioFile={pendingAudioFile}
-			initialTrackId={sessionTrackId}
-			initialConfig={restoredSlideshowConfig}
+<svelte:boundary onerror={(err) => console.error(err)}>
+	{#if view === "slideshow" && slideshowFiles.length > 0}
+		{#await loadSlideshowEditor() then SlideshowEditor}
+			<SlideshowEditor
+				initialFiles={slideshowFiles}
+				initialAudioFile={pendingAudioFile}
+				initialTrackId={sessionTrackId}
+				initialConfig={restoredSlideshowConfig}
+				{warmCanvas}
+				{warmRenderer}
+				onExit={exitToUpload}
+			/>
+		{:catch err}
+			{@render loadFailed(err)}
+		{/await}
+	{:else if view === "sequence" && sequenceFiles.length > 0}
+		{#await loadEditor() then Editor}
+			<Editor
+				mode="sequence"
+				file={sequenceFiles[0]}
+				extraFiles={sequenceFiles.slice(1)}
+				initialAudioFile={pendingAudioFile}
+				initialTrackId={sequenceTrackId}
+				onfile={async (f: File) =>
+					(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
+				{warmCanvas}
+				{warmRenderer}
+				onExit={exitToUpload}
+			/>
+		{:catch err}
+			{@render loadFailed(err)}
+		{/await}
+	{:else if view === "single" && file}
+		{#await loadEditor() then Editor}
+			<Editor
+				{file}
+				initialAudioFile={pendingAudioFile}
+				initialTrackId={sessionTrackId}
+				initialSession={restoredSingle}
+				onfile={async (f: File) => (file = await gifToVideo(f))}
+				{warmCanvas}
+				{warmRenderer}
+				onExit={exitToUpload}
+			/>
+		{:catch err}
+			{@render loadFailed(err)}
+		{/await}
+	{:else}
+		<UploadScreen
+			onfile={async (f: File) => {
+				file = await gifToVideo(f);
+				navigateTo("single");
+			}}
+			onSequence={async (files: File[]) => {
+				sequenceFiles = await gifsToVideo(files);
+				navigateTo("sequence");
+			}}
+			onSequenceFromSong={(trackId: string) =>
+				void openSequenceFromSong(trackId)}
+			onSessionOpen={(mode: SessionMode, key: string) =>
+				void openSessionByKey(mode, key)}
+			onSlideshow={async (files: File[]) => {
+				slideshowFiles = await gifsToVideo(files);
+				navigateTo("slideshow");
+			}}
+			onaudio={(f: File) => (pendingAudioFile = f)}
 			{warmCanvas}
 			{warmRenderer}
-			onExit={exitToUpload}
 		/>
-	{:catch err}
-		{@render loadFailed(err)}
-	{/await}
-{:else if view === "sequence" && sequenceFiles.length > 0}
-	{#await loadEditor() then Editor}
-		<Editor
-			mode="sequence"
-			file={sequenceFiles[0]}
-			extraFiles={sequenceFiles.slice(1)}
-			initialAudioFile={pendingAudioFile}
-			initialTrackId={sequenceTrackId}
-			onfile={async (f: File) =>
-				(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
-			{warmCanvas}
-			{warmRenderer}
-			onExit={exitToUpload}
+	{/if}
+
+	{#snippet failed(err)}
+		<AppError
+			title="Something broke"
+			message="The editor hit an error it couldn't recover from. Your work up to the last autosave is kept; reload to pick it back up."
+			detail={err instanceof Error ? err.message : String(err)}
 		/>
-	{:catch err}
-		{@render loadFailed(err)}
-	{/await}
-{:else if view === "single" && file}
-	{#await loadEditor() then Editor}
-		<Editor
-			{file}
-			initialAudioFile={pendingAudioFile}
-			initialTrackId={sessionTrackId}
-			initialSession={restoredSingle}
-			onfile={async (f: File) => (file = await gifToVideo(f))}
-			{warmCanvas}
-			{warmRenderer}
-			onExit={exitToUpload}
-		/>
-	{:catch err}
-		{@render loadFailed(err)}
-	{/await}
-{:else}
-	<UploadScreen
-		onfile={async (f: File) => {
-			file = await gifToVideo(f);
-			navigateTo("single");
-		}}
-		onSequence={async (files: File[]) => {
-			sequenceFiles = await gifsToVideo(files);
-			navigateTo("sequence");
-		}}
-		onSequenceFromSong={(trackId: string) => void openSequenceFromSong(trackId)}
-		onSessionOpen={(mode: SessionMode, key: string) =>
-			void openSessionByKey(mode, key)}
-		onSlideshow={async (files: File[]) => {
-			slideshowFiles = await gifsToVideo(files);
-			navigateTo("slideshow");
-		}}
-		onaudio={(f: File) => (pendingAudioFile = f)}
-		{warmCanvas}
-		{warmRenderer}
-	/>
-{/if}
+	{/snippet}
+</svelte:boundary>
 
 {#if isFeedbackOpen()}
 	{#await loadFeedbackModal() then FeedbackModal}
