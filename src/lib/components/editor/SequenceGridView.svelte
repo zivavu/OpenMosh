@@ -152,7 +152,7 @@
 	{:else}
 		<div class="grid">
 			{#each sources as src, i (src.id)}
-				{const edge = dropEdge(i)}
+				{const edge = $derived(dropEdge(i))}
 				<div
 					class="card"
 					class:active={selectedSourceId === src.id}

@@ -821,7 +821,7 @@
 			onpointerdown={onLanePointerDown}
 		>
 			{#each SUBDIVISIONS as sub}
-				{const y = subToY(sub)}
+				{const y = $derived(subToY(sub))}
 				<line class="grid-row" x1="0%" y1={y} x2="100%" y2={y} />
 			{/each}
 
@@ -847,7 +847,7 @@
 				{/if}
 			{:else}
 				<!-- Two halves, each dash-anchored at its end dot, so both dots stay connected. -->
-				{const tailMid = (vp.toPct(0) + vp.toPct(trackDuration)) / 2}
+				{const tailMid = $derived((vp.toPct(0) + vp.toPct(trackDuration)) / 2)}
 				<line
 					class="tail"
 					x1="{vp.toPct(0)}%"
@@ -896,7 +896,7 @@
 					y2={sv.y}
 				/>
 				{#if sv.endX - sv.startX > 4}
-					{const midX = (sv.startX + sv.endX) / 2}
+					{const midX = $derived((sv.startX + sv.endX) / 2)}
 					<line
 						class="seg-mid"
 						x1="{midX}%"
@@ -905,7 +905,9 @@
 						y2={sv.y + 4}
 						pointer-events="none"
 					/>
-					{const lblX = Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX))}
+					{const lblX = $derived(
+						Math.max(sv.startX + 2, Math.min(sv.endX - 2, midX)),
+					)}
 					<text
 						class="seg-lbl"
 						x="{lblX}%"
@@ -930,11 +932,15 @@
 			/>
 
 			{#each segVis as sv}
-				{const leftConn = connectors.find((c) => c.rightSegId === sv.id)}
-				{const rightConn = connectors.find((c) => c.leftSegId === sv.id)}
+				{const leftConn = $derived(
+					connectors.find((c) => c.rightSegId === sv.id),
+				)}
+				{const rightConn = $derived(
+					connectors.find((c) => c.leftSegId === sv.id),
+				)}
 
 				{#if sv.startTime > 0.001}
-					{const lId = leftConn?.leftSegId ?? null}
+					{const lId = $derived(leftConn?.leftSegId ?? null)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						class="dot-hit"
@@ -963,7 +969,7 @@
 				{/if}
 
 				{#if sv.endTime < trackDuration - 0.001}
-					{const rId = rightConn?.rightSegId ?? null}
+					{const rId = $derived(rightConn?.rightSegId ?? null)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						class="dot-hit"
@@ -1000,16 +1006,24 @@
 			{/if}
 
 			{#if dragging?.type === "rect-select" && dragMoved}
-				{const minX = Math.min(
-					vp.toPct(dragging.startTime),
-					vp.toPct(dragging.currentTime),
+				{const minX = $derived(
+					Math.min(
+						vp.toPct(dragging.startTime),
+						vp.toPct(dragging.currentTime),
+					),
 				)}
-				{const maxX = Math.max(
-					vp.toPct(dragging.startTime),
-					vp.toPct(dragging.currentTime),
+				{const maxX = $derived(
+					Math.max(
+						vp.toPct(dragging.startTime),
+						vp.toPct(dragging.currentTime),
+					),
 				)}
-				{const minY = Math.min(dragging.startSvgY, dragging.currentSvgY)}
-				{const maxY = Math.max(dragging.startSvgY, dragging.currentSvgY)}
+				{const minY = $derived(
+					Math.min(dragging.startSvgY, dragging.currentSvgY),
+				)}
+				{const maxY = $derived(
+					Math.max(dragging.startSvgY, dragging.currentSvgY),
+				)}
 				<rect
 					class="select-rect"
 					x="{minX}%"
@@ -1022,8 +1036,8 @@
 
 			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
 				{#each boundaries.clipboard as { offset }}
-					{const ghostTime = boundaries.pasteCursorTime + offset}
-					{const gx = vp.toPct(ghostTime)}
+					{const ghostTime = $derived(boundaries.pasteCursorTime + offset)}
+					{const gx = $derived(vp.toPct(ghostTime))}
 					<line
 						class="ghost-split-line"
 						x1="{gx}%"

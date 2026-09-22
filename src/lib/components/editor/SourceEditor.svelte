@@ -1251,7 +1251,7 @@
 								aria-label="Media preview"
 							></canvas>
 							{#if !isFullCrop(crop)}
-								{const idle = tool !== "crop"}
+								{const idle = $derived(tool !== "crop")}
 								<!-- Shown under every tool, not just Crop: what is cropped away is gone either way. -->
 								<div
 									class="crop-shade"

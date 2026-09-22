@@ -15,7 +15,7 @@
 </script>
 
 {#each ctrl.adjacentPairs(lane) as pair (pair.left.id)}
-	{const left = ctrl.stack.vp.toPct(pair.at)}
+	{const left = $derived(ctrl.stack.vp.toPct(pair.at))}
 	{#if left >= 0 && left <= 100}
 		<div
 			class="clip-boundary"

@@ -189,7 +189,7 @@
 			{/if}
 
 			{#if source?.kind === "video" && source.duration > 0}
-				{const span = sourceSpan(edits[source.id], source.duration)}
+				{const span = $derived(sourceSpan(edits[source.id], source.duration))}
 				<!-- Bounded by the trim: an in-point before it starts at the trim's start anyway. -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="row" title="Where in the video this clip starts">

@@ -473,7 +473,7 @@
 					<ul class="rows">
 						{#each inventory.projects as p (p.trackId)}
 							{const key = `p:${p.trackId}`}
-							{const open = expanded.has(key)}
+							{const open = $derived(expanded.has(key))}
 							<li
 								class="row selectable"
 								class:open
@@ -593,7 +593,7 @@
 					<ul class="rows">
 						{#each inventory.looseEdits as e (e.key)}
 							{const key = `e:${e.key}`}
-							{const open = expanded.has(key)}
+							{const open = $derived(expanded.has(key))}
 							<li
 								class="row selectable"
 								class:open
@@ -695,7 +695,7 @@
 					</div>
 					<ul class="rows">
 						{#if inventory.unassigned.length > 0}
-							{const open = expanded.has("unassigned")}
+							{const open = $derived(expanded.has("unassigned"))}
 							<li class="row" class:open>
 								<button
 									class="row-main"

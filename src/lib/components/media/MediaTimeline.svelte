@@ -408,10 +408,10 @@
 				onpointercancel={(e) => ctrl.onPointerUp(e)}
 			>
 				{#each lane.clips as clip (clip.id)}
-					{const left = vp.toPct(clip.start)}
-					{const width = vp.toPct(clip.end) - left}
-					{const edge = ctrl.edgeWidth(clip)}
-					{const src = clipSource(lane, clip)}
+					{const left = $derived(vp.toPct(clip.start))}
+					{const width = $derived(vp.toPct(clip.end) - left)}
+					{const edge = $derived(ctrl.edgeWidth(clip))}
+					{const src = $derived(clipSource(lane, clip))}
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"
@@ -464,8 +464,8 @@
 				{/each}
 
 				{#if dropGhost?.laneId === lane.id}
-					{const left = vp.toPct(dropGhost.start)}
-					{const width = vp.toPct(dropGhost.end) - left}
+					{const left = $derived(vp.toPct(dropGhost.start))}
+					{const width = $derived(vp.toPct(dropGhost.end) - left)}
 					<div class="clip ghost" style="left: {left}%; width: {width}%">
 						{#if ghostSource?.thumbUrl}
 							<span

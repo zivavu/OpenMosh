@@ -336,8 +336,8 @@
 		{:else}
 			<ul class="track-list">
 				{#each tracks as track (track.id)}
-					{const isActive = isTrackActive(track)}
-					{const isPlaying = isActive && mainPlaying}
+					{const isActive = $derived(isTrackActive(track))}
+					{const isPlaying = $derived(isActive && mainPlaying)}
 					<li class="track-row" class:active={isActive}>
 						<button
 							class="preview-btn"
