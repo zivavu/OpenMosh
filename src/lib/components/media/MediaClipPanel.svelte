@@ -264,7 +264,7 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="How loud this clip plays, on top of the layer's volume. Double-click to reset."
+							title="How loud this clip plays. Double-click to reset."
 							ondblclick={() => setClipGain(1)}
 						>
 							<label for="mc-gain">Clip volume</label>
@@ -277,24 +277,6 @@
 								oninput={setClipGain}
 							/>
 							<span class="val">{Math.round((clip.gain ?? 1) * 100)}%</span>
-						</div>
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div
-							class="row"
-							title="How loud every clip on this layer plays. Double-click to reset."
-							ondblclick={() => setLaneAudio("gain", 1)}
-						>
-							<label for="mc-lane-gain">Layer volume</label>
-							<RangeSlider
-								id="mc-lane-gain"
-								value={laneAudio.gain}
-								min={0}
-								max={MAX_GAIN}
-								step={0.01}
-								oninput={(v) =>
-									setLaneAudio("gain", v, `mc-lane-gain-${lane.id}`)}
-							/>
-							<span class="val">{Math.round(laneAudio.gain * 100)}%</span>
 						</div>
 						<div
 							class="row"

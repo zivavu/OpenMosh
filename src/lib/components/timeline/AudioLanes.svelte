@@ -14,7 +14,6 @@
 	import ClipLaneGutter from "./ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "./LaneDeleteDialog.svelte";
 	import LaneWaveform from "./LaneWaveform.svelte";
-	import VolumeSlider from "../ui/VolumeSlider.svelte";
 
 	const LANE_HEIGHT = 30;
 	const LANE_FOLDED_HEIGHT = 14;
@@ -170,20 +169,6 @@
 				>
 					<Activity size={12} />
 				</button>
-				<VolumeSlider
-					width="40px"
-					value={lane.gain}
-					max={MAX_GAIN}
-					title="Lane volume: {Math.round(
-						lane.gain * 100,
-					)}% — double-click to reset"
-					ariaLabel="{lane.name} volume"
-					oninput={(v) => {
-						onBeforeEdit?.(`audio-lane-gain-${lane.id}`);
-						ctrl.update(lane.id, (l) => ({ ...l, gain: v }));
-					}}
-					ondblclick={() => ctrl.setLane(lane.id, "gain", 1)}
-				/>
 			</ClipLaneGutter>
 
 			<div
@@ -271,7 +256,7 @@
 					: clipLabel(selectedClips[0])}
 			</span>
 			<div class="tl-tool-sep"></div>
-			<span class="tl-tool-label">Volume</span>
+			<span class="tl-tool-label">Clip volume</span>
 			<input
 				type="range"
 				class="audio-gain"

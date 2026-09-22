@@ -40,7 +40,7 @@ export interface MixSegment {
 	/** Source seconds at `start`. */
 	offset: number;
 	rate: number;
-	/** Lane × clip × source gain, before the fade. */
+	/** Clip × source gain, before the fade. */
 	gain: number;
 	fade: MixFade;
 }
@@ -156,7 +156,7 @@ export function planMix(input: MixInput): MixSegment[] {
 				clip,
 				sourceId,
 				audio.drives,
-				audio.gain * (clip.gain ?? 1),
+				clip.gain ?? 1,
 				videoWalk(edits[sourceId], length, clip),
 			);
 		}
@@ -167,7 +167,7 @@ export function planMix(input: MixInput): MixSegment[] {
 		for (const clip of lane.clips) {
 			const sourceId = clip.sourceId;
 			if (!sourceId) continue;
-			const gain = lane.gain * (clip.gain ?? 1);
+			const gain = clip.gain ?? 1;
 			const length = videos[sourceId];
 			if (length) {
 				// A video's sound keeps the picture's speed and wrap even once detached.

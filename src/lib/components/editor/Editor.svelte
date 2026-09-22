@@ -2144,7 +2144,7 @@
 		}
 		const detached = {
 			...createAudioClip(clip.start, clip.end, sourceId, clip.sourceStart),
-			gain: (lane.audio?.gain ?? 1) * (clip.gain ?? 1),
+			gain: clip.gain,
 			fadeInSec: clip.fadeInSec,
 			fadeOutSec: clip.fadeOutSec,
 		};

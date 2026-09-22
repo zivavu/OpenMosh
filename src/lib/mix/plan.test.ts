@@ -10,7 +10,7 @@ import { createAudioClip, createAudioLane, trackSourceId } from "./types";
 
 function videoTimeline(
 	clips: [number, number, number?][],
-	audio = { muted: false, gain: 1, drives: false },
+	audio = { muted: false, drives: false },
 ): MediaTimeline {
 	const lane = createMediaLane("Layer 1", "vid");
 	lane.audio = audio;
@@ -65,7 +65,6 @@ describe("planMix", () => {
 			planMix({
 				timeline: videoTimeline([[0, 2]], {
 					muted: true,
-					gain: 1,
 					drives: false,
 				}),
 				edits: {},
@@ -82,9 +81,8 @@ describe("planMix", () => {
 		).toHaveLength(0);
 	});
 
-	it("plays library tracks once, with lane, clip and source gain multiplied", () => {
+	it("plays library tracks once, with clip and source gain multiplied", () => {
 		const lane = createAudioLane("Music", true);
-		lane.gain = 0.5;
 		const clip = createAudioClip(1, 4, trackSourceId("song"), 10);
 		clip.gain = 0.5;
 		lane.clips = [clip];
@@ -99,7 +97,7 @@ describe("planMix", () => {
 			start: 1,
 			end: 4,
 			offset: 10,
-			gain: 0.5,
+			gain: 1,
 			drives: true,
 		});
 	});

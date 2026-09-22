@@ -57,7 +57,6 @@ describe("normalizing", () => {
 		expect(lane).toMatchObject({
 			name: "Audio 1",
 			enabled: true,
-			gain: 1,
 			drives: false,
 		});
 		expect(lane.clips[0]).toMatchObject({

@@ -19,7 +19,7 @@ export function trackIdOf(sourceId: string): string | null {
 		: null;
 }
 
-/** Linear gain the volume controls reach: +6 dB of headroom over unity. */
+/** Linear gain the clip volume reaches: +6 dB of headroom over unity. */
 export const MAX_GAIN = 2;
 
 /** One span of sound on an audio lane. */
@@ -39,7 +39,6 @@ export interface AudioLane {
 	name: string;
 	/** Off mutes the lane. */
 	enabled: boolean;
-	gain: number;
 	/** Whether this lane's sound feeds the audio links: what the effects react to. */
 	drives: boolean;
 	clips: AudioClip[];
@@ -48,13 +47,11 @@ export interface AudioLane {
 /** How a media lane's videos sound. The picture and its audio share one clip. */
 export interface LaneAudio {
 	muted: boolean;
-	gain: number;
 	drives: boolean;
 }
 
 export const DEFAULT_LANE_AUDIO: LaneAudio = {
 	muted: false,
-	gain: 1,
 	drives: false,
 };
 
@@ -94,7 +91,6 @@ export function createAudioLane(name: string, drives = false): AudioLane {
 		id: nextId("alane"),
 		name,
 		enabled: true,
-		gain: 1,
 		drives,
 		clips: [],
 	};
@@ -135,7 +131,6 @@ export function normalizeAudioLanes(raw: unknown): AudioLane[] {
 		id: lane.id ?? nextId("alane"),
 		name: lane.name ?? `Audio ${i + 1}`,
 		enabled: lane.enabled !== false,
-		gain: num(lane.gain, 1),
 		drives: !!lane.drives,
 		clips: (Array.isArray(lane.clips) ? lane.clips : []).map(
 			(c: Partial<AudioClip>) => ({
@@ -157,7 +152,6 @@ export function normalizeLaneAudio(raw: unknown): LaneAudio {
 	const a = raw as Partial<LaneAudio>;
 	return {
 		muted: !!a.muted,
-		gain: num(a.gain, 1),
 		drives: !!a.drives,
 	};
 }
