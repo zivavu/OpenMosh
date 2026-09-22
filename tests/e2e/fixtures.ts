@@ -1,13 +1,7 @@
 import { deflateSync } from "node:zlib";
 
-/**
- * Media the specs feed the app, built here rather than committed.
- *
- * Binary fixtures in a repo rot quietly: nobody can diff them, and nobody can
- * tell what a spec depends on without opening one in a player. These are a few
- * dozen lines of encoder instead, so a source's colour or a track's length is
- * something a test can state outright.
- */
+/** Media the specs feed the app, built here rather than committed. Binary fixtures rot
+ * quietly: nobody can diff them, so a source's colour or a track's length is stated outright. */
 
 const CRC_TABLE = (() => {
 	const table = new Uint32Array(256);
@@ -40,11 +34,8 @@ export interface Rgb {
 	b: number;
 }
 
-/**
- * A solid-colour PNG. Flat on purpose: a source the specs can recognise on the
- * preview by its colour alone, with no detail for an effect to smear into
- * something ambiguous.
- */
+/** A solid-colour PNG. Flat on purpose: a source the specs recognise on the preview by
+ * its colour alone, with no detail for an effect to smear into something ambiguous. */
 export function pngBytes(color: Rgb, size = 64): Buffer {
 	const ihdr = Buffer.alloc(13);
 	ihdr.writeUInt32BE(size, 0);
@@ -70,15 +61,8 @@ export function pngBytes(color: Rgb, size = 64): Buffer {
 	]);
 }
 
-/**
- * The source image the renderer specs draw through.
- *
- * A flat colour is useless here: an effect that only displaces pixels has
- * nothing to move, and one that only shifts colour has nothing to shift. This
- * carries a full ramp in both axes for the colour effects and hard checker
- * edges for the spatial ones, so "the frame changed" means something whatever
- * an effect does.
- */
+/** The source image the renderer specs draw through. A flat colour is useless: an effect
+ * that displaces pixels has nothing to move, and one that shifts colour nothing to shift. */
 export function patternPngBytes(size = 128): Buffer {
 	const ihdr = Buffer.alloc(13);
 	ihdr.writeUInt32BE(size, 0);
@@ -123,13 +107,8 @@ export interface WavOptions {
 	sampleRate?: number;
 }
 
-/**
- * A mono 16-bit WAV: a quiet tone with a sharp click on every beat.
- *
- * The clicks matter — a flat tone has no tempo, and anything reading levels
- * off this track would see one unbroken value. The beat grid here is exact, so
- * a spec can say where a downbeat falls.
- */
+/** A mono 16-bit WAV: a quiet tone with a sharp click on every beat. The clicks matter:
+ * a flat tone has no tempo, and anything reading levels would see one unbroken value. */
 export function wavBytes({
 	seconds = 8,
 	bpm = 120,

@@ -1,11 +1,7 @@
 /**
- * Undo for the playback span. The span handles are an edit like any other,
- * so a mis-drag comes back with Ctrl+Z. Its own stack because the span is
- * neither effects nor clips; the undo router picks between it and the rest by
- * when each was last touched. Both editors with a track carry one.
- *
- * A drag only reports where it landed, and the stack holds the state each
- * change replaced, so the span as it stood *before* the drag is kept here.
+ * Undo for the playback span. Its own stack because the span is neither effects nor
+ * clips; the undo router picks between it and the rest by when each was last touched.
+ * A drag only reports where it landed, so the stack holds the span before the drag.
  */
 
 import { untrack } from "svelte";
@@ -22,15 +18,14 @@ export function createSpanHistory(audio: AudioManager) {
 	const history = createSnapshotHistory<Span>();
 	/** The span as it stood before the drag in progress. */
 	let atRest: Span = { start: 0, end: 0 };
-	/** Which track the stack was last reset for — see `trackChanged`. */
+	/** Which track the stack was last reset for; see `trackChanged`. */
 	let spannedTrack = "";
 
 	function live(): Span {
 		return { start: audio.spanStart, end: audio.spanEnd };
 	}
 
-	/** Record the span a drag landed on. A drag that put it back where it was
-	 * is not an edit, so it doesn't leave a step behind. */
+	/** Record the span a drag landed on; a no-op drag leaves no step behind. */
 	function push() {
 		if (atRest.start === audio.spanStart && atRest.end === audio.spanEnd) {
 			return;
@@ -53,9 +48,9 @@ export function createSpanHistory(audio: AudioManager) {
 	}
 
 	/**
-	 * A track brings its own span, restored from storage: that is the baseline
-	 * to undo back to, not the empty one the editor started on. Call from an
-	 * effect with the current track's id; the stack resets once per track.
+	 * A track brings its own span, restored from storage: that is the baseline to undo
+	 * back to, not the empty one the editor started on. Call from an effect with the
+	 * current track's id; the stack resets once per track.
 	 */
 	function trackChanged(trackId: string | null) {
 		const d = audio.trackDuration;

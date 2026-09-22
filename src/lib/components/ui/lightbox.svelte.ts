@@ -1,7 +1,6 @@
 /**
- * The open/closed state of a MediaLightbox and the gesture that opens it:
- * the preview zooms out from the card that was clicked, so opening records
- * where that card sat relative to the viewport's centre.
+ * Open/closed state of a MediaLightbox plus the gesture that opens it: the
+ * preview zooms from the clicked card, so opening records its viewport offset.
  */
 export function createLightbox() {
 	let index = $state<number | null>(null);

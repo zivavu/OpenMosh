@@ -2,11 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { NO_EDIT, nextEditSeq } from "./edit-clock";
 import { redoLatest, undoLatest, type UndoSource } from "./undo-router";
 
-/**
- * A stack that stamps the way the real ones do: an edit takes a fresh tick, and
- * crossing the cursor re-stamps the entry that moved. Stands in for the rune-
- * based histories, which need the Svelte compiler to run.
- */
+/** A stack that stamps like the real ones: an edit takes a fresh tick, and
+ * crossing the cursor re-stamps the moved entry. Stands in for the rune-based histories. */
 function fakeStack(log: string[], name: string): UndoSource & { edit(): void } {
 	const undos: number[] = [];
 	const redos: number[] = [];

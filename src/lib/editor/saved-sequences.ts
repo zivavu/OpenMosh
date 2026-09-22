@@ -8,15 +8,8 @@ import {
 	storedMediaToFile,
 } from "./sequence-media-store";
 
-/**
- * A song you've already built a sequence for, offered on the upload screen so
- * the media doesn't have to be picked again.
- *
- * Pools are keyed the same way the sequence timeline is, which for a
- * video-driven sequence is the video rather than a track — those aren't songs
- * and are skipped here. A pool whose blobs have since been pruned is skipped
- * too: there'd be nothing to open with.
- */
+/** A song with a saved sequence, offered on the upload screen. Video-driven pools
+ * (keyed by video, not track) and pools whose blobs were pruned are skipped. */
 export interface SavedSequence {
 	trackId: string;
 	trackName: string;
@@ -27,14 +20,8 @@ export interface SavedSequence {
 const CACHE_KEY = "openmosh-saved-sequences";
 const cache = createListCache(CACHE_KEY, isSavedSequence);
 
-/**
- * The last computed list, readable synchronously.
- *
- * IndexedDB can only answer a tick or two after mount, so the upload screen
- * would always paint without this section and pop it in afterwards. The cache
- * is a mirror, never the source of truth: `listSavedSequences` still runs and
- * overwrites it, so a song deleted elsewhere corrects itself on the next paint.
- */
+/** Last computed list, readable synchronously so the upload screen paints with it.
+ * A mirror only: `listSavedSequences` still runs and overwrites it. */
 export function readCachedSavedSequences(): SavedSequence[] {
 	return cache.read();
 }
@@ -57,16 +44,14 @@ function writeCachedSavedSequences(list: SavedSequence[]): void {
 export async function listSavedSequences(): Promise<SavedSequence[]> {
 	let pools, tracks, stored;
 	try {
-		// Ids, not records: this only counts which sources survive, and the media
-		// store holds every image and video the sequences were built from.
+		// Ids, not records: this only counts which sources survive.
 		[pools, tracks, stored] = await Promise.all([
 			getAllMediaPools(),
 			getAllTracks(),
 			getAllSequenceMediaIds(),
 		]);
 	} catch {
-		// Keep showing what was cached rather than blanking the section on a
-		// transient database failure.
+		// Fall back to the cache rather than blanking the section on a transient DB failure.
 		return readCachedSavedSequences();
 	}
 	const trackById = new Map(tracks.map((t) => [t.id, t]));
@@ -102,7 +87,6 @@ export async function openSavedSequence(
 ): Promise<OpenedSequence | null> {
 	let sourceIds, track;
 	try {
-		// Only this song's pool and track, rather than every pool and every track.
 		[sourceIds, track] = await Promise.all([
 			loadMediaPool(trackId),
 			getTrack(trackId),

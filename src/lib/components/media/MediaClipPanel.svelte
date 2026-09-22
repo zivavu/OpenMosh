@@ -27,10 +27,8 @@
 	const loadSourceEditor = lazy(() => import("../editor/SourceEditor.svelte"));
 
 	interface Props {
-		/** The lane the selected clip lives in; the panel edits its style. */
 		lane: MediaLane | null;
 		clip: MediaClip | null;
-		/** The media pool this layer can draw from. */
 		sources?: SequenceSource[];
 		onLaneChange: (lane: MediaLane) => void;
 		onClipChange: (clip: MediaClip) => void;
@@ -39,17 +37,14 @@
 		onClose?: () => void;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
-		/** Forwarded to the lane's effect panel for its spectrum read-out. */
 		response?: AudioResponse;
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		edits?: Record<string, SourceEdit>;
 		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
-		/** Fired as the media edit modal opens and closes. The editor stops
-		 * playback while it is up: the modal has its own transport, and a clip
-		 * running behind it fights the one being scrubbed inside. */
+		/** Fired as the media edit modal opens and closes. The editor stops playback
+		 * while it is up. */
 		onEditingChange?: (open: boolean) => void;
-		/** Which half to show: the clip's controls, or the lane's effect chain.
-		 * The sidebar gives each its own tab. */
+		/** Which half to show: the clip's controls, or the lane's effect chain. */
 		section?: "clip" | "chain";
 	}
 
@@ -70,7 +65,6 @@
 		section = "clip",
 	}: Props = $props();
 
-	/** True while the media editor is open on this clip's source. */
 	let editingSource = $state(false);
 
 	// Report the modal's state up, so the editor can stop the preview behind it.
@@ -89,7 +83,6 @@
 		);
 	});
 
-	/** What the selected clip draws: its own source, or the lane's. */
 	let source = $derived(
 		lane ? sources.find((s) => s.id === clipSourceId(lane, clip)) : undefined,
 	);
@@ -111,19 +104,14 @@
 		onLaneChange({ ...lane, style: { ...lane.style, [key]: value } });
 	}
 
-	/** Double-clicking a row puts that style back to the default. */
 	function resetStyle(e: MouseEvent, key: keyof MediaStyle) {
 		const t = e.target as HTMLElement | null;
 		if (t?.closest('input[type="text"], textarea')) return;
 		setStyle(key, DEFAULT_MEDIA_STYLE[key]);
 	}
 
-	/**
-	 * Point this clip at its own media. The empty value hands it back to the
-	 * lane, so a clip that never chose keeps following the lane's picker — the
-	 * placement and the effect chain stay shared either way, which is the whole
-	 * point of cutting a lane up rather than adding another.
-	 */
+	/** Point this clip at its own media. The empty value hands it back to the lane,
+	 * so a clip that never chose keeps following the lane's picker. */
 	function setClipSource(id: string) {
 		if (!clip || !lane) return;
 		onBeforeEdit?.();
@@ -179,8 +167,7 @@
 						{/each}
 					</select>
 					{#if source && onEditChange}
-						<!-- The other way in is a small button on a rail thumb, which is
-					     nowhere near where the decision to crop something is made. -->
+						<!-- The other way in is a small button on a rail thumb, nowhere near this decision. -->
 						<button
 							class="src-edit"
 							class:on={sourceEdited}
@@ -203,8 +190,7 @@
 
 			{#if source?.kind === "video" && source.duration > 0}
 				{const span = sourceSpan(edits[source.id], source.duration)}
-				<!-- Bounded by the trim: an in-point before it starts at the trim's
-				     start anyway, and one past it would never be reached. -->
+				<!-- Bounded by the trim: an in-point before it starts at the trim's start anyway. -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="row" title="Where in the video this clip starts">
 					<label for="mc-in">Start at</label>
@@ -317,8 +303,7 @@
 			</div>
 
 			{#if lane.style.bleed > 0}
-				<!-- Only with a margin to fade: at a bleed of 0 there is nothing between
-			     the media's edge and the layer's, so the control would do nothing. -->
+				<!-- Only with a margin to fade: at a bleed of 0 there is nothing between the edges. -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="row"
@@ -432,8 +417,7 @@
 {/if}
 
 <style>
-	/* Lit when the media carries an edit, the way the rail's own button is: the
-	   panel should say the file is not what it was before you open anything. */
+	/* Lit when the media carries an edit, the way the rail's own button is. */
 	.src-edit {
 		display: inline-flex;
 		align-items: center;

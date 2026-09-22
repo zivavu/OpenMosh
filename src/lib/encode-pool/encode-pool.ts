@@ -16,20 +16,13 @@ export interface PoolPacket {
 export interface EncoderPoolOptions {
 	config: VideoEncoderConfig;
 	workerCount: number;
-	/** Frames per chunk. Each chunk starts with a forced keyframe and is encoded
-	 * wholly by one worker, so chunks are independent VP8 streams that remain
-	 * valid when interleaved back in frame order. */
+	/** Frames per chunk; each chunk is a forced keyframe encoded wholly by one worker. */
 	chunkSize: number;
 	/** Called once per frame, strictly in frame order. */
 	onPacket: (packet: PoolPacket) => void;
 }
 
-/**
- * Farms software video encoding out to N worker threads. Chrome/Firefox run
- * one software encoder mostly single-pipeline, so parallel encoder instances
- * scale throughput with cores. Frames are assigned round-robin by chunk;
- * packets are reordered back to global frame order before being emitted.
- */
+/** Farms software video encoding out to N worker threads; packets reorder to frame order. */
 export class EncoderPool {
 	private workers: Worker[] = [];
 	private pending = new Map<number, PoolPacket>();

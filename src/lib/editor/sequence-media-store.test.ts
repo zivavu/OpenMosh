@@ -30,9 +30,8 @@ describe("stableSourceId", () => {
 		).not.toBe(id);
 	});
 
-	// The whole point of a content-derived id is that storage round-trips it.
-	// The File constructor defaults lastModified to Date.now(), so this only
-	// holds while storedMediaToFile carries it across explicitly.
+	// A content-derived id must survive storage round-trips; File defaults
+	// lastModified to Date.now(), so storedMediaToFile must carry it across.
 	test("a stored record rebuilds to a File with the same id", () => {
 		const file = makeFile("clip.mp4", "abcdef", 1_700_000_000_000);
 		const id = stableSourceId(file);

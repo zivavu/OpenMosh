@@ -95,15 +95,8 @@ float insideLayer(vec2 uv) {
   return e.x * e.y;
 }
 
-/**
- * The same, ramped to nothing over the outermost "fade" of the box, in box uv.
- * Bleed hands a layer's effects room to spill into, but the room still ends,
- * and a glow cut off at that edge draws the rectangle it was meant to hide.
- * Ramping the coverage there lets the spill die out instead.
- *
- * The band never reaches the media: the caller sizes it from the margin alone,
- * so a soft edge costs nothing off the picture itself.
- */
+/** The same, ramped to nothing over the outermost "fade" of the box, in box uv.
+ * Bleed gives effects room to spill into, but a glow cut off there draws the rectangle. */
 float insideLayerSoft(vec2 uv, float fade) {
   float inside = insideLayer(uv);
   if (fade <= 0.0) return inside;
@@ -114,10 +107,7 @@ float insideLayerSoft(vec2 uv, float fade) {
 }
 `;
 
-/**
- * Chroma keying, shared by the layer placement and the source-edit pass. Both
- * key the same media by the same rule, so they read from one copy.
- */
+/** Chroma keying, shared by the layer placement and the source-edit pass. */
 const CHROMA_KEY_GLSL = `uniform vec3 u_keyColor;
 // <= 0 switches the key off, so unkeyed media costs one compare.
 uniform float u_keyThreshold;
@@ -127,20 +117,18 @@ uniform float u_keyLuma;
 // Hand-erased coverage in source space; red channel, 1 = keep. Off at <= 0.
 uniform sampler2D u_mask;
 uniform float u_hasMask;
-// The shape being morphed into, and how far along. When u_maskSdf is 0 these
-// are unused and u_mask holds plain coverage, exactly as it always did.
+// The shape being morphed into, and how far along. Unused when u_maskSdf is 0.
 uniform sampler2D u_maskNext;
 uniform float u_maskMix;
-// 1 only while a morph is in progress: the masks hold coverage in red and
-// their distance field in alpha, and this picks which one to read.
+// 1 only while a morph is in progress: masks hold coverage in red, field in alpha.
 uniform float u_maskSdf;
-// Half-width of the rebuilt edge and the range the field is encoded over, both
-// in mask pixels. Must match mask-sdf.ts.
+// Half-width of the rebuilt edge and the range the field is encoded over, both in
+// mask pixels. Must match mask-sdf.ts.
 uniform vec2 u_maskSdfShape;
 // Where the second shape's middle sits relative to the first's, in mask uv.
 uniform vec2 u_maskShift;
 // Where the mask sits: xy = offset in source space, z = scale about its centre.
-// (0,0,1) leaves it exactly as painted, which is what a still edit sets.
+// (0,0,1) leaves it as painted.
 uniform vec3 u_maskXform;
 // The part of the source to keep: xy = origin, zw = size, both normalized.
 uniform vec4 u_crop;
@@ -150,13 +138,7 @@ vec2 chroma(vec3 c) {
 }
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 // A cylinder in Y'CbCr: chroma within u_keyThreshold of the key's, brightness
-// within u_keyLuma. Chroma alone put every neutral at one point — white, grey
-// and black an exact match for each other — so keying a grey backdrop took the
-// highlights with it however low the threshold went. Each axis is softened in
-// its own units and a pixel outside on either is kept: folding brightness onto
-// the chroma axis and softening once blew the brightness band up by
-// smoothing/threshold, so at a low threshold the key ignored brightness again.
-// Returns coverage, 1 = keep. Mirrored in keyCoverage() in source-edit.ts.
+// within u_keyLuma (chroma alone keyed grey backdrops' highlights too). Returns coverage, 1 = keep.
 float keyCoverage(vec3 c) {
   float s = max(u_keySmooth, 0.0001);
   float dC = distance(chroma(c), chroma(u_keyColor));
@@ -170,42 +152,31 @@ float keyCoverage(vec3 c) {
 vec4 editedSource(sampler2D tex, vec2 uv) {
   vec2 srcUv = uv * u_crop.zw + u_crop.xy;
   vec4 c = texture(tex, srcUv);
-  // Sampled in source space too, so cropping afterwards doesn't slide the
-  // erased areas around the picture.
+  // Sampled in source space too, so cropping doesn't slide the erased areas around.
   if (u_hasMask > 0.0) {
     vec2 mUv = (srcUv - u_maskXform.xy - 0.5) / max(u_maskXform.z, 0.0001) + 0.5;
-    // Everything the moved mask no longer covers is kept. Clamping instead
-    // would drag the mask's edge pixels across the frame it slid off, painting
-    // a stripe of whatever the border happened to be.
+    // Everything the moved mask no longer covers is kept. Clamping instead would
+    // drag the mask's edge pixels across the frame it slid off.
     float inside =
       step(0.0, mUv.x) * step(mUv.x, 1.0) * step(0.0, mUv.y) * step(mUv.y, 1.0);
     float cover;
     if (u_maskSdf > 0.0) {
-      // Mid-morph: interpolate where the edge *is*, not how opaque the two
-      // paintings are. A lerp of the fields (alpha) walks one boundary across;
-      // a lerp of the coverage (red) would show both blobs at half strength.
-      // Both shapes are slid onto the travelling middle first: two blobs that
-      // do not overlap are each far from the other everywhere, so interpolating
-      // the fields where they lie shrinks both to nothing halfway. Aligned, the
-      // boundary morphs while the middle moves.
-      // mUv is already mask space, so the shift needs no rescaling.
+      // Mid-morph: interpolate where the edge is, not how opaque the two paintings are.
+      // A lerp of the fields (alpha) walks one boundary across; a lerp of the
+      // coverage would show both blobs.
       vec2 shift = u_maskShift;
       float encA = texture(u_mask, mUv - shift * u_maskMix).a;
       float encB = texture(u_maskNext, mUv + shift * (1.0 - u_maskMix)).a;
       float enc = mix(encA, encB, u_maskMix);
       float d = (enc - 0.5) * 2.0 * u_maskSdfShape.y;
       cover = clamp(d / u_maskSdfShape.x + 0.5, 0.0, 1.0);
-      // Whatever both shapes erase stays erased the whole way across. Without
-      // this floor a mask that is painted on over the clip — every key a
-      // superset of the last, which is what continuing to erase produces —
-      // blinks out entirely in the middle: the fields of two many-blobbed
-      // shapes average to a point that is far from every blob in both.
+      // Whatever both shapes erase stays erased the whole way across. Without this
+      // floor a mask painted on over the clip blinks out in the middle.
       float erasedInBoth =
         min(1.0 - texture(u_mask, mUv).r, 1.0 - texture(u_maskNext, mUv).r);
       cover = min(cover, 1.0 - erasedInBoth);
     } else {
-      // Sitting on a key, or not animated at all: the painting itself, soft
-      // brush edge and all.
+      // Sitting on a key, or not animated at all: the painting itself, soft brush edge and all.
       cover = texture(u_mask, mUv).r;
     }
     c.a *= mix(1.0, cover, inside);
@@ -215,11 +186,8 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
 }
 `;
 
-/**
- * Place a media layer into a full-frame buffer: fitted, scaled, rotated and
- * centred, with everything outside its box transparent so the composite leaves
- * the image underneath it alone.
- */
+/** Place a media layer into a full-frame buffer: fitted, scaled, rotated and
+ * centred, with everything outside its box transparent. */
 export const LAYER_TRANSFORM_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_texture;
@@ -231,18 +199,16 @@ ${LAYER_BOX_GLSL}
 ${CHROMA_KEY_GLSL}
 void main() {
   vec2 uv = layerUv(v_uv);
-  // Coverage is kept here, unlike the source pass: a layer has the frame
-  // underneath it to show through wherever it was erased or keyed out.
+  // Coverage is kept here, unlike the source pass: the frame underneath shows through.
   vec4 c = editedSource(u_texture, clamp(uv, 0.0, 1.0));
-  // What the edit removed goes in colour too, not only in coverage. The chain
-  // reads rgb straight, so a keyed backdrop that kept its green would bloom
-  // and smear right back through the hole. Alpha stays straight: the
-  // composite mixes by it, and premultiplying would darken the soft edge.
+  // What the edit removed goes in colour too, not only in coverage: the chain reads
+  // rgb straight, so a keyed backdrop that kept its green would bloom back through the hole.
   c.rgb *= step(0.001, c.a);
   outColor = c * insideLayerSoft(uv, u_edgeFade);
 }`;
 
-/** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,4=overlay,5=difference,6=exclusion,7=subtract. u_invert: 0/1. u_opacity: 0-1. */
+/** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,
+ * 4=overlay,5=difference,6=exclusion,7=subtract. u_invert 0/1, u_opacity 0-1. */
 export const TEXT_BLEND_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_texture;
@@ -258,10 +224,8 @@ void main() {
   if (u_invert > 0.5) {
     textC.rgb = 1.0 - textC.rgb;
   }
-  // Coverage is whatever the layer's own chain produced. A media layer is
-  // placed into a transparent frame, so its chain carries that alpha with it —
-  // and an effect that displaces or blooms past the layer's edges is meant to
-  // land outside them, the same way a text layer's does.
+  // Coverage is whatever the layer's own chain produced. A media layer is placed into
+  // a transparent frame, and an effect that displaces or blooms past its edges lands outside.
   float a = textC.a * u_opacity;
   vec3 mainRgb = mainC.rgb;
   vec3 textRgb = textC.rgb;
@@ -285,11 +249,8 @@ void main() {
   } else {
     blended = mix(mainRgb, textRgb, a);
   }
-  // Source-over, in straight alpha. The mode above already folds the layer's
-  // coverage into an opaque base; where the base is clear — the editor's blank
-  // frame, the fit's bars, or a text layer's own chain, which this same pass
-  // runs inside — the layer shows through as itself, not darkened by the
-  // nothing it landed on.
+  // Source-over, in straight alpha. The mode above already folds the layer's coverage
+  // into an opaque base; where the base is clear the layer shows through as itself.
   float outA = mainC.a + a * (1.0 - mainC.a);
   vec3 over = (1.0 - mainC.a) * a * textRgb + mainC.a * blended;
   outColor = vec4(
@@ -302,12 +263,8 @@ export interface PrePassDef {
 	fragment: string;
 	/** Use LINEAR texture filtering for this pass (smoother sampling). */
 	linearFilter?: boolean;
-	/**
-	 * Keep this pass's output as private full-res history and hand it back as
-	 * u_feedback next frame. Its output becomes the next pass's input, so an
-	 * effect can carry state (a background estimate, a held keyframe) apart
-	 * from the main pass's own feedback.
-	 */
+	/** Keep this pass's output as private full-res history and hand it back as
+	 * u_feedback next frame, so an effect can carry state apart from the main pass's own feedback. */
 	feedback?: boolean;
 }
 
@@ -317,17 +274,12 @@ export interface EffectShaderDef {
 	prePasses?: PrePassDef[];
 	/** Sample the chain input with LINEAR filtering for the main pass (smooth warps like swirl). */
 	linearFilter?: boolean;
-	/**
-	 * Allocate this effect's u_feedback history as half-float instead of RGBA8.
-	 * Needed by simulations whose per-frame deltas fall below 8-bit quantization
-	 * (they stall into flat blobs otherwise).
-	 */
+	/** Allocate this effect's u_feedback history as half-float instead of RGBA8:
+	 * simulations whose per-frame deltas fall below 8-bit quantization stall into
+	 * flat blobs otherwise. */
 	hdrFeedback?: boolean;
-	/**
-	 * This shader paints its own background over the whole frame (halftone's
-	 * paper), so it can't preserve the transparency of what it was handed. On a
-	 * text layer it fills the frame instead of following the text.
-	 */
+	/** This shader paints its own background over the whole frame (halftone's
+	 * paper), so it can't preserve transparency. On a text layer it fills the frame. */
 	opaqueOutput?: boolean;
 	animated?: boolean;
 	setUniforms: (
@@ -355,11 +307,8 @@ function setInt(
 	if (locs[name]) gl.uniform1i(locs[name], value);
 }
 
-/**
- * Parsed colors, keyed by the hex string. A color only changes when its param
- * does, but setUniforms runs every frame — so without this every frame paid a
- * regex, a parseInt and two array allocations per color.
- */
+/** Parsed colors, keyed by the hex string. setUniforms runs every frame, so
+ * without this each frame paid a regex, a parseInt and two array allocations per color. */
 const colorVecs = new Map<string, Float32Array>();
 
 function colorVec(hex: string): Float32Array {
@@ -373,7 +322,6 @@ function colorVec(hex: string): Float32Array {
 	return vec;
 }
 
-/** Set a vec3 uniform from a hex color param. */
 function setColor(
 	gl: WebGL2RenderingContext,
 	locs: Record<string, WebGLUniformLocation>,
@@ -390,12 +338,11 @@ function floats(...keys: string[]): EffectShaderDef["setUniforms"] {
 	};
 }
 
-/** Plain horizontal Gaussian (no threshold) — Blur effect pass 1. */
+/** Plain horizontal Gaussian (no threshold), Blur effect pass 1. */
 const BLUR_H_FRAG = `uniform float u_radius;
 uniform vec2 u_resolution;
 void main() {
-  // Pixel size from the full output resolution (not the pre-pass buffer), so
-  // the screen-space blur width is invariant to pre-pass downsampling.
+  // Pixel size from the full output resolution, so blur width ignores pre-pass downsampling.
   vec2 px = 1.0 / u_resolution;
   float spread = u_radius * 3.0;
   float sigma = spread * 0.4;
@@ -471,20 +418,15 @@ void main() {
   vec4 c = texture(u_texture, v_uv);
   vec3 hsv = rgb2hsv(c.rgb);
 
-  // The Sabattier fold: gamma the value channel, then reflect it about the
-  // pivot. Everything below the pivot inverts (shadows come back as
-  // highlights), everything above it climbs from black, and the pivot itself
-  // lands on zero — that dark band through the midtones is the whole effect.
+  // The Sabattier fold: gamma the value channel, then reflect it about the pivot.
+  // Below the pivot inverts, above climbs from black, the pivot lands on zero.
   float v = pow(hsv.z, u_curve);
   float folded = v < u_pivot
     ? 1.0 - v / max(u_pivot, 1e-4)
     : (v - u_pivot) / max(u_pivot, 1e-4);
 
-  // Saturation follows how bright the pixel *was*, not what the fold turned it
-  // into, so the colour that survives tracks the original image rather than
-  // the inverted one. Scaled right down: a darkroom solarization is close to
-  // monochrome with a colour cast, and holding full saturation here just reads
-  // as a hue-shifted negative.
+  // Saturation follows how bright the pixel was, not what the fold turned it into,
+  // so the surviving colour tracks the original. A darkroom solarization is near-monochrome.
   float sat = hsv.y * hsv.z * u_colorize;
 
   outColor = vec4(clamp(hsv2rgb(vec3(hsv.x, sat, folded)), 0.0, 1.0), c.a);
@@ -528,8 +470,8 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec4 orig = texture(u_texture, v_uv);
 
-  // Sobel on pre-blurred luminance — sample each tap as a 2x2 average to
-  // suppress pixel-level noise and produce smooth, organic edges
+  // Sobel on pre-blurred luminance: each tap is a 2x2 average, suppressing
+  // pixel noise for smooth edges
   vec3 luma = vec3(0.299, 0.587, 0.114);
   vec2 h = px * 0.5;
   #define SLUM(o) dot( \
@@ -551,11 +493,9 @@ void main() {
   float gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
   float edge = clamp(sqrt(gx*gx + gy*gy) * u_strength, 0.0, 1.0);
 
-  // Neon: original hue at full saturation + brightness
   vec3 hsv = rgb2hsv(orig.rgb);
   vec3 neon = hsv2rgb(vec3(hsv.x, 1.0, 1.0));
 
-  // Glow: 5x5 blur of neon signal from neighborhood
   vec3 glowAccum = vec3(0.0);
   for (int x = -2; x <= 2; x++) {
     for (int y = -2; y <= 2; y++) {
@@ -567,10 +507,8 @@ void main() {
   }
   glowAccum /= 25.0;
 
-  // Background: original dimmed in non-edge areas
   vec3 bg = orig.rgb * u_bg * (1.0 - edge);
 
-  // Composite: sharp neon edges + soft glow halo + dim bg
   vec3 result = neon * edge + glowAccum * sqrt(edge) * u_glow * 0.4 + bg;
   outColor = vec4(clamp(result, 0.0, 1.0), orig.a);
 }`,
@@ -600,8 +538,7 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0)) * u_radius;
   vec4 c = texture(u_texture, v_uv);
 
-  // 3x3 Gaussian blur (sigma ~0.85)
-  // Weights: center=4/16, edges=2/16, corners=1/16
+  // 3x3 Gaussian blur (sigma ~0.85): center=4/16, edges=2/16, corners=1/16
   vec3 blur =
     texture(u_texture, v_uv + vec2(-px.x, -px.y)).rgb * 1.0 +
     texture(u_texture, v_uv + vec2(   0., -px.y)).rgb * 2.0 +
@@ -678,7 +615,6 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
 
   if (u_mode == 0) {
-    // Linear: uniform offset along angle
     float rad = u_angle * 3.14159265 / 180.0;
     vec2 d = vec2(cos(rad), sin(rad)) * u_amount * px;
     outColor = vec4(
@@ -688,7 +624,6 @@ void main() {
       texture(u_texture, v_uv).a
     );
   } else if (u_mode == 1) {
-    // Radial: offset from center, stronger at edges
     vec2 center = vec2(0.5);
     vec2 dir = v_uv - center;
     float dist = length(dir);
@@ -701,7 +636,6 @@ void main() {
       texture(u_texture, v_uv).a
     );
   } else {
-    // Prismatic: position-dependent dispersion + hue rotation, animated
     float t = u_time * u_speed;
     float rad = u_angle * 3.14159265 / 180.0;
     vec2 dir = vec2(cos(rad), sin(rad));
@@ -713,8 +647,7 @@ void main() {
     float r = texture(u_texture, uvR).r;
     float g = texture(u_texture, v_uv).g;
     float b = texture(u_texture, uvB).b;
-    // Widest coverage of the three taps, so a split text layer keeps every
-    // channel it displaced.
+    // Widest coverage of the three taps, so a split text layer keeps every channel it displaced.
     float a = max(texture(u_texture, uvR).a,
                   max(texture(u_texture, v_uv).a, texture(u_texture, uvB).a));
     vec3 color = vec3(r, g, b);
@@ -768,18 +701,14 @@ uniform float u_amount;
 uniform float u_transparent;
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  // Squircle norm instead of a circle so the falloff hugs all four edges
-  // evenly (edge midpoints hit 1.0, corners only ~1.19) rather than pooling
-  // in the corners.
+  // Squircle norm, not a circle, so the falloff hugs all four edges evenly instead of pooling.
   vec2 d = abs(v_uv - 0.5) * 2.0;
   vec2 d4 = d * d * d * d;
   float dist = pow(d4.x + d4.y, 0.25);
   float edge = 1.2 - u_size;
   float vig = smoothstep(edge, edge - 0.6, dist);
   float fade = mix(1.0, vig, u_amount);
-  // Same falloff either way; transparent spends it on alpha instead of on the
-  // colour, so whatever sits under the layer shows through the edge rather
-  // than getting painted over in black.
+  // Same falloff either way; transparent spends it on alpha, so what sits under shows through.
   outColor = u_transparent > 0.5 ? vec4(c.rgb, c.a * fade) : vec4(c.rgb * fade, c.a);
 }`,
 		setUniforms: floats("size", "amount", "transparent"),
@@ -845,21 +774,20 @@ void main() {
 uniform float u_frequency;
 uniform float u_speed;
 
-// Value noise helpers
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 float noise(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f); // smoothstep
+  f = f * f * (3.0 - 2.0 * f);
   return mix(
     mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
     mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
     f.y
   );
 }
-// Fractal Brownian motion — 3 octaves
+// Fractal Brownian motion, 3 octaves
 float fbm(vec2 p) {
   float v = 0.0;
   v += 0.5    * noise(p); p *= 2.13;
@@ -873,7 +801,7 @@ void main() {
   float t = u_time * u_speed;
   vec2 st = v_uv * u_frequency;
 
-  // 2D noise-based displacement — varies in both axes
+  // 2D noise-based displacement, varies in both axes
   float ox = fbm(st + vec2(t * 0.7, t * 0.3)) - 0.5;
   float oy = fbm(st + vec2(t * -0.4, t * 0.8) + 50.0) - 0.5;
 
@@ -932,7 +860,6 @@ void main() {
 	glow: {
 		prePasses: [
 			{
-				// Pass 1: threshold + horizontal Gaussian blur
 				fragment:
 					H +
 					`uniform float u_cutoff;
@@ -951,8 +878,7 @@ void main() {
     float fi = float(i) * step;
     float w = exp(-fi * fi * invSigma2);
     vec2 off = vec2(fi * px.x, 0.0);
-    // Weighted by coverage, so a half-erased edge blooms half as much and a
-    // cut-out's soft rim doesn't glow with the colour it was keyed out of.
+    // Weighted by coverage, so a half-erased edge blooms half as much.
     vec4 s4 = texture(u_texture, v_uv + off);
     vec3 s = s4.rgb * s4.a;
     float luma = dot(s, vec3(0.299, 0.587, 0.114));
@@ -966,12 +892,10 @@ void main() {
 				linearFilter: true,
 			},
 			{
-				// Pass 2: vertical Gaussian blur
 				fragment: H + GLOW_VBLUR_FRAG,
 				linearFilter: true,
 			},
 		],
-		// Final pass: composite blurred bloom with original
 		fragment:
 			H +
 			`uniform float u_amount;
@@ -980,10 +904,7 @@ void main() {
   vec4 orig = texture(u_original, v_uv);
   vec3 bloom = texture(u_texture, v_uv).rgb * u_amount;
   // The halo carries its own coverage, so glow spreads past the edge of a text
-  // layer or a cut-out instead of being clipped to it. Summed premultiplied
-  // and divided back out: the composite mixes by alpha, so leaving the halo's
-  // colour straight would scale it by its own coverage twice and the spill
-  // would all but vanish off the edge. No-op on an opaque image.
+  // layer or a cut-out. Summed premultiplied and divided back out, or it scales twice.
   float halo = dot(bloom, vec3(0.299, 0.587, 0.114));
   float a = clamp(max(orig.a, halo), 0.0, 1.0);
   vec3 lit = orig.rgb * orig.a + bloom;
@@ -1002,7 +923,6 @@ float vnoise(float x) {
   float f = fract(x);
   return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f));
 }
-// rotate hue by angle (radians)
 vec3 hrot(vec3 c, float a) {
   float ca = cos(a), sa = sin(a);
   vec3 k = vec3(0.57735);
@@ -1035,26 +955,21 @@ void main() {
 
     float typeR = h1(et * 5.3 + fi * 8.7);
     if (typeR < 0.25) {
-      // content stolen from another row
       float srcY = h1(et * 2.9 + fi * 1.3);
       readUV = vec2(v_uv.x, srcY + fract(y - top) * ht);
     } else if (typeR < 0.5) {
-      // horizontal shift + wrong-color hue rotation
       float xOff = (h1(et * 7.1 + fi) - 0.5) * strength * 1.8;
       readUV = vec2(clamp(v_uv.x + xOff, 0.0, 1.0), y);
       hueShift = h1(et * 3.3 + fi * 5.5) * 6.28;
     } else if (typeR < 0.68) {
-      // row-duplication stutter
       float stripeH = ht / 4.0;
       float srcRow = top + h1(et * 4.4 + fi) * ht * 0.5;
       readUV = vec2(v_uv.x, srcRow + mod(y - top, stripeH));
     } else if (typeR < 0.84) {
-      // vertical slip: the band slides up/down
       float yOff = (h1(et * 6.2 + fi) - 0.5) * strength * 0.8;
       readUV = vec2(v_uv.x, clamp(y + yOff, 0.0, 1.0));
       hueShift = (h1(et * 1.9 + fi) - 0.5) * 1.2;
     } else {
-      // ghost echo: translucent shifted duplicate
       ghost = 0.4 + h1(et * 8.8 + fi) * 0.4;
     }
     break;
@@ -1065,7 +980,6 @@ void main() {
   if (burst > 0.0 && h1(ft * 0.173) > 1.0 - 0.06 * burst) {
     float kind = h1(ft * 0.731);
     if (kind < 0.45) {
-      // full-frame tear below a random line
       float tearY = h1(ft * 1.37);
       float off = (h1(ft * 2.11) - 0.5) * strength * 1.2;
       if (readUV.y > tearY) readUV.x = clamp(readUV.x + off, 0.0, 1.0);
@@ -1102,7 +1016,7 @@ void main() {
 
   float r = 3.0 * max(px.x, px.y);
 
-  // 4th-order central-difference gradient — smooth, suppresses per-pixel noise
+  // 4th-order central-difference gradient, smooth and suppresses per-pixel noise
   float gxN2 = dot(texture(u_texture, v_uv - vec2(2.0*r, 0.0)).rgb, lum);
   float gxN1 = dot(texture(u_texture, v_uv - vec2(    r, 0.0)).rgb, lum);
   float gxP1 = dot(texture(u_texture, v_uv + vec2(    r, 0.0)).rgb, lum);
@@ -1117,7 +1031,7 @@ void main() {
   // Curl of luminance gradient = divergence-free flow (follows colour contours)
   vec2 curl = vec2(-gy, gx);
 
-  // Two layered sine waves at incommensurate frequencies — live animation
+  // Two layered sine waves at incommensurate frequencies, live animation
   float d1 = sin(v_uv.x * 3.1 + t) * cos(v_uv.y * 2.7 - t * 0.73);
   float d2 = sin(v_uv.y * 4.3 - t * 1.3 + 1.57) * cos(v_uv.x * 3.7 + t * 0.91);
   vec2 drift = vec2(d1, d2) * 0.2;
@@ -1126,10 +1040,8 @@ void main() {
   vec2 rawFlow = curl + drift;
   vec2 flowDir = rawFlow / max(length(rawFlow), 0.08);
 
-  // LIC-style streamline accumulation:
-  // Step N times backward along the flow direction, blending colours with
-  // exponential decay weights — this is what turns a plain warp into the
-  // characteristic elongated liquid-paint / pour-paint brush-stroke look.
+  // LIC-style streamline accumulation: step N times backward along the flow,
+  // blending colours with exponential decay weights, which gives the brush-stroke look.
   float stepLen = r * (1.0 + u_amount * 6.0);
   vec2  stepVec = flowDir * stepLen;
 
@@ -1146,8 +1058,7 @@ void main() {
   vec4 acc = color / totalW;
   vec3 avg = acc.rgb;
 
-  // Weighted averaging desaturates colours by blending hues toward their
-  // neighbours along the streamline. Re-expand chroma to restore vibrancy.
+  // Weighted averaging desaturates colours; re-expand chroma to restore vibrancy.
   float avgLuma = dot(avg, lum);
   avg = mix(vec3(avgLuma), avg, 1.35);
 
@@ -1176,11 +1087,9 @@ void main() {
   float row = floor(v_uv.y * res.y);
   float colPx = floor(v_uv.x * res.x);
 
-  // --- Drifting hotspot regions where static concentrates ---
   float hotspot = clamp(0.5 + 0.3 * sin(v_uv.y * 6.0 + t * 0.5)
                             + 0.2 * sin(v_uv.y * 17.0 - t * 0.8), 0.0, 1.0);
 
-  // --- Static bands (2-5 px tall) with random lifetimes ---
   float bandH = 2.0 + hash(vec2(floor(row / 3.0), 444.0)) * 3.0;
   float bandId = floor(row / bandH);
   float lifeLen = 2.0 + floor(hash(vec2(bandId, 123.0)) * 7.0);
@@ -1188,11 +1097,9 @@ void main() {
   float bandChance = hash(vec2(bandId, bandEpoch * 7.0));
   float isStaticBand = step(1.0 - u_noise * 0.5 * hotspot, bandChance);
 
-  // --- Horizontal displacement of static bands ---
   float shiftDir = hash(vec2(bandId, bandEpoch * 13.0 + 50.0)) - 0.5;
   float shiftAmt = isStaticBand * shiftDir * u_noise * 40.0 * px.x;
 
-  // --- Streak: hot head decaying into a noisy tail; some are dark dropouts ---
   float streakX0 = hash(vec2(bandId * 3.0, bandEpoch + 77.0));
   float lenSeed = hash(vec2(bandId * 7.0, bandEpoch + 33.0));
   float streakLen = 0.03 + lenSeed * 0.15 + step(0.8, lenSeed) * 0.12;
@@ -1204,14 +1111,12 @@ void main() {
   float dropout = step(0.75, toneSeed);
   float streakSig = inStreak * env * sparkle * (0.45 + toneSeed * 0.55) * u_noise;
 
-  // --- Per-line jitter + sporadic warp bands ---
   float scanY = floor(v_uv.y * 480.0);
   float lineNoise = (hash(vec2(scanY, floor(t * 10.0))) - 0.5) * u_noise * 4.0 * px.x;
   float warpA = (hash(vec2(floor(v_uv.y * 80.0), floor(t * 6.0))) - 0.5)
     * step(0.75, hash(vec2(floor(v_uv.y * 80.0) + 100.0, floor(t * 6.0))))
     * u_noise * 15.0 * px.x;
 
-  // --- Tracking bars crawling vertically ---
   float bars = 0.0;
   for (int i = 0; i < 4; i++) {
     float fi = float(i);
@@ -1231,7 +1136,6 @@ void main() {
   float rOff = totalWarp * 1.2;
   float bOff = totalWarp * -0.8;
 
-  // --- Sample with RGB split ---
   vec4 c;
   c.r = texture(u_texture, v_uv + vec2(rOff, 0.0)).r;
   c.g = texture(u_texture, v_uv + vec2(totalWarp * 0.3, 0.0)).g;
@@ -1239,16 +1143,13 @@ void main() {
   c.a = max(texture(u_texture, v_uv + vec2(rOff, 0.0)).a,
             texture(u_texture, v_uv + vec2(bOff, 0.0)).a);
 
-  // --- Streaks: bright ones add, dropouts pull toward black ---
   c.rgb += streakSig * (1.0 - dropout);
   c.rgb -= streakSig * dropout * 1.6;
 
-  // --- Chroma speckle on static bands (blue/yellow shimmer) ---
   float chroma = isStaticBand * u_noise * 0.25;
   c.r += (hash(vec2(colPx * 1.3, row + tFrame)) - 0.5) * chroma;
   c.b += (hash(vec2(colPx * 1.7, row - tFrame)) - 0.5) * chroma;
 
-  // --- Tracking bar interior: noise fill instead of a flat lift ---
   c.rgb = mix(c.rgb, vec3(barNoise), min(bars * 0.45, 0.85));
 
   outColor = vec4(clamp(c.rgb, 0.0, 1.0), c.a);
@@ -1286,7 +1187,7 @@ void main() {
 uniform float u_rgb;
 uniform int u_blendMode;
 // Sine-free hash (Dave Hoskins): stable on ANGLE/D3D where fract(sin(x)*K)
-// collapses to a constant for large x — with pixel coords it must not.
+// collapses to a constant for large x, which pixel coords hit.
 float hash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -1303,8 +1204,8 @@ void main() {
   vec4 c = texture(u_texture, v_uv);
   float frame = floor(u_time * 24.0);
 
-  // Hard per-pixel speckle: one hash per pixel, no interpolation — crisp
-  // grains that re-seat every frame and boil like film.
+  // Hard per-pixel speckle: one hash per pixel, no interpolation, so grains
+  // re-seat every frame and boil like film.
   vec2 p = floor(gl_FragCoord.xy) + frame * vec2(13.7, 57.3);
 
   // RGB mode gives each channel its own grain -> colored speckle
@@ -1408,15 +1309,13 @@ void main() {
 
   for (float i = 0.0; i < 12.0; i++) {
     if (i >= numZones) break;
-    // Corrupt zones are runs of consecutive blocks in raster order,
-    // wrapping row edges like a corrupted byte stream.
+    // Corrupt zones are runs of consecutive blocks in raster order, wrapping row edges.
     float zStart = floor(hash(vec2(i, t)) * total);
     float zLen = floor((0.01 + hash(vec2(i + 50.0, t)) * 0.06)
       * total * (0.3 + u_intensity));
     float zEnd = zStart + zLen;
 
-    // The classic databend signature: everything AFTER the broken bytes
-    // stays shifted sideways for the zone's lifetime.
+    // The classic databend signature: everything after the broken bytes stays shifted.
     if (bIdx >= zEnd) {
       rasterShift += floor((hash(vec2(i * 3.0, t + 7.0)) - 0.5)
         * u_intensity * 7.0);
@@ -1425,7 +1324,6 @@ void main() {
     if (bIdx >= zStart && bIdx < zEnd) {
       float fate = hash(vec2(i * 11.0, t + 3.0));
       if (fate < 0.45) {
-        // wrong content: this block decodes bytes from elsewhere
         float srcIdx = mod(bIdx + floor((hash(vec2(i * 5.0, t)) - 0.5)
           * total * 0.5) + total, total);
         readBlock = vec2(mod(srcIdx, gridW), floor(srcIdx / gridW));
@@ -1433,7 +1331,6 @@ void main() {
         // smear: the block repeats its first row downward (JPEG streak)
         readLocal.y = readLocal.y * 0.08;
       } else {
-        // garbage: posterized hue trash on laterally-shifted content
         garbage = 1.0;
         hueG = hash(vec2(i * 7.0, t + 9.0)) * 6.28;
         readBlock.x = mod(readBlock.x + floor(hash(vec2(i, t + 4.0)) * 8.0), gridW);
@@ -1441,7 +1338,6 @@ void main() {
     }
   }
 
-  // Re-linearize with the persistent raster shift
   float rIdx = readBlock.y * gridW + readBlock.x + rasterShift;
   rIdx = clamp(rIdx, 0.0, total - 1.0);
   vec2 rb = vec2(mod(rIdx, gridW), floor(rIdx / gridW));
@@ -1490,14 +1386,12 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   float t = u_time;
 
-  // --- Drip field ---------------------------------------------------------
   // Broad slow columns crossed with fine streaks; wanders gently over time.
   float cols = fbm(vec2(v_uv.x * 4.0, t * 0.05));
   float streaks = fbm(vec2(v_uv.x * 47.0 + 13.0, t * 0.021));
   float drip = cols * cols * (0.3 + 0.7 * streaks);
 
-  // A melting front descends per column, so drips grow downward over time
-  // instead of the whole image sliding at once.
+  // A melting front descends per column, so drips grow downward over time.
   float front = t * u_amount * (0.02 + 0.3 * cols);
   float meltOn = smoothstep(0.0, 0.18, front - v_uv.y);
 
@@ -1511,34 +1405,28 @@ void main() {
   // Moving drips swing sideways; amplitude scales with their speed.
   float sway = sin(v_uv.y * 21.0 - t * 1.4 + cols * 6.2831) * fall * 2.2;
 
-  // Advection: this pixel receives what was slightly above it last frame
-  // (+v_uv.y is screen-down in effect space).
+  // Advection: this pixel receives what was slightly above it last frame (v_uv.y is screen-down).
   vec2 from = vec2(clamp(v_uv.x + sway, 0.0, 1.0),
                    clamp(v_uv.y - fall, 0.0, 1.0));
   vec4 meltedS = texture(u_feedback, from);
   vec3 melted = meltedS.rgb;
   float meltedA = meltedS.a;
 
-  // --- Viscous softening ---------------------------------------------------
-  // Only where actually flowing: fast drips smear and blend like wax,
-  // untouched areas stay perfectly crisp.
+  // Only where actually flowing: fast drips smear like wax, untouched areas stay crisp.
   float visc = 0.7 * clamp(fall / (px.y * 1.5), 0.0, 1.0);
   vec3 up   = texture(u_feedback, clamp(from + vec2(0.0, px.y * 1.5), vec2(0.0), vec2(1.0))).rgb;
   vec3 down = texture(u_feedback, clamp(from - vec2(0.0, px.y * 1.5), vec2(0.0), vec2(1.0))).rgb;
   melted = mix(melted, (melted * 2.0 + up + down) * 0.25, visc);
 
-  // --- Re-solidifying ------------------------------------------------------
-  // The source image constantly seeps back through the wax, so the melt
-  // reaches a living equilibrium instead of burying the input. Higher
-  // amounts drip faster and re-solidify slower, but never fully take over.
+  // The source image seeps back through the wax, so the melt reaches equilibrium
+  // instead of burying the input. Higher amounts drip faster and set slower.
   vec4 freshS = texture(u_texture, v_uv);
   vec3 fresh = freshS.rgb;
   float heal = 1.0 - exp(-mix(2.0, 0.25, u_amount) * u_delta);
   melted = mix(melted, fresh, heal);
   meltedA = mix(meltedA, freshS.a, heal);
 
-  // Where the front hasn't arrived yet, show the live chain input so
-  // unmelted regions (and upstream animated effects) stay alive.
+  // Where the front hasn't arrived yet, show the live chain input so unmelted regions stay alive.
   vec3 col = mix(fresh, melted, meltOn);
 
   outColor = vec4(clamp(col, 0.0, 1.0), mix(freshS.a, meltedA, meltOn));
@@ -1564,7 +1452,7 @@ void main() {
   float ca = cos(a), sa = sin(a);
   c = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y) * s;
   // Decay knob is inverted (higher = fades faster) and cropped to the
-  // usable 0.90–1.00 per-frame multiplier range.
+  // usable 0.90 to 1.00 per-frame multiplier range.
   float fade = 1.0 - u_decay * 0.1;
   vec4 prev = texture(u_feedback, c + 0.5) * pow(fade, u_delta * 60.0);
   vec4 fresh = texture(u_texture, v_uv);
@@ -1593,19 +1481,17 @@ void main() {
   float slot = v_uv.x * bars;
   float idx = floor(slot) / bars;
 
-  // Bass occupies a tiny slice of a linear FFT, so square the lookup to hand
-  // the low end most of the width. Sampling linearly leaves every bar past the
-  // first few sitting dead for most music.
+  // Bass occupies a tiny slice of a linear FFT, so square the lookup to give the low end width.
   float lo = idx * idx;
   float hi = (idx + 1.0 / bars) * (idx + 1.0 / bars);
   float level = 0.0;
   for (int i = 0; i < 8; i++) {
     float f = mix(lo, hi, (float(i) + 0.5) / 8.0);
-    // Peak of the bins this bar spans, not their mean — averaging reads as mush.
+    // Peak of the bins this bar spans, not their mean, which reads as mush.
     level = max(level, texture(u_spectrum, vec2(f, 0.5)).r);
   }
-  // Punch reshapes the response the same way it does for volume links: below
-  // 1 lifts quiet detail into visible movement, above 1 leaves only the hits.
+  // Punch reshapes the response as for volume links: below 1 lifts quiet detail
+  // into movement, above 1 leaves only the hits.
   level = clamp(pow(level, u_punch) * u_gain, 0.0, 1.0) * u_height;
 
   // v_uv.y runs top-down, so anchoring to the bottom means measuring back up.
@@ -1631,8 +1517,8 @@ void main() {
 			setFloat(gl, l, "u_bars", v.bars as number);
 			setFloat(gl, l, "u_height", v.height as number);
 			setFloat(gl, l, "u_gain", v.gain as number);
-			// Smoothing is applied on the CPU per instance before the texture upload;
-			// only the punch curve is cheap enough to leave to the shader.
+			// Smoothing is applied on the CPU per instance before upload; only the punch
+			// curve is left to the shader.
 			setFloat(
 				gl,
 				l,
@@ -1661,9 +1547,7 @@ uniform float u_amount;
 uniform int u_mode;
 void main() {
   vec4 c = texture(u_texture, v_uv);
-  // u_time arrives as accumulated phase because the rate param is keyed
-  // "speed", so one unit is one full flash cycle and changing the rate mid-clip
-  // doesn't jump the strobe.
+  // u_time arrives as accumulated phase because the rate param is keyed "speed".
   float phase = fract(u_time);
   float on = step(phase, u_duty);
   vec3 flash = u_mode == 1 ? vec3(1.0)
@@ -1705,16 +1589,15 @@ uniform int u_blend;
 uniform float u_delta;
 uniform sampler2D u_feedback;
 void main() {
-  // Every transform is per second and scaled by the frame delta, so a trail
-  // decays and travels the same distance whatever the frame rate.
+  // Every transform is per second and scaled by the frame delta, so a trail decays
+  // and travels the same distance at any frame rate.
   float s = 1.0 - u_scale * u_delta;
   float a = u_rotate * (3.14159265 / 180.0) * u_delta;
   float ca = cos(a), sa = sin(a);
   vec2 c = v_uv - 0.5;
   vec2 from = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y) * s + 0.5;
 
-  // Noise drift, so the trail curls away instead of sliding rigidly along the
-  // scale/rotate path.
+  // Noise drift, so the trail curls away instead of sliding rigidly along the scale/rotate path.
   if (u_warp > 0.0) {
     float nx = fbm(v_uv * 3.0 + u_time * 0.15);
     float ny = fbm(v_uv * 3.0 - u_time * 0.12 + 17.0);
@@ -1722,9 +1605,8 @@ void main() {
   }
 
   vec4 prev = texture(u_feedback, clamp(from, 0.0, 1.0));
-  // The hue shift compounds: each pass through the loop turns the surviving
-  // trail a little further, so old ghosts separate in colour from new ones
-  // rather than stacking into one grey smear.
+  // The hue shift compounds, so old ghosts separate in colour from new ones rather
+  // than stacking into one grey smear.
   if (u_hue != 0.0) prev.rgb = hueRotate(prev.rgb, u_hue * u_delta);
   prev *= pow(1.0 - u_decay * 0.06, u_delta * 60.0);
 
@@ -1785,7 +1667,6 @@ void main() {
     ink = smoothstep(r, r - 1.5 / u_scale, length(cell));
   }
   ink = mix(ink, 1.0 - ink, u_invert);
-  // Ink takes the source color over paper white
   vec3 col = mix(vec3(1.0), src, ink);
   outColor = vec4(col, 1.0);
 }`,
@@ -1799,14 +1680,8 @@ void main() {
 		},
 	},
 
-	/**
-	 * Composite video falling apart. Not a dot screen — the speckle comes from
-	 * decoding, so it lands on detail and leaves flat areas alone: luma is
-	 * sample-and-held into runs then over-peaked (the ringing rides the run
-	 * edges, not the picture's), chroma is decoded at a quarter of that
-	 * bandwidth and late so it never sits on the run that produced it, and the
-	 * subcarrier beats against luma with its phase flipped every line.
-	 */
+	/** Composite video falling apart. The speckle comes from decoding, so it lands
+	 * on detail and leaves flat areas alone: luma is held into runs then over-peaked. */
 	composite: {
 		fragment:
 			H +
@@ -1814,9 +1689,7 @@ void main() {
 uniform float u_crawl;
 uniform float u_crush;
 uniform float u_mix;
-// Pinned rather than exposed: these four only read as this signal near the top
-// of their ranges, so a slider on each is four ways to a worse picture. Tune
-// here if the look ever needs to move.
+// Pinned rather than exposed: these four only read as this signal near the top of their ranges.
 const float RUN = 24.0;
 const float LINES = 8.0;
 const float RING = 5.0;
@@ -1842,8 +1715,8 @@ void main() {
   vec2 pos = v_uv * res;
   vec4 src = texture(u_texture, v_uv);
 
-  // Everything below is computed per scan line, so nothing lines up vertically
-  // — that mismatch between neighbouring lines is the comb texture.
+  // Everything below is computed per scan line, so nothing lines up vertically:
+  // that mismatch is the comb texture.
   float row = floor(pos.y / LINES);
   float rowY = (row + 0.5) * LINES;
   float rh = hash(vec2(row, floor(u_time * 24.0)));
@@ -1851,12 +1724,10 @@ void main() {
   float run = RUN * (0.45 + 1.1 * rh);
   float ph = fract(rh * 7.13) * run;
 
-  // Luma: latch one sample and smear it across the run, so an edge leaves a
-  // bar of flat value instead of a gradient.
+  // Luma: latch one sample and smear it across the run, so an edge leaves a flat bar.
   float held = luma(texture(u_texture, vec2((floor((pos.x + ph) / run) + 0.5) * run - ph, rowY) / res).rgb);
-  // Over-peak against a neighbourhood of the *held* signal: the overshoot
-  // fires on run boundaries, which is what breaks edges into bright dashes
-  // while flat shadow stays flat and crushes away to nothing.
+  // Over-peak against a neighbourhood of the held signal: the overshoot fires on
+  // run boundaries, breaking edges into bright dashes.
   float mean = 0.0, wsum = 0.0;
   for (int k = -4; k <= 4; k++) {
     float fk = float(k);
@@ -1867,9 +1738,8 @@ void main() {
   }
   float lum = held + RING * (held - mean / wsum);
 
-  // Chroma: averaged over a wide window that ignores the run structure and
-  // sits to the left of the pixel, so colour trails behind the luma that made
-  // it. Highlights ride the same taps forward into a scan-aligned smear.
+  // Chroma: averaged over a wide window that ignores the run structure and sits
+  // left of the pixel, so colour trails the luma that made it.
   float wide = max(0.5, u_bleed) * 0.25;
   vec2 chroma = vec2(0.0);
   float bloom = 0.0, bwsum = 0.0;
@@ -1884,9 +1754,8 @@ void main() {
   chroma /= 9.0;
   bloom /= bwsum;
 
-  // Dot crawl: the subcarrier beating against luma. Its phase inverts every
-  // line, so the interference reads as a diagonal hatch rather than a grid,
-  // and it drifts because the beat is never quite locked.
+  // Dot crawl: the subcarrier beating against luma. Its phase inverts every line,
+  // so the interference reads as a diagonal hatch.
   float beat = cos(6.2831853 * pos.x * 0.25 + 3.14159265 * row + u_time * 2.0);
   lum += u_crawl * length(chroma) * beat * 2.0;
   // The same beat as a demodulation phase error, which rainbows the hatch.
@@ -1894,8 +1763,7 @@ void main() {
   float ca = cos(a), sa = sin(a);
   chroma = vec2(ca * chroma.x - sa * chroma.y, sa * chroma.x + ca * chroma.y);
 
-  // A wide chroma window averages saturation away; put it back, then crush so
-  // only the ringing survives in the shadows.
+  // A wide chroma window averages saturation away; put it back, then crush.
   vec3 col = yiq2rgb(lum, chroma * (1.4 + u_bleed * 0.03));
   col = (col - u_crush) / max(0.05, 1.0 - u_crush);
   col = clamp(col + bloom * BLOOM, 0.0, 1.0);
@@ -1916,13 +1784,10 @@ void main() {
   vec2 c = v_uv - 0.5;
   c.x *= aspect;
   float d = length(c);
-  // Whirlpool profile: full twist at the core with a quadratic falloff
-  // to zero at u_radius — the shear stays concentrated in the middle
-  // instead of streaking the whole disc into rings.
+  // Whirlpool profile: full twist at the core, quadratic falloff to zero at u_radius.
   float infl = 1.0 - smoothstep(0.0, u_radius, d);
   infl *= infl;
-  // Bounded rocking around the base twist instead of endless wind-up,
-  // so the vortex breathes instead of spiraling into mush.
+  // Bounded rocking around the base twist instead of endless wind-up, so the vortex breathes.
   float a = (u_angle + sin(u_time * 0.8) * 60.0) * (3.14159265 / 180.0) * infl;
   float ca = cos(a), sa = sin(a);
   vec2 r = vec2(ca * c.x - sa * c.y, sa * c.x + ca * c.y);
@@ -1988,23 +1853,21 @@ void main() {
   mat3 R = rotateZ(u_rotZ * DEG + sz) * rotateY(u_rotY * DEG + sy)
          * rotateX(u_rotX * DEG + sx);
 
-  // Focal length: the low end is nearly orthographic (a flat shear), the high
-  // end a wide lens where the near edge lunges at the camera. The plane sits at
-  // exactly f, so an untilted quad fills the frame whatever the lens is doing.
+  // Focal length: the low end is nearly orthographic, the high end a wide lens.
+  // The plane sits at exactly f, so an untilted quad fills the frame either way.
   float f = mix(8.0, 0.9, u_perspective);
   vec3 center = vec3(0.0, 0.0, f / max(u_zoom, 0.001));
 
-  // Inverse mapping: shoot a ray per output pixel and intersect the rotated
-  // plane, rather than rasterizing a quad. The ray through v_uv is (p, f), so
-  // projecting it back lands on v_uv again and zero rotation is a passthrough.
+  // Inverse mapping: shoot a ray per output pixel and intersect the rotated plane,
+  // rather than rasterizing a quad. Zero rotation is a passthrough.
   vec3 dir = vec3((v_uv - 0.5) * 2.0 * vec2(aspect, 1.0), f);
   vec3 n = R * vec3(0.0, 0.0, 1.0);
   float denom = dot(n, dir);
   float k = dot(n, center) / denom;
   vec3 q = transpose(R) * (k * dir - center);
   vec2 uv = vec2(q.x / aspect, q.y) * 0.5 + 0.5;
-  // Taken before the horizon test: a derivative is only defined when the whole
-  // quad reaches it, and half of it may be about to bail out.
+  // Taken before the horizon test: a derivative is only defined when the whole quad
+  // reaches it, and half may be about to bail out.
   vec2 w = clamp(fwidth(uv), vec2(1e-4), vec2(0.1));
   // Edge-on, or the intersection is behind the camera: past the horizon.
   if (abs(denom) < 1e-5 || k <= 0.0) { outColor = vec4(0.0); return; }
@@ -2016,8 +1879,7 @@ void main() {
   } else if (u_edge == 3) {
     outColor = texture(u_texture, vec2(bounce(uv.x), bounce(uv.y)));
   } else {
-    // Feather by one pixel of the *warped* uv so the receding edge doesn't
-    // stair-step.
+    // Feather by one pixel of the *warped* uv so the receding edge doesn't stair-step.
     vec2 e = smoothstep(vec2(0.0), w, uv) * smoothstep(vec2(0.0), w, 1.0 - uv);
     float cov = e.x * e.y;
     if (cov <= 0.0) { outColor = vec4(0.0); return; }
@@ -2243,20 +2105,16 @@ void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
   vec4 c = texture(u_texture, v_uv);
 
-  // compute depth value
   float d;
   if (u_depthSource == 0) {
-    // luminance-based depth
     d = dot(c.rgb, vec3(0.299, 0.587, 0.114));
   } else if (u_depthSource == 1) {
-    // edge-based depth (gradient magnitude)
     float lL = dot(texture(u_texture, v_uv + vec2(-px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
     float lR = dot(texture(u_texture, v_uv + vec2( px.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
     float lT = dot(texture(u_texture, v_uv + vec2(0.0, -px.y)).rgb, vec3(0.299, 0.587, 0.114));
     float lB = dot(texture(u_texture, v_uv + vec2(0.0,  px.y)).rgb, vec3(0.299, 0.587, 0.114));
     d = clamp(length(vec2(lR - lL, lB - lT)) * 4.0, 0.0, 1.0);
   } else {
-    // flat — uniform offset
     d = 1.0;
   }
 
@@ -2266,12 +2124,10 @@ void main() {
   vec2 dir = vec2(cos(rad), sin(rad)) * offset * px;
 
   if (u_mode == 0) {
-    // anaglyph red/cyan
     float r = texture(u_texture, v_uv + dir).r;
     vec2 gb = texture(u_texture, v_uv - dir).gb;
     outColor = vec4(r, gb, c.a);
   } else {
-    // color split — offset per channel in 3 directions
     float r = texture(u_texture, v_uv + dir).r;
     float g = texture(u_texture, v_uv).g;
     float b = texture(u_texture, v_uv - dir).b;
@@ -2335,8 +2191,7 @@ const int SMEAR_STEPS = 8;
 
 void main() {
   // Self-displacement: the image's own red/green channels are read as a vector
-  // field and the pixel is walked along it, so content flows with its own
-  // colour rather than in one imposed direction. Angle turns the field.
+  // field and the pixel is walked along it, so content flows with its own colour.
   float rad = u_angle * 3.14159265 / 180.0;
   float ca = cos(rad);
   float sa = sin(rad);
@@ -2349,14 +2204,12 @@ void main() {
   for (int i = 0; i < SMEAR_STEPS; i++) {
     vec4 s = texture(u_texture, vec2(bounce(p.x), bounce(p.y)));
     float t = float(i) / float(SMEAR_STEPS - 1);
-    // Trail 0 keeps essentially the far end of the walk — one clean
-    // displacement. Trail 1 weights the whole path evenly, which is what
-    // actually reads as a smear rather than a ghost.
+    // Trail 0 keeps the far end of the walk, one clean displacement. Trail 1
+    // weights the whole path evenly, which reads as a smear rather than a ghost.
     float w = mix(pow(t, 16.0), 1.0, u_trail);
     acc += s * w;
     total += w;
-    // Re-reading the field at each step lets the walk bend with the image
-    // instead of running straight, so streaks follow contours out of an edge.
+    // Re-reading the field at each step lets the walk bend with the image.
     p += rot * (s.rg - 0.5) * stride;
   }
   outColor = acc / max(total, 1e-4);
@@ -2376,10 +2229,8 @@ void main() {
   float rad = u_angle * 3.14159265 / 180.0;
   vec2 dir = vec2(cos(rad), sin(rad));
 
-  // Parallax occlusion mapping: treat luma as a height field.
-  // Cast a ray descending from height=1 to 0 while stepping in dir.
-  // Track prev step so we can interpolate the exact intersection —
-  // this eliminates staircase artifacts and gives smooth ridges.
+  // Parallax occlusion mapping: treat luma as a height field. Cast a ray descending
+  // from height=1 to 0 while stepping in dir, interpolating the exact intersection.
   const int N = 64;
   vec2  stepUV = dir * u_amount / float(N);
   float stepH  = 1.0 / float(N);
@@ -2394,7 +2245,6 @@ void main() {
   for (int i = 0; i < N; i++) {
     float surfH = dot(texture(u_texture, pos).rgb, lum);
     if (!found && surfH >= rayH) {
-      // Linearly interpolate between prev and current step for sub-step accuracy
       float prevRayH = rayH + stepH;
       float t = (prevRayH - prevSurfH) / max((surfH - prevSurfH) - (rayH - prevRayH), 0.0001);
       hitPos = mix(prevPos, pos, clamp(t, 0.0, 1.0));
@@ -2442,8 +2292,7 @@ uniform vec2 u_resolution;
 #define FIBER_TAPS 14
 
 void main() {
-  // Work in an aspect-corrected frame so the weave keeps its angle and the
-  // threads stay square on non-square images.
+  // Work in an aspect-corrected frame so the weave keeps its angle on non-square images.
   vec2 aspect = vec2(u_resolution.x / max(u_resolution.y, 1.0), 1.0);
   float rad = u_angle * 3.14159265 / 180.0;
   vec2 dir = vec2(sin(rad), cos(rad));   // along a thread
@@ -2453,14 +2302,12 @@ void main() {
   float across = dot(p, nrm) * u_density;
   float along = dot(p, dir);
 
-  // Silk: band-limited noise across the weave that also drifts down the length
-  // of each thread, so a fiber's pull changes as it runs instead of holding one
-  // flat value for the whole span.
+  // Silk: band-limited noise across the weave that also drifts down each thread,
+  // so a fiber's pull changes as it runs.
   float silk = fbm(vec2(across * 0.7, along * 1.7)) * 2.0 - 1.0;
 
-  // Shred: one constant pull per thread. The cell boundary is widened to a
-  // pixel with fwidth, so cranking density dissolves the weave into a soft
-  // grain instead of shattering into aliased confetti.
+  // Shred: one constant pull per thread. The cell boundary is widened to a pixel
+  // with fwidth, so cranking density dissolves the weave into a soft grain.
   float cell = floor(across);
   float aa = clamp(fwidth(across), 0.02, 1.0);
   float w0 = vnoise(vec2(cell * 1.37, along * 1.7)) * 2.0 - 1.0;
@@ -2470,10 +2317,8 @@ void main() {
   float fiber = mix(shred, silk, u_smoothness);
   float disp = fiber * u_strength * 0.18;
 
-  // Walk the pull and accumulate, so each thread reads as image drawn out along
-  // its length rather than a block shifted sideways. Each channel gets its own
-  // weight profile over the same taps: red rides the full pull, blue lags, so
-  // the fringing costs no extra fetches.
+  // Walk the pull and accumulate, so each thread reads as image drawn out along its
+  // length. Each channel gets its own weight profile over the same taps, so fringing is free.
   float d = u_chrome * 0.3;
   vec3 centers = vec3(1.0, 1.0 - d * 0.5, 1.0 - d);
   vec3 acc = vec3(0.0);
@@ -2484,9 +2329,8 @@ void main() {
     float t = float(i) / float(FIBER_TAPS - 1);
     vec2 uv = v_uv + dir * disp * t;
     vec4 s = texture(u_texture, vec2(bounce(uv.x), bounce(uv.y)));
-    // Comb 0 keeps a narrow bump at the end of the walk -- one clean pull.
-    // Comb 1 weights the whole path, which is what actually reads as a
-    // combed-out fiber.
+    // Comb 0 keeps a narrow bump at the end of the walk, one clean pull. Comb 1
+    // weights the whole path, which reads as a combed-out fiber.
     vec3 dt = vec3(t) - centers;
     vec3 w = mix(exp(-60.0 * dt * dt), 1.0 - smoothstep(vec3(-0.08), vec3(0.08), dt), u_comb);
     acc += s.rgb * w;
@@ -2497,44 +2341,38 @@ void main() {
   vec3 col = acc / max(total, vec3(1e-4));
   float alpha = accA / max(totalA, 1e-4);
 
-  // Sheen: light each thread as a cylinder, so the highlight is a smooth band
-  // running down the fiber the way real fabric catches light. Deriving it from
-  // fwidth(fiber) instead spikes on the per-thread discontinuities and stipples
-  // aliased white dots along every cell boundary.
+  // Sheen: light each thread as a cylinder, so the highlight is a smooth band down
+  // the fiber. Deriving it from fwidth(fiber) instead spikes on the discontinuities.
   float xr = fract(across) * 2.0 - 1.0;      // position across one thread
   float nz = sqrt(max(1.0 - xr * xr, 0.0));  // cylinder normal, facing viewer
   float ndl = clamp(xr * -0.55 + nz * 0.84, 0.0, 1.0);
 
-  // A thread only a pixel or two wide can't carry a tight highlight, so widen
-  // and dim it as the weave goes sub-pixel rather than let it alias.
+  // A thread a pixel or two wide can't carry a tight highlight, so widen and dim it
+  // as the weave goes sub-pixel rather than let it alias.
   float thin = smoothstep(0.15, 0.6, aa);
   float spec = pow(ndl, mix(24.0, 3.0, thin)) * mix(1.0, 0.55, thin);
 
   // Vary the glint per thread so the weave doesn't read as one even sheet.
   spec *= 0.4 + 0.6 * abs(fiber);
 
-  // Iridescence shifts with the angle you view the thread at, like an oil film,
-  // and stays inside a narrow arc so neighbouring threads keep a family
-  // resemblance. Swinging 110 degrees off a per-thread random instead scatters
-  // them across the whole hue wheel, which is what reads as neon plastic.
+  // Iridescence shifts with the viewing angle, like an oil film, and stays inside a
+  // narrow arc so neighbouring threads keep a family resemblance.
   float shift = (xr * 0.75 + fiber * 0.25) * 24.0;
   col = hueRotate(col, shift * u_chrome);
 
-  // The sheen carries no colour of its own: it scales the thread's existing
-  // colour, so a lit fiber keeps its hue and saturation and simply gets more
-  // light. Blending toward white instead washes the whole weave out to pastel.
+  // The sheen carries no colour of its own: it scales the thread's existing colour,
+  // so a lit fiber keeps its hue and simply gets more light.
   float sh = clamp(spec * u_chrome, 0.0, 1.0);
   col *= 1.0 + sh * 1.6;
   col *= 1.0 - u_chrome * 0.22 * (1.0 - nz) * (1.0 - thin);
 
-  // Roll off on the brightest channel. A per-channel clamp would pin the other
-  // two below it and desaturate the peaks to white -- the thing we just avoided.
+  // Roll off on the brightest channel. A per-channel clamp would pin the other two
+  // below it and desaturate the peaks to white.
   float peak = max(max(col.r, col.g), col.b);
   col /= 1.0 + max(peak - 1.0, 0.0);
 
-  // Ease the threads that ended up on the gamut edge back off it. Saturation
-  // pinned at full is the other half of the plastic look, and the multiply
-  // above pushes colours there; only the worst offenders are touched.
+  // Ease the threads that ended up on the gamut edge back off it. Saturation pinned
+  // at full is the other half of the plastic look; only the worst offenders are touched.
   float lo = min(min(col.r, col.g), col.b);
   float sat = max(max(col.r, col.g), col.b) - lo;
   float grey = dot(col, vec3(0.299, 0.587, 0.114));
@@ -2571,20 +2409,18 @@ void main() {
   float freq = 1.0 + (1.0 - u_scale) * 11.0;
   vec2 p = v_uv * aspect * freq;
 
-  // Domain warp: a slow vector field steers the cell field, so blobs creep and
-  // merge like oil on water instead of boiling in place.
+  // Domain warp: a slow vector field steers the cell field, so blobs creep and merge.
   vec2 w = 2.2 * vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t * 0.6));
 
-  // Field + gradient. The offset samples reuse the same warp, so the surface
-  // normal costs two extra noise lookups instead of six.
+  // Field + gradient. The offset samples reuse the same warp, so the surface normal
+  // costs two extra noise lookups instead of six.
   vec2 e = (2.0 / u_resolution) * aspect * freq;
   float f = fbm(p + w);
   vec2 grad = vec2(fbm(p + w + vec2(e.x, 0.0)) - f, fbm(p + w + vec2(0.0, e.y)) - f);
   float slope = length(grad);
   vec2 n = grad / max(slope, 1e-4);
 
-  // Refract through the cell surface, one sample per channel at slightly
-  // different strengths: every blob edge blooms into a wet spectral rim.
+  // Refract through the cell surface, one sample per channel at different strengths.
   vec2 dir = n * min(slope * 16.0, 1.0) * u_refraction * 0.3;
   float d = u_dispersion * 0.7;
   vec3 fresh;
@@ -2598,8 +2434,8 @@ void main() {
   float rim = min(slope * 24.0, 1.0);
   fresh = mix(fresh, hueRotate(fresh, f * 220.0 + t * 40.0), rim * u_dispersion);
 
-  // Dye drifts along the field (perpendicular to the gradient) and heals back
-  // to the live input, so the wash never buries the source.
+  // Dye drifts along the field (perpendicular to the gradient) and heals back to
+  // the live input, so the wash never buries the source.
   vec2 from = clamp(v_uv - vec2(-n.y, n.x) * u_delta * u_flow * 0.05, vec2(0.0), vec2(1.0));
   vec4 prevS = texture(u_feedback, from);
   float heal = 1.0 - exp(-mix(6.0, 1.2, u_flow) * u_delta);
@@ -2623,9 +2459,8 @@ uniform float u_delta;
 uniform vec2 u_resolution;
 uniform sampler2D u_feedback;
 void main() {
-  // Three reagents held in RGB, so the simulation state is the visible image.
-  // Each cell reacts against the local average of its neighbours -- that
-  // spatial coupling is what rolls the spiral waves outward.
+  // Three reagents held in RGB, so the simulation state is the visible image. Each
+  // cell reacts against the local average of its neighbours, which rolls the waves outward.
   vec2 px = (1.0 + u_scale * 3.0) / u_resolution;
   vec3 avg = vec3(0.0);
   float avgA = 0.0;
@@ -2639,10 +2474,8 @@ void main() {
   avg /= 9.0;
   avgA /= 9.0;
 
-  // Each reagent drifts along its own heading, 120 degrees apart and slowly
-  // rotating, so they chase one another across the frame instead of settling.
-  // This is pure transport -- it curls the waves without producing reagent,
-  // so it can't tint anything.
+  // Each reagent drifts along its own heading, 120 degrees apart and slowly rotating,
+  // so they chase one another across the frame. Pure transport, so it can't tint anything.
   float curl = (u_drift - 0.5) * 2.0;
   float a = u_time * 0.15;
   float reach = 2.5 * curl;
@@ -2652,24 +2485,20 @@ void main() {
   drift.b = texture(u_feedback, clamp(v_uv + vec2(cos(a + 4.1888), sin(a + 4.1888)) * px * reach, vec2(0.0), vec2(1.0))).b;
   avg = mix(avg, drift, 0.6 * abs(curl));
 
-  // Cyclic reaction: red eats green eats blue eats red. The three increments
-  // sum to exactly zero, so total concentration is conserved and no reagent
-  // can win globally -- that is what keeps the frame from drifting into a flat
-  // colour cast, however far the knobs are pushed.
+  // Cyclic reaction: red eats green eats blue eats red. The three increments sum to
+  // exactly zero, so total concentration is conserved and no reagent can win globally.
   float k = clamp(u_delta * 60.0, 0.4, 2.0) * (0.4 + u_reaction * 1.6);
   vec3 next;
   next.r = avg.r + avg.r * (avg.g - avg.b) * k;
   next.g = avg.g + avg.g * (avg.b - avg.r) * k;
   next.b = avg.b + avg.b * (avg.r - avg.g) * k;
 
-  // A whisper of noise nucleates the spirals and keeps flat regions from
-  // locking into a dead uniform state, which is where this stalls on stills.
+  // A whisper of noise nucleates the spirals and keeps flat regions from locking up.
   next += (hash(v_uv * u_resolution + fract(u_time)) - 0.5) * 0.004;
   next = clamp(next, 0.0, 1.0);
 
-  // The picture is fed back in as reagent concentration, so the chemistry
-  // grows out of the image's own colours. Low takeover heals fast (picture
-  // legible, faint structure); high takeover lets the reaction run away.
+  // The picture is fed back in as reagent concentration, so the chemistry grows out
+  // of the image's own colours. Low takeover heals fast, high lets the reaction run away.
   vec4 srcS = texture(u_texture, v_uv);
   vec3 src = srcS.rgb;
   float seed = 1.0 - exp(-mix(7.0, 0.22, u_takeover) * u_delta);
@@ -2707,37 +2536,32 @@ void main() {
   float bands = max(2.0, floor(u_bands));
   float band = floor(l * bands);
 
-  // Neighbouring bands slide in opposite directions along the terrain
-  // gradient, so the contours shear against each other rather than
-  // translating as one sheet.
+  // Neighbouring bands slide in opposite directions along the terrain gradient, so
+  // the contours shear against each other rather than translating as one sheet.
   float dirSign = mod(band, 2.0) * 2.0 - 1.0;
   vec2 flow = (grad / max(slope, 1e-4)) * dirSign * u_flow * u_delta * 0.2;
   vec4 prevS = texture(u_feedback, clamp(v_uv - flow, vec2(0.0), vec2(1.0)));
   vec3 prev = prevS.rgb;
 
-  // Quantise luminance while keeping the source chroma, then cycle hue per
-  // band so the terrain reads as a heat map that has gone liquid.
+  // Quantise luminance while keeping the source chroma, then cycle hue per band.
   vec3 quant = src * ((band + 0.5) / bands) / max(l, 0.02);
   float q = band / bands;
   quant = clamp(hueRotate(clamp(quant, 0.0, 1.0), (q * 360.0 + u_time * 50.0) * u_cycle), 0.0, 1.0);
 
-  // Contour seam. fwidth gives the width the band edge actually occupies on
-  // screen, so the line stays a couple of pixels thick at any band count
-  // instead of flaring into a halo that swallows the frame.
+  // Contour seam. fwidth gives the width the band edge occupies on screen, so the
+  // line stays a couple of pixels thick at any band count.
   float terrain = l * bands;
   float w = max(fwidth(terrain), 1e-4);
   float edge = fract(terrain);
   float seam = 1.0 - smoothstep(w, w * 2.5, min(edge, 1.0 - edge));
   seam *= smoothstep(0.0, 0.6, slope * bands * 6.0);
 
-  // Light the seam from a fixed direction so ridges facing the light catch it
-  // and the rest stay dark -- an even seam just reads as white paint.
+  // Light the seam from a fixed direction so ridges facing the light catch it.
   vec2 n = grad / max(slope, 1e-4);
   float lambert = 0.25 + 0.75 * clamp(dot(n, vec2(-0.6, 0.8)), 0.0, 1.0);
 
-  // Screen-blend a tinted highlight into the band colour instead of adding
-  // white, and do it before the feedback mix: added afterwards it lands in the
-  // feedback buffer and compounds every frame until the frame is flat white.
+  // Screen-blend a tinted highlight into the band colour instead of adding white, and
+  // do it before the feedback mix: added afterwards it compounds every frame until flat white.
   vec3 spec = mix(quant, vec3(1.0), 0.45);
   float s = clamp(seam * lambert * u_sheen, 0.0, 1.0);
   vec3 lit = 1.0 - (1.0 - quant) * (1.0 - spec * s);
@@ -2752,12 +2576,10 @@ void main() {
 		setUniforms: floats("bands", "flow", "cycle", "sheen"),
 	},
 
-	// --- Ports from the shader lab (lab/shaders): X-PostProcessing-Library and
-	// Vidvox ISF-Files, both MIT. Matched by behaviour; time-driven randomness
-	// is quantised to ticks so preview and export roll the same.
+	// Ports from the shader lab (lab/shaders): X-PostProcessing-Library and
+	// Vidvox ISF-Files, both MIT. Randomness is quantised to ticks so preview and export match.
 
-	/** XPL GlitchRGBSplitV5: noise bursts throw each channel a different way.
-	 * The RGBA noise texture is a bilinear value noise here. */
+	/** XPL GlitchRGBSplitV5: noise bursts throw each channel a different way. */
 	"rgb-burst": {
 		fragment:
 			H +
@@ -2869,9 +2691,8 @@ void main() {
 		},
 	},
 
-	/** Vidvox RGB Strobe: each channel inverts on its own clock. Rates are
-	 * one phase with a per-channel stagger, in place of the original's
-	 * per-channel periods, so a mosh can roll it. */
+	/** Vidvox RGB Strobe: each channel inverts on its own clock. One phase with a
+	 * per-channel stagger, so a mosh can roll it. */
 	"rgb-strobe": {
 		fragment:
 			H +
@@ -2973,8 +2794,7 @@ const float PI = 3.14159265359;
 void main() {
   vec2 loc = v_uv;
   float modVal = u_mirror > 0.5 ? 2.0 : 1.0;
-  // Column shift depends on the row it sits in; the row shift then uses the
-  // shifted column, as the original does.
+  // Column shift depends on the row; the row shift then uses the shifted column.
   if (u_sinusoidal > 0.5) {
     loc.x = mod(u_hRandom * hash(vec2(u_time * 0.127, loc.x)) + loc.x
       + sign(u_hFrequency) * 0.5 * (1.0 + cos(2.0 * PI * (u_hPhase + u_hFrequency * loc.y))), modVal);
@@ -3057,8 +2877,7 @@ void main() {
 		},
 	},
 
-	/** Vidvox Shockwave Pulse: a ring of displacement travelling out from the
-	 * centre. The original fires on an event; this one repeats on its clock. */
+	/** Vidvox Shockwave Pulse: a ring of displacement travelling out from the centre. */
 	shockwave: {
 		fragment:
 			H +
@@ -3138,9 +2957,7 @@ void main() {
 	},
 
 	/** Vidvox FastMosh: the frame-to-frame difference is painted onto a blocky
-	 * keyframe that can be held, which is the whole datamosh look without the
-	 * codec. The keyframe lives in a stateful pre-pass; the main pass feeds
-	 * back its own output. */
+	 * keyframe that can be held, the whole datamosh look without the codec. */
 	"fast-mosh": {
 		prePasses: [
 			{
@@ -3165,8 +2982,7 @@ uniform int u_mode;
 uniform vec2 u_resolution;
 uniform sampler2D u_original;
 uniform sampler2D u_feedback;
-// The keyframe read as if it were a 1/block-size buffer scaled back up with
-// bilinear filtering: point-sampled cells, blended between their centres.
+// The keyframe read as if it were a 1/block-size buffer scaled back up with bilinear filtering.
 vec4 keyAt(vec2 uv) {
   vec2 cells = max(u_resolution / u_block, vec2(1.0));
   vec2 g = uv * cells - 0.5;
@@ -3337,8 +3153,7 @@ void main() {
 	},
 
 	/** Vidvox Motion Mask: only what differs from a slowly settling background
-	 * estimate shows through. The estimate is a stateful pre-pass; the mask is
-	 * eroded and blurred at half res before the cut. */
+	 * estimate shows through. The estimate is a stateful pre-pass. */
 	"motion-mask": {
 		prePasses: [
 			{
@@ -3458,12 +3273,12 @@ export const ANIMATED_EFFECTS = new Set(
 		.filter(([, def]) => def.animated)
 		.map(([id]) => id),
 );
-// Tracking is a 2D-canvas overlay (no shader) but animates every frame
-// (jitter / glitch-jumps / data scramble), so the render loop must keep running.
+// Tracking is a 2D-canvas overlay (no shader) but animates every frame, so the
+// render loop must keep running.
 ANIMATED_EFFECTS.add("tracking");
 
 /** Effects that paint their own background, so they can't sit on a text layer
- * without filling the frame. The text panel warns before one is added. */
+ * without filling the frame. */
 export const OPAQUE_OUTPUT_EFFECTS = new Set(
 	Object.entries(EFFECT_SHADERS)
 		.filter(([, def]) => def.opaqueOutput)

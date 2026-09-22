@@ -1,8 +1,4 @@
-/**
- * The spec travels inside the PNG as a tEXt chunk, right after IHDR. That makes
- * a generated file self-describing wherever it ends up — IndexedDB, a session
- * restore, a download dragged back in — with no side table to keep in sync.
- */
+/** The spec travels inside the PNG as a tEXt chunk, right after IHDR. */
 
 import { isFieldSpec } from "./field/spec";
 import { isGradientSpec } from "./gradient/spec";

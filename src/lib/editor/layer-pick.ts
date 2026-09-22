@@ -1,21 +1,13 @@
-// Straight from the module, not the barrel: that re-exports the custom-font
-// store, whose runes can't run outside a Svelte build.
+// Straight from the module, not the barrel: that re-exports the custom-font store.
 import { overlayTextBox } from "../text-overlay/draw";
 import type { ResolvedMediaLayer } from "../media";
 import type { ResolvedTextLayer } from "../text";
 
-/**
- * Picking a layer by clicking the preview. The box is where the layer's
- * placement puts it, before its own effects move any of those pixels — the
- * same thing the selection outline draws, and wrong in the same way for a
- * chain that displaces the media. Rectangles, not coverage: a keyed or cropped
- * layer is clickable across its whole box.
- */
+/** Picking a layer by clicking the preview. */
 export interface LayerHitBox {
 	kind: "media" | "text";
 	laneId: string;
-	/** Composited ahead of the main chain, so always beneath the layers that
-	 * aren't — the one ordering `z` alone doesn't say. */
+	/** Composited ahead of the main chain, so always beneath the layers that aren't. */
 	underEffects: boolean;
 	z: number;
 	/** Centre, size and rotation in output pixels. */
@@ -26,11 +18,7 @@ export interface LayerHitBox {
 	rot: number;
 }
 
-/**
- * What a click on the preview landed on: a layer, or the image every layer
- * sits over. "base" carries no id — what that image belongs to is the editor's
- * question, and it answers differently per mode.
- */
+/** What a click on the preview landed on: a layer, or the image every layer sits over. */
 export type LayerPick =
 	{ kind: "media" | "text"; laneId: string } | { kind: "base" };
 
@@ -51,8 +39,7 @@ export function pointInLayer(
 	if (box.w <= 0 || box.h <= 0) return false;
 	const dx = px - box.cx;
 	const dy = py - box.cy;
-	// Into the box's own frame, so a rotated layer is hit where it looks like it
-	// is rather than across the axis-aligned span it covers.
+	// Into the box's own frame, so a rotated layer is hit where it looks like it is.
 	const cos = Math.cos(-box.rot);
 	const sin = Math.sin(-box.rot);
 	return (
@@ -61,11 +48,7 @@ export function pointInLayer(
 	);
 }
 
-/**
- * The layer a click at `px`, `py` lands on: the one drawn last of those it
- * hits, so what the user points at is what they were looking at. Null when the
- * click misses every layer.
- */
+/** The layer a click at `px`, `py` lands on: the one drawn last of those it hits. */
 export function pickTopLayer(
 	boxes: LayerHitBox[],
 	px: number,
@@ -79,19 +62,13 @@ export function pickTopLayer(
 	return top;
 }
 
-/** Composite order between two layers: over the chain beats under it, then z,
- * and ties go to whichever the caller listed later. */
+/** Composite order between two layers: over the chain beats under it, then z. */
 function drawnAfter(box: LayerHitBox, other: LayerHitBox): boolean {
 	if (box.underEffects !== other.underEffects) return !box.underEffects;
 	return box.z >= other.z;
 }
 
-/**
- * Boxes for everything on screen this frame. `mediaRect` is the renderer's
- * own placement — it knows the natural size the fit is measured against, which
- * the lane's style alone doesn't say, and returns null for a lane whose first
- * frame hasn't arrived.
- */
+/** Boxes for everything on screen this frame. */
 export function layerHitBoxes(
 	media: ResolvedMediaLayer[],
 	text: ResolvedTextLayer[],

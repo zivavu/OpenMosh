@@ -28,7 +28,6 @@ export const RATIOS = [
 
 export type RatioLabel = (typeof RATIOS)[number]["label"];
 
-/** Pixel size for a ratio at a given short side. */
 export function ratioSize(
 	label: RatioLabel,
 	shortSide: number,
@@ -39,7 +38,6 @@ export function ratioSize(
 		: { width: shortSide, height: Math.round((shortSide * r.h) / r.w) };
 }
 
-/** The short side generated files are rendered at. */
 export const GENERATED_SHORT_SIDE = 1080;
 
 /** Render to a self-describing PNG the rest of the app treats as an upload. */

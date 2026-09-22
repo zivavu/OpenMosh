@@ -22,10 +22,9 @@
 
 	interface Props {
 		sources: SequenceSource[];
-		/** How many segments are selected — a click assigns to all of them. */
+		/** How many segments are selected: a click assigns to all of them. */
 		selectedCount?: number;
-		/** Highlights the card the selection currently plays; null when they
-		 * disagree. */
+		/** Highlights the card the selection currently plays; null when they disagree. */
 		selectedSourceId?: string | null;
 		onAddFiles: (files: File[]) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
@@ -34,7 +33,7 @@
 		onRemove: (id: string) => void;
 		onReorder: (from: number, to: number) => void;
 		onAssign: (sourceId: string) => void;
-		/** Click on a source's proxy badge — see proxyStatus's `action`. */
+		/** Click on a source's proxy badge; see proxyStatus's `action`. */
 		onProxyAction: (sourceId: string, action: ProxyAction["kind"]) => void;
 	}
 
@@ -66,9 +65,7 @@
 		})),
 	);
 
-	/** One dragstart serves both drops: a card carries its index for a reorder
-	 * here, and its id under our own type so the timeline below can take the
-	 * same drag as an assignment. */
+	/** One dragstart serves both drops: a card carries its index and its id. */
 	function onCardDragStart(e: DragEvent, index: number) {
 		dragFromIndex = index;
 		beginSourceDrag(sources[index].id);
@@ -79,14 +76,7 @@
 		e.dataTransfer.setData("text/plain", sources[index].id);
 	}
 
-	/**
-	 * Which edge of card `i` the insertion line belongs on, or null.
-	 *
-	 * reorder() splices out then back in, so a card moved rightwards lands
-	 * *after* the one it was dropped on and a card moved leftwards lands before
-	 * it. A line always on the leading edge would point at the wrong gap for
-	 * half of every drag.
-	 */
+	/** Which edge of card `i` the insertion line belongs on, or null. */
 	function dropEdge(i: number): "before" | "after" | null {
 		if (dragFromIndex === null || dragOverIndex !== i || dragFromIndex === i) {
 			return null;
@@ -100,9 +90,7 @@
 		dragOverIndex = null;
 	}
 
-	// Files dropped anywhere in here are the editor pane's to handle — it already
-	// routes a drop to the pool in sequence mode, and taking them here as well
-	// would add every file twice.
+	// Files dropped here are the editor pane's to handle, or they would be added twice.
 	function onGridDragOver(e: DragEvent) {
 		if (dragFromIndex !== null) e.preventDefault();
 	}
@@ -356,9 +344,7 @@
 		opacity: 0.4;
 	}
 
-	/* A line in the gap the card would land in, rather than a border on the card
-	   under the cursor — that read as "this one is selected" instead of "it goes
-	   here". Inset rather than in the grid gap: the card clips its overflow. */
+	/* A line in the gap the card would land in, not a border on the card under the cursor. */
 	.card.drop-before::after,
 	.card.drop-after::after {
 		content: "";

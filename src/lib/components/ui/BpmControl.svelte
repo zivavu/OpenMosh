@@ -27,7 +27,6 @@
 	/** Where the steppers start from when no tempo has been set yet. */
 	const DEFAULT_BPM = 120;
 
-	// Tap BPM state
 	let tapTimes: number[] = $state([]);
 	let tapResetTimer: ReturnType<typeof setTimeout> | null = null;
 	const TAP_RESET_MS = 2000;
@@ -54,7 +53,7 @@
 			intervals.push(tapTimes[i] - tapTimes[i - 1]);
 		}
 		const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-		const tapped = Math.round((60000 / avgMs) * 2) / 2; // round to nearest 0.5
+		const tapped = Math.round((60000 / avgMs) * 2) / 2;
 		onBpmChange(Math.min(MAX_BPM, Math.max(MIN_BPM, tapped)));
 	}
 </script>
@@ -143,14 +142,13 @@
 	}
 
 	/* Wide enough for "Detecting" and its lamp in every state: the settings panel
-	   is shrink-to-fit, so a button that grows mid-run drags the whole sidebar
-	   wider with it. */
+	   is shrink-to-fit, so a button that grows mid-run drags the sidebar wider. */
 	.detect-auto {
 		min-width: 94px;
 	}
 
 	/* Live work in progress, so it reads with the same green as everything else
-	   that is running — and keeps full contrast despite being disabled. */
+	   running, and keeps full contrast despite being disabled. */
 	.detect-btn.detecting,
 	.detect-btn.detecting:disabled {
 		opacity: 1;

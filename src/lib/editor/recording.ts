@@ -37,7 +37,7 @@ export interface RecordingContext {
 	spanStart: number;
 	spanEnd: number;
 	isVideo: boolean;
-	/** Whether the source video has an audio track. When false, no audio is decoded/muxed. */
+	/** Whether the source video has an audio track; false means no audio is decoded/muxed. */
 	videoHasAudio: boolean;
 	videoEl: HTMLVideoElement | null;
 	videoDuration: number;
@@ -46,12 +46,7 @@ export interface RecordingContext {
 	/** Video playback speed factor (1 = normal). Defaults to 1. */
 	videoSpeed?: number;
 	file: File;
-	/**
-	 * Single mode's webcam. The export then runs in real time: each frame
-	 * waits for its moment on the wall clock and takes what the camera shows.
-	 * An encoder slower than the frame rate stretches the take — frames are
-	 * stamped by count, not by when they were grabbed.
-	 */
+	/** Single mode's webcam; the export runs in real time, not frame by frame. */
 	live?: HTMLVideoElement | null;
 	/** Fired as the first live frame is taken, so the host can start the song. */
 	onLiveStart?: () => void;
@@ -60,7 +55,7 @@ export interface RecordingContext {
 		moshOptions: MoshOptions;
 		/** Master timeline length (audio track duration when masterIsAudio, else video duration). */
 		duration: number;
-		/** True when an external track drives the clock — clips are keyed to audio time. */
+		/** True when an external track drives the clock; clips are keyed to audio time. */
 		masterIsAudio: boolean;
 		/** Stacked effect lanes, run in lane order over the layers. */
 		fxLanes?: FxLane[];
@@ -76,12 +71,11 @@ export interface RecordingContext {
 	textTimeline?: TextTimeline | null;
 	/** Optional media lanes, on the same clock. */
 	mediaTimeline?: MediaTimeline | null;
-	/** What the media clips roll under — an auto clip re-rolls per tick. */
+	/** What the media clips roll under; an auto clip re-rolls per tick. */
 	moshOptions?: MoshOptions;
 	/** The pool the media lanes draw from. Both modes have one. */
 	layerSources?: SequenceSource[];
-	/** Per-source edits: the rate each clip walks its media at.
-	 * The crop, key and mask are already on the renderer. */
+	/** Per-source edits: the rate each clip walks its media at. */
 	sourceEdits?: Record<string, SourceEdit>;
 	/** Master-clock time the export's frame 0 lands on. */
 	textTimeOffset?: number;
@@ -132,8 +126,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	// Output-time length of the video span once playback speed is applied
 	const playedSpanDuration = videoSpanDuration / videoSpeed;
 
-	// Priority: audio span > video span > manual slider
-	// Each tier is only used if its span duration > 0
+	// Priority: audio span > video span > manual slider; each tier only if its
+	// span duration > 0
 	const exportDuration =
 		hasExplicitAudio && spanEnd - spanStart > 0
 			? spanEnd - spanStart
@@ -158,8 +152,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			? videoSpanStart + (srcElapsed % videoSpanDuration)
 			: Math.min(videoSpanStart + srcElapsed, videoSpanEnd);
 	};
-	// Only decode the video's own audio when it actually has an audio track;
-	// decodeAudioData on a silent file throws and would abort the whole export.
+	// Only decode the video's own audio when it has a track; decodeAudioData throws on silence.
 	const useVideoSourceAudio = isVideo && !hasExplicitAudio && videoHasAudio;
 
 	const audioStart = hasExplicitAudio
@@ -189,11 +182,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	]);
 	await preloadTextTimelineFonts(textTimeline);
 
-	// Sequential WebCodecs decode of the source video: each packet is decoded at
-	// most once, vs. the fallback path's full <video> seek per frame (keyframe
-	// jump + decode-forward, mostly idle waiting). Falls back to seeking when the
-	// file can't be demuxed/decoded, or when rotation metadata is present (the
-	// <video> element applies rotation; raw decoded frames would not).
+	// Sequential WebCodecs decode: each packet decoded at most once, vs. a seek per frame.
 	let videoFrames: AsyncGenerator<
 		import("mediabunny").VideoSample | null,
 		void,
@@ -204,9 +193,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		const opened = await openDecodableVideo(file);
 		if (opened) {
 			const totalFrames = Math.ceil(exportDuration * fps);
-			// Must yield exactly one timestamp per recorder frame, mirroring the
-			// recorder's time formula, so the generator stays in lockstep with
-			// onBeforeRender calls.
+			// One timestamp per recorder frame, so the generator stays in lockstep with onBeforeRender.
 			const frameTimes = function* () {
 				for (let i = 0; i < totalFrames; i++) {
 					yield sourceTimeAt(i / fps);
@@ -227,8 +214,6 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	};
 
 	// Single mode's video: one sample per recorder frame, uploaded as it lands.
-	// null/done means no frame at this timestamp — keep the last uploaded one,
-	// matching the seek path's freeze-frame behavior.
 	const decodeBeforeRender = async () => {
 		const sample = (await videoFrames!.next()).value;
 		if (!sample) return;
@@ -250,14 +235,12 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		renderer.updateSourceFrame(live!);
 	};
 
-	// Sequence mode: fx lanes over a blank base. Clip times live on the audio
-	// timeline (master clock); a video-mastered sequence keys by source time.
+	// Sequence mode: fx lanes over a blank base; clip times live on the master clock.
 	const sequence = ctx.sequence;
 	const seqTimeAt = (time: number): number =>
 		sequence?.masterIsAudio ? audioStart + time : sourceTimeAt(time);
 
-	// Cloned: this chain gets each frame's audio-link values written into it,
-	// and those must not reach the user's clips.
+	// Cloned: this chain gets each frame's audio-link values, which must not reach the clips.
 	const fxSource =
 		sequence && (sequence.fxLanes?.length ?? 0) > 0
 			? createFxLayerSource(
@@ -266,8 +249,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 					{ clone: true },
 				)
 			: null;
-	/** Rebuilt per frame: each active lane under its own response — the split
-	 * the preview's tick makes. */
+	/** Rebuilt per frame: each active lane under its own response. */
 	const audioGroupsRef: { current: AudioLinkGroup[] | null } = {
 		current: null,
 	};
@@ -286,10 +268,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
 	const sequenceBeforeRender = async (_frameIndex: number, time: number) => {
 		const t = seqTimeAt(time);
-		// The base is black; the layers are the picture. `effectsRef.current` is
-		// the flat form, which is what the recorder writes this frame's
-		// audio-link values into — the layers hold the same instances, so the
-		// renderer sees those values too.
+		// The base is black; the layers are the picture.
 		const fxLayers = fxSource?.(t) ?? [];
 		effectsRef!.current = flattenFxLayers(fxLayers);
 		audioGroupsRef.current =
@@ -305,9 +284,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 						};
 					})
 				: null;
-		// Rendered through the same layered call the preview uses, so a lane's
-		// fade ramps in the export too. The default path would flatten it into
-		// one chain and apply every lane at full strength.
+		// Rendered through the same layered call the preview uses, so a lane's fade ramps here too.
 		return (
 			textLayers: ResolvedTextLayer[],
 			mediaLayers: ResolvedMediaLayer[],
@@ -315,10 +292,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	};
 
 	try {
-		// Keyed by lane, matching how the preview driver holds its decoders: the
-		// lane is what a layer's frames belong to, and two lanes can want two
-		// positions in one file. A lane lists every source its clips name, since
-		// they need not all be the lane's own.
+		// Keyed by lane, matching how the preview driver holds its decoders.
 		const laneSources = new Map<string, string[]>();
 		if (mediaTimeline?.enabled) {
 			for (const lane of mediaTimeline.lanes) {
@@ -334,8 +308,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 				renderer,
 			);
 		}
-		// Same resolver the preview builds, so interval rolls reproduce exactly;
-		// cloned, so this frame's audio-link values stay out of the clips.
+		// Same resolver the preview builds, so interval rolls reproduce exactly.
 		const mediaChains =
 			mediaTimeline && moshOptions
 				? createMediaChainSource(() => moshOptions, { clone: true })
@@ -399,8 +372,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		});
 		downloadBlob(blob);
 	} finally {
-		// Stops mediabunny's pre-decode pipeline and closes its decoder on
-		// abort/error; no-op when the generator already ran to completion.
+		// Stops mediabunny's pre-decode pipeline and closes its decoder on abort/error.
 		void videoFrames?.return();
 		exportLayers?.dispose();
 	}

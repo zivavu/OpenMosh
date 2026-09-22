@@ -195,19 +195,17 @@ export const FONT_OPTIONS: FontOption[] = [
 
 const loaded = new Map<string, Promise<void>>();
 
-/** Lookup table, not a scan: the renderer calls ensureFontLoaded per text layer
- * and per caption on every frame. */
+/** Lookup table, not a scan: the renderer calls ensureFontLoaded per text
+ * layer and per caption on every frame. */
 const OPTIONS_BY_FAMILY = new Map(FONT_OPTIONS.map((f) => [f.family, f]));
 
 /** Shared, so a system or unknown family doesn't mint a promise per frame. */
 const RESOLVED = Promise.resolve();
 
-/**
- * Ensure the font for the given CSS family value is registered and loaded
+/** Ensure the font for the given CSS family value is registered and loaded
  * into document.fonts so 2D-canvas drawing (preview and export) uses it.
- * User-added faces are looked up in the shared registry; system and unknown
- * families resolve immediately.
- */
+ * User-added faces come from the shared registry; system and unknown families
+ * resolve immediately. */
 export function ensureFontLoaded(family: string): Promise<void> {
 	const option = OPTIONS_BY_FAMILY.get(family);
 	if (!option?.url) {

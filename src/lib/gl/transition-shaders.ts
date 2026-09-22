@@ -1,17 +1,14 @@
 /**
  * Fragment shaders for scene transitions (the demo background). Each blends the outgoing
- * chain output (u_texture) into the incoming one (u_texture2) along
- * u_progress (0→1). All randomness derives from (u_seed, u_progress) — never
- * u_time — so preview and export produce identical blends frame for frame.
- * Flicker-style randomness quantizes progress into ticks (floor(p * N)) so it
- * re-rolls at the same output times in preview and export.
+ * chain output (u_texture) into the incoming one (u_texture2) along u_progress (0 to 1).
+ * All randomness derives from (u_seed, u_progress), never u_time, so preview and export
+ * match frame for frame; flicker randomness quantizes progress into ticks (floor(p * N)).
  *
  * u_direction (whip): 0=→ 1=← 2=↓ 3=↑ (in image space; v_uv.y=1 is the top).
  * u_density (shatter): 0=coarse 1=medium 2=fine.
  *
- * Scene buffers wrap MIRRORED_REPEAT and filter NEAREST, so samples past the
- * edge mirror rather than clamp, and multi-tap smears read as strobed ghosts
- * instead of soft blur. Both are deliberate.
+ * Scene buffers wrap MIRRORED_REPEAT and filter NEAREST, so samples past the edge mirror
+ * rather than clamp, and multi-tap smears read as strobed ghosts instead of soft blur.
  */
 
 const H = `#version 300 es
@@ -27,9 +24,8 @@ in vec2 v_uv;
 out vec4 outColor;
 `;
 
-/** Shared helpers. The easing curves matter as much as the effects: a
- * symmetric ramp reads as a fade, while holding and then running reads as a
- * cut with intent. */
+/** Shared helpers. The easing curves matter as much as the effects: a symmetric
+ * ramp reads as a fade, holding then running reads as a cut with intent. */
 const LIB = `float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -39,13 +35,12 @@ const LIB = `float hash12(vec2 p) {
 /** Barely moves for the first quarter, so the rest lands hard. */
 float hold(float p) { return smoothstep(0.24, 1.0, p); }
 
-/** Arrives fast and settles — the shape of something thrown at the camera. */
+/** Arrives fast and settles, the shape of something thrown at the camera. */
 float rush(float p) { float q = 1.0 - p; return 1.0 - q * q * q * q; }
 
 /** One spike, peaking mid-blend. */
 float spike(float p) { return sin(p * 3.14159265); }
 
-/** Channel pull along an axis. */
 vec3 split(sampler2D t, vec2 uv, vec2 off) {
   return vec3(
     texture(t, uv + off).r,
@@ -53,7 +48,6 @@ vec3 split(sampler2D t, vec2 uv, vec2 off) {
     texture(t, uv - off).b);
 }
 
-/** Directional smear, centred on the sample point. */
 vec3 smear(sampler2D t, vec2 uv, vec2 dir, float amt) {
   vec3 acc = vec3(0.0);
   for (int i = 0; i < 10; i++) {
@@ -62,7 +56,6 @@ vec3 smear(sampler2D t, vec2 uv, vec2 dir, float amt) {
   return acc * 0.1;
 }
 
-/** Axis for the direction-carrying transitions. */
 vec2 axisOf(int d) {
   return d == 0 ? vec2(1.0, 0.0)
     : d == 1 ? vec2(-1.0, 0.0)
@@ -71,9 +64,9 @@ vec2 axisOf(int d) {
 }
 `;
 
-/** Part of the shared prefix rather than a local in main(): the e2e suite
- * recovers each body as whatever follows the prefix common to all fragments,
- * and a SEED line there would read as every transition using the seed. */
+/** Part of the shared prefix rather than a local in main(): the e2e suite recovers
+ * each body as whatever follows the prefix, and a SEED line there would read as
+ * every transition using the seed. */
 const SEED_GLSL = `#define SEED mod(u_seed, 997.0)
 `;
 
@@ -89,7 +82,7 @@ ${body}
 }`;
 }
 
-// Every one of these carries a motion component and a curve that snaps — the
+// Every one of these carries a motion component and a curve that snaps; the
 // soft, purely dissolving blends were dropped rather than kept as filler.
 
 /** Channel-split punch, now thrown sideways: bands shear apart while the whole
@@ -98,7 +91,7 @@ const RGBSLIP_FRAG = frag(`  float p = u_progress;
   float s = spike(p);
   float tick = floor(p * 20.0);
   float e = hold(p);
-  // Scale pop plus a lateral whip — the punch now has somewhere to go.
+  // Scale pop plus a lateral whip, so the punch has somewhere to go.
   float zoom = 1.0 + s * 0.14;
   vec2 uv = (v_uv - 0.5) / zoom + 0.5;
   uv.x += (e - 0.5) * 0.16;
@@ -115,9 +108,9 @@ const RGBSLIP_FRAG = frag(`  float p = u_progress;
   col *= 1.0 + (hash12(vec2(tick, SEED + 4.0)) - 0.5) * 0.35 * s;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);`);
 
-/** The outgoing frame blows past the camera while the incoming one rushes up
- * from depth, both streaked along the radial axis. Channels arrive at slightly
- * different depths, so the rush fringes. */
+/** The outgoing frame blows past the camera while the incoming one rushes up from
+ * depth, both streaked along the radial axis. Channels arrive at different depths,
+ * so the rush fringes. */
 const SLAM_FRAG = frag(`  float p = u_progress;
   float e = rush(p);
   float s = spike(p);
@@ -139,8 +132,7 @@ const SLAM_FRAG = frag(`  float p = u_progress;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);`);
 
 /** A whip pan: the outgoing frame flies off one edge, the incoming one arrives
- * from the other, and the swap happens under the heaviest blur where the eye
- * can't catch it. */
+ * from the other, and the swap happens under the heaviest blur. */
 const WHIP_FRAG = frag(`  float p = u_progress;
   float e = smoothstep(0.0, 1.0, p);
   float s = spike(p);
@@ -150,12 +142,12 @@ const WHIP_FRAG = frag(`  float p = u_progress;
   float blur = s * 0.30;
   vec3 a = smear(u_texture, v_uv - offA, axisVec, blur);
   vec3 b = smear(u_texture2, v_uv - offB, axisVec, blur);
-  // Chromatic trail along the pan. Samplers can't be ternary operands, so the
-  // two sides are split separately and picked afterwards.
+  // Chromatic trail along the pan. Samplers can't be ternary operands, so the two
+  // sides are split separately and picked afterwards.
   vec2 co = axisVec * s * 0.05;
   vec3 fa = split(u_texture, v_uv - offA, co);
   vec3 fb = split(u_texture2, v_uv - offB, co);
-  // Hard swap at the peak — invisible because both sides are pure streak here.
+  // Hard swap at the peak, invisible because both sides are pure streak here.
   float sw = step(0.5, p);
   vec3 col = mix(mix(a, fa, s * 0.5), mix(b, fb, s * 0.5), sw);
   col *= 1.0 + s * 0.30;
@@ -169,8 +161,7 @@ const SHATTER_FRAG = frag(`  float p = u_progress;
   float rows = u_density == 0 ? 6.0 : (u_density == 1 ? 12.0 : 22.0);
   float row = floor(v_uv.y * rows);
   float dir = hash12(vec2(row, SEED)) < 0.5 ? -1.0 : 1.0;
-  // Each slab leaves at its own moment, so the break reads as a collapse
-  // rather than a single sliding sheet.
+  // Each slab leaves at its own moment, so the break reads as a collapse.
   float lead = hash12(vec2(row, SEED + 11.0)) * 0.38;
   float t = clamp((e - lead) / max(0.0001, 1.0 - lead), 0.0, 1.0);
   float shift = dir * t * t * 1.5;
@@ -206,9 +197,8 @@ const BURN_FRAG = frag(`  float p = u_progress;
   col += (grain - 0.5) * 0.10 * blow;
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);`);
 
-// Two ports from gl-transitions (MIT, via the Vidvox ISF-Files lab set). Both
-// work in a y-up space with the motion along +x, so the direction handling is
-// one map from screen uv into that space and its inverse for the samples.
+// Two ports from gl-transitions (MIT, via the Vidvox ISF-Files lab set). Both work
+// in a y-up space with the motion along +x, so direction handling is one map and its inverse.
 
 /** Maps screen uv (y down) into the transition's y-up, rightward space. */
 const ORIENT_GLSL = `vec2 toSpace(vec2 s) {
@@ -239,13 +229,9 @@ const CROSSWARP_FRAG = frag(
 	ORIENT_GLSL,
 );
 
-/** rectalogic's cross zoom: both frames zoom-blur towards a centre that drifts
- * across the frame while dissolving into each other — the camera breathing
- * between two shots. Deliberately directionless: the blur is radially symmetric
- * about the frame centre and the drift is symmetric about it too, so a direction
- * transform would cancel out and change nothing. The lab's 40-tap loop is
- * trimmed to 24; the dithered tap offsets hide the difference, and transitions
- * render on phones too. */
+/** rectalogic's cross zoom: both frames zoom-blur towards a centre that drifts across
+ * the frame while dissolving into each other. Deliberately directionless: the blur and
+ * drift are radially symmetric, so a direction transform would cancel out. */
 const CROSSZOOM_HELPERS = `/** The original's exponential in-out dissolve: reluctant off both ends. */
 float dissolveCurve(float p) {
   if (p <= 0.0) return 0.0;
@@ -258,12 +244,10 @@ float dissolveCurve(float p) {
 `;
 
 const CROSSZOOM_FRAG = frag(
-	`  // The zoom centre drifts across the middle half of the frame, so the pull
-  // travels instead of pulsing in place.
+	`  // The zoom centre drifts across the middle half of the frame, so the pull travels instead of pulsing in place.
   vec2 center = vec2(0.25 + u_progress * 0.5, 0.5);
   float dissolve = dissolveCurve(u_progress);
-  // Mirrored sinusoidal loop: the blur breathes in and back out, peaking at
-  // the lab's 0.4 strength halfway through.
+  // Mirrored sinusoidal loop: the blur breathes in and back out, peaking at 0.4 strength.
   float str = (1.0 - cos(u_progress * 6.2831853)) * 0.2;
   vec2 toCenter = center - v_uv;
   // Dithered taps hide the banding a short zoom-blur loop would show.
@@ -303,7 +287,6 @@ vec4 bgColor(vec2 pfr, vec2 pto) {
   if (inBounds(pto)) c += toColor(pto) * REFLECTION * (1.0 - pto.y);
   return c;
 }
-// Skews a face into perspective about one of its vertical edges.
 vec2 xskew(vec2 p, float persp, float center) {
   float x = mix(p.x, 1.0 - p.x, center);
   return (vec2(x, (p.y - 0.5 * (1.0 - persp) * x) / (1.0 + (persp - 1.0) * x))

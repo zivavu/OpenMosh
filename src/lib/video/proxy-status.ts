@@ -1,16 +1,5 @@
-/**
- * What a preview proxy's badge shows and says, in one place.
- *
- * Four surfaces display this state — the source rail, both grid views and
- * single mode — and they were each carrying their own wording, which drifted
- * into saying less than the app knows. The state also reads as three different
- * things depending on how far along it is (looking in storage, encoding a
- * known size, done), and none of that is visible from a boolean.
- *
- * Copy rules here: say what is happening to the user's media and what it means
- * for playback and export. No progress verbs standing in for facts
- * ("optimizing"), no promises about the result ("for smooth playback").
- */
+/** What a preview proxy's badge shows and says, in one place. Copy rules: say
+ * what is happening to the user's media and what it means for playback/export. */
 
 export interface ProxyStatusInput {
 	/** Source display size, from the add-time probe. */
@@ -21,25 +10,17 @@ export interface ProxyStatusInput {
 	proxyWidth?: number;
 	proxyHeight?: number;
 	proxyPending?: boolean;
-	/** 0–1. */
+	/** 0 to 1. */
 	proxyProgress?: number;
 	proxyFailed?: boolean;
 	/** The worker's error text, when there is one. */
 	proxyReason?: string;
-	/**
-	 * The user asked this video to preview from the original. Only ever set on
-	 * media a proxy would otherwise be built for, so it doubles as "this one is
-	 * big enough for the choice to mean something".
-	 */
+	/** The user asked this video to preview from the original. */
 	proxyDisabled?: boolean;
 }
 
-/**
- * What clicking the badge does. Carried beside the status so every surface
- * offers the same action for the same state, and so the one surface that can't
- * take a click (the rail chip, which is already a button) can leave it out
- * without its tooltip promising one.
- */
+/** What clicking the badge does, carried beside the status so every surface
+ * offers the same action; the rail chip (already a button) leaves it out. */
 export interface ProxyAction {
 	kind: "disable" | "enable" | "retry";
 	/** Appended to the tooltip on a surface where the badge is clickable. */
@@ -71,8 +52,7 @@ export type ProxyStatus =
 const MAX_REASON = 120;
 
 export function proxyStatus(src: ProxyStatusInput): ProxyStatus {
-	// Checked first: the choice outranks whatever a job left behind, and a
-	// cancelled transcode's leftovers shouldn't keep reading as in progress.
+	// Checked first: the choice outranks whatever a job left behind.
 	if (src.proxyDisabled) {
 		return {
 			kind: "off",
@@ -88,9 +68,7 @@ export function proxyStatus(src: ProxyStatusInput): ProxyStatus {
 			src.proxyProgress === undefined
 				? null
 				: Math.round(src.proxyProgress * 100);
-		// No size yet means the worker hasn't reported one, which is the window
-		// where storage is being checked and the source benchmarked. Naming a
-		// size we don't have would be a guess, so the wait says what it's doing.
+		// No size yet means the worker hasn't reported one; the wait says what it's doing.
 		if (!src.proxyWidth || !src.proxyHeight) {
 			return {
 				kind: "pending",
@@ -130,8 +108,7 @@ export function proxyStatus(src: ProxyStatusInput): ProxyStatus {
 			action: DISABLE_READY,
 		};
 	}
-	// A proxy with no size behind it (an older session, say) still helps the
-	// preview, but there is nothing to tell the user about it.
+	// A proxy with no size behind it (an older session) still helps the preview.
 	if (src.proxyFile) {
 		return {
 			kind: "ready",
@@ -145,7 +122,7 @@ export function proxyStatus(src: ProxyStatusInput): ProxyStatus {
 	return { kind: "none" };
 }
 
-/** "1920×1080" — the × is a multiplication sign, not the letter. */
+/** "1920×1080"; the × is a multiplication sign, not the letter. */
 function size(width: number, height: number): string {
 	return `${width}×${height}`;
 }
@@ -154,11 +131,7 @@ function sourceSize(src: ProxyStatusInput): string {
 	return src.width && src.height ? size(src.width, src.height) : "full size";
 }
 
-/**
- * Shorthand for the row count, the way a camera menu writes it. Rounded down
- * to the nearest familiar rung so an anamorphic or oddly cropped proxy still
- * reads as a number someone recognizes.
- */
+/** Row count the way a camera menu writes it, rounded down to a familiar rung. */
 export function shortRes(height: number): string {
 	for (const rung of [2160, 1440, 1080, 720, 480, 360]) {
 		if (height >= rung) return `${rung}p`;

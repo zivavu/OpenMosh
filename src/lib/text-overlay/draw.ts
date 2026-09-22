@@ -1,12 +1,8 @@
-/**
- * Drawing text onto a 2D canvas, shared by the text-timeline lanes and the
- * caption effect. Both produce a transparent canvas that the renderer uploads
- * and blends over the chain, so the two have to agree pixel for pixel — they
- * used to hold a copy each, which is a standing invitation to drift.
- */
+/** Drawing text onto a 2D canvas, shared by the text-timeline lanes and the caption
+ * effect, so the two have to agree pixel for pixel. */
 
-/** The part of a text style that actually reaches the canvas. Opacity and blend
- * mode are deliberately absent: the GL composite owns those. */
+/** The part of a text style that reaches the canvas. Opacity and blend mode are
+ * deliberately absent: the GL composite owns those. */
 export interface CanvasTextStyle {
 	/** Anchor position, normalized (x: left→right, y: top→bottom). */
 	x: number;
@@ -28,24 +24,20 @@ export interface CanvasTextStyle {
 const MAX_WIDTH_RATIO = 0.92;
 const LINE_HEIGHT = 1.2;
 
-/**
- * Where the wrapped lines land, with the context already set up to draw them.
- * Both the draw and the box measurement come through here, so what the preview
- * calls clickable can't drift from what the glyphs cover.
- */
+/** Where the wrapped lines land, with the context already set up to draw them.
+ * Both the draw and the box measurement come through here. */
 interface TextLayout {
 	lines: string[];
 	lineHeight: number;
 	/** The anchor every line is drawn at; `align` decides which side it sits on. */
 	x: number;
-	/** Centre of the first line — the context draws on a "middle" baseline. */
+	/** Centre of the first line: the context draws on a "middle" baseline. */
 	firstY: number;
 	align: CanvasTextAlign;
 	/** How far the outline reaches past the glyphs. 0 when there is none. */
 	strokeWidth: number;
 }
 
-/** Set `ctx` up for this style and work out where its lines go. */
 function layoutText(
 	ctx: CanvasRenderingContext2D,
 	width: number,
@@ -63,8 +55,8 @@ function layoutText(
 		lineHeight,
 		x: width * style.x,
 		firstY: height * style.y - ((lines.length - 1) * lineHeight) / 2,
-		// Align names the side of Position X the text sits on, so "left" puts the
-		// text left of the anchor — the inverse of the canvas' edge-naming.
+		// Align names the side of Position X the text sits on, so "left" puts the text
+		// left of the anchor, the inverse of the canvas' edge-naming.
 		align:
 			style.align === "left"
 				? "right"
@@ -118,8 +110,8 @@ export interface OverlayTextBox {
 	h: number;
 }
 
-/** Measuring canvas: a text lane has no texture to ask, and the one the
- * renderer draws into is mid-frame whenever a click arrives. */
+/** Measuring canvas: a text lane has no texture to ask, and the one the renderer
+ * draws into is mid-frame whenever a click arrives. */
 let scratch: CanvasRenderingContext2D | null | undefined;
 function scratchContext(): CanvasRenderingContext2D | null {
 	if (scratch === undefined) {
@@ -131,13 +123,8 @@ function scratchContext(): CanvasRenderingContext2D | null {
 	return scratch;
 }
 
-/**
- * The box drawn text occupies, for picking a text layer by clicking the
- * preview. Line boxes rather than glyph ink: the height is the wrapped lines'
- * leading, so a lane stays clickable in the gaps its descenders leave.
- *
- * Null when there is nothing on screen to hit.
- */
+/** The box drawn text occupies, for picking a text layer by clicking the preview.
+ * Line boxes rather than glyph ink, so a lane stays clickable in the gaps. */
 export function overlayTextBox(
 	width: number,
 	height: number,
@@ -167,11 +154,8 @@ export function overlayTextBox(
 	};
 }
 
-/**
- * Everything drawOverlayText would put on screen. When two frames share a
- * signature the caller can skip the redraw and the GPU upload entirely.
- * `fontsVersion` covers webfaces that finish loading after a first draw.
- */
+/** Everything drawOverlayText would put on screen. When two frames share a
+ * signature the caller can skip the redraw and the GPU upload. */
 export function overlayTextSignature(
 	text: string,
 	style: CanvasTextStyle,

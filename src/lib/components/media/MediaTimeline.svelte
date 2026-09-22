@@ -32,55 +32,35 @@
 	import ClipLaneGutter from "../timeline/ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
 
-	/** Length a click-to-add clip gets, when the gap it lands in allows it. */
 	const DEFAULT_CLIP_LENGTH = 2;
 	const LANE_HEIGHT = 30;
-	/** A folded lane: its clips are still there to read, but not at a height that
-	 * pays for the text inside them. A floor, not a height: the strip fills its
-	 * row, so the gutter controls never leave slack under it. */
+	/** A folded lane: clips stay readable, but not at a height that pays for the
+	 * text inside. */
 	const LANE_FOLDED_HEIGHT = 14;
-	/** Shared so an unfolded panel allocates nothing per instance. */
 	const NO_FOLDS: ReadonlySet<string> = new Set();
-	/**
-	 * Below this the label is all ellipsis and no word. The clip's tooltip still
-	 * names its source, and the thumbnail strip still reads at any width.
-	 */
+	/** Below this the label is all ellipsis and no word. */
 	const MIN_LABEL_PX = 44;
 
 	interface Props {
 		timeline: MediaTimeline;
-		/** Every layer, front first — this lane's place in the stack. */
 		layerOrder?: LayerRef[];
-		/** Starts a row drag that reorders the whole layer stack. The editor owns
-		 * it: a drag crosses into the other kind's rows, which this can't see. */
 		onLaneDragStart?: (laneId: string, e: PointerEvent) => void;
-		/** Id of the row being dragged right now, for its lifted look. */
 		draggingLaneId?: string | null;
-		/** Lanes the user has folded to a strip, by lane id. */
 		foldedLaneIds?: ReadonlySet<string>;
-		/** Fired when a lane's fold toggle is clicked. */
 		onToggleFold?: (laneId: string) => void;
-		/** The media pool, for naming and thumbnailing each lane's source. */
 		sources?: SequenceSource[];
-		/** Per-source edits, for how long a dropped video actually runs. */
 		edits?: Record<string, SourceEdit>;
-		/** Lane shown by itself on the canvas; null when nothing is soloed. */
 		soloLaneId?: string | null;
 		onToggleSolo?: (laneId: string) => void;
 		selectedClipId?: string | null;
-		/**
-		 * The whole selection, so the media rail can assign to all of it.
-		 * `selectedClipId` stays the primary — the one the clip panel edits and
-		 * the anchor a shift-range extends from — and is always a member here.
-		 */
+		/** The whole selection, so the media rail can assign to all of it. `selectedClipId`
+		 * stays the primary and is always a member here. */
 		selectedClipIds?: string[];
 		onChange: (timeline: MediaTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
-		/** Beats per minute, when known — unlocks the beat-spaced re-roll options. */
+		/** Beats per minute, when known: unlocks the beat-spaced re-roll options. */
 		bpm?: number;
-		// The clip chain gestures, the same set an fx clip takes.
-		// All optional: without them the bar isn't offered at all.
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
@@ -114,14 +94,14 @@
 		onModeChange,
 	}: Props = $props();
 
-	// One axis for the whole stack: zoom, pan, playhead-following and the
-	// duration-change reset all live in TimelineStack.
+	// One axis for the whole stack: zoom, pan and playhead-following live in
+	// TimelineStack.
 	const stack = getTimelineStack();
 	const vp = stack.vp;
 	let trackDuration = $derived(stack.trackDuration);
 
-	// Selection, drags, scrubbing, split/add/delete and the keyboard — the
-	// gestures every clip lane shares. Reads the props live through the getters.
+	// Selection, drags, scrubbing, split/add/delete and the keyboard: the gestures
+	// every clip lane shares.
 	const ctrl = new ClipLaneController<MediaClip, MediaLane>(
 		{
 			kind: "media",
@@ -146,8 +126,8 @@
 			createClip: (start, end) => createMediaClip(start, end),
 			splitClipAt: splitMediaClipAt,
 			clipSpanAt: (lane, time) => clipSpanAt(lane, time),
-			// A clip keeps showing what it showed: one that inherited its old
-			// lane's source has it pinned, unless the new lane shows the same.
+			// A clip keeps showing what it showed: one that inherited its old lane's source
+			// has it pinned, unless the new lane shows the same.
 			remapOnLaneChange: (clip, from, to) => {
 				const sourceId = clip.sourceId ?? from.sourceId ?? undefined;
 				return {
@@ -162,30 +142,23 @@
 	);
 	$effect(() => ctrl.syncSelection());
 
-	// ── Clip toolbar ─────────────────────────────────────────────────────────
-	// Rendered in the stack's shared selection bar, like the fx lanes' — one
-	// bar for whichever lane holds the selection, so the stack never resizes.
+	// Rendered in the stack's shared selection bar, like the fx lanes'.
 	let selectedClips = $derived(ctrl.selectedClips);
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
 		return stack.registerSelectionBar("media", clipBar);
 	});
 
-	// ── Source drops ─────────────────────────────────────────────────────────
-	// The same payload the media rail and the sequence grid send, so a thumb
-	// dragged onto a lane either retargets the clip it lands on or lays down a
-	// new one in the gap it fell in.
+	// The same payload the media rail and the sequence grid send, so a thumb dragged
+	// onto a lane either retargets the clip it lands on or lays down a new one.
 	let dropLaneId = $state<string | null>(null);
-	/** The clip a drop would retarget; null when it would make a new one. */
 	let dropClipId = $state<string | null>(null);
-	/** Where a drop on empty space would put its clip. Drawn as a ghost, so the
-	 * span is settled before the media lands rather than after. */
+	/** Where a drop on empty space would put its clip, drawn as a ghost. */
 	let dropGhost = $state<{
 		laneId: string;
 		start: number;
 		end: number;
 	} | null>(null);
-	/** The media in the air — the drag payload itself is sealed until the drop. */
 	let ghostSource = $derived(sourceById(draggedSourceId()));
 
 	function isSourceDrag(e: DragEvent): boolean {
@@ -206,14 +179,13 @@
 		dropLaneId = laneId;
 		dropClipId = onClip?.id ?? null;
 		dropGhost = onClip ? null : ghostAt(laneId, e.clientX);
-		// "none" over a gap too narrow to hold a clip: the cursor is the only
-		// thing that can say so before the drop does nothing.
+		// "none" over a gap too narrow to hold a clip: the cursor is the only thing that
+		// can say so before the drop does nothing.
 		if (e.dataTransfer) {
 			e.dataTransfer.dropEffect = onClip || dropGhost ? "copy" : "none";
 		}
 	}
 
-	/** Where the clip a drop at this x would create lands, or null if none fits. */
 	function ghostAt(
 		laneId: string,
 		clientX: number,
@@ -224,7 +196,6 @@
 		return span && { laneId, ...span };
 	}
 
-	/** The clip a drop at this x would land on, if it lands on one at all. */
 	function dropTargetClip(laneId: string, clientX: number): MediaClip | null {
 		const lane = ctrl.laneOf(laneId);
 		if (!lane || !ctrl.overTrack(clientX)) return null;
@@ -244,12 +215,8 @@
 		clearDrop();
 	}
 
-	/**
-	 * A thumb dropped on a clip retargets that clip alone; one dropped on the
-	 * lane's empty space lays down a new clip there showing it. That split is
-	 * what lets one lane hold several images without the drop having to ask
-	 * which it meant.
-	 */
+	/** A thumb dropped on a clip retargets that clip alone; one dropped on the lane's
+	 * empty space lays down a new clip there showing it. */
 	function onLaneDrop(e: DragEvent, laneId: string) {
 		if (!isSourceDrag(e)) return;
 		e.preventDefault();
@@ -266,9 +233,7 @@
 			return;
 		}
 		if (!ghost || ghost.laneId !== laneId) return;
-		// A lane with no media of its own takes the drop as its default too, so
-		// its picker has something to name and later clips inherit it; after
-		// that the new clip carries the source itself and the lane is left be.
+		// A lane with no media of its own takes the drop as its default too.
 		const inherits = lane.sourceId === null || lane.sourceId === sourceId;
 		const clip = createMediaClip(
 			ghost.start,
@@ -290,7 +255,6 @@
 		return id ? sources.find((s) => s.id === id) : undefined;
 	}
 
-	/** The media a clip actually draws — its own when it was retargeted. */
 	function clipSource(
 		lane: MediaLane,
 		clip: MediaClip,
@@ -298,26 +262,17 @@
 		return sourceById(clipSourceId(lane, clip));
 	}
 
-	/** What a clip says it is showing. Clips with no source read as unset. */
 	function clipLabel(lane: MediaLane, clip: MediaClip): string {
 		return clipSource(lane, clip)?.name ?? "No source";
 	}
 
-	/** The chain's label, unless it is the default a fresh clip carries — a
-	 * row of "clean" says nothing the empty rack doesn't. */
 	function chainLabel(clip: MediaClip): string | null {
 		if (clip.label === "clean" && !clip.modified) return null;
 		return clip.modified ? `${clip.label}*` : clip.label;
 	}
 
-	/**
-	 * Turning solo on aims the sidebar at the lane too — the point of seeing one
-	 * layer by itself is to work on it, and hunting for its clip afterwards is
-	 * the step that was missing.
-	 *
-	 * Only ever an existing clip, unlike `openLane`: soloing is a way of looking
-	 * at the timeline, and it must not write to it.
-	 */
+	/** Turning solo on aims the sidebar at the lane too. Only ever an existing clip,
+	 * unlike `openLane`: soloing must not write to the timeline. */
 	function soloLane(lane: MediaLane) {
 		const turningOn = soloLaneId !== lane.id;
 		onToggleSolo?.(lane.id);
@@ -326,12 +281,8 @@
 		if (first) ctrl.selectOnly(first.id);
 	}
 
-	/**
-	 * The span a clip added at `time` gets. A video asks for its own length —
-	 * as trimmed and at its speed, the stretch it takes to play through once —
-	 * so dropping one lays down the whole shot rather than a stub; everything
-	 * else takes the default.
-	 */
+	/** The span a clip added at `time` gets. A video asks for its own length (as
+	 * trimmed and at its speed), so dropping one lays down the whole shot. */
 	function clipSpanAt(
 		lane: MediaLane,
 		time: number,
@@ -349,19 +300,13 @@
 		);
 	}
 
-	// ── Clip clipboard ───────────────────────────────────────────────────────
-	// Local to the lanes. The selections are mutually exclusive, so a Ctrl+C
-	// with clips selected can only mean these. A paste goes onto the selection
-	// when there is one — what the copied clips showed, into clips that keep
-	// their spans — and otherwise stamps whole clips down at the start marker.
+	// Local to the lanes. The selections are mutually exclusive, so a Ctrl+C with
+	// clips selected can only mean these.
 	let clipboard = $state<MediaClipboardEntry[]>([]);
-	/** What the clipboard was copied from, plus every copy stamped from it
-	 * since: pasting onto exactly those would change nothing, so that gesture
-	 * stamps new copies instead — which is what makes a second Ctrl+V, with
-	 * the first paste still selected, lay down another copy. */
+	/** What the clipboard was copied from, plus every copy stamped since. */
 	let copiedIds = new Set<string>();
-	/** The copy stamp when the clipboard was last filled: a paste answers only
-	 * if nothing was copied on another lane since. */
+	/** The copy stamp when the clipboard was last filled; a paste answers only if it
+	 * matches. */
 	let clipStamp = -1;
 
 	function copySelection(): boolean {
@@ -386,9 +331,6 @@
 		return pasteClips();
 	}
 
-	/** Stamp the copied clips at the start marker, on the lane last clicked —
-	 * the same click that put the marker there — and leave the copies selected
-	 * to drag from there. */
 	function pasteClips(): boolean {
 		const result = pasteMediaClips(
 			timeline,
@@ -566,31 +508,26 @@
 {/snippet}
 
 <style>
-	/* The chain rides after the media name, dimmer: what it shows first, what
-	   runs on it second. */
+	/* The chain rides after the media name, dimmer: what it shows first, what runs on
+	   it second. */
 	.clip-chain {
 		margin-left: 0.35rem;
 		color: var(--mosh);
 		opacity: 0.85;
 	}
 
-	/* No box of its own: the rows join the layer column their sibling component
-	   renders into, so one `order` per row interleaves the two kinds. */
+	/* No box of its own: the rows join the layer column their sibling renders into. */
 	.media-tl {
 		display: contents;
 	}
 
-	/* A source is being dragged over this row's empty space and a clip would be
-	   cut for it. Over a clip the clip lights instead — the drop retargets that
-	   one clip, and lighting the whole row would promise otherwise. */
+	/* A source is being dragged over this row's empty space and a clip would be cut. */
 	.tl-row.drop-target .lane-track {
 		border-color: var(--live);
 		box-shadow: inset 0 0 0 1px var(--live);
 	}
 
-	/* Lit rather than dimmed, unlike the eye: solo is a mode the editor is in,
-	   and one the user has to be able to spot from across the timeline to
-	   explain why the canvas is showing one layer on black. */
+	/* Lit rather than dimmed, unlike the eye: solo is a mode the editor is in. */
 	.lane-solo:hover {
 		color: var(--text);
 	}
@@ -599,8 +536,6 @@
 		color: var(--mosh);
 	}
 
-	/* A clip showing something other than its lane's source. Left corner, so it
-	   survives a clip narrow enough to lose its label. */
 	.clip.retargeted::after {
 		content: "";
 		position: absolute;
@@ -613,9 +548,7 @@
 		pointer-events: none;
 	}
 
-	/* The clip a drop would make, at the span it would get: the gesture has to
-	   say where the media lands while there is still time to move it. Dashed
-	   and pale so it never reads as a clip that is already there. */
+	/* The clip a drop would make, at the span it would get. */
 	.clip.ghost {
 		border-style: dashed;
 		border-color: var(--mosh);
@@ -629,9 +562,8 @@
 		box-shadow: inset 0 0 0 1px var(--mosh);
 	}
 
-	/* The source's thumbnail, tiled along the clip: a filmstrip reads as "this
-	   media" faster than the file name does, and survives being zoomed out to a
-	   few pixels wide, which the label does not. */
+	/* The source's thumbnail, tiled along the clip: a filmstrip reads as "this media"
+	   faster than the file name. */
 	.clip-thumb {
 		position: absolute;
 		inset: 0;

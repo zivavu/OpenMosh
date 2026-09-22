@@ -6,7 +6,6 @@ import {
 	smoothBandLevel,
 } from "./auto-range";
 
-/** Run a level signal through the smoother at a given frame rate. */
 function runAtFps(
 	key: string,
 	levelAt: (t: number) => number,
@@ -102,8 +101,7 @@ describe("autoRangeLevel", () => {
 	beforeEach(resetAutoRange);
 
 	it("falls back to the raw level once a band goes steady", () => {
-		// A band with no dynamics used to bail out at 0, snapping every param
-		// linked to it to the bottom of its range.
+		// A band with no dynamics used to bail out at 0, snapping every linked param down.
 		let v = 0;
 		for (let i = 0; i < 600; i++) v = autoRangeLevel("k", 0.4, 1 / 60);
 		expect(v).toBeCloseTo(0.4, 1);
@@ -118,8 +116,7 @@ describe("autoRangeLevel", () => {
 	it("does not let a single-frame spike own the whole range", () => {
 		for (let i = 0; i < 120; i++) autoRangeLevel("k", 0.3, 1 / 60);
 		autoRangeLevel("k", 1, 1 / 60);
-		// The spike itself reads as a peak, but the frames after it must not all
-		// collapse onto the floor of a range stretched to fit one frame.
+		// The spike reads as a peak, but later frames must not collapse onto the floor.
 		expect(autoRangeLevel("k", 0.3, 1 / 60)).toBeLessThan(0.35);
 		let v = 0;
 		for (let i = 0; i < 30; i++) v = autoRangeLevel("k", 0.45, 1 / 60);
@@ -144,8 +141,7 @@ describe("smoothed levels through auto-ranging", () => {
 		return out.slice(out.length / 2);
 	}
 
-	/** Share of frames somewhere between the extremes — the part of the signal
-	 * that reads as movement rather than a flicker. */
+	/** Share of frames between the extremes: the part that reads as movement. */
 	function midRangeShare(out: number[]): number {
 		return out.filter((v) => v > 0.2 && v < 0.8).length / out.length;
 	}
@@ -158,9 +154,7 @@ describe("smoothed levels through auto-ranging", () => {
 	});
 
 	it("turns the beat into movement instead of an on/off flicker", () => {
-		// Both span the full range, but raw single-frame spikes pin the ceiling and
-		// drop everything else on the floor — the render stops reading as connected
-		// to the kick because nothing sits between the two extremes.
+		// Raw spikes pin the ceiling and drop everything else on the floor.
 		const smoothed = beatResponse(true, 30);
 		resetAutoRange();
 		const raw = beatResponse(false, 30);
@@ -174,7 +168,6 @@ describe("smoothed levels through auto-ranging", () => {
 describe("dropAutoRangeScope", () => {
 	it("forgets only the named scope's bands", () => {
 		resetAutoRange();
-		// Drive two scopes to clearly different envelopes.
 		for (let i = 0; i < 40; i++) {
 			smoothBandLevel("laneA|20:250", 0.9, 1 / 60, 0.5);
 			autoRangeLevel("laneA|20:250", 0.9, 1 / 60);
@@ -199,7 +192,7 @@ describe("dropAutoRangeScope", () => {
 		smoothBandLevel("lane1|20:250", 0.5, 1 / 60, 0.5);
 		smoothBandLevel("lane10|20:250", 0.5, 1 / 60, 0.5);
 		dropAutoRangeScope("lane1");
-		// lane10 is not lane1 — the "|" in the prefix is what keeps them apart.
+		// lane10 is not lane1: the "|" in the prefix is what keeps them apart.
 		expect(smoothBandLevel("lane10|20:250", 0.9, 1 / 60, 0.5)).not.toBe(0.9);
 	});
 });

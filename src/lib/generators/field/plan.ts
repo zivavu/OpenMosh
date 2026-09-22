@@ -1,8 +1,4 @@
-/**
- * Textures for the height-field generators. Each kind has its own tuned
- * ranges; the domain bend and ramp cycles are dealt across the batch so most
- * images stay flat and plain while a few get a tunnel, a mirror or banding.
- */
+/** Textures for the height-field generators. Each kind has its own tuned ranges. */
 
 import { deal } from "../palette";
 import { randIn, randLog, type Rand } from "../../rng";
@@ -17,18 +13,13 @@ interface Look {
 	scale: number;
 	params: Params;
 	light: [number, number];
-	/** Default 0.45–0.75 and 1.0–1.6; smooth fields need less crush. */
+	/** Default 0.45 to 0.75 and 1.0 to 1.6; smooth fields need less crush. */
 	gamma?: [number, number];
 	contrast?: [number, number];
 	cycles: number;
 }
 
-/**
- * Which domain bends suit each kind, from contact sheets: the kaleidoscope's
- * fold shows as a seam through anything smooth and large (plasma, rings), and
- * the tunnel's centre is a smear on plasma — both read as a pattern on the
- * cellular and striped fields.
- */
+/** Which domain bends suit each kind: the kaleidoscope's fold seams smooth fields. */
 const DOMAIN_WEIGHTS: Record<FieldKind, [Domain, number][]> = {
 	voronoi: [
 		[0, 0.6],

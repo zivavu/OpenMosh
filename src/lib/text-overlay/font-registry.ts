@@ -1,19 +1,15 @@
-/**
- * Shared bookkeeping for every face the canvas renderers can draw with —
- * bundled (fonts.ts) and user-added (custom-fonts.svelte.ts) alike. It lives in
- * its own module so those two don't have to import each other.
- */
+/** Shared bookkeeping for every face the canvas renderers can draw with,
+ * bundled (fonts.ts) and user-added (custom-fonts.svelte.ts) alike. Its own
+ * module so those two don't import each other. */
 
 const families = new Map<string, Promise<void>>();
 
 let version = 0;
 const listeners = new Set<() => void>();
 
-/**
- * Bumped every time a face lands. Renderers that cache drawn text by signature
- * mix this in, so a caption drawn with the fallback face is redrawn once its
- * real font is available.
- */
+/** Bumped every time a face lands. Renderers that cache drawn text by
+ * signature mix this in, so a caption drawn with the fallback face is redrawn
+ * once its real font is available. */
 export function fontsVersion(): number {
 	return version;
 }
@@ -46,11 +42,9 @@ export function familyPromise(family: string): Promise<void> | undefined {
 
 let pending: Promise<void> | null = null;
 
-/**
- * The in-flight read of the user's saved fonts. Set once at startup and
- * cleared when it settles, so asking for a family before it lands can wait
- * for it — and so the per-frame path costs nothing once it has.
- */
+/** The in-flight read of the user's saved fonts. Set once at startup and
+ * cleared when it settles, so asking for a family before it lands can wait for
+ * it, and the per-frame path costs nothing once it has. */
 export function setFontsPending(p: Promise<void>): void {
 	pending = p;
 	void p.then(

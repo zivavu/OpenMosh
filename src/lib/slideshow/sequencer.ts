@@ -10,21 +10,16 @@ import { applyPreset, getDefinition, loadPresets } from "../effects";
 import type { SlideshowConfig, SlideshowSlide } from "./types";
 
 /**
- * Deep-clone an effects array for a beat, keeping each instance's ID.
- *
- * The IDs are what the renderer keys its per-instance state on — feedback
- * buffer pairs, accumulated phase, tracking boxes, caption textures. Minting
- * fresh ones every beat made it allocate and then garbage-collect a pair of
- * full-resolution render targets per feedback effect per beat, which at 1/16
- * and 1/32 is several a second.
+ * Deep-clone an effects array for a beat, keeping each instance's ID: the
+ * renderer keys per-instance state (feedback buffers, phase, tracking) on it.
  */
 export function cloneEffects(effects: EffectInstance[]): EffectInstance[] {
 	return effects.map((e) => ({ ...e, values: { ...e.values } }));
 }
 
 /**
- * Smooth mode: toggle exactly one non-locked effect on or off.
- * Biased toward enabling when below moshMin and disabling when above moshMax.
+ * Smooth mode: toggle one non-locked effect, biased toward enabling below
+ * moshMin and disabling above moshMax.
  */
 export function toggleOneEffect(
 	effects: EffectInstance[],
@@ -58,7 +53,6 @@ export function toggleOneEffect(
 		const toggled = { ...e, enabled: !e.enabled };
 		if (!toggled.enabled) return toggled;
 
-		// Randomize params when enabling
 		const def = getDefinition(toggled.defId);
 		if (!def) return toggled;
 		const values = { ...toggled.values };
@@ -68,10 +62,9 @@ export function toggleOneEffect(
 }
 
 /**
- * Compute the effects for a single beat based on the mosh mode.
- * For 'smooth' mode, mutates `smoothState` in place (pass a ref object).
- * `presets` (used by 'per-image') should be supplied by callers that run this
- * per beat, so a localStorage read + parse doesn't land on every frame.
+ * Effects for a single beat by mosh mode. Mutates `smoothState` in place for
+ * 'smooth'; callers running per beat should pass `presets` to avoid a
+ * localStorage read every frame.
  */
 export function computeEffectsForBeat(
 	config: SlideshowConfig,
@@ -106,9 +99,8 @@ export function computeEffectsForBeat(
 		case "per-image": {
 			if (slide.presetIndex !== null) {
 				const preset = (presets ?? loadPresets())[slide.presetIndex];
-				// Derived from the slide, not minted: a slide coming back round reuses
-				// the renderer state its chain built last time instead of forcing a
-				// fresh set of feedback buffers.
+				// Derived from the slide, not minted, so a slide coming back round
+				// reuses the renderer state its chain built last time.
 				if (preset) {
 					return applyPreset(preset).map((e, i) => ({
 						...e,
@@ -122,10 +114,8 @@ export function computeEffectsForBeat(
 }
 
 /**
- * Re-roll random audio links for the beat when the "Random audio links"
- * toggle is on. `generateMosh` already does this for `random` mode; this
- * covers `smooth`, which never calls it. Not applied to `consistent` or
- * `per-image` — those keep the user's manual/preset links.
+ * Re-roll random audio links for the beat when the toggle is on; `generateMosh`
+ * covers `random` mode, this covers `smooth`.
  */
 function withRandomAudioLinks(
 	effects: EffectInstance[],

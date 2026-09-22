@@ -5,7 +5,7 @@
 	import LaneGrip from "../ui/LaneGrip.svelte";
 	import LaneName from "../ui/LaneName.svelte";
 
-	/** The gutter every clip lane wears: grip, fold, eye, name, delete — with
+	/** The gutter every clip lane wears: grip, fold, eye, name, delete, with
 	 * room between the eye and the name for a kind's own switch (solo). */
 	interface Props {
 		lane: { id: string; name: string; enabled: boolean };

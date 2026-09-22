@@ -1,12 +1,5 @@
-/**
- * Per-song timeline persistence, in IndexedDB.
- *
- * Every media and fx clip carries a full effect chain, so these run to
- * hundreds of kilobytes a song — enough that a few of them filled localStorage's
- * 5 MB cap, after which the writes failed silently. The cost of moving is async
- * reads: see `loadedTimelineKey` in Editor.svelte, which holds off saving until
- * the load for the current key lands.
- */
+/** Per-song timeline persistence in IndexedDB. Clips carry full chains (hundreds
+ * of KB a song), which overflowed localStorage's 5 MB cap and failed silently. */
 
 import { readJson } from "../storage";
 import { getTimeline, putTimeline } from "./sequence-media-store";
@@ -22,18 +15,14 @@ function legacyAll(): Record<string, unknown> {
 	return all && typeof all === "object" ? all : {};
 }
 
-/**
- * Read one song's timeline, falling back to the legacy localStorage blob and
- * copying anything found there into IndexedDB on the way past. The legacy value
- * is left in place, so an older tab still finds its work.
- */
+/** Read one song's timeline, falling back to the legacy localStorage blob and
+ * copying it into IndexedDB; the legacy value stays so an older tab still finds it. */
 export async function loadTimeline<T>(key: string): Promise<T | null> {
 	let stored: unknown = null;
 	try {
 		stored = await getTimeline(key);
 	} catch {
-		// Storage blocked or the database is unavailable; the legacy read may
-		// still turn something up.
+		// Storage blocked or DB unavailable; the legacy read may still turn something up.
 	}
 	if (stored != null) return stored as T;
 

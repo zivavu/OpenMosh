@@ -38,8 +38,7 @@
 
 	interface Props {
 		effects: EffectInstance[];
-		/** No "Signal chain" head: the sidebar tab already names it. The live
-		 * count moves into the search row. */
+		/** No "Signal chain" head; the live count moves into the search row. */
 		headless?: boolean;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
@@ -50,39 +49,23 @@
 			paramKey: string,
 			link: VolumeLink | null,
 		) => void;
-		/** Called after `effects` is replaced wholesale (e.g. preset load), so callers can push undo history. */
+		/** Called after `effects` is replaced wholesale, so callers can push undo history. */
 		onEffectsReplaced?: () => void;
-		/** Called after a preset is explicitly overwritten via its save icon. */
 		onPresetUpdated?: (preset: Preset) => void;
-		/** Called after a preset is loaded from the list, with that preset. */
 		onPresetApplied?: (preset: Preset) => void;
-		/** Called on every user action that changes render output (param change,
-		 * enable toggle, add/remove/reorder) — not on expand/lock. */
+		/** Called on every user action that changes render output, not on expand/lock. */
 		onUserEdit?: () => void;
-		/** Called immediately before any of those changes is applied, while the
-		 * pre-edit state is still intact — lets callers capture undo snapshots
-		 * for edits that mutate `effects` in place. `coalesceKey` identifies a
-		 * continuously-dragged parameter so consecutive ticks of one gesture can
-		 * be merged into a single undo entry; discrete edits pass nothing. */
+		/** Called before a change is applied, while the pre-edit state is intact.
+		 * `coalesceKey` merges consecutive ticks of one drag into one undo entry. */
 		onBeforeUserEdit?: (coalesceKey?: string) => void;
-		/** Set when `effects` is not a chain the user can edit — sequence mode
-		 * with nothing selected has no clip for an edit to land on. The rack
-		 * stands down and shows this instead of pretending to be a chain. */
+		/** Set when `effects` is not a chain the user can edit; the rack shows this instead. */
 		noTarget?: { title: string; hint: string } | null;
-		/** Set when something else decides which effects are on — the slideshow's
-		 * random and smooth modes roll the chain every beat. The switches stand
-		 * down; everything else, hiding especially, still works, since hiding is
-		 * how an effect is kept out of the roll. */
+		/** Set when something else decides which effects are on, e.g. the slideshow's
+		 * random and smooth modes. The switches stand down. */
 		rolledNote?: string | null;
-		/** Set when the roll owns the whole chain, not just its switches — an
-		 * auto clip rebuilds the list from scratch every tick, so a
-		 * hand reorder or param tweak there is thrown away. Drops the reorder
-		 * affordances and the param drawers; hiding still works. */
+		/** Set when the roll owns the whole chain: an auto clip rebuilds the list every tick. */
 		rolledChain?: boolean;
-		/** Which effects the roll actually owns. 'all' — the chain is rebuilt from
-		 * scratch, so nothing in it survives. 'moshable' — the roll runs over a
-		 * copy and skips non-moshable effects, so those keep the user's switch,
-		 * order and params and stay fully editable. */
+		/** Which effects the roll owns: 'all' rebuilds the chain, 'moshable' runs over a copy. */
 		rolledScope?: "all" | "moshable";
 	}
 
@@ -104,12 +87,11 @@
 		headless = false,
 	}: Props = $props();
 
-	/** False for an effect the roll leaves alone — its controls stay live. */
+	/** False for an effect the roll leaves alone; its controls stay live. */
 	function isRolled(effect: EffectInstance): boolean {
 		return rolledScope === "all" || isMoshable(effect);
 	}
 
-	/** How many effects are actually passing signal, shown in the panel header. */
 	let liveCount = $derived(effects.filter((e) => e.enabled).length);
 
 	let presets: Preset[] = $state(loadPresets());
@@ -121,7 +103,6 @@
 	/** The picker is a disclosure: one line closed, a full-width list open. */
 	let presetsOpen = $state(false);
 
-	/** The preset the chain was last set from, by name, for the trigger. */
 	let activePresetName = $derived(
 		appliedIndex === null ? null : (presets[appliedIndex]?.name ?? null),
 	);
@@ -139,15 +120,12 @@
 		saving = false;
 	}
 
-	// Loading is a one-shot apply — presets are only ever written via the
-	// explicit save icons, never automatically.
+	// Loading is a one-shot apply; presets are only written via the explicit save icons.
 	function handleLoadPreset(index: number) {
 		onBeforeUserEdit?.();
 		const applied = applyPreset(presets[index]);
-		// Keep the rest of the library in the list, switched off. Replacing the
-		// chain outright made every other effect look deleted (they silently fell
-		// into "Hidden effects"), which reads as data loss on what is meant to be
-		// a one-click starting point.
+		// Keep the rest of the library in the list, switched off: replacing the chain
+		// outright made other effects look deleted.
 		const inPreset = new Set(applied.map((e) => e.defId));
 		const rest = effects
 			.filter((e) => !inPreset.has(e.defId))
@@ -191,18 +169,15 @@
 		effects[index].expanded = !effects[index].expanded;
 	}
 
-	// Expansion is view state, not a chain edit — deliberately out of undo.
+	// Expansion is view state, not a chain edit, so it stays out of undo.
 	const anyExpanded = $derived(!rolledChain && effects.some((e) => e.expanded));
 
 	function collapseAll() {
 		for (const effect of effects) effect.expanded = false;
 	}
 
-	// Hidden effects are tracked as an explicit set of ids the user chose to
-	// hide, *not* as "every definition missing from the current chain". The
-	// panel's chain is often a subset of the library — a preset-filled clip,
-	// say — and deriving the set from it would silently mark the whole
-	// rest of the library as permanently hidden.
+	// Hidden effects are an explicit set of ids the user chose to hide, not every
+	// definition missing from the chain.
 	function loadHiddenEffectIds(): Set<string> {
 		return new Set(readJson<string[]>(HIDDEN_EFFECTS_KEY, []));
 	}
@@ -213,8 +188,7 @@
 		writeJson(HIDDEN_EFFECTS_KEY, [...hiddenIds]);
 	}
 
-	// Params of hidden effects, so re-adding one restores it as it was rather
-	// than resetting it to defaults.
+	// Params of hidden effects, so re-adding one restores it as it was.
 	const stashedValues = new Map<
 		string,
 		{
@@ -223,12 +197,10 @@
 		}
 	>();
 
-	/** True when the chain holds more than one instance of this effect. */
 	function isCopy(effect: EffectInstance): boolean {
 		return effects.filter((e) => e.defId === effect.defId).length > 1;
 	}
 
-	/** Insert an independent copy of an effect right below it. */
 	function duplicate(index: number) {
 		onBeforeUserEdit?.();
 		const copy = cloneEffectInstance(
@@ -240,14 +212,7 @@
 		onUserEdit?.();
 	}
 
-	/**
-	 * Hide an effect from the list. This is a persisted preference rather than a
-	 * chain edit, so it deliberately stays out of the undo stack — Ctrl+Z can't
-	 * un-hide, but one click under "Hidden effects" restores it with its params.
-	 *
-	 * Copies are the exception: with other instances left in the chain there is
-	 * nothing to hide, so this is an ordinary (undoable) delete.
-	 */
+	/** Hide an effect from the list. A persisted preference, so it stays out of undo. */
 	function hide(index: number) {
 		const effect = effects[index];
 		if (isCopy(effect)) {
@@ -280,13 +245,9 @@
 
 	let searchQuery = $state("");
 
-	// Narrows the list to the effects actually passing signal — the working set
-	// once a mosh has filled the chain with things you don't want to scroll past.
+	// Narrows the list to the effects actually passing signal.
 	let onlyLive = $state(false);
-	// Effects the live filter keeps around even once switched off: the set that
-	// was live when the filter came on, plus anything toggled off under it. So
-	// switching an effect off doesn't yank it out from under the pointer; the
-	// list only tightens when the filter is switched off and on again.
+	// Effects the live filter keeps around once switched off: the set live when it came on.
 	let livePinned = new SvelteSet<string>();
 
 	function setOnlyLive(on: boolean) {
@@ -389,12 +350,7 @@
 		onUserEdit?.();
 	}
 
-	/**
-	 * Move an effect by button rather than by drag. `pos` indexes the *visible*
-	 * list, and neighbours are taken from it too: with a search active the
-	 * adjacent row on screen is rarely adjacent in `effects`, and stepping
-	 * through the raw array would look like the button did nothing.
-	 */
+	/** Move an effect by button. `pos` indexes the visible list, not `effects`. */
 	async function moveEffect(pos: number, direction: -1 | 1, toEnd: boolean) {
 		const visible = filteredEffects;
 		const to = resolveMoveTarget(
@@ -411,8 +367,8 @@
 		appliedIndex = null;
 		onUserEdit?.();
 
-		// Keep the effect the user is working on under their eye — after a jump
-		// to either end it would otherwise be somewhere off-screen.
+		// Keep the effect under the user's eye; after a jump to either end it would be
+		// off-screen.
 		await tick();
 		centerOnEffect(moved.instanceId);
 	}
@@ -425,8 +381,7 @@
 		if (!box || !el) return;
 		const item = el.getBoundingClientRect();
 		const container = box.getBoundingClientRect();
-		// Offset from the container's own scrollTop, so this works regardless of
-		// where the list sits on the page or which element is the offsetParent.
+		// Offset from the container's own scrollTop, so this works regardless of offsetParent.
 		const delta =
 			item.top - container.top - (container.height - item.height) / 2;
 		box.scrollTo({
@@ -446,22 +401,13 @@
 		return dropPosition;
 	}
 
-	// Touch drag support
 	let touchDragFromIndex: number | null = $state(null);
-	// $state because the rack stands down (and the binding drops to null) when
-	// there is no chain to edit.
+	// $state because the rack stands down (and the binding drops to null) with no chain.
 	let listEl = $state<HTMLElement | null>(null);
 	let scrollRafId: number | null = null;
 
-	/**
-	 * The scroll box this chain lives in — the sidebar column, or the mobile
-	 * sheet's tab. The chain does not scroll on its own, so the one thing that
-	 * can carry an effect into view is whatever scrolls around it.
-	 *
-	 * Walked rather than passed in: the panel sits directly in the sidebar in
-	 * one place and nested inside a clip panel in another, and which ancestor
-	 * scrolls is not something either caller should have to state.
-	 */
+	/** The scroll box this chain lives in. Walked rather than passed in: which
+	 * ancestor scrolls is not the caller's. */
 	function scrollBox(): HTMLElement | null {
 		for (let el = listEl?.parentElement; el; el = el.parentElement) {
 			const overflow = getComputedStyle(el).overflowY;
@@ -854,9 +800,8 @@
 
 <style>
 	.effects-panel {
-		/* Natural height, never its own scrollbox: the sidebar around it scrolls
-		   as one region, and a chain that scrolled inside that would be a
-		   second scroller nested in the first. */
+		/* Natural height, never its own scrollbox: the sidebar around it scrolls as one
+		   region. */
 		flex: 0 0 auto;
 		width: 100%;
 		max-width: var(--sidebar-w);
@@ -874,8 +819,7 @@
 		}
 	}
 
-	/* Pinned to whatever scrolls around the panel, so the tools are always
-	   in reach however long the chain runs. */
+	/* Pinned to whatever scrolls around the panel, so the tools are always in reach. */
 	.panel-tools {
 		position: sticky;
 		top: 0;
@@ -884,8 +828,7 @@
 		flex-shrink: 0;
 	}
 
-	/* Own stacking context, so slider thumbs and drop lines can't ride over
-	   the pinned tools while the chain scrolls under them. */
+	/* Stacking context, so slider thumbs and drop lines can't ride over the tools. */
 	.panel-list {
 		isolation: isolate;
 	}
@@ -934,7 +877,6 @@
 		gap: 0.15rem;
 	}
 
-	/* The picker: one line closed, a full-width list open. */
 	.preset-trigger {
 		display: flex;
 		align-items: center;
@@ -1281,8 +1223,7 @@
 		color: var(--live);
 	}
 
-	/* Standing in for the list, so a filtered-to-nothing panel still says what
-	   happened and offers the way out. */
+	/* Standing in for the list, so a filtered-to-nothing panel still says what happened. */
 	.list-empty {
 		display: flex;
 		flex-direction: column;

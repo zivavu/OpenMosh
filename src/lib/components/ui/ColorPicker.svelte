@@ -12,7 +12,7 @@
 
 	let { value, defaultValue, onChange, id }: Props = $props();
 
-	/** Fixed palette — the app's usual glitch primaries plus the neutrals. */
+	/** Fixed palette: the app's usual glitch primaries plus the neutrals. */
 	const SWATCHES = [
 		"#000000",
 		"#ffffff",
@@ -30,9 +30,8 @@
 	let hsv = $state<Hsv>(untrack(() => hexToHsv(value, defaultValue)));
 	let root = $state<HTMLElement | null>(null);
 
-	// Click-away / Escape to close. Bound on pointerdown so a drag that starts
-	// outside closes immediately, and capture-phase so a stopPropagation()
-	// elsewhere in the panel can't strand the picker open.
+	// Click-away / Escape to close. Bound on pointerdown so a drag starting
+	// outside closes at once, capture-phase so a stopPropagation() can't strand it open.
 	$effect(() => {
 		if (!open) return;
 

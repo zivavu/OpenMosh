@@ -3,7 +3,7 @@ import type { Colors } from "../palette";
 export const FIELD_KINDS = ["voronoi", "stripes", "plasma", "rings"] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
-/** Shader-side index of each kind — keep in step with `uField` in the shader. */
+/** Shader-side index of each kind; keep in step with `uField` in the shader. */
 export const FIELD_INDEX: Record<FieldKind, number> = {
 	voronoi: 0,
 	stripes: 1,
@@ -18,10 +18,10 @@ export type Domain = 0 | 1 | 2;
  * A height field mapped through the shared ramp and crease lighting. `params`
  * mean different things per kind:
  *
- * - voronoi: [jitter 0–1, metric 0 euclid/1 manhattan/2 chebyshev, look 0 blobs/1 cracks/2 flat cells, warp]
- * - stripes: [frequency, warp, hardness 0–1, stripe angle rad]
+ * - voronoi: [jitter 0-1, metric 0 euclid/1 manhattan/2 chebyshev, look 0 blobs/1 cracks/2 flat cells, warp]
+ * - stripes: [frequency, warp, hardness 0-1, stripe angle rad]
  * - plasma:  [x freq, y freq, diagonal freq, radial freq]
- * - rings:   [centres 1–4, frequency, decay, linear-wave mix 0–1]
+ * - rings:   [centres 1-4, frequency, decay, linear-wave mix 0-1]
  */
 export interface FieldSpec {
 	gen: "field";

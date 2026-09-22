@@ -50,12 +50,9 @@ function placementSignature(p: TrackingParams): string {
 	return `${p.count}|${p.sensitivity.toFixed(3)}|${p.size.toFixed(3)}`;
 }
 
-/**
- * Rebuild the persistent box set from the current salient points when the
- * placement params changed or the box set is empty. Boxes otherwise persist —
- * their motion is owned by trackBoxes. Identities (hex) are derived from
- * seed+slot so they stay stable across rebuilds with the same count.
- */
+/** Rebuild the persistent box set from the current salient points when the
+ * placement params changed or the set is empty; boxes otherwise persist, their
+ * motion owned by trackBoxes. */
 export function syncBoxes(
 	state: TrackingState,
 	params: TrackingParams,
@@ -86,8 +83,8 @@ export function syncBoxes(
 			quality: 0.6,
 			state: "lock",
 			stateChangedAt: time,
-			// Fresh boxes spawn already faded in so a single frozen render (PNG/JPG
-			// preview) shows the HUD; the fade only plays on later re-acquires.
+			// Fresh boxes spawn already faded in so a single frozen render (PNG/JPG preview)
+			// shows the HUD; the fade only plays on later re-acquires.
 			acquiredAt: prev ? prev.acquiredAt : time - 0.35,
 		});
 	}
@@ -109,16 +106,10 @@ const LOST_MIN_S = 0.35; // minimum time spent visibly lost
 const LOST_MAX_S = 2.5; // force reacquire even mid-disturbance
 const REACQUIRE_S = 0.45; // search animation length
 
-/**
- * Frame-to-frame tracking with believable failure. Each box's luminance patch
- * is matched against the new grid within a local search window (SSD); the
- * match residual drives a signal-quality value that drops fast and recovers
- * slowly. A global disturbance metric (mean luminance change across the whole
- * grid) distinguishes "the feed is glitching" from "my target moved". Boxes
- * move through lock → degraded → lost → reacquire: when a glitch effect nukes
- * the frame they freeze at their last good position and report signal loss
- * instead of chasing garbage, then re-acquire once the feed settles.
- */
+/** Frame-to-frame tracking with believable failure. Each box's luminance patch
+ * is matched against the new grid within a local search window (SSD); the match
+ * residual drives a signal quality that drops fast and recovers slowly. A glitch
+ * freezes boxes and reports signal loss instead of chasing garbage. */
 export function trackBoxes(
 	state: TrackingState,
 	params: TrackingParams,
@@ -132,10 +123,9 @@ export function trackBoxes(
 	const prev = state.prevLum;
 
 	if (gap < 0 || gap > 0.4) {
-		// Scene cut / single-frame render (frozen preview, param tweak between
-		// stills, time reset): no frame-to-frame story to tell. Re-seat boxes
-		// instantly onto the current content, confident and locked — a still
-		// export should show a clean HUD, not mid-glitch theatrics.
+		// Scene cut or single-frame render (frozen preview, param tweak between stills,
+		// time reset): no frame-to-frame story to tell. Re-seat boxes instantly onto the
+		// current content, confident and locked, so a still export shows a clean HUD.
 		state.disturbance = 0;
 		for (let k = 0; k < state.boxes.length; k++) {
 			const box = state.boxes[k];
@@ -187,8 +177,8 @@ export function trackBoxes(
 			}
 		}
 
-		// Primary designation (drone hierarchy): sticky, only reassigned when the
-		// current primary is gone or has lost its target.
+		// Primary designation (drone hierarchy): sticky, reassigned only when the current
+		// primary is gone or has lost its target.
 		const cur = state.boxes.find((b) => b.key === state.primaryKey);
 		if (!cur || cur.state === "lost" || cur.quality < 0.3) {
 			let best: TrackBox | null = null;
@@ -289,7 +279,7 @@ function reacquire(box: TrackBox, state: TrackingState, time: number): void {
 			break; // salPoints are sorted strongest-first
 		}
 	}
-	if (!best) return; // nothing to lock onto yet — retry next tick
+	if (!best) return; // nothing to lock onto yet, retry next tick
 	box.baseX = best.x;
 	box.baseY = best.y;
 	box.quality = 0.4;
@@ -321,8 +311,8 @@ export function resolveFrame(
 	const margin = 0.02;
 
 	for (const box of state.boxes) {
-		// Display easing per state: smooth when locked, hesitant when degraded,
-		// frozen when lost, snappy while reacquiring.
+		// Display easing per state: smooth when locked, hesitant when degraded, frozen
+		// when lost, snappy while reacquiring.
 		let ease: number;
 		if (box.state === "lock") ease = 0.25;
 		else if (box.state === "degraded") ease = 0.09;

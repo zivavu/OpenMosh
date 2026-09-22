@@ -14,8 +14,8 @@
 	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
 
-	// The editors are the bulk of the bundle and none of it is needed to paint
-	// the upload screen, so they load with the route instead of with the app.
+	// The editors are the bulk of the bundle and none of it is needed to paint the
+	// upload screen, so they load with the route instead of with the app.
 	const loadEditor = lazy(
 		() => import("./lib/components/editor/Editor.svelte"),
 	);
@@ -38,19 +38,12 @@
 	/** Library id of the song a reopened session was keyed to. */
 	let sessionTrackId: string | null = $state(null);
 
-	// Named for what each view *is*, not for the route it answers to — the two
-	// stopped matching when the segment editor took the "#editor" name.
+	// Named for what each view is, not for the route it answers to: the two stopped
+	// matching when the segment editor took the "#editor" name.
 	type View = "upload" | "single" | "sequence" | "slideshow";
 
-	/**
-	 * The segment editor is "#editor" now: it grew from sequencing presets over
-	 * one video into the mode that does nearly everything, and the single-image
-	 * view it took the name from is the narrow one.
-	 *
-	 * Internally it is still "sequence" everywhere, and deliberately so — the
-	 * mode's saved timelines, media pool and sessions are all keyed under that
-	 * word, and renaming it would orphan them.
-	 */
+	/** The segment editor is "#editor" now, though internally it is still "sequence": the
+	 * mode's saved timelines, media pool and sessions are keyed under that word. */
 	const VIEW_HASH: Record<View, string> = {
 		upload: "#",
 		single: "#single",
@@ -62,8 +55,8 @@
 		switch (hash) {
 			case "#slideshow":
 				return "slideshow";
-			// "#sequence" is the route this mode used to answer to; kept so links
-			// and bookmarks from before the rename still land in it.
+			// "#sequence" is the route this mode used to answer to; kept so links and
+			// bookmarks from before the rename still land in it.
 			case "#editor":
 			case "#sequence":
 				return "sequence";
@@ -126,10 +119,8 @@
 		warmGeneration++;
 	}
 
-	/** Warm up only once the upload screen has painted its text. `warmShaders`
-	 * slices the linking, but the context and its core programs still cost a
-	 * frame, and holding for the webfont keeps that frame from being the one
-	 * with every label still inside its swap period. */
+	/** Warm up only once the upload screen has painted its text: the context and its core
+	 * programs cost a frame, and holding for the webfont keeps labels from swapping. */
 	function scheduleWarm() {
 		cancelWarm();
 		disposeWarm();
@@ -144,8 +135,8 @@
 		});
 	}
 
-	/** Warm the editor chunks once the upload screen goes idle, so picking a
-	 * mode doesn't wait on the network. */
+	/** Warm the editor chunks once the upload screen goes idle, so picking a mode
+	 * doesn't wait on the network. */
 	function prefetchEditors() {
 		const pull = () => {
 			void loadEditor();
@@ -176,14 +167,14 @@
 			showToast("That session's media is no longer stored", "error");
 			return;
 		}
-		// The song comes back too, so the per-song text timeline and segments
-		// the editor restores have the track they're keyed to.
+		// The song comes back too, so the per-song text timeline and segments the
+		// editor restores have the track they're keyed to.
 		pendingAudioFile = opened.trackFile;
 		sessionTrackId = opened.trackId;
 		if (mode === "single") {
 			restoredSingle = opened.state as SingleSessionState;
-			// Older single sessions stored layer media after the source; only
-			// the source is wanted now.
+			// Older single sessions stored layer media after the source; only the
+			// source is wanted now.
 			file = await gifToVideo(opened.files[0]);
 			navigateTo("single");
 			return;
@@ -215,8 +206,8 @@
 	}
 
 	onMount(() => {
-		// Text layers and captions can be restored with a user font already
-		// selected, so their faces have to be registered before anything draws.
+		// Text layers and captions can be restored with a user font already selected,
+		// so their faces have to be registered before anything draws.
 		void loadCustomFonts();
 
 		const onPopState = () => {

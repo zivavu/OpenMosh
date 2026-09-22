@@ -1,10 +1,7 @@
 import { stopStream } from "./camera";
 
-/**
- * A webcam take: the camera's frames straight into a WebM, in real time.
- * mediabunny writes a proper header and cues, unlike MediaRecorder, whose
- * output reports no duration — which the pool's probe needs to place a clip.
- */
+/** A webcam take: the camera's frames straight into a WebM, in real time. mediabunny
+ * writes a proper header and cues, unlike MediaRecorder, whose output reports no duration. */
 export interface Take {
 	/** Seconds captured so far, for the panel's counter. */
 	readonly elapsed: number;

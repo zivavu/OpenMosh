@@ -1,10 +1,8 @@
 <script lang="ts">
 	import type { HTMLInputAttributes } from "svelte/elements";
 
-	/* The app's tick. Off is an unlit indicator — a dim pip in a raised frame
-	   rather than an empty hole — and on lights it in --live, like every other
-	   active thing in the rack. The native input sits invisibly over the box so
-	   labels, focus, shift-click and keyboard all stay platform behavior. */
+	/* The app's tick: off is a dim pip in a raised frame, on lights it in --live.
+	   The native input sits invisibly over the box, so labels, focus and keyboard stay native. */
 	interface Props extends Omit<
 		HTMLInputAttributes,
 		"type" | "checked" | "size"

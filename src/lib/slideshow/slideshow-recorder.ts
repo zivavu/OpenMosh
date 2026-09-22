@@ -59,8 +59,8 @@ export async function executeSlideshowRecording(
 		? audioEnd - audioStart
 		: Math.max(0.5, ctx.noAudioDuration ?? 5);
 
-	// Pre-load all images; create a fresh sampler per video slide (positions
-	// start at 0, matching the preview's reset-on-start)
+	// Pre-load all images; fresh sampler per video slide (positions start at 0,
+	// matching the preview's reset-on-start)
 	const imageMap = new Map<string, HTMLImageElement>();
 	const samplerMap = new Map<string, SlideVideoSampler>();
 	await Promise.all([
@@ -86,7 +86,6 @@ export async function executeSlideshowRecording(
 			}),
 	]);
 
-	// Set up renderer dimensions from the first slide
 	const firstSlide = slides[0];
 	if (firstSlide.kind === "video") {
 		const sampler = samplerMap.get(firstSlide.id);
@@ -95,7 +94,6 @@ export async function executeSlideshowRecording(
 		const firstImg = imageMap.get(firstSlide.id);
 		if (firstImg) renderer.loadImage(firstImg);
 	}
-	// Respect user's canvas size if set (otherwise keep first slide dimensions)
 	if (
 		outputWidth != null &&
 		outputHeight != null &&
@@ -107,8 +105,8 @@ export async function executeSlideshowRecording(
 
 	const effectsRef = { current: cloneEffects(baseEffects) };
 
-	// Same driver the preview runs on — slide selection, per-beat effects and
-	// video advancement all come from there.
+	// Same driver the preview runs on, so slide selection, per-beat effects and
+	// video advancement match.
 	const driver = new SlideshowFrameDriver({
 		getConfig: () => config,
 		getSlides: () => slides,
@@ -146,7 +144,7 @@ export async function executeSlideshowRecording(
 			...(audioFile && { audioFile, audioStart, audioEnd, normalizeGain }),
 			async onBeforeRender(_frameIndex: number, time: number) {
 				// time is 0..duration (recording window); segments use "seconds from
-				// audio start" (silent export: the beat clock just starts at 0)
+				// audio start" (silent export: the beat clock starts at 0)
 				const frame = driver.advance(time + (audioFile ? audioStart : 0));
 				// Video slides must have their frame uploaded before this frame renders.
 				if (frame.ready) await frame.ready;

@@ -17,8 +17,8 @@ import {
 	type MediaTimeline,
 } from "./types";
 
-// Clip geometry is lane-shape agnostic and shared with the text and fx lanes;
-// re-exported here so the media timeline keeps importing it from one place.
+// Clip geometry is shared with the text and fx lanes; re-exported here for one
+// import site.
 export {
 	addClip,
 	clipAt,
@@ -36,12 +36,8 @@ export {
 
 /** One media layer to draw for a single frame. */
 export interface ResolvedMediaLayer {
-	/**
-	 * Stable across frames: keys the renderer's layer texture and the lane's
-	 * feedback buffers. The lane, not the clip — one texture per lane is all a
-	 * lane can show at once, and re-keying at every clip edge would drop the
-	 * texture on a cut the user can't see the point of.
-	 */
+	/** Stable across frames: keys the renderer's layer texture and the lane's feedback
+	 * buffers. Keyed by lane, not clip, so a cut doesn't drop the texture. */
 	key: string;
 	laneId: string;
 	/** The clip on screen, whose chain `effects` is (or was rolled from). */
@@ -54,23 +50,15 @@ export interface ResolvedMediaLayer {
 	/** Seconds into the source to show. Videos wrap; images ignore it. */
 	sourceTime: number;
 	style: MediaStyle;
-	/**
-	 * What the composite draws this layer at: the lane's opacity, scaled by the
-	 * clip's fade while one is ramping. Separate from `style.opacity` so the
-	 * per-frame value never has to clone the lane's style.
-	 */
+	/** What the composite draws this layer at: the lane's opacity scaled by the clip's
+	 * fade. Separate from `style.opacity` so the per-frame value needn't clone. */
 	opacity: number;
 	effects: EffectInstance[];
 	/** The lane's own audio response; absent when it follows the editor's. */
 	response?: AudioResponse;
 }
 
-/**
- * What a clip draws: its own source when it was retargeted, the lane's
- * otherwise. Every read of a clip's media goes through here — a clip pointing
- * at a source that has since left the pool is the caller's problem, the same
- * as a lane's.
- */
+/** What a clip draws: its own source when retargeted, the lane's otherwise. */
 export function clipSourceId(
 	lane: MediaLane,
 	clip: MediaClip | null | undefined,
@@ -88,42 +76,29 @@ export function laneSourceIds(lane: MediaLane): string[] {
 	return [...ids];
 }
 
-/** The chain a media clip contributes at a time — see createMediaChainSource. */
+/** The chain a media clip contributes at a time; see createMediaChainSource. */
 export type MediaChainSource = (
 	lane: MediaLane,
 	clip: MediaClip,
 	time: number,
 ) => EffectInstance[];
 
-/**
- * Clip → chain resolver, one per preview and one per export. Static clips
- * hand back their own chain; interval clips roll per tick through a bounded
- * cache keyed by seed and mosh options, so a fresh source built from the same
- * inputs reproduces the preview exactly. `clone` serves static chains as
- * cached deep copies, so an export can write per-frame audio-link values into
- * what it renders without them landing in the clips the user is editing.
- */
+/** Clip → chain resolver, one per preview and one per export. Static clips hand
+ * back their own chain; interval clips roll per tick through a cache. */
 export function createMediaChainSource(
 	getMoshOptions: () => MoshOptions,
 	{ clone = false } = {},
 ): MediaChainSource {
 	const cache = new Map<string, EffectInstance[]>();
-	// Each lane rolls under its own settings, so an auto clip on a lane set up
-	// for a slow wash never comes out as the hard stutter of the lane above.
+	// Each lane rolls under its own settings, so an auto clip never borrows another's.
 	return (lane, clip, time) =>
 		chainClipEffectsAt(clip, time, cache, clone, () =>
 			laneMoshOptions(lane, getMoshOptions()),
 		);
 }
 
-/**
- * The media layers visible at `time`, in lane order. Preview and export both
- * go through here, so what you scrub past is what gets written out.
- *
- * Without `chains`, every clip contributes its stored chain — enough for
- * anything that only needs to know which layers are on screen, not what runs
- * on them. Anything that draws passes one, or an interval clip renders clean.
- */
+/** The media layers visible at `time`, in lane order. Preview and export both go
+ * through here. Without `chains`, every clip contributes its stored chain. */
 export function resolveMediaLayersAt(
 	timeline: MediaTimeline | null | undefined,
 	time: number,
@@ -173,7 +148,7 @@ export function findMediaClip(
 	return null;
 }
 
-/** The lane holding this clip — the panel edits the lane, not the clip. */
+/** The lane holding this clip; the panel edits the lane, not the clip. */
 export function findMediaClipLane(
 	timeline: MediaTimeline | null | undefined,
 	clipId: string | null,
@@ -197,7 +172,6 @@ export function allMediaEffectIds(
 	return ids;
 }
 
-/** Apply an edit to every clip in `clipIds`, across lanes. */
 export function updateMediaClips(
 	timeline: MediaTimeline,
 	clipIds: Set<string>,
@@ -207,7 +181,6 @@ export function updateMediaClips(
 	return lanes === timeline.lanes ? timeline : { ...timeline, lanes };
 }
 
-/** The timeline with one clip swapped for its edited self, wherever it is. */
 export function replaceMediaClip(
 	timeline: MediaTimeline,
 	next: MediaClip,
@@ -215,7 +188,6 @@ export function replaceMediaClip(
 	return { ...timeline, lanes: replaceClipIn(timeline.lanes, next) };
 }
 
-/** The lane holding `clipId`, and the clip itself. */
 export function findMediaClipIn(
 	timeline: MediaTimeline | null | undefined,
 	clipId: string | null | undefined,
@@ -242,11 +214,8 @@ export function mediaTimelineSourceIds(
 	return [...ids];
 }
 
-/**
- * Point the given clips at `sourceId`. A clip already on its lane's source
- * keeps no override, so the lane's own picker still moves it — that is what
- * "this lane's default" has to keep meaning for the clips that never chose.
- */
+/** Point the given clips at `sourceId`. A clip already on its lane's source keeps
+ * no override. */
 export function setMediaClipSources(
 	timeline: MediaTimeline,
 	clipIds: string[],
@@ -273,7 +242,6 @@ export function setMediaClipSources(
 	};
 }
 
-/** Apply a lane edit inside a timeline. */
 export function updateMediaLane(
 	timeline: MediaTimeline,
 	laneId: string,
@@ -282,11 +250,8 @@ export function updateMediaLane(
 	return { ...timeline, lanes: updateLaneIn(timeline.lanes, laneId, fn) };
 }
 
-/**
- * Drop a removed source from every lane and clip that pointed at it. A clip
- * loses its override rather than gaining a null one, so it falls back to its
- * lane the way an untouched clip does.
- */
+/** Drop a removed source from every lane and clip that pointed at it. A clip loses
+ * its override rather than gaining a null one. */
 export function detachMediaSource(
 	timeline: MediaTimeline,
 	sourceId: string,

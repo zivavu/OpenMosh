@@ -13,7 +13,7 @@ import {
 export interface VideoFrameSource {
 	queue: FrameQueue;
 	duration: number;
-	/** The media's own size — what an export writes and the UI reports. */
+	/** The media's own size, what an export writes and the UI reports. */
 	width: number;
 	height: number;
 	/** Size the frames actually arrive at, which the source texture is sized to. */
@@ -21,23 +21,15 @@ export interface VideoFrameSource {
 	frameHeight: number;
 }
 
-/**
- * Open a file as a queue of decoded frames, decoding in a worker where that is
- * available and on the main thread otherwise. Null when the file can't drive
- * the WebCodecs path at all, which is the caller's cue to fall back to a
- * <video> element.
- *
- * Frames arrive at the size the file holds on both paths — see the decode
- * worker for why they are no longer downscaled on the way out.
- */
+/** Open a file as a queue of decoded frames, in a worker where available and on
+ * the main thread otherwise; null when the file can't drive the WebCodecs path. */
 export async function openVideoFrameSource(
 	file: File,
 ): Promise<VideoFrameSource | null> {
 	const worker = getWorker();
 	if (worker) {
 		const viaWorker = await openInWorker(worker, file);
-		// "unsupported" is the file's verdict, not the worker's, and the
-		// main-thread path applies the same rules — so don't pay to re-check.
+		// "unsupported" is the file's verdict, not the worker's; don't re-check it.
 		if (viaWorker !== "no-worker") return viaWorker;
 	}
 	const opened = await openPlayableVideo(file);
@@ -51,8 +43,6 @@ export async function openVideoFrameSource(
 		frameHeight: opened.height,
 	};
 }
-
-// ── Shared worker plumbing ─────────────────────────────────────────────────
 
 let worker: Worker | null = null;
 let workerUnavailable = false;
@@ -77,8 +67,7 @@ function getWorker(): Worker | null {
 		spawned.onmessage = (e: MessageEvent<DecodeWorkerResponse>) =>
 			route(e.data);
 		spawned.onerror = () => {
-			// A worker that failed to load can't answer anything already asked of
-			// it, and won't answer anything asked later either.
+			// A worker that failed to load can't answer anything, now or later.
 			workerUnavailable = true;
 			worker = null;
 			for (const resolve of opens.values()) resolve(null);
@@ -143,16 +132,8 @@ function route(msg: DecodeWorkerResponse) {
 	}
 }
 
-/**
- * The consumer half of a worker-decoded stream: frames land here by message
- * and are drained synchronously by the render loop, exactly as with the
- * main-thread pump.
- *
- * Backpressure crosses the thread boundary as credit. The worker may only run
- * `depth` frames ahead of what the consumer holds, and every frame taken out
- * of this queue hands one slot back — so a paused preview parks the decoder
- * instead of decoding the rest of the file into memory.
- */
+/** The consumer half of a worker-decoded stream: frames land by message and are
+ * drained synchronously by the render loop, as with the main-thread pump. */
 class WorkerFrameQueue implements FrameQueue {
 	#worker: Worker;
 	#id: number;

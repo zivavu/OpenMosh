@@ -1,14 +1,5 @@
-/**
- * Which shortcuts the element under a keydown is allowed to swallow.
- *
- * A text field owns every key: bare keys are literal input, and Ctrl+Z/C/V
- * mean undo/copy/paste *of the text*. Other form controls — a dropdown, a
- * slider, a checkbox — only own bare keys: arrows change their value and space
- * opens a dropdown, but Ctrl+Z means nothing to them, so it has to reach the
- * app. Suppressing modifier shortcuts for those too is what made Ctrl+Z do
- * nothing right after picking a value from a dropdown (the control keeps
- * focus), until the user clicked elsewhere.
- */
+/** Which shortcuts the element under a keydown may swallow. Text fields own every
+ * key; other controls own only bare keys, so Ctrl+Z must still reach the app. */
 
 /** Input types that behave like a text field: caret, typing, native undo. */
 const TEXT_INPUT_TYPES = new Set([
@@ -26,7 +17,6 @@ const TEXT_INPUT_TYPES = new Set([
 	"time",
 ]);
 
-/** Nearest enclosing form control / editable region, if any. */
 function closestControl(target: EventTarget | null): HTMLElement | null {
 	if (!(target instanceof HTMLElement)) return null;
 	return target.closest<HTMLElement>(
@@ -34,7 +24,7 @@ function closestControl(target: EventTarget | null): HTMLElement | null {
 	);
 }
 
-/** The focused element edits text — leave every shortcut to it. */
+/** The focused element edits text, leave every shortcut to it. */
 export function isTextEntryTarget(target: EventTarget | null): boolean {
 	const el = closestControl(target);
 	if (!el) return false;
@@ -43,10 +33,8 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
 	return true; // textarea, or contenteditable region
 }
 
-/**
- * The focused element consumes bare keys (arrows, space, typeahead) itself,
- * so unmodified shortcuts must not also fire.
- */
+/** The focused element consumes bare keys (arrows, space, typeahead) itself, so
+ * unmodified shortcuts must not also fire. */
 export function isInteractiveTarget(target: EventTarget | null): boolean {
 	return closestControl(target) !== null;
 }

@@ -1,12 +1,4 @@
-/**
- * A clip that carries its own effect chain — the shape the fx lanes and the
- * media lanes share, so the roll, fill, clear and mode rules live here once
- * and both lane kinds call them.
- *
- * "static": `effects` is the concrete, user-editable chain for the whole span.
- * "interval": the chain is re-rolled deterministically every `intervalSec`
- * from `seed`, so preview and export always agree.
- */
+/** A clip that carries its own effect chain, shared by the fx and media lanes. */
 
 import type { AudioResponse } from "../audio/auto-range";
 import { applyPreset } from "../effects";
@@ -46,8 +38,7 @@ export interface ChainClip extends TimelineClip {
 	effects: EffectInstance[];
 	/** "interval" mode: seconds between re-rolls. */
 	intervalSec?: number;
-	/** "interval" mode: the spacing in beats, when picked that way, so a later
-	 * BPM correction can re-derive the seconds. */
+	/** "interval" mode: spacing in beats, so a BPM correction re-derives the seconds. */
 	intervalBeats?: number;
 	/** "interval" mode: base seed for per-tick rolls. */
 	seed?: number;
@@ -59,11 +50,7 @@ export function chainClipTick(clip: ChainClip, time: number): number {
 	return Math.max(0, Math.floor((time - clip.start) / interval));
 }
 
-/**
- * Switch a clip to a re-roll mode. Going to "interval" mints a seed if there
- * isn't one, so the rolls are reproducible from the moment it's turned on;
- * going back to "static" keeps the last concrete chain rather than blanking it.
- */
+/** Switch a clip to a re-roll mode; "static" keeps the last concrete chain. */
 export function withChainMode<C extends ChainClip>(
 	clip: C,
 	mode: ChainMode,
@@ -79,8 +66,7 @@ export function withChainMode<C extends ChainClip>(
 		label: "auto",
 		seed: clip.seed ?? randomSeed(),
 		intervalSec: intervalSec ?? clip.intervalSec ?? DEFAULT_INTERVAL_SEC,
-		// null explicitly drops the beat link, so a later BPM change leaves a
-		// hand-picked duration alone; undefined leaves whatever was there.
+		// null drops the beat link; undefined leaves what was there.
 		intervalBeats:
 			intervalBeats === null
 				? undefined
@@ -88,8 +74,7 @@ export function withChainMode<C extends ChainClip>(
 	};
 }
 
-/** Re-roll: a static clip gets a fresh concrete chain, an interval clip a new
- * base seed, which re-rolls every tick in the span at once. */
+/** Re-roll: a static clip gets a fresh chain, an interval clip a new base seed. */
 export function rolledChainClip<C extends ChainClip>(
 	clip: C,
 	options: MoshOptions,
@@ -131,10 +116,7 @@ export function filledChainClip<C extends ChainClip>(
 	};
 }
 
-/**
- * A preset was explicitly overwritten — refresh a static clip filled from it,
- * so it tracks the newest version. Hand-edited ("modified") clips keep theirs.
- */
+/** A preset was overwritten: refresh a static clip filled from it. */
 export function syncedChainClip<C extends ChainClip>(
 	clip: C,
 	preset: Preset,
@@ -157,11 +139,7 @@ export function chainClipMoshSnapshot(clip: ChainClip): MoshSnapshot {
 	};
 }
 
-/**
- * Put a clip back to a remembered mosh. Timing is deliberately excluded:
- * walking the mosh history must change what a clip renders, never where it
- * sits.
- */
+/** Put a clip back to a remembered mosh; timing is excluded. */
 export function withChainMosh<C extends ChainClip>(
 	clip: C,
 	snap: MoshSnapshot,
@@ -180,14 +158,7 @@ export function cloneChainEffects(effects: EffectInstance[]): EffectInstance[] {
 	return effects.map(cloneEffectInstance);
 }
 
-/**
- * Cut the clip covering `at` in two. The lane comes back unchanged when `at`
- * isn't inside a clip, or when either half would be shorter than
- * MIN_CLIP_LENGTH. Each half gets an id from `newId` and its own deep copy of
- * the chain, so editing one no longer touches the other; `tail` lets a lane
- * kind adjust the right half, given the clip it came from (a media clip
- * advances its in-point by the cut).
- */
+/** Cut the clip covering `at` in two; no-op when a half would be too short. */
 export function splitChainClipAt<
 	L extends ClipLane<ChainClip>,
 	C extends ChainClip = L["clips"][number],
@@ -224,14 +195,7 @@ export function splitChainClipAt<
 	};
 }
 
-/**
- * The chain a clip contributes at `time`. Static clips hand back their own
- * array (or a cached deep clone when `clone` is set, so an export can write
- * per-frame audio-link values without them landing in the clip being edited).
- * Interval clips roll per tick through the shared bounded cache, keyed by
- * seed and the mosh options — a settings change must never serve rolls made
- * under different parameters, or the preview and export would disagree.
- */
+/** The chain a clip contributes at `time`; static clips hand back their own array. */
 export function chainClipEffectsAt(
 	clip: ChainClip,
 	time: number,
@@ -241,8 +205,7 @@ export function chainClipEffectsAt(
 ): EffectInstance[] {
 	if (clip.mode !== "interval") {
 		if (!clone) return clip.effects;
-		// Cached per clip, not per frame: a static clip's chain is the same objects
-		// for its whole span, and re-cloning 39 effects per frame is not free.
+		// Cached per clip, not per frame: a static clip's chain is the same for its whole span.
 		let cloned = cache.get(clip.id);
 		if (!cloned) {
 			cloned = cloneChainEffects(clip.effects);
@@ -282,13 +245,7 @@ export function normalizeChainFields(
 	return out;
 }
 
-/**
- * How one lane rolls its moshes and how its links follow the music.
- *
- * A lane is its own instrument: a slow-breathing wash on one lane and a hard
- * per-hit stutter on another want opposite settings, and one global set could
- * only ever serve one of them. Shared by the fx and media lanes.
- */
+/** How one lane rolls its moshes and how its links follow the music. */
 export interface LaneSettings {
 	moshMin: number;
 	moshMax: number;
@@ -319,8 +276,7 @@ export function laneMoshOptions(
 		moshAudioLink: s.moshAudioLink,
 		moshAudioLinkStrength: s.moshAudioLinkStrength,
 		moshLinkBand: s.moshLinkBand,
-		// Not the lane's to decide: whether a track is loaded at all, and whether
-		// the roll is restricted to what is already switched on, are the session's.
+		// Not the lane's to decide: hasAudio and onlyMoshEnabled are the session's.
 		hasAudio: fallback.hasAudio,
 		onlyMoshEnabled: fallback.onlyMoshEnabled,
 	};
@@ -334,9 +290,7 @@ export function laneAudioResponse(
 	return lane.settings?.audioResponse ?? fallback;
 }
 
-/** A stored settings block is kept only if it is complete — a half-written one
- * would leave the lane rolling under a mix of its own values and the
- * editor's, which is neither of the two things the user set up. */
+/** A stored settings block is kept only if complete. */
 export function normalizeLaneSettings(raw: unknown): LaneSettings | undefined {
 	const s = raw as Partial<LaneSettings> | undefined;
 	if (!s || typeof s !== "object") return undefined;

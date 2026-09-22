@@ -1,14 +1,8 @@
-/**
- * Bounded cache for generated mosh rolls, shared by the fx and media clips.
- * Both key a roll by seed plus the mosh options it was
- * generated under, and both have to hand back the *same* instances every frame
- * a clip is on screen — re-rolling would restart every feedback effect.
- */
+/** Bounded cache for generated mosh rolls, shared by fx and media clips. Both key a
+ * roll by seed plus its options and must return the same instances every frame. */
 
-/** Newest kept, oldest dropped. The playhead moves forward, so insertion order
- * tracks recency closely enough that a real LRU would buy nothing. Dropping one
- * entry rather than clearing the map avoids the rebuild storm a full flush
- * caused the moment the cap was reached. */
+/** Newest kept, oldest dropped: insertion order tracks recency closely enough, and
+ * dropping one entry avoids the rebuild storm a full flush caused at the cap. */
 export function putRoll<T>(
 	cache: Map<string, T>,
 	key: string,

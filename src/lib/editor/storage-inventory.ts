@@ -1,15 +1,4 @@
-/**
- * What the app has stored, grouped the way the user thinks about it, and the
- * deletions the storage manager offers.
- *
- * A project is a song: the sequence pool and timeline, the single/slideshow
- * sessions and the per-song localStorage entries all hang off a track id, so
- * that is the unit that gets listed and deleted. Edits made without a song —
- * a single-mode file, a video-driven sequence — are listed separately.
- *
- * Media blobs are shared: two projects built from the same folder point at the
- * same ids. Deleting a project only removes blobs nothing else still refers to.
- */
+/** What the app has stored, grouped the way the user thinks about it. */
 
 import { clearTracks, deleteTrack, getAllTracks } from "../audio/track-library";
 import {
@@ -70,7 +59,7 @@ export interface StorageProject {
 	media: StorageMediaItem[];
 	/** Media plus proxies. Shared blobs count in full for every project. */
 	mediaSize: number;
-	/** Timelines and session state — the edits themselves. */
+	/** Timelines and session state: the edits themselves. */
 	workSize: number;
 	/** Newest write across everything keyed to the song; 0 when only the song. */
 	updatedAt: number;
@@ -121,7 +110,7 @@ const SESSION_TRACK_PREFIX: Record<Exclude<ProjectMode, "sequence">, string> = {
 	slideshow: "slideshow:track:",
 };
 
-/** Bytes a state record takes once serialised — close enough to what IndexedDB stores. */
+/** Bytes a state record takes once serialised. */
 function jsonSize(value: unknown): number {
 	try {
 		return new Blob([JSON.stringify(value)]).size;
@@ -149,8 +138,7 @@ function nameFromSourceId(id: string): string {
 	return parseSourceId(id).name;
 }
 
-/** Where a song-less single edit keeps its render settings — see Editor's
- * `renderKey`: the file, name unencoded, rather than the session. */
+/** Where a song-less single edit keeps its render settings (see Editor's `renderKey`). */
 function renderKeyFromSourceId(id: string): string {
 	const { name, rest } = parseSourceId(id);
 	return `single:file:${name}${rest}`;
@@ -334,11 +322,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 	};
 }
 
-/**
- * Delete the blobs in `ids` that nothing remaining points at, plus their
- * proxies. Called after the referencing records are gone, so the live pools
- * and sessions are the ones to check against.
- */
+/** Delete the blobs in `ids` that nothing remaining points at, plus their proxies. */
 async function dropOrphanedMedia(ids: Iterable<string>): Promise<void> {
 	const candidates = new Set(ids);
 	if (candidates.size === 0) return;
@@ -405,8 +389,7 @@ export async function deleteLooseEdit(edit: StorageLooseEdit): Promise<void> {
 		await deleteTimeline(`seq:${edit.key}`);
 		await deleteTimeline(`single:${edit.key}`);
 	}
-	// Render settings for a song-less single edit are keyed by the file, not
-	// the session, so the session key alone would leave that entry behind.
+	// Render settings for a song-less single edit are keyed by the file, not the session.
 	const keys = [edit.key, `seq:${edit.key}`, `single:${edit.key}`];
 	const first = edit.media[0];
 	if (edit.kind === "session" && edit.mode === "single" && first) {
@@ -418,8 +401,7 @@ export async function deleteLooseEdit(edit: StorageLooseEdit): Promise<void> {
 	await refreshListCaches();
 }
 
-/** Media nothing refers to. Fresh drops land here briefly, so this is only
- * offered from a screen where no editor is open. */
+/** Media nothing refers to; only offered where no editor is open. */
 export async function deleteUnassignedMedia(
 	items: StorageMediaItem[],
 ): Promise<void> {
@@ -436,10 +418,7 @@ export async function deleteFont(id: string): Promise<void> {
 	await removeCustomFont(id);
 }
 
-/**
- * Every project, edit, song, blob and font. Presets and settings are left:
- * they are preferences rather than stored work, and they're kilobytes.
- */
+/** Every project, edit, song, blob and font; presets and settings are left. */
 export async function deleteEverything(): Promise<void> {
 	await clearAllSequenceStores();
 	await clearTracks();
@@ -449,11 +428,7 @@ export async function deleteEverything(): Promise<void> {
 	await refreshListCaches();
 }
 
-/**
- * Ask the browser to exempt this origin from eviction. Asked directly rather
- * than through requestPersistentStorage, whose once-per-load memo would hand
- * back an earlier refusal without asking again.
- */
+/** Ask the browser to exempt this origin from eviction, bypassing requestPersistentStorage. */
 export async function keepStorage(): Promise<boolean> {
 	try {
 		if (!navigator.storage?.persist) return false;

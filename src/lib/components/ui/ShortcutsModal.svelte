@@ -15,8 +15,8 @@
 
 	let { groups, onClose }: Props = $props();
 
-	// The editor's own shortcuts stay off while the sheet has the keyboard —
-	// pressing Space here is a question, not a transport command.
+	// The editor's own shortcuts stay off while the sheet has the keyboard: pressing
+	// Space here is a question, not a transport command.
 	onMount(() => pushModalKeyboard());
 
 	const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -39,13 +39,11 @@
 		}));
 	}
 
-	// ── Navigation ───────────────────────────────────────────────────────────
 	let active = $state(0);
 	let group = $derived(groups[Math.min(active, groups.length - 1)]);
 
-	// ── Ask the sheet ────────────────────────────────────────────────────────
-	// Press a key and the rows it belongs to light up; if none of them are in
-	// the open group, the sheet turns to the first group that has one.
+	// Press a key and the rows it belongs to light up; if none are in the open group,
+	// the sheet turns to one that has it.
 	const KEY_NAMES: Record<string, string> = {
 		" ": "Space",
 		Escape: "Esc",
@@ -55,11 +53,8 @@
 	};
 	const MODIFIER_KEYS = new Set(["Control", "Meta", "Shift", "Alt"]);
 
-	/**
-	 * The rows a keypress names, as "group:row" ids. What's held must be part
-	 * of the combo, not all of it: C lights C and Ctrl+C, Ctrl+C lights only
-	 * Ctrl+C, and a bare Shift lights every Shift combo, Shift+Drag included.
-	 */
+	/** The rows a keypress names, as "group:row" ids. What's held must be part of the
+	 * combo, not all of it: C lights C and Ctrl+C, Ctrl+C lights only Ctrl+C. */
 	function rowsFor(e: KeyboardEvent): Set<string> {
 		const hits = new Set<string>();
 		const name = MODIFIER_KEYS.has(e.key)
@@ -228,7 +223,6 @@
 		}
 	}
 
-	/* ── Rail ─────────────────────────────────────────────────────────────── */
 	.rail {
 		display: flex;
 		flex-direction: column;
@@ -316,7 +310,6 @@
 		text-wrap: pretty;
 	}
 
-	/* ── Pane ─────────────────────────────────────────────────────────────── */
 	.pane {
 		display: flex;
 		flex-direction: column;

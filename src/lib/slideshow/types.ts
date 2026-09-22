@@ -6,13 +6,10 @@ export type BeatSubdivision =
 
 export interface TimelineSegment {
 	id: string;
-	/** Seconds from audio start where this segment begins. */
+	/** Seconds from audio start. */
 	startTime: number;
-	/**
-	 * Optional end time (seconds from audio start).
-	 * If null/undefined, the segment is treated as open-ended and
-	 * applies until the next segment or the end of the track.
-	 */
+	/** Optional end (seconds from audio start); null/undefined runs until the
+	 * next segment or the end of the track. */
 	endTime?: number | null;
 	subdivision: BeatSubdivision;
 }
@@ -21,44 +18,32 @@ export interface SlideshowSlide {
 	id: string;
 	file: File;
 	objectUrl: string;
-	/** 100×100 thumbnail blob URL for grid display. null until generated. */
+	/** 100×100 thumbnail blob URL; null until generated. */
 	thumbUrl: string | null;
-	/** Whether a thumbnail is still coming — see SequenceSource.thumbPending. */
+	/** Whether a thumbnail is still coming; see SequenceSource.thumbPending. */
 	thumbPending: boolean;
-	/** Index into the presets array — only used in 'per-image' mode. */
+	/** Index into the presets array; only used in 'per-image' mode. */
 	presetIndex: number | null;
 	kind: "image" | "video";
 	/** Video only: intrinsic duration in seconds (probed at add time). */
 	duration?: number;
-	/** Video only: display dimensions (probed at add time). */
 	width?: number;
 	height?: number;
-	/**
-	 * ≤1080p stand-in the preview decodes instead of an oversized original
-	 * (see video/proxy.ts). Absent until the transcode lands; export keeps
-	 * reading `file` either way.
-	 */
+	/** ≤1080p stand-in the preview decodes instead of an oversized original
+	 * (see video/proxy.ts); absent until the transcode lands. */
 	proxyFile?: File;
-	/**
-	 * The proxy's size: what the transcode is aiming at while it runs, and what
-	 * the finished file turned out to be once it lands. Absent until the worker
-	 * has picked one, which is what the badge reads as "still looking".
-	 */
+	/** The proxy's size: what the transcode aims at while running, then what it
+	 * turned out to be. Absent until the worker picks one. */
 	proxyWidth?: number;
 	proxyHeight?: number;
-	/** A proxy is being built (or looked up in storage) for this slide. */
 	proxyPending?: boolean;
-	/** 0–1, while `proxyPending`. */
+	/** 0 to 1, while `proxyPending`. */
 	proxyProgress?: number;
-	/** Transcoding failed — the chip shows a warning; previews stay on the original. */
+	/** Transcoding failed; previews stay on the original. */
 	proxyFailed?: boolean;
-	/** Why it failed, for the badge to say something more useful than that it did. */
 	proxyReason?: string;
-	/**
-	 * The user asked this video to preview from the original — see
-	 * video/proxy-preference.ts. Only set on slides a proxy would otherwise be
-	 * built for, so the badge can treat it as "the choice applies here".
-	 */
+	/** User asked this video to preview from the original (see
+	 * video/proxy-preference.ts); only set where a proxy would otherwise be built. */
 	proxyDisabled?: boolean;
 }
 
@@ -68,15 +53,15 @@ export interface SlideshowConfig {
 	bpm: number;
 	/** Seconds offset to the first beat (from BPM detection). */
 	beatOffset: number;
-	/** How many beats per image flash. 1 = every beat, 0.5 = every half-beat, 2 = every 2 beats. */
+	/** Beats per image flash: 1 = every beat, 0.5 = half-beat, 2 = every 2 beats. */
 	subdivision: BeatSubdivision;
 	moshMode: SlideshowMoshMode;
 	moshMin: number;
 	moshMax: number;
-	/** How many effects are toggled per beat in smooth mode (1 = slow drift, 5 = fast churn). */
+	/** Effects toggled per beat in smooth mode (1 = slow drift, 5 = fast churn). */
 	smoothSpeed: number;
 	moshAudioLink: boolean;
-	/** 0–1: controls probability and range width of random audio links. */
+	/** 0 to 1: probability and range width of random audio links. */
 	moshAudioLinkStrength: number;
 	loop: boolean;
 	segments: TimelineSegment[];

@@ -12,15 +12,12 @@ export function lumFromRGBA(rgba: Uint8Array, n: number): Float32Array {
 	return lum;
 }
 
-/**
- * Cheap content-aware saliency: from a small downsampled luminance grid, score
+/** Cheap content-aware saliency: from a small downsampled luminance grid, score
  * each cell by edge magnitude (Sobel) plus deviation from the mean brightness,
- * then greedily pick the strongest cells with spatial spacing so the boxes
- * don't clump. Returns points in normalized coords (y: top→bottom).
+ * then greedily pick the strongest cells with spatial spacing so boxes don't
+ * clump. Returns points in normalized coords (y: top→bottom).
  *
- * `lum` is row-major starting at the image TOP (the caller reads the framebuffer
- * such that row 0 == top of the image), so normalized y = row / (gh - 1).
- */
+ * `lum` is row-major starting at the image TOP, so normalized y = row / (gh - 1). */
 export function computeSaliency(
 	lum: Float32Array,
 	gw: number,
@@ -75,7 +72,7 @@ export function computeSaliency(
 	}
 	candidates.sort((a, b) => b.score - a.score);
 
-	// Greedy non-maximum suppression: keep strong points that are far enough apart.
+	// Greedy non-maximum suppression: keep strong points far enough apart.
 	// Higher sensitivity packs boxes tighter; lower spreads them out.
 	const minDist = (0.18 - params.sensitivity * 0.1) * (1 + 4 / params.count);
 	const minDist2 = minDist * minDist;

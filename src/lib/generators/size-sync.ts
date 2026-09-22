@@ -5,10 +5,7 @@ const DEBOUNCE_MS = 400;
 
 /**
  * Keeps generated sources rendered at the output size. Each editor tracks its
- * generated entries here and reports the output size; after a pause this
- * re-renders whichever entries don't match and hands back a fresh object URL
- * per entry, leaving the File itself (the identity sessions key on) alone.
- * Exports call `settle()` first so a pending re-render can't be skipped.
+ * entries here; after a pause this re-renders the stale ones with a fresh object URL.
  */
 export class GeneratedSizeSync {
 	#specs = new Map<string, GeneratedSpec>();

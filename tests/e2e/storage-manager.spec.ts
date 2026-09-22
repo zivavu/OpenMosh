@@ -8,15 +8,8 @@ import {
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
-/**
- * The storage manager, end to end: real edits land in IndexedDB, the modal
- * reads them back grouped by song, and deleting from it empties both the
- * database and the upload screen's list of things to pick back up.
- *
- * The unit suite covers the grouping and deletion rules against a fake
- * database; what's checked here is the wiring — that the editors write what
- * the manager expects to find, and that the modal drives the right deletion.
- */
+/** The storage manager, end to end: real edits land in IndexedDB, the modal reads them
+ * back grouped by song, and deleting empties both the database and the upload screen's list. */
 
 /** The debounce behind the timeline and session writes, plus the round-trip. */
 const SAVE_SETTLE_MS = 2500;
@@ -114,7 +107,6 @@ test("a song worked on is listed as a project with its pooled media", async ({
 		"blue.png",
 	]);
 
-	// The usage readout agrees that there's a song and media on disk.
 	await expect(
 		modal.locator(".legend-item", { hasText: "Media" }),
 	).not.toContainText("0 B");
@@ -138,8 +130,7 @@ test("deleting a project empties the database and the upload screen's offer", as
 	await expect(modal.getByText("Nothing stored yet")).toBeVisible();
 	expect(await storedTrackNames(page)).toEqual([]);
 
-	// Closing hands the change back to the upload screen, which stops offering
-	// the song it no longer has.
+	// Closing hands the change back to the upload screen, which stops offering the song.
 	await modal.getByRole("button", { name: "Close" }).click();
 	await expect(modal).toHaveCount(0);
 	await selectMode(page, "Editor");
@@ -170,13 +161,11 @@ test("select all and delete selected clears several projects at once", async ({
 	await expect(modal.locator(".row.selectable")).toHaveCount(2);
 	await expect(modal.locator(".bulk")).toHaveCount(0);
 
-	// One row checked: the bar appears and the section box goes indeterminate.
 	await modal.getByRole("checkbox", { name: "Select one.wav" }).check();
 	await expect(modal.locator(".bulk")).toContainText("1 selected");
 	const all = modal.getByRole("checkbox", { name: "Select all projects" });
 	await expect(all).toHaveJSProperty("indeterminate", true);
 
-	// Section box: everything in, then everything out, then in again.
 	await all.click();
 	await expect(modal.locator(".bulk")).toContainText("2 selected");
 	await expect(all).toBeChecked();

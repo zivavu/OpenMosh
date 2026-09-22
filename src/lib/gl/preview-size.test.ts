@@ -15,8 +15,7 @@ describe("fitPreviewSize", () => {
 
 	it("bounds an unmeasured display instead of taking the output size", () => {
 		// A hidden or not-yet-laid-out preview measures 0. Handing back 2160x3840
-		// there allocated every buffer at 8 megapixels — enough to take the GPU
-		// process down on an integrated card.
+		// there allocated every buffer at 8 megapixels, enough to kill the GPU process.
 		const size = fitPreviewSize(2160, 3840, 0, 0)!;
 		expect(size.width * size.height).toBeLessThanOrEqual(1280 * 720);
 		expect(size.width / size.height).toBeCloseTo(2160 / 3840, 2);

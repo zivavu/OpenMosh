@@ -13,11 +13,7 @@ function bandKey(scope: string, freqMin: number, freqMax: number): string {
 /** Scratch for applyVolumeLinksToEffects; valid only within one call. */
 const perBand = new Map<string, number>();
 
-/**
- * A set of effects that follows the music its own way. Every chain used to
- * share one response; an fx lane now carries its own, and the envelope state
- * behind a band is per scope so one lane's smoothing never steps another's.
- */
+/** A set of effects that follows the music its own way, with its own response and scope. */
 export interface AudioLinkGroup {
 	/** Namespaces the per-band envelope state. Lanes pass their lane id. */
 	scope: string;
@@ -25,10 +21,7 @@ export interface AudioLinkGroup {
 	response: AudioResponse;
 }
 
-/**
- * `dt` and `response` must match between preview and export, or a render will
- * not look like what was previewed.
- */
+/** `dt` and `response` must match between preview and export, or a render won't match. */
 export function applyVolumeLinksToEffects(
 	effects: EffectInstance[],
 	volumeLevel: number,
@@ -41,8 +34,6 @@ export function applyVolumeLinksToEffects(
 ): void {
 	const exponent = punchExponent(response.punch);
 	// Cached so a band's envelope advances once per frame, not once per link.
-	// Reused across calls rather than minted per frame: this runs every rAF tick
-	// for every link group, and nothing reads it after the call returns.
 	perBand.clear();
 	const levelForBand = (freqMin: number, freqMax: number): number => {
 		const key = bandKey(scope, freqMin, freqMax);
@@ -58,9 +49,7 @@ export function applyVolumeLinksToEffects(
 						freqMax,
 					)
 				: volumeLevel;
-		// Smoothed before ranging, not after: the envelope has to see the same
-		// steadied signal in an export that the preview's analyser handed it, or
-		// its ceiling gets pinned by transients the preview never showed it.
+		// Smoothed before ranging, not after: the envelope must see the same steadied signal.
 		const raw = smoothBandLevel(key, measured, dt, response.smoothing);
 		const ranged = autoRangeLevel(key, raw, dt);
 		perBand.set(key, ranged);
@@ -122,7 +111,7 @@ export function formatTime(sec: number): string {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-/** m:ss.mmm — for the playhead readout, where a frame is ~16ms. */
+/** m:ss.mmm for the playhead readout, where a frame is ~16ms. */
 export function formatTimeMs(sec: number): string {
 	if (!Number.isFinite(sec) || sec < 0) return "0:00.000";
 	const ms = Math.floor((sec % 1) * 1000);

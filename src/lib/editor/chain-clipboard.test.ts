@@ -4,7 +4,7 @@ import { applyChainTo, chainClipboard } from "./chain-clipboard";
 import type { FxClip } from "./fx-lanes";
 import type { MediaClip } from "../media";
 
-/** Same shape the fx-lane tests use — the real defs aren't the point here. */
+/** Same shape the fx-lane tests use: the real defs aren't the point here. */
 function effects(defId: string): EffectInstance[] {
 	return [
 		{

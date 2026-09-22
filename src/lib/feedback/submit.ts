@@ -1,8 +1,6 @@
 import { getFeedbackChain } from "../components/ui/feedback.svelte";
 
-/** Web3Forms endpoint — a static-site form relay that emails submissions on.
- * The access key is public by design: it only allows posting to this one form,
- * and the bundle ships to the browser anyway. */
+/** Web3Forms endpoint, a static-site form relay that emails submissions on. */
 const ACCESS_KEY = "0cb8b3a2-3288-492e-b71f-65b36a0977dd";
 const ENDPOINT = "https://api.web3forms.com/submit";
 
@@ -11,7 +9,7 @@ export type FeedbackKind = "bug" | "idea" | "other";
 export interface FeedbackPayload {
 	kind: FeedbackKind;
 	message: string;
-	/** Optional — only so a reply is possible. */
+	/** Optional; only so a reply is possible. */
 	email: string;
 	/** Honeypot: bots fill every field they find, people never see this one. */
 	botcheck: string;
@@ -23,9 +21,7 @@ const KIND_LABELS: Record<FeedbackKind, string> = {
 	other: "Feedback",
 };
 
-/** The chain as it stood, stripped to what reproduces it: no instance ids, no
- * UI state, and only the effects that were actually on. Text rather than a
- * screenshot — this can be pasted back in, a picture can only be squinted at. */
+/** The chain as it stood, stripped to what reproduces it: no ids, no UI state. */
 function describeChain(): string {
 	const effects = getFeedbackChain();
 	if (!effects) return "Chain: none (upload screen)";
@@ -43,8 +39,8 @@ function describeChain(): string {
 ${JSON.stringify(chain)}`;
 }
 
-/** Where the reporter was and what they were running — the context that
- * otherwise takes three round trips to get out of a bug report. */
+/** Where the reporter was and what they were running: the context that otherwise
+ * takes three round trips to get out of a bug report. */
 function collectContext(): string {
 	const view = window.location.hash || "#";
 	return [

@@ -1,13 +1,7 @@
-/**
- * Presentation helpers shared by everything that shows the sequence media pool
- * — the grid view and the rail.
- */
+/** Presentation helpers shared by the sequence media pool's grid view and rail. */
 
-/**
- * dataTransfer type marking a drag that carries a source id. The timeline
- * accepts drops by looking for this type, so a drag can start in the grid
- * without the two components sharing any state.
- */
+/** dataTransfer type marking a drag that carries a source id. The timeline accepts
+ * drops by this type, so a drag can start in the grid without shared state. */
 export const SOURCE_DND_TYPE = "application/x-openmosh-source";
 
 /** A stable colour per position in the pool. */
@@ -15,10 +9,8 @@ export function sourceColor(n: number): string {
 	return `hsl(${(n * 57) % 360} 45% 52%)`;
 }
 
-/**
- * Filenames from one export batch share a long prefix, so keep the tail (and
- * the extension) rather than truncating from the right.
- */
+/** Filenames from one export batch share a long prefix, so keep the tail (and the
+ * extension) rather than truncating from the right. */
 export function shortSourceName(name: string, max = 16): string {
 	if (name.length <= max) return name;
 	const dot = name.lastIndexOf(".");

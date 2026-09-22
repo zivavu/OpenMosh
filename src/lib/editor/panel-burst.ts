@@ -1,24 +1,6 @@
-/**
- * Undo bookkeeping for effects-panel edits.
- *
- * Panel edits mutate the effect chain in place, so they can't be recorded from
- * the data itself — they're recorded around the edit instead. Only consecutive
- * ticks of one dragged parameter coalesce (same `coalesceKey`, within
- * `coalesceMs`); discrete edits like toggles each get their own undo entry, so
- * undoing after flipping five effects on takes five steps rather than one.
- *
- * The two kinds of undo stack in the app want opposite timing: a lane's stack
- * stores the state *before* an edit, while the plain effect history stores the
- * state *after* one. `onEditStart` covers both — take the pre-edit snapshot
- * there and return nothing, or return a closure to record once the burst
- * settles.
- */
+/** Undo bookkeeping for effects-panel edits, which mutate the chain in place. */
 export interface PanelBurstOptions {
-	/**
-	 * Called when a burst opens, before the edit has been applied. Return a
-	 * function to run when the burst closes (post-edit recording), or nothing
-	 * when a snapshot taken here is the whole record.
-	 */
+	/** Called when a burst opens, before the edit is applied; may return a close handler. */
 	onEditStart: () => (() => void) | void;
 	/** Coalescing window for one dragged parameter, in ms. */
 	coalesceMs?: number;
@@ -36,21 +18,15 @@ export class PanelBurstController {
 		this.#coalesceMs = coalesceMs;
 	}
 
-	/** True while a burst is open — an edit that has been applied but not yet
-	 * recorded on its stack. */
+	/** True while a burst is open: an edit applied but not yet recorded on its stack. */
 	get open(): boolean {
 		return this.#timer !== undefined;
 	}
 
-	/**
-	 * Call immediately before a panel edit is applied, while the pre-edit state
-	 * is still intact. `coalesceKey` identifies a continuously-dragged parameter;
-	 * discrete edits pass nothing.
-	 */
+	/** Call immediately before a panel edit is applied, while the pre-edit state is intact. */
 	beforeEdit(coalesceKey?: string) {
 		const key = coalesceKey ?? null;
-		// A discrete edit, or a drag that moved to a different parameter, closes
-		// whatever burst is open so the two don't share an undo entry.
+		// A discrete edit, or a drag moved to a different parameter, closes the open burst.
 		if (this.#timer !== undefined && (key === null || key !== this.#key)) {
 			this.end();
 		}
@@ -59,19 +35,14 @@ export class PanelBurstController {
 		else this.#onClose = this.#onEditStart() ?? null;
 
 		this.#key = key;
-		// Discrete edits close on the next tick — just late enough for the
-		// mutation to have landed, so the recorded state is the post-edit one.
+		// Discrete edits close on the next tick, just late enough for the mutation to land.
 		this.#timer = setTimeout(
 			() => this.end(),
 			key === null ? 0 : this.#coalesceMs,
 		);
 	}
 
-	/**
-	 * Close the burst and record it. Runs on the coalescing timer, and directly
-	 * for edits that shouldn't wait it out (preset loads, or an undo that must
-	 * land on the state before an edit still inside its window).
-	 */
+	/** Close the burst and record it. */
 	end() {
 		clearTimeout(this.#timer);
 		this.#timer = undefined;
@@ -81,7 +52,7 @@ export class PanelBurstController {
 		onClose?.();
 	}
 
-	/** Drop a pending burst without recording it — for undo/redo restores. */
+	/** Drop a pending burst without recording it, for undo/redo restores. */
 	cancel() {
 		clearTimeout(this.#timer);
 		this.#timer = undefined;

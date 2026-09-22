@@ -56,14 +56,13 @@
 	/** Set while a deletion runs, so a second click can't overlap the first. */
 	let busy = $state(false);
 	let changed = false;
-	/** Rows whose media list is unfolded. */
 	let expanded = $state<Set<string>>(new Set());
 	/** Checked rows, by the same `p:`/`e:` keys as `expanded`. */
 	let selected = $state<Set<string>>(new Set());
 	/** The last row checked, so shift-click can extend from it. */
 	let lastPicked: string | null = null;
 	let keepRefused = $state(false);
-	/** Chrome offered an install we can trigger — the one lever that flips its refusal. */
+	/** Chrome offered an install we can trigger, the one lever that flips its refusal. */
 	let installable = $state(canInstall());
 	const isChromium = "chrome" in window;
 	/** Chrome keys its trust signals on the registrable domain, and localhost has none. */
@@ -101,7 +100,6 @@
 		if (e.key === "Escape" && !pending) close();
 	}
 
-	/** The `p:`/`e:` row whose name is a field right now. */
 	let renaming = $state<string | null>(null);
 
 	// Blank clears the custom name; the reload is what brings the song's back.
@@ -156,13 +154,11 @@
 		}
 	}
 
-	/** Install as an app, then ask again — Chrome grants installed apps outright. */
+	/** Install as an app, then ask again: Chrome grants installed apps outright. */
 	async function installAndKeep() {
 		if (!(await promptInstall())) return;
 		await keep();
 	}
-
-	// ── Selection ──
 
 	/** Every checkable row, in display order, so a shift-click has a range. */
 	let selectableKeys = $derived<string[]>(
@@ -193,7 +189,6 @@
 		selected = next;
 	}
 
-	/** Checks the whole section, or clears it when every row is already in. */
 	function pickAll(keys: string[]) {
 		const next = new Set(selected);
 		const all = keys.every((k) => next.has(k));
@@ -241,8 +236,6 @@
 			},
 		};
 	}
-
-	// ── Actions ──
 
 	function askDeleteProject(p: StorageProject) {
 		pending = {
@@ -294,8 +287,6 @@
 		};
 	}
 
-	// ── Formatting ──
-
 	function fmtBytes(n: number): string {
 		if (n < 1024) return `${n} B`;
 		const units = ["KB", "MB", "GB", "TB"];
@@ -317,8 +308,6 @@
 		single: "Single",
 		slideshow: "Slideshow",
 	};
-
-	// ── Derived ──
 
 	let unassignedSize = $derived(
 		inventory?.unassigned.reduce((n, m) => n + m.size + m.proxySize, 0) ?? 0,
@@ -387,7 +376,6 @@
 				<span class="note">Reading…</span>
 			</div>
 		{:else}
-			<!-- Usage -->
 			<section class="usage">
 				<div class="bar" title={`${fmtBytes(storedTotal)} stored by OpenMosh`}>
 					{#each segments as seg (seg.key)}
@@ -470,7 +458,6 @@
 				</p>
 			{/if}
 
-			<!-- Projects -->
 			{#if inventory.projects.length > 0}
 				<section>
 					<div class="section-head">
@@ -591,7 +578,6 @@
 				</section>
 			{/if}
 
-			<!-- Song-less edits -->
 			{#if inventory.looseEdits.length > 0}
 				<section>
 					<div class="section-head">
@@ -702,7 +688,6 @@
 				</section>
 			{/if}
 
-			<!-- Caches and leftovers -->
 			{#if inventory.unassigned.length > 0 || inventory.proxyCount > 0 || inventory.fonts.length > 0}
 				<section>
 					<div class="section-head">
@@ -922,8 +907,6 @@
 		gap: 0.5rem;
 	}
 
-	/* ── Usage ── */
-
 	.usage {
 		display: flex;
 		flex-direction: column;
@@ -965,8 +948,8 @@
 		transition: width var(--t);
 	}
 
-	/* One hue per kind of thing, echoed by the legend dots. Media is the live
-	   colour because it is the work; the rest are supporting. */
+	/* One hue per kind of thing, echoed by the legend dots. Media is the live colour
+	   because it is the work; the rest are supporting. */
 	.seg--media,
 	.dot--media {
 		background: var(--live);
@@ -1078,8 +1061,6 @@
 		color: var(--text-3);
 	}
 
-	/* ── Sections ── */
-
 	section {
 		display: flex;
 		flex-direction: column;
@@ -1146,8 +1127,8 @@
 		padding-left: 0.35rem;
 	}
 
-	/* Sticks to the bottom of the scroll so the action is reachable from any
-	   row, on a solid backing so rows don't show through. */
+	/* Sticks to the bottom of the scroll so the action is reachable from any row,
+	   on a solid backing so rows don't show through. */
 	.bulk {
 		position: sticky;
 		bottom: -1.25rem;
@@ -1264,8 +1245,8 @@
 		flex-shrink: 0;
 	}
 
-	/* Mode chips borrow the upload screen's mode colours: the editor is the
-	   generative mode, single and slideshow sit in neutral. */
+	/* Mode chips borrow the upload screen's mode colours: the editor is the generative
+	   mode, single and slideshow sit in neutral. */
 	.mode {
 		padding: 0.1rem 0.35rem;
 		border-radius: var(--r-1);
@@ -1373,8 +1354,6 @@
 		cursor: default;
 	}
 
-	/* ── Expanded media ── */
-
 	.media-list {
 		grid-column: 1 / -1;
 		display: flex;
@@ -1425,8 +1404,6 @@
 	.proxy-size {
 		color: var(--start-dim);
 	}
-
-	/* ── Footer ── */
 
 	.footer {
 		display: flex;

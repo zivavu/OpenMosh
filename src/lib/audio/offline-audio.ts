@@ -4,9 +4,6 @@ import type { AudioResponse } from "./auto-range";
 
 export const FFT_SIZE = 2048;
 
-/**
- * Decode an audio file to an AudioBuffer using the Web Audio API.
- */
 export async function decodeAudioFile(file: File): Promise<AudioBuffer> {
 	const arrayBuffer = await file.arrayBuffer();
 	const ctx = new AudioContext();
@@ -18,9 +15,7 @@ export async function decodeAudioFile(file: File): Promise<AudioBuffer> {
 	}
 }
 
-/**
- * Create a new AudioBuffer containing only the samples in [start, end] (seconds).
- */
+/** Samples in [start, end] seconds, as a new AudioBuffer. */
 export function trimAudioBuffer(
 	buffer: AudioBuffer,
 	start: number,
@@ -44,9 +39,7 @@ export function trimAudioBuffer(
 	return trimmed;
 }
 
-/**
- * Tile `buffer` to fill `targetDuration` seconds (loops the buffer content).
- */
+/** Tile `buffer` to fill `targetDuration` seconds by looping its content. */
 export function loopAudioBuffer(
 	buffer: AudioBuffer,
 	targetDuration: number,
@@ -60,7 +53,7 @@ export function loopAudioBuffer(
 		sampleRate,
 	});
 
-	// Nothing to tile — an empty source would spin the copy loop forever.
+	// Nothing to tile: an empty source would spin the copy loop forever.
 	if (srcLength === 0) return looped;
 
 	for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
@@ -130,10 +123,8 @@ function getTwiddleTables(n: number): {
 }
 
 /**
- * The Blackman window AnalyserNode applies (a0 .42, a1 .5, a2 .08, over N).
- * Matching it matters because its coherent gain differs from a Hann window's
- * by ~1.5 dB — a constant offset between what a preview measured and what an
- * export measured for the very same audio.
+ * The Blackman window AnalyserNode applies (a0 .42, a1 .5, a2 .08, over N). Its
+ * coherent gain differs from a Hann window's by ~1.5 dB, a constant preview/export offset.
  */
 function getBlackmanWindow(n: number): Float32Array {
 	let w = blackmanWindows.get(n);
@@ -150,9 +141,8 @@ function getBlackmanWindow(n: number): Float32Array {
 	return w;
 }
 
-/**
- * In-place radix-2 FFT. Input and output in real/imag arrays; output is magnitude in freqData[0..fftSize/2].
- */
+/** In-place radix-2 FFT. Input in real/imag; output magnitude in
+ * magnitude[0..fftSize/2]. */
 function fftMagnitude(
 	real: Float32Array,
 	imag: Float32Array,
@@ -208,11 +198,8 @@ interface AnalysisScratch {
 	magnitude: Float32Array;
 }
 
-/**
- * Extract a single frame's audio analysis at time t (seconds): RMS volume and frequency bins (0-255).
- * `channels` should be each channel's Float32Array (fetched once per buffer by the caller).
- * `scratch` arrays are reused across frames to avoid per-frame allocations.
- */
+/** One frame's analysis at time t (seconds): RMS volume and frequency bins (0-255).
+ * `channels` are each channel's Float32Array; `scratch` is reused across frames. */
 function computeFrameAnalysis(
 	channels: Float32Array[],
 	length: number,
@@ -230,7 +217,6 @@ function computeFrameAnalysis(
 	const frameEndSample = Math.min(length, frameStartSample + fftSize);
 	const actualLength = frameEndSample - frameStartSample;
 
-	// Time-domain: mix down to mono and compute RMS
 	let sumSq = 0;
 	const real = scratch.real;
 	const imag = scratch.imag;
@@ -251,9 +237,8 @@ function computeFrameAnalysis(
 	const magnitude = scratch.magnitude;
 	fftMagnitude(real, imag, magnitude, fftSize);
 
-	// Convert magnitude to byte frequency data (0-255) using the same dB scale
-	// as AnalyserNode.getByteFrequencyData: dB = 20*log10(mag / fftSize),
-	// mapped from [minDecibels, maxDecibels] → [0, 255].
+	// Same dB scale as AnalyserNode.getByteFrequencyData: dB = 20*log10(mag / fftSize),
+	// mapped from [minDecibels, maxDecibels] to [0, 255].
 	const minDecibels = -100;
 	const maxDecibels = -30;
 	const dbRange = maxDecibels - minDecibels;
@@ -272,10 +257,8 @@ function computeFrameAnalysis(
 	return { volumeLevel, frequencyData };
 }
 
-/**
- * Pre-compute audio analysis for each frame timestamp. Yields to the event loop
- * every few frames so the UI can paint progress instead of freezing.
- */
+/** Pre-compute analysis for each frame timestamp, yielding to the event loop every
+ * few frames so the UI can paint progress instead of freezing. */
 export async function analyzeFrames(
 	buffer: AudioBuffer,
 	frameTimes: number[],
@@ -317,10 +300,7 @@ export async function analyzeFrames(
 	return results;
 }
 
-/**
- * Apply pre-computed frame audio data to effects' values (volume-linked params).
- * Modifies effect.values in place.
- */
+/** Apply pre-computed frame audio to effects' volume-linked params, in place. */
 export function applyFrameAudioToEffects(
 	effects: EffectInstance[],
 	frameData: FrameAudioData,

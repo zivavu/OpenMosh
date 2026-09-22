@@ -1,14 +1,5 @@
-/**
- * Whole-clip copy/paste for the fx lanes: span, chain and fade together, to
- * be stamped down elsewhere on the timeline. The chain alone travels through
- * chainClipboard, which is what a paste *onto* a clip uses; this is the paste
- * that makes new clips.
- *
- * Clips land on the lane last clicked, or back where they came from. A
- * static clip's chain is concrete and goes anywhere; an interval clip re-rolls
- * under whichever lane's settings it lands on, which is what a lane's settings
- * are for.
- */
+/** Whole-clip copy/paste for fx lanes (span, chain, fade). Clips land on the lane
+ * last clicked; an interval clip re-rolls under that lane's settings. */
 
 import { cloneEffectInstance } from "../effects";
 import {
@@ -43,11 +34,8 @@ export function copyFxClips(
 
 export type FxPasteResult = ClipBlockPaste<FxLane>;
 
-/**
- * Stamp the clipboard down with its earliest clip at `at` — see
- * pasteClipBlock. Fresh clip ids and effect instance ids each paste, so two
- * copies never share feedback state.
- */
+/** Stamp the clipboard down with its earliest clip at `at`. Fresh clip and effect
+ * instance ids each paste, so two copies never share feedback state. */
 export function pasteFxClips(
 	lanes: FxLane[],
 	entries: FxClipboardEntry[],

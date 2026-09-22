@@ -1,10 +1,6 @@
-/**
- * The IndexedDB plumbing every store module was spelling out by hand: a
- * request as a promise, a transaction that resolves once it commits, and the
- * "one database, one store keyed by id" shape the small libraries all take.
- */
+/** The IndexedDB plumbing every store module was spelling out by hand: a request
+ * as a promise, a transaction that resolves once it commits, and simpleStore. */
 
-/** A request's result, once it has one. */
 export function request<T>(req: IDBRequest<T>): Promise<T> {
 	return new Promise((resolve, reject) => {
 		req.onsuccess = () => resolve(req.result);
@@ -12,12 +8,7 @@ export function request<T>(req: IDBRequest<T>): Promise<T> {
 	});
 }
 
-/**
- * Run `body` inside one transaction and resolve with what it returned once
- * the transaction has committed. The body may return a promise built from
- * `request` calls — those settle before `complete` fires, so awaiting the
- * result never outlives the transaction.
- */
+/** Run `body` inside one transaction and resolve with what it returned once committed. */
 export function transact<T>(
 	db: IDBDatabase,
 	stores: string | string[],
@@ -43,12 +34,7 @@ export function transact<T>(
 	});
 }
 
-/**
- * A database holding a single object store keyed by `id`. Every call opens a
- * fresh connection and closes it after — these libraries are read at most a
- * few times a session, and a held connection would block another tab's
- * upgrade for nothing.
- */
+/** A database holding a single object store keyed by `id`; each call opens and closes. */
 export function simpleStore(dbName: string, storeName: string, version = 1) {
 	function open(): Promise<IDBDatabase> {
 		const req = indexedDB.open(dbName, version);

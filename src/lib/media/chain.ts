@@ -1,8 +1,5 @@
-/**
- * The chain gestures on media clips — fill, mosh, clear, static/auto — as the
- * clip toolbar and the ←/→ arrows drive them. Thin fan-outs over the shared
- * chain-clip rules, so a media clip rolls exactly as an fx clip does.
- */
+/** The chain gestures on media clips (fill, mosh, clear, static/auto), thin
+ * fan-outs over the shared chain-clip rules. */
 
 import {
 	clearedChainClip,
@@ -38,8 +35,7 @@ export function rollMediaClips(
 	clipIds: Set<string>,
 	options: MoshOptions,
 ): MediaTimeline {
-	// Per lane, as rollFxClips: one Mosh over a selection spanning lanes gives
-	// each lane the mosh it is set up for.
+	// Per lane, as rollFxClips: one Mosh over a selection gives each lane its own.
 	return updateMediaClips(timeline, clipIds, (clip, lane) =>
 		rolledChainClip(clip, laneMoshOptions(lane, options)),
 	);
@@ -77,8 +73,7 @@ export function syncMediaClipsToPreset(
 	);
 }
 
-/** Re-derive `intervalSec` for every clip whose spacing was set in beats, so
- * correcting the BPM retimes them. Same array back when nothing moves. */
+/** Re-derive `intervalSec` for clips spaced in beats, so correcting the BPM retimes them. */
 export function applyBpmToMediaClips(
 	timeline: MediaTimeline,
 	bpm: number,
@@ -113,13 +108,9 @@ export function restoreMediaClipMosh(
 	);
 }
 
-/**
- * Deal the pool across the given clips, in time order. Dealt from a shuffled
- * deck rather than picked independently: independent picks clump, and four
- * clips in a row on the same media reads as a broken shuffle. Every source is
- * used once before any repeats, and the reshuffle never lets one repeat
- * across the seam either.
- */
+/** Deal the pool across the given clips, in time order. Dealt from a shuffled
+ * deck rather than picked independently: independent picks clump, and four clips
+ * in a row on the same media reads as a broken shuffle. */
 export function dealMediaClipSources(
 	timeline: MediaTimeline,
 	clipIds: Set<string>,
@@ -153,8 +144,7 @@ export function dealMediaClipSources(
 				clips: lane.clips.map((c) => {
 					const id = dealt.get(c.id);
 					if (!id) return c;
-					// A clip already on its lane's source keeps no override — see
-					// setMediaClipSources.
+					// A clip already on its lane's source keeps no override — see setMediaClipSources.
 					return { ...c, sourceId: id === lane.sourceId ? undefined : id };
 				}),
 			};

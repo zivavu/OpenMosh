@@ -1,8 +1,5 @@
-/**
- * Batch planning: what N images look like *together*. Colours are dealt
- * across the whole batch (see palette.ts), kinds are dealt when mixing, and
- * each generator lays out its own textures for the slots it was given.
- */
+/** Batch planning: what N images look like *together*. Colours are dealt across
+ * the batch (see palette.ts), kinds when mixing; each generator lays out its own. */
 
 import { planFieldTextures } from "./field/plan";
 import { FIELD_KINDS } from "./field/spec";

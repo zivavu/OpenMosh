@@ -10,7 +10,6 @@ import type { SlideVideoSampler } from "./video-sampler";
 const HOLD_BEAT = Number.MAX_SAFE_INTEGER;
 
 export interface SlideshowFrameSources {
-	/** Decoded image for a slide; undefined while it is still loading. */
 	getImage(slide: SlideshowSlide): SourceImage | undefined;
 	getSampler(slide: SlideshowSlide): SlideVideoSampler | undefined;
 }
@@ -24,32 +23,21 @@ export interface SlideshowFrameDriverOptions {
 	/** Read per frame: the preview's renderer is rebuilt on WebGL context loss. */
 	getRenderer: () => GlRenderer;
 	sources: SlideshowFrameSources;
-	/**
-	 * Whether a video slide's advance may stall waiting for its decoder. Export
-	 * needs the exact frame; preview holds the one already on screen instead, so
-	 * a slide slower than the display doesn't pace the render loop.
-	 */
+	/** Whether a video slide's advance may stall waiting for its decoder. Export
+	 * needs the exact frame; preview holds the one on screen instead. */
 	waitForFrames?: boolean;
 }
 
 export interface SlideshowFrame {
-	/** Effect chain to render this frame. */
 	effects: EffectInstance[];
-	/**
-	 * Resolves once this frame's video-slide upload has landed, or null when
-	 * there is nothing to wait for. Export awaits it so each frame renders the
-	 * exact source frame; preview ignores it so the render loop never blocks.
-	 */
+	/** Resolves once this frame's video-slide upload has landed, or null when
+	 * there is nothing to wait for. Export awaits it; preview ignores it. */
 	ready: Promise<void> | null;
 }
 
 /**
- * Beat → frame resolution for the slideshow, shared by the live preview and
- * the export. Both drive the same instance sequentially, so what a preview
- * shows and what an export writes can't drift apart: slide selection, per-beat
- * effect computation and video-slide advancement all live here, and the only
- * differences left to the callers are where frames come from and how time is
- * stepped.
+ * Beat to frame resolution shared by the live preview and the export, so what a
+ * preview shows and what an export writes can't drift apart.
  */
 export class SlideshowFrameDriver {
 	#getConfig: () => SlideshowConfig;
@@ -83,8 +71,7 @@ export class SlideshowFrameDriver {
 	/**
 	 * Resolve the frame at `time` (seconds on the beat timeline). A video slide
 	 * is shown at the moment `time` picks out of its clip, so the same song
-	 * position always yields the same frame — in the preview, in a second run of
-	 * it, and in the export.
+	 * position always yields the same frame.
 	 */
 	advance(time: number): SlideshowFrame {
 		const config = this.#getConfig();
@@ -112,8 +99,8 @@ export class SlideshowFrameDriver {
 			this.#lastBeatIndex = beatIndex;
 			if (slide.kind === "image" && slide.id !== this.#currentSlideId) {
 				const img = this.#sources.getImage(slide);
-				// A slide still decoding keeps the previous texture and retries on its
-				// next beat (currentSlideId only advances once the upload happened).
+				// A slide still decoding keeps the previous texture and retries next
+				// beat (currentSlideId only advances once the upload happened).
 				if (img) {
 					this.#getRenderer().updateSourceImage(img);
 					this.#currentSlideId = slide.id;
@@ -146,9 +133,8 @@ export class SlideshowFrameDriver {
 	#advanceVideo(slide: SlideshowSlide, time: number): Promise<void> | null {
 		const sampler = this.#sources.getSampler(slide);
 		if (!sampler) return null;
-		// The clip runs against the song rather than against its own appearances:
-		// a slide that comes back shows where the track has got to, and the same
-		// beat always shows the same frame.
+		// The clip runs against the song, not its own appearances: a slide that
+		// comes back shows where the track has got to.
 		return sampler.at(time, this.#waitForFrames).then((frame) => {
 			if (!frame) return;
 			if (!this.#disposed) this.#getRenderer().updateSourceFrame(frame);

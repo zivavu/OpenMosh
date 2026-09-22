@@ -23,7 +23,7 @@
 		onRemoveSlide: (id: string) => void;
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
 		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
-		/** Click on a slide's proxy badge — see proxyStatus's `action`. */
+		/** Click on a slide's proxy badge, see proxyStatus's `action`. */
 		onProxyAction: (slideId: string, action: ProxyAction["kind"]) => void;
 	}
 

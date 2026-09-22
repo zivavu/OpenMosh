@@ -7,22 +7,18 @@
 	import type { SpectrumData } from "../../types";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
 
-	/**
-	 * A layer clip's own effect chain, as the clip panels edit it: the mirror
-	 * EffectsPanel needs, the write-back on every edit, and the label upkeep
-	 * that follows a hand edit.
-	 */
+	/** A layer clip's own effect chain, as the clip panels edit it: the mirror
+	 * EffectsPanel needs, the write-back on every edit, and label upkeep. */
 	interface Props {
 		clip: C;
 		onClipChange: (clip: C) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
-		/** Forwarded to the chain for its spectrum read-out. */
 		response?: AudioResponse;
 		/** What the chain runs on: "this clip's media", "this clip's text". */
 		hint: string;
-		/** Anything to say above the hint — a warning about the chain. */
+		/** Anything to say above the hint, e.g. a warning about the chain. */
 		children?: Snippet;
 	}
 
@@ -37,9 +33,8 @@
 		children,
 	}: Props = $props();
 
-	// The clip's chain, mirrored for EffectsPanel to own and written back on
-	// every edit. Handled here rather than by the editor: the chain on show is
-	// this mirror, so the editor has nothing to apply an edit to.
+	// The clip's chain, mirrored for EffectsPanel to own and written back on every
+	// edit: the chain on show is this mirror, so the editor has nothing to apply.
 	const chain = new LaneEffects<C>(
 		() => clip,
 		(next) => onClipChange(next),
@@ -48,8 +43,7 @@
 	$effect(() => chain.sync());
 
 	/** A hand-edit to a preset-filled clip: the label gains a "*" and explicit
-	 * preset overwrites stop clobbering it. A hand-built chain takes its name
-	 * from what it switches on instead. */
+	 * preset overwrites stop clobbering it. */
 	function onChainEdited() {
 		chain.commit();
 		const next = $state.snapshot(clip) as C;

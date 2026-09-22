@@ -15,7 +15,7 @@ export function randIn(rng: Rand, min: number, max: number): number {
 	return min + rng() * (max - min);
 }
 
-/** Uniform in log space — the right shape for zoom-like parameters. */
+/** Uniform in log space, the right shape for zoom-like parameters. */
 export function randLog(rng: Rand, min: number, max: number): number {
 	return Math.exp(randIn(rng, Math.log(min), Math.log(max)));
 }

@@ -30,7 +30,7 @@ export function createBeatClock(
 export interface BeatInfo {
 	/** Global beat index (cumulative across all segments/manual points). */
 	index: number;
-	/** 0–1 fractional progress through the current beat interval. */
+	/** 0-1 fractional progress through the current beat interval. */
 	fraction: number;
 }
 

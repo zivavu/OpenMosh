@@ -115,9 +115,7 @@
 	interface Props {
 		initialFiles: File[];
 		initialAudioFile?: File | null;
-		/** Library id of `initialAudioFile`, when it came from a saved session. */
 		initialTrackId?: string | null;
-		/** Config restored from a saved session, if reopened from one. */
 		initialConfig?: SlideshowConfig | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
@@ -134,7 +132,6 @@
 		onExit,
 	}: Props = $props();
 
-	// ── Slides ──
 	let slides: SlideshowSlide[] = $state([]);
 
 	async function addFiles(files: FileList | File[]) {
@@ -186,7 +183,6 @@
 		}
 	}
 
-	/** Fill in duration/dimensions/thumb for a video slide, or reject it. */
 	async function probeVideoSlide(id: string, file: File) {
 		const probe = await probeSlideVideo(file);
 		const i = slides.findIndex((s) => s.id === id);
@@ -201,11 +197,10 @@
 		s.width = probe.width;
 		s.height = probe.height;
 		if (probe.thumb) s.thumbUrl = URL.createObjectURL(probe.thumb);
-		// Settled either way: the probe is the only shot at a video thumbnail.
+		// The probe is the only shot at a video thumbnail.
 		s.thumbPending = false;
 		if (needsProxy(probe.width, probe.height)) {
-			// The user's standing choice for this file decides whether there is a
-			// transcode at all; the badge is where it can be changed.
+			// The user's choice for this file decides whether a transcode happens.
 			if (isProxyDisabled(file)) {
 				s.proxyDisabled = true;
 			} else {
@@ -215,11 +210,7 @@
 		}
 	}
 
-	/**
-	 * Attach a ≤1080p preview proxy to a video slide: reuse the one persisted
-	 * beside the original, or transcode one in the background. The slide
-	 * previews from the original either way until the proxy lands.
-	 */
+	/** Attach a <=1080p preview proxy: reuse the persisted one or transcode in the background. */
 	async function makeSlideProxy(id: string, file: File) {
 		const stored = await getSequenceMediaProxy(file);
 		let proxy = stored;
@@ -245,12 +236,8 @@
 			proxy = await job.promise;
 			proxyJobs.delete(id);
 		}
-		// A proxy that won't open is worse than none — the preview would freeze
-		// on this slide instead of grinding through the original — so it gets the
-		// same decodability check an added file gets before it is trusted.
-		// Opening it is also where its real size comes from, which is the one the
-		// badge reports: a stored proxy never announced one, and a fresh one only
-		// announced the size it was aiming at.
+		// A proxy that won't open would freeze the preview, so it gets the same
+		// decodability check an added file gets.
 		let opened: { width: number; height: number } | null = null;
 		if (proxy) {
 			const sampler = await SlideVideoSampler.create(proxy);
@@ -258,27 +245,23 @@
 			sampler?.dispose();
 			if (!sampler) {
 				proxy = null;
-				// A stored one that no longer opens has to go, or the retry would
-				// find it again and fail the same way.
+				// A stored proxy that no longer opens must go, or the retry finds it again.
 				if (stored) void deleteSequenceMediaProxy(file).catch(() => {});
 			}
 		}
 		const live = slides.find((s) => s.id === id);
 		if (!live) return;
-		// Turned off while the transcode ran: the file is still worth storing for
-		// a later change of mind, but nothing here may touch the slide's state.
+		// Turned off during the transcode: nothing here may touch the slide's state.
 		if (live.proxyDisabled) return;
 		if (proxy) {
-			// Persisted under the slide file's own id so the next run skips the
-			// transcode.
+			// Persisted under the slide file's own id so the next run skips the transcode.
 			if (!stored) void putSequenceMediaProxy(file, proxy).catch(() => {});
 			live.proxyFile = proxy;
 			live.proxyWidth = opened?.width;
 			live.proxyHeight = opened?.height;
 			live.proxyPending = false;
 			live.proxyProgress = undefined;
-			// A sampler decoding the original costs 4× the per-frame work; drop it
-			// so the next ensureSampler reopens on the proxy.
+			// A sampler on the original costs 4x the per-frame work; drop it for the proxy.
 			videoSamplers.get(id)?.dispose();
 			videoSamplers.delete(id);
 			samplerPromises.delete(id);
@@ -288,12 +271,7 @@
 		}
 	}
 
-	/**
-	 * Turn the preview proxy for a slide on or off — the badge's click action.
-	 * Off drops any proxy already attached and stops one being built, so the
-	 * preview decodes the original the user asked for; the choice is remembered
-	 * for this file across sessions and modes.
-	 */
+	/** Turn the preview proxy on or off, the badge's click action. */
 	function setSlideProxyEnabled(id: string, enabled: boolean) {
 		const s = slides.find((x) => x.id === id);
 		if (!s || s.kind !== "video") return;
@@ -307,8 +285,6 @@
 		s.proxyFailed = false;
 		s.proxyReason = undefined;
 		s.proxyDisabled = !enabled;
-		// Whichever file the sampler was opened on is now the wrong one, in either
-		// direction; the next ensureSampler reopens on the one this choice asks for.
 		videoSamplers.get(id)?.dispose();
 		videoSamplers.delete(id);
 		samplerPromises.delete(id);
@@ -317,7 +293,6 @@
 		if (wanted) void makeSlideProxy(s.id, s.file);
 	}
 
-	/** Retry a failed proxy transcode for a slide — the badge's click action. */
 	function retrySlideProxy(id: string) {
 		const s = slides.find((x) => x.id === id);
 		if (!s || s.kind !== "video" || !s.proxyFailed) return;
@@ -369,7 +344,6 @@
 		}
 	}
 
-	/** How long a removed slide stays restorable — matches its toast's lifetime. */
 	const UNDO_WINDOW_MS = 8000;
 
 	interface PendingRemoval {
@@ -377,12 +351,9 @@
 		index: number;
 		timer: ReturnType<typeof setTimeout>;
 	}
-	/** Removed slides awaiting either an Undo or the end of the undo window.
-	 * Their object URLs stay alive until then, so a restore is a plain re-insert. */
+	/** Removed slides awaiting Undo; their object URLs stay alive. */
 	const pendingRemovals = new Map<string, PendingRemoval>();
 
-	// Generated slides follow the output size: a re-render lands as a fresh
-	// object URL on the slide, the File (its identity) stays put.
 	const sizeSync = new GeneratedSizeSync((id, url) => {
 		const s = slides.find((s) => s.id === id) ?? pendingRemovals.get(id)?.slide;
 		if (!s) {
@@ -400,16 +371,12 @@
 		sizeSync.resize(resizeWidth, resizeHeight);
 	});
 
-	// ── Generator ──
 	const loadGeneratePanel = lazy(
 		() => import("../generators/GeneratePanel.svelte"),
 	);
 	let generateOpen = $state(false);
 
-	// ── Webcam burst ──
-	// A photo booth on the beat: the song plays from where it sits and the
-	// panel snaps a still per beat into the pool. Audio alone drives it — the
-	// preview needs slides, and an empty pool is exactly when this is useful.
+	// Photo booth on the beat: the song plays and the panel snaps a still per beat.
 	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
 	let webcamOpen = $state(false);
 	let burstWallStart = 0;
@@ -420,8 +387,6 @@
 		else audio.pauseAudio();
 	}
 
-	/** The beat the burst is on: the song's grid, or the tempo on the wall
-	 * clock without one. Null with no tempo at all. */
 	function burstBeat(): number | null {
 		if (config.bpm <= 0) return null;
 		if (audio.trackFile && audio.audioPlaying) {
@@ -442,7 +407,6 @@
 		dropCachedImage(s.id);
 	}
 
-	/** `undoable: false` for removals the user didn't ask for (a failed decode). */
 	function removeSlide(id: string, undoable = true) {
 		const i = slides.findIndex((s) => s.id === id);
 		if (i === -1) return;
@@ -475,7 +439,6 @@
 	let showClearSlidesConfirm = $state(false);
 	let slideInput = $state<HTMLInputElement | undefined>(undefined);
 
-	/** Empties the pool outright — too many to hand back one toast at a time. */
 	function clearSlides() {
 		showClearSlidesConfirm = false;
 		for (const slide of [...slides]) removeSlide(slide.id, false);
@@ -495,7 +458,6 @@
 		});
 	}
 
-	/** Re-apply a saved id order; slides added or removed since are left at the end. */
 	function restoreOrder(order: string[]) {
 		const byId = new Map(slides.map((s) => [s.id, s]));
 		const restored = order
@@ -505,16 +467,11 @@
 		slides = [...restored, ...slides.filter((s) => !known.has(s.id))];
 	}
 
-	// ── Session ──
-	// The image set and the config that was built around it are saved together,
-	// so the upload screen can offer the whole slideshow back.
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function saveSlideshowSession() {
 		const files = slides.map((s) => s.file);
 		if (files.length === 0) return;
-		// Keyed by the song when there is one, so the session sits alongside the
-		// segments and text already saved under that track id.
 		void saveSession(
 			"slideshow",
 			files,
@@ -523,16 +480,14 @@
 		)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
-				// Swallowing this outright is what made the last failure invisible.
+				// Logged, not swallowed: a silent failure here is invisible.
 				if (import.meta.env.DEV)
 					console.error("Slideshow session save failed:", e);
 			});
 	}
 
 	$effect(() => {
-		// Deep-read, discarded: naming `slides` and `config` alone subscribes to
-		// the two references only, so changing a segment or a slide's preset —
-		// which is most of the editing — would never re-arm the debounce.
+		// Deep-read, discarded: a shallow read of `slides`/`config` never re-arms the debounce.
 		$state.snapshot(slides);
 		$state.snapshot(config);
 		// Loading a different song re-keys the session, so it has to re-save.
@@ -551,8 +506,7 @@
 			);
 			return;
 		}
-		// No confirm: the slideshow is saved as a session and offered back on
-		// the upload screen, so leaving costs nothing.
+		// No confirm: the slideshow is saved as a session and offered back on upload.
 		clearTimeout(sessionSaveTimer);
 		saveSlideshowSession();
 		onExit();
@@ -592,7 +546,6 @@
 		};
 	});
 
-	// ── Video slide samplers (shared decode engine for preview; export creates its own) ──
 	const videoSamplers = new Map<string, SlideVideoSampler>();
 	const samplerPromises = new Map<string, Promise<SlideVideoSampler | null>>();
 	/** In-flight proxy transcodes, keyed by slide id, so removeSlide can stop one. */
@@ -603,13 +556,11 @@
 	): Promise<SlideVideoSampler | null> {
 		let p = samplerPromises.get(slide.id);
 		if (!p) {
-			// The proxy decodes at a fraction of the per-frame cost; the original is
-			// only what's left to decode while a proxy is still being built.
+			// The proxy decodes at a fraction of the per-frame cost; the original is the fallback.
 			const file = slide.proxyFile ?? slide.file;
 			p = SlideVideoSampler.create(file).then((s) => {
 				if (s) {
-					// A proxy landed while this creation was in flight: the sampler is
-					// already obsolete, and keeping it would pin the slow path.
+					// A proxy landed mid-creation: keeping the sampler would pin the slow path.
 					if (slide.proxyFile && slide.proxyFile !== file) {
 						s.dispose();
 						return null;
@@ -623,11 +574,9 @@
 		return p;
 	}
 
-	// ── Config ──
 	const CONFIG_KEY = "openmosh-slideshow-config";
 	function loadConfig(): SlideshowConfig {
-		// A reopened session carries its own config; the global key is only the
-		// "whatever was set last" default for a brand-new slideshow.
+		// A reopened session carries its own config; the global key is the new-session default.
 		const restored = untrack(() => initialConfig);
 		if (restored) {
 			return {
@@ -669,13 +618,8 @@
 		(raw) => (Array.isArray(raw) ? { segments: raw } : (raw as SegmentsEntry)),
 	);
 
-	/**
-	 * The span worth writing back. Between adopting a track id and the audio
-	 * element reporting its duration the live span reads 0/0, and persisting
-	 * that would wipe the saved one for good if the metadata never lands. A
-	 * restore still in flight is the real value; failing that, keep whatever
-	 * was already stored rather than replacing it with an empty span.
-	 */
+	/** The span worth writing back: between adopting a track id and the audio element
+	 * reporting its duration the live span reads 0/0, which would wipe the saved one. */
 	function spanForSave(
 		trackId: string,
 	): Pick<SegmentsEntry, "spanStart" | "spanEnd"> {
@@ -707,7 +651,6 @@
 		if (currentTrackId) saveSegments(currentTrackId);
 	}
 
-	// Save span when user adjusts it while a library track is loaded
 	$effect(() => {
 		audio.spanStart;
 		audio.spanEnd;
@@ -716,11 +659,9 @@
 
 	let selectedSegmentId = $state<string | null>(null);
 
-	// ── Effects ──
 	let effects: EffectInstance[] = $state(loadInitialEffects());
 
-	// Hand the live chain to the feedback modal, which is mounted at the app
-	// root and has no other way to see it.
+	// The feedback modal is mounted at the app root and can't otherwise see the chain.
 	$effect(() => {
 		setFeedbackChain(() => $state.snapshot(effects) as EffectInstance[]);
 		return () => setFeedbackChain(null);
@@ -736,18 +677,16 @@
 		endBurst: () => panelBurst.end(),
 	});
 
-	// ── Canvas / Renderer ──
 	let canvasEl: HTMLCanvasElement | null = $state(null);
 	let glRenderer: GlRenderer | null = $state(null);
 	let naturalWidth = $state<number | undefined>(undefined);
 	let naturalHeight = $state<number | undefined>(undefined);
 	let currentFps = $state(0);
 	let showFps = $state(loadSettings().showFps ?? DEFAULT_SETTINGS.showFps);
-	// GlCanvas is externally driven here, so its own counter never ticks — the
-	// preview loop below feeds this one instead.
+	// GlCanvas is externally driven here, so the preview loop feeds this counter instead.
 	let frameTimes: number[] = [];
 	let lastFpsUpdate = 0;
-	/** Only called while the overlay is on — see GlCanvas.trackFps. */
+	/** Only called while the overlay is on; see GlCanvas.trackFps. */
 	function trackFps(now: number) {
 		frameTimes.push(now);
 		if (now - lastFpsUpdate < 400) return;
@@ -768,9 +707,8 @@
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
 
-	/** Set when a project restores its output size, so the slides finishing
-	 * their load doesn't default it straight back to their own. Consumed once:
-	 * media picked afterwards is a deliberate change and should win. */
+	/** Set when a project restores its output size, so slides finishing their load don't
+	 * default it back to their own. */
 	let sizeRestoredFromProject = false;
 
 	$effect(() => {
@@ -786,9 +724,7 @@
 		}
 	});
 
-	// Preview render size, decoupled from the output size (same as the single
-	// editor). For image-first slides GlCanvas owns this; the video-first path
-	// below drives the renderer directly and must apply it itself.
+	// Preview render size, decoupled from the output size; the video-first path drives it itself.
 	let previewArea = $state<HTMLDivElement | null>(null);
 	let displayW = $state(0);
 	let displayH = $state(0);
@@ -816,8 +752,6 @@
 		fitPreviewSize(resizeWidth, resizeHeight, displayW, displayH),
 	);
 
-	// Size the preview canvas from the first slide, matching the export:
-	// image → GlCanvas image loading; video → probed dimensions.
 	let previewImageSrc = $state("");
 	$effect(() => {
 		const first = slides[0];
@@ -826,14 +760,11 @@
 			if (!previewImageSrc) previewImageSrc = first.objectUrl;
 			return;
 		}
-		// Video-first: allocate the source texture from the probed dimensions
-		// (width/height arrive async after the add-time probe).
 		if (previewImageSrc || !glRenderer || naturalWidth != null) return;
 		if (first.width && first.height) {
 			glRenderer.initVideoSource(first.width, first.height);
 			naturalWidth = first.width;
 			naturalHeight = first.height;
-			// Show the first frame instead of a blank canvas until play
 			void ensureSampler(first).then(async (sampler) => {
 				if (!sampler || !glRenderer || previewPlaying) return;
 				const frame = await sampler.at(0);
@@ -846,10 +777,8 @@
 		}
 	});
 
-	// GlCanvas applies the preview size only after its own image/video load
-	// (imageReady) — the video-first path above bypasses it, so apply here.
-	// Also re-runs when recording ends (which resized the renderer to full
-	// output res), restoring the smaller preview size.
+	// GlCanvas applies the preview size only after its own load, which the video-first
+	// path bypasses. Also re-runs when recording ends.
 	$effect(() => {
 		recordingState.recording;
 		if (previewImageSrc || !glRenderer || naturalWidth == null) return;
@@ -860,17 +789,13 @@
 		}
 	});
 
-	// Image-first counterpart. GlCanvas uploads the texture and sizes the canvas
-	// itself here, but it never draws: the slideshow owns rendering
-	// (externallyDriven), so both its animation loop and its static redraw bail
-	// out. Nothing else drew either, which left the preview black until playback
-	// started. Sizing stays GlCanvas's job — this only supplies the frame.
+	// Image-first counterpart: GlCanvas uploads the texture and sizes the canvas but
+	// never draws, since the slideshow owns rendering.
 	$effect(() => {
 		recordingState.recording;
 		if (!previewImageSrc || !glRenderer || naturalWidth == null) return;
 		if (previewPlaying) return;
-		// Re-draw after a resize, and on effect edits, so a stopped preview
-		// reflects the panel the way the single editor's does.
+		// Re-draw after a resize and on effect edits, so a stopped preview reflects the panel.
 		previewRenderSize;
 		for (const e of effects) {
 			e.enabled;
@@ -878,20 +803,16 @@
 		}
 		textTime;
 		textTimeline;
-		// Set here as well as through GlCanvas's prop: this effect can run
-		// before the child's, and a stopped preview has no later frame to fix it.
+		// Set here too: this effect can run before the child's, leaving no later frame to fix it.
 		glRenderer.setSourceFit(sourceFit);
 		glRenderer.setBeat(beatsAt(textTime), config.bpm / 60);
 		glRenderer.render(effects, 0, currentTextLayers());
 	});
 
-	// ── Audio ──
-	// Load outputVolume from config before constructing manager
 	const savedOutputVolume = loadConfig().outputVolume ?? 1;
 
 	const audio = new AudioManager({
-		// One group: the slideshow drives effects from beats, so there are no
-		// per-lane responses to keep apart.
+		// One group: the slideshow drives effects from beats, so there are no per-lane responses.
 		getLinkGroups: () => [
 			{
 				scope: "",
@@ -901,9 +822,7 @@
 						: effects,
 				response: DEFAULT_AUDIO_RESPONSE,
 			},
-			// Each text layer's own chain follows the music too, under its own
-			// envelope state — the same deal the editor gives its layers. Read off
-			// the resolved layers: the chain is the clip's under the playhead.
+			// Each text layer's chain follows the music too, read off the resolved layers.
 			...currentTextLayers().map((layer) => ({
 				scope: layer.laneId,
 				effects: layer.effects,
@@ -922,23 +841,19 @@
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.
 	$effect(() => () => audio.disposeAudioGraph());
 
-	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
 	$effect(() => {
 		audio.setAudioEl(audioEl);
 	});
 
-	// Seed track from audio selected on the upload screen
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
-			// Reopened from a saved session: adopting the library id is what
-			// brings its segments, BPM and text timeline back with it.
+			// Reopened from a saved session: adopting the library id brings its segments back.
 			if (initialTrackId) adoptLibraryTrack(initialTrackId);
 		}
 	});
 
-	// ── Track file picker ──
 	let trackInput: HTMLInputElement;
 
 	function openTrackPicker() {
@@ -948,8 +863,7 @@
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
 		if (f) {
-			// Drop the previous track's normalize gain until the auto-add
-			// measurement reports the new track's own.
+			// Drop the previous track's normalize gain until the auto-add measurement lands.
 			audio.setNormalizeGain(1.0);
 			audio.trackFile = f;
 			trackInput.value = "";
@@ -957,8 +871,7 @@
 	}
 
 	function clearTrack() {
-		// Unloading is a song change too — onLibraryLoadTrack saves before
-		// switching, and dropping the track has to do the same.
+		// Unloading is a song change too, so dropping the track saves like a switch does.
 		if (currentTrackId) saveSegments(currentTrackId);
 		audio.clearTrack();
 		currentTrackId = null;
@@ -967,8 +880,7 @@
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		stopPreview();
 		if (currentTrackId) saveSegments(currentTrackId);
-		// Partial audio reset — intentionally skip zeroing trackDuration and trackFile
-		// so AudioTimeline stays mounted during the switch (avoids a remount flash).
+		// Partial reset: trackDuration and trackFile are left, so AudioTimeline doesn't flash.
 		audio.resetPlayback();
 		currentTrackId = null;
 		audio.disposeAudioGraph();
@@ -990,13 +902,11 @@
 				: {}),
 		};
 		if (saved.bpm !== undefined) {
-			// The song brought its own tempo back: nothing to detect, and a
-			// detection already running must not overwrite it.
+			// The song brought its own tempo back; a running detection must not overwrite it.
 			bpmEpoch++;
 			bpmRestoredFor = trackId;
 		}
-		// An empty span is never something the user chose — it's an entry left
-		// behind by an older build. Fall through to the whole track.
+		// An empty span is an older build's leftover, never a choice; use the whole track.
 		if (
 			saved.spanStart !== undefined &&
 			saved.spanEnd !== undefined &&
@@ -1006,35 +916,26 @@
 		}
 	}
 
-	/** A track picked on the upload screen: the library reports its id once it
-	 * has been saved, or straight away if it was already there. That id is what
-	 * keys the segments, so restore against it too. */
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
 		applySavedSegments(trackId);
 	}
 
-	// ── BPM Detection ──
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = $state(null);
-	/** Bumped whenever the BPM is settled from elsewhere — a restored song, a
-	 * typed correction. A detection that started before that yields to it. */
+	/** Bumped when the BPM is settled elsewhere; older detections yield to it. */
 	let bpmEpoch = 0;
-	/** The track the automatic pass has already been spent on. */
 	let autoBpmFor: File | null = null;
-	/** Track id whose saved BPM came back with it, so it needs no detection. */
 	let bpmRestoredFor: string | null = null;
 
-	// A new track detects its own tempo: everything here is cut to the beat, and
-	// the default 120 is only right by accident.
+	// A new track detects its own tempo: everything here is cut to the beat.
 	$effect(() => {
 		const file = audio.trackFile;
 		if (!file) return;
 		untrack(() => {
 			if (autoBpmFor === file) return;
 			autoBpmFor = file;
-			// A song reopened from the library brings its own BPM back.
 			if (currentTrackId && bpmRestoredFor === currentTrackId) return;
 			void runBpmDetection(true);
 		});
@@ -1048,8 +949,7 @@
 		bpmDetectAbort = new AbortController();
 		try {
 			const result = await detectBpm(file, bpmDetectAbort.signal);
-			// The automatic pass never overrules what landed while it ran: a
-			// restore, or a number the user typed themselves.
+			// The automatic pass never overrules what landed while it ran.
 			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			config = { ...config, bpm: result.bpm, beatOffset: result.offset };
 		} catch (e) {
@@ -1067,38 +967,25 @@
 		}
 	}
 
-	// ── Preview ──
-	// A reopened show is there to be watched, so it lands on the preview; a
-	// fresh pile of media starts on the grid, where what just landed is laid out.
+	// A reopened show lands on the preview; a fresh pile of media starts on the grid.
 	let activeView: "grid" | "preview" = $state(
 		untrack(() => initialConfig) ? "preview" : "grid",
 	);
 	let previewPlaying = $state(false);
 	let previewRafId = $state<number | null>(null);
 	let previewEffects: EffectInstance[] = $state([]);
-	// A silent preview runs on a wall clock; these anchor it at the static
-	// marker for the duration of one run, so play resumes from there.
+	// A silent preview runs on a wall clock; these anchor it at the static marker.
 	let noTrackAnchor = 0;
 	let noTrackWallStart = 0;
 	let previewDriver: SlideshowFrameDriver | null = null;
 
-	// ImageBitmaps, not <img>: uploading an <img> re-decodes it on every
-	// texImage2D, which at 1/16 and 1/32 beats is most of a frame's budget.
-	// A bitmap is already decoded, so the upload is a straight copy.
+	// ImageBitmaps, not <img>: uploading an <img> re-decodes it on every texImage2D.
 	const imageCache = new Map<string, ImageBitmap>();
 	/** In-flight decodes, so a slide recurring before it lands isn't decoded twice. */
 	const imageDecodes = new Map<string, Promise<void>>();
 
-	/**
-	 * Bitmaps are decoded at the size the preview actually draws, not the size
-	 * the file happens to be: a pool of camera photos would neither fit in
-	 * memory nor upload inside a frame at 1/32, and nothing above the preview's
-	 * own resolution is visible anyway. Export is unaffected — the recorder
-	 * decodes the originals itself.
-	 *
-	 * Rounded up to 512px steps so ordinary window resizing doesn't invalidate
-	 * the whole cache.
-	 */
+	/** Bitmaps are decoded at the size the preview draws, not the file's size, rounded
+	 * up to 512px steps so window resizing doesn't invalidate the whole cache. */
 	const bitmapCap = $derived(
 		Math.max(
 			1024,
@@ -1114,7 +1001,7 @@
 	/** Backstop for pools too big to hold at preview size (~256 MB of RGBA). */
 	const IMAGE_CACHE_PIXELS = 64_000_000;
 	let cachedPixels = 0;
-	/** Play position of the last slide asked for — eviction measures against it. */
+	/** Play position of the last slide asked for; eviction measures against it. */
 	let lastRequestedIndex = 0;
 
 	function dropCachedImage(id: string) {
@@ -1130,12 +1017,9 @@
 		cachedPixels = 0;
 	}
 
-	/** Cap the cached bitmaps were decoded against. */
 	let cachedCap = 0;
 
-	// Only a preview that outgrows the cached bitmaps forces a re-decode. A
-	// shrinking one keeps them: oversized is still correct, and entering the
-	// preview view resizes the canvas right as the pool finishes decoding.
+	// Only a preview that outgrows the cached bitmaps forces a re-decode; oversized is fine.
 	$effect(() => {
 		const cap = bitmapCap;
 		untrack(() => {
@@ -1146,9 +1030,7 @@
 	});
 
 	function evictImages() {
-		// Slides are played in order and on a loop, so the one to give up is the
-		// one furthest ahead of the playhead — dropping the oldest would throw
-		// out whatever is due next and decode the whole pool every cycle.
+		// Slides loop in order, so evict the one furthest ahead of the playhead, not the oldest.
 		while (cachedPixels > IMAGE_CACHE_PIXELS && imageCache.size > 4) {
 			let victim: string | null = null;
 			let furthest = -1;
@@ -1168,7 +1050,6 @@
 		}
 	}
 
-	/** Decode a slide into the cache. Resolves once it is usable (or failed). */
 	function loadSlideBitmap(slide: SlideshowSlide): Promise<void> {
 		if (imageCache.has(slide.id)) return Promise.resolve();
 		const pending = imageDecodes.get(slide.id);
@@ -1189,8 +1070,7 @@
 				return shrunk;
 			})
 			.then((bitmap) => {
-				// Dropped while decoding, or decoded against a cap that has since
-				// changed — don't resurrect it or leak the bitmap.
+				// Dropped while decoding, or decoded against a cap that has since changed.
 				if (!slides.some((s) => s.id === slide.id) || cap < bitmapCap) {
 					bitmap.close();
 					return;
@@ -1220,9 +1100,7 @@
 		activeView = "preview";
 		previewPlaying = true;
 
-		// Measure the preview box now rather than waiting on the ResizeObserver:
-		// the canvas grows when the grid gives way, and a pool decoded against
-		// the grid's smaller size would be thrown out mid-playback.
+		// Measure the preview box now, or a pool decoded against the grid's size is thrown out.
 		await domSettled();
 		if (previewArea) {
 			const { width, height } = measureDisplaySize(previewArea);
@@ -1263,14 +1141,11 @@
 				getImage: getCachedImage,
 				getSampler: (slide) => videoSamplers.get(slide.id),
 			},
-			// Preview already ignores the `ready` promise; this stops the slide's
-			// decoder stalling inside it too.
+			// Preview ignores the `ready` promise; this stops the decoder stalling inside it too.
 			waitForFrames: false,
 		});
 		previewDriver = driver;
-		// Raw reference of the chain last handed to `previewEffects`; comparing
-		// against the $state proxy would never match, so this keeps the
-		// assignment (and the reactivity it triggers) on beat changes only.
+		// Raw reference of the last chain handed to `previewEffects`; the proxy never matches.
 		let lastAppliedEffects: EffectInstance[] | null = null;
 
 		function tick() {
@@ -1280,8 +1155,7 @@
 			if (audio.trackFile && audio.audioPlaying) {
 				audio.tickCurrentTime();
 				t = audio.trackCurrentTime;
-				// A run started past the span end ignores it and plays out the
-				// track; the track's own end stops it.
+				// A run started past the span end ignores it and plays out the track.
 				if (audio.pastSpan) {
 					if (t >= audio.trackDuration) {
 						stopPreview();
@@ -1297,8 +1171,7 @@
 					}
 				}
 			} else if (audio.trackFile && audio.trackDuration > 0) {
-				// The track stopped on its own — the preview goes with it rather
-				// than falling through to the silent clock below.
+				// The track stopped on its own, so the preview goes with it, not the silent clock.
 				stopPreview();
 				return;
 			} else {
@@ -1313,8 +1186,7 @@
 					config.beatOffset;
 			}
 
-			// The video-frame upload is left unawaited here: the render loop must
-			// not stall on the decoder (the export awaits it instead).
+			// The video-frame upload is unawaited: the render loop must not stall on the decoder.
 			const nowMs = performance.now();
 			if (showFps) trackFps(nowMs);
 			const frame = driver.advance(t);
@@ -1365,20 +1237,16 @@
 		setTextTimeline(appendTextLane(textTimeline, nextLayerZ(layerOrder)));
 	}
 
-	/** Scrubbing the shared timeline axis: the audio clock when there is a
-	 * track, and the text lanes' own clock when the slideshow is silent. */
 	function seekMaster(t: number) {
 		textTime = t;
 		if (audio.trackFile) audio.seekTo(t);
 		else if (previewPlaying) {
-			// The silent preview runs off a wall clock, so a seek mid-run has to
-			// re-anchor it or the next frame would overwrite the new position.
+			// The silent preview runs off a wall clock, so a seek mid-run has to re-anchor it.
 			noTrackAnchor = t;
 			noTrackWallStart = performance.now() / 1000;
 		}
 	}
 
-	// ── Mosh ──
 	function getMoshOptions() {
 		return {
 			moshMin: config.moshMin,
@@ -1391,8 +1259,7 @@
 		};
 	}
 
-	// Panel edits mutate the chain in place, so the post-edit state is pushed
-	// once the burst settles.
+	// Panel edits mutate in place, so the post-edit state is pushed once the burst settles.
 	const panelBurst = new PanelBurstController({
 		onEditStart: () => () => moshSession.pushEdit(effects),
 	});
@@ -1400,14 +1267,12 @@
 	const panelBeforeEdit = (coalesceKey?: string) =>
 		panelBurst.beforeEdit(coalesceKey);
 
-	// ── Span undo ────────────────────────────────────────────────────────────
-	// The span handles are an edit like any other — see span-history.svelte.ts.
+	// The span handles are an edit like any other; see span-history.svelte.ts.
 	const spanHistory = createSpanHistory(audio);
 	$effect(() => spanHistory.trackChanged(currentTrackId));
 
-	// ── Undo routing ─────────────────────────────────────────────────────────
-	// Ctrl+Z lands on whichever stack was edited last, not on whichever one the
-	// selection points at — see Editor.svelte and undo-router.ts.
+	// Ctrl+Z lands on whichever stack was edited last, not the selected one. See
+	// Editor.svelte and undo-router.ts.
 	let segmentUndo = $state<UndoSource | undefined>(undefined);
 	const undoSources = (): (UndoSource | undefined)[] => [
 		spanHistory.undoSource,
@@ -1419,8 +1284,7 @@
 		segmentUndo,
 		{
 			get undoSeq() {
-				// A burst still inside its coalescing window is an edit that has
-				// not reached its stack yet, and it is the newest one there is.
+				// A burst inside its coalescing window hasn't reached its stack yet, and is newest.
 				return panelBurst.open ? PENDING_EDIT : moshSession.undoSeq;
 			},
 			get redoSeq() {
@@ -1431,16 +1295,8 @@
 		},
 	];
 
-	/**
-	 * Random and smooth decide what is on themselves — random rolls a fresh
-	 * chain every beat, smooth toggles the running one a step at a time — so the
-	 * switches would be setting something that is overwritten before it renders.
-	 * The rack stays, though: hiding an effect is what keeps it out of the roll,
-	 * and that is worth more in these modes than in any other.
-	 */
-	/* Random rolls order and params too, so those controls stand down with the
-	 * switches; smooth only flips one switch a beat, leaving the order and every
-	 * param exactly as they were edited. */
+	/** Random and smooth decide what is on themselves, so the switches would set
+	 * something overwritten before it renders. */
 	let panelRolledNote = $derived(
 		config.moshMode === "random"
 			? "Random mode rolls the switches, order and params every beat. Hide an effect to keep it out of the roll."
@@ -1449,13 +1305,10 @@
 				: null,
 	);
 
-	// ── Recording ──
 	let recordFps = $state(60);
-	/** Export length for silent (no-track) recordings. */
 	let recordDuration = $state(10);
 
-	// Export settings ride with the song, and under their own mode prefix: the
-	// same song worked on in the segment editor keeps a separate set.
+	// Export settings ride with the song under their own mode prefix.
 	let renderKey = $derived(currentTrackId && `slideshow:${currentTrackId}`);
 	let renderKeyLoaded = $state<string | null>(null);
 
@@ -1490,7 +1343,6 @@
 		});
 	});
 
-	// ── Text timeline ──
 	// Keyed to audio time, the same clock the beat driver runs on.
 	let selectedTextClipId = $state<string | null>(null);
 	let lyricsOpen = $state(false);
@@ -1516,7 +1368,6 @@
 		});
 	}
 
-	// Same gesture as the editor's; only text lanes exist here to move.
 	let draggingLaneId = $state<string | null>(null);
 
 	function startLayerDrag(laneId: string, e: PointerEvent) {
@@ -1529,7 +1380,6 @@
 	let selectedTextClip = $derived(
 		findTextClip(textTimeline, selectedTextClipId),
 	);
-	/** The lane holding the selected clip — the panel edits its style. */
 	let selectedTextLane = $derived(
 		findTextClipLane(textTimeline, selectedTextClipId),
 	);
@@ -1537,12 +1387,10 @@
 	// Same resolver the export builds, so an auto clip's rolls reproduce.
 	const previewTextChains = createTextChainSource(getMoshOptions);
 
-	/** Layers for whatever the preview is showing right now. */
 	function currentTextLayers() {
 		return resolveTextLayersAt(textTimeline, textTime, previewTextChains);
 	}
 
-	/** Song-grid position of master time `t`, for beat-synced effects. */
 	function beatsAt(t: number): number | null {
 		if (config.bpm <= 0) return null;
 		return ((t - config.beatOffset) * config.bpm) / 60;
@@ -1576,8 +1424,6 @@
 		}
 	}
 
-	/** Transport for the lyrics-sync modal: the preview drives the same audio
-	 * clock the beats and text timeline run on. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
 		textTimeline.enabled
 			? {
@@ -1596,7 +1442,6 @@
 			: null,
 	);
 
-	/** Drop the synced lines into the lyrics lane and select the first one. */
 	function applyLyrics(clips: TextClip[]) {
 		if (clips.length === 0) return;
 		pushTextHistory();
@@ -1658,7 +1503,6 @@
 			},
 		);
 
-		// Export resized the renderer to full output res — restore preview size.
 		if (canvasEl && glRenderer) {
 			if (previewRenderSize) {
 				glRenderer.resize(previewRenderSize.width, previewRenderSize.height);
@@ -1671,10 +1515,8 @@
 		recordingState.cancel();
 	}
 
-	// ── Drag & Drop ──
 	let dragging = $state(false);
 
-	/** Audio replaces the track; anything else is added as slides. */
 	function handleDroppedFiles(files: FileList) {
 		if (files[0].type.startsWith("audio/")) {
 			clearTrack();
@@ -1684,20 +1526,16 @@
 		}
 	}
 
-	// ── Component refs ──
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
-	// ── Keyboard ──
-	/** The timeline's shared axis, once the stack is mounted — the C shortcut
-	 * fires from the window, outside the context the stack puts it in. */
+	/** The timeline's shared axis, once mounted: the C shortcut fires from the window. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
 
 	function handleKeydown(e: KeyboardEvent) {
 		const mod = e.ctrlKey || e.metaKey;
 		const key = e.key.toLowerCase();
 
-		// Undo/redo reach the app even while a dropdown or slider holds focus;
-		// only a text field owns Ctrl+Z.
+		// Undo/redo reach the app even while a dropdown holds focus; only a text field owns it.
 		if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
@@ -1716,9 +1554,7 @@
 		// The media lightbox owns the keyboard while it's up.
 		if (isModalKeyboardOpen()) return;
 
-		// Space is the transport, whatever holds focus — a dropdown left focused
-		// by an earlier click would otherwise swallow the key and reopen its
-		// menu. A text field is the one exception: there space types a space.
+		// Space is the transport whatever holds focus, or a focused dropdown would swallow it.
 		if (e.code === "Space") {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
@@ -1767,7 +1603,6 @@
 		onended={() => audio.onAudioEnded()}
 		onplay={() => {
 			audio.audioPlaying = true;
-			// External playback (media keys) — bring the preview along
 			if (!previewPlaying) startPreview();
 		}}
 		onpause={() => {
@@ -1942,11 +1777,8 @@
 					{/if}
 				{/if}
 			{/snippet}
-			<!-- Read bottom to top, the way a frame is built: the track at the
-			     foot is the input, the beat segments above it drive the chain,
-			     and the text layers composite over what it produced. -->
-			<!-- Same layer column as the editor's: the lane rows are
-			     display:contents, so they need one flex parent to order in. -->
+			<!-- Read bottom to top, the way a frame is built: the track at the foot is
+			     the input, the beat segments above it drive the chain. -->
 			<div class="tl-layers">
 				{#if textTimeline.enabled}
 					<TextTimelineLane
@@ -2097,8 +1929,7 @@
 </div>
 
 <style>
-	/* The lane component renders straight into this (it is display:contents), so
-	   the gap and the row ordering live here. */
+	/* The lane renders straight into this (display:contents), so gap and order live here. */
 	.tl-layers {
 		display: flex;
 		flex-direction: column;

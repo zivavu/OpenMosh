@@ -1,10 +1,7 @@
-/**
- * Copy/paste for text clips. A clip is its span, its words and its chain —
- * the style is the lane's — so a whole-clip paste stamps the words and chain
- * down elsewhere in the lane's own look, and a paste *onto* a clip swaps its
- * words and chain and keeps its span. The same two gestures the media and fx
- * lanes answer to.
- */
+/** Copy/paste for text clips. A clip is its span, its words and its chain (the
+ * style is the lane's): a whole-clip paste stamps words and chain down in the
+ * lane's own look, a paste onto a clip swaps words and chain but keeps its
+ * span. The same two gestures the media and fx lanes answer to. */
 
 import {
 	applyChainTo,
@@ -62,8 +59,7 @@ export interface TextPasteResult {
 	clipIds: string[];
 }
 
-/** Stamp the clipboard down with its earliest clip at `at` — see
- * pasteClipBlock. */
+/** Stamp the clipboard down with its earliest clip at `at`; see pasteClipBlock. */
 export function pasteTextClips(
 	timeline: TextTimeline,
 	entries: TextClipboardEntry[],

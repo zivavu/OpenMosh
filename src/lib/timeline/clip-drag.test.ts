@@ -57,7 +57,7 @@ describe("dragClipsStep", () => {
 			0.9,
 			[],
 			10,
-			() => 0.5, // wants a to land at 1.4–2.4, but b starts at 2
+			() => 0.5, // wants a to land at 1.4-2.4, but b starts at 2
 		);
 		expect(spans(lane)).toEqual([
 			["a", 1, 2],

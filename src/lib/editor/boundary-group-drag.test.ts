@@ -16,7 +16,6 @@ interface Seg {
 	endTime?: number | null;
 }
 
-/** Boundaries at 2, 4, 6, 8. */
 const SEGS: Seg[] = [
 	{ id: "a", startTime: 0, endTime: 2 },
 	{ id: "b", startTime: 2, endTime: 4 },

@@ -14,31 +14,21 @@
 		trackDuration: number;
 		currentTime: number;
 		isPlaying?: boolean;
-		/** Omit to leave the transport out (a mode driven from elsewhere). */
+		/** Omit to leave the transport out. */
 		onTogglePlay?: (() => void) | null;
 		onSeek?: ((time: number) => void) | null;
-		/** Start of the playback span, if the master clock has one. A track that
-		 * loads with a span saved against it parks the marker there. */
 		spanStart?: number;
 		loopEnabled?: boolean;
 		onToggleLoop?: (() => void) | null;
-		/**
-		 * The lanes' own actions — one toolbar for the whole stack rather than a
-		 * header row per lane. The editors fill this; see Editor.svelte.
-		 */
+		/** The lanes' own actions, one toolbar for the whole stack. */
 		toolbar?: Snippet;
-		/** Shown in the selection bar while no lane has anything selected, so
-		 * the row is never dead space. Omit to leave it empty. */
 		selectionHint?: string | null;
 		/** Tempo of the master track, when known: drags snap to its beats. */
 		bpm?: number;
-		/** The editor's dragged split, in px. Left out, the stack takes its own
-		 * height under its cap. */
+		/** The editor's dragged split, in px; omitted, the stack takes its own height. */
 		height?: number | null;
-		/** The lanes, top to bottom. */
 		children: Snippet;
-		/** Out: the axis this stack owns, for editors whose window-level
-		 * shortcuts sit outside the context it lives in. */
+		/** Out: the axis this stack owns, for editors whose window-level shortcuts sit outside it. */
 		axis?: TimelineStackState;
 	}
 
@@ -72,10 +62,7 @@
 	});
 	const vp = stack.vp;
 
-	// Follow the track: any new duration opens the window onto the whole thing.
-	// The duration grows under us — a mode starts on the short record window and
-	// only reaches the track length once a track loads — and the old window left
-	// in place reads as a deep zoom into the new, far longer timeline.
+	// Follow the track: a new duration opens the window onto the whole thing.
 	let viewedDuration = 0;
 	$effect(() => {
 		const d = trackDuration;
@@ -84,45 +71,29 @@
 		vp.viewStart = 0;
 		vp.viewEnd = d;
 		stack.followPlayhead = true;
-		// A new track opens on its own start marker: the span it was saved with,
-		// so a restored project is ready to play its selection rather than the
-		// silence before it. The clock goes along, the same as any other move of
-		// the marker.
+		// A new track opens on its own start marker, the span it was saved with.
 		stack.staticTime = Math.max(0, Math.min(d, spanStart));
 		stack.returnToStatic();
 	});
 
-	// Keep the playhead centred: the view slides under it rather than the other
-	// way round. Only while zoomed — unzoomed the whole track is on screen and
-	// there is nothing to scroll. panView clamps at the track ends, where the
-	// window runs out of room and the playhead drifts off centre instead.
+	// Keep the playhead centred: the view slides under it, only while zoomed.
 	$effect(() => {
 		const t = currentTime;
 		const d = trackDuration;
 		if (d <= 0 || !stack.followPlayhead) return;
-		// Untracked, pan included: panView reads the window it writes, so a
-		// tracked call retriggers on its own pan — and at the track ends, where
-		// the clamp means the correction never reaches zero, never settles.
+		// Untracked, pan included: panView reads the window it writes, so a tracked
+		// call never settles.
 		untrack(() => {
 			if (!vp.isZoomed || vp.viewEnd <= 0) return;
 			const centred = t - (vp.viewStart + vp.viewDuration / 2);
-			// The clock is interpolated per frame, so any correction at all would
-			// pan on every one of them — and a pan rewrites the window every lane
-			// maps its clips through, re-laying out every clip on screen. Below a
-			// pixel of movement there is nothing to show for that, so let the
-			// playhead drift and catch it up on the frame the drift is visible.
-			// Zoomed far enough in a frame's worth of time is more than a pixel,
-			// where this passes every frame and the view scrolls as it did.
+			// The clock is interpolated per frame, so let the playhead drift until it moves a pixel.
 			const perPixel =
 				stack.laneWidth > 0 ? vp.viewDuration / stack.laneWidth : 0;
 			if (Math.abs(centred) >= perPixel) vp.panView(centred);
 		});
 	});
 
-	// ── Time grid ────────────────────────────────────────────────────────────
-	// Drawn over the lanes rather than in a ruler row of its own: the lines are
-	// what makes two lanes readable against each other, and the labels only need
-	// somewhere to sit, not a row to themselves.
+	// Drawn over the lanes rather than in a ruler row: the lines make two lanes readable.
 	const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 
 	/** Coarsest step that still leaves at least a handful of ticks in the window. */
@@ -149,8 +120,7 @@
 	});
 
 	let playheadPct = $derived(vp.toPct(currentTime));
-	// Only while playing: stopped, the clock sits back on the static marker, and
-	// two lines on one spot read as a glitch rather than as two things.
+	// Only while playing: stopped, the clock sits back on the static marker.
 	let playheadVisible = $derived(
 		isPlaying && trackDuration > 0 && playheadPct >= 0 && playheadPct <= 100,
 	);
@@ -160,29 +130,16 @@
 		trackDuration > 0 && staticPct >= 0 && staticPct <= 100,
 	);
 
-	/** Where to draw a marker standing at `pct` of the axis.
-	 *
-	 * A percentage alone puts the marker's left edge at the percentage, so at
-	 * the very end of the track its 1px line starts where the axis stops — half
-	 * of it over the lane's right edge, and at 100% clipped away entirely. Pull
-	 * it back by its own width in proportion to how far along it is: nothing at
-	 * the left edge, a full pixel at the right, so the line always lands on a
-	 * column inside the lane. */
+	/** Where to draw a marker standing at `pct` of the axis, pulled back by its own width. */
 	function markerX(pct: number): string {
 		return `translate3d(calc(${pct}% - ${(pct / 100).toFixed(4)}px), 0, 0)`;
 	}
 
-	// ── Scrubbing ────────────────────────────────────────────────────────────
-	// Owned by the stack rather than the lanes: the playhead is drawn once over
-	// the lot, so it is grabbable once over the lot too — a lane that spends its
-	// pointer events on clips or span handles (the layer lanes, the audio lane)
-	// can't be the only way to move the clock.
+	// Owned by the stack rather than the lanes: the playhead is drawn once over the lot.
 	let scrubbing = $state(false);
 	let staticDragging = $state(false);
 
-	// Ctrl-click on a lane splits or creates a clip, and the grab handles sit
-	// over the lanes — so while the modifier is down they fall through, or the
-	// spot under the playhead would be the one place a lane can't be clicked.
+	// Ctrl-click splits or creates a clip, so the grab handles fall through while held.
 	let modifierHeld = $state(false);
 	function trackModifier(e: KeyboardEvent) {
 		modifierHeld = e.ctrlKey || e.metaKey;
@@ -191,8 +148,7 @@
 		modifierHeld = false;
 	}
 
-	// Stopping puts the clock back where playback started, so the run leaves
-	// nothing behind: the live line vanishes into the marker it came out of.
+	// Stopping puts the clock back where playback started.
 	let wasPlaying = false;
 	$effect(() => {
 		const playing = isPlaying;
@@ -202,8 +158,6 @@
 		});
 	});
 
-	/** Registers the scale strip with the shared axis, so it zooms with the
-	 * lanes and can measure the axis even when no lane is mounted. */
 	function laneTrack(node: HTMLElement) {
 		return stack.lane(node);
 	}
@@ -229,8 +183,7 @@
 		window.addEventListener("pointercancel", onUp);
 	}
 
-	/** Drag the static playhead: the clock goes with it, so a drag scrubs the
-	 * preview while paused and jumps playback while it runs. */
+	/** Drag the static playhead: the clock goes with it, scrubbing while paused. */
 	function beginStaticDrag(e: PointerEvent) {
 		if (!onSeek || trackDuration <= 0 || e.button !== 0) return;
 		e.preventDefault();
@@ -289,8 +242,7 @@
 				<Repeat size={12} />
 			</button>
 		{/if}
-		<!-- Split so the milliseconds, which change every frame, read as a
-		     subordinate part of the number rather than competing with it. -->
+		<!-- Split so the milliseconds, which change every frame, read as subordinate. -->
 		<span class="tl-clock">
 			{formatTime(currentTime)}<span class="tl-clock-ms"
 				>{formatTimeMs(currentTime).slice(-4)}</span
@@ -313,8 +265,7 @@
 		{/if}
 	</div>
 
-	<!-- Everything on the shared axis. The playhead and the time grid are each
-	     drawn once, over the lot. -->
+	<!-- Everything on the shared axis; the playhead and time grid are drawn once. -->
 	<div class="tl-body">
 		{@render children()}
 
@@ -328,9 +279,8 @@
 			</div>
 		{/if}
 
-		<!-- The band the tick labels sit in, doubling as a ruler: clicking here
-		     moves the start marker, and the clock with it, in every mode —
-		     whatever the lanes above do with a pointer. -->
+		<!-- The band the tick labels sit in, doubling as a ruler: clicking here moves
+		     the start marker. -->
 		<div
 			class="tl-scale"
 			class:scrubbing={staticDragging}
@@ -346,8 +296,7 @@
 		></div>
 
 		{#if stack.snapGuide !== null}
-			<!-- What the drag is snapped to, across every lane: the pull is only
-			     ever as clear as the thing causing it. -->
+			<!-- What the drag is snapped to, across every lane. -->
 			<div class="tl-playhead-layer">
 				<div
 					class="tl-snap-guide"
@@ -356,24 +305,19 @@
 			</div>
 		{/if}
 		{#if playheadVisible || staticVisible}
-			<!-- A source in the air falls through the grab handles: they sit over
-			     the lanes, and a drop aimed at the playhead — the most natural
-			     place to put media — would otherwise land on nothing. -->
+			<!-- A source in the air falls through the grab handles, so a drop doesn't land on nothing. -->
 			<div
 				class="tl-playhead-layer"
 				class:source-drag={draggedSourceId() !== null}
 				class:fall-through={modifierHeld}
 			>
 				{#if playheadVisible}
-					<!-- Full-width and moved by transform rather than by `left`: a
-					     percentage translate is of this element's own width, i.e. the
-					     lane width, and it moves on the compositor without laying the
-					     layer out again every frame. -->
+					<!-- Full-width and moved by transform rather than `left`: a percentage
+					     translate is of this element's own width. -->
 					<div class="tl-playhead" style="transform: {markerX(playheadPct)}">
 						<div class="tl-playhead-line"></div>
 						{#if onSeek}
-							<!-- The only part of the overlay that takes pointer events, and
-							     narrow, so it doesn't shadow the lane under it. -->
+							<!-- The only part of the overlay that takes pointer events, and narrow. -->
 							<div
 								class="tl-playhead-grab"
 								class:scrubbing
@@ -384,9 +328,7 @@
 					</div>
 				{/if}
 				{#if staticVisible && onSeek}
-					<!-- The static playhead: where playback starts from, and where the
-					     clock is put back when it stops. Dragging it takes the clock
-					     along. -->
+					<!-- The static playhead: where playback starts from and where the clock is put back. -->
 					<div
 						class="tl-static-playhead"
 						style="transform: {markerX(staticPct)}"
@@ -417,9 +359,8 @@
 		</div>
 	{/if}
 
-	<!-- One bar for every lane's selection, always mounted: rendering it only
-	     when something is selected made every click resize the stack. Whichever
-	     lane registered last owns it. -->
+	<!-- Always mounted: rendering the selection bar only when something is selected
+	     made every click resize the stack. -->
 	<div class="tl-selbar">
 		{#if stack.selectionBar}
 			{@render stack.selectionBar()}
@@ -430,13 +371,10 @@
 </div>
 
 <style>
-	/* The row / gutter / lane classes are the contract every lane component
-	   renders against, so they are global — scoped to this container, which is
-	   the only place they mean anything. */
+	/* The row / gutter / lane classes are the contract every lane component renders
+	   against, so they are global here. */
 	.tl-stack {
-		/* Wide enough for a lane's name beside its controls: the media rows carry a
-		   fold toggle, a grip, two toggles and a delete before the name starts, and
-		   "Layer 1" was ellipsing at 110px. */
+		/* Wide enough for a lane's name beside its controls. */
 		--tl-gutter: 158px;
 		--tl-gap: 0.35rem;
 		--tl-playhead: var(--live);
@@ -444,20 +382,15 @@
 		--tl-chrome-bg: var(--surface);
 		/* Height of the band under the lanes that the tick labels sit in. */
 		--tl-scale-h: 12px;
-		/* The lane area has no natural ceiling — one more lane is one more row —
-		   and without a cap the stack simply eats the column, leaving the preview
-		   whatever is left over. The preview is the output; the lanes are how you
-		   get there. Past this share they scroll under the axis instead. */
+		/* The lane area has no natural ceiling; past this share the lanes scroll under
+		   the axis. */
 		--tl-cap: 45%;
-		/* The clip lanes' look. One set of rules for every lane kind, with the
-		   kind setting the accent on its rows — the fx lanes go mosh-purple. */
+		/* The clip lanes' look: one set of rules for every lane kind. */
 		--clip-accent: var(--live);
 		--clip-accent-dim: var(--live-dim);
 		--clip-bg: #24384d;
 		--clip-fg: #dce8f2;
-		/* --tl-vscroll is set by the editor, from what the lane list's own
-		   scrollbar actually costs it: the overlays have to give up the same
-		   width or the playhead lands past the lane it is meant to be over. */
+		/* --tl-vscroll is set by the editor from what the lane list's scrollbar costs it. */
 		flex-shrink: 0;
 		max-height: var(--tl-cap);
 		min-height: 0;
@@ -469,14 +402,11 @@
 		padding: 0.4rem 0.5rem;
 		border-top: 1px solid var(--line);
 		background: var(--tl-chrome-bg);
-		/* The whole stack is a drag surface — scrubbing the playhead across it
-		   otherwise sweeps a selection through the tick labels, the clock and
-		   the lane names on the way. Nothing in here is text worth copying. */
+		/* The whole stack is a drag surface: scrubbing otherwise sweeps a selection. */
 		user-select: none;
 	}
 
-	/* …except a field, where selecting is the point. None are in the lanes
-	   today; this is so adding one doesn't inherit an unusable input. */
+	/* ...except a field, where selecting is the point. */
 	:global(.tl-stack input:not([type]), .tl-stack input[type="text"]),
 	:global(.tl-stack input[type="number"], .tl-stack textarea) {
 		user-select: text;
@@ -504,36 +434,31 @@
 		touch-action: none;
 	}
 
-	/* A folded lane keeps its clips as bars — where the lane has material is still
-	   worth seeing — but drops the text inside them, which has no room to read
-	   and only muddies the strip. */
+	/* A folded lane keeps its clips as bars but drops the text inside them. */
 	:global(.tl-stack .tl-row.folded .clip-label) {
 		display: none;
 	}
 
-	/* And the clips run edge to edge: the 3px inset that gives an open lane's
-	   bars some air would leave a 14px strip with a 6px bar in it. */
+	/* And the clips run edge to edge: the 3px inset would leave a 14px strip with a
+	   6px bar in it. */
 	:global(.tl-stack .tl-row.folded .clip) {
 		top: 0;
 		bottom: 0;
 		border-radius: 3px;
 	}
 
-	/* A folded row is as short as its gutter lets it be, and the strip fills
-	   that: the buttons' vertical padding was what set the row height, and the
-	   14px strip sat at the top of an 18px row, so the slack read as a gap
-	   nearly half the strip's own height. */
+	/* A folded row is as short as its gutter lets it be, so the buttons' vertical
+	   padding goes. */
 	:global(.tl-stack .tl-row.folded .tl-gutter button) {
 		padding-top: 0;
 		padding-bottom: 0;
 	}
 
-	/* ── Clip lanes ─────────────────────────────────────────────────────────
-	   Shared by the fx, media and text rows; each renders into this column
-	   with `display: contents` so one `order` per row interleaves the kinds. */
+	/* Shared by the fx, media and text rows; each renders into this column with
+	   `display: contents` so one `order` per row interleaves them. */
 
-	/* The row follows the pointer by re-ordering, not by moving, so this is
-	   the only thing that says which one is in hand. */
+	/* The row follows the pointer by re-ordering, not by moving, so this is the only
+	   cue for which one is in hand. */
 	:global(.tl-stack .tl-row.lifted) {
 		opacity: 0.55;
 	}
@@ -559,9 +484,7 @@
 		font-size: 0.68rem;
 		cursor: grab;
 		overflow: hidden;
-		/* A clip is dragged with pointer events, so the browser's own drag — the
-		   translucent copy that trails the cursor — is never wanted. Covers the
-		   label and edges too. */
+		/* A clip is dragged with pointer events, so the browser's own drag is never wanted. */
 		user-select: none;
 		-webkit-user-drag: none;
 	}
@@ -591,12 +514,8 @@
 		pointer-events: none;
 	}
 
-	/* Width is set inline, against the clip's own width — see edgeWidth. At
-	   full size that is EDGE_GRAB, wider than the boundary's half-width, so a
-	   flush junction still leaves a strip that trims one clip and opens a gap.
-	   Positioned rather than laid out in the flex row: as flex items they
-	   competed with the label, whose padding cannot shrink, so on a narrow clip
-	   they were pushed into overflow and the end handle was clipped away. */
+	/* Width is set inline, against the clip's own width; see edgeWidth. Positioned
+	   rather than laid out, or a narrow clip clips the end handle away. */
 	:global(.tl-stack .clip-edge) {
 		position: absolute;
 		top: 0;
@@ -642,10 +561,8 @@
 		background: var(--clip-accent);
 	}
 
-	/* Rows that carry controls rather than time. Opaque and above the overlays,
-	   so neither the playhead nor the grid stripes them. */
-	/* Always this tall, selection or not: the lanes above must not move when
-	   one is made. */
+	/* Rows that carry controls rather than time, always this tall so the lanes above
+	   don't move when a selection is made. */
 	.tl-selbar {
 		display: flex;
 		align-items: center;
@@ -682,9 +599,7 @@
 		flex-shrink: 0;
 	}
 
-	/* One toolbar for the whole stack: the transport, then whatever the lanes
-	   contribute, then Follow. Wraps rather than scrolling — a mode with a lot of
-	   actions gets a second line instead of hiding half of them. */
+	/* One toolbar for the whole stack: transport, lane actions, then Follow. Wraps. */
 	.tl-toolbar {
 		display: flex;
 		align-items: center;
@@ -729,13 +644,12 @@
 		color: var(--rec);
 	}
 
-	/* Pushes Follow — and nothing else — to the far right. */
+	/* Pushes Follow, and nothing else, to the far right. */
 	.tl-follow {
 		margin-left: auto;
 	}
 
-	/* A hairline between groups of lane actions, so the toolbar reads as sections
-	   rather than one long run of buttons. */
+	/* A hairline between groups of lane actions, so the toolbar reads as sections. */
 	:global(.tl-stack .tl-tool-sep) {
 		width: 1px;
 		align-self: stretch;
@@ -802,30 +716,24 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		/* Lets the lanes give way to the stack's cap rather than pushing it open.
-		   It does not grow: a stack shorter than its cap is a stack with nothing
-		   left to show, and padding it out to the cap is dead space. */
+		/* Lets the lanes give way to the stack's cap rather than pushing it open. */
 		min-height: 0;
 		flex: 0 1 auto;
-		/* The band the tick labels live in — cheaper than a ruler row, and it
-		   doubles as breathing room above the scrollbar. */
+		/* The band the tick labels live in: cheaper than a ruler row, and breathing room. */
 		padding-bottom: var(--tl-scale-h);
 	}
 
-	/* Both overlays start where the lanes start, so a percentage inside them is a
-	   percentage of the axis — the same mapping every lane uses. */
+	/* Both overlays start where the lanes start, so a percentage inside is of the axis. */
 	.tl-grid-layer,
 	.tl-playhead-layer {
 		position: absolute;
 		top: 0;
 		bottom: 0;
 		left: calc(var(--tl-gutter) + var(--tl-gap));
-		/* Clear of the lane scrollbar, or the playhead would sit a scrollbar's
-		   width past the lane it is supposed to be over. */
+		/* Clear of the lane scrollbar, or the playhead sits a scrollbar's width past its lane. */
 		right: var(--tl-vscroll, 0px);
 		pointer-events: none;
-		/* A tick label sitting on the last gridline would otherwise hang past the
-		   axis, over whatever panel is beside the timeline. */
+		/* A tick label on the last gridline would otherwise hang past the axis. */
 		overflow: hidden;
 	}
 
@@ -837,8 +745,7 @@
 		z-index: 5;
 	}
 
-	/* Over the lanes, not behind them — the lanes are opaque. Faint enough to
-	   read as a grid rather than as content. */
+	/* Over the lanes, not behind them: the lanes are opaque. */
 	.tl-tick {
 		position: absolute;
 		top: 0;
@@ -867,8 +774,7 @@
 		will-change: transform;
 	}
 
-	/* Under the playheads, over the lanes. Dashed and faint: a hint about the
-	   drag, not a third marker. */
+	/* Under the playheads, over the lanes. Dashed and faint: a hint, not a marker. */
 	.tl-snap-guide {
 		position: absolute;
 		top: 0;
@@ -923,9 +829,7 @@
 		will-change: transform;
 	}
 
-	/* Fainter than the live playhead, so the moving clock reads as the
-	   dominant line while the marker stays quietly where it was put — but full
-	   strength when it is the only line on screen. */
+	/* Fainter than the live playhead, so the moving clock dominates. */
 	.tl-static-line {
 		position: absolute;
 		top: 0;
@@ -940,8 +844,7 @@
 		opacity: 0.9;
 	}
 
-	/* A diamond cap marks the static playhead as a handle, not a clock — and
-	   tells it apart from the live playhead at a glance. */
+	/* A diamond cap marks the static playhead as a handle, not a clock. */
 	.tl-static-handle {
 		position: absolute;
 		top: 1px;
@@ -969,8 +872,7 @@
 		background: rgba(240, 181, 104, 0.14);
 	}
 
-	/* Sits in the padding band under the lanes, over the tick labels — they are
-	   in the grid layer, which takes no pointer events. */
+	/* Sits in the padding band under the lanes, over the tick labels. */
 	.tl-scale {
 		position: absolute;
 		bottom: 0;
@@ -991,10 +893,7 @@
 	}
 
 	@media (max-width: 800px) {
-		/* No gutter at all: a third of a phone's width for a lane's caption
-		   is the axis's to have. The lanes a phone gets — audio, the video bar —
-		   carry nothing there a touch user needs. Both variables go to zero so
-		   the overlays still start where the lanes do. */
+		/* No gutter: a third of a phone's width for a lane caption is the axis's to have. */
 		.tl-stack {
 			--tl-gutter: 0px;
 			--tl-gap: 0px;
@@ -1005,8 +904,7 @@
 			display: none;
 		}
 
-		/* A selection bar that wraps needs the room: the fixed row is what
-		   kept the stack's height steady, and at this width it clipped instead. */
+		/* A wrapping selection bar needs the room; the fixed row clipped at this width. */
 		.tl-selbar {
 			height: auto;
 			min-height: 30px;

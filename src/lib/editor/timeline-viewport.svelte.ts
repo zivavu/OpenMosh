@@ -1,13 +1,4 @@
-/**
- * Shared zoom/pan viewport for every timeline (the editor's lane stack, the
- * slideshow beat timeline, the text timeline). Owns the visible
- * [viewStart, viewEnd] window over a track of `getTrackDuration()` seconds and
- * the coordinate mapping between client-x pixels and track time.
- *
- * The reset/clamp policy on duration change stays with each component — they
- * differ — so this class exposes the mutable state and leaves initialization
- * to the caller.
- */
+/** Shared zoom/pan viewport for every timeline. */
 
 const MIN_ZOOM_FRACTION = 1 / 200;
 /** One notch of zoom, shared by the wheel and the keyboard. */
@@ -19,8 +10,7 @@ export class TimelineViewport {
 
 	readonly #getDuration: () => number;
 	readonly #getRect: () => DOMRect | null;
-	/** Optional playhead read: wheel-zoom pins it instead of the cursor. Return
-	 * null to fall back to the cursor (e.g. while not following the playhead). */
+	/** Optional playhead read: wheel-zoom pins it instead of the cursor. */
 	readonly #getAnchorTime: (() => number | null) | null;
 
 	constructor(
@@ -103,21 +93,12 @@ export class TimelineViewport {
 		this.viewEnd = Math.min(td, ne);
 	}
 
-	/**
-	 * One notch of zoom from the keyboard, where there is no cursor to zoom
-	 * around: the playhead holds still while it is on screen, the middle of the
-	 * view once it is not.
-	 */
+	/** One notch of zoom from the keyboard, where there is no cursor. */
 	zoomStep(inward: boolean): void {
 		this.zoomView(inward ? 1 / ZOOM_STEP : ZOOM_STEP, this.anchorFrac() ?? 0.5);
 	}
 
-	/**
-	 * Attach the shared wheel behavior (shift/horizontal → pan, vertical → zoom,
-	 * pinned to the playhead when it's on screen) to `el` with a non-passive
-	 * listener. `onPan` fires on the pan gestures only, for callers that treat a
-	 * deliberate pan as taking the view over. Returns a cleanup fn.
-	 */
+	/** Attach the shared wheel behavior (shift/horizontal → pan, vertical → zoom) to `el`. */
 	attachWheel(
 		el: HTMLElement | SVGElement,
 		onPan: (() => void) | null = null,
@@ -138,8 +119,7 @@ export class TimelineViewport {
 				onPan?.();
 				this.panView((e.deltaX / 200) * this.viewDuration);
 			} else {
-				// Pin the playhead while zooming when it's on screen, so the view
-				// grows around it instead of under the cursor.
+				// Pin the playhead while zooming when it's on screen.
 				this.zoomView(
 					e.deltaY > 0 ? ZOOM_STEP : 1 / ZOOM_STEP,
 					this.anchorFrac() ?? cursorFrac,

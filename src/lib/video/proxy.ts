@@ -1,25 +1,10 @@
 import type { ProxyWorkerRequest, ProxyWorkerResponse } from "./proxy-worker";
 
-/**
- * Preview proxies for oversized videos.
- *
- * A source above Full HD is re-encoded once, in the background, to a ≤1080p
- * stand-in that every preview path decodes instead of the original. Decode,
- * texture upload and queue memory all scale with pixel count, so this is the
- * one lever that makes QHD/4K previews smooth on machines that can't decode
- * them in real time — the renderer already runs at display resolution and
- * can't help. The worker profiles decode speed per file and drops the proxy
- * to HD on machines that can't decode the source at twice realtime. Exports
- * are untouched: they keep reading the original file, so output quality never
- * drops.
- */
+/** Preview proxies for oversized videos: a source above Full HD is re-encoded
+ * once, in the background, to a <=1080p stand-in every preview path decodes. */
 
-/**
- * Which build of the transcoder made a proxy. Stored beside every proxy, and
- * bumped whenever a change here would produce a different file — a stored
- * proxy is otherwise reused for the life of the browser profile, so a fix to
- * the worker never reaches the videos that already have one.
- */
+/** Which build of the transcoder made a proxy. Bumped whenever a change here
+ * would produce a different file; a stored proxy is reused for the profile. */
 export const PROXY_BUILD = 2;
 
 /** Sources at or under this many pixels preview fine as-is. */
@@ -35,30 +20,20 @@ export interface ProxyJob {
 	cancel(): void;
 }
 
-/**
- * What a caller can be told while a transcode runs. All optional: the job
- * resolves to the same file either way, and a caller with nowhere to show
- * progress can ignore every one of them.
- */
+/** Optional progress callbacks; the job resolves to the same file either way. */
 export interface ProxyJobHandlers {
-	/** 0–1. */
+	/** 0 to 1. */
 	onProgress?: (progress: number) => void;
-	/**
-	 * The size the proxy will be, known once the worker has benchmarked the
-	 * source and before the encode starts — so the wait can say what it is
-	 * waiting for rather than only how far along it is.
-	 */
+	/** The proxy's size, known after the benchmark and before the encode starts. */
 	onSized?: (width: number, height: number) => void;
 	/** Why the transcode failed, for a message that says more than "failed". */
 	onFailed?: (reason: string) => void;
 }
 
-// ── Worker plumbing ──────────────────────────────────────────────────────────
-
 let worker: Worker | null = null;
 let workerUnavailable = false;
 
-/** Jobs waiting on the worker, keyed by id — resolved if the worker dies. */
+/** Jobs waiting on the worker, keyed by id; resolved if the worker dies. */
 const pending = new Map<number, (file: File | null) => void>();
 
 function getWorker(): Worker | null {
@@ -73,8 +48,7 @@ function getWorker(): Worker | null {
 			type: "module",
 		});
 		spawned.onerror = (event) => {
-			// A worker that failed to load can't answer anything asked of it —
-			// without this, every queued job would sit at 0% forever.
+			// A worker that failed to load can't answer anything; without this every job sits at 0%.
 			workerUnavailable = true;
 			worker = null;
 			console.error("[proxy] worker failed to load", spawned, event.message);
@@ -89,9 +63,7 @@ function getWorker(): Worker | null {
 	}
 }
 
-// One transcode at a time: concurrent jobs would thrash the very machine this
-// exists to help, and the queue is invisible — each source previews from its
-// original until its own proxy lands.
+// One transcode at a time: concurrent jobs would thrash the machine this helps.
 let chain: Promise<void> = Promise.resolve();
 let nextJobId = 1;
 
@@ -103,8 +75,7 @@ export function startProxyJob(
 	let canceled = false;
 
 	const promise = new Promise<File | null>((resolve) => {
-		// Resolved directly if the worker dies before this job's slot opens; the
-		// running slot replaces it with a settle that also releases the chain.
+		// Resolved directly if the worker dies before this job's slot opens.
 		pending.set(id, resolve);
 		chain = chain.then(
 			() =>
@@ -114,8 +85,7 @@ export function startProxyJob(
 						resolve(result);
 						release();
 					};
-					// While this job runs, a worker death must release the chain slot
-					// too — the creation-time entry could only resolve the promise.
+					// While this job runs, a worker death must release the chain slot too.
 					pending.set(id, settle);
 					if (canceled) {
 						settle(null);
@@ -141,16 +111,14 @@ export function startProxyJob(
 						if (msg.type === "done") {
 							settle(new File([msg.blob], file.name, { type: "video/mp4" }));
 						} else {
-							// The worker logs the underlying error; this is what ties it
-							// back to the file the user is looking at.
+							// The worker logs the underlying error; this ties it to the user's file.
 							console.warn(`[proxy] "${file.name}": ${msg.reason}`);
 							handlers.onFailed?.(msg.reason);
 							settle(null);
 						}
 					};
 					target_.addEventListener("message", onMessage);
-					// The worker sizes the proxy itself: it has the track, and the
-					// size depends on how fast the machine decodes it.
+					// The worker sizes the proxy itself: it has the track and the decode speed.
 					target_.postMessage({
 						type: "convert",
 						id,
@@ -164,8 +132,7 @@ export function startProxyJob(
 		promise,
 		cancel() {
 			canceled = true;
-			// No-op for a job still queued (the slot-open check resolves it) and for
-			// one already finished; the worker ignores unknown ids.
+			// No-op for a queued or finished job; the worker ignores unknown ids.
 			getWorker()?.postMessage({
 				type: "cancel",
 				id,

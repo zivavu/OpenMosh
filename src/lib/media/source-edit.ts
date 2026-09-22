@@ -1,11 +1,4 @@
-/**
- * Edits that belong to a piece of media itself rather than to any one place it
- * is used. A source edited here is edited everywhere it is drawn — the point
- * being that "this clip has a green screen behind it" is a fact about the file,
- * not about the layer that happens to show it.
- */
-
-/** Knocks a flat background colour out of a source. */
+/** Edits that belong to the media itself, applied everywhere it is drawn. */
 export interface ChromaKey {
 	enabled: boolean;
 	/** The colour to key out, 0..1 per channel. */
@@ -14,12 +7,8 @@ export interface ChromaKey {
 	threshold: number;
 	/** Width of the soft band above the threshold, 0..1. 0 gives a hard edge. */
 	smoothing: number;
-	/**
-	 * How far a pixel's brightness may differ from the key colour's and still be
-	 * cut, 0..1. 1 ignores brightness entirely, which is what the key did before
-	 * this existed — and why keying a grey backdrop also took every white and
-	 * black in the frame: on chroma alone every neutral is the same colour.
-	 */
+	/** How far a pixel's brightness may differ from the key's and still be cut, 0..1.
+	 * 1 ignores brightness. */
 	lumaRange: number;
 }
 
@@ -37,13 +26,7 @@ function smoothstep(lo: number, hi: number, x: number): number {
 	return t * t * (3 - 2 * t);
 }
 
-/**
- * How much of a pixel the key leaves, 1 = keep. The same rule as keyCoverage()
- * in the placement shader — two copies of one test, so keep them in step. Each
- * axis is softened in its own units and a pixel outside on either is kept;
- * softening once on a combined distance let the smoothing band swallow the
- * brightness range at low thresholds.
- */
+/** How much of a pixel the key leaves, 1 = keep. Same rule as the placement shader. */
 export function keyCoverage(
 	r: number,
 	g: number,
@@ -72,12 +55,8 @@ export interface CropRect {
 
 export const FULL_CROP: CropRect = { x: 0, y: 0, w: 1, h: 1 };
 
-/**
- * Longest edge of a stored erase mask, in pixels. The mask rides along in the
- * saved JSON as a data URL, so it is kept small on purpose: an eraser is for
- * taking out a lamp post, not for cutting hair, and a full-resolution PNG per
- * source would dwarf everything else in the save.
- */
+/** Longest edge of a stored erase mask, in pixels. Kept small: the mask rides in
+ * the saved JSON as a data URL. */
 export const MASK_MAX = 512;
 
 /** A stretch of a source's own time, seconds from its start. */
@@ -93,22 +72,14 @@ export const SPAN_MIN = 0.1;
 export const SPEED_MIN = 0.25;
 export const SPEED_MAX = 4;
 
-/**
- * One keyed value, stamped in seconds into the *source's own* media time —
- * not the timeline's. An edit is a fact about the file, so a key set 2.4s into
- * a clip lands at that same instant everywhere the clip is used: on a layer
- * whose clip starts partway in, on two lanes at once.
- */
+/** One keyed value, stamped in seconds into the source's own media time. */
 export interface Keyframe<T> {
 	t: number;
 	v: T;
 }
 
-/**
- * Where the erase mask sits at a given moment, relative to how it was painted.
- * `x`/`y` are in source-space units (1 = the whole frame), `scale` is about the
- * mask's own centre.
- */
+/** Where the erase mask sits at a given moment. `x`/`y` are source-space units
+ * (1 = the whole frame), `scale` is about its centre. */
 export interface MaskTransform {
 	x: number;
 	y: number;
@@ -117,20 +88,8 @@ export interface MaskTransform {
 
 export const IDENTITY_MASK_TRANSFORM: MaskTransform = { x: 0, y: 0, scale: 1 };
 
-/**
- * One key on the erase track: where the shape sits, and optionally the shape
- * itself, so a mask can be repainted over the clip rather than only moved.
- *
- * The two halves interpolate differently on purpose. Position and scale blend,
- * because there is an honest in-between for them. The painted bitmap **holds**
- * — the shape set at a key stays until the next one replaces it. Blending two
- * paintings shows both at half strength, which reads as ghosting rather than as
- * motion; holding is what frame-by-frame rotoscoping does, and it is the only
- * in-between for a hand-painted shape that doesn't invent coverage nobody drew.
- *
- * `mask` absent means the key says nothing about the shape and the static
- * `SourceEdit.mask` stands; `null` means this key erases nothing.
- */
+/** One key on the erase track: where the shape sits, and optionally the shape
+ * itself. The painted bitmap holds until the next key replaces it. */
 export interface MaskKey extends MaskTransform {
 	mask?: string | null;
 }
@@ -148,45 +107,19 @@ export interface SourceEditAnim {
 /** Everything editable about a source, applied wherever it is drawn. */
 export interface SourceEdit {
 	chromaKey: ChromaKey;
-	/** What is left after cropping. Full frame by default. */
 	crop: CropRect;
-	/**
-	 * Hand-erased areas, as a PNG data URL: the red channel is coverage, so
-	 * white keeps a pixel and black takes it out. In *source* space, not crop
-	 * space, so cropping afterwards doesn't slide the erased parts around.
-	 *
-	 * Null when nothing has been erased, which is the common case and worth not
-	 * paying a texture for.
-	 */
+	/** Hand-erased areas, as a PNG data URL: the red channel is coverage, so white
+	 * keeps a pixel and black takes it out. In source space, not crop space. */
 	mask: string | null;
-	/**
-	 * Playback rate, 1 = as shot. Absent means 1. Scales how fast a clip walks
-	 * through its media; keyframes stay on media time, so they still land on
-	 * the frames they were set on.
-	 */
+	/** Playback rate, 1 = as shot. Absent means 1. Keyframes stay on media time. */
 	speed?: number;
-	/**
-	 * The stretch of the media a clip plays, in the media's own seconds. Absent
-	 * means all of it. A clip starts at the in-point and loops inside the span,
-	 * so trimming a lead-in or a tail off a shot is done once, on the file, and
-	 * every clip drawing it stops showing it. Keyframes stay on media time.
-	 */
+	/** The stretch of the media a clip plays, in the media's own seconds. Absent
+	 * means all of it. */
 	span?: SourceSpan;
-	/**
-	 * Keyed tracks, for sources whose subject moves. Absent on a still edit,
-	 * which is the common case and costs nothing to sample.
-	 */
 	anim?: SourceEditAnim;
-	/**
-	 * Where the mask sits *now*. Filled in by `sampleSourceEdit`; never stored —
-	 * a stored edit carries the track and the painted mask, not one moment of it.
-	 */
+	/** Where the mask sits now. Filled in by `sampleSourceEdit`, never stored. */
 	maskTransform?: MaskTransform;
-	/**
-	 * The shape the erase track is morphing into, and how far along it is. Both
-	 * filled in by `sampleSourceEdit` and never stored. Absent when nothing is
-	 * being morphed, which is every still edit and every moment sitting on a key.
-	 */
+	/** The shape the erase track is morphing into, and how far along. Never stored. */
 	maskNext?: string | null;
 	maskMix?: number;
 }
@@ -197,8 +130,8 @@ export const DEFAULT_CHROMA_KEY: ChromaKey = {
 	color: { r: 0, g: 1, b: 0 },
 	threshold: 0.3,
 	smoothing: 0.1,
-	// Wide enough for the shadows and hot spots on an unevenly lit backdrop,
-	// tight enough that a mid-grey key leaves white and black alone.
+	// Wide enough for shadows on an unevenly lit backdrop, tight enough to leave
+	// white and black alone.
 	lumaRange: 0.35,
 };
 
@@ -219,7 +152,6 @@ export function createSourceEdit(): SourceEdit {
 	};
 }
 
-/** True when the rectangle keeps the whole frame, so nothing has to be done. */
 export function isFullCrop(crop: CropRect | undefined): boolean {
 	if (!crop) return true;
 	return (
@@ -230,13 +162,8 @@ export function isFullCrop(crop: CropRect | undefined): boolean {
 	);
 }
 
-/**
- * True when the edit is the untouched default, so it needn't be stored.
- *
- * Compared in full rather than just on `enabled`: switching the key off while
- * tuning it would otherwise throw the tuning away, and turning it back on would
- * hand back a green screen at the default threshold.
- */
+/** True when the edit is the untouched default, so it needn't be stored. Compared
+ * in full, so switching the key off while tuning it doesn't throw the tuning away. */
 export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
 	if (!edit) return true;
 	const k = edit.chromaKey;
@@ -257,22 +184,12 @@ export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
 	);
 }
 
-/** The edit's playback rate, 1 when it has none. */
 export function sourceSpeed(edit: SourceEdit | undefined): number {
 	return edit?.speed ?? 1;
 }
 
-/**
- * Seconds into the media after `elapsed` seconds of a clip, from its in-point.
- * Every clip-time-to-media-time conversion goes through here so the speed is
- * applied in exactly one way: the in-point is a place in the media and stays
- * put, and only the walk from it runs at the edit's rate.
- *
- * With a span on the edit the walk stays inside it: an in-point before the
- * span starts at the span instead, and a clip that outruns it wraps back to
- * the span's start rather than to the file's. Without one the time runs on
- * unbounded, and the frame sampler wraps it to the file's length.
- */
+/** Seconds into the media after `elapsed` seconds of a clip, from its in-point.
+ * Speed applies to the walk, not the in-point itself. */
 export function sourceTimeAt(
 	edit: SourceEdit | undefined,
 	elapsed: number,
@@ -289,7 +206,6 @@ export function sourceTimeAt(
 	);
 }
 
-/** The span an edit plays, or the whole file when it has none. */
 export function sourceSpan(
 	edit: SourceEdit | undefined,
 	duration: number,
@@ -306,8 +222,8 @@ export function sourcePlayLength(
 	return Math.max(0, s.end - s.start) / sourceSpeed(edit);
 }
 
-/** A span forced sane: in order, at least SPAN_MIN long, inside the file when
- * its length is known. Null when nothing is cut off, so it needn't be stored. */
+/** A span forced sane: in order, at least SPAN_MIN long, inside the file when its
+ * length is known. Null when nothing is cut off. */
 export function clampSpan(
 	span: SourceSpan,
 	duration = Infinity,
@@ -319,7 +235,6 @@ export function clampSpan(
 	return { start, end };
 }
 
-/** True when any track carries a key, so the edit varies over the clip. */
 export function hasAnimation(edit: SourceEdit | undefined): boolean {
 	const a = edit?.anim;
 	if (!a) return false;
@@ -348,8 +263,7 @@ export function normalizeSourceEdit(raw: unknown): SourceEdit {
 			? { speed: Math.min(SPEED_MAX, Math.max(SPEED_MIN, e.speed)) }
 			: {}),
 		...normalizeSpan(e.span),
-		// Only a data URL is any use to the loader; anything else is dropped rather
-		// than handed to an <img> that will fail asynchronously.
+		// Only a data URL is any use to the loader; anything else would fail asynchronously.
 		mask:
 			typeof e.mask === "string" && e.mask.startsWith("data:") ? e.mask : null,
 	};
@@ -388,8 +302,7 @@ export function clampCrop(c: CropRect): CropRect {
 	return {
 		x,
 		y,
-		// Clamped against the origin, so a rectangle can never reach past the frame
-		// and leave the placement sampling outside the texture.
+		// Clamped against the origin so the rectangle can't reach past the frame.
 		w: Math.min(Math.max(c.w, 0.01), 1 - x),
 		h: Math.min(Math.max(c.h, 0.01), 1 - y),
 	};
@@ -406,31 +319,20 @@ export function normalizeSourceEdits(raw: unknown): Record<string, SourceEdit> {
 	return out;
 }
 
-// ── Keyframes ──────────────────────────────────────────────────────────────
-// Linear between neighbouring keys, held flat before the first and after the
-// last. No easing: the tracks here follow something in the footage, and a value
-// that eases away from where the subject actually is has to be corrected with
-// another key.
+// Linear between neighbouring keys, held flat outside the first and last. No
+// easing: these tracks follow footage.
 
 /** Two keys are the same key within this many seconds. */
 export const KEY_EPSILON = 1e-3;
 
-/**
- * How close the playhead has to be to count as sitting *on* a key, for the
- * editing UI. Wider than `KEY_EPSILON` because that one asks whether two keys
- * are the same key, and this one asks whether a person aiming at a diamond a
- * few pixels wide hit it.
- */
+/** How close the playhead must be to count as sitting on a key, for the editing UI. */
 export const KEY_NEAR = 0.02;
 
 function lerp(a: number, b: number, k: number): number {
 	return a + (b - a) * k;
 }
 
-/**
- * The track's value at `time`, or null when the track is empty. Keys are
- * assumed sorted — `putKeyframe` is the only way one gets in.
- */
+/** The track's value at `time`, or null when empty. Keys are assumed sorted. */
 export function sampleTrack<T>(
 	keys: Keyframe<T>[] | undefined,
 	time: number,
@@ -440,8 +342,7 @@ export function sampleTrack<T>(
 	if (keys.length === 1 || time <= keys[0].t) return keys[0].v;
 	const last = keys[keys.length - 1];
 	if (time >= last.t) return last.v;
-	// Linear scan: a hand-placed track is a handful of keys, and a binary search
-	// would cost more to read than it saves.
+	// Linear scan: a hand-placed track is a handful of keys.
 	for (let i = 1; i < keys.length; i++) {
 		const b = keys[i];
 		if (b.t < time) continue;
@@ -479,22 +380,14 @@ function blendMaskKey(a: MaskKey, b: MaskKey, k: number): MaskKey {
 		x: lerp(a.x, b.x, k),
 		y: lerp(a.y, b.y, k),
 		scale: lerp(a.scale, b.scale, k),
-		// The shape `a` set stands as the one being left; `sampleMaskTrack` carries
-		// the one being arrived at alongside it, so the two can be morphed.
+		// The shape `a` set is the one being left; `sampleMaskTrack` carries the next.
 		mask: a.mask,
 	};
 }
 
-/**
- * The erase track at `time`: where the shape sits, plus the two painted shapes
- * either side of the playhead and how far between them it is.
- *
- * Two shapes rather than one because a painted mask has no midpoint of its own
- * — the boundary is interpolated downstream, in the distance fields the
- * renderer builds, and that needs both ends.
- */
+/** The erase track at `time`: where the shape sits, plus the two painted shapes
+ * either side of the playhead. A painted mask has no midpoint, so both ends. */
 export interface SampledMask extends MaskTransform {
-	/** The shape being left. */
 	mask?: string | null;
 	/** The shape being arrived at; absent when there is nothing to morph into. */
 	next?: string | null;
@@ -526,40 +419,22 @@ export function sampleMaskTrack(
 	return at(lastIndex);
 }
 
-/**
- * Where in the media `t` really lands, for a source `duration` seconds long.
- *
- * A clip longer than its media loops: the sampler wraps the frame it hands back
- * into [0, duration), so the edit has to be sampled at the same instant or the
- * two come apart. Unwrapped, a keyed edit runs off the end of its track on the
- * first pass and holds its last key for every loop after it — the picture back
- * at the start with the erase mask still parked where it finished.
- *
- * Duration 0 covers images and media not probed yet: they have no instants to
- * wrap into, so the time only has to be non-negative.
- */
+/** Where in the media `t` really lands, for a source `duration` seconds long. A
+ * clip longer than its media loops, so the edit is sampled at the wrapped instant. */
 export function wrapSourceTime(t: number, duration: number): number {
 	if (!(duration > 0)) return Math.max(0, t);
 	return ((t % duration) + duration) % duration;
 }
 
-/**
- * The edit as it stands at `time` seconds into the source: every track sampled
- * down to a plain value, `anim` dropped. Everything downstream takes one of
- * these and needn't know a track was ever involved.
- *
- * Returns the edit itself when nothing is keyed, so a still edit allocates
- * nothing on the way to the shader.
- */
+/** The edit as it stands at `time` seconds into the source: every track sampled
+ * down to a plain value, `anim` dropped. Returns the edit itself when nothing is keyed. */
 export function sampleSourceEdit(edit: SourceEdit, time: number): SourceEdit {
 	const anim = edit.anim;
 	if (!anim || !hasAnimation(edit)) return edit;
 	const crop = sampleTrack(anim.crop, time, blendCrop);
 	const key = sampleTrack(anim.key, time, blendKey);
 	const maskKey = sampleMaskTrack(anim.mask, time);
-	// A key that carries a shape replaces the static one; `null` is a key that
-	// erases nothing, so it has to win over the static mask as well — only an
-	// absent `mask` leaves the stored shape standing.
+	// A key carrying a shape replaces the static one; `null` erases nothing.
 	const held = (v: string | null | undefined) =>
 		v !== undefined ? v : edit.mask;
 	const mask = maskKey ? held(maskKey.mask) : edit.mask;
@@ -571,8 +446,8 @@ export function sampleSourceEdit(edit: SourceEdit, time: number): SourceEdit {
 			: edit.chromaKey,
 		crop: crop ?? edit.crop,
 		mask,
-		// Only when there is a second shape to reach: with one shape the renderer
-		// takes the plain path and the painted softness survives untouched.
+		// Only when there is a second shape to reach; with one the renderer takes the
+		// plain path.
 		maskNext: next !== mask ? next : undefined,
 		maskMix: next !== mask ? maskKey!.mix : undefined,
 		maskTransform: maskKey
@@ -581,12 +456,8 @@ export function sampleSourceEdit(edit: SourceEdit, time: number): SourceEdit {
 	};
 }
 
-/**
- * The widest and tallest the crop ever gets, as a share of the source. What the
- * renderer sizes its crop buffer from: an animated crop changes shape every
- * frame, and a buffer re-allocated to match would mean a texture and a
- * framebuffer thrown away per frame.
- */
+/** The widest and tallest the crop ever gets, as a share of the source. The
+ * renderer sizes its crop buffer from this. */
 export function cropExtent(edit: SourceEdit): { w: number; h: number } {
 	const keys = edit.anim?.crop;
 	if (!keys || keys.length === 0) return { w: edit.crop.w, h: edit.crop.h };
@@ -599,10 +470,7 @@ export function cropExtent(edit: SourceEdit): { w: number; h: number } {
 	return { w: Math.min(w, 1), h: Math.min(h, 1) };
 }
 
-/**
- * `keys` with `v` set at `time`, replacing the key already there. Returns a new
- * array, sorted, so the caller can hand it straight to an undo snapshot.
- */
+/** `keys` with `v` set at `time`, replacing the key there. Returns a new sorted array. */
 export function putKeyframe<T>(
 	keys: Keyframe<T>[] | undefined,
 	time: number,
@@ -615,7 +483,6 @@ export function putKeyframe<T>(
 	return out;
 }
 
-/** `keys` without the one at `time`, if there is one. */
 export function removeKeyframe<T>(
 	keys: Keyframe<T>[] | undefined,
 	time: number,
@@ -623,7 +490,6 @@ export function removeKeyframe<T>(
 	return (keys ?? []).filter((k) => Math.abs(k.t - time) > KEY_EPSILON);
 }
 
-/** The key at `time`, or null. */
 export function keyframeAt<T>(
 	keys: Keyframe<T>[] | undefined,
 	time: number,
@@ -678,8 +544,7 @@ function normalizeAnimatedKey(raw: unknown): AnimatedKey {
 function normalizeMaskKey(raw: unknown): MaskKey {
 	const m = (raw ?? {}) as Partial<MaskKey>;
 	return {
-		// Only a data URL is any use to the loader; `null` survives as its own
-		// meaning, so a key can say "nothing erased here".
+		// Only a data URL is any use to the loader; `null` means "nothing erased here".
 		...(typeof m.mask === "string" && m.mask.startsWith("data:")
 			? { mask: m.mask }
 			: m.mask === null
@@ -687,8 +552,8 @@ function normalizeMaskKey(raw: unknown): MaskKey {
 				: {}),
 		x: num(m.x, 0),
 		y: num(m.y, 0),
-		// A mask scaled to nothing erases nothing, which is indistinguishable from
-		// a broken save; a floor keeps it recoverable.
+		// A mask scaled to nothing is indistinguishable from a broken save; a floor
+		// keeps it recoverable.
 		scale: Math.max(num(m.scale, 1), 0.01),
 	};
 }

@@ -4,27 +4,12 @@ import { openVideoFrameSource } from "../video/frame-source";
 
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
 const MAX_DECODE_LAG = 1;
-/** Matches the editor's VIDEO_END_EPSILON: a position this close to the span
- * end counts as being at it. */
+/** Matches the editor's VIDEO_END_EPSILON: this close to the span end counts as at it. */
 const SPAN_END_EPSILON = 0.1;
 
-/**
- * WebCodecs-based video preview playback (via mediabunny), replacing the
- * <video> element as the preview frame source. The element stalls at high
- * playbackRate (decode underrun, unreliable ended/timeupdate); here the clock
- * is plain arithmetic that cannot stall.
- *
- * The decode pump runs flat-out into a small ready-queue — no timer-based
- * pacing, which cannot keep up above ~2× (frames due every few ms vs. 4-16ms
- * timer jitter). Frame selection happens synchronously in `takeFrame` on the
- * render loop: newest due sample wins, older due samples are discarded.
- *
- * Eligibility mirrors the export path: no rotation metadata and a decodable
- * codec, otherwise `create` returns null and the caller falls back to the
- * <video> element.
- */
+/** WebCodecs-based video preview playback (via mediabunny), replacing the <video>
+ * element, which stalls at high playbackRate. */
 export class VideoPreviewPlayer {
-	// Reactive playback state, read by the editor UI
 	currentTime = $state(0);
 	playing = $state(false);
 
@@ -32,7 +17,7 @@ export class VideoPreviewPlayer {
 	/** The media's own size, which is what an export writes. */
 	readonly width: number;
 	readonly height: number;
-	/** Size the frames arrive at — smaller than the media for a large source. */
+	/** Size the frames arrive at, smaller than the media for a large source. */
 	readonly frameWidth: number;
 	readonly frameHeight: number;
 
@@ -43,20 +28,16 @@ export class VideoPreviewPlayer {
 	#spanStart = 0;
 	#spanEnd: number;
 	#speed = 1;
-	/** Set while the position sits past the end of the span. The span is an
-	 * export selection, not a fence: a run started beyond it plays out the video
-	 * rather than being pulled back to the span. */
+	/** Set while the position sits past the span end; the span is a selection, not a fence. */
 	#pastSpan = false;
 	#muted = false;
 	#disposed = false;
 
-	// Wall-clock → media-time mapping. While playing, media time is
-	// baseMedia + elapsed wall time × speed; while paused it's just baseMedia.
+	// Wall-clock to media-time mapping: baseMedia + elapsed wall time × speed while playing.
 	#baseMedia = 0;
 	#baseWall = 0;
 
-	// Video-source audio, decoded once into a buffer and played through the
-	// editor's Web Audio graph so volume links / analysis keep working.
+	// Video-source audio, decoded once and played through the editor's Web Audio graph.
 	#audioBuffer: AudioBuffer | null = null;
 	#audioCtx: AudioContext | null = null;
 	#audioDest: AudioNode | null = null;
@@ -82,12 +63,7 @@ export class VideoPreviewPlayer {
 	/** Returns null when the file can't drive the WebCodecs preview path. */
 	static async create(
 		file: File,
-		/**
-		 * The original media's size and duration, when `file` is a preview proxy:
-		 * frames arrive at the proxy's smaller size, but the media's own size is
-		 * what the UI reports and what the output defaults to, and the clock is
-		 * anchored to the original's duration.
-		 */
+		/** The original media's size and duration when `file` is a preview proxy. */
 		media?: { width: number; height: number; duration: number },
 	): Promise<VideoPreviewPlayer | null> {
 		const opened = await openVideoFrameSource(file);
@@ -102,10 +78,7 @@ export class VideoPreviewPlayer {
 			media?.duration || opened.duration,
 		);
 
-		// Decode the audio track in the background; playback starts silent and
-		// sound joins in once ready (usually well under a second). Its own input:
-		// the video is decoded elsewhere (a worker, usually), and this one is
-		// finished with the moment the buffer exists.
+		// Decode the audio track in the background; playback starts silent and sound joins in.
 		void (async () => {
 			const audio = await openAudioTrack(file);
 			if (!audio) return;
@@ -125,10 +98,7 @@ export class VideoPreviewPlayer {
 		return player;
 	}
 
-	/**
-	 * Route this player's audio into an existing Web Audio graph. Safe to call
-	 * before the audio buffer has finished decoding.
-	 */
+	/** Route this player's audio into an existing Web Audio graph; safe before decode. */
 	attachAudioOutput(context: AudioContext, destination: AudioNode) {
 		if (this.#audioCtx && this.#audioCtx !== context) {
 			this.#audioCtx.removeEventListener("statechange", this.#onContextState);
@@ -139,11 +109,8 @@ export class VideoPreviewPlayer {
 		if (this.playing) this.#startAudio();
 	}
 
-	// resume() is async, so the context is usually still suspended when play()
-	// starts audio synchronously right after it. The media clock is wall-clock
-	// based and keeps running regardless, so a buffer source scheduled while
-	// suspended resumes at a stale offset, behind the video. Restart from the
-	// current media time once the context is actually running.
+	// resume() is async, so the context is usually still suspended when play() starts
+	// audio; a source scheduled then resumes at a stale offset, behind video.
 	#onContextState = () => {
 		if (this.#audioCtx?.state === "running" && this.playing) this.#startAudio();
 	};
@@ -191,18 +158,14 @@ export class VideoPreviewPlayer {
 		else if (this.playing) this.#startAudio();
 	}
 
-	/**
-	 * Advance the clock and return a newly due frame, or null to keep the
-	 * previous upload. Called once per rendered frame; the caller must close
-	 * the returned VideoFrame after uploading it.
-	 */
+	/** Advance the clock and return a newly due frame, or null to keep the previous
+	 * upload. Called once per rendered frame. */
 	takeFrame(): VideoFrame | null {
 		if (this.#disposed) return null;
 		this.#tickClock();
 		const t = this.#mediaTimeNow();
 
-		// Decoder can't keep up and has fallen far behind — jump to a keyframe
-		// near the clock instead of grinding through every skipped frame.
+		// Decoder fell far behind: jump to a keyframe near the clock instead of grinding.
 		if (
 			this.playing &&
 			!this.#queue.done &&
@@ -283,8 +246,7 @@ export class VideoPreviewPlayer {
 		) {
 			return;
 		}
-		// Covers entry points that don't resume the context themselves, e.g. the
-		// space-bar play shortcut; a no-op when it is already running.
+		// Covers entry points that don't resume the context themselves, e.g. space-bar play.
 		if (this.#audioCtx.state === "suspended") {
 			void this.#audioCtx.resume().catch(() => {});
 		}
@@ -303,7 +265,7 @@ export class VideoPreviewPlayer {
 		try {
 			this.#audioSrc.stop();
 		} catch {
-			// Not started yet — fine
+			// Not started yet, fine
 		}
 		this.#audioSrc.disconnect();
 		this.#audioSrc = null;
@@ -318,14 +280,8 @@ async function decodeAudioTrackToBuffer(
 	const duration = await track.computeDuration();
 	if (!Number.isFinite(duration) || duration <= 0) return null;
 
-	// The output buffer's rate/channels come from the first decoded chunk, not
-	// from the container metadata: mediabunny reads MP4/AAC's rate from the base
-	// samplingFrequencyIndex in the AudioSpecificConfig, which for HE-AAC is half
-	// the decoder's real output rate (SBR) — and channelConfiguration reads 1 for
-	// HE-AAC v2 despite stereo output (PS). Sizing from those values wrote every
-	// chunk at half its true offset into a half-rate buffer, so video-source
-	// audio played back slowed down and overlapping. Opus (WebM) is always 48 kHz
-	// and so never tripped this.
+	// Rate/channels come from the first decoded chunk, not container metadata: mediabunny
+	// reads HE-AAC's rate as half the real output (SBR) and 1 channel (PS).
 	let out: AudioBuffer | null = null;
 	let sampleRate = 0;
 	let channels = 0;

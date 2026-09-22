@@ -1,11 +1,9 @@
 import type { TrackingFrame, TrackingParams } from "./types";
 
-/**
- * Draw the tracking HUD (FLIR-style corner brackets + minimal telemetry) onto
- * a 2D canvas with a transparent background. The canvas is later uploaded as
- * a texture and alpha-composited over the frame. Coordinates are top-down,
- * matching the normalized centers produced by the tracker.
- */
+/** Draw the tracking HUD (FLIR-style corner brackets + minimal telemetry) onto
+ * a 2D canvas with a transparent background, later uploaded as a texture and
+ * alpha-composited over the frame. Coordinates are top-down, matching the
+ * normalized centers the tracker produces. */
 export function drawTrackingToCanvas(
 	canvas: HTMLCanvasElement,
 	width: number,
@@ -57,7 +55,6 @@ export function drawTrackingToCanvas(
 		ctx.setLineDash([]);
 
 		if (box.primary) {
-			// Center designator dot.
 			ctx.beginPath();
 			ctx.arc(box.cx * width, box.cy * height, lw * 1.3, 0, Math.PI * 2);
 			ctx.fill();
@@ -94,13 +91,11 @@ export function drawTrackingToCanvas(
 	ctx.globalAlpha = 1;
 }
 
-/**
- * Cheap signature of everything drawTrackingToCanvas would put on screen,
+/** Cheap signature of everything drawTrackingToCanvas would put on screen,
  * quantized to 0.1 px. When consecutive frames produce the same signature the
- * caller can skip the full-res canvas redraw and GPU texture upload entirely
- * (e.g. locked boxes that have settled on a still image). Must mirror the
- * drawing logic above: anything that changes the drawn pixels has to feed in.
- */
+ * caller can skip the canvas redraw and GPU upload (e.g. locked boxes settled
+ * on a still image). Must mirror the drawing logic above: anything that changes
+ * the drawn pixels has to feed in. */
 export function trackingFrameSignature(
 	frame: TrackingFrame,
 	params: TrackingParams,
@@ -151,19 +146,15 @@ function drawBrackets(
 	const ax = w * arm;
 	const ay = h * arm;
 	ctx.beginPath();
-	// top-left
 	ctx.moveTo(x, y + ay);
 	ctx.lineTo(x, y);
 	ctx.lineTo(x + ax, y);
-	// top-right
 	ctx.moveTo(x + w - ax, y);
 	ctx.lineTo(x + w, y);
 	ctx.lineTo(x + w, y + ay);
-	// bottom-right
 	ctx.moveTo(x + w, y + h - ay);
 	ctx.lineTo(x + w, y + h);
 	ctx.lineTo(x + w - ax, y + h);
-	// bottom-left
 	ctx.moveTo(x + ax, y + h);
 	ctx.lineTo(x, y + h);
 	ctx.lineTo(x, y + h - ay);

@@ -1,6 +1,6 @@
 import { readJson, writeJson } from "../storage";
 
-/** Generic per-track-id localStorage store, keyed by a single storage key holding a Record<trackId, T>. */
+/** Per-track-id localStorage store: one storage key holding a Record<trackId, T>. */
 export function createTrackStore<T>(
 	storageKey: string,
 	/** Transform a raw stored entry into T (e.g. for backward-compat with an older format). */
@@ -12,10 +12,8 @@ export function createTrackStore<T>(
 	}
 
 	/**
-	 * Write one song's entry, evicting older ones if the quota is hit. Without
-	 * this a full blob threw inside writeJson, which swallows it, and the store
-	 * silently stopped saving. Re-inserting the current key makes the order an LRU.
-	 * Returns false only when even one entry alone doesn't fit.
+	 * Write one song's entry, evicting older ones if the quota is hit: a full blob
+	 * otherwise threw inside writeJson, which swallows it, silently stopping saves.
 	 */
 	function save(trackId: string, data: T): boolean {
 		const all = loadAll();
@@ -43,10 +41,9 @@ export function createTrackStore<T>(
 }
 
 /**
- * Every per-song localStorage key, so a song deleted from the storage manager
- * takes its span, segments and render settings with it. Render settings are
- * keyed by the mode-prefixed timeline key rather than the bare track id; the
- * legacy timeline blob is keyed both ways, from before the prefix existed.
+ * Every per-song localStorage key, so a song deleted from the storage manager takes
+ * its span, segments and render settings with it. Render settings use the mode-prefixed
+ * timeline key, not the bare track id; the legacy blob uses both.
  */
 const TRACK_KEYED_STORES = [
 	"openmosh-single-span",

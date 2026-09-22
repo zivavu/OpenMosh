@@ -3,7 +3,7 @@
 	import { stackTitle, type LayerRef } from "../../timeline/layer-order";
 
 	interface Props {
-		/** Every row of the stack, front first — for naming this one's neighbours. */
+		/** Every row of the stack, front first, for naming this one's neighbours. */
 		layerOrder: LayerRef[];
 		laneId: string;
 		/** For the accessible name, and for the tooltip's "drag to restack". */
@@ -21,11 +21,8 @@
 </script>
 
 <!--
-	The reorder handle every stacking lane carries — media, text and fx rows all
-	wear this one, at the head of the gutter, so "grab here to restack" is
-	learned once. Where a row sits in the stack is already told by where it sits
-	in the column, so the handle only has to say "drag me": the neighbours it
-	would land between are in its tooltip.
+	The reorder handle every stacking lane carries, so "grab here to restack" is
+	learned once. The column shows where a row sits; the tooltip names its neighbours.
 -->
 <button
 	class="lane-grip"
@@ -63,7 +60,7 @@
 		color: var(--live);
 	}
 
-	/* The lifted look is the row's to declare — it owns the drag state — so the
+	/* The lifted look is the row's to declare (it owns the drag state), so the
 	   ancestor half of this selector is the parent's, not ours. */
 	:global(.lifted) .lane-grip {
 		cursor: grabbing;

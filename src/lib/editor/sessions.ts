@@ -1,18 +1,4 @@
-/**
- * Resumable edits for single and slideshow mode.
- *
- * Keyed the way sequence mode keys its media pool: by the song when there is
- * one, falling back to the media itself when there isn't. That matters because
- * the rest of a mode's per-song work — the text timeline, lanes, BPM, the
- * playback span — is already stored against the track id. Keying the media any
- * other way would split one edit across two identities, and reopening a song
- * would restore its text over somebody else's images.
- *
- * Both the media and the editor state live in IndexedDB, but the list shown on
- * the upload screen is mirrored into localStorage — IndexedDB can only answer
- * asynchronously, and the section has to be there on the first paint or the
- * layout jumps when it arrives.
- */
+/** Resumable edits for single and slideshow mode, keyed by the song when there is one. */
 
 import { getAllTracks, getTrack } from "../audio/track-library";
 import { createListCache } from "../storage";
@@ -30,9 +16,7 @@ import {
 import type { EffectInstance } from "../effects/types";
 import type { TextTimeline } from "../text/types";
 
-/** What single mode stores; sequence keeps its own timeline entry instead.
- * Sessions from when single mode had media layers carry a `media` block too;
- * it is ignored — the layers live in the editor now. */
+/** What single mode stores; older sessions may carry a `media` block, now ignored. */
 export interface SingleSessionState {
 	effects: EffectInstance[];
 	text: TextTimeline | null;
@@ -46,20 +30,7 @@ export interface SavedSession {
 	updatedAt: number;
 }
 
-/**
- * What identifies a resumable edit.
- *
- * The song, whenever there is one: that's what the text timeline and lanes
- * are already stored under.
- *
- * Slideshow has no fallback. The upload screen requires a track before it will
- * start one, so a song-less slideshow can't be created — and keying it by its
- * media instead meant every image added or removed forked a whole new session,
- * leaving a trail of them behind one editing pass.
- *
- * Single mode does fall back to its one file, because it genuinely works with
- * no audio at all, and one file is a stable identity in a way a set isn't.
- */
+/** What identifies a resumable edit: the song whenever there is one. */
 export function sessionKey(
 	mode: SessionMode,
 	files: File[],
@@ -76,12 +47,7 @@ function defaultLabel(mode: SessionMode, files: File[]): string {
 	return `${files.length} image${files.length === 1 ? "" : "s"}`;
 }
 
-/**
- * Store the media and the editor state under this session's key.
- *
- * Media is written every time rather than diffed: ids are content-derived, so
- * re-putting a file that's already there overwrites it with itself.
- */
+/** Store the media and editor state under this session's key. */
 export async function saveSession(
 	mode: SessionMode,
 	files: File[],
@@ -92,8 +58,7 @@ export async function saveSession(
 	if (!key) return;
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
 	await putSequenceMedia(entries);
-	// A song-keyed session is named after the song, matching how the sequence
-	// list reads; the media only names it when there's no song to name it after.
+	// A song-keyed session is named after the song, matching the sequence list.
 	let label = defaultLabel(mode, files);
 	if (trackId) {
 		const track = await getTrack(trackId).catch(() => null);
@@ -140,8 +105,7 @@ export async function openSession(key: string): Promise<OpenedSession | null> {
 	}
 	if (files.length === 0) return null;
 
-	// The song comes back with the media: without it the editor would restore a
-	// text timeline and lanes keyed to a track that isn't loaded.
+	// The song comes back with the media, or lanes restore keyed to an unloaded track.
 	let trackFile: File | null = null;
 	if (session.trackId) {
 		const track = await getTrack(session.trackId).catch(() => null);
@@ -168,14 +132,11 @@ export async function listSavedSessions(
 		// A transient failure shouldn't blank the section.
 		return readCachedSessions(mode);
 	}
-	// The stored label is the song's name as of the last save; a song renamed
-	// in the library since should read as it does everywhere else.
+	// The stored label is the song's name at last save; a renamed song should read as elsewhere.
 	const trackName = new Map(tracks.map((t) => [t.id, t.name]));
 	const out = sessions
 		.filter((s) => s.mode === mode)
-		// Song-less slideshow entries predate the track requirement. They're
-		// deleted on the next prune; hiding them now keeps the list from showing
-		// one near-duplicate per image that was ever added or removed.
+		// Song-less slideshow entries predate the track requirement; the next prune deletes them.
 		.filter((s) => s.mode !== "slideshow" || !!s.trackId)
 		.map((s) => ({
 			key: s.key,

@@ -104,7 +104,7 @@
 		cursor: grabbing;
 	}
 
-	/* Unzoomed the thumb fills the bar — still visible, so the row never looks
+	/* Unzoomed the thumb fills the bar: still visible, so the row never looks
 	   empty, but inert. After the state rules so nothing lights it up. */
 	.scrollbar-thumb.full,
 	.scrollbar-thumb.full:hover,

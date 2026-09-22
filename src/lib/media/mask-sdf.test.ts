@@ -62,8 +62,7 @@ describe("morphing two shapes", () => {
 		return f.data[c * 4 + 3] / 255;
 	};
 
-	// The shader's alignment: both shapes slid onto the middle they travel
-	// through, so their boundaries overlap and have something to interpolate.
+	// The shader's alignment: both shapes slid onto the middle they travel through.
 	const at = (mix: number) =>
 		erasedRun(
 			Array.from({ length: W }, (_, x) => {
@@ -83,8 +82,7 @@ describe("morphing two shapes", () => {
 	});
 
 	it("travels rather than cross-fading", () => {
-		// The whole point: one run, between the two, roughly the size of both —
-		// not two runs at half strength, which is what blending the masks gave.
+		// One run, between the two, roughly the size of both, not two runs at half strength.
 		const mid = at(0.5)!;
 		expect(mid).not.toBeNull();
 		const centre = (mid.from + mid.to) / 2;

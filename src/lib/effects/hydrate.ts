@@ -7,8 +7,7 @@ import {
 	type EffectParam,
 } from "./types";
 
-/** Lookup table, not a scan: hydration runs over every instance in every
- * restored chain. */
+/** Lookup table, not a scan: hydration runs over every restored instance. */
 const DEFINITIONS_BY_ID = new Map<string, EffectDefinition>(
 	EFFECT_DEFINITIONS.map((d) => [d.id, d]),
 );
@@ -19,11 +18,7 @@ export function getDefinition(defId: string): EffectDefinition | undefined {
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
-/**
- * Duotone's two hue sliders became color pickers. Values saved before that
- * carry hues only — rebuild the colors the old shader would have produced
- * (shadows were the hue at 30% brightness) so they still look the same.
- */
+/** Duotone's two hue sliders became color pickers; rebuild old hue-only values. */
 function migrateValues(
 	defId: string,
 	values: Record<string, number | string>,
@@ -42,15 +37,8 @@ function migrateValues(
 	return migrated;
 }
 
-/**
- * Reconcile one stored value with the param as it's defined *today*.
- *
- * A param's range can narrow and a select can lose an option between the day a
- * chain was saved and the day it's restored. Left alone the stale value still
- * reaches the shader while the control renders something else — a slider pinned
- * at its min, a select showing option zero — so the panel and the output
- * disagree with no way for the user to see why.
- */
+/** Reconcile one stored value with the param as it's defined today: a narrowed range
+ * or dropped select option would otherwise leave the panel and output disagreeing. */
 function reconcile(
 	param: EffectParam,
 	value: number | string,
@@ -79,16 +67,8 @@ function reconcile(
 	}
 }
 
-/**
- * Fill in every param a stored instance is missing, using its definition's
- * defaults, and bring the ones it does have back in line with the definition.
- *
- * Anything persisted — a session, a preset, a segment, a lane clip — was
- * written against whatever params the effect had that day. Adding one later
- * means every stored chain is short a key, and the panel reads
- * `values[param.key].toString()` straight off it. Merging defaults underneath
- * is what keeps a new param from breaking every saved edit.
- */
+/** Fill in every param a stored instance is missing, using its definition's defaults,
+ * and bring the ones it has back in line. */
 export function hydrateValues(
 	defId: string,
 	values: Record<string, number | string> | undefined,
@@ -108,11 +88,7 @@ export function hydrateValues(
 	return hydrated;
 }
 
-/**
- * Bring a stored chain back to something the editor can render: instances whose
- * definition is gone are dropped (a stale defId renders as a hole in the
- * chain), and the survivors get their missing params filled in.
- */
+/** Bring a stored chain back to something the editor can render. */
 export function hydrateEffects(saved: unknown): EffectInstance[] {
 	if (!Array.isArray(saved)) return [];
 	return saved

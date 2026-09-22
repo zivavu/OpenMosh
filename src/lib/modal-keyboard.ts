@@ -1,10 +1,6 @@
 /**
- * Whether an overlay currently owns the keyboard.
- *
- * The editors bind their shortcuts at the window, where listener order rather
- * than the DOM decides who runs first — so an overlay calling stopPropagation
- * can't reliably hold them off, and one bound in the capture phase never sees
- * it at all. They ask here instead.
+ * Whether an overlay owns the keyboard. Editors bind shortcuts at the window,
+ * where listener order decides who runs first, so they ask here instead.
  */
 let openCount = 0;
 

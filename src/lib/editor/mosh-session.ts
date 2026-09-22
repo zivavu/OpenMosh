@@ -12,24 +12,18 @@ export interface MoshSessionOptions {
 	endBurst: () => void;
 }
 
-/**
- * Two independent undo stacks over one effect chain, so the two gestures never
- * fight: ←/→ walk the moshes, Ctrl+Z/Y walk hand-edits. Rolling a mosh rebases
- * the edit history onto the new chain, so an edit undo lands on the mosh you
- * were tweaking rather than on some chain from before it.
- */
+/** Two undo stacks over one chain so ←/→ (moshes) and Ctrl+Z/Y (hand-edits)
+ * never fight; rolling a mosh rebases the edit history onto the new chain. */
 export function createMoshSession(opts: MoshSessionOptions) {
 	const { getEffects, setEffects, getMoshOptions, cancelBurst, endBurst } =
 		opts;
 	const history = createEffectHistory();
 	const moshHistory = createEffectHistory();
 
-	/** Roll a fresh mosh onto the current chain. */
 	function roll() {
 		cancelBurst();
 		const effects = getEffects();
-		// Record what the chain looked like before the very first roll, so ←
-		// comes back to the user's own work rather than the startup chain.
+		// Record the pre-first-roll chain so ← returns to the user's own work, not startup.
 		if (!moshHistory.canUndo && !moshHistory.canRedo)
 			moshHistory.reset(effects);
 		generateMosh(effects, getMoshOptions());
@@ -37,7 +31,7 @@ export function createMoshSession(opts: MoshSessionOptions) {
 		history.reset(effects);
 	}
 
-	/** → : forward through the mosh history, rolling a new mosh at its top. */
+	/** → : forward through mosh history, rolling a new mosh at its top. */
 	function forward() {
 		const next = moshHistory.redo();
 		if (!next) {
@@ -58,11 +52,8 @@ export function createMoshSession(opts: MoshSessionOptions) {
 		history.reset(prev);
 	}
 
-	/**
-	 * Ctrl+Z: hand-edits only. An edit still inside its coalescing window is a
-	 * real edit — it's committed first, so undoing lands on the state before it
-	 * rather than skipping past it to whatever was recorded last.
-	 */
+	/** Ctrl+Z: hand-edits only. A pending coalescing burst is committed first, so
+	 * undo lands before it rather than skipping past it. */
 	function undoEdit() {
 		endBurst();
 		const prev = history.undo();
@@ -79,19 +70,17 @@ export function createMoshSession(opts: MoshSessionOptions) {
 		get canUndoMosh() {
 			return moshHistory.canUndo;
 		},
-		/** Where the hand-edit stack sits on the shared edit clock, for the
-		 * Ctrl+Z router. The mosh stack has its own keys and stays out of it. */
+		/** Where the hand-edit stack sits on the shared edit clock, for the Ctrl+Z router. */
 		get undoSeq() {
 			return history.undoSeq;
 		},
 		get redoSeq() {
 			return history.redoSeq;
 		},
-		/** Anything to undo on either stack — i.e. the chain has been worked on. */
+		/** Anything to undo on either stack, i.e. the chain has been worked on. */
 		get touched() {
 			return history.canUndo || moshHistory.canUndo;
 		},
-		/** Record an in-place edit to the current chain. */
 		pushEdit(effects: EffectInstance[]) {
 			history.push(effects);
 		},

@@ -12,11 +12,7 @@ export const sleep = (ms: number) =>
 /** Decode-ahead queue depth; absorbs consumer/decoder cadence mismatch. */
 export const QUEUE_DEPTH = 8;
 
-/**
- * Frames every queue has produced, for the preview's FPS overlay. Counted here
- * rather than per player so the reading means the same thing whichever path
- * the preview is on — one video, a sequence segment, or a media lane.
- */
+/** Frames every queue has produced, for the preview's FPS overlay. */
 export const decodeStats = { frames: 0 };
 
 export interface DecodableVideo {
@@ -32,12 +28,8 @@ export interface PlayableVideo extends DecodableVideo {
 	height: number;
 }
 
-/**
- * Open a file's primary video track for WebCodecs decoding, or null when the
- * file can't drive that path. Rotation metadata is applied by the <video>
- * element but not to raw decoded frames, so rotated files fall back to the
- * element everywhere that uses this.
- */
+/** Open a file's primary video track for WebCodecs decoding, or null when it
+ * can't drive that path; rotated files fall back to the <video> element. */
 export async function openDecodableVideo(
 	file: File,
 ): Promise<DecodableVideo | null> {
@@ -57,10 +49,7 @@ export async function openDecodableVideo(
 	}
 }
 
-/**
- * As openDecodableVideo, but also resolves the dimensions and duration a
- * player/sampler needs to drive playback — null when any of them is unusable.
- */
+/** As openDecodableVideo, plus the dimensions and duration a player needs. */
 export async function openPlayableVideo(
 	file: File,
 ): Promise<PlayableVideo | null> {
@@ -78,10 +67,7 @@ export async function openPlayableVideo(
 	}
 }
 
-/**
- * Open a file's primary audio track. The input is the caller's to dispose once
- * it has read what it needs — nothing else here holds it.
- */
+/** Open a file's primary audio track. The caller owns the input and disposes it. */
 export async function openAudioTrack(
 	file: File,
 ): Promise<{ input: Input; track: InputAudioTrack } | null> {
@@ -102,54 +88,36 @@ export async function openAudioTrack(
 	}
 }
 
-/** Convert a decoded sample to a VideoFrame and release the sample. */
+/** Convert a sample to a VideoFrame and close the sample. */
 export function toVideoFrame(sample: VideoSample): VideoFrame {
 	const frame = sample.toVideoFrame();
 	sample.close();
 	return frame;
 }
 
-/**
- * A bounded queue of decoded frames fed by a decode pump, drained
- * synchronously by a render loop. Implemented on the main thread by
- * `SampleQueue` and off it by `WorkerFrameQueue` — see `openVideoFrameSource`,
- * which picks between them.
- *
- * Timestamps are seconds throughout the interface, matching the clocks the
- * consumers keep. Frames handed out are the caller's to close.
- */
+/** A bounded queue of decoded frames fed by a decode pump, drained synchronously
+ * by a render loop. Timestamps are seconds; handed-out frames are the caller's. */
 export interface FrameQueue {
-	/** True once the source is exhausted and no more frames will arrive. */
+	/** True once the source is exhausted. */
 	readonly done: boolean;
 	readonly started: boolean;
 	readonly size: number;
-	/** Timestamp of the newest decoded frame — how far ahead the decoder is. */
+	/** Timestamp of the newest decoded frame, i.e. how far ahead the decoder is. */
 	readonly head: number;
-	/** Frames that have landed since the queue was created, for a decode rate. */
+	/** Frames landed since creation, for a decode rate. */
 	readonly received: number;
-	/** (Re)start decoding from `startTime`, dropping anything already queued. */
+	/** (Re)start decoding from `startTime`, dropping anything queued. */
 	start(startTime: number): void;
-	/**
-	 * The newest frame due at `t`. Older due frames are stale and dropped, so a
-	 * consumer that falls behind catches up instead of playing in slow motion.
-	 */
+	/** Newest frame due at `t`; older due frames are dropped so a lagging consumer
+	 * catches up. */
 	takeDue(t: number): VideoFrame | null;
-	/** The queue head regardless of its timestamp; null when the queue is empty. */
+	/** Queue head regardless of timestamp; null when empty. */
 	takeHead(): VideoFrame | null;
 	dispose(): void;
 }
 
-/**
- * Main-thread decode pump feeding a bounded ready-queue — the fallback for
- * browsers where the worker path can't be used.
- *
- * Decoding runs flat-out into the queue and parks only while it is full, woken
- * by the next consumer take rather than by a timer. A poll interval here is a
- * floor on how fast the queue can refill: at 165 Hz a consumer drains a
- * QUEUE_DEPTH queue in well under the poll, so the decoder ends up idling on a
- * timer while the preview starves — with no CPU or GPU load to show for it.
- * Consumers pull synchronously from the queue on their own cadence.
- */
+/** Main-thread decode pump feeding a bounded ready-queue, the fallback where the
+ * worker path can't be used; it parks while full, woken by the next take. */
 export class SampleQueue implements FrameQueue {
 	#sink: VideoSampleSink;
 	#depth: number;
@@ -220,12 +188,11 @@ export class SampleQueue implements FrameQueue {
 	#clear() {
 		for (const frame of this.#frames) frame.close();
 		this.#frames = [];
-		// Also covers cancellation: a parked pump has to run again to notice its
-		// generation was retired, close the sample it is holding and return.
+		// Also wakes a parked pump so it notices its generation was retired.
 		this.#wake();
 	}
 
-	/** Let a parked pump re-check whether there is room to decode into. */
+	/** Let a parked pump re-check for room. */
 	#wake() {
 		const resume = this.#room;
 		if (!resume) return;
@@ -244,9 +211,7 @@ export class SampleQueue implements FrameQueue {
 					!this.#disposed &&
 					this.#frames.length >= this.#depth
 				) {
-					// Parked until a consumer frees a slot. A paused preview leaves this
-					// waiting indefinitely, which is the point — no background timer per
-					// idle lane — and dispose()/restart both wake it.
+					// Parked until a consumer frees a slot; a paused preview waits here indefinitely.
 					await new Promise<void>((resolve) => (this.#room = resolve));
 				}
 				if (id !== this.#genId || this.#disposed) {

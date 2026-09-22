@@ -97,7 +97,7 @@ describe("stepping over disabled effects", () => {
 	});
 
 	it("falls back to the end when nothing enabled lies that way", () => {
-		// "e" is off and nothing after "a" is on — go to the bottom rather than
+		// "e" is off and nothing after "a" is on: go to the bottom rather than
 		// leaving the button inert
 		const onlyA = rows(["a"]);
 		expect(move(onlyA, 1, 1)).toEqual(["a", "c", "d", "e", "b"]);

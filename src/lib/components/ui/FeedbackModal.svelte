@@ -47,7 +47,7 @@
 	$effect(() => () => clearTimeout(closeTimer));
 
 	/** The editors bind their shortcuts on window, so every key pressed in here
-	 * has to stop before it gets there — Escape included, which we handle. */
+	 * has to stop before it gets there, Escape included (which we handle). */
 	function onKeydown(e: KeyboardEvent) {
 		e.stopPropagation();
 		if (e.key === "Escape") {

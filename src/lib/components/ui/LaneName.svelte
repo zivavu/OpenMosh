@@ -48,8 +48,8 @@
 </script>
 
 <!--
-	The name every stacking lane shows in its gutter. Double-click turns it into
-	a field in place; Enter or leaving it keeps the new name, Escape drops it.
+	The name every stacking lane shows in its gutter. Double-click edits in place;
+	Enter or leaving keeps the new name, Escape drops it.
 -->
 {#if editing}
 	<input

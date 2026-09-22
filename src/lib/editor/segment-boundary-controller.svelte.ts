@@ -1,12 +1,4 @@
-/**
- * Shared undo/redo + boundary selection/clipboard logic for timeline
- * components that edit a flat, gapless list of time-span segments
- * (TimelineSegments.svelte and SequenceTimeline.svelte). Each caller wires
- * in its own segment shape and split behavior; this owns the mechanics
- * behind Ctrl/Cmd+C, Ctrl/Cmd+V, Escape, and rectangle-select boundary math.
- * It owns an undo/redo stack too, but not the keys: those are routed by the
- * editor across all of its stacks (see undo-router.ts).
- */
+/** Shared undo/redo and boundary selection/clipboard logic for timeline components. */
 
 import { NO_EDIT, nextEditSeq } from "./edit-clock";
 import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
@@ -50,8 +42,7 @@ export class SegmentBoundaryController<
 
 	#undoStack = $state<S[][]>([]);
 	#redoStack = $state<S[][]>([]);
-	// Edit-clock stamps, one per entry of each stack, so the editor's Ctrl+Z
-	// router can tell a boundary edit apart in time from a text or span one.
+	// Edit-clock stamps, one per stack entry, so the Ctrl+Z router can order boundary edits.
 	#undoSeqs = $state<number[]>([]);
 	#redoSeqs = $state<number[]>([]);
 	#opts: SegmentBoundaryControllerOptions<S, M>;
@@ -68,7 +59,7 @@ export class SegmentBoundaryController<
 		return this.#redoStack.length > 0;
 	}
 
-	/** Stamp of the edit undo() would revert — see edit-clock.ts. */
+	/** Stamp of the edit undo() would revert (see edit-clock.ts). */
 	get undoSeq(): number {
 		return this.#undoSeqs[this.#undoSeqs.length - 1] ?? NO_EDIT;
 	}
@@ -84,31 +75,23 @@ export class SegmentBoundaryController<
 		this.#redoSeqs = [];
 	}
 
-	/** Snapshot current segments to history without changing anything — call once when a drag starts moving. */
+	/** Snapshot current segments to history without changing anything. */
 	snapshotForDrag(): void {
 		this.#record([...this.#opts.getSegments()]);
 	}
 
-	/** Apply new segments and record history — use for discrete, one-shot edits. */
+	/** Apply new segments and record history; use for discrete, one-shot edits. */
 	commit(segments: S[]): void {
 		this.#record([...this.#opts.getSegments()]);
 		this.#opts.onChange(segments);
 	}
 
-	/**
-	 * Push an externally captured pre-edit state (deep-snapshotted by the
-	 * caller) — for in-place edits that bypass commit(), e.g. effect panel
-	 * tweaks mutating a segment's effects directly.
-	 */
+	/** Push an externally captured pre-edit state, for in-place edits that bypass commit(). */
 	pushState(prev: S[]): void {
 		this.#record(prev);
 	}
 
-	/**
-	 * Apply new segments without recording history — mid-drag (after
-	 * snapshotForDrag()), or for changes that belong to a different history
-	 * than this one, such as mosh rolls driven by their own stack.
-	 */
+	/** Apply new segments without recording history: mid-drag, or another history's changes. */
 	live(segments: S[]): void {
 		this.#opts.onChange(segments);
 	}
@@ -215,7 +198,7 @@ export class SegmentBoundaryController<
 		return true;
 	}
 
-	/** Boundary times inside [minTime, maxTime] — used both for live rect-select highlighting and on commit. */
+	/** Boundary times inside [minTime, maxTime]. */
 	boundaryTimesInRange(minTime: number, maxTime: number): number[] {
 		const duration = this.#opts.getTrackDuration();
 		const times = new Set<number>();
@@ -237,17 +220,9 @@ export class SegmentBoundaryController<
 		this.selectedBoundaryTimes = this.boundaryTimesInRange(minTime, maxTime);
 	}
 
-	/**
-	 * Handles the shortcuts that don't depend on component-specific selection
-	 * priority (copy/paste/escape). Undo and redo are not among them: they are
-	 * routed by the editor across every stack it owns, newest edit first, so
-	 * this one must not consume them ahead of it. Returns true if consumed —
-	 * callers should e.preventDefault() and, where a competing outer keydown
-	 * handler exists, stop the event from reaching it.
-	 */
+	/** Handles the shortcuts that don't depend on component-specific selection priority. */
 	onKeydown(e: KeyboardEvent): boolean {
-		// Modifier shortcuts still fire from a focused dropdown/slider (see
-		// shortcut-target); only Escape, a bare key, defers to the control.
+		// Modifier shortcuts still fire from a focused dropdown/slider; only Escape defers.
 		if (isTextEntryTarget(e.target)) return false;
 
 		const key = e.key.toLowerCase();

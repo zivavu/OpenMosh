@@ -1,10 +1,6 @@
-/**
- * Animated GIF intake: a GIF is re-encoded to an MP4 once, on the way in, and
- * takes the video path everywhere after that — preview, edit modal, timeline,
- * export. Nothing downstream knows GIFs exist. Browsers can animate a GIF in
- * an <img> but can't seek one, and Firefox has no ImageDecoder, so the frames
- * come from the small decoder below.
- */
+/** Animated GIF intake: a GIF is re-encoded to an MP4 once, on the way in, and
+ * takes the video path everywhere after that. Browsers can animate a GIF in an
+ * <img> but can't seek one, and Firefox has no ImageDecoder. */
 export interface GifFrame {
 	/** Full-canvas RGBA, disposal already applied. */
 	pixels: Uint8ClampedArray<ArrayBuffer>;
@@ -21,21 +17,15 @@ export interface DecodedGif {
 const MIN_DELAY_MS = 20;
 const DEFAULT_DELAY_MS = 100;
 
-/**
- * Re-encodes an animated GIF as an MP4 `File` with the same name and
- * timestamp, so it lands in the pool as a video. Anything else — non-GIFs,
- * single-frame GIFs, GIFs the browser can't encode — comes back as it was.
- *
- * MP4 rather than WebM: Matroska has no duration on the last block, so a
- * two-frame GIF would end the moment its second frame appeared.
- */
+/** Re-encodes an animated GIF as an MP4 `File` with the same name and timestamp,
+ * so it lands in the pool as a video. Anything else comes back as it was. MP4
+ * rather than WebM: Matroska has no duration on the last block. */
 export async function gifToVideo(file: File): Promise<File> {
 	if (file.type !== "image/gif") return file;
 	try {
 		const gif = decodeGif(new Uint8Array(await file.arrayBuffer()));
 		if (gif.frames.length < 2) return file;
-		// Deferred like every other mediabunny user: a static import here would
-		// put the whole library in the entry chunk.
+		// Deferred like every other mediabunny user: a static import would pull in the library.
 		const {
 			BufferTarget,
 			CanvasSource,
@@ -82,7 +72,6 @@ export async function gifToVideo(file: File): Promise<File> {
 	}
 }
 
-/** `gifToVideo` over a list, keeping order. */
 export function gifsToVideo(files: File[]): Promise<File[]> {
 	return Promise.all(files.map(gifToVideo));
 }

@@ -4,11 +4,7 @@ import { EFFECT_DEFINITIONS } from "./definitions";
 import { getDefinition, hydrateEffects, hydrateValues } from "./hydrate";
 import type { EffectDefinition, EffectParam } from "./types";
 
-/**
- * Params are looked up in the live registry rather than hard-coded, so these
- * stay honest when an effect's knobs are renamed or retuned. Everything here
- * is about *how* a stored value is reconciled, not about any one effect.
- */
+/** Params are looked up in the live registry rather than hard-coded, so these stay honest. */
 function findParam<T extends EffectParam["type"]>(
 	type: T,
 	match: (param: Extract<EffectParam, { type: T }>) => boolean = () => true,

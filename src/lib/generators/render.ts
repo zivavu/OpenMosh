@@ -117,11 +117,7 @@ function setCommon(
 	spec.colors.forEach((hex, i) => gl.uniform3fv(u[`uC${i}`], hex2rgb(hex)));
 }
 
-/**
- * Draw the spec onto the shared canvas at w×h, supersampled `aa`× (capped by
- * what the GPU allows). The canvas is left holding the result for the caller
- * to copy out — it is overwritten by the next call.
- */
+/** Draw the spec onto the shared canvas at w×h, supersampled `aa`× (capped by the GPU). */
 export function drawSpec(
 	spec: GeneratedSpec,
 	w: number,
@@ -138,7 +134,7 @@ export function drawSpec(
 	const hh = Math.round(h * ss);
 	ensureHi(c, hw, hh);
 
-	// pass 1 — field → hi-res buffer
+	// pass 1: field to hi-res buffer
 	gl.bindFramebuffer(gl.FRAMEBUFFER, c.hiFbo);
 	gl.viewport(0, 0, hw, hh);
 	if (spec.gen === "gradient") {
@@ -165,7 +161,7 @@ export function drawSpec(
 	gl.bindTexture(gl.TEXTURE_2D, c.hiTex);
 	gl.generateMipmap(gl.TEXTURE_2D);
 
-	// pass 2 — resolve + grain → canvas
+	// pass 2: resolve + grain to canvas
 	if (c.canvas.width !== w || c.canvas.height !== h) {
 		c.canvas.width = w;
 		c.canvas.height = h;

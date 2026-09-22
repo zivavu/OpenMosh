@@ -1,10 +1,4 @@
-/**
- * Source material for the upload-screen demo, drawn procedurally rather than
- * bundled: no bytes to ship and no music/image licence to honour in a repo
- * anyone can fork. Every poster is a designed piece that should hold up before
- * a single effect touches it — bold flat graphics with hard edges and saturated
- * blocks also happen to be what the shaders chew on best.
- */
+/** Source material for the upload-screen demo, drawn procedurally rather than bundled. */
 
 import { mulberry32, type Rand } from "../rng";
 
@@ -71,8 +65,7 @@ function fitWord(ctx: C, word: string, maxW: number, maxH: number): number {
 	return Math.min(maxH, (maxW / ctx.measureText(word).width) * 100);
 }
 
-/** Centred slab of type with an offset colour drop — reads as a channel split
- * the moment any effect touches it. */
+/** Centred slab of type with an offset colour drop, reading as a channel split. */
 function bigWord(
 	ctx: C,
 	rand: Rand,
@@ -115,7 +108,6 @@ function poly(ctx: C, pts: number[][]) {
 	ctx.fill();
 }
 
-/* ── posters ──────────────────────────────────────────────────────────── */
 
 function testCard(ctx: C, rand: Rand, p: Palette) {
 	const cols = [
@@ -728,8 +720,8 @@ function toImage(canvas: HTMLCanvasElement): Promise<HTMLImageElement> {
 }
 
 /**
- * Posters as images, since GlRenderer's upload path takes HTMLImageElement.
- * All share one size so switching source never reallocates the FBOs.
+ * Posters as images, since GlRenderer's upload path takes HTMLImageElement. All
+ * share one size so switching source never reallocates the FBOs.
  */
 export async function loadDemoSources(
 	count = POSTERS.length,

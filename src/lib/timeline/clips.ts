@@ -1,25 +1,11 @@
-/**
- * Clip geometry shared by every lane that holds free-floating, non-overlapping
- * spans: the text lanes and the sequence fx lanes. Nothing here knows what a
- * clip *carries* — only where it sits — so both callers get the same drag,
- * resize and gap-finding behaviour without a second copy of the math.
- *
- * Contrast with segment-coverage.ts, which holds the opposite invariant for
- * the slideshow: its lane partitions [0, duration] with no gaps, because every
- * beat has to come from somewhere. A lane of clips is allowed to be empty.
- */
+/** Clip geometry shared by every lane that holds free-floating, non-overlapping
+ * spans: the text lanes and the sequence fx lanes. Nothing here knows what a clip carries. */
 
 /** Shortest clip a lane will create or leave behind after a resize. */
 export const MIN_CLIP_LENGTH = 0.05;
 
-/**
- * Float dust, in seconds, allowed under MIN_CLIP_LENGTH.
- *
- * 0.05 has no exact binary form, so a span built by subtracting it off a gap's
- * end and adding it back lands a rounding step short of it. Compared exactly,
- * that span is refused — which is a drop that previews a clip and then quietly
- * does nothing. A nanosecond is far below anything a frame can express.
- */
+/** Float dust, in seconds, allowed under MIN_CLIP_LENGTH. 0.05 has no exact binary
+ * form, so a span built by subtracting it off a gap's end lands a rounding step short. */
 const LENGTH_EPSILON = 1e-9;
 
 /** Whether a span is long enough to keep, rounding aside. */
@@ -53,10 +39,7 @@ export function clipAt<C extends TimelineClip>(
 	return null;
 }
 
-/**
- * The clips between two ids inclusive, in time order — a shift-click range.
- * Both must be in this lane; otherwise only `toId` is in range.
- */
+/** The clips between two ids inclusive, in time order: a shift-click range. */
 export function clipRange<C extends TimelineClip>(
 	lane: ClipLane<C>,
 	fromId: string,
@@ -71,10 +54,7 @@ export function clipRange<C extends TimelineClip>(
 	return ordered.slice(lo, hi + 1).map((c) => c.id);
 }
 
-/**
- * The empty span around `time` on this lane, bounded by its neighbours and by
- * [0, duration]. Null when `time` already sits on a clip.
- */
+/** The empty span around `time`, bounded by its neighbours and [0, duration]. */
 export function freeRangeAt<C extends TimelineClip>(
 	lane: ClipLane<C>,
 	time: number,
@@ -90,17 +70,8 @@ export function freeRangeAt<C extends TimelineClip>(
 	return end - start >= MIN_CLIP_LENGTH ? { start, end } : null;
 }
 
-/**
- * Where a clip placed at `time` lands: it starts under the pointer and runs for
- * `want` seconds, held inside the gap it fell in. Null when `time` is already
- * covered, or its gap is too small to hold anything.
- *
- * A clip that would overrun the gap keeps its length and backs up off the
- * neighbour, rather than being truncated where it was aimed — the same bargain
- * moveClip strikes for a clip already on the lane, so a dropped clip and a
- * dragged one come to rest the same way. Only a gap shorter than the clip
- * itself trims it, and one shorter than MIN_CLIP_LENGTH refuses it outright.
- */
+/** Where a clip placed at `time` lands: it starts under the pointer and runs for
+ * `want` seconds, held inside the gap it fell in. Null when the gap is too small. */
 export function newClipSpan<C extends TimelineClip>(
 	lane: ClipLane<C>,
 	time: number,
@@ -111,20 +82,15 @@ export function newClipSpan<C extends TimelineClip>(
 	if (!gap) return null;
 	const room = gap.end - gap.start;
 	const len = Math.min(Math.max(want, MIN_CLIP_LENGTH), room);
-	// Pinned against the gap's tail — including a clip that wants the whole of
-	// it — the gap's own end is the anchor, so the span ends exactly where the
-	// neighbour begins instead of a rounding step inside or past it.
-	if (time + len >= gap.end) {
+		// Pinned against the gap's tail, so the span ends where the neighbour begins.
+		if (time + len >= gap.end) {
 		return { start: Math.max(gap.start, gap.end - len), end: gap.end };
 	}
 	const start = Math.max(gap.start, time);
 	return { start, end: start + len };
 }
 
-/**
- * Slide a clip to `newStart`, keeping its length and stopping at whichever
- * neighbour it runs into — a drag can't reorder or overwrite the lane.
- */
+/** Slide a clip to `newStart`, keeping its length and stopping at its neighbour. */
 export function moveClip<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	clipId: string,
@@ -148,12 +114,8 @@ export function moveClip<C extends TimelineClip, L extends ClipLane<C>>(
 	return replaceClip(lane, { ...clip, start, end: start + length });
 }
 
-/**
- * Slide every clip in `clipIds` by `delta`, as one block. The whole group stops
- * at whichever unselected neighbour any member runs into, so the selection
- * keeps its internal spacing and still can't overwrite anything. Ids belonging
- * to other lanes are ignored.
- */
+/** Slide every clip in `clipIds` by `delta`, as one block. The group stops at
+ * whichever unselected neighbour any member runs into. */
 export function moveClips<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	clipIds: string[],
@@ -192,14 +154,8 @@ export function moveClips<C extends TimelineClip, L extends ClipLane<C>>(
 	};
 }
 
-/**
- * Carry clips from one lane to another, shifted by `delta` — a drag that
- * crossed into a neighbouring row. Lands only when every clip fits inside
- * [0, duration] clear of the target's own clips; otherwise returns the input
- * by identity, and the caller keeps dragging them on the lane they came from.
- * `adapt` rewrites each clip for the lane it lands on. Ids not on `fromId`
- * are ignored.
- */
+/** Carry clips from one lane to another, shifted by `delta`: a drag that crossed
+ * into a neighbouring row. Lands only when every clip fits clear of the target's clips. */
 export function moveClipsToLane<
 	L extends ClipLane<TimelineClip> & { id: string },
 >(
@@ -210,8 +166,7 @@ export function moveClipsToLane<
 	delta: number,
 	duration: number,
 	adapt?: (clip: L["clips"][number], from: L, to: L) => L["clips"][number],
-	/** How far (seconds) the group may slide from `delta` to find room on the
-	 * new lane. 0 means only an exact fit carries it over. */
+	/** How far (seconds) the group may slide from `delta` to find room; 0 = exact fit only. */
 	tolerance = 0,
 ): L[] {
 	if (fromId === toId) return lanes;
@@ -253,17 +208,8 @@ function groupFits(
 	);
 }
 
-/**
- * The shift closest to `wanted` at which `group` lands clear on `lane`, or
- * null when nothing within `tolerance` of it does.
- *
- * A drag into another row rarely lands the group exactly in a gap: the
- * pointer is where the user's eye is, not where the neighbours' edges are.
- * So rather than refusing the row until the pixels line up, the group slides
- * to the nearest spot that holds it — flush against whichever clip it was
- * overlapping, or the track's ends. Only those ends are worth trying: between
- * two of them nothing changes about what blocks what.
- */
+/** The shift closest to `wanted` at which `group` lands clear on `lane`, or null
+ * when nothing within `tolerance` does. */
 export function nearestFitDelta(
 	group: readonly TimelineClip[],
 	lane: ClipLane<TimelineClip>,
@@ -292,11 +238,7 @@ export function nearestFitDelta(
 	return best;
 }
 
-/**
- * Drag one edge. The clip keeps at least MIN_CLIP_LENGTH and stops at its
- * neighbours, so edges can meet but never cross — dragging one edge alone
- * pulls it away from a flush neighbour, leaving a gap.
- */
+/** Drag one edge, keeping at least MIN_CLIP_LENGTH and stopping at the neighbours. */
 export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	clipId: string,
@@ -323,10 +265,7 @@ export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
 	return replaceClip(lane, { ...clip, end });
 }
 
-/**
- * Drag the edge shared by two flush clips: both clips' facing edges move to
- * `time`, each keeping at least MIN_CLIP_LENGTH.
- */
+/** Drag the edge shared by two flush clips: both facing edges move to `time`. */
 export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	leftId: string,
@@ -354,10 +293,7 @@ export function resizeBoundary<C extends TimelineClip, L extends ClipLane<C>>(
 	};
 }
 
-/**
- * Add a clip, trimmed to the free span it lands in. Returns the lane unchanged
- * when there is no room.
- */
+/** Add a clip, trimmed to the free span it lands in. Unchanged when there is no room. */
 export function addClip<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	clip: C,
@@ -391,8 +327,7 @@ function replaceClip<C extends TimelineClip, L extends ClipLane<C>>(
 	};
 }
 
-/** A copied clip's place in its block: which lane, and where relative to
- * the block's earliest clip. What the clip carries is the caller's. */
+/** A copied clip's place: which lane, and where relative to the block's anchor. */
 export interface ClipBlockEntry {
 	laneId: string;
 	/** Seconds from the block's anchor. */
@@ -418,21 +353,8 @@ function fits(
 	return true;
 }
 
-/**
- * How far a block of copied clips has to slide right from `at` to land clear
- * of everything on its lanes, or null when it never does.
- *
- * Lanes can't hold overlapping clips, and trimming a paste to whatever gap it
- * happened to land in would quietly hand back a shorter clip than the one
- * that was copied. So the whole block keeps its shape and slides to the first
- * place it fits at full length — pasting with the playhead inside the
- * original drops the copy directly after it.
- *
- * Only the ends of the clips in the way are worth trying: between two of them
- * nothing changes about what blocks what, so the first delta that works is
- * one that puts some entry flush against the clip it was overlapping.
- * Entries whose lane is missing are ignored.
- */
+/** How far a block of copied clips has to slide right from `at` to land clear of
+ * everything on its lanes, or null when it never does. */
 export function firstFreeDelta(
 	entries: ClipBlockEntry[],
 	lanes: ReadonlyMap<string, ClipLane<TimelineClip>>,
@@ -458,12 +380,7 @@ export function firstFreeDelta(
 	return null;
 }
 
-/**
- * Move a copied block onto other lanes: the block's first lane (in `laneIds`
- * order) becomes `targetLaneId`, and the rest keep their spacing below it.
- * Entries pushed past the last lane are dropped. Unchanged when the target
- * isn't one of the lanes, or is already the block's first lane.
- */
+/** Move a copied block onto other lanes: its first lane becomes `targetLaneId`. */
 export function retargetClipBlock<E extends ClipBlockEntry>(
 	entries: E[],
 	laneIds: string[],
@@ -495,16 +412,8 @@ export interface ClipPlacement<E extends ClipBlockEntry> {
 	end: number;
 }
 
-/**
- * Where a pasted block of clips goes, with its earliest clip at `at`.
- *
- * At full length if anywhere downstream has room (see firstFreeDelta). When
- * nothing does, the block stays at `at` and each clip is cut down to the free
- * space it lands in — a copy longer than the gap it is pasted into fills the
- * gap rather than going nowhere. A clip whose spot is taken moves to the next
- * gap on its lane; one left with less than MIN_CLIP_LENGTH is dropped.
- * Entries whose lane is missing are dropped.
- */
+/** Where a pasted block of clips goes, with its earliest clip at `at`. At full
+ * length if anywhere downstream has room; otherwise each clip is cut to fit. */
 export function placeClipBlock<E extends ClipBlockEntry>(
 	entries: E[],
 	lanes: ReadonlyMap<string, ClipLane<TimelineClip>>,
@@ -552,8 +461,7 @@ export function updateLaneIn<L extends { id: string }>(
 	return lanes.map((l) => (l.id === laneId ? fn(l) : l));
 }
 
-/** Apply one edit to every clip in `clipIds`, across lanes; the same lanes
- * back (by identity) when none of them is here. */
+/** Apply one edit to every clip in `clipIds`, across lanes. */
 export function updateClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 	lanes: L[],
 	clipIds: ReadonlySet<string>,
@@ -577,12 +485,8 @@ export function replaceClipIn<C extends TimelineClip, L extends ClipLane<C>>(
 	return updateClipsIn(lanes, new Set([next.id]), () => next);
 }
 
-/**
- * How strongly a clip applies at `time`: 1 across the body, ramping from 0 at
- * each edge that has a fade. Returns 1 without one, which is every clip until
- * the user asks for a ramp. What "strength" means is the caller's — an fx lane
- * scales its effects toward off, a media lane scales its opacity.
- */
+/** How strongly a clip applies at `time`: 1 across the body, ramping from 0 at
+ * each edge that has a fade. */
 export function clipFadeWeight(
 	clip: TimelineClip,
 	fadeInSec: number | undefined,
@@ -594,8 +498,7 @@ export function clipFadeWeight(
 	if (fadeIn <= 0 && fadeOut <= 0) return 1;
 	const length = clip.end - clip.start;
 	if (length <= 0) return 1;
-	// Ramps that together outlast the clip would overlap and never let it
-	// reach full strength; shrinking both in proportion has them meet instead.
+		// Ramps that outlast the clip would never reach full strength; shrink both to meet.
 	if (fadeIn + fadeOut > length) {
 		const scale = length / (fadeIn + fadeOut);
 		fadeIn *= scale;
@@ -607,19 +510,8 @@ export function clipFadeWeight(
 	return Math.max(0, Math.min(1, inWeight, outWeight));
 }
 
-/**
- * Clamp a lane's clips into [0, duration], for when the master clock shrinks
- * under them: swapping a 2-minute song for a 90-second one leaves every clip
- * built against the old length hanging past the end of the timeline, where it
- * still renders but can no longer be seen or grabbed.
- *
- * Clips keep their start and lose only the overhang. One left with nothing on
- * screen, or with less than MIN_CLIP_LENGTH of it, is dropped rather than
- * pinned to the end as a sliver the user has to find and delete.
- *
- * Returns the lane by identity when nothing moved, so the callers that run this
- * on every duration read can skip the write.
- */
+/** Clamp a lane's clips into [0, duration], for when the master clock shrinks under
+ * them. Clips keep their start and lose only the overhang. */
 export function fitClipsToDuration<
 	C extends TimelineClip,
 	L extends ClipLane<C>,

@@ -29,98 +29,59 @@ const THUMB_CONCURRENCY = 6;
 /** Chip thumbnail edge, matching probeSlideVideo's default for videos. */
 const THUMB_SIZE = 100;
 
-/** One piece of media a layer clip can draw from. */
 export interface SequenceSource {
 	id: string;
 	file: File;
 	name: string;
 	kind: "image" | "video";
 	objectUrl: string;
-	/** Grid thumbnail. Null until generated — images fill theirs in after the
-	 * chip is already on screen. */
+	/** Grid thumbnail; images fill theirs in after the chip is on screen. */
 	thumbUrl: string | null;
-	/**
-	 * Whether a thumbnail is still coming. Null `thumbUrl` alone can't say: an
-	 * image's is pending, while a video that couldn't be thumbed never gets one,
-	 * and the two need to read differently on the chip.
-	 */
+	/** Whether a thumbnail is still coming; a null `thumbUrl` alone can't say. */
 	thumbPending: boolean;
-	/** Videos only, from the add-time probe. Images enter the pool without
-	 * touching their pixels, so they carry no dimensions. */
+	/** Videos only, from the add-time probe. */
 	width?: number;
 	height?: number;
 	/** Videos only; 0 for images. */
 	duration: number;
-	/**
-	 * ≤1080p stand-in the preview decodes instead of an oversized original
-	 * (see video/proxy.ts). Absent until the transcode lands; exports keep
-	 * reading `file` either way.
-	 */
+	/** <=1080p stand-in the preview decodes; exports still read `file`. */
 	proxyFile?: File;
-	/**
-	 * The proxy's size: what the transcode is aiming at while it runs, and what
-	 * the finished file turned out to be once it lands. Absent until the worker
-	 * has picked one, which is what the chip reads as "still looking".
-	 */
+	/** Proxy size: target while transcoding, finished size after; absent means still looking. */
 	proxyWidth?: number;
 	proxyHeight?: number;
-	/** A proxy is being built (or looked up in storage) for this source. */
 	proxyPending?: boolean;
-	/** 0–1, while `proxyPending`. */
+	/** 0-1, while `proxyPending`. */
 	proxyProgress?: number;
-	/** Transcoding failed — the chip shows a warning; previews stay on the original. */
+	/** Transcoding failed; previews stay on the original. */
 	proxyFailed?: boolean;
-	/** Why it failed, for the chip to say something more useful than that it did. */
 	proxyReason?: string;
-	/**
-	 * The user asked this video to preview from the original — see
-	 * video/proxy-preference.ts. Only set on sources a proxy would otherwise be
-	 * built for, so the chip can treat it as "the choice applies here".
-	 */
+	/** User asked this video to preview from the original (see video/proxy-preference.ts). */
 	proxyDisabled?: boolean;
 }
 
-/**
- * The media pool behind sequence mode. Owns object URLs, decoded images,
- * thumbnails and proxies; the layers' clips reference entries by id. Video
- * decoding is the layer driver's (see media-layer-driver.ts), one decoder per
- * lane, since two lanes on one file want two positions in it.
- */
+/** The media pool behind sequence mode; video decoding belongs to the layer driver. */
 export class SequenceSourceRegistry {
 	sources = $state<SequenceSource[]>([]);
 
-	/**
-	 * Per-source edits, keyed by source id. Held beside the sources rather than
-	 * on them: an edit belongs to the media across the whole pool, and only the
-	 * handful of sources actually edited need an entry.
-	 */
+	/** Per-source edits, keyed by id; an edit belongs to the media across the pool. */
 	edits = $state<Record<string, SourceEdit>>({});
 
-	/**
-	 * Files the in-flight `add` calls are working through, and how many of them
-	 * are done. Both 0 when nothing is being ingested. Probing a batch of large
-	 * videos takes a while and leaves the preview with nothing to draw, so the
-	 * editor puts a placeholder over the canvas while these are non-zero.
-	 */
+	/** Files in-flight `add` calls are working through, and how many are done. */
 	loadingTotal = $state(0);
 	loadingDone = $state(0);
 	/** Overlapping loads share the counters; the last one out clears them. */
 	#loads = 0;
 
-	/** Insertion-ordered LRU of decoded images — see MAX_DECODED_IMAGES. */
+	/** Insertion-ordered LRU of decoded images (see MAX_DECODED_IMAGES). */
 	#images = new Map<string, HTMLImageElement>();
 	#decoding = new Set<string>();
 	/** Ids an in-flight `add` has claimed but not appended yet. */
 	#pendingIds = new Set<string>();
-	/** In-flight proxy transcodes, keyed by source id, so remove() can stop one. */
+	/** In-flight proxy transcodes, keyed by id, so remove() can stop one. */
 	#proxyJobs = new Map<string, ProxyJob>();
 	#disposed = false;
 	#onReady: (() => void) | undefined;
-	/**
-	 * Generated images follow the output size (see `setOutputSize`): a
-	 * re-render replaces the source's object URL and drops its decode, while the
-	 * File — the id — stays as it was.
-	 */
+	/** Generated images follow the output size; a re-render swaps the URL and drops the decode. */
 	#sizeSync = new GeneratedSizeSync((id, url) => {
 		const live = this.get(id);
 		if (!live || this.#disposed) {
@@ -144,11 +105,6 @@ export class SequenceSourceRegistry {
 		return this.sources.find((s) => s.id === id);
 	}
 
-	/**
-	 * Adds files in the given order, skipping any that can't be decoded and any
-	 * already in the pool (ids are content-derived, so re-adding is idempotent).
-	 * `persist` false is for entries coming back out of the store.
-	 */
 	#beginLoad(count: number) {
 		this.#loads++;
 		this.loadingTotal += count;
@@ -161,11 +117,7 @@ export class SequenceSourceRegistry {
 		}
 	}
 
-	/**
-	 * Ends a span whose files are being handed to another load. The reservation
-	 * goes with them: the load taking over reserves them itself, and leaving
-	 * this one's behind would count every file twice in the total.
-	 */
+	/** Ends a span whose files another load takes over; leaving them counted would double-count. */
 	#handOffLoad(count: number) {
 		this.loadingTotal -= count;
 		this.#endLoad();
@@ -173,13 +125,9 @@ export class SequenceSourceRegistry {
 
 	async add(files: File[], { persist = true } = {}): Promise<SequenceSource[]> {
 		// Animated GIFs become videos here, before anything is keyed on the file.
-		// Stored media is already converted, so restores don't pay for this.
 		files = await gifsToVideo(files);
-		// Ids are reserved before the first await, not just checked against the
-		// current pool. Probing and decoding are async, so two overlapping calls —
-		// the per-song pool restore and the clip-driven restore both pulling the
-		// same media out of storage on load — would each see an empty pool and
-		// append the same source, which is a duplicate key in the bin's keyed each.
+		// Ids are reserved before the first await: probing is async, so overlapping
+		// calls would both see an empty pool and append a duplicate key.
 		const fresh = files.filter((f) => {
 			const id = stableSourceId(f);
 			if (this.get(id) || this.#pendingIds.has(id)) return false;
@@ -193,10 +141,8 @@ export class SequenceSourceRegistry {
 		const ok: SequenceSource[] = [];
 		this.#beginLoad(fresh.length);
 		try {
-			// Nothing about an image source needs its pixels — the dimensions were
-			// never read, and the thumbnail can arrive later. So they go into the
-			// pool synchronously and a few hundred chips appear in one frame instead
-			// of waiting on a full-resolution decode and a JPEG encode each.
+			// Images need no pixels to enter the pool, so chips appear in one frame
+			// instead of waiting on a decode and encode each.
 			if (images.length > 0) {
 				const batch = this.#accept(images.map((f) => this.#buildImage(f)));
 				if (this.#disposed) return [];
@@ -211,44 +157,43 @@ export class SequenceSourceRegistry {
 				}
 			}
 
-			// Videos still need probing up front: it's what rejects undecodable
-			// files and supplies the duration, and a pool rarely holds many.
+			// Videos still need probing up front: it rejects undecodable files and
+			// supplies the duration.
 			for (let i = 0; i < videos.length; i += ADD_BATCH_SIZE) {
 				const slice = videos.slice(i, i + ADD_BATCH_SIZE);
 				const built = await Promise.all(slice.map((f) => this.#buildVideo(f)));
 				const batch = this.#accept(built);
-				// Counted per file probed, not per source accepted: a file that failed
-				// to decode is still one the user is no longer waiting on.
+				// Counted per file probed, not per source accepted: a failed file is still
+				// one the user stopped waiting on.
 				this.loadingDone += slice.length;
 				if (this.#disposed) return [];
 				ok.push(...batch);
-				// Started only once the source is actually in the pool: the job's
-				// callbacks resolve the source by id, and a proxy that lands before
-				// the append would have nowhere to land itself.
+				// Started only once the source is in the pool: the job's callbacks resolve
+				// the source by id.
 				for (const s of batch) {
 					if (s.proxyPending) void this.#makeProxy(s.id, s.file);
 				}
 			}
 		} finally {
-			// Released only after the appends, so a call waiting behind this one
-			// sees the sources in the pool rather than re-adding them.
+			// Released after the appends, so a waiting call sees the sources rather than
+			// re-adding them.
 			for (const f of fresh) this.#pendingIds.delete(stableSourceId(f));
 			this.#endLoad();
 		}
 
 		if (persist) {
-			// No prune here: these blobs belong to no song's pool until the editor
-			// saves one, and pruning now would evict the batch we just wrote.
+			// No prune here: these blobs belong to no song's pool yet, and pruning now
+			// would evict the batch just written.
 			void putSequenceMedia(ok.map((s) => ({ id: s.id, file: s.file }))).catch(
 				() => {
-					// Storage full or blocked — the pool still works for this session.
+					// Storage full or blocked; the pool still works for this session.
 				},
 			);
 		}
 		return ok;
 	}
 
-	/** The edit for this source, defaults included, for the editor to bind to. */
+	/** The edit for this source, defaults included. */
 	editFor(id: string): SourceEdit {
 		return this.edits[id] ?? createSourceEdit();
 	}
@@ -261,20 +206,12 @@ export class SequenceSourceRegistry {
 		this.edits = next;
 	}
 
-	/**
-	 * Restore saved edits. Not filtered against the current pool: the pool comes
-	 * back out of IndexedDB a tick or two later, so anything checked here would
-	 * be checked against an empty bin. `remove` drops an edit with its source.
-	 */
+	/** Restore saved edits; not filtered against the pool, which arrives a tick later. */
 	restoreEdits(raw: unknown) {
 		this.edits = normalizeSourceEdits(raw);
 	}
 
-	/**
-	 * Drops the source from this song. The stored blob is deliberately left
-	 * alone: another song's pool may reference the same media, and once none
-	 * does, `pruneSequenceMedia` collects it on the next pool save.
-	 */
+	/** Drops the source from this song; the stored blob stays for other pools. */
 	remove(id: string) {
 		const src = this.get(id);
 		if (!src) return;
@@ -291,7 +228,6 @@ export class SequenceSourceRegistry {
 		this.#revoke(src);
 	}
 
-	/** The size generated images should render at — the editor's output size. */
 	setOutputSize(width: number, height: number) {
 		this.#sizeSync.resize(width, height);
 	}
@@ -301,11 +237,7 @@ export class SequenceSourceRegistry {
 		return this.#sizeSync.settle();
 	}
 
-	/**
-	 * Move a source to another slot. The order is what the pool's numbering and
-	 * per-source colours follow, so it's the user's to arrange; assignments ride
-	 * on ids and don't move with it.
-	 */
+	/** Move a source to another slot; assignments ride on ids, not order. */
 	reorder(from: number, to: number) {
 		const list = [...this.sources];
 		if (from === to) return;
@@ -315,15 +247,11 @@ export class SequenceSourceRegistry {
 		this.sources = list;
 	}
 
-	/** Drop every source. */
 	clear() {
 		for (const s of [...this.sources]) this.remove(s.id);
 	}
 
-	/**
-	 * Make the pool exactly `ids`, pulling any missing ones out of storage.
-	 * Used when the song changes: the pool belongs to the song.
-	 */
+	/** Make the pool exactly `ids`, pulling missing ones from storage. */
 	async setPool(ids: string[]): Promise<void> {
 		const want = new Set(ids);
 		for (const s of [...this.sources]) {
@@ -332,19 +260,14 @@ export class SequenceSourceRegistry {
 		await this.restore(ids);
 	}
 
-	/**
-	 * Pulls previously-stored media back into the pool. Only ids that saved
-	 * clips actually reference are restored, so an unrelated earlier session's
-	 * files don't pile into the bin.
-	 */
+	/** Pulls stored media back into the pool; only ids saved clips reference are restored. */
 	async restore(wantedIds: Iterable<string>): Promise<void> {
 		const wanted = new Set(wantedIds);
 		for (const s of this.sources) wanted.delete(s.id);
 		if (wanted.size === 0) return;
 		let stored: StoredSequenceMedia[];
-		// Reading a song's pool back out of storage is part of the wait the
-		// placeholder covers, so it holds the counters open until the add below
-		// takes them over — the files themselves are only ever counted there.
+		// Reading a pool back is part of the wait the placeholder covers, so the
+		// counters stay open until the add takes over.
 		this.#beginLoad(wanted.size);
 		try {
 			stored = await getAllSequenceMedia();
@@ -357,11 +280,7 @@ export class SequenceSourceRegistry {
 		if (files.length > 0) await this.add(files, { persist: false });
 	}
 
-	/**
-	 * Returns undefined while the image is still being decoded: the caller
-	 * holds the previous frame and is called back via `onReady`. Decoding eagerly at add time would pin every source's full
-	 * bitmap in memory, which a few hundred screenshots will not survive.
-	 */
+	/** Undefined while the image decodes; the caller holds the previous frame. */
 	image(id: string): HTMLImageElement | undefined {
 		const hit = this.#images.get(id);
 		if (hit) {
@@ -388,12 +307,7 @@ export class SequenceSourceRegistry {
 		return undefined;
 	}
 
-	/**
-	 * Turn the preview proxy for this source on or off — the chip's badge is the
-	 * entry point. Off drops any proxy already attached and stops one being
-	 * built, so the preview decodes the original the user asked for; the choice
-	 * is remembered for this file across sessions and modes.
-	 */
+	/** Turn the preview proxy on or off; the choice persists across sessions and modes. */
 	setProxyEnabled(id: string, enabled: boolean) {
 		const src = this.get(id);
 		if (!src || src.kind !== "video") return;
@@ -412,10 +326,6 @@ export class SequenceSourceRegistry {
 		if (wanted) void this.#makeProxy(id, src.file);
 	}
 
-	/**
-	 * Retry a failed proxy transcode for this source — the chip's warning badge
-	 * is the entry point. A no-op when there is nothing to retry.
-	 */
 	retryProxy(id: string) {
 		const src = this.get(id);
 		if (!src || src.kind !== "video" || !src.proxyFailed) return;
@@ -446,8 +356,7 @@ export class SequenceSourceRegistry {
 		const batch: SequenceSource[] = [];
 		for (const s of built) {
 			if (!s) continue;
-			// Belt and braces: anything that slipped in behind us is dropped rather
-			// than duplicated.
+			// Belt and braces: anything that slipped in behind us is dropped.
 			if (this.#disposed || this.get(s.id)) {
 				this.#revoke(s);
 				continue;
@@ -459,11 +368,7 @@ export class SequenceSourceRegistry {
 		return batch;
 	}
 
-	/**
-	 * Fills in image thumbnails once the chips are already on screen. Also the
-	 * validation pass: a file that won't decode isn't usable media, so it leaves
-	 * the pool again.
-	 */
+	/** Fills in image thumbnails once chips are on screen; also the validation pass. */
 	async #fillThumbnails(list: SequenceSource[]) {
 		let next = 0;
 		const worker = async () => {
@@ -481,8 +386,6 @@ export class SequenceSourceRegistry {
 					continue;
 				}
 				// `sources` is $state, so assigning through the proxy updates the chip.
-				// The decode is also the one place an image's size is read, and the
-				// editor sizes its frame off the first source's.
 				live.thumbUrl = thumb.url;
 				live.thumbPending = false;
 				live.width = thumb.width;
@@ -501,7 +404,7 @@ export class SequenceSourceRegistry {
 		}
 	}
 
-	/** Synchronous — an image needs no decoding to become a pool entry. */
+	/** Synchronous: an image needs no decoding to become a pool entry. */
 	#buildImage(file: File): SequenceSource {
 		return {
 			id: stableSourceId(file),
@@ -523,8 +426,8 @@ export class SequenceSourceRegistry {
 			return null;
 		}
 		const eligible = needsProxy(probe.width, probe.height);
-		// Read here rather than when the job would start: the user's choice is
-		// what decides whether there is a job at all.
+		// Read here, not when the job starts: the user's choice decides whether there
+		// is a job at all.
 		const optedOut = eligible && isProxyDisabled(file);
 		return {
 			id: stableSourceId(file),
@@ -538,17 +441,13 @@ export class SequenceSourceRegistry {
 			width: probe.width,
 			height: probe.height,
 			duration: probe.duration,
-			// The job itself starts after the append — see add().
+			// The job starts after the append; see add().
 			proxyPending: eligible && !optedOut,
 			proxyDisabled: eligible && optedOut,
 		};
 	}
 
-	/**
-	 * Attach a ≤1080p preview proxy to a video source: reuse the one persisted
-	 * beside the original, or transcode one in the background. The source
-	 * previews from the original either way until the proxy lands.
-	 */
+	/** Attach a <=1080p preview proxy; previews use the original until it lands. */
 	async #makeProxy(id: string, file: File) {
 		const stored = await getSequenceMediaProxy(file);
 		let proxy = stored;
@@ -575,12 +474,7 @@ export class SequenceSourceRegistry {
 			this.#proxyJobs.delete(id);
 		}
 		if (this.#disposed) return;
-		// A proxy that won't open is worse than none — the preview would freeze on
-		// this source instead of grinding through the original — so it gets the
-		// same decodability check an added file gets before it is trusted.
-		// Opening it is also where its real size comes from, which is the one the
-		// chip reports: a stored proxy never announced one, and a fresh one only
-		// announced the size it was aiming at.
+		// A proxy that won't open is worse than none, so it gets the same decodability check.
 		let opened: { width: number; height: number } | null = null;
 		if (proxy) {
 			const sampler = await SlideVideoSampler.create(proxy);
@@ -588,15 +482,13 @@ export class SequenceSourceRegistry {
 			sampler?.dispose();
 			if (!sampler) {
 				proxy = null;
-				// A stored one that no longer opens has to go, or the retry would find
-				// it again and fail the same way.
+				// A stored one that no longer opens has to go, or the retry finds it again.
 				if (stored) void deleteSequenceMediaProxy(file).catch(() => {});
 			}
 		}
 		const live = this.get(id);
 		if (!live) return;
-		// Turned off while the transcode ran: the file is still worth storing for
-		// a later change of mind, but nothing here may touch the source's state.
+		// Turned off while the transcode ran: still worth storing, but don't touch the source's state.
 		if (live.proxyDisabled) return;
 		if (proxy) {
 			live.proxyFile = proxy;
@@ -604,8 +496,7 @@ export class SequenceSourceRegistry {
 			live.proxyHeight = opened?.height;
 			live.proxyPending = false;
 			live.proxyProgress = undefined;
-			// Persisted under the source's own id so the next run skips the
-			// transcode, whether or not the source itself is persisted.
+			// Persisted under the source's own id so the next run skips the transcode.
 			if (!stored) {
 				void putSequenceMediaProxy(file, proxy).catch(() => {});
 			}
@@ -616,15 +507,7 @@ export class SequenceSourceRegistry {
 	}
 }
 
-/**
- * Cover-cropped square JPEG for a chip, as an object URL.
- *
- * `createImageBitmap` rather than an `<img>`: it decodes off the main thread
- * and the bitmap is closed straight after, so a few hundred of these don't
- * pile full-resolution decodes into memory. Pointing the chips at the original
- * files instead would make the browser decode full-size screenshots to fill
- * 58px boxes.
- */
+/** Cover-cropped square JPEG for a chip, as an object URL. */
 async function makeThumbUrl(
 	file: File,
 	size = THUMB_SIZE,

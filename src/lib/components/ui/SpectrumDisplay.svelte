@@ -17,9 +17,8 @@
 		binCount: number;
 		freqMin: number;
 		freqMax: number;
-		/** The response this link is modulated through. Drives both how fast the
-		 * bars move and the level read-out, so the display shows what the
-		 * parameter actually rides rather than a generic spectrum. */
+		/** The response this link is modulated through. Drives both how fast the bars move
+		 * and the level read-out, so the display shows what the parameter rides. */
 		response?: AudioResponse;
 		width?: number;
 		height?: number;
@@ -38,15 +37,12 @@
 
 	let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);
 
-	// Capped at 16 kHz like the presets — above it is MP3/AAC lowpass dead zone.
+	// Capped at 16 kHz like the presets; above it is MP3/AAC lowpass dead zone.
 	const AXIS_MIN_HZ = FREQ_PRESETS.full.min;
 	const AXIS_MAX_HZ = FREQ_PRESETS.full.max;
 
-	/**
-	 * Envelope state for the read-out lives in the same keyed store the real
-	 * modulation uses, under a scope of this display's own so it never steps the
-	 * band a parameter is actually riding. Dropped on unmount.
-	 */
+	/** Envelope state for the read-out lives in the same keyed store the real modulation
+	 * uses, under this display's own scope, so it never steps the band a parameter rides. */
 	const previewScope = `spectrum-preview-${generateId()}`;
 
 	function hzToBin(hz: number): number {
@@ -58,7 +54,6 @@
 		return AXIS_MIN_HZ * (AXIS_MAX_HZ / AXIS_MIN_HZ) ** t;
 	}
 
-	/** Inverse of barFreq, for placing the selected band on the axis. */
 	function freqToX(hz: number, w: number): number {
 		const t =
 			Math.log(Math.max(hz, AXIS_MIN_HZ) / AXIS_MIN_HZ) /
@@ -76,13 +71,8 @@
 		return a + (b - a) * frac;
 	}
 
-	/**
-	 * The number the linked parameter is riding this frame: band mean, envelope
-	 * followed, auto-ranged, then shaped by Punch — the same chain and the same
-	 * order `applyVolumeLinksToEffects` runs. Inversion is deliberately left
-	 * off; it mirrors the same curve and showing it flipped would only make the
-	 * display harder to read against the spectrum under it.
-	 */
+	/** The number the linked parameter is riding this frame: band mean, envelope
+	 * followed, auto-ranged, then shaped by Punch, as `applyVolumeLinksToEffects` does. */
 	function modulationLevel(dt: number): number {
 		if (!sampleRate || !data.length) return 0;
 		const key = `${previewScope}|${freqMin}:${freqMax}`;
@@ -107,10 +97,8 @@
 		const bars = 64;
 		const barW = w / bars;
 		let rafId: number;
-		// The analyser hands out raw bins (its smoothing moved into the shared
-		// band level, so exports get it too), so the bars are damped here — on
-		// the same asymmetric curve the band follower uses, so moving Smoothing
-		// visibly changes how the display responds too.
+		// The analyser hands out raw bins, so the bars are damped here on the same
+		// asymmetric curve the band follower uses.
 		const shown = new Float32Array(bars);
 		let lastFrame = performance.now();
 
@@ -129,8 +117,8 @@
 				const b1 = hzToBin(hiHz);
 				const first = Math.floor(b0);
 				const last = Math.min(binCount - 1, Math.floor(b1));
-				// Peak, not mean: high bars span hundreds of bins and averaging
-				// buries every transient in the noise floor around it.
+				// Peak, not mean: high bars span hundreds of bins and averaging buries
+				// every transient in the noise floor around it.
 				let peak: number;
 				if (last <= first) {
 					peak = sampleBin((b0 + b1) / 2);
@@ -151,8 +139,8 @@
 				ctx.fillRect(i * barW, h - barH, barW - 1, barH);
 			}
 
-			// The modulation read-out, over the band it is measured from. Drawn
-			// last so it reads on top of the spectrum rather than behind it.
+			// The modulation read-out, over the band it is measured from. Drawn last
+			// so it reads on top of the spectrum rather than behind it.
 			const x0 = freqToX(freqMin, w);
 			const x1 = freqToX(freqMax, w);
 			const y = h - modulationLevel(dt) * h * 0.9;

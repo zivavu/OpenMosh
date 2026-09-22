@@ -13,33 +13,21 @@ export interface MoshOptions {
 	moshMax: number;
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
-	/** 0–1: controls both how many params get linked and how wide their modulation range is. */
+	/** 0-1: controls how many params get linked and how wide their range is. */
 	moshAudioLinkStrength: number;
 	/** Band every rolled link listens to. Defaults to the full spectrum. */
 	moshLinkBand?: FreqBand;
 	hasAudio: boolean;
-	/** When true, only currently enabled (non–hidden) effects are included in random mosh; disabled effects stay off. */
+	/** When true, only enabled effects are included in random mosh. */
 	onlyMoshEnabled?: boolean;
 }
 
-/**
- * Effects a roll may touch: locked ones are the user's choice to protect,
- * `moshable: false` ones have nothing worth randomizing (see EffectDefinition).
- * Both keep their enabled state, params and chain position through a mosh.
- */
+/** Effects a roll may touch; locked ones are protected by the user. */
 export function isMoshable(effect: EffectInstance): boolean {
 	return !effect.locked && getDefinition(effect.defId)?.moshable !== false;
 }
 
-/**
- * Roll fresh values for every randomizable param of one effect, in place.
- *
- * Shared with the slideshow sequencer, which held a second copy that quantized
- * range params onto a grid anchored at `param.min` while this one anchored at
- * zero. The two agree for every param defined today (each one's `min` is a
- * whole number of steps), but only by accident — this form is the one that
- * holds regardless, and it leaves a `step` of 0 alone instead of dividing by it.
- */
+/** Roll fresh values for every randomizable param of one effect, in place. */
 export function randomizeParams(
 	values: Record<string, number | string>,
 	def: EffectDefinition,
@@ -55,8 +43,7 @@ export function randomizeParams(
 					? Math.round((raw - param.min) / param.step) * param.step + param.min
 					: raw;
 		} else if (param.type === "select") {
-			// An unmatched moshOptions entry would leave nothing to pick from, so
-			// fall back to the full list rather than rolling undefined.
+			// An unmatched moshOptions entry would leave nothing to pick from; use the full list.
 			const allowed = param.moshOptions;
 			const opts = allowed?.length
 				? param.options.filter((o) => allowed.includes(o.value))
@@ -67,10 +54,7 @@ export function randomizeParams(
 	}
 }
 
-/**
- * Link a random share of range params to the music, all on the same band —
- * see the comment at the link site below.
- */
+/** Link a random share of range params to the music, all on the same band. */
 export function applyRandomAudioLinks(
 	effects: EffectInstance[],
 	hasAudio: boolean,
@@ -106,7 +90,7 @@ export function applyRandomAudioLinks(
 			const span = pMax - pMin;
 			// Center position is independent of width so they don't limit each other
 			const centerT = Math.random();
-			// Width is guaranteed [50%–100%] of span at strength=1, scaled down linearly
+			// Width is guaranteed [50%-100%] of span at strength=1, scaled down linearly
 			const widthFraction = strength * (0.5 + Math.random() * 0.5);
 			const halfW = widthFraction / 2;
 			let vMin = pMin + Math.max(0, centerT - halfW) * span;
@@ -120,10 +104,7 @@ export function applyRandomAudioLinks(
 				if (vMax <= vMin) vMax = Math.min(pMax, vMin + param.step);
 			}
 
-			// One band for the whole roll, chosen by the user. Rolling a random band
-			// per param used to be the default, but it reads as noise — half the
-			// links would sit on a quiet part of the mix and barely move. "full"
-			// leaves freqMin/freqMax unset, which follows the overall RMS level.
+			// One band for the whole roll, chosen by the user; a random band per param reads as noise.
 			links[param.key] =
 				band === "full"
 					? { min: vMin, max: vMax }
@@ -143,17 +124,7 @@ export function applyRandomAudioLinks(
 	}
 }
 
-/**
- * Randomize effects — enable a random subset, randomize their params, optionally shuffle order.
- * Mutates the effects array in place.
- *
- * MUST stay fully synchronous and draw all randomness from `Math.random`:
- * sequence/preview determinism runs it inside `withSeededRandom`, which swaps
- * the global `Math.random` for the call's duration and restores it in a
- * `finally`. Introducing an `await` here (or a non-`Math.random` RNG) would let
- * the swap leak across the microtask boundary or bypass the seed — breaking the
- * preview/export "same seed → same mosh" guarantee. See [[sequence.ts]].
- */
+/** Randomize effects: enable a random subset, randomize params, optionally shuffle order. */
 export function generateMosh(
 	effects: EffectInstance[],
 	options: MoshOptions,

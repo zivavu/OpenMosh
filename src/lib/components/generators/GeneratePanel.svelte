@@ -21,10 +21,8 @@
 	interface Props {
 		/** Single mode makes one image; the multi modes make a set. */
 		single: boolean;
-		/**
-		 * Opened from inside an editor: render straight at its output size and
-		 * skip the ratio choice.
-		 */
+		/** Opened from inside an editor: render straight at its output size and skip
+		 * the ratio choice. */
 		size?: { width: number; height: number } | null;
 		onUse: (files: File[]) => void;
 		onClose: () => void;
@@ -51,7 +49,6 @@
 		{ label: "Wild", value: "wild" },
 		{ label: "Cohesive", value: "cohesive" },
 	];
-	/** How many of the batch the strip shows. */
 	const PREVIEW_MAX = 6;
 	const PREVIEW_SHORT = 150;
 
@@ -71,7 +68,6 @@
 	let target = $derived(size ?? ratioSize(ratio, GENERATED_SHORT_SIDE));
 	let aspect = $derived(target.width / target.height);
 
-	// ── Preview strip ──
 	let previews = $state<string[]>([]);
 	let previewing = $state(false);
 
@@ -105,7 +101,6 @@
 
 	onDestroy(() => previews.forEach((u) => URL.revokeObjectURL(u)));
 
-	// ── Use ──
 	let busy = $state(false);
 	let done = $state(0);
 

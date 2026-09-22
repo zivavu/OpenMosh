@@ -6,9 +6,8 @@ import {
 	type ChainClip,
 } from "../editor/chain-clip";
 import { cleanEffects, handBuiltLabel } from "../editor/sequence";
-// Straight from the module, not the barrel: that re-exports the custom-font
-// store, whose runes can't run outside a Svelte build — which took this file's
-// tests down with it.
+// From the module, not the barrel: that re-exports the custom-font store, whose
+// runes break outside a Svelte build.
 import { FONT_OPTIONS } from "../text-overlay/fonts";
 import type { TextOverlayBlendMode } from "../text-overlay/types";
 import {
@@ -21,7 +20,6 @@ export type TextAlign = "left" | "center" | "right";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
-/** How a lane's text is drawn, independent of when it is on screen. */
 export interface TextStyle {
 	/** Anchor position, normalized (x: left→right, y: top→bottom). */
 	x: number;
@@ -30,7 +28,6 @@ export interface TextStyle {
 	size: number;
 	/** CSS font-family value (see text-overlay/fonts.ts). */
 	fontFamily: string;
-	/** Which side of the anchor the text sits on. */
 	align: TextAlign;
 	color: string;
 	outline: boolean;
@@ -42,44 +39,32 @@ export interface TextStyle {
 	blendMode: TextOverlayBlendMode;
 }
 
-/** One span of text on a lane. A chain clip (see chain-clip.ts): the effects
- * run on this clip's text alone, before it meets the image, and roll, fill
- * and clear the same way a media clip's do. */
+/** One span of text on a lane. A chain clip: its effects run on this clip's text
+ * alone, before it meets the image. */
 export interface TextClip extends ChainClip {
 	text: string;
-	/** Ramp the layer in over `fadeInSec` after its start and out over
-	 * `fadeOutSec` before its end — each edge on its own, the same as a media
-	 * clip. Absent means no ramp. */
+	/** Ramp in over `fadeInSec` after the start and out over `fadeOutSec` before the
+	 * end, each edge on its own. Absent means no ramp. */
 	fadeInSec?: number;
 	fadeOutSec?: number;
 }
 
-/** How strongly the clip shows at `time` — 1 unless a fade is ramping.
- * Multiplied into the lane's opacity by the resolver. */
+/** How strongly the clip shows at `time`, 1 unless a fade is ramping. */
 export function textClipWeight(clip: TextClip, time: number): number {
 	return clipFadeWeight(clip, clip.fadeInSec, clip.fadeOutSec, time);
 }
 
-/**
- * A text layer. Clips within a lane never overlap, so a lane shows at most one
- * clip at a time and drag/resize stay unambiguous.
- */
+/** A text layer. Clips within a lane never overlap, so a lane shows at most one
+ * clip at a time and drag/resize stay unambiguous. */
 export interface TextLane {
 	id: string;
 	name: string;
 	enabled: boolean;
-	/**
-	 * Composite before the main chain rather than over the finished frame, so
-	 * every image effect distorts this layer too.
-	 *
-	 * This replaced an index into the enabled effects: only its two ends meant
-	 * anything stable, since toggling an effect, reordering the chain or rolling
-	 * a mosh renumbers everything in between.
-	 */
+	/** Composite before the main chain rather than over the finished frame, so every
+	 * image effect distorts this layer too. */
 	underEffects: boolean;
 	/** Order among *all* layers, text and media alike. Higher sits on top. */
 	z: number;
-	/** Shared by every clip in the lane. */
 	style: TextStyle;
 	clips: TextClip[];
 }
@@ -123,17 +108,13 @@ export function createTextClip(
 		text,
 		mode: "static",
 		label: "clean",
-		// See createMediaClip: the same all-disabled list the main chain starts
-		// from, so the panel has something to switch on.
+		// Same all-disabled list the main chain starts from, so the panel can switch things on.
 		effects: cleanEffects(),
 	};
 }
 
-/**
- * Cut the clip covering `at` into two, each keeping the text. Returns the lane
- * unchanged when `at` isn't inside a clip, or when either half would come out
- * shorter than MIN_CLIP_LENGTH.
- */
+/** Cut the clip covering `at` in two, each keeping the text. Returns the lane
+ * unchanged when `at` is outside a clip. */
 export function splitTextClipAt(lane: TextLane, at: number): TextLane {
 	return splitChainClipAt(lane, at, () => nextId("clip"));
 }
@@ -158,10 +139,8 @@ export function createTextTimeline(z = TEXT_Z_BASE): TextTimeline {
 	return { enabled: true, lanes: [createTextLane("Text 1", z)] };
 }
 
-/**
- * Add an empty lane, named after its position. `z` comes from the caller: the
- * order spans the media lanes too, and this timeline can't see those.
- */
+/** Add an empty lane, named after its position. `z` comes from the caller: the
+ * order spans the media lanes too, which this timeline can't see. */
 export function appendTextLane(
 	timeline: TextTimeline,
 	z = TEXT_Z_BASE,
@@ -175,11 +154,8 @@ export function appendTextLane(
 	};
 }
 
-/**
- * Where text lanes start in the shared layer order. Above the media lanes,
- * which is where they sat before the two orders were merged — and where a
- * caption over a layered clip wants to be anyway.
- */
+/** Where text lanes start in the shared layer order: above the media lanes, where
+ * they sat before the orders merged. */
 export const TEXT_Z_BASE = 1000;
 
 /** A clip saved with no chain at all is backfilled, not left switch-less. */
@@ -202,8 +178,8 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 		enabled: !!t.enabled,
 		lanes: lanes.map((lane, i) => {
 			const clips = Array.isArray(lane.clips) ? lane.clips : [];
-			// Timelines saved before styles moved to the lane carried one per
-			// clip; the first clip's style stands in for the lane's.
+			// Timelines saved before styles moved to the lane carried one per clip; the first
+			// clip's style stands in for the lane's.
 			const legacyStyle = (clips as Array<{ style?: TextStyle }>).find(
 				(c) => c.style,
 			)?.style;
@@ -211,16 +187,13 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 				id: lane.id ?? nextId("lane"),
 				name: lane.name ?? `Text ${i + 1}`,
 				enabled: lane.enabled !== false,
-				// Timelines saved against the old chain index carry one instead of
-				// these two: index 0 was "under every effect", anything else was some
-				// position the next mosh would have invalidated anyway.
+				// Old timelines carry a chain index instead: 0 meant "under every effect".
 				underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
 				z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
 				style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
 				clips: clips.map((clip) => {
-					// Lanes saved before clips carried their own chain held one for
-					// the whole lane: every clip inherits it, a copy each, so the
-					// lane keeps rendering as it did.
+					// Lanes saved before clips carried their own chain held one for the whole lane:
+					// every clip inherits a copy.
 					const legacyChain = (lane as { effects?: unknown }).effects;
 					const effects = Array.isArray(clip.effects)
 						? clipEffects(clip.effects)
@@ -232,8 +205,7 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 						text: clip.text ?? "",
 						...normalizeChainFields(clip, effects),
 					};
-					// An inherited chain has no label of its own: name it by what
-					// it switches on rather than calling a moshed lane "clean".
+					// An inherited chain has no label: name it by what it switches on.
 					if (!Array.isArray(clip.effects) && !clip.label)
 						out.label = handBuiltLabel(effects);
 					if (clip.fadeInSec! > 0) out.fadeInSec = clip.fadeInSec;

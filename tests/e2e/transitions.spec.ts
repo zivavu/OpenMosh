@@ -1,37 +1,20 @@
 import { expect, test as base, type Page } from "@playwright/test";
 import { patternPngBase64, pngBytes, RED } from "./fixtures";
 
-/**
- * Every segment transition, through the real renderer.
- *
- * Same gap as the effects, and the same silent failure: a transition whose
- * shader stops compiling is caught, logged, and then quietly skipped — the
- * blend just becomes a cut and nothing anywhere goes red. Driven off
- * TRANSITION_SHADERS, so a new transition is covered the moment it's in the
- * registry.
- *
- * There is a second contract here that only a real render can check. The
- * shaders' own doc says every bit of randomness derives from (u_seed,
- * u_progress) and never from u_time, precisely so the preview and the export
- * produce identical blends frame for frame. That is a property, and properties
- * can be tested: render the same blend at two different clock times and the
- * pixels have to match.
- */
+/** Every segment transition, through the real renderer. A transition whose shader stops
+ * compiling is caught, logged and skipped, so the blend becomes a cut and nothing goes red. */
 
 interface TransitionResult {
 	type: string;
-	/** Halfway through, the blend differs from both the outgoing and the
-	 * incoming frame — it is actually mixing rather than cutting. */
+	/** Halfway through, the blend differs from both the outgoing and incoming frame:
+	 * it is actually mixing rather than cutting. */
 	blends: boolean;
 	/** Same seed and progress at a different clock time gives the same pixels. */
 	timeIndependent: boolean;
 	/** Landed on the incoming frame exactly once progress reached 1. */
 	settlesOnIncoming: boolean;
-	/**
-	 * Whether each knob the shader declares actually reaches it. Null means the
-	 * shader doesn't read that uniform, so there is nothing to check — decided
-	 * from the shader source, not from a list kept in this file.
-	 */
+	/** Whether each knob the shader declares actually reaches it. Null means the shader
+	 * doesn't read that uniform; decided from the shader source, not a list in this file. */
 	respondsToSeed: boolean | null;
 	respondsToDirection: boolean | null;
 	respondsToDensity: boolean | null;
@@ -79,9 +62,8 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 			const renderer = new GlRenderer(canvas);
 			renderer.resize(size, size);
 
-			// Two visibly different sources, so a blend between them has somewhere
-			// to travel. The outgoing side is the alt texture, which is the path
-			// the editor uses when two segments draw from different media.
+			// Two visibly different sources, so a blend has somewhere to travel. The outgoing side
+			// is the alt texture, the path the editor uses when two segments draw from different media.
 			renderer.loadImage(await bitmapOf(incomingB64));
 			renderer.updateAltSourceImage(await bitmapOf(outgoingB64));
 
@@ -126,15 +108,11 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 			// The incoming frame on its own is what progress 1 has to land on.
 			renderer.render([], 0);
 			const incomingHash = sample();
-			// And the outgoing one is the far end: progress 0 drawn from the alt
-			// texture, which is as close to "before the blend" as this gets.
+			// The outgoing one is the far end: progress 0 drawn from the alt texture.
 			const outgoingHash = blendAt("rgbslip", 0, 0);
 
-			// Every transition is built as header + shared helpers + its own body,
-			// and the first two mention all three uniforms whether or not the body
-			// uses them. The shared part is exactly the longest prefix common to
-			// all of them, so the bodies can be recovered without this file
-			// knowing anything about how the shaders are assembled.
+			// Every transition is header + shared helpers + its own body, and the first two mention
+			// all three uniforms. The shared part is the longest common prefix, so bodies can be recovered.
 			const registry = TRANSITION_SHADERS as Record<
 				string,
 				{ fragment: string }
@@ -155,16 +133,13 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 				const body: string = TRANSITION_SHADERS[type].fragment.slice(
 					shared.length,
 				);
-				// The seed reaches a body as `SEED`, a local the shared prefix
-				// derives from u_seed; the other two are read as uniforms directly.
+				// The seed reaches a body as `SEED`, derived from u_seed; the other two are uniforms.
 				const readsSeed = /\bSEED\b/.test(body) || body.includes("u_seed");
 				const mid = blendAt(type, 0.5, 0.4);
-				// The same blend, one second later on the clock. Any u_time in the
-				// shader shows up right here as a different frame.
+				// The same blend, one second later: any u_time in the shader shows up as a different frame.
 				const midLater = blendAt(type, 0.5, 1.4);
 				const settled = blendAt(type, 1, 0.4);
-				// Only asked of the shaders that declare the uniform, so this stays
-				// right as transitions are added and none of it is hard-coded.
+				// Only asked of shaders that declare the uniform, so nothing here is hard-coded.
 				const differsWith = (seed: number, dir: number, den: number) =>
 					blendAt(type, 0.5, 0.4, seed, dir, den) !== mid;
 				transitions.push({
@@ -205,8 +180,7 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 }
 
 /** One render pass per worker, shared by every test below. */
-// `{}` is Playwright's own shape for "no test-scoped fixtures, one
-// worker-scoped one"; a stricter empty type doesn't satisfy its generics.
+// `{}` is Playwright's shape for "no test-scoped fixtures, one worker-scoped one".
 const test = base.extend<{}, { report: TransitionReport }>({
 	report: [
 		async ({ browser }, use) => {
@@ -226,8 +200,7 @@ test("has a transition to render for every one in the registry", async ({
 });
 
 test("draws the two ends of a blend differently", async ({ report }) => {
-	// Everything below compares against these two. If the outgoing and incoming
-	// frames were the same picture, every blend would trivially "not blend".
+	// Everything below compares against these two; if they matched, no blend would blend.
 	expect(report.outgoingHash).not.toBe(report.incomingHash);
 });
 
@@ -248,8 +221,7 @@ test("renders every transition without a GL error", async ({ report }) => {
 });
 
 test("actually mixes the two sides halfway through", async ({ report }) => {
-	// A transition that fails to bind one of its textures still renders — as
-	// one side or the other, which reads as a cut the user didn't ask for.
+	// A transition that fails to bind a texture still renders, as one side or the other.
 	const notBlending = report.transitions
 		.filter((t) => !t.blends)
 		.map((t) => t.type);
@@ -257,11 +229,8 @@ test("actually mixes the two sides halfway through", async ({ report }) => {
 });
 
 test("blends the same way whatever the clock says", async ({ report }) => {
-	// A tripwire rather than a bug hunt: transitions aren't handed a u_time
-	// today, so this holds by construction. It's here because the day someone
-	// wires one in, the exported file starts disagreeing with the preview the
-	// user approved — frame for frame, silently — and this is the only thing
-	// watching for it.
+	// A tripwire rather than a bug hunt: transitions aren't handed a u_time today, so this
+	// holds by construction. The day someone wires one in, the export drifts from the preview.
 	const drifting = report.transitions
 		.filter((t) => !t.timeIndependent)
 		.map((t) => t.type);
@@ -269,9 +238,8 @@ test("blends the same way whatever the clock says", async ({ report }) => {
 });
 
 test("wires up every knob its shader asks for", async ({ report }) => {
-	// The renderer sets these uniforms behind `if (prog.uniforms[...])`, so a
-	// renamed or dropped one doesn't throw — the transition just stops
-	// responding to that control, and every re-roll starts looking the same.
+	// The renderer sets these behind `if (prog.uniforms[...])`, so a renamed or dropped one
+	// doesn't throw: the transition just stops responding and every re-roll looks the same.
 	const ignored: string[] = [];
 	for (const t of report.transitions) {
 		if (t.respondsToSeed === false) ignored.push(`${t.type}: u_seed`);
@@ -282,8 +250,7 @@ test("wires up every knob its shader asks for", async ({ report }) => {
 });
 
 test("has a transition reading each of the three knobs", async ({ report }) => {
-	// Guards the test above from passing by reading nothing: if every
-	// `respondsTo*` were null it would be green and checking nothing at all.
+	// Guards the test above from passing by reading nothing: all-null would be green and check nothing.
 	const declared = {
 		seed: report.transitions.some((t) => t.respondsToSeed !== null),
 		direction: report.transitions.some((t) => t.respondsToDirection !== null),
@@ -295,9 +262,8 @@ test("has a transition reading each of the three knobs", async ({ report }) => {
 test("lands exactly on the incoming frame when it finishes", async ({
 	report,
 }) => {
-	// Documented fast path: at progress 1 the renderer skips the blend entirely
-	// and draws chain B. A transition that ends a shade off leaves a visible
-	// seam at every segment boundary.
+	// Documented fast path: at progress 1 the renderer skips the blend and draws chain B.
+	// A transition that ends a shade off leaves a seam at every segment boundary.
 	const short = report.transitions
 		.filter((t) => !t.settlesOnIncoming)
 		.map((t) => t.type);
@@ -307,8 +273,7 @@ test("lands exactly on the incoming frame when it finishes", async ({
 test("falls back to a cut for a transition it doesn't know", async ({
 	report,
 }) => {
-	// Same path a saved timeline takes when it names a transition that has
-	// since been removed: draw the incoming segment rather than nothing.
+	// Same path a saved timeline takes when it names a removed transition: draw the incoming segment.
 	expect(report.unknownTypeHash).toBe(report.incomingHash);
 });
 

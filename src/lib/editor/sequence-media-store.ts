@@ -1,15 +1,4 @@
-/**
- * IndexedDB storage for sequence media.
- *
- * Two stores. `media` holds the blobs, keyed by a content-derived id: a reload
- * hands the editor plain `File`s again, so the ids have to survive it, which
- * also makes re-adding the same file a no-op. `pools` records which of those
- * ids belong to which song, so loading a track brings back the media that
- * song's timeline was built from rather than one global bin.
- *
- * The pool key matches the sequence timeline's own storage key (the track id,
- * or the source video when there's no track), so the two always swap together.
- */
+/** IndexedDB storage for sequence media; `pools` maps ids to songs. */
 
 import { request, transact } from "../idb";
 import { requestPersistentStorage } from "../persistent-storage";
@@ -21,40 +10,26 @@ export interface StoredSequenceMedia {
 	blob: Blob;
 	type: string;
 	addedAt: number;
-	/**
-	 * The source file's mtime. Part of the id, so rebuilding a File without it
-	 * changes that File's id — see storedMediaToFile. Absent on records written
-	 * before this field existed.
-	 */
+	/** Source mtime; part of the id, so a rebuilt File without it gets a new id. */
 	lastModified?: number;
 }
 
-/**
- * A ≤1080p preview re-encode of some media (see video/proxy.ts), keyed by the
- * same content-derived id as its source. Its own store rather than a field on
- * the media entry: a single-mode file is deliberately not persisted, and a
- * proxy that died with that decision would re-transcode on every start.
- */
+/** A <=1080p preview re-encode (see video/proxy.ts), keyed by its source's id. */
 export interface StoredSequenceProxy {
 	id: string;
 	blob: Blob;
 	addedAt: number;
-	/** The transcoder build that made it — see PROXY_BUILD. Absent on entries
-	 * written before proxies were stamped, which is itself reason to rebuild. */
+	/** Transcoder build that made it (see PROXY_BUILD); absent means rebuild. */
 	build?: number;
 }
 
-/** The set of media one song's timeline draws from. */
 export interface StoredMediaPool {
 	key: string;
 	sourceIds: string[];
 	updatedAt: number;
 }
 
-/**
- * One song's sequence/single timeline: segments, fx lanes, text, media layers.
- * Hundreds of kilobytes a song, which is what outgrew its old localStorage home.
- */
+/** One song's timeline; hundreds of KB a song, which outgrew localStorage. */
 export interface StoredTimeline {
 	/** The mode-prefixed track key: `seq:<id>` or `single:<id>`. */
 	key: string;
@@ -66,11 +41,7 @@ export interface StoredTimeline {
 /** Modes that resume from a session record rather than a song's media pool. */
 export type SessionMode = "single" | "slideshow";
 
-/**
- * A resumable edit outside sequence mode. Unlike a pool, this carries the
- * editor state as well as the media, because there's no song to key a separate
- * timeline entry against — the media *is* the identity.
- */
+/** A resumable edit outside sequence mode; the media *is* the identity. */
 export interface StoredSession {
 	key: string;
 	mode: SessionMode;
@@ -93,44 +64,22 @@ const PROXY_STORE = "proxies";
 const DB_VERSION = 5;
 /** Least recently used pools past this are dropped. */
 const MAX_POOLS = 20;
-/** Same, for sessions — they compete with pools for the one media store. */
+/** Same, for sessions; they compete with pools for the one media store. */
 const MAX_SESSIONS = 20;
 /** Timelines are the largest records here, and only the recent ones matter. */
 const MAX_TIMELINES = 40;
-/**
- * Media belonging to no retained pool is kept up to this many entries, newest
- * first. Freshly added files land here until the pool save catches up, so this
- * must not be so tight that an add races its own eviction.
- */
+/** Fresh files land here until the pool save catches up, kept up to this many. */
 const MAX_UNREFERENCED = 64;
 
-/**
- * Proxies belonging to no referenced media are kept up to this many entries,
- * newest first — a session-scoped source (a single-mode file) has no pool or
- * session pointing at it, and its proxy is the one thing worth keeping
- * between runs.
- */
+/** Unreferenced proxies kept up to this many; a session-scoped source has no pool. */
 const MAX_UNREFERENCED_PROXIES = 16;
 
-/**
- * Stable across reloads for the same file, without hashing its contents.
- * The name is percent-encoded rather than stripped so two different names
- * can't collapse onto one id (and can't be crafted to forge another's).
- */
+/** The name is percent-encoded so two names can't collapse onto one id. */
 export function stableSourceId(file: File): string {
 	return `src:${encodeURIComponent(file.name)}:${file.size}:${file.lastModified}`;
 }
 
-/**
- * One shared connection for the whole module.
- *
- * This used to open and close a connection per call, which deadlocks the moment
- * the version changes: a version upgrade can't run while any other connection
- * to the database is still open, and callers here routinely overlap (the upload
- * screen alone kicks off three listings at once). The upgrade fires `blocked`
- * instead of `success`, and with no handler for it the promise simply never
- * settles — every read hangs forever, silently.
- */
+/** One shared connection; a connection per call deadlocks when the version changes. */
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 const REQUIRED_STORES = [
@@ -145,15 +94,15 @@ function hasAllStores(db: IDBDatabase): boolean {
 	return REQUIRED_STORES.every((name) => db.objectStoreNames.contains(name));
 }
 
-/** Omit `version` to open at whatever the stored version happens to be. */
+/** Omit `version` to open at the stored version. */
 function openAt(version?: number): Promise<IDBDatabase> {
 	return new Promise<IDBDatabase>((resolve, reject) => {
 		const req =
 			version === undefined
 				? indexedDB.open(DB_NAME)
 				: indexedDB.open(DB_NAME, version);
-		// Guarded rather than unconditional: v1 databases already have `media`,
-		// and upgrading them must only add the store they're missing.
+		// Guarded: v1 databases already have `media`, so upgrading must only add the
+		// missing store.
 		req.onupgradeneeded = () => {
 			const db = req.result;
 			if (!db.objectStoreNames.contains(STORE)) {
@@ -174,8 +123,8 @@ function openAt(version?: number): Promise<IDBDatabase> {
 		};
 		req.onsuccess = () => resolve(req.result);
 		req.onerror = () => reject(req.error);
-		// Another connection is holding the old version open. Fail loudly rather
-		// than hanging: callers can retry once that connection goes away.
+		// Another connection holds the old version open; fail loudly rather than
+		// hang, since callers can retry.
 		req.onblocked = () =>
 			reject(
 				new Error("openmosh-sequence-media upgrade blocked by another tab"),
@@ -183,7 +132,6 @@ function openAt(version?: number): Promise<IDBDatabase> {
 	});
 }
 
-/** Every record in a store. */
 async function readAll<T>(store: string): Promise<T[]> {
 	const db = await openDb();
 	return transact(db, store, "readonly", (tx) =>
@@ -209,23 +157,18 @@ async function write(
 function openDb(): Promise<IDBDatabase> {
 	if (dbPromise) return dbPromise;
 	dbPromise = (async () => {
-		// Opened without a version first: DB_VERSION is a floor, not an exact
-		// demand. Asking for a specific version fails outright against a database
-		// that's already past it, which is easy to end up with — a repair below
-		// bumps it, and any future rollback of DB_VERSION would too.
+		// Opened without a version first: DB_VERSION is a floor, and asking for a
+		// specific version fails against a database already past it.
 		let db = await openAt();
-		// A database at or past the current version but missing a store can't be
-		// repaired by opening it again — `upgradeneeded` only fires on a version
-		// bump. That state comes from an interrupted upgrade, or a hot reload that
-		// left an older connection alive. Force the next version so the creation
-		// path runs, rather than failing every write from here on.
+		// A database at/past the version but missing a store can't be repaired by
+		// reopening, since `upgradeneeded` only fires on a bump; force the next version.
 		if (db.version < DB_VERSION || !hasAllStores(db)) {
 			const next = Math.max(DB_VERSION, db.version + 1);
 			db.close();
 			db = await openAt(next);
 		}
-		// Another tab upgrading needs us out of the way, and the handle is dead
-		// afterwards — drop it so the next call reopens.
+		// Another tab upgrading needs us out of the way; the handle is dead
+		// afterwards, so drop it and let the next call reopen.
 		db.onversionchange = () => {
 			db.close();
 			dbPromise = null;
@@ -236,7 +179,6 @@ function openDb(): Promise<IDBDatabase> {
 		return db;
 	})();
 	// Don't cache a rejection: the blocking tab may be gone by the next call.
-	// Compared by identity so a retry that already replaced this one survives.
 	const pending = dbPromise;
 	pending.catch(() => {
 		if (dbPromise === pending) dbPromise = null;
@@ -249,12 +191,7 @@ export async function getAllSequenceMedia(): Promise<StoredSequenceMedia[]> {
 	return all.sort((a, b) => a.addedAt - b.addedAt);
 }
 
-/**
- * Just the ids, without deserializing a blob per record. Callers that only need
- * to know what's stored (rather than read it) should use this: the media store
- * holds every image and video, so a full getAll there is the most expensive
- * read in the app.
- */
+/** Just the ids; a full getAll deserializes a blob per record. */
 export async function getAllSequenceMediaIds(): Promise<Set<string>> {
 	const db = await openDb();
 	const keys = await transact(db, STORE, "readonly", (tx) =>
@@ -263,11 +200,7 @@ export async function getAllSequenceMediaIds(): Promise<Set<string>> {
 	return new Set(keys.map(String));
 }
 
-/**
- * The named entries only, in the order asked for, skipping ids that are gone.
- * One transaction, one `get` each — cheaper than pulling the whole store to
- * pick a pool's worth out of it.
- */
+/** The named entries only, in the order asked for, skipping ids that are gone. */
 export async function getSequenceMediaByIds(
 	ids: string[],
 ): Promise<StoredSequenceMedia[]> {
@@ -284,11 +217,7 @@ export async function getSequenceMediaByIds(
 	return found.filter((m) => m !== undefined);
 }
 
-/**
- * The stored preview proxy for this exact file, if one was persisted — keyed
- * by the same content-derived id as the media itself, so a proxy survives
- * reloads without its own identity anywhere.
- */
+/** The stored preview proxy for this file, keyed by the same id as the media. */
 export async function getSequenceMediaProxy(file: File): Promise<File | null> {
 	try {
 		const db = await openDb();
@@ -298,8 +227,7 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
 			stableSourceId(file),
 		);
 		if (!entry?.blob) return null;
-		// Made by an older transcoder: drop it and let the caller build a current
-		// one, rather than previewing from a file this build would never produce.
+		// Made by an older transcoder: drop it and let the caller build a current one.
 		if (entry.build !== PROXY_BUILD) {
 			void deleteSequenceProxy(entry.id).catch(() => {});
 			return null;
@@ -310,7 +238,6 @@ export async function getSequenceMediaProxy(file: File): Promise<File | null> {
 	}
 }
 
-/** Stores the preview proxy for this exact file, keyed by its source id. */
 export function putSequenceMediaProxy(file: File, proxy: Blob): Promise<void> {
 	const entry: StoredSequenceProxy = {
 		id: stableSourceId(file),
@@ -323,11 +250,7 @@ export function putSequenceMediaProxy(file: File, proxy: Blob): Promise<void> {
 	});
 }
 
-/**
- * Drops the stored proxy for this file. The one caller is a proxy that came
- * back from storage and then wouldn't open: kept, it would fail the same way
- * on every retry, since a retry looks in storage first.
- */
+/** Drops the stored proxy for this file; one that won't open fails on every retry. */
 export async function deleteSequenceMediaProxy(file: File): Promise<void> {
 	await deleteSequenceProxy(stableSourceId(file));
 }
@@ -342,11 +265,7 @@ export function deleteSequenceProxy(id: string): Promise<void> {
 	});
 }
 
-/**
- * One connection and one transaction for the whole batch. Writing a few
- * hundred files one call at a time meant a few hundred database opens, which
- * took longer than everything else about adding them put together.
- */
+/** One transaction for the batch; a call per file meant a few hundred database opens. */
 export async function putSequenceMedia(
 	entries: { id: string; file: File }[],
 ): Promise<void> {
@@ -369,8 +288,7 @@ export async function putSequenceMedia(
 	});
 }
 
-/** Only pruning and the storage manager delete blobs — removing a source from
- * the editor just unlinks it from a pool. */
+/** Only pruning and the storage manager delete blobs; removing a source just unlinks it. */
 export function deleteSequenceMedia(id: string): Promise<void> {
 	return write(STORE, (store) => {
 		store.delete(id);
@@ -452,11 +370,8 @@ export function deleteTimeline(key: string): Promise<void> {
 	});
 }
 
-/**
- * Drops least-recently-used pools and sessions, then media neither a retained
- * pool nor a retained session references — except the newest MAX_UNREFERENCED,
- * which covers files added but not yet assigned to a song.
- */
+/** Drops LRU pools and sessions, then media no retained pool or session
+ * references, except the newest MAX_UNREFERENCED. */
 export async function pruneSequenceMedia(): Promise<void> {
 	const pools = (await getAllMediaPools()).sort(
 		(a, b) => b.updatedAt - a.updatedAt,
@@ -466,10 +381,7 @@ export async function pruneSequenceMedia(): Promise<void> {
 	}
 
 	const allSessions = await getAllSessions();
-	// Slideshow sessions keyed by media rather than a song date from before the
-	// upload screen required a track. They can't be recreated, and one editing
-	// pass left a separate entry behind for every image added or removed, so the
-	// list fills up with near-duplicates of the same slideshow.
+	// Slideshow sessions keyed by media predate the track requirement; they can't be recreated.
 	const orphaned = allSessions.filter(
 		(s) => s.mode === "slideshow" && !s.trackId,
 	);
@@ -495,8 +407,8 @@ export async function pruneSequenceMedia(): Promise<void> {
 	for (const pool of pools.slice(0, MAX_POOLS)) {
 		for (const id of pool.sourceIds) referenced.add(id);
 	}
-	// Sessions hold the only reference to single/slideshow media — miss these and
-	// resuming would come back to an empty editor.
+	// Sessions hold the only reference to single/slideshow media; miss these and
+	// resuming comes back empty.
 	for (const session of sessions.slice(0, MAX_SESSIONS)) {
 		for (const id of session.sourceIds) referenced.add(id);
 	}
@@ -509,9 +421,8 @@ export async function pruneSequenceMedia(): Promise<void> {
 		await deleteSequenceMedia(entry.id);
 	}
 
-	// A proxy whose source is gone can never be looked up against again — its
-	// id is derived from the source file — so past the newest few, they are
-	// disk spent on nothing.
+	// A proxy whose source is gone can never be looked up again, since its id
+	// derives from the source file.
 	const proxies = (await getAllSequenceProxies()).sort(
 		(a, b) => b.addedAt - a.addedAt,
 	);
@@ -523,15 +434,7 @@ export async function pruneSequenceMedia(): Promise<void> {
 	}
 }
 
-/**
- * Rebuilds a `File` from a stored entry so it can re-enter the pool.
- *
- * `lastModified` has to be carried across explicitly: the File constructor
- * defaults it to `Date.now()`, and since it feeds `stableSourceId`, a restored
- * file would come back under a brand-new id every time. Segments would never
- * resolve their source, and each restore would re-add the same media under yet
- * another id.
- */
+/** Rebuilds a `File`; the constructor defaults `lastModified` to `Date.now()`. */
 export function storedMediaToFile(entry: StoredSequenceMedia): File {
 	return new File([entry.blob], entry.name, {
 		type: entry.type || entry.blob.type,
@@ -545,11 +448,7 @@ function lastModifiedFromId(id: string): number {
 	return Number.isFinite(n) ? n : 0;
 }
 
-/**
- * Empties every store at once, for the storage manager's "delete everything".
- * Clears rather than deleting the database: this module holds its connection
- * open, and `deleteDatabase` would sit blocked behind it.
- */
+/** Empties every store; clears rather than deleting the DB, which the open connection blocks. */
 export async function clearAllSequenceStores(): Promise<void> {
 	const db = await openDb();
 	await transact(db, REQUIRED_STORES, "readwrite", (tx) => {

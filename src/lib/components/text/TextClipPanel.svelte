@@ -20,7 +20,6 @@
 	import LayerCompositeRows from "../timeline/LayerCompositeRows.svelte";
 
 	interface Props {
-		/** The lane the selected clip lives in; the panel edits its style. */
 		lane: TextLane | null;
 		clip: TextClip | null;
 		onLaneChange: (lane: TextLane) => void;
@@ -30,10 +29,8 @@
 		onClose?: () => void;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
-		/** Forwarded to the lane's effect panel for its spectrum read-out. */
 		response?: AudioResponse;
-		/** Which half to show: the clip's controls, or the lane's effect chain.
-		 * The sidebar gives each its own tab. */
+		/** Which half to show: the clip's controls, or the lane's effect chain. */
 		section?: "clip" | "chain";
 	}
 
@@ -67,11 +64,10 @@
 	}
 
 	/**
-	 * Double-clicking a row — its label, its slider, its checkbox, its swatch —
-	 * puts that style back to the default. Bound on the row rather than the
-	 * control so it also reaches a native select, whose open popup swallows the
-	 * second click. Text fields and the open colour picker are left alone, so
-	 * double-click-to-select-a-word and picking a preset still work.
+	 * Double-clicking a row puts that style back to the default. Bound on the row
+	 * rather than the control so it also reaches a native select, whose popup
+	 * swallows the second click. Text fields and the open colour picker are left
+	 * alone.
 	 */
 	function resetStyle(e: MouseEvent, key: keyof TextStyle) {
 		const t = e.target as HTMLElement | null;
@@ -333,7 +329,7 @@
 	}
 
 	/* The font picker is its own component, so the row's select styling has to
-	   reach across the boundary to keep it looking like the rest of the panel. */
+	   reach across the boundary. */
 	.row :global(.font-select select) {
 		padding: 0.2rem 0.3rem;
 		border-radius: 4px;

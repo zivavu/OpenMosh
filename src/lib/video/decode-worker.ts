@@ -1,29 +1,7 @@
 /// <reference lib="webworker" />
-/**
- * Demux + decode for one or more video streams, off the main thread.
- *
- * Demuxing is what actually runs in JS: mediabunny reads packets, walks the
- * sample tables and hands them to a VideoDecoder, and every step of that is an
- * await that only resumes when the event loop is free. On the main thread it
- * competes with the render loop and Svelte's reactivity, so a preview heavy
- * enough to fill a frame budget starves the decoder feeding it — the decoder
- * idles, the queue empties, and playback stutters with neither CPU nor GPU
- * saturated. Here nothing else is on the thread.
- *
- * Streams share this one worker rather than getting one each: the contention
- * that matters is with the UI, not between two videos, and a worker per sampler
- * would mean a mediabunny module instance per sampler.
- *
- * Frames leave here at the size the file holds. Downscaling them on the way out
- * was tried and removed: `new VideoFrame(canvas)` copies into a freshly
- * allocated GPU texture per frame, and a profile of a 4K preview showed the
- * compositor's render thread blocking every other GPU-process draw call behind
- * batched destruction of exactly those textures. Whatever the upload saved, it
- * cost more on the resource everything else was already queued on.
- */
-// Statically imported, unlike everywhere else: a dynamic import would split the
-// worker bundle, which Vite can't emit for a classic worker chunk. Nothing
-// loads it until the first video is opened — that is what spawns the worker.
+/** Demux + decode for one or more video streams, off the main thread. Demuxing
+ * awaits at every step, so on the main thread it starves the decoder feeding it. */
+// Statically imported: a dynamic import would split the worker bundle Vite can't emit.
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from "mediabunny";
 
 export type DecodeWorkerRequest =
@@ -91,8 +69,7 @@ self.onmessage = (e: MessageEvent<DecodeWorkerRequest>) => {
 			void pump(msg.id, stream, msg.gen, msg.startTime);
 			break;
 		case "credit":
-			// A credit from before the last restart is for frames that were dropped;
-			// the restart already reset the allowance.
+			// A credit from before the last restart is for dropped frames; ignore it.
 			if (stream.gen !== msg.gen) break;
 			stream.credit += msg.n;
 			wake(stream);
@@ -112,8 +89,7 @@ async function open(id: number, file: File, depth: number) {
 			source: new BlobSource(file),
 			formats: ALL_FORMATS,
 		});
-		// Same eligibility rules as the main-thread path: rotation metadata is
-		// applied by the <video> element but not to raw decoded frames.
+		// Same eligibility rules as the main-thread path: rotated files fall back.
 		const track = await input.getPrimaryVideoTrack();
 		const duration = track ? await track.computeDuration() : 0;
 		if (
@@ -150,11 +126,8 @@ async function open(id: number, file: File, depth: number) {
 	}
 }
 
-/**
- * Decode from `startTime` into the consumer's queue, parking whenever it has
- * no room left. Frames are transferred, not copied — the consumer owns each
- * one once it lands and is what frees the slot it took.
- */
+/** Decode from `startTime` into the consumer's queue, parking when it has no
+ * room. Frames are transferred, not copied; the consumer owns each one. */
 async function pump(
 	id: number,
 	stream: Stream,
@@ -177,8 +150,7 @@ async function pump(
 		}
 		if (stream.gen === gen) post({ type: "done", id, gen });
 	} catch {
-		// Decode failure mid-stream, or the input disposed under us: the consumer
-		// keeps the last frame it got.
+		// Decode failure mid-stream, or the input disposed under us.
 		if (stream.gen === gen) post({ type: "done", id, gen });
 	}
 }

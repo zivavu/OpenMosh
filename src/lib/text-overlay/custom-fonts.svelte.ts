@@ -1,9 +1,5 @@
-/**
- * User-added fonts, pasted in as a Google Fonts link (or a direct font-file
- * URL) or uploaded straight off disk. The file itself is stored in IndexedDB
- * rather than the link, so a font keeps working across sessions without
- * refetching — and so an export can't race a network round-trip.
- */
+/** User-added fonts, pasted in as a Google Fonts link (or a direct font-file URL)
+ * or uploaded off disk. The bytes live in IndexedDB, not the link. */
 import { generateId } from "../effects/types";
 import { simpleStore } from "../idb";
 import {
@@ -20,7 +16,7 @@ export interface CustomFont {
 	name: string;
 	/** CSS font-family value, quoted to match the bundled options. */
 	family: string;
-	/** Where it came from — the pasted link, or an uploaded file's name. */
+	/** Where it came from: the pasted link, or an uploaded file's name. */
 	sourceUrl: string;
 	addedAt: number;
 }
@@ -59,8 +55,8 @@ export function customFonts(): CustomFont[] {
 
 /** Register a stored face with the document so 2D-canvas drawing can use it. */
 function registerFont(font: StoredFont): void {
-	// A slice: FontFace takes ownership of the buffer, and the same record may
-	// be handed back by a later getAll().
+	// A slice: FontFace takes ownership of the buffer, and the same record may come
+	// back from a later getAll().
 	const face = new FontFace(font.name, font.data.slice(0));
 	const promise = face
 		.load()
@@ -76,10 +72,7 @@ function registerFont(font: StoredFont): void {
 
 let loadPromise: Promise<void> | null = null;
 
-/**
- * Read every saved font out of IndexedDB and register it. Called once at
- * startup, before anything can draw with a stored family.
- */
+/** Read every saved font out of IndexedDB and register it. Called once at startup. */
 export function loadCustomFonts(): Promise<void> {
 	if (!loadPromise) {
 		loadPromise = getAllStored()
@@ -98,7 +91,7 @@ export function loadCustomFonts(): Promise<void> {
 
 const FONT_FILE_RE = /\.(woff2?|ttf|otf)(?:[?#]|$)/i;
 
-/** Whatever the user pasted, as a Google Fonts CSS URL — or null if it isn't one. */
+/** Whatever the user pasted, as a Google Fonts CSS URL, or null if it isn't one. */
 function toStylesheetUrl(input: string): string | null {
 	let url: URL;
 	try {
@@ -144,11 +137,8 @@ function parseFontFaces(css: string): ParsedFace[] {
 	return faces;
 }
 
-/**
- * A Google Fonts stylesheet is one @font-face per script subset and per weight.
- * Take the upright regular latin one — the overlays draw a single weight, and
- * the latin block is the one that covers the characters they type.
- */
+/** A Google Fonts stylesheet is one @font-face per script subset and weight. Take
+ * the upright regular latin one: the overlays draw a single weight. */
 function pickFace(faces: ParsedFace[]): ParsedFace | null {
 	if (faces.length === 0) return null;
 	const upright = faces.filter((f) => !f.italic);
@@ -178,12 +168,8 @@ async function fetchBytes(url: string): Promise<ArrayBuffer> {
 	return res.arrayBuffer();
 }
 
-/**
- * Fetch, register and save the font the URL points at. Accepts a Google Fonts
- * link (share, specimen or css2) or a direct woff2/ttf/otf URL.
- *
- * Throws with a message meant for the user.
- */
+/** Fetch, register and save the font the URL points at. Accepts a Google Fonts
+ * link (share, specimen or css2) or a direct woff2/ttf/otf URL. */
 export async function addCustomFont(input: string): Promise<CustomFont> {
 	const trimmed = input.trim();
 	if (!trimmed) throw new Error("Paste a font link first.");
@@ -214,19 +200,15 @@ export async function addCustomFont(input: string): Promise<CustomFont> {
 	return saveFont(name, trimmed, data);
 }
 
-/**
- * Add a font the user picked off disk. Same result as a pasted link, minus the
- * fetch — the bytes are already here.
- *
- * Throws with a message meant for the user.
- */
+/** Add a font the user picked off disk. Same result as a pasted link, minus the
+ * fetch. */
 export async function addCustomFontFile(file: File): Promise<CustomFont> {
 	if (!FONT_FILE_RE.test(file.name)) {
 		throw new Error("Pick a .woff2, .woff, .ttf or .otf file.");
 	}
 	const data = await file.arrayBuffer();
-	// Parse it before it goes anywhere: a file the browser can't read would
-	// otherwise sit in the list and silently draw as the fallback face.
+	// Parse it before it goes anywhere: a file the browser can't read would otherwise
+	// sit in the list and silently draw as the fallback face.
 	try {
 		await new FontFace("OpenMoshProbe", data.slice(0)).load();
 	} catch {
@@ -235,7 +217,6 @@ export async function addCustomFontFile(file: File): Promise<CustomFont> {
 	return saveFont(nameFromFileUrl(file.name), file.name, data);
 }
 
-/** Claim a family name, register the face and persist it. */
 async function saveFont(
 	name: string,
 	sourceUrl: string,
@@ -258,8 +239,8 @@ async function saveFont(
 		data,
 	};
 
-	// Register before storing: a font that can't be persisted (private window)
-	// should still work for this session.
+	// Register before storing: a font that can't be persisted (private window) should
+	// still work for this session.
 	registerFont(stored);
 	const { data: _data, ...meta } = stored;
 	fonts = [...fonts, meta];

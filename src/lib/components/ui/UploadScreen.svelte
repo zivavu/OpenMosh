@@ -2,9 +2,8 @@
 	interface Props {
 		onfile: (file: File) => void;
 		onSequence: (files: File[]) => void;
-		/** Reopen a song's saved sequence — no media picking needed. */
+		/** Reopen a song's saved sequence, no media picking needed. */
 		onSequenceFromSong: (trackId: string) => void;
-		/** Reopen a saved single or slideshow session by its key. */
 		onSessionOpen: (mode: SessionMode, key: string) => void;
 		onSlideshow: (files: File[]) => void;
 		onaudio?: (file: File) => void;
@@ -78,14 +77,12 @@
 		warmRenderer = null,
 	}: Props = $props();
 
-	// Work already done, offered as a way back in that skips picking media. All
-	// three lists are painted from their cache so the section is there on the first
-	// frame, then reconciled against IndexedDB.
+	// Work already done, offered as a way back in that skips picking media: painted
+	// from cache first, then reconciled against IndexedDB.
 	let savedSequences = $state<SavedSequence[]>(readCachedSavedSequences());
 	let savedSingle = $state<SavedSession[]>(readCachedSessions("single"));
 	let savedSlideshow = $state<SavedSession[]>(readCachedSessions("slideshow"));
-	// The user's own names, over the song's. Re-read whenever the lists are,
-	// since the storage modal renames too.
+	// The user's own names, over the song's; re-read whenever the lists are.
 	let projectNames = $state(readProjectNames());
 	function refreshSaved() {
 		projectNames = readProjectNames();
@@ -95,24 +92,16 @@
 	}
 	$effect(refreshSaved);
 
-	// Everything stored, with a way to delete it — the one place that shows
-	// what the browser is holding on to for this site.
 	const loadStorageModal = lazy(() => import("./StorageModal.svelte"));
 	let storageOpen = $state(false);
 
-	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear
-	// along with the background it belongs to.
+	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear too.
 	let demoPlaying = $state(demoBackgroundEnabled());
 
-	// Editor and Slideshow are timeline work — lanes, clips, keyboard shortcuts
-	// and a screen wide enough to scrub — so on a touch device only Single is
-	// offered. Same check the editors themselves use for their own mobile layout.
+	// Editor and Slideshow are timeline work, so a touch device offers only Single.
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
 
-	// Opens on whichever mode was last launched: coming back for a second pass at
-	// the same kind of edit is the common case. Mobile always opens on Single
-	// without writing that back, so a desktop's remembered mode survives a
-	// phone visit.
+	// Opens on the last launched mode; mobile opens on Single without writing that back.
 	let selectedMode: UploadMode = $state(
 		isMobile
 			? "single"
@@ -122,12 +111,9 @@
 	function setMode(mode: UploadMode) {
 		selectedMode = mode;
 		updateSettings({ lastMode: mode });
-		// Staged media belongs to the mode it was dropped on: single takes one file
-		// and needs no song, so holding a set across the switch would misrepresent
-		// what's about to happen.
+		// Staged media belongs to the mode it was dropped on, so clear it across a switch.
 		stagedMedia = null;
 	}
-	/** Modes that take a whole set of media rather than one file. */
 	let isMultiMode = $derived(selectedMode !== "single");
 
 	const MODES = [
@@ -146,8 +132,7 @@
 		if (n >= 1 && n <= MODES.length) setMode(MODES[n - 1].value);
 	}
 
-	/** The session list backing whichever mode is showing. Sequence keeps its own
-	 * list, keyed by song rather than by media. */
+	/** The session list backing whichever mode is showing. */
 	let savedForMode = $derived<SavedSession[]>(
 		selectedMode === "single"
 			? savedSingle
@@ -156,9 +141,7 @@
 				: [],
 	);
 
-	/** One shape for the list, whichever store the mode reads from. Sequence
-	 * rows have no session key: reopening is keyed by song. Single rows carry
-	 * no count — there is always exactly one source. */
+	/** One shape for the list, whichever store the mode reads from. */
 	interface RecentRow {
 		key: string;
 		/** What a rename is stored under: the song, or the session itself. */
@@ -181,8 +164,7 @@
 					updatedAt: seq.updatedAt,
 					title: `Reopen "${projectNames[seq.trackId] ?? seq.trackName}" with its ${seq.sourceCount} source${seq.sourceCount === 1 ? "" : "s"}`,
 					open: () => {
-						// Reopening a song is entering the editor too. The stored value
-						// stays "sequence": it is what every saved key is written under.
+						// Reopening a song is entering the editor too; the stored value stays "sequence".
 						updateSettings({ lastMode: "sequence" });
 						onSequenceFromSong(seq.trackId);
 					},
@@ -207,8 +189,7 @@
 				}),
 	);
 
-	// Deleting from here is the storage manager's deletion: the same lookup,
-	// the same wording, the same confirm — just reached without opening it.
+	// Deleting from here is the storage manager's deletion, reached without opening it.
 	const loadConfirmDialog = lazy(() => import("./ConfirmDialog.svelte"));
 	interface PendingDelete {
 		title: string;
@@ -266,8 +247,7 @@
 		}
 	}
 
-	/** The row whose name is a field right now. Blank clears the custom name,
-	 * so the row reads as its song again. */
+	/** The row whose name is a field right now. Blank clears the custom name. */
 	let renamingKey = $state<string | null>(null);
 	function renameRow(row: RecentRow, name: string) {
 		setProjectName(row.projectKey, name);
@@ -363,9 +343,7 @@
 				"info",
 			);
 		}
-		// Both multi modes cut media to a track — there is nothing to time against
-		// without one. Rather than reject the drop and make the user find the files
-		// again, hold them until a song arrives and start the moment it does.
+		// Both multi modes cut media to a track, so hold the files until a song arrives.
 		if (!pendingAudio) {
 			stagedMedia = accepted;
 			showToast(
@@ -377,11 +355,9 @@
 		launchMultiMode(accepted);
 	}
 
-	/** Media held back waiting on the song a multi mode requires. */
 	let stagedMedia = $state<File[] | null>(null);
 
-	// Procedural images instead of an upload: they come back as ordinary
-	// files, so they take the same road in as a drop would.
+	// Procedural images come back as ordinary files, so they take the same road in as a drop.
 	const loadGeneratePanel = lazy(
 		() => import("../generators/GeneratePanel.svelte"),
 	);
@@ -393,8 +369,7 @@
 		else handleFile(files[0]);
 	}
 
-	// Single mode's live camera. Wrapped as a file, so it takes the same road
-	// in; the editor tells it apart and runs the stream instead of a player.
+	// Single mode's live camera. Wrapped as a file, so it takes the same road in.
 	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
 	let webcamOpen = $state(false);
 	const hasCamera = !!navigator.mediaDevices?.getUserMedia;
@@ -405,7 +380,7 @@
 		else onSlideshow(files);
 	}
 
-	/** Single mode takes one file — say so rather than silently dropping the rest. */
+	/** Single mode takes one file; say so rather than silently dropping the rest. */
 	function handleSingleFile(files: FileList | File[]) {
 		const all = Array.from(files);
 		const file = all[0];
@@ -427,8 +402,8 @@
 		const files = e.dataTransfer?.files;
 		if (!files || files.length === 0) return;
 
-		// A track dropped on the media zone is far likelier to be a track than a
-		// mistake worth a toast about, so route by what landed rather than reject.
+		// A track dropped on the media zone is likelier a track than a mistake, so route
+		// by what landed.
 		const all = Array.from(files);
 		const audio = all.filter(isAudioFile);
 		const media = all.filter((f) => !isAudioFile(f));
@@ -485,8 +460,7 @@
 		}
 		pendingAudio = file;
 		onaudio?.(file);
-		// The song was the only thing missing — go, rather than making the user
-		// re-drop media they already picked.
+		// The song was the only thing missing, so go rather than re-dropping media.
 		if (stagedMedia && isMultiMode) launchMultiMode(stagedMedia);
 	}
 
@@ -514,9 +488,8 @@
 
 <div class="upload-screen">
 	<div class="hero">
-		<!-- The ghosts are the two split channels. Real spans rather than
-		     ::before/::after content, so screen readers announce the wordmark
-		     once instead of three times. -->
+		<!-- The ghosts are the two split channels. Real spans, not ::before/::after, so
+		     screen readers announce the wordmark once. -->
 		<h1 class="title" class:still={!demoPlaying}>
 			OpenMosh
 			<span class="ghost ghost-live" aria-hidden="true">OpenMosh</span>
@@ -543,9 +516,8 @@
 		</div>
 	{/if}
 
-	<!-- One panel: media on top, the song strip along its foot. The strip
-	     stops its own drag events so a track dropped on it isn't also read
-	     by the panel. -->
+	<!-- One panel: media on top, the song strip along its foot. The strip stops its
+	     own drag events so a dropped track isn't read by the panel. -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="panel"
@@ -700,9 +672,8 @@
 		{/await}
 	{/if}
 
-	<!-- A rack of rows at a fixed height for every mode, empty or not: a block
-	     that collapsed when a mode had nothing saved is what made switching
-	     jump. The rack itself hugs its rows up to five; the rest scroll. -->
+	<!-- A rack of rows at a fixed height for every mode, empty or not: a block that
+	     collapsed when a mode had nothing saved made switching jump. -->
 	<div class="recent">
 		{#if recentRows.length > 0}
 			<div class="recent-head">
@@ -807,8 +778,7 @@
 
 <style>
 	/* Everything here sits over a live mosh, so panels carry their own frosted
-	   backing and text runs a step brighter than it would on flat black —
-	   motion behind copy eats apparent contrast. */
+	   backing. */
 	.upload-screen {
 		position: relative;
 		z-index: 1;
@@ -874,10 +844,8 @@
 		cursor: default;
 	}
 
-	/* Offset copies of the wordmark in the app's own two accents, screened over
-	   the white so only the fringes show. They sit still most of the cycle and
-	   tear for about half a second, since a permanent jitter stops reading as a
-	   glitch and starts reading as a broken page. */
+	/* Offset copies of the wordmark in the app's two accents, screened over the white
+	   so only the fringes show. */
 	.ghost {
 		position: absolute;
 		inset: 0;
@@ -888,11 +856,7 @@
 	}
 
 	/* Each layer runs on its own period, and the periods share no small common
-	   multiple, so the bursts drift in and out of phase and the tear never
-	   repeats the same shape twice within a sitting. The negative delays start
-	   every cycle already near a burst, so the wordmark tears within a moment
-	   of the page appearing rather than sitting still and looking like flat
-	   text. */
+	   multiple, so the bursts drift in and out of phase. */
 	.ghost-live {
 		color: var(--live);
 		transform: translate(-3px, 0);
@@ -905,19 +869,14 @@
 		animation: tear-rec 2.3s steps(1, end) -2.1s infinite;
 	}
 
-	/* A white shard on a third period. Hidden between bursts — its own clip-path
-	   is what makes it appear — so between tears there is nothing extra stacked
-	   over the wordmark. */
+	/* A white shard on a third period. Hidden between bursts; its clip-path reveals it. */
 	.ghost-slice {
 		color: #fff;
 		clip-path: inset(0 0 100% 0);
 		animation: slice 2.9s steps(1, end) -2.7s infinite;
 	}
 
-	/* Stepped, not eased: a datamosh cuts between states, it doesn't tween.
-	   Each held step is about 50ms, slow enough to actually read as a torn
-	   frame instead of blurring into a shimmer. Two bursts per cycle — one
-	   glancing, one full — so a layer isn't dead for its whole period. */
+	/* Stepped, not eased: a datamosh cuts between states, it doesn't tween. */
 	@keyframes tear-live {
 		0%,
 		37% {
@@ -1010,8 +969,8 @@
 		}
 	}
 
-	/* Bands of the wordmark yanked sideways and dropped back. Kept thin: a wide
-	   band just reads as the whole title sliding. */
+	/* Bands of the wordmark yanked sideways and dropped back. Kept thin: a wide band
+	   reads as the whole title sliding. */
 	@keyframes slice {
 		0%,
 		29% {
@@ -1050,10 +1009,7 @@
 		}
 	}
 
-	/* The white wordmark shears on its own beat too, on a fourth period so the
-	   body of the title and its colour fringes rarely break together. Without
-	   this only the fringes move and the tear reads as a halo rather than a
-	   broken frame. */
+	/* The white wordmark shears on its own beat too, on a fourth period. */
 	.title {
 		animation: shear 4.1s steps(1, end) -3.9s infinite;
 	}
@@ -1088,18 +1044,15 @@
 		}
 	}
 
-	/* Hovering pulls every layer onto the same short period, so the drifting
-	   tear snaps into one hard repeating break under the pointer — the title
-	   answers the pointer the way the effect rack does. */
+	/* Hovering pulls every layer onto the same short period, so the tear snaps into
+	   one hard repeating break. */
 	.title:hover,
 	.title:hover .ghost {
 		animation-duration: 0.8s;
 	}
 
-	/* STOP blacks out the demo, so the wordmark settles with it and keeps only
-	   the static split. Deliberately not tied to prefers-reduced-motion: people
-	   set that flag for their OS, not to opt out of a page's centrepiece, and
-	   the button is the opt-out this screen offers. */
+	/* STOP blacks out the demo, so the wordmark settles with it. Deliberately not tied
+	   to prefers-reduced-motion: the button is the opt-out this screen offers. */
 	.title.still,
 	.title.still .ghost,
 	.title.still:hover,
@@ -1207,8 +1160,8 @@
 	}
 
 	/* ── Panel ────────────────────────────────────────────────────────────── */
-	/* A solid plate with an inner highlight along its top edge; the dashed
-	   line is the drag state, not the resting frame. */
+	/* A solid plate with an inner highlight along its top edge; the dashed line is the
+	   drag state. */
 	.panel {
 		width: 100%;
 		max-width: 520px;
@@ -1312,8 +1265,7 @@
 		color: var(--live);
 	}
 
-	/* Media is picked and waiting on the song: a live state, in the mosh
-	   colour the launch belongs to. */
+	/* Media is picked and waiting on the song: a live state, in the mosh colour. */
 	.drop-hint.staged {
 		color: var(--mosh);
 	}
@@ -1391,8 +1343,8 @@
 	}
 
 	/* ── Recent ───────────────────────────────────────────────────────────── */
-	/* Reserves the head plus five rows, so the block takes the same space with
-	   one row, ten, or none; only the rack inside hugs its rows. */
+	/* Reserves the head plus five rows, so the block takes the same space with one row
+	   or ten; only the rack inside hugs its rows. */
 	.recent {
 		--row-h: 2.1rem;
 		display: flex;
@@ -1421,9 +1373,7 @@
 		line-height: 1.5;
 	}
 
-	/* A glass rack of hairline-split rows, as tall as its rows up to five.
-	   Overflow scrolls vertically with a mosh-tinted thumb inset from the
-	   rounded edge. */
+	/* A glass rack of hairline-split rows, as tall as its rows up to five. */
 	.recent-list {
 		flex: 0 1 auto;
 		min-height: 0;
@@ -1455,8 +1405,7 @@
 		}
 	}
 
-	/* The row, not the button, carries the hover: the pencil sits beside the
-	   button and the highlight has to run under it too. */
+	/* The row, not the button, carries the hover: the pencil sits beside the button. */
 	.saved-row {
 		display: flex;
 		align-items: center;
@@ -1497,8 +1446,7 @@
 			background-color var(--t);
 	}
 
-	/* In flow, so they never cover the timestamp; only lit for the row under
-	   the pointer. */
+	/* In flow, so they never cover the timestamp; only lit for the row under the pointer. */
 	.saved-action {
 		flex-shrink: 0;
 		margin: 0 0 0 -0.4rem;

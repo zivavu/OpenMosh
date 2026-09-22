@@ -11,8 +11,7 @@
 		showSettings?: boolean;
 		settingsContent?: Snippet;
 		/** Hide the mosh/clear/undo buttons but keep the settings gear (sequence
-		 * mode). Gate this on the sequence timeline actually being rendered —
-		 * otherwise these actions vanish with nothing replacing them. */
+		 * mode). Gate on the sequence timeline rendering, or they vanish with no replacement. */
 		hideActions?: boolean;
 	}
 
@@ -37,7 +36,6 @@
 </script>
 
 <div class="mosh-group" bind:this={groupEl}>
-	<!-- The session switches: settings, then the two that undo what MOSH did. -->
 	{#if settingsContent || !hideActions}
 		<div class="bar-cluster">
 			{#if settingsContent}

@@ -1,12 +1,7 @@
 /**
- * Chromium's deferred "install this site" prompt.
- *
- * Chrome never asks the user about persistent storage: it grants
- * navigator.storage.persist() only to origins it already trusts — installed
- * as an app, bookmarked, allowed to notify, or heavily used — and refuses the
- * rest silently. Installing is the one of those a page can trigger itself, so
- * the event is caught here (it fires once, early, and only if listened for)
- * and handed to whoever wants to offer the install.
+ * Chromium's deferred "install this site" prompt. Chrome grants
+ * navigator.storage.persist() only to origins it already trusts and refuses the rest
+ * silently; installing is the one a page can trigger itself, so the event is caught here.
  */
 
 interface BeforeInstallPromptEvent extends Event {

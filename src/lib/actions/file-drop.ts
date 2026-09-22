@@ -8,10 +8,8 @@ export interface FileDropOptions {
 }
 
 /**
- * Whole-pane file drop target. Drags that carry no files (text selections,
- * in-page element drags) are ignored, and the leave check tolerates moving
- * over child elements — a plain `dragleave` fires for those too and would
- * flicker the affordance off.
+ * Whole-pane file drop target. Drags with no files are ignored, and the leave
+ * check tolerates child elements: a plain `dragleave` fires for those too.
  */
 export function fileDrop(opts: FileDropOptions): Attachment<HTMLElement> {
 	return (node) => {

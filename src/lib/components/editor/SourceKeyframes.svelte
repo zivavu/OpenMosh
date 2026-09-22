@@ -48,8 +48,7 @@
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		if (rect.width <= 0) return;
 		const t = ((e.clientX - rect.left) / rect.width) * duration;
-		// Ctrl-click drops a key where it was clicked: the same as seeking there
-		// and pressing +, which is what it does.
+		// Ctrl-click drops a key where it was clicked.
 		if (e.ctrlKey || e.metaKey) {
 			if (track.blocked && !track.on) return;
 			onAdd(track.id, t);

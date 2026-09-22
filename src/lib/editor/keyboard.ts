@@ -11,17 +11,13 @@ export interface KeyboardActions {
 	undo: () => void;
 	redo: () => void;
 	reInput: () => void;
-	/** F: fill the screen with the preview. */
 	toggleFullscreen: () => void;
-	/** C: chase the playhead with the timeline view, or stop chasing it. */
 	toggleFollowPlayhead: () => void;
-	/** Space: the master transport — a track, a video, or a still's own clock. */
+	/** Space: the master transport (a track, a video, or a still's own clock). */
 	togglePlay: () => void;
-	/** R: loop playback inside the selected clip. */
 	toggleClipLoop: () => void;
 	/** S: cut the clip under the playhead on the lane last touched. */
 	splitAtPlayhead: () => void;
-	/** +/- : one notch of timeline zoom. */
 	zoomTimeline: (inward: boolean) => void;
 }
 
@@ -41,8 +37,7 @@ export function createKeyboardHandler(
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
 
-		// Undo/redo reach the app even while a dropdown or slider holds focus —
-		// they have nothing of their own to undo — but never from a text field.
+		// Undo/redo reach the app even while a dropdown or slider holds focus, but not a text field.
 		if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
@@ -56,9 +51,8 @@ export function createKeyboardHandler(
 			return;
 		}
 
-		// Space is the transport, whatever holds focus — a dropdown left focused
-		// by an earlier click would otherwise swallow the key and reopen its menu.
-		// A text field is the one exception: there space types a space.
+		// Space is the transport whatever holds focus: a focused dropdown would otherwise
+		// swallow it and reopen its menu. A text field is the exception (space types a space).
 		if (e.key === " ") {
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
@@ -91,8 +85,7 @@ export function createKeyboardHandler(
 			e.preventDefault();
 			actions.splitAtPlayhead();
 		} else if (!mod && (e.key === "+" || e.key === "=")) {
-			// "=" as well as "+": on most layouts the latter needs Shift, and every
-			// other app zooms in on the unshifted key too.
+			// "=" as well as "+": "+" needs Shift on most layouts, and other apps zoom on the unshifted key.
 			e.preventDefault();
 			actions.zoomTimeline(true);
 		} else if (!mod && (e.key === "-" || e.key === "_")) {

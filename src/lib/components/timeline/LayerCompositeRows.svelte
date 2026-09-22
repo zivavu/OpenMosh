@@ -3,8 +3,8 @@
 	import Checkbox from "../ui/Checkbox.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 
-	/** How a layer meets the frame — opacity, blend and whether the image
-	 * effects run over it — the tail every layer kind's panel ends on. */
+	/** How a layer meets the frame: opacity, blend and whether the image
+	 * effects run over it, the tail every layer kind's panel ends on. */
 	interface Props {
 		style: { opacity: number; blendMode: TextOverlayBlendMode };
 		underEffects: boolean;

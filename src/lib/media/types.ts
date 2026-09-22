@@ -22,18 +22,14 @@ export const MEDIA_FIT_OPTIONS: { label: string; value: MediaFit }[] = [
 	{ label: "stretch", value: "stretch" },
 ];
 
-/**
- * How a lane's media is placed and composited, independent of when it is on
- * screen — the media counterpart to TextStyle.
- */
+/** How a lane's media is placed and composited, the media counterpart to TextStyle. */
 export interface MediaStyle {
 	/** Centre of the layer, normalized (x: left→right, y: top→bottom). */
 	x: number;
 	y: number;
 	/** Multiplier on the fitted size. 1 = exactly the fit. */
 	scale: number;
-	/** Per-axis stretch on top of `scale`, so a layer can be squashed without
-	 * losing its uniform size. 1 = none. */
+	/** Per-axis stretch on top of `scale`. 1 = none. */
 	scaleX: number;
 	scaleY: number;
 	/** Clockwise, in degrees. */
@@ -42,84 +38,41 @@ export interface MediaStyle {
 	/** 0..1, applied by the GL composite. */
 	opacity: number;
 	blendMode: TextOverlayBlendMode;
-	/**
-	 * Room around the media for its own effects to spread into, as a fraction of
-	 * the media's size on each side. A blur or a glow otherwise stops dead at the
-	 * media's edge, because the edge is where the layer's buffer ends.
-	 *
-	 * Paid for in resolution: the chain renders the media at 1/(1 + 2*bleed) of
-	 * the buffer, so a layer drawn near full-frame size softens a little. 0 is
-	 * the old behaviour, sharp and hard-edged; 1 gives a margin as wide as the
-	 * media and leaves it a third of the buffer. The buffer's own edge is the
-	 * ceiling either way — there is no bleed without something to spend on it.
-	 */
+	/** Room around the media for its own effects to spread into, as a fraction of the
+	 * media's size per side. */
 	bleed: number;
-	/**
-	 * How much of that margin is a fade rather than a hard edge, 0..1. The room
-	 * bleed hands the effects still ends somewhere, and a glow cut off there
-	 * draws the rectangle the bleed was meant to hide; this ramps the coverage
-	 * out instead. Measured within the margin alone, so it never eats into the
-	 * media. Irrelevant, and hidden, at a bleed of 0.
-	 */
+	/** How much of that margin is a fade rather than a hard edge, 0..1. Measured
+	 * within the margin alone, so it never eats into the media. */
 	bleedFade: number;
 }
 
-/**
- * One span of media on a lane. A chain clip (see chain-clip.ts): the effects
- * run on this clip's media alone, so a lane cut in two can mosh each half
- * differently, fill one from a preset and leave the other clean.
- */
+/** One span of media on a lane. A chain clip: the effects run on this clip's media
+ * alone, so a lane cut in two can mosh each half differently. */
 export interface MediaClip extends ChainClip {
 	/** Seconds into the source the clip starts at. Ignored by image sources. */
 	sourceStart: number;
-	/**
-	 * What this clip draws, when it isn't the lane's own source. Absent means
-	 * "whatever the lane says", which is what every clip meant before a lane
-	 * could hold more than one image — so a split inherits the source the whole
-	 * lane was on and only the halves the user retargets carry one of these.
-	 *
-	 * The placement stays on the lane, so cutting a lane in two and dropping a
-	 * different photo on each half keeps both in the same place on screen.
-	 */
+	/** What this clip draws when it isn't the lane's own source. Absent = the lane's. */
 	sourceId?: string;
-	/**
-	 * Fade the layer in over this many seconds from the clip's start, and out
-	 * over `fadeOutSec` before its end — each edge on its own, so a layer can
-	 * arrive slowly and cut, or the reverse.
-	 *
-	 * The media counterpart of FxClip.fadeSec, and for the same reason: a
-	 * stacked lane has no other side to cross into, so what a clip boundary
-	 * needs is the layer arriving rather than popping on. Here it scales the
-	 * lane's opacity rather than its effects' parameters.
-	 */
+	/** Fade the layer in over this many seconds from the clip's start, and out over
+	 * `fadeOutSec` before its end. */
 	fadeInSec?: number;
 	fadeOutSec?: number;
 }
 
-/**
- * A media layer: a source from the pool, drawn with the lane's placement and
- * run through the clip's own effect chain before it meets the image. Clips
- * within a lane never overlap, so a lane shows at most one at a time.
- */
+/** A media layer: a source from the pool, drawn with the lane's placement and chain. */
 export interface MediaLane {
 	id: string;
 	name: string;
 	enabled: boolean;
-	/**
-	 * Composite before the main chain rather than over the finished frame, so
-	 * every image effect distorts this layer too. See TextLane.underEffects for
-	 * why this is a flag and not an index.
-	 */
+	/** Composite before the main chain, so every image effect distorts this layer too. */
 	underEffects: boolean;
 	/** Order among *all* layers, media and text alike. Higher sits on top. */
 	z: number;
 	/** Into the media pool. Null on a lane whose source was removed. */
 	sourceId: string | null;
-	/** Shared by every clip in the lane. */
 	style: MediaStyle;
 	clips: MediaClip[];
-	/** How this lane's auto clips roll and its links follow the music. Absent
-	 * = the editor's settings, as on lanes saved before lanes had their own. */
+	/** How this lane's auto clips roll and its links follow the music. Absent = defaults. */
 	settings?: LaneSettings;
 }
 
@@ -147,9 +100,7 @@ export const EMPTY_MEDIA_TIMELINE: MediaTimeline = {
 	lanes: [],
 };
 
-/** A sanity cap, not a frame budget: each lane is a full-frame buffer and video
- * lanes each hold a decoder, but the preview keeps up with far more than anyone
- * stacks on purpose. */
+/** A sanity cap, not a frame budget: each lane is a full-frame buffer. */
 export const MAX_MEDIA_LANES = 20;
 
 let idCounter = 0;
@@ -171,30 +122,20 @@ export function createMediaClip(
 		sourceStart,
 		mode: "static",
 		label: "clean",
-		// The same all-disabled list the main chain starts from, hidden effects
-		// respected — an empty chain gives the panel nothing to switch on, which
-		// reads as every effect being unavailable on this clip.
+		// The same all-disabled list the main chain starts from, hidden effects respected.
 		effects: cleanEffects(),
 	};
 	if (sourceId) clip.sourceId = sourceId;
 	return clip;
 }
 
-/**
- * How strongly the clip's layer shows at `time` — 1 unless a fade is ramping.
- * Multiplied into the lane's opacity by the resolver.
- */
+/** How strongly the clip's layer shows at `time`, 1 unless a fade is ramping. */
 export function mediaClipWeight(clip: MediaClip, time: number): number {
 	return clipFadeWeight(clip, clip.fadeInSec, clip.fadeOutSec, time);
 }
 
-/**
- * Cut the clip covering `at` into two. The right half picks up the source time
- * the left half reached, so splitting a video clip doesn't rewind it, and both
- * halves keep whatever source the clip was on — retargeting one of them is the
- * next gesture, not something a split should guess at. The chain is deep-copied
- * into each half so editing one no longer touches the other.
- */
+/** Cut the clip covering `at` into two. The right half picks up the source time
+ * the left reached. */
 export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
 	return splitChainClipAt(
 		lane,
@@ -235,12 +176,7 @@ export function createMediaTimeline(
 	};
 }
 
-/**
- * Add an empty lane, named after its position: what goes on it is the user's
- * call, and a clip they never asked for is one they have to trim or delete. `z`
- * comes from the caller: the order spans the text lanes too, which this
- * timeline can't see.
- */
+/** Add an empty lane, named after its position. `z` comes from the caller. */
 export function appendMediaLane(
 	timeline: MediaTimeline,
 	sourceId: string | null,
@@ -277,8 +213,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			id: lane.id ?? nextId("mlane"),
 			name: lane.name ?? `Layer ${i + 1}`,
 			enabled: lane.enabled !== false,
-			// See normalizeTextTimeline: lanes saved against the old chain index
-			// carry one of those instead of these two.
+			// See normalizeTextTimeline: lanes saved against the old chain index carry one.
 			underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
 			z: typeof lane.z === "number" ? lane.z : i,
 			sourceId: lane.sourceId ?? null,
@@ -286,9 +221,8 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			settings: normalizeLaneSettings(lane.settings),
 			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((raw) => {
 				const clip = raw as Partial<MediaClip> & { fadeSec?: number };
-				// Lanes saved before clips carried their own chain held one for the
-				// whole lane: every clip inherits it, a copy each, so the split the
-				// user made back then keeps rendering as it did.
+				// Lanes saved before clips carried their own chain held one for the whole lane:
+				// every clip inherits a copy.
 				const legacyChain = (lane as { effects?: unknown }).effects;
 				const effects = Array.isArray(clip.effects)
 					? clipEffects(clip.effects)
@@ -309,11 +243,8 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 	};
 }
 
-/**
- * Pull every lane's clips back inside a timeline that just got shorter. Kept by
- * identity when nothing overhangs, so the editor can run it on every duration
- * change without writing.
- */
+/** Pull every lane's clips back inside a timeline that just got shorter. Kept by
+ * identity when nothing overhangs. */
 export function fitMediaTimeline(
 	timeline: MediaTimeline,
 	duration: number,

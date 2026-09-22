@@ -1,10 +1,4 @@
-/**
- * What every chain clip in the editor shares: the static/auto mode, the
- * re-roll spacings, the seeded roll and the labels. The lanes that hold such
- * clips — fx lanes and media layers — build on chain-clip.ts, which builds on
- * this. (The file keeps its name: the mode's saved data is keyed under
- * "sequence" everywhere, and so is the route.)
- */
+/** What every chain clip shares: mode, spacings, seeded roll and labels. */
 
 import {
 	getDefinition,
@@ -18,11 +12,7 @@ export type ChainMode = "static" | "interval";
 
 export const DEFAULT_INTERVAL_SEC = 0.25;
 
-/**
- * Re-roll spacings offered once a BPM is known, as divisions of a beat. Tops
- * out at one per beat: a roll slower than the beat reads as missed cuts, not
- * a rhythm, so anything longer is left to the clip boundaries.
- */
+/** Re-roll spacings offered once a BPM is known, as divisions of a beat. */
 export const BEAT_INTERVALS: { beats: number; label: string }[] = [
 	{ beats: 0.03125, label: "1/32 beat" },
 	{ beats: 0.0625, label: "1/16 beat" },
@@ -32,11 +22,7 @@ export const BEAT_INTERVALS: { beats: number; label: string }[] = [
 	{ beats: 1, label: "every beat" },
 ];
 
-/**
- * Compact wording for a re-roll spacing, for timeline labels. Beat-set
- * intervals read as beats: their seconds are a BPM division, so they print as
- * float noise ("1.1428571428571428s") and change meaning with the BPM.
- */
+/** Compact wording for a re-roll spacing, for timeline labels. */
 export function intervalLabel(
 	intervalSec: number | undefined,
 	intervalBeats?: number | null,
@@ -62,11 +48,7 @@ export function randomSeed(): number {
 	return Math.floor(Math.random() * 0x7fffffff);
 }
 
-/**
- * Run fn with Math.random temporarily replaced by a seeded PRNG. Lets the
- * existing mosh generator (which draws from Math.random throughout) produce
- * reproducible results without a parallel seeded implementation.
- */
+/** Run fn with Math.random temporarily replaced by a seeded PRNG. */
 export function withSeededRandom<T>(seed: number, fn: () => T): T {
 	const original = Math.random;
 	Math.random = mulberry32(seed);
@@ -82,11 +64,7 @@ export function cleanEffects(): EffectInstance[] {
 	return loadInitialEffects();
 }
 
-/**
- * Label for a chain the user built by hand: what it actually switches on, so
- * an edited span stops reading "clean". Preset- and mosh-filled chains keep
- * their own label instead, marked with a "*" once edited.
- */
+/** Label for a hand-built chain: what it switches on. */
 export function handBuiltLabel(effects: EffectInstance[]): string {
 	const on = effects.filter((e) => e.enabled);
 	if (on.length === 0) return "clean";
@@ -94,8 +72,7 @@ export function handBuiltLabel(effects: EffectInstance[]): string {
 	return on.length === 1 ? first : `${first} +${on.length - 1}`;
 }
 
-/** True when a span's label is auto-derived from its chain rather than a
- * preset name or a mosh, so a hand-edit is free to re-derive it. */
+/** True when a span's label is auto-derived from its chain, not a preset name or mosh. */
 export function isHandBuiltLabel(span: {
 	label: string;
 	presetName?: string;

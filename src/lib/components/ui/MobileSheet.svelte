@@ -5,11 +5,8 @@
 		children?: Snippet;
 		settings?: Snippet;
 		effectsPanel?: Snippet;
-		/**
-		 * An editor for whatever the user just picked, a clip say. While one is
-		 * showing it takes two tabs of its own, its controls and its chain, in
-		 * front of the settings; the main chain waits behind them.
-		 */
+		/** An editor for whatever the user just picked, a clip say. While one is showing it
+		 * takes two tabs of its own, its controls and its chain, in front of the settings. */
 		topPanel?: Snippet<[section: "clip" | "chain"]>;
 		/** Tab names. The first tab is the top panel's while one is showing. */
 		settingsLabel?: string;
@@ -33,11 +30,11 @@
 	let sheetDragging = $state(false);
 	let sheetHandleEl = $state<HTMLButtonElement>();
 	type Tab = "clip" | "effects" | "settings";
-	/** The tab last picked by hand. Every selection opens in it, so a chain
-	 * edit across many clips is one click on Chain rather than one per clip. */
+	/** The tab last picked by hand. Every selection opens in it, so a chain edit
+	 * across many clips is one click on Chain rather than one per clip. */
 	let preferredTab = $state<Tab>("effects");
 	// Only a layer clip has a clip tab: an fx clip picked while it is preferred
-	// shows its chain instead, and the preference waits for the next clip.
+	// shows its chain instead.
 	const activeTab = $derived<Tab>(
 		preferredTab === "clip" && !topPanel ? "effects" : preferredTab,
 	);
@@ -142,9 +139,9 @@
 	</button>
 
 	{#if hasTabs}
-		<!-- One tab at a time, on every width. The chain is the working
-		     surface, so it gets the full height; the settings are one tab
-		     away rather than a block it has to scroll past. -->
+		<!-- One tab at a time, on every width. The chain is the working surface, so it
+		     gets the full height; the settings are one tab away rather than a block it
+		     has to scroll past. -->
 		<div class="tab-bar" role="tablist">
 			{#if topPanel}
 				<button
@@ -186,8 +183,8 @@
 
 <style>
 	/* Fixed width rather than sized by whatever is inside it: the sidebar swaps
-	   panels as the selection changes, and letting the content decide made it
-	   jump between widths on every click. */
+	   panels as the selection changes, and letting the content decide made it jump
+	   between widths on every click. */
 	.sheet-container {
 		display: flex;
 		flex-direction: column;

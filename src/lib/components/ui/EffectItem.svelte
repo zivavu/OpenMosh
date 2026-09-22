@@ -34,7 +34,8 @@
 
 	export type { SpectrumData };
 
-	/** Piecewise-linear mapping: 75% of slider (0–750) = 20–8000 Hz, 25% (750–1000) = 8000–20000 Hz */
+	/** Piecewise-linear mapping: 75% of slider (0 to 750) = 20 to 8000 Hz, 25%
+	 * (750 to 1000) = 8000 to 20000 Hz */
 	function sliderToFreq(s: number): number {
 		if (s <= 750) return 20 + (s / 750) * (8000 - 20);
 		return 8000 + ((s - 750) / 250) * (20000 - 8000);
@@ -87,29 +88,24 @@
 		effect: EffectInstance;
 		hasTrack?: boolean;
 		spectrumData?: SpectrumData | null;
-		/** How this chain follows the music — the spectrum read-out is drawn
-		 * through it, so it shows the value the parameter actually rides. */
+		/** How this chain follows the music; the spectrum read-out is drawn through
+		 * it, so it shows the value the parameter actually rides. */
 		response?: AudioResponse;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
 		onToggle: () => void;
-		/** Set when the chain's on/off state is not the user's to set — the
-		 * slideshow's rolling modes decide it per beat. The switch still shows
-		 * what is passing signal, but says why it can't be moved. */
+		/** Set when the chain's on/off state is not the user's to set (the slideshow's
+		 * rolling modes decide it per beat). The switch still shows what is passing signal. */
 		rolledNote?: string | null;
-		/** Set when the whole list — order and params, not just the switches — is
-		 * rebuilt by the roll. Reordering and opening the params would both be
-		 * undone by the next tick, so those affordances go away rather than
-		 * sitting there dead. */
+		/** Set when the whole list (order and params, not just the switches) is rebuilt by
+		 * the roll, so reordering and opening params go away rather than sitting dead. */
 		rolledChain?: boolean;
 		onToggleExpand: () => void;
 		/** Hide from the effect list (a persisted preference, not a chain edit). */
 		onHide: () => void;
-		/** Insert an independent copy right below this one. */
 		onDuplicate: () => void;
-		/** True when the chain holds other copies of this effect — hiding one copy
+		/** True when the chain holds other copies of this effect; hiding one copy
 		 * would be a chain edit, so it removes instead. */
 		isCopy?: boolean;
-		/** Step one place in `direction`, or jump to that end when `toEnd`. */
 		onMove: (direction: -1 | 1, toEnd: boolean) => void;
 		canMoveUp: boolean;
 		canMoveDown: boolean;
@@ -194,8 +190,8 @@
 			onDragEnd();
 		}}
 	>
-		<!-- The rail runs the height of every strip, lit where signal passes, so
-		     the chain reads as one continuous path down the panel. -->
+		<!-- The rail runs the height of every strip, lit where signal passes, so the
+		     chain reads as one continuous path down the panel. -->
 		<div class="rail" aria-hidden="true">
 			<span class="rail-index readout"
 				>{String((effectIndex ?? 0) + 1).padStart(2, "0")}</span
@@ -718,8 +714,8 @@
 			border-color var(--t);
 	}
 
-	/* Reporting, not controlling: dimmed so it doesn't invite a click, but not
-	   so far that the live state stops reading. */
+	/* Reporting, not controlling: dimmed so it doesn't invite a click, but not so
+	   far that the live state stops reading. */
 	.toggle:disabled {
 		cursor: default;
 		opacity: 0.55;
@@ -750,7 +746,6 @@
 		box-shadow: 0 0 6px rgba(110, 231, 192, 0.7);
 	}
 
-	/* Icon buttons */
 	.icon-btn {
 		display: flex;
 		align-items: center;
@@ -789,10 +784,10 @@
 		color: var(--text-2);
 	}
 
-	/* At rest a strip is its number, its name and its switch. The rest of the
-	   tools keep their space but only show for the strip under the pointer, the
-	   one with focus, or an open one, so the chain reads as a list rather than
-	   a control panel. Touch has no hover, so there they are always on. */
+	/* At rest a strip is its number, its name and its switch. The rest of the tools
+	   keep their space but only show for the strip under the pointer, the one with
+	   focus, or an open one, so the chain reads as a list rather than a control
+	   panel. Touch has no hover, so there they are always on. */
 	.icon-btn,
 	.move-btns,
 	.drag-handle {
@@ -820,7 +815,6 @@
 		}
 	}
 
-	/* Params panel */
 	.params {
 		padding: 0.3rem 0.7rem 0.6rem 1.15rem;
 		display: flex;

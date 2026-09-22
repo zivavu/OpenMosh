@@ -1,30 +1,5 @@
 /// <reference lib="webworker" />
-/**
- * Proxy transcoding, one video at a time, off the main thread.
- *
- * A proxy is a ≤1080p re-encode that previews decode instead of an oversized
- * original: software 4K decode is what drops previews to a few fps on weaker
- * machines, and every per-frame cost — decode, GPU upload, queue memory —
- * scales with pixel count. The original is never modified (exports keep
- * reading it), so the proxy only has to be fast to build and cheap to decode.
- *
- * The proxy's size is picked per file: a short decode benchmark runs against
- * the source first, and a machine that can't push it through at twice
- * realtime gets an HD proxy instead of Full HD — a proxy the machine still
- * can't decode comfortably would miss the point.
- *
- * The resize is done by a registered VideoSampleTransformer rather than
- * mediabunny's built-in one: its path draws decoded frames with 2D-canvas
- * drawImage, which Firefox rejects for some hardware-decoded streams (HDR
- * ones, observedly) with "Passed-in video frame is broken" even though the
- * pixels are perfectly readable through other paths. The transformer draws
- * through the same fast path first and falls back to ImageBitmap and then to
- * raw pixel copies — one of those always works if the preview can show the
- * video at all.
- *
- * Statically imported, like decode-worker: a dynamic import would split the
- * worker bundle, which Vite can't emit for a classic worker chunk.
- */
+/** Proxy transcoding, one video at a time, off the main thread: a <=1080p re-encode. */
 import {
 	ALL_FORMATS,
 	BlobSource,
@@ -59,23 +34,17 @@ function post(msg: ProxyWorkerResponse, transfer?: Transferable[]) {
 	(self as unknown as Worker).postMessage(msg, transfer ?? []);
 }
 
-/** Long-edge ceiling of a preview proxy on machines that decode comfortably. */
+/** Long-edge ceiling on machines that decode comfortably. */
 const FHD_LONG_EDGE = 1920;
 /** Long-edge ceiling on machines that can't decode the source at 2× realtime. */
 const HD_LONG_EDGE = 1280;
-/** How much source media the benchmark decodes before judging speed. */
+/** Source media the benchmark decodes before judging speed. */
 const BENCH_MEDIA_SECONDS = 2;
-/** Wall-clock cap on the benchmark — past this the verdict is already clear. */
+/** Wall-clock cap on the benchmark; past this the verdict is clear. */
 const BENCH_WALL_MS = 1500;
 
-/**
- * Decode the first moments of a track and time it, as a multiple of realtime —
- * null when the track can't be decoded at all. Measured per file rather than
- * cached per device: decode cost depends on the media as much as on the
- * machine, and the check costs at most BENCH_WALL_MS. Decoder warmup skews the
- * first frames slow, so the number reads low; the safe direction for both
- * things it decides.
- */
+/** Decode the first moments of a track and time it, as a multiple of realtime;
+ * null when it can't be decoded. */
 async function benchmarkDecode(track: InputVideoTrack): Promise<number | null> {
 	try {
 		const sink = new VideoSampleSink(track);
@@ -95,11 +64,7 @@ async function benchmarkDecode(track: InputVideoTrack): Promise<number | null> {
 	}
 }
 
-/**
- * A machine that can't push the source through at twice realtime gets an HD
- * proxy instead of Full HD — a proxy the machine still can't decode
- * comfortably would miss the point. An unmeasurable source is assumed strong.
- */
+/** Under 2× realtime gets an HD proxy; an unmeasurable source is assumed strong. */
 function pickLongEdge(realtime: number | null): number {
 	if (realtime === null) return FHD_LONG_EDGE;
 	const weak = realtime < 2;
@@ -109,45 +74,18 @@ function pickLongEdge(realtime: number | null): number {
 	return weak ? HD_LONG_EDGE : FHD_LONG_EDGE;
 }
 
-/**
- * Quality of the re-encode.
- *
- * `preferBitrate` is what makes it a *quality* setting rather than a
- * quantizer: left alone, mediabunny encodes a qualitative level with
- * quantizer-based rate control, which puts no ceiling on the result — a
- * QP-based re-encode of clean footage can land above the delivery bitrate of
- * the original, so the proxy ends up more expensive per frame to demux and
- * decode than the thing it stands in for. Bitrate mode pins it near 3 Mbps at
- * 1080p, which is plenty for a preview.
- */
+/** `preferBitrate` makes this a quality setting rather than a quantizer: QP rate
+ * control puts no ceiling on the result. */
 const PROXY_QUALITY = new Quality({ quality: "medium", preferBitrate: true });
 
-/**
- * Seconds between key frames in the proxy, against mediabunny's default of 2.
- *
- * Previews seek constantly — every scrub, every clip edge, and every time a
- * sampler notices decode has fallen behind the clock and jumps to a key frame
- * to catch up (see SlideVideoSampler). Each of those decodes from the
- * preceding key frame forward, so a long interval means a jump can land a
- * couple of seconds of frames away from where the playhead already is; for a
- * sampler that only jumped because it was behind, that is a hole it can dig
- * itself deeper into. Denser key frames cost bitrate, which a preview proxy
- * has to spare.
- */
+/** Seconds between key frames, against mediabunny's default of 2. Previews seek
+ * constantly, and each seek decodes from the preceding key frame. */
 const KEY_FRAME_INTERVAL = 1;
 
-/**
- * Codecs a proxy may be encoded in, ordered by how likely a decoder is to be
- * cheap. Every one of them is legal in MP4.
- */
+/** Codecs a proxy may use, ordered by how likely a decoder is to be cheap. */
 const PROXY_CODECS: VideoCodec[] = ["avc", "hevc", "vp9", "av1", "vp8"];
 
-/**
- * Representative codec strings for asking whether a decoder exists in
- * hardware. The proxy's own stream will differ in profile and level, but not
- * in the thing being asked — whether this machine decodes this codec at this
- * size without falling back to the CPU.
- */
+/** Representative codec strings for probing for a hardware decoder. */
 const DECODE_PROBES: Record<VideoCodec, string | null> = {
 	avc: "avc1.640028", // High 4.0
 	hevc: "hvc1.1.6.L120.90", // Main 4.0
@@ -157,17 +95,8 @@ const DECODE_PROBES: Record<VideoCodec, string | null> = {
 	prores: null, // Not a browser codec; never a proxy target.
 };
 
-/**
- * The codec to encode the proxy in: the first one this machine can both encode
- * *and* decode in hardware. Null hands the choice back to mediabunny.
- *
- * Encodability alone is what mediabunny picks on, and that is how a proxy ends
- * up costing more to play than the source it replaced: a browser with no H.264
- * encoder (Firefox has none) falls through to VP9 or AV1, whose decoders are
- * far more often software-only, while the untouched source was hardware-decoded
- * H.264 the whole time. Downscaling can't win back what a software decoder
- * gives away, so the codec has to be chosen from the playback side.
- */
+/** The first codec this machine can both encode and decode in hardware; null
+ * defers to mediabunny. */
 async function pickCodec(
 	width: number,
 	height: number,
@@ -182,8 +111,7 @@ async function pickCodec(
 		console.info(`[proxy] encoding in ${codec} (hardware-decodable here)`);
 		return codec;
 	}
-	// Nothing decodes in hardware — a machine where the proxy's win has to come
-	// from pixel count alone. Let mediabunny pick whatever it can encode.
+	// Nothing decodes in hardware, so the win has to come from pixel count alone.
 	console.info("[proxy] no hardware-decodable codec, deferring the choice");
 	return null;
 }
@@ -209,10 +137,7 @@ async function canHardwareDecode(
 	}
 }
 
-/**
- * Even-dimensioned size capping the long edge, never upscaling. Even because
- * H.264 encoders reject odd dimensions.
- */
+/** Even-dimensioned size capping the long edge; H.264 rejects odd sizes. */
 function shrinkToLongEdge(width: number, height: number, longEdge: number) {
 	const scale = Math.min(1, longEdge / Math.max(width, height));
 	return {
@@ -221,20 +146,12 @@ function shrinkToLongEdge(width: number, height: number, longEdge: number) {
 	};
 }
 
-/**
- * Index of the draw path that last worked; starts on mediabunny's own and is
- * reset per conversion, since what one file's frames reject the next one's may
- * well accept.
- */
+/** Index of the draw path that last worked; reset per conversion. */
 let drawTier = 0;
 /** Logged once per tier, so a machine where every path fails stays readable. */
 const loggedTier = new Set<number>();
 
-/**
- * Draw `sample` onto `canvas` at the description's size. Tiers are ordered by
- * speed; each is only tried after the one before it failed, and the first
- * success sticks for the rest of the conversion.
- */
+/** Draw `sample` onto `canvas`; tiers are ordered by speed, first success sticks. */
 async function drawResized(
 	sample: VideoSample,
 	canvas: OffscreenCanvas,
@@ -245,15 +162,14 @@ async function drawResized(
 	for (let tier = drawTier; tier < 3; tier++) {
 		try {
 			if (tier === 0) {
-				// mediabunny's own draw — handles rotation, crop and fit itself.
+				// mediabunny's own draw, which handles rotation, crop and fit itself.
 				sample.drawWithFit(ctx, {
 					fit: description.fit,
 					rotation: description.rotation,
 					crop: description.crop,
 				});
 			} else {
-				// Fallbacks assume the simple case proxies always run in: upright
-				// frame, fill fit, no crop. Anything else returned null upstream.
+				// Fallbacks assume the simple case proxies run in: upright, fill fit, no crop.
 				if (description.alpha === "discard") {
 					ctx.fillStyle = "black";
 					ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -299,16 +215,8 @@ async function drawViaBitmap(
 	}
 }
 
-/**
- * Last resort: read the raw pixels and assemble them ourselves.
- *
- * RGBA first, since a canvas takes those directly. Firefox refuses that
- * conversion for some hardware-decoded frames — "Failed to convert videoframe
- * in the defined format" — while still handing the pixels over untouched, so
- * the second try copies in the frame's own format and rewraps them in a
- * buffer-backed VideoFrame, which by construction has the surface data the
- * decoded one was missing.
- */
+/** Last resort: read the raw pixels and assemble them ourselves. RGBA first, then
+ * the frame's own format, which Firefox accepts where RGBA fails. */
 async function drawViaPixels(
 	sample: VideoSample,
 	ctx: OffscreenCanvasRenderingContext2D,
@@ -335,9 +243,7 @@ async function drawViaPixels(
 
 /** The frame's pixels converted to RGBA and put on a canvas. */
 async function copyToCanvas(frame: VideoFrame): Promise<OffscreenCanvas> {
-	// The copy is laid out over the visible rect, which for an anamorphic
-	// source is not the display size — sizing the canvas off the latter makes
-	// ImageData reject the buffer outright.
+	// Sized off the visible rect; an anamorphic display size makes ImageData reject it.
 	const rect = frame.visibleRect;
 	const canvas = new OffscreenCanvas(
 		rect?.width ?? frame.codedWidth,
@@ -376,17 +282,11 @@ async function copyToFrame(
 	});
 }
 
-/** Tail of the transform queue — see the transformer below. */
+/** Tail of the transform queue; see the transformer below. */
 let transforms: Promise<void> = Promise.resolve();
 
-/**
- * The transformer mediabunny will call instead of its own canvas path. Only
- * the simple case is handled — upright frame, fill fit, no crop — which is
- * the only one the proxy ever asks for; anything else defers back.
- *
- * The canvas is created with alpha like mediabunny's own transformation
- * canvases: Firefox glitches when making VideoFrames from opaque ones.
- */
+/** The transformer mediabunny calls instead of its own canvas path; only the
+ * simple case (upright, fill fit, no crop) is handled. */
 registerVideoSampleTransformer((sample, description) => {
 	if (
 		description.rotation !== 0 ||
@@ -399,9 +299,7 @@ registerVideoSampleTransformer((sample, description) => {
 		return null;
 	}
 	const canvas = resizeCanvas(description.width, description.height);
-	// One frame at a time: the canvas is shared across frames and the fallback
-	// tiers await, so two transforms in flight could hand one frame's pixels to
-	// the other's sample. A transformer may return a promise.
+	// One frame at a time: the canvas is shared and the fallback tiers await.
 	const result = transforms.then(async () => {
 		await drawResized(sample, canvas, description);
 		return new VideoSample(canvas, {
@@ -417,10 +315,7 @@ registerVideoSampleTransformer((sample, description) => {
 	return result;
 });
 
-/**
- * One canvas per size, reused across frames — the VideoSample made from it
- * snapshots the pixels at construction, so the next frame can reuse it.
- */
+/** One canvas per size, reused: the VideoSample made from it snapshots the pixels. */
 const resizeCanvases = new Map<string, OffscreenCanvas>();
 
 function resizeCanvas(width: number, height: number): OffscreenCanvas {
@@ -445,16 +340,8 @@ self.onmessage = (e: MessageEvent<ProxyWorkerRequest>) => {
 		.catch(() => {});
 };
 
-/**
- * Log what the proxy actually came out as, next to the source it replaces.
- *
- * The whole point of a proxy is that it decodes cheaper, and every input to
- * that — codec, bitrate, whether a hardware decoder took it — is decided by
- * probes and browser fallbacks rather than by anything stated here. Without a
- * number measured on the finished file, a proxy that decodes *slower* than its
- * source looks exactly like one that works. Costs one benchmark per file, and
- * only after the transcode the user was already waiting on.
- */
+/** Log what the proxy came out as, next to the source: without a measured number a
+ * proxy that decodes slower than its source looks like one that works. */
 async function reportProxy(blob: Blob, sourceRealtime: number | null) {
 	try {
 		const input = new Input({
@@ -488,7 +375,7 @@ async function reportProxy(blob: Blob, sourceRealtime: number | null) {
 			input.dispose();
 		}
 	} catch (error) {
-		// Diagnostics only — a proxy that resists measurement still plays.
+		// Diagnostics only; a proxy that resists measurement still plays.
 		console.warn("[proxy] could not measure the finished proxy", error);
 	}
 }
@@ -510,8 +397,7 @@ async function convert(id: number, file: File) {
 			pickLongEdge(sourceRealtime),
 		);
 		const codec = await pickCodec(size.width, size.height);
-		// Before the encode, not after: the size is what the UI has to show for
-		// however long the transcode takes.
+		// Posted before the encode: the size is what the UI shows for the whole transcode.
 		post({ type: "sized", id, width: size.width, height: size.height });
 		const target = new BufferTarget();
 		const output = new Output({ format: new Mp4OutputFormat(), target });
@@ -519,26 +405,19 @@ async function convert(id: number, file: File) {
 			input,
 			output,
 			video: {
-				// The size is the track's own, scaled, so a sub-pixel rounding
-				// difference is all "fill" can stretch by — "contain" would letterbox.
+				// The track's own size, scaled, so "fill" can only stretch by a rounding difference.
 				width: size.width,
 				height: size.height,
 				fit: "fill",
 				quality: PROXY_QUALITY,
 				keyFrameInterval: KEY_FRAME_INTERVAL,
 				...(codec ? { codec } : {}),
-				// Deliberately no hardwareAcceleration hint: mediabunny picks the
-				// codec by probing what the browser can actually encode, but the hint
-				// rides into the encoder config afterwards, where a browser without
-				// hardware encoding for that codec (Firefox has no H.264 encoder at
-				// all) rejects the config and the whole conversion dies. A background
-				// proxy is happy to encode in software.
+				// Deliberately no hardwareAcceleration hint: it rides into the encoder config, where
+				// a browser without hardware encoding for that codec rejects the whole job.
 			},
 		});
 		conversions.set(id, conversion);
-		// A discarded video track (no encodable codec, undecodable source) leaves
-		// an audio-only or empty conversion — execute() would throw a bare
-		// "invalid", so surface the real reason instead.
+		// A discarded video track leaves an audio-only conversion whose execute() throws.
 		if (!conversion.isValid) {
 			const reasons = conversion.discardedTracks
 				.map((t) => `${t.track.type}: ${t.reason}`)
@@ -554,8 +433,7 @@ async function convert(id: number, file: File) {
 		await reportProxy(blob, sourceRealtime);
 		post({ type: "done", id, blob });
 	} catch (error) {
-		// Cancel or a mid-stream decode/encode failure — both read as "no proxy".
-		// The error is otherwise invisible: nothing here logs on its own.
+		// Cancel or a mid-stream failure, both read as "no proxy"; nothing else logs.
 		conversions.delete(id);
 		console.error(`[proxy] conversion ${id} failed`, error);
 		post({ type: "failed", id, reason: String(error) });

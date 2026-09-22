@@ -1,6 +1,5 @@
-/* Only the latin subsets are declared, rather than importing the whole
-   fontsource package — vietnamese/greek/cyrillic never render here and their
-   @font-face rules only pad the render-blocking stylesheet. */
+/* Only the latin subsets are declared, rather than importing the whole fontsource
+   package: the other subsets never render here and only pad the stylesheet. */
 @font-face {
 	font-family: "Archivo Variable";
 	font-style: normal;
@@ -62,9 +61,8 @@
 	-webkit-tap-highlight-color: transparent;
 }
 
-/* Scrollbars: a bare thumb on a transparent track, everywhere. Chrome drops
-   the ::-webkit rules on any element that also sets scrollbar-width, so the
-   standard properties are reserved for engines without them (Firefox). */
+/* Scrollbars: a bare thumb on a transparent track. Chrome drops the ::-webkit rules
+   on any element that also sets scrollbar-width, so those are for Firefox. */
 ::-webkit-scrollbar {
 	width: 6px;
 	height: 6px;
@@ -92,9 +90,7 @@
 }
 
 /* The app is a signal path: media enters, passes a chain of effects, leaves as a
-   file. The chrome is built like the rack around that signal — near-black
-   surfaces, engraved uppercase labels, mono for anything a number. Color is
-   reserved for state: a lit effect, a running clock, a live recording. */
+   file. The chrome is a rack around that signal; color is reserved for state. */
 :root {
 	/* Surfaces, darkest to lightest */
 	--ink: #0a0a0c;
@@ -110,19 +106,17 @@
 	--text-3: #62626e;
 	--text-4: #43434d;
 
-	/* State colors — each one means something, none are decorative */
+	/* State colors: each one means something, none are decorative */
 	--live: #6ee7c0; /* anything live: lit effects, active toggles, clocks, timelines */
 	--live-dim: #2f6a5b;
-	--mosh: #c6a2ea; /* mosh and presets — the generative actions */
+	--mosh: #c6a2ea; /* mosh and presets: the generative actions */
 	--mosh-dim: #6a5080;
 	--rec: #ff5f56; /* recording, destructive */
 	--rec-dim: #7d3430;
-	--start: #f0b568; /* the static playhead — where playback starts from */
+	--start: #f0b568; /* the static playhead: where playback starts from */
 	--start-dim: #8a6a3f;
 
-	/* The sidebar. Every panel that can take it over has to agree on this: a
-	   narrower one caps the column and leaves the chain below it overflowing
-	   sideways behind a horizontal scrollbar. */
+	/* The sidebar. Every panel that can take it over has to agree on this. */
 	--sidebar-w: 340px;
 
 	--r-1: 3px;
@@ -180,10 +174,7 @@ button:active {
 	font-feature-settings: "zero" 1;
 }
 
-/* The action bar under every preview is a rack strip: small switches gathered
-   into segmented clusters, the big actions as keycaps, hairlines between jobs.
-   Same shapes as the top bar's button group and the timeline's tools — the
-   strip is the row that used to be circles and pills. */
+/* The action bar under every preview is a rack strip: switches in segmented clusters. */
 .bar-sep {
 	width: 1px;
 	height: 18px;
@@ -319,8 +310,8 @@ button:active {
 	color: var(--rec);
 }
 
-/* The settings sheet a key or switch opens above itself. Anchoring is the
-   owner's; this is the sheet. */
+/* The settings sheet a key or switch opens above itself. Anchoring is the owner's;
+   this is the sheet. */
 .bar-pop {
 	position: absolute;
 	bottom: calc(100% + 0.45rem);
@@ -370,9 +361,7 @@ button:active {
 	outline-offset: 2px;
 }
 
-/* Sliders drop the outline (a box around the whole track reads as a bug) and
-   light the thumb instead. `:not(:disabled)` is there to outrank each
-   component's scoped hover rule. */
+/* Sliders drop the outline and light the thumb instead. */
 input[type="range"]:focus-visible {
 	outline: none;
 }
@@ -392,8 +381,5 @@ input[type="range"]:focus-visible:not(:disabled)::-moz-range-thumb {
 	height: 100svh;
 }
 
-/* No prefers-reduced-motion reset here on purpose. Windows ships that flag off
-   by default under "Show animations in Windows", so the blanket !important
-   version silently flattened every animation in the app, glitch effects
-   included, for anyone who had never thought about the setting. The upload
-   screen's STOP button is the opt-out this app offers instead. */
+/* No prefers-reduced-motion reset on purpose: Windows ships that flag off by default,
+   so the blanket !important version flattened every animation, glitch effects included. */

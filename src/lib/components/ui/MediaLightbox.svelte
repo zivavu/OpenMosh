@@ -8,8 +8,8 @@
 	import { onDestroy, onMount } from "svelte";
 	import { pushModalKeyboard } from "../../modal-keyboard";
 
-	/** Anything with a name and an object URL can be shown here: slideshow
-	 * slides, sequence sources. */
+	/** Anything with a name and an object URL can be shown here: slideshow slides,
+	 * sequence sources. */
 	export interface LightboxItem {
 		name: string;
 		kind: "image" | "video";
@@ -20,14 +20,12 @@
 		items: LightboxItem[];
 		/** Index into `items`; arrows walk it, so the owner sees where we are. */
 		index: number;
-		/** Where the opening zoom starts from, as an offset from screen centre.
-		 * Null skips the flight and the item just fades in. */
+		/** Where the opening zoom starts from, as an offset from screen centre. Null
+		 * skips the flight and the item just fades in. */
 		origin?: { x: number; y: number } | null;
 		onClose: () => void;
-		/**
-		 * Hand the item on show over to an editor. Optional: the slideshow has
-		 * nothing to hand it to, and shows no button at all.
-		 */
+		/** Hand the item on show over to an editor. Optional: the slideshow has nothing
+		 * to hand it to, and shows no button at all. */
 		onEdit?: (index: number) => void;
 	}
 
@@ -56,9 +54,8 @@
 	let closeVersion = 0;
 	let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
-	/** Fly back to where it came from, then unmount. The timer is the fallback
-	 * for when no transitionend arrives (video, reduced motion, a tab that was
-	 * backgrounded mid-flight). */
+	/** Fly back to where it came from, then unmount. The timer is the fallback for
+	 * when no transitionend arrives (video, reduced motion, a backgrounded tab). */
 	function close() {
 		if (closing) return;
 		closing = true;
@@ -97,8 +94,8 @@
 		index = (index - 1 + items.length) % items.length;
 	}
 
-	// While we're up the editors' own shortcuts stand down — Delete would take
-	// the clip behind us, and the arrows are ours to walk the pool with.
+	// While we're up the editors' own shortcuts stand down: Delete would take the
+	// clip behind us, and the arrows are ours to walk the pool with.
 	onMount(() => pushModalKeyboard());
 
 	function onKeydown(e: KeyboardEvent) {
@@ -106,8 +103,8 @@
 		else if (e.key === "ArrowLeft") prev();
 		else if (e.key === "Escape") close();
 		else return;
-		// Both editors bind these keys at the window (mosh history, clip
-		// deletes) — while the lightbox is up it consumes them outright.
+		// Both editors bind these keys at the window, so while the lightbox is up it
+		// consumes them outright.
 		e.preventDefault();
 		e.stopPropagation();
 	}

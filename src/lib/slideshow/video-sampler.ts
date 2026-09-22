@@ -10,16 +10,11 @@ export interface SlideVideoProbe {
 	duration: number;
 	width: number;
 	height: number;
-	/** First-frame thumbnail (cover-cropped square JPEG), or null if it failed. */
 	thumb: Blob | null;
 }
 
-/**
- * Eligibility check for a video slide, mirroring the single-editor WebCodecs
- * rules (no rotation metadata, decodable codec). Also grabs duration,
- * dimensions and a first-frame thumbnail in the same pass.
- * Returns null when the file can't drive the WebCodecs path.
- */
+/** Eligibility check for a video slide, mirroring the single-editor WebCodecs rules
+ * (no rotation metadata, decodable codec); also grabs duration and a thumbnail. */
 export async function probeSlideVideo(
 	file: File,
 	thumbSize = 100,
@@ -29,9 +24,8 @@ export async function probeSlideVideo(
 
 	let thumb: Blob | null = null;
 	try {
-		// Iterated rather than getSample(0): that returns null whenever the track's
-		// first frame sits past zero — an edit list or a phone/camera muxer is
-		// enough — which left those files permanently thumbless.
+		// Iterated rather than getSample(0): that returns null whenever the track's first
+		// frame sits past zero (edit list or phone/camera muxer).
 		for await (const sample of opened.sink.samples()) {
 			const frame = toVideoFrame(sample);
 			thumb = await drawThumb(frame, thumbSize);
@@ -39,7 +33,6 @@ export async function probeSlideVideo(
 			break;
 		}
 	} catch {
-		// Thumbless is survivable — the chip falls back to its no-preview state.
 	} finally {
 		// Nothing here outlives the probe: callers get plain data back.
 		opened.input.dispose();
@@ -78,28 +71,19 @@ async function drawThumb(
 	return canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 });
 }
 
-/** Forward jump past this many seconds is seeked to rather than decoded through. */
+/** Forward jump past this many seconds is seeked, not decoded through. */
 const SEEK_AHEAD = 0.75;
 /** If decode falls this far (media seconds) behind a preview, keyframe-jump. */
 const MAX_DECODE_LAG = 0.5;
 /** Backward slack, so float noise in a clock doesn't trigger a seek. */
 const BACK_EPS = 0.001;
 
-/**
- * Frame sampler for a video slide, shared by preview and export.
- *
- * Unlike VideoPreviewPlayer there is no clock, audio or speed — the caller
- * states the position outright with `at(t)`, so the same time always yields the
- * same frame however the playhead got there. Decode still runs sequentially: a
- * position that creeps forward is served straight from the queue, and the pump
- * is restarted (a seek) only on a jump. It starts lazily on the first call, so
- * samplers for hidden slides hold no decoded frames.
- */
+/** Frame sampler for a video slide, shared by preview and export. No clock, audio
+ * or speed: the caller states the position with `at(t)`. */
 export class SlideVideoSampler {
 	readonly duration: number;
 	readonly width: number;
 	readonly height: number;
-	/** Where the sampler currently is, wrapped into [0, duration). */
 	position = 0;
 
 	#queue: FrameQueue;
@@ -121,7 +105,6 @@ export class SlideVideoSampler {
 		this.height = height;
 	}
 
-	/** Returns null when the file can't drive the WebCodecs path. */
 	static async create(file: File): Promise<SlideVideoSampler | null> {
 		const opened = await openVideoFrameSource(file);
 		if (!opened) return null;
@@ -133,27 +116,14 @@ export class SlideVideoSampler {
 		);
 	}
 
-	/** Rewind to 0 so a fresh preview/export run starts deterministically. */
 	reset() {
 		this.position = 0;
 		this.#delivered = false;
 		if (this.#queue.started) this.#queue.start(0);
 	}
 
-	/**
-	 * Move to absolute position `t` (wrapped into the clip) and return the frame
-	 * due there, or null to keep the previous upload.
-	 *
-	 * This is what makes playback repeatable: the position is a function of the
-	 * caller's clock rather than of how many times it happened to call, so a
-	 * stalled frame, a paused preview and a playhead dropped into the middle of a
-	 * segment all land on the same frame the export will write.
-	 *
-	 * `wait` is what separates the two callers. An export needs the exact frame
-	 * and can afford to stall for it. A preview must not: the lane already has a
-	 * frame on screen, and blocking for a newer one only costs the render loop
-	 * the frame it is on. See `#take`.
-	 */
+	/** Move to absolute position `t` (wrapped into the clip) and return the frame due
+	 * there, or null to keep the previous upload. `wait` separates the two callers. */
 	async at(t: number, wait = true): Promise<VideoFrame | null> {
 		if (this.#disposed || this.duration <= 0) return null;
 		if (this.#busy) return null;
@@ -162,8 +132,8 @@ export class SlideVideoSampler {
 			const want = ((t % this.duration) + this.duration) % this.duration;
 			const delta = want - this.position;
 			this.position = want;
-			// Creeping forward is what the queue is for; anything else is a jump,
-			// and re-pumping from there beats decoding through the gap.
+			// Creeping forward is what the queue is for; anything else is a jump, and
+			// re-pumping beats decoding through the gap.
 			if (!this.#queue.started || delta < -BACK_EPS || delta > SEEK_AHEAD) {
 				this.#delivered = false;
 				this.#queue.start(want);
@@ -174,11 +144,8 @@ export class SlideVideoSampler {
 				this.#queue.size === 0 &&
 				want - this.#queue.head > MAX_DECODE_LAG
 			) {
-				// Decode has fallen behind the clock with nothing queued to catch up
-				// from. Every frame it decodes from here is one the playhead has
-				// already passed, so it can only lose more ground — jump to a keyframe
-				// near the clock instead. Previews only: an export is allowed to take
-				// as long as it needs, and must not skip.
+				// Decode has fallen behind the clock with nothing queued to catch up from, so
+				// every frame it decodes is one the playhead already passed. Previews only.
 				this.#queue.start(want);
 			}
 			return await this.#take(want, wait);
@@ -187,13 +154,8 @@ export class SlideVideoSampler {
 		}
 	}
 
-	/**
-	 * The newest queued frame due at `t`. Waits for decode if none has landed
-	 * and `wait` allows it — a caller that already has a frame on screen keeps
-	 * it instead, so a source slower than the display doesn't drag the render
-	 * loop down to its own rate. A lane that has never shown anything still
-	 * waits either way: null there means a blank frame, not a held one.
-	 */
+	/** The newest queued frame due at `t`. Waits for decode if none has landed and
+	 * `wait` allows it; a caller with a frame on screen keeps it. */
 	async #take(t: number, wait: boolean): Promise<VideoFrame | null> {
 		while (!this.#disposed) {
 			const due = this.#queue.takeDue(t);
@@ -202,9 +164,8 @@ export class SlideVideoSampler {
 				return due;
 			}
 			if (this.#queue.size > 0) {
-				// Head is in the future. If we've already shown a frame it's still
-				// current; otherwise (first frame timestamp > t) show the head so
-				// the slide isn't blank on its first beat.
+				// Head is in the future. If a frame was already shown it's still current;
+				// otherwise show the head so the slide isn't blank.
 				if (this.#delivered) return null;
 				this.#delivered = true;
 				return this.#queue.takeHead()!;

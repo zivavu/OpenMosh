@@ -24,7 +24,7 @@
 
 	const MIN_SEGMENT_DURATION = 0.125;
 
-	// Ordered top→bottom: fast (1/32) to slow (4) — lower = higher beat value
+	// Top to bottom: fast (1/32) to slow (4); lower = higher beat value
 	const SUBDIVISIONS: BeatSubdivision[] = [
 		0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 0,
 	];
@@ -56,8 +56,7 @@
 		onConfigChange: (config: SlideshowConfig) => void;
 		selectedSegmentId?: string | null;
 		onSeek?: (time: number) => void;
-		/** Out: this lane's undo stack, for the editor's Ctrl+Z router — the
-		 * segments are edited here but Ctrl+Z is decided across every stack. */
+		/** Out: this lane's undo stack, for the editor's Ctrl+Z router. */
 		undoSource?: UndoSource;
 	}
 
@@ -69,7 +68,7 @@
 		undoSource = $bindable(),
 	}: Props = $props();
 
-	// One axis for the whole stack — zoom, pan and the playhead live there.
+	// One axis for the whole stack: zoom, pan and the playhead live there.
 	const stack = getTimelineStack();
 	const vp = stack.vp;
 	const laneTrack = stack.lane;
@@ -98,7 +97,6 @@
 		}
 	});
 
-	// ── Drag state ───────────────────────────────────────────────────────────────
 	type DragState =
 		| { type: "boundary"; leftSegId: string | null; rightSegId: string | null }
 		| {
@@ -126,7 +124,6 @@
 	let dragging: DragState = $state(null);
 	let dragMoved = $state(false);
 
-	// ── Selection / clipboard / undo-redo (boundary dots) ────────────────────
 	const boundaries = new SegmentBoundaryController<
 		TimelineSegment,
 		BeatSubdivision
@@ -169,19 +166,16 @@
 		redo: () => void boundaries.redo(),
 	};
 
-	// Tracks which interior boundary dot the pointer is currently over
 	let hoveredDot: {
 		leftSegId: string | null;
 		rightSegId: string | null;
 	} | null = $state(null);
 
-	// ── Helpers ──────────────────────────────────────────────────────────────────
-	/** Emit without recording history — use during active drags. */
+	/** Emit without recording history; use during active drags. */
 	function emitLive(patch: { segments: TimelineSegment[] }) {
 		boundaries.live(patch.segments);
 	}
 
-	/** Emit and push current segments to undo history. */
 	function emit(patch: { segments: TimelineSegment[] }) {
 		boundaries.commit(patch.segments);
 	}
@@ -196,8 +190,8 @@
 		return ((cy - r.top) / r.height) * SVG_H;
 	}
 
-	// ── Touch handler (non-passive, handles dots + seg/seek drags) ──
-	const DOT_HIT_PX = 28; // pixel radius for dot hit detection on touch
+	// Non-passive: handles dots and seg/seek drags.
+	const DOT_HIT_PX = 28; // pixel radius for dot hits on touch
 
 	$effect(() => {
 		const el = svgEl;
@@ -220,9 +214,7 @@
 			void svgY_px;
 			void svgH;
 
-			// Check dot hits first (boundary dots)
 			for (const sv of segVis) {
-				// Convert sv.startX/endX (%) to pixel x
 				const startPx = (sv.startX / 100) * rect.width;
 				const endPx = (sv.endX / 100) * rect.width;
 				const dotY_px = (sv.y / SVG_H) * rect.height;
@@ -267,7 +259,6 @@
 				}
 			}
 
-			// Check seg-y drag (hit a segment line)
 			for (const sv of segVis) {
 				const startPx = (sv.startX / 100) * rect.width;
 				const endPx = (sv.endX / 100) * rect.width;
@@ -292,7 +283,6 @@
 				}
 			}
 
-			// Default: place the start marker
 			if (onSeek && trackDuration > 0) {
 				onLanePointerDown({
 					clientX: cx,
@@ -311,7 +301,6 @@
 		return () => el.removeEventListener("touchstart", handler);
 	});
 
-	// ── Derived visuals ──────────────────────────────────────────────────────────
 	interface SegVis {
 		id: string;
 		startX: number; // view-relative %
@@ -378,7 +367,6 @@
 			: subToY(config.subdivision),
 	);
 
-	// ── Event handlers ───────────────────────────────────────────────────────────
 	function startBndDrag(
 		e: PointerEvent,
 		leftSegId: string | null,
@@ -386,7 +374,6 @@
 	) {
 		e.stopPropagation();
 
-		// Determine the boundary time from segment data
 		let boundaryTime: number | null = null;
 		if (leftSegId) {
 			const lseg = config.segments.find((s) => s.id === leftSegId);
@@ -483,7 +470,6 @@
 			boundaries.pasteAt(vp.clientXToTime(e.clientX));
 			return;
 		}
-		// Ctrl+click → split segment at cursor
 		if (e.ctrlKey || e.metaKey) {
 			e.stopPropagation();
 			const time = vp.clientXToTime(e.clientX);
@@ -530,12 +516,10 @@
 			});
 			return;
 		}
-		// Shift+drag → rectangle selection
 		if (e.shiftKey) {
 			startRectSelect(e);
 			return;
 		}
-		// Default: place the start marker, which takes the clock with it.
 		if (!onSeek) return;
 		boundaries.clearSelection();
 		stack.seekStatic(
@@ -740,24 +724,17 @@
 		});
 	}
 
-	/**
-	 * Runs in the capture phase (see the `onkeydowncapture` binding below) so
-	 * it gets first look at the key, before SlideshowEditor's own window-level
-	 * handler (bubble phase) applies Ctrl+Z to the effect chain. Consuming a
-	 * key stops propagation so only one stack reacts; anything the timeline
-	 * doesn't want proceeds untouched.
-	 */
+	/** Runs in the capture phase so it gets first look at the key, before
+	 * SlideshowEditor's window-level handler (bubble phase) applies Ctrl+Z. */
 	function onKeydown(e: KeyboardEvent) {
 		if (isTextEntryTarget(e.target)) return;
 
-		// Undo / redo / copy / paste-mode-enter / escape
 		if (boundaries.onKeydown(e)) {
 			e.stopPropagation();
 			return;
 		}
 
-		// Delete / Backspace — existing local priority: hovered dot, then
-		// selected boundaries, then the selected whole segment.
+		// Delete / Backspace priority: hovered dot, then selected boundaries, then the segment.
 		if (isInteractiveTarget(e.target)) return;
 		if (e.key !== "Delete" && e.key !== "Backspace") return;
 		if (hoveredDot) {
@@ -777,7 +754,7 @@
 
 	let showHint = $derived(segments.length === 0);
 
-	// Boundary times currently inside the in-progress rect-select drag (for live highlighting)
+	// Boundary times inside the in-progress rect-select drag, for live highlighting
 	let rectHoverTimes = $derived.by((): number[] => {
 		if (dragging?.type !== "rect-select" || !dragMoved) return [];
 		const minTime = Math.min(dragging.startTime, dragging.currentTime);
@@ -843,13 +820,11 @@
 			style:cursor={svgCursor}
 			onpointerdown={onLanePointerDown}
 		>
-			<!-- Subtle grid rows -->
 			{#each SUBDIVISIONS as sub}
 				{const y = subToY(sub)}
 				<line class="grid-row" x1="0%" y1={y} x2="100%" y2={y} />
 			{/each}
 
-			<!-- Tail lines for uncovered regions -->
 			{#if segVis.length > 0}
 				{#if segVis[0].startTime > 0.001}
 					<line
@@ -861,8 +836,7 @@
 					/>
 				{/if}
 				{#if segVis[segVis.length - 1].endTime < trackDuration - 0.001}
-					<!-- Drawn end→start so the dash pattern anchors at the end dot;
-					     with start-anchored dashes the phase could leave a gap there -->
+			<!-- Drawn end to start so the dash pattern anchors at the end dot. -->
 					<line
 						class="tail"
 						x1="{vp.toPct(trackDuration)}%"
@@ -872,8 +846,7 @@
 					/>
 				{/if}
 			{:else}
-				<!-- Two halves, each dash-anchored at its end dot, so both dots
-				     stay connected; any phase seam lands mid-track -->
+				<!-- Two halves, each dash-anchored at its end dot, so both dots stay connected. -->
 				{const tailMid = (vp.toPct(0) + vp.toPct(trackDuration)) / 2}
 				<line
 					class="tail"
@@ -891,7 +864,6 @@
 				/>
 			{/if}
 
-			<!-- Segment hit areas -->
 			{#each segVis as sv}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<line
@@ -904,7 +876,6 @@
 				/>
 			{/each}
 
-			<!-- Vertical connectors between adjacent segments -->
 			{#each connectors as c}
 				<line
 					class="connector"
@@ -915,7 +886,6 @@
 				/>
 			{/each}
 
-			<!-- Segment visible lines + labels -->
 			{#each segVis as sv}
 				<line
 					class="seg"
@@ -946,7 +916,6 @@
 				{/if}
 			{/each}
 
-			<!-- Fixed anchor dots at time=0 and time=trackDuration -->
 			<circle
 				class="dot-anchor"
 				cx="{vp.toPct(0)}%"
@@ -960,12 +929,10 @@
 				r={DOT_R}
 			/>
 
-			<!-- Interior boundary dots (draggable) -->
 			{#each segVis as sv}
 				{const leftConn = connectors.find((c) => c.rightSegId === sv.id)}
 				{const rightConn = connectors.find((c) => c.leftSegId === sv.id)}
 
-				<!-- Start dot: only when not at the absolute track start -->
 				{#if sv.startTime > 0.001}
 					{const lId = leftConn?.leftSegId ?? null}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -995,7 +962,6 @@
 					>
 				{/if}
 
-				<!-- End dot: only when not at the absolute track end -->
 				{#if sv.endTime < trackDuration - 0.001}
 					{const rId = rightConn?.rightSegId ?? null}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1026,7 +992,6 @@
 				{/if}
 			{/each}
 
-			<!-- Empty state hint -->
 			{#if showHint}
 				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
 					Ctrl+click to create · drag bar up/down to change beat · drag dot to
@@ -1034,7 +999,6 @@
 				</text>
 			{/if}
 
-			<!-- Rectangle selection overlay -->
 			{#if dragging?.type === "rect-select" && dragMoved}
 				{const minX = Math.min(
 					vp.toPct(dragging.startTime),
@@ -1056,7 +1020,6 @@
 				/>
 			{/if}
 
-			<!-- Ghost paste preview (boundary splits) -->
 			{#if boundaries.pasteMode && boundaries.clipboard.length > 0}
 				{#each boundaries.clipboard as { offset }}
 					{const ghostTime = boundaries.pasteCursorTime + offset}

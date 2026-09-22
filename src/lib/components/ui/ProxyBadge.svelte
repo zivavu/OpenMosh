@@ -7,10 +7,8 @@
 	} from "../../video/proxy-status";
 
 	/**
-	 * A video's preview-proxy state, as one chip: the same icon, wording and
-	 * colour on every surface that shows it. A button when the surface can take
-	 * the click (see proxyStatus's `action`), a plain span otherwise. Where it
-	 * sits is the owner's — set `position` on `.proxy-badge` from outside.
+	 * A video's preview-proxy state as one chip, same icon and wording everywhere.
+	 * A button when the surface takes the click, a span otherwise; the owner positions it.
 	 */
 	interface Props {
 		source: ProxyStatusInput;

@@ -14,7 +14,7 @@
 </script>
 
 <!-- Curved: the ramps worth reaching for are fractions of a second, and
-     a linear 0–10 track would bury all of them in its first pixels. -->
+     a linear 0-10 track would bury all of them in its first pixels. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="row"

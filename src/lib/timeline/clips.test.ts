@@ -94,8 +94,7 @@ describe("freeRangeAt", () => {
 	});
 
 	it("finds the gap from the instant a clip ends", () => {
-		// The half-open convention has to hold here too, or a click flush against
-		// a clip's tail would report itself as occupied.
+		// Half-open here too, or a click flush against a clip's tail would read as occupied.
 		expect(freeRangeAt(laneOf(clip("a", 0, 2)), 2, 10)).toEqual({
 			start: 2,
 			end: 10,
@@ -117,8 +116,7 @@ describe("newClipSpan", () => {
 	});
 
 	it("keeps its length and backs up off the next clip", () => {
-		// Not truncated where it was aimed: the same bargain moveClip strikes, so
-		// a dropped clip and a dragged one come to rest the same way.
+		// Not truncated where aimed: the same bargain moveClip strikes, so drop and drag rest alike.
 		const lane = laneOf(clip("a", 4, 8));
 		expect(newClipSpan(lane, 3, 10, 2)).toEqual({ start: 2, end: 4 });
 	});
@@ -140,8 +138,7 @@ describe("newClipSpan", () => {
 
 	it("never starts before the gap does", () => {
 		const lane = laneOf(clip("a", 0, 5));
-		// A pointer time behind the gap's start can't drag the clip under its
-		// neighbour — freeRangeAt bounds it either way.
+		// A pointer time behind the gap's start can't drag the clip under its neighbour.
 		expect(newClipSpan(lane, 5, 10, 2)).toEqual({ start: 5, end: 7 });
 	});
 
@@ -163,10 +160,8 @@ describe("newClipSpan", () => {
 	});
 
 	it("takes the whole gap when the pointer is pinned against its tail", () => {
-		// MIN_CLIP_LENGTH has no exact binary form, so a span derived by
-		// subtracting it off the gap's end and adding it back used to land a
-		// rounding step under it — which addClip refused, making the drop preview
-		// a clip and then do nothing.
+		// MIN_CLIP_LENGTH has no exact binary form, so a span derived by subtracting it
+		// off the gap's end and adding it back used to land a rounding step under it.
 		const lane = laneOf(clip("a", 0, 2), clip("b", 4, 6));
 		const span = newClipSpan(lane, 4 - MIN_CLIP_LENGTH, 10, 2)!;
 		expect(span.end).toBe(4);
@@ -174,9 +169,8 @@ describe("newClipSpan", () => {
 	});
 
 	it("always yields a span addClip will accept", () => {
-		// The two have to agree: a ghost drawn for a span addClip then refuses is
-		// a drop that previews and does nothing. Swept rather than sampled —
-		// the failure was a floating-point edge no hand-picked case found.
+		// The two have to agree: a ghost drawn for a span addClip then refuses is a drop
+		// that previews and does nothing. Swept, since the failure was a float edge.
 		const lane = laneOf(clip("a", 0, 2), clip("b", 4, 6));
 		for (let step = 0; step <= 400; step++) {
 			const t = 2 + (step / 400) * 2;
@@ -509,8 +503,7 @@ describe("resizeClip", () => {
 	});
 
 	it("opens a gap when one edge is pulled off a flush neighbour", () => {
-		// Deliberately not resizeBoundary: dragging a single edge moves only that
-		// edge, and the neighbour keeps its span.
+		// Deliberately not resizeBoundary: dragging a single edge moves only that edge.
 		const lane = laneOf(clip("a", 0, 2), clip("b", 2, 4));
 		expect(spans(resizeClip(lane, "b", "start", 3, 10))).toEqual([
 			["a", 0, 2],
@@ -577,8 +570,7 @@ describe("addClip", () => {
 	});
 
 	it("picks the free span by where the clip starts, not where it overlaps", () => {
-		// A clip whose start is already taken is refused outright, even though its
-		// tail reaches open room.
+		// A clip whose start is taken is refused outright, even if its tail reaches open room.
 		const lane = laneOf(clip("a", 0, 2), clip("b", 6, 8));
 		expect(addClip(lane, clip("new", 1.5, 5), 10)).toBe(lane);
 	});
@@ -666,7 +658,7 @@ describe("clipFadeWeight", () => {
 	});
 
 	it("shrinks over-long fades in proportion so they meet", () => {
-		// 20s each on a 10s clip would otherwise overlap and never reach full.
+		// 20s each on a 10s clip would overlap and never reach full.
 		expect(clipFadeWeight(c, 20, 20, 5)).toBe(1);
 		expect(clipFadeWeight(c, 20, 20, 2.5)).toBe(0.5);
 		// 30s in + 10s out on 10s meet at 7.5.

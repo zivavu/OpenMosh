@@ -1,8 +1,5 @@
-/**
- * Procedural source images. A generated image is a spec, not pixels: the spec
- * is what the app keeps (embedded in the PNG it hands out as a File), and the
- * pixels are re-rendered at whatever size the output turns out to need.
- */
+/** Procedural source images. A generated image is a spec, not pixels: the spec
+ * is what the app keeps (embedded in the PNG), re-rendered at the needed size. */
 
 import type { FieldKind, FieldSpec } from "./field/spec";
 import type { GradientSpec } from "./gradient/spec";

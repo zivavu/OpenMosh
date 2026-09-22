@@ -1,8 +1,5 @@
-/**
- * Time-stretch an AudioBuffer by `rate` (2 = twice as fast, half duration)
- * while preserving pitch, using WSOLA (waveform-similarity overlap-add).
- * Offline-only — used to match export audio to a sped-up/slowed video.
- */
+/** Time-stretch an AudioBuffer by `rate` (2 = twice as fast) preserving pitch, via
+ * WSOLA (waveform-similarity overlap-add). Offline-only, for sped-up/slowed video. */
 export function stretchAudioBuffer(
 	buffer: AudioBuffer,
 	rate: number,
@@ -28,8 +25,7 @@ export function stretchAudioBuffer(
 		outChannels.push(out.getChannelData(ch));
 	}
 
-	// Too short for overlap-add: nearest-sample resample (pitch shifts, but
-	// clips this short make it inaudible).
+	// Too short for overlap-add: nearest-sample resample (pitch shifts, inaudible here).
 	if (buffer.length < frame * 2 + search || outLength <= frame) {
 		for (let ch = 0; ch < numberOfChannels; ch++) {
 			for (let i = 0; i < outLength; i++) {
@@ -50,9 +46,8 @@ export function stretchAudioBuffer(
 		}
 	}
 
-	// First frame is copied verbatim; subsequent frames are picked near the
-	// ideal (time-scaled) position, biased toward waveform similarity with the
-	// natural continuation of the previous frame, then crossfaded in.
+	// First frame copied verbatim; later frames are picked near the ideal (time-scaled)
+	// position, biased toward waveform similarity with the previous frame, then crossfaded.
 	for (let ch = 0; ch < numberOfChannels; ch++) {
 		outChannels[ch].set(channels[ch].subarray(0, Math.min(frame, outLength)));
 	}

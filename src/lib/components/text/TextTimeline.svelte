@@ -24,50 +24,35 @@
 	import ClipLaneGutter from "../timeline/ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
 
-	// Only fetched when the sync modal is actually opened; it reseeds itself from
-	// the timeline on every open, so mounting it late costs nothing.
+	// Only fetched when the sync modal opens; it reseeds from the timeline each open.
 	const loadLyricsSyncModal = lazy(() => import("./LyricsSyncModal.svelte"));
 
 	const LANE_HEIGHT = 30;
-	/** A folded lane: its clips are still there to read, but not at a height that
-	 * pays for the text inside them. A floor, not a height: the strip fills its
-	 * row, so the gutter controls never leave slack under it. */
+	/** A folded lane: clips stay readable, but not at a height that pays for the
+	 * text inside. */
 	const LANE_FOLDED_HEIGHT = 14;
-	/** Shared so an unfolded panel allocates nothing per instance. */
 	const NO_FOLDS: ReadonlySet<string> = new Set();
-	/**
-	 * Below this the label is all ellipsis and no word — a lane of synced lyrics
-	 * zoomed out becomes a row of "P…", which reads as noise rather than as text.
-	 * The clip's tooltip still names it.
-	 */
+	/** Below this the label is all ellipsis and no word, so a zoomed-out lyrics lane
+	 * reads as noise. */
 	const MIN_LABEL_PX = 34;
 
 	interface Props {
 		timeline: TextTimeline;
-		/** Every layer, front first — this lane's place in the stack. */
 		layerOrder?: LayerRef[];
-		/** Starts a row drag that reorders the whole layer stack. The editor owns
-		 * it: a drag crosses into the other kind's rows, which this can't see. */
+		/** Starts a row drag that reorders the whole layer stack. The editor owns it. */
 		onLaneDragStart?: (laneId: string, e: PointerEvent) => void;
-		/** Id of the row being dragged right now, for its lifted look. */
 		draggingLaneId?: string | null;
-		/** Lanes the user has folded to a strip, by lane id. */
 		foldedLaneIds?: ReadonlySet<string>;
-		/** Fired when a lane's fold toggle is clicked. */
 		onToggleFold?: (laneId: string) => void;
 		selectedClipId?: string | null;
-		/** The whole selection. `selectedClipId` stays the primary — the one
-		 * the clip panel edits and the anchor a shift-range extends from — and
-		 * is always a member of this list. */
+		/** The whole selection. `selectedClipId` stays the primary and is always a member. */
 		selectedClipIds?: string[];
 		onChange: (timeline: TextTimeline) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		/** Song tempo, for interval clips spaced in beats. 0 = unknown. */
 		bpm?: number;
-		/** The clip toolbar's actions, fanned out over the selection. Without
-		 * `onModeChange` the bar stays hidden — a mode with no chain gestures
-		 * (the slideshow) has nothing to put in it. */
+		/** The clip toolbar's actions, fanned out over the selection. */
 		onApplyPreset?: (clipIds: string[], preset: Preset) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
@@ -77,10 +62,8 @@
 			intervalSec?: number,
 			intervalBeats?: number | null,
 		) => void;
-		/** When provided, the header grows a Lyrics button that opens the sync
-		 * modal, wired to the mode's own transport. */
+		/** When provided, the header grows a Lyrics button that opens the sync modal. */
 		lyricsSync?: LyricsSyncProps | null;
-		/** External open/close of the sync modal (e.g. the editor's top bar). */
 		lyricsOpen?: boolean;
 	}
 
@@ -104,17 +87,16 @@
 		lyricsOpen = $bindable(false),
 	}: Props = $props();
 
-	/** What the sync modal opens onto: the lyrics lane as the timeline holds it,
-	 * so clips dragged here show up there with their nudged times. */
+	/** What the sync modal opens onto: the lyrics lane as the timeline holds it. */
 	let lyricsDraft = $derived(lyricsDraftFromTimeline(timeline));
 
-	// One axis for the whole stack: zoom, pan, playhead-following and the
-	// duration-change reset all live in TimelineStack.
+	// One axis for the whole stack: zoom, pan and playhead-following live in
+	// TimelineStack.
 	const stack = getTimelineStack();
 	const vp = stack.vp;
 
-	// Selection, drags, scrubbing, split/add/delete and the keyboard — the
-	// gestures every clip lane shares. Reads the props live through the getters.
+	// Selection, drags, scrubbing, split/add/delete and the keyboard: the gestures
+	// every clip lane shares.
 	const ctrl = new ClipLaneController<TextClip, TextLane>(
 		{
 			kind: "text",
@@ -145,33 +127,26 @@
 	);
 	$effect(() => ctrl.syncSelection());
 
-	// ── Clip toolbar ─────────────────────────────────────────────────────────
-	// Rendered in the stack's shared selection bar, like the media lanes' — one
-	// bar for whichever lane holds the selection, so the stack never resizes.
+	// Rendered in the stack's shared selection bar, like the media lanes'.
 	let selectedClips = $derived(ctrl.selectedClips);
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
 		return stack.registerSelectionBar("text", clipBar);
 	});
 
-	/** The chain's label, unless it is the default a fresh clip carries — a
-	 * row of "clean" says nothing the empty rack doesn't. */
+	/** The chain's label, unless it is the default a fresh clip carries. */
 	function chainLabel(clip: TextClip): string | null {
 		if (clip.label === "clean" && !clip.modified) return null;
 		return clip.modified ? `${clip.label}*` : clip.label;
 	}
 
-	// ── Clip clipboard ───────────────────────────────────────────────────────
-	// Same shape as the media lane's: a paste goes onto the selection when
-	// there is one — the words, into clips that keep their spans — and
-	// otherwise stamps whole clips down at the start marker.
+	// Same shape as the media lane's: a paste goes onto the selection when there is
+	// one, otherwise stamps whole clips down at the start marker.
 	let clipboard: TextClipboardEntry[] = [];
-	/** What the clipboard was copied from, plus every copy stamped from it
-	 * since: pasting onto exactly those would change nothing, so that gesture
-	 * stamps new copies instead. */
+	/** What the clipboard was copied from, plus every copy stamped since. */
 	let copiedIds = new Set<string>();
-	/** The copy stamp when the clipboard was last filled: a paste answers only
-	 * if nothing was copied on another lane since. */
+	/** The copy stamp when the clipboard was last filled; a paste answers only if it
+	 * matches. */
 	let clipStamp = -1;
 
 	function copySelection(): boolean {
@@ -195,8 +170,6 @@
 		return pasteClips();
 	}
 
-	/** Stamp the copied clips at the start marker, on the lane last clicked,
-	 * and leave the copies selected to drag from there. */
 	function pasteClips(): boolean {
 		const result = pasteTextClips(
 			timeline,
@@ -348,16 +321,15 @@
 {/snippet}
 
 <style>
-	/* The chain rides after the words, dimmer: what it says first, what runs
-	   on it second. */
+	/* The chain rides after the words, dimmer: what it says first, what runs on it
+	   second. */
 	.clip-chain {
 		margin-left: 0.35rem;
 		color: var(--mosh);
 		opacity: 0.85;
 	}
 
-	/* No box of its own: the rows join the layer column their sibling component
-	   renders into, so one `order` per row interleaves the two kinds. */
+	/* No box of its own: the rows join the layer column their sibling renders into. */
 	.text-tl {
 		display: contents;
 	}

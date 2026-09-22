@@ -13,24 +13,12 @@ import {
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
-/**
- * Resuming an edit after a reload.
- *
- * Everything here crosses IndexedDB — the media pool, the timeline, and the
- * localStorage mirror the upload screen paints from before the database can
- * answer. None of it is reachable from the unit suite, and the failure mode is
- * the worst one the app has: work that looks saved and isn't.
- *
- * Note the source counts. The pool belongs to the song, the file the editor
- * opened with included — the media layer draws from it, so it has to come back
- * with the rest. A sequence started from three files is a saved sequence of
- * three, and one started from a single file is a sequence of one.
- */
+/** Resuming an edit after a reload. Everything here crosses IndexedDB (the media pool,
+ * the timeline, the localStorage mirror); the failure mode is work that looks saved and isn't. */
 
 /** The debounce behind the timeline write, plus room for the round-trip. */
 const SAVE_SETTLE_MS = 2500;
 
-/** Back to the upload screen and into the list of songs worked on. */
 async function reopenSavedSong(page: import("@playwright/test").Page) {
 	await page.goto("/");
 	await selectMode(page, "Editor");
@@ -89,15 +77,12 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 
 	await reopenSavedSong(page);
 
-	// The cut survived.
 	await expect(segments(page)).toHaveCount(2);
 	// The whole pool came back, not just the source the clips point at.
 	await expect(page.getByText("3 SOURCES")).toBeVisible();
-	// And the chain is the one that was rolled, effect for effect.
 	await selectSegment(page, 0);
 	expect(await liveEffectNames(page)).toEqual(rolled);
-	// The segment that was never moshed is still clean, rather than inheriting
-	// its neighbour's chain on the way through storage.
+	// The segment never moshed is still clean, not inheriting its neighbour's chain.
 	await selectSegment(page, 1);
 	await expect(liveEffects(page)).toHaveCount(0);
 });
@@ -105,9 +90,7 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 test("counts every source the editor opened with in the song's pool", async ({
 	page,
 }) => {
-	// The pool belongs to the song now, the file the editor opened with
-	// included: the media layer draws from it, so it has to come back with the
-	// rest. Three files in is an offer of three.
+	// The pool belongs to the song, the opening file included, so three files in is three back.
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],
@@ -127,8 +110,7 @@ test("counts every source the editor opened with in the song's pool", async ({
 test("a sequence opened from one file is offered back with it", async ({
 	page,
 }) => {
-	// The one file is the whole pool, and the pool is the song's — so a
-	// single-file edit is as resumable as any other.
+	// The one file is the whole pool, and the pool is the song's, so this is as resumable as any.
 	await openEditor(page, { sources: [["red.png", RED]] });
 	await waitForRender(page);
 	await splitSegmentAt(page, 0.5);
@@ -153,16 +135,14 @@ test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 	await expect(segments(page)).toHaveCount(3);
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
-	// A reload, not a navigation: this is the tab being refreshed out from under
-	// the editor, which is what the pagehide flush exists to catch.
+	// A reload, not a navigation: the tab refreshed out from under the editor.
 	await page.reload();
 	await reopenSavedSong(page);
 	await expect(segments(page)).toHaveCount(3);
 });
 
 test("starts clean when there's nothing stored yet", async ({ page }) => {
-	// Guards the specs above: they'd pass on a database left behind by an
-	// earlier run just as happily as on the state they actually created.
+	// Guards the specs above: they'd pass on a database left by an earlier run just as happily.
 	await page.goto("/");
 	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item")).toHaveCount(0);

@@ -2,11 +2,8 @@
 	import type { Snippet } from "svelte";
 	import { X } from "lucide-svelte";
 
-	/**
-	 * The sidebar panel for a selected layer clip: a header naming the lane,
-	 * then either the clip's own controls or its effect chain, whichever tab
-	 * the sidebar has open. Owns the look of the rows the kinds put in it.
-	 */
+	/** The sidebar panel for a selected layer clip: a header naming the lane, then
+	 * either the clip's own controls or its effect chain, per the open tab. */
 	interface Props {
 		/** Null renders the empty prompt instead of the panel. */
 		open: boolean;
@@ -68,15 +65,12 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding: 0.75rem;
-		/* Sits at the top of the sidebar and keeps its natural height: the
-		   sidebar is one scroll region, so a scrollbar here would strand the
-		   settings below it at the bottom of the window. */
+		/* Sits at the top of the sidebar and keeps its natural height: the sidebar
+		   is one scroll region, so a scrollbar here would strand the settings below. */
 		flex: 0 0 auto;
 		border-bottom: 1px solid var(--line);
-		/* Matches the effects panel this replaces. Without a width the sidebar is
-		   sized by this panel's content, and the help text alone is a single
-		   unbroken max-content line — enough to stretch the sidebar across the
-		   window the moment a clip is selected. */
+		/* Matches the effects panel this replaces; without a width the sidebar is
+		   sized by this panel's content, and the help text is one unbroken line. */
 		width: 100%;
 		max-width: var(--sidebar-w);
 		box-sizing: border-box;
@@ -89,15 +83,13 @@
 		}
 	}
 
-	/* Nothing shrinks: children keep their natural height and the panel scrolls. */
+	/* Nothing shrinks: children keep their height and the panel scrolls. */
 	.clip-panel > :global(*) {
 		flex-shrink: 0;
 	}
 
-	/* The nested chain carries the same padding as it does in the sidebar, so it
-	   goes full-bleed here — inside this panel's padding too it sat in a double
-	   inset, reading as a sunken box rather than a continuation of the panel.
-	   It is the last section, so it owns the bottom edge too. */
+	/* The nested chain carries the same padding as in the sidebar, so it goes
+	   full-bleed here; inside this panel's padding too it read as a sunken box. */
 	.clip-panel :global(aside.effects-panel) {
 		width: auto;
 		max-width: none;
@@ -150,9 +142,8 @@
 		color: var(--text);
 	}
 
-	/* ── Rows ──────────────────────────────────────────────────────────────
-	   Label, control, read-out. Global so the kinds' own rows and the shared
-	   row components all take the one look. */
+	/* Label, control, read-out. Global so the kinds' own rows and the shared row
+	   components all take the one look. */
 	.clip-panel :global(.row) {
 		display: flex;
 		align-items: center;

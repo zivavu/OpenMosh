@@ -1,4 +1,3 @@
-// src/lib/audio/track-library.ts
 import { generateId } from "../effects/types";
 import { request, simpleStore } from "../idb";
 
@@ -28,15 +27,9 @@ export async function getTrack(id: string): Promise<StoredTrack | null> {
 }
 
 /**
- * Save the file, or hand back the entry it was already saved as.
- *
- * The lookup runs inside the write transaction on purpose. Two callers can ask
- * to save the same song at once — the editor registering the loaded track and
- * the library drawer auto-saving it — and a lookup done before the transaction
- * misses a write still in flight, so both would store it and the song would
- * show up twice under one name. IndexedDB runs overlapping readwrite
- * transactions on a store one after another, so checking in here means the
- * second caller sees the first caller's track and returns that instead.
+ * Save the file, or hand back the entry it was already saved as. The lookup runs
+ * inside the write transaction on purpose: two callers can save the same song at
+ * once, and a lookup before it misses a write still in flight, storing it twice.
  */
 export function addTrack(file: File): Promise<StoredTrack> {
 	return db.run("readwrite", async (store) => {
@@ -56,8 +49,7 @@ export function addTrack(file: File): Promise<StoredTrack> {
 	});
 }
 
-/** Give the track a display name; the file name it dedupes by is kept, and
- * a blank name goes back to it. */
+/** Give the track a display name; the dedupe file name is kept, blank reverts. */
 export function renameTrack(id: string, name: string): Promise<void> {
 	return db.run("readwrite", async (store) => {
 		const track = await request(

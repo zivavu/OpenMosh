@@ -11,8 +11,8 @@ const SEEDED_KEY = "openmosh-presets-seeded";
 export function loadPresets(): Preset[] {
 	const stored = readJson<Preset[] | null>(PRESETS_KEY, null);
 	if (stored !== null) return stored;
-	// First run: seed the starters as ordinary, editable user presets. Guarded
-	// by its own key so a user who deletes them all doesn't get them back.
+	// First run: seed the starters as ordinary, editable user presets. Guarded by
+	// its own key so a user who deletes them all doesn't get them back.
 	if (readRaw(SEEDED_KEY) === null) {
 		writeRaw(SEEDED_KEY, "1");
 		writeJson(PRESETS_KEY, STARTER_PRESETS);
@@ -28,8 +28,7 @@ export function normalizePresetName(name: string): string {
 	return name.trim().slice(0, PRESET_NAME_MAX_LENGTH).trim();
 }
 
-/** A spread alone leaves every link object shared with the chain it came from,
- * so dragging a link's range afterwards edits both sides. */
+/** A spread alone leaves every link object shared with the chain it came from. */
 function copyLinks(
 	links: Record<string, VolumeLink>,
 ): Record<string, VolumeLink> {
@@ -38,8 +37,7 @@ function copyLinks(
 	);
 }
 
-/** What a preset keeps of a live chain: no instance ids, no UI state, and no
- * empty volumeLinks key to bloat every saved entry. */
+/** What a preset keeps of a live chain: no instance ids, no UI state. */
 function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 	return effects.map((e) => ({
 		defId: e.defId,

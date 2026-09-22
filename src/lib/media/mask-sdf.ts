@@ -1,29 +1,12 @@
-/**
- * Erase masks as signed distance fields, so two painted shapes have an honest
- * in-between.
- *
- * Cross-fading the masks themselves shows both blobs at half strength, which
- * reads as ghosting rather than as motion — it was tried and rejected. A
- * distance field moves the *boundary* instead: halfway between two keys the
- * shape is one blob, halfway along, the right size. Same trick a font atlas
- * uses to stay sharp, applied to interpolation rather than to magnification.
- */
+/** Erase masks as signed distance fields, so two painted shapes have an honest
+ * in-between. Cross-fading the masks reads as ghosting. */
 
-/**
- * How far from the edge the field still carries a gradient, in mask pixels.
- * Beyond this it saturates and two shapes further apart than this shrink out
- * and grow in rather than travelling. Sized against `MASK_MAX` (512): a quarter
- * of the mask is a long way for a hand-painted blob to move between two keys,
- * and every doubling costs a pixel of precision in the 8 bits it is stored in.
- */
+/** How far from the edge the field still carries a gradient, in mask pixels. Beyond
+ * this it saturates and two shapes further apart shrink out and grow in. */
 export const MASK_SDF_RANGE = 128;
 
-/**
- * Squared 1-D distance transform (Felzenszwalb & Huttenlocher). `f` holds the
- * per-cell cost; the result is the lower envelope of the parabolas rooted at
- * each cell. Linear in `n`, which is what keeps a 512² mask off the frame
- * budget.
- */
+/** Squared 1-D distance transform (Felzenszwalb & Huttenlocher): the lower envelope
+ * of parabolas rooted at each cell. */
 function edt1d(f: Float64Array, n: number, out: Float64Array): void {
 	// v: parabola roots in the envelope; z: where consecutive ones intersect.
 	const v = new Int32Array(n);
@@ -81,36 +64,16 @@ function edt2d(
 	return grid;
 }
 
-/**
- * A painted mask with its distance field packed alongside it.
- *
- * In: RGBA where the red channel is coverage (255 keeps a pixel, 0 erases it).
- * Out: RGBA with **red still the coverage exactly as painted** and **alpha the
- * signed distance** to the 50% contour, 0.5 sitting on the edge, above it kept
- * and below it erased.
- *
- * Both, rather than one: reconstructing coverage from a distance field gives
- * every edge the same falloff, which would harden the soft brush on the far
- * more common mask that is never animated at all. So a still mask reads red and
- * looks exactly as it was painted, and only a morph in progress reads alpha —
- * where losing the painted softness for a few frames buys a shape that moves.
- * The mask PNG is opaque, so its own alpha channel was going spare.
- */
+/** A painted mask with its distance field packed alongside it. In: RGBA where red
+ * is coverage (255 keeps, 0 erases). Out: red still coverage, alpha the signed distance. */
 /** Middle of a mask's erased region, or null when it erases nothing. */
 export type MaskCentre = { x: number; y: number } | null;
 
 export interface MaskField {
 	/** RGBA: coverage in red, encoded signed distance in alpha. */
 	data: Uint8ClampedArray;
-	/**
-	 * Middle of the erased region, normalized to the mask. Two shapes that do not
-	 * overlap have to be brought onto each other before their boundaries can be
-	 * interpolated — lerping the fields where they are makes both shapes shrink
-	 * to nothing on the way, because every point is far from *both*. Morphing the
-	 * shape and travelling the centre are separate jobs, and this is the second.
-	 *
-	 * Null when nothing is erased, which has no middle to speak of.
-	 */
+	/** Middle of the erased region, normalized to the mask. Two shapes that do not
+	 * overlap must be brought onto each other before their boundaries can be interpolated. */
 	centre: MaskCentre;
 }
 
@@ -137,9 +100,8 @@ export function maskToSdf(
 			sy += (i / w) | 0;
 			count++;
 		}
-		// Positive outside the erased shape (kept), negative within it. Both legs
-		// measure to the *other* region, so the contour lands between the two
-		// pixels straddling it rather than on one of them.
+		// Positive outside the erased shape (kept), negative within it. Both legs measure
+		// to the *other* region, so the contour lands between the two pixels.
 		const d = inside[i] ? -Math.sqrt(toOutside[i]) : Math.sqrt(toInside[i]);
 		const enc = 0.5 + d / (2 * MASK_SDF_RANGE);
 		const cov = rgba[i * 4];
@@ -154,11 +116,8 @@ export function maskToSdf(
 	};
 }
 
-/**
- * How far the second shape's middle sits from the first's, in mask uv. What
- * the morph slides along so the two boundaries have something to interpolate
- * between; zero when either mask erases nothing.
- */
+/** How far the second shape's middle sits from the first's, in mask uv. What the
+ * morph slides along. */
 export function maskShift(
 	a: MaskCentre,
 	b: MaskCentre,
@@ -167,14 +126,8 @@ export function maskShift(
 	return { x: b.x - a.x, y: b.y - a.y };
 }
 
-/**
- * Coverage back out of an encoded distance, matching the shader's
- * reconstruction so the dialog's own preview agrees with the canvas.
- *
- * `SOFT` is the width of the rebuilt edge in mask pixels, in the region of the
- * default brush's own falloff — wide enough not to look cut out, narrow enough
- * that a blob still has an edge.
- */
+/** Coverage back out of an encoded distance, matching the shader's reconstruction
+ * so the dialog's preview agrees with the canvas. */
 const SOFT = 6;
 
 export function sdfCoverage(enc: number): number {

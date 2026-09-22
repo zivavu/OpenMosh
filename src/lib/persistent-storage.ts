@@ -1,17 +1,11 @@
 /**
- * Ask the browser to stop evicting this origin.
+ * Ask the browser to stop evicting this origin. Everything durable lives in IndexedDB
+ * under a best-effort quota a browser short on disk may clear with no warning, taking
+ * an afternoon of work with it.
  *
- * Everything durable — sessions, timelines, the media pool, proxies — lives in
- * IndexedDB under a best-effort quota, which a browser short on disk may clear
- * with no warning and no undo. An afternoon of timeline work goes with it.
- * Persistent storage exempts the origin from that sweep.
- *
- * Requested on the first write that stores real work rather than at startup:
- * Firefox shows a permission prompt, and a prompt that arrives before the user
- * has made anything is both unexplainable and likely to be refused for good.
- * Chrome grants or refuses it silently on engagement heuristics, so a refusal
- * there is worth re-asking after a later visit — hence once per page load, not
- * once ever.
+ * Requested on the first write that stores real work rather than at startup: Firefox
+ * shows a permission prompt, and one that arrives before the user has made anything is
+ * likely to be refused for good. Chrome decides silently on engagement heuristics.
  */
 
 let pending: Promise<boolean> | null = null;

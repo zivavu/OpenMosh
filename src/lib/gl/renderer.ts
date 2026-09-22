@@ -52,8 +52,7 @@ import {
 	type TrackingState,
 } from "../tracking";
 
-/** A 2D-drawn overlay uploaded as a texture, kept until its content or the
- * output size changes. `sig` is everything the draw depended on. */
+/** Cached 2D-drawn overlay texture; `sig` covers everything the draw depends on. */
 interface OverlayTexture {
 	tex: WebGLTexture;
 	w: number;
@@ -61,8 +60,7 @@ interface OverlayTexture {
 	sig: string;
 }
 
-/** Framebuffer statuses already reported, so a broken target logs once rather
- * than once per allocation. */
+/** Framebuffer statuses already reported, so a broken target logs once. */
 const reportedFBOStatuses = new Set<number>();
 
 /** Effect ids already warned about, so a stale preset logs once, not per frame. */
@@ -73,18 +71,10 @@ interface CompiledProgram {
 	uniforms: Record<string, WebGLUniformLocation>;
 }
 
-/**
- * How a source whose aspect ratio differs from the output is fitted. Only
- * reachable with a mixed media pool — a single source always defines the
- * output aspect itself.
- */
+/** How a source whose aspect differs from the output is fitted (mixed media pool only). */
 export type SourceFit = "stretch" | "contain" | "cover";
 
-/**
- * A still source the renderer can upload. ImageBitmap is the cheap form —
- * already decoded, so the upload is a copy rather than a decode — and is what
- * anything swapping stills at speed (the slideshow) should hand over.
- */
+/** A still source the renderer can upload. ImageBitmap is the cheap form (already decoded). */
 export type SourceImage = HTMLImageElement | ImageBitmap;
 
 function imageWidth(image: SourceImage): number {
@@ -95,8 +85,7 @@ function imageHeight(image: SourceImage): number {
 	return image instanceof HTMLImageElement ? image.naturalHeight : image.height;
 }
 
-/** A layer with its own chain already rendered, ready to composite. Text and
- * media layers differ only in how `tex` was filled. */
+/** A layer with its chain already rendered, ready to composite. */
 interface PreparedLayer {
 	tex: WebGLTexture;
 	/** True = composite before the first effect, so the chain distorts it. */
@@ -107,13 +96,8 @@ interface PreparedLayer {
 	blendMode: TextOverlayBlendMode;
 }
 
-/**
- * Where a media layer's frame sits, in output pixels. Used by the placement
- * pass alone: it draws the media into an otherwise transparent frame, and the
- * alpha it leaves behind is the only coverage anything downstream reads. A
- * layer with a chain runs it against `fullFrameBox` first and is placed after,
- * so its effects see the media rather than the canvas.
- */
+/** Where a media layer's frame sits, in output pixels. The placement pass's
+ * alpha is the only coverage downstream reads. */
 interface LayerBox {
 	drawW: number;
 	drawH: number;
@@ -128,12 +112,8 @@ type ChainOp =
 	| { kind: "effect"; eff: EffectInstance }
 	| { kind: "layer"; layer: PreparedLayer };
 
-/**
- * Slot the layers into the effect chain. `underEffects` layers go in ahead of
- * the first effect, so the whole chain distorts them; the rest lay over the
- * finished frame. Within each group the array's own order decides who sits on
- * top, so callers hand this a list already sorted by z.
- */
+/** Slot the layers into the effect chain: `underEffects` layers go ahead of the
+ * first effect, the rest over the finished frame. Callers pass a list sorted by z. */
 function buildChainOps(
 	effects: EffectInstance[],
 	layers: PreparedLayer[],
@@ -151,27 +131,18 @@ function buildChainOps(
 	return ops;
 }
 
-/**
- * One stacked fx lane's contribution for a frame: the chain it adds, and how
- * strongly it applies. A weight below 1 mixes the lane's output back over its
- * input, which is what fades a lane's clip in and out at its edges — there is
- * no "other side" to blend against the way a source-lane transition has one.
- */
+/** One stacked fx lane's contribution for a frame. A weight below 1 mixes the
+ * lane's output back over its input, fading its clip in and out. */
 export interface PostChainLayer {
 	effects: EffectInstance[];
 	/** 0 = lane absent, 1 = fully applied. */
 	weight: number;
-	/** Place in the stack shared with the layers. Higher runs later, so a lane
-	 * above a layer applies to the layer too. */
+	/** Place in the stack shared with the layers; higher runs later. */
 	z: number;
 }
 
-/**
- * One rung of the stack that runs over the root chain: either a layer being
- * composited, or an fx lane's chain being applied to everything beneath it.
- * Sorted by z, bottom first — which is what makes "this lane is above that
- * layer" mean something.
- */
+/** One rung of the stack over the root chain: a layer, or an fx lane's chain
+ * applied to everything beneath it. Sorted by z, bottom first. */
 type StackStep =
 	| { kind: "layer"; layer: PreparedLayer }
 	| { kind: "fx"; lane: PostChainLayer };
@@ -191,26 +162,20 @@ function stepZ(step: StackStep): number {
 	return step.kind === "layer" ? step.layer.z : step.lane.z;
 }
 
-/**
- * Lanes that actually change the frame, in stack order — the rest are skipped
- * entirely. Sorted here rather than at each use: the flattened fast path
- * concatenates them into one chain, where the array order *is* the pass order.
- */
+/** Lanes that actually change the frame, in stack order. Sorted here because the
+ * flattened fast path concatenates them into one chain. */
 function livePostLayers(layers: PostChainLayer[]): PostChainLayer[] {
 	return layers
 		.filter((l) => l.weight > 0 && l.effects.some((e) => e.enabled))
 		.sort((a, b) => a.z - b.z);
 }
 
-/** True when every live lane applies at full strength, so they can run as one
- * concatenated chain with no intermediate buffers — the common case. */
+/** True when every live lane applies at full strength, so they run as one concatenated chain. */
 function allFullWeight(layers: PostChainLayer[]): boolean {
 	return layers.every((l) => l.weight >= 1);
 }
 
-/** Collect instance ids into `live`, so feedback buffers survive the GC. Fills a
- * caller-owned set: this runs every frame, and the intermediate arrays a
- * returning version needed were pure garbage. */
+/** Collect instance ids into `live`, so feedback buffers survive the GC. */
 function addInstanceIds(live: Set<string>, effects: EffectInstance[]): void {
 	for (const e of effects) live.add(e.instanceId);
 }
@@ -233,7 +198,7 @@ function addPostInstanceIds(live: Set<string>, post: PostChainLayer[]): void {
 	for (const l of post) addInstanceIds(live, l.effects);
 }
 
-/** One clear texel — see GlRenderer.clearSource. */
+/** One clear texel; see GlRenderer.clearSource. */
 const CLEAR_PIXEL = new Uint8Array([0, 0, 0, 0]);
 
 export class GlRenderer {
@@ -241,42 +206,29 @@ export class GlRenderer {
 	private quadVAO: WebGLVertexArrayObject;
 	private sourceTexture: WebGLTexture | null = null;
 	private sourceFit: SourceFit = "contain";
-	/**
-	 * Second source texture, holding the *outgoing* media while a transition
-	 * runs (the demo background's). Only allocated once a transition actually
-	 * crosses two different sources.
-	 */
+	/** Second source texture, holding the outgoing media while a transition runs.
+	 * Only allocated once a transition crosses two different sources. */
 	private altSourceTexture: WebGLTexture | null = null;
 	private altTexW = 0;
 	private altTexH = 0;
 	private altStageTexture: WebGLTexture | null = null;
 	private altStageFBO: WebGLFramebuffer | null = null;
-	/** Output-sized copy of the source, letterboxed or cropped. Only allocated
-	 * once a source whose aspect differs from the output actually arrives. */
+	/** Output-sized copy of the source, letterboxed or cropped. Only allocated when
+	 * a source's aspect differs from the output. */
 	private stageTexture: WebGLTexture | null = null;
 	private stageFBO: WebGLFramebuffer | null = null;
-	/** Allocated dimensions of sourceTexture, so per-frame uploads can take the
-	 * texSubImage2D fast path when the size is unchanged and only reallocate on
-	 * an actual size change (mixed-size slideshow slides). */
+	/** Allocated dimensions of sourceTexture, so per-frame uploads take the
+	 * texSubImage2D fast path when the size is unchanged. */
 	private srcTexW = 0;
 	private srcTexH = 0;
 	private ppTextures: [WebGLTexture, WebGLTexture] | null = null;
 	private ppFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
-	/**
-	 * Final result buffer. Only needed when an overlay has to be composited over
-	 * the chain; when there's no overlay, the last effect draws straight to the
-	 * canvas to avoid an extra full-screen blit.
-	 */
+	/** Final result buffer, needed only when an overlay composites over the chain;
+	 * otherwise the last effect draws straight to the canvas. */
 	private fbTexture: WebGLTexture | null = null;
 	private fbFBO: WebGLFramebuffer | null = null;
-	/**
-	 * Half-float ping-pong for HDR multi-pass effects (bloom/blur). Allocated at
-	 * a fraction of the output resolution: the Gaussian pre-passes are the
-	 * heaviest part of these effects, and their result is low-frequency, so a
-	 * half-res blur + linear upsample is visually ~identical for a 4× fill cut.
-	 * The blur shaders derive pixel size from u_resolution (full res), so the
-	 * screen-space blur width is unchanged by this downsampling.
-	 */
+	/** Half-float ping-pong for HDR multi-pass effects (bloom/blur), at half the
+	 * output resolution: the Gaussian pre-passes are low-frequency, so half-res is fine. */
 	private hdrTextures: [WebGLTexture, WebGLTexture] | null = null;
 	private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
 	private hdrW = 0;
@@ -285,24 +237,16 @@ export class GlRenderer {
 	private sceneTextures: [WebGLTexture, WebGLTexture] | null = null;
 	private sceneFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
 	/** Holds a finished transition blend while a post chain runs over it. Only
-	 * allocated when something actually stacks on top of a blend. */
+	 * allocated when something stacks on top of a blend. */
 	private blendTexture: WebGLTexture | null = null;
 	private blendFBO: WebGLFramebuffer | null = null;
-	/**
-	 * Rotation for the stacked fx lanes. Three, not two: fading a lane needs its
-	 * input and its output both readable while a third buffer takes the mix, and
-	 * the ping-pong pair is already in use inside each lane's own chain. Only
-	 * allocated when a lane actually stacks.
-	 */
+	/** Rotation for the stacked fx lanes. Three, not two: fading a lane needs its
+	 * input and output readable while a third takes the mix. */
 	private stackTextures: WebGLTexture[] | null = null;
 	private stackFBOs: WebGLFramebuffer[] | null = null;
 	private transitionPrograms = new Map<string, CompiledProgram>();
-	/**
-	 * Private history buffers for feedback-reading effects (u_feedback), keyed
-	 * by effect instanceId. Each such effect feeds back its OWN previous output
-	 * — not the chain composite — so downstream effects can't create runaway
-	 * loops (e.g. melt -> bleach crushing shadows to black over a second).
-	 */
+	/** Private history buffers for feedback-reading effects (u_feedback), keyed by
+	 * instanceId: each feeds back its own output, so downstream effects can't loop. */
 	private fxFeedback = new Map<
 		string,
 		{
@@ -326,15 +270,12 @@ export class GlRenderer {
 	>();
 	private textBlendProgram: CompiledProgram | null = null;
 	private layerTransformProgram: CompiledProgram | null = null;
-	/** Holds a media layer's placed frame while its own chain consumes it. One
-	 * buffer for all of them: the chain reads it and is done with it. */
-	/** One erase mask per source, and the data URL it was decoded from. */
-	/** How many painted shapes stay resident. A hand-keyed erase track runs to a
-	 * handful; this is loose enough not to thrash one and tight enough to bound
-	 * a long session. */
+	/** How many painted shapes stay resident: loose enough not to thrash a hand-keyed
+	 * track, tight enough to bound a long session. */
 	private static readonly MAX_MASK_TEXTURES = 24;
 	/** Reused for turning decoded masks into distance fields. */
 	private maskScratch: HTMLCanvasElement | null = null;
+	/** One erase mask per source, and the data URL it was decoded from. */
 	private maskTextures = new Map<
 		string,
 		{
@@ -346,9 +287,8 @@ export class GlRenderer {
 		}
 	>();
 
-	/** Solo: chainSource hands back black rather than the source. Requested for
-	 * the next render and cleared by it, so a caller that never asks — the
-	 * recorder, a frame save, the slideshow — can't inherit the preview's. */
+	/** Solo: chainSource hands back black rather than the source. Requested for the
+	 * next render and cleared by it, so a caller that never asks can't inherit it. */
 	private pendingBlank = false;
 	private blankSource = false;
 	private blankTex: WebGLTexture | null = null;
@@ -374,14 +314,11 @@ export class GlRenderer {
 	private effectTimeOut = { time: 0, delta: 0 };
 	private phaseMap = new Map<string, number>();
 
-	/**
-	 * Caption overlay textures, keyed by instanceId — unlike tracking there can
-	 * be any number of captions in one chain, each with its own drawn text.
-	 */
+	/** Caption overlay textures, keyed by instanceId: one chain can hold any number
+	 * of captions. */
 	private captionTextures = new Map<string, OverlayTexture>();
 	private captionCanvas: HTMLCanvasElement | null = null;
 
-	// --- Tracking overlay effect (2D-canvas HUD composited into the chain) ---
 	private trackingStates = new Map<string, TrackingState>();
 	private trackingCanvas: HTMLCanvasElement | null = null;
 	private trackingTexture: WebGLTexture | null = null;
@@ -404,17 +341,13 @@ export class GlRenderer {
 	} | null = null;
 
 	constructor(private canvas: HTMLCanvasElement) {
-		// antialias defaults to true, which multisamples the default framebuffer
-		// and resolves it on every present. Nothing here has an edge to smooth —
-		// every pass is a quad covering the whole viewport — so that resolve buys
-		// nothing and costs the most where the canvas is biggest, during export.
+		// antialias defaults to true, which multisamples and resolves the default
+		// framebuffer every present; every pass here is a full-viewport quad with no edge.
 		const gl = canvas.getContext("webgl2", {
 			preserveDrawingBuffer: true,
 			antialias: false,
-			// The chain carries straight alpha through to the canvas: a blank
-			// base and the fit's bars are clear, and a layer's soft edge is its
-			// own colour at partial coverage. Left premultiplied, the page would
-			// read every such pixel as brighter than it is.
+			// Straight alpha to the canvas: a blank base and the fit's bars are clear, and a
+			// layer's soft edge is its own colour at partial coverage. Premultiplied reads brighter.
 			premultipliedAlpha: false,
 		});
 		if (!gl) throw new Error("WebGL2 not supported");
@@ -424,34 +357,20 @@ export class GlRenderer {
 		this.passthrough = this.compile(PASSTHROUGH_FRAG);
 		this.textBlendProgram = this.compile(TEXT_BLEND_FRAG);
 		this.layerTransformProgram = this.compile(LAYER_TRANSFORM_FRAG);
-		// Effect and transition programs compile on first use, not here. Linking
-		// all ~60 of them costs Firefox nearly two seconds on the main thread, and
-		// a constructor is the one place that time can't be broken up.
+		// Effect and transition programs compile on first use: linking all ~60 costs
+		// Firefox nearly two seconds on the main thread, and a constructor can't yield.
 	}
 
-	/**
-	 * How a canvas parked in <body> has to be styled to hold its GL context
-	 * without affecting the page.
-	 *
-	 * `position:fixed` and an explicit 1px box, not `position:absolute` alone: an
-	 * absolutely positioned element with no offsets sits at its static position —
-	 * the end of <body> — and still contributes to the document's scrollable
-	 * overflow. `visibility:hidden` hides the pixels but keeps the layout box, so
-	 * a parked canvas carrying its last render size (hundreds of pixels tall) gave
-	 * the editor a phantom vertical scrollbar.
-	 */
+	/** How a canvas parked in <body> is styled to hold its GL context without
+	 * affecting the page: `position:fixed` with an explicit 1px box, not `absolute`. */
 	static readonly PARKED_CANVAS_STYLE =
 		"position:fixed;top:0;left:0;width:1px;height:1px;visibility:hidden;pointer-events:none";
 
-	/**
-	 * Pre-compile all shaders on a hidden 1×1 canvas so the first real render
-	 * doesn't pay the compilation cost. Returns the warmed renderer + its canvas;
-	 * pass both into GlCanvas via the `warmCanvas`/`warmRenderer` props.
-	 */
+	/** Pre-compile all shaders on a hidden 1x1 canvas so the first real render
+	 * doesn't pay for it. */
 	static warmup(): { canvas: HTMLCanvasElement; renderer: GlRenderer } {
-		// Sweep any warm canvas still parked from a previous cycle. Only direct
-		// children of <body> qualify: one adopted into an editor lives inside that
-		// editor's DOM and is still in use.
+		// Sweep any warm canvas parked from a previous cycle. Only direct children of
+		// <body>: one adopted into an editor is still in use.
 		for (const stale of document.body.querySelectorAll(
 			":scope > canvas[data-openmosh-warm]",
 		)) {
@@ -467,11 +386,8 @@ export class GlRenderer {
 		return { canvas, renderer };
 	}
 
-	/**
-	 * Update the internal canvas reference after the canvas element has been
-	 * moved in the DOM (e.g. from the hidden warmup container into the editor).
-	 * The WebGL context stays intact — only the canvas pointer is updated.
-	 */
+	/** Point at the canvas element after it has moved in the DOM. The GL context
+	 * stays intact. */
 	adoptCanvas(canvas: HTMLCanvasElement) {
 		this.canvas = canvas;
 	}
@@ -488,27 +404,21 @@ export class GlRenderer {
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 	}
 
-	/**
-	 * Allocate the source texture/FBOs for externally-decoded VideoFrames
-	 * (WebCodecs preview) — like loadVideo, but without an element to sample.
-	 */
+	/** Allocate the source texture and FBOs for externally-decoded VideoFrames
+	 * (WebCodecs preview). */
 	initVideoSource(w: number, h: number) {
 		this.resetSource(w, h);
 	}
 
-	/**
-	 * Size the frame to `w`×`h` with nothing on the source texture: the
-	 * sequence editor's base, black under the layers. The frame keeps its size;
-	 * the texture holds one black pixel.
-	 */
+	/** Size the frame with nothing on the source texture: the sequence editor's
+	 * base, black under the layers. */
 	initBlankSource(w: number, h: number) {
 		if (!this.resetSource(w, h)) return;
 		this.clearSource();
 	}
 
-	/** Put one clear pixel on the source texture, stretched over the frame by
-	 * the fit. Cheaper than clearing a full-size texture, and the fit of a 1×1
-	 * is clear either way: nothing under the layers is transparent. */
+	/** Put one clear pixel on the source texture, stretched over the frame by the
+	 * fit: cheaper than clearing a full-size texture. */
 	clearSource() {
 		if (!this.sourceTexture) return;
 		const gl = this.gl;
@@ -528,12 +438,8 @@ export class GlRenderer {
 		this.srcTexH = 1;
 	}
 
-	/**
-	 * Size the output to `w`×`h` and hand back a freshly bound source texture for
-	 * the caller to upload into. False when the dimensions aren't usable yet: a
-	 * 0×0 source texture makes every subsequent draw fail, freezing the preview
-	 * on the last presented frame (preserveDrawingBuffer).
-	 */
+	/** Size the output to `w`x`h` and hand back a freshly bound source texture.
+	 * False when the dimensions aren't usable: a 0x0 source texture breaks every later draw. */
 	private resetSource(w: number, h: number): boolean {
 		if (w === 0 || h === 0) return false;
 		const gl = this.gl;
@@ -548,27 +454,19 @@ export class GlRenderer {
 		this.srcTexH = h;
 
 		this.setupPingPong();
-		// setupPingPong binds its own textures last, so rebind before returning —
+		// setupPingPong binds its own textures last, so rebind before returning:
 		// callers upload straight into TEXTURE_2D.
 		gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
 		return true;
 	}
 
-	/**
-	 * Wall-clock ms spent uploading frames since the reader last zeroed it, and
-	 * the switch that collects it. Off by default: a sequence lane uploads from
-	 * a promise callback, so the preview loop can't time these from outside, and
-	 * a stat nobody is showing shouldn't cost a clock read per upload.
-	 */
+	/** Wall-clock ms spent uploading frames since the reader last zeroed it, and the
+	 * switch that collects it. Off by default: a stat nobody shows costs no clock read. */
 	measureUploads = false;
 	uploadMs = 0;
 
-	/**
-	 * What the chain actually runs at, and what the source texture holds. The
-	 * two come from different places — the preview render size and whatever the
-	 * decoder hands over — and a preview drawing far more pixels than it shows
-	 * is invisible from the outside without them.
-	 */
+	/** What the chain actually runs at, and what the source texture holds: a preview
+	 * drawing far more pixels than it shows is invisible from the outside without them. */
 	get sizes() {
 		return {
 			w: this.imgW,
@@ -587,8 +485,8 @@ export class GlRenderer {
 
 	updateSourceFrame(source: HTMLVideoElement | VideoFrame) {
 		if (!this.sourceTexture) return;
-		// Skip uploads while the element has no decoded frame (seeking/stalled) —
-		// Firefox would upload zeros, flashing black instead of holding the frame
+		// Skip uploads while the element has no decoded frame (seeking or stalled):
+		// Firefox uploads zeros, flashing black instead of holding the frame
 		if (
 			source instanceof HTMLVideoElement &&
 			(source.readyState < 2 || source.videoWidth === 0)
@@ -605,10 +503,8 @@ export class GlRenderer {
 				: source.displayHeight;
 		const gl = this.gl;
 		gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
-		// Fast path: texSubImage2D writes into the existing allocation (the usual
-		// case — a video plays at constant dimensions). texImage2D would reallocate
-		// and revalidate storage every frame. Reallocate only on an actual size
-		// change (e.g. a mixed-size slideshow switching source mid-preview).
+		// Fast path: texSubImage2D writes into the existing allocation, where
+		// texImage2D would reallocate and revalidate storage every frame.
 		this.#timeUpload(() => {
 			if (w === this.srcTexW && h === this.srcTexH) {
 				gl.texSubImage2D(
@@ -635,16 +531,14 @@ export class GlRenderer {
 		});
 	}
 
-	/** Upload a new image to the existing source texture without re-allocating FBOs. */
 	updateSourceImage(image: SourceImage) {
 		if (!this.sourceTexture) return;
 		const gl = this.gl;
 		const w = imageWidth(image);
 		const h = imageHeight(image);
 		gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
-		// Same fast path as updateSourceFrame: a slideshow cutting between
-		// same-sized images reuses the allocation instead of reallocating storage
-		// every beat.
+		// Same fast path as updateSourceFrame: a slideshow cutting between same-sized
+		// images reuses the allocation.
 		if (w === this.srcTexW && h === this.srcTexH) {
 			gl.texSubImage2D(
 				gl.TEXTURE_2D,
@@ -662,26 +556,17 @@ export class GlRenderer {
 		this.srcTexH = h;
 	}
 
-	// ── Media layers ─────────────────────────────────────────────────────────
-	// A layer's frame is uploaded by the caller (the preview registry or the
-	// export's twin), keyed by lane — a lane shows one clip at a time, so one
-	// texture per lane is all it can ever need.
+	// A layer's frame is uploaded by the caller, keyed by lane: a lane shows one
+	// clip at a time, so one texture per lane is all it needs.
 
-	/**
-	 * Per-source edits, pushed in whenever they change rather than carried on
-	 * each frame's resolved layers: the edit belongs to the media, so it is the
-	 * same for every lane drawing it and for the export driver as well.
-	 */
+	/** Per-source edits, pushed in when they change rather than carried on each
+	 * frame's resolved layers: the edit belongs to the media, so every lane sees the same. */
 	setSourceEdits(edits: Map<string, SourceEdit>) {
 		this.sourceEdits = edits;
 	}
 
-	/**
-	 * How long each source's media runs, so a keyed edit can be sampled at the
-	 * instant the frame sampler actually wrapped to. Pushed the same way as the
-	 * edits; a source missing from the map is treated as having no duration,
-	 * which is what an image is.
-	 */
+	/** How long each source's media runs, so a keyed edit can be sampled where the
+	 * frame sampler wrapped to. A source missing from the map is an image. */
 	setSourceDurations(durations: Map<string, number>) {
 		this.sourceDurations = durations;
 	}
@@ -691,17 +576,12 @@ export class GlRenderer {
 		return wrapSourceTime(time, this.sourceDurations.get(sourceId ?? "") ?? 0);
 	}
 
-	/**
-	 * Start the *next* render's chain from black instead of the source. The solo
-	 * button uses it to show one media layer by itself. One-shot by design: the
-	 * preview re-asks on every frame it draws, so nothing else that renders
-	 * through this instance has to know the mode exists.
-	 */
+	/** Start the next render's chain from black instead of the source; the solo
+	 * button uses it. One-shot: the preview re-asks every frame. */
 	setBlankSource(on: boolean) {
 		this.pendingBlank = on;
 	}
 
-	/** Take the pending blank request, if any. Called once per render. */
 	private takeBlankSource() {
 		this.blankSource = this.pendingBlank;
 		this.pendingBlank = false;
@@ -732,23 +612,13 @@ export class GlRenderer {
 		return tex;
 	}
 
-	/**
-	 * The erase mask for a source, decoding it on first use. Returns null until
-	 * the image lands, so a frame drawn in the meantime shows the media whole
-	 * rather than blank: an eraser that flashes the picture away while its own
-	 * mask loads would read as a bug.
-	 */
-	/**
-	 * Keyed by the mask itself, not by the source: a keyed erase track holds a
-	 * different painted shape per key, and a one-per-source cache threw the
-	 * texture away and re-decoded on every key the playhead crossed — which
-	 * showed as the erase blinking off for a frame or two each time.
-	 */
+	/** The erase mask for a source, decoding it on first use. Returns null until the
+	 * image lands, so a frame drawn meanwhile shows the media whole. Keyed by the mask. */
 	private maskTexture(url: string): WebGLTexture | null {
 		const held = this.maskTextures.get(url);
 		if (held) return held.ready ? held.tex : null;
-		// A track has as many shapes as it has keys; keeping every one a session
-		// ever painted would leak. Oldest out first — Map keeps insertion order.
+		// A track has as many shapes as it has keys, so keeping every one would leak.
+		// Oldest out first; Map keeps insertion order.
 		while (this.maskTextures.size >= GlRenderer.MAX_MASK_TEXTURES) {
 			const oldest = this.maskTextures.keys().next();
 			if (oldest.done) break;
@@ -771,10 +641,8 @@ export class GlRenderer {
 			// decoded; only fill the texture this load was started for.
 			if (this.maskTextures.get(url) !== entry) return;
 			gl.bindTexture(gl.TEXTURE_2D, tex);
-			// Stored as a distance field rather than as coverage, so two keys can be
-			// interpolated at their boundary. Built once per painted shape, here,
-			// where the decode already costs a frame — it is O(pixels) but it is not
-			// on the per-frame path.
+			// Stored as a distance field rather than coverage, so two keys interpolate at
+			// their boundary. Built once per painted shape, where the decode already costs a frame.
 			const sdf = this.sdfPixels(img);
 			if (sdf) {
 				entry.centre = sdf.field.centre;
@@ -827,20 +695,12 @@ export class GlRenderer {
 	/** Called when a mask finishes decoding, so a paused preview redraws. */
 	onMaskReady: (() => void) | null = null;
 
-	/** True once this lane has a frame to draw. */
 	hasLayerTexture(key: string): boolean {
 		return this.mediaLayerTextures.has(key);
 	}
 
-	/**
-	 * Where this lane's media lands in the output, in output pixels — for the
-	 * preview's selection outline, which is DOM and so never reaches an export.
-	 * Reads the same `layerBox` the placement pass draws with rather than
-	 * recomputing the fit, so the outline can't drift from the media.
-	 *
-	 * Null until the lane has a frame: its natural size is what the fit is
-	 * measured against, and that arrives with the first upload.
-	 */
+	/** Where this lane's media lands in the output, for the preview's selection
+	 * outline. Reads the same `layerBox` the placement pass draws with, so it can't drift. */
 	mediaLayerRect(
 		key: string,
 		style: MediaStyle,
@@ -870,7 +730,7 @@ export class GlRenderer {
 		);
 	}
 
-	/** Release a lane's frame — its source was cleared, or the lane is gone. */
+	/** Release a lane's frame: its source was cleared, or the lane is gone. */
 	dropLayerTexture(key: string) {
 		const entry = this.mediaLayerTextures.get(key);
 		if (!entry) return;
@@ -890,9 +750,8 @@ export class GlRenderer {
 		if (!entry) {
 			const tex = gl.createTexture()!;
 			gl.bindTexture(gl.TEXTURE_2D, tex);
-			// LINEAR and clamped, unlike the chain's buffers: this one is sampled at
-			// an arbitrary scale by the placement pass, where NEAREST would alias a
-			// shrunk photo badly and a mirrored wrap would tile it outside its box.
+			// LINEAR and clamped, unlike the chain's buffers: the placement pass samples
+			// this at an arbitrary scale, where NEAREST would alias a shrunk photo.
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -931,9 +790,6 @@ export class GlRenderer {
 		});
 	}
 
-	// ── Outgoing source (transitions across two different media) ─────────────
-
-	/** Whether anything has been staged for the outgoing side yet. */
 	get hasAltSource(): boolean {
 		return !!this.altSourceTexture;
 	}
@@ -1006,7 +862,6 @@ export class GlRenderer {
 		});
 	}
 
-	/** Resize output canvas and ping-pong/feedback buffers. Source texture is unchanged; sampling scales automatically. */
 	resize(width: number, height: number) {
 		if (width <= 0 || height <= 0) return;
 		if (width === this.imgW && height === this.imgH) return;
@@ -1045,22 +900,20 @@ export class GlRenderer {
 		// Narrowed rather than asserted: createRenderTarget can genuinely fail, and
 		// there is nothing to draw into if it did.
 		if (!presentFBO || !presentTex) return;
-		// Layers run their own chains through the shared ping-pong, so they have to
-		// be finished before the main chain starts using it.
+		// Layers run their own chains through the shared ping-pong, so they finish
+		// before the main chain starts using it.
 		const prepared = this.prepareLayers(textLayers, mediaLayers, time, safeDt);
 
-		// Layers that sit over the finished frame have to be composited after the
-		// fx lanes when a lane is under them, which the flat chain below can't
-		// express — those go through the stack walk instead.
+		// Layers over the finished frame composite after the fx lanes when a lane is
+		// under them, which the flat chain can't express.
 		const over = prepared.filter((l) => !l.underEffects);
 
-		// Nothing stacked, or nothing to interleave and nothing fading: one chain,
-		// no intermediate buffers. This is the path every non-sequence render takes.
+		// Nothing stacked, or nothing to interleave and nothing fading: one chain, no
+		// intermediate buffers. Every non-sequence render takes this path.
 		if (post.length === 0 || (over.length === 0 && allFullWeight(post))) {
 			let flat = effects;
 			if (post.length > 0) {
-				// Built by hand rather than with flatMap, which would allocate a second
-				// array per frame just to spread it into this one.
+				// By hand rather than flatMap, which allocates a second array per frame.
 				flat = effects.slice();
 				for (const l of post) flat.push(...l.effects);
 			}
@@ -1078,10 +931,8 @@ export class GlRenderer {
 			return;
 		}
 
-		// A fading lane has to mix against its own input, and an interleaved layer
-		// has to composite between two lanes, so the root chain lands in a buffer
-		// rather than going straight to the canvas. Only the layers that sit
-		// *under* the effects belong in it; the rest are rungs of the stack.
+		// A fading lane mixes against its own input and an interleaved layer composites
+		// between two lanes, so the root chain lands in a buffer rather than the canvas.
 		this.ensureSceneBuffers();
 		const sceneFBOs = this.sceneFBOs;
 		const sceneTextures = this.sceneTextures;
@@ -1102,12 +953,8 @@ export class GlRenderer {
 		);
 	}
 
-	/**
-	 * Blend two effect chains with a transition shader: chain A (outgoing) and
-	 * chain B (incoming) each render into their own scene buffer — feedback
-	 * effects on both sides keep evolving during the blend — then the
-	 * transition pass composites them along `progress` (0 = pure A, 1 = pure B).
-	 */
+	/** Blend two effect chains with a transition shader. A and B each render into
+	 * their own scene buffer, then the transition pass composites along `progress`. */
 	renderTransition(
 		effectsA: EffectInstance[],
 		effectsB: EffectInstance[],
@@ -1117,17 +964,12 @@ export class GlRenderer {
 		direction: number,
 		density: number,
 		time = 0,
-		/** Render chain A from the outgoing source texture — set when the two
-		 * sides draw from different media, so the media cross-fades too. */
+		/** Render chain A from the outgoing source texture, set when the two sides draw
+		 * from different media so the media cross-fades too. */
 		useAltSourceForA = false,
 		textLayers: ResolvedTextLayer[] = [],
-		/**
-		 * Stacked fx lanes, run over the finished blend — they sit above the source
-		 * lane, so they apply to whatever it produced, blend included. Deliberately
-		 * *not* appended to both sides: chains A and B render separately, so the
-		 * same instance on both would have two passes writing one feedback buffer,
-		 * each reading the other's history.
-		 */
+		/** Stacked fx lanes, run over the finished blend. Deliberately not appended to
+		 * both sides, or one instance would have two passes writing one feedback buffer. */
 		postLayers: PostChainLayer[] = [],
 		/** Media lanes, composited into both sides' chains. */
 		mediaLayers: ResolvedMediaLayer[] = [],
@@ -1140,8 +982,8 @@ export class GlRenderer {
 			return;
 		}
 
-		// Every chain stays alive for the whole blend — collect feedback buffers
-		// only against the union, or rendering A would drop B's history.
+		// Every chain stays alive for the whole blend, so collect feedback buffers
+		// against the union or rendering A would drop B's history.
 		const live = this.beginLiveIds();
 		addInstanceIds(live, effectsA);
 		addInstanceIds(live, effectsB);
@@ -1153,8 +995,8 @@ export class GlRenderer {
 		this.gcMediaLayers(mediaLayers);
 		const safeDt = this.frameDelta(time);
 
-		// One preparation feeding both sides: the layers are the same layers, so
-		// they ride through the blend rather than popping in when B takes over.
+		// One preparation feeding both sides, so the layers ride through the blend
+		// rather than popping in when B takes over.
 		const prepared = this.prepareLayers(textLayers, mediaLayers, time, safeDt);
 
 		this.ensureSceneBuffers();
@@ -1204,9 +1046,7 @@ export class GlRenderer {
 		}
 
 		// A post chain reads the blend, so the blend can't land in the buffer that
-		// chain writes to. Park it in its own texture and hand that over as the
-		// chain's source; text layers stay on A and B, where they ride through the
-		// blend rather than popping in when B takes over.
+		// chain writes to. Park it in its own texture and hand that over as the source.
 		this.ensureBlendBuffer();
 		const blendFBO = this.blendFBO;
 		const blendTexture = this.blendTexture;
@@ -1239,17 +1079,6 @@ export class GlRenderer {
 		this.sourceFit = fit;
 	}
 
-	/**
-	 * The texture the effect chain should read.
-	 *
-	 * Uploads keep their own dimensions, so a source that doesn't share the
-	 * output's aspect would be stretched across it by the chain's 0..1 sampling.
-	 * When that happens (only possible with a mixed media pool) the source is
-	 * first copied into an output-sized buffer, scaled to fit and centred, and
-	 * the chain reads that instead. Matching aspects skip the copy entirely, so
-	 * the ordinary single-source case pays nothing.
-	 */
-	/** The crop / mask / key uniforms of the layer placement pass. */
 	private setSourceEditUniforms(
 		prog: CompiledProgram,
 		edit: SourceEdit | undefined,
@@ -1288,8 +1117,7 @@ export class GlRenderer {
 			);
 		}
 		const mask = edit?.mask ? this.maskTexture(edit.mask) : null;
-		// The shape being morphed into. Falls back to the one being left while it
-		// is still decoding, so a key change never blinks the erase off.
+		// The shape being morphed into; falls back to the one being left while it decodes.
 		const nextUrl = edit?.maskNext;
 		const next = nextUrl ? this.maskTexture(nextUrl) : null;
 		const morphing = !!mask && !!next;
@@ -1304,8 +1132,8 @@ export class GlRenderer {
 			gl.uniform1f(prog.uniforms["u_hasMask"], mask ? 1 : 0);
 		}
 		if (prog.uniforms["u_maskSdf"]) {
-			// Only mid-morph. On a key, and on every mask that is not animated at
-			// all, the shader reads the painting itself and the soft brush survives.
+			// Only mid-morph. On a key, and on any mask that isn't animated, the shader
+			// reads the painting itself and the soft brush survives.
 			gl.uniform1f(prog.uniforms["u_maskSdf"], morphing ? 1 : 0);
 		}
 		if (prog.uniforms["u_maskMix"]) {
@@ -1340,18 +1168,18 @@ export class GlRenderer {
 		}
 		if (mask && prog.uniforms["u_maskNext"]) {
 			gl.activeTexture(gl.TEXTURE4);
-			// Bound to the same field when nothing is being morphed: a sampler left
-			// pointing at whatever was in the unit last is undefined, and the mix is
-			// 0 either way.
+			// Bound to the same field when nothing is morphing: a sampler left pointing
+			// at whatever was in the unit last is undefined, and the mix is 0 either way.
 			gl.bindTexture(gl.TEXTURE_2D, morphing ? next! : mask);
 			gl.uniform1i(prog.uniforms["u_maskNext"], 4);
 		}
 	}
 
+	/** The texture the effect chain should read. A source that doesn't share the
+	 * output's aspect would be stretched by 0..1 sampling, so it is copied to fit. */
 	private chainSource(alt = false): WebGLTexture {
-		// Solo: the chain starts from black, so the soloed layer is composited onto
-		// an empty frame rather than over the picture it is meant to be told apart
-		// from. Ahead of the fit staging — there is nothing to fit.
+		// Solo: the chain starts from black, so the soloed layer is composited onto an
+		// empty frame rather than over the picture it is meant to be told apart from.
 		if (this.blankSource) return this.blankTexture();
 		let src = alt ? this.altSourceTexture : this.sourceTexture;
 		if (!src) return this.sourceTexture!;
@@ -1390,8 +1218,8 @@ export class GlRenderer {
 		const y = Math.round((this.imgH - h) / 2);
 
 		gl.bindFramebuffer(gl.FRAMEBUFFER, stageFbo);
-		// Clear at full size first, then draw into the fitted rect — "contain"
-		// leaves the bars transparent, "cover" simply clips outside the viewport.
+		// Clear at full size first, then draw into the fitted rect: "contain" leaves
+		// the bars transparent, "cover" clips outside the viewport.
 		gl.viewport(0, 0, this.imgW, this.imgH);
 		gl.clearColor(0, 0, 0, 0);
 		gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1427,7 +1255,6 @@ export class GlRenderer {
 		this.altStageFBO = null;
 	}
 
-	/** Per-frame delta time for phase accumulation, guarded against discontinuities. */
 	/** The shared live-id set, emptied and ready to refill. */
 	private beginLiveIds(): Set<string> {
 		this.liveIds.clear();
@@ -1441,10 +1268,8 @@ export class GlRenderer {
 		return dt > 0 && dt < 0.5 ? dt : 0;
 	}
 
-	/** Drop per-instance state for effects that no longer exist (deleted, or
-	 * replaced wholesale by undo/preset): feedback GPU buffers, plus the phase,
-	 * tracking and caption maps. Every mosh roll mints fresh instanceIds, so
-	 * without this the latter three grow unbounded across a long session. */
+	/** Drop per-instance state for effects that no longer exist (deleted, or replaced
+	 * by undo or a preset): feedback buffers, phase, tracking and caption maps. */
 	private gcFxFeedback(live: Set<string>) {
 		for (const [id, pair] of this.fxFeedback) {
 			// Stateful pre-passes key their history as "<instanceId>:<pass>".
@@ -1475,7 +1300,6 @@ export class GlRenderer {
 		}
 	}
 
-	/** Drop every cached caption texture (resize, teardown). */
 	private clearCaptionTextures() {
 		for (const entry of this.captionTextures.values()) {
 			this.gl.deleteTexture(entry.tex);
@@ -1483,13 +1307,8 @@ export class GlRenderer {
 		this.captionTextures.clear();
 	}
 
-	/**
-	 * Render one effect chain, writing the final pass into `finalFbo` and
-	 * returning the texture holding the result (a private feedback buffer when
-	 * the last effect reads u_feedback). Intermediate passes share the
-	 * ping-pong FBOs, so chains must run sequentially — which is why text layers
-	 * arrive already rendered.
-	 */
+	/** Render one effect chain, writing the final pass into `finalFbo` and returning
+	 * the result texture (a private feedback buffer if the last effect reads u_feedback). */
 	private renderChainTo(
 		effects: EffectInstance[],
 		time: number,
@@ -1515,9 +1334,8 @@ export class GlRenderer {
 
 		let input = srcTex;
 		let ppIdx = 0;
-		/** Texture holding the final chain output (presented at the end); null
-		 * either when nothing has rendered yet or when the last pass drew
-		 * straight to the canvas (toCanvas) — `producedOutput` disambiguates. */
+		/** Texture holding the final chain output; null when nothing rendered yet or the
+		 * last pass drew to the canvas, which `producedOutput` tells apart. */
 		let resultTex: WebGLTexture | null = null;
 		let producedOutput = false;
 
@@ -1525,9 +1343,8 @@ export class GlRenderer {
 			const op = ops[i];
 			const isLast = i === ops.length - 1;
 
-			// A text layer is composited over whatever the chain holds at its slot,
-			// so effects below it in the chain go on to distort it. It always lands
-			// in an FBO — the final blit is left to presentFrame.
+			// A text layer composites over whatever the chain holds at its slot, so effects
+			// below it distort it too. Always into an FBO; the final blit is left to presentFrame.
 			if (op.kind === "layer") {
 				const target = isLast ? finalFbo : this.ppFBOs![ppIdx];
 				this.compositeOverlayToFBO(
@@ -1550,8 +1367,7 @@ export class GlRenderer {
 			const eff = op.eff;
 
 			// Tracking and captions are CPU-built 2D overlays, not shader passes.
-			// Composite them over the chain input at this slot, so later effects can
-			// distort them.
+			// Composited over the chain input at this slot so later effects distort them.
 			if (eff.defId === TRACKING_EFFECT_ID || eff.defId === CAPTION_EFFECT_ID) {
 				const target = isLast ? finalFbo : this.ppFBOs![ppIdx];
 				if (eff.defId === CAPTION_EFFECT_ID) {
@@ -1571,8 +1387,8 @@ export class GlRenderer {
 
 			const entry = this.effectEntry(eff.defId);
 			if (!entry) {
-				// A stale preset or a deleted effect. Skipping is right — reporting it
-				// once is what makes "my preset does nothing" diagnosable.
+				// A stale preset or a deleted effect. Reporting it once is what makes "my
+				// preset does nothing" diagnosable.
 				if (!reportedUnknownEffects.has(eff.defId)) {
 					reportedUnknownEffects.add(eff.defId);
 					console.warn(`No shader for effect "${eff.defId}" — skipping it.`);
@@ -1588,10 +1404,8 @@ export class GlRenderer {
 				safeDt,
 			);
 
-			// Multi-pass effects: run pre-passes through the half-res HDR ping-pong,
-			// then composite. The pre-pass viewport is the HDR buffer size; the
-			// shaders use u_resolution (full res) for blur width, so downsampling
-			// only lowers the sample resolution, not the blur radius.
+			// Multi-pass effects: pre-passes run through the half-res HDR ping-pong, then
+			// composite. Blur width comes from u_resolution, so downsampling lowers resolution.
 			const originalInput = input;
 			if (entry.prePasses) {
 				this.ensureHdrBuffers();
@@ -1599,8 +1413,7 @@ export class GlRenderer {
 				for (let p = 0; p < entry.prePasses.length; p++) {
 					const pp = entry.prePasses[p];
 					// A stateful pre-pass keeps its own full-res history (a background
-					// estimate, a held keyframe) that the main pass then reads as its
-					// input, separate from the main pass's own u_feedback.
+					// estimate, a held keyframe) that the main pass then reads as its input.
 					if (pp.feedback) {
 						const pair = this.getFxFeedback(
 							`${eff.instanceId}:${p}`,
@@ -1643,17 +1456,16 @@ export class GlRenderer {
 					input = this.hdrTextures![hdrIdx];
 					hdrIdx = 1 - hdrIdx;
 				}
-				// The composite reads the final blurred buffer at full res — keep it
-				// LINEAR so the upsample is smooth (setTextureFilter may have left the
-				// shared source texture NEAREST above; HDR textures are LINEAR-native).
+				// The composite reads the final blurred buffer at full res, so keep it LINEAR for
+				// a smooth upsample: setTextureFilter may have left the shared source NEAREST above.
 				this.setTextureFilter(input, true);
 			}
 
 			if (entry.def.linearFilter) this.setTextureFilter(input, true);
 
 			if (entry.program.uniforms["u_feedback"]) {
-				// Feedback effect: render into its private history buffer, reading
-				// its own previous output — downstream effects never enter the loop.
+				// Feedback effect: render into its private history buffer, reading its own
+				// previous output, so downstream effects never enter the loop.
 				const pair = this.getFxFeedback(
 					eff.instanceId,
 					input,
@@ -1743,7 +1555,6 @@ export class GlRenderer {
 		return resultTex;
 	}
 
-	/** Composite outgoing (texA) + incoming (texB) chain outputs along progress. */
 	private drawTransitionPass(
 		prog: CompiledProgram,
 		targetFBO: WebGLFramebuffer,
@@ -1783,19 +1594,13 @@ export class GlRenderer {
 
 	/** Blit the finished frame to the canvas, when the chain didn't already. */
 	private presentFrame(mainResult: WebGLTexture | null) {
-		// A feedback effect at the end of the chain writes to its own history
-		// buffer, so it needs this final blit; otherwise the last pass already
-		// drew straight to the canvas.
+		// A feedback effect at the end of the chain writes to its own history buffer,
+		// so it needs this blit; otherwise the last pass already drew to the canvas.
 		if (mainResult) this.drawPass(this.passthrough, null, mainResult, -1.0, 0);
 	}
 
-	/**
-	 * Get (or lazily create) the private history buffer for a feedback effect.
-	 * New buffers are seeded with the current chain input at that slot, so the
-	 * effect starts from valid history instead of uninitialized memory.
-	 * Simulation effects (hdrFeedback) get half-float history so their per-frame
-	 * deltas survive round-tripping.
-	 */
+	/** Get or lazily create the private history buffer for a feedback effect. New
+	 * buffers are seeded with the current chain input, so it starts from valid history. */
 	private getFxFeedback(
 		instanceId: string,
 		seedTex: WebGLTexture,
@@ -1818,11 +1623,8 @@ export class GlRenderer {
 		return pair;
 	}
 
-	/**
-	 * For effects with a speed param, accumulate phase so speed changes don't
-	 * cause jumps. Writes into a shared object rather than returning a fresh one:
-	 * this runs per effect per frame, and the caller reads it out immediately.
-	 */
+	/** For effects with a speed param, accumulate phase so speed changes don't jump.
+	 * Writes into a shared object: this runs per effect per frame. */
 	private getEffectTime(
 		eff: EffectInstance,
 		time: number,
@@ -1834,9 +1636,8 @@ export class GlRenderer {
 			out.delta = dt;
 			return out;
 		}
-		// Beat-synced: phase is read off the song's grid rather than accumulated,
-		// so flashes land on beats and realign after a seek instead of drifting.
-		// No BPM (single mode, a track nobody detected) falls back to free-running.
+		// Beat-synced: phase is read off the song's grid rather than accumulated, so
+		// flashes land on beats and realign after a seek. No BPM falls back to free-running.
 		if (eff.values.sync === "beat" && this.beatPhase !== null) {
 			const perBeat = Number(eff.values.division) || 1;
 			out.time = this.beatPhase * perBeat;
@@ -1872,7 +1673,6 @@ export class GlRenderer {
 		return s;
 	}
 
-	/** (Re)allocate the small saliency framebuffer to match the current aspect. */
 	private ensureSalResources() {
 		const gl = this.gl;
 		const targetW = 96;
@@ -1928,7 +1728,6 @@ export class GlRenderer {
 		this.setTextureFilter(srcTex, false);
 	}
 
-	/** Score + track from whatever is currently in salBuf. */
 	private processSalBuf(
 		state: TrackingState,
 		params: TrackingParams,
@@ -1940,11 +1739,8 @@ export class GlRenderer {
 		trackBoxes(state, params, lum, this.salW, this.salH, time);
 	}
 
-	/**
-	 * Blocking analyze: draw, readPixels, score + track. Only used for the very
-	 * first analysis (or a time reset) so a single-frame render (still preview,
-	 * PNG save) gets a populated HUD immediately.
-	 */
+	/** Blocking analyze: draw, readPixels, score and track. Only for the first
+	 * analysis (or a time reset), so a single-frame render gets a populated HUD. */
 	private analyzeSaliencySync(
 		state: TrackingState,
 		params: TrackingParams,
@@ -1967,11 +1763,8 @@ export class GlRenderer {
 		this.processSalBuf(state, params, time);
 	}
 
-	/**
-	 * Kick off a non-blocking readback: readPixels goes into a PBO (no CPU
-	 * copy, no pipeline stall) and a fence records when the GPU is done.
-	 * pollSaliency collects the result on a later frame.
-	 */
+	/** Kick off a non-blocking readback: readPixels goes into a PBO (no CPU copy, no
+	 * pipeline stall) and a fence records when the GPU is done. pollSaliency collects it. */
 	private startSaliencyRead(
 		state: TrackingState,
 		params: TrackingParams,
@@ -1983,9 +1776,8 @@ export class GlRenderer {
 		if (!this.salFBO || !this.salPBO || !this.salBuf) return;
 		this.drawSaliencyPass(srcTex);
 		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.salPBO);
-		// Orphan the store every read. Chromium keeps a readback shadow per
-		// READ-usage buffer from the fence on and only drops it on bufferData or
-		// delete, so reusing the store warns on every cycle.
+		// Orphan the store every read. Chromium keeps a readback shadow per READ-usage
+		// buffer and only drops it on bufferData or delete, so reuse warns every cycle.
 		gl.bufferData(gl.PIXEL_PACK_BUFFER, this.salBuf.byteLength, gl.STREAM_READ);
 		gl.readPixels(0, 0, this.salW, this.salH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
 		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
@@ -2013,12 +1805,8 @@ export class GlRenderer {
 		this.processSalBuf(state, params, time);
 	}
 
-	/**
-	 * Drop an in-flight readback. With `drain`, the PBO is read (and the result
-	 * discarded) so the driver's pending readback copy is consumed; skipping
-	 * that and writing the PBO again trips Firefox's READ-usage buffer warning.
-	 * Callers that delete the PBO right after don't need to drain.
-	 */
+	/** Drop an in-flight readback. With `drain`, the PBO is read (and discarded) so
+	 * the driver's pending copy is consumed; skipping it trips Firefox's READ-usage warning. */
 	private abortPendingSaliency(drain = false) {
 		const gl = this.gl;
 		if (this.salFence) {
@@ -2033,7 +1821,6 @@ export class GlRenderer {
 		this.salPending = null;
 	}
 
-	/** Composite an overlay texture over a main texture into the target FBO. */
 	private compositeOverlayToFBO(
 		mainTex: WebGLTexture,
 		overlayTex: WebGLTexture,
@@ -2067,11 +1854,8 @@ export class GlRenderer {
 		gl.activeTexture(gl.TEXTURE0);
 	}
 
-	/**
-	 * Draw each visible text layer and run its own effect chain, so a layer can
-	 * be moshed without the image underneath it moving. Returns them in the order
-	 * they were given, ready to be composited into the main chain.
-	 */
+	/** Draw each visible text layer and run its own effect chain, so a layer can be
+	 * moshed without the image underneath it moving. Returned in the order given. */
 	private prepareTextLayers(
 		layers: ResolvedTextLayer[],
 		time: number,
@@ -2111,11 +1895,8 @@ export class GlRenderer {
 		return prepared;
 	}
 
-	/**
-	 * Both kinds of layer for this frame, in composite order: one z order spans
-	 * text and media alike, so a caption can sit under a layered clip as easily
-	 * as over it.
-	 */
+	/** Both kinds of layer for this frame, in composite order: one z order spans
+	 * text and media alike. */
 	private prepareLayers(
 		textLayers: ResolvedTextLayer[],
 		mediaLayers: ResolvedMediaLayer[],
@@ -2131,19 +1912,13 @@ export class GlRenderer {
 			text.length,
 		);
 		if (media.length === 0) return text;
-		// Sorted after preparing, not before: the buffer each layer rendered into
-		// is claimed by preparation order, and only the composite cares about z.
+		// Sorted after preparing, not before: the buffer each layer rendered into is
+		// claimed by preparation order, and only the composite cares about z.
 		return media.concat(text).sort((a, b) => a.z - b.z);
 	}
 
-	/**
-	 * Place each visible media layer and run its own chain, so a layer can be
-	 * moshed without the image underneath it moving. Returns them in lane order,
-	 * ready to be composited into the main chain.
-	 *
-	 * `bufOffset` is where this frame's text layers stopped claiming scratch
-	 * targets, so the two kinds never write into the same one.
-	 */
+	/** Place each visible media layer and run its own chain, so a layer can be moshed
+	 * without the image underneath it moving. `bufOffset` is where text layers stopped. */
 	private prepareMediaLayers(
 		layers: ResolvedMediaLayer[],
 		time: number,
@@ -2155,8 +1930,8 @@ export class GlRenderer {
 		for (const layer of layers) {
 			const entry = this.mediaLayerTextures.get(layer.key);
 			if (!entry || entry.w <= 0) continue;
-			// Sampled per lane, not once for the source: two lanes can hold the same
-			// media at different points in it, and each wants its own instant's crop.
+			// Sampled per lane, not once for the source: two lanes can hold the same media
+			// at different points, each wanting its own instant's crop.
 			const stored = this.sourceEdits.get(layer.sourceId);
 			const edit = stored
 				? sampleSourceEdit(
@@ -2164,9 +1939,8 @@ export class GlRenderer {
 						this.editTime(layer.sourceId, layer.sourceTime),
 					)
 				: undefined;
-			// Fitted against what the crop leaves, not the whole file: "contain" has
-			// to mean the visible rectangle, or cropping a photo would letterbox the
-			// part that was thrown away.
+			// Fitted against what the crop leaves, not the whole file, so "contain" means the
+			// visible rectangle.
 			const box = this.layerBox(
 				layer.style,
 				entry.w * (edit?.crop?.w ?? 1),
@@ -2181,23 +1955,8 @@ export class GlRenderer {
 			} else {
 				const scratch = this.ensureMediaScratch();
 				if (!scratch) continue;
-				// Chain first, placement second. The chain runs on the media filling
-				// the whole buffer, so every effect that asks where the centre or the
-				// edges are gets the *media's* — a vignette on a half-size layer in the
-				// corner darkens that layer's edges, not the canvas's. Placing first
-				// (which is what this did) handed the chain a frame the media happened
-				// to sit somewhere in, and no effect could tell where.
-				//
-				// The media is stretched to the buffer here and squashed back by the
-				// placement, so a circle in the chain comes out following the layer's
-				// own rectangle — which is what "as if this media were the frame" has
-				// to mean when the layer isn't the frame's shape.
-				//
-				// Bleed keeps the media off the buffer's own edges, leaving transparent
-				// margin for a blur or a glow to spread into; the placement box grows
-				// to match, so what spread lands outside the media instead of being cut
-				// at its edge. Effects that write opaque alpha fill that margin too —
-				// they fill whatever they are given, and this gives them more.
+				// Chain first, placement second. The chain runs on the media filling the whole
+				// buffer, so an effect's centre or edges are the media's, not the canvas's.
 				const grow = this.bleedFactor(layer.style);
 				this.drawLayerPlacement(
 					entry.tex,
@@ -2218,12 +1977,8 @@ export class GlRenderer {
 						[],
 						out.tex,
 					) ?? scratch.tex;
-				// Safe to write back into `out`: the chain's result lives in the
-				// scratch (or in a feedback buffer), never in the texture it read.
-				//
-				// Chain buffers are NEAREST, and this samples one at the layer's own
-				// scale — usually a downscale, where NEAREST crunches the edges. The
-				// media texture the no-chain path draws is LINEAR for the same reason.
+				// Safe to write back into `out`: the chain's result lives in the scratch (or a
+				// feedback buffer), never in the texture it read. Chain buffers are NEAREST.
 				this.setTextureFilter(chained, true);
 				this.drawLayerPlacement(
 					chained,
@@ -2246,11 +2001,8 @@ export class GlRenderer {
 		return prepared;
 	}
 
-	/**
-	 * The box a layer's chain runs in: the whole frame, or the middle `fill` of
-	 * it when the style asks for bleed. What the placement box is measured
-	 * against, and what makes an effect's idea of "the centre" the media's own.
-	 */
+	/** The box a layer's chain runs in: the whole frame, or the middle `fill` of it
+	 * when the style asks for bleed. Makes an effect's idea of "the centre" the media's. */
 	private fullFrameBox(fill = 1): LayerBox {
 		return {
 			drawW: this.imgW * fill,
@@ -2261,28 +2013,20 @@ export class GlRenderer {
 		};
 	}
 
-	/**
-	 * Grow a placement box by the same factor the fill was shrunk by, so the
-	 * media lands exactly where it would have and the margin its effects spread
-	 * into hangs outside. 1 + 2*bleed: the margin is on both sides.
-	 */
+	/** Grow a placement box by the same factor the fill was shrunk by, so the media
+	 * lands where it would have and the margin hangs outside. 1 + 2*bleed: both sides. */
 	private bleedFactor(style: MediaStyle): number {
 		return 1 + 2 * Math.max(0, style.bleed ?? 0);
 	}
 
-	/**
-	 * The coverage ramp at the grown box's edges, in box uv. Sized from the
-	 * margin alone — `(1 - 1/grow) / 2` is how much of the box each side of the
-	 * margin takes — so the fade dies exactly at the media's edge at its widest
-	 * and never reaches the picture.
-	 */
+	/** The coverage ramp at the grown box's edges, in box uv. Sized from the margin
+	 * alone, `(1 - 1/grow) / 2` being how much each side takes, so it dies at the edge. */
 	private edgeFade(style: MediaStyle, grow: number): number {
 		const fade = Math.max(0, Math.min(1, style.bleedFade ?? 0));
 		if (fade <= 0 || grow <= 1) return 0;
 		return ((1 - 1 / grow) / 2) * fade;
 	}
 
-	/** Where a layer's media lands, in output pixels. */
 	private layerBox(style: MediaStyle, texW: number, texH: number): LayerBox {
 		const fw = this.imgW;
 		const fh = this.imgH;
@@ -2320,8 +2064,8 @@ export class GlRenderer {
 		if (prog.uniforms["u_rot"]) gl.uniform1f(prog.uniforms["u_rot"], box.rot);
 	}
 
-	/** Draw a layer's media into a full-frame buffer at its placement, keying
-	 * out its background colour on the way if the lane asks for it. */
+	/** Draw a layer's media into a full-frame buffer at its placement, keying out
+	 * its background colour if the lane asks. */
 	private drawLayerPlacement(
 		tex: WebGLTexture,
 		box: LayerBox,
@@ -2363,8 +2107,8 @@ export class GlRenderer {
 
 	/** The drawn (pre-effect) text for a clip, redrawn only when it changes. */
 	private textLayerTexture(layer: ResolvedTextLayer): WebGLTexture | null {
-		// Bundled faces load async; the text draws with a fallback until then and
-		// is redrawn once fontsVersion() moves.
+		// Bundled faces load async: the text draws with a fallback and is redrawn
+		// once fontsVersion() moves.
 		void ensureFontLoaded(layer.style.fontFamily);
 
 		return this.upsertOverlayTexture(
@@ -2382,11 +2126,8 @@ export class GlRenderer {
 		);
 	}
 
-	/**
-	 * The cached texture for an overlay, redrawn only when `sig` or the output
-	 * size changed. Text layers and captions differ solely in what they draw and
-	 * what they key by, so they share this rather than a copy each.
-	 */
+	/** The cached texture for an overlay, redrawn only when `sig` or the output size
+	 * changed. Text layers and captions differ only in what they draw and key by. */
 	private upsertOverlayTexture(
 		cache: Map<string, OverlayTexture>,
 		key: string,
@@ -2434,7 +2175,6 @@ export class GlRenderer {
 		return buf;
 	}
 
-	/** Drop uploaded frames for lanes that are no longer on screen. */
 	private gcMediaLayers(layers: ResolvedMediaLayer[]) {
 		if (this.mediaLayerTextures.size === 0) return;
 		for (const key of this.mediaLayerTextures.keys()) {
@@ -2442,7 +2182,6 @@ export class GlRenderer {
 		}
 	}
 
-	/** Drop drawn text for clips that are no longer on screen. */
 	private gcTextLayers(layers: ResolvedTextLayer[]) {
 		if (this.textLayerTextures.size === 0) return;
 		const live = new Set(layers.map((l) => l.key));
@@ -2482,7 +2221,6 @@ export class GlRenderer {
 		this.mediaLayerTextures.clear();
 	}
 
-	/** Draw a caption and composite it over `inputTex` into `targetFBO`. */
 	private renderCaption(
 		eff: EffectInstance,
 		inputTex: WebGLTexture,
@@ -2494,8 +2232,8 @@ export class GlRenderer {
 			this.drawPass(this.passthrough, targetFBO, inputTex, 1.0, 0);
 			return;
 		}
-		// Bundled faces load async; the caption draws with a fallback until then and
-		// is redrawn once fontsVersion() moves.
+		// Bundled faces load async: the caption draws with a fallback and is redrawn
+		// once fontsVersion() moves.
 		void ensureFontLoaded(params.fontFamily);
 
 		const tex = this.upsertOverlayTexture(
@@ -2515,7 +2253,6 @@ export class GlRenderer {
 		);
 	}
 
-	/** Build the tracking HUD and composite it over `inputTex` into `targetFBO`. */
 	private renderTracking(
 		eff: EffectInstance,
 		inputTex: WebGLTexture,
@@ -2526,10 +2263,8 @@ export class GlRenderer {
 		const params = readTrackingParams(eff.values);
 		const state = this.getTrackingState(eff.instanceId);
 
-		// Re-analyze on a fixed cadence in animation-time so preview and export
-		// stay deterministic. 0.12 s ≈ 8 Hz: fluid motion, cheap 96-px readback.
-		// Reads the chain output feeding this pass, so boxes chase content set in
-		// motion by upstream effects (and video motion).
+		// Re-analyze on a fixed cadence in animation-time so preview and export stay
+		// deterministic. 0.12 s is about 8 Hz: fluid motion, cheap 96-px readback.
 		const interval = 0.12;
 		if (state.lastAnalyze < 0 || time < state.lastAnalyze) {
 			// First frame or time reset: blocking analyze so a single-frame render
@@ -2538,9 +2273,8 @@ export class GlRenderer {
 			this.analyzeSaliencySync(state, params, inputTex, time);
 			state.lastAnalyze = time;
 		} else {
-			// Steady state: collect the previous async readback once its fence
-			// signals, then start the next one on cadence. The ~1-frame latency is
-			// invisible at 8 Hz and avoids readPixels' full GPU pipeline stall.
+			// Steady state: collect the previous async readback once its fence signals, then
+			// start the next on cadence. The ~1-frame latency is invisible at 8 Hz.
 			this.pollSaliency();
 			if (time - state.lastAnalyze >= interval && !this.salFence) {
 				this.startSaliencyRead(state, params, inputTex, time);
@@ -2552,9 +2286,8 @@ export class GlRenderer {
 		const trackingH = Math.max(1, Math.round(this.imgH * 0.5));
 		const frame = resolveFrame(state, params, time, trackingW, trackingH);
 
-		// The 2D-canvas redraw + texture upload is the expensive part of this
-		// overlay. Render at half resolution (still plenty for thin HUD strokes)
-		// and skip both when the HUD would be pixel-identical.
+		// The 2D-canvas redraw and texture upload are the expensive part. Render at half
+		// resolution (plenty for thin HUD strokes) and skip both when the HUD is identical.
 		const gl = this.gl;
 		const sig =
 			eff.instanceId +
@@ -2667,16 +2400,16 @@ export class GlRenderer {
 		gl.getExtension("WEBGL_lose_context")?.loseContext();
 	}
 
-	/** One texel per FFT bin, R8. Rewritten per audio-bars instance as the chain
-	 * is walked, so each can follow the audio with its own Smoothing. */
+	/** One texel per FFT bin, R8. Rewritten per audio-bars instance as the chain is
+	 * walked, so each can follow the audio with its own Smoothing. */
 	private spectrumTexture: WebGLTexture | null = null;
 	private spectrumW = 0;
 	private spectrumTime = -1;
 	/** This frame's normalized bins, held until the chain walk consumes them. */
 	private spectrumFrame: Uint8Array | null = null;
 	private spectrumDt = 0;
-	/** Bumped once per setSpectrum, so a chain walked twice in one frame (a
-	 * transition blend, stacked lanes) doesn't step the followers twice. */
+	/** Bumped once per setSpectrum, so a chain walked twice in one frame (a transition
+	 * blend, stacked lanes) doesn't step the followers twice. */
 	private spectrumSerial = 0;
 	private spectrumSmoothed = new Map<
 		string,
@@ -2684,33 +2417,19 @@ export class GlRenderer {
 	>();
 	private static readonly SILENCE = new Uint8Array(1);
 
-	/**
-	 * Hand the renderer this frame's FFT bins.
-	 *
-	 * Both drivers call it and must keep calling it: the preview passes the
-	 * AnalyserNode's live array, the exporter passes the frame's offline FFT. If
-	 * only one did, a visualizer would preview and export differently. Null (no
-	 * track loaded, or a frame before the audio starts) uploads silence, so the
-	 * bars collapse instead of freezing on the last thing they saw.
-	 *
-	 * Normalization happens here because it describes the signal and every
-	 * instance wants the same answer. Smoothing does not: it is a parameter on
-	 * the effect, so it is applied per instance in `uploadSpectrumFor`.
-	 */
 	/** Beat position of the frame being rendered, or null when no BPM is known. */
 	private beatPhase: number | null = null;
 	private beatsPerSecond = 0;
 
-	/**
-	 * Hand the renderer this frame's place on the song's beat grid, in beats
-	 * from the grid's origin. Like `setSpectrum`, both drivers must keep calling
-	 * it or a beat-synced effect would preview and export differently.
-	 */
+	/** Hand the renderer this frame's place on the song's beat grid, in beats from
+	 * the grid's origin. Like `setSpectrum`, both drivers must keep calling it. */
 	setBeat(beats: number | null, beatsPerSecond = 0): void {
 		this.beatPhase = beats;
 		this.beatsPerSecond = beatsPerSecond;
 	}
 
+	/** Hand the renderer this frame's FFT bins. Both drivers must keep calling it or a
+	 * visualizer would preview and export differently. Null uploads silence. */
 	setSpectrum(data: Uint8Array | null, time: number): void {
 		// Its own clock, not frameDelta's: that one is consumed by render() and
 		// reading it here would leave the effect chain with a zero delta.
@@ -2758,11 +2477,8 @@ export class GlRenderer {
 		gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
 	}
 
-	/**
-	 * Put this instance's own envelope-followed copy of the frame on the texture,
-	 * right before it draws. Two Audio Bars at different Smoothing settings each
-	 * get their own follower off the same audio.
-	 */
+	/** Put this instance's own envelope-followed copy of the frame on the texture,
+	 * right before it draws. Two Audio Bars at different Smoothing get their own follower. */
 	private uploadSpectrumFor(eff: EffectInstance): void {
 		const frame = this.spectrumFrame;
 		if (!frame || frame.length === 0) return;
@@ -2803,8 +2519,8 @@ export class GlRenderer {
     ]), gl.STATIC_DRAW);
 		gl.enableVertexAttribArray(0);
 		gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-		// Left bound: every draw in this class uses this one quad, and nothing else
-		// ever binds a VAO on this context, so re-binding per pass was pure churn.
+		// Left bound: every draw in this class uses this one quad, and nothing else binds
+		// a VAO on this context, so re-binding per pass was pure churn.
 		return vao;
 	}
 
@@ -2815,14 +2531,11 @@ export class GlRenderer {
 		return { program, uniforms };
 	}
 
-	/** Effects whose shader threw once already — don't relink them every frame. */
+	/** Effects whose shader threw once already, so don't relink them every frame. */
 	private failedEffects = new Set<string>();
 
-	/**
-	 * The compiled entry for an effect, linking it on first use. Returns
-	 * undefined for an id that isn't a known effect (a stale preset) or one whose
-	 * shader failed to link, which the caller reports as a skipped effect.
-	 */
+	/** The compiled entry for an effect, linking it on first use. Undefined for an
+	 * unknown id (a stale preset) or one whose shader failed to link. */
 	private effectEntry(id: string) {
 		const cached = this.compiled.get(id);
 		if (cached) return cached;
@@ -2874,13 +2587,8 @@ export class GlRenderer {
 
 	private warmCancelled = false;
 
-	/**
-	 * Link every remaining effect and transition ahead of the first real render,
-	 * a few milliseconds at a time. Yielding between slices is the whole point:
-	 * done in one go this blocks Firefox's main thread long enough that whatever
-	 * was on screen when it started — including text still inside a webfont's
-	 * swap period — stays frozen there until it finishes.
-	 */
+	/** Link every remaining effect and transition ahead of the first real render, a few
+	 * milliseconds at a time. Yielding between slices is the point: one go blocks Firefox. */
 	async warmShaders(sliceMs = 6): Promise<void> {
 		const ids = [
 			...Object.keys(EFFECT_SHADERS).map((id) => () => this.effectEntry(id)),
@@ -2961,14 +2669,8 @@ export class GlRenderer {
 		}
 	}
 
-	/**
-	 * An FBO rendering into `tex`. Null only when the context refuses to make one
-	 * at all; an *incomplete* one is still returned, because that is what every
-	 * call site here did before and the draws against it fail harmlessly (a black
-	 * pass) rather than taking the editor down. It gets reported once per status,
-	 * which is the whole point — a half-float target the driver won't accept used
-	 * to show up only as bloom that silently does nothing.
-	 */
+	/** An FBO rendering into `tex`. Null only when the context refuses to make one;
+	 * an incomplete one is still returned, since draws against it fail harmlessly. */
 	private createRenderTarget(tex: WebGLTexture): WebGLFramebuffer | null {
 		const gl = this.gl;
 		const fbo = gl.createFramebuffer();
@@ -3104,20 +2806,8 @@ export class GlRenderer {
 		this.sceneFBOs = this.createFBOPair(this.sceneTextures);
 	}
 
-	/**
-	 * Run the stacked fx lanes over `inputTex`, in lane order, and return the
-	 * texture holding the result.
-	 *
-	 * A full-strength lane just chains off the previous result. A fading one
-	 * renders its chain, then mixes that output back over its own input at the
-	 * lane's weight — so the lane arrives and leaves gradually without any of its
-	 * effects needing to know what "half applied" means for their parameters.
-	 */
-	/**
-	 * Walk the stack that runs over the root chain, bottom rung first: an fx lane
-	 * applies its chain to everything beneath it, a layer composites on top of
-	 * it. Which is which at each rung is the whole point of the shared z order.
-	 */
+	/** Walk the stack that runs over the root chain, bottom rung first: an fx lane
+	 * applies its chain to everything beneath it, a layer composites on top. */
 	private renderStack(
 		steps: StackStep[],
 		inputTex: WebGLTexture,
@@ -3126,8 +2816,8 @@ export class GlRenderer {
 	): WebGLTexture {
 		this.ensureStackBuffers();
 		let cur = inputTex;
-		// Index of the buffer `cur` lives in, or -1 while it's still the caller's
-		// texture — which must never be written to.
+		// Index of the buffer `cur` lives in, or -1 while it is still the caller's
+		// texture, which must never be written to.
 		let curIdx = -1;
 
 		for (const step of steps) {
@@ -3161,8 +2851,8 @@ export class GlRenderer {
 
 			if (lane.weight >= 1) {
 				cur = outTex;
-				// renderChainTo can hand back a private feedback texture rather than
-				// the buffer we named, so track where the result actually is.
+				// renderChainTo can hand back a private feedback texture rather than the
+				// buffer we named, so track where the result actually is.
 				curIdx = outTex === this.stackTextures![outIdx] ? outIdx : -1;
 				continue;
 			}
@@ -3181,7 +2871,6 @@ export class GlRenderer {
 		return cur;
 	}
 
-	/** A stack buffer that is neither of the two given ones. */
 	private freeStackIndex(a: number, b: number): number {
 		for (let i = 0; i < 3; i++) {
 			if (i !== a && i !== b) return i;
@@ -3232,7 +2921,6 @@ export class GlRenderer {
 		subtract: 7,
 	};
 
-	/** Toggle texture filtering between LINEAR and NEAREST. */
 	private setTextureFilter(tex: WebGLTexture, linear: boolean) {
 		const gl = this.gl;
 		const filter = linear ? gl.LINEAR : gl.NEAREST;
@@ -3297,8 +2985,8 @@ export class GlRenderer {
 			gl.activeTexture(gl.TEXTURE0);
 		}
 		if (compiled.uniforms["u_spectrum"]) {
-			// Never leave the sampler at its default unit 0 — it would read the
-			// frame itself as a spectrum and paint noise.
+			// Never leave the sampler at its default unit 0: it would read the frame
+			// itself as a spectrum and paint noise.
 			if (!this.spectrumTexture) this.uploadSpectrumTexture(null);
 			gl.activeTexture(gl.TEXTURE5);
 			gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);

@@ -1,9 +1,5 @@
-/**
- * Ctrl+Z / Ctrl+Y across an editor's several undo stacks. Each stack reports
- * when its top entry was last touched (see edit-clock.ts) and how to walk it;
- * the newest stamp wins, so one shortcut steps back through the user's actual
- * sequence of edits whatever they were editing at the time.
- */
+/** Ctrl+Z / Ctrl+Y across an editor's several undo stacks. Each reports when its
+ * top entry was last touched (edit-clock.ts); the newest stamp wins. */
 
 import { NO_EDIT } from "./edit-clock";
 

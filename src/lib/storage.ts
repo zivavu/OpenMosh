@@ -1,12 +1,5 @@
-/**
- * localStorage access that can't throw.
- *
- * Every read has to survive a half-written or hand-edited value, and every
- * write has to survive a private window and a full quota — a persistence
- * failure is never worth taking the UI down with it. That was a try/catch at
- * each of the three dozen call sites, which is how one of them (updateSettings)
- * ended up without one.
- */
+/** localStorage access that can't throw. Every read survives a half-written value,
+ * and every write a private window and a full quota. */
 
 /** The stored value at `key`, or `fallback` when it's missing or unparseable. */
 export function readJson<T>(key: string, fallback: T): T {
@@ -46,15 +39,8 @@ export function writeRaw(key: string, value: string): boolean {
 	}
 }
 
-/**
- * A localStorage mirror of a list that really lives in IndexedDB.
- *
- * IndexedDB can only answer a tick or two after mount, so a section driven by
- * it would always paint empty and pop in afterwards. The mirror is never the
- * source of truth: the async load still runs and overwrites it, so an entry
- * deleted elsewhere corrects itself on the next paint. Entries are validated on
- * read, since anything could be sitting under the key.
- */
+/** A localStorage mirror of a list that really lives in IndexedDB, so a section
+ * doesn't paint empty while the async load runs. Never the source of truth. */
 export function createListCache<T>(
 	key: string,
 	isValid: (value: unknown) => value is T,

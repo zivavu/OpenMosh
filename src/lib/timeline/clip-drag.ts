@@ -1,9 +1,6 @@
-/**
- * One pointermove of a clip drag, shared by every lane of free-floating clips
- * (text, fx, media). Works out where the pointer wants the clips, lets the
- * stack pull that onto a snap target, then applies the lane's own limits —
- * neighbours and the minimum length — which always win over the snap.
- */
+/** One pointermove of a clip drag, shared by every lane of free-floating clips.
+ * Works out where the pointer wants the clips, lets the stack pull that onto a snap
+ * target, then applies the lane's own limits, which always win over the snap. */
 
 import {
 	moveClips,
@@ -24,22 +21,17 @@ export interface ClipDrag {
 	grabOffset: number;
 }
 
-/** The shift that lands one of `edges` on a snap target; 0 for none. Owners
- * in `exclude` are the clips being dragged, whose edges must not pull. */
+/** The shift that lands one of `edges` on a snap target; 0 for none. */
 export type SnapShift = (edges: number[], exclude: Set<string>) => number;
 
 export interface ClipDragStep<L> {
 	lane: L;
-	/** Where the dragged edges ended up, for the stack to check its guide
-	 * against: a neighbour can stop them short of the target. */
+	/** Where the dragged edges ended up, for the stack to check its guide against. */
 	edges: number[];
 }
 
-/**
- * Apply a drag to its lane with the pointer at time `t`. `groupIds` is the
- * selection when the held clip is part of one; every member on this lane moves
- * with it, and the whole group snaps by whichever member's edge is closest.
- */
+/** Apply a drag to its lane with the pointer at time `t`. `groupIds` is the
+ * selection when the held clip is part of one; the whole group snaps by the closest edge. */
 export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,
 	drag: ClipDrag,
@@ -53,8 +45,7 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 		const ids = groupIds.includes(clipId) ? groupIds : [clipId];
 		const held = lane.clips.find((c) => c.id === clipId);
 		if (!held) return { lane, edges: [] };
-		// A delta off the held clip's live position: each move re-enters here
-		// against an already-shifted lane.
+		// A delta off the held clip's live position: each move re-enters against a shifted lane.
 		const wanted = t - grabOffset - held.start;
 		const moving = lane.clips.filter((c) => ids.includes(c.id));
 		const shift = snap(

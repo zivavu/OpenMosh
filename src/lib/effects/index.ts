@@ -50,12 +50,8 @@ export function loadInitialEffects(): EffectInstance[] {
 	);
 }
 
-/**
- * Append a disabled instance for every effect the chain lacks, unless the user
- * hid it. A stored chain is only as long as the registry was the day it was
- * saved, so without this each new effect surfaces under "hidden" instead of
- * in the pool.
- */
+/** Append a disabled instance for every effect the chain lacks, unless the user
+ * hid it. Without this, effects added after a chain was saved surface as hidden. */
 export function addNewEffects(effects: EffectInstance[]): EffectInstance[] {
 	const hidden = new Set(readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null));
 	const present = new Set(effects.map((e) => e.defId));

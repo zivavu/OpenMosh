@@ -1,10 +1,6 @@
-/**
- * The clip clipboard every lane kind shares: a copy snapshots the selection
- * as a block anchored at its earliest clip, a paste stamps that block down
- * as new clips, and a paste *onto* a selection pours what the copies carried
- * into clips that keep their own spans. What a clip carries — its words, its
- * media, its chain — is the kind's business, through the callbacks.
- */
+/** The clip clipboard every lane kind shares: a copy snapshots the selection as a
+ * block anchored at its earliest clip, a paste stamps that block down as new clips,
+ * and a paste onto a selection pours the copies into clips that keep their spans. */
 
 import {
 	placeClipBlock,
@@ -53,13 +49,9 @@ export interface ClipBlockPaste<L> {
 	clipIds: string[];
 }
 
-/**
- * Stamp the block down with its earliest clip at `at`, on `targetLaneId` when
- * that is one of these lanes (the block's other lanes follow below it) and
- * otherwise back where it was copied from. See placeClipBlock for where the
- * copies land when the space is short. `build` makes each clip; `retargeted`
- * tells it the block moved lanes, for anything a copy inherits from its lane.
- */
+/** Stamp the block down with its earliest clip at `at`, on `targetLaneId` when that
+ * is one of these lanes, otherwise back where it was copied from. `build` makes each
+ * clip; `retargeted` tells it the block moved lanes. */
 export function pasteClipBlock<
 	C extends TimelineClip,
 	L extends Lane<C>,
@@ -116,11 +108,8 @@ export function pasteClipBlock<
 	};
 }
 
-/**
- * Pour the copies into the selected clips, in time order; a shorter copy
- * repeats over them. Each target keeps its span and lane — `apply` decides
- * what else it keeps. The same lanes back when none of the targets is here.
- */
+/** Pour the copies into the selected clips, in time order; a shorter copy repeats
+ * over them. Each target keeps its span and lane; `apply` decides what else. */
 export function pasteOntoClips<C extends TimelineClip, L extends Lane<C>, E>(
 	lanes: L[],
 	clipIds: string[],

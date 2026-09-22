@@ -28,15 +28,13 @@
 		activeTrackName: string | null;
 		activeTrackId?: string | null;
 		onLoadTrack: (file: File, trackId: string, autoplay?: boolean) => void;
-		/** Clicking the already-loaded track unloads it. */
 		onUnloadTrack?: () => void;
 		onPlay?: () => void;
 		onPause?: () => void;
 		mainPlaying?: boolean;
 		pendingTrack?: File | null;
 		onNormalizeChange?: (gain: number) => void;
-		/** Fired when a manually loaded track (drag/picker) is auto-saved to the
-		 * library, so the editor can adopt it as the active library track. */
+		/** Fired when a manually loaded track is auto-saved, so the editor can adopt it. */
 		onAutoAdded?: (trackId: string) => void;
 	}
 
@@ -64,7 +62,7 @@
 	let normalizedIds = $state<Set<string>>(
 		new Set(readJson<string[]>(NORMALIZE_KEY, [])),
 	);
-	// Not $state — only used internally, never read in template directly
+	// Not $state: only used internally, never read in the template directly
 	let gainCache = new Map<string, number>();
 	let measuringIds = $state<Set<string>>(new Set());
 
@@ -76,7 +74,6 @@
 		writeRaw(OPEN_KEY, String(open));
 	});
 
-	// Auto-add manually loaded tracks to the library
 	$effect(() => {
 		const f = pendingTrack;
 		if (!f || !libraryLoaded) return;
@@ -84,18 +81,16 @@
 			(t) => trackFileName(t) === f.name && t.blob.size === f.size,
 		);
 		if (existing) {
-			// Already saved from an earlier visit. Still report it: this is the
-			// only place the editor learns the id of a track picked on the upload
-			// screen, and everything keyed per song — the sequence timeline, its
-			// media pool, the audio span — is dead without it.
+			// Already saved from an earlier visit. Still report it: this is the only place
+			// the editor learns the id of a track picked on the upload screen.
 			onAutoAdded?.(existing.id);
 			return;
 		}
 		addTrack(f)
 			.then((track) => {
 				onAutoAdded?.(track.id);
-				// addTrack returns the existing entry when the song is already
-				// saved, so only list and normalize what is genuinely new.
+				// addTrack returns the existing entry when the song is already saved, so only
+				// list and normalize what is new.
 				if (tracks.some((t) => t.id === track.id)) return;
 				tracks = [...tracks, track];
 				autoNormalize(track);
@@ -130,12 +125,8 @@
 		return () => document.removeEventListener("pointerdown", onPointerDown);
 	});
 
-	/**
-	 * Resolve the track's normalize gain (measuring if not cached) and push it
-	 * to the editor once known, provided the track is still the active one.
-	 * Rolls back the normalized flag on measurement failure. Fire-and-forget;
-	 * an in-flight measurement for the same track is left to do the emitting.
-	 */
+	/** Resolve the track's normalize gain (measuring if not cached) and push it to
+	 * the editor once known. Fire-and-forget. */
 	function applyNormalizeGain(track: StoredTrack) {
 		const cached = gainCache.get(track.id);
 		if (cached !== undefined) {
@@ -166,7 +157,6 @@
 			});
 	}
 
-	// Start normalize measurement for a newly added track (fire-and-forget).
 	function autoNormalize(track: StoredTrack) {
 		normalizedIds = new Set([...normalizedIds, track.id]);
 		applyNormalizeGain(track);
@@ -186,12 +176,10 @@
 		}
 	}
 
-	/** The track the confirm dialog is asking about. */
 	let pendingDelete = $state<StoredTrack | null>(null);
 
-	/** Removing the loaded track hands the editor its neighbour first, so it
-	 * never sits on a file that is gone: the one below, else the one above,
-	 * else nothing. Playback carries over. */
+	/** Removing the loaded track hands the editor its neighbour first, so it never
+	 * sits on a file that is gone. */
 	async function onDelete(track: StoredTrack) {
 		pendingDelete = null;
 		if (isTrackActive(track)) {
@@ -210,7 +198,6 @@
 		}
 	}
 
-	/** The track whose name is a field right now. */
 	let renamingId = $state<string | null>(null);
 
 	async function onRename(track: StoredTrack, name: string) {
@@ -226,39 +213,27 @@
 		}
 	}
 
-	/** Prefer the id — two library entries can share a name. Fall back to the
-	 * name for tracks loaded outside the library (drag/picker), which have no
-	 * id yet but should still show as the loaded one. */
+	/** Prefer the id (two library entries can share a name); fall back to the name. */
 	function isTrackActive(track: StoredTrack): boolean {
 		return activeTrackId
 			? track.id === activeTrackId
 			: track.name === activeTrackName;
 	}
 
-	/** Clicking the loaded track unloads it. Re-loading it instead used to
-	 * clear and immediately reload the same file — a visible deselect flash
-	 * for no change. */
+	/** Clicking the loaded track unloads it, rather than reloading it into a
+	 * deselect flash. */
 	function toggleLoad(track: StoredTrack) {
 		if (isTrackActive(track)) {
 			onUnloadTrack?.();
 			return;
 		}
 		onLoad(track);
-		// Picking a track is what the drawer is for, and it sits over the left
-		// of the editor — including the sequence media bin, whose chips are
-		// entirely hidden behind it. Leaving it open after the job is done just
-		// covers the controls the user reaches for next.
+		// Picking a track is what the drawer is for, so close it once the job is done.
 		open = false;
 	}
 
-	/**
-	 * Communicate this track's normalize gain to the editor.
-	 *
-	 * The gain cache is memory-only while normalizedIds persists, so after a
-	 * reload the gain must be re-measured; applyNormalizeGain emits once it
-	 * resolves. Unity is emitted first so a previous track's gain isn't left
-	 * applied to this one for the length of the measurement.
-	 */
+	/** Communicate this track's normalize gain to the editor. The gain cache is
+	 * memory-only while normalizedIds persists, so a reload re-measures. */
 	function syncNormalizeGain(track: StoredTrack) {
 		if (normalizedIds.has(track.id)) {
 			if (!gainCache.has(track.id)) onNormalizeChange?.(1.0);
@@ -274,21 +249,12 @@
 			track.id,
 			autoplay,
 		);
-		// Relies on activeTrackId being updated synchronously by onLoadTrack,
-		// which it is.
+		// Relies on activeTrackId being updated synchronously by onLoadTrack.
 		syncedTrackId = track.id;
 		syncNormalizeGain(track);
 	}
 
-	/**
-	 * Whichever track ends up loaded gets its gain emitted, however it got there.
-	 *
-	 * onLoad only covers tracks picked from this drawer. A session resumed from
-	 * the upload screen adopts its track directly, so none of this ran: the
-	 * toggle rendered lit from the persisted set while the editor was still at
-	 * unity, and turning it off changed nothing because there was nothing to
-	 * turn off. Reacting to the active track covers every route in.
-	 */
+	/** Whichever track ends up loaded gets its gain emitted, however it got there. */
 	let syncedTrackId: string | null = null;
 	$effect(() => {
 		const id = activeTrackId;
@@ -296,8 +262,8 @@
 			syncedTrackId = null;
 			return;
 		}
-		// The list arrives from IndexedDB a tick or two after mount, and a
-		// restored session is already active by then.
+		// The list arrives from IndexedDB a tick or two after mount, and a restored
+		// session is already active by then.
 		if (!libraryLoaded || syncedTrackId === id) return;
 		const track = tracks.find((t) => t.id === id);
 		// A session whose track was since deleted stays at unity, correctly.
@@ -317,13 +283,11 @@
 
 	function toggleNormalize(track: StoredTrack) {
 		if (normalizedIds.has(track.id)) {
-			// Turn off
 			normalizedIds = new Set([...normalizedIds].filter((x) => x !== track.id));
 			if (track.id === activeTrackId) onNormalizeChange?.(1.0);
 			return;
 		}
 
-		// Turn on — measure if not cached
 		normalizedIds = new Set([...normalizedIds, track.id]);
 		applyNormalizeGain(track);
 	}

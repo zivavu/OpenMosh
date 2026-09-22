@@ -5,8 +5,7 @@ let shown = $state<boolean>(
 );
 
 /** Whether audio links draw their live spectrum. One switch for every panel,
- * read straight by the link row. Persisted as `showSpectrum` by the editor's
- * settings effect. */
+ * read straight by the link row. Persisted as `showSpectrum` by settings. */
 export const showSpectrum = {
 	get value(): boolean {
 		return shown;

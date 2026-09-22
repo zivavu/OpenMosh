@@ -23,9 +23,7 @@
 	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
 
 	const LANE_HEIGHT = 30;
-	/** A folded lane: its clips are still there to read, but not at a height that
-	 * pays for the text inside them. A floor, not a height: the strip fills its
-	 * row, so the gutter controls never leave slack under it. */
+	/** A folded lane: clips stay readable, but not at a height that pays for the text. */
 	const LANE_FOLDED_HEIGHT = 14;
 	/** Shared so an unfolded panel allocates nothing per instance. */
 	const NO_FOLDS: ReadonlySet<string> = new Set();
@@ -37,15 +35,12 @@
 		selectedClipId?: string | null;
 		/** The whole selection, for toolbar actions that live outside these lanes. */
 		selectedClipIds?: string[];
-		/** Lane picked by its name in the gutter, for the settings panel — a lane
-		 * rolls and follows the music under its own settings, so the panel needs
-		 * to know which one it is aimed at. A selected clip speaks for its lane,
-		 * so this only carries a pick made with no clip selected. */
+		/** Lane picked by its name in the gutter, for the settings panel. */
 		selectedLaneId?: string | null;
 		onChange: (lanes: FxLane[]) => void;
 		/** Called before a change lands, while the pre-edit state is intact. */
 		onBeforeEdit?: (coalesceKey?: string) => void;
-		/** Beats per minute, when known — unlocks the beat-spaced re-roll options. */
+		/** Beats per minute, when known: unlocks the beat-spaced re-roll options. */
 		bpm?: number;
 		onModeChange?: (
 			clipIds: string[],
@@ -55,10 +50,9 @@
 		) => void;
 		onRoll?: (clipIds: string[]) => void;
 		onClear?: (clipIds: string[]) => void;
-		/** Every row of the stack, front first — this lane's place in it. */
+		/** Every row of the stack, front first: this lane's place in it. */
 		layerOrder?: LayerRef[];
-		/** Starts a row drag that reorders the whole stack. The editor owns it: a
-		 * drag crosses into the text and media rows, which this can't see. */
+		/** Starts a row drag that reorders the whole stack; the editor owns it. */
 		onLaneDragStart?: (laneId: string, e: PointerEvent) => void;
 		/** Id of the row being dragged right now, for its lifted look. */
 		draggingLaneId?: string | null;
@@ -86,13 +80,11 @@
 		onToggleFold,
 	}: Props = $props();
 
-	// One axis for the whole stack: zoom, pan and playhead-following all live in
-	// TimelineStack, the same as every other lane.
+	// One axis for the whole stack: zoom, pan and playhead-following live in TimelineStack.
 	const stack = getTimelineStack();
 	const vp = stack.vp;
 
-	// Selection, drags, scrubbing, split/add/delete and the keyboard — the
-	// gestures every clip lane shares. Reads the props live through the getters.
+	// The gestures every clip lane shares: selection, drags, scrubbing, split/add/delete.
 	const ctrl = new ClipLaneController<FxClip, FxLane>(
 		{
 			kind: "fx",
@@ -116,9 +108,7 @@
 			},
 			createClip: createFxClip,
 			splitClipAt: splitFxClipAt,
-			// The clip's own lane speaks for the panel now; a lane picked earlier
-			// in the gutter would otherwise come back the moment this clip is
-			// dropped.
+			// The clip's own lane speaks for the panel now.
 			onSelectOnly: () => (selectedLaneId = null),
 			copy: copySelectedChains,
 			paste,
@@ -127,8 +117,7 @@
 	);
 	$effect(() => ctrl.syncSelection());
 
-	/** Clicking a lane's name aims the settings panel at it; clicking it again
-	 * hands the panel back to the editor's own settings. */
+	/** Clicking a lane's name aims the settings panel at it; clicking again hands it back. */
 	function toggleLaneSelection(lane: FxLane) {
 		if (selectedLaneId === lane.id) {
 			selectedLaneId = null;
@@ -138,10 +127,7 @@
 		ctrl.deselect();
 	}
 
-	// ── Clip toolbar ─────────────────────────────────────────────────────────
-	// Rendered in the stack's shared selection bar rather than in a row of our
-	// own: two bars duplicated the same controls, and each one appearing on
-	// click resized the stack.
+	// Rendered in the stack's shared selection bar rather than a row of our own.
 	let selectedClips = $derived(ctrl.selectedClips);
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
@@ -166,13 +152,7 @@
 		);
 	}
 
-	/**
-	 * Tooltip for a clip. Filled in on hover rather than rendered as an
-	 * attribute: counting the enabled effects walks the clip's whole chain
-	 * through its state proxy, which is more than the tooltip is worth on every
-	 * clip of every lane, every frame the view pans. The clip carries an
-	 * aria-label of its own, so nothing depends on this to be named.
-	 */
+	/** Tooltip for a clip, filled in on hover: counting enabled effects walks the whole chain. */
 	function clipTitle(clip: FxClip, label: string): string {
 		if (clip.mode === "interval") return `Re-rolls every ${label}`;
 		let active = 0;
@@ -180,22 +160,12 @@
 		return `${label} — ${active} effect${active === 1 ? "" : "s"}`;
 	}
 
-	// ── Clipboards ───────────────────────────────────────────────────────────
-	// Two things a Ctrl+C here fills. The chain clipboard is shared across the
-	// lane kinds, so a chain can be pasted onto a clip anywhere — a paste onto a
-	// selection takes only what a clip *does*; the target's span and fade are
-	// its own. The clip clipboard keeps the whole clips, for a paste with
-	// nothing selected to stamp down at the start marker.
+	// Two things a Ctrl+C here fills: the chain clipboard and the clip clipboard.
 
 	let clipClipboard = $state<FxClipboardEntry[]>([]);
-	/** The copy stamp when the clip clipboard was last filled, so a paste can
-	 * tell whether anything was copied since. A chain copied later from another
-	 * lane kind has no span to stamp, so it can only go onto a selection. */
+	/** The copy stamp when the clip clipboard was last filled. */
 	let clipClipStamp = -1;
-	/** What the clip clipboard was copied from, plus every copy stamped from
-	 * it since: pasting onto exactly those would change nothing, so that
-	 * gesture stamps new copies instead — which is what makes a second Ctrl+V,
-	 * with the first paste still selected, lay down another copy. */
+	/** What the clip clipboard was copied from, plus every copy stamped from it since. */
 	let copiedIds = new Set<string>();
 
 	function copySelectedChains(): boolean {
@@ -211,11 +181,9 @@
 		return true;
 	}
 
-	/** Onto the selection when there is one that isn't just the copied clips
-	 * themselves; otherwise whole clips at the start marker. */
+	/** Onto the selection when there is one; otherwise whole clips at the start marker. */
 	function paste(): boolean {
-		// Something copied on a lane that shares no chain — media clips — is the
-		// newest: that lane pastes, not this one.
+		// Something copied on a lane that shares no chain is the newest: that lane pastes.
 		if (latestCopy() > chainClipboard.stamp) return false;
 		const ontoSelf =
 			selectedClipIds.length > 0 &&
@@ -224,9 +192,7 @@
 		return pasteClips();
 	}
 
-	/** Stamp the copied clips at the start marker, on the lane last clicked —
-	 * the same click that put the marker there — and leave the copies selected
-	 * to drag from there. */
+	/** Stamp the copied clips at the start marker, on the lane last clicked. */
 	function pasteClips(): boolean {
 		if (clipClipboard.length === 0 || latestCopy() !== clipClipStamp) {
 			return false;
@@ -406,15 +372,12 @@
 {/snippet}
 
 <style>
-	/* No box of its own: these rows join the stack column the layer lanes render
-	   into, so one `order` per row interleaves all three kinds. */
+	/* No box of its own: these rows join the stack column the layer lanes render into. */
 	.fx-tl {
 		display: contents;
 	}
 
-	/* Warmer than the layer lanes' blue: these stack onto the source chain rather
-	   than laying over the frame, and the colour is what tells them apart at a
-	   glance in a full stack. */
+	/* Warmer than the layer lanes' blue: these stack onto the source chain. */
 	.fx-row {
 		--clip-accent: var(--mosh);
 		--clip-accent-dim: var(--mosh-dim);
@@ -422,8 +385,7 @@
 		--clip-fg: var(--mosh);
 	}
 
-	/* Dashed, because the chain under it is re-rolled rather than fixed —
-	   the same "this isn't one held value" reading the label gives. */
+	/* Dashed, because the chain under it is re-rolled rather than fixed. */
 	.clip.interval {
 		border-style: dashed;
 	}

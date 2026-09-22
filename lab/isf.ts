@@ -1,7 +1,5 @@
 // Minimal ISF (Interactive Shader Format) runtime on WebGL2.
-// Spec: https://github.com/mrRay/ISF_Spec — supports float/bool/long/color/
-// point2D/event/image inputs, multi-pass with PERSISTENT/FLOAT targets and
-// WIDTH/HEIGHT expressions, custom .vs files. No audio or IMPORTED textures.
+// Spec: https://github.com/mrRay/ISF_Spec. No audio or IMPORTED textures.
 
 export interface IsfInput {
 	NAME: string;
@@ -80,8 +78,6 @@ export function defaultValue(input: IsfInput): ParamValue {
 	}
 }
 
-// --- GLSL source assembly -------------------------------------------------
-
 const IMG_MACROS = [
 	"IMG_NORM_PIXEL",
 	"IMG_PIXEL",
@@ -90,7 +86,6 @@ const IMG_MACROS = [
 	"IMG_SIZE",
 ];
 
-// Splits a top-level comma-separated argument list (handles nested parens).
 function splitArgs(s: string): string[] {
 	const out: string[] = [];
 	let depth = 0;
@@ -108,8 +103,8 @@ function splitArgs(s: string): string[] {
 	return out;
 }
 
-// The IMG_* "functions" take an image *name*, which GLSL can't express as a
-// function parameter — ISF hosts rewrite them textually, and so do we.
+// IMG_* take an image name, which GLSL can't express as a function parameter:
+// ISF hosts rewrite them textually, and so do we.
 export function expandImgMacros(body: string): string {
 	let out = "";
 	let i = 0;
@@ -230,8 +225,6 @@ export function buildVertexSource(
 	else head.push("void main() { isf_vertShaderInit(); }");
 	return head.join("\n");
 }
-
-// --- Runtime ----------------------------------------------------------------
 
 interface Target {
 	name: string;
@@ -364,7 +357,6 @@ export class IsfEffect {
 		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 	}
 
-	// Restarts TIME/FRAMEINDEX and wipes persistent buffers.
 	reset() {
 		this.frameIndex = 0;
 		this.startTime = -1;
@@ -425,11 +417,8 @@ export class IsfEffect {
 		}
 	}
 
-	/**
-	 * Renders one frame. `images` binds each image input by name; unbound
-	 * image inputs get a 1x1 transparent black. Output goes to `outFbo`
-	 * (null = default framebuffer) at outW x outH.
-	 */
+	/** Renders one frame. `images` binds image inputs by name; unbound ones get
+	 * 1x1 transparent black. Output goes to `outFbo` (null = default framebuffer). */
 	render(
 		params: Record<string, ParamValue>,
 		images: Record<string, ImageBinding>,

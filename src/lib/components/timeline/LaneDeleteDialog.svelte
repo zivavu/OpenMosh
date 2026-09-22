@@ -1,7 +1,7 @@
 <script lang="ts">
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 
-	/** "Delete this lane?" — asked only for lanes with clips on them. */
+	/** "Delete this lane?", asked only for lanes with clips on them. */
 	interface Props {
 		lane: { id: string; name: string; clips: unknown[] };
 		/** "layer" or "lane", and what its clips are called. */

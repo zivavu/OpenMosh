@@ -1,15 +1,5 @@
-/**
- * User-given project names, kept apart from the song's own name.
- *
- * A project is still identified by its song, so its key is the track id — one
- * name covers the sequence, single and slideshow work under that song, the
- * way the storage manager groups them. Song-less edits use their session or
- * pool key. Kept in its own map rather than on the records so the name
- * survives the song being decoupled from the project later: whatever the
- * project key becomes, the map just needs re-keying.
- *
- * Unset means "named after the song" (or the media); callers fall back.
- */
+/** User-given project names, kept apart from the song's own name. Keyed by track id
+ * so one name covers a song's sequence/single/slideshow work; unset falls back to it. */
 
 import { readJson, writeJson } from "../storage";
 

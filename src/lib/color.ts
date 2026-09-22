@@ -5,11 +5,11 @@ export interface Rgb {
 }
 
 export interface Hsv {
-	/** 0–360 */
+	/** 0-360 */
 	h: number;
-	/** 0–1 */
+	/** 0-1 */
 	s: number;
-	/** 0–1 */
+	/** 0-1 */
 	v: number;
 }
 
@@ -40,7 +40,7 @@ export function normalizeHex(value: string | number, fallback: string): string {
 	return rgb ? rgbToHex(rgb) : fallback;
 }
 
-/** 0–1 per channel, for shader uniforms. */
+/** 0-1 per channel, for shader uniforms. */
 export function hexToVec3(
 	hex: string,
 	fallback = "#000000",

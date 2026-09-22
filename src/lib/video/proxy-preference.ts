@@ -1,16 +1,5 @@
-/**
- * Which videos the user has told us not to build a preview proxy for.
- *
- * Kept beside the proxies themselves rather than in a song: the choice is
- * about one file on one machine ("this clip looks wrong scaled down", "I want
- * to judge the grain"), so it belongs to the media, not to the edit. Keyed by
- * the same content-derived id the proxy store uses, so opting a file out in
- * slideshow mode also opts it out when the same file lands in a sequence pool.
- *
- * localStorage rather than IndexedDB: it's a handful of short strings, and it
- * has to be readable synchronously while a source is being built — an async
- * lookup there would start the transcode the user already declined.
- */
+/** Which videos the user has told us not to build a preview proxy for. Kept
+ * beside the proxies, keyed by the same content-derived id the store uses. */
 
 import { stableSourceId } from "../editor/sequence-media-store";
 import { readJson, writeJson } from "../storage";

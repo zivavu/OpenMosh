@@ -3,7 +3,7 @@
 	import { clampSpan, SPAN_MIN, type SourceSpan } from "../../media";
 
 	interface Props {
-		/** Seconds the strip spans — the whole file. */
+		/** Seconds the strip spans: the whole file. */
 		duration: number;
 		currentTime: number;
 		/** The stretch being played: the edit's, or the whole file. */
@@ -55,8 +55,7 @@
 		return next ?? { start: 0, end: duration };
 	}
 
-	/** A handle drag: the edge follows the pointer, and the picture follows the
-	 * edge, so what is being cut is on screen while it is being cut. */
+	/** A handle drag: the edge follows the pointer, and the picture follows the edge. */
 	function onHandleDown(e: PointerEvent, edge: "start" | "end") {
 		if (e.button !== 0) return;
 		e.stopPropagation();

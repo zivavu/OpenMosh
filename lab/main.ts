@@ -1,6 +1,5 @@
 // Shader Lab: plays a video (or image / webcam) through ISF shaders so effects
-// can be judged on real footage before anything is ported into the app.
-// Dev only — open http://localhost:5173/lab/ with `bun dev`.
+// can be judged on real footage before porting. Dev only: localhost:5173/lab/ (`bun dev`).
 
 import {
 	IsfEffect,
@@ -11,8 +10,6 @@ import {
 	type ParamValue,
 	type ImageBinding,
 } from "./isf";
-
-// --- Shader catalogue --------------------------------------------------------
 
 const fsFiles = import.meta.glob("./shaders/**/*.fs", {
 	query: "?raw",
@@ -76,8 +73,6 @@ const entries: Entry[] = Object.entries(fsFiles)
 		(a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name),
 	);
 
-// --- Persistence ---------------------------------------------------------------
-
 const favs = new Set<string>(
 	JSON.parse(localStorage.getItem("lab-favs") ?? "[]"),
 );
@@ -88,8 +83,6 @@ const saveFavs = () =>
 	localStorage.setItem("lab-favs", JSON.stringify([...favs]));
 const saveNotes = () =>
 	localStorage.setItem("lab-notes", JSON.stringify(notes));
-
-// --- GL setup --------------------------------------------------------------------
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const gl = canvas.getContext("webgl2", {
@@ -185,7 +178,6 @@ class MediaSlot {
 		this.video = v;
 	}
 
-	// Uploads the current frame if there is a new one.
 	upload() {
 		gl.bindTexture(gl.TEXTURE_2D, this.texture);
 		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -229,8 +221,6 @@ const passthrough = new IsfEffect(
 	parseIsf(`/*{"INPUTS":[{"NAME":"inputImage","TYPE":"image"}]}*/
 void main(){ gl_FragColor = IMG_THIS_NORM_PIXEL(inputImage); }`),
 );
-
-// --- State -------------------------------------------------------------------
 
 interface Current {
 	entry: Entry;
@@ -298,9 +288,8 @@ function select(entry: Entry) {
 	scheduleNoopCheck();
 }
 
-// Many library shaders ship with amount/progress at 0 and look like a no-op.
-// After a few frames, compare against the source; if nothing changed, push
-// sliders sitting at their minimum to mid-range and say so.
+// Many library shaders ship with amount/progress at 0 and look like a no-op. After a
+// few frames, compare against the source and bump minimum sliders to mid-range.
 let noopTimer = 0;
 const scratch = {
 	fbo: gl.createFramebuffer()!,
@@ -406,8 +395,6 @@ function checkNoop() {
 	}
 }
 
-// --- List ------------------------------------------------------------------------
-
 let favOnly = false;
 function renderList() {
 	const q = searchEl.value.trim().toLowerCase();
@@ -461,8 +448,6 @@ function toggleFav(e: Entry) {
 	saveFavs();
 	renderList();
 }
-
-// --- Params UI ---------------------------------------------------------------------
 
 function fmt(v: number) {
 	return Math.abs(v) >= 100
@@ -655,8 +640,6 @@ function escapeHtml(s: string) {
 	);
 }
 
-// --- Render loop -----------------------------------------------------------------------
-
 let frames = 0;
 let lastFpsTime = performance.now();
 let frameMs = 0;
@@ -705,8 +688,6 @@ function frame(now: number) {
 	}
 }
 requestAnimationFrame(frame);
-
-// --- Wiring -------------------------------------------------------------------------------
 
 const fileEl = document.getElementById("file") as HTMLInputElement;
 const fileBEl = document.getElementById("fileB") as HTMLInputElement;
@@ -861,8 +842,6 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keyup", (e) => {
 	if (e.key.toLowerCase() === "b") setBypass(false);
 });
-
-// --- Boot --------------------------------------------------------------------------------------
 
 // Debug hook for the Playwright harness.
 (window as unknown as { __lab: unknown }).__lab = {

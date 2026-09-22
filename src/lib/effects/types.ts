@@ -29,16 +29,9 @@ export interface SelectParam {
 	type: "select";
 	defaultValue: string;
 	options: { label: string; value: string }[];
-	/**
-	 * Values a mosh may roll, when only some of the options are worth rolling.
-	 * The select counterpart to {@link RangeParam.moshMin}/`moshMax`: a single
-	 * entry pins the param. Unset rolls the whole list.
-	 */
+	/** Values a mosh may roll; unset rolls the whole list. */
 	moshOptions?: string[];
-	/**
-	 * Render with the font picker instead of a plain select, so the user's own
-	 * fonts show up alongside `options` (which stays the bundled list a mosh rolls).
-	 */
+	/** Render with the font picker instead of a plain select. */
 	fontPicker?: boolean;
 	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
@@ -77,11 +70,7 @@ export interface EffectDefinition {
 	id: string;
 	name: string;
 	params: EffectParam[];
-	/**
-	 * Exclude from random moshing (treated as permanently locked). For effects
-	 * whose output is driven by content the user typed in, which a roll can only
-	 * scramble or blank out.
-	 */
+	/** Exclude from random moshing (treated as permanently locked). */
 	moshable?: false;
 }
 
@@ -96,16 +85,8 @@ export interface VolumeLink {
 	inverted?: boolean;
 }
 
-/**
- * Frequency presets (Hz) for volume links.
- *
- * Capped at 16 kHz rather than 20 kHz: MP3 and AAC lowpass around there, so on
- * most source material the bins above are dead air that only drag the band's
- * average down.
- *
- * `full` is not stored on the link (it leaves freqMin/freqMax unset) — it is the
- * range an unbanded link resolves to in applyVolumeLinksToEffects.
- */
+/** Frequency presets (Hz) for volume links. Capped at 16 kHz rather than 20 kHz:
+ * MP3 and AAC lowpass around there, so bins above are dead air. */
 export const FREQ_PRESETS = {
 	full: { min: 20, max: 16000 },
 	low: { min: 20, max: 500 },

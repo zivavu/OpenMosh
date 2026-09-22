@@ -1,10 +1,5 @@
-/** The rows behind the shortcuts modal, in one place so every mode lists the
- * same gesture the same way. Keys in one row are alternatives. Every
- * description is one short line: the modal is a cheat sheet, not the docs.
- *
- * Each row names what the code does, including the case where it does
- * nothing — a sheet that promises more than the keys deliver is worse than
- * none. When a binding changes, this file changes with it. */
+/** The rows behind the shortcuts modal, in one place so every mode lists a gesture
+ * the same way. Keys in a row are alternatives; descriptions stay one short line. */
 
 export interface ShortcutRow {
 	keys: string[];
@@ -63,8 +58,8 @@ const TIMELINE: ShortcutGroup = {
 	],
 };
 
-/** Selection and editing that every clip lane answers to the same way —
- * text, media and FX lanes alike, so it is listed once. */
+/** Selection and editing that every clip lane answers the same way (text, media,
+ * FX), so it is listed once. */
 const CLIP_ROWS: ShortcutRow[] = [
 	{
 		keys: ["Click"],
@@ -116,8 +111,8 @@ const CLIP_ROWS: ShortcutRow[] = [
 
 const CLIPS: ShortcutGroup = { title: "Clips", shortcuts: CLIP_ROWS };
 
-/** Every clip carries its own chain, so in the editor the arrows mosh the
- * selected one — a clip row, not an editor row. */
+/** Every clip carries its own chain, so in the editor the arrows mosh the selected
+ * one: a clip row, not an editor row. */
 const CLIP_MOSH: ShortcutRow = {
 	keys: MOSH.keys,
 	description:

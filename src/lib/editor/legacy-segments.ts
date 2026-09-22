@@ -1,14 +1,5 @@
-/**
- * The editor used to have a segment lane: a gapless partition of the song,
- * each span with its own chain and, optionally, a pool source to draw. Media
- * layers and fx lanes do both jobs now, so a saved entry's segments are folded
- * into those on load — once, and then saved back without them.
- *
- * The chains become one fx lane of clips, span for span, so they keep rolling
- * over the frame as they did. Segments that named a source become clips on a
- * media layer under the effects, so what each span showed still shows.
- * Transitions have no counterpart and are dropped.
- */
+/** The old segment lane is folded on load into one fx lane of clips (chains, span
+ * for span) and a media layer under the effects (sources); transitions are dropped. */
 
 import { restoreEffects, type EffectInstance } from "../effects";
 import { normalizeChainFields } from "./chain-clip";
@@ -67,16 +58,13 @@ function spansOf(
 	return out;
 }
 
-/** True when a chain switches anything on — an all-off span adds nothing. */
+/** True when a chain switches anything on, an all-off span adds nothing. */
 function contributes(seg: LegacySegment, effects: EffectInstance[]): boolean {
 	return seg.mode === "interval" || effects.some((e) => e.enabled);
 }
 
-/**
- * Fold saved segments into an fx lane and a media lane. Both sit at the foot
- * of the stack — the media lane under everything, the fx lane just over it —
- * which is where the segment lane rendered.
- */
+/** Fold saved segments into an fx lane and a media lane, both at the foot of the
+ * stack (media under everything, fx just over it) where the segment lane rendered. */
 export function migrateLegacySegments(
 	raw: unknown,
 	duration: number,

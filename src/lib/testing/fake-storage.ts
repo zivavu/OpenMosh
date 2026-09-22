@@ -1,10 +1,5 @@
-/**
- * A localStorage stand-in for the test runner, which has no DOM.
- *
- * Beyond holding values it can be told to fail the way a browser does: a full
- * quota, or a private window where touching the API throws outright. Those are
- * the paths storage.ts exists to absorb, so they need to be reachable here.
- */
+/** A localStorage stand-in for the test runner, which has no DOM. It can be told to
+ * fail the way a browser does: a full quota, or a private window that throws. */
 
 export interface FakeLocalStorage {
 	store: Map<string, string>;
@@ -25,10 +20,7 @@ class QuotaExceededError extends Error {
 	}
 }
 
-/**
- * Install the fake on globalThis and hand back its controls. Call `restore()`
- * in an afterEach so one test's keys can't leak into the next.
- */
+/** Install the fake on globalThis and hand back its controls; call `restore()` after. */
 export function installFakeLocalStorage(): FakeLocalStorage {
 	const store = new Map<string, string>();
 	const had = "localStorage" in globalThis;

@@ -7,12 +7,10 @@
 		value: number;
 		min: number;
 		max: number;
-		/** What one click of a stepper moves. */
 		step?: number;
 		/** What shift+click moves instead, when the field wants a finer grid. */
 		fineStep?: number;
 		placeholder?: string;
-		/** Where the steppers start from when the field is empty. */
 		emptyValue?: number;
 		/** False when the host has no meaning for "unset" and needs a number. */
 		allowEmpty?: boolean;
@@ -41,8 +39,8 @@
 
 	let inputEl: HTMLInputElement | null = $state(null);
 
-	/** Snaps to the finest grid the field allows, so a click can't leave a
-	    number the field itself would reject. */
+	/** Snaps to the finest grid the field allows, so a click can't leave a number
+	    the field itself would reject. */
 	function quantize(n: number): number {
 		const grid = fineStep ?? step;
 		// Rounded again: a grid of 0.1 lands on 0.30000000000000004 otherwise.
@@ -71,13 +69,13 @@
 		value={value > 0 ? value : ""}
 		oninput={(e) => {
 			const raw = (e.currentTarget as HTMLInputElement).value;
-			// Only the ceiling is enforced while typing: clamping up to `min`
-			// would fight the first digit of a bigger number.
+			// Only the ceiling is enforced while typing: clamping up to `min` would
+			// fight the first digit of a bigger number.
 			onChange(raw === "" ? 0 : Math.min(max, +raw));
 		}}
 		onblur={() => {
-			// Whatever half-typed text is in the field, leaving it shows the
-			// number the rest of the app is actually using.
+			// Whatever half-typed text is in the field, leaving it shows the number
+			// the rest of the app is actually using.
 			const next = value > 0 ? Math.max(min, value) : allowEmpty ? 0 : min;
 			if (next !== value) onChange(next);
 			if (inputEl) inputEl.value = next > 0 ? String(next) : "";
@@ -129,8 +127,8 @@
 		font-variant-numeric: tabular-nums;
 		text-align: center;
 		outline: none;
-		/* The custom stepper replaces the native spinners, which differ per
-		   browser and never match the panel. */
+		/* The custom stepper replaces the native spinners, which differ per browser
+		   and never match the panel. */
 		appearance: textfield;
 		-moz-appearance: textfield;
 		transition:
@@ -158,7 +156,7 @@
 		margin: 0;
 	}
 
-	/* Stacked, so the pair costs one control's width — same as the effect rows. */
+	/* Stacked, so the pair costs one control's width, same as the effect rows. */
 	.stepper {
 		display: flex;
 		flex-direction: column;

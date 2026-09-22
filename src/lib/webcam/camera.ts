@@ -5,7 +5,7 @@ export interface CameraInfo {
 	label: string;
 }
 
-/** Cameras the browser will name — only after a grant, so ask once first. */
+/** Cameras the browser will name; only after a grant, so ask once first. */
 export async function listCameras(): Promise<CameraInfo[]> {
 	if (!navigator.mediaDevices?.enumerateDevices) return [];
 	const all = await navigator.mediaDevices.enumerateDevices();
@@ -62,13 +62,8 @@ function cameraErrorMessage(e: unknown): string {
 	}
 }
 
-/**
- * Single mode's live source, wearing a File. The editor keys everything on
- * its file — sessions, settings, the object URL — so the camera travels as one
- * too: an empty file with a type nothing else claims, and the stream looked up
- * beside it. Re-input hands the same file back on undo, which is why the
- * lookup can re-open the camera rather than hold a dead stream.
- */
+/** Single mode's live source, wearing a File: an empty file with a type nothing else
+ * claims, and the stream looked up beside it. */
 export const LIVE_FILE_TYPE = "application/x-openmosh-live";
 
 interface LiveEntry {

@@ -17,7 +17,7 @@ import {
 } from "./types";
 
 // Clip geometry is lane-shape agnostic and shared with the sequence fx lanes;
-// re-exported here so the text timeline keeps importing it from one place.
+// re-exported so the text timeline imports it from one place.
 export {
 	addClip,
 	clipAt,
@@ -32,7 +32,6 @@ export {
 	sortClips,
 } from "../timeline/clips";
 
-/** One text layer to draw for a single frame. */
 export interface ResolvedTextLayer {
 	/** Stable across frames: keys the renderer's texture and feedback caches. */
 	key: string;
@@ -47,19 +46,15 @@ export interface ResolvedTextLayer {
 	effects: EffectInstance[];
 }
 
-/** The chain a text clip contributes at a time — see createTextChainSource. */
 export type TextChainSource = (
 	clip: TextClip,
 	time: number,
 ) => EffectInstance[];
 
-/**
- * Clip → chain resolver, one per preview and one per export; the same rules
- * as createMediaChainSource. Static clips hand back their own chain; interval
- * clips roll per tick through a bounded cache keyed by seed and mosh options.
- * `clone` serves static chains as cached deep copies, so an export can write
- * per-frame audio-link values without them landing in the clips being edited.
- */
+/** Clip to chain resolver, one per preview and one per export; same rules as
+ * createMediaChainSource. Static clips hand back their own chain; interval
+ * clips roll per tick through a cache keyed by seed and mosh options. `clone`
+ * serves static chains as deep copies, so export writes don't touch the clips. */
 export function createTextChainSource(
 	getMoshOptions: () => MoshOptions,
 	{ clone = false } = {},
@@ -69,13 +64,10 @@ export function createTextChainSource(
 		chainClipEffectsAt(clip, time, cache, clone, getMoshOptions);
 }
 
-/**
- * The text layers visible at `time`, in lane order. Preview and export both go
- * through here, so what you scrub past is what gets written out.
- *
- * Without `chains`, every clip contributes its stored chain; anything that
- * draws passes one, or an interval clip renders clean.
- */
+/** The text layers visible at `time`, in lane order. Preview and export both
+ * go through here, so what you scrub past is what gets written out. Without
+ * `chains`, every clip contributes its stored chain; anything that draws
+ * passes one, or an interval clip renders clean. */
 export function resolveTextLayersAt(
 	timeline: TextTimeline | null | undefined,
 	time: number,
@@ -108,7 +100,6 @@ export function resolveTextLayersAt(
 	return layers;
 }
 
-/** The clip with this id, wherever it sits. Null when nothing is selected. */
 export function findTextClip(
 	timeline: TextTimeline | null | undefined,
 	clipId: string | null,
@@ -121,7 +112,7 @@ export function findTextClip(
 	return null;
 }
 
-/** The lane holding this clip — the style panel edits the lane, not the clip. */
+/** The lane holding this clip: the style panel edits the lane, not the clip. */
 export function findTextClipLane(
 	timeline: TextTimeline | null | undefined,
 	clipId: string | null,
@@ -168,7 +159,6 @@ export function textTimelineFonts(
 	return [...families];
 }
 
-/** Apply a lane edit inside a timeline. */
 export function updateLane(
 	timeline: TextTimeline,
 	laneId: string,
@@ -177,7 +167,6 @@ export function updateLane(
 	return { ...timeline, lanes: updateLaneIn(timeline.lanes, laneId, fn) };
 }
 
-/** The timeline with one clip swapped for its edited self, wherever it is. */
 export function replaceTextClip(
 	timeline: TextTimeline,
 	next: TextClip,

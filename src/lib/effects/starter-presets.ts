@@ -1,21 +1,11 @@
 import type { Preset } from "./types";
 
 /**
- * Presets seeded into localStorage on first run so a new user has somewhere to
- * start other than a flat list of ~48 effects. Once seeded they are ordinary
- * user presets: editable, overwritable, deletable, and never re-seeded.
- *
- * Every value here must sit inside its param's declared min/max in
- * `definitions.ts` — `applyPreset` merges definition defaults underneath, so
- * params added later fill themselves in.
- *
- * Each preset drives one or two "intensity" params from the music via
- * `volumeLinks`. Omitting `freqMin`/`freqMax` links to the full spectrum (the
- * overall RMS level) rather than a single band. The linked range is read as
- * `min + level * (max - min)`, and a normalized track sits around level
- * 0.2–0.5 with peaks near 0.7 — so `min` is the quiet resting look and `max` is
- * set past the loudest expected value to leave headroom. The static `values`
- * below stay meaningful: they're what renders when no track is loaded.
+ * Presets seeded into localStorage on first run so a new user has somewhere to start.
+ * Once seeded they are ordinary user presets: editable, never re-seeded. Every value
+ * must sit inside its param's declared min/max in `definitions.ts`; `applyPreset`
+ * merges definition defaults underneath. Each preset drives one or two intensity params
+ * from the music via `volumeLinks`, read as `min + level * (max - min)`.
  */
 export const STARTER_PRESETS: Preset[] = [
 	{

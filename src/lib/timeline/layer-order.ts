@@ -1,11 +1,6 @@
-/**
- * One stacking order across every kind of layer — text lanes and media lanes
- * alike. Each lane carries a `z`; this is where the two lists are merged into
- * the order the compositor and the UI both read.
- *
- * Kept apart from the lanes themselves because neither timeline can see the
- * other: only whoever owns both (the editor) can say what "one above" means.
- */
+/** One stacking order across every kind of layer, text and media alike. Each lane
+ * carries a `z`; this merges the lists into the order the compositor and the UI
+ * read. Kept apart because neither timeline can see the other. */
 
 export type LayerKind = "media" | "text" | "fx";
 
@@ -25,15 +20,11 @@ export interface LayerRef {
 	z: number;
 }
 
-/** Ties resolve in this order, front first: text, then media, then fx lanes —
- * where the three sat before their orders were merged. */
+/** Ties resolve in this order, front first: text, then media, then fx lanes. */
 const KIND_RANK: Record<LayerKind, number> = { text: 0, media: 1, fx: 2 };
 
-/**
- * Every row of the stack, front first — index 0 is the one applied last. An fx
- * lane belongs here alongside the layers: above one it processes that layer
- * too, below it the layer composites over what the lane produced.
- */
+/** Every row of the stack, front first (index 0 applied last). An fx lane belongs
+ * here too: above one it processes that layer, below it the layer composites over. */
 export function combinedLayerOrder(
 	media: OrderedLane[],
 	text: OrderedLane[],
@@ -54,12 +45,8 @@ export function stackIndex(order: LayerRef[], laneId: string): number {
 	return order.findIndex((l) => l.id === laneId);
 }
 
-/**
- * What a row's reorder handle says about where it sits: its neighbours, named.
- *
- * In terms of rows rather than layers, because an fx lane is neither above nor
- * below "a layer" — it is one more rung of the same stack.
- */
+/** What a row's reorder handle says about where it sits: its neighbours, named.
+ * In terms of rows rather than layers, since an fx lane is one more rung. */
 export function stackTitle(order: LayerRef[], laneId: string): string {
 	const at = stackIndex(order, laneId);
 	if (at === -1) return "";
@@ -78,15 +65,9 @@ export function nextLayerZ(order: LayerRef[]): number {
 	return top + 1;
 }
 
-/**
- * Lift one layer out of the stack and drop it at `toIndex` (front-first, the
- * same indexing `order` uses). Returns the z every layer takes afterwards, or
- * null when nothing would move.
- *
- * The whole stack is renumbered rather than two entries swapped: a drag can
- * cross several rows at once, and consecutive integers keep the next drag from
- * having to reason about gaps or ties.
- */
+/** Lift one layer out of the stack and drop it at `toIndex` (front-first). Returns
+ * the z every layer takes afterwards, or null when nothing would move. The whole
+ * stack is renumbered rather than two entries swapped, so a drag can cross rows. */
 export function moveLayerTo(
 	order: LayerRef[],
 	id: string,
@@ -118,12 +99,9 @@ export function layerRowIdAt(x: number, y: number): string | null {
 	return el?.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ?? null;
 }
 
-/**
- * A grip drag that restacks a layer row. Live reorder: the row under the
- * pointer trades places with the held one as it passes, so the stack always
- * shows where a drop would land. One undo entry for the gesture, however
- * many rows it crosses — `reorder` gets the same coalesce key every tick.
- */
+/** A grip drag that restacks a layer row. Live reorder: the row under the pointer
+ * trades places with the held one as it passes. One undo entry for the gesture,
+ * however many rows it crosses. */
 export function startLayerRowDrag(
 	e: PointerEvent,
 	laneId: string,

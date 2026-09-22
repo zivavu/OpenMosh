@@ -1,81 +1,29 @@
-/**
- * Rolling normalization for the raw FFT bins the audio-bars visualizer draws.
- *
- * `getByteFrequencyData` maps the AnalyserNode's dB window (-100..-30 by
- * default) onto 0..255, and ordinary music only occupies a slice of that: bins
- * sit somewhere around 0.4..0.85 and never approach either end. Drawn straight,
- * the bars stand permanently half-height and a drop barely moves them.
- *
- * Two corrections, in order:
- *
- * 1. **Per-bin floor removal.** Each bin keeps its own rolling low, so what gets
- *    drawn is how far that band has risen above its own resting level rather
- *    than its absolute value. This is what reclaims the bottom of the range.
- * 2. **One shared ceiling.** The heights are then divided by a single rolling
- *    peak taken across every bin, not per bin. A per-bin ceiling would push
- *    every band to full scale independently and flatten the very thing being
- *    fixed — overall loudness would stop reading at all. Sharing it means a
- *    loud passage lifts every bar together, and because the ceiling is slow to
- *    follow, the dynamics show up before it catches up.
- *
- * Time constants are asymmetric for the reasons set out in `auto-range.ts` —
- * reach for a new extreme quickly, drift back from it slowly — and are stepped
- * in seconds off the frame delta, so a 60 fps preview and a 30 fps export
- * converge on the same envelope instead of the render disagreeing with what was
- * previewed.
- */
+/** Rolling normalization for the raw FFT bins the audio-bars visualizer draws: each
+ * bin subtracts its own rolling floor, then all heights divide by one shared peak. */
 
 import { followerTaus } from "./auto-range";
 
-/**
- * Effectively peak-hold. The ceiling has to be able to reach the top of a
- * transient inside the transient: at 0.3 it could not, so on percussive
- * material it sagged all the way down to MIN_CEIL, every bar clipped flat at
- * full height, and the display stopped resolving loud from very loud. Kept just
- * off instant so a single-frame spike still has to persist a beat to own the
- * range.
- */
+/** Effectively peak-hold: the ceiling must reach a transient's top within the
+ * transient, or percussive material sags to MIN_CEIL and clips flat. */
 const CEIL_RISE_TAU = 0.03;
 const CEIL_FALL_TAU = 2.5;
 
-/**
- * Window the per-bin floor takes its minimum over.
- *
- * The floor used to chase the signal itself whenever the signal sat above it,
- * which meant a repeated note kept nudging its own floor up and each repeat
- * read weaker than the one before even at identical volume. A minimum can only
- * rise on evidence that the quiet level really has risen, so repeats stay put.
- * Two windows are kept, so the effective lookback is one to two of these.
- */
+/** Window the per-bin floor takes its minimum over. A floor that chased the signal
+ * let a repeated note nudge its own floor up, so each repeat read weaker. */
 const FLOOR_WINDOW = 2;
-/**
- * Deliberately quicker than auto-range's equivalent. Until a bin's floor comes
- * back down, its height clamps at zero, so a hard cut into a breakdown blanks
- * the display entirely; at 0.3 that lasted ~300ms and read as a glitch rather
- * than as dynamics. Halving it costs nothing in steady state and still sits
- * well clear of the timescale the signal itself wobbles on.
- */
+/** Deliberately quicker than auto-range's equivalent: until a bin's floor comes back
+ * down its height clamps at zero, so a hard cut into a breakdown blanks the display. */
 const FLOOR_FALL_TAU = 0.15;
 /** Slower than the fall, so a sustained tone doesn't quietly erase itself. */
 const FLOOR_RISE_TAU = 4;
-/**
- * Smallest ceiling the heights are divided by, and so the smallest dynamic
- * range that gets expanded to full scale.
- *
- * Digital silence is safe at any value — every height is exactly 0. This
- * guards the more common case just above it: room tone, a fade tail, a filtered
- * pad. At 0.08 a signal barely moving off its own floor was still stretched to
- * around 60% height, so near-silence looked like a chorus. Real material clears
- * this comfortably — bins resting around 0.4..0.85 leave heights of 0.2 and up
- * once their floor is removed — so it only ever engages on material that
- * genuinely has no dynamics to show.
- */
+/** Smallest ceiling the heights divide by, and so the smallest dynamic range expanded
+ * to full scale. Guards near-silence (room tone, fade tail) from looking like a chorus. */
 const MIN_CEIL = 0.15;
 
 let floors: Float32Array | null = null;
 let heights: Float32Array | null = null;
 let out: Uint8Array | null = null;
-/** Running minimum of the window in progress, and of the one before it. */
+/** Running minimum of the current window and the one before it. */
 let winMin: Float32Array | null = null;
 let prevMin: Float32Array | null = null;
 let windowT = 0;
@@ -107,12 +55,8 @@ function approach(
 	return current + (target - current) * (1 - Math.exp(-step / tau));
 }
 
-/**
- * Normalize one frame of FFT bins, returning a reused buffer.
- *
- * The result is only valid until the next call — it is uploaded to a texture
- * immediately and never retained.
- */
+/** Normalize one frame of FFT bins into a reused buffer, valid only until the next
+ * call: it is uploaded to a texture immediately. */
 export function normalizeSpectrum(
 	src: Uint8Array | null,
 	dt: number,
@@ -125,8 +69,7 @@ export function normalizeSpectrum(
 		winMin = new Float32Array(n);
 		prevMin = new Float32Array(n);
 		out = new Uint8Array(n);
-		// Seeded from this frame so playback opens where the music actually sits
-		// rather than sweeping up from zero over the first few seconds.
+		// Seeded from this frame so playback opens where the music sits, not at zero.
 		for (let i = 0; i < n; i++) {
 			const v = src[i] / 255;
 			floors[i] = v;
@@ -146,8 +89,7 @@ export function normalizeSpectrum(
 	for (let i = 0; i < n; i++) {
 		const v = src[i] / 255;
 		if (v < wMin[i]) wMin[i] = v;
-		// Target the quietest this bin has been recently, not wherever it is now:
-		// a bin that is currently loud says nothing about where its floor belongs.
+		// Target the quietest this bin has been recently, not where it is now.
 		const target = wMin[i] < pMin[i] ? wMin[i] : pMin[i];
 		const f = floors[i];
 		floors[i] = approach(
@@ -161,8 +103,7 @@ export function normalizeSpectrum(
 		if (h[i] > framePeak) framePeak = h[i];
 	}
 
-	// Roll the window: the one just finished becomes the comparison, and the next
-	// starts open so a genuinely raised floor can still be discovered.
+	// Roll the window: the finished one becomes the comparison, the next starts open.
 	windowT += step;
 	if (windowT >= FLOOR_WINDOW) {
 		windowT = 0;
@@ -186,28 +127,17 @@ export function normalizeSpectrum(
 	return o;
 }
 
-/**
- * Per-instance envelope followers, keyed by effect instance id.
- *
- * Keyed rather than global because Smoothing is a parameter on the effect, so
- * two Audio Bars instances can legitimately want different ones off the same
- * frame of audio.
- */
+/** Per-instance envelope followers, keyed by effect instance id: Smoothing is a
+ * per-effect parameter, so two Audio Bars can want different ones off one frame. */
 const followers = new Map<string, Float32Array>();
 
-/** Forget one instance's follower. Called when the effect goes away. */
+/** Forget one instance's follower when the effect goes away. */
 export function dropSpectrumFollower(key: string): void {
 	followers.delete(key);
 }
 
-/**
- * Envelope-follow an already-normalized frame, writing into `dest`.
- *
- * Attack and release come from the same curve the volume links use, so the
- * Smoothing slider means the same thing in both places: the rise stays quick so
- * a kick still reads as a kick, while the fall is several times longer so bars
- * glide back down instead of dropping out between hits.
- */
+/** Envelope-follow an already-normalized frame into `dest`, using the same attack and
+ * release curve as the volume links so Smoothing means the same in both places. */
 export function smoothSpectrum(
 	key: string,
 	src: Uint8Array,

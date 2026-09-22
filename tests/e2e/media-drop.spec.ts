@@ -15,18 +15,8 @@ import {
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
-/**
- * Dragging media out of the pool and onto a layer lane.
- *
- * The gesture has two readings and the lane has to pick one mid-drag: over a
- * clip it retargets that clip, over empty space it cuts a new one. Only a real
- * browser can say which — the split is decided by the native drag's cursor
- * position against a lane's measured box, and the ghost that previews it is
- * drawn from a dataTransfer payload the spec never sees.
- *
- * The editor opens onto a media layer already showing the opening file, so the
- * specs below add a second, empty lane and drop onto that.
- */
+/** Dragging media out of the pool and onto a layer lane. The gesture has two readings
+ * and the lane picks one mid-drag: over a clip it retargets, over empty space it cuts. */
 
 test.beforeEach(async ({ page }) => {
 	page.on("pageerror", (error) => {
@@ -57,9 +47,7 @@ test.describe("a new layer", () => {
 	}) => {
 		await openLayers(page);
 
-		// Worth pinning: a clip the user never asked for is one they have to
-		// trim or delete, and every drop-to-create test below leans on the lane
-		// starting clear.
+		// Worth pinning: every drop-to-create test below leans on the lane starting clear.
 		await expect(mediaClips(page, LAYER)).toHaveCount(0);
 	});
 });
@@ -90,8 +78,7 @@ test.describe("dropping onto empty space", () => {
 			hold: true,
 		});
 
-		// The whole point of the placeholder: the span is visible while there is
-		// still time to move it.
+		// The whole point of the placeholder: the span is visible while there is time to move it.
 		await expect(mediaDropGhost(page, LAYER)).toBeVisible();
 		await expect(mediaClips(page, LAYER)).toHaveCount(0);
 
@@ -153,7 +140,6 @@ test.describe("dropping onto empty space", () => {
 		await dragAwayFromLanes(page);
 		await expect(mediaDropGhost(page, LAYER)).toHaveCount(0);
 
-		// And releasing off the lane leaves the timeline untouched.
 		await dropHeldSource(page);
 		await expect(mediaClips(page, LAYER)).toHaveCount(0);
 	});
@@ -229,9 +215,8 @@ test.describe("dropping on the playhead", () => {
 	test("lands under it rather than on its grab handle", async ({ page }) => {
 		await openLayers(page);
 
-		// The start marker sits at the head, and its grab handle is drawn over
-		// the lanes. A drop there used to hit the handle and do nothing — at the
-		// one spot media most naturally goes.
+		// The start marker's grab handle is drawn over the lanes, so a drop at the head used
+		// to hit the handle and do nothing, at the one spot media most naturally goes.
 		await dragSourceToLane(page, { thumb: 1, lane: LAYER, fraction: 0 });
 
 		await expect(mediaClips(page, LAYER)).toHaveCount(1);
@@ -247,8 +232,7 @@ test.describe("dropping on the playhead", () => {
 test.describe("what the preview draws", () => {
 	test("shows the dropped media on the layer", async ({ page }) => {
 		await openLayers(page);
-		// The opening layer shows the first source, so the frame is its red. The
-		// drop has to take it to the new layer's blue.
+		// The opening layer shows the first source (red); the drop must take it to blue.
 		await expect
 			.poll(async () => nearestColor((await canvasStats(page)).mean, PALETTE))
 			.toBe("red");
@@ -283,8 +267,7 @@ test.describe("the rail's own gesture still works", () => {
 		});
 		await page.mouse.up();
 
-		// The same dragstart feeds both drops; a reorder must not have been
-		// turned into a lane drop by the shared payload.
+		// The same dragstart feeds both drops; a reorder must not become a lane drop.
 		await expect.poll(names).not.toEqual(before);
 	});
 });

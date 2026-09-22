@@ -1,10 +1,6 @@
 <script lang="ts">
-	/**
-	 * Live mosh running behind the upload screen — the app demoing itself rather
-	 * than a video of it. Renders into the warm canvas App already keeps around
-	 * for shader pre-compilation, so the demo costs no extra WebGL context and
-	 * hands the same one straight to the editor when a file lands.
-	 */
+	/** Live mosh running behind the upload screen, rendering into the warm canvas App
+	 * keeps for shader pre-compilation, so the demo costs no extra WebGL context. */
 	import { untrack } from "svelte";
 	import { Play, Square } from "lucide-svelte";
 	import { GlRenderer } from "../../gl/renderer";
@@ -37,7 +33,7 @@
 	const easeOut = (p: number) => 1 - (1 - p) ** 3;
 
 	/** Set once the render loop is wired up, so the button can drive it without
-	 * tearing down and reparenting the canvas on every toggle. */
+	 * reparenting the canvas on every toggle. */
 	let transport = $state<{
 		start: () => void;
 		stop: () => void;
@@ -88,17 +84,14 @@
 		/** Poster currently staged in the renderer's outgoing slot. */
 		let altIndex = -1;
 		let raf = 0;
-		// Fed a delta rather than wall-clock, so a pause doesn't silently skip
-		// the demo forward by however long it sat frozen.
+		// Fed a delta rather than wall-clock, so a pause doesn't silently skip the
+		// demo forward by however long it sat frozen.
 		let lastTs = 0;
 		/** Seconds of drawn demo so far, capped at FADE_SECONDS. */
 		let fadeT = 0;
 
-		// Driven off the render loop rather than a CSS transition: the fade has
-		// to start from a frame that was actually painted, and a class flipped
-		// around mount lands in the same frame as the first paint, so it just
-		// cuts. Sharing the loop's delta also means the ramp only advances on
-		// frames that really drew.
+		// Driven off the render loop rather than a CSS transition: the fade has to start
+		// from a frame that was actually painted. The ramp only advances on drawn frames.
 		const advanceFade = (dt: number) => {
 			if (fadeT >= FADE_SECONDS) return;
 			fadeT = Math.min(FADE_SECONDS, fadeT + dt);
@@ -112,16 +105,16 @@
 			const frame = director.advance(dt);
 			if (frame.sourceIndex !== shownIndex) {
 				const img = imgs[frame.sourceIndex];
-				// First upload allocates the texture and FBOs; later cuts only
-				// swap pixels, since every poster shares one size.
+				// First upload allocates the texture and FBOs; later cuts only swap
+				// pixels, since every poster shares one size.
 				if (shownIndex === -1) renderer.loadImage(img);
 				else renderer.updateSourceImage(img);
 				shownIndex = frame.sourceIndex;
 			}
 			const t = frame.transition;
 			if (t) {
-				// The outgoing poster goes in the alt slot so the blend crosses
-				// two different media, not just two effect chains.
+				// The outgoing poster goes in the alt slot so the blend crosses two
+				// different media, not just two effect chains.
 				if (t.fromSourceIndex !== altIndex) {
 					renderer.updateAltSourceImage(imgs[t.fromSourceIndex]);
 					altIndex = t.fromSourceIndex;
@@ -140,8 +133,8 @@
 			} else {
 				renderer.render(frame.effects, frame.time);
 			}
-			// dt is 0 on the first frame after any start, so the priming draw
-			// paints the holder at opacity 0 before the ramp moves at all.
+			// dt is 0 on the first frame after any start, so the priming draw paints
+			// the holder at opacity 0 before the ramp moves at all.
 			advanceFade(dt);
 		};
 
@@ -158,19 +151,16 @@
 		const start = () => {
 			if (!raf && !document.hidden) raf = requestAnimationFrame(loop);
 		};
-		// Stopping is a blackout, not a pause, so it cuts and re-fades on
-		// resume. A tab left in the background only calls stop().
+		// Stopping is a blackout, not a pause, so it cuts and re-fades on resume.
+		// A tab left in the background only calls stop().
 		const blank = () => {
 			fadeT = 0;
 			holder.style.opacity = "0";
 		};
 		const onVisibility = () => (document.hidden || !playing ? stop() : start());
 
-		// Prime the canvas so the first painted frame isn't a fade-in from
-		// nothing. Skipped when switched off, since off means a black screen
-		// rather than a held still. Untracked: this draw runs inside the effect
-		// body, so anything it touches would otherwise become a dependency and
-		// re-trigger the whole setup.
+		// Prime the canvas so the first painted frame isn't a fade-in from nothing.
+		// Untracked: anything this draw touches would re-trigger the whole setup.
 		if (untrack(() => playing)) untrack(drawFrame);
 		document.addEventListener("visibilitychange", onVisibility);
 		transport = { start, stop, blank };
@@ -179,13 +169,11 @@
 			stop();
 			transport = null;
 			document.removeEventListener("visibilitychange", onVisibility);
-			// The editor inherits this renderer; a poster left in the outgoing
-			// slot would surface in its first sequence transition.
+			// The editor inherits this renderer; a poster left in the outgoing slot
+			// would surface in its first sequence transition.
 			renderer.clearAltSource();
-			// Park the canvas back where warmup left it, hidden — the editor
-			// reparents this exact element and expects it still attached. Same
-			// style as warmup, since by now it carries the demo's render size and
-			// would otherwise leave a page-tall box at the end of <body>.
+			// Park the canvas back where warmup left it, hidden: the editor reparents this
+			// exact element and expects it attached.
 			canvas.style.cssText = GlRenderer.PARKED_CANVAS_STYLE;
 			canvas.className = "";
 			document.body.appendChild(canvas);
@@ -236,21 +224,20 @@
 		background: #000;
 	}
 
-	/* Switched off is the flat #121212 the upload screen had before the demo
-	   existed — inherited from :root, no gradient, no scrim. */
+	/* Switched off is the flat #121212 the upload screen had before the demo existed. */
 	.demo-bg.blank {
 		background: #121212;
 	}
 
-	/* The scrim only exists to keep the UI readable over the mosh; over the
-	   blank grey it would just crush it back to black. */
+	/* The scrim only exists to keep the UI readable over the mosh; over the blank
+	   grey it would just crush it back to black. */
 	.blank .scrim {
 		opacity: 0;
 	}
 
-	/* Starts black and comes up into the mosh — the first frame is a whole
-	   image appearing at once, so a hard cut reads as a flash. The ramp itself
-	   is an inline opacity written by the render loop, not a transition. */
+	/* Starts black and comes up into the mosh: the first frame is a whole image
+	   appearing at once, so a hard cut reads as a flash. The ramp itself is an
+	   inline opacity written by the render loop. */
 	.demo-holder {
 		position: absolute;
 		inset: 0;
@@ -265,8 +252,8 @@
 		object-fit: cover;
 	}
 
-	/* Bottom left, opposite the GitHub link. Above the upload screen, which is
-	   a full-viewport flex layer and would otherwise swallow the click. */
+	/* Bottom left, opposite the GitHub link. Above the upload screen, which would
+	   otherwise swallow the click. */
 	.demo-toggle {
 		position: fixed;
 		bottom: 1rem;
@@ -297,9 +284,8 @@
 		color: #ccc;
 	}
 
-	/* The upload UI has to stay readable over whatever the mosh throws up:
-	   a heavy centre-weighted scrim, not a flat dim, so the corners keep some
-	   of the motion. */
+	/* The upload UI has to stay readable over whatever the mosh throws up: a
+	   heavy centre-weighted scrim, not a flat dim. */
 	.scrim {
 		position: absolute;
 		inset: 0;

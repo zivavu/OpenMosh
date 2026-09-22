@@ -1,13 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-/**
- * What the rest of the suite is allowed to assume about the browser it runs in.
- *
- * These aren't tests of OpenMosh. They're the reason a failure elsewhere can be
- * read as "the app broke" instead of "the CI container has no GPU": if the
- * export spec goes red and this file is green, the encoder is fine and the app
- * isn't.
- */
+/** What the rest of the suite is allowed to assume about the browser it runs in. These
+ * aren't tests of OpenMosh: if the export spec goes red and this file is green, the app broke. */
 test.describe("the browser the suite runs in", () => {
 	test("gives a canvas a working WebGL2 context", async ({ page }) => {
 		await page.goto("/");
@@ -65,7 +59,7 @@ test.describe("the browser the suite runs in", () => {
 			return results;
 		});
 		expect(support).not.toBeNull();
-		// One of the two is enough — the exporter picks what the machine offers.
+		// One of the two is enough: the exporter picks what the machine offers.
 		expect(Object.values(support!).some(Boolean)).toBe(true);
 	});
 
@@ -78,8 +72,7 @@ test.describe("the browser the suite runs in", () => {
 	});
 
 	test("runs an AudioContext without waiting for a click", async ({ page }) => {
-		// The autoplay flag in the config is what makes this true; if it ever
-		// stops working, every clock-driven spec hangs instead of failing.
+		// The autoplay flag in the config makes this true; without it every clock-driven spec hangs.
 		await page.goto("/");
 		const state = await page.evaluate(async () => {
 			const ctx = new AudioContext();

@@ -6,8 +6,7 @@
 	import FeedbackButton from "./FeedbackButton.svelte";
 
 	/** The strip above the preview: home, the links, then whatever the mode
-	 * puts after the separator. Any `.help-btn` in there gets the home
-	 * button's round look. */
+	 * puts after the separator. A `.help-btn` in there gets the home button's round look. */
 	interface Props {
 		onExit?: () => void;
 		children: Snippet;

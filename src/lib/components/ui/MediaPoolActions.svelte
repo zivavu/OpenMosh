@@ -7,7 +7,7 @@
 		count: number;
 		/** What one item is called in the readout: "source", "image". */
 		noun?: string;
-		/** Label on the webcam button — the editor records, the slideshow snaps. */
+		/** Label on the webcam button: the editor records, the slideshow snaps. */
 		recordLabel?: string;
 		/** How many items a shuffle is scoped to; 0 means all of them. */
 		shuffleScope?: number;
@@ -121,7 +121,7 @@
 		border-color: var(--rec);
 	}
 
-	/* The count a shuffle is scoped to survives the label being dropped — it is
+	/* The count a shuffle is scoped to survives the label being dropped: it is
 	   the part that changes with the selection. */
 	.btn-scope {
 		color: var(--text-2);
@@ -137,8 +137,7 @@
 	}
 
 	/* Below this the bar has no room for words: the buttons keep their icons
-	   and lose their labels, and the spacing tightens with them. Four of them
-	   plus the count against a 340px sidebar needs the full 1200. */
+	   and lose their labels. Four plus the count against a 340px sidebar needs 1200. */
 	@media (max-width: 1200px) {
 		.pool-actions {
 			gap: 0.25rem;
@@ -153,7 +152,7 @@
 		}
 	}
 
-	/* Narrower still, the readout goes too — the pool's size is on the grid a
+	/* Narrower still, the readout goes too: the pool's size is on the grid a
 	   tap away. */
 	@media (max-width: 1000px) {
 		.pool-count {

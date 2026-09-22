@@ -1,8 +1,5 @@
-/**
- * Colour ramps shared by every generator: a five-stop ramp with lightness
- * climbing dark→bright, hue drifting smoothly and saturation peaking in the
- * midtones — the structure all the good presets share.
- */
+/** Colour ramps shared by every generator: a five-stop ramp with lightness
+ * climbing dark to bright, hue drifting smoothly, saturation peaking mid. */
 
 import { randIn, shuffle, type Rand } from "../rng";
 
@@ -106,7 +103,7 @@ export function deal<T>(rng: Rand, n: number, weights: [T, number][]): T[] {
 
 /**
  * Colours for a wild batch: hues step around the wheel by the golden angle so
- * any N covers it evenly, and the ramp shapes are dealt in fixed proportions.
+ * any N covers it evenly, and ramp shapes are dealt in fixed proportions.
  */
 export function wildColors(
 	rng: Rand,

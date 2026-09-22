@@ -17,15 +17,10 @@ import {
 } from "./app";
 import { RED } from "./fixtures";
 
-/**
- * The app on a phone. Everything else in this suite runs at a desktop size,
- * where the sidebar is a column and the mode toggle is there; this is the
- * layout where the sidebar folds into a bottom sheet and the timeline modes
- * are off the menu.
- */
+/** The app on a phone. Everything else runs at a desktop size, where the sidebar is a
+ * column and the mode toggle is there; here it folds into a bottom sheet. */
 
-// A touch device: `(pointer: coarse)` is what the app keys its mobile layout
-// off, and the narrow viewport is what folds the sidebar into a sheet.
+// A touch device: `(pointer: coarse)` is what the app keys its mobile layout off.
 test.use({ ...devices["Pixel 5"] });
 
 test.beforeEach(async ({ page }) => {
@@ -50,8 +45,7 @@ test.describe("bottom sheet", () => {
 		await sheetHandle(page).click();
 		await expect(sheetTab(page, "Chain")).toHaveClass(/active/);
 		const chain = effectItems(sheetContent(page));
-		// The whole registry is listed, enabled or not — an empty tab means the
-		// chain never rendered, not that nothing is switched on.
+		// The whole registry is listed, enabled or not: an empty tab means the chain never rendered.
 		await expect(chain.first()).toBeVisible();
 		expect(await chain.count()).toBeGreaterThan(1);
 	});
@@ -90,8 +84,7 @@ test.describe("action bar", () => {
 		for (const box of await buttons.evaluateAll((els) =>
 			els.map((el) => el.getBoundingClientRect().toJSON()),
 		)) {
-			// Inside the bar's box horizontally, and all on the bar's first line:
-			// the wrap rule is a fallback, not the layout at this width.
+			// Inside the bar's box horizontally, all on its first line: the wrap rule is a fallback.
 			expect(box.left).toBeGreaterThanOrEqual(barBox.x);
 			expect(box.right).toBeLessThanOrEqual(barBox.x + barBox.width);
 			expect(box.top - barBox.y).toBeLessThan(barBox.height / 2);
@@ -108,8 +101,7 @@ test.describe("timeline", () => {
 		for (const gutter of await laneGutters(page).all()) {
 			await expect(gutter).toBeHidden();
 		}
-		// The lane, not merely the row, spans the stack: a gutter collapsed to
-		// zero but still laid out would leave its gap in front of the lane.
+		// The lane, not merely the row, spans the stack: a zero-width gutter still leaves its gap.
 		const lane = stack.locator(".tl-lane").first();
 		const laneBox = (await lane.boundingBox())!;
 		const stackBox = (await stack.boundingBox())!;
@@ -118,8 +110,7 @@ test.describe("timeline", () => {
 });
 
 test.describe("segment bar in a narrow window", () => {
-	// A desktop browser squeezed narrow, not a phone: the editor is not on
-	// offer to a touch device, but a small window still reaches its bars.
+	// A desktop browser squeezed narrow, not a phone: the editor is not offered to touch devices.
 	test.use({
 		isMobile: false,
 		hasTouch: false,

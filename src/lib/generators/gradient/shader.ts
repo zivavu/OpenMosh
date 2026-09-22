@@ -38,8 +38,7 @@ float fbm(vec2 p){
 }
 
 // Sum the swirl velocity of every nearby vortex at grid-space point g. Each
-// vortex is an angular field under a compact C² bump, so the field is seamless
-// even after the derivative-based crease lighting.
+// vortex is an angular field under a compact C² bump, keeping the field seamless.
 vec2 scatterVel(vec2 g, float sd){
   vec2 vel=vec2(0.0);
   vec2 gi=floor(g);

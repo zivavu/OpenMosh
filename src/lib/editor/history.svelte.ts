@@ -5,7 +5,7 @@ export function createEffectHistory() {
 	let history = $state<EffectInstance[][]>([
 		$state.snapshot(loadInitialEffects()),
 	]);
-	// Edit-clock stamp per entry — see createSnapshotHistory for the same
+	// Edit-clock stamp per entry; see createSnapshotHistory for the same
 	// bookkeeping and why Ctrl+Z needs it.
 	let seqs = $state<number[]>([NO_EDIT]);
 	let historyIndex = $state(0);

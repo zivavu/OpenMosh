@@ -1,15 +1,8 @@
 import "fake-indexeddb/auto";
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
-/**
- * The inventory runs against the real IndexedDB stores on a fake database,
- * so what's asserted is the deletion logic as it ships — which records go,
- * which blobs survive because something else still points at them — rather
- * than a hand-written stand-in for the stores.
- *
- * The one thing mocked is the font module: it's a `.svelte.ts` file using
- * runes, which bun can't evaluate. Nothing else in the suite imports it.
- */
+/** Runs against the real IndexedDB stores on a fake database, so the deletion logic
+ * is asserted as it ships. Only the font module is mocked (runes, bun can't evaluate). */
 
 interface FakeFont {
 	id: string;
@@ -52,8 +45,6 @@ const {
 	loadStorageInventory,
 } = inventory;
 
-// ── Seeding ──
-
 function bytes(n: number): string {
 	return "x".repeat(n);
 }
@@ -92,8 +83,6 @@ beforeEach(async () => {
 afterAll(() => {
 	delete (globalThis as { localStorage?: unknown }).localStorage;
 });
-
-// ── Inventory ──
 
 describe("loadStorageInventory", () => {
 	test("an empty database reads as empty", async () => {
@@ -299,8 +288,6 @@ describe("loadStorageInventory", () => {
 		expect(inv.projects.map((p) => p.name)).toEqual(["newer.wav", "older.wav"]);
 	});
 });
-
-// ── Deletion ──
 
 describe("deleteProject", () => {
 	test("removes the song and every record keyed to it", async () => {

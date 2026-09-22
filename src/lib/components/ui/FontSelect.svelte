@@ -80,7 +80,7 @@
 		if (value === family) select(FONT_OPTIONS[0].family);
 	}
 
-	/** The editors bind their shortcuts on window, so keys pressed in here must stop first. */
+	/** Editors bind their shortcuts on window, so keys pressed here must stop first. */
 	function onKeydown(e: KeyboardEvent) {
 		e.stopPropagation();
 		if (e.key === "Escape") open = false;
@@ -112,8 +112,8 @@
 		title="Add a font from a link or a file"
 		aria-label="Add a font"
 		onclick={(e) => {
-			// The host row treats a double-click as "reset this style"; opening the
-			// picker must not count towards one.
+			// The host row treats a double-click as "reset this style"; opening the picker
+			// must not count towards one.
 			e.stopPropagation();
 			open = true;
 		}}
@@ -247,8 +247,8 @@
 	   these through :global, since scoping stops at the component boundary. */
 	.font-select select {
 		flex: 1;
-		/* Font names are long; without this the select refuses to shrink below
-		   its widest option and pushes the row wider than the panel. */
+		/* Font names are long; without this the select refuses to shrink below its
+		   widest option and pushes the row wider than the panel. */
 		min-width: 0;
 		padding: 0.25rem 0.45rem;
 		background: var(--sunken);

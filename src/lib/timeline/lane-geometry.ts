@@ -1,8 +1,5 @@
-/**
- * On-screen sizing for the clips on a lane: how wide a clip is in pixels and
- * how much of it a grab handle may take. Shared by every lane kind, since the
- * same clip widths meet the same pointer.
- */
+/** On-screen sizing for the clips on a lane: how wide a clip is in pixels and how
+ * much of it a grab handle may take. Shared by every lane kind. */
 
 import { sortClips, type ClipLane, type TimelineClip } from "./clips";
 
@@ -17,7 +14,6 @@ export interface LaneScale {
 	laneWidthPx: number;
 }
 
-/** A span's on-screen width. */
 export function clipPx(
 	span: { start: number; end: number },
 	scale: LaneScale,
@@ -26,23 +22,17 @@ export function clipPx(
 	return ((span.end - span.start) / scale.viewDuration) * scale.laneWidthPx;
 }
 
-/**
- * Sized against the clip rather than fixed. At a flat 10px each, two handles
- * overrun any clip under 20px wide and the right one is clipped away
- * entirely — text set very small does exactly that. A third each keeps both
- * edges grabbable at any width, and leaves the middle third to drag by.
- */
+/** Sized against the clip rather than fixed. At a flat 10px each, two handles
+ * overrun any clip under 20px wide and the right one is clipped away entirely. A
+ * third each keeps both edges grabbable and leaves the middle third to drag by. */
 export function edgeWidth(clip: TimelineClip, scale: LaneScale): number {
 	const px = clipPx(clip, scale);
 	if (px <= 0) return EDGE_GRAB;
 	return Math.max(1, Math.min(EDGE_GRAB, px / 3));
 }
 
-/**
- * A boundary is drawn over the clips either side of it, so a fixed grab area
- * would blanket short clips entirely and leave nothing to click. Never take
- * more than a third of the narrower neighbour.
- */
+/** A boundary is drawn over the clips either side of it, so a fixed grab area would
+ * blanket short clips entirely. Never take more than a third of the narrower neighbour. */
 export function boundaryWidth(
 	left: TimelineClip,
 	right: TimelineClip,

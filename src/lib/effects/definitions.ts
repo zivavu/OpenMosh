@@ -1,12 +1,7 @@
 import { FONT_OPTIONS } from "../text-overlay/fonts";
 import type { EffectDefinition, EffectParam } from "./types";
 
-/**
- * A clock the renderer can run free or off the song grid: the "speed" key is
- * what makes it accumulate phase, and "sync"/"division" are what it reads to
- * lock that phase to beats instead. One unit of phase is one cycle of
- * whatever the effect does, so a division is literally cycles per beat.
- */
+/** A clock the renderer can run free or off the song grid; a division is cycles per beat. */
 function clockParams(
 	label: string,
 	speed: {
@@ -117,8 +112,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				max: 1,
 				step: 0.01,
 				defaultValue: 0.1,
-				// The classic look sits near the bottom of the range; moshing to
-				// 0.8 just makes a hue-shifted negative.
+				// The classic look sits near the bottom; moshing to 0.8 makes a
+				// hue-shifted negative.
 				moshMax: 0.4,
 			},
 		],
@@ -240,8 +235,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				max: 1,
 				step: 0.01,
 				defaultValue: 1,
-				// A partial mirror just reads as a blurry seam — a roll is only
-				// worth having at full strength.
+				// A partial mirror reads as a blurry seam, so a roll is only worth
+				// it at full strength.
 				moshMin: 1,
 				moshMax: 1,
 			},
@@ -432,7 +427,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				defaultValue: 0.5,
 			},
 			// Checkbox on purpose: a mosh only rolls range and select params, so
-			// this stays wherever the user put it.
+			// this stays put.
 			{
 				key: "transparent",
 				label: "Transparent",
@@ -1302,13 +1297,13 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				min: 0.1,
 				max: 3,
 				step: 0.05,
-				// 1.0 now that the bins arrive normalized: anything above it just
-				// clips the peaks flat against the top of the bar.
+				// 1.0 now that bins arrive normalized; above it just clips peaks
+				// against the top of the bar.
 				defaultValue: 1,
 			},
 			{
-				// Both default to DEFAULT_AUDIO_RESPONSE, so the bars start out
-				// following the music the same way a volume link does.
+				// Both default to DEFAULT_AUDIO_RESPONSE, so bars follow the music
+				// like a volume link.
 				key: "smoothing",
 				label: "Smoothing",
 				type: "range",
@@ -1415,7 +1410,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				label: "Decay",
 				type: "range",
 				// Never quite 0: with no decay the loop never releases a frame and
-				// the image welds itself to whatever was brightest.
+				// welds to the brightest.
 				min: 0.02,
 				max: 1,
 				step: 0.01,
@@ -1467,8 +1462,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 					{ label: "Screen", value: "screen" },
 					{ label: "Add", value: "add" },
 				],
-				// Screen and add both compound the loop toward white; max is the
-				// only one that survives a random decay.
+				// Screen and add compound the loop toward white; max is the only one
+				// that survives a random decay.
 				moshOptions: ["max"],
 			},
 		],
@@ -1556,8 +1551,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				max: 1,
 				step: 0.01,
 				defaultValue: 1,
-				// Under half this reads as a mild sharpen; the signal only falls
-				// apart once it has mostly replaced the frame.
+				// Under half reads as a mild sharpen; the signal falls apart once it
+				// mostly replaces the frame.
 				moshMin: 0.65,
 			},
 		],
@@ -1641,7 +1636,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				step: 1,
 				defaultValue: 0,
 				// Past ~60 degrees the plane is edge-on and the frame is mostly
-				// horizon, so a roll stays inside the range that still reads as an image.
+				// horizon, so a roll stays inside it.
 				moshMin: -55,
 				moshMax: 55,
 			},
@@ -1880,7 +1875,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 			},
 		],
 	},
-	// --- Ports from the shader lab (X-PostProcessing-Library, Vidvox ISF-Files).
 	{
 		id: "rgb-burst",
 		name: "RGB Burst",

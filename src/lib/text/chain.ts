@@ -1,8 +1,5 @@
-/**
- * The chain gestures on text clips — fill, mosh, clear, static/auto — as the
- * clip toolbar and the ←/→ arrows drive them. Thin fan-outs over the shared
- * chain-clip rules, so a text clip rolls exactly as a media or fx clip does.
- */
+/** The chain gestures on text clips (fill, mosh, clear, static/auto) as the
+ * toolbar and arrows drive them. Thin fan-outs over the shared chain-clip rules. */
 
 import {
 	clearedChainClip,

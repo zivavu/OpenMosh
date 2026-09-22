@@ -27,8 +27,7 @@ describe("crop", () => {
 
 	it("keeps a saved rectangle inside the frame", () => {
 		const e = normalizeSourceEdit({ crop: { x: 0.8, y: 0.9, w: 1, h: 1 } });
-		// Clamped against its own origin: a rectangle reaching past the edge would
-		// leave the placement sampling outside the texture.
+		// Clamped against its own origin: past the edge would sample outside the texture.
 		expect(e.crop.x + e.crop.w).toBeCloseTo(1, 5);
 		expect(e.crop.y + e.crop.h).toBeCloseTo(1, 5);
 	});
@@ -48,8 +47,7 @@ describe("crop", () => {
 describe("mask", () => {
 	it("keeps a data URL and drops anything else", () => {
 		expect(normalizeSourceEdit({ mask: PNG }).mask).toBe(PNG);
-		// An <img> handed a bare path fails asynchronously, long after the load
-		// that would have reported it.
+		// An <img> handed a bare path fails asynchronously, long after the load reports it.
 		expect(normalizeSourceEdit({ mask: "/masks/1.png" }).mask).toBeNull();
 		expect(normalizeSourceEdit({ mask: 42 }).mask).toBeNull();
 	});
@@ -252,9 +250,8 @@ describe("wrapSourceTime", () => {
 	});
 
 	it("wraps a looped clip back into the media, as the sampler does", () => {
-		// A 6s video under a 20s segment: at 14s the sampler is showing second 2,
-		// so the edit has to be sampled there too. Unwrapped it sat past the last
-		// key for every loop after the first.
+		// A 6s video under a 20s segment: at 14s the sampler shows second 2, so the edit
+		// has to be sampled there too. Unwrapped it sat past the last key on later loops.
 		expect(wrapSourceTime(14, 6)).toBeCloseTo(2, 10);
 	});
 
@@ -296,8 +293,7 @@ describe("keyed erase masks", () => {
 	};
 
 	it("holds each key's shape until the next one", () => {
-		// Not a cross-fade: halfway between the keys the first shape still stands,
-		// whole, rather than two paintings at half strength.
+		// Not a cross-fade: halfway between keys the first shape still stands whole.
 		expect(sampleSourceEdit(edit, 0).mask).toBe(PNG);
 		expect(sampleSourceEdit(edit, 2).mask).toBe(PNG);
 		expect(sampleSourceEdit(edit, 3.99).mask).toBe(PNG);
@@ -349,8 +345,7 @@ describe("keyCoverage", () => {
 	});
 
 	it("keeps white and black under a grey key at the lowest threshold", () => {
-		// Same chroma as the key; only brightness tells them apart, and the
-		// smoothing band must not widen the brightness range.
+		// Same chroma as the key; only brightness tells them apart.
 		expect(keyCoverage(1, 1, 1, grey)).toBe(1);
 		expect(keyCoverage(0, 0, 0, grey)).toBe(1);
 	});

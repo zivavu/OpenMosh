@@ -60,7 +60,7 @@
 	import SourceTrim from "./SourceTrim.svelte";
 
 	interface Props {
-		/** The media being edited. The edit belongs to it, not to any layer. */
+		/** The media being edited; the edit belongs to it, not to a layer. */
 		source: SequenceSource;
 		edit: SourceEdit;
 		onChange: (edit: SourceEdit) => void;
@@ -69,23 +69,13 @@
 
 	let { source, edit, onChange, onClose }: Props = $props();
 
-	/** Long edge of the preview buffer. Independent of how big the preview is
-	 * drawn — the buffer is what the JS key walks pixel by pixel on every played
-	 * frame, so it stays well inside the frame budget while the picture on
-	 * screen scales to whatever room the dialog has. */
+	/** Long edge of the preview buffer; the JS key walks it pixel by pixel every frame. */
 	const PREVIEW_MAX = 640;
 
-	// The keyboard is ours while the dialog is up: Space is the transport here,
-	// and Ctrl+Z belongs to the media being edited rather than to the timeline
-	// behind it. Without this both fire at once.
+	// The keyboard is ours while the dialog is up: Space is the transport here.
 	onMount(() => pushModalKeyboard());
 
-	/**
-	 * Undo for the dialog's own edits. Every tool writes through `onChange`, so
-	 * one stack of whole-edit snapshots covers an erase stroke, a crop drag and
-	 * a slider sweep alike — and an erase stroke is the one thing in here that
-	 * was previously un-take-back-able short of clearing the entire mask.
-	 */
+	/** Undo for the dialog's own edits; every tool writes through `onChange`. */
 	const history = createSnapshotHistory<SourceEdit>();
 
 	/** Snapshot the edit as it stands, before whatever is about to change it. */
@@ -143,31 +133,20 @@
 	/** The media's own pixels, for the head's readout. */
 	let mediaSize = $state<{ w: number; h: number } | null>(null);
 
-	// Video transport. A duration of 0 covers both "still an image" and "not
-	// loaded yet", which are the same thing as far as the controls care.
+	// A duration of 0 covers both "still an image" and "not loaded yet".
 	let duration = $state(0);
 	let currentTime = $state(0);
 	let playing = $state(false);
-	/** Wrap at the end instead of stopping. Remembered across openings: it is
-	 * a way of watching, not a property of the clip. */
+	/** Wrap at the end instead of stopping; remembered across openings. */
 	let loop = $state(loopPreference);
 
-	/**
-	 * The edit as it stands under the playhead. Everything on screen reads from
-	 * here rather than from the stored edit: with a track running, the crop
-	 * rectangle, the key's numbers and the mask's position are all functions of
-	 * where in the clip we are, and the panel has to agree with the picture.
-	 */
+	/** The edit as it stands under the playhead; everything on screen reads from here. */
 	let live = $derived(sampleSourceEdit(edit, currentTime));
 	let key = $derived(live.chromaKey);
 	let crop = $derived(live.crop ?? FULL_CROP);
 	let maskXform = $derived(live.maskTransform ?? IDENTITY_MASK_TRANSFORM);
 
-	/**
-	 * The current frame, unkeyed, at preview size. Everything reads from here:
-	 * the keyed preview is drawn from it, and the eyedropper samples it — off
-	 * the keyed canvas the dropper would keep landing on cut-out pixels.
-	 */
+	/** The current frame, unkeyed, at preview size; the eyedropper samples it. */
 	let raw: HTMLCanvasElement | null = null;
 	let rawCtx: CanvasRenderingContext2D | null = null;
 	/** The buffer's size, mirrored into state for the fit below. */
@@ -176,13 +155,7 @@
 	/** Where frames come from. An image draws once; a video every frame. */
 	let media: HTMLImageElement | HTMLVideoElement | null = null;
 
-	// ── Keyframe tracks ──────────────────────────────────────────────────────
-	// A track is on when it holds at least one key. Off, the panel's value is
-	// the whole clip's; on, every change writes a key under the playhead, which
-	// is how a property that varies gets edited without a separate mode.
-	//
-	// Only videos have anywhere to put a key: an image is one instant, and its
-	// edit is the same at every point in it.
+	// A track is on when it holds at least one key; only videos have anywhere to put one.
 	type TrackId = "crop" | "key" | "mask";
 
 	let anim = $derived(edit.anim);
@@ -249,9 +222,7 @@
 	function valueNow(id: TrackId): CropRect | AnimatedKey | MaskKey {
 		if (id === "crop") return { ...crop };
 		if (id === "key") return animatedKey(key);
-		// The shape goes into the key with its position: a key that held only
-		// where the mask sits would lose the painting the moment a later key
-		// carried one of its own.
+			// The shape goes into the key with its position.
 		return { ...maskXform, mask: live.mask };
 	}
 
@@ -264,11 +235,7 @@
 		onChange(withTrack(base, id, keys));
 	}
 
-	/**
-	 * The key under the playhead, if one is close enough to count. Nearest
-	 * rather than first: the strip draws a diamond a few pixels wide, and the
-	 * playhead lands wherever the video seeked to, not on the exact key time.
-	 */
+	/** The key under the playhead, if one is close enough to count. */
 	function keyHere(id: TrackId): Keyframe<unknown> | null {
 		let best: Keyframe<unknown> | null = null;
 		for (const k of (edit.anim?.[id] ?? []) as Keyframe<unknown>[]) {
@@ -284,22 +251,15 @@
 			(edit.anim?.[id] ?? []) as Keyframe<unknown>[],
 			keyHere(id)?.t ?? currentTime,
 		);
-		// Dropping the last key leaves the value it held as the static one, so
-		// switching a track off never changes the picture under the playhead.
+		// Dropping the last key leaves its value as the static one.
 		onChange(withTrack(keys.length === 0 ? flatten(id) : edit, id, keys));
 	}
 
-	/**
-	 * The edit with this track's value under the playhead written back as the
-	 * static one. What "stop animating" has to mean: the frame on screen is the
-	 * one being looked at, so it is the one to keep.
-	 */
+	/** The edit with this track's value under the playhead written back as the static one. */
 	function flatten(id: TrackId): SourceEdit {
 		if (id === "crop") return { ...edit, crop: { ...crop } };
 		if (id === "key") return { ...edit, chromaKey: { ...key } };
-		// The shape under the playhead becomes the static one, so switching the
-		// track off keeps the picture on screen. Its offset is not kept: a mask
-		// has no static offset — it is painted where it is.
+			// The shape under the playhead becomes the static one; its offset is not kept.
 		return { ...edit, mask: live.mask };
 	}
 
@@ -317,8 +277,7 @@
 		beforeEdit(coalesceKey);
 		const chromaKey = { ...key, [prop]: value };
 		const next = { ...edit, chromaKey };
-		// `enabled` is the one part that is never keyed, so it alone writes
-		// straight through to the stored edit.
+		// `enabled` is never keyed, so it writes straight through to the stored edit.
 		if (trackOn("key") && prop !== "enabled") {
 			addKey("key", next, animatedKey(chromaKey));
 		} else {
@@ -326,8 +285,7 @@
 		}
 	}
 
-	/** Picking a colour switches the key on: nobody reaches for the dropper to
-	 * leave it off, and the preview would show nothing otherwise. */
+	/** Picking a colour switches the key on. */
 	function setColor(r: number, g: number, b: number, coalesceKey?: string) {
 		beforeEdit(coalesceKey);
 		const chromaKey = { ...key, enabled: true, color: { r, g, b } };
@@ -336,19 +294,12 @@
 		else onChange(next);
 	}
 
-	/**
-	 * Where the mask sits under the playhead. Always a key: the mask has no
-	 * static offset — it is painted where it is — so having moved it at all is
-	 * what starts the track. One key holds it there for the whole clip until a
-	 * second one gives it somewhere to go.
-	 */
+	/** Where the mask sits under the playhead; always a key. */
 	function setMaskTransform(xf: MaskTransform) {
-		// Carrying the shape through: moving a mask must not drop the painting
-		// the key it lands on was holding.
+		// Carrying the shape through: moving a mask must not drop the key's painting.
 		addKey("mask", edit, { ...xf, mask: live.mask });
 	}
 
-	// ── Loading ──────────────────────────────────────────────────────────────
 	$effect(() => {
 		const src = source;
 		let cancelled = false;
@@ -393,11 +344,7 @@
 		raw.height = Math.max(1, Math.round(h * k));
 		rawW = raw.width;
 		rawH = raw.height;
-		// Accelerated, not willReadFrequently: every frame is drawn into this
-		// buffer, and only a key or a mask ever reads it back. A CPU-backed
-		// buffer made the common case — neither of those on — pull a full frame
-		// out of the GPU per repaint, which is most of what a laptop had to
-		// spend to play a 1080p clip in here.
+		// Accelerated, not willReadFrequently: only a key or mask reads this buffer back.
 		rawCtx = raw.getContext("2d");
 	}
 
@@ -413,14 +360,12 @@
 	function videoElement(url: string): Promise<HTMLVideoElement> {
 		return new Promise((resolve, reject) => {
 			const v = document.createElement("video");
-			// Silent by design: this is a colour-picking dialog, and the editor's
-			// own preview may well be playing behind it.
+			// Silent by design: the editor's own preview may be playing behind it.
 			v.muted = true;
 			v.playsInline = true;
 			v.preload = "auto";
 			v.onerror = () => reject(new Error("decode failed"));
-			// Repaints a scrub while paused; during playback the loop owns the
-			// frame and this just lands on top of the same picture.
+			// Repaints a scrub while paused; during playback the loop owns the frame.
 			v.onseeked = () => {
 				grabFrame();
 				paint();
@@ -428,8 +373,7 @@
 			// Looping is the element's own: it never fires ended.
 			v.onended = () => (playing = false);
 			v.onloadeddata = () => {
-				// Not frame 0: some encodes open on a black or faded lead-in, which
-				// keys to nothing useful.
+				// Not frame 0: some encodes open on a black or faded lead-in.
 				v.currentTime = Math.min(0.1, (v.duration || 1) / 2);
 				resolve(v);
 			};
@@ -437,20 +381,16 @@
 		});
 	}
 
-	// ── Playback ─────────────────────────────────────────────────────────────
 	$effect(() => {
 		if (!playing || !ready) return;
 		const v = media;
 		if (!v || !("play" in v)) return;
-		// Playback starts inside the trim, and wraps (or stops) at its out point
-		// the way the element itself would at the file's end.
+		// Playback starts inside the trim and wraps at its out point.
 		const s = untrack(() => span);
 		if (v.currentTime < s.start || v.currentTime >= s.end)
 			v.currentTime = s.start;
 		void v.play().catch(() => (playing = false));
-		// Once per decoded frame rather than once per display refresh: a repaint
-		// costs a full-frame draw out of the video either way, and on a display
-		// faster than the clip most of them landed on the picture already shown.
+		// Once per decoded frame rather than per display refresh.
 		const perFrame = "requestVideoFrameCallback" in v;
 		let handle = 0;
 		const step = () => {
@@ -478,10 +418,7 @@
 		};
 	});
 
-	// ── Stage fit ────────────────────────────────────────────────────────────
-	// The picture is sized in JS rather than by max-width/max-height: the crop
-	// overlay is positioned against the canvas's box, so that box has to be the
-	// letterboxed picture exactly and not a stretched parent with bars.
+	// Sized in JS: the crop overlay is positioned against the canvas's box.
 	let stageEl = $state<HTMLDivElement | undefined>(undefined);
 	let stage = $state({ w: 0, h: 0 });
 
@@ -512,15 +449,10 @@
 		v.currentTime = t;
 	}
 
-	// ── Erase mask ───────────────────────────────────────────────────────────
-	// Kept as a canvas while the dialog is open and written back to the edit as
-	// a PNG data URL on pointerup, so a stroke costs one re-encode rather than
-	// one per pointermove.
+	// Kept as a canvas while the dialog is open, written back as a PNG on pointerup.
 	let maskCanvas: HTMLCanvasElement | null = null;
 	let maskCtx: CanvasRenderingContext2D | null = null;
-	/** The data URL the canvas was last built from, so an edit made elsewhere
-	 * (Reset, or reopening on another source) reloads it and our own writes
-	 * don't. */
+	/** The data URL the canvas was last built from, so an edit made elsewhere reloads it. */
 	let maskLoaded: string | null = null;
 
 	function ensureMask(): CanvasRenderingContext2D | null {
@@ -534,8 +466,7 @@
 		maskCanvas.height = Math.max(1, Math.round(h * k));
 		maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
 		if (!maskCtx) return null;
-		// White is "keep": the shader multiplies coverage by the red channel, so
-		// an untouched mask has to be opaque white rather than empty.
+		// White is "keep": the shader multiplies coverage by the red channel.
 		maskCtx.fillStyle = "#fff";
 		maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
 		return maskCtx;
@@ -543,8 +474,7 @@
 
 	/** Pull the saved mask into the working canvas, or start a clean one. */
 	function loadMask() {
-		// The shape under the playhead, not the stored one: scrubbing onto another
-		// key has to bring that key's painting into the canvas being painted on.
+		// The shape under the playhead, not the stored one.
 		const url = live.mask ?? null;
 		if (url === maskLoaded) return;
 		maskLoaded = url;
@@ -569,8 +499,7 @@
 	function dab(x: number, y: number) {
 		const ctx = ensureMask();
 		if (!ctx || !maskCanvas || !raw) return;
-		// Back through the mask's own transform: a moved mask is painted where
-		// the brush appears to be, not where the file's pixels are.
+		// Back through the mask's own transform: a moved mask is painted where the brush appears.
 		const u = unmoved(x / raw.width, y / raw.height);
 		const sx = u.x * maskCanvas.width;
 		const sy = u.y * maskCanvas.height;
@@ -586,8 +515,7 @@
 		ctx.fill();
 	}
 
-	/** A point in source space, put back into the mask's own space. The same
-	 * mapping the shader runs — see editedSource. */
+	/** A point in source space, put back into the mask's own space. */
 	function unmoved(x: number, y: number): { x: number; y: number } {
 		const s = Math.max(maskXform.scale, 0.0001);
 		return {
@@ -596,13 +524,7 @@
 		};
 	}
 
-	/** Write the working canvas back into the edit. */
-	/**
-	 * The stroke just painted, stored. With the track running it lands on the
-	 * key under the playhead — repainting at a key is how the shape itself is
-	 * animated, and the key already holds where that shape sits. With no track
-	 * it is the source's one static mask, as it always was.
-	 */
+	/** The stroke just painted, stored; with the track running it lands on the key. */
 	function commitMask() {
 		if (!maskCanvas) return;
 		const url = maskCanvas.toDataURL("image/png");
@@ -616,12 +538,10 @@
 		maskCanvas = null;
 		maskCtx = null;
 		maskLoaded = null;
-		// The track goes with the mask: keys that move a shape which is no longer
-		// painted have nothing left to move.
+		// The track goes with the mask: keys moving an unpainted shape have nothing to move.
 		onChange(withTrack({ ...edit, mask: null }, "mask", []));
 	}
 
-	// ── Drawing ──────────────────────────────────────────────────────────────
 	/** Copy whatever the media is showing right now into the raw buffer. */
 	function grabFrame() {
 		if (!media || !raw || !rawCtx) return;
@@ -651,8 +571,8 @@
 			ctx.putImageData(img, 0, 0);
 			return;
 		}
-		// Plain copy: the loop reads the key per pixel and a proxy would pay for
-		// every read.
+		// Plain copy: the loop reads the key per pixel and a proxy would pay for every
+		// read.
 		const k = $state.snapshot(key);
 		for (let i = 0; i < px.length; i += 4) {
 			px[i + 3] *= keyCoverage(
@@ -666,21 +586,7 @@
 		ctx.putImageData(img, 0, 0);
 	}
 
-	/**
-	 * The mask at the raw buffer's size, so its coverage lines up pixel for
-	 * pixel with the frame being keyed. Read from the red channel, exactly as
-	 * the shader does: the mask is opaque black-on-white, so its own alpha says
-	 * nothing.
-	 */
-	/**
-	 * Distance fields per painted shape, so the dialog can morph between two of
-	 * them the way the shader does. Built once per shape and kept: the transform
-	 * is O(pixels) and a scrub would otherwise pay for it every frame.
-	 *
-	 * Capped, because a field is a full RGBA buffer the size of the mask — half
-	 * a megabyte each at 512² — and a keyed track can hold one per key. A morph
-	 * needs two; the rest is slack for scrubbing back and forth over a few keys.
-	 */
+	/** Distance fields per painted shape, for morphing the way the shader does. */
 	const MAX_SDF_CACHE = 8;
 	const sdfCache = new Map<
 		string,
@@ -690,8 +596,7 @@
 	function ensureSdf(url: string) {
 		const held = sdfCache.get(url);
 		if (held) {
-			// Freshen: Map keeps insertion order, so re-inserting moves this to the
-			// young end and the next eviction takes something actually stale.
+			// Freshen: Map keeps insertion order, so re-inserting moves this to the young end.
 			sdfCache.delete(url);
 			sdfCache.set(url, held);
 			return held === "pending" ? null : held;
@@ -724,14 +629,7 @@
 		return null;
 	}
 
-	/**
-	 * The two shapes mid-morph, resolved to one coverage canvas — the same
-	 * boundary interpolation the shader does, so the dialog and the canvas
-	 * behind it never disagree about what is erased.
-	 *
-	 * Null whenever nothing is being morphed, which puts the painted mask back
-	 * on the fast path with its soft edge intact.
-	 */
+	/** The two shapes mid-morph, resolved to one coverage canvas. */
 	let morphCanvas: HTMLCanvasElement | null = null;
 	// What morphCanvas currently holds, so an unchanged frame skips the pass.
 	let morphFrom: string | null = null;
@@ -752,11 +650,7 @@
 		}
 		const ctx = c.getContext("2d", { willReadFrequently: true });
 		if (!ctx) return null;
-		// One pass over every mask pixel, so it is worth not repeating it for a
-		// playhead that has not moved — paint() runs on every frame and on every
-		// knob.
-		// Compared by reference first — sampling hands back the same string object
-		// for an unchanged key, so this is a pointer check on the common path.
+		// One pass over every mask pixel, so it is worth not repeating for an unmoved playhead.
 		if (
 			from === morphFrom &&
 			to === morphTo &&
@@ -769,16 +663,14 @@
 		morphFrom = from;
 		morphTo = to;
 		morphMix = mix;
-		// The same alignment the shader does: both shapes slid onto the middle
-		// they are travelling through, so their boundaries have an in-between.
+		// The same alignment the shader does: both shapes slid onto the middle they travel through.
 		const shift = maskShift(a.field.centre, b.field.centre);
 		const dxA = Math.round(-shift.x * mix * a.w);
 		const dyA = Math.round(-shift.y * mix * a.h);
 		const dxB = Math.round(shift.x * (1 - mix) * b.w);
 		const dyB = Math.round(shift.y * (1 - mix) * b.h);
 		const out = ctx.createImageData(a.w, a.h);
-		// Off the edge reads as kept, which is what CLAMP_TO_EDGE gives the
-		// shader: the field saturates positive outside a painted shape.
+		// Off the edge reads as kept, matching CLAMP_TO_EDGE in the shader.
 		const enc = (
 			f: MaskField,
 			w: number,
@@ -795,8 +687,7 @@
 				const ea = enc(a.field, a.w, a.h, x + dxA, y + dyA);
 				const eb = enc(b.field, b.w, b.h, x + dxB, y + dyB);
 				const i = (y * a.w + x) * 4;
-				// The same floor the shader applies: what both shapes erase stays
-				// erased, or a mask painted on over the clip blinks out midway.
+				// The same floor the shader applies: what both shapes erase stays erased.
 				const erasedInBoth = Math.min(
 					255 - a.field.data[i],
 					255 - b.field.data[i],
@@ -828,12 +719,9 @@
 	}
 
 	let maskScratch: HTMLCanvasElement | null = null;
+	/** The mask at the raw buffer's size, so coverage lines up with the frame being keyed. */
 	function maskPixels(): Uint8ClampedArray | null {
-		// Mid-stroke the working canvas *is* the shape: the morph was baked into
-		// it when the stroke began, and every dab since has gone there. Reading
-		// the morph instead means a drag paints into a canvas nothing is showing
-		// and the strokes only appear on release, when committing a key collapses
-		// the morph — which is exactly how this looked.
+		// Mid-stroke the working canvas is the shape: the morph was baked in when the stroke began.
 		const shape = (painting ? null : morphedMask()) ?? maskCanvas;
 		if (!shape || !raw) return null;
 		if (
@@ -849,8 +737,7 @@
 		if (!sc) return null;
 		const w = maskScratch.width;
 		const h = maskScratch.height;
-		// White first: everything the moved mask has slid off is kept, the same
-		// rule the shader follows outside the mask's own square.
+		// White first: everything the moved mask slid off is kept, as the shader does.
 		sc.fillStyle = "#fff";
 		sc.fillRect(0, 0, w, h);
 		const dw = w * maskXform.scale;
@@ -865,16 +752,13 @@
 		return sc.getImageData(0, 0, w, h).data;
 	}
 
-	// The saved mask, into the working canvas. Runs on open, whenever the edit
-	// gains or loses one from outside (Clear, or the dialog's Reset), and
-	// whenever the playhead crosses onto a key holding a different shape.
+	// The saved mask, into the working canvas; runs on open and on a new key shape.
 	$effect(() => {
 		void live.mask;
 		if (ready) loadMask();
 	});
 
-	// Repaint when a knob moves. Playback repaints every frame on its own, so
-	// this only has to cover a paused preview.
+	// Repaint when a knob moves; playback repaints every frame on its own.
 	$effect(() => {
 		// Read every knob, so any of them moving re-runs this.
 		void [
@@ -885,8 +769,7 @@
 			key.lumaRange,
 			edit.mask,
 			maskXform,
-			// A morph moves on with the playhead even when nothing else does:
-			// two keys can hold the same position and different shapes.
+			// A morph moves on with the playhead even when nothing else does.
 			live.maskNext,
 			live.maskMix,
 			crop,
@@ -905,9 +788,7 @@
 		setColor(r / 255, g / 255, b / 255);
 	}
 
-	// ── Preview pointer ──────────────────────────────────────────────────────
-	// One handler for all three tools: they share the canvas, and only the
-	// selected one gets the drag.
+	// One handler for all three tools: only the selected one gets the drag.
 
 	/** Pointer position in raw-buffer pixels. */
 	function atEvent(e: PointerEvent): { x: number; y: number } | null {
@@ -930,12 +811,7 @@
 		};
 	}
 
-	/**
-	 * Where a key written mid-gesture lands. Pinned when a drag starts, because
-	 * the playhead moves under a drag made while the clip is playing — and a
-	 * crop dragged across two seconds of video would otherwise leave a key on
-	 * every frame it crossed instead of one where the gesture began.
-	 */
+	/** Where a key written mid-gesture lands; pinned when a drag starts. */
 	let gestureTime: number | null = null;
 
 	function keyTime(): number {
@@ -956,12 +832,7 @@
 	/** Narrowest the rectangle may get, matching the clamp in `setCrop`. */
 	const MIN_CROP = 0.01;
 
-	/**
-	 * How close to an edge counts as grabbing it, in normalized units. Taken
-	 * from the drawn size so the target is the same handful of pixels whatever
-	 * the dialog has been resized to, and capped at a third of the rectangle so
-	 * a small crop keeps a middle that can still be moved.
-	 */
+	/** How close to an edge counts as grabbing it, in normalized units. */
 	function grabTolerance(): { x: number; y: number } {
 		const rect = canvasEl?.getBoundingClientRect();
 		const px = 10;
@@ -975,8 +846,7 @@
 	function edgesAt(n: { x: number; y: number }): Edges | null {
 		if (isFullCrop(crop)) return null;
 		const t = grabTolerance();
-		// Outside the rectangle by more than the grab distance is a new
-		// rectangle, not a resize of this one.
+		// Outside the rectangle by more than the grab distance is a new rectangle.
 		if (
 			n.x < crop.x - t.x ||
 			n.x > crop.x + crop.w + t.x ||
@@ -1027,12 +897,9 @@
 			return;
 		}
 		if (tool === "erase") {
-			// One entry per stroke, taken before the first dab: undo steps back a
-			// whole stroke, which is the unit the hand thinks in.
+			// One entry per stroke, taken before the first dab.
 			beforeEdit();
-			// Shift drags the erased shape around instead of painting a new one —
-			// which is how the mask follows a pan without being repainted, and the
-			// only gesture that writes a key on the erase track.
+			// Shift drags the erased shape instead of painting a new one.
 			if (e.shiftKey && edit.mask && raw) {
 				drag = {
 					kind: "mask-move",
@@ -1042,14 +909,10 @@
 				};
 				return;
 			}
-			// Mid-morph the working canvas holds the shape being left, while the
-			// screen shows the blend of it and the next one. Painting on the
-			// former would throw the blend away and land a key that reverts to an
-			// older shape — so the stroke starts from what is actually on screen.
+			// Mid-morph the working canvas holds the shape being left, not the blend on screen.
 			bakeMorph();
 			painting = true;
-			// Alt is the transient form of the Restore toggle, the way it is in
-			// every paint program; the toggle stays where the user left it.
+			// Alt is the transient form of the Restore toggle.
 			const held = restoring;
 			if (e.altKey) restoring = !restoring;
 			drag = { kind: "erase" };
@@ -1060,13 +923,10 @@
 		}
 		const n = normAt(e);
 		if (!n) return;
-		// On an edge, the drag resizes; inside the rectangle it moves it;
-		// anywhere else starts a new one. Drawing a fresh rectangle is the common
-		// gesture, so it stays the one that needs no handle to find.
+		// On an edge the drag resizes, inside it moves, anywhere else starts a new one.
 		const edges = edgesAt(n);
 		const inside = insideCrop(n);
-		// Once for the gesture, before it starts: setCrop runs on every move, and
-		// an entry per move would make undo a frame-by-frame rewind.
+		// Once for the gesture, before it starts: setCrop runs on every move.
 		beforeEdit();
 		if (edges) {
 			drag = { kind: "crop-resize", edges, from: { ...crop } };
@@ -1080,8 +940,7 @@
 
 	function onPreviewMove(e: PointerEvent) {
 		if (!drag) {
-			// Nothing is being dragged, so the only job is to say what a press
-			// here would do.
+			// Nothing is being dragged, so the only job is to say what a press here would do.
 			if (tool === "crop") {
 				const n = normAt(e);
 				const edges = n && edgesAt(n);
@@ -1118,15 +977,12 @@
 		if (!n) return;
 		if (drag.kind === "crop-resize") {
 			const { edges, from } = drag;
-			// The held edges follow the pointer, the opposite ones stay where the
-			// gesture found them — read from the rectangle as it was at the start,
-			// not as it stands, so a fast drag can't drift the anchor.
+			// The held edges follow the pointer, the opposite ones stay put.
 			let x0 = from.x;
 			let y0 = from.y;
 			let x1 = from.x + from.w;
 			let y1 = from.y + from.h;
-			// An edge stops at the opposite one rather than crossing it: a
-			// rectangle turned inside out is never what the hand meant.
+			// An edge stops at the opposite one rather than crossing it.
 			if (edges.l) x0 = Math.min(n.x, x1 - MIN_CROP);
 			if (edges.r) x1 = Math.max(n.x, x0 + MIN_CROP);
 			if (edges.t) y0 = Math.min(n.y, y1 - MIN_CROP);
@@ -1168,18 +1024,13 @@
 			w: Math.min(Math.max(next.w, 0.01), 1 - Math.min(Math.max(next.x, 0), 1)),
 			h: Math.min(Math.max(next.h, 0.01), 1 - Math.min(Math.max(next.y, 0), 1)),
 		};
-		// The static rectangle is kept up to date even while a track owns the
-		// picture, so switching the track off lands on what was last drawn.
+		// The static rectangle stays up to date even while a track owns the picture.
 		const withCrop = { ...edit, crop };
 		if (trackOn("crop")) addKey("crop", withCrop, crop);
 		else onChange(withCrop);
 	}
 
-	/**
-	 * Resize the crop about its own centre. Anchoring at the top-left instead
-	 * would let the rectangle run off the frame, where the clamp in `setCrop`
-	 * pins the slider and it stops answering the drag.
-	 */
+	/** Resize the crop about its own centre. */
 	function setCropSize(dim: "w" | "h", v: number) {
 		beforeEdit(`crop-${dim}`);
 		const axis = dim === "w" ? "x" : "y";
@@ -1191,12 +1042,7 @@
 		});
 	}
 
-	/**
-	 * Whether a tool has been touched at all. Its Reset is dead until it has:
-	 * a button that always looks pressable, on a tool that is already at its
-	 * default, is the thing that made "Whole frame" and "Clear" read as two
-	 * unrelated commands rather than as one idea.
-	 */
+	/** Whether a tool has been touched at all; its Reset is dead until it has. */
 	let dirty = $derived({
 		key:
 			key.enabled ||
@@ -1208,10 +1054,7 @@
 		erase: !!edit.mask || !!live.mask || trackOn("mask"),
 	});
 
-	/**
-	 * Put one tool back where it started, its track included — the same thing
-	 * the footer's Reset does to all three, so the two agree.
-	 */
+	/** Put one tool back where it started, its track included. */
 	function resetTool(t: Tool) {
 		if (t === "erase") {
 			clearMask();
@@ -1239,16 +1082,11 @@
 
 	function setHex(hex: string) {
 		// The picker fires as it is dragged, so the whole sweep is one entry.
-		// An unparseable hex — half-typed in the field — falls back to the colour
-		// already keyed rather than snapping the picture to black.
 		const [r, g, b] = hexToVec3(hex, toHex(key.color));
 		setColor(r, g, b, "key-color");
 	}
 
-	/** Put every tool back: the button sits under all three, not just the key. */
-	// ── Speed ────────────────────────────────────────────────────────────────
-	// A clip property rather than a tool: it changes how fast the media is
-	// walked, not what is in it.
+	// A clip property rather than a tool: it changes how fast the media is walked.
 	const speed = $derived(sourceSpeed(edit));
 	const speedLabel = $derived(
 		(speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)) + "×",
@@ -1266,12 +1104,7 @@
 		setSpeed(Math.abs(v) < 0.08 ? 1 : 2 ** v);
 	}
 
-	// ── Trim ─────────────────────────────────────────────────────────────────
-	// Which stretch of the file the clips play. Like speed, a property of the
-	// media rather than a tool: it changes how much of it is walked, not what
-	// is in it. The dialog's playback stays inside it, so the loop can be
-	// watched as the timeline will run it — while scrubbing is free to go
-	// outside, since the cut edges are set by looking at what is past them.
+	// Which stretch of the file the clips play; a property of the media, not a tool.
 	const span = $derived<SourceSpan>(sourceSpan(edit, duration));
 	const trimmed = $derived(!!edit.span);
 	let trim = $state<SourceTrim | undefined>(undefined);
@@ -1281,10 +1114,7 @@
 		onChange(next ? { ...rest, span: next } : rest);
 	}
 
-	// The dialog's own playback runs at the edited rate, so the clip can be
-	// watched the way the timeline will run it. Keyed on `ready`, not the
-	// element: it lands after the load, and a clip opened with a speed already
-	// on it has to start at that speed, not at 1× until the slider moves.
+	// The dialog's playback runs at the edited rate; keyed on `ready`, not the element.
 	$effect(() => {
 		if (!ready) return;
 		const v = media;
@@ -1298,6 +1128,7 @@
 		if (v && "loop" in v) v.loop = loop;
 	});
 
+	/** Put every tool back: the button sits under all three, not just the key. */
 	function reset() {
 		beforeEdit();
 		maskCanvas = null;
@@ -1311,9 +1142,7 @@
 			},
 			crop: { ...FULL_CROP },
 			mask: null,
-			// Every track goes with it: Reset sits under all three tools, and a
-			// crop track left behind would keep moving a rectangle that no longer
-			// crops anything.
+			// Every track goes with it.
 		});
 	}
 
@@ -1335,9 +1164,7 @@
 			undo();
 			return;
 		}
-		// Delete takes out the key under the playhead. Which track: the one the
-		// open tool owns, falling back to any other that has a key there, so a
-		// key is never left behind because the wrong tool was selected.
+		// Delete takes out the key under the playhead, on the open tool's track.
 		if (e.key === "Delete" && duration > 0) {
 			if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
 			const order: TrackId[] = [TOOL_TRACK[tool], "crop", "key", "mask"];
@@ -1356,8 +1183,7 @@
 			else trim.setOutHere();
 			return;
 		}
-		// Space is the transport here as it is everywhere else — except while a
-		// control has focus, where it means "press this".
+		// Space is the transport here, except while a control has focus.
 		if (e.key === " " && duration > 0) {
 			if ((e.target as HTMLElement | null)?.closest("button, input")) return;
 			e.preventDefault();
@@ -1426,13 +1252,7 @@
 							></canvas>
 							{#if !isFullCrop(crop)}
 								{const idle = tool !== "crop"}
-								<!-- Shown under every tool, not just Crop: what is cropped away is
-								     gone whichever tool is in hand, and hiding it meant erasing and
-								     keying against a frame that wasn't the one being kept.
-
-								     Four panels rather than one outlined box: the dimming has to
-								     land outside the rectangle, and a border alone reads as a
-								     selection instead of as what is being thrown away. -->
+								<!-- Shown under every tool, not just Crop: what is cropped away is gone either way. -->
 								<div
 									class="crop-shade"
 									class:idle
@@ -1462,11 +1282,7 @@
 									style="left:{crop.x * 100}%; top:{crop.y *
 										100}%; width:{crop.w * 100}%; height:{crop.h * 100}%"
 								>
-									<!-- Corners only. The sides are draggable too, but marking all
-									     eight puts more furniture on a small rectangle than it can
-									     hold; the cursor is what says an edge is live. Decoration
-									     alone — the canvas under them hit-tests the edges, so they
-									     take no pointer events of their own. -->
+									<!-- Corners only: all eight would crowd a small rectangle. -->
 									{#if !idle}
 										<span class="crop-grip tl"></span>
 										<span class="crop-grip tr"></span>
@@ -1480,9 +1296,7 @@
 				</div>
 
 				{#if duration > 0}
-					<!-- Videos get a transport: the background to key out is rarely the
-					     same colour all the way through, so the whole clip has to be
-					     watchable with the key live on it. -->
+					<!-- Videos get a transport: the background to key out rarely holds one colour. -->
 					<div class="transport">
 						<div class="bar-cluster">
 							<button
@@ -1546,8 +1360,7 @@
 						onChange={setSpan}
 					/>
 
-					<!-- Videos only: an image is one instant, and there is nowhere in it
-					     for a second key to go. -->
+					<!-- Videos only: an image is one instant, with nowhere for a second key. -->
 					<SourceKeyframes
 						tracks={trackViews}
 						{duration}
@@ -1556,8 +1369,7 @@
 						onToggle={(id) => toggleTrack(id as TrackId)}
 						onAdd={(id, at) => {
 							beforeEdit();
-							// Seek first: the key lands under the playhead, holding the
-							// value the tracks sample there.
+							// Seek first: the key lands under the playhead.
 							if (at !== undefined) seekTo(at);
 							addKey(id as TrackId);
 						}}
@@ -1586,9 +1398,7 @@
 					{/each}
 				</div>
 
-				<!-- Every tool opens the same way: what it does, then its Reset in the
-				     one place, then its rows. Reset lives here rather than among the
-				     rows because it undoes the whole tool, not the row it sits in. -->
+				<!-- Every tool opens the same way: what it does, then its Reset, then its rows. -->
 				<div class="tool-head">
 					<p class="tool-hint">{TOOLS.find((t) => t.value === tool)?.hint}</p>
 					<div class="bar-cluster">
@@ -1604,9 +1414,7 @@
 					</div>
 				</div>
 
-				<!-- Rows are label / control / readout throughout, and double-clicking
-				     one puts that control back — the same row as everywhere else in
-				     the app. -->
+				<!-- Rows are label / control / readout throughout; double-clicking one resets it. -->
 				<div class="rows">
 					{#if tool === "key"}
 						<div class="row">
@@ -1742,11 +1550,7 @@
 						</div>
 
 						{#if edit.mask && animatable}
-							<!-- Position as sliders, not only as Shift+drag on the preview.
-							     The drag is the quicker gesture but it is invisible, and
-							     without a visible way to move the shape the keyframe track
-							     could only ever be filled with identical keys — which looks
-							     exactly like the animation being broken. -->
+							<!-- Position as sliders, not only Shift+drag on the preview: the drag is invisible. -->
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div
 								class="row"
@@ -1853,9 +1657,7 @@
 </div>
 
 <style>
-	/* The crop overlay is positioned against this, not against the preview box:
-	   the canvas is letterboxed inside it and the rectangle has to track the
-	   picture, not the padding. */
+	/* The crop overlay is positioned against this, not the preview box. */
 	.canvas-wrap {
 		position: relative;
 		display: block;
@@ -1888,9 +1690,7 @@
 		pointer-events: none;
 	}
 
-	/* Under another tool the rectangle is not being edited, so it stops looking
-	   like a handle: the discarded margin goes flatter and the outline drops to
-	   a hairline rather than the live dashes. */
+	/* Under another tool the rectangle is not being edited, so it stops looking like a handle. */
 	.crop-shade.idle {
 		background: rgba(0, 0, 0, 0.75);
 	}
@@ -1934,9 +1734,7 @@
 		bottom: -4px;
 	}
 
-	/* The tools as one segmented strip, the width of the column. The picked
-	   one is held down the way the button group marks its pick; the pointer's
-	   mode is a selection, not a switch that is on. */
+	/* The tools as one segmented strip; the picked one is held down. */
 	.tool-bar {
 		display: flex;
 		flex-shrink: 0;
@@ -2009,10 +1807,7 @@
 		animation: overlay-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 	}
 
-	/* A module lifted out of the rack: one surface, hairlines between its
-	   head, bench and foot, and a top edge the light catches. Big on purpose —
-	   cropping and erasing are aiming tasks, and the old 420px column left the
-	   picture smaller than the controls under it. */
+	/* A module lifted out of the rack: one surface with hairlines between its parts. */
 	.edit-dialog {
 		display: flex;
 		flex-direction: column;
@@ -2050,8 +1845,7 @@
 		border-bottom: 1px solid var(--line);
 	}
 
-	/* The engraved label, then the file it is about — the thing that changes
-	   from one opening to the next gets the size. */
+	/* The engraved label, then the file it is about. */
 	.dialog-title {
 		display: flex;
 		flex-direction: column;
@@ -2084,8 +1878,7 @@
 		color: var(--text-4);
 	}
 
-	/* The picture and its transport on the left, every control on the right, so
-	   the preview keeps the room instead of splitting it with a stack of rows. */
+	/* The picture and its transport on the left, every control on the right. */
 	.dialog-body {
 		display: flex;
 		flex: 1;
@@ -2142,8 +1935,7 @@
 		cursor: crosshair;
 	}
 
-	/* Below this the two columns won't both hold their width, so they stack and
-	   the dialog goes back to being a scrolling sheet. */
+	/* Below this the two columns won't both hold their width, so they stack. */
 	@media (max-width: 720px) {
 		.edit-dialog {
 			height: auto;
@@ -2189,8 +1981,7 @@
 		color: var(--text-2);
 	}
 
-	/* Off the end of the transport. Wider than the video bar's: 0.25×–4× on a
-	   log track is four octaves, and a short slider lands between the stops. */
+	/* Wider than the video bar's: 0.25× to 4× on a log track is four octaves. */
 	.speed {
 		display: flex;
 		align-items: center;
@@ -2207,8 +1998,7 @@
 		gap: 0.4rem;
 	}
 
-	/* Flex, not grid: RangeSlider's input is `flex: 1; width: 0`, which collapses
-	   to nothing in a grid cell. */
+	/* Flex, not grid: RangeSlider's input is `flex: 1; width: 0`. */
 	.row {
 		display: flex;
 		align-items: center;
@@ -2220,8 +2010,7 @@
 		min-width: 6.5rem;
 		font-size: 0.7rem;
 		color: var(--text-2);
-		/* The row's double-click resets the control; without this it also
-		   selects the label text. */
+		/* The row's double-click resets the control; without this it also selects the label. */
 		user-select: none;
 	}
 
@@ -2243,8 +2032,7 @@
 		border-top: 1px solid var(--line);
 	}
 
-	/* Undo and redo sit at the left, away from Reset: they are the way back from
-	   it, and one misaimed click apart is too close. */
+	/* Undo and redo sit at the left, away from Reset. */
 	.foot-gap {
 		flex: 1;
 	}

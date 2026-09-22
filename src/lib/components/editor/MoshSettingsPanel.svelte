@@ -24,16 +24,13 @@
 		audioSmoothing: number;
 		audioPunch: number;
 		hasAudio: boolean;
-		/** Name of the lane (fx or media) these settings belong to, when one is
-		 * selected. Null = the editor's own settings, which single mode uses. */
+		/** Name of the lane these settings belong to, when one is selected. Null = the editor's own. */
 		targetLabel?: string | null;
-		/** Whether that lane carries its own settings, or is still following the
-		 * editor's — the first edit here pins the whole set to the lane. */
+		/** Whether that lane carries its own settings or follows the editor's. */
 		targetOwnsSettings?: boolean;
 		/** Drop the lane's own settings so it follows the editor's again. */
 		onFollowEditor?: () => void;
-		/** The song's tempo: what auto clips re-roll against in sequence mode,
-		 * and what beat-synced effects follow in either mode. */
+		/** The song's tempo: what auto clips re-roll against, and what beat-synced effects follow. */
 		showTiming?: boolean;
 		bpm?: number;
 		bpmDetecting?: boolean;
@@ -63,11 +60,7 @@
 		onBpmChange,
 	}: Props = $props();
 
-	/**
-	 * Double-clicking a row — its label, its slider, its checkbox — puts that
-	 * setting back to its default. Bound on the row rather than the control so
-	 * the label works too; text fields keep double-click-to-select-a-word.
-	 */
+	/** Double-clicking a row puts that setting back to its default. */
 	function resetRow(e: MouseEvent, reset: () => void) {
 		const t = e.target as HTMLElement | null;
 		if (
@@ -78,9 +71,7 @@
 	}
 </script>
 
-<!-- Whose settings these are: a lane's, or (unlabelled) the editor's own. A
-     lane that hasn't been edited yet shows the editor's values and says so;
-     once it has its own, a click hands it back. -->
+<!-- Whose settings these are: a lane's, or (unlabelled) the editor's own. -->
 {#snippet head(title: string)}
 	<div class="section-head">
 		<span class="rack-label">{title}</span>
@@ -106,8 +97,7 @@
 	</div>
 {/snippet}
 
-<!-- A setting: label, control, and a reset that shows once the value has
-     left its default. Double-clicking the row resets it too. -->
+<!-- A setting: label, control, and a reset that shows once the value moves. -->
 {#snippet row(
 	id: string,
 	label: string,
@@ -385,8 +375,7 @@
 		min-width: 92px;
 		color: var(--text-2);
 		font-size: 0.76rem;
-		/* The row's double-click resets the setting; without this it also
-		   selects the label text. */
+		/* The row's double-click resets the setting; without this it also selects the label. */
 		user-select: none;
 	}
 

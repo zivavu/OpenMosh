@@ -8,12 +8,8 @@ import {
 
 const BINS = 32;
 
-/**
- * A frame shaped like real material: bins resting well above zero and well
- * below full scale, tilted so highs are quieter, and swinging on a kick every
- * half second so each bin has genuine frame-to-frame dynamics. `loudness`
- * scales the whole frame.
- */
+/** A frame shaped like real material: bins above zero and below full scale, tilted so
+ * highs are quieter, swinging on a kick every half second. `loudness` scales it. */
 function frame(loudness: number, t: number): Uint8Array {
 	const a = new Uint8Array(BINS);
 	const beat = Math.exp(-((t % 0.5) / 0.12));
@@ -28,11 +24,8 @@ function frame(loudness: number, t: number): Uint8Array {
 const peak = (a: Uint8Array) => a.reduce((m, v) => (v > m ? v : m), 0);
 const mean = (a: Uint8Array) => a.reduce((t, v) => t + v, 0) / a.length;
 
-/**
- * Run a stretch of frames and report over the whole window, not on the last
- * one: with a beat in the signal, whether any single frame is loud depends
- * entirely on where in the bar it lands.
- */
+/** Run a stretch of frames and report over the whole window, not the last one: with a
+ * beat, whether any single frame is loud depends on where it lands. */
 function run(loudness: number, seconds: number, fps = 60, startT = 0) {
 	const dt = 1 / fps;
 	let t = startT;
@@ -53,8 +46,7 @@ describe("normalizeSpectrum", () => {
 	beforeEach(resetSpectrumRange);
 
 	it("expands a narrow input band to use the full output range", () => {
-		// The bug this exists to fix: raw bins occupy a slice in the middle of the
-		// byte range and never approach either end, so the bars barely move.
+		// The bug this fixes: raw bins occupy a slice mid-range and never approach either end.
 		const raw = frame(0.8, 0.4);
 		expect(peak(raw)).toBeLessThan(150);
 		expect(Math.min(...raw)).toBeGreaterThan(50);
@@ -65,9 +57,8 @@ describe("normalizeSpectrum", () => {
 	});
 
 	it("still moves when overall loudness changes", () => {
-		// The ceiling is shared across bins rather than per-bin, so a louder
-		// passage lifts every bar before the envelope catches up. A per-bin
-		// ceiling would pin each band at full scale and lose this entirely.
+		// The ceiling is shared across bins, so a louder passage lifts every bar before the
+		// envelope catches up; a per-bin ceiling would pin each band at full scale.
 		const settled = run(0.8, 4);
 		const quiet = run(0.8, 0.25, 60, settled.t);
 		const loud = run(1.4, 0.25, 60, quiet.t);
@@ -83,16 +74,13 @@ describe("normalizeSpectrum", () => {
 	});
 
 	it("does not stretch near-silence into a full-scale display", () => {
-		// Room tone or a fade tail: real, but with almost no dynamics. Auto-gain
-		// will happily amplify it into a chorus unless the ceiling has a floor.
+		// Room tone or a fade tail: real but nearly static; auto-gain would amplify it.
 		expect(run(0.03, 5).high).toBeLessThan(120);
 	});
 
 	it("comes back to life within a beat of a hard cut", () => {
-		// Until a bin's floor falls back to the new quiet level its height clamps
-		// at zero, so there is a blank window after any downward step. What FLOOR_
-		// FALL_TAU buys is that the floor is down again before the next kick lands,
-		// so the display resumes on that beat instead of sitting out several.
+		// Until a bin's floor falls back to the new quiet level its height clamps at zero, so
+		// there is a blank window after any downward step. FLOOR_FALL_TAU shortens it.
 		const settled = run(1, 5);
 		const after = run(0.45, 1, 60, settled.t);
 		expect(after.high).toBeGreaterThan(150);
@@ -115,10 +103,8 @@ describe("normalizeSpectrum", () => {
 	});
 
 	it("draws a repeated note at the same height every time", () => {
-		// Reported symptom: the first stab of a repeating figure read strongly and
-		// every one after it a little weaker, at identical volume. Two causes, both
-		// cumulative — the floor nudged up by the note itself, and a ceiling too
-		// slow ever to reach the top of a transient.
+		// Reported symptom: the first stab of a repeating figure read strongly and every one
+		// after it weaker, at identical volume. Causes: floor creep and a too-slow ceiling.
 		const gate = (t: number) => {
 			const a = new Uint8Array(BINS);
 			const level = t % 0.5 < 0.25 ? 0.85 : 0.42;
@@ -140,8 +126,7 @@ describe("normalizeSpectrum", () => {
 			hits.push(high);
 		}
 
-		// The opening hit is allowed to over-read: nothing has established the
-		// scale yet. From there it has to hold, however long the figure runs.
+		// The opening hit may over-read: nothing has established the scale yet.
 		const settled = hits.slice(2);
 		expect(Math.max(...settled) - Math.min(...settled)).toBeLessThan(3);
 		// And it must not be drifting in one direction across the run.
@@ -149,8 +134,7 @@ describe("normalizeSpectrum", () => {
 	});
 
 	it("still resolves loud from quiet instead of clipping everything flat", () => {
-		// A ceiling unable to track a transient used to sag all the way to
-		// MIN_CEIL, which pinned every bar at full height and flattened dynamics.
+		// A ceiling unable to track a transient used to sag to MIN_CEIL, flattening dynamics.
 		const stab = (t: number, amount: number) => {
 			const a = new Uint8Array(BINS);
 			const env = Math.exp(-((t % 0.5) / 0.09));
@@ -178,8 +162,7 @@ describe("normalizeSpectrum", () => {
 	it("reseeds after a reset so a seek doesn't inherit the old envelope", () => {
 		run(1, 5);
 		resetSpectrumRange();
-		// The first frame after a reset seeds the floors from itself, so nothing
-		// has risen above its own resting level yet.
+		// The first frame after a reset seeds the floors from itself, so nothing has risen.
 		expect(peak(normalizeSpectrum(frame(0.4, 0), 1 / 60)!)).toBe(0);
 	});
 });
@@ -187,7 +170,6 @@ describe("normalizeSpectrum", () => {
 describe("smoothSpectrum", () => {
 	beforeEach(resetSpectrumRange);
 
-	/** Hold a level for `seconds`, then read what the follower reports. */
 	function hold(
 		key: string,
 		level: number,
@@ -204,10 +186,8 @@ describe("smoothSpectrum", () => {
 	}
 
 	it("rises faster than it falls, at every smoothing setting", () => {
-		// Asymmetric on purpose: a follower quick enough to catch a transient is
-		// also quick enough to flicker on every gap between hits. Compared as
-		// ground covered in the same window, since the absolute attack does get
-		// slower as smoothing rises — it is the ratio that has to hold.
+		// Asymmetric on purpose: a follower quick enough to catch a transient also flickers on
+		// every gap between hits. Compared as ground covered in the same window.
 		for (const smoothing of [0, 0.45, 1]) {
 			const key = `asym-${smoothing}`;
 			hold(key, 0, 1, smoothing);
@@ -229,8 +209,7 @@ describe("smoothSpectrum", () => {
 	});
 
 	it("keeps a separate follower per instance", () => {
-		// Two Audio Bars at different Smoothing settings read the same audio, so
-		// sharing one follower would let the slower instance drag the faster one.
+		// Two Audio Bars at different Smoothing read the same audio; sharing would drag.
 		hold("a", 255, 1, 0);
 		hold("b", 255, 1, 0.9);
 		const fast = hold("a", 0, 0.15, 0);

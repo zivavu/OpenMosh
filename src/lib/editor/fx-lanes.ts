@@ -1,17 +1,4 @@
-/**
- * Stacked effect lanes for sequence mode.
- *
- * The media layers say what a span of time shows. An fx lane says only "also
- * run these effects over the frame here" — it takes no media, and where it
- * holds nothing, it costs nothing. That makes it a lane of free-floating clips
- * (see timeline/clips.ts).
- *
- * Composition is plain concatenation. GlRenderer runs an EffectInstance[]
- * sequentially through its ping-pong FBOs and keys every piece of per-effect
- * state (feedback buffers, phase, tracking) by instanceId, so appending one
- * lane's chain to another's is exactly "and then run these too" — two lanes
- * can even hold the same effect without colliding.
- */
+/** Stacked effect lanes for sequence mode; an fx lane takes no media, just effects. */
 
 import {
 	generateId,
@@ -48,32 +35,16 @@ import type { MoshOptions } from "./mosh";
 import type { MoshSnapshot } from "./mosh-history";
 import { beatsToSeconds, cleanEffects, type ChainMode } from "./sequence";
 
-/**
- * One span of extra effects on an fx lane: a chain clip (see chain-clip.ts)
- * plus a fade of its own.
- */
+/** One span of extra effects on an fx lane: a chain clip (see chain-clip.ts) plus a fade. */
 export interface FxClip extends ChainClip {
-	/**
-	 * Fade the lane's contribution in over this many seconds from the clip's
-	 * start, and out over the same before its end.
-	 *
-	 * Not a scene transition: a stacked lane has no "other side" — before the
-	 * clip the lane contributes nothing at all. What a clip boundary needs is
-	 * the chain arriving rather than snapping on, so this scales the parameters
-	 * of the lane's own effects toward their disabled state instead of
-	 * compositing anything.
-	 */
+	/** Fade the lane's contribution in and out over this many seconds at each edge. */
 	fadeSec?: number;
 }
 
 /** Default ramp for a clip that asks for one, in seconds. */
 export const DEFAULT_FX_FADE = 0.25;
 
-/**
- * How strongly `clip` applies at `time`: 1 across the body, ramping from 0 at
- * each edge when the clip has a fade. Returns 1 for clips without one, which is
- * every clip until the user asks for a ramp.
- */
+/** How strongly `clip` applies at `time`: 1 across the body, 0 at a faded edge. */
 export function fxClipWeight(clip: FxClip, time: number): number {
 	return clipFadeWeight(clip, clip.fadeSec, clip.fadeSec, time);
 }
@@ -81,27 +52,19 @@ export function fxClipWeight(clip: FxClip, time: number): number {
 /** 0-based re-roll tick index inside an interval clip. */
 export const fxClipTick: (clip: FxClip, time: number) => number = chainClipTick;
 
-/** See LaneSettings — the fx lanes were the first to carry their own. */
+/** See LaneSettings; the fx lanes were the first to carry their own. */
 export type FxLaneSettings = LaneSettings;
 
-/**
- * A stacked effect layer. Clips within a lane never overlap, so a lane
- * contributes at most one chain at a time and drag/resize stay unambiguous.
- */
+/** A stacked effect layer; clips within a lane never overlap. */
 export interface FxLane {
 	id: string;
 	name: string;
 	/** Off = the lane contributes nothing, without losing its clips. */
 	enabled: boolean;
-	/**
-	 * Place in the stack it shares with the text and media layers. A lane above
-	 * a layer applies its chain to that layer too; below it, the layer
-	 * composites over whatever the lane produced.
-	 */
+	/** Place in the shared stack; a lane above a layer applies its chain to it too. */
 	z: number;
 	clips: FxClip[];
-	/** Absent on lanes saved before per-lane settings, and on lanes the user has
-	 * never opened: those follow the editor's settings, as they always did. */
+	/** Absent on lanes saved before per-lane settings; those follow the editor's. */
 	settings?: FxLaneSettings;
 }
 
@@ -124,21 +87,10 @@ export function createFxLane(
 	return { id: generateId(), name, enabled: true, z, clips: [], settings };
 }
 
-/** Most stacked lanes at once. A sanity cap, not a frame budget: the renderer
- * keeps up with far more passes than anyone stacks on purpose. */
+/** Most stacked lanes at once. A sanity cap, not a frame budget. */
 export const MAX_FX_LANES = 20;
 
-/**
- * Add a lane, named after its position. At the cap, returns the input by
- * identity so callers can skip a history entry for a no-op.
- *
- * The lane starts with one clean clip across the whole timeline rather than
- * bare: an empty lane renders nothing and offers nothing to select, so the
- * first thing to do with one was always to draw a clip over it. A full-width
- * clean clip is that same starting point, already there to mosh or fill from a
- * preset — and still contributes nothing until its effects are switched on.
- * Falls back to a bare lane when there is no timeline yet (duration 0).
- */
+/** Add a lane, named after its position; at the cap returns the input by identity. */
 export function appendFxLane(
 	lanes: FxLane[],
 	settings?: FxLaneSettings,
@@ -151,16 +103,7 @@ export function appendFxLane(
 	return [...lanes, lane];
 }
 
-/**
- * The clips contributing at `time`, in lane order — which is chain order, so
- * reordering lanes reorders the passes.
- *
- * `forceClipId` is the clip being edited in the panel: its lane contributes it
- * whatever the playhead is over, and contributes nothing else — so a tweak is
- * never invisible because the playhead sits past the clip, and the chain can't
- * carry the same instanceId twice (which would leave two passes sharing one
- * feedback buffer). Preview only; the export passes no override.
- */
+/** The clips contributing at `time`, in lane order, which is chain order. */
 export function activeFxClips(
 	lanes: FxLane[] | null | undefined,
 	time: number,
@@ -169,8 +112,7 @@ export function activeFxClips(
 	return activeFxParts(lanes, time, forceClipId).map((p) => p.clip);
 }
 
-/** The same walk, keeping the lane each clip came from — the settings it rolls
- * and follows the music under live there. */
+/** The same walk, keeping the lane each clip came from; its settings live there. */
 function activeFxParts(
 	lanes: FxLane[] | null | undefined,
 	time: number,
@@ -195,10 +137,7 @@ const NO_CLIPS: FxClip[] = [];
 const NO_PARTS: { lane: FxLane; clip: FxClip }[] = [];
 const NO_LAYERS: FxLayer[] = [];
 
-/**
- * One lane's contribution for a frame. Structurally the renderer's
- * PostChainLayer: the chain the lane adds, and how strongly it applies.
- */
+/** One lane's contribution for a frame; structurally the renderer's PostChainLayer. */
 export interface FxLayer {
 	effects: EffectInstance[];
 	/** 0 = absent, 1 = fully applied. Below 1 only while a clip's fade ramps. */
@@ -211,30 +150,11 @@ export interface FxLayer {
 }
 
 export interface FxEffectSourceOptions {
-	/**
-	 * Serve static clips as cached deep clones, so the export can write each
-	 * frame's audio-link values into the chain it renders without those values
-	 * landing in the clips the user is still editing.
-	 */
+	/** Serve static clips as cached deep clones, so the export can write into the chain safely. */
 	clone?: boolean;
 }
 
-/**
- * Time → stacked lanes resolver. Preview and export both build one of these,
- * so a frame that was scrubbed past is the frame that gets written out:
- * interval rolls are keyed by (clip, seed, tick, mosh options), which makes a
- * fresh source built from the same inputs reproduce the preview exactly.
- *
- * Returns a shared empty array when nothing is active, so the common "no fx
- * lanes here" frame doesn't mint an array the render loop has to re-check.
- *
- * A frame whose layers came out identical to the last one gets that same array
- * back rather than an equal copy. The preview calls this from a derived that
- * re-runs on every tick of an interpolated clock, and most of those ticks land
- * inside the same clips at the same weights — handing back a fresh array there
- * would invalidate the whole chain downstream (and the canvas props with it)
- * for a frame that renders exactly the same thing.
- */
+/** Time to stacked lanes resolver, shared by preview and export so both agree on a frame. */
 export function createFxLayerSource(
 	getLanes: () => FxLane[] | null | undefined,
 	getMoshOptions: () => MoshOptions,
@@ -254,9 +174,7 @@ export function createFxLayerSource(
 			effects: chainClipEffectsAt(clip, time, cache, clone, () =>
 				laneMoshOptions(lane, getMoshOptions()),
 			),
-			// A clip pinned in for editing shows at full strength: the fade is about
-			// how it enters during playback, and ramping it here would leave the
-			// panel adjusting a chain that is only partly on screen.
+			// A clip pinned in for editing shows at full strength, not its fade.
 			weight: clip.id === forceClipId ? 1 : fxClipWeight(clip, time),
 		}));
 		if (sameLayers(last, layers)) return last;
@@ -280,8 +198,7 @@ function sameLayers(a: FxLayer[], b: FxLayer[]): boolean {
 	return true;
 }
 
-/** Every stacked effect for a frame, in lane order — for the audio-link tick
- * and the animation check, which care about the instances, not the weights. */
+/** Every stacked effect for a frame, in lane order. */
 export function flattenFxLayers(layers: FxLayer[]): EffectInstance[] {
 	if (layers.length === 0) return EMPTY;
 	let out: EffectInstance[] | null = null;
@@ -309,11 +226,7 @@ export function updateFxClips(
 	return updateClipsIn(lanes, clipIds, fn);
 }
 
-/**
- * Switch clips to a re-roll mode. Going to "interval" mints a seed if there
- * isn't one, so the rolls are reproducible from the moment it's turned on;
- * going back to "static" keeps the last concrete chain rather than blanking it.
- */
+/** Switch clips to a re-roll mode; "static" keeps the last concrete chain. */
 export function setFxClipsMode(
 	lanes: FxLane[],
 	clipIds: Set<string>,
@@ -326,10 +239,7 @@ export function setFxClipsMode(
 	);
 }
 
-/**
- * Re-roll clips. Static clips get a fresh concrete chain; interval clips get a
- * new base seed, which re-rolls every tick in the span at once.
- */
+/** Re-roll clips: static ones get a fresh chain, interval ones a new base seed. */
 export function rollFxClips(
 	lanes: FxLane[],
 	clipIds: Set<string>,
@@ -337,8 +247,8 @@ export function rollFxClips(
 ): FxLane[] {
 	return lanes.map((lane) => {
 		if (!lane.clips.some((c) => clipIds.has(c.id))) return lane;
-		// Each lane rolls under its own settings, so one Mosh over a selection
-		// spanning lanes gives each lane the mosh it is set up for.
+		// Each lane rolls under its own settings, so one Mosh over a cross-lane
+		// selection gives each lane its own mosh.
 		const laneOptions = laneMoshOptions(lane, options);
 		return {
 			...lane,
@@ -365,18 +275,12 @@ export function clearFxClips(lanes: FxLane[], clipIds: Set<string>): FxLane[] {
 	return updateFxClips(lanes, clipIds, clearedChainClip);
 }
 
-/**
- * Cut the clip covering `at` into two (Ctrl+Click). Both halves keep the chain — deep-copied, so editing one no longer
- * touches the other — along with the mode, interval spacing and seed.
- *
- * Returns the lane unchanged when `at` isn't inside a clip, or when either half
- * would come out shorter than MIN_CLIP_LENGTH.
- */
+/** Cut the clip covering `at` into two (Ctrl+Click); no-op when a half would be too short. */
 export function splitFxClipAt(lane: FxLane, at: number): FxLane {
 	return splitChainClipAt(lane, at, generateId);
 }
 
-/** Put a clip back to a remembered mosh — see withChainMosh. */
+/** Put a clip back to a remembered mosh; see withChainMosh. */
 export function restoreFxClipMosh(
 	lanes: FxLane[],
 	clipId: string,
@@ -404,11 +308,7 @@ export function findFxClip(
 	return null;
 }
 
-/**
- * Deep copy for the export path, which applies per-frame audio-link values
- * into the chain it renders and must not write them back into the clips the
- * user is editing.
- */
+/** Deep copy for the export path, which must not write per-frame values into the clips. */
 export const cloneFxEffects: (effects: EffectInstance[]) => EffectInstance[] =
 	cloneChainEffects;
 
@@ -420,13 +320,12 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
 		id: lane.id ?? generateId(),
 		name: lane.name ?? `FX ${i + 1}`,
 		enabled: lane.enabled !== false,
-		// Lanes saved before the shared stack existed sit under every layer, which
-		// is where they rendered: layers composited over the finished lane output.
+		// Lanes saved before the shared stack sit under every layer, where they
+		// rendered.
 		z: typeof lane.z === "number" ? lane.z : i - lanes.length,
 		settings: normalizeLaneSettings(lane.settings),
 		clips: (Array.isArray(lane.clips) ? lane.clips : [])
-			// A clip with no chain would be an invisible span that still takes up
-			// room on the lane; drop it rather than resurrect it empty.
+			// A clip with no chain would be an invisible span that still takes up room.
 			.filter((c: Partial<FxClip>) => Array.isArray(c.effects))
 			.map((clip: FxClip) => ({
 				id: clip.id ?? generateId(),
@@ -445,11 +344,7 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
 	}));
 }
 
-/**
- * Re-derive `intervalSec` for every clip whose interval was set in beats, so
- * correcting the BPM retimes them. Returns the input by identity when nothing
- * moves, so callers can skip a redundant commit.
- */
+/** Re-derive `intervalSec` for beat-set intervals, so a BPM fix retimes them. */
 export function applyBpmToFxLanes(lanes: FxLane[], bpm: number): FxLane[] {
 	if (bpm <= 0) return lanes;
 	let changed = false;

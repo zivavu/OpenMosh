@@ -12,21 +12,16 @@
 	import { snapStill, startTake, type Take } from "../../webcam/take";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
 
-	/**
-	 * The one camera overlay, in three shapes: single mode takes the camera
-	 * itself as its source, the editor records a take to land on a lane, the
-	 * slideshow snaps stills on the beat.
-	 */
+	/** The one camera overlay, in three shapes: single mode takes the camera as its
+	 * source, the editor records a take, the slideshow snaps stills on the beat. */
 	interface Props {
 		mode: "live" | "record" | "burst";
 		/** live: the camera, wrapped as the editor's file. */
 		onLive?: (file: File) => void;
-		/** record: the finished take. */
 		onTake?: (file: File) => void;
-		/** burst: the stills, in order. */
 		onSnaps?: (files: File[]) => void;
-		/** record/burst: start and stop the host's transport around the capture,
-		 * so the song plays while you perform. */
+		/** record/burst: start and stop the host's transport around the capture, so
+		 * the song plays while you perform. */
 		onTransport?: (playing: boolean) => void;
 		/** burst: the host's clock in beats; null when it has no grid. */
 		beatAt?: () => number | null;
@@ -78,7 +73,6 @@
 				? "Record a take"
 				: "Snap on the beat",
 	);
-	/** The camera's own frame size, once it is open. */
 	let streamSize = $derived.by(() => {
 		const s = stream?.getVideoTracks()[0]?.getSettings();
 		return s ? `${s.width ?? "?"} × ${s.height ?? "?"}` : undefined;

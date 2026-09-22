@@ -1,10 +1,7 @@
 import type { EffectInstance } from "../effects";
 
-/**
- * The mosh-relevant slice of a chain clip. Timing (start/end) is deliberately
- * excluded: walking the mosh history must not move a clip, only change what
- * it renders.
- */
+/** Mosh-relevant slice of a chain clip. Timing (start/end) is excluded so walking
+ * the history never moves a clip, only changes what it renders. */
 export interface MoshSnapshot {
 	effects: EffectInstance[];
 	/** "interval" clips mosh by re-seeding rather than by new effects. */
@@ -19,14 +16,8 @@ interface Stack<T> {
 	index: number;
 }
 
-/**
- * Keyed ←/→ mosh history. Each id gets its own stack so the arrows always walk
- * the moshes of the thing you're editing, matching how they behave in single
- * mode — media and fx clips key by clip id, text lanes by lane id.
- *
- * Entry 0 is the pre-mosh state, seeded on the first roll, so ← from the first
- * mosh returns to what was there before it.
- */
+/** Keyed ←/→ mosh history: each id gets its own stack so the arrows walk the moshes
+ * of the thing being edited. Entry 0 is the pre-mosh state, seeded on first roll. */
 export class MoshHistory<T> {
 	#stacks = new Map<string, Stack<T>>();
 
@@ -62,12 +53,10 @@ export class MoshHistory<T> {
 		return stack.entries[stack.index];
 	}
 
-	/** Drop a deleted thing's stack. */
 	forget(id: string): void {
 		this.#stacks.delete(id);
 	}
 
-	/** Drop every stack whose owner no longer exists. */
 	retain(liveIds: Iterable<string>): void {
 		const keep = new Set(liveIds);
 		for (const id of [...this.#stacks.keys()]) {

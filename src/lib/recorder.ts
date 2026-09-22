@@ -40,11 +40,8 @@ import type { StreamTargetChunk } from "mediabunny";
 import type { EffectInstance } from "./effects";
 import type { GlRenderer } from "./gl/renderer";
 
-/**
- * Export bitrate scales with the output size — a fixed rate starves big
- * canvases and bloats small ones. Chrome honors the target; Firefox clamps
- * it regardless of what's asked. Mosh content is noise-heavy, so err generous.
- */
+/** Bitrate scales with output size: a fixed rate starves big canvases and bloats
+ * small ones. Chrome honors the target, Firefox clamps it. */
 const BITS_PER_PIXEL = 0.2;
 const MIN_VIDEO_BITRATE = 3_000_000;
 const MAX_VIDEO_BITRATE = 60_000_000;
@@ -72,55 +69,42 @@ export interface RecordOptions {
 	/** Called when frame capture is done and finalization (mux, blob) begins. */
 	onFinalizing?: () => void;
 	signal?: AbortSignal;
-	/** When set, audio is decoded and used to drive effects during recording; for WebM it is also muxed into the output. */
+	/** Decoded to drive effects during recording; for WebM it is also muxed. */
 	audioFile?: File;
-	/** Start time of the audio region in seconds (used for trimming and for effect timeline). */
+	/** Start of the audio region in seconds, for trimming and effect timing. */
 	audioStart?: number;
 	/** End time of the audio region in seconds. */
 	audioEnd?: number;
-	/** Called before each frame render — use to swap source textures, effects, etc.
-	 * Return `true` to skip the default `renderer.render()` call (e.g. when transition already rendered).
-	 * Return a function to replace the default render: it is invoked AFTER per-frame
-	 * audio data has been applied to the active effects, so custom renders (e.g.
-	 * transitions blending two chains) still get fresh audio-linked values. It is
-	 * handed this frame's text layers so a custom render can composite them too.
-	 * May return a Promise. */
+	/** Called before each frame render, to swap source textures, effects and so on.
+	 * Return `true` to skip the default render, or a function to replace it. */
 	onBeforeRender?: (
 		frameIndex: number,
 		time: number,
 	) => boolean | void | CustomRender | Promise<boolean | void | CustomRender>;
-	/** When provided, these effects are used for rendering instead of `effects`. Allows per-frame effect swapping via onBeforeRender. */
+	/** Used for rendering instead of `effects`, for per-frame effect swapping. */
 	effectsRef?: { current: EffectInstance[] };
-	/**
-	 * Per-frame split of the render chain by audio response, set from
-	 * `onBeforeRender`. Sequence exports use it to give each fx lane the
-	 * response its clips were previewed under; null falls back to applying one
-	 * response to the whole chain.
-	 */
+	/** Per-frame split of the render chain by audio response, set from
+	 * `onBeforeRender`; null applies one response to the whole chain. */
 	audioGroupsRef?: { current: AudioLinkGroup[] | null };
-	/** When true, the audio is looped to match the recording duration. */
 	loopAudio?: boolean;
-	/** Speed factor applied to the audio via pitch-preserving time-stretch. Defaults to 1. */
+	/** Pitch-preserving time-stretch factor for the audio. Defaults to 1. */
 	audioSpeed?: number;
-	/** Linear gain to apply to audio before FFT analysis and muxing. Defaults to 1.0 (no change). */
+	/** Linear gain applied before FFT analysis and muxing. Defaults to 1. */
 	normalizeGain?: number;
 	/** How band levels are followed and shaped. Must match the preview. */
 	audioResponse?: AudioResponse;
-	/** Text lanes composited into the chain, resolved per frame. */
 	textTimeline?: TextTimeline | null;
 	/** Media lanes, resolved per frame on the same clock as the text lanes. */
 	mediaTimeline?: MediaTimeline | null;
 	/** Per-source edits, for the rate each media clip runs at. */
 	sourceEdits?: Record<string, SourceEdit>;
-	/** Uploads each visible layer's frame; awaited, so the written frame is the
-	 * one the layer asked for rather than whatever had decoded by then. */
+	/** Uploads each visible layer's frame; awaited, so the written frame is the one asked for. */
 	mediaLayerSink?: ((layers: ResolvedMediaLayer[]) => Promise<void>) | null;
-	/** Chain per media clip and frame, the export's own — see recording.ts. */
+	/** Chain per media clip and frame, the export's own; see recording.ts. */
 	mediaChains?: MediaChainSource | null;
 	/** The same, per text clip. */
 	textChains?: TextChainSource | null;
-	/** Added to the frame time to reach the timeline's clock — an export that
-	 * starts at an audio span offset still lands on the clips you placed. */
+	/** Added to the frame time to reach the timeline's clock (audio span offset). */
 	textTimeOffset?: number;
 	/** Frame-time-to-master-clock rate, for sources played back off-speed. */
 	textTimeScale?: number;
@@ -134,9 +118,9 @@ export interface RecordOptions {
 interface FrameSink {
 	/** Human-readable backend name for the perf log. */
 	label: string;
-	/** Capture the current canvas state as frame `frameIndex`. Applies its own backpressure. */
+	/** Capture the current canvas as frame `frameIndex`. Applies its own backpressure. */
 	submit(frameIndex: number, time: number): Promise<void> | void;
-	/** Wait until every packet has been encoded and handed to the muxer, then close the video source. */
+	/** Wait until every packet is encoded and handed to the muxer, then close. */
 	finish(): Promise<void>;
 	/** Release resources (idempotent; used on abort/error paths). */
 	dispose(): void;
@@ -160,10 +144,8 @@ function applyFrameAudio(
 ): void {
 	if (frameAudioData.length === 0) return;
 	const frame = frameAudioData[i]!;
-	// Each group carries its own response and its own envelope scope, exactly
-	// as the preview's per-frame tick does. The ungrouped case is applied
-	// directly rather than through a one-element array minted per frame — an
-	// export renders tens of thousands of them.
+	// Each group carries its own response and envelope scope, as the preview's
+	// per-frame tick does; the ungrouped case is applied directly.
 	if (groups) {
 		applyGroups(groups, frame, sampleRate, frameDuration);
 	} else {
@@ -176,8 +158,7 @@ function applyFrameAudio(
 			response,
 		);
 	}
-	// The layer chains are their own groups either way: they follow the music
-	// whether or not the main chain was split into lanes.
+	// Layer chains are their own groups either way: they follow the music regardless.
 	if (fixedGroups) applyGroups(fixedGroups, frame, sampleRate, frameDuration);
 }
 
@@ -226,9 +207,8 @@ async function prepareFrameAudio(
 		audioSpeed,
 	);
 	const audioBuffer = loop ? loopAudioBuffer(trimmed, duration) : trimmed;
-	// Apply normalize gain before analyzeFrames so FFT and muxed audio are consistent.
-	// trimmed: used by analyzeFrames when loop=true
-	// audioBuffer: distinct looped copy used for muxing when loop=true; same object as trimmed when loop=false
+	// Normalize gain goes on before analyzeFrames, so FFT and muxed audio agree.
+	// When looping, `trimmed` feeds the analysis and `audioBuffer` is muxed.
 	if (normalizeGain !== 1.0) {
 		const buffersToScale = loop ? [trimmed, audioBuffer] : [audioBuffer];
 		for (const buf of buffersToScale) {
@@ -253,18 +233,16 @@ async function prepareFrameAudio(
 	return { frameAudioData, sampleRate: audioBuffer.sampleRate, audioBuffer };
 }
 
-// Blob's ArrayBuffer branch refuses anything over 2 GB, so a long export can't
-// be handed to it as one buffer. The muxer's writes land in fixed-size slabs
-// instead, and the Blob is built from those parts — each stays under the cap.
+// Blob's ArrayBuffer branch refuses anything over 2 GB, so a long export can't be
+// handed to it as one buffer; the muxer's writes land in fixed-size slabs instead.
 const SLAB_SIZE = 64 * 1024 * 1024;
 
 class SlabBuffer {
 	private slabs: Uint8Array<ArrayBuffer>[] = [];
-	/** Highest byte offset written so far — the final file length. */
+	/** Highest byte offset written so far: the final file length. */
 	length = 0;
 
-	// Writes are not append-only: the muxer seeks back to patch the header and
-	// cues once the duration is known.
+	// Writes are not append-only: the muxer seeks back to patch the header and cues.
 	write(data: Uint8Array, position: number) {
 		const end = position + data.byteLength;
 		while (this.slabs.length * SLAB_SIZE < end) {
@@ -343,7 +321,6 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	}
 	const bitrate = targetVideoBitrate(canvas.width, canvas.height, fps);
 
-	// Resolve audio buffer and per-frame analysis when user provided audio
 	let audioBufferForMux: AudioBuffer | null = null;
 	let frameAudioData: FrameAudioData[] = [];
 	let audioSampleRate = 0;
@@ -371,8 +348,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	const containerCodecs = outputFormat.getSupportedVideoCodecs();
 
-	// Prefer a hardware encoder (VP9/AV1 on most modern GPUs): far faster than
-	// software VP8 and equal-or-better quality at these bitrates.
+	// Prefer a hardware encoder (VP9/AV1 on most modern GPUs): far faster than software VP8.
 	const hwCandidates = (["vp9", "av1"] as const).filter((c) =>
 		containerCodecs.includes(c as any),
 	);
@@ -424,8 +400,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const output = new mb.Output({ format: outputFormat, target });
 
 	const wantsAudioTrack = audioBufferForMux != null;
-	// Progress tracks encoded packets (1 per frame), not submitted frames, so the
-	// bar reflects the real bottleneck and "Creating file" doesn't appear stuck.
+	// Progress tracks encoded packets, not submitted frames (the real bottleneck).
 	let encodedFrames = 0;
 	const reportPacket = () => {
 		encodedFrames++;
@@ -436,13 +411,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const makeCanvasSink = (): FrameSink => {
 		let resolveFirstPacket: (() => void) | null = null;
 		const firstPacket = new Promise<void>((r) => (resolveFirstPacket = r));
-		// videoSource.add() resolves on hand-off to the encoder, not on actual
-		// completion, so it cannot be used as backpressure by itself — submitting
-		// as fast as we render can outrun the encoder's real drain rate (measured:
-		// ~170fps submit vs ~19fps hardware AV1 drain at 2560x1440), building an
-		// unbounded backlog of full-resolution frames that exhausts GPU memory and
-		// crashes the whole tab (driver TDR -> CONTEXT_LOST_WEBGL). Gate submission
-		// on encodedFrames, the only signal tied to real encoder completion.
+		// videoSource.add() resolves on hand-off, not completion, so it is no backpressure:
+		// submitting as fast as we render outruns the encoder and exhausts GPU memory.
 		const MAX_BACKLOG = 16;
 		let resolveWait: (() => void) | null = null;
 		let rejectWait: ((reason?: unknown) => void) | null = null;
@@ -507,12 +477,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					rejectQueueError?.(queueError);
 					abortWait(queueError);
 				});
-				// Chromium hardware encoders can process the first frames out of
-				// order (startup race), emitting frame 1 as the stream's keyframe
-				// with frame 0 as a delta after it — which the muxer rejects. Holding
-				// frame 1 until frame 0's packet is out makes the swap impossible.
-				// The timeout keeps encoders that buffer before emitting from
-				// stalling the export.
+				// Chromium hardware encoders can emit frame 1 as the keyframe with frame 0 as a
+				// delta after it, which the muxer rejects; hold frame 1 until frame 0's packet is out.
 				if (frameIndex === 0) {
 					await Promise.race([
 						firstPacket,
@@ -550,10 +516,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		};
 	};
 
-	// Software encoding is mostly single-pipeline per encoder instance, so a
-	// pool of worker-thread VP8 encoders scales throughput with CPU cores.
-	// Chunks of frames go round-robin to workers; each chunk starts with a
-	// forced keyframe so the interleaved streams stay valid.
+	// Software encoding is single-pipeline per encoder, so a pool of worker-thread VP8
+	// encoders scales with CPU cores; chunks go round-robin, each with a forced keyframe.
 	const makePoolSink = async (): Promise<FrameSink> => {
 		const { EncoderPool } = await import("./encode-pool/encode-pool");
 		if (!EncoderPool.isSupported())
@@ -603,8 +567,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					});
 			},
 		});
-		// Init before adding the track: if workers fail to start we fall back to
-		// the canvas sink, and the output must not end up with two video tracks.
+		// Init before adding the track: on worker failure we fall back to the canvas sink.
 		await pool.init();
 		packetSource = new mb.EncodedVideoPacketSource("vp8");
 		output.addVideoTrack(packetSource);
@@ -694,11 +657,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			if (mediaLayers.length > 0 && mediaLayerSink) {
 				await mediaLayerSink(mediaLayers);
 			}
-			// The layers' chains are per clip — the one under the playhead, or the
-			// roll an auto clip made for this tick — so they are read off the
-			// resolved layers every frame. The lane is the scope, as in the
-			// preview: one lane's smoothing must never step another's, whichever
-			// clip it is on.
+			// The layers' chains are per clip, so they are read off the resolved layers every
+			// frame; the lane is the scope, so one lane's smoothing never steps another's.
 			const layerGroups = [
 				...mediaLayers.map((l) => ({
 					scope: l.laneId,
@@ -721,11 +681,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				audioGroupsRef?.current,
 				layerGroups.length > 0 ? layerGroups : null,
 			);
-			// The bars read this straight off the GPU, so the export has to push
-			// the same bins the preview's AnalyserNode would have.
+			// The bars read this straight off the GPU, so push the same bins the preview would.
 			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null, time);
-			// Beat-synced effects read the grid off the same master clock the
-			// text lanes do, so an export lands its flashes where the preview did.
+			// Beat-synced effects read the grid off the same master clock the text lanes do.
 			renderer.setBeat(
 				bpm > 0
 					? ((textTimeOffset + time * textTimeScale - beatOffset) * bpm) / 60
@@ -739,8 +697,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			await sink.submit(i, time);
 		}
 
-		// Encoders flush their remaining pipeline here — packet callbacks keep
-		// firing, driving progress the rest of the way to 100%.
+		// Encoders flush their remaining pipeline here; packet callbacks drive progress to 100%.
 		await sink.finish();
 		await output.finalize();
 	} finally {
@@ -749,8 +706,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	onProgress?.(1);
 	// Let the UI paint "Creating file..." before blocking on blob creation.
-	// setTimeout keeps exports alive in background tabs (requestAnimationFrame
-	// does not fire when a tab is hidden).
+	// setTimeout keeps exports alive in background tabs, where rAF doesn't fire.
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 

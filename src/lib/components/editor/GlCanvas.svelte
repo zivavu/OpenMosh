@@ -59,89 +59,54 @@
 		/** WebCodecs preview player; takes precedence over videoEl as frame source. */
 		frameSource?: VideoPreviewPlayer | null;
 		freezeAnimation?: boolean;
-		/** Stops all preview rendering (e.g. while recording, when the recorder
-		 * owns the shared renderer — interleaved renders corrupt per-effect
-		 * feedback history and delta-time state). */
+		/** Stops all preview rendering; interleaved renders corrupt per-effect feedback history. */
 		suspended?: boolean;
-		/** True when a parent component drives `renderer.render()` itself (e.g. the
-		 * slideshow preview engine). Prevents this component's rAF and static
-		 * redraw effects from rendering duplicate frames. */
+		/** True when a parent drives `renderer.render()` itself; keeps this component's rAF off. */
 		externallyDriven?: boolean;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: GlRenderer | null;
-		/**
-		 * Sequence fx lanes: stacked over the base, so a fading lane can mix
-		 * against its own input. `effects` still carries their instances flat,
-		 * for the animation check and the audio-link tick — the renderer is
-		 * handed the layers.
-		 */
+		/** Sequence fx lanes, stacked over the base so a fading lane mixes against its own input. */
 		postLayers?: PostChainLayer[];
-		/** Changes whenever a layer's late upload lands, retriggering a paused
-		 * redraw. */
+		/** Changes whenever a layer's late upload lands, retriggering a paused redraw. */
 		sourceKey?: string | null;
-		/** Two-way: set it to enter/leave fullscreen, and it follows Esc or any
-		 * other way the browser drops out of it. */
+		/** Two-way: set it to enter/leave fullscreen; it follows Esc and browser exits. */
 		fullscreen?: boolean;
-		/** How a source that doesn't match the output aspect is fitted into it. */
 		sourceFit?: SourceFit;
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		sourceEdits?: Record<string, SourceEdit>;
-		/** How long each source's media runs, so a keyed edit is sampled at the
-		 * instant the frame sampler wrapped to. Sparse; images may be omitted. */
+		/** How long each source's media runs, so a keyed edit is sampled at the wrapped instant. */
 		sourceDurations?: Record<string, number>;
 		/** Optional text lanes composited into the chain at their insertion points. */
 		textTimeline?: TextTimeline | null;
 		/** Optional media lanes, composited the same way. */
 		mediaTimeline?: MediaTimeline | null;
-		/** Lane whose clip is selected: gets an outline over the preview, so the
-		 * placement sliders say which part of the frame they are moving. */
+		/** Lane whose clip is selected: outlined over the preview. */
 		selectedMediaLane?: MediaLane | null;
-		/** Lane being soloed: it is drawn by itself on black, with the source, the
-		 * effects and every other layer left out. Preview only — an inspection
-		 * mode, never a property of the work. */
+		/** Lane being soloed: drawn by itself on black, with every other layer left out. */
 		soloMediaLaneId?: string | null;
-		/** Uploads each visible media layer's frame before the chain runs. Called
-		 * with the layers resolved for this frame, on the master clock. */
+		/** Uploads each visible media layer's frame before the chain runs. */
 		mediaDriver?: ((layers: ResolvedMediaLayer[]) => void) | null;
-		/** Chain per media clip and time — an auto clip's roll for the tick.
-		 * Without one every clip renders its stored chain. */
+		/** Chain per media clip and time: an auto clip's roll for the tick. */
 		mediaChains?: MediaChainSource | null;
 		/** The same, per text clip. */
 		textChains?: TextChainSource | null;
-		/**
-		 * Sequence mode: the frame's size, with no media of its own. The base
-		 * stays black at this size under the layers; `imageSrc` and the video
-		 * props are ignored.
-		 */
+		/** Sequence mode: the frame's size, with no media of its own; the base stays black. */
 		baseSize?: { width: number; height: number } | null;
 		/** Master-timeline seconds the text clips are looked up at. */
 		textTime?: number;
-		/** Song tempo, for beat-synced effects. 0 = unknown, they run free.
-		 * The grid is anchored to the same master clock `textTime` reads. */
+		/** Song tempo for beat-synced effects. 0 = unknown, they run free. */
 		bpm?: number;
-		/** Keep the animation loop running even when nothing else needs it — a
-		 * still image with a playing text timeline has no other reason to. */
+		/** Keep the animation loop running even when nothing else needs it. */
 		forceAnimation?: boolean;
-		/** Drawn over the whole preview box — for states where the canvas holds
-		 * nothing worth looking at, like a sequence with an empty media pool. */
+		/** Drawn over the whole preview box when the canvas holds nothing worth looking at. */
 		overlay?: Snippet;
-		/** Clicking the preview picks the layer drawn on top at that point, or
-		 * the base image when the click lands past every layer. Null means the
-		 * click found nothing at all — off the frame, or on a soloed lane's
-		 * blanked background. Absent means the preview isn't a way of selecting
-		 * anything. */
+		/** Clicking the preview picks the top layer at that point, or the base past every layer. */
 		onPickLayer?: ((pick: LayerPick | null) => void) | null;
-		/** Dragging a media layer, or one of the selected layer's handles, moves
-		 * its placement live. Fired with the lane's whole style so the editor
-		 * writes it the same way the panel's sliders do. Absent means the
-		 * preview only picks. */
+		/** Dragging a media layer or a selected handle moves its placement live. */
 		onLayerStyleChange?: ((laneId: string, style: MediaStyle) => void) | null;
-		/** Called once per drag gesture, before its first change lands, so the
-		 * editor can push one undo entry for the whole drag. */
+		/** Called once per drag gesture, so the editor can push one undo entry for it. */
 		onLayerDragStart?: ((laneId: string) => void) | null;
-		/** Live FFT bins for the audio-bars effect. The AnalyserNode mutates one
-		 * array in place, so this is read fresh every rendered frame rather than
-		 * reacted to. */
+		/** Live FFT bins for the audio-bars effect; the AnalyserNode mutates one array in place. */
 		spectrum?: Uint8Array | null;
 	}
 
@@ -190,8 +155,7 @@
 	let frameTimes: number[] = [];
 	let lastFpsUpdate = 0;
 
-	/** Only called while the overlay is on: with it hidden, the sampling and its
-	 * `fps` write were reactive churn nobody could see. */
+	/** Only called while the overlay is on: hidden, the sampling was invisible reactive churn. */
 	function trackFps(now: number) {
 		frameTimes.push(now);
 		if (now - lastFpsUpdate >= 400) {
@@ -205,10 +169,7 @@
 	let canvas = $state<HTMLCanvasElement>(null!);
 	let renderer: GlRenderer | null = $state(null);
 
-	// ── Selected-layer outline ───────────────────────────────────────────────
-	// DOM rather than a GL pass: this is an editing aid, and anything drawn into
-	// the canvas would be in the export too. Sized from the renderer's own
-	// `layerBox`, so it can't drift from where the media actually lands.
+	// DOM rather than a GL pass: anything drawn into the canvas would be in the export too.
 	let outline = $state<{
 		left: number;
 		top: number;
@@ -217,16 +178,7 @@
 		rot: number;
 	} | null>(null);
 
-	/**
-	 * Where the rendered frame sits in client space and what it was scaled by:
-	 * an output pixel lands at `left + x * s`. Both the outline and the layer
-	 * picking go through here, so a click can't land somewhere the outline says
-	 * it didn't.
-	 *
-	 * Fullscreen letterboxes the frame inside the element (object-fit:
-	 * contain); outside it the element is already the content box, where both
-	 * ratios are equal and this reduces to the one scale.
-	 */
+	/** Where the rendered frame sits in client space and what it was scaled by. */
 	function frameFit(): { left: number; top: number; s: number } | null {
 		const cv = canvasEl;
 		if (!cv || cv.width <= 0 || cv.height <= 0) return null;
@@ -257,8 +209,7 @@
 			h: rect.h * fit.s,
 			rot: rect.rot,
 		};
-		// Compared before assigning: this runs on every drawn frame, and a fresh
-		// object each time would re-render the outline sixty times a second.
+		// Compared before assigning: a fresh object each frame would re-render the outline.
 		if (
 			outline &&
 			Math.abs(outline.left - next.left) < 0.5 &&
@@ -272,8 +223,7 @@
 		outline = next;
 	}
 
-	// Selecting a lane, or editing its placement, need not redraw anything —
-	// and a resize changes where the frame sits without redrawing at all.
+	// Selecting a lane or editing its placement need not redraw anything.
 	$effect(() => {
 		const st = selectedMediaLane?.style;
 		void [
@@ -289,8 +239,7 @@
 			canvasHeight,
 			fullscreen,
 		];
-		// Untracked: the comparison inside reads `outline`, and a tracked read of
-		// what this writes would re-enter the effect on every update.
+		// Untracked: a tracked read of what this writes would re-enter the effect.
 		untrack(updateOutline);
 	});
 
@@ -302,38 +251,27 @@
 		return () => ro.disconnect();
 	});
 
-	// ── Click to select a layer ──────────────────────────────────────────────
-	// Written by the draw loop, read only when a click arrives: the layers this
-	// frame put on screen, which is the only honest answer to what was clicked.
+	// Written by the draw loop, read only when a click arrives.
 	let pickable: { media: ResolvedMediaLayer[]; text: ResolvedTextLayer[] } = {
 		media: EMPTY_MEDIA,
 		text: [],
 	};
 
-	/** Hand the layer under the pointer to the editor. Pointerdown rather than
-	 * click, matching the timeline lanes, and left button only — the canvas has
-	 * no menu of its own to compete with. */
+	/** Hand the layer under the pointer to the editor; pointerdown, left button only. */
 	function pickLayerAt(e: PointerEvent) {
-		// A press on the preview takes focus off whatever control had it. The
-		// preventDefault below keeps the browser from doing that itself, so a
-		// slider just dragged would otherwise still own the arrow keys and eat
-		// the mosh shortcut.
+		// A press on the preview takes focus off whatever control had it.
 		const active = document.activeElement;
 		if (active instanceof HTMLElement && !previewArea?.contains(active)) {
 			active.blur();
 		}
 		if (!onPickLayer || e.button !== 0) return;
-		// Anything else in the preview box is its own control, and the overlay
-		// covers a canvas whose contents are stale by the time it is up.
+		// Anything else in the preview box is its own control.
 		if (!renderer || !canvasEl || e.target !== canvasEl) return;
-		// Claim the press: without this the browser reads the drag as a text
-		// selection sweep, and with a selection already standing it drags that
-		// selection instead, cancelling the pointer under our layer move.
+		// Claim the press: otherwise the browser reads the drag as a text selection sweep.
 		e.preventDefault();
 		window.getSelection()?.removeAllRanges();
 		const p = framePoint(e);
-		// Fullscreen letterboxes the frame inside the element, so a click can
-		// land on the canvas and still be off the picture.
+		// Fullscreen letterboxes the frame, so a click can land on the canvas off the picture.
 		if (!p) {
 			onPickLayer(null);
 			return;
@@ -341,13 +279,11 @@
 		const hit = hitAt(p.x, p.y);
 		if (hit) {
 			onPickLayer({ kind: hit.kind, laneId: hit.laneId });
-			// Selecting and moving are one gesture: the press that picked a media
-			// layer keeps hold of it, and dragging on from here moves it.
+			// Selecting and moving are one gesture: the press that picked a layer keeps hold of it.
 			if (hit.kind === "media") startMove(e, hit.laneId, p);
 			return;
 		}
-		// Past every layer is the image they sit over — except under solo, where
-		// the source is blanked and that is bare black, belonging to nothing.
+		// Past every layer is the image they sit over, except under solo, which is bare black.
 		onPickLayer(soloMediaLaneId ? null : { kind: "base" });
 	}
 
@@ -378,11 +314,7 @@
 		);
 	}
 
-	// ── Drag to place a layer ────────────────────────────────────────────────
-	// Both gestures work in output pixels, the space `mediaLayerRect` reports
-	// in, and only convert to the style's normalized units when writing. The
-	// style is read once, at the press: every move is measured from there, so
-	// a fast drag can't accumulate rounding.
+	// Both gestures work in output pixels, converting to normalized units when writing.
 	type LayerDrag = {
 		laneId: string;
 		from: MediaStyle;
@@ -402,8 +334,7 @@
 				/** Which handle: -1/0/1 per axis, corners on both. */
 				hx: -1 | 0 | 1;
 				hy: -1 | 0 | 1;
-				/** Box centre, rotation and the handle's offset from the centre in
-				 * the box's own frame, all at the press. */
+				/** Box centre, rotation and the handle's offset in the box's own frame, at the press. */
 				cx: number;
 				cy: number;
 				rot: number;
@@ -415,8 +346,7 @@
 	/** Set on the preview box while the pointer is over something draggable. */
 	let hoverCursor = $state("");
 
-	/** Client pixels of slack before a press turns into a move, so a click that
-	 * wobbles doesn't nudge the layer it was only meant to select. */
+	/** Client pixels of slack before a press turns into a move. */
 	const MOVE_SLOP = 3;
 
 	function laneStyle(laneId: string): MediaStyle | null {
@@ -493,8 +423,7 @@
 				if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
 				else dx = 0;
 			}
-			// Held to the frame: a layer dragged clean off it can only be got back
-			// from the panel, so a grabbable strip always stays on screen.
+			// Held to the frame: a layer dragged clean off could only be got back from the panel.
 			next = { ...from, ...clampMove(from, dx, dy, drag.hw, drag.hh, fw, fh) };
 		} else {
 			next = scaleFromHandle(from, drag, px, py, fw, fh, e.altKey);
@@ -539,10 +468,7 @@
 	let imageReady = $state(false);
 	let error: string | null = $state(null);
 
-	// Displayed preview size in device pixels. The renderer runs at the output
-	// aspect fitted into this box (never upscaled), so heavy chains aren't paid
-	// at full source resolution while the canvas is CSS-scaled down anyway.
-	// Export/save temporarily resize the renderer to the real output size.
+	// Displayed preview size in device pixels; the renderer fits the output aspect into it.
 	let displayW = $state(0);
 	let displayH = $state(0);
 	$effect(() => {
@@ -555,8 +481,7 @@
 			displayH = height;
 		};
 		measure();
-		// Debounced: each renderer resize reallocates every FBO, so tracking a
-		// window drag-resize per event would thrash GPU memory.
+		// Debounced: each renderer resize reallocates every FBO.
 		const ro = new ResizeObserver(() => {
 			clearTimeout(timer);
 			timer = setTimeout(measure, 150);
@@ -572,11 +497,7 @@
 		fitPreviewSize(canvasWidth, canvasHeight, displayW, displayH),
 	);
 
-	// ── Fullscreen ───────────────────────────────────────────────────────────
-	// The preview area is the element that goes fullscreen, so the existing
-	// ResizeObserver above picks up the new box and the renderer follows —
-	// `fitPreviewSize` still caps at the output resolution, so a small source
-	// isn't suddenly rendered at monitor size.
+	// The preview area goes fullscreen, so the ResizeObserver picks up the new box.
 	$effect(() => {
 		const el = previewArea;
 		if (!el) return;
@@ -593,9 +514,7 @@
 		const isFs = document.fullscreenElement === el;
 		if (fullscreen === isFs) return;
 		if (fullscreen) {
-			// iOS Safari has no element fullscreen at all, and a request that
-			// wasn't user-initiated is rejected. Either way, snap the flag back
-			// so the button never sits in a state the document isn't in.
+			// iOS Safari has no element fullscreen, and a non-user-initiated request is rejected.
 			const req = el.requestFullscreen?.();
 			if (req) req.catch(() => (fullscreen = false));
 			else fullscreen = false;
@@ -620,9 +539,7 @@
 	const hasAnimatedEffects = $derived(
 		effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
 	);
-	/** A media clip's own chain can animate with nothing else on screen moving.
-	 * Read off the resolved layers: the chain on screen is the clip's under
-	 * the playhead, or the roll an auto clip made for this tick. */
+	/** A media clip's own chain can animate with nothing else on screen moving. */
 	const hasAnimatedLayers = $derived(
 		(!!mediaTimeline?.enabled &&
 			resolveMediaLayersAt(
@@ -652,10 +569,8 @@
 				hasAnimatedEffects),
 	);
 
-	/** Render the current frame. */
 	function drawFrame(now: number) {
-		// Before anything renders: the bars have to see this frame's audio, and
-		// the export driver does the same on its side.
+		// Before anything renders: the bars have to see this frame's audio.
 		renderer!.setSpectrum(spectrum, now);
 		renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
 		const solo = soloMediaLaneId;
@@ -671,23 +586,17 @@
 					mediaChains ?? undefined,
 				)
 			: EMPTY_MEDIA;
-		// Every lane is still driven, not just the soloed one: the driver drops
-		// the frames of lanes it isn't asked about, and leaving solo would then
-		// stall on re-uploading them.
+		// Every lane is still driven, not just the soloed one, or leaving solo would stall.
 		if (media.length > 0) mediaDriver?.(media);
 		const shown = solo ? media.filter((l) => l.laneId === solo) : media;
-		// What a click can land on is what the frame actually drew, so a soloed
-		// lane's hidden neighbours can't be picked out of the black.
+		// What a click can land on is what the frame actually drew.
 		pickable = { media: shown, text: layers };
 		renderer!.setBlankSource(!!solo);
-		// The render hands over the source chain alone plus the layers, so a
-		// fading lane can be mixed against its input; `effects` is the flat form,
-		// which would double the stacked instances if passed whole.
+		// The render hands over the source chain plus the layers, not the flat `effects`.
 		const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
 		const base =
 			stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
-		// Solo drops the image chain and the fx lanes along with the source: what
-		// is left is the lane's own media and its own effects.
+		// Solo drops the image chain and the fx lanes along with the source.
 		renderer!.render(
 			solo ? [] : base,
 			now,
@@ -695,8 +604,7 @@
 			solo ? [] : postLayers,
 			shown,
 		);
-		// Every draw path ends here, so the outline follows a texture arriving,
-		// the playhead moving off the clip, and an output-size change alike.
+		// Every draw path ends here, so the outline follows any change.
 		updateOutline();
 	}
 
@@ -706,13 +614,10 @@
 			let activeCanvas: HTMLCanvasElement;
 
 			if (warmCanvas && warmRenderer) {
-				// Move the pre-warmed canvas (currently hidden in <body>) into our
-				// preview area. Styled by class, not inline: an inline rule would
-				// outrank the :fullscreen overrides below.
+				// Styled by class, not inline: an inline rule would outrank the :fullscreen overrides.
 				warmCanvas.style.cssText = "";
 				warmCanvas.className = "preview-canvas";
-				// The markup below carries this; the warmed-up canvas was built in
-				// App before there was a preview to name, so it needs it applied.
+				// The markup below carries this; the warmed-up canvas was built in App.
 				warmCanvas.setAttribute("aria-label", "Effect preview canvas");
 				previewArea.appendChild(warmCanvas);
 				warmRenderer.adoptCanvas(warmCanvas);
@@ -727,8 +632,7 @@
 			canvasEl = activeCanvas;
 			glRenderer = r;
 
-			// Mutable ref so cleanup always destroys whichever renderer is currently
-			// live, even if it was rebuilt by onContextRestored below.
+			// Mutable ref so cleanup destroys whichever renderer is live.
 			const current = { renderer: r };
 
 			/** A canvas this component made to recover onto; Svelte owns the other. */
@@ -752,14 +656,7 @@
 				error = null;
 			};
 
-			/**
-			 * Rebuild onto a brand-new element. A canvas that lost its context
-			 * never hands out another one, and when the loss came from the GPU
-			 * process going down — a driver reset, which is what the whole window
-			 * greying out is — Chrome may never fire webglcontextrestored at all.
-			 * Waiting on that event alone is why a lost preview used to stay lost
-			 * until the page was reloaded.
-			 */
+			/** Rebuild onto a brand-new element; a lost context never hands out another. */
 			const rebuildOnFreshCanvas = () => {
 				const old = activeCanvas;
 				const fresh = document.createElement("canvas");
@@ -775,9 +672,7 @@
 						"Lost the WebGL context and could not rebuild it. Reload the page.";
 					return;
 				}
-				// Hidden rather than removed: Svelte owns the original element and
-				// takes it out itself on teardown, which it can't do if we already
-				// pulled it from under it.
+				// Hidden rather than removed: Svelte owns the original element and removes it on teardown.
 				old.style.display = "none";
 				detach(old);
 				attach(fresh);
@@ -792,8 +687,7 @@
 			};
 
 			const onContextLost = (ev: Event) => {
-				// preventDefault() is required for the browser to attempt automatic
-				// restoration; without it, webglcontextrestored never fires.
+				// preventDefault() is required for automatic restoration, or webglcontextrestored never fires.
 				ev.preventDefault();
 				error = "Lost the WebGL context. Rebuilding…";
 				clearTimeout(rebuildTimer);
@@ -826,9 +720,7 @@
 		}
 	});
 
-	// A blank base at a stated size: the sequence editor's, whose media all
-	// comes through the drivers. Re-run when the size changes, which reallocates
-	// the FBOs the same way a new file would.
+	// A blank base at a stated size: the sequence editor's, whose media comes through the drivers.
 	$effect(() => {
 		if (!renderer || !baseSize) return;
 		renderer.initBlankSource(baseSize.width, baseSize.height);
@@ -837,7 +729,6 @@
 		imageReady = true;
 	});
 
-	// Image loading — skipped when a video source is active
 	$effect(() => {
 		if (!renderer || videoEl || frameSource || baseSize) return;
 		imageReady = false;
@@ -848,7 +739,6 @@
 			renderer!.loadImage(img);
 			naturalWidth = img.naturalWidth;
 			naturalHeight = img.naturalHeight;
-			// The main resize/draw effect below applies the preview render size
 			imageReady = true;
 		};
 		img.src = imageSrc;
@@ -857,19 +747,16 @@
 		};
 	});
 
-	// WebCodecs preview — dimensions are known upfront, no element to wait on
+	// WebCodecs preview: dimensions are known upfront, no element to wait on
 	$effect(() => {
 		if (!renderer || !frameSource) return;
-		// The texture is sized to the frames that will land in it, which for a
-		// large source is smaller than the media — but the media's own size is
-		// what the UI reports and what the output defaults to.
+		// The texture is sized to the frames that will land in it, smaller than the media.
 		renderer.initVideoSource(frameSource.frameWidth, frameSource.frameHeight);
 		naturalWidth = frameSource.width;
 		naturalHeight = frameSource.height;
 		imageReady = true;
 	});
 
-	// Video loading — initialises the renderer once metadata is available
 	$effect(() => {
 		if (!renderer || !videoEl || frameSource) return;
 		imageReady = false;
@@ -887,14 +774,10 @@
 			drawFrame(0);
 		}
 
-		// Wait for an actual decoded frame with known dimensions. In Firefox,
-		// loadedmetadata (readyState 1) can report videoWidth 0 for some files;
-		// initializing then allocates a 0×0 texture, every draw fails, and the
-		// preview appears frozen while the video plays on.
+		// Wait for a decoded frame with known dimensions; Firefox can report videoWidth 0.
 		const isReady = () => video.readyState >= 2 && video.videoWidth > 0;
 
-		// While the animation loop is running it handles per-frame uploads.
-		// When the video is paused we still need to redraw after a seek.
+		// A paused video still needs a redraw after a seek.
 		const onTimeUpdate = () => {
 			if (!ready || needsAnimation) return;
 			renderer!.updateSourceFrame(video);
@@ -920,23 +803,19 @@
 		};
 	});
 
-	// Resize the renderer when the preview box changes. The render itself is
-	// handled by the animation loop while active; otherwise a static redraw is
-	// triggered here. When externally driven, the parent owns all rendering.
+	// Resize the renderer when the preview box changes; otherwise a static redraw here.
 	$effect(() => {
 		if (suspended || !renderer || !imageReady || !renderSize) return;
 		renderer.resize(renderSize.width, renderSize.height);
 		if (!externallyDriven && !needsAnimation) drawFrame(0);
 	});
 
-	// Applied here rather than by the parent so a change also repaints a paused
-	// canvas, through the static redraw driver below.
+	// Applied here rather than by the parent so a change also repaints a paused canvas.
 	$effect(() => {
 		renderer?.setSourceFit(sourceFit);
 	});
 
-	// Same reason, and pushed rather than carried on each frame's layers: an
-	// edit belongs to the media, so it is the same for every lane drawing it.
+	// Pushed rather than carried on each frame's layers: an edit belongs to the media.
 	$effect(() => {
 		renderer?.setSourceEdits(new Map(Object.entries(sourceEdits)));
 	});
@@ -945,9 +824,7 @@
 		renderer?.setSourceDurations(new Map(Object.entries(sourceDurations)));
 	});
 
-	// An erase mask is decoded from a data URL, so it lands a frame or two after
-	// the edit does. Without this a paused preview keeps the un-erased picture
-	// until something else happens to redraw it.
+	// An erase mask is decoded from a data URL, so it lands a frame or two after the edit.
 	$effect(() => {
 		const r = renderer;
 		if (!r) return;
@@ -959,9 +836,7 @@
 		};
 	});
 
-	// Static redraw driver: subscribes to effect values and re-renders when the
-	// animation loop is not running. Using a separate effect prevents double
-	// renders during playback (the rAF loop already owns the frame).
+	// Static redraw driver: re-renders when the animation loop is not running.
 	$effect(() => {
 		if (suspended || !renderer || !imageReady || !renderSize) return;
 		if (externallyDriven || needsAnimation) return;
@@ -977,8 +852,8 @@
 		readTextTimeline();
 		readMediaTimeline();
 		textTime;
-		// A late layer upload landing while paused is what gets that frame onto
-		// the canvas.
+		// A late layer upload landing while paused is what gets that frame onto the
+		// canvas.
 		sourceKey;
 		drawFrame(0);
 	});
@@ -986,15 +861,7 @@
 	let fontTick = $state(0);
 	$effect(() => onFontsChanged(() => fontTick++));
 
-	/**
-	 * Touch every text field so a paused canvas redraws on any text edit. Read
-	 * straight from the effect rather than through a derived signature: an
-	 * effect re-runs whenever a dependency changes, so the string a derived had
-	 * to build (and JSON.stringify its way through) only ever existed to be
-	 * compared against itself.
-	 */
-	/** Same purpose as readTextTimeline: touch every field a media lane draws
-	 * from, so a paused canvas redraws when one is edited. */
+	/** Touch every field a media lane draws from, so a paused canvas redraws on an edit. */
 	function readMediaTimeline() {
 		if (!mediaTimeline?.enabled) return;
 		for (const l of mediaTimeline.lanes) {
@@ -1020,6 +887,7 @@
 		}
 	}
 
+	/** Touch every text field so a paused canvas redraws on any text edit. */
 	function readTextTimeline() {
 		if (!textTimeline?.enabled) return;
 		for (const l of textTimeline.lanes) {
@@ -1076,9 +944,7 @@
 	});
 </script>
 
-<!-- Selecting by pointer is a shortcut, not the only way in: every layer the
-     canvas can be clicked on is also selectable from its timeline lane, which
-     is where the keyboard and the screen reader work. -->
+<!-- Selecting by pointer is a shortcut, not the only way in. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="preview-area"
@@ -1098,15 +964,13 @@
 		></canvas>
 	{/if}
 	{#if outline}
-		<!-- Sits under .canvas-overlay: when that is up there is nothing on the
-           canvas worth pointing at. -->
+		<!-- Sits under .canvas-overlay: when that is up there is nothing worth pointing at. -->
 		<div
 			class="layer-outline"
 			style="left: {outline.left}px; top: {outline.top}px; width: {outline.w}px; height: {outline.h}px; transform: rotate({outline.rot}rad)"
 		>
 			{#if onLayerStyleChange}
-				<!-- Children of the rotated box, so they turn with it and a drag
-				     along a side is a drag along that side. -->
+				<!-- Children of the rotated box, so they turn with it. -->
 				{#each HANDLES as h (h.hx * 3 + h.hy)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
@@ -1154,16 +1018,13 @@
 		user-select: none;
 	}
 
-	/* :global — the pre-warmed canvas is moved in via the DOM, so it never gets
-	   Svelte's scoping attribute. */
+	/* :global: the pre-warmed canvas is moved in via the DOM, so it never gets scoped. */
 	.preview-area :global(.preview-canvas) {
 		max-width: 100%;
 		max-height: 100%;
 		border-radius: 2px;
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
-		/* Checkerboard under the frame: whatever the chain leaves clear — the
-		   blank base, the fit's bars, a keyed-out backdrop — reads as clear
-		   rather than as black paint. */
+		/* Checkerboard under the frame: whatever the chain leaves clear reads as clear. */
 		background:
 			repeating-conic-gradient(
 					rgba(255, 255, 255, 0.07) 0 25%,
@@ -1173,11 +1034,7 @@
 			var(--ink);
 	}
 
-	/* Marks the selected layer's box while its clip panel is open, so the
-	   placement sliders say which part of the frame they move. Dashed and thin:
-	   it overlays live media and has to stay legible without competing with it.
-	   The box itself takes no pointer: a press inside it goes to the canvas,
-	   which drags the layer; only the handles catch anything. */
+	/* Marks the selected layer's box while its clip panel is open; the box takes no pointer. */
 	.layer-outline {
 		position: absolute;
 		z-index: 8;
@@ -1200,8 +1057,7 @@
 		touch-action: none;
 	}
 
-	/* Opaque: whatever is still on the canvas underneath is stale by the time
-	   anything wants to cover it. */
+	/* Opaque: whatever is still on the canvas underneath is stale. */
 	.canvas-overlay {
 		position: absolute;
 		inset: 0;
@@ -1230,9 +1086,7 @@
 		background: var(--sunken);
 	}
 
-	/* Scale up to fill the screen on whichever axis runs out first, letterboxing
-	   the other — object-fit: contain does this on a canvas, which max-width /
-	   max-height alone can't (they cap, they never upscale). */
+	/* Scale up to fill the screen on whichever axis runs out first, letterboxing the other. */
 	.preview-area:fullscreen :global(.preview-canvas) {
 		width: 100%;
 		height: 100%;
@@ -1265,8 +1119,7 @@
 		z-index: 11;
 	}
 
-	/* Out of the way until the pointer moves — the point of fullscreen is to
-	   see only the render. Focus-visible keeps it reachable by keyboard. */
+	/* Out of the way until the pointer moves: fullscreen is for seeing only the render. */
 	.preview-area:hover .fs-exit,
 	.fs-exit:focus-visible {
 		opacity: 1;

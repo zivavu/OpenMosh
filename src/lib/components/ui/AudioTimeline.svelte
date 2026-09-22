@@ -23,9 +23,8 @@
 		onSeek: (t: number) => void;
 		onSpanStartChange: (t: number) => void;
 		onSpanEndChange: (t: number) => void;
-		/** Fired once when a handle drag ends, with the new span already
-		 * applied — the editor records it for undo there, one entry per drag
-		 * rather than one per pointermove. */
+		/** Fired once when a handle drag ends, with the new span already applied, so
+		 * the editor records one undo entry per drag rather than one per pointermove. */
 		onSpanCommit?: () => void;
 		outputVolume?: number;
 		onVolumeChange?: (v: number) => void;
@@ -34,13 +33,8 @@
 		loopEnabled?: boolean;
 		onToggleLoop?: () => void;
 		ariaLabel?: string;
-		/**
-		 * `lane` puts the track on the enclosing TimelineStack's shared axis: it
-		 * zooms with every other lane, and the stack draws the playhead and owns
-		 * the transport. `bar` is the self-contained strip, for a clock that is not
-		 * the stack's master (a video playing under its own span while a track
-		 * drives the timeline).
-		 */
+		/** `lane` puts the track on the enclosing TimelineStack's shared axis: it zooms
+		 * with every lane, and the stack draws the playhead and owns the transport. */
 		layout?: "bar" | "lane";
 	}
 
@@ -67,8 +61,8 @@
 		layout = "bar",
 	}: Props = $props();
 
-	// Present whenever this is mounted inside a stack; used only in lane layout,
-	// so a bar keeps its own axis even when it sits next to one.
+	// Present whenever this is mounted inside a stack; used only in lane layout, so
+	// a bar keeps its own axis even when it sits next to one.
 	const enclosingStack = tryGetTimelineStack();
 	let stack = $derived(layout === "lane" ? enclosingStack : undefined);
 
@@ -79,26 +73,23 @@
 		outputVolume === 0 ? VolumeX : outputVolume < 0.5 ? Volume1 : Volume2,
 	);
 
-	/** Registers the track with the shared axis; a no-op for a standalone bar. */
 	function laneTrack(node: HTMLElement) {
 		return stack?.lane(node);
 	}
 
-	/** Absolute time → percent across the track, through the shared view window
-	 * when there is one and over the whole track when there isn't. Off-screen
-	 * either side once the view is zoomed in, so anything drawn from it clamps. */
+	/** Absolute time to percent across the track, through the shared view window when
+	 * there is one. Off-screen either side once zoomed in, so anything drawn clamps. */
 	function pct(time: number): number {
 		if (stack) return stack.toPct(time);
 		return trackDuration > 0 ? (time / trackDuration) * 100 : 0;
 	}
 
-	/** `pct` held inside the lane — a span that starts before the view window
-	 * would otherwise draw its bar clean across the panel beside the timeline. */
+	/** `pct` held inside the lane, so a span starting before the view window
+	 * doesn't draw its bar clean across the panel beside the timeline. */
 	function clampPct(time: number): number {
 		return Math.max(0, Math.min(100, pct(time)));
 	}
 
-	/** Whether a handle is inside the view at all; off-screen it isn't drawn. */
 	function onScreen(time: number): boolean {
 		const p = pct(time);
 		return p >= 0 && p <= 100;
@@ -117,11 +108,11 @@
 	}
 
 	// The handles are hit-tested by proximity and drawn with pointer-events off,
-	// so :hover can't reach them — which handle is live is tracked here instead.
+	// so :hover can't reach them; which handle is live is tracked here instead.
 	let hoverHandle = $state<"start" | "end" | null>(null);
 	let dragHandle = $state<"start" | "end" | null>(null);
-	/** The handle to light up: the dragged one wins, since the pointer wanders
-	 * off the grab zone once a drag is under way. */
+	/** The handle to light up: the dragged one wins, since the pointer wanders off
+	 * the grab zone once a drag is under way. */
 	let liveHandle = $derived(dragHandle ?? hoverHandle);
 
 	function handleFromClientX(clientX: number): "start" | "end" | null {
@@ -136,11 +127,8 @@
 		return null;
 	}
 
-	/**
-	 * Double-clicking a handle throws it back to its end of the track, so a span
-	 * trimmed too far goes back to the whole track without a drag. Same reset
-	 * gesture the panel sliders use.
-	 */
+	/** Double-clicking a handle throws it back to its end of the track, so a span
+	 * trimmed too far resets without a drag. Same gesture the panel sliders use. */
 	function onTimelineDblClick(e: MouseEvent) {
 		const handle = handleFromClientX(e.clientX);
 		if (!handle) return;
@@ -180,9 +168,8 @@
 		window.addEventListener("pointercancel", onUp);
 	}
 
-	/** One drag over the track: in a lane the track is part of the shared axis,
-	 * so the default drag moves the start marker, and the clock with it. A
-	 * standalone bar has no marker, so it scrubs its own clock instead. */
+	/** One drag over the track: in a lane the track is part of the shared axis, so
+	 * the default drag moves the start marker. A standalone bar scrubs its clock. */
 	function dragTrackTo(clientX: number) {
 		const t = timeFromClientX(clientX);
 		if (stack) stack.seekStatic(t);
@@ -240,7 +227,8 @@
 		window.addEventListener("touchend", onUp);
 	}
 
-	// Non-passive touchstart on timeline track — handles seek and handle drag via proximity
+	// Non-passive touchstart on the timeline track: handles seek and handle drag
+	// via proximity
 	$effect(() => {
 		const trackEl = timelineTrackEl;
 		if (!trackEl) return;
@@ -281,7 +269,7 @@
 </script>
 
 <!-- The track itself, identical either way: only the chrome around it differs.
-     The playhead is the stack's job in lane layout — it draws one line through
+     The playhead is the stack's job in lane layout, which draws one line through
      every lane rather than one per row. -->
 {#snippet trackBody()}
 	<div
@@ -479,9 +467,8 @@
 		outline: none;
 	}
 
-	/* A lane is a window onto a zoomed axis, so nothing may paint outside it.
-	   The standalone bar always spans its whole track and keeps the visible
-	   overflow its handles are drawn with. */
+	/* A lane is a window onto a zoomed axis, so nothing may paint outside it. The
+	   standalone bar keeps the visible overflow its handles are drawn with. */
 	.timeline-track-wrap.tl-lane {
 		overflow: hidden;
 		border-radius: 4px;
@@ -535,9 +522,7 @@
 
 	/* Drawn inside the span rather than straddling its edge: a lane clips to its
 	   window, so a centred handle lost its outer half whenever the span reached
-	   either end of the track — which is exactly where a full-length selection
-	   puts both of them. Inset, the whole grip is always on screen, and it reads
-	   as the end of the selection rather than a marker sitting on top of it. */
+	   either end of the track. Inset, the whole grip is always on screen. */
 	.timeline-handle {
 		position: absolute;
 		top: 0;
@@ -559,8 +544,7 @@
 		border-radius: 0 4px 4px 0;
 	}
 
-	/* Two grip lines, so it reads as something to drag rather than a boundary
-	   the span happens to end at. */
+	/* Two grip lines, so it reads as something to drag rather than a boundary. */
 	.timeline-handle::after {
 		content: "";
 		position: absolute;
@@ -570,7 +554,7 @@
 		transition: border-color var(--t-fast);
 	}
 
-	/* Lit by proximity rather than :hover — the handles take no pointer events,
+	/* Lit by proximity rather than :hover: the handles take no pointer events,
 	   since the track hit-tests them by distance. */
 	.timeline-handle.live,
 	.timeline-handle.dragging {
@@ -596,8 +580,7 @@
 	}
 
 	/* The gutter is a fixed column, so anything short of 150px leaves slack. Let
-	   the slider take it — a longer throw is a finer volume — with the × pinned
-	   to the far edge. */
+	   the slider take it, with the icon pinned to the far edge. */
 	.audio-gutter {
 		gap: 0.4rem;
 	}

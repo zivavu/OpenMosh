@@ -13,10 +13,8 @@ export interface AudioGraphState {
 	binCount: number;
 }
 
-// A media element can be captured by one MediaElementSourceNode ever — a
-// second createMediaElementSource throws, even after the first context closed.
-// So each element keeps its context + source for life, and disposing a graph
-// only detaches and suspends them.
+// A media element can be captured by one MediaElementSourceNode ever: a second
+// createMediaElementSource throws, even after the first context closed.
 const captures = new WeakMap<
 	HTMLMediaElement,
 	{ ctx: AudioContext; source: MediaElementAudioSourceNode }
@@ -38,10 +36,8 @@ export function createAudioGraph(
 	return buildGraph(cap.ctx, cap.source);
 }
 
-/**
- * Audio graph with no media-element source — callers connect their own source
- * node (e.g. an AudioBufferSourceNode) into `normalizeGain`.
- */
+/** Audio graph with no media-element source: callers connect their own source node
+ * (e.g. an AudioBufferSourceNode) into `normalizeGain`. */
 export function createOutputAudioGraph(): AudioGraphState {
 	return buildGraph(new AudioContext(), null);
 }
@@ -54,10 +50,8 @@ function buildGraph(
 	const normalizeGain = ctx.createGain();
 	const analyser = ctx.createAnalyser();
 	analyser.fftSize = 2048;
-	// Raw bins. Smoothing lives in smoothBandLevel, which an export runs too —
-	// left at the 0.8 default this path would be smoothed twice over and a render
-	// not at all. It also ran per rAF tick, so a 144 Hz monitor previewed
-	// something a 60 Hz one never saw.
+	// Raw bins. Smoothing lives in smoothBandLevel, which an export runs too: left at
+	// the 0.8 default this path would be smoothed twice over and a render not at all.
 	analyser.smoothingTimeConstant = 0;
 	const gain = ctx.createGain();
 	source?.connect(normalizeGain);

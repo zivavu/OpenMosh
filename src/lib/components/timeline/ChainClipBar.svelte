@@ -5,19 +5,13 @@
 	import { BEAT_INTERVALS, type ChainMode } from "../../editor/sequence";
 	import { loadPresets, type Preset } from "../../effects";
 
-	/**
-	 * The selection bar for any lane whose clips carry a chain: fill from a
-	 * preset, roll a mosh, clear, and switch between a static chain and one
-	 * that re-rolls on an interval. Every action fans out over the whole
-	 * selection; a value the selection disagrees on renders blank until the
-	 * user picks one, which then applies to all of them.
-	 */
+	/** The selection bar for any lane whose clips carry a chain: fill from a
+	 * preset, roll a mosh, clear, and switch static/interval. Every action fans
+	 * out over the selection; a value the selection disagrees on renders blank. */
 	interface Props {
-		/** Names the lane kind: the bar is shared, so it has to say which of
-		 * them it is driving. */
+		/** Names the lane kind: the bar is shared, so it has to say which one. */
 		title: string;
 		selectedClips: ChainClip[];
-		/** What a single selected clip is called in the bar. */
 		label: (clip: ChainClip) => string;
 		bpm?: number;
 		/** Without it the preset picker is left out. */
@@ -30,7 +24,6 @@
 			intervalSec?: number,
 			intervalBeats?: number | null,
 		) => void;
-		/** Extra controls between the mode switch and the interval picker. */
 		children?: Snippet;
 	}
 
@@ -73,7 +66,7 @@
 		return String(commonIntervalSec);
 	});
 
-	/** Read on open, not at mount — presets saved meanwhile show up. */
+	/** Read on open, not at mount, so presets saved meanwhile show up. */
 	let presetList = $state<Preset[]>([]);
 	let selectedPresetIndex = $derived.by(() => {
 		const name = commonValue(selectedClips.map((c) => c.presetName));
@@ -94,8 +87,8 @@
 			const beats = Number(v.slice(1));
 			onModeChange?.(ids, "interval", (60 / bpm) * beats, beats);
 		} else {
-			// Picking a plain duration drops the beat link, so a later BPM
-			// change leaves it alone.
+			// Picking a plain duration drops the beat link, so a later BPM change
+			// leaves it alone.
 			onModeChange?.(ids, "interval", Number(v), null);
 		}
 	}
@@ -183,8 +176,7 @@
 				{/if}
 				{#each [0.125, 0.25, 0.5, 1, 2] as sec}
 					<!-- String, not the number: the select's value is a string and Svelte
-					     matches an option by strict equality, so a numeric option value
-					     never matches and the picker renders blank. -->
+					     matches an option by strict equality, so a numeric value never matches. -->
 					<option value={String(sec)}>every {sec}s</option>
 				{/each}
 			</select>
@@ -204,9 +196,8 @@
 		padding: 0 0.25rem;
 	}
 
-	/* Too narrow for one row of everything: the controls wrap into as many rows
-	   as they need, with the captions and dividers gone — it's their space the
-	   row is short of. */
+	/* Too narrow for one row of everything: the controls wrap, with the captions
+	   and dividers gone. */
 	@media (max-width: 800px) {
 		.chain-bar {
 			flex-wrap: wrap;

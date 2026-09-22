@@ -4,13 +4,8 @@
 	import { onMount } from "svelte";
 	import { pushModalKeyboard } from "../../modal-keyboard";
 
-	/**
-	 * The centred tool panel the generator and the webcam open in: overlay,
-	 * card, a titled head with a close button, and the keyboard claimed for as
-	 * long as it is up. Escape is the owner's to handle — what it means differs
-	 * while the panel is busy. The `.label` and `.btn` classes the owners put
-	 * inside are styled here too, so the two read as one kind of thing.
-	 */
+	/** The centred tool panel the generator and the webcam open in: overlay, card, a
+	 * titled head with a close button, and the keyboard claimed while it is up. */
 	interface Props {
 		title: string;
 		/** Accessible name; defaults to the title. */

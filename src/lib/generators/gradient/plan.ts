@@ -1,8 +1,4 @@
-/**
- * Textures for the gradient generator. The axes people notice — mode and
- * scale — are dealt in fixed proportions and shuffled rather than drawn
- * independently, so a small batch can't come out all one thing by luck.
- */
+/** Textures for the gradient generator. Mode and scale are dealt in fixed proportions. */
 
 import { deal } from "../palette";
 import { randIn, randLog, type Rand } from "../../rng";
@@ -11,14 +7,7 @@ import type { GradientSpec } from "./spec";
 
 export type GradientTexture = Omit<GradientSpec, "colors">;
 
-/**
- * Where each mode has something to look at, from contact sheets of the
- * shader: flow turns to noise above scale ~3 and to a flat wash below warp ~2;
- * scatter is a blank below scale ~2.5 and only winds properly from warp ~3.
- * Gamma is what keeps the dark stops in play — at 1 and above the ramp's
- * bottom half never shows. The shader's blob mask is left off: a cut-out on
- * black reads as a missing image once the effects hit it.
- */
+/** Where each mode has something to look at: flow turns to noise above scale ~3. */
 const SCALE_RANGE: Record<0 | 1, [number, number]> = {
 	0: [0.8, 2.5],
 	1: [2.5, 8],

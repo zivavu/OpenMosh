@@ -34,11 +34,9 @@
 
 	interface Props {
 		sources: SequenceSource[];
-		/** How many layer clips are selected — Enter on a thumb assigns to all
-		 * of them. */
+		/** How many layer clips are selected: Enter on a thumb assigns to all of them. */
 		selectedCount?: number;
-		/** Marks the thumb the selection currently plays; null when they
-		 * disagree. */
+		/** Marks the thumb the selection currently plays; null when they disagree. */
 		selectedSourceId?: string | null;
 		onAssign: (sourceId: string) => void;
 		onAdd: () => void;
@@ -47,9 +45,7 @@
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		edits?: Record<string, SourceEdit>;
 		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
-		/** Fired as the media edit modal opens and closes. The editor stops
-		 * playback while it is up: the modal has its own transport, and a clip
-		 * running behind it fights the one being scrubbed inside. */
+		/** Fired as the media edit modal opens and closes. */
 		onEditingChange?: (open: boolean) => void;
 	}
 
@@ -70,9 +66,7 @@
 
 	let assignable = $derived(selectedCount > 0);
 
-	/** Open thumb's index; null when the preview is closed. Same component and
-	 * same rule the grid's cards use: a click previews; putting media on a clip
-	 * is a drag, or Enter on the thumb while the clip is selected. */
+	/** Open thumb's index; null when the preview is closed. */
 	const lightbox = createLightbox();
 
 	let lightboxItems = $derived(
@@ -90,8 +84,7 @@
 	// Report the modal's state up, so the editor can stop the preview behind it.
 	$effect(() => onEditingChange?.(!!editingSource));
 
-	/** Any of the three tools having been used, not just the key: the lit button
-	 * is how the rail says this media is not what the file holds. */
+	/** Any of the three tools having been used, not just the key. */
 	function isEdited(src: SequenceSource): boolean {
 		const e = edits[src.id];
 		return (
@@ -111,10 +104,7 @@
 	/** The scrolling strip, for centring the highlighted thumb. */
 	let itemsEl = $state<HTMLDivElement | undefined>(undefined);
 
-	/** Follow the highlight: the rail holds more thumbs than fit, and the source
-	 * behind a newly selected clip is often scrolled off it. Measured
-	 * against the strip rather than scrollIntoView, which would scroll the
-	 * editor's ancestors as well as this one. */
+	/** Follow the highlight: the rail holds more thumbs than fit. */
 	$effect(() => {
 		const id = selectedSourceId;
 		if (!id || !open) return;
@@ -128,9 +118,7 @@
 		strip.scrollBy({ left: delta, behavior: "smooth" });
 	});
 
-	// Reorder, the same gesture the grid's cards use: a thumb carries its index
-	// for a drop in here, and its id under our own type so a drop on a lane is
-	// still read as an assignment.
+	// Reorder, the same gesture the grid's cards use.
 	let dragFromIndex = $state<number | null>(null);
 	let dragOverIndex = $state<number | null>(null);
 
@@ -145,8 +133,7 @@
 		e.dataTransfer.setData("text/plain", src.id);
 	}
 
-	/** Which edge of slot `i` the insertion line belongs on — see the grid's
-	 * copy: a thumb moved rightwards lands after the one it was dropped on. */
+	/** Which edge of slot `i` the insertion line belongs on. */
 	function dropEdge(i: number): "before" | "after" | null {
 		if (dragFromIndex === null || dragOverIndex !== i || dragFromIndex === i) {
 			return null;
@@ -248,8 +235,7 @@
 							<span class="rail-kind"
 								><Play size={7} fill="currentColor" /></span
 							>
-							<!-- Display only: the chip is itself a button, so the toggle
-							     lives on the grid's badge and over the single preview. -->
+							<!-- Display only: the chip is itself a button. -->
 							<ProxyBadge source={src} size={7} />
 						{/if}
 						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
@@ -294,8 +280,7 @@
 			onClose={lightbox.close}
 			onEdit={onEditChange
 				? (i) => {
-						// Straight from previewing it to editing it: seeing the media at
-						// size is when it becomes obvious something has to come out of it.
+						// Straight from previewing it to editing it.
 						lightbox.close();
 						editingId = sources[i]?.id ?? null;
 					}
@@ -305,8 +290,7 @@
 {/if}
 
 <style>
-	/* Sits between the preview and the timeline so a source can be dragged onto
-	   a lane without swapping the preview out for the grid. */
+	/* Sits between the preview and the timeline so a source can be dragged onto a lane. */
 	.rail {
 		display: flex;
 		align-items: stretch;
@@ -364,9 +348,7 @@
 		cursor: grabbing;
 	}
 
-	/* A line in the gap the thumb would land in, rather than a border on the one
-	   under the cursor — that reads as "this is selected" instead of "it goes
-	   here". Same indicator the grid uses. */
+	/* A line in the gap the thumb would land in, not a border on the one under the cursor. */
 	.rail-slot.drop-before::before,
 	.rail-slot.drop-after::before {
 		content: "";
@@ -395,8 +377,7 @@
 		border: 1px solid var(--line);
 		border-radius: 3px;
 		background: #101010;
-		/* Clicking is the primary action (assign, or preview); the drag is the
-		   secondary one, so grabbing shows only once one is under way. */
+		/* Clicking is the primary action; grabbing shows only once a drag is under way. */
 		cursor: pointer;
 		overflow: hidden;
 	}
@@ -405,16 +386,13 @@
 		cursor: grabbing;
 	}
 
-	/* What the selected clips already show — the same accent the clip blocks
-	   use for selection. */
+	/* The same accent the clip blocks use for selection. */
 	.rail-item.playing {
 		border-color: var(--mosh);
 		box-shadow: inset 0 0 0 1px var(--mosh);
 	}
 
-	/* On the thumb rather than beside it: the rail is a scrolling strip, and a
-	   second full-width control per source would halve how many fit. Bottom
-	   corner, because the top-right one belongs to the kind and base badges. */
+	/* On the thumb rather than beside it: the rail is a scrolling strip. */
 	.rail-edit {
 		position: absolute;
 		top: 18px;
@@ -435,8 +413,7 @@
 		opacity: 1;
 	}
 
-	/* A keyed source keeps its button lit, so the rail says which media has
-	   been edited without hovering every thumb. */
+	/* A keyed source keeps its button lit. */
 	.rail-edit.on {
 		opacity: 1;
 		color: var(--mosh);
@@ -477,10 +454,7 @@
 
 	/* Both badges can show at once, so the BASE one steps aside. */
 
-	/* Bottom-left of the thumb. The top edge already carries the index, the
-	   kind and base badges and the edit button, and this one is the widest of
-	   them. Anchored by its own bottom rather than by a top offset, so the text
-	   inside it can't push it past the thumb and onto the name. */
+	/* Bottom-left of the thumb, anchored by its own bottom. */
 	.rail-item :global(.proxy-badge) {
 		position: absolute;
 		top: calc(var(--rail-thumb-h) - 2px);

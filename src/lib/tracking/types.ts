@@ -5,9 +5,8 @@ export const TRACKING_EFFECT_ID = "tracking";
 export type BoxState = "lock" | "degraded" | "lost" | "reacquire";
 
 export interface TrackingParams {
-	/** Max number of tracked targets. */
 	count: number;
-	/** 0..1 — how selective the saliency picker is (higher = only strongest spots). */
+	/** 0..1: how selective the saliency picker is (higher = only strongest spots). */
 	sensitivity: number;
 	/** Base box size as a fraction of the smaller image dimension. */
 	size: number;
@@ -34,14 +33,11 @@ export interface TrackBox {
 	/** Tracked normalized center. Frozen while `state` is "lost". */
 	baseX: number;
 	baseY: number;
-	/** Normalized box size. */
 	w: number;
 	h: number;
-	/**
-	 * Signal quality 0..1 derived from patch-match residual. Drops fast when the
-	 * target patch is disturbed, recovers slowly — like a real tracker losing
-	 * and re-confirming a lock.
-	 */
+	/** Signal quality 0..1 from patch-match residual. Drops fast when the
+	 * target patch is disturbed, recovers slowly, like a real tracker losing
+	 * and re-confirming a lock. */
 	quality: number;
 	state: BoxState;
 	/** Animation-time of the last state transition (drives state animations). */
@@ -66,19 +62,15 @@ export interface TrackingState {
 	prevLum: Float32Array | null;
 	gridW: number;
 	gridH: number;
-	/**
-	 * Global feed disturbance 0..1 — mean frame-to-frame luminance change,
-	 * rising instantly and decaying over a few analysis ticks. High values mean
-	 * "the whole feed is glitching", not "my target moved".
-	 */
+	/** Global feed disturbance 0..1: mean frame-to-frame luminance change,
+	 * rising instantly and decaying over a few ticks. High means "the whole
+	 * feed is glitching", not "my target moved". */
 	disturbance: number;
 	/** Key of the current primary (designated) target, -1 = none. */
 	primaryKey: number;
 }
 
-/** A box resolved for the current frame, ready to draw. */
 export interface FrameBox {
-	/** Normalized center. */
 	cx: number;
 	cy: number;
 	w: number;

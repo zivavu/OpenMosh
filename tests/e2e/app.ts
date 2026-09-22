@@ -7,39 +7,27 @@ import {
 	type WavOptions,
 } from "./fixtures";
 
-/**
- * The moves every editor spec makes, in the app's own vocabulary.
- *
- * Selectors live here and nowhere else: the editor is one 5000-line component
- * whose markup moves constantly, and a spec that reaches into it directly goes
- * stale the next time a button is restyled.
- */
+/** The moves every editor spec makes. Selectors live here and nowhere else: the
+ * editor is one 5000-line component whose markup moves constantly. */
 
 export const PREVIEW_CANVAS = 'canvas[aria-label="Effect preview canvas"]';
 
-/** A downscale big enough to tell a red frame from a blue one, small enough to
- * ship over the CDP bridge on every poll. */
+/** Downscale big enough to tell a red frame from a blue one, small enough to ship per poll. */
 const SAMPLE = 32;
 
 export interface CanvasStats {
 	mean: Rgb;
 	/** Spread across the sampled pixels. Zero means a flat fill. */
 	variance: number;
-	/** Quantised colour count — a rough stand-in for "how much is going on". */
+	/** Quantised colour count: a rough stand-in for "how much is going on". */
 	distinctColors: number;
 	/** Cheap content hash, for asking whether two frames differ at all. */
 	hash: string;
 	blank: boolean;
 }
 
-/**
- * Sample what the preview is actually showing.
- *
- * The read happens inside a rAF callback so it lands after the app's own draw
- * for that frame: a WebGL canvas without `preserveDrawingBuffer` is only
- * guaranteed to hold its content until the frame is composited, and reading
- * from outside the loop is how you get an empty buffer back.
- */
+/** Sample what the preview is showing. The read happens inside a rAF callback so it
+ * lands after the app's own draw; outside the loop you get an empty buffer back. */
 export async function canvasStats(page: Page): Promise<CanvasStats> {
 	return page.evaluate(
 		async ([selector, sample]) => {
@@ -121,7 +109,6 @@ export async function waitForRender(page: Page): Promise<CanvasStats> {
 	return last!;
 }
 
-/** Which of the fixture colours the preview is closest to. */
 export function nearestColor(mean: Rgb, palette: Record<string, Rgb>): string {
 	let best = "";
 	let bestDistance = Infinity;
@@ -139,23 +126,14 @@ export function nearestColor(mean: Rgb, palette: Record<string, Rgb>): string {
 }
 
 export interface OpenEditorOptions {
-	/**
-	 * Pool sources, as [name, colour] pairs. `"pattern"` in place of a colour
-	 * gives that source the detailed test image instead of a flat fill — which
-	 * a spec needs whenever it asserts that the preview *changed*, since a flat
-	 * source comes out of a spatial effect looking exactly the same.
-	 */
+	/** Pool sources, as [name, colour] pairs. `"pattern"` gives that source the detailed
+	 * test image instead of a flat fill, which a spec needs to assert the preview changed. */
 	sources: [string, Rgb | "pattern"][];
 	track?: WavOptions & { name?: string };
 }
 
-/**
- * Take the upload screen through to the segment editor.
- *
- * The song goes in first on purpose: the upload screen holds media back until
- * a track arrives and launches the moment it does, so loading in this order
- * makes the transition happen at one known point instead of racing.
- */
+/** Take the upload screen through to the segment editor. The song goes in first on
+ * purpose: the upload screen holds media back until a track arrives and launches then. */
 export async function openEditor(
 	page: Page,
 	{ sources, track = {} }: OpenEditorOptions,
@@ -183,26 +161,20 @@ export function recordButton(page: Page): Locator {
 	return page.getByRole("button", { name: "RECORD", exact: true });
 }
 
-/** The media lane, where clips are made, cut and picked. */
 export function moshLane(page: Page): Locator {
 	return mediaLaneTrack(page, 0);
 }
 
-/** The clips on that lane — the segment lane's successor. */
 export function segments(page: Page): Locator {
 	return mediaClips(page, 0);
 }
 
-/**
- * The chain lists every effect the app has; only the enabled ones render. The
- * panel's own "N live" readout counts these, so they're what a spec means when
- * it says a segment has effects on it.
- */
+/** The chain lists every effect the app has; only the enabled ones render. The panel's
+ * "N live" readout counts these, so this is what a spec means by effects on a segment. */
 export function liveEffects(page: Page): Locator {
 	return page.locator(".effect-item.enabled");
 }
 
-/** Which effects a segment's chain has switched on, by name and in order. */
 export async function liveEffectNames(page: Page): Promise<string[]> {
 	return liveEffects(page)
 		.locator(".name")
@@ -210,7 +182,6 @@ export async function liveEffectNames(page: Page): Promise<string[]> {
 		.then((names) => names.map((n) => n.trim()));
 }
 
-/** Cut a new segment boundary at `fraction` along the source lane. */
 export async function splitSegmentAt(
 	page: Page,
 	fraction: number,
@@ -223,7 +194,6 @@ export async function splitSegmentAt(
 	});
 }
 
-/** Open a clip's chain in the sidebar. */
 export async function selectSegment(page: Page, index: number): Promise<void> {
 	await segments(page).nth(index).click();
 	await expect(page.locator(".chain-count")).toBeVisible();
@@ -234,11 +204,8 @@ export function segmentMoshButton(page: Page): Locator {
 	return page.getByTitle("Random mosh for this clip");
 }
 
-/**
- * Take the upload screen through to single mode with one image. No mode
- * button is pressed: single is the default, and on a touch device it is the
- * only mode there is.
- */
+/** Take the upload screen through to single mode with one image. No mode button is
+ * pressed: single is the default, and on a touch device it is the only mode there is. */
 export async function openSingle(
 	page: Page,
 	file: string,
@@ -260,13 +227,11 @@ export async function openSingle(
 	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
 }
 
-/** The upload screen's Single / Editor / Slideshow pill. */
 export function modeToggle(page: Page): Locator {
 	return page.locator(".mode-toggle");
 }
 
-/** Pick a mode on the upload screen. The tabs are numbered ("2 Editor"), so
- * the match is on the label's tail rather than the whole name. */
+/** Pick a mode. The tabs are numbered ("2 Editor"), so match the label's tail. */
 export async function selectMode(
 	page: Page,
 	mode: "Single" | "Editor" | "Slideshow",
@@ -281,9 +246,8 @@ export function sheetHandle(page: Page): Locator {
 	return page.getByRole("button", { name: "Toggle panel" });
 }
 
-/** A tab of that sheet, by the label it actually carries: the settings tab is
- * "Mosh" in the editor and "Settings" in the slideshow, and the chain tab is
- * "Chain" in both. */
+/** A tab of that sheet, by the label it carries: the settings tab is "Mosh" in the
+ * editor and "Settings" in the slideshow; the chain tab is "Chain" in both. */
 export function sheetTab(
 	page: Page,
 	name: "Mosh" | "Settings" | "Chain",
@@ -291,12 +255,10 @@ export function sheetTab(
 	return page.locator(".tab-btn", { hasText: name });
 }
 
-/** Whatever the active sheet tab is showing. */
 export function sheetContent(page: Page): Locator {
 	return page.locator(".tab-content");
 }
 
-/** Every effect the chain lists, live or not. */
 export function effectItems(within: Page | Locator): Locator {
 	return within.locator(".effect-item");
 }
@@ -313,7 +275,6 @@ export function layerButtons(page: Page): Locator {
 	);
 }
 
-/** The toolbar under the stack for the selected clip(s). */
 export function segmentBar(page: Page): Locator {
 	return page.locator(".chain-bar");
 }
@@ -323,16 +284,13 @@ export function timelineStack(page: Page): Locator {
 	return page.locator(".tl-stack");
 }
 
-/** The caption column beside every lane. */
 export function laneGutters(page: Page): Locator {
 	return page.locator(".tl-stack .tl-gutter");
 }
 
-// ── Media layers ────────────────────────────────────────────────────────────
-// The layer stack a source can be dropped onto. Media and text rows are the
-// same element but for `data-lane-kind`, so everything here goes through it.
+// Media and text rows differ only by `data-lane-kind`, so everything here goes through it.
 
-/** Thumbs in the media pool rail under the preview — what a drag starts from. */
+/** Thumbs in the media pool rail under the preview; what a drag starts from. */
 export function railThumbs(page: Page): Locator {
 	return page.locator(".rail-item");
 }
@@ -346,7 +304,7 @@ export function mediaLaneTrack(page: Page, lane = 0): Locator {
 	return mediaLanes(page).nth(lane).locator(".lane-track");
 }
 
-/** The clips actually on a lane — never the drop ghost, which is not one yet. */
+/** The clips actually on a lane, never the drop ghost. */
 export function mediaClips(page: Page, lane = 0): Locator {
 	return mediaLaneTrack(page, lane).locator(".clip:not(.ghost)");
 }
@@ -356,14 +314,12 @@ export function mediaDropGhost(page: Page, lane = 0): Locator {
 	return mediaLaneTrack(page, lane).locator(".clip.ghost");
 }
 
-/** Add an empty media lane over the one the editor opened onto. */
 export async function addMediaLayer(page: Page): Promise<void> {
 	await expect(mediaLanes(page)).toHaveCount(1);
 	await page.getByRole("button", { name: "Media layer" }).click();
 	await expect(mediaLanes(page)).toHaveCount(2);
 }
 
-/** A point `fraction` of the way across a lane's track, in page coordinates. */
 async function laneX(
 	page: Page,
 	lane: number,
@@ -377,19 +333,14 @@ export interface SourceDragOptions {
 	/** Index into the rail. */
 	thumb: number;
 	lane?: number;
-	/** Where across the lane to hold the cursor, 0–1. */
+	/** Where across the lane to hold the cursor, 0-1. */
 	fraction: number;
 	/** Leave the drag in the air, for asserting on the ghost. */
 	hold?: boolean;
 }
 
-/**
- * Drag a rail thumb onto a media lane with real mouse input.
- *
- * Chromium turns a press-move-release over a `draggable` element into a native
- * HTML5 drag, so this exercises the same dataTransfer path a user gets —
- * dispatching synthetic DragEvents instead would only test the handlers.
- */
+/** Drag a rail thumb onto a media lane with real mouse input. Chromium turns a
+ * press-move-release over a `draggable` into a native HTML5 drag, not synthetic events. */
 export async function dragSourceToLane(
 	page: Page,
 	{ thumb, lane = 0, fraction, hold = false }: SourceDragOptions,
@@ -398,8 +349,7 @@ export async function dragSourceToLane(
 	const to = await laneX(page, lane, fraction);
 	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
 	await page.mouse.down();
-	// Clear the drag threshold first, then approach: one jump to the target can
-	// land before the browser has decided a drag started at all.
+	// Clear the drag threshold first: one jump to the target can land before a drag starts.
 	await page.mouse.move(from.x + from.width / 2, from.y - 20, { steps: 4 });
 	await page.mouse.move(to.x, to.y, { steps: 12 });
 	// A dragover at rest, so the last one the lane sees is the one being asserted.
@@ -408,12 +358,10 @@ export async function dragSourceToLane(
 	await page.mouse.up();
 }
 
-/** Finish a held drag where it stands. */
 export async function dropHeldSource(page: Page): Promise<void> {
 	await page.mouse.up();
 }
 
-/** Take a held drag off the lane stack entirely. */
 export async function dragAwayFromLanes(page: Page): Promise<void> {
 	const box = (await page.locator(PREVIEW_CANVAS).boundingBox())!;
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
@@ -421,7 +369,7 @@ export async function dragAwayFromLanes(page: Page): Promise<void> {
 	});
 }
 
-/** Where a clip (or the ghost) sits across its lane, as 0–1 fractions. */
+/** Where a clip (or the ghost) sits across its lane, as 0-1 fractions. */
 export async function clipSpanFraction(
 	page: Page,
 	clip: Locator,

@@ -1,14 +1,5 @@
-/**
- * What every clip lane component does the same way: which clips are selected
- * and how a click changes that, dragging clips and boundaries, scrubbing on
- * empty lane space, adding and splitting at the cursor, deleting, and the
- * keyboard. The fx, media and text lanes each hand this a `host` describing
- * what a clip is on their lane and keep only their own markup and gestures.
- *
- * Lanes are read through the host's getter on every call, so the controller
- * always sees the component's current props; edits go back through
- * `setLanes` after `onBeforeEdit` has recorded the state they replace.
- */
+/** What every clip lane component does the same way: selection, dragging clips and
+ * boundaries, scrubbing, adding and splitting, deleting, and the keyboard. */
 
 import { untrack } from "svelte";
 import type { TimelineStackState } from "../editor/timeline-stack.svelte";
@@ -49,8 +40,7 @@ export interface ClipLaneHost<
 	readonly lanes: L[];
 	setLanes(lanes: L[]): void;
 	onBeforeEdit?(coalesceKey?: string): void;
-	/** The primary selection — the one the panel edits and a shift-range
-	 * extends from — and the whole selection it is always a member of. */
+	/** The primary selection, and the whole selection it is always a member of. */
 	selectedClipId: string | null;
 	selectedClipIds: string[];
 	createClip(start: number, end: number): C;
@@ -78,15 +68,11 @@ export class ClipLaneController<
 	scrubbing = $state(false);
 	/** Lane the delete button is asking about; null when nothing is pending. */
 	lanePendingDelete = $state<L | null>(null);
-	/** The lane geometry, for hit-testing against the track. Every lane shares
-	 * one geometry, so whichever mounted last will do. */
+	/** The lane geometry, for hit-testing against the track. Every lane shares one. */
 	trackEl: HTMLElement | undefined;
 
-	/** Set on pointerdown when a plain click landed on an already-selected
-	 * clip. The selection has to survive until pointerup so the clip (or the
-	 * group) can still be dragged; only a click that turns out not to be a
-	 * drag resolves it — a group collapses to the one clicked, a lone clip
-	 * deselects. */
+	/** Set on pointerdown when a plain click landed on an already-selected clip, so the
+	 * selection survives until pointerup and the clip can still be dragged. */
 	#clickOnUp: string | null = null;
 
 	constructor(host: ClipLaneHost<C, L>, stack: TimelineStackState) {
@@ -97,8 +83,6 @@ export class ClipLaneController<
 	get trackDuration(): number {
 		return this.stack.trackDuration;
 	}
-
-	// ── Selection ────────────────────────────────────────────────────────────
 
 	selectOnly(clipId: string): void {
 		this.host.selectedClipId = clipId;
@@ -111,8 +95,7 @@ export class ClipLaneController<
 		this.host.selectedClipIds = [];
 	}
 
-	/** Follow external changes to the primary (the panel's back button,
-	 * applied lyrics) and drop ids whose clips are gone. Call from an effect. */
+	/** Follow external changes to the primary and drop ids whose clips are gone. */
 	syncSelection(): void {
 		const id = this.host.selectedClipId;
 		const alive = new Set(
@@ -138,8 +121,6 @@ export class ClipLaneController<
 		);
 	}
 
-	// ── Lookups ──────────────────────────────────────────────────────────────
-
 	/** The raw pointer time; a drag snaps it against the stack in dragClipsStep. */
 	timeAt(clientX: number): number {
 		return this.stack.vp.clientXToTime(clientX);
@@ -149,16 +130,13 @@ export class ClipLaneController<
 		return this.host.lanes.find((l) => l.id === laneId);
 	}
 
-	/** Over the track rather than the row's gutter. A pixel of slack either
-	 * side: the mouse lands on whole pixels, and a box edge that falls between
-	 * two would otherwise refuse a drop aimed at the very start of the lane. */
+	/** Over the track rather than the row's gutter. A pixel of slack either side, since
+	 * a box edge between two whole pixels would refuse a drop. */
 	overTrack(clientX: number): boolean {
 		if (!this.trackEl) return false;
 		const rect = this.trackEl.getBoundingClientRect();
 		return clientX >= rect.left - 1 && clientX <= rect.right + 1;
 	}
-
-	// ── Geometry ─────────────────────────────────────────────────────────────
 
 	get #scale() {
 		return {
@@ -182,8 +160,6 @@ export class ClipLaneController<
 	adjacentPairs(lane: L): AdjacentPair<C>[] {
 		return adjacentPairs(lane);
 	}
-
-	// ── Edits ────────────────────────────────────────────────────────────────
 
 	update(laneId: string, fn: (lane: L) => L): void {
 		this.host.setLanes(updateLaneIn(this.host.lanes, laneId, fn));
@@ -243,16 +219,15 @@ export class ClipLaneController<
 		this.selectOnly(clip.id);
 	}
 
-	/** Aim the panel at a lane: its first clip, or a fresh full-length one when
-	 * it has none — a lane whose clips were all deleted has nothing to select
-	 * and no other way back. */
+	/** Aim the panel at a lane: its first clip, or a fresh full-length one when it has
+	 * none. */
 	openLane(lane: L): void {
 		const first = sortClips(lane.clips)[0];
 		if (first) this.selectOnly(first.id);
 		else this.addFullClip(lane.id);
 	}
 
-	/** Cut the clip under `time` on one lane in two — the S shortcut's target. */
+	/** Cut the clip under `time` on one lane in two, the S shortcut's target. */
 	splitAt(laneId: string, time: number): void {
 		const lane = this.laneOf(laneId);
 		if (!lane) return;
@@ -261,8 +236,7 @@ export class ClipLaneController<
 		if (next === lane) return;
 		this.host.onBeforeEdit?.();
 		this.update(laneId, () => next);
-		// The clip the cursor was in is gone; leaving its id selected would show
-		// the panel a chain that is no longer on the lane.
+		// The clip the cursor was in is gone; leaving its id selected would show a stale chain.
 		this.deselect();
 	}
 
@@ -286,12 +260,8 @@ export class ClipLaneController<
 		this.deselect();
 	}
 
-	// ── Lane track ───────────────────────────────────────────────────────────
-
-	/** Action for a lane's track element: registers it with the shared axis,
-	 * as a split target for the S shortcut, and its clip edges as snap targets
-	 * for drags on any lane. An action, not an attachment, for the reason
-	 * `TimelineStackState.lane` is. */
+	/** Action for a lane's track element: registers it with the shared axis, as a split
+	 * target for S, and its clip edges as snap targets. */
 	laneTrack = (node: HTMLElement, laneId: string) => {
 		this.trackEl = node;
 		const shared = this.stack.lane(node, laneId);
@@ -311,12 +281,9 @@ export class ClipLaneController<
 		};
 	};
 
-	// ── Pointer ──────────────────────────────────────────────────────────────
-
 	onTrackDblClick(e: MouseEvent, laneId: string): void {
 		if (this.trackDuration <= 0) return;
-		// A double-click inside a clip is the clip's business; only empty lane
-		// space drops a new clip.
+		// A double-click inside a clip is the clip's business; only empty lane space adds one.
 		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
 		this.addClipAt(laneId, this.timeAt(e.clientX));
 	}
@@ -332,12 +299,8 @@ export class ClipLaneController<
 		this.#clickOnUp = null;
 		const host = this.host;
 
-		// Selection gestures first, and none of them start a drag — dragging from
-		// one would move clips the user was only trying to pick.
-		//
-		// Ctrl+Shift toggles a single clip in or out: the additive pick that plain
-		// Ctrl used to be, moved aside so Ctrl+Click can split. Checked before the
-		// plain-Shift range, which would otherwise swallow it.
+		// Selection gestures first, and none of them start a drag, since dragging from one
+		// would move clips the user was only trying to pick.
 		if ((e.ctrlKey || e.metaKey) && e.shiftKey && mode === "move") {
 			if (host.selectedClipIds.includes(clipId)) {
 				const rest = host.selectedClipIds.filter((x) => x !== clipId);
@@ -351,8 +314,7 @@ export class ClipLaneController<
 			return;
 		}
 
-		// Ctrl+Click cuts at the cursor. Handled on the edge handles too: they sit
-		// over the clip's ends, and a cut there is no less unambiguous.
+		// Ctrl+Click cuts at the cursor, on the edge handles too.
 		if (e.ctrlKey || e.metaKey) {
 			this.splitAt(laneId, this.timeAt(e.clientX));
 			return;
@@ -372,8 +334,7 @@ export class ClipLaneController<
 			return;
 		}
 
-		// A plain click on something already selected keeps the selection, so it
-		// can be dragged; pointerup resolves it if nothing moved.
+		// A plain click on something already selected keeps it so it can be dragged.
 		if (host.selectedClipIds.includes(clipId) && mode === "move") {
 			host.selectedClipId = clipId;
 			this.#clickOnUp = clipId;
@@ -415,10 +376,8 @@ export class ClipLaneController<
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
-	/** Empty lane space places the start marker, which takes the clock with
-	 * it: with no ruler row of its own, every lane has to be draggable, or a
-	 * text-only timeline has nothing to seek with. Ctrl/Cmd drops a clip there
-	 * instead — a one-handed alternative to double-clicking. */
+	/** Empty lane space places the start marker, which takes the clock with it: with no
+	 * ruler row, every lane has to be draggable. */
 	onLanePointerDown(e: PointerEvent, laneId: string): void {
 		if (e.button !== 0 || this.trackDuration <= 0) return;
 		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
@@ -443,9 +402,8 @@ export class ClipLaneController<
 		const group = this.host.selectedClipIds.includes(clipId)
 			? this.host.selectedClipIds
 			: [clipId];
-		// A move that crossed into another row of this kind carries the clips
-		// over, if they fit there; otherwise they keep sliding on the row they
-		// came from. From then on the drag belongs to the new lane.
+		// A move that crossed into another row of this kind carries the clips over, if they
+		// fit; otherwise they keep sliding on the row they came from.
 		if (mode === "move") {
 			const over = this.stack.laneIdAt(e.clientY);
 			const from = this.laneOf(laneId);
@@ -470,8 +428,7 @@ export class ClipLaneController<
 				}
 			}
 		}
-		// Dragging any member drags the whole selection with it. Alt holds the
-		// snap off.
+		// Dragging any member drags the whole selection. Alt holds the snap off.
 		const step = dragClipsStep(
 			this.laneOf(laneId)!,
 			drag,
@@ -501,12 +458,9 @@ export class ClipLaneController<
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}
 
-	// ── Keyboard ─────────────────────────────────────────────────────────────
-
 	onKeyDown(e: KeyboardEvent): void {
 		if (isTextEntryTarget(e.target)) return;
-		// The media lightbox and other overlays own the keyboard while they're
-		// up: Escape and Delete must not reach the clips behind them.
+		// The media lightbox and other overlays own the keyboard while they're up.
 		if (isModalKeyboardOpen()) return;
 		if (e.ctrlKey || e.metaKey) {
 			const key = e.key.toLowerCase();

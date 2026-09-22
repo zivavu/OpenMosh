@@ -230,7 +230,6 @@
 	import { lazy } from "../../lazy";
 	import { GeneratedSizeSync, readGenerated } from "../../generators";
 
-	// An overlay behind a key; its chunk waits until someone asks for help.
 	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
 	const loadGeneratePanel = lazy(
 		() => import("../generators/GeneratePanel.svelte"),
@@ -239,15 +238,14 @@
 	interface Props {
 		file: File;
 		onfile: (f: File) => void;
-		/** Sequence mode: the rest of the media pool, alongside `file`. */
+		/** Sequence mode: the rest of the media pool. */
 		extraFiles?: File[];
 		initialAudioFile?: File | null;
-		/** Library id of `initialAudioFile`, when it came from a saved sequence. */
+		/** Library id of `initialAudioFile` from a saved sequence. */
 		initialTrackId?: string | null;
-		/** The lane timeline belongs to 'sequence' alone — 'single' is one
-		 * source and one effect chain, and the two persist separately. */
+		/** Lane timeline is sequence-only. */
 		mode?: "single" | "sequence";
-		/** Single mode: work restored from a saved session, if reopened from one. */
+		/** Single mode: work restored from a saved session. */
 		initialSession?: SingleSessionState | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
@@ -271,14 +269,9 @@
 	let dragging = $state(false);
 	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
-	// Sequence mode never plays `file` itself: the media there all comes from
-	// the pool, through the frame drivers, and the frame starts black. So the
-	// editor's own player — and everything that hangs off it, from the span
-	// bar to the export's decode loop — is single mode's alone.
+	// Sequence mode never plays `file`; media comes from the pool.
 	let isVideo = $derived(!isSequenceMode && file.type.startsWith("video/"));
-	// The webcam, live: a `<video>` on the camera stream stands in for the file's
-	// player. No span, no seeking, no session — the export runs in real time
-	// off whatever the camera shows while it records.
+	// Live webcam: a `<video>` on the camera stream stands in for the player.
 	let isLive = $derived(!isSequenceMode && isLiveFile(file));
 	let liveVideoEl = $state<HTMLVideoElement | null>(null);
 	let liveStream = $state<MediaStream | null>(null);
@@ -299,8 +292,7 @@
 		return () => {
 			dropped = true;
 			liveStream = null;
-			// Swapped out for a file — re-input's frame, a drop: the camera is let
-			// go. Undo hands the live file back, and its lookup re-opens it.
+			// Swapped out for a file: release the camera.
 			stopLiveFile(f);
 		};
 	});
@@ -315,29 +307,17 @@
 	let videoSpanEnd = $state(0);
 	let videoPlaying = $state(false);
 	let videoSpeed = $state(1);
-	// Treat positions this close to the span end as "at the end" when deciding
-	// whether play should restart from the span start
+	// Positions this close to the span end count as "at the end".
 	const VIDEO_END_EPSILON = 0.1;
-	/** Set while the video clock sits past the end of its span — the element
-	 * path's copy of what VideoPreviewPlayer tracks for itself. */
+	/** Video clock sits past its span end. */
 	let videoPastSpan = $state(false);
-	// Whether the video file has an audio track. Starts false so we don't hook a
-	// silent video into Web Audio before the probe confirms it — Firefox pins any
-	// element captured via createMediaElementSource to realtime, ignoring
-	// playbackRate (mozilla bug 1517199), which breaks the speed control.
+	// Starts false: Firefox ignores playbackRate on element-captured audio (moz bug 1517199).
 	let videoHasAudio = $state(false);
 
-	// WebCodecs-driven preview playback. When non-null it replaces the <video>
-	// element as the frame source (the element stays mounted but inert, kept as
-	// the recording fallback). Null when the file can't be demuxed/decoded or
-	// has rotation metadata — those keep the element-driven preview.
+	// WebCodecs preview playback; replaces the <video> element as frame source.
 	let previewPlayer = $state<VideoPreviewPlayer | null>(null);
 
-	// Single read-side view of the active video source (WebCodecs player when
-	// present, else the fallback <video> element's tracked state), so callers
-	// don't repeat the `previewPlayer ? … : …` fork. The write side stays in
-	// playVideo/pauseVideo/seekVideoTo. These read reactive state, so avoid them
-	// inside untrack() blocks that deliberately sample the live element clock.
+	// Read-only view of the active video source; writes stay in the transport functions.
 	let videoClock = $derived(
 		previewPlayer ? previewPlayer.currentTime : videoCurrentTime,
 	);
@@ -345,21 +325,14 @@
 		previewPlayer ? previewPlayer.playing : videoPlaying,
 	);
 
-	// The file the current preview player was built for — plain, so the proxy
-	// swap below can tell "same media, better decoder" from "new media".
+	// The file the current player was built for; plain, so the proxy swap can compare identity.
 	let playerFile: File | null = null;
 
 	$effect(() => {
 		if (!isVideo) return;
-		// The file's proxy, once one has landed — see the single-mode proxy
-		// below.
 		const proxy = singleProxyFor === file ? singleProxy : null;
 		const previewFile = proxy ?? file;
-		// Frames arrive at the proxy's size, but the media's own size and
-		// duration are what the UI reports and what the output defaults to —
-		// anchored to the original so the swap moves nothing. Read untracked:
-		// these describe the outgoing player, and tracking them would rebuild
-		// the player each time the swap writes them back.
+		// Read untracked: tracking would rebuild the player.
 		const media = proxy
 			? untrack(() => ({
 					width: previewPlayer?.width ?? naturalWidth ?? 0,
@@ -384,7 +357,6 @@
 			player = p;
 			playerFile = file;
 			previewPlayer = p;
-			// Player owns the preview now — the element is only a recording fallback
 			videoEl?.pause();
 			if (videoEl) videoEl.muted = true;
 			videoDuration = p.duration;
@@ -399,12 +371,10 @@
 				videoSpanEnd = p.duration;
 				recordDuration = Math.round(p.duration * 10) / 10;
 			}
-			// If the videoHasAudio probe finished first, ensureVideoAudioGraph
-			// already built an element-sourced graph for the now-inert element —
-			// tear it down and rebuild sourceless for the player.
+			// The probe may have built an element-sourced graph first; rebuild it sourceless.
 			if (audio.audioContext && !audio.trackFile) audio.disposeAudioGraph();
 			ensureVideoAudioGraph();
-			// Starts paused on purpose — see videoAudioUnlocked.
+			// Starts paused on purpose; see videoAudioUnlocked.
 		});
 		return () => {
 			cancelled = true;
@@ -413,27 +383,20 @@
 		};
 	});
 
-	// ── Single-mode preview proxy ──────────────────────────────────────────
-	// Single mode keeps its file out of the pool, so its proxy has no registry
-	// to live in: one job per file, swapped into the player when it lands.
+	// Single mode's file is not pooled, so its proxy has no registry: one job per file.
 	let singleProxy = $state<File | null>(null);
-	/** The file `singleProxy` belongs to — plain, so a stale proxy can't leak
-	 * into the player effect after the file changed under it. */
+	/** The file `singleProxy` belongs to; plain, so a stale proxy can't leak into the player. */
 	let singleProxyFor: File | null = null;
 	let singleJob: ProxyJob | null = null;
 	let singleJobFor: File | null = null;
-	/** Set when optimization failed, so it isn't retried in a loop; the toast's
-	 * Retry action clears it. */
+	/** Set on failure so it isn't retried in a loop; the toast's Retry clears it. */
 	let singleProxyFailed = $state(false);
-	/** Single mode has no chip to hang the proxy's state on, so it keeps the
-	 * same fields a pooled source carries and shows them over the preview. */
+	/** Single mode has no proxy chip, so it keeps the fields a pooled source carries. */
 	let singleProxyPending = $state(false);
 	let singleProxyProgress = $state<number | undefined>(undefined);
 	let singleProxySize = $state<{ width: number; height: number } | null>(null);
 	let singleProxyReason = $state<string | undefined>(undefined);
-	/** The user asked this video to preview from the original — see
-	 * video/proxy-preference.ts. Read back from there per file, so the choice
-	 * survives a reload and follows the file into the other modes. */
+	/** User asked to preview from the original; stored per file in video/proxy-preference.ts. */
 	let singleProxyDisabled = $state(false);
 	const singleProxyStatus = $derived(
 		proxyStatus({
@@ -446,27 +409,19 @@
 			proxyProgress: singleProxyProgress,
 			proxyFailed: singleProxyFailed,
 			proxyReason: singleProxyReason,
-			// Only meaningful for media a proxy would be built for; a smaller
-			// video says nothing either way.
+			// Only meaningful for media a proxy would be built for.
 			proxyDisabled:
 				singleProxyDisabled &&
 				needsProxy(previewPlayer?.width ?? 0, previewPlayer?.height ?? 0),
 		}),
 	);
 
-	/**
-	 * Turn the preview proxy for the single-mode file on or off — the badge over
-	 * the preview is the entry point. Off drops the proxy the player is on, so
-	 * the next frame comes from the original; the choice is remembered for this
-	 * file across sessions and modes.
-	 */
+	/** Turn the single-mode preview proxy on or off; the preview badge is the entry point. */
 	function setSingleProxyEnabled(enabled: boolean) {
 		const f = file;
 		if (!f) return;
 		setProxyDisabled(f, !enabled);
-		// Cleared rather than set directly: the effect below re-runs off the back
-		// of this and reads the choice back out, which is the one place that
-		// decides whether a job starts.
+		// Cleared, not set: the effect below re-reads the choice and decides.
 		singleJob?.cancel();
 		singleJob = null;
 		singleJobFor = null;
@@ -497,9 +452,7 @@
 			singleProxyReason = undefined;
 			singleProxyDisabled = isProxyDisabled(f);
 		}
-		// The player is the gate as well as the size source: files on the
-		// <video>-element fallback (rotation metadata, undecodable) decode
-		// through the browser's own hardware stack and don't need a proxy.
+		// The player gates as well as sizes: files on the <video> fallback need no proxy.
 		const player = previewPlayer;
 		const w = player?.width ?? 0;
 		const h = player?.height ?? 0;
@@ -528,30 +481,23 @@
 				proxy = await job.promise;
 			}
 			if (f !== file) return;
-			// A proxy that won't open is worse than none — the preview would freeze
-			// instead of grinding through the original — so it gets the same
-			// decodability check an added file gets before it is trusted.
+			// A proxy that won't open is worse than none, so it gets the same decodability check.
 			let openedSize: { width: number; height: number } | null = null;
 			if (proxy) {
 				const opened = await openVideoFrameSource(proxy);
 				if (opened) {
-					// The real size of the finished file, which is what the preview
-					// reports: a stored proxy never announced one, and a fresh one only
-					// announced the size it was aiming at.
+					// The finished file's real size; a stored proxy never announced one.
 					openedSize = { width: opened.width, height: opened.height };
 				}
 				opened?.queue.dispose();
 				if (!opened) {
 					proxy = null;
-					// A stored one that no longer opens has to go, or the retry would
-					// find it again and fail the same way.
+					// A stored one that no longer opens has to go, or the retry finds it.
 					if (stored) void deleteSequenceMediaProxy(f).catch(() => {});
 				}
 			}
 			if (proxy) {
-				// Persisted under the file's own id, so re-opening the same video
-				// skips the transcode even though single mode saves no session until
-				// it has been edited.
+				// Persisted under the file's own id, so re-opening the same video skips the transcode.
 				if (!stored) void putSequenceMediaProxy(f, proxy).catch(() => {});
 				singleProxy = proxy;
 				singleProxyFor = f;
@@ -559,8 +505,7 @@
 				singleProxyPending = false;
 				singleProxyProgress = undefined;
 			} else {
-				// Not auto-retried: a persistent failure would loop. The toast's
-				// action is the explicit way back.
+				// Not auto-retried; a persistent failure would loop.
 				singleProxyFailed = true;
 				singleProxyPending = false;
 				singleProxyProgress = undefined;
@@ -583,7 +528,6 @@
 		})();
 	});
 
-	// Push editor state into the player
 	$effect(() => {
 		previewPlayer?.setSpeed(videoSpeed);
 	});
@@ -601,9 +545,7 @@
 		if (videoEl) videoEl.playbackRate = videoSpeed;
 	});
 
-	// Probe the video file for an audio track. Gates both the volume slider and
-	// the Web Audio capture in ensureVideoAudioGraph. On demux failure assume
-	// audio is present so exotic-but-playable files keep their sound.
+	// Probe for an audio track; gates the volume slider and Web Audio capture.
 	$effect(() => {
 		if (!isVideo) return;
 		const probed = file;
@@ -623,8 +565,7 @@
 		})();
 	});
 
-	// Sequence mode has no still to save — a lane timeline is a video by
-	// definition — so it skips the picker and stays on WebM.
+	// A lane timeline is a video, so sequence mode skips the still-image picker.
 	let format = $state<"png" | "jpg" | "webm">(
 		isMobile && untrack(() => mode) !== "sequence" ? "png" : "webm",
 	);
@@ -637,10 +578,7 @@
 		return () => URL.revokeObjectURL(url);
 	});
 
-	// A generated file re-renders at the output size; the preview reads the
-	// re-render while `file` (the identity sessions key on) stays put. Sequence
-	// mode's pool does the same for its own entries — this is only for the file
-	// the editor's own player shows.
+	// A generated file re-renders at output size; the preview reads that, `file` stays put.
 	let generatedSrc = $state<string | null>(null);
 	const primarySync = new GeneratedSizeSync((_, url) => {
 		if (generatedSrc) URL.revokeObjectURL(generatedSrc);
@@ -669,11 +607,7 @@
 
 	let generateOpen = $state(false);
 
-	// ── Webcam take ──
-	// A take is a performance to the song: the panel counts in, the song plays
-	// from the playhead while the camera records, and the take lands on the
-	// timeline at the second it started — on the selected lane if it has room
-	// there, else on a lane of its own. From then on it is any other clip.
+	// The take lands at the second it started, on the selected lane or a new one.
 	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
 	let webcamOpen = $state(false);
 	let takeStart = 0;
@@ -729,11 +663,7 @@
 	}
 	let canvasEl: HTMLCanvasElement | null = $state(null);
 	let glRenderer: GlRenderer | null = $state(null);
-	/**
-	 * Restored instances are dropped if their definition no longer exists —
-	 * a session can outlive an effect being renamed or retired, and a stale
-	 * defId would render as a hole in the chain.
-	 */
+	/** Restored instances whose definition no longer exists are dropped. */
 	function restoredEffects(): EffectInstance[] | null {
 		const saved = untrack(() => initialSession)?.effects;
 		if (!Array.isArray(saved) || saved.length === 0) return null;
@@ -745,8 +675,7 @@
 		restoredEffects() ?? loadInitialEffects(),
 	);
 
-	// Hand the live chain to the feedback modal, which is mounted at the app
-	// root and has no other way to see it.
+	// The feedback modal is at the app root and has no other way to see the live chain.
 	$effect(() => {
 		setFeedbackChain(() => $state.snapshot(effects) as EffectInstance[]);
 		return () => setFeedbackChain(null);
@@ -786,11 +715,7 @@
 
 
 	const audio = new AudioManager({
-		// The base chain follows the editor's response; every active fx and
-		// media lane follows its own, under its own envelope state. The text
-		// layers follow the editor's response — they have no settings of their
-		// own — but each still gets its own scope, so one layer's smoothing
-		// never steps another's.
+		// Base chain and text layers follow the editor's response; each lane follows its own.
 		getLinkGroups: (): AudioLinkGroup[] => [
 			{
 				scope: "",
@@ -802,9 +727,7 @@
 				effects: layer.effects,
 				response: fxLaneResponse(layer.laneId),
 			})),
-			// The chain on each media lane is its clip's under the playhead — or
-			// the roll an auto clip made for this tick — so it is read off the
-			// resolved layers rather than the lanes. The lane stays the scope.
+			// A media lane's chain is its clip's under the playhead, read off the resolved layers.
 			...resolveMediaLayersAt(
 				mediaTimeline,
 				textTime,
@@ -830,28 +753,23 @@
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.
 	$effect(() => () => audio.disposeAudioGraph());
 
-	// Smooth playhead: pull the element clock every frame while playing (the
-	// ~4 Hz timeupdate event alone makes the playhead jump)
+	// Pull the element clock every frame while playing; ~4 Hz timeupdate alone makes it jump.
 	$effect(() => {
 		if (!audio.audioPlaying) return;
 		let raf = requestAnimationFrame(function loop() {
 			audio.tickCurrentTime();
-			// Per frame, not per timeupdate: the span end is a visible line on the
-			// timeline, and playback has to turn round on it rather than a quarter
-			// second past it.
+			// Per frame, not per timeupdate: playback must turn round on the span end.
 			audio.checkSpanEnd();
 			raf = requestAnimationFrame(loop);
 		});
 		return () => cancelAnimationFrame(raf);
 	});
 
-	// Sync audioEl DOM binding into the manager
 	let audioEl = $state<HTMLAudioElement | undefined>(undefined);
 	$effect(() => {
 		audio.setAudioEl(audioEl);
 	});
 
-	// Seed track from audio selected on the upload screen
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
@@ -860,7 +778,7 @@
 		}
 	});
 
-	// Mute video when explicit audio track is active; re-hook video audio when cleared
+	// Mute video when an explicit audio track is active; re-hook video audio when cleared.
 	$effect(() => {
 		if (!isVideo || !videoEl) return;
 		if (audio.trackFile) {
@@ -871,7 +789,6 @@
 	});
 
 	$effect(() => {
-		// subscribe to all settings
 		moshMin;
 		moshMax;
 		randomizeOrder;
@@ -885,8 +802,7 @@
 		audio.outputVolume;
 		audio.loopAudio;
 		videoLoop;
-		// Merged, not replaced: settings written from outside the editor (the
-		// upload screen's mode) live under the same key.
+			// Merged, not replaced: the upload screen writes its mode under the same key.
 		updateSettings({
 			moshMin,
 			moshMax,
@@ -916,16 +832,12 @@
 	const spanStore = createTrackStore<{ spanStart: number; spanEnd: number }>(
 		"openmosh-single-span",
 	);
-	/** Read-only now: output size moved into the per-project render settings.
-	 * Entries written before that still restore through the fallback below. */
+	/** Read-only now: output size moved into per-project render settings. */
 	const sizeStore = createTrackStore<{ width: number; height: number }>(
 		"openmosh-single-size",
 	);
 
-	// Persist span changes for library tracks. The span sits at 0/0 from the
-	// moment a track id is adopted until the audio element reports its duration,
-	// so writing unguarded would overwrite the saved span with an empty one —
-	// permanently, whenever the tab is left before that metadata ever arrives.
+	// Persist span changes for library tracks; the span sits at 0/0 until duration is known.
 	$effect(() => {
 		const start = audio.spanStart;
 		const end = audio.spanEnd;
@@ -935,19 +847,13 @@
 		spanStore.save(currentTrackId, { spanStart: start, spanEnd: end });
 	});
 
-	// ── Span undo ────────────────────────────────────────────────────────────
-	// The span handles are an edit like any other — see span-history.svelte.ts.
+	// The span handles are an edit like any other; see span-history.svelte.ts.
 	const spanHistory = createSpanHistory(audio);
 	$effect(() => spanHistory.trackChanged(currentTrackId));
 
 	let trackInput: HTMLInputElement;
 
-	/**
-	 * Latched when a track restores a size, so the default below doesn't
-	 * immediately overwrite it — the two race whenever media finishes loading
-	 * after the track was adopted. Consumed once: picking new media afterwards
-	 * is deliberate, and that media's own size should win.
-	 */
+	/** Latched when a track restores a size, so the default below can't overwrite it. */
 	let sizeRestoredFromTrack = false;
 
 	// New media defaults the output to its own size.
@@ -978,35 +884,24 @@
 	}
 
 	function clearTrack() {
-		// Before the key changes out from under them — see flushSequenceSave.
+		// Before the key changes out from under them; see flushSequenceSave.
 		flushSequenceSave();
 		flushMediaPoolSave();
 		audio.clearTrack();
 		currentTrackId = null;
 		sizeRestoredFromTrack = false;
-		// Belongs to the song that just left; whatever arrives next restores or
-		// detects its own.
+		// Belongs to the song that just left; the next one restores or detects its own.
 		sequenceBpm = 0;
 	}
 
-	/**
-	 * Pull back whatever was stored against a song. Returns false when it has
-	 * nothing saved, so callers can decide what an empty result means.
-	 *
-	 * Every path that learns a track id has to run this, not just loading one
-	 * from the library: a track picked on the upload screen is adopted by id
-	 * only, and without a restore its timeline would sit unreachable in storage.
-	 */
+	/** Pull back whatever was stored against a song; every track-id path runs this. */
 	async function applySavedTrackState(
 		trackId: string,
-		/** Moving between two songs starts the new one clean when it has nothing
-		 * saved; arriving at the first song keeps what's on screen, since that
-		 * work was made for it and had nowhere else to be. */
+		/** Moving between songs starts the new one clean when it has nothing saved. */
 		clearOnMissing = false,
 	): Promise<void> {
 		const savedSpan = spanStore.load(trackId);
-		// An empty span is never something the user chose — it's an entry left
-		// behind by the overwrite above. Fall through to the whole track.
+		// An empty span is left by the overwrite above, never a user choice.
 		if (savedSpan !== null && savedSpan.spanEnd > savedSpan.spanStart) {
 			audio.pendingSpan = {
 				start: savedSpan.spanStart,
@@ -1016,8 +911,7 @@
 		const key = seqKeyPrefix + trackId;
 		loadedTimelineKey = null;
 		const savedSeq = await loadSeqEntry(trackId);
-		// A later switch overtook this load while it was out; that one owns the
-		// state now, and applying this would restore the song we already left.
+		// A later switch overtook this load; that one owns the state now.
 		if (seqStoreKey !== key) return;
 		loadedTimelineKey = key;
 		if (savedSeq === null) {
@@ -1025,9 +919,7 @@
 			seedLayerKey = key;
 			return;
 		}
-		// The BPM comes back in both modes — single mode has no clips to time,
-		// but beat-synced effects read the same tempo. The keys are already
-		// per-mode, so neither mode reads the other's number.
+		// BPM comes back in both modes; beat-synced effects read it in single mode too.
 		restoreSequenceBpm(savedSeq.bpm ?? 0);
 		if (isSequenceMode) restoreFxLanes(savedSeq.fx);
 		restoreTextTimeline(savedSeq.text);
@@ -1040,26 +932,14 @@
 				: null;
 	}
 
-	/** The editor learned a track's library id without being asked to load it —
-	 * the upload screen's track, saved or already present. */
+	/** The editor learned a track's library id without being asked to load it. */
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
 		void applySavedTrackState(trackId);
 	}
 
-	/**
-	 * Give a song that arrived without a library id one.
-	 *
-	 * A track picked on the upload screen, dropped on the editor or chosen from
-	 * the file picker has no id — only the library drawer hands one out. But the
-	 * id is the key everything per-song is saved under, so without this an entire
-	 * session's timeline, text and span were silently never written: `seqStoreKey`
-	 * is null with no track id, and every save path returns early on that.
-	 *
-	 * addTrack matches the library by name and size first, so re-picking a file
-	 * reopens the work already saved for it instead of forking a second identity.
-	 */
+	/** Give a song that arrived without a library id one; the id keys everything per-song. */
 	let registeringTrack: File | null = null;
 	$effect(() => {
 		const f = audio.trackFile;
@@ -1084,29 +964,20 @@
 		clearTrack();
 		currentTrackId = trackId;
 		audio.trackFile = file;
-		// The media pool is deliberately left alone on a switch — see the pool
-		// restore effect.
+		// The media pool is deliberately left alone on a switch.
 		void applySavedTrackState(trackId, switchingSongs);
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
-	// An AudioContext created before the user has interacted with the page starts
-	// suspended and the browser refuses to resume it ("An AudioContext was
-	// prevented from starting automatically"), leaving the preview silent until
-	// some later gesture. The preview therefore starts paused and the graph is
-	// built on the first play — inside the gesture — so it is never born blocked.
-	// Reactive so the callers that re-run ensureVideoAudioGraph on state changes
-	// pick it up, and so the videoHasAudio probe is re-read once it flips.
+	// An AudioContext created before a user gesture starts suspended and can't be resumed.
 	let videoAudioUnlocked = $state(false);
 
 	function ensureVideoAudioGraph() {
 		if (!videoAudioUnlocked) return;
-		// Skip silent videos: there's nothing to hear or analyze, and capturing
-		// them into Web Audio breaks the speed control in Firefox (see videoHasAudio).
+		// Skip silent videos: capturing them breaks the speed control in Firefox.
 		if (audio.audioContext || audio.trackFile || !videoHasAudio) return;
 		if (previewPlayer) {
-			// WebCodecs preview: sourceless graph, the player connects its own
-			// AudioBufferSourceNode into normalizeGain.
+			// WebCodecs preview: sourceless graph; the player connects its own source node.
 			const state = createOutputAudioGraph();
 			audio.applyAudioGraphState(state);
 			previewPlayer.attachAudioOutput(state.context, state.normalizeGain);
@@ -1121,19 +992,14 @@
 	}
 
 	function playVideo() {
-		// First play is a user gesture — the point at which the audio graph can be
-		// created unblocked.
+		// First play is a user gesture, so the graph can be created unblocked.
 		videoAudioUnlocked = true;
 		ensureVideoAudioGraph();
 		audio.audioContext?.resume();
-		// Start from the static marker when the video owns the timeline clock; a
-		// video slaved to a track keeps following the track instead.
+		// Start from the static marker when the video owns the clock.
 		const fromMarker = !!timelineAxis && videoIsMaster;
 		if (fromMarker && !videoIsPlaying) seekVideoTo(timelineAxis!.staticTime);
-		// Past the span end is where the user put the marker, so it plays from
-		// there and runs on to the end of the video. Without a marker of its own
-		// a slaved video still restarts at the span. Before the span start there
-		// is nothing to watch yet either way.
+		// Past the span end is where the user put the marker, so it plays from there.
 		const outOfSpan = (t: number) =>
 			t < videoSpanStart ||
 			(!fromMarker && t >= videoSpanEnd - VIDEO_END_EPSILON);
@@ -1170,8 +1036,7 @@
 		videoCurrentTime = tClamp;
 	}
 
-	// Not gated on audioContext: links are data, and the graph is only built
-	// on first play, so requiring it drops links when moshing before playback.
+	// Not gated on audioContext: the graph is only built on first play.
 	const hasAudio = $derived(!!audio.trackFile || (isVideo && videoHasAudio));
 
 	function getMoshOptions() {
@@ -1186,44 +1051,25 @@
 		};
 	}
 
-	// ── Sequence mode ────────────────────────────────────────────────────────
-	// Stacked effect lanes over the frame. They carry no media — a clip only
-	// says "also run these effects here" — and their chains run in lane order
-	// over what the media layers composited. See editor/fx-lanes.ts.
+	// Stacked effect lanes over the frame; chains run in lane order.
 	let fxLanes = $state<FxLane[]>([]);
 	let selectedFxClipId = $state<string | null>(null);
 	let selectedFxClipIds = $state<string[]>([]);
 
-	// With an external track the audio is the master clock (matches export,
-	// where the audio span sets the duration and the video loops inside it).
-	// Clips then live on the audio timeline, not the video's.
-	//
-	// Loading a track file is enough to make it master — deliberately not
-	// "…and its duration is known". The duration lands a beat after the file
-	// does, and treating that window as video-mastered corrupted the save: the
-	// store key fell back to the video's (so a reload restored a stale
-	// video-keyed entry over the song's), and the fit re-trimmed clips built
-	// against a 3-minute song onto a 10-second one. Until the
-	// duration arrives `seqMasterDuration` is simply 0, which every consumer
-	// already reads as "no timeline yet".
+	// With an external track the audio is the master clock, matching export.
+	// Loading the file makes it master, not "and its duration is known".
 	let seqMasterIsAudio = $derived(!!audio.trackFile);
 	let seqMasterDuration = $derived(
 		seqMasterIsAudio ? audio.trackDuration : videoDuration,
 	);
 
-	// Beats per minute for this song, feeding the auto clips' re-roll
-	// spacing. 0 = not detected yet.
+	// Beats per minute, feeding the auto clips' re-roll spacing; 0 = not detected yet.
 	let sequenceBpm = $state(0);
 
 	interface SeqEntry {
-		/**
-		 * Absent on entries saved while the file the editor opened with was the
-		 * segments' implicit media. Those segments render that file until told
-		 * otherwise, so loading one of them pins it on — see loadSeqEntry.
-		 */
+		/** Absent on entries saved while the opening file was the segments' implicit media. */
 		v?: number;
-		/** The segment lane, on entries from before it was retired. Folded into
-		 * the fx and media lanes on load (see legacy-segments.ts), never saved. */
+		/** The retired segment lane; folded into the fx and media lanes on load, never saved. */
 		segments?: LegacySegmentEntry[];
 		/** Absent on entries saved before BPM existed. */
 		bpm?: number;
@@ -1237,7 +1083,7 @@
 		sourceEdits?: Record<string, SourceEdit>;
 	}
 
-	/** Bumped when what a saved entry means changes — see SeqEntry.v. */
+	/** Bumped when what a saved entry means changes; see SeqEntry.v. */
 	const SEQ_ENTRY_VERSION = 2;
 
 	/** As much of a saved segment as the migration reads. */
@@ -1269,48 +1115,28 @@
 		});
 	});
 
-	// Keyed by master clock — that's what clip times are relative to.
+	// Keyed by master clock: clip times are relative to it.
 	let videoSeqKey = $derived(
 		isVideo ? `video:${file.name}:${file.size}:${file.lastModified}` : null,
 	);
-	// The song/video this editor is saving against, before the mode prefix. The
-	// media pool keys off this directly: pools only ever exist on the sequence
-	// route, so there is nothing to disambiguate and prefixing would orphan the
-	// ones already in IndexedDB.
+	// The song/video this editor saves against, before the mode prefix.
 	let seqBaseKey = $derived(
 		seqMasterIsAudio ? currentTrackId : (videoSeqKey ?? currentTrackId),
 	);
 
-	/**
-	 * Single and sequence are the same component, so one un-namespaced store had
-	 * them overwriting each other: a song worked on in the lane editor came
-	 * back with its timeline (and the sequence mode) forced on in single mode,
-	 * and any edit there wrote back over it. The prefix keeps the two apart.
-	 */
+	/** Single and sequence share this component, so the store is namespaced. */
 	const seqKeyPrefix = $derived(isSequenceMode ? "seq:" : "single:");
 	let seqStoreKey = $derived(seqBaseKey && seqKeyPrefix + seqBaseKey);
 
-	/**
-	 * The key whose stored timeline has landed; saving waits for the key on screen
-	 * to match. Loads are async, and a debounce firing mid-switch would write the
-	 * outgoing song's timeline under the incoming song's key.
-	 */
+	/** The key whose stored timeline has landed; saving waits for the on-screen key to match. */
 	let loadedTimelineKey: string | null = null;
 
-	/**
-	 * Read this mode's entry for a song, falling back once to the legacy
-	 * un-prefixed entry. Only the sequence route falls back: those entries hold
-	 * real timelines worth keeping, whereas letting single mode read them is the
-	 * exact leak the prefix exists to stop.
-	 */
+	/** Read this mode's entry for a song, falling back to the legacy un-prefixed entry. */
 	async function loadSeqEntry(baseKey: string): Promise<SeqEntry | null> {
 		const entry =
 			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
 			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
-		// Before the layers took the media over, a segment with no source of its
-		// own drew the file the editor opened with — which is the first of a
-		// saved pool, and so the file this editor opened with. Pin it, or every
-		// such segment would migrate to a clip showing nothing.
+			// Before layers took the media over, a segment with no source drew the opened file.
 		if (entry?.segments && !entry.v) {
 			const opened = stableSourceId(file);
 			for (const seg of entry.segments) seg.sourceId ??= opened;
@@ -1331,8 +1157,7 @@
 			const saved = await loadSeqEntry(key);
 			// A song adopted while this was out owns the state now.
 			if (seqStoreKey !== storeKey) return;
-			// Marked even with nothing to restore: a video with no saved timeline
-			// still has to be able to save the one being built for it.
+			// Marked even with nothing to restore: a video with no saved timeline still saves.
 			loadedTimelineKey = storeKey;
 			if (saved === null) return;
 			restoreTextTimeline(saved.text);
@@ -1341,21 +1166,14 @@
 		})();
 	});
 
-	/** A restored BPM wins over any detection already in flight — the clips
-	 * were built against it, so re-deriving it would retime them. Restoring
-	 * nothing leaves the detection to land. */
+	/** A restored BPM wins over any detection in flight: the clips were built against it. */
 	function restoreSequenceBpm(bpm: number) {
 		if (bpm > 0) bpmEpoch++;
 		sequenceBpm = bpm;
 	}
 
-	// Persist the sequence timeline per library track (deep read via snapshot,
-	// so clip/effect edits are captured too). Skipped while playing: the
-	// per-frame volume-link tick mutates values inside the clips' chains — an
-	// ungated deep read here re-ran the snapshot + localStorage JSON round-trip
-	// every frame, tanking preview FPS proportionally to clip count. Persisting
-	// settles on pause; the debounce keeps slider/clip drags from writing
-	// localStorage per input event.
+	// Persist the sequence timeline per library track (deep snapshot read).
+	// Skipped while playing: the volume-link tick mutates the chains each frame.
 	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		const playing = audio.audioPlaying || videoIsPlaying;
@@ -1386,8 +1204,7 @@
 		}, 300);
 	});
 
-	/** Only the transition into failure is announced, or an unsaveable timeline
-	 * would toast on every debounce tick. */
+	/** Only the transition into failure is announced, or it would toast every tick. */
 	let seqSaveFailed = false;
 	function reportSeqSave(ok: boolean) {
 		if (ok === !seqSaveFailed) return;
@@ -1400,18 +1217,7 @@
 		);
 	}
 
-	/**
-	 * Write the current timeline under the current key, now.
-	 *
-	 * The effect above can't cover a track switch on its own. Svelte batches the
-	 * whole switch into one update, so by the time it re-runs `seqStoreKey` is
-	 * already the *new* track and the lanes may already have been
-	 * replaced — the outgoing track's edits were never written, and any pending
-	 * debounce for it gets cancelled on the way past. Worse, the effect is gated
-	 * on playback, so editing while the track plays (the normal way to use this)
-	 * schedules nothing at all until a pause that the switch itself supplies too
-	 * late. Every path that changes or drops the song calls this first.
-	 */
+	/** Write the current timeline under the current key now; a track switch outruns the effect. */
 	function flushSequenceSave() {
 		clearTimeout(seqSaveTimer);
 		const key = seqStoreKey;
@@ -1432,8 +1238,7 @@
 		}).then(reportSeqSave);
 	}
 
-	// Reloading or closing mid-playback would otherwise lose the session, for
-	// the same reason: no pause ever arrives to settle the debounce.
+	// Reloading or closing mid-playback would lose the session: no pause settles the debounce.
 	onMount(() => {
 		const onHide = () => {
 			flushSequenceSave();
@@ -1447,14 +1252,7 @@
 		};
 	});
 
-	// Pull the clip lanes back inside the master clock when it changes (track
-	// loaded/swapped/cleared). Swapping a 2-minute song for a 90-second one
-	// leaves every clip built against the old length hanging past the end of
-	// the timeline, where it still renders but the ruler can no longer reach it.
-	//
-	// Keyed off the master clock alone, and off the timelines untracked: with no
-	// track `textDuration` falls back to the record length, and trimming clips on
-	// every nudge of that slider would eat work still in front of the user.
+	// Pull the clip lanes back inside the master clock when it changes.
 	$effect(() => {
 		const duration = seqMasterDuration;
 		if (duration <= 0) return;
@@ -1473,9 +1271,7 @@
 		return videoClock;
 	}
 
-	// ── FX lanes ─────────────────────────────────────────────────────────────
-	// Their own undo stack, for the same reason the text timeline has one.
-	// Ctrl+Z reaches it when an fx edit is the newest.
+	// Their own undo stack, like the text timeline's; Ctrl+Z reaches it when newest.
 	const fxHistory = createSnapshotHistory<FxLane[]>();
 
 	function pushFxHistory(coalesceKey?: string) {
@@ -1484,8 +1280,7 @@
 
 	function setFxLanes(next: FxLane[]) {
 		fxLanes = next;
-		// Splits, deletes and undo retire clip ids — drop their mosh stacks so a
-		// later clip can't inherit rolls that were never its own.
+		// Splits, deletes and undo retire clip ids; drop their mosh stacks.
 		fxMoshHistory.retain(next.flatMap((l) => l.clips.map((c) => c.id)));
 	}
 
@@ -1498,8 +1293,7 @@
 		fxHistory.reset();
 	}
 
-	/** What a new lane starts from: the editor's current settings, copied. From
-	 * then on the lane is its own — the panel edits whichever is selected. */
+	/** What a new lane starts from: the editor's current settings, copied. */
 	function currentFxLaneSettings(): FxLaneSettings {
 		return {
 			moshMin,
@@ -1513,16 +1307,14 @@
 	}
 
 	function addFxLane() {
-		// Full timeline width: a new lane arrives with one clean clip to work on,
-		// rather than as bare space the user has to draw over first.
+		// Full timeline width, so a new lane arrives with one clean clip to work on.
 		const next = appendFxLane(
 			fxLanes,
 			currentFxLaneSettings(),
 			seqMasterDuration,
 			nextLayerZ(layerOrder),
 		);
-		// At the cap this is a no-op; recording it would leave a Ctrl+Z entry
-		// that undoes nothing.
+		// At the cap this is a no-op; recording it would leave a Ctrl+Z that undoes nothing.
 		if (next === fxLanes) return;
 		pushFxHistory();
 		fxLanes = next;
@@ -1544,27 +1336,15 @@
 		);
 	}
 
-	// ←/→ walk one fx clip's moshes. Its own stack per clip, keyed by clip id
-	// — MoshHistory is agnostic about what the id names, and an FxClip carries
-	// exactly the fields it snapshots.
+	// Left/right walk one fx clip's moshes, one stack per clip keyed by clip id.
 	const fxMoshHistory = new MoshHistory<MoshSnapshot>();
 
-	/**
-	 * The fx clip the mosh gestures act on: the selected one, and only that.
-	 *
-	 * No playhead fallback: several lanes can hold a clip at one time, so "the
-	 * clip under the playhead" names no single thing.
-	 */
+	/** The fx clip the mosh gestures act on: the selected one only. */
 	function activeFxClip(): FxClip | null {
 		return selectedFxClip;
 	}
 
-	/**
-	 * Roll the given clips. Mosh history only — never the fx edit stack: a mosh
-	 * is not a hand-edit, and recording it would leave a Ctrl+Z entry behind
-	 * every arrow press, with the two histories driving each other. Same rule
-	 * every other mosh follows.
-	 */
+	/** Roll the given clips. Mosh history only, never the fx edit stack. */
 	function fxRoll(clipIds: string[]) {
 		const ids = new Set(clipIds);
 		for (const clip of fxClipsById(ids)) {
@@ -1605,11 +1385,7 @@
 	// Same resolver the export builds, so interval rolls reproduce exactly.
 	const previewFxSource = createFxLayerSource(() => fxLanes, getMoshOptions);
 
-	/**
-	 * Which lane the settings panel is aimed at: the selected clip's lane (fx
-	 * or media), or an fx lane picked by its name in the gutter. Null means the
-	 * editor's own settings, which is what single mode always rolls under.
-	 */
+	/** The lane the settings panel is aimed at: the selected clip's, or one picked by name. */
 	let selectedFxLaneId = $state<string | null>(null);
 	let panelLane = $derived.by((): FxLane | MediaLane | null => {
 		if (!isSequenceMode) return null;
@@ -1626,9 +1402,7 @@
 		return panelLane?.settings?.[key] ?? global;
 	}
 
-	/** Panel edit: writes to the lane when one is selected, otherwise to the
-	 * editor's settings. A lane still on the defaults materializes them first,
-	 * so an edit pins the whole set rather than one stray field. */
+	/** Panel edit: writes to the selected lane, else the editor's settings. */
 	function setFxSetting<K extends keyof FxLaneSettings>(
 		key: K,
 		value: FxLaneSettings[K],
@@ -1645,8 +1419,7 @@
 		};
 	}
 
-	/** Hand a lane back to the editor's settings: drops its own, so the panel
-	 * reads the editor's again and the lane rolls under whatever they become. */
+	/** Hand a lane back to the editor's settings, so the panel reads those again. */
 	function followEditorSettings() {
 		if (panelLane) panelLane.settings = undefined;
 	}
@@ -1676,20 +1449,13 @@
 		};
 	}
 
-	/** A lane's audio response, falling back to the editor's for lanes that were
-	 * made before they had their own. */
+	/** A lane's audio response, falling back to the editor's for older lanes. */
 	function fxLaneResponse(laneId: string) {
 		const lane = fxLanes.find((l) => l.id === laneId);
 		return lane ? laneAudioResponse(lane, audioResponse) : audioResponse;
 	}
 
-	/**
-	 * The stacked lanes for this frame, with their fade weights. The selected
-	 * clip is forced in so a tweak is visible wherever the playhead sits — and,
-	 * because forcing replaces its lane's own contribution, the same instance
-	 * can never land in the chain twice (two passes would then share one
-	 * feedback buffer).
-	 */
+	/** The stacked lanes for this frame, with fade weights; the selected clip is forced in. */
 	let fxLayers = $derived(
 		isSequenceMode ? previewFxSource(seqMasterTime(), selectedFxClipId) : [],
 	);
@@ -1697,15 +1463,7 @@
 	/** The same effects flat, for the panel-facing chain and the audio tick. */
 	let fxChain = $derived(flattenFxLayers(fxLayers));
 
-	// ── Sequence media pool ──────────────────────────────────────────────────
-	// Every piece of media the project can draw: the layers' clips pick from
-	// here. The file the editor opened with is one entry
-	// among the rest — a new project lands it on the first layer (see the
-	// seeding effect below) and nothing else about it is special.
-	// Bumped when a late upload — a video frame or a lazily-decoded image —
-	// lands while paused, so the canvas redraws with it. Gated on paused:
-	// during playback the rAF loop already redraws, and ticking state per
-	// frame would be pure reactivity churn.
+	// Every piece of media the project can draw; sourceTick bumps when a late upload lands.
 	let sourceTick = $state(0);
 	const bumpSourceTick = () => {
 		if (!seqPlaying()) sourceTick++;
@@ -1713,29 +1471,18 @@
 
 	const sourceRegistry = new SequenceSourceRegistry(bumpSourceTick);
 	let sequenceSources = $derived(sourceRegistry.sources);
-	/** The pool is empty until the opening file lands in it, so the placeholder
-	 * waits for that rather than flashing over every load. */
+	/** The pool is empty until the opening file lands, so the placeholder waits for that. */
 	let poolFilled = $state(false);
 	let noSequenceMedia = $derived(
 		isSequenceMode && poolFilled && sequenceSources.length === 0,
 	);
-	/**
-	 * Held from mount until everything the editor opens with is in the pool:
-	 * the files it was handed, the song's stored pool, and the thumbnails the
-	 * grid draws them with. Opening on the first source alone left the rest
-	 * landing one by one behind a live preview, which read as broken rather
-	 * than loading. Proxies are deliberately not waited on — a transcode runs
-	 * for minutes and the chip already carries its progress. Sequence-only
-	 * through `mediaLoading`; single mode never shows the overlay.
-	 */
+	/** Held from mount until the opening files are in the pool; proxies are not waited on. */
 	let openingMedia = $state(true);
 	/** The mount-time adds (the opened file and its extras) have finished. */
 	let mountMediaDone = $state(false);
 	$effect(() => {
 		if (!openingMedia) return;
-		// A song being registered has no key yet; its pool restore is still to
-		// come, so the key is only settled once there is one or nothing to wait
-		// for.
+		// A song being registered has no key yet, so the key is settled once there is one.
 		const keySettled = !!seqBaseKey || !audio.trackFile;
 		const settled =
 			mountMediaDone &&
@@ -1745,10 +1492,7 @@
 			!sequenceSources.some((s) => s.thumbPending);
 		if (settled) openingMedia = false;
 	});
-	/** Media is being probed and nothing has landed in the pool yet, so the
-	 * canvas is black — the placeholder says so instead of the user guessing.
-	 * After the opening load, a first source is enough: the frame is worth
-	 * more than an overlay and the grid's own chips carry the rest. */
+	/** Media is being probed and nothing has landed, so the canvas is black. */
 	let mediaLoading = $derived(
 		isSequenceMode &&
 			(openingMedia ||
@@ -1757,13 +1501,10 @@
 
 	onMount(() => {
 		void (async () => {
-			// Single mode has no pool: its one file is the frame, and `file` can
-			// be replaced from under us.
+			// Single mode has no pool: its one file is the frame.
 			if (!isSequenceMode) return;
 			try {
-				// Opened from a saved song: these blobs came straight out of
-				// storage, so writing them back would rewrite the whole pool for
-				// nothing.
+				// Opened from a saved song: these blobs came from storage, so don't write them back.
 				const persist = !initialTrackId;
 				await sourceRegistry.add([file], { persist });
 				poolFilled = true;
@@ -1778,9 +1519,7 @@
 		return () => sourceRegistry.dispose();
 	});
 
-	// ── Per-song media pool ──────────────────────────────────────────────────
-	// Keyed the same way as the sequence timeline (seqBaseKey), so loading a
-	// track brings back both the lanes and the media they were built from.
+	// Keyed like the sequence timeline (seqBaseKey), so a track brings back both.
 	let poolKey: string | null = null;
 	let poolReady = $state(false);
 	/** Clip source ids already looked for in storage; see the effect below. */
@@ -1799,23 +1538,16 @@
 			try {
 				ids = await loadMediaPool(key);
 			} catch {
-				// Storage blocked — carry on with whatever is loaded.
+				// Storage blocked: carry on with whatever is loaded.
 			}
 			if (poolKey !== key) return;
-			// A song with a saved pool swaps to it. A song with none keeps what's
-			// loaded and adopts it on the next save — deliberately *not* the same
-			// rule the timeline follows. Clearing a timeline costs a few clicks;
-			// clearing the pool throws away media the user assembled by hand, and
-			// once no pool references those blobs, pruning deletes them for good.
-			// Keeping them strands nothing either way: a reset timeline holds no
-			// source ids at all.
+			// A song with a saved pool swaps to it; one with none keeps what's loaded.
 			if (ids) await sourceRegistry.setPool(ids);
 			if (poolKey === key) poolReady = true;
 		})();
 	});
 
-	// Persist the pool for the current song. Debounced because a multi-file add
-	// appends in batches and would otherwise write once per batch.
+	// Persist the pool for the current song. Debounced: a multi-file add appends in batches.
 	let poolSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
 		if (!isSequenceMode || !poolReady) return;
@@ -1830,7 +1562,7 @@
 		}, 400);
 	});
 
-	/** Pool counterpart to flushSequenceSave — same track-switch race. */
+	/** Pool counterpart to flushSequenceSave; same track-switch race. */
 	function flushMediaPoolSave() {
 		clearTimeout(poolSaveTimer);
 		if (!isSequenceMode || !poolReady || !poolKey) return;
@@ -1841,10 +1573,7 @@
 			.catch(() => {});
 	}
 
-	// A restored timeline references sources by id. Pull any the pool is missing
-	// back out of IndexedDB, so a reload shows each clip's own media instead of
-	// nothing. Ids that aren't in the store are remembered as attempted,
-	// otherwise this would retry them forever.
+	// A restored timeline references sources by id; pull missing ones back out of IndexedDB.
 	$effect(() => {
 		if (!isSequenceMode) return;
 		const missing = mediaTimelineSourceIds(mediaTimeline).filter(
@@ -1855,18 +1584,12 @@
 		void sourceRegistry.restore(missing);
 	});
 
-	/**
-	 * Add to the pool, then seat anything the user is obviously waiting for: a
-	 * layer lane with no source adopts the first file added, so picking media
-	 * from an empty lane is one step rather than two.
-	 */
+	/** Add to the pool, then seat a source-less lane on the first file added. */
 	async function addLayerSources(files: File[]) {
 		const added = await addSequenceSources(files);
 		const first = added[0];
 		if (!first) return;
-		// Nothing anywhere on the lane to draw — a lane whose clips were each
-		// pointed somewhere is already carrying media, however empty its own
-		// picker reads.
+		// Nothing anywhere on the lane to draw; clips that each point somewhere already carry media.
 		const unset = mediaTimeline.lanes.find(
 			(l) => !l.sourceId && l.clips.every((c) => !c.sourceId),
 		);
@@ -1881,8 +1604,7 @@
 	}
 
 	async function addSequenceSources(files: File[]) {
-		// Single mode's pool is session-scoped: it has no song to persist under,
-		// and the session save writes the files it actually uses.
+		// Single mode's pool is session-scoped: no song to persist under.
 		const added = await sourceRegistry.add(files, {
 			persist: isSequenceMode,
 		});
@@ -1898,12 +1620,7 @@
 
 	let showClearSourcesConfirm = $state(false);
 
-	/**
-	 * Empty the pool: the preview sits on its no-media placeholder until
-	 * something is added back. The clips that drew from it lose their media;
-	 * the media itself is deleted from storage, so re-adding the files is on
-	 * the user.
-	 */
+	/** Empty the pool; clips that drew from it lose their media, deleted from storage too. */
 	function clearSequenceSources() {
 		showClearSourcesConfirm = false;
 		for (const src of sequenceSources) {
@@ -1913,22 +1630,17 @@
 		restoreAttempted.clear();
 	}
 
-	/** Clips pointing at a removed source draw nothing from then on, and
-	 * emptying the pool entirely leaves the preview on its no-media placeholder
-	 * until something is added back. */
+	/** Clips pointing at a removed source draw nothing; an empty pool shows the placeholder. */
 	function removeSequenceSource(id: string) {
 		sourceRegistry.remove(id);
 		setMediaTimeline(detachMediaSource(mediaTimeline, id));
 	}
 
-	/** Grid replaces the preview while the pool is being arranged; the timeline
-	 * stays put under it, so a card can still be dragged onto a lane. */
+	/** Grid replaces the preview while the pool is arranged; the timeline stays under it. */
 	let sequenceView = $state<"preview" | "grid">("preview");
 	let sequenceGridOpen = $derived(isSequenceMode && sequenceView === "grid");
 
-	// Starting playback from the grid means the user wants to watch it, so the
-	// preview comes back up. Only on the transition into playing — switching to
-	// the grid mid-play is a deliberate move and stays put.
+	// Starting playback from the grid means the user wants to watch it, so leave the grid.
 	$effect(() => {
 		if (isSequenceMode && seqPlaying()) sequenceView = "preview";
 	});
@@ -1943,26 +1655,18 @@
 		onUpload: bumpSourceTick,
 	});
 
-	/** Media length per pool source, for sampling keyed edits where the frame
-	 * sampler actually is once a clip has looped. */
+	/** Media length per pool source, for sampling keyed edits once a clip has looped. */
 	let sourceDurations = $derived(
 		Object.fromEntries(sequenceSources.map((s) => [s.id, s.duration])),
 	);
 
-	// A rebuilt renderer (context loss) has blank layer textures; make the
-	// driver re-upload instead of holding textures that no longer exist.
+	// A rebuilt renderer (context loss) has blank layer textures; make the driver re-upload.
 	$effect(() => {
 		glRenderer;
 		mediaLayers.invalidate();
 	});
 
-	/**
-	 * The frame's size. With no media of its own, the base takes the size of
-	 * the first source that lands — the file the editor opened with, or what
-	 * came first out of a saved pool — and keeps it: the frame resizing under a
-	 * project because a pool entry was removed would move every layer. Only an
-	 * emptied pool lets go of it, so the next media in can size a fresh frame.
-	 */
+	/** The frame's size; with no media of its own the base takes the first source's size. */
 	let seqBaseSize = $state<{ width: number; height: number } | null>(null);
 	$effect(() => {
 		if (!isSequenceMode) return;
@@ -1976,12 +1680,7 @@
 			seqBaseSize = { width: first.width, height: first.height };
 		}
 	});
-	/**
-	 * A song with nothing saved yet: the file the editor opened with goes on a
-	 * first layer, running the whole song, under the effects. Set by the load
-	 * that found nothing and consumed here once the pool holds the file and the
-	 * song has a length — the two land in either order.
-	 */
+	/** A song with nothing saved yet: the opened file goes on a first layer spanning it. */
 	let seedLayerKey = $state<string | null>(null);
 	$effect(() => {
 		if (!isSequenceMode || !seedLayerKey || seedLayerKey !== seqStoreKey) {
@@ -2000,32 +1699,22 @@
 		mediaHistory.reset();
 	});
 
-	/**
-	 * What is actually on screen right now: the main chain (single mode's; in
-	 * sequence mode it stays clean), then each fx lane's, in lane order.
-	 * GlRenderer runs a chain sequentially and keys per-effect state by
-	 * instanceId, so appending is exactly "and then run these too".
-	 */
+	/** What is on screen now: the main chain, then each fx lane's in lane order. */
 	let renderedEffects = $derived.by(() =>
 		fxChain.length === 0 ? effects : [...effects, ...fxChain],
 	);
-	// A preset was explicitly overwritten in the panel — overwriting never
-	// re-assigns the preset to the selected clip, so this isn't an edit.
+	// A preset overwritten in the panel; overwriting never re-assigns it, so this isn't an edit.
 	function seqSyncPreset(preset: Preset) {
 		mediaTimeline = syncMediaClipsToPreset(mediaTimeline, preset);
 		textTimeline = syncTextClipsToPreset(textTimeline, preset);
 		fxLanes = syncFxClipsToPreset(fxLanes, preset);
 	}
 
-	// A hand-edit to a preset-filled fx clip: the label gains a "*" and explicit
-	// preset overwrites stop clobbering it. Driven by explicit edit callbacks
-	// (not data watching) — the audio volume-link tick also mutates values.
+	// A hand-edit to a preset-filled fx clip: the label gains a "*".
 	function markPanelClipEdited() {
 		const target = selectedFxClip;
 		if (!target) return;
-		// A hand-built chain has no name of its own, so it takes one from what it
-		// switches on rather than sitting at "clean" forever. Preset- and
-		// mosh-filled chains keep their name and pick up the "*" instead.
+		// A hand-built chain takes its name from what it switches on.
 		if (isHandBuiltLabel(target)) target.label = handBuiltLabel(target.effects);
 		else if (!target.modified) target.modified = true;
 	}
@@ -2035,11 +1724,7 @@
 		return selectedFxClip?.effects ?? effects;
 	}
 
-	/**
-	 * Sequence mode only: with nothing selected the rack has no chain to edit —
-	 * the main chain belongs to single mode, and every chain here lives on a
-	 * clip. The rack shows a standing-down note rather than an inert chain.
-	 */
+	/** Sequence mode only: with nothing selected the rack has no chain to edit. */
 	let panelNoTarget = $derived.by(() => {
 		if (!isSequenceMode || selectedFxClip) return null;
 		return {
@@ -2053,11 +1738,7 @@
 		selectedFxClip?.mode === "interval" ? selectedFxClip : null,
 	);
 
-	/**
-	 * An interval clip rolls its own chain, so the switches would be setting
-	 * something the next tick overwrites. The rack stays: the roll draws from
-	 * the un-hidden effects, so hiding is how an effect is kept out of it.
-	 */
+	/** An interval clip rolls its own chain, so the switches would be overwritten next tick. */
 	let panelRolledNote = $derived(
 		panelIntervalClip
 			? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the clip to Static in the clip bar to build a chain by hand."
@@ -2078,17 +1759,12 @@
 		endBurst: () => panelBurst.end(),
 	});
 
-	// An fx clip edit records into the fx stack (pre-edit snapshot), any other
-	// edit into the single-mode history (pushed once the burst settles).
-	/** Which stack the open burst will land on. The fx stack is written at the
-	 * start of the burst, so it carries a stamp already; the chain's entry is
-	 * only pushed when the burst closes, and until then the router has to be
-	 * told it is there. */
+	// An fx clip edit records into the fx stack, any other into the single-mode history.
+	/** Which stack the open burst will land on. */
 	let burstOwner: "fx" | "chain" | null = null;
 	const panelBurst = new PanelBurstController({
 		onEditStart: () => {
-			// An fx clip edit belongs to the fx stack, so Ctrl+Z steps back the
-			// tweak rather than the lane's last structural change.
+			// An fx clip edit belongs to the fx stack, so Ctrl+Z steps back the tweak.
 			if (selectedFxClip) {
 				burstOwner = "fx";
 				pushFxHistory();
@@ -2103,21 +1779,15 @@
 	const panelBeforeEdit = (coalesceKey?: string) =>
 		panelBurst.beforeEdit(coalesceKey);
 
-	// ── BPM ──────────────────────────────────────────────────────────────────
-	// Same detector the slideshow uses: decode to mono 44.1 kHz, then
-	// essentia's RhythmExtractor2013 in a shared worker. Here it feeds the
-	// auto clips' re-roll spacing rather than a slide clock.
+	// Same detector the slideshow uses: essentia's RhythmExtractor2013 in a shared worker.
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = null;
-	/** Bumped whenever the BPM is settled from elsewhere — a restored song, a
-	 * typed correction. A detection that started before that yields to it. */
+	/** Bumped when the BPM is settled elsewhere; a detection that started before yields to it. */
 	let bpmEpoch = 0;
 	/** The track the automatic pass has already been spent on. */
 	let autoBpmFor: File | null = null;
 
-	// A new track detects its own tempo: the clip timing (and any beat-synced
-	// effect) this feeds is unusable until the BPM is right, so it shouldn't
-	// wait to be asked. Both modes — single has beat sync too.
+	// A new track detects its own tempo: clip timing and beat-synced effects need it.
 	$effect(() => {
 		const file = audio.trackFile;
 		if (!file) return;
@@ -2138,8 +1808,7 @@
 		bpmDetectAbort = new AbortController();
 		try {
 			const result = await detectBpm(file, bpmDetectAbort.signal);
-			// The automatic pass never overrules what landed while it ran: a
-			// restore, or a number the user typed themselves.
+			// The automatic pass never overrules what landed while it ran.
 			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			setSequenceBpm(Math.round(result.bpm));
 		} catch (e) {
@@ -2187,8 +1856,7 @@
 		return clip ? { start: clip.start, end: clip.end } : null;
 	});
 
-	/** R. Needs one clip picked: the loop has no other way to know which span
-	 * to hold inside, so a flag set without one would lie in wait. */
+	/** R. Needs one clip picked: the loop has no other way to know its span. */
 	function toggleClipLoop() {
 		if (!loopSpan) return;
 		clipLoop = !clipLoop;
@@ -2204,8 +1872,7 @@
 	});
 
 	function playSpan() {
-		// Playback starts at the static marker — the resume point — rather than
-		// wherever the clock last stopped.
+		// Playback starts at the static marker, not wherever the clock last stopped.
 		if (timelineAxis && !audio.audioPlaying)
 			audio.seekTo(timelineAxis.staticTime);
 		audio.playAudio();
@@ -2220,12 +1887,7 @@
 	/** True while the media edit modal is up. */
 	let sourceEditOpen = $state(false);
 
-	/**
-	 * The modal carries its own transport and scrubs the media frame by frame.
-	 * Leaving the preview running behind it means two players fighting over the
-	 * same clip, and the canvas is covered anyway — so playback stops and the
-	 * render loop idles until the modal closes.
-	 */
+	/** The modal has its own transport, so the preview stops while it is up. */
 	function onSourceEditingChange(open: boolean) {
 		sourceEditOpen = open;
 		if (open) pauseTrack();
@@ -2242,8 +1904,7 @@
 
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
-		// A layer's panel has taken the sidebar over, so the arrows belong to
-		// its chain.
+		// A layer's panel has taken the sidebar over, so the arrows belong to its chain.
 		const mediaClip = selectedMediaClip;
 		if (mediaClip) {
 			const snap = mediaMoshHistory.redo(mediaClip.id);
@@ -2258,8 +1919,7 @@
 			else textRoll([textClip.id]);
 			return;
 		}
-		// A selected fx clip is what every other panel action is aimed at, so a
-		// mosh means that clip.
+		// A selected fx clip is what every panel action aims at, so a mosh means it.
 		const clip = activeFxClip();
 		if (clip) {
 			const snap = fxMoshHistory.redo(clip.id);
@@ -2267,8 +1927,7 @@
 			else fxRoll([clip.id]);
 			return;
 		}
-		// Sequence mode: the mosh group is hidden and every chain lives on a
-		// clip, so with nothing selected the arrows have nothing to roll.
+		// Sequence mode: every chain lives on a clip, so with nothing selected the arrows do nothing.
 		if (isSequenceMode) return;
 		moshSession.forward();
 	}
@@ -2297,10 +1956,7 @@
 		moshSession.back();
 	}
 
-	// Ctrl+Z/Y: hand-edits only, across every stack the editor owns. Which one
-	// a press lands on is decided by when each was last edited, not by what is
-	// selected — the order the user worked in is the only order that reads as
-	// undo. Moshes keep their own keys (←/→) and stay out of it.
+	// Ctrl+Z/Y: hand-edits only, across every stack the editor owns; the newest edit wins.
 	const fxUndo = snapshotUndoSource(
 		fxHistory,
 		() => $state.snapshot(fxLanes) as FxLane[],
@@ -2329,8 +1985,7 @@
 		},
 		{
 			get undoSeq() {
-				// A burst still inside its coalescing window is an edit that has
-				// not reached its stack yet, and it is the newest one there is.
+				// A burst inside its coalescing window hasn't reached its stack yet.
 				return burstOwner === "chain" && panelBurst.open
 					? PENDING_EDIT
 					: moshSession.undoSeq;
@@ -2352,8 +2007,7 @@
 	}
 
 	function clearEffects() {
-		// A selected fx clip is what the panel is showing, so it's what a clear
-		// means; its chain is never `effects`.
+		// A selected fx clip is what the panel shows, so it is what a clear means.
 		const clip = selectedFxClip;
 		if (clip) {
 			panelBeforeEdit();
@@ -2375,19 +2029,12 @@
 			);
 			return;
 		}
-		// No confirm: the work survives the exit either way — sequence mode as
-		// its song's pool and timeline, single mode as a session the upload
-		// screen offers straight back.
+		// No confirm: the work survives the exit either way.
 		flushSingleSessionSave();
 		onExit();
 	}
 
-	/**
-	 * The preview renders at display resolution — re-render at the real output
-	 * size, hand the canvas to `capture`, then restore the preview size via the
-	 * passed `done`. Feedback-effect history resets across the resize (buffers
-	 * are reallocated), same as any manual resize.
-	 */
+	/** The preview renders at display resolution, so re-render at the real output size. */
 	function captureAtOutputRes(
 		time: number,
 		capture: (done: () => void) => void,
@@ -2412,16 +2059,10 @@
 		});
 	}
 
-	/**
-	 * Bake the current frame into a new source file. Destructive — it replaces
-	 * the file being edited and clears the chain — and it's bound to a bare `V`,
-	 * so it hands back an Undo that restores both the previous file and the
-	 * effect chain as it stood before the bake.
-	 */
+	/** Bake the current frame into a new source file; destructive, so it hands back an Undo. */
 	function reInput() {
 		if (!canvasEl) return;
-		// Single mode only: sequence draws from a pool of sources through its
-		// layers, so there is no one source for a baked frame to replace.
+		// Single mode only: sequence draws from a pool of sources through its layers.
 		if (isSequenceMode) return;
 		const prevFile = file;
 		const prevEffects = $state.snapshot(effects) as EffectInstance[];
@@ -2450,18 +2091,12 @@
 		});
 	}
 
-	/** The timeline's shared axis, once a stack is mounted — the C shortcut
-	 * fires from the window, outside the context the stack puts it in. */
+	/** The timeline's shared axis, once a stack is mounted. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
 
 	/** The lane list, so the width its own scrollbar takes can be measured. */
 	let laneListEl = $state<HTMLElement | null>(null);
-	/** What the lane list's vertical scrollbar costs it — zero wherever
-	 * scrollbars overlay their content instead of displacing it. The timeline's
-	 * grid and playhead are drawn over the lanes from outside that scroller, so
-	 * they have to give up the same width or the playhead lands a scrollbar's
-	 * width past the lane it is marking. Measured rather than assumed, because
-	 * the answer is a platform's, not ours. */
+	/** What the lane list's vertical scrollbar costs it; zero where scrollbars overlay. */
 	let laneScrollbar = $state(0);
 
 	$effect(() => {
@@ -2474,10 +2109,7 @@
 		return () => observer.disconnect();
 	});
 
-	// ── The timeline split ───────────────────────────────────────────────────
-	/** Which side of the column deserves the room is the user's call, not a
-	 * rule's: building a look wants the preview, arranging a stack wants the
-	 * lanes. Their answer is remembered. */
+	/** Which side of the column gets the room is the user's call, and remembered. */
 	const SPLIT_KEY = "openmosh-timeline-split";
 	/** Enough for the toolbar, the ruler, the selection bar and a lane or two. */
 	const SPLIT_MIN = 150;
@@ -2502,8 +2134,7 @@
 		return mainAreaEl?.querySelector<HTMLElement>(".tl-stack") ?? null;
 	}
 
-	/** The tallest the timeline may go right now: its own share of the column,
-	 * and never so far that the preview is left with nothing. */
+	/** The tallest the timeline may go: its share of the column, leaving the preview something. */
 	function splitCeiling(startSplit: number): number {
 		const area = mainAreaEl;
 		if (!area) return startSplit;
@@ -2513,16 +2144,13 @@
 			preview && !preview.classList.contains("hidden")
 				? preview.getBoundingClientRect().height
 				: 0;
-		// With the preview away in grid mode there is no floor to keep, so the
-		// cap is the whole answer.
+		// With the preview away in grid mode there is no floor to keep.
 		const byPreview =
 			previewH > 0 ? startSplit + Math.max(0, previewH - PREVIEW_MIN) : cap;
 		return Math.max(SPLIT_MIN, Math.min(cap, byPreview));
 	}
 
-	/** The shortest the timeline may go: its fixed chrome — toolbar, ruler band,
-	 * scrollbar row, selection bar — plus one lane left showing. Taken from the
-	 * live split rather than a constant, since the chrome is what it is. */
+	/** The shortest the timeline may go: its fixed chrome plus one lane showing. */
 	function splitFloor(startSplit: number): number {
 		const lanes = mainAreaEl?.querySelector<HTMLElement>(".tl-layers");
 		const lanesH = lanes?.getBoundingClientRect().height ?? 0;
@@ -2588,10 +2216,7 @@
 		commitSplit();
 	}
 
-	// ── Folded lanes ─────────────────────────────────────────────────────────
-	/** Lanes folded to a strip. A view choice like solo, so it stays out of the
-	 * saved timeline — but it outlives the session, because a stack worth folding
-	 * is one worth coming back to folded. */
+	/** Lanes folded to a strip; a view choice like solo, not saved. */
 	const FOLD_KEY = "openmosh-folded-lanes";
 	let foldedLaneIds = $state<Set<string>>(
 		new Set(readJson<string[]>(FOLD_KEY, [])),
@@ -2648,18 +2273,12 @@
 	let showRecordSettings = $state(false);
 	let recordDuration = $state(5);
 	let recordFps = $state(60);
-	/** Seconds. A ceiling on typos, not a format limit — the encoder has no cap. */
+	/** Seconds. A ceiling on typos, not a format limit: the encoder has no cap. */
 	const MAX_RECORD_DURATION = 600;
 	/** One click for the lengths people actually reach for. */
 	const RECORD_DURATION_PRESETS = [5, 10, 30, 60, 120];
 
-	/**
-	 * Which project the export settings belong to. `seqStoreKey` already carries
-	 * the mode prefix, so single mode and the lane editor keep separate
-	 * settings for the same song. Media with no song of its own still has an identity worth
-	 * keying by — single mode works with no audio at all — so it falls back to
-	 * the file, matching how sessions.ts keys a track-less edit.
-	 */
+	/** Which project the export settings belong to; `seqStoreKey` carries the mode prefix. */
 	let renderKey = $derived(
 		seqStoreKey ??
 			(isSequenceMode
@@ -2667,8 +2286,7 @@
 				: `single:file:${file.name}:${file.size}:${file.lastModified}`),
 	);
 
-	/** The project whose settings are already loaded, so the save effect can't
-	 * write one project's values under the next one's key. */
+	/** The project whose settings are loaded; the save effect waits for it. */
 	let renderKeyLoaded = $state<string | null>(null);
 
 	$effect(() => {
@@ -2679,8 +2297,7 @@
 			const saved = loadRenderSettings(key);
 			if (saved?.fps) recordFps = saved.fps;
 			if (saved?.duration) recordDuration = saved.duration;
-			// Falls back to the pre-render-settings per-track size store, whose
-			// entries were written before the output size lived here.
+			// Falls back to the per-track size store used before the output size lived here.
 			const size =
 				saved?.width && saved?.height
 					? { width: saved.width, height: saved.height }
@@ -2690,8 +2307,7 @@
 			if (size && size.width > 0 && size.height > 0) {
 				resizeWidth = size.width;
 				resizeHeight = size.height;
-				// Media finishing its load after this would otherwise default the
-				// output back to its own size — see the latch's own comment.
+				// Media finishing its load after this would otherwise default the output back to its own size.
 				sizeRestoredFromTrack = true;
 			}
 		});
@@ -2703,8 +2319,7 @@
 		const duration = recordDuration;
 		const width = resizeWidth;
 		const height = resizeHeight;
-		// Before this project's own values are in, the live ones still belong to
-		// whatever was open before.
+		// Before this project's values are in, the live ones belong to what was open before.
 		if (!key || renderKeyLoaded !== key) return;
 		saveRenderSettings(key, {
 			fps,
@@ -2713,19 +2328,9 @@
 		});
 	});
 
-	// ── Text timeline ──
-	// Optional lanes of text clips over the master clock. Off until the user
-	// turns it on, so nothing about the existing editor changes for people who
-	// don't want text.
+	// Optional lanes of text clips over the master clock, off until turned on.
 
-	/**
-	 * Layer lanes are desktop work — the buttons that turn them on are not
-	 * offered on a phone, and neither is anything a lane draws or edits. What
-	 * a desktop built still comes back through here, only switched off: the
-	 * `enabled` flag is all the lanes key off. The flag as loaded is kept so
-	 * a save from the phone hands the lanes back exactly as they were, rather
-	 * than hidden the next time the desktop opens them.
-	 */
+	/** Layer lanes are desktop work: the buttons that turn them on aren't offered on a phone. */
 	const loadedLayerFlags = { text: false };
 	function layersOffOnMobile<T extends { enabled: boolean }>(
 		timeline: T,
@@ -2743,7 +2348,7 @@
 		return { ...timeline, enabled: loadedLayerFlags[kind] };
 	}
 
-	// Seed only — a later change to the prop shouldn't overwrite live edits.
+	// Seed only: a later change to the prop shouldn't overwrite live edits.
 	let textTimeline = $state<TextTimeline>(
 		untrack(() =>
 			initialSession?.text
@@ -2755,11 +2360,7 @@
 	let selectedTextClipIds = $state<string[]>([]);
 	let lyricsOpen = $state(false);
 
-	// ── Media layers ──
-	// Lanes of media over the same master clock, each with its own placement,
-	// its clips each with their own chain. Sequence mode only, and always on
-	// there: the layers are where the media goes, not an extra to switch on.
-	// Single mode is the one-file editor and stays out of it entirely.
+	// Lanes of media over the master clock, each clip with its own chain; sequence mode only.
 	let mediaTimeline = $state<MediaTimeline>(
 		untrack(() => ({ ...EMPTY_MEDIA_TIMELINE, enabled: isSequenceMode })),
 	);
@@ -2767,19 +2368,14 @@
 	/** The layer-clip selection, so the media rail can assign to all of it. */
 	let selectedMediaClipIds = $state<string[]>([]);
 
-	/**
-	 * Lane shown by itself on the canvas. Deliberately not part of the timeline
-	 * data: soloing is a way of looking at the work, not a property of it, so it
-	 * neither persists nor reaches an export.
-	 */
+	/** Lane shown by itself on the canvas; not timeline data, so it never persists or exports. */
 	let soloMediaLaneId = $state<string | null>(null);
 
 	function toggleMediaSolo(laneId: string) {
 		soloMediaLaneId = soloMediaLaneId === laneId ? null : laneId;
 	}
 
-	/** Every lane on the stack, whatever kind it is — the fold-all control works
-	 * on the lot, so it has to see all three kinds at once. */
+	/** Every lane on the stack, whatever kind: the fold-all control works on the lot. */
 	let laneIds = $derived([
 		...mediaTimeline.lanes.map((lane) => lane.id),
 		...textTimeline.lanes.map((lane) => lane.id),
@@ -2800,29 +2396,20 @@
 		writeJson(FOLD_KEY, [...next]);
 	}
 
-	// A soloed lane that was deleted would leave the canvas black with nothing
-	// on screen to say why, so solo only counts while its lane is on the stack.
-	// The id itself is kept: undoing the delete brings the solo back with it.
+	// Solo only counts while its lane is on the stack; the id is kept so undo brings it back.
 	let soloLaneId = $derived(
 		mediaTimeline.lanes.some((l) => l.id === soloMediaLaneId)
 			? soloMediaLaneId
 			: null,
 	);
 
-	// ── Single-mode session ──
-	// Sequence mode resumes from its song's media pool; single mode has only the
-	// one file, so the file and the work done to it are saved together and the
-	// upload screen offers it back. Untouched opens aren't saved — every file
-	// ever previewed would otherwise pile up in the list.
+	// Sequence mode resumes from its song's pool; single mode saves file and work together.
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
 	function saveSingleSession() {
 		// A camera can't be reopened from a saved session.
 		if (isSequenceMode || isLive) return;
-		// Lane presence, not `enabled`: that flag is the layer's visibility
-		// toggle and survives being switched off with the lanes still there.
-		// Keying either the guard or the payload off it discards the whole
-		// timeline the moment the user hides it.
+		// Lane presence, not `enabled`: keying off the visibility toggle would discard hidden timelines.
 		const hasText = textTimeline.lanes.length > 0;
 		if (!moshSession.touched && !hasText) return;
 		const source = file;
@@ -2832,29 +2419,20 @@
 				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
 				: null,
 		};
-		// Keyed by the song when there is one, so the session sits alongside the
-		// text timeline and span already saved under that track id.
+		// Keyed by the song when there is one, alongside the text timeline and span.
 		void saveSession("single", [source], state, currentTrackId)
 			.then(() => pruneSequenceMedia())
 			.catch((e) => {
-				// Swallowing this outright is what made the last failure invisible.
+				// Logged, not swallowed: a silent failure here is invisible.
 				if (import.meta.env.DEV) console.error("Session save failed:", e);
 			});
 	}
 
 	$effect(() => {
 		if (isSequenceMode) return;
-		// Skipped while playing, for the same reason the sequence save above is:
-		// the per-frame volume-link tick mutates values inside `effects`, so the
-		// deep read below re-runs this effect — and its two deep snapshots —
-		// once per rendered frame. The clones are discarded immediately, which
-		// makes it pure garbage for the collector to come back for every couple
-		// of seconds. Saving settles on pause, and the pagehide flush covers a
-		// tab closed mid-playback.
+		// Skipped while playing, like the sequence save: the volume-link tick mutates `effects`.
 		if (audio.audioPlaying || videoIsPlaying) return;
-		// Deep-read, discarded: naming `effects` alone subscribes to the array
-		// reference only, so dragging a parameter — which mutates in place —
-		// would never re-arm the debounce.
+		// Deep-read, discarded: naming `effects` alone subscribes to the reference, not its contents.
 		$state.snapshot(effects);
 		$state.snapshot(textTimeline);
 		file;
@@ -2879,8 +2457,7 @@
 		}),
 	);
 
-	// A still image with no track has no clock at all, so the text timeline
-	// supplies one: it loops the record window, which is what an export writes.
+	// A still image with no track has no clock, so the text timeline supplies one.
 	let stillClock = $state(0);
 	let stillPlaying = $state(false);
 	/** Bumped on every seek, so the running loop re-anchors on the new time. */
@@ -2892,9 +2469,7 @@
 	/** True when nothing else owns a playhead, so the text ruler grows one. */
 	let textNeedsTransport = $derived(seqMasterDuration <= 0);
 	let textTime = $derived(textNeedsTransport ? stillClock : seqMasterTime());
-	// An export's frame 0 is not the master clock's zero: it starts at the audio
-	// span (or the video's in-point), and a sped-up video covers master time
-	// faster than frame time. Both preview and export read the same clips.
+	// An export's frame 0 is not the master clock's zero; it starts at the audio span.
 	let textTimeOffset = $derived(
 		audio.trackFile && audio.trackDuration > 0
 			? audio.spanStart
@@ -2909,11 +2484,7 @@
 		textNeedsTransport ? stillPlaying : audio.audioPlaying || videoIsPlaying,
 	);
 
-	// ── Timeline stack ───────────────────────────────────────────────────────
-	// Every lane shares the master clock's axis: the media, text and fx lanes
-	// and whichever transport is the master. A video playing under its own
-	// span while a track drives the timeline is a second clock, so it stays a
-	// standalone bar above the stack rather than joining the axis.
+	// Every lane shares the master clock's axis; a video under its own span is a second clock.
 	let showVideoBar = $derived(
 		isVideo && videoDuration > 0 && !(isSequenceMode && seqMasterIsAudio),
 	);
@@ -2954,9 +2525,7 @@
 		else videoLoop = !videoLoop;
 	}
 
-	// ── Stack toolbar ────────────────────────────────────────────────────────
-	// The lanes' own actions, gathered into the stack's one toolbar rather than a
-	// header row each.
+	// The lanes' own actions, gathered into one toolbar rather than a header row each.
 	let sourceInput = $state<HTMLInputElement | undefined>(undefined);
 
 	function addTextLane() {
@@ -2966,8 +2535,7 @@
 
 	$effect(() => {
 		if (!stillPlaying) return;
-		// Tracked, so a seek mid-run restarts the loop on the new position — the
-		// anchor below is read once and would otherwise ignore it.
+		// Tracked, so a seek mid-run restarts the loop on the new position.
 		stillSeekTick;
 		const span = Math.max(0.1, textDuration);
 		const started = performance.now() - untrack(() => stillClock) * 1000;
@@ -2978,19 +2546,12 @@
 		return () => cancelAnimationFrame(raf);
 	});
 
-	/** Names of the enabled main effects — the lane chain-position picker. */
-	/**
-	 * Every layer in both timelines, front first. One order spans the two kinds,
-	 * so the panels and the lane gutters agree on what sits over what.
-	 */
+	/** Every layer in both timelines, front first; one order spans the two kinds. */
 	let layerOrder = $derived(
 		combinedLayerOrder(mediaTimeline.lanes, textTimeline.lanes, fxLanes),
 	);
 
-	/**
-	 * Drop a layer at `toIndex` in the shared stack, whichever timeline holds
-	 * it. The stack is renumbered whole, so both sides may need writing.
-	 */
+	/** Drop a layer at `toIndex` in the shared stack, whichever timeline holds it. */
 	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
 		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
@@ -3014,9 +2575,7 @@
 		}
 	}
 
-	// ── Layer row drag ───────────────────────────────────────────────────────
-	// Owned here rather than by either lane component: a drag crosses between
-	// text and media rows, and neither can see the other's.
+	// Owned here rather than by either lane component: a drag crosses between text and media rows.
 	let draggingLaneId = $state<string | null>(null);
 
 	function startLayerDrag(laneId: string, e: PointerEvent) {
@@ -3030,19 +2589,15 @@
 	let selectedTextClip = $derived(
 		findTextClip(textTimeline, selectedTextClipId),
 	);
-	/** The lane holding the selected clip — the panel edits its style. */
+	/** The lane holding the selected clip; the panel edits its style. */
 	let selectedTextLane = $derived(
 		findTextClipLane(textTimeline, selectedTextClipId),
 	);
 
-	// Its own undo stack: the chain stacks are typed to effect arrays, and a
-	// text edit shouldn't rewind a mosh. Ctrl+Z reaches it when a text edit is
-	// the newest thing the user did.
+	// Its own undo stack: the chain stacks are typed to effect arrays.
 	const textHistory = createTextHistory();
 
-	// A restored timeline is the baseline, not an edit on top of an empty one:
-	// the stack starts seeded with EMPTY, so without this the first undo would
-	// wipe the lanes that just came back.
+	// A restored timeline is the baseline, so the stack starts seeded with EMPTY.
 	if (untrack(() => initialSession?.text)) {
 		textHistory.reset();
 	}
@@ -3099,9 +2654,7 @@
 		mediaTimeline = updateMediaLaneIn(mediaTimeline, next.id, () => next);
 	}
 
-	/** Adopt a saved timeline, or clear back to empty when a song has none.
-	 * Always on in sequence mode: entries saved while the layers could still be
-	 * switched off come back switched on. */
+	/** Adopt a saved timeline, or clear back to empty. Always on in sequence mode. */
 	function restoreMediaTimeline(saved: MediaTimeline | undefined) {
 		mediaTimeline = {
 			...(saved ? normalizeMediaTimeline(saved) : EMPTY_MEDIA_TIMELINE),
@@ -3123,9 +2676,7 @@
 		setMediaTimeline(
 			appendMediaLane(mediaTimeline, sourceId, nextLayerZ(layerOrder)),
 		);
-		// Nothing in the pool to draw: asking for the file here is the step the
-		// user was going to take anyway, and addLayerSources seats it in the lane
-		// that just appeared.
+		// Nothing in the pool to draw, so ask for the file.
 		if (!sourceId) sourceInput?.click();
 	}
 
@@ -3134,15 +2685,7 @@
 		isSequenceMode && !sequenceGridOpen && sequenceSources.length > 0,
 	);
 
-	// One selection across the whole stack: the sidebar edits one thing at a
-	// time, so filling any lane's selection empties every other lane's. Without
-	// this the sidebar shows whichever branch came first while the other lane
-	// still draws itself as selected.
-	//
-	// The lanes bind their own selection state, so there is no setter they all
-	// pass through. Each kind gets a one-way effect instead: whichever
-	// selection the user just made survives, and the rest settle to null on the
-	// next pass.
+	// One selection across the whole stack: filling any lane's selection empties every other's.
 	type SelectionKind = "fx" | "media" | "text";
 
 	function keepOnlySelection(keep: SelectionKind) {
@@ -3150,8 +2693,7 @@
 			if (keep !== "fx") {
 				selectedFxClipId = null;
 				selectedFxClipIds = [];
-				// A lane picked by name aims the settings panel at it; left set,
-				// the panel would go on showing the wrong owner's settings.
+				// A lane picked by name aims the settings panel at it.
 				selectedFxLaneId = null;
 			}
 			if (keep !== "media") selectedMediaClipId = null;
@@ -3169,15 +2711,7 @@
 		if (selectedTextClipId) keepOnlySelection("text");
 	});
 
-	/**
-	 * Select what the preview was clicked on. A layer pick names a lane; which
-	 * of its clips to open is whatever is on screen at the playhead, since that
-	 * is the one the click was aimed at.
-	 *
-	 * Clicking past every layer lands on the base: in single mode the main
-	 * chain, which is already what the rack shows once no layer is in the way,
-	 * so dropping the layer selection is the whole gesture.
-	 */
+	/** Select what the preview was clicked on; clicking past every layer lands on the base. */
 	function pickLayer(pick: LayerPick | null) {
 		if (pick?.kind === "media") {
 			const lane = mediaTimeline.lanes.find((l) => l.id === pick.laneId);
@@ -3198,17 +2732,13 @@
 		selectedTextClipId = null;
 	}
 
-	// ── Text clip chains ──
-	// Fill, mosh, clear and static/auto on a text clip: the same gestures a
-	// media clip takes, over the same shared rules (chain-clip.ts).
-	// Same resolver the export builds, so interval rolls reproduce exactly.
+	// Fill, mosh, clear and static/auto on a text clip: the same gestures a media clip takes.
 	const previewTextChains = createTextChainSource(getMoshOptions);
 
 	/** ←/→ walk one text clip's moshes, keyed by clip id. */
 	const textMoshHistory = new MoshHistory<MoshSnapshot>();
 
-	/** Deleting a clip retires its id — drop the stack so a later clip can't
-	 * inherit moshes that were never its own. */
+	/** Deleting a clip retires its id, so drop the stack. */
 	function retainLaneMoshes() {
 		textMoshHistory.retain(
 			textTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
@@ -3224,7 +2754,7 @@
 		);
 	}
 
-	/** Mosh history only — never the text edit stack; see fxRoll. */
+	/** Mosh history only, never the text edit stack; see fxRoll. */
 	function textRoll(clipIds: string[]) {
 		const ids = new Set(clipIds);
 		for (const clip of textClipsById(ids)) {
@@ -3276,10 +2806,7 @@
 		);
 	}
 
-	// ── Media clip chains ──
-	// Fill, mosh, clear and static/auto on a media clip: the same gestures an
-	// fx clip takes, over the same shared rules (chain-clip.ts).
-	// Same resolver the export builds, so interval rolls reproduce exactly.
+	// Fill, mosh, clear and static/auto on a media clip: the same gestures an fx clip takes.
 	const previewMediaChains = createMediaChainSource(getMoshOptions);
 
 	/** ←/→ walk one media clip's moshes, keyed by clip id. */
@@ -3291,7 +2818,7 @@
 		);
 	}
 
-	/** Mosh history only — never the media edit stack; see fxRoll. */
+	/** Mosh history only, never the media edit stack; see fxRoll. */
 	function mediaRoll(clipIds: string[]) {
 		const ids = new Set(clipIds);
 		for (const clip of mediaClipsById(ids)) {
@@ -3350,9 +2877,7 @@
 		findMediaClipLane(mediaTimeline, selectedMediaClipId),
 	);
 
-	/** The source the selected layer clips draw; null when they disagree. Clips
-	 * that never chose one resolve to their lane's, so a lane's worth of plain
-	 * clips still agrees on a single thumb. */
+	/** The source the selected layer clips draw; null when they disagree. */
 	let mediaSelectedSourceId = $derived.by(() => {
 		if (selectedMediaClipIds.length === 0) return null;
 		const picked = new Set(selectedMediaClipIds);
@@ -3366,9 +2891,7 @@
 		return drawn.every((id) => id && id === drawn[0]) ? drawn[0] : null;
 	});
 
-	/** The thumb the rail lights up: what the selected layer clips draw. Falls
-	 * back to the lane behind the primary clip, so a lane opened with nothing
-	 * selected still says which media it is on. */
+	/** The thumb the rail lights up; falls back to the lane behind the primary clip. */
 	let railSourceId = $derived(
 		mediaSelectedSourceId ?? selectedMediaLane?.sourceId ?? null,
 	);
@@ -3376,8 +2899,7 @@
 	/** How many clips a rail click assigns to. */
 	let railTargetCount = $derived(selectedMediaClipIds.length);
 
-	/** Point the selected layer clips at this source, fanned out over the whole
-	 * selection. */
+	/** Point the selected layer clips at this source, fanned out over the selection. */
 	function assignMediaClipSource(sourceId: string) {
 		if (selectedMediaClipIds.length === 0) return;
 		pushMediaHistory();
@@ -3408,8 +2930,7 @@
 		}
 	}
 
-	/** Transport for the lyrics-sync modal, on whichever clock owns the master
-	 * timeline here: the track, the video, or the still-image loop. */
+	/** Transport for the lyrics-sync modal, on whichever clock owns the master timeline. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
 		textTimeline.enabled
 			? {
@@ -3477,11 +2998,9 @@
 			return;
 		}
 		showRecordSettings = false;
-		// The record overlay and progress live outside the fullscreen element, so
-		// staying in it during an export would hide every control the user needs.
+		// The record overlay lives outside the fullscreen element, so staying in it would hide it.
 		previewFullscreen = false;
 
-		// Pause playback while recording
 		audio.pauseAudio();
 		previewPlayer?.pause();
 		if (isVideo && videoEl) videoEl.pause();
@@ -3494,8 +3013,7 @@
 		await primarySync.settle();
 		await sourceRegistry.settleGenerated();
 
-		// Preview runs at display resolution — export at the real output size.
-		// GlCanvas restores the preview size when `suspended` clears.
+		// Preview runs at display resolution, so export at the real output size.
 		if (resizeWidth > 0 && resizeHeight > 0) {
 			glRenderer.resize(resizeWidth, resizeHeight);
 		}
@@ -3521,8 +3039,7 @@
 					videoSpeed,
 					file,
 					live: isLive ? liveVideoEl : null,
-					// A live export is a performance: the song has to be heard from
-					// the span it is exporting, so the take can follow it.
+					// A live export is a performance: the song must be heard from the span it exports.
 					onLiveStart: () => {
 						if (!audio.trackFile) return;
 						audio.seekTo(audio.spanStart);
@@ -3568,8 +3085,7 @@
 			},
 		);
 
-		// Left paused: an export ends with the file saved and the user reading a
-		// toast, not wanting the song to start up again on its own.
+		// Left paused: an export ends with the file saved and a toast to read.
 		if (isLive) audio.pauseAudio();
 		if (canvasEl && glRenderer) {
 			glRenderer.render(renderedEffects, performance.now() / 1000);
@@ -3580,8 +3096,7 @@
 		recordingState.cancel();
 	}
 
-	/** Audio sets the track. Media replaces the file in single mode; in sequence
-	 * mode it joins the pool, since clips can each pick their own. */
+	/** Audio sets the track; media replaces the file in single mode, joins the pool in sequence. */
 	function handleDroppedFiles(files: FileList) {
 		const all = Array.from(files);
 		const audioFile = all.find((f) => f.type.startsWith("audio/"));
@@ -3659,8 +3174,7 @@
 						onchange={(v) => (sequenceView = v as "preview" | "grid")}
 					/>
 				</div>
-				<!-- Shuffle is scoped by the selection: with layer clips picked it
-					     deals across those, otherwise across every layer clip. -->
+					<!-- Scoped by the selection: with layer clips picked it deals across those. -->
 				<MediaPoolActions
 					count={sequenceSources.length}
 					shuffleScope={selectedMediaClipIds.length}
@@ -3756,8 +3270,7 @@
 				autoplay={!previewPlayer}
 				playsinline
 				onloadedmetadata={() => {
-					// Player owns duration/span/audio when active; element is
-					// just the recording fallback then
+					// Player owns duration/span/audio when active; the element is only the recording fallback then
 					if (previewPlayer) return;
 					const dur = videoEl!.duration;
 					videoDuration = dur;
@@ -3820,16 +3333,14 @@
 				}}
 			/>
 		{/if}
-		<!-- Hidden, never unmounted: tearing the canvas down would take the
-		     renderer (and the pre-warmed context it adopted) with it. -->
+		<!-- Hidden, never unmounted: tearing the canvas down would take the renderer with it. -->
 		<div
 			class="preview-slot"
 			class:hidden={sequenceGridOpen}
 			bind:this={previewSlotEl}
 		>
 			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== "none"}
-				<!-- Single mode has no source chip, so the one thing that would
-				     otherwise happen silently to the user's video says so here. -->
+				<!-- Single mode has no source chip, so this says what would otherwise be silent. -->
 				<button
 					class="preview-proxy"
 					class:ok={singleProxyStatus.kind === "ready"}
@@ -3927,9 +3438,7 @@
 					<Library size={13} />
 				</button>
 			</div>
-			<!-- The view switches. Layer lanes are off on a phone altogether — see
-			     layersOffOnMobile — so their switches go too, and the cluster
-			     with them if fullscreen can't fill it. -->
+			<!-- Layer lanes are off on a phone (see layersOffOnMobile), so their switches go too. -->
 			{#if !isMobile || fullscreenSupported}
 				<div class="bar-cluster">
 					{#if hasKeyboard}
@@ -4040,8 +3549,7 @@
 				</div>
 			{/if}
 			{#if showStack}
-				<!-- The same transport as the timeline toolbar's, at the size the
-				     slideshow gives it: playing back is a main action here too. -->
+				<!-- The same transport as the timeline toolbar's, at the size the slideshow gives it. -->
 				<button class="bar-key live" onclick={toggleMasterPlay}>
 					{#if textClockRunning}
 						<Pause size={14} fill="currentColor" stroke="none" />
@@ -4121,8 +3629,7 @@
 			{/if}
 		</div>
 		{#if showSourceRail}
-			<!-- The pool, on hand while the preview is up: dragging a thumb onto a
-			     media layer's row is the same drop the grid's cards make. -->
+			<!-- The pool, on hand while the preview is up. -->
 			<SourceRail
 				sources={sequenceSources}
 				selectedCount={railTargetCount}
@@ -4136,8 +3643,7 @@
 			/>
 		{/if}
 		{#if showVideoBar && !videoIsMaster}
-			<!-- A second clock: the video runs its own span while the track drives
-			     the timeline, so it can't share the stack's axis. -->
+			<!-- A second clock: the video runs its own span while the track drives the timeline. -->
 			<AudioTimeline
 				label="VID"
 				trackDuration={videoDuration}
@@ -4162,10 +3668,7 @@
 			/>
 		{/if}
 		{#if showStack}
-			<!-- The split between the output and the lanes. Its hit area is taller
-			     than the grip it draws, so the target is not a hairline. -->
-			<!-- A separator is a window splitter when it is focusable, which is
-			     exactly the case here — so both of these are the rule misfiring. -->
+			<!-- The split between the output and the lanes; its hit area is taller than the grip. -->
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<div class="tl-split" class:held={splitDragging}>
@@ -4198,9 +3701,7 @@
 				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
 			>
 				{#snippet toolbar()}
-					<!-- Each button names the lane it adds in full: with three kinds of
-					     lane side by side, "+ Lane" under a group label read as the
-					     same button three times. -->
+					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->
 					{#if textTimeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<button
@@ -4221,8 +3722,7 @@
 							</button>
 						{/if}
 					{/if}
-					<!-- Read bottom to top, the way the frame is built: the layers
-				     composite onto the base, and the fx lanes run over the result. -->
+					<!-- Read bottom to top, the way the frame is built. -->
 					{#if mediaTimeline.enabled}
 						<div class="tl-tool-sep"></div>
 						<button
@@ -4273,12 +3773,7 @@
 						/>
 					{/if}
 				{/snippet}
-				<!-- Read bottom to top, the way a frame is built: the transports at
-				     the foot are the inputs, and everything stacks over them. -->
-				<!-- One column for every row of the stack: media, text and fx lanes
-				     alike. Each carries its place in the shared
-				     stack as a CSS order, so the three interleave without any of
-				     the components knowing about the others. -->
+				<!-- Read bottom to top: the transports at the foot are the inputs. -->
 				<div class="tl-layers" bind:this={laneListEl}>
 					{#if mediaTimeline.enabled}
 						<MediaTimelineLane
@@ -4401,10 +3896,7 @@
 			onchange={onTrackInputChange}
 			hidden
 		/>
-		<!-- Outside the timeline stack: the stack is hidden while there's no
-		     clock, and both the empty-pool placeholder and the layer panel still
-		     need this picker. Mounted in single mode too, where the pool holds
-		     the media the layers draw from. -->
+		<!-- Outside the timeline stack, which is hidden while there's no clock. -->
 		<input
 			bind:this={sourceInput}
 			type="file"
@@ -4472,9 +3964,7 @@
 		</div>
 	{/snippet}
 
-	<!-- Passed only while a clip is selected. The sheet takes any top panel
-	     as "show this instead of the chain", so an always-present snippet that
-	     merely rendered nothing left the mobile Effects tab empty. -->
+	<!-- Passed only while a clip is selected. -->
 	{#snippet layerPanel(section: "clip" | "chain")}
 		{#if selectedMediaClip}
 			<MediaClipPanel
@@ -4521,8 +4011,7 @@
 			{@render moshSettings()}
 		{/snippet}
 		{#snippet effectsPanel()}
-			<!-- A selected layer is edited by the top panel instead; the main
-			     chain would be a second, unrelated effect list under it. -->
+			<!-- A selected layer is edited by the top panel instead; the main chain would be a second list. -->
 			{#if !selectedMediaClip && !selectedTextClip}
 				<EffectsPanel
 					headless
@@ -4635,24 +4124,16 @@
 		min-width: 0;
 	}
 
-	/* The extra pixel up top pays for the bottom border: it sits below the
-	   padding, so equal padding centres the row in the box but not between the
-	   two edges you can see. Whole pixels, so nothing rounds either. */
-	/* The lane components render straight into this (they are display:contents),
-	   so the gap and the ordering live here. */
+	/* The extra pixel up top pays for the bottom border, which sits below the padding. */
 	.tl-layers {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		/* The stack caps its own height, so the lanes are the part that gives:
-		   past a screenful they scroll under the axis instead of pushing the
-		   preview out of the column. It does not grow — folding every lane should
-		   hand the room straight back, not leave a gap under the strips. */
+		/* The stack caps its own height, so past a screenful the lanes scroll under the axis. */
 		flex: 0 1 auto;
 		min-height: 0;
 		overflow-y: auto;
-		/* Reserved whether or not it is scrolling, so the axis does not jump
-		   sideways the moment a lane is added. */
+		/* Reserved whether or not it scrolls, so the axis doesn't jump sideways when a lane is added. */
 		scrollbar-gutter: stable;
 		/* The same thumb the horizontal scrollbar below the lanes uses. */
 		scrollbar-width: thin;
@@ -4667,8 +4148,7 @@
 		flex-shrink: 0;
 	}
 
-	/* Holds the canvas's place in the column so the grid can take the box
-	   without the preview being torn down. */
+	/* Holds the canvas's place so the grid can take the box without tearing the preview down. */
 	.preview-slot {
 		position: relative;
 		flex: 1;
@@ -4719,9 +4199,7 @@
 		}
 	}
 
-	/* Below this the strip's controls, at their phone size, still overrun a
-	   narrow viewport: every gap comes in, and wrapping is the last resort for
-	   anything narrower still, so no control is ever clipped off the edge. */
+	/* Below this the strip's controls overrun the viewport; wrapping is the last resort. */
 	@media (max-width: 450px) {
 		.action-bar {
 			flex-wrap: wrap;
@@ -4736,9 +4214,7 @@
 		margin: 0.15rem 0;
 	}
 
-	/* The strip under the preview. A hairline off the canvas, then the switch
-	   clusters and keys centred on one line; the air is padding, and the
-	   preview pays for every pixel of it. */
+	/* The strip under the preview: a hairline off the canvas, then the switch clusters. */
 	.action-bar {
 		display: flex;
 		align-items: center;
@@ -4749,9 +4225,7 @@
 		flex-shrink: 0;
 	}
 
-	/* The timeline's top edge, grabbed to rebalance the column. The band pulls the
-	   stack back up over itself, so it costs no height at all: the rail above it
-	   keeps the size it had. */
+	/* The timeline's top edge, grabbed to rebalance the column; the band costs no height. */
 	.tl-split {
 		position: relative;
 		z-index: 3;
@@ -4761,8 +4235,7 @@
 		flex-shrink: 0;
 		height: 9px;
 		margin-bottom: -9px;
-		/* Only the grip takes the pointer, so the band cannot shadow the toolbar
-		   it lies over. */
+		/* Only the grip takes the pointer, so the band can't shadow the toolbar it lies over. */
 		pointer-events: none;
 	}
 

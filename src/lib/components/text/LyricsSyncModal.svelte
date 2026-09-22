@@ -15,7 +15,6 @@
 		type TextClip,
 	} from "../../text";
 
-	/** The lyrics lane's current contents, as the modal reads them. */
 	export interface LyricsDraft {
 		lines: string[];
 		timings: number[];
@@ -28,7 +27,7 @@
 		/** Master-time span the sync runs over (the track or video span). */
 		spanStart: number;
 		spanEnd: number;
-		/** Live clock read for stamping — fresher than the rendered prop. */
+		/** Live clock read for stamping, fresher than the rendered prop. */
 		getCurrentTime?: () => number;
 		onPlay: () => void;
 		onPause: () => void;
@@ -40,8 +39,7 @@
 		/** Kept mounted while closed so a half-done sync isn't lost. */
 		open: boolean;
 		currentTime: number;
-		/** What the lyrics lane holds right now. Opening seeds from this, so the
-		 * modal shows the same lines the timeline does. Null before any sync. */
+		/** What the lyrics lane holds right now. Opening seeds from this. */
 		existing?: LyricsDraft | null;
 		onClose: () => void;
 	}
@@ -69,8 +67,8 @@
 	let phase = $state<"edit" | "sync">("edit");
 	let lyricsText = $state("");
 	let timings = $state<(number | null)[]>([]);
-	/** Cleared by any edit, so the confirmation only ever describes the lane as
-	 * it stands. */
+	/** Cleared by any edit, so the confirmation only describes the lane as it
+	 * stands. */
 	let applied = $state(false);
 
 	let panelEl = $state<HTMLElement | undefined>(undefined);
@@ -102,14 +100,8 @@
 		if (phase === "sync") panelEl?.focus();
 	});
 
-	/**
-	 * Hold the line being timed in the middle of the list. Marking lines is a
-	 * heads-down job at tempo — the eye stays in one place and the lyrics move
-	 * past it, rather than chasing the highlight down to the bottom edge.
-	 *
-	 * Measured off rects rather than offsetTop, which would be relative to
-	 * whichever ancestor happens to be positioned.
-	 */
+	/** Hold the line being timed in the middle of the list. Measured off rects rather
+	 * than offsetTop, which would be relative to whichever ancestor is positioned. */
 	$effect(() => {
 		const i = activeIndex;
 		const list = linesEl;
@@ -125,12 +117,8 @@
 		list.scrollTo({ top: list.scrollTop + offset, behavior: "smooth" });
 	});
 
-	/**
-	 * Open onto whatever the lyrics lane already holds, so the modal and the
-	 * timeline show the same lines — including timings nudged by dragging clips.
-	 * A sync left half-done survives instead: closing mid-pass to look at
-	 * something shouldn't throw the pass away.
-	 */
+	/** Open onto whatever the lyrics lane already holds, so the modal and timeline
+	 * show the same lines, including timings nudged by dragging clips. */
 	function seedFromTimeline() {
 		if (phase === "sync" && !allTimed) return;
 		if (!existing || existing.lines.length === 0) return;
@@ -156,12 +144,8 @@
 		onPlay();
 	}
 
-	/**
-	 * The earliest a line may be marked: clear of the line above it. Lines are
-	 * applied in order and never overlap, so a mark placed behind its
-	 * predecessor would be silently pushed forward on apply — the list would
-	 * stop matching the timeline. Held here instead, where it is visible.
-	 */
+	/** The earliest a line may be marked: clear of the line above it, since lines are
+	 * applied in order and a mark behind its predecessor would be pushed forward. */
 	function earliestFor(i: number): number {
 		for (let k = i - 1; k >= 0; k--) {
 			const t = timings[k];
@@ -188,12 +172,8 @@
 		onSeek(Math.max(spanStart, prev));
 	}
 
-	/**
-	 * Re-time from line `i`: everything from there on is cleared and the playhead
-	 * jumps back ahead of that line's spot. The lead-in never reaches past the
-	 * line above — rewinding behind a line that keeps its timing only invites a
-	 * mark that can't be honoured.
-	 */
+	/** Re-time from line `i`: everything from there on is cleared and the playhead
+	 * jumps back ahead of that line's spot. */
 	function retimeFrom(i: number) {
 		if (i < 0 || i >= lines.length) return;
 		const anchor = timings[i] ?? timings[i - 1] ?? spanStart;
@@ -216,9 +196,8 @@
 		else onPlay();
 	}
 
-	/** Write the lines into the lane and stay put, so the result is visible and
-	 * still nudgeable. The lane's own clips go in as `previous`, which is what
-	 * keeps per-line effect chains alive across a re-apply. */
+	/** Write the lines into the lane and stay put. The lane's own clips go in as
+	 * `previous`, keeping per-line effect chains alive. */
 	function apply() {
 		if (!allTimed) return;
 		onApply(
@@ -236,8 +215,7 @@
 		if (!open) return;
 		if (isTextEntryTarget(e.target)) return;
 		if (phase === "edit") {
-			// Keep the app's global shortcuts from firing under the modal; the
-			// lyrics textarea already owns every key while it is focused.
+			// Keep the app's global shortcuts from firing under the modal.
 			if (e.key === "Escape") {
 				e.stopPropagation();
 				onClose();
@@ -269,8 +247,7 @@
 			e.stopPropagation();
 			togglePlay();
 		} else if (e.ctrlKey || e.metaKey) {
-			// Undo/redo/save belong to the app; mid-sync they'd rewrite the
-			// timeline under the modal.
+			// Undo/redo/save belong to the app; mid-sync they'd rewrite the timeline.
 			if (key === "z" || key === "y" || key === "s") {
 				e.preventDefault();
 				e.stopPropagation();
@@ -546,9 +523,8 @@
 		margin: 0;
 		overflow-y: auto;
 		height: var(--lines-height);
-		/* Half a box of slack at each end, so the first and last lines can sit in
-		   the middle like every other one — without it the highlight starts at
-		   the top edge and travels, which is the thing being avoided. */
+		/* Half a box of slack at each end, so the first and last lines can sit in the
+		   middle like every other one. */
 		padding: calc((var(--lines-height) - var(--line-height)) / 2) 0;
 		border: 1px solid var(--line);
 		border-radius: 6px;

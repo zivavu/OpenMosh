@@ -10,17 +10,10 @@ import {
 } from "./app";
 import { GREEN, RED } from "./fixtures";
 
-/**
- * Exporting the timeline to a file.
- *
- * The one irreversible thing the app does, and the last place a user finds out
- * something is wrong. Every layer is live here — the WebGL chain, the encoder,
- * the muxer and the audio path — so these are slow, and worth it: nothing
- * below this level can tell you the output was playable.
- */
+/** Exporting the timeline to a file. The one irreversible thing the app does, and the last
+ * place a user finds out something is wrong: every layer is live here, so these are slow. */
 
-/** Short on purpose: the export renders every frame through a software
- * rasterizer, so the track's length is most of the runtime here. */
+/** Short on purpose: the export renders every frame through a software rasterizer. */
 const TRACK_SECONDS = 3;
 
 async function exportAt(page: Page, fps: "15" | "24" = "15") {
@@ -104,16 +97,14 @@ test("runs as long as the song it was cut to", async ({ page }) => {
 	const file = await await exportAt(page);
 	const played = await probe(page, (await file.path())!);
 	expect(played).not.toBeNull();
-	// A frame or so of slack at each end; what this is really guarding is an
-	// export that stops early or runs away.
+	// A frame or so of slack at each end; this guards an export that stops early or runs away.
 	expect(played!.duration).toBeGreaterThan(TRACK_SECONDS - 0.5);
 	expect(played!.duration).toBeLessThan(TRACK_SECONDS + 1);
 });
 
 test("exports a timeline that was cut and moshed", async ({ page }) => {
-	// The plain export above renders one clean source end to end. This one has
-	// the segment machinery in the loop: a cut, a rolled chain on one side of
-	// it, and a source swap at the boundary.
+	// The plain export above renders one clean source end to end. This one has the segment
+	// machinery in the loop: a cut, a rolled chain on one side, a source swap at the boundary.
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],

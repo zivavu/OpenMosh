@@ -11,19 +11,7 @@ export interface MediaLayerDriverOptions {
 	onUpload?: () => void;
 }
 
-/**
- * Uploads the frame each visible media layer wants, keyed by lane. The lane's
- * clip states where in its source it is, so what a layer shows at a given
- * master time never depends on how playback got there — and matches what the
- * export writes.
- *
- * Video layers get a sampler each, keyed by lane *and* source rather than by
- * source alone. A sampler decodes sequentially from wherever it is and drops
- * overlapping `at()` calls, so two lanes sharing one would each be handed the
- * other's position. The source is
- * in the key too because a lane's clips can name different videos, and a lane
- * that kept one decoder would reopen it at every cut.
- */
+/** Uploads the frame each visible media layer wants, keyed by lane. */
 export class MediaLayerDriver {
 	#registry: SequenceSourceRegistry;
 	#getRenderer: () => GlRenderer | null;
@@ -54,12 +42,7 @@ export class MediaLayerDriver {
 			}
 
 			if (src.kind === "image") {
-				// Still media only re-uploads when the lane's source changes; a photo
-				// layer costs nothing per frame after the first. Checked against the
-				// renderer, not this latch alone: it collects a lane's texture as soon
-				// as the lane stops resolving — hidden, or simply between two clips —
-				// and a latch that only tracked the source id would then skip the
-				// upload that has to bring it back.
+				// Still media only re-uploads when the lane's source changes.
 				if (
 					this.#uploaded.get(layer.key) === src.id &&
 					renderer?.hasLayerTexture(layer.key)
@@ -83,13 +66,10 @@ export class MediaLayerDriver {
 			const { key } = layer;
 			const wanted = src.id;
 			this.#uploaded.set(key, wanted);
-			// Non-blocking: a lane whose decoder has nothing new keeps the frame
-			// already on its texture rather than making every other lane wait on it.
+			// Non-blocking: a lane whose decoder has nothing new keeps its current frame.
 			void sampler.at(layer.sourceTime, false).then((frame) => {
 				if (!frame) return;
-				// A request that outlived the clip it was made for: the sampler blocks
-				// across frames for the first frame after a seek, and the lane can
-				// reach the next clip — or stop resolving — before it lands.
+				// A request that outlived the clip it was made for.
 				if (!this.#disposed && this.#uploaded.get(key) === wanted) {
 					this.#getRenderer()?.updateLayerFrame(key, frame);
 					this.#onUpload?.();
@@ -97,25 +77,13 @@ export class MediaLayerDriver {
 				frame.close();
 			});
 		}
-		// Lanes that stopped asking for frames drop theirs; the renderer collects
-		// the textures on its own once they leave the resolved set. The decoders
-		// are kept: a lane between two clips is about to want its own back, and
-		// reopening one mid-playback stalls the frame it happens on.
+		// Lanes that stopped asking for frames drop theirs; decoders are kept for a later clip.
 		for (const key of this.#uploaded.keys()) {
 			if (!layers.some((l) => l.key === key)) this.#uploaded.delete(key);
 		}
 	}
 
-	/**
-	 * This lane's decoder for this source, opening one as needed. Kept once open:
-	 * a lane that cuts back and forth between two videos would otherwise pay a
-	 * decoder open on every clip edge. The per-lane cap is what stops a lane with
-	 * a dozen video clips from holding a dozen decoders.
-	 *
-	 * The decoder is pinned to the file it was opened on: a proxy landing
-	 * mid-playback retires it, so the lane doesn't spend the rest of the session
-	 * on the 4×-costlier original.
-	 */
+	/** This lane's decoder for this source, opening one as needed. */
 	#samplerFor(
 		key: string,
 		sourceId: string,
@@ -145,8 +113,7 @@ export class MediaLayerDriver {
 			}
 			this.#samplers.set(id, { sampler, file });
 			this.#evict(key);
-			// A paused canvas only redraws when told to; without this the lane
-			// stays blank until playback's own loop asks again.
+			// A paused canvas only redraws when told to.
 			this.#onUpload?.();
 		});
 		return undefined;
@@ -183,11 +150,7 @@ export class MediaLayerDriver {
 	}
 }
 
-/**
- * How many decoders one lane may hold at once. A lane shows one clip at a time,
- * so anything past the handful it cuts between is memory spent on video the
- * playhead left behind.
- */
+/** How many decoders one lane may hold at once. */
 const MAX_LANE_SAMPLERS = 4;
 
 /** Lane ids are generated with no "|" in them, so this splits cleanly. */
