@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import { X, Github, Check } from "lucide-svelte";
 	import ButtonGroup from "./ButtonGroup.svelte";
 	import { closeFeedback } from "./feedback.svelte";
@@ -62,8 +63,15 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="feedback-overlay" onclick={closeFeedback} onkeydown={onKeydown}>
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="feedback-modal" onclick={(e) => e.stopPropagation()}>
+	<div
+		class="feedback-modal"
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+		aria-label="Send feedback"
+		{@attach modalDialog()}
+		onclick={(e) => e.stopPropagation()}
+	>
 		<div class="header">
 			<span class="title">Send feedback</span>
 			<button class="close-btn" onclick={closeFeedback} title="Close">

@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
 		Crop,
@@ -1196,9 +1197,15 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="edit-overlay" onclick={onClose}>
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="edit-dialog" onclick={(e) => e.stopPropagation()}>
+	<div
+		class="edit-dialog"
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+		aria-label="Edit media"
+		{@attach modalDialog()}
+		onclick={(e) => e.stopPropagation()}
+	>
 		<div class="dialog-head">
 			<div class="dialog-title">
 				<span class="rack-label">Edit media</span>

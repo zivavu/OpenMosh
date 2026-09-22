@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	interface Props {
 		title: string;
 		message: string;
@@ -21,7 +22,6 @@
 	}: Props = $props();
 
 	let confirmBtnEl = $state<HTMLButtonElement | undefined>(undefined);
-	let dialogEl = $state<HTMLDivElement | undefined>(undefined);
 
 	$effect(() => {
 		confirmBtnEl?.focus();
@@ -31,21 +31,6 @@
 		if (e.key === "Escape") {
 			e.preventDefault();
 			onCancel();
-			return;
-		}
-		// Two focusable buttons, so a manual wrap is cheaper than a trap helper.
-		if (e.key === "Tab" && dialogEl) {
-			const btns = [...dialogEl.querySelectorAll("button")];
-			if (btns.length === 0) return;
-			const first = btns[0];
-			const last = btns[btns.length - 1];
-			if (e.shiftKey && document.activeElement === first) {
-				e.preventDefault();
-				last.focus();
-			} else if (!e.shiftKey && document.activeElement === last) {
-				e.preventDefault();
-				first.focus();
-			}
 		}
 	}
 </script>
@@ -57,7 +42,7 @@
 <div class="confirm-overlay" onclick={onCancel}>
 	<div
 		class="confirm-dialog"
-		bind:this={dialogEl}
+		{@attach modalDialog()}
 		role="alertdialog"
 		aria-modal="true"
 		aria-label={title}

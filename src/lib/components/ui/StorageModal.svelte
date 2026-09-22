@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import Checkbox from "./Checkbox.svelte";
 	interface Props {
 		onClose: () => void;
@@ -359,6 +360,7 @@
 		aria-modal="true"
 		aria-label="Storage"
 		tabindex="-1"
+		{@attach modalDialog()}
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="header">

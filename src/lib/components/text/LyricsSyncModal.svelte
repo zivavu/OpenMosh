@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import {
 		ChevronLeft,
 		ChevronRight,
@@ -269,8 +270,10 @@
 	class="lyrics-overlay"
 	class:hidden={!open}
 	role="dialog"
+	aria-modal="true"
 	aria-label="Sync lyrics"
 	tabindex="-1"
+	{@attach open && modalDialog()}
 	bind:this={panelEl}
 	onkeydowncapture={onKeydown}
 >

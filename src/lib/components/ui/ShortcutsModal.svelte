@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import { MousePointer2, X } from "lucide-svelte";
 	import { onMount } from "svelte";
 	import { pushModalKeyboard } from "../../modal-keyboard";
@@ -127,8 +128,15 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="overlay" onclick={onClose}>
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="sheet" onclick={(e) => e.stopPropagation()}>
+	<div
+		class="sheet"
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+		aria-label="Keyboard shortcuts"
+		{@attach modalDialog()}
+		onclick={(e) => e.stopPropagation()}
+	>
 		<nav class="rail">
 			<span class="rail-title rack-label">Shortcuts</span>
 			{#each groups as g, i (g.title)}

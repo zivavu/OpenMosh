@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import type { Snippet } from "svelte";
 	import { X } from "lucide-svelte";
 	import { onMount } from "svelte";
@@ -41,6 +42,7 @@
 		aria-modal="true"
 		aria-label={label ?? title}
 		tabindex="-1"
+		{@attach modalDialog()}
 		onclick={(e) => e.stopPropagation()}
 	>
 		<div class="head">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import {
 		ChevronLeft,
 		ChevronRight,
@@ -116,9 +117,15 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div class="lb-backdrop" class:lb-closing={closing} onclick={close}>
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="lb-content" onclick={(e) => e.stopPropagation()}>
+		<div
+			class="lb-content"
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
+			aria-label={item.name}
+			{@attach modalDialog()}
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="lb-topbar">
 				<span class="lb-info">
 					{#if items.length > 1}{index + 1} / {items.length}&nbsp;·&nbsp;{/if}{item.name}
