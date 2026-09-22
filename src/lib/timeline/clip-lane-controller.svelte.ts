@@ -290,7 +290,8 @@ export class ClipLaneController<
 
 	/** Action for a lane's track element: registers it with the shared axis,
 	 * as a split target for the S shortcut, and its clip edges as snap targets
-	 * for drags on any lane. */
+	 * for drags on any lane. An action, not an attachment, for the reason
+	 * `TimelineStackState.lane` is. */
 	laneTrack = (node: HTMLElement, laneId: string) => {
 		this.trackEl = node;
 		const shared = this.stack.lane(node, laneId);

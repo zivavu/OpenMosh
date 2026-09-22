@@ -1789,10 +1789,10 @@
 <div
 	class="editor"
 	class:drag-over={dragging}
-	use:fileDrop={{
+	{@attach fileDrop({
 		onDraggingChange: (d) => (dragging = d),
 		onDrop: handleDroppedFiles,
-	}}
+	})}
 >
 	<TrackLibrary
 		activeTrackName={audio.trackFile?.name ?? null}

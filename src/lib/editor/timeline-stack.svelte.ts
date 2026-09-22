@@ -305,6 +305,9 @@ export class TimelineStackState {
 	 * axis measures against and gives it the shared wheel behaviour, so
 	 * scrolling over any lane zooms every lane.
 	 */
+	// Stays an action rather than an attachment: registration reads and writes
+	// `laneWidth`, so as an effect it would retrigger itself and re-observe the
+	// element on every resize.
 	lane = (node: HTMLElement | SVGElement, laneId?: string) => {
 		const el = node as HTMLElement;
 		this.#trackEls.add(el);
