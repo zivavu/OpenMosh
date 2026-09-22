@@ -15,7 +15,7 @@ OpenMosh uses [bun](https://bun.sh) as its package manager and runtime.
 ```bash
 bun install        # Install dependencies
 bun dev            # Start dev server (Vite)
-bun build          # Production build
+bun run build      # Production build
 bun preview        # Preview the production build
 bun check          # TypeScript + Svelte type-check
 bun test           # Unit suite (bun:test)
