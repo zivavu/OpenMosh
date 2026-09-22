@@ -10,6 +10,7 @@
 	import { formatTime } from "../../audio/audio-utils";
 	import { tryGetTimelineStack } from "../../editor/timeline-stack.svelte";
 	import SpeedControl from "./SpeedControl.svelte";
+	import VolumeSlider from "./VolumeSlider.svelte";
 
 	interface Props {
 		label: string;
@@ -335,15 +336,10 @@
 				<span class="volume-icon" title="Volume">
 					<VolumeIcon size={13} />
 				</span>
-				<input
-					type="range"
-					class="volume-slider lane-volume"
-					min="0"
-					max="1"
-					step="0.01"
+				<VolumeSlider
+					fill
 					value={outputVolume}
-					oninput={(e) =>
-						onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+					oninput={onVolumeChange}
 					title="Volume: {Math.round(outputVolume * 100)}%"
 				/>
 			{/if}
@@ -385,15 +381,9 @@
 			<span class="volume-icon" title="Volume">
 				<VolumeIcon size={13} />
 			</span>
-			<input
-				type="range"
-				class="volume-slider"
-				min="0"
-				max="1"
-				step="0.01"
+			<VolumeSlider
 				value={outputVolume}
-				oninput={(e) =>
-					onVolumeChange(+(e.currentTarget as HTMLInputElement).value)}
+				oninput={onVolumeChange}
 				title="Volume: {Math.round(outputVolume * 100)}%"
 			/>
 		{/if}
@@ -585,46 +575,7 @@
 		gap: 0.4rem;
 	}
 
-	.volume-slider.lane-volume {
-		flex: 1;
-		width: auto;
-		min-width: 28px;
-	}
-
-	.volume-slider {
-		width: 60px;
-		height: 4px;
-		appearance: none;
-		background: rgba(255, 255, 255, 0.07);
-		border-radius: 2px;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-	.volume-slider::-webkit-slider-thumb {
-		appearance: none;
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		cursor: pointer;
-	}
-	.volume-slider::-moz-range-thumb {
-		width: 9px;
-		height: 13px;
-		border-radius: 4px;
-		background: var(--text-2);
-		border: none;
-		cursor: pointer;
-	}
-	.volume-slider:hover::-webkit-slider-thumb {
-		background: var(--text);
-	}
-	.volume-slider:hover::-moz-range-thumb {
-		background: var(--text);
-	}
-
 	@media (max-width: 800px) {
-		.volume-slider,
 		.volume-icon {
 			display: none;
 		}

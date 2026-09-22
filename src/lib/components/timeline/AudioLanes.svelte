@@ -14,6 +14,7 @@
 	import ClipLaneGutter from "./ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "./LaneDeleteDialog.svelte";
 	import LaneWaveform from "./LaneWaveform.svelte";
+	import VolumeSlider from "../ui/VolumeSlider.svelte";
 
 	const LANE_HEIGHT = 30;
 	const LANE_FOLDED_HEIGHT = 14;
@@ -169,23 +170,17 @@
 				>
 					<Activity size={12} />
 				</button>
-				<input
-					type="range"
-					class="lane-gain"
-					min="0"
-					max={MAX_GAIN}
-					step="0.01"
+				<VolumeSlider
+					width="40px"
 					value={lane.gain}
+					max={MAX_GAIN}
 					title="Lane volume: {Math.round(
 						lane.gain * 100,
 					)}% — double-click to reset"
-					aria-label="{lane.name} volume"
-					oninput={(e) => {
+					ariaLabel="{lane.name} volume"
+					oninput={(v) => {
 						onBeforeEdit?.(`audio-lane-gain-${lane.id}`);
-						ctrl.update(lane.id, (l) => ({
-							...l,
-							gain: +e.currentTarget.value,
-						}));
+						ctrl.update(lane.id, (l) => ({ ...l, gain: v }));
 					}}
 					ondblclick={() => ctrl.setLane(lane.id, "gain", 1)}
 				/>
@@ -349,15 +344,6 @@
 
 	.lane-drives.on {
 		color: var(--mosh);
-	}
-
-	/* Narrow: the name keeps the rest of the gutter. */
-	.lane-gain {
-		flex-shrink: 0;
-		width: 40px;
-		height: 12px;
-		margin: 0 2px;
-		accent-color: var(--live);
 	}
 
 	.audio-bar {
