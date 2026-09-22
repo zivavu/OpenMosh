@@ -35,7 +35,7 @@ export type CustomRender = (
 	mediaLayers: ResolvedMediaLayer[],
 ) => void;
 
-import type { StreamTargetChunk } from "mediabunny";
+import type { StreamTargetChunk, VideoCodec } from "mediabunny";
 import type { EffectInstance } from "./effects";
 import type { GlRenderer } from "./gl/renderer";
 
@@ -349,13 +349,13 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	// Prefer a hardware encoder (VP9/AV1 on most modern GPUs): far faster than software VP8.
 	const hwCandidates = (["vp9", "av1"] as const).filter((c) =>
-		containerCodecs.includes(c as any),
+		containerCodecs.includes(c),
 	);
-	let selectedCodec: string | null = null;
+	let selectedCodec: VideoCodec | null = null;
 	let hardware = false;
 	for (const c of hwCandidates) {
 		if (
-			await mb.canEncodeVideo(c as any, {
+			await mb.canEncodeVideo(c, {
 				width: canvas.width,
 				height: canvas.height,
 				bitrate,
@@ -369,10 +369,10 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	}
 
 	const swCandidates = (["vp8", "vp9", "av1"] as const).filter((c) =>
-		containerCodecs.includes(c as any),
+		containerCodecs.includes(c),
 	);
 	if (!selectedCodec) {
-		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates as any, {
+		selectedCodec = await mb.getFirstEncodableVideoCodec(swCandidates, {
 			width: canvas.width,
 			height: canvas.height,
 			bitrate,
@@ -444,7 +444,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			: null;
 		const abortOrNever = abortPromise ?? never;
 		const videoSource = new mb.CanvasSource(canvas, {
-			codec: selectedCodec as any,
+			codec: selectedCodec,
 			bitrate,
 			...(hardware
 				? { hardwareAcceleration: "prefer-hardware" as const }
@@ -602,19 +602,16 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		const supportedAudio = outputFormat.getSupportedAudioCodecs();
 		const preferredAudio = ["opus", "vorbis"] as const;
 		const audioCandidates = preferredAudio.filter((c) =>
-			supportedAudio.includes(c as any),
+			supportedAudio.includes(c),
 		);
-		const audioCodec = await mb.getFirstEncodableAudioCodec(
-			audioCandidates as any,
-			{
-				numberOfChannels: audioBufferForMux.numberOfChannels,
-				sampleRate: audioBufferForMux.sampleRate,
-				bitrate: 256_000,
-			},
-		);
+		const audioCodec = await mb.getFirstEncodableAudioCodec(audioCandidates, {
+			numberOfChannels: audioBufferForMux.numberOfChannels,
+			sampleRate: audioBufferForMux.sampleRate,
+			bitrate: 256_000,
+		});
 		if (audioCodec) {
 			audioSource = new mb.AudioBufferSource({
-				codec: audioCodec as any,
+				codec: audioCodec,
 				bitrate: 256_000,
 			});
 			output.addAudioTrack(audioSource);

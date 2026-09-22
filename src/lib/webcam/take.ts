@@ -20,9 +20,7 @@ export async function startTake(stream: MediaStream): Promise<Take> {
 	const format = new mb.WebMOutputFormat();
 	const containerCodecs = format.getSupportedVideoCodecs();
 	const codec = await mb.getFirstEncodableVideoCodec(
-		(["vp9", "vp8", "av1"] as const).filter((c) =>
-			containerCodecs.includes(c as any),
-		) as any,
+		(["vp9", "vp8", "av1"] as const).filter((c) => containerCodecs.includes(c)),
 		{ width, height, bitrate: TAKE_BITRATE },
 	);
 	if (!codec) throw new Error("This browser can't encode WEBM video.");
@@ -30,7 +28,7 @@ export async function startTake(stream: MediaStream): Promise<Take> {
 	const target = new mb.BufferTarget();
 	const output = new mb.Output({ format, target });
 	const source = new mb.MediaStreamVideoTrackSource(track, {
-		codec: codec as any,
+		codec,
 		bitrate: TAKE_BITRATE,
 		latencyMode: "realtime",
 	});
