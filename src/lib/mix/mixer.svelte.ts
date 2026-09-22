@@ -7,7 +7,7 @@ import { resetAutoRange } from "../audio/auto-range";
 import { resetSpectrumRange } from "../audio/spectrum-range";
 import type { SpectrumData } from "../types";
 import type { MixSegment } from "./plan";
-import { scheduleMix, stopNodes } from "./schedule";
+import { scheduleMix, stopNodes, type ScheduledNode } from "./schedule";
 import type { SourceAudioBank } from "./source-audio.svelte";
 
 /** Scheduling lead: sound asked to start "now" would clip its first few ms. */
@@ -58,7 +58,7 @@ export class SequenceMixer {
 	#ctx: AudioContext | null = null;
 	#master: GainNode | null = null;
 	#drive: GainNode | null = null;
-	#nodes: AudioBufferSourceNode[] = [];
+	#nodes: ScheduledNode[] = [];
 	/** Timeline time at context time `#anchorCtx`, while playing. */
 	#anchorTime = 0;
 	#anchorCtx = 0;
@@ -104,10 +104,20 @@ export class SequenceMixer {
 		});
 	}
 
-	/** Swap in a new plan; a playing mix picks it up where it is. */
+	/** Swap in a new plan; a playing mix picks it up where it is. A change of volume
+	 * alone ramps the sound already playing rather than restarting it. */
 	setPlan(plan: MixSegment[]): void {
+		const before = this.plan;
 		this.plan = plan;
-		if (this.playing) this.#reschedule();
+		if (!this.playing) return;
+		const ctx = this.#ctx;
+		if (ctx && sameButGain(before, plan)) {
+			for (const { trim, index } of this.#nodes) {
+				trim.gain.setTargetAtTime(plan[index].gain, ctx.currentTime, 0.015);
+			}
+			return;
+		}
+		this.#reschedule();
 	}
 
 	get trackDuration(): number {
@@ -164,10 +174,12 @@ export class SequenceMixer {
 		return this.#anchorTime + (performance.now() - this.#anchorWall) / 1000;
 	}
 
-	#reschedule(): void {
+	/** Stop and schedule again. `fromNow` starts the clock at its current reading
+	 * after the lead (play, seek); otherwise it runs on through it, unbroken. */
+	#reschedule(fromNow = false): void {
 		const ctx = this.#ctx;
 		if (!ctx) return;
-		const t = this.#now();
+		const t = this.#now() + (fromNow ? 0 : LEAD);
 		stopNodes(this.#nodes);
 		this.#anchorTime = t;
 		this.#anchorCtx = ctx.currentTime + LEAD;
@@ -203,7 +215,7 @@ export class SequenceMixer {
 		this.#anchorWall = performance.now();
 		this.currentTime = t;
 		this.playing = true;
-		this.#reschedule();
+		this.#reschedule(true);
 		this.#raf = requestAnimationFrame(this.#frame);
 	}
 
@@ -229,7 +241,7 @@ export class SequenceMixer {
 			this.#anchorTime = clamped;
 			this.#anchorCtx = this.#ctx.currentTime;
 			this.#anchorWall = performance.now();
-			this.#reschedule();
+			this.#reschedule(true);
 		}
 		resetAutoRange();
 		resetSpectrumRange();
@@ -260,4 +272,24 @@ export class SequenceMixer {
 		this.#ctx = null;
 		this.analyserNode = null;
 	}
+}
+
+/** Two plans alike in everything the scheduled nodes are built from, bar volume. */
+function sameButGain(a: MixSegment[], b: MixSegment[]): boolean {
+	if (a.length !== b.length) return false;
+	return a.every((x, i) => {
+		const y = b[i];
+		return (
+			x.sourceId === y.sourceId &&
+			x.drives === y.drives &&
+			x.start === y.start &&
+			x.end === y.end &&
+			x.offset === y.offset &&
+			x.rate === y.rate &&
+			x.fade.start === y.fade.start &&
+			x.fade.end === y.fade.end &&
+			x.fade.fadeIn === y.fade.fadeIn &&
+			x.fade.fadeOut === y.fade.fadeOut
+		);
+	});
 }

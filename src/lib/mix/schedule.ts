@@ -7,6 +7,15 @@ export interface MixBuses {
 	drive: AudioNode | null;
 }
 
+/** One scheduled segment. `trim` carries its volume apart from the fade, so a
+ * volume change can reach sound that's already playing. */
+export interface ScheduledNode {
+	node: AudioBufferSourceNode;
+	trim: GainNode;
+	/** Index into the plan it came from. */
+	index: number;
+}
+
 /**
  * Put the plan's sound between timeline `from` and `to` onto `ctx`, with timeline
  * `from` landing at context time `ctxAt`. Returns the nodes, so they can be stopped.
@@ -19,10 +28,10 @@ export function scheduleMix(
 	from: number,
 	to: number,
 	ctxAt: number,
-): AudioBufferSourceNode[] {
-	const nodes: AudioBufferSourceNode[] = [];
+): ScheduledNode[] {
+	const nodes: ScheduledNode[] = [];
 	const when = (t: number) => ctxAt + (t - from);
-	for (const whole of plan) {
+	for (const [index, whole] of plan.entries()) {
 		const seg = trimSegment(whole, from, to);
 		if (!seg) continue;
 		const heard = buses.mix !== null;
@@ -34,23 +43,26 @@ export function scheduleMix(
 		const node = ctx.createBufferSource();
 		node.buffer = buffer;
 		node.playbackRate.value = seg.rate;
-		const gain = ctx.createGain();
-		const envelope = segmentEnvelope(seg);
-		gain.gain.setValueAtTime(envelope[0]?.gain ?? seg.gain, when(seg.start));
+		const fade = ctx.createGain();
+		const envelope = segmentEnvelope({ ...seg, gain: 1 });
+		fade.gain.setValueAtTime(envelope[0]?.gain ?? 1, when(seg.start));
 		for (const point of envelope.slice(1)) {
-			gain.gain.linearRampToValueAtTime(point.gain, when(point.t));
+			fade.gain.linearRampToValueAtTime(point.gain, when(point.t));
 		}
-		node.connect(gain);
-		if (heard) gain.connect(buses.mix!);
-		if (drives) gain.connect(buses.drive!);
+		const trim = ctx.createGain();
+		trim.gain.value = seg.gain;
+		node.connect(fade);
+		fade.connect(trim);
+		if (heard) trim.connect(buses.mix!);
+		if (drives) trim.connect(buses.drive!);
 		node.start(when(seg.start), seg.offset, (seg.end - seg.start) * seg.rate);
-		nodes.push(node);
+		nodes.push({ node, trim, index });
 	}
 	return nodes;
 }
 
-export function stopNodes(nodes: AudioBufferSourceNode[]): void {
-	for (const node of nodes) {
+export function stopNodes(nodes: ScheduledNode[]): void {
+	for (const { node } of nodes) {
 		try {
 			node.stop();
 		} catch {
