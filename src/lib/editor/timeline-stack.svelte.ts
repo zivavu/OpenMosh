@@ -241,7 +241,7 @@ export class TimelineStackState {
 			this.laneWidth = el.getBoundingClientRect().width;
 		}
 		// Any touch marks the lane a bare split shortcut aims at.
-		const markUsed = (e: PointerEvent) => {
+		const markUsed = () => {
 			if (laneId) this.markLaneUsed(laneId);
 		};
 		el.addEventListener("pointerdown", markUsed, true);

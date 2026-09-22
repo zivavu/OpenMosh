@@ -40,10 +40,7 @@
 	import { addTrack } from "../../audio/track-library";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
-	import {
-		clearEffects as clearEffectsFn,
-		generateMosh,
-	} from "../../editor/mosh";
+	import { clearEffects as clearEffectsFn } from "../../editor/mosh";
 	import { executeRecording } from "../../editor/recording";
 	import { createRecordingState } from "../../editor/recording-state.svelte";
 	import { createMoshSession } from "../../editor/mosh-session";
@@ -61,7 +58,6 @@
 		restoreEffects,
 		setVolumeLink,
 		type EffectInstance,
-		type FreqBand,
 		type Preset,
 	} from "../../effects";
 	import {
@@ -267,7 +263,6 @@
 
 	let isSequenceMode = $derived(mode === "sequence");
 	let dragging = $state(false);
-	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
 	// Sequence mode never plays `file`; media comes from the pool.
 	let isVideo = $derived(!isSequenceMode && file.type.startsWith("video/"));
@@ -1775,7 +1770,6 @@
 		},
 	});
 	const endPanelBurst = () => panelBurst.end();
-	const cancelPanelBurst = () => panelBurst.cancel();
 	const panelBeforeEdit = (coalesceKey?: string) =>
 		panelBurst.beforeEdit(coalesceKey);
 
@@ -4002,7 +3996,6 @@
 	{/snippet}
 
 	<MobileSheet
-		bind:this={_mobileSheetRef}
 		topPanel={selectedMediaClip || selectedTextClip ? layerPanel : undefined}
 		settingsLabel="Mosh"
 		topPanelLabel={selectedMediaClip ? "Media clip" : "Text clip"}

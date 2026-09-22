@@ -112,7 +112,6 @@ const REACQUIRE_S = 0.45; // search animation length
  * freezes boxes and reports signal loss instead of chasing garbage. */
 export function trackBoxes(
 	state: TrackingState,
-	params: TrackingParams,
 	lum: Float32Array,
 	gw: number,
 	gh: number,
@@ -302,7 +301,6 @@ const STATUS: Record<BoxState, string> = {
 /** Resolve every persistent box into a drawable frame (motion + labels). */
 export function resolveFrame(
 	state: TrackingState,
-	params: TrackingParams,
 	time: number,
 	imgW: number,
 	imgH: number,

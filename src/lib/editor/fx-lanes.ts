@@ -133,7 +133,6 @@ function activeFxParts(
 }
 
 const EMPTY: EffectInstance[] = [];
-const NO_CLIPS: FxClip[] = [];
 const NO_PARTS: { lane: FxLane; clip: FxClip }[] = [];
 const NO_LAYERS: FxLayer[] = [];
 

@@ -8,7 +8,6 @@ import {
 import {
 	analyzeFrames,
 	applyFrameAudioToEffects,
-	decodeAudioFile,
 	FFT_SIZE,
 	type FrameAudioData,
 	loopAudioBuffer,

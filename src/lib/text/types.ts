@@ -13,7 +13,6 @@ import type { TextOverlayBlendMode } from "../text-overlay/types";
 import {
 	clipFadeWeight,
 	fitClipsToDuration,
-	type TimelineClip,
 } from "../timeline/clips";
 
 export type TextAlign = "left" | "center" | "right";

@@ -1736,7 +1736,7 @@ export class GlRenderer {
 		if (!this.salBuf) return;
 		const lum = lumFromRGBA(this.salBuf, this.salW * this.salH);
 		state.salPoints = computeSaliency(lum, this.salW, this.salH, params);
-		trackBoxes(state, params, lum, this.salW, this.salH, time);
+		trackBoxes(state, lum, this.salW, this.salH, time);
 	}
 
 	/** Blocking analyze: draw, readPixels, score and track. Only for the first
@@ -2284,7 +2284,7 @@ export class GlRenderer {
 		syncBoxes(state, params, time);
 		const trackingW = Math.max(1, Math.round(this.imgW * 0.5));
 		const trackingH = Math.max(1, Math.round(this.imgH * 0.5));
-		const frame = resolveFrame(state, params, time, trackingW, trackingH);
+		const frame = resolveFrame(state, time, trackingW, trackingH);
 
 		// The 2D-canvas redraw and texture upload are the expensive part. Render at half
 		// resolution (plenty for thin HUD strokes) and skip both when the HUD is identical.

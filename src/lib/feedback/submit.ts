@@ -60,7 +60,7 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<void> {
 		from_name: "OpenMosh",
 		kind: KIND_LABELS[payload.kind],
 		email: payload.email || undefined,
-		message: `${payload.message}\n\n---\n${collectContext()}`,
+		message: `${payload.message}\n\n---\n${collectContext()}\n${describeChain()}`,
 	};
 
 	let res: Response;

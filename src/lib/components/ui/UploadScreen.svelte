@@ -254,7 +254,6 @@
 		projectNames = readProjectNames();
 	}
 	let dragging = $state(false);
-	let fileInput: HTMLInputElement;
 
 	const AUDIO_TYPES = [
 		"audio/mpeg",
@@ -442,10 +441,6 @@
 		input.value = "";
 	}
 
-	function openFilePicker() {
-		fileInput.click();
-	}
-
 	function getAcceptTypes() {
 		return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
 	}
@@ -551,7 +546,6 @@
 			<div class="load-row">
 				<label class="load-btn">
 					<input
-						bind:this={fileInput}
 						type="file"
 						accept={getAcceptTypes()}
 						multiple={getIsMultiple()}

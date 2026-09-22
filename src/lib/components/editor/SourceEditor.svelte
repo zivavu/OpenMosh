@@ -28,7 +28,6 @@
 		isFullCrop,
 		KEY_NEAR,
 		keyCoverage,
-		keyframeAt,
 		MASK_MAX,
 		putKeyframe,
 		removeKeyframe,

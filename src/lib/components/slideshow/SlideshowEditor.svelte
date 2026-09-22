@@ -1526,7 +1526,6 @@
 		}
 	}
 
-	let _mobileSheetRef: MobileSheet | undefined = undefined;
 
 	/** The timeline's shared axis, once mounted: the C shortcut fires from the window. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
@@ -1847,7 +1846,6 @@
 	{/snippet}
 
 	<MobileSheet
-		bind:this={_mobileSheetRef}
 		topPanel={selectedTextClip ? textPanel : undefined}
 		topPanelLabel="Text clip"
 	>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { RefreshCw, Sparkles } from "lucide-svelte";
-	import { onDestroy, onMount, untrack } from "svelte";
+	import { onDestroy, untrack } from "svelte";
 	import {
 		GENERATED_SHORT_SIDE,
 		PALETTES,

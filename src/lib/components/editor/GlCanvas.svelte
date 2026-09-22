@@ -17,7 +17,6 @@
 	} from "../../editor/layer-pick";
 	import {
 		clampMove,
-		MIN_SCALE,
 		scaleFromHandle,
 	} from "../../editor/layer-drag";
 	import { onFontsChanged } from "../../text-overlay";
