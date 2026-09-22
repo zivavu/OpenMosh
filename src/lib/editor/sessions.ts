@@ -31,7 +31,7 @@ export interface SavedSession {
 }
 
 /** What identifies a resumable edit: the song whenever there is one. */
-export function sessionKey(
+function sessionKey(
 	mode: SessionMode,
 	files: File[],
 	trackId?: string | null,

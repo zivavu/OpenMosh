@@ -9,7 +9,7 @@ export const MIN_CLIP_LENGTH = 0.05;
 const LENGTH_EPSILON = 1e-9;
 
 /** Whether a span is long enough to keep, rounding aside. */
-export function isKeepableLength(start: number, end: number): boolean {
+function isKeepableLength(start: number, end: number): boolean {
 	return end - start >= MIN_CLIP_LENGTH - LENGTH_EPSILON;
 }
 
@@ -210,7 +210,7 @@ function groupFits(
 
 /** The shift closest to `wanted` at which `group` lands clear on `lane`, or null
  * when nothing within `tolerance` does. */
-export function nearestFitDelta(
+function nearestFitDelta(
 	group: readonly TimelineClip[],
 	lane: ClipLane<TimelineClip>,
 	wanted: number,
@@ -355,7 +355,7 @@ function fits(
 
 /** How far a block of copied clips has to slide right from `at` to land clear of
  * everything on its lanes, or null when it never does. */
-export function firstFreeDelta(
+function firstFreeDelta(
 	entries: ClipBlockEntry[],
 	lanes: ReadonlyMap<string, ClipLane<TimelineClip>>,
 	at: number,

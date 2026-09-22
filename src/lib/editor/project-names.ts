@@ -19,10 +19,6 @@ export function readProjectNames(): Record<string, string> {
 		: {};
 }
 
-export function getProjectName(key: string): string | null {
-	return readProjectNames()[key] ?? null;
-}
-
 /** Blank clears the name, so the project reads as its song again. */
 export function setProjectName(key: string, name: string): void {
 	const names = readProjectNames();

@@ -5,7 +5,7 @@ import type { EffectInstance } from "../effects/types";
 import { generateMosh } from "../editor/mosh";
 import { ANIMATED_EFFECTS } from "../gl/effect-shaders";
 
-export const DEMO_BPM = 20;
+const DEMO_BPM = 20;
 
 /** Effects that keep moving between cuts; every id must be one the renderer animates. */
 const ANIMATED_POOL = [

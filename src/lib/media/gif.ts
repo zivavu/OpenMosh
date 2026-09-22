@@ -77,7 +77,7 @@ export function gifsToVideo(files: File[]): Promise<File[]> {
 }
 
 /** Decodes every frame of a GIF, composited onto the logical screen. */
-export function decodeGif(bytes: Uint8Array): DecodedGif {
+function decodeGif(bytes: Uint8Array): DecodedGif {
 	const sig = String.fromCharCode(...bytes.subarray(0, 6));
 	if (sig !== "GIF87a" && sig !== "GIF89a") throw new Error("not a GIF");
 	const width = bytes[6] | (bytes[7] << 8);

@@ -25,7 +25,6 @@ export {
 	freeRangeAt,
 	moveClip,
 	moveClips,
-	moveClipsToLane,
 	removeClip,
 	resizeBoundary,
 	resizeClip,
@@ -121,20 +120,6 @@ export function findTextClipLane(
 	return (
 		timeline.lanes.find((l) => l.clips.some((c) => c.id === clipId)) ?? null
 	);
-}
-
-/** Every effect instance held anywhere in the timeline (for feedback-buffer GC). */
-export function allTextEffectIds(
-	timeline: TextTimeline | null | undefined,
-): string[] {
-	if (!timeline) return [];
-	const ids: string[] = [];
-	for (const lane of timeline.lanes) {
-		for (const clip of lane.clips) {
-			for (const eff of clip.effects) ids.push(eff.instanceId);
-		}
-	}
-	return ids;
 }
 
 /** Apply one edit to every clip in `clipIds`; the same timeline back when

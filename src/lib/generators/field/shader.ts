@@ -1,7 +1,5 @@
 /** One program for every height-field generator; `uField` picks the field. */
 
-export { VERT } from "../gradient/shader";
-
 export const FRAG_FIELD = `#version 300 es
 precision highp float;
 out vec4 outColor;

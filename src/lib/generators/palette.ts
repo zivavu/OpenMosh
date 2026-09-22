@@ -17,7 +17,7 @@ export const PALETTES: Record<string, Colors> = {
 const GOLDEN_ANGLE = 137.508;
 
 /** h in degrees, s & l in 0..1 */
-export function hslHex(h: number, s: number, l: number): string {
+function hslHex(h: number, s: number, l: number): string {
 	h = ((h % 360) + 360) % 360;
 	const a = s * Math.min(l, 1 - l);
 	const f = (n: number) => {
@@ -46,7 +46,7 @@ export interface RampShape {
 	l0: number;
 }
 
-export function rampShape(
+function rampShape(
 	rng: Rand,
 	strategy: HueStrategy,
 	lightness: number,
@@ -73,7 +73,7 @@ export function rampShape(
 	};
 }
 
-export function makeRamp(baseHue: number, r: RampShape): Colors {
+function makeRamp(baseHue: number, r: RampShape): Colors {
 	const N = 5;
 	return Array.from({ length: N }, (_, i) => {
 		const t = i / (N - 1);

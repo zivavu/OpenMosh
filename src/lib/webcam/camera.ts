@@ -64,7 +64,7 @@ function cameraErrorMessage(e: unknown): string {
 
 /** Single mode's live source, wearing a File: an empty file with a type nothing else
  * claims, and the stream looked up beside it. */
-export const LIVE_FILE_TYPE = "application/x-openmosh-live";
+const LIVE_FILE_TYPE = "application/x-openmosh-live";
 
 interface LiveEntry {
 	stream: MediaStream;

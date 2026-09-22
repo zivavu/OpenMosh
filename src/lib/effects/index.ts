@@ -1,5 +1,5 @@
 export * from "./types";
-export { getDefinition, hydrateValues, hydrateEffects } from "./hydrate";
+export { getDefinition } from "./hydrate";
 export { EFFECT_DEFINITIONS } from "./definitions";
 export {
 	loadPresets,
@@ -52,7 +52,7 @@ export function loadInitialEffects(): EffectInstance[] {
 
 /** Append a disabled instance for every effect the chain lacks, unless the user
  * hid it. Without this, effects added after a chain was saved surface as hidden. */
-export function addNewEffects(effects: EffectInstance[]): EffectInstance[] {
+function addNewEffects(effects: EffectInstance[]): EffectInstance[] {
 	const hidden = new Set(readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null));
 	const present = new Set(effects.map((e) => e.defId));
 	const added = EFFECT_DEFINITIONS.filter(

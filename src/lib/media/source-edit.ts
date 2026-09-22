@@ -13,11 +13,11 @@ export interface ChromaKey {
 }
 
 /** Y'CbCr chroma of an rgb colour, 0..1 per channel in. */
-export function chromaOf(r: number, g: number, b: number): [number, number] {
+function chromaOf(r: number, g: number, b: number): [number, number] {
 	return [-0.169 * r - 0.331 * g + 0.5 * b, 0.5 * r - 0.419 * g - 0.081 * b];
 }
 
-export function lumaOf(r: number, g: number, b: number): number {
+function lumaOf(r: number, g: number, b: number): number {
 	return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
@@ -296,7 +296,7 @@ function normalizeCrop(raw: unknown): CropRect {
 }
 
 /** A rectangle forced back inside the frame. Shared with the keyframe blend. */
-export function clampCrop(c: CropRect): CropRect {
+function clampCrop(c: CropRect): CropRect {
 	const x = Math.min(Math.max(c.x, 0), 1);
 	const y = Math.min(Math.max(c.y, 0), 1);
 	return {
@@ -323,7 +323,7 @@ export function normalizeSourceEdits(raw: unknown): Record<string, SourceEdit> {
 // easing: these tracks follow footage.
 
 /** Two keys are the same key within this many seconds. */
-export const KEY_EPSILON = 1e-3;
+const KEY_EPSILON = 1e-3;
 
 /** How close the playhead must be to count as sitting on a key, for the editing UI. */
 export const KEY_NEAR = 0.02;
@@ -333,7 +333,7 @@ function lerp(a: number, b: number, k: number): number {
 }
 
 /** The track's value at `time`, or null when empty. Keys are assumed sorted. */
-export function sampleTrack<T>(
+function sampleTrack<T>(
 	keys: Keyframe<T>[] | undefined,
 	time: number,
 	blend: (a: T, b: T, k: number) => T,
@@ -395,7 +395,7 @@ export interface SampledMask extends MaskTransform {
 	mix: number;
 }
 
-export function sampleMaskTrack(
+function sampleMaskTrack(
 	keys: Keyframe<MaskKey>[] | undefined,
 	time: number,
 ): SampledMask | null {

@@ -4,11 +4,11 @@ import type { GeneratedSpec } from "./types";
 
 export { PALETTES } from "./palette";
 export { planBatch } from "./plan";
-export { FIELD_KINDS, type FieldKind } from "./field/spec";
+export { type FieldKind } from "./field/spec";
 export { readGenerated, type GeneratedInfo } from "./png-meta";
 export { renderSpec } from "./render";
 export { GeneratedSizeSync } from "./size-sync";
-export { mulberry32, randomSeed } from "../rng";
+export { randomSeed } from "../rng";
 export type {
 	BatchOptions,
 	GeneratedSpec,
@@ -41,7 +41,7 @@ export function ratioSize(
 export const GENERATED_SHORT_SIDE = 1080;
 
 /** Render to a self-describing PNG the rest of the app treats as an upload. */
-export async function specToFile(
+async function specToFile(
 	spec: GeneratedSpec,
 	width: number,
 	height: number,

@@ -21,7 +21,7 @@ export function cloneEffects(effects: EffectInstance[]): EffectInstance[] {
  * Smooth mode: toggle one non-locked effect, biased toward enabling below
  * moshMin and disabling above moshMax.
  */
-export function toggleOneEffect(
+function toggleOneEffect(
 	effects: EffectInstance[],
 	moshMin: number,
 	moshMax: number,

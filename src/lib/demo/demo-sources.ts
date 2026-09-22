@@ -2,8 +2,8 @@
 
 import { mulberry32, type Rand } from "../rng";
 
-export const DEMO_WIDTH = 640;
-export const DEMO_HEIGHT = 360;
+const DEMO_WIDTH = 640;
+const DEMO_HEIGHT = 360;
 
 const W = DEMO_WIDTH;
 const H = DEMO_HEIGHT;

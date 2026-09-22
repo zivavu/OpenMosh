@@ -94,7 +94,7 @@ export function applyLayerMoves<L extends { id: string; z: number }>(
 }
 
 /** The layer row under a point, by the `data-layer-id` every row carries. */
-export function layerRowIdAt(x: number, y: number): string | null {
+function layerRowIdAt(x: number, y: number): string | null {
 	const el = document.elementFromPoint(x, y) as HTMLElement | null;
 	return el?.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ?? null;
 }

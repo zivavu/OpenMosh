@@ -18,7 +18,6 @@ import {
 	chainClipMoshSnapshot,
 	chainClipTick,
 	clearedChainClip,
-	cloneChainEffects,
 	splitChainClipAt,
 	rolledChainClip,
 	syncedChainClip,
@@ -40,9 +39,6 @@ export interface FxClip extends ChainClip {
 	/** Fade the lane's contribution in and out over this many seconds at each edge. */
 	fadeSec?: number;
 }
-
-/** Default ramp for a clip that asks for one, in seconds. */
-export const DEFAULT_FX_FADE = 0.25;
 
 /** How strongly `clip` applies at `time`: 1 across the body, 0 at a faded edge. */
 export function fxClipWeight(clip: FxClip, time: number): number {
@@ -205,19 +201,8 @@ export function flattenFxLayers(layers: FxLayer[]): EffectInstance[] {
 	return out ?? EMPTY;
 }
 
-/** Every effect instance held anywhere in the lanes (for feedback-buffer GC). */
-export function allFxEffectIds(lanes: FxLane[] | null | undefined): string[] {
-	const ids: string[] = [];
-	for (const lane of lanes ?? []) {
-		for (const clip of lane.clips) {
-			for (const eff of clip.effects) ids.push(eff.instanceId);
-		}
-	}
-	return ids;
-}
-
 /** Apply an edit to every clip in `clipIds`, across lanes. */
-export function updateFxClips(
+function updateFxClips(
 	lanes: FxLane[],
 	clipIds: Set<string>,
 	fn: (clip: FxClip) => FxClip,
@@ -306,10 +291,6 @@ export function findFxClip(
 	}
 	return null;
 }
-
-/** Deep copy for the export path, which must not write per-frame values into the clips. */
-export const cloneFxEffects: (effects: EffectInstance[]) => EffectInstance[] =
-	cloneChainEffects;
 
 /** Fill in anything a saved lane list predates or dropped. */
 export function normalizeFxLanes(raw: unknown): FxLane[] {

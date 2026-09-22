@@ -1,5 +1,3 @@
-import { stopStream } from "./camera";
-
 /** A webcam take: the camera's frames straight into a WebM, in real time. mediabunny
  * writes a proper header and cues, unlike MediaRecorder, whose output reports no duration. */
 export interface Take {
@@ -84,5 +82,3 @@ export async function snapStill(
 	);
 	return blob ? new File([blob], name, { type: "image/png" }) : null;
 }
-
-export { stopStream };

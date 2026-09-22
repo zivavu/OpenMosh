@@ -19,20 +19,7 @@ import {
 
 // Clip geometry is shared with the text and fx lanes; re-exported here for one
 // import site.
-export {
-	addClip,
-	clipAt,
-	clipRange,
-	freeRangeAt,
-	moveClip,
-	moveClips,
-	moveClipsToLane,
-	newClipSpan,
-	removeClip,
-	resizeBoundary,
-	resizeClip,
-	sortClips,
-} from "../timeline/clips";
+export { addClip, newClipSpan } from "../timeline/clips";
 
 /** One media layer to draw for a single frame. */
 export interface ResolvedMediaLayer {
@@ -159,19 +146,6 @@ export function findMediaClipLane(
 	);
 }
 
-/** Every effect instance held anywhere (for feedback-buffer GC). */
-export function allMediaEffectIds(
-	timeline: MediaTimeline | null | undefined,
-): string[] {
-	const ids: string[] = [];
-	for (const lane of timeline?.lanes ?? []) {
-		for (const clip of lane.clips) {
-			for (const eff of clip.effects) ids.push(eff.instanceId);
-		}
-	}
-	return ids;
-}
-
 export function updateMediaClips(
 	timeline: MediaTimeline,
 	clipIds: Set<string>,
@@ -186,18 +160,6 @@ export function replaceMediaClip(
 	next: MediaClip,
 ): MediaTimeline {
 	return { ...timeline, lanes: replaceClipIn(timeline.lanes, next) };
-}
-
-export function findMediaClipIn(
-	timeline: MediaTimeline | null | undefined,
-	clipId: string | null | undefined,
-): { lane: MediaLane; clip: MediaClip } | null {
-	if (!clipId || !timeline) return null;
-	for (const lane of timeline.lanes) {
-		const clip = lane.clips.find((c) => c.id === clipId);
-		if (clip) return { lane, clip };
-	}
-	return null;
 }
 
 /** Source ids the timeline references, so a save can persist just those. */

@@ -63,7 +63,7 @@ export function pngBytes(color: Rgb, size = 64): Buffer {
 
 /** The source image the renderer specs draw through. A flat colour is useless: an effect
  * that displaces pixels has nothing to move, and one that shifts colour nothing to shift. */
-export function patternPngBytes(size = 128): Buffer {
+function patternPngBytes(size = 128): Buffer {
 	const ihdr = Buffer.alloc(13);
 	ihdr.writeUInt32BE(size, 0);
 	ihdr.writeUInt32BE(size, 4);
@@ -109,7 +109,7 @@ export interface WavOptions {
 
 /** A mono 16-bit WAV: a quiet tone with a sharp click on every beat. The clicks matter:
  * a flat tone has no tempo, and anything reading levels would see one unbroken value. */
-export function wavBytes({
+function wavBytes({
 	seconds = 8,
 	bpm = 120,
 	sampleRate = 44100,

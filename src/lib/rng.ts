@@ -20,10 +20,6 @@ export function randLog(rng: Rand, min: number, max: number): number {
 	return Math.exp(randIn(rng, Math.log(min), Math.log(max)));
 }
 
-export function pick<T>(rng: Rand, items: readonly T[]): T {
-	return items[Math.floor(rng() * items.length)];
-}
-
 export function shuffle<T>(rng: Rand, arr: T[]): T[] {
 	for (let i = arr.length - 1; i > 0; i--) {
 		const j = Math.floor(rng() * (i + 1));

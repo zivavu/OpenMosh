@@ -166,16 +166,6 @@ export function createMediaLane(
 	};
 }
 
-export function createMediaTimeline(
-	sourceId: string | null,
-	z = 0,
-): MediaTimeline {
-	return {
-		enabled: true,
-		lanes: [createMediaLane("Layer 1", sourceId, z)],
-	};
-}
-
 /** Add an empty lane, named after its position. `z` comes from the caller. */
 export function appendMediaLane(
 	timeline: MediaTimeline,

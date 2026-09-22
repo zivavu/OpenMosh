@@ -118,7 +118,7 @@ function setCommon(
 }
 
 /** Draw the spec onto the shared canvas at w×h, supersampled `aa`× (capped by the GPU). */
-export function drawSpec(
+function drawSpec(
 	spec: GeneratedSpec,
 	w: number,
 	h: number,

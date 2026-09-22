@@ -161,10 +161,6 @@ export function recordButton(page: Page): Locator {
 	return page.getByRole("button", { name: "RECORD", exact: true });
 }
 
-export function moshLane(page: Page): Locator {
-	return mediaLaneTrack(page, 0);
-}
-
 export function segments(page: Page): Locator {
 	return mediaClips(page, 0);
 }
@@ -186,7 +182,7 @@ export async function splitSegmentAt(
 	page: Page,
 	fraction: number,
 ): Promise<void> {
-	const lane = moshLane(page);
+	const lane = mediaLaneTrack(page, 0);
 	const box = (await lane.boundingBox())!;
 	await lane.click({
 		modifiers: ["Control"],
@@ -295,12 +291,12 @@ export function railThumbs(page: Page): Locator {
 	return page.locator(".rail-item");
 }
 
-export function mediaLanes(page: Page): Locator {
+function mediaLanes(page: Page): Locator {
 	return page.locator('.tl-row[data-lane-kind="media"]');
 }
 
 /** A lane's clip track: the drop target, and the box every x is measured in. */
-export function mediaLaneTrack(page: Page, lane = 0): Locator {
+function mediaLaneTrack(page: Page, lane = 0): Locator {
 	return mediaLanes(page).nth(lane).locator(".lane-track");
 }
 

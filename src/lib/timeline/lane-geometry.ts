@@ -4,9 +4,9 @@
 import { sortClips, type ClipLane, type TimelineClip } from "./clips";
 
 /** Comfortable grab width for a shared boundary, in px. */
-export const BOUNDARY_GRAB = 12;
+const BOUNDARY_GRAB = 12;
 /** Comfortable grab width for a clip's own start/end handles, in px. */
-export const EDGE_GRAB = 10;
+const EDGE_GRAB = 10;
 
 /** What the sizing is measured against: the view's span and the lane's width. */
 export interface LaneScale {

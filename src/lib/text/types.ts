@@ -152,7 +152,7 @@ export function appendTextLane(
 
 /** Where text lanes start in the shared layer order: above the media lanes, where
  * they sat before the orders merged. */
-export const TEXT_Z_BASE = 1000;
+const TEXT_Z_BASE = 1000;
 
 /** A clip saved with no chain at all is backfilled, not left switch-less. */
 function clipEffects(saved: unknown): EffectInstance[] {

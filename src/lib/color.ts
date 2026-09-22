@@ -27,7 +27,7 @@ export function hexToRgb(hex: string): Rgb | null {
 	return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-export function rgbToHex({ r, g, b }: Rgb): string {
+function rgbToHex({ r, g, b }: Rgb): string {
 	const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 	return `#${((1 << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b))
 		.toString(16)
@@ -49,7 +49,7 @@ export function hexToVec3(
 	return [rgb.r / 255, rgb.g / 255, rgb.b / 255];
 }
 
-export function rgbToHsv({ r, g, b }: Rgb): Hsv {
+function rgbToHsv({ r, g, b }: Rgb): Hsv {
 	const rn = r / 255;
 	const gn = g / 255;
 	const bn = b / 255;
@@ -68,7 +68,7 @@ export function rgbToHsv({ r, g, b }: Rgb): Hsv {
 	return { h, s: max === 0 ? 0 : d / max, v: max };
 }
 
-export function hsvToRgb({ h, s, v }: Hsv): Rgb {
+function hsvToRgb({ h, s, v }: Hsv): Rgb {
 	const c = v * s;
 	const hp = (((h % 360) + 360) % 360) / 60;
 	const x = c * (1 - Math.abs((hp % 2) - 1));

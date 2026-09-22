@@ -48,12 +48,3 @@ export async function promptInstall(): Promise<boolean> {
 		return false;
 	}
 }
-
-/** Running as an installed app rather than a tab. */
-export function isInstalled(): boolean {
-	return (
-		typeof window !== "undefined" &&
-		(window.matchMedia("(display-mode: standalone)").matches ||
-			(navigator as { standalone?: boolean }).standalone === true)
-	);
-}

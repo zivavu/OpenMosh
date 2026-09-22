@@ -19,7 +19,3 @@ export function getDecodedAudioBuffer(file: File): Promise<AudioBuffer> {
 	}
 	return promise;
 }
-
-export function clearDecodedAudioBufferCache(): void {
-	cache.clear();
-}

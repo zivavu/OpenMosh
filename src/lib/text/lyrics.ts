@@ -14,7 +14,7 @@ import {
 export const LYRICS_LANE_NAME = "Lyrics";
 
 /** The karaoke-style placement a fresh lyrics lane starts from. */
-export const LYRICS_STYLE = { x: 0.5, y: 0.85, size: 0.075 } as const;
+const LYRICS_STYLE = { x: 0.5, y: 0.85, size: 0.075 } as const;
 
 /** One clip per line, back-to-back: each line stays up until the next starts,
  * and the last holds to `spanEnd`.
