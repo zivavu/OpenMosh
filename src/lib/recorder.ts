@@ -74,6 +74,9 @@ export interface RecordOptions {
 	audioStart?: number;
 	/** End time of the audio region in seconds. */
 	audioEnd?: number;
+	/** Sound already mixed for the export, in place of `audioFile`: `mix` is muxed,
+	 * `drive` is what the effects react to. */
+	audioMix?: { mix: AudioBuffer | null; drive: AudioBuffer | null };
 	/** Called before each frame render, to swap source textures, effects and so on.
 	 * Return `true` to skip the default render, or a function to replace it. */
 	onBeforeRender?: (
@@ -291,6 +294,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		audioFile,
 		audioStart = 0,
 		audioEnd,
+		audioMix,
 		onBeforeRender,
 		effectsRef,
 		audioGroupsRef,
@@ -324,7 +328,20 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	let frameAudioData: FrameAudioData[] = [];
 	let audioSampleRate = 0;
 
-	if (audioFile) {
+	if (audioMix) {
+		audioBufferForMux = audioMix.mix;
+		const drive = audioMix.drive;
+		if (drive) {
+			const last = Math.max(0, drive.duration - 0.001);
+			const frameTimes = Array.from({ length: totalFrames }, (_, i) =>
+				Math.min(i * frameDuration, last),
+			);
+			frameAudioData = await analyzeFrames(drive, frameTimes, FFT_SIZE, (p) =>
+				onProgress?.(p * 0.15),
+			);
+			audioSampleRate = drive.sampleRate;
+		}
+	} else if (audioFile) {
 		const audio = await prepareFrameAudio(
 			audioFile,
 			duration,

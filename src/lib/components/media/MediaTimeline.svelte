@@ -1,5 +1,8 @@
 <script lang="ts">
-	import { Focus } from "lucide-svelte";
+	import { Focus, Volume2, VolumeX } from "lucide-svelte";
+	import type { MixSegment } from "../../mix/plan";
+	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
+	import LaneWaveform from "../timeline/LaneWaveform.svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import type { Preset } from "../../effects";
 	import type { ChainMode } from "../../editor/sequence";
@@ -70,6 +73,10 @@
 			intervalSec?: number,
 			intervalBeats?: number | null,
 		) => void;
+		/** The mix, for the sound strip under each video clip. */
+		plan?: MixSegment[];
+		peaksOf?: (sourceId: string) => Float32Array | null;
+		audioVersion?: number;
 	}
 
 	let {
@@ -92,6 +99,9 @@
 		onRoll,
 		onClear,
 		onModeChange,
+		plan,
+		peaksOf,
+		audioVersion = 0,
 	}: Props = $props();
 
 	// One axis for the whole stack: zoom, pan and playhead-following live in
@@ -266,6 +276,23 @@
 		return clipSource(lane, clip)?.name ?? "No source";
 	}
 
+	/** Only a lane that can play a video has sound to mute. */
+	function laneHasVideo(lane: MediaLane): boolean {
+		if (sourceById(lane.sourceId)?.kind === "video") return true;
+		return lane.clips.some((c) => clipSource(lane, c)?.kind === "video");
+	}
+
+	function toggleSound(lane: MediaLane) {
+		const audio = lane.audio ?? DEFAULT_LANE_AUDIO;
+		onBeforeEdit?.();
+		onChange(
+			updateMediaLane(timeline, lane.id, (l) => ({
+				...l,
+				audio: { ...audio, muted: !audio.muted },
+			})),
+		);
+	}
+
 	function chainLabel(clip: MediaClip): string | null {
 		if (clip.label === "clean" && !clip.modified) return null;
 		return clip.modified ? `${clip.label}*` : clip.label;
@@ -378,6 +405,20 @@
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
 			>
+				{#if plan && laneHasVideo(lane)}
+					{const muted = lane.audio?.muted ?? false}
+					<button
+						class="lane-sound"
+						class:off={muted}
+						aria-pressed={!muted}
+						title={muted
+							? "Sound muted — click to hear this layer's videos"
+							: "Sound on — click to mute this layer's videos"}
+						onclick={() => toggleSound(lane)}
+					>
+						{#if muted}<VolumeX size={12} />{:else}<Volume2 size={12} />{/if}
+					</button>
+				{/if}
 				{#if onToggleSolo}
 					<button
 						class="lane-solo"
@@ -463,6 +504,15 @@
 					{/if}
 				{/each}
 
+				{#if plan && peaksOf && !foldedLaneIds.has(lane.id)}
+					<LaneWaveform
+						variant="strip"
+						segments={plan.filter((seg) => seg.laneId === lane.id)}
+						{peaksOf}
+						version={audioVersion}
+					/>
+				{/if}
+
 				{#if dropGhost?.laneId === lane.id}
 					{const left = $derived(vp.toPct(dropGhost.start))}
 					{const width = $derived(vp.toPct(dropGhost.end) - left)}
@@ -525,6 +575,14 @@
 	.tl-row.drop-target .lane-track {
 		border-color: var(--live);
 		box-shadow: inset 0 0 0 1px var(--live);
+	}
+
+	.lane-sound:hover {
+		color: var(--text);
+	}
+
+	.lane-sound.off {
+		color: var(--text-4);
 	}
 
 	/* Lit rather than dimmed, unlike the eye: solo is a mode the editor is in. */

@@ -16,6 +16,12 @@
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import type { SpectrumData } from "../../types";
 	import type { AudioResponse } from "../../audio/auto-range";
+	import {
+		DEFAULT_LANE_AUDIO,
+		MAX_GAIN,
+		type LaneAudio,
+	} from "../../mix/types";
+	import Checkbox from "../ui/Checkbox.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
@@ -46,6 +52,10 @@
 		onEditingChange?: (open: boolean) => void;
 		/** Which half to show: the clip's controls, or the lane's effect chain. */
 		section?: "clip" | "chain";
+		/** False once the clip's video is known to have no sound. */
+		sourceHasAudio?: boolean;
+		/** Move the clip's sound onto an audio lane of its own. */
+		onDetachAudio?: () => void;
 	}
 
 	let {
@@ -63,7 +73,27 @@
 		onEditChange,
 		onEditingChange,
 		section = "clip",
+		sourceHasAudio = true,
+		onDetachAudio,
 	}: Props = $props();
+
+	let laneAudio = $derived(lane?.audio ?? DEFAULT_LANE_AUDIO);
+
+	function setLaneAudio<K extends keyof LaneAudio>(
+		key: K,
+		value: LaneAudio[K],
+		coalesceKey?: string,
+	) {
+		if (!lane) return;
+		onBeforeEdit?.(coalesceKey);
+		onLaneChange({ ...lane, audio: { ...laneAudio, [key]: value } });
+	}
+
+	function setClipGain(v: number) {
+		if (!clip) return;
+		onBeforeEdit?.(`mc-gain-${clip.id}`);
+		onClipChange({ ...clip, gain: v === 1 ? undefined : v });
+	}
 
 	let editingSource = $state(false);
 
@@ -207,6 +237,95 @@
 			{/if}
 
 			<FadeRows {clip} noun="this layer" idPrefix="mc" onFade={setFade} />
+
+			{#if source?.kind === "video"}
+				{#if !sourceHasAudio}
+					<p class="hint">This video has no sound.</p>
+				{:else if clip.audioDetached}
+					<p class="hint">
+						This clip's sound was moved to an audio lane, where it plays on its
+						own.
+					</p>
+				{:else}
+					<div class="row" title="Play this layer's video sound">
+						<label for="mc-sound">Sound</label>
+						<Checkbox
+							id="mc-sound"
+							checked={!laneAudio.muted}
+							onchange={(e) =>
+								setLaneAudio(
+									"muted",
+									!(e.currentTarget as HTMLInputElement).checked,
+								)}
+						/>
+						<span class="val">{laneAudio.muted ? "muted" : "on"}</span>
+					</div>
+					{#if !laneAudio.muted}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="How loud this clip plays, on top of the layer's volume. Double-click to reset."
+							ondblclick={() => setClipGain(1)}
+						>
+							<label for="mc-gain">Clip volume</label>
+							<RangeSlider
+								id="mc-gain"
+								value={clip.gain ?? 1}
+								min={0}
+								max={MAX_GAIN}
+								step={0.01}
+								oninput={setClipGain}
+							/>
+							<span class="val">{Math.round((clip.gain ?? 1) * 100)}%</span>
+						</div>
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="How loud every clip on this layer plays. Double-click to reset."
+							ondblclick={() => setLaneAudio("gain", 1)}
+						>
+							<label for="mc-lane-gain">Layer volume</label>
+							<RangeSlider
+								id="mc-lane-gain"
+								value={laneAudio.gain}
+								min={0}
+								max={MAX_GAIN}
+								step={0.01}
+								oninput={(v) =>
+									setLaneAudio("gain", v, `mc-lane-gain-${lane.id}`)}
+							/>
+							<span class="val">{Math.round(laneAudio.gain * 100)}%</span>
+						</div>
+						<div
+							class="row"
+							title="Let this layer's sound drive the audio links, so effects react to it"
+						>
+							<label for="mc-drives">Drives FX</label>
+							<Checkbox
+								id="mc-drives"
+								checked={laneAudio.drives}
+								onchange={(e) =>
+									setLaneAudio(
+										"drives",
+										(e.currentTarget as HTMLInputElement).checked,
+									)}
+							/>
+						</div>
+					{/if}
+					{#if onDetachAudio}
+						<div class="row">
+							<span class="label-spacer"></span>
+							<button
+								class="detach"
+								title="Move this clip's sound onto an audio lane, so it can be trimmed and moved apart from the picture"
+								onclick={onDetachAudio}
+							>
+								Detach sound
+							</button>
+						</div>
+					{/if}
+				{/if}
+			{/if}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -417,6 +536,28 @@
 {/if}
 
 <style>
+	/* Lines the button up with the controls, under the labels' column. */
+	.label-spacer {
+		flex-shrink: 0;
+		min-width: 84px;
+	}
+
+	.detach {
+		flex: 1;
+		padding: 0.25rem 0.5rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		background: var(--ink);
+		color: var(--text-2);
+		font-size: 0.7rem;
+		cursor: pointer;
+	}
+
+	.detach:hover {
+		color: var(--text);
+		border-color: var(--live);
+	}
+
 	/* Lit when the media carries an edit, the way the rail's own button is. */
 	.src-edit {
 		display: inline-flex;

@@ -1,5 +1,6 @@
 import { getAllTracks, getTrack } from "../audio/track-library";
 import { createListCache } from "../storage";
+import { readProjectNames } from "./project-names";
 import {
 	getAllMediaPools,
 	getAllSequenceMediaIds,
@@ -8,9 +9,11 @@ import {
 	storedMediaToFile,
 } from "./sequence-media-store";
 
-/** A song with a saved sequence, offered on the upload screen. Video-driven pools
- * (keyed by video, not track) and pools whose blobs were pruned are skipped. */
+/** A saved editor project, offered on the upload screen: one keyed by its song, or,
+ * since projects got their own length, by an id of its own. Video-driven pools and
+ * pools whose blobs were pruned are skipped. */
 export interface SavedSequence {
+	/** The project key: a track id for song-keyed projects, else a `proj-` id. */
 	trackId: string;
 	trackName: string;
 	sourceCount: number;
@@ -55,16 +58,18 @@ export async function listSavedSequences(): Promise<SavedSequence[]> {
 		return readCachedSavedSequences();
 	}
 	const trackById = new Map(tracks.map((t) => [t.id, t]));
+	const names = readProjectNames();
 
 	const out: SavedSequence[] = [];
 	for (const pool of pools) {
 		const track = trackById.get(pool.key);
-		if (!track) continue;
+		const own = isProjectKey(pool.key);
+		if (!track && !own) continue;
 		const sourceCount = pool.sourceIds.filter((id) => stored.has(id)).length;
 		if (sourceCount === 0) continue;
 		out.push({
 			trackId: pool.key,
-			trackName: track.name,
+			trackName: track?.name ?? names[pool.key] ?? "Untitled project",
 			sourceCount,
 			updatedAt: pool.updatedAt,
 		});
@@ -74,10 +79,17 @@ export async function listSavedSequences(): Promise<SavedSequence[]> {
 	return out;
 }
 
-/** The song and its media, ready to hand to the editor. */
+/** A project keyed by its own id rather than a song's. */
+export function isProjectKey(key: string): boolean {
+	return key.startsWith("proj-");
+}
+
+/** The project's media, and its song when it's keyed by one, ready for the editor. */
 export interface OpenedSequence {
+	/** The project key. */
 	trackId: string;
-	trackFile: File;
+	/** Null for a project keyed by its own id: its song, if any, is in its timeline. */
+	trackFile: File | null;
 	/** Pool order; the first becomes the editor's primary source. */
 	sources: File[];
 }
@@ -89,12 +101,12 @@ export async function openSavedSequence(
 	try {
 		[sourceIds, track] = await Promise.all([
 			loadMediaPool(trackId),
-			getTrack(trackId),
+			isProjectKey(trackId) ? null : getTrack(trackId),
 		]);
 	} catch {
 		return null;
 	}
-	if (!sourceIds || !track) return null;
+	if (!sourceIds || (!track && !isProjectKey(trackId))) return null;
 
 	let sources: File[];
 	try {
@@ -106,7 +118,9 @@ export async function openSavedSequence(
 
 	return {
 		trackId,
-		trackFile: new File([track.blob], track.name, { type: track.blob.type }),
+		trackFile: track
+			? new File([track.blob], track.name, { type: track.blob.type })
+			: null,
 		sources,
 	};
 }

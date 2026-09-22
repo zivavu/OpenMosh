@@ -59,6 +59,10 @@ export interface RecordingContext {
 		masterIsAudio: boolean;
 		/** Stacked effect lanes, run in lane order over the layers. */
 		fxLanes?: FxLane[];
+		/** The export span on the project timeline; overrides the track and video spans. */
+		span?: { start: number; end: number };
+		/** The span's sound, already mixed from every lane. */
+		mix?: { mix: AudioBuffer | null; drive: AudioBuffer | null };
 	} | null;
 	onProgress: (p: number) => void;
 	onFinalizing: () => void;
@@ -128,8 +132,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 
 	// Priority: audio span > video span > manual slider; each tier only if its
 	// span duration > 0
-	const exportDuration =
-		hasExplicitAudio && spanEnd - spanStart > 0
+	const projectSpan = ctx.sequence?.span;
+	const exportDuration = projectSpan
+		? projectSpan.end - projectSpan.start
+		: hasExplicitAudio && spanEnd - spanStart > 0
 			? spanEnd - spanStart
 			: isVideo && videoDuration > 0 && videoSpanDuration > 0
 				? playedSpanDuration
@@ -155,11 +161,13 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	// Only decode the video's own audio when it has a track; decodeAudioData throws on silence.
 	const useVideoSourceAudio = isVideo && !hasExplicitAudio && videoHasAudio;
 
-	const audioStart = hasExplicitAudio
-		? spanStart
-		: isVideo
-			? videoSpanStart
-			: 0;
+	const audioStart = projectSpan
+		? projectSpan.start
+		: hasExplicitAudio
+			? spanStart
+			: isVideo
+				? videoSpanStart
+				: 0;
 	// When explicit audio is present, audioEnd is always spanEnd (the full selected span)
 	const audioEnd = hasExplicitAudio
 		? spanEnd
@@ -343,6 +351,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			onProgress,
 			onFinalizing,
 			signal,
+			...(ctx.sequence?.mix && { audioMix: ctx.sequence.mix }),
 			// Explicit audio track: always include for both mux output and FFT reactivity
 			...(hasExplicitAudio && {
 				audioFile: trackFile!,

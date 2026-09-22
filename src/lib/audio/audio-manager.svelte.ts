@@ -1,8 +1,7 @@
 import {
 	createAudioGraph,
 	disposeAudioGraph as disposeGraph,
-	computeVolumeLevel,
-	applyVolumeLinksTick,
+	startLinkTick,
 	type AudioGraphState,
 } from "./audio-controller";
 import { resetAutoRange } from "./auto-range";
@@ -95,62 +94,16 @@ export class AudioManager {
 		$effect(() => {
 			const analyser = this.analyserNode;
 			if (!analyser) return;
-			const timeData = new Uint8Array(analyser.fftSize);
-			// Captured at effect-run time, matching the original editors.
-			const freqDataRef = this.frequencyData;
-			const sampleRate = this.audioSampleRate;
-			const fftSize = analyser.fftSize;
-			let rafId: number;
-			let wasPaused = false;
-			let lastTick = performance.now();
-			const tick = () => {
-				const now = performance.now();
-				const dt = (now - lastTick) / 1000;
-				lastTick = now;
+			return startLinkTick({
+				analyser,
+				// Captured at effect-run time, matching the original editors.
+				frequencyData: this.frequencyData,
+				sampleRate: this.audioSampleRate,
 				// Source-agnostic pause check (works for <audio> and <video> sources).
-				if (this.mediaSource?.mediaElement.paused) {
-					if (!wasPaused) {
-						// Settle to baseline once on pause, not freeze at the last non-silent frame.
-						wasPaused = true;
-						this.volumeLevel = 0;
-						freqDataRef?.fill(0);
-						// Envelopes survive a pause; re-learning would cost dead seconds.
-						for (const group of this.#getLinkGroups()) {
-							applyVolumeLinksTick(
-								group.effects,
-								0,
-								freqDataRef,
-								sampleRate,
-								fftSize,
-								dt,
-								group.response,
-								group.scope,
-							);
-						}
-					}
-					rafId = requestAnimationFrame(tick);
-					return;
-				}
-				wasPaused = false;
-				this.volumeLevel = computeVolumeLevel(analyser, timeData);
-				if (freqDataRef)
-					analyser.getByteFrequencyData(freqDataRef as Uint8Array<ArrayBuffer>);
-				for (const group of this.#getLinkGroups()) {
-					applyVolumeLinksTick(
-						group.effects,
-						this.volumeLevel,
-						freqDataRef,
-						sampleRate,
-						fftSize,
-						dt,
-						group.response,
-						group.scope,
-					);
-				}
-				rafId = requestAnimationFrame(tick);
-			};
-			rafId = requestAnimationFrame(tick);
-			return () => cancelAnimationFrame(rafId);
+				isPaused: () => !!this.mediaSource?.mediaElement.paused,
+				getLinkGroups: this.#getLinkGroups,
+				onLevel: (level) => (this.volumeLevel = level),
+			});
 		});
 	}
 

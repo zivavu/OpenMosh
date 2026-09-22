@@ -10,6 +10,14 @@ import {
 import { cleanEffects } from "../editor/sequence";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import { clipFadeWeight, fitClipsToDuration } from "../timeline/clips";
+import {
+	DEFAULT_LANE_AUDIO,
+	fitAudioLanes,
+	normalizeAudioLanes,
+	normalizeLaneAudio,
+	type AudioLane,
+	type LaneAudio,
+} from "../mix/types";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
@@ -57,6 +65,10 @@ export interface MediaClip extends ChainClip {
 	 * `fadeOutSec` before its end. */
 	fadeInSec?: number;
 	fadeOutSec?: number;
+	/** Linear volume of the video's own sound on this clip. Absent means 1. */
+	gain?: number;
+	/** The sound was moved onto an audio lane, so the clip plays silent. */
+	audioDetached?: boolean;
 }
 
 /** A media layer: a source from the pool, drawn with the lane's placement and chain. */
@@ -74,11 +86,15 @@ export interface MediaLane {
 	clips: MediaClip[];
 	/** How this lane's auto clips roll and its links follow the music. Absent = defaults. */
 	settings?: LaneSettings;
+	/** How the lane's videos sound. */
+	audio?: LaneAudio;
 }
 
 export interface MediaTimeline {
 	enabled: boolean;
 	lanes: MediaLane[];
+	/** Sound-only lanes: music, voice-over, detached video audio. Editor mode only. */
+	audioLanes?: AudioLane[];
 }
 
 export const DEFAULT_MEDIA_STYLE: MediaStyle = {
@@ -163,6 +179,7 @@ export function createMediaLane(
 		sourceId,
 		style: { ...style },
 		clips: [],
+		audio: { ...DEFAULT_LANE_AUDIO },
 	};
 }
 
@@ -199,6 +216,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 	const lanes = Array.isArray(t.lanes) ? t.lanes : [];
 	return {
 		enabled: !!t.enabled,
+		audioLanes: normalizeAudioLanes(t.audioLanes),
 		lanes: lanes.map((lane, i) => ({
 			id: lane.id ?? nextId("mlane"),
 			name: lane.name ?? `Layer ${i + 1}`,
@@ -209,6 +227,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
 			settings: normalizeLaneSettings(lane.settings),
+			audio: normalizeLaneAudio(lane.audio),
 			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((raw) => {
 				const clip = raw as Partial<MediaClip> & { fadeSec?: number };
 				// Lanes saved before clips carried their own chain held one for the whole lane:
@@ -226,6 +245,8 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					// Saved before the two edges split, `fadeSec` ramped both.
 					fadeInSec: clip.fadeInSec ?? clip.fadeSec,
 					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,
+					gain: clip.gain,
+					audioDetached: clip.audioDetached || undefined,
 					...normalizeChainFields(clip, effects),
 				};
 			}),
@@ -239,11 +260,15 @@ export function fitMediaTimeline(
 	timeline: MediaTimeline,
 	duration: number,
 ): MediaTimeline {
-	if (duration <= 0 || timeline.lanes.length === 0) return timeline;
+	if (duration <= 0) return timeline;
 	const lanes = timeline.lanes.map((lane) =>
 		fitClipsToDuration(lane, duration),
 	);
-	return lanes.some((l, i) => l !== timeline.lanes[i])
-		? { ...timeline, lanes }
+	const audioLanes = timeline.audioLanes
+		? fitAudioLanes(timeline.audioLanes, duration)
+		: undefined;
+	return lanes.some((l, i) => l !== timeline.lanes[i]) ||
+		audioLanes !== timeline.audioLanes
+		? { ...timeline, lanes, audioLanes }
 		: timeline;
 }

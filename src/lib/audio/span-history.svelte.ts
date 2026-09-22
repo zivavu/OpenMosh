@@ -7,14 +7,21 @@
 import { untrack } from "svelte";
 import type { UndoSource } from "../editor/undo-router";
 import { createSnapshotHistory } from "../timeline/snapshot-history.svelte";
-import type { AudioManager } from "./audio-manager.svelte";
 
 export interface Span {
 	start: number;
 	end: number;
 }
 
-export function createSpanHistory(audio: AudioManager) {
+/** Whatever owns a span: the song player, or the editor's transport. */
+export interface SpanOwner {
+	spanStart: number;
+	spanEnd: number;
+	readonly trackDuration: number;
+	readonly trackFile?: File | null;
+}
+
+export function createSpanHistory(audio: SpanOwner) {
 	const history = createSnapshotHistory<Span>();
 	/** The span as it stood before the drag in progress. */
 	let atRest: Span = { start: 0, end: 0 };

@@ -1,3 +1,5 @@
+import { applyVolumeLinksToEffects, type AudioLinkGroup } from "./audio-utils";
+
 export { applyVolumeLinksToEffects as applyVolumeLinksTick } from "./audio-utils";
 
 export interface AudioGraphState {
@@ -92,4 +94,70 @@ export function computeVolumeLevel(
 		sum += n * n;
 	}
 	return Math.min(1, Math.sqrt(sum / timeData.length));
+}
+
+export interface LinkTickOptions {
+	analyser: AnalyserNode;
+	frequencyData: Uint8Array | null;
+	sampleRate: number;
+	isPaused: () => boolean;
+	getLinkGroups: () => AudioLinkGroup[];
+	onLevel: (level: number) => void;
+}
+
+/** Feed the analyser's level and spectrum to every audio link, once per frame.
+ * Returns the stop function. */
+export function startLinkTick({
+	analyser,
+	frequencyData,
+	sampleRate,
+	isPaused,
+	getLinkGroups,
+	onLevel,
+}: LinkTickOptions): () => void {
+	const timeData = new Uint8Array(analyser.fftSize);
+	const fftSize = analyser.fftSize;
+	let rafId: number;
+	let wasPaused = false;
+	let lastTick = performance.now();
+	const applyAll = (level: number, dt: number) => {
+		for (const group of getLinkGroups()) {
+			applyVolumeLinksToEffects(
+				group.effects,
+				level,
+				frequencyData,
+				sampleRate,
+				fftSize,
+				dt,
+				group.response,
+				group.scope,
+			);
+		}
+	};
+	const tick = () => {
+		const now = performance.now();
+		const dt = (now - lastTick) / 1000;
+		lastTick = now;
+		if (isPaused()) {
+			if (!wasPaused) {
+				// Settle to baseline once on pause, not freeze at the last non-silent frame.
+				wasPaused = true;
+				onLevel(0);
+				frequencyData?.fill(0);
+				// Envelopes survive a pause; re-learning would cost dead seconds.
+				applyAll(0, dt);
+			}
+			rafId = requestAnimationFrame(tick);
+			return;
+		}
+		wasPaused = false;
+		const level = computeVolumeLevel(analyser, timeData);
+		onLevel(level);
+		if (frequencyData)
+			analyser.getByteFrequencyData(frequencyData as Uint8Array<ArrayBuffer>);
+		applyAll(level, dt);
+		rafId = requestAnimationFrame(tick);
+	};
+	rafId = requestAnimationFrame(tick);
+	return () => cancelAnimationFrame(rafId);
 }

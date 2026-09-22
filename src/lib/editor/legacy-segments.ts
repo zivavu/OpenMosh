@@ -12,6 +12,7 @@ import {
 	type MediaTimeline,
 } from "../media";
 import { MIN_CLIP_LENGTH } from "../timeline/clips";
+import { LEGACY_LANE_AUDIO } from "../mix/types";
 
 /** What a saved segment looked like; anything else it carried is ignored. */
 interface LegacySegment {
@@ -85,6 +86,8 @@ export function migrateLegacySegments(
 
 	const mediaLane = createMediaLane("Base", null, BOTTOM_Z);
 	mediaLane.underEffects = true;
+	// Segments were always silent under the song; migrating mustn't give them a voice.
+	mediaLane.audio = { ...LEGACY_LANE_AUDIO };
 	for (const { seg, start, end } of spans) {
 		if (!seg.sourceId) continue;
 		mediaLane.clips.push(createMediaClip(start, end, 0, seg.sourceId));

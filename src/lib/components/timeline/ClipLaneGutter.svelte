@@ -82,7 +82,9 @@
 	.lane-eye,
 	.lane-del,
 	.lane-fold,
-	.tl-gutter :global(.lane-solo) {
+	.tl-gutter :global(.lane-solo),
+	.tl-gutter :global(.lane-sound),
+	.tl-gutter :global(.lane-drives) {
 		display: inline-flex;
 		align-items: center;
 		padding: 0.15rem;

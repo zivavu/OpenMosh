@@ -9,6 +9,7 @@ import {
 	updateLaneIn,
 } from "../timeline/clips";
 import { sourceTimeAt, type SourceEdit } from "./source-edit";
+import { audioLaneSourceIds, trackIdOf, type AudioLane } from "../mix/types";
 import {
 	mediaClipWeight,
 	type MediaClip,
@@ -162,7 +163,7 @@ export function replaceMediaClip(
 	return { ...timeline, lanes: replaceClipIn(timeline.lanes, next) };
 }
 
-/** Source ids the timeline references, so a save can persist just those. */
+/** Pool source ids the timeline references, so a save can persist just those. */
 export function mediaTimelineSourceIds(
 	timeline: MediaTimeline | null | undefined,
 ): string[] {
@@ -172,6 +173,9 @@ export function mediaTimelineSourceIds(
 		for (const clip of lane.clips) {
 			if (clip.sourceId) ids.add(clip.sourceId);
 		}
+	}
+	for (const id of audioLaneSourceIds(timeline?.audioLanes)) {
+		if (!trackIdOf(id)) ids.add(id);
 	}
 	return [...ids];
 }
@@ -220,9 +224,28 @@ export function detachMediaSource(
 ): MediaTimeline {
 	const held = (l: MediaLane) =>
 		l.sourceId === sourceId || l.clips.some((c) => c.sourceId === sourceId);
-	if (!timeline.lanes.some(held)) return timeline;
+	const heardIn = (l: AudioLane) =>
+		l.clips.some((c) => c.sourceId === sourceId);
+	const audioLanes = timeline.audioLanes?.some(heardIn)
+		? timeline.audioLanes.map((l) =>
+				heardIn(l)
+					? {
+							...l,
+							clips: l.clips.map((c) =>
+								c.sourceId === sourceId ? { ...c, sourceId: null } : c,
+							),
+						}
+					: l,
+			)
+		: timeline.audioLanes;
+	if (!timeline.lanes.some(held)) {
+		return audioLanes === timeline.audioLanes
+			? timeline
+			: { ...timeline, audioLanes };
+	}
 	return {
 		...timeline,
+		audioLanes,
 		lanes: timeline.lanes.map((l) => {
 			if (!held(l)) return l;
 			return {

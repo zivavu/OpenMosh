@@ -37,7 +37,25 @@
 		saveRenderSettings,
 	} from "../../editor/render-settings";
 	import { readJson, readRaw, writeJson, writeRaw } from "../../storage";
-	import { addTrack } from "../../audio/track-library";
+	import { addTrack, getTrack } from "../../audio/track-library";
+	import { SequenceMixer } from "../../mix/mixer.svelte";
+	import { SourceAudioBank } from "../../mix/source-audio.svelte";
+	import { planMix, planSourceIds } from "../../mix/plan";
+	import { renderMix } from "../../mix/render";
+	import {
+		audioLanesEnd,
+		createAudioClip,
+		createAudioLane,
+		MAX_AUDIO_LANES,
+		removeAudioSource,
+		retargetAudioSource,
+		trackIdOf,
+		trackSourceId,
+		type AudioLane,
+	} from "../../mix/types";
+	import { readProjectNames, setProjectName } from "../../editor/project-names";
+	import { generateId } from "../../effects/types";
+	import AudioLanes from "../timeline/AudioLanes.svelte";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
 	import { createKeyboardHandler } from "../../editor/keyboard";
 	import { clearEffects as clearEffectsFn } from "../../editor/mosh";
@@ -131,7 +149,10 @@
 	} from "../../timeline/layer-order";
 	import { clipAt } from "../../timeline/clips";
 	import type { LayerPick } from "../../editor/layer-pick";
-	import { SequenceSourceRegistry } from "../../editor/sequence-sources.svelte";
+	import {
+		SequenceSourceRegistry,
+		type SequenceSource,
+	} from "../../editor/sequence-sources.svelte";
 	import { MediaLayerDriver } from "../../editor/media-layer-driver";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
 	import { openVideoFrameSource } from "../../video/frame-source";
@@ -239,6 +260,8 @@
 		initialAudioFile?: File | null;
 		/** Library id of `initialAudioFile` from a saved sequence. */
 		initialTrackId?: string | null;
+		/** Sequence mode: the saved project being reopened. Absent starts a new one. */
+		initialProjectKey?: string | null;
 		/** Lane timeline is sequence-only. */
 		mode?: "single" | "sequence";
 		/** Single mode: work restored from a saved session. */
@@ -254,6 +277,7 @@
 		extraFiles = [],
 		initialAudioFile = null,
 		initialTrackId = null,
+		initialProjectKey = null,
 		mode = "single",
 		initialSession = null,
 		warmCanvas = null,
@@ -708,44 +732,72 @@
 	const fullscreenSupported =
 		typeof document !== "undefined" && document.fullscreenEnabled;
 
-	const audio = new AudioManager({
-		// Base chain and text layers follow the editor's response; each lane follows its own.
-		getLinkGroups: (): AudioLinkGroup[] => [
-			{
-				scope: "",
-				effects,
+	// Base chain and text layers follow the editor's response; each lane follows its own.
+	const linkGroups = (): AudioLinkGroup[] => [
+		{
+			scope: "",
+			effects,
+			response: audioResponse,
+		},
+		...fxLayers.map((layer) => ({
+			scope: layer.laneId,
+			effects: layer.effects,
+			response: fxLaneResponse(layer.laneId),
+		})),
+		// A media lane's chain is its clip's under the playhead, read off the resolved layers.
+		...resolveMediaLayersAt(
+			mediaTimeline,
+			textTime,
+			sourceRegistry.edits,
+			previewMediaChains,
+		).map((layer) => ({
+			scope: layer.laneId,
+			effects: layer.effects,
+			response: layer.response ?? audioResponse,
+		})),
+		...resolveTextLayersAt(textTimeline, textTime, previewTextChains).map(
+			(layer) => ({
+				scope: layer.laneId,
+				effects: layer.effects,
 				response: audioResponse,
-			},
-			...fxLayers.map((layer) => ({
-				scope: layer.laneId,
-				effects: layer.effects,
-				response: fxLaneResponse(layer.laneId),
-			})),
-			// A media lane's chain is its clip's under the playhead, read off the resolved layers.
-			...resolveMediaLayersAt(
-				mediaTimeline,
-				textTime,
-				sourceRegistry.edits,
-				previewMediaChains,
-			).map((layer) => ({
-				scope: layer.laneId,
-				effects: layer.effects,
-				response: layer.response ?? audioResponse,
-			})),
-			...resolveTextLayersAt(textTimeline, textTime, previewTextChains).map(
-				(layer) => ({
-					scope: layer.laneId,
-					effects: layer.effects,
-					response: audioResponse,
-				}),
-			),
-		],
+			}),
+		),
+	];
+
+	const audio = new AudioManager({
+		getLinkGroups: linkGroups,
 		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
 		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,
 	});
 
 	// Close the AudioContext on unmount so repeated visits don't leak contexts.
 	$effect(() => () => audio.disposeAudioGraph());
+
+	// Sequence mode: every lane's sound, from the song to a video's own, decoded per source.
+	const audioBank = new SourceAudioBank(async (id) => {
+		const trackId = trackIdOf(id);
+		if (trackId) {
+			if (trackId === currentTrackId && audio.trackFile) return audio.trackFile;
+			const track = await getTrack(trackId).catch(() => null);
+			return track
+				? new File([track.blob], track.name, { type: track.blob.type })
+				: null;
+		}
+		const source = sourceRegistry.get(id);
+		return source?.kind === "video" ? source.file : null;
+	});
+
+	// Sequence mode's clock: the project sets the length, and the mix plays under it.
+	const mixer = new SequenceMixer({
+		bank: audioBank,
+		getLinkGroups: linkGroups,
+		initialOutputVolume: saved.outputVolume ?? DEFAULT_SETTINGS.outputVolume,
+		initialLoop: saved.loopAudio ?? DEFAULT_SETTINGS.loopAudio,
+	});
+	$effect(() => () => {
+		mixer.dispose();
+		audioBank.dispose();
+	});
 
 	// Pull the element clock every frame while playing; ~4 Hz timeupdate alone makes it jump.
 	$effect(() => {
@@ -764,12 +816,15 @@
 		audio.setAudioEl(audioEl);
 	});
 
+	// Once per file handed in: unloading the song later mustn't bring it back.
 	$effect(() => {
-		if (initialAudioFile && !audio.trackFile) {
-			audio.trackFile = initialAudioFile;
+		const initial = initialAudioFile;
+		untrack(() => {
+			if (!initial || audio.trackFile) return;
+			audio.trackFile = initial;
 			// Opened from a saved song: adopt its id and its stored timeline.
 			if (initialTrackId) adoptLibraryTrack(initialTrackId);
-		}
+		});
 	});
 
 	// Mute video when an explicit audio track is active; re-hook video audio when cleared.
@@ -793,8 +848,10 @@
 		audioPunch;
 		showFps;
 		showSpectrum.value;
-		audio.outputVolume;
-		audio.loopAudio;
+		const outputVolume = isSequenceMode
+			? mixer.outputVolume
+			: audio.outputVolume;
+		const loopAudio = isSequenceMode ? mixer.loop : audio.loopAudio;
 		videoLoop;
 		// Merged, not replaced: the upload screen writes its mode under the same key.
 		updateSettings({
@@ -808,8 +865,8 @@
 			audioPunch,
 			showFps,
 			showSpectrum: showSpectrum.value,
-			outputVolume: audio.outputVolume,
-			loopAudio: audio.loopAudio,
+			outputVolume,
+			loopAudio,
 			loopVideo: videoLoop,
 			sourceFit,
 		});
@@ -844,6 +901,7 @@
 	// The span handles are an edit like any other; see span-history.svelte.ts.
 	const spanHistory = createSpanHistory(audio);
 	$effect(() => spanHistory.trackChanged(currentTrackId));
+	const mixSpanHistory = createSpanHistory(mixer);
 
 	let trackInput: HTMLInputElement;
 
@@ -869,15 +927,22 @@
 	}
 
 	function onTrackInputChange() {
-		const f = trackInput?.files?.[0];
-		if (f) {
-			clearTrack();
-			audio.trackFile = f;
-			trackInput.value = "";
+		const files = Array.from(trackInput?.files ?? []);
+		trackInput.value = "";
+		if (files.length === 0) return;
+		if (isSequenceMode) {
+			void addAudioFiles(files);
+			return;
 		}
+		clearTrack();
+		audio.trackFile = files[0];
 	}
 
 	function clearTrack() {
+		if (isSequenceMode) {
+			removeSong();
+			return;
+		}
 		// Before the key changes out from under them; see flushSequenceSave.
 		flushSequenceSave();
 		flushMediaPoolSave();
@@ -910,7 +975,6 @@
 		loadedTimelineKey = key;
 		if (savedSeq === null) {
 			if (clearOnMissing) restoreFxLanes(undefined);
-			seedLayerKey = key;
 			return;
 		}
 		// BPM comes back in both modes; beat-synced effects read it in single mode too.
@@ -930,6 +994,8 @@
 	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
+		// The project, not its song, owns what's saved in sequence mode.
+		if (isSequenceMode) return;
 		void applySavedTrackState(trackId);
 	}
 
@@ -954,6 +1020,10 @@
 	});
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
+		if (isSequenceMode) {
+			replaceSong(file, trackId);
+			return;
+		}
 		const switchingSongs = !!currentTrackId && currentTrackId !== trackId;
 		clearTrack();
 		currentTrackId = trackId;
@@ -1031,7 +1101,20 @@
 	}
 
 	// Not gated on audioContext: the graph is only built on first play.
-	const hasAudio = $derived(!!audio.trackFile || (isVideo && videoHasAudio));
+	const hasAudio = $derived(
+		isSequenceMode
+			? mixer.hasDrive
+			: !!audio.trackFile || (isVideo && videoHasAudio),
+	);
+	/** Whether the audio links have something to follow, for the panels' spectra. */
+	let linksHaveAudio = $derived(
+		isSequenceMode
+			? mixer.hasDrive
+			: !!audio.trackFile || (isVideo && !!audio.analyserNode),
+	);
+	let liveSpectrum = $derived(
+		isSequenceMode ? mixer.spectrumData : audio.spectrumData,
+	);
 
 	function getMoshOptions() {
 		return {
@@ -1050,11 +1133,16 @@
 	let selectedFxClipId = $state<string | null>(null);
 	let selectedFxClipIds = $state<string[]>([]);
 
-	// With an external track the audio is the master clock, matching export.
-	// Loading the file makes it master, not "and its duration is known".
-	let seqMasterIsAudio = $derived(!!audio.trackFile);
+	// Single mode: with an external track the audio is the master clock, matching export.
+	// Loading the file makes it master, not "and its duration is known". Sequence mode's
+	// clock is the mixer, whatever the lanes hold.
+	let seqMasterIsAudio = $derived(!isSequenceMode && !!audio.trackFile);
 	let seqMasterDuration = $derived(
-		seqMasterIsAudio ? audio.trackDuration : videoDuration,
+		isSequenceMode
+			? mixer.duration
+			: seqMasterIsAudio
+				? audio.trackDuration
+				: videoDuration,
 	);
 
 	// Beats per minute, feeding the auto clips' re-roll spacing; 0 = not detected yet.
@@ -1075,10 +1163,17 @@
 		fx?: FxLane[];
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
 		sourceEdits?: Record<string, SourceEdit>;
+		/** Sequence mode, from v3: the project's own length. Before, the song set it. */
+		length?: number;
+		/** The export span on the project timeline. */
+		span?: { start: number; end: number };
+		/** Library id of the song: the BPM source, and what the library shows as loaded. */
+		song?: string | null;
 	}
 
-	/** Bumped when what a saved entry means changes; see SeqEntry.v. */
-	const SEQ_ENTRY_VERSION = 2;
+	/** Bumped when what a saved entry means changes; see SeqEntry.v. v3 moved the song
+	 * onto an audio lane and gave the project its own length. */
+	const SEQ_ENTRY_VERSION = 3;
 
 	/** As much of a saved segment as the migration reads. */
 	interface LegacySegmentEntry {
@@ -1113,9 +1208,22 @@
 	let videoSeqKey = $derived(
 		isVideo ? `video:${file.name}:${file.size}:${file.lastModified}` : null,
 	);
+	/** Sequence mode's project id: the song's id for projects from before v3, else its own. */
+	let projectKey = $state<string | null>(
+		untrack(() =>
+			mode === "sequence"
+				? (initialProjectKey ?? initialTrackId ?? `proj-${generateId()}`)
+				: null,
+		),
+	);
+
 	// The song/video this editor saves against, before the mode prefix.
 	let seqBaseKey = $derived(
-		seqMasterIsAudio ? currentTrackId : (videoSeqKey ?? currentTrackId),
+		isSequenceMode
+			? projectKey
+			: seqMasterIsAudio
+				? currentTrackId
+				: (videoSeqKey ?? currentTrackId),
 	);
 
 	/** Single and sequence share this component, so the store is namespaced. */
@@ -1170,33 +1278,41 @@
 	// Skipped while playing: the volume-link tick mutates the chains each frame.
 	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
-		const playing = audio.audioPlaying || videoIsPlaying;
+		const playing = audio.audioPlaying || videoIsPlaying || mixer.playing;
 		if (playing) return;
-		const bpm = sequenceBpm;
-		const text = layersAsLoaded(
-			$state.snapshot(textTimeline) as TextTimeline,
-			"text",
-		);
-		const media = $state.snapshot(mediaTimeline) as MediaTimeline;
-		const fx = $state.snapshot(fxLanes) as FxLane[];
-		const sourceEdits = $state.snapshot(sourceRegistry.edits) as Record<
-			string,
-			SourceEdit
-		>;
+		const entry = seqEntryNow();
 		const key = seqStoreKey;
-		if (!key || key !== loadedTimelineKey) return;
+		if (!key || key !== loadedTimelineKey || !entry) return;
 		clearTimeout(seqSaveTimer);
 		seqSaveTimer = setTimeout(() => {
-			void saveTimeline(key, {
-				v: SEQ_ENTRY_VERSION,
-				bpm,
-				text,
-				media,
-				fx,
-				sourceEdits,
-			}).then(reportSeqSave);
+			void saveTimeline(key, entry).then(reportSeqSave);
 		}, 300);
 	});
+
+	/** What gets saved, read deep; null while a project is still working out its length. */
+	function seqEntryNow(): SeqEntry | null {
+		if (isSequenceMode && !projectReady) return null;
+		const entry: SeqEntry = {
+			v: SEQ_ENTRY_VERSION,
+			bpm: sequenceBpm,
+			text: layersAsLoaded(
+				$state.snapshot(textTimeline) as TextTimeline,
+				"text",
+			),
+			media: $state.snapshot(mediaTimeline) as MediaTimeline,
+			fx: $state.snapshot(fxLanes) as FxLane[],
+			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
+				string,
+				SourceEdit
+			>,
+		};
+		if (isSequenceMode) {
+			entry.length = mixer.duration;
+			entry.span = { start: mixer.spanStart, end: mixer.spanEnd };
+			entry.song = currentTrackId;
+		}
+		return entry;
+	}
 
 	/** Only the transition into failure is announced, or it would toast every tick. */
 	let seqSaveFailed = false;
@@ -1215,21 +1331,9 @@
 	function flushSequenceSave() {
 		clearTimeout(seqSaveTimer);
 		const key = seqStoreKey;
-		if (!key || key !== loadedTimelineKey) return;
-		void saveTimeline(key, {
-			v: SEQ_ENTRY_VERSION,
-			bpm: sequenceBpm,
-			text: layersAsLoaded(
-				$state.snapshot(textTimeline) as TextTimeline,
-				"text",
-			),
-			media: $state.snapshot(mediaTimeline) as MediaTimeline,
-			fx: $state.snapshot(fxLanes) as FxLane[],
-			sourceEdits: $state.snapshot(sourceRegistry.edits) as Record<
-				string,
-				SourceEdit
-			>,
-		}).then(reportSeqSave);
+		const entry = seqEntryNow();
+		if (!key || key !== loadedTimelineKey || !entry) return;
+		void saveTimeline(key, entry).then(reportSeqSave);
 	}
 
 	// Reloading or closing mid-playback would lose the session: no pause settles the debounce.
@@ -1261,6 +1365,7 @@
 	});
 
 	function seqMasterTime(): number {
+		if (isSequenceMode) return mixer.currentTime;
 		if (seqMasterIsAudio) return audio.trackCurrentTime;
 		return videoClock;
 	}
@@ -1498,8 +1603,8 @@
 			// Single mode has no pool: its one file is the frame.
 			if (!isSequenceMode) return;
 			try {
-				// Opened from a saved song: these blobs came from storage, so don't write them back.
-				const persist = !initialTrackId;
+				// Opened from a saved project: these blobs came from storage, so don't write them back.
+				const persist = !initialTrackId && !initialProjectKey;
 				await sourceRegistry.add([file], { persist });
 				poolFilled = true;
 				const extras = extraFiles.filter((f) => f !== file);
@@ -1640,6 +1745,7 @@
 	});
 
 	function seqPlaying(): boolean {
+		if (isSequenceMode) return mixer.playing;
 		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
 	}
 
@@ -1674,24 +1780,399 @@
 			seqBaseSize = { width: first.width, height: first.height };
 		}
 	});
-	/** A song with nothing saved yet: the opened file goes on a first layer spanning it. */
-	let seedLayerKey = $state<string | null>(null);
+	/** Sequence mode: set once the project knows its length; nothing saves before. */
+	let projectReady = $state(false);
+	/** A project still working out its length, from its song and its opened media. */
+	let pendingInit = $state<{ key: string; seed: boolean } | null>(null);
+	/** Length a new project takes when nothing else gives it one. */
+	const DEFAULT_PROJECT_LENGTH = 30;
+
+	// Opening a project: its saved timeline, or a fresh one seeded from the opened file.
+	let projectLoadedFor: string | null = null;
 	$effect(() => {
-		if (!isSequenceMode || !seedLayerKey || seedLayerKey !== seqStoreKey) {
+		if (!isSequenceMode) return;
+		const key = projectKey;
+		if (!key || key === projectLoadedFor) return;
+		projectLoadedFor = key;
+		void loadProject(key);
+	});
+
+	async function loadProject(key: string) {
+		const storeKey = seqKeyPrefix + key;
+		loadedTimelineKey = null;
+		projectReady = false;
+		const saved = await loadSeqEntry(key);
+		if (seqStoreKey !== storeKey) return;
+		loadedTimelineKey = storeKey;
+		if (saved === null) {
+			// Named after what it was opened with until the user names it.
+			if (key.startsWith("proj-") && !readProjectNames()[key]) {
+				setProjectName(key, file.name);
+			}
+			pendingInit = { key: storeKey, seed: true };
 			return;
 		}
-		const duration = seqMasterDuration;
-		if (duration <= 0) return;
-		const source = sourceRegistry.get(stableSourceId(file));
-		if (!source) return;
-		seedLayerKey = null;
-		if (untrack(() => mediaTimeline).lanes.length > 0) return;
-		const lane = createMediaLane("Layer 1", source.id, 0);
-		lane.underEffects = true;
-		lane.clips = [createMediaClip(0, duration)];
-		mediaTimeline = { enabled: true, lanes: [lane] };
-		mediaHistory.reset();
+		restoreSequenceBpm(saved.bpm ?? 0);
+		restoreFxLanes(saved.fx);
+		restoreTextTimeline(saved.text);
+		restoreMediaTimeline(saved.media);
+		sourceRegistry.restoreEdits(saved.sourceEdits);
+		legacySegments = saved.segments?.length
+			? { key: storeKey, segments: saved.segments }
+			: null;
+		const length = saved.length ?? 0;
+		if ((saved.v ?? 0) < 3 || length <= 0) {
+			// Saved while the song was the clock: it becomes a lane once its length is known.
+			pendingInit = { key: storeKey, seed: false };
+			return;
+		}
+		mixer.setDuration(length);
+		if (saved.span && saved.span.end > saved.span.start) {
+			mixer.spanStart = saved.span.start;
+			mixer.spanEnd = Math.min(saved.span.end, length);
+		}
+		if (saved.song !== undefined && saved.song !== currentTrackId) {
+			await loadSong(saved.song);
+		}
+		mixSpanHistory.reset();
+		projectReady = true;
+	}
+
+	// The song's length and the opened file are what a project without one is sized by.
+	$effect(() => {
+		const pending = pendingInit;
+		if (!pending || pending.key !== seqStoreKey) return;
+		audioBank.version;
+		// A song handed in without a library id gets one first; it's keyed by that.
+		if (audio.trackFile && !currentTrackId) return;
+		const songId = songSourceId;
+		let songLength = 0;
+		if (songId) {
+			const buffer = audioBank.buffer(songId);
+			if (!buffer && !audioBank.isSilent(songId)) return;
+			songLength = buffer?.duration ?? 0;
+		}
+		const first = sourceRegistry.get(stableSourceId(file)) ?? null;
+		// An opened file that never decoded won't seed anything; don't wait on it forever.
+		if (pending.seed && !first && !mountMediaDone) return;
+		pendingInit = null;
+		untrack(() =>
+			finishProjectInit(pending.seed ? first : null, songId, songLength),
+		);
 	});
+
+	/** The latest clip end on any lane. */
+	function timelineContentEnd(): number {
+		let end = audioLanesEnd(mediaTimeline.audioLanes);
+		for (const lane of [
+			...mediaTimeline.lanes,
+			...textTimeline.lanes,
+			...fxLanes,
+		]) {
+			for (const clip of lane.clips) end = Math.max(end, clip.end);
+		}
+		return end;
+	}
+
+	function finishProjectInit(
+		seedFrom: SequenceSource | null,
+		songId: string | null,
+		songLength: number,
+	) {
+		const contentEnd = timelineContentEnd();
+		const length =
+			songLength > 0
+				? songLength
+				: contentEnd > 0
+					? contentEnd
+					: seedFrom && seedFrom.duration > 0
+						? seedFrom.duration
+						: DEFAULT_PROJECT_LENGTH;
+		mixer.setDuration(length);
+		// Before v3 the span was kept per song.
+		const savedSpan = currentTrackId ? spanStore.load(currentTrackId) : null;
+		if (savedSpan && savedSpan.spanEnd > savedSpan.spanStart) {
+			mixer.spanStart = Math.min(savedSpan.spanStart, length);
+			mixer.spanEnd = Math.min(savedSpan.spanEnd, length);
+		} else {
+			mixer.spanStart = 0;
+			mixer.spanEnd = length;
+		}
+		let next = mediaTimeline;
+		const lanes = next.audioLanes ?? [];
+		if (
+			songId &&
+			songLength > 0 &&
+			!lanes.some((l) => l.clips.some((c) => c.sourceId === songId))
+		) {
+			const lane = createAudioLane("Music", true);
+			lane.clips = [createAudioClip(0, Math.min(songLength, length), songId)];
+			next = { ...next, audioLanes: [lane, ...lanes] };
+		}
+		if (seedFrom && next.lanes.length === 0) {
+			const lane = createMediaLane("Layer 1", seedFrom.id, 0);
+			lane.underEffects = true;
+			lane.clips = [createMediaClip(0, length)];
+			// Under a song the opened video is a backdrop; its own sound would fight it.
+			if (songId && lane.audio) lane.audio = { ...lane.audio, muted: true };
+			next = { ...next, enabled: true, lanes: [lane] };
+		}
+		mediaTimeline = next;
+		mediaHistory.reset();
+		mixSpanHistory.reset();
+		projectReady = true;
+	}
+
+	// Every lane's sound, planned once for the mixer, the waveforms and the export.
+	/** Pool videos and their length: the sources that can carry sound. */
+	let videoLengths = $derived(
+		Object.fromEntries(
+			sequenceSources
+				.filter((s) => s.kind === "video" && s.duration > 0)
+				.map((s) => [s.id, s.duration]),
+		),
+	);
+	let songSourceId = $derived(
+		isSequenceMode && currentTrackId ? trackSourceId(currentTrackId) : null,
+	);
+	let mixPlan = $derived.by(() =>
+		isSequenceMode
+			? planMix({
+					timeline: mediaTimeline,
+					edits: sourceRegistry.edits,
+					videos: videoLengths,
+					// The library's loudness match applies to the song, as it did when it played alone.
+					sourceGains: songSourceId
+						? { [songSourceId]: audio.normalizeGain }
+						: undefined,
+				})
+			: [],
+	);
+	$effect(() => {
+		if (isSequenceMode) mixer.setPlan(mixPlan);
+	});
+	$effect(() => {
+		if (!isSequenceMode) return;
+		const ids = planSourceIds(mixPlan);
+		if (songSourceId) ids.push(songSourceId);
+		audioBank.ensure(ids);
+	});
+
+	const peaksOf = (id: string) => audioBank.peaks(id);
+
+	/** Names of library tracks on the lanes, filled in as they're looked up. */
+	let audioTrackNames = $state<Record<string, string>>({});
+	$effect(() => {
+		for (const lane of mediaTimeline.audioLanes ?? []) {
+			for (const clip of lane.clips) {
+				const trackId = clip.sourceId ? trackIdOf(clip.sourceId) : null;
+				if (!trackId || untrack(() => audioTrackNames[trackId])) continue;
+				void getTrack(trackId).then((t) => {
+					if (t) audioTrackNames = { ...audioTrackNames, [trackId]: t.name };
+				});
+			}
+		}
+	});
+
+	/** A lane-ready name for an audio source. */
+	function audioSourceName(id: string | null): string {
+		if (!id) return "No sound";
+		const trackId = trackIdOf(id);
+		if (trackId) return audioTrackNames[trackId] ?? "Audio";
+		return sourceRegistry.get(id)?.name ?? "Missing media";
+	}
+
+	/** Load a library track as the song, or drop the song for null. */
+	async function loadSong(trackId: string | null) {
+		if (!trackId) {
+			dropSong();
+			return;
+		}
+		const track = await getTrack(trackId).catch(() => null);
+		if (!track) return;
+		setSong(
+			new File([track.blob], track.name, { type: track.blob.type }),
+			trackId,
+		);
+	}
+
+	/** The project's song: the BPM source, and the track the library shows as loaded. */
+	function setSong(songFile: File, trackId: string) {
+		audio.trackFile = songFile;
+		currentTrackId = trackId;
+	}
+
+	function dropSong() {
+		audio.clearTrack();
+		currentTrackId = null;
+		sequenceBpm = 0;
+	}
+
+	/** Sequence mode: sound files onto lanes. The first becomes the song when there's none. */
+	async function addAudioFiles(files: File[]) {
+		const at = timelineAxis?.staticTime ?? 0;
+		for (const f of files) {
+			let track;
+			try {
+				track = await addTrack(f);
+			} catch (e) {
+				console.error("Failed to store track:", e);
+				showToast(`Couldn't store "${f.name}"`, "error");
+				continue;
+			}
+			const sourceId = trackSourceId(track.id);
+			const isSong = !audio.trackFile;
+			if (isSong) setSong(f, track.id);
+			await audioBank.settle([sourceId]);
+			const buffer = audioBank.buffer(sourceId);
+			if (!buffer) {
+				showToast(`"${f.name}" has no sound that could be decoded`, "error");
+				if (isSong) dropSong();
+				continue;
+			}
+			const name = isSong ? "Music" : f.name.replace(/\.[^.]+$/, "");
+			placeAudio(sourceId, buffer.duration, isSong ? 0 : at, name, isSong);
+		}
+	}
+
+	/** A new lane holding one clip of `sourceId` from `at`. The first music into a project
+	 * with no sound yet grows it to fit, and stretches a backdrop that filled it. */
+	function placeAudio(
+		sourceId: string,
+		length: number,
+		at: number,
+		name: string,
+		drives: boolean,
+	) {
+		const lanes = mediaTimeline.audioLanes ?? [];
+		if (lanes.length >= MAX_AUDIO_LANES) {
+			showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
+			return;
+		}
+		pushMediaHistory();
+		let next = mediaTimeline;
+		const before = mixer.duration;
+		if (drives && lanes.length === 0 && length > before) {
+			next = {
+				...next,
+				lanes: next.lanes.map((l) =>
+					l.clips.length === 1 &&
+					l.clips[0].start === 0 &&
+					Math.abs(l.clips[0].end - before) < 1e-6
+						? { ...l, clips: [{ ...l.clips[0], end: length }] }
+						: l,
+				),
+			};
+			mixer.setDuration(length);
+		}
+		const duration = mixer.duration;
+		const start = Math.min(at, Math.max(0, duration - MIN_CLIP_LENGTH));
+		const lane = createAudioLane(name, drives);
+		lane.clips = [
+			createAudioClip(start, Math.min(duration, start + length), sourceId),
+		];
+		setMediaTimeline({
+			...next,
+			audioLanes: drives ? [lane, ...lanes] : [...lanes, lane],
+		});
+		selectedAudioClipId = lane.clips[0].id;
+		selectedAudioClipIds = [lane.clips[0].id];
+	}
+
+	/** The library picked a song: it takes the old one's clips, or a lane of its own. */
+	function replaceSong(songFile: File, trackId: string) {
+		if (trackId === currentTrackId) return;
+		const from = songSourceId;
+		const to = trackSourceId(trackId);
+		sequenceBpm = 0;
+		setSong(songFile, trackId);
+		const lanes = mediaTimeline.audioLanes ?? [];
+		if (from && lanes.some((l) => l.clips.some((c) => c.sourceId === from))) {
+			pushMediaHistory();
+			setMediaTimeline({
+				...mediaTimeline,
+				audioLanes: retargetAudioSource(lanes, from, to),
+			});
+			return;
+		}
+		void audioBank.settle([to]).then(() => {
+			const buffer = audioBank.buffer(to);
+			if (buffer && currentTrackId === trackId) {
+				placeAudio(to, buffer.duration, 0, "Music", true);
+			}
+		});
+	}
+
+	/** Unloading the song takes its clips off the lanes too. */
+	function removeSong() {
+		const id = songSourceId;
+		const lanes = mediaTimeline.audioLanes ?? [];
+		if (id && lanes.some((l) => l.clips.some((c) => c.sourceId === id))) {
+			pushMediaHistory();
+			setMediaTimeline({
+				...mediaTimeline,
+				audioLanes: removeAudioSource(lanes, id),
+			});
+		}
+		dropSong();
+	}
+
+	/** The project's length, set by hand. Clips past a shorter end are trimmed, undoably. */
+	function setProjectLength(length: number) {
+		const next = Math.max(1, length);
+		if (next < mixer.duration && timelineContentEnd() > next) {
+			pushMediaHistory();
+			pushTextHistory();
+			pushFxHistory();
+		}
+		mixer.setDuration(next);
+	}
+
+	/** Detach a video clip's sound onto an audio lane of its own. */
+	function detachClipAudio(clipId: string) {
+		const lane = findMediaClipLane(mediaTimeline, clipId);
+		const clip = lane?.clips.find((c) => c.id === clipId);
+		const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
+		if (!lane || !clip || !sourceId) return;
+		const lanes = mediaTimeline.audioLanes ?? [];
+		// The first free-standing lane with room takes it; otherwise a new one does.
+		const fits = (l: AudioLane) =>
+			l.clips.every((c) => c.end <= clip.start || c.start >= clip.end);
+		const target = lanes.find((l) => !l.drives && fits(l));
+		if (!target && lanes.length >= MAX_AUDIO_LANES) {
+			showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
+			return;
+		}
+		const detached = {
+			...createAudioClip(clip.start, clip.end, sourceId, clip.sourceStart),
+			gain: (lane.audio?.gain ?? 1) * (clip.gain ?? 1),
+			fadeInSec: clip.fadeInSec,
+			fadeOutSec: clip.fadeOutSec,
+		};
+		const audioLanes = target
+			? lanes.map((l) =>
+					l.id === target.id
+						? {
+								...l,
+								clips: [...l.clips, detached].sort((a, b) => a.start - b.start),
+							}
+						: l,
+				)
+			: [
+					...lanes,
+					{ ...createAudioLane(`${lane.name} sound`), clips: [detached] },
+				];
+		pushMediaHistory();
+		setMediaTimeline({
+			...updateMediaLaneIn(mediaTimeline, lane.id, (l) => ({
+				...l,
+				clips: l.clips.map((c) =>
+					c.id === clipId ? { ...c, audioDetached: true } : c,
+				),
+			})),
+			audioLanes,
+		});
+	}
 
 	/** What is on screen now: the main chain, then each fx lane's in lane order. */
 	let renderedEffects = $derived.by(() =>
@@ -1858,14 +2339,16 @@
 		const span = loopSpan;
 		if (!clipLoop || !span) return;
 		const t = seqMasterTime();
-		if (t < span.start - 0.05 || t >= span.end) {
-			if (seqMasterIsAudio) seekTo(span.start);
-			else seekVideoTo(span.start);
-		}
+		if (t < span.start - 0.05 || t >= span.end) seekMaster(span.start);
 	});
 
 	function playSpan() {
-		// Playback starts at the static marker, not wherever the clock last stopped.
+		if (isSequenceMode) {
+			// Playback starts at the static marker, not wherever the clock last stopped.
+			if (timelineAxis && !mixer.playing) mixer.seek(timelineAxis.staticTime);
+			mixer.play();
+			return;
+		}
 		if (timelineAxis && !audio.audioPlaying)
 			audio.seekTo(timelineAxis.staticTime);
 		audio.playAudio();
@@ -1873,6 +2356,10 @@
 	}
 
 	function pauseTrack() {
+		if (isSequenceMode) {
+			mixer.pause();
+			return;
+		}
 		audio.pauseAudio();
 		if (isVideo) pauseVideo();
 	}
@@ -1887,7 +2374,8 @@
 	}
 
 	function seekTo(t: number) {
-		audio.seekTo(t);
+		if (isSequenceMode) mixer.seek(t);
+		else audio.seekTo(t);
 	}
 
 	let moshGroupRef: MoshGroup | undefined = $state(undefined);
@@ -1958,7 +2446,7 @@
 	);
 	// Built per press: the text and media stacks are declared further down.
 	const undoSources = (): UndoSource[] => [
-		spanHistory.undoSource,
+		isSequenceMode ? mixSpanHistory.undoSource : spanHistory.undoSource,
 		snapshotUndoSource(
 			textHistory,
 			() => $state.snapshot(textTimeline) as TextTimeline,
@@ -2268,6 +2756,8 @@
 	let recordFps = $state(60);
 	/** Seconds. A ceiling on typos, not a format limit: the encoder has no cap. */
 	const MAX_RECORD_DURATION = 600;
+	/** A ceiling on typos for the editor's project length. */
+	const MAX_PROJECT_LENGTH = 3600;
 	/** One click for the lengths people actually reach for. */
 	const RECORD_DURATION_PRESETS = [5, 10, 30, 60, 120];
 
@@ -2371,6 +2861,7 @@
 	/** Every lane on the stack, whatever kind: the fold-all control works on the lot. */
 	let laneIds = $derived([
 		...mediaTimeline.lanes.map((lane) => lane.id),
+		...(mediaTimeline.audioLanes ?? []).map((lane) => lane.id),
 		...textTimeline.lanes.map((lane) => lane.id),
 		...fxLanes.map((lane) => lane.id),
 	]);
@@ -2460,21 +2951,27 @@
 		seqMasterDuration > 0 ? seqMasterDuration : recordDuration,
 	);
 	/** True when nothing else owns a playhead, so the text ruler grows one. */
-	let textNeedsTransport = $derived(seqMasterDuration <= 0);
+	let textNeedsTransport = $derived(!isSequenceMode && seqMasterDuration <= 0);
 	let textTime = $derived(textNeedsTransport ? stillClock : seqMasterTime());
 	// An export's frame 0 is not the master clock's zero; it starts at the audio span.
 	let textTimeOffset = $derived(
-		audio.trackFile && audio.trackDuration > 0
-			? audio.spanStart
-			: isVideo && videoDuration > 0
-				? videoSpanStart
-				: 0,
+		isSequenceMode
+			? mixer.spanStart
+			: audio.trackFile && audio.trackDuration > 0
+				? audio.spanStart
+				: isVideo && videoDuration > 0
+					? videoSpanStart
+					: 0,
 	);
 	let textTimeScale = $derived(
 		!audio.trackFile && isVideo && videoDuration > 0 ? videoSpeed : 1,
 	);
 	let textClockRunning = $derived(
-		textNeedsTransport ? stillPlaying : audio.audioPlaying || videoIsPlaying,
+		isSequenceMode
+			? mixer.playing
+			: textNeedsTransport
+				? stillPlaying
+				: audio.audioPlaying || videoIsPlaying,
 	);
 
 	// Every lane shares the master clock's axis; a video under its own span is a second clock.
@@ -2484,16 +2981,20 @@
 	let videoIsMaster = $derived(showVideoBar && !seqMasterIsAudio);
 	let audioIsMaster = $derived(audio.trackFile && audio.trackDuration > 0);
 	let showStack = $derived(
-		textDuration > 0 &&
-			((isSequenceMode && seqMasterDuration > 0) ||
-				textTimeline.enabled ||
-				mediaTimeline.enabled ||
-				videoIsMaster ||
-				audioIsMaster),
+		isSequenceMode
+			? seqMasterDuration > 0
+			: textDuration > 0 &&
+					(textTimeline.enabled ||
+						mediaTimeline.enabled ||
+						videoIsMaster ||
+						audioIsMaster),
 	);
 
 	function toggleMasterPlay() {
-		if (textNeedsTransport) {
+		if (isSequenceMode) {
+			if (mixer.playing) pauseTrack();
+			else playSpan();
+		} else if (textNeedsTransport) {
 			stillPlaying = !stillPlaying;
 		} else if (seqMasterIsAudio) {
 			if (audio.audioPlaying) pauseTrack();
@@ -2506,7 +3007,9 @@
 	}
 
 	function seekMaster(t: number) {
-		if (textNeedsTransport) {
+		if (isSequenceMode) {
+			mixer.seek(t);
+		} else if (textNeedsTransport) {
 			stillClock = t;
 			stillSeekTick++;
 		} else if (seqMasterIsAudio) seekTo(t);
@@ -2514,7 +3017,8 @@
 	}
 
 	function toggleMasterLoop() {
-		if (seqMasterIsAudio) audio.loopAudio = !audio.loopAudio;
+		if (isSequenceMode) mixer.loop = !mixer.loop;
+		else if (seqMasterIsAudio) audio.loopAudio = !audio.loopAudio;
 		else videoLoop = !videoLoop;
 	}
 
@@ -2678,8 +3182,11 @@
 		isSequenceMode && !sequenceGridOpen && sequenceSources.length > 0,
 	);
 
+	let selectedAudioClipId = $state<string | null>(null);
+	let selectedAudioClipIds = $state<string[]>([]);
+
 	// One selection across the whole stack: filling any lane's selection empties every other's.
-	type SelectionKind = "fx" | "media" | "text";
+	type SelectionKind = "fx" | "media" | "text" | "audio";
 
 	function keepOnlySelection(keep: SelectionKind) {
 		untrack(() => {
@@ -2691,6 +3198,7 @@
 			}
 			if (keep !== "media") selectedMediaClipId = null;
 			if (keep !== "text") selectedTextClipId = null;
+			if (keep !== "audio") selectedAudioClipId = null;
 		});
 	}
 
@@ -2702,6 +3210,9 @@
 	});
 	$effect(() => {
 		if (selectedTextClipId) keepOnlySelection("text");
+	});
+	$effect(() => {
+		if (selectedAudioClipId) keepOnlySelection("audio");
 	});
 
 	/** Select what the preview was clicked on; clicking past every layer lands on the base. */
@@ -2869,6 +3380,12 @@
 	let selectedMediaLane = $derived(
 		findMediaClipLane(mediaTimeline, selectedMediaClipId),
 	);
+	/** What the selected layer clip draws, and plays. */
+	let selectedMediaSourceId = $derived(
+		selectedMediaLane && selectedMediaClip
+			? clipSourceId(selectedMediaLane, selectedMediaClip)
+			: null,
+	);
 
 	/** The source the selected layer clips draw; null when they disagree. */
 	let mediaSelectedSourceId = $derived.by(() => {
@@ -2925,45 +3442,56 @@
 
 	/** Transport for the lyrics-sync modal, on whichever clock owns the master timeline. */
 	let lyricsSync = $derived<LyricsSyncProps | null>(
-		textTimeline.enabled
+		textTimeline.enabled && isSequenceMode
 			? {
-					isPlaying: textNeedsTransport
-						? stillPlaying
-						: audio.audioPlaying || videoIsPlaying,
-					spanStart: textNeedsTransport
-						? 0
-						: seqMasterIsAudio
-							? audio.spanStart
-							: videoSpanStart,
-					spanEnd: textNeedsTransport
-						? textDuration
-						: seqMasterIsAudio
-							? audio.spanEnd
-							: videoSpanEnd,
-					getCurrentTime: () =>
-						textNeedsTransport
-							? stillClock
-							: seqMasterIsAudio
-								? audio.trackCurrentTime
-								: videoClock,
-					onPlay: textNeedsTransport
-						? () => (stillPlaying = true)
-						: seqMasterIsAudio
-							? playSpan
-							: playVideo,
-					onPause: textNeedsTransport
-						? () => (stillPlaying = false)
-						: seqMasterIsAudio
-							? pauseTrack
-							: pauseVideo,
-					onSeek: textNeedsTransport
-						? (t) => (stillClock = t)
-						: seqMasterIsAudio
-							? seekTo
-							: seekVideoTo,
+					isPlaying: mixer.playing,
+					spanStart: mixer.spanStart,
+					spanEnd: mixer.spanEnd,
+					getCurrentTime: () => mixer.currentTime,
+					onPlay: playSpan,
+					onPause: pauseTrack,
+					onSeek: (t) => mixer.seek(t),
 					onApply: applyLyrics,
 				}
-			: null,
+			: textTimeline.enabled
+				? {
+						isPlaying: textNeedsTransport
+							? stillPlaying
+							: audio.audioPlaying || videoIsPlaying,
+						spanStart: textNeedsTransport
+							? 0
+							: seqMasterIsAudio
+								? audio.spanStart
+								: videoSpanStart,
+						spanEnd: textNeedsTransport
+							? textDuration
+							: seqMasterIsAudio
+								? audio.spanEnd
+								: videoSpanEnd,
+						getCurrentTime: () =>
+							textNeedsTransport
+								? stillClock
+								: seqMasterIsAudio
+									? audio.trackCurrentTime
+									: videoClock,
+						onPlay: textNeedsTransport
+							? () => (stillPlaying = true)
+							: seqMasterIsAudio
+								? playSpan
+								: playVideo,
+						onPause: textNeedsTransport
+							? () => (stillPlaying = false)
+							: seqMasterIsAudio
+								? pauseTrack
+								: pauseVideo,
+						onSeek: textNeedsTransport
+							? (t) => (stillClock = t)
+							: seqMasterIsAudio
+								? seekTo
+								: seekVideoTo,
+						onApply: applyLyrics,
+					}
+				: null,
 	);
 
 	/** Drop the synced lines into the lyrics lane and select the first one. */
@@ -2974,13 +3502,15 @@
 		selectedTextClipId = clips[0].id;
 	}
 	let effectiveDuration = $derived(
-		audio.trackFile &&
-			audio.trackDuration > 0 &&
-			audio.spanEnd - audio.spanStart > 0
-			? audio.spanEnd - audio.spanStart
-			: isVideo && videoDuration > 0
-				? (videoSpanEnd - videoSpanStart) / videoSpeed
-				: recordDuration,
+		isSequenceMode
+			? mixer.spanEnd - mixer.spanStart
+			: audio.trackFile &&
+				  audio.trackDuration > 0 &&
+				  audio.spanEnd - audio.spanStart > 0
+				? audio.spanEnd - audio.spanStart
+				: isVideo && videoDuration > 0
+					? (videoSpanEnd - videoSpanStart) / videoSpeed
+					: recordDuration,
 	);
 	const recordingState = createRecordingState();
 
@@ -2995,6 +3525,7 @@
 		previewFullscreen = false;
 
 		audio.pauseAudio();
+		mixer.pause();
 		previewPlayer?.pause();
 		if (isVideo && videoEl) videoEl.pause();
 		if (isLive && !liveVideoEl?.srcObject) {
@@ -3011,15 +3542,28 @@
 			glRenderer.resize(resizeWidth, resizeHeight);
 		}
 
+		// The editor's sound is mixed up front, from the same plan the preview plays.
+		const plan = mixPlan;
+		const span = { start: mixer.spanStart, end: mixer.spanEnd };
+		const mixSound = async () => {
+			await audioBank.settle(planSourceIds(plan));
+			return renderMix(
+				plan,
+				(id) => audioBank.buffer(id),
+				span.start,
+				span.end,
+			);
+		};
+
 		await recordingState.run(
-			(signal) =>
+			async (signal) =>
 				executeRecording({
 					fps: recordFps,
 					recordDuration,
 					canvas: canvasEl!,
 					renderer: glRenderer!,
 					effects,
-					trackFile: audio.trackFile,
+					trackFile: isSequenceMode ? null : audio.trackFile,
 					trackDuration: audio.trackDuration,
 					spanStart: audio.spanStart,
 					spanEnd: audio.spanEnd,
@@ -3059,8 +3603,10 @@
 						? {
 								moshOptions: getMoshOptions(),
 								duration: seqMasterDuration,
-								masterIsAudio: seqMasterIsAudio,
+								masterIsAudio: true,
 								fxLanes: $state.snapshot(fxLanes) as FxLane[],
+								span,
+								mix: await mixSound(),
 							}
 						: null,
 					onProgress: (p) => {
@@ -3092,10 +3638,12 @@
 	/** Audio sets the track; media replaces the file in single mode, joins the pool in sequence. */
 	function handleDroppedFiles(files: FileList) {
 		const all = Array.from(files);
-		const audioFile = all.find((f) => f.type.startsWith("audio/"));
-		if (audioFile) {
+		const audioFiles = all.filter((f) => f.type.startsWith("audio/"));
+		if (isSequenceMode && audioFiles.length > 0) {
+			void addAudioFiles(audioFiles);
+		} else if (audioFiles[0]) {
 			clearTrack();
-			audio.trackFile = audioFile;
+			audio.trackFile = audioFiles[0];
 		}
 		const media = all.filter(
 			(f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
@@ -3115,7 +3663,7 @@
 	}}
 />
 
-{#if audio.trackObjectUrl}
+{#if audio.trackObjectUrl && !isSequenceMode}
 	<audio
 		bind:this={audioEl}
 		src={audio.trackObjectUrl}
@@ -3143,9 +3691,9 @@
 		activeTrackId={currentTrackId}
 		onLoadTrack={onLibraryLoadTrack}
 		onUnloadTrack={clearTrack}
-		onPlay={() => audio.playAudio()}
-		onPause={() => audio.pauseAudio()}
-		mainPlaying={audio.audioPlaying}
+		onPlay={isSequenceMode ? playSpan : () => audio.playAudio()}
+		onPause={isSequenceMode ? pauseTrack : () => audio.pauseAudio()}
+		mainPlaying={isSequenceMode ? mixer.playing : audio.audioPlaying}
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
@@ -3405,7 +3953,7 @@
 					: noSequenceMedia
 						? noMediaOverlay
 						: undefined}
-				spectrum={audio.frequencyData}
+				spectrum={isSequenceMode ? mixer.frequencyData : audio.frequencyData}
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
 				{sourceDurations}
@@ -3567,7 +4115,7 @@
 					bind:showSettings={showRecordSettings}
 				>
 					{#snippet settingsContent()}
-						{#if !audio.trackFile && !isVideo}
+						{#if !isSequenceMode && !audio.trackFile && !isVideo}
 							<div class="mosh-setting-row">
 								<label for="rec-duration">Duration</label>
 								<NumberField
@@ -3690,8 +4238,14 @@
 				selectionHint={isSequenceMode
 					? "Click a layer clip or an FX clip to edit it"
 					: null}
-				loopEnabled={seqMasterIsAudio ? audio.loopAudio : videoLoop}
-				onToggleLoop={audioIsMaster || videoIsMaster ? toggleMasterLoop : null}
+				loopEnabled={isSequenceMode
+					? mixer.loop
+					: seqMasterIsAudio
+						? audio.loopAudio
+						: videoLoop}
+				onToggleLoop={isSequenceMode || audioIsMaster || videoIsMaster
+					? toggleMasterLoop
+					: null}
 			>
 				{#snippet toolbar()}
 					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->
@@ -3730,6 +4284,15 @@
 						</button>
 					{/if}
 					{#if isSequenceMode && seqMasterDuration > 0}
+						<button
+							class="tl-tool-btn"
+							disabled={(mediaTimeline.audioLanes?.length ?? 0) >=
+								MAX_AUDIO_LANES}
+							title="Add music, a voice-over or any sound, on a lane of its own from the start marker"
+							onclick={openTrackPicker}
+						>
+							<Plus size={12} /> Audio
+						</button>
 						<div class="tl-tool-sep"></div>
 						<button
 							class="tl-tool-btn"
@@ -3756,6 +4319,34 @@
 							{:else}
 								<ChevronsDownUp size={12} /> Fold all
 							{/if}
+						</button>
+					{/if}
+					{#if isSequenceMode && seqMasterDuration > 0}
+						<div class="tl-tool-sep"></div>
+						<span
+							class="tl-tool-label"
+							title="How long the project runs. Shorter trims whatever hangs past the end."
+							>Length</span
+						>
+						<NumberField
+							value={Math.round(mixer.duration * 10) / 10}
+							min={1}
+							max={MAX_PROJECT_LENGTH}
+							step={1}
+							fineStep={0.1}
+							allowEmpty={false}
+							unit="duration"
+							upTitle="Longer (shift for a tenth of a second)"
+							downTitle="Shorter (shift for a tenth of a second)"
+							onChange={setProjectLength}
+						/>
+						<button
+							class="tl-tool-btn"
+							title="Fit the project to its clips: end where the last one does"
+							disabled={timelineContentEnd() <= 0}
+							onclick={() => setProjectLength(timelineContentEnd())}
+						>
+							Fit
 						</button>
 					{/if}
 					{#if videoIsMaster}
@@ -3789,6 +4380,9 @@
 							onRoll={mediaRoll}
 							onClear={mediaClear}
 							onModeChange={mediaModeChange}
+							plan={isSequenceMode ? mixPlan : undefined}
+							{peaksOf}
+							audioVersion={audioBank.version}
 						/>
 					{/if}
 					{#if textTimeline.enabled}
@@ -3831,6 +4425,23 @@
 							onClear={fxClear}
 						/>
 					{/if}
+					{#if isSequenceMode && (mediaTimeline.audioLanes?.length ?? 0) > 0}
+						<AudioLanes
+							lanes={mediaTimeline.audioLanes ?? []}
+							bind:selectedClipId={selectedAudioClipId}
+							bind:selectedClipIds={selectedAudioClipIds}
+							onChange={(audioLanes) =>
+								setMediaTimeline({ ...mediaTimeline, audioLanes })}
+							onBeforeEdit={pushMediaHistory}
+							plan={mixPlan}
+							{peaksOf}
+							version={audioBank.version}
+							sourceName={audioSourceName}
+							orderBase={layerOrder.length}
+							{foldedLaneIds}
+							onToggleFold={toggleLaneFold}
+						/>
+					{/if}
 				</div>
 				{#if videoIsMaster}
 					<AudioTimeline
@@ -3855,7 +4466,27 @@
 							: undefined}
 					/>
 				{/if}
-				{#if audioIsMaster}
+				{#if isSequenceMode}
+					<!-- The export span over the whole project, and the master volume. -->
+					<AudioTimeline
+						layout="lane"
+						label="OUT"
+						trackDuration={mixer.duration}
+						trackCurrentTime={mixer.currentTime}
+						spanStart={mixer.spanStart}
+						spanEnd={mixer.spanEnd}
+						isPlaying={mixer.playing}
+						outputVolume={mixer.outputVolume}
+						onPlay={playSpan}
+						onPause={pauseTrack}
+						onSeek={seekTo}
+						onSpanCommit={mixSpanHistory.push}
+						onSpanStartChange={(t) => (mixer.spanStart = t)}
+						onSpanEndChange={(t) => (mixer.spanEnd = t)}
+						onVolumeChange={(v) => mixer.setOutputVolume(v)}
+						ariaLabel="Export span"
+					/>
+				{:else if audioIsMaster}
 					<AudioTimeline
 						layout="lane"
 						label="AUD"
@@ -3876,7 +4507,7 @@
 				{/if}
 			</TimelineStack>
 		{/if}
-		{#if !audio.trackFile}
+		{#if isSequenceMode ? !audio.trackFile && !mediaTimeline.audioLanes?.length : !audio.trackFile}
 			<TrackAddBar
 				onOpenPicker={openTrackPicker}
 				hintText="Add music to make effects react to the beat"
@@ -3886,6 +4517,7 @@
 			bind:this={trackInput}
 			type="file"
 			accept="audio/*"
+			multiple={isSequenceMode}
 			onchange={onTrackInputChange}
 			hidden
 		/>
@@ -3968,8 +4600,8 @@
 				onClipChange={updateMediaClip}
 				onBeforeEdit={pushMediaHistory}
 				onClose={() => (selectedMediaClipId = null)}
-				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-				spectrumData={audio.spectrumData}
+				hasTrack={linksHaveAudio}
+				spectrumData={liveSpectrum}
 				response={selectedMediaLane
 					? laneAudioResponse(selectedMediaLane, audioResponse)
 					: audioResponse}
@@ -3977,6 +4609,11 @@
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 				onEditingChange={onSourceEditingChange}
 				{section}
+				sourceHasAudio={!selectedMediaSourceId ||
+					!audioBank.isSilent(selectedMediaSourceId)}
+				onDetachAudio={isSequenceMode && selectedMediaClip
+					? () => detachClipAudio(selectedMediaClip!.id)
+					: undefined}
 			/>
 		{:else if selectedTextClip}
 			<TextClipPanel
@@ -3986,8 +4623,8 @@
 				onClipChange={updateTextClip}
 				onBeforeEdit={pushTextHistory}
 				onClose={() => (selectedTextClipId = null)}
-				hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-				spectrumData={audio.spectrumData}
+				hasTrack={linksHaveAudio}
+				spectrumData={liveSpectrum}
 				response={audioResponse}
 				{section}
 			/>
@@ -4011,8 +4648,8 @@
 					noTarget={panelNoTarget}
 					rolledNote={panelRolledNote}
 					rolledChain={!!panelIntervalClip}
-					hasTrack={!!audio.trackFile || (isVideo && !!audio.analyserNode)}
-					spectrumData={audio.spectrumData}
+					hasTrack={linksHaveAudio}
+					spectrumData={liveSpectrum}
 					response={audioResponse}
 					onVolumeLinkChange={(index, paramKey, link) => {
 						panelBeforeEdit(`link:${index}:${paramKey}`);
@@ -4047,7 +4684,11 @@
 
 	{#if dragging}
 		<div class="drop-overlay">
-			<span>Drop image/video to replace · Drop audio to set track</span>
+			<span
+				>{isSequenceMode
+					? "Drop images or videos into the pool · Drop audio onto a lane"
+					: "Drop image/video to replace · Drop audio to set track"}</span
+			>
 		</div>
 	{/if}
 

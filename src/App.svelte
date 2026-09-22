@@ -31,6 +31,8 @@
 	let sequenceFiles: File[] = $state([]);
 	/** Set when sequence mode was opened from a saved song. */
 	let sequenceTrackId: string | null = $state(null);
+	/** Set when sequence mode was opened from a saved project. */
+	let sequenceProjectKey: string | null = $state(null);
 	let slideshowFiles: File[] = $state([]);
 	let pendingAudioFile: File | null = $state(null);
 	/** Editor state carried in from a reopened session, cleared on exit. */
@@ -154,6 +156,7 @@
 		file = null;
 		sequenceFiles = [];
 		sequenceTrackId = null;
+		sequenceProjectKey = null;
 		pendingAudioFile = null;
 		slideshowFiles = [];
 		restoredSingle = null;
@@ -196,7 +199,8 @@
 		}
 		sequenceFiles = await gifsToVideo(opened.sources);
 		pendingAudioFile = opened.trackFile;
-		sequenceTrackId = opened.trackId;
+		sequenceTrackId = opened.trackFile ? opened.trackId : null;
+		sequenceProjectKey = opened.trackId;
 		navigateTo("sequence");
 	}
 
@@ -261,6 +265,7 @@
 				extraFiles={sequenceFiles.slice(1)}
 				initialAudioFile={pendingAudioFile}
 				initialTrackId={sequenceTrackId}
+				initialProjectKey={sequenceProjectKey}
 				onfile={async (f: File) =>
 					(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
 				{warmCanvas}

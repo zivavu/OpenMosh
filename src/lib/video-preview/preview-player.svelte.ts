@@ -1,5 +1,8 @@
-import type { InputAudioTrack } from "mediabunny";
-import { openAudioTrack, type FrameQueue } from "../video/decode";
+import {
+	decodeAudioTrackToBuffer,
+	openAudioTrack,
+	type FrameQueue,
+} from "../video/decode";
 import { openVideoFrameSource } from "../video/frame-source";
 
 /** If decode falls this far (media seconds) behind the clock, keyframe-jump. */
@@ -270,45 +273,4 @@ export class VideoPreviewPlayer {
 		this.#audioSrc.disconnect();
 		this.#audioSrc = null;
 	}
-}
-
-/** Decode a full audio track into a single AudioBuffer for Web Audio playback. */
-async function decodeAudioTrackToBuffer(
-	track: InputAudioTrack,
-): Promise<AudioBuffer | null> {
-	const { AudioBufferSink } = await import("mediabunny");
-	const duration = await track.computeDuration();
-	if (!Number.isFinite(duration) || duration <= 0) return null;
-
-	// Rate/channels come from the first decoded chunk, not container metadata: mediabunny
-	// reads HE-AAC's rate as half the real output (SBR) and 1 channel (PS).
-	let out: AudioBuffer | null = null;
-	let sampleRate = 0;
-	let channels = 0;
-	let length = 0;
-
-	const sink = new AudioBufferSink(track);
-	for await (const { buffer, timestamp } of sink.buffers()) {
-		if (!out) {
-			sampleRate = buffer.sampleRate;
-			channels = buffer.numberOfChannels;
-			if (!sampleRate || !channels) return null;
-			length = Math.ceil(duration * sampleRate);
-			out = new AudioBuffer({ numberOfChannels: channels, length, sampleRate });
-		}
-		const offset = Math.round(timestamp * sampleRate);
-		if (offset >= length) break;
-		const room = length - offset;
-		for (let ch = 0; ch < channels; ch++) {
-			const src = buffer.getChannelData(
-				Math.min(ch, buffer.numberOfChannels - 1),
-			);
-			out.copyToChannel(
-				src.length > room ? src.subarray(0, room) : src,
-				ch,
-				offset,
-			);
-		}
-	}
-	return out;
 }
