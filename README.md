@@ -34,13 +34,13 @@ Pick one of three modes on the upload screen.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.png)
 
-**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then cut it into segments and give each one its own source and its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. On top of that sit stacked effect lanes, media layers with their own chains, and a text timeline. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once.
+**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then lay clips out on media layers, each with its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. Stacked effect lanes run over the whole frame, and a text timeline sits alongside the layers. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once.
 
-![Editor mode, timeline cut into segments](assets/screenshots/editor.png)
+![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.png)
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 
-There are 68 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Segments in the editor blend into each other through eight transitions. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
+There are 68 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
 
 Keyboard shortcuts live behind the shortcuts button in the app.
 
@@ -89,14 +89,14 @@ Issues and pull requests are welcome. The conventions worth knowing up front:
 - bun, not npm or yarn. Svelte 5 runes only.
 - Unit tests sit next to what they cover and run under `bun:test`, for pure logic only. Anything that needs a browser API goes in the Playwright suite under `tests/e2e`.
 - Run `bun check` and both test suites before opening a PR. `bunx playwright install chromium` once, first time.
-- A new effect is two files: its `EffectDefinition` in `src/lib/effects/definitions.ts`, and its GLSL plus `EffectShaderDef` in `src/lib/gl/effect-shaders.ts`. A transition is one: its fragment in `src/lib/gl/transition-shaders.ts`, listed in `TRANSITION_OPTIONS` in `src/lib/editor/sequence.ts`.
+- A new effect is two files: its `EffectDefinition` in `src/lib/effects/definitions.ts`, and its GLSL plus `EffectShaderDef` in `src/lib/gl/effect-shaders.ts`.
 - `bun dev` also serves a shader lab at `/lab/` for auditioning open-source ISF shaders on real footage before porting one. It's dev-only and not part of the build; see `lab/README.md`.
 
 ---
 
 ## Credits
 
-[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp, cross zoom and cube transitions come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, [essentia.js](https://mtg.github.io/essentia.js/) the BPM detection, and [lucide](https://lucide.dev/) the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
+[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp, cross zoom and cube transitions in the upload-screen demo come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, [essentia.js](https://mtg.github.io/essentia.js/) the BPM detection, and [lucide](https://lucide.dev/) the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
 
 ---
 
