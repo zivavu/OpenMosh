@@ -1818,9 +1818,9 @@
 		if (seqStoreKey !== storeKey) return;
 		loadedTimelineKey = storeKey;
 		if (saved === null) {
-			// Named after what it was opened with until the user names it.
+			// Named after its song, else what it was opened with, until the user names it.
 			if (key.startsWith("proj-") && !readProjectNames()[key]) {
-				setProjectName(key, file.name);
+				setProjectName(key, initialAudioFile?.name ?? file.name);
 			}
 			pendingInit = { key: storeKey, seed: true };
 			return;

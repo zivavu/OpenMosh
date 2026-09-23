@@ -16,7 +16,7 @@ import {
 	projectKeyForSession,
 	readProjectNames,
 } from "./project-names";
-import { listSavedSequences } from "./saved-sequences";
+import { isProjectKey, listSavedSequences } from "./saved-sequences";
 import {
 	clearAllSequenceStores,
 	deleteMediaPool,
@@ -63,6 +63,8 @@ export interface StorageProject {
 	workSize: number;
 	/** Newest write across everything keyed to the song; 0 when only the song. */
 	updatedAt: number;
+	/** Editor projects keyed by their own id that play this song. */
+	projectKeys: string[];
 }
 
 /** An edit keyed by its media rather than a song. */
@@ -117,6 +119,12 @@ function jsonSize(value: unknown): number {
 	} catch {
 		return 0;
 	}
+}
+
+/** The library song an own-id project's timeline plays, if it saved one. */
+function songOf(timeline: StoredTimeline | undefined): string | null {
+	const song = (timeline?.state as { song?: unknown } | null)?.song;
+	return typeof song === "string" ? song : null;
 }
 
 /** A `src:<name>:<size>:<mtime>` media id, taken apart. */
@@ -194,6 +202,19 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 	const poolByKey = new Map(pools.map((p) => [p.key, p]));
 	const sessionByKey = new Map(sessions.map((s) => [s.key, s]));
 	const timelineByKey = new Map(timelines.map((t) => [t.key, t]));
+	const trackIds = new Set(tracks.map((t) => t.id));
+
+	/** Own-id projects grouped under the song they play, so a song lists once. */
+	const ownProjectsBySong = new Map<string, StoredMediaPool[]>();
+	for (const pool of pools) {
+		if (!isProjectKey(pool.key)) continue;
+		const song = songOf(timelineByKey.get(`seq:${pool.key}`));
+		if (!song || !trackIds.has(song)) continue;
+		ownProjectsBySong.set(song, [...(ownProjectsBySong.get(song) ?? []), pool]);
+	}
+	const songOwned = new Set(
+		[...ownProjectsBySong.values()].flat().map((p) => p.key),
+	);
 
 	const projects: StorageProject[] = tracks.map((track) => {
 		const id = track.id;
@@ -204,14 +225,19 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 		const slideshowSession = sessionByKey.get(
 			SESSION_TRACK_PREFIX.slideshow + id,
 		);
+		const ownPools = ownProjectsBySong.get(id) ?? [];
+		const ownTimelines = ownPools
+			.map((p) => timelineByKey.get(`seq:${p.key}`))
+			.filter((t) => t !== undefined);
 
 		const modes: ProjectMode[] = [];
-		if (pool || seqTimeline) modes.push("sequence");
+		if (pool || seqTimeline || ownPools.length > 0) modes.push("sequence");
 		if (singleSession || singleTimeline) modes.push("single");
 		if (slideshowSession) modes.push("slideshow");
 
 		const mediaItems = resolve([
 			...(pool?.sourceIds ?? []),
+			...ownPools.flatMap((p) => p.sourceIds),
 			...(singleSession?.sourceIds ?? []),
 			...(slideshowSession?.sourceIds ?? []),
 		]);
@@ -221,6 +247,8 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 			singleTimeline,
 			singleSession,
 			slideshowSession,
+			...ownPools,
+			...ownTimelines,
 		].filter((r) => r !== undefined);
 		return {
 			trackId: id,
@@ -233,15 +261,16 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 				jsonSize(seqTimeline?.state) +
 				jsonSize(singleTimeline?.state) +
 				jsonSize(singleSession?.state) +
-				jsonSize(slideshowSession?.state),
+				jsonSize(slideshowSession?.state) +
+				ownTimelines.reduce((n, t) => n + jsonSize(t.state), 0),
 			updatedAt: records.reduce((t, r) => Math.max(t, r.updatedAt), 0),
+			projectKeys: ownPools.map((p) => p.key),
 		};
 	});
 	projects.sort(
 		(a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name),
 	);
 
-	const trackIds = new Set(tracks.map((t) => t.id));
 	const looseEdits: StorageLooseEdit[] = [];
 	for (const session of sessions) {
 		if (session.trackId && trackIds.has(session.trackId)) continue;
@@ -258,7 +287,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 		});
 	}
 	for (const pool of pools) {
-		if (trackIds.has(pool.key)) continue;
+		if (trackIds.has(pool.key) || songOwned.has(pool.key)) continue;
 		const items = resolve(pool.sourceIds);
 		looseEdits.push({
 			key: pool.key,
@@ -369,6 +398,12 @@ export function describeLooseEditDeletion(e: StorageLooseEdit): string {
 /** The song and everything keyed to it, in every mode. */
 export async function deleteProject(project: StorageProject): Promise<void> {
 	const id = project.trackId;
+	for (const key of project.projectKeys) {
+		await deleteMediaPool(key);
+		await deleteTimeline(`seq:${key}`);
+		forgetTrackEntries([key, `seq:${key}`]);
+	}
+	forgetProjectNames(project.projectKeys);
 	await deleteMediaPool(id);
 	await deleteTimeline(`seq:${id}`);
 	await deleteTimeline(`single:${id}`);
