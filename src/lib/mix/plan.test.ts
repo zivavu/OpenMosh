@@ -103,6 +103,29 @@ describe("planMix", () => {
 	});
 });
 
+describe("looping tracks", () => {
+	it("starts a looped track over when it runs out, and plays an unlooped one once", () => {
+		const lane = createAudioLane("Beat");
+		const clip = createAudioClip(0, 10, trackSourceId("beat"), 1);
+		lane.clips = [clip];
+		const input = {
+			timeline: { enabled: true, lanes: [], audioLanes: [lane] },
+			edits: {},
+			videos: {},
+			tracks: { [trackSourceId("beat")]: 4 },
+		};
+		expect(planMix(input).map((s) => [s.start, s.end, s.offset])).toEqual([
+			[0, 10, 1],
+		]);
+		clip.loop = true;
+		expect(planMix(input).map((s) => [s.start, s.end, s.offset])).toEqual([
+			[0, 3, 1],
+			[3, 7, 0],
+			[7, 10, 0],
+		]);
+	});
+});
+
 describe("trimSegment", () => {
 	it("moves the offset with the cut, at the segment's rate", () => {
 		const [seg] = planMix({

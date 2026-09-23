@@ -32,6 +32,8 @@ export interface AudioClip extends TimelineClip {
 	gain?: number;
 	fadeInSec?: number;
 	fadeOutSec?: number;
+	/** Starts the file over when it runs out, for as long as the clip lasts. */
+	loop?: boolean;
 }
 
 export interface AudioLane {
@@ -142,6 +144,7 @@ export function normalizeAudioLanes(raw: unknown): AudioLane[] {
 				gain: c.gain,
 				fadeInSec: c.fadeInSec,
 				fadeOutSec: c.fadeOutSec,
+				loop: c.loop || undefined,
 			}),
 		),
 	}));

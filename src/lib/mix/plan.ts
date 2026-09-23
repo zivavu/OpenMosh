@@ -18,6 +18,8 @@ export interface MixInput {
 	videos: Record<string, number>;
 	/** Extra gain per source, e.g. the song's loudness normalization. */
 	sourceGains?: Record<string, number>;
+	/** Library tracks' lengths, once decoded: what a looping clip wraps at. */
+	tracks?: Record<string, number>;
 }
 
 /** The clip a segment belongs to, for its fade envelope. */
@@ -105,7 +107,7 @@ function videoWalk(
 }
 
 export function planMix(input: MixInput): MixSegment[] {
-	const { timeline, edits, videos, sourceGains = {} } = input;
+	const { timeline, edits, videos, sourceGains = {}, tracks = {} } = input;
 	const out: MixSegment[] = [];
 	const push = (
 		laneId: string,
@@ -180,12 +182,14 @@ export function planMix(input: MixInput): MixSegment[] {
 					videoWalk(edits[sourceId], length, clip),
 				);
 			} else if (trackIdOf(sourceId)) {
+				const trackLength = tracks[sourceId] ?? 0;
+				const loops = clip.loop && trackLength > 0;
 				push(lane.id, clip, sourceId, lane.drives, gain, {
 					start: clip.start,
 					end: clip.end,
-					from: clip.sourceStart,
+					from: loops ? clip.sourceStart % trackLength : clip.sourceStart,
 					rate: 1,
-					loop: null,
+					loop: loops ? { start: 0, end: trackLength } : null,
 				});
 			}
 		}

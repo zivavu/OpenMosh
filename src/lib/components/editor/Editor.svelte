@@ -1939,6 +1939,19 @@
 				.map((s) => [s.id, s.duration]),
 		),
 	);
+	/** Decoded library tracks on the audio lanes, by length: looping clips wrap there. */
+	let trackLengths = $derived.by(() => {
+		audioBank.version;
+		const lengths: Record<string, number> = {};
+		for (const lane of mediaTimeline.audioLanes ?? []) {
+			for (const clip of lane.clips) {
+				const id = clip.sourceId;
+				const buffer = id && trackIdOf(id) ? audioBank.buffer(id) : null;
+				if (id && buffer) lengths[id] = buffer.duration;
+			}
+		}
+		return lengths;
+	});
 	let songSourceId = $derived(
 		isSequenceMode && currentTrackId ? trackSourceId(currentTrackId) : null,
 	);
@@ -1948,6 +1961,7 @@
 					timeline: mediaTimeline,
 					edits: sourceRegistry.edits,
 					videos: videoLengths,
+					tracks: trackLengths,
 					// The library's loudness match applies to the song, as it did when it played alone.
 					sourceGains: songSourceId
 						? { [songSourceId]: audio.normalizeGain }

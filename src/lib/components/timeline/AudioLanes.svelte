@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Activity } from "lucide-svelte";
+	import { Activity, Repeat } from "lucide-svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import type { MixSegment } from "../../mix/plan";
@@ -98,6 +98,7 @@
 		return values.every((v) => v === values[0]) ? values[0] : undefined;
 	}
 
+	let allLoop = $derived(selectedClips.every((c) => c.loop));
 	let commonGain = $derived(common(selectedClips.map((c) => c.gain ?? 1)));
 	let commonFadeIn = $derived(
 		common(selectedClips.map((c) => c.fadeInSec ?? 0)),
@@ -278,6 +279,21 @@
 			<span class="tl-tool-label audio-val">
 				{commonGain === undefined ? "—" : `${Math.round(commonGain * 100)}%`}
 			</span>
+			<div class="tl-tool-sep"></div>
+			<button
+				class="tl-tool-btn"
+				class:active={allLoop}
+				aria-pressed={allLoop}
+				title={allLoop
+					? "Looping: the sound starts over when it runs out. Click to play it once."
+					: "Loop: start the sound over when it runs out, then drag the clip's end out as far as you want"}
+				onclick={() => {
+					const loop = !allLoop;
+					updateSelected((c) => ({ ...c, loop: loop || undefined }));
+				}}
+			>
+				<Repeat size={12} /> Loop
+			</button>
 			<div class="tl-tool-sep"></div>
 			{#each [["Fade in", "fadeInSec", commonFadeIn], ["Fade out", "fadeOutSec", commonFadeOut]] as const as [label, key, value] (key)}
 				<span class="tl-tool-label">{label}</span>
