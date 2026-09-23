@@ -20,6 +20,7 @@ import {
 	updateLaneIn,
 	type ClipLane,
 	type TimelineClip,
+	trimClipsAt,
 } from "./clips";
 
 function clip(id: string, start: number, end: number): TimelineClip {
@@ -712,5 +713,23 @@ describe("fitClipsToDuration", () => {
 		const lane = laneOf(clip("a", 0, 2));
 		expect(fitClipsToDuration(lane, 0)).toBe(lane);
 		expect(fitClipsToDuration(lane, -1)).toBe(lane);
+	});
+});
+
+describe("trimClipsAt", () => {
+	it("cuts only the clips that straddle the end", () => {
+		const lane = {
+			clips: [
+				{ id: "a", start: 0, end: 4 },
+				{ id: "b", start: 5, end: 12 },
+				{ id: "c", start: 15, end: 20 },
+			],
+		};
+		expect(trimClipsAt(lane, 10).clips.map((c) => [c.start, c.end])).toEqual([
+			[0, 4],
+			[5, 10],
+			[15, 20],
+		]);
+		expect(trimClipsAt(lane, 4.5)).toBe(lane);
 	});
 });

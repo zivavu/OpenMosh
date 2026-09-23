@@ -238,6 +238,23 @@ function nearestFitDelta(
 	return best;
 }
 
+/** Cut clips that straddle `end` back to it; clips wholly past it are left alone.
+ * Kept by identity when nothing straddles. */
+export function trimClipsAt<C extends TimelineClip, L extends ClipLane<C>>(
+	lane: L,
+	end: number,
+): L {
+	if (!lane.clips.some((c) => c.start < end && c.end > end)) return lane;
+	return {
+		...lane,
+		clips: lane.clips.map((c) =>
+			c.start < end && c.end > end
+				? { ...c, end: Math.max(end, c.start + MIN_CLIP_LENGTH) }
+				: c,
+		),
+	};
+}
+
 /** Drag one edge, keeping at least MIN_CLIP_LENGTH and stopping at the neighbours. */
 export function resizeClip<C extends TimelineClip, L extends ClipLane<C>>(
 	lane: L,

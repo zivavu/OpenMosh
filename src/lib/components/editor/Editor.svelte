@@ -148,7 +148,12 @@
 		moveLayerTo,
 		startLayerRowDrag,
 	} from "../../timeline/layer-order";
-	import { clipAt } from "../../timeline/clips";
+	import {
+		clipAt,
+		trimClipsAt,
+		type ClipLane,
+		type TimelineClip,
+	} from "../../timeline/clips";
 	import type { LayerPick } from "../../editor/layer-pick";
 	import {
 		SequenceSourceRegistry,
@@ -2117,10 +2122,35 @@
 		dropSong();
 	}
 
-	/** The project's length, set by hand. Clips past a shorter end are kept, unplayed. */
+	/** The project's length, set by hand. Shorter cuts clips straddling the new end
+	 * back to it, undoably, so their edge stays in reach; clips wholly past it are kept. */
 	function setProjectLength(length: number) {
 		pauseTrack();
-		mixer.setDuration(Math.max(1, length));
+		const next = Math.max(1, length);
+		if (next < mixer.duration) {
+			const trim = <L extends ClipLane<TimelineClip>>(lanes: L[]) =>
+				lanes.map((l) => trimClipsAt<TimelineClip, L>(l, next));
+			const media = trim(mediaTimeline.lanes);
+			const audioLanes = trim(mediaTimeline.audioLanes ?? []);
+			if (
+				media.some((l, i) => l !== mediaTimeline.lanes[i]) ||
+				audioLanes.some((l, i) => l !== mediaTimeline.audioLanes?.[i])
+			) {
+				pushMediaHistory();
+				setMediaTimeline({ ...mediaTimeline, lanes: media, audioLanes });
+			}
+			const text = trim(textTimeline.lanes);
+			if (text.some((l, i) => l !== textTimeline.lanes[i])) {
+				pushTextHistory();
+				setTextTimeline({ ...textTimeline, lanes: text });
+			}
+			const fx = trim(fxLanes);
+			if (fx.some((l, i) => l !== fxLanes[i])) {
+				pushFxHistory();
+				setFxLanes(fx);
+			}
+		}
+		mixer.setDuration(next);
 	}
 
 	/** Detach a video clip's sound onto an audio lane of its own. */
@@ -4320,7 +4350,7 @@
 						<div class="tl-tool-sep"></div>
 						<span
 							class="tl-tool-label"
-							title="How long the project runs. Clips past a shorter end are kept, just not played."
+							title="How long the project runs. Shorter cuts clips crossing the new end back to it; clips wholly past it are kept for when it grows."
 							>Length</span
 						>
 						<NumberField
