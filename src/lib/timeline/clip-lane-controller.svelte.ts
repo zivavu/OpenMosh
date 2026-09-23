@@ -8,6 +8,7 @@ import { isModalKeyboardOpen } from "../modal-keyboard";
 import { latestCopy, markCopied } from "../editor/copy-stamp";
 import { dropAutoRangeScope } from "../audio/auto-range";
 import { dragClipsStep, laneSnapPoints, type ClipDrag } from "./clip-drag";
+import { sourceEndOwner, type SnapPoint } from "./snap";
 import {
 	addClip,
 	clipRange,
@@ -69,6 +70,9 @@ export interface ClipLaneHost<
 	/** Joins carry something to edit (a transition): clicking one calls this with the
 	 * joins it edits, named by the clip to their right, and a box selects them too. */
 	onJoinClick?(rightIds: string[], anchor: DOMRect): void;
+	/** Timeline times where a clip's media runs out, measured as if it ran to `until`;
+	 * a dragged edge snaps to them. */
+	sourceEnds?(clip: C, lane: L, until: number): number[];
 	/** What a copied join carries over to where it's pasted. */
 	readJoin?(right: C): unknown;
 	writeJoin?(right: C, data: unknown): C;
@@ -338,7 +342,7 @@ export class ClipLaneController<
 			this.splitAt(laneId, t),
 		);
 		const unsnap = this.stack.registerSnapSource(laneId, () =>
-			laneSnapPoints(this.laneOf(laneId)),
+			this.#snapPoints(laneId),
 		);
 		return {
 			destroy: () => {
@@ -349,6 +353,21 @@ export class ClipLaneController<
 			},
 		};
 	};
+
+	#snapPoints(laneId: string): SnapPoint[] {
+		const lane = this.laneOf(laneId);
+		const edges = laneSnapPoints(lane);
+		const ends = this.host.sourceEnds;
+		if (!lane || !ends) return edges;
+		return edges.concat(
+			lane.clips.flatMap((clip) =>
+				ends(clip, lane, this.trackDuration).map((time) => ({
+					time,
+					ownerId: sourceEndOwner(clip.id),
+				})),
+			),
+		);
+	}
 
 	onTrackDblClick(e: MouseEvent, laneId: string): void {
 		if (this.trackDuration <= 0) return;
@@ -646,7 +665,13 @@ export class ClipLaneController<
 				this.#pendingEditKey = null;
 			}
 			const raw = this.timeAt(e.clientX) - moving.anchor;
-			const own = new Set(moving.joins.flatMap((j) => [j.leftId, j.rightId]));
+			const own = new Set(
+				moving.joins.flatMap((j) => [
+					j.leftId,
+					j.rightId,
+					sourceEndOwner(j.rightId),
+				]),
+			);
 			const shift = this.stack.snapShift(
 				moving.joins.map((j) => j.at + raw),
 				own,

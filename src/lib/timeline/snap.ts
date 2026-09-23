@@ -50,6 +50,12 @@ export function findSnap(
 	return best;
 }
 
+/** Owner of the points where a clip's media runs out. Separate from the clip's own
+ * edges, so trimming its end can land on them while moving the clip can't. */
+export function sourceEndOwner(clipId: string): string {
+	return `${clipId}:source-end`;
+}
+
 /** Whether one of `edges` sits on `at`: a neighbour can stop a snapped edge short. */
 export function landedAt(edges: number[], at: number): boolean {
 	return edges.some((e) => Math.abs(e - at) < 1e-6);

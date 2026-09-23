@@ -44,7 +44,9 @@
 		planMix,
 		planSourceIds,
 		trackClipRepeats,
+		trackSourceEnds,
 		videoClipRepeats,
+		videoSourceEnds,
 	} from "../../mix/plan";
 	import { renderMix } from "../../mix/render";
 	import {
@@ -2011,6 +2013,22 @@
 		}
 		const trackLength = trackLengths[id];
 		return clip.loop && trackLength ? trackClipRepeats(clip, trackLength) : [];
+	}
+
+	/** Where an audio clip's sound runs out, for its edges to snap to. */
+	function audioSourceEnds(clip: AudioClip, until: number): number[] {
+		const id = clip.sourceId;
+		if (!id) return [];
+		const videoLength = videoLengths[id];
+		if (videoLength) {
+			return videoSourceEnds(
+				sourceRegistry.edits[id],
+				videoLength,
+				clip,
+				until,
+			);
+		}
+		return trackSourceEnds(clip, trackLengths[id] ?? 0, until);
 	}
 
 	/** A lane-ready name for an audio source. */
@@ -4500,6 +4518,7 @@
 							version={audioBank.version}
 							sourceName={audioSourceName}
 							repeatsOf={audioClipRepeats}
+							sourceEndsOf={audioSourceEnds}
 							orderBase={layerOrder.length}
 							{foldedLaneIds}
 							onToggleFold={toggleLaneFold}

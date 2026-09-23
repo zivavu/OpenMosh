@@ -4,7 +4,11 @@
 	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
 	import LaneWaveform from "../timeline/LaneWaveform.svelte";
 	import ClipRepeats from "../timeline/ClipRepeats.svelte";
-	import { repeatNote, videoClipRepeats } from "../../mix/plan";
+	import {
+		repeatNote,
+		videoClipRepeats,
+		videoSourceEnds,
+	} from "../../mix/plan";
 	import { TRANSITION_OPTIONS, transitionLength } from "../../media/transition";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import type { Preset } from "../../effects";
@@ -153,6 +157,12 @@
 			copy: copySelection,
 			paste: pasteClipboard,
 			onJoinClick: (ids, anchor) => (joinPopover = { ids, anchor }),
+			sourceEnds: (clip, lane, until) => {
+				const src = clipSource(lane, clip);
+				return src?.kind === "video"
+					? videoSourceEnds(edits[src.id], src.duration, clip, until)
+					: [];
+			},
 			readJoin: (clip) => clip.transition,
 			writeJoin: (clip, transition) => ({
 				...clip,

@@ -35,6 +35,8 @@
 		sourceName: (sourceId: string | null) => string;
 		/** Where each clip's sound starts over, if it does. */
 		repeatsOf?: (clip: AudioClip) => number[];
+		/** Where a clip's sound runs out, measured as if it ran to `until`: snap targets. */
+		sourceEndsOf?: (clip: AudioClip, until: number) => number[];
 		/** Sits under the layer rows, whatever their stacking. */
 		orderBase: number;
 		foldedLaneIds?: ReadonlySet<string>;
@@ -52,6 +54,7 @@
 		version,
 		sourceName,
 		repeatsOf = () => [],
+		sourceEndsOf,
 		orderBase,
 		foldedLaneIds = NO_FOLDS,
 		onToggleFold,
@@ -87,6 +90,7 @@
 			clipSpanAt: () => null,
 			copy: () => false,
 			paste: () => false,
+			sourceEnds: (clip, _lane, until) => sourceEndsOf?.(clip, until) ?? [],
 		},
 		stack,
 	);

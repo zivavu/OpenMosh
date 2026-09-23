@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { dragClipsStep, laneSnapPoints, type ClipDrag } from "./clip-drag";
 import type { ClipLane, TimelineClip } from "./clips";
+import { sourceEndOwner } from "./snap";
 
 const clip = (id: string, start: number, end: number): TimelineClip => ({
 	id,
@@ -47,7 +48,32 @@ describe("dragClipsStep", () => {
 				return 0;
 			},
 		);
-		expect(seen).toEqual({ edges: [1, 2, 3, 4], exclude: ["a", "b"] });
+		expect(seen).toEqual({
+			edges: [1, 2, 3, 4],
+			exclude: ["a", "b", sourceEndOwner("a"), sourceEndOwner("b")],
+		});
+	});
+
+	it("lets a trimmed end land on its own media's end, but not a trimmed start", () => {
+		const excluded = (mode: ClipDrag["mode"]) => {
+			let seen: string[] = [];
+			dragClipsStep(
+				laneOf(clip("a", 0, 1), clip("b", 1, 2)),
+				{ laneId: "l", clipId: "a", otherId: "b", mode, grabOffset: 0 },
+				0.5,
+				[],
+				10,
+				(_edges, exclude) => {
+					seen = [...exclude];
+					return 0;
+				},
+			);
+			return seen;
+		};
+		expect(excluded("end")).not.toContain(sourceEndOwner("a"));
+		expect(excluded("start")).toContain(sourceEndOwner("a"));
+		expect(excluded("boundary")).not.toContain(sourceEndOwner("a"));
+		expect(excluded("boundary")).toContain(sourceEndOwner("b"));
 	});
 
 	it("applies the snap's shift, then the lane's limits", () => {
@@ -103,7 +129,7 @@ describe("dragClipsStep", () => {
 				return 0;
 			},
 		);
-		expect(exclude).toEqual(["a", "b"]);
+		expect(exclude).toEqual(["a", "b", sourceEndOwner("b")]);
 		expect(spans(lane)).toEqual([
 			["a", 0, 1.5],
 			["b", 1.5, 2],

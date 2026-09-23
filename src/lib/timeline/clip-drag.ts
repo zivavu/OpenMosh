@@ -10,6 +10,7 @@ import {
 	type ClipLane,
 	type TimelineClip,
 } from "./clips";
+import { sourceEndOwner } from "./snap";
 
 export interface ClipDrag {
 	laneId: string;
@@ -48,9 +49,10 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 		// A delta off the held clip's live position: each move re-enters against a shifted lane.
 		const wanted = t - grabOffset - held.start;
 		const moving = lane.clips.filter((c) => ids.includes(c.id));
+		// Their media ends travel with them.
 		const shift = snap(
 			moving.flatMap((c) => [c.start + wanted, c.end + wanted]),
-			new Set(ids),
+			new Set([...ids, ...ids.map(sourceEndOwner)]),
 		);
 		const next = moveClips(lane, ids, wanted + shift, duration);
 		return {
@@ -61,12 +63,16 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 		};
 	}
 	if (mode === "boundary") {
-		const at = t + snap([t], new Set([clipId, otherId!]));
+		// The left clip's media end holds still; the right one's slides with its start.
+		const at =
+			t + snap([t], new Set([clipId, otherId!, sourceEndOwner(otherId!)]));
 		const next = resizeBoundary(lane, clipId, otherId!, at);
 		const left = next.clips.find((c) => c.id === clipId);
 		return { lane: next, edges: left ? [left.end] : [] };
 	}
-	const at = t + snap([t], new Set([clipId]));
+	const exclude = new Set([clipId]);
+	if (mode === "start") exclude.add(sourceEndOwner(clipId));
+	const at = t + snap([t], exclude);
 	const next = resizeClip(lane, clipId, mode, at, duration);
 	const clip = next.clips.find((c) => c.id === clipId);
 	return { lane: next, edges: clip ? [clip[mode]] : [] };

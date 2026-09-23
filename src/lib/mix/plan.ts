@@ -226,6 +226,40 @@ export function trackClipRepeats(
 		.map((s) => s.start);
 }
 
+/** More than any snap needs; a tiny loop over a long project would list thousands. */
+const MAX_SOURCE_ENDS = 200;
+
+/** Where a video clip's media runs out and starts over, measured as if the clip ran
+ * to `until`: what its end snaps to while being dragged longer or shorter. */
+export function videoSourceEnds(
+	edit: SourceEdit | undefined,
+	length: number,
+	clip: { start: number; sourceStart: number },
+	until: number,
+): number[] {
+	return videoClipRepeats(edit, length, { ...clip, end: until }).slice(
+		0,
+		MAX_SOURCE_ENDS,
+	);
+}
+
+/** The same for a library track: once where it ends, or at every restart when it loops. */
+export function trackSourceEnds(
+	clip: { start: number; sourceStart: number; loop?: boolean },
+	length: number,
+	until: number,
+): number[] {
+	if (!(length > 0)) return [];
+	if (clip.loop) {
+		return trackClipRepeats({ ...clip, end: until }, length).slice(
+			0,
+			MAX_SOURCE_ENDS,
+		);
+	}
+	const end = clip.start + length - clip.sourceStart;
+	return end > clip.start ? [end] : [];
+}
+
 /** Tooltip tail for a clip that repeats: how many times its media plays. */
 export function repeatNote(repeats: number[]): string {
 	return repeats.length > 0 ? ` — plays ${repeats.length + 1}×` : "";

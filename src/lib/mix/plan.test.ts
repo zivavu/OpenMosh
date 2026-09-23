@@ -9,8 +9,10 @@ import {
 	planMix,
 	segmentEnvelope,
 	trackClipRepeats,
+	trackSourceEnds,
 	trimSegment,
 	videoClipRepeats,
+	videoSourceEnds,
 } from "./plan";
 import { createAudioClip, createAudioLane, trackSourceId } from "./types";
 
@@ -180,5 +182,18 @@ describe("segmentEnvelope", () => {
 			{ t: 6, gain: 1 },
 			{ t: 10, gain: 0 },
 		]);
+	});
+});
+
+describe("source ends", () => {
+	it("finds where a video runs out past the clip's end, and every restart after", () => {
+		const clip = { start: 2, sourceStart: 1 };
+		expect(videoSourceEnds(undefined, 4, clip, 12)).toEqual([5, 9]);
+	});
+
+	it("gives a track that plays once a single end, a looping one each restart", () => {
+		const clip = { start: 1, sourceStart: 2 };
+		expect(trackSourceEnds(clip, 5, 20)).toEqual([4]);
+		expect(trackSourceEnds({ ...clip, loop: true }, 5, 12)).toEqual([4, 9]);
 	});
 });
