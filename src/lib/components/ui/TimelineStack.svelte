@@ -585,6 +585,16 @@
 		height: 8px;
 	}
 
+	:global(.tl-stack .join-ghost) {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 0;
+		border-left: 2px dashed var(--live);
+		pointer-events: none;
+		z-index: 4;
+	}
+
 	:global(.tl-stack .clip-marquee) {
 		position: absolute;
 		top: 0;

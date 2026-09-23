@@ -5,6 +5,7 @@ import { untrack } from "svelte";
 import type { TimelineStackState } from "../editor/timeline-stack.svelte";
 import { isTextEntryTarget } from "../editor/shortcut-target";
 import { isModalKeyboardOpen } from "../modal-keyboard";
+import { latestCopy, markCopied } from "../editor/copy-stamp";
 import { dropAutoRangeScope } from "../audio/auto-range";
 import { dragClipsStep, laneSnapPoints, type ClipDrag } from "./clip-drag";
 import {
@@ -26,6 +27,16 @@ import {
 	edgeWidth,
 	type AdjacentPair,
 } from "./lane-geometry";
+import {
+	copyJoins,
+	joinDeltaLimits,
+	joinPastePoints,
+	joinRefs,
+	moveJoins,
+	pasteJoins,
+	type CopiedJoin,
+	type JoinRef,
+} from "./join-group";
 
 export type ClipEdgeMode = "move" | "start" | "end";
 
@@ -58,6 +69,9 @@ export interface ClipLaneHost<
 	/** Joins carry something to edit (a transition): clicking one calls this with the
 	 * joins it edits, named by the clip to their right, and a box selects them too. */
 	onJoinClick?(rightIds: string[], anchor: DOMRect): void;
+	/** What a copied join carries over to where it's pasted. */
+	readJoin?(right: C): unknown;
+	writeJoin?(right: C, data: unknown): C;
 }
 
 /** A shift-drag box over the lanes it spans, in time. */
@@ -100,6 +114,20 @@ export class ClipLaneController<
 	#joinPress: { rightId: string; anchor: DOMRect } | null = null;
 	/** Undo key a join drag records on its first move, so a click adds no step. */
 	#pendingEditKey: string | null = null;
+	/** Several selected joins dragged as one, from where they sat at the press. */
+	#joinGroup: {
+		joins: JoinRef[];
+		anchor: number;
+		min: number;
+		max: number;
+	} | null = null;
+
+	/** Copied joins, laid down by clicking once Ctrl+V has armed the paste. */
+	joinClipboard = $state<CopiedJoin<unknown>[]>([]);
+	#joinStamp = -1;
+	pastingJoins = $state(false);
+	/** Where the armed paste would land, following the pointer. */
+	pasteCursor = $state<{ laneId: string; time: number } | null>(null);
 
 	constructor(host: ClipLaneHost<C, L>, stack: TimelineStackState) {
 		this.host = host;
@@ -337,6 +365,7 @@ export class ClipLaneController<
 	): void {
 		if (e.button !== 0) return;
 		e.stopPropagation();
+		if (this.#pasteClick(e, laneId)) return;
 		this.#clickOnUp = null;
 		const host = this.host;
 
@@ -397,11 +426,31 @@ export class ClipLaneController<
 		if (e.button !== 0) return;
 		e.preventDefault();
 		e.stopPropagation();
+		if (this.#pasteClick(e, laneId)) return;
 		const joins = !!this.host.onJoinClick;
 		if (joins && e.shiftKey) {
-			this.selectedJoins = this.selectedJoins.includes(rightId)
-				? this.selectedJoins.filter((j) => j !== rightId)
-				: [...this.selectedJoins, rightId];
+			this.#selectJoinsOnly(
+				this.selectedJoins.includes(rightId)
+					? this.selectedJoins.filter((j) => j !== rightId)
+					: [...this.selectedJoins, rightId],
+			);
+			return;
+		}
+		const target = e.currentTarget as HTMLElement;
+		if (
+			joins &&
+			this.selectedJoins.length > 1 &&
+			this.selectedJoins.includes(rightId)
+		) {
+			const group = joinRefs(this.host.lanes, this.selectedJoins);
+			this.#joinGroup = {
+				joins: group,
+				anchor: this.timeAt(e.clientX),
+				...joinDeltaLimits(this.host.lanes, group),
+			};
+			this.#joinPress = { rightId, anchor: target.getBoundingClientRect() };
+			this.#pendingEditKey = `${this.host.kind}-joins-${rightId}`;
+			target.setPointerCapture(e.pointerId);
 			return;
 		}
 		this.drag = {
@@ -411,7 +460,6 @@ export class ClipLaneController<
 			mode: "boundary",
 			grabOffset: 0,
 		};
-		const target = e.currentTarget as HTMLElement;
 		this.#joinPress = joins
 			? { rightId, anchor: target.getBoundingClientRect() }
 			: null;
@@ -425,6 +473,7 @@ export class ClipLaneController<
 	onLanePointerDown(e: PointerEvent, laneId: string): void {
 		if (e.button !== 0 || this.trackDuration <= 0) return;
 		if ((e.target as HTMLElement | null)?.closest?.(".clip")) return;
+		if (this.#pasteClick(e, laneId)) return;
 		if (e.ctrlKey || e.metaKey) {
 			e.preventDefault();
 			this.addClipAt(laneId, this.timeAt(e.clientX));
@@ -439,6 +488,90 @@ export class ClipLaneController<
 		this.scrubbing = true;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		this.stack.seekStatic(this.timeAt(e.clientX));
+	}
+
+	/** Joins picked on their own: the clips step aside so Ctrl+C takes the joins. */
+	#selectJoinsOnly(ids: string[]): void {
+		this.host.selectedClipIds = [];
+		this.host.selectedClipId = null;
+		this.selectedJoins = ids;
+	}
+
+	/** This controller's lanes as they stack on screen, top to bottom. */
+	#laneOrder(): string[] {
+		return this.stack
+			.laneIdsBetween(-Infinity, Infinity)
+			.filter((id) => this.laneOf(id));
+	}
+
+	#copyJoins(): boolean {
+		if (!this.host.onJoinClick || this.selectedJoins.length === 0) return false;
+		const read = this.host.readJoin ?? (() => undefined);
+		this.joinClipboard = copyJoins(
+			this.host.lanes,
+			joinRefs(this.host.lanes, this.selectedJoins),
+			this.#laneOrder(),
+			read,
+		);
+		if (this.joinClipboard.length === 0) return false;
+		this.#joinStamp = markCopied();
+		return true;
+	}
+
+	/** Arm the paste; the next click on a lane lays the joins down there. */
+	#armJoinPaste(): boolean {
+		if (this.joinClipboard.length === 0 || latestCopy() !== this.#joinStamp) {
+			return false;
+		}
+		this.pastingJoins = true;
+		return true;
+	}
+
+	cancelJoinPaste(): void {
+		this.pastingJoins = false;
+		this.pasteCursor = null;
+	}
+
+	/** The times the armed paste would cut `laneId` at, for its ghost. */
+	pasteGhost(laneId: string): number[] {
+		const cursor = this.pasteCursor;
+		if (!this.pastingJoins || !cursor) return [];
+		return joinPastePoints(
+			this.joinClipboard,
+			this.#laneOrder(),
+			cursor.laneId,
+			cursor.time,
+			this.trackDuration,
+		)
+			.filter((p) => p.laneId === laneId)
+			.map((p) => p.at);
+	}
+
+	/** A click while a paste is armed lays it down; true when it did. */
+	#pasteClick(e: PointerEvent, laneId: string): boolean {
+		if (!this.pastingJoins) return false;
+		e.preventDefault();
+		e.stopPropagation();
+		const points = joinPastePoints(
+			this.joinClipboard,
+			this.#laneOrder(),
+			laneId,
+			this.timeAt(e.clientX),
+			this.trackDuration,
+		);
+		this.cancelJoinPaste();
+		if (points.length === 0) return true;
+		const write = this.host.writeJoin ?? ((c: C) => c);
+		this.host.onBeforeEdit?.();
+		const pasted = pasteJoins(
+			this.host.lanes,
+			points,
+			(lane, at) => this.host.splitClipAt(lane, at),
+			write,
+		);
+		this.host.setLanes(pasted.lanes);
+		this.#selectJoinsOnly(pasted.rightIds);
+		return true;
 	}
 
 	#startBox(e: PointerEvent, laneId: string, clipId: string | null): void {
@@ -498,6 +631,32 @@ export class ClipLaneController<
 	}
 
 	onPointerMove(e: PointerEvent): void {
+		if (this.pastingJoins) {
+			const over = this.stack.laneIdAt(e.clientY);
+			if (over && this.laneOf(over)) {
+				this.pasteCursor = { laneId: over, time: this.timeAt(e.clientX) };
+			}
+			return;
+		}
+		const moving = this.#joinGroup;
+		if (moving) {
+			this.#joinPress = null;
+			if (this.#pendingEditKey) {
+				this.host.onBeforeEdit?.(this.#pendingEditKey);
+				this.#pendingEditKey = null;
+			}
+			const raw = this.timeAt(e.clientX) - moving.anchor;
+			const own = new Set(moving.joins.flatMap((j) => [j.leftId, j.rightId]));
+			const shift = this.stack.snapShift(
+				moving.joins.map((j) => j.at + raw),
+				own,
+				e.altKey,
+			);
+			const delta = Math.max(moving.min, Math.min(moving.max, raw + shift));
+			this.host.setLanes(moveJoins(this.host.lanes, moving.joins, delta));
+			this.stack.confirmSnap(moving.joins.map((j) => j.at + delta));
+			return;
+		}
 		const box = this.#boxStart;
 		if (box) {
 			// A few pixels of slack, so a shaky shift-click stays a click.
@@ -573,6 +732,11 @@ export class ClipLaneController<
 		const press = this.#joinPress;
 		this.#joinPress = null;
 		this.#pendingEditKey = null;
+		if (this.#joinGroup) {
+			this.#joinGroup = null;
+			this.stack.endSnap();
+			(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+		}
 		if (press) {
 			// Clicking one of several selected joins edits them all.
 			const inSelection = this.selectedJoins.includes(press.rightId);
@@ -580,7 +744,7 @@ export class ClipLaneController<
 				inSelection && this.selectedJoins.length > 1
 					? this.selectedJoins
 					: [press.rightId];
-			if (!inSelection) this.selectedJoins = [press.rightId];
+			this.#selectJoinsOnly(inSelection ? this.selectedJoins : [press.rightId]);
 			this.host.onJoinClick?.(joins, press.anchor);
 		}
 		const clickOnUp = this.#clickOnUp;
@@ -605,13 +769,18 @@ export class ClipLaneController<
 		if (isModalKeyboardOpen()) return;
 		if (e.ctrlKey || e.metaKey) {
 			const key = e.key.toLowerCase();
+			// Clips come first; joins copy when they're all that's picked.
 			if (
-				(key === "c" && this.host.copy()) ||
-				(key === "v" && this.host.paste())
+				(key === "c" && (this.host.copy() || this.#copyJoins())) ||
+				(key === "v" && (this.#armJoinPaste() || this.host.paste()))
 			) {
 				e.preventDefault();
 				e.stopPropagation();
 			}
+			return;
+		}
+		if (e.key === "Escape" && this.pastingJoins) {
+			this.cancelJoinPaste();
 			return;
 		}
 		if (

@@ -88,6 +88,15 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description: "Add or remove it from the selected joins",
 	},
 	{
+		keys: ["Drag a selected join"],
+		description: "Move every selected join together",
+	},
+	{
+		keys: ["Ctrl/Cmd+C", "Ctrl/Cmd+V"],
+		description:
+			"With only joins selected, copy their cuts and transitions; paste by clicking where the first lands",
+	},
+	{
 		keys: ["Dbl-click", "Ctrl/Cmd+Click"],
 		description: "Add a clip in empty lane space",
 	},

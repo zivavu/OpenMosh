@@ -5,8 +5,8 @@
 	import type { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import type { ClipLane, TimelineClip } from "../../timeline/clips";
 
-	/** The draggable joins between clips that share an edge on one lane, and the
-	 * shift-drag box while one is drawn over it. */
+	/** The draggable joins between clips that share an edge on one lane, the
+	 * shift-drag box while one is drawn over it, and where pasted joins would land. */
 	interface Props {
 		ctrl: ClipLaneController<C, L>;
 		lane: L;
@@ -39,6 +39,10 @@
 				ctrl.onBoundaryPointerDown(e, lane.id, pair.left.id, pair.right.id)}
 		></div>
 	{/if}
+{/each}
+
+{#each ctrl.pasteGhost(lane.id) as at (at)}
+	<div class="join-ghost" style="left: {ctrl.stack.vp.toPct(at)}%"></div>
 {/each}
 
 {#if box}

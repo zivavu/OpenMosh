@@ -153,6 +153,11 @@
 			copy: copySelection,
 			paste: pasteClipboard,
 			onJoinClick: (ids, anchor) => (joinPopover = { ids, anchor }),
+			readJoin: (clip) => clip.transition,
+			writeJoin: (clip, transition) => ({
+				...clip,
+				transition: transition as MediaClip["transition"],
+			}),
 		},
 		stack,
 	);
