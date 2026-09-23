@@ -147,14 +147,14 @@ const MEDIA_LAYERS: ShortcutGroup = {
 	shortcuts: [
 		{
 			keys: ["Click a thumb"],
-			description: "Show it on the selected clips; with none, preview it",
+			description: "Preview it full size; ← → step through, Esc closes",
+		},
+		{
+			keys: ["Enter on a thumb"],
+			description: "Show it on the selected clips",
 		},
 		{ keys: ["Drag a thumb onto a clip"], description: "Show it on that clip" },
 		{ keys: ["Drag a thumb into a gap"], description: "Add a clip showing it" },
-		{
-			keys: ["Dbl-click a thumb"],
-			description: "Preview it full size; ← → step through, Esc closes",
-		},
 	],
 };
 
