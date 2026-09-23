@@ -26,6 +26,7 @@
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
 	import FadeRows from "../timeline/FadeRows.svelte";
+	import TransitionRows from "./TransitionRows.svelte";
 	import LayerCompositeRows from "../timeline/LayerCompositeRows.svelte";
 	import { lazy } from "../../lazy";
 
@@ -158,6 +159,20 @@
 		onClipChange({ ...clip, [edge]: sec > 0 ? sec : undefined });
 	}
 
+	/** Whether a clip on the lane ends right where this one starts. */
+	let followsClip = $derived(
+		!!clip &&
+			!!lane?.clips.some(
+				(c) => c.id !== clip.id && Math.abs(c.end - clip.start) < 1e-3,
+			),
+	);
+
+	function setTransition(transition: MediaClip["transition"]) {
+		if (!clip) return;
+		onBeforeEdit?.();
+		onClipChange({ ...clip, transition });
+	}
+
 	function setSourceStart(v: number) {
 		if (!clip) return;
 		onBeforeEdit?.(`media-in-${clip.id}`);
@@ -237,6 +252,12 @@
 			{/if}
 
 			<FadeRows {clip} noun="this layer" idPrefix="mc" onFade={setFade} />
+
+			<TransitionRows
+				transition={clip.transition}
+				follows={followsClip}
+				onChange={setTransition}
+			/>
 
 			{#if source?.kind === "video"}
 				{#if !sourceHasAudio}

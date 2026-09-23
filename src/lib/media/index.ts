@@ -51,15 +51,22 @@ export {
 	SPEED_MIN,
 	SPEED_MAX,
 } from "./source-edit";
-export type { MediaChainSource, ResolvedMediaLayer } from "./resolve";
+export type {
+	MediaChainSource,
+	MediaLayerSide,
+	ResolvedLayerTransition,
+	ResolvedMediaLayer,
+} from "./resolve";
 export {
 	addClip,
+	altLayerKey,
 	createMediaChainSource,
 	clipSourceId,
 	detachMediaSource,
 	findMediaClip,
 	findMediaClipLane,
 	laneSourceIds,
+	mediaLayerSides,
 	mediaTimelineSourceIds,
 	newClipSpan,
 	replaceMediaClip,

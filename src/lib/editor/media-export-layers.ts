@@ -1,5 +1,5 @@
 import type { GlRenderer } from "../gl/renderer";
-import type { ResolvedMediaLayer } from "../media";
+import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSource } from "./sequence-sources.svelte";
 
@@ -42,11 +42,21 @@ export async function createMediaExportLayers(
 		),
 	);
 
+	/** A blend's second texture opens its decoders on first use. */
+	const samplerFor = async (key: string, file: File, sourceId: string) => {
+		const id = samplerKey(key, sourceId);
+		if (!samplers.has(id)) {
+			const sampler = await SlideVideoSampler.create(file);
+			if (sampler) samplers.set(id, sampler);
+		}
+		return samplers.get(id);
+	};
+
 	return {
 		async advance(layers) {
 			// Run the lanes together rather than in series: each holds its own decoder and texture.
 			await Promise.all(
-				layers.map(async (layer) => {
+				mediaLayerSides(layers).map(async (layer) => {
 					const src = byId.get(layer.sourceId);
 					if (!src) return;
 
@@ -65,7 +75,7 @@ export async function createMediaExportLayers(
 						return;
 					}
 
-					const sampler = samplers.get(samplerKey(layer.key, src.id));
+					const sampler = await samplerFor(layer.key, src.file, src.id);
 					if (!sampler) return;
 					uploaded.set(layer.key, src.id);
 					const frame = await sampler.at(layer.sourceTime);

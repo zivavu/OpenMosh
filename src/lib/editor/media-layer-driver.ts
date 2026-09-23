@@ -1,5 +1,5 @@
 import type { GlRenderer } from "../gl/renderer";
-import type { ResolvedMediaLayer } from "../media";
+import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSourceRegistry } from "./sequence-sources.svelte";
 
@@ -34,7 +34,8 @@ export class MediaLayerDriver {
 	advance(layers: ResolvedMediaLayer[]) {
 		if (this.#disposed) return;
 		const renderer = this.#getRenderer();
-		for (const layer of layers) {
+		const sides = mediaLayerSides(layers);
+		for (const layer of sides) {
 			const src = this.#registry.get(layer.sourceId);
 			if (!src) {
 				this.#release(layer.key);
@@ -79,7 +80,7 @@ export class MediaLayerDriver {
 		}
 		// Lanes that stopped asking for frames drop theirs; decoders are kept for a later clip.
 		for (const key of this.#uploaded.keys()) {
-			if (!layers.some((l) => l.key === key)) this.#uploaded.delete(key);
+			if (!sides.some((l) => l.key === key)) this.#uploaded.delete(key);
 		}
 	}
 

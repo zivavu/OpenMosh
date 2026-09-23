@@ -9,6 +9,11 @@ import {
 	updateLaneIn,
 } from "../timeline/clips";
 import { sourceTimeAt, type SourceEdit } from "./source-edit";
+import {
+	resolveConcreteTransition,
+	transitionLength,
+	type ConcreteTransition,
+} from "./transition";
 import { audioLaneSourceIds, trackIdOf, type AudioLane } from "../mix/types";
 import {
 	mediaClipWeight,
@@ -44,7 +49,74 @@ export interface ResolvedMediaLayer {
 	effects: EffectInstance[];
 	/** The lane's own audio response; absent when it follows the editor's. */
 	response?: AudioResponse;
+	/** Set while the clip blends in. */
+	transition?: ResolvedLayerTransition;
 }
+
+/** What one texture on a lane shows: the clip on screen, or the one blending out. */
+export interface MediaLayerSide {
+	key: string;
+	clipId: string;
+	sourceId: string;
+	sourceTime: number;
+	effects: EffectInstance[];
+}
+
+export interface ResolvedLayerTransition {
+	/** The clip before, still playing on; null when blending in from nothing. */
+	from: MediaLayerSide | null;
+	concrete: ConcreteTransition;
+	/** 0 at the clip's start, 1 once the blend is done. */
+	progress: number;
+	seed: number;
+}
+
+/** Every texture the layers need this frame, outgoing sides included. */
+export function mediaLayerSides(
+	layers: ResolvedMediaLayer[],
+): MediaLayerSide[] {
+	const sides: MediaLayerSide[] = [];
+	for (const layer of layers) {
+		sides.push(layer);
+		if (layer.transition?.from) sides.push(layer.transition.from);
+	}
+	return sides;
+}
+
+/** A lane's second texture, which a clip blending in draws into. */
+export function altLayerKey(laneId: string): string {
+	return laneId + "#b";
+}
+
+/** The texture key each clip draws into. A blend needs both clips live at once, so the
+ * key flips at every transition from an adjacent clip; a plain cut keeps it. */
+function laneClipKey(lane: MediaLane, index: number): string {
+	let alt = false;
+	for (let i = 1; i <= index; i++) {
+		if (blendsFrom(lane, i)) alt = !alt;
+	}
+	return alt ? altLayerKey(lane.id) : lane.id;
+}
+
+/** The clip right before the one at `index`, when the two touch. */
+function adjacentBefore(lane: MediaLane, index: number): MediaClip | null {
+	const prev = lane.clips[index - 1];
+	const clip = lane.clips[index];
+	return prev && clip && clip.start - prev.end < ADJACENT_EPS ? prev : null;
+}
+
+function blendsFrom(lane: MediaLane, index: number): boolean {
+	const clip = lane.clips[index];
+	return (
+		!!clip &&
+		transitionLength(clip) > 0 &&
+		!!adjacentBefore(lane, index) &&
+		!!clipSourceId(lane, lane.clips[index - 1])
+	);
+}
+
+/** Clips closer than this count as touching. */
+const ADJACENT_EPS = 1e-3;
 
 /** What a clip draws: its own source when retargeted, the lane's otherwise. */
 export function clipSourceId(
@@ -102,8 +174,38 @@ export function resolveMediaLayersAt(
 		if (!clip) continue;
 		const sourceId = clipSourceId(lane, clip);
 		if (!sourceId) continue;
+		const index = lane.clips.indexOf(clip);
+		const blend = transitionLength(clip);
+		const elapsed = time - clip.start;
+		let transition: ResolvedLayerTransition | undefined;
+		if (blend > 0 && elapsed < blend) {
+			const concrete = resolveConcreteTransition(clip.transition!, clip.start);
+			const prev = blendsFrom(lane, index) ? lane.clips[index - 1] : null;
+			const prevSource = prev && clipSourceId(lane, prev);
+			if (concrete) {
+				transition = {
+					from:
+						prev && prevSource
+							? {
+									key: laneClipKey(lane, index - 1),
+									clipId: prev.id,
+									sourceId: prevSource,
+									sourceTime: sourceTimeAt(
+										edits?.[prevSource],
+										time - prev.start,
+										prev.sourceStart,
+									),
+									effects: chains ? chains(lane, prev, time) : prev.effects,
+								}
+							: null,
+					concrete,
+					progress: elapsed / blend,
+					seed: clip.transition!.seed,
+				};
+			}
+		}
 		layers.push({
-			key: lane.id,
+			key: laneClipKey(lane, index),
 			laneId: lane.id,
 			clipId: clip.id,
 			underEffects: lane.underEffects,
@@ -118,6 +220,7 @@ export function resolveMediaLayersAt(
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
 			effects: chains ? chains(lane, clip, time) : clip.effects,
 			response: lane.settings?.audioResponse,
+			transition,
 		});
 	}
 	return layers;

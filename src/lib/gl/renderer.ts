@@ -13,8 +13,18 @@ import {
 	maskShift,
 	maskToSdf,
 } from "../media/mask-sdf";
-import { sampleSourceEdit, wrapSourceTime } from "../media";
-import type { MediaStyle, ResolvedMediaLayer, SourceEdit } from "../media";
+import {
+	altLayerKey,
+	mediaLayerSides,
+	sampleSourceEdit,
+	wrapSourceTime,
+} from "../media";
+import type {
+	MediaLayerSide,
+	MediaStyle,
+	ResolvedMediaLayer,
+	SourceEdit,
+} from "../media";
 import {
 	CAPTION_EFFECT_ID,
 	captionSignature,
@@ -31,6 +41,8 @@ import { createProgram, getUniformLocations } from "./utils";
 import {
 	VERTEX_SHADER,
 	PASSTHROUGH_FRAG,
+	ALPHA_MERGE_FRAG,
+	ALPHA_TO_RGB_FRAG,
 	TEXT_BLEND_FRAG,
 	LAYER_TRANSFORM_FRAG,
 	EFFECT_SHADERS,
@@ -191,7 +203,8 @@ function addMediaInstanceIds(
 	live: Set<string>,
 	layers: ResolvedMediaLayer[],
 ): void {
-	for (const layer of layers) addInstanceIds(live, layer.effects);
+	for (const side of mediaLayerSides(layers))
+		addInstanceIds(live, side.effects);
 }
 
 function addPostInstanceIds(live: Set<string>, post: PostChainLayer[]): void {
@@ -305,6 +318,8 @@ export class GlRenderer {
 	private textLayerCanvas: HTMLCanvasElement | null = null;
 	/** Scratch targets holding each layer's own chain output for this frame. */
 	private layerBuffers: { tex: WebGLTexture; fbo: WebGLFramebuffer }[] = [];
+	private layerBlendBuffers: { tex: WebGLTexture; fbo: WebGLFramebuffer }[] =
+		[];
 	private imgW = 0;
 	private imgH = 0;
 	private lastTime = -1;
@@ -705,7 +720,10 @@ export class GlRenderer {
 		key: string,
 		style: MediaStyle,
 	): { x: number; y: number; w: number; h: number; rot: number } | null {
-		const entry = this.mediaLayerTextures.get(key);
+		// A lane id finds its clip on either texture: one mid-blend draws into the second.
+		const entry =
+			this.mediaLayerTextures.get(key) ??
+			this.mediaLayerTextures.get(altLayerKey(key));
 		if (!entry || entry.w <= 0 || this.imgW <= 0) return null;
 		const box = this.layerBox(style, entry.w, entry.h);
 		return {
@@ -1928,67 +1946,12 @@ export class GlRenderer {
 		if (layers.length === 0 || this.imgW <= 0 || this.imgH <= 0) return [];
 		const prepared: PreparedLayer[] = [];
 		for (const layer of layers) {
-			const entry = this.mediaLayerTextures.get(layer.key);
-			if (!entry || entry.w <= 0) continue;
-			// Sampled per lane, not once for the source: two lanes can hold the same media
-			// at different points, each wanting its own instant's crop.
-			const stored = this.sourceEdits.get(layer.sourceId);
-			const edit = stored
-				? sampleSourceEdit(
-						stored,
-						this.editTime(layer.sourceId, layer.sourceTime),
-					)
-				: undefined;
-			// Fitted against what the crop leaves, not the whole file, so "contain" means the
-			// visible rectangle.
-			const box = this.layerBox(
-				layer.style,
-				entry.w * (edit?.crop?.w ?? 1),
-				entry.h * (edit?.crop?.h ?? 1),
-			);
-			const hasChain = layer.effects.some((e) => e.enabled);
 			const out = this.ensureLayerBuffer(bufOffset + prepared.length);
 			if (!out) continue;
-
-			if (!hasChain) {
-				this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0);
-			} else {
-				const scratch = this.ensureMediaScratch();
-				if (!scratch) continue;
-				// Chain first, placement second. The chain runs on the media filling the whole
-				// buffer, so an effect's centre or edges are the media's, not the canvas's.
-				const grow = this.bleedFactor(layer.style);
-				this.drawLayerPlacement(
-					entry.tex,
-					this.fullFrameBox(1 / grow),
-					out.fbo,
-					edit,
-					0,
-				);
-				const chained =
-					this.renderChainTo(
-						layer.effects,
-						time,
-						safeDt,
-						scratch.fbo,
-						scratch.tex,
-						false,
-						false,
-						[],
-						out.tex,
-					) ?? scratch.tex;
-				// Safe to write back into `out`: the chain's result lives in the scratch (or a
-				// feedback buffer), never in the texture it read. Chain buffers are NEAREST.
-				this.setTextureFilter(chained, true);
-				this.drawLayerPlacement(
-					chained,
-					{ ...box, drawW: box.drawW * grow, drawH: box.drawH * grow },
-					out.fbo,
-					undefined,
-					this.edgeFade(layer.style, grow),
-				);
-				this.setTextureFilter(chained, false);
-			}
+			const drawn = layer.transition
+				? this.drawMediaTransition(layer, time, safeDt, out)
+				: this.drawMediaSide(layer, layer.style, time, safeDt, out);
+			if (!drawn) continue;
 			prepared.push({
 				tex: out.tex,
 				underEffects: layer.underEffects,
@@ -1999,6 +1962,146 @@ export class GlRenderer {
 			});
 		}
 		return prepared;
+	}
+
+	/** One clip's media, placed and run through its chain, into `out`. False when its
+	 * texture hasn't arrived yet. */
+	private drawMediaSide(
+		side: MediaLayerSide,
+		style: MediaStyle,
+		time: number,
+		safeDt: number,
+		out: { tex: WebGLTexture; fbo: WebGLFramebuffer },
+	): boolean {
+		const entry = this.mediaLayerTextures.get(side.key);
+		if (!entry || entry.w <= 0) return false;
+		// Sampled per lane, not once for the source: two lanes can hold the same media
+		// at different points, each wanting its own instant's crop.
+		const stored = this.sourceEdits.get(side.sourceId);
+		const edit = stored
+			? sampleSourceEdit(stored, this.editTime(side.sourceId, side.sourceTime))
+			: undefined;
+		// Fitted against what the crop leaves, not the whole file, so "contain" means the
+		// visible rectangle.
+		const box = this.layerBox(
+			style,
+			entry.w * (edit?.crop?.w ?? 1),
+			entry.h * (edit?.crop?.h ?? 1),
+		);
+		if (!side.effects.some((e) => e.enabled)) {
+			this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0);
+			return true;
+		}
+		const scratch = this.ensureMediaScratch();
+		if (!scratch) return false;
+		// Chain first, placement second. The chain runs on the media filling the whole
+		// buffer, so an effect's centre or edges are the media's, not the canvas's.
+		const grow = this.bleedFactor(style);
+		this.drawLayerPlacement(
+			entry.tex,
+			this.fullFrameBox(1 / grow),
+			out.fbo,
+			edit,
+			0,
+		);
+		const chained =
+			this.renderChainTo(
+				side.effects,
+				time,
+				safeDt,
+				scratch.fbo,
+				scratch.tex,
+				false,
+				false,
+				[],
+				out.tex,
+			) ?? scratch.tex;
+		// Safe to write back into `out`: the chain's result lives in the scratch (or a
+		// feedback buffer), never in the texture it read. Chain buffers are NEAREST.
+		this.setTextureFilter(chained, true);
+		this.drawLayerPlacement(
+			chained,
+			{ ...box, drawW: box.drawW * grow, drawH: box.drawH * grow },
+			out.fbo,
+			undefined,
+			this.edgeFade(style, grow),
+		);
+		this.setTextureFilter(chained, false);
+		return true;
+	}
+
+	/** A clip blending in over the one before it. The shader blends colour only, so it
+	 * runs a second time over both sides' coverage to keep the layer's shape. */
+	private drawMediaTransition(
+		layer: ResolvedMediaLayer,
+		time: number,
+		safeDt: number,
+		out: { tex: WebGLTexture; fbo: WebGLFramebuffer },
+	): boolean {
+		const t = layer.transition!;
+		const prog = this.transitionProgram(t.concrete.type);
+		const toAlpha = this.helperProgram("__alpha", ALPHA_TO_RGB_FRAG);
+		const merge = this.helperProgram("__merge", ALPHA_MERGE_FRAG);
+		const [a, b, c, d] = [0, 1, 2, 3].map((i) =>
+			this.ensureMediaBlendBuffer(i),
+		);
+		const fallback = () =>
+			this.drawMediaSide(layer, layer.style, time, safeDt, out) ||
+			(!!t.from && this.drawMediaSide(t.from, layer.style, time, safeDt, out));
+		if (!prog || !toAlpha || !merge || !a || !b || !c || !d) return fallback();
+
+		const hasFrom =
+			!!t.from && this.drawMediaSide(t.from, layer.style, time, safeDt, a);
+		if (!hasFrom) this.clearTarget(a.fbo);
+		// The incoming texture can lag its first decode; hold the outgoing until it lands.
+		if (!this.drawMediaSide(layer, layer.style, time, safeDt, b)) {
+			return fallback();
+		}
+		const { progress, seed } = t;
+		const { direction, density } = t.concrete;
+		this.drawTransitionPass(
+			prog,
+			c.fbo,
+			a.tex,
+			b.tex,
+			progress,
+			seed,
+			direction,
+			density,
+			time,
+		);
+		this.drawPass(toAlpha, d.fbo, a.tex, 1.0, time);
+		this.drawPass(toAlpha, a.fbo, b.tex, 1.0, time);
+		this.drawTransitionPass(
+			prog,
+			b.fbo,
+			d.tex,
+			a.tex,
+			progress,
+			seed,
+			direction,
+			density,
+			time,
+		);
+		this.drawPass(
+			merge,
+			out.fbo,
+			c.tex,
+			1.0,
+			time,
+			undefined,
+			undefined,
+			b.tex,
+		);
+		return true;
+	}
+
+	private clearTarget(fbo: WebGLFramebuffer) {
+		const gl = this.gl;
+		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+		gl.viewport(0, 0, this.imgW, this.imgH);
+		gl.clearColor(0, 0, 0, 0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
 	}
 
 	/** The box a layer's chain runs in: the whole frame, or the middle `fill` of it
@@ -2177,9 +2280,24 @@ export class GlRenderer {
 
 	private gcMediaLayers(layers: ResolvedMediaLayer[]) {
 		if (this.mediaLayerTextures.size === 0) return;
+		const live = new Set(mediaLayerSides(layers).map((l) => l.key));
 		for (const key of this.mediaLayerTextures.keys()) {
-			if (!layers.some((l) => l.key === key)) this.dropLayerTexture(key);
+			if (!live.has(key)) this.dropLayerTexture(key);
 		}
+	}
+
+	/** Scratch targets for a media blend's two sides and their coverage. */
+	private ensureMediaBlendBuffer(
+		index: number,
+	): { tex: WebGLTexture; fbo: WebGLFramebuffer } | null {
+		const existing = this.layerBlendBuffers[index];
+		if (existing) return existing;
+		const tex = this.createTexture(this.imgW, this.imgH);
+		const fbo = this.createRenderTarget(tex);
+		if (!fbo) return null;
+		const buf = { tex, fbo };
+		this.layerBlendBuffers[index] = buf;
+		return buf;
 	}
 
 	private gcTextLayers(layers: ResolvedTextLayer[]) {
@@ -2200,6 +2318,11 @@ export class GlRenderer {
 			gl.deleteFramebuffer(buf.fbo);
 		}
 		this.layerBuffers = [];
+		for (const buf of this.layerBlendBuffers) {
+			gl.deleteTexture(buf.tex);
+			gl.deleteFramebuffer(buf.fbo);
+		}
+		this.layerBlendBuffers = [];
 		if (this.mediaScratch) {
 			gl.deleteTexture(this.mediaScratch.tex);
 			gl.deleteFramebuffer(this.mediaScratch.fbo);
@@ -2564,6 +2687,23 @@ export class GlRenderer {
 		} catch (e) {
 			console.error(`Failed to compile effect "${id}":`, e);
 			this.failedEffects.add(id);
+			return undefined;
+		}
+	}
+
+	/** A small pass kept with the transition programs, so it's freed with them. */
+	private helperProgram(
+		key: string,
+		fragment: string,
+	): CompiledProgram | undefined {
+		const cached = this.transitionPrograms.get(key);
+		if (cached) return cached;
+		try {
+			const program = this.compile(fragment);
+			this.transitionPrograms.set(key, program);
+			return program;
+		} catch (e) {
+			console.error(`Failed to compile ${key}:`, e);
 			return undefined;
 		}
 	}

@@ -75,6 +75,21 @@ export const PASSTHROUGH_FRAG =
   outColor = texture(u_texture, v_uv);
 }`;
 
+/** A layer's coverage as an opaque grey, so a transition shader can blend it too. */
+export const ALPHA_TO_RGB_FRAG =
+	H +
+	`void main() {
+  outColor = vec4(texture(u_texture, v_uv).aaa, 1.0);
+}`;
+
+/** Colour from one blend, coverage from the other. */
+export const ALPHA_MERGE_FRAG =
+	H +
+	`uniform sampler2D u_original;
+void main() {
+  outColor = vec4(texture(u_texture, v_uv).rgb, texture(u_original, v_uv).r);
+}`;
+
 /** Shared by the placement pass and the composite, so the box they agree on is one copy. */
 const LAYER_BOX_GLSL = `uniform vec2 u_frameSize;
 uniform vec2 u_drawSize;

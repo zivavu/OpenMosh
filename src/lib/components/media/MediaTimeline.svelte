@@ -5,6 +5,7 @@
 	import LaneWaveform from "../timeline/LaneWaveform.svelte";
 	import ClipRepeats from "../timeline/ClipRepeats.svelte";
 	import { repeatNote, videoClipRepeats } from "../../mix/plan";
+	import { TRANSITION_OPTIONS, transitionLength } from "../../media/transition";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import type { Preset } from "../../effects";
 	import type { ChainMode } from "../../editor/sequence";
@@ -278,6 +279,13 @@
 		return clipSource(lane, clip)?.name ?? "No source";
 	}
 
+	function transitionNote(clip: MediaClip): string {
+		const t = clip.transition;
+		if (!t || transitionLength(clip) <= 0) return "";
+		const label = TRANSITION_OPTIONS.find((o) => o.value === t.type)?.label;
+		return ` — ${label} in`;
+	}
+
 	/** Only a lane that can play a video has sound to mute. */
 	function laneHasVideo(lane: MediaLane): boolean {
 		if (sourceById(lane.sourceId)?.kind === "video") return true;
@@ -472,7 +480,7 @@
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
-							title="{clipLabel(lane, clip)}{repeatNote(
+							title="{clipLabel(lane, clip)}{transitionNote(clip)}{repeatNote(
 								repeats,
 							)} — double-click to edit"
 							ondblclick={() => ctrl.openLane(lane)}
@@ -492,6 +500,14 @@
 								<span
 									class="clip-thumb"
 									style="background-image: url({src.thumbUrl})"
+								></span>
+							{/if}
+							{#if transitionLength(clip) > 0}
+								<span
+									class="clip-transition"
+									style="width: {(transitionLength(clip) /
+										(clip.end - clip.start)) *
+										100}%"
 								></span>
 							{/if}
 							<ClipRepeats {clip} times={repeats} px={ctrl.clipPx(clip)} />
@@ -632,6 +648,22 @@
 
 	/* The source's thumbnail, tiled along the clip: a filmstrip reads as "this media"
 	   faster than the file name. */
+	/* A wedge over the stretch the clip spends blending in. */
+	.clip-transition {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		background: linear-gradient(
+			to top right,
+			color-mix(in srgb, var(--clip-accent) 40%, transparent) 50%,
+			transparent 50%
+		);
+		border-right: 1px solid
+			color-mix(in srgb, var(--clip-accent) 60%, transparent);
+		pointer-events: none;
+	}
+
 	.clip-thumb {
 		position: absolute;
 		inset: 0;

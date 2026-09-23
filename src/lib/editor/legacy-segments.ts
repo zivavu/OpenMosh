@@ -1,5 +1,5 @@
 /** The old segment lane is folded on load into one fx lane of clips (chains, span
- * for span) and a media layer under the effects (sources); transitions are dropped. */
+ * for span) and a media layer under the effects (sources and transitions). */
 
 import { restoreEffects, type EffectInstance } from "../effects";
 import { normalizeChainFields } from "./chain-clip";
@@ -13,6 +13,7 @@ import {
 } from "../media";
 import { MIN_CLIP_LENGTH } from "../timeline/clips";
 import { LEGACY_LANE_AUDIO } from "../mix/types";
+import { normalizeClipTransition } from "../media/transition";
 
 /** What a saved segment looked like; anything else it carried is ignored. */
 interface LegacySegment {
@@ -27,6 +28,7 @@ interface LegacySegment {
 	intervalSec?: number;
 	intervalBeats?: number;
 	seed?: number;
+	transition?: unknown;
 }
 
 /** Below any z a lane gets by hand: those count up from zero. */
@@ -90,7 +92,10 @@ export function migrateLegacySegments(
 	mediaLane.audio = { ...LEGACY_LANE_AUDIO };
 	for (const { seg, start, end } of spans) {
 		if (!seg.sourceId) continue;
-		mediaLane.clips.push(createMediaClip(start, end, 0, seg.sourceId));
+		const clip = createMediaClip(start, end, 0, seg.sourceId);
+		const transition = normalizeClipTransition(seg.transition);
+		if (transition) clip.transition = transition;
+		mediaLane.clips.push(clip);
 	}
 
 	return {

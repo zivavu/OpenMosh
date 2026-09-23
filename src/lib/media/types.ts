@@ -19,6 +19,8 @@ import {
 	type LaneAudio,
 } from "../mix/types";
 
+import { normalizeClipTransition, type ClipTransition } from "./transition";
+
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
 
 /** How a layer's media is sized against the frame before its own scale. */
@@ -69,6 +71,8 @@ export interface MediaClip extends ChainClip {
 	gain?: number;
 	/** The sound was moved onto an audio lane, so the clip plays silent. */
 	audioDetached?: boolean;
+	/** Blends in from the clip before it on the lane, or from nothing after a gap. */
+	transition?: ClipTransition;
 }
 
 /** A media layer: a source from the pool, drawn with the lane's placement and chain. */
@@ -160,6 +164,7 @@ export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
 		(half, clip) => ({
 			...half,
 			sourceStart: clip.sourceStart + (at - clip.start),
+			transition: undefined,
 		}),
 	);
 }
@@ -247,6 +252,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,
 					gain: clip.gain,
 					audioDetached: clip.audioDetached || undefined,
+					transition: normalizeClipTransition(clip.transition),
 					...normalizeChainFields(clip, effects),
 				};
 			}),
