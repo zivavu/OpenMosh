@@ -87,15 +87,17 @@ export function lyricsLane(timeline: TextTimeline): TextLane | undefined {
 
 /** Refill the lyrics lane with `clips`, creating the lane on the first sync.
  * Re-applying replaces the previous sync rather than stacking on top. */
+/** A new lyrics lane lands on top: at `z`, or above every text lane when not given. */
 export function applyLyricsToTimeline(
 	timeline: TextTimeline,
 	clips: TextClip[],
+	z = Math.max(-1, ...timeline.lanes.map((l) => l.z)) + 1,
 ): TextTimeline {
 	const existing = lyricsLane(timeline);
 	const lane: TextLane = existing
 		? { ...existing, enabled: true, clips }
 		: {
-				...createTextLane(LYRICS_LANE_NAME),
+				...createTextLane(LYRICS_LANE_NAME, z),
 				style: { ...DEFAULT_TEXT_STYLE, ...LYRICS_STYLE },
 				clips,
 			};

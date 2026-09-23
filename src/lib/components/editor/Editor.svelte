@@ -3537,7 +3537,11 @@
 	function applyLyrics(clips: TextClip[]) {
 		if (clips.length === 0) return;
 		pushTextHistory();
-		textTimeline = applyLyricsToTimeline(textTimeline, clips);
+		textTimeline = applyLyricsToTimeline(
+			textTimeline,
+			clips,
+			nextLayerZ(layerOrder),
+		);
 		selectedTextClipId = clips[0].id;
 	}
 	let effectiveDuration = $derived(

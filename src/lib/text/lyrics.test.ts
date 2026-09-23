@@ -171,4 +171,17 @@ describe("lyricsDraftFromTimeline", () => {
 		expect(lyricsDraftFromTimeline({ enabled: true, lanes: [] })).toBeNull();
 		expect(lyricsDraftFromTimeline(timelineWithLyrics([]))).toBeNull();
 	});
+
+	it("puts a new lyrics lane above every other lane", () => {
+		const t: TextTimeline = {
+			enabled: true,
+			lanes: [createTextLane("A", 0), createTextLane("B", 3)],
+		};
+		const next = applyLyricsToTimeline(t, createLyricsClips(["a"], [0], 5));
+		expect(lyricsLane(next)?.z).toBe(4);
+		expect(
+			lyricsLane(applyLyricsToTimeline(t, createLyricsClips(["a"], [0], 5), 9))
+				?.z,
+		).toBe(9);
+	});
 });
