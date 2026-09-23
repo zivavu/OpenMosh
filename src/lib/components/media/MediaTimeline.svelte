@@ -37,6 +37,8 @@
 	import ClipBoundaries from "../timeline/ClipBoundaries.svelte";
 	import ClipLaneGutter from "../timeline/ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
+	import TransitionPopover from "./TransitionPopover.svelte";
+	import { updateMediaClips } from "../../media/resolve";
 
 	const DEFAULT_CLIP_LENGTH = 2;
 	const LANE_HEIGHT = 30;
@@ -150,9 +152,37 @@
 			},
 			copy: copySelection,
 			paste: pasteClipboard,
+			onJoinClick: (ids, anchor) => (joinPopover = { ids, anchor }),
 		},
 		stack,
 	);
+
+	/** The joins a click opened the transition editor on, by the clip blending in. */
+	let joinPopover = $state<{ ids: string[]; anchor: DOMRect } | null>(null);
+	let joinClips = $derived(
+		joinPopover
+			? timeline.lanes.flatMap((l) =>
+					l.clips.filter((c) => joinPopover!.ids.includes(c.id)),
+				)
+			: [],
+	);
+	// Merged, deleted or undone away while open: nothing left to edit.
+	$effect(() => {
+		if (joinPopover && joinClips.length === 0) joinPopover = null;
+	});
+
+	function editJoinTransitions(
+		edit: (t: MediaClip["transition"]) => MediaClip["transition"],
+	) {
+		if (!joinPopover) return;
+		onBeforeEdit?.();
+		onChange(
+			updateMediaClips(timeline, new Set(joinPopover.ids), (c) => ({
+				...c,
+				transition: edit(c.transition),
+			})),
+		);
+	}
 	$effect(() => ctrl.syncSelection());
 
 	// Rendered in the stack's shared selection bar, like the fx lanes'.
@@ -559,6 +589,15 @@
 			</div>
 		</div>
 	{/each}
+
+	{#if joinPopover}
+		<TransitionPopover
+			anchor={joinPopover.anchor}
+			transitions={joinClips.map((c) => c.transition)}
+			onChange={editJoinTransitions}
+			onClose={() => (joinPopover = null)}
+		/>
+	{/if}
 
 	{#if ctrl.lanePendingDelete}
 		<LaneDeleteDialog

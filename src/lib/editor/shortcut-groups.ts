@@ -74,6 +74,20 @@ const CLIP_ROWS: ShortcutRow[] = [
 		description: "Add or remove one clip from the selection",
 	},
 	{
+		keys: ["Shift+Drag"],
+		description:
+			"Box-select the clips it touches, and on layers the joins inside it",
+	},
+	{
+		keys: ["Click a layer join"],
+		description:
+			"Set its transition; clicking one of several selected edits them all",
+	},
+	{
+		keys: ["Shift+Click a layer join"],
+		description: "Add or remove it from the selected joins",
+	},
+	{
 		keys: ["Dbl-click", "Ctrl/Cmd+Click"],
 		description: "Add a clip in empty lane space",
 	},

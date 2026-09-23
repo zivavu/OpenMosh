@@ -561,6 +561,40 @@
 		background: var(--clip-accent);
 	}
 
+	/* A join with a transition to set reads as a handle, not just a seam. */
+	:global(.tl-stack .clip-boundary.editable::before) {
+		content: "";
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 6px;
+		height: 6px;
+		transform: translate(-50%, -50%) rotate(45deg);
+		background: rgba(255, 255, 255, 0.35);
+		pointer-events: none;
+	}
+
+	:global(.tl-stack .clip-boundary.selected::after),
+	:global(.tl-stack .clip-boundary.selected::before) {
+		width: 2px;
+		background: var(--live);
+	}
+
+	:global(.tl-stack .clip-boundary.selected::before) {
+		width: 8px;
+		height: 8px;
+	}
+
+	:global(.tl-stack .clip-marquee) {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		border: 1px dashed var(--live);
+		background: color-mix(in srgb, var(--live) 12%, transparent);
+		pointer-events: none;
+		z-index: 4;
+	}
+
 	/* Rows that carry controls rather than time, always this tall so the lanes above
 	   don't move when a selection is made. */
 	.tl-selbar {

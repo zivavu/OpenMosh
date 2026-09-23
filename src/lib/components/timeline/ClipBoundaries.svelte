@@ -5,13 +5,19 @@
 	import type { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import type { ClipLane, TimelineClip } from "../../timeline/clips";
 
-	/** The draggable joins between clips that share an edge on one lane. */
+	/** The draggable joins between clips that share an edge on one lane, and the
+	 * shift-drag box while one is drawn over it. */
 	interface Props {
 		ctrl: ClipLaneController<C, L>;
 		lane: L;
 	}
 
 	let { ctrl, lane }: Props = $props();
+
+	let editable = $derived(!!ctrl.host.onJoinClick);
+	let box = $derived(
+		ctrl.marquee?.laneIds.includes(lane.id) ? ctrl.marquee : null,
+	);
 </script>
 
 {#each ctrl.adjacentPairs(lane) as pair (pair.left.id)}
@@ -19,14 +25,26 @@
 	{#if left >= 0 && left <= 100}
 		<div
 			class="clip-boundary"
+			class:editable
+			class:selected={ctrl.selectedJoins.includes(pair.right.id)}
 			style="left: {left}%; width: {ctrl.boundaryWidth(
 				pair.left,
 				pair.right,
 			)}px"
 			role="presentation"
-			title="Drag to trim both clips"
+			title={editable
+				? "Click to set the transition · drag to trim both clips · shift-click to select"
+				: "Drag to trim both clips"}
 			onpointerdown={(e) =>
 				ctrl.onBoundaryPointerDown(e, lane.id, pair.left.id, pair.right.id)}
 		></div>
 	{/if}
 {/each}
+
+{#if box}
+	{const left = $derived(ctrl.stack.vp.toPct(box.from))}
+	<div
+		class="clip-marquee"
+		style="left: {left}%; width: {ctrl.stack.vp.toPct(box.to) - left}%"
+	></div>
+{/if}

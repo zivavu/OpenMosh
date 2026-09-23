@@ -10,63 +10,95 @@
 		type TransitionType,
 	} from "../../media/transition";
 
-	/** How a layer clip blends in from the clip before it. */
+	type Edit = (t: ClipTransition | undefined) => ClipTransition | undefined;
+
+	/** How layer clips blend in from the clip before each. Several at once show a
+	 * value only where they agree. */
 	interface Props {
-		transition: ClipTransition | undefined;
-		/** Whether a clip touches this one's start; without one it blends in from nothing. */
+		transitions: (ClipTransition | undefined)[];
+		/** Whether a clip touches the start; without one it blends in from nothing. */
 		follows: boolean;
-		onChange: (transition: ClipTransition | undefined) => void;
+		idPrefix: string;
+		/** Applied to every target's transition. */
+		onChange: (edit: Edit) => void;
 	}
 
-	let { transition, follows, onChange }: Props = $props();
+	let { transitions, follows, idPrefix, onChange }: Props = $props();
 
-	let meta = $derived(
-		TRANSITION_OPTIONS.find((o) => o.value === (transition?.type ?? "cut")),
+	/** The one value every target shares, else undefined. */
+	function common<T>(
+		read: (t: ClipTransition | undefined) => T,
+	): T | undefined {
+		const values = transitions.map(read);
+		return values.every((v) => v === values[0]) ? values[0] : undefined;
+	}
+
+	let type = $derived(common((t) => t?.type ?? "cut"));
+	let duration = $derived(common((t) => t?.durationSec));
+	let direction = $derived(common((t) => t?.direction ?? 0));
+	let density = $derived(common((t) => t?.density ?? 1));
+	let anyOn = $derived(transitions.some((t) => !!t));
+	/** The controls a mixed selection shows are the ones any of its types has. */
+	let metas = $derived(
+		transitions.map((t) =>
+			TRANSITION_OPTIONS.find((o) => o.value === (t?.type ?? "cut")),
+		),
 	);
 
-	function setType(type: TransitionType) {
-		if (type === "cut") return onChange(undefined);
-		onChange(transition ? { ...transition, type } : createTransition(type));
+	function setType(next: TransitionType) {
+		onChange((t) =>
+			next === "cut"
+				? undefined
+				: t
+					? { ...t, type: next }
+					: createTransition(next),
+		);
 	}
 
 	function patch(p: Partial<ClipTransition>) {
-		if (transition) onChange({ ...transition, ...p });
+		onChange((t) => (t ? { ...t, ...p } : t));
 	}
 </script>
 
 <div
 	class="row"
 	title={follows
-		? "How this clip blends in from the clip right before it"
-		: "How this clip blends in. Nothing plays right before it, so it arrives out of nothing."}
+		? "How the clip blends in from the clip right before it"
+		: "How the clip blends in. Nothing plays right before it, so it arrives out of nothing."}
 >
-	<label for="mc-transition">Transition</label>
+	<label for="{idPrefix}-transition">Transition</label>
 	<select
-		id="mc-transition"
-		value={transition?.type ?? "cut"}
-		onchange={(e) =>
-			setType((e.currentTarget as HTMLSelectElement).value as TransitionType)}
+		id="{idPrefix}-transition"
+		value={type ?? ""}
+		onchange={(e) => {
+			const v = (e.currentTarget as HTMLSelectElement).value;
+			if (v) setType(v as TransitionType);
+		}}
 	>
+		{#if type === undefined}
+			<option value="" disabled>&#8212;</option>
+		{/if}
 		{#each TRANSITION_OPTIONS as o (o.value)}
 			<option value={o.value}>{o.value === "cut" ? "none" : o.label}</option>
 		{/each}
 	</select>
 </div>
 
-{#if transition}
+{#if anyOn}
 	<div class="row" title="How long the blend runs from the clip's start">
-		<label for="mc-transition-len">Length</label>
+		<label for="{idPrefix}-transition-len">Length</label>
 		<select
-			id="mc-transition-len"
-			value={transition.durationSec}
-			onchange={(e) =>
-				patch({
-					durationSec: Number((e.currentTarget as HTMLSelectElement).value),
-				})}
+			id="{idPrefix}-transition-len"
+			value={duration ?? ""}
+			onchange={(e) => {
+				const v = (e.currentTarget as HTMLSelectElement).value;
+				if (v) patch({ durationSec: Number(v) });
+			}}
 		>
-			{#if !TRANSITION_DURATIONS.includes(transition.durationSec)}
-				<option value={transition.durationSec}>{transition.durationSec}s</option
-				>
+			{#if duration === undefined}
+				<option value="" disabled>&#8212;</option>
+			{:else if !TRANSITION_DURATIONS.includes(duration)}
+				<option value={duration}>{duration}s</option>
 			{/if}
 			{#each TRANSITION_DURATIONS as sec (sec)}
 				<option value={sec}>{sec}s</option>
@@ -74,17 +106,20 @@
 		</select>
 	</div>
 
-	{#if meta?.hasDirection}
+	{#if metas.some((m) => m?.hasDirection)}
 		<div class="row" title="Which way the blend travels">
-			<label for="mc-transition-dir">Direction</label>
+			<label for="{idPrefix}-transition-dir">Direction</label>
 			<select
-				id="mc-transition-dir"
-				value={transition.direction ?? 0}
-				onchange={(e) =>
-					patch({
-						direction: Number((e.currentTarget as HTMLSelectElement).value),
-					})}
+				id="{idPrefix}-transition-dir"
+				value={direction ?? ""}
+				onchange={(e) => {
+					const v = (e.currentTarget as HTMLSelectElement).value;
+					if (v) patch({ direction: Number(v) });
+				}}
 			>
+				{#if direction === undefined}
+					<option value="" disabled>&#8212;</option>
+				{/if}
 				<option value={0}>&#8594;</option>
 				<option value={1}>&#8592;</option>
 				<option value={2}>&#8595;</option>
@@ -94,17 +129,20 @@
 		</div>
 	{/if}
 
-	{#if meta?.hasDensity}
+	{#if metas.some((m) => m?.hasDensity)}
 		<div class="row" title="Size of the shards">
-			<label for="mc-transition-cells">Cells</label>
+			<label for="{idPrefix}-transition-cells">Cells</label>
 			<select
-				id="mc-transition-cells"
-				value={transition.density ?? 1}
-				onchange={(e) =>
-					patch({
-						density: Number((e.currentTarget as HTMLSelectElement).value),
-					})}
+				id="{idPrefix}-transition-cells"
+				value={density ?? ""}
+				onchange={(e) => {
+					const v = (e.currentTarget as HTMLSelectElement).value;
+					if (v) patch({ density: Number(v) });
+				}}
 			>
+				{#if density === undefined}
+					<option value="" disabled>&#8212;</option>
+				{/if}
 				<option value={0}>coarse</option>
 				<option value={1}>med</option>
 				<option value={2}>fine</option>
@@ -112,13 +150,13 @@
 		</div>
 	{/if}
 
-	{#if meta?.hasSeed}
+	{#if metas.some((m) => m?.hasSeed)}
 		<div class="row">
 			<span class="label-spacer"></span>
 			<button
 				class="reroll"
 				title="Roll a new layout for the blend, and a new pick when it's random"
-				onclick={() => patch({ seed: randomSeed() })}
+				onclick={() => onChange((t) => (t ? { ...t, seed: randomSeed() } : t))}
 			>
 				<Dices size={11} /> Re-roll
 			</button>

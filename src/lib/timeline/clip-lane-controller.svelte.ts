@@ -55,6 +55,16 @@ export interface ClipLaneHost<
 	/** Ctrl+C / Ctrl+V; true when handled. */
 	copy(): boolean;
 	paste(): boolean;
+	/** Joins carry something to edit (a transition): clicking one calls this with the
+	 * joins it edits, named by the clip to their right, and a box selects them too. */
+	onJoinClick?(rightIds: string[], anchor: DOMRect): void;
+}
+
+/** A shift-drag box over the lanes it spans, in time. */
+export interface ClipMarquee {
+	laneIds: string[];
+	from: number;
+	to: number;
 }
 
 export class ClipLaneController<
@@ -71,9 +81,25 @@ export class ClipLaneController<
 	/** The lane geometry, for hit-testing against the track. Every lane shares one. */
 	trackEl: HTMLElement | undefined;
 
+	/** Joins picked by a box or shift-click, by the id of the clip to their right. */
+	selectedJoins = $state<string[]>([]);
+	marquee = $state<ClipMarquee | null>(null);
+
 	/** Set on pointerdown when a plain click landed on an already-selected clip, so the
 	 * selection survives until pointerup and the clip can still be dragged. */
 	#clickOnUp: string | null = null;
+	/** A shift press waiting to see whether it drags a box or clicks. */
+	#boxStart: {
+		time: number;
+		x: number;
+		y: number;
+		laneId: string;
+		clipId: string | null;
+	} | null = null;
+	/** A join pressed but not yet dragged: releasing it there is a click. */
+	#joinPress: { rightId: string; anchor: DOMRect } | null = null;
+	/** Undo key a join drag records on its first move, so a click adds no step. */
+	#pendingEditKey: string | null = null;
 
 	constructor(host: ClipLaneHost<C, L>, stack: TimelineStackState) {
 		this.host = host;
@@ -87,12 +113,21 @@ export class ClipLaneController<
 	selectOnly(clipId: string): void {
 		this.host.selectedClipId = clipId;
 		this.host.selectedClipIds = [clipId];
+		this.selectedJoins = [];
 		this.host.onSelectOnly?.();
 	}
 
 	deselect(): void {
 		this.host.selectedClipId = null;
 		this.host.selectedClipIds = [];
+		this.selectedJoins = [];
+	}
+
+	/** The clips that start on a join, across every lane. */
+	#joinIds(): Set<string> {
+		return new Set(
+			this.host.lanes.flatMap((l) => adjacentPairs(l).map((p) => p.right.id)),
+		);
 	}
 
 	/** Follow external changes to the primary and drop ids whose clips are gone. */
@@ -102,6 +137,12 @@ export class ClipLaneController<
 			this.host.lanes.flatMap((l) => l.clips.map((c) => c.id)),
 		);
 		untrack(() => {
+			if (this.selectedJoins.length > 0) {
+				const joins = this.#joinIds();
+				const kept = this.selectedJoins.filter((j) => joins.has(j));
+				if (kept.length !== this.selectedJoins.length)
+					this.selectedJoins = kept;
+			}
 			const ids = this.host.selectedClipIds;
 			if (!id || !alive.has(id)) {
 				if (ids.length > 0) this.host.selectedClipIds = [];
@@ -320,17 +361,9 @@ export class ClipLaneController<
 			return;
 		}
 
-		// Shift extends the selection from the primary.
+		// Shift: a drag boxes clips in, a click extends the selection from the primary.
 		if (e.shiftKey && mode === "move") {
-			const lane = this.laneOf(laneId);
-			if (lane && host.selectedClipId) {
-				const range = clipRange(lane, host.selectedClipId, clipId);
-				if (range.length > 0) {
-					host.selectedClipIds = range;
-					return;
-				}
-			}
-			this.selectOnly(clipId);
+			this.#startBox(e, laneId, clipId);
 			return;
 		}
 
@@ -364,6 +397,13 @@ export class ClipLaneController<
 		if (e.button !== 0) return;
 		e.preventDefault();
 		e.stopPropagation();
+		const joins = !!this.host.onJoinClick;
+		if (joins && e.shiftKey) {
+			this.selectedJoins = this.selectedJoins.includes(rightId)
+				? this.selectedJoins.filter((j) => j !== rightId)
+				: [...this.selectedJoins, rightId];
+			return;
+		}
 		this.drag = {
 			laneId,
 			clipId: leftId,
@@ -371,9 +411,13 @@ export class ClipLaneController<
 			mode: "boundary",
 			grabOffset: 0,
 		};
-		// One undo entry per gesture, not per pointermove.
-		this.host.onBeforeEdit?.(`${this.host.kind}-boundary-${leftId}`);
-		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		const target = e.currentTarget as HTMLElement;
+		this.#joinPress = joins
+			? { rightId, anchor: target.getBoundingClientRect() }
+			: null;
+		// One undo entry per gesture, taken once it moves.
+		this.#pendingEditKey = `${this.host.kind}-boundary-${leftId}`;
+		target.setPointerCapture(e.pointerId);
 	}
 
 	/** Empty lane space places the start marker, which takes the clock with it: with no
@@ -386,18 +430,97 @@ export class ClipLaneController<
 			this.addClipAt(laneId, this.timeAt(e.clientX));
 			return;
 		}
+		if (e.shiftKey) {
+			e.preventDefault();
+			this.#startBox(e, laneId, null);
+			return;
+		}
+		this.selectedJoins = [];
 		this.scrubbing = true;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		this.stack.seekStatic(this.timeAt(e.clientX));
 	}
 
+	#startBox(e: PointerEvent, laneId: string, clipId: string | null): void {
+		this.#boxStart = {
+			time: this.timeAt(e.clientX),
+			x: e.clientX,
+			y: e.clientY,
+			laneId,
+			clipId,
+		};
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	/** This controller's lanes the box spans, top to bottom on screen. */
+	#boxLanes(y0: number, y1: number, startLaneId: string): string[] {
+		const mine = this.stack
+			.laneIdsBetween(y0, y1)
+			.filter((id) => this.laneOf(id));
+		return mine.length > 0 ? mine : [startLaneId];
+	}
+
+	#endBox(): void {
+		const start = this.#boxStart!;
+		const box = this.marquee;
+		this.#boxStart = null;
+		this.marquee = null;
+		const host = this.host;
+		if (!box) {
+			// A shift-click: extend from the primary, or clear on empty space.
+			if (!start.clipId) return this.deselect();
+			const lane = this.laneOf(start.laneId);
+			const range =
+				lane && host.selectedClipId
+					? clipRange(lane, host.selectedClipId, start.clipId)
+					: [];
+			if (range.length > 0) host.selectedClipIds = range;
+			else this.selectOnly(start.clipId);
+			return;
+		}
+		const lanes = box.laneIds
+			.map((id) => this.laneOf(id))
+			.filter((l): l is L => !!l);
+		const ids = lanes.flatMap((l) =>
+			sortClips(l.clips)
+				.filter((c) => c.end > box.from && c.start < box.to)
+				.map((c) => c.id),
+		);
+		host.selectedClipIds = ids;
+		host.selectedClipId = ids[0] ?? null;
+		this.selectedJoins = host.onJoinClick
+			? lanes.flatMap((l) =>
+					adjacentPairs(l)
+						.filter((p) => p.at >= box.from && p.at <= box.to)
+						.map((p) => p.right.id),
+				)
+			: [];
+	}
+
 	onPointerMove(e: PointerEvent): void {
+		const box = this.#boxStart;
+		if (box) {
+			// A few pixels of slack, so a shaky shift-click stays a click.
+			if (!this.marquee && Math.abs(e.clientX - box.x) < 3) return;
+			const t = this.timeAt(e.clientX);
+			this.marquee = {
+				laneIds: this.#boxLanes(box.y, e.clientY, box.laneId),
+				from: Math.max(0, Math.min(box.time, t)),
+				to: Math.min(this.trackDuration, Math.max(box.time, t)),
+			};
+			return;
+		}
 		if (this.scrubbing) this.stack.seekStatic(this.timeAt(e.clientX));
 		const drag = this.drag;
 		if (!drag) return;
 		const t = this.timeAt(e.clientX);
 		const { laneId, clipId, mode, grabOffset } = drag;
 		this.#clickOnUp = null;
+		this.#joinPress = null;
+		if (this.#pendingEditKey) {
+			this.host.onBeforeEdit?.(this.#pendingEditKey);
+			this.#pendingEditKey = null;
+		}
 		const lanes = this.host.lanes;
 		const group = this.host.selectedClipIds.includes(clipId)
 			? this.host.selectedClipIds
@@ -442,6 +565,24 @@ export class ClipLaneController<
 	}
 
 	onPointerUp(e: PointerEvent): void {
+		if (this.#boxStart) {
+			this.#endBox();
+			(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+			return;
+		}
+		const press = this.#joinPress;
+		this.#joinPress = null;
+		this.#pendingEditKey = null;
+		if (press) {
+			// Clicking one of several selected joins edits them all.
+			const inSelection = this.selectedJoins.includes(press.rightId);
+			const joins =
+				inSelection && this.selectedJoins.length > 1
+					? this.selectedJoins
+					: [press.rightId];
+			if (!inSelection) this.selectedJoins = [press.rightId];
+			this.host.onJoinClick?.(joins, press.anchor);
+		}
 		const clickOnUp = this.#clickOnUp;
 		if (clickOnUp) {
 			// Clicking the one selected clip again drops the selection.
@@ -473,7 +614,10 @@ export class ClipLaneController<
 			}
 			return;
 		}
-		if (e.key === "Escape" && this.host.selectedClipIds.length > 0) {
+		if (
+			e.key === "Escape" &&
+			(this.host.selectedClipIds.length > 0 || this.selectedJoins.length > 0)
+		) {
 			this.deselect();
 			return;
 		}

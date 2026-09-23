@@ -231,6 +231,17 @@ export class TimelineStackState {
 		return null;
 	}
 
+	/** Lanes whose rows overlap the band between two screen heights, top to bottom. */
+	laneIdsBetween(y0: number, y1: number): string[] {
+		const top = Math.min(y0, y1);
+		const bottom = Math.max(y0, y1);
+		return [...this.#laneEls]
+			.map(([el, id]) => ({ id, r: el.getBoundingClientRect() }))
+			.filter(({ r }) => r.bottom > top && r.top <= bottom)
+			.sort((a, b) => a.r.top - b.r.top)
+			.map(({ id }) => id);
+	}
+
 	/** Svelte action for a lane's track element; registers it as the axis geometry. */
 	lane = (node: HTMLElement | SVGElement, laneId?: string) => {
 		const el = node as HTMLElement;

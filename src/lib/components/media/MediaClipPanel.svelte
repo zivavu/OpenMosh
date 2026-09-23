@@ -167,10 +167,12 @@
 			),
 	);
 
-	function setTransition(transition: MediaClip["transition"]) {
+	function editTransition(
+		edit: (t: MediaClip["transition"]) => MediaClip["transition"],
+	) {
 		if (!clip) return;
 		onBeforeEdit?.();
-		onClipChange({ ...clip, transition });
+		onClipChange({ ...clip, transition: edit(clip.transition) });
 	}
 
 	function setSourceStart(v: number) {
@@ -254,9 +256,10 @@
 			<FadeRows {clip} noun="this layer" idPrefix="mc" onFade={setFade} />
 
 			<TransitionRows
-				transition={clip.transition}
+				transitions={[clip.transition]}
 				follows={followsClip}
-				onChange={setTransition}
+				idPrefix="mc"
+				onChange={editTransition}
 			/>
 
 			{#if source?.kind === "video"}
