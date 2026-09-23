@@ -197,6 +197,40 @@ export function planMix(input: MixInput): MixSegment[] {
 	return out;
 }
 
+/** Timeline times inside a video clip where its source starts over. */
+export function videoClipRepeats(
+	edit: SourceEdit | undefined,
+	length: number,
+	clip: { start: number; end: number; sourceStart: number },
+): number[] {
+	if (!(length > 0)) return [];
+	return walkClip(videoWalk(edit, length, clip))
+		.slice(1)
+		.map((s) => s.start);
+}
+
+/** The same for a looping library track, `length` seconds long. */
+export function trackClipRepeats(
+	clip: { start: number; end: number; sourceStart: number },
+	length: number,
+): number[] {
+	if (!(length > 0)) return [];
+	return walkClip({
+		start: clip.start,
+		end: clip.end,
+		from: clip.sourceStart % length,
+		rate: 1,
+		loop: { start: 0, end: length },
+	})
+		.slice(1)
+		.map((s) => s.start);
+}
+
+/** Tooltip tail for a clip that repeats: how many times its media plays. */
+export function repeatNote(repeats: number[]): string {
+	return repeats.length > 0 ? ` — plays ${repeats.length + 1}×` : "";
+}
+
 /** The part of a segment inside [from, to), with the offset moved to match. */
 export function trimSegment(
 	seg: MixSegment,

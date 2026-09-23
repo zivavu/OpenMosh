@@ -3,6 +3,8 @@
 	import type { MixSegment } from "../../mix/plan";
 	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
 	import LaneWaveform from "../timeline/LaneWaveform.svelte";
+	import ClipRepeats from "../timeline/ClipRepeats.svelte";
+	import { repeatNote, videoClipRepeats } from "../../mix/plan";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import type { Preset } from "../../effects";
 	import type { ChainMode } from "../../editor/sequence";
@@ -453,6 +455,11 @@
 					{const width = $derived(vp.toPct(clip.end) - left)}
 					{const edge = $derived(ctrl.edgeWidth(clip))}
 					{const src = $derived(clipSource(lane, clip))}
+					{const repeats = $derived(
+						src?.kind === "video"
+							? videoClipRepeats(edits[src.id], src.duration, clip)
+							: [],
+					)}
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"
@@ -465,7 +472,9 @@
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
-							title="{clipLabel(lane, clip)} — double-click to edit"
+							title="{clipLabel(lane, clip)}{repeatNote(
+								repeats,
+							)} — double-click to edit"
 							ondblclick={() => ctrl.openLane(lane)}
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
@@ -485,6 +494,7 @@
 									style="background-image: url({src.thumbUrl})"
 								></span>
 							{/if}
+							<ClipRepeats {clip} times={repeats} px={ctrl.clipPx(clip)} />
 							{#if ctrl.clipPx(clip) >= MIN_LABEL_PX}
 								<span class="clip-label">
 									{clipLabel(lane, clip)}

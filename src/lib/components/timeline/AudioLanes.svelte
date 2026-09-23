@@ -2,7 +2,8 @@
 	import { Activity, Repeat } from "lucide-svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
-	import type { MixSegment } from "../../mix/plan";
+	import { repeatNote, type MixSegment } from "../../mix/plan";
+	import ClipRepeats from "./ClipRepeats.svelte";
 	import {
 		createAudioClip,
 		MAX_GAIN,
@@ -32,6 +33,8 @@
 		peaksOf: (sourceId: string) => Float32Array | null;
 		version: number;
 		sourceName: (sourceId: string | null) => string;
+		/** Where each clip's sound starts over, if it does. */
+		repeatsOf?: (clip: AudioClip) => number[];
 		/** Sits under the layer rows, whatever their stacking. */
 		orderBase: number;
 		foldedLaneIds?: ReadonlySet<string>;
@@ -48,6 +51,7 @@
 		peaksOf,
 		version,
 		sourceName,
+		repeatsOf = () => [],
 		orderBase,
 		foldedLaneIds = NO_FOLDS,
 		onToggleFold,
@@ -189,6 +193,7 @@
 					{const left = $derived(vp.toPct(clip.start))}
 					{const width = $derived(vp.toPct(clip.end) - left)}
 					{const edge = $derived(ctrl.edgeWidth(clip))}
+					{const repeats = $derived(repeatsOf(clip))}
 					{#if left < 100 && left + width > 0}
 						<div
 							class="clip"
@@ -200,7 +205,7 @@
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
-							title={clipLabel(clip)}
+							title="{clipLabel(clip)}{repeatNote(repeats)}"
 							draggable="false"
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
@@ -213,6 +218,7 @@
 								onpointerdown={(e) =>
 									ctrl.onClipPointerDown(e, lane.id, clip.id, "start")}
 							></span>
+							<ClipRepeats {clip} times={repeats} px={ctrl.clipPx(clip)} />
 							{#if ctrl.clipPx(clip) >= MIN_LABEL_PX}
 								<span class="clip-label">{clipLabel(clip)}</span>
 							{/if}

@@ -5,7 +5,13 @@ import {
 	type MediaTimeline,
 } from "../media/types";
 import { createSourceEdit } from "../media/source-edit";
-import { planMix, segmentEnvelope, trimSegment } from "./plan";
+import {
+	planMix,
+	segmentEnvelope,
+	trackClipRepeats,
+	trimSegment,
+	videoClipRepeats,
+} from "./plan";
 import { createAudioClip, createAudioLane, trackSourceId } from "./types";
 
 function videoTimeline(
@@ -123,6 +129,20 @@ describe("looping tracks", () => {
 			[3, 7, 0],
 			[7, 10, 0],
 		]);
+	});
+});
+
+describe("repeat points", () => {
+	it("marks where a clip's media starts over", () => {
+		expect(
+			videoClipRepeats(undefined, 3, { start: 0, end: 5, sourceStart: 2 }),
+		).toEqual([1, 4]);
+		expect(trackClipRepeats({ start: 2, end: 10, sourceStart: 0 }, 4)).toEqual([
+			6,
+		]);
+		expect(
+			videoClipRepeats(undefined, 10, { start: 0, end: 5, sourceStart: 0 }),
+		).toEqual([]);
 	});
 });
 

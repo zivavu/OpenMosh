@@ -40,7 +40,12 @@
 	import { addTrack, getTrack } from "../../audio/track-library";
 	import { SequenceMixer } from "../../mix/mixer.svelte";
 	import { SourceAudioBank } from "../../mix/source-audio.svelte";
-	import { planMix, planSourceIds } from "../../mix/plan";
+	import {
+		planMix,
+		planSourceIds,
+		trackClipRepeats,
+		videoClipRepeats,
+	} from "../../mix/plan";
 	import { renderMix } from "../../mix/render";
 	import {
 		audioLanesEnd,
@@ -52,6 +57,7 @@
 		retargetAudioSource,
 		trackIdOf,
 		trackSourceId,
+		type AudioClip,
 		type AudioLane,
 	} from "../../mix/types";
 	import { readProjectNames, setProjectName } from "../../editor/project-names";
@@ -1994,6 +2000,18 @@
 			}
 		}
 	});
+
+	/** Where an audio clip's sound starts over: a video's always wraps, a track's when looped. */
+	function audioClipRepeats(clip: AudioClip): number[] {
+		const id = clip.sourceId;
+		if (!id) return [];
+		const videoLength = videoLengths[id];
+		if (videoLength) {
+			return videoClipRepeats(sourceRegistry.edits[id], videoLength, clip);
+		}
+		const trackLength = trackLengths[id];
+		return clip.loop && trackLength ? trackClipRepeats(clip, trackLength) : [];
+	}
 
 	/** A lane-ready name for an audio source. */
 	function audioSourceName(id: string | null): string {
@@ -4481,6 +4499,7 @@
 							{peaksOf}
 							version={audioBank.version}
 							sourceName={audioSourceName}
+							repeatsOf={audioClipRepeats}
 							orderBase={layerOrder.length}
 							{foldedLaneIds}
 							onToggleFold={toggleLaneFold}
