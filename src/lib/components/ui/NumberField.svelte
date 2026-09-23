@@ -18,6 +18,9 @@
 		unit?: string;
 		upTitle?: string;
 		downTitle?: string;
+		/** Typing applies on Enter or blur, not per keystroke: for values where a
+		 * half-typed number would do damage on its way. */
+		commitOnBlur?: boolean;
 		onChange: (value: number) => void;
 	}
 
@@ -34,6 +37,7 @@
 		unit = "value",
 		upTitle,
 		downTitle,
+		commitOnBlur = false,
 		onChange,
 	}: Props = $props();
 
@@ -68,12 +72,26 @@
 		step={fineStep ?? step}
 		value={value > 0 ? value : ""}
 		oninput={(e) => {
+			if (commitOnBlur) return;
 			const raw = (e.currentTarget as HTMLInputElement).value;
 			// Only the ceiling is enforced while typing: clamping up to `min` would
 			// fight the first digit of a bigger number.
 			onChange(raw === "" ? 0 : Math.min(max, +raw));
 		}}
+		onkeydown={(e) => {
+			if (commitOnBlur && e.key === "Enter") inputEl?.blur();
+		}}
 		onblur={() => {
+			if (commitOnBlur) {
+				const raw = inputEl?.value ?? "";
+				const typed = raw === "" ? NaN : +raw;
+				const next = Number.isFinite(typed)
+					? Math.min(max, Math.max(min, typed))
+					: value;
+				if (next !== value) onChange(next);
+				if (inputEl) inputEl.value = next > 0 ? String(next) : "";
+				return;
+			}
 			// Whatever half-typed text is in the field, leaving it shows the number
 			// the rest of the app is actually using.
 			const next = value > 0 ? Math.max(min, value) : allowEmpty ? 0 : min;

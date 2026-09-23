@@ -1351,10 +1351,11 @@
 		};
 	});
 
-	// Pull the clip lanes back inside the master clock when it changes.
+	// Pull the clip lanes back inside the master clock when it changes. Not in sequence
+	// mode: a shorter project leaves clips past its end alone, to come back if it grows.
 	$effect(() => {
 		const duration = seqMasterDuration;
-		if (duration <= 0) return;
+		if (duration <= 0 || isSequenceMode) return;
 		untrack(() => {
 			const media = fitMediaTimeline(mediaTimeline, duration);
 			if (media !== mediaTimeline) mediaTimeline = media;
@@ -2116,15 +2117,10 @@
 		dropSong();
 	}
 
-	/** The project's length, set by hand. Clips past a shorter end are trimmed, undoably. */
+	/** The project's length, set by hand. Clips past a shorter end are kept, unplayed. */
 	function setProjectLength(length: number) {
-		const next = Math.max(1, length);
-		if (next < mixer.duration && timelineContentEnd() > next) {
-			pushMediaHistory();
-			pushTextHistory();
-			pushFxHistory();
-		}
-		mixer.setDuration(next);
+		pauseTrack();
+		mixer.setDuration(Math.max(1, length));
 	}
 
 	/** Detach a video clip's sound onto an audio lane of its own. */
@@ -4324,7 +4320,7 @@
 						<div class="tl-tool-sep"></div>
 						<span
 							class="tl-tool-label"
-							title="How long the project runs. Shorter trims whatever hangs past the end."
+							title="How long the project runs. Clips past a shorter end are kept, just not played."
 							>Length</span
 						>
 						<NumberField
@@ -4337,6 +4333,7 @@
 							unit="duration"
 							upTitle="Longer (shift for a tenth of a second)"
 							downTitle="Shorter (shift for a tenth of a second)"
+							commitOnBlur
 							onChange={setProjectLength}
 						/>
 						<button
