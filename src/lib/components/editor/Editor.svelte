@@ -2169,6 +2169,24 @@
 		});
 	}
 
+	/** A track already on the lanes becomes the song, the one the BPM is measured from.
+	 * Unlike replaceSong, every clip stays where it is. */
+	async function setBpmSource(sourceId: string) {
+		const trackId = trackIdOf(sourceId);
+		if (!trackId || trackId === currentTrackId) return;
+		const track = await getTrack(trackId).catch(() => null);
+		if (!track) {
+			showToast("That track is no longer in the library", "error");
+			return;
+		}
+		// Zero, so the new song is measured rather than keeping the old one's tempo.
+		sequenceBpm = 0;
+		setSong(
+			new File([track.blob], track.name, { type: track.blob.type }),
+			trackId,
+		);
+	}
+
 	/** Unloading the song takes its clips off the lanes too. */
 	function removeSong() {
 		const id = songSourceId;
@@ -2342,6 +2360,7 @@
 	// Same detector the slideshow uses: essentia's RhythmExtractor2013 in a shared worker.
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = null;
+	let bpmDetectFile: File | null = null;
 	/** Bumped when the BPM is settled elsewhere; a detection that started before yields to it. */
 	let bpmEpoch = 0;
 	/** The track the automatic pass has already been spent on. */
@@ -2361,13 +2380,17 @@
 	});
 
 	async function runSequenceBpmDetection(auto = false) {
-		if (!audio.trackFile || bpmDetecting) return;
 		const file = audio.trackFile;
+		if (!file || (bpmDetecting && bpmDetectFile === file)) return;
+		// A pass still measuring the previous song is moot.
+		bpmDetectAbort?.abort();
+		const abort = new AbortController();
+		bpmDetectAbort = abort;
+		bpmDetectFile = file;
 		const epoch = bpmEpoch;
 		bpmDetecting = true;
-		bpmDetectAbort = new AbortController();
 		try {
-			const result = await detectBpm(file, bpmDetectAbort.signal);
+			const result = await detectBpm(file, abort.signal);
 			// The automatic pass never overrules what landed while it ran.
 			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
 			setSequenceBpm(Math.round(result.bpm));
@@ -2381,8 +2404,11 @@
 				);
 			}
 		} finally {
-			bpmDetecting = false;
-			bpmDetectAbort = null;
+			if (bpmDetectAbort === abort) {
+				bpmDetecting = false;
+				bpmDetectAbort = null;
+				bpmDetectFile = null;
+			}
 		}
 	}
 
@@ -4538,6 +4564,8 @@
 							{peaksOf}
 							version={audioBank.version}
 							sourceName={audioSourceName}
+							bpmSourceId={songSourceId}
+							onSetBpmSource={setBpmSource}
 							repeatsOf={audioClipRepeats}
 							sourceEndsOf={audioSourceEnds}
 							orderBase={layerOrder.length}

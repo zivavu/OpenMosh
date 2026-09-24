@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Activity, Repeat } from "lucide-svelte";
+	import { Activity, Metronome, Repeat } from "lucide-svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import {
@@ -14,6 +14,7 @@
 		createAudioClip,
 		MAX_GAIN,
 		splitAudioClipAt,
+		trackIdOf,
 		type AudioClip,
 		type AudioLane,
 	} from "../../mix/types";
@@ -39,6 +40,9 @@
 		peaksOf: (sourceId: string) => Float32Array | null;
 		version: number;
 		sourceName: (sourceId: string | null) => string;
+		/** The song: the source the BPM is measured from. */
+		bpmSourceId?: string | null;
+		onSetBpmSource?: (sourceId: string) => void;
 		/** Where each clip's sound starts over, if it does. */
 		repeatsOf?: (clip: AudioClip) => number[];
 		/** Where a clip's sound runs out, measured as if it ran to `until`: snap targets. */
@@ -59,6 +63,8 @@
 		peaksOf,
 		version,
 		sourceName,
+		bpmSourceId = null,
+		onSetBpmSource,
 		repeatsOf = () => [],
 		sourceEndsOf,
 		orderBase,
@@ -113,6 +119,11 @@
 	}
 
 	let allLoop = $derived(selectedClips.every((c) => c.loop));
+	/** The one library track the selection plays, if that's all it plays. */
+	let commonTrack = $derived.by(() => {
+		const id = common(selectedClips.map((c) => c.sourceId));
+		return id && trackIdOf(id) ? id : null;
+	});
 	let commonGain = $derived(common(selectedClips.map((c) => c.gain ?? 1)));
 	let commonFadeIn = $derived(
 		common(selectedClips.map((c) => c.fadeInSec ?? 0)),
@@ -339,6 +350,20 @@
 			>
 				<Repeat size={12} /> Loop
 			</button>
+			{#if commonTrack && onSetBpmSource}
+				{@const isSource = commonTrack === bpmSourceId}
+				<button
+					class="tl-tool-btn"
+					class:active={isSource}
+					aria-pressed={isSource}
+					title={isSource
+						? "The BPM is measured from this track"
+						: "Measure the BPM from this track instead, and time the beat grid by it"}
+					onclick={() => onSetBpmSource(commonTrack)}
+				>
+					<Metronome size={12} /> BPM source
+				</button>
+			{/if}
 			<div class="tl-tool-sep"></div>
 			{#each [["Fade in", "fadeInSec", commonFadeIn], ["Fade out", "fadeOutSec", commonFadeOut]] as const as [label, key, value] (key)}
 				<span class="tl-tool-label">{label}</span>
