@@ -12,7 +12,6 @@
 	import ClipRepeats from "./ClipRepeats.svelte";
 	import {
 		createAudioClip,
-		MAX_GAIN,
 		splitAudioClipAt,
 		trackIdOf,
 		type AudioClip,
@@ -23,6 +22,7 @@
 	import LaneDeleteDialog from "./LaneDeleteDialog.svelte";
 	import LaneWaveform from "./LaneWaveform.svelte";
 	import RepeatButton from "./RepeatButton.svelte";
+	import ClipVolume from "./ClipVolume.svelte";
 
 	const LANE_HEIGHT = 30;
 	const LANE_FOLDED_HEIGHT = 14;
@@ -313,29 +313,15 @@
 					? `${selectedClips.length} clips`
 					: sourceName(selectedClips[0].sourceId)}
 			</span>
-			<div class="tl-tool-sep"></div>
-			<span class="tl-tool-label">Clip volume</span>
-			<input
-				type="range"
-				class="audio-gain"
-				min="0"
-				max={MAX_GAIN}
-				step="0.01"
-				value={commonGain ?? 1}
-				class:mixed={commonGain === undefined}
-				title="Volume of the selected clips. Double-click to reset."
-				oninput={(e) => {
-					const v = +e.currentTarget.value;
+			<ClipVolume
+				value={commonGain}
+				onInput={(v) =>
 					updateSelected(
 						(c) => ({ ...c, gain: v === 1 ? undefined : v }),
 						`audio-gain-${selectedClipIds.join(",")}`,
-					);
-				}}
-				ondblclick={() => updateSelected((c) => ({ ...c, gain: undefined }))}
+					)}
+				onReset={() => updateSelected((c) => ({ ...c, gain: undefined }))}
 			/>
-			<span class="tl-tool-label audio-val">
-				{commonGain === undefined ? "—" : `${Math.round(commonGain * 100)}%`}
-			</span>
 			<div class="tl-tool-sep"></div>
 			<button
 				class="tl-tool-btn"
@@ -437,19 +423,6 @@
 		font-weight: 600;
 		color: var(--live);
 		white-space: nowrap;
-	}
-
-	.audio-gain {
-		width: 6rem;
-		accent-color: var(--live);
-	}
-
-	.audio-gain.mixed {
-		opacity: 0.5;
-	}
-
-	.audio-val {
-		min-width: 2.5rem;
 	}
 
 	.audio-select {

@@ -38,6 +38,7 @@
 	import { draggedSourceId } from "../../editor/source-drag.svelte";
 	import { stackIndex, type LayerRef } from "../../timeline/layer-order";
 	import ChainClipBar from "../timeline/ChainClipBar.svelte";
+	import ClipVolume from "../timeline/ClipVolume.svelte";
 	import ClipBoundaries from "../timeline/ClipBoundaries.svelte";
 	import ClipLaneGutter from "../timeline/ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "../timeline/LaneDeleteDialog.svelte";
@@ -202,6 +203,34 @@
 
 	// Rendered in the stack's shared selection bar, like the fx lanes'.
 	let selectedClips = $derived(ctrl.selectedClips);
+
+	/** Selected clips playing their video's own sound, which the bar's volume sets. */
+	let soundClips = $derived(
+		timeline.lanes.flatMap((lane) =>
+			(lane.audio ?? DEFAULT_LANE_AUDIO).muted
+				? []
+				: lane.clips.filter(
+						(c) =>
+							selectedClipIds.includes(c.id) &&
+							!c.audioDetached &&
+							clipSource(lane, c)?.kind === "video",
+					),
+		),
+	);
+	let commonGain = $derived.by(() => {
+		const gains = soundClips.map((c) => c.gain ?? 1);
+		return gains.every((g) => g === gains[0]) ? gains[0] : undefined;
+	});
+
+	function setSoundGain(gain: number | undefined, coalesceKey?: string) {
+		onBeforeEdit?.(coalesceKey);
+		onChange(
+			updateMediaClips(timeline, new Set(soundClips.map((c) => c.id)), (c) => ({
+				...c,
+				gain,
+			})),
+		);
+	}
 	$effect(() => {
 		if (selectedClips.length === 0 || !onModeChange) return;
 		return stack.registerSelectionBar("media", clipBar);
@@ -634,7 +663,21 @@
 		{onRoll}
 		{onClear}
 		{onModeChange}
-	/>
+	>
+		{#snippet trailing()}
+			{#if soundClips.length > 0}
+				<ClipVolume
+					value={commonGain}
+					onInput={(v) =>
+						setSoundGain(
+							v === 1 ? undefined : v,
+							`media-gain-${selectedClipIds.join(",")}`,
+						)}
+					onReset={() => setSoundGain(undefined)}
+				/>
+			{/if}
+		{/snippet}
+	</ChainClipBar>
 {/snippet}
 
 <style>
