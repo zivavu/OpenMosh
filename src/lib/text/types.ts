@@ -33,6 +33,41 @@ export interface TextStyle {
 	/** 0..1, applied by the GL composite rather than the 2D canvas. */
 	opacity: number;
 	blendMode: TextOverlayBlendMode;
+	fontCycle: FontCycle;
+}
+
+export type FontCycleOrder = "cycle" | "shuffle";
+
+/** Fonts the lane steps through on the beat, in place of `fontFamily`. */
+export interface FontCycle {
+	enabled: boolean;
+	fonts: string[];
+	/** Beats each font holds for. */
+	everyBeats: number;
+	order: FontCycleOrder;
+}
+
+export const FONT_CYCLE_BEATS = [0.5, 1, 2, 4, 8];
+
+export const DEFAULT_FONT_CYCLE: FontCycle = {
+	enabled: false,
+	fonts: [],
+	everyBeats: 1,
+	order: "cycle",
+};
+
+function normalizeFontCycle(raw: unknown): FontCycle {
+	if (!raw || typeof raw !== "object") return { ...DEFAULT_FONT_CYCLE };
+	const c = raw as Partial<FontCycle>;
+	return {
+		enabled: !!c.enabled,
+		fonts: Array.isArray(c.fonts)
+			? c.fonts.filter((f): f is string => typeof f === "string")
+			: [],
+		everyBeats:
+			typeof c.everyBeats === "number" && c.everyBeats > 0 ? c.everyBeats : 1,
+		order: c.order === "shuffle" ? "shuffle" : "cycle",
+	};
 }
 
 /** One span of text on a lane. A chain clip: its effects run on this clip's text
@@ -82,6 +117,7 @@ export const DEFAULT_TEXT_STYLE: TextStyle = {
 	outlineWidth: 2,
 	opacity: 1,
 	blendMode: "normal",
+	fontCycle: DEFAULT_FONT_CYCLE,
 };
 
 export const EMPTY_TEXT_TIMELINE: TextTimeline = { enabled: false, lanes: [] };
@@ -179,6 +215,7 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 			const legacyStyle = (clips as Array<{ style?: TextStyle }>).find(
 				(c) => c.style,
 			)?.style;
+			const style = lane.style ?? legacyStyle;
 			return {
 				id: lane.id ?? nextId("lane"),
 				name: lane.name ?? `Text ${i + 1}`,
@@ -186,7 +223,11 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 				// Old timelines carry a chain index instead: 0 meant "under every effect".
 				underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
 				z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
-				style: { ...DEFAULT_TEXT_STYLE, ...(lane.style ?? legacyStyle) },
+				style: {
+					...DEFAULT_TEXT_STYLE,
+					...style,
+					fontCycle: normalizeFontCycle(style?.fontCycle),
+				},
 				clips: clips.map((clip) => {
 					// Lanes saved before clips carried their own chain held one for the whole lane:
 					// every clip inherits a copy.

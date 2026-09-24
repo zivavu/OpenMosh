@@ -1389,7 +1389,12 @@
 	const previewTextChains = createTextChainSource(getMoshOptions);
 
 	function currentTextLayers() {
-		return resolveTextLayersAt(textTimeline, textTime, previewTextChains);
+		return resolveTextLayersAt(
+			textTimeline,
+			textTime,
+			previewTextChains,
+			beatsAt(textTime),
+		);
 	}
 
 	function beatsAt(t: number): number | null {
@@ -1842,6 +1847,7 @@
 			spectrumData={audio.spectrumData}
 			response={DEFAULT_AUDIO_RESPONSE}
 			{section}
+			bpm={config.bpm}
 		/>
 	{/snippet}
 

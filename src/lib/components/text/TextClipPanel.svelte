@@ -13,6 +13,7 @@
 	import type { AudioResponse } from "../../audio/auto-range";
 	import ColorPicker from "../ui/ColorPicker.svelte";
 	import FontSelect from "../ui/FontSelect.svelte";
+	import FontCycleRows from "./FontCycleRows.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import ClipChainSection from "../timeline/ClipChainSection.svelte";
 	import ClipPanel from "../timeline/ClipPanel.svelte";
@@ -32,6 +33,8 @@
 		response?: AudioResponse;
 		/** Which half to show: the clip's controls, or the lane's effect chain. */
 		section?: "clip" | "chain";
+		/** For the font-on-beat rows to say when there's no tempo to follow. */
+		bpm?: number;
 	}
 
 	let {
@@ -45,6 +48,7 @@
 		spectrumData = null,
 		response = undefined,
 		section = "clip",
+		bpm,
 	}: Props = $props();
 
 	function setUnderEffects(under: boolean) {
@@ -130,6 +134,13 @@
 					onChange={(family) => setStyle("fontFamily", family)}
 				/>
 			</div>
+
+			<FontCycleRows
+				cycle={lane.style.fontCycle}
+				fontFamily={lane.style.fontFamily}
+				{bpm}
+				onChange={(cycle) => setStyle("fontCycle", cycle)}
+			/>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div

@@ -18,6 +18,7 @@
 	import { clampMove, scaleFromHandle } from "../../editor/layer-drag";
 	import { onFontsChanged } from "../../text-overlay";
 	import {
+		preloadTextTimelineFonts,
 		resolveTextLayersAt,
 		type ResolvedTextLayer,
 		type TextChainSource,
@@ -568,11 +569,17 @@
 	function drawFrame(now: number) {
 		// Before anything renders: the bars have to see this frame's audio.
 		renderer!.setSpectrum(spectrum, now);
-		renderer!.setBeat(bpm > 0 ? (textTime * bpm) / 60 : null, bpm / 60);
+		const beat = bpm > 0 ? (textTime * bpm) / 60 : null;
+		renderer!.setBeat(beat, bpm / 60);
 		const solo = soloMediaLaneId;
 		const layers =
 			textTimeline && !solo
-				? resolveTextLayersAt(textTimeline, textTime, textChains ?? undefined)
+				? resolveTextLayersAt(
+						textTimeline,
+						textTime,
+						textChains ?? undefined,
+						beat,
+					)
 				: [];
 		const media = mediaTimeline
 			? resolveMediaLayersAt(
@@ -830,6 +837,11 @@
 		return () => {
 			if (r.onMaskReady) r.onMaskReady = null;
 		};
+	});
+
+	// Beat-cycled fonts turn up mid-play; fetched ahead so none first draws as a fallback.
+	$effect(() => {
+		void preloadTextTimelineFonts(textTimeline);
 	});
 
 	// Static redraw driver: re-renders when the animation loop is not running.

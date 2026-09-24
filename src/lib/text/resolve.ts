@@ -63,14 +63,55 @@ export function createTextChainSource(
 		chainClipEffectsAt(clip, time, cache, clone, getMoshOptions);
 }
 
+function hash(seed: string, n: number): number {
+	let h = 2166136261 ^ n;
+	for (let i = 0; i < seed.length; i++) {
+		h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+	}
+	return Math.imul(h ^ (h >>> 15), 2246822507) >>> 0;
+}
+
+/** A seeded order of `n` items for one round of a shuffle. */
+function shuffledRound(n: number, seed: string, round: number): number[] {
+	const order = Array.from({ length: n }, (_, i) => i);
+	for (let i = n - 1; i > 0; i--) {
+		const j = hash(seed, round * 131 + i) % (i + 1);
+		[order[i], order[j]] = [order[j], order[i]];
+	}
+	return order;
+}
+
+/** The font a lane draws in at `beat`, beats since the grid's zero. A shuffle deals
+ * every font once per round and never repeats across a round's seam. */
+export function fontAtBeat(
+	style: TextStyle,
+	beat: number | null | undefined,
+	seed: string,
+): string {
+	const cycle = style.fontCycle;
+	const n = cycle?.fonts.length ?? 0;
+	if (!cycle?.enabled || n === 0 || beat == null) return style.fontFamily;
+	const step = Math.floor(beat / cycle.everyBeats);
+	const at = ((step % n) + n) % n;
+	// Two fonts can only alternate without repeating.
+	if (cycle.order === "cycle" || n <= 2) return cycle.fonts[at];
+	const round = Math.floor(step / n);
+	const order = shuffledRound(n, seed, round);
+	const lastOfPrev = shuffledRound(n, seed, round - 1)[n - 1];
+	if (order[0] === lastOfPrev) [order[0], order[1]] = [order[1], order[0]];
+	return cycle.fonts[order[at]];
+}
+
 /** The text layers visible at `time`, in lane order. Preview and export both
  * go through here, so what you scrub past is what gets written out. Without
  * `chains`, every clip contributes its stored chain; anything that draws
- * passes one, or an interval clip renders clean. */
+ * passes one, or an interval clip renders clean. `beat` is the beats elapsed
+ * at `time`, for lanes whose font follows the beat; null with no tempo. */
 export function resolveTextLayersAt(
 	timeline: TextTimeline | null | undefined,
 	time: number,
 	chains?: TextChainSource,
+	beat?: number | null,
 ): ResolvedTextLayer[] {
 	if (!timeline?.enabled) return [];
 	const layers: ResolvedTextLayer[] = [];
@@ -82,6 +123,11 @@ export function resolveTextLayersAt(
 		// a fading clip reuses the lane's texture frame after frame.
 		const weight = textClipWeight(clip, time);
 		if (weight <= 0) continue;
+		const fontFamily = fontAtBeat(lane.style, beat, lane.id);
+		let style = lane.style;
+		if (weight < 1 || fontFamily !== style.fontFamily) {
+			style = { ...style, fontFamily, opacity: style.opacity * weight };
+		}
 		layers.push({
 			key: clip.id,
 			laneId: lane.id,
@@ -89,10 +135,7 @@ export function resolveTextLayersAt(
 			underEffects: lane.underEffects,
 			z: lane.z,
 			text: clip.text,
-			style:
-				weight < 1
-					? { ...lane.style, opacity: lane.style.opacity * weight }
-					: lane.style,
+			style,
 			effects: chains ? chains(clip, time) : clip.effects,
 		});
 	}
@@ -140,6 +183,8 @@ export function textTimelineFonts(
 	const families = new Set<string>();
 	for (const lane of timeline?.lanes ?? []) {
 		families.add(lane.style.fontFamily);
+		const cycle = lane.style.fontCycle;
+		if (cycle?.enabled) for (const f of cycle.fonts) families.add(f);
 	}
 	return [...families];
 }

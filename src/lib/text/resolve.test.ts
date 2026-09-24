@@ -3,6 +3,7 @@ import {
 	addClip,
 	clipAt,
 	clipRange,
+	fontAtBeat,
 	freeRangeAt,
 	moveClip,
 	moveClips,
@@ -15,9 +16,13 @@ import {
 import {
 	createTextClip,
 	createTextLane,
+	DEFAULT_FONT_CYCLE,
+	DEFAULT_TEXT_STYLE,
 	MIN_CLIP_LENGTH,
 	normalizeTextTimeline,
+	type FontCycle,
 	type TextLane,
+	type TextStyle,
 	type TextTimeline,
 } from "./types";
 
@@ -87,6 +92,47 @@ describe("resolveTextLayersAt", () => {
 		const b = laneWith([[0, 5]], "b");
 		const layers = resolveTextLayersAt(timelineOf([a, b]), 2);
 		expect(layers.map((l) => l.text)).toEqual(["a", "b"]);
+	});
+});
+
+describe("fontAtBeat", () => {
+	const fonts = ["A", "B", "C", "D"];
+	const styleWith = (cycle: Partial<FontCycle>): TextStyle => ({
+		...DEFAULT_TEXT_STYLE,
+		fontFamily: "Base",
+		fontCycle: { ...DEFAULT_FONT_CYCLE, enabled: true, fonts, ...cycle },
+	});
+
+	it("keeps the lane's font when off, empty or without a tempo", () => {
+		expect(fontAtBeat(styleWith({ enabled: false }), 3, "l")).toBe("Base");
+		expect(fontAtBeat(styleWith({ fonts: [] }), 3, "l")).toBe("Base");
+		expect(fontAtBeat(styleWith({}), null, "l")).toBe("Base");
+	});
+
+	it("steps through the fonts in order, holding each for its beats", () => {
+		const style = styleWith({ everyBeats: 2 });
+		const at = [0, 1.9, 2, 4, 6, 8].map((b) => fontAtBeat(style, b, "l"));
+		expect(at).toEqual(["A", "A", "B", "C", "D", "A"]);
+	});
+
+	it("shuffles every font once per round, never twice in a row", () => {
+		const style = styleWith({ order: "shuffle" });
+		const seq = Array.from({ length: 40 }, (_, b) => fontAtBeat(style, b, "l"));
+		for (let r = 0; r < 10; r++) {
+			expect([...seq.slice(r * 4, r * 4 + 4)].sort()).toEqual(fonts);
+		}
+		for (let i = 1; i < seq.length; i++) expect(seq[i]).not.toBe(seq[i - 1]);
+		expect(seq).toEqual(
+			Array.from({ length: 40 }, (_, b) => fontAtBeat(style, b, "l")),
+		);
+	});
+
+	it("draws the resolved layer in the beat's font", () => {
+		const lane = laneWith([[0, 10]]);
+		lane.style = styleWith({});
+		const [layer] = resolveTextLayersAt(timelineOf([lane]), 1, undefined, 1);
+		expect(layer.style.fontFamily).toBe("B");
+		expect(lane.style.fontFamily).toBe("Base");
 	});
 });
 

@@ -4758,6 +4758,7 @@
 				spectrumData={liveSpectrum}
 				response={audioResponse}
 				{section}
+				bpm={sequenceBpm}
 			/>
 		{/if}
 	{/snippet}

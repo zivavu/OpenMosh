@@ -656,8 +656,14 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				renderResult instanceof Promise ? await renderResult : renderResult;
 			const renderEffects = effectsRef ? effectsRef.current : effects;
 			const clockTime = textTimeOffset + time * textTimeScale;
+			const beat = bpm > 0 ? ((clockTime - beatOffset) * bpm) / 60 : null;
 			const textLayers = textTimeline
-				? resolveTextLayersAt(textTimeline, clockTime, textChains ?? undefined)
+				? resolveTextLayersAt(
+						textTimeline,
+						clockTime,
+						textChains ?? undefined,
+						beat,
+					)
 				: [];
 			const mediaLayers = mediaTimeline
 				? resolveMediaLayersAt(
@@ -697,12 +703,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			// The bars read this straight off the GPU, so push the same bins the preview would.
 			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null, time);
 			// Beat-synced effects read the grid off the same master clock the text lanes do.
-			renderer.setBeat(
-				bpm > 0
-					? ((textTimeOffset + time * textTimeScale - beatOffset) * bpm) / 60
-					: null,
-				bpm / 60,
-			);
+			renderer.setBeat(beat, bpm / 60);
 			if (typeof skipRender === "function") skipRender(textLayers, mediaLayers);
 			else if (!skipRender) {
 				renderer.render(renderEffects, time, textLayers, [], mediaLayers);
