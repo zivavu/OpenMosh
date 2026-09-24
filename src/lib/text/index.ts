@@ -50,6 +50,7 @@ export {
 	MIN_CLIP_LENGTH,
 	normalizeTextTimeline,
 	splitTextClipAt,
+	textClipPosition,
 } from "./types";
 
 /** Load every font the timeline needs, so an export doesn't start on a fallback face. */

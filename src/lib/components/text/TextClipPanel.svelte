@@ -4,6 +4,7 @@
 	import { ensureFontLoaded } from "../../text-overlay";
 	import {
 		DEFAULT_TEXT_STYLE,
+		textClipPosition,
 		type TextAlign,
 		type TextClip,
 		type TextLane,
@@ -83,6 +84,16 @@
 		if (!clip) return;
 		onBeforeEdit?.(`text-body-${clip.id}`);
 		onClipChange({ ...clip, text });
+	}
+
+	let position = $derived(
+		clip && lane ? textClipPosition(clip, lane.style) : { x: 0.5, y: 0.5 },
+	);
+
+	function setPosition(axis: "x" | "y", v: number, coalesceKey?: string) {
+		if (!clip) return;
+		onBeforeEdit?.(coalesceKey);
+		onClipChange({ ...clip, [axis]: v });
 	}
 
 	/** Zero means no ramp at all, which the clip carries as an absent field. */
@@ -186,37 +197,37 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Where the text is anchored across the frame — 0 at the left edge, 100 at the right. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, "x")}
+				title="Where this clip's text is anchored across the frame — 0 at the left edge, 100 at the right. Double-click to reset."
+				ondblclick={() => setPosition("x", DEFAULT_TEXT_STYLE.x)}
 			>
 				<label for="tc-x">Position X</label>
 				<RangeSlider
 					id="tc-x"
-					value={lane.style.x}
+					value={position.x}
 					min={0}
 					max={1}
 					step={0.01}
-					oninput={(v) => setStyle("x", v, `tc-x-${clip.id}`)}
+					oninput={(v) => setPosition("x", v, `tc-x-${clip.id}`)}
 				/>
-				<span class="val">{Math.round(lane.style.x * 100)}</span>
+				<span class="val">{Math.round(position.x * 100)}</span>
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Where the text is anchored down the frame — 0 at the top edge, 100 at the bottom. Double-click to reset."
-				ondblclick={(e) => resetStyle(e, "y")}
+				title="Where this clip's text is anchored down the frame — 0 at the top edge, 100 at the bottom. Double-click to reset."
+				ondblclick={() => setPosition("y", DEFAULT_TEXT_STYLE.y)}
 			>
 				<label for="tc-y">Position Y</label>
 				<RangeSlider
 					id="tc-y"
-					value={lane.style.y}
+					value={position.y}
 					min={0}
 					max={1}
 					step={0.01}
-					oninput={(v) => setStyle("y", v, `tc-y-${clip.id}`)}
+					oninput={(v) => setPosition("y", v, `tc-y-${clip.id}`)}
 				/>
-				<span class="val">{Math.round(lane.style.y * 100)}</span>
+				<span class="val">{Math.round(position.y * 100)}</span>
 			</div>
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->

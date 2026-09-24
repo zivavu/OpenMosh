@@ -53,6 +53,16 @@ describe("pasteTextClips", () => {
 		expect(pasted.id).not.toBe(lane.clips[0].id);
 	});
 
+	it("carries the clip's position", () => {
+		const lane = laneWith([[0, 5, "hi"]]);
+		lane.clips[0] = { ...lane.clips[0], x: 0.2, y: 0.7 };
+		const t = timelineOf([lane]);
+		const copied = copyTextClips(t, [lane.clips[0].id]);
+		const { timeline, clipIds } = pasteTextClips(t, copied, 20, 60);
+		const pasted = timeline.lanes[0].clips.find((c) => c.id === clipIds[0])!;
+		expect(pasted).toMatchObject({ x: 0.2, y: 0.7 });
+	});
+
 	it("carries the chain, with fresh effect instances", () => {
 		const lane = laneWith([[0, 5, "hi"]]);
 		lane.clips[0].label = "mosh";

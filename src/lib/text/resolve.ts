@@ -9,6 +9,7 @@ import {
 } from "../timeline/clips";
 import {
 	createTextTimeline,
+	textClipPosition,
 	textClipWeight,
 	type TextClip,
 	type TextLane,
@@ -124,9 +125,15 @@ export function resolveTextLayersAt(
 		const weight = textClipWeight(clip, time);
 		if (weight <= 0) continue;
 		const fontFamily = fontAtBeat(lane.style, beat, lane.id);
+		const { x, y } = textClipPosition(clip, lane.style);
 		let style = lane.style;
-		if (weight < 1 || fontFamily !== style.fontFamily) {
-			style = { ...style, fontFamily, opacity: style.opacity * weight };
+		if (
+			weight < 1 ||
+			fontFamily !== style.fontFamily ||
+			x !== style.x ||
+			y !== style.y
+		) {
+			style = { ...style, fontFamily, x, y, opacity: style.opacity * weight };
 		}
 		layers.push({
 			key: clip.id,

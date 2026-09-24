@@ -1,7 +1,7 @@
-/** Copy/paste for text clips. A clip is its span, its words and its chain (the
- * style is the lane's): a whole-clip paste stamps words and chain down in the
- * lane's own look, a paste onto a clip swaps words and chain but keeps its
- * span. The same two gestures the media and fx lanes answer to. */
+/** Copy/paste for text clips. A clip is its span, its words, its chain and its
+ * position (the rest of the style is the lane's): a whole-clip paste stamps them
+ * down in the lane's own look, a paste onto a clip swaps words and chain but keeps
+ * its span and position. The same two gestures the media and fx lanes answer to. */
 
 import {
 	applyChainTo,
@@ -28,6 +28,8 @@ export interface TextClipboardEntry extends ClipBlockEntry {
 	chain: CopiedChain;
 	fadeInSec?: number;
 	fadeOutSec?: number;
+	x?: number;
+	y?: number;
 }
 
 /** A pasted chain, with fresh instance ids: the renderer keys per-effect
@@ -49,6 +51,8 @@ export function copyTextClips(
 			chain: captureChain(clip),
 			fadeInSec: clip.fadeInSec,
 			fadeOutSec: clip.fadeOutSec,
+			x: clip.x,
+			y: clip.y,
 		}),
 	);
 }
@@ -77,6 +81,8 @@ export function pasteTextClips(
 			const clip = applyChainTo(createTextClip(start, end, e.text), chainOf(e));
 			if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
 			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
+			if (e.x !== undefined) clip.x = e.x;
+			if (e.y !== undefined) clip.y = e.y;
 			return clip;
 		},
 	);

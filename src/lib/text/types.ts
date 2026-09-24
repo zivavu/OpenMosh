@@ -74,10 +74,21 @@ function normalizeFontCycle(raw: unknown): FontCycle {
  * alone, before it meets the image. */
 export interface TextClip extends ChainClip {
 	text: string;
+	/** The clip's own anchor; absent, it sits at the lane's. */
+	x?: number;
+	y?: number;
 	/** Ramp in over `fadeInSec` after the start and out over `fadeOutSec` before the
 	 * end, each edge on its own. Absent means no ramp. */
 	fadeInSec?: number;
 	fadeOutSec?: number;
+}
+
+/** Where the clip's text is anchored, normalized. */
+export function textClipPosition(
+	clip: TextClip,
+	style: TextStyle,
+): { x: number; y: number } {
+	return { x: clip.x ?? style.x, y: clip.y ?? style.y };
 }
 
 /** How strongly the clip shows at `time`, 1 unless a fade is ramping. */
@@ -245,6 +256,8 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 					// An inherited chain has no label: name it by what it switches on.
 					if (!Array.isArray(clip.effects) && !clip.label)
 						out.label = handBuiltLabel(effects);
+					if (typeof clip.x === "number") out.x = clip.x;
+					if (typeof clip.y === "number") out.y = clip.y;
 					if (clip.fadeInSec! > 0) out.fadeInSec = clip.fadeInSec;
 					if (clip.fadeOutSec! > 0) out.fadeOutSec = clip.fadeOutSec;
 					return out;

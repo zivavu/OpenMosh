@@ -4077,11 +4077,10 @@
 				onPickLayer={pickLayer}
 				onLayerDragStart={() => pushMediaHistory()}
 				onTextDragStart={() => pushTextHistory()}
-				onTextStyleChange={(id, style) =>
-					(textTimeline = updateLane(textTimeline, id, (l) => ({
-						...l,
-						style,
-					})))}
+				onTextMove={(clipId, x, y) => {
+					const clip = findTextClip(textTimeline, clipId);
+					if (clip) updateTextClip({ ...clip, x, y });
+				}}
 				onLayerStyleChange={(id, style) =>
 					(mediaTimeline = updateMediaLaneIn(mediaTimeline, id, (l) => ({
 						...l,

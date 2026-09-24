@@ -87,6 +87,18 @@ describe("resolveTextLayersAt", () => {
 		);
 	});
 
+	it("places each clip at its own position, else the lane's", () => {
+		const lane = laneWith([
+			[0, 5],
+			[5, 10],
+		]);
+		lane.style = { ...lane.style, x: 0.3, y: 0.4 };
+		lane.clips[1] = { ...lane.clips[1], x: 0.9, y: 0.1 };
+		const at = (t: number) => resolveTextLayersAt(timelineOf([lane]), t)[0];
+		expect(at(1).style).toBe(lane.style);
+		expect(at(6).style).toMatchObject({ x: 0.9, y: 0.1 });
+	});
+
 	it("carries one layer per lane in lane order", () => {
 		const a = laneWith([[0, 5]], "a");
 		const b = laneWith([[0, 5]], "b");
@@ -340,6 +352,22 @@ describe("normalizeTextTimeline", () => {
 		expect(a.effects).not.toBe(b.effects);
 		expect(a.label).toBe("pixelate");
 		expect(t.lanes[0]).not.toHaveProperty("effects");
+	});
+
+	it("keeps a clip's own position, and leaves it off where there was none", () => {
+		const t = normalizeTextTimeline({
+			enabled: true,
+			lanes: [
+				{
+					clips: [
+						{ start: 0, end: 1, x: 0.2, y: 0.8 },
+						{ start: 1, end: 2 },
+					],
+				},
+			],
+		});
+		expect(t.lanes[0].clips[0]).toMatchObject({ x: 0.2, y: 0.8 });
+		expect(t.lanes[0].clips[1]).not.toHaveProperty("x");
 	});
 
 	it("keeps a clip's fades and drops zeroed ones", () => {

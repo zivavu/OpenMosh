@@ -24,7 +24,6 @@
 		resolveTextLayersAt,
 		type ResolvedTextLayer,
 		type TextChainSource,
-		type TextStyle,
 		type TextTimeline,
 	} from "../../text";
 	import {
@@ -108,9 +107,9 @@
 		onLayerStyleChange?: ((laneId: string, style: MediaStyle) => void) | null;
 		/** Called once per drag gesture, so the editor can push one undo entry for it. */
 		onLayerDragStart?: ((laneId: string) => void) | null;
-		/** Dragging a text layer moves its lane's anchor live. */
-		onTextStyleChange?: ((laneId: string, style: TextStyle) => void) | null;
-		onTextDragStart?: ((laneId: string) => void) | null;
+		/** Dragging a text layer moves the anchor of the clip on screen, live. */
+		onTextMove?: ((clipId: string, x: number, y: number) => void) | null;
+		onTextDragStart?: ((clipId: string) => void) | null;
 		/** Live FFT bins for the audio-bars effect; the AnalyserNode mutates one array in place. */
 		spectrum?: Uint8Array | null;
 	}
@@ -156,7 +155,7 @@
 		onPickLayer = null,
 		onLayerStyleChange = null,
 		onLayerDragStart = null,
-		onTextStyleChange = null,
+		onTextMove = null,
 		onTextDragStart = null,
 	}: Props = $props();
 
@@ -407,10 +406,10 @@
 		previewArea.setPointerCapture(e.pointerId);
 	}
 
-	/** A text lane's anchor being dragged, from where the press found it. */
+	/** A text clip's anchor being dragged, from where the press found it. */
 	let textDrag: {
-		laneId: string;
-		from: TextStyle;
+		clipId: string;
+		from: { x: number; y: number };
 		x0: number;
 		y0: number;
 		moved: boolean;
@@ -421,10 +420,16 @@
 		laneId: string,
 		p: { x: number; y: number },
 	) {
-		if (!onTextStyleChange) return;
-		const lane = textTimeline?.lanes.find((l) => l.id === laneId);
-		if (!lane) return;
-		textDrag = { laneId, from: lane.style, x0: p.x, y0: p.y, moved: false };
+		if (!onTextMove) return;
+		const layer = pickable.text.find((l) => l.laneId === laneId);
+		if (!layer) return;
+		textDrag = {
+			clipId: layer.clipId,
+			from: { x: layer.style.x, y: layer.style.y },
+			x0: p.x,
+			y0: p.y,
+			moved: false,
+		};
 		previewArea.setPointerCapture(e.pointerId);
 	}
 
@@ -441,15 +446,15 @@
 		}
 		if (!td.moved) {
 			td.moved = true;
-			onTextDragStart?.(td.laneId);
+			onTextDragStart?.(td.clipId);
 		}
 		// The anchor stays on the frame, where the panel's sliders can still reach it.
 		const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-		onTextStyleChange?.(td.laneId, {
-			...td.from,
-			x: clamp01(td.from.x + dx / canvasEl.width),
-			y: clamp01(td.from.y + dy / canvasEl.height),
-		});
+		onTextMove?.(
+			td.clipId,
+			clamp01(td.from.x + dx / canvasEl.width),
+			clamp01(td.from.y + dy / canvasEl.height),
+		);
 	}
 
 	function startScale(e: PointerEvent, hx: -1 | 0 | 1, hy: -1 | 0 | 1) {
@@ -524,11 +529,11 @@
 	/** A move cursor over any layer a press would drag. */
 	function updateHoverCursor(e: PointerEvent) {
 		let cursor = "";
-		if ((onLayerStyleChange || onTextStyleChange) && e.target === canvasEl) {
+		if ((onLayerStyleChange || onTextMove) && e.target === canvasEl) {
 			const p = framePoint(e);
 			const hit = p && hitAt(p.x, p.y);
 			const draggable =
-				hit?.kind === "media" ? !!onLayerStyleChange : !!onTextStyleChange;
+				hit?.kind === "media" ? !!onLayerStyleChange : !!onTextMove;
 			if (hit && draggable) cursor = "move";
 		}
 		if (cursor !== hoverCursor) hoverCursor = cursor;
