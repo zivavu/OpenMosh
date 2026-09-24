@@ -1,11 +1,8 @@
 <script lang="ts">
-	import {
-		Check,
-		CircleDashed,
-		LoaderCircle,
-		TriangleAlert,
-	} from "lucide-svelte";
+	import { CircleDashed, TriangleAlert } from "lucide-svelte";
+	import { fade } from "svelte/transition";
 	import type { SaveState } from "../../editor/save-status.svelte";
+	import SaveGlyph from "./SaveGlyph.svelte";
 
 	/** The top bar's word on autosave. Muted unless something needs looking at. */
 	interface Props {
@@ -73,12 +70,13 @@
 			<TriangleAlert size={12} />
 		{:else if notSaved}
 			<CircleDashed size={12} />
-		{:else if state === "saving"}
-			<span class="spin"><LoaderCircle size={12} /></span>
 		{:else}
-			<Check size={12} />
+			<!-- One glyph for both, so saving can morph into saved. -->
+			<SaveGlyph saving={state === "saving"} />
 		{/if}
-		{view.label}
+		{#key view.label}
+			<span class="label" in:fade={{ duration: 180 }}>{view.label}</span>
+		{/key}
 	</span>
 	<div class="bar-sep"></div>
 {/if}
@@ -98,15 +96,9 @@
 		cursor: default;
 	}
 
-	.spin {
-		display: inline-flex;
-		animation: spin 0.8s linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
+	/* Wide enough for "Saving…", so the bar doesn't shift on every save. */
+	.label {
+		min-width: 9ch;
 	}
 
 	.save-indicator.warn {
