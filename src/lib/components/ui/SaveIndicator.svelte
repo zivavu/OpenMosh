@@ -74,7 +74,7 @@
 		{:else if notSaved}
 			<CircleDashed size={12} />
 		{:else if state === "saving"}
-			<LoaderCircle size={12} />
+			<span class="spin"><LoaderCircle size={12} /></span>
 		{:else}
 			<Check size={12} />
 		{/if}
@@ -96,6 +96,17 @@
 		text-transform: uppercase;
 		white-space: nowrap;
 		cursor: default;
+	}
+
+	.spin {
+		display: inline-flex;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.save-indicator.warn {
