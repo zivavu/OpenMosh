@@ -4055,6 +4055,7 @@
 				textTimeline={textTimeline.enabled ? textTimeline : null}
 				mediaTimeline={mediaTimeline.enabled ? mediaTimeline : null}
 				selectedMediaLane={mediaTimeline.enabled ? selectedMediaLane : null}
+				selectedTextClipId={textTimeline.enabled ? selectedTextClipId : null}
 				soloMediaLaneId={mediaTimeline.enabled ? soloLaneId : null}
 				mediaDriver={(layers) => mediaLayers.advance(layers)}
 				mediaChains={previewMediaChains}

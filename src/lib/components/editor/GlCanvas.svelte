@@ -14,9 +14,11 @@
 		layerHitBoxes,
 		pickTopLayer,
 		type LayerPick,
+		type MediaRect,
 	} from "../../editor/layer-pick";
 	import { clampMove, scaleFromHandle } from "../../editor/layer-drag";
 	import { onFontsChanged } from "../../text-overlay";
+	import { overlayTextBox } from "../../text-overlay/draw";
 	import {
 		preloadTextTimelineFonts,
 		resolveTextLayersAt,
@@ -79,6 +81,8 @@
 		mediaTimeline?: MediaTimeline | null;
 		/** Lane whose clip is selected: outlined over the preview. */
 		selectedMediaLane?: MediaLane | null;
+		/** Outlined too, while it is on screen. */
+		selectedTextClipId?: string | null;
 		/** Lane being soloed: drawn by itself on black, with every other layer left out. */
 		soloMediaLaneId?: string | null;
 		/** Uploads each visible media layer's frame before the chain runs. */
@@ -135,6 +139,7 @@
 		textTimeline = null,
 		mediaTimeline = null,
 		selectedMediaLane = null,
+		selectedTextClipId = null,
 		soloMediaLaneId = null,
 		mediaDriver = null,
 		mediaChains = null,
@@ -168,6 +173,7 @@
 
 	// DOM rather than a GL pass: anything drawn into the canvas would be in the export too.
 	let outline = $state<{
+		kind: "media" | "text";
 		left: number;
 		top: number;
 		w: number;
@@ -189,10 +195,25 @@
 		};
 	}
 
+	/** The selected text clip's box as last drawn, in the font the beat gave it. */
+	function selectedTextRect(): MediaRect | null {
+		const id = selectedTextClipId;
+		const layer = id ? pickable.text.find((l) => l.clipId === id) : null;
+		if (!layer || !canvasEl) return null;
+		const box = overlayTextBox(
+			canvasEl.width,
+			canvasEl.height,
+			layer.text,
+			layer.style,
+		);
+		return box && { ...box, rot: 0 };
+	}
+
 	function updateOutline() {
 		const lane = selectedMediaLane;
-		const rect =
+		const mediaRect =
 			lane && renderer ? renderer.mediaLayerRect(lane.id, lane.style) : null;
+		const rect = mediaRect ?? selectedTextRect();
 		const fit = rect ? frameFit() : null;
 		if (!rect || !fit || !previewArea) {
 			if (outline) outline = null;
@@ -200,6 +221,7 @@
 		}
 		const ar = previewArea.getBoundingClientRect();
 		const next = {
+			kind: mediaRect ? ("media" as const) : ("text" as const),
 			left: fit.left - ar.left + rect.x * fit.s,
 			top: fit.top - ar.top + rect.y * fit.s,
 			w: rect.w * fit.s,
@@ -209,6 +231,7 @@
 		// Compared before assigning: a fresh object each frame would re-render the outline.
 		if (
 			outline &&
+			outline.kind === next.kind &&
 			Math.abs(outline.left - next.left) < 0.5 &&
 			Math.abs(outline.top - next.top) < 0.5 &&
 			Math.abs(outline.w - next.w) < 0.5 &&
@@ -225,6 +248,7 @@
 		const st = selectedMediaLane?.style;
 		void [
 			selectedMediaLane?.id,
+			selectedTextClipId,
 			st?.x,
 			st?.y,
 			st?.scale,
@@ -977,7 +1001,8 @@
 			class="layer-outline"
 			style="left: {outline.left}px; top: {outline.top}px; width: {outline.w}px; height: {outline.h}px; transform: rotate({outline.rot}rad)"
 		>
-			{#if onLayerStyleChange}
+			<!-- Text is placed from its panel; only media scales on the canvas. -->
+			{#if onLayerStyleChange && outline.kind === "media"}
 				<!-- Children of the rotated box, so they turn with it. -->
 				{#each HANDLES as h (h.hx * 3 + h.hy)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
