@@ -45,8 +45,23 @@
 		});
 	}
 
+	let allPicked = $derived(fonts.every((f) => cycle.fonts.includes(f.family)));
+
+	/** All keeps the fonts already picked at the front, in their order. */
+	function toggleAll() {
+		if (allPicked) {
+			onChange({ ...cycle, fonts: [] });
+			return;
+		}
+		const rest = fonts
+			.map((f) => f.family)
+			.filter((f) => !cycle.fonts.includes(f));
+		for (const f of rest) void ensureFontLoaded(f);
+		onChange({ ...cycle, fonts: [...cycle.fonts, ...rest] });
+	}
+
 	function beatsLabel(beats: number): string {
-		if (beats === 0.5) return "½ beat";
+		if (beats < 1) return `1/${Math.round(1 / beats)} beat`;
 		return beats === 1 ? "1 beat" : `${beats} beats`;
 	}
 </script>
@@ -100,6 +115,13 @@
 		</select>
 	</div>
 
+	<div class="row">
+		<span class="fonts-label">Fonts ({cycle.fonts.length})</span>
+		<button type="button" class="all-btn" onclick={toggleAll}>
+			{allPicked ? "Clear" : "Select all"}
+		</button>
+	</div>
+
 	<div class="font-chips" role="group" aria-label="Fonts to switch between">
 		{#each fonts as font (font.family)}
 			{@const at = cycle.fonts.indexOf(font.family)}
@@ -126,6 +148,28 @@
 {/if}
 
 <style>
+	.fonts-label {
+		flex: 1;
+		color: var(--text-2);
+		font-size: 0.75rem;
+	}
+
+	.all-btn {
+		padding: 2px 8px;
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		cursor: pointer;
+	}
+
+	.all-btn:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
 	.font-chips {
 		display: flex;
 		flex-wrap: wrap;

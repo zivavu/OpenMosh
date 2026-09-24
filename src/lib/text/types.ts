@@ -47,7 +47,7 @@ export interface FontCycle {
 	order: FontCycleOrder;
 }
 
-export const FONT_CYCLE_BEATS = [0.5, 1, 2, 4, 8];
+export const FONT_CYCLE_BEATS = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8];
 
 export const DEFAULT_FONT_CYCLE: FontCycle = {
 	enabled: false,
