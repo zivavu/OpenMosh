@@ -184,6 +184,7 @@ export function generateMosh(
 
 export function clearEffects(effects: EffectInstance[]): void {
 	for (const effect of effects) {
+		if (effect.locked) continue;
 		effect.enabled = false;
 		const def = getDefinition(effect.defId);
 		if (!def) continue;

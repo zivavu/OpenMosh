@@ -4,6 +4,8 @@ import {
 	beatsToSeconds,
 	DEFAULT_INTERVAL_SEC,
 	intervalLabel,
+	keepLocked,
+	lockedKey,
 	rollEffects,
 	withSeededRandom,
 } from "./sequence";
@@ -76,6 +78,53 @@ describe("rollEffects determinism (preview/export contract)", () => {
 		const a = rollEffects(1, OPTIONS);
 		const b = rollEffects(2, OPTIONS);
 		expect(renderShape(a)).not.toEqual(renderShape(b));
+	});
+});
+
+describe("locked effects", () => {
+	/** A rolled chain with its last effect switched on, tuned and locked. */
+	function withLockedLast() {
+		const base = rollEffects(5, { ...OPTIONS, randomizeOrder: false });
+		const last = base[base.length - 1];
+		last.enabled = true;
+		last.locked = true;
+		return { base, last };
+	}
+
+	test("ride through a roll where they sat, as they were", () => {
+		const { base, last } = withLockedLast();
+		for (const seed of [1, 2, 3]) {
+			const rolled = rollEffects(seed, OPTIONS, base);
+			expect(rolled).toHaveLength(base.length);
+			const kept = rolled[rolled.length - 1];
+			expect(kept.defId).toBe(last.defId);
+			expect(kept.enabled).toBe(true);
+			expect(kept.locked).toBe(true);
+			expect(kept.values).toEqual(last.values);
+			expect(rolled.filter((e) => e.defId === last.defId)).toHaveLength(1);
+		}
+	});
+
+	test("a locked chain still rolls deterministically", () => {
+		const { base } = withLockedLast();
+		expect(renderShape(rollEffects(9, OPTIONS, base))).toEqual(
+			renderShape(rollEffects(9, OPTIONS, base)),
+		);
+	});
+
+	test("keepLocked leaves a chain with no locks alone", () => {
+		const fresh = rollEffects(1, OPTIONS);
+		expect(keepLocked(fresh, rollEffects(2, OPTIONS))).toBe(fresh);
+	});
+
+	test("the lock key follows what the locks hold", () => {
+		const { base, last } = withLockedLast();
+		const before = lockedKey(base);
+		expect(before).not.toBe("");
+		last.enabled = false;
+		expect(lockedKey(base)).not.toBe(before);
+		last.locked = false;
+		expect(lockedKey(base)).toBe("");
 	});
 });
 

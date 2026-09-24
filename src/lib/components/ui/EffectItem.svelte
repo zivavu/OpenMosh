@@ -8,6 +8,8 @@
 		Copy,
 		EyeOff,
 		GripVertical,
+		Lock,
+		LockOpen,
 		Music,
 		Trash2,
 		X,
@@ -93,6 +95,8 @@
 		response?: AudioResponse;
 		onVolumeLinkChange?: (paramKey: string, link: VolumeLink | null) => void;
 		onToggle: () => void;
+		/** Locking keeps the effect as it is through every mosh, roll and clear. */
+		onToggleLock?: () => void;
 		/** Set when the chain's on/off state is not the user's to set (the slideshow's
 		 * rolling modes decide it per beat). The switch still shows what is passing signal. */
 		rolledNote?: string | null;
@@ -128,6 +132,7 @@
 		response = DEFAULT_AUDIO_RESPONSE,
 		onVolumeLinkChange,
 		onToggle,
+		onToggleLock,
 		rolledNote = null,
 		rolledChain = false,
 		onToggleExpand,
@@ -273,6 +278,24 @@
 						>
 							<GripVertical size={14} />
 						</span>
+					{/if}
+					{#if onToggleLock && def.moshable !== false}
+						<button
+							class="icon-btn lock-btn"
+							class:locked={effect.locked}
+							onclick={onToggleLock}
+							aria-pressed={effect.locked}
+							title={effect.locked
+								? "Locked: moshing leaves it exactly as it is. Click to let rolls change it again."
+								: "Lock: keep this effect, on or off, with its settings, through every mosh"}
+							aria-label={effect.locked ? "Unlock effect" : "Lock effect"}
+						>
+							{#if effect.locked}
+								<Lock size={13} />
+							{:else}
+								<LockOpen size={13} />
+							{/if}
+						</button>
 					{/if}
 					<button
 						class="toggle"
@@ -805,6 +828,12 @@
 	.effect-item.expanded .move-btns,
 	.effect-item.expanded .drag-handle {
 		opacity: 1;
+	}
+
+	/* A lock stays in sight: it changes what the next mosh does. */
+	.effect-item .lock-btn.locked {
+		opacity: 1;
+		color: var(--mosh);
 	}
 
 	@media (pointer: coarse) {

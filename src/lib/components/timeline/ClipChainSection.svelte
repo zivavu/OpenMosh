@@ -61,9 +61,10 @@
 	headless
 	bind:effects={() => chain.effects, (v) => (chain.effects = v)}
 	rolledNote={clip.mode === "interval"
-		? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the clip to Static in the clip bar to build a chain by hand."
+		? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Lock an effect to keep it through every roll, hide one to keep it out, or switch the clip to Static in the clip bar to build a chain by hand."
 		: null}
 	rolledChain={clip.mode === "interval"}
+	rolledScope="moshable"
 	{hasTrack}
 	{spectrumData}
 	{response}

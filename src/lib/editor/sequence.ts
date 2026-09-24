@@ -1,6 +1,7 @@
 /** What every chain clip shares: mode, spacings, seeded roll and labels. */
 
 import {
+	cloneEffectInstance,
 	getDefinition,
 	loadInitialEffects,
 	type EffectInstance,
@@ -80,12 +81,51 @@ export function isHandBuiltLabel(span: {
 	return !span.presetName && span.label !== "mosh" && span.label !== "auto";
 }
 
-/** Deterministic mosh roll: same seed + options → same effects. */
+/** A fresh chain that keeps `from`'s locked effects as they are, where they sat. */
+export function keepLocked(
+	fresh: EffectInstance[],
+	from: EffectInstance[],
+): EffectInstance[] {
+	if (!from.some((e) => e.locked)) return fresh;
+	const byDef = new Map(fresh.map((e) => [e.defId, e]));
+	for (const e of from) if (e.locked) byDef.delete(e.defId);
+	const out: EffectInstance[] = [];
+	for (const e of from) {
+		if (e.locked) {
+			out.push(cloneEffectInstance(e));
+			continue;
+		}
+		const f = byDef.get(e.defId);
+		if (!f) continue;
+		out.push(f);
+		byDef.delete(e.defId);
+	}
+	return [...out, ...byDef.values()];
+}
+
+/** What a chain's locks hold, for cache keys: a roll over it changes with them. */
+export function lockedKey(effects: EffectInstance[]): string {
+	const locked = effects.filter((e) => e.locked);
+	if (locked.length === 0) return "";
+	return JSON.stringify(
+		locked.map((e) => [
+			effects.indexOf(e),
+			e.defId,
+			e.enabled,
+			e.values,
+			e.volumeLinks,
+		]),
+	);
+}
+
+/** Deterministic mosh roll: same seed + options → same effects. Effects locked in
+ * `keep` ride through it untouched. */
 export function rollEffects(
 	seed: number,
 	options: MoshOptions,
+	keep: EffectInstance[] = [],
 ): EffectInstance[] {
-	const effects = loadInitialEffects();
+	const effects = keepLocked(loadInitialEffects(), keep);
 	withSeededRandom(seed, () => generateMosh(effects, options));
 	return effects;
 }

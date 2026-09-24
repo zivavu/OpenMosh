@@ -21,6 +21,9 @@ import type { MoshSnapshot } from "./mosh-history";
 import {
 	cleanEffects,
 	DEFAULT_INTERVAL_SEC,
+	handBuiltLabel,
+	keepLocked,
+	lockedKey,
 	randomSeed,
 	rollEffects,
 	type ChainMode,
@@ -82,20 +85,21 @@ export function rolledChainClip<C extends ChainClip>(
 	if (clip.mode === "interval") return { ...clip, seed: randomSeed() };
 	return {
 		...clip,
-		effects: rollEffects(randomSeed(), options),
+		effects: rollEffects(randomSeed(), options, clip.effects),
 		label: "mosh",
 		presetName: undefined,
 		modified: false,
 	};
 }
 
-/** Reset to an all-disabled static chain. */
+/** Reset to an all-disabled static chain; locked effects stay. */
 export function clearedChainClip<C extends ChainClip>(clip: C): C {
+	const effects = keepLocked(cleanEffects(), clip.effects);
 	return {
 		...clip,
 		mode: "static",
-		effects: cleanEffects(),
-		label: "clean",
+		effects,
+		label: handBuiltLabel(effects),
 		presetName: undefined,
 		modified: false,
 	};
@@ -217,10 +221,10 @@ export function chainClipEffectsAt(
 	const options = getMoshOptions();
 	const tick = chainClipTick(clip, time);
 	const seed = (clip.seed ?? 0) + tick * 7919;
-	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}`;
+	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${lockedKey(clip.effects)}`;
 	let effects = cache.get(key);
 	if (!effects) {
-		effects = rollEffects(seed, options);
+		effects = rollEffects(seed, options, clip.effects);
 		putRoll(cache, key, effects);
 	}
 	return effects;

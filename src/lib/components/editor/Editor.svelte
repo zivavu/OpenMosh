@@ -2349,7 +2349,7 @@
 	/** An interval clip rolls its own chain, so the switches would be overwritten next tick. */
 	let panelRolledNote = $derived(
 		panelIntervalClip
-			? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Hide an effect to keep it out of the roll, or switch the clip to Static in the clip bar to build a chain by hand."
+			? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Lock an effect to keep it through every roll, hide one to keep it out, or switch the clip to Static in the clip bar to build a chain by hand."
 			: null,
 	);
 
@@ -2689,7 +2689,7 @@
 		if (clip) {
 			panelBeforeEdit();
 			clearEffectsFn(clip.effects);
-			if (isHandBuiltLabel(clip)) clip.label = "clean";
+			if (isHandBuiltLabel(clip)) clip.label = handBuiltLabel(clip.effects);
 			else clip.modified = true;
 			return;
 		}
@@ -4917,6 +4917,7 @@
 					noTarget={panelNoTarget}
 					rolledNote={panelRolledNote}
 					rolledChain={!!panelIntervalClip}
+					rolledScope="moshable"
 					hasTrack={linksHaveAudio}
 					spectrumData={liveSpectrum}
 					response={audioResponse}

@@ -49,7 +49,8 @@
 			paramKey: string,
 			link: VolumeLink | null,
 		) => void;
-		/** Called after `effects` is replaced wholesale, so callers can push undo history. */
+		/** Called after `effects` is replaced wholesale or a lock flips, so callers can
+		 * push undo history. */
 		onEffectsReplaced?: () => void;
 		onPresetUpdated?: (preset: Preset) => void;
 		onPresetApplied?: (preset: Preset) => void;
@@ -163,6 +164,13 @@
 			livePinned.add(effects[index].instanceId);
 		appliedIndex = null;
 		onUserEdit?.();
+	}
+
+	/** Not a render edit, so it commits like a replace rather than marking the chain edited. */
+	function toggleLock(index: number) {
+		onBeforeUserEdit?.();
+		effects[index].locked = !effects[index].locked;
+		onEffectsReplaced?.();
 	}
 
 	function toggleExpand(index: number) {
@@ -714,6 +722,7 @@
 						? (key, link) => onVolumeLinkChange(i, key, link)
 						: undefined}
 					onToggle={() => toggle(i)}
+					onToggleLock={() => toggleLock(i)}
 					rolledNote={isRolled(effect) ? rolledNote : null}
 					rolledChain={rolledChain && isRolled(effect)}
 					onToggleExpand={() => toggleExpand(i)}
