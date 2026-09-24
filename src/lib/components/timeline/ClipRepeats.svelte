@@ -28,14 +28,17 @@
 {/if}
 
 <style>
-	/* A notch top and bottom joined by a faint line: a seam, not a cut. */
+	/* A notch top and bottom joined by a faint line: a seam, not a cut.
+	   Light with a dark halo so it reads over a waveform in the clip's own color. */
 	.clip-repeat {
+		--repeat-mark: var(--text);
 		position: absolute;
 		top: 0;
 		bottom: 0;
 		width: 0;
-		border-left: 1px dashed var(--clip-accent);
-		opacity: 0.6;
+		border-left: 1px dashed var(--repeat-mark);
+		opacity: 0.85;
+		filter: drop-shadow(0 0 1px var(--ink));
 		pointer-events: none;
 	}
 
@@ -49,11 +52,11 @@
 
 	.clip-repeat::before {
 		top: 0;
-		border-top-color: var(--clip-accent);
+		border-top-color: var(--repeat-mark);
 	}
 
 	.clip-repeat::after {
 		bottom: 0;
-		border-bottom-color: var(--clip-accent);
+		border-bottom-color: var(--repeat-mark);
 	}
 </style>
