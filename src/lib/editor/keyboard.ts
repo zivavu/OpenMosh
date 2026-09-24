@@ -15,7 +15,8 @@ export interface KeyboardActions {
 	toggleFollowPlayhead: () => void;
 	/** Space: the master transport (a track, a video, or a still's own clock). */
 	togglePlay: () => void;
-	toggleClipLoop: () => void;
+	/** R: repeat the selected clips in the preview, or stop. */
+	toggleRepeat: () => void;
 	/** S: cut the clip under the playhead on the lane last touched. */
 	splitAtPlayhead: () => void;
 	zoomTimeline: (inward: boolean) => void;
@@ -80,7 +81,7 @@ export function createKeyboardHandler(
 			actions.toggleFollowPlayhead();
 		} else if (key === "r" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
-			actions.toggleClipLoop();
+			actions.toggleRepeat();
 		} else if (key === "s" && !mod && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			actions.splitAtPlayhead();

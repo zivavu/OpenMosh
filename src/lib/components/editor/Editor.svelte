@@ -2433,27 +2433,6 @@
 		}
 	}
 
-	// Loop playback inside the selected clip (edit-while-playing aid).
-	let clipLoop = $state(false);
-
-	/** The span the loop holds inside: whichever clip is selected. */
-	let loopSpan = $derived.by(() => {
-		const clip = selectedMediaClip ?? selectedFxClip ?? selectedTextClip;
-		return clip ? { start: clip.start, end: clip.end } : null;
-	});
-
-	/** R. Needs one clip picked: the loop has no other way to know its span. */
-	function toggleClipLoop() {
-		if (!loopSpan) return;
-		clipLoop = !clipLoop;
-	}
-	$effect(() => {
-		const span = loopSpan;
-		if (!clipLoop || !span) return;
-		const t = seqMasterTime();
-		if (t < span.start - 0.05 || t >= span.end) seekMaster(span.start);
-	});
-
 	function playSpan() {
 		if (isSequenceMode) {
 			// Playback starts at the static marker, not wherever the clock last stopped.
@@ -2467,36 +2446,56 @@
 		if (isVideo) playVideo();
 	}
 
-	/** Media clips the preview goes round, spanning first start to last end. */
+	/** Clips of any lane kind the preview goes round, spanning first start to last end. */
 	let repeatClipIds = $state<string[]>([]);
 	let repeatRange = $derived.by(() => {
 		if (repeatClipIds.length === 0) return null;
 		const ids = new Set(repeatClipIds);
 		let start = Infinity;
 		let end = -Infinity;
-		for (const lane of mediaTimeline.lanes) {
+		const lanes: { clips: TimelineClip[] }[] = [
+			...mediaTimeline.lanes,
+			...(mediaTimeline.audioLanes ?? []),
+			...textTimeline.lanes,
+			...fxLanes,
+		];
+		for (const lane of lanes) {
 			for (const c of lane.clips) {
 				if (!ids.has(c.id)) continue;
 				start = Math.min(start, c.start);
 				end = Math.max(end, c.end);
 			}
 		}
-		end = Math.min(end, mixer.duration);
+		end = Math.min(end, seqMasterDuration);
 		return end > start ? { start, end } : null;
 	});
 	$effect(() => {
-		mixer.repeat = repeatRange;
+		mixer.repeat = isSequenceMode ? repeatRange : null;
 	});
 	// Clips deleted or moved past the end take the repeat with them.
 	$effect(() => {
 		if (repeatClipIds.length > 0 && !repeatRange) repeatClipIds = [];
 	});
+	// Single mode's clocks have no range of their own: pull them back into it.
+	$effect(() => {
+		const range = repeatRange;
+		if (isSequenceMode || !range) return;
+		const t = seqMasterTime();
+		if (t < range.start - 0.05 || t >= range.end) seekMaster(range.start);
+	});
 
+	function masterPlaying(): boolean {
+		if (isSequenceMode) return mixer.playing;
+		if (textNeedsTransport) return stillPlaying;
+		return seqMasterIsAudio ? audio.audioPlaying : videoIsPlaying;
+	}
+
+	/** Repeat these clips, or stop if they're the ones repeating. Starts playback there. */
 	function toggleRepeat(clipIds: string[]) {
 		const same =
 			clipIds.length === repeatClipIds.length &&
 			clipIds.every((id) => repeatClipIds.includes(id));
-		if (same) {
+		if (same || clipIds.length === 0) {
 			repeatClipIds = [];
 			return;
 		}
@@ -2504,9 +2503,23 @@
 		const range = repeatRange;
 		if (!range) return;
 		// Ahead of the effect, so play() already clamps to the range.
-		mixer.repeat = range;
-		mixer.seek(range.start);
-		mixer.play();
+		if (isSequenceMode) mixer.repeat = range;
+		seekMaster(range.start);
+		if (!masterPlaying()) toggleMasterPlay();
+	}
+
+	/** R: the selection, whichever lane it's on. */
+	function toggleSelectionRepeat() {
+		const ids =
+			selectedMediaClipIds.length > 0
+				? selectedMediaClipIds
+				: selectedTextClipIds.length > 0
+					? selectedTextClipIds
+					: selectedFxClipIds.length > 0
+						? selectedFxClipIds
+						: selectedAudioClipIds;
+		// R with nothing picked still stops a repeat.
+		toggleRepeat(ids.length > 0 ? ids : repeatClipIds);
 	}
 
 	function pauseTrack() {
@@ -2878,7 +2891,7 @@
 				timelineAxis.followPlayhead = !timelineAxis.followPlayhead;
 		},
 		togglePlay: toggleMasterPlay,
-		toggleClipLoop,
+		toggleRepeat: toggleSelectionRepeat,
 		splitAtPlayhead: () =>
 			timelineAxis?.activeLaneSplitAt?.(timelineAxis.currentTime),
 		zoomTimeline: (inward) => timelineAxis?.vp.zoomStep(inward),
@@ -4410,8 +4423,10 @@
 				onToggleLoop={isSequenceMode || audioIsMaster || videoIsMaster
 					? toggleMasterLoop
 					: null}
-				repeatRange={isSequenceMode ? repeatRange : null}
+				{repeatRange}
 				onStopRepeat={() => (repeatClipIds = [])}
+				{repeatClipIds}
+				onToggleRepeat={toggleRepeat}
 			>
 				{#snippet toolbar()}
 					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->
@@ -4558,8 +4573,6 @@
 							onClear={mediaClear}
 							onModeChange={mediaModeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
-							{repeatClipIds}
-							onToggleRepeat={isSequenceMode ? toggleRepeat : undefined}
 							{peaksOf}
 							audioVersion={audioBank.version}
 						/>

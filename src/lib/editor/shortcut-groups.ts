@@ -117,7 +117,11 @@ const CLIP_ROWS: ShortcutRow[] = [
 		keys: ["Alt+Drag"],
 		description: "Hold the snap off (edges, beats, marker)",
 	},
-	{ keys: ["R"], description: "Loop playback inside the selected clip" },
+	{
+		keys: ["R"],
+		description:
+			"Repeat the selected clips in the preview, or stop; the export isn't affected",
+	},
 	{ keys: ["Delete", "Backspace"], description: "Delete the selection" },
 	{
 		keys: ["Ctrl/Cmd+C"],

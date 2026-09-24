@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Focus, Repeat, Volume2, VolumeX } from "lucide-svelte";
+	import { Focus, Volume2, VolumeX } from "lucide-svelte";
 	import type { MixSegment } from "../../mix/plan";
 	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
 	import LaneWaveform from "../timeline/LaneWaveform.svelte";
@@ -86,9 +86,6 @@
 		plan?: MixSegment[];
 		peaksOf?: (sourceId: string) => Float32Array | null;
 		audioVersion?: number;
-		/** Clips the preview is going round; the bar's Repeat toggles the selection in. */
-		repeatClipIds?: string[];
-		onToggleRepeat?: (clipIds: string[]) => void;
 	}
 
 	let {
@@ -114,8 +111,6 @@
 		plan,
 		peaksOf,
 		audioVersion = 0,
-		repeatClipIds = [],
-		onToggleRepeat,
 	}: Props = $props();
 
 	// One axis for the whole stack: zoom, pan and playhead-following live in
@@ -639,27 +634,7 @@
 		{onRoll}
 		{onClear}
 		{onModeChange}
-	>
-		{#snippet trailing()}
-			{#if onToggleRepeat}
-				{@const repeating =
-					selectedClipIds.length === repeatClipIds.length &&
-					selectedClipIds.every((id) => repeatClipIds.includes(id))}
-				<div class="tl-tool-sep"></div>
-				<button
-					class="tl-tool-btn"
-					class:active={repeating}
-					aria-pressed={repeating}
-					title={repeating
-						? "Repeating in the preview. Click to play on normally."
-						: "Play this stretch over and over in the preview. The export isn't affected."}
-					onclick={() => onToggleRepeat(selectedClipIds)}
-				>
-					<Repeat size={12} /> Repeat
-				</button>
-			{/if}
-		{/snippet}
-	</ChainClipBar>
+	/>
 {/snippet}
 
 <style>

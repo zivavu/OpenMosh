@@ -4,6 +4,7 @@
 	import type { ChainClip } from "../../editor/chain-clip";
 	import { BEAT_INTERVALS, type ChainMode } from "../../editor/sequence";
 	import { loadPresets, type Preset } from "../../effects";
+	import RepeatButton from "./RepeatButton.svelte";
 
 	/** The selection bar for any lane whose clips carry a chain: fill from a
 	 * preset, roll a mosh, clear, and switch static/interval. Every action fans
@@ -25,8 +26,6 @@
 			intervalBeats?: number | null,
 		) => void;
 		children?: Snippet;
-		/** The lane kind's own actions, after the shared ones. */
-		trailing?: Snippet;
 	}
 
 	let {
@@ -39,7 +38,6 @@
 		onClear,
 		onModeChange,
 		children,
-		trailing,
 	}: Props = $props();
 
 	let ids = $derived(selectedClips.map((c) => c.id));
@@ -184,7 +182,7 @@
 				{/each}
 			</select>
 		{/if}
-		{@render trailing?.()}
+		<RepeatButton clipIds={ids} />
 	</div>
 {/if}
 

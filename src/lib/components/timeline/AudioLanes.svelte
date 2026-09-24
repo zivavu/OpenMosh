@@ -22,6 +22,7 @@
 	import ClipLaneGutter from "./ClipLaneGutter.svelte";
 	import LaneDeleteDialog from "./LaneDeleteDialog.svelte";
 	import LaneWaveform from "./LaneWaveform.svelte";
+	import RepeatButton from "./RepeatButton.svelte";
 
 	const LANE_HEIGHT = 30;
 	const LANE_FOLDED_HEIGHT = 14;
@@ -386,6 +387,7 @@
 					{/each}
 				</select>
 			{/each}
+			<RepeatButton clipIds={selectedClipIds} />
 		</div>
 	{/if}
 {/snippet}

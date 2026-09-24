@@ -23,6 +23,19 @@ export class TimelineStackState {
 	/** The lane last touched, so a bare split shortcut knows which to cut. */
 	activeLaneId = $state<string | null>(null);
 
+	/** Clips playback goes round, and the editor's toggle; null where it can't repeat. */
+	repeatClipIds = $state<string[]>([]);
+	toggleRepeat = $state<((clipIds: string[]) => void) | null>(null);
+
+	isRepeating(clipIds: string[]): boolean {
+		const ids = this.repeatClipIds;
+		return (
+			clipIds.length > 0 &&
+			clipIds.length === ids.length &&
+			clipIds.every((id) => ids.includes(id))
+		);
+	}
+
 	/** Split-at-time callbacks, keyed by lane id, for lanes that support it. */
 	readonly #splitters = new Map<string, (time: number) => void>();
 

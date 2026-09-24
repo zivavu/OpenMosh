@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Crosshair, Pause, Play, Repeat, X } from "lucide-svelte";
+	import { Crosshair, Pause, Play, Repeat, Repeat1, X } from "lucide-svelte";
 	import { untrack, type Snippet } from "svelte";
 	import { formatTime, formatTimeMs } from "../../audio/audio-utils";
 	import {
@@ -23,6 +23,9 @@
 		/** The stretch the preview is going round, marked on the axis. */
 		repeatRange?: { start: number; end: number } | null;
 		onStopRepeat?: (() => void) | null;
+		/** The clips behind it, and the toggle every clip bar's Repeat calls. */
+		repeatClipIds?: string[];
+		onToggleRepeat?: ((clipIds: string[]) => void) | null;
 		/** The lanes' own actions, one toolbar for the whole stack. */
 		toolbar?: Snippet;
 		selectionHint?: string | null;
@@ -46,6 +49,8 @@
 		onToggleLoop = null,
 		repeatRange = null,
 		onStopRepeat = null,
+		repeatClipIds = [],
+		onToggleRepeat = null,
 		toolbar,
 		selectionHint = null,
 		bpm = 0,
@@ -64,6 +69,10 @@
 
 	$effect(() => {
 		stack.bpm = bpm;
+	});
+	$effect(() => {
+		stack.repeatClipIds = repeatClipIds;
+		stack.toggleRepeat = onToggleRepeat;
 	});
 	const vp = stack.vp;
 
@@ -253,7 +262,7 @@
 				onclick={onStopRepeat}
 				title="The preview is repeating the marked stretch. Click to play on normally."
 			>
-				<Repeat size={11} /> Repeating <X size={11} />
+				<Repeat1 size={11} /> Repeating <X size={11} />
 			</button>
 		{/if}
 		<!-- Split so the milliseconds, which change every frame, read as subordinate. -->
