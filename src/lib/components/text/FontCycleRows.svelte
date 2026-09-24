@@ -17,10 +17,39 @@
 		fontFamily: string;
 		/** Undefined where the host doesn't know it; 0 means no tempo yet. */
 		bpm?: number;
+		/** The clip's words, for the hover preview. */
+		text?: string;
 		onChange: (cycle: FontCycle) => void;
 	}
 
-	let { cycle, fontFamily, bpm, onChange }: Props = $props();
+	let { cycle, fontFamily, bpm, text = "", onChange }: Props = $props();
+
+	const PREVIEW_WIDTH = 240;
+	const PREVIEW_MARGIN = 8;
+
+	/** The chip being hovered, and where its preview floats. */
+	let preview = $state<{
+		family: string;
+		label: string;
+		left: number;
+		top: number;
+		below: boolean;
+	} | null>(null);
+
+	function showPreview(e: Event, family: string, label: string) {
+		// A tap would only flash it.
+		if (e instanceof PointerEvent && e.pointerType === "touch") return;
+		void ensureFontLoaded(family);
+		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const left = Math.min(
+			Math.max(r.left + r.width / 2 - PREVIEW_WIDTH / 2, PREVIEW_MARGIN),
+			window.innerWidth - PREVIEW_WIDTH - PREVIEW_MARGIN,
+		);
+		// Under the chip when there's no room above it.
+		const below = r.top < 140;
+		const top = below ? r.bottom + PREVIEW_MARGIN : r.top - PREVIEW_MARGIN;
+		preview = { family, label, left, top, below };
+	}
 
 	let fonts = $derived([
 		...FONT_OPTIONS.map((f) => ({ family: f.family, label: f.label })),
@@ -131,12 +160,30 @@
 				class:on={at !== -1}
 				aria-pressed={at !== -1}
 				onclick={() => toggleFont(font.family)}
+				onpointerenter={(e) => showPreview(e, font.family, font.label)}
+				onpointerleave={() => (preview = null)}
+				onfocus={(e) => showPreview(e, font.family, font.label)}
+				onblur={() => (preview = null)}
 			>
 				{#if at !== -1}<span class="n">{at + 1}</span>{/if}
 				{font.label}
 			</button>
 		{/each}
 	</div>
+
+	{#if preview}
+		<div
+			class="font-preview"
+			class:below={preview.below}
+			style="left: {preview.left}px; top: {preview.top}px; width: {PREVIEW_WIDTH}px"
+			aria-hidden="true"
+		>
+			<div class="sample" style="font-family: {preview.family}">
+				{text.trim() || preview.label}
+			</div>
+			<div class="name">{preview.label}</div>
+		</div>
+	{/if}
 
 	{#if cycle.fonts.length < 2}
 		<p class="hint">Pick two or more fonts to switch between.</p>
@@ -208,5 +255,41 @@
 
 	.n {
 		font-weight: 700;
+	}
+
+	.font-preview {
+		position: fixed;
+		z-index: 150;
+		transform: translateY(-100%);
+		padding: 0.6rem 0.7rem 0.45rem;
+		background: var(--ink);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--r-2);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+		pointer-events: none;
+	}
+
+	.font-preview.below {
+		transform: none;
+	}
+
+	.sample {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		color: var(--text);
+		font-size: 1.4rem;
+		line-height: 1.2;
+		white-space: pre-line;
+		overflow-wrap: anywhere;
+	}
+
+	.name {
+		margin-top: 0.35rem;
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
 	}
 </style>

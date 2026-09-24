@@ -139,6 +139,7 @@
 				cycle={lane.style.fontCycle}
 				fontFamily={lane.style.fontFamily}
 				{bpm}
+				text={clip.text}
 				onChange={(cycle) => setStyle("fontCycle", cycle)}
 			/>
 
