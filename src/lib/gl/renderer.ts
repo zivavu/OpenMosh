@@ -2313,12 +2313,15 @@ export class GlRenderer {
 
 	private deleteLayerBuffers() {
 		const gl = this.gl;
+		// Filled by index, so both can have holes.
 		for (const buf of this.layerBuffers) {
+			if (!buf) continue;
 			gl.deleteTexture(buf.tex);
 			gl.deleteFramebuffer(buf.fbo);
 		}
 		this.layerBuffers = [];
 		for (const buf of this.layerBlendBuffers) {
+			if (!buf) continue;
 			gl.deleteTexture(buf.tex);
 			gl.deleteFramebuffer(buf.fbo);
 		}
