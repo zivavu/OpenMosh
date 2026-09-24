@@ -4,7 +4,7 @@ name: PR title
 # from those titles, so each one has to be a conventional commit.
 on:
   pull_request_target:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   pull-requests: read
@@ -32,3 +32,7 @@ jobs:
           # The changelog line reads as a sentence: "feat: Lock effects through moshes".
           subjectPattern: ^[A-Z].*$
           subjectPatternError: Start the title's subject with a capital letter.
+          # release-please names its own PRs "chore(main): release x.y.z".
+          ignoreLabels: |
+            autorelease: pending
+            autorelease: tagged
