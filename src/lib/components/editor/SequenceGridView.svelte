@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Plus, Camera, Sparkles, X } from "lucide-svelte";
+	import { Play, Plus, Camera, Palette, X } from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -142,7 +142,7 @@
 					<Plus size={14} /> ADD MEDIA
 				</button>
 				<button class="add-btn" onclick={onGenerate}>
-					<Sparkles size={14} /> GENERATE
+					<Palette size={14} /> GENERATE
 				</button>
 				<button class="add-btn" onclick={onRecord}>
 					<Camera size={14} /> RECORD

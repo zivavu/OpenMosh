@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { RefreshCw, Sparkles } from "lucide-svelte";
+	import { RefreshCw, Palette } from "lucide-svelte";
 	import { onDestroy, untrack } from "svelte";
 	import {
 		GENERATED_SHORT_SIDE,
@@ -145,7 +145,7 @@
 	{busy}
 	{onClose}
 >
-	{#snippet icon()}<Sparkles size={12} />{/snippet}
+	{#snippet icon()}<Palette size={12} />{/snippet}
 	<div class="controls">
 		<div class="ctrl">
 			<span class="label">Field</span>

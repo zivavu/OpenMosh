@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Camera, Plus, Sparkles } from "lucide-svelte";
+	import { Camera, Plus, Palette } from "lucide-svelte";
 
 	/** The three dashed cards that close a media grid: add, generate, webcam. */
 	interface Props {
@@ -29,7 +29,7 @@
 	title="Generate images into the pool"
 	onclick={onGenerate}
 >
-	<Sparkles size={18} />
+	<Palette size={18} />
 </button>
 <button class="add-card generate" title={recordTitle} onclick={onRecord}>
 	<Camera size={18} />

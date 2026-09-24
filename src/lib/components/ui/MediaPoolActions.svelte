@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Camera, Plus, Shuffle, Sparkles, Trash2 } from "lucide-svelte";
+	import { Camera, Plus, Shuffle, Palette, Trash2 } from "lucide-svelte";
 
 	/** The pool's toolbar: shuffle, the three ways in, clear, and a count.
 	 * Shared by the editor's source pool and the slideshow's image pool. */
@@ -61,7 +61,7 @@
 			title="Generate images into the pool"
 			onclick={onGenerate}
 		>
-			<Sparkles size={12} />
+			<Palette size={12} />
 			<span class="btn-label">Generate</span>
 		</button>
 		<button class="pool-btn" title={recordTitle} onclick={onRecord}>

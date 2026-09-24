@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Camera, X, Play, Sparkles } from "lucide-svelte";
+	import { Camera, X, Play, Palette } from "lucide-svelte";
 	import type { SlideshowSlide, SlideshowConfig } from "../../slideshow/types";
 	import type { Preset } from "../../effects";
 	import type { ProxyAction } from "../../video/proxy-status";
@@ -150,7 +150,7 @@
 					>Add media</button
 				>
 				<button class="add-btn generate" onclick={onGenerate}
-					><Sparkles size={13} /> Generate</button
+					><Palette size={13} /> Generate</button
 				>
 				<button class="add-btn generate" onclick={onSnap}
 					><Camera size={13} /> Snap</button

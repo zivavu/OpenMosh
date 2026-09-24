@@ -19,7 +19,7 @@
 		ListVideo,
 		Music,
 		Pencil,
-		Sparkles,
+		Palette,
 		Trash2,
 		Upload,
 		X,
@@ -560,7 +560,7 @@
 					onclick={() => (generateOpen = true)}
 					onkeydown={(e) => e.stopPropagation()}
 				>
-					<Sparkles size={16} />
+					<Palette size={16} />
 					Generate
 				</button>
 				{#if !isMultiMode && hasCamera}

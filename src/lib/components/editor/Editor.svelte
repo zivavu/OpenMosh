@@ -15,7 +15,7 @@
 		Pause,
 		Play,
 		Plus,
-		Sparkles,
+		Palette,
 		TriangleAlert,
 		Type,
 		Zap,
@@ -3976,7 +3976,7 @@
 					title="Generate a new source image"
 					onclick={() => (generateOpen = true)}
 				>
-					<Sparkles size={14} />
+					<Palette size={14} />
 				</button>
 				<div class="output-group">
 					<span class="rack-label">Output</span>
@@ -4024,7 +4024,7 @@
 						<Plus size={14} /> ADD MEDIA
 					</button>
 					<button class="no-media-btn" onclick={() => (generateOpen = true)}>
-						<Sparkles size={14} /> GENERATE
+						<Palette size={14} /> GENERATE
 					</button>
 					<button class="no-media-btn" onclick={() => (webcamOpen = true)}>
 						<Camera size={14} /> RECORD
