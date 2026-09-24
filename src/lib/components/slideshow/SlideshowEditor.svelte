@@ -68,6 +68,8 @@
 	import SlideshowConfigPanel from "./SlideshowConfigPanel.svelte";
 	import SlideshowGridView from "./SlideshowGridView.svelte";
 	import SlideshowTopBar from "./SlideshowTopBar.svelte";
+	import SaveIndicator from "../ui/SaveIndicator.svelte";
+	import { SaveTracker } from "../../editor/save-status.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import { DEFAULT_AUDIO_RESPONSE } from "../../audio/auto-range";
@@ -470,21 +472,28 @@
 
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
+	/** Every autosave reports here, for the top bar's saved/saving/failed word. */
+	const saves = new SaveTracker();
+
 	function saveSlideshowSession() {
-		const files = slides.map((s) => s.file);
-		if (files.length === 0) return;
-		void saveSession(
+		if (!sessionKept) {
+			saves.drop("session");
+			return;
+		}
+		const write = saveSession(
 			"slideshow",
-			files,
+			slides.map((s) => s.file),
 			{ config: $state.snapshot(config) as SlideshowConfig },
 			currentTrackId,
-		)
-			.then(() => pruneSequenceMedia())
-			.catch((e) => {
-				// Logged, not swallowed: a silent failure here is invisible.
-				if (import.meta.env.DEV)
-					console.error("Slideshow session save failed:", e);
-			});
+		).catch((e) => {
+			// Logged, not swallowed: a silent failure here is invisible.
+			if (import.meta.env.DEV)
+				console.error("Slideshow session save failed:", e);
+			return false;
+		});
+		void saves.track("session", write).then((ok) => {
+			if (ok) void pruneSequenceMedia().catch(() => {});
+		});
 	}
 
 	$effect(() => {
@@ -493,7 +502,9 @@
 		$state.snapshot(config);
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
+		if (!sessionKept) return;
 		clearTimeout(sessionSaveTimer);
+		untrack(() => saves.schedule("session"));
 		sessionSaveTimer = setTimeout(saveSlideshowSession, 600);
 		return () => clearTimeout(sessionSaveTimer);
 	});
@@ -603,6 +614,19 @@
 	});
 
 	let currentTrackId = $state<string | null>(null);
+
+	/** A slideshow is kept under its song: without one there is nothing to key it by. */
+	let sessionKept = $derived(slides.length > 0 && !!currentTrackId);
+
+	let notSaved = $derived(
+		slides.length > 0 && !currentTrackId
+			? {
+					reason:
+						"A slideshow is saved under its song. Add a song to keep this one; without it a reload starts over.",
+					warn: true,
+				}
+			: null,
+	);
 
 	interface SegmentsEntry {
 		segments: SlideshowConfig["segments"];
@@ -1659,7 +1683,15 @@
 			onSnap={() => (webcamOpen = true)}
 			onClear={() => (showClearSlidesConfirm = true)}
 			onExit={onExit ? handleExit : undefined}
-		/>
+		>
+			{#snippet status()}
+				<SaveIndicator
+					state={saves.state}
+					lastSavedAt={saves.lastSavedAt}
+					{notSaved}
+				/>
+			{/snippet}
+		</SlideshowTopBar>
 		<input
 			bind:this={slideInput}
 			type="file"

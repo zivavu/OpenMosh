@@ -9,10 +9,12 @@
 	 * puts after the separator. A `.help-btn` in there gets the home button's round look. */
 	interface Props {
 		onExit?: () => void;
+		/** Whether the edit is saved, right after the links. */
+		status?: Snippet;
 		children: Snippet;
 	}
 
-	let { onExit, children }: Props = $props();
+	let { onExit, status, children }: Props = $props();
 </script>
 
 <div class="top-bar">
@@ -26,6 +28,7 @@
 		<YoutubeLink />
 		<FeedbackButton />
 		<div class="bar-sep"></div>
+		{@render status?.()}
 		{@render children()}
 	</div>
 </div>

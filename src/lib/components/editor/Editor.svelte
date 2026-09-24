@@ -250,6 +250,8 @@
 	import SequenceGridView from "./SequenceGridView.svelte";
 	import MediaPoolActions from "../ui/MediaPoolActions.svelte";
 	import TopBar from "../ui/TopBar.svelte";
+	import SaveIndicator from "../ui/SaveIndicator.svelte";
+	import { SaveTracker } from "../../editor/save-status.svelte";
 	import SourceRail from "./SourceRail.svelte";
 	import FxLanes from "./FxLanes.svelte";
 	import MoshGroup from "./MoshGroup.svelte";
@@ -1289,6 +1291,9 @@
 		sequenceBpm = bpm;
 	}
 
+	/** Every autosave below reports here, for the top bar's saved/saving/failed word. */
+	const saves = new SaveTracker();
+
 	// Persist the sequence timeline per library track (deep snapshot read).
 	// Skipped while playing: the volume-link tick mutates the chains each frame.
 	let seqSaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1299,8 +1304,11 @@
 		const key = seqStoreKey;
 		if (!key || key !== loadedTimelineKey || !entry) return;
 		clearTimeout(seqSaveTimer);
+		untrack(() => saves.schedule("timeline"));
 		seqSaveTimer = setTimeout(() => {
-			void saveTimeline(key, entry).then(reportSeqSave);
+			void saves
+				.track("timeline", saveTimeline(key, entry))
+				.then(reportSeqSave);
 		}, 300);
 	});
 
@@ -1347,8 +1355,11 @@
 		clearTimeout(seqSaveTimer);
 		const key = seqStoreKey;
 		const entry = seqEntryNow();
-		if (!key || key !== loadedTimelineKey || !entry) return;
-		void saveTimeline(key, entry).then(reportSeqSave);
+		if (!key || key !== loadedTimelineKey || !entry) {
+			saves.drop("timeline");
+			return;
+		}
+		void saves.track("timeline", saveTimeline(key, entry)).then(reportSeqSave);
 	}
 
 	// Reloading or closing mid-playback would lose the session: no pause settles the debounce.
@@ -1670,22 +1681,32 @@
 		const ids = sourceRegistry.sources.map((s) => s.id);
 		if (!key) return;
 		clearTimeout(poolSaveTimer);
-		poolSaveTimer = setTimeout(() => {
-			void saveMediaPool(key, ids)
-				.then(() => pruneSequenceMedia())
-				.catch(() => {});
-		}, 400);
+		untrack(() => saves.schedule("pool"));
+		poolSaveTimer = setTimeout(() => savePool(key, ids), 400);
 	});
+
+	function savePool(key: string, ids: string[]) {
+		void saves
+			.track(
+				"pool",
+				saveMediaPool(key, ids).then(() => true),
+			)
+			.then((ok) => {
+				if (ok) void pruneSequenceMedia().catch(() => {});
+			});
+	}
 
 	/** Pool counterpart to flushSequenceSave; same track-switch race. */
 	function flushMediaPoolSave() {
 		clearTimeout(poolSaveTimer);
-		if (!isSequenceMode || !poolReady || !poolKey) return;
-		const key = poolKey;
-		const ids = sourceRegistry.sources.map((s) => s.id);
-		void saveMediaPool(key, ids)
-			.then(() => pruneSequenceMedia())
-			.catch(() => {});
+		if (!isSequenceMode || !poolReady || !poolKey) {
+			saves.drop("pool");
+			return;
+		}
+		savePool(
+			poolKey,
+			sourceRegistry.sources.map((s) => s.id),
+		);
 	}
 
 	// A restored timeline references sources by id; pull missing ones back out of IndexedDB.
@@ -3065,12 +3086,20 @@
 	// Sequence mode resumes from its song's pool; single mode saves file and work together.
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
+	/** Single mode keeps an edit once there's something in it; a camera never. Lane
+	 * presence, not `enabled`: keying off the visibility toggle would discard hidden timelines. */
+	let singleSessionKept = $derived(
+		!isSequenceMode &&
+			!isLive &&
+			(moshSession.touched || textTimeline.lanes.length > 0),
+	);
+
 	function saveSingleSession() {
-		// A camera can't be reopened from a saved session.
-		if (isSequenceMode || isLive) return;
-		// Lane presence, not `enabled`: keying off the visibility toggle would discard hidden timelines.
+		if (!singleSessionKept) {
+			saves.drop("session");
+			return;
+		}
 		const hasText = textTimeline.lanes.length > 0;
-		if (!moshSession.touched && !hasText) return;
 		const source = file;
 		const state: SingleSessionState = {
 			effects: $state.snapshot(effects) as EffectInstance[],
@@ -3079,12 +3108,16 @@
 				: null,
 		};
 		// Keyed by the song when there is one, alongside the text timeline and span.
-		void saveSession("single", [source], state, currentTrackId)
-			.then(() => pruneSequenceMedia())
-			.catch((e) => {
+		const write = saveSession("single", [source], state, currentTrackId).catch(
+			(e) => {
 				// Logged, not swallowed: a silent failure here is invisible.
 				if (import.meta.env.DEV) console.error("Session save failed:", e);
-			});
+				return false;
+			},
+		);
+		void saves.track("session", write).then((ok) => {
+			if (ok) void pruneSequenceMedia().catch(() => {});
+		});
 	}
 
 	$effect(() => {
@@ -3097,9 +3130,31 @@
 		file;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
+		if (!singleSessionKept) return;
 		clearTimeout(sessionSaveTimer);
+		untrack(() => saves.schedule("session"));
 		sessionSaveTimer = setTimeout(saveSingleSession, 600);
 		return () => clearTimeout(sessionSaveTimer);
+	});
+
+	/** Why the top bar says this edit isn't kept, when it isn't. */
+	let notSaved = $derived.by(() => {
+		if (isSequenceMode) return null;
+		if (isLive) {
+			return {
+				reason:
+					"A live camera feed isn't saved. Take a snapshot to keep working on a frame.",
+				warn: true,
+			};
+		}
+		if (!singleSessionKept) {
+			return {
+				reason:
+					"Nothing to keep yet. Change an effect or add text and this edit is saved in this browser.",
+				warn: false,
+			};
+		}
+		return null;
 	});
 
 	/** Backing out shouldn't race the debounce and lose the last edit. */
@@ -3883,6 +3938,13 @@
 		style="--tl-vscroll: {laneScrollbar}px"
 	>
 		<TopBar onExit={onExit ? handleExit : undefined}>
+			{#snippet status()}
+				<SaveIndicator
+					state={saves.state}
+					lastSavedAt={saves.lastSavedAt}
+					{notSaved}
+				/>
+			{/snippet}
 			{#if isSequenceMode}
 				<div class="output-group">
 					<ButtonGroup

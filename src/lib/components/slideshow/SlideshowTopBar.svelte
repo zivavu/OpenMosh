@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from "svelte";
 	import TopBar from "../ui/TopBar.svelte";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
 	import MediaPoolActions from "../ui/MediaPoolActions.svelte";
@@ -13,6 +14,7 @@
 		onSnap: () => void;
 		onClear: () => void;
 		onExit?: () => void;
+		status?: Snippet;
 	}
 
 	let {
@@ -25,10 +27,11 @@
 		onSnap,
 		onClear,
 		onExit,
+		status,
 	}: Props = $props();
 </script>
 
-<TopBar {onExit}>
+<TopBar {onExit} {status}>
 	<div class="view-group">
 		<ButtonGroup
 			buttons={[

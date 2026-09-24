@@ -48,15 +48,16 @@ function defaultLabel(mode: SessionMode, files: File[]): string {
 	return `${files.length} image${files.length === 1 ? "" : "s"}`;
 }
 
-/** Store the media and editor state under this session's key. */
+/** Store the media and editor state under this session's key. False when the edit has
+ * no key to be kept under (a slideshow without a song), so nothing was written. */
 export async function saveSession(
 	mode: SessionMode,
 	files: File[],
 	state: unknown,
 	trackId?: string | null,
-): Promise<void> {
+): Promise<boolean> {
 	const key = sessionKey(mode, files, trackId);
-	if (!key) return;
+	if (!key) return false;
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
 	await putSequenceMedia(entries);
 	// A song-keyed session is named after the song, matching the sequence list.
@@ -77,6 +78,7 @@ export async function saveSession(
 	rememberLastOpened({ mode, key });
 	// Refresh the mirror so the upload screen paints this edit next time.
 	await listSavedSessions(mode).catch(() => {});
+	return true;
 }
 
 export interface OpenedSession {
