@@ -26,8 +26,8 @@
 			intervalBeats?: number | null,
 		) => void;
 		children?: Snippet;
-		/** The lane kind's own controls, after the shared ones. */
-		trailing?: Snippet;
+		/** The lane kind's own controls, after the clip's name. */
+		leading?: Snippet;
 	}
 
 	let {
@@ -40,7 +40,7 @@
 		onClear,
 		onModeChange,
 		children,
-		trailing,
+		leading,
 	}: Props = $props();
 
 	let ids = $derived(selectedClips.map((c) => c.id));
@@ -104,6 +104,7 @@
 		<span class="tl-tool-label">
 			{many ? `${selectedClips.length} clips` : label(selectedClips[0])}
 		</span>
+		{@render leading?.()}
 
 		{#if onApplyPreset}
 			<div class="tl-tool-sep"></div>
@@ -185,7 +186,6 @@
 				{/each}
 			</select>
 		{/if}
-		{@render trailing?.()}
 		<RepeatButton clipIds={ids} />
 	</div>
 {/if}

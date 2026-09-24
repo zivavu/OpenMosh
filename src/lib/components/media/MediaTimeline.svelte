@@ -664,7 +664,7 @@
 		{onClear}
 		{onModeChange}
 	>
-		{#snippet trailing()}
+		{#snippet leading()}
 			{#if soundClips.length > 0}
 				<ClipVolume
 					value={commonGain}
