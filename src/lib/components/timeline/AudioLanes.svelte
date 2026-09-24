@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { Activity, Repeat } from "lucide-svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
+	import { latestCopy, markCopied } from "../../editor/copy-stamp";
+	import {
+		copyAudioClips,
+		pasteAudioClips,
+		type AudioClipboardEntry,
+	} from "../../mix/clipboard";
 	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import { repeatNote, type MixSegment } from "../../mix/plan";
 	import ClipRepeats from "./ClipRepeats.svelte";
@@ -88,8 +94,8 @@
 			splitClipAt: splitAudioClipAt,
 			// Sound comes in as files, never as an empty clip drawn on the lane.
 			clipSpanAt: () => null,
-			copy: () => false,
-			paste: () => false,
+			copy: copySelection,
+			paste: pasteClipboard,
 			sourceEnds: (clip, _lane, until) => sourceEndsOf?.(clip, until) ?? [],
 		},
 		stack,
@@ -132,6 +138,35 @@
 
 	function segmentsOf(laneId: string): MixSegment[] {
 		return plan.filter((s) => s.laneId === laneId);
+	}
+
+	let clipboard: AudioClipboardEntry[] = [];
+	/** The copy stamp when the clipboard was last filled; a paste answers only if it matches. */
+	let clipStamp = -1;
+
+	function copySelection(): boolean {
+		clipboard = copyAudioClips(lanes, selectedClipIds);
+		if (clipboard.length === 0) return false;
+		clipStamp = markCopied();
+		return true;
+	}
+
+	/** Stamp the copied clips at the start marker, on the lane last clicked. */
+	function pasteClipboard(): boolean {
+		if (clipboard.length === 0 || latestCopy() !== clipStamp) return false;
+		const result = pasteAudioClips(
+			lanes,
+			clipboard,
+			stack.staticTime,
+			stack.trackDuration,
+			stack.activeLaneId,
+		);
+		if (result.clipIds.length === 0) return false;
+		onBeforeEdit?.();
+		onChange(result.lanes);
+		selectedClipIds = result.clipIds;
+		selectedClipId = result.clipIds[result.clipIds.length - 1];
+		return true;
 	}
 
 	function clipLabel(clip: AudioClip): string {

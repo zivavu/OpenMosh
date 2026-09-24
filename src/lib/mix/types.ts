@@ -185,20 +185,22 @@ export function retargetAudioSource(
 	);
 }
 
-/** Drop every clip playing `sourceId`; lanes left empty go too. */
+/** Drop every clip playing `sourceId`; lanes this empties go too. */
 export function removeAudioSource(
 	lanes: AudioLane[],
 	sourceId: string,
 ): AudioLane[] {
-	if (!lanes.some((l) => l.clips.some((c) => c.sourceId === sourceId))) {
-		return lanes;
-	}
+	const plays = (l: AudioLane) => l.clips.some((c) => c.sourceId === sourceId);
+	if (!lanes.some(plays)) return lanes;
 	return lanes
-		.map((lane) => ({
-			...lane,
-			clips: lane.clips.filter((c) => c.sourceId !== sourceId),
-		}))
-		.filter((lane) => lane.clips.length > 0);
+		.filter(
+			(lane) => !plays(lane) || lane.clips.some((c) => c.sourceId !== sourceId),
+		)
+		.map((lane) =>
+			plays(lane)
+				? { ...lane, clips: lane.clips.filter((c) => c.sourceId !== sourceId) }
+				: lane,
+		);
 }
 
 /** Sources the audio lanes reference, pool and library alike. */

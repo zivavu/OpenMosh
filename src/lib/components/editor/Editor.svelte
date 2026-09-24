@@ -2134,6 +2134,17 @@
 		selectedAudioClipIds = [lane.clips[0].id];
 	}
 
+	/** A lane with no sound yet, for clips pasted or dragged in from another. */
+	function addEmptyAudioLane() {
+		const lanes = mediaTimeline.audioLanes ?? [];
+		if (lanes.length >= MAX_AUDIO_LANES) return;
+		pushMediaHistory();
+		setMediaTimeline({
+			...mediaTimeline,
+			audioLanes: [...lanes, createAudioLane(nextAudioLaneName(lanes))],
+		});
+	}
+
 	/** The library picked a song: it takes the old one's clips, or a lane of its own. */
 	function replaceSong(songFile: File, trackId: string) {
 		if (trackId === currentTrackId) return;
@@ -4370,7 +4381,16 @@
 							title="Add music, a voice-over or any sound, on a lane of its own from the start marker"
 							onclick={openTrackPicker}
 						>
-							<Plus size={12} /> Audio
+							<Plus size={12} /> Audio file
+						</button>
+						<button
+							class="tl-tool-btn"
+							disabled={(mediaTimeline.audioLanes?.length ?? 0) >=
+								MAX_AUDIO_LANES}
+							title="Add an empty audio lane, to paste or drag clips onto from another"
+							onclick={addEmptyAudioLane}
+						>
+							<Plus size={12} /> Audio lane
 						</button>
 						<div class="tl-tool-sep"></div>
 						<button

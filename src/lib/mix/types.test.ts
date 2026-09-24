@@ -89,6 +89,14 @@ describe("song swaps", () => {
 		expect(next.map((l) => l.name)).toEqual(["Voice"]);
 	});
 
+	it("keeps a lane that was empty before the song went", () => {
+		const next = removeAudioSource(
+			[...lanes(), createAudioLane("Spare")],
+			song,
+		);
+		expect(next.map((l) => l.name)).toEqual(["Voice", "Spare"]);
+	});
+
 	it("tells library sources from pool ones", () => {
 		expect(trackIdOf(song)).toBe("a");
 		expect(trackIdOf("src:clip.mkv:1:2")).toBeNull();
