@@ -37,16 +37,12 @@ const OPTIONS: MoshOptions = {
 };
 
 /** The chain resolver as the preview builds it (no cloning). */
-function resolveFxEffectsAt(
-	lanes: FxLane[] | null | undefined,
-	time: number,
-	opts: { forceClipId?: string | null } = {},
-) {
+function resolveFxEffectsAt(lanes: FxLane[] | null | undefined, time: number) {
 	return flattenFxLayers(
 		createFxLayerSource(
 			() => lanes,
 			() => OPTIONS,
-		)(time, opts.forceClipId),
+		)(time),
 	);
 }
 
@@ -121,35 +117,6 @@ describe("resolveFxEffectsAt", () => {
 		const lanes = [lane("a", [clip("c1", 2, 3, ["blur"])])];
 		expect(resolveFxEffectsAt(lanes, 0)).toBe(resolveFxEffectsAt(lanes, 1));
 		expect(resolveFxEffectsAt([], 0)).toBe(resolveFxEffectsAt(null, 0));
-	});
-
-	test("a forced clip contributes even when the playhead is past it", () => {
-		const lanes = [
-			lane("a", [clip("c1", 0, 1, ["grain"]), clip("c2", 4, 5, ["blur"])]),
-		];
-		expect(
-			resolveFxEffectsAt(lanes, 9, { forceClipId: "c2" }).map((e) => e.defId),
-		).toEqual(["blur"]);
-	});
-
-	test("a forced clip replaces its own lane's clip, never doubling it", () => {
-		const lanes = [
-			lane("a", [clip("c1", 0, 5, ["grain"]), clip("c2", 5, 9, ["blur"])]),
-		];
-		// Playhead sits on c1, but c2 is the one being edited.
-		expect(
-			resolveFxEffectsAt(lanes, 1, { forceClipId: "c2" }).map((e) => e.defId),
-		).toEqual(["blur"]);
-	});
-
-	test("forcing a clip leaves other lanes reading the playhead", () => {
-		const lanes = [
-			lane("a", [clip("c1", 8, 9, ["blur"])]),
-			lane("b", [clip("c2", 0, 5, ["shift"])]),
-		];
-		expect(
-			resolveFxEffectsAt(lanes, 1, { forceClipId: "c1" }).map((e) => e.defId),
-		).toEqual(["blur", "shift"]);
 	});
 
 	test("two lanes may run the same effect — instances stay distinct", () => {
@@ -348,18 +315,6 @@ describe("fade weights in the layer source", () => {
 		);
 		expect(at(1).map((l) => l.weight)).toEqual([0.5, 1]);
 		expect(at(5).map((l) => l.weight)).toEqual([1, 1]);
-	});
-
-	test("the clip being edited shows at full strength, fade or not", () => {
-		const lanes = [
-			lane("a", [{ ...clip("c1", 0, 10, ["grain"]), fadeSec: 2 }]),
-		];
-		const at = createFxLayerSource(
-			() => lanes,
-			() => OPTIONS,
-		);
-		expect(at(1, "c1")[0].weight).toBe(1);
-		expect(at(1)[0].weight).toBe(0.5);
 	});
 });
 

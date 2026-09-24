@@ -103,25 +103,20 @@ export function appendFxLane(
 export function activeFxClips(
 	lanes: FxLane[] | null | undefined,
 	time: number,
-	forceClipId?: string | null,
 ): FxClip[] {
-	return activeFxParts(lanes, time, forceClipId).map((p) => p.clip);
+	return activeFxParts(lanes, time).map((p) => p.clip);
 }
 
 /** The same walk, keeping the lane each clip came from; its settings live there. */
 function activeFxParts(
 	lanes: FxLane[] | null | undefined,
 	time: number,
-	forceClipId?: string | null,
 ): { lane: FxLane; clip: FxClip }[] {
 	if (!lanes || lanes.length === 0) return NO_PARTS;
 	let out: { lane: FxLane; clip: FxClip }[] | null = null;
 	for (const lane of lanes) {
 		if (!lane.enabled) continue;
-		const forced = forceClipId
-			? lane.clips.find((c) => c.id === forceClipId)
-			: undefined;
-		const clip = forced ?? clipAt(lane, time);
+		const clip = clipAt(lane, time);
 		if (!clip) continue;
 		(out ??= []).push({ lane, clip });
 	}
@@ -154,11 +149,11 @@ export function createFxLayerSource(
 	getLanes: () => FxLane[] | null | undefined,
 	getMoshOptions: () => MoshOptions,
 	{ clone = false }: FxEffectSourceOptions = {},
-): (time: number, forceClipId?: string | null) => FxLayer[] {
+): (time: number) => FxLayer[] {
 	const cache = new Map<string, EffectInstance[]>();
 	let last: FxLayer[] = NO_LAYERS;
-	return (time: number, forceClipId?: string | null) => {
-		const parts = activeFxParts(getLanes(), time, forceClipId);
+	return (time: number) => {
+		const parts = activeFxParts(getLanes(), time);
 		if (parts.length === 0) {
 			last = NO_LAYERS;
 			return NO_LAYERS;
@@ -169,8 +164,7 @@ export function createFxLayerSource(
 			effects: chainClipEffectsAt(clip, time, cache, clone, () =>
 				laneMoshOptions(lane, getMoshOptions()),
 			),
-			// A clip pinned in for editing shows at full strength, not its fade.
-			weight: clip.id === forceClipId ? 1 : fxClipWeight(clip, time),
+			weight: fxClipWeight(clip, time),
 		}));
 		if (sameLayers(last, layers)) return last;
 		last = layers;

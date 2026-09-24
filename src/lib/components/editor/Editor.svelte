@@ -1569,9 +1569,9 @@
 		return lane ? laneAudioResponse(lane, audioResponse) : audioResponse;
 	}
 
-	/** The stacked lanes for this frame, with fade weights; the selected clip is forced in. */
+	/** The stacked lanes for this frame, with fade weights. */
 	let fxLayers = $derived(
-		isSequenceMode ? previewFxSource(seqMasterTime(), selectedFxClipId) : [],
+		isSequenceMode ? previewFxSource(seqMasterTime()) : [],
 	);
 
 	/** The same effects flat, for the panel-facing chain and the audio tick. */
