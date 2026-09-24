@@ -4374,6 +4374,7 @@
 						</button>
 					{/if}
 					{#if isSequenceMode && seqMasterDuration > 0}
+						<div class="tl-tool-sep"></div>
 						<button
 							class="tl-tool-btn"
 							disabled={(mediaTimeline.audioLanes?.length ?? 0) >=
