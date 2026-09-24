@@ -221,6 +221,7 @@
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import { saveSession, type SingleSessionState } from "../../editor/sessions";
+	import { rememberLastOpened } from "../../editor/last-opened";
 	import {
 		migrateLegacySegments,
 		prependMediaLane,
@@ -1801,6 +1802,13 @@
 	let pendingInit = $state<{ key: string; seed: boolean } | null>(null);
 	/** Length a new project takes when nothing else gives it one. */
 	const DEFAULT_PROJECT_LENGTH = 30;
+
+	// Ready means it saves from here on, so a reload can come back to it.
+	$effect(() => {
+		if (isSequenceMode && projectReady && projectKey) {
+			rememberLastOpened({ mode: "sequence", key: projectKey });
+		}
+	});
 
 	// Opening a project: its saved timeline, or a fresh one seeded from the opened file.
 	let projectLoadedFor: string | null = null;

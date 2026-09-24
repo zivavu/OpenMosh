@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, untrack } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
 	import AppError from "./lib/components/ui/AppError.svelte";
@@ -8,6 +8,11 @@
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
 	import { openSession, type SingleSessionState } from "./lib/editor/sessions";
+	import {
+		forgetLastOpened,
+		readLastOpened,
+		rememberLastOpened,
+	} from "./lib/editor/last-opened";
 	import type { SessionMode } from "./lib/editor/sequence-media-store";
 	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
@@ -72,8 +77,13 @@
 
 	let view: View = $state(hashToView(window.location.hash));
 
-	function navigateTo(v: View) {
-		history.pushState(null, "", VIEW_HASH[v]);
+	function navigateTo(v: View, replace = false) {
+		// Already there after a reload: a second entry would make Back a no-op.
+		if (replace || window.location.hash === VIEW_HASH[v]) {
+			history.replaceState(null, "", VIEW_HASH[v]);
+		} else {
+			history.pushState(null, "", VIEW_HASH[v]);
+		}
 		// A warmup still queued would land after the editor already built its own
 		// context, leaving a stray hidden one behind.
 		if (v !== "upload") cancelWarm();
@@ -164,13 +174,15 @@
 		sessionTrackId = null;
 	}
 
-	/** Reopen a saved single or slideshow edit: its media and the work done. */
-	async function openSessionByKey(mode: SessionMode, key: string) {
+	/** Reopen a saved single or slideshow edit: its media and the work done. False when
+	 * it's gone. */
+	async function openSessionByKey(
+		mode: SessionMode,
+		key: string,
+	): Promise<boolean> {
 		const opened = await openSession(key);
-		if (!opened) {
-			showToast("That session's media is no longer stored", "error");
-			return;
-		}
+		if (!opened) return false;
+		rememberLastOpened({ mode, key });
 		// The song comes back too, so the per-song text timeline and segments the
 		// editor restores have the track they're keyed to.
 		pendingAudioFile = opened.trackFile;
@@ -181,27 +193,59 @@
 			// source is wanted now.
 			file = await gifToVideo(opened.files[0]);
 			navigateTo("single");
-			return;
+			return true;
 		}
 		const state = opened.state as { config?: SlideshowConfig } | null;
 		restoredSlideshowConfig = state?.config ?? null;
 		slideshowFiles = await gifsToVideo(opened.files);
 		navigateTo("slideshow");
+		return true;
 	}
 
 	/** Reopen a song's saved sequence: its media becomes the pool, and the song
-	 * itself is handed over as the already-known library track. */
-	async function openSequenceFromSong(trackId: string) {
+	 * itself is handed over as the already-known library track. False when it's gone. */
+	async function openSequenceFromSong(trackId: string): Promise<boolean> {
 		const opened = await openSavedSequence(trackId);
-		if (!opened) {
-			showToast("That song's media is no longer stored", "error");
-			return;
-		}
+		if (!opened) return false;
+		rememberLastOpened({ mode: "sequence", key: trackId });
 		sequenceFiles = await gifsToVideo(opened.sources);
 		pendingAudioFile = opened.trackFile;
 		sequenceTrackId = opened.trackFile ? opened.trackId : null;
 		sequenceProjectKey = opened.trackId;
 		navigateTo("sequence");
+		return true;
+	}
+
+	/** Whether the current route has its media, or would fall through to the upload screen. */
+	function editorOpen(): boolean {
+		if (view === "sequence") return sequenceFiles.length > 0;
+		if (view === "slideshow") return slideshowFiles.length > 0;
+		if (view === "single") return !!file;
+		return false;
+	}
+
+	/** A reload lands on an editor's route with nothing open: bring back what was. */
+	let restoring = $state(untrack(() => view) !== "upload");
+
+	async function restoreLastOpened() {
+		const last = readLastOpened();
+		// Replaced, not pushed: Back onto the dead route would only bounce here again.
+		if (!last || last.mode !== view) {
+			restoring = false;
+			navigateTo("upload", true);
+			return;
+		}
+		restoring = true;
+		const ok =
+			last.mode === "sequence"
+				? await openSequenceFromSong(last.key)
+				: await openSessionByKey(last.mode, last.key);
+		restoring = false;
+		if (!ok) {
+			forgetLastOpened();
+			navigateTo("upload", true);
+			showToast("Couldn't reopen your last project", "error");
+		}
 	}
 
 	function exitToUpload() {
@@ -220,12 +264,15 @@
 			if (view === "upload") {
 				resetFiles();
 				scheduleWarm();
+			} else if (!editorOpen()) {
+				void restoreLastOpened();
 			}
 		};
 		window.addEventListener("popstate", onPopState);
 
 		scheduleWarm();
 		prefetchEditors();
+		if (view !== "upload" && !editorOpen()) void restoreLastOpened();
 
 		return () => {
 			cancelWarm();
@@ -290,21 +337,33 @@
 		{:catch err}
 			{@render loadFailed(err)}
 		{/await}
+	{:else if restoring}
+		<!-- Blank rather than the upload screen, which would flash up and go. -->
+		<div class="restoring"></div>
 	{:else}
 		<UploadScreen
 			onfile={async (f: File) => {
+				forgetLastOpened();
 				file = await gifToVideo(f);
 				navigateTo("single");
 			}}
 			onSequence={async (files: File[]) => {
+				forgetLastOpened();
 				sequenceFiles = await gifsToVideo(files);
 				navigateTo("sequence");
 			}}
-			onSequenceFromSong={(trackId: string) =>
-				void openSequenceFromSong(trackId)}
-			onSessionOpen={(mode: SessionMode, key: string) =>
-				void openSessionByKey(mode, key)}
+			onSequenceFromSong={async (trackId: string) => {
+				if (!(await openSequenceFromSong(trackId))) {
+					showToast("That song's media is no longer stored", "error");
+				}
+			}}
+			onSessionOpen={async (mode: SessionMode, key: string) => {
+				if (!(await openSessionByKey(mode, key))) {
+					showToast("That session's media is no longer stored", "error");
+				}
+			}}
 			onSlideshow={async (files: File[]) => {
+				forgetLastOpened();
 				slideshowFiles = await gifsToVideo(files);
 				navigateTo("slideshow");
 			}}
@@ -330,3 +389,11 @@
 {/if}
 
 <ToastContainer />
+
+<style>
+	.restoring {
+		position: fixed;
+		inset: 0;
+		background: var(--ink);
+	}
+</style>

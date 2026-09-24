@@ -2,6 +2,7 @@
 
 import { getAllTracks, getTrack } from "../audio/track-library";
 import { createListCache } from "../storage";
+import { rememberLastOpened } from "./last-opened";
 import {
 	getAllSessions,
 	getSequenceMediaByIds,
@@ -72,6 +73,8 @@ export async function saveSession(
 		sourceIds: entries.map((e) => e.id),
 		state,
 	});
+	// Saved edits are the open one, so this is what a reload comes back to.
+	rememberLastOpened({ mode, key });
 	// Refresh the mirror so the upload screen paints this edit next time.
 	await listSavedSessions(mode).catch(() => {});
 }
