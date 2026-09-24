@@ -26,6 +26,9 @@
 		/** The clips behind it, and the toggle every clip bar's Repeat calls. */
 		repeatClipIds?: string[];
 		onToggleRepeat?: ((clipIds: string[]) => void) | null;
+		/** Set where the project owns its length: dragging clips past the end grows it. */
+		onGrow?: ((length: number) => void) | null;
+		maxLength?: number;
 		/** The lanes' own actions, one toolbar for the whole stack. */
 		toolbar?: Snippet;
 		selectionHint?: string | null;
@@ -51,6 +54,8 @@
 		onStopRepeat = null,
 		repeatClipIds = [],
 		onToggleRepeat = null,
+		onGrow = null,
+		maxLength = Infinity,
 		toolbar,
 		selectionHint = null,
 		bpm = 0,
@@ -74,6 +79,10 @@
 		stack.repeatClipIds = repeatClipIds;
 		stack.toggleRepeat = onToggleRepeat;
 	});
+	$effect(() => {
+		stack.growTo = onGrow;
+		stack.maxLength = maxLength;
+	});
 	const vp = stack.vp;
 
 	// Follow the track: a new duration opens the window onto the whole thing.
@@ -82,6 +91,8 @@
 		const d = trackDuration;
 		if (d <= 0 || d === viewedDuration) return;
 		viewedDuration = d;
+		// A drag growing the project sets the view itself.
+		if (stack.dragging) return;
 		vp.viewStart = 0;
 		vp.viewEnd = d;
 		stack.followPlayhead = true;

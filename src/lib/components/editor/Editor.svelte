@@ -4497,6 +4497,8 @@
 				onStopRepeat={() => (repeatClipIds = [])}
 				{repeatClipIds}
 				onToggleRepeat={toggleRepeat}
+				onGrow={isSequenceMode ? (length) => mixer.setDuration(length) : null}
+				maxLength={MAX_PROJECT_LENGTH}
 			>
 				{#snippet toolbar()}
 					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->

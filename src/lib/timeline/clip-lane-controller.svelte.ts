@@ -431,6 +431,7 @@ export class ClipLaneController<
 			mode,
 			grabOffset: this.timeAt(e.clientX) - clip.start,
 		};
+		this.stack.beginDrag();
 		// One undo entry per gesture, not per pointermove.
 		host.onBeforeEdit?.(`${host.kind}-${mode}-${clipId}`);
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -697,7 +698,8 @@ export class ClipLaneController<
 		if (this.scrubbing) this.stack.seekStatic(this.timeAt(e.clientX));
 		const drag = this.drag;
 		if (!drag) return;
-		const t = this.timeAt(e.clientX);
+		const t = this.stack.dragTime(e.clientX);
+		const limit = this.stack.dragLimit;
 		const { laneId, clipId, mode, grabOffset } = drag;
 		this.#clickOnUp = null;
 		this.#joinPress = null;
@@ -722,7 +724,7 @@ export class ClipLaneController<
 					over,
 					group,
 					t - grabOffset - held.start,
-					this.trackDuration,
+					limit,
 					this.host.remapOnLaneChange,
 					this.stack.crossLaneTolerance(
 						from.clips.filter((c) => group.includes(c.id)),
@@ -731,6 +733,7 @@ export class ClipLaneController<
 				if (next !== lanes) {
 					drag.laneId = over;
 					this.host.setLanes(next);
+					this.#reach(group);
 					return;
 				}
 			}
@@ -741,11 +744,23 @@ export class ClipLaneController<
 			drag,
 			t,
 			this.host.selectedClipIds,
-			this.trackDuration,
+			limit,
 			(edges, exclude) => this.stack.snapShift(edges, exclude, e.altKey),
 		);
 		this.update(laneId, () => step.lane);
 		this.stack.confirmSnap(step.edges);
+		if (mode !== "boundary") this.#reach(mode === "move" ? group : [clipId]);
+	}
+
+	/** Let the project grow to where the dragged clips end. */
+	#reach(clipIds: string[]): void {
+		let end = 0;
+		for (const lane of this.host.lanes) {
+			for (const c of lane.clips) {
+				if (clipIds.includes(c.id)) end = Math.max(end, c.end);
+			}
+		}
+		this.stack.reach(end);
 	}
 
 	onPointerUp(e: PointerEvent): void {
@@ -784,6 +799,7 @@ export class ClipLaneController<
 		this.scrubbing = false;
 		if (!this.drag) return;
 		this.drag = null;
+		this.stack.endDrag();
 		this.stack.endSnap();
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
 	}

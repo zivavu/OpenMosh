@@ -80,7 +80,8 @@ export class TimelineStackState {
 			return 0;
 		}
 		const secPerPx = this.vp.viewDuration / this.laneWidth;
-		const duration = this.#getDuration();
+		// The grown end moves with the drag; snapping to it would hold the edge back.
+		const duration = this.#drag?.duration ?? this.#getDuration();
 		const targets: SnapPoint[] = [
 			{ time: 0, ownerId: null },
 			{ time: duration, ownerId: null },
@@ -124,6 +125,66 @@ export class TimelineStackState {
 	/** The drag is over; the guide goes with it. */
 	endSnap(): void {
 		this.snapGuide = null;
+	}
+
+	/** Grows the project when a drag carries clips past its end; null where the length is fixed. */
+	growTo = $state<((length: number) => void) | null>(null);
+	maxLength = $state(Infinity);
+
+	/** The view and length a clip drag started from. */
+	#drag: { start: number; end: number; duration: number } | null = null;
+
+	get dragging(): boolean {
+		return this.#drag !== null;
+	}
+
+	beginDrag(): void {
+		this.#drag = {
+			start: this.vp.viewStart,
+			end: this.vp.viewEnd,
+			duration: this.#getDuration(),
+		};
+	}
+
+	endDrag(): void {
+		this.#drag = null;
+	}
+
+	/** How far a dragged clip may go. */
+	get dragLimit(): number {
+		return this.growTo ? this.maxLength : this.#getDuration();
+	}
+
+	/** Whether the drag started with the project's end on screen, so it can be pulled out. */
+	get #endInView(): boolean {
+		const view = this.#drag;
+		return !!view && view.end >= view.duration - 1e-6;
+	}
+
+	/** The pointer's time in a drag. Where the project can grow, past the lane's right edge
+	 * keeps the scale the drag started at, so the view zooming out can't feed back into it. */
+	dragTime(clientX: number): number {
+		const view = this.#drag;
+		const r = this.#laneRect();
+		if (!this.growTo || !view || !this.#endInView || !r || r.width <= 0) {
+			return this.vp.clientXToTime(clientX);
+		}
+		const frac = Math.max(0, (clientX - r.left) / r.width);
+		return Math.min(
+			this.maxLength,
+			view.start + frac * (view.end - view.start),
+		);
+	}
+
+	/** The dragged clips end at `end`: the project grows to hold them, and gives the
+	 * growth back if they're pulled in again. */
+	reach(end: number): void {
+		const view = this.#drag;
+		if (!this.growTo || !view) return;
+		const length = Math.min(this.maxLength, Math.max(view.duration, end));
+		if (Math.abs(length - this.#getDuration()) > 1e-6) this.growTo(length);
+		// The end stays pinned to the lane's edge; a zoomed-in view is left where it was.
+		if (this.#endInView) this.vp.viewEnd = length;
 	}
 
 	/** Contextual controls for each lane's selection, in the stack's one selection bar. */
