@@ -13,6 +13,8 @@
 	import type { SpectrumData } from "../../types";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import ColorPicker from "../ui/ColorPicker.svelte";
+	import { Plus } from "lucide-svelte";
+	import AddFontDialog from "../ui/AddFontDialog.svelte";
 	import FontSelect from "../ui/FontSelect.svelte";
 	import FontCycleRows from "./FontCycleRows.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
@@ -86,6 +88,41 @@
 		onClipChange({ ...clip, text });
 	}
 
+	let addFontOpen = $state(false);
+
+	/** A new face joins the beat's fonts while they're on, else becomes the lane's. */
+	function fontAdded(family: string) {
+		if (!lane) return;
+		void ensureFontLoaded(family);
+		const cycle = lane.style.fontCycle;
+		if (!cycle.enabled) {
+			setStyle("fontFamily", family);
+		} else if (!cycle.fonts.includes(family)) {
+			setStyle("fontCycle", { ...cycle, fonts: [...cycle.fonts, family] });
+		}
+	}
+
+	/** A removed face would otherwise stay picked and draw as a fallback. */
+	function fontRemoved(family: string) {
+		if (!lane) return;
+		const cycle = lane.style.fontCycle;
+		onBeforeEdit?.();
+		onLaneChange({
+			...lane,
+			style: {
+				...lane.style,
+				fontFamily:
+					lane.style.fontFamily === family
+						? DEFAULT_TEXT_STYLE.fontFamily
+						: lane.style.fontFamily,
+				fontCycle: {
+					...cycle,
+					fonts: cycle.fonts.filter((f) => f !== family),
+				},
+			},
+		});
+	}
+
 	let position = $derived(
 		clip && lane ? textClipPosition(clip, lane.style) : { x: 0.5, y: 0.5 },
 	);
@@ -145,6 +182,7 @@
 						id="tc-font"
 						value={lane.style.fontFamily}
 						onChange={(family) => setStyle("fontFamily", family)}
+						showAdd={false}
 					/>
 				</div>
 			{/if}
@@ -156,6 +194,22 @@
 				text={clip.text}
 				onChange={(cycle) => setStyle("fontCycle", cycle)}
 			/>
+
+			<button
+				type="button"
+				class="add-font-btn"
+				title="Add a font from Google Fonts, a link or a file of your own"
+				onclick={() => (addFontOpen = true)}
+			>
+				<Plus size={12} /> Add your own font
+			</button>
+			{#if addFontOpen}
+				<AddFontDialog
+					onClose={() => (addFontOpen = false)}
+					onAdded={fontAdded}
+					onRemoved={fontRemoved}
+				/>
+			{/if}
 
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -347,6 +401,29 @@
 		font-size: 0.78rem;
 		font-family: inherit;
 		resize: vertical;
+	}
+
+	.add-font-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		width: 100%;
+		padding: 0.35rem;
+		background: none;
+		border: 1px dashed var(--line-strong);
+		border-radius: 4px;
+		color: var(--text-2);
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+
+	.add-font-btn:hover {
+		border-color: var(--live-dim);
+		color: var(--live);
 	}
 
 	.row :global(.font-select) {
