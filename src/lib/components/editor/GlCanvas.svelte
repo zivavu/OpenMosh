@@ -24,6 +24,7 @@
 		resolveTextLayersAt,
 		type ResolvedTextLayer,
 		type TextChainSource,
+		type TextStyle,
 		type TextTimeline,
 	} from "../../text";
 	import {
@@ -107,6 +108,9 @@
 		onLayerStyleChange?: ((laneId: string, style: MediaStyle) => void) | null;
 		/** Called once per drag gesture, so the editor can push one undo entry for it. */
 		onLayerDragStart?: ((laneId: string) => void) | null;
+		/** Dragging a text layer moves its lane's anchor live. */
+		onTextStyleChange?: ((laneId: string, style: TextStyle) => void) | null;
+		onTextDragStart?: ((laneId: string) => void) | null;
 		/** Live FFT bins for the audio-bars effect; the AnalyserNode mutates one array in place. */
 		spectrum?: Uint8Array | null;
 	}
@@ -152,6 +156,8 @@
 		onPickLayer = null,
 		onLayerStyleChange = null,
 		onLayerDragStart = null,
+		onTextStyleChange = null,
+		onTextDragStart = null,
 	}: Props = $props();
 
 	let frameTimes: number[] = [];
@@ -302,6 +308,7 @@
 			onPickLayer({ kind: hit.kind, laneId: hit.laneId });
 			// Selecting and moving are one gesture: the press that picked a layer keeps hold of it.
 			if (hit.kind === "media") startMove(e, hit.laneId, p);
+			else startTextMove(e, hit.laneId, p);
 			return;
 		}
 		// Past every layer is the image they sit over, except under solo, which is bare black.
@@ -400,6 +407,51 @@
 		previewArea.setPointerCapture(e.pointerId);
 	}
 
+	/** A text lane's anchor being dragged, from where the press found it. */
+	let textDrag: {
+		laneId: string;
+		from: TextStyle;
+		x0: number;
+		y0: number;
+		moved: boolean;
+	} | null = null;
+
+	function startTextMove(
+		e: PointerEvent,
+		laneId: string,
+		p: { x: number; y: number },
+	) {
+		if (!onTextStyleChange) return;
+		const lane = textTimeline?.lanes.find((l) => l.id === laneId);
+		if (!lane) return;
+		textDrag = { laneId, from: lane.style, x0: p.x, y0: p.y, moved: false };
+		previewArea.setPointerCapture(e.pointerId);
+	}
+
+	function textDragMove(e: PointerEvent) {
+		const td = textDrag;
+		const fit = frameFit();
+		if (!td || !fit || !canvasEl) return;
+		let dx = (e.clientX - fit.left) / fit.s - td.x0;
+		let dy = (e.clientY - fit.top) / fit.s - td.y0;
+		if (!td.moved && Math.hypot(dx, dy) * fit.s < MOVE_SLOP) return;
+		if (e.shiftKey) {
+			if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+			else dx = 0;
+		}
+		if (!td.moved) {
+			td.moved = true;
+			onTextDragStart?.(td.laneId);
+		}
+		// The anchor stays on the frame, where the panel's sliders can still reach it.
+		const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+		onTextStyleChange?.(td.laneId, {
+			...td.from,
+			x: clamp01(td.from.x + dx / canvasEl.width),
+			y: clamp01(td.from.y + dy / canvasEl.height),
+		});
+	}
+
 	function startScale(e: PointerEvent, hx: -1 | 0 | 1, hy: -1 | 0 | 1) {
 		const lane = selectedMediaLane;
 		if (!onLayerStyleChange || !lane || !renderer || e.button !== 0) return;
@@ -423,6 +475,10 @@
 	}
 
 	function dragMove(e: PointerEvent) {
+		if (textDrag) {
+			textDragMove(e);
+			return;
+		}
 		if (!drag) {
 			updateHoverCursor(e);
 			return;
@@ -457,20 +513,23 @@
 	}
 
 	function endDrag(e: PointerEvent) {
-		if (!drag) return;
+		if (!drag && !textDrag) return;
 		drag = null;
+		textDrag = null;
 		if (previewArea.hasPointerCapture(e.pointerId)) {
 			previewArea.releasePointerCapture(e.pointerId);
 		}
 	}
 
-	/** A move cursor over any media layer, since a press there drags it. */
+	/** A move cursor over any layer a press would drag. */
 	function updateHoverCursor(e: PointerEvent) {
 		let cursor = "";
-		if (onLayerStyleChange && e.target === canvasEl) {
+		if ((onLayerStyleChange || onTextStyleChange) && e.target === canvasEl) {
 			const p = framePoint(e);
 			const hit = p && hitAt(p.x, p.y);
-			if (hit?.kind === "media") cursor = "move";
+			const draggable =
+				hit?.kind === "media" ? !!onLayerStyleChange : !!onTextStyleChange;
+			if (hit && draggable) cursor = "move";
 		}
 		if (cursor !== hoverCursor) hoverCursor = cursor;
 	}
@@ -986,7 +1045,7 @@
 	onpointermove={dragMove}
 	onpointerup={endDrag}
 	onpointercancel={endDrag}
-	onpointerleave={() => !drag && hoverCursor && (hoverCursor = "")}
+	onpointerleave={() => !drag && !textDrag && hoverCursor && (hoverCursor = "")}
 >
 	{#if !warmCanvas}
 		<canvas

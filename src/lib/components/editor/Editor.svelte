@@ -4076,6 +4076,12 @@
 				{sourceDurations}
 				onPickLayer={pickLayer}
 				onLayerDragStart={() => pushMediaHistory()}
+				onTextDragStart={() => pushTextHistory()}
+				onTextStyleChange={(id, style) =>
+					(textTimeline = updateLane(textTimeline, id, (l) => ({
+						...l,
+						style,
+					})))}
 				onLayerStyleChange={(id, style) =>
 					(mediaTimeline = updateMediaLaneIn(mediaTimeline, id, (l) => ({
 						...l,
