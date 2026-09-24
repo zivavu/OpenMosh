@@ -1,5 +1,19 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
+
+const { version } = JSON.parse(
+	readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+) as { version: string };
+
+// Vercel tells a build which deployment it is; anything else is a local build.
+const vercelEnv = process.env.VERCEL_ENV;
+const channel =
+	vercelEnv === "production"
+		? "release"
+		: vercelEnv === "preview"
+			? "preview"
+			: "local";
 
 // The dev URL, where nothing is hashed yet. This matches the URL Vite rewrites
 // the stylesheet's url() to, so the preload is reused.
@@ -79,4 +93,9 @@ function labRedirect(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [svelte(), preloadLatinFonts(), labRedirect()],
+	define: {
+		__APP_VERSION__: JSON.stringify(version),
+		__APP_CHANNEL__: JSON.stringify(channel),
+		__APP_COMMIT__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? null),
+	},
 });
