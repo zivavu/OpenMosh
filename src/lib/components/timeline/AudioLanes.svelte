@@ -264,7 +264,7 @@
 			<span class="tl-tool-label">
 				{selectedClips.length > 1
 					? `${selectedClips.length} clips`
-					: clipLabel(selectedClips[0])}
+					: sourceName(selectedClips[0].sourceId)}
 			</span>
 			<div class="tl-tool-sep"></div>
 			<span class="tl-tool-label">Clip volume</span>
