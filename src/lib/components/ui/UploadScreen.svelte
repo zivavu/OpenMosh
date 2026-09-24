@@ -28,6 +28,7 @@
 	import { lazy } from "../../lazy";
 	import DemoBackground from "./DemoBackground.svelte";
 	import GithubLink from "./GithubLink.svelte";
+	import VersionTag from "./VersionTag.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { showToast } from "./toast.svelte";
@@ -734,6 +735,7 @@
 	</div>
 
 	<div class="github-corner">
+		<VersionTag />
 		<button
 			class="storage-btn"
 			onclick={() => (storageOpen = true)}
