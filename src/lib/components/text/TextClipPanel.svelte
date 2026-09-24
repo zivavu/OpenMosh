@@ -129,22 +129,25 @@
 
 			<FadeRows {clip} noun="this text" idPrefix="tc" onFade={setFade} />
 
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				class="row"
-				title="Typeface this clip is drawn in. Double-click to reset."
-				ondblclick={(e) => {
-					void ensureFontLoaded(DEFAULT_TEXT_STYLE.fontFamily);
-					resetStyle(e, "fontFamily");
-				}}
-			>
-				<label for="tc-font">Font</label>
-				<FontSelect
-					id="tc-font"
-					value={lane.style.fontFamily}
-					onChange={(family) => setStyle("fontFamily", family)}
-				/>
-			</div>
+			<!-- The beat picks the font while it's on. -->
+			{#if !lane.style.fontCycle.enabled}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="row"
+					title="Typeface this clip is drawn in. Double-click to reset."
+					ondblclick={(e) => {
+						void ensureFontLoaded(DEFAULT_TEXT_STYLE.fontFamily);
+						resetStyle(e, "fontFamily");
+					}}
+				>
+					<label for="tc-font">Font</label>
+					<FontSelect
+						id="tc-font"
+						value={lane.style.fontFamily}
+						onChange={(family) => setStyle("fontFamily", family)}
+					/>
+				</div>
+			{/if}
 
 			<FontCycleRows
 				cycle={lane.style.fontCycle}
