@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Crosshair, Pause, Play, Repeat } from "lucide-svelte";
+	import { Crosshair, Pause, Play, Repeat, X } from "lucide-svelte";
 	import { untrack, type Snippet } from "svelte";
 	import { formatTime, formatTimeMs } from "../../audio/audio-utils";
 	import {
@@ -20,6 +20,9 @@
 		spanStart?: number;
 		loopEnabled?: boolean;
 		onToggleLoop?: (() => void) | null;
+		/** The stretch the preview is going round, marked on the axis. */
+		repeatRange?: { start: number; end: number } | null;
+		onStopRepeat?: (() => void) | null;
 		/** The lanes' own actions, one toolbar for the whole stack. */
 		toolbar?: Snippet;
 		selectionHint?: string | null;
@@ -41,6 +44,8 @@
 		spanStart = 0,
 		loopEnabled = false,
 		onToggleLoop = null,
+		repeatRange = null,
+		onStopRepeat = null,
 		toolbar,
 		selectionHint = null,
 		bpm = 0,
@@ -242,6 +247,15 @@
 				<Repeat size={12} />
 			</button>
 		{/if}
+		{#if repeatRange && onStopRepeat}
+			<button
+				class="tl-repeat-chip"
+				onclick={onStopRepeat}
+				title="The preview is repeating the marked stretch. Click to play on normally."
+			>
+				<Repeat size={11} /> Repeating <X size={11} />
+			</button>
+		{/if}
 		<!-- Split so the milliseconds, which change every frame, read as subordinate. -->
 		<span class="tl-clock">
 			{formatTime(currentTime)}<span class="tl-clock-ms"
@@ -276,6 +290,13 @@
 						<span class="tl-tick-label">{tick.label}</span>
 					</span>
 				{/each}
+				{#if repeatRange}
+					{@const left = vp.toPct(repeatRange.start)}
+					<div
+						class="tl-repeat"
+						style="left: {left}%; width: {vp.toPct(repeatRange.end) - left}%"
+					></div>
+				{/if}
 			</div>
 		{/if}
 
@@ -738,6 +759,42 @@
 		color: var(--text);
 		border-color: var(--text-4);
 		background: rgba(255, 255, 255, 0.12);
+	}
+
+	.tl-repeat-chip {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		height: 22px;
+		padding: 0 6px;
+		border: 1px solid var(--live-dim);
+		border-radius: 5px;
+		background: none;
+		color: var(--live);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.tl-repeat-chip:hover {
+		border-color: var(--live);
+	}
+
+	/* The repeated stretch: tinted through the lanes, solid along the ruler. */
+	.tl-repeat {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		border-left: 1px dashed var(--live-dim);
+		border-right: 1px dashed var(--live-dim);
+		background: linear-gradient(
+			to top,
+			var(--live-dim) 0 var(--tl-scale-h),
+			rgba(255, 255, 255, 0.03) var(--tl-scale-h)
+		);
 	}
 
 	.tl-clock {

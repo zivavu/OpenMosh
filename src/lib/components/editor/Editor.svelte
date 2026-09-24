@@ -2467,6 +2467,48 @@
 		if (isVideo) playVideo();
 	}
 
+	/** Media clips the preview goes round, spanning first start to last end. */
+	let repeatClipIds = $state<string[]>([]);
+	let repeatRange = $derived.by(() => {
+		if (repeatClipIds.length === 0) return null;
+		const ids = new Set(repeatClipIds);
+		let start = Infinity;
+		let end = -Infinity;
+		for (const lane of mediaTimeline.lanes) {
+			for (const c of lane.clips) {
+				if (!ids.has(c.id)) continue;
+				start = Math.min(start, c.start);
+				end = Math.max(end, c.end);
+			}
+		}
+		end = Math.min(end, mixer.duration);
+		return end > start ? { start, end } : null;
+	});
+	$effect(() => {
+		mixer.repeat = repeatRange;
+	});
+	// Clips deleted or moved past the end take the repeat with them.
+	$effect(() => {
+		if (repeatClipIds.length > 0 && !repeatRange) repeatClipIds = [];
+	});
+
+	function toggleRepeat(clipIds: string[]) {
+		const same =
+			clipIds.length === repeatClipIds.length &&
+			clipIds.every((id) => repeatClipIds.includes(id));
+		if (same) {
+			repeatClipIds = [];
+			return;
+		}
+		repeatClipIds = [...clipIds];
+		const range = repeatRange;
+		if (!range) return;
+		// Ahead of the effect, so play() already clamps to the range.
+		mixer.repeat = range;
+		mixer.seek(range.start);
+		mixer.play();
+	}
+
 	function pauseTrack() {
 		if (isSequenceMode) {
 			mixer.pause();
@@ -4368,6 +4410,8 @@
 				onToggleLoop={isSequenceMode || audioIsMaster || videoIsMaster
 					? toggleMasterLoop
 					: null}
+				repeatRange={isSequenceMode ? repeatRange : null}
+				onStopRepeat={() => (repeatClipIds = [])}
 			>
 				{#snippet toolbar()}
 					<!-- Each button names the lane it adds: "+ Lane" read as the same button three times. -->
@@ -4514,6 +4558,8 @@
 							onClear={mediaClear}
 							onModeChange={mediaModeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
+							{repeatClipIds}
+							onToggleRepeat={isSequenceMode ? toggleRepeat : undefined}
 							{peaksOf}
 							audioVersion={audioBank.version}
 						/>

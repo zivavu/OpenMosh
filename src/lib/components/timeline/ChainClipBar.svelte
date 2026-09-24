@@ -25,6 +25,8 @@
 			intervalBeats?: number | null,
 		) => void;
 		children?: Snippet;
+		/** The lane kind's own actions, after the shared ones. */
+		trailing?: Snippet;
 	}
 
 	let {
@@ -37,6 +39,7 @@
 		onClear,
 		onModeChange,
 		children,
+		trailing,
 	}: Props = $props();
 
 	let ids = $derived(selectedClips.map((c) => c.id));
@@ -181,6 +184,7 @@
 				{/each}
 			</select>
 		{/if}
+		{@render trailing?.()}
 	</div>
 {/if}
 

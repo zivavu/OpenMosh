@@ -31,6 +31,8 @@ export class SequenceMixer {
 	loop = $state(false);
 	/** Set while the clock sits past the span end; a run started beyond it plays on. */
 	pastSpan = $state(false);
+	/** Preview-only: playback goes round this range, over the span and the loop setting. */
+	repeat = $state<{ start: number; end: number } | null>(null);
 	outputVolume = $state(1);
 
 	/** The segments to play, from `planMix`. */
@@ -206,10 +208,16 @@ export class SequenceMixer {
 		const ctx = this.#ensureGraph();
 		if (ctx.state === "suspended") void ctx.resume().catch(() => {});
 		let t = this.currentTime;
-		// Past the span end is where the marker sits, so it plays from there; before it, no.
-		this.pastSpan = this.spanEnd > 0 && t >= this.spanEnd;
-		if (!this.pastSpan && t < this.spanStart) t = this.spanStart;
-		if (t >= this.duration) t = this.spanStart;
+		const repeat = this.repeat;
+		if (repeat) {
+			this.pastSpan = false;
+			if (t < repeat.start || t >= repeat.end) t = repeat.start;
+		} else {
+			// Past the span end is where the marker sits, so it plays from there; before it, no.
+			this.pastSpan = this.spanEnd > 0 && t >= this.spanEnd;
+			if (!this.pastSpan && t < this.spanStart) t = this.spanStart;
+			if (t >= this.duration) t = this.spanStart;
+		}
 		this.#anchorTime = t;
 		this.#anchorCtx = ctx.currentTime;
 		this.#anchorWall = performance.now();
@@ -250,9 +258,15 @@ export class SequenceMixer {
 	#frame = () => {
 		if (!this.playing) return;
 		const t = this.#now();
+		const repeat = this.repeat;
+		if (repeat && t >= repeat.end) {
+			this.seek(repeat.start);
+			this.#raf = requestAnimationFrame(this.#frame);
+			return;
+		}
 		const end =
 			!this.pastSpan && this.spanEnd > 0 ? this.spanEnd : this.duration;
-		if (t >= end) {
+		if (!repeat && t >= end) {
 			if (this.loop && !this.pastSpan) {
 				this.seek(this.spanStart);
 			} else {
