@@ -92,9 +92,24 @@ Issues and pull requests are welcome. The conventions worth knowing up front:
 
 - bun, not npm or yarn. Svelte 5 runes only.
 - Unit tests sit next to what they cover and run under `bun:test`, for pure logic only. Anything that needs a browser API goes in the Playwright suite under `tests/e2e`.
-- Run `bun check` and both test suites before opening a PR. `bunx playwright install chromium` once, first time.
+- Run `bun check` and both test suites before opening a PR. `bunx playwright install chromium` once, first time. CI runs the same checks, plus formatting and the build, and a PR can't merge until they pass.
 - A new effect is two files: its `EffectDefinition` in `src/lib/effects/definitions.ts`, and its GLSL plus `EffectShaderDef` in `src/lib/gl/effect-shaders.ts`.
 - `bun dev` also serves a shader lab at `/lab/` for auditioning open-source ISF shaders on real footage before porting one. It's dev-only and not part of the build; see `lab/README.md`.
+
+### Pull requests and releases
+
+Everything reaches `main` through a pull request. Branch off `main`, and commit however you like on the branch: PRs are squash-merged, so only the PR title lands on `main`.
+
+That title also becomes a line in the changelog, so write it for the people using the app. It has to be a [conventional commit](https://www.conventionalcommits.org/) with a capitalized subject, and a check on the PR holds it to that:
+
+```
+feat: Lock effects so moshing leaves them alone
+fix: The playhead stays put when the mix changes
+```
+
+`feat`, `fix` and `perf` go into the changelog. `refactor`, `docs`, `test`, `ci`, `build`, `chore` and `style` stay out of it. Don't mark a PR as breaking with `!`: every release is a patch bump until 1.0. If a change affects saved projects, say so in the title or the description.
+
+Leave `version` in `package.json` and `CHANGELOG.md` alone. [release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps both. Merging it tags the version, publishes the GitHub Release and deploys it to [open-mosh.vercel.app](https://open-mosh.vercel.app/). Until then, merged work shows up only on Vercel preview deployments.
 
 ---
 
