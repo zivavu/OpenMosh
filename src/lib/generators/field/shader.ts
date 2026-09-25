@@ -18,6 +18,7 @@ uniform float uCycles;
 uniform vec4  uParams;
 uniform int   uField;
 uniform int   uDomain;
+uniform int   uStyle;
 uniform vec3  uC0,uC1,uC2,uC3,uC4;
 
 float hash21(vec2 p){
@@ -52,7 +53,64 @@ vec2 bend(vec2 p){
   return p;
 }
 
+/** Distance to the nearest cell's centre, and the exact distance to its border (so
+ * lines keep one width); the cell goes in id. */
+vec2 voronoiBorder(vec2 p, float jitter, out vec2 id){
+  vec2 n=floor(p), f=fract(p), mg=vec2(0), mr=vec2(0);
+  float md=8.;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+    vec2 g=vec2(float(x),float(y));
+    vec2 r=g+hash22(n+g+uSeed)*jitter-f;
+    float d=dot(r,r);
+    if(d<md){ md=d; mr=r; mg=g; }
+  }
+  float bd=8.;
+  for(int y=-2;y<=2;y++) for(int x=-2;x<=2;x++){
+    vec2 g=mg+vec2(float(x),float(y));
+    vec2 r=g+hash22(n+g+uSeed)*jitter-f;
+    if(dot(mr-r,mr-r)>1e-5) bd=min(bd,dot(0.5*(mr+r),normalize(r-mr)));
+  }
+  id=n+mg;
+  return vec2(sqrt(md),bd);
+}
+
+/** Style 1: 0 stained glass, 1 pebbles, 2 veins, 3 blobs. */
+float fieldVoronoiArt(vec2 p){
+  int look=int(uParams.z+0.5);
+  p+=(vec2(fbm(p*0.5+uSeed),fbm(p*0.5+vec2(3.1,7.7)+uSeed))-0.5)*uParams.w;
+  vec2 id;
+  vec2 v=voronoiBorder(p,uParams.x,id);
+  float f1=v.x, bd=v.y;
+  float tone=hash21(id*1.3+uSeed);
+  float aa=fwidth(bd);
+  if(look==0){
+    float lead=1.0-smoothstep(0.03,0.03+aa*1.5,bd);
+    float dome=1.0-0.3*f1*f1;
+    float glass=0.9+0.2*fbm(p*5.0+id);
+    float rim=exp(-bd*14.0)*0.18;
+    return clamp(((0.3+0.7*tone)*dome*glass+rim)*(1.0-lead),0.,1.);
+  }
+  if(look==1){
+    float e=clamp(bd/0.22,0.,1.);
+    return sqrt(1.0-(1.0-e)*(1.0-e))*(0.55+0.45*tone);
+  }
+  if(look==2){
+    float w=0.035+aa;
+    float line=exp(-bd*bd/(w*w));
+    float halo=exp(-bd*7.0)*0.35;
+    return clamp(line+halo+0.1*tone,0.,1.);
+  }
+  float soft=0.;
+  vec2 n=floor(p), f=fract(p);
+  for(int y=-2;y<=2;y++) for(int x=-2;x<=2;x++){
+    vec2 g=vec2(float(x),float(y));
+    soft+=exp2(-8.0*length(g+hash22(n+g+uSeed)*uParams.x-f));
+  }
+  return clamp(-log2(soft)/8.0*1.4,0.,1.);
+}
+
 float fieldVoronoi(vec2 p){
+  if(uStyle==1) return fieldVoronoiArt(p);
   float jitter=uParams.x; int metric=int(uParams.y+0.5); int look=int(uParams.z+0.5);
   p+=(vec2(fbm(p*0.5+uSeed),fbm(p*0.5+vec2(3.1,7.7)+uSeed))-0.5)*uParams.w;
   vec2 n=floor(p), f=fract(p);
@@ -79,7 +137,23 @@ float fieldVoronoi(vec2 p){
   return 0.0;
 }
 
+/** Style 1: satin ribbons, light and dark in turn, each its own tone, meeting in a groove. */
+float fieldStripesArt(vec2 p){
+  float freq=uParams.x, warp=uParams.y, hard=uParams.z, ang=uParams.w;
+  vec2 dir=vec2(cos(ang),sin(ang));
+  float ph=(dot(p,dir)+(fbm(p*0.7+uSeed)-0.5)*warp)*freq*2.0;
+  float k=floor(ph);
+  float edge=min(fract(ph),1.0-fract(ph))*2.0;
+  float tone=hash21(vec2(k,uSeed));
+  tone=mod(k,2.0)<1.0 ? 0.2+0.25*tone : 0.65+0.35*tone;
+  float profile=1.0-pow(1.0-edge,mix(2.0,10.0,hard));
+  float h=0.12+profile*(tone-0.12);
+  // Too dense to draw: settle on the average rather than shimmer.
+  return mix(h,0.45,smoothstep(0.3,0.8,fwidth(ph)));
+}
+
 float fieldStripes(vec2 p){
+  if(uStyle==1) return fieldStripesArt(p);
   float freq=uParams.x, warp=uParams.y, hard=uParams.z, ang=uParams.w;
   vec2 dir=vec2(cos(ang),sin(ang));
   float w=(fbm(p*0.7+uSeed)-0.5)*warp;
@@ -126,7 +200,7 @@ void main(){
           : fieldRings(p);
 
   // flat cells carry their own shading; derivative lighting only adds seams
-  float lightAmt = (uField==0 && int(uParams.z+0.5)==2) ? 0.0 : uLight;
+  float lightAmt = (uField==0 && uStyle==0 && int(uParams.z+0.5)==2) ? 0.0 : uLight;
   vec2 g=vec2(dFdx(h),dFdy(h))*uRes.y;
   vec3 n=normalize(vec3(-g*lightAmt,1.));
   vec2 ld=vec2(cos(uAngle),sin(uAngle));

@@ -154,6 +154,7 @@ function drawSpec(
 		gl.uniform4fv(u.uParams, spec.params);
 		gl.uniform1i(u.uField, FIELD_INDEX[spec.field]);
 		gl.uniform1i(u.uDomain, spec.domain);
+		gl.uniform1i(u.uStyle, spec.style ?? 0);
 	}
 	gl.drawArrays(gl.TRIANGLES, 0, 3);
 
