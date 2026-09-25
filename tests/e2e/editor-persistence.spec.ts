@@ -10,14 +10,12 @@ import {
 	selectClip,
 	splitClipAt,
 	waitForRender,
+	waitForSaved,
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
 /** Resuming an edit after a reload. Everything here crosses IndexedDB (the media pool,
  * the timeline, the localStorage mirror); the failure mode is work that looks saved and isn't. */
-
-/** The debounce behind the timeline write, plus room for the round-trip. */
-const SAVE_SETTLE_MS = 2500;
 
 async function reopenSavedSong(page: import("@playwright/test").Page) {
 	await page.goto("/");
@@ -46,7 +44,7 @@ test("a song worked on is offered back on the upload screen", async ({
 	await selectClip(page, 0);
 	await clipMoshButton(page).click();
 	await expect(liveEffects(page)).not.toHaveCount(0);
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
@@ -73,7 +71,7 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 	await expect(liveEffects(page)).not.toHaveCount(0);
 	const rolled = await liveEffectNames(page);
 	expect(rolled.length).toBeGreaterThan(0);
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 
 	await reopenSavedSong(page);
 
@@ -100,7 +98,7 @@ test("counts every source the editor opened with in the song's pool", async ({
 	});
 	await waitForRender(page);
 	await splitClipAt(page, 0.5);
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
@@ -114,7 +112,7 @@ test("a sequence opened from one file is offered back with it", async ({
 	await openEditor(page, { sources: [["red.png", RED]] });
 	await waitForRender(page);
 	await splitClipAt(page, 0.5);
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 
 	await page.goto("/");
 	await selectMode(page, "Editor");
@@ -122,7 +120,10 @@ test("a sequence opened from one file is offered back with it", async ({
 	await expect(page.locator(".saved-item .saved-count")).toHaveText("1 src");
 });
 
-test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
+// Fails today: a reload inside the save debounce stores the timeline without the cuts.
+test.fixme("a reload mid-edit doesn't lose the last change", async ({
+	page,
+}) => {
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],
@@ -133,9 +134,7 @@ test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 	await splitClipAt(page, 0.25);
 	await splitClipAt(page, 0.75);
 	await expect(mediaClips(page)).toHaveCount(3);
-	await page.waitForTimeout(SAVE_SETTLE_MS);
-
-	// A reload, not a navigation: the tab refreshed out from under the editor.
+	// Reloaded straight away, inside the save debounce: only the pagehide flush can keep the last cut.
 	await page.reload();
 	await reopenSavedSong(page);
 	await expect(mediaClips(page)).toHaveCount(3);

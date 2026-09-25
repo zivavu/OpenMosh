@@ -5,14 +5,12 @@ import {
 	selectMode,
 	splitClipAt,
 	waitForRender,
+	waitForSaved,
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
 /** The storage manager, end to end: real edits land in IndexedDB, the modal reads them
  * back grouped by song, and deleting empties both the database and the upload screen's list. */
-
-/** The debounce behind the timeline and session writes, plus the round-trip. */
-const SAVE_SETTLE_MS = 2500;
 
 async function openStorage(page: Page): Promise<Locator> {
 	await page.goto("/");
@@ -70,7 +68,7 @@ async function buildSequence(page: Page, trackName: string): Promise<void> {
 	});
 	await waitForRender(page);
 	await splitClipAt(page, 0.5);
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -204,7 +202,7 @@ test("a single-mode edit with no song is listed without one, and deletable", asy
 	await waitForRender(page);
 	// A single session is only written once something was done to the image.
 	await page.getByRole("button", { name: "MOSH", exact: true }).click();
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 
 	const modal = await openStorage(page);
 	await expect(modal.getByText("Without a song")).toBeVisible();
@@ -229,7 +227,7 @@ test("Delete everything wipes projects and song-less edits together", async ({
 	await openSingle(page, "red.png", RED);
 	await waitForRender(page);
 	await page.getByRole("button", { name: "MOSH", exact: true }).click();
-	await page.waitForTimeout(SAVE_SETTLE_MS);
+	await waitForSaved(page);
 	await buildSequence(page, "track.wav");
 
 	const modal = await openStorage(page);
