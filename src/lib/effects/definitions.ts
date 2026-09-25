@@ -55,6 +55,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "pixelate",
 		name: "Pixelate",
+		// Left out of every roll: it only fits when picked on purpose.
+		moshable: false,
 		params: [
 			{
 				key: "size",
@@ -1473,6 +1475,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "halftone",
 		name: "Halftone",
+		// Left out of every roll: it only fits when picked on purpose.
+		moshable: false,
 		params: [
 			{
 				key: "scale",

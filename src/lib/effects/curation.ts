@@ -21,12 +21,10 @@ export type Family =
 	| "motion"
 	| "time"
 	| "displace"
-	| "block"
 	| "rgb"
 	| "palette"
 	| "grade"
 	| "edges"
-	| "print"
 	| "light"
 	| "focus"
 	| "texture"
@@ -49,12 +47,10 @@ export const FAMILIES: Record<Family, FamilyRule> = {
 	motion: { weight: 0.4, cap: 1, hero: false },
 	time: { weight: 1.2, cap: 1, hero: true },
 	displace: { weight: 1.4, cap: 2, hero: true },
-	block: { weight: 0.6, cap: 1, hero: true },
 	rgb: { weight: 1.1, cap: 1, hero: true },
 	palette: { weight: 1.0, cap: 1, hero: true },
 	grade: { weight: 0.6, cap: 1, hero: false },
 	edges: { weight: 0.8, cap: 1, hero: true },
-	print: { weight: 0.5, cap: 1, hero: true },
 	light: { weight: 0.8, cap: 1, hero: false },
 	focus: { weight: 0.4, cap: 1, hero: false },
 	texture: { weight: 0.7, cap: 1, hero: false },
@@ -115,7 +111,6 @@ export const CURATION: Record<string, Curation> = {
 	"screen-jump": c("glitch", "displace", "intensity"),
 	"resize-glitch": c("glitch", "displace", "chance"),
 	"stylize-glitch": c("glitch", "displace", "level"),
-	pixelate: c("glitch", "block", "size"),
 	"channel-split": c("glitch", "rgb", "amount"),
 	"rgb-burst": c("glitch", "rgb", "amplitude"),
 	stereoscopic: c("glitch", "rgb", "depth"),
@@ -136,7 +131,6 @@ export const CURATION: Record<string, Curation> = {
 	emboss: c("stylize", "edges", "mix"),
 	relief: c("stylize", "edges", "amount"),
 	"flow-contours": c("stylize", "edges"),
-	halftone: c("stylize", "print"),
 
 	glow: c("light", "light", "amount"),
 	"liquid-light": c("light", "light"),
