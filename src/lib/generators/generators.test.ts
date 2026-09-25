@@ -65,6 +65,28 @@ describe("planBatch", () => {
 		for (const s of specs) expect(s.colors[2]).toBe("#e8197a");
 	});
 
+	it("draws new voronoi and stripes in the second style, euclid only and off the tunnel", () => {
+		const voronoi = planBatch(6, wild({ count: 32, kind: "voronoi" }));
+		const looks = new Set<number>();
+		for (const s of voronoi) {
+			if (s.gen !== "field") throw new Error("not a field");
+			expect(s.style).toBe(1);
+			expect(s.params[1]).toBe(0);
+			expect(s.domain).not.toBe(1);
+			looks.add(s.params[2]);
+		}
+		expect([...looks].every((l) => l >= 0 && l <= 3)).toBe(true);
+		expect(looks.size).toBeGreaterThan(2);
+		for (const s of planBatch(6, wild({ count: 8, kind: "stripes" })))
+			expect(s.gen === "field" && s.style).toBe(1);
+	});
+
+	it("leaves the other fields in the original style", () => {
+		for (const kind of ["plasma", "rings"] as const)
+			for (const s of planBatch(6, wild({ count: 8, kind })))
+				expect(s.gen === "field" && s.style).toBeUndefined();
+	});
+
 	it("keeps a cohesive batch to one generator", () => {
 		const specs = planBatch(9, wild({ variety: "cohesive" }));
 		const kinds = new Set(
@@ -118,6 +140,13 @@ describe("png spec embedding", () => {
 			expect(info!.width).toBe(640);
 			expect(info!.height).toBe(360);
 		}
+	});
+
+	it("reads older specs without a style, and refuses a style it doesn't know", () => {
+		const [spec] = planBatch(2, wild({ count: 1, kind: "voronoi" }));
+		const { style: _, ...older } = spec as typeof spec & { style?: 1 };
+		expect(isFieldSpec(older)).toBe(true);
+		expect(isFieldSpec({ ...spec, style: 2 })).toBe(false);
 	});
 
 	it("reads ordinary PNGs and other files as plain media", async () => {

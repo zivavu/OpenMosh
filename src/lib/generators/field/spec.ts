@@ -18,8 +18,9 @@ export type Domain = 0 | 1 | 2;
  * A height field mapped through the shared ramp and crease lighting. `params`
  * mean different things per kind:
  *
- * - voronoi: [jitter 0-1, metric 0 euclid/1 manhattan/2 chebyshev, look 0 blobs/1 cracks/2 flat cells, warp]
- * - stripes: [frequency, warp, hardness 0-1, stripe angle rad]
+ * - voronoi: [jitter 0-1, metric 0 euclid/1 manhattan/2 chebyshev, look 0 blobs/1 cracks/2 flat cells, warp];
+ *   under style 1 the metric is always euclid and the looks are 0 glass/1 pebbles/2 veins/3 blobs
+ * - stripes: [frequency, warp, hardness 0-1, stripe angle rad]; style 1 draws them as satin ribbons
  * - plasma:  [x freq, y freq, diagonal freq, radial freq]
  * - rings:   [centres 1-4, frequency, decay, linear-wave mix 0-1]
  */
@@ -39,6 +40,8 @@ export interface FieldSpec {
 	gamma: number;
 	grain: number;
 	colors: Colors;
+	/** Which set of looks drew it. Absent on older images, which keep drawing as saved. */
+	style?: 1;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -76,6 +79,7 @@ export function isFieldSpec(v: unknown): v is FieldSpec {
 		!s.params.every(finite)
 	)
 		return false;
+	if (s.style !== undefined && s.style !== 1) return false;
 	const cols = s.colors;
 	return (
 		Array.isArray(cols) &&
