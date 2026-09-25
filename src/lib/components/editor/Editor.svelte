@@ -4949,6 +4949,7 @@
 				targetLabel={panelLane?.name ?? null}
 				targetOwnsSettings={!!panelLane?.settings}
 				onFollowEditor={followEditorSettings}
+				labelEditorScope={isSequenceMode}
 				{hasAudio}
 				showTiming={isSequenceMode || !!audio.trackFile}
 				bpm={sequenceBpm}
