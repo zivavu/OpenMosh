@@ -46,6 +46,8 @@
 		targetOwnsSettings?: boolean;
 		/** Drop the lane's own settings so it follows the editor's again. */
 		onFollowEditor?: () => void;
+		/** With no lane targeted, say the settings are the editor's own. */
+		labelEditorScope?: boolean;
 		/** The song's tempo: what auto clips re-roll against, and what beat-synced effects follow. */
 		showTiming?: boolean;
 		bpm?: number;
@@ -69,6 +71,7 @@
 		targetLabel = null,
 		targetOwnsSettings = false,
 		onFollowEditor,
+		labelEditorScope = false,
 		showTiming = false,
 		bpm = 0,
 		bpmDetecting = false,
@@ -88,7 +91,7 @@
 	}
 </script>
 
-<!-- Whose settings these are: a lane's, or (unlabelled) the editor's own. -->
+<!-- Whose settings these are: a lane's, or the editor's own. -->
 {#snippet head(title: string)}
 	<div class="section-head">
 		<span class="rack-label">{title}</span>
@@ -110,6 +113,14 @@
 					follows editor
 				</span>
 			{/if}
+		{:else if title === "Mosh" && labelEditorScope}
+			<span class="scope-name">Editor</span>
+			<span
+				class="scope-mode"
+				title="The editor's own settings. Text clips, and every lane without settings of its own, follow them."
+			>
+				global
+			</span>
 		{/if}
 	</div>
 {/snippet}
