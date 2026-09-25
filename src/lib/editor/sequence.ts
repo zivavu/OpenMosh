@@ -81,17 +81,22 @@ export function isHandBuiltLabel(span: {
 	return !span.presetName && span.label !== "mosh" && span.label !== "auto";
 }
 
-/** A fresh chain that keeps `from`'s locked effects as they are, where they sat. */
+/** Kept through a roll: locked, or switched on by hand where no roll may pick it. */
+function isHeld(e: EffectInstance): boolean {
+	return e.locked || (e.enabled && getDefinition(e.defId)?.moshable === false);
+}
+
+/** A fresh chain that keeps `from`'s held effects as they are, where they sat. */
 export function keepLocked(
 	fresh: EffectInstance[],
 	from: EffectInstance[],
 ): EffectInstance[] {
-	if (!from.some((e) => e.locked)) return fresh;
+	if (!from.some(isHeld)) return fresh;
 	const byDef = new Map(fresh.map((e) => [e.defId, e]));
-	for (const e of from) if (e.locked) byDef.delete(e.defId);
+	for (const e of from) if (isHeld(e)) byDef.delete(e.defId);
 	const out: EffectInstance[] = [];
 	for (const e of from) {
-		if (e.locked) {
+		if (isHeld(e)) {
 			out.push(cloneEffectInstance(e));
 			continue;
 		}
@@ -105,7 +110,7 @@ export function keepLocked(
 
 /** What a chain's locks hold, for cache keys: a roll over it changes with them. */
 export function lockedKey(effects: EffectInstance[]): string {
-	const locked = effects.filter((e) => e.locked);
+	const locked = effects.filter(isHeld);
 	if (locked.length === 0) return "";
 	return JSON.stringify(
 		locked.map((e) => [
