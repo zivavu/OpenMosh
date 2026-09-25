@@ -4,11 +4,11 @@ import {
 	liveEffects,
 	openEditor,
 	PREVIEW_CANVAS,
-	segmentMoshButton,
-	segments,
+	clipMoshButton,
+	mediaClips,
 	selectMode,
-	selectSegment,
-	splitSegmentAt,
+	selectClip,
+	splitClipAt,
 	waitForRender,
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
@@ -43,8 +43,8 @@ test("a song worked on is offered back on the upload screen", async ({
 		],
 	});
 	await waitForRender(page);
-	await selectSegment(page, 0);
-	await segmentMoshButton(page).click();
+	await selectClip(page, 0);
+	await clipMoshButton(page).click();
 	await expect(liveEffects(page)).not.toHaveCount(0);
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
@@ -67,9 +67,9 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 	});
 	await waitForRender(page);
 
-	await splitSegmentAt(page, 0.5);
-	await selectSegment(page, 0);
-	await segmentMoshButton(page).click();
+	await splitClipAt(page, 0.5);
+	await selectClip(page, 0);
+	await clipMoshButton(page).click();
 	await expect(liveEffects(page)).not.toHaveCount(0);
 	const rolled = await liveEffectNames(page);
 	expect(rolled.length).toBeGreaterThan(0);
@@ -77,13 +77,13 @@ test("reopening it restores the cuts, the pool and every chain", async ({
 
 	await reopenSavedSong(page);
 
-	await expect(segments(page)).toHaveCount(2);
+	await expect(mediaClips(page)).toHaveCount(2);
 	// The whole pool came back, not just the source the clips point at.
 	await expect(page.getByText("3 SOURCES")).toBeVisible();
-	await selectSegment(page, 0);
+	await selectClip(page, 0);
 	expect(await liveEffectNames(page)).toEqual(rolled);
-	// The segment never moshed is still clean, not inheriting its neighbour's chain.
-	await selectSegment(page, 1);
+	// The clip never moshed is still clean, not inheriting its neighbour's chain.
+	await selectClip(page, 1);
 	await expect(liveEffects(page)).toHaveCount(0);
 });
 
@@ -99,7 +99,7 @@ test("counts every source the editor opened with in the song's pool", async ({
 		],
 	});
 	await waitForRender(page);
-	await splitSegmentAt(page, 0.5);
+	await splitClipAt(page, 0.5);
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
 	await page.goto("/");
@@ -113,7 +113,7 @@ test("a sequence opened from one file is offered back with it", async ({
 	// The one file is the whole pool, and the pool is the song's, so this is as resumable as any.
 	await openEditor(page, { sources: [["red.png", RED]] });
 	await waitForRender(page);
-	await splitSegmentAt(page, 0.5);
+	await splitClipAt(page, 0.5);
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
 	await page.goto("/");
@@ -130,15 +130,15 @@ test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 		],
 	});
 	await waitForRender(page);
-	await splitSegmentAt(page, 0.25);
-	await splitSegmentAt(page, 0.75);
-	await expect(segments(page)).toHaveCount(3);
+	await splitClipAt(page, 0.25);
+	await splitClipAt(page, 0.75);
+	await expect(mediaClips(page)).toHaveCount(3);
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 
 	// A reload, not a navigation: the tab refreshed out from under the editor.
 	await page.reload();
 	await reopenSavedSong(page);
-	await expect(segments(page)).toHaveCount(3);
+	await expect(mediaClips(page)).toHaveCount(3);
 });
 
 test("starts clean when there's nothing stored yet", async ({ page }) => {

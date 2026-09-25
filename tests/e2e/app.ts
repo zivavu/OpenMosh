@@ -132,7 +132,7 @@ export interface OpenEditorOptions {
 	track?: WavOptions & { name?: string };
 }
 
-/** Take the upload screen through to the segment editor. The song goes in first on
+/** Take the upload screen through to the editor. The song goes in first on
  * purpose: the upload screen holds media back until a track arrives and launches then. */
 export async function openEditor(
 	page: Page,
@@ -161,12 +161,8 @@ export function recordButton(page: Page): Locator {
 	return page.getByRole("button", { name: "RECORD", exact: true });
 }
 
-export function segments(page: Page): Locator {
-	return mediaClips(page, 0);
-}
-
 /** The chain lists every effect the app has; only the enabled ones render. The panel's
- * "N live" readout counts these, so this is what a spec means by effects on a segment. */
+ * "N live" readout counts these, so this is what a spec means by effects on a clip. */
 export function liveEffects(page: Page): Locator {
 	return page.locator(".effect-item.enabled");
 }
@@ -178,10 +174,8 @@ export async function liveEffectNames(page: Page): Promise<string[]> {
 		.then((names) => names.map((n) => n.trim()));
 }
 
-export async function splitSegmentAt(
-	page: Page,
-	fraction: number,
-): Promise<void> {
+/** Ctrl+click the opening layer to cut its clip. */
+export async function splitClipAt(page: Page, fraction: number): Promise<void> {
 	const lane = mediaLaneTrack(page, 0);
 	const box = (await lane.boundingBox())!;
 	await lane.click({
@@ -190,13 +184,13 @@ export async function splitSegmentAt(
 	});
 }
 
-export async function selectSegment(page: Page, index: number): Promise<void> {
-	await segments(page).nth(index).click();
+export async function selectClip(page: Page, index: number): Promise<void> {
+	await mediaClips(page).nth(index).click();
 	await expect(page.locator(".chain-count")).toBeVisible();
 }
 
 /** Roll a random chain onto the selected clip. */
-export function segmentMoshButton(page: Page): Locator {
+export function clipMoshButton(page: Page): Locator {
 	return page.getByTitle("Random mosh for this clip");
 }
 
@@ -271,7 +265,7 @@ export function layerButtons(page: Page): Locator {
 	);
 }
 
-export function segmentBar(page: Page): Locator {
+export function chainBar(page: Page): Locator {
 	return page.locator(".chain-bar");
 }
 

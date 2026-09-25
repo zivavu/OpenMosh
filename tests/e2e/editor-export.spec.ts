@@ -3,9 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import {
 	openEditor,
 	recordButton,
-	segmentMoshButton,
-	selectSegment,
-	splitSegmentAt,
+	clipMoshButton,
+	selectClip,
+	splitClipAt,
 	waitForRender,
 } from "./app";
 import { GREEN, RED } from "./fixtures";
@@ -103,7 +103,7 @@ test("runs as long as the song it was cut to", async ({ page }) => {
 });
 
 test("exports a timeline that was cut and moshed", async ({ page }) => {
-	// The plain export above renders one clean source end to end. This one has the segment
+	// The plain export above renders one clean source end to end. This one has the clip
 	// machinery in the loop: a cut, a rolled chain on one side, a source swap at the boundary.
 	await openEditor(page, {
 		sources: [
@@ -114,9 +114,9 @@ test("exports a timeline that was cut and moshed", async ({ page }) => {
 	});
 	await waitForRender(page);
 
-	await splitSegmentAt(page, 0.5);
-	await selectSegment(page, 0);
-	await segmentMoshButton(page).click();
+	await splitClipAt(page, 0.5);
+	await selectClip(page, 0);
+	await clipMoshButton(page).click();
 
 	const file = await await exportAt(page);
 	const path = (await file.path())!;

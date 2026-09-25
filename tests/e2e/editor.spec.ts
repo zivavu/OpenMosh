@@ -5,16 +5,16 @@ import {
 	liveEffects,
 	nearestColor,
 	openEditor,
-	segmentMoshButton,
-	segments,
-	selectSegment,
-	splitSegmentAt,
+	clipMoshButton,
+	mediaClips,
+	selectClip,
+	splitClipAt,
 	waitForRender,
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
 /** Editor (sequence) mode, end to end in a real browser: a song on a master clock, a pool
- * of sources, segments cutting between them, and a chain per segment. */
+ * of sources, clips cutting between them, and a chain per clip. */
 
 const PALETTE = { red: RED, green: GREEN, blue: BLUE };
 
@@ -40,12 +40,12 @@ test.describe("opening the editor", () => {
 		expect(stats.variance).toBeLessThan(1);
 	});
 
-	test("starts as one segment covering the whole song", async ({ page }) => {
+	test("starts as one clip covering the whole song", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
 
 		// The source lane partitions the timeline, so a fresh timeline is exactly one block.
-		await expect(segments(page)).toHaveCount(1);
+		await expect(mediaClips(page)).toHaveCount(1);
 	});
 
 	test("takes every source into the pool", async ({ page }) => {
@@ -62,12 +62,12 @@ test.describe("opening the editor", () => {
 });
 
 test.describe("cutting the timeline", () => {
-	test("a ctrl+click splits one segment into two", async ({ page }) => {
+	test("a ctrl+click splits one clip into two", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
 
-		await splitSegmentAt(page, 0.25);
-		await expect(segments(page)).toHaveCount(2);
+		await splitClipAt(page, 0.25);
+		await expect(mediaClips(page)).toHaveCount(2);
 	});
 
 	test("the two halves still cover the timeline end to end", async ({
@@ -75,11 +75,11 @@ test.describe("cutting the timeline", () => {
 	}) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
-		const whole = (await segments(page).first().boundingBox())!;
+		const whole = (await mediaClips(page).first().boundingBox())!;
 
-		await splitSegmentAt(page, 0.5);
-		const left = (await segments(page).nth(0).boundingBox())!;
-		const right = (await segments(page).nth(1).boundingBox())!;
+		await splitClipAt(page, 0.5);
+		const left = (await mediaClips(page).nth(0).boundingBox())!;
+		const right = (await mediaClips(page).nth(1).boundingBox())!;
 
 		// Flush against each other, and between them the width of the original. The rects are
 		// drawn a pixel apart so the boundary handle reads as a seam, so this is about no gap.
@@ -89,24 +89,22 @@ test.describe("cutting the timeline", () => {
 		expect(left.width + right.width).toBeLessThan(whole.width + 3);
 	});
 
-	test("splits again inside a segment that was already cut", async ({
-		page,
-	}) => {
+	test("splits again inside a clip that was already cut", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
 
-		await splitSegmentAt(page, 0.5);
-		await splitSegmentAt(page, 0.75);
-		await expect(segments(page)).toHaveCount(3);
+		await splitClipAt(page, 0.5);
+		await splitClipAt(page, 0.75);
+		await expect(mediaClips(page)).toHaveCount(3);
 	});
 });
 
-test.describe("a segment's chain", () => {
-	test("opens empty when the segment is picked", async ({ page }) => {
+test.describe("a clip's chain", () => {
+	test("opens empty when the clip is picked", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
 
-		await selectSegment(page, 0);
+		await selectClip(page, 0);
 		await expect(page.locator(".chain-count")).toHaveText(/0 live/i);
 		await expect(liveEffects(page)).toHaveCount(0);
 	});
@@ -119,8 +117,8 @@ test.describe("a segment's chain", () => {
 		await openEditor(page, { sources: [["pattern.png", "pattern"]] });
 		const clean = await waitForRender(page);
 
-		await selectSegment(page, 0);
-		await segmentMoshButton(page).click();
+		await selectClip(page, 0);
+		await clipMoshButton(page).click();
 
 		await expect(liveEffects(page)).not.toHaveCount(0);
 		// The preview is the point: a chain the renderer never picked up still lists effects.
@@ -135,12 +133,12 @@ test.describe("a segment's chain", () => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
 
-		await selectSegment(page, 0);
-		await segmentMoshButton(page).click();
+		await selectClip(page, 0);
+		await clipMoshButton(page).click();
 		await expect(liveEffects(page)).not.toHaveCount(0);
 		const first = await liveEffectNames(page);
 
-		await segmentMoshButton(page).click();
+		await clipMoshButton(page).click();
 		await expect
 			.poll(async () => (await liveEffectNames(page)).join(), {
 				message: "the second mosh rolled the same chain",
@@ -148,34 +146,34 @@ test.describe("a segment's chain", () => {
 			.not.toBe(first.join());
 	});
 
-	test("moshes each segment on its own", async ({ page }) => {
+	test("moshes each clip on its own", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
-		await splitSegmentAt(page, 0.5);
+		await splitClipAt(page, 0.5);
 
-		await selectSegment(page, 0);
-		await segmentMoshButton(page).click();
+		await selectClip(page, 0);
+		await clipMoshButton(page).click();
 		await expect(liveEffects(page)).not.toHaveCount(0);
 		const first = await liveEffectNames(page);
 
-		await selectSegment(page, 1);
+		await selectClip(page, 1);
 		await expect(liveEffects(page)).toHaveCount(0);
 
-		await selectSegment(page, 0);
+		await selectClip(page, 0);
 		expect(await liveEffectNames(page)).toEqual(first);
 	});
 
-	test("keeps a segment's chain across a re-select", async ({ page }) => {
+	test("keeps a clip's chain across a re-select", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
 
-		await selectSegment(page, 0);
-		await segmentMoshButton(page).click();
+		await selectClip(page, 0);
+		await clipMoshButton(page).click();
 		await expect(liveEffects(page)).not.toHaveCount(0);
 		const rolled = await liveEffectNames(page);
 
 		await page.keyboard.press("Escape");
-		await selectSegment(page, 0);
+		await selectClip(page, 0);
 		expect(await liveEffectNames(page)).toEqual(rolled);
 	});
 });

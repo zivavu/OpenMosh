@@ -7,8 +7,8 @@ import {
 	modeToggle,
 	openEditor,
 	openSingle,
-	segmentBar,
-	selectSegment,
+	chainBar,
+	selectClip,
 	sheetContent,
 	sheetHandle,
 	sheetTab,
@@ -109,7 +109,7 @@ test.describe("timeline", () => {
 	});
 });
 
-test.describe("segment bar in a narrow window", () => {
+test.describe("chain bar in a narrow window", () => {
 	// A desktop browser squeezed narrow, not a phone: the editor is not offered to touch devices.
 	test.use({
 		isMobile: false,
@@ -120,9 +120,9 @@ test.describe("segment bar in a narrow window", () => {
 	test("wraps instead of running off the edge", async ({ page }) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
-		await selectSegment(page, 0);
+		await selectClip(page, 0);
 
-		const bar = segmentBar(page);
+		const bar = chainBar(page);
 		await expect(bar).toBeVisible();
 		const width = page.viewportSize()!.width;
 		for (const box of await bar
