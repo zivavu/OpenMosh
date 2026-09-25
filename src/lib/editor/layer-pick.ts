@@ -48,15 +48,19 @@ export function pointInLayer(
 	);
 }
 
-/** The layer a click at `px`, `py` lands on: the one drawn last of those it hits. */
+/** The layer a click at `px`, `py` lands on: the selected one if it is hit, else the one drawn last. */
 export function pickTopLayer(
 	boxes: LayerHitBox[],
 	px: number,
 	py: number,
+	selected: { kind: "media" | "text"; laneId: string } | null = null,
 ): LayerHitBox | null {
 	let top: LayerHitBox | null = null;
 	for (const box of boxes) {
 		if (!pointInLayer(box, px, py)) continue;
+		if (box.kind === selected?.kind && box.laneId === selected.laneId) {
+			return box;
+		}
 		if (!top || drawnAfter(box, top)) top = box;
 	}
 	return top;

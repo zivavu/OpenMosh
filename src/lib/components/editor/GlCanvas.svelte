@@ -338,7 +338,17 @@
 			),
 			x,
 			y,
+			selectedLayer(),
 		);
+	}
+
+	/** The layer the outline marks; a press on it keeps it even under another. */
+	function selectedLayer(): { kind: "media" | "text"; laneId: string } | null {
+		if (selectedMediaLane)
+			return { kind: "media", laneId: selectedMediaLane.id };
+		const id = selectedTextClipId;
+		const text = id ? pickable.text.find((l) => l.clipId === id) : null;
+		return text ? { kind: "text", laneId: text.laneId } : null;
 	}
 
 	// Both gestures work in output pixels, converting to normalized units when writing.
