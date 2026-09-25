@@ -629,6 +629,7 @@ describe("appendFxLane", () => {
 const LANE_SETTINGS: FxLaneSettings = {
 	moshMin: 1,
 	moshMax: 1,
+	moshStyle: "curated",
 	randomizeOrder: false,
 	moshAudioLink: false,
 	moshAudioLinkStrength: 0,
@@ -710,5 +711,13 @@ describe("per-lane settings", () => {
 			{ id: "a", name: "a", clips: [], settings: { moshMin: 2 } },
 		]);
 		expect(dropped.settings).toBeUndefined();
+	});
+
+	test("settings saved before the curated style read as random", () => {
+		const { moshStyle: _, ...older } = LANE_SETTINGS;
+		const [lane] = normalizeFxLanes([
+			{ id: "a", name: "a", clips: [], settings: older },
+		]);
+		expect(lane.settings?.moshStyle).toBe("random");
 	});
 });

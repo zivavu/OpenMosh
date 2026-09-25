@@ -20,6 +20,7 @@
 		type MediaRect,
 	} from "../../editor/layer-pick";
 	import { clampMove, scaleFromHandle } from "../../editor/layer-drag";
+	import { frameLooksDead } from "../../editor/frame-check";
 	import { onFontsChanged } from "../../text-overlay";
 	import { overlayTextBox } from "../../text-overlay/draw";
 	import {
@@ -1008,6 +1009,14 @@
 	});
 
 	// An erase mask is decoded from a data URL, so it lands a frame or two after the edit.
+	/** Draw what the editor holds right now and judge it; false whenever it can't tell. */
+	export function frameLooksDeadNow(): boolean {
+		if (!renderer || suspended || externallyDriven || !imageReady) return false;
+		drawFrame(performance.now() / 1000);
+		const sample = renderer.sampleFrame();
+		return !!sample && frameLooksDead(sample.pixels, sample.w, sample.h);
+	}
+
 	$effect(() => {
 		const r = renderer;
 		if (!r) return;

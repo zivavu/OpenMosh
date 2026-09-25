@@ -720,6 +720,7 @@
 	const saved = loadSettings();
 	let moshMin = $state(saved.moshMin ?? DEFAULT_SETTINGS.moshMin);
 	let moshMax = $state(saved.moshMax ?? DEFAULT_SETTINGS.moshMax);
+	let moshStyle = $state(saved.moshStyle ?? DEFAULT_SETTINGS.moshStyle);
 	let randomizeOrder = $state(
 		saved.randomizeOrder ?? DEFAULT_SETTINGS.randomizeOrder,
 	);
@@ -857,6 +858,7 @@
 	$effect(() => {
 		moshMin;
 		moshMax;
+		moshStyle;
 		randomizeOrder;
 		moshAudioLink;
 		moshAudioLinkStrength;
@@ -874,6 +876,7 @@
 		updateSettings({
 			moshMin,
 			moshMax,
+			moshStyle,
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
@@ -1137,6 +1140,7 @@
 		return {
 			moshMin,
 			moshMax,
+			moshStyle,
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
@@ -1424,6 +1428,7 @@
 		return {
 			moshMin,
 			moshMax,
+			moshStyle,
 			randomizeOrder,
 			moshAudioLink,
 			moshAudioLinkStrength,
@@ -1479,7 +1484,7 @@
 				fxClipMoshSnapshot($state.snapshot(clip) as FxClip),
 			);
 		}
-		fxLanes = rollFxClips(fxLanes, ids, getMoshOptions());
+		rollAlive(() => (fxLanes = rollFxClips(fxLanes, ids, getMoshOptions())));
 		for (const clip of fxClipsById(ids)) {
 			fxMoshHistory.push(
 				clip.id,
@@ -2359,10 +2364,26 @@
 		else effects = v;
 	}
 
+	/** Extra tries a curated roll gets when the preview comes out dead. */
+	const DEAD_ROLL_RETRIES = 4;
+	let glCanvasRef: GlCanvas | undefined = $state(undefined);
+
+	/** Roll; in curated style, roll again while the preview comes out black, white,
+	 * flat or noise. The last try stands either way. */
+	function rollAlive(roll: () => void) {
+		roll();
+		if (moshStyle !== "curated") return;
+		for (let i = 0; i < DEAD_ROLL_RETRIES; i++) {
+			if (!glCanvasRef?.frameLooksDeadNow()) return;
+			roll();
+		}
+	}
+
 	const moshSession = createMoshSession({
 		getEffects: () => effects,
 		setEffects: (v) => (effects = v),
 		getMoshOptions,
+		rollAlive,
 		cancelBurst: () => panelBurst.cancel(),
 		endBurst: () => panelBurst.end(),
 	});
@@ -3497,7 +3518,9 @@
 				chainClipMoshSnapshot($state.snapshot(clip) as TextClip),
 			);
 		}
-		textTimeline = rollTextClips(textTimeline, ids, getMoshOptions());
+		rollAlive(
+			() => (textTimeline = rollTextClips(textTimeline, ids, getMoshOptions())),
+		);
 		for (const clip of textClipsById(ids)) {
 			textMoshHistory.push(
 				clip.id,
@@ -3561,7 +3584,10 @@
 				chainClipMoshSnapshot($state.snapshot(clip) as MediaClip),
 			);
 		}
-		mediaTimeline = rollMediaClips(mediaTimeline, ids, getMoshOptions());
+		rollAlive(
+			() =>
+				(mediaTimeline = rollMediaClips(mediaTimeline, ids, getMoshOptions())),
+		);
 		for (const clip of mediaClipsById(ids)) {
 			mediaMoshHistory.push(
 				clip.id,
@@ -4151,6 +4177,7 @@
 				</button>
 			{/if}
 			<GlCanvas
+				bind:this={glCanvasRef}
 				imageSrc={generatedSrc ?? imageSrc}
 				effects={renderedEffects}
 				postLayers={fxLayers}
@@ -4813,6 +4840,10 @@
 				bind:moshMax={
 					() => fxSetting("moshMax", moshMax),
 					(v) => setFxSetting("moshMax", v, (g) => (moshMax = g))
+				}
+				bind:moshStyle={
+					() => fxSetting("moshStyle", moshStyle),
+					(v) => setFxSetting("moshStyle", v, (g) => (moshStyle = g))
 				}
 				bind:randomizeOrder={
 					() => fxSetting("randomizeOrder", randomizeOrder),

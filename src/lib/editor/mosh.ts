@@ -7,10 +7,19 @@ import {
 	type VolumeLink,
 } from "../effects";
 import { shuffleInPlace } from "../utils";
+import type { Family } from "../effects/curation";
+import { curationOf } from "../effects/curation";
+import { applyHierarchy, curatedOrder, pickCurated } from "./curated-mosh";
+
+/** Random scatters any effects in any order; curated composes. See curated-mosh.ts. */
+export type MoshStyle = "random" | "curated";
 
 export interface MoshOptions {
 	moshMin: number;
 	moshMax: number;
+	/** Absent = random. */
+	moshStyle?: MoshStyle;
+	/** Random style only: curated sets its own order. */
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
 	/** 0-1: controls how many params get linked and how wide their range is. */
@@ -146,6 +155,32 @@ export function generateMosh(
 	const target =
 		clampedMin + Math.floor(Math.random() * (clampedMax - clampedMin + 1));
 
+	if (options.moshStyle === "curated") {
+		rollCurated(effects, moshable, target);
+	} else {
+		rollRandom(effects, moshable, target, randomizeOrder);
+	}
+
+	if (moshAudioLink) {
+		applyRandomAudioLinks(
+			effects,
+			options.hasAudio,
+			moshAudioLinkStrength,
+			moshLinkBand,
+		);
+	} else {
+		for (const effect of effects) {
+			if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;
+		}
+	}
+}
+
+function rollRandom(
+	effects: EffectInstance[],
+	moshable: EffectInstance[],
+	target: number,
+	randomizeOrder: boolean,
+): void {
 	const indices = shuffleInPlace(moshable.map((_, i) => i));
 	const enabledSet = new Set(indices.slice(0, target));
 
@@ -167,19 +202,37 @@ export function generateMosh(
 			effects[moshableIndices[k]] = snapshot[shuffled[k]];
 		}
 	}
+}
 
-	if (moshAudioLink) {
-		applyRandomAudioLinks(
-			effects,
-			options.hasAudio,
-			moshAudioLinkStrength,
-			moshLinkBand,
-		);
-	} else {
-		for (const effect of effects) {
-			if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;
-		}
+/** Picks into the slots `pool` holds, in chain order, the rest after them. */
+function rollCurated(
+	effects: EffectInstance[],
+	pool: EffectInstance[],
+	target: number,
+): void {
+	// What's already on and out of the roll's reach still fills its family.
+	const taken = new Map<Family, number>();
+	for (const e of effects) {
+		if (!e.enabled || pool.includes(e)) continue;
+		const family = curationOf(e.defId).family;
+		taken.set(family, (taken.get(family) ?? 0) + 1);
 	}
+	for (const e of pool) e.enabled = false;
+	const picked = pickCurated(pool, target, taken);
+	for (const e of picked) {
+		e.enabled = true;
+		const def = getDefinition(e.defId);
+		if (def) randomizeParams(e.values, def);
+	}
+	applyHierarchy(picked);
+	const slots = effects
+		.map((e, i) => (pool.includes(e) ? i : -1))
+		.filter((i) => i !== -1);
+	const order = [
+		...curatedOrder(picked),
+		...pool.filter((e) => !picked.includes(e)),
+	];
+	slots.forEach((slot, k) => (effects[slot] = order[k]));
 }
 
 export function clearEffects(effects: EffectInstance[]): void {
