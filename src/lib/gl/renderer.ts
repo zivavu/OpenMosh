@@ -43,6 +43,7 @@ import {
 	PASSTHROUGH_FRAG,
 	ALPHA_MERGE_FRAG,
 	ALPHA_TO_RGB_FRAG,
+	LAYER_EDGE_FRAG,
 	TEXT_BLEND_FRAG,
 	LAYER_TRANSFORM_FRAG,
 	EFFECT_SHADERS,
@@ -211,6 +212,23 @@ function addPostInstanceIds(live: Set<string>, post: PostChainLayer[]): void {
 	for (const l of post) addInstanceIds(live, l.effects);
 }
 
+/** A layer the preview outlines by its drawn pixels. See GlRenderer.traceHighlight. */
+export type HighlightTarget =
+	{ kind: "media"; laneId: string } | { kind: "text"; clipId: string };
+
+export function highlightKey(target: HighlightTarget): string {
+	return target.kind === "media"
+		? `media:${target.laneId}`
+		: `text:${target.clipId}`;
+}
+
+export interface LayerHighlight {
+	/** highlightKey of the target it was traced for. */
+	key: string;
+	/** Null when the layer wasn't on screen. */
+	image: ImageData | null;
+}
+
 /** One clear texel; see GlRenderer.clearSource. */
 const CLEAR_PIXEL = new Uint8Array([0, 0, 0, 0]);
 
@@ -354,6 +372,26 @@ export class GlRenderer {
 		params: TrackingParams;
 		time: number;
 	} | null = null;
+
+	/** Asked for by traceHighlight, consumed by the next render. */
+	private highlightRequest: {
+		target: HighlightTarget;
+		w: number;
+		h: number;
+	} | null = null;
+	/** The requested layer's prepared texture, found while preparing layers. */
+	private highlightTex: WebGLTexture | null = null;
+	private highlightTarget: {
+		tex: WebGLTexture;
+		fbo: WebGLFramebuffer;
+		pbo: WebGLBuffer;
+		w: number;
+		h: number;
+		pixels: Uint8ClampedArray<ArrayBuffer>;
+	} | null = null;
+	private highlightFence: WebGLSync | null = null;
+	private highlightPendingKey = "";
+	private highlightResult: LayerHighlight | null = null;
 
 	constructor(private canvas: HTMLCanvasElement) {
 		// antialias defaults to true, which multisamples and resolves the default
@@ -920,7 +958,17 @@ export class GlRenderer {
 		if (!presentFBO || !presentTex) return;
 		// Layers run their own chains through the shared ping-pong, so they finish
 		// before the main chain starts using it.
-		const prepared = this.prepareLayers(textLayers, mediaLayers, time, safeDt);
+		const trace = this.highlightRequest;
+		this.highlightRequest = null;
+		this.highlightTex = null;
+		const prepared = this.prepareLayers(
+			textLayers,
+			mediaLayers,
+			time,
+			safeDt,
+			trace?.target ?? null,
+		);
+		if (trace) this.startHighlightRead(trace);
 
 		// Layers over the finished frame composite after the fx lanes when a lane is
 		// under them, which the flat chain can't express.
@@ -1839,6 +1887,128 @@ export class GlRenderer {
 		this.salPending = null;
 	}
 
+	/** Trace `target`'s drawn edge on the next render, at `w`×`h`. Read back rather
+	 * than drawn here, so the canvas an export reads never carries it. */
+	traceHighlight(target: HighlightTarget, w: number, h: number) {
+		this.highlightRequest = { target, w, h };
+	}
+
+	/** True while a trace is still on the GPU; poll takeHighlight until it isn't. */
+	get highlightPending(): boolean {
+		return this.highlightFence !== null;
+	}
+
+	/** The newest finished trace, handed out once. Never stalls. */
+	takeHighlight(): LayerHighlight | null {
+		this.pollHighlight(false);
+		const result = this.highlightResult;
+		this.highlightResult = null;
+		return result;
+	}
+
+	private startHighlightRead(trace: {
+		target: HighlightTarget;
+		w: number;
+		h: number;
+	}) {
+		const gl = this.gl;
+		// Collected even if unfinished: a newer trace must never be dropped for it.
+		this.pollHighlight(true);
+		const key = highlightKey(trace.target);
+		const tex = this.highlightTex;
+		if (!tex) {
+			this.highlightResult = { key, image: null };
+			return;
+		}
+		const prog = this.helperProgram("__layerEdge", LAYER_EDGE_FRAG);
+		const target = this.ensureHighlightTarget(trace.w, trace.h);
+		if (!prog || !target) return;
+		gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+		gl.viewport(0, 0, target.w, target.h);
+		gl.useProgram(prog.program);
+		if (prog.uniforms["u_flipY"]) gl.uniform1f(prog.uniforms["u_flipY"], 1.0);
+		if (prog.uniforms["u_outSize"]) {
+			gl.uniform2f(prog.uniforms["u_outSize"], target.w, target.h);
+		}
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
+		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, target.pbo);
+		// Orphaned every read, for the same reason as the saliency PBO.
+		gl.bufferData(
+			gl.PIXEL_PACK_BUFFER,
+			target.pixels.byteLength,
+			gl.STREAM_READ,
+		);
+		gl.readPixels(0, 0, target.w, target.h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+		this.highlightFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+		this.highlightPendingKey = key;
+	}
+
+	/** Collect the in-flight trace once its fence signals, or right away with `force`. */
+	private pollHighlight(force: boolean) {
+		const gl = this.gl;
+		const target = this.highlightTarget;
+		if (!this.highlightFence || !target) return;
+		if (!force) {
+			const status = gl.clientWaitSync(this.highlightFence, 0, 0);
+			if (status !== gl.ALREADY_SIGNALED && status !== gl.CONDITION_SATISFIED) {
+				return;
+			}
+		}
+		gl.deleteSync(this.highlightFence);
+		this.highlightFence = null;
+		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, target.pbo);
+		gl.getBufferSubData(
+			gl.PIXEL_PACK_BUFFER,
+			0,
+			new Uint8Array(target.pixels.buffer),
+		);
+		gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+		this.highlightResult = {
+			key: this.highlightPendingKey,
+			image: new ImageData(target.pixels, target.w, target.h),
+		};
+	}
+
+	private ensureHighlightTarget(w: number, h: number) {
+		const current = this.highlightTarget;
+		if (current && current.w === w && current.h === h) return current;
+		this.deleteHighlightTarget();
+		const gl = this.gl;
+		const tex = this.createTexture(w, h);
+		const fbo = this.createRenderTarget(tex);
+		const pbo = gl.createBuffer();
+		if (!fbo) {
+			gl.deleteTexture(tex);
+			gl.deleteBuffer(pbo);
+			return null;
+		}
+		this.highlightTarget = {
+			tex,
+			fbo,
+			pbo,
+			w,
+			h,
+			pixels: new Uint8ClampedArray(w * h * 4),
+		};
+		return this.highlightTarget;
+	}
+
+	private deleteHighlightTarget() {
+		const gl = this.gl;
+		if (this.highlightFence) gl.deleteSync(this.highlightFence);
+		this.highlightFence = null;
+		const target = this.highlightTarget;
+		if (!target) return;
+		gl.deleteTexture(target.tex);
+		gl.deleteFramebuffer(target.fbo);
+		gl.deleteBuffer(target.pbo);
+		this.highlightTarget = null;
+	}
+
 	private compositeOverlayToFBO(
 		mainTex: WebGLTexture,
 		overlayTex: WebGLTexture,
@@ -1878,6 +2048,7 @@ export class GlRenderer {
 		layers: ResolvedTextLayer[],
 		time: number,
 		safeDt: number,
+		highlight: HighlightTarget | null,
 	): PreparedLayer[] {
 		if (layers.length === 0 || this.imgW <= 0 || this.imgH <= 0) return [];
 		const prepared: PreparedLayer[] = [];
@@ -1902,6 +2073,9 @@ export class GlRenderer {
 						) ?? buf.tex;
 				}
 			}
+			if (highlight?.kind === "text" && highlight.clipId === layer.clipId) {
+				this.highlightTex = tex;
+			}
 			prepared.push({
 				tex,
 				underEffects: layer.underEffects,
@@ -1920,14 +2094,16 @@ export class GlRenderer {
 		mediaLayers: ResolvedMediaLayer[],
 		time: number,
 		safeDt: number,
+		highlight: HighlightTarget | null = null,
 	): PreparedLayer[] {
-		const text = this.prepareTextLayers(textLayers, time, safeDt);
+		const text = this.prepareTextLayers(textLayers, time, safeDt, highlight);
 		if (mediaLayers.length === 0) return text;
 		const media = this.prepareMediaLayers(
 			mediaLayers,
 			time,
 			safeDt,
 			text.length,
+			highlight,
 		);
 		if (media.length === 0) return text;
 		// Sorted after preparing, not before: the buffer each layer rendered into is
@@ -1942,6 +2118,7 @@ export class GlRenderer {
 		time: number,
 		safeDt: number,
 		bufOffset: number,
+		highlight: HighlightTarget | null,
 	): PreparedLayer[] {
 		if (layers.length === 0 || this.imgW <= 0 || this.imgH <= 0) return [];
 		const prepared: PreparedLayer[] = [];
@@ -1952,6 +2129,9 @@ export class GlRenderer {
 				? this.drawMediaTransition(layer, time, safeDt, out)
 				: this.drawMediaSide(layer, layer.style, time, safeDt, out);
 			if (!drawn) continue;
+			if (highlight?.kind === "media" && highlight.laneId === layer.laneId) {
+				this.highlightTex = out.tex;
+			}
 			prepared.push({
 				tex: out.tex,
 				underEffects: layer.underEffects,
@@ -2481,6 +2661,7 @@ export class GlRenderer {
 		this.salFBO = null;
 		if (this.salPBO) gl.deleteBuffer(this.salPBO);
 		this.salPBO = null;
+		this.deleteHighlightTarget();
 		this.trackingStates.clear();
 		if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
 		this.textBlendProgram = null;

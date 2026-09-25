@@ -6,6 +6,9 @@
 	import { fitPreviewSize, measureDisplaySize } from "../../gl/preview-size";
 	import {
 		GlRenderer,
+		highlightKey,
+		type HighlightTarget,
+		type LayerHighlight,
 		type PostChainLayer,
 		type SourceFit,
 	} from "../../gl/renderer";
@@ -184,7 +187,69 @@
 		w: number;
 		h: number;
 		rot: number;
+		/** The whole frame, which the highlight trace spans. */
+		frame: { left: number; top: number; w: number; h: number };
 	} | null>(null);
+
+	/** Longest side the highlight is traced at; the readback grows with its area. */
+	const HIGHLIGHT_MAX_SIDE = 1280;
+	let highlightCanvas = $state<HTMLCanvasElement>(null!);
+	/** Key of the trace on the highlight canvas; shown only while it is the selection's. */
+	let highlightShown = $state<string | null>(null);
+	let highlightPoll = 0;
+
+	function selectedHighlight(): HighlightTarget | null {
+		if (selectedMediaLane)
+			return { kind: "media", laneId: selectedMediaLane.id };
+		if (selectedTextClipId) return { kind: "text", clipId: selectedTextClipId };
+		return null;
+	}
+
+	const selectedHighlightKey = $derived.by(() => {
+		const target = selectedHighlight();
+		return target ? highlightKey(target) : null;
+	});
+
+	/** Traced at the frame's on-screen size, so the shader's widths are CSS pixels. */
+	function requestHighlight() {
+		const target = selectedHighlight();
+		const fit = target ? frameFit() : null;
+		if (!target || !fit || !renderer || !canvasEl) return;
+		const w = canvasEl.width * fit.s;
+		const h = canvasEl.height * fit.s;
+		const k = Math.min(1, HIGHLIGHT_MAX_SIDE / Math.max(w, h, 1));
+		renderer.traceHighlight(
+			target,
+			Math.max(1, Math.round(w * k)),
+			Math.max(1, Math.round(h * k)),
+		);
+	}
+
+	/** Collects the trace a render started, polling each frame until the GPU is done. */
+	function pollHighlight() {
+		cancelAnimationFrame(highlightPoll);
+		highlightPoll = 0;
+		const r = renderer;
+		if (!r) return;
+		const done = r.takeHighlight();
+		if (done) paintHighlight(done);
+		if (r.highlightPending)
+			highlightPoll = requestAnimationFrame(pollHighlight);
+	}
+
+	function paintHighlight({ key, image }: LayerHighlight) {
+		const cv = highlightCanvas;
+		if (!cv || !image) {
+			highlightShown = null;
+			return;
+		}
+		if (cv.width !== image.width) cv.width = image.width;
+		if (cv.height !== image.height) cv.height = image.height;
+		cv.getContext("2d")?.putImageData(image, 0, 0);
+		highlightShown = key;
+	}
+
+	$effect(() => () => cancelAnimationFrame(highlightPoll));
 
 	/** Where the rendered frame sits in client space and what it was scaled by. */
 	function frameFit(): { left: number; top: number; s: number } | null {
@@ -232,6 +297,12 @@
 			w: rect.w * fit.s,
 			h: rect.h * fit.s,
 			rot: rect.rot,
+			frame: {
+				left: fit.left - ar.left,
+				top: fit.top - ar.top,
+				w: canvasEl!.width * fit.s,
+				h: canvasEl!.height * fit.s,
+			},
 		};
 		// Compared before assigning: a fresh object each frame would re-render the outline.
 		if (
@@ -241,7 +312,11 @@
 			Math.abs(outline.top - next.top) < 0.5 &&
 			Math.abs(outline.w - next.w) < 0.5 &&
 			Math.abs(outline.h - next.h) < 0.5 &&
-			outline.rot === next.rot
+			outline.rot === next.rot &&
+			Math.abs(outline.frame.left - next.frame.left) < 0.5 &&
+			Math.abs(outline.frame.top - next.frame.top) < 0.5 &&
+			Math.abs(outline.frame.w - next.frame.w) < 0.5 &&
+			Math.abs(outline.frame.h - next.frame.h) < 0.5
 		) {
 			return;
 		}
@@ -697,6 +772,7 @@
 		const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
 		const base =
 			stacked > 0 ? effects.slice(0, effects.length - stacked) : effects;
+		requestHighlight();
 		// Solo drops the image chain and the fx lanes along with the source.
 		renderer!.render(
 			solo ? [] : base,
@@ -707,6 +783,7 @@
 		);
 		// Every draw path ends here, so the outline follows any change.
 		updateOutline();
+		pollHighlight();
 	}
 
 	$effect(() => {
@@ -958,6 +1035,8 @@
 		readTextTimeline();
 		readMediaTimeline();
 		textTime;
+		// The highlight is traced by a render.
+		selectedHighlightKey;
 		// A late layer upload landing while paused is what gets that frame onto the
 		// canvas.
 		sourceKey;
@@ -1069,6 +1148,21 @@
 			aria-label="Effect preview canvas"
 		></canvas>
 	{/if}
+	<!-- Kept mounted so a trace can land on it while hidden. -->
+	<canvas
+		bind:this={highlightCanvas}
+		class="layer-highlight"
+		aria-hidden="true"
+		style:display={outline &&
+		!externallyDriven &&
+		highlightShown === selectedHighlightKey
+			? null
+			: "none"}
+		style:left="{outline?.frame.left ?? 0}px"
+		style:top="{outline?.frame.top ?? 0}px"
+		style:width="{outline?.frame.w ?? 0}px"
+		style:height="{outline?.frame.h ?? 0}px"
+	></canvas>
 	{#if outline}
 		<!-- Sits under .canvas-overlay: when that is up there is nothing worth pointing at. -->
 		<div
@@ -1139,6 +1233,13 @@
 				)
 				0 0 / 16px 16px,
 			var(--ink);
+	}
+
+	/* The selected layer's own edge, traced from its pixels. */
+	.layer-highlight {
+		position: absolute;
+		z-index: 7;
+		pointer-events: none;
 	}
 
 	/* Marks the selected layer's box while its clip panel is open; the box takes no pointer. */

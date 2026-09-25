@@ -82,6 +82,42 @@ export const ALPHA_TO_RGB_FRAG =
   outColor = vec4(texture(u_texture, v_uv).aaa, 1.0);
 }`;
 
+/** The selection highlight: everything but the layer's pixels dimmed, a bright line
+ * just inside its edge and a glow fading out past it. Straight alpha, since it is
+ * read back into an ImageData. */
+export const LAYER_EDGE_FRAG =
+	H +
+	`uniform vec2 u_outSize;
+const vec3 LINE = vec3(0.431, 0.906, 0.753);
+const float DIM = 0.6;
+const float LINE_PX = 3.0;
+const float GLOW_PX = 10.0;
+float covered(vec2 uv) {
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+  return step(0.5, texture(u_texture, uv).a);
+}
+/** Pixels to the nearest one across the edge, on 16 rays; past GLOW_PX when none is near. */
+float edgeDistance(float self, vec2 px) {
+  for (float r = 1.0; r <= GLOW_PX; r += 1.0) {
+    for (int i = 0; i < 16; i++) {
+      float t = float(i) * 0.3926991;
+      if (covered(v_uv + vec2(cos(t), sin(t)) * r * px) != self) return r;
+    }
+  }
+  return GLOW_PX + 1.0;
+}
+void main() {
+  float self = covered(v_uv);
+  float d = edgeDistance(self, 1.0 / u_outSize);
+  if (self > 0.5) {
+    outColor = d <= LINE_PX ? vec4(LINE, 1.0) : vec4(0.0);
+    return;
+  }
+  float glow = 0.9 * pow(max(0.0, 1.0 - d / GLOW_PX), 2.0);
+  float a = glow + DIM * (1.0 - glow);
+  outColor = vec4(LINE * glow / a, a);
+}`;
+
 /** Colour from one blend, coverage from the other. */
 export const ALPHA_MERGE_FRAG =
 	H +
