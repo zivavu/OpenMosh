@@ -125,6 +125,11 @@ export function nearestColor(mean: Rgb, palette: Record<string, Rgb>): string {
 	return best;
 }
 
+/** Wait out the autosave: the top bar reads "Saved" once every queued write has landed. */
+export async function waitForSaved(page: Page): Promise<void> {
+	await expect(page.locator(".save-indicator .label")).toHaveText("Saved");
+}
+
 export interface OpenEditorOptions {
 	/** Pool sources, as [name, colour] pairs. `"pattern"` gives that source the detailed
 	 * test image instead of a flat fill, which a spec needs to assert the preview changed. */
