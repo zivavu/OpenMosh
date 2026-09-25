@@ -30,9 +30,16 @@ jobs:
       - run: bun run build
 
   # Separate job: it needs a browser download and takes minutes, and a failure
-  # here means something different from a failing unit test.
-  e2e:
+  # here means something different from a failing unit test. Split across two
+  # runners, since one runner's CPU can't take a second worker; by file rather
+  # than --shard, which balances test counts, not time.
+  e2e-half:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        half: [1, 2]
+    name: e2e (${{ matrix.half }}/2)
     steps:
       - uses: actions/checkout@v4
 
@@ -54,11 +61,19 @@ jobs:
       # If a library ever does go missing, capabilities.spec.ts is what says so.
       - run: bunx playwright install chromium
 
-      - run: bun run test:e2e
+      - run: bun run test:e2e ${{ matrix.half == 1 && '--test-list' || '--test-list-invert' }} tests/e2e/ci-first-half.txt
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.half }}
           path: playwright-report
           retention-days: 7
+
+  # The main ruleset requires a check named "e2e"; matrix jobs don't report under it.
+  e2e:
+    needs: e2e-half
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.e2e-half.result }}" = success

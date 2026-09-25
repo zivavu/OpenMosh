@@ -1,0 +1,7 @@
+# The e2e specs CI runs on its first runner; the second runs everything else
+# (--test-list-invert), so a new spec can't fall between them. Picked by time,
+# not count: the renderer specs are many tests but take seconds.
+capabilities.spec.ts
+editor-export.spec.ts
+editor-persistence.spec.ts
+storage-manager.spec.ts
