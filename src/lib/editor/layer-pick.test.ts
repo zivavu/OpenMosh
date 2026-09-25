@@ -93,4 +93,23 @@ describe("pickTopLayer", () => {
 		);
 		expect(hit?.laneId).toBe("second");
 	});
+
+	it("keeps the selected layer when it is hit, even under another", () => {
+		const boxes = [
+			box({ laneId: "under", z: 1 }),
+			box({ laneId: "over", z: 5 }),
+		];
+		const selected = { kind: "media" as const, laneId: "under" };
+		expect(pickTopLayer(boxes, 100, 100, selected)?.laneId).toBe("under");
+	});
+
+	it("falls back to the top layer when the selected one is missed", () => {
+		const boxes = [
+			box({ laneId: "away", z: 1, cx: 400 }),
+			box({ laneId: "low", z: 2 }),
+			box({ laneId: "high", z: 5 }),
+		];
+		const selected = { kind: "media" as const, laneId: "away" };
+		expect(pickTopLayer(boxes, 100, 100, selected)?.laneId).toBe("high");
+	});
 });
