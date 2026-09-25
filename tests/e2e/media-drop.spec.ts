@@ -35,8 +35,15 @@ const SOURCES: [string, typeof RED][] = [
 /** The lane the specs drop onto: the empty one added over the opening layer. */
 const LAYER = 1;
 
+/** A dropped still lays down 20 seconds, so the song has to be longer than that for a
+ * drop to land where it was aimed rather than back up to fit the lane. */
+const TRACK_SECONDS = 60;
+
 async function openLayers(page: Parameters<typeof openEditor>[0]) {
-	await openEditor(page, { sources: SOURCES });
+	await openEditor(page, {
+		sources: SOURCES,
+		track: { seconds: TRACK_SECONDS },
+	});
 	await waitForRender(page);
 	await addMediaLayer(page);
 }
@@ -66,6 +73,8 @@ test.describe("dropping onto empty space", () => {
 		);
 		expect(span.start).toBeGreaterThan(0.25);
 		expect(span.start).toBeLessThan(0.35);
+		// A still has no length of its own, so the drop gives it the 20-second default.
+		expect(span.end - span.start).toBeCloseTo(20 / TRACK_SECONDS, 2);
 	});
 
 	test("shows a ghost of the clip before the drop", async ({ page }) => {
