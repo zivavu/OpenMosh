@@ -17,15 +17,15 @@
 
 	const STYLES = [
 		{
-			id: "random",
-			label: "Random",
-			title: "Any effects, any order, any strength.",
-		},
-		{
 			id: "curated",
 			label: "Curated",
 			title:
 				"Effects that work together, in a signal-chain order, one leading and the rest supporting; dead frames are rolled again.",
+		},
+		{
+			id: "random",
+			label: "Random",
+			title: "Any effects, any order, any strength.",
 		},
 	] as const satisfies { id: MoshStyle; label: string; title: string }[];
 

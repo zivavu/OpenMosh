@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	lastMode: "single",
 	moshMin: 2,
 	moshMax: 4,
-	moshStyle: "random",
+	moshStyle: "curated",
 	randomizeOrder: true,
 	moshAudioLink: true,
 	moshAudioLinkStrength: 0.8,
