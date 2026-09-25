@@ -366,6 +366,11 @@
 			active.blur();
 		}
 		if (!onPickLayer || e.button !== 0) return;
+		// The empty box around the frame lets go of the selection.
+		if (e.target === previewArea) {
+			onPickLayer(null);
+			return;
+		}
 		// Anything else in the preview box is its own control.
 		if (!renderer || !canvasEl || e.target !== canvasEl) return;
 		// Claim the press: otherwise the browser reads the drag as a text selection sweep.
