@@ -1,0 +1,33 @@
+name: Commit messages
+
+# PRs are rebase-merged, so every commit lands on main as it is and release-please
+# builds the changelog from them: each subject has to be a conventional commit.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional:
+    # release-please names its own commits "chore(main): release x.y.z".
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # The changelog line reads as a sentence: "feat: Lock effects through moshes".
+          # No "!": every release is a patch bump until 1.0.
+          pattern='^(feat|fix|perf|revert|refactor|docs|test|ci|build|chore|style)(\([a-z0-9-]+\))?: [A-Z]'
+          bad=0
+          while IFS= read -r subject; do
+            if ! grep -Eq "$pattern" <<< "$subject"; then
+              echo "::error::Not a conventional commit with a capitalized subject: $subject"
+              bad=1
+            fi
+          done < <(gh api "repos/$REPO/pulls/$PR/commits" --paginate --jq '.[].commit.message | split("\n")[0]')
+          exit $bad
