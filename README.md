@@ -78,7 +78,7 @@ Your media never leaves the machine. There is no backend, no account and no uplo
 
 <!-- x-release-please-start-version -->
 
-Version 0.9.2. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
+Version 0.9.3. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
 
 <!-- x-release-please-end -->
 
