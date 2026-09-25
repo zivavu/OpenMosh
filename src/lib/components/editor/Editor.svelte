@@ -137,6 +137,7 @@
 		type FxLane,
 		type FxLaneSettings,
 	} from "../../editor/fx-lanes";
+	import { fanOutEdit, fanOutNote } from "../../editor/chain-fanout";
 	import {
 		createSnapshotHistory,
 		snapshotUndoSource,
@@ -1512,6 +1513,14 @@
 			? (findFxClip(fxLanes, selectedFxClipId)?.clip ?? null)
 			: null,
 	);
+	let fxChainNote = $derived(
+		fanOutNote(
+			selectedFxClip,
+			fxClipsById(new Set(selectedFxClipIds)).filter(
+				(c) => c.id !== selectedFxClipId,
+			),
+		),
+	);
 
 	// Same resolver the export builds, so interval rolls reproduce exactly.
 	const previewFxSource = createFxLayerSource(() => fxLanes, getMoshOptions);
@@ -2405,8 +2414,33 @@
 		},
 	});
 	const endPanelBurst = () => panelBurst.end();
-	const panelBeforeEdit = (coalesceKey?: string) =>
+	/** The fx clip as it stood before the panel's current edit, to replay it on the rest of the selection. */
+	let fxEditBase: FxClip | null = null;
+	const panelBeforeEdit = (coalesceKey?: string) => {
+		fxEditBase = selectedFxClip
+			? ($state.snapshot(selectedFxClip) as FxClip)
+			: null;
 		panelBurst.beforeEdit(coalesceKey);
+	};
+
+	/** The panel edits the fx clip in place; carry the edit to the other selected clips. */
+	function fanOutFxEdit() {
+		const clip = selectedFxClip;
+		const base = fxEditBase;
+		if (!clip || base?.id !== clip.id) return;
+		const after = $state.snapshot(clip) as FxClip;
+		fxEditBase = after;
+		const others = fxClipsById(new Set(selectedFxClipIds)).filter(
+			(c) => c.id !== clip.id,
+		);
+		const fanned = fanOutEdit(base, after, $state.snapshot(others) as FxClip[]);
+		if (fanned.length === 0) return;
+		const byId = new Map(fanned.map((c) => [c.id, c]));
+		fxLanes = fxLanes.map((l) => ({
+			...l,
+			clips: l.clips.map((c) => byId.get(c.id) ?? c),
+		}));
+	}
 
 	// Same detector the slideshow uses: essentia's RhythmExtractor2013 in a shared worker.
 	let bpmDetecting = $state(false);
@@ -2715,6 +2749,7 @@
 			clearEffectsFn(clip.effects);
 			if (isHandBuiltLabel(clip)) clip.label = handBuiltLabel(clip.effects);
 			else clip.modified = true;
+			fanOutFxEdit();
 			return;
 		}
 		clearEffectsFn(effects);
@@ -3340,6 +3375,14 @@
 	let selectedTextClip = $derived(
 		findTextClip(textTimeline, selectedTextClipId),
 	);
+	let textChainNote = $derived(
+		fanOutNote(
+			selectedTextClip,
+			textClipsById(new Set(selectedTextClipIds)).filter(
+				(c) => c.id !== selectedTextClipId,
+			),
+		),
+	);
 	/** The lane holding the selected clip; the panel edits its style. */
 	let selectedTextLane = $derived(
 		findTextClipLane(textTimeline, selectedTextClipId),
@@ -3365,8 +3408,17 @@
 		retainLaneMoshes();
 	}
 
+	/** A chain edit also reaches the other selected clips, when they run the same effects. */
 	function updateTextClip(next: TextClip) {
-		textTimeline = replaceTextClip(textTimeline, next);
+		const others = textClipsById(new Set(selectedTextClipIds)).filter(
+			(c) => c.id !== next.id,
+		);
+		const fanned = fanOutEdit(
+			findTextClip(textTimeline, next.id),
+			next,
+			$state.snapshot(others) as TextClip[],
+		);
+		textTimeline = [next, ...fanned].reduce(replaceTextClip, textTimeline);
 	}
 
 	function updateTextLane(next: TextLane) {
@@ -3397,8 +3449,17 @@
 		retainLaneMoshes();
 	}
 
+	/** See updateTextClip. */
 	function updateMediaClip(next: MediaClip) {
-		mediaTimeline = replaceMediaClip(mediaTimeline, next);
+		const others = mediaClipsById(new Set(selectedMediaClipIds)).filter(
+			(c) => c.id !== next.id,
+		);
+		const fanned = fanOutEdit(
+			findMediaClip(mediaTimeline, next.id),
+			next,
+			$state.snapshot(others) as MediaClip[],
+		);
+		mediaTimeline = [next, ...fanned].reduce(replaceMediaClip, mediaTimeline);
 	}
 
 	function updateMediaLane(next: MediaLane) {
@@ -3638,6 +3699,14 @@
 	);
 	let selectedMediaLane = $derived(
 		findMediaClipLane(mediaTimeline, selectedMediaClipId),
+	);
+	let mediaChainNote = $derived(
+		fanOutNote(
+			selectedMediaClip,
+			mediaClipsById(new Set(selectedMediaClipIds)).filter(
+				(c) => c.id !== selectedMediaClipId,
+			),
+		),
 	);
 	/** What the selected layer clip draws, and plays. */
 	let selectedMediaSourceId = $derived(
@@ -4911,6 +4980,7 @@
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 				onEditingChange={onSourceEditingChange}
 				{section}
+				chainNote={mediaChainNote}
 				sourceHasAudio={!selectedMediaSourceId ||
 					!audioBank.isSilent(selectedMediaSourceId)}
 				onDetachAudio={isSequenceMode && selectedMediaClip
@@ -4929,6 +4999,7 @@
 				spectrumData={liveSpectrum}
 				response={audioResponse}
 				{section}
+				chainNote={textChainNote}
 				bpm={sequenceBpm}
 			/>
 		{/if}
@@ -4947,6 +5018,7 @@
 			{#if !selectedMediaClip && !selectedTextClip}
 				<EffectsPanel
 					headless
+					note={fxChainNote}
 					bind:effects={getPanelEffects, setPanelEffects}
 					noTarget={panelNoTarget}
 					rolledNote={panelRolledNote}
@@ -4961,8 +5033,12 @@
 							setVolumeLink(getPanelEffects(), index, paramKey, link),
 						);
 						markPanelClipEdited();
+						fanOutFxEdit();
 					}}
-					onEffectsReplaced={endPanelBurst}
+					onEffectsReplaced={() => {
+						fanOutFxEdit();
+						endPanelBurst();
+					}}
 					onPresetUpdated={seqSyncPreset}
 					onPresetApplied={(preset) => {
 						const target = selectedFxClip;
@@ -4970,9 +5046,13 @@
 							target.label = preset.name;
 							target.presetName = preset.name;
 							target.modified = false;
+							fanOutFxEdit();
 						}
 					}}
-					onUserEdit={markPanelClipEdited}
+					onUserEdit={() => {
+						markPanelClipEdited();
+						fanOutFxEdit();
+					}}
 					onBeforeUserEdit={panelBeforeEdit}
 				/>
 			{/if}

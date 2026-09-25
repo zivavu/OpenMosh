@@ -57,7 +57,11 @@ export class LaneEffects<L extends EffectLane> {
 		if (known) return;
 		this.#loadedLaneId = id;
 		this.#loadedFrom = effects;
-		this.#effects = effects ? [...effects] : [];
+		// A deep copy: the panel edits in place, and the lane must keep its pre-edit
+		// chain until `commit`, so an edit can be told apart from what it replaced.
+		this.#effects = effects
+			? untrack(() => $state.snapshot(effects) as EffectInstance[])
+			: [];
 	}
 
 	/** Write the mirror back to the lane. */

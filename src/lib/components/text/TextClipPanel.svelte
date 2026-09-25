@@ -36,6 +36,8 @@
 		response?: AudioResponse;
 		/** Which half to show: the clip's controls, or the lane's effect chain. */
 		section?: "clip" | "chain";
+		/** Whether chain edits also reach the rest of a multi-selection. */
+		chainNote?: string | null;
 		/** For the font-on-beat rows to say when there's no tempo to follow. */
 		bpm?: number;
 	}
@@ -51,6 +53,7 @@
 		spectrumData = null,
 		response = undefined,
 		section = "clip",
+		chainNote = null,
 		bpm,
 	}: Props = $props();
 
@@ -374,6 +377,7 @@
 				{spectrumData}
 				{response}
 				hint="this clip's text"
+				note={chainNote}
 			>
 				{#if opaqueNames.length > 0}
 					<p class="warn">
