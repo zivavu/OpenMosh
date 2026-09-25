@@ -37,32 +37,26 @@ test.describe("upload screen", () => {
 	});
 });
 
-test.describe("bottom sheet", () => {
-	test("chain tab lists the chain", async ({ page }) => {
-		await openSingle(page, "red.png", RED);
-		await waitForRender(page);
+test("the bottom sheet opens on the chain, with mosh settings a tap away and back", async ({
+	page,
+}) => {
+	await openSingle(page, "red.png", RED);
+	await waitForRender(page);
 
-		await sheetHandle(page).click();
-		await expect(sheetTab(page, "Chain")).toHaveClass(/active/);
-		const chain = effectItems(sheetContent(page));
-		// The whole registry is listed, enabled or not: an empty tab means the chain never rendered.
-		await expect(chain.first()).toBeVisible();
-		expect(await chain.count()).toBeGreaterThan(1);
-	});
+	await sheetHandle(page).click();
+	await expect(sheetTab(page, "Chain")).toHaveClass(/active/);
+	const chain = effectItems(sheetContent(page));
+	// The whole registry is listed, enabled or not: an empty tab means the chain never rendered.
+	await expect(chain.first()).toBeVisible();
+	expect(await chain.count()).toBeGreaterThan(1);
 
-	test("mosh settings are a tap away and back", async ({ page }) => {
-		await openSingle(page, "red.png", RED);
-		await waitForRender(page);
+	await sheetTab(page, "Mosh").click();
+	await expect(sheetTab(page, "Mosh")).toHaveClass(/active/);
+	await expect(chain).toHaveCount(0);
+	await expect(sheetContent(page)).not.toBeEmpty();
 
-		await sheetHandle(page).click();
-		await sheetTab(page, "Mosh").click();
-		await expect(sheetTab(page, "Mosh")).toHaveClass(/active/);
-		await expect(effectItems(sheetContent(page))).toHaveCount(0);
-		await expect(sheetContent(page)).not.toBeEmpty();
-
-		await sheetTab(page, "Chain").click();
-		await expect(effectItems(sheetContent(page)).first()).toBeVisible();
-	});
+	await sheetTab(page, "Chain").click();
+	await expect(chain.first()).toBeVisible();
 });
 
 test.describe("action bar", () => {

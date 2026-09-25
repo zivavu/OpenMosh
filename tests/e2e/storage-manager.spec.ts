@@ -85,7 +85,7 @@ test("a fresh browser has nothing to manage", async ({ page }) => {
 	).toHaveCount(0);
 });
 
-test("a song worked on is listed as a project with its pooled media", async ({
+test("a song worked on is listed with its pooled media, and deleting it empties the database", async ({
 	page,
 }) => {
 	await buildSequence(page, "track.wav");
@@ -111,15 +111,8 @@ test("a song worked on is listed as a project with its pooled media", async ({
 	await expect(
 		modal.locator(".legend-item", { hasText: "Songs" }),
 	).not.toContainText("0 B");
-});
-
-test("deleting a project empties the database and the upload screen's offer", async ({
-	page,
-}) => {
-	await buildSequence(page, "track.wav");
 	expect(await storedTrackNames(page)).toEqual(["track.wav"]);
 
-	const modal = await openStorage(page);
 	await modal.getByRole("button", { name: "Delete track.wav" }).click();
 	await expect(page.getByRole("alertdialog")).toContainText("track.wav");
 	await confirmDelete(page);
@@ -133,19 +126,6 @@ test("deleting a project empties the database and the upload screen's offer", as
 	await expect(modal).toHaveCount(0);
 	await selectMode(page, "Editor");
 	await expect(page.locator(".saved-item")).toHaveCount(0);
-});
-
-test("cancelling the confirmation keeps the project", async ({ page }) => {
-	await buildSequence(page, "track.wav");
-	const modal = await openStorage(page);
-	await modal.getByRole("button", { name: "Delete track.wav" }).click();
-	await page
-		.getByRole("alertdialog")
-		.getByRole("button", { name: "Cancel" })
-		.click();
-	await expect(page.getByRole("alertdialog")).toHaveCount(0);
-	await expect(modal.locator(".row", { hasText: "track.wav" })).toHaveCount(1);
-	expect(await storedTrackNames(page)).toEqual(["track.wav"]);
 });
 
 test("select all and delete selected clears several projects at once", async ({
@@ -178,21 +158,6 @@ test("select all and delete selected clears several projects at once", async ({
 
 	await expect(modal.getByText("Nothing stored yet")).toBeVisible();
 	expect(await storedTrackNames(page)).toEqual([]);
-});
-
-test("Clear drops the selection without deleting anything", async ({
-	page,
-}) => {
-	await buildSequence(page, "track.wav");
-	const modal = await openStorage(page);
-	await modal.getByRole("checkbox", { name: "Select track.wav" }).check();
-	await expect(modal.locator(".bulk")).toBeVisible();
-	await modal.locator(".bulk").getByRole("button", { name: "Clear" }).click();
-	await expect(modal.locator(".bulk")).toHaveCount(0);
-	await expect(
-		modal.getByRole("checkbox", { name: "Select track.wav" }),
-	).not.toBeChecked();
-	await expect(modal.locator(".row", { hasText: "track.wav" })).toHaveCount(1);
 });
 
 test("a single-mode edit with no song is listed without one, and deletable", async ({
@@ -243,16 +208,37 @@ test("Delete everything wipes projects and song-less edits together", async ({
 	await expect(page.locator(".saved-item")).toHaveCount(0);
 });
 
-test("Escape closes the modal, but not while a confirmation is up", async ({
+test("Clear, Cancel and Escape all leave the project alone", async ({
 	page,
 }) => {
 	await buildSequence(page, "track.wav");
 	const modal = await openStorage(page);
+	const row = modal.locator(".row", { hasText: "track.wav" });
+
+	await modal.getByRole("checkbox", { name: "Select track.wav" }).check();
+	await expect(modal.locator(".bulk")).toBeVisible();
+	await modal.locator(".bulk").getByRole("button", { name: "Clear" }).click();
+	await expect(modal.locator(".bulk")).toHaveCount(0);
+	await expect(
+		modal.getByRole("checkbox", { name: "Select track.wav" }),
+	).not.toBeChecked();
+
+	await modal.getByRole("button", { name: "Delete track.wav" }).click();
+	await page
+		.getByRole("alertdialog")
+		.getByRole("button", { name: "Cancel" })
+		.click();
+	await expect(page.getByRole("alertdialog")).toHaveCount(0);
+	await expect(row).toHaveCount(1);
+
 	await modal.getByRole("button", { name: "Delete track.wav" }).click();
 	await page.keyboard.press("Escape");
 	// The confirmation took the key; the modal behind it is still there.
 	await expect(page.getByRole("alertdialog")).toHaveCount(0);
 	await expect(modal).toBeVisible();
+	await expect(row).toHaveCount(1);
 	await page.keyboard.press("Escape");
 	await expect(modal).toHaveCount(0);
+
+	expect(await storedTrackNames(page)).toEqual(["track.wav"]);
 });

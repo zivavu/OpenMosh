@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import {
 	canvasStats,
+	clipMoshButton,
 	liveEffectNames,
 	liveEffects,
+	mediaClips,
 	nearestColor,
 	openEditor,
-	clipMoshButton,
-	mediaClips,
 	selectClip,
 	splitClipAt,
 	waitForRender,
@@ -25,90 +25,49 @@ test.beforeEach(async ({ page }) => {
 	});
 });
 
-test.describe("opening the editor", () => {
-	test("puts the first source on the preview", async ({ page }) => {
-		await openEditor(page, {
-			sources: [
-				["red.png", RED],
-				["blue.png", BLUE],
-			],
-		});
-
-		const stats = await waitForRender(page);
-		expect(nearestColor(stats.mean, PALETTE)).toBe("red");
-		// A flat source through a clean chain stays flat: nothing is on it yet.
-		expect(stats.variance).toBeLessThan(1);
+test("opening puts the first source on the preview and every file in the pool", async ({
+	page,
+}) => {
+	await openEditor(page, {
+		sources: [
+			["red.png", RED],
+			["green.png", GREEN],
+			["blue.png", BLUE],
+		],
 	});
 
-	test("starts as one clip covering the whole song", async ({ page }) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
-
-		// The source lane partitions the timeline, so a fresh timeline is exactly one block.
-		await expect(mediaClips(page)).toHaveCount(1);
-	});
-
-	test("takes every source into the pool", async ({ page }) => {
-		await openEditor(page, {
-			sources: [
-				["red.png", RED],
-				["green.png", GREEN],
-				["blue.png", BLUE],
-			],
-		});
-		await waitForRender(page);
-		await expect(page.getByText("3 SOURCES")).toBeVisible();
-	});
+	const stats = await waitForRender(page);
+	expect(nearestColor(stats.mean, PALETTE)).toBe("red");
+	// A flat source through a clean chain stays flat: nothing is on it yet.
+	expect(stats.variance).toBeLessThan(1);
+	await expect(page.getByText("3 SOURCES")).toBeVisible();
 });
 
-test.describe("cutting the timeline", () => {
-	test("a ctrl+click splits one clip into two", async ({ page }) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
+test("a ctrl+click cuts a clip in two, and again inside a cut one", async ({
+	page,
+}) => {
+	await openEditor(page, { sources: [["red.png", RED]] });
+	await waitForRender(page);
+	// The opening layer is one clip over the whole song.
+	await expect(mediaClips(page)).toHaveCount(1);
+	const whole = (await mediaClips(page).first().boundingBox())!;
 
-		await splitClipAt(page, 0.25);
-		await expect(mediaClips(page)).toHaveCount(2);
-	});
+	await splitClipAt(page, 0.5);
+	await expect(mediaClips(page)).toHaveCount(2);
+	const left = (await mediaClips(page).nth(0).boundingBox())!;
+	const right = (await mediaClips(page).nth(1).boundingBox())!;
+	// Flush against each other, and between them the width of the original. The rects are
+	// drawn a pixel apart so the boundary handle reads as a seam, so this is about no gap.
+	const seam = Math.abs(right.x - (left.x + left.width));
+	expect(seam).toBeLessThanOrEqual(2);
+	expect(left.width + right.width).toBeGreaterThan(whole.width - 3);
+	expect(left.width + right.width).toBeLessThan(whole.width + 3);
 
-	test("the two halves still cover the timeline end to end", async ({
-		page,
-	}) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
-		const whole = (await mediaClips(page).first().boundingBox())!;
-
-		await splitClipAt(page, 0.5);
-		const left = (await mediaClips(page).nth(0).boundingBox())!;
-		const right = (await mediaClips(page).nth(1).boundingBox())!;
-
-		// Flush against each other, and between them the width of the original. The rects are
-		// drawn a pixel apart so the boundary handle reads as a seam, so this is about no gap.
-		const seam = Math.abs(right.x - (left.x + left.width));
-		expect(seam).toBeLessThanOrEqual(2);
-		expect(left.width + right.width).toBeGreaterThan(whole.width - 3);
-		expect(left.width + right.width).toBeLessThan(whole.width + 3);
-	});
-
-	test("splits again inside a clip that was already cut", async ({ page }) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
-
-		await splitClipAt(page, 0.5);
-		await splitClipAt(page, 0.75);
-		await expect(mediaClips(page)).toHaveCount(3);
-	});
+	await splitClipAt(page, 0.75);
+	await expect(mediaClips(page)).toHaveCount(3);
 });
 
 test.describe("a clip's chain", () => {
-	test("opens empty when the clip is picked", async ({ page }) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
-
-		await selectClip(page, 0);
-		await expect(page.locator(".chain-count")).toHaveText(/0 live/i);
-		await expect(liveEffects(page)).toHaveCount(0);
-	});
-
 	test("a mosh switches effects on and changes what's on screen", async ({
 		page,
 	}) => {
@@ -118,6 +77,7 @@ test.describe("a clip's chain", () => {
 		const clean = await waitForRender(page);
 
 		await selectClip(page, 0);
+		await expect(liveEffects(page)).toHaveCount(0);
 		await clipMoshButton(page).click();
 
 		await expect(liveEffects(page)).not.toHaveCount(0);
@@ -129,9 +89,12 @@ test.describe("a clip's chain", () => {
 			.not.toBe(clean.hash);
 	});
 
-	test("a second mosh rolls a different chain", async ({ page }) => {
+	test("each clip keeps its own, and a second mosh rolls a new one", async ({
+		page,
+	}) => {
 		await openEditor(page, { sources: [["red.png", RED]] });
 		await waitForRender(page);
+		await splitClipAt(page, 0.5);
 
 		await selectClip(page, 0);
 		await clipMoshButton(page).click();
@@ -144,35 +107,11 @@ test.describe("a clip's chain", () => {
 				message: "the second mosh rolled the same chain",
 			})
 			.not.toBe(first.join());
-	});
-
-	test("moshes each clip on its own", async ({ page }) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
-		await splitClipAt(page, 0.5);
-
-		await selectClip(page, 0);
-		await clipMoshButton(page).click();
-		await expect(liveEffects(page)).not.toHaveCount(0);
-		const first = await liveEffectNames(page);
+		const rolled = await liveEffectNames(page);
 
 		await selectClip(page, 1);
 		await expect(liveEffects(page)).toHaveCount(0);
 
-		await selectClip(page, 0);
-		expect(await liveEffectNames(page)).toEqual(first);
-	});
-
-	test("keeps a clip's chain across a re-select", async ({ page }) => {
-		await openEditor(page, { sources: [["red.png", RED]] });
-		await waitForRender(page);
-
-		await selectClip(page, 0);
-		await clipMoshButton(page).click();
-		await expect(liveEffects(page)).not.toHaveCount(0);
-		const rolled = await liveEffectNames(page);
-
-		await page.keyboard.press("Escape");
 		await selectClip(page, 0);
 		expect(await liveEffectNames(page)).toEqual(rolled);
 	});
