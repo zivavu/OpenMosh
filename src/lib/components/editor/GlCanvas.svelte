@@ -19,7 +19,11 @@
 		type LayerPick,
 		type MediaRect,
 	} from "../../editor/layer-pick";
-	import { clampMove, scaleFromHandle } from "../../editor/layer-drag";
+	import {
+		clampMove,
+		rotateFromHandle,
+		scaleFromHandle,
+	} from "../../editor/layer-drag";
 	import { frameLooksDead } from "../../editor/frame-check";
 	import { onFontsChanged } from "../../text-overlay";
 	import { overlayTextBox } from "../../text-overlay/draw";
@@ -470,6 +474,13 @@
 				c0x: number;
 				c0y: number;
 		  }
+		| {
+				kind: "rotate";
+				/** Box centre, and the pointer's angle around it, at the press. */
+				cx: number;
+				cy: number;
+				a0: number;
+		  }
 	);
 	let drag: LayerDrag | null = null;
 	/** Set on the preview box while the pointer is over something draggable. */
@@ -581,6 +592,38 @@
 		previewArea.setPointerCapture(e.pointerId);
 	}
 
+	function startRotate(e: PointerEvent) {
+		const lane = selectedMediaLane;
+		const fit = frameFit();
+		if (!onLayerStyleChange || !lane || !renderer || !fit || e.button !== 0)
+			return;
+		const rect = renderer.mediaLayerRect(lane.id, lane.style);
+		if (!rect) return;
+		e.stopPropagation();
+		const cx = rect.x + rect.w / 2;
+		const cy = rect.y + rect.h / 2;
+		const px = (e.clientX - fit.left) / fit.s;
+		const py = (e.clientY - fit.top) / fit.s;
+		drag = {
+			kind: "rotate",
+			laneId: lane.id,
+			from: { ...lane.style },
+			moved: false,
+			cx,
+			cy,
+			a0: Math.atan2(py - cy, px - cx),
+		};
+		hoverCursor = "grabbing";
+		previewArea.setPointerCapture(e.pointerId);
+	}
+
+	function resetRotation() {
+		const lane = selectedMediaLane;
+		if (!onLayerStyleChange || !lane || lane.style.rotation === 0) return;
+		onLayerDragStart?.(lane.id);
+		onLayerStyleChange(lane.id, { ...lane.style, rotation: 0 });
+	}
+
 	function dragMove(e: PointerEvent) {
 		if (textDrag) {
 			textDragMove(e);
@@ -609,6 +652,10 @@
 			}
 			// Held to the frame: a layer dragged clean off could only be got back from the panel.
 			next = { ...from, ...clampMove(from, dx, dy, drag.hw, drag.hh, fw, fh) };
+		} else if (drag.kind === "rotate") {
+			const rotation = rotateFromHandle(from, drag, px, py, e.shiftKey);
+			if (!drag.moved && rotation === from.rotation) return;
+			next = { ...from, rotation };
 		} else {
 			next = scaleFromHandle(from, drag, px, py, fw, fh, e.altKey);
 		}
@@ -1208,6 +1255,13 @@
 						onpointerdown={(e) => startScale(e, h.hx, h.hy)}
 					></div>
 				{/each}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="layer-rotate"
+					title="Drag to rotate (Shift snaps to 15°). Double-click to reset."
+					onpointerdown={startRotate}
+					ondblclick={resetRotation}
+				></div>
 			{/if}
 		</div>
 	{/if}
@@ -1290,6 +1344,35 @@
 		box-sizing: border-box;
 		pointer-events: auto;
 		touch-action: none;
+	}
+
+	/* A knob on a stalk above the top edge; it turns with the box. */
+	.layer-rotate {
+		position: absolute;
+		left: 50%;
+		top: -22px;
+		width: 11px;
+		height: 11px;
+		margin-left: -6px;
+		border-radius: 50%;
+		background: var(--live);
+		border: 1px solid rgba(0, 0, 0, 0.7);
+		box-sizing: border-box;
+		cursor: grab;
+		pointer-events: auto;
+		touch-action: none;
+	}
+
+	.layer-rotate::before {
+		content: "";
+		position: absolute;
+		left: 50%;
+		top: 100%;
+		width: 1px;
+		height: 12px;
+		margin-left: -0.5px;
+		background: var(--live);
+		pointer-events: none;
 	}
 
 	/* Opaque: whatever is still on the canvas underneath is stale. */

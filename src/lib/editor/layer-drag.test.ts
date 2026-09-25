@@ -4,6 +4,7 @@ import {
 	clampMove,
 	KEEP_PX,
 	MIN_SCALE,
+	rotateFromHandle,
 	scaleFromHandle,
 	type HandleFrame,
 } from "./layer-drag";
@@ -148,5 +149,29 @@ describe("clampMove", () => {
 		const { x, y } = clampMove(FROM, 1000, -1000, 10, 8, FW, FH);
 		expect(x * FW + 10).toBeCloseTo(FW);
 		expect(y * FH - 8).toBeCloseTo(0);
+	});
+});
+
+describe("rotateFromHandle", () => {
+	// Pressed straight above the centre, as the handle sits on an unrotated box.
+	const g = { cx: 200, cy: 150, a0: -Math.PI / 2 };
+
+	test("turns clockwise as the pointer goes round to the right", () => {
+		expect(rotateFromHandle(FROM, g, 300, 150, false)).toBeCloseTo(90, 6);
+	});
+
+	test("adds to the rotation the layer already had", () => {
+		const from = { ...FROM, rotation: 30 };
+		expect(rotateFromHandle(from, g, 100, 150, false)).toBeCloseTo(-60, 6);
+	});
+
+	test("stays within a half turn either way", () => {
+		const from = { ...FROM, rotation: 170 };
+		expect(rotateFromHandle(from, g, 300, 150, false)).toBeCloseTo(-100, 6);
+	});
+
+	test("snaps with Shift", () => {
+		expect(rotateFromHandle(FROM, g, 300, 140, true)).toBe(90);
+		expect(rotateFromHandle(FROM, g, 300, 130, true)).toBe(75);
 	});
 });

@@ -77,3 +77,22 @@ export function scaleFromHandle(
 	}
 	return next;
 }
+
+/** Degrees a Shift-held rotate snaps to. */
+export const ROTATE_SNAP = 15;
+
+/** The rotation after dragging the rotate handle: the turn the pointer made around
+ * the box's centre (`cx`, `cy`) since the press at angle `a0`, kept in [-180, 180]. */
+export function rotateFromHandle(
+	from: MediaStyle,
+	g: { cx: number; cy: number; a0: number },
+	px: number,
+	py: number,
+	snap: boolean,
+): number {
+	const turn = ((Math.atan2(py - g.cy, px - g.cx) - g.a0) * 180) / Math.PI;
+	let deg = from.rotation + turn;
+	if (snap) deg = Math.round(deg / ROTATE_SNAP) * ROTATE_SNAP;
+	deg = ((((deg + 180) % 360) + 360) % 360) - 180;
+	return deg === -180 ? 180 : deg;
+}
