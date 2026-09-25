@@ -30,7 +30,7 @@ Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxi
 
 Pick one of three modes on the upload screen.
 
-**Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
+**Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Set the mosh style to Curated and a roll picks effects that work together instead: it runs them in a sensible order, lets one of them carry the look, and rolls again when the frame comes out blank. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.png)
 
@@ -93,7 +93,7 @@ Issues and pull requests are welcome. The conventions worth knowing up front:
 - bun, not npm or yarn. Svelte 5 runes only.
 - Unit tests sit next to what they cover and run under `bun:test`, for pure logic only. Anything that needs a browser API goes in the Playwright suite under `tests/e2e`.
 - Run `bun check` and both test suites before opening a PR. `bunx playwright install chromium` once, first time. CI runs the same checks, plus formatting and the build, and a PR can't merge until they pass.
-- A new effect is two files: its `EffectDefinition` in `src/lib/effects/definitions.ts`, and its GLSL plus `EffectShaderDef` in `src/lib/gl/effect-shaders.ts`.
+- A new effect needs its `EffectDefinition` in `src/lib/effects/definitions.ts`, its GLSL plus `EffectShaderDef` in `src/lib/gl/effect-shaders.ts`, and an entry in `src/lib/effects/curation.ts` (where it sits in the chain for the Curated mosh style), unless it's `moshable: false`. A unit test catches a missing entry.
 - `bun dev` also serves a shader lab at `/lab/` for auditioning open-source ISF shaders on real footage before porting one. It's dev-only and not part of the build; see `lab/README.md`.
 
 ### Pull requests and releases
