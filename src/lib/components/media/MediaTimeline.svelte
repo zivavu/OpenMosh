@@ -46,8 +46,8 @@
 	import { updateMediaClips } from "../../media/resolve";
 
 	const DEFAULT_CLIP_LENGTH = 2;
-	/** A still dropped from the pool; it has no length of its own to lay down. */
-	const DROPPED_STILL_LENGTH = 20;
+	/** The least a drop from the pool lays down; a shorter video loops to fill it. */
+	const DROPPED_CLIP_LENGTH = 20;
 	const LANE_HEIGHT = 30;
 	/** A folded lane: clips stay readable, but not at a height that pays for the
 	 * text inside. */
@@ -394,24 +394,21 @@
 		if (first) ctrl.selectOnly(first.id);
 	}
 
-	/** The span a clip added at `time` gets. A dropped video asks for its own length (as
-	 * trimmed and at its speed), so it lays down the whole shot. */
+	/** The span a clip added at `time` gets. A dropped video keeps its whole shot (as
+	 * trimmed and at its speed) when that runs past the drop length. */
 	function clipSpanAt(
 		lane: MediaLane,
 		time: number,
 		sourceId?: string | null,
 	): { start: number; end: number } | null {
 		const source = sourceById(sourceId ?? null);
-		const duration = source
-			? sourcePlayLength(edits[source.id], source.duration ?? 0)
-			: 0;
-		const still = source ? DROPPED_STILL_LENGTH : DEFAULT_CLIP_LENGTH;
-		return newClipSpan(
-			lane,
-			time,
-			trackDuration,
-			duration > 0 ? duration : still,
-		);
+		const want = source
+			? Math.max(
+					DROPPED_CLIP_LENGTH,
+					sourcePlayLength(edits[source.id], source.duration ?? 0),
+				)
+			: DEFAULT_CLIP_LENGTH;
+		return newClipSpan(lane, time, trackDuration, want);
 	}
 
 	// Local to the lanes. The selections are mutually exclusive, so a Ctrl+C with
