@@ -3,7 +3,7 @@ import {
 	openEditor,
 	openSingle,
 	selectMode,
-	splitSegmentAt,
+	splitClipAt,
 	waitForRender,
 } from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
@@ -69,7 +69,7 @@ async function buildSequence(page: Page, trackName: string): Promise<void> {
 		track: { name: trackName },
 	});
 	await waitForRender(page);
-	await splitSegmentAt(page, 0.5);
+	await splitClipAt(page, 0.5);
 	await page.waitForTimeout(SAVE_SETTLE_MS);
 }
 
