@@ -698,6 +698,9 @@ export class ClipLaneController<
 		if (this.scrubbing) this.stack.seekStatic(this.timeAt(e.clientX));
 		const drag = this.drag;
 		if (!drag) return;
+		this.stack.edgeScroll(e.clientX, () => {
+			if (this.drag === drag) this.onPointerMove(e);
+		});
 		const t = this.stack.dragTime(e.clientX);
 		const limit = this.stack.dragLimit;
 		const { laneId, clipId, mode, grabOffset } = drag;
