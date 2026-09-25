@@ -198,6 +198,8 @@
 	/** Key of the trace on the highlight canvas; shown only while it is the selection's. */
 	let highlightShown = $state<string | null>(null);
 	let highlightPoll = 0;
+	/** Lit by a new selection until the first mosh; the outline box stays. */
+	let highlightLit = $state(false);
 
 	function selectedHighlight(): HighlightTarget | null {
 		if (selectedMediaLane)
@@ -211,9 +213,18 @@
 		return target ? highlightKey(target) : null;
 	});
 
+	$effect(() => {
+		highlightLit = !!selectedHighlightKey;
+	});
+
+	/** Out of the way, so the mosh can be seen. */
+	export function dismissHighlight() {
+		highlightLit = false;
+	}
+
 	/** Traced at the frame's on-screen size, so the shader's widths are CSS pixels. */
 	function requestHighlight() {
-		const target = selectedHighlight();
+		const target = highlightLit ? selectedHighlight() : null;
 		const fit = target ? frameFit() : null;
 		if (!target || !fit || !renderer || !canvasEl) return;
 		const w = canvasEl.width * fit.s;
@@ -1051,6 +1062,7 @@
 		textTime;
 		// The highlight is traced by a render.
 		selectedHighlightKey;
+		highlightLit;
 		// A late layer upload landing while paused is what gets that frame onto the
 		// canvas.
 		sourceKey;
@@ -1169,6 +1181,7 @@
 		aria-hidden="true"
 		style:display={outline &&
 		!externallyDriven &&
+		highlightLit &&
 		highlightShown === selectedHighlightKey
 			? null
 			: "none"}

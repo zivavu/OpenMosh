@@ -2371,6 +2371,7 @@
 	/** Roll; in curated style, roll again while the preview comes out black, white,
 	 * flat or noise. The last try stands either way. */
 	function rollAlive(roll: () => void) {
+		glCanvasRef?.dismissHighlight();
 		roll();
 		if (moshStyle !== "curated") return;
 		for (let i = 0; i < DEAD_ROLL_RETRIES; i++) {
@@ -2602,6 +2603,7 @@
 
 	/** → : forward through the mosh history, rolling a new mosh at its top. */
 	function mosh() {
+		glCanvasRef?.dismissHighlight();
 		// A layer's panel has taken the sidebar over, so the arrows belong to its chain.
 		const mediaClip = selectedMediaClip;
 		if (mediaClip) {
@@ -2632,6 +2634,7 @@
 
 	/** ← : back through the mosh history. Never touches the edit history. */
 	function undoMosh() {
+		glCanvasRef?.dismissHighlight();
 		const mediaClip = selectedMediaClip;
 		if (mediaClip) {
 			const snap = mediaMoshHistory.undo(mediaClip.id);
