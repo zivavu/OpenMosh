@@ -2,6 +2,7 @@
 
 import { getContext, setContext, untrack, type Snippet } from "svelte";
 import { findSnap, landedAt, type SnapPoint } from "../timeline/snap";
+import { edgeOvershoot, edgeScrollSpeed } from "../timeline/edge-scroll";
 import { TimelineViewport } from "./timeline-viewport.svelte";
 
 /** How close, on screen, a dragged edge has to come to a target to snap. */
@@ -147,7 +148,19 @@ export class TimelineStackState {
 	}
 
 	endDrag(): void {
+		const view = this.#drag;
 		this.#drag = null;
+		this.#stopEdgeScroll();
+		if (!view) return;
+		const duration = this.#getDuration();
+		// Started on the whole project: show the whole of it again, however far it grew.
+		if (view.start <= 1e-6 && view.end >= view.duration - 1e-6) {
+			this.vp.viewStart = 0;
+			this.vp.viewEnd = duration;
+			return;
+		}
+		// Scrolling past the end ahead of the clips can leave the view hanging off it.
+		this.vp.panView(0);
 	}
 
 	/** How far a dragged clip may go. */
@@ -155,25 +168,9 @@ export class TimelineStackState {
 		return this.growTo ? this.maxLength : this.#getDuration();
 	}
 
-	/** Whether the drag started with the project's end on screen, so it can be pulled out. */
-	get #endInView(): boolean {
-		const view = this.#drag;
-		return !!view && view.end >= view.duration - 1e-6;
-	}
-
-	/** The pointer's time in a drag. Where the project can grow, past the lane's right edge
-	 * keeps the scale the drag started at, so the view zooming out can't feed back into it. */
+	/** The pointer's time in a drag, held to the lane; past an edge the view scrolls instead. */
 	dragTime(clientX: number): number {
-		const view = this.#drag;
-		const r = this.#laneRect();
-		if (!this.growTo || !view || !this.#endInView || !r || r.width <= 0) {
-			return this.vp.clientXToTime(clientX);
-		}
-		const frac = Math.max(0, (clientX - r.left) / r.width);
-		return Math.min(
-			this.maxLength,
-			view.start + frac * (view.end - view.start),
-		);
+		return this.vp.clientXToTime(clientX);
 	}
 
 	/** The dragged clips end at `end`: the project grows to hold them, and gives the
@@ -183,8 +180,69 @@ export class TimelineStackState {
 		if (!this.growTo || !view) return;
 		const length = Math.min(this.maxLength, Math.max(view.duration, end));
 		if (Math.abs(length - this.#getDuration()) > 1e-6) this.growTo(length);
-		// The end stays pinned to the lane's edge; a zoomed-in view is left where it was.
-		if (this.#endInView) this.vp.viewEnd = length;
+	}
+
+	#edgeScroll: {
+		clientX: number;
+		reapply: () => void;
+		frame: number;
+		last: number;
+	} | null = null;
+
+	/** Scroll the view while a drag holds the pointer near or past a lane edge, faster
+	 * the further out, calling `reapply` so the dragged clips follow. */
+	edgeScroll(clientX: number, reapply: () => void): void {
+		if (!this.#drag) return;
+		const running = this.#edgeScroll;
+		if (running) {
+			running.clientX = clientX;
+			running.reapply = reapply;
+			return;
+		}
+		const r = this.#laneRect();
+		if (!r || edgeOvershoot(clientX, r.left, r.right) === 0) return;
+		this.#edgeScroll = {
+			clientX,
+			reapply,
+			frame: requestAnimationFrame(this.#edgeScrollTick),
+			last: performance.now(),
+		};
+	}
+
+	#edgeScrollTick = (now: number): void => {
+		const s = this.#edgeScroll;
+		const r = this.#laneRect();
+		const over = r ? edgeOvershoot(s?.clientX ?? 0, r.left, r.right) : 0;
+		if (!s || !r || !this.#drag || over === 0) {
+			this.#stopEdgeScroll();
+			return;
+		}
+		// Capped, so a stalled frame doesn't throw the view.
+		const dt = Math.min(0.05, (now - s.last) / 1000);
+		s.last = now;
+		const secPerPx = this.vp.viewDuration / r.width;
+		const delta = Math.sign(over) * edgeScrollSpeed(over) * dt * secPerPx;
+		if (this.#scrollDragView(delta)) s.reapply();
+		s.frame = requestAnimationFrame(this.#edgeScrollTick);
+	};
+
+	#stopEdgeScroll(): void {
+		if (this.#edgeScroll) cancelAnimationFrame(this.#edgeScroll.frame);
+		this.#edgeScroll = null;
+	}
+
+	/** Slide the view by `delta`. A project that can grow may be scrolled past its end,
+	 * so the clips can be carried there. False when the view is already at the limit. */
+	#scrollDragView(delta: number): boolean {
+		const vp = this.vp;
+		const limit = this.growTo ? this.maxLength : this.#getDuration();
+		const span = vp.viewEnd - vp.viewStart;
+		const start = Math.max(0, Math.min(limit - span, vp.viewStart + delta));
+		if (Math.abs(start - vp.viewStart) < 1e-9) return false;
+		this.followPlayhead = false;
+		vp.viewStart = start;
+		vp.viewEnd = start + span;
+		return true;
 	}
 
 	/** Contextual controls for each lane's selection, in the stack's one selection bar. */
