@@ -15,7 +15,7 @@ import {
 	type ClipLane,
 	type TimelineClip,
 } from "../timeline/clips";
-import type { MoshOptions } from "./mosh";
+import type { MoshOptions, MoshStyle } from "./mosh";
 import { putRoll } from "./roll-cache";
 import type { MoshSnapshot } from "./mosh-history";
 import {
@@ -221,7 +221,7 @@ export function chainClipEffectsAt(
 	const options = getMoshOptions();
 	const tick = chainClipTick(clip, time);
 	const seed = (clip.seed ?? 0) + tick * 7919;
-	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${lockedKey(clip.effects)}`;
+	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${lockedKey(clip.effects)}`;
 	let effects = cache.get(key);
 	if (!effects) {
 		effects = rollEffects(seed, options, clip.effects);
@@ -253,6 +253,7 @@ export function normalizeChainFields(
 export interface LaneSettings {
 	moshMin: number;
 	moshMax: number;
+	moshStyle: MoshStyle;
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
 	moshAudioLinkStrength: number;
@@ -276,6 +277,7 @@ export function laneMoshOptions(
 	return {
 		moshMin: s.moshMin,
 		moshMax: s.moshMax,
+		moshStyle: s.moshStyle,
 		randomizeOrder: s.randomizeOrder,
 		moshAudioLink: s.moshAudioLink,
 		moshAudioLinkStrength: s.moshAudioLinkStrength,
@@ -312,6 +314,7 @@ export function normalizeLaneSettings(raw: unknown): LaneSettings | undefined {
 	return {
 		moshMin: s.moshMin,
 		moshMax: s.moshMax,
+		moshStyle: s.moshStyle === "curated" ? "curated" : "random",
 		randomizeOrder: s.randomizeOrder !== false,
 		moshAudioLink: s.moshAudioLink !== false,
 		moshAudioLinkStrength: s.moshAudioLinkStrength,

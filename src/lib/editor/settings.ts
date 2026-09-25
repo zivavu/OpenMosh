@@ -1,5 +1,6 @@
 import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
 import type { FreqBand } from "../effects";
+import type { MoshStyle } from "./mosh";
 import { readJson, writeJson } from "../storage";
 
 const SETTINGS_KEY = "openmosh-settings";
@@ -12,6 +13,7 @@ export interface EditorSettings {
 	lastMode: UploadMode;
 	moshMin: number;
 	moshMax: number;
+	moshStyle: MoshStyle;
 	randomizeOrder: boolean;
 	moshAudioLink: boolean;
 	moshAudioLinkStrength: number;
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	lastMode: "single",
 	moshMin: 2,
 	moshMax: 4,
+	moshStyle: "random",
 	randomizeOrder: true,
 	moshAudioLink: true,
 	moshAudioLinkStrength: 0.8,

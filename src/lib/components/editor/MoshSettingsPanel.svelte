@@ -2,6 +2,7 @@
 	import { DEFAULT_SETTINGS } from "../../editor/settings";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import type { FreqBand } from "../../effects";
+	import type { MoshStyle } from "../../editor/mosh";
 	import { RotateCcw } from "lucide-svelte";
 	import BpmControl from "../ui/BpmControl.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
@@ -14,9 +15,24 @@
 		{ id: "high", label: "High", title: "High (4k–16k Hz)" },
 	] as const satisfies { id: FreqBand; label: string; title: string }[];
 
+	const STYLES = [
+		{
+			id: "random",
+			label: "Random",
+			title: "Any effects, any order, any strength.",
+		},
+		{
+			id: "curated",
+			label: "Curated",
+			title:
+				"Effects that work together, in a signal-chain order, one leading and the rest supporting; dead frames are rolled again.",
+		},
+	] as const satisfies { id: MoshStyle; label: string; title: string }[];
+
 	interface Props {
 		moshMin: number;
 		moshMax: number;
+		moshStyle: MoshStyle;
 		randomizeOrder: boolean;
 		moshAudioLink: boolean;
 		moshAudioLinkStrength: number;
@@ -42,6 +58,7 @@
 	let {
 		moshMin = $bindable(),
 		moshMax = $bindable(),
+		moshStyle = $bindable(),
 		randomizeOrder = $bindable(),
 		moshAudioLink = $bindable(),
 		moshAudioLinkStrength = $bindable(),
@@ -190,17 +207,41 @@
 		},
 		maxCtl,
 	)}
-	{#snippet shuffleCtl()}
-		<Checkbox id="mosh-shuffle" bind:checked={randomizeOrder} />
+	{#snippet styleCtl()}
+		<div class="band-presets" role="group" aria-label="Mosh style">
+			{#each STYLES as style (style.id)}
+				<button
+					type="button"
+					class="band-btn"
+					class:active={moshStyle === style.id}
+					title={style.title}
+					onclick={() => (moshStyle = style.id)}>{style.label}</button
+				>
+			{/each}
+		</div>
 	{/snippet}
 	{@render row(
-		"mosh-shuffle",
-		"Shuffle order",
-		"Let a mosh reorder the chain as well as re-roll it. Order changes the look: a blur before a glitch is not the same as a glitch before a blur.",
-		randomizeOrder !== DEFAULT_SETTINGS.randomizeOrder,
-		() => (randomizeOrder = DEFAULT_SETTINGS.randomizeOrder),
-		shuffleCtl,
+		"mosh-style",
+		"Style",
+		"Random picks any effects in any order at any strength. Curated picks effects that don't fight, runs them in signal-chain order, lets one lead while the rest support it, and rolls again when the frame comes out dead.",
+		moshStyle !== DEFAULT_SETTINGS.moshStyle,
+		() => (moshStyle = DEFAULT_SETTINGS.moshStyle),
+		styleCtl,
 	)}
+	<!-- Curated sets its own order. -->
+	{#if moshStyle !== "curated"}
+		{#snippet shuffleCtl()}
+			<Checkbox id="mosh-shuffle" bind:checked={randomizeOrder} />
+		{/snippet}
+		{@render row(
+			"mosh-shuffle",
+			"Shuffle order",
+			"Let a mosh reorder the chain as well as re-roll it. Order changes the look: a blur before a glitch is not the same as a glitch before a blur.",
+			randomizeOrder !== DEFAULT_SETTINGS.randomizeOrder,
+			() => (randomizeOrder = DEFAULT_SETTINGS.randomizeOrder),
+			shuffleCtl,
+		)}
+	{/if}
 
 	{#if hasAudio}
 		{@render head("Audio links")}

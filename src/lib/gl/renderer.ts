@@ -392,6 +392,13 @@ export class GlRenderer {
 	private highlightFence: WebGLSync | null = null;
 	private highlightPendingKey = "";
 	private highlightResult: LayerHighlight | null = null;
+	/** Small target the canvas is shrunk into when a roll is judged. */
+	private sampleTarget: {
+		tex: WebGLTexture;
+		fbo: WebGLFramebuffer;
+		w: number;
+		h: number;
+	} | null = null;
 
 	constructor(private canvas: HTMLCanvasElement) {
 		// antialias defaults to true, which multisamples and resolves the default
@@ -1887,6 +1894,58 @@ export class GlRenderer {
 		this.salPending = null;
 	}
 
+	/** The canvas as last drawn, shrunk to at most `maxSide` px, as RGBA rows. Blocks
+	 * on the GPU: for the odd judged roll, not per frame. */
+	sampleFrame(
+		maxSide = 96,
+	): { pixels: Uint8Array; w: number; h: number } | null {
+		const gl = this.gl;
+		const cw = this.canvas.width;
+		const ch = this.canvas.height;
+		if (cw <= 0 || ch <= 0) return null;
+		const k = Math.min(1, maxSide / Math.max(cw, ch));
+		const w = Math.max(1, Math.round(cw * k));
+		const h = Math.max(1, Math.round(ch * k));
+		let target = this.sampleTarget;
+		if (!target || target.w !== w || target.h !== h) {
+			this.deleteSampleTarget();
+			const tex = this.createTexture(w, h);
+			const fbo = this.createRenderTarget(tex);
+			if (!fbo) {
+				gl.deleteTexture(tex);
+				return null;
+			}
+			target = this.sampleTarget = { tex, fbo, w, h };
+		}
+		gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, target.fbo);
+		gl.blitFramebuffer(
+			0,
+			0,
+			cw,
+			ch,
+			0,
+			0,
+			w,
+			h,
+			gl.COLOR_BUFFER_BIT,
+			gl.LINEAR,
+		);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+		const pixels = new Uint8Array(w * h * 4);
+		gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		return { pixels, w, h };
+	}
+
+	private deleteSampleTarget() {
+		const target = this.sampleTarget;
+		if (!target) return;
+		this.gl.deleteTexture(target.tex);
+		this.gl.deleteFramebuffer(target.fbo);
+		this.sampleTarget = null;
+	}
+
 	/** Trace `target`'s drawn edge on the next render, at `w`×`h`. Read back rather
 	 * than drawn here, so the canvas an export reads never carries it. */
 	traceHighlight(target: HighlightTarget, w: number, h: number) {
@@ -2662,6 +2721,7 @@ export class GlRenderer {
 		if (this.salPBO) gl.deleteBuffer(this.salPBO);
 		this.salPBO = null;
 		this.deleteHighlightTarget();
+		this.deleteSampleTarget();
 		this.trackingStates.clear();
 		if (this.textBlendProgram) gl.deleteProgram(this.textBlendProgram.program);
 		this.textBlendProgram = null;

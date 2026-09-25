@@ -10,6 +10,8 @@ export interface MoshSessionOptions {
 	cancelBurst: () => void;
 	/** Close and record a pending burst before walking the edit history. */
 	endBurst: () => void;
+	/** Runs a roll, and may run it again until the result is worth keeping. */
+	rollAlive?: (roll: () => void) => void;
 }
 
 /** Two undo stacks over one chain so ←/→ (moshes) and Ctrl+Z/Y (hand-edits)
@@ -17,6 +19,7 @@ export interface MoshSessionOptions {
 export function createMoshSession(opts: MoshSessionOptions) {
 	const { getEffects, setEffects, getMoshOptions, cancelBurst, endBurst } =
 		opts;
+	const rollAlive = opts.rollAlive ?? ((roll: () => void) => roll());
 	const history = createEffectHistory();
 	const moshHistory = createEffectHistory();
 
@@ -26,7 +29,7 @@ export function createMoshSession(opts: MoshSessionOptions) {
 		// Record the pre-first-roll chain so ← returns to the user's own work, not startup.
 		if (!moshHistory.canUndo && !moshHistory.canRedo)
 			moshHistory.reset(effects);
-		generateMosh(effects, getMoshOptions());
+		rollAlive(() => generateMosh(effects, getMoshOptions()));
 		moshHistory.push(effects);
 		history.reset(effects);
 	}
