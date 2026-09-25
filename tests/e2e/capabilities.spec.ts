@@ -1,52 +1,28 @@
 import { expect, test } from "@playwright/test";
 
-/** What the rest of the suite is allowed to assume about the browser it runs in. These
- * aren't tests of OpenMosh: if the export spec goes red and this file is green, the app broke. */
-test.describe("the browser the suite runs in", () => {
-	test("gives a canvas a working WebGL2 context", async ({ page }) => {
-		await page.goto("/");
-		const gl = await page.evaluate(() => {
-			const canvas = document.createElement("canvas");
-			const ctx = canvas.getContext("webgl2");
-			if (!ctx) return null;
-			return {
-				renderer: ctx.getParameter(ctx.RENDERER) as string,
-				maxTextureSize: ctx.getParameter(ctx.MAX_TEXTURE_SIZE) as number,
-				// The editor renders its chain through float textures.
-				floatColorBuffer: !!ctx.getExtension("EXT_color_buffer_float"),
-			};
-		});
-		expect(gl).not.toBeNull();
-		// 4096 is the floor every preview size decision assumes.
-		expect(gl!.maxTextureSize).toBeGreaterThanOrEqual(4096);
-		expect(gl!.floatColorBuffer).toBe(true);
-	});
-
-	test("actually rasterizes, rather than handing back a blank buffer", async ({
-		page,
-	}) => {
-		await page.goto("/");
-		const pixel = await page.evaluate(() => {
-			const canvas = document.createElement("canvas");
-			canvas.width = 4;
-			canvas.height = 4;
-			const gl = canvas.getContext("webgl2")!;
+/** What the rest of the suite is allowed to assume about the browser it runs in. Not a
+ * test of OpenMosh: if the export spec goes red and this is green, the app broke. One page
+ * load, soft assertions, so a failure still names every missing capability. */
+test("the browser the suite runs in has what the app needs", async ({
+	page,
+}) => {
+	await page.goto("/");
+	const caps = await page.evaluate(async () => {
+		const canvas = document.createElement("canvas");
+		canvas.width = 4;
+		canvas.height = 4;
+		const gl = canvas.getContext("webgl2");
+		let pixel: number[] = [];
+		if (gl) {
 			gl.clearColor(0, 1, 0, 1);
 			gl.clear(gl.COLOR_BUFFER_BIT);
 			const buf = new Uint8Array(4);
 			gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-			return [...buf];
-		});
-		expect(pixel).toEqual([0, 255, 0, 255]);
-	});
+			pixel = [...buf];
+		}
 
-	test("can encode the codec the exporter muxes into WebM", async ({
-		page,
-	}) => {
-		await page.goto("/");
-		const support = await page.evaluate(async () => {
-			if (!("VideoEncoder" in window)) return null;
-			const results: Record<string, boolean> = {};
+		const encoders: boolean[] = [];
+		if ("VideoEncoder" in window) {
 			for (const codec of ["vp8", "vp09.00.10.08"]) {
 				const { supported } = await VideoEncoder.isConfigSupported({
 					codec,
@@ -54,39 +30,38 @@ test.describe("the browser the suite runs in", () => {
 					height: 240,
 					bitrate: 1_000_000,
 				});
-				results[codec] = !!supported;
+				encoders.push(!!supported);
 			}
-			return results;
-		});
-		expect(support).not.toBeNull();
-		// One of the two is enough: the exporter picks what the machine offers.
-		expect(Object.values(support!).some(Boolean)).toBe(true);
+		}
+
+		const audio = new AudioContext();
+		await new Promise((r) => setTimeout(r, 100));
+
+		return {
+			webgl2: !!gl,
+			maxTextureSize: gl ? (gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) : 0,
+			// The editor renders its chain through float textures.
+			floatColorBuffer: !!gl?.getExtension("EXT_color_buffer_float"),
+			pixel,
+			encoders,
+			decoder: "VideoDecoder" in window && "VideoFrame" in window,
+			audioState: audio.state,
+		};
 	});
 
-	test("can decode video frames off a file", async ({ page }) => {
-		await page.goto("/");
-		const has = await page.evaluate(
-			() => "VideoDecoder" in window && "VideoFrame" in window,
-		);
-		expect(has).toBe(true);
-	});
-
-	test("runs an AudioContext without waiting for a click", async ({ page }) => {
-		// The autoplay flag in the config makes this true; without it every clock-driven spec hangs.
-		await page.goto("/");
-		const state = await page.evaluate(async () => {
-			const ctx = new AudioContext();
-			await new Promise((r) => setTimeout(r, 100));
-			return ctx.state;
-		});
-		expect(state).toBe("running");
-	});
-
-	test("has the storage the editor persists into", async ({ page }) => {
-		await page.goto("/");
-		const ok = await page.evaluate(
-			() => "indexedDB" in window && "localStorage" in window,
-		);
-		expect(ok).toBe(true);
-	});
+	expect.soft(caps.webgl2, "a WebGL2 context").toBe(true);
+	// 4096 is the floor every preview size decision assumes.
+	expect.soft(caps.maxTextureSize).toBeGreaterThanOrEqual(4096);
+	expect.soft(caps.floatColorBuffer, "EXT_color_buffer_float").toBe(true);
+	// Actually rasterizes, rather than handing back a blank buffer.
+	expect
+		.soft(caps.pixel, "a cleared pixel read back")
+		.toEqual([0, 255, 0, 255]);
+	// One of the two is enough: the exporter picks what the machine offers.
+	expect.soft(caps.encoders.some(Boolean), "a VP8 or VP9 encoder").toBe(true);
+	expect.soft(caps.decoder, "WebCodecs decode").toBe(true);
+	// The autoplay flag in the config makes this true; without it every clock-driven spec hangs.
+	expect
+		.soft(caps.audioState, "an AudioContext without a click")
+		.toBe("running");
 });

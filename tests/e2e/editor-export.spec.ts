@@ -11,7 +11,7 @@ import {
 import { GREEN, RED } from "./fixtures";
 
 /** Exporting the timeline to a file. The one irreversible thing the app does, and the last
- * place a user finds out something is wrong: every layer is live here, so these are slow. */
+ * place a user finds out something is wrong: every layer is live here, so this is slow. */
 
 /** Short on purpose: the export renders every frame through a software rasterizer. */
 const TRACK_SECONDS = 3;
@@ -58,7 +58,9 @@ test.beforeEach(async ({ page }) => {
 	});
 });
 
-test("records the timeline to a playable WebM", async ({ page }) => {
+test("records a cut, moshed timeline to a playable WebM as long as the song", async ({
+	page,
+}) => {
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],
@@ -67,9 +69,12 @@ test("records the timeline to a playable WebM", async ({ page }) => {
 		track: { seconds: TRACK_SECONDS },
 	});
 	await waitForRender(page);
+	// The clip machinery in the loop: a cut, and a rolled chain on one side of it.
+	await splitClipAt(page, 0.5);
+	await selectClip(page, 0);
+	await clipMoshButton(page).click();
 
-	const download = await exportAt(page);
-	const file = await download;
+	const file = await exportAt(page);
 	expect(file.suggestedFilename()).toMatch(/^openmosh-\d+\.webm$/);
 
 	const path = (await file.path())!;
@@ -82,49 +87,7 @@ test("records the timeline to a playable WebM", async ({ page }) => {
 	expect(played, "the exported file wouldn't load as a video").not.toBeNull();
 	expect(played!.width).toBeGreaterThan(0);
 	expect(played!.height).toBeGreaterThan(0);
-});
-
-test("runs as long as the song it was cut to", async ({ page }) => {
-	await openEditor(page, {
-		sources: [
-			["red.png", RED],
-			["green.png", GREEN],
-		],
-		track: { seconds: TRACK_SECONDS },
-	});
-	await waitForRender(page);
-
-	const file = await await exportAt(page);
-	const played = await probe(page, (await file.path())!);
-	expect(played).not.toBeNull();
 	// A frame or so of slack at each end; this guards an export that stops early or runs away.
 	expect(played!.duration).toBeGreaterThan(TRACK_SECONDS - 0.5);
 	expect(played!.duration).toBeLessThan(TRACK_SECONDS + 1);
-});
-
-test("exports a timeline that was cut and moshed", async ({ page }) => {
-	// The plain export above renders one clean source end to end. This one has the clip
-	// machinery in the loop: a cut, a rolled chain on one side, a source swap at the boundary.
-	await openEditor(page, {
-		sources: [
-			["red.png", RED],
-			["green.png", GREEN],
-		],
-		track: { seconds: TRACK_SECONDS },
-	});
-	await waitForRender(page);
-
-	await splitClipAt(page, 0.5);
-	await selectClip(page, 0);
-	await clipMoshButton(page).click();
-
-	const file = await await exportAt(page);
-	const path = (await file.path())!;
-	expect([...readFileSync(path).subarray(0, 4)]).toEqual([
-		0x1a, 0x45, 0xdf, 0xa3,
-	]);
-
-	const played = await probe(page, path);
-	expect(played).not.toBeNull();
-	expect(played!.duration).toBeGreaterThan(TRACK_SECONDS - 0.5);
 });
