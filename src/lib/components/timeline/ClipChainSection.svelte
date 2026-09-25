@@ -20,6 +20,8 @@
 		hint: string;
 		/** Anything to say above the hint, e.g. a warning about the chain. */
 		children?: Snippet;
+		/** Whether edits here also reach the rest of a multi-selection. */
+		note?: string | null;
 	}
 
 	let {
@@ -31,6 +33,7 @@
 		response = undefined,
 		hint,
 		children,
+		note = null,
 	}: Props = $props();
 
 	// The clip's chain, mirrored for EffectsPanel to own and written back on every
@@ -59,6 +62,7 @@
 <p class="hint">These effects only run on {hint}, before it meets the frame.</p>
 <EffectsPanel
 	headless
+	{note}
 	bind:effects={() => chain.effects, (v) => (chain.effects = v)}
 	rolledNote={clip.mode === "interval"
 		? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Lock an effect to keep it through every roll, hide one to keep it out, or switch the clip to Static in the clip bar to build a chain by hand."

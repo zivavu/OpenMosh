@@ -53,6 +53,8 @@
 		onEditingChange?: (open: boolean) => void;
 		/** Which half to show: the clip's controls, or the lane's effect chain. */
 		section?: "clip" | "chain";
+		/** Whether chain edits also reach the rest of a multi-selection. */
+		chainNote?: string | null;
 		/** False once the clip's video is known to have no sound. */
 		sourceHasAudio?: boolean;
 		/** Move the clip's sound onto an audio lane of its own. */
@@ -74,6 +76,7 @@
 		onEditChange,
 		onEditingChange,
 		section = "clip",
+		chainNote = null,
 		sourceHasAudio = true,
 		onDetachAudio,
 	}: Props = $props();
@@ -525,6 +528,7 @@
 				{spectrumData}
 				{response}
 				hint="this clip's media"
+				note={chainNote}
 			/>
 		{/if}
 	{/snippet}

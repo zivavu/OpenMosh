@@ -59,6 +59,8 @@
 		/** Called before a change is applied, while the pre-edit state is intact.
 		 * `coalesceKey` merges consecutive ticks of one drag into one undo entry. */
 		onBeforeUserEdit?: (coalesceKey?: string) => void;
+		/** Shown over the list, e.g. what an edit reaches in a multi-selection. */
+		note?: string | null;
 		/** Set when `effects` is not a chain the user can edit; the rack shows this instead. */
 		noTarget?: { title: string; hint: string } | null;
 		/** Set when something else decides which effects are on, e.g. the slideshow's
@@ -82,6 +84,7 @@
 		onUserEdit,
 		onBeforeUserEdit,
 		noTarget = null,
+		note = null,
 		rolledNote = null,
 		rolledChain = false,
 		rolledScope = "all",
@@ -706,6 +709,9 @@
 		</div>
 	{:else}
 		<div class="panel-list" bind:this={listEl}>
+			{#if note}
+				<p class="rolled-note">{note}</p>
+			{/if}
 			{#if rolledNote}
 				<p class="rolled-note">{rolledNote}</p>
 			{/if}
