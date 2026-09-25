@@ -112,7 +112,14 @@ describe("locked effects", () => {
 		);
 	});
 
-	const PICKED_ON_PURPOSE = ["petri", "circle-warp", "polar", "transform-3d"];
+	const PICKED_ON_PURPOSE = [
+		"petri",
+		"circle-warp",
+		"polar",
+		"transform-3d",
+		"pixelate",
+		"halftone",
+	];
 
 	test("a roll never switches on an effect meant to be picked on purpose", () => {
 		for (let seed = 1; seed <= 40; seed++) {
