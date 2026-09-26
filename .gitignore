@@ -14,7 +14,6 @@ dist-ssr
 
 # Claude Code
 CLAUDE.md
-AGENTS.md
 docs
 .superpowers
 .claude
