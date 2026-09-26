@@ -91,10 +91,11 @@ const RGBSLIP_FRAG = frag(`  float p = u_progress;
   float s = spike(p);
   float tick = floor(p * 20.0);
   float e = hold(p);
-  // Scale pop plus a lateral whip, so the punch has somewhere to go.
+  // Scale pop plus a lateral whip, so the punch has somewhere to go. Both die out at
+  // the ends, so the blend starts and lands on the clips as they are.
   float zoom = 1.0 + s * 0.14;
   vec2 uv = (v_uv - 0.5) / zoom + 0.5;
-  uv.x += (e - 0.5) * 0.16;
+  uv.x += (e - 0.5) * 0.16 * s;
   float band = floor(v_uv.y * 14.0);
   float bd = hash12(vec2(band, SEED)) - 0.5;
   uv.x += sign(bd) * abs(bd) * 0.20 * s * s;
@@ -175,8 +176,8 @@ const SHATTER_FRAG = frag(`  float p = u_progress;
     outColor = vec4(clamp(a * (1.0 - t * 0.25), 0.0, 1.0), 1.0);
     return;
   }
-  // Freshly uncovered strips flash before settling.
-  float fresh = smoothstep(0.0, 0.18, t - 0.5);
+  // Freshly uncovered strips flash before settling, out by the time the slab is gone.
+  float fresh = smoothstep(0.0, 0.18, t - 0.5) * (1.0 - smoothstep(0.8, 1.0, t));
   outColor = vec4(clamp(texture(u_texture2, v_uv).rgb * (1.0 + fresh * 0.15), 0.0, 1.0), 1.0);`);
 
 /** Exposure runs away: the frame clips to white, swings warm as it goes, and

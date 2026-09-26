@@ -1,5 +1,5 @@
 import { expect, test as base, type Page } from "@playwright/test";
-import { GREEN, patternPngBase64, pngBytes, RED } from "./fixtures";
+import { GREEN, patternPngBase64, pngBytes } from "./fixtures";
 
 /** Every clip transition, through the path a media layer blends on in the real renderer. A
  * transition whose shader stops compiling is caught, logged and skipped, so the blend becomes a
@@ -14,6 +14,8 @@ interface TransitionResult {
 	timeIndependent: boolean;
 	/** Landed on the incoming clip exactly once progress reached 1. */
 	settlesOnIncoming: boolean;
+	/** Drawn exactly as the outgoing clip at progress 0. */
+	startsOnOutgoing: boolean;
 	/** Whether each knob the shader declares actually reaches it. Null means the shader
 	 * doesn't read that uniform; decided from the shader source, not a list in this file. */
 	respondsToSeed: boolean | null;
@@ -38,7 +40,7 @@ const SIZE = 128;
 async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 	await page.goto("/");
 	return page.evaluate(
-		async ([size, baseB64, incomingB64, outgoingB64]) => {
+		async ([size, baseB64, incomingB64]) => {
 			const load = (path: string) => import(/* @vite-ignore */ path);
 			const { GlRenderer } = await load("/src/lib/gl/renderer.ts");
 			const { TRANSITION_SHADERS } = await load(
@@ -82,7 +84,19 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 
 			// Two visibly different clips on one lane, so a blend has somewhere to travel.
 			const incoming = await bitmapOf(incomingB64);
-			const outgoing = await bitmapOf(outgoingB64);
+			// Detailed too, and unlike the incoming pattern: a shift of a flat fill looks like no shift.
+			const art = document.createElement("canvas");
+			art.width = size;
+			art.height = size;
+			const ctx = art.getContext("2d")!;
+			const gradient = ctx.createLinearGradient(0, size, size, 0);
+			gradient.addColorStop(0, "#ff2200");
+			gradient.addColorStop(1, "#ffdd00");
+			ctx.fillStyle = gradient;
+			ctx.fillRect(0, 0, size, size);
+			ctx.fillStyle = "#101040";
+			for (let x = 0; x < size; x += 12) ctx.fillRect(x, 0, 5, size);
+			const outgoing = await createImageBitmap(art);
 			const side = (key: string) => ({
 				key,
 				clipId: key,
@@ -157,6 +171,7 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 				// The same blend, one second later: any u_time in the shader shows up as a different frame.
 				const midLater = blendAt(type, 0.5, 1.4);
 				const settled = blendAt(type, 1, 0.4);
+				const started = blendAt(type, 0, 0.4);
 				// Only asked of shaders that declare the uniform, so nothing here is hard-coded.
 				const differsWith = (seed: number, dir: number, den: number) =>
 					blendAt(type, 0.5, 0.4, seed, dir, den) !== mid;
@@ -165,6 +180,7 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 					blends: mid !== incomingHash && mid !== outgoingHash,
 					timeIndependent: mid === midLater,
 					settlesOnIncoming: settled === incomingHash,
+					startsOnOutgoing: started === outgoingHash,
 					respondsToSeed: readsSeed ? differsWith(SEED + 92, 0, 0) : null,
 					respondsToDirection: body.includes("u_direction")
 						? differsWith(SEED, 2, 0)
@@ -193,7 +209,6 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 			SIZE,
 			pngBytes(GREEN, SIZE).toString("base64"),
 			patternPngBase64(SIZE),
-			pngBytes(RED, SIZE).toString("base64"),
 		] as const,
 	);
 }
@@ -278,10 +293,6 @@ test("has a transition reading each of the three knobs", async ({ report }) => {
 	expect(declared).toEqual({ seed: true, direction: true, density: true });
 });
 
-/** Still off the incoming clip at progress 1: rgbslip ends shifted sideways, shatter ends
- * brightened. Remove one once its shader is fixed; this test fails until then. */
-const KNOWN_SEAMS = ["rgbslip", "shatter"];
-
 test("lands exactly on the incoming clip when it finishes", async ({
 	report,
 }) => {
@@ -290,7 +301,15 @@ test("lands exactly on the incoming clip when it finishes", async ({
 	const short = report.transitions
 		.filter((t) => !t.settlesOnIncoming)
 		.map((t) => t.type);
-	expect(short).toEqual(KNOWN_SEAMS);
+	expect(short).toEqual([]);
+});
+
+test("starts exactly on the outgoing clip", async ({ report }) => {
+	// The other end of the same seam: the frame before the blend is the outgoing clip alone.
+	const off = report.transitions
+		.filter((t) => !t.startsOnOutgoing)
+		.map((t) => t.type);
+	expect(off).toEqual([]);
 });
 
 test("falls back to a cut for a transition it doesn't know", async ({
