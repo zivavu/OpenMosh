@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.4](https://github.com/zivavu/OpenMosh/compare/v0.9.3...v0.9.4) (2026-09-26)
+
+
+### Added
+
+* Edit the effects of several selected clips at once ([6db54c5](https://github.com/zivavu/OpenMosh/commit/6db54c5d5285517cfff786ef7b0dc53883a594e7))
+* Hide the layer highlight after the first mosh ([37172a7](https://github.com/zivavu/OpenMosh/commit/37172a7d13b1d8d2bae4e3dd684a24a08dfc55d9))
+* Loop short videos to 20 seconds when dropped on a lane ([0329db6](https://github.com/zivavu/OpenMosh/commit/0329db68fdb356376186201133c1629d23675f28))
+* Make Curated the default mosh style ([1686667](https://github.com/zivavu/OpenMosh/commit/168666760f2b76f97a1c20579b9b5d82ff69a934))
+* Rotate media layers from a handle on the canvas ([27fb509](https://github.com/zivavu/OpenMosh/commit/27fb509966a56d51668a3d9a1f7e7db39dcc9f77))
+* Show when the Mosh settings are the editor's own ([5715479](https://github.com/zivavu/OpenMosh/commit/57154791313ce442b571b485d644fee73e9c47d5))
+
+
+### Fixed
+
+* Keep an edit made just before a reload ([d959994](https://github.com/zivavu/OpenMosh/commit/d959994ef81e4c7d05daa00684ac91bbe325c033))
+* Stop RGB slip and shatter jumping at their ends ([1a8bdbb](https://github.com/zivavu/OpenMosh/commit/1a8bdbb2cae656df89b8a460b3df3cc807f647d4))
+
 ## [0.9.3](https://github.com/zivavu/OpenMosh/compare/v0.9.2...v0.9.3) (2026-09-25)
 
 
