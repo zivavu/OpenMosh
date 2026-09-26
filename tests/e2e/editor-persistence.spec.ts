@@ -83,10 +83,7 @@ test("a sequence opened from one file is offered back with it", async ({
 	await expect(page.locator(".saved-item .saved-count")).toHaveText("1 src");
 });
 
-// Fails today: a reload inside the save debounce stores the timeline without the cuts.
-test.fixme("a reload mid-edit doesn't lose the last change", async ({
-	page,
-}) => {
+test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],
@@ -99,7 +96,8 @@ test.fixme("a reload mid-edit doesn't lose the last change", async ({
 	await expect(mediaClips(page)).toHaveCount(3);
 	// Reloaded straight away, inside the save debounce: only the pagehide flush can keep the last cut.
 	await page.reload();
-	await selectMode(page, "Editor");
-	await openSavedSong(page);
+	// The editor resumes the song it was on.
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await waitForRender(page);
 	await expect(mediaClips(page)).toHaveCount(3);
 });

@@ -151,7 +151,11 @@ async function write(
 	body: (store: IDBObjectStore) => void,
 ): Promise<void> {
 	const db = await openDb();
-	await transact(db, store, "readwrite", (tx) => body(tx.objectStore(store)));
+	await transact(db, store, "readwrite", (tx) => {
+		body(tx.objectStore(store));
+		// Committed now, not on auto-commit: a write started as the page unloads still lands.
+		tx.commit();
+	});
 }
 
 function openDb(): Promise<IDBDatabase> {
