@@ -3408,13 +3408,25 @@
 		retainLaneMoshes();
 	}
 
+	/** The clip before the panel's edit: its chain panel edits the effects in place. */
+	let textEditBase: TextClip | null = null;
+
+	function beforeTextClipEdit(coalesceKey?: string) {
+		textEditBase = selectedTextClip
+			? ($state.snapshot(selectedTextClip) as TextClip)
+			: null;
+		pushTextHistory(coalesceKey);
+	}
+
 	/** A chain edit also reaches the other selected clips, when they run the same effects. */
 	function updateTextClip(next: TextClip) {
+		const base = textEditBase;
+		textEditBase = null;
 		const others = textClipsById(new Set(selectedTextClipIds)).filter(
 			(c) => c.id !== next.id,
 		);
 		const fanned = fanOutEdit(
-			findTextClip(textTimeline, next.id),
+			base?.id === next.id ? base : findTextClip(textTimeline, next.id),
 			next,
 			$state.snapshot(others) as TextClip[],
 		);
@@ -3449,13 +3461,25 @@
 		retainLaneMoshes();
 	}
 
+	/** See textEditBase. */
+	let mediaEditBase: MediaClip | null = null;
+
+	function beforeMediaClipEdit(coalesceKey?: string) {
+		mediaEditBase = selectedMediaClip
+			? ($state.snapshot(selectedMediaClip) as MediaClip)
+			: null;
+		pushMediaHistory(coalesceKey);
+	}
+
 	/** See updateTextClip. */
 	function updateMediaClip(next: MediaClip) {
+		const base = mediaEditBase;
+		mediaEditBase = null;
 		const others = mediaClipsById(new Set(selectedMediaClipIds)).filter(
 			(c) => c.id !== next.id,
 		);
 		const fanned = fanOutEdit(
-			findMediaClip(mediaTimeline, next.id),
+			base?.id === next.id ? base : findMediaClip(mediaTimeline, next.id),
 			next,
 			$state.snapshot(others) as MediaClip[],
 		);
@@ -4971,7 +4995,7 @@
 				sources={sequenceSources}
 				onLaneChange={updateMediaLane}
 				onClipChange={updateMediaClip}
-				onBeforeEdit={pushMediaHistory}
+				onBeforeEdit={beforeMediaClipEdit}
 				onClose={() => (selectedMediaClipId = null)}
 				hasTrack={linksHaveAudio}
 				spectrumData={liveSpectrum}
@@ -4995,7 +5019,7 @@
 				clip={selectedTextClip}
 				onLaneChange={updateTextLane}
 				onClipChange={updateTextClip}
-				onBeforeEdit={pushTextHistory}
+				onBeforeEdit={beforeTextClipEdit}
 				onClose={() => (selectedTextClipId = null)}
 				hasTrack={linksHaveAudio}
 				spectrumData={liveSpectrum}

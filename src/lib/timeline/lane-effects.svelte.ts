@@ -57,11 +57,8 @@ export class LaneEffects<L extends EffectLane> {
 		if (known) return;
 		this.#loadedLaneId = id;
 		this.#loadedFrom = effects;
-		// A deep copy: the panel edits in place, and the lane must keep its pre-edit
-		// chain until `commit`, so an edit can be told apart from what it replaced.
-		this.#effects = effects
-			? untrack(() => $state.snapshot(effects) as EffectInstance[])
-			: [];
+		// The lane's own instances, so the sliders follow what the audio tick writes to them.
+		this.#effects = effects ? [...effects] : [];
 	}
 
 	/** Write the mirror back to the lane. */
