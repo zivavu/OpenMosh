@@ -26,6 +26,8 @@
 		selectedCount?: number;
 		/** Highlights the card the selection currently plays; null when they disagree. */
 		selectedSourceId?: string | null;
+		/** Files still being read in; each gets a placeholder card. */
+		pendingCount?: number;
 		onAddFiles: (files: File[]) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
 		onGenerate: () => void;
@@ -41,6 +43,7 @@
 		sources,
 		selectedCount = 0,
 		selectedSourceId = null,
+		pendingCount = 0,
 		onAddFiles,
 		onGenerate,
 		onRecord,
@@ -133,7 +136,7 @@
 		</span>
 	</div>
 
-	{#if sources.length === 0}
+	{#if sources.length === 0 && pendingCount === 0}
 		<div class="empty-state">
 			<span class="empty-label">NO MEDIA</span>
 			<p>Drop images or videos in, or use the button below.</p>
@@ -207,6 +210,12 @@
 					>
 						<X size={12} />
 					</button>
+				</div>
+			{/each}
+
+			{#each { length: pendingCount }}
+				<div class="card loading" title="Loading…">
+					<MediaThumb thumbPending />
 				</div>
 			{/each}
 
@@ -328,6 +337,14 @@
 
 	.card:hover {
 		border-color: var(--line-strong);
+	}
+
+	.card.loading {
+		cursor: default;
+	}
+
+	.card.loading:hover {
+		border-color: var(--line);
 	}
 
 	.card.active {

@@ -124,23 +124,27 @@ export class SequenceSourceRegistry {
 	}
 
 	async add(files: File[], { persist = true } = {}): Promise<SequenceSource[]> {
-		// Animated GIFs become videos here, before anything is keyed on the file.
-		files = await gifsToVideo(files);
-		// Ids are reserved before the first await: probing is async, so overlapping
-		// calls would both see an empty pool and append a duplicate key.
-		const fresh = files.filter((f) => {
-			const id = stableSourceId(f);
-			if (this.get(id) || this.#pendingIds.has(id)) return false;
-			this.#pendingIds.add(id);
-			return true;
-		});
-
-		const images = fresh.filter((f) => !f.type.startsWith("video/"));
-		const videos = fresh.filter((f) => f.type.startsWith("video/"));
-
+		// Counted before the GIF conversion, which is part of the wait.
+		this.#beginLoad(files.length);
+		const fresh: File[] = [];
 		const ok: SequenceSource[] = [];
-		this.#beginLoad(fresh.length);
 		try {
+			// Animated GIFs become videos here, before anything is keyed on the file.
+			files = await gifsToVideo(files);
+			// Ids are reserved before the next await: probing is async, so overlapping
+			// calls would both see an empty pool and append a duplicate key.
+			for (const f of files) {
+				const id = stableSourceId(f);
+				if (this.get(id) || this.#pendingIds.has(id)) continue;
+				this.#pendingIds.add(id);
+				fresh.push(f);
+			}
+			// Duplicates were never going to land.
+			this.loadingTotal -= files.length - fresh.length;
+
+			const images = fresh.filter((f) => !f.type.startsWith("video/"));
+			const videos = fresh.filter((f) => f.type.startsWith("video/"));
+
 			// Images need no pixels to enter the pool, so chips appear in one frame
 			// instead of waiting on a decode and encode each.
 			if (images.length > 0) {

@@ -4201,6 +4201,7 @@
 				sources={sequenceSources}
 				selectedCount={selectedMediaClipIds.length}
 				selectedSourceId={railSourceId}
+				pendingCount={sourceRegistry.loadingTotal - sourceRegistry.loadingDone}
 				onAddFiles={(files) => void addSequenceSources(files)}
 				onGenerate={() => (generateOpen = true)}
 				onRecord={() => (webcamOpen = true)}
