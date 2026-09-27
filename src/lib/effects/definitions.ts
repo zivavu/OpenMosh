@@ -1151,7 +1151,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				min: 0,
 				max: 1,
 				step: 0.01,
-				defaultValue: 0.45,
+				defaultValue: 0,
 			},
 		],
 	},

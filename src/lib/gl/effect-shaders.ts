@@ -2250,32 +2250,30 @@ void main() {
 uniform float u_angle;
 uniform float u_trail;
 
-const int SMEAR_STEPS = 8;
+const int TRAIL_STEPS = 8;
+
+vec4 at(vec2 p) {
+  return texture(u_texture, vec2(bounce(p.x), bounce(p.y)));
+}
 
 void main() {
-  // Self-displacement: the image's own red/green channels are read as a vector
-  // field and the pixel is walked along it, so content flows with its own colour.
+  // Each pixel is pushed by its own red/green, read as a vector, so content flows
+  // with its colour. One lookup keeps the result crisp.
   float rad = u_angle * 3.14159265 / 180.0;
   float ca = cos(rad);
   float sa = sin(rad);
-  mat2 rot = mat2(ca, -sa, sa, ca);
-  float stride = u_amount * 0.2 / float(SMEAR_STEPS);
-
-  vec2 p = v_uv;
-  vec4 acc = vec4(0.0);
-  float total = 0.0;
-  for (int i = 0; i < SMEAR_STEPS; i++) {
-    vec4 s = texture(u_texture, vec2(bounce(p.x), bounce(p.y)));
-    float t = float(i) / float(SMEAR_STEPS - 1);
-    // Trail 0 keeps the far end of the walk, one clean displacement. Trail 1
-    // weights the whole path evenly, which reads as a smear rather than a ghost.
-    float w = mix(pow(t, 16.0), 1.0, u_trail);
-    acc += s * w;
-    total += w;
-    // Re-reading the field at each step lets the walk bend with the image.
-    p += rot * (s.rg - 0.5) * stride;
+  vec2 push = mat2(ca, -sa, sa, ca) * (texture(u_texture, v_uv).rg - 0.5) * u_amount * 0.2;
+  vec4 moved = at(v_uv + push);
+  if (u_trail <= 0.0) {
+    outColor = moved;
+    return;
   }
-  outColor = acc / max(total, 1e-4);
+  // Trail ghosts the path the pixel was pushed along.
+  vec4 path = vec4(0.0);
+  for (int i = 0; i < TRAIL_STEPS; i++) {
+    path += at(v_uv + push * (float(i) / float(TRAIL_STEPS - 1)));
+  }
+  outColor = mix(moved, path / float(TRAIL_STEPS), u_trail);
 }`,
 		setUniforms: floats("amount", "angle", "trail"),
 	},
