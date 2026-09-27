@@ -411,15 +411,6 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		name: "Vignette",
 		params: [
 			{
-				key: "size",
-				label: "Size",
-				type: "range",
-				min: 0,
-				max: 1,
-				step: 0.01,
-				defaultValue: 0.5,
-			},
-			{
 				key: "amount",
 				label: "Amount",
 				type: "range",
@@ -427,6 +418,30 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				max: 1,
 				step: 0.01,
 				defaultValue: 0.5,
+			},
+			{
+				key: "feather",
+				label: "Feather",
+				type: "range",
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 1,
+			},
+			{
+				key: "roundness",
+				label: "Roundness",
+				type: "range",
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 1,
+			},
+			{
+				key: "color",
+				label: "Color",
+				type: "color",
+				defaultValue: "#000000",
 			},
 			// Checkbox on purpose: a mosh only rolls range and select params, so
 			// this stays put.
