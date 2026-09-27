@@ -7,6 +7,7 @@ import type {
 	TrackingParams,
 	TrackingState,
 } from "./types";
+import { contentBounds, MARGIN, type Bounds } from "./saliency";
 
 const HEX = "0123456789ABCDEF";
 
@@ -86,6 +87,9 @@ export function syncBoxes(
 			// Fresh boxes spawn already faded in so a single frozen render (PNG/JPG preview)
 			// shows the HUD; the fade only plays on later re-acquires.
 			acquiredAt: prev ? prev.acquiredAt : time - 0.35,
+			template: null,
+			vx: 0,
+			vy: 0,
 		});
 	}
 	state.boxes = boxes;
@@ -93,8 +97,20 @@ export function syncBoxes(
 	state.primaryKey = -1;
 }
 
-const PATCH_R = 3; // 7x7-cell template
-const SEARCH_R = 5; // +/- cells searched around the last position
+const PATCH_R = 4; // 9x9-cell template
+const PATCH_N = (PATCH_R * 2 + 1) * (PATCH_R * 2 + 1);
+const SEARCH_R = 6; // cells searched around the predicted position
+const WIDE_SEARCH_R = 16; // while lost, how far to look for the same target
+// A patch whose zero-mean length is under this is flat: nothing to recognize.
+const FLAT = 0.08;
+// Match scores (normalized cross-correlation, -1..1) mapped onto quality 0..1.
+const MATCH_FLOOR = 0.4;
+const MATCH_FULL = 0.9;
+const FOUND = 0.75; // a lost box takes a match this good as its target again
+const REFRESH = 0.8; // matches this good update the template
+const ANCHOR = 0.7; // the template still recognizes the target this well
+const MAX_SPEED = 2; // normalized units per second
+const DUPLICATE = 0.04; // two boxes this close are following the same thing
 
 // Quality thresholds for the state machine (with hysteresis).
 const Q_DEGRADE = 0.5; // lock → degraded below this
@@ -103,13 +119,15 @@ const Q_LOST = 0.22; // degraded → lost below this
 // Disturbance below this counts as "the feed has settled".
 const SETTLED = 0.25;
 const LOST_MIN_S = 0.35; // minimum time spent visibly lost
+const GIVE_UP_S = 1; // settled this long without finding it: pick a new target
 const LOST_MAX_S = 2.5; // force reacquire even mid-disturbance
 const REACQUIRE_S = 0.45; // search animation length
 
-/** Frame-to-frame tracking with believable failure. Each box's luminance patch
- * is matched against the new grid within a local search window (SSD); the match
- * residual drives a signal quality that drops fast and recovers slowly. A glitch
- * freezes boxes and reports signal loss instead of chasing garbage. */
+/** Frame-to-frame tracking with believable failure. Each box keeps a template of
+ * its target and looks for it where its velocity says it went, matching by
+ * normalized cross-correlation so a brightness shift isn't a lost target. The
+ * match score drives a signal quality that drops fast and recovers slowly. A lost
+ * box first looks for its old target, then settles for a new one nearby. */
 export function trackBoxes(
 	state: TrackingState,
 	lum: Float32Array,
@@ -136,6 +154,7 @@ export function trackBoxes(
 			box.drawX = box.baseX;
 			box.drawY = box.baseY;
 			box.quality = 0.75;
+			forgetTarget(box);
 			if (box.state !== "lock") setState(box, "lock", time);
 		}
 	} else if (prev && state.gridW === gw && state.gridH === gh) {
@@ -145,12 +164,13 @@ export function trackBoxes(
 		for (let i = 0; i < n; i++) diff += Math.abs(lum[i] - prev[i]);
 		const inst = Math.min(1, (diff / n) * 8);
 		state.disturbance = Math.max(inst, state.disturbance * 0.75);
+		const bounds = contentBounds(lum, gw, gh);
 
 		for (const box of state.boxes) {
 			switch (box.state) {
 				case "lock":
 				case "degraded":
-					matchBox(box, prev, lum, gw, gh);
+					followBox(box, prev, lum, gw, gh, gap, bounds);
 					if (box.state === "lock" && box.quality < Q_DEGRADE) {
 						setState(box, "degraded", time);
 					} else if (box.state === "degraded") {
@@ -159,22 +179,26 @@ export function trackBoxes(
 					}
 					break;
 				case "lost": {
-					// Frozen: no matching, no movement. Wait for the feed to settle.
+					// Frozen where it lost the target until it turns up again or the feed settles.
 					const lostFor = time - box.stateChangedAt;
-					const settled = state.disturbance < SETTLED && lostFor > LOST_MIN_S;
+					if (lostFor < LOST_MIN_S) break;
+					if (refind(box, lum, gw, gh, time, bounds)) break;
+					const settled = state.disturbance < SETTLED && lostFor > GIVE_UP_S;
 					if (settled || lostFor > LOST_MAX_S) {
 						reacquire(box, state, time);
 					}
 					break;
 				}
 				case "reacquire":
+					followBox(box, prev, lum, gw, gh, gap, bounds);
 					if (time - box.stateChangedAt > REACQUIRE_S) {
-						box.quality = 0.6;
+						box.quality = Math.max(box.quality, 0.6);
 						setState(box, "lock", time);
 					}
 					break;
 			}
 		}
+		dropDuplicates(state, time);
 
 		// Primary designation (drone hierarchy): sticky, reassigned only when the current
 		// primary is gone or has lost its target.
@@ -195,59 +219,295 @@ export function trackBoxes(
 	state.gridH = gh;
 }
 
-/** SSD patch match around the box's last position; updates position + quality. */
-function matchBox(
+/** Find the box's target near where its velocity predicts; move it and its
+ * quality to match. Matched against how the target looked last tick, which holds
+ * through slow changes in its look; the kept template is for finding it again. */
+function followBox(
 	box: TrackBox,
 	prev: Float32Array,
 	lum: Float32Array,
 	gw: number,
 	gh: number,
+	dt: number,
+	bounds: Bounds,
 ): void {
-	const px = clampCell(Math.round(box.baseX * (gw - 1)), gw);
-	const py = clampCell(Math.round(box.baseY * (gh - 1)), gh);
-	let bestErr = Infinity;
-	let bestX = px;
-	let bestY = py;
-	for (let dy = -SEARCH_R; dy <= SEARCH_R; dy++) {
-		for (let dx = -SEARCH_R; dx <= SEARCH_R; dx++) {
-			const cx = px + dx;
-			const cy = py + dy;
-			if (
-				cx < PATCH_R ||
-				cy < PATCH_R ||
-				cx >= gw - PATCH_R ||
-				cy >= gh - PATCH_R
-			) {
-				continue;
-			}
-			let err = 0;
-			for (let oy = -PATCH_R; oy <= PATCH_R; oy++) {
-				for (let ox = -PATCH_R; ox <= PATCH_R; ox++) {
-					const d =
-						prev[(py + oy) * gw + (px + ox)] - lum[(cy + oy) * gw + (cx + ox)];
-					err += d * d;
-				}
-			}
-			// Tiny bias toward staying put so flat regions don't wander.
-			err += (dx * dx + dy * dy) * 0.0004;
-			if (err < bestErr) {
-				bestErr = err;
-				bestX = cx;
-				bestY = cy;
-			}
-		}
-	}
-	if (bestErr === Infinity) return;
-	const n = (PATCH_R * 2 + 1) * (PATCH_R * 2 + 1);
-	const rmse = Math.sqrt(bestErr / n);
-	const q = Math.max(0, Math.min(1, 1 - rmse * 6));
+	const sx = gw - 1;
+	const sy = gh - 1;
+	const x = box.baseX * sx;
+	const y = box.baseY * sy;
+	const recent = readPatch(prev, gw, gh, x, y);
+	box.template ??= recent && recent.slice();
+	const tpl = recent ?? box.template;
+	const px = x + box.vx * dt * sx;
+	const py = y + box.vy * dt * sy;
+	const m = tpl ? search(tpl, lum, gw, gh, px, py, SEARCH_R) : null;
+	// A target leaving the picture is lost, not pinned against its edge.
+	const score = m && inside(m, bounds) ? m.score : 0;
+	const q = qualityOf(score);
 	// Asymmetric smoothing: lose the lock fast, re-confirm it slowly.
 	box.quality =
 		q < box.quality
 			? box.quality * 0.4 + q * 0.6
 			: box.quality * 0.85 + q * 0.15;
-	box.baseX = bestX / (gw - 1);
-	box.baseY = bestY / (gh - 1);
+	if (!m || score < MATCH_FLOOR) {
+		// Nothing there worth following: hold still rather than chase noise.
+		box.vx *= 0.5;
+		box.vy *= 0.5;
+		return;
+	}
+	// Frame-to-frame errors add up, so the kept template pulls the box back onto the
+	// spot it locked whenever it still recognizes it there.
+	const anchored = box.template
+		? search(box.template, lum, gw, gh, m.x, m.y, 1)
+		: null;
+	const at = anchored && anchored.score > ANCHOR ? anchored : m;
+	// Only the velocity is smoothed: the next patch is read where the target is, or
+	// any lag would become an offset the box keeps forever. The drawn box eases.
+	if (dt > 0) {
+		box.vx = clampSpeed(box.vx + ((at.x - px) * 0.5) / dt / sx);
+		box.vy = clampSpeed(box.vy + ((at.y - py) * 0.5) / dt / sy);
+	}
+	box.baseX = clamp01(at.x / sx);
+	box.baseY = clamp01(at.y / sy);
+	if (score > REFRESH && box.template) {
+		refreshTemplate(box.template, lum, gw, gh, at.x, at.y);
+	}
+}
+
+function inside(m: Match, b: Bounds): boolean {
+	return (
+		m.x >= b.x0 + MARGIN &&
+		m.x <= b.x1 - MARGIN &&
+		m.y >= b.y0 + MARGIN &&
+		m.y <= b.y1 - MARGIN
+	);
+}
+
+/** Look wider for a lost box's own target; true when it turned up. */
+function refind(
+	box: TrackBox,
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	time: number,
+	bounds: Bounds,
+): boolean {
+	if (!box.template) return false;
+	const sx = gw - 1;
+	const sy = gh - 1;
+	const m = search(
+		box.template,
+		lum,
+		gw,
+		gh,
+		box.baseX * sx,
+		box.baseY * sy,
+		WIDE_SEARCH_R,
+	);
+	if (m.score < FOUND || !inside(m, bounds)) return false;
+	box.baseX = clamp01(m.x / sx);
+	box.baseY = clamp01(m.y / sy);
+	box.quality = qualityOf(m.score);
+	box.vx = 0;
+	box.vy = 0;
+	box.acquiredAt = time;
+	setState(box, "reacquire", time);
+	return true;
+}
+
+/** Two boxes that ended up on the same thing: the weaker one lets go. */
+function dropDuplicates(state: TrackingState, time: number): void {
+	const boxes = state.boxes;
+	for (let i = 0; i < boxes.length; i++) {
+		for (let j = i + 1; j < boxes.length; j++) {
+			const a = boxes[i];
+			const b = boxes[j];
+			if (!isTracking(a) || !isTracking(b)) continue;
+			const dx = a.baseX - b.baseX;
+			const dy = a.baseY - b.baseY;
+			if (dx * dx + dy * dy > DUPLICATE * DUPLICATE) continue;
+			const weaker = a.quality < b.quality ? a : b;
+			forgetTarget(weaker);
+			setState(weaker, "lost", time);
+		}
+	}
+}
+
+function isTracking(box: TrackBox): boolean {
+	return box.state === "lock" || box.state === "degraded";
+}
+
+interface Match {
+	x: number;
+	y: number;
+	score: number;
+}
+
+/** Best template match within `r` cells of (x, y), refined to a fraction of a
+ * cell so slow motion isn't rounded away. */
+function search(
+	tpl: Float32Array,
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	x: number,
+	y: number,
+	r: number,
+): Match {
+	const x0 = Math.round(x);
+	const y0 = Math.round(y);
+	const size = r * 2 + 1;
+	const scores = new Float32Array(size * size).fill(-Infinity);
+	let best = -Infinity;
+	let bestRank = -Infinity;
+	let bx = x0;
+	let by = y0;
+	for (let dy = -r; dy <= r; dy++) {
+		const cy = y0 + dy;
+		if (cy < 0 || cy >= gh) continue;
+		for (let dx = -r; dx <= r; dx++) {
+			const cx = x0 + dx;
+			if (cx < 0 || cx >= gw) continue;
+			const s = matchAt(tpl, lum, gw, gh, cx, cy);
+			scores[(dy + r) * size + dx + r] = s;
+			// Near-ties go to the prediction, so repeated texture doesn't pull the box off.
+			const rank = s - (dx * dx + dy * dy) * 0.0005;
+			if (rank > bestRank) {
+				bestRank = rank;
+				best = s;
+				bx = cx;
+				by = cy;
+			}
+		}
+	}
+	const at = (cx: number, cy: number) => {
+		const ix = cx - x0 + r;
+		const iy = cy - y0 + r;
+		if (ix < 0 || iy < 0 || ix >= size || iy >= size) return -Infinity;
+		return scores[iy * size + ix];
+	};
+	return {
+		x: bx + peakOffset(at(bx - 1, by), best, at(bx + 1, by)),
+		y: by + peakOffset(at(bx, by - 1), best, at(bx, by + 1)),
+		score: best,
+	};
+}
+
+/** Where a parabola through three neighbouring scores peaks, -0.5..0.5. */
+function peakOffset(l: number, c: number, r: number): number {
+	if (!Number.isFinite(l) || !Number.isFinite(r)) return 0;
+	const curve = l - 2 * c + r;
+	if (curve >= 0) return 0;
+	return Math.max(-0.5, Math.min(0.5, (l - r) / (2 * curve)));
+}
+
+/** Normalized cross-correlation of the template with the patch centred on a cell. */
+function matchAt(
+	tpl: Float32Array,
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	cx: number,
+	cy: number,
+): number {
+	let dot = 0;
+	let sum = 0;
+	let sq = 0;
+	let i = 0;
+	for (let oy = -PATCH_R; oy <= PATCH_R; oy++) {
+		const row = clampInt(cy + oy, gh) * gw;
+		for (let ox = -PATCH_R; ox <= PATCH_R; ox++) {
+			const v = lum[row + clampInt(cx + ox, gw)];
+			dot += tpl[i++] * v;
+			sum += v;
+			sq += v * v;
+		}
+	}
+	const spread = Math.sqrt(Math.max(0, sq - (sum * sum) / PATCH_N));
+	// The template sums to zero, so the patch's mean drops out of the dot product.
+	return spread < FLAT ? 0 : dot / spread;
+}
+
+/** The patch around a fractional cell, zero-mean and unit length; null when flat. */
+function readPatch(
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	x: number,
+	y: number,
+): Float32Array | null {
+	const patch = new Float32Array(PATCH_N);
+	let i = 0;
+	for (let oy = -PATCH_R; oy <= PATCH_R; oy++) {
+		for (let ox = -PATCH_R; ox <= PATCH_R; ox++) {
+			patch[i++] = sample(lum, gw, gh, x + ox, y + oy);
+		}
+	}
+	return normalizePatch(patch) ? patch : null;
+}
+
+/** Blend the target's current look into its template, so it follows slow changes
+ * in appearance without drifting onto whatever passes in front. */
+function refreshTemplate(
+	tpl: Float32Array,
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	x: number,
+	y: number,
+): void {
+	const cur = readPatch(lum, gw, gh, x, y);
+	if (!cur) return;
+	const keep = tpl.slice();
+	for (let i = 0; i < PATCH_N; i++) tpl[i] = tpl[i] * 0.9 + cur[i] * 0.1;
+	if (!normalizePatch(tpl)) tpl.set(keep);
+}
+
+/** Zero-mean, unit length in place; false when the patch is too flat for that. */
+function normalizePatch(p: Float32Array): boolean {
+	let mean = 0;
+	for (let i = 0; i < p.length; i++) mean += p[i];
+	mean /= p.length;
+	let len = 0;
+	for (let i = 0; i < p.length; i++) {
+		p[i] -= mean;
+		len += p[i] * p[i];
+	}
+	len = Math.sqrt(len);
+	if (len < FLAT) return false;
+	for (let i = 0; i < p.length; i++) p[i] /= len;
+	return true;
+}
+
+/** Bilinear luminance at a fractional cell, clamped to the grid. */
+function sample(
+	lum: Float32Array,
+	gw: number,
+	gh: number,
+	x: number,
+	y: number,
+): number {
+	const cx = Math.max(0, Math.min(gw - 1, x));
+	const cy = Math.max(0, Math.min(gh - 1, y));
+	const x0 = Math.floor(cx);
+	const y0 = Math.floor(cy);
+	const x1 = Math.min(gw - 1, x0 + 1);
+	const y1 = Math.min(gh - 1, y0 + 1);
+	const fx = cx - x0;
+	const fy = cy - y0;
+	const top = lum[y0 * gw + x0] * (1 - fx) + lum[y0 * gw + x1] * fx;
+	const bottom = lum[y1 * gw + x0] * (1 - fx) + lum[y1 * gw + x1] * fx;
+	return top * (1 - fy) + bottom * fy;
+}
+
+function qualityOf(score: number): number {
+	return clamp01((score - MATCH_FLOOR) / (MATCH_FULL - MATCH_FLOOR));
+}
+
+function forgetTarget(box: TrackBox): void {
+	box.template = null;
+	box.vx = 0;
+	box.vy = 0;
 }
 
 function setState(box: TrackBox, next: BoxState, time: number): void {
@@ -255,13 +515,24 @@ function setState(box: TrackBox, next: BoxState, time: number): void {
 	box.stateChangedAt = time;
 }
 
-function clampCell(c: number, size: number): number {
-	return Math.min(size - 1 - PATCH_R, Math.max(PATCH_R, c));
+function clamp01(v: number): number {
+	return Math.max(0, Math.min(1, v));
 }
 
-/** Snap a lost box onto the strongest salient point no other box claims. */
+function clampInt(c: number, size: number): number {
+	return c < 0 ? 0 : c >= size ? size - 1 : c;
+}
+
+function clampSpeed(v: number): number {
+	return Math.max(-MAX_SPEED, Math.min(MAX_SPEED, v));
+}
+
+/** Put a lost box on a salient point no other box claims, favouring strong points
+ * near where it lost its target over the strongest one anywhere. */
 function reacquire(box: TrackBox, state: TrackingState, time: number): void {
+	const top = state.salPoints[0]?.score ?? 0;
 	let best: SalPoint | null = null;
+	let bestRank = -Infinity;
 	for (const pt of state.salPoints) {
 		let claimed = false;
 		for (const other of state.boxes) {
@@ -273,9 +544,13 @@ function reacquire(box: TrackBox, state: TrackingState, time: number): void {
 				break;
 			}
 		}
-		if (!claimed) {
+		if (claimed) continue;
+		const dx = box.baseX - pt.x;
+		const dy = box.baseY - pt.y;
+		const rank = pt.score / top - (dx * dx + dy * dy) * 2;
+		if (rank > bestRank) {
+			bestRank = rank;
 			best = pt;
-			break; // salPoints are sorted strongest-first
 		}
 	}
 	if (!best) return; // nothing to lock onto yet, retry next tick
@@ -283,6 +558,7 @@ function reacquire(box: TrackBox, state: TrackingState, time: number): void {
 	box.baseY = best.y;
 	box.quality = 0.4;
 	box.acquiredAt = time;
+	forgetTarget(box);
 	setState(box, "reacquire", time);
 }
 

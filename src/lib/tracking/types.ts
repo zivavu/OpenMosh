@@ -35,9 +35,9 @@ export interface TrackBox {
 	baseY: number;
 	w: number;
 	h: number;
-	/** Signal quality 0..1 from patch-match residual. Drops fast when the
-	 * target patch is disturbed, recovers slowly, like a real tracker losing
-	 * and re-confirming a lock. */
+	/** Signal quality 0..1 from how well the template matches. Drops fast when the
+	 * target is disturbed, recovers slowly, like a real tracker losing and
+	 * re-confirming a lock. */
 	quality: number;
 	state: BoxState;
 	/** Animation-time of the last state transition (drives state animations). */
@@ -47,6 +47,12 @@ export interface TrackBox {
 	drawY: number;
 	/** Animation-time the box was (re)acquired, for fade-in. */
 	acquiredAt: number;
+	/** What the target looks like: a zero-mean, unit-length luminance patch.
+	 * Null until the next tick captures it. */
+	template: Float32Array | null;
+	/** Velocity in normalized units per second, to predict where to search. */
+	vx: number;
+	vy: number;
 }
 
 export interface TrackingState {
