@@ -101,8 +101,6 @@ function imageHeight(image: SourceImage): number {
 /** A layer with its chain already rendered, ready to composite. */
 interface PreparedLayer {
 	tex: WebGLTexture;
-	/** True = composite before the first effect, so the chain distorts it. */
-	underEffects: boolean;
 	/** Order among all layers. Prepared layers arrive already sorted by it. */
 	z: number;
 	opacity: number;
@@ -125,22 +123,17 @@ type ChainOp =
 	| { kind: "effect"; eff: EffectInstance }
 	| { kind: "layer"; layer: PreparedLayer };
 
-/** Slot the layers into the effect chain: `underEffects` layers go ahead of the
- * first effect, the rest over the finished frame. Callers pass a list sorted by z. */
+/** The effects, then the layers over the finished frame. Callers pass layers
+ * sorted by z. */
 function buildChainOps(
 	effects: EffectInstance[],
 	layers: PreparedLayer[],
 ): ChainOp[] {
 	const ops: ChainOp[] = [];
-	for (const layer of layers) {
-		if (layer.underEffects) ops.push({ kind: "layer", layer });
-	}
 	for (const eff of effects) {
 		if (eff.enabled) ops.push({ kind: "effect", eff });
 	}
-	for (const layer of layers) {
-		if (!layer.underEffects) ops.push({ kind: "layer", layer });
-	}
+	for (const layer of layers) ops.push({ kind: "layer", layer });
 	return ops;
 }
 
@@ -979,13 +972,9 @@ export class GlRenderer {
 		);
 		if (trace) this.startHighlightRead(trace);
 
-		// Layers over the finished frame composite after the fx lanes when a lane is
-		// under them, which the flat chain can't express.
-		const over = prepared.filter((l) => !l.underEffects);
-
 		// Nothing stacked, or nothing to interleave and nothing fading: one chain, no
 		// intermediate buffers. Every non-sequence render takes this path.
-		if (post.length === 0 || (over.length === 0 && allFullWeight(post))) {
+		if (post.length === 0 || (prepared.length === 0 && allFullWeight(post))) {
 			let flat = effects;
 			if (post.length > 0) {
 				// By hand rather than flatMap, which allocates a second array per frame.
@@ -1012,7 +1001,6 @@ export class GlRenderer {
 		const sceneFBOs = this.sceneFBOs;
 		const sceneTextures = this.sceneTextures;
 		if (!sceneFBOs || !sceneTextures) return;
-		const under = prepared.filter((l) => l.underEffects);
 		const baseTex = this.renderChainTo(
 			effects,
 			time,
@@ -1020,11 +1008,9 @@ export class GlRenderer {
 			sceneFBOs[0],
 			sceneTextures[0],
 			false,
-			false,
-			under,
 		)!;
 		this.presentFrame(
-			this.renderStack(buildStack(over, post), baseTex, time, safeDt),
+			this.renderStack(buildStack(prepared, post), baseTex, time, safeDt),
 		);
 	}
 
@@ -1138,15 +1124,7 @@ export class GlRenderer {
 			time,
 		);
 		this.presentFrame(
-			this.renderStack(
-				buildStack(
-					prepared.filter((l) => !l.underEffects),
-					post,
-				),
-				blendTexture,
-				time,
-				safeDt,
-			),
+			this.renderStack(buildStack(prepared, post), blendTexture, time, safeDt),
 		);
 	}
 
@@ -2139,7 +2117,6 @@ export class GlRenderer {
 			}
 			prepared.push({
 				tex,
-				underEffects: layer.underEffects,
 				z: layer.z,
 				opacity: layer.style.opacity,
 				blendMode: layer.style.blendMode,
@@ -2195,7 +2172,6 @@ export class GlRenderer {
 			}
 			prepared.push({
 				tex: out.tex,
-				underEffects: layer.underEffects,
 				z: layer.z,
 				// The resolved value, not the lane's: it already carries the clip fade.
 				opacity: layer.opacity,

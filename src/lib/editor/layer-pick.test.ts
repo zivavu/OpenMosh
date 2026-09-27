@@ -5,7 +5,6 @@ function box(over: Partial<LayerHitBox> = {}): LayerHitBox {
 	return {
 		kind: "media",
 		laneId: "a",
-		underEffects: false,
 		z: 0,
 		cx: 100,
 		cy: 100,
@@ -59,30 +58,6 @@ describe("pickTopLayer", () => {
 			100,
 		);
 		expect(hit?.laneId).toBe("under");
-	});
-
-	it("puts every over-chain layer above every under-chain one", () => {
-		const hit = pickTopLayer(
-			[
-				box({ laneId: "over", z: 0 }),
-				box({ laneId: "under", z: 9, underEffects: true }),
-			],
-			100,
-			100,
-		);
-		expect(hit?.laneId).toBe("over");
-	});
-
-	it("picks among under-chain layers by z when nothing sits over them", () => {
-		const hit = pickTopLayer(
-			[
-				box({ laneId: "low", z: 0, underEffects: true }),
-				box({ laneId: "high", z: 3, underEffects: true }),
-			],
-			100,
-			100,
-		);
-		expect(hit?.laneId).toBe("high");
 	});
 
 	it("breaks a z tie with the later layer, as the composite does", () => {

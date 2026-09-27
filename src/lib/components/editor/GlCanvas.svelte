@@ -1124,7 +1124,6 @@
 		if (!mediaTimeline?.enabled) return;
 		for (const l of mediaTimeline.lanes) {
 			l.enabled;
-			l.underEffects;
 			l.z;
 			l.sourceId;
 			const style = l.style as unknown as Record<string, unknown>;
@@ -1150,7 +1149,6 @@
 		if (!textTimeline?.enabled) return;
 		for (const l of textTimeline.lanes) {
 			l.enabled;
-			l.underEffects;
 			l.z;
 			const style = l.style as unknown as Record<string, unknown>;
 			for (const k of Object.keys(style)) style[k];

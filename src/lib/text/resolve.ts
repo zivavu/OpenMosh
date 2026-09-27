@@ -37,8 +37,6 @@ export interface ResolvedTextLayer {
 	key: string;
 	laneId: string;
 	clipId: string;
-	/** Composite before the whole chain, or over the finished frame. */
-	underEffects: boolean;
 	/** Order among all layers, text and media alike. Higher sits on top. */
 	z: number;
 	text: string;
@@ -139,7 +137,6 @@ export function resolveTextLayersAt(
 			key: clip.id,
 			laneId: lane.id,
 			clipId: clip.id,
-			underEffects: lane.underEffects,
 			z: lane.z,
 			text: clip.text,
 			style,

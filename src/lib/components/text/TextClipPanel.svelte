@@ -57,12 +57,6 @@
 		bpm,
 	}: Props = $props();
 
-	function setUnderEffects(under: boolean) {
-		if (!lane) return;
-		onBeforeEdit?.();
-		onLaneChange({ ...lane, underEffects: under });
-	}
-
 	function setStyle<K extends keyof TextStyle>(
 		key: K,
 		value: TextStyle[K],
@@ -356,13 +350,11 @@
 
 			<LayerCompositeRows
 				style={lane.style}
-				underEffects={lane.underEffects}
 				noun="the text"
 				idPrefix="tc"
 				onStyle={(key, value, coalesceKey) =>
 					setStyle(key, value as never, coalesceKey)}
 				onReset={resetStyle}
-				onUnderEffects={setUnderEffects}
 			/>
 		{/if}
 	{/snippet}
