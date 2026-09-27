@@ -7,8 +7,6 @@ import type { ResolvedTextLayer } from "../text";
 export interface LayerHitBox {
 	kind: "media" | "text";
 	laneId: string;
-	/** Composited ahead of the main chain, so always beneath the layers that aren't. */
-	underEffects: boolean;
 	z: number;
 	/** Centre, size and rotation in output pixels. */
 	cx: number;
@@ -66,9 +64,7 @@ export function pickTopLayer(
 	return top;
 }
 
-/** Composite order between two layers: over the chain beats under it, then z. */
 function drawnAfter(box: LayerHitBox, other: LayerHitBox): boolean {
-	if (box.underEffects !== other.underEffects) return !box.underEffects;
 	return box.z >= other.z;
 }
 
@@ -87,7 +83,6 @@ export function layerHitBoxes(
 		boxes.push({
 			kind: "media",
 			laneId: layer.laneId,
-			underEffects: layer.underEffects,
 			z: layer.z,
 			cx: rect.x + rect.w / 2,
 			cy: rect.y + rect.h / 2,
@@ -102,7 +97,6 @@ export function layerHitBoxes(
 		boxes.push({
 			kind: "text",
 			laneId: layer.laneId,
-			underEffects: layer.underEffects,
 			z: layer.z,
 			cx: box.x + box.w / 2,
 			cy: box.y + box.h / 2,

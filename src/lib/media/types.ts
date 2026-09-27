@@ -80,8 +80,6 @@ export interface MediaLane {
 	id: string;
 	name: string;
 	enabled: boolean;
-	/** Composite before the main chain, so every image effect distorts this layer too. */
-	underEffects: boolean;
 	/** Order among *all* layers, media and text alike. Higher sits on top. */
 	z: number;
 	/** Into the media pool. Null on a lane whose source was removed. */
@@ -179,7 +177,6 @@ export function createMediaLane(
 		id: nextId("mlane"),
 		name,
 		enabled: true,
-		underEffects: false,
 		z,
 		sourceId,
 		style: { ...style },
@@ -209,11 +206,6 @@ function clipEffects(saved: unknown): EffectInstance[] {
 	return hydrated.length > 0 ? hydrated : cleanEffects();
 }
 
-function legacyChainIndex(lane: object): number {
-	const raw = (lane as { chainIndex?: unknown }).chainIndex;
-	return typeof raw === "number" ? raw : Number.MAX_SAFE_INTEGER;
-}
-
 /** Fill in anything a saved timeline predates or dropped. */
 export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 	if (!raw || typeof raw !== "object") return { ...EMPTY_MEDIA_TIMELINE };
@@ -226,8 +218,6 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			id: lane.id ?? nextId("mlane"),
 			name: lane.name ?? `Layer ${i + 1}`,
 			enabled: lane.enabled !== false,
-			// See normalizeTextTimeline: lanes saved against the old chain index carry one.
-			underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
 			z: typeof lane.z === "number" ? lane.z : i,
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },

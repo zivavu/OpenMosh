@@ -322,7 +322,6 @@ describe("normalizeTextTimeline", () => {
 			lanes: [{ clips: [{ start: 0, end: 1 }] }],
 		});
 		expect(t.lanes[0].enabled).toBe(true);
-		expect(t.lanes[0].underEffects).toBe(false);
 		expect(typeof t.lanes[0].z).toBe("number");
 		expect(t.lanes[0].style.color).toBe("#ffffff");
 		// Backfilled rather than left empty: a clip with no chain gives its panel

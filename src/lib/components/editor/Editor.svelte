@@ -1969,7 +1969,6 @@
 		}
 		if (seedFrom && next.lanes.length === 0) {
 			const lane = createMediaLane("Layer 1", seedFrom.id, 0);
-			lane.underEffects = true;
 			lane.clips = [createMediaClip(0, length)];
 			// Under a song the opened video is a backdrop; its own sound would fight it.
 			if (songId && lane.audio) lane.audio = { ...lane.audio, muted: true };

@@ -45,7 +45,7 @@ describe("migrateLegacySegments", () => {
 		expect(fxLane).toBeNull();
 	});
 
-	it("puts segments that named a source on a media lane under the effects", () => {
+	it("puts segments that named a source on a media lane", () => {
 		const { mediaLane } = migrateLegacySegments(
 			[
 				{ startTime: 0, endTime: 3, sourceId: "src-a", effects: [] },
@@ -54,7 +54,6 @@ describe("migrateLegacySegments", () => {
 			],
 			9,
 		);
-		expect(mediaLane?.underEffects).toBe(true);
 		expect(mediaLane?.clips.map((c) => [c.start, c.end, c.sourceId])).toEqual([
 			[0, 3, "src-a"],
 			[6, 9, "src-b"],

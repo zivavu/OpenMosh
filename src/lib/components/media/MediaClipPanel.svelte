@@ -122,12 +122,6 @@
 	);
 	let laneSource = $derived(sources.find((s) => s.id === lane?.sourceId));
 
-	function setUnderEffects(under: boolean) {
-		if (!lane) return;
-		onBeforeEdit?.();
-		onLaneChange({ ...lane, underEffects: under });
-	}
-
 	function setStyle<K extends keyof MediaStyle>(
 		key: K,
 		value: MediaStyle[K],
@@ -507,13 +501,11 @@
 
 			<LayerCompositeRows
 				style={lane.style}
-				underEffects={lane.underEffects}
 				noun="the layer"
 				idPrefix="mc"
 				onStyle={(key, value, coalesceKey) =>
 					setStyle(key, value as never, coalesceKey)}
 				onReset={resetStyle}
-				onUnderEffects={setUnderEffects}
 			/>
 		{/if}
 	{/snippet}

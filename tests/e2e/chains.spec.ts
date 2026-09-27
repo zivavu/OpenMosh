@@ -75,7 +75,6 @@ async function renderArrangements(page: Page): Promise<ChainReport> {
 			const layer = {
 				key: "probe-lane",
 				laneId: "probe-lane",
-				underEffects: false,
 				z: 0,
 				sourceId: "probe-source",
 				sourceTime: 0,
@@ -110,16 +109,16 @@ async function renderArrangements(page: Page): Promise<ChainReport> {
 			withLayerTexture();
 			const layerTransparent = draw([], [], [{ ...layer, opacity: 0 }]);
 			withLayerTexture();
-			const layerUnderEffects = draw(
-				[blur],
+			const layerBelowLane = draw(
 				[],
-				[{ ...layer, underEffects: true }],
+				[lane([blur], 1, 1)],
+				[{ ...layer, z: 0 }],
 			);
 			withLayerTexture();
-			const layerOverEffects = draw(
-				[blur],
+			const layerAboveLane = draw(
 				[],
-				[{ ...layer, underEffects: false }],
+				[lane([blur], 1, 1)],
+				[{ ...layer, z: 2 }],
 			);
 
 			const frames: Record<string, string> = {
@@ -146,8 +145,8 @@ async function renderArrangements(page: Page): Promise<ChainReport> {
 
 				layerOver,
 				layerTransparent,
-				layerUnderEffects,
-				layerOverEffects,
+				layerBelowLane,
+				layerAboveLane,
 			};
 
 			renderer.destroy();
@@ -242,13 +241,10 @@ test.describe("a media layer", () => {
 		expect(report.frames.layerTransparent).toBe(report.frames.clean);
 	});
 
-	test("lands before or after the chain depending on underEffects", async ({
+	test("is processed by an fx lane above it, not one below", async ({
 		report,
 	}) => {
-		// A layer under the effects is processed by them; one over survives them untouched.
-		// Same layer, same chain: if these match, the flag isn't doing anything.
-		expect(report.frames.layerUnderEffects).not.toBe(
-			report.frames.layerOverEffects,
-		);
+		// Same layer, same lane: if these match, z order isn't deciding what the lane covers.
+		expect(report.frames.layerBelowLane).not.toBe(report.frames.layerAboveLane);
 	});
 });

@@ -35,8 +35,6 @@ export interface ResolvedMediaLayer {
 	laneId: string;
 	/** The clip on screen, whose chain `effects` is (or was rolled from). */
 	clipId: string;
-	/** Composite before the whole chain, or over the finished frame. */
-	underEffects: boolean;
 	/** Order among all layers, media and text alike. Higher sits on top. */
 	z: number;
 	sourceId: string;
@@ -208,7 +206,6 @@ export function resolveMediaLayersAt(
 			key: laneClipKey(lane, index),
 			laneId: lane.id,
 			clipId: clip.id,
-			underEffects: lane.underEffects,
 			z: lane.z,
 			sourceId,
 			sourceTime: sourceTimeAt(

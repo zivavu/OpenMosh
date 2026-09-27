@@ -107,7 +107,6 @@ async function renderEveryTransition(page: Page): Promise<TransitionReport> {
 			const layer = (key: string, transition?: unknown) => ({
 				...side(key),
 				laneId: "probe-lane",
-				underEffects: false,
 				z: 0,
 				style: DEFAULT_MEDIA_STYLE,
 				opacity: 1,

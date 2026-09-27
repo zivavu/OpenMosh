@@ -102,9 +102,6 @@ export interface TextLane {
 	id: string;
 	name: string;
 	enabled: boolean;
-	/** Composite before the main chain rather than over the finished frame, so every
-	 * image effect distorts this layer too. */
-	underEffects: boolean;
 	/** Order among *all* layers, text and media alike. Higher sits on top. */
 	z: number;
 	style: TextStyle;
@@ -171,7 +168,6 @@ export function createTextLane(
 		id: nextId("lane"),
 		name,
 		enabled: true,
-		underEffects: false,
 		z,
 		style: { ...style },
 		clips: [],
@@ -207,11 +203,6 @@ function clipEffects(saved: unknown): EffectInstance[] {
 	return hydrated.length > 0 ? hydrated : cleanEffects();
 }
 
-function legacyChainIndex(lane: object): number {
-	const raw = (lane as { chainIndex?: unknown }).chainIndex;
-	return typeof raw === "number" ? raw : Number.MAX_SAFE_INTEGER;
-}
-
 /** Fill in anything a saved timeline predates or dropped. */
 export function normalizeTextTimeline(raw: unknown): TextTimeline {
 	if (!raw || typeof raw !== "object") return { ...EMPTY_TEXT_TIMELINE };
@@ -231,8 +222,6 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 				id: lane.id ?? nextId("lane"),
 				name: lane.name ?? `Text ${i + 1}`,
 				enabled: lane.enabled !== false,
-				// Old timelines carry a chain index instead: 0 meant "under every effect".
-				underEffects: lane.underEffects ?? legacyChainIndex(lane) === 0,
 				z: typeof lane.z === "number" ? lane.z : TEXT_Z_BASE + i,
 				style: {
 					...DEFAULT_TEXT_STYLE,

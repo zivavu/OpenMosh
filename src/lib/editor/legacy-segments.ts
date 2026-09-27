@@ -87,7 +87,6 @@ export function migrateLegacySegments(
 	}
 
 	const mediaLane = createMediaLane("Base", null, BOTTOM_Z);
-	mediaLane.underEffects = true;
 	// Segments were always silent under the song; migrating mustn't give them a voice.
 	mediaLane.audio = { ...LEGACY_LANE_AUDIO };
 	for (const { seg, start, end } of spans) {
