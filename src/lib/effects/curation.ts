@@ -83,7 +83,7 @@ const c = (
 export const CURATION: Record<string, Curation> = {
 	mirror: c("geometry", "symmetry"),
 	kaleido: c("geometry", "symmetry", "amount"),
-	tile: c("geometry", "symmetry"),
+	tile: c("geometry", "symmetry", "amount"),
 	bulge: c("geometry", "warp", "amount", true),
 	wobble: c("geometry", "warp", "amount"),
 	swirl: c("geometry", "warp", "angle"),

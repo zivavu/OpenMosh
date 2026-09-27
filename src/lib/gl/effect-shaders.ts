@@ -1316,22 +1316,31 @@ void main() {
 	tile: {
 		fragment:
 			H +
-			`uniform float u_size;
+			`uniform float u_amount;
+uniform float u_size;
 uniform float u_offset;
 uniform float u_angle;
+uniform vec2 u_resolution;
 void main() {
-  float rad = u_angle * 3.14159265 / 180.0;
+  float aspect = u_resolution.x / u_resolution.y;
+  float rad = radians(u_angle);
   float c = cos(rad), s = sin(rad);
-  vec2 centered = v_uv - 0.5;
-  vec2 rotated = vec2(c * centered.x + s * centered.y, -s * centered.x + c * centered.y) + 0.5;
-  vec2 uv = rotated * u_size + u_offset + vec2(u_time * 0.2, 0.0);
-  vec2 cell = floor(uv);
-  vec2 local = fract(uv);
-  vec2 mirrored = mix(local, 1.0 - local, mod(cell, 2.0));
-  outColor = texture(u_texture, mirrored);
+  vec2 p = (v_uv - 0.5) * vec2(aspect, 1.0);
+  vec2 q = vec2(c * p.x + s * p.y, -s * p.x + c * p.y);
+  vec2 copy = vec2(aspect, 1.0) / u_size;
+  // Copies overlap at Offset 0, sit edge to edge near 0.9 and leave a small gap at 1.
+  vec2 spacing = copy * (0.25 + u_offset * 0.85);
+  // Speed flows every copy the same way along the rows.
+  q.x += u_time * 0.2 * spacing.x;
+  vec2 k = floor(q / spacing + 0.5);
+  // Each spot shows the nearest copy; mirroring odd ones makes overlaps seamless.
+  vec2 local = (q - k * spacing) / copy * (1.0 - 2.0 * mod(k, 2.0)) + 0.5;
+  bool inside = all(greaterThanEqual(local, vec2(0.0))) && all(lessThanEqual(local, vec2(1.0)));
+  vec4 tiled = inside ? texture(u_texture, local) : vec4(0.0);
+  outColor = mix(texture(u_texture, v_uv), tiled, u_amount);
 }`,
 		animated: true,
-		setUniforms: floats("size", "offset", "angle"),
+		setUniforms: floats("amount", "size", "offset", "angle"),
 	},
 
 	"data-bend": {
