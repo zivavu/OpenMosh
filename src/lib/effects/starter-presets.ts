@@ -182,8 +182,8 @@ export const STARTER_PRESETS: Preset[] = [
 			{
 				defId: "vignette",
 				enabled: true,
-				values: { size: 0.55, amount: 0.4 },
-				volumeLinks: { amount: { min: 0.15, max: 0.8 } },
+				values: { amount: 0.6, feather: 0.8 },
+				volumeLinks: { amount: { min: 0.3, max: 0.9 } },
 			},
 		],
 	},
