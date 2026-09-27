@@ -93,6 +93,8 @@ function labRedirect(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [svelte(), preloadLatinFonts(), labRedirect()],
+	// Only a worker imports it, which the dep scan misses; found late, Vite reloads the page.
+	optimizeDeps: { include: ["essentia.js"] },
 	define: {
 		__APP_VERSION__: JSON.stringify(version),
 		__APP_CHANNEL__: JSON.stringify(channel),
