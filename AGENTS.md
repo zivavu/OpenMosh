@@ -21,6 +21,9 @@ bun run test:e2e   # Playwright suite under tests/e2e (`bunx playwright install 
 
 Unit tests sit next to what they cover as `*.test.ts` and cover pure logic only.
 
+Keep the local Bun on the version `.github/workflows/ci.yml` pins (`bun --version`). Older Bun
+can't `structuredClone` a Blob, so the storage tests fail locally while CI passes.
+
 ## Verification
 
 I test changes by hand in my own dev server. Don't drive the app in a browser (the `/verify`
