@@ -1750,7 +1750,7 @@ export class GlRenderer {
 
 	private ensureSalResources() {
 		const gl = this.gl;
-		const targetW = 96;
+		const targetW = 128;
 		const targetH = Math.max(
 			24,
 			Math.min(160, Math.round((targetW * this.imgH) / Math.max(1, this.imgW))),
@@ -2633,7 +2633,7 @@ export class GlRenderer {
 		const state = this.getTrackingState(eff.instanceId);
 
 		// Re-analyze on a fixed cadence in animation-time so preview and export stay
-		// deterministic. 0.12 s is about 8 Hz: fluid motion, cheap 96-px readback.
+		// deterministic. 0.12 s is about 8 Hz: fluid motion, cheap 128-px readback.
 		const interval = 0.12;
 		if (state.lastAnalyze < 0 || time < state.lastAnalyze) {
 			// First frame or time reset: blocking analyze so a single-frame render
