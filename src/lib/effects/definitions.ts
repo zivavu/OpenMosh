@@ -816,6 +816,15 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		name: "Tile",
 		params: [
 			{
+				key: "amount",
+				label: "Amount",
+				type: "range",
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 1,
+			},
+			{
 				key: "size",
 				label: "Size",
 				type: "range",
@@ -831,7 +840,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 				min: 0,
 				max: 1,
 				step: 0.01,
-				defaultValue: 0,
+				defaultValue: 0.3,
 			},
 			{
 				key: "angle",
