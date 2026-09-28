@@ -338,11 +338,11 @@
 
 		{#if stack.snapGuide !== null}
 			<!-- What the drag is snapped to, across every lane. -->
+			{@const pct = vp.toPct(stack.snapGuide)}
 			<div class="tl-playhead-layer">
-				<div
-					class="tl-snap-guide"
-					style="transform: {markerX(vp.toPct(stack.snapGuide))}"
-				></div>
+				<div class="tl-snap-guide" style="transform: {markerX(pct)}">
+					<span class="tl-snap-hint" class:flip={pct > 85}>Alt: no snap</span>
+				</div>
 			</div>
 		{/if}
 		{#if playheadVisible || staticVisible}
@@ -905,6 +905,22 @@
 		border-left: 1px dashed var(--tl-playhead);
 		opacity: 0.55;
 		will-change: transform;
+	}
+
+	/* Snapping is the only time the bypass matters, so that's when it's shown. */
+	.tl-snap-hint {
+		position: absolute;
+		top: 2px;
+		left: 4px;
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.53rem;
+		white-space: nowrap;
+	}
+
+	.tl-snap-hint.flip {
+		left: auto;
+		right: calc(100% + 4px);
 	}
 
 	.tl-playhead-line {
