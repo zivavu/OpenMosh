@@ -1,15 +1,34 @@
-/** Edits that belong to the media itself, applied everywhere it is drawn. */
-export interface ChromaKey {
-	enabled: boolean;
-	/** The colour to key out, 0..1 per channel. */
-	color: { r: number; g: number; b: number };
+export type KeyColor = { r: number; g: number; b: number };
+
+/** One colour to key out, and where in the frame it was picked. */
+export interface KeyPoint {
+	/** 0..1 per channel. */
+	color: KeyColor;
+	/** Where it was picked, 0..1 of the source frame, y down. Seeds a connected cut. */
+	x: number;
+	y: number;
+	/** Cut only the matching area touching the point, not every match in the frame. */
+	connected: boolean;
 	/** Chroma distance below which a pixel is fully cut, 0..1. */
 	threshold: number;
 	/** Width of the soft band above the threshold, 0..1. 0 gives a hard edge. */
 	smoothing: number;
-	/** How far a pixel's brightness may differ from the key's and still be cut, 0..1.
+	/** How far a pixel's brightness may differ from the point's and still be cut, 0..1.
 	 * 1 ignores brightness. */
 	lumaRange: number;
+}
+
+/** A point's tolerances, the part the three sliders edit. */
+export type KeyTune = Pick<KeyPoint, "threshold" | "smoothing" | "lumaRange">;
+
+/** The most points a key holds; the shader's arrays are this long. */
+export const MAX_KEY_POINTS = 8;
+
+/** Edits that belong to the media itself, applied everywhere it is drawn. */
+export interface ChromaKey {
+	enabled: boolean;
+	/** Never empty. A pixel goes if it matches any point. */
+	points: KeyPoint[];
 }
 
 /** Y'CbCr chroma of an rgb colour, 0..1 per channel in. */
@@ -26,23 +45,66 @@ function smoothstep(lo: number, hi: number, x: number): number {
 	return t * t * (3 - 2 * t);
 }
 
-/** How much of a pixel the key leaves, 1 = keep. Same rule as the placement shader. */
+/** Coverage for 0..1 rgb, 1 = keep. `reached`: the pixel lies in the connected
+ * cut; points that aren't connected ignore it. */
+export type KeyTest = (
+	r: number,
+	g: number,
+	b: number,
+	reached?: boolean,
+) => number;
+
+/** The key compiled for a per-pixel loop. Same rule as the placement shader. */
+export function keyTester(
+	key: Omit<ChromaKey, "enabled">,
+	only?: (p: KeyPoint) => boolean,
+): KeyTest {
+	const pts = key.points
+		.filter((p) => !only || only(p))
+		.map((p) => {
+			const [kx, ky] = chromaOf(p.color.r, p.color.g, p.color.b);
+			const ly = lumaOf(p.color.r, p.color.g, p.color.b);
+			return {
+				kx,
+				ky,
+				ly,
+				connected: p.connected,
+				thr: p.threshold,
+				luma: p.lumaRange,
+				s: Math.max(p.smoothing, 0.0001),
+			};
+		});
+	return (r, g, b, reached = true) => {
+		const [cx, cy] = chromaOf(r, g, b);
+		const y = lumaOf(r, g, b);
+		let cover = 1;
+		for (const p of pts) {
+			if (p.connected && !reached) continue;
+			const dC = Math.hypot(cx - p.kx, cy - p.ky);
+			const dY = Math.abs(y - p.ly);
+			const k = Math.max(
+				smoothstep(p.thr, p.thr + p.s, dC),
+				smoothstep(p.luma, p.luma + p.s, dY),
+			);
+			if (k < cover) cover = k;
+		}
+		return cover;
+	};
+}
+
+/** How much of a pixel the key leaves, 1 = keep. */
 export function keyCoverage(
 	r: number,
 	g: number,
 	b: number,
 	key: Omit<ChromaKey, "enabled">,
+	reached = true,
 ): number {
-	const k = key.color;
-	const [cx, cy] = chromaOf(r, g, b);
-	const [kx, ky] = chromaOf(k.r, k.g, k.b);
-	const dC = Math.hypot(cx - kx, cy - ky);
-	const dY = Math.abs(lumaOf(r, g, b) - lumaOf(k.r, k.g, k.b));
-	const s = Math.max(key.smoothing, 0.0001);
-	return Math.max(
-		smoothstep(key.threshold, key.threshold + s, dC),
-		smoothstep(key.lumaRange, key.lumaRange + s, dY),
-	);
+	return keyTester(key)(r, g, b, reached);
+}
+
+export function hasConnectedPoint(key: ChromaKey | undefined): boolean {
+	return !!key?.enabled && key.points.some((p) => p.connected);
 }
 
 /** A rectangle of the source to keep, normalized to its own frame. */
@@ -124,15 +186,22 @@ export interface SourceEdit {
 	maskMix?: number;
 }
 
-export const DEFAULT_CHROMA_KEY: ChromaKey = {
-	enabled: false,
+export const DEFAULT_KEY_POINT: KeyPoint = {
 	// Green screen, the colour anyone reaching for this is most likely holding.
 	color: { r: 0, g: 1, b: 0 },
+	x: 0.5,
+	y: 0.5,
+	connected: false,
 	threshold: 0.3,
 	smoothing: 0.1,
 	// Wide enough for shadows on an unevenly lit backdrop, tight enough to leave
 	// white and black alone.
 	lumaRange: 0.35,
+};
+
+export const DEFAULT_CHROMA_KEY: ChromaKey = {
+	enabled: false,
+	points: [DEFAULT_KEY_POINT],
 };
 
 export const DEFAULT_SOURCE_EDIT: SourceEdit = {
@@ -141,12 +210,21 @@ export const DEFAULT_SOURCE_EDIT: SourceEdit = {
 	mask: null,
 };
 
+export function createKeyPoint(from: Partial<KeyPoint> = {}): KeyPoint {
+	return {
+		...DEFAULT_KEY_POINT,
+		...from,
+		color: { ...(from.color ?? DEFAULT_KEY_POINT.color) },
+	};
+}
+
+export function createChromaKey(enabled = false): ChromaKey {
+	return { ...DEFAULT_CHROMA_KEY, enabled, points: [createKeyPoint()] };
+}
+
 export function createSourceEdit(): SourceEdit {
 	return {
-		chromaKey: {
-			...DEFAULT_CHROMA_KEY,
-			color: { ...DEFAULT_CHROMA_KEY.color },
-		},
+		chromaKey: createChromaKey(),
 		crop: { ...FULL_CROP },
 		mask: null,
 	};
@@ -167,20 +245,32 @@ export function isFullCrop(crop: CropRect | undefined): boolean {
 export function isIdleSourceEdit(edit: SourceEdit | undefined): boolean {
 	if (!edit) return true;
 	const k = edit.chromaKey;
-	const d = DEFAULT_CHROMA_KEY;
 	return (
 		!k.enabled &&
-		k.color.r === d.color.r &&
-		k.color.g === d.color.g &&
-		k.color.b === d.color.b &&
-		k.threshold === d.threshold &&
-		k.smoothing === d.smoothing &&
-		k.lumaRange === d.lumaRange &&
+		isDefaultKeyPoints(k.points) &&
 		isFullCrop(edit.crop) &&
 		!edit.mask &&
 		sourceSpeed(edit) === 1 &&
 		!edit.span &&
 		!hasAnimation(edit)
+	);
+}
+
+/** The one untouched point a fresh key carries. */
+export function isDefaultKeyPoints(points: KeyPoint[]): boolean {
+	if (points.length !== 1) return false;
+	const p = points[0];
+	const d = DEFAULT_KEY_POINT;
+	return (
+		p.color.r === d.color.r &&
+		p.color.g === d.color.g &&
+		p.color.b === d.color.b &&
+		p.x === d.x &&
+		p.y === d.y &&
+		p.connected === d.connected &&
+		p.threshold === d.threshold &&
+		p.smoothing === d.smoothing &&
+		p.lumaRange === d.lumaRange
 	);
 }
 
@@ -244,19 +334,8 @@ export function hasAnimation(edit: SourceEdit | undefined): boolean {
 export function normalizeSourceEdit(raw: unknown): SourceEdit {
 	const e = (raw ?? {}) as Partial<SourceEdit>;
 	const k = (e.chromaKey ?? {}) as Partial<ChromaKey>;
-	const c = (k.color ?? {}) as Partial<ChromaKey["color"]>;
 	return {
-		chromaKey: {
-			enabled: !!k.enabled,
-			color: {
-				r: num(c.r, DEFAULT_CHROMA_KEY.color.r),
-				g: num(c.g, DEFAULT_CHROMA_KEY.color.g),
-				b: num(c.b, DEFAULT_CHROMA_KEY.color.b),
-			},
-			threshold: num(k.threshold, DEFAULT_CHROMA_KEY.threshold),
-			smoothing: num(k.smoothing, DEFAULT_CHROMA_KEY.smoothing),
-			lumaRange: num(k.lumaRange, DEFAULT_CHROMA_KEY.lumaRange),
-		},
+		chromaKey: { enabled: !!k.enabled, ...normalizeAnimatedKey(k) },
 		crop: normalizeCrop(e.crop),
 		anim: normalizeAnim(e.anim),
 		...(typeof e.speed === "number" && e.speed !== 1
@@ -363,16 +442,27 @@ function blendCrop(a: CropRect, b: CropRect, k: number): CropRect {
 }
 
 function blendKey(a: AnimatedKey, b: AnimatedKey, k: number): AnimatedKey {
-	return {
-		color: {
-			r: lerp(a.color.r, b.color.r, k),
-			g: lerp(a.color.g, b.color.g, k),
-			b: lerp(a.color.b, b.color.b, k),
-		},
-		threshold: lerp(a.threshold, b.threshold, k),
-		smoothing: lerp(a.smoothing, b.smoothing, k),
-		lumaRange: lerp(a.lumaRange, b.lumaRange, k),
-	};
+	// Points pair up by index; a key that added or dropped one holds.
+	const points =
+		a.points.length === b.points.length
+			? a.points.map((p, i) => {
+					const q = b.points[i];
+					return {
+						color: {
+							r: lerp(p.color.r, q.color.r, k),
+							g: lerp(p.color.g, q.color.g, k),
+							b: lerp(p.color.b, q.color.b, k),
+						},
+						x: lerp(p.x, q.x, k),
+						y: lerp(p.y, q.y, k),
+						connected: p.connected,
+						threshold: lerp(p.threshold, q.threshold, k),
+						smoothing: lerp(p.smoothing, q.smoothing, k),
+						lumaRange: lerp(p.lumaRange, q.lumaRange, k),
+					};
+				})
+			: a.points;
+	return { points };
 }
 
 function blendMaskKey(a: MaskKey, b: MaskKey, k: number): MaskKey {
@@ -527,17 +617,45 @@ function normalizeTrack<T>(
 }
 
 function normalizeAnimatedKey(raw: unknown): AnimatedKey {
-	const k = (raw ?? {}) as Partial<AnimatedKey>;
-	const c = (k.color ?? {}) as Partial<ChromaKey["color"]>;
+	// Keys saved before points held one colour and one set of tolerances, which now
+	// seed every point that doesn't carry its own.
+	const k = (raw ?? {}) as Partial<AnimatedKey> &
+		Partial<KeyTune> & { color?: unknown };
+	const rawPoints: unknown[] = Array.isArray(k.points)
+		? k.points
+		: k.color
+			? [{ color: k.color }]
+			: [];
+	const d = DEFAULT_KEY_POINT;
+	const tune: KeyTune = {
+		threshold: num(k.threshold, d.threshold),
+		smoothing: num(k.smoothing, d.smoothing),
+		lumaRange: num(k.lumaRange, d.lumaRange),
+	};
+	const points = rawPoints
+		.slice(0, MAX_KEY_POINTS)
+		.map((p) => normalizeKeyPoint(p, tune));
+	return { points: points.length > 0 ? points : [createKeyPoint(tune)] };
+}
+
+function normalizeKeyPoint(raw: unknown, tune: KeyTune): KeyPoint {
+	const p = (raw ?? {}) as Partial<KeyPoint>;
+	const c = (p.color ?? {}) as Partial<KeyColor>;
+	const d = DEFAULT_KEY_POINT;
+	const unit = (v: unknown, fallback: number) =>
+		Math.min(1, Math.max(0, num(v, fallback)));
 	return {
+		threshold: num(p.threshold, tune.threshold),
+		smoothing: num(p.smoothing, tune.smoothing),
+		lumaRange: num(p.lumaRange, tune.lumaRange),
 		color: {
-			r: num(c.r, DEFAULT_CHROMA_KEY.color.r),
-			g: num(c.g, DEFAULT_CHROMA_KEY.color.g),
-			b: num(c.b, DEFAULT_CHROMA_KEY.color.b),
+			r: unit(c.r, d.color.r),
+			g: unit(c.g, d.color.g),
+			b: unit(c.b, d.color.b),
 		},
-		threshold: num(k.threshold, DEFAULT_CHROMA_KEY.threshold),
-		smoothing: num(k.smoothing, DEFAULT_CHROMA_KEY.smoothing),
-		lumaRange: num(k.lumaRange, DEFAULT_CHROMA_KEY.lumaRange),
+		x: unit(p.x, d.x),
+		y: unit(p.y, d.y),
+		connected: !!p.connected,
 	};
 }
 

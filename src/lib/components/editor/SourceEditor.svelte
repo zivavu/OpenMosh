@@ -11,6 +11,7 @@
 		Pause,
 		Pipette,
 		Play,
+		Plus,
 		Redo2,
 		Repeat,
 		RotateCcw,
@@ -23,13 +24,19 @@
 	import { pushModalKeyboard } from "../../modal-keyboard";
 	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
 	import {
-		DEFAULT_CHROMA_KEY,
+		createChromaKey,
+		createKeyPoint,
+		DEFAULT_KEY_POINT,
 		FULL_CROP,
+		hasConnectedPoint,
 		IDENTITY_MASK_TRANSFORM,
+		isDefaultKeyPoints,
 		isFullCrop,
 		KEY_NEAR,
-		keyCoverage,
+		keyReach,
+		keyTester,
 		MASK_MAX,
+		MAX_KEY_POINTS,
 		putKeyframe,
 		removeKeyframe,
 		sampleSourceEdit,
@@ -40,7 +47,10 @@
 		type AnimatedKey,
 		type ChromaKey,
 		type CropRect,
+		type KeyColor,
 		type Keyframe,
+		type KeyPoint,
+		type KeyTune,
 		type MaskKey,
 		type MaskTransform,
 		type SourceEdit,
@@ -107,7 +117,7 @@
 		{
 			value: "key",
 			label: "Key",
-			hint: "Click the preview to pick the colour to remove",
+			hint: "Click the preview to pick the colour to remove; Shift-click adds another point",
 		},
 		{
 			value: "crop",
@@ -211,10 +221,7 @@
 	/** The animated part of the key: what it is on/off is not a keyable thing. */
 	function animatedKey(k: ChromaKey): AnimatedKey {
 		return {
-			color: { ...k.color },
-			threshold: k.threshold,
-			smoothing: k.smoothing,
-			lumaRange: k.lumaRange,
+			points: k.points.map((p) => createKeyPoint(p)),
 		};
 	}
 
@@ -285,13 +292,74 @@
 		}
 	}
 
-	/** Picking a colour switches the key on. */
-	function setColor(r: number, g: number, b: number, coalesceKey?: string) {
+	/** The point the colour, position and reach controls act on. */
+	let selectedPoint = $state(0);
+	let pointIndex = $derived(Math.min(selectedPoint, key.points.length - 1));
+	let point = $derived(key.points[pointIndex] ?? DEFAULT_KEY_POINT);
+	/** The next click on the preview adds a point instead of re-picking this one. */
+	let addingPoint = $state(false);
+	let canAddPoint = $derived(key.points.length < MAX_KEY_POINTS);
+
+	/** Picking switches the key on. Colour, position and tolerances are keyed values. */
+	function setPoint(
+		i: number,
+		patch: Partial<Omit<KeyPoint, "connected">>,
+		coalesceKey?: string,
+	) {
 		beforeEdit(coalesceKey);
-		const chromaKey = { ...key, enabled: true, color: { r, g, b } };
+		const points = key.points.map((p, j) =>
+			j === i ? createKeyPoint({ ...p, ...patch }) : p,
+		);
+		const chromaKey = { ...key, enabled: true, points };
 		const next = { ...edit, chromaKey };
 		if (trackOn("key")) addKey("key", next, animatedKey(chromaKey));
 		else onChange(next);
+	}
+
+	/** One of the selected point's tolerances; a slider drag is one undo entry. */
+	function setTune(prop: keyof KeyTune, value: number, dragging = false) {
+		const i = pointIndex;
+		setPoint(i, { [prop]: value }, dragging ? `key-${prop}-${i}` : undefined);
+	}
+
+	/** A change to which points exist or how they reach: the same on every key, or
+	 * keys with different point counts would stop interpolating. */
+	function reshapePoints(
+		fn: (points: KeyPoint[]) => KeyPoint[],
+		enable = false,
+	) {
+		beforeEdit();
+		const keys = edit.anim?.key?.map((k) => ({
+			...k,
+			v: { ...k.v, points: fn(k.v.points) },
+		}));
+		const chromaKey = {
+			...edit.chromaKey,
+			enabled: enable || edit.chromaKey.enabled,
+			points: fn(edit.chromaKey.points),
+		};
+		const base = { ...edit, chromaKey };
+		onChange(keys ? withTrack(base, "key", keys) : base);
+	}
+
+	function addPoint(p: KeyPoint) {
+		if (!canAddPoint) return;
+		const index = key.points.length;
+		reshapePoints((points) => [...points, createKeyPoint(p)], true);
+		selectedPoint = index;
+	}
+
+	function removePoint(i: number) {
+		if (key.points.length <= 1) return;
+		reshapePoints((points) => points.filter((_, j) => j !== i));
+		if (selectedPoint >= i && selectedPoint > 0) selectedPoint--;
+	}
+
+	function setConnected(connected: boolean) {
+		const i = pointIndex;
+		reshapePoints((points) =>
+			points.map((p, j) => (j === i ? { ...p, connected } : p)),
+		);
 	}
 
 	/** Where the mask sits under the playhead; always a key. */
@@ -557,7 +625,7 @@
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		const keying = key.enabled && key.threshold > 0;
+		const keying = key.enabled;
 		const maskPx = maskPixels();
 		if (!keying && !maskPx) {
 			ctx.drawImage(raw, 0, 0);
@@ -574,12 +642,17 @@
 		// Plain copy: the loop reads the key per pixel and a proxy would pay for every
 		// read.
 		const k = $state.snapshot(key);
+		const test = keyTester(k);
+		// Worked out on the whole frame before any alpha is touched.
+		const reach = hasConnectedPoint(k)
+			? keyReach(px, raw.width, raw.height, k)
+			: null;
 		for (let i = 0; i < px.length; i += 4) {
-			px[i + 3] *= keyCoverage(
+			px[i + 3] *= test(
 				px[i] / 255,
 				px[i + 1] / 255,
 				px[i + 2] / 255,
-				k,
+				!reach || reach[i >> 2] === 1,
 			);
 			if (maskPx) px[i + 3] *= maskPx[i] / 255;
 		}
@@ -763,10 +836,7 @@
 		// Read every knob, so any of them moving re-runs this.
 		void [
 			key.enabled,
-			key.color,
-			key.threshold,
-			key.smoothing,
-			key.lumaRange,
+			key.points,
 			edit.mask,
 			maskXform,
 			// A morph moves on with the playhead even when nothing else does.
@@ -777,15 +847,28 @@
 		if (ready && !playing) paint();
 	});
 
-	function pickAt(x: number, y: number) {
-		if (!rawCtx) return;
+	/** Re-picks the selected point, or adds one when asked to. */
+	function pickAt(x: number, y: number, add: boolean) {
+		if (!rawCtx || !raw) return;
 		const [r, g, b] = rawCtx.getImageData(
 			Math.floor(x),
 			Math.floor(y),
 			1,
 			1,
 		).data;
-		setColor(r / 255, g / 255, b / 255);
+		const picked = {
+			color: { r: r / 255, g: g / 255, b: b / 255 },
+			x: Math.min(Math.max(x / raw.width, 0), 1),
+			y: Math.min(Math.max(y / raw.height, 0), 1),
+		};
+		addingPoint = false;
+		// A fresh key's green is a placeholder, not a point anyone picked.
+		const fresh = !key.enabled && isDefaultKeyPoints(key.points);
+		if (add && canAddPoint && !fresh) {
+			addPoint({ ...point, ...picked });
+		} else {
+			setPoint(pointIndex, picked);
+		}
 	}
 
 	// One handler for all three tools: only the selected one gets the drag.
@@ -893,7 +976,7 @@
 		gestureTime = currentTime;
 
 		if (tool === "key") {
-			pickAt(p.x, p.y);
+			pickAt(p.x, p.y, e.shiftKey || addingPoint);
 			return;
 		}
 		if (tool === "erase") {
@@ -1044,12 +1127,7 @@
 
 	/** Whether a tool has been touched at all; its Reset is dead until it has. */
 	let dirty = $derived({
-		key:
-			key.enabled ||
-			trackOn("key") ||
-			key.threshold !== DEFAULT_CHROMA_KEY.threshold ||
-			key.smoothing !== DEFAULT_CHROMA_KEY.smoothing ||
-			key.lumaRange !== DEFAULT_CHROMA_KEY.lumaRange,
+		key: key.enabled || trackOn("key") || !isDefaultKeyPoints(key.points),
 		crop: !isFullCrop(crop) || trackOn("crop"),
 		erase: !!edit.mask || !!live.mask || trackOn("mask"),
 	});
@@ -1064,11 +1142,8 @@
 		if (t === "crop") {
 			onChange(withTrack({ ...edit, crop: { ...FULL_CROP } }, "crop", []));
 		} else {
-			const chromaKey = {
-				...DEFAULT_CHROMA_KEY,
-				color: { ...DEFAULT_CHROMA_KEY.color },
-			};
-			onChange(withTrack({ ...edit, chromaKey }, "key", []));
+			selectedPoint = 0;
+			onChange(withTrack({ ...edit, chromaKey: createChromaKey() }, "key", []));
 		}
 	}
 
@@ -1082,7 +1157,7 @@
 		return `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
 	}
 
-	function toHex({ r, g, b }: ChromaKey["color"]): string {
+	function toHex({ r, g, b }: KeyColor): string {
 		const h = (v: number) =>
 			Math.round(Math.min(1, Math.max(0, v)) * 255)
 				.toString(16)
@@ -1092,8 +1167,8 @@
 
 	function setHex(hex: string) {
 		// The picker fires as it is dragged, so the whole sweep is one entry.
-		const [r, g, b] = hexToVec3(hex, toHex(key.color));
-		setColor(r, g, b, "key-color");
+		const [r, g, b] = hexToVec3(hex, toHex(point.color));
+		setPoint(pointIndex, { color: { r, g, b } }, `key-color-${pointIndex}`);
 	}
 
 	// A clip property rather than a tool: it changes how fast the media is walked.
@@ -1144,12 +1219,9 @@
 		maskCanvas = null;
 		maskCtx = null;
 		maskLoaded = null;
+		selectedPoint = 0;
 		onChange({
-			chromaKey: {
-				...DEFAULT_CHROMA_KEY,
-				color: { ...DEFAULT_CHROMA_KEY.color },
-				enabled: key.enabled,
-			},
+			chromaKey: createChromaKey(key.enabled),
 			crop: { ...FULL_CROP },
 			mask: null,
 			// Every track goes with it.
@@ -1266,6 +1338,19 @@
 								onpointercancel={onPreviewUp}
 								aria-label="Media preview"
 							></canvas>
+							<!-- Where each point was picked: a connected point cuts outward from there. -->
+							{#if tool === "key" && key.enabled}
+								{#each key.points as p, i (i)}
+									<span
+										class="key-marker"
+										class:selected={i === pointIndex}
+										class:connected={p.connected}
+										style="left:{p.x * 100}%; top:{p.y * 100}%"
+									>
+										{i + 1}
+									</span>
+								{/each}
+							{/if}
 							{#if !isFullCrop(crop)}
 								{const idle = $derived(tool !== "crop")}
 								<!-- Shown under every tool, not just Crop: what is cropped away is gone either way. -->
@@ -1443,76 +1528,153 @@
 						</div>
 
 						<div class="row">
+							<span class="row-label">Points</span>
+							<div class="key-points">
+								{#each key.points as p, i (i)}
+									<span class="key-point" class:selected={i === pointIndex}>
+										<button
+											class="key-point-pick"
+											title="Point {i + 1}{p.connected
+												? ', connected'
+												: ''} — select it to change its colour and reach"
+											aria-pressed={i === pointIndex}
+											onclick={() => (selectedPoint = i)}
+										>
+											<span
+												class="key-swatch"
+												class:connected={p.connected}
+												style:background={toHex(p.color)}
+											></span>
+											{i + 1}
+										</button>
+										{#if key.points.length > 1}
+											<button
+												class="key-point-del"
+												title="Remove point {i + 1}"
+												aria-label="Remove point {i + 1}"
+												onclick={() => removePoint(i)}
+											>
+												<X size={10} />
+											</button>
+										{/if}
+									</span>
+								{/each}
+								<button
+									class="key-point-add"
+									class:on={addingPoint}
+									disabled={!canAddPoint}
+									title={canAddPoint
+										? "Add a point: the next click on the preview picks its colour. Shift-click the preview does the same."
+										: `A key holds at most ${MAX_KEY_POINTS} points`}
+									aria-label="Add a point"
+									aria-pressed={addingPoint}
+									onclick={() => (addingPoint = !addingPoint)}
+								>
+									<Plus size={11} />
+								</button>
+							</div>
+						</div>
+
+						<div class="row">
 							<label for="ck-color">Colour</label>
 							<ColorPicker
 								id="ck-color"
-								value={toHex(key.color)}
-								defaultValue={toHex(DEFAULT_CHROMA_KEY.color)}
+								value={toHex(point.color)}
+								defaultValue={toHex(DEFAULT_KEY_POINT.color)}
 								onChange={setHex}
 							/>
 						</div>
 
+						<div
+							class="row"
+							title="Whole frame cuts this colour wherever it appears. Connected cuts only the patch of it that touches the point, so the same colour elsewhere, in a shirt say, stays."
+						>
+							<span class="row-label">Reach</span>
+							<div
+								class="bar-cluster reach-toggle"
+								role="group"
+								aria-label="Reach"
+							>
+								<button
+									class="tool-btn"
+									class:open={!point.connected}
+									aria-pressed={!point.connected}
+									onclick={() => setConnected(false)}
+								>
+									Whole frame
+								</button>
+								<button
+									class="tool-btn"
+									class:open={point.connected}
+									aria-pressed={point.connected}
+									onclick={() => setConnected(true)}
+								>
+									Connected
+								</button>
+							</div>
+						</div>
+
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="How close a pixel's colour has to be to the key colour to be cut away. Raise it until the background goes; drop it if the subject starts going with it. Double-click to reset."
+							title="How close a pixel's colour has to be to the selected point's to be cut away. Raise it until the background goes; drop it if the subject starts going with it. Double-click to reset."
 							ondblclick={() =>
-								setKey("threshold", DEFAULT_CHROMA_KEY.threshold)}
+								setTune("threshold", DEFAULT_KEY_POINT.threshold)}
 						>
 							<label for="ck-thr">Threshold</label>
 							<RangeSlider
 								id="ck-thr"
-								value={key.threshold}
+								value={point.threshold}
 								min={0.01}
 								max={1}
 								step={0.001}
 								curve={KEY_CURVE}
 								disabled={!key.enabled}
-								oninput={(v) => setKey("threshold", v, "key-threshold")}
+								oninput={(v) => setTune("threshold", v, true)}
 							/>
-							<span class="val">{keyPct(key.threshold)}</span>
+							<span class="val">{keyPct(point.threshold)}</span>
 						</div>
 
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="How far a pixel's brightness may differ from the key colour's. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs. Double-click to reset."
+							title="How far a pixel's brightness may differ from the selected point's colour. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs. Double-click to reset."
 							ondblclick={() =>
-								setKey("lumaRange", DEFAULT_CHROMA_KEY.lumaRange)}
+								setTune("lumaRange", DEFAULT_KEY_POINT.lumaRange)}
 						>
 							<label for="ck-luma">Brightness range</label>
 							<RangeSlider
 								id="ck-luma"
-								value={key.lumaRange}
+								value={point.lumaRange}
 								min={0.01}
 								max={1}
 								step={0.001}
 								curve={KEY_CURVE}
 								disabled={!key.enabled}
-								oninput={(v) => setKey("lumaRange", v, "key-luma")}
+								oninput={(v) => setTune("lumaRange", v, true)}
 							/>
-							<span class="val">{keyPct(key.lumaRange)}</span>
+							<span class="val">{keyPct(point.lumaRange)}</span>
 						</div>
 
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="How soft the edge of the cut is. A little feathering hides the jagged step the key leaves behind, too much eats into the subject. Double-click to reset."
+							title="How soft the edge of the selected point's cut is. A little feathering hides the jagged step the key leaves behind, too much eats into the subject. Double-click to reset."
 							ondblclick={() =>
-								setKey("smoothing", DEFAULT_CHROMA_KEY.smoothing)}
+								setTune("smoothing", DEFAULT_KEY_POINT.smoothing)}
 						>
 							<label for="ck-smooth">Smoothing</label>
 							<RangeSlider
 								id="ck-smooth"
-								value={key.smoothing}
+								value={point.smoothing}
 								min={0}
 								max={0.5}
 								step={0.001}
 								curve={KEY_CURVE}
 								disabled={!key.enabled}
-								oninput={(v) => setKey("smoothing", v, "key-smoothing")}
+								oninput={(v) => setTune("smoothing", v, true)}
 							/>
-							<span class="val">{keyPct(key.smoothing)}</span>
+							<span class="val">{keyPct(point.smoothing)}</span>
 						</div>
 					{:else if tool === "crop"}
 						<div class="row">
@@ -1701,6 +1863,33 @@
 
 	.canvas-wrap canvas.tool-key {
 		cursor: copy;
+	}
+
+	.key-marker {
+		position: absolute;
+		display: grid;
+		place-items: center;
+		width: 14px;
+		height: 14px;
+		margin: -7px 0 0 -7px;
+		border: 1px dashed rgba(255, 255, 255, 0.7);
+		border-radius: 50%;
+		background: rgba(0, 0, 0, 0.45);
+		color: #fff;
+		font-family: var(--font-mono);
+		font-size: 0.5rem;
+		line-height: 1;
+		pointer-events: none;
+	}
+
+	/* Solid ring: this one cuts only the patch it sits in. */
+	.key-marker.connected {
+		border-style: solid;
+	}
+
+	.key-marker.selected {
+		border-color: var(--live);
+		color: var(--live);
 	}
 
 	.crop-shade {
@@ -2031,6 +2220,100 @@
 		color: var(--text-2);
 		/* The row's double-click resets the control; without this it also selects the label. */
 		user-select: none;
+	}
+
+	.row .row-label {
+		flex-shrink: 0;
+		min-width: 6.5rem;
+		font-size: 0.7rem;
+		color: var(--text-2);
+		user-select: none;
+	}
+
+	.key-points {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.key-point {
+		display: inline-flex;
+		align-items: center;
+		border: 1px solid var(--line);
+		border-radius: 3px;
+	}
+
+	.key-point.selected {
+		border-color: var(--live);
+	}
+
+	.key-point-pick,
+	.key-point-del,
+	.key-point-add {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		height: 20px;
+		padding: 0 0.3rem;
+		border: none;
+		background: none;
+		color: var(--text-3);
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		cursor: pointer;
+	}
+
+	.key-point.selected .key-point-pick {
+		color: var(--text);
+	}
+
+	.key-point-del {
+		padding: 0 0.2rem 0 0;
+	}
+
+	.key-point-pick:hover,
+	.key-point-del:hover,
+	.key-point-add:hover:not(:disabled) {
+		color: var(--text);
+	}
+
+	.key-point-add {
+		border: 1px dashed var(--line);
+		border-radius: 3px;
+	}
+
+	.key-point-add.on {
+		border-style: solid;
+		border-color: var(--live);
+		color: var(--live);
+	}
+
+	.key-point-add:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+
+	.key-swatch {
+		width: 10px;
+		height: 10px;
+		border: 1px dashed rgba(255, 255, 255, 0.5);
+		border-radius: 50%;
+	}
+
+	.key-swatch.connected {
+		border-style: solid;
+	}
+
+	.reach-toggle {
+		display: flex;
+		flex: 1;
+	}
+
+	.reach-toggle .tool-btn {
+		height: 22px;
+		font-size: 0.56rem;
+		letter-spacing: 0.08em;
 	}
 
 	.val {

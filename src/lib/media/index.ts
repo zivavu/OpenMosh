@@ -19,7 +19,10 @@ export type {
 	AnimatedKey,
 	ChromaKey,
 	CropRect,
+	KeyColor,
 	Keyframe,
+	KeyPoint,
+	KeyTune,
 	MaskKey,
 	MaskTransform,
 	SourceEdit,
@@ -27,17 +30,24 @@ export type {
 	SourceSpan,
 } from "./source-edit";
 export {
+	createChromaKey,
+	createKeyPoint,
 	createSourceEdit,
 	DEFAULT_CHROMA_KEY,
+	DEFAULT_KEY_POINT,
 	DEFAULT_SOURCE_EDIT,
 	FULL_CROP,
 	hasAnimation,
+	hasConnectedPoint,
 	IDENTITY_MASK_TRANSFORM,
+	isDefaultKeyPoints,
 	isFullCrop,
 	isIdleSourceEdit,
 	KEY_NEAR,
 	keyCoverage,
+	keyTester,
 	MASK_MAX,
+	MAX_KEY_POINTS,
 	normalizeSourceEdits,
 	putKeyframe,
 	removeKeyframe,
@@ -51,6 +61,7 @@ export {
 	SPEED_MIN,
 	SPEED_MAX,
 } from "./source-edit";
+export { KEY_REACH_MATCH, KEY_SEED_RADIUS, keyReach } from "./key-reach";
 export type {
 	MediaChainSource,
 	MediaLayerSide,
