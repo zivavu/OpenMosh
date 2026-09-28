@@ -249,6 +249,7 @@
 		end: number;
 	} | null>(null);
 	let ghostSource = $derived(sourceById(draggedSourceId()));
+	let dropClipIds = $derived(dropClipId ? dropTargetIds(dropClipId) : []);
 
 	function isSourceDrag(e: DragEvent): boolean {
 		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
@@ -292,6 +293,11 @@
 		return lane.clips.find((c) => t >= c.start && t < c.end) ?? null;
 	}
 
+	/** A drop on a selected clip lands on the whole selection. */
+	function dropTargetIds(clipId: string): string[] {
+		return selectedClipIds.includes(clipId) ? selectedClipIds : [clipId];
+	}
+
 	function onLaneDragLeave(e: DragEvent) {
 		// Ignore the leaves fired crossing between a row's own children.
 		if (
@@ -304,8 +310,8 @@
 		clearDrop();
 	}
 
-	/** A thumb dropped on a clip retargets that clip alone; one dropped on the lane's
-	 * empty space lays down a new clip there showing it. */
+	/** A thumb dropped on a clip retargets it, or the whole selection when it is part
+	 * of one; one dropped on the lane's empty space lays down a new clip there. */
 	function onLaneDrop(e: DragEvent, laneId: string) {
 		if (!isSourceDrag(e)) return;
 		e.preventDefault();
@@ -316,9 +322,13 @@
 		const lane = ctrl.laneOf(laneId);
 		if (!sourceId || !lane) return;
 		if (onClip) {
-			if (clipSourceId(lane, onClip) === sourceId) return;
+			const ids = new Set(dropTargetIds(onClip.id));
+			const changes = timeline.lanes.some((l) =>
+				l.clips.some((c) => ids.has(c.id) && clipSourceId(l, c) !== sourceId),
+			);
+			if (!changes) return;
 			onBeforeEdit?.();
-			onChange(setMediaClipSources(timeline, [onClip.id], sourceId));
+			onChange(setMediaClipSources(timeline, [...ids], sourceId));
 			return;
 		}
 		if (!ghost || ghost.laneId !== laneId) return;
@@ -550,7 +560,7 @@
 								clip.id === selectedClipId}
 							class:muted={!lane.enabled}
 							class:retargeted={!!clip.sourceId}
-							class:drop-target={dropClipId === clip.id}
+							class:drop-target={dropClipIds.includes(clip.id)}
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
