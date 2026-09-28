@@ -1072,6 +1072,16 @@
 		}
 	}
 
+	/** Cubic track for the key's sliders: the useful settings sit in their bottom
+	 * fifth, which this spreads over more than half the travel. */
+	const KEY_CURVE = 3;
+
+	/** A decimal under 10%, where the curved track makes it reachable. */
+	function keyPct(v: number): string {
+		const pct = v * 100;
+		return `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
+	}
+
 	function toHex({ r, g, b }: ChromaKey["color"]): string {
 		const h = (v: number) =>
 			Math.round(Math.min(1, Math.max(0, v)) * 255)
@@ -1455,11 +1465,12 @@
 								value={key.threshold}
 								min={0.01}
 								max={1}
-								step={0.005}
+								step={0.001}
+								curve={KEY_CURVE}
 								disabled={!key.enabled}
 								oninput={(v) => setKey("threshold", v, "key-threshold")}
 							/>
-							<span class="val">{Math.round(key.threshold * 100)}%</span>
+							<span class="val">{keyPct(key.threshold)}</span>
 						</div>
 
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1475,11 +1486,12 @@
 								value={key.lumaRange}
 								min={0.01}
 								max={1}
-								step={0.005}
+								step={0.001}
+								curve={KEY_CURVE}
 								disabled={!key.enabled}
 								oninput={(v) => setKey("lumaRange", v, "key-luma")}
 							/>
-							<span class="val">{Math.round(key.lumaRange * 100)}%</span>
+							<span class="val">{keyPct(key.lumaRange)}</span>
 						</div>
 
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1495,11 +1507,12 @@
 								value={key.smoothing}
 								min={0}
 								max={0.5}
-								step={0.005}
+								step={0.001}
+								curve={KEY_CURVE}
 								disabled={!key.enabled}
 								oninput={(v) => setKey("smoothing", v, "key-smoothing")}
 							/>
-							<span class="val">{Math.round(key.smoothing * 100)}%</span>
+							<span class="val">{keyPct(key.smoothing)}</span>
 						</div>
 					{:else if tool === "crop"}
 						<div class="row">
