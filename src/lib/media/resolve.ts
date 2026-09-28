@@ -124,6 +124,18 @@ export function clipSourceId(
 	return clip?.sourceId ?? lane.sourceId;
 }
 
+/** The media a clip added at `time` shows: the clip before it carries on, else the
+ * one after, else the lane's own. */
+export function newClipSourceId(lane: MediaLane, time: number): string | null {
+	let before: MediaClip | undefined;
+	let after: MediaClip | undefined;
+	for (const c of lane.clips) {
+		if (c.end <= time && (!before || c.end > before.end)) before = c;
+		if (c.start >= time && (!after || c.start < after.start)) after = c;
+	}
+	return clipSourceId(lane, before ?? after);
+}
+
 /** Distinct sources a lane's clips can call for, the lane's own included. */
 export function laneSourceIds(lane: MediaLane): string[] {
 	const ids = new Set<string>();

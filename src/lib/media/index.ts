@@ -68,6 +68,7 @@ export {
 	laneSourceIds,
 	mediaLayerSides,
 	mediaTimelineSourceIds,
+	newClipSourceId,
 	newClipSpan,
 	replaceMediaClip,
 	resolveMediaLayersAt,

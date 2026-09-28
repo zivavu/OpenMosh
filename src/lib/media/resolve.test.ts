@@ -4,6 +4,7 @@ import {
 	detachMediaSource,
 	laneSourceIds,
 	mediaTimelineSourceIds,
+	newClipSourceId,
 	resolveMediaLayersAt,
 	setMediaClipSources,
 } from "./resolve";
@@ -377,5 +378,28 @@ describe("fitMediaTimeline", () => {
 	it("leaves everything alone before a duration is known", () => {
 		const t = timelineOf([laneWith([[0, 120]])]);
 		expect(fitMediaTimeline(t, 0)).toBe(t);
+	});
+});
+
+describe("newClipSourceId", () => {
+	it("carries on the media of the clip before", () => {
+		const lane = retargeted(
+			laneWith([
+				[0, 2],
+				[5, 7],
+			]),
+			0,
+			"src-b",
+		);
+		expect(newClipSourceId(lane, 3)).toBe("src-b");
+	});
+
+	it("takes the clip after when nothing comes before", () => {
+		const lane = retargeted(laneWith([[5, 7]]), 0, "src-b");
+		expect(newClipSourceId(lane, 1)).toBe("src-b");
+	});
+
+	it("falls back to the lane's own media", () => {
+		expect(newClipSourceId(laneWith([]), 1)).toBe("src-a");
 	});
 });

@@ -98,7 +98,8 @@ const CLIP_ROWS: ShortcutRow[] = [
 	},
 	{
 		keys: ["Dbl-click", "Ctrl/Cmd+Click"],
-		description: "Add a clip in empty lane space",
+		description:
+			"Add a clip in empty lane space; on a media layer it shows the neighbouring clip's media, previewed while Ctrl is held",
 	},
 	{ keys: ["Ctrl/Cmd+Click a clip"], description: "Split it at the cursor" },
 	{
