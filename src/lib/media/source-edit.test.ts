@@ -16,7 +16,9 @@ import {
 	clampSpan,
 	sourcePlayLength,
 	sourceTimeAt,
+	createKeyPoint,
 } from "./source-edit";
+import { keyReach } from "./key-reach";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
@@ -68,7 +70,10 @@ describe("isIdleSourceEdit", () => {
 
 	it("still counts a tuned but switched-off key", () => {
 		const tuned = createSourceEdit();
-		tuned.chromaKey = { ...DEFAULT_CHROMA_KEY, threshold: 0.7 };
+		tuned.chromaKey = {
+			...DEFAULT_CHROMA_KEY,
+			points: [createKeyPoint({ threshold: 0.7 })],
+		};
 		expect(isIdleSourceEdit(tuned)).toBe(false);
 	});
 });
@@ -110,12 +115,12 @@ describe("keyframes", () => {
 		e.chromaKey.enabled = true;
 		e.anim = {
 			key: [
-				{ t: 0, v: { ...DEFAULT_CHROMA_KEY, threshold: 0.1 } },
-				{ t: 2, v: { ...DEFAULT_CHROMA_KEY, threshold: 0.5 } },
+				{ t: 0, v: { points: [createKeyPoint({ threshold: 0.1 })] } },
+				{ t: 2, v: { points: [createKeyPoint({ threshold: 0.5 })] } },
 			],
 		};
 		const mid = sampleSourceEdit(e, 1);
-		expect(mid.chromaKey.threshold).toBeCloseTo(0.3, 5);
+		expect(mid.chromaKey.points[0].threshold).toBeCloseTo(0.3, 5);
 		expect(mid.chromaKey.enabled).toBe(true);
 	});
 
@@ -331,13 +336,18 @@ describe("keyed erase masks", () => {
 });
 
 describe("keyCoverage", () => {
-	const grey = {
+	const tune = { threshold: 0.01, smoothing: 0.1, lumaRange: 0.35 };
+	const greyPoint = createKeyPoint({
+		...tune,
 		color: { r: 0.5, g: 0.5, b: 0.5 },
-		threshold: 0.01,
-		smoothing: 0.1,
-		lumaRange: 0.35,
-	};
-	const green = { ...grey, color: { r: 0, g: 1, b: 0 }, threshold: 0.3 };
+	});
+	const greenPoint = createKeyPoint({
+		...tune,
+		threshold: 0.3,
+		color: { r: 0, g: 1, b: 0 },
+	});
+	const grey = { points: [greyPoint] };
+	const green = { points: [greenPoint] };
 
 	it("cuts the key colour itself", () => {
 		expect(keyCoverage(0.5, 0.5, 0.5, grey)).toBe(0);
@@ -369,5 +379,91 @@ describe("keyCoverage", () => {
 		const y = keyCoverage(0.9, 0.9, 0.9, grey);
 		expect(y).toBeGreaterThan(0);
 		expect(y).toBeLessThan(1);
+	});
+
+	it("cuts a pixel matching any of its points", () => {
+		const both = { points: [greenPoint, greyPoint] };
+		expect(keyCoverage(0, 1, 0, both)).toBe(0);
+		expect(keyCoverage(0.5, 0.5, 0.5, both)).toBe(0);
+		expect(keyCoverage(1, 0, 0, both)).toBe(1);
+	});
+
+	it("tests each point against its own tolerances", () => {
+		// Bluer than the grey point: past its tight threshold and band, inside a wide one.
+		const tight = { points: [greyPoint] };
+		const wide = { points: [{ ...greyPoint, threshold: 0.3 }] };
+		expect(keyCoverage(0.5, 0.5, 0.8, tight)).toBe(1);
+		expect(keyCoverage(0.5, 0.5, 0.8, wide)).toBe(0);
+	});
+
+	it("leaves a connected point's colour alone outside its reach", () => {
+		const local = { points: [{ ...greenPoint, connected: true }] };
+		expect(keyCoverage(0, 1, 0, local, true)).toBe(0);
+		expect(keyCoverage(0, 1, 0, local, false)).toBe(1);
+	});
+});
+
+describe("key points", () => {
+	it("reads a single-colour key from before points", () => {
+		const e = normalizeSourceEdit({
+			chromaKey: { enabled: true, color: { r: 0, g: 0, b: 1 }, threshold: 0.2 },
+		});
+		expect(e.chromaKey.points).toHaveLength(1);
+		expect(e.chromaKey.points[0].color).toEqual({ r: 0, g: 0, b: 1 });
+		expect(e.chromaKey.points[0].connected).toBe(false);
+		// The old key-wide tolerances carry over onto the point.
+		expect(e.chromaKey.points[0].threshold).toBe(0.2);
+	});
+
+	it("fills in tolerances a saved point lacks from the key", () => {
+		const e = normalizeSourceEdit({
+			chromaKey: {
+				threshold: 0.05,
+				points: [{ color: { r: 1, g: 0, b: 0 } }, { threshold: 0.4 }],
+			},
+		});
+		expect(e.chromaKey.points.map((p) => p.threshold)).toEqual([0.05, 0.4]);
+	});
+
+	it("counts an added point as a change", () => {
+		const e = createSourceEdit();
+		e.chromaKey.points.push(createKeyPoint({ x: 0.1 }));
+		expect(isIdleSourceEdit(e)).toBe(false);
+	});
+
+	it("moves points between keys with the same count", () => {
+		const e = createSourceEdit();
+		e.chromaKey.enabled = true;
+		e.anim = {
+			key: [
+				{
+					t: 0,
+					v: { ...DEFAULT_CHROMA_KEY, points: [createKeyPoint({ x: 0 })] },
+				},
+				{
+					t: 2,
+					v: { ...DEFAULT_CHROMA_KEY, points: [createKeyPoint({ x: 1 })] },
+				},
+			],
+		};
+		expect(sampleSourceEdit(e, 1).chromaKey.points[0].x).toBeCloseTo(0.5, 5);
+	});
+});
+
+describe("keyReach", () => {
+	// 5×1: green, green, red, green, green.
+	const G = [0, 255, 0, 255];
+	const R = [255, 0, 0, 255];
+	const row = new Uint8ClampedArray([...G, ...G, ...R, ...G, ...G]);
+	const key = (connected: boolean) => ({
+		points: [createKeyPoint({ x: 0, y: 0, connected })],
+	});
+
+	it("stops at the first pixel that doesn't match", () => {
+		expect([...keyReach(row, 5, 1, key(true))]).toEqual([1, 1, 0, 0, 0]);
+	});
+
+	it("reaches nothing without a connected point", () => {
+		expect([...keyReach(row, 5, 1, key(false))]).toEqual([0, 0, 0, 0, 0]);
 	});
 });

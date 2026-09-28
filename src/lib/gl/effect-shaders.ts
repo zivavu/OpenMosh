@@ -1,5 +1,6 @@
 import { hexToVec3 } from "../color";
 import { DEFAULT_AUDIO_RESPONSE, punchExponent } from "../audio/auto-range";
+import { MAX_KEY_POINTS } from "../media/source-edit";
 
 export const VERTEX_SHADER = `#version 300 es
 layout(location = 0) in vec2 a_position;
@@ -158,13 +159,39 @@ float insideLayerSoft(vec2 uv, float fade) {
 }
 `;
 
-/** Chroma keying, shared by the layer placement and the source-edit pass. */
-const CHROMA_KEY_GLSL = `uniform vec3 u_keyColor;
+/** The key's points and the per-point colour test. Must match keyTester in source-edit.ts. */
+const KEY_POINTS_GLSL = `#define MAX_KEY_POINTS ${MAX_KEY_POINTS}
 // <= 0 switches the key off, so unkeyed media costs one compare.
-uniform float u_keyThreshold;
-uniform float u_keySmooth;
-// How far a pixel's brightness may differ from the key's. 1 ignores it.
-uniform float u_keyLuma;
+uniform float u_keyOn;
+uniform int u_keyCount;
+uniform vec3 u_keyColors[MAX_KEY_POINTS];
+// Per point: x = threshold, y = smoothing, z = brightness range (1 ignores it).
+uniform vec3 u_keyTunes[MAX_KEY_POINTS];
+// 1 = the point only cuts inside the connected reach.
+uniform float u_keyConnected[MAX_KEY_POINTS];
+
+vec2 chroma(vec3 c) {
+  return vec2(dot(c, vec3(-0.169, -0.331, 0.5)), dot(c, vec3(0.5, -0.419, -0.081)));
+}
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+// A cylinder in Y'CbCr: chroma within the threshold of the point's, brightness
+// within its range (chroma alone keyed grey backdrops' highlights too). Returns coverage, 1 = keep.
+float pointCoverage(vec3 c, int i) {
+  vec3 k = u_keyColors[i];
+  vec3 t = u_keyTunes[i];
+  float s = max(t.y, 0.0001);
+  float dC = distance(chroma(c), chroma(k));
+  float dY = abs(luma(c) - luma(k));
+  return max(smoothstep(t.x, t.x + s, dC), smoothstep(t.z, t.z + s, dY));
+}
+`;
+
+/** Chroma keying, shared by the layer placement and the source-edit pass. */
+const CHROMA_KEY_GLSL = `${KEY_POINTS_GLSL}
+// Where the connected points cut, in source uv: g = reached. Off at <= 0.
+uniform sampler2D u_keyReach;
+uniform float u_hasReach;
+uniform vec2 u_keyReachTexel;
 // Hand-erased coverage in source space; red channel, 1 = keep. Off at <= 0.
 uniform sampler2D u_mask;
 uniform float u_hasMask;
@@ -184,19 +211,32 @@ uniform vec3 u_maskXform;
 // The part of the source to keep: xy = origin, zw = size, both normalized.
 uniform vec4 u_crop;
 
-vec2 chroma(vec3 c) {
-  return vec2(dot(c, vec3(-0.169, -0.331, 0.5)), dot(c, vec3(0.5, -0.419, -0.081)));
+// Grown by a texel: the reach is coarse, and its rim would leave a halo of backdrop.
+float keyReachAt(vec2 srcUv) {
+  if (u_hasReach <= 0.0) return 0.0;
+  vec2 t = u_keyReachTexel;
+  float r = textureLod(u_keyReach, srcUv, 0.0).g;
+  r = max(r, textureLod(u_keyReach, srcUv + vec2(t.x, t.y), 0.0).g);
+  r = max(r, textureLod(u_keyReach, srcUv + vec2(-t.x, t.y), 0.0).g);
+  r = max(r, textureLod(u_keyReach, srcUv + vec2(t.x, -t.y), 0.0).g);
+  r = max(r, textureLod(u_keyReach, srcUv + vec2(-t.x, -t.y), 0.0).g);
+  return r;
 }
-float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-// A cylinder in Y'CbCr: chroma within u_keyThreshold of the key's, brightness
-// within u_keyLuma (chroma alone keyed grey backdrops' highlights too). Returns coverage, 1 = keep.
-float keyCoverage(vec3 c) {
-  float s = max(u_keySmooth, 0.0001);
-  float dC = distance(chroma(c), chroma(u_keyColor));
-  float dY = abs(luma(c) - luma(u_keyColor));
-  return max(
-    smoothstep(u_keyThreshold, u_keyThreshold + s, dC),
-    smoothstep(u_keyLuma, u_keyLuma + s, dY));
+
+// A pixel goes if it matches any point; a connected one only inside its reach.
+float keyCoverage(vec3 c, vec2 srcUv) {
+  float reach = -1.0;
+  float cover = 1.0;
+  for (int i = 0; i < MAX_KEY_POINTS; i++) {
+    if (i >= u_keyCount) break;
+    float k = pointCoverage(c, i);
+    if (u_keyConnected[i] > 0.5) {
+      if (reach < 0.0) reach = keyReachAt(srcUv);
+      k = mix(1.0, k, reach);
+    }
+    cover = min(cover, k);
+  }
+  return cover;
 }
 
 /** Crop, erase and key in one go. Returns the media with its coverage in .a. */
@@ -232,7 +272,7 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
     }
     c.a *= mix(1.0, cover, inside);
   }
-  if (u_keyThreshold > 0.0) c.a *= keyCoverage(c.rgb);
+  if (u_keyOn > 0.0) c.a *= keyCoverage(c.rgb, srcUv);
   return c;
 }
 `;
@@ -256,6 +296,62 @@ void main() {
   // rgb straight, so a keyed backdrop that kept its green would bloom back through the hole.
   c.rgb *= step(0.001, c.a);
   outColor = c * insideLayerSoft(uv, u_edgeFade);
+}`;
+
+/** First step of a connected key, at low res over the whole source: r = matches a
+ * connected point, g = matches and sits by one of their seeds. Must match key-reach.ts. */
+export const KEY_REACH_SEED_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+${KEY_POINTS_GLSL}
+uniform vec2 u_keySeeds[MAX_KEY_POINTS];
+// Seed half-width, in texels of this buffer.
+uniform float u_seedRadius;
+uniform vec2 u_reachSize;
+in vec2 v_uv;
+out vec4 outColor;
+void main() {
+  vec3 c = texture(u_texture, v_uv).rgb;
+  float match = 1.0;
+  float seeded = 0.0;
+  for (int i = 0; i < MAX_KEY_POINTS; i++) {
+    if (i >= u_keyCount) break;
+    if (u_keyConnected[i] < 0.5) continue;
+    match = min(match, pointCoverage(c, i));
+    vec2 d = abs(v_uv - u_keySeeds[i]) * u_reachSize;
+    if (max(d.x, d.y) <= u_seedRadius) seeded = 1.0;
+  }
+  float passable = step(match, 0.999);
+  outColor = vec4(passable, passable * seeded, 0.0, 1.0);
+}`;
+
+/** One sweep of the connected fill along a row or column: a matching texel is
+ * reached if it can walk to a reached one without leaving the match. Alternating
+ * sweeps flood a region in about as many passes as its outline has turns. */
+export const KEY_REACH_SPREAD_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+uniform ivec2 u_step;
+out vec4 outColor;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  ivec2 size = textureSize(u_texture, 0);
+  vec2 here = texelFetch(u_texture, p, 0).rg;
+  float reach = here.g;
+  if (here.r > 0.5 && reach < 0.5) {
+    for (int dir = -1; dir <= 1; dir += 2) {
+      ivec2 q = p;
+      for (int i = 0; i < 1024; i++) {
+        q += u_step * dir;
+        if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y) break;
+        vec2 s = texelFetch(u_texture, q, 0).rg;
+        if (s.r < 0.5) break;
+        if (s.g > 0.5) { reach = 1.0; break; }
+      }
+      if (reach > 0.5) break;
+    }
+  }
+  outColor = vec4(here.r, reach, 0.0, 1.0);
 }`;
 
 /** Blend text overlay over main image. u_blendMode: 0=normal,1=multiply,2=add,3=screen,
