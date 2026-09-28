@@ -117,6 +117,7 @@ export const CURATION: Record<string, Curation> = {
 
 	duotone: c("color", "palette", "intensity"),
 	"trio-tone": c("color", "palette", "intensity"),
+	"insta-color": c("color", "grade", "amount"),
 	thermal: c("color", "palette", "intensity"),
 	"hsv-swap": c("color", "palette", "amount"),
 	posterize: c("color", "palette"),

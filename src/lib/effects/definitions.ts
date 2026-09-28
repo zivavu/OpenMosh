@@ -51,6 +51,39 @@ function clockParams(
 	];
 }
 
+/** Insta Color's grades as [value, label]; the shader indexes them in this order. */
+export const INSTA_COLOR_FILTERS = [
+	["golden", "Golden Hour"],
+	["ember", "Ember"],
+	["sodium", "Sodium Lamp"],
+	["seventies", "Seventies"],
+	["warm-film", "Warm Film"],
+	["evergreen", "Evergreen Film"],
+	["instant", "Instant"],
+	["matte", "Matte"],
+	["lomo", "Lomo"],
+	["cross-process", "Cross Process"],
+	["negative", "Negative"],
+	["teal-orange", "Teal & Orange"],
+	["bleach-bypass", "Bleach Bypass"],
+	["two-strip", "Two-Strip"],
+	["day-for-night", "Day for Night"],
+	["arctic", "Arctic"],
+	["pop", "Pop"],
+	["dreamy", "Dreamy"],
+	["noir", "Noir"],
+	["sepia", "Sepia"],
+	["cyanotype", "Cyanotype"],
+	["chrome", "Chrome"],
+	["red-splash", "Red Splash"],
+	["vaporwave", "Vaporwave"],
+	["cyberpunk", "Cyberpunk"],
+	["matrix", "Matrix"],
+	["toxic", "Toxic"],
+	["infrared", "Infrared"],
+	["acid", "Acid"],
+] as const;
+
 export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "pixelate",
@@ -2090,6 +2123,31 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 			{
 				key: "intensity",
 				label: "Intensity",
+				type: "range",
+				min: 0,
+				max: 1,
+				step: 0.01,
+				defaultValue: 1,
+			},
+		],
+	},
+	{
+		id: "insta-color",
+		name: "Insta Color",
+		params: [
+			{
+				key: "filter",
+				label: "Filter",
+				type: "select",
+				defaultValue: "golden",
+				options: INSTA_COLOR_FILTERS.map(([value, label]) => ({
+					label,
+					value,
+				})),
+			},
+			{
+				key: "amount",
+				label: "Amount",
 				type: "range",
 				min: 0,
 				max: 1,
