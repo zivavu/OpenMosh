@@ -20,6 +20,7 @@
 		clipSourceId,
 		copyMediaClips,
 		createMediaClip,
+		newClipSourceId,
 		newClipSpan,
 		pasteMediaClips,
 		pasteMediaContentOnto,
@@ -145,9 +146,18 @@
 			set selectedClipIds(v) {
 				selectedClipIds = v;
 			},
-			createClip: (start, end) => createMediaClip(start, end),
+			createClip: (start, end, lane) => {
+				const sourceId = newClipSourceId(lane, start);
+				return createMediaClip(
+					start,
+					end,
+					0,
+					sourceId && sourceId !== lane.sourceId ? sourceId : undefined,
+				);
+			},
 			splitClipAt: splitMediaClipAt,
-			clipSpanAt: (lane, time) => clipSpanAt(lane, time),
+			clipSpanAt: (lane, time) =>
+				clipSpanAt(lane, time, newClipSourceId(lane, time)),
 			// A clip keeps showing what it showed: one that inherited its old lane's source
 			// has it pinned, unless the new lane shows the same.
 			remapOnLaneChange: (clip, from, to) => {
@@ -248,8 +258,50 @@
 		start: number;
 		end: number;
 	} | null>(null);
-	let ghostSource = $derived(sourceById(draggedSourceId()));
+	/** Where a Ctrl+click would add a clip, and the media it would show. */
+	let addGhost = $state<{
+		laneId: string;
+		start: number;
+		end: number;
+		sourceId: string | null;
+	} | null>(null);
+	let lastPointer: { laneId: string; clientX: number } | null = null;
+	let ghost = $derived(
+		dropGhost
+			? { ...dropGhost, source: sourceById(draggedSourceId()) }
+			: addGhost && { ...addGhost, source: sourceById(addGhost.sourceId) },
+	);
 	let dropClipIds = $derived(dropClipId ? dropTargetIds(dropClipId) : []);
+
+	function updateAddGhost(ctrlHeld: boolean) {
+		addGhost = null;
+		const at = lastPointer;
+		if (!ctrlHeld || !at || ctrl.drag || dropGhost) return;
+		if (dropTargetClip(at.laneId, at.clientX)) return;
+		const lane = ctrl.laneOf(at.laneId);
+		if (!lane || trackDuration <= 0 || !ctrl.overTrack(at.clientX)) return;
+		const time = ctrl.timeAt(at.clientX);
+		const sourceId = newClipSourceId(lane, time);
+		const span = clipSpanAt(lane, time, sourceId);
+		if (span) addGhost = { laneId: at.laneId, ...span, sourceId };
+	}
+
+	function onTrackPointerMove(e: PointerEvent, laneId: string) {
+		lastPointer = { laneId, clientX: e.clientX };
+		updateAddGhost((e.ctrlKey || e.metaKey) && e.buttons === 0);
+		ctrl.onPointerMove(e);
+	}
+
+	function onTrackPointerLeave() {
+		lastPointer = null;
+		addGhost = null;
+	}
+
+	function onModifierKey(e: KeyboardEvent) {
+		if (e.key === "Control" || e.key === "Meta") {
+			updateAddGhost(e.ctrlKey || e.metaKey);
+		}
+	}
 
 	function isSourceDrag(e: DragEvent): boolean {
 		return !!e.dataTransfer?.types.includes(SOURCE_DND_TYPE);
@@ -470,7 +522,14 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => ctrl.onKeyDown(e)} />
+<svelte:window
+	onkeydown={(e) => {
+		onModifierKey(e);
+		ctrl.onKeyDown(e);
+	}}
+	onkeyup={onModifierKey}
+	onblur={onTrackPointerLeave}
+/>
 
 <div class="media-tl">
 	{#each timeline.lanes as lane (lane.id)}
@@ -537,8 +596,12 @@
 				role="group"
 				aria-label="{lane.name} clips"
 				ondblclick={(e) => ctrl.onTrackDblClick(e, lane.id)}
-				onpointerdown={(e) => ctrl.onLanePointerDown(e, lane.id)}
-				onpointermove={(e) => ctrl.onPointerMove(e)}
+				onpointerdown={(e) => {
+					addGhost = null;
+					ctrl.onLanePointerDown(e, lane.id);
+				}}
+				onpointermove={(e) => onTrackPointerMove(e, lane.id)}
+				onpointerleave={onTrackPointerLeave}
 				onpointerup={(e) => ctrl.onPointerUp(e)}
 				onpointercancel={(e) => ctrl.onPointerUp(e)}
 			>
@@ -623,18 +686,18 @@
 					/>
 				{/if}
 
-				{#if dropGhost?.laneId === lane.id}
-					{const left = $derived(vp.toPct(dropGhost.start))}
-					{const width = $derived(vp.toPct(dropGhost.end) - left)}
+				{#if ghost?.laneId === lane.id}
+					{const left = $derived(vp.toPct(ghost.start))}
+					{const width = $derived(vp.toPct(ghost.end) - left)}
 					<div class="clip ghost" style="left: {left}%; width: {width}%">
-						{#if ghostSource?.thumbUrl}
+						{#if ghost.source?.thumbUrl}
 							<span
 								class="clip-thumb"
-								style="background-image: url({ghostSource.thumbUrl})"
+								style="background-image: url({ghost.source.thumbUrl})"
 							></span>
 						{/if}
-						{#if ctrl.clipPx(dropGhost) >= MIN_LABEL_PX}
-							<span class="clip-label">{ghostSource?.name ?? "New clip"}</span>
+						{#if ctrl.clipPx(ghost) >= MIN_LABEL_PX}
+							<span class="clip-label">{ghost.source?.name ?? "New clip"}</span>
 						{/if}
 					</div>
 				{/if}

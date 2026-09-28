@@ -55,7 +55,7 @@ export interface ClipLaneHost<
 	/** The primary selection, and the whole selection it is always a member of. */
 	selectedClipId: string | null;
 	selectedClipIds: string[];
-	createClip(start: number, end: number): C;
+	createClip(start: number, end: number, lane: L): C;
 	splitClipAt(lane: L, at: number): L;
 	/** The span a clip added at `time` gets; the default fills the gap up to
 	 * `defaultClipLength`. */
@@ -277,7 +277,7 @@ export class ClipLaneController<
 		if (!lane) return;
 		const span = this.clipSpanAt(lane, time);
 		if (!span) return;
-		const clip = this.host.createClip(span.start, span.end);
+		const clip = this.host.createClip(span.start, span.end, lane);
 		this.host.onBeforeEdit?.();
 		this.update(laneId, (l) => addClip(l, clip, this.trackDuration));
 		this.selectOnly(clip.id);
@@ -285,8 +285,9 @@ export class ClipLaneController<
 
 	/** Put a full-length clip on a lane that has none, and select it. */
 	addFullClip(laneId: string): void {
-		if (this.trackDuration <= 0) return;
-		const clip = this.host.createClip(0, this.trackDuration);
+		const lane = this.laneOf(laneId);
+		if (!lane || this.trackDuration <= 0) return;
+		const clip = this.host.createClip(0, this.trackDuration, lane);
 		this.host.onBeforeEdit?.();
 		this.update(laneId, (l) => addClip(l, clip, this.trackDuration));
 		this.selectOnly(clip.id);
