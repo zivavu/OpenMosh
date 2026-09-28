@@ -15,15 +15,11 @@ import {
 } from "../media/mask-sdf";
 import {
 	altLayerKey,
-	hasConnectedPoint,
-	KEY_SEED_RADIUS,
-	MAX_KEY_POINTS,
 	mediaLayerSides,
 	sampleSourceEdit,
 	wrapSourceTime,
 } from "../media";
 import type {
-	ChromaKey,
 	MediaLayerSide,
 	MediaStyle,
 	ResolvedMediaLayer,
@@ -50,11 +46,10 @@ import {
 	LAYER_EDGE_FRAG,
 	TEXT_BLEND_FRAG,
 	LAYER_TRANSFORM_FRAG,
-	KEY_REACH_SEED_FRAG,
-	KEY_REACH_SPREAD_FRAG,
 	EFFECT_SHADERS,
 	type EffectShaderDef,
 } from "./effect-shaders";
+import { KeyReachPass, setKeyPointUniforms } from "./key-pass";
 import { TRANSITION_SHADERS } from "./transition-shaders";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
@@ -317,21 +312,8 @@ export class GlRenderer {
 		}
 	>();
 
-	/** Long edge of the connected key's fill. Coarse on purpose: it only says where
-	 * the key may cut; the colour test still runs per pixel. */
-	private static readonly KEY_REACH_MAX = 192;
-	/** Fill sweeps per frame, alternating rows and columns. */
-	private static readonly KEY_REACH_SWEEPS = 10;
-	/** The connected key's fill programs and ping-pong, built on first use. */
-	private keyReach: {
-		seed: CompiledProgram;
-		spread: CompiledProgram;
-		tex: [WebGLTexture, WebGLTexture];
-		fbo: [WebGLFramebuffer, WebGLFramebuffer];
-		w: number;
-		h: number;
-	} | null = null;
-	private keyReachFailed = false;
+	/** The connected key's fill; its programs and buffers are built on first use. */
+	private keyReach: KeyReachPass;
 
 	/** Solo: chainSource hands back black rather than the source. Requested for the
 	 * next render and cleared by it, so a caller that never asks can't inherit it. */
@@ -429,6 +411,7 @@ export class GlRenderer {
 		});
 		if (!gl) throw new Error("WebGL2 not supported");
 		this.gl = gl;
+		this.keyReach = new KeyReachPass(gl);
 		gl.getExtension("EXT_color_buffer_float");
 		this.quadVAO = this.createQuad();
 		this.passthrough = this.compile(PASSTHROUGH_FRAG);
@@ -1154,71 +1137,15 @@ export class GlRenderer {
 		this.sourceFit = fit;
 	}
 
-	/** The key's tuning and points, for any program built on KEY_POINTS_GLSL. */
-	private setKeyPointUniforms(
-		prog: CompiledProgram,
-		key: ChromaKey | undefined,
-	) {
-		const gl = this.gl;
-		if (prog.uniforms["u_keyOn"]) {
-			gl.uniform1f(prog.uniforms["u_keyOn"], key?.enabled ? 1 : 0);
-		}
-		const points = key?.points.slice(0, MAX_KEY_POINTS) ?? [];
-		if (prog.uniforms["u_keyCount"]) {
-			gl.uniform1i(prog.uniforms["u_keyCount"], points.length);
-		}
-		const colors = new Float32Array(MAX_KEY_POINTS * 3);
-		const tunes = new Float32Array(MAX_KEY_POINTS * 3);
-		const connected = new Float32Array(MAX_KEY_POINTS);
-		const seeds = new Float32Array(MAX_KEY_POINTS * 2);
-		points.forEach((p, i) => {
-			colors.set([p.color.r, p.color.g, p.color.b], i * 3);
-			tunes.set(
-				[Math.max(p.threshold, 0.0001), p.smoothing, p.lumaRange],
-				i * 3,
-			);
-			connected[i] = p.connected ? 1 : 0;
-			seeds.set([p.x, p.y], i * 2);
-		});
-		if (prog.uniforms["u_keyColors[0]"]) {
-			gl.uniform3fv(prog.uniforms["u_keyColors[0]"], colors);
-		}
-		if (prog.uniforms["u_keyTunes[0]"]) {
-			gl.uniform3fv(prog.uniforms["u_keyTunes[0]"], tunes);
-		}
-		if (prog.uniforms["u_keyConnected[0]"]) {
-			gl.uniform1fv(prog.uniforms["u_keyConnected[0]"], connected);
-		}
-		if (prog.uniforms["u_keySeeds[0]"]) {
-			gl.uniform2fv(prog.uniforms["u_keySeeds[0]"], seeds);
-		}
-	}
-
 	private setSourceEditUniforms(
 		prog: CompiledProgram,
 		edit: SourceEdit | undefined,
-		/** The connected key's fill for this frame, from keyReachTexture. */
+		/** The connected key's fill for this frame, from KeyReachPass.run. */
 		reach: WebGLTexture | null = null,
 	) {
 		const gl = this.gl;
-		this.setKeyPointUniforms(prog, edit?.chromaKey);
-		if (prog.uniforms["u_hasReach"]) {
-			gl.uniform1f(prog.uniforms["u_hasReach"], reach ? 1 : 0);
-		}
-		if (reach && this.keyReach) {
-			if (prog.uniforms["u_keyReachTexel"]) {
-				gl.uniform2f(
-					prog.uniforms["u_keyReachTexel"],
-					1 / this.keyReach.w,
-					1 / this.keyReach.h,
-				);
-			}
-			if (prog.uniforms["u_keyReach"]) {
-				gl.activeTexture(gl.TEXTURE5);
-				gl.bindTexture(gl.TEXTURE_2D, reach);
-				gl.uniform1i(prog.uniforms["u_keyReach"], 5);
-			}
-		}
+		setKeyPointUniforms(gl, prog, edit?.chromaKey);
+		this.keyReach.bind(prog, reach);
 		const crop = edit?.crop;
 		if (prog.uniforms["u_crop"]) {
 			gl.uniform4f(
@@ -2466,7 +2393,7 @@ export class GlRenderer {
 		if (!prog) return;
 		// Before the target is bound: the fill draws into its own buffers.
 		const reach = texSize
-			? this.keyReachTexture(tex, texSize.w, texSize.h, edit?.chromaKey)
+			? this.keyReach.run(tex, texSize.w, texSize.h, edit?.chromaKey)
 			: null;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
 		gl.viewport(0, 0, this.imgW, this.imgH);
@@ -2481,123 +2408,6 @@ export class GlRenderer {
 		gl.bindTexture(gl.TEXTURE_2D, tex);
 		if (prog.uniforms["u_texture"]) gl.uniform1i(prog.uniforms["u_texture"], 0);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
-	}
-
-	/** Where a key's connected points cut this frame, in source uv (g = reached), or
-	 * null when none of its points is connected. Mirrors keyReach in key-reach.ts. */
-	private keyReachTexture(
-		tex: WebGLTexture,
-		texW: number,
-		texH: number,
-		key: ChromaKey | undefined,
-	): WebGLTexture | null {
-		if (!hasConnectedPoint(key) || texW <= 0 || texH <= 0) return null;
-		const k = Math.min(1, GlRenderer.KEY_REACH_MAX / Math.max(texW, texH));
-		const w = Math.max(1, Math.round(texW * k));
-		const h = Math.max(1, Math.round(texH * k));
-		const r = this.ensureKeyReach(w, h);
-		if (!r) return null;
-		const gl = this.gl;
-		gl.viewport(0, 0, w, h);
-
-		gl.bindFramebuffer(gl.FRAMEBUFFER, r.fbo[0]);
-		gl.useProgram(r.seed.program);
-		const seed = r.seed.uniforms;
-		if (seed["u_flipY"]) gl.uniform1f(seed["u_flipY"], 1.0);
-		this.setKeyPointUniforms(r.seed, key);
-		if (seed["u_seedRadius"]) {
-			gl.uniform1f(
-				seed["u_seedRadius"],
-				Math.max(1, KEY_SEED_RADIUS * Math.max(w, h)),
-			);
-		}
-		if (seed["u_reachSize"]) gl.uniform2f(seed["u_reachSize"], w, h);
-		gl.activeTexture(gl.TEXTURE0);
-		gl.bindTexture(gl.TEXTURE_2D, tex);
-		if (seed["u_texture"]) gl.uniform1i(seed["u_texture"], 0);
-		gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-		gl.useProgram(r.spread.program);
-		const spread = r.spread.uniforms;
-		if (spread["u_flipY"]) gl.uniform1f(spread["u_flipY"], 1.0);
-		if (spread["u_texture"]) gl.uniform1i(spread["u_texture"], 0);
-		let src = 0;
-		for (let i = 0; i < GlRenderer.KEY_REACH_SWEEPS; i++) {
-			const dst = 1 - src;
-			gl.bindFramebuffer(gl.FRAMEBUFFER, r.fbo[dst]);
-			gl.bindTexture(gl.TEXTURE_2D, r.tex[src]);
-			if (spread["u_step"]) {
-				gl.uniform2i(
-					spread["u_step"],
-					i % 2 === 0 ? 1 : 0,
-					i % 2 === 0 ? 0 : 1,
-				);
-			}
-			gl.drawArrays(gl.TRIANGLES, 0, 6);
-			src = dst;
-		}
-		return r.tex[src];
-	}
-
-	private ensureKeyReach(w: number, h: number) {
-		if (this.keyReachFailed) return null;
-		const gl = this.gl;
-		if (!this.keyReach) {
-			try {
-				const seed = this.compile(KEY_REACH_SEED_FRAG);
-				const spread = this.compile(KEY_REACH_SPREAD_FRAG);
-				const tex: [WebGLTexture, WebGLTexture] = [
-					this.createTexture(w, h),
-					this.createTexture(w, h),
-				];
-				const a = this.createRenderTarget(tex[0]);
-				const b = this.createRenderTarget(tex[1]);
-				if (!a || !b) throw new Error("key reach target incomplete");
-				this.keyReach = { seed, spread, tex, fbo: [a, b], w, h };
-				for (const t of tex) {
-					gl.bindTexture(gl.TEXTURE_2D, t);
-					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-				}
-				// Read by the placement with LINEAR, so the cut's rim ramps over a texel.
-				for (const t of tex) this.setTextureFilter(t, true);
-			} catch (err) {
-				console.warn("Connected key unavailable:", err);
-				this.keyReachFailed = true;
-				return null;
-			}
-		}
-		const r = this.keyReach;
-		if (r.w !== w || r.h !== h) {
-			for (const t of r.tex) {
-				gl.bindTexture(gl.TEXTURE_2D, t);
-				gl.texImage2D(
-					gl.TEXTURE_2D,
-					0,
-					gl.RGBA,
-					w,
-					h,
-					0,
-					gl.RGBA,
-					gl.UNSIGNED_BYTE,
-					null,
-				);
-			}
-			r.w = w;
-			r.h = h;
-		}
-		return r;
-	}
-
-	private deleteKeyReach() {
-		const r = this.keyReach;
-		if (!r) return;
-		const gl = this.gl;
-		gl.deleteProgram(r.seed.program);
-		gl.deleteProgram(r.spread.program);
-		for (const t of r.tex) gl.deleteTexture(t);
-		for (const f of r.fbo) gl.deleteFramebuffer(f);
-		this.keyReach = null;
 	}
 
 	private ensureMediaScratch(): {
@@ -2894,7 +2704,7 @@ export class GlRenderer {
 			gl.deleteProgram(this.layerTransformProgram.program);
 		}
 		this.layerTransformProgram = null;
-		this.deleteKeyReach();
+		this.keyReach.dispose();
 		if (this.altSourceTexture) gl.deleteTexture(this.altSourceTexture);
 		this.altSourceTexture = null;
 		this.deleteStageBuffer();

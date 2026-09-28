@@ -45,7 +45,6 @@ export {
 	isIdleSourceEdit,
 	KEY_NEAR,
 	keyCoverage,
-	keyTester,
 	MASK_MAX,
 	MAX_KEY_POINTS,
 	normalizeSourceEdits,
@@ -61,7 +60,6 @@ export {
 	SPEED_MIN,
 	SPEED_MAX,
 } from "./source-edit";
-export { KEY_REACH_MATCH, KEY_SEED_RADIUS, keyReach } from "./key-reach";
 export type {
 	MediaChainSource,
 	MediaLayerSide,

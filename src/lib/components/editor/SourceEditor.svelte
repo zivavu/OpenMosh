@@ -28,13 +28,10 @@
 		createKeyPoint,
 		DEFAULT_KEY_POINT,
 		FULL_CROP,
-		hasConnectedPoint,
 		IDENTITY_MASK_TRANSFORM,
 		isDefaultKeyPoints,
 		isFullCrop,
 		KEY_NEAR,
-		keyReach,
-		keyTester,
 		MASK_MAX,
 		MAX_KEY_POINTS,
 		putKeyframe,
@@ -64,6 +61,8 @@
 		type MaskField,
 	} from "../../media/mask-sdf";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import { SourceEditPreview } from "../../gl/source-edit-preview";
+	import { SlideVideoSampler } from "../../slideshow/video-sampler";
 	import ColorPicker from "../ui/ColorPicker.svelte";
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import SourceKeyframes, { type KeyTrackView } from "./SourceKeyframes.svelte";
@@ -79,7 +78,8 @@
 
 	let { source, edit, onChange, onClose }: Props = $props();
 
-	/** Long edge of the preview buffer; the JS key walks it pixel by pixel every frame. */
+	/** Long edge of the grid the pointer, brush and erase mask work in. The picture
+	 * itself is keyed on the GPU at full resolution. */
 	const PREVIEW_MAX = 640;
 
 	// The keyboard is ours while the dialog is up: Space is the transport here.
@@ -156,14 +156,17 @@
 	let crop = $derived(live.crop ?? FULL_CROP);
 	let maskXform = $derived(live.maskTransform ?? IDENTITY_MASK_TRANSFORM);
 
-	/** The current frame, unkeyed, at preview size; the eyedropper samples it. */
-	let raw: HTMLCanvasElement | null = null;
-	let rawCtx: CanvasRenderingContext2D | null = null;
-	/** The buffer's size, mirrored into state for the fit below. */
+	/** The pointer and mask grid: the source's aspect, at most PREVIEW_MAX long. */
+	let raw: { width: number; height: number } | null = null;
+	/** The grid's size, mirrored into state for the fit below. */
 	let rawW = $state(0);
 	let rawH = $state(0);
-	/** Where frames come from. An image draws once; a video every frame. */
+	/** The transport: a video's clock and scrubbing. Its pixels are not what is shown. */
 	let media: HTMLImageElement | HTMLVideoElement | null = null;
+	/** The decoder the editor's preview uses, so the dialog keys the same frames. */
+	let sampler: SlideVideoSampler | null = null;
+	/** The key and erase, drawn by the renderer's own shader. */
+	let preview: SourceEditPreview | null = null;
 
 	// A track is on when it holds at least one key; only videos have anywhere to put one.
 	type TrackId = "crop" | "key" | "mask";
@@ -376,11 +379,14 @@
 		// Another source's edits are not this one's to step back through.
 		history.reset();
 		load(src)
-			.then(() => {
-				if (cancelled) return;
+			.then((opened) => {
+				if (cancelled) {
+					opened?.dispose();
+					return;
+				}
+				sampler = opened;
+				// The canvas mounts with this; its effect shows the first frame.
 				ready = true;
-				grabFrame();
-				paint();
 			})
 			.catch(() => {
 				if (!cancelled) loadError = "Could not read this media.";
@@ -390,10 +396,14 @@
 			playing = false;
 			if (media && "pause" in media) media.pause();
 			media = null;
+			sampler?.dispose();
+			sampler = null;
 		};
 	});
 
-	async function load(src: SequenceSource): Promise<void> {
+	/** Opens the transport, and for a video the decoder the editor's preview reads:
+	 * the proxy when there is one, as the preview does. */
+	async function load(src: SequenceSource): Promise<SlideVideoSampler | null> {
 		const el =
 			src.kind === "video"
 				? await videoElement(src.objectUrl)
@@ -401,19 +411,81 @@
 		const w = "videoWidth" in el ? el.videoWidth : el.naturalWidth;
 		const h = "videoHeight" in el ? el.videoHeight : el.naturalHeight;
 		if (!w || !h) throw new Error("no dimensions");
+		// Null falls back to the element's own frames; the preview couldn't decode it either.
+		const opened =
+			src.kind === "video"
+				? await SlideVideoSampler.create(src.proxyFile ?? src.file)
+				: null;
 		media = el;
 		mediaSize = { w, h };
 		duration =
 			"duration" in el && Number.isFinite(el.duration) ? el.duration : 0;
 		currentTime = "currentTime" in el ? el.currentTime : 0;
 		const k = Math.min(PREVIEW_MAX / w, PREVIEW_MAX / h, 1);
-		raw = document.createElement("canvas");
-		raw.width = Math.max(1, Math.round(w * k));
-		raw.height = Math.max(1, Math.round(h * k));
+		raw = {
+			width: Math.max(1, Math.round(w * k)),
+			height: Math.max(1, Math.round(h * k)),
+		};
 		rawW = raw.width;
 		rawH = raw.height;
-		// Accelerated, not willReadFrequently: only a key or mask reads this buffer back.
-		rawCtx = raw.getContext("2d");
+		return opened;
+	}
+
+	// One WebGL context per open dialog, made when the canvas mounts.
+	$effect(() => {
+		const canvas = canvasEl;
+		if (!canvas) return;
+		let made: SourceEditPreview;
+		try {
+			made = new SourceEditPreview(canvas);
+		} catch {
+			loadError = "This browser can't draw the preview (WebGL2 is off).";
+			return;
+		}
+		preview = made;
+		untrack(() => showFrame(true));
+		return () => {
+			if (preview === made) preview = null;
+			made.dispose();
+		};
+	});
+
+	/** The time the newest frame request asked for; a scrub outruns the decoder. */
+	let wantedTime = -1;
+	let fetching = false;
+
+	/** Puts the frame at `currentTime` on the preview and repaints. `wait` holds out
+	 * for the exact frame (a scrub); playback takes what has decoded. */
+	function showFrame(wait: boolean) {
+		const m = media;
+		if (!preview || !m) return;
+		if (!("videoWidth" in m)) {
+			preview.setFrame(m, m.naturalWidth, m.naturalHeight);
+			paint();
+			return;
+		}
+		if (!sampler) {
+			preview.setFrame(m, m.videoWidth, m.videoHeight);
+			paint();
+			return;
+		}
+		wantedTime = currentTime;
+		if (fetching) return;
+		fetching = true;
+		const s = sampler;
+		const t = wantedTime;
+		void s.at(t, wait).then((frame) => {
+			fetching = false;
+			if (frame) {
+				if (s === sampler && preview) {
+					preview.setFrame(frame, frame.displayWidth, frame.displayHeight);
+					paint();
+				}
+				frame.close();
+			}
+			// The playhead moved while this decoded: go again for where it is now.
+			if (s === sampler && wantedTime !== t && !playing) showFrame(true);
+		});
 	}
 
 	function imageElement(url: string): Promise<HTMLImageElement> {
@@ -435,8 +507,7 @@
 			v.onerror = () => reject(new Error("decode failed"));
 			// Repaints a scrub while paused; during playback the loop owns the frame.
 			v.onseeked = () => {
-				grabFrame();
-				paint();
+				showFrame(true);
 			};
 			// Looping is the element's own: it never fires ended.
 			v.onended = () => (playing = false);
@@ -472,13 +543,13 @@
 				}
 			}
 			currentTime = v.currentTime;
-			grabFrame();
-			paint();
+			showFrame(false);
 			handle = perFrame
 				? v.requestVideoFrameCallback(step)
 				: requestAnimationFrame(step);
 		};
-		step();
+		// Untracked: step writes currentTime and the frame it asks for reads it back.
+		untrack(step);
 		return () => {
 			if (perFrame) v.cancelVideoFrameCallback(handle);
 			else cancelAnimationFrame(handle);
@@ -610,54 +681,34 @@
 		onChange(withTrack({ ...edit, mask: null }, "mask", []));
 	}
 
-	/** Copy whatever the media is showing right now into the raw buffer. */
-	function grabFrame() {
-		if (!media || !raw || !rawCtx) return;
-		rawCtx.drawImage(media, 0, 0, raw.width, raw.height);
-	}
-
-	/** Raw buffer → visible canvas, with the key applied. */
+	/** The frame on the preview, keyed and erased by the renderer's own shader. Drawn
+	 * at the canvas's on-screen pixels, so every pixel shown is one the key judged. */
 	function paint() {
 		const canvas = canvasEl;
-		if (!canvas || !raw || !rawCtx) return;
-		if (canvas.width !== raw.width) canvas.width = raw.width;
-		if (canvas.height !== raw.height) canvas.height = raw.height;
-		const ctx = canvas.getContext("2d");
-		if (!ctx) return;
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		const keying = key.enabled;
+		if (!canvas || !preview || !raw) return;
+		const box = fitted;
+		const dpr = window.devicePixelRatio || 1;
+		const cap = mediaSize ?? { w: raw.width, h: raw.height };
+		const w = Math.max(
+			1,
+			Math.round(Math.min((box?.w ?? raw.width) * dpr, cap.w)),
+		);
+		const h = Math.max(
+			1,
+			Math.round(Math.min((box?.h ?? raw.height) * dpr, cap.h)),
+		);
+		if (canvas.width !== w) canvas.width = w;
+		if (canvas.height !== h) canvas.height = h;
 		const maskPx = maskPixels();
-		if (!keying && !maskPx) {
-			ctx.drawImage(raw, 0, 0);
-			return;
-		}
-		const img = rawCtx.getImageData(0, 0, raw.width, raw.height);
-		const px = img.data;
-		// The mask alone: nothing to key, so skip the whole colour test.
-		if (!keying) {
-			for (let i = 0; i < px.length; i += 4) px[i + 3] *= maskPx![i] / 255;
-			ctx.putImageData(img, 0, 0);
-			return;
-		}
-		// Plain copy: the loop reads the key per pixel and a proxy would pay for every
-		// read.
-		const k = $state.snapshot(key);
-		const test = keyTester(k);
-		// Worked out on the whole frame before any alpha is touched.
-		const reach = hasConnectedPoint(k)
-			? keyReach(px, raw.width, raw.height, k)
-			: null;
-		for (let i = 0; i < px.length; i += 4) {
-			px[i + 3] *= test(
-				px[i] / 255,
-				px[i + 1] / 255,
-				px[i + 2] / 255,
-				!reach || reach[i >> 2] === 1,
-			);
-			if (maskPx) px[i + 3] *= maskPx[i] / 255;
-		}
-		ctx.putImageData(img, 0, 0);
+		preview.setMask(maskPx, raw.width, raw.height);
+		preview.draw($state.snapshot(key) as ChromaKey);
 	}
+
+	// A resized dialog changes how many pixels the canvas holds.
+	$effect(() => {
+		void fitted;
+		if (ready && !playing) untrack(paint);
+	});
 
 	/** Distance fields per painted shape, for morphing the way the shader does. */
 	const MAX_SDF_CACHE = 8;
@@ -849,18 +900,13 @@
 
 	/** Re-picks the selected point, or adds one when asked to. */
 	function pickAt(x: number, y: number, add: boolean) {
-		if (!rawCtx || !raw) return;
-		const [r, g, b] = rawCtx.getImageData(
-			Math.floor(x),
-			Math.floor(y),
-			1,
-			1,
-		).data;
-		const picked = {
-			color: { r: r / 255, g: g / 255, b: b / 255 },
-			x: Math.min(Math.max(x / raw.width, 0), 1),
-			y: Math.min(Math.max(y / raw.height, 0), 1),
-		};
+		if (!raw || !preview) return;
+		const nx = Math.min(Math.max(x / raw.width, 0), 1);
+		const ny = Math.min(Math.max(y / raw.height, 0), 1);
+		// From the decoded frame the key will run on, not the scaled-down picture.
+		const color = preview.sample(nx, ny);
+		if (!color) return;
+		const picked = { color, x: nx, y: ny };
 		addingPoint = false;
 		// A fresh key's green is a placeholder, not a point anyone picked.
 		const fresh = !key.enabled && isDefaultKeyPoints(key.points);
