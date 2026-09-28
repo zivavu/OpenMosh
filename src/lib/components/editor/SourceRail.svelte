@@ -482,7 +482,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 26px;
+		width: 34px;
 		height: 34px;
 		border: 1px dashed #2e2e2e;
 		border-radius: 3px;
