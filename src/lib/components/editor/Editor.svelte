@@ -2532,8 +2532,14 @@
 
 	/** Clips of any lane kind the preview goes round, spanning first start to last end. */
 	let repeatClipIds = $state<string[]>([]);
+	/** The span once dragged on the ruler; it stops following the clips from then on. */
+	let repeatSpan = $state<{ start: number; end: number } | null>(null);
 	let repeatRange = $derived.by(() => {
 		if (repeatClipIds.length === 0) return null;
+		if (repeatSpan) {
+			const end = Math.min(repeatSpan.end, seqMasterDuration);
+			return end > repeatSpan.start ? { start: repeatSpan.start, end } : null;
+		}
 		const ids = new Set(repeatClipIds);
 		let start = Infinity;
 		let end = -Infinity;
@@ -2558,8 +2564,13 @@
 	});
 	// Clips deleted or moved past the end take the repeat with them.
 	$effect(() => {
-		if (repeatClipIds.length > 0 && !repeatRange) repeatClipIds = [];
+		if (repeatClipIds.length > 0 && !repeatRange) stopRepeat();
 	});
+
+	function stopRepeat() {
+		repeatClipIds = [];
+		repeatSpan = null;
+	}
 	// Single mode's clocks have no range of their own: pull them back into it.
 	$effect(() => {
 		const range = repeatRange;
@@ -2580,10 +2591,11 @@
 			clipIds.length === repeatClipIds.length &&
 			clipIds.every((id) => repeatClipIds.includes(id));
 		if (same || clipIds.length === 0) {
-			repeatClipIds = [];
+			stopRepeat();
 			return;
 		}
 		repeatClipIds = [...clipIds];
+		repeatSpan = null;
 		const range = repeatRange;
 		if (!range) return;
 		// Ahead of the effect, so play() already clamps to the range.
@@ -4617,7 +4629,8 @@
 					? toggleMasterLoop
 					: null}
 				{repeatRange}
-				onStopRepeat={() => (repeatClipIds = [])}
+				onStopRepeat={stopRepeat}
+				onRepeatRangeChange={(range) => (repeatSpan = range)}
 				{repeatClipIds}
 				onToggleRepeat={toggleRepeat}
 				onGrow={isSequenceMode ? (length) => mixer.setDuration(length) : null}

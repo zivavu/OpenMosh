@@ -23,6 +23,9 @@
 		/** The stretch the preview is going round, marked on the axis. */
 		repeatRange?: { start: number; end: number } | null;
 		onStopRepeat?: (() => void) | null;
+		/** Set to let the repeated span's edges and body be dragged on the ruler. */
+		onRepeatRangeChange?:
+			((range: { start: number; end: number }) => void) | null;
 		/** The clips behind it, and the toggle every clip bar's Repeat calls. */
 		repeatClipIds?: string[];
 		onToggleRepeat?: ((clipIds: string[]) => void) | null;
@@ -52,6 +55,7 @@
 		onToggleLoop = null,
 		repeatRange = null,
 		onStopRepeat = null,
+		onRepeatRangeChange = null,
 		repeatClipIds = [],
 		onToggleRepeat = null,
 		onGrow = null,
@@ -119,6 +123,8 @@
 	});
 
 	// Drawn over the lanes rather than in a ruler row: the lines make two lanes readable.
+	/** The shortest stretch the repeat can be dragged down to, in seconds. */
+	const MIN_REPEAT = 0.1;
 	const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 
 	/** Coarsest step that still leaves at least a handful of ticks in the window. */
@@ -199,6 +205,61 @@
 		};
 		const onUp = () => {
 			scrubbing = false;
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
+		};
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
+	}
+
+	/** Drag the repeated span by an edge, or whole by its body; a body click still
+	 * places the start marker. Snaps like a clip, Alt holding it off. */
+	function beginRepeatDrag(e: PointerEvent, part: "start" | "end" | "body") {
+		const from = repeatRange;
+		if (!from || !onRepeatRangeChange || e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		const grab = vp.clientXToTime(e.clientX);
+		const length = from.end - from.start;
+		let moved = false;
+		const onMove = (ev: PointerEvent) => {
+			ev.preventDefault();
+			moved = true;
+			const t = vp.clientXToTime(ev.clientX);
+			const none = new Set<string>();
+			if (part === "body") {
+				const raw = from.start + t - grab;
+				const shift = stack.snapShift([raw, raw + length], none, ev.altKey);
+				const start = Math.max(
+					0,
+					Math.min(trackDuration - length, raw + shift),
+				);
+				onRepeatRangeChange?.({ start, end: start + length });
+				stack.confirmSnap([start, start + length]);
+				return;
+			}
+			const at = stack.snapTime(t, none, ev.altKey);
+			const range =
+				part === "start"
+					? {
+							start: Math.max(0, Math.min(at, from.end - MIN_REPEAT)),
+							end: from.end,
+						}
+					: {
+							start: from.start,
+							end: Math.min(
+								trackDuration,
+								Math.max(at, from.start + MIN_REPEAT),
+							),
+						};
+			onRepeatRangeChange?.(range);
+			stack.confirmSnap([part === "start" ? range.start : range.end]);
+		};
+		const onUp = () => {
+			stack.endSnap();
+			if (!moved && part === "body") stack.seekStatic(grab);
 			window.removeEventListener("pointermove", onMove);
 			window.removeEventListener("pointerup", onUp);
 			window.removeEventListener("pointercancel", onUp);
@@ -335,6 +396,30 @@
 			tabindex="-1"
 			onpointerdown={beginStaticDrag}
 		></div>
+
+		{#if repeatRange && onRepeatRangeChange && trackDuration > 0}
+			{@const left = vp.toPct(repeatRange.start)}
+			<div class="tl-playhead-layer tl-repeat-layer">
+				<div
+					class="tl-repeat-grab"
+					style="left: {left}%; width: {vp.toPct(repeatRange.end) - left}%"
+					role="presentation"
+					title="Drag to move the repeated stretch, or its edges to resize it"
+					onpointerdown={(e) => beginRepeatDrag(e, "body")}
+				>
+					<span
+						class="tl-repeat-edge start"
+						role="presentation"
+						onpointerdown={(e) => beginRepeatDrag(e, "start")}
+					></span>
+					<span
+						class="tl-repeat-edge end"
+						role="presentation"
+						onpointerdown={(e) => beginRepeatDrag(e, "end")}
+					></span>
+				</div>
+			</div>
+		{/if}
 
 		{#if stack.snapGuide !== null}
 			<!-- What the drag is snapped to, across every lane. -->
@@ -815,6 +900,64 @@
 			var(--live-dim) 0 var(--tl-scale-h),
 			rgba(255, 255, 255, 0.03) var(--tl-scale-h)
 		);
+	}
+
+	/* Over the ruler and the markers' grabs, but only along the ruler: the lanes
+	   under the tint stay the clips'. */
+	.tl-playhead-layer.tl-repeat-layer {
+		z-index: 7;
+	}
+
+	.tl-repeat-grab {
+		position: absolute;
+		bottom: 0;
+		height: var(--tl-scale-h);
+		pointer-events: auto;
+		cursor: grab;
+		touch-action: none;
+	}
+
+	.tl-repeat-edge {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 9px;
+		cursor: ew-resize;
+	}
+
+	.tl-repeat-edge.start {
+		left: -4px;
+	}
+
+	.tl-repeat-edge.end {
+		right: -4px;
+	}
+
+	/* A grip on each end, so the edges read as handles. */
+	.tl-repeat-edge::after {
+		content: "";
+		position: absolute;
+		top: 2px;
+		bottom: 2px;
+		left: 3px;
+		width: 3px;
+		border-radius: 1px;
+		background: var(--live);
+		opacity: 0.7;
+	}
+
+	.tl-repeat-edge:hover::after {
+		left: 2px;
+		width: 5px;
+		opacity: 1;
+	}
+
+	.tl-repeat-grab:hover {
+		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.tl-repeat-grab:active {
+		cursor: grabbing;
 	}
 
 	.tl-clock {
