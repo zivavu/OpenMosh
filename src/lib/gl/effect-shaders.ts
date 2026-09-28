@@ -159,7 +159,7 @@ float insideLayerSoft(vec2 uv, float fade) {
 }
 `;
 
-/** The key's points and the per-point colour test. Must match keyTester in source-edit.ts. */
+/** The key's points and the per-point colour test. Must match keyCoverage in source-edit.ts. */
 const KEY_POINTS_GLSL = `#define MAX_KEY_POINTS ${MAX_KEY_POINTS}
 // <= 0 switches the key off, so unkeyed media costs one compare.
 uniform float u_keyOn;
@@ -277,6 +277,19 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
 }
 `;
 
+/** The media editor's preview: the whole source through the same key and erase
+ * as the placement, premultiplied for a canvas that composites over the page. */
+export const SOURCE_EDIT_PREVIEW_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D u_texture;
+in vec2 v_uv;
+out vec4 outColor;
+${CHROMA_KEY_GLSL}
+void main() {
+  vec4 c = editedSource(u_texture, v_uv);
+  outColor = vec4(c.rgb * c.a, c.a);
+}`;
+
 /** Place a media layer into a full-frame buffer: fitted, scaled, rotated and
  * centred, with everything outside its box transparent. */
 export const LAYER_TRANSFORM_FRAG = `#version 300 es
@@ -299,7 +312,7 @@ void main() {
 }`;
 
 /** First step of a connected key, at low res over the whole source: r = matches a
- * connected point, g = matches and sits by one of their seeds. Must match key-reach.ts. */
+ * connected point, g = matches and sits by one of their seeds. */
 export const KEY_REACH_SEED_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D u_texture;

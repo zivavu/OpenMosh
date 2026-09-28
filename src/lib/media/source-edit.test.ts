@@ -18,7 +18,6 @@ import {
 	sourceTimeAt,
 	createKeyPoint,
 } from "./source-edit";
-import { keyReach } from "./key-reach";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
@@ -447,23 +446,5 @@ describe("key points", () => {
 			],
 		};
 		expect(sampleSourceEdit(e, 1).chromaKey.points[0].x).toBeCloseTo(0.5, 5);
-	});
-});
-
-describe("keyReach", () => {
-	// 5×1: green, green, red, green, green.
-	const G = [0, 255, 0, 255];
-	const R = [255, 0, 0, 255];
-	const row = new Uint8ClampedArray([...G, ...G, ...R, ...G, ...G]);
-	const key = (connected: boolean) => ({
-		points: [createKeyPoint({ x: 0, y: 0, connected })],
-	});
-
-	it("stops at the first pixel that doesn't match", () => {
-		expect([...keyReach(row, 5, 1, key(true))]).toEqual([1, 1, 0, 0, 0]);
-	});
-
-	it("reaches nothing without a connected point", () => {
-		expect([...keyReach(row, 5, 1, key(false))]).toEqual([0, 0, 0, 0, 0]);
 	});
 });
