@@ -52,7 +52,11 @@ import {
 import { KeyReachPass, setKeyPointUniforms } from "./key-pass";
 import { MeshPass } from "./mesh-pass";
 import type { Mesh } from "../mesh";
-import { meshCamera } from "../mesh/camera";
+import {
+	meshCamera,
+	TRANSFORM_3D_ID,
+	type Transform3dValues,
+} from "../mesh/camera";
 import { TRANSITION_SHADERS } from "./transition-shaders";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
@@ -2219,7 +2223,16 @@ export class GlRenderer {
 		safeDt: number,
 		out: { tex: WebGLTexture; fbo: WebGLFramebuffer },
 	): boolean {
-		if (this.modelLayers.has(side.key) && !this.drawModel(side)) return false;
+		let effects = side.effects;
+		if (this.modelLayers.has(side.key)) {
+			// A model turns in depth instead: its 3D Transforms aim the camera, first,
+			// wherever they sit in the chain.
+			const turns = effects.filter(
+				(e) => e.enabled && e.defId === TRANSFORM_3D_ID,
+			);
+			if (!this.drawModel(side, turns, time, safeDt)) return false;
+			if (turns.length > 0) effects = effects.filter((e) => !turns.includes(e));
+		}
 		const entry = this.mediaLayerTextures.get(side.key);
 		if (!entry || entry.w <= 0) return false;
 		// Sampled per lane, not once for the source: two lanes can hold the same media
@@ -2236,7 +2249,7 @@ export class GlRenderer {
 			entry.h * (edit?.crop?.h ?? 1),
 		);
 		const texSize = { w: entry.w, h: entry.h };
-		if (!side.effects.some((e) => e.enabled)) {
+		if (!effects.some((e) => e.enabled)) {
 			this.drawLayerPlacement(entry.tex, box, out.fbo, edit, 0, texSize);
 			return true;
 		}
@@ -2256,7 +2269,7 @@ export class GlRenderer {
 		this.chainMediaFill = 1 / grow;
 		const chained =
 			this.renderChainTo(
-				side.effects,
+				effects,
 				time,
 				safeDt,
 				scratch.fbo,
@@ -2284,7 +2297,12 @@ export class GlRenderer {
 	/** A clip blending in over the one before it. The shader blends colour only, so it
 	 * runs a second time over both sides' coverage to keep the layer's shape. */
 	/** Renders a model lane's mesh into its texture, at the frame's size. */
-	private drawModel(side: MediaLayerSide): boolean {
+	private drawModel(
+		side: MediaLayerSide,
+		turns: EffectInstance[],
+		time: number,
+		safeDt: number,
+	): boolean {
 		const entry = this.mediaLayerTextures.get(side.key);
 		const sourceId = this.modelLayers.get(side.key);
 		if (!entry || !sourceId || this.imgW <= 0 || this.imgH <= 0) return false;
@@ -2310,7 +2328,12 @@ export class GlRenderer {
 			entry.tex,
 			entry.w,
 			entry.h,
-			meshCamera([]),
+			meshCamera(
+				turns.map((e) => ({
+					values: e.values as unknown as Transform3dValues,
+					time: this.getEffectTime(e, time, safeDt).time,
+				})),
+			),
 		);
 		gl.bindVertexArray(this.quadVAO);
 		return drawn;

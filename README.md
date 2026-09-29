@@ -34,7 +34,7 @@ Pick one of three modes on the upload screen.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.png)
 
-**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then lay clips out on media layers, each with its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. Stacked effect lanes run over the whole frame, and a text timeline sits alongside the layers. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once.
+**Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then lay clips out on media layers, each with its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. Stacked effect lanes run over the whole frame, and a text timeline sits alongside the layers. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. 3D models (OBJ or STL) go on layers too, and a 3D Transform on their clip turns the model itself, not a flat picture of it. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once.
 
 ![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.png)
 
