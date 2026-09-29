@@ -95,17 +95,18 @@ export class SlideshowFrameDriver {
 		const slide = slides[slideIndex];
 		if (!slide) return { effects: this.#effects, ready: null };
 
+		// A slide still decoding keeps the previous texture and retries every frame
+		// (currentSlideId only advances once the upload happened).
+		if (slide.kind === "image" && slide.id !== this.#currentSlideId) {
+			const img = this.#sources.getImage(slide);
+			if (img) {
+				this.#getRenderer().updateSourceImage(img);
+				this.#currentSlideId = slide.id;
+			}
+		}
+
 		if (beatIndex !== this.#lastBeatIndex) {
 			this.#lastBeatIndex = beatIndex;
-			if (slide.kind === "image" && slide.id !== this.#currentSlideId) {
-				const img = this.#sources.getImage(slide);
-				// A slide still decoding keeps the previous texture and retries next
-				// beat (currentSlideId only advances once the upload happened).
-				if (img) {
-					this.#getRenderer().updateSourceImage(img);
-					this.#currentSlideId = slide.id;
-				}
-			}
 			this.#effects = computeEffectsForBeat(
 				config,
 				slide,
