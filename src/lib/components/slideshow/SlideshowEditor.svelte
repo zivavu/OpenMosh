@@ -5,10 +5,8 @@
 	import {
 		generateId,
 		loadInitialEffects,
-		loadPresets,
 		setVolumeLink,
 		type EffectInstance,
-		type Preset,
 	} from "../../effects";
 	import { MicVocal, Plus } from "lucide-svelte";
 	import {
@@ -44,7 +42,11 @@
 	import { detectBpm } from "../../slideshow/bpm-detector";
 	import { SlideshowFrameDriver } from "../../slideshow/frame-driver";
 	import { executeSlideshowRecording } from "../../slideshow/slideshow-recorder";
-	import type { SlideshowConfig, SlideshowSlide } from "../../slideshow/types";
+	import type {
+		SlideshowConfig,
+		SlideshowMoshMode,
+		SlideshowSlide,
+	} from "../../slideshow/types";
 	import { DEFAULT_SLIDESHOW_CONFIG } from "../../slideshow/types";
 	import {
 		probeSlideVideo,
@@ -160,7 +162,6 @@
 					objectUrl: URL.createObjectURL(file),
 					thumbUrl: null,
 					thumbPending: true,
-					presetIndex: null,
 					kind: "image",
 				};
 				slides.push(slide);
@@ -176,7 +177,6 @@
 					objectUrl: URL.createObjectURL(file),
 					thumbUrl: null,
 					thumbPending: true,
-					presetIndex: null,
 					kind: "video",
 				};
 				slides.push(slide);
@@ -524,11 +524,6 @@
 		onExit();
 	}
 
-	function setPresetIndex(slideId: string, presetIndex: number | null) {
-		const s = slides.find((s) => s.id === slideId);
-		if (s) s.presetIndex = presetIndex;
-	}
-
 	// svelte-ignore state_referenced_locally
 	if (initialFiles.length > 0) {
 		addFiles(initialFiles);
@@ -587,6 +582,14 @@
 	}
 
 	const CONFIG_KEY = "openmosh-slideshow-config";
+	/** Saves from before the per-image preset mode was removed play their base chain. */
+	function knownMoshMode(mode: string | undefined): SlideshowMoshMode {
+		return mode === "random" || mode === "smooth" || mode === "consistent"
+			? mode
+			: mode === undefined
+				? DEFAULT_SLIDESHOW_CONFIG.moshMode
+				: "consistent";
+	}
 	function loadConfig(): SlideshowConfig {
 		// A reopened session carries its own config; the global key is the new-session default.
 		const restored = untrack(() => initialConfig);
@@ -594,6 +597,7 @@
 			return {
 				...DEFAULT_SLIDESHOW_CONFIG,
 				...restored,
+				moshMode: knownMoshMode(restored.moshMode),
 				text: normalizeTextTimeline(restored.text),
 			};
 		}
@@ -602,6 +606,7 @@
 			return {
 				...DEFAULT_SLIDESHOW_CONFIG,
 				...saved,
+				moshMode: knownMoshMode(saved.moshMode),
 				text: normalizeTextTimeline(saved.text),
 			};
 		}
@@ -691,8 +696,6 @@
 		setFeedbackChain(() => $state.snapshot(effects) as EffectInstance[]);
 		return () => setFeedbackChain(null);
 	});
-
-	let presets: Preset[] = $state(loadPresets());
 
 	const moshSession = createMoshSession({
 		getEffects: () => effects,
@@ -1708,14 +1711,11 @@
 		{#if activeView === "grid"}
 			<SlideshowGridView
 				{slides}
-				{config}
-				{presets}
 				onAddFiles={(files) => addFiles(files)}
 				onGenerate={() => (generateOpen = true)}
 				onSnap={() => (webcamOpen = true)}
 				onRemoveSlide={removeSlide}
 				onReorderSlides={reorderSlides}
-				onSetPresetIndex={setPresetIndex}
 				onProxyAction={(id, action) => {
 					if (action === "retry") retrySlideProxy(id);
 					else setSlideProxyEnabled(id, action === "enable");

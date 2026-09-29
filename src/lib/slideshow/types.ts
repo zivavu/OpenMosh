@@ -1,5 +1,4 @@
-export type SlideshowMoshMode =
-	"random" | "consistent" | "smooth" | "per-image";
+export type SlideshowMoshMode = "random" | "consistent" | "smooth";
 
 export type BeatSubdivision =
 	0 | 0.03125 | 0.0625 | 0.125 | 0.25 | 0.5 | 1 | 2 | 4;
@@ -22,8 +21,6 @@ export interface SlideshowSlide {
 	thumbUrl: string | null;
 	/** Whether a thumbnail is still coming; see SequenceSource.thumbPending. */
 	thumbPending: boolean;
-	/** Index into the presets array; only used in 'per-image' mode. */
-	presetIndex: number | null;
 	kind: "image" | "video";
 	/** Video only: intrinsic duration in seconds (probed at add time). */
 	duration?: number;

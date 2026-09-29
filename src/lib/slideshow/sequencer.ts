@@ -5,9 +5,9 @@ import {
 	randomizeParams,
 	type MoshOptions,
 } from "../editor/mosh";
-import type { EffectInstance, Preset } from "../effects";
-import { applyPreset, getDefinition, loadPresets } from "../effects";
-import type { SlideshowConfig, SlideshowSlide } from "./types";
+import type { EffectInstance } from "../effects";
+import { getDefinition } from "../effects";
+import type { SlideshowConfig } from "./types";
 
 /**
  * Deep-clone an effects array for a beat, keeping each instance's ID: the
@@ -63,16 +63,13 @@ function toggleOneEffect(
 
 /**
  * Effects for a single beat by mosh mode. Mutates `smoothState` in place for
- * 'smooth'; callers running per beat should pass `presets` to avoid a
- * localStorage read every frame.
+ * 'smooth'.
  */
 export function computeEffectsForBeat(
 	config: SlideshowConfig,
-	slide: SlideshowSlide,
 	baseEffects: EffectInstance[],
 	smoothState: { effects: EffectInstance[] },
 	moshOptions: MoshOptions,
-	presets?: Preset[],
 ): EffectInstance[] {
 	switch (config.moshMode) {
 		case "random": {
@@ -95,20 +92,6 @@ export function computeEffectsForBeat(
 				cloneEffects(smoothState.effects),
 				moshOptions,
 			);
-		}
-		case "per-image": {
-			if (slide.presetIndex !== null) {
-				const preset = (presets ?? loadPresets())[slide.presetIndex];
-				// Derived from the slide, not minted, so a slide coming back round
-				// reuses the renderer state its chain built last time.
-				if (preset) {
-					return applyPreset(preset).map((e, i) => ({
-						...e,
-						instanceId: `${slide.id}:${i}`,
-					}));
-				}
-			}
-			return cloneEffects(baseEffects);
 		}
 	}
 }
