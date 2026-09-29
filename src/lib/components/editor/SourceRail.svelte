@@ -1,5 +1,6 @@
 <script lang="ts">
 	import {
+		Box,
 		ChevronDown,
 		ChevronUp,
 		ImageOff,
@@ -24,7 +25,10 @@
 		beginSourceDrag,
 		endSourceDrag,
 	} from "../../editor/source-drag.svelte";
-	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import {
+		lightboxItem,
+		type SequenceSource,
+	} from "../../editor/sequence-sources.svelte";
 	import { createLightbox } from "../ui/lightbox.svelte";
 	import ProxyBadge from "../ui/ProxyBadge.svelte";
 
@@ -69,13 +73,7 @@
 	/** Open thumb's index; null when the preview is closed. */
 	const lightbox = createLightbox();
 
-	let lightboxItems = $derived(
-		sources.map((s) => ({
-			name: s.name,
-			kind: s.kind,
-			objectUrl: s.objectUrl,
-		})),
-	);
+	let lightboxItems = $derived(sources.map(lightboxItem));
 
 	/** Source whose editor is open; null when the dialog is closed. */
 	let editingId = $state<string | null>(null);
@@ -237,10 +235,13 @@
 							>
 							<!-- Display only: the chip is itself a button. -->
 							<ProxyBadge source={src} size={7} />
+						{:else if src.kind === "model"}
+							<span class="rail-kind" title="3D model"><Box size={7} /></span>
 						{/if}
 						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
 					</button>
-					{#if onEditChange}
+					<!-- Crop, key and erase work on pixels a model doesn't have yet. -->
+					{#if onEditChange && src.kind !== "model"}
 						<button
 							class="rail-edit"
 							class:on={isEdited(src)}
@@ -253,7 +254,11 @@
 					{/if}
 				</div>
 			{/each}
-			<button class="rail-add" onclick={onAdd} title="Add images or videos">
+			<button
+				class="rail-add"
+				onclick={onAdd}
+				title="Add images, videos or 3D models (OBJ, STL)"
+			>
 				<Plus size={13} />
 			</button>
 		</div>

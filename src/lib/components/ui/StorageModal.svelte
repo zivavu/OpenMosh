@@ -9,6 +9,7 @@
 
 	import {
 		ChevronRight,
+		Box,
 		Film,
 		Image,
 		ListVideo,
@@ -19,6 +20,7 @@
 		X,
 	} from "lucide-svelte";
 	import { onMount } from "svelte";
+	import { MESH_TYPE } from "../../mesh";
 	import {
 		deleteAllProxies,
 		deleteEverything,
@@ -553,6 +555,8 @@
 											<li class="media">
 												{#if m.type.startsWith("video/")}
 													<Film size={11} />
+												{:else if m.type === MESH_TYPE}
+													<Box size={11} />
 												{:else}
 													<Image size={11} />
 												{/if}
@@ -670,6 +674,8 @@
 											<li class="media">
 												{#if m.type.startsWith("video/")}
 													<Film size={11} />
+												{:else if m.type === MESH_TYPE}
+													<Box size={11} />
 												{:else}
 													<Image size={11} />
 												{/if}
@@ -727,6 +733,8 @@
 											<li class="media">
 												{#if m.type.startsWith("video/")}
 													<Film size={11} />
+												{:else if m.type === MESH_TYPE}
+													<Box size={11} />
 												{:else}
 													<Image size={11} />
 												{/if}

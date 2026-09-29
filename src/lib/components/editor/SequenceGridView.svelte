@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Play, Plus, Camera, Palette, X } from "lucide-svelte";
+	import { Box, Play, Plus, Camera, Palette, X } from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
 		shortSourceName,
@@ -9,7 +9,11 @@
 		beginSourceDrag,
 		endSourceDrag,
 	} from "../../editor/source-drag.svelte";
-	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
+	import {
+		lightboxItem,
+		type SequenceSource,
+	} from "../../editor/sequence-sources.svelte";
+	import { MESH_ACCEPT } from "../../mesh";
 	import type { ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
 	import { createLightbox } from "../ui/lightbox.svelte";
@@ -60,13 +64,7 @@
 
 	let assignable = $derived(selectedCount > 0);
 
-	let lightboxItems = $derived(
-		sources.map((s) => ({
-			name: s.name,
-			kind: s.kind,
-			objectUrl: s.objectUrl,
-		})),
-	);
+	let lightboxItems = $derived(sources.map(lightboxItem));
 
 	/** One dragstart serves both drops: a card carries its index and its id. */
 	function onCardDragStart(e: DragEvent, index: number) {
@@ -118,7 +116,7 @@
 	<input
 		bind:this={fileInput}
 		type="file"
-		accept="image/*,video/*"
+		accept="image/*,video/*,{MESH_ACCEPT}"
 		multiple
 		hidden
 		onchange={onInputChange}
@@ -139,7 +137,9 @@
 	{#if sources.length === 0 && pendingCount === 0}
 		<div class="empty-state">
 			<span class="empty-label">NO MEDIA</span>
-			<p>Drop images or videos in, or use the button below.</p>
+			<p>
+				Drop images, videos or 3D models (OBJ, STL) in, or use the button below.
+			</p>
 			<div class="empty-actions">
 				<button class="add-btn" onclick={() => fileInput?.click()}>
 					<Plus size={14} /> ADD MEDIA
@@ -198,6 +198,10 @@
 							source={src}
 							onAction={(action) => onProxyAction(src.id, action)}
 						/>
+					{:else if src.kind === "model"}
+						<span class="card-kind" title="3D model">
+							<Box size={9} />
+						</span>
 					{/if}
 					<span class="card-name">{shortSourceName(src.name, 20)}</span>
 					<button
@@ -220,6 +224,7 @@
 			{/each}
 
 			<MediaAddCards
+				addTitle="Add images, videos or 3D models (OBJ, STL) to the pool"
 				recordTitle="Record a webcam take to the song, from the playhead"
 				onAdd={() => fileInput?.click()}
 				{onGenerate}

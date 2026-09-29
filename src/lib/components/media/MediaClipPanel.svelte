@@ -210,7 +210,7 @@
 							<option value={s.id}>{s.name}</option>
 						{/each}
 					</select>
-					{#if source && onEditChange}
+					{#if source && onEditChange && source.kind !== "model"}
 						<!-- The other way in is a small button on a rail thumb, nowhere near this decision. -->
 						<button
 							class="src-edit"
@@ -229,6 +229,13 @@
 				<p class="warn">
 					This clip has nothing to draw — pick media above, or drag a thumb from
 					the media rail onto it.
+				</p>
+			{/if}
+
+			{#if source?.kind === "model"}
+				<p class="hint">
+					Add a 3D Transform to this clip's effects to turn the model around in
+					3D.
 				</p>
 			{/if}
 

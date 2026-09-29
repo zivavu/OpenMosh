@@ -1,4 +1,5 @@
 import type { GlRenderer } from "../gl/renderer";
+import { parseMesh, type Mesh } from "../mesh";
 import { mediaLayerSides, type ResolvedMediaLayer } from "../media";
 import { SlideVideoSampler } from "../slideshow/video-sampler";
 import type { SequenceSource } from "./sequence-sources.svelte";
@@ -19,6 +20,7 @@ export async function createMediaExportLayers(
 	const byId = new Map(sources.map((s) => [s.id, s]));
 
 	const images = new Map<string, HTMLImageElement>();
+	const meshes = new Map<string, Mesh>();
 	/** One decoder per (lane, video source); a sampler decodes from its own position. */
 	const samplers = new Map<string, SlideVideoSampler>();
 	/** Source whose frame is on each lane's texture, keyed by lane. */
@@ -33,6 +35,12 @@ export async function createMediaExportLayers(
 				if (src.kind === "video") {
 					const sampler = await SlideVideoSampler.create(src.file);
 					if (sampler) samplers.set(samplerKey(laneId, src.id), sampler);
+					return;
+				}
+				if (src.kind === "model") {
+					if (meshes.has(src.id)) return;
+					const mesh = await parseMesh(src.file);
+					if (mesh) meshes.set(src.id, mesh);
 					return;
 				}
 				if (images.has(src.id)) return;
@@ -59,6 +67,20 @@ export async function createMediaExportLayers(
 				mediaLayerSides(layers).map(async (layer) => {
 					const src = byId.get(layer.sourceId);
 					if (!src) return;
+
+					if (src.kind === "model") {
+						if (
+							uploaded.get(layer.key) === src.id &&
+							renderer.hasLayerTexture(layer.key)
+						) {
+							return;
+						}
+						const mesh = meshes.get(src.id);
+						if (!mesh) return;
+						renderer.updateLayerModel(layer.key, src.id, mesh);
+						uploaded.set(layer.key, src.id);
+						return;
+					}
 
 					if (src.kind === "image") {
 						// Same as the preview driver: the renderer collects a lane's texture when it stops resolving.
@@ -90,6 +112,7 @@ export async function createMediaExportLayers(
 			for (const s of samplers.values()) s.dispose();
 			samplers.clear();
 			images.clear();
+			meshes.clear();
 			uploaded.clear();
 		},
 	};

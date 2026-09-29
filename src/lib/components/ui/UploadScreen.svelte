@@ -26,6 +26,7 @@
 	} from "lucide-svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import { lazy } from "../../lazy";
+	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
 	import DemoBackground from "./DemoBackground.svelte";
 	import GithubLink from "./GithubLink.svelte";
 	import VersionTag from "./VersionTag.svelte";
@@ -297,6 +298,7 @@
 	}
 
 	function isAcceptedFile(file: File) {
+		if (isMeshFile(file)) return selectedMode === "sequence";
 		if (file.type) return ACCEPTED_TYPES.includes(file.type);
 		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 	}
@@ -308,6 +310,10 @@
 	const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
 
 	function rejectFile(file: File) {
+		if (isMeshFile(file)) {
+			showToast(`3D models like "${file.name}" work in the Editor`, "error");
+			return;
+		}
 		showToast(
 			`Can't open "${file.name}". Supported formats: ${SUPPORTED_LABEL}`,
 			"error",
@@ -443,7 +449,8 @@
 	}
 
 	function getAcceptTypes() {
-		return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(",");
+		const models = selectedMode === "sequence" ? [MESH_ACCEPT] : [];
+		return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS, ...models].join(",");
 	}
 	function getIsMultiple() {
 		return isMultiMode;
@@ -537,7 +544,8 @@
 					A pile of media and a track. It finds the BPM and cuts on the beat.
 				{:else if selectedMode === "sequence"}
 					Your song on a timeline. The media goes on layers, cut into clips with
-					their own effects; FX lanes mosh the whole frame.
+					their own effects; FX lanes mosh the whole frame. 3D models (OBJ, STL)
+					work here too.
 				{:else}
 					One image or video. Mosh it, then lock whatever survived and roll
 					again.
@@ -580,6 +588,8 @@
 				{#if stagedMedia}
 					{stagedMedia.length} file{stagedMedia.length === 1 ? "" : "s"} ready. Add
 					a song to start.
+				{:else if selectedMode === "sequence"}
+					or drop images, videos and 3D models anywhere on this panel
 				{:else if isMultiMode}
 					or drop images and videos anywhere on this panel
 				{:else}
