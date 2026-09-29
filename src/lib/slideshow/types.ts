@@ -60,7 +60,6 @@ export interface SlideshowConfig {
 	moshAudioLink: boolean;
 	/** 0 to 1: probability and range width of random audio links. */
 	moshAudioLinkStrength: number;
-	loop: boolean;
 	segments: TimelineSegment[];
 	/** Optional timed text lanes, keyed to audio time. */
 	text: TextTimeline;
@@ -78,7 +77,6 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	smoothSpeed: 1,
 	moshAudioLink: false,
 	moshAudioLinkStrength: 0.8,
-	loop: true,
 	segments: [],
 	text: { ...EMPTY_TEXT_TIMELINE },
 	outputVolume: 1,

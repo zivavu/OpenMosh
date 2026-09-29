@@ -188,18 +188,6 @@
 			</div>
 		{/if}
 	{/if}
-
-	<h3 class="panel-title section-title">Playback</h3>
-
-	<div class="config-row">
-		<label for="ss-loop">Loop images</label>
-		<Checkbox
-			id="ss-loop"
-			checked={config.loop}
-			onchange={(e) =>
-				set("loop", (e.currentTarget as HTMLInputElement).checked)}
-		/>
-	</div>
 </div>
 
 <style>
