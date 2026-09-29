@@ -2768,31 +2768,37 @@ void main() {
 		fragment:
 			H +
 			`uniform float u_amplitude;
-vec4 hash4(vec2 p) {
-  vec4 q = vec4(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)),
-                dot(p, vec2(419.2, 371.9)), dot(p, vec2(233.7, 97.3)));
-  return fract(sin(q) * 43758.5453123);
+uniform float u_decay;
+// Sine-free: the burst index grows without bound.
+vec4 hash4(float p) {
+  vec4 p4 = fract(vec4(p) * vec4(0.1031, 0.1030, 0.0973, 0.1099));
+  p4 += dot(p4, p4.wzxy + 33.33);
+  return fract((p4.xxyz + p4.yzzw) * p4.zywx);
 }
-vec4 noise4(vec2 p) {
-  p *= 64.0;
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash4(i), hash4(i + vec2(1.0, 0.0)), f.x),
-             mix(hash4(i + vec2(0.0, 1.0)), hash4(i + vec2(1.0, 1.0)), f.x), f.y);
-}
+const int TAPS = 12;
+// One burst per clock cycle: it pops at the cycle's start and decays. Green holds
+// still while red and blue streak out and in from a point near the centre.
 void main() {
-  vec4 n = noise4(vec2(u_time, 2.0 * u_time / 25.0));
-  // pow 8 keeps the split near zero most of the time, so it reads as bursts.
-  vec4 split = pow(n, vec4(8.0)) * vec4(vec3(u_amplitude), 1.0);
-  split *= 2.0 * split.w - 1.0;
-  float r = texture(u_texture, v_uv + vec2(split.x, -split.y)).r;
-  float g = texture(u_texture, v_uv + vec2(split.y, -split.z)).g;
-  float b = texture(u_texture, v_uv + vec2(split.z, -split.x)).b;
-  outColor = vec4(r, g, b, texture(u_texture, v_uv).a);
+  vec4 h = hash4(floor(u_time));
+  float f = fract(u_time);
+  // Decay is the share of the cycle the burst takes to fade to ~5%.
+  float env = exp(-3.0 * f / u_decay) * (0.6 + 0.4 * h.x);
+  vec2 center = 0.5 + (h.yz - 0.5) * 0.3;
+  float a = h.w * 6.2831853;
+  vec2 offset = ((v_uv - center) * 0.06 + vec2(cos(a), sin(a)) * 0.01)
+              * u_amplitude * env;
+  vec4 c = texture(u_texture, v_uv);
+  float r = 0.0, b = 0.0;
+  for (int i = 1; i <= TAPS; i++) {
+    float t = float(i) / float(TAPS);
+    r += texture(u_texture, v_uv - offset * t).r;
+    b += texture(u_texture, v_uv + offset * t).b;
+  }
+  outColor = vec4(r / float(TAPS), c.g, b / float(TAPS), c.a);
 }`,
 		animated: true,
-		setUniforms: floats("amplitude"),
+		linearFilter: true,
+		setUniforms: floats("amplitude", "decay"),
 	},
 
 	/** XPL GlitchScreenJump: the frame rolls like a lost vertical hold. */
