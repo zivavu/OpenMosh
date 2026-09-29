@@ -171,10 +171,9 @@ export const STARTER_PRESETS: Preset[] = [
 				enabled: true,
 				values: {
 					scale: 7,
-					angle: 15,
-					contrast: 1.2,
-					mode: "dots",
-					invert: 0,
+					angle: 0,
+					sharpness: 12,
+					color: 1,
 				},
 				volumeLinks: { scale: { min: 4, max: 18 } },
 			},

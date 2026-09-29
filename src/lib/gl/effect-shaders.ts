@@ -1839,52 +1839,25 @@ void main() {
 		},
 	},
 
+	/** A sine dot screen added to the tone, then pushed hard: light areas keep dark
+	 * dots, dark areas bright ones, and midtones turn into a checkerboard. */
 	halftone: {
 		fragment:
 			H +
 			`uniform float u_scale;
 uniform float u_angle;
-uniform float u_contrast;
-uniform float u_invert;
-uniform int u_mode;
+uniform float u_sharpness;
+uniform float u_color;
 void main() {
-  vec2 res = vec2(textureSize(u_texture, 0));
-  vec2 pos = v_uv * res;
-  vec3 src = texture(u_texture, v_uv).rgb;
-  float lum = dot(src, vec3(0.299, 0.587, 0.114));
-  lum = clamp((lum - 0.5) * u_contrast + 0.5, 0.0, 1.0);
-
-  float rad = u_angle * 3.14159265 / 180.0;
-  float ca = cos(rad), sa = sin(rad);
-  vec2 rp = vec2(ca * pos.x + sa * pos.y, -sa * pos.x + ca * pos.y);
-
-  float ink; // 1 = inked
-  if (u_mode == 2) {
-    // Engraving lines; a second, perpendicular set joins in dark areas
-    float aa = 1.5 * 3.14159265 / u_scale;
-    float w1 = 0.5 + 0.5 * sin(rp.y * 3.14159265 / u_scale);
-    float w2 = 0.5 + 0.5 * sin(rp.x * 3.14159265 / u_scale);
-    float l1 = 1.0 - smoothstep(w1 - aa, w1 + aa, lum);
-    float l2 = 1.0 - smoothstep(w2 - aa, w2 + aa, lum * 2.0);
-    ink = max(l1, l2);
-  } else {
-    // Classic rotated dot screen: dot area grows with darkness
-    vec2 cell = fract(rp / u_scale) - 0.5;
-    float r = sqrt(1.0 - lum) * 0.7071;
-    ink = smoothstep(r, r - 1.5 / u_scale, length(cell));
-  }
-  ink = mix(ink, 1.0 - ink, u_invert);
-  vec3 col = mix(vec3(1.0), src, ink);
-  outColor = vec4(col, 1.0);
+  vec4 src = texture(u_texture, v_uv);
+  vec2 pos = v_uv * vec2(textureSize(u_texture, 0));
+  float a = radians(u_angle);
+  vec2 rp = mat2(cos(a), sin(a), -sin(a), cos(a)) * pos * (3.14159265 / u_scale);
+  float dots = sin(rp.x) * sin(rp.y) * 0.4;
+  vec3 tone = mix(vec3(dot(src.rgb, vec3(0.2126, 0.7152, 0.0722))), src.rgb, u_color);
+  outColor = vec4(clamp((tone - 0.5 + dots) * u_sharpness + 0.5, 0.0, 1.0), src.a);
 }`,
-		opaqueOutput: true,
-		setUniforms: (gl, l, v) => {
-			setFloat(gl, l, "u_scale", v.scale as number);
-			setFloat(gl, l, "u_angle", v.angle as number);
-			setFloat(gl, l, "u_contrast", v.contrast as number);
-			setFloat(gl, l, "u_invert", v.invert as number);
-			setInt(gl, l, "u_mode", v.mode === "lines" ? 2 : 0);
-		},
+		setUniforms: floats("scale", "angle", "sharpness", "color"),
 	},
 
 	/** Composite video falling apart. The speckle comes from decoding, so it lands
