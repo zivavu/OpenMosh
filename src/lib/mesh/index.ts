@@ -5,6 +5,8 @@ import { parseStl } from "./stl";
 export type { Mesh };
 
 export const MESH_EXTENSIONS = [".obj", ".stl"];
+/** For a file input's `accept`. */
+export const MESH_ACCEPT = MESH_EXTENSIONS.join(",");
 
 /** Browsers give these files no MIME type, or an inconsistent one, so the pool
  * keys them on this instead. */

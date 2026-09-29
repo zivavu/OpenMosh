@@ -3,6 +3,7 @@
 
 	/** The three dashed cards that close a media grid: add, generate, webcam. */
 	interface Props {
+		addTitle?: string;
 		recordTitle?: string;
 		onAdd: () => void;
 		onGenerate: () => void;
@@ -10,6 +11,7 @@
 	}
 
 	let {
+		addTitle = "Add images or videos to the pool",
 		recordTitle = "Record from the webcam into the pool",
 		onAdd,
 		onGenerate,
@@ -17,11 +19,7 @@
 	}: Props = $props();
 </script>
 
-<button
-	class="add-card"
-	title="Add images or videos to the pool"
-	onclick={onAdd}
->
+<button class="add-card" title={addTitle} onclick={onAdd}>
 	<Plus size={20} />
 </button>
 <button

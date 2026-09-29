@@ -6,6 +6,8 @@ import {
 } from "../media";
 import { GeneratedSizeSync, readGenerated } from "../generators";
 import { gifsToVideo } from "../media/gif";
+import { asMeshFile, isMeshFile, parseMesh, type Mesh } from "../mesh";
+import { renderMeshThumb } from "../mesh/thumb";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
 import { isProxyDisabled, setProxyDisabled } from "../video/proxy-preference";
@@ -28,12 +30,14 @@ const ADD_BATCH_SIZE = 8;
 const THUMB_CONCURRENCY = 6;
 /** Chip thumbnail edge, matching probeSlideVideo's default for videos. */
 const THUMB_SIZE = 100;
+/** Larger: a model's render is also what its preview shows. */
+const MODEL_THUMB_SIZE = 512;
 
 export interface SequenceSource {
 	id: string;
 	file: File;
 	name: string;
-	kind: "image" | "video";
+	kind: "image" | "video" | "model";
 	objectUrl: string;
 	/** Grid thumbnail; images fill theirs in after the chip is on screen. */
 	thumbUrl: string | null;
@@ -59,6 +63,18 @@ export interface SequenceSource {
 	proxyDisabled?: boolean;
 }
 
+/** How the lightbox shows a source: a model as its render. */
+export function lightboxItem(src: SequenceSource): {
+	name: string;
+	kind: "image" | "video";
+	objectUrl: string;
+} {
+	if (src.kind !== "model") {
+		return { name: src.name, kind: src.kind, objectUrl: src.objectUrl };
+	}
+	return { name: src.name, kind: "image", objectUrl: src.thumbUrl ?? "" };
+}
+
 /** The media pool behind sequence mode; video decoding belongs to the layer driver. */
 export class SequenceSourceRegistry {
 	sources = $state<SequenceSource[]>([]);
@@ -75,6 +91,8 @@ export class SequenceSourceRegistry {
 	/** Insertion-ordered LRU of decoded images (see MAX_DECODED_IMAGES). */
 	#images = new Map<string, HTMLImageElement>();
 	#decoding = new Set<string>();
+	/** Parsed models, held while they're in the pool: they're small, and re-parsing isn't. */
+	#meshes = new Map<string, Mesh>();
 	/** Ids an in-flight `add` has claimed but not appended yet. */
 	#pendingIds = new Set<string>();
 	/** In-flight proxy transcodes, keyed by id, so remove() can stop one. */
@@ -131,6 +149,7 @@ export class SequenceSourceRegistry {
 		try {
 			// Animated GIFs become videos here, before anything is keyed on the file.
 			files = await gifsToVideo(files);
+			files = files.map((f) => (isMeshFile(f) ? asMeshFile(f) : f));
 			// Ids are reserved before the next await: probing is async, so overlapping
 			// calls would both see an empty pool and append a duplicate key.
 			for (const f of files) {
@@ -142,7 +161,10 @@ export class SequenceSourceRegistry {
 			// Duplicates were never going to land.
 			this.loadingTotal -= files.length - fresh.length;
 
-			const images = fresh.filter((f) => !f.type.startsWith("video/"));
+			const models = fresh.filter(isMeshFile);
+			const images = fresh.filter(
+				(f) => !f.type.startsWith("video/") && !isMeshFile(f),
+			);
 			const videos = fresh.filter((f) => f.type.startsWith("video/"));
 
 			// Images need no pixels to enter the pool, so chips appear in one frame
@@ -159,6 +181,15 @@ export class SequenceSourceRegistry {
 							this.#sizeSync.track(s.id, info.spec, info.width, info.height);
 					});
 				}
+			}
+
+			// Parsed up front, like a video's probe: it's what rejects a file with nothing to draw.
+			if (models.length > 0) {
+				const built = await Promise.all(models.map((f) => this.#buildModel(f)));
+				const batch = this.#accept(built);
+				this.loadingDone += models.length;
+				if (this.#disposed) return [];
+				ok.push(...batch);
 			}
 
 			// Videos still need probing up front: it rejects undecodable files and
@@ -228,6 +259,7 @@ export class SequenceSourceRegistry {
 			this.edits = next;
 		}
 		this.#images.delete(id);
+		this.#meshes.delete(id);
 		this.#sizeSync.untrack(id);
 		this.#revoke(src);
 	}
@@ -311,6 +343,11 @@ export class SequenceSourceRegistry {
 		return undefined;
 	}
 
+	/** A model's mesh; parsed on add, so only a removed source has none. */
+	mesh(id: string): Mesh | undefined {
+		return this.#meshes.get(id);
+	}
+
 	/** Turn the preview proxy on or off; the choice persists across sessions and modes. */
 	setProxyEnabled(id: string, enabled: boolean) {
 		const src = this.get(id);
@@ -347,6 +384,7 @@ export class SequenceSourceRegistry {
 		for (const job of this.#proxyJobs.values()) job.cancel();
 		this.#proxyJobs.clear();
 		this.#images.clear();
+		this.#meshes.clear();
 		this.#decoding.clear();
 		this.#pendingIds.clear();
 		this.loadingTotal = 0;
@@ -418,6 +456,28 @@ export class SequenceSourceRegistry {
 			kind: "image",
 			thumbUrl: null,
 			thumbPending: true,
+			duration: 0,
+		};
+	}
+
+	async #buildModel(file: File): Promise<SequenceSource | null> {
+		const mesh = await parseMesh(file);
+		if (!mesh) return null;
+		const thumb = await renderMeshThumb(mesh, MODEL_THUMB_SIZE).catch(
+			() => null,
+		);
+		const id = stableSourceId(file);
+		// Kept even if #accept then drops the source as a duplicate: the one already
+		// pooled under this id is the same file.
+		if (!this.#disposed) this.#meshes.set(id, mesh);
+		return {
+			id,
+			file,
+			name: file.name,
+			objectUrl: URL.createObjectURL(file),
+			kind: "model",
+			thumbUrl: thumb ? URL.createObjectURL(thumb) : null,
+			thumbPending: false,
 			duration: 0,
 		};
 	}

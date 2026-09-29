@@ -42,6 +42,22 @@ export class MediaLayerDriver {
 				continue;
 			}
 
+			if (src.kind === "model") {
+				// The renderer redraws a model every frame; it only needs the mesh once.
+				if (
+					this.#uploaded.get(layer.key) === src.id &&
+					renderer?.hasLayerTexture(layer.key)
+				) {
+					continue;
+				}
+				const mesh = this.#registry.mesh(src.id);
+				if (mesh && renderer) {
+					renderer.updateLayerModel(layer.key, src.id, mesh);
+					this.#uploaded.set(layer.key, src.id);
+				}
+				continue;
+			}
+
 			if (src.kind === "image") {
 				// Still media only re-uploads when the lane's source changes.
 				if (

@@ -169,6 +169,7 @@
 		type SequenceSource,
 	} from "../../editor/sequence-sources.svelte";
 	import { MediaLayerDriver } from "../../editor/media-layer-driver";
+	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
 	import { openVideoFrameSource } from "../../video/frame-source";
 	import { proxyStatus } from "../../video/proxy-status";
@@ -1754,10 +1755,17 @@
 	}
 
 	async function addSequenceSources(files: File[]) {
+		if (!isSequenceMode && files.some(isMeshFile)) {
+			showToast("3D models work in the Editor", "error");
+			files = files.filter((f) => !isMeshFile(f));
+		}
 		// Single mode's pool is session-scoped: no song to persist under.
 		const added = await sourceRegistry.add(files, {
 			persist: isSequenceMode,
 		});
+		if (isSequenceMode && added.some((s) => s.kind === "model")) {
+			showToast("To turn a model, add a 3D Transform to its clip", "info");
+		}
 		const skipped = files.length - added.length;
 		if (skipped > 0) {
 			showToast(
@@ -1826,7 +1834,12 @@
 			return;
 		}
 		if (seqBaseSize) return;
-		const first = sequenceSources[0];
+		// A model has no pixel size of its own to lend the project.
+		const first = sequenceSources.find((s) => s.kind !== "model");
+		if (!first) {
+			seqBaseSize = { width: 1920, height: 1080 };
+			return;
+		}
 		if (first.width && first.height) {
 			seqBaseSize = { width: first.width, height: first.height };
 		}
@@ -4012,8 +4025,14 @@
 			clearTrack();
 			audio.trackFile = audioFiles[0];
 		}
+		if (!isSequenceMode && all.some(isMeshFile)) {
+			showToast("3D models work in the Editor", "error");
+		}
 		const media = all.filter(
-			(f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
+			(f) =>
+				f.type.startsWith("image/") ||
+				f.type.startsWith("video/") ||
+				(isSequenceMode && isMeshFile(f)),
 		);
 		if (media.length === 0) return;
 		if (isSequenceMode) void addSequenceSources(media);
@@ -4149,8 +4168,8 @@
 			<div class="no-media">
 				<span class="no-media-label">NO MEDIA</span>
 				<p class="no-media-text">
-					Every source is gone from this song. Add an image or a video and the
-					layers have something to show again.
+					Every source is gone from this song. Add an image, a video or a 3D
+					model and the layers have something to show again.
 				</p>
 				<div class="no-media-actions">
 					<button class="no-media-btn" onclick={() => sourceInput?.click()}>
@@ -4666,7 +4685,7 @@
 							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
 							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
 								? `${MAX_MEDIA_LANES} layers is the limit`
-								: "Add a layer of images or videos from the pool, each clip with its own effects"}
+								: "Add a layer of images, videos or 3D models from the pool, each clip with its own effects"}
 							onclick={addMediaLane}
 						>
 							<Plus size={12} /> Media layer
@@ -4929,7 +4948,7 @@
 		<input
 			bind:this={sourceInput}
 			type="file"
-			accept="image/*,video/*"
+			accept="image/*,video/*,{MESH_ACCEPT}"
 			multiple
 			hidden
 			onchange={(e) => {
@@ -5108,7 +5127,7 @@
 		<div class="drop-overlay">
 			<span
 				>{isSequenceMode
-					? "Drop images or videos into the pool · Drop audio onto a lane"
+					? "Drop images, videos or 3D models into the pool · Drop audio onto a lane"
 					: "Drop image/video to replace · Drop audio to set track"}</span
 			>
 		</div>
