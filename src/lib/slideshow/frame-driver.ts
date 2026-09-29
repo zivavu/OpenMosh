@@ -87,10 +87,7 @@ export class SlideshowFrameDriver {
 			return { effects: this.#effects, ready: null };
 		}
 
-		const slideIndex = config.loop
-			? beatIndex % slides.length
-			: Math.min(beatIndex, slides.length - 1);
-		const slide = slides[slideIndex];
+		const slide = slides[beatIndex % slides.length];
 		if (!slide) return { effects: this.#effects, ready: null };
 
 		// A slide still decoding keeps the previous texture and retries every frame
