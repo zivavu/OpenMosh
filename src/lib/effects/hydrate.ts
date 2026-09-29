@@ -18,12 +18,27 @@ export function getDefinition(defId: string): EffectDefinition | undefined {
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
-/** Duotone's two hue sliders became color pickers; rebuild old hue-only values. */
 function migrateValues(
 	defId: string,
 	values: Record<string, number | string>,
 ): Record<string, number | string> {
-	if (defId !== "duotone") return values;
+	if (defId === "duotone") return migrateDuotone(values);
+	if (defId === "edges") return migrateEdges(values);
+	return values;
+}
+
+/** Edges' Mix (1 = lines only) became Passthru (1 = the original behind the lines). */
+function migrateEdges(
+	values: Record<string, number | string>,
+): Record<string, number | string> {
+	if (typeof values.mix !== "number" || values.passthru != null) return values;
+	return { ...values, passthru: 1 - values.mix };
+}
+
+/** Duotone's two hue sliders became color pickers; rebuild old hue-only values. */
+function migrateDuotone(
+	values: Record<string, number | string>,
+): Record<string, number | string> {
 	const migrated = { ...values };
 	if (typeof values.shadowHue === "number" && values.shadowColor == null) {
 		migrated.shadowColor = hueToHex(values.shadowHue, 0.3);

@@ -208,6 +208,19 @@ describe("hydrateValues", () => {
 			expect(hydrated.shadowColor).toBeUndefined();
 		});
 	});
+
+	describe("edges' mix, saved before it became passthru", () => {
+		it("inverts it, since mix 1 meant lines only", () => {
+			expect(hydrateValues("edges", { mix: 1 }).passthru).toBe(0);
+			expect(hydrateValues("edges", { mix: 0.25 }).passthru).toBe(0.75);
+		});
+
+		it("leaves a passthru the user has since set alone", () => {
+			expect(hydrateValues("edges", { mix: 1, passthru: 0.4 }).passthru).toBe(
+				0.4,
+			);
+		});
+	});
 });
 
 describe("hydrateEffects", () => {
