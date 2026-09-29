@@ -50,6 +50,9 @@ import {
 	type EffectShaderDef,
 } from "./effect-shaders";
 import { KeyReachPass, setKeyPointUniforms } from "./key-pass";
+import { MeshPass } from "./mesh-pass";
+import type { Mesh } from "../mesh";
+import { meshCamera } from "../mesh/camera";
 import { TRANSITION_SHADERS } from "./transition-shaders";
 import type { TextOverlayBlendMode } from "../text-overlay";
 import {
@@ -324,6 +327,9 @@ export class GlRenderer {
 		null;
 	/** Uploaded (pre-effect) media per media lane, keyed by lane id. */
 	private mediaLayerTextures = new Map<string, OverlayTexture>();
+	/** Lanes showing a 3D model, and which one; their texture is redrawn every frame. */
+	private modelLayers = new Map<string, string>();
+	private meshPass: MeshPass;
 	/** Per-source edits, keyed by source id. See setSourceEdits. */
 	private sourceEdits = new Map<string, SourceEdit>();
 	/** Per-source media length, keyed by source id. See setSourceDurations. */
@@ -412,6 +418,7 @@ export class GlRenderer {
 		if (!gl) throw new Error("WebGL2 not supported");
 		this.gl = gl;
 		this.keyReach = new KeyReachPass(gl);
+		this.meshPass = new MeshPass(gl);
 		gl.getExtension("EXT_color_buffer_float");
 		this.quadVAO = this.createQuad();
 		this.passthrough = this.compile(PASSTHROUGH_FRAG);
@@ -793,12 +800,41 @@ export class GlRenderer {
 		);
 	}
 
+	/** Show a 3D model on this lane; the mesh uploads once per source. */
+	updateLayerModel(key: string, sourceId: string, mesh: Mesh) {
+		const prev = this.modelLayers.get(key);
+		this.modelLayers.set(key, sourceId);
+		if (prev && prev !== sourceId) this.releaseMesh(prev);
+		this.meshPass.upload(sourceId, mesh);
+		if (this.mediaLayerTextures.has(key)) return;
+		const gl = this.gl;
+		const tex = gl.createTexture()!;
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		// Sized on first draw, to the frame.
+		this.mediaLayerTextures.set(key, { tex, w: 0, h: 0, sig: "" });
+	}
+
 	/** Release a lane's frame: its source was cleared, or the lane is gone. */
 	dropLayerTexture(key: string) {
+		const model = this.modelLayers.get(key);
+		if (model) {
+			this.modelLayers.delete(key);
+			this.releaseMesh(model);
+		}
 		const entry = this.mediaLayerTextures.get(key);
 		if (!entry) return;
 		this.gl.deleteTexture(entry.tex);
 		this.mediaLayerTextures.delete(key);
+	}
+
+	/** Frees a mesh once no lane shows it. */
+	private releaseMesh(sourceId: string) {
+		for (const id of this.modelLayers.values()) if (id === sourceId) return;
+		this.meshPass.drop(sourceId);
 	}
 
 	private uploadLayerTexture(
@@ -809,6 +845,12 @@ export class GlRenderer {
 	) {
 		if (w <= 0 || h <= 0) return;
 		const gl = this.gl;
+		// The lane moved on from a model to a picture.
+		const model = this.modelLayers.get(key);
+		if (model) {
+			this.modelLayers.delete(key);
+			this.releaseMesh(model);
+		}
 		let entry = this.mediaLayerTextures.get(key);
 		if (!entry) {
 			const tex = gl.createTexture()!;
@@ -2177,6 +2219,7 @@ export class GlRenderer {
 		safeDt: number,
 		out: { tex: WebGLTexture; fbo: WebGLFramebuffer },
 	): boolean {
+		if (this.modelLayers.has(side.key) && !this.drawModel(side)) return false;
 		const entry = this.mediaLayerTextures.get(side.key);
 		if (!entry || entry.w <= 0) return false;
 		// Sampled per lane, not once for the source: two lanes can hold the same media
@@ -2240,6 +2283,39 @@ export class GlRenderer {
 
 	/** A clip blending in over the one before it. The shader blends colour only, so it
 	 * runs a second time over both sides' coverage to keep the layer's shape. */
+	/** Renders a model lane's mesh into its texture, at the frame's size. */
+	private drawModel(side: MediaLayerSide): boolean {
+		const entry = this.mediaLayerTextures.get(side.key);
+		const sourceId = this.modelLayers.get(side.key);
+		if (!entry || !sourceId || this.imgW <= 0 || this.imgH <= 0) return false;
+		const gl = this.gl;
+		if (entry.w !== this.imgW || entry.h !== this.imgH) {
+			gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA,
+				this.imgW,
+				this.imgH,
+				0,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				null,
+			);
+			entry.w = this.imgW;
+			entry.h = this.imgH;
+		}
+		const drawn = this.meshPass.draw(
+			sourceId,
+			entry.tex,
+			entry.w,
+			entry.h,
+			meshCamera([]),
+		);
+		gl.bindVertexArray(this.quadVAO);
+		return drawn;
+	}
+
 	private drawMediaTransition(
 		layer: ResolvedMediaLayer,
 		time: number,
@@ -2559,6 +2635,8 @@ export class GlRenderer {
 			this.gl.deleteTexture(entry.tex);
 		}
 		this.mediaLayerTextures.clear();
+		this.modelLayers.clear();
+		this.meshPass.dispose();
 	}
 
 	private renderCaption(
