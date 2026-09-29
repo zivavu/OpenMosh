@@ -126,7 +126,7 @@ export const CURATION: Record<string, Curation> = {
 	bleach: c("color", "grade", "amount"),
 	"color-correction": c("color", "grade"),
 
-	edges: c("stylize", "edges", "mix"),
+	edges: c("stylize", "edges", "strength"),
 	"neon-edges": c("stylize", "edges", "strength"),
 	"sobel-neon": c("stylize", "edges", "neon"),
 	emboss: c("stylize", "edges", "mix"),
