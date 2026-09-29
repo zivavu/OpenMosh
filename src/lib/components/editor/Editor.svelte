@@ -3676,7 +3676,11 @@
 	}
 
 	// Fill, mosh, clear and static/auto on a media clip: the same gestures an fx clip takes.
-	const previewMediaChains = createMediaChainSource(getMoshOptions);
+	const isModelSource = (id: string) =>
+		sourceRegistry.get(id)?.kind === "model";
+	const previewMediaChains = createMediaChainSource(getMoshOptions, {
+		isModel: isModelSource,
+	});
 
 	/** ←/→ walk one media clip's moshes, keyed by clip id. */
 	const mediaMoshHistory = new MoshHistory<MoshSnapshot>();
@@ -3698,7 +3702,12 @@
 		}
 		rollAlive(
 			() =>
-				(mediaTimeline = rollMediaClips(mediaTimeline, ids, getMoshOptions())),
+				(mediaTimeline = rollMediaClips(
+					mediaTimeline,
+					ids,
+					getMoshOptions(),
+					isModelSource,
+				)),
 		);
 		for (const clip of mediaClipsById(ids)) {
 			mediaMoshHistory.push(

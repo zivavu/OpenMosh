@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+	clipMoshOptions,
 	clipSourceId,
 	detachMediaSource,
 	laneSourceIds,
@@ -401,5 +402,34 @@ describe("newClipSourceId", () => {
 
 	it("falls back to the lane's own media", () => {
 		expect(newClipSourceId(laneWith([]), 1)).toBe("src-a");
+	});
+});
+
+describe("clipMoshOptions", () => {
+	const options = {
+		moshMin: 1,
+		moshMax: 3,
+		randomizeOrder: true,
+		moshAudioLink: false,
+		moshAudioLinkStrength: 0,
+		hasAudio: false,
+	};
+	const isModel = (id: string) => id === "model";
+
+	it("flags only the clips that show a model", () => {
+		const lane = retargeted(
+			laneWith([
+				[0, 1],
+				[1, 2],
+			]),
+			1,
+			"model",
+		);
+		expect(clipMoshOptions(lane, lane.clips[0], options, isModel).model).toBe(
+			undefined,
+		);
+		expect(clipMoshOptions(lane, lane.clips[1], options, isModel).model).toBe(
+			true,
+		);
 	});
 });

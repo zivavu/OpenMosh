@@ -221,7 +221,7 @@ export function chainClipEffectsAt(
 	const options = getMoshOptions();
 	const tick = chainClipTick(clip, time);
 	const seed = (clip.seed ?? 0) + tick * 7919;
-	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${lockedKey(clip.effects)}`;
+	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${options.model}:${lockedKey(clip.effects)}`;
 	let effects = cache.get(key);
 	if (!effects) {
 		effects = rollEffects(seed, options, clip.effects);
