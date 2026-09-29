@@ -77,9 +77,24 @@
 	let svgEl: SVGSVGElement | undefined = $state();
 
 	// Re-fit on duration change, and repair lists already out of range.
+	// An empty list starts as one flat line at the current beat division.
 	$effect(() => {
 		const td = trackDuration;
 		const segs = config.segments;
+		if (td > 0 && segs.length === 0) {
+			onConfigChange({
+				...config,
+				segments: [
+					{
+						id: generateId(),
+						startTime: 0,
+						endTime: td,
+						subdivision: config.subdivision,
+					},
+				],
+			});
+			return;
+		}
 		const fixed = normalizeCoverage(segs, td);
 		if (fixed !== segs) onConfigChange({ ...config, segments: fixed });
 	});
@@ -674,13 +689,7 @@
 			(a, b) => a.startTime - b.startTime,
 		);
 		const idx = sorted.findIndex((s) => s.id === id);
-		if (idx === -1) return;
-
-		if (sorted.length === 1) {
-			selectedSegmentId = null;
-			emit({ segments: [] });
-			return;
-		}
+		if (idx === -1 || sorted.length === 1) return;
 
 		const deleted = sorted[idx];
 		const neighbour =
@@ -752,7 +761,7 @@
 		}
 	}
 
-	let showHint = $derived(segments.length === 0);
+	let showHint = $derived(segments.length <= 1);
 
 	// Boundary times inside the in-progress rect-select drag, for live highlighting
 	let rectHoverTimes = $derived.by((): number[] => {
@@ -999,8 +1008,8 @@
 			{/each}
 
 			{#if showHint}
-				<text class="hint" x="50%" y={SVG_H / 2 + 4} text-anchor="middle">
-					Ctrl+click to create · drag bar up/down to change beat · drag dot to
+				<text class="hint" x="50%" y={SVG_H / 2 - 16} text-anchor="middle">
+					Ctrl+click to split · drag bar up/down to change beat · drag dot to
 					move boundary
 				</text>
 			{/if}

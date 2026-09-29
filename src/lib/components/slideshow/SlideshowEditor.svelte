@@ -888,8 +888,8 @@
 	function onTrackInputChange() {
 		const f = trackInput?.files?.[0];
 		if (f) {
-			// Drop the previous track's normalize gain until the auto-add measurement lands.
-			audio.setNormalizeGain(1.0);
+			// Also drops the previous track's normalize gain until the auto-add measurement lands.
+			clearTrack();
 			audio.trackFile = f;
 			trackInput.value = "";
 		}
@@ -900,6 +900,7 @@
 		if (currentTrackId) saveSegments(currentTrackId);
 		audio.clearTrack();
 		currentTrackId = null;
+		config = { ...config, segments: [] };
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
@@ -917,7 +918,11 @@
 
 	function applySavedSegments(trackId: string) {
 		const saved = segmentsStore.load(trackId);
-		if (saved === null) return;
+		if (saved === null) {
+			// A song of its own starts from a fresh flat line (see TimelineSegments).
+			config = { ...config, segments: [] };
+			return;
+		}
 		config = {
 			...config,
 			segments: saved.segments,
