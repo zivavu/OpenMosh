@@ -78,6 +78,14 @@ edit: they eat context fast.
   `MeshPass` inside `GlRenderer`. A model clip's 3D Transforms become its camera and run first,
   wherever they sit in the chain; `mesh/camera.ts` mirrors the shader, and a test holds them
   together. No baked turntable clips.
+- The upload demo is only 3D worlds (`lib/demo/worlds/`), raymarched GLSL scenes drawn by
+  `gl/scene-pass.ts`, not meshes. A scene is marched once with element ids and once without its
+  elements; each element, and the backdrop, becomes its own layer with its own mosh. Shader loops
+  start at `ZERO`: on Windows, Direct3D unrolls constant loops and a world takes seconds to
+  compile. The next world compiles halfway through the current one, except in Firefox: it never
+  shipped `KHR_parallel_shader_compile` and a compile freezes the page, so there every world
+  compiles before the demo first shows.
+  In dev, `?world=<id>` holds one world and `?bare` drops the mosh.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - Chrome never grants `navigator.storage.persist()` on `localhost`, and code can't fix that. Use

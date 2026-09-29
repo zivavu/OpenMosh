@@ -29,6 +29,21 @@ export default defineConfig({
 		: [["list"]],
 	use: {
 		baseURL: `http://localhost:${PORT}`,
+		// The upload screen's raymarched worlds would eat the CPU the specs render on.
+		storageState: {
+			cookies: [],
+			origins: [
+				{
+					origin: `http://localhost:${PORT}`,
+					localStorage: [
+						{
+							name: "openmosh-settings",
+							value: JSON.stringify({ demoBackground: false }),
+						},
+					],
+				},
+			],
+		},
 		trace: "on-first-retry",
 		video: "off",
 	},

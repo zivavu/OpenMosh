@@ -5,11 +5,15 @@
 	import { Play, Square } from "lucide-svelte";
 	import { GlRenderer } from "../../gl/renderer";
 	import { demoBackgroundEnabled, updateSettings } from "../../editor/settings";
-	import { loadDemoSources } from "../../demo/demo-sources";
+	import {
+		DEMO_HEIGHT,
+		DEMO_WIDTH,
+		WORLD_COUNT,
+		worldScene,
+	} from "../../demo/demo-worlds";
 	import {
 		getDemoDirector,
 		missingDemoEffects,
-		stillDemoEffects,
 	} from "../../demo/demo-director";
 
 	interface Props {
@@ -26,7 +30,6 @@
 	}: Props = $props();
 
 	let holder = $state<HTMLDivElement>(undefined!);
-	let sources = $state<HTMLImageElement[]>([]);
 
 	/** Seconds the demo takes to come up from black on its first frames. */
 	const FADE_SECONDS = 1.2;
@@ -46,43 +49,27 @@
 	}
 
 	$effect(() => {
-		if (import.meta.env.DEV) {
-			const missing = missingDemoEffects();
-			if (missing.length > 0) {
-				console.warn("Demo references unknown effects:", missing);
-			}
-			const still = stillDemoEffects();
-			if (still.length > 0) {
-				console.warn(
-					"Demo's animated pool holds effects that never move:",
-					still,
-				);
-			}
+		if (!import.meta.env.DEV) return;
+		const missing = missingDemoEffects();
+		if (missing.length > 0) {
+			console.warn("Demo references unknown effects:", missing);
 		}
-		let cancelled = false;
-		void loadDemoSources().then((imgs) => {
-			if (!cancelled) sources = imgs;
-		});
-		return () => {
-			cancelled = true;
-		};
 	});
 
 	$effect(() => {
 		const renderer = warmRenderer;
 		const canvas = warmCanvas;
-		const imgs = sources;
-		if (!renderer || !canvas || imgs.length === 0 || !holder) return;
+		if (!renderer || !canvas || !holder) return;
 
 		canvas.style.cssText = "";
 		canvas.className = "demo-canvas";
 		holder.appendChild(canvas);
+		renderer.initBlankSource(DEMO_WIDTH, DEMO_HEIGHT);
 
 		// Shared across modes and mounts, so the performance never restarts.
-		const director = getDemoDirector(imgs.length);
-		let shownIndex = -1;
-		/** Poster currently staged in the renderer's outgoing slot. */
-		let altIndex = -1;
+		const director = getDemoDirector();
+		/** Layer keys the worlds staged, released when the demo hands the renderer on. */
+		const staged = new Set<string>();
 		let raf = 0;
 		// Fed a delta rather than wall-clock, so a pause doesn't silently skip the
 		// demo forward by however long it sat frozen.
@@ -98,41 +85,31 @@
 			holder.style.opacity = String(easeOut(fadeT / FADE_SECONDS));
 		};
 
+		// Where a compile blocks the page (Firefox), any compile mid-show freezes the
+		// world, so every world compiles before the first frame, one a frame.
+		const unbuilt = renderer.scenesCompileInBackground
+			? []
+			: Array.from({ length: WORLD_COUNT }, (_, i) => worldScene(i));
+
 		const drawFrame = () => {
+			if (unbuilt.length > 0) {
+				renderer.sceneReady(unbuilt.pop()!);
+				return;
+			}
 			const now = performance.now();
 			const dt = lastTs ? (now - lastTs) / 1000 : 0;
 			lastTs = now;
+			// Held while the world on screen still compiles, so it isn't cut short.
+			const scene = director.scene();
+			renderer.prepareScene(scene);
+			if (!renderer.sceneReady(scene)) return;
 			const frame = director.advance(dt);
-			if (frame.sourceIndex !== shownIndex) {
-				const img = imgs[frame.sourceIndex];
-				// First upload allocates the texture and FBOs; later cuts only swap
-				// pixels, since every poster shares one size.
-				if (shownIndex === -1) renderer.loadImage(img);
-				else renderer.updateSourceImage(img);
-				shownIndex = frame.sourceIndex;
+			if (frame.upcoming) renderer.prepareScene(frame.upcoming);
+			for (const p of frame.parts) {
+				renderer.updateLayerScene(p.key, p.scene, p.part);
+				staged.add(p.key);
 			}
-			const t = frame.transition;
-			if (t) {
-				// The outgoing poster goes in the alt slot so the blend crosses two
-				// different media, not just two effect chains.
-				if (t.fromSourceIndex !== altIndex) {
-					renderer.updateAltSourceImage(imgs[t.fromSourceIndex]);
-					altIndex = t.fromSourceIndex;
-				}
-				renderer.renderTransition(
-					t.effects,
-					frame.effects,
-					t.type,
-					t.progress,
-					t.seed,
-					t.direction,
-					t.density,
-					frame.time,
-					true,
-				);
-			} else {
-				renderer.render(frame.effects, frame.time);
-			}
+			renderer.render([], frame.time, [], frame.post, frame.layers);
 			// dt is 0 on the first frame after any start, so the priming draw paints
 			// the holder at opacity 0 before the ramp moves at all.
 			advanceFade(dt);
@@ -169,9 +146,8 @@
 			stop();
 			transport = null;
 			document.removeEventListener("visibilitychange", onVisibility);
-			// The editor inherits this renderer; a poster left in the outgoing slot
-			// would surface in its first sequence transition.
-			renderer.clearAltSource();
+			for (const key of staged) renderer.dropLayerTexture(key);
+			renderer.releaseScenes();
 			// Park the canvas back where warmup left it, hidden: the editor reparents this
 			// exact element and expects it attached.
 			canvas.style.cssText = GlRenderer.PARKED_CANVAS_STYLE;

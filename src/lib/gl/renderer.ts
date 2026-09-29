@@ -51,6 +51,7 @@ import {
 } from "./effect-shaders";
 import { KeyReachPass, setKeyPointUniforms } from "./key-pass";
 import { MeshPass } from "./mesh-pass";
+import { ScenePass, type SceneDef } from "./scene-pass";
 import type { Mesh } from "../mesh";
 import {
 	meshCamera,
@@ -334,6 +335,9 @@ export class GlRenderer {
 	/** Lanes showing a 3D model, and which one; their texture is redrawn every frame. */
 	private modelLayers = new Map<string, string>();
 	private meshPass: MeshPass;
+	/** Lanes drawing part of a procedural scene instead of media. */
+	private sceneLayers = new Map<string, { scene: SceneDef; part: number }>();
+	private scenePass: ScenePass;
 	/** Per-source edits, keyed by source id. See setSourceEdits. */
 	private sourceEdits = new Map<string, SourceEdit>();
 	/** Per-source media length, keyed by source id. See setSourceDurations. */
@@ -423,6 +427,7 @@ export class GlRenderer {
 		this.gl = gl;
 		this.keyReach = new KeyReachPass(gl);
 		this.meshPass = new MeshPass(gl);
+		this.scenePass = new ScenePass(gl);
 		gl.getExtension("EXT_color_buffer_float");
 		this.quadVAO = this.createQuad();
 		this.passthrough = this.compile(PASSTHROUGH_FRAG);
@@ -822,8 +827,45 @@ export class GlRenderer {
 		this.mediaLayerTextures.set(key, { tex, w: 0, h: 0, sig: "" });
 	}
 
+	/** Show one part of a procedural scene on this lane: 0 its backdrop, then each
+	 * element by id. */
+	updateLayerScene(key: string, scene: SceneDef, part: number) {
+		this.sceneLayers.set(key, { scene, part });
+		if (this.mediaLayerTextures.has(key)) return;
+		const gl = this.gl;
+		const tex = gl.createTexture()!;
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		this.mediaLayerTextures.set(key, { tex, w: 0, h: 0, sig: "" });
+	}
+
+	/** Starts compiling a scene ahead of its first frame. */
+	prepareScene(scene: SceneDef) {
+		this.scenePass.prepare(scene);
+	}
+
+	/** False where a compile blocks the context until done (Firefox). */
+	get scenesCompileInBackground(): boolean {
+		return this.scenePass.compilesInBackground;
+	}
+
+	/** Whether the scene has compiled and can draw. Where compiles don't run in the
+	 * background, blocks until it has. */
+	sceneReady(scene: SceneDef): boolean {
+		return this.scenePass.ready(scene);
+	}
+
+	/** Frees the scenes' render targets once nothing shows them. */
+	releaseScenes() {
+		this.scenePass.releaseFrames();
+	}
+
 	/** Release a lane's frame: its source was cleared, or the lane is gone. */
 	dropLayerTexture(key: string) {
+		this.sceneLayers.delete(key);
 		const model = this.modelLayers.get(key);
 		if (model) {
 			this.modelLayers.delete(key);
@@ -849,7 +891,8 @@ export class GlRenderer {
 	) {
 		if (w <= 0 || h <= 0) return;
 		const gl = this.gl;
-		// The lane moved on from a model to a picture.
+		// The lane moved on from a model or scene to a picture.
+		this.sceneLayers.delete(key);
 		const model = this.modelLayers.get(key);
 		if (model) {
 			this.modelLayers.delete(key);
@@ -2232,6 +2275,8 @@ export class GlRenderer {
 			);
 			if (!this.drawModel(side, turns, time, safeDt)) return false;
 			if (turns.length > 0) effects = effects.filter((e) => !turns.includes(e));
+		} else if (this.sceneLayers.has(side.key)) {
+			if (!this.drawScene(side.key, time)) return false;
 		}
 		const entry = this.mediaLayerTextures.get(side.key);
 		if (!entry || entry.w <= 0) return false;
@@ -2303,11 +2348,46 @@ export class GlRenderer {
 		time: number,
 		safeDt: number,
 	): boolean {
-		const entry = this.mediaLayerTextures.get(side.key);
+		const entry = this.frameSizedLayer(side.key);
 		const sourceId = this.modelLayers.get(side.key);
-		if (!entry || !sourceId || this.imgW <= 0 || this.imgH <= 0) return false;
-		const gl = this.gl;
+		if (!entry || !sourceId) return false;
+		const drawn = this.meshPass.draw(
+			sourceId,
+			entry.tex,
+			entry.w,
+			entry.h,
+			meshCamera(
+				turns.map((e) => ({
+					values: e.values as unknown as Transform3dValues,
+					time: this.getEffectTime(e, time, safeDt).time,
+				})),
+			),
+		);
+		this.gl.bindVertexArray(this.quadVAO);
+		return drawn;
+	}
+
+	/** Renders a scene lane's part into its texture, at the frame's size. */
+	private drawScene(key: string, time: number): boolean {
+		const entry = this.frameSizedLayer(key);
+		const layer = this.sceneLayers.get(key);
+		if (!entry || !layer) return false;
+		return this.scenePass.draw(
+			layer.scene,
+			layer.part,
+			time,
+			entry.tex,
+			entry.w,
+			entry.h,
+		);
+	}
+
+	/** A generated lane's texture, reallocated to the frame's size when it changed. */
+	private frameSizedLayer(key: string) {
+		const entry = this.mediaLayerTextures.get(key);
+		if (!entry || this.imgW <= 0 || this.imgH <= 0) return null;
 		if (entry.w !== this.imgW || entry.h !== this.imgH) {
+			const gl = this.gl;
 			gl.bindTexture(gl.TEXTURE_2D, entry.tex);
 			gl.texImage2D(
 				gl.TEXTURE_2D,
@@ -2323,20 +2403,7 @@ export class GlRenderer {
 			entry.w = this.imgW;
 			entry.h = this.imgH;
 		}
-		const drawn = this.meshPass.draw(
-			sourceId,
-			entry.tex,
-			entry.w,
-			entry.h,
-			meshCamera(
-				turns.map((e) => ({
-					values: e.values as unknown as Transform3dValues,
-					time: this.getEffectTime(e, time, safeDt).time,
-				})),
-			),
-		);
-		gl.bindVertexArray(this.quadVAO);
-		return drawn;
+		return entry;
 	}
 
 	private drawMediaTransition(
@@ -2660,6 +2727,8 @@ export class GlRenderer {
 		this.mediaLayerTextures.clear();
 		this.modelLayers.clear();
 		this.meshPass.dispose();
+		this.sceneLayers.clear();
+		this.scenePass.dispose();
 	}
 
 	private renderCaption(
