@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.9.5](https://github.com/zivavu/OpenMosh/compare/v0.9.4...v0.9.5) (2026-09-29)
+
+
+### Added
+
+* Add Insta Color, 29 photo-app colour grades ([6a0490a](https://github.com/zivavu/OpenMosh/commit/6a0490aa0343b323691956884f78bfce7d4ad8f8))
+* Always loop slideshow images ([63a44f2](https://github.com/zivavu/OpenMosh/commit/63a44f2e2a2ed070e34bb3e757b1d3265aa0e767))
+* Give every moshed 3D model a 3D Transform ([f74c135](https://github.com/zivavu/OpenMosh/commit/f74c13578389a209fb153d51a00fd198efc9a996))
+* Load OBJ and STL 3D models in the editor ([f593f34](https://github.com/zivavu/OpenMosh/commit/f593f347a87824edefdddae747c607a6789b5ea0))
+* Remove the slideshow's per-image preset mode ([8ab6b10](https://github.com/zivavu/OpenMosh/commit/8ab6b108cdd46a599f8be8000ea2f99879ad2bc3))
+* Show eight moshed 3D worlds behind the upload screen ([8208cbd](https://github.com/zivavu/OpenMosh/commit/8208cbdeed39466583a6b35d8d145a737d89bf70))
+* Start slideshows with a beat line already drawn ([177f50c](https://github.com/zivavu/OpenMosh/commit/177f50cce2ebea7816983e6772a52c4a95116e3f))
+* Turn 3D models in depth with the 3D Transform effect ([5f07af2](https://github.com/zivavu/OpenMosh/commit/5f07af2d98aba50c57b1cd213d82132bfa2c7964))
+
+
+### Fixed
+
+* Stop the slideshow preview sticking on one image ([94821b5](https://github.com/zivavu/OpenMosh/commit/94821b554b4f884aa9930793c8ae8fa9c6991989))
+
 ## [0.9.4](https://github.com/zivavu/OpenMosh/compare/v0.9.3...v0.9.4) (2026-09-28)
 
 
