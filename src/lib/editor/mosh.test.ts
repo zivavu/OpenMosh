@@ -4,7 +4,13 @@ import {
 	FREQ_PRESETS,
 	loadInitialEffects,
 } from "../effects";
-import { applyRandomAudioLinks, randomizeParams } from "./mosh";
+import { withSeededRandom } from "./sequence";
+import {
+	applyRandomAudioLinks,
+	generateMosh,
+	randomizeParams,
+	type MoshOptions,
+} from "./mosh";
 
 /** Every link a roll produced, flattened across effects. */
 function rolledLinks(band?: Parameters<typeof applyRandomAudioLinks>[3]) {
@@ -76,5 +82,54 @@ describe("randomizeParams", () => {
 		randomizeParams(values, def);
 		expect(typeof values.a).toBe("number");
 		expect(Number.isFinite(values.a as number)).toBe(true);
+	});
+});
+
+describe("generateMosh for a 3D model", () => {
+	const options: MoshOptions = {
+		moshMin: 2,
+		moshMax: 4,
+		randomizeOrder: true,
+		moshAudioLink: false,
+		moshAudioLinkStrength: 0,
+		hasAudio: false,
+	};
+	const turnOf = (effects: ReturnType<typeof loadInitialEffects>) =>
+		effects.find((e) => e.defId === "transform-3d")!;
+
+	function rolled(seed: number, over: Partial<MoshOptions> = {}) {
+		const effects = loadInitialEffects();
+		withSeededRandom(seed, () =>
+			generateMosh(effects, { ...options, ...over }),
+		);
+		return effects;
+	}
+
+	it("always turns a model, whichever style rolls", () => {
+		for (const moshStyle of ["random", "curated"] as const) {
+			for (let seed = 1; seed <= 20; seed++) {
+				const turn = turnOf(rolled(seed, { model: true, moshStyle }));
+				expect(turn.enabled).toBe(true);
+				expect(Math.abs(turn.values.rotY as number)).toBeLessThanOrEqual(55);
+			}
+		}
+	});
+
+	it("never turns flat media", () => {
+		for (let seed = 1; seed <= 20; seed++) {
+			expect(turnOf(rolled(seed)).enabled).toBe(false);
+		}
+	});
+
+	it("leaves a locked 3D Transform as it was", () => {
+		const effects = loadInitialEffects();
+		const turn = turnOf(effects);
+		turn.locked = true;
+		turn.values.rotY = 90;
+		withSeededRandom(3, () =>
+			generateMosh(effects, { ...options, model: true }),
+		);
+		expect(turn.enabled).toBe(false);
+		expect(turn.values.rotY).toBe(90);
 	});
 });

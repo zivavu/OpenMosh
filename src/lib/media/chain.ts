@@ -4,7 +4,6 @@
 import {
 	clearedChainClip,
 	filledChainClip,
-	laneMoshOptions,
 	rolledChainClip,
 	syncedChainClip,
 	withChainMode,
@@ -15,7 +14,7 @@ import type { MoshSnapshot } from "../editor/mosh-history";
 import { beatsToSeconds, type ChainMode } from "../editor/sequence";
 import type { Preset } from "../effects";
 import { shuffleInPlace } from "../utils";
-import { updateMediaClips } from "./resolve";
+import { clipMoshOptions, updateMediaClips } from "./resolve";
 import type { MediaTimeline } from "./types";
 
 export function setMediaClipsMode(
@@ -34,10 +33,11 @@ export function rollMediaClips(
 	timeline: MediaTimeline,
 	clipIds: Set<string>,
 	options: MoshOptions,
+	isModel?: (sourceId: string) => boolean,
 ): MediaTimeline {
 	// Per lane, as rollFxClips: one Mosh over a selection gives each lane its own.
 	return updateMediaClips(timeline, clipIds, (clip, lane) =>
-		rolledChainClip(clip, laneMoshOptions(lane, options)),
+		rolledChainClip(clip, clipMoshOptions(lane, clip, options, isModel)),
 	);
 }
 

@@ -6,6 +6,7 @@ import {
 	type FreqBand,
 	type VolumeLink,
 } from "../effects";
+import { TRANSFORM_3D_ID } from "../mesh/camera";
 import { shuffleInPlace } from "../utils";
 import type { Family } from "../effects/curation";
 import { curationOf } from "../effects/curation";
@@ -29,6 +30,8 @@ export interface MoshOptions {
 	hasAudio: boolean;
 	/** When true, only enabled effects are included in random mosh. */
 	onlyMoshEnabled?: boolean;
+	/** Rolling for a 3D model: a 3D Transform always comes along to turn it. */
+	model?: boolean;
 }
 
 /** Effects a roll may touch; locked ones are protected by the user. */
@@ -160,6 +163,7 @@ export function generateMosh(
 	} else {
 		rollRandom(effects, moshable, target, randomizeOrder);
 	}
+	if (options.model) turnModel(effects);
 
 	if (moshAudioLink) {
 		applyRandomAudioLinks(
@@ -173,6 +177,16 @@ export function generateMosh(
 			if (effect.volumeLinks && isMoshable(effect)) delete effect.volumeLinks;
 		}
 	}
+}
+
+/** On top of the roll, not part of it: 3D Transform stays out of flat media's moshes. */
+function turnModel(effects: EffectInstance[]): void {
+	const turn = effects.find((e) => e.defId === TRANSFORM_3D_ID);
+	if (!turn || turn.locked) return;
+	const def = getDefinition(turn.defId);
+	if (!def) return;
+	turn.enabled = true;
+	randomizeParams(turn.values, def);
 }
 
 function rollRandom(

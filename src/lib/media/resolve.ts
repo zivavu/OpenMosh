@@ -153,17 +153,34 @@ export type MediaChainSource = (
 	time: number,
 ) => EffectInstance[];
 
+/** The options a media clip rolls under: its lane's, flagged when it shows a model. */
+export function clipMoshOptions(
+	lane: MediaLane,
+	clip: MediaClip,
+	options: MoshOptions,
+	isModel?: (sourceId: string) => boolean,
+): MoshOptions {
+	const laneOptions = laneMoshOptions(lane, options);
+	const sourceId = clipSourceId(lane, clip);
+	return sourceId && isModel?.(sourceId)
+		? { ...laneOptions, model: true }
+		: laneOptions;
+}
+
 /** Clip → chain resolver, one per preview and one per export. Static clips hand
  * back their own chain; interval clips roll per tick through a cache. */
 export function createMediaChainSource(
 	getMoshOptions: () => MoshOptions,
-	{ clone = false } = {},
+	{
+		clone = false,
+		isModel,
+	}: { clone?: boolean; isModel?: (sourceId: string) => boolean } = {},
 ): MediaChainSource {
 	const cache = new Map<string, EffectInstance[]>();
 	// Each lane rolls under its own settings, so an auto clip never borrows another's.
 	return (lane, clip, time) =>
 		chainClipEffectsAt(clip, time, cache, clone, () =>
-			laneMoshOptions(lane, getMoshOptions()),
+			clipMoshOptions(lane, clip, getMoshOptions(), isModel),
 		);
 }
 
