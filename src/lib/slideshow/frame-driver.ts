@@ -1,5 +1,5 @@
 import type { MoshOptions } from "../editor/mosh";
-import { loadPresets, type EffectInstance, type Preset } from "../effects";
+import type { EffectInstance } from "../effects";
 import type { GlRenderer, SourceImage } from "../gl/renderer";
 import { beatAtTime } from "./beat-clock";
 import { cloneEffects, computeEffectsForBeat } from "./sequencer";
@@ -50,8 +50,6 @@ export class SlideshowFrameDriver {
 
 	#smoothState: { effects: EffectInstance[] };
 	#effects: EffectInstance[];
-	/** Presets are read once per run: 'per-image' mode resolves one every beat. */
-	#presets: Preset[] | null = null;
 	#lastBeatIndex = -1;
 	#currentSlideId: string | null = null;
 	#disposed = false;
@@ -109,11 +107,9 @@ export class SlideshowFrameDriver {
 			this.#lastBeatIndex = beatIndex;
 			this.#effects = computeEffectsForBeat(
 				config,
-				slide,
 				this.#baseEffects,
 				this.#smoothState,
 				this.#getMoshOptions(),
-				this.#resolvePresets(),
 			);
 		}
 
@@ -141,10 +137,5 @@ export class SlideshowFrameDriver {
 			if (!this.#disposed) this.#getRenderer().updateSourceFrame(frame);
 			frame.close();
 		});
-	}
-
-	#resolvePresets(): Preset[] {
-		if (!this.#presets) this.#presets = loadPresets();
-		return this.#presets;
 	}
 }

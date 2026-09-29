@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Camera, X, Play, Palette } from "lucide-svelte";
-	import type { SlideshowSlide, SlideshowConfig } from "../../slideshow/types";
-	import type { Preset } from "../../effects";
+	import type { SlideshowSlide } from "../../slideshow/types";
 	import type { ProxyAction } from "../../video/proxy-status";
 	import { lazy } from "../../lazy";
 	import { createLightbox } from "../ui/lightbox.svelte";
@@ -14,29 +13,23 @@
 
 	interface Props {
 		slides: SlideshowSlide[];
-		config: SlideshowConfig;
-		presets: Preset[];
 		onAddFiles: (files: FileList) => void;
 		/** Open the image generator, which adds what it makes to the pool. */
 		onGenerate: () => void;
 		onSnap: () => void;
 		onRemoveSlide: (id: string) => void;
 		onReorderSlides: (fromIndex: number, toIndex: number) => void;
-		onSetPresetIndex: (slideId: string, presetIndex: number | null) => void;
 		/** Click on a slide's proxy badge, see proxyStatus's `action`. */
 		onProxyAction: (slideId: string, action: ProxyAction["kind"]) => void;
 	}
 
 	let {
 		slides,
-		config,
-		presets,
 		onAddFiles,
 		onGenerate,
 		onSnap,
 		onRemoveSlide,
 		onReorderSlides,
-		onSetPresetIndex,
 		onProxyAction,
 	}: Props = $props();
 
@@ -205,24 +198,6 @@
 					>
 						<X size={12} />
 					</button>
-
-					{#if config.moshMode === "per-image"}
-						<select
-							class="preset-select"
-							value={slide.presetIndex ?? ""}
-							onchange={(e) => {
-								e.stopPropagation();
-								const val = (e.currentTarget as HTMLSelectElement).value;
-								onSetPresetIndex(slide.id, val === "" ? null : +val);
-							}}
-							onclick={(e) => e.stopPropagation()}
-						>
-							<option value="">Default</option>
-							{#each presets as preset, pi}
-								<option value={pi}>{preset.name}</option>
-							{/each}
-						</select>
-					{/if}
 				</div>
 			{/each}
 
@@ -374,19 +349,6 @@
 	.remove-btn:hover {
 		background: rgba(200, 50, 50, 0.8);
 		color: var(--text);
-	}
-
-	.preset-select {
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		padding: 2px 4px;
-		border: none;
-		background: rgba(0, 0, 0, 0.7);
-		color: var(--text);
-		font-size: 0.6rem;
-		font-family: inherit;
 	}
 
 	.empty-actions {

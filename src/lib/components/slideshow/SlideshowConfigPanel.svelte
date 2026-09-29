@@ -109,7 +109,6 @@
 			<option value="random">Random</option>
 			<option value="consistent">Consistent</option>
 			<option value="smooth">Smooth</option>
-			<option value="per-image">Per-image preset</option>
 		</select>
 	</div>
 
