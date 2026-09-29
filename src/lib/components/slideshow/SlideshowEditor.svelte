@@ -1034,30 +1034,20 @@
 	/** Play position of the last slide asked for; eviction measures against it. */
 	let lastRequestedIndex = 0;
 
+	/** The cap each cached bitmap was decoded against. A preview that outgrows it
+	 * re-decodes that slide, showing the smaller bitmap until the new one lands. */
+	const imageCaps = new Map<string, number>();
+	/** Slides decoded ahead of the playhead, so a beat never waits on a decode. */
+	const IMAGE_PREFETCH = 6;
+
 	function dropCachedImage(id: string) {
 		const bitmap = imageCache.get(id);
 		if (!bitmap) return;
 		cachedPixels -= bitmap.width * bitmap.height;
 		bitmap.close();
 		imageCache.delete(id);
+		imageCaps.delete(id);
 	}
-
-	function clearImageCache() {
-		for (const id of [...imageCache.keys()]) dropCachedImage(id);
-		cachedPixels = 0;
-	}
-
-	let cachedCap = 0;
-
-	// Only a preview that outgrows the cached bitmaps forces a re-decode; oversized is fine.
-	$effect(() => {
-		const cap = bitmapCap;
-		untrack(() => {
-			if (cap <= cachedCap) return;
-			clearImageCache();
-			cachedCap = cap;
-		});
-	});
 
 	function evictImages() {
 		// Slides loop in order, so evict the one furthest ahead of the playhead, not the oldest.
@@ -1081,10 +1071,10 @@
 	}
 
 	function loadSlideBitmap(slide: SlideshowSlide): Promise<void> {
-		if (imageCache.has(slide.id)) return Promise.resolve();
+		const cap = bitmapCap;
+		if ((imageCaps.get(slide.id) ?? 0) >= cap) return Promise.resolve();
 		const pending = imageDecodes.get(slide.id);
 		if (pending) return pending;
-		const cap = bitmapCap;
 		const job = fetch(slide.objectUrl)
 			.then((r) => r.blob())
 			.then((blob) => createImageBitmap(blob))
@@ -1105,8 +1095,9 @@
 					bitmap.close();
 					return;
 				}
+				dropCachedImage(slide.id);
 				imageCache.set(slide.id, bitmap);
-				cachedCap = Math.max(cachedCap, cap);
+				imageCaps.set(slide.id, cap);
 				cachedPixels += bitmap.width * bitmap.height;
 				evictImages();
 			})
@@ -1118,11 +1109,15 @@
 
 	function getCachedImage(slide: SlideshowSlide): ImageBitmap | undefined {
 		const at = slides.indexOf(slide);
-		if (at >= 0) lastRequestedIndex = at;
-		const hit = imageCache.get(slide.id);
-		if (hit) return hit;
+		if (at >= 0) {
+			lastRequestedIndex = at;
+			for (let k = 1; k <= IMAGE_PREFETCH && k < slides.length; k++) {
+				const next = slides[(at + k) % slides.length];
+				if (next.kind === "image") void loadSlideBitmap(next);
+			}
+		}
 		void loadSlideBitmap(slide);
-		return undefined;
+		return imageCache.get(slide.id);
 	}
 
 	async function startPreview() {
