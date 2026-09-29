@@ -791,10 +791,15 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		/* Centred while it fits; on a short viewport it falls back to the top so the
+		   stack scrolls instead of clipping. */
 		justify-content: center;
+		justify-content: safe center;
 		height: 100%;
 		gap: 1.75rem;
 		padding: 2rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
 	}
 
 	.github-corner {
@@ -837,6 +842,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 0.75rem;
+		flex-shrink: 0;
 	}
 
 	.title {
@@ -1171,6 +1177,7 @@
 	.panel {
 		width: 100%;
 		max-width: 520px;
+		flex-shrink: 0;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--r-3);
 		background: var(--glass);
@@ -1357,6 +1364,7 @@
 		flex-direction: column;
 		width: 100%;
 		max-width: 520px;
+		flex-shrink: 0;
 		height: calc(1.5rem + var(--row-h) * 5);
 	}
 
@@ -1546,6 +1554,23 @@
 	.saved-when {
 		min-width: 3.6rem;
 		text-align: right;
+	}
+
+	/* Short viewports: tighten the stack so the panel and rack still fit without a
+	   scroll where possible. */
+	@media (max-height: 760px) {
+		.upload-screen {
+			gap: 1.1rem;
+			padding: 1.25rem;
+		}
+
+		.title {
+			font-size: clamp(2rem, 4.5vw, 3.25rem);
+		}
+
+		.recent {
+			--row-h: 1.9rem;
+		}
 	}
 
 	@media (max-width: 800px) {
