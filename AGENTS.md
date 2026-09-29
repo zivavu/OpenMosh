@@ -42,6 +42,8 @@ edit: they eat context fast.
   animation — `ANIMATED_EFFECTS` is derived automatically, no separate registration needed),
   and give it a stage, family and amount param in `src/lib/effects/curation.ts` (the Curated
   mosh style needs it; a test fails without it) unless it's `moshable: false`.
+- Write user-facing UI copy (hints, tooltips, toasts, empty states) through the `/humanizer`
+  skill, the same as changelog text.
 - Never gate motion on `prefers-reduced-motion`. Windows ships with animations off by default, so
   honoring it flattened every animation, glitch effects included.
 - PhotoMosh's code is proprietary: match its effects by how they look and behave, never by
