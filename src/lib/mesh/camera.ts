@@ -4,6 +4,8 @@
 
 const DEG = Math.PI / 180;
 
+export const TRANSFORM_3D_ID = "transform-3d";
+
 export interface Transform3dValues {
 	rotX: number;
 	rotY: number;

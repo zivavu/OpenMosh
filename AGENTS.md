@@ -72,6 +72,10 @@ edit: they eat context fast.
   `AudioManager`.
 - Anything that reads a media layer's texture goes through `mediaLayerSides()`: transitions give
   each lane two textures.
+- 3D models (`lib/mesh/`) are editor-only and stay live meshes, drawn every frame by
+  `MeshPass` inside `GlRenderer`. A model clip's 3D Transforms become its camera and run first,
+  wherever they sit in the chain; `mesh/camera.ts` mirrors the shader, and a test holds them
+  together. No baked turntable clips.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - Chrome never grants `navigator.storage.persist()` on `localhost`, and code can't fix that. Use
