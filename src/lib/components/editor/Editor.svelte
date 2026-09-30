@@ -129,7 +129,6 @@
 		laneAudioResponse,
 		MAX_FX_LANES,
 		restoreFxClipMosh,
-		normalizeFxLanes,
 		rollFxClips,
 		setFxClipsMode,
 		syncFxClipsToPreset,
@@ -198,7 +197,6 @@
 		clipSourceId,
 		mediaTimelineSourceIds,
 		newClipSpan,
-		normalizeMediaTimeline,
 		replaceMediaClip,
 		resolveMediaLayersAt,
 		restoreMediaClipMosh,
@@ -229,6 +227,13 @@
 		prependMediaLane,
 	} from "../../editor/legacy-segments";
 	import { MoshHistory, type MoshSnapshot } from "../../editor/mosh-history";
+	import {
+		readSeqEntry,
+		SEQ_ENTRY_VERSION,
+		type LegacySegmentEntry,
+		type RestoredEntry,
+		type SeqEntry,
+	} from "../../editor/seq-entry";
 	import type { GlRenderer, SourceFit } from "../../gl/renderer";
 	import { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
@@ -996,18 +1001,18 @@
 		if (seqStoreKey !== key) return;
 		loadedTimelineKey = key;
 		if (savedSeq === null) {
-			if (clearOnMissing) restoreFxLanes(undefined);
+			if (clearOnMissing) restoreFxLanes([]);
 			return;
 		}
 		// BPM comes back in both modes; beat-synced effects read it in single mode too.
-		restoreSequenceBpm(savedSeq.bpm ?? 0);
+		restoreSequenceBpm(savedSeq.bpm);
 		if (isSequenceMode) restoreFxLanes(savedSeq.fx);
 		restoreTextTimeline(savedSeq.text);
 		restoreMediaTimeline(savedSeq.media);
 		sourceRegistry.restoreEdits(savedSeq.sourceEdits);
 		// Segments fold into the lanes once the song's length is known.
 		legacySegments =
-			isSequenceMode && savedSeq.segments?.length
+			isSequenceMode && savedSeq.segments.length
 				? { key, segments: savedSeq.segments }
 				: null;
 	}
@@ -1171,39 +1176,6 @@
 	// Beats per minute, feeding the auto clips' re-roll spacing; 0 = not detected yet.
 	let sequenceBpm = $state(0);
 
-	interface SeqEntry {
-		/** Absent on entries saved while the opening file was the segments' implicit media. */
-		v?: number;
-		/** The retired segment lane; folded into the fx and media lanes on load, never saved. */
-		segments?: LegacySegmentEntry[];
-		/** Absent on entries saved before BPM existed. */
-		bpm?: number;
-		/** Absent on entries saved before the text timeline existed. */
-		text?: TextTimeline;
-		/** Absent on entries saved before media layers existed. */
-		media?: MediaTimeline;
-		/** Absent on entries saved before fx lanes existed. */
-		fx?: FxLane[];
-		/** Per-source edits, keyed by source id. Sparse: only edited media. */
-		sourceEdits?: Record<string, SourceEdit>;
-		/** Sequence mode, from v3: the project's own length. Before, the song set it. */
-		length?: number;
-		/** The export span on the project timeline. */
-		span?: { start: number; end: number };
-		/** Library id of the song: the BPM source, and what the library shows as loaded. */
-		song?: string | null;
-	}
-
-	/** Bumped when what a saved entry means changes; see SeqEntry.v. v3 moved the song
-	 * onto an audio lane and gave the project its own length. */
-	const SEQ_ENTRY_VERSION = 3;
-
-	/** As much of a saved segment as the migration reads. */
-	interface LegacySegmentEntry {
-		sourceId?: string;
-		[key: string]: unknown;
-	}
-
 	/** Segments waiting for the song's duration to be folded into the lanes. */
 	let legacySegments = $state<{
 		key: string;
@@ -1257,16 +1229,11 @@
 	let loadedTimelineKey: string | null = null;
 
 	/** Read this mode's entry for a song, falling back to the legacy un-prefixed entry. */
-	async function loadSeqEntry(baseKey: string): Promise<SeqEntry | null> {
+	async function loadSeqEntry(baseKey: string): Promise<RestoredEntry | null> {
 		const entry =
 			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
 			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
-		// Before layers took the media over, a segment with no source drew the opened file.
-		if (entry?.segments && !entry.v) {
-			const opened = stableSourceId(file);
-			for (const seg of entry.segments) seg.sourceId ??= opened;
-		}
-		return entry;
+		return entry && readSeqEntry(entry, stableSourceId(file));
 	}
 
 	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.
@@ -1417,8 +1384,8 @@
 	}
 
 	/** Adopt saved lanes, or clear back to none when a song has none. */
-	function restoreFxLanes(saved: FxLane[] | undefined) {
-		fxLanes = normalizeFxLanes(saved);
+	function restoreFxLanes(lanes: FxLane[]) {
+		fxLanes = lanes;
 		selectedFxClipId = null;
 		selectedFxClipIds = [];
 		selectedFxLaneId = null;
@@ -1883,24 +1850,23 @@
 			pendingInit = { key: storeKey, seed: true };
 			return;
 		}
-		restoreSequenceBpm(saved.bpm ?? 0);
+		restoreSequenceBpm(saved.bpm);
 		restoreFxLanes(saved.fx);
 		restoreTextTimeline(saved.text);
 		restoreMediaTimeline(saved.media);
 		sourceRegistry.restoreEdits(saved.sourceEdits);
-		legacySegments = saved.segments?.length
+		legacySegments = saved.segments.length
 			? { key: storeKey, segments: saved.segments }
 			: null;
-		const length = saved.length ?? 0;
-		if ((saved.v ?? 0) < 3 || length <= 0) {
+		if (saved.length === null) {
 			// Saved while the song was the clock: it becomes a lane once its length is known.
 			pendingInit = { key: storeKey, seed: false };
 			return;
 		}
-		mixer.setDuration(length);
-		if (saved.span && saved.span.end > saved.span.start) {
+		mixer.setDuration(saved.length);
+		if (saved.span) {
 			mixer.spanStart = saved.span.start;
-			mixer.spanEnd = Math.min(saved.span.end, length);
+			mixer.spanEnd = saved.span.end;
 		}
 		if (saved.song !== undefined && saved.song !== currentTrackId) {
 			await loadSong(saved.song);
@@ -3462,9 +3428,9 @@
 	}
 
 	/** Adopt a saved timeline, or clear back to empty when a track has none. */
-	function restoreTextTimeline(saved: TextTimeline | undefined) {
+	function restoreTextTimeline(saved: TextTimeline | null) {
 		textTimeline = saved
-			? layersOffOnMobile(normalizeTextTimeline(saved), "text")
+			? layersOffOnMobile(saved, "text")
 			: { ...EMPTY_TEXT_TIMELINE };
 		selectedTextClipId = null;
 		textHistory.reset();
@@ -3515,9 +3481,9 @@
 	}
 
 	/** Adopt a saved timeline, or clear back to empty. Always on in sequence mode. */
-	function restoreMediaTimeline(saved: MediaTimeline | undefined) {
+	function restoreMediaTimeline(saved: MediaTimeline | null) {
 		mediaTimeline = {
-			...(saved ? normalizeMediaTimeline(saved) : EMPTY_MEDIA_TIMELINE),
+			...(saved ?? EMPTY_MEDIA_TIMELINE),
 			enabled: isSequenceMode,
 		};
 		selectedMediaClipId = null;
