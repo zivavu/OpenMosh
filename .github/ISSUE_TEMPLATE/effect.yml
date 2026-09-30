@@ -1,0 +1,23 @@
+name: Effect request
+description: An effect you'd like to see in OpenMosh.
+labels: [effect]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Effect name
+      placeholder: Pixel Melt
+    validations:
+      required: true
+  - type: textarea
+    id: look
+    attributes:
+      label: What it does
+      description: How it looks and how it moves. Which parameters would you want to turn?
+    validations:
+      required: true
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference
+      description: A screenshot, a video link or an openly licensed shader that shows it. If PhotoMosh has it, a recording of it is the most useful thing here (we don't use their code).

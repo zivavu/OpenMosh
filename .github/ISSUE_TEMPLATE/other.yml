@@ -1,0 +1,15 @@
+name: Something else
+description: An idea, a question or feedback that isn't a bug or an effect.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What's on your mind
+      description: The idea, the question or what you'd change. If it's about a mode (Single, Editor or Slideshow), say which one.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters to you
+      description: What you were trying to do when it came up. Optional, but it helps.
