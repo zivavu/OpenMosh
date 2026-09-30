@@ -38,6 +38,7 @@ export type CustomRender = (
 import type { StreamTargetChunk, VideoCodec } from "mediabunny";
 import type { EffectInstance } from "./effects";
 import type { GlRenderer } from "./gl/renderer";
+import { downloadFile } from "./utils";
 
 /** Bitrate scales with output size: a fixed rate starves big canvases and bloats
  * small ones. Chrome honors the target, Firefox clamps it. */
@@ -732,11 +733,5 @@ export async function recordVideo(opts: RecordOptions): Promise<Blob> {
 }
 
 export function downloadBlob(blob: Blob, ext = "webm") {
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = `openmosh-${Date.now()}.${ext}`;
-	a.click();
-	// Deleting the object URL immediately can cancel the download in some browsers.
-	setTimeout(() => URL.revokeObjectURL(url), 1000);
+	downloadFile(blob, `openmosh-${Date.now()}.${ext}`);
 }

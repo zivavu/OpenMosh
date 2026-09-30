@@ -7,9 +7,13 @@ import { EFFECT_DEFINITIONS } from "./definitions";
 import {
 	applyPreset,
 	deletePreset,
+	importPresets,
 	loadPresets,
 	normalizePresetName,
+	parsePresetFile,
 	PRESET_NAME_MAX_LENGTH,
+	presetFileName,
+	presetsToFile,
 	savePreset,
 	updatePreset,
 } from "./presets";
@@ -327,5 +331,62 @@ describe("every starter preset", () => {
 		for (const preset of STARTER_PRESETS) {
 			expect(preset.name).toBe(normalizePresetName(preset.name));
 		}
+	});
+});
+
+describe("preset files", () => {
+	const known = EFFECT_DEFINITIONS[0].id;
+	const preset: Preset = {
+		name: "Crunch",
+		effects: [{ defId: known, enabled: true, values: {} }],
+	};
+
+	it("round-trips through a file", async () => {
+		const text = await presetsToFile([preset]).text();
+		expect(parsePresetFile(text)).toEqual([preset]);
+	});
+
+	it("names a single-preset file after it", () => {
+		expect(presetFileName([{ ...preset, name: "Deep fry!" }])).toBe(
+			"openmosh-Deep-fry.json",
+		);
+		expect(presetFileName([preset, preset])).toBe("openmosh-presets.json");
+	});
+
+	it("rejects files that aren't preset files", () => {
+		expect(() => parsePresetFile("not json")).toThrow();
+		expect(() => parsePresetFile(JSON.stringify({ presets: [] }))).toThrow();
+	});
+
+	it("drops unknown effects and presets left empty", () => {
+		const text = JSON.stringify({
+			format: "openmosh-presets",
+			version: 1,
+			presets: [
+				{
+					name: "Mixed",
+					effects: [
+						{ defId: "from-the-future", enabled: true, values: {} },
+						{ defId: known, values: {} },
+					],
+				},
+				{ name: "Gone", effects: [{ defId: "from-the-future", values: {} }] },
+			],
+		});
+		const parsed = parsePresetFile(text);
+		expect(parsed.map((p) => p.name)).toEqual(["Mixed"]);
+		expect(parsed[0].effects).toEqual([
+			{ defId: known, enabled: true, values: {} },
+		]);
+	});
+
+	it("numbers imported names that are taken", () => {
+		ls.store.set(PRESETS_KEY, JSON.stringify([preset]));
+		const after = importPresets([preset, preset]);
+		expect(after.map((p) => p.name)).toEqual([
+			"Crunch",
+			"Crunch (2)",
+			"Crunch (3)",
+		]);
 	});
 });
