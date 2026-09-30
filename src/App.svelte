@@ -7,6 +7,7 @@
 
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
+	import { openProjectFile } from "./lib/project-file/import";
 	import { openSession, type SingleSessionState } from "./lib/editor/sessions";
 	import {
 		forgetLastOpened,
@@ -217,6 +218,22 @@
 		return true;
 	}
 
+	/** Import a `.openmosh` file as a new project, then open it the normal way. */
+	async function openProjectFromFile(file: File) {
+		try {
+			const key = await openProjectFile(file);
+			if (!(await openSequenceFromSong(key))) {
+				showToast("That project has no media to open", "error");
+			}
+		} catch (e) {
+			showToast(
+				e instanceof Error ? e.message : "Couldn't open that project file",
+				"error",
+				8000,
+			);
+		}
+	}
+
 	/** Whether the current route has its media, or would fall through to the upload screen. */
 	function editorOpen(): boolean {
 		if (view === "sequence") return sequenceFiles.length > 0;
@@ -359,6 +376,7 @@
 					showToast("That song's media is no longer stored", "error");
 				}
 			}}
+			onProjectFile={openProjectFromFile}
 			onSessionOpen={async (mode: SessionMode, key: string) => {
 				if (!(await openSessionByKey(mode, key))) {
 					showToast("That session's media is no longer stored", "error");

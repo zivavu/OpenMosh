@@ -26,6 +26,11 @@ const SAVE_FRAME: ShortcutRow = {
 	description: "Save the frame on screen as an image",
 };
 
+const SAVE_PROJECT: ShortcutRow = {
+	keys: ["Ctrl/Cmd+Shift+S"],
+	description: "Save the whole project as a file",
+};
+
 const FULLSCREEN: ShortcutRow = {
 	keys: ["F"],
 	description: "Fullscreen preview; Esc leaves it",
@@ -180,6 +185,7 @@ export function editorShortcutGroups(opts: {
 				...(sequence ? [] : [MOSH]),
 				...UNDO,
 				SAVE_FRAME,
+				...(sequence ? [SAVE_PROJECT] : []),
 				...(sequence
 					? []
 					: [

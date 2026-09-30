@@ -4,6 +4,8 @@
 		onSequence: (files: File[]) => void;
 		/** Reopen a song's saved sequence, no media picking needed. */
 		onSequenceFromSong: (trackId: string) => void;
+		/** A `.openmosh` file dropped or picked; the app imports and opens it. */
+		onProjectFile: (file: File) => void;
 		onSessionOpen: (mode: SessionMode, key: string) => void;
 		onSlideshow: (files: File[]) => void;
 		onaudio?: (file: File) => void;
@@ -14,6 +16,7 @@
 
 	import {
 		Camera,
+		FolderOpen,
 		HardDrive,
 		Image,
 		ListVideo,
@@ -73,6 +76,7 @@
 		onfile,
 		onSequence,
 		onSequenceFromSong,
+		onProjectFile,
 		onSessionOpen,
 		onSlideshow,
 		onaudio,
@@ -256,6 +260,7 @@
 		setProjectName(row.projectKey, name);
 		projectNames = readProjectNames();
 	}
+
 	let dragging = $state(false);
 
 	const AUDIO_TYPES = [
@@ -269,6 +274,18 @@
 	let pendingAudio = $state<File | null>(null);
 	let audioDragging = $state(false);
 	let audioInput = $state<HTMLInputElement>(undefined!);
+	let projectInput = $state<HTMLInputElement>(undefined!);
+
+	function openProjectPicker() {
+		projectInput.click();
+	}
+
+	function onProjectInputChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (file) onProjectFile(file);
+		input.value = "";
+	}
 
 	const ACCEPTED_TYPES = [
 		"image/png",
@@ -304,6 +321,11 @@
 		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 	}
 
+	/** A saved project file; it opens the Editor whatever mode is showing. */
+	function isProjectFile(file: File) {
+		return file.name.toLowerCase().endsWith(".openmosh");
+	}
+
 	function isAudioFile(file: File) {
 		return AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/");
 	}
@@ -323,6 +345,10 @@
 	}
 
 	function handleFile(file: File) {
+		if (isProjectFile(file)) {
+			onProjectFile(file);
+			return;
+		}
 		if (!isAcceptedFile(file)) {
 			rejectFile(file);
 			return;
@@ -332,6 +358,11 @@
 
 	function handleMultiFiles(files: FileList | File[]) {
 		const all = Array.from(files);
+		const project = all.find(isProjectFile);
+		if (project) {
+			onProjectFile(project);
+			return;
+		}
 		const accepted = all.filter((f) => isAcceptedFile(f));
 		if (accepted.length === 0) {
 			if (all.length === 1) rejectFile(all[0]);
@@ -433,9 +464,16 @@
 		const files = e.dataTransfer?.files;
 		if (!files || files.length === 0) return;
 
+		// A project file opens the Editor whatever mode is showing.
+		const all = Array.from(files);
+		const project = all.find(isProjectFile);
+		if (project) {
+			onProjectFile(project);
+			return;
+		}
+
 		// A track dropped on the media zone is likelier a track than a mistake, so route
 		// by what landed.
-		const all = Array.from(files);
 		const audio = all.filter(isAudioFile);
 		const media = all.filter((f) => !isAudioFile(f));
 		if (audio.length > 0) handleAudioFile(audio[0]);
@@ -465,6 +503,13 @@
 		const input = e.target as HTMLInputElement;
 		if (!input.files || input.files.length === 0) return;
 
+		const project = Array.from(input.files).find(isProjectFile);
+		if (project) {
+			onProjectFile(project);
+			input.value = "";
+			return;
+		}
+
 		if (isMultiMode) {
 			handleMultiFiles(input.files);
 		} else {
@@ -475,7 +520,12 @@
 
 	function getAcceptTypes() {
 		const models = selectedMode === "sequence" ? [MESH_ACCEPT] : [];
-		return [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS, ...models].join(",");
+		return [
+			...ACCEPTED_TYPES,
+			...ACCEPTED_EXTENSIONS,
+			...models,
+			".openmosh",
+		].join(",");
 	}
 	function getIsMultiple() {
 		return isMultiMode;
@@ -627,6 +677,16 @@
 						Webcam
 					</button>
 				{/if}
+				{#if selectedMode === "sequence"}
+					<button
+						class="load-btn generate-btn"
+						onclick={openProjectPicker}
+						onkeydown={(e) => e.stopPropagation()}
+					>
+						<FolderOpen size={16} />
+						Open project
+					</button>
+				{/if}
 			</div>
 
 			<p class="drop-hint" class:staged={stagedMedia}>
@@ -634,7 +694,8 @@
 					{stagedMedia.length} file{stagedMedia.length === 1 ? "" : "s"} ready. Add
 					a song to start.
 				{:else if selectedMode === "sequence"}
-					or drop images, videos and 3D models anywhere on this panel
+					or drop images, videos, 3D models or a project file anywhere on this
+					panel
 				{:else if isMultiMode}
 					or drop images and videos anywhere on this panel
 				{:else}
@@ -702,6 +763,14 @@
 		type="file"
 		accept={AUDIO_TYPES.join(",")}
 		onchange={onAudioInputChange}
+		hidden
+	/>
+
+	<input
+		bind:this={projectInput}
+		type="file"
+		accept=".openmosh"
+		onchange={onProjectInputChange}
 		hidden
 	/>
 
@@ -1287,7 +1356,7 @@
 
 	/* What this mode does, as the panel's first line. */
 	.panel-hint {
-		max-width: 40ch;
+		max-width: 70ch;
 		margin: 0 0 0.35rem;
 		font-size: 0.82rem;
 		line-height: 1.5;
