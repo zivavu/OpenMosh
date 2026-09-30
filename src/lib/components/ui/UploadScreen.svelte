@@ -376,6 +376,30 @@
 		else handleFile(files[0]);
 	}
 
+	/** One click in with no file: a random generated batch, sized for the mode. */
+	let sampling = $state(false);
+	async function trySample() {
+		if (sampling) return;
+		sampling = true;
+		try {
+			const gen = await import("../../generators");
+			const count = { single: 1, sequence: 3, slideshow: 8 }[selectedMode];
+			const specs = gen.planBatch(gen.randomSeed(), {
+				count,
+				variety: "wild",
+				kind: "gradient",
+				palette: null,
+			});
+			const { width, height } = gen.ratioSize("16:9", gen.GENERATED_SHORT_SIDE);
+			useGenerated(await gen.specsToFiles(specs, width, height));
+		} catch (err) {
+			console.error(err);
+			showToast("Couldn't make a sample image", "error");
+		} finally {
+			sampling = false;
+		}
+	}
+
 	// Single mode's live camera. Wrapped as a file, so it takes the same road in.
 	const loadWebcamPanel = lazy(() => import("../webcam/WebcamPanel.svelte"));
 	let webcamOpen = $state(false);
@@ -617,6 +641,12 @@
 					or drop an image or video anywhere on this panel
 				{/if}
 			</p>
+
+			{#if !stagedMedia}
+				<button class="sample-btn" onclick={trySample} disabled={sampling}>
+					{sampling ? "Making a sample…" : "No file handy? Try a sample"}
+				</button>
+			{/if}
 		</div>
 
 		{#if pendingAudio}
@@ -1322,6 +1352,27 @@
 
 	.panel.dragging .drop-hint {
 		color: var(--live);
+	}
+
+	.sample-btn {
+		align-self: center;
+		padding: 0.2rem 0.4rem;
+		border: none;
+		background: none;
+		color: var(--text-3);
+		font-size: 0.78rem;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+		transition: color var(--t);
+	}
+
+	.sample-btn:hover:not(:disabled) {
+		color: var(--text);
+	}
+
+	.sample-btn:disabled {
+		cursor: progress;
 	}
 
 	/* Media is picked and waiting on the song: a live state, in the mosh colour. */
