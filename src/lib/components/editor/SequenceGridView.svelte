@@ -138,7 +138,8 @@
 		<div class="empty-state">
 			<span class="empty-label">NO MEDIA</span>
 			<p>
-				Drop images, videos or 3D models (OBJ, STL) in, or use the button below.
+				Drop images, videos or 3D models (OBJ, STL, GLB, FBX) in, or use the
+				button below.
 			</p>
 			<div class="empty-actions">
 				<button class="add-btn" onclick={() => fileInput?.click()}>
@@ -224,7 +225,7 @@
 			{/each}
 
 			<MediaAddCards
-				addTitle="Add images, videos or 3D models (OBJ, STL) to the pool"
+				addTitle="Add images, videos or 3D models (OBJ, STL, GLB, FBX) to the pool"
 				recordTitle="Record a webcam take to the song, from the playhead"
 				onAdd={() => fileInput?.click()}
 				{onGenerate}

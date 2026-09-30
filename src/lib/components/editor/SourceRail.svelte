@@ -257,7 +257,7 @@
 			<button
 				class="rail-add"
 				onclick={onAdd}
-				title="Add images, videos or 3D models (OBJ, STL)"
+				title="Add images, videos or 3D models (OBJ, STL, GLB, FBX)"
 			>
 				<Plus size={13} />
 			</button>

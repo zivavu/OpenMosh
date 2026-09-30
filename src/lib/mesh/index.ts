@@ -1,10 +1,12 @@
-import type { Mesh } from "./mesh";
+import { parseFbx } from "./fbx";
+import { parseGlb } from "./glb";
+import type { Mesh, Skin } from "./mesh";
 import { parseObj } from "./obj";
 import { parseStl } from "./stl";
 
-export type { Mesh };
+export type { Mesh, Skin };
 
-export const MESH_EXTENSIONS = [".obj", ".stl"];
+export const MESH_EXTENSIONS = [".obj", ".stl", ".glb", ".fbx"];
 /** For a file input's `accept`. */
 export const MESH_ACCEPT = MESH_EXTENSIONS.join(",");
 
@@ -34,11 +36,37 @@ export function asMeshFile(file: File): File {
 /** Null for a file with no drawable triangles. */
 export async function parseMesh(file: File): Promise<Mesh | null> {
 	try {
-		if (extension(file.name) === ".stl") {
-			return parseStl(new Uint8Array(await file.arrayBuffer()));
+		const mesh = await parseByExtension(file);
+		if (mesh?.image) {
+			mesh.texture = await decodeTexture(mesh.image).catch(() => null);
+			mesh.image = null;
+			// A texture that won't decode leaves the model in its material colours.
+			if (!mesh.texture) mesh.uvs = null;
 		}
-		return parseObj(await file.text());
+		return mesh;
 	} catch {
 		return null;
 	}
+}
+
+async function parseByExtension(file: File): Promise<Mesh | null> {
+	switch (extension(file.name)) {
+		case ".stl":
+			return parseStl(new Uint8Array(await file.arrayBuffer()));
+		case ".glb":
+			return parseGlb(new Uint8Array(await file.arrayBuffer()));
+		case ".fbx":
+			return parseFbx(new Uint8Array(await file.arrayBuffer()));
+		default:
+			return parseObj(await file.text());
+	}
+}
+
+function decodeTexture(
+	image: NonNullable<Mesh["image"]>,
+): Promise<ImageBitmap> {
+	return createImageBitmap(
+		new Blob([image.bytes as BlobPart], { type: image.mime }),
+		{ premultiplyAlpha: "none", colorSpaceConversion: "none" },
+	);
 }

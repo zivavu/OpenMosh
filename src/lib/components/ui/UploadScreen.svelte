@@ -544,8 +544,8 @@
 					A pile of media and a track. It finds the BPM and cuts on the beat.
 				{:else if selectedMode === "sequence"}
 					Your song on a timeline. The media goes on layers, cut into clips with
-					their own effects; FX lanes mosh the whole frame. 3D models (OBJ, STL)
-					work here too.
+					their own effects; FX lanes mosh the whole frame. 3D models (OBJ, STL,
+					GLB, FBX) work here too.
 				{:else}
 					One image or video. Mosh it, then lock whatever survived and roll
 					again.
