@@ -56,6 +56,23 @@ describe("resolveMediaLayersAt", () => {
 		expect(resolveMediaLayersAt(t, 1)?.[0].sourceTime).toBe(11);
 	});
 
+	it("walks the source at the clip's speed, from its in-point", () => {
+		const lane = laneWith([[2, 6, 1]]);
+		const t = timelineOf([
+			{ ...lane, clips: [{ ...lane.clips[0], speed: 2 }] },
+		]);
+		expect(resolveMediaLayersAt(t, 3.5)[0].sourceTime).toBe(4);
+	});
+
+	it("keeps a clip's speed through a save round-trip, held to the range", () => {
+		const lane = laneWith([[0, 4]]);
+		const raw = JSON.parse(JSON.stringify(timelineOf([lane])));
+		raw.lanes[0].clips[0].speed = 16;
+		expect(normalizeMediaTimeline(raw).lanes[0].clips[0].speed).toBe(4);
+		raw.lanes[0].clips[0].speed = 1;
+		expect(normalizeMediaTimeline(raw).lanes[0].clips[0].speed).toBeUndefined();
+	});
+
 	it("keys by lane, not by clip, so a cut doesn't drop the texture", () => {
 		const lane = laneWith([
 			[0, 1],
@@ -139,6 +156,16 @@ describe("splitMediaClipAt", () => {
 		expect(split.clips.map((c) => [c.start, c.end, c.sourceStart])).toEqual([
 			[0, 3, 5],
 			[3, 4, 8],
+		]);
+	});
+
+	it("carries the source position at the clip's speed", () => {
+		const lane = laneWith([[0, 4, 5]]);
+		const slow = { ...lane, clips: [{ ...lane.clips[0], speed: 0.5 }] };
+		const split = splitMediaClipAt(slow, 3);
+		expect(split.clips.map((c) => [c.sourceStart, c.speed])).toEqual([
+			[5, 0.5],
+			[6.5, 0.5],
 		]);
 	});
 

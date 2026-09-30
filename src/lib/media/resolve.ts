@@ -16,6 +16,7 @@ import {
 } from "./transition";
 import { audioLaneSourceIds, trackIdOf, type AudioLane } from "../mix/types";
 import {
+	mediaClipSpeed,
 	mediaClipWeight,
 	type MediaClip,
 	type MediaLane,
@@ -184,6 +185,20 @@ export function createMediaChainSource(
 		);
 }
 
+/** Seconds into the clip's media at timeline `time`. */
+function clipSourceTime(
+	clip: MediaClip,
+	sourceId: string,
+	time: number,
+	edits?: Record<string, SourceEdit>,
+): number {
+	return sourceTimeAt(
+		edits?.[sourceId],
+		(time - clip.start) * mediaClipSpeed(clip),
+		clip.sourceStart,
+	);
+}
+
 /** The media layers visible at `time`, in lane order. Preview and export both go
  * through here. Without `chains`, every clip contributes its stored chain. */
 export function resolveMediaLayersAt(
@@ -217,11 +232,7 @@ export function resolveMediaLayersAt(
 									key: laneClipKey(lane, index - 1),
 									clipId: prev.id,
 									sourceId: prevSource,
-									sourceTime: sourceTimeAt(
-										edits?.[prevSource],
-										time - prev.start,
-										prev.sourceStart,
-									),
+									sourceTime: clipSourceTime(prev, prevSource, time, edits),
 									effects: chains ? chains(lane, prev, time) : prev.effects,
 								}
 							: null,
@@ -237,11 +248,7 @@ export function resolveMediaLayersAt(
 			clipId: clip.id,
 			z: lane.z,
 			sourceId,
-			sourceTime: sourceTimeAt(
-				edits?.[sourceId],
-				time - clip.start,
-				clip.sourceStart,
-			),
+			sourceTime: clipSourceTime(clip, sourceId, time, edits),
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
 			effects: chains ? chains(lane, clip, time) : clip.effects,

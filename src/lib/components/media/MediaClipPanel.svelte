@@ -7,7 +7,10 @@
 		hasAnimation,
 		isFullCrop,
 		MEDIA_FIT_OPTIONS,
+		mediaClipSpeed,
 		sourceSpan,
+		SPEED_MAX,
+		SPEED_MIN,
 		type MediaClip,
 		type MediaLane,
 		type MediaStyle,
@@ -177,6 +180,16 @@
 		onBeforeEdit?.(`media-in-${clip.id}`);
 		onClipChange({ ...clip, sourceStart: v });
 	}
+
+	let speed = $derived(clip ? mediaClipSpeed(clip) : 1);
+
+	/** Log₂ track, as the media edit dialog's: 1× sits at the centre, snapped to. */
+	function setSpeedFromTrack(v: number) {
+		if (!clip) return;
+		const next = Math.abs(v) < 0.08 ? 1 : 2 ** v;
+		onBeforeEdit?.(`media-speed-${clip.id}`);
+		onClipChange({ ...clip, speed: next === 1 ? undefined : next });
+	}
 </script>
 
 <ClipPanel
@@ -250,6 +263,25 @@
 						oninput={setSourceStart}
 					/>
 					<span class="val">{(clip.sourceStart % length).toFixed(1)}s</span>
+				</div>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="row"
+					title="How fast the model's animation plays. Double-click to reset."
+					ondblclick={() => setSpeedFromTrack(0)}
+				>
+					<label for="mc-speed">Speed</label>
+					<RangeSlider
+						id="mc-speed"
+						value={Math.log2(speed)}
+						min={Math.log2(SPEED_MIN)}
+						max={Math.log2(SPEED_MAX)}
+						step={0.05}
+						oninput={setSpeedFromTrack}
+					/>
+					<span class="val">
+						{speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)}×
+					</span>
 				</div>
 			{/if}
 
