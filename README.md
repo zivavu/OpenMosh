@@ -70,7 +70,7 @@ The chain runs one full-screen shader pass per enabled effect, so cost scales wi
 
 ## Privacy
 
-Your media never leaves the machine. There is no backend, no account and no upload — files are read straight off disk into the page, everything renders locally, and the export is written by your own browser. Sessions, saved sequences and your track library live in IndexedDB and localStorage on your device.
+Your media never leaves the machine. There is no backend, no account and no upload — files are read straight off disk into the page, everything renders locally, and the export is written by your own browser. Sessions, saved sequences and your track library live in IndexedDB and localStorage on your device. After the first visit the app keeps a copy of itself, so it opens and runs offline too.
 
 ---
 

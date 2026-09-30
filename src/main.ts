@@ -30,6 +30,13 @@ function reportUncaught(reason: unknown) {
 window.addEventListener("error", (e) => reportUncaught(e.error ?? e.message));
 window.addEventListener("unhandledrejection", (e) => reportUncaught(e.reason));
 
+// The offline copy; dev serves unbundled modules, which it can't list.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+	window.addEventListener("load", () => {
+		navigator.serviceWorker.register("/sw.js").catch(() => {});
+	});
+}
+
 mount(App, {
 	target: document.getElementById("app")!,
 });
