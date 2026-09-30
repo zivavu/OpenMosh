@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createSourceEdit } from "../media/source-edit";
 import { normalizeMediaTimeline } from "../media/types";
 import {
 	createAudioClip,
@@ -39,6 +40,18 @@ describe("splitAudioClipAt", () => {
 		const lane = createAudioLane("Voice");
 		lane.clips = [createAudioClip(2, 10, null)];
 		expect(splitAudioClipAt(lane, 11)).toBe(lane);
+	});
+
+	it("walks a video's sound at the picture's speed, inside its trim", () => {
+		const lane = createAudioLane("Voice");
+		lane.clips = [createAudioClip(0, 10, "vid", 0)];
+		const edit = {
+			...createSourceEdit(),
+			speed: 2,
+			span: { start: 1, end: 5 },
+		};
+		const right = splitAudioClipAt(lane, 1.5, { vid: edit }).clips[1];
+		expect(right.sourceStart).toBe(4);
 	});
 });
 

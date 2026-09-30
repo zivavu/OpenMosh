@@ -9,6 +9,7 @@
 	} from "../../mix/clipboard";
 	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import { repeatNote, type MixSegment } from "../../mix/plan";
+	import type { SourceEdit } from "../../media/source-edit";
 	import ClipRepeats from "./ClipRepeats.svelte";
 	import {
 		createAudioClip,
@@ -46,6 +47,8 @@
 		onSetBpmSource?: (sourceId: string) => void;
 		/** Where each clip's sound starts over, if it does. */
 		repeatsOf?: (clip: AudioClip) => number[];
+		/** Per-source edits, so a video's sound splits where its picture would. */
+		edits?: Record<string, SourceEdit>;
 		/** Where a clip's sound runs out, measured as if it ran to `until`: snap targets. */
 		sourceEndsOf?: (clip: AudioClip, until: number) => number[];
 		/** Sits under the layer rows, whatever their stacking. */
@@ -67,6 +70,7 @@
 		bpmSourceId = null,
 		onSetBpmSource,
 		repeatsOf = () => [],
+		edits = {},
 		sourceEndsOf,
 		orderBase,
 		foldedLaneIds = NO_FOLDS,
@@ -98,7 +102,7 @@
 				selectedClipIds = v;
 			},
 			createClip: (start, end) => createAudioClip(start, end, null),
-			splitClipAt: splitAudioClipAt,
+			splitClipAt: (lane, at) => splitAudioClipAt(lane, at, edits),
 			// Sound comes in as files, never as an empty clip drawn on the lane.
 			clipSpanAt: () => null,
 			copy: copySelection,

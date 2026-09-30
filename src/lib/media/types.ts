@@ -19,7 +19,12 @@ import {
 	type LaneAudio,
 } from "../mix/types";
 
-import { SPEED_MAX, SPEED_MIN } from "./source-edit";
+import {
+	sourceTimeAt,
+	SPEED_MAX,
+	SPEED_MIN,
+	type SourceEdit,
+} from "./source-edit";
 import { normalizeClipTransition, type ClipTransition } from "./transition";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
@@ -166,15 +171,23 @@ export function mediaClipWeight(clip: MediaClip, time: number): number {
 }
 
 /** Cut the clip covering `at` into two. The right half picks up the source time
- * the left reached. */
-export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
+ * the left reached, walked at its source's speed and trim. */
+export function splitMediaClipAt(
+	lane: MediaLane,
+	at: number,
+	edits?: Record<string, SourceEdit>,
+): MediaLane {
 	return splitChainClipAt(
 		lane,
 		at,
 		() => nextId("mclip"),
 		(half, clip) => ({
 			...half,
-			sourceStart: clip.sourceStart + (at - clip.start) * mediaClipSpeed(clip),
+			sourceStart: sourceTimeAt(
+				edits?.[clip.sourceId ?? lane.sourceId ?? ""],
+				(at - clip.start) * mediaClipSpeed(clip),
+				clip.sourceStart,
+			),
 			transition: undefined,
 		}),
 	);
