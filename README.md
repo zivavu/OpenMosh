@@ -22,7 +22,7 @@ bun test           # Unit suite (bun:test)
 bun test:e2e       # End-to-end suite (Playwright, tests/e2e)
 ```
 
-Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxing, `essentia.js` does the BPM detection.
+Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxing; BPM detection is our own, with no dependencies.
 
 ---
 
@@ -115,7 +115,7 @@ Leave `version` in `package.json` and `CHANGELOG.md` alone. [release-please](htt
 
 ## Credits
 
-[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp, cross zoom and cube transitions in the upload-screen demo come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, [essentia.js](https://mtg.github.io/essentia.js/) the BPM detection, and [lucide](https://lucide.dev/) the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
+[PhotoMosh](https://photomosh.com/) is what this is chasing. A number of effects are ports: from [X-PostProcessing-Library](https://github.com/QianMo/X-PostProcessing-Library) (RGB Burst, Screen Jump, Sobel Neon) and [Vidvox's ISF-Files](https://github.com/Vidvox/ISF-Files) (HSV Swap, RGB Strobe, Trio Tone, Circle Warp, Pixel Shifter, Ring Warp, Shockwave, Ghosting, Fast Mosh, Resize Glitch, Stylize Glitch, Motion Mask), and the crosswarp, cross zoom and cube transitions in the upload-screen demo come from [gl-transitions](https://gl-transitions.com/), all MIT. [mediabunny](https://github.com/Vanilagy/mediabunny) does the muxing and the proxy transcodes, and [lucide](https://lucide.dev/) the icons. Type is Archivo and JetBrains Mono via [Fontsource](https://fontsource.org/), plus the display faces in `public/fonts`, all under the SIL Open Font License.
 
 ---
 

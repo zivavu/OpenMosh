@@ -7,8 +7,6 @@ export interface BpmResult {
 	offset: number;
 }
 
-const TARGET_SAMPLE_RATE = 44100;
-
 let worker: Worker | null = null;
 let nextRequestId = 1;
 
@@ -21,26 +19,16 @@ function getWorker(): Worker {
 	return worker;
 }
 
-async function getMonoSamples(audioFile: File): Promise<Float32Array> {
-	const audioBuffer = await getDecodedAudioBuffer(audioFile);
-	if (
-		audioBuffer.sampleRate === TARGET_SAMPLE_RATE &&
-		audioBuffer.numberOfChannels === 1
-	) {
-		return audioBuffer.getChannelData(0).slice();
+/** Channels averaged down to one; the detector runs at the file's own rate. */
+function getMonoSamples(audioBuffer: AudioBuffer): Float32Array {
+	const mono = audioBuffer.getChannelData(0).slice();
+	const channels = audioBuffer.numberOfChannels;
+	for (let c = 1; c < channels; c++) {
+		const data = audioBuffer.getChannelData(c);
+		for (let i = 0; i < mono.length; i++) mono[i] += data[i];
 	}
-	// Resample + downmix to mono 44 100 Hz via OfflineAudioContext
-	const offlineCtx = new OfflineAudioContext(
-		1,
-		Math.ceil(audioBuffer.duration * TARGET_SAMPLE_RATE),
-		TARGET_SAMPLE_RATE,
-	);
-	const source = offlineCtx.createBufferSource();
-	source.buffer = audioBuffer;
-	source.connect(offlineCtx.destination);
-	source.start(0);
-	const resampled = await offlineCtx.startRendering();
-	return resampled.getChannelData(0).slice();
+	if (channels > 1) for (let i = 0; i < mono.length; i++) mono[i] /= channels;
+	return mono;
 }
 
 export async function detectBpm(
@@ -51,11 +39,11 @@ export async function detectBpm(
 
 	// Audio decoding stays on the main thread; the decoded buffer is usually
 	// cached from an earlier loudness/export pass.
-	const samples = await getMonoSamples(audioFile);
+	const audioBuffer = await getDecodedAudioBuffer(audioFile);
+	const samples = getMonoSamples(audioBuffer);
 	if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-	// Hand off the heavy WASM computation to a persistent worker so repeated
-	// detections don't re-pay the essentia WASM instantiation cost.
+	// Off the main thread: a full song takes about a second.
 	const id = nextRequestId++;
 	const w = getWorker();
 	return new Promise<BpmResult>((resolve, reject) => {
@@ -86,6 +74,8 @@ export async function detectBpm(
 		w.addEventListener("error", onError, { once: true });
 
 		// Transfer the buffer so no copy is needed.
-		w.postMessage({ id, samples }, [samples.buffer]);
+		w.postMessage({ id, samples, sampleRate: audioBuffer.sampleRate }, [
+			samples.buffer,
+		]);
 	});
 }
