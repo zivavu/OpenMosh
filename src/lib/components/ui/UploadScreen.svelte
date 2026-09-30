@@ -32,6 +32,7 @@
 	import VersionTag from "./VersionTag.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
+	import { getCapabilityReport } from "../../capabilities.svelte";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
@@ -483,6 +484,14 @@
 		const file = e.dataTransfer?.files?.[0];
 		if (file) handleAudioFile(file);
 	}
+
+	const compatMessages = $derived.by(() => {
+		const r = getCapabilityReport();
+		if (!r) return [];
+		return [r.blocking, r.exportBlocked, ...r.notes].filter(
+			(m): m is string => !!m,
+		);
+	});
 </script>
 
 <svelte:window onkeydown={onModeKey} />
@@ -501,6 +510,18 @@
 		</h1>
 		<p class="subtitle">Open-source image & video glitching in the browser.</p>
 	</div>
+
+	{#if compatMessages.length > 0}
+		<div
+			class="compat"
+			class:blocking={!!getCapabilityReport()?.blocking}
+			role="status"
+		>
+			{#each compatMessages as message (message)}
+				<p>{message}</p>
+			{/each}
+		</div>
+	{/if}
 
 	{#if !isMobile}
 		<div class="mode-toggle" role="tablist">
@@ -835,6 +856,31 @@
 	.storage-btn:hover {
 		border-color: var(--text-3);
 		color: var(--text);
+	}
+
+	.compat {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		max-width: 34rem;
+		padding: 0.7rem 1rem;
+		border: 1px solid var(--mosh-dim);
+		border-radius: var(--r-2);
+		background: var(--glass);
+		backdrop-filter: var(--blur);
+		color: var(--text-2);
+		font-size: 0.8rem;
+		line-height: 1.45;
+		flex-shrink: 0;
+	}
+
+	.compat.blocking {
+		border-color: var(--rec-dim);
+		color: var(--text);
+	}
+
+	.compat p {
+		margin: 0;
 	}
 
 	.hero {

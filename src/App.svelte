@@ -19,6 +19,7 @@
 	import { gifsToVideo, gifToVideo } from "./lib/media/gif";
 	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
+	import { probeCapabilities } from "./lib/capabilities.svelte";
 
 	// The editors are the bulk of the bundle and none of it is needed to paint the
 	// upload screen, so they load with the route instead of with the app.
@@ -272,6 +273,7 @@
 
 		scheduleWarm();
 		prefetchEditors();
+		void probeCapabilities();
 		if (view !== "upload" && !editorOpen()) void restoreLastOpened();
 
 		return () => {
