@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	depthRange,
 	meshCamera,
+	modelFootprint,
 	modelToWorld,
 	projectToUv,
 	type MeshCamera,
@@ -119,5 +120,35 @@ describe("meshCamera", () => {
 		const { near, far } = depthRange(cam);
 		expect(near).toBeGreaterThan(0);
 		expect(far).toBeGreaterThan(cam.distance + cam.radius);
+	});
+});
+
+describe("modelFootprint", () => {
+	const extent = [0.3, 0.9, 0.2];
+
+	it("is tall for a tall model seen from the front", () => {
+		const f = modelFootprint(meshCamera([]), extent);
+		expect(f.y / f.x).toBeCloseTo(3, 0);
+	});
+
+	it("holds every point of the box, however the model turns", () => {
+		for (const rotY of [0, 30, 75, 140]) {
+			for (const rotX of [0, 40]) {
+				const cam = meshCamera([
+					{ values: { ...base, rotX, rotY, zoom: 1.4 }, time: 0 },
+				]);
+				const f = modelFootprint(cam, extent);
+				for (let i = 0; i < 200; i++) {
+					const p = extent.map((e) => (Math.random() * 2 - 1) * e);
+					const w = modelToWorld(cam, p);
+					expect(Math.abs((cam.focal * w[0]) / w[2])).toBeLessThanOrEqual(
+						f.x + 1e-9,
+					);
+					expect(Math.abs((cam.focal * w[1]) / w[2])).toBeLessThanOrEqual(
+						f.y + 1e-9,
+					);
+				}
+			}
+		}
 	});
 });

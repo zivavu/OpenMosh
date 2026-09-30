@@ -55,6 +55,7 @@ import { ScenePass, type SceneDef } from "./scene-pass";
 import type { Mesh } from "../mesh";
 import {
 	meshCamera,
+	modelFootprint,
 	TRANSFORM_3D_ID,
 	type Transform3dValues,
 } from "../mesh/camera";
@@ -234,6 +235,11 @@ export interface LayerHighlight {
 /** One clear texel; see GlRenderer.clearSource. */
 const CLEAR_PIXEL = new Uint8Array([0, 0, 0, 0]);
 
+/** Model boxes grow in steps of this many pixels. */
+const MODEL_BOX_STEP = 16;
+/** A model's texture is at most this many times the frame's longer side. */
+const MODEL_MAX_TEXTURE = 2;
+
 export class GlRenderer {
 	private gl: WebGL2RenderingContext;
 	private quadVAO: WebGLVertexArrayObject;
@@ -334,6 +340,8 @@ export class GlRenderer {
 	private mediaLayerTextures = new Map<string, OverlayTexture>();
 	/** Lanes showing a 3D model, and which one; their texture is redrawn every frame. */
 	private modelLayers = new Map<string, string>();
+	/** A model lane's box in frame pixels, before the lane's scale; set as it draws. */
+	private modelBoxes = new Map<string, { w: number; h: number }>();
 	private meshPass: MeshPass;
 	/** Lanes drawing part of a procedural scene instead of media. */
 	private sceneLayers = new Map<string, { scene: SceneDef; part: number }>();
@@ -782,11 +790,10 @@ export class GlRenderer {
 		style: MediaStyle,
 	): { x: number; y: number; w: number; h: number; rot: number } | null {
 		// A lane id finds its clip on either texture: one mid-blend draws into the second.
-		const entry =
-			this.mediaLayerTextures.get(key) ??
-			this.mediaLayerTextures.get(altLayerKey(key));
+		const drawn = this.mediaLayerTextures.has(key) ? key : altLayerKey(key);
+		const entry = this.mediaLayerTextures.get(drawn);
 		if (!entry || entry.w <= 0 || this.imgW <= 0) return null;
-		const box = this.layerBox(style, entry.w, entry.h);
+		const box = this.sideBox(drawn, style, entry.w, entry.h);
 		return {
 			x: box.cx * this.imgW - box.drawW / 2,
 			y: box.cy * this.imgH - box.drawH / 2,
@@ -869,6 +876,7 @@ export class GlRenderer {
 		const model = this.modelLayers.get(key);
 		if (model) {
 			this.modelLayers.delete(key);
+			this.modelBoxes.delete(key);
 			this.releaseMesh(model);
 		}
 		const entry = this.mediaLayerTextures.get(key);
@@ -896,6 +904,7 @@ export class GlRenderer {
 		const model = this.modelLayers.get(key);
 		if (model) {
 			this.modelLayers.delete(key);
+			this.modelBoxes.delete(key);
 			this.releaseMesh(model);
 		}
 		let entry = this.mediaLayerTextures.get(key);
@@ -2288,7 +2297,8 @@ export class GlRenderer {
 			: undefined;
 		// Fitted against what the crop leaves, not the whole file, so "contain" means the
 		// visible rectangle.
-		const box = this.layerBox(
+		const box = this.sideBox(
+			side.key,
 			style,
 			entry.w * (edit?.crop?.w ?? 1),
 			entry.h * (edit?.crop?.h ?? 1),
@@ -2341,27 +2351,53 @@ export class GlRenderer {
 
 	/** A clip blending in over the one before it. The shader blends colour only, so it
 	 * runs a second time over both sides' coverage to keep the layer's shape. */
-	/** Renders a model lane's mesh into its texture, at the frame's size. */
+	/** Renders a model lane's mesh into a texture cut to the model's own box. The
+	 * front view fits the frame like an image would; turning or zooming it grows or
+	 * shrinks the box around the model at the same scale. */
 	private drawModel(
 		side: MediaLayerSide,
 		turns: EffectInstance[],
 		time: number,
 		safeDt: number,
 	): boolean {
-		const entry = this.frameSizedLayer(side.key);
 		const sourceId = this.modelLayers.get(side.key);
-		if (!entry || !sourceId) return false;
+		const extent = sourceId ? this.meshPass.extent(sourceId) : null;
+		if (!sourceId || !extent || this.imgW <= 0 || this.imgH <= 0) return false;
+		const camera = meshCamera(
+			turns.map((e) => ({
+				values: e.values as unknown as Transform3dValues,
+				time: this.getEffectTime(e, time, safeDt).time,
+			})),
+		);
+		const front = modelFootprint(meshCamera([]), extent);
+		// Pixels per half-height unit, fitting the front view inside the frame.
+		const unit =
+			(this.imgH / 2) * Math.min(this.imgW / this.imgH / front.x, 1 / front.y);
+		const half = modelFootprint(camera, extent);
+		// Rounded up so a turning model doesn't reallocate its buffers every frame.
+		const boxW =
+			Math.ceil((2 * half.x * unit) / MODEL_BOX_STEP) * MODEL_BOX_STEP;
+		const boxH =
+			Math.ceil((2 * half.y * unit) / MODEL_BOX_STEP) * MODEL_BOX_STEP;
+		this.modelBoxes.set(side.key, { w: boxW, h: boxH });
+		const cap = Math.min(
+			1,
+			(MODEL_MAX_TEXTURE * Math.max(this.imgW, this.imgH)) /
+				Math.max(boxW, boxH),
+		);
+		const entry = this.sizedLayer(
+			side.key,
+			Math.max(1, Math.round(boxW * cap)),
+			Math.max(1, Math.round(boxH * cap)),
+		);
+		if (!entry) return false;
 		const drawn = this.meshPass.draw(
 			sourceId,
 			entry.tex,
 			entry.w,
 			entry.h,
-			meshCamera(
-				turns.map((e) => ({
-					values: e.values as unknown as Transform3dValues,
-					time: this.getEffectTime(e, time, safeDt).time,
-				})),
-			),
+			camera,
+			{ x: boxW / 2 / unit, y: boxH / 2 / unit },
 			side.sourceTime,
 		);
 		this.gl.bindVertexArray(this.quadVAO);
@@ -2385,24 +2421,30 @@ export class GlRenderer {
 
 	/** A generated lane's texture, reallocated to the frame's size when it changed. */
 	private frameSizedLayer(key: string) {
+		if (this.imgW <= 0 || this.imgH <= 0) return null;
+		return this.sizedLayer(key, this.imgW, this.imgH);
+	}
+
+	/** A generated lane's texture, reallocated when its size changed. */
+	private sizedLayer(key: string, w: number, h: number) {
 		const entry = this.mediaLayerTextures.get(key);
-		if (!entry || this.imgW <= 0 || this.imgH <= 0) return null;
-		if (entry.w !== this.imgW || entry.h !== this.imgH) {
+		if (!entry) return null;
+		if (entry.w !== w || entry.h !== h) {
 			const gl = this.gl;
 			gl.bindTexture(gl.TEXTURE_2D, entry.tex);
 			gl.texImage2D(
 				gl.TEXTURE_2D,
 				0,
 				gl.RGBA,
-				this.imgW,
-				this.imgH,
+				w,
+				h,
 				0,
 				gl.RGBA,
 				gl.UNSIGNED_BYTE,
 				null,
 			);
-			entry.w = this.imgW;
-			entry.h = this.imgH;
+			entry.w = w;
+			entry.h = h;
 		}
 		return entry;
 	}
@@ -2505,12 +2547,31 @@ export class GlRenderer {
 		return ((1 - 1 / grow) / 2) * fade;
 	}
 
-	private layerBox(style: MediaStyle, texW: number, texH: number): LayerBox {
+	/** A lane's box: a model keeps the size it drew at, anything else fits the frame. */
+	private sideBox(
+		key: string,
+		style: MediaStyle,
+		texW: number,
+		texH: number,
+	): LayerBox {
+		const model = this.modelBoxes.get(key);
+		return model
+			? this.layerBox(style, model.w, model.h, true)
+			: this.layerBox(style, texW, texH);
+	}
+
+	private layerBox(
+		style: MediaStyle,
+		texW: number,
+		texH: number,
+		/** Take `texW` x `texH` as the size in frame pixels rather than fitting it. */
+		natural = false,
+	): LayerBox {
 		const fw = this.imgW;
 		const fh = this.imgH;
-		let w = fw;
-		let h = fh;
-		if (style.fit !== "stretch" && texW > 0 && texH > 0) {
+		let w = natural ? texW : fw;
+		let h = natural ? texH : fh;
+		if (!natural && style.fit !== "stretch" && texW > 0 && texH > 0) {
 			const k =
 				style.fit === "cover"
 					? Math.max(fw / texW, fh / texH)
@@ -2727,6 +2788,7 @@ export class GlRenderer {
 		}
 		this.mediaLayerTextures.clear();
 		this.modelLayers.clear();
+		this.modelBoxes.clear();
 		this.meshPass.dispose();
 		this.sceneLayers.clear();
 		this.scenePass.dispose();

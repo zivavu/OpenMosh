@@ -134,6 +134,29 @@ export function projectToUv(
 	];
 }
 
+/** Half-width and half-height, in the frame's half-height units, of the screen box
+ * the model's `extent` box covers from this camera. The box's corners bound its
+ * projection, so nothing the model draws falls outside. */
+export function modelFootprint(
+	camera: MeshCamera,
+	extent: ArrayLike<number>,
+): { x: number; y: number } {
+	let x = 0;
+	let y = 0;
+	for (let i = 0; i < 8; i++) {
+		const w = modelToWorld(camera, [
+			i & 1 ? extent[0] : -extent[0],
+			i & 2 ? extent[1] : -extent[1],
+			i & 4 ? extent[2] : -extent[2],
+		]);
+		// A corner at or behind the lens would project to infinity.
+		const z = Math.max(w[2], camera.distance * 0.05);
+		x = Math.max(x, Math.abs((camera.focal * w[0]) / z));
+		y = Math.max(y, Math.abs((camera.focal * w[1]) / z));
+	}
+	return { x: Math.max(x, 1e-3), y: Math.max(y, 1e-3) };
+}
+
 /** Tight near and far planes around the model, for depth precision. */
 export function depthRange(camera: MeshCamera): { near: number; far: number } {
 	return {

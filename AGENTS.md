@@ -80,6 +80,8 @@ edit: they eat context fast.
   together. No baked turntable clips. Animated GLB/FBX are skinned on the GPU from a bone
   texture; the pose comes from the clip's `sourceTime` and loops. FBX textures must be embedded.
   The unit-sphere fit is folded into the bone matrices and sampled across the whole clip.
+  A model's layer box is its own footprint, not the frame: the front view fits the frame like an
+  image, and turning or zooming resizes the box around it at that scale (`modelFootprint`).
 - The upload demo is only 3D worlds (`lib/demo/worlds/`), raymarched GLSL scenes drawn by
   `gl/scene-pass.ts`, not meshes. A scene is marched once with element ids and once without its
   elements; each element, and the backdrop, becomes its own layer with its own mosh. Shader loops

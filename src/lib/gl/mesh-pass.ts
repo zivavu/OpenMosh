@@ -18,7 +18,7 @@ uniform mat3 u_rotation;
 uniform float u_radius;
 uniform float u_distance;
 uniform float u_focal;
-uniform float u_aspect;
+uniform vec2 u_half;
 uniform vec2 u_depth;
 out vec3 v_normal;
 out vec3 v_color;
@@ -48,7 +48,7 @@ void main() {
   v_color = a_color;
   v_uv = a_uv;
   v_world = w;
-  gl_Position = vec4(u_focal * w.x / u_aspect, u_focal * w.y, u_depth.x * w.z + u_depth.y, w.z);
+  gl_Position = vec4(u_focal * w.x / u_half.x, u_focal * w.y / u_half.y, u_depth.x * w.z + u_depth.y, w.z);
 }`;
 
 const MESH_FRAG = `#version 300 es
@@ -84,6 +84,7 @@ interface GpuMesh {
 	vao: WebGLVertexArrayObject;
 	buffers: WebGLBuffer[];
 	count: number;
+	extent: [number, number, number];
 	texture: WebGLTexture | null;
 	skin: { skin: Skin; bones: WebGLTexture; matrices: Float32Array } | null;
 }
@@ -117,6 +118,11 @@ export class MeshPass {
 		return this.#meshes.has(id);
 	}
 
+	/** The uploaded model's `Mesh.extent`; null before it's uploaded. */
+	extent(id: string): [number, number, number] | null {
+		return this.#meshes.get(id)?.extent ?? null;
+	}
+
 	upload(id: string, mesh: Mesh) {
 		if (this.#meshes.has(id)) return;
 		const gl = this.#gl;
@@ -148,6 +154,7 @@ export class MeshPass {
 			vao,
 			buffers,
 			count: mesh.triangles * 3,
+			extent: mesh.extent,
 			texture: mesh.texture ? this.#colorTexture(mesh.texture) : null,
 			skin: skin
 				? {
@@ -213,13 +220,15 @@ export class MeshPass {
 	}
 
 	/** Clears `tex` (w x h) and draws the mesh into it, posed `time` seconds into its
-	 * animation. False when it couldn't. */
+	 * animation. `half` is the screen box the texture covers, in the frame's
+	 * half-height units. False when it couldn't. */
 	draw(
 		id: string,
 		tex: WebGLTexture,
 		w: number,
 		h: number,
 		camera: MeshCamera,
+		half: { x: number; y: number },
 		time: number,
 	): boolean {
 		const mesh = this.#meshes.get(id);
@@ -243,7 +252,7 @@ export class MeshPass {
 		gl.uniform1f(u["u_radius"], camera.radius);
 		gl.uniform1f(u["u_distance"], camera.distance);
 		gl.uniform1f(u["u_focal"], camera.focal);
-		gl.uniform1f(u["u_aspect"], w / h);
+		gl.uniform2f(u["u_half"], half.x, half.y);
 		gl.uniform2f(
 			u["u_depth"],
 			(far + near) / (far - near),
