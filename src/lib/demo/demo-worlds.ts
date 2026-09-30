@@ -1,5 +1,6 @@
-/** 3D worlds for the upload-screen demo: raymarched scenes cut into layers, the
- * backdrop and each element running its own mosh. */
+/** Worlds for the upload-screen demo: scenes cut into layers, the backdrop and
+ * each element running its own mosh. Raymarched 3D where the device keeps up,
+ * flat 2D where it doesn't. */
 
 import { createEffectInstance, getDefinition } from "../effects";
 import type { EffectInstance } from "../effects/types";
@@ -13,6 +14,11 @@ import {
 	type ResolvedMediaLayer,
 } from "../media";
 import type { ConcreteTransition } from "../media/transition";
+import { LAVA_LAMP } from "./flat-worlds/lava-lamp";
+import { NEON_TUNNEL } from "./flat-worlds/neon-tunnel";
+import { POP_SHAPES } from "./flat-worlds/pop-shapes";
+import { RINGED_PLANET } from "./flat-worlds/ringed-planet";
+import { SUNSET_DRIVE } from "./flat-worlds/sunset-drive";
 import { ABYSS } from "./worlds/abyss";
 import { DEEP_SPACE } from "./worlds/deep-space";
 import { GLOW_FOREST } from "./worlds/glow-forest";
@@ -26,15 +32,17 @@ import { VAPOR_PLAZA } from "./worlds/vapor-plaza";
 export const DEMO_WIDTH = 640;
 export const DEMO_HEIGHT = 360;
 
-interface World {
+export interface World {
 	scene: SceneDef;
 	backdropPool: string[];
 	/** One pool per element, in id order. */
 	elementPools: string[][];
 	postPool: string[];
+	/** One effect per element, not up to two. */
+	lean?: boolean;
 }
 
-const WORLDS: World[] = [
+export const WORLDS: World[] = [
 	{
 		scene: NEON_CANYON,
 		backdropPool: ["posterize", "soft-glitch", "duotone"],
@@ -120,20 +128,78 @@ const WORLDS: World[] = [
 	},
 ];
 
-export const WORLD_COUNT = WORLDS.length;
+/** Single-pass effects only: no glow bloom, no wide sampling loops. */
+const FLAT_BACKDROP = ["posterize", "duotone", "halftone", "soft-glitch"];
+const FLAT_POST = ["scanlines", "channel-split", "vhs"];
 
-export function worldScene(index: number): SceneDef {
-	return WORLDS[index].scene;
-}
+export const FLAT_WORLDS: World[] = [
+	{
+		scene: SUNSET_DRIVE,
+		backdropPool: FLAT_BACKDROP,
+		elementPools: [
+			["channel-split", "solarize", "data-bend"],
+			["wobble", "channel-split", "posterize"],
+		],
+		postPool: FLAT_POST,
+		lean: true,
+	},
+	{
+		scene: LAVA_LAMP,
+		backdropPool: FLAT_BACKDROP,
+		elementPools: [
+			["ripple", "solarize", "posterize"],
+			["channel-split", "wobble", "halftone"],
+		],
+		postPool: FLAT_POST,
+		lean: true,
+	},
+	{
+		scene: POP_SHAPES,
+		backdropPool: FLAT_BACKDROP,
+		elementPools: [
+			["halftone", "channel-split"],
+			["data-bend", "solarize"],
+			["wobble", "posterize"],
+		],
+		postPool: FLAT_POST,
+		lean: true,
+	},
+	{
+		scene: RINGED_PLANET,
+		backdropPool: FLAT_BACKDROP,
+		elementPools: [
+			["posterize", "channel-split", "data-bend"],
+			["solarize", "wobble"],
+		],
+		postPool: FLAT_POST,
+		lean: true,
+	},
+	{
+		scene: NEON_TUNNEL,
+		backdropPool: FLAT_BACKDROP,
+		elementPools: [
+			["channel-split", "solarize", "ripple"],
+			["wobble", "data-bend"],
+		],
+		postPool: FLAT_POST,
+		lean: true,
+	},
+];
 
-/** Index of the world with this scene id, for previewing one in dev. */
-export function worldIndexOf(id: string): number {
-	return WORLDS.findIndex((w) => w.scene.id === id);
+/** The world with this scene id in either set, for previewing one in dev. */
+export function findWorld(
+	id: string,
+): { worlds: World[]; index: number } | null {
+	for (const worlds of [WORLDS, FLAT_WORLDS]) {
+		const index = worlds.findIndex((w) => w.scene.id === id);
+		if (index >= 0) return { worlds, index };
+	}
+	return null;
 }
 
 /** Every effect a world rolls from, for the dev check that they still exist. */
 export function worldEffectIds(): string[] {
-	return WORLDS.flatMap((w) => [
+	return [...WORLDS, ...FLAT_WORLDS].flatMap((w) => [
 		...w.backdropPool,
 		...w.postPool,
 		...w.elementPools.flat(),
@@ -189,12 +255,13 @@ function laneKey(lane: number, alt: boolean): string {
 	return alt ? altLayerKey(key) : key;
 }
 
-export function startWorld(index: number, alt: boolean): WorldShow {
-	const world = WORLDS[index];
+export function startWorld(world: World, alt: boolean): WorldShow {
 	const chains = [
 		moshed(pickSome(world.backdropPool, 1)),
 		...world.elementPools.map((pool) =>
-			moshed(pickSome(pool, 1 + Math.floor(Math.random() * 2))),
+			moshed(
+				pickSome(pool, world.lean ? 1 : 1 + Math.floor(Math.random() * 2)),
+			),
 		),
 	];
 	return {

@@ -85,7 +85,10 @@ edit: they eat context fast.
   compile. The next world compiles halfway through the current one, except in Firefox: it never
   shipped `KHR_parallel_shader_compile` and a compile freezes the page, so there every world
   compiles before the demo first shows.
-  In dev, `?world=<id>` holds one world and `?bare` drops the mosh.
+  Devices under 40fps on the 3D worlds (`demo/demo-quality.ts` measures the first seconds) cut
+  to flat 2D worlds (`lib/demo/flat-worlds/`) with single-pass effects, and start on them for a
+  week. Touch devices always run the flat worlds. Same scene contract, no marching.
+  In dev, `?world=<id>` holds one world, `?bare` drops the mosh and `?flat` starts on 2D.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - Chrome never grants `navigator.storage.persist()` on `localhost`, and code can't fix that. Use
