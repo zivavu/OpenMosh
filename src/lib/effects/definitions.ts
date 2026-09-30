@@ -88,7 +88,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "pixelate",
 		name: "Pixelate",
-		// Left out of every roll: it only fits when picked on purpose.
+		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
 		params: [
 			{
@@ -848,7 +848,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "polar",
 		name: "Polar",
-		// Left out of every roll: it only fits when picked on purpose.
+		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
 		params: [
 			{
@@ -1559,7 +1559,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "halftone",
 		name: "Halftone",
-		// Left out of every roll: it only fits when picked on purpose.
+		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
 		params: [
 			{
@@ -1706,7 +1706,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "transform-3d",
 		name: "3D Transform",
-		// Left out of every roll: it only fits when picked on purpose.
+		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
 		params: [
 			{
@@ -1875,7 +1875,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "petri",
 		name: "Petri",
-		// Left out of every roll: it only fits when picked on purpose.
+		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
 		params: [
 			{
@@ -2186,7 +2186,7 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 	{
 		id: "circle-warp",
 		name: "Circle Warp",
-		// Left out of every roll: it only fits when picked on purpose.
+		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
 		params: [
 			{

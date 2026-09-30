@@ -1,7 +1,8 @@
 import {
 	applyRandomAudioLinks,
 	generateMosh,
-	isMoshable,
+	isRollable,
+	type MoshStyle,
 	randomizeParams,
 	type MoshOptions,
 } from "../editor/mosh";
@@ -25,12 +26,13 @@ function toggleOneEffect(
 	effects: EffectInstance[],
 	moshMin: number,
 	moshMax: number,
+	style: MoshStyle | undefined,
 ): EffectInstance[] {
 	const moshableEnabled: number[] = [];
 	const moshableDisabled: number[] = [];
 	for (let i = 0; i < effects.length; i++) {
 		const e = effects[i];
-		if (!isMoshable(e)) continue;
+		if (!isRollable(e, style)) continue;
 		(e.enabled ? moshableEnabled : moshableDisabled).push(i);
 	}
 
@@ -86,6 +88,7 @@ export function computeEffectsForBeat(
 					smoothState.effects,
 					moshOptions.moshMin,
 					moshOptions.moshMax,
+					moshOptions.moshStyle,
 				);
 			}
 			return withRandomAudioLinks(
