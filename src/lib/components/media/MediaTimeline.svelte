@@ -155,7 +155,7 @@
 					sourceId && sourceId !== lane.sourceId ? sourceId : undefined,
 				);
 			},
-			splitClipAt: splitMediaClipAt,
+			splitClipAt: (lane, at) => splitMediaClipAt(lane, at, edits),
 			clipSpanAt: (lane, time) =>
 				clipSpanAt(lane, time, newClipSourceId(lane, time)),
 			// A clip keeps showing what it showed: one that inherited its old lane's source

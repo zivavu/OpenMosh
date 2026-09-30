@@ -4,6 +4,7 @@ import {
 	sortClips,
 	type TimelineClip,
 } from "../timeline/clips";
+import { sourceTimeAt, type SourceEdit } from "../media/source-edit";
 
 /** Audio sources that live in the track library rather than the media pool. */
 export const TRACK_SOURCE_PREFIX = "track:";
@@ -98,8 +99,13 @@ export function createAudioLane(name: string, drives = false): AudioLane {
 	};
 }
 
-/** Cut the clip covering `at` into two; the right half picks up where the left stopped. */
-export function splitAudioClipAt(lane: AudioLane, at: number): AudioLane {
+/** Cut the clip covering `at` into two; the right half picks up where the left stopped.
+ * `edits` covers a video's sound, walked at the picture's speed and trim. */
+export function splitAudioClipAt(
+	lane: AudioLane,
+	at: number,
+	edits?: Record<string, SourceEdit>,
+): AudioLane {
 	const clip = lane.clips.find((c) => at > c.start && at < c.end);
 	if (!clip) return lane;
 	if (at - clip.start < MIN_CLIP_LENGTH || clip.end - at < MIN_CLIP_LENGTH) {
@@ -110,7 +116,11 @@ export function splitAudioClipAt(lane: AudioLane, at: number): AudioLane {
 		...clip,
 		id: nextId("aclip"),
 		start: at,
-		sourceStart: clip.sourceStart + (at - clip.start),
+		sourceStart: sourceTimeAt(
+			clip.sourceId ? edits?.[clip.sourceId] : undefined,
+			at - clip.start,
+			clip.sourceStart,
+		),
 		fadeInSec: undefined,
 	};
 	return {

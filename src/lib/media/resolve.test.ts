@@ -9,6 +9,7 @@ import {
 	resolveMediaLayersAt,
 	setMediaClipSources,
 } from "./resolve";
+import { createSourceEdit } from "./source-edit";
 import {
 	appendMediaLane,
 	createMediaClip,
@@ -167,6 +168,17 @@ describe("splitMediaClipAt", () => {
 			[5, 0.5],
 			[6.5, 0.5],
 		]);
+	});
+
+	it("carries the source position at the source's speed, inside its trim", () => {
+		const lane = laneWith([[0, 4]]);
+		const edit = {
+			...createSourceEdit(),
+			speed: 2,
+			span: { start: 1, end: 5 },
+		};
+		const split = splitMediaClipAt(lane, 3, { "src-a": edit });
+		expect(split.clips[1].sourceStart).toBe(3);
 	});
 
 	it("leaves the lane alone when a half would be too short", () => {

@@ -4869,6 +4869,7 @@
 							bpmSourceId={songSourceId}
 							onSetBpmSource={setBpmSource}
 							repeatsOf={audioClipRepeats}
+							edits={sourceRegistry.edits}
 							sourceEndsOf={audioSourceEnds}
 							orderBase={layerOrder.length}
 							{foldedLaneIds}
