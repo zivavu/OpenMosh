@@ -15,6 +15,9 @@ export interface Mesh {
 	/** Bones and animation. When set, `positions` is the pose at time 0 (for
 	 * thumbnails) and the GPU draws `skin.bindPositions` instead. */
 	skin: Skin | null;
+	/** Half-size of the box the model fills along x, y and z, in the unit sphere's
+	 * units, over its whole animation. Centred on the origin. */
+	extent: [number, number, number];
 	triangles: number;
 }
 
@@ -108,7 +111,7 @@ export class MeshBuilder {
 		if (this.#positions.length === 0) return null;
 		const positions = new Float32Array(this.#positions);
 		if (!fitUnitSphere(positions)) return null;
-		return this.#finish(positions, null);
+		return this.#finish(positions, null, halfExtent(positions));
 	}
 
 	/** Like `build`, but the rig's whole motion decides the fit, so a dancer
@@ -118,8 +121,9 @@ export class MeshBuilder {
 		const bind = new Float32Array(this.#positions);
 		const joints = new Uint16Array(this.#joints);
 		const weights = new Float32Array(this.#weights);
-		const fit = fitRig(bind, joints, weights, rig);
-		if (!fit) return null;
+		const fitted = fitRig(bind, joints, weights, rig);
+		if (!fitted) return null;
+		const { fit, extent } = fitted;
 		const skin: Skin = {
 			bindPositions: bind,
 			joints,
@@ -138,10 +142,14 @@ export class MeshBuilder {
 		skin.pose(0, mats);
 		const posed = new Float32Array(bind.length);
 		skinPositions(bind, joints, weights, mats, posed);
-		return this.#finish(posed, skin);
+		return this.#finish(posed, skin, extent);
 	}
 
-	#finish(positions: Float32Array, skin: Skin | null): Mesh {
+	#finish(
+		positions: Float32Array,
+		skin: Skin | null,
+		extent: [number, number, number],
+	): Mesh {
 		return {
 			positions,
 			normals: new Float32Array(this.#normals),
@@ -150,6 +158,7 @@ export class MeshBuilder {
 			image: null,
 			texture: null,
 			skin,
+			extent,
 			triangles: this.#positions.length / 9,
 		};
 	}
@@ -213,14 +222,25 @@ function skinPositions(
 	}
 }
 
+/** Largest |x|, |y| and |z| over the positions. */
+function halfExtent(positions: Float32Array): [number, number, number] {
+	const e: [number, number, number] = [0, 0, 0];
+	for (let i = 0; i < positions.length; i += 3) {
+		for (let k = 0; k < 3; k++)
+			e[k] = Math.max(e[k], Math.abs(positions[i + k]));
+	}
+	return e;
+}
+
 /** The matrix that centres the rig's poses on the origin and scales the furthest
- * vertex to 1; null for a rig with no extent or a non-finite pose. */
+ * vertex to 1, and the box those poses fill; null for a rig with no extent or a
+ * non-finite pose. */
 function fitRig(
 	bind: Float32Array,
 	joints: Uint16Array,
 	weights: Float32Array,
 	rig: Rig,
-): Mat4 | null {
+): { fit: Mat4; extent: [number, number, number] } | null {
 	const times =
 		rig.duration > 0
 			? Array.from(
@@ -262,10 +282,17 @@ function fitRig(
 		}
 	}
 	if (radius <= 0) return null;
-	return multiply(
-		scaling(1 / radius, 1 / radius, 1 / radius),
-		translation(-centre[0], -centre[1], -centre[2]),
-	);
+	return {
+		fit: multiply(
+			scaling(1 / radius, 1 / radius, 1 / radius),
+			translation(-centre[0], -centre[1], -centre[2]),
+		),
+		extent: [0, 1, 2].map((k) => (max[k] - min[k]) / 2 / radius) as [
+			number,
+			number,
+			number,
+		],
+	};
 }
 
 /** Centres the bounding box on the origin and scales its furthest vertex to 1.
