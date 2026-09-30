@@ -2454,7 +2454,7 @@
 		}));
 	}
 
-	// Same detector the slideshow uses: essentia's RhythmExtractor2013 in a shared worker.
+	// Same detector the slideshow uses, in a shared worker.
 	let bpmDetecting = $state(false);
 	let bpmDetectAbort: AbortController | null = null;
 	let bpmDetectFile: File | null = null;
