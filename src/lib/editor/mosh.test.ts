@@ -115,6 +115,15 @@ describe("generateMosh for a 3D model", () => {
 		}
 	});
 
+	it("puts a model's turn at the head of the chain", () => {
+		for (const moshStyle of ["random", "curated"] as const) {
+			for (let seed = 1; seed <= 20; seed++) {
+				const effects = rolled(seed, { model: true, moshStyle });
+				expect(effects[0].defId).toBe("transform-3d");
+			}
+		}
+	});
+
 	it("never turns flat media in a curated roll", () => {
 		for (let seed = 1; seed <= 20; seed++) {
 			expect(turnOf(rolled(seed, { moshStyle: "curated" })).enabled).toBe(
@@ -168,12 +177,18 @@ describe("generateMosh styles", () => {
 		expect(unpickable.some((id) => seen.has(id))).toBe(true);
 	});
 
-	it("puts a random roll's live effects first", () => {
-		for (let seed = 1; seed <= 20; seed++) {
-			const effects = loadInitialEffects();
-			withSeededRandom(seed, () => generateMosh(effects, options));
-			const firstOff = effects.findIndex((e) => !e.enabled);
-			expect(effects.slice(firstOff).some((e) => e.enabled)).toBe(false);
+	it("puts a roll's live effects first, in either style", () => {
+		for (const moshStyle of ["random", "curated"] as const) {
+			for (const model of [false, true]) {
+				for (let seed = 1; seed <= 20; seed++) {
+					const effects = loadInitialEffects();
+					withSeededRandom(seed, () =>
+						generateMosh(effects, { ...options, moshStyle, model }),
+					);
+					const firstOff = effects.findIndex((e) => !e.enabled);
+					expect(effects.slice(firstOff).some((e) => e.enabled)).toBe(false);
+				}
+			}
 		}
 	});
 
