@@ -44,6 +44,7 @@
 		selectedSourceId?: string | null;
 		onAssign: (sourceId: string) => void;
 		onAdd: () => void;
+		onRemove?: (sourceId: string) => void;
 		/** Drag one thumb onto another to move it there. */
 		onReorder?: (from: number, to: number) => void;
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
@@ -59,6 +60,7 @@
 		selectedSourceId = null,
 		onAssign,
 		onAdd,
+		onRemove,
 		onReorder,
 		edits = {},
 		onEditChange,
@@ -290,6 +292,7 @@
 						editingId = sources[i]?.id ?? null;
 					}
 				: undefined}
+			onRemove={onRemove ? (i) => onRemove(sources[i].id) : undefined}
 		/>
 	{/await}
 {/if}

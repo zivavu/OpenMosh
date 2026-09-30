@@ -241,6 +241,7 @@
 				bind:index={lightbox.index}
 				origin={lightbox.origin}
 				onClose={lightbox.close}
+				onRemove={(i) => onRemove(sources[i].id)}
 			/>
 		{/await}
 	{/if}
