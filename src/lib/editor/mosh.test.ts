@@ -115,10 +115,21 @@ describe("generateMosh for a 3D model", () => {
 		}
 	});
 
-	it("never turns flat media", () => {
+	it("never turns flat media in a curated roll", () => {
 		for (let seed = 1; seed <= 20; seed++) {
-			expect(turnOf(rolled(seed)).enabled).toBe(false);
+			expect(turnOf(rolled(seed, { moshStyle: "curated" })).enabled).toBe(
+				false,
+			);
 		}
+	});
+
+	it("turns off an unlocked 3D Transform a curated roll can't pick", () => {
+		const effects = loadInitialEffects();
+		turnOf(effects).enabled = true;
+		withSeededRandom(4, () =>
+			generateMosh(effects, { ...options, moshStyle: "curated" }),
+		);
+		expect(turnOf(effects).enabled).toBe(false);
 	});
 
 	it("leaves a locked 3D Transform as it was", () => {
@@ -131,5 +142,50 @@ describe("generateMosh for a 3D model", () => {
 		);
 		expect(turn.enabled).toBe(false);
 		expect(turn.values.rotY).toBe(90);
+	});
+});
+
+describe("generateMosh styles", () => {
+	const options: MoshOptions = {
+		moshMin: 3,
+		moshMax: 3,
+		randomizeOrder: true,
+		moshAudioLink: false,
+		moshAudioLinkStrength: 0,
+		hasAudio: false,
+	};
+	const unpickable = EFFECT_DEFINITIONS.filter((d) => d.moshable === false).map(
+		(d) => d.id,
+	);
+
+	it("lets a random roll pick any unlocked effect", () => {
+		const seen = new Set<string>();
+		for (let seed = 1; seed <= 400; seed++) {
+			const effects = loadInitialEffects();
+			withSeededRandom(seed, () => generateMosh(effects, options));
+			for (const e of effects) if (e.enabled) seen.add(e.defId);
+		}
+		expect(unpickable.some((id) => seen.has(id))).toBe(true);
+	});
+
+	it("puts a random roll's live effects first", () => {
+		for (let seed = 1; seed <= 20; seed++) {
+			const effects = loadInitialEffects();
+			withSeededRandom(seed, () => generateMosh(effects, options));
+			const firstOff = effects.findIndex((e) => !e.enabled);
+			expect(effects.slice(firstOff).some((e) => e.enabled)).toBe(false);
+		}
+	});
+
+	it("keeps curated rolls off the unpickable list", () => {
+		for (let seed = 1; seed <= 40; seed++) {
+			const effects = loadInitialEffects();
+			withSeededRandom(seed, () =>
+				generateMosh(effects, { ...options, moshStyle: "curated" }),
+			);
+			for (const e of effects) {
+				if (unpickable.includes(e.defId)) expect(e.enabled).toBe(false);
+			}
+		}
 	});
 });

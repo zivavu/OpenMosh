@@ -36,7 +36,19 @@ export interface MoshOptions {
 
 /** Effects a roll may touch; locked ones are protected by the user. */
 export function isMoshable(effect: EffectInstance): boolean {
-	return !effect.locked && getDefinition(effect.defId)?.moshable !== false;
+	return !effect.locked;
+}
+
+/** Effects a roll may switch on. Curated skips the ones marked `moshable: false`;
+ * random takes anything unlocked. */
+export function isRollable(
+	effect: EffectInstance,
+	style: MoshStyle = "random",
+): boolean {
+	return (
+		isMoshable(effect) &&
+		(style !== "curated" || getDefinition(effect.defId)?.moshable !== false)
+	);
 }
 
 /** Roll fresh values for every randomizable param of one effect, in place. */
@@ -150,15 +162,20 @@ export function generateMosh(
 		moshLinkBand,
 		onlyMoshEnabled,
 	} = options;
+	const style = options.moshStyle ?? "random";
+	// Unlocked effects the style never picks still go off with the roll.
+	for (const e of effects) {
+		if (isMoshable(e) && !isRollable(e, style)) e.enabled = false;
+	}
 	const moshable = effects.filter(
-		(e) => isMoshable(e) && (!onlyMoshEnabled || e.enabled),
+		(e) => isRollable(e, style) && (!onlyMoshEnabled || e.enabled),
 	);
 	const clampedMin = Math.min(moshMin, moshable.length);
 	const clampedMax = Math.min(moshMax, moshable.length);
 	const target =
 		clampedMin + Math.floor(Math.random() * (clampedMax - clampedMin + 1));
 
-	if (options.moshStyle === "curated") {
+	if (style === "curated") {
 		rollCurated(effects, moshable, target);
 	} else {
 		rollRandom(effects, moshable, target, randomizeOrder);
@@ -216,6 +233,21 @@ function rollRandom(
 			effects[moshableIndices[k]] = snapshot[shuffled[k]];
 		}
 	}
+	enabledFirst(effects);
+}
+
+/** Moves the unlocked effects that are on ahead of the ones that are off, as curated
+ * does. Off effects don't draw, so the picture is unchanged. */
+function enabledFirst(effects: EffectInstance[]): void {
+	const slots = effects
+		.map((e, i) => (isMoshable(e) ? i : -1))
+		.filter((i) => i !== -1);
+	const moved = slots.map((i) => effects[i]);
+	const order = [
+		...moved.filter((e) => e.enabled),
+		...moved.filter((e) => !e.enabled),
+	];
+	slots.forEach((slot, k) => (effects[slot] = order[k]));
 }
 
 /** Picks into the slots `pool` holds, in chain order, the rest after them. */

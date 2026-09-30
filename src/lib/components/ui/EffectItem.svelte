@@ -279,7 +279,7 @@
 							<GripVertical size={14} />
 						</span>
 					{/if}
-					{#if onToggleLock && def.moshable !== false}
+					{#if onToggleLock}
 						<button
 							class="icon-btn lock-btn"
 							class:locked={effect.locked}

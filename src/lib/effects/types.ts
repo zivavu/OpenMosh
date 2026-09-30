@@ -70,7 +70,7 @@ export interface EffectDefinition {
 	id: string;
 	name: string;
 	params: EffectParam[];
-	/** Exclude from random moshing (treated as permanently locked). */
+	/** Never picked by a curated roll; random rolls and the lock treat it like any other. */
 	moshable?: false;
 }
 

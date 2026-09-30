@@ -121,24 +121,34 @@ describe("locked effects", () => {
 		"halftone",
 	];
 
-	test("a roll never switches on an effect meant to be picked on purpose", () => {
+	test("a curated roll never switches on an effect meant to be picked on purpose", () => {
 		for (let seed = 1; seed <= 40; seed++) {
-			const on = rollEffects(seed, { ...OPTIONS, moshMin: 8, moshMax: 12 })
+			const on = rollEffects(seed, {
+				...OPTIONS,
+				moshStyle: "curated",
+				moshMin: 8,
+				moshMax: 12,
+			})
 				.filter((e) => e.enabled)
 				.map((e) => e.defId);
 			for (const id of PICKED_ON_PURPOSE) expect(on).not.toContain(id);
 		}
 	});
 
-	test("one switched on by hand survives the roll, unlocked", () => {
+	test("one switched on by hand goes with the roll unless locked", () => {
 		const base = rollEffects(3, OPTIONS);
 		const polar = base.find((e) => e.defId === "polar")!;
 		polar.enabled = true;
-		const rolled = rollEffects(4, OPTIONS, base);
-		const kept = rolled.find((e) => e.defId === "polar")!;
+		const curated = { ...OPTIONS, moshStyle: "curated" as const };
+		expect(
+			rollEffects(4, curated, base).find((e) => e.defId === "polar")!.enabled,
+		).toBe(false);
+		polar.locked = true;
+		const kept = rollEffects(4, curated, base).find(
+			(e) => e.defId === "polar",
+		)!;
 		expect(kept.enabled).toBe(true);
 		expect(kept.values).toEqual(polar.values);
-		expect(lockedKey(base)).not.toBe("");
 	});
 
 	test("keepLocked leaves a chain with no locks alone", () => {

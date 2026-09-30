@@ -81,9 +81,9 @@ export function isHandBuiltLabel(span: {
 	return !span.presetName && span.label !== "mosh" && span.label !== "auto";
 }
 
-/** Kept through a roll: locked, or switched on by hand where no roll may pick it. */
+/** Kept through a roll or a clear: only what the user locked. */
 function isHeld(e: EffectInstance): boolean {
-	return e.locked || (e.enabled && getDefinition(e.defId)?.moshable === false);
+	return !!e.locked;
 }
 
 /** A fresh chain that keeps `from`'s held effects as they are, where they sat. */
