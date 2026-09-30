@@ -39,6 +39,8 @@ export function cloneEffectInstance(e: EffectInstance): EffectInstance {
 }
 
 export const HIDDEN_EFFECTS_KEY = "openmosh-hidden-effects";
+/** Whether the effects panel lists live effects first. */
+export const LIVE_FIRST_KEY = "openmosh-live-first";
 
 export function loadInitialEffects(): EffectInstance[] {
 	const hidden = readJson<string[] | null>(HIDDEN_EFFECTS_KEY, null);
