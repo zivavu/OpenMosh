@@ -4,6 +4,7 @@
 		ChevronLeft,
 		ChevronRight,
 		SlidersHorizontal,
+		Trash2,
 		X,
 	} from "lucide-svelte";
 	import { onDestroy, onMount } from "svelte";
@@ -30,6 +31,8 @@
 		/** Hand the item on show over to an editor. Optional: the slideshow has nothing
 		 * to hand it to, and shows no button at all. */
 		onEdit?: (index: number) => void;
+		/** Take the item on show out of its pool; the next one steps in. */
+		onRemove?: (index: number) => void;
 	}
 
 	let {
@@ -38,6 +41,7 @@
 		origin = null,
 		onClose,
 		onEdit,
+		onRemove,
 	}: Props = $props();
 
 	let closing = $state(false);
@@ -141,6 +145,16 @@
 							aria-label="Edit this media"
 						>
 							<SlidersHorizontal size={14} />
+						</button>
+					{/if}
+					{#if onRemove}
+						<button
+							class="lb-close"
+							onclick={() => onRemove(index)}
+							title="Remove"
+							aria-label="Remove {item.name}"
+						>
+							<Trash2 size={14} />
 						</button>
 					{/if}
 					<button class="lb-close" onclick={close} title="Close (Esc)">

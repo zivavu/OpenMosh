@@ -217,6 +217,7 @@
 				bind:index={lightbox.index}
 				origin={lightbox.origin}
 				onClose={lightbox.close}
+				onRemove={(i) => onRemoveSlide(slides[i].id)}
 			/>
 		{/await}
 	{/if}
