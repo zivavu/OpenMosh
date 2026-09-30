@@ -66,7 +66,8 @@ describe("meshCamera", () => {
 			{ rotX: 30, rotY: -50, zoom: 1.6, perspective: 0.2 },
 			{ spin: 45, axis: "tumble" },
 		]) {
-			const cam = meshCamera([{ values: { ...base, ...v }, time: 1.3 }]);
+			// `time` is the spin's accumulated degrees, as the shader's u_time is.
+			const cam = meshCamera([{ values: { ...base, ...v }, time: 58.5 }]);
 			for (const img of [
 				[0.5, 0.5],
 				[0.2, 0.3],
