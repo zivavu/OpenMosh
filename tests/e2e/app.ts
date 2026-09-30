@@ -151,7 +151,7 @@ export async function openEditor(
 		.locator('input[type="file"][accept*="audio"]')
 		.setInputFiles(trackFile(name, wav));
 	await page
-		.locator('input[type="file"]:not([accept*="audio"])')
+		.locator('input[type="file"][accept*="image/png"]')
 		.setInputFiles(
 			sources.map(([file, color]) =>
 				color === "pattern" ? patternImageFile(file) : imageFile(file, color),
@@ -199,6 +199,11 @@ export function clipMoshButton(page: Page): Locator {
 	return page.getByTitle("Random mosh for this clip");
 }
 
+/** The editor's top-bar project menu button. */
+export function projectMenuButton(page: Page): Locator {
+	return page.locator(".project-btn");
+}
+
 /** Take the upload screen through to single mode with one image. No mode button is
  * pressed: single is the default, and on a touch device it is the only mode there is. */
 export async function openSingle(
@@ -215,7 +220,7 @@ export async function openSingle(
 			.setInputFiles(trackFile(name, wav));
 	}
 	await page
-		.locator('input[type="file"]:not([accept*="audio"])')
+		.locator('input[type="file"][accept*="image/png"]')
 		.setInputFiles(
 			color === "pattern" ? patternImageFile(file) : imageFile(file, color),
 		);

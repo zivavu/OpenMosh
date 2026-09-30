@@ -29,6 +29,8 @@
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
 	import { downloadBlob } from "../../recorder";
+	import { saveBlobAs } from "../../utils";
+	import { buildProjectFile } from "../../project-file/export";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
 	import { loadTimeline, saveTimeline } from "../../editor/timeline-store";
@@ -262,11 +264,12 @@
 	import SourceRail from "./SourceRail.svelte";
 	import FxLanes from "./FxLanes.svelte";
 	import MoshGroup from "./MoshGroup.svelte";
+	import ProjectMenu from "./ProjectMenu.svelte";
 	import MoshSettingsPanel from "./MoshSettingsPanel.svelte";
 	import RecordGroup from "./RecordGroup.svelte";
 	import RecordOverlay from "./RecordOverlay.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
-	import { showToast } from "../ui/toast.svelte";
+	import { showToast, dismissToast } from "../ui/toast.svelte";
 	import { isLiveFile, liveStreamOf, stopLiveFile } from "../../webcam/camera";
 	import { lazy } from "../../lazy";
 	import { GeneratedSizeSync, readGenerated } from "../../generators";
@@ -1212,6 +1215,16 @@
 		),
 	);
 
+	/** What the project menu shows: the user's name, else what it was opened with. */
+	let projectName = $derived(
+		projectKey
+			? (readProjectNames()[projectKey] ??
+					initialAudioFile?.name ??
+					file.name ??
+					"Untitled project")
+			: "",
+	);
+
 	// The song/video this editor saves against, before the mode prefix.
 	let seqBaseKey = $derived(
 		isSequenceMode
@@ -1333,6 +1346,37 @@
 			return;
 		}
 		void saves.track("timeline", saveTimeline(key, entry)).then(reportSeqSave);
+	}
+
+	/** Save the whole project as a `.openmosh` file: the timeline, its pool, songs and
+	 * fonts. The pending autosave is flushed first so the file matches what's on screen. */
+	async function saveProjectFile() {
+		if (!isSequenceMode || !projectKey) return;
+		flushSequenceSave();
+		flushMediaPoolSave();
+		const progress = showToast("Building the project file…", "info", 0);
+		try {
+			const { blob, name, missing } = await buildProjectFile(
+				projectKey,
+				seqEntryNow(),
+			);
+			dismissToast(progress);
+			await saveBlobAs(blob, name);
+			if (missing > 0) {
+				showToast(
+					`${missing} file${missing === 1 ? "" : "s"} were missing and weren't saved`,
+					"info",
+					8000,
+				);
+			}
+		} catch (e) {
+			dismissToast(progress);
+			showToast(
+				e instanceof Error ? e.message : "Couldn't save the project file",
+				"error",
+				8000,
+			);
+		}
 	}
 
 	// Reloading or closing mid-playback would lose the session: no pause settles the debounce.
@@ -2958,6 +3002,7 @@
 
 	const handleKeydown = createKeyboardHandler({
 		save,
+		saveProject: saveProjectFile,
 		mosh,
 		undoMosh,
 		undo,
@@ -4073,6 +4118,7 @@
 				/>
 			{/snippet}
 			{#if isSequenceMode}
+				<ProjectMenu name={projectName} onSave={saveProjectFile} />
 				<div class="output-group">
 					<ButtonGroup
 						buttons={[

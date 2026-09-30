@@ -6,6 +6,7 @@ import {
 	PREVIEW_CANVAS,
 	clipMoshButton,
 	mediaClips,
+	projectMenuButton,
 	selectMode,
 	selectClip,
 	splitClipAt,
@@ -100,4 +101,74 @@ test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
 	await waitForRender(page);
 	await expect(mediaClips(page)).toHaveCount(3);
+});
+
+test("a project saved to a file comes back after storage is cleared", async ({
+	page,
+}) => {
+	// The file picker is a native dialog Playwright can't drive; take the download path.
+	await page.addInitScript(() => {
+		Object.defineProperty(window, "showSaveFilePicker", {
+			value: undefined,
+			configurable: true,
+		});
+	});
+
+	await openEditor(page, {
+		sources: [
+			["red.png", RED],
+			["green.png", GREEN],
+			["blue.png", BLUE],
+		],
+	});
+	await waitForRender(page);
+	await splitClipAt(page, 0.5);
+	await selectClip(page, 0);
+	await clipMoshButton(page).click();
+	await expect(liveEffects(page)).not.toHaveCount(0);
+	const rolled = await liveEffectNames(page);
+	expect(rolled.length).toBeGreaterThan(0);
+	await waitForSaved(page);
+
+	// Save the whole project from the top bar's project menu.
+	const downloadPromise = page.waitForEvent("download");
+	await projectMenuButton(page).click();
+	await page.getByRole("menuitem", { name: "Save project file" }).click();
+	const download = await downloadPromise;
+	expect(download.suggestedFilename()).toMatch(/\.openmosh$/);
+	const filePath = await download.path();
+	expect(filePath).toBeTruthy();
+
+	// Wipe everything the app stored, so the file is the only copy left.
+	await page.goto("/");
+	await page.evaluate(async () => {
+		localStorage.clear();
+		const dbs = await indexedDB.databases();
+		await Promise.all(
+			dbs.map(
+				(db) =>
+					new Promise<void>((resolve) => {
+						if (!db.name) return resolve();
+						const req = indexedDB.deleteDatabase(db.name);
+						req.onsuccess = req.onerror = req.onblocked = () => resolve();
+					}),
+			),
+		);
+	});
+	await page.reload();
+	await selectMode(page, "Editor");
+	await expect(page.locator(".saved-item")).toHaveCount(0);
+
+	// Open the file back through the upload screen's project picker.
+	await page.locator('input[accept=".openmosh"]').setInputFiles(filePath!);
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await waitForRender(page);
+
+	// The cuts, the chain and the whole pool came back.
+	await expect(mediaClips(page)).toHaveCount(2);
+	await expect(page.getByText("3 SOURCES")).toBeVisible();
+	await selectClip(page, 0);
+	expect(await liveEffectNames(page)).toEqual(rolled);
+	await selectClip(page, 1);
+	await expect(liveEffects(page)).toHaveCount(0);
 });

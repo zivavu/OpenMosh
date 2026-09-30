@@ -3,6 +3,8 @@ import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
 
 export interface KeyboardActions {
 	save: () => void;
+	/** Ctrl/Cmd+Shift+S: save the whole project as a file (Editor mode). */
+	saveProject: () => void;
 	/** → : step forward through the mosh history, or roll a new mosh at its top. */
 	mosh: () => void;
 	/** ← : step back through the mosh history. */
@@ -29,14 +31,15 @@ export function createKeyboardHandler(
 		// An overlay (the media lightbox) has the keyboard.
 		if (isModalKeyboardOpen()) return;
 
-		if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
-			e.preventDefault();
-			actions.save();
-			return;
-		}
-
 		const key = e.key.toLowerCase();
 		const mod = e.ctrlKey || e.metaKey;
+
+		if (key === "s" && mod) {
+			e.preventDefault();
+			if (e.shiftKey) actions.saveProject();
+			else actions.save();
+			return;
+		}
 
 		// Undo/redo reach the app even while a dropdown or slider holds focus, but not a text field.
 		if (mod && (key === "y" || (key === "z" && e.shiftKey))) {

@@ -27,3 +27,39 @@ export function downloadFile(blob: Blob, name: string) {
 	// Deleting the object URL immediately can cancel the download in some browsers.
 	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+interface SaveFilePickerOptions {
+	suggestedName?: string;
+	types?: { description?: string; accept: Record<string, string[]> }[];
+}
+
+type SaveFilePicker = (
+	options: SaveFilePickerOptions,
+) => Promise<{ createWritable: () => Promise<WritableStream<Uint8Array>> }>;
+
+/** Save a blob to disk: streamed through the file picker where the browser has one,
+ * a plain download otherwise. A cancelled picker saves nothing. */
+export async function saveBlobAs(blob: Blob, name: string): Promise<void> {
+	const picker = (window as { showSaveFilePicker?: unknown })
+		.showSaveFilePicker;
+	if (typeof picker === "function") {
+		try {
+			const handle = await (picker as SaveFilePicker)({
+				suggestedName: name,
+				types: [
+					{
+						description: "OpenMosh project",
+						accept: { "application/zip": [".openmosh"] },
+					},
+				],
+			});
+			const writable = await handle.createWritable();
+			await blob.stream().pipeTo(writable);
+			return;
+		} catch (e) {
+			if (e instanceof DOMException && e.name === "AbortError") return;
+			// Any other failure falls back to a download.
+		}
+	}
+	downloadFile(blob, name);
+}

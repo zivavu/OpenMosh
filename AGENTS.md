@@ -62,6 +62,11 @@ edit: they eat context fast.
 - A saved timeline is read through `readSeqEntry` (`lib/editor/seq-entry.ts`). Each past format
   has a fixture in `lib/editor/fixtures/seq-entry/`, built with that version's own code. Bumping
   `SEQ_ENTRY_VERSION` adds a fixture; never regenerate an old one.
+- A project file (`.openmosh`) is a stored zip: `project.json` plus the pool, songs and fonts.
+  It has its own `PROJECT_VERSION` in `lib/project-file/manifest.ts`, separate from
+  `SEQ_ENTRY_VERSION`; a change to either gets a fixture. The zip writer and reader
+  (`lib/project-file/zip.ts`) have no dependency and store entries rather than deflating them,
+  so an archive is built from the media blobs without copying them through memory.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
   `chain-fanout.ts`, or a multi-selection edits only the primary clip.

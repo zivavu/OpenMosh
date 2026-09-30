@@ -1,27 +1,11 @@
 import "fake-indexeddb/auto";
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { fakeFontModule, setFakeFonts } from "../testing/fake-fonts";
 
 /** Runs against the real IndexedDB stores on a fake database, so the deletion logic
  * is asserted as it ships. Only the font module is mocked (runes, bun can't evaluate). */
 
-interface FakeFont {
-	id: string;
-	name: string;
-	family: string;
-	sourceUrl: string;
-	addedAt: number;
-}
-let fonts: FakeFont[] = [];
-let fontSizes = new Map<string, number>();
-
-mock.module("../text-overlay/custom-fonts.svelte", () => ({
-	customFonts: () => fonts,
-	getCustomFontSizes: async () => new Map(fontSizes),
-	removeCustomFont: async (id: string) => {
-		fonts = fonts.filter((f) => f.id !== id);
-		fontSizes.delete(id);
-	},
-}));
+mock.module("../text-overlay/custom-fonts.svelte", fakeFontModule);
 
 /** localStorage is absent under bun; the per-song stores need a stand-in. */
 const localData = new Map<string, string>();
@@ -76,8 +60,7 @@ beforeEach(async () => {
 	await store.clearAllSequenceStores();
 	await tracks.clearTracks();
 	localData.clear();
-	fonts = [];
-	fontSizes = new Map();
+	setFakeFonts([]);
 });
 
 afterAll(() => {
@@ -263,16 +246,18 @@ describe("loadStorageInventory", () => {
 	});
 
 	test("lists fonts with their stored size", async () => {
-		fonts = [
-			{
-				id: "f1",
-				name: "Rubik Glitch",
-				family: '"Rubik Glitch"',
-				sourceUrl: "",
-				addedAt: 1,
-			},
-		];
-		fontSizes = new Map([["f1", 4096]]);
+		setFakeFonts(
+			[
+				{
+					id: "f1",
+					name: "Rubik Glitch",
+					family: '"Rubik Glitch"',
+					sourceUrl: "",
+					addedAt: 1,
+				},
+			],
+			new Map([["f1", 4096]]),
+		);
 		const inv = await loadStorageInventory();
 		expect(inv.fonts).toEqual([{ id: "f1", name: "Rubik Glitch", size: 4096 }]);
 		expect(inv.totals.fonts).toBe(4096);
@@ -543,8 +528,10 @@ describe("deleteEverything", () => {
 			state: {},
 		});
 		await store.putSequenceMediaProxy(img.file, new Blob(["p"]));
-		fonts = [{ id: "f", name: "F", family: "F", sourceUrl: "", addedAt: 1 }];
-		fontSizes = new Map([["f", 1]]);
+		setFakeFonts(
+			[{ id: "f", name: "F", family: "F", sourceUrl: "", addedAt: 1 }],
+			new Map([["f", 1]]),
+		);
 		writeJson("openmosh-track-segments", { [trackId]: {} });
 		writeJson("openmosh-presets", [{ name: "mine" }]);
 		writeJson("openmosh-settings", { moshMin: 2 });

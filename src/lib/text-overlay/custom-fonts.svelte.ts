@@ -48,6 +48,14 @@ export async function getCustomFontSizes(): Promise<Map<string, number>> {
 	return new Map(stored.map((f) => [f.id, f.data.byteLength]));
 }
 
+/** The stored bytes for a font, for saving it into a project file. */
+export async function getCustomFontData(
+	id: string,
+): Promise<ArrayBuffer | null> {
+	const stored = await getAllStored();
+	return stored.find((f) => f.id === id)?.data ?? null;
+}
+
 /** Every font the user has added, newest last. Reactive. */
 export function customFonts(): CustomFont[] {
 	return fonts;
@@ -206,15 +214,28 @@ export async function addCustomFontFile(file: File): Promise<CustomFont> {
 	if (!FONT_FILE_RE.test(file.name)) {
 		throw new Error("Pick a .woff2, .woff, .ttf or .otf file.");
 	}
-	const data = await file.arrayBuffer();
+	return addCustomFontData(
+		nameFromFileUrl(file.name),
+		file.name,
+		await file.arrayBuffer(),
+	);
+}
+
+/** Add a font from bytes under an explicit name, for a project file that carries
+ * the face's own name. */
+export async function addCustomFontData(
+	name: string,
+	sourceUrl: string,
+	data: ArrayBuffer,
+): Promise<CustomFont> {
 	// Parse it before it goes anywhere: a file the browser can't read would otherwise
 	// sit in the list and silently draw as the fallback face.
 	try {
 		await new FontFace("OpenMoshProbe", data.slice(0)).load();
 	} catch {
-		throw new Error(`${file.name} isn't a font this browser can read.`);
+		throw new Error(`${name} isn't a font this browser can read.`);
 	}
-	return saveFont(nameFromFileUrl(file.name), file.name, data);
+	return saveFont(name, sourceUrl, data);
 }
 
 async function saveFont(
