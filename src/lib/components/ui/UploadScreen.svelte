@@ -16,6 +16,7 @@
 
 	import {
 		Camera,
+		Download,
 		FolderOpen,
 		HardDrive,
 		Image,
@@ -37,7 +38,8 @@
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { getCapabilityReport } from "../../capabilities.svelte";
 	import { showToast } from "./toast.svelte";
-	import { fmtAgo } from "../../utils";
+	import { fmtAgo, saveBlobAs } from "../../utils";
+	import { buildProjectFile } from "../../project-file/export";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import {
@@ -159,6 +161,8 @@
 		updatedAt: number;
 		title: string;
 		open: () => void;
+		/** Editor projects can be saved to a file; sessions can't. */
+		download?: () => void;
 	}
 	let recentRows = $derived<RecentRow[]>(
 		selectedMode === "sequence"
@@ -175,6 +179,7 @@
 						updateSettings({ lastMode: "sequence" });
 						onSequenceFromSong(seq.trackId);
 					},
+					download: () => downloadProject(seq.trackId),
 				}))
 			: savedForMode.map((session) => {
 					const projectKey = projectKeyForSession(session.key);
@@ -259,6 +264,19 @@
 	function renameRow(row: RecentRow, name: string) {
 		setProjectName(row.projectKey, name);
 		projectNames = readProjectNames();
+	}
+
+	/** Save a project to a `.openmosh` file without opening it. */
+	async function downloadProject(projectKey: string) {
+		try {
+			const { blob, name } = await buildProjectFile(projectKey);
+			await saveBlobAs(blob, name);
+		} catch (e) {
+			showToast(
+				e instanceof Error ? e.message : "Couldn't save that project",
+				"error",
+			);
+		}
 	}
 
 	let dragging = $state(false);
@@ -840,6 +858,16 @@
 								{/if}
 								<span class="saved-when">{fmtAgo(row.updatedAt)}</span>
 							</button>
+							{#if row.download}
+								<button
+									class="saved-action"
+									title="Save to a project file"
+									aria-label={`Save ${row.label} to a file`}
+									onclick={row.download}
+								>
+									<Download size={12} />
+								</button>
+							{/if}
 							<button
 								class="saved-action"
 								title="Rename"
