@@ -1,0 +1,82 @@
+/** A song's or project's saved timeline, and how every version of it is read back. */
+
+import { normalizeFxLanes, type FxLane } from "./fx-lanes";
+import { normalizeTextTimeline, type TextTimeline } from "../text/types";
+import { normalizeMediaTimeline, type MediaTimeline } from "../media/types";
+import { normalizeSourceEdits, type SourceEdit } from "../media/source-edit";
+
+/** Bumped when what a saved entry means changes; see SeqEntry.v. v3 moved the song
+ * onto an audio lane and gave the project its own length. */
+export const SEQ_ENTRY_VERSION = 3;
+
+/** As much of a saved segment as the migration reads. */
+export interface LegacySegmentEntry {
+	sourceId?: string;
+	[key: string]: unknown;
+}
+
+export interface SeqEntry {
+	/** Absent on entries saved while the opening file was the segments' implicit media. */
+	v?: number;
+	/** The retired segment lane; folded into the fx and media lanes on load, never saved. */
+	segments?: LegacySegmentEntry[];
+	/** Absent on entries saved before BPM existed. */
+	bpm?: number;
+	/** Absent on entries saved before the text timeline existed. */
+	text?: TextTimeline;
+	/** Absent on entries saved before media layers existed. */
+	media?: MediaTimeline;
+	/** Absent on entries saved before fx lanes existed. */
+	fx?: FxLane[];
+	/** Per-source edits, keyed by source id. Sparse: only edited media. */
+	sourceEdits?: Record<string, SourceEdit>;
+	/** Sequence mode, from v3: the project's own length. Before, the song set it. */
+	length?: number;
+	/** The export span on the project timeline. */
+	span?: { start: number; end: number };
+	/** Library id of the song: the BPM source, and what the library shows as loaded. */
+	song?: string | null;
+}
+
+/** A saved entry, normalised into what the editor restores. */
+export interface RestoredEntry {
+	bpm: number;
+	fx: FxLane[];
+	text: TextTimeline | null;
+	media: MediaTimeline | null;
+	sourceEdits: Record<string, SourceEdit>;
+	/** Waiting to be folded into the lanes once the song's length is known. */
+	segments: LegacySegmentEntry[];
+	/** Null when the project sizes itself from its song, as before v3. */
+	length: number | null;
+	span: { start: number; end: number } | null;
+	song: string | null | undefined;
+}
+
+/** `openedSourceId` is the file the editor opened with: before layers took the media
+ * over, a segment with no source drew it. */
+export function readSeqEntry(
+	entry: SeqEntry,
+	openedSourceId: string,
+): RestoredEntry {
+	const segments = (entry.segments ?? []).map((seg) =>
+		entry.v ? seg : { ...seg, sourceId: seg.sourceId ?? openedSourceId },
+	);
+	const length =
+		(entry.v ?? 0) >= 3 && (entry.length ?? 0) > 0 ? entry.length! : null;
+	const span =
+		length !== null && entry.span && entry.span.end > entry.span.start
+			? { start: entry.span.start, end: Math.min(entry.span.end, length) }
+			: null;
+	return {
+		bpm: entry.bpm ?? 0,
+		fx: normalizeFxLanes(entry.fx),
+		text: entry.text ? normalizeTextTimeline(entry.text) : null,
+		media: entry.media ? normalizeMediaTimeline(entry.media) : null,
+		sourceEdits: normalizeSourceEdits(entry.sourceEdits),
+		segments,
+		length,
+		span,
+		song: entry.song,
+	};
+}

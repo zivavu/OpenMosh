@@ -59,6 +59,9 @@ edit: they eat context fast.
   picture and FX lanes run on top. Don't bring back a base-media or gapless-segment concept;
   `legacy-segments.ts` converts old saves on load. The slideshow's `TimelineSegments` still uses
   the segment modules.
+- A saved timeline is read through `readSeqEntry` (`lib/editor/seq-entry.ts`). Each past format
+  has a fixture in `lib/editor/fixtures/seq-entry/`, built with that version's own code. Bumping
+  `SEQ_ENTRY_VERSION` adds a fixture; never regenerate an old one.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
   `chain-fanout.ts`, or a multi-selection edits only the primary clip.
