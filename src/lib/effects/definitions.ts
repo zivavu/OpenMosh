@@ -1708,6 +1708,8 @@ export const EFFECT_DEFINITIONS: EffectDefinition[] = [
 		name: "3D Transform",
 		// Curated rolls leave it out: it only fits when picked on purpose.
 		moshable: false,
+		// u_time arrives as degrees turned so far.
+		rateParam: "spin",
 		params: [
 			{
 				key: "rotX",

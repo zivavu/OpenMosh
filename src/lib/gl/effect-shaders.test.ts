@@ -42,7 +42,7 @@ describe("EFFECT_SHADERS", () => {
 			});
 			shader.setUniforms(stubGl(), stubLocs(), values);
 			for (const param of def.params) {
-				if (HOST_PARAMS.has(param.key)) continue;
+				if (HOST_PARAMS.has(param.key) || param.key === def.rateParam) continue;
 				if (!read.has(param.key)) missing.push(`${def.id}.${param.key}`);
 			}
 		}

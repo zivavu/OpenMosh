@@ -2009,7 +2009,6 @@ uniform float u_rotY;
 uniform float u_rotZ;
 uniform float u_perspective;
 uniform float u_zoom;
-uniform float u_spin;
 uniform int u_axis;
 uniform int u_edge;
 
@@ -2026,7 +2025,7 @@ void main() {
   vec2 res = vec2(textureSize(u_texture, 0));
   float aspect = res.x / res.y;
 
-  float t = u_time * u_spin * DEG;
+  float t = u_time * DEG;
   float sx = u_axis == 0 ? t : (u_axis == 3 ? t * 0.43 : 0.0);
   float sy = u_axis == 1 ? t : (u_axis == 3 ? t : 0.0);
   float sz = u_axis == 2 ? t : (u_axis == 3 ? t * 0.17 : 0.0);
@@ -2075,7 +2074,6 @@ void main() {
 			setFloat(gl, l, "u_rotZ", v.rotZ as number);
 			setFloat(gl, l, "u_perspective", v.perspective as number);
 			setFloat(gl, l, "u_zoom", v.zoom as number);
-			setFloat(gl, l, "u_spin", v.spin as number);
 			setInt(
 				gl,
 				l,

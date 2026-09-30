@@ -62,9 +62,12 @@ function mul(a: Mat3, b: Mat3): Mat3 {
 
 const IDENTITY: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 
-/** The shader's R at `time` (the effect's own clock, phase included). */
-export function transform3dRotation(v: Transform3dValues, time: number): Mat3 {
-	const t = time * v.spin * DEG;
+/** The shader's R, `turned` being the spin's accumulated degrees (its u_time). */
+export function transform3dRotation(
+	v: Transform3dValues,
+	turned: number,
+): Mat3 {
+	const t = turned * DEG;
 	const sx = v.axis === "x" ? t : v.axis === "tumble" ? t * 0.43 : 0;
 	const sy = v.axis === "y" || v.axis === "tumble" ? t : 0;
 	const sz = v.axis === "z" ? t : v.axis === "tumble" ? t * 0.17 : 0;

@@ -1,4 +1,4 @@
-import type { EffectInstance } from "../effects";
+import { getDefinition, type EffectInstance } from "../effects";
 import { ensureFontLoaded, fontsVersion } from "../text-overlay";
 import {
 	drawTextToCanvas,
@@ -1769,7 +1769,8 @@ export class GlRenderer {
 		dt: number,
 	): { time: number; delta: number } {
 		const out = this.effectTimeOut;
-		if (!("speed" in eff.values)) {
+		const rate = getDefinition(eff.defId)?.rateParam ?? "speed";
+		if (!(rate in eff.values)) {
 			out.time = time;
 			out.delta = dt;
 			return out;
@@ -1782,7 +1783,7 @@ export class GlRenderer {
 			out.delta = dt * perBeat * this.beatsPerSecond;
 			return out;
 		}
-		const speed = eff.values.speed as number;
+		const speed = eff.values[rate] as number;
 		const prev = this.phaseMap.get(eff.instanceId) ?? 0;
 		const phase = prev + dt * speed;
 		this.phaseMap.set(eff.instanceId, phase);

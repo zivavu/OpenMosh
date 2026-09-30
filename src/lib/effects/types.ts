@@ -72,6 +72,9 @@ export interface EffectDefinition {
 	params: EffectParam[];
 	/** Never picked by a curated roll; random rolls and the lock treat it like any other. */
 	moshable?: false;
+	/** The param the renderer integrates into `u_time`, so changing it changes the rate
+	 * rather than the position. Defaults to "speed", where there is one. */
+	rateParam?: string;
 }
 
 /** When set, this range param is driven by music volume in [min, max]. */
