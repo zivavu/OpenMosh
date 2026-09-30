@@ -5,16 +5,16 @@
 	import { Play, Square } from "lucide-svelte";
 	import { GlRenderer } from "../../gl/renderer";
 	import { demoBackgroundEnabled, updateSettings } from "../../editor/settings";
-	import {
-		DEMO_HEIGHT,
-		DEMO_WIDTH,
-		WORLD_COUNT,
-		worldScene,
-	} from "../../demo/demo-worlds";
+	import { DEMO_HEIGHT, DEMO_WIDTH } from "../../demo/demo-worlds";
 	import {
 		getDemoDirector,
 		missingDemoEffects,
 	} from "../../demo/demo-director";
+	import {
+		createFpsProbe,
+		demoStartsFlat,
+		rememberDemoSlow,
+	} from "../../demo/demo-quality";
 
 	interface Props {
 		warmCanvas: HTMLCanvasElement | null;
@@ -67,7 +67,7 @@
 		renderer.initBlankSource(DEMO_WIDTH, DEMO_HEIGHT);
 
 		// Shared across modes and mounts, so the performance never restarts.
-		const director = getDemoDirector();
+		const director = getDemoDirector(demoStartsFlat());
 		/** Layer keys the worlds staged, released when the demo hands the renderer on. */
 		const staged = new Set<string>();
 		let raf = 0;
@@ -87,9 +87,19 @@
 
 		// Where a compile blocks the page (Firefox), any compile mid-show freezes the
 		// world, so every world compiles before the first frame, one a frame.
-		const unbuilt = renderer.scenesCompileInBackground
-			? []
-			: Array.from({ length: WORLD_COUNT }, (_, i) => worldScene(i));
+		const unbuilt = renderer.scenesCompileInBackground ? [] : director.scenes();
+		// Too slow for the 3D worlds, the demo cuts to the flat ones for good.
+		let probe = director.flat ? null : createFpsProbe();
+		const checkPace = (dt: number) => {
+			const verdict = probe?.frame(dt);
+			if (!verdict) return;
+			probe = null;
+			if (verdict === "smooth") return;
+			director.goFlat();
+			rememberDemoSlow();
+			if (!renderer.scenesCompileInBackground)
+				unbuilt.push(...director.scenes());
+		};
 
 		const drawFrame = () => {
 			if (unbuilt.length > 0) {
@@ -113,6 +123,7 @@
 			// dt is 0 on the first frame after any start, so the priming draw paints
 			// the holder at opacity 0 before the ramp moves at all.
 			advanceFade(dt);
+			checkPace(dt);
 		};
 
 		const loop = () => {

@@ -33,6 +33,8 @@ export interface EditorSettings {
 	sourceFit: "stretch" | "contain" | "cover";
 	/** Whether the upload screen's demo keeps moshing behind the UI. */
 	demoBackground: boolean;
+	/** When the demo last ran too slow for its 3D worlds; 0 if it never has. */
+	demoSlowAt: number;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -55,6 +57,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	// Only bites when source and output aspects differ; "contain" never crops.
 	sourceFit: "contain",
 	demoBackground: true,
+	demoSlowAt: 0,
 };
 
 export function loadSettings(): Partial<EditorSettings> {
