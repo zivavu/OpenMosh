@@ -68,11 +68,23 @@ export function lightboxItem(src: SequenceSource): {
 	name: string;
 	kind: "image" | "video";
 	objectUrl: string;
+	editable: boolean;
 } {
 	if (src.kind !== "model") {
-		return { name: src.name, kind: src.kind, objectUrl: src.objectUrl };
+		return {
+			name: src.name,
+			kind: src.kind,
+			objectUrl: src.objectUrl,
+			editable: true,
+		};
 	}
-	return { name: src.name, kind: "image", objectUrl: src.thumbUrl ?? "" };
+	// The media editor has no tools for a model.
+	return {
+		name: src.name,
+		kind: "image",
+		objectUrl: src.thumbUrl ?? "",
+		editable: false,
+	};
 }
 
 /** The media pool behind sequence mode; video decoding belongs to the layer driver. */

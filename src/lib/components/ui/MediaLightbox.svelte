@@ -15,6 +15,8 @@
 		name: string;
 		kind: "image" | "video";
 		objectUrl: string;
+		/** False hides the edit button for this item; absent counts as true. */
+		editable?: boolean;
 	}
 
 	interface Props {
@@ -131,7 +133,7 @@
 					{#if items.length > 1}{index + 1} / {items.length}&nbsp;·&nbsp;{/if}{item.name}
 				</span>
 				<div class="lb-actions">
-					{#if onEdit}
+					{#if onEdit && item.editable !== false}
 						<button
 							class="lb-close"
 							onclick={() => onEdit(index)}
