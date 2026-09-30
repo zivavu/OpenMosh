@@ -27,6 +27,11 @@ void main() {
   outColor = vec4(clamp(w.rgb, 0.0, 1.0), u_withElements > 0.5 ? w.a / 255.0 : 1.0);
 }`;
 
+/** The fragment shader a scene compiles to. */
+export function sceneFragment(scene: SceneDef): string {
+	return HEADER + scene.frag + MAIN;
+}
+
 /** Part 0 copies the backdrop; any other keeps the pixels whose id matches. */
 const PART_FRAG = `#version 300 es
 precision highp float;
@@ -104,7 +109,7 @@ export class ScenePass {
 		const program = gl.createProgram();
 		const shaders = [
 			[gl.VERTEX_SHADER, VERTEX_SHADER],
-			[gl.FRAGMENT_SHADER, HEADER + scene.frag + MAIN],
+			[gl.FRAGMENT_SHADER, sceneFragment(scene)],
 		].map(([type, source]) => {
 			const shader = gl.createShader(type as number)!;
 			gl.shaderSource(shader, source as string);
