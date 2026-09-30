@@ -24,6 +24,7 @@ import {
 /** One copied clip, placed relative to the earliest one in the copy. */
 export interface MediaClipboardEntry extends ClipBlockEntry {
 	sourceStart: number;
+	speed?: number;
 	/** The clip's own source, when it had one; absent means the lane's. */
 	sourceId?: string;
 	/** What the clip showed, resolved through its lane at copy time, so a paste onto
@@ -60,6 +61,7 @@ export function copyMediaClips(
 		clipIds,
 		(clip, lane) => ({
 			sourceStart: clip.sourceStart,
+			speed: clip.speed,
 			sourceId: clip.sourceId,
 			resolvedSourceId: clip.sourceId ?? lane.sourceId,
 			chain: captureChain(clip),
@@ -97,6 +99,7 @@ export function pasteMediaClips(
 				createMediaClip(start, end, e.sourceStart, sourceId),
 				chainOf(e),
 			);
+			if (e.speed !== undefined) clip.speed = e.speed;
 			if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
 			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 			return clip;
@@ -121,7 +124,12 @@ export function pasteMediaContentOnto(
 		entries,
 		(c, e, lane) =>
 			applyChainTo(
-				{ ...c, sourceStart: e.sourceStart, sourceId: pinnedSource(e, lane) },
+				{
+					...c,
+					sourceStart: e.sourceStart,
+					speed: e.speed,
+					sourceId: pinnedSource(e, lane),
+				},
 				chainOf(e),
 			),
 	);

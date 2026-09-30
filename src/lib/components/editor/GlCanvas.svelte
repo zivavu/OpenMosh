@@ -1132,6 +1132,7 @@
 				c.start;
 				c.end;
 				c.sourceStart;
+				c.speed;
 				c.sourceId;
 				c.mode;
 				c.seed;

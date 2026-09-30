@@ -100,6 +100,7 @@ export {
 	fitMediaTimeline,
 	MAX_MEDIA_LANES,
 	MEDIA_FIT_OPTIONS,
+	mediaClipSpeed,
 	MIN_CLIP_LENGTH,
 	normalizeMediaTimeline,
 	splitMediaClipAt,

@@ -19,6 +19,7 @@ import {
 	type LaneAudio,
 } from "../mix/types";
 
+import { SPEED_MAX, SPEED_MIN } from "./source-edit";
 import { normalizeClipTransition, type ClipTransition } from "./transition";
 
 export { MIN_CLIP_LENGTH } from "../timeline/clips";
@@ -63,6 +64,8 @@ export interface MediaClip extends ChainClip {
 	sourceStart: number;
 	/** What this clip draws when it isn't the lane's own source. Absent = the lane's. */
 	sourceId?: string;
+	/** Models only: how fast the animation plays. Absent means 1. */
+	speed?: number;
 	/** Fade the layer in over this many seconds from the clip's start, and out over
 	 * `fadeOutSec` before its end. */
 	fadeInSec?: number;
@@ -147,6 +150,16 @@ export function createMediaClip(
 	return clip;
 }
 
+export function mediaClipSpeed(clip: MediaClip): number {
+	return clip.speed ?? 1;
+}
+
+/** A stored rate held to the dialog's range; 1 is dropped. */
+function normalizeClipSpeed(raw: unknown): number | undefined {
+	if (typeof raw !== "number" || !Number.isFinite(raw) || raw === 1) return;
+	return Math.min(SPEED_MAX, Math.max(SPEED_MIN, raw));
+}
+
 /** How strongly the clip's layer shows at `time`, 1 unless a fade is ramping. */
 export function mediaClipWeight(clip: MediaClip, time: number): number {
 	return clipFadeWeight(clip, clip.fadeInSec, clip.fadeOutSec, time);
@@ -161,7 +174,7 @@ export function splitMediaClipAt(lane: MediaLane, at: number): MediaLane {
 		() => nextId("mclip"),
 		(half, clip) => ({
 			...half,
-			sourceStart: clip.sourceStart + (at - clip.start),
+			sourceStart: clip.sourceStart + (at - clip.start) * mediaClipSpeed(clip),
 			transition: undefined,
 		}),
 	);
@@ -237,6 +250,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					end: clip.end ?? 0,
 					sourceStart: clip.sourceStart ?? 0,
 					sourceId: clip.sourceId ?? undefined,
+					speed: normalizeClipSpeed(clip.speed),
 					// Saved before the two edges split, `fadeSec` ramped both.
 					fadeInSec: clip.fadeInSec ?? clip.fadeSec,
 					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,
