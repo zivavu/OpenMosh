@@ -1,6 +1,6 @@
 import type { EffectInstance, Preset, VolumeLink } from "./types";
 import { generateId } from "./types";
-import { hydrateValues } from "./hydrate";
+import { getDefinition, hydrateValues } from "./hydrate";
 import { STARTER_PRESETS } from "./starter-presets";
 import { readJson, readRaw, writeJson, writeRaw } from "../storage";
 
@@ -89,4 +89,90 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 		values: hydrateValues(pe.defId, pe.values),
 		...(pe.volumeLinks && { volumeLinks: copyLinks(pe.volumeLinks) }),
 	}));
+}
+
+const FILE_FORMAT = "openmosh-presets";
+
+/** A preset file: versioned so a later shape can still read this one. */
+export function presetsToFile(presets: Preset[]): Blob {
+	const file = { format: FILE_FORMAT, version: 1, presets };
+	return new Blob([JSON.stringify(file, null, "	")], {
+		type: "application/json",
+	});
+}
+
+export function presetFileName(presets: Preset[]): string {
+	const base =
+		presets.length === 1
+			? presets[0].name.replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "") ||
+				"preset"
+			: "presets";
+	return `openmosh-${base}.json`;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+	return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** Reads a preset file, keeping what this build understands: effects it doesn't
+ * know are dropped, and so is a preset left with none. Throws on anything else. */
+export function parsePresetFile(text: string): Preset[] {
+	let data: unknown;
+	try {
+		data = JSON.parse(text);
+	} catch {
+		throw new Error("That file isn't valid JSON");
+	}
+	if (
+		!isRecord(data) ||
+		data.format !== FILE_FORMAT ||
+		!Array.isArray(data.presets)
+	)
+		throw new Error("That isn't an OpenMosh preset file");
+	const presets: Preset[] = [];
+	for (const p of data.presets) {
+		if (!isRecord(p) || typeof p.name !== "string" || !Array.isArray(p.effects))
+			continue;
+		const effects: Preset["effects"] = [];
+		for (const e of p.effects) {
+			if (
+				!isRecord(e) ||
+				typeof e.defId !== "string" ||
+				!getDefinition(e.defId)
+			)
+				continue;
+			effects.push({
+				defId: e.defId,
+				enabled: e.enabled !== false,
+				values: isRecord(e.values)
+					? (e.values as Preset["effects"][number]["values"])
+					: {},
+				...(isRecord(e.volumeLinks) && {
+					volumeLinks: e.volumeLinks as Record<string, VolumeLink>,
+				}),
+			});
+		}
+		const name = normalizePresetName(p.name);
+		if (name && effects.length > 0) presets.push({ name, effects });
+	}
+	if (presets.length === 0)
+		throw new Error("No presets in that file work here");
+	return presets;
+}
+
+/** Appends imported presets, numbering a name that's already taken. */
+export function importPresets(incoming: Preset[]): Preset[] {
+	const presets = loadPresets();
+	const taken = new Set(presets.map((p) => p.name));
+	for (const p of incoming) {
+		let name = p.name;
+		for (let n = 2; taken.has(name); n++) {
+			const suffix = ` (${n})`;
+			name = p.name.slice(0, PRESET_NAME_MAX_LENGTH - suffix.length) + suffix;
+		}
+		taken.add(name);
+		presets.push({ ...p, name });
+	}
+	writeJson(PRESETS_KEY, presets);
+	return presets;
 }

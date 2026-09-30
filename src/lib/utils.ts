@@ -17,3 +17,13 @@ export function fmtAgo(t: number): string {
 	if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
 	return new Date(t).toLocaleDateString();
 }
+
+export function downloadFile(blob: Blob, name: string) {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement("a");
+	a.href = url;
+	a.download = name;
+	a.click();
+	// Deleting the object URL immediately can cancel the download in some browsers.
+	setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

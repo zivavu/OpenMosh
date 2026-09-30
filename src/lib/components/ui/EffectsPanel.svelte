@@ -6,6 +6,8 @@
 		Check,
 		ChevronDown,
 		ChevronsDownUp,
+		Download,
+		FileUp,
 		ListStart,
 		Plus,
 		Save,
@@ -20,9 +22,13 @@
 		cloneEffectInstance,
 		createEffectInstance,
 		deletePreset,
+		importPresets,
 		loadPresets,
 		normalizePresetName,
+		parsePresetFile,
 		PRESET_NAME_MAX_LENGTH,
+		presetFileName,
+		presetsToFile,
 		savePreset,
 		updatePreset,
 		type EffectInstance,
@@ -34,6 +40,8 @@
 	import { moveItem, resolveMoveTarget } from "../../effects/reorder";
 	import { isMoshable } from "../../editor/mosh";
 	import EffectItem from "./EffectItem.svelte";
+	import { showToast } from "./toast.svelte";
+	import { downloadFile } from "../../utils";
 
 	export type { SpectrumData };
 
@@ -155,6 +163,28 @@
 		presets = deletePreset(index);
 		if (appliedIndex === index) appliedIndex = null;
 		else if (appliedIndex !== null && appliedIndex > index) appliedIndex--;
+	}
+
+	function exportPresets(list: Preset[]) {
+		const snapshot = $state.snapshot(list) as Preset[];
+		downloadFile(presetsToFile(snapshot), presetFileName(snapshot));
+	}
+
+	async function handleImportPresets(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = "";
+		if (!file) return;
+		try {
+			const incoming = parsePresetFile(await file.text());
+			presets = importPresets(incoming);
+			presetsOpen = true;
+			showToast(
+				`Added ${incoming.length} preset${incoming.length === 1 ? "" : "s"}`,
+			);
+		} catch (err) {
+			showToast(err instanceof Error ? err.message : String(err), "error");
+		}
 	}
 
 	let dragFromIndex: number | null = $state(null);
@@ -591,6 +621,29 @@
 				<div class="presets-head">
 					<span class="rack-label">Presets</span>
 					<div class="presets-tools">
+						<label
+							class="preset-tool"
+							title="Import presets from a file"
+							aria-label="Import presets"
+						>
+							<input
+								type="file"
+								accept=".json,application/json"
+								onchange={handleImportPresets}
+								hidden
+							/>
+							<FileUp size={12} />
+						</label>
+						{#if presets.length > 0}
+							<button
+								class="preset-tool"
+								onclick={() => exportPresets(presets)}
+								title="Download all presets as a file"
+								aria-label="Download all presets"
+							>
+								<Download size={12} />
+							</button>
+						{/if}
 						<button
 							class="preset-tool"
 							onclick={() => (saving = true)}
@@ -702,6 +755,14 @@
 										aria-label="Overwrite preset"
 									>
 										<Save size={10} />
+									</button>
+									<button
+										class="preset-mini"
+										onclick={() => exportPresets([preset])}
+										title="Download this preset to share it"
+										aria-label="Download preset"
+									>
+										<Download size={10} />
 									</button>
 									<button
 										class="preset-mini preset-mini--rec"
