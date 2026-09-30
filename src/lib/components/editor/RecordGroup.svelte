@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Disc } from "lucide-svelte";
 	import type { Snippet } from "svelte";
+	import { getCapabilityReport } from "../../capabilities.svelte";
 
 	interface Props {
 		recording: boolean;
@@ -20,6 +21,8 @@
 
 	let groupEl: HTMLDivElement;
 
+	const exportBlocked = $derived(getCapabilityReport()?.exportBlocked ?? null);
+
 	export function handleClickOutside(e: MouseEvent) {
 		if (showSettings && groupEl && !groupEl.contains(e.target as Node)) {
 			showSettings = false;
@@ -32,8 +35,8 @@
 		class="bar-key rec"
 		class:armed={showSettings}
 		onclick={() => (showSettings = !showSettings)}
-		disabled={recording || disabled}
-		{title}
+		disabled={recording || disabled || !!exportBlocked}
+		title={exportBlocked ?? title}
 	>
 		<Disc size={14} />
 		RECORD
