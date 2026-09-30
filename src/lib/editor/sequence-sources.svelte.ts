@@ -48,6 +48,8 @@ export interface SequenceSource {
 	height?: number;
 	/** Videos only; 0 for images. */
 	duration: number;
+	/** Models only: seconds their animation loops over; absent for a still model. */
+	animationLength?: number;
 	/** <=1080p stand-in the preview decodes; exports still read `file`. */
 	proxyFile?: File;
 	/** Proxy size: target while transcoding, finished size after; absent means still looking. */
@@ -491,6 +493,7 @@ export class SequenceSourceRegistry {
 			thumbUrl: thumb ? URL.createObjectURL(thumb) : null,
 			thumbPending: false,
 			duration: 0,
+			animationLength: mesh.skin?.duration || undefined,
 		};
 	}
 
