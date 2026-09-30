@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { tick } from "svelte";
-	import { SvelteSet } from "svelte/reactivity";
+	import { SvelteMap } from "svelte/reactivity";
 	import { readJson, writeJson } from "../../storage";
 	import {
 		Check,
 		ChevronDown,
 		ChevronsDownUp,
-		Filter,
+		ListStart,
 		Plus,
 		Save,
 		Search,
@@ -15,6 +15,7 @@
 	import {
 		EFFECT_DEFINITIONS,
 		HIDDEN_EFFECTS_KEY,
+		LIVE_FIRST_KEY,
 		applyPreset,
 		cloneEffectInstance,
 		createEffectInstance,
@@ -160,13 +161,28 @@
 	let dragOverIndex: number | null = $state(null);
 	let dropPosition: "above" | "below" | null = $state(null);
 
-	function toggle(index: number) {
+	async function toggle(index: number) {
 		onBeforeUserEdit?.();
-		effects[index].enabled = !effects[index].enabled;
-		if (onlyLive && !effects[index].enabled)
-			livePinned.add(effects[index].instanceId);
+		const effect = effects[index];
+		// Switched on while grouped, it runs last, so it lands at the bottom of the live ones.
+		const lift = liveFirst && !effect.enabled && !held.has(effect.instanceId);
+		if (lift) heldSignature = liveSignature(effect);
+		else hold(effect);
+		effect.enabled = !effect.enabled;
+		if (lift) {
+			let last = effects.length - 1;
+			while (
+				last >= 0 &&
+				(effects[last] === effect || !inLiveGroup(effects[last]))
+			)
+				last--;
+			if (last >= 0) moveItem(effects, index, last < index ? last + 1 : last);
+		}
 		appliedIndex = null;
 		onUserEdit?.();
+		if (!lift) return;
+		await tick();
+		centerOnEffect(effect.instanceId);
 	}
 
 	/** Not a render edit, so it commits like a replace rather than marking the chain edited. */
@@ -256,39 +272,81 @@
 
 	let searchQuery = $state("");
 
-	// Narrows the list to the effects actually passing signal.
-	let onlyLive = $state(false);
-	// Effects the live filter keeps around once switched off: the set live when it came on.
-	let livePinned = new SvelteSet<string>();
+	// Lists the live effects above the rest; the chain itself keeps its order.
+	let liveFirst = $state(readJson<boolean>(LIVE_FIRST_KEY, false));
 
-	function setOnlyLive(on: boolean) {
-		livePinned.clear();
-		if (on)
-			for (const e of effects) if (e.enabled) livePinned.add(e.instanceId);
-		onlyLive = on;
+	function setLiveFirst(on: boolean) {
+		held.clear();
+		liveFirst = on;
+		writeJson(LIVE_FIRST_KEY, on);
 	}
 
-	let filteredEffects = $derived(
-		effects
+	// An effect switched from this panel keeps its group, so the row doesn't jump
+	// from under the pointer. Any other change to what's live regroups everything.
+	const held = new SvelteMap<string, boolean>();
+	let heldSignature = "";
+
+	/** Which effects are live, with `flipped` counted as already switched. Sorted, so
+	 * a move alone doesn't count as a change. */
+	function liveSignature(flipped?: EffectInstance): string {
+		return effects
+			.filter((e) => (e === flipped) !== e.enabled)
+			.map((e) => e.instanceId)
+			.sort()
+			.join();
+	}
+
+	/** Call right before `effect.enabled` flips from here. */
+	function hold(effect: EffectInstance) {
+		if (!liveFirst) return;
+		if (!held.has(effect.instanceId))
+			held.set(effect.instanceId, effect.enabled);
+		heldSignature = liveSignature(effect);
+	}
+
+	$effect(() => {
+		if (liveSignature() !== heldSignature) held.clear();
+	});
+
+	function inLiveGroup(effect: EffectInstance): boolean {
+		return held.get(effect.instanceId) ?? effect.enabled;
+	}
+
+	let filteredEffects = $derived.by(() => {
+		const rows = effects
 			.map((e, i) => ({ effect: e, index: i }))
 			.filter(({ effect }) => {
-				if (onlyLive && !effect.enabled && !livePinned.has(effect.instanceId))
-					return false;
 				if (!searchQuery) return true;
 				const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
 				return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
-			}),
-	);
+			});
+		if (!liveFirst) return rows;
+		return [
+			...rows.filter((r) => inLiveGroup(r.effect)),
+			...rows.filter((r) => !inLiveGroup(r.effect)),
+		];
+	});
 
-	// Nothing in here is live, so the section has no place in a live-only list.
+	/** The rows a move stays among: the whole list, or the effect's own group. */
+	function moveRows(effect: EffectInstance) {
+		if (!liveFirst) return filteredEffects;
+		const live = inLiveGroup(effect);
+		return filteredEffects.filter((r) => inLiveGroup(r.effect) === live);
+	}
+
+	/** The first switched-off row under the live ones; the divider sits above it. */
+	let firstOffId = $derived.by(() => {
+		if (!liveFirst) return null;
+		const i = filteredEffects.findIndex((r) => !inLiveGroup(r.effect));
+		return i > 0 ? filteredEffects[i].effect.instanceId : null;
+	});
+
 	let filteredHiddenDefs = $derived(
-		onlyLive
-			? []
-			: searchQuery
-				? hiddenDefs.filter((def) =>
-						def.name.toLowerCase().includes(searchQuery.toLowerCase()),
-					)
-				: hiddenDefs,
+		searchQuery
+			? hiddenDefs.filter((def) =>
+					def.name.toLowerCase().includes(searchQuery.toLowerCase()),
+				)
+			: hiddenDefs,
 	);
 
 	function addEffect(defId: string) {
@@ -315,7 +373,10 @@
 	function paramChange(index: number, key: string, value: number | string) {
 		onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
 		effects[index].values[key] = value;
-		if (!effects[index].enabled) effects[index].enabled = true;
+		if (!effects[index].enabled) {
+			hold(effects[index]);
+			effects[index].enabled = true;
+		}
 		appliedIndex = null;
 		onUserEdit?.();
 	}
@@ -362,9 +423,14 @@
 		onUserEdit?.();
 	}
 
-	/** Move an effect by button. `pos` indexes the visible list, not `effects`. */
-	async function moveEffect(pos: number, direction: -1 | 1, toEnd: boolean) {
-		const visible = filteredEffects;
+	/** Move an effect by button, among the rows `moveRows` gives it. */
+	async function moveEffect(
+		effect: EffectInstance,
+		direction: -1 | 1,
+		toEnd: boolean,
+	) {
+		const visible = moveRows(effect);
+		const pos = visible.findIndex((r) => r.effect === effect);
 		const to = resolveMoveTarget(
 			visible.map((v) => ({ index: v.index, enabled: v.effect.enabled })),
 			pos,
@@ -676,15 +742,15 @@
 				{/if}
 				<button
 					class="search-clear live-filter"
-					class:on={onlyLive}
-					onclick={() => setOnlyLive(!onlyLive)}
-					title={onlyLive
-						? "Showing live effects only — click to show the whole chain"
-						: "Show live effects only"}
-					aria-pressed={onlyLive}
-					aria-label="Show live effects only"
+					class:on={liveFirst}
+					onclick={() => setLiveFirst(!liveFirst)}
+					title={liveFirst
+						? "Live effects are listed first. Click to list the chain in order."
+						: "List live effects first. The chain keeps its order."}
+					aria-pressed={liveFirst}
+					aria-label="List live effects first"
 				>
-					<Filter size={13} />
+					<ListStart size={13} />
 				</button>
 				{#if anyExpanded}
 					<button
@@ -715,12 +781,16 @@
 			{#if rolledNote}
 				<p class="rolled-note">{rolledNote}</p>
 			{/if}
-			{#each filteredEffects as { effect, index: i }, pos (effect.instanceId)}
+			{#each filteredEffects as { effect, index: i } (effect.instanceId)}
+				{@const rows = moveRows(effect)}
+				{#if effect.instanceId === firstOffId}
+					<div class="group-divider" role="separator"></div>
+				{/if}
 				<EffectItem
 					{effect}
-					canMoveUp={pos > 0}
-					canMoveDown={pos < filteredEffects.length - 1}
-					onMove={(direction, toEnd) => moveEffect(pos, direction, toEnd)}
+					canMoveUp={rows[0]?.effect !== effect}
+					canMoveDown={rows[rows.length - 1]?.effect !== effect}
+					onMove={(direction, toEnd) => moveEffect(effect, direction, toEnd)}
 					{hasTrack}
 					{spectrumData}
 					{response}
@@ -750,23 +820,7 @@
 
 			{#if filteredEffects.length === 0}
 				<div class="list-empty">
-					{#if onlyLive && searchQuery}
-						<p class="empty-title">No live match</p>
-						<p class="empty-hint">
-							Nothing switched on is called “{searchQuery}”.
-						</p>
-						<button class="empty-action" onclick={() => setOnlyLive(false)}>
-							Show the whole chain
-						</button>
-					{:else if onlyLive}
-						<p class="empty-title">Nothing is live</p>
-						<p class="empty-hint">
-							Switch an effect on, or hit MOSH to fill the chain for you.
-						</p>
-						<button class="empty-action" onclick={() => setOnlyLive(false)}>
-							Show the whole chain
-						</button>
-					{:else if searchQuery}
+					{#if searchQuery}
 						<p class="empty-title">No match</p>
 						<p class="empty-hint">Nothing here is called “{searchQuery}”.</p>
 						<button class="empty-action" onclick={() => (searchQuery = "")}>
@@ -1237,6 +1291,12 @@
 
 	.live-filter.on {
 		color: var(--live);
+	}
+
+	/* Between the live effects and the switched-off ones under them. */
+	.group-divider {
+		margin: 0.35rem 0;
+		border-top: 1px dashed var(--line-strong);
 	}
 
 	/* Standing in for the list, so a filtered-to-nothing panel still says what happened. */
