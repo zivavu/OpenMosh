@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.9.6](https://github.com/zivavu/OpenMosh/compare/v0.9.5...v0.9.6) (2026-09-30)
+
+
+### Added
+
+* Change a model's animation speed ([da085ce](https://github.com/zivavu/OpenMosh/commit/da085ce7dda0c7800eaad9d7247d34b6676f1885))
+* Download saved projects from the upload screen ([bc7284b](https://github.com/zivavu/OpenMosh/commit/bc7284bbccc6cf4deb293cfbdbf075c0c7ad0466))
+* Fit a 3D model's layer box to the model ([4bebb4b](https://github.com/zivavu/OpenMosh/commit/4bebb4bb43480d30b7942eff08053b5cd7dc3e22))
+* Give Edges thickness, passthru and a line colour ([1b839ac](https://github.com/zivavu/OpenMosh/commit/1b839acb2981529f9fa00d3071dbc33f2f9c77e2))
+* Keep working offline after the first visit ([f33a9d0](https://github.com/zivavu/OpenMosh/commit/f33a9d081853340034fd56ed0658d32191a81b5c))
+* List live effects first in the effects panel ([9fdf203](https://github.com/zivavu/OpenMosh/commit/9fdf203a3856013fc44ae4c481f901f60445bf18))
+* Make Halftone a crisp colour dot screen ([2a698fe](https://github.com/zivavu/OpenMosh/commit/2a698fe826bf6c7193e1ec9d08573afcfd4922c4))
+* Open the matching issue form from the feedback dialog ([a6d4b34](https://github.com/zivavu/OpenMosh/commit/a6d4b343aaef43a8541068d781bb1997b4d368c3))
+* Pick where a model's animation starts ([e952bcb](https://github.com/zivavu/OpenMosh/commit/e952bcb7f58d67b3b5b5aec53a62ff170b7aedd5))
+* Play animated GLB and FBX models ([7bf75ac](https://github.com/zivavu/OpenMosh/commit/7bf75acb083bf29a34d876b09ac47427623e015b))
+* Remove media straight from its preview ([519b37d](https://github.com/zivavu/OpenMosh/commit/519b37de80029a2efd2d5e26ac3aafa526c79d25))
+* Save and open Editor projects as files ([a3bc491](https://github.com/zivavu/OpenMosh/commit/a3bc4919e9b09c455701d82887d8d56aefb7e147))
+* Share presets as files ([9c9028e](https://github.com/zivavu/OpenMosh/commit/9c9028e6ce8e47b81cff659a8f5cfcefaaf642d5))
+* Show a lighter 2D demo on slower devices ([aa46b12](https://github.com/zivavu/OpenMosh/commit/aa46b126691f1ea34fe9bbb1c43086953692fecd))
+* Show a preview when an OpenMosh link is shared ([7d57578](https://github.com/zivavu/OpenMosh/commit/7d57578e9efea8f53d53ebd8756fabfcd204b61d))
+* Try the app on a sample image with one click ([fd41703](https://github.com/zivavu/OpenMosh/commit/fd41703d0b209af015080f23fed72808550e1465))
+* Warn up front when a browser can't export ([eedafd8](https://github.com/zivavu/OpenMosh/commit/eedafd824a63248d4a938bebb3b3e98bfeccc829))
+
+
+### Fixed
+
+* Change 3D Transform's spin speed without a jump ([4696fa8](https://github.com/zivavu/OpenMosh/commit/4696fa801c0c1bcdbc2e1025bbe908a95b188567))
+* Detect a song's exact BPM so cuts stay on the beat ([fbe9953](https://github.com/zivavu/OpenMosh/commit/fbe9953c63c7c826f01cbf6437bcdc3a60bf3ce7))
+* Hide the edit button when previewing a 3D model ([b696c31](https://github.com/zivavu/OpenMosh/commit/b696c3164013e17c9655415fa42135eec885fca3))
+* Keep a mosh's live effects at the top of the list ([078344f](https://github.com/zivavu/OpenMosh/commit/078344f20751c0c0c6a4343bf1fd71f5a15f693b))
+* Let random moshes and locks reach every effect ([4fdd807](https://github.com/zivavu/OpenMosh/commit/4fdd80717039c58f6293e66af67eea33810443ec))
+* Make RGB Burst fire bursts instead of shaking the frame ([274ac65](https://github.com/zivavu/OpenMosh/commit/274ac6518a7cb5930c221170a0a2803555bc27eb))
+* Split sped-up or trimmed videos where they were ([57445cb](https://github.com/zivavu/OpenMosh/commit/57445cbb7a6400634245611aad57fd28439b0bf5))
+* Stop the upload screen clipping on short viewports ([038b2b4](https://github.com/zivavu/OpenMosh/commit/038b2b4be4ae6c4ae020630d13e439e938596394))
+
 ## [0.9.5](https://github.com/zivavu/OpenMosh/compare/v0.9.4...v0.9.5) (2026-09-29)
 
 
