@@ -10,6 +10,7 @@
 	import {
 		ChevronRight,
 		Box,
+		Download,
 		Film,
 		Image,
 		ListVideo,
@@ -50,7 +51,8 @@
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
 	import { showToast } from "./toast.svelte";
-	import { fmtAgo } from "../../utils";
+	import { fmtAgo, saveBlobAs } from "../../utils";
+	import { buildProjectFile } from "../../project-file/export";
 
 	let { onClose, onChanged }: Props = $props();
 
@@ -116,6 +118,19 @@
 		setProjectName(projectKeyForSession(e.key), name);
 		changed = true;
 		void refresh();
+	}
+
+	/** Save an editor project to a `.openmosh` file without opening it. */
+	async function downloadProject(key: string) {
+		try {
+			const { blob, name } = await buildProjectFile(key);
+			await saveBlobAs(blob, name);
+		} catch (e) {
+			showToast(
+				e instanceof Error ? e.message : "Couldn't save that project",
+				"error",
+			);
+		}
 	}
 
 	function toggle(key: string) {
@@ -532,6 +547,16 @@
 								<span class="row-actions">
 									<button
 										class="icon-btn"
+										title="Save to a project file"
+										aria-label={`Save ${p.name} to a file`}
+										disabled={busy}
+										onclick={() =>
+											downloadProject(p.projectKeys[0] ?? p.trackId)}
+									>
+										<Download size={13} />
+									</button>
+									<button
+										class="icon-btn"
 										title="Rename project"
 										aria-label={`Rename ${p.name}`}
 										disabled={busy}
@@ -649,6 +674,17 @@
 									<span class="row-when">{fmtAgo(e.updatedAt)}</span>
 								</svelte:element>
 								<span class="row-actions">
+									{#if e.kind === "pool"}
+										<button
+											class="icon-btn"
+											title="Save to a project file"
+											aria-label={`Save ${e.label} to a file`}
+											disabled={busy}
+											onclick={() => downloadProject(e.key)}
+										>
+											<Download size={13} />
+										</button>
+									{/if}
 									<button
 										class="icon-btn"
 										title="Rename edit"
