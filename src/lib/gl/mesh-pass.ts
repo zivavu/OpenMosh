@@ -1,12 +1,19 @@
 import { depthRange, type MeshCamera } from "../mesh/camera";
-import type { Mesh } from "../mesh";
+import type { Mesh, Skin } from "../mesh";
 import { createProgram, getUniformLocations } from "./utils";
 
 // Same world as the transform-3d shader: x right, y down, z away from the camera.
 const MESH_VERT = `#version 300 es
+precision highp float;
+precision highp sampler2D;
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec3 a_color;
+layout(location = 3) in vec3 a_uv;
+layout(location = 4) in uvec4 a_joints;
+layout(location = 5) in vec4 a_weights;
+uniform sampler2D u_bones;
+uniform bool u_skinned;
 uniform mat3 u_rotation;
 uniform float u_radius;
 uniform float u_distance;
@@ -16,12 +23,30 @@ uniform vec2 u_depth;
 out vec3 v_normal;
 out vec3 v_color;
 out vec3 v_world;
+out vec3 v_uv;
+mat4 bone(uint j) {
+  int x = int(j) * 4;
+  return mat4(
+    texelFetch(u_bones, ivec2(x, 0), 0),
+    texelFetch(u_bones, ivec2(x + 1, 0), 0),
+    texelFetch(u_bones, ivec2(x + 2, 0), 0),
+    texelFetch(u_bones, ivec2(x + 3, 0), 0));
+}
 void main() {
+  vec3 pos = a_position;
+  vec3 nrm = a_normal;
+  if (u_skinned) {
+    mat4 m = a_weights.x * bone(a_joints.x) + a_weights.y * bone(a_joints.y)
+           + a_weights.z * bone(a_joints.z) + a_weights.w * bone(a_joints.w);
+    pos = (m * vec4(a_position, 1.0)).xyz;
+    nrm = mat3(m) * a_normal;
+  }
   // Model files are y up with their front facing +z; the frame is y down, looking +z.
   vec3 flip = vec3(1.0, -1.0, -1.0);
-  vec3 w = u_rotation * (a_position * flip * u_radius) + vec3(0.0, 0.0, u_distance);
-  v_normal = u_rotation * (a_normal * flip);
+  vec3 w = u_rotation * (pos * flip * u_radius) + vec3(0.0, 0.0, u_distance);
+  v_normal = u_rotation * (nrm * flip);
   v_color = a_color;
+  v_uv = a_uv;
   v_world = w;
   gl_Position = vec4(u_focal * w.x / u_aspect, u_focal * w.y, u_depth.x * w.z + u_depth.y, w.z);
 }`;
@@ -31,6 +56,8 @@ precision highp float;
 in vec3 v_normal;
 in vec3 v_color;
 in vec3 v_world;
+in vec3 v_uv;
+uniform sampler2D u_texture;
 out vec4 outColor;
 void main() {
   vec3 n = normalize(v_normal);
@@ -41,16 +68,24 @@ void main() {
   vec3 light = normalize(vec3(-0.45, -0.65, -0.6));
   float diffuse = max(dot(n, light), 0.0);
   float spec = pow(max(dot(n, normalize(light + toEye)), 0.0), 32.0) * 0.25;
-  outColor = vec4(v_color * (0.28 + 0.8 * diffuse) + spec, 1.0);
+  vec3 base = v_color;
+  if (v_uv.z > 0.5) base *= texture(u_texture, v_uv.xy).rgb;
+  outColor = vec4(base * (0.28 + 0.8 * diffuse) + spec, 1.0);
 }`;
 
 /** What a mesh with no colours of its own is drawn in. */
 const DEFAULT_COLOR = 0.82;
 
+/** Units the pass binds its textures to, so unit 0 stays as the renderer left it. */
+const BONE_UNIT = 1;
+const TEXTURE_UNIT = 2;
+
 interface GpuMesh {
 	vao: WebGLVertexArrayObject;
 	buffers: WebGLBuffer[];
 	count: number;
+	texture: WebGLTexture | null;
+	skin: { skin: Skin; bones: WebGLTexture; matrices: Float32Array } | null;
 }
 
 /**
@@ -88,19 +123,82 @@ export class MeshPass {
 		const vao = gl.createVertexArray();
 		if (!vao) return;
 		gl.bindVertexArray(vao);
-		const colors =
-			mesh.colors ??
-			new Float32Array(mesh.positions.length).fill(DEFAULT_COLOR);
-		const buffers = [mesh.positions, mesh.normals, colors].map((data, loc) => {
-			const buf = gl.createBuffer()!;
-			gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-			gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-			gl.enableVertexAttribArray(loc);
-			gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);
-			return buf;
-		});
+		const vertices = mesh.positions.length / 3;
+		const skin = mesh.skin;
+		const buffers = [
+			this.#attribute(0, skin?.bindPositions ?? mesh.positions, 3),
+			this.#attribute(1, mesh.normals, 3),
+			this.#attribute(
+				2,
+				mesh.colors ?? new Float32Array(vertices * 3).fill(DEFAULT_COLOR),
+				3,
+			),
+			this.#attribute(3, mesh.uvs ?? new Float32Array(vertices * 3), 3),
+		];
+		if (skin) {
+			const joints = gl.createBuffer()!;
+			gl.bindBuffer(gl.ARRAY_BUFFER, joints);
+			gl.bufferData(gl.ARRAY_BUFFER, skin.joints, gl.STATIC_DRAW);
+			gl.enableVertexAttribArray(4);
+			gl.vertexAttribIPointer(4, 4, gl.UNSIGNED_SHORT, 0, 0);
+			buffers.push(joints, this.#attribute(5, skin.weights, 4));
+		}
 		gl.bindVertexArray(null);
-		this.#meshes.set(id, { vao, buffers, count: mesh.triangles * 3 });
+		this.#meshes.set(id, {
+			vao,
+			buffers,
+			count: mesh.triangles * 3,
+			texture: mesh.texture ? this.#colorTexture(mesh.texture) : null,
+			skin: skin
+				? {
+						skin,
+						bones: this.#boneTexture(),
+						matrices: new Float32Array(skin.bones * 16),
+					}
+				: null,
+		});
+	}
+
+	#attribute(loc: number, data: Float32Array, size: number): WebGLBuffer {
+		const gl = this.#gl;
+		const buf = gl.createBuffer()!;
+		gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+		gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(loc);
+		gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+		return buf;
+	}
+
+	#colorTexture(image: ImageBitmap): WebGLTexture {
+		const gl = this.#gl;
+		const tex = gl.createTexture()!;
+		gl.activeTexture(gl.TEXTURE0 + TEXTURE_UNIT);
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+		gl.generateMipmap(gl.TEXTURE_2D);
+		gl.texParameteri(
+			gl.TEXTURE_2D,
+			gl.TEXTURE_MIN_FILTER,
+			gl.LINEAR_MIPMAP_LINEAR,
+		);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+		gl.activeTexture(gl.TEXTURE0);
+		return tex;
+	}
+
+	/** A bone's matrix is four RGBA32F texels, read with texelFetch: no filtering. */
+	#boneTexture(): WebGLTexture {
+		const gl = this.#gl;
+		const tex = gl.createTexture()!;
+		gl.activeTexture(gl.TEXTURE0 + BONE_UNIT);
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		gl.activeTexture(gl.TEXTURE0);
+		return tex;
 	}
 
 	drop(id: string) {
@@ -109,16 +207,20 @@ export class MeshPass {
 		const gl = this.#gl;
 		gl.deleteVertexArray(held.vao);
 		for (const buf of held.buffers) gl.deleteBuffer(buf);
+		if (held.texture) gl.deleteTexture(held.texture);
+		if (held.skin) gl.deleteTexture(held.skin.bones);
 		this.#meshes.delete(id);
 	}
 
-	/** Clears `tex` (w x h) and draws the mesh into it. False when it couldn't. */
+	/** Clears `tex` (w x h) and draws the mesh into it, posed `time` seconds into its
+	 * animation. False when it couldn't. */
 	draw(
 		id: string,
 		tex: WebGLTexture,
 		w: number,
 		h: number,
 		camera: MeshCamera,
+		time: number,
 	): boolean {
 		const mesh = this.#meshes.get(id);
 		const prog = this.#ensureProgram();
@@ -147,6 +249,31 @@ export class MeshPass {
 			(far + near) / (far - near),
 			(-2 * far * near) / (far - near),
 		);
+		gl.uniform1i(u["u_bones"], BONE_UNIT);
+		gl.uniform1i(u["u_texture"], TEXTURE_UNIT);
+		gl.uniform1i(u["u_skinned"], mesh.skin ? 1 : 0);
+		if (mesh.skin) {
+			const { skin, bones, matrices } = mesh.skin;
+			skin.pose(time, matrices);
+			gl.activeTexture(gl.TEXTURE0 + BONE_UNIT);
+			gl.bindTexture(gl.TEXTURE_2D, bones);
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA32F,
+				skin.bones * 4,
+				1,
+				0,
+				gl.RGBA,
+				gl.FLOAT,
+				matrices,
+			);
+		}
+		if (mesh.texture) {
+			gl.activeTexture(gl.TEXTURE0 + TEXTURE_UNIT);
+			gl.bindTexture(gl.TEXTURE_2D, mesh.texture);
+		}
+		gl.activeTexture(gl.TEXTURE0);
 		gl.bindVertexArray(mesh.vao);
 		gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
 		gl.disable(gl.DEPTH_TEST);

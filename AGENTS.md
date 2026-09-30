@@ -77,7 +77,9 @@ edit: they eat context fast.
 - 3D models (`lib/mesh/`) are editor-only and stay live meshes, drawn every frame by
   `MeshPass` inside `GlRenderer`. A model clip's 3D Transforms become its camera and run first,
   wherever they sit in the chain; `mesh/camera.ts` mirrors the shader, and a test holds them
-  together. No baked turntable clips.
+  together. No baked turntable clips. Animated GLB/FBX are skinned on the GPU from a bone
+  texture; the pose comes from the clip's `sourceTime` and loops. FBX textures must be embedded.
+  The unit-sphere fit is folded into the bone matrices and sampled across the whole clip.
 - The upload demo is only 3D worlds (`lib/demo/worlds/`), raymarched GLSL scenes drawn by
   `gl/scene-pass.ts`, not meshes. A scene is marched once with element ids and once without its
   elements; each element, and the backdrop, becomes its own layer with its own mosh. Shader loops

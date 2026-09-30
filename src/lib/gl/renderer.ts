@@ -2362,6 +2362,7 @@ export class GlRenderer {
 					time: this.getEffectTime(e, time, safeDt).time,
 				})),
 			),
+			side.sourceTime,
 		);
 		this.gl.bindVertexArray(this.quadVAO);
 		return drawn;
