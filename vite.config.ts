@@ -1,5 +1,7 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 
 const { version } = JSON.parse(
@@ -90,9 +92,54 @@ function labRedirect(): Plugin {
 	};
 }
 
+/** Public files the offline copy leaves out: only link previews fetch the share image. */
+const OFFLINE_SKIP = new Set(["og.jpg"]);
+
+function listFiles(dir: string): string[] {
+	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+		entry.isDirectory()
+			? listFiles(join(dir, entry.name))
+			: [join(dir, entry.name)],
+	);
+}
+
+// Writes sw.js into the build with the list of files to keep offline.
+function serviceWorker(): Plugin {
+	let outDir = "dist";
+	let publicDir = "public";
+	return {
+		name: "openmosh:service-worker",
+		apply: "build",
+		configResolved(config) {
+			outDir = config.build.outDir;
+			publicDir = config.publicDir;
+		},
+		writeBundle(_, bundle) {
+			const built = Object.keys(bundle).filter((f) => !f.endsWith(".map"));
+			const copied = listFiles(publicDir)
+				.map((f) => relative(publicDir, f).replaceAll("\\", "/"))
+				.filter((f) => !OFFLINE_SKIP.has(f));
+			const files = [...new Set([...built, ...copied])].sort();
+			const version = createHash("sha256")
+				.update(files.join("\n"))
+				.digest("hex")
+				.slice(0, 12);
+			const precache = files.map((f) => "/" + f);
+			const source = readFileSync(
+				new URL("./sw/service-worker.js", import.meta.url),
+				"utf8",
+			);
+			writeFileSync(
+				join(outDir, "sw.js"),
+				`const PRECACHE = ${JSON.stringify(precache)};\nconst VERSION = "${version}";\n${source}`,
+			);
+		},
+	};
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [svelte(), preloadLatinFonts(), labRedirect()],
+	plugins: [svelte(), preloadLatinFonts(), labRedirect(), serviceWorker()],
 	define: {
 		__APP_VERSION__: JSON.stringify(version),
 		__APP_CHANNEL__: JSON.stringify(channel),
