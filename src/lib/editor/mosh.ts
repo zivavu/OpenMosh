@@ -180,6 +180,8 @@ export function generateMosh(
 	} else {
 		rollRandom(effects, moshable, target, randomizeOrder);
 	}
+	// Curated only orders its own picks; this also lifts them past effects it can't pick.
+	enabledFirst(effects);
 	if (options.model) turnModel(effects);
 
 	if (moshAudioLink) {
@@ -204,6 +206,12 @@ function turnModel(effects: EffectInstance[]): void {
 	if (!def) return;
 	turn.enabled = true;
 	randomizeParams(turn.values, def);
+	// The renderer runs it first on a model, so the list shows it there too.
+	const from = effects.indexOf(turn);
+	const to = effects.findIndex((e) => isMoshable(e));
+	if (to < 0 || to >= from) return;
+	effects.splice(from, 1);
+	effects.splice(to, 0, turn);
 }
 
 function rollRandom(
@@ -233,11 +241,10 @@ function rollRandom(
 			effects[moshableIndices[k]] = snapshot[shuffled[k]];
 		}
 	}
-	enabledFirst(effects);
 }
 
-/** Moves the unlocked effects that are on ahead of the ones that are off, as curated
- * does. Off effects don't draw, so the picture is unchanged. */
+/** Moves the unlocked effects that are on ahead of the ones that are off, keeping
+ * their order. Off effects don't draw, so the picture is unchanged. */
 function enabledFirst(effects: EffectInstance[]): void {
 	const slots = effects
 		.map((e, i) => (isMoshable(e) ? i : -1))
