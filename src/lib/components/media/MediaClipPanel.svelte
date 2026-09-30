@@ -232,6 +232,27 @@
 				</p>
 			{/if}
 
+			{#if source?.kind === "model" && source.animationLength}
+				{const length = source.animationLength}
+				<!-- The animation loops, so a split clip's in-point past the end wraps back. -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="row"
+					title="Where in the model's animation this clip starts"
+				>
+					<label for="mc-in">Start at</label>
+					<RangeSlider
+						id="mc-in"
+						value={clip.sourceStart % length}
+						min={0}
+						max={length}
+						step={0.05}
+						oninput={setSourceStart}
+					/>
+					<span class="val">{(clip.sourceStart % length).toFixed(1)}s</span>
+				</div>
+			{/if}
+
 			{#if source?.kind === "model"}
 				<p class="hint">
 					Add a 3D Transform to this clip's effects to turn the model around in
