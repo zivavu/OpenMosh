@@ -6,6 +6,9 @@
 	import { submitFeedback, type FeedbackKind } from "../../feedback/submit";
 
 	let kind: FeedbackKind = $state("bug");
+	const issueUrl = $derived(
+		`https://github.com/zivavu/OpenMosh/issues/new?template=${kind === "bug" ? "bug" : "other"}.yml`,
+	);
 	let message = $state("");
 	let email = $state("");
 	let botcheck = $state("");
@@ -137,7 +140,7 @@
 			<div class="actions">
 				<a
 					class="ghost"
-					href="https://github.com/zivavu/OpenMosh/issues/new"
+					href={issueUrl}
 					target="_blank"
 					rel="noopener noreferrer"
 				>
