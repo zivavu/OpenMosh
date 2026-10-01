@@ -274,6 +274,40 @@ describe("loadStorageInventory", () => {
 	});
 });
 
+describe("projectToDownload", () => {
+	const row = {
+		trackId: "song",
+		projectKeys: [] as string[],
+		songKeyed: false,
+	};
+
+	test("picks the one editor project a song has", () => {
+		expect(inventory.projectToDownload({ ...row, songKeyed: true })).toBe(
+			"song",
+		);
+		expect(
+			inventory.projectToDownload({ ...row, projectKeys: ["proj-a"] }),
+		).toBe("proj-a");
+	});
+
+	test("offers nothing with no editor project, or several", () => {
+		expect(inventory.projectToDownload(row)).toBeNull();
+		expect(
+			inventory.projectToDownload({
+				...row,
+				songKeyed: true,
+				projectKeys: ["proj-a"],
+			}),
+		).toBeNull();
+		expect(
+			inventory.projectToDownload({
+				...row,
+				projectKeys: ["proj-a", "proj-b"],
+			}),
+		).toBeNull();
+	});
+});
+
 describe("deleteProject", () => {
 	test("removes the song and every record keyed to it", async () => {
 		const trackId = await seedTrack("song.wav", 10);
