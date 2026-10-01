@@ -305,6 +305,7 @@
 		title="Couldn't load the editor"
 		message="Part of the app failed to download. Check your connection and reload; your saved projects are safe."
 		detail={err instanceof Error ? err.message : String(err)}
+		stack={err instanceof Error ? err.stack : undefined}
 	/>
 {/snippet}
 
@@ -398,6 +399,7 @@
 			title="Something broke"
 			message="The editor hit an error it couldn't recover from. Your work up to the last autosave is kept; reload to pick it back up."
 			detail={err instanceof Error ? err.message : String(err)}
+			stack={err instanceof Error ? err.stack : undefined}
 		/>
 	{/snippet}
 </svelte:boundary>

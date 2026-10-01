@@ -2,14 +2,15 @@
 	import { modalDialog } from "../../actions/modal-dialog";
 	import { X, Github, Check } from "lucide-svelte";
 	import ButtonGroup from "./ButtonGroup.svelte";
-	import { closeFeedback } from "./feedback.svelte";
+	import { closeFeedback, takeFeedbackPrefill } from "./feedback.svelte";
 	import { submitFeedback, type FeedbackKind } from "../../feedback/submit";
 
-	let kind: FeedbackKind = $state("bug");
+	const prefill = takeFeedbackPrefill();
+	let kind: FeedbackKind = $state(prefill?.kind ?? "bug");
 	const issueUrl = $derived(
 		`https://github.com/zivavu/OpenMosh/issues/new?template=${kind === "bug" ? "bug" : "other"}.yml`,
 	);
-	let message = $state("");
+	let message = $state(prefill?.message ?? "");
 	let email = $state("");
 	let botcheck = $state("");
 	let sending = $state(false);
@@ -165,7 +166,8 @@
 	.feedback-overlay {
 		position: fixed;
 		inset: 0;
-		z-index: 200;
+		/* Over every dialog and the crash screen, which can open it. */
+		z-index: 450;
 		display: flex;
 		align-items: center;
 		justify-content: center;
