@@ -1,12 +1,29 @@
 <script lang="ts">
+	import { openFeedback } from "./feedback.svelte";
+
 	interface Props {
 		title: string;
 		message: string;
 		/** Shown under the message so a bug report can quote it. */
 		detail?: string;
+		/** Goes into the report, not on screen. */
+		stack?: string;
 	}
 
-	let { title, message, detail }: Props = $props();
+	let { title, message, detail, stack }: Props = $props();
+
+	function report() {
+		openFeedback({
+			kind: "bug",
+			message: [
+				`${title}: ${detail}`,
+				stack,
+				"What I was doing when it happened:\n",
+			]
+				.filter(Boolean)
+				.join("\n\n"),
+		});
+	}
 </script>
 
 <div class="app-error" role="alert">
@@ -17,6 +34,9 @@
 			<pre class="detail">{detail}</pre>
 		{/if}
 		<div class="actions">
+			{#if detail}
+				<button class="btn" onclick={report}>Report this</button>
+			{/if}
 			<a class="btn" href="/">Back to start</a>
 			<button class="btn primary" onclick={() => location.reload()}>
 				Reload

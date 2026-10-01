@@ -5,7 +5,7 @@
 
 <button
 	class="feedback-btn"
-	onclick={openFeedback}
+	onclick={() => openFeedback()}
 	title="Send feedback"
 	aria-label="Send feedback"
 >
