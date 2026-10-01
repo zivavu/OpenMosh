@@ -171,6 +171,24 @@ describe("a project file round trip", () => {
 		expect(saved.song).toBe(song.id);
 	});
 
+	test("saves the open editor's pool, not the stored one", async () => {
+		const key = "proj-live";
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(key, [a.id]);
+		const fresh = mediaFile("fresh.png", 300, 3000);
+		const freshId = store.stableSourceId(fresh);
+
+		const built = await buildProjectFile(key, {
+			entry: { v: 3, length: 10 },
+			media: [
+				{ id: a.id, file: mediaFile("a.png", 100, 1000) },
+				{ id: freshId, file: fresh },
+			],
+		});
+		const newKey = await openProjectFile(built.blob);
+		expect(await store.loadMediaPool(newKey)).toEqual([a.id, freshId]);
+	});
+
 	test("names a copy when the name is taken", async () => {
 		const key = "proj-name";
 		const a = await seedMedia("a.png", 100, 1000);
