@@ -23,6 +23,8 @@ export interface ProjectSongEntry {
 	trackId: string;
 	name: string;
 	fileName: string;
+	/** MIME type; a slice of the zip carries none. */
+	type: string;
 	path: string;
 }
 
@@ -96,6 +98,7 @@ function parseSongs(raw: unknown): ProjectSongEntry[] {
 			trackId: item.trackId,
 			name,
 			fileName: typeof item.fileName === "string" ? item.fileName : name,
+			type: typeof item.type === "string" ? item.type : "",
 			path: safePath(item.path, "songs/"),
 		});
 	}

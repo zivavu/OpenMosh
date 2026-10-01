@@ -123,7 +123,13 @@ export async function buildProjectFile(
 		if (!track) continue;
 		const fileName = track.fileName ?? track.name;
 		const path = `songs/${songs.length}.${extOf(fileName, track.blob.type)}`;
-		songs.push({ trackId, name: track.name, fileName, path });
+		songs.push({
+			trackId,
+			name: track.name,
+			fileName,
+			type: track.blob.type,
+			path,
+		});
 		songParts.push({ name: path, blob: track.blob });
 	}
 
