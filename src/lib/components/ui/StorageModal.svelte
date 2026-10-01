@@ -33,6 +33,7 @@
 		describeProjectDeletion,
 		keepStorage,
 		loadStorageInventory,
+		projectToDownload,
 		type ProjectMode,
 		type StorageInventory,
 		type StorageLooseEdit,
@@ -545,16 +546,18 @@
 									<span class="row-when">{fmtAgo(p.updatedAt)}</span>
 								</svelte:element>
 								<span class="row-actions">
-									<button
-										class="icon-btn"
-										title="Save to a project file"
-										aria-label={`Save ${p.name} to a file`}
-										disabled={busy}
-										onclick={() =>
-											downloadProject(p.projectKeys[0] ?? p.trackId)}
-									>
-										<Download size={13} />
-									</button>
+									{#if projectToDownload(p) !== null}
+										{@const downloadKey = projectToDownload(p)!}
+										<button
+											class="icon-btn"
+											title="Save to a project file"
+											aria-label={`Save ${p.name} to a file`}
+											disabled={busy}
+											onclick={() => downloadProject(downloadKey)}
+										>
+											<Download size={13} />
+										</button>
+									{/if}
 									<button
 										class="icon-btn"
 										title="Rename project"

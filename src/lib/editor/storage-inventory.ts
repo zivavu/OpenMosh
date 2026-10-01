@@ -65,6 +65,20 @@ export interface StorageProject {
 	updatedAt: number;
 	/** Editor projects keyed by their own id that play this song. */
 	projectKeys: string[];
+	/** An editor project keyed by the song itself, from before projects had ids. */
+	songKeyed: boolean;
+}
+
+/** The editor project a song's row saves to a file; null when there's none, or more
+ * than one to choose between. */
+export function projectToDownload(
+	project: Pick<StorageProject, "trackId" | "projectKeys" | "songKeyed">,
+): string | null {
+	const keys = [
+		...(project.songKeyed ? [project.trackId] : []),
+		...project.projectKeys,
+	];
+	return keys.length === 1 ? keys[0] : null;
 }
 
 /** An edit keyed by its media rather than a song. */
@@ -265,6 +279,7 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 				ownTimelines.reduce((n, t) => n + jsonSize(t.state), 0),
 			updatedAt: records.reduce((t, r) => Math.max(t, r.updatedAt), 0),
 			projectKeys: ownPools.map((p) => p.key),
+			songKeyed: !!(pool || seqTimeline),
 		};
 	});
 	projects.sort(
