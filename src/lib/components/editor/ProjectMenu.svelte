@@ -98,7 +98,7 @@
 		z-index: 41;
 		min-width: 12rem;
 		padding: 0.25rem;
-		background: var(--panel);
+		background: var(--raised);
 		border: 1px solid var(--line-strong);
 		border-radius: var(--r-2);
 		box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
