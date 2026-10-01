@@ -1356,9 +1356,14 @@
 		flushMediaPoolSave();
 		const progress = showToast("Building the project file…", "info", 0);
 		try {
+			const entry = seqEntryNow();
+			const media = sourceRegistry.sources.map((s) => ({
+				id: s.id,
+				file: s.file,
+			}));
 			const { blob, name, missing } = await buildProjectFile(
 				projectKey,
-				seqEntryNow(),
+				entry ? { entry, media } : undefined,
 			);
 			dismissToast(progress);
 			await saveBlobAs(blob, name);

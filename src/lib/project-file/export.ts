@@ -85,34 +85,54 @@ function fontFamiliesOf(entry: SeqEntry): Set<string> {
 	return families;
 }
 
-/** Build the file. `liveEntry` is the editor's current timeline; without it the
- * stored one is used, which may be an older format the importer still reads. */
+/** What the open editor has on screen, so the file doesn't wait on autosaves. */
+export interface LiveProject {
+	entry: SeqEntry;
+	media: { id: string; file: File }[];
+}
+
+/** The pool, in order, and how many stored ids had lost their bytes. */
+async function poolMedia(
+	projectKey: string,
+	live?: LiveProject,
+): Promise<{ media: { id: string; file: File }[]; missing: number }> {
+	if (live) return { media: live.media, missing: 0 };
+	const ids = (await loadMediaPool(projectKey)) ?? [];
+	const stored = await getSequenceMediaByIds(ids);
+	return {
+		media: stored.map((item) => ({
+			id: item.id,
+			file: storedMediaToFile(item),
+		})),
+		missing: ids.length - stored.length,
+	};
+}
+
+/** Build the file. Without `live` the stored timeline is used, which may be an
+ * older format the importer still reads. */
 export async function buildProjectFile(
 	projectKey: string,
-	liveEntry?: SeqEntry | null,
+	live?: LiveProject,
 ): Promise<ProjectFileResult> {
 	let entry =
-		liveEntry ?? ((await getTimeline(`seq:${projectKey}`)) as SeqEntry | null);
+		live?.entry ??
+		((await getTimeline(`seq:${projectKey}`)) as SeqEntry | null);
 	if (!entry) throw new Error("This project has nothing saved yet");
 	// A project keyed by its song predates the song field; the import gives it a key
 	// of its own, so the song has to be named.
 	if (!isProjectKey(projectKey) && !entry.song)
 		entry = { ...entry, song: projectKey };
 
-	const poolIds = (await loadMediaPool(projectKey)) ?? [];
-	const stored = await getSequenceMediaByIds(poolIds);
-	const missing = poolIds.length - stored.length;
-
+	const { media, missing } = await poolMedia(projectKey, live);
 	const pool: ProjectPoolEntry[] = [];
 	const mediaParts: ZipEntryInput[] = [];
-	stored.forEach((item, i) => {
-		const file = storedMediaToFile(item);
-		const path = `media/${i}.${extOf(item.name, item.type || item.blob.type)}`;
+	media.forEach(({ id, file }, i) => {
+		const path = `media/${i}.${extOf(file.name, file.type)}`;
 		pool.push({
-			id: item.id,
-			name: item.name,
-			type: item.type || item.blob.type,
-			lastModified: item.lastModified ?? 0,
+			id,
+			name: file.name,
+			type: file.type,
+			lastModified: file.lastModified,
 			path,
 		});
 		mediaParts.push({ name: path, blob: file });
