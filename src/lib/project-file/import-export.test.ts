@@ -156,6 +156,21 @@ describe("a project file round trip", () => {
 		expect(built.missing).toBe(1);
 	});
 
+	test("names the song of a project keyed by it", async () => {
+		const trackId = await seedTrack("song.wav", 500);
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(trackId, [a.id]);
+		await store.putTimeline(`seq:${trackId}`, structuredClone(v2));
+
+		const built = await buildProjectFile(trackId);
+		await tracks.clearTracks();
+		const newKey = await openProjectFile(built.blob);
+
+		const saved = (await store.getTimeline(`seq:${newKey}`)) as SeqEntry;
+		const [song] = await tracks.getAllTracks();
+		expect(saved.song).toBe(song.id);
+	});
+
 	test("names a copy when the name is taken", async () => {
 		const key = "proj-name";
 		const a = await seedMedia("a.png", 100, 1000);

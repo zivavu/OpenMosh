@@ -61,11 +61,9 @@ function isUrl(value: string): boolean {
 }
 
 /** Every library song the project plays: its main song and any on an audio lane. */
-function songIdsOf(entry: SeqEntry, projectKey: string): string[] {
+function songIdsOf(entry: SeqEntry): string[] {
 	const ids = new Set<string>();
 	if (entry.song) ids.add(entry.song);
-	// A project keyed by its song predates the song field; the key is the song.
-	if (!isProjectKey(projectKey)) ids.add(projectKey);
 	for (const lane of entry.media?.audioLanes ?? []) {
 		for (const clip of lane.clips) {
 			const track = clip.sourceId ? trackIdOf(clip.sourceId) : null;
@@ -93,9 +91,13 @@ export async function buildProjectFile(
 	projectKey: string,
 	liveEntry?: SeqEntry | null,
 ): Promise<ProjectFileResult> {
-	const entry =
+	let entry =
 		liveEntry ?? ((await getTimeline(`seq:${projectKey}`)) as SeqEntry | null);
 	if (!entry) throw new Error("This project has nothing saved yet");
+	// A project keyed by its song predates the song field; the import gives it a key
+	// of its own, so the song has to be named.
+	if (!isProjectKey(projectKey) && !entry.song)
+		entry = { ...entry, song: projectKey };
 
 	const poolIds = (await loadMediaPool(projectKey)) ?? [];
 	const stored = await getSequenceMediaByIds(poolIds);
@@ -118,7 +120,7 @@ export async function buildProjectFile(
 
 	const songs: ProjectSongEntry[] = [];
 	const songParts: ZipEntryInput[] = [];
-	for (const trackId of songIdsOf(entry, projectKey)) {
+	for (const trackId of songIdsOf(entry)) {
 		const track = await getTrack(trackId).catch(() => null);
 		if (!track) continue;
 		const fileName = track.fileName ?? track.name;
@@ -152,9 +154,8 @@ export async function buildProjectFile(
 	const names = readProjectNames();
 	let name: string | undefined = names[projectKey];
 	if (!name) {
-		const songId = entry.song ?? (isProjectKey(projectKey) ? null : projectKey);
-		if (songId) {
-			const track = await getTrack(songId).catch(() => null);
+		if (entry.song) {
+			const track = await getTrack(entry.song).catch(() => null);
 			name = track?.name;
 		}
 	}
