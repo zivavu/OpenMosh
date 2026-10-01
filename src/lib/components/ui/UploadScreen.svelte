@@ -657,8 +657,7 @@
 					A pile of media and a track. It finds the BPM and cuts on the beat.
 				{:else if selectedMode === "sequence"}
 					Your song on a timeline. The media goes on layers, cut into clips with
-					their own effects; FX lanes mosh the whole frame. 3D models (OBJ, STL,
-					GLB, FBX) work here too.
+					their own effects. 3D models (OBJ, STL, GLB, FBX) work here too.
 				{:else}
 					One image or video. Mosh it, then lock whatever survived and roll
 					again.
@@ -666,7 +665,7 @@
 			</p>
 
 			<div class="load-row">
-				<label class="load-btn">
+				<label class="load-btn primary-btn">
 					<input
 						type="file"
 						accept={getAcceptTypes()}
@@ -678,7 +677,7 @@
 					{isMultiMode ? "Load files" : "Load a file"}
 				</label>
 				<button
-					class="load-btn generate-btn"
+					class="load-btn alt-btn"
 					onclick={() => (generateOpen = true)}
 					onkeydown={(e) => e.stopPropagation()}
 				>
@@ -687,7 +686,7 @@
 				</button>
 				{#if !isMultiMode && hasCamera}
 					<button
-						class="load-btn generate-btn"
+						class="load-btn alt-btn"
 						onclick={() => (webcamOpen = true)}
 						onkeydown={(e) => e.stopPropagation()}
 					>
@@ -697,7 +696,7 @@
 				{/if}
 				{#if selectedMode === "sequence"}
 					<button
-						class="load-btn generate-btn"
+						class="load-btn alt-btn"
 						onclick={openProjectPicker}
 						onkeydown={(e) => e.stopPropagation()}
 					>
@@ -1407,8 +1406,8 @@
 		padding: 0.65rem 1.5rem;
 		border: 1px solid var(--line-strong);
 		border-radius: var(--r-pill);
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--text);
+		background: rgba(255, 255, 255, 0.03);
+		color: var(--text-2);
 		font-family: inherit;
 		font-size: 0.82rem;
 		font-weight: 600;
@@ -1416,27 +1415,42 @@
 		transition:
 			border-color var(--t),
 			background-color var(--t),
+			color var(--t),
 			transform var(--t-fast);
-	}
-
-	.load-btn:hover {
-		border-color: var(--text-3);
-		background-color: rgba(255, 255, 255, 0.1);
 	}
 
 	.load-btn:active {
 		transform: scale(0.98);
 	}
 
-	.generate-btn {
-		border-color: var(--mosh-dim);
-		background: color-mix(in srgb, var(--mosh) 6%, transparent);
-		color: var(--mosh);
+	/* The main way in, by weight rather than hue: state colours stay for state. */
+	.primary-btn {
+		border-color: var(--text);
+		background: var(--text);
+		color: var(--ink);
 	}
 
-	.generate-btn:hover {
-		border-color: var(--mosh);
-		background-color: color-mix(in srgb, var(--mosh) 14%, transparent);
+	.primary-btn {
+		transition:
+			border-color var(--t),
+			background-color var(--t),
+			box-shadow var(--t),
+			transform var(--t-fast);
+	}
+
+	.primary-btn:hover,
+	.primary-btn:focus-within {
+		border-color: #fff;
+		background-color: #fff;
+		box-shadow:
+			0 0 0 3px rgba(255, 255, 255, 0.18),
+			0 0 22px rgba(255, 255, 255, 0.22);
+	}
+
+	.alt-btn:hover {
+		border-color: var(--text-3);
+		background-color: rgba(255, 255, 255, 0.08);
+		color: var(--text);
 	}
 
 	.drop-hint {
