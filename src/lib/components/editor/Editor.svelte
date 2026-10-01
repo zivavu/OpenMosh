@@ -1902,6 +1902,11 @@
 		legacySegments = saved.segments.length
 			? { key: storeKey, segments: saved.segments }
 			: null;
+		// Before v3 the song was the clock, so it has to be in before the project is sized.
+		if (saved.length === null && saved.song && saved.song !== currentTrackId) {
+			await loadSong(saved.song);
+			if (seqStoreKey !== storeKey) return;
+		}
 		if (saved.length === null) {
 			// Saved while the song was the clock: it becomes a lane once its length is known.
 			pendingInit = { key: storeKey, seed: false };
