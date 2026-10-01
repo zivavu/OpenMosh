@@ -136,6 +136,7 @@ describe("a project file round trip", () => {
 		// The song is a fresh library entry, and the lane points at it.
 		const newTracks = await tracks.getAllTracks();
 		expect(newTracks).toHaveLength(1);
+		expect(newTracks[0].blob.type).toBe("audio/wav");
 		expect(restored.song).toBe(newTracks[0].id);
 		expect(restored.media!.audioLanes![0].clips[0].sourceId).toBe(
 			`track:${newTracks[0].id}`,

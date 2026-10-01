@@ -65,7 +65,7 @@ export async function openProjectFile(file: Blob): Promise<string> {
 		const entry = byPath.get(item.path);
 		if (!entry) continue;
 		const songFile = new File([entry.blob], item.fileName, {
-			type: entry.blob.type || "audio/mpeg",
+			type: item.type || "audio/mpeg",
 		});
 		const track = await addTrack(songFile);
 		if (track.id !== item.trackId) trackIds.set(item.trackId, track.id);
