@@ -70,7 +70,9 @@ The chain runs one full-screen shader pass per enabled effect, so cost scales wi
 
 ## Privacy
 
-Your media never leaves the machine. There is no backend, no account and no upload — files are read straight off disk into the page, everything renders locally, and the export is written by your own browser. Sessions, saved sequences and your track library live in IndexedDB and localStorage on your device. After the first visit the app keeps a copy of itself, so it opens and runs offline too. Project files are yours: saving one writes a `.openmosh` file to your disk, and nothing leaves the machine unless you send the file yourself.
+Your media never leaves the machine. There's no backend, no account and no upload: files are read straight off disk into the page, everything renders locally, and your own browser writes the export. Sessions, saved sequences and your track library live in IndexedDB and localStorage on your device. After the first visit the app keeps a copy of itself, so it opens and runs offline too. Project files are yours: saving one writes a `.openmosh` file to your disk, and nothing leaves the machine unless you send the file yourself.
+
+Two things do go over the network, and only when you use them. The feedback form sends your message, your browser and screen size, and the effect chain you had on through [Web3Forms](https://web3forms.com/), which emails it to me. A custom font added from Google Fonts is downloaded from Google once, then kept on your device.
 
 ---
 
@@ -78,7 +80,7 @@ Your media never leaves the machine. There is no backend, no account and no uplo
 
 <!-- x-release-please-start-version -->
 
-Version 0.9.6. Single and slideshow modes are more or less settled. The editor is the part still moving, and an update can change the shape of a saved sequence, so treat old projects there as breakable. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
+Version 0.9.6. Single and slideshow modes are more or less settled. The editor is still moving, but every past save format is tested on load, so updates bring old projects along. Save a project file now and then anyway: browsers can clear site data, and the file is your backup. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
 
 <!-- x-release-please-end -->
 
