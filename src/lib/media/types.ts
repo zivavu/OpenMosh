@@ -1,3 +1,4 @@
+import { records } from "../records";
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
@@ -236,7 +237,7 @@ function clipEffects(saved: unknown): EffectInstance[] {
 export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 	if (!raw || typeof raw !== "object") return { ...EMPTY_MEDIA_TIMELINE };
 	const t = raw as Partial<MediaTimeline>;
-	const lanes = Array.isArray(t.lanes) ? t.lanes : [];
+	const lanes = records<MediaLane>(t.lanes);
 	return {
 		enabled: !!t.enabled,
 		audioLanes: normalizeAudioLanes(t.audioLanes),
@@ -249,7 +250,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
 			settings: normalizeLaneSettings(lane.settings),
 			audio: normalizeLaneAudio(lane.audio),
-			clips: (Array.isArray(lane.clips) ? lane.clips : []).map((raw) => {
+			clips: records<MediaClip>(lane.clips).map((raw) => {
 				const clip = raw as Partial<MediaClip> & { fadeSec?: number };
 				// Lanes saved before clips carried their own chain held one for the whole lane:
 				// every clip inherits a copy.

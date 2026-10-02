@@ -1,3 +1,4 @@
+import { records } from "../records";
 import {
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
@@ -138,25 +139,22 @@ function num(v: unknown, fallback: number): number {
 }
 
 export function normalizeAudioLanes(raw: unknown): AudioLane[] {
-	if (!Array.isArray(raw)) return [];
-	return raw.map((lane: Partial<AudioLane>, i) => ({
+	return records<AudioLane>(raw).map((lane, i) => ({
 		id: lane.id ?? nextId("alane"),
 		name: lane.name ?? `Audio ${i + 1}`,
 		enabled: lane.enabled !== false,
 		drives: !!lane.drives,
-		clips: (Array.isArray(lane.clips) ? lane.clips : []).map(
-			(c: Partial<AudioClip>) => ({
-				id: c.id ?? nextId("aclip"),
-				start: num(c.start, 0),
-				end: num(c.end, 0),
-				sourceStart: num(c.sourceStart, 0),
-				sourceId: c.sourceId ?? null,
-				gain: c.gain,
-				fadeInSec: c.fadeInSec,
-				fadeOutSec: c.fadeOutSec,
-				loop: c.loop || undefined,
-			}),
-		),
+		clips: records<AudioClip>(lane.clips).map((c) => ({
+			id: c.id ?? nextId("aclip"),
+			start: num(c.start, 0),
+			end: num(c.end, 0),
+			sourceStart: num(c.sourceStart, 0),
+			sourceId: c.sourceId ?? null,
+			gain: c.gain,
+			fadeInSec: c.fadeInSec,
+			fadeOutSec: c.fadeOutSec,
+			loop: c.loop || undefined,
+		})),
 	}));
 }
 

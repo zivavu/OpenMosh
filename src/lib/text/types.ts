@@ -1,3 +1,4 @@
+import { records } from "../records";
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
@@ -207,11 +208,11 @@ function clipEffects(saved: unknown): EffectInstance[] {
 export function normalizeTextTimeline(raw: unknown): TextTimeline {
 	if (!raw || typeof raw !== "object") return { ...EMPTY_TEXT_TIMELINE };
 	const t = raw as Partial<TextTimeline>;
-	const lanes = Array.isArray(t.lanes) ? t.lanes : [];
+	const lanes = records<TextLane>(t.lanes);
 	return {
 		enabled: !!t.enabled,
 		lanes: lanes.map((lane, i) => {
-			const clips = Array.isArray(lane.clips) ? lane.clips : [];
+			const clips = records<TextClip>(lane.clips);
 			// Timelines saved before styles moved to the lane carried one per clip; the first
 			// clip's style stands in for the lane's.
 			const legacyStyle = (clips as Array<{ style?: TextStyle }>).find(

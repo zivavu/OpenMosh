@@ -94,3 +94,35 @@ describe("v3", () => {
 		expect(restored.segments).toEqual([]);
 	});
 });
+
+describe("a damaged entry", () => {
+	const damaged = {
+		v: 3,
+		length: 10,
+		span: { start: 20, end: 30 },
+		media: {
+			enabled: true,
+			lanes: [null, { clips: [null, 7] }],
+			audioLanes: [null],
+		},
+		fx: [null, { clips: [null] }],
+		text: { enabled: true, lanes: [null, { clips: [null] }] },
+		segments: [null],
+	} as unknown as SeqEntry;
+
+	it("skips what isn't a record instead of throwing", () => {
+		const restored = readSeqEntry(damaged, "opened");
+		expect(restored.media?.lanes).toHaveLength(1);
+		expect(restored.media?.lanes[0].clips).toEqual([]);
+		expect(restored.media?.audioLanes).toEqual([]);
+		expect(restored.fx).toHaveLength(1);
+		expect(restored.text?.lanes).toHaveLength(1);
+		expect(restored.segments).toEqual([]);
+	});
+
+	it("drops a span that lies past the project's end", () => {
+		expect(readSeqEntry(damaged, "opened").span).toBeNull();
+		const partly = { ...damaged, span: { start: -2, end: 30 } };
+		expect(readSeqEntry(partly, "opened").span).toEqual({ start: 0, end: 10 });
+	});
+});

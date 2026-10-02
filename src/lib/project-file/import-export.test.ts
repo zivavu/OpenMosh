@@ -214,7 +214,9 @@ describe("old projects", () => {
 				audioLanes?: { clips: { sourceId: string | null }[] }[];
 			};
 			sourceEdits: Record<string, unknown>;
+			segments: { sourceId?: unknown }[];
 		};
+		for (const seg of clone.segments) seg.sourceId = "src";
 		for (const lane of clone.media?.lanes ?? []) {
 			lane.sourceId = null;
 			for (const clip of lane.clips) delete clip.sourceId;

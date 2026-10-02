@@ -1,7 +1,10 @@
 /** The manifest inside a project file: its shape, how it's validated, and how the
  * ids it carries are rewritten when an import lands on different ones. */
 
-import type { SeqEntry } from "../editor/seq-entry";
+import type { LegacySegmentEntry, SeqEntry } from "../editor/seq-entry";
+import type { MediaClip, MediaLane } from "../media/types";
+import type { AudioClip, AudioLane } from "../mix/types";
+import { records } from "../records";
 import type { SourceEdit } from "../media/source-edit";
 import { trackIdOf, trackSourceId } from "../mix/types";
 
@@ -184,28 +187,37 @@ export function remapProject(
 	if (entry.song && trackIds.has(entry.song))
 		next.song = trackIds.get(entry.song);
 
-	if (entry.media) {
+	// The editor's normalisers repair anything else; this only has to not trip on it.
+	if (isRecord(entry.media)) {
 		next.media = {
 			...entry.media,
-			lanes: entry.media.lanes.map((lane) => ({
+			lanes: records<MediaLane>(entry.media.lanes).map((lane) => ({
 				...lane,
 				sourceId: source(lane.sourceId) ?? null,
-				clips: lane.clips.map((clip) => ({
+				clips: records<MediaClip>(lane.clips).map((clip) => ({
 					...clip,
 					sourceId: source(clip.sourceId) ?? undefined,
 				})),
-			})),
-			audioLanes: entry.media.audioLanes?.map((lane) => ({
+			})) as MediaLane[],
+			audioLanes: records<AudioLane>(entry.media.audioLanes).map((lane) => ({
 				...lane,
-				clips: lane.clips.map((clip) => ({
+				clips: records<AudioClip>(lane.clips).map((clip) => ({
 					...clip,
 					sourceId: source(clip.sourceId) ?? null,
 				})),
-			})),
+			})) as AudioLane[],
 		};
 	}
 
-	if (entry.sourceEdits) {
+	// Saved before layers took the media over; folded into lanes when opened.
+	if (Array.isArray(entry.segments)) {
+		next.segments = records<LegacySegmentEntry>(entry.segments).map((seg) => ({
+			...seg,
+			sourceId: source(seg.sourceId) ?? undefined,
+		}));
+	}
+
+	if (isRecord(entry.sourceEdits)) {
 		const edits: Record<string, SourceEdit> = {};
 		for (const [id, edit] of Object.entries(entry.sourceEdits)) {
 			edits[sourceIds.get(id) ?? id] = edit;
