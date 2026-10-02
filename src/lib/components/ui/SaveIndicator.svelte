@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from "svelte";
 	import { CircleDashed, TriangleAlert } from "lucide-svelte";
 	import { fade } from "svelte/transition";
 	import type { SaveState } from "../../editor/save-status.svelte";
@@ -10,9 +11,12 @@
 		lastSavedAt: number | null;
 		/** Why this edit isn't being kept, when it isn't; `warn` when it never will be. */
 		notSaved?: { reason: string; warn: boolean } | null;
+		/** A control that belongs with saving, ahead of the word: the word keeps room
+		 * for "Saving…", and that room reads as padding at the end, not as a gap. */
+		action?: Snippet;
 	}
 
-	let { state, lastSavedAt, notSaved = null }: Props = $props();
+	let { state, lastSavedAt, notSaved = null, action }: Props = $props();
 
 	let savedAt = $derived(
 		lastSavedAt
@@ -58,6 +62,7 @@
 	});
 </script>
 
+{@render action?.()}
 {#if view}
 	<span
 		class="save-indicator readout"
@@ -78,6 +83,8 @@
 			<span class="label" in:fade={{ duration: 180 }}>{view.label}</span>
 		{/key}
 	</span>
+{/if}
+{#if view || action}
 	<div class="bar-sep"></div>
 {/if}
 
@@ -110,7 +117,7 @@
 	}
 
 	/* Narrow bars keep the icon; the tooltip carries the word. */
-	@media (max-width: 800px) {
+	@container topbar (max-width: 720px) {
 		.save-indicator {
 			font-size: 0;
 			gap: 0;

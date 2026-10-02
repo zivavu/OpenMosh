@@ -199,9 +199,9 @@ export function clipMoshButton(page: Page): Locator {
 	return page.getByTitle("Random mosh for this clip");
 }
 
-/** The editor's top-bar project menu button. */
-export function projectMenuButton(page: Page): Locator {
-	return page.locator(".project-btn");
+/** The editor's top-bar button that saves the project as a file. */
+export function saveProjectButton(page: Page): Locator {
+	return page.getByRole("button", { name: "Save project file" });
 }
 
 /** Take the upload screen through to single mode with one image. No mode button is
