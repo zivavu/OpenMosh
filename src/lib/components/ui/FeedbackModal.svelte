@@ -38,8 +38,13 @@
 		other: "Anything you want to tell me.",
 	};
 
+	/** A prefilled report is only the template until something is written into it. */
+	const canSend = $derived(
+		!!message.trim() && message.trim() !== basedOn.trim() && !sending,
+	);
+
 	async function send() {
-		if (!message.trim() || sending) return;
+		if (!canSend) return;
 		sending = true;
 		error = null;
 		try {
@@ -169,11 +174,7 @@
 				</a>
 				<div class="spacer"></div>
 				<button class="ghost" onclick={closeFeedback}>Cancel</button>
-				<button
-					class="primary"
-					disabled={!message.trim() || sending}
-					onclick={send}
-				>
+				<button class="primary" disabled={!canSend} onclick={send}>
 					{sending ? "Sending…" : "Send"}
 				</button>
 			</div>
