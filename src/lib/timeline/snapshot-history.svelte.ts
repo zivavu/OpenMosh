@@ -16,13 +16,15 @@ const COALESCE_MS = 500;
 const MAX_ENTRIES = 60;
 
 export function createSnapshotHistory<T>() {
+	// Raw, and replaced rather than mutated: entries are whole documents, and only the
+	// lengths need to be reactive, so deep proxies would be pure overhead.
 	/** States as they were before each change, oldest first. */
-	let past = $state<T[]>([]);
+	let past = $state.raw<T[]>([]);
 	/** States undone away from, newest last, so redo can walk back up. */
-	let future = $state<T[]>([]);
+	let future = $state.raw<T[]>([]);
 	// Edit-clock stamp per entry, so Ctrl+Z can pick this stack over another one.
-	let pastSeqs = $state<number[]>([]);
-	let futureSeqs = $state<number[]>([]);
+	let pastSeqs = $state.raw<number[]>([]);
+	let futureSeqs = $state.raw<number[]>([]);
 	let lastKey: string | null = null;
 	let lastAt = 0;
 	const canUndo = $derived(past.length > 0);
@@ -39,15 +41,11 @@ export function createSnapshotHistory<T>() {
 		lastAt = now;
 		if (continuing) return;
 		// A fresh edit is a new branch; whatever was undone away from is gone.
-		future.length = 0;
-		futureSeqs.length = 0;
-		past.push($state.snapshot(before) as T);
-		pastSeqs.push(nextEditSeq());
+		future = [];
+		futureSeqs = [];
 		// Oldest out first: the far end of a session is the least likely step wanted back.
-		while (past.length > MAX_ENTRIES) {
-			past.shift();
-			pastSeqs.shift();
-		}
+		past = [...past, $state.snapshot(before) as T].slice(-MAX_ENTRIES);
+		pastSeqs = [...pastSeqs, nextEditSeq()].slice(-MAX_ENTRIES);
 	}
 
 	function undo(current: T): T | null {
@@ -55,20 +53,24 @@ export function createSnapshotHistory<T>() {
 		lastKey = null;
 		lastAt = 0;
 		// What is on screen becomes the thing redo comes back to.
-		future.push($state.snapshot(current) as T);
-		futureSeqs.push(nextEditSeq());
-		pastSeqs.pop();
-		return $state.snapshot(past.pop()!) as T;
+		future = [...future, $state.snapshot(current) as T];
+		futureSeqs = [...futureSeqs, nextEditSeq()];
+		const prev = past[past.length - 1];
+		past = past.slice(0, -1);
+		pastSeqs = pastSeqs.slice(0, -1);
+		return $state.snapshot(prev) as T;
 	}
 
 	function redo(current: T): T | null {
 		if (!canRedo) return null;
 		lastKey = null;
 		lastAt = 0;
-		past.push($state.snapshot(current) as T);
-		pastSeqs.push(nextEditSeq());
-		futureSeqs.pop();
-		return $state.snapshot(future.pop()!) as T;
+		past = [...past, $state.snapshot(current) as T];
+		pastSeqs = [...pastSeqs, nextEditSeq()];
+		const next = future[future.length - 1];
+		future = future.slice(0, -1);
+		futureSeqs = futureSeqs.slice(0, -1);
+		return $state.snapshot(next) as T;
 	}
 
 	/** Forget everything. The live state is the caller's and stays untouched. */
