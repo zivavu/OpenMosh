@@ -72,9 +72,12 @@ export class EncoderPool {
 						}
 					};
 					worker.addEventListener("message", onReady);
-					worker.addEventListener("error", (e) =>
-						reject(new Error(e.message || "Encode worker failed to start")),
-					);
+					// A worker dying later fails the pool, or a frame waiting on it hangs.
+					worker.addEventListener("error", (e) => {
+						const err = new Error(e.message || "Encode worker failed");
+						reject(err);
+						this.fail(err);
+					});
 				}),
 			);
 			this.post(worker, { type: "init", config: this.opts.config });
@@ -135,6 +138,11 @@ export class EncoderPool {
 				`Encode pool finished with ${this.inFlight} frames unaccounted for`,
 			);
 		}
+	}
+
+	/** Stop: whatever is waiting on a slot or the flush rejects with `reason`. */
+	abort(reason: Error): void {
+		this.fail(reason);
 	}
 
 	dispose(): void {
