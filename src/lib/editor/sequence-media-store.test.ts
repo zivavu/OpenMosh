@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { addTrack, clearTracks } from "../audio/track-library";
 import {
 	clearAllSequenceStores,
+	getSession,
 	getTimeline,
 	loadMediaPool,
 	pruneSequenceMedia,
@@ -94,6 +95,25 @@ describe("pruneSequenceMedia", () => {
 		await saveMediaPool(key, [id]);
 		return id;
 	}
+
+	test("every project and edit is kept, however many there are", async () => {
+		for (let i = 0; i < 30; i++) {
+			const id = await seedPool(`proj-${i}`);
+			await putSession({
+				key: `single:${id}`,
+				mode: "single",
+				label: `${i}`,
+				sourceIds: [id],
+				state: null,
+			});
+		}
+		await pruneSequenceMedia();
+		for (let i = 0; i < 30; i++) {
+			const id = stableSourceId(makeFile(`proj-${i}.png`, "x", 1));
+			expect(await loadMediaPool(`proj-${i}`)).not.toBeNull();
+			expect(await getSession(`single:${id}`)).not.toBeNull();
+		}
+	});
 
 	test("a kept project keeps its timeline however many newer ones there are", async () => {
 		const id = await seedPool("proj-old");
