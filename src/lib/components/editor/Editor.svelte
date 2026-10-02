@@ -604,8 +604,12 @@
 					source: new mb.BlobSource(probed),
 					formats: mb.ALL_FORMATS,
 				});
-				const track = await input.getPrimaryAudioTrack();
-				if (file === probed) videoHasAudio = !!track;
+				try {
+					const track = await input.getPrimaryAudioTrack();
+					if (file === probed) videoHasAudio = !!track;
+				} finally {
+					input.dispose();
+				}
 			} catch {
 				if (file === probed) videoHasAudio = true;
 			}

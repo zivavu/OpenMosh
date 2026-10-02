@@ -197,8 +197,10 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		unknown
 	> | null = null;
 
+	let videoInput: { dispose(): void } | null = null;
 	if (isVideo && videoEl) {
 		const opened = await openDecodableVideo(file);
+		videoInput = opened?.input ?? null;
 		if (opened) {
 			const totalFrames = Math.ceil(exportDuration * fps);
 			// One timestamp per recorder frame, so the generator stays in lockstep with onBeforeRender.
@@ -388,7 +390,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		downloadBlob(blob);
 	} finally {
 		// Stops mediabunny's pre-decode pipeline and closes its decoder on abort/error.
-		void videoFrames?.return();
+		await videoFrames?.return().catch(() => {});
+		videoInput?.dispose();
 		exportLayers?.dispose();
 	}
 }
