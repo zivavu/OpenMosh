@@ -63,10 +63,6 @@ const SESSION_STORE = "sessions";
 const TIMELINE_STORE = "timelines";
 const PROXY_STORE = "proxies";
 const DB_VERSION = 5;
-/** Least recently used pools past this are dropped. */
-const MAX_POOLS = 20;
-/** Same, for sessions; they compete with pools for the one media store. */
-const MAX_SESSIONS = 20;
 /** Timelines nothing keeps (a video opened once in single mode) kept up to this many. */
 const MAX_UNREFERENCED_TIMELINES = 8;
 /** Fresh files land here until the pool save catches up, kept up to this many. */
@@ -388,15 +384,10 @@ export function pruneSequenceMediaThrottled(now = Date.now()): Promise<void> {
 	return pruneSequenceMedia();
 }
 
-/** Drops LRU pools and sessions, then media no retained pool or session
- * references, except the newest MAX_UNREFERENCED. */
+/** Drops media no project or edit references, except the newest MAX_UNREFERENCED.
+ * Projects and edits themselves go only when the user deletes them. */
 export async function pruneSequenceMedia(): Promise<void> {
-	const pools = (await getAllMediaPools()).sort(
-		(a, b) => b.updatedAt - a.updatedAt,
-	);
-	for (const stale of pools.slice(MAX_POOLS)) {
-		await deleteMediaPool(stale.key);
-	}
+	const pools = await getAllMediaPools();
 
 	const allSessions = await getAllSessions();
 	// Slideshow sessions keyed by media predate the track requirement; they can't be recreated.
@@ -407,25 +398,17 @@ export async function pruneSequenceMedia(): Promise<void> {
 		await deleteSession(stale.key);
 	}
 
-	const sessions = allSessions
-		.filter((s) => !orphaned.includes(s))
-		.sort((a, b) => b.updatedAt - a.updatedAt);
-	for (const stale of sessions.slice(MAX_SESSIONS)) {
-		await deleteSession(stale.key);
-	}
+	const sessions = allSessions.filter((s) => !orphaned.includes(s));
 
-	await pruneTimelines(
-		pools.slice(0, MAX_POOLS),
-		sessions.slice(0, MAX_SESSIONS),
-	);
+	await pruneTimelines(pools, sessions);
 
 	const referenced = new Set<string>();
-	for (const pool of pools.slice(0, MAX_POOLS)) {
+	for (const pool of pools) {
 		for (const id of pool.sourceIds) referenced.add(id);
 	}
 	// Sessions hold the only reference to single/slideshow media; miss these and
 	// resuming comes back empty.
-	for (const session of sessions.slice(0, MAX_SESSIONS)) {
+	for (const session of sessions) {
 		for (const id of session.sourceIds) referenced.add(id);
 	}
 
