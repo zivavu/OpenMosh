@@ -1,6 +1,6 @@
 /** Resumable edits for single and slideshow mode, keyed by the song when there is one. */
 
-import { getAllTracks, getTrack } from "../audio/track-library";
+import { getAllTracks, getTrack, trackToFile } from "../audio/track-library";
 import { createListCache } from "../storage";
 import { rememberLastOpened } from "./last-opened";
 import {
@@ -115,7 +115,7 @@ export async function openSession(key: string): Promise<OpenedSession | null> {
 	if (session.trackId) {
 		const track = await getTrack(session.trackId).catch(() => null);
 		if (track) {
-			trackFile = new File([track.blob], track.name, { type: track.blob.type });
+			trackFile = trackToFile(track);
 		}
 	}
 	return {

@@ -39,7 +39,7 @@
 		saveRenderSettings,
 	} from "../../editor/render-settings";
 	import { readJson, readRaw, writeJson, writeRaw } from "../../storage";
-	import { addTrack, getTrack } from "../../audio/track-library";
+	import { addTrack, getTrack, trackToFile } from "../../audio/track-library";
 	import { SequenceMixer } from "../../mix/mixer.svelte";
 	import { SourceAudioBank } from "../../mix/source-audio.svelte";
 	import {
@@ -807,9 +807,7 @@
 		if (trackId) {
 			if (trackId === currentTrackId && audio.trackFile) return audio.trackFile;
 			const track = await getTrack(trackId).catch(() => null);
-			return track
-				? new File([track.blob], track.name, { type: track.blob.type })
-				: null;
+			return track ? trackToFile(track) : null;
 		}
 		const source = sourceRegistry.get(id);
 		return source?.kind === "video" ? source.file : null;
@@ -2122,10 +2120,7 @@
 		}
 		const track = await getTrack(trackId).catch(() => null);
 		if (!track) return;
-		setSong(
-			new File([track.blob], track.name, { type: track.blob.type }),
-			trackId,
-		);
+		setSong(trackToFile(track), trackId);
 	}
 
 	/** The project's song: the BPM source, and the track the library shows as loaded. */
@@ -2256,10 +2251,7 @@
 		}
 		// Zero, so the new song is measured rather than keeping the old one's tempo.
 		sequenceBpm = 0;
-		setSong(
-			new File([track.blob], track.name, { type: track.blob.type }),
-			trackId,
-		);
+		setSong(trackToFile(track), trackId);
 	}
 
 	/** Unloading the song takes its clips off the lanes too. */
