@@ -375,6 +375,18 @@ export function deleteTimeline(key: string): Promise<void> {
 	});
 }
 
+/** Autosaves land every pause in editing; a prune reads every record, so it runs
+ * at most this often from them. */
+const PRUNE_INTERVAL_MS = 60_000;
+let lastPruneAt = -Infinity;
+
+/** pruneSequenceMedia for the autosave paths: skipped when one ran recently. */
+export function pruneSequenceMediaThrottled(now = Date.now()): Promise<void> {
+	if (now - lastPruneAt < PRUNE_INTERVAL_MS) return Promise.resolve();
+	lastPruneAt = now;
+	return pruneSequenceMedia();
+}
+
 /** Drops LRU pools and sessions, then media no retained pool or session
  * references, except the newest MAX_UNREFERENCED. */
 export async function pruneSequenceMedia(): Promise<void> {

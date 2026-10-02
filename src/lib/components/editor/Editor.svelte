@@ -217,7 +217,7 @@
 		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
 		loadMediaPool,
-		pruneSequenceMedia,
+		pruneSequenceMediaThrottled,
 		putSequenceMediaProxy,
 		saveMediaPool,
 		stableSourceId,
@@ -1721,7 +1721,7 @@
 				saveMediaPool(key, ids).then(() => true),
 			)
 			.then((ok) => {
-				if (ok) void pruneSequenceMedia().catch(() => {});
+				if (ok) void pruneSequenceMediaThrottled().catch(() => {});
 			});
 	}
 
@@ -3212,7 +3212,7 @@
 			},
 		);
 		void saves.track("session", write).then((ok) => {
-			if (ok) void pruneSequenceMedia().catch(() => {});
+			if (ok) void pruneSequenceMediaThrottled().catch(() => {});
 		});
 	}
 

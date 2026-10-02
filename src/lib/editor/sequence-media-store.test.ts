@@ -6,6 +6,7 @@ import {
 	getTimeline,
 	loadMediaPool,
 	pruneSequenceMedia,
+	pruneSequenceMediaThrottled,
 	putSequenceMedia,
 	putSession,
 	putTimeline,
@@ -141,4 +142,27 @@ describe("pruneSequenceMedia", () => {
 		);
 		expect(left.filter((t) => t !== null)).toHaveLength(8);
 	});
+});
+
+test("autosave prunes run at most once a minute", async () => {
+	await clearAllSequenceStores();
+	for (let i = 0; i < 20; i++) {
+		await putTimeline(`single:video:t${i}.mp4:1:1`, { v: 3 });
+	}
+	const count = async () => {
+		let n = 0;
+		for (let i = 0; i < 20; i++) {
+			if (await getTimeline(`single:video:t${i}.mp4:1:1`)) n++;
+		}
+		return n;
+	};
+	await pruneSequenceMediaThrottled(1_000_000);
+	expect(await count()).toBe(8);
+	for (let i = 0; i < 20; i++) {
+		await putTimeline(`single:video:t${i}.mp4:1:1`, { v: 3 });
+	}
+	await pruneSequenceMediaThrottled(1_030_000);
+	expect(await count()).toBe(20);
+	await pruneSequenceMediaThrottled(1_061_000);
+	expect(await count()).toBe(8);
 });
