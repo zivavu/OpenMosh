@@ -41,6 +41,7 @@
 				message: message.trim(),
 				email: email.trim(),
 				botcheck,
+				chain: start?.chain,
 			});
 			sent = true;
 			closeTimer = window.setTimeout(closeFeedback, AUTO_CLOSE_MS);
