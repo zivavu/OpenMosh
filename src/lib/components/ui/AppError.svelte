@@ -4,13 +4,17 @@
 	interface Props {
 		title: string;
 		message: string;
-		/** Shown under the message so a bug report can quote it. */
-		detail?: string;
-		/** Goes into the report, not on screen. */
-		stack?: string;
+		/** Its message shows under ours, so a bug report can quote it; its stack goes
+		 * into the report, not on screen. */
+		error: unknown;
 	}
 
-	let { title, message, detail, stack }: Props = $props();
+	let { title, message, error }: Props = $props();
+
+	const detail = $derived(
+		error instanceof Error ? error.message : String(error),
+	);
+	const stack = $derived(error instanceof Error ? error.stack : undefined);
 
 	function report() {
 		openFeedback({
