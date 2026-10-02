@@ -240,7 +240,15 @@ async function prepareFrameAudio(
 // handed to it as one buffer; the muxer's writes land in fixed-size slabs instead.
 const SLAB_SIZE = 64 * 1024 * 1024;
 
-class SlabBuffer {
+/** Where the muxer's bytes land until the export is handed over as a Blob. */
+interface OutputBuffer {
+	write(data: Uint8Array, position: number): void | Promise<void>;
+	toBlob(type: string): Promise<Blob>;
+	/** Throw the partial output away; the export failed or was cancelled. */
+	discard(): void;
+}
+
+class SlabBuffer implements OutputBuffer {
 	private slabs: Uint8Array<ArrayBuffer>[] = [];
 	/** Highest byte offset written so far: the final file length. */
 	length = 0;
@@ -264,7 +272,7 @@ class SlabBuffer {
 		if (end > this.length) this.length = end;
 	}
 
-	toBlob(type: string): Blob {
+	async toBlob(type: string): Promise<Blob> {
 		const parts: BlobPart[] = [];
 		for (let i = 0; i < this.slabs.length; i++) {
 			const start = i * SLAB_SIZE;
@@ -277,6 +285,43 @@ class SlabBuffer {
 		// The Blob owns a copy now; drop ours so the slabs can be collected.
 		this.slabs = [];
 		return blob;
+	}
+
+	discard() {
+		this.slabs = [];
+	}
+}
+
+const EXPORT_DIR = "exports";
+
+/** A file in the origin's private storage, so a long export never sits in memory.
+ * Null where the browser can't write one; the slabs take over there. */
+async function openDiskBuffer(): Promise<OutputBuffer | null> {
+	try {
+		if (!navigator.storage?.getDirectory) return null;
+		const root = await navigator.storage.getDirectory();
+		// The last export was read straight off its file, and has long been saved.
+		await root.removeEntry(EXPORT_DIR, { recursive: true }).catch(() => {});
+		const dir = await root.getDirectoryHandle(EXPORT_DIR, { create: true });
+		const handle = await dir.getFileHandle(`export-${Date.now()}.webm`, {
+			create: true,
+		});
+		if (typeof handle.createWritable !== "function") return null;
+		const writable = await handle.createWritable();
+		return {
+			// Copied: the muxer may reuse the buffer before the queued write runs.
+			write: (data, position) =>
+				writable.write({ type: "write", position, data: data.slice() }),
+			async toBlob(type) {
+				await writable.close();
+				return new Blob([await handle.getFile()], { type });
+			},
+			discard() {
+				void writable.abort().catch(() => {});
+			},
+		};
+	} catch {
+		return null;
 	}
 }
 
@@ -404,12 +449,12 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		);
 	}
 
-	const slabs = new SlabBuffer();
+	const buffer = (await openDiskBuffer()) ?? new SlabBuffer();
 	// Chunked so the muxer batches its writes instead of calling us per packet.
 	const target = new mb.StreamTarget(
 		new WritableStream<StreamTargetChunk>({
 			write(chunk) {
-				slabs.write(chunk.data, chunk.position);
+				return buffer.write(chunk.data, chunk.position);
 			},
 		}),
 		{ chunked: true },
@@ -647,6 +692,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	resetAutoRange();
 	resetSpectrumRange();
 
+	let finished = false;
 	try {
 		for (let i = 0; i < totalFrames; i++) {
 			checkAbort(signal);
@@ -715,8 +761,10 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		// Encoders flush their remaining pipeline here; packet callbacks drive progress to 100%.
 		await sink.finish();
 		await output.finalize();
+		finished = true;
 	} finally {
 		sink.dispose();
+		if (!finished) buffer.discard();
 	}
 
 	onProgress?.(1);
@@ -725,7 +773,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	onFinalizing?.();
 	await new Promise<void>((r) => setTimeout(r, 0));
 
-	return slabs.toBlob("video/webm");
+	return buffer.toBlob("video/webm");
 }
 
 export async function recordVideo(opts: RecordOptions): Promise<Blob> {
