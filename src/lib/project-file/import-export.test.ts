@@ -27,6 +27,7 @@ const { createSourceEdit } = await import("../media/source-edit");
 const { createTextClip, createTextLane } = await import("../text/types");
 const { buildProjectFile } = await import("./export");
 const { openProjectFile } = await import("./import");
+const { writeZip } = await import("./zip");
 
 import v0 from "../editor/fixtures/seq-entry/v0.json";
 import v2 from "../editor/fixtures/seq-entry/v2.json";
@@ -261,4 +262,69 @@ describe("old projects", () => {
 			]);
 		},
 	);
+});
+
+describe("fonts in a project file", () => {
+	async function fileWithFonts(fonts: unknown[]): Promise<Blob> {
+		const manifest = {
+			format: "openmosh-project",
+			version: 1,
+			name: "Fonts",
+			entry: { v: 3, length: 10 },
+			pool: [],
+			songs: [],
+			fonts,
+		};
+		return writeZip([
+			{ name: "project.json", blob: new Blob([JSON.stringify(manifest)]) },
+		]);
+	}
+
+	test("a link to any other site is never fetched on import", async () => {
+		await openProjectFile(
+			await fileWithFonts([
+				{ id: "a", family: "'Evil'", url: "https://evil.example/x.woff2" },
+				{ id: "b", family: "'Local'", url: "http://192.168.0.1/x.ttf" },
+			]),
+		);
+		expect(fakeFonts()).toEqual([]);
+	});
+
+	test("a Google Fonts link from an older file still comes back", async () => {
+		await openProjectFile(
+			await fileWithFonts([
+				{
+					id: "g",
+					family: "'Rubik Glitch'",
+					url: "https://fonts.googleapis.com/css2?family=Rubik+Glitch",
+				},
+			]),
+		);
+		expect(fakeFonts()).toHaveLength(1);
+	});
+
+	test("a font added from a link is saved into the file as bytes", async () => {
+		const key = "proj-font";
+		const textLane = createTextLane("Text", 0);
+		textLane.style = { ...textLane.style, fontFamily: "'Linked'" };
+		await store.putTimeline(`seq:${key}`, {
+			v: 3,
+			length: 10,
+			text: { enabled: true, lanes: [textLane] },
+		});
+		setFakeFonts([
+			{
+				id: "l1",
+				name: "Linked",
+				family: "'Linked'",
+				sourceUrl: "https://fonts.googleapis.com/css2?family=Linked",
+				addedAt: 1,
+				data: new TextEncoder().encode("FONT").buffer,
+			},
+		]);
+		const built = await buildProjectFile(key);
+		setFakeFonts([]);
+		await openProjectFile(built.blob);
+		expect(fakeFonts().map((f) => f.sourceUrl)).toEqual(["fonts/l1.woff2"]);
+	});
 });

@@ -14,7 +14,7 @@ import {
 	addCustomFont,
 	addCustomFontData,
 } from "../text-overlay/custom-fonts.svelte";
-import { parseManifest, remapProject } from "./manifest";
+import { isFetchableFontUrl, parseManifest, remapProject } from "./manifest";
 import { readZip } from "./zip";
 
 /** A name that isn't already in the library; a taken one gets "(copy)". */
@@ -73,8 +73,7 @@ export async function openProjectFile(file: Blob): Promise<string> {
 
 	for (const item of manifest.fonts) {
 		try {
-			if (item.url) await addCustomFont(item.url);
-			else if (item.path) {
+			if (item.path) {
 				const entry = byPath.get(item.path);
 				if (entry) {
 					const name = item.family.replace(/^'|'$/g, "") || "Custom Font";
@@ -84,6 +83,8 @@ export async function openProjectFile(file: Blob): Promise<string> {
 						await entry.blob.arrayBuffer(),
 					);
 				}
+			} else if (item.url && isFetchableFontUrl(item.url)) {
+				await addCustomFont(item.url);
 			}
 		} catch {
 			// Already added, or the face wouldn't load; the text falls back.

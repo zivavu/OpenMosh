@@ -56,10 +56,6 @@ export function projectFileName(name: string): string {
 	return `${base || "openmosh-project"}.openmosh`;
 }
 
-function isUrl(value: string): boolean {
-	return /^https?:\/\//i.test(value.trim());
-}
-
 /** Every library song the project plays: its main song and any on an audio lane. */
 function songIdsOf(entry: SeqEntry): string[] {
 	const ids = new Set<string>();
@@ -160,10 +156,7 @@ export async function buildProjectFile(
 	const fontParts: ZipEntryInput[] = [];
 	for (const font of customFonts()) {
 		if (!families.has(font.family)) continue;
-		if (isUrl(font.sourceUrl)) {
-			fonts.push({ id: font.id, family: font.family, url: font.sourceUrl });
-			continue;
-		}
+		// Embedded even when it came from a link, so opening the file fetches nothing.
 		const data = await getCustomFontData(font.id);
 		if (!data) continue;
 		const path = `fonts/${font.id}.woff2`;

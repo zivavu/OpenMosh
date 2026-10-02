@@ -31,7 +31,7 @@ export interface ProjectSongEntry {
 export interface ProjectFontEntry {
 	id: string;
 	family: string;
-	/** A Google Fonts (or direct) URL; uploaded fonts carry a path instead. */
+	/** Files from before fonts were always embedded may carry a link instead. */
 	url?: string;
 	path?: string;
 }
@@ -46,6 +46,20 @@ export interface ProjectManifest {
 	pool: ProjectPoolEntry[];
 	songs: ProjectSongEntry[];
 	fonts: ProjectFontEntry[];
+}
+
+/** Whether a font link a project file names may be fetched on import: Google Fonts
+ * only, so opening a file someone sent can't make the browser call any other site. */
+export function isFetchableFontUrl(url: string): boolean {
+	try {
+		const { protocol, hostname } = new URL(url);
+		return (
+			protocol === "https:" &&
+			(hostname === "fonts.googleapis.com" || hostname === "fonts.google.com")
+		);
+	} catch {
+		return false;
+	}
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
