@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, untrack } from "svelte";
 	import { hasKeyboard } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
@@ -5166,6 +5167,8 @@
 				onTake={(file) => void useTake(file)}
 				onClose={() => (webcamOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (webcamOpen = false)} />
 		{/await}
 	{/if}
 
@@ -5179,6 +5182,8 @@
 				onUse={useGenerated}
 				onClose={() => (generateOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (generateOpen = false)} />
 		{/await}
 	{/if}
 
@@ -5188,6 +5193,8 @@
 				groups={shortcutGroups}
 				onClose={() => (showShortcuts = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (showShortcuts = false)} />
 		{/await}
 	{/if}
 

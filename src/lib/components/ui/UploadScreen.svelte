@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "./LoadFailed.svelte";
 	interface Props {
 		onfile: (file: File) => void;
 		onSequence: (files: File[]) => void;
@@ -771,6 +772,8 @@
 				}}
 				onClose={() => (webcamOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (webcamOpen = false)} />
 		{/await}
 	{/if}
 
@@ -781,6 +784,8 @@
 				onUse={useGenerated}
 				onClose={() => (generateOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (generateOpen = false)} />
 		{/await}
 	{/if}
 
@@ -886,6 +891,8 @@
 				onConfirm={runPendingDelete}
 				onCancel={() => (pendingDelete = null)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (pendingDelete = null)} />
 		{/await}
 	{/if}
 
@@ -895,6 +902,8 @@
 				onClose={() => (storageOpen = false)}
 				onChanged={refreshSaved}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (storageOpen = false)} />
 		{/await}
 	{/if}
 </div>

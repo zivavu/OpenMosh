@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { HelpCircle, Pause, Play, Settings, Type } from "lucide-svelte";
 	import { hasKeyboard } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
@@ -225,6 +226,8 @@
 			groups={shortcutGroups}
 			onClose={() => (showShortcuts = false)}
 		/>
+	{:catch}
+		<LoadFailed onclose={() => (showShortcuts = false)} />
 	{/await}
 {/if}
 

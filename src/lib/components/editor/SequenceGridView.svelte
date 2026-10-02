@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { Box, Play, Plus, Camera, Palette, X } from "lucide-svelte";
 	import {
 		SOURCE_DND_TYPE,
@@ -243,6 +244,8 @@
 				onClose={lightbox.close}
 				onRemove={(i) => onRemove(sources[i].id)}
 			/>
+		{:catch}
+			<LoadFailed onclose={lightbox.close} />
 		{/await}
 	{/if}
 </div>

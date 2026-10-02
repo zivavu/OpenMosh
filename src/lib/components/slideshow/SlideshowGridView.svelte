@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { Camera, X, Play, Palette } from "lucide-svelte";
 	import type { SlideshowSlide } from "../../slideshow/types";
 	import type { ProxyAction } from "../../video/proxy-status";
@@ -219,6 +220,8 @@
 				onClose={lightbox.close}
 				onRemove={(i) => onRemoveSlide(slides[i].id)}
 			/>
+		{:catch}
+			<LoadFailed onclose={lightbox.close} />
 		{/await}
 	{/if}
 </div>
