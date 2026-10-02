@@ -59,13 +59,7 @@
 		setProjectName,
 	} from "../../editor/project-names";
 	import RenameInput from "./RenameInput.svelte";
-	import {
-		deleteLooseEdit,
-		deleteProject,
-		describeLooseEditDeletion,
-		describeProjectDeletion,
-		loadStorageInventory,
-	} from "../../editor/storage-inventory";
+	import { deleteRecentEdit } from "../../editor/storage-inventory";
 	import {
 		DEFAULT_SETTINGS,
 		demoBackgroundEnabled,
@@ -211,35 +205,11 @@
 	let pendingDelete = $state<PendingDelete | null>(null);
 	let deleting = $state(false);
 
-	async function askDeleteRow(row: RecentRow) {
-		let inventory;
-		try {
-			inventory = await loadStorageInventory();
-		} catch {
-			showToast("Couldn't read storage", "error");
-			return;
-		}
-		const project = inventory.projects.find(
-			(p) => p.trackId === row.projectKey,
-		);
-		if (project) {
-			pendingDelete = {
-				title: "Delete project",
-				message: describeProjectDeletion(project),
-				run: () => deleteProject(project),
-			};
-			return;
-		}
-		const edit = inventory.looseEdits.find((e) => e.key === row.key);
-		if (!edit) {
-			// Already gone underneath the cached list; repaint to match.
-			refreshSaved();
-			return;
-		}
+	function askDeleteRow(row: RecentRow) {
 		pendingDelete = {
-			title: "Delete edit",
-			message: describeLooseEditDeletion(edit),
-			run: () => deleteLooseEdit(edit),
+			title: row.mode === "sequence" ? "Delete project" : "Delete edit",
+			message: `Removes the saved work on "${row.label}" and any media only it uses. Your songs and other projects stay. This can't be undone.`,
+			run: () => deleteRecentEdit(row.mode, row.key),
 		};
 	}
 

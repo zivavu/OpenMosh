@@ -438,7 +438,7 @@ export async function pruneSequenceMedia(): Promise<void> {
 }
 
 /** The timelines a session's editor saves to: its song's, else its video's. */
-function sessionTimelineKeys(session: StoredSession): string[] {
+export function sessionTimelineKeys(session: StoredSession): string[] {
 	if (session.mode !== "single") return [];
 	if (session.trackId) return [`single:${session.trackId}`];
 	const id = session.sourceIds[0];
