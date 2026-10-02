@@ -1,4 +1,4 @@
-import { getAllTracks, getTrack } from "../audio/track-library";
+import { getAllTracks, getTrack, trackToFile } from "../audio/track-library";
 import { createListCache } from "../storage";
 import { readProjectNames } from "./project-names";
 import {
@@ -118,9 +118,7 @@ export async function openSavedSequence(
 
 	return {
 		trackId,
-		trackFile: track
-			? new File([track.blob], track.name, { type: track.blob.type })
-			: null,
+		trackFile: track ? trackToFile(track) : null,
 		sources,
 	};
 }

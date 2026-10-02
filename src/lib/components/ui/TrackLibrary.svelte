@@ -19,6 +19,7 @@
 		getAllTracks,
 		renameTrack,
 		trackFileName,
+		trackToFile,
 		type StoredTrack,
 	} from "../../audio/track-library";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -135,9 +136,7 @@
 		}
 		if (measuringIds.has(track.id)) return;
 		measuringIds = new Set([...measuringIds, track.id]);
-		const file = new File([track.blob], track.name, {
-			type: track.blob.type,
-		});
+		const file = trackToFile(track);
 		getDecodedAudioBuffer(file)
 			.then((buffer) => {
 				const db = measureLoudness(buffer);
@@ -244,11 +243,7 @@
 	}
 
 	function onLoad(track: StoredTrack, autoplay = false) {
-		onLoadTrack(
-			new File([track.blob], track.name, { type: track.blob.type }),
-			track.id,
-			autoplay,
-		);
+		onLoadTrack(trackToFile(track), track.id, autoplay);
 		// Relies on activeTrackId being updated synchronously by onLoadTrack.
 		syncedTrackId = track.id;
 		syncNormalizeGain(track);

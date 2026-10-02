@@ -16,6 +16,15 @@ export function trackFileName(track: StoredTrack): string {
 	return track.fileName ?? track.name;
 }
 
+/** The stored song as a File. Stamped with when it was added, so every rebuild of
+ * one track reads as the same file to the decode cache. */
+export function trackToFile(track: StoredTrack): File {
+	return new File([track.blob], track.name, {
+		type: track.blob.type,
+		lastModified: track.addedAt,
+	});
+}
+
 const db = simpleStore("openmosh-tracks", "tracks");
 
 export function getAllTracks(): Promise<StoredTrack[]> {
