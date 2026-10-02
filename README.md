@@ -72,7 +72,7 @@ The chain runs one full-screen shader pass per enabled effect, so cost scales wi
 
 Your media never leaves the machine. There's no backend, no account and no upload: files are read straight off disk into the page, everything renders locally, and your own browser writes the export. Sessions, saved sequences and your track library live in IndexedDB and localStorage on your device. After the first visit the app keeps a copy of itself, so it opens and runs offline too. Project files are yours: saving one writes a `.openmosh` file to your disk, and nothing leaves the machine unless you send the file yourself.
 
-Two things do go over the network, and only when you use them. The feedback form sends your message, your browser and screen size, and the effect chain you had on through [Web3Forms](https://web3forms.com/), which emails it to me. A custom font added from Google Fonts is downloaded from Google once, then kept on your device.
+Two things do go over the network, and only when you use them. The feedback form sends your message, your email if you give one, the screen you were on, your browser and screen size, and the effect chain you had on through [Web3Forms](https://web3forms.com/), which emails it to me. A report sent from the crash screen also carries the error and where in the code it happened, which can include a file name. A custom font added from a link is downloaded once from wherever the link points (Google Fonts, or the site hosting a font file you pasted), then kept on your device. Project files carry their fonts inside, so opening one downloads nothing, except a Google Fonts link in a file saved by an older version.
 
 ---
 
