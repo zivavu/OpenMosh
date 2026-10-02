@@ -20,8 +20,14 @@ export class SaveTracker {
 		delete this.#channels[channel];
 	}
 
+	/** The newest write per channel; an older one finishing late doesn't settle it. */
+	#latest = new Map<string, number>();
+	#writes = 0;
+
 	/** Follow one write through; `ok` is false when it failed. */
 	async track(channel: string, write: Promise<boolean>): Promise<boolean> {
+		const id = ++this.#writes;
+		this.#latest.set(channel, id);
 		this.#channels[channel] = "saving";
 		let ok = false;
 		try {
@@ -29,8 +35,11 @@ export class SaveTracker {
 		} catch {
 			ok = false;
 		}
-		// A newer save queued meanwhile owns the channel now.
-		if (this.#channels[channel] === "saving") {
+		// A newer write, or a save queued meanwhile, owns the channel now.
+		if (
+			this.#latest.get(channel) === id &&
+			this.#channels[channel] === "saving"
+		) {
 			this.#channels[channel] = ok ? "ok" : "failed";
 		}
 		if (ok) this.lastSavedAt = Date.now();
