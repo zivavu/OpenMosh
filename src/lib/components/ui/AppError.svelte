@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { stackFrames } from "../../feedback/stack";
 	import { openFeedback } from "./feedback.svelte";
 
 	interface Props {
@@ -14,7 +15,9 @@
 	const detail = $derived(
 		error instanceof Error ? error.message : String(error),
 	);
-	const stack = $derived(error instanceof Error ? error.stack : undefined);
+	const stack = $derived(
+		error instanceof Error ? stackFrames(error) : undefined,
+	);
 
 	function report() {
 		openFeedback({
