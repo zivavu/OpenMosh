@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+	poolCount,
 	canvasStats,
 	clipMoshButton,
 	liveEffectNames,
@@ -40,7 +41,7 @@ test("opening puts the first source on the preview and every file in the pool", 
 	expect(nearestColor(stats.mean, PALETTE)).toBe("red");
 	// A flat source through a clean chain stays flat: nothing is on it yet.
 	expect(stats.variance).toBeLessThan(1);
-	await expect(page.getByText("3 SOURCES")).toBeVisible();
+	await expect(poolCount(page)).toHaveText(/^3\s+sources$/i);
 });
 
 test("a ctrl+click cuts a clip in two, and again inside a cut one", async ({

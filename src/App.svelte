@@ -211,11 +211,23 @@
 
 	/** Reopen a song's saved sequence: its media becomes the pool, and the song
 	 * itself is handed over as the already-known library track. False when it's gone. */
-	async function openSequenceFromSong(trackId: string): Promise<boolean> {
+	async function openSequenceFromSong(
+		trackId: string,
+		/** Opened from inside the editor, in place of the project it has open. */
+		replacing = false,
+	): Promise<boolean> {
 		const opened = await openSavedSequence(trackId);
 		if (!opened) return false;
 		rememberLastOpened({ mode: "sequence", key: trackId });
-		sequenceFiles = await gifsToVideo(opened.sources);
+		const files = await gifsToVideo(opened.sources);
+		if (replacing) {
+			// The warmed canvas went to the editor being replaced, which destroys it on
+			// the way out; cleared in this same step, so that editor never sees it go.
+			cancelWarm();
+			warmCanvas = null;
+			warmRenderer = null;
+		}
+		sequenceFiles = files;
 		pendingAudioFile = opened.trackFile;
 		sequenceTrackId = opened.trackFile ? opened.trackId : null;
 		sequenceProjectKey = opened.trackId;
@@ -330,19 +342,27 @@
 		{/await}
 	{:else if view === "sequence" && sequenceFiles.length > 0}
 		{#await loadEditor() then Editor}
-			<Editor
-				mode="sequence"
-				file={sequenceFiles[0]}
-				extraFiles={sequenceFiles.slice(1)}
-				initialAudioFile={pendingAudioFile}
-				initialTrackId={sequenceTrackId}
-				initialProjectKey={sequenceProjectKey}
-				onfile={async (f: File) =>
-					(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
-				{warmCanvas}
-				{warmRenderer}
-				onExit={exitToUpload}
-			/>
+			<!-- Keyed: another project is a fresh editor, not this one's state reseeded. -->
+			{#key sequenceProjectKey}
+				<Editor
+					mode="sequence"
+					file={sequenceFiles[0]}
+					extraFiles={sequenceFiles.slice(1)}
+					initialAudioFile={pendingAudioFile}
+					initialTrackId={sequenceTrackId}
+					initialProjectKey={sequenceProjectKey}
+					onfile={async (f: File) =>
+						(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
+					{warmCanvas}
+					{warmRenderer}
+					onExit={exitToUpload}
+					onOpenProject={async (key: string) => {
+						if (!(await openSequenceFromSong(key, true))) {
+							showToast("That project's media is no longer stored", "error");
+						}
+					}}
+				/>
+			{/key}
 		{:catch err}
 			{@render loadFailed(err)}
 		{/await}

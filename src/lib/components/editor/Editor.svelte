@@ -297,6 +297,8 @@
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
+		/** Sequence mode: open another saved project in place of this one. */
+		onOpenProject?: (key: string) => void;
 	}
 
 	let {
@@ -311,6 +313,7 @@
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
+		onOpenProject,
 	}: Props = $props();
 
 	let isSequenceMode = $derived(mode === "sequence");
@@ -2795,6 +2798,19 @@
 		moshSession.pushEdit(effects);
 	}
 
+	/** Leaving for another project saves this one on the way out, as exiting does. */
+	function openOtherProject(key: string) {
+		if (!onOpenProject) return;
+		if (recordingState.recording) {
+			showToast(
+				"Cancel or wait for the recording to finish before switching projects",
+				"error",
+			);
+			return;
+		}
+		onOpenProject(key);
+	}
+
 	function handleExit() {
 		if (!onExit) return;
 		if (recordingState.recording) {
@@ -4118,6 +4134,10 @@
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
+		activeProjectKey={projectKey}
+		onOpenProject={isSequenceMode && onOpenProject
+			? openOtherProject
+			: undefined}
 	/>
 	<div
 		class="main-area"
@@ -4422,8 +4442,8 @@
 				<button
 					class="bar-icon"
 					onclick={() => trackLibraryRef?.openLibrary()}
-					title="Track library"
-					aria-label="Track library"
+					title={isSequenceMode ? "Projects and songs" : "Track library"}
+					aria-label={isSequenceMode ? "Projects and songs" : "Track library"}
 				>
 					<Library size={13} />
 				</button>

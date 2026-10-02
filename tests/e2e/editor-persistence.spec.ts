@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+	poolCount,
 	liveEffectNames,
 	liveEffects,
 	openEditor,
@@ -61,7 +62,7 @@ test("a song worked on is offered back, and reopening it restores the cuts, the 
 
 	await expect(mediaClips(page)).toHaveCount(2);
 	// The whole pool came back, not just the source the clips point at.
-	await expect(page.getByText("3 SOURCES")).toBeVisible();
+	await expect(poolCount(page)).toHaveText(/^3\s+sources$/i);
 	await selectClip(page, 0);
 	expect(await liveEffectNames(page)).toEqual(rolled);
 	// The clip never moshed is still clean, not inheriting its neighbour's chain.
@@ -165,7 +166,7 @@ test("a project saved to a file comes back after storage is cleared", async ({
 
 	// The cuts, the chain and the whole pool came back.
 	await expect(mediaClips(page)).toHaveCount(2);
-	await expect(page.getByText("3 SOURCES")).toBeVisible();
+	await expect(poolCount(page)).toHaveText(/^3\s+sources$/i);
 	await selectClip(page, 0);
 	expect(await liveEffectNames(page)).toEqual(rolled);
 	await selectClip(page, 1);

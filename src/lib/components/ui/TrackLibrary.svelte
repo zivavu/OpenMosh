@@ -22,6 +22,13 @@
 		trackToFile,
 		type StoredTrack,
 	} from "../../audio/track-library";
+	import {
+		listSavedSequences,
+		readCachedSavedSequences,
+		type SavedSequence,
+	} from "../../editor/saved-sequences";
+	import { readProjectNames } from "../../editor/project-names";
+	import { fmtAgo } from "../../utils";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
 
@@ -37,6 +44,11 @@
 		onNormalizeChange?: (gain: number) => void;
 		/** Fired when a manually loaded track is auto-saved, so the editor can adopt it. */
 		onAutoAdded?: (trackId: string) => void;
+		/** Editor only: the drawer leads with the saved projects, and this opens one,
+		 * media, timeline and song together. */
+		onOpenProject?: (key: string) => void;
+		/** The project open now, marked in the list. */
+		activeProjectKey?: string | null;
 	}
 
 	let {
@@ -50,7 +62,36 @@
 		pendingTrack = null,
 		onNormalizeChange,
 		onAutoAdded,
+		onOpenProject,
+		activeProjectKey = null,
 	}: Props = $props();
+
+	const hasProjects = $derived(!!onOpenProject);
+	const TAB_KEY = "openmosh-library-tab";
+	let tab = $state<"projects" | "songs">(
+		readRaw(TAB_KEY) === "songs" ? "songs" : "projects",
+	);
+	$effect(() => {
+		writeRaw(TAB_KEY, tab);
+	});
+	/** Single and slideshow have no projects tab: the drawer is their song library. */
+	const showing = $derived(hasProjects ? tab : "songs");
+
+	let projects = $state<SavedSequence[]>(readCachedSavedSequences());
+	let projectNames = $state(readProjectNames());
+
+	// Re-read on every open: the list moves as projects save, rename and go.
+	$effect(() => {
+		if (!hasProjects || !open) return;
+		projectNames = readProjectNames();
+		void listSavedSequences().then((list) => (projects = list));
+	});
+
+	function openProject(key: string) {
+		if (key === activeProjectKey) return;
+		open = false;
+		onOpenProject?.(key);
+	}
 
 	const OPEN_KEY = "openmosh-library-open";
 	let open = $state(readRaw(OPEN_KEY) === "true");
@@ -301,7 +342,7 @@
 	<button
 		class="expand-btn"
 		onclick={() => (open = true)}
-		title="Open track library"
+		title={hasProjects ? "Open projects and songs" : "Open track library"}
 	>
 		<Library size={14} />
 	</button>
@@ -309,24 +350,73 @@
 	<!-- Overlay panel: slides in on top of the expand strip -->
 	<div class="panel" aria-hidden={!open} inert={!open || undefined}>
 		<div class="header">
-			<span class="title">Track library</span>
-			<button
-				class="add-btn"
-				onclick={() => fileInput.click()}
-				title="Add track"
-			>
-				<Plus size={12} />
-			</button>
+			{#if hasProjects}
+				<div class="tabs" role="tablist">
+					<button
+						class="tab"
+						role="tab"
+						aria-selected={showing === "projects"}
+						class:active={showing === "projects"}
+						onclick={() => (tab = "projects")}>Projects</button
+					>
+					<button
+						class="tab"
+						role="tab"
+						aria-selected={showing === "songs"}
+						class:active={showing === "songs"}
+						onclick={() => (tab = "songs")}>Songs</button
+					>
+				</div>
+			{:else}
+				<span class="title">Track library</span>
+			{/if}
+			{#if showing === "songs"}
+				<button
+					class="add-btn"
+					onclick={() => fileInput.click()}
+					title="Add track"
+				>
+					<Plus size={12} />
+				</button>
+			{/if}
 			<button
 				class="collapse-btn"
 				onclick={() => (open = false)}
-				title="Collapse library"
+				title={hasProjects ? "Collapse" : "Collapse library"}
 			>
 				<ChevronLeft size={12} />
 			</button>
 		</div>
 
-		{#if tracks.length === 0}
+		{#if showing === "projects"}
+			{#if projects.length === 0}
+				<div class="empty">
+					No saved projects yet.<br />This one saves as you work.
+				</div>
+			{:else}
+				<ul class="track-list">
+					{#each projects as project (project.trackId)}
+						{@const name = projectNames[project.trackId] ?? project.trackName}
+						{@const isOpen = project.trackId === activeProjectKey}
+						<li class="track-row" class:active={isOpen}>
+							<button
+								class="name-btn project-row"
+								onclick={() => openProject(project.trackId)}
+								title={isOpen ? "Open now" : `Open "${name}"`}
+								aria-current={isOpen || undefined}
+							>
+								<span class="project-name">{name}</span>
+								<span class="project-meta"
+									>{project.sourceCount} source{project.sourceCount === 1
+										? ""
+										: "s"} · {fmtAgo(project.updatedAt)}</span
+								>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		{:else if tracks.length === 0}
 			<div class="empty">No tracks yet.<br />Click + to add.</div>
 		{:else}
 			<ul class="track-list">
@@ -592,6 +682,54 @@
 	}
 	.delete-btn:hover {
 		color: #e06060;
+	}
+
+	.tabs {
+		flex: 1;
+		display: flex;
+		gap: 0.6rem;
+	}
+
+	.tab {
+		padding: 0;
+		background: none;
+		border: none;
+		border-bottom: 1px solid transparent;
+		color: var(--text-4);
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+
+	.tab:hover {
+		color: var(--text-2);
+	}
+
+	.tab.active {
+		color: var(--text-2);
+		border-bottom-color: var(--live);
+	}
+
+	.project-row {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		padding: 0.15rem 0;
+	}
+
+	.project-name,
+	.project-meta {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 100%;
+	}
+
+	.project-meta {
+		font-size: 0.55rem;
+		color: var(--text-4);
 	}
 
 	.name-btn {
