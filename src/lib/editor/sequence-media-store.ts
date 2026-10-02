@@ -1,5 +1,6 @@
 /** IndexedDB storage for sequence media; `pools` maps ids to songs. */
 
+import { getAllTrackIds } from "../audio/track-library";
 import { request, transact } from "../idb";
 import { requestPersistentStorage } from "../persistent-storage";
 import { PROXY_BUILD } from "../video/proxy";
@@ -66,8 +67,8 @@ const DB_VERSION = 5;
 const MAX_POOLS = 20;
 /** Same, for sessions; they compete with pools for the one media store. */
 const MAX_SESSIONS = 20;
-/** Timelines are the largest records here, and only the recent ones matter. */
-const MAX_TIMELINES = 40;
+/** Timelines nothing keeps (a video opened once in single mode) kept up to this many. */
+const MAX_UNREFERENCED_TIMELINES = 8;
 /** Fresh files land here until the pool save catches up, kept up to this many. */
 const MAX_UNREFERENCED = 64;
 
@@ -400,12 +401,10 @@ export async function pruneSequenceMedia(): Promise<void> {
 		await deleteSession(stale.key);
 	}
 
-	const timelines = (await getAllTimelines()).sort(
-		(a, b) => b.updatedAt - a.updatedAt,
+	await pruneTimelines(
+		pools.slice(0, MAX_POOLS),
+		sessions.slice(0, MAX_SESSIONS),
 	);
-	for (const stale of timelines.slice(MAX_TIMELINES)) {
-		await deleteTimeline(stale.key);
-	}
 
 	const referenced = new Set<string>();
 	for (const pool of pools.slice(0, MAX_POOLS)) {
@@ -435,6 +434,57 @@ export async function pruneSequenceMedia(): Promise<void> {
 		.slice(MAX_UNREFERENCED_PROXIES);
 	for (const entry of staleProxies) {
 		await deleteSequenceProxy(entry.id);
+	}
+}
+
+/** The timelines a session's editor saves to: its song's, else its video's. */
+function sessionTimelineKeys(session: StoredSession): string[] {
+	if (session.mode !== "single") return [];
+	if (session.trackId) return [`single:${session.trackId}`];
+	const id = session.sourceIds[0];
+	const parts = id?.startsWith("src:") ? id.slice(4).split(":") : [];
+	if (parts.length !== 3) return [];
+	let name = parts[0];
+	try {
+		name = decodeURIComponent(name);
+	} catch {
+		// Not our encoding; the raw form can't match a video key anyway.
+	}
+	return [`single:video:${name}:${parts[1]}:${parts[2]}`];
+}
+
+/** Drop timelines nothing kept points at, past the newest few: a project's timeline
+ * lives exactly as long as its pool, whatever else gets opened meanwhile. */
+async function pruneTimelines(
+	pools: StoredMediaPool[],
+	sessions: StoredSession[],
+): Promise<void> {
+	const kept = new Set<string>();
+	for (const pool of pools) {
+		kept.add(`seq:${pool.key}`);
+		// Saved before the mode prefix existed.
+		kept.add(pool.key);
+	}
+	for (const session of sessions) {
+		for (const key of sessionTimelineKeys(session)) kept.add(key);
+	}
+	// A song keeps its single-mode timeline: the BPM found for it lives there.
+	for (const id of await getAllTrackIds()) kept.add(`single:${id}`);
+
+	const db = await openDb();
+	const keys = await transact(db, TIMELINE_STORE, "readonly", (tx) =>
+		request(tx.objectStore(TIMELINE_STORE).getAllKeys()),
+	);
+	const loose = keys.map(String).filter((key) => !kept.has(key));
+	if (loose.length <= MAX_UNREFERENCED_TIMELINES) return;
+	const entries = (
+		await Promise.all(
+			loose.map((key) => readOne<StoredTimeline>(TIMELINE_STORE, key)),
+		)
+	).filter((t) => t !== undefined);
+	entries.sort((a, b) => b.updatedAt - a.updatedAt);
+	for (const stale of entries.slice(MAX_UNREFERENCED_TIMELINES)) {
+		await deleteTimeline(stale.key);
 	}
 }
 

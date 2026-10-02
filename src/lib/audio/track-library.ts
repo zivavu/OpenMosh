@@ -22,6 +22,12 @@ export function getAllTracks(): Promise<StoredTrack[]> {
 	return db.getAll<StoredTrack>();
 }
 
+/** Just the ids, for checking what a song-keyed record still points at. */
+export async function getAllTrackIds(): Promise<Set<string>> {
+	const keys = await db.run("readonly", (s) => request(s.getAllKeys()));
+	return new Set(keys.map(String));
+}
+
 export async function getTrack(id: string): Promise<StoredTrack | null> {
 	return (await db.get<StoredTrack>(id)) ?? null;
 }
