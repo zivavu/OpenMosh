@@ -126,3 +126,21 @@ describe("forgetTrackEntries", () => {
 		expect(render.load("seq:t1")).toBeNull();
 	});
 });
+
+describe("createTrackStore with a cap", () => {
+	beforeEach(() => installStorage(1_000_000));
+	afterEach(() => {
+		delete (globalThis as { localStorage?: unknown }).localStorage;
+	});
+
+	it("keeps only the most recently saved entries", () => {
+		const store = createTrackStore<number>(KEY, undefined, 2);
+		store.save("a", 1);
+		store.save("b", 2);
+		store.save("a", 3);
+		store.save("c", 4);
+		expect(store.load("b")).toBeNull();
+		expect(store.load("a")).toBe(3);
+		expect(store.load("c")).toBe(4);
+	});
+});
