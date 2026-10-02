@@ -3003,6 +3003,10 @@
 
 	/** Lanes folded to a strip; a view choice like solo, not saved. */
 	const FOLD_KEY = "openmosh-folded-lanes";
+	/** Lane ids from every project share the key, so only the latest folds stay. */
+	const MAX_FOLDED = 500;
+	const saveFolds = (ids: Set<string>) =>
+		writeJson(FOLD_KEY, [...ids].slice(-MAX_FOLDED));
 	let foldedLaneIds = $state<Set<string>>(
 		new Set(readJson<string[]>(FOLD_KEY, [])),
 	);
@@ -3012,7 +3016,7 @@
 		if (next.has(laneId)) next.delete(laneId);
 		else next.add(laneId);
 		foldedLaneIds = next;
-		writeJson(FOLD_KEY, [...next]);
+		saveFolds(next);
 	}
 
 	const handleKeydown = createKeyboardHandler({
@@ -3182,7 +3186,7 @@
 			else next.add(id);
 		}
 		foldedLaneIds = next;
-		writeJson(FOLD_KEY, [...next]);
+		saveFolds(next);
 	}
 
 	// Solo only counts while its lane is on the stack; the id is kept so undo brings it back.

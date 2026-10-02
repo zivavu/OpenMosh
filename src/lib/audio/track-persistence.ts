@@ -5,6 +5,8 @@ export function createTrackStore<T>(
 	storageKey: string,
 	/** Transform a raw stored entry into T (e.g. for backward-compat with an older format). */
 	migrate?: (raw: unknown) => T | null,
+	/** Entries kept, newest saved last; a key per opened file would grow forever. */
+	maxEntries = Infinity,
 ) {
 	function loadAll(): Record<string, unknown> {
 		const all = readJson<Record<string, unknown>>(storageKey, {});
@@ -19,6 +21,10 @@ export function createTrackStore<T>(
 		const all = loadAll();
 		delete all[trackId];
 		all[trackId] = data;
+		const keys = Object.keys(all);
+		for (const key of keys.slice(0, Math.max(0, keys.length - maxEntries))) {
+			delete all[key];
+		}
 		if (writeJson(storageKey, all)) return true;
 		for (const key of Object.keys(all)) {
 			if (key === trackId) continue;

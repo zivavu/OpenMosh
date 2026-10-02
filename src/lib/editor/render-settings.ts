@@ -11,7 +11,14 @@ export interface RenderSettings {
 	height?: number;
 }
 
-const store = createTrackStore<RenderSettings>("openmosh-render-settings");
+/** Every file opened in single mode gets an entry, so only the recent ones stay. */
+const MAX_PROJECTS = 200;
+
+const store = createTrackStore<RenderSettings>(
+	"openmosh-render-settings",
+	undefined,
+	MAX_PROJECTS,
+);
 
 export function loadRenderSettings(
 	key: string | null | undefined,
