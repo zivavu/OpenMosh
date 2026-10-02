@@ -106,7 +106,7 @@
 	import {
 		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
-		pruneSequenceMedia,
+		pruneSequenceMediaThrottled,
 		putSequenceMediaProxy,
 	} from "../../editor/sequence-media-store";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
@@ -495,7 +495,7 @@
 			return false;
 		});
 		void saves.track("session", write).then((ok) => {
-			if (ok) void pruneSequenceMedia().catch(() => {});
+			if (ok) void pruneSequenceMediaThrottled().catch(() => {});
 		});
 	}
 
