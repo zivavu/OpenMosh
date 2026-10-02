@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { stackFrames } from "../../feedback/stack";
-	import { openFeedback } from "./feedback.svelte";
+	import { openFeedback, recentlyClosedChain } from "./feedback.svelte";
 
 	interface Props {
 		title: string;
@@ -11,6 +11,9 @@
 	}
 
 	let { title, message, error }: Props = $props();
+
+	// Taken as the screen comes up: the editor that crashed was just torn down.
+	const chainAtCrash = recentlyClosedChain();
 
 	const detail = $derived(
 		error instanceof Error ? error.message : String(error),
@@ -29,6 +32,7 @@
 			]
 				.filter(Boolean)
 				.join("\n\n"),
+			chain: chainAtCrash,
 		});
 	}
 </script>

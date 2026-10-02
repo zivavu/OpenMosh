@@ -1,4 +1,5 @@
 import { getFeedbackChain } from "../components/ui/feedback.svelte";
+import type { EffectInstance } from "../effects/types";
 
 /** Web3Forms endpoint, a static-site form relay that emails submissions on. */
 const ACCESS_KEY = "0cb8b3a2-3288-492e-b71f-65b36a0977dd";
@@ -13,6 +14,8 @@ export interface FeedbackPayload {
 	email: string;
 	/** Honeypot: bots fill every field they find, people never see this one. */
 	botcheck: string;
+	/** Reported instead of the live chain, which a crash has already cleared. */
+	chain?: EffectInstance[] | null;
 }
 
 const KIND_LABELS: Record<FeedbackKind, string> = {
@@ -22,8 +25,8 @@ const KIND_LABELS: Record<FeedbackKind, string> = {
 };
 
 /** The chain as it stood, stripped to what reproduces it: no ids, no UI state. */
-function describeChain(): string {
-	const effects = getFeedbackChain();
+function describeChain(given?: EffectInstance[] | null): string {
+	const effects = given ?? getFeedbackChain();
 	if (!effects) return "Chain: none (upload screen)";
 	const on = effects.filter((e) => e.enabled);
 	if (on.length === 0) return "Chain: no effects enabled";
@@ -60,7 +63,7 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<void> {
 		from_name: "OpenMosh",
 		kind: KIND_LABELS[payload.kind],
 		email: payload.email || undefined,
-		message: `${payload.message}\n\n---\n${collectContext()}\n${describeChain()}`,
+		message: `${payload.message}\n\n---\n${collectContext()}\n${describeChain(payload.chain)}`,
 	};
 
 	let res: Response;
