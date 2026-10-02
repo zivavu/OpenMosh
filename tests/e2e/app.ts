@@ -199,6 +199,12 @@ export function clipMoshButton(page: Page): Locator {
 	return page.getByTitle("Random mosh for this clip");
 }
 
+/** The pool's "N sources" readout in the top bar. The drawer's project list says
+ * the same of every saved project, so the text alone isn't enough to find it. */
+export function poolCount(page: Page): Locator {
+	return page.locator(".pool-count");
+}
+
 /** The editor's top-bar button that saves the project as a file. */
 export function saveProjectButton(page: Page): Locator {
 	return page.getByRole("button", { name: "Save project file" });
