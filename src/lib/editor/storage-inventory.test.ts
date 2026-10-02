@@ -25,6 +25,7 @@ const {
 	deleteAllProxies,
 	deleteLooseEdit,
 	deleteProject,
+	deleteRecentEdit,
 	deleteUnassignedMedia,
 	loadStorageInventory,
 } = inventory;
@@ -587,5 +588,49 @@ describe("deleteEverything", () => {
 describe("keepStorage", () => {
 	test("reports false where the API is missing rather than throwing", async () => {
 		expect(await inventory.keepStorage()).toBe(false);
+	});
+});
+
+describe("deleteRecentEdit", () => {
+	test("an Editor project that plays a song goes, the song and its other work stay", async () => {
+		const song = await seedTrack("song.wav", 10);
+		const a = await seedMedia("a.png", 5);
+		const b = await seedMedia("b.png", 6);
+		await store.saveMediaPool("proj-1", [a.id]);
+		await store.putTimeline("seq:proj-1", { v: 3, song });
+		await store.saveMediaPool("proj-2", [b.id]);
+		await store.putTimeline("seq:proj-2", { v: 3, song });
+
+		await deleteRecentEdit("sequence", "proj-1");
+
+		expect(await store.loadMediaPool("proj-1")).toBeNull();
+		expect(await store.getTimeline("seq:proj-1")).toBeNull();
+		expect(await store.loadMediaPool("proj-2")).toEqual([b.id]);
+		expect(await tracks.getTrack(song)).not.toBeNull();
+		expect(await idsInStore()).toEqual([b.id]);
+	});
+
+	test("a song-keyed single edit goes alone, leaving the song's Editor project", async () => {
+		const song = await seedTrack("song.wav", 10);
+		const a = await seedMedia("a.png", 5);
+		const b = await seedMedia("b.png", 6);
+		await store.saveMediaPool(song, [b.id]);
+		await store.putSession({
+			key: `single:track:${song}`,
+			mode: "single",
+			label: "song.wav",
+			trackId: song,
+			sourceIds: [a.id],
+			state: null,
+		});
+		await store.putTimeline(`single:${song}`, { v: 3 });
+
+		await deleteRecentEdit("single", `single:track:${song}`);
+
+		expect(await store.getSession(`single:track:${song}`)).toBeNull();
+		expect(await store.getTimeline(`single:${song}`)).toBeNull();
+		expect(await store.loadMediaPool(song)).toEqual([b.id]);
+		expect(await tracks.getTrack(song)).not.toBeNull();
+		expect(await idsInStore()).toEqual([b.id]);
 	});
 });

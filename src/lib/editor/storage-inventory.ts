@@ -29,6 +29,9 @@ import {
 	getAllSequenceProxies,
 	getAllSessions,
 	getAllTimelines,
+	getSession,
+	loadMediaPool,
+	sessionTimelineKeys,
 	type StoredMediaPool,
 	type StoredSession,
 	type StoredTimeline,
@@ -448,6 +451,37 @@ export async function deleteLooseEdit(edit: StorageLooseEdit): Promise<void> {
 	forgetTrackEntries(keys);
 	forgetProjectNames([projectKeyForSession(edit.key)]);
 	await dropOrphanedMedia(edit.media.map((m) => m.id));
+	await refreshListCaches();
+}
+
+/** One row of the upload screen's recent list: that edit alone. The song it plays,
+ * and whatever else was made with that song, stay. */
+export async function deleteRecentEdit(
+	mode: ProjectMode,
+	key: string,
+): Promise<void> {
+	if (mode === "sequence") {
+		const ids = (await loadMediaPool(key)) ?? [];
+		await deleteMediaPool(key);
+		await deleteTimeline(`seq:${key}`);
+		// Saved before the mode prefix existed.
+		await deleteTimeline(key);
+		forgetTrackEntries([`seq:${key}`]);
+		// A song's name is shared by its edits in every mode, so it outlives this one.
+		if (isProjectKey(key)) forgetProjectNames([key]);
+		await dropOrphanedMedia(ids);
+	} else {
+		const session = await getSession(key);
+		await deleteSession(key);
+		const timelines = session ? sessionTimelineKeys(session) : [];
+		for (const timeline of timelines) await deleteTimeline(timeline);
+		const keys = [key, ...timelines];
+		const first = session?.sourceIds[0];
+		if (!session?.trackId && first) keys.push(renderKeyFromSourceId(first));
+		forgetTrackEntries(keys);
+		if (projectKeyForSession(key) === key) forgetProjectNames([key]);
+		await dropOrphanedMedia(session?.sourceIds ?? []);
+	}
 	await refreshListCaches();
 }
 
