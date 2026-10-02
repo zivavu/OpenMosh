@@ -631,6 +631,12 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		});
 		// Init before adding the track: on worker failure we fall back to the canvas sink.
 		await pool.init();
+		// A frame parked on a full pool would otherwise only notice Cancel once a slot freed.
+		signal?.addEventListener(
+			"abort",
+			() => pool.abort(new DOMException("Recording cancelled", "AbortError")),
+			{ once: true },
+		);
 		packetSource = new mb.EncodedVideoPacketSource("vp8");
 		output.addVideoTrack(packetSource);
 		return {
@@ -764,7 +770,11 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		finished = true;
 	} finally {
 		sink.dispose();
-		if (!finished) buffer.discard();
+		if (!finished) {
+			// Releases the encoders now rather than whenever they're collected.
+			void output.cancel().catch(() => {});
+			buffer.discard();
+		}
 	}
 
 	onProgress?.(1);
