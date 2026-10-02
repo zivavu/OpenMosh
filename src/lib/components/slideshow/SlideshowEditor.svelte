@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick as domSettled, untrack } from "svelte";
+	import { onMount, tick as domSettled, untrack } from "svelte";
 	import { fileDrop } from "../../actions/file-drop";
 	import { readJson, writeJson } from "../../storage";
 	import {
@@ -471,11 +471,14 @@
 	}
 
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** A debounced save hasn't run yet; leaving the page must not drop it. */
+	let sessionSavePending = false;
 
 	/** Every autosave reports here, for the top bar's saved/saving/failed word. */
 	const saves = new SaveTracker();
 
 	function saveSlideshowSession() {
+		sessionSavePending = false;
 		if (!sessionKept) {
 			saves.drop("session");
 			return;
@@ -505,8 +508,24 @@
 		if (!sessionKept) return;
 		clearTimeout(sessionSaveTimer);
 		untrack(() => saves.schedule("session"));
+		sessionSavePending = true;
 		sessionSaveTimer = setTimeout(saveSlideshowSession, 600);
 		return () => clearTimeout(sessionSaveTimer);
+	});
+
+	/** Write a save the debounce is still holding. */
+	function flushSlideshowSave() {
+		clearTimeout(sessionSaveTimer);
+		if (sessionSavePending) saveSlideshowSession();
+	}
+
+	// A reload, or Back out of the editor, lands inside the debounce as often as not.
+	onMount(() => {
+		window.addEventListener("pagehide", flushSlideshowSave);
+		return () => {
+			window.removeEventListener("pagehide", flushSlideshowSave);
+			flushSlideshowSave();
+		};
 	});
 
 	function handleExit() {
