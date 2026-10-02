@@ -33,38 +33,42 @@ export interface PlayableVideo extends DecodableVideo {
 export async function openDecodableVideo(
 	file: File,
 ): Promise<DecodableVideo | null> {
+	let input: Input | null = null;
 	try {
 		const mb = await import("mediabunny");
-		const input = new mb.Input({
+		input = new mb.Input({
 			source: new mb.BlobSource(file),
 			formats: mb.ALL_FORMATS,
 		});
 		const track = await input.getPrimaryVideoTrack();
-		if (!track || track.rotation !== 0 || !(await track.canDecode())) {
-			return null;
+		if (track && track.rotation === 0 && (await track.canDecode())) {
+			return { input, track, sink: new mb.VideoSampleSink(track) };
 		}
-		return { input, track, sink: new mb.VideoSampleSink(track) };
 	} catch {
-		return null;
+		// Not a video this path can decode.
 	}
+	input?.dispose();
+	return null;
 }
 
 /** As openDecodableVideo, plus the dimensions and duration a player needs. */
 export async function openPlayableVideo(
 	file: File,
 ): Promise<PlayableVideo | null> {
+	const opened = await openDecodableVideo(file);
+	if (!opened) return null;
 	try {
-		const opened = await openDecodableVideo(file);
-		if (!opened) return null;
 		const duration = await opened.track.computeDuration();
-		if (!Number.isFinite(duration) || duration <= 0) return null;
 		const width = opened.track.displayWidth;
 		const height = opened.track.displayHeight;
-		if (width <= 0 || height <= 0) return null;
-		return { ...opened, duration, width, height };
+		if (Number.isFinite(duration) && duration > 0 && width > 0 && height > 0) {
+			return { ...opened, duration, width, height };
+		}
 	} catch {
-		return null;
+		// Unreadable duration; the <video> element takes it.
 	}
+	opened.input.dispose();
+	return null;
 }
 
 /** Open a file's primary audio track. The caller owns the input and disposes it. */
