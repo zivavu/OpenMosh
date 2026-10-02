@@ -29,8 +29,16 @@ export function transact<T>(
 		// the request's own error and stops it surfacing as unhandled.
 		Promise.resolve(result).catch(reject);
 		tx.oncomplete = () => resolve(result);
-		tx.onerror = () => reject(tx.error);
-		tx.onabort = () => reject(tx.error);
+		// While a failed request's error bubbles up, tx.error is still null; the
+		// request carries the cause.
+		tx.onerror = (e) =>
+			reject(
+				tx.error ??
+					(e.target as IDBRequest | null)?.error ??
+					new Error("IndexedDB request failed"),
+			);
+		tx.onabort = () =>
+			reject(tx.error ?? new DOMException("Transaction aborted", "AbortError"));
 	});
 }
 

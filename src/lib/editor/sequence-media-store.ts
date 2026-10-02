@@ -155,7 +155,8 @@ async function write(
 	await transact(db, store, "readwrite", (tx) => {
 		body(tx.objectStore(store));
 		// Committed now, not on auto-commit: a write started as the page unloads still lands.
-		tx.commit();
+		// Safari before 15 has no commit(); it auto-commits.
+		if (typeof tx.commit === "function") tx.commit();
 	});
 }
 
