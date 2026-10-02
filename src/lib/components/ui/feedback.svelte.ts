@@ -32,6 +32,25 @@ export function feedbackPrefill(): FeedbackPrefill | null {
 	return prefill;
 }
 
+/** What was typed into a report closed unsent, by the text it was opened with. */
+interface FeedbackDraft {
+	basedOn: string;
+	kind: FeedbackKind;
+	message: string;
+	email: string;
+}
+let draft: FeedbackDraft | null = null;
+
+/** Kept so an Escape or a stray click outside doesn't throw the writing away. */
+export function saveFeedbackDraft(next: FeedbackDraft | null) {
+	draft = next;
+}
+
+/** The draft left on the same report, if any. */
+export function feedbackDraft(basedOn: string): FeedbackDraft | null {
+	return draft?.basedOn === basedOn ? draft : null;
+}
+
 export function closeFeedback() {
 	open = false;
 }

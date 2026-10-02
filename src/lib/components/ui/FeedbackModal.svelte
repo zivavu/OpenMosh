@@ -3,19 +3,26 @@
 	import { X, Github, Check } from "lucide-svelte";
 	import ButtonGroup from "./ButtonGroup.svelte";
 	import { untrack } from "svelte";
-	import { closeFeedback, type FeedbackPrefill } from "./feedback.svelte";
+	import {
+		closeFeedback,
+		feedbackDraft,
+		saveFeedbackDraft,
+		type FeedbackPrefill,
+	} from "./feedback.svelte";
 	import { submitFeedback, type FeedbackKind } from "../../feedback/submit";
 
 	/** Read once: a new prefill remounts the modal (see App). */
 	let { prefill = null }: { prefill?: FeedbackPrefill | null } = $props();
 	const start = untrack(() => prefill);
+	const basedOn = start?.message ?? "";
+	const restored = feedbackDraft(basedOn);
 
-	let kind: FeedbackKind = $state(start?.kind ?? "bug");
+	let kind: FeedbackKind = $state(restored?.kind ?? start?.kind ?? "bug");
 	const issueUrl = $derived(
 		`https://github.com/zivavu/OpenMosh/issues/new?template=${kind === "bug" ? "bug" : "other"}.yml`,
 	);
-	let message = $state(start?.message ?? "");
-	let email = $state("");
+	let message = $state(restored?.message ?? basedOn);
+	let email = $state(restored?.email ?? "");
 	let botcheck = $state("");
 	let sending = $state(false);
 	let sent = $state(false);
@@ -53,8 +60,15 @@
 		}
 	}
 
-	// The modal unmounts on close, so a pending auto-close must not outlive it.
-	$effect(() => () => clearTimeout(closeTimer));
+	// The modal unmounts on close, so a pending auto-close must not outlive it, and
+	// unsent writing is kept for the next time this report opens.
+	$effect(() => () => {
+		clearTimeout(closeTimer);
+		const edited = message !== basedOn || email.trim() !== "";
+		saveFeedbackDraft(
+			!sent && edited ? { basedOn, kind, message, email } : null,
+		);
+	});
 
 	/** The editors bind their shortcuts on window, so every key pressed in here
 	 * has to stop before it gets there, Escape included (which we handle). */
