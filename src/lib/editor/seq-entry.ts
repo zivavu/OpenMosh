@@ -1,5 +1,6 @@
 /** A song's or project's saved timeline, and how every version of it is read back. */
 
+import { records } from "../records";
 import { normalizeFxLanes, type FxLane } from "./fx-lanes";
 import { normalizeTextTimeline, type TextTimeline } from "../text/types";
 import { normalizeMediaTimeline, type MediaTimeline } from "../media/types";
@@ -53,21 +54,30 @@ export interface RestoredEntry {
 	song: string | null | undefined;
 }
 
+/** The span inside the project, or null when nothing of it is left. */
+function clampSpan(
+	span: SeqEntry["span"],
+	length: number,
+): { start: number; end: number } | null {
+	if (!span || !Number.isFinite(span.start) || !Number.isFinite(span.end))
+		return null;
+	const start = Math.min(Math.max(0, span.start), length);
+	const end = Math.min(span.end, length);
+	return end > start ? { start, end } : null;
+}
+
 /** `openedSourceId` is the file the editor opened with: before layers took the media
  * over, a segment with no source drew it. */
 export function readSeqEntry(
 	entry: SeqEntry,
 	openedSourceId: string,
 ): RestoredEntry {
-	const segments = (entry.segments ?? []).map((seg) =>
+	const segments = records<LegacySegmentEntry>(entry.segments).map((seg) =>
 		entry.v ? seg : { ...seg, sourceId: seg.sourceId ?? openedSourceId },
 	);
 	const length =
 		(entry.v ?? 0) >= 3 && (entry.length ?? 0) > 0 ? entry.length! : null;
-	const span =
-		length !== null && entry.span && entry.span.end > entry.span.start
-			? { start: entry.span.start, end: Math.min(entry.span.end, length) }
-			: null;
+	const span = length !== null ? clampSpan(entry.span, length) : null;
 	return {
 		bpm: entry.bpm ?? 0,
 		fx: normalizeFxLanes(entry.fx),

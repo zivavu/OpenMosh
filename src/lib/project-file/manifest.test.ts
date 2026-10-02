@@ -140,3 +140,23 @@ describe("remapProject", () => {
 		expect(original.media!.lanes[0].sourceId).toBe("src-a");
 	});
 });
+
+describe("remapProject on a damaged or old entry", () => {
+	it("doesn't throw on media without lanes", () => {
+		const out = remapProject(
+			{ v: 3, media: {} } as unknown as SeqEntry,
+			new Map(),
+			new Map(),
+		);
+		expect(out.media?.lanes).toEqual([]);
+	});
+
+	it("remaps the media ids an old entry's segments point at", () => {
+		const out = remapProject(
+			{ segments: [{ sourceId: "old" }, null] } as unknown as SeqEntry,
+			new Map(),
+			new Map([["old", "new"]]),
+		);
+		expect(out.segments).toEqual([{ sourceId: "new" }]);
+	});
+});

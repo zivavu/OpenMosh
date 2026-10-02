@@ -1,5 +1,6 @@
 /** Stacked effect lanes for sequence mode; an fx lane takes no media, just effects. */
 
+import { records } from "../records";
 import {
 	generateId,
 	restoreEffects,
@@ -288,9 +289,8 @@ export function findFxClip(
 
 /** Fill in anything a saved lane list predates or dropped. */
 export function normalizeFxLanes(raw: unknown): FxLane[] {
-	if (!Array.isArray(raw)) return [];
-	const lanes = raw;
-	return raw.map((lane: Partial<FxLane>, i) => ({
+	const lanes = records<FxLane>(raw);
+	return lanes.map((lane, i) => ({
 		id: lane.id ?? generateId(),
 		name: lane.name ?? `FX ${i + 1}`,
 		enabled: lane.enabled !== false,
@@ -298,10 +298,10 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
 		// rendered.
 		z: typeof lane.z === "number" ? lane.z : i - lanes.length,
 		settings: normalizeLaneSettings(lane.settings),
-		clips: (Array.isArray(lane.clips) ? lane.clips : [])
+		clips: records<FxClip>(lane.clips)
 			// A clip with no chain would be an invisible span that still takes up room.
-			.filter((c: Partial<FxClip>) => Array.isArray(c.effects))
-			.map((clip: FxClip) => ({
+			.filter((c): c is FxClip => Array.isArray(c.effects))
+			.map((clip) => ({
 				id: clip.id ?? generateId(),
 				start: clip.start ?? 0,
 				end: clip.end ?? 0,
