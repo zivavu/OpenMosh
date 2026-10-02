@@ -634,3 +634,30 @@ describe("deleteRecentEdit", () => {
 		expect(await idsInStore()).toEqual([b.id]);
 	});
 });
+
+describe("a song-less single video edit", () => {
+	test("takes its timeline with it, and counts it as its own work", async () => {
+		const video = new File(["vid"], "my clip.mp4", {
+			type: "video/mp4",
+			lastModified: 7,
+		});
+		const id = store.stableSourceId(video);
+		await store.putSequenceMedia([{ id, file: video }]);
+		await store.putSession({
+			key: `single:${id}`,
+			mode: "single",
+			label: "my clip.mp4",
+			sourceIds: [id],
+			state: null,
+		});
+		const timelineKey = "single:video:my clip.mp4:3:7";
+		await store.putTimeline(timelineKey, { v: 3, text: { lanes: [] } });
+
+		const edit = (await loadStorageInventory()).looseEdits.find(
+			(e) => e.key === `single:${id}`,
+		)!;
+		expect(edit.workSize).toBeGreaterThan(4);
+		await deleteLooseEdit(edit);
+		expect(await store.getTimeline(timelineKey)).toBeNull();
+	});
+});
