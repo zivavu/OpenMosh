@@ -7,6 +7,7 @@
 		ChevronsDownUp,
 		ChevronsUpDown,
 		Download,
+		FolderDown,
 		Camera,
 		HelpCircle,
 		Library,
@@ -265,7 +266,6 @@
 	import SourceRail from "./SourceRail.svelte";
 	import FxLanes from "./FxLanes.svelte";
 	import MoshGroup from "./MoshGroup.svelte";
-	import ProjectMenu from "./ProjectMenu.svelte";
 	import MoshSettingsPanel from "./MoshSettingsPanel.svelte";
 	import RecordGroup from "./RecordGroup.svelte";
 	import RecordOverlay from "./RecordOverlay.svelte";
@@ -1220,16 +1220,6 @@
 				? (initialProjectKey ?? initialTrackId ?? `proj-${generateId()}`)
 				: null,
 		),
-	);
-
-	/** What the project menu shows: the user's name, else what it was opened with. */
-	let projectName = $derived(
-		projectKey
-			? (readProjectNames()[projectKey] ??
-					initialAudioFile?.name ??
-					file.name ??
-					"Untitled project")
-			: "",
 	);
 
 	// The song/video this editor saves against, before the mode prefix.
@@ -4140,10 +4130,22 @@
 					state={saves.state}
 					lastSavedAt={saves.lastSavedAt}
 					{notSaved}
-				/>
+				>
+					{#snippet action()}
+						{#if isSequenceMode}
+							<button
+								class="save-file-btn"
+								title="Save the project as a file you can keep or share (Ctrl+Shift+S)"
+								aria-label="Save project file"
+								onclick={saveProjectFile}
+							>
+								<FolderDown size={14} />
+							</button>
+						{/if}
+					{/snippet}
+				</SaveIndicator>
 			{/snippet}
 			{#if isSequenceMode}
-				<ProjectMenu name={projectName} onSave={saveProjectFile} />
 				<div class="output-group">
 					<ButtonGroup
 						buttons={[
@@ -5266,6 +5268,30 @@
 		/* The same thumb the horizontal scrollbar below the lanes uses. */
 		scrollbar-width: thin;
 		scrollbar-color: var(--live-dim) var(--sunken);
+	}
+
+	/* As quiet as the save word beside it, until pointed at. */
+	.save-file-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: var(--r-1);
+		background: none;
+		color: var(--text-3);
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast);
+	}
+
+	.save-file-btn:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
 	}
 
 	.output-group {

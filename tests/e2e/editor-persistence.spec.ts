@@ -6,7 +6,7 @@ import {
 	PREVIEW_CANVAS,
 	clipMoshButton,
 	mediaClips,
-	projectMenuButton,
+	saveProjectButton,
 	selectMode,
 	selectClip,
 	splitClipAt,
@@ -130,10 +130,9 @@ test("a project saved to a file comes back after storage is cleared", async ({
 	expect(rolled.length).toBeGreaterThan(0);
 	await waitForSaved(page);
 
-	// Save the whole project from the top bar's project menu.
+	// Save the whole project from the top bar.
 	const downloadPromise = page.waitForEvent("download");
-	await projectMenuButton(page).click();
-	await page.getByRole("menuitem", { name: "Save project file" }).click();
+	await saveProjectButton(page).click();
 	const download = await downloadPromise;
 	expect(download.suggestedFilename()).toMatch(/\.openmosh$/);
 	const filePath = await download.path();

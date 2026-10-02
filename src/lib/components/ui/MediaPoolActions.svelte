@@ -137,8 +137,8 @@
 	}
 
 	/* Below this the bar has no room for words: the buttons keep their icons
-	   and lose their labels. Four plus the count against a 340px sidebar needs 1200. */
-	@media (max-width: 1200px) {
+	   and lose their labels. Measured on the bar, which the sidebars narrow. */
+	@container topbar (max-width: 960px) {
 		.pool-actions {
 			gap: 0.25rem;
 		}
@@ -154,7 +154,7 @@
 
 	/* Narrower still, the readout goes too: the pool's size is on the grid a
 	   tap away. */
-	@media (max-width: 1000px) {
+	@container topbar (max-width: 720px) {
 		.pool-count {
 			display: none;
 		}

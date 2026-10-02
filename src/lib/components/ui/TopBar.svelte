@@ -34,7 +34,10 @@
 </div>
 
 <style>
+	/* A container, so what's inside steps down by the room the bar actually has: the
+	   sidebars take a share of the window that a media query can't see. */
 	.top-bar {
+		container: topbar / inline-size;
 		display: flex;
 		align-items: center;
 		padding: 4px 12px;
@@ -77,13 +80,25 @@
 	}
 
 	/* Below this the bar tightens with the pool actions dropping their labels. */
-	@media (max-width: 1200px) {
-		.top-bar {
-			padding: 7px 8px 6px;
-		}
-
+	@container topbar (max-width: 960px) {
 		.toolbar {
 			gap: 0.35rem;
+		}
+	}
+
+	/* The project links are on the upload screen too, so they go first. */
+	@container topbar (max-width: 560px) {
+		.toolbar :global(.github-link),
+		.toolbar :global(.youtube-link) {
+			display: none;
+		}
+	}
+
+	/* Narrower than the controls themselves: a second row rather than a clipped one. */
+	@container topbar (max-width: 480px) {
+		.toolbar {
+			flex-wrap: wrap;
+			row-gap: 0.35rem;
 		}
 	}
 
