@@ -328,7 +328,11 @@
 		let dropped = false;
 		void liveStreamOf(f)
 			.then((stream) => {
-				if (dropped) return;
+				// Reopened after the cleanup already ran: nothing else will stop this one.
+				if (dropped) {
+					stopLiveFile(f);
+					return;
+				}
 				liveStream = stream;
 				if (!stream) showToast("The camera is gone", "error");
 			})
