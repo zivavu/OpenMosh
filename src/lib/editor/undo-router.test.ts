@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NO_EDIT, nextEditSeq } from "./edit-clock";
+import { asOneEdit, NO_EDIT, nextEditSeq } from "./edit-clock";
 import { redoLatest, undoLatest, type UndoSource } from "./undo-router";
 
 /** A stack that stamps like the real ones: an edit takes a fresh tick, and
@@ -88,5 +88,27 @@ describe("undo router", () => {
 		text.edit();
 		expect(undoLatest([span, text, undefined])).toBe(true);
 		expect(log).toEqual(["undo text"]);
+	});
+});
+
+describe("one edit across several stacks", () => {
+	test("undoes and redoes as a single step", () => {
+		const log: string[] = [];
+		const media = fakeStack(log, "media");
+		const text = fakeStack(log, "text");
+		const fx = fakeStack(log, "fx");
+		fx.edit();
+		asOneEdit(() => {
+			media.edit();
+			text.edit();
+		});
+
+		undoLatest([media, text, fx]);
+		expect(log).toEqual(["undo media", "undo text"]);
+		redoLatest([media, text, fx]);
+		expect(log.slice(2)).toEqual(["redo media", "redo text"]);
+		undoLatest([media, text, fx]);
+		undoLatest([media, text, fx]);
+		expect(log.slice(-1)).toEqual(["undo fx"]);
 	});
 });

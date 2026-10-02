@@ -145,7 +145,7 @@
 		snapshotUndoSource,
 	} from "../../timeline/snapshot-history.svelte";
 	import { createSpanHistory } from "../../audio/span-history.svelte";
-	import { PENDING_EDIT } from "../../editor/edit-clock";
+	import { asOneEdit, PENDING_EDIT } from "../../editor/edit-clock";
 	import {
 		redoLatest,
 		undoLatest,
@@ -2530,6 +2530,10 @@
 	function setSequenceBpm(bpm: number) {
 		bpmEpoch++;
 		sequenceBpm = bpm;
+		asOneEdit(() => retimeToBpm(bpm));
+	}
+
+	function retimeToBpm(bpm: number) {
 		const retimedFx = applyBpmToFxLanes(fxLanes, bpm);
 		if (retimedFx !== fxLanes) {
 			pushFxHistory();
@@ -3383,24 +3387,30 @@
 	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
 		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
-		if (fxLanes.some((l) => moves.some((m) => m.id === l.id))) {
-			pushFxHistory(coalesceKey);
-			setFxLanes(applyLayerMoves(fxLanes, moves));
-		}
-		if (mediaTimeline.lanes.length > 0) {
-			pushMediaHistory(coalesceKey);
-			setMediaTimeline({
-				...mediaTimeline,
-				lanes: applyLayerMoves(mediaTimeline.lanes, moves),
-			});
-		}
-		if (textTimeline.lanes.length > 0) {
-			pushTextHistory(coalesceKey);
-			setTextTimeline({
-				...textTimeline,
-				lanes: applyLayerMoves(textTimeline.lanes, moves),
-			});
-		}
+		const moved = new Set(moves.map((m) => m.id));
+		const touched = (lanes: { id: string }[]) =>
+			lanes.some((l) => moved.has(l.id));
+		// Only the stacks whose lanes moved record it, under one stamp: one Ctrl+Z.
+		asOneEdit(() => {
+			if (touched(fxLanes)) {
+				pushFxHistory(coalesceKey);
+				setFxLanes(applyLayerMoves(fxLanes, moves));
+			}
+			if (touched(mediaTimeline.lanes)) {
+				pushMediaHistory(coalesceKey);
+				setMediaTimeline({
+					...mediaTimeline,
+					lanes: applyLayerMoves(mediaTimeline.lanes, moves),
+				});
+			}
+			if (touched(textTimeline.lanes)) {
+				pushTextHistory(coalesceKey);
+				setTextTimeline({
+					...textTimeline,
+					lanes: applyLayerMoves(textTimeline.lanes, moves),
+				});
+			}
+		});
 	}
 
 	// Owned here rather than by either lane component: a drag crosses between text and media rows.
