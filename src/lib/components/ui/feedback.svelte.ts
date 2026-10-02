@@ -9,7 +9,8 @@ export interface FeedbackPrefill {
 /** The feedback modal is mounted once at the app root; every view opens it
  * through here rather than owning its own copy. */
 let open = $state(false);
-let prefill: FeedbackPrefill | null = null;
+/** Read by the modal as it opens; reactive, so an open while it's up still lands. */
+let prefill = $state.raw<FeedbackPrefill | null>(null);
 
 /** Set by whichever editor is mounted, so a report can carry the chain that
  * was on screen. Null on the upload screen, where there isn't one. */
@@ -24,11 +25,9 @@ export function openFeedback(start?: FeedbackPrefill) {
 	open = true;
 }
 
-/** What the modal starts from, handed over once. */
-export function takeFeedbackPrefill(): FeedbackPrefill | null {
-	const taken = prefill;
-	prefill = null;
-	return taken;
+/** What the modal starts from. */
+export function feedbackPrefill(): FeedbackPrefill | null {
+	return prefill;
 }
 
 export function closeFeedback() {

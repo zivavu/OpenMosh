@@ -21,6 +21,7 @@
 	import { gifsToVideo, gifToVideo } from "./lib/media/gif";
 	import {
 		closeFeedback,
+		feedbackPrefill,
 		isFeedbackOpen,
 	} from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
@@ -408,7 +409,9 @@
 
 {#if isFeedbackOpen()}
 	{#await loadFeedbackModal() then FeedbackModal}
-		<FeedbackModal />
+		{#key feedbackPrefill()}
+			<FeedbackModal prefill={feedbackPrefill()} />
+		{/key}
 	{:catch}
 		<LoadFailed onclose={closeFeedback} />
 	{/await}

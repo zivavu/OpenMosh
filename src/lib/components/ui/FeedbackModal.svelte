@@ -2,15 +2,19 @@
 	import { modalDialog } from "../../actions/modal-dialog";
 	import { X, Github, Check } from "lucide-svelte";
 	import ButtonGroup from "./ButtonGroup.svelte";
-	import { closeFeedback, takeFeedbackPrefill } from "./feedback.svelte";
+	import { untrack } from "svelte";
+	import { closeFeedback, type FeedbackPrefill } from "./feedback.svelte";
 	import { submitFeedback, type FeedbackKind } from "../../feedback/submit";
 
-	const prefill = takeFeedbackPrefill();
-	let kind: FeedbackKind = $state(prefill?.kind ?? "bug");
+	/** Read once: a new prefill remounts the modal (see App). */
+	let { prefill = null }: { prefill?: FeedbackPrefill | null } = $props();
+	const start = untrack(() => prefill);
+
+	let kind: FeedbackKind = $state(start?.kind ?? "bug");
 	const issueUrl = $derived(
 		`https://github.com/zivavu/OpenMosh/issues/new?template=${kind === "bug" ? "bug" : "other"}.yml`,
 	);
-	let message = $state(prefill?.message ?? "");
+	let message = $state(start?.message ?? "");
 	let email = $state("");
 	let botcheck = $state("");
 	let sending = $state(false);
