@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, tick as domSettled, untrack } from "svelte";
 	import { fileDrop } from "../../actions/file-drop";
 	import { readJson, writeJson } from "../../storage";
@@ -1963,6 +1964,8 @@
 				onSnaps={(files) => void addFiles(files)}
 				onClose={() => (webcamOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (webcamOpen = false)} />
 		{/await}
 	{/if}
 
@@ -1979,6 +1982,8 @@
 				}}
 				onClose={() => (generateOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (generateOpen = false)} />
 		{/await}
 	{/if}
 </div>

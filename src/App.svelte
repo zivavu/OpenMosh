@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "./lib/components/ui/LoadFailed.svelte";
 	import { onMount, untrack } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
@@ -18,7 +19,10 @@
 	import type { SlideshowConfig } from "./lib/slideshow/types";
 	import { showToast } from "./lib/components/ui/toast.svelte";
 	import { gifsToVideo, gifToVideo } from "./lib/media/gif";
-	import { isFeedbackOpen } from "./lib/components/ui/feedback.svelte";
+	import {
+		closeFeedback,
+		isFeedbackOpen,
+	} from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
 	import { probeCapabilities } from "./lib/capabilities.svelte";
 
@@ -407,6 +411,8 @@
 {#if isFeedbackOpen()}
 	{#await loadFeedbackModal() then FeedbackModal}
 		<FeedbackModal />
+	{:catch}
+		<LoadFailed onclose={closeFeedback} />
 	{/await}
 {/if}
 

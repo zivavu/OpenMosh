@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import {
 		Box,
 		ChevronDown,
@@ -275,6 +276,8 @@
 			onChange={(edit) => onEditChange(editingSource!.id, edit)}
 			onClose={() => (editingId = null)}
 		/>
+	{:catch}
+		<LoadFailed onclose={() => (editingId = null)} />
 	{/await}
 {/if}
 
@@ -294,6 +297,8 @@
 				: undefined}
 			onRemove={onRemove ? (i) => onRemove(sources[i].id) : undefined}
 		/>
+	{:catch}
+		<LoadFailed onclose={lightbox.close} />
 	{/await}
 {/if}
 

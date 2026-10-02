@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { SlidersHorizontal } from "lucide-svelte";
 	import {
 		clipSourceId,
@@ -594,6 +595,8 @@
 			onChange={(edit) => onEditChange(source!.id, edit)}
 			onClose={() => (editingSource = false)}
 		/>
+	{:catch}
+		<LoadFailed onclose={() => (editingSource = false)} />
 	{/await}
 {/if}
 

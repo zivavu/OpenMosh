@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import type { Preset } from "../../effects";
@@ -303,6 +304,8 @@
 				onApply={lyricsSync.onApply}
 				onClose={() => (lyricsOpen = false)}
 			/>
+		{:catch}
+			<LoadFailed onclose={() => (lyricsOpen = false)} />
 		{/await}
 	{/if}
 </div>
