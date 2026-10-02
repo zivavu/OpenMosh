@@ -300,7 +300,12 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 			label: names[projectKeyForSession(session.key)] ?? session.label,
 			media: items,
 			mediaSize: sizeOf(items),
-			workSize: jsonSize(session.state),
+			workSize:
+				jsonSize(session.state) +
+				sessionTimelineKeys(session).reduce(
+					(n, key) => n + jsonSize(timelineByKey.get(key)?.state),
+					0,
+				),
 			updatedAt: session.updatedAt,
 		});
 	}
@@ -436,20 +441,14 @@ export async function deleteProject(project: StorageProject): Promise<void> {
 
 export async function deleteLooseEdit(edit: StorageLooseEdit): Promise<void> {
 	if (edit.kind === "session") {
-		await deleteSession(edit.key);
-	} else {
-		await deleteMediaPool(edit.key);
-		await deleteTimeline(`seq:${edit.key}`);
-		await deleteTimeline(`single:${edit.key}`);
+		await deleteRecentEdit(edit.mode, edit.key);
+		return;
 	}
-	// Render settings for a song-less single edit are keyed by the file, not the session.
-	const keys = [edit.key, `seq:${edit.key}`, `single:${edit.key}`];
-	const first = edit.media[0];
-	if (edit.kind === "session" && edit.mode === "single" && first) {
-		keys.push(renderKeyFromSourceId(first.id));
-	}
-	forgetTrackEntries(keys);
-	forgetProjectNames([projectKeyForSession(edit.key)]);
+	await deleteMediaPool(edit.key);
+	await deleteTimeline(`seq:${edit.key}`);
+	await deleteTimeline(`single:${edit.key}`);
+	forgetTrackEntries([edit.key, `seq:${edit.key}`, `single:${edit.key}`]);
+	forgetProjectNames([edit.key]);
 	await dropOrphanedMedia(edit.media.map((m) => m.id));
 	await refreshListCaches();
 }
