@@ -284,6 +284,9 @@ export class MeshPass {
 		}
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindVertexArray(mesh.vao);
+		// An unskinned mesh has no joint buffer, so the shader's uvec4 reads the generic
+		// value, which defaults to float; ANGLE refuses the draw on the type mismatch.
+		if (!mesh.skin) gl.vertexAttribI4ui(4, 0, 0, 0, 0);
 		gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
 		gl.disable(gl.DEPTH_TEST);
 
