@@ -57,6 +57,55 @@ function slidingTriangle(): Uint8Array {
 			{ byteOffset: 104, byteLength: 24 },
 		],
 	};
+	return packGlb(json, bin);
+}
+
+/** A triangle coloured per vertex (normalised bytes), tinted by its material. */
+function vertexColouredTriangle(): Uint8Array {
+	const bin = new ArrayBuffer(36 + 12);
+	const view = new DataView(bin);
+	[0, 0, 0, 1, 0, 0, 0, 1, 0].forEach((v, i) =>
+		view.setFloat32(i * 4, v, true),
+	);
+	[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255].forEach((v, i) =>
+		view.setUint8(36 + i, v),
+	);
+	return packGlb(
+		{
+			asset: { version: "2.0" },
+			scene: 0,
+			scenes: [{ nodes: [0] }],
+			nodes: [{ mesh: 0 }],
+			meshes: [
+				{
+					primitives: [
+						{ attributes: { POSITION: 0, COLOR_0: 1 }, material: 0 },
+					],
+				},
+			],
+			materials: [
+				{ pbrMetallicRoughness: { baseColorFactor: [0.5, 1, 1, 1] } },
+			],
+			accessors: [
+				{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+				{
+					bufferView: 1,
+					componentType: 5121,
+					normalized: true,
+					count: 3,
+					type: "VEC4",
+				},
+			],
+			bufferViews: [
+				{ byteOffset: 0, byteLength: 36 },
+				{ byteOffset: 36, byteLength: 12 },
+			],
+		},
+		bin,
+	);
+}
+
+function packGlb(json: object, bin: ArrayBuffer): Uint8Array {
 	const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
 	const jsonPad = (4 - (jsonBytes.length % 4)) % 4;
 	const jsonLength = jsonBytes.length + jsonPad;
@@ -121,6 +170,14 @@ describe("parseGlb", () => {
 
 	it("rejects anything that isn't a GLB", () => {
 		expect(parseGlb(new Uint8Array(64))).toBeNull();
+	});
+
+	it("colours each corner from COLOR_0, tinted by the material", () => {
+		const colors = Array.from(parseGlb(vertexColouredTriangle())!.colors!);
+		const corners = [0, 1, 2].map((k) => colors.slice(k * 3, k * 3 + 3));
+		expect(corners).toContainEqual([0.5, 0, 0]);
+		expect(corners).toContainEqual([0, 1, 0]);
+		expect(corners).toContainEqual([0, 0, 1]);
 	});
 });
 
