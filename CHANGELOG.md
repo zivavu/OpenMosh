@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.9.7](https://github.com/zivavu/OpenMosh/compare/v0.9.6...v0.9.7) (2026-10-03)
+
+
+### Added
+
+* Report a crash straight from the error screen ([1f3546b](https://github.com/zivavu/OpenMosh/commit/1f3546b735dbac93285ea511ecf73a705a073423))
+* Switch projects from the editor's side drawer ([a9127e8](https://github.com/zivavu/OpenMosh/commit/a9127e81ff46cfdb1de5f82bff513f590868d8e6))
+
+
+### Fixed
+
+* Ask what happened before sending a crash report ([2e4fe63](https://github.com/zivavu/OpenMosh/commit/2e4fe63f2cab5354b4fdb93a47e629336f1d073c))
+* Delete only the edit picked in the recent list ([3a28a07](https://github.com/zivavu/OpenMosh/commit/3a28a0752798e0e7116529831c5238d5bc988702))
+* Fit the editor's top bar on every screen size ([6c87eee](https://github.com/zivavu/OpenMosh/commit/6c87eee7ca0dc356874a53ed0c5cc51c7659fc9c))
+* Give the project menu a solid background ([200b807](https://github.com/zivavu/OpenMosh/commit/200b807415fadbf520d727729bb34b48cae7fe91))
+* Keep a crash report's text when the dialog closes ([6ebf5b9](https://github.com/zivavu/OpenMosh/commit/6ebf5b9b773a447d616949aa4471ccccd9d7e045))
+* Keep a project's timeline however many other files get opened ([2d6ad2a](https://github.com/zivavu/OpenMosh/commit/2d6ad2a0115d8a92227ecd67c84fd088e41d1f22))
+* Keep a song's file type in project files ([a42ea34](https://github.com/zivavu/OpenMosh/commit/a42ea34d2d8e71bb55dec207aa21b02439c1f88e))
+* Keep an old project's song when it's saved to a file ([7e907f2](https://github.com/zivavu/OpenMosh/commit/7e907f2f74fbec197fe2bf303c5ef69ebb018b8d))
+* Keep every saved project and edit, however many there are ([c0aa8aa](https://github.com/zivavu/OpenMosh/commit/c0aa8aa22292a0efbdf09f57a47e70c35c010a80))
+* Keep saving on older Safari ([d16b8d6](https://github.com/zivavu/OpenMosh/commit/d16b8d650d5735db605583d43a8147472a4e2fa2))
+* Keep the effect chain in a crash report ([552b9e8](https://github.com/zivavu/OpenMosh/commit/552b9e85275a70d3e3cbdd9b08a6a3e510314607))
+* Make Cancel stop an export when the encoder hangs ([1e2d9b1](https://github.com/zivavu/OpenMosh/commit/1e2d9b1568adc097837a96b4c2632f3e2721c374))
+* Make Load a file the main button on the upload screen ([8447094](https://github.com/zivavu/OpenMosh/commit/8447094261165e0d5cbfe1c9237656e4adaf77b0))
+* Offer a project download only where there's one project ([16080af](https://github.com/zivavu/OpenMosh/commit/16080af007962e0fb3db5b4804f440ebf994e27e))
+* Open damaged projects instead of failing halfway ([bd95829](https://github.com/zivavu/OpenMosh/commit/bd958294c4c6e61b1bfda15de0c195f581f071b2))
+* Open the project drawer on the Projects tab every time ([ec66711](https://github.com/zivavu/OpenMosh/commit/ec66711d1fda64d5e470aeec12d1d9934cc39d05))
+* Release media files once they've been read ([6e6b765](https://github.com/zivavu/OpenMosh/commit/6e6b765fbccf10cea1e796ee34723132b9814fd2))
+* Save media added just before a project file ([31223aa](https://github.com/zivavu/OpenMosh/commit/31223aa6d0e255896d48ea63806132c5d735946c))
+* Save the slideshow's last change on reload or Back ([fee2a6b](https://github.com/zivavu/OpenMosh/commit/fee2a6b51320f78b3ab9b0894a63dd278e77bf2c))
+* Say so when a panel fails to load, and let it retry ([e72cb3f](https://github.com/zivavu/OpenMosh/commit/e72cb3fc70b7d05634e95920990ec50d695584e2))
+* Show 3D models that have no animation ([75568c3](https://github.com/zivavu/OpenMosh/commit/75568c355480d6c8098ee1bfd92557be50949241))
+* Show a failed save even when an earlier one succeeded ([104e0c7](https://github.com/zivavu/OpenMosh/commit/104e0c71cd6a04817a3b8f5e4d383484151863ff))
+* Stop filling browser storage with per-file settings ([999925d](https://github.com/zivavu/OpenMosh/commit/999925d1485d885a36155a93fad576c932a40114))
+* Stop project files from fetching fonts from any site ([3c58d24](https://github.com/zivavu/OpenMosh/commit/3c58d2444b9a1f8de9ac7d59003a788f542d055b))
+* Stop repeating the error message in Chrome crash reports ([299ed7f](https://github.com/zivavu/OpenMosh/commit/299ed7f871637031c80ac94a9a03ecbfe9777643))
+* Take a video edit's text with it when it's deleted ([1f03852](https://github.com/zivavu/OpenMosh/commit/1f03852d09b0f6cd9f433264930a5c09fc953b82))
+* Turn the camera off if the editor closes while it reopens ([ccc7093](https://github.com/zivavu/OpenMosh/commit/ccc70939213f6026f055be88bf55ef2d09b4d245))
+* Undo a layer move or a BPM change in one step ([0325bc5](https://github.com/zivavu/OpenMosh/commit/0325bc515175734d9555c039a75a064fe197294e))
+
+
+### Faster
+
+* Clean up storage at most once a minute ([3e7f936](https://github.com/zivavu/OpenMosh/commit/3e7f936e36e7a9e71d93875ad1a0aec69684654f))
+* Stop keeping every decoded song in memory ([e40725c](https://github.com/zivavu/OpenMosh/commit/e40725cc12346c7491059f3970eeca01511bbab2))
+* Use less memory for undo history ([a13ce98](https://github.com/zivavu/OpenMosh/commit/a13ce981fe73b5ccadf95971cbb7d6e68a5d399a))
+* Write exports to disk as they render, not to memory ([4e3ffd9](https://github.com/zivavu/OpenMosh/commit/4e3ffd924d993cb943505654f8d31271cee34767))
+
 ## [0.9.6](https://github.com/zivavu/OpenMosh/compare/v0.9.5...v0.9.6) (2026-09-30)
 
 
