@@ -7,6 +7,7 @@
 		Pencil,
 		Play,
 		Plus,
+		Trash2,
 		X,
 	} from "lucide-svelte";
 	import { onMount } from "svelte";
@@ -27,12 +28,14 @@
 		readCachedSavedSequences,
 		type SavedSequence,
 	} from "../../editor/saved-sequences";
-	import { readProjectNames } from "../../editor/project-names";
+	import { readProjectNames, setProjectName } from "../../editor/project-names";
 	import {
 		beginTrackDrag,
 		endTrackDrag,
 		TRACK_DND_TYPE,
 	} from "../../editor/source-drag.svelte";
+	import { deleteRecentEdit } from "../../editor/storage-inventory";
+	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
@@ -90,13 +93,46 @@
 	$effect(() => {
 		if (!hasProjects || !open) return;
 		projectNames = readProjectNames();
-		void listSavedSequences().then((list) => (projects = list));
+		refreshProjects();
 	});
+
+	function refreshProjects() {
+		void listSavedSequences().then((list) => (projects = list));
+	}
 
 	function openProject(key: string) {
 		if (key === activeProjectKey) return;
 		open = false;
 		onOpenProject?.(key);
+	}
+
+	let renamingProject = $state<string | null>(null);
+
+	function renameProject(key: string, name: string) {
+		setProjectName(key, name);
+		projectNames = readProjectNames();
+	}
+
+	interface ProjectDelete {
+		key: string;
+		name: string;
+	}
+	let pendingProjectDelete = $state<ProjectDelete | null>(null);
+
+	async function deleteProject({ key }: ProjectDelete) {
+		pendingProjectDelete = null;
+		projects = projects.filter((p) => p.trackId !== key);
+		try {
+			await deleteRecentEdit("sequence", key);
+		} catch (e) {
+			console.error("Failed to delete project:", e);
+			showToast(
+				"Couldn't delete that project. Storage refused the write.",
+				"error",
+			);
+		} finally {
+			refreshProjects();
+		}
 	}
 
 	const OPEN_KEY = "openmosh-library-open";
@@ -164,7 +200,7 @@
 	onMount(() => {
 		// The confirm dialog sits outside the panel; clicks in it aren't "away".
 		function onPointerDown(e: PointerEvent) {
-			if (pendingDelete) return;
+			if (pendingDelete || pendingProjectDelete) return;
 			if (open && libraryEl && !libraryEl.contains(e.target as Node)) {
 				open = false;
 			}
@@ -401,15 +437,17 @@
 			{:else}
 				<span class="title">Track library</span>
 			{/if}
-			{#if showing === "songs"}
-				<button
-					class="add-btn"
-					onclick={() => fileInput.click()}
-					title="Add track"
-				>
-					<Plus size={12} />
-				</button>
-			{/if}
+			<!-- Kept in place on the projects tab so switching tabs never resizes them. -->
+			<button
+				class="add-btn"
+				class:held={showing !== "songs"}
+				onclick={() => fileInput.click()}
+				title="Add track"
+				inert={showing !== "songs" || undefined}
+				aria-hidden={showing !== "songs" || undefined}
+			>
+				<Plus size={12} />
+			</button>
 			<button
 				class="collapse-btn"
 				onclick={() => (open = false)}
@@ -429,20 +467,56 @@
 					{#each projects as project (project.trackId)}
 						{@const name = projectNames[project.trackId] ?? project.trackName}
 						{@const isOpen = project.trackId === activeProjectKey}
-						<li class="track-row" class:active={isOpen}>
-							<button
-								class="name-btn project-row"
-								onclick={() => openProject(project.trackId)}
-								title={isOpen ? "Open now" : `Open "${name}"`}
-								aria-current={isOpen || undefined}
-							>
-								<span class="project-name">{name}</span>
-								<span class="project-meta"
-									>{project.sourceCount} source{project.sourceCount === 1
-										? ""
-										: "s"} · {fmtAgo(project.updatedAt)}</span
+						<li class="project" class:open-now={isOpen}>
+							{#if renamingProject === project.trackId}
+								<div class="project-body">
+									<RenameInput
+										value={name}
+										label="Project name"
+										class="project-name-input"
+										onRename={(next) => renameProject(project.trackId, next)}
+										onDone={() => (renamingProject = null)}
+									/>
+								</div>
+							{:else}
+								<button
+									class="project-body"
+									onclick={() => openProject(project.trackId)}
+									title={isOpen ? "Open now" : `Open "${name}"`}
+									aria-current={isOpen || undefined}
 								>
-							</button>
+									<span class="project-name">{name}</span>
+									<span class="project-meta">
+										<span
+											>{project.sourceCount} source{project.sourceCount === 1
+												? ""
+												: "s"}</span
+										>
+										<span>{fmtAgo(project.updatedAt)}</span>
+									</span>
+								</button>
+								<div class="project-actions">
+									<button
+										class="project-action"
+										onclick={() => (renamingProject = project.trackId)}
+										title="Rename"
+										aria-label="Rename {name}"
+									>
+										<Pencil size={11} />
+									</button>
+									{#if !isOpen}
+										<button
+											class="project-action danger"
+											onclick={() =>
+												(pendingProjectDelete = { key: project.trackId, name })}
+											title="Delete"
+											aria-label="Delete {name}"
+										>
+											<Trash2 size={11} />
+										</button>
+									{/if}
+								</div>
+							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -522,6 +596,18 @@
 		{/if}
 	</div>
 </div>
+
+{#if pendingProjectDelete}
+	<ConfirmDialog
+		title="Delete “{pendingProjectDelete.name}”?"
+		message="Removes this project's timeline and any media only it uses. Your songs and other projects stay. This can't be undone."
+		confirmLabel="Delete project"
+		cancelLabel="Cancel"
+		danger
+		onConfirm={() => deleteProject(pendingProjectDelete!)}
+		onCancel={() => (pendingProjectDelete = null)}
+	/>
+{/if}
 
 {#if pendingDelete}
 	<ConfirmDialog
@@ -645,6 +731,10 @@
 		border: 1px solid var(--line);
 	}
 
+	.add-btn.held {
+		visibility: hidden;
+	}
+
 	.add-btn:hover {
 		color: var(--text);
 		border-color: var(--text-4);
@@ -726,23 +816,31 @@
 		color: #e06060;
 	}
 
+	/* A two-way switch in a sunken well, like the action bar's clusters. */
 	.tabs {
 		flex: 1;
 		display: flex;
-		gap: 0.6rem;
+		padding: 2px;
+		gap: 2px;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
 	}
 
 	.tab {
-		padding: 0;
+		flex: 1;
+		padding: 0.2rem 0;
 		background: none;
 		border: none;
-		border-bottom: 1px solid transparent;
-		color: var(--text-4);
-		font-size: 0.6rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
+		border-radius: var(--r-1);
+		color: var(--text-3);
+		font-family: inherit;
+		font-size: 0.65rem;
+		font-weight: 600;
 		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			background var(--t-fast);
 	}
 
 	.tab:hover {
@@ -750,28 +848,145 @@
 	}
 
 	.tab.active {
-		color: var(--text-2);
-		border-bottom-color: var(--live);
+		color: var(--text);
+		background: var(--raised);
+		box-shadow: inset 0 0 0 1px var(--line);
 	}
 
-	.project-row {
+	.tab:focus-visible,
+	.project-body:focus-visible,
+	.project-action:focus-visible {
+		outline: 1px solid var(--live);
+		outline-offset: -1px;
+	}
+
+	.project {
+		position: relative;
+		margin: 0 0.3rem;
+		border-radius: var(--r-1);
+	}
+
+	.project + .project {
+		margin-top: 1px;
+	}
+
+	.project:hover,
+	.project:focus-within {
+		background: var(--raised);
+	}
+
+	/* The open project carries the live rail: it's the one the timeline is writing to. */
+	.project.open-now {
+		--row-bg: color-mix(in srgb, var(--live) 7%, var(--ink));
+		background: var(--row-bg);
+	}
+
+	.project.open-now::before {
+		content: "";
+		position: absolute;
+		left: 0;
+		top: 0.4rem;
+		bottom: 0.4rem;
+		width: 2px;
+		border-radius: 1px;
+		background: var(--live);
+	}
+
+	.project-body {
 		display: flex;
 		flex-direction: column;
-		gap: 0.1rem;
-		padding: 0.15rem 0;
+		gap: 0.15rem;
+		width: 100%;
+		min-width: 0;
+		padding: 0.4rem 0.55rem 0.4rem 0.6rem;
+		background: none;
+		border: none;
+		border-radius: inherit;
+		text-align: left;
+		cursor: pointer;
+		font-family: inherit;
 	}
 
-	.project-name,
-	.project-meta {
+	.project-name {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		max-width: 100%;
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--text-2);
+	}
+
+	.project:hover .project-name,
+	.project.open-now .project-name {
+		color: var(--text);
 	}
 
 	.project-meta {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.5rem;
+		font-family: var(--font-mono);
 		font-size: 0.55rem;
-		color: var(--text-4);
+		font-variant-numeric: tabular-nums;
+		color: var(--text-3);
+		white-space: nowrap;
+	}
+
+	.project.open-now .project-meta {
+		color: var(--live-dim);
+	}
+
+	.project :global(.project-name-input) {
+		font-size: 0.7rem;
+		font-weight: 500;
+	}
+
+	/* Over the row's right end, only where the pointer or focus is. */
+	.project-actions {
+		position: absolute;
+		top: 0.3rem;
+		right: 0.3rem;
+		display: flex;
+		gap: 1px;
+		padding-left: 0.6rem;
+		background: linear-gradient(
+			to right,
+			transparent,
+			var(--row-bg, var(--raised)) 0.6rem
+		);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--t-fast);
+	}
+
+	.project:hover .project-actions,
+	.project:focus-within .project-actions {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.project-action {
+		width: 20px;
+		height: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		background: var(--raised);
+		border: 1px solid var(--line);
+		border-radius: var(--r-1);
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.project-action:hover {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
+	.project-action.danger:hover {
+		color: var(--rec);
+		border-color: var(--rec-dim);
 	}
 
 	.name-btn {
