@@ -7,6 +7,7 @@ import {
 	normalizeAudioLanes,
 	removeAudioSource,
 	retargetAudioSource,
+	setAudioClipSources,
 	splitAudioClipAt,
 	trackIdOf,
 	trackSourceId,
@@ -95,6 +96,21 @@ describe("song swaps", () => {
 		const next = retargetAudioSource(lanes(), song, trackSourceId("b"));
 		expect(next[0].clips[0].sourceId).toBe(trackSourceId("b"));
 		expect(next[1].clips[0].sourceId).toBe(trackSourceId("v"));
+	});
+
+	it("swaps the sound of only the clips a track is dropped on", () => {
+		const before = lanes();
+		const next = setAudioClipSources(
+			before,
+			[before[1].clips[0].id],
+			trackSourceId("b"),
+		);
+		expect(next[0]).toBe(before[0]);
+		expect(next[1].clips[0]).toMatchObject({
+			start: 1,
+			end: 2,
+			sourceId: trackSourceId("b"),
+		});
 	});
 
 	it("drops a removed song's clips, and lanes left empty", () => {

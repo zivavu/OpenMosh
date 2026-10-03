@@ -3,6 +3,12 @@
 	import { getTimelineStack } from "../../editor/timeline-stack.svelte";
 	import { latestCopy, markCopied } from "../../editor/copy-stamp";
 	import {
+		draggedTrackId,
+		endTrackDrag,
+		TRACK_DND_TYPE,
+	} from "../../editor/source-drag.svelte";
+	import { freeRangeAt, MIN_CLIP_LENGTH } from "../../timeline/clips";
+	import {
 		copyAudioClips,
 		pasteAudioClips,
 		type AudioClipboardEntry,
@@ -15,6 +21,7 @@
 		createAudioClip,
 		splitAudioClipAt,
 		trackIdOf,
+		trackSourceId,
 		type AudioClip,
 		type AudioLane,
 	} from "../../mix/types";
@@ -55,6 +62,13 @@
 		orderBase: number;
 		foldedLaneIds?: ReadonlySet<string>;
 		onToggleFold?: (laneId: string) => void;
+		/** A decoded track's length, for the drop ghost; null until it decodes. */
+		trackLength?: (sourceId: string) => number | null;
+		/** A library song dropped on clips swaps their sound; on empty space, it adds a clip. */
+		onDropTrack?: (
+			trackId: string,
+			target: { clipIds: string[] } | { laneId: string; time: number },
+		) => void;
 	}
 
 	let {
@@ -75,6 +89,8 @@
 		orderBase,
 		foldedLaneIds = NO_FOLDS,
 		onToggleFold,
+		trackLength = () => null,
+		onDropTrack,
 	}: Props = $props();
 
 	const stack = getTimelineStack();
@@ -185,6 +201,94 @@
 		return true;
 	}
 
+	let dropLaneId = $state<string | null>(null);
+	let dropClipId = $state<string | null>(null);
+	/** Where a drop on empty space would put its clip. */
+	let dropGhost = $state<{
+		laneId: string;
+		start: number;
+		end: number;
+	} | null>(null);
+	/** A drop on a selected clip lands on the whole selection. */
+	let dropClipIds = $derived(
+		dropClipId
+			? selectedClipIds.includes(dropClipId)
+				? selectedClipIds
+				: [dropClipId]
+			: [],
+	);
+
+	function isTrackDrag(e: DragEvent): boolean {
+		return !!onDropTrack && !!e.dataTransfer?.types.includes(TRACK_DND_TYPE);
+	}
+
+	function clearDrop() {
+		dropLaneId = null;
+		dropClipId = null;
+		dropGhost = null;
+	}
+
+	function dropTargetClip(laneId: string, clientX: number): AudioClip | null {
+		const lane = ctrl.laneOf(laneId);
+		if (!lane || !ctrl.overTrack(clientX)) return null;
+		const t = ctrl.timeAt(clientX);
+		return lane.clips.find((c) => t >= c.start && t < c.end) ?? null;
+	}
+
+	/** The span the clip gets: from the drop to the song's end, or the next clip. */
+	function ghostAt(laneId: string, clientX: number) {
+		const lane = ctrl.laneOf(laneId);
+		const duration = stack.trackDuration;
+		if (!lane || duration <= 0 || !ctrl.overTrack(clientX)) return null;
+		const time = ctrl.timeAt(clientX);
+		const range = freeRangeAt(lane, time, duration);
+		if (!range) return null;
+		const trackId = draggedTrackId();
+		const length = trackId ? trackLength(trackSourceId(trackId)) : null;
+		const end = Math.min(range.end, length === null ? Infinity : time + length);
+		return end - time >= MIN_CLIP_LENGTH ? { laneId, start: time, end } : null;
+	}
+
+	function onLaneDragOver(e: DragEvent, laneId: string) {
+		if (!isTrackDrag(e)) return;
+		// Without preventDefault the browser refuses the drop entirely.
+		e.preventDefault();
+		const onClip = dropTargetClip(laneId, e.clientX);
+		dropLaneId = laneId;
+		dropClipId = onClip?.id ?? null;
+		dropGhost = onClip ? null : ghostAt(laneId, e.clientX);
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = onClip || dropGhost ? "copy" : "none";
+		}
+	}
+
+	function onLaneDragLeave(e: DragEvent) {
+		// Ignore the leaves fired crossing between a row's own children.
+		if (
+			e.currentTarget instanceof Element &&
+			e.relatedTarget instanceof Node &&
+			e.currentTarget.contains(e.relatedTarget)
+		) {
+			return;
+		}
+		clearDrop();
+	}
+
+	function onLaneDrop(e: DragEvent, laneId: string) {
+		if (!isTrackDrag(e)) return;
+		e.preventDefault();
+		const trackId = e.dataTransfer?.getData(TRACK_DND_TYPE) ?? "";
+		const clipIds = dropClipIds;
+		const ghost = dropGhost;
+		clearDrop();
+		endTrackDrag();
+		if (!trackId) return;
+		if (clipIds.length > 0) onDropTrack?.(trackId, { clipIds });
+		else if (ghost?.laneId === laneId) {
+			onDropTrack?.(trackId, { laneId, time: ghost.start });
+		}
+	}
+
 	function clipLabel(clip: AudioClip): string {
 		const gain = clip.gain ?? 1;
 		const name = sourceName(clip.sourceId);
@@ -196,11 +300,16 @@
 
 <div class="audio-tl">
 	{#each lanes as lane, i (lane.id)}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="tl-row audio-row"
 			class:folded={foldedLaneIds.has(lane.id)}
+			class:drop-target={dropLaneId === lane.id && !dropClipId}
 			style="order: {orderBase + i}"
 			data-layer-id={lane.id}
+			ondragover={(e) => onLaneDragOver(e, lane.id)}
+			ondragleave={onLaneDragLeave}
+			ondrop={(e) => onLaneDrop(e, lane.id)}
 		>
 			<ClipLaneGutter
 				{lane}
@@ -257,6 +366,7 @@
 								clip.id === selectedClipId}
 							class:muted={!lane.enabled}
 							class:orphan={!clip.sourceId}
+							class:drop-target={dropClipIds.includes(clip.id)}
 							style="left: {left}%; width: {width}%"
 							role="button"
 							tabindex="0"
@@ -287,6 +397,12 @@
 						</div>
 					{/if}
 				{/each}
+
+				{#if dropGhost?.laneId === lane.id}
+					{const left = $derived(vp.toPct(dropGhost.start))}
+					{const width = $derived(vp.toPct(dropGhost.end) - left)}
+					<div class="clip ghost" style="left: {left}%; width: {width}%"></div>
+				{/if}
 
 				{#if !foldedLaneIds.has(lane.id)}
 					<LaneWaveform segments={segmentsOf(lane.id)} {peaksOf} {version} />
@@ -393,6 +509,25 @@
 		--clip-accent-dim: var(--live-dim);
 		--clip-bg: #173029;
 		--clip-fg: var(--live);
+	}
+
+	/* A song is being dragged over this row's empty space and a clip would be added. */
+	.tl-row.drop-target .lane-track {
+		border-color: var(--live);
+		box-shadow: inset 0 0 0 1px var(--live);
+	}
+
+	/* The clip a drop would add, at the span it would get. */
+	.clip.ghost {
+		border-style: dashed;
+		border-color: var(--mosh);
+		background: rgba(0, 0, 0, 0.35);
+		pointer-events: none;
+	}
+
+	.clip.drop-target {
+		border-color: var(--mosh);
+		box-shadow: inset 0 0 0 1px var(--mosh);
 	}
 
 	.clip.orphan {
