@@ -45,6 +45,13 @@
 
 	let ids = $derived(selectedClips.map((c) => c.id));
 	let many = $derived(selectedClips.length > 1);
+	let selectionName = $derived(
+		many
+			? `${selectedClips.length} clips`
+			: selectedClips[0]
+				? label(selectedClips[0])
+				: "",
+	);
 
 	function commonValue<T>(values: T[]): T | undefined {
 		return values.every((v) => v === values[0]) ? values[0] : undefined;
@@ -101,9 +108,9 @@
 {#if selectedClips.length > 0}
 	<div class="chain-bar">
 		<span class="chain-title">{title}</span>
-		<span class="tl-tool-label">
-			{many ? `${selectedClips.length} clips` : label(selectedClips[0])}
-		</span>
+		<span class="tl-tool-label tl-tool-name" title={selectionName}
+			>{selectionName}</span
+		>
 		{@render leading?.()}
 
 		{#if onApplyPreset}
