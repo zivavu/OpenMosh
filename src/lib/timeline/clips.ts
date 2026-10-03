@@ -122,36 +122,97 @@ export function moveClips<C extends TimelineClip, L extends ClipLane<C>>(
 	delta: number,
 	duration: number,
 ): L {
-	const ids = new Set(clipIds);
-	const moving = lane.clips.filter((c) => ids.has(c.id));
-	if (moving.length === 0) return lane;
-	const fixed = lane.clips.filter((c) => !ids.has(c.id));
+	return moveClipsIn([lane], clipIds, delta, duration)[0];
+}
 
-	// The tightest limit any one member imposes governs the whole group.
+/** `moveClips` over several lanes: the tightest limit on any lane holds them all. */
+export function moveClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
+	lanes: L[],
+	clipIds: string[],
+	delta: number,
+	duration: number,
+): L[] {
+	const ids = new Set(clipIds);
 	let lower = -Infinity;
 	let upper = Infinity;
-	for (const clip of moving) {
-		lower = Math.max(lower, -clip.start);
-		upper = Math.min(upper, duration - clip.end);
-		for (const other of fixed) {
-			if (other.end <= clip.start)
-				lower = Math.max(lower, other.end - clip.start);
-			else if (other.start >= clip.end)
-				upper = Math.min(upper, other.start - clip.end);
+	let any = false;
+	for (const lane of lanes) {
+		const fixed = lane.clips.filter((c) => !ids.has(c.id));
+		for (const clip of lane.clips) {
+			if (!ids.has(clip.id)) continue;
+			any = true;
+			lower = Math.max(lower, -clip.start);
+			upper = Math.min(upper, duration - clip.end);
+			for (const other of fixed) {
+				if (other.end <= clip.start)
+					lower = Math.max(lower, other.end - clip.start);
+				else if (other.start >= clip.end)
+					upper = Math.min(upper, other.start - clip.end);
+			}
 		}
 	}
-	if (lower > upper) return lane;
-
+	if (!any || lower > upper) return lanes;
 	const step = Math.min(Math.max(delta, lower), upper);
-	if (step === 0) return lane;
-	return {
-		...lane,
-		clips: sortClips(
-			lane.clips.map((c) =>
-				ids.has(c.id) ? { ...c, start: c.start + step, end: c.end + step } : c,
-			),
-		),
-	};
+	if (step === 0) return lanes;
+	return shiftIn(lanes, ids, (c) => ({
+		...c,
+		start: c.start + step,
+		end: c.end + step,
+	}));
+}
+
+/** Move one edge of every clip in `clipIds` by `delta`. The tightest limit any member
+ * meets (a neighbour, the timeline's ends, the shortest clip) holds them all. */
+export function resizeClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
+	lanes: L[],
+	clipIds: string[],
+	edge: "start" | "end",
+	delta: number,
+	duration: number,
+): L[] {
+	const ids = new Set(clipIds);
+	let lower = -Infinity;
+	let upper = Infinity;
+	let any = false;
+	for (const lane of lanes) {
+		for (const clip of lane.clips) {
+			if (!ids.has(clip.id)) continue;
+			any = true;
+			const others = lane.clips.filter((c) => c.id !== clip.id);
+			if (edge === "start") {
+				let floor = 0;
+				for (const o of others)
+					if (o.end <= clip.start) floor = Math.max(floor, o.end);
+				lower = Math.max(lower, floor - clip.start);
+				upper = Math.min(upper, clip.end - MIN_CLIP_LENGTH - clip.start);
+			} else {
+				let ceiling = duration;
+				for (const o of others)
+					if (o.start >= clip.end) ceiling = Math.min(ceiling, o.start);
+				upper = Math.min(upper, ceiling - clip.end);
+				lower = Math.max(lower, clip.start + MIN_CLIP_LENGTH - clip.end);
+			}
+		}
+	}
+	if (!any || lower > upper) return lanes;
+	const step = Math.min(Math.max(delta, lower), upper);
+	if (step === 0) return lanes;
+	return shiftIn(lanes, ids, (c) => ({ ...c, [edge]: c[edge] + step }));
+}
+
+function shiftIn<C extends TimelineClip, L extends ClipLane<C>>(
+	lanes: L[],
+	ids: Set<string>,
+	fn: (clip: C) => C,
+): L[] {
+	return lanes.map((lane) =>
+		lane.clips.some((c) => ids.has(c.id))
+			? {
+					...lane,
+					clips: sortClips(lane.clips.map((c) => (ids.has(c.id) ? fn(c) : c))),
+				}
+			: lane,
+	);
 }
 
 /** Carry clips from one lane to another, shifted by `delta`: a drag that crossed

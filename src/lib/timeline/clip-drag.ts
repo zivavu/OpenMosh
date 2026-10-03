@@ -3,9 +3,9 @@
  * target, then applies the lane's own limits, which always win over the snap. */
 
 import {
-	moveClips,
+	moveClipsIn,
 	resizeBoundary,
-	resizeClip,
+	resizeClipsIn,
 	sortClips,
 	type ClipLane,
 	type TimelineClip,
@@ -26,15 +26,16 @@ export interface ClipDrag {
 export type SnapShift = (edges: number[], exclude: Set<string>) => number;
 
 export interface ClipDragStep<L> {
-	lane: L;
+	lanes: L[];
 	/** Where the dragged edges ended up, for the stack to check its guide against. */
 	edges: number[];
 }
 
-/** Apply a drag to its lane with the pointer at time `t`. `groupIds` is the
- * selection when the held clip is part of one; the whole group snaps by the closest edge. */
+/** Apply a drag with the pointer at time `t`. `groupIds` is the selection when the
+ * held clip is part of one: the whole group moves or trims, on whatever lanes it sits,
+ * and snaps by its closest edge. */
 export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
-	lane: L,
+	lanes: L[],
 	drag: ClipDrag,
 	t: number,
 	groupIds: string[],
@@ -42,40 +43,48 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 	snap: SnapShift,
 ): ClipDragStep<L> {
 	const { clipId, otherId, mode, grabOffset } = drag;
+	const ids = groupIds.includes(clipId) ? groupIds : [clipId];
+	const all = lanes.flatMap((l) => l.clips);
+	const held = all.find((c) => c.id === clipId);
+	if (!held) return { lanes, edges: [] };
+	const moving = all.filter((c) => ids.includes(c.id));
+	const movedEdges = (next: L[], keys: ("start" | "end")[]) =>
+		next
+			.flatMap((l) => l.clips)
+			.filter((c) => ids.includes(c.id))
+			.flatMap((c) => keys.map((k) => c[k]));
 	if (mode === "move") {
-		const ids = groupIds.includes(clipId) ? groupIds : [clipId];
-		const held = lane.clips.find((c) => c.id === clipId);
-		if (!held) return { lane, edges: [] };
-		// A delta off the held clip's live position: each move re-enters against a shifted lane.
+		// A delta off the held clip's live position: each move re-enters against shifted lanes.
 		const wanted = t - grabOffset - held.start;
-		const moving = lane.clips.filter((c) => ids.includes(c.id));
 		// Their media ends travel with them.
 		const shift = snap(
 			moving.flatMap((c) => [c.start + wanted, c.end + wanted]),
 			new Set([...ids, ...ids.map(sourceEndOwner)]),
 		);
-		const next = moveClips(lane, ids, wanted + shift, duration);
-		return {
-			lane: next,
-			edges: next.clips
-				.filter((c) => ids.includes(c.id))
-				.flatMap((c) => [c.start, c.end]),
-		};
+		const next = moveClipsIn(lanes, ids, wanted + shift, duration);
+		return { lanes: next, edges: movedEdges(next, ["start", "end"]) };
 	}
 	if (mode === "boundary") {
 		// The left clip's media end holds still; the right one's slides with its start.
 		const at =
 			t + snap([t], new Set([clipId, otherId!, sourceEndOwner(otherId!)]));
-		const next = resizeBoundary(lane, clipId, otherId!, at);
-		const left = next.clips.find((c) => c.id === clipId);
-		return { lane: next, edges: left ? [left.end] : [] };
+		const next = lanes.map((l) =>
+			l.clips.some((c) => c.id === clipId)
+				? resizeBoundary(l, clipId, otherId!, at)
+				: l,
+		);
+		const left = next.flatMap((l) => l.clips).find((c) => c.id === clipId);
+		return { lanes: next, edges: left ? [left.end] : [] };
 	}
-	const exclude = new Set([clipId]);
-	if (mode === "start") exclude.add(sourceEndOwner(clipId));
-	const at = t + snap([t], exclude);
-	const next = resizeClip(lane, clipId, mode, at, duration);
-	const clip = next.clips.find((c) => c.id === clipId);
-	return { lane: next, edges: clip ? [clip[mode]] : [] };
+	const exclude = new Set(ids);
+	if (mode === "start") for (const id of ids) exclude.add(sourceEndOwner(id));
+	const wanted = t - held[mode];
+	const shift = snap(
+		moving.map((c) => c[mode] + wanted),
+		exclude,
+	);
+	const next = resizeClipsIn(lanes, ids, mode, wanted + shift, duration);
+	return { lanes: next, edges: movedEdges(next, [mode]) };
 }
 
 /** Every edge on a lane, owned by its clip — the lane's snap targets. */

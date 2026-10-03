@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { dragClipsStep, laneSnapPoints, type ClipDrag } from "./clip-drag";
-import type { ClipLane, TimelineClip } from "./clips";
+import { MIN_CLIP_LENGTH, type ClipLane, type TimelineClip } from "./clips";
 import { sourceEndOwner } from "./snap";
 
 const clip = (id: string, start: number, end: number): TimelineClip => ({
@@ -14,6 +14,20 @@ const laneOf = (...clips: TimelineClip[]): ClipLane<TimelineClip> => ({
 const spans = (lane: ClipLane<TimelineClip>) =>
 	lane.clips.map((c) => [c.id, c.start, c.end]);
 const noSnap = () => 0;
+type Lane = ClipLane<TimelineClip>;
+/** One lane in, one lane out: most cases need no more. */
+const dragOne = (
+	lane: Lane,
+	...rest: Parameters<typeof dragClipsStep<TimelineClip, Lane>> extends [
+		unknown,
+		...infer R,
+	]
+		? R
+		: never
+) => {
+	const { lanes, edges } = dragClipsStep([lane], ...rest);
+	return { lane: lanes[0], edges };
+};
 const move = (clipId: string, grabOffset = 0): ClipDrag => ({
 	laneId: "l",
 	clipId,
@@ -23,7 +37,7 @@ const move = (clipId: string, grabOffset = 0): ClipDrag => ({
 
 describe("dragClipsStep", () => {
 	it("moves the held clip to the pointer, less the grab offset", () => {
-		const { lane, edges } = dragClipsStep(
+		const { lane, edges } = dragOne(
 			laneOf(clip("a", 0, 1)),
 			move("a", 0.25),
 			2.25,
@@ -37,7 +51,7 @@ describe("dragClipsStep", () => {
 
 	it("offers both edges of every moving clip to the snap, excluding them", () => {
 		let seen: { edges: number[]; exclude: string[] } | null = null;
-		dragClipsStep(
+		dragOne(
 			laneOf(clip("a", 0, 1), clip("b", 2, 3), clip("c", 5, 6)),
 			move("a"),
 			1,
@@ -57,7 +71,7 @@ describe("dragClipsStep", () => {
 	it("lets a trimmed end land on its own media's end, but not a trimmed start", () => {
 		const excluded = (mode: ClipDrag["mode"]) => {
 			let seen: string[] = [];
-			dragClipsStep(
+			dragOne(
 				laneOf(clip("a", 0, 1), clip("b", 1, 2)),
 				{ laneId: "l", clipId: "a", otherId: "b", mode, grabOffset: 0 },
 				0.5,
@@ -77,7 +91,7 @@ describe("dragClipsStep", () => {
 	});
 
 	it("applies the snap's shift, then the lane's limits", () => {
-		const { lane, edges } = dragClipsStep(
+		const { lane, edges } = dragOne(
 			laneOf(clip("a", 0, 1), clip("b", 2, 3)),
 			move("a"),
 			0.9,
@@ -94,7 +108,7 @@ describe("dragClipsStep", () => {
 
 	it("snaps only the dragged edge on a resize", () => {
 		let seen: number[] = [];
-		const { lane, edges } = dragClipsStep(
+		const { lane, edges } = dragOne(
 			laneOf(clip("a", 0, 1)),
 			{ laneId: "l", clipId: "a", mode: "end", grabOffset: 0 },
 			1.95,
@@ -112,7 +126,7 @@ describe("dragClipsStep", () => {
 
 	it("moves a shared boundary, keeping both clips out of the snap", () => {
 		let exclude: string[] = [];
-		const { lane, edges } = dragClipsStep(
+		const { lane, edges } = dragOne(
 			laneOf(clip("a", 0, 1), clip("b", 1, 2)),
 			{
 				laneId: "l",
@@ -135,6 +149,78 @@ describe("dragClipsStep", () => {
 			["b", 1.5, 2],
 		]);
 		expect(edges).toEqual([1.5]);
+	});
+});
+
+describe("dragClipsStep across lanes", () => {
+	const lanes = () => [
+		laneOf(clip("a", 0, 1), clip("x", 3, 4)),
+		laneOf(clip("b", 1, 2)),
+	];
+
+	it("moves a selection spread over lanes, stopped by any lane's neighbour", () => {
+		const { lanes: next, edges } = dragClipsStep(
+			lanes(),
+			move("b"),
+			5,
+			["a", "b"],
+			10,
+			noSnap,
+		);
+		// a runs into x after 2s, so b stops there too.
+		expect(next.map(spans)).toEqual([
+			[
+				["a", 2, 3],
+				["x", 3, 4],
+			],
+			[["b", 3, 4]],
+		]);
+		expect(edges).toEqual([2, 3, 3, 4]);
+	});
+
+	it("trims the same edge of every selected clip by the same amount", () => {
+		const { lanes: next } = dragClipsStep(
+			lanes(),
+			{ laneId: "l", clipId: "b", mode: "end", grabOffset: 0 },
+			2.5,
+			["a", "b"],
+			10,
+			noSnap,
+		);
+		expect(next.map(spans)).toEqual([
+			[
+				["a", 0, 1.5],
+				["x", 3, 4],
+			],
+			[["b", 1, 2.5]],
+		]);
+	});
+
+	it("holds a group trim at the shortest clip's minimum length", () => {
+		const { lanes: next } = dragClipsStep(
+			lanes(),
+			{ laneId: "l", clipId: "b", mode: "start", grabOffset: 0 },
+			1.99,
+			["a", "b"],
+			10,
+			noSnap,
+		);
+		expect(next[0].clips[0]).toMatchObject({ start: 1 - MIN_CLIP_LENGTH });
+		expect(next[1].clips[0]).toMatchObject({ start: 2 - MIN_CLIP_LENGTH });
+	});
+
+	it("trims only the held clip when it is not part of the selection", () => {
+		const before = lanes();
+		const { lanes: next } = dragClipsStep(
+			before,
+			{ laneId: "l", clipId: "b", mode: "end", grabOffset: 0 },
+			2.5,
+			["a", "x"],
+			10,
+			noSnap,
+		);
+		expect(next[0]).toBe(before[0]);
+		expect(spans(next[1])).toEqual([["b", 1, 2.5]]);
 	});
 });
 

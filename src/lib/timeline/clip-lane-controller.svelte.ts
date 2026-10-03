@@ -416,8 +416,10 @@ export class ClipLaneController<
 			return;
 		}
 
-		// A plain click on something already selected keeps it so it can be dragged.
-		if (host.selectedClipIds.includes(clipId) && mode === "move") {
+		// A plain click on something already selected keeps it so it can be dragged; an
+		// edge of a multi-selection trims the whole selection.
+		const selected = host.selectedClipIds.includes(clipId);
+		if (selected && (mode === "move" || host.selectedClipIds.length > 1)) {
 			host.selectedClipId = clipId;
 			this.#clickOnUp = clipId;
 		} else {
@@ -716,8 +718,12 @@ export class ClipLaneController<
 			? this.host.selectedClipIds
 			: [clipId];
 		// A move that crossed into another row of this kind carries the clips over, if they
-		// fit; otherwise they keep sliding on the row they came from.
-		if (mode === "move") {
+		// fit; otherwise they keep sliding on the row they came from. A selection spread
+		// over several rows only slides.
+		const groupLanes = lanes.filter((l) =>
+			l.clips.some((c) => group.includes(c.id)),
+		).length;
+		if (mode === "move" && groupLanes === 1) {
 			const over = this.stack.laneIdAt(e.clientY);
 			const from = this.laneOf(laneId);
 			const held = from?.clips.find((c) => c.id === clipId);
@@ -742,18 +748,19 @@ export class ClipLaneController<
 				}
 			}
 		}
-		// Dragging any member drags the whole selection. Alt holds the snap off.
+		// Dragging any member, or either edge of one, drags the whole selection. Alt holds
+		// the snap off.
 		const step = dragClipsStep(
-			this.laneOf(laneId)!,
+			lanes,
 			drag,
 			t,
 			this.host.selectedClipIds,
 			limit,
 			(edges, exclude) => this.stack.snapShift(edges, exclude, e.altKey),
 		);
-		this.update(laneId, () => step.lane);
+		if (step.lanes !== lanes) this.host.setLanes(step.lanes);
 		this.stack.confirmSnap(step.edges);
-		if (mode !== "boundary") this.#reach(mode === "move" ? group : [clipId]);
+		if (mode !== "boundary") this.#reach(group);
 	}
 
 	/** Let the project grow to where the dragged clips end. */
