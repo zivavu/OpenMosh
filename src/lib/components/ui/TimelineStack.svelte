@@ -840,6 +840,15 @@
 		text-transform: uppercase;
 	}
 
+	/* A clip's file name: song titles run long, so it gives way before the controls do. */
+	:global(.tl-stack .tl-tool-name) {
+		min-width: 3rem;
+		max-width: 16rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	.tl-transport-btn {
 		display: flex;
 		align-items: center;

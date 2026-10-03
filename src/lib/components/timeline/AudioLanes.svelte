@@ -130,6 +130,11 @@
 	$effect(() => ctrl.syncSelection());
 
 	let selectedClips = $derived(ctrl.selectedClips);
+	let selectionName = $derived(
+		selectedClips.length > 1
+			? `${selectedClips.length} clips`
+			: sourceName(selectedClips[0]?.sourceId ?? null),
+	);
 	$effect(() => {
 		if (selectedClips.length === 0) return;
 		return stack.registerSelectionBar("audio", clipBar);
@@ -428,11 +433,9 @@
 	{#if selectedClips.length > 0}
 		<div class="audio-bar">
 			<span class="audio-title">Audio</span>
-			<span class="tl-tool-label">
-				{selectedClips.length > 1
-					? `${selectedClips.length} clips`
-					: sourceName(selectedClips[0].sourceId)}
-			</span>
+			<span class="tl-tool-label tl-tool-name" title={selectionName}
+				>{selectionName}</span
+			>
 			<ClipVolume
 				value={commonGain}
 				onInput={(v) =>
