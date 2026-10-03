@@ -32,6 +32,11 @@
 	import type { GlRenderer } from "../../gl/renderer";
 	import { lazy } from "../../lazy";
 	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
+	import {
+		diagnoseModel,
+		isOtherModelFile,
+		type ModelProblem,
+	} from "../../mesh/support";
 	import DemoBackground from "./DemoBackground.svelte";
 	import GithubLink from "./GithubLink.svelte";
 	import VersionTag from "./VersionTag.svelte";
@@ -321,7 +326,22 @@
 
 	const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
 
+	/** 3D files in a format we can't read, and why; the dialog is up while there are any. */
+	let modelProblems = $state<ModelProblem[]>([]);
+	const loadUnsupportedModelDialog = lazy(
+		() => import("./UnsupportedModelDialog.svelte"),
+	);
+
+	async function explainModels(files: File[]) {
+		const problems = await Promise.all(files.map(diagnoseModel));
+		modelProblems = [...modelProblems, ...problems];
+	}
+
 	function rejectFile(file: File) {
+		if (isOtherModelFile(file)) {
+			void explainModels([file]);
+			return;
+		}
 		if (isMeshFile(file)) {
 			showToast(`3D models like "${file.name}" work in the Editor`, "error");
 			return;
@@ -353,6 +373,10 @@
 			return;
 		}
 		const accepted = all.filter((f) => isAcceptedFile(f));
+		// A lone file is rejectFile's to explain.
+		const otherModels = all.filter(isOtherModelFile);
+		if (all.length > 1 && otherModels.length > 0)
+			void explainModels(otherModels);
 		if (accepted.length === 0) {
 			if (all.length === 1) rejectFile(all[0]);
 			else
@@ -904,6 +928,17 @@
 			/>
 		{:catch}
 			<LoadFailed onclose={() => (storageOpen = false)} />
+		{/await}
+	{/if}
+
+	{#if modelProblems.length > 0}
+		{#await loadUnsupportedModelDialog() then UnsupportedModelDialog}
+			<UnsupportedModelDialog
+				problems={modelProblems}
+				onClose={() => (modelProblems = [])}
+			/>
+		{:catch}
+			<LoadFailed onclose={() => (modelProblems = [])} />
 		{/await}
 	{/if}
 </div>
