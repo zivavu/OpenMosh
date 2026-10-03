@@ -165,3 +165,105 @@ export function patternImageFile(name: string, size = 128) {
 export function trackFile(name = "track.wav", options: WavOptions = {}) {
 	return { name, mimeType: "audio/wav", buffer: wavBytes(options) };
 }
+
+/** A cube whose every vertex carries `color`, so a drawn model is told apart by hue. */
+export function objCubeFile(name: string, color: Rgb) {
+	const c = `${color.r / 255} ${color.g / 255} ${color.b / 255}`;
+	const corners = [
+		[-1, -1, -1],
+		[1, -1, -1],
+		[1, 1, -1],
+		[-1, 1, -1],
+		[-1, -1, 1],
+		[1, -1, 1],
+		[1, 1, 1],
+		[-1, 1, 1],
+	];
+	const faces = [
+		[1, 2, 3, 4],
+		[5, 8, 7, 6],
+		[1, 5, 6, 2],
+		[2, 6, 7, 3],
+		[3, 7, 8, 4],
+		[5, 1, 4, 8],
+	];
+	const text = [
+		...corners.map((v) => `v ${v.join(" ")} ${c}`),
+		...faces.map((f) => `f ${f.join(" ")}`),
+	].join("\n");
+	return { name, mimeType: "", buffer: Buffer.from(text) };
+}
+
+/** A GLB holding one triangle skinned to one bone that slides along x over a
+ * second: the smallest model that takes the animated (skinned) draw path. */
+export function skinnedGlbFile(name: string) {
+	const bin = new ArrayBuffer(36 + 12 + 48 + 8 + 24);
+	const view = new DataView(bin);
+	let at = 0;
+	for (const v of [-1, -1, 0, 1, -1, 0, 0, 1, 0]) {
+		view.setFloat32(at, v, true);
+		at += 4;
+	}
+	// Joint 0 for every vertex, at full weight.
+	at += 12;
+	for (let i = 0; i < 3; i++) view.setFloat32(at + i * 16, 1, true);
+	at += 48;
+	for (const t of [0, 1]) {
+		view.setFloat32(at, t, true);
+		at += 4;
+	}
+	for (const v of [0, 0, 0, 0.5, 0, 0]) {
+		view.setFloat32(at, v, true);
+		at += 4;
+	}
+	const json = {
+		asset: { version: "2.0" },
+		scene: 0,
+		scenes: [{ nodes: [0, 1] }],
+		nodes: [{ name: "bone" }, { mesh: 0, skin: 0 }],
+		meshes: [
+			{
+				primitives: [
+					{ attributes: { POSITION: 0, JOINTS_0: 1, WEIGHTS_0: 2 } },
+				],
+			},
+		],
+		skins: [{ joints: [0] }],
+		animations: [
+			{
+				channels: [{ sampler: 0, target: { node: 0, path: "translation" } }],
+				samplers: [{ input: 3, output: 4 }],
+			},
+		],
+		accessors: [
+			{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+			{ bufferView: 1, componentType: 5121, count: 3, type: "VEC4" },
+			{ bufferView: 2, componentType: 5126, count: 3, type: "VEC4" },
+			{ bufferView: 3, componentType: 5126, count: 2, type: "SCALAR" },
+			{ bufferView: 4, componentType: 5126, count: 2, type: "VEC3" },
+		],
+		bufferViews: [
+			{ byteOffset: 0, byteLength: 36 },
+			{ byteOffset: 36, byteLength: 12 },
+			{ byteOffset: 48, byteLength: 48 },
+			{ byteOffset: 96, byteLength: 8 },
+			{ byteOffset: 104, byteLength: 24 },
+		],
+	};
+	const jsonBytes = Buffer.from(JSON.stringify(json));
+	const jsonLength = jsonBytes.length + ((4 - (jsonBytes.length % 4)) % 4);
+	const total = 12 + 8 + jsonLength + 8 + bin.byteLength;
+	const out = Buffer.alloc(total);
+	out.writeUInt32LE(0x46546c67, 0);
+	out.writeUInt32LE(2, 4);
+	out.writeUInt32LE(total, 8);
+	out.writeUInt32LE(jsonLength, 12);
+	out.writeUInt32LE(0x4e4f534a, 16);
+	jsonBytes.copy(out, 20);
+	out.fill(0x20, 20 + jsonBytes.length, 20 + jsonLength);
+	const binAt = 20 + jsonLength;
+	out.writeUInt32LE(bin.byteLength, binAt);
+	out.writeUInt32LE(0x004e4942, binAt + 4);
+	Buffer.from(bin).copy(out, binAt + 8);
+	return { name, mimeType: "", buffer: out };
+}
