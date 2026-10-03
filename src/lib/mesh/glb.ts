@@ -176,6 +176,11 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 				skin && prim.attributes.WEIGHTS_0 !== undefined
 					? accessor(prim.attributes.WEIGHTS_0).data
 					: null;
+			// Vertex colours, RGB or RGBA; low-poly models often carry these instead of a texture.
+			const vcol =
+				prim.attributes.COLOR_0 === undefined
+					? null
+					: accessor(prim.attributes.COLOR_0);
 			const index =
 				prim.indices === undefined ? null : accessor(prim.indices).data;
 
@@ -207,17 +212,19 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 					jnt ? (slotOfJoint[jnt[v * 4 + k]] ?? 0) : slotOfJoint[0],
 				),
 				w: weightsAt(wgt, v),
+				col: vcol
+					? [0, 1, 2].map((k) => factor[k] * vcol.data[v * vcol.size + k])
+					: [factor[0], factor[1], factor[2]],
 			});
 			const count = index ? index.length : pos.length / 3;
 			for (let i = 0; i + 2 < count; i += 3) {
 				const c = [0, 1, 2].map((k) => corner(index ? index[i + k] : i + k));
-				const col = [factor[0], factor[1], factor[2]];
 				builder.triangle(
 					c[0].p,
 					c[1].p,
 					c[2].p,
 					c.every((x) => x.n) ? [c[0].n!, c[1].n!, c[2].n!] : null,
-					[col, col, col],
+					[c[0].col, c[1].col, c[2].col],
 					{
 						uvs: [c[0].uv, c[1].uv, c[2].uv],
 						joints: [c[0].j, c[1].j, c[2].j],
