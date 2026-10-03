@@ -67,12 +67,10 @@
 	}: Props = $props();
 
 	const hasProjects = $derived(!!onOpenProject);
-	const TAB_KEY = "openmosh-library-tab";
-	let tab = $state<"projects" | "songs">(
-		readRaw(TAB_KEY) === "songs" ? "songs" : "projects",
-	);
+	/** Always opens on the projects: picking one is what the drawer is for. */
+	let tab = $state<"projects" | "songs">("projects");
 	$effect(() => {
-		writeRaw(TAB_KEY, tab);
+		if (open) tab = "projects";
 	});
 	/** Single and slideshow have no projects tab: the drawer is their song library. */
 	const showing = $derived(hasProjects ? tab : "songs");
