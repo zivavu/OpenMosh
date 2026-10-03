@@ -2370,7 +2370,7 @@ export class GlRenderer {
 				time: this.getEffectTime(e, time, safeDt).time,
 			})),
 		);
-		const front = modelFootprint(meshCamera([]), extent);
+		const front = modelFootprint(meshCamera([]), extent, false);
 		// Pixels per half-height unit, fitting the front view inside the frame.
 		const unit =
 			(this.imgH / 2) * Math.min(this.imgW / this.imgH / front.x, 1 / front.y);

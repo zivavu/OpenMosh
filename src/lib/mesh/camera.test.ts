@@ -132,24 +132,61 @@ describe("modelFootprint", () => {
 		expect(f.y / f.x).toBeCloseTo(3, 0);
 	});
 
-	it("holds every point of the box, however the model turns", () => {
+	/** Random points a model's vertices could be at: in its box and the unit sphere. */
+	function modelPoints(box: number[], count: number): number[][] {
+		const out: number[][] = [];
+		while (out.length < count) {
+			const p = box.map((e) => (Math.random() * 2 - 1) * e);
+			if (Math.hypot(p[0], p[1], p[2]) <= 1) out.push(p);
+		}
+		return out;
+	}
+
+	function expectHolds(cam: MeshCamera, box: number[]) {
+		const f = modelFootprint(cam, box);
+		for (const p of modelPoints(box, 200)) {
+			const w = modelToWorld(cam, p);
+			expect(Math.abs((cam.focal * w[0]) / w[2])).toBeLessThanOrEqual(
+				f.x + 1e-9,
+			);
+			expect(Math.abs((cam.focal * w[1]) / w[2])).toBeLessThanOrEqual(
+				f.y + 1e-9,
+			);
+		}
+	}
+
+	it("holds every point of the model, however it turns", () => {
 		for (const rotY of [0, 30, 75, 140]) {
 			for (const rotX of [0, 40]) {
-				const cam = meshCamera([
-					{ values: { ...base, rotX, rotY, zoom: 1.4 }, time: 0 },
-				]);
-				const f = modelFootprint(cam, extent);
-				for (let i = 0; i < 200; i++) {
-					const p = extent.map((e) => (Math.random() * 2 - 1) * e);
-					const w = modelToWorld(cam, p);
-					expect(Math.abs((cam.focal * w[0]) / w[2])).toBeLessThanOrEqual(
-						f.x + 1e-9,
-					);
-					expect(Math.abs((cam.focal * w[1]) / w[2])).toBeLessThanOrEqual(
-						f.y + 1e-9,
-					);
+				for (const perspective of [0.5, 1]) {
+					const cam = meshCamera([
+						{
+							values: { ...base, rotX, rotY, perspective, zoom: 1.4 },
+							time: 0,
+						},
+					]);
+					expectHolds(cam, extent);
+					expectHolds(cam, [0.7, 0.6, 0.7]);
+					expectHolds(cam, [0.95, 0.25, 0.95]);
 				}
 			}
 		}
+	});
+
+	// A box corner can sit nearer the lens than any vertex; the box used to blow up
+	// there, and the model drew into a corner of a huge, low-resolution texture.
+	it("stays near the model's size on a wide lens as it turns", () => {
+		const disc = [0.95, 0.25, 0.95];
+		const sizes = [0, 15, 30, 45, 60, 75, 90].map((rotY) => {
+			const cam = meshCamera([
+				{
+					values: { ...base, rotY, rotX: 35, perspective: 1, zoom: 1.3 },
+					time: 0,
+				},
+			]);
+			const f = modelFootprint(cam, disc);
+			return Math.max(f.x, f.y);
+		});
+		expect(Math.max(...sizes) / Math.min(...sizes)).toBeLessThan(1.5);
 	});
 });
