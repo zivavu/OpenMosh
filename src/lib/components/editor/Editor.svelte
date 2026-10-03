@@ -61,12 +61,14 @@
 		nextAudioLaneName,
 		removeAudioSource,
 		retargetAudioSource,
+		setAudioClipSources,
 		trackIdOf,
 		trackSourceId,
 		type AudioClip,
 		type AudioLane,
 	} from "../../mix/types";
 	import { readProjectNames, setProjectName } from "../../editor/project-names";
+	import { draggedTrackId } from "../../editor/source-drag.svelte";
 	import { generateId } from "../../effects/types";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
 	import { editorShortcutGroups } from "../../editor/shortcut-groups";
@@ -2206,6 +2208,62 @@
 		selectedAudioClipIds = [lane.clips[0].id];
 	}
 
+	// Decoding starts as a song leaves the library, so the lanes can show its length.
+	$effect(() => {
+		const trackId = draggedTrackId();
+		if (isSequenceMode && trackId) audioBank.ensure([trackSourceId(trackId)]);
+	});
+
+	function decodedLength(sourceId: string): number | null {
+		return audioBank.buffer(sourceId)?.duration ?? null;
+	}
+
+	/** A library song dropped on the lanes: on clips it swaps their sound, on empty
+	 * space it adds a clip there. The first into a project with no song becomes it. */
+	async function dropTrack(
+		trackId: string,
+		target: { clipIds: string[] } | { laneId: string; time: number },
+	) {
+		const sourceId = trackSourceId(trackId);
+		if ("clipIds" in target) {
+			const ids = new Set(target.clipIds);
+			const changes = (mediaTimeline.audioLanes ?? []).some((l) =>
+				l.clips.some((c) => ids.has(c.id) && c.sourceId !== sourceId),
+			);
+			if (!changes) return;
+			pushMediaHistory();
+			setMediaTimeline({
+				...mediaTimeline,
+				audioLanes: setAudioClipSources(
+					mediaTimeline.audioLanes ?? [],
+					target.clipIds,
+					sourceId,
+				),
+			});
+		} else {
+			await audioBank.settle([sourceId]);
+			const length = decodedLength(sourceId);
+			if (length === null) {
+				showToast("That track has no sound that could be decoded", "error");
+				return;
+			}
+			const lanes = mediaTimeline.audioLanes ?? [];
+			const lane = lanes.find((l) => l.id === target.laneId);
+			if (!lane) return;
+			const clip = createAudioClip(target.time, target.time + length, sourceId);
+			const next = addClip(lane, clip, mixer.duration);
+			if (next === lane) return;
+			pushMediaHistory();
+			setMediaTimeline({
+				...mediaTimeline,
+				audioLanes: lanes.map((l) => (l.id === lane.id ? next : l)),
+			});
+			selectedAudioClipId = clip.id;
+			selectedAudioClipIds = [clip.id];
+		}
+		if (!audio.trackFile) await loadSong(trackId);
+	}
+
 	/** A lane with no sound yet, for clips pasted or dragged in from another. */
 	function addEmptyAudioLane() {
 		const lanes = mediaTimeline.audioLanes ?? [];
@@ -4135,6 +4193,7 @@
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
 		activeProjectKey={projectKey}
+		tracksDraggable={isSequenceMode}
 		onOpenProject={isSequenceMode && onOpenProject
 			? openOtherProject
 			: undefined}
@@ -4933,6 +4992,8 @@
 							orderBase={layerOrder.length}
 							{foldedLaneIds}
 							onToggleFold={toggleLaneFold}
+							trackLength={decodedLength}
+							onDropTrack={dropTrack}
 						/>
 					{/if}
 				</div>

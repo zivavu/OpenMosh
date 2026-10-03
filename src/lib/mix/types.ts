@@ -193,6 +193,25 @@ export function retargetAudioSource(
 	);
 }
 
+/** Point these clips at another source; their spans and offsets stay. */
+export function setAudioClipSources(
+	lanes: AudioLane[],
+	clipIds: string[],
+	sourceId: string,
+): AudioLane[] {
+	const ids = new Set(clipIds);
+	return lanes.map((lane) =>
+		lane.clips.some((c) => ids.has(c.id))
+			? {
+					...lane,
+					clips: lane.clips.map((c) =>
+						ids.has(c.id) ? { ...c, sourceId } : c,
+					),
+				}
+			: lane,
+	);
+}
+
 /** Drop every clip playing `sourceId`; lanes this empties go too. */
 export function removeAudioSource(
 	lanes: AudioLane[],

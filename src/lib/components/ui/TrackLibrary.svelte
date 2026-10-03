@@ -28,6 +28,11 @@
 		type SavedSequence,
 	} from "../../editor/saved-sequences";
 	import { readProjectNames } from "../../editor/project-names";
+	import {
+		beginTrackDrag,
+		endTrackDrag,
+		TRACK_DND_TYPE,
+	} from "../../editor/source-drag.svelte";
 	import { fmtAgo } from "../../utils";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
@@ -49,6 +54,8 @@
 		onOpenProject?: (key: string) => void;
 		/** The project open now, marked in the list. */
 		activeProjectKey?: string | null;
+		/** Editor only: songs drag out onto the audio lanes. */
+		tracksDraggable?: boolean;
 	}
 
 	let {
@@ -64,6 +71,7 @@
 		onAutoAdded,
 		onOpenProject,
 		activeProjectKey = null,
+		tracksDraggable = false,
 	}: Props = $props();
 
 	const hasProjects = $derived(!!onOpenProject);
@@ -306,6 +314,26 @@
 		syncNormalizeGain(track);
 	});
 
+	/** Slides the panel aside while a song is dragged, so it doesn't cover the lanes. */
+	let draggingTrack = $state(false);
+
+	function onTrackDragStart(e: DragEvent, track: StoredTrack) {
+		beginTrackDrag(track.id);
+		if (!e.dataTransfer) return;
+		e.dataTransfer.effectAllowed = "copy";
+		e.dataTransfer.setData(TRACK_DND_TYPE, track.id);
+		// Some browsers cancel a drag that carries no standard data at all.
+		e.dataTransfer.setData("text/plain", track.name);
+		// A frame late: moving the dragged row in its own dragstart cancels the drag.
+		requestAnimationFrame(() => (draggingTrack = true));
+	}
+
+	function onTrackDragEnd(e: DragEvent) {
+		endTrackDrag();
+		draggingTrack = false;
+		if (e.dataTransfer?.dropEffect !== "none") open = false;
+	}
+
 	function togglePlay(track: StoredTrack) {
 		if (isTrackActive(track)) {
 			if (mainPlaying) onPause?.();
@@ -335,7 +363,12 @@
 	hidden
 />
 
-<div class="library" class:open bind:this={libraryEl}>
+<div
+	class="library"
+	class:open
+	class:dragging={draggingTrack}
+	bind:this={libraryEl}
+>
 	<!-- Always in flow: the 28px expand strip -->
 	<button
 		class="expand-btn"
@@ -421,7 +454,13 @@
 				{#each tracks as track (track.id)}
 					{const isActive = $derived(isTrackActive(track))}
 					{const isPlaying = $derived(isActive && mainPlaying)}
-					<li class="track-row" class:active={isActive}>
+					<li
+						class="track-row"
+						class:active={isActive}
+						draggable={tracksDraggable && renamingId !== track.id}
+						ondragstart={(e) => onTrackDragStart(e, track)}
+						ondragend={onTrackDragEnd}
+					>
 						<button
 							class="preview-btn"
 							onclick={() => togglePlay(track)}
@@ -457,7 +496,8 @@
 							<button
 								class="name-btn"
 								onclick={() => toggleLoad(track)}
-								title={isActive ? "Unload track" : "Load track"}
+								title={(isActive ? "Unload track" : "Load track") +
+									(tracksDraggable ? ", or drag it onto an audio lane" : "")}
 							>
 								{track.name}
 							</button>
@@ -562,6 +602,10 @@
 
 	.library.open .panel {
 		transform: translateX(0);
+	}
+
+	.library.open.dragging .panel {
+		transform: translateX(-100%);
 	}
 
 	.header {

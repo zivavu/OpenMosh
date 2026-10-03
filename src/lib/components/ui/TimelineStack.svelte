@@ -6,7 +6,10 @@
 		setTimelineStack,
 		TimelineStackState,
 	} from "../../editor/timeline-stack.svelte";
-	import { draggedSourceId } from "../../editor/source-drag.svelte";
+	import {
+		draggedSourceId,
+		draggedTrackId,
+	} from "../../editor/source-drag.svelte";
 	import TimelineScrollbar from "./TimelineScrollbar.svelte";
 
 	interface Props {
@@ -434,7 +437,8 @@
 			<!-- A source in the air falls through the grab handles, so a drop doesn't land on nothing. -->
 			<div
 				class="tl-playhead-layer"
-				class:source-drag={draggedSourceId() !== null}
+				class:source-drag={draggedSourceId() !== null ||
+					draggedTrackId() !== null}
 				class:fall-through={modifierHeld}
 			>
 				{#if playheadVisible}
