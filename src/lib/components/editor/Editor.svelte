@@ -175,6 +175,11 @@
 	} from "../../editor/sequence-sources.svelte";
 	import { MediaLayerDriver } from "../../editor/media-layer-driver";
 	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
+	import {
+		diagnoseModel,
+		isOtherModelFile,
+		type ModelProblem,
+	} from "../../mesh/support";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
 	import { openVideoFrameSource } from "../../video/frame-source";
 	import { proxyStatus } from "../../video/proxy-status";
@@ -1671,6 +1676,7 @@
 				if (extras.length > 0) {
 					await sourceRegistry.add(extras, { persist });
 				}
+				void explainRejectedModels([file, ...extras]);
 			} finally {
 				mountMediaDone = true;
 			}
@@ -1777,6 +1783,8 @@
 			showToast("3D models work in the Editor", "error");
 			files = files.filter((f) => !isMeshFile(f));
 		}
+		const otherModels = files.filter(isOtherModelFile);
+		files = files.filter((f) => !isOtherModelFile(f));
 		// Single mode's pool is session-scoped: no song to persist under.
 		const added = await sourceRegistry.add(files, {
 			persist: isSequenceMode,
@@ -1784,7 +1792,12 @@
 		if (isSequenceMode && added.some((s) => s.kind === "model")) {
 			showToast("To turn a model, add a 3D Transform to its clip", "info");
 		}
-		const skipped = files.length - added.length;
+		const rejectedModels = await explainRejectedModels([
+			...otherModels,
+			...files,
+		]);
+		const skipped =
+			files.length - added.length - (rejectedModels - otherModels.length);
 		if (skipped > 0) {
 			showToast(
 				`Skipped ${skipped} file${skipped === 1 ? "" : "s"} that couldn't be decoded`,
@@ -1792,6 +1805,25 @@
 			);
 		}
 		return added;
+	}
+
+	/** 3D files the pool turned down, and why; the dialog is up while there are any. */
+	let modelProblems = $state<ModelProblem[]>([]);
+	const loadUnsupportedModelDialog = lazy(
+		() => import("../ui/UnsupportedModelDialog.svelte"),
+	);
+
+	/** Say why models that didn't make the pool were turned down; returns how many. */
+	async function explainRejectedModels(files: File[]): Promise<number> {
+		const rejected = files.filter(
+			(f) =>
+				isOtherModelFile(f) ||
+				(isMeshFile(f) && !sourceRegistry.get(stableSourceId(f))),
+		);
+		if (rejected.length === 0) return 0;
+		const problems = await Promise.all(rejected.map(diagnoseModel));
+		modelProblems = [...modelProblems, ...problems];
+		return rejected.length;
 	}
 
 	let showClearSourcesConfirm = $state(false);
@@ -4141,7 +4173,7 @@
 			(f) =>
 				f.type.startsWith("image/") ||
 				f.type.startsWith("video/") ||
-				(isSequenceMode && isMeshFile(f)),
+				(isSequenceMode && (isMeshFile(f) || isOtherModelFile(f))),
 		);
 		if (media.length === 0) return;
 		if (isSequenceMode) void addSequenceSources(media);
@@ -5303,6 +5335,16 @@
 		{/await}
 	{/if}
 
+	{#if modelProblems.length > 0}
+		{#await loadUnsupportedModelDialog() then UnsupportedModelDialog}
+			<UnsupportedModelDialog
+				problems={modelProblems}
+				onClose={() => (modelProblems = [])}
+			/>
+		{:catch}
+			<LoadFailed onclose={() => (modelProblems = [])} />
+		{/await}
+	{/if}
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
