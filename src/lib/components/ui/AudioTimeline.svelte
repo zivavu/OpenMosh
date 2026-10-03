@@ -462,6 +462,8 @@
 	.timeline-track-wrap.tl-lane {
 		overflow: hidden;
 		border-radius: 4px;
+		/* Below the scrolling lane list: as narrow as its lanes, or the axis stretches. */
+		margin-right: var(--tl-vscroll, 0px);
 	}
 
 	.timeline-track-wrap.seeking {
