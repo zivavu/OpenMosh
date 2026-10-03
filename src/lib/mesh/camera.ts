@@ -138,24 +138,52 @@ export function projectToUv(
 }
 
 /** Half-width and half-height, in the frame's half-height units, of the screen box
- * the model's `extent` box covers from this camera. The box's corners bound its
- * projection, so nothing the model draws falls outside. */
+ * the model's `extent` box covers from this camera, so nothing the model draws
+ * falls outside. `sphere` tightens it by the model's bounding sphere too; the
+ * front-view fit leaves it off, so a model keeps the scale it was saved at. */
 export function modelFootprint(
 	camera: MeshCamera,
 	extent: ArrayLike<number>,
+	sphere = true,
 ): { x: number; y: number } {
-	let x = 0;
-	let y = 0;
-	for (let i = 0; i < 8; i++) {
-		const w = modelToWorld(camera, [
+	const corners = Array.from({ length: 8 }, (_, i) =>
+		modelToWorld(camera, [
 			i & 1 ? extent[0] : -extent[0],
 			i & 2 ? extent[1] : -extent[1],
 			i & 4 ? extent[2] : -extent[2],
-		]);
-		// A corner at or behind the lens would project to infinity.
-		const z = Math.max(w[2], camera.distance * 0.05);
-		x = Math.max(x, Math.abs((camera.focal * w[0]) / z));
-		y = Math.max(y, Math.abs((camera.focal * w[1]) / z));
+		]),
+	);
+	// The model fits the unit sphere, so no vertex is nearer than its front. A box
+	// corner can be, and on a wide lens would blow the box up far past the model.
+	const near = Math.max(
+		camera.distance - camera.radius,
+		camera.distance * 0.05,
+	);
+	const points = corners.filter((c) => c[2] >= near);
+	// The box cut off at that depth: its edges crossing it close the cut face.
+	for (let a = 0; a < 8; a++) {
+		for (const bit of [1, 2, 4]) {
+			if (a & bit) continue;
+			const p = corners[a];
+			const q = corners[a | bit];
+			if (p[2] < near === q[2] < near) continue;
+			const t = (near - p[2]) / (q[2] - p[2]);
+			points.push([p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1]), near]);
+		}
+	}
+	let x = 0;
+	let y = 0;
+	for (const w of points) {
+		x = Math.max(x, Math.abs((camera.focal * w[0]) / w[2]));
+		y = Math.max(y, Math.abs((camera.focal * w[1]) / w[2]));
+	}
+	// The sphere, centred on the lens axis, projects to a circle; up close that's the
+	// tighter bound of the two.
+	const { distance: d, radius: r } = camera;
+	if (sphere && d > r) {
+		const circle = (camera.focal * r) / Math.sqrt(d * d - r * r);
+		x = Math.min(x, circle);
+		y = Math.min(y, circle);
 	}
 	return { x: Math.max(x, 1e-3), y: Math.max(y, 1e-3) };
 }
