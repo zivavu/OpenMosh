@@ -524,43 +524,78 @@
 		return null;
 	}
 
+	let toolsEl = $state<HTMLElement | null>(null);
+	/** Latest pointer during a drag; the scroll loop reads it every frame. */
+	let dragPointer: { x: number; y: number } | null = null;
+
+	/** How far from the list's visible edge a drag starts scrolling it. */
+	const SCROLL_ZONE_PX = 90;
+	/** At the edge or past it. */
+	const SCROLL_MAX_PX_PER_S = 1200;
+
 	function stopAutoScroll() {
+		dragPointer = null;
 		if (scrollRafId !== null) {
 			cancelAnimationFrame(scrollRafId);
 			scrollRafId = null;
 		}
 	}
 
-	function startAutoScroll(touchY: number) {
-		stopAutoScroll();
+	/** Scroll speed, px/s, for a pointer at `y` over a list visible from `top` to `bottom`. */
+	function edgeSpeed(y: number, top: number, bottom: number): number {
+		const zone = Math.min(SCROLL_ZONE_PX, (bottom - top) / 3);
+		if (zone <= 0) return 0;
+		const up = Math.min(1, (top + zone - y) / zone);
+		if (up > 0) return -SCROLL_MAX_PX_PER_S * up * up;
+		const down = Math.min(1, (y - (bottom - zone)) / zone);
+		if (down > 0) return SCROLL_MAX_PX_PER_S * down * down;
+		return 0;
+	}
+
+	function trackDragPointer(x: number, y: number) {
+		dragPointer = { x, y };
+		if (scrollRafId !== null) return;
 		const box = scrollBox();
 		if (!box) return;
-		const rect = box.getBoundingClientRect();
-		const zone = 60;
-		const maxSpeed = 8;
-
-		function step() {
-			if (touchDragFromIndex === null) return;
-			const distTop = touchY - rect.top;
-			const distBottom = rect.bottom - touchY;
-			if (distTop < zone && distTop > 0) {
-				box!.scrollTop -= maxSpeed * (1 - distTop / zone);
-			} else if (distBottom < zone && distBottom > 0) {
-				box!.scrollTop += maxSpeed * (1 - distBottom / zone);
-			} else {
+		let last = performance.now();
+		const step = (now: number) => {
+			const dt = Math.min(0.05, (now - last) / 1000);
+			last = now;
+			const p = dragPointer;
+			if (!p) {
+				scrollRafId = null;
 				return;
 			}
+			const rect = box.getBoundingClientRect();
+			// The pinned tools cover the box's own top edge.
+			const top = Math.max(
+				rect.top,
+				toolsEl?.getBoundingClientRect().bottom ?? 0,
+			);
+			if (p.x >= rect.left && p.x <= rect.right) {
+				box.scrollTop += edgeSpeed(p.y, top, rect.bottom) * dt;
+			}
 			scrollRafId = requestAnimationFrame(step);
-		}
-
+		};
 		scrollRafId = requestAnimationFrame(step);
 	}
+
+	// Document-wide: the pointer is often over the pinned tools, outside every row.
+	$effect(() => {
+		if (dragFromIndex === null || touchDragFromIndex !== null) return;
+		const onDragOver = (e: DragEvent) => trackDragPointer(e.clientX, e.clientY);
+		document.addEventListener("dragover", onDragOver);
+		return () => {
+			document.removeEventListener("dragover", onDragOver);
+			stopAutoScroll();
+		};
+	});
 
 	function onDocTouchMove(e: TouchEvent) {
 		if (touchDragFromIndex === null) return;
 		e.preventDefault();
 		const touch = e.touches[0];
-		startAutoScroll(touch.clientY);
+		trackDragPointer(touch.clientX, touch.clientY);
 		const el = document.elementFromPoint(touch.clientX, touch.clientY);
 		if (!el) return;
 		const itemEl = el.closest?.("[data-effect-index]") as HTMLElement | null;
@@ -604,7 +639,7 @@
 
 <aside class="effects-panel">
 	<!-- Head, presets and search stay put while the chain scrolls under them. -->
-	<div class="panel-tools">
+	<div class="panel-tools" bind:this={toolsEl}>
 		{#if !headless}
 			<header class="panel-head">
 				<span class="rack-label">Signal chain</span>
