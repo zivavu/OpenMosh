@@ -6,4 +6,4 @@ OpenMosh runs entirely in the browser. There's no server and no accounts, and yo
 
 Open a [regular issue](https://github.com/zivavu/OpenMosh/issues/new?template=bug.yml) with the steps to reproduce and the browser you used.
 
-Only the version live at [open-mosh.vercel.app](https://open-mosh.vercel.app/) gets fixes.
+Only the version live at [openmosh.com](https://openmosh.com/) gets fixes.
