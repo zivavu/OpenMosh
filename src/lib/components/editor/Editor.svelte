@@ -180,6 +180,7 @@
 		type ModelProblem,
 	} from "../../mesh/support";
 	import { SingleProxy } from "../../editor/single-proxy.svelte";
+	import type { ProxyAction } from "../../video/proxy-status";
 	import {
 		addClip,
 		appendMediaLane,
@@ -1717,6 +1718,11 @@
 	}
 
 	/** Clips pointing at a removed source draw nothing; an empty pool shows the placeholder. */
+	function sourceProxyAction(id: string, action: ProxyAction["kind"]) {
+		if (action === "retry") sourceRegistry.retryProxy(id);
+		else sourceRegistry.setProxyEnabled(id, action === "enable");
+	}
+
 	function removeSequenceSource(id: string) {
 		sourceRegistry.remove(id);
 		setMediaTimeline(detachMediaSource(mediaTimeline, id));
@@ -4061,10 +4067,7 @@
 				onRemove={removeSequenceSource}
 				onReorder={(from, to) => sourceRegistry.reorder(from, to)}
 				onAssign={assignMediaClipSource}
-				onProxyAction={(id, action) => {
-					if (action === "retry") sourceRegistry.retryProxy(id);
-					else sourceRegistry.setProxyEnabled(id, action === "enable");
-				}}
+				onProxyAction={sourceProxyAction}
 			/>
 		{/if}
 		<!-- Hidden, never unmounted: tearing the canvas down would take the renderer with it. -->
@@ -4393,6 +4396,7 @@
 				edits={sourceRegistry.edits}
 				onEditChange={(id, edit) => sourceRegistry.setEdit(id, edit)}
 				onEditingChange={onSourceEditingChange}
+				onProxyAction={sourceProxyAction}
 			/>
 		{/if}
 		{#if showVideoBar && !videoIsMaster}
