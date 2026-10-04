@@ -16,7 +16,7 @@ bun run build      # Production build
 bun preview        # Preview production build
 bun check          # TypeScript + Svelte type-check (svelte-check + tsc)
 bun test           # Unit suite (bun:test)
-bun run test:e2e   # Playwright suite under tests/e2e (`bunx playwright install chromium` once)
+bun run test:e2e   # Playwright suite under tests/e2e (`bunx playwright install chromium firefox` once)
 ```
 
 Unit tests sit next to what they cover as `*.test.ts` and cover pure logic only.
