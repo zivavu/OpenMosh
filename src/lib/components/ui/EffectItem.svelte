@@ -17,6 +17,7 @@
 	import {
 		FREQ_PRESETS,
 		getDefinition,
+		isParamVisible,
 		type EffectInstance,
 		type FreqBand,
 		type VolumeLink,
@@ -311,7 +312,7 @@
 
 			{#if effect.expanded && !rolledChain}
 				<div class="params">
-					{#each def.params.filter((p) => !p.visibleWhen || p.visibleWhen(effect.values)) as param}
+					{#each def.params.filter((p) => isParamVisible(p, effect)) as param}
 						<div class="param-row">
 							<label class="param-label" for="{effect.instanceId}-{param.key}"
 								>{param.label}</label

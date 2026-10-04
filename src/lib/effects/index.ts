@@ -1,5 +1,6 @@
 export * from "./types";
 export { getDefinition } from "./hydrate";
+export { isParamVisible } from "./visibility";
 export { EFFECT_DEFINITIONS } from "./definitions";
 export {
 	loadPresets,
