@@ -89,6 +89,15 @@ export class SingleProxy {
 		this.disabled = !enabled;
 	}
 
+	/** The "Optimize large videos" setting changed: follow it unless this file has its own say. */
+	refresh() {
+		if (!this.#opts.active()) return;
+		const disabled = isProxyDisabled(this.#opts.file());
+		if (disabled === this.disabled) return;
+		this.#reset();
+		this.disabled = disabled;
+	}
+
 	retry = () => {
 		this.#jobFor = null;
 		this.failed = false;

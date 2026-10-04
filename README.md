@@ -63,7 +63,7 @@ Hardware-wise, anything with a GPU from the last decade previews fine. Export is
 The chain runs one full-screen shader pass per enabled effect, so cost scales with how many effects are live and with the resolution they run at.
 
 - The preview renders at the size it's displayed, not at the output size. Export switches the renderer to full output resolution for the duration of the capture.
-- Video above 1080p gets transcoded to a preview proxy in a worker. OpenMosh times the decode first and picks a 1920 or 1280 long edge depending on how the machine coped. You can turn the proxy off per file when you need to judge the original.
+- Video above 1080p gets transcoded to a preview proxy in a worker. OpenMosh times the decode first and picks a 1920 or 1280 long edge depending on how the machine coped. You can turn the proxy off per file when you need to judge the original, or for every video by unticking Optimize large videos in the Mosh settings.
 - Export encodes in parallel across worker threads. Chromium runs one software encoder mostly single-pipeline, so more cores means a faster export.
 
 ---

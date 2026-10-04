@@ -628,6 +628,9 @@
 		punch: audioPunch,
 	});
 	let showFps = $state(saved.showFps ?? DEFAULT_SETTINGS.showFps);
+	let previewProxies = $state(
+		saved.previewProxies ?? DEFAULT_SETTINGS.previewProxies,
+	);
 	let videoLoop = $state(saved.loopVideo ?? DEFAULT_SETTINGS.loopVideo);
 	let sourceFit = $state<SourceFit>(
 		saved.sourceFit ?? DEFAULT_SETTINGS.sourceFit,
@@ -1491,6 +1494,16 @@
 				);
 			});
 	});
+	// Saved here rather than with the other settings, so the refresh reads the new value.
+	$effect(() => {
+		const on = previewProxies;
+		untrack(() => {
+			updateSettings({ previewProxies: on });
+			singleProxy.refresh();
+			sourceRegistry.refreshProxies();
+		});
+	});
+
 	let sequenceSources = $derived(sourceRegistry.sources);
 	/** The pool is empty until the opening file lands, so the placeholder waits for that. */
 	let poolFilled = $state(false);
@@ -4224,6 +4237,15 @@
 						/>
 						<div class="settings-divider"></div>
 					{/if}
+					<div class="mosh-setting-row">
+						<label
+							for="preview-proxies"
+							title="Videos over 1080p preview from a smaller copy made in the background. Export always uses the original. Clicking a video's badge overrides this for that one file."
+						>
+							Optimize large videos
+						</label>
+						<Checkbox id="preview-proxies" bind:checked={previewProxies} />
+					</div>
 					<div class="mosh-setting-row">
 						<label for="show-fps">Show FPS</label>
 						<Checkbox id="show-fps" bind:checked={showFps} />

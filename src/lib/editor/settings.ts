@@ -31,6 +31,8 @@ export interface EditorSettings {
 	loopVideo: boolean;
 	/** How sources that don't match the output aspect are fitted. */
 	sourceFit: "stretch" | "contain" | "cover";
+	/** Videos over 1080p preview from a smaller copy unless a file says otherwise. */
+	previewProxies: boolean;
 	/** Whether the upload screen's demo keeps moshing behind the UI. */
 	demoBackground: boolean;
 	/** When the demo last ran too slow for its 3D worlds; 0 if it never has. */
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	loopVideo: true,
 	// Only bites when source and output aspects differ; "contain" never crops.
 	sourceFit: "contain",
+	previewProxies: true,
 	demoBackground: true,
 	demoSlowAt: 0,
 };
