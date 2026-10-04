@@ -9,14 +9,14 @@ bun install
 bun dev            # http://localhost:5173
 bun check          # TypeScript + Svelte type-check
 bun test           # unit tests
-bun run test:e2e   # Playwright; run `bunx playwright install chromium` once first
+bun run test:e2e   # Playwright; run `bunx playwright install chromium firefox` once first
 ```
 
 ## Conventions
 
 - bun, not npm or yarn. Svelte 5 runes only.
 - Unit tests sit next to what they cover and run under `bun:test`, for pure logic only. Anything that needs a browser API goes in the Playwright suite under `tests/e2e`.
-- Run `bun check` and both test suites before opening a PR. `bunx playwright install chromium` once, first time. CI runs the same checks, plus formatting and the build, and a PR can't merge until they pass.
+- Run `bun check` and both test suites before opening a PR. `bunx playwright install chromium firefox` once, first time. CI runs the same checks, plus formatting and the build, and a PR can't merge until they pass.
 - A new effect needs its `EffectDefinition` in `src/lib/effects/definitions.ts`, its GLSL plus `EffectShaderDef` in `src/lib/gl/effect-shaders.ts`, and an entry in `src/lib/effects/curation.ts` (where it sits in the chain for the Curated mosh style), unless it's `moshable: false`. A unit test catches a missing entry.
 - `bun dev` also serves a shader lab at `/lab/` for auditioning open-source ISF shaders on real footage before porting one. It's dev-only and not part of the build; see `lab/README.md`.
 

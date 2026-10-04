@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 5173;
+/** The only spec Firefox runs; Chromium skips it and runs everything else. Local
+ * only: CI's runners have no GL driver Firefox can use. */
+const ENGINE_SMOKE = /engines\.spec\.ts/;
 
 /**
  * End-to-end config for the parts of OpenMosh no unit test can reach: WebGL2
@@ -50,6 +53,7 @@ export default defineConfig({
 	projects: [
 		{
 			name: "chromium",
+			testIgnore: ENGINE_SMOKE,
 			use: {
 				...devices["Desktop Chrome"],
 				launchOptions: {
@@ -67,6 +71,23 @@ export default defineConfig({
 				},
 			},
 		},
+		...(process.env.CI
+			? []
+			: [
+					{
+						name: "firefox",
+						testMatch: ENGINE_SMOKE,
+						use: {
+							...devices["Desktop Firefox"],
+							launchOptions: {
+								firefoxUserPrefs: {
+									"media.autoplay.default": 0,
+									"media.volume_scale": "0.0",
+								},
+							},
+						},
+					},
+				]),
 	],
 	webServer: {
 		command: `bun run dev --port ${PORT} --strictPort`,
