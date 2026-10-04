@@ -35,6 +35,9 @@ export class VideoPreviewPlayer {
 	#pastSpan = false;
 	#muted = false;
 	#disposed = false;
+	/** A frame went out since the last start or seek. Until one has, a paused player
+	 * shows the nearest decoded frame, or a fresh texture stays blank. */
+	#shown = false;
 
 	// Wall-clock to media-time mapping: baseMedia + elapsed wall time × speed while playing.
 	#baseMedia = 0;
@@ -179,7 +182,16 @@ export class VideoPreviewPlayer {
 			return null;
 		}
 
-		return this.#queue.takeDue(t);
+		const due = this.#queue.takeDue(t);
+		if (due) {
+			this.#shown = true;
+			return due;
+		}
+		// A stream can open just past the playhead, so nothing is due until it moves.
+		if (this.playing || this.#shown) return null;
+		const head = this.#queue.takeHead();
+		if (head) this.#shown = true;
+		return head;
 	}
 
 	dispose() {
@@ -234,6 +246,7 @@ export class VideoPreviewPlayer {
 		this.#baseMedia = t;
 		this.#baseWall = performance.now();
 		this.currentTime = t;
+		this.#shown = false;
 		this.#queue.start(t);
 		if (this.playing) this.#startAudio();
 	}
