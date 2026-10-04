@@ -40,7 +40,6 @@
 		loadRenderSettings,
 		saveRenderSettings,
 	} from "../../editor/render-settings";
-	import { readJson, readRaw, writeJson, writeRaw } from "../../storage";
 	import { addTrack, getTrack, trackToFile } from "../../audio/track-library";
 	import { SequenceMixer } from "../../mix/mixer.svelte";
 	import { SourceAudioBank } from "../../mix/source-audio.svelte";
@@ -251,6 +250,10 @@
 	import SpeedControl from "../ui/SpeedControl.svelte";
 	import TimelineStack from "../ui/TimelineStack.svelte";
 	import type { TimelineStackState } from "../../editor/timeline-stack.svelte";
+	import {
+		LaneFolds,
+		TimelineSplit,
+	} from "../../editor/timeline-layout.svelte";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
 	import { setFeedbackChain } from "../ui/feedback.svelte";
 	import ButtonGroup from "../ui/ButtonGroup.svelte";
@@ -2983,145 +2986,8 @@
 	/** The timeline's shared axis, once a stack is mounted. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
 
-	/** The lane list, so the width its own scrollbar takes can be measured. */
-	let laneListEl = $state<HTMLElement | null>(null);
-	/** What the lane list's vertical scrollbar costs it; zero where scrollbars overlay. */
-	let laneScrollbar = $state(0);
-
-	$effect(() => {
-		const el = laneListEl;
-		if (!el) return;
-		const measure = () => (laneScrollbar = el.offsetWidth - el.clientWidth);
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(el);
-		return () => observer.disconnect();
-	});
-
-	/** Which side of the column gets the room is the user's call, and remembered. */
-	const SPLIT_KEY = "openmosh-timeline-split";
-	/** Enough for the toolbar, the ruler, the selection bar and a lane or two. */
-	const SPLIT_MIN = 150;
-	/** A lane row is 30px, and the split never leaves less than one of them. */
-	const LANE_MIN_H = 30;
-	/** What the preview keeps however far the split is dragged. */
-	const PREVIEW_MIN = 200;
-
-	function loadSplit(): number | null {
-		const raw = readRaw(SPLIT_KEY);
-		const px = raw === null ? Number.NaN : Number(raw);
-		return Number.isFinite(px) && px > 0 ? px : null;
-	}
-
-	/** null is automatic: the stack's own height, under its cap. */
-	let timelineSplit = $state<number | null>(loadSplit());
-	let splitDragging = $state(false);
-	let mainAreaEl = $state<HTMLElement | null>(null);
-	let previewSlotEl = $state<HTMLElement | null>(null);
-
-	function splitStack(): HTMLElement | null {
-		return mainAreaEl?.querySelector<HTMLElement>(".tl-stack") ?? null;
-	}
-
-	/** The tallest the timeline may go: its share of the column, leaving the preview something. */
-	function splitCeiling(startSplit: number): number {
-		const area = mainAreaEl;
-		if (!area) return startSplit;
-		const cap = area.clientHeight * 0.45;
-		const preview = previewSlotEl;
-		const previewH =
-			preview && !preview.classList.contains("hidden")
-				? preview.getBoundingClientRect().height
-				: 0;
-		// With the preview away in grid mode there is no floor to keep.
-		const byPreview =
-			previewH > 0 ? startSplit + Math.max(0, previewH - PREVIEW_MIN) : cap;
-		return Math.max(SPLIT_MIN, Math.min(cap, byPreview));
-	}
-
-	/** The shortest the timeline may go: its fixed chrome plus one lane showing. */
-	function splitFloor(startSplit: number): number {
-		const lanes = mainAreaEl?.querySelector<HTMLElement>(".tl-layers");
-		const lanesH = lanes?.getBoundingClientRect().height ?? 0;
-		return Math.max(SPLIT_MIN, startSplit - lanesH + LANE_MIN_H);
-	}
-
-	function commitSplit() {
-		writeRaw(SPLIT_KEY, timelineSplit === null ? "" : String(timelineSplit));
-	}
-
-	function beginSplitDrag(e: PointerEvent) {
-		if (e.button !== 0) return;
-		const stack = splitStack();
-		if (!stack) return;
-		e.preventDefault();
-		const startY = e.clientY;
-		const startSplit = stack.getBoundingClientRect().height;
-		const ceiling = splitCeiling(startSplit);
-		const floor = splitFloor(startSplit);
-		splitDragging = true;
-
-		const move = (ev: PointerEvent) => {
-			const next = startSplit - (ev.clientY - startY);
-			timelineSplit = Math.round(Math.min(ceiling, Math.max(floor, next)));
-		};
-		const up = () => {
-			splitDragging = false;
-			window.removeEventListener("pointermove", move);
-			window.removeEventListener("pointerup", up);
-			window.removeEventListener("pointercancel", up);
-			commitSplit();
-		};
-		window.addEventListener("pointermove", move);
-		window.addEventListener("pointerup", up);
-		window.addEventListener("pointercancel", up);
-	}
-
-	function resetSplit() {
-		timelineSplit = null;
-		commitSplit();
-	}
-
-	function onSplitKeydown(e: KeyboardEvent) {
-		const stack = splitStack();
-		if (!stack) return;
-		const current = stack.getBoundingClientRect().height;
-		const step = e.shiftKey ? 48 : 16;
-		const floor = splitFloor(current);
-		if (e.key === "ArrowUp") {
-			timelineSplit = Math.round(
-				Math.min(splitCeiling(current), Math.max(floor, current + step)),
-			);
-		} else if (e.key === "ArrowDown") {
-			timelineSplit = Math.round(Math.max(floor, current - step));
-		} else if (e.key === "Home") {
-			e.preventDefault();
-			resetSplit();
-			return;
-		} else {
-			return;
-		}
-		e.preventDefault();
-		commitSplit();
-	}
-
-	/** Lanes folded to a strip; a view choice like solo, not saved. */
-	const FOLD_KEY = "openmosh-folded-lanes";
-	/** Lane ids from every project share the key, so only the latest folds stay. */
-	const MAX_FOLDED = 500;
-	const saveFolds = (ids: Set<string>) =>
-		writeJson(FOLD_KEY, [...ids].slice(-MAX_FOLDED));
-	let foldedLaneIds = $state<Set<string>>(
-		new Set(readJson<string[]>(FOLD_KEY, [])),
-	);
-
-	function toggleLaneFold(laneId: string) {
-		const next = new Set(foldedLaneIds);
-		if (next.has(laneId)) next.delete(laneId);
-		else next.add(laneId);
-		foldedLaneIds = next;
-		saveFolds(next);
-	}
+	const timelineSplit = new TimelineSplit();
+	const laneFolds = new LaneFolds();
 
 	const handleKeydown = createKeyboardHandler({
 		save,
@@ -3279,19 +3145,7 @@
 		...fxLanes.map((lane) => lane.id),
 	]);
 
-	let allLanesFolded = $derived(
-		laneIds.length > 0 && laneIds.every((id) => foldedLaneIds.has(id)),
-	);
-
-	function toggleAllFolds() {
-		const next = new Set(foldedLaneIds);
-		for (const id of laneIds) {
-			if (allLanesFolded) next.delete(id);
-			else next.add(id);
-		}
-		foldedLaneIds = next;
-		saveFolds(next);
-	}
+	let allLanesFolded = $derived(laneFolds.allFolded(laneIds));
 
 	// Solo only counts while its lane is on the stack; the id is kept so undo brings it back.
 	let soloLaneId = $derived(
@@ -4240,8 +4094,8 @@
 	/>
 	<div
 		class="main-area"
-		bind:this={mainAreaEl}
-		style="--tl-vscroll: {laneScrollbar}px"
+		bind:this={timelineSplit.mainAreaEl}
+		style="--tl-vscroll: {timelineSplit.laneScrollbar}px"
 	>
 		<TopBar onExit={onExit ? handleExit : undefined}>
 			{#snippet status()}
@@ -4439,7 +4293,7 @@
 		<div
 			class="preview-slot"
 			class:hidden={sequenceGridOpen}
-			bind:this={previewSlotEl}
+			bind:this={timelineSplit.previewSlotEl}
 		>
 			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== "none"}
 				<!-- Single mode has no source chip, so this says what would otherwise be silent. -->
@@ -4786,7 +4640,7 @@
 			<!-- The split between the output and the lanes; its hit area is taller than the grip. -->
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-			<div class="tl-split" class:held={splitDragging}>
+			<div class="tl-split" class:held={timelineSplit.dragging}>
 				<span
 					class="tl-split-grip"
 					role="separator"
@@ -4794,13 +4648,13 @@
 					aria-label="Resize the timeline"
 					title="Drag to resize the timeline · double-click to reset"
 					tabindex="0"
-					onpointerdown={beginSplitDrag}
-					ondblclick={resetSplit}
-					onkeydown={onSplitKeydown}
+					onpointerdown={timelineSplit.beginDrag}
+					ondblclick={timelineSplit.reset}
+					onkeydown={timelineSplit.onKeydown}
 				></span>
 			</div>
 			<TimelineStack
-				height={timelineSplit}
+				height={timelineSplit.height}
 				bind:axis={timelineAxis}
 				trackDuration={textDuration}
 				currentTime={textTime}
@@ -4904,7 +4758,7 @@
 							title={allLanesFolded
 								? "Unfold every lane"
 								: "Fold every lane to a strip"}
-							onclick={toggleAllFolds}
+							onclick={() => laneFolds.toggleAll(laneIds)}
 						>
 							{#if allLanesFolded}
 								<ChevronsUpDown size={12} /> Unfold all
@@ -4951,12 +4805,12 @@
 					{/if}
 				{/snippet}
 				<!-- Read bottom to top: the transports at the foot are the inputs. -->
-				<div class="tl-layers" bind:this={laneListEl}>
+				<div class="tl-layers" bind:this={timelineSplit.laneListEl}>
 					{#if mediaTimeline.enabled}
 						<MediaTimelineLane
 							timeline={mediaTimeline}
-							{foldedLaneIds}
-							onToggleFold={toggleLaneFold}
+							foldedLaneIds={laneFolds.ids}
+							onToggleFold={laneFolds.toggle}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
@@ -4981,8 +4835,8 @@
 					{#if textTimeline.enabled}
 						<TextTimelineLane
 							timeline={textTimeline}
-							{foldedLaneIds}
-							onToggleFold={toggleLaneFold}
+							foldedLaneIds={laneFolds.ids}
+							onToggleFold={laneFolds.toggle}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
@@ -5002,8 +4856,8 @@
 					{#if isSequenceMode && fxLanes.length > 0}
 						<FxLanes
 							lanes={fxLanes}
-							{foldedLaneIds}
-							onToggleFold={toggleLaneFold}
+							foldedLaneIds={laneFolds.ids}
+							onToggleFold={laneFolds.toggle}
 							{layerOrder}
 							{draggingLaneId}
 							onLaneDragStart={startLayerDrag}
@@ -5036,8 +4890,8 @@
 							edits={sourceRegistry.edits}
 							sourceEndsOf={audioSourceEnds}
 							orderBase={layerOrder.length}
-							{foldedLaneIds}
-							onToggleFold={toggleLaneFold}
+							foldedLaneIds={laneFolds.ids}
+							onToggleFold={laneFolds.toggle}
 							trackLength={decodedLength}
 							onDropTrack={dropTrack}
 						/>
