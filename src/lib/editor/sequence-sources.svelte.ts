@@ -374,6 +374,22 @@ export class SequenceSourceRegistry {
 		const src = this.get(id);
 		if (!src || src.kind !== "video") return;
 		setProxyDisabled(src.file, !enabled);
+		this.#applyProxy(src, enabled);
+	}
+
+	/** The "Optimize large videos" setting changed: follow it wherever a file has no say. */
+	refreshProxies() {
+		for (const src of this.sources) {
+			if (src.kind !== "video" || !needsProxy(src.width ?? 0, src.height ?? 0))
+				continue;
+			const enabled = !isProxyDisabled(src.file);
+			if (enabled === !src.proxyDisabled) continue;
+			this.#applyProxy(src, enabled);
+		}
+	}
+
+	#applyProxy(src: SequenceSource, enabled: boolean) {
+		const id = src.id;
 		this.#proxyJobs.get(id)?.cancel();
 		this.#proxyJobs.delete(id);
 		src.proxyFile = undefined;
