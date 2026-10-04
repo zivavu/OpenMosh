@@ -179,13 +179,7 @@
 		isOtherModelFile,
 		type ModelProblem,
 	} from "../../mesh/support";
-	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
-	import { openVideoFrameSource } from "../../video/frame-source";
-	import { proxyStatus } from "../../video/proxy-status";
-	import {
-		isProxyDisabled,
-		setProxyDisabled,
-	} from "../../video/proxy-preference";
+	import { SingleProxy } from "../../editor/single-proxy.svelte";
 	import {
 		addClip,
 		appendMediaLane,
@@ -222,11 +216,8 @@
 	} from "../../media";
 	import { chainClipMoshSnapshot } from "../../editor/chain-clip";
 	import {
-		deleteSequenceMediaProxy,
-		getSequenceMediaProxy,
 		loadMediaPool,
 		pruneSequenceMediaThrottled,
-		putSequenceMediaProxy,
 		saveMediaPool,
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
@@ -394,7 +385,7 @@
 
 	$effect(() => {
 		if (!isVideo) return;
-		const proxy = singleProxyFor === file ? singleProxy : null;
+		const proxy = singleProxy.forFile(file);
 		const previewFile = proxy ?? file;
 		// Read untracked: tracking would rebuild the player.
 		const media = proxy
@@ -447,149 +438,10 @@
 		};
 	});
 
-	// Single mode's file is not pooled, so its proxy has no registry: one job per file.
-	let singleProxy = $state<File | null>(null);
-	/** The file `singleProxy` belongs to; plain, so a stale proxy can't leak into the player. */
-	let singleProxyFor: File | null = null;
-	let singleJob: ProxyJob | null = null;
-	let singleJobFor: File | null = null;
-	/** Set on failure so it isn't retried in a loop; the toast's Retry clears it. */
-	let singleProxyFailed = $state(false);
-	/** Single mode has no proxy chip, so it keeps the fields a pooled source carries. */
-	let singleProxyPending = $state(false);
-	let singleProxyProgress = $state<number | undefined>(undefined);
-	let singleProxySize = $state<{ width: number; height: number } | null>(null);
-	let singleProxyReason = $state<string | undefined>(undefined);
-	/** User asked to preview from the original; stored per file in video/proxy-preference.ts. */
-	let singleProxyDisabled = $state(false);
-	const singleProxyStatus = $derived(
-		proxyStatus({
-			width: previewPlayer?.width,
-			height: previewPlayer?.height,
-			proxyFile: singleProxy ?? undefined,
-			proxyWidth: singleProxySize?.width,
-			proxyHeight: singleProxySize?.height,
-			proxyPending: singleProxyPending,
-			proxyProgress: singleProxyProgress,
-			proxyFailed: singleProxyFailed,
-			proxyReason: singleProxyReason,
-			// Only meaningful for media a proxy would be built for.
-			proxyDisabled:
-				singleProxyDisabled &&
-				needsProxy(previewPlayer?.width ?? 0, previewPlayer?.height ?? 0),
-		}),
-	);
-
-	/** Turn the single-mode preview proxy on or off; the preview badge is the entry point. */
-	function setSingleProxyEnabled(enabled: boolean) {
-		const f = file;
-		if (!f) return;
-		setProxyDisabled(f, !enabled);
-		// Cleared, not set: the effect below re-reads the choice and decides.
-		singleJob?.cancel();
-		singleJob = null;
-		singleJobFor = null;
-		singleProxy = null;
-		singleProxyFor = null;
-		singleProxyFailed = false;
-		singleProxyPending = false;
-		singleProxyProgress = undefined;
-		singleProxySize = null;
-		singleProxyReason = undefined;
-		singleProxyDisabled = !enabled;
-	}
-
-	$effect(() => {
-		if (isSequenceMode || !isVideo) return;
-		const f = file;
-		if (singleJobFor !== f) {
-			// Different media: drop the previous file's proxy and job.
-			singleJob?.cancel();
-			singleJob = null;
-			singleJobFor = null;
-			singleProxy = null;
-			singleProxyFor = null;
-			singleProxyFailed = false;
-			singleProxyPending = false;
-			singleProxyProgress = undefined;
-			singleProxySize = null;
-			singleProxyReason = undefined;
-			singleProxyDisabled = isProxyDisabled(f);
-		}
-		// The player gates as well as sizes: files on the <video> fallback need no proxy.
-		const player = previewPlayer;
-		const w = player?.width ?? 0;
-		const h = player?.height ?? 0;
-		if (!player || !needsProxy(w, h)) return;
-		// The user asked for the original: no job, and the badge says so.
-		if (singleProxyDisabled) return;
-		if (singleJobFor === f || singleProxyFor === f || singleProxyFailed) return;
-		singleJobFor = f;
-		singleProxyPending = true;
-		void (async () => {
-			const stored = await getSequenceMediaProxy(f);
-			let proxy = stored;
-			if (!stored) {
-				const job = startProxyJob(f, {
-					onProgress: (progress) => {
-						if (f === file) singleProxyProgress = progress;
-					},
-					onSized: (width, height) => {
-						if (f === file) singleProxySize = { width, height };
-					},
-					onFailed: (reason) => {
-						if (f === file) singleProxyReason = reason;
-					},
-				});
-				singleJob = job;
-				proxy = await job.promise;
-			}
-			if (f !== file) return;
-			// A proxy that won't open is worse than none, so it gets the same decodability check.
-			let openedSize: { width: number; height: number } | null = null;
-			if (proxy) {
-				const opened = await openVideoFrameSource(proxy);
-				if (opened) {
-					// The finished file's real size; a stored proxy never announced one.
-					openedSize = { width: opened.width, height: opened.height };
-				}
-				opened?.queue.dispose();
-				if (!opened) {
-					proxy = null;
-					// A stored one that no longer opens has to go, or the retry finds it.
-					if (stored) void deleteSequenceMediaProxy(f).catch(() => {});
-				}
-			}
-			if (proxy) {
-				// Persisted under the file's own id, so re-opening the same video skips the transcode.
-				if (!stored) void putSequenceMediaProxy(f, proxy).catch(() => {});
-				singleProxy = proxy;
-				singleProxyFor = f;
-				singleProxySize = openedSize;
-				singleProxyPending = false;
-				singleProxyProgress = undefined;
-			} else {
-				// Not auto-retried; a persistent failure would loop.
-				singleProxyFailed = true;
-				singleProxyPending = false;
-				singleProxyProgress = undefined;
-				singleProxySize = null;
-				showToast(
-					`No smaller copy of "${f.name}" could be made. The preview plays the` +
-						" original, which may stutter. Export is unaffected.",
-					"error",
-					8000,
-					{
-						label: "Try again",
-						run: () => {
-							singleJobFor = null;
-							singleProxyFailed = false;
-							singleProxyReason = undefined;
-						},
-					},
-				);
-			}
-		})();
+	const singleProxy = new SingleProxy({
+		active: () => !isSequenceMode && isVideo,
+		file: () => file,
+		player: () => previewPlayer,
 	});
 
 	$effect(() => {
@@ -4246,33 +4098,30 @@
 			class:hidden={sequenceGridOpen}
 			bind:this={timelineSplit.previewSlotEl}
 		>
-			{#if !isSequenceMode && isVideo && singleProxyStatus.kind !== "none"}
+			{#if !isSequenceMode && isVideo && singleProxy.status.kind !== "none"}
 				<!-- Single mode has no source chip, so this says what would otherwise be silent. -->
 				<button
 					class="preview-proxy"
-					class:ok={singleProxyStatus.kind === "ready"}
-					class:warn={singleProxyStatus.kind === "failed"}
-					class:off={singleProxyStatus.kind === "off"}
-					title={`${singleProxyStatus.title} ${singleProxyStatus.action.hint}`}
+					class:ok={singleProxy.status.kind === "ready"}
+					class:warn={singleProxy.status.kind === "failed"}
+					class:off={singleProxy.status.kind === "off"}
+					title={`${singleProxy.status.title} ${singleProxy.status.action.hint}`}
 					onclick={() => {
-						const action = singleProxyStatus.action.kind;
-						if (action === "retry") {
-							singleJobFor = null;
-							singleProxyFailed = false;
-							singleProxyReason = undefined;
-						} else {
-							setSingleProxyEnabled(action === "enable");
-						}
+						const status = singleProxy.status;
+						if (status.kind === "none") return;
+						const action = status.action.kind;
+						if (action === "retry") singleProxy.retry();
+						else singleProxy.setEnabled(action === "enable");
 					}}
 				>
-					{#if singleProxyStatus.kind === "ready"}
+					{#if singleProxy.status.kind === "ready"}
 						<Zap size={9} fill="currentColor" />
-					{:else if singleProxyStatus.kind === "off"}
+					{:else if singleProxy.status.kind === "off"}
 						<ZapOff size={9} />
-					{:else if singleProxyStatus.kind === "failed"}
+					{:else if singleProxy.status.kind === "failed"}
 						<TriangleAlert size={9} />
 					{/if}
-					{singleProxyStatus.kind === "failed" ? "" : singleProxyStatus.badge}
+					{singleProxy.status.kind === "failed" ? "" : singleProxy.status.badge}
 				</button>
 			{/if}
 			<GlCanvas
