@@ -59,9 +59,11 @@ export class SingleProxy {
 		$effect(() => this.#run());
 	}
 
-	/** The proxy, if it was made for `file`. */
+	/** The proxy, if it was made for `file`. Reads `proxy` first, so an effect calling
+	 * this rebuilds when one lands. */
 	forFile(file: File): File | null {
-		return this.#proxyFor === file ? this.proxy : null;
+		const proxy = this.proxy;
+		return this.#proxyFor === file ? proxy : null;
 	}
 
 	#reset() {

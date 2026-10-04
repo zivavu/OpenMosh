@@ -395,9 +395,11 @@
 					duration: videoDuration,
 				}))
 			: undefined;
-		const swap = playerFile === file && !!proxy;
+		// Same file means only the decoder changed: the proxy landed, or was turned off.
+		const swap = playerFile === file;
 		const resume = untrack(() => ({
 			time: previewPlayer?.currentTime ?? 0,
+			playing: previewPlayer?.playing ?? false,
 			spanStart: videoSpanStart,
 			spanEnd: videoSpanEnd,
 			recordDuration: recordDuration,
@@ -416,7 +418,7 @@
 			if (videoEl) videoEl.muted = true;
 			videoDuration = p.duration;
 			if (swap) {
-				// Same media, cheaper decoder: keep the span and the playhead.
+				// Same media, other decoder: keep the span and the playhead.
 				videoSpanStart = resume.spanStart;
 				videoSpanEnd = resume.spanEnd;
 				recordDuration = resume.recordDuration;
@@ -429,7 +431,8 @@
 			// The probe may have built an element-sourced graph first; rebuild it sourceless.
 			if (audio.audioContext && !audio.trackFile) audio.disposeAudioGraph();
 			ensureVideoAudioGraph();
-			// Starts paused on purpose; see videoAudioUnlocked.
+			// Starts paused on purpose, see videoAudioUnlocked, unless a swap cut playback short.
+			if (swap && resume.playing) p.play();
 		});
 		return () => {
 			cancelled = true;
