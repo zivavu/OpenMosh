@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-	addMediaLayer,
+	addMediaLane,
 	canvasStats,
 	clipSpanFraction,
 	dragAwayFromLanes,
@@ -45,7 +45,7 @@ async function openLayers(page: Parameters<typeof openEditor>[0]) {
 		track: { seconds: TRACK_SECONDS },
 	});
 	await waitForRender(page);
-	await addMediaLayer(page);
+	await addMediaLane(page);
 	// Every drop below leans on the new lane starting empty.
 	await expect(mediaClips(page, LAYER)).toHaveCount(0);
 }

@@ -81,15 +81,15 @@ const CLIP_ROWS: ShortcutRow[] = [
 	{
 		keys: ["Shift+Drag"],
 		description:
-			"Box-select the clips it touches, and on layers the joins inside it",
+			"Box-select the clips it touches, and on media lanes the joins inside it",
 	},
 	{
-		keys: ["Click a layer join"],
+		keys: ["Click a join on a media lane"],
 		description:
 			"Set its transition; clicking one of several selected edits them all",
 	},
 	{
-		keys: ["Shift+Click a layer join"],
+		keys: ["Shift+Click a join on a media lane"],
 		description: "Add or remove it from the selected joins",
 	},
 	{
@@ -104,7 +104,7 @@ const CLIP_ROWS: ShortcutRow[] = [
 	{
 		keys: ["Dbl-click", "Ctrl/Cmd+Click"],
 		description:
-			"Add a clip in empty lane space; on a media layer it shows the neighbouring clip's media, previewed while Ctrl is held",
+			"Add a clip in empty lane space; on a media lane it shows the neighbouring clip's media, previewed while Ctrl is held",
 	},
 	{ keys: ["Ctrl/Cmd+Click a clip"], description: "Split it at the cursor" },
 	{
@@ -152,8 +152,8 @@ const CLIP_MOSH: ShortcutRow = {
 		"Previous or next mosh of the selected clip; → past the newest rolls a fresh one. Nothing selected, nothing rolls",
 };
 
-const MEDIA_LAYERS: ShortcutGroup = {
-	title: "Media layers",
+const MEDIA_LANES: ShortcutGroup = {
+	title: "Media lanes",
 	shortcuts: [
 		{
 			keys: ["Click a thumb"],
@@ -203,7 +203,7 @@ export function editorShortcutGroups(opts: {
 			: text || media
 				? [CLIPS]
 				: []),
-		...(media ? [MEDIA_LAYERS] : []),
+		...(media ? [MEDIA_LANES] : []),
 	];
 }
 

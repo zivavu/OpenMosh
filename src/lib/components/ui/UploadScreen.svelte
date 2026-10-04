@@ -651,7 +651,7 @@
 				{:else if selectedMode === "slideshow"}
 					A pile of media and a track. It finds the BPM and cuts on the beat.
 				{:else if selectedMode === "sequence"}
-					Your song on a timeline. The media goes on layers, cut into clips with
+					Your song on a timeline. The media goes on lanes, cut into clips with
 					their own effects. 3D models (OBJ, STL, GLB, FBX) work here too.
 				{:else}
 					One image or video. Mosh it, then lock whatever survived and roll

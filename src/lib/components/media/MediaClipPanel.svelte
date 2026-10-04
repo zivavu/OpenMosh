@@ -226,12 +226,12 @@
 
 <ClipPanel
 	open={!!clip && !!lane}
-	emptyText="Select a layer clip to edit it."
+	emptyText="Select a media clip to edit it."
 	{section}
 	title={lane?.name ?? ""}
 	subtitle={source?.name}
 	{onClose}
-	closeLabel="Close layer clip"
+	closeLabel="Close media clip"
 >
 	{#snippet controls()}
 		{#if clip && lane}
@@ -239,7 +239,7 @@
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
 					class="row"
-					title="What this clip shows. Every clip on the lane shares its placement and effects, so cutting the lane up is how one layer plays several images."
+					title="What this clip shows. Every clip on the lane shares its placement and effects, so cutting the lane up is how one lane plays several images."
 				>
 					<label for="mc-source">Media</label>
 					<select
@@ -331,7 +331,7 @@
 				{/if}
 			{/if}
 
-			<FadeRows {clip} noun="this layer" idPrefix="mc" onFade={setFade} />
+			<FadeRows {clip} noun="this media" idPrefix="mc" onFade={setFade} />
 
 			<TransitionRows
 				transitions={[clip.transition]}
@@ -349,7 +349,7 @@
 						own.
 					</p>
 				{:else}
-					<div class="row" title="Play this layer's video sound">
+					<div class="row" title="Play this lane's video sound">
 						<label for="mc-sound">Sound</label>
 						<Checkbox
 							id="mc-sound"
@@ -382,7 +382,7 @@
 						</div>
 						<div
 							class="row"
-							title="Let this layer's sound drive the audio links, so effects react to it"
+							title="Let this lane's sound drive the audio links, so effects react to it"
 						>
 							<label for="mc-drives">Drives FX</label>
 							<Checkbox
@@ -414,7 +414,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="How the media fills its layer. Contain keeps all of it in frame, cover fills the frame and crops what hangs over, stretch bends it to the frame's shape. Double-click to reset."
+				title="How the media fills the frame. Contain keeps all of it in frame, cover fills the frame and crops what hangs over, stretch bends it to the frame's shape. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "fit")}
 			>
 				<label for="mc-fit">Fit</label>
@@ -529,7 +529,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Where the layer's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Dragging the layer on the preview moves this too. Double-click to reset."
+				title="Where the media's centre sits across the frame — 0 at the left edge, 100 at the right. Past either takes it off screen. Dragging it on the preview moves this too. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "x")}
 			>
 				<label for="mc-x">Position X</label>
@@ -547,7 +547,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Where the layer's centre sits down the frame — 0 at the top edge, 100 at the bottom. Past either takes it off screen. Double-click to reset."
+				title="Where the media's centre sits down the frame — 0 at the top edge, 100 at the bottom. Past either takes it off screen. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "y")}
 			>
 				<label for="mc-y">Position Y</label>
@@ -565,7 +565,7 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="row"
-				title="Turns the layer around its own centre, in degrees. Double-click to reset."
+				title="Turns the media around its own centre, in degrees. Double-click to reset."
 				ondblclick={(e) => resetStyle(e, "rotation")}
 			>
 				<label for="mc-rot">Rotation</label>
@@ -582,7 +582,7 @@
 
 			<LayerCompositeRows
 				style={lane.style}
-				noun="the layer"
+				noun="the media"
 				idPrefix="mc"
 				onStyle={(key, value, coalesceKey) =>
 					setStyle(key, value as never, coalesceKey)}
