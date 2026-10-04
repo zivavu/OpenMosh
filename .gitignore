@@ -17,9 +17,12 @@ CLAUDE.md
 docs
 .superpowers
 .claude
+.agents
+skills-lock.json
 
 #misc
 ZEN*
+test_models
 
 # Editor directories and files
 .vscode/*
