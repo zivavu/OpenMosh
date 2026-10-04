@@ -3311,6 +3311,7 @@ export class GlRenderer {
 		this.ppFBOs = this.createFBOPair(this.ppTextures);
 
 		this.deleteLazyBuffers();
+		this.meshPass.releaseTarget();
 		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 		for (const pair of this.fxFeedback.values()) {
 			this.deleteTexturePair(pair.textures);
