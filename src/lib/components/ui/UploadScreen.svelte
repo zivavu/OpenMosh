@@ -43,6 +43,7 @@
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { getCapabilityReport } from "../../capabilities.svelte";
+	import { onOldHost, SITE_URL } from "../../site";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo, saveBlobAs } from "../../utils";
 	import { buildProjectFile } from "../../project-file/export";
@@ -598,6 +599,16 @@
 		<p class="subtitle">Open-source image & video glitching in the browser.</p>
 	</div>
 
+	{#if onOldHost()}
+		<div class="compat" role="status">
+			<p>
+				OpenMosh now lives at <a href={SITE_URL}>openmosh.com</a>. Projects
+				saved here don't move with it: save each one to a file with its download
+				button, then open the file there.
+			</p>
+		</div>
+	{/if}
+
 	{#if compatMessages.length > 0}
 		<div
 			class="compat"
@@ -1021,6 +1032,10 @@
 
 	.compat p {
 		margin: 0;
+	}
+
+	.compat a {
+		color: var(--text);
 	}
 
 	.hero {
