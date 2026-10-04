@@ -32,6 +32,7 @@
 	} from "../../editor/sequence-sources.svelte";
 	import { createLightbox } from "../ui/lightbox.svelte";
 	import ProxyBadge from "../ui/ProxyBadge.svelte";
+	import type { ProxyAction } from "../../video/proxy-status";
 
 	// Both are overlays: neither chunk is needed until one is actually opened.
 	const loadSourceEditor = lazy(() => import("./SourceEditor.svelte"));
@@ -53,6 +54,8 @@
 		onEditChange?: (sourceId: string, edit: SourceEdit) => void;
 		/** Fired as the media edit modal opens and closes. */
 		onEditingChange?: (open: boolean) => void;
+		/** A video's proxy badge was clicked. */
+		onProxyAction?: (sourceId: string, action: ProxyAction["kind"]) => void;
 	}
 
 	let {
@@ -66,6 +69,7 @@
 		edits = {},
 		onEditChange,
 		onEditingChange,
+		onProxyAction,
 	}: Props = $props();
 
 	const OPEN_KEY = "openmosh-seq-rail-open";
@@ -236,13 +240,21 @@
 							<span class="rail-kind"
 								><Play size={7} fill="currentColor" /></span
 							>
-							<!-- Display only: the chip is itself a button. -->
-							<ProxyBadge source={src} size={7} />
 						{:else if src.kind === "model"}
 							<span class="rail-kind" title="3D model"><Box size={7} /></span>
 						{/if}
 						<span class="rail-name">{shortSourceName(src.name, 10)}</span>
 					</button>
+					<!-- Beside the chip rather than in it, so it can be a button of its own. -->
+					{#if src.kind === "video"}
+						<ProxyBadge
+							source={src}
+							size={7}
+							onAction={onProxyAction
+								? (action) => onProxyAction(src.id, action)
+								: undefined}
+						/>
+					{/if}
 					<!-- Crop, key and erase work on pixels a model doesn't have yet. -->
 					{#if onEditChange && src.kind !== "model"}
 						<button
@@ -351,6 +363,7 @@
 	}
 
 	.rail-slot {
+		--rail-thumb-h: 34px;
 		position: relative;
 		flex-shrink: 0;
 		line-height: 0;
@@ -382,7 +395,6 @@
 	}
 
 	.rail-item {
-		--rail-thumb-h: 34px;
 		position: relative;
 		flex-shrink: 0;
 		width: 62px;
@@ -463,15 +475,26 @@
 		line-height: 1.4;
 	}
 
-	.rail-kind,
-
-	/* Both badges can show at once, so the BASE one steps aside. */
-
-	/* Bottom-left of the thumb, anchored by its own bottom. */
-	.rail-item :global(.proxy-badge) {
+	.rail-kind {
 		position: absolute;
-		top: calc(var(--rail-thumb-h) - 2px);
-		left: 2px;
+		top: 2px;
+		right: 2px;
+		display: flex;
+		align-items: center;
+		padding: 0 2px;
+		border-radius: 2px;
+		background: rgba(0, 0, 0, 0.65);
+		color: var(--text-2);
+		font-size: 0.5rem;
+		font-weight: 700;
+	}
+
+	/* Bottom-left of the thumb, anchored by its own bottom. The slot's origin sits
+	   on the chip's 1px border. */
+	.rail-slot :global(.proxy-badge) {
+		position: absolute;
+		top: calc(var(--rail-thumb-h) - 1px);
+		left: 3px;
 		transform: translateY(-100%);
 		gap: 2px;
 		padding: 0 2px;
