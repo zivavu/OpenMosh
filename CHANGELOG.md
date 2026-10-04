@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.9.8](https://github.com/zivavu/OpenMosh/compare/v0.9.7...v0.9.8) (2026-10-04)
+
+OpenMosh now lives at [openmosh.com](https://openmosh.com/). Projects saved on open-mosh.vercel.app stay in your browser at that address, which keeps working: save them to files there, then open the files on the new site.
+
+### Added
+
+* Turn smaller previews of large videos off for every project, in the Mosh settings ([fdc1d39](https://github.com/zivavu/OpenMosh/commit/fdc1d39095b157a3d0b8d6b84a4442bd45ba41a0))
+* Drag songs from the library onto audio lanes ([40f79f3](https://github.com/zivavu/OpenMosh/commit/40f79f38b0bfb94256f0d717aa89145aee0db3e1))
+* Move and trim clips selected across lanes together ([ff0fe14](https://github.com/zivavu/OpenMosh/commit/ff0fe14cbe4fca310640949507822a076abc18cd))
+* Set a video's speed from its media clip ([cb5c752](https://github.com/zivavu/OpenMosh/commit/cb5c752e396af684a86c731463883c487b5326ad))
+* Rename and delete projects from the editor drawer ([0c9dfa7](https://github.com/zivavu/OpenMosh/commit/0c9dfa715484b9c1767e46b7e976b2f2a17aa65e))
+* Step the resize width and height with the arrow keys ([587352c](https://github.com/zivavu/OpenMosh/commit/587352c66702966aa4bb39a316d189a4e4327b62))
+* Explain why a 3D model can't be used ([b3d3c27](https://github.com/zivavu/OpenMosh/commit/b3d3c276bc09bffb3e35a040699a9b7462a39811))
+* Show where a WebM export will play ([a95c963](https://github.com/zivavu/OpenMosh/commit/a95c963853ea446aa2ccb55f585d306d27160c06))
+* Media layers are now called media lanes ([dac26a5](https://github.com/zivavu/OpenMosh/commit/dac26a5bd29d7e919823b8bac2053fbc8ce473da))
+* Point visitors on the old address to openmosh.com ([b8025c3](https://github.com/zivavu/OpenMosh/commit/b8025c369403592d0bf9265380804fc8f1243b23))
+
+### Fixed
+
+* Switch to the smaller preview copy once it's ready ([272de06](https://github.com/zivavu/OpenMosh/commit/272de0615a52e0515d901d247ef57c92e58347f8))
+* Turn a video's smaller copy on or off from the media rail ([f3452f0](https://github.com/zivavu/OpenMosh/commit/f3452f008bcf5882b6527ab46652c3e5e27fb653))
+* Say so when the browser won't save your media ([8604e44](https://github.com/zivavu/OpenMosh/commit/8604e44ce42cf19a62c86905af7246d07a565081))
+* Hold playback until the media has loaded ([cd26dea](https://github.com/zivavu/OpenMosh/commit/cd26deaa806353388b1c9fc9a669bafa8d2d1ce9))
+* Open projects at their own aspect ratio ([4dce2e4](https://github.com/zivavu/OpenMosh/commit/4dce2e463b6e0508d0647851e7c59e80a3a18d2f))
+* Line the export span up with the timeline ([8e5efb5](https://github.com/zivavu/OpenMosh/commit/8e5efb538748bff1d80afd5637f03ba262390524))
+* Keep Spin Axis steady while Spin follows the music ([6953308](https://github.com/zivavu/OpenMosh/commit/695330899491da72aa67e4fad1f87a101d543ca8))
+* Keep 3D models sharp on a wide perspective ([ac3372d](https://github.com/zivavu/OpenMosh/commit/ac3372df917a88b90496cbdb5cc8c58813b18071))
+* Show the colours of vertex-coloured GLB models ([7dc11d1](https://github.com/zivavu/OpenMosh/commit/7dc11d1e6b74d8bcfe57a74a01b5f5bb135170e0))
+* Scroll the effect list up and down while dragging an effect ([94cc7eb](https://github.com/zivavu/OpenMosh/commit/94cc7eb6c5328f33b0a5016b091cbab54f251c1d))
+* Cut long clip names short in the clip bar ([5080170](https://github.com/zivavu/OpenMosh/commit/50801706223d6474a833bc67df9b862b363dc6c2))
+* Show the selected media's whole outline in the rail ([40c6fd4](https://github.com/zivavu/OpenMosh/commit/40c6fd42bbb96bed515450a3df6c8035d9a75ed3))
+
+### Faster
+
+* Download fonts only when text needs them ([f726f28](https://github.com/zivavu/OpenMosh/commit/f726f28de1225ddb587b31c9456f2001e5740b1f))
+* Keep many 3D models smooth in the editor ([e3a694c](https://github.com/zivavu/OpenMosh/commit/e3a694cec4f9dccfe378ec38c8ab3034b6c67a59))
+
 ## [0.9.7](https://github.com/zivavu/OpenMosh/compare/v0.9.6...v0.9.7) (2026-10-03)
 
 
