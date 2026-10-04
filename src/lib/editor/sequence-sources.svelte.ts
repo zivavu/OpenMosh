@@ -113,6 +113,7 @@ export class SequenceSourceRegistry {
 	#proxyJobs = new Map<string, ProxyJob>();
 	#disposed = false;
 	#onReady: (() => void) | undefined;
+	#onPersist: ((write: Promise<void>) => void) | undefined;
 	/** Generated images follow the output size; a re-render swaps the URL and drops the decode. */
 	#sizeSync = new GeneratedSizeSync((id, url) => {
 		const live = this.get(id);
@@ -127,9 +128,14 @@ export class SequenceSourceRegistry {
 		this.#onReady?.();
 	});
 
-	/** Notified when a lazy decode lands, so a paused preview can redraw. */
-	constructor(onReady?: () => void) {
+	/** Notified when a lazy decode lands, so a paused preview can redraw. `onPersist`
+	 * follows each write of added media to storage. */
+	constructor(
+		onReady?: () => void,
+		onPersist?: (write: Promise<void>) => void,
+	) {
 		this.#onReady = onReady;
+		this.#onPersist = onPersist;
 	}
 
 	get(id: string | null | undefined): SequenceSource | undefined {
@@ -230,14 +236,15 @@ export class SequenceSourceRegistry {
 			this.#endLoad();
 		}
 
-		if (persist) {
+		if (persist && ok.length > 0) {
 			// No prune here: these blobs belong to no song's pool yet, and pruning now
 			// would evict the batch just written.
-			void putSequenceMedia(ok.map((s) => ({ id: s.id, file: s.file }))).catch(
-				() => {
-					// Storage full or blocked; the pool still works for this session.
-				},
+			const write = putSequenceMedia(
+				ok.map((s) => ({ id: s.id, file: s.file })),
 			);
+			// Storage full or blocked: the pool still works for this session.
+			if (this.#onPersist) this.#onPersist(write);
+			else void write.catch(() => {});
 		}
 		return ok;
 	}
