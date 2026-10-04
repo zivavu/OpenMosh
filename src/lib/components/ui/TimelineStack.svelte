@@ -19,6 +19,8 @@
 		isPlaying?: boolean;
 		/** Omit to leave the transport out. */
 		onTogglePlay?: (() => void) | null;
+		/** Play is off (pausing still works), e.g. while media loads. */
+		playDisabled?: boolean;
 		onSeek?: ((time: number) => void) | null;
 		spanStart?: number;
 		loopEnabled?: boolean;
@@ -52,6 +54,7 @@
 		currentTime,
 		isPlaying = false,
 		onTogglePlay = null,
+		playDisabled = false,
 		onSeek = null,
 		spanStart = 0,
 		loopEnabled = false,
@@ -311,7 +314,12 @@
 			<button
 				class="tl-transport-btn"
 				onclick={onTogglePlay}
-				title={isPlaying ? "Pause" : "Play"}
+				disabled={playDisabled && !isPlaying}
+				title={isPlaying
+					? "Pause"
+					: playDisabled
+						? "Media is still loading"
+						: "Play"}
 			>
 				{#if isPlaying}
 					<Pause size={13} fill="currentColor" stroke="none" />
@@ -867,7 +875,12 @@
 			background 0.15s;
 	}
 
-	.tl-transport-btn:hover {
+	.tl-transport-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
+	}
+
+	.tl-transport-btn:hover:not(:disabled) {
 		color: var(--text);
 		border-color: var(--text-4);
 		background: rgba(255, 255, 255, 0.06);

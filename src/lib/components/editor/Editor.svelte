@@ -1663,6 +1663,14 @@
 				(sourceRegistry.loadingTotal > 0 && sequenceSources.length === 0)),
 	);
 
+	/** Files are still landing in the pool, so playback would stutter or show gaps. */
+	let mediaBusy = $derived(
+		isSequenceMode && (openingMedia || sourceRegistry.loadingTotal > 0),
+	);
+	$effect(() => {
+		if (mediaBusy && untrack(() => mixer.playing)) pauseTrack();
+	});
+
 	onMount(() => {
 		void (async () => {
 			// Single mode has no pool: its one file is the frame.
@@ -3432,7 +3440,7 @@
 	function toggleMasterPlay() {
 		if (isSequenceMode) {
 			if (mixer.playing) pauseTrack();
-			else playSpan();
+			else if (!mediaBusy) playSpan();
 		} else if (textNeedsTransport) {
 			stillPlaying = !stillPlaying;
 		} else if (seqMasterIsAudio) {
@@ -4651,7 +4659,12 @@
 			{/if}
 			{#if showStack}
 				<!-- The same transport as the timeline toolbar's, at the size the slideshow gives it. -->
-				<button class="bar-key live" onclick={toggleMasterPlay}>
+				<button
+					class="bar-key live"
+					onclick={toggleMasterPlay}
+					disabled={mediaBusy && !textClockRunning}
+					title={mediaBusy ? "Media is still loading" : undefined}
+				>
 					{#if textClockRunning}
 						<Pause size={14} fill="currentColor" stroke="none" />
 						STOP
@@ -4793,6 +4806,7 @@
 				currentTime={textTime}
 				isPlaying={textClockRunning}
 				onTogglePlay={toggleMasterPlay}
+				playDisabled={mediaBusy}
 				onSeek={seekMaster}
 				spanStart={textTimeOffset}
 				bpm={isSequenceMode ? sequenceBpm : 0}
