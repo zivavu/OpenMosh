@@ -10,6 +10,7 @@
 		MEDIA_FIT_OPTIONS,
 		mediaClipSpeed,
 		sourceSpan,
+		sourceSpeed,
 		SPEED_MAX,
 		SPEED_MIN,
 		type MediaClip,
@@ -182,16 +183,46 @@
 		onClipChange({ ...clip, sourceStart: v });
 	}
 
-	let speed = $derived(clip ? mediaClipSpeed(clip) : 1);
+	// A model's rate is the clip's own; a video's is its source edit, as in the dialog.
+	let speed = $derived(
+		source?.kind === "video"
+			? sourceSpeed(edits[source.id])
+			: clip
+				? mediaClipSpeed(clip)
+				: 1,
+	);
 
 	/** Log₂ track, as the media edit dialog's: 1× sits at the centre, snapped to. */
 	function setSpeedFromTrack(v: number) {
 		if (!clip) return;
 		const next = Math.abs(v) < 0.08 ? 1 : 2 ** v;
+		if (source?.kind === "video") {
+			const { speed: _, ...rest } = edits[source.id] ?? DEFAULT_SOURCE_EDIT;
+			onEditChange?.(source.id, next === 1 ? rest : { ...rest, speed: next });
+			return;
+		}
 		onBeforeEdit?.(`media-speed-${clip.id}`);
 		onClipChange({ ...clip, speed: next === 1 ? undefined : next });
 	}
 </script>
+
+{#snippet speedRow(title: string)}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="row" {title} ondblclick={() => setSpeedFromTrack(0)}>
+		<label for="mc-speed">Speed</label>
+		<RangeSlider
+			id="mc-speed"
+			value={Math.log2(speed)}
+			min={Math.log2(SPEED_MIN)}
+			max={Math.log2(SPEED_MAX)}
+			step={0.05}
+			oninput={setSpeedFromTrack}
+		/>
+		<span class="val">
+			{speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)}×
+		</span>
+	</div>
+{/snippet}
 
 <ClipPanel
 	open={!!clip && !!lane}
@@ -265,25 +296,9 @@
 					/>
 					<span class="val">{(clip.sourceStart % length).toFixed(1)}s</span>
 				</div>
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="row"
-					title="How fast the model's animation plays. Double-click to reset."
-					ondblclick={() => setSpeedFromTrack(0)}
-				>
-					<label for="mc-speed">Speed</label>
-					<RangeSlider
-						id="mc-speed"
-						value={Math.log2(speed)}
-						min={Math.log2(SPEED_MIN)}
-						max={Math.log2(SPEED_MAX)}
-						step={0.05}
-						oninput={setSpeedFromTrack}
-					/>
-					<span class="val">
-						{speed >= 1 ? speed.toFixed(1) : speed.toFixed(2)}×
-					</span>
-				</div>
+				{@render speedRow(
+					"How fast the model's animation plays. Double-click to reset.",
+				)}
 			{/if}
 
 			{#if source?.kind === "model"}
@@ -309,6 +324,11 @@
 					/>
 					<span class="val">{clip.sourceStart.toFixed(1)}s</span>
 				</div>
+				{#if onEditChange}
+					{@render speedRow(
+						`How fast “${source.name}” plays, everywhere it's used. It's the same speed as in its edit dialog. Double-click to reset.`,
+					)}
+				{/if}
 			{/if}
 
 			<FadeRows {clip} noun="this layer" idPrefix="mc" onFade={setFade} />
