@@ -966,6 +966,7 @@
 	$effect(() => {
 		if (!renderer || !baseSize) return;
 		renderer.initBlankSource(baseSize.width, baseSize.height);
+		refitPreview();
 		naturalWidth = baseSize.width;
 		naturalHeight = baseSize.height;
 		imageReady = true;
@@ -979,6 +980,7 @@
 		img.onload = () => {
 			if (cancelled) return;
 			renderer!.loadImage(img);
+			refitPreview();
 			naturalWidth = img.naturalWidth;
 			naturalHeight = img.naturalHeight;
 			imageReady = true;
@@ -994,6 +996,7 @@
 		if (!renderer || !frameSource) return;
 		// The texture is sized to the frames that will land in it, smaller than the media.
 		renderer.initVideoSource(frameSource.frameWidth, frameSource.frameHeight);
+		refitPreview();
 		naturalWidth = frameSource.width;
 		naturalHeight = frameSource.height;
 		imageReady = true;
@@ -1009,6 +1012,7 @@
 			if (ready) return;
 			ready = true;
 			renderer!.loadVideo(video);
+			refitPreview();
 			naturalWidth = video.videoWidth;
 			naturalHeight = video.videoHeight;
 			imageReady = true;
@@ -1044,6 +1048,15 @@
 			video.removeEventListener("timeupdate", onTimeUpdate);
 		};
 	});
+
+	// A source reset sizes the frame to the source; the effect below may not re-run after it.
+	function refitPreview() {
+		untrack(() => {
+			if (!suspended && renderSize) {
+				renderer?.resize(renderSize.width, renderSize.height);
+			}
+		});
+	}
 
 	// Resize the renderer when the preview box changes; otherwise a static redraw here.
 	$effect(() => {
