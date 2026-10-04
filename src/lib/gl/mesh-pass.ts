@@ -239,9 +239,13 @@ export class MeshPass {
 
 		gl.bindFramebuffer(gl.FRAMEBUFFER, target.msFbo);
 		gl.viewport(0, 0, w, h);
+		// The target can be bigger than this model's box; only its corner is used.
+		gl.enable(gl.SCISSOR_TEST);
+		gl.scissor(0, 0, w, h);
 		gl.clearColor(0, 0, 0, 0);
 		gl.clearDepth(1);
 		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+		gl.disable(gl.SCISSOR_TEST);
 		gl.enable(gl.DEPTH_TEST);
 		gl.depthFunc(gl.LESS);
 
@@ -319,8 +323,13 @@ export class MeshPass {
 		return this.#program;
 	}
 
-	#ensureTarget(w: number, h: number) {
-		if (this.#target?.w === w && this.#target.h === h) return this.#target;
+	/** Grow-only: every model lane has its own box size, and reallocating the
+	 * multisampled buffers for each one, every frame, stalls the GPU. */
+	#ensureTarget(minW: number, minH: number) {
+		const held = this.#target;
+		if (held && held.w >= minW && held.h >= minH) return held;
+		const w = Math.max(minW, held?.w ?? 0);
+		const h = Math.max(minH, held?.h ?? 0);
 		this.#deleteTarget();
 		const gl = this.#gl;
 		const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) as number);
@@ -366,6 +375,11 @@ export class MeshPass {
 		gl.deleteRenderbuffer(t.color);
 		gl.deleteRenderbuffer(t.depth);
 		this.#target = null;
+	}
+
+	/** Frees the shared target, so it next grows to fit the new frame size. */
+	releaseTarget() {
+		this.#deleteTarget();
 	}
 
 	dispose() {
