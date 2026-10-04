@@ -37,11 +37,13 @@ edit: they eat context fast.
   not `new App()`; use `$state.snapshot()` when you need a plain object copy.
 - Package manager: **bun** — always use `bun`, not `npm` or `yarn`.
 - No MP4 or GIF export — both were intentionally removed; do not re-add either. (GIF files are supported as _input_; they animate.)
-- When adding a new effect: add its `EffectDefinition` to `definitions.ts`, add its GLSL +
-  `EffectShaderDef` to `effect-shaders.ts` (set `animated: true` if it uses `u_time` for
-  animation — `ANIMATED_EFFECTS` is derived automatically, no separate registration needed),
-  and give it a stage, family and amount param in `src/lib/effects/curation.ts` (the Curated
-  mosh style needs it; a test fails without it) unless it's `moshable: false`.
+- When adding a new effect: give it a file in `src/lib/effects/catalog/` exporting its
+  `definition` and its GLSL `shader` (set `animated: true` if it uses `u_time` for
+  animation — `ANIMATED_EFFECTS` is derived automatically, no separate registration needed;
+  shared GLSL and uniform setters are in `gl/shader-lib.ts`), list it in `catalog/index.ts`
+  where it should sit in the effects panel, and give it a stage, family and amount param in
+  `src/lib/effects/curation.ts` (the Curated mosh style needs it; a test fails without it)
+  unless it's `moshable: false`.
 - Write user-facing UI copy (hints, tooltips, toasts, empty states) through the `/humanizer`
   skill, the same as changelog text.
 - Never gate motion on `prefers-reduced-motion`. Windows ships with animations off by default, so

@@ -1,0 +1,65 @@
+import type { EffectDefinition } from "../types";
+
+export const definition: EffectDefinition = {
+	id: "tracking",
+	name: "Tracking",
+	params: [
+		{
+			key: "count",
+			label: "Targets",
+			type: "range",
+			min: 1,
+			max: 12,
+			step: 1,
+			defaultValue: 5,
+			moshMax: 8,
+		},
+		{
+			key: "sensitivity",
+			label: "Sensitivity",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0.5,
+		},
+		{
+			key: "size",
+			label: "Box Size",
+			type: "range",
+			min: 0.03,
+			max: 0.3,
+			step: 0.005,
+			defaultValue: 0.12,
+		},
+		{
+			key: "thickness",
+			label: "Line Width",
+			type: "range",
+			min: 1,
+			max: 3,
+			step: 0.5,
+			defaultValue: 2,
+		},
+		{
+			key: "opacity",
+			label: "Opacity",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 1,
+			moshMin: 0.6,
+		},
+		{
+			key: "color",
+			label: "Color",
+			type: "select",
+			defaultValue: "white",
+			options: [
+				{ label: "White", value: "white" },
+				{ label: "Black", value: "black" },
+			],
+		},
+	],
+};
