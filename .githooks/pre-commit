@@ -1,0 +1,6 @@
+#!/bin/sh
+# main only takes PRs; work goes on a batch/<slug> branch.
+if [ "$(git symbolic-ref --short -q HEAD)" = "main" ]; then
+	echo "pre-commit: refusing to commit on main. Switch to a batch/<slug> branch first." >&2
+	exit 1
+fi
