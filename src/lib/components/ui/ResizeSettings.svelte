@@ -1,4 +1,6 @@
 <script lang="ts">
+	import NumberField from "./NumberField.svelte";
+
 	const MAX_RESIZE = 10000;
 
 	const RATIO_PRESETS = [
@@ -101,15 +103,19 @@
 </div>
 <div class="size-row">
 	<label for="rs-width">Width</label>
-	<input
+	<NumberField
 		id="rs-width"
-		class="size-input"
-		type="number"
-		min="1"
-		max={MAX_RESIZE}
-		step="1"
 		value={width}
-		oninput={(e) => setWidth(+(e.currentTarget as HTMLInputElement).value)}
+		min={1}
+		max={MAX_RESIZE}
+		step={10}
+		fineStep={1}
+		allowEmpty={false}
+		unit="width"
+		upTitle="Wider (shift for one pixel)"
+		downTitle="Narrower (shift for one pixel)"
+		commitOnBlur
+		onChange={setWidth}
 	/>
 	<button
 		class="lock-btn"
@@ -156,15 +162,19 @@
 
 <div class="size-row">
 	<label for="rs-height">Height</label>
-	<input
+	<NumberField
 		id="rs-height"
-		class="size-input"
-		type="number"
-		min="1"
-		max={MAX_RESIZE}
-		step="1"
 		value={height}
-		oninput={(e) => setHeight(+(e.currentTarget as HTMLInputElement).value)}
+		min={1}
+		max={MAX_RESIZE}
+		step={10}
+		fineStep={1}
+		allowEmpty={false}
+		unit="height"
+		upTitle="Taller (shift for one pixel)"
+		downTitle="Shorter (shift for one pixel)"
+		commitOnBlur
+		onChange={setHeight}
 	/>
 </div>
 <button
@@ -228,22 +238,6 @@
 		color: var(--text-3);
 		min-width: 72px;
 		flex-shrink: 0;
-	}
-
-	.size-input {
-		width: 4.5rem;
-		background: var(--surface);
-		color: var(--text-2);
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		padding: 0.2rem 0.4rem;
-		font-size: 0.7rem;
-		font-family: inherit;
-		outline: none;
-	}
-
-	.size-input:focus {
-		border-color: var(--text-4);
 	}
 
 	.lock-btn {
