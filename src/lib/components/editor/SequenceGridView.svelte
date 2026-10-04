@@ -168,8 +168,8 @@
 					tabindex="0"
 					draggable="true"
 					title={assignable
-						? `${src.name}. Click to preview. Drag it onto the selected layer clip${selectedCount > 1 ? "s" : ""}, or press Enter to show it there.`
-						: `${src.name}. Click to preview, or drag it onto a layer.`}
+						? `${src.name}. Click to preview. Drag it onto the selected media clip${selectedCount > 1 ? "s" : ""}, or press Enter to show it there.`
+						: `${src.name}. Click to preview, or drag it onto a media lane.`}
 					ondragstart={(e) => onCardDragStart(e, i)}
 					ondragover={(e) => {
 						if (dragFromIndex === null) return;

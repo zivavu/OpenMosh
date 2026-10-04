@@ -222,7 +222,7 @@ export function appendMediaLane(
 		...timeline,
 		lanes: [
 			...timeline.lanes,
-			createMediaLane(`Layer ${timeline.lanes.length + 1}`, sourceId, z),
+			createMediaLane(`Media ${timeline.lanes.length + 1}`, sourceId, z),
 		],
 	};
 }
@@ -243,7 +243,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 		audioLanes: normalizeAudioLanes(t.audioLanes),
 		lanes: lanes.map((lane, i) => ({
 			id: lane.id ?? nextId("mlane"),
-			name: lane.name ?? `Layer ${i + 1}`,
+			name: lane.name ?? `Media ${i + 1}`,
 			enabled: lane.enabled !== false,
 			z: typeof lane.z === "number" ? lane.z : i,
 			sourceId: lane.sourceId ?? null,

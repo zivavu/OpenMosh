@@ -21,7 +21,7 @@
 		topPanel,
 		settingsLabel = "Settings",
 		effectsLabel = "Chain",
-		topPanelLabel = "Layer",
+		topPanelLabel = "Clip",
 	}: Props = $props();
 
 	const SHEET_HEIGHT_VH = 70;

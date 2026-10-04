@@ -2035,7 +2035,7 @@
 			next = { ...next, audioLanes: [lane, ...lanes] };
 		}
 		if (seedFrom && next.lanes.length === 0) {
-			const lane = createMediaLane("Layer 1", seedFrom.id, 0);
+			const lane = createMediaLane("Media 1", seedFrom.id, 0);
 			lane.clips = [createMediaClip(0, length)];
 			// Under a song the opened video is a backdrop; its own sound would fight it.
 			if (songId && lane.audio) lane.audio = { ...lane.audio, muted: true };
@@ -2467,7 +2467,7 @@
 		if (!isSequenceMode || selectedFxClip) return null;
 		return {
 			title: "Nothing selected",
-			hint: "Click a layer clip or an FX clip on the timeline to edit its chain.",
+			hint: "Click a media clip or an FX clip on the timeline to edit its chain.",
 		};
 	});
 
@@ -4272,8 +4272,8 @@
 					count={sequenceSources.length}
 					shuffleScope={selectedMediaClipIds.length}
 					shuffleTitle={selectedMediaClipIds.length > 0
-						? "Deal the pool at random across the selected layer clips"
-						: "Deal the pool at random across every layer clip"}
+						? "Deal the pool at random across the selected media clips"
+						: "Deal the pool at random across every media clip"}
 					recordTitle="Record a webcam take to the song, from the playhead"
 					onShuffle={dealMediaSources}
 					onAdd={() => sourceInput?.click()}
@@ -4797,7 +4797,7 @@
 				spanStart={textTimeOffset}
 				bpm={isSequenceMode ? sequenceBpm : 0}
 				selectionHint={isSequenceMode
-					? "Click a layer clip or an FX clip to edit it"
+					? "Click a media clip or an FX clip to edit it"
 					: null}
 				loopEnabled={isSequenceMode
 					? mixer.loop
@@ -4844,11 +4844,11 @@
 							class="tl-tool-btn"
 							disabled={mediaTimeline.lanes.length >= MAX_MEDIA_LANES}
 							title={mediaTimeline.lanes.length >= MAX_MEDIA_LANES
-								? `${MAX_MEDIA_LANES} layers is the limit`
-								: "Add a layer of images, videos or 3D models from the pool, each clip with its own effects"}
+								? `${MAX_MEDIA_LANES} media lanes is the limit`
+								: "Add a lane of images, videos or 3D models from the pool, each clip with its own effects"}
 							onclick={addMediaLane}
 						>
-							<Plus size={12} /> Media layer
+							<Plus size={12} /> Media lane
 						</button>
 					{/if}
 					{#if isSequenceMode && seqMasterDuration > 0}
@@ -4877,7 +4877,7 @@
 							disabled={fxLanes.length >= MAX_FX_LANES}
 							title={fxLanes.length >= MAX_FX_LANES
 								? `${MAX_FX_LANES} lanes is the limit`
-								: "Add a lane of extra effects that run over the whole frame, layers included"}
+								: "Add a lane of extra effects that run over the whole frame, media lanes included"}
 							onclick={addFxLane}
 						>
 							<Plus size={12} /> FX lane
@@ -5348,7 +5348,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Every source is removed from this song, and its layer clips are left with nothing to show until media is added back. Media that other songs still use is kept."
+			message="Every source is removed from this song, and its media clips are left with nothing to show until media is added back. Media that other songs still use is kept."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger

@@ -41,7 +41,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="row"
-	title="How {noun}'s colours mix with the layers underneath instead of simply covering them. Double-click to reset."
+	title="How {noun}'s colours mix with what's underneath instead of simply covering them. Double-click to reset."
 	ondblclick={(e) => onReset(e, "blendMode")}
 >
 	<label for="{idPrefix}-blend">Blend</label>

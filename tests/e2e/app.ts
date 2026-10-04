@@ -320,9 +320,9 @@ export function mediaDropGhost(page: Page, lane = 0): Locator {
 	return mediaLaneTrack(page, lane).locator(".clip.ghost");
 }
 
-export async function addMediaLayer(page: Page): Promise<void> {
+export async function addMediaLane(page: Page): Promise<void> {
 	await expect(mediaLanes(page)).toHaveCount(1);
-	await page.getByRole("button", { name: "Media layer" }).click();
+	await page.getByRole("button", { name: "Media lane" }).click();
 	await expect(mediaLanes(page)).toHaveCount(2);
 }
 

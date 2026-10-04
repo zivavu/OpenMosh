@@ -553,7 +553,7 @@
 				folded={foldedLaneIds.has(lane.id)}
 				{onToggleFold}
 				onToggleEnabled={() => ctrl.setLane(lane.id, "enabled", !lane.enabled)}
-				nameTitle="{lane.name} — click to edit this layer's placement and effects."
+				nameTitle="{lane.name} — click to edit this lane's placement and effects."
 				onNameClick={() => ctrl.openLane(lane)}
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
@@ -565,8 +565,8 @@
 						class:off={muted}
 						aria-pressed={!muted}
 						title={muted
-							? "Sound muted — click to hear this layer's videos"
-							: "Sound on — click to mute this layer's videos"}
+							? "Sound muted — click to hear this lane's videos"
+							: "Sound on — click to mute this lane's videos"}
 						onclick={() => toggleSound(lane)}
 					>
 						{#if muted}<VolumeX size={12} />{:else}<Volume2 size={12} />{/if}
@@ -578,7 +578,7 @@
 						class:on={soloLaneId === lane.id}
 						title={soloLaneId === lane.id
 							? "Stop soloing — show the whole frame again"
-							: "Solo: show only this layer on the canvas"}
+							: "Solo: show only this lane on the canvas"}
 						aria-pressed={soloLaneId === lane.id}
 						onclick={() => soloLane(lane)}
 					>
@@ -719,7 +719,7 @@
 	{#if ctrl.lanePendingDelete}
 		<LaneDeleteDialog
 			lane={ctrl.lanePendingDelete}
-			laneNoun="layer"
+			laneNoun="media lane"
 			onConfirm={(id) => ctrl.deleteLane(id)}
 			onCancel={() => (ctrl.lanePendingDelete = null)}
 		/>
@@ -728,7 +728,7 @@
 
 {#snippet clipBar()}
 	<ChainClipBar
-		title="Layer"
+		title="Media"
 		{selectedClips}
 		label={(c) => chainLabel(c as MediaClip) ?? "clean"}
 		{bpm}

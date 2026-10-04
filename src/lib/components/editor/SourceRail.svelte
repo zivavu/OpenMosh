@@ -210,8 +210,8 @@
 							onAssign(src.id);
 						}}
 						title={assignable
-							? `${src.name} — click to preview. Drag it onto the selected layer clip${selectedCount > 1 ? "s" : ""}, or press Enter to show it there.`
-							: `${src.name} — click to preview, or drag it onto a layer clip`}
+							? `${src.name} — click to preview. Drag it onto the selected media clip${selectedCount > 1 ? "s" : ""}, or press Enter to show it there.`
+							: `${src.name} — click to preview, or drag it onto a media clip`}
 					>
 						{#if src.thumbUrl}
 							<img
