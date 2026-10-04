@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Disc } from "lucide-svelte";
+	import { Disc, Info } from "lucide-svelte";
 	import type { Snippet } from "svelte";
 	import { getCapabilityReport } from "../../capabilities.svelte";
 
@@ -45,6 +45,12 @@
 	{#if showSettings && settingsContent}
 		<div class="bar-pop record-settings">
 			{@render settingsContent()}
+			<p
+				class="format-note"
+				title="Browsers, Discord and YouTube play WebM. Instagram and the iPhone Photos app don't, so convert it first if it's going there."
+			>
+				Saves as WebM <Info size={11} />
+			</p>
 		</div>
 	{/if}
 </div>
@@ -65,5 +71,19 @@
 	.record-settings {
 		right: 0;
 		min-width: 230px;
+	}
+
+	.format-note {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.3rem;
+		margin-top: 0.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-4);
+		cursor: help;
 	}
 </style>
