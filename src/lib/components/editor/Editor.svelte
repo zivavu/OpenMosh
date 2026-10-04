@@ -227,7 +227,7 @@
 		migrateLegacySegments,
 		prependMediaLane,
 	} from "../../editor/legacy-segments";
-	import { MoshHistory, type MoshSnapshot } from "../../editor/mosh-history";
+	import { ClipMoshes } from "../../editor/clip-moshes.svelte";
 	import {
 		readSeqEntry,
 		SEQ_ENTRY_VERSION,
@@ -1290,8 +1290,7 @@
 
 	function setFxLanes(next: FxLane[]) {
 		fxLanes = next;
-		// Splits, deletes and undo retire clip ids; drop their mosh stacks.
-		fxMoshHistory.retain(next.flatMap((l) => l.clips.map((c) => c.id)));
+		fxMoshes.retain(next.flatMap((l) => l.clips.map((c) => c.id)));
 	}
 
 	/** Adopt saved lanes, or clear back to none when a song has none. */
@@ -1347,38 +1346,21 @@
 		);
 	}
 
-	// Left/right walk one fx clip's moshes, one stack per clip keyed by clip id.
-	const fxMoshHistory = new MoshHistory<MoshSnapshot>();
+	const fxMoshes = new ClipMoshes<FxClip>({
+		clips: fxClipsById,
+		snapshot: fxClipMoshSnapshot,
+		roll: (ids) =>
+			rollAlive(() => (fxLanes = rollFxClips(fxLanes, ids, getMoshOptions()))),
+		restore: (id, snap) => (fxLanes = restoreFxClipMosh(fxLanes, id, snap)),
+	});
 
 	/** The fx clip the mosh gestures act on: the selected one only. */
 	function activeFxClip(): FxClip | null {
 		return selectedFxClip;
 	}
 
-	/** Roll the given clips. Mosh history only, never the fx edit stack. */
-	function fxRoll(clipIds: string[]) {
-		const ids = new Set(clipIds);
-		for (const clip of fxClipsById(ids)) {
-			fxMoshHistory.seed(
-				clip.id,
-				fxClipMoshSnapshot($state.snapshot(clip) as FxClip),
-			);
-		}
-		rollAlive(() => (fxLanes = rollFxClips(fxLanes, ids, getMoshOptions())));
-		for (const clip of fxClipsById(ids)) {
-			fxMoshHistory.push(
-				clip.id,
-				fxClipMoshSnapshot($state.snapshot(clip) as FxClip),
-			);
-		}
-	}
-
 	function fxClipsById(ids: Set<string>): FxClip[] {
 		return fxLanes.flatMap((l) => l.clips.filter((c) => ids.has(c.id)));
-	}
-
-	function applyFxClipMosh(clipId: string, snap: MoshSnapshot) {
-		fxLanes = restoreFxClipMosh(fxLanes, clipId, snap);
 	}
 
 	function fxClear(clipIds: string[]) {
@@ -2587,24 +2569,18 @@
 		// A layer's panel has taken the sidebar over, so the arrows belong to its chain.
 		const mediaClip = selectedMediaClip;
 		if (mediaClip) {
-			const snap = mediaMoshHistory.redo(mediaClip.id);
-			if (snap) applyMediaClipMosh(mediaClip.id, snap);
-			else mediaRoll([mediaClip.id]);
+			mediaMoshes.forward(mediaClip.id);
 			return;
 		}
 		const textClip = selectedTextClip;
 		if (textClip) {
-			const snap = textMoshHistory.redo(textClip.id);
-			if (snap) applyTextClipMosh(textClip.id, snap);
-			else textRoll([textClip.id]);
+			textMoshes.forward(textClip.id);
 			return;
 		}
 		// A selected fx clip is what every panel action aims at, so a mosh means it.
 		const clip = activeFxClip();
 		if (clip) {
-			const snap = fxMoshHistory.redo(clip.id);
-			if (snap) applyFxClipMosh(clip.id, snap);
-			else fxRoll([clip.id]);
+			fxMoshes.forward(clip.id);
 			return;
 		}
 		// Sequence mode: every chain lives on a clip, so with nothing selected the arrows do nothing.
@@ -2617,20 +2593,17 @@
 		glCanvasRef?.dismissHighlight();
 		const mediaClip = selectedMediaClip;
 		if (mediaClip) {
-			const snap = mediaMoshHistory.undo(mediaClip.id);
-			if (snap) applyMediaClipMosh(mediaClip.id, snap);
+			mediaMoshes.back(mediaClip.id);
 			return;
 		}
 		const textClip = selectedTextClip;
 		if (textClip) {
-			const snap = textMoshHistory.undo(textClip.id);
-			if (snap) applyTextClipMosh(textClip.id, snap);
+			textMoshes.back(textClip.id);
 			return;
 		}
 		const clip = activeFxClip();
 		if (clip) {
-			const snap = fxMoshHistory.undo(clip.id);
-			if (snap) applyFxClipMosh(clip.id, snap);
+			fxMoshes.back(clip.id);
 			return;
 		}
 		if (isSequenceMode) return;
@@ -3399,15 +3372,24 @@
 	// Fill, mosh, clear and static/auto on a text clip: the same gestures a media clip takes.
 	const previewTextChains = createTextChainSource(getMoshOptions);
 
-	/** ←/→ walk one text clip's moshes, keyed by clip id. */
-	const textMoshHistory = new MoshHistory<MoshSnapshot>();
+	const textMoshes = new ClipMoshes<TextClip>({
+		clips: textClipsById,
+		snapshot: chainClipMoshSnapshot,
+		roll: (ids) =>
+			rollAlive(
+				() =>
+					(textTimeline = rollTextClips(textTimeline, ids, getMoshOptions())),
+			),
+		restore: (id, snap) =>
+			(textTimeline = restoreTextClipMosh(textTimeline, id, snap)),
+	});
 
 	/** Deleting a clip retires its id, so drop the stack. */
 	function retainLaneMoshes() {
-		textMoshHistory.retain(
+		textMoshes.retain(
 			textTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
 		);
-		mediaMoshHistory.retain(
+		mediaMoshes.retain(
 			mediaTimeline.lanes.flatMap((l) => l.clips.map((c) => c.id)),
 		);
 	}
@@ -3416,30 +3398,6 @@
 		return textTimeline.lanes.flatMap((l) =>
 			l.clips.filter((c) => ids.has(c.id)),
 		);
-	}
-
-	/** Mosh history only, never the text edit stack; see fxRoll. */
-	function textRoll(clipIds: string[]) {
-		const ids = new Set(clipIds);
-		for (const clip of textClipsById(ids)) {
-			textMoshHistory.seed(
-				clip.id,
-				chainClipMoshSnapshot($state.snapshot(clip) as TextClip),
-			);
-		}
-		rollAlive(
-			() => (textTimeline = rollTextClips(textTimeline, ids, getMoshOptions())),
-		);
-		for (const clip of textClipsById(ids)) {
-			textMoshHistory.push(
-				clip.id,
-				chainClipMoshSnapshot($state.snapshot(clip) as TextClip),
-			);
-		}
-	}
-
-	function applyTextClipMosh(clipId: string, snap: MoshSnapshot) {
-		textTimeline = restoreTextClipMosh(textTimeline, clipId, snap);
 	}
 
 	function textClear(clipIds: string[]) {
@@ -3479,43 +3437,27 @@
 		isModel: isModelSource,
 	});
 
-	/** ←/→ walk one media clip's moshes, keyed by clip id. */
-	const mediaMoshHistory = new MoshHistory<MoshSnapshot>();
+	const mediaMoshes = new ClipMoshes<MediaClip>({
+		clips: mediaClipsById,
+		snapshot: chainClipMoshSnapshot,
+		roll: (ids) =>
+			rollAlive(
+				() =>
+					(mediaTimeline = rollMediaClips(
+						mediaTimeline,
+						ids,
+						getMoshOptions(),
+						isModelSource,
+					)),
+			),
+		restore: (id, snap) =>
+			(mediaTimeline = restoreMediaClipMosh(mediaTimeline, id, snap)),
+	});
 
 	function mediaClipsById(ids: Set<string>): MediaClip[] {
 		return mediaTimeline.lanes.flatMap((l) =>
 			l.clips.filter((c) => ids.has(c.id)),
 		);
-	}
-
-	/** Mosh history only, never the media edit stack; see fxRoll. */
-	function mediaRoll(clipIds: string[]) {
-		const ids = new Set(clipIds);
-		for (const clip of mediaClipsById(ids)) {
-			mediaMoshHistory.seed(
-				clip.id,
-				chainClipMoshSnapshot($state.snapshot(clip) as MediaClip),
-			);
-		}
-		rollAlive(
-			() =>
-				(mediaTimeline = rollMediaClips(
-					mediaTimeline,
-					ids,
-					getMoshOptions(),
-					isModelSource,
-				)),
-		);
-		for (const clip of mediaClipsById(ids)) {
-			mediaMoshHistory.push(
-				clip.id,
-				chainClipMoshSnapshot($state.snapshot(clip) as MediaClip),
-			);
-		}
-	}
-
-	function applyMediaClipMosh(clipId: string, snap: MoshSnapshot) {
-		mediaTimeline = restoreMediaClipMosh(mediaTimeline, clipId, snap);
 	}
 
 	function mediaClear(clipIds: string[]) {
@@ -4624,7 +4566,7 @@
 							onBeforeEdit={pushMediaHistory}
 							bpm={sequenceBpm}
 							onApplyPreset={mediaApplyPreset}
-							onRoll={mediaRoll}
+							onRoll={mediaMoshes.roll}
 							onClear={mediaClear}
 							onModeChange={mediaModeChange}
 							plan={isSequenceMode ? mixPlan : undefined}
@@ -4646,7 +4588,7 @@
 							onBeforeEdit={pushTextHistory}
 							bpm={sequenceBpm}
 							onApplyPreset={textApplyPreset}
-							onRoll={textRoll}
+							onRoll={textMoshes.roll}
 							onClear={textClear}
 							onModeChange={textModeChange}
 							{lyricsSync}
@@ -4668,7 +4610,7 @@
 							bpm={sequenceBpm}
 							bind:selectedLaneId={selectedFxLaneId}
 							onModeChange={fxModeChange}
-							onRoll={fxRoll}
+							onRoll={fxMoshes.roll}
 							onClear={fxClear}
 						/>
 					{/if}
