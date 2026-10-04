@@ -358,7 +358,8 @@
 		align-items: center;
 		gap: 0.3rem;
 		min-width: 0;
-		padding: 0.3rem 0 0;
+		/* A little under the chips, or the strip's clip eats the selected one's bottom edge. */
+		padding: 0.3rem 0 2px;
 		overflow-x: auto;
 	}
 
@@ -411,10 +412,23 @@
 		cursor: grabbing;
 	}
 
-	/* The same accent the clip blocks use for selection. */
+	/* The same accent the clip blocks use for selection. Drawn over the thumb, which
+	   would cover an inset shadow on the item itself. */
 	.rail-item.playing {
 		border-color: var(--mosh);
+	}
+
+	.rail-item.playing::after {
+		content: "";
+		position: absolute;
+		inset: 0;
 		box-shadow: inset 0 0 0 1px var(--mosh);
+		pointer-events: none;
+	}
+
+	/* Inside the edge: the strip scrolls, so it clips anything drawn past it. */
+	.rail-item:focus-visible {
+		outline-offset: -2px;
 	}
 
 	/* On the thumb rather than beside it: the rail is a scrolling strip. */
