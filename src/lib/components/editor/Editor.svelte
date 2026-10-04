@@ -153,7 +153,7 @@
 		undoLatest,
 		type UndoSource,
 	} from "../../editor/undo-router";
-	import { detectBpm } from "../../slideshow/bpm-detector";
+	import { BpmDetection } from "../../editor/bpm-detection.svelte";
 	import {
 		applyLayerMoves,
 		combinedLayerOrder,
@@ -1283,7 +1283,7 @@
 
 	/** A restored BPM wins over any detection in flight: the clips were built against it. */
 	function restoreSequenceBpm(bpm: number) {
-		if (bpm > 0) bpmEpoch++;
+		if (bpm > 0) bpmDetection.settle();
 		sequenceBpm = bpm;
 	}
 
@@ -2569,64 +2569,15 @@
 		}));
 	}
 
-	// Same detector the slideshow uses, in a shared worker.
-	let bpmDetecting = $state(false);
-	let bpmDetectAbort: AbortController | null = null;
-	let bpmDetectFile: File | null = null;
-	/** Bumped when the BPM is settled elsewhere; a detection that started before yields to it. */
-	let bpmEpoch = 0;
-	/** The track the automatic pass has already been spent on. */
-	let autoBpmFor: File | null = null;
-
-	// A new track detects its own tempo: clip timing and beat-synced effects need it.
-	$effect(() => {
-		const file = audio.trackFile;
-		if (!file) return;
-		untrack(() => {
-			if (autoBpmFor === file) return;
-			autoBpmFor = file;
-			// A song reopened from the library brings its own BPM back.
-			if (sequenceBpm > 0) return;
-			void runSequenceBpmDetection(true);
-		});
+	const bpmDetection = new BpmDetection({
+		track: () => audio.trackFile,
+		bpm: () => sequenceBpm,
+		onDetected: setSequenceBpm,
 	});
-
-	async function runSequenceBpmDetection(auto = false) {
-		const file = audio.trackFile;
-		if (!file || (bpmDetecting && bpmDetectFile === file)) return;
-		// A pass still measuring the previous song is moot.
-		bpmDetectAbort?.abort();
-		const abort = new AbortController();
-		bpmDetectAbort = abort;
-		bpmDetectFile = file;
-		const epoch = bpmEpoch;
-		bpmDetecting = true;
-		try {
-			const result = await detectBpm(file, abort.signal);
-			// The automatic pass never overrules what landed while it ran.
-			if (auto && (bpmEpoch !== epoch || audio.trackFile !== file)) return;
-			setSequenceBpm(Math.round(result.bpm));
-		} catch (e) {
-			if (!(e instanceof DOMException && e.name === "AbortError")) {
-				console.error("BPM detection failed:", e);
-				showToast(
-					"Couldn't detect the BPM for this track. Set it by hand instead.",
-					"error",
-					6000,
-				);
-			}
-		} finally {
-			if (bpmDetectAbort === abort) {
-				bpmDetecting = false;
-				bpmDetectAbort = null;
-				bpmDetectFile = null;
-			}
-		}
-	}
 
 	/** Correcting the BPM retimes every clip whose spacing was set in beats. */
 	function setSequenceBpm(bpm: number) {
-		bpmEpoch++;
+		bpmDetection.settle();
 		sequenceBpm = bpm;
 		asOneEdit(() => retimeToBpm(bpm));
 	}
@@ -5040,9 +4991,9 @@
 				{hasAudio}
 				showTiming={isSequenceMode || !!audio.trackFile}
 				bpm={sequenceBpm}
-				{bpmDetecting}
+				bpmDetecting={bpmDetection.detecting}
 				hasTrack={!!audio.trackFile}
-				onDetectBpm={runSequenceBpmDetection}
+				onDetectBpm={bpmDetection.run}
 				onBpmChange={setSequenceBpm}
 			/>
 		</div>
