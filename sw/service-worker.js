@@ -1,5 +1,5 @@
-// Offline copy of the app. The build prepends PRECACHE (every file it wrote) and
-// VERSION (a hash of their names, which are content-hashed), so a deploy gets its own
+// Offline copy of the app. The build prepends PRECACHE (every file it wrote but the
+// fonts) and VERSION (a hash of their names, which are content-hashed), so a deploy gets its own
 // cache. There's no skipWaiting: a new version takes over only once every tab on the
 // old one has closed, so an open tab keeps finding the chunks it lazy-loads.
 /* global PRECACHE, VERSION */
@@ -39,5 +39,17 @@ self.addEventListener("fetch", (event) => {
 		);
 		return;
 	}
-	event.respondWith(caches.match(request).then((hit) => hit ?? fetch(request)));
+	event.respondWith(
+		caches.match(request).then((hit) => hit ?? fetchAndKeep(request)),
+	);
 });
+
+// Fonts aren't in PRECACHE; one is kept the first time a text clip asks for it.
+async function fetchAndKeep(request) {
+	const response = await fetch(request);
+	if (response.ok && new URL(request.url).pathname.startsWith("/fonts/")) {
+		const copy = response.clone();
+		caches.open(CACHE).then((cache) => cache.put(request, copy));
+	}
+	return response;
+}
