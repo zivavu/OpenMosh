@@ -33,7 +33,7 @@ fix: The playhead stays put when the mix changes
 
 `feat`, `fix` and `perf` go into the changelog. `refactor`, `docs`, `test`, `ci`, `build`, `chore` and `style` stay out of it. Don't mark a commit as breaking with `!`: every release is a patch bump until 1.0. If a change affects saved projects, say so in its message.
 
-Leave `version` in `package.json` and `CHANGELOG.md` alone. [release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps both. Merging it tags the version, publishes the GitHub Release and deploys it to [open-mosh.vercel.app](https://open-mosh.vercel.app/). Until then, merged work shows up only on Vercel preview deployments.
+Leave `version` in `package.json` and `CHANGELOG.md` alone. [release-please](https://github.com/googleapis/release-please) keeps a release PR open that bumps both. Merging it tags the version, publishes the GitHub Release and deploys it to [openmosh.com](https://openmosh.com/). Until then, merged work shows up only on Vercel preview deployments.
 
 ## Effects inspired by PhotoMosh
 

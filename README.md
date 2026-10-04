@@ -2,7 +2,7 @@
 
 A browser-based glitch art studio, inspired by PhotoMosh. Drop in a photo or a video, pile on effects until it falls apart, hook the whole mess up to a song, and save the result. Nothing is uploaded anywhere, it all runs in your browser.
 
-**[open-mosh.vercel.app](https://open-mosh.vercel.app/)**
+**[openmosh.com](https://openmosh.com/)**
 
 ![The OpenMosh upload screen](assets/screenshots/upload.jpg)
 
