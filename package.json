@@ -13,7 +13,8 @@
 		"test:e2e": "playwright test",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
-		"test:bpm": "BPM_MUSIC=1 bun test src/lib/audio/tempo.music"
+		"test:bpm": "BPM_MUSIC=1 bun test src/lib/audio/tempo.music",
+		"prepare": "git config core.hooksPath .githooks || true"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.63.0",

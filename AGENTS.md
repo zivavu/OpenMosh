@@ -139,8 +139,9 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
 
 ## Git
 
-- Never commit to `main`; it only takes PRs. PRs are rebase-merged (squash is off), so every
-  commit on a branch lands on `main` as-is and becomes its own changelog line.
+- Never commit to `main`; it only takes PRs. A hook in `.githooks/pre-commit` refuses it
+  locally; installing with bun sets `core.hooksPath` to it. PRs are rebase-merged (squash is
+  off), so every commit on a branch lands on `main` as-is and becomes its own changelog line.
 - Work goes on a batch branch, `batch/<slug>` (`batch/editor-polish`), from an up-to-date `main`:
   one branch collects several tasks, one commit each. Keep adding to the batch branch until its
   PR is opened; after that, start the next batch from it (or from `main` once it has merged) and
