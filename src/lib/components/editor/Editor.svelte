@@ -1473,7 +1473,24 @@
 		if (!seqPlaying()) sourceTick++;
 	};
 
-	const sourceRegistry = new SequenceSourceRegistry(bumpSourceTick);
+	/** Once per session: a browser that won't store files refuses every add. */
+	let mediaSaveFailed = false;
+	const sourceRegistry = new SequenceSourceRegistry(bumpSourceTick, (write) => {
+		void saves
+			.track(
+				"media",
+				write.then(() => true),
+			)
+			.then((ok) => {
+				if (ok || mediaSaveFailed) return;
+				mediaSaveFailed = true;
+				showToast(
+					"This browser wouldn't store your media, so it won't be here after a reload. Save a project file to keep it.",
+					"error",
+					10000,
+				);
+			});
+	});
 	let sequenceSources = $derived(sourceRegistry.sources);
 	/** The pool is empty until the opening file lands, so the placeholder waits for that. */
 	let poolFilled = $state(false);
