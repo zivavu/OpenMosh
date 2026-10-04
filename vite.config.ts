@@ -92,8 +92,10 @@ function labRedirect(): Plugin {
 	};
 }
 
-/** Public files the offline copy leaves out: only link previews fetch the share image. */
+/** Public files left out of the install: only link previews fetch the share image. */
 const OFFLINE_SKIP = new Set(["og.jpg"]);
+/** Text-overlay fonts are half the build and load on demand, so the worker caches them on use. */
+const ON_USE_DIR = "fonts/";
 
 function listFiles(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -118,7 +120,7 @@ function serviceWorker(): Plugin {
 			const built = Object.keys(bundle).filter((f) => !f.endsWith(".map"));
 			const copied = listFiles(publicDir)
 				.map((f) => relative(publicDir, f).replaceAll("\\", "/"))
-				.filter((f) => !OFFLINE_SKIP.has(f));
+				.filter((f) => !OFFLINE_SKIP.has(f) && !f.startsWith(ON_USE_DIR));
 			const files = [...new Set([...built, ...copied])].sort();
 			const version = createHash("sha256")
 				.update(files.join("\n"))
