@@ -27,7 +27,8 @@
 
 	let { renderer, canvas, area, lane, redraw }: Props = $props();
 
-	const target = $derived(maskPaint.target!);
+	// Held from mount: the layer outlives the target while it fades out.
+	const target = maskPaint.target!;
 
 	let box = $state<MaskBox | null>(null);
 
