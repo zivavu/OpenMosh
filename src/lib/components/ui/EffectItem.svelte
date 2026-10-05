@@ -4,6 +4,7 @@
 		ArrowUpDown,
 		Brush,
 		ImageUp,
+		Move,
 		Pipette,
 		ChevronDown,
 		ChevronRight,
@@ -41,8 +42,14 @@
 	import {
 		MASK_LANE_CONTEXT,
 		maskPaint,
+		type MaskPaintTarget,
 		type ParamHistory,
 	} from "../../effects/mask-paint.svelte";
+	import {
+		readShape,
+		SHAPE_KEYS,
+		type ShapeValues,
+	} from "../editor/mask-shape";
 	import { getContext, onDestroy } from "svelte";
 	import { isMaskEffect } from "../../effects/catalog/mask";
 	import { maskFromImage } from "../../brush/mask-image";
@@ -188,23 +195,57 @@
 	);
 	const painting = $derived(maskPaint.target?.instanceId === effect.instanceId);
 
-	/** Hand the preview to a Mask tool: the brush, or picking the Key's colours. */
-	function toggleTool(key: string, tool: "paint" | "keys") {
+	/** Hand the preview to a Mask tool, editing the params `current` and `commit`
+	 * read and write. */
+	function startTool(
+		tool: MaskPaintTarget["tool"],
+		current: () => string,
+		commit: MaskPaintTarget["commit"],
+	) {
 		if (painting) {
 			maskPaint.target = null;
 			return;
 		}
 		if (!effect.enabled) onToggle();
-		const shape = effect.values.shape;
+		const shape = String(effect.values.shape);
 		maskPaint.shownId = effect.instanceId;
 		maskPaint.target = {
 			instanceId: effect.instanceId,
 			tool,
-			current: () => String(effect.values[key] ?? ""),
+			shape,
+			current,
 			laneId: maskLane?.() ?? null,
-			commit: (value, history) => onParamChange(key, value, history),
+			commit,
 			alive: () => effect.enabled && effect.values.shape === shape,
 		};
+	}
+
+	/** The brush or the Key's picker: each edits one param. */
+	function toggleTool(key: string, tool: "paint" | "keys") {
+		startTool(
+			tool,
+			() => String(effect.values[key] ?? ""),
+			(value, history) => onParamChange(key, value, history),
+		);
+	}
+
+	const editableShape = $derived(
+		isMaskEffect(effect) &&
+			["ellipse", "rect", "gradient"].includes(String(effect.values.shape)),
+	);
+
+	/** Moving and sizing on the preview: five params, written as one edit. */
+	function toggleShapeEdit() {
+		startTool(
+			"shape",
+			() => JSON.stringify(readShape(effect.values)),
+			(json, history) => {
+				const next = JSON.parse(json) as ShapeValues;
+				SHAPE_KEYS.forEach((k, i) =>
+					onParamChange(k, next[k], i === 0 ? history : "none"),
+				);
+			},
+		);
 	}
 
 	const LOAD_MASK_HINT =
@@ -425,17 +466,31 @@
 						<p class="effect-hint">{def.hint}</p>
 					{/if}
 					{#if isMask}
-						<button
-							type="button"
-							class="paint-btn show-area"
-							class:active={areaShown}
-							aria-pressed={areaShown}
-							onclick={() =>
-								(maskPaint.shownId = areaShown ? null : effect.instanceId)}
-						>
-							{#if areaShown}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
-							Show area
-						</button>
+						<div class="paint-btns mask-tools">
+							<button
+								type="button"
+								class="paint-btn"
+								class:active={areaShown}
+								aria-pressed={areaShown}
+								onclick={() =>
+									(maskPaint.shownId = areaShown ? null : effect.instanceId)}
+							>
+								{#if areaShown}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+								Show area
+							</button>
+							{#if editableShape}
+								<button
+									type="button"
+									class="paint-btn"
+									class:active={painting}
+									aria-pressed={painting}
+									onclick={toggleShapeEdit}
+								>
+									<Move size={12} />
+									{painting ? "Done" : "Edit shape"}
+								</button>
+							{/if}
+						</div>
 					{/if}
 					{#each def.params.filter((p) => isParamVisible(p, effect)) as param}
 						<div class="param-row">
@@ -1164,7 +1219,7 @@
 		color: var(--text-3);
 	}
 
-	.show-area {
+	.mask-tools {
 		margin-bottom: 0.3rem;
 	}
 
