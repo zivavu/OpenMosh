@@ -716,15 +716,14 @@
 											onclick={() => toggleTool(param.key, "paint")}
 										>
 											<Brush size={12} />
-											{painting
-												? "Done"
-												: effect.values[param.key]
-													? "Paint more"
-													: "Paint"}
+											{painting ? "Done" : "Paint"}
 										</button>
-										<label class="paint-btn" title={LOAD_MASK_HINT}>
-											<ImageUp size={12} />
-											Load image
+										<label
+											class="icon-btn"
+											title="Load image. {LOAD_MASK_HINT}"
+											aria-label="Load image"
+										>
+											<ImageUp size={14} />
 											<input
 												type="file"
 												accept="image/*"
@@ -735,9 +734,13 @@
 										{#if effect.values[param.key]}
 											<button
 												type="button"
-												class="paint-btn"
-												onclick={() => change(param.key, "")}>Clear</button
+												class="icon-btn"
+												title="Clear the painting"
+												aria-label="Clear the painting"
+												onclick={() => change(param.key, "")}
 											>
+												<Trash2 size={14} />
+											</button>
 										{/if}
 									</div>
 									{#if painting}
@@ -1175,6 +1178,7 @@
 
 	.paint-btns {
 		display: flex;
+		align-items: center;
 		gap: 0.35rem;
 	}
 
@@ -1182,6 +1186,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
+		white-space: nowrap;
 		padding: 0.2rem 0.6rem;
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
