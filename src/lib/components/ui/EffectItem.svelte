@@ -183,6 +183,7 @@
 			return;
 		}
 		if (!effect.enabled) onToggle();
+		maskPaint.shownId = effect.instanceId;
 		maskPaint.target = {
 			instanceId: effect.instanceId,
 			current: () => String(effect.values[key] ?? ""),

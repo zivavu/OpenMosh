@@ -24,7 +24,7 @@ export const maskPaint = $state({
 	softness: 0.5,
 	/** Paint the effects back out instead of in. */
 	erase: false,
-	/** The Mask whose area the preview tints, besides the one being painted. */
+	/** The Mask whose area the preview tints. Painting starts with its own shown. */
 	shownId: null as string | null,
 });
 
