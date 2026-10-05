@@ -13,6 +13,8 @@ export interface ColorKey {
 	softness: number;
 	/** Only the matching area that runs into the pick point, not every match. */
 	touching: boolean;
+	/** Off leaves the colour out of the Mask without forgetting it. */
+	on: boolean;
 }
 
 /** The most keys one Mask holds; the shader's arrays are this long. */
@@ -53,6 +55,7 @@ export function parseKeys(raw: unknown): ColorKey[] {
 			range: unit(o.range, KEY_RANGE_MAX, 0.1),
 			softness: unit(o.softness, KEY_SOFTNESS_MAX, DEFAULT_KEY_SOFTNESS),
 			touching: o.touching === true,
+			on: o.on !== false,
 		});
 		if (keys.length === MAX_COLOR_KEYS) break;
 	}
@@ -116,6 +119,8 @@ export interface KeyUniforms {
 	tunes: Float32Array;
 	/** 1 per key that only takes the area touching its pick point. */
 	touch: Float32Array;
+	/** 1 per key that is on. */
+	on: Float32Array;
 	seeds: Float32Array;
 	anyTouching: boolean;
 }
@@ -130,16 +135,18 @@ export function keyUniforms(raw: string): KeyUniforms {
 	const labs = new Float32Array(MAX_COLOR_KEYS * 3);
 	const tunes = new Float32Array(MAX_COLOR_KEYS * 2);
 	const touch = new Float32Array(MAX_COLOR_KEYS);
+	const on = new Float32Array(MAX_COLOR_KEYS);
 	const seeds = new Float32Array(MAX_COLOR_KEYS * 2);
 	keys.forEach((k, i) => {
 		const [r, g, b] = hexToVec3(k.color);
 		labs.set(oklab(r, g, b), i * 3);
 		tunes.set([k.range, Math.max(k.softness, 0.0005)], i * 2);
 		touch[i] = k.touching ? 1 : 0;
+		on[i] = k.on ? 1 : 0;
 		seeds.set([k.x, k.y], i * 2);
 	});
-	const anyTouching = keys.some((k) => k.touching);
-	held = { count: keys.length, labs, tunes, touch, seeds, anyTouching };
+	const anyTouching = keys.some((k) => k.touching && k.on);
+	held = { count: keys.length, labs, tunes, touch, on, seeds, anyTouching };
 	// A range drag mints a string per tick; don't grow forever.
 	if (packed.size > 64) packed.clear();
 	packed.set(raw, held);
@@ -150,6 +157,7 @@ const KEY_UNIFORMS_GLSL = `uniform float u_keyCount;
 uniform vec3 u_keyLab[${MAX_COLOR_KEYS}];
 uniform vec2 u_keyTune[${MAX_COLOR_KEYS}];
 uniform float u_keyTouch[${MAX_COLOR_KEYS}];
+uniform float u_keyOn[${MAX_COLOR_KEYS}];
 `;
 
 /** The Key shape's per-key uniforms, for the Mask and its touching fill. */
@@ -172,7 +180,7 @@ void main() {
   float seeded = 0.0;
   for (int i = 0; i < ${MAX_COLOR_KEYS}; i++) {
     if (float(i) >= u_keyCount) break;
-    if (u_keyTouch[i] < 0.5) continue;
+    if (u_keyTouch[i] < 0.5 || u_keyOn[i] < 0.5) continue;
     vec2 t = u_keyTune[i];
     if (distance(lab, u_keyLab[i]) < t.x + t.y) pass = 1.0;
     vec2 d = abs(v_uv - u_keySeeds[i]) * u_reachSize;
@@ -191,5 +199,6 @@ export function setKeyUniforms(
 	if (l["u_keyLab[0]"]) gl.uniform3fv(l["u_keyLab[0]"], keys.labs);
 	if (l["u_keyTune[0]"]) gl.uniform2fv(l["u_keyTune[0]"], keys.tunes);
 	if (l["u_keyTouch[0]"]) gl.uniform1fv(l["u_keyTouch[0]"], keys.touch);
+	if (l["u_keyOn[0]"]) gl.uniform1fv(l["u_keyOn[0]"], keys.on);
 	if (l["u_keySeeds[0]"]) gl.uniform2fv(l["u_keySeeds[0]"], keys.seeds);
 }

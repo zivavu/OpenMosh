@@ -104,10 +104,7 @@
 		e.preventDefault();
 		const p = areaPoint(e);
 		const b = box;
-		const near = keys.findIndex((k) => {
-			const m = uvPoint(b, k.x, k.y);
-			return Math.hypot(m.x - p.x, m.y - p.y) <= GRAB;
-		});
+		const near = markerAt(p);
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		if (near >= 0) {
 			maskPaint.keyIndex = near;
@@ -143,6 +140,7 @@
 					range: pending.range,
 					softness: DEFAULT_KEY_SOFTNESS,
 					touching: false,
+					on: true,
 				},
 			];
 			write(next, false);
@@ -150,13 +148,40 @@
 			// Ticks from here on extend the step the pick just made.
 			pending.index = next.length - 1;
 			pending.moved = true;
+			focus(pending.index);
 		});
 		redraw();
 	}
 
+	/** The dot under a point in preview-area pixels, or -1. */
+	function markerAt(p: { x: number; y: number }): number {
+		const b = box;
+		if (!b) return -1;
+		return keys.findIndex((k) => {
+			const m = uvPoint(b, k.x, k.y);
+			return Math.hypot(m.x - p.x, m.y - p.y) <= GRAB;
+		});
+	}
+
+	/** Narrow the tint to one colour, or widen it back with -1. */
+	function focus(index: number) {
+		const now = maskPaint.keyFocus;
+		if (index < 0) {
+			if (now?.instanceId === target.instanceId) maskPaint.keyFocus = null;
+			return;
+		}
+		if (now?.instanceId === target.instanceId && now.index === index) return;
+		maskPaint.keyFocus = { instanceId: target.instanceId, index };
+	}
+	onMount(() => () => focus(-1));
+
 	function onMove(e: PointerEvent) {
-		if (!drag || !box) return;
+		if (!box) return;
 		const p = areaPoint(e);
+		if (!drag) {
+			focus(markerAt(p));
+			return;
+		}
 		const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0);
 		if (!drag.moved && dist < 4) return;
 		const range =
@@ -179,9 +204,10 @@
 		ring = { x: drag.x0, y: drag.y0, r };
 	}
 
-	function onUp() {
+	function onUp(e: PointerEvent) {
 		drag = null;
 		ring = null;
+		focus(markerAt(areaPoint(e)));
 	}
 
 	onMount(() =>
@@ -208,11 +234,13 @@
 	onpointermove={onMove}
 	onpointerup={onUp}
 	onpointercancel={onUp}
+	onpointerleave={() => !drag && focus(-1)}
 >
 	{#each markers as m, i (i)}
 		<span
 			class="marker"
 			class:selected={i === maskPaint.keyIndex}
+			class:off={!m.key.on}
 			style:left="{m.at.x}px"
 			style:top="{m.at.y}px"
 			style:background={m.key.color}
@@ -254,6 +282,13 @@
 		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 		transform: translate(-50%, -50%);
 		cursor: grab;
+	}
+
+	/* Off: hollow, so the colour's place still shows. */
+	.marker.off {
+		background: transparent !important;
+		border-style: dashed;
+		opacity: 0.7;
 	}
 
 	.marker.selected {

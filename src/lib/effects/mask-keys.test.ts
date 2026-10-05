@@ -15,6 +15,7 @@ const key = {
 	range: 0.1,
 	softness: 0.04,
 	touching: false,
+	on: true,
 };
 
 describe("parseKeys", () => {
@@ -63,6 +64,17 @@ describe("oklab", () => {
 });
 
 describe("keyUniforms", () => {
+	it("keeps a colour that's off, marked off", () => {
+		const raw = serializeKeys([key, { ...key, on: false }]);
+		expect(parseKeys(raw)[1].on).toBe(false);
+		expect([...keyUniforms(raw).on.slice(0, 2)]).toEqual([1, 0]);
+	});
+
+	it("reads a colour saved before the switch existed as on", () => {
+		const { on: _, ...old } = key;
+		expect(parseKeys(JSON.stringify([old]))[0].on).toBe(true);
+	});
+
 	it("marks touching keys and where they were picked", () => {
 		const packed = keyUniforms(
 			serializeKeys([key, { ...key, touching: true, x: 0.9, y: 0.1 }]),

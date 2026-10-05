@@ -298,7 +298,17 @@
 		);
 	}
 
+	/** Point the tint at one colour, or back at the whole Mask. */
+	function focusKey(i: number | null) {
+		if (i !== null) {
+			maskPaint.keyFocus = { instanceId: effect.instanceId, index: i };
+		} else if (maskPaint.keyFocus?.instanceId === effect.instanceId) {
+			maskPaint.keyFocus = null;
+		}
+	}
+
 	function removeKey(key: string, i: number) {
+		focusKey(null);
 		onParamChange(
 			key,
 			serializeKeys(colorKeys.filter((_, j) => j !== i)),
@@ -333,6 +343,7 @@
 		if (painting) maskPaint.target = null;
 		if (areaShown) maskPaint.shownId = null;
 		if (maskPaint.hoverId === effect.instanceId) maskPaint.hoverId = null;
+		focusKey(null);
 	});
 
 	function handleDragStart(e: DragEvent) {
@@ -723,13 +734,20 @@
 								<div class="paint-controls">
 									<div class="paint-btns key-swatches">
 										{#each colorKeys as k, i (i)}
-											<span class="key-chip" class:selected={i === keyIndex}>
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
+											<span
+												class="key-chip"
+												class:selected={i === keyIndex}
+												class:off={!k.on}
+												onmouseenter={() => focusKey(i)}
+												onmouseleave={() => focusKey(null)}
+											>
 												<button
 													type="button"
 													class="key-swatch"
 													style:background={k.color}
-													title={k.color}
-													aria-label="Color {i + 1}"
+													title="{k.color}. Hover to see only what this color selects."
+													aria-label="Color {i + 1}{k.on ? '' : ', off'}"
 													onclick={() => (maskPaint.keyIndex = i)}
 												></button>
 												<button
@@ -754,6 +772,19 @@
 									</div>
 									{#if colorKeys[keyIndex]}
 										{@const k = colorKeys[keyIndex]}
+										<label
+											class="paint-setting"
+											title="Turn this color off without deleting it"
+										>
+											<span>On</span>
+											<Checkbox
+												checked={k.on}
+												onchange={(e) =>
+													setKey(param.key, keyIndex, {
+														on: e.currentTarget.checked,
+													})}
+											/>
+										</label>
 										<div class="paint-setting">
 											<span>Range</span>
 											<RangeSlider
@@ -1356,6 +1387,17 @@
 		border: 1px solid var(--line);
 		border-radius: 4px;
 		cursor: pointer;
+	}
+
+	/* A colour that's off: faded and struck through. */
+	.key-chip.off .key-swatch {
+		opacity: 0.35;
+		background-image: linear-gradient(
+			to top right,
+			transparent calc(50% - 1px),
+			var(--text-2) 50%,
+			transparent calc(50% + 1px)
+		) !important;
 	}
 
 	.key-chip.selected .key-swatch {

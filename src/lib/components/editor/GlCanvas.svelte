@@ -1115,6 +1115,17 @@
 	const TINT_OUT_MS = 380;
 	let tintRaf = 0;
 
+	// A focused Key colour narrows the tint to what it selects.
+	$effect(() => {
+		const r = renderer;
+		if (!r) return;
+		const focus = maskPaint.keyFocus;
+		const key = focus && focus.instanceId === tintedMask() ? focus.index : -1;
+		if (r.maskPreviewKey === key) return;
+		r.maskPreviewKey = key;
+		if (!needsAnimation && !suspended && !externallyDriven) drawFrame(0);
+	});
+
 	// The Mask whose area is shown gets it tinted, eased in and out; never in an export.
 	$effect(() => {
 		const r = renderer;
