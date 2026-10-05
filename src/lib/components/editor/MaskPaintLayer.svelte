@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import { maskPaint } from "../../effects/mask-paint.svelte";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
+	import { softDab } from "../../brush/soft-dab";
 	import type { GlRenderer } from "../../gl/renderer";
 	import type { MediaLane } from "../../media";
 	import { MASK_MAX } from "../../media/source-edit";
@@ -183,48 +184,22 @@
 	let last: { x: number; y: number } | null = null;
 	let erasing = false;
 	let cursor = $state<{ x: number; y: number } | null>(null);
-	/** The painting before this stroke, and the stroke drawn hard on its own. Blurring
-	 * the whole stroke at once keeps overlapping dabs from piling up into a hard line. */
-	let before: HTMLCanvasElement | null = null;
-	let stroke: HTMLCanvasElement | null = null;
-
-	function radius(): number {
-		return (maskPaint.size * Math.max(paint.width, paint.height)) / 2;
-	}
-
-	function beginStroke() {
-		before = copyOf(paint);
-		stroke = document.createElement("canvas");
-		stroke.width = paint.width;
-		stroke.height = paint.height;
-	}
-
 	function strokeTo(p: { x: number; y: number }) {
-		const sctx = stroke?.getContext("2d");
-		if (!ctx || !sctx || !before) return;
-		const r = radius();
-		// Softer brushes shrink their core and spread the rest into the blur.
-		const core = r * (1 - 0.5 * maskPaint.softness);
-		sctx.strokeStyle = sctx.fillStyle = erasing ? "#000" : "#fff";
-		sctx.lineCap = "round";
-		sctx.lineWidth = core * 2;
-		sctx.beginPath();
-		if (last) {
-			sctx.moveTo(last.x, last.y);
-			sctx.lineTo(p.x, p.y);
-			sctx.stroke();
-		} else {
-			sctx.arc(p.x, p.y, core, 0, Math.PI * 2);
-			sctx.fill();
+		if (!ctx) return;
+		const r = (maskPaint.size * Math.max(paint.width, paint.height)) / 2;
+		const core = 1 - maskPaint.softness;
+		// Dabs half a radius apart: close enough for a line, loose enough to stay soft.
+		const from = last ?? p;
+		const steps = Math.max(
+			1,
+			Math.ceil(Math.hypot(p.x - from.x, p.y - from.y) / Math.max(1, r / 2)),
+		);
+		for (let i = last ? 1 : 0; i <= steps; i++) {
+			const t = i / steps;
+			const x = from.x + (p.x - from.x) * t;
+			softDab(ctx, x, from.y + (p.y - from.y) * t, r, !erasing, core);
 		}
 		last = p;
-		ctx.drawImage(before, 0, 0);
-		ctx.filter =
-			maskPaint.softness > 0
-				? `blur(${maskPaint.softness * r * 1.5}px)`
-				: "none";
-		ctx.drawImage(stroke!, 0, 0);
-		ctx.filter = "none";
 		show();
 	}
 
@@ -237,7 +212,6 @@
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		erasing = maskPaint.erase !== e.altKey;
 		last = null;
-		beginStroke();
 		strokeTo(p);
 	}
 
@@ -252,7 +226,6 @@
 	function onUp() {
 		if (!last) return;
 		last = null;
-		before = stroke = null;
 		undoStack.push(committed);
 		redoStack = [];
 		save(paint.toDataURL("image/png"));

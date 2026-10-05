@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+	import { softDab } from "../../brush/soft-dab";
 	import { modalDialog } from "../../actions/modal-dialog";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
@@ -643,15 +644,7 @@
 		const sx = u.x * maskCanvas.width;
 		const sy = u.y * maskCanvas.height;
 		const r = (brush * Math.max(maskCanvas.width, maskCanvas.height)) / 2;
-		const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(r, 1));
-		const on = restoring;
-		grad.addColorStop(0, on ? "rgba(255,255,255,1)" : "rgba(0,0,0,1)");
-		grad.addColorStop(0.6, on ? "rgba(255,255,255,1)" : "rgba(0,0,0,1)");
-		grad.addColorStop(1, on ? "rgba(255,255,255,0)" : "rgba(0,0,0,0)");
-		ctx.fillStyle = grad;
-		ctx.beginPath();
-		ctx.arc(sx, sy, Math.max(r, 1), 0, Math.PI * 2);
-		ctx.fill();
+		softDab(ctx, sx, sy, r, restoring);
 	}
 
 	/** A point in source space, put back into the mask's own space. */

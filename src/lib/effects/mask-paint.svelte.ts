@@ -1,3 +1,5 @@
+import { DEFAULT_DAB_CORE } from "../brush/soft-dab";
+
 /** A Mask effect whose painting the preview is taking strokes for. */
 export interface MaskPaintTarget {
 	instanceId: string;
@@ -20,8 +22,8 @@ export const maskPaint = $state({
 	target: null as MaskPaintTarget | null,
 	/** Brush diameter as a share of the painted box's long edge. */
 	size: 0.1,
-	/** 0 = hard edge, 1 = blurred well past the brush. */
-	softness: 0.5,
+	/** 0 = hard edge, 1 = fading from the centre. The default is the eraser's brush. */
+	softness: 1 - DEFAULT_DAB_CORE,
 	/** Paint the effects back out instead of in. */
 	erase: false,
 	/** The Mask whose area the preview tints. Painting starts with its own shown. */
