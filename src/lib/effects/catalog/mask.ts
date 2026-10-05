@@ -25,7 +25,10 @@ const SHAPES = [
 ] as const;
 
 const placed = (v: Record<string, number | string>) =>
-	v.shape === "ellipse" || v.shape === "rect" || v.shape === "gradient";
+	v.shape === "ellipse" ||
+	v.shape === "rect" ||
+	v.shape === "gradient" ||
+	v.shape === "image";
 const sized = (v: Record<string, number | string>) =>
 	v.shape === "ellipse" || v.shape === "rect";
 const isImage = (v: Record<string, number | string>) => v.shape === "image";
@@ -85,6 +88,26 @@ export const definition: EffectDefinition = {
 				{ label: "Fit", value: "contain" },
 				{ label: "Fill", value: "cover" },
 			],
+			visibleWhen: isImage,
+		},
+		{
+			key: "imageWidth",
+			label: "Width",
+			type: "range",
+			min: 0.05,
+			max: 4,
+			step: 0.01,
+			defaultValue: 1,
+			visibleWhen: isImage,
+		},
+		{
+			key: "imageHeight",
+			label: "Height",
+			type: "range",
+			min: 0.05,
+			max: 4,
+			step: 0.01,
+			defaultValue: 1,
 			visibleWhen: isImage,
 		},
 		{
@@ -231,6 +254,8 @@ uniform float u_channel;
 uniform float u_fit;
 uniform float u_black;
 uniform float u_white;
+uniform float u_imageWidth;
+uniform float u_imageHeight;
 ${MASK_KEYS_GLSL}
 // g = inside the touching keys' fill; coarse, so grown by a texel against a halo.
 uniform sampler2D u_keyReach;
@@ -245,6 +270,12 @@ float reachAt(vec2 uv) {
   return r;
 }
 
+// Units of the short edge of what the chain lands on, so equal sides are a circle
+// on screen even over a media layer's stretched box.
+vec2 shortEdge() {
+  return max(vec2(u_chainAspect, 1.0) / min(u_chainAspect, 1.0), vec2(1.0));
+}
+
 // Where the loaded image sits under uv: stretched, fitted inside, or filling.
 // Outside a fitted image is outside the mask.
 float imageCoverage(vec2 uv) {
@@ -253,7 +284,13 @@ float imageCoverage(vec2 uv) {
   vec2 size = vec2(1.0);
   if (u_fit > 1.5) size = r > 1.0 ? vec2(r, 1.0) : vec2(1.0, 1.0 / r);
   else if (u_fit > 0.5) size = r > 1.0 ? vec2(1.0, 1.0 / r) : vec2(r, 1.0);
-  vec2 iu = (uv - 0.5) / size + 0.5;
+  // Placed like the other shapes: in short-edge units, turned about its centre.
+  vec2 s = shortEdge();
+  vec2 box = size * s * vec2(u_imageWidth, u_imageHeight);
+  vec2 p = (uv - vec2(u_x, u_y)) * s;
+  float a = radians(u_angle);
+  p = mat2(cos(a), -sin(a), sin(a), cos(a)) * p;
+  vec2 iu = p / box + 0.5;
   if (any(lessThan(iu, vec2(0.0))) || any(greaterThan(iu, vec2(1.0)))) return 0.0;
   vec4 t = texture(u_brush, iu);
   float v = u_channel > 0.5 ? t.a : t.r;
@@ -284,9 +321,7 @@ float coverage(vec2 uv, vec4 base) {
     float f = max(u_feather * 0.5, 0.002);
     return smoothstep(u_threshold - f, u_threshold + f, l);
   }
-  // Units of the short edge of what the chain lands on, so equal sides are a circle
-  // on screen even over a media layer's stretched box.
-  vec2 p = (uv - vec2(u_x, u_y)) * max(vec2(u_chainAspect, 1.0) / min(u_chainAspect, 1.0), vec2(1.0));
+  vec2 p = (uv - vec2(u_x, u_y)) * shortEdge();
   // Clockwise for a positive angle, the way layers turn.
   float a = radians(u_angle);
   p = mat2(cos(a), -sin(a), sin(a), cos(a)) * p;
@@ -330,6 +365,8 @@ void main() {
 			"invert",
 			"black",
 			"white",
+			"imageWidth",
+			"imageHeight",
 		]) {
 			setFloat(gl, l, `u_${key}`, v[key] as number);
 		}

@@ -14,6 +14,8 @@ export interface MaskPaintTarget {
 	laneId: string | null;
 	/** Called per stroke, pick or tool undo, with the whole param. */
 	commit: (url: string, history: ParamHistory) => void;
+	/** The Image shape's picture and Fit, which set its size at Width and Height 1. */
+	image?: () => { url: string; fit: string };
 	/** False once the Mask is off or no longer a brush; painting ends then. */
 	alive: () => boolean;
 }

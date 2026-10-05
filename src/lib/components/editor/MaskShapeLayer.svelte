@@ -18,6 +18,7 @@
 		rotateShape,
 		scaleShape,
 		shapeGeometry,
+		imageBase,
 		shapeHandle,
 		type ShapeValues,
 	} from "./mask-shape";
@@ -37,9 +38,6 @@
 
 	// Held from mount: the layer outlives the target while it fades out.
 	const target = maskPaint.target!;
-	const shape = $derived(JSON.parse(target.current()) as ShapeValues);
-	const gradient = $derived(target.shape === "gradient");
-
 	let box = $state<MaskBox | null>(null);
 	onMount(() =>
 		followBox(
@@ -47,6 +45,54 @@
 			(next) => (box = next),
 		),
 	);
+
+	/** The params as stored: for the Image shape, width and height are multiples of its Fit. */
+	const stored = $derived(JSON.parse(target.current()) as ShapeValues);
+
+	// The Image shape's own proportions, read off the loaded picture.
+	let imageAspect = $state(1);
+	$effect(() => {
+		const url = target.image?.().url;
+		if (!url) {
+			imageAspect = 1;
+			return;
+		}
+		const img = new Image();
+		img.onload = () => (imageAspect = img.naturalWidth / img.naturalHeight);
+		img.src = url;
+	});
+
+	/** Short-edge size at Width and Height 1: the Fit's rectangle, or 1 for shapes. */
+	const base = $derived(
+		target.image && box
+			? imageBase(imageAspect, box.w / box.h, target.image().fit)
+			: { w: 1, h: 1 },
+	);
+	/** The Image shape's size limits, as multiples of its Fit (catalog/mask.ts). */
+	const IMAGE_SIZE = { min: 0.05, max: 4 };
+
+	/** The shape in short-edge units, the way the drag math and the outline want it. */
+	const shape = $derived({
+		...stored,
+		width: stored.width * base.w,
+		height: stored.height * base.h,
+	});
+
+	/** Back to what the params hold. */
+	function toStored(s: ShapeValues): ShapeValues {
+		if (!target.image) return s;
+		const clampSize = (v: number) =>
+			Math.min(IMAGE_SIZE.max, Math.max(IMAGE_SIZE.min, v));
+		return {
+			...s,
+			width: clampSize(s.width / base.w),
+			height: clampSize(s.height / base.h),
+		};
+	}
+
+	/** The Image shape is held by its own limits, applied in toStored. */
+	const sizeMax = $derived(target.image ? Infinity : undefined);
+	const gradient = $derived(target.shape === "gradient");
 
 	let session = createParamSession("", () => {});
 	let sessionFor = "";
@@ -135,15 +181,24 @@
 				if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
 				else dx = 0;
 			}
-			next = moveShape(drag.from, dx, dy, box.w, box.h);
+			next = moveShape(drag.from, dx, dy, box.w, box.h, sizeMax);
 		} else if (drag.kind === "scale") {
-			next = scaleShape(drag.from, drag.g, p.x, p.y, box.w, box.h, e.altKey);
+			next = scaleShape(
+				drag.from,
+				drag.g,
+				p.x,
+				p.y,
+				box.w,
+				box.h,
+				e.altKey,
+				sizeMax,
+			);
 		} else {
 			next = rotateShape(drag.from, drag, p.x, p.y, e.shiftKey);
 		}
 		const extend = drag.moved;
 		drag.moved = true;
-		save(JSON.stringify(next), extend);
+		save(JSON.stringify(toStored(next)), extend);
 	}
 
 	function onUp(e: PointerEvent) {
@@ -155,7 +210,7 @@
 
 	function resetAngle() {
 		if (shape.angle === 0) return;
-		save(JSON.stringify({ ...shape, angle: 0 }));
+		save(JSON.stringify({ ...stored, angle: 0 }));
 	}
 
 	function save(json: string, extend = false) {

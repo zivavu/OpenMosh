@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+	imageBase,
 	moveShape,
 	readShape,
 	rotateShape,
@@ -75,6 +76,48 @@ describe("readShape", () => {
 			y: 0.5,
 			width: 0.6,
 			height: 0.6,
+			angle: 0,
+		});
+	});
+});
+
+describe("imageBase", () => {
+	// A 16:9 box: its short edge is the height, so its uv width is 16/9 units.
+	const wide = 16 / 9;
+
+	it("stretches over the whole box", () => {
+		const b = imageBase(1, wide, "stretch");
+		expect(b.w).toBeCloseTo(wide);
+		expect(b.h).toBeCloseTo(1);
+	});
+
+	it("fits a square image to the box's height, keeping it square", () => {
+		const b = imageBase(1, wide, "contain");
+		expect(b.w).toBeCloseTo(1);
+		expect(b.h).toBeCloseTo(1);
+	});
+
+	it("fills the box's width with a square image, cropping its height", () => {
+		const b = imageBase(1, wide, "cover");
+		expect(b.w).toBeCloseTo(wide);
+		expect(b.h).toBeCloseTo(wide);
+	});
+
+	it("fits a wide image inside a tall box by its width", () => {
+		const b = imageBase(2, 0.5, "contain");
+		// Tall box: the short edge is the width, so the box is 1 by 2 units.
+		expect(b.w).toBeCloseTo(1);
+		expect(b.h).toBeCloseTo(0.5);
+	});
+});
+
+describe("readShape for an image", () => {
+	it("reads the size multiples, which start at 1", () => {
+		expect(readShape({ imageWidth: 2 }, true)).toEqual({
+			x: 0.5,
+			y: 0.5,
+			width: 2,
+			height: 1,
 			angle: 0,
 		});
 	});
