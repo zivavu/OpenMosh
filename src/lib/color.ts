@@ -27,7 +27,7 @@ export function hexToRgb(hex: string): Rgb | null {
 	return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-function rgbToHex({ r, g, b }: Rgb): string {
+export function rgbToHex({ r, g, b }: Rgb): string {
 	const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 	return `#${((1 << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b))
 		.toString(16)
