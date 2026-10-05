@@ -7,8 +7,14 @@ import { EFFECT_SHADERS } from "./effect-shaders";
 /** Composited as CPU overlays instead of running a fragment shader. */
 const CPU_EFFECTS = new Set<string>([TRACKING_EFFECT_ID, CAPTION_EFFECT_ID]);
 
-/** Read by the renderer (effect clock, spectrum upload), never by a shader. */
-const HOST_PARAMS = new Set(["speed", "sync", "division", "smoothing"]);
+/** Read by the renderer (effect clock, spectrum upload, painted masks), never by a shader. */
+const HOST_PARAMS = new Set([
+	"speed",
+	"sync",
+	"division",
+	"smoothing",
+	"paint",
+]);
 
 describe("EFFECT_SHADERS", () => {
 	it("has a shader for every effect definition", () => {

@@ -124,6 +124,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		textTimeScale = 1,
 		bpm = 0,
 	} = ctx;
+	// The preview's mask tint must never reach a file.
+	renderer.maskPreviewId = null;
 
 	const hasExplicitAudio = !!trackFile && trackDuration > 0;
 	const videoSpanDuration = videoSpanEnd - videoSpanStart;

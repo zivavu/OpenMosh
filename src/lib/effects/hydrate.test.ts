@@ -28,6 +28,13 @@ describe("getDefinition", () => {
 });
 
 describe("hydrateValues", () => {
+	it("keeps a painted mask and drops anything that isn't an image", () => {
+		const url = "data:image/png;base64,AAAA";
+		expect(hydrateValues("mask", { paint: url }).paint).toBe(url);
+		expect(hydrateValues("mask", { paint: "javascript:x" }).paint).toBe("");
+		expect(hydrateValues("mask", { paint: 3 }).paint).toBe("");
+	});
+
 	it("fills in every param a stored chain is missing", () => {
 		const def = EFFECT_DEFINITIONS[0];
 		const hydrated = hydrateValues(def.id, {});

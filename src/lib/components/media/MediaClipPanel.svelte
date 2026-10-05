@@ -34,6 +34,8 @@
 	import TransitionRows from "./TransitionRows.svelte";
 	import LayerCompositeRows from "../timeline/LayerCompositeRows.svelte";
 	import { lazy } from "../../lazy";
+	import { setContext } from "svelte";
+	import { MASK_LANE_CONTEXT } from "../../effects/mask-paint.svelte";
 
 	// Same chunk the source rail opens; only fetched when an edit starts.
 	const loadSourceEditor = lazy(() => import("../editor/SourceEditor.svelte"));
@@ -85,6 +87,9 @@
 		sourceHasAudio = true,
 		onDetachAudio,
 	}: Props = $props();
+
+	// This chain runs on the lane's media, so a Mask paints over its box.
+	setContext(MASK_LANE_CONTEXT, () => lane?.id ?? null);
 
 	let laneAudio = $derived(lane?.audio ?? DEFAULT_LANE_AUDIO);
 

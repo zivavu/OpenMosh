@@ -79,6 +79,10 @@ function reconcile(
 			return typeof value === "string" && HEX_COLOR.test(value)
 				? value
 				: param.defaultValue;
+		case "paint":
+			return typeof value === "string" && value.startsWith("data:image/")
+				? value
+				: param.defaultValue;
 	}
 }
 

@@ -2,10 +2,12 @@
 	import Checkbox from "./Checkbox.svelte";
 	import {
 		ArrowUpDown,
+		Brush,
 		ChevronDown,
 		ChevronRight,
 		ChevronUp,
 		Copy,
+		Eye,
 		EyeOff,
 		GripVertical,
 		Lock,
@@ -34,6 +36,13 @@
 		DEFAULT_AUDIO_RESPONSE,
 		type AudioResponse,
 	} from "../../audio/auto-range";
+	import {
+		MASK_LANE_CONTEXT,
+		maskPaint,
+		type ParamHistory,
+	} from "../../effects/mask-paint.svelte";
+	import { getContext, onDestroy } from "svelte";
+	import { isMaskEffect } from "../../effects/catalog/mask";
 
 	export type { SpectrumData };
 
@@ -114,7 +123,11 @@
 		onMove: (direction: -1 | 1, toEnd: boolean) => void;
 		canMoveUp: boolean;
 		canMoveDown: boolean;
-		onParamChange: (key: string, value: number | string) => void;
+		onParamChange: (
+			key: string,
+			value: number | string,
+			history?: ParamHistory,
+		) => void;
 		isDragging: boolean;
 		dropIndicator: "above" | "below" | null;
 		onDragStart: (e: DragEvent) => void;
@@ -158,6 +171,46 @@
 	const def = $derived(getDefinition(effect.defId));
 
 	let canDrag = $state(false);
+
+	const maskLane = getContext<(() => string | null) | undefined>(
+		MASK_LANE_CONTEXT,
+	);
+	const painting = $derived(maskPaint.target?.instanceId === effect.instanceId);
+
+	function togglePaint(key: string) {
+		if (painting) {
+			maskPaint.target = null;
+			return;
+		}
+		if (!effect.enabled) onToggle();
+		maskPaint.target = {
+			instanceId: effect.instanceId,
+			current: () => String(effect.values[key] ?? ""),
+			laneId: maskLane?.() ?? null,
+			commit: (url, history) => onParamChange(key, url, history),
+			alive: () => effect.enabled && effect.values.shape === "brush",
+		};
+	}
+
+	const isMask = $derived(isMaskEffect(effect));
+	const areaShown = $derived(maskPaint.shownId === effect.instanceId);
+
+	/** A param edit; on a Mask it also shows the area being changed. */
+	function change(key: string, value: number | string) {
+		onParamChange(key, value);
+		if (isMask) maskPaint.shownId = effect.instanceId;
+	}
+
+	function toggleExpand() {
+		if (effect.expanded && areaShown) maskPaint.shownId = null;
+		onToggleExpand();
+	}
+
+	// A card that goes away (deleted, another clip picked) takes its painting with it.
+	onDestroy(() => {
+		if (painting) maskPaint.target = null;
+		if (areaShown) maskPaint.shownId = null;
+	});
 
 	function handleDragStart(e: DragEvent) {
 		if (!canDrag) {
@@ -210,7 +263,7 @@
 						><span class="name">{def.name}</span></span
 					>
 				{:else}
-					<button class="expand-trigger" onclick={onToggleExpand}>
+					<button class="expand-trigger" onclick={toggleExpand}>
 						<span class="expand-arrow" class:expanded={effect.expanded}>
 							<ChevronRight size={12} />
 						</span>
@@ -312,6 +365,22 @@
 
 			{#if effect.expanded && !rolledChain}
 				<div class="params">
+					{#if def.hint}
+						<p class="effect-hint">{def.hint}</p>
+					{/if}
+					{#if isMask}
+						<button
+							type="button"
+							class="paint-btn show-area"
+							class:active={areaShown}
+							aria-pressed={areaShown}
+							onclick={() =>
+								(maskPaint.shownId = areaShown ? null : effect.instanceId)}
+						>
+							{#if areaShown}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+							Show area
+						</button>
+					{/if}
 					{#each def.params.filter((p) => isParamVisible(p, effect)) as param}
 						<div class="param-row">
 							<label class="param-label" for="{effect.instanceId}-{param.key}"
@@ -327,9 +396,8 @@
 										step={param.step}
 										curve={param.curve}
 										disabled={!!effect.volumeLinks?.[param.key]}
-										oninput={(v) => onParamChange(param.key, v)}
-										ondblclick={() =>
-											onParamChange(param.key, param.defaultValue)}
+										oninput={(v) => change(param.key, v)}
+										ondblclick={() => change(param.key, param.defaultValue)}
 									/>
 									<span class="param-value"
 										>{parseFloat(effect.values[param.key].toString()).toFixed(
@@ -478,21 +546,20 @@
 									id="{effect.instanceId}-{param.key}"
 									checked={effect.values[param.key] === 1}
 									onchange={(e) =>
-										onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
+										change(param.key, e.currentTarget.checked ? 1 : 0)}
 								/>
 							{/if}
 							{#if param.type === "select" && param.fontPicker}
 								<FontSelect
 									id="{effect.instanceId}-{param.key}"
 									value={String(effect.values[param.key])}
-									onChange={(family) => onParamChange(param.key, family)}
+									onChange={(family) => change(param.key, family)}
 								/>
 							{:else if param.type === "select"}
 								<select
 									id="{effect.instanceId}-{param.key}"
 									value={effect.values[param.key]}
-									onchange={(e) =>
-										onParamChange(param.key, e.currentTarget.value)}
+									onchange={(e) => change(param.key, e.currentTarget.value)}
 								>
 									{#each param.options as opt}
 										<option value={opt.value}>{opt.label}</option>
@@ -507,16 +574,71 @@
 									value={effect.values[param.key]}
 									maxlength={param.maxLength}
 									placeholder={param.placeholder ?? ""}
-									oninput={(e) =>
-										onParamChange(param.key, e.currentTarget.value)}
+									oninput={(e) => change(param.key, e.currentTarget.value)}
 								/>
+							{/if}
+							{#if param.type === "paint"}
+								<div class="paint-controls">
+									<div class="paint-btns">
+										<button
+											type="button"
+											class="paint-btn"
+											class:active={painting}
+											onclick={() => togglePaint(param.key)}
+										>
+											<Brush size={12} />
+											{painting
+												? "Done"
+												: effect.values[param.key]
+													? "Paint more"
+													: "Paint"}
+										</button>
+										{#if effect.values[param.key]}
+											<button
+												type="button"
+												class="paint-btn"
+												onclick={() => change(param.key, "")}>Clear</button
+											>
+										{/if}
+									</div>
+									{#if painting}
+										<div class="paint-setting">
+											<span>Size</span>
+											<RangeSlider
+												value={maskPaint.size}
+												min={0.01}
+												max={0.5}
+												step={0.01}
+												oninput={(v) => (maskPaint.size = v)}
+											/>
+										</div>
+										<div class="paint-setting">
+											<span>Softness</span>
+											<RangeSlider
+												value={maskPaint.softness}
+												min={0}
+												max={1}
+												step={0.01}
+												oninput={(v) => (maskPaint.softness = v)}
+											/>
+										</div>
+										<label class="paint-setting">
+											<span>Erase</span>
+											<Checkbox
+												checked={maskPaint.erase}
+												onchange={(e) =>
+													(maskPaint.erase = e.currentTarget.checked)}
+											/>
+										</label>
+									{/if}
+								</div>
 							{/if}
 							{#if param.type === "color"}
 								<ColorPicker
 									id="{effect.instanceId}-{param.key}"
 									value={String(effect.values[param.key])}
 									defaultValue={param.defaultValue}
-									onChange={(hex) => onParamChange(param.key, hex)}
+									onChange={(hex) => change(param.key, hex)}
 								/>
 							{/if}
 						</div>
@@ -891,6 +1013,75 @@
 		align-items: center;
 		gap: 0.4rem;
 		flex-wrap: wrap;
+	}
+
+	.effect-hint {
+		margin: 0 0 0.3rem;
+		font-size: 0.66rem;
+		line-height: 1.45;
+		color: var(--text-3);
+	}
+
+	.show-area {
+		margin-bottom: 0.3rem;
+	}
+
+	.paint-controls {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.paint-btns {
+		display: flex;
+		gap: 0.35rem;
+	}
+
+	.paint-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.6rem;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-2);
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast);
+	}
+
+	.paint-btn:hover,
+	.paint-btn.active {
+		color: var(--live);
+		border-color: var(--live-dim);
+	}
+
+	.paint-setting {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.66rem;
+		color: var(--text-3);
+	}
+
+	.paint-setting > span {
+		min-width: 52px;
+	}
+
+	.paint-setting > :global(:not(span)) {
+		flex: 1;
+	}
+
+	label.paint-setting > :global(:not(span)) {
+		flex: none;
 	}
 
 	.volume-link-btn {

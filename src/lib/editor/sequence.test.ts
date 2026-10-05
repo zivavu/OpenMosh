@@ -9,6 +9,7 @@ import {
 	rollEffects,
 	withSeededRandom,
 } from "./sequence";
+import { MASK_EFFECT_ID } from "../effects/catalog/mask";
 
 const OPTIONS: MoshOptions = {
 	moshMin: 3,
@@ -192,5 +193,26 @@ describe("beat-based re-roll spacing", () => {
 		expect(intervalLabel(2)).toBe("2s");
 		expect(intervalLabel(1.1428571428571428)).toBe("1.143s");
 		expect(intervalLabel(undefined)).toBe(`${DEFAULT_INTERVAL_SEC}s`);
+	});
+});
+
+describe("Masks in a rolled chain", () => {
+	test("an enabled Mask keeps its place and painting through an auto clip's roll", () => {
+		const base = rollEffects(5, { ...OPTIONS, randomizeOrder: false });
+		const at = base.findIndex((e) => e.defId === MASK_EFFECT_ID);
+		base[at].enabled = true;
+		base[at].values.shape = "brush";
+		base[at].values.paint = "data:image/png;base64,AAAA";
+		for (const seed of [1, 2, 3]) {
+			const rolled = rollEffects(seed, OPTIONS, base);
+			expect(rolled[at].defId).toBe(MASK_EFFECT_ID);
+			expect(rolled[at].enabled).toBe(true);
+			expect(rolled[at].values).toEqual(base[at].values);
+		}
+		expect(lockedKey(base)).not.toBe("");
+	});
+
+	test("a Mask that is off leaves the roll's cache key alone", () => {
+		expect(lockedKey(rollEffects(5, OPTIONS))).toBe("");
 	});
 });

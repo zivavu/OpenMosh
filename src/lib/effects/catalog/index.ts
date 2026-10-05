@@ -69,6 +69,7 @@ import * as stylizeGlitch from "./stylize-glitch";
 import * as motionMask from "./motion-mask";
 import * as tracking from "./tracking";
 import * as caption from "./caption";
+import * as mask from "./mask";
 
 export interface CatalogEffect {
 	definition: EffectDefinition;
@@ -149,4 +150,6 @@ export const CATALOG: CatalogEffect[] = [
 	motionMask,
 	tracking,
 	caption,
+	// Last, so by default it covers everything above it.
+	mask,
 ];

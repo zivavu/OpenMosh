@@ -1,4 +1,9 @@
 import { getDefinition, type EffectInstance } from "../effects";
+import {
+	MASK_BRUSH_UNIT,
+	MASK_EFFECT_ID,
+	isMaskEffect,
+} from "../effects/catalog/mask";
 import { ensureFontLoaded, fontsVersion } from "../text-overlay";
 import {
 	drawTextToCanvas,
@@ -145,6 +150,30 @@ function buildChainOps(
 	}
 	for (const layer of layers) ops.push({ kind: "layer", layer });
 	return ops;
+}
+
+/** A Mask's scope ends at the top of its own lane, even with the lanes run as one
+ * chain. Only worked out when some lane holds a Mask. */
+function laneScopeStarts(
+	post: PostChainLayer[],
+): Set<EffectInstance> | undefined {
+	if (!post.some((l) => l.effects.some((e) => e.enabled && isMaskEffect(e)))) {
+		return undefined;
+	}
+	const starts = new Set<EffectInstance>();
+	for (const l of post) {
+		const first = l.effects.find((e) => e.enabled);
+		if (first) starts.add(first);
+	}
+	return starts;
+}
+
+function lastMaskIndex(ops: ChainOp[]): number {
+	for (let i = ops.length - 1; i >= 0; i--) {
+		const op = ops[i];
+		if (op.kind === "effect" && isMaskEffect(op.eff)) return i;
+	}
+	return -1;
 }
 
 /** One stacked fx lane's contribution for a frame. A weight below 1 mixes the
@@ -325,6 +354,25 @@ export class GlRenderer {
 			centre: MaskCentre;
 		}
 	>();
+
+	/** Painted Mask effects, decoded once per painting. Coverage, not distance fields. */
+	private brushTextures = new Map<
+		string,
+		{ tex: WebGLTexture; ready: boolean }
+	>();
+	/** A Mask being painted, read straight off the painting canvas each frame. */
+	private liveBrush: {
+		instanceId: string;
+		/** The painting last committed: clip chains render from copies with new ids. */
+		paint: string;
+		canvas: HTMLCanvasElement;
+		tex: WebGLTexture;
+		dirty: boolean;
+	} | null = null;
+	/** The Mask whose area the preview tints. Never set while exporting. */
+	maskPreviewId: string | null = null;
+	/** Where a Mask's scope started, kept apart from the ping-pong that overwrites it. */
+	private maskBase: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null = null;
 
 	/** The connected key's fill; its programs and buffers are built on first use. */
 	private keyReach: KeyReachPass;
@@ -758,6 +806,135 @@ export class GlRenderer {
 		return null;
 	}
 
+	/** A Mask effect's painting, decoding it on first use. Null until it lands. */
+	private brushTexture(url: string): WebGLTexture | null {
+		const held = this.brushTextures.get(url);
+		if (held) {
+			// Re-inserted so the oldest is the least recently drawn.
+			this.brushTextures.delete(url);
+			this.brushTextures.set(url, held);
+			return held.ready ? held.tex : null;
+		}
+		while (this.brushTextures.size >= GlRenderer.MAX_MASK_TEXTURES) {
+			const oldest = this.brushTextures.keys().next();
+			if (oldest.done) break;
+			this.gl.deleteTexture(this.brushTextures.get(oldest.value)!.tex);
+			this.brushTextures.delete(oldest.value);
+		}
+		const tex = this.createBrushTexture();
+		const entry = { tex, ready: false };
+		this.brushTextures.set(url, entry);
+		const img = new Image();
+		img.onload = () => {
+			if (this.brushTextures.get(url) !== entry) return;
+			const gl = this.gl;
+			gl.bindTexture(gl.TEXTURE_2D, tex);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+			entry.ready = true;
+			this.onMaskReady?.();
+		};
+		img.src = url;
+		return null;
+	}
+
+	/** Start decoding a painting before it is drawn, so swapping it in doesn't blink. */
+	preloadBrush(url: string) {
+		this.brushTexture(url);
+	}
+
+	private createBrushTexture(): WebGLTexture {
+		const gl = this.gl;
+		const tex = gl.createTexture()!;
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		return tex;
+	}
+
+	/** Show a Mask's painting from `canvas` while it is being painted; null stops. */
+	setLiveBrush(
+		instanceId: string,
+		canvas: HTMLCanvasElement | null,
+		paint = "",
+	) {
+		if (!canvas) {
+			if (this.liveBrush) this.gl.deleteTexture(this.liveBrush.tex);
+			this.liveBrush = null;
+			return;
+		}
+		if (this.liveBrush?.canvas === canvas) {
+			Object.assign(this.liveBrush, { instanceId, paint, dirty: true });
+			return;
+		}
+		if (this.liveBrush) this.gl.deleteTexture(this.liveBrush.tex);
+		const tex = this.createBrushTexture();
+		this.liveBrush = { instanceId, paint, canvas, tex, dirty: true };
+	}
+
+	/** What a Mask reads its painting from; black (nothing painted) by default. */
+	private bindBrush(eff: EffectInstance) {
+		const gl = this.gl;
+		let tex: WebGLTexture | null = null;
+		const live = this.liveBrush;
+		if (
+			live &&
+			(live.instanceId === eff.instanceId ||
+				(eff.values.shape === "brush" && eff.values.paint === live.paint))
+		) {
+			if (live.dirty) {
+				gl.bindTexture(gl.TEXTURE_2D, live.tex);
+				gl.texImage2D(
+					gl.TEXTURE_2D,
+					0,
+					gl.RGBA,
+					gl.RGBA,
+					gl.UNSIGNED_BYTE,
+					live.canvas,
+				);
+				live.dirty = false;
+			}
+			tex = live.tex;
+		} else if (eff.values.shape === "brush") {
+			const url = eff.values.paint;
+			if (typeof url === "string" && url) tex = this.brushTexture(url);
+		}
+		gl.activeTexture(gl.TEXTURE0 + MASK_BRUSH_UNIT);
+		gl.bindTexture(gl.TEXTURE_2D, tex ?? this.blankTexture());
+		gl.activeTexture(gl.TEXTURE0);
+	}
+
+	private ensureMaskBase(): {
+		tex: WebGLTexture;
+		fbo: WebGLFramebuffer;
+	} | null {
+		if (this.maskBase) return this.maskBase;
+		const tex = this.createTexture(this.imgW, this.imgH);
+		const fbo = this.createRenderTarget(tex);
+		if (!fbo) {
+			this.gl.deleteTexture(tex);
+			return null;
+		}
+		this.maskBase = { tex, fbo };
+		return this.maskBase;
+	}
+
+	private deleteMaskBase() {
+		if (!this.maskBase) return;
+		this.gl.deleteTexture(this.maskBase.tex);
+		this.gl.deleteFramebuffer(this.maskBase.fbo);
+		this.maskBase = null;
+	}
+
+	/** Park `tex` as the next Mask scope's starting picture. */
+	private holdMaskBase(tex: WebGLTexture, time: number): WebGLTexture {
+		const base = this.ensureMaskBase();
+		if (!base) return tex;
+		this.drawPass(this.passthrough, base.fbo, tex, 1.0, time);
+		return base.tex;
+	}
+
 	/** The decoded mask as a distance field, or null if 2D canvas is unavailable. */
 	private sdfPixels(
 		img: HTMLImageElement,
@@ -1079,10 +1256,12 @@ export class GlRenderer {
 		// intermediate buffers. Every non-sequence render takes this path.
 		if (post.length === 0 || (prepared.length === 0 && allFullWeight(post))) {
 			let flat = effects;
+			let scopeStarts: Set<EffectInstance> | undefined;
 			if (post.length > 0) {
 				// By hand rather than flatMap, which allocates a second array per frame.
 				flat = effects.slice();
 				for (const l of post) flat.push(...l.effects);
+				scopeStarts = laneScopeStarts(post);
 			}
 			const resultTex = this.renderChainTo(
 				flat,
@@ -1093,6 +1272,8 @@ export class GlRenderer {
 				true,
 				false,
 				prepared,
+				undefined,
+				scopeStarts,
 			);
 			this.presentFrame(resultTex);
 			return;
@@ -1457,9 +1638,14 @@ export class GlRenderer {
 		useAltSource = false,
 		layers: PreparedLayer[] = [],
 		srcOverride?: WebGLTexture,
+		/** Effects that open a new Mask scope: the first of each concatenated lane. */
+		scopeStarts?: ReadonlySet<EffectInstance>,
 	): WebGLTexture | null {
 		const srcTex = srcOverride ?? this.chainSource(useAltSource);
 		const ops = buildChainOps(effects, layers);
+		const lastMask = lastMaskIndex(ops);
+		/** What the picture was where the current Mask scope began. */
+		let scopeBase = srcTex;
 
 		if (ops.length === 0) {
 			if (toCanvas) {
@@ -1503,6 +1689,14 @@ export class GlRenderer {
 			}
 
 			const eff = op.eff;
+			const isMask = eff.defId === MASK_EFFECT_ID;
+			const values =
+				isMask && eff.instanceId === this.maskPreviewId
+					? { ...eff.values, preview: 1 }
+					: eff.values;
+			if (scopeStarts?.has(eff) && i <= lastMask) {
+				scopeBase = this.holdMaskBase(input, time);
+			}
 
 			// Tracking and captions are CPU-built 2D overlays, not shader passes.
 			// Composited over the chain input at this slot so later effects distort them.
@@ -1566,7 +1760,7 @@ export class GlRenderer {
 							1.0,
 							effectTime,
 							entry.def,
-							eff.values,
+							values,
 							originalInput,
 							effectDelta,
 							pair.textures[pair.idx],
@@ -1583,7 +1777,7 @@ export class GlRenderer {
 						1.0,
 						effectTime,
 						entry.def,
-						eff.values,
+						values,
 						originalInput,
 						undefined,
 						undefined,
@@ -1600,6 +1794,12 @@ export class GlRenderer {
 			}
 
 			if (entry.def.linearFilter) this.setTextureFilter(input, true);
+			if (isMask) this.bindBrush(eff);
+			const original = isMask
+				? scopeBase
+				: entry.prePasses
+					? originalInput
+					: undefined;
 
 			if (entry.program.uniforms["u_feedback"]) {
 				// Feedback effect: render into its private history buffer, reading its own
@@ -1618,8 +1818,8 @@ export class GlRenderer {
 					1.0,
 					effectTime,
 					entry.def,
-					eff.values,
-					entry.prePasses ? originalInput : undefined,
+					values,
+					original,
 					effectDelta,
 					pair.textures[pair.idx],
 				);
@@ -1642,8 +1842,8 @@ export class GlRenderer {
 						-1.0,
 						effectTime,
 						entry.def,
-						eff.values,
-						entry.prePasses ? originalInput : undefined,
+						values,
+						original,
 						effectDelta,
 					);
 				} else {
@@ -1654,8 +1854,8 @@ export class GlRenderer {
 						1.0,
 						effectTime,
 						entry.def,
-						eff.values,
-						entry.prePasses ? originalInput : undefined,
+						values,
+						original,
 						effectDelta,
 					);
 				}
@@ -1670,13 +1870,15 @@ export class GlRenderer {
 					1.0,
 					effectTime,
 					entry.def,
-					eff.values,
-					entry.prePasses ? originalInput : undefined,
+					values,
+					original,
 					effectDelta,
 				);
 				if (entry.def.linearFilter) this.setTextureFilter(input, false);
 				input = this.ppTextures![ppIdx];
 				ppIdx = 1 - ppIdx;
+				// The next Mask's scope starts here, and the ping-pong is about to overwrite it.
+				if (isMask && i < lastMask) scopeBase = this.holdMaskBase(input, time);
 			}
 		}
 
@@ -2916,6 +3118,10 @@ export class GlRenderer {
 	destroy() {
 		const gl = this.gl;
 		if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
+		for (const entry of this.brushTextures.values())
+			gl.deleteTexture(entry.tex);
+		this.brushTextures.clear();
+		this.setLiveBrush("", null);
 		if (this.trackingTexture) gl.deleteTexture(this.trackingTexture);
 		this.trackingTexture = null;
 		this.clearCaptionTextures();
@@ -2953,6 +3159,7 @@ export class GlRenderer {
 		if (this.blendTexture) gl.deleteTexture(this.blendTexture);
 		if (this.blendFBO) gl.deleteFramebuffer(this.blendFBO);
 		this.deleteStackBuffers();
+		this.deleteMaskBase();
 		for (const prog of this.transitionPrograms.values()) {
 			gl.deleteProgram(prog.program);
 		}
@@ -3349,6 +3556,7 @@ export class GlRenderer {
 			this.blendFBO = null;
 		}
 		this.deleteStackBuffers();
+		this.deleteMaskBase();
 		if (this.trackingTexture) {
 			gl.deleteTexture(this.trackingTexture);
 			this.trackingTexture = null;

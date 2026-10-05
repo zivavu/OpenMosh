@@ -37,12 +37,21 @@ function copyLinks(
 	);
 }
 
+/** A painting belongs to the picture it was painted on, so presets leave it out. */
+function withoutPaint(e: EffectInstance): Record<string, number | string> {
+	const values = { ...e.values };
+	for (const param of getDefinition(e.defId)?.params ?? []) {
+		if (param.type === "paint") values[param.key] = param.defaultValue;
+	}
+	return values;
+}
+
 /** What a preset keeps of a live chain: no instance ids, no UI state. */
 function serializeEffects(effects: EffectInstance[]): Preset["effects"] {
 	return effects.map((e) => ({
 		defId: e.defId,
 		enabled: e.enabled,
-		values: { ...e.values },
+		values: withoutPaint(e),
 		...(e.volumeLinks &&
 			Object.keys(e.volumeLinks).length > 0 && {
 				volumeLinks: copyLinks(e.volumeLinks),
