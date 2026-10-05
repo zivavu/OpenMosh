@@ -47,6 +47,7 @@
 		type ParamHistory,
 	} from "../../effects/mask-paint.svelte";
 	import {
+		IMAGE_SHAPE_KEYS,
 		readShape,
 		SHAPE_KEYS,
 		type ShapeValues,
@@ -202,6 +203,7 @@
 		tool: MaskPaintTarget["tool"],
 		current: () => string,
 		commit: MaskPaintTarget["commit"],
+		image?: MaskPaintTarget["image"],
 	) {
 		if (painting) {
 			maskPaint.target = null;
@@ -216,6 +218,7 @@
 			current,
 			laneId: maskLane?.() ?? null,
 			commit,
+			image,
 			alive: () => effect.enabled && effect.values.shape === shape,
 		};
 	}
@@ -231,20 +234,30 @@
 
 	const editableShape = $derived(
 		isMaskEffect(effect) &&
-			["ellipse", "rect", "gradient"].includes(String(effect.values.shape)),
+			["ellipse", "rect", "gradient", "image"].includes(
+				String(effect.values.shape),
+			),
 	);
 
 	/** Moving and sizing on the preview: five params, written as one edit. */
 	function toggleShapeEdit() {
+		const image = effect.values.shape === "image";
+		const keys = image ? IMAGE_SHAPE_KEYS : SHAPE_KEYS;
 		startTool(
 			"shape",
-			() => JSON.stringify(readShape(effect.values)),
+			() => JSON.stringify(readShape(effect.values, image)),
 			(json, history) => {
 				const next = JSON.parse(json) as ShapeValues;
 				SHAPE_KEYS.forEach((k, i) =>
-					onParamChange(k, next[k], i === 0 ? history : "none"),
+					onParamChange(keys[i], next[k], i === 0 ? history : "none"),
 				);
 			},
+			image
+				? () => ({
+						url: String(effect.values.image ?? ""),
+						fit: String(effect.values.fit),
+					})
+				: undefined,
 		);
 	}
 
