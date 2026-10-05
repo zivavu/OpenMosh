@@ -53,7 +53,7 @@
 		type ShapeValues,
 	} from "../editor/mask-shape";
 	import { getContext, onDestroy } from "svelte";
-	import { isMaskEffect } from "../../effects/catalog/mask";
+	import { isMaskEffect, maskAwaitingImage } from "../../effects/catalog/mask";
 	import { maskFromImage } from "../../brush/mask-image";
 	import { showToast } from "./toast.svelte";
 	import {
@@ -219,7 +219,10 @@
 			laneId: maskLane?.() ?? null,
 			commit,
 			image,
-			alive: () => effect.enabled && effect.values.shape === shape,
+			alive: () =>
+				effect.enabled &&
+				effect.values.shape === shape &&
+				!maskAwaitingImage(effect.values),
 		};
 	}
 
@@ -261,6 +264,7 @@
 		);
 	}
 
+	const IMAGE_EMPTY_HINT = "A black-and-white image or a cutout";
 	const LOAD_MASK_HINT =
 		"White areas get the effects and black areas don't. A cutout with a transparent background works too: the effects go on the part that's left.";
 
@@ -487,7 +491,7 @@
 					{#if def.hint}
 						<p class="effect-hint">{def.hint}</p>
 					{/if}
-					{#if isMask}
+					{#if isMask && !maskAwaitingImage(effect.values)}
 						<div class="paint-btns mask-tools">
 							<button
 								type="button"
@@ -807,6 +811,9 @@
 											onchange={(e) => loadMask(param.key, e.currentTarget)}
 										/>
 									</label>
+									{#if !effect.values[param.key]}
+										<span class="image-empty">{IMAGE_EMPTY_HINT}</span>
+									{/if}
 									{#if effect.values[param.key]}
 										<button
 											type="button"
@@ -1268,6 +1275,13 @@
 	.image-row {
 		flex: 1;
 		min-width: 0;
+		flex-wrap: wrap;
+	}
+
+	.image-empty {
+		font-size: 0.64rem;
+		line-height: 1.35;
+		color: var(--text-3);
 	}
 
 	/* The mask on a checkerboard, so a cutout's see-through parts read as such. */
