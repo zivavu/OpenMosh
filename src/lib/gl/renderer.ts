@@ -427,6 +427,8 @@ export class GlRenderer {
 	private imgH = 0;
 	/** How much of the chain buffer the media fills, centred; under 1 when a layer bleeds. */
 	private chainMediaFill = 1;
+	/** Width over height of what the chain lands on: a media layer's box, or 0 for the frame. */
+	private chainAspect = 0;
 	private lastTime = -1;
 	/** Refilled every frame by beginLiveIds, so the GC pass costs no allocation. */
 	private liveIds = new Set<string>();
@@ -2633,6 +2635,7 @@ export class GlRenderer {
 			texSize,
 		);
 		this.chainMediaFill = 1 / grow;
+		this.chainAspect = box.drawW / Math.max(box.drawH, 1);
 		const chained =
 			this.renderChainTo(
 				effects,
@@ -2646,6 +2649,7 @@ export class GlRenderer {
 				out.tex,
 			) ?? scratch.tex;
 		this.chainMediaFill = 1;
+		this.chainAspect = 0;
 		// Safe to write back into `out`: the chain's result lives in the scratch (or a
 		// feedback buffer), never in the texture it read. Chain buffers are NEAREST.
 		this.setTextureFilter(chained, true);
@@ -3881,6 +3885,12 @@ export class GlRenderer {
 		}
 		if (compiled.uniforms["u_mediaFill"]) {
 			gl.uniform1f(compiled.uniforms["u_mediaFill"], this.chainMediaFill);
+		}
+		if (compiled.uniforms["u_chainAspect"]) {
+			gl.uniform1f(
+				compiled.uniforms["u_chainAspect"],
+				this.chainAspect || this.imgW / Math.max(this.imgH, 1),
+			);
 		}
 		if (compiled.uniforms["u_time"]) {
 			gl.uniform1f(compiled.uniforms["u_time"], time);
