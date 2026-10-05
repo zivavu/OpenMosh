@@ -39,6 +39,8 @@ export const maskPaint = $state({
 	peekId: null as string | null,
 	/** The Mask whose Show area button the pointer rests on. */
 	hoverId: null as string | null,
+	/** A Key colour pointed at or dragged: the tint shows only what it selects. */
+	keyFocus: null as { instanceId: string; index: number } | null,
 	/** The Key shape's colour whose settings the card shows. */
 	keyIndex: 0,
 });
@@ -59,7 +61,12 @@ export function peekArea(id: string) {
 
 /** The Mask whose area the preview tints right now, if any. */
 export function tintedMask(): string | null {
-	return maskPaint.shownId ?? maskPaint.hoverId ?? maskPaint.peekId;
+	return (
+		maskPaint.shownId ??
+		maskPaint.hoverId ??
+		maskPaint.keyFocus?.instanceId ??
+		maskPaint.peekId
+	);
 }
 
 /** Key for the context a media clip's panel sets, so its Masks paint in its box. */

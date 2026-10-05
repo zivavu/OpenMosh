@@ -260,6 +260,8 @@ uniform float u_feather;
 uniform float u_amount;
 uniform float u_invert;
 uniform float u_preview;
+// The Key colour the preview tints alone; -1 for all of them.
+uniform float u_previewKey;
 uniform float u_channel;
 uniform float u_fit;
 uniform float u_black;
@@ -308,24 +310,27 @@ float imageCoverage(vec2 uv) {
   return clamp((v - u_black) / max(u_white - u_black, 0.001), 0.0, 1.0);
 }
 
+// The Key shape's colours that are on, or just colour number "only" (on or not) when it is >= 0.
+float keysCoverage(vec2 uv, vec3 lab, float only) {
+  float m = 0.0;
+  float reach = -1.0;
+  for (int i = 0; i < ${MAX_COLOR_KEYS}; i++) {
+    if (float(i) >= u_keyCount) break;
+    if (only >= 0.0 ? float(i) != only : u_keyOn[i] < 0.5) continue;
+    vec2 t = u_keyTune[i];
+    float k = 1.0 - smoothstep(t.x, t.x + t.y, distance(lab, u_keyLab[i]));
+    if (u_keyTouch[i] > 0.5) {
+      if (reach < 0.0) reach = reachAt(uv);
+      k *= reach;
+    }
+    m = max(m, k);
+  }
+  return m;
+}
+
 float coverage(vec2 uv, vec4 base) {
   if (u_shape > 5.5) return imageCoverage(uv);
-  if (u_shape > 4.5) {
-    vec3 lab = oklab(base.rgb);
-    float m = 0.0;
-    float reach = -1.0;
-    for (int i = 0; i < ${MAX_COLOR_KEYS}; i++) {
-      if (float(i) >= u_keyCount) break;
-      vec2 t = u_keyTune[i];
-      float k = 1.0 - smoothstep(t.x, t.x + t.y, distance(lab, u_keyLab[i]));
-      if (u_keyTouch[i] > 0.5) {
-        if (reach < 0.0) reach = reachAt(uv);
-        k *= reach;
-      }
-      m = max(m, k);
-    }
-    return m;
-  }
+  if (u_shape > 4.5) return keysCoverage(uv, oklab(base.rgb), -1.0);
   if (u_shape > 3.5) return texture(u_brush, uv).r;
   if (u_shape > 2.5) {
     float l = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
@@ -358,11 +363,16 @@ void main() {
   if (u_invert > 0.5) m = 1.0 - m;
   outColor = mix(base, cur, m * u_amount);
   if (u_preview > 0.0) {
+    // A focused Key colour shows only what it selects, invert aside.
+    float shown = m;
+    if (u_shape > 4.5 && u_shape < 5.5 && u_previewKey >= 0.0) {
+      shown = keysCoverage(v_uv, oklab(base.rgb), u_previewKey);
+    }
     // Outside tinted, edge traced, so the area reads whatever the effects do. Scaled
     // by u_preview, which the preview eases in and out.
-    float tint = (1.0 - m) * 0.5 * u_preview;
+    float tint = (1.0 - shown) * 0.5 * u_preview;
     outColor.rgb = mix(outColor.rgb, vec3(1.0, 0.18, 0.45), tint);
-    float edge = 1.0 - smoothstep(0.0, max(fwidth(m), 0.0001) * 1.5, abs(m - 0.5));
+    float edge = 1.0 - smoothstep(0.0, max(fwidth(shown), 0.0001) * 1.5, abs(shown - 0.5));
     outColor.rgb = mix(outColor.rgb, vec3(1.0), edge * 0.85 * u_preview);
     outColor.a = max(outColor.a, tint);
   }
@@ -396,6 +406,7 @@ void main() {
 		);
 		setInt(gl, l, "u_brush", MASK_BRUSH_UNIT);
 		setFloat(gl, l, "u_preview", (v.preview as number | undefined) ?? 0);
+		setFloat(gl, l, "u_previewKey", (v.previewKey as number | undefined) ?? -1);
 		setKeyUniforms(gl, l, keyUniforms(String(v.keys ?? "")));
 		setInt(gl, l, "u_keyReach", MASK_REACH_UNIT);
 	},
