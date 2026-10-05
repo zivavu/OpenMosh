@@ -8,7 +8,14 @@ import {
 	serializeKeys,
 } from "./mask-keys";
 
-const key = { color: "#00ff00", x: 0.2, y: 0.7, range: 0.1, softness: 0.04 };
+const key = {
+	color: "#00ff00",
+	x: 0.2,
+	y: 0.7,
+	range: 0.1,
+	softness: 0.04,
+	touching: false,
+};
 
 describe("parseKeys", () => {
 	it("reads back what serializeKeys wrote", () => {
@@ -56,6 +63,16 @@ describe("oklab", () => {
 });
 
 describe("keyUniforms", () => {
+	it("marks touching keys and where they were picked", () => {
+		const packed = keyUniforms(
+			serializeKeys([key, { ...key, touching: true, x: 0.9, y: 0.1 }]),
+		);
+		expect(packed.anyTouching).toBe(true);
+		expect([...packed.touch.slice(0, 2)]).toEqual([0, 1]);
+		expect(packed.seeds[2]).toBeCloseTo(0.9);
+		expect(packed.seeds[3]).toBeCloseTo(0.1);
+	});
+
 	it("packs each key's colour and tolerances in order", () => {
 		const packed = keyUniforms(
 			serializeKeys([key, { ...key, color: "#ffffff" }]),

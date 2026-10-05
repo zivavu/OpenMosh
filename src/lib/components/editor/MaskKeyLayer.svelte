@@ -134,6 +134,7 @@
 					y: v,
 					range: pending.range,
 					softness: DEFAULT_KEY_SOFTNESS,
+					touching: false,
 				},
 			];
 			write(next, false);

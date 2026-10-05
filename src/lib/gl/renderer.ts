@@ -3,8 +3,14 @@ import { rgbToHex } from "../color";
 import {
 	MASK_BRUSH_UNIT,
 	MASK_EFFECT_ID,
+	MASK_REACH_UNIT,
 	isMaskEffect,
 } from "../effects/catalog/mask";
+import {
+	MASK_REACH_SEED_FRAG,
+	keyUniforms,
+	setKeyUniforms,
+} from "../effects/mask-keys";
 import { ensureFontLoaded, fontsVersion } from "../text-overlay";
 import {
 	drawTextToCanvas,
@@ -55,7 +61,7 @@ import {
 	EFFECT_SHADERS,
 	type EffectShaderDef,
 } from "./effect-shaders";
-import { KeyReachPass, setKeyPointUniforms } from "./key-pass";
+import { KeyReachPass, ReachFill, setKeyPointUniforms } from "./key-pass";
 import { MeshPass } from "./mesh-pass";
 import { ScenePass, type SceneDef } from "./scene-pass";
 import type { Mesh } from "../mesh";
@@ -386,6 +392,8 @@ export class GlRenderer {
 
 	/** The connected key's fill; its programs and buffers are built on first use. */
 	private keyReach: KeyReachPass;
+	/** The Key shape's touching fill, run per Mask over where its scope starts. */
+	private maskReach: ReachFill;
 
 	/** Solo: chainSource hands back black rather than the source. Requested for the
 	 * next render and cleared by it, so a caller that never asks can't inherit it. */
@@ -492,6 +500,7 @@ export class GlRenderer {
 		if (!gl) throw new Error("WebGL2 not supported");
 		this.gl = gl;
 		this.keyReach = new KeyReachPass(gl);
+		this.maskReach = new ReachFill(gl, MASK_REACH_SEED_FRAG);
 		this.meshPass = new MeshPass(gl);
 		this.scenePass = new ScenePass(gl);
 		gl.getExtension("EXT_color_buffer_float");
@@ -881,6 +890,23 @@ export class GlRenderer {
 		if (this.liveBrush) this.gl.deleteTexture(this.liveBrush.tex);
 		const tex = this.createBrushTexture();
 		this.liveBrush = { instanceId, paint, canvas, tex, dirty: true };
+	}
+
+	/** The Key shape's touching fill for this Mask, or black when no key touches. */
+	private bindMaskReach(eff: EffectInstance, base: WebGLTexture) {
+		const gl = this.gl;
+		let reach: WebGLTexture | null = null;
+		if (eff.values.shape === "key") {
+			const keys = keyUniforms(String(eff.values.keys ?? ""));
+			if (keys.anyTouching) {
+				reach = this.maskReach.run(base, this.imgW, this.imgH, (prog) =>
+					setKeyUniforms(gl, prog.uniforms, keys),
+				);
+			}
+		}
+		gl.activeTexture(gl.TEXTURE0 + MASK_REACH_UNIT);
+		gl.bindTexture(gl.TEXTURE_2D, reach ?? this.blankTexture());
+		gl.activeTexture(gl.TEXTURE0);
 	}
 
 	/** What a Mask reads its painting from; black (nothing painted) by default. */
@@ -1867,7 +1893,10 @@ export class GlRenderer {
 			}
 
 			if (entry.def.linearFilter) this.setTextureFilter(input, true);
-			if (isMask) this.bindBrush(eff);
+			if (isMask) {
+				this.bindMaskReach(eff, scopeBase);
+				this.bindBrush(eff);
+			}
 			const pick = this.maskPick;
 			if (isMask && pick?.instanceId === eff.instanceId) {
 				this.maskPick = null;
@@ -3224,6 +3253,7 @@ export class GlRenderer {
 		}
 		this.layerTransformProgram = null;
 		this.keyReach.dispose();
+		this.maskReach.dispose();
 		if (this.altSourceTexture) gl.deleteTexture(this.altSourceTexture);
 		this.altSourceTexture = null;
 		this.deleteStageBuffer();
