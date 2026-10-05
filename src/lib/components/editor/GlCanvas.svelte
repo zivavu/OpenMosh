@@ -44,7 +44,7 @@
 		type SourceEdit,
 	} from "../../media";
 	import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
-	import { maskPaint } from "../../effects/mask-paint.svelte";
+	import { maskPaint, tintedMask } from "../../effects/mask-paint.svelte";
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 	import MaskKeyLayer from "./MaskKeyLayer.svelte";
 	import MaskShapeLayer from "./MaskShapeLayer.svelte";
@@ -1112,7 +1112,7 @@
 	$effect(() => {
 		const r = renderer;
 		if (!r) return;
-		const id = suspended || externallyDriven ? null : maskPaint.shownId;
+		const id = suspended || externallyDriven ? null : tintedMask();
 		if (r.maskPreviewId === id) return;
 		r.maskPreviewId = id;
 		if (!needsAnimation && !suspended && !externallyDriven) drawFrame(0);

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { maskPaint } from "../../effects/mask-paint.svelte";
+	import { maskPaint, peekArea } from "../../effects/mask-paint.svelte";
 	import {
 		DEFAULT_KEY_SOFTNESS,
 		KEY_RANGE_MAX,
@@ -87,6 +87,13 @@
 
 	function write(next: ColorKey[], extend: boolean) {
 		session.save(serializeKeys(next), extend);
+		peekArea(target.instanceId);
+		redraw();
+	}
+
+	function step(changed: string | null) {
+		if (changed === null) return;
+		peekArea(target.instanceId);
 		redraw();
 	}
 
@@ -179,8 +186,8 @@
 	onMount(() =>
 		captureToolKeys({
 			close: () => (maskPaint.target = null),
-			undo: () => session.undo() !== null && redraw(),
-			redo: () => session.redo() !== null && redraw(),
+			undo: () => step(session.undo()),
+			redo: () => step(session.redo()),
 		}),
 	);
 

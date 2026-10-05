@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { maskPaint } from "../../effects/mask-paint.svelte";
+	import { maskPaint, peekArea } from "../../effects/mask-paint.svelte";
 	import { softDab } from "../../brush/soft-dab";
 	import type { GlRenderer } from "../../gl/renderer";
 	import type { MediaLane } from "../../media";
@@ -154,6 +154,7 @@
 			softDab(ctx, x, from.y + (p.y - from.y) * t, r, !erasing, core);
 		}
 		last = p;
+		peekArea(target.instanceId);
 		show();
 	}
 
@@ -186,6 +187,7 @@
 
 	function step(url: string | null) {
 		if (url === null) return;
+		peekArea(target.instanceId);
 		load(url);
 	}
 

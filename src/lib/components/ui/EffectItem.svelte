@@ -42,6 +42,7 @@
 	import {
 		MASK_LANE_CONTEXT,
 		maskPaint,
+		peekArea,
 		type MaskPaintTarget,
 		type ParamHistory,
 	} from "../../effects/mask-paint.svelte";
@@ -208,7 +209,6 @@
 		}
 		if (!effect.enabled) onToggle();
 		const shape = String(effect.values.shape);
-		maskPaint.shownId = effect.instanceId;
 		maskPaint.target = {
 			instanceId: effect.instanceId,
 			tool,
@@ -260,7 +260,7 @@
 			const url = await maskFromImage(file);
 			if (!effect.enabled) onToggle();
 			onParamChange(key, url, "new");
-			maskPaint.shownId = effect.instanceId;
+			peekArea(effect.instanceId);
 		} catch {
 			showToast("Couldn't read that image as a mask", "error");
 		}
@@ -286,16 +286,23 @@
 			serializeKeys(colorKeys.filter((_, j) => j !== i)),
 			"new",
 		);
+		peekArea(effect.instanceId);
 		if (maskPaint.keyIndex >= i && maskPaint.keyIndex > 0) maskPaint.keyIndex--;
 	}
 
 	const isMask = $derived(isMaskEffect(effect));
 	const areaShown = $derived(maskPaint.shownId === effect.instanceId);
 
-	/** A param edit; on a Mask it also shows the area being changed. */
+	/** A param edit; on a Mask the area shows while it changes. */
 	function change(key: string, value: number | string) {
 		onParamChange(key, value);
-		if (isMask) maskPaint.shownId = effect.instanceId;
+		if (isMask) peekArea(effect.instanceId);
+	}
+
+	function toggleArea() {
+		maskPaint.shownId = areaShown ? null : effect.instanceId;
+		// Off has to look off at once, not wait for the pointer to leave.
+		maskPaint.hoverId = null;
 	}
 
 	function toggleExpand() {
@@ -307,6 +314,7 @@
 	onDestroy(() => {
 		if (painting) maskPaint.target = null;
 		if (areaShown) maskPaint.shownId = null;
+		if (maskPaint.hoverId === effect.instanceId) maskPaint.hoverId = null;
 	});
 
 	function handleDragStart(e: DragEvent) {
@@ -472,8 +480,13 @@
 								class="paint-btn"
 								class:active={areaShown}
 								aria-pressed={areaShown}
-								onclick={() =>
-									(maskPaint.shownId = areaShown ? null : effect.instanceId)}
+								title="Keeps the Mask's area tinted on the preview. Hover here to see it without turning it on."
+								onclick={toggleArea}
+								onmouseenter={() => (maskPaint.hoverId = effect.instanceId)}
+								onmouseleave={() => {
+									if (maskPaint.hoverId === effect.instanceId)
+										maskPaint.hoverId = null;
+								}}
 							>
 								{#if areaShown}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 								Show area
