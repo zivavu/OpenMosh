@@ -1106,14 +1106,11 @@
 		void preloadTextTimelineFonts(textTimeline);
 	});
 
-	// The Mask being painted or looked at gets its area tinted; never in an export.
+	// The Mask whose area is shown gets it tinted; never in an export.
 	$effect(() => {
 		const r = renderer;
 		if (!r) return;
-		const id =
-			suspended || externallyDriven
-				? null
-				: (maskPaint.target?.instanceId ?? maskPaint.shownId);
+		const id = suspended || externallyDriven ? null : maskPaint.shownId;
 		if (r.maskPreviewId === id) return;
 		r.maskPreviewId = id;
 		if (!needsAnimation && !suspended && !externallyDriven) drawFrame(0);
