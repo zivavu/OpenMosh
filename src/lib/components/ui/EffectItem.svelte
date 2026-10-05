@@ -3,6 +3,7 @@
 	import {
 		ArrowUpDown,
 		Brush,
+		Pipette,
 		ChevronDown,
 		ChevronRight,
 		ChevronUp,
@@ -43,6 +44,13 @@
 	} from "../../effects/mask-paint.svelte";
 	import { getContext, onDestroy } from "svelte";
 	import { isMaskEffect } from "../../effects/catalog/mask";
+	import {
+		KEY_RANGE_MAX,
+		KEY_SOFTNESS_MAX,
+		parseKeys,
+		serializeKeys,
+		type ColorKey,
+	} from "../../effects/mask-keys";
 
 	export type { SpectrumData };
 
@@ -177,20 +185,46 @@
 	);
 	const painting = $derived(maskPaint.target?.instanceId === effect.instanceId);
 
-	function togglePaint(key: string) {
+	/** Hand the preview to a Mask tool: the brush, or picking the Key's colours. */
+	function toggleTool(key: string, tool: "paint" | "keys") {
 		if (painting) {
 			maskPaint.target = null;
 			return;
 		}
 		if (!effect.enabled) onToggle();
+		const shape = effect.values.shape;
 		maskPaint.shownId = effect.instanceId;
 		maskPaint.target = {
 			instanceId: effect.instanceId,
+			tool,
 			current: () => String(effect.values[key] ?? ""),
 			laneId: maskLane?.() ?? null,
-			commit: (url, history) => onParamChange(key, url, history),
-			alive: () => effect.enabled && effect.values.shape === "brush",
+			commit: (value, history) => onParamChange(key, value, history),
+			alive: () => effect.enabled && effect.values.shape === shape,
 		};
+	}
+
+	const colorKeys = $derived(parseKeys(effect.values.keys));
+	const keyIndex = $derived(
+		Math.min(maskPaint.keyIndex, Math.max(0, colorKeys.length - 1)),
+	);
+
+	function setKey(key: string, i: number, patch: Partial<ColorKey>) {
+		change(
+			key,
+			serializeKeys(
+				colorKeys.map((k, j) => (j === i ? { ...k, ...patch } : k)),
+			),
+		);
+	}
+
+	function removeKey(key: string, i: number) {
+		onParamChange(
+			key,
+			serializeKeys(colorKeys.filter((_, j) => j !== i)),
+			"new",
+		);
+		if (maskPaint.keyIndex >= i && maskPaint.keyIndex > 0) maskPaint.keyIndex--;
 	}
 
 	const isMask = $derived(isMaskEffect(effect));
@@ -578,6 +612,66 @@
 									oninput={(e) => change(param.key, e.currentTarget.value)}
 								/>
 							{/if}
+							{#if param.type === "keys"}
+								<div class="paint-controls">
+									<div class="paint-btns key-swatches">
+										{#each colorKeys as k, i (i)}
+											<span class="key-chip" class:selected={i === keyIndex}>
+												<button
+													type="button"
+													class="key-swatch"
+													style:background={k.color}
+													title={k.color}
+													aria-label="Color {i + 1}"
+													onclick={() => (maskPaint.keyIndex = i)}
+												></button>
+												<button
+													type="button"
+													class="key-del"
+													aria-label="Remove color {i + 1}"
+													onclick={() => removeKey(param.key, i)}
+												>
+													<X size={9} />
+												</button>
+											</span>
+										{/each}
+										<button
+											type="button"
+											class="paint-btn"
+											class:active={painting}
+											onclick={() => toggleTool(param.key, "keys")}
+										>
+											<Pipette size={12} />
+											{painting ? "Done" : "Pick"}
+										</button>
+									</div>
+									{#if colorKeys[keyIndex]}
+										{@const k = colorKeys[keyIndex]}
+										<div class="paint-setting">
+											<span>Range</span>
+											<RangeSlider
+												value={k.range}
+												min={0}
+												max={KEY_RANGE_MAX}
+												step={0.005}
+												oninput={(v) =>
+													setKey(param.key, keyIndex, { range: v })}
+											/>
+										</div>
+										<div class="paint-setting">
+											<span>Softness</span>
+											<RangeSlider
+												value={k.softness}
+												min={0}
+												max={KEY_SOFTNESS_MAX}
+												step={0.005}
+												oninput={(v) =>
+													setKey(param.key, keyIndex, { softness: v })}
+											/>
+										</div>
+									{/if}
+								</div>
+							{/if}
 							{#if param.type === "paint"}
 								<div class="paint-controls">
 									<div class="paint-btns">
@@ -585,7 +679,7 @@
 											type="button"
 											class="paint-btn"
 											class:active={painting}
-											onclick={() => togglePaint(param.key)}
+											onclick={() => toggleTool(param.key, "paint")}
 										>
 											<Brush size={12} />
 											{painting
@@ -1063,6 +1157,52 @@
 	.paint-btn.active {
 		color: var(--live);
 		border-color: var(--live-dim);
+	}
+
+	.key-swatches {
+		flex-wrap: wrap;
+		align-items: center;
+	}
+
+	.key-chip {
+		position: relative;
+		display: inline-flex;
+	}
+
+	.key-swatch {
+		width: 20px;
+		height: 20px;
+		padding: 0;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		cursor: pointer;
+	}
+
+	.key-chip.selected .key-swatch {
+		border-color: var(--live);
+		box-shadow: 0 0 0 1px var(--live);
+	}
+
+	.key-del {
+		position: absolute;
+		top: -5px;
+		right: -5px;
+		display: none;
+		align-items: center;
+		justify-content: center;
+		width: 13px;
+		height: 13px;
+		padding: 0;
+		border: none;
+		border-radius: 50%;
+		background: var(--ink);
+		color: var(--text-2);
+		cursor: pointer;
+	}
+
+	.key-chip:hover .key-del,
+	.key-del:focus-visible {
+		display: inline-flex;
 	}
 
 	.paint-setting {

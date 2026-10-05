@@ -1,12 +1,20 @@
 import { H, setFloat, setInt } from "../../gl/shader-lib";
 import type { EffectShaderDef } from "../../gl/shader-lib";
 import type { EffectDefinition, EffectInstance } from "../types";
+import { MAX_COLOR_KEYS, OKLAB_GLSL, keyUniforms } from "../mask-keys";
 
 export const MASK_EFFECT_ID = "mask";
 /** Texture unit the renderer binds the painted mask to. */
 export const MASK_BRUSH_UNIT = 6;
 
-const SHAPES = ["ellipse", "rect", "gradient", "brightness", "brush"] as const;
+const SHAPES = [
+	"ellipse",
+	"rect",
+	"gradient",
+	"brightness",
+	"brush",
+	"key",
+] as const;
 
 const placed = (v: Record<string, number | string>) =>
 	v.shape === "ellipse" || v.shape === "rect" || v.shape === "gradient";
@@ -35,8 +43,16 @@ export const definition: EffectDefinition = {
 				{ label: "Rectangle", value: "rect" },
 				{ label: "Gradient", value: "gradient" },
 				{ label: "Brightness", value: "brightness" },
+				{ label: "Key", value: "key" },
 				{ label: "Brush", value: "brush" },
 			],
+		},
+		{
+			key: "keys",
+			label: "Colors",
+			type: "keys",
+			defaultValue: "",
+			visibleWhen: (v) => v.shape === "key",
 		},
 		{
 			key: "paint",
@@ -113,7 +129,7 @@ export const definition: EffectDefinition = {
 			max: 1,
 			step: 0.01,
 			defaultValue: 0.2,
-			visibleWhen: (v) => v.shape !== "brush",
+			visibleWhen: (v) => v.shape !== "brush" && v.shape !== "key",
 		},
 		{
 			key: "amount",
@@ -150,8 +166,21 @@ uniform float u_feather;
 uniform float u_amount;
 uniform float u_invert;
 uniform float u_preview;
-
+uniform float u_keyCount;
+uniform vec3 u_keyLab[${MAX_COLOR_KEYS}];
+uniform vec2 u_keyTune[${MAX_COLOR_KEYS}];
+${OKLAB_GLSL}
 float coverage(vec2 uv, vec4 base) {
+  if (u_shape > 4.5) {
+    vec3 lab = oklab(base.rgb);
+    float m = 0.0;
+    for (int i = 0; i < ${MAX_COLOR_KEYS}; i++) {
+      if (float(i) >= u_keyCount) break;
+      vec2 t = u_keyTune[i];
+      m = max(m, 1.0 - smoothstep(t.x, t.x + t.y, distance(lab, u_keyLab[i])));
+    }
+    return m;
+  }
   if (u_shape > 3.5) return texture(u_brush, uv).r;
   if (u_shape > 2.5) {
     float l = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
@@ -203,5 +232,9 @@ void main() {
 		}
 		setInt(gl, l, "u_brush", MASK_BRUSH_UNIT);
 		setFloat(gl, l, "u_preview", (v.preview as number | undefined) ?? 0);
+		const keys = keyUniforms(String(v.keys ?? ""));
+		setFloat(gl, l, "u_keyCount", keys.count);
+		if (l["u_keyLab[0]"]) gl.uniform3fv(l["u_keyLab[0]"], keys.labs);
+		if (l["u_keyTune[0]"]) gl.uniform2fv(l["u_keyTune[0]"], keys.tunes);
 	},
 };

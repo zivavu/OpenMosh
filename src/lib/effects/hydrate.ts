@@ -1,5 +1,6 @@
 import { EFFECT_DEFINITIONS } from "./definitions";
 import { hueToHex } from "../color";
+import { parseKeys, serializeKeys } from "./mask-keys";
 import {
 	generateId,
 	type EffectDefinition,
@@ -79,6 +80,8 @@ function reconcile(
 			return typeof value === "string" && HEX_COLOR.test(value)
 				? value
 				: param.defaultValue;
+		case "keys":
+			return serializeKeys(parseKeys(value));
 		case "paint":
 			return typeof value === "string" && value.startsWith("data:image/")
 				? value

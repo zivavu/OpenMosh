@@ -1,13 +1,15 @@
 import { DEFAULT_DAB_CORE } from "../brush/soft-dab";
 
-/** A Mask effect whose painting the preview is taking strokes for. */
+/** A Mask effect the preview is taking brush strokes or colour picks for. */
 export interface MaskPaintTarget {
 	instanceId: string;
-	/** The painting the effect holds now; "" for none. */
+	/** Painting with the brush, or picking colours for the Key shape. */
+	tool: "paint" | "keys";
+	/** The param the tool edits, as the effect holds it now. */
 	current: () => string;
 	/** Set when the chain is a media clip's: the painting covers that layer's box. */
 	laneId: string | null;
-	/** Called once per stroke, or brush undo, with the whole painting. */
+	/** Called per stroke, pick or tool undo, with the whole param. */
 	commit: (url: string, history: ParamHistory) => void;
 	/** False once the Mask is off or no longer a brush; painting ends then. */
 	alive: () => boolean;
@@ -26,8 +28,10 @@ export const maskPaint = $state({
 	softness: 1 - DEFAULT_DAB_CORE,
 	/** Paint the effects back out instead of in. */
 	erase: false,
-	/** The Mask whose area the preview tints. Painting starts with its own shown. */
+	/** The Mask whose area the preview tints. A tool starts with its own shown. */
 	shownId: null as string | null,
+	/** The Key shape's colour whose settings the card shows. */
+	keyIndex: 0,
 });
 
 /** Key for the context a media clip's panel sets, so its Masks paint in its box. */

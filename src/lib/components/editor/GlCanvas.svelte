@@ -46,6 +46,7 @@
 	import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import { maskPaint } from "../../effects/mask-paint.svelte";
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
+	import MaskKeyLayer from "./MaskKeyLayer.svelte";
 
 	/** Shared, so the default prop doesn't mint an array per render. */
 	const EMPTY_POST: PostChainLayer[] = [];
@@ -1290,7 +1291,9 @@
 		</div>
 	{/if}
 	{#if maskPaint.target && renderer && canvasEl && !externallyDriven}
-		<MaskPaintLayer
+		{@const Tool =
+			maskPaint.target.tool === "keys" ? MaskKeyLayer : MaskPaintLayer}
+		<Tool
 			{renderer}
 			canvas={canvasEl}
 			area={previewArea}

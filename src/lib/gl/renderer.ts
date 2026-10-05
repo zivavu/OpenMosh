@@ -1,4 +1,5 @@
 import { getDefinition, type EffectInstance } from "../effects";
+import { rgbToHex } from "../color";
 import {
 	MASK_BRUSH_UNIT,
 	MASK_EFFECT_ID,
@@ -371,6 +372,15 @@ export class GlRenderer {
 	} | null = null;
 	/** The Mask whose area the preview tints. Never set while exporting. */
 	maskPreviewId: string | null = null;
+	/** A colour wanted from where a Mask's scope starts, read on the next draw. */
+	private maskPick: {
+		instanceId: string;
+		u: number;
+		v: number;
+		done: (hex: string) => void;
+	} | null = null;
+	private pickTarget: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null =
+		null;
 	/** Where a Mask's scope started, kept apart from the ping-pong that overwrites it. */
 	private maskBase: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null = null;
 
@@ -925,6 +935,69 @@ export class GlRenderer {
 		this.gl.deleteTexture(this.maskBase.tex);
 		this.gl.deleteFramebuffer(this.maskBase.fbo);
 		this.maskBase = null;
+	}
+
+	/** The colour at `u`,`v` (chain uv, y down) of the picture Mask `instanceId`
+	 * starts from, handed over after the next draw that reaches it. */
+	pickMaskColor(
+		instanceId: string,
+		u: number,
+		v: number,
+		done: (hex: string) => void,
+	) {
+		this.maskPick = { instanceId, u, v, done };
+	}
+
+	/** A small patch of `tex` around `u`,`v`, averaged: one pixel of a photo is noise. */
+	private readPatch(tex: WebGLTexture, u: number, v: number): string {
+		const gl = this.gl;
+		const N = 5;
+		if (!this.pickTarget) {
+			const t = this.createTexture(N, N);
+			const fbo = this.createRenderTarget(t);
+			if (!fbo) {
+				gl.deleteTexture(t);
+				return "#000000";
+			}
+			this.pickTarget = { tex: t, fbo };
+		}
+		gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickTarget.fbo);
+		// The whole frame drawn offset, so the point lands mid-patch.
+		gl.viewport(
+			Math.round(N / 2 - u * this.imgW),
+			Math.round(N / 2 - v * this.imgH),
+			this.imgW,
+			this.imgH,
+		);
+		gl.useProgram(this.passthrough.program);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		if (this.passthrough.uniforms["u_texture"]) {
+			gl.uniform1i(this.passthrough.uniforms["u_texture"], 0);
+		}
+		if (this.passthrough.uniforms["u_flipY"]) {
+			gl.uniform1f(this.passthrough.uniforms["u_flipY"], 1.0);
+		}
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
+		const px = new Uint8Array(N * N * 4);
+		gl.readPixels(0, 0, N, N, gl.RGBA, gl.UNSIGNED_BYTE, px);
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		for (let i = 0; i < px.length; i += 4) {
+			r += px[i];
+			g += px[i + 1];
+			b += px[i + 2];
+		}
+		const n = N * N;
+		return rgbToHex({ r: r / n, g: g / n, b: b / n });
+	}
+
+	private deletePickTarget() {
+		if (!this.pickTarget) return;
+		this.gl.deleteTexture(this.pickTarget.tex);
+		this.gl.deleteFramebuffer(this.pickTarget.fbo);
+		this.pickTarget = null;
 	}
 
 	/** Park `tex` as the next Mask scope's starting picture. */
@@ -1795,6 +1868,12 @@ export class GlRenderer {
 
 			if (entry.def.linearFilter) this.setTextureFilter(input, true);
 			if (isMask) this.bindBrush(eff);
+			const pick = this.maskPick;
+			if (isMask && pick?.instanceId === eff.instanceId) {
+				this.maskPick = null;
+				const hex = this.readPatch(scopeBase, pick.u, pick.v);
+				queueMicrotask(() => pick.done(hex));
+			}
 			const original = isMask
 				? scopeBase
 				: entry.prePasses
@@ -3159,6 +3238,7 @@ export class GlRenderer {
 		if (this.blendTexture) gl.deleteTexture(this.blendTexture);
 		if (this.blendFBO) gl.deleteFramebuffer(this.blendFBO);
 		this.deleteStackBuffers();
+		this.deletePickTarget();
 		this.deleteMaskBase();
 		for (const prog of this.transitionPrograms.values()) {
 			gl.deleteProgram(prog.program);

@@ -72,13 +72,23 @@ export interface PaintParam {
 	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
+/** Colours picked off the picture, as JSON (see effects/mask-keys); "" is none. */
+export interface KeysParam {
+	key: string;
+	label: string;
+	type: "keys";
+	defaultValue: "";
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
+}
+
 export type EffectParam =
 	| RangeParam
 	| SelectParam
 	| CheckboxParam
 	| TextParam
 	| ColorParam
-	| PaintParam;
+	| PaintParam
+	| KeysParam;
 
 export interface EffectDefinition {
 	id: string;
