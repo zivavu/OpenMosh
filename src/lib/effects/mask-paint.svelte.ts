@@ -3,8 +3,11 @@ import { DEFAULT_DAB_CORE } from "../brush/soft-dab";
 /** A Mask effect the preview is taking brush strokes or colour picks for. */
 export interface MaskPaintTarget {
 	instanceId: string;
-	/** Painting with the brush, or picking colours for the Key shape. */
-	tool: "paint" | "keys";
+	/** Painting with the brush, picking the Key shape's colours, or moving and
+	 * sizing an Ellipse, Rectangle or Gradient. */
+	tool: "paint" | "keys" | "shape";
+	/** The Mask's shape when the tool started. */
+	shape: string;
 	/** The param the tool edits, as the effect holds it now. */
 	current: () => string;
 	/** Set when the chain is a media clip's: the painting covers that layer's box. */

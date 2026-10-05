@@ -47,6 +47,7 @@
 	import { maskPaint } from "../../effects/mask-paint.svelte";
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 	import MaskKeyLayer from "./MaskKeyLayer.svelte";
+	import MaskShapeLayer from "./MaskShapeLayer.svelte";
 
 	/** Shared, so the default prop doesn't mint an array per render. */
 	const EMPTY_POST: PostChainLayer[] = [];
@@ -1291,8 +1292,11 @@
 		</div>
 	{/if}
 	{#if maskPaint.target && renderer && canvasEl && !externallyDriven}
-		{@const Tool =
-			maskPaint.target.tool === "keys" ? MaskKeyLayer : MaskPaintLayer}
+		{@const Tool = {
+			paint: MaskPaintLayer,
+			keys: MaskKeyLayer,
+			shape: MaskShapeLayer,
+		}[maskPaint.target.tool]}
 		<Tool
 			{renderer}
 			canvas={canvasEl}
