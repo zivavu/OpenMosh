@@ -40,7 +40,7 @@ Pick one of three modes on the upload screen.
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 
-There are 70 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. A Mask effect limits the effects above it to an ellipse, a rectangle, a gradient, the bright parts of the picture, colors you pick from it or a shape you paint. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
+There are 70 effects, from the tame ones (pixelate, posterize, blur) through the usual glitch vocabulary (data bend, pixel sort, VHS, channel split) to things that follow motion or the salient region of the frame. A Mask effect limits the effects above it to an ellipse, a rectangle, a gradient, the bright parts of the picture, colors you pick from it, a shape you paint or an image you load. Anything with a clock — strobes, rolls, pulses, re-rolls — can run free or lock to the beat of the track. Everything renders in WebGL2 and exports to WebM with audio. No MP4, no GIF.
 
 Keyboard shortcuts live behind the shortcuts button in the app.
 
