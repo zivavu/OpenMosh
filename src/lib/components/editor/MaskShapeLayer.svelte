@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { maskPaint } from "../../effects/mask-paint.svelte";
+	import { maskPaint, peekArea } from "../../effects/mask-paint.svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import type { MediaLane } from "../../media";
 	import type { HandleFrame } from "../../editor/layer-drag";
@@ -142,8 +142,7 @@
 		}
 		const extend = drag.moved;
 		drag.moved = true;
-		session.save(JSON.stringify(next), extend);
-		redraw();
+		save(JSON.stringify(next), extend);
 	}
 
 	function onUp(e: PointerEvent) {
@@ -155,15 +154,26 @@
 
 	function resetAngle() {
 		if (shape.angle === 0) return;
-		session.save(JSON.stringify({ ...shape, angle: 0 }));
+		save(JSON.stringify({ ...shape, angle: 0 }));
+	}
+
+	function save(json: string, extend = false) {
+		session.save(json, extend);
+		peekArea(target.instanceId);
+		redraw();
+	}
+
+	function step(changed: string | null) {
+		if (changed === null) return;
+		peekArea(target.instanceId);
 		redraw();
 	}
 
 	onMount(() =>
 		captureToolKeys({
 			close: () => (maskPaint.target = null),
-			undo: () => session.undo() !== null && redraw(),
-			redo: () => session.redo() !== null && redraw(),
+			undo: () => step(session.undo()),
+			redo: () => step(session.redo()),
 		}),
 	);
 
