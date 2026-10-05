@@ -1,11 +1,18 @@
 import { H, setFloat, setInt } from "../../gl/shader-lib";
 import type { EffectShaderDef } from "../../gl/shader-lib";
 import type { EffectDefinition, EffectInstance } from "../types";
-import { MAX_COLOR_KEYS, OKLAB_GLSL, keyUniforms } from "../mask-keys";
+import {
+	MASK_KEYS_GLSL,
+	MAX_COLOR_KEYS,
+	keyUniforms,
+	setKeyUniforms,
+} from "../mask-keys";
 
 export const MASK_EFFECT_ID = "mask";
 /** Texture unit the renderer binds the painted mask to. */
 export const MASK_BRUSH_UNIT = 6;
+/** And the Key shape's touching fill. */
+export const MASK_REACH_UNIT = 7;
 
 const SHAPES = [
 	"ellipse",
@@ -166,18 +173,34 @@ uniform float u_feather;
 uniform float u_amount;
 uniform float u_invert;
 uniform float u_preview;
-uniform float u_keyCount;
-uniform vec3 u_keyLab[${MAX_COLOR_KEYS}];
-uniform vec2 u_keyTune[${MAX_COLOR_KEYS}];
-${OKLAB_GLSL}
+${MASK_KEYS_GLSL}
+// g = inside the touching keys' fill; coarse, so grown by a texel against a halo.
+uniform sampler2D u_keyReach;
+
+float reachAt(vec2 uv) {
+  vec2 t = 1.0 / vec2(textureSize(u_keyReach, 0));
+  float r = textureLod(u_keyReach, uv, 0.0).g;
+  r = max(r, textureLod(u_keyReach, uv + vec2(t.x, t.y), 0.0).g);
+  r = max(r, textureLod(u_keyReach, uv + vec2(-t.x, t.y), 0.0).g);
+  r = max(r, textureLod(u_keyReach, uv + vec2(t.x, -t.y), 0.0).g);
+  r = max(r, textureLod(u_keyReach, uv + vec2(-t.x, -t.y), 0.0).g);
+  return r;
+}
+
 float coverage(vec2 uv, vec4 base) {
   if (u_shape > 4.5) {
     vec3 lab = oklab(base.rgb);
     float m = 0.0;
+    float reach = -1.0;
     for (int i = 0; i < ${MAX_COLOR_KEYS}; i++) {
       if (float(i) >= u_keyCount) break;
       vec2 t = u_keyTune[i];
-      m = max(m, 1.0 - smoothstep(t.x, t.x + t.y, distance(lab, u_keyLab[i])));
+      float k = 1.0 - smoothstep(t.x, t.x + t.y, distance(lab, u_keyLab[i]));
+      if (u_keyTouch[i] > 0.5) {
+        if (reach < 0.0) reach = reachAt(uv);
+        k *= reach;
+      }
+      m = max(m, k);
     }
     return m;
   }
@@ -232,9 +255,7 @@ void main() {
 		}
 		setInt(gl, l, "u_brush", MASK_BRUSH_UNIT);
 		setFloat(gl, l, "u_preview", (v.preview as number | undefined) ?? 0);
-		const keys = keyUniforms(String(v.keys ?? ""));
-		setFloat(gl, l, "u_keyCount", keys.count);
-		if (l["u_keyLab[0]"]) gl.uniform3fv(l["u_keyLab[0]"], keys.labs);
-		if (l["u_keyTune[0]"]) gl.uniform2fv(l["u_keyTune[0]"], keys.tunes);
+		setKeyUniforms(gl, l, keyUniforms(String(v.keys ?? "")));
+		setInt(gl, l, "u_keyReach", MASK_REACH_UNIT);
 	},
 };

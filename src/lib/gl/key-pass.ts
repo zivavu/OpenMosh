@@ -60,12 +60,14 @@ const SEED_RADIUS = 0.006;
 const REACH_UNIT = 5;
 
 /**
- * Where a key's connected points cut, worked out on the GPU over the whole
- * source frame: a match pass, then sweeps that flood it from the seeds.
- * Leaves the framebuffer, viewport and program changed.
+ * A flood over a frame at low res, on the GPU: a seed pass marks r = passable and
+ * g = reached, then sweeps spread the reach through passable texels. The seed
+ * shader decides what passes; the chroma key and the Mask's Key shape each bring
+ * their own. Leaves the framebuffer, viewport and program changed.
  */
-export class KeyReachPass {
+export class ReachFill {
 	#gl: WebGL2RenderingContext;
+	#seedFrag: string;
 	#failed = false;
 	#state: {
 		seed: KeyProgram;
@@ -76,18 +78,24 @@ export class KeyReachPass {
 		h: number;
 	} | null = null;
 
-	constructor(gl: WebGL2RenderingContext) {
+	constructor(gl: WebGL2RenderingContext, seedFrag: string) {
 		this.#gl = gl;
+		this.#seedFrag = seedFrag;
 	}
 
-	/** The fill for this frame (g = reached), or null when no point is connected. */
+	/** Size of the last fill, in texels. */
+	get size(): { w: number; h: number } | null {
+		return this.#state && { w: this.#state.w, h: this.#state.h };
+	}
+
+	/** The fill of `tex` (g = reached). `seed` sets the seed program's own uniforms. */
 	run(
 		tex: WebGLTexture,
 		texW: number,
 		texH: number,
-		key: ChromaKey | undefined,
+		seed: (prog: KeyProgram, w: number, h: number) => void,
 	): WebGLTexture | null {
-		if (!hasConnectedPoint(key) || texW <= 0 || texH <= 0) return null;
+		if (texW <= 0 || texH <= 0) return null;
 		const k = Math.min(1, REACH_MAX / Math.max(texW, texH));
 		const w = Math.max(1, Math.round(texW * k));
 		const h = Math.max(1, Math.round(texH * k));
@@ -98,19 +106,19 @@ export class KeyReachPass {
 
 		gl.bindFramebuffer(gl.FRAMEBUFFER, r.fbo[0]);
 		gl.useProgram(r.seed.program);
-		const seed = r.seed.uniforms;
-		if (seed["u_flipY"]) gl.uniform1f(seed["u_flipY"], 1.0);
-		setKeyPointUniforms(gl, r.seed, key);
-		if (seed["u_seedRadius"]) {
+		const u = r.seed.uniforms;
+		if (u["u_flipY"]) gl.uniform1f(u["u_flipY"], 1.0);
+		seed(r.seed, w, h);
+		if (u["u_seedRadius"]) {
 			gl.uniform1f(
-				seed["u_seedRadius"],
+				u["u_seedRadius"],
 				Math.max(1, SEED_RADIUS * Math.max(w, h)),
 			);
 		}
-		if (seed["u_reachSize"]) gl.uniform2f(seed["u_reachSize"], w, h);
+		if (u["u_reachSize"]) gl.uniform2f(u["u_reachSize"], w, h);
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, tex);
-		if (seed["u_texture"]) gl.uniform1i(seed["u_texture"], 0);
+		if (u["u_texture"]) gl.uniform1i(u["u_texture"], 0);
 		gl.drawArrays(gl.TRIANGLES, 0, 6);
 
 		gl.useProgram(r.spread.program);
@@ -131,29 +139,12 @@ export class KeyReachPass {
 		return r.tex[src];
 	}
 
-	/** Hands `reach` (from run) to a program built on CHROMA_KEY_GLSL. */
-	bind(prog: KeyProgram, reach: WebGLTexture | null) {
-		const gl = this.#gl;
-		const u = prog.uniforms;
-		if (u["u_hasReach"]) gl.uniform1f(u["u_hasReach"], reach ? 1 : 0);
-		const r = this.#state;
-		if (!reach || !r) return;
-		if (u["u_keyReachTexel"]) {
-			gl.uniform2f(u["u_keyReachTexel"], 1 / r.w, 1 / r.h);
-		}
-		if (u["u_keyReach"]) {
-			gl.activeTexture(gl.TEXTURE0 + REACH_UNIT);
-			gl.bindTexture(gl.TEXTURE_2D, reach);
-			gl.uniform1i(u["u_keyReach"], REACH_UNIT);
-		}
-	}
-
 	#ensure(w: number, h: number) {
 		if (this.#failed) return null;
 		const gl = this.#gl;
 		if (!this.#state) {
 			try {
-				const seed = compileKeyProgram(gl, KEY_REACH_SEED_FRAG);
+				const seed = compileKeyProgram(gl, this.#seedFrag);
 				const spread = compileKeyProgram(gl, KEY_REACH_SPREAD_FRAG);
 				const tex: [WebGLTexture, WebGLTexture] = [
 					this.#texture(w, h),
@@ -185,7 +176,7 @@ export class KeyReachPass {
 		gl.bindTexture(gl.TEXTURE_2D, tex);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-		// Read by the placement with LINEAR, so the cut's rim ramps over a texel.
+		// Read with LINEAR, so the cut's rim ramps over a texel.
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		this.#allocate(tex, w, h);
@@ -235,5 +226,50 @@ export class KeyReachPass {
 		for (const t of r.tex) gl.deleteTexture(t);
 		for (const f of r.fbo) gl.deleteFramebuffer(f);
 		this.#state = null;
+	}
+}
+
+/** Where a chroma key's connected points cut, over the whole source frame. */
+export class KeyReachPass {
+	#gl: WebGL2RenderingContext;
+	#fill: ReachFill;
+
+	constructor(gl: WebGL2RenderingContext) {
+		this.#gl = gl;
+		this.#fill = new ReachFill(gl, KEY_REACH_SEED_FRAG);
+	}
+
+	/** The fill for this frame (g = reached), or null when no point is connected. */
+	run(
+		tex: WebGLTexture,
+		texW: number,
+		texH: number,
+		key: ChromaKey | undefined,
+	): WebGLTexture | null {
+		if (!hasConnectedPoint(key)) return null;
+		return this.#fill.run(tex, texW, texH, (prog) =>
+			setKeyPointUniforms(this.#gl, prog, key),
+		);
+	}
+
+	/** Hands `reach` (from run) to a program built on CHROMA_KEY_GLSL. */
+	bind(prog: KeyProgram, reach: WebGLTexture | null) {
+		const gl = this.#gl;
+		const u = prog.uniforms;
+		if (u["u_hasReach"]) gl.uniform1f(u["u_hasReach"], reach ? 1 : 0);
+		const size = this.#fill.size;
+		if (!reach || !size) return;
+		if (u["u_keyReachTexel"]) {
+			gl.uniform2f(u["u_keyReachTexel"], 1 / size.w, 1 / size.h);
+		}
+		if (u["u_keyReach"]) {
+			gl.activeTexture(gl.TEXTURE0 + REACH_UNIT);
+			gl.bindTexture(gl.TEXTURE_2D, reach);
+			gl.uniform1i(u["u_keyReach"], REACH_UNIT);
+		}
+	}
+
+	dispose() {
+		this.#fill.dispose();
 	}
 }

@@ -669,6 +669,19 @@
 													setKey(param.key, keyIndex, { softness: v })}
 											/>
 										</div>
+										<label
+											class="paint-setting"
+											title="Take only the matching area that runs into this color's dot, not every match in the picture"
+										>
+											<span>Touching only</span>
+											<Checkbox
+												checked={k.touching}
+												onchange={(e) =>
+													setKey(param.key, keyIndex, {
+														touching: e.currentTarget.checked,
+													})}
+											/>
+										</label>
 									{/if}
 								</div>
 							{/if}
