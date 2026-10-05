@@ -28,10 +28,18 @@ const placed = (v: Record<string, number | string>) =>
 	v.shape === "ellipse" ||
 	v.shape === "rect" ||
 	v.shape === "gradient" ||
-	v.shape === "image";
+	imageLoaded(v);
 const sized = (v: Record<string, number | string>) =>
 	v.shape === "ellipse" || v.shape === "rect";
 const isImage = (v: Record<string, number | string>) => v.shape === "image";
+const imageLoaded = (v: Record<string, number | string>) =>
+	isImage(v) && !!v.image;
+
+/** The Image shape before anything is loaded: it masks nothing, and only Load means
+ * anything yet. */
+export function maskAwaitingImage(v: Record<string, number | string>): boolean {
+	return isImage(v) && !v.image;
+}
 
 export function isMaskEffect(e: Pick<EffectInstance, "defId">): boolean {
 	return e.defId === MASK_EFFECT_ID;
@@ -76,7 +84,7 @@ export const definition: EffectDefinition = {
 				{ label: "Brightness", value: "luma" },
 				{ label: "Transparency", value: "alpha" },
 			],
-			visibleWhen: isImage,
+			visibleWhen: imageLoaded,
 		},
 		{
 			key: "fit",
@@ -88,7 +96,7 @@ export const definition: EffectDefinition = {
 				{ label: "Fit", value: "contain" },
 				{ label: "Fill", value: "cover" },
 			],
-			visibleWhen: isImage,
+			visibleWhen: imageLoaded,
 		},
 		{
 			key: "imageWidth",
@@ -98,7 +106,7 @@ export const definition: EffectDefinition = {
 			max: 4,
 			step: 0.01,
 			defaultValue: 1,
-			visibleWhen: isImage,
+			visibleWhen: imageLoaded,
 		},
 		{
 			key: "imageHeight",
@@ -108,7 +116,7 @@ export const definition: EffectDefinition = {
 			max: 4,
 			step: 0.01,
 			defaultValue: 1,
-			visibleWhen: isImage,
+			visibleWhen: imageLoaded,
 		},
 		{
 			key: "black",
@@ -118,7 +126,7 @@ export const definition: EffectDefinition = {
 			max: 1,
 			step: 0.01,
 			defaultValue: 0,
-			visibleWhen: isImage,
+			visibleWhen: imageLoaded,
 		},
 		{
 			key: "white",
@@ -128,7 +136,7 @@ export const definition: EffectDefinition = {
 			max: 1,
 			step: 0.01,
 			defaultValue: 1,
-			visibleWhen: isImage,
+			visibleWhen: imageLoaded,
 		},
 		{
 			key: "keys",
@@ -223,12 +231,14 @@ export const definition: EffectDefinition = {
 			max: 1,
 			step: 0.01,
 			defaultValue: 1,
+			visibleWhen: (v) => !maskAwaitingImage(v),
 		},
 		{
 			key: "invert",
 			label: "Invert",
 			type: "checkbox",
 			defaultValue: 0,
+			visibleWhen: (v) => !maskAwaitingImage(v),
 		},
 	],
 };
@@ -254,6 +264,7 @@ uniform float u_channel;
 uniform float u_fit;
 uniform float u_black;
 uniform float u_white;
+uniform float u_hasImage;
 uniform float u_imageWidth;
 uniform float u_imageHeight;
 ${MASK_KEYS_GLSL}
@@ -338,6 +349,11 @@ float coverage(vec2 uv, vec4 base) {
 void main() {
   vec4 cur = texture(u_texture, v_uv);
   vec4 base = texture(u_original, v_uv);
+  // An Image shape with nothing loaded leaves the effects alone.
+  if (u_shape > 5.5 && u_hasImage < 0.5) {
+    outColor = cur;
+    return;
+  }
   float m = clamp(coverage(v_uv, base), 0.0, 1.0);
   if (u_invert > 0.5) m = 1.0 - m;
   outColor = mix(base, cur, m * u_amount);
@@ -371,6 +387,7 @@ void main() {
 			setFloat(gl, l, `u_${key}`, v[key] as number);
 		}
 		setFloat(gl, l, "u_channel", v.channel === "alpha" ? 1 : 0);
+		setFloat(gl, l, "u_hasImage", v.image ? 1 : 0);
 		setFloat(
 			gl,
 			l,
