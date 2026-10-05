@@ -161,7 +161,7 @@ export const shader: EffectShaderDef = {
 		H +
 		`uniform sampler2D u_original;
 uniform sampler2D u_brush;
-uniform vec2 u_resolution;
+uniform float u_chainAspect;
 uniform float u_shape;
 uniform float u_x;
 uniform float u_y;
@@ -210,10 +210,12 @@ float coverage(vec2 uv, vec4 base) {
     float f = max(u_feather * 0.5, 0.002);
     return smoothstep(u_threshold - f, u_threshold + f, l);
   }
-  // Short-edge units, so equal width and height make a circle.
-  vec2 p = (uv - vec2(u_x, u_y)) * u_resolution / min(u_resolution.x, u_resolution.y);
+  // Units of the short edge of what the chain lands on, so equal sides are a circle
+  // on screen even over a media layer's stretched box.
+  vec2 p = (uv - vec2(u_x, u_y)) * max(vec2(u_chainAspect, 1.0) / min(u_chainAspect, 1.0), vec2(1.0));
+  // Clockwise for a positive angle, the way layers turn.
   float a = radians(u_angle);
-  p = mat2(cos(a), sin(a), -sin(a), cos(a)) * p;
+  p = mat2(cos(a), -sin(a), sin(a), cos(a)) * p;
   if (u_shape > 1.5) {
     float f = max(u_feather * 0.5, 0.001);
     return smoothstep(-f, f, -p.y);
