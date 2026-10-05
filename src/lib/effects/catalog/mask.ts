@@ -59,13 +59,13 @@ export const definition: EffectDefinition = {
 			type: "select",
 			defaultValue: "ellipse",
 			options: [
+				{ label: "Brush", value: "brush" },
+				{ label: "Key", value: "key" },
+				{ label: "Image", value: "image" },
+				{ label: "Brightness", value: "brightness" },
 				{ label: "Ellipse", value: "ellipse" },
 				{ label: "Rectangle", value: "rect" },
 				{ label: "Gradient", value: "gradient" },
-				{ label: "Brightness", value: "brightness" },
-				{ label: "Key", value: "key" },
-				{ label: "Brush", value: "brush" },
-				{ label: "Image", value: "image" },
 			],
 		},
 		{
