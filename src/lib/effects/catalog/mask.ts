@@ -232,12 +232,14 @@ void main() {
   float m = clamp(coverage(v_uv, base), 0.0, 1.0);
   if (u_invert > 0.5) m = 1.0 - m;
   outColor = mix(base, cur, m * u_amount);
-  if (u_preview > 0.5) {
-    // Outside tinted, edge traced, so the area reads whatever the effects do.
-    outColor.rgb = mix(outColor.rgb, vec3(1.0, 0.18, 0.45), (1.0 - m) * 0.5);
+  if (u_preview > 0.0) {
+    // Outside tinted, edge traced, so the area reads whatever the effects do. Scaled
+    // by u_preview, which the preview eases in and out.
+    float tint = (1.0 - m) * 0.5 * u_preview;
+    outColor.rgb = mix(outColor.rgb, vec3(1.0, 0.18, 0.45), tint);
     float edge = 1.0 - smoothstep(0.0, max(fwidth(m), 0.0001) * 1.5, abs(m - 0.5));
-    outColor.rgb = mix(outColor.rgb, vec3(1.0), edge * 0.85);
-    outColor.a = max(outColor.a, (1.0 - m) * 0.5);
+    outColor.rgb = mix(outColor.rgb, vec3(1.0), edge * 0.85 * u_preview);
+    outColor.a = max(outColor.a, tint);
   }
 }`,
 	setUniforms: (gl, l, v) => {

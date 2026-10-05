@@ -35,7 +35,8 @@
 
 	let { renderer, canvas, area, lane, redraw }: Props = $props();
 
-	const target = $derived(maskPaint.target!);
+	// Held from mount: the layer outlives the target while it fades out.
+	const target = maskPaint.target!;
 	const shape = $derived(JSON.parse(target.current()) as ShapeValues);
 	const gradient = $derived(target.shape === "gradient");
 

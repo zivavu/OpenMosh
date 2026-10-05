@@ -48,6 +48,8 @@
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 	import MaskKeyLayer from "./MaskKeyLayer.svelte";
 	import MaskShapeLayer from "./MaskShapeLayer.svelte";
+	import { fade } from "svelte/transition";
+	import { cubicOut } from "svelte/easing";
 
 	/** Shared, so the default prop doesn't mint an array per render. */
 	const EMPTY_POST: PostChainLayer[] = [];
@@ -1108,14 +1110,41 @@
 		void preloadTextTimelineFonts(textTimeline);
 	});
 
-	// The Mask whose area is shown gets it tinted; never in an export.
+	/** How long the area tint takes to come up and to go, in ms. */
+	const TINT_IN_MS = 120;
+	const TINT_OUT_MS = 380;
+	let tintRaf = 0;
+
+	// The Mask whose area is shown gets it tinted, eased in and out; never in an export.
 	$effect(() => {
 		const r = renderer;
 		if (!r) return;
-		const id = suspended || externallyDriven ? null : tintedMask();
-		if (r.maskPreviewId === id) return;
-		r.maskPreviewId = id;
-		if (!needsAnimation && !suspended && !externallyDriven) drawFrame(0);
+		const exporting = suspended || externallyDriven;
+		const id = exporting ? null : tintedMask();
+		cancelAnimationFrame(tintRaf);
+		if (exporting) {
+			r.maskPreviewId = null;
+			r.maskPreviewStrength = 0;
+			return;
+		}
+		// Another Mask takes over at once; only showing and hiding ease.
+		if (id) r.maskPreviewId = id;
+		if (!r.maskPreviewId) return;
+		const from = r.maskPreviewStrength;
+		const to = id ? 1 : 0;
+		if (from === to) return;
+		const span = (id ? TINT_IN_MS : TINT_OUT_MS) * Math.abs(to - from);
+		const start = performance.now();
+		const tick = (now: number) => {
+			const t = Math.min(1, (now - start) / Math.max(span, 1));
+			// Ease-out cubic: quick to answer, gentle to settle.
+			r.maskPreviewStrength = from + (to - from) * (1 - (1 - t) ** 3);
+			if (t >= 1 && to === 0) r.maskPreviewId = null;
+			if (!needsAnimation) drawFrame(0);
+			if (t < 1) tintRaf = requestAnimationFrame(tick);
+		};
+		tintRaf = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(tintRaf);
 	});
 
 	// Static redraw driver: re-renders when the animation loop is not running.
@@ -1297,15 +1326,23 @@
 			keys: MaskKeyLayer,
 			shape: MaskShapeLayer,
 		}[maskPaint.target.tool]}
-		<Tool
-			{renderer}
-			canvas={canvasEl}
-			area={previewArea}
-			lane={selectedMediaLane}
-			redraw={() => {
-				if (!suspended && !needsAnimation) drawFrame(0);
-			}}
-		/>
+		{#key maskPaint.target}
+			<!-- Fades as Done takes it off, alongside the tint easing out. -->
+			<div
+				class="mask-tool"
+				out:fade|global={{ duration: 180, easing: cubicOut }}
+			>
+				<Tool
+					{renderer}
+					canvas={canvasEl}
+					area={previewArea}
+					lane={selectedMediaLane}
+					redraw={() => {
+						if (!suspended && !needsAnimation) drawFrame(0);
+					}}
+				/>
+			</div>
+		{/key}
 	{/if}
 	{#if overlay}
 		<div class="canvas-overlay">{@render overlay()}</div>
@@ -1415,6 +1452,13 @@
 		margin-left: -0.5px;
 		background: var(--live);
 		pointer-events: none;
+	}
+
+	/* Covers the preview area exactly, so the tool layers inside measure against it. */
+	.mask-tool {
+		position: absolute;
+		inset: 0;
+		z-index: 8;
 	}
 
 	/* Opaque: whatever is still on the canvas underneath is stale. */

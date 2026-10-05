@@ -378,6 +378,8 @@ export class GlRenderer {
 	} | null = null;
 	/** The Mask whose area the preview tints. Never set while exporting. */
 	maskPreviewId: string | null = null;
+	/** How strongly, 0..1, so the preview can ease the tint in and out. */
+	maskPreviewStrength = 1;
 	/** A colour wanted from where a Mask's scope starts, read on the next draw. */
 	private maskPick: {
 		instanceId: string;
@@ -1793,7 +1795,7 @@ export class GlRenderer {
 			const isMask = eff.defId === MASK_EFFECT_ID;
 			const values =
 				isMask && eff.instanceId === this.maskPreviewId
-					? { ...eff.values, preview: 1 }
+					? { ...eff.values, preview: this.maskPreviewStrength }
 					: eff.values;
 			if (scopeStarts?.has(eff) && i <= lastMask) {
 				scopeBase = this.holdMaskBase(input, time);
