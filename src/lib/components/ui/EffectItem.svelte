@@ -3,6 +3,7 @@
 	import {
 		ArrowUpDown,
 		Brush,
+		ImageUp,
 		Pipette,
 		ChevronDown,
 		ChevronRight,
@@ -44,6 +45,8 @@
 	} from "../../effects/mask-paint.svelte";
 	import { getContext, onDestroy } from "svelte";
 	import { isMaskEffect } from "../../effects/catalog/mask";
+	import { maskFromImage } from "../../brush/mask-image";
+	import { showToast } from "./toast.svelte";
 	import {
 		KEY_RANGE_MAX,
 		KEY_SOFTNESS_MAX,
@@ -202,6 +205,24 @@
 			commit: (value, history) => onParamChange(key, value, history),
 			alive: () => effect.enabled && effect.values.shape === shape,
 		};
+	}
+
+	const LOAD_MASK_HINT =
+		"White areas get the effects and black areas don't. A cutout with a transparent background works too: the effects go on the part that's left.";
+
+	/** A mask made elsewhere, in place of the painting. Touch it up with the brush after. */
+	async function loadMask(key: string, input: HTMLInputElement) {
+		const file = input.files?.[0];
+		input.value = "";
+		if (!file) return;
+		try {
+			const url = await maskFromImage(file);
+			if (!effect.enabled) onToggle();
+			onParamChange(key, url, "new");
+			maskPaint.shownId = effect.instanceId;
+		} catch {
+			showToast("Couldn't read that image as a mask", "error");
+		}
 	}
 
 	const colorKeys = $derived(parseKeys(effect.values.keys));
@@ -701,6 +722,16 @@
 													? "Paint more"
 													: "Paint"}
 										</button>
+										<label class="paint-btn" title={LOAD_MASK_HINT}>
+											<ImageUp size={12} />
+											Load image
+											<input
+												type="file"
+												accept="image/*"
+												hidden
+												onchange={(e) => loadMask(param.key, e.currentTarget)}
+											/>
+										</label>
 										{#if effect.values[param.key]}
 											<button
 												type="button"
