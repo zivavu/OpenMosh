@@ -103,6 +103,11 @@ edit: they eat context fast.
   to flat 2D worlds (`lib/demo/flat-worlds/`) with single-pass effects, and start on them for a
   week. Touch devices always run the flat worlds. Same scene contract, no marching.
   In dev, `?world=<id>` holds one world, `?bare` drops the mosh and `?flat` starts on 2D.
+- Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
+  limits the effects above it, back to the previous Mask or the top of its own chain (an FX
+  lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
+  rolls never touch a Mask. Presets drop its painting. On a media clip it paints in the
+  layer's box.
 - Code-split only what sits behind an `{#if}` that starts false, via `lib/lazy.ts`. Inline
   controls stay eager.
 - The site is `openmosh.com`; `www` redirects to it. Never switch those around: each address
