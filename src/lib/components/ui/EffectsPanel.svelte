@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from "svelte";
+	import type { ParamHistory } from "../../effects/mask-paint.svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { readJson, writeJson } from "../../storage";
 	import {
@@ -400,8 +401,17 @@
 		onUserEdit?.();
 	}
 
-	function paramChange(index: number, key: string, value: number | string) {
-		onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
+	function paramChange(
+		index: number,
+		key: string,
+		value: number | string,
+		/** Unset: a slider's ticks share one entry while they keep coming. */
+		history?: ParamHistory,
+	) {
+		if (history === "new") onBeforeUserEdit?.();
+		else if (history !== "none") {
+			onBeforeUserEdit?.(`param:${effects[index].instanceId}:${key}`);
+		}
 		effects[index].values[key] = value;
 		if (!effects[index].enabled) {
 			hold(effects[index]);
@@ -901,7 +911,8 @@
 					onHide={() => hide(i)}
 					onDuplicate={() => duplicate(i)}
 					isCopy={isCopy(effect)}
-					onParamChange={(key, value) => paramChange(i, key, value)}
+					onParamChange={(key, value, history) =>
+						paramChange(i, key, value, history)}
 					isDragging={dragFromIndex === i}
 					dropIndicator={getDropIndicator(i)}
 					onDragStart={(e) => handleDragStart(i, e)}

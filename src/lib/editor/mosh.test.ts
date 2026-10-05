@@ -5,8 +5,10 @@ import {
 	loadInitialEffects,
 } from "../effects";
 import { withSeededRandom } from "./sequence";
+import { MASK_EFFECT_ID } from "../effects/catalog/mask";
 import {
 	applyRandomAudioLinks,
+	clearEffects,
 	generateMosh,
 	randomizeParams,
 	type MoshOptions,
@@ -200,6 +202,35 @@ describe("generateMosh styles", () => {
 			);
 			for (const e of effects) {
 				if (unpickable.includes(e.defId)) expect(e.enabled).toBe(false);
+			}
+		}
+	});
+});
+
+describe("Mask effects", () => {
+	const options: MoshOptions = {
+		moshMin: 6,
+		moshMax: 10,
+		randomizeOrder: true,
+		moshAudioLink: true,
+		moshAudioLinkStrength: 1,
+		hasAudio: true,
+	};
+
+	it("ride through every roll and clear exactly as they were", () => {
+		for (const moshStyle of ["random", "curated"] as const) {
+			for (let seed = 1; seed <= 30; seed++) {
+				const effects = loadInitialEffects();
+				const at = effects.findIndex((e) => e.defId === MASK_EFFECT_ID);
+				const mask = effects[at];
+				mask.enabled = true;
+				mask.values.shape = "rect";
+				const before = structuredClone(mask);
+				withSeededRandom(seed, () =>
+					generateMosh(effects, { ...options, moshStyle }),
+				);
+				clearEffects(effects);
+				expect(effects[at]).toEqual(before);
 			}
 		}
 	});

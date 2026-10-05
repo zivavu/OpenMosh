@@ -7,6 +7,7 @@ import {
 	type EffectInstance,
 } from "../effects";
 import { generateMosh, type MoshOptions } from "./mosh";
+import { isMaskEffect } from "../effects/catalog/mask";
 import { mulberry32 } from "../rng";
 
 export type ChainMode = "static" | "interval";
@@ -81,9 +82,9 @@ export function isHandBuiltLabel(span: {
 	return !span.presetName && span.label !== "mosh" && span.label !== "auto";
 }
 
-/** Kept through a roll or a clear: only what the user locked. */
+/** Kept through a roll or a clear: what the user locked, and Masks in use. */
 function isHeld(e: EffectInstance): boolean {
-	return !!e.locked;
+	return !!e.locked || (isMaskEffect(e) && e.enabled);
 }
 
 /** A fresh chain that keeps `from`'s held effects as they are, where they sat. */

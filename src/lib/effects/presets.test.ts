@@ -147,6 +147,16 @@ describe("savePreset", () => {
 		});
 	});
 
+	it("leaves a Mask's painting behind, since it fits only one picture", () => {
+		const [preset] = savePreset("one", [
+			instance({
+				defId: "mask",
+				values: { shape: "brush", paint: "data:image/png;base64,AAAA" },
+			}),
+		]);
+		expect(preset.effects[0].values).toEqual({ shape: "brush", paint: "" });
+	});
+
 	it("omits an empty volumeLinks rather than bloating every entry", () => {
 		const [preset] = savePreset("one", [instance({ volumeLinks: {} })]);
 		expect("volumeLinks" in preset.effects[0]).toBe(false);

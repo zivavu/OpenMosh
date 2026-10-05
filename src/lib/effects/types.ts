@@ -63,13 +63,29 @@ export interface ColorParam {
 	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
+/** A painted grayscale image as a PNG data URL; "" is nothing painted. */
+export interface PaintParam {
+	key: string;
+	label: string;
+	type: "paint";
+	defaultValue: "";
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
+}
+
 export type EffectParam =
-	RangeParam | SelectParam | CheckboxParam | TextParam | ColorParam;
+	| RangeParam
+	| SelectParam
+	| CheckboxParam
+	| TextParam
+	| ColorParam
+	| PaintParam;
 
 export interface EffectDefinition {
 	id: string;
 	name: string;
 	params: EffectParam[];
+	/** Shown above the params, for an effect whose behaviour the name doesn't explain. */
+	hint?: string;
 	/** Never picked by a curated roll; random rolls and the lock treat it like any other. */
 	moshable?: false;
 	/** The param the renderer integrates into `u_time`, so changing it changes the rate

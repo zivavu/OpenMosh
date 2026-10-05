@@ -32,7 +32,13 @@ function describeChain(given?: EffectInstance[] | null): string {
 	if (on.length === 0) return "Chain: no effects enabled";
 	const chain = on.map((e) => ({
 		defId: e.defId,
-		values: { ...e.values },
+		// A painted mask is a data URL; its presence is the useful part.
+		values: Object.fromEntries(
+			Object.entries(e.values).map(([k, v]) => [
+				k,
+				typeof v === "string" && v.startsWith("data:") ? "[painted]" : v,
+			]),
+		),
 		...(e.volumeLinks &&
 			Object.keys(e.volumeLinks).length > 0 && {
 				volumeLinks: { ...e.volumeLinks },

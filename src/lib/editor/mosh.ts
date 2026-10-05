@@ -7,6 +7,7 @@ import {
 	type VolumeLink,
 } from "../effects";
 import { TRANSFORM_3D_ID } from "../mesh/camera";
+import { isMaskEffect } from "../effects/catalog/mask";
 import { shuffleInPlace } from "../utils";
 import type { Family } from "../effects/curation";
 import { curationOf } from "../effects/curation";
@@ -34,9 +35,10 @@ export interface MoshOptions {
 	model?: boolean;
 }
 
-/** Effects a roll may touch; locked ones are protected by the user. */
+/** Effects a roll may touch: locked ones are protected by the user, and a Mask
+ * only means something where the user put it. */
 export function isMoshable(effect: EffectInstance): boolean {
-	return !effect.locked;
+	return !effect.locked && !isMaskEffect(effect);
 }
 
 /** Effects a roll may switch on. Curated skips the ones marked `moshable: false`;
@@ -290,7 +292,7 @@ function rollCurated(
 
 export function clearEffects(effects: EffectInstance[]): void {
 	for (const effect of effects) {
-		if (effect.locked) continue;
+		if (!isMoshable(effect)) continue;
 		effect.enabled = false;
 		const def = getDefinition(effect.defId);
 		if (!def) continue;

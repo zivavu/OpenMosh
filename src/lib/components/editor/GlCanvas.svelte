@@ -44,6 +44,8 @@
 		type SourceEdit,
 	} from "../../media";
 	import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
+	import { maskPaint } from "../../effects/mask-paint.svelte";
+	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 
 	/** Shared, so the default prop doesn't mint an array per render. */
 	const EMPTY_POST: PostChainLayer[] = [];
@@ -1104,6 +1106,19 @@
 		void preloadTextTimelineFonts(textTimeline);
 	});
 
+	// The Mask being painted or looked at gets its area tinted; never in an export.
+	$effect(() => {
+		const r = renderer;
+		if (!r) return;
+		const id =
+			suspended || externallyDriven
+				? null
+				: (maskPaint.target?.instanceId ?? maskPaint.shownId);
+		if (r.maskPreviewId === id) return;
+		r.maskPreviewId = id;
+		if (!needsAnimation && !suspended && !externallyDriven) drawFrame(0);
+	});
+
 	// Static redraw driver: re-renders when the animation loop is not running.
 	$effect(() => {
 		if (suspended || !renderer || !imageReady || !renderSize) return;
@@ -1276,6 +1291,17 @@
 				></div>
 			{/if}
 		</div>
+	{/if}
+	{#if maskPaint.target && renderer && canvasEl && !externallyDriven}
+		<MaskPaintLayer
+			{renderer}
+			canvas={canvasEl}
+			area={previewArea}
+			lane={selectedMediaLane}
+			redraw={() => {
+				if (!suspended && !needsAnimation) drawFrame(0);
+			}}
+		/>
 	{/if}
 	{#if overlay}
 		<div class="canvas-overlay">{@render overlay()}</div>

@@ -54,6 +54,8 @@ export async function executeSlideshowRecording(
 		onFinalizing,
 		signal,
 	} = ctx;
+	// The preview's mask tint must never reach a file.
+	renderer.maskPreviewId = null;
 
 	const duration = audioFile
 		? audioEnd - audioStart
