@@ -147,14 +147,22 @@ describe("savePreset", () => {
 		});
 	});
 
-	it("leaves a Mask's painting behind, since it fits only one picture", () => {
+	it("leaves a Mask's painting and image behind, since they fit one picture", () => {
 		const [preset] = savePreset("one", [
 			instance({
 				defId: "mask",
-				values: { shape: "brush", paint: "data:image/png;base64,AAAA" },
+				values: {
+					shape: "brush",
+					paint: "data:image/png;base64,AAAA",
+					image: "data:image/png;base64,BBBB",
+				},
 			}),
 		]);
-		expect(preset.effects[0].values).toEqual({ shape: "brush", paint: "" });
+		expect(preset.effects[0].values).toEqual({
+			shape: "brush",
+			paint: "",
+			image: "",
+		});
 	});
 
 	it("omits an empty volumeLinks rather than bloating every entry", () => {

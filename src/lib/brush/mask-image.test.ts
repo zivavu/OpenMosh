@@ -4,19 +4,15 @@ import { toMaskPixels } from "./mask-image";
 const px = (...rgba: number[]) => new Uint8ClampedArray(rgba);
 
 describe("toMaskPixels", () => {
-	it("reads an opaque image by its brightness", () => {
-		const data = px(255, 255, 255, 255, 0, 0, 0, 255, 0, 255, 0, 255);
-		toMaskPixels(data);
-		expect([...data]).toEqual([
-			255, 255, 255, 255, 0, 0, 0, 255, 182, 182, 182, 255,
-		]);
+	it("greys an opaque image by brightness and calls it no cutout", () => {
+		const data = px(255, 255, 255, 255, 0, 255, 0, 255);
+		expect(toMaskPixels(data)).toBe(false);
+		expect([...data]).toEqual([255, 255, 255, 255, 182, 182, 182, 255]);
 	});
 
-	it("reads a cutout by its alpha, whatever the colours under it", () => {
-		const data = px(0, 0, 0, 255, 255, 255, 255, 0, 10, 20, 30, 128);
-		toMaskPixels(data);
-		expect([...data]).toEqual([
-			255, 255, 255, 255, 0, 0, 0, 255, 128, 128, 128, 255,
-		]);
+	it("keeps transparency as it is and flags a cutout", () => {
+		const data = px(255, 0, 0, 0, 10, 20, 30, 128);
+		expect(toMaskPixels(data)).toBe(true);
+		expect([data[3], data[7]]).toEqual([0, 128]);
 	});
 });

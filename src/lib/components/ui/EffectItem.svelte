@@ -251,15 +251,16 @@
 	const LOAD_MASK_HINT =
 		"White areas get the effects and black areas don't. A cutout with a transparent background works too: the effects go on the part that's left.";
 
-	/** A mask made elsewhere, in place of the painting. Touch it up with the brush after. */
+	/** A mask made elsewhere. A cutout starts out read by its transparency. */
 	async function loadMask(key: string, input: HTMLInputElement) {
 		const file = input.files?.[0];
 		input.value = "";
 		if (!file) return;
 		try {
-			const url = await maskFromImage(file);
+			const { url, cutout } = await maskFromImage(file);
 			if (!effect.enabled) onToggle();
 			onParamChange(key, url, "new");
+			onParamChange("channel", cutout ? "alpha" : "luma", "none");
 			peekArea(effect.instanceId);
 		} catch {
 			showToast("Couldn't read that image as a mask", "error");
@@ -774,6 +775,38 @@
 									{/if}
 								</div>
 							{/if}
+							{#if param.type === "image"}
+								<div class="paint-btns image-row">
+									{#if effect.values[param.key]}
+										<img
+											class="image-thumb"
+											src={String(effect.values[param.key])}
+											alt="The loaded mask"
+										/>
+									{/if}
+									<label class="paint-btn" title={LOAD_MASK_HINT}>
+										<ImageUp size={12} />
+										{effect.values[param.key] ? "Replace" : "Load"}
+										<input
+											type="file"
+											accept="image/*"
+											hidden
+											onchange={(e) => loadMask(param.key, e.currentTarget)}
+										/>
+									</label>
+									{#if effect.values[param.key]}
+										<button
+											type="button"
+											class="icon-btn"
+											title="Remove the image"
+											aria-label="Remove the image"
+											onclick={() => change(param.key, "")}
+										>
+											<Trash2 size={14} />
+										</button>
+									{/if}
+								</div>
+							{/if}
 							{#if param.type === "paint"}
 								<div class="paint-controls">
 									<div class="paint-btns">
@@ -786,19 +819,6 @@
 											<Brush size={12} />
 											{painting ? "Done" : "Paint"}
 										</button>
-										<label
-											class="icon-btn"
-											title="Load image. {LOAD_MASK_HINT}"
-											aria-label="Load image"
-										>
-											<ImageUp size={14} />
-											<input
-												type="file"
-												accept="image/*"
-												hidden
-												onchange={(e) => loadMask(param.key, e.currentTarget)}
-											/>
-										</label>
 										{#if effect.values[param.key]}
 											<button
 												type="button"
@@ -1230,6 +1250,22 @@
 		font-size: 0.66rem;
 		line-height: 1.45;
 		color: var(--text-3);
+	}
+
+	.image-row {
+		flex: 1;
+		min-width: 0;
+	}
+
+	/* The mask on a checkerboard, so a cutout's see-through parts read as such. */
+	.image-thumb {
+		width: 32px;
+		height: 22px;
+		object-fit: contain;
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		background: repeating-conic-gradient(#3a3a3a 0 25%, #222 0 50%) 0 0 / 8px
+			8px;
 	}
 
 	.mask-tools {

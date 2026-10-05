@@ -913,7 +913,7 @@ export class GlRenderer {
 		gl.activeTexture(gl.TEXTURE0);
 	}
 
-	/** What a Mask reads its painting from; black (nothing painted) by default. */
+	/** What a Mask reads its painting or loaded image from; black (nothing) by default. */
 	private bindBrush(eff: EffectInstance) {
 		const gl = this.gl;
 		let tex: WebGLTexture | null = null;
@@ -936,8 +936,9 @@ export class GlRenderer {
 				live.dirty = false;
 			}
 			tex = live.tex;
-		} else if (eff.values.shape === "brush") {
-			const url = eff.values.paint;
+		} else if (eff.values.shape === "brush" || eff.values.shape === "image") {
+			const url =
+				eff.values.shape === "brush" ? eff.values.paint : eff.values.image;
 			if (typeof url === "string" && url) tex = this.brushTexture(url);
 		}
 		gl.activeTexture(gl.TEXTURE0 + MASK_BRUSH_UNIT);
