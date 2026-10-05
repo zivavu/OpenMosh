@@ -82,6 +82,7 @@ function reconcile(
 				: param.defaultValue;
 		case "keys":
 			return serializeKeys(parseKeys(value));
+		case "image":
 		case "paint":
 			return typeof value === "string" && value.startsWith("data:image/")
 				? value

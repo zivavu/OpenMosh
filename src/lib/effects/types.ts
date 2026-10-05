@@ -72,6 +72,15 @@ export interface PaintParam {
 	visibleWhen?: (values: Record<string, number | string>) => boolean;
 }
 
+/** A loaded image as a PNG data URL; "" is none. */
+export interface ImageParam {
+	key: string;
+	label: string;
+	type: "image";
+	defaultValue: "";
+	visibleWhen?: (values: Record<string, number | string>) => boolean;
+}
+
 /** Colours picked off the picture, as JSON (see effects/mask-keys); "" is none. */
 export interface KeysParam {
 	key: string;
@@ -88,6 +97,7 @@ export type EffectParam =
 	| TextParam
 	| ColorParam
 	| PaintParam
+	| ImageParam
 	| KeysParam;
 
 export interface EffectDefinition {

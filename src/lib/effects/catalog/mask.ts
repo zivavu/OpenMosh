@@ -21,12 +21,14 @@ const SHAPES = [
 	"brightness",
 	"brush",
 	"key",
+	"image",
 ] as const;
 
 const placed = (v: Record<string, number | string>) =>
 	v.shape === "ellipse" || v.shape === "rect" || v.shape === "gradient";
 const sized = (v: Record<string, number | string>) =>
 	v.shape === "ellipse" || v.shape === "rect";
+const isImage = (v: Record<string, number | string>) => v.shape === "image";
 
 export function isMaskEffect(e: Pick<EffectInstance, "defId">): boolean {
 	return e.defId === MASK_EFFECT_ID;
@@ -52,7 +54,58 @@ export const definition: EffectDefinition = {
 				{ label: "Brightness", value: "brightness" },
 				{ label: "Key", value: "key" },
 				{ label: "Brush", value: "brush" },
+				{ label: "Image", value: "image" },
 			],
+		},
+		{
+			key: "image",
+			label: "Image",
+			type: "image",
+			defaultValue: "",
+			visibleWhen: isImage,
+		},
+		{
+			key: "channel",
+			label: "Read by",
+			type: "select",
+			defaultValue: "luma",
+			options: [
+				{ label: "Brightness", value: "luma" },
+				{ label: "Transparency", value: "alpha" },
+			],
+			visibleWhen: isImage,
+		},
+		{
+			key: "fit",
+			label: "Fit",
+			type: "select",
+			defaultValue: "contain",
+			options: [
+				{ label: "Stretch", value: "stretch" },
+				{ label: "Fit", value: "contain" },
+				{ label: "Fill", value: "cover" },
+			],
+			visibleWhen: isImage,
+		},
+		{
+			key: "black",
+			label: "Black point",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0,
+			visibleWhen: isImage,
+		},
+		{
+			key: "white",
+			label: "White point",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 1,
+			visibleWhen: isImage,
 		},
 		{
 			key: "keys",
@@ -136,7 +189,8 @@ export const definition: EffectDefinition = {
 			max: 1,
 			step: 0.01,
 			defaultValue: 0.2,
-			visibleWhen: (v) => v.shape !== "brush" && v.shape !== "key",
+			visibleWhen: (v) =>
+				v.shape !== "brush" && v.shape !== "key" && v.shape !== "image",
 		},
 		{
 			key: "amount",
@@ -173,6 +227,10 @@ uniform float u_feather;
 uniform float u_amount;
 uniform float u_invert;
 uniform float u_preview;
+uniform float u_channel;
+uniform float u_fit;
+uniform float u_black;
+uniform float u_white;
 ${MASK_KEYS_GLSL}
 // g = inside the touching keys' fill; coarse, so grown by a texel against a halo.
 uniform sampler2D u_keyReach;
@@ -187,7 +245,23 @@ float reachAt(vec2 uv) {
   return r;
 }
 
+// Where the loaded image sits under uv: stretched, fitted inside, or filling.
+// Outside a fitted image is outside the mask.
+float imageCoverage(vec2 uv) {
+  vec2 ts = vec2(textureSize(u_brush, 0));
+  float r = (ts.x / ts.y) / u_chainAspect;
+  vec2 size = vec2(1.0);
+  if (u_fit > 1.5) size = r > 1.0 ? vec2(r, 1.0) : vec2(1.0, 1.0 / r);
+  else if (u_fit > 0.5) size = r > 1.0 ? vec2(1.0, 1.0 / r) : vec2(r, 1.0);
+  vec2 iu = (uv - 0.5) / size + 0.5;
+  if (any(lessThan(iu, vec2(0.0))) || any(greaterThan(iu, vec2(1.0)))) return 0.0;
+  vec4 t = texture(u_brush, iu);
+  float v = u_channel > 0.5 ? t.a : t.r;
+  return clamp((v - u_black) / max(u_white - u_black, 0.001), 0.0, 1.0);
+}
+
 float coverage(vec2 uv, vec4 base) {
+  if (u_shape > 5.5) return imageCoverage(uv);
   if (u_shape > 4.5) {
     vec3 lab = oklab(base.rgb);
     float m = 0.0;
@@ -254,9 +328,18 @@ void main() {
 			"feather",
 			"amount",
 			"invert",
+			"black",
+			"white",
 		]) {
 			setFloat(gl, l, `u_${key}`, v[key] as number);
 		}
+		setFloat(gl, l, "u_channel", v.channel === "alpha" ? 1 : 0);
+		setFloat(
+			gl,
+			l,
+			"u_fit",
+			["stretch", "contain", "cover"].indexOf(String(v.fit)),
+		);
 		setInt(gl, l, "u_brush", MASK_BRUSH_UNIT);
 		setFloat(gl, l, "u_preview", (v.preview as number | undefined) ?? 0);
 		setKeyUniforms(gl, l, keyUniforms(String(v.keys ?? "")));

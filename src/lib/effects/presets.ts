@@ -37,11 +37,12 @@ function copyLinks(
 	);
 }
 
-/** A painting belongs to the picture it was painted on, so presets leave it out. */
+/** A painting or a loaded mask belongs to one picture, so presets leave it out. */
 function withoutPaint(e: EffectInstance): Record<string, number | string> {
 	const values = { ...e.values };
 	for (const param of getDefinition(e.defId)?.params ?? []) {
-		if (param.type === "paint") values[param.key] = param.defaultValue;
+		const scrub = param.type === "paint" || param.type === "image";
+		if (scrub && param.key in values) values[param.key] = param.defaultValue;
 	}
 	return values;
 }

@@ -14,6 +14,7 @@ const HOST_PARAMS = new Set([
 	"division",
 	"smoothing",
 	"paint",
+	"image",
 ]);
 
 describe("EFFECT_SHADERS", () => {
