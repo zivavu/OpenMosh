@@ -422,7 +422,10 @@ export class GlRenderer {
 	/** Lanes showing a 3D model, and which one; their texture is redrawn every frame. */
 	private modelLayers = new Map<string, string>();
 	/** A model lane's box in frame pixels, before the lane's scale; set as it draws. */
-	private modelBoxes = new Map<string, { w: number; h: number }>();
+	private modelBoxes = new Map<
+		string,
+		{ w: number; h: number; dx: number; dy: number }
+	>();
 	private meshPass: MeshPass;
 	/** Lanes drawing part of a procedural scene instead of media. */
 	private sceneLayers = new Map<string, { scene: SceneDef; part: number }>();
@@ -2726,7 +2729,14 @@ export class GlRenderer {
 			Math.ceil((2 * half.x * unit) / MODEL_BOX_STEP) * MODEL_BOX_STEP;
 		const boxH =
 			Math.ceil((2 * half.y * unit) / MODEL_BOX_STEP) * MODEL_BOX_STEP;
-		this.modelBoxes.set(side.key, { w: boxW, h: boxH });
+		// Position moves the model's box, not the camera, as it moves a flat layer.
+		let dx = 0;
+		let dy = 0;
+		for (const e of turns) {
+			dx += Number(e.values.posX) || 0;
+			dy += Number(e.values.posY) || 0;
+		}
+		this.modelBoxes.set(side.key, { w: boxW, h: boxH, dx, dy });
 		const cap = Math.min(
 			1,
 			(MODEL_MAX_TEXTURE * Math.max(this.imgW, this.imgH)) /
@@ -2902,9 +2912,9 @@ export class GlRenderer {
 		texH: number,
 	): LayerBox {
 		const model = this.modelBoxes.get(key);
-		return model
-			? this.layerBox(style, model.w, model.h, true)
-			: this.layerBox(style, texW, texH);
+		if (!model) return this.layerBox(style, texW, texH);
+		const box = this.layerBox(style, model.w, model.h, true);
+		return { ...box, cx: box.cx + model.dx, cy: box.cy + model.dy };
 	}
 
 	private layerBox(

@@ -64,6 +64,28 @@ export const definition: EffectDefinition = {
 			moshMax: 1.6,
 		},
 		{
+			key: "posX",
+			label: "Position X",
+			type: "range",
+			min: -1,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0,
+			moshMin: -0.15,
+			moshMax: 0.15,
+		},
+		{
+			key: "posY",
+			label: "Position Y",
+			type: "range",
+			min: -1,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0,
+			moshMin: -0.15,
+			moshMax: 0.15,
+		},
+		{
 			key: "spin",
 			label: "Spin",
 			type: "range",
@@ -110,6 +132,7 @@ uniform float u_rotY;
 uniform float u_rotZ;
 uniform float u_perspective;
 uniform float u_zoom;
+uniform vec2 u_pos;
 uniform int u_axis;
 uniform int u_edge;
 
@@ -140,7 +163,8 @@ void main() {
 
   // Inverse mapping: shoot a ray per output pixel and intersect the rotated plane,
   // rather than rasterizing a quad. Zero rotation is a passthrough.
-  vec3 dir = vec3((v_uv - 0.5) * 2.0 * vec2(aspect, 1.0), f);
+  // Position moves the result across the frame, in frame widths and heights.
+  vec3 dir = vec3((v_uv - u_pos - 0.5) * 2.0 * vec2(aspect, 1.0), f);
   vec3 n = R * vec3(0.0, 0.0, 1.0);
   float denom = dot(n, dir);
   float k = dot(n, center) / denom;
@@ -175,6 +199,7 @@ void main() {
 		setFloat(gl, l, "u_rotZ", v.rotZ as number);
 		setFloat(gl, l, "u_perspective", v.perspective as number);
 		setFloat(gl, l, "u_zoom", v.zoom as number);
+		if (l.u_pos) gl.uniform2f(l.u_pos, v.posX as number, v.posY as number);
 		setInt(
 			gl,
 			l,
