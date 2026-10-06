@@ -26,6 +26,8 @@ export interface EditorSettings {
 	showFps: boolean;
 	/** Whether audio links draw their live spectrum; off saves a canvas per link. */
 	showSpectrum: boolean;
+	/** Whether selecting a layer in the editor traces its edge on the preview. */
+	layerHighlight: boolean;
 	outputVolume: number;
 	loopAudio: boolean;
 	loopVideo: boolean;
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	audioPunch: DEFAULT_AUDIO_RESPONSE.punch,
 	showFps: false,
 	showSpectrum: true,
+	layerHighlight: true,
 	outputVolume: 1,
 	loopAudio: false,
 	loopVideo: true,
