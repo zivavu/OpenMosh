@@ -220,6 +220,17 @@ export const definition: EffectDefinition = {
 				v.shape !== "brush" && v.shape !== "key" && v.shape !== "image",
 		},
 		{
+			// Its own param: Feather's 0.2 default sits in every saved brush Mask.
+			key: "paintFeather",
+			label: "Feather",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0,
+			visibleWhen: (v) => v.shape === "brush",
+		},
+		{
 			key: "amount",
 			label: "Amount",
 			type: "range",
@@ -253,6 +264,7 @@ uniform float u_height;
 uniform float u_angle;
 uniform float u_threshold;
 uniform float u_feather;
+uniform float u_paintFeather;
 uniform float u_amount;
 uniform float u_invert;
 uniform float u_preview;
@@ -306,10 +318,29 @@ float imageCoverage(vec2 uv) {
   return clamp((v - u_black) / max(u_white - u_black, 0.001), 0.0, 1.0);
 }
 
+// The painting, blurred by the brush's Feather: a spiral of taps from a mip level about
+// as coarse as their spacing, so a wide feather stays smooth.
+float paintCoverage(vec2 uv) {
+  if (u_paintFeather <= 0.0) return texture(u_brush, uv).r;
+  vec2 rad = u_paintFeather * 0.15 / shortEdge();
+  vec2 ts = vec2(textureSize(u_brush, 0));
+  float lod = max(0.0, log2(max(rad.x * ts.x, rad.y * ts.y) / 4.0));
+  float sum = 0.0;
+  float wsum = 0.0;
+  for (int i = 0; i < 24; i++) {
+    float r = sqrt((float(i) + 0.5) / 24.0);
+    float a = float(i) * 2.39996;
+    float w = exp(-2.0 * r * r);
+    sum += textureLod(u_brush, uv + vec2(cos(a), sin(a)) * r * rad, lod).r * w;
+    wsum += w;
+  }
+  return sum / wsum;
+}
+
 float coverage(vec2 uv, vec4 base) {
   if (u_shape > 5.5) return imageCoverage(uv);
   if (u_shape > 4.5) return keysMatch(oklab(base.rgb), uv, -1.0);
-  if (u_shape > 3.5) return texture(u_brush, uv).r;
+  if (u_shape > 3.5) return paintCoverage(uv);
   if (u_shape > 2.5) {
     float l = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
     float f = max(u_feather * 0.5, 0.002);
@@ -365,6 +396,7 @@ void main() {
 			"angle",
 			"threshold",
 			"feather",
+			"paintFeather",
 			"amount",
 			"invert",
 			"black",
