@@ -25,6 +25,7 @@ function migrateValues(
 ): Record<string, number | string> {
 	if (defId === "duotone") return migrateDuotone(values);
 	if (defId === "edges") return migrateEdges(values);
+	if (defId === "slices") return migrateSlices(values);
 	return values;
 }
 
@@ -34,6 +35,14 @@ function migrateEdges(
 ): Record<string, number | string> {
 	if (typeof values.mix !== "number" || values.passthru != null) return values;
 	return { ...values, passthru: 1 - values.mix };
+}
+
+/** Slices' Horizontal/Vertical select became an Angle slider. */
+function migrateSlices(
+	values: Record<string, number | string>,
+): Record<string, number | string> {
+	if (values.direction == null || values.angle != null) return values;
+	return { ...values, angle: values.direction === "vertical" ? 90 : 0 };
 }
 
 /** Duotone's two hue sliders became color pickers; rebuild old hue-only values. */

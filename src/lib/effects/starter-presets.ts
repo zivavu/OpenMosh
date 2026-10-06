@@ -59,7 +59,7 @@ export const STARTER_PRESETS: Preset[] = [
 			{
 				defId: "slices",
 				enabled: true,
-				values: { count: 14, offset: 28, direction: "horizontal" },
+				values: { count: 14, offset: 28, angle: 0 },
 				volumeLinks: { offset: { min: 6, max: 70 } },
 			},
 			{
