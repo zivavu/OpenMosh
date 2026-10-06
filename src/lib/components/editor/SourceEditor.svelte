@@ -12,7 +12,6 @@
 		Pause,
 		Pipette,
 		Play,
-		Plus,
 		Redo2,
 		Repeat,
 		RotateCcw,
@@ -69,6 +68,11 @@
 	import RangeSlider from "../ui/RangeSlider.svelte";
 	import SourceKeyframes, { type KeyTrackView } from "./SourceKeyframes.svelte";
 	import SourceTrim from "./SourceTrim.svelte";
+	import KeyPicker, {
+		type PickerKey,
+		type PickerPatch,
+	} from "./KeyPicker.svelte";
+	import type { MaskBox } from "./mask-tools";
 
 	interface Props {
 		/** The media being edited; the edit belongs to it, not to a layer. */
@@ -119,7 +123,7 @@
 		{
 			value: "key",
 			label: "Key",
-			hint: "Click the preview to pick the colour to remove; Shift-click adds another point",
+			hint: "Click a colour to remove it, dragging outward to set its range. Drag a dot to move it, or the ring around it to change its range",
 		},
 		{
 			value: "crop",
@@ -301,9 +305,6 @@
 	let selectedPoint = $state(0);
 	let pointIndex = $derived(Math.min(selectedPoint, key.points.length - 1));
 	let point = $derived(key.points[pointIndex] ?? DEFAULT_KEY_POINT);
-	/** The next click on the preview adds a point instead of re-picking this one. */
-	let addingPoint = $state(false);
-	let canAddPoint = $derived(key.points.length < MAX_KEY_POINTS);
 	/** The point whose swatch is hovered: the preview cuts with it alone. */
 	let soloPoint = $state(-1);
 
@@ -334,8 +335,9 @@
 	function reshapePoints(
 		fn: (points: KeyPoint[]) => KeyPoint[],
 		enable = false,
+		coalesceKey?: string,
 	) {
-		beforeEdit();
+		beforeEdit(coalesceKey);
 		const keys = edit.anim?.key?.map((k) => ({
 			...k,
 			v: { ...k.v, points: fn(k.v.points) },
@@ -347,13 +349,6 @@
 		};
 		const base = { ...edit, chromaKey };
 		onChange(keys ? withTrack(base, "key", keys) : base);
-	}
-
-	function addPoint(p: KeyPoint) {
-		if (!canAddPoint) return;
-		const index = key.points.length;
-		reshapePoints((points) => [...points, createKeyPoint(p)], true);
-		selectedPoint = index;
 	}
 
 	function removePoint(i: number) {
@@ -896,23 +891,61 @@
 		if (ready && !playing) paint();
 	});
 
-	/** Re-picks the selected point, or adds one when asked to. */
-	function pickAt(x: number, y: number, add: boolean) {
-		if (!raw || !preview) return;
-		const nx = Math.min(Math.max(x / raw.width, 0), 1);
-		const ny = Math.min(Math.max(y / raw.height, 0), 1);
+	/** The picker's points; a fresh key's placeholder green isn't one anyone picked. */
+	let pickerKeys = $derived<PickerKey[]>(
+		!key.enabled && isDefaultKeyPoints(key.points)
+			? []
+			: key.points.map((p) => ({
+					color: toHex(p.color),
+					x: p.x,
+					y: p.y,
+					range: p.range,
+					on: p.on,
+				})),
+	);
+
+	/** The picker's box: the whole frame, as the canvas shows it. */
+	let pickerBox = $derived<MaskBox | null>(
+		fitted ? { left: 0, top: 0, w: fitted.w, h: fitted.h, rot: 0 } : null,
+	);
+
+	/** One picker gesture's undo step: every change in it shares the key. */
+	let gesture = "";
+	let gestures = 0;
+	function newGesture(): string {
+		gesture = `key-pick-${++gestures}`;
+		return gesture;
+	}
+
+	function pickerAdd(
+		x: number,
+		y: number,
+		range: () => number,
+		added: (index: number) => void,
+	) {
 		// From the decoded frame the key will run on, not the scaled-down picture.
-		const color = preview.sample(nx, ny);
+		const color = preview?.sample(x, y);
 		if (!color) return;
-		const picked = { color, x: nx, y: ny };
-		addingPoint = false;
-		// A fresh key's green is a placeholder, not a point anyone picked.
-		const fresh = !key.enabled && isDefaultKeyPoints(key.points);
-		if (add && canAddPoint && !fresh) {
-			addPoint({ ...point, ...picked });
-		} else {
-			setPoint(pointIndex, picked);
-		}
+		const p = createKeyPoint({ color, x, y, range: range() });
+		const fresh = pickerKeys.length === 0;
+		const index = fresh ? 0 : key.points.length;
+		reshapePoints(
+			(points) => (fresh ? [p] : [...points, p]),
+			true,
+			newGesture(),
+		);
+		added(index);
+	}
+
+	function pickerChange(index: number, patch: PickerPatch, extend: boolean) {
+		setPoint(index, patch, extend ? gesture : newGesture());
+	}
+
+	/** A moved point takes the colour where it landed, in the same undo step. */
+	function pickerMoved(index: number) {
+		const p = key.points[index];
+		const color = p && preview?.sample(p.x, p.y);
+		if (color) setPoint(index, { color }, gesture);
 	}
 
 	// One handler for all three tools: only the selected one gets the drag.
@@ -1019,10 +1052,6 @@
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		gestureTime = currentTime;
 
-		if (tool === "key") {
-			pickAt(p.x, p.y, e.shiftKey || addingPoint);
-			return;
-		}
 		if (tool === "erase") {
 			// One entry per stroke, taken before the first dab.
 			beforeEdit();
@@ -1378,17 +1407,18 @@
 								onpointercancel={onPreviewUp}
 								aria-label="Media preview"
 							></canvas>
-							<!-- Where each point was picked: a connected point cuts outward from there. -->
-							{#if tool === "key" && key.enabled}
-								{#each key.points as p, i (i)}
-									<span
-										class="key-marker"
-										class:selected={i === pointIndex}
-										class:off={!p.on}
-										style="left:{p.x * 100}%; top:{p.y * 100}%"
-										style:background={toHex(p.color)}
-									></span>
-								{/each}
+							{#if tool === "key"}
+								<KeyPicker
+									keys={pickerKeys}
+									box={pickerBox}
+									selected={pointIndex}
+									max={MAX_KEY_POINTS}
+									onselect={(i) => (selectedPoint = i)}
+									onadd={pickerAdd}
+									onchange={pickerChange}
+									onmoved={pickerMoved}
+									onfocus={(i) => (soloPoint = i)}
+								/>
 							{/if}
 							{#if !isFullCrop(crop)}
 								{const idle = $derived(tool !== "crop")}
@@ -1604,19 +1634,6 @@
 										{/if}
 									</span>
 								{/each}
-								<button
-									class="key-point-add"
-									class:on={addingPoint}
-									disabled={!canAddPoint}
-									title={canAddPoint
-										? "Add a point: the next click on the preview picks its colour. Shift-click the preview does the same."
-										: `A key holds at most ${MAX_KEY_POINTS} points`}
-									aria-label="Add a point"
-									aria-pressed={addingPoint}
-									onclick={() => (addingPoint = !addingPoint)}
-								>
-									<Plus size={11} />
-								</button>
 							</div>
 						</div>
 
@@ -1895,31 +1912,6 @@
 
 	.canvas-wrap canvas.tool-key {
 		cursor: copy;
-	}
-
-	/* Same dots as the Mask's Key shape. */
-	.key-marker {
-		position: absolute;
-		width: 12px;
-		height: 12px;
-		border: 2px solid #fff;
-		border-radius: 50%;
-		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
-		transform: translate(-50%, -50%);
-		pointer-events: none;
-	}
-
-	/* Off: hollow, so the colour's place still shows. */
-	.key-marker.off {
-		background: transparent !important;
-		border-style: dashed;
-		opacity: 0.7;
-	}
-
-	.key-marker.selected {
-		width: 16px;
-		height: 16px;
-		border-color: var(--live);
 	}
 
 	.crop-shade {
@@ -2318,35 +2310,6 @@
 	.key-point:hover .key-point-del,
 	.key-point-del:focus-visible {
 		display: inline-flex;
-	}
-
-	.key-point-add {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 20px;
-		height: 20px;
-		padding: 0;
-		border: 1px dashed var(--line);
-		border-radius: 4px;
-		background: none;
-		color: var(--text-3);
-		cursor: pointer;
-	}
-
-	.key-point-add:hover:not(:disabled) {
-		color: var(--text);
-	}
-
-	.key-point-add.on {
-		border-style: solid;
-		border-color: var(--live);
-		color: var(--live);
-	}
-
-	.key-point-add:disabled {
-		opacity: 0.4;
-		cursor: default;
 	}
 
 	.reach-toggle {
