@@ -69,8 +69,8 @@
 	const FULL_DRAG = 0.35;
 	/** Range a click without a drag picks. */
 	const CLICK_RANGE = 0.08;
-	/** How close a press must land to a marker to move it, in pixels. */
-	const GRAB = 8;
+	/** How close a press must land to a marker to take it, in pixels. */
+	const GRAB = 14;
 	/** And to the selected marker's ring to change its range. */
 	const RING_GRAB = 10;
 
