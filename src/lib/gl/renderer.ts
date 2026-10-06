@@ -6,11 +6,8 @@ import {
 	MASK_REACH_UNIT,
 	isMaskEffect,
 } from "../effects/catalog/mask";
-import {
-	MASK_REACH_SEED_FRAG,
-	keyUniforms,
-	setKeyUniforms,
-} from "../effects/mask-keys";
+import { KEY_REACH_SEED_FRAG, setKeyUniforms } from "../color-key";
+import { keyUniforms } from "../effects/mask-keys";
 import { ensureFontLoaded, fontsVersion } from "../text-overlay";
 import {
 	drawTextToCanvas,
@@ -506,7 +503,7 @@ export class GlRenderer {
 		if (!gl) throw new Error("WebGL2 not supported");
 		this.gl = gl;
 		this.keyReach = new KeyReachPass(gl);
-		this.maskReach = new ReachFill(gl, MASK_REACH_SEED_FRAG);
+		this.maskReach = new ReachFill(gl, KEY_REACH_SEED_FRAG);
 		this.meshPass = new MeshPass(gl);
 		this.scenePass = new ScenePass(gl);
 		gl.getExtension("EXT_color_buffer_float");
