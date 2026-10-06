@@ -104,8 +104,9 @@ export class SourceEditPreview {
 		);
 	}
 
-	/** The whole frame, uncropped (the dialog shades the crop itself), into the canvas. */
-	draw(key: ChromaKey) {
+	/** The whole frame, uncropped (the dialog shades the crop itself), into the canvas.
+	 * `solo`: cut with that point alone, or -1 for the whole key. */
+	draw(key: ChromaKey, solo = -1) {
 		const gl = this.#gl;
 		gl.clearColor(0, 0, 0, 0);
 		if (!this.hasFrame) {
@@ -124,6 +125,7 @@ export class SourceEditPreview {
 		// -1: the canvas's first row is the top, as the source texture's is.
 		if (u["u_flipY"]) gl.uniform1f(u["u_flipY"], -1);
 		setKeyPointUniforms(gl, prog, key);
+		if (u["u_keySolo"]) gl.uniform1f(u["u_keySolo"], solo + 1);
 		this.#reach.bind(prog, reach);
 		if (u["u_crop"]) gl.uniform4f(u["u_crop"], 0, 0, 1, 1);
 		if (u["u_hasMask"]) gl.uniform1f(u["u_hasMask"], this.#hasMask ? 1 : 0);

@@ -18,6 +18,8 @@ export interface KeyPoint {
 	y: number;
 	/** Cut only the matching area touching the point, not every match in the frame. */
 	connected: boolean;
+	/** Off leaves the point out of the key without forgetting it. */
+	on: boolean;
 	/** OKLab distance that is fully cut. */
 	range: number;
 	/** Width of the fade past `range`, in the same units. 0 gives a hard edge. */
@@ -46,7 +48,7 @@ export function keyPointSpec(p: KeyPoint): KeySpec {
 		range: p.range,
 		softness: p.softness,
 		touching: p.connected,
-		on: true,
+		on: p.on,
 	};
 }
 
@@ -82,7 +84,7 @@ export function keyCoverage(
 }
 
 export function hasConnectedPoint(key: ChromaKey | undefined): boolean {
-	return !!key?.enabled && key.points.some((p) => p.connected);
+	return !!key?.enabled && key.points.some((p) => p.connected && p.on);
 }
 
 /** A rectangle of the source to keep, normalized to its own frame. */
@@ -170,6 +172,7 @@ export const DEFAULT_KEY_POINT: KeyPoint = {
 	x: 0.5,
 	y: 0.5,
 	connected: false,
+	on: true,
 	// Wide enough for shadows on an unevenly lit backdrop.
 	range: 0.15,
 	softness: DEFAULT_KEY_SOFTNESS,
@@ -244,6 +247,7 @@ export function isDefaultKeyPoints(points: KeyPoint[]): boolean {
 		p.x === d.x &&
 		p.y === d.y &&
 		p.connected === d.connected &&
+		p.on === d.on &&
 		p.range === d.range &&
 		p.softness === d.softness
 	);
@@ -431,6 +435,7 @@ function blendKey(a: AnimatedKey, b: AnimatedKey, k: number): AnimatedKey {
 						x: lerp(p.x, q.x, k),
 						y: lerp(p.y, q.y, k),
 						connected: p.connected,
+						on: p.on,
 						range: lerp(p.range, q.range, k),
 						softness: lerp(p.softness, q.softness, k),
 					};
@@ -623,6 +628,7 @@ function normalizeKeyPoint(raw: unknown): KeyPoint {
 		x: unit(p.x, d.x),
 		y: unit(p.y, d.y),
 		connected: !!p.connected,
+		on: p.on !== false,
 	};
 }
 

@@ -373,6 +373,11 @@ describe("keyCoverage", () => {
 		expect(keyCoverage(0.5, 0.5, 0.8, wide)).toBe(0);
 	});
 
+	it("leaves a point that's off out of the cut", () => {
+		const off = { points: [{ ...greenPoint, on: false }] };
+		expect(keyCoverage(0, 1, 0, off)).toBe(1);
+	});
+
 	it("leaves a connected point's colour alone outside its reach", () => {
 		const local = { points: [{ ...greenPoint, connected: true }] };
 		expect(keyCoverage(0, 1, 0, local, true)).toBe(0);
@@ -405,6 +410,13 @@ describe("key points", () => {
 		expect(old.softness).toBe(DEFAULT_KEY_POINT.softness);
 		expect(old).not.toHaveProperty("threshold");
 		expect([kept.range, kept.softness]).toEqual([0.3, 0.1]);
+	});
+
+	it("reads a point saved before the switch existed as on", () => {
+		const e = normalizeSourceEdit({
+			chromaKey: { points: [{ color: { r: 1, g: 0, b: 0 } }, { on: false }] },
+		});
+		expect(e.chromaKey.points.map((p) => p.on)).toEqual([true, false]);
 	});
 
 	it("counts an added point as a change", () => {

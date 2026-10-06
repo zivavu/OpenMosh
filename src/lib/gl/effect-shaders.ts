@@ -106,6 +106,8 @@ float insideLayerSoft(vec2 uv, float fade) {
 const CHROMA_KEY_GLSL = `${KEYS_MATCH_GLSL}
 // <= 0 switches the key off, so unkeyed media costs one compare.
 uniform float u_chromaOn;
+// Point number + 1 to cut with that point alone, on or not; 0 for every point that's on.
+uniform float u_keySolo;
 // Where the connected points cut, in source uv: g = reached. Off at <= 0.
 uniform sampler2D u_keyReach;
 uniform float u_hasReach;
@@ -143,7 +145,7 @@ float keyReach(vec2 srcUv) {
 
 // A pixel goes if it matches any point; a connected one only inside its reach.
 float keyCoverage(vec3 c, vec2 srcUv) {
-  return 1.0 - keysMatch(oklab(c), srcUv, -1.0);
+  return 1.0 - keysMatch(oklab(c), srcUv, u_keySolo - 1.0);
 }
 
 /** Crop, erase and key in one go. Returns the media with its coverage in .a. */
