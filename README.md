@@ -1,10 +1,12 @@
 # OpenMosh
 
+![OpenMosh in glitched chrome lettering](assets/screenshots/banner.webp)
+
 A browser-based glitch art studio, inspired by PhotoMosh. Drop in a photo or a video, pile on effects until it falls apart, hook the whole mess up to a song, and save the result. Nothing is uploaded anywhere, it all runs in your browser.
 
 **[openmosh.com](https://openmosh.com/)**
 
-![The OpenMosh upload screen](assets/screenshots/upload.jpg)
+![The OpenMosh upload screen](assets/screenshots/upload.webp)
 
 ---
 
@@ -32,11 +34,11 @@ Pick one of three modes on the upload screen.
 
 **Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Set the mosh style to Curated and a roll picks effects that work together instead: it runs them in a sensible order, lets one of them carry the look, and rolls again when the frame comes out blank. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
 
-![Single mode with a moshed image and its signal chain](assets/screenshots/single.png)
+![Single mode with a moshed image and its signal chain](assets/screenshots/single.webp)
 
 **Editor** is a timeline. You upload a batch of media, drop the song in as the master track, then lay clips out on media layers, each with its own mosh: a preset, a fixed mosh, or a re-roll that fires on an interval. Stacked effect lanes run over the whole frame, and a text timeline sits alongside the layers. Any piece of media can be cropped, keyed, erased by hand and run at its own speed, and a layer clip pasted onto another brings its chain along. 3D models go on layers too: OBJ, STL, GLB and FBX, and animated GLB and FBX files play their animation (an FBX needs its textures embedded). A 3D Transform on a model's clip turns the model itself, not a flat picture of it. The timeline is yours to size — drag the split along its top edge, or double-click it to hand the room back — and any lane you are not working on folds to a strip, one at a time or all at once. Save the whole project as a `.openmosh` file from the project menu, and open it back anywhere: the timeline, the media pool, the song and any custom fonts travel with it.
 
-![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.png)
+![Editor mode, media layers and effect lanes on the timeline](assets/screenshots/editor.webp)
 
 **Slideshow** is the fast one. Throw in a pile of images or videos, let it detect the BPM of your track, and it cuts between them on the beat with effects firing on the grid.
 
