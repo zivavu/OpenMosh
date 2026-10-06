@@ -1384,11 +1384,10 @@
 									<span
 										class="key-marker"
 										class:selected={i === pointIndex}
-										class:connected={p.connected}
+										class:off={!p.on}
 										style="left:{p.x * 100}%; top:{p.y * 100}%"
-									>
-										{i + 1}
-									</span>
+										style:background={toHex(p.color)}
+									></span>
 								{/each}
 							{/if}
 							{#if !isFullCrop(crop)}
@@ -1575,27 +1574,21 @@
 									<span
 										class="key-point"
 										class:selected={i === pointIndex}
+										class:off={!p.on}
 										onmouseenter={() => (soloPoint = i)}
 										onmouseleave={() => (soloPoint = -1)}
 									>
 										<button
-											class="key-point-pick"
+											class="key-swatch"
 											title="Point {i + 1}{p.connected
 												? ', connected'
 												: ''}{p.on
 												? ''
 												: ', off'}. Select it to change its colour and reach; hover to see only what it cuts."
 											aria-pressed={i === pointIndex}
+											style:background={toHex(p.color)}
 											onclick={() => (selectedPoint = i)}
-										>
-											<span
-												class="key-swatch"
-												class:connected={p.connected}
-												class:off={!p.on}
-												style:background={toHex(p.color)}
-											></span>
-											{i + 1}
-										</button>
+										></button>
 										{#if key.points.length > 1}
 											<button
 												class="key-point-del"
@@ -1606,7 +1599,7 @@
 													removePoint(i);
 												}}
 											>
-												<X size={10} />
+												<X size={9} />
 											</button>
 										{/if}
 									</span>
@@ -1904,31 +1897,29 @@
 		cursor: copy;
 	}
 
+	/* Same dots as the Mask's Key shape. */
 	.key-marker {
 		position: absolute;
-		display: grid;
-		place-items: center;
-		width: 14px;
-		height: 14px;
-		margin: -7px 0 0 -7px;
-		border: 1px dashed rgba(255, 255, 255, 0.7);
+		width: 12px;
+		height: 12px;
+		border: 2px solid #fff;
 		border-radius: 50%;
-		background: rgba(0, 0, 0, 0.45);
-		color: #fff;
-		font-family: var(--font-mono);
-		font-size: 0.5rem;
-		line-height: 1;
+		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+		transform: translate(-50%, -50%);
 		pointer-events: none;
 	}
 
-	/* Solid ring: this one cuts only the patch it sits in. */
-	.key-marker.connected {
-		border-style: solid;
+	/* Off: hollow, so the colour's place still shows. */
+	.key-marker.off {
+		background: transparent !important;
+		border-style: dashed;
+		opacity: 0.7;
 	}
 
 	.key-marker.selected {
+		width: 16px;
+		height: 16px;
 		border-color: var(--live);
-		color: var(--live);
 	}
 
 	.crop-shade {
@@ -2269,57 +2260,82 @@
 		user-select: none;
 	}
 
+	/* Same chips as the Mask's Key shape. */
 	.key-points {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.35rem;
 	}
 
 	.key-point {
+		position: relative;
 		display: inline-flex;
-		align-items: center;
-		border: 1px solid var(--line);
-		border-radius: 3px;
 	}
 
-	.key-point.selected {
-		border-color: var(--live);
-	}
-
-	.key-point-pick,
-	.key-point-del,
-	.key-point-add {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
+	.key-swatch {
+		width: 20px;
 		height: 20px;
-		padding: 0 0.3rem;
-		border: none;
-		background: none;
-		color: var(--text-3);
-		font-family: var(--font-mono);
-		font-size: 0.6rem;
+		padding: 0;
+		border: 1px solid var(--line);
+		border-radius: 4px;
 		cursor: pointer;
 	}
 
-	.key-point.selected .key-point-pick {
-		color: var(--text);
+	/* A point that's off: faded and struck through. */
+	.key-point.off .key-swatch {
+		opacity: 0.35;
+		background-image: linear-gradient(
+			to top right,
+			transparent calc(50% - 1px),
+			var(--text-2) 50%,
+			transparent calc(50% + 1px)
+		) !important;
+	}
+
+	.key-point.selected .key-swatch {
+		border-color: var(--live);
+		box-shadow: 0 0 0 1px var(--live);
 	}
 
 	.key-point-del {
-		padding: 0 0.2rem 0 0;
+		position: absolute;
+		top: -5px;
+		right: -5px;
+		display: none;
+		align-items: center;
+		justify-content: center;
+		width: 13px;
+		height: 13px;
+		padding: 0;
+		border: none;
+		border-radius: 50%;
+		background: var(--ink);
+		color: var(--text-2);
+		cursor: pointer;
 	}
 
-	.key-point-pick:hover,
-	.key-point-del:hover,
-	.key-point-add:hover:not(:disabled) {
-		color: var(--text);
+	.key-point:hover .key-point-del,
+	.key-point-del:focus-visible {
+		display: inline-flex;
 	}
 
 	.key-point-add {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		padding: 0;
 		border: 1px dashed var(--line);
-		border-radius: 3px;
+		border-radius: 4px;
+		background: none;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.key-point-add:hover:not(:disabled) {
+		color: var(--text);
 	}
 
 	.key-point-add.on {
@@ -2331,22 +2347,6 @@
 	.key-point-add:disabled {
 		opacity: 0.4;
 		cursor: default;
-	}
-
-	.key-swatch {
-		width: 10px;
-		height: 10px;
-		border: 1px dashed rgba(255, 255, 255, 0.5);
-		border-radius: 50%;
-	}
-
-	.key-swatch.connected {
-		border-style: solid;
-	}
-
-	/* Off: faded, so the point still shows where it was. */
-	.key-swatch.off {
-		opacity: 0.3;
 	}
 
 	.reach-toggle {
