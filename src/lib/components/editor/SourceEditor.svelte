@@ -304,11 +304,13 @@
 	/** The next click on the preview adds a point instead of re-picking this one. */
 	let addingPoint = $state(false);
 	let canAddPoint = $derived(key.points.length < MAX_KEY_POINTS);
+	/** The point whose swatch is hovered: the preview cuts with it alone. */
+	let soloPoint = $state(-1);
 
 	/** Picking switches the key on. Colour, position and tolerances are keyed values. */
 	function setPoint(
 		i: number,
-		patch: Partial<Omit<KeyPoint, "connected">>,
+		patch: Partial<Omit<KeyPoint, "connected" | "on">>,
 		coalesceKey?: string,
 	) {
 		beforeEdit(coalesceKey);
@@ -360,10 +362,11 @@
 		if (selectedPoint >= i && selectedPoint > 0) selectedPoint--;
 	}
 
-	function setConnected(connected: boolean) {
+	/** Reach and on/off: the same on every key, like the points themselves. */
+	function setPointFlag(patch: Pick<Partial<KeyPoint>, "connected" | "on">) {
 		const i = pointIndex;
 		reshapePoints((points) =>
-			points.map((p, j) => (j === i ? { ...p, connected } : p)),
+			points.map((p, j) => (j === i ? { ...p, ...patch } : p)),
 		);
 	}
 
@@ -695,7 +698,7 @@
 		if (canvas.height !== h) canvas.height = h;
 		const maskPx = maskPixels();
 		preview.setMask(maskPx, raw.width, raw.height);
-		preview.draw($state.snapshot(key) as ChromaKey);
+		preview.draw($state.snapshot(key) as ChromaKey, soloPoint);
 	}
 
 	// A resized dialog changes how many pixels the canvas holds.
@@ -882,6 +885,7 @@
 		void [
 			key.enabled,
 			key.points,
+			soloPoint,
 			edit.mask,
 			maskXform,
 			// A morph moves on with the playhead even when nothing else does.
@@ -1567,18 +1571,27 @@
 							<span class="row-label">Points</span>
 							<div class="key-points">
 								{#each key.points as p, i (i)}
-									<span class="key-point" class:selected={i === pointIndex}>
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<span
+										class="key-point"
+										class:selected={i === pointIndex}
+										onmouseenter={() => (soloPoint = i)}
+										onmouseleave={() => (soloPoint = -1)}
+									>
 										<button
 											class="key-point-pick"
 											title="Point {i + 1}{p.connected
 												? ', connected'
-												: ''} — select it to change its colour and reach"
+												: ''}{p.on
+												? ''
+												: ', off'}. Select it to change its colour and reach; hover to see only what it cuts."
 											aria-pressed={i === pointIndex}
 											onclick={() => (selectedPoint = i)}
 										>
 											<span
 												class="key-swatch"
 												class:connected={p.connected}
+												class:off={!p.on}
 												style:background={toHex(p.color)}
 											></span>
 											{i + 1}
@@ -1588,7 +1601,10 @@
 												class="key-point-del"
 												title="Remove point {i + 1}"
 												aria-label="Remove point {i + 1}"
-												onclick={() => removePoint(i)}
+												onclick={() => {
+													soloPoint = -1;
+													removePoint(i);
+												}}
 											>
 												<X size={10} />
 											</button>
@@ -1609,6 +1625,16 @@
 									<Plus size={11} />
 								</button>
 							</div>
+						</div>
+
+						<div class="row" title="Turn this point off without deleting it">
+							<label for="ck-point-on">Use point</label>
+							<Checkbox
+								id="ck-point-on"
+								checked={point.on}
+								disabled={!key.enabled}
+								onchange={(e) => setPointFlag({ on: e.currentTarget.checked })}
+							/>
 						</div>
 
 						<div class="row">
@@ -1635,7 +1661,7 @@
 									class="tool-btn"
 									class:open={!point.connected}
 									aria-pressed={!point.connected}
-									onclick={() => setConnected(false)}
+									onclick={() => setPointFlag({ connected: false })}
 								>
 									Whole frame
 								</button>
@@ -1643,7 +1669,7 @@
 									class="tool-btn"
 									class:open={point.connected}
 									aria-pressed={point.connected}
-									onclick={() => setConnected(true)}
+									onclick={() => setPointFlag({ connected: true })}
 								>
 									Connected
 								</button>
@@ -2316,6 +2342,11 @@
 
 	.key-swatch.connected {
 		border-style: solid;
+	}
+
+	/* Off: faded, so the point still shows where it was. */
+	.key-swatch.off {
+		opacity: 0.3;
 	}
 
 	.reach-toggle {

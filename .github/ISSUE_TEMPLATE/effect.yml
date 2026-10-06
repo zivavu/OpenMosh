@@ -20,4 +20,4 @@ body:
     id: reference
     attributes:
       label: Reference
-      description: A screenshot, a video link or an openly licensed shader that shows it. If PhotoMosh has it, a recording of it is the most useful thing here (we don't use their code).
+      description: A screenshot, a video link or an openly licensed shader that shows it.
