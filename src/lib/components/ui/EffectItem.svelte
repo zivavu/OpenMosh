@@ -731,7 +731,7 @@
 							{/if}
 							{#if param.type === "keys"}
 								<div class="paint-controls">
-									<div class="paint-btns key-swatches">
+									<div class="paint-btns key-swatches" data-key-points>
 										{#each colorKeys as k, i (i)}
 											<!-- svelte-ignore a11y_no_static_element_interactions -->
 											<span
