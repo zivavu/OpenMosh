@@ -745,9 +745,12 @@
 													type="button"
 													class="key-swatch"
 													style:background={k.color}
-													title="{k.color}. Hover to see only what this color selects."
+													title="{k.color}. Click to select it on the preview; hover to see only what it selects."
 													aria-label="Color {i + 1}{k.on ? '' : ', off'}"
-													onclick={() => (maskPaint.keyIndex = i)}
+													onclick={() => {
+														maskPaint.keyIndex = i;
+														if (!painting) toggleTool(param.key, "keys");
+													}}
 												></button>
 												<button
 													type="button"
