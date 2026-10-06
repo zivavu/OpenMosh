@@ -36,6 +36,15 @@ export const definition: EffectDefinition = {
 			step: 0.005,
 			defaultValue: 0,
 		},
+		{
+			key: "feather",
+			label: "Feather",
+			type: "range",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			defaultValue: 0,
+		},
 	],
 };
 
@@ -46,6 +55,7 @@ export const shader: EffectShaderDef = {
 		`uniform float u_radius;
 uniform float u_width;
 uniform float u_rotation;
+uniform float u_feather;
 uniform vec2 u_resolution;
 void main() {
   vec2 ct = vec2(0.5);
@@ -59,14 +69,18 @@ void main() {
   float a = u_rotation * 6.28318530718;
   vec2 d = pt - ct;
   pt = vec2(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a)) + ct;
-  if (distance(pt, ct) >= u_radius) {
+  float dist = distance(pt, ct);
+  if (dist >= u_radius) {
     outColor = vec4(0.0);
     return;
   }
+  // Feather fades the inner band of the circle, as a share of the radius.
+  float edge = 1.0 - smoothstep(u_radius * (1.0 - max(u_feather, 0.001)), u_radius, dist);
   float chord = 2.0 * sqrt(max(u_radius * u_radius - (pt.x - 0.5) * (pt.x - 0.5), 1e-6));
   pt.y = (pt.y - 0.5) / chord + 0.5;
-  outColor = texture(u_texture, pt);
+  vec4 c = texture(u_texture, pt);
+  outColor = vec4(c.rgb, c.a * edge);
 }`,
 	linearFilter: true,
-	setUniforms: floats("radius", "width", "rotation"),
+	setUniforms: floats("radius", "width", "rotation", "feather"),
 };
