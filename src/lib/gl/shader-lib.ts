@@ -68,7 +68,46 @@ export interface PrePassDef {
 	/** Keep this pass's output as private full-res history and hand it back as
 	 * u_feedback next frame, so an effect can carry state apart from the main pass's own feedback. */
 	feedback?: boolean;
+	/** Halve the input down a mip pyramid, then run this fragment once per level on
+	 * the way back up: u_texture is the coarser result (sample it with upsampleTent),
+	 * u_level this level's downsample, u_texel the coarser level's texel size. */
+	pyramid?: boolean;
 }
+
+/** 13-tap downsample for mip pyramids (the Call of Duty bloom filter): wide enough
+ * that halving doesn't alias, so bright pixels don't flicker as they move. */
+export const PYRAMID_DOWN_FRAG =
+	H +
+	`uniform vec2 u_texel;
+void main() {
+  vec2 t = u_texel;
+  vec3 a = texture(u_texture, v_uv + t * vec2(-2.0, -2.0)).rgb;
+  vec3 b = texture(u_texture, v_uv + t * vec2( 0.0, -2.0)).rgb;
+  vec3 c = texture(u_texture, v_uv + t * vec2( 2.0, -2.0)).rgb;
+  vec3 d = texture(u_texture, v_uv + t * vec2(-2.0,  0.0)).rgb;
+  vec3 e = texture(u_texture, v_uv).rgb;
+  vec3 f = texture(u_texture, v_uv + t * vec2( 2.0,  0.0)).rgb;
+  vec3 g = texture(u_texture, v_uv + t * vec2(-2.0,  2.0)).rgb;
+  vec3 h = texture(u_texture, v_uv + t * vec2( 0.0,  2.0)).rgb;
+  vec3 i = texture(u_texture, v_uv + t * vec2( 2.0,  2.0)).rgb;
+  vec3 j = texture(u_texture, v_uv + t * vec2(-1.0, -1.0)).rgb;
+  vec3 k = texture(u_texture, v_uv + t * vec2( 1.0, -1.0)).rgb;
+  vec3 l = texture(u_texture, v_uv + t * vec2(-1.0,  1.0)).rgb;
+  vec3 m = texture(u_texture, v_uv + t * vec2( 1.0,  1.0)).rgb;
+  vec3 sum = e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625
+    + (j + k + l + m) * 0.125;
+  outColor = vec4(sum, 1.0);
+}`;
+
+export const UPSAMPLE_TENT_GLSL = `vec3 upsampleTent(sampler2D t, vec2 uv, vec2 texel) {
+  vec3 s = texture(t, uv).rgb * 4.0;
+  s += (texture(t, uv + vec2(-texel.x, 0.0)).rgb + texture(t, uv + vec2(texel.x, 0.0)).rgb
+    + texture(t, uv + vec2(0.0, -texel.y)).rgb + texture(t, uv + vec2(0.0, texel.y)).rgb) * 2.0;
+  s += texture(t, uv - texel).rgb + texture(t, uv + texel).rgb
+    + texture(t, uv + vec2(-texel.x, texel.y)).rgb + texture(t, uv + vec2(texel.x, -texel.y)).rgb;
+  return s / 16.0;
+}
+`;
 
 export interface EffectShaderDef {
 	fragment: string;

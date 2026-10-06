@@ -113,7 +113,7 @@ export const STARTER_PRESETS: Preset[] = [
 			{
 				defId: "glow",
 				enabled: true,
-				values: { amount: 8, cutoff: 0.25, radius: 8 },
+				values: { amount: 8, cutoff: 0.45, radius: 8 },
 				volumeLinks: { amount: { min: 2, max: 30 } },
 			},
 		],
