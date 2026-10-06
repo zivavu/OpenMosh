@@ -1,3 +1,12 @@
+import {
+	DEFAULT_KEY_SOFTNESS,
+	KEY_RANGE_MAX,
+	KEY_SOFTNESS_MAX,
+	MAX_COLOR_KEYS,
+	keysTester,
+	type KeySpec,
+} from "../color-key";
+
 export type KeyColor = { r: number; g: number; b: number };
 
 /** One colour to key out, and where in the frame it was picked. */
@@ -9,20 +18,17 @@ export interface KeyPoint {
 	y: number;
 	/** Cut only the matching area touching the point, not every match in the frame. */
 	connected: boolean;
-	/** Chroma distance below which a pixel is fully cut, 0..1. */
-	threshold: number;
-	/** Width of the soft band above the threshold, 0..1. 0 gives a hard edge. */
-	smoothing: number;
-	/** How far a pixel's brightness may differ from the point's and still be cut, 0..1.
-	 * 1 ignores brightness. */
-	lumaRange: number;
+	/** OKLab distance that is fully cut. */
+	range: number;
+	/** Width of the fade past `range`, in the same units. 0 gives a hard edge. */
+	softness: number;
 }
 
-/** A point's tolerances, the part the three sliders edit. */
-export type KeyTune = Pick<KeyPoint, "threshold" | "smoothing" | "lumaRange">;
+/** A point's tolerances, the part the sliders edit. */
+export type KeyTune = Pick<KeyPoint, "range" | "softness">;
 
 /** The most points a key holds; the shader's arrays are this long. */
-export const MAX_KEY_POINTS = 8;
+export const MAX_KEY_POINTS = MAX_COLOR_KEYS;
 
 /** Edits that belong to the media itself, applied everywhere it is drawn. */
 export interface ChromaKey {
@@ -31,18 +37,17 @@ export interface ChromaKey {
 	points: KeyPoint[];
 }
 
-/** Y'CbCr chroma of an rgb colour, 0..1 per channel in. */
-function chromaOf(r: number, g: number, b: number): [number, number] {
-	return [-0.169 * r - 0.331 * g + 0.5 * b, 0.5 * r - 0.419 * g - 0.081 * b];
-}
-
-function lumaOf(r: number, g: number, b: number): number {
-	return 0.299 * r + 0.587 * g + 0.114 * b;
-}
-
-function smoothstep(lo: number, hi: number, x: number): number {
-	const t = Math.min(1, Math.max(0, (x - lo) / (hi - lo)));
-	return t * t * (3 - 2 * t);
+/** A point in the form the shared keying takes. */
+export function keyPointSpec(p: KeyPoint): KeySpec {
+	return {
+		...p.color,
+		x: p.x,
+		y: p.y,
+		range: p.range,
+		softness: p.softness,
+		touching: p.connected,
+		on: true,
+	};
 }
 
 /** Coverage for 0..1 rgb, 1 = keep. `reached`: the pixel lies in the connected
@@ -59,37 +64,10 @@ export function keyTester(
 	key: Omit<ChromaKey, "enabled">,
 	only?: (p: KeyPoint) => boolean,
 ): KeyTest {
-	const pts = key.points
-		.filter((p) => !only || only(p))
-		.map((p) => {
-			const [kx, ky] = chromaOf(p.color.r, p.color.g, p.color.b);
-			const ly = lumaOf(p.color.r, p.color.g, p.color.b);
-			return {
-				kx,
-				ky,
-				ly,
-				connected: p.connected,
-				thr: p.threshold,
-				luma: p.lumaRange,
-				s: Math.max(p.smoothing, 0.0001),
-			};
-		});
-	return (r, g, b, reached = true) => {
-		const [cx, cy] = chromaOf(r, g, b);
-		const y = lumaOf(r, g, b);
-		let cover = 1;
-		for (const p of pts) {
-			if (p.connected && !reached) continue;
-			const dC = Math.hypot(cx - p.kx, cy - p.ky);
-			const dY = Math.abs(y - p.ly);
-			const k = Math.max(
-				smoothstep(p.thr, p.thr + p.s, dC),
-				smoothstep(p.luma, p.luma + p.s, dY),
-			);
-			if (k < cover) cover = k;
-		}
-		return cover;
-	};
+	const test = keysTester(
+		key.points.filter((p) => !only || only(p)).map(keyPointSpec),
+	);
+	return (r, g, b, reached = true) => 1 - test(r, g, b, reached);
 }
 
 /** How much of a pixel the key leaves, 1 = keep. */
@@ -192,11 +170,9 @@ export const DEFAULT_KEY_POINT: KeyPoint = {
 	x: 0.5,
 	y: 0.5,
 	connected: false,
-	threshold: 0.3,
-	smoothing: 0.1,
-	// Wide enough for shadows on an unevenly lit backdrop, tight enough to leave
-	// white and black alone.
-	lumaRange: 0.35,
+	// Wide enough for shadows on an unevenly lit backdrop.
+	range: 0.15,
+	softness: DEFAULT_KEY_SOFTNESS,
 };
 
 export const DEFAULT_CHROMA_KEY: ChromaKey = {
@@ -268,9 +244,8 @@ export function isDefaultKeyPoints(points: KeyPoint[]): boolean {
 		p.x === d.x &&
 		p.y === d.y &&
 		p.connected === d.connected &&
-		p.threshold === d.threshold &&
-		p.smoothing === d.smoothing &&
-		p.lumaRange === d.lumaRange
+		p.range === d.range &&
+		p.softness === d.softness
 	);
 }
 
@@ -456,9 +431,8 @@ function blendKey(a: AnimatedKey, b: AnimatedKey, k: number): AnimatedKey {
 						x: lerp(p.x, q.x, k),
 						y: lerp(p.y, q.y, k),
 						connected: p.connected,
-						threshold: lerp(p.threshold, q.threshold, k),
-						smoothing: lerp(p.smoothing, q.smoothing, k),
-						lumaRange: lerp(p.lumaRange, q.lumaRange, k),
+						range: lerp(p.range, q.range, k),
+						softness: lerp(p.softness, q.softness, k),
 					};
 				})
 			: a.points;
@@ -617,37 +591,30 @@ function normalizeTrack<T>(
 }
 
 function normalizeAnimatedKey(raw: unknown): AnimatedKey {
-	// Keys saved before points held one colour and one set of tolerances, which now
-	// seed every point that doesn't carry its own.
-	const k = (raw ?? {}) as Partial<AnimatedKey> &
-		Partial<KeyTune> & { color?: unknown };
+	// Keys saved before points held one colour. Tolerances from before the OKLab
+	// key don't carry over: a point without range and softness gets the defaults.
+	const k = (raw ?? {}) as Partial<AnimatedKey> & { color?: unknown };
 	const rawPoints: unknown[] = Array.isArray(k.points)
 		? k.points
 		: k.color
 			? [{ color: k.color }]
 			: [];
-	const d = DEFAULT_KEY_POINT;
-	const tune: KeyTune = {
-		threshold: num(k.threshold, d.threshold),
-		smoothing: num(k.smoothing, d.smoothing),
-		lumaRange: num(k.lumaRange, d.lumaRange),
-	};
-	const points = rawPoints
-		.slice(0, MAX_KEY_POINTS)
-		.map((p) => normalizeKeyPoint(p, tune));
-	return { points: points.length > 0 ? points : [createKeyPoint(tune)] };
+	const points = rawPoints.slice(0, MAX_KEY_POINTS).map(normalizeKeyPoint);
+	return { points: points.length > 0 ? points : [createKeyPoint()] };
 }
 
-function normalizeKeyPoint(raw: unknown, tune: KeyTune): KeyPoint {
+function normalizeKeyPoint(raw: unknown): KeyPoint {
 	const p = (raw ?? {}) as Partial<KeyPoint>;
 	const c = (p.color ?? {}) as Partial<KeyColor>;
 	const d = DEFAULT_KEY_POINT;
 	const unit = (v: unknown, fallback: number) =>
 		Math.min(1, Math.max(0, num(v, fallback)));
 	return {
-		threshold: num(p.threshold, tune.threshold),
-		smoothing: num(p.smoothing, tune.smoothing),
-		lumaRange: num(p.lumaRange, tune.lumaRange),
+		range: Math.min(KEY_RANGE_MAX, Math.max(0, num(p.range, d.range))),
+		softness: Math.min(
+			KEY_SOFTNESS_MAX,
+			Math.max(0, num(p.softness, d.softness)),
+		),
 		color: {
 			r: unit(c.r, d.color.r),
 			g: unit(c.g, d.color.g),

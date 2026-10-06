@@ -21,6 +21,7 @@
 	} from "lucide-svelte";
 	import { onMount, untrack } from "svelte";
 	import { hexToVec3 } from "../../color";
+	import { KEY_RANGE_MAX, KEY_SOFTNESS_MAX } from "../../color-key";
 	import { formatTime } from "../../audio/audio-utils";
 	import { pushModalKeyboard } from "../../modal-keyboard";
 	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
@@ -1186,11 +1187,7 @@
 		}
 	}
 
-	/** Cubic track for the key's sliders: the useful settings sit in their bottom
-	 * fifth, which this spreads over more than half the travel. */
-	const KEY_CURVE = 3;
-
-	/** A decimal under 10%, where the curved track makes it reachable. */
+	/** A decimal under 10%, where a small step still shows. */
 	function keyPct(v: number): string {
 		const pct = v * 100;
 		return `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
@@ -1656,64 +1653,41 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="How close a pixel's colour has to be to the selected point's to be cut away. Raise it until the background goes; drop it if the subject starts going with it. Double-click to reset."
-							ondblclick={() =>
-								setTune("threshold", DEFAULT_KEY_POINT.threshold)}
+							title="How close a colour has to be to the selected point's to be cut. Raise it until the background is gone; lower it if the subject starts going too. Double-click to reset."
+							ondblclick={() => setTune("range", DEFAULT_KEY_POINT.range)}
 						>
-							<label for="ck-thr">Threshold</label>
+							<label for="ck-range">Color range</label>
 							<RangeSlider
-								id="ck-thr"
-								value={point.threshold}
-								min={0.01}
-								max={1}
-								step={0.001}
-								curve={KEY_CURVE}
-								disabled={!key.enabled}
-								oninput={(v) => setTune("threshold", v, true)}
-							/>
-							<span class="val">{keyPct(point.threshold)}</span>
-						</div>
-
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div
-							class="row"
-							title="How far a pixel's brightness may differ from the selected point's colour. Wide cuts every shade of it, shadows and hot spots included; narrow matches one exact shade, which is what an unsaturated background needs. Double-click to reset."
-							ondblclick={() =>
-								setTune("lumaRange", DEFAULT_KEY_POINT.lumaRange)}
-						>
-							<label for="ck-luma">Brightness range</label>
-							<RangeSlider
-								id="ck-luma"
-								value={point.lumaRange}
-								min={0.01}
-								max={1}
-								step={0.001}
-								curve={KEY_CURVE}
-								disabled={!key.enabled}
-								oninput={(v) => setTune("lumaRange", v, true)}
-							/>
-							<span class="val">{keyPct(point.lumaRange)}</span>
-						</div>
-
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div
-							class="row"
-							title="How soft the edge of the selected point's cut is. A little feathering hides the jagged step the key leaves behind, too much eats into the subject. Double-click to reset."
-							ondblclick={() =>
-								setTune("smoothing", DEFAULT_KEY_POINT.smoothing)}
-						>
-							<label for="ck-smooth">Smoothing</label>
-							<RangeSlider
-								id="ck-smooth"
-								value={point.smoothing}
+								id="ck-range"
+								value={point.range}
 								min={0}
-								max={0.5}
+								max={KEY_RANGE_MAX}
 								step={0.001}
-								curve={KEY_CURVE}
 								disabled={!key.enabled}
-								oninput={(v) => setTune("smoothing", v, true)}
+								oninput={(v) => setTune("range", v, true)}
 							/>
-							<span class="val">{keyPct(point.smoothing)}</span>
+							<span class="val">{keyPct(point.range / KEY_RANGE_MAX)}</span>
+						</div>
+
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="How soft the edge of the selected point's cut is. A little hides the jagged edge the key leaves; too much eats into the subject. Double-click to reset."
+							ondblclick={() => setTune("softness", DEFAULT_KEY_POINT.softness)}
+						>
+							<label for="ck-soft">Softness</label>
+							<RangeSlider
+								id="ck-soft"
+								value={point.softness}
+								min={0}
+								max={KEY_SOFTNESS_MAX}
+								step={0.001}
+								disabled={!key.enabled}
+								oninput={(v) => setTune("softness", v, true)}
+							/>
+							<span class="val"
+								>{keyPct(point.softness / KEY_SOFTNESS_MAX)}</span
+							>
 						</div>
 					{:else if tool === "crop"}
 						<div class="row">

@@ -1,4 +1,4 @@
-import { MAX_KEY_POINTS } from "../media/source-edit";
+import { KEYS_MATCH_GLSL } from "../color-key";
 import { CATALOG } from "../effects/catalog";
 import { H, type EffectShaderDef } from "./shader-lib";
 
@@ -102,35 +102,10 @@ float insideLayerSoft(vec2 uv, float fade) {
 }
 `;
 
-/** The key's points and the per-point colour test. Must match keyCoverage in source-edit.ts. */
-const KEY_POINTS_GLSL = `#define MAX_KEY_POINTS ${MAX_KEY_POINTS}
-// <= 0 switches the key off, so unkeyed media costs one compare.
-uniform float u_keyOn;
-uniform int u_keyCount;
-uniform vec3 u_keyColors[MAX_KEY_POINTS];
-// Per point: x = threshold, y = smoothing, z = brightness range (1 ignores it).
-uniform vec3 u_keyTunes[MAX_KEY_POINTS];
-// 1 = the point only cuts inside the connected reach.
-uniform float u_keyConnected[MAX_KEY_POINTS];
-
-vec2 chroma(vec3 c) {
-  return vec2(dot(c, vec3(-0.169, -0.331, 0.5)), dot(c, vec3(0.5, -0.419, -0.081)));
-}
-float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-// A cylinder in Y'CbCr: chroma within the threshold of the point's, brightness
-// within its range (chroma alone keyed grey backdrops' highlights too). Returns coverage, 1 = keep.
-float pointCoverage(vec3 c, int i) {
-  vec3 k = u_keyColors[i];
-  vec3 t = u_keyTunes[i];
-  float s = max(t.y, 0.0001);
-  float dC = distance(chroma(c), chroma(k));
-  float dY = abs(luma(c) - luma(k));
-  return max(smoothstep(t.x, t.x + s, dC), smoothstep(t.z, t.z + s, dY));
-}
-`;
-
 /** Chroma keying, shared by the layer placement and the source-edit pass. */
-const CHROMA_KEY_GLSL = `${KEY_POINTS_GLSL}
+const CHROMA_KEY_GLSL = `${KEYS_MATCH_GLSL}
+// <= 0 switches the key off, so unkeyed media costs one compare.
+uniform float u_chromaOn;
 // Where the connected points cut, in source uv: g = reached. Off at <= 0.
 uniform sampler2D u_keyReach;
 uniform float u_hasReach;
@@ -155,7 +130,7 @@ uniform vec3 u_maskXform;
 uniform vec4 u_crop;
 
 // Grown by a texel: the reach is coarse, and its rim would leave a halo of backdrop.
-float keyReachAt(vec2 srcUv) {
+float keyReach(vec2 srcUv) {
   if (u_hasReach <= 0.0) return 0.0;
   vec2 t = u_keyReachTexel;
   float r = textureLod(u_keyReach, srcUv, 0.0).g;
@@ -168,18 +143,7 @@ float keyReachAt(vec2 srcUv) {
 
 // A pixel goes if it matches any point; a connected one only inside its reach.
 float keyCoverage(vec3 c, vec2 srcUv) {
-  float reach = -1.0;
-  float cover = 1.0;
-  for (int i = 0; i < MAX_KEY_POINTS; i++) {
-    if (i >= u_keyCount) break;
-    float k = pointCoverage(c, i);
-    if (u_keyConnected[i] > 0.5) {
-      if (reach < 0.0) reach = keyReachAt(srcUv);
-      k = mix(1.0, k, reach);
-    }
-    cover = min(cover, k);
-  }
-  return cover;
+  return 1.0 - keysMatch(oklab(c), srcUv, -1.0);
 }
 
 /** Crop, erase and key in one go. Returns the media with its coverage in .a. */
@@ -215,7 +179,7 @@ vec4 editedSource(sampler2D tex, vec2 uv) {
     }
     c.a *= mix(1.0, cover, inside);
   }
-  if (u_keyOn > 0.0) c.a *= keyCoverage(c.rgb, srcUv);
+  if (u_chromaOn > 0.0) c.a *= keyCoverage(c.rgb, srcUv);
   return c;
 }
 `;
@@ -252,33 +216,6 @@ void main() {
   // rgb straight, so a keyed backdrop that kept its green would bloom back through the hole.
   c.rgb *= step(0.001, c.a);
   outColor = c * insideLayerSoft(uv, u_edgeFade);
-}`;
-
-/** First step of a connected key, at low res over the whole source: r = matches a
- * connected point, g = matches and sits by one of their seeds. */
-export const KEY_REACH_SEED_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D u_texture;
-${KEY_POINTS_GLSL}
-uniform vec2 u_keySeeds[MAX_KEY_POINTS];
-// Seed half-width, in texels of this buffer.
-uniform float u_seedRadius;
-uniform vec2 u_reachSize;
-in vec2 v_uv;
-out vec4 outColor;
-void main() {
-  vec3 c = texture(u_texture, v_uv).rgb;
-  float match = 1.0;
-  float seeded = 0.0;
-  for (int i = 0; i < MAX_KEY_POINTS; i++) {
-    if (i >= u_keyCount) break;
-    if (u_keyConnected[i] < 0.5) continue;
-    match = min(match, pointCoverage(c, i));
-    vec2 d = abs(v_uv - u_keySeeds[i]) * u_reachSize;
-    if (max(d.x, d.y) <= u_seedRadius) seeded = 1.0;
-  }
-  float passable = step(match, 0.999);
-  outColor = vec4(passable, passable * seeded, 0.0, 1.0);
 }`;
 
 /** One sweep of the connected fill along a row or column: a matching texel is

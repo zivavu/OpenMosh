@@ -1,9 +1,6 @@
-import { hasConnectedPoint, MAX_KEY_POINTS, type ChromaKey } from "../media";
-import {
-	KEY_REACH_SEED_FRAG,
-	KEY_REACH_SPREAD_FRAG,
-	VERTEX_SHADER,
-} from "./effect-shaders";
+import { KEY_REACH_SEED_FRAG, packKeys, setKeyUniforms } from "../color-key";
+import { hasConnectedPoint, keyPointSpec, type ChromaKey } from "../media";
+import { KEY_REACH_SPREAD_FRAG, VERTEX_SHADER } from "./effect-shaders";
 import { createProgram, getUniformLocations } from "./utils";
 
 /** The chroma key's GL side, shared by the renderer and the media editor's
@@ -22,30 +19,15 @@ export function compileKeyProgram(
 	return { program, uniforms: getUniformLocations(gl, program) };
 }
 
-/** The key's points, for any program built on KEY_POINTS_GLSL. */
+/** The key's points, for any program built on CHROMA_KEY_GLSL or the reach seed. */
 export function setKeyPointUniforms(
 	gl: WebGL2RenderingContext,
 	prog: KeyProgram,
 	key: ChromaKey | undefined,
 ) {
 	const u = prog.uniforms;
-	if (u["u_keyOn"]) gl.uniform1f(u["u_keyOn"], key?.enabled ? 1 : 0);
-	const points = key?.points.slice(0, MAX_KEY_POINTS) ?? [];
-	if (u["u_keyCount"]) gl.uniform1i(u["u_keyCount"], points.length);
-	const colors = new Float32Array(MAX_KEY_POINTS * 3);
-	const tunes = new Float32Array(MAX_KEY_POINTS * 3);
-	const connected = new Float32Array(MAX_KEY_POINTS);
-	const seeds = new Float32Array(MAX_KEY_POINTS * 2);
-	points.forEach((p, i) => {
-		colors.set([p.color.r, p.color.g, p.color.b], i * 3);
-		tunes.set([Math.max(p.threshold, 0.0001), p.smoothing, p.lumaRange], i * 3);
-		connected[i] = p.connected ? 1 : 0;
-		seeds.set([p.x, p.y], i * 2);
-	});
-	if (u["u_keyColors[0]"]) gl.uniform3fv(u["u_keyColors[0]"], colors);
-	if (u["u_keyTunes[0]"]) gl.uniform3fv(u["u_keyTunes[0]"], tunes);
-	if (u["u_keyConnected[0]"]) gl.uniform1fv(u["u_keyConnected[0]"], connected);
-	if (u["u_keySeeds[0]"]) gl.uniform2fv(u["u_keySeeds[0]"], seeds);
+	if (u["u_chromaOn"]) gl.uniform1f(u["u_chromaOn"], key?.enabled ? 1 : 0);
+	setKeyUniforms(gl, u, packKeys(key?.points.map(keyPointSpec) ?? []));
 }
 
 /** Long edge of the connected key's fill. Coarse on purpose: it only says where

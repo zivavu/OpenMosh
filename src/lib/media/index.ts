@@ -45,6 +45,7 @@ export {
 	isIdleSourceEdit,
 	KEY_NEAR,
 	keyCoverage,
+	keyPointSpec,
 	MASK_MAX,
 	MAX_KEY_POINTS,
 	normalizeSourceEdits,
