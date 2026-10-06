@@ -24,7 +24,6 @@ import * as opticalFlow from "./optical-flow";
 import * as vhs from "./vhs";
 import * as duotone from "./duotone";
 import * as grain from "./grain";
-import * as polar from "./polar";
 import * as tile from "./tile";
 import * as dataBend from "./data-bend";
 import * as melt from "./melt";
@@ -103,7 +102,6 @@ export const CATALOG: CatalogEffect[] = [
 	vhs,
 	duotone,
 	grain,
-	polar,
 	tile,
 	dataBend,
 	melt,
