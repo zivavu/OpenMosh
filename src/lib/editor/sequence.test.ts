@@ -116,7 +116,6 @@ describe("locked effects", () => {
 	const PICKED_ON_PURPOSE = [
 		"petri",
 		"circle-warp",
-		"polar",
 		"transform-3d",
 		"pixelate",
 		"halftone",
@@ -138,18 +137,19 @@ describe("locked effects", () => {
 
 	test("one switched on by hand goes with the roll unless locked", () => {
 		const base = rollEffects(3, OPTIONS);
-		const polar = base.find((e) => e.defId === "polar")!;
-		polar.enabled = true;
+		const warp = base.find((e) => e.defId === "circle-warp")!;
+		warp.enabled = true;
 		const curated = { ...OPTIONS, moshStyle: "curated" as const };
 		expect(
-			rollEffects(4, curated, base).find((e) => e.defId === "polar")!.enabled,
+			rollEffects(4, curated, base).find((e) => e.defId === "circle-warp")!
+				.enabled,
 		).toBe(false);
-		polar.locked = true;
+		warp.locked = true;
 		const kept = rollEffects(4, curated, base).find(
-			(e) => e.defId === "polar",
+			(e) => e.defId === "circle-warp",
 		)!;
 		expect(kept.enabled).toBe(true);
-		expect(kept.values).toEqual(polar.values);
+		expect(kept.values).toEqual(warp.values);
 	});
 
 	test("keepLocked leaves a chain with no locks alone", () => {
