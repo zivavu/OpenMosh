@@ -67,10 +67,14 @@
 	const FULL_DRAG = 0.35;
 	/** Range a click without a drag picks. */
 	const CLICK_RANGE = 0.08;
-	/** How close a press must land to a marker to take hold of it, in pixels. */
-	const GRAB = 12;
+	/** How close a press must land to a marker to move it, in pixels. */
+	const GRAB = 8;
+	/** And to the selected marker's ring to change its range. */
+	const RING_GRAB = 10;
 
 	type Drag = {
+		/** Range: sized from (x0, y0). Move: the dot follows the pointer. */
+		mode: "range" | "move";
 		/** Null until the picked colour comes back. */
 		index: number | null;
 		x0: number;
@@ -80,8 +84,10 @@
 		moved: boolean;
 	};
 	let drag: Drag | null = null;
-	/** The drag's reach on screen, drawn as a ring so the range has something to point at. */
-	let ring = $state<{ x: number; y: number; r: number } | null>(null);
+	/** Bumped as a drag moves, so the ring follows it. */
+	let dragTick = $state(0);
+	/** The pointer is over the selected colour's ring. */
+	let overRing = $state(false);
 
 	function areaPoint(e: PointerEvent) {
 		const ar = area.getBoundingClientRect();
@@ -108,23 +114,37 @@
 		const b = box;
 		const near = markerAt(p);
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		overRing = false;
 		if (near >= 0) {
 			maskPaint.keyIndex = near;
-			const m = uvPoint(b, keys[near].x, keys[near].y);
 			drag = {
+				mode: "move",
 				index: near,
-				x0: m.x,
-				y0: m.y,
-				range: keys[near].range,
+				x0: p.x,
+				y0: p.y,
+				range: 0,
 				moved: false,
 			};
-			showRing();
+			return;
+		}
+		const sel = keys[maskPaint.keyIndex];
+		const r = ring;
+		if (sel && r && onRing(p)) {
+			drag = {
+				mode: "range",
+				index: maskPaint.keyIndex,
+				x0: r.x,
+				y0: r.y,
+				range: sel.range,
+				moved: false,
+			};
 			return;
 		}
 		const { u, v } = boxUv(b, p.x, p.y);
 		if (u < 0 || u > 1 || v < 0 || v > 1) return;
 		if (keys.length >= MAX_COLOR_KEYS) return;
 		const pending: Drag = {
+			mode: "range",
 			index: null,
 			x0: p.x,
 			y0: p.y,
@@ -155,6 +175,13 @@
 		redraw();
 	}
 
+	function onRing(p: { x: number; y: number }): boolean {
+		return (
+			!!ring &&
+			Math.abs(Math.hypot(p.x - ring.x, p.y - ring.y) - ring.r) <= RING_GRAB
+		);
+	}
+
 	/** The dot under a point in preview-area pixels, or -1. */
 	function markerAt(p: { x: number; y: number }): number {
 		const b = box;
@@ -181,17 +208,23 @@
 		if (!box) return;
 		const p = areaPoint(e);
 		if (!drag) {
-			focus(markerAt(p));
+			const near = markerAt(p);
+			focus(near);
+			overRing = near < 0 && onRing(p);
 			return;
 		}
 		const dist = Math.hypot(p.x - drag.x0, p.y - drag.y0);
 		if (!drag.moved && dist < 4) return;
+		if (drag.mode === "move") {
+			moveTo(drag, p);
+			return;
+		}
 		const range =
 			KEY_RANGE_MAX * Math.min(1, dist / (FULL_DRAG * Math.min(box.w, box.h)));
 		const extend = drag.moved;
 		drag.range = range;
 		drag.moved = true;
-		showRing();
+		dragTick++;
 		if (drag.index === null) return;
 		const index = drag.index;
 		write(
@@ -200,16 +233,40 @@
 		);
 	}
 
-	function showRing() {
-		if (!drag || !box) return;
-		const r = (drag.range / KEY_RANGE_MAX) * FULL_DRAG * Math.min(box.w, box.h);
-		ring = { x: drag.x0, y: drag.y0, r };
+	/** The dot to where the pointer is, kept inside the box. */
+	function moveTo(d: Drag, p: { x: number; y: number }) {
+		if (!box || d.index === null) return;
+		const { u, v } = boxUv(box, p.x, p.y);
+		const x = Math.min(1, Math.max(0, u));
+		const y = Math.min(1, Math.max(0, v));
+		const index = d.index;
+		const extend = d.moved;
+		d.moved = true;
+		write(
+			keys.map((k, i) => (i === index ? { ...k, x, y } : k)),
+			extend,
+		);
 	}
 
 	function onUp(e: PointerEvent) {
+		const d = drag;
 		drag = null;
-		ring = null;
+		dragTick++;
 		focus(markerAt(areaPoint(e)));
+		// A moved dot takes the colour where it landed, in the same undo step.
+		if (d?.mode !== "move" || !d.moved || d.index === null) return;
+		const index = d.index;
+		const k = keys[index];
+		if (!k) return;
+		renderer.pickMaskColor(target.instanceId, k.x, k.y, (color) => {
+			const now = parseKeys(target.current());
+			if (!now[index]) return;
+			write(
+				now.map((c, i) => (i === index ? { ...c, color } : c)),
+				true,
+			);
+		});
+		redraw();
 	}
 
 	onMount(() =>
@@ -224,6 +281,20 @@
 		if (!target.alive()) maskPaint.target = null;
 	});
 
+	/** The range on screen: the drag's while sizing, else the selected colour's. */
+	const ring = $derived.by(() => {
+		void dragTick;
+		if (!box) return null;
+		const scale = (FULL_DRAG * Math.min(box.w, box.h)) / KEY_RANGE_MAX;
+		if (drag?.mode === "range") {
+			return { x: drag.x0, y: drag.y0, r: drag.range * scale };
+		}
+		const k = keys[maskPaint.keyIndex];
+		if (!k) return null;
+		const at = uvPoint(box, k.x, k.y);
+		return { x: at.x, y: at.y, r: k.range * scale };
+	});
+
 	const markers = $derived(
 		box ? keys.map((k) => ({ key: k, at: uvPoint(box!, k.x, k.y) })) : [],
 	);
@@ -232,11 +303,16 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="key-catcher"
+	class:over-ring={overRing}
 	onpointerdown={onDown}
 	onpointermove={onMove}
 	onpointerup={onUp}
 	onpointercancel={onUp}
-	onpointerleave={() => !drag && focus(-1)}
+	onpointerleave={() => {
+		if (drag) return;
+		focus(-1);
+		overRing = false;
+	}}
 >
 	{#each markers as m, i (i)}
 		<span
@@ -261,8 +337,8 @@
 		message={!box
 			? "Select this clip's layer to pick colors on it."
 			: keys.length >= MAX_COLOR_KEYS
-				? "A Mask holds up to 8 colors. Drag a dot to change its range."
-				: "Click a color to select it. Drag outward to widen the range, or drag a dot to change one."}
+				? "A Mask holds up to 8 colors. Drag a dot to move it, or the ring around it to change its range."
+				: "Click a color to select it, dragging outward to set its range. Drag a dot to move it, or the ring around it to change its range."}
 	/>
 </div>
 
@@ -273,6 +349,10 @@
 		z-index: 8;
 		cursor: crosshair;
 		touch-action: none;
+	}
+
+	.key-catcher.over-ring {
+		cursor: nwse-resize;
 	}
 
 	.marker {
