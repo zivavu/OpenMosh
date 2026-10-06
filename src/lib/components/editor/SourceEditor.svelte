@@ -2354,7 +2354,11 @@
 		flex: 1;
 	}
 
+	/* Equal halves on one line, whatever the labels' lengths. */
 	.reach-toggle .tool-btn {
+		flex: 1 1 0;
+		min-width: 0;
+		white-space: nowrap;
 		height: 22px;
 		font-size: 0.56rem;
 		letter-spacing: 0.08em;
