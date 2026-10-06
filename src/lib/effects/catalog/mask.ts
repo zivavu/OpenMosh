@@ -1,12 +1,8 @@
 import { H, setFloat, setInt } from "../../gl/shader-lib";
 import type { EffectShaderDef } from "../../gl/shader-lib";
 import type { EffectDefinition, EffectInstance } from "../types";
-import {
-	MASK_KEYS_GLSL,
-	MAX_COLOR_KEYS,
-	keyUniforms,
-	setKeyUniforms,
-} from "../mask-keys";
+import { KEYS_MATCH_GLSL, setKeyUniforms } from "../../color-key";
+import { keyUniforms } from "../mask-keys";
 
 export const MASK_EFFECT_ID = "mask";
 /** Texture unit the renderer binds the painted mask to. */
@@ -269,11 +265,11 @@ uniform float u_white;
 uniform float u_hasImage;
 uniform float u_imageWidth;
 uniform float u_imageHeight;
-${MASK_KEYS_GLSL}
+${KEYS_MATCH_GLSL}
 // g = inside the touching keys' fill; coarse, so grown by a texel against a halo.
 uniform sampler2D u_keyReach;
 
-float reachAt(vec2 uv) {
+float keyReach(vec2 uv) {
   vec2 t = 1.0 / vec2(textureSize(u_keyReach, 0));
   float r = textureLod(u_keyReach, uv, 0.0).g;
   r = max(r, textureLod(u_keyReach, uv + vec2(t.x, t.y), 0.0).g);
@@ -310,27 +306,9 @@ float imageCoverage(vec2 uv) {
   return clamp((v - u_black) / max(u_white - u_black, 0.001), 0.0, 1.0);
 }
 
-// The Key shape's colours that are on, or just colour number "only" (on or not) when it is >= 0.
-float keysCoverage(vec2 uv, vec3 lab, float only) {
-  float m = 0.0;
-  float reach = -1.0;
-  for (int i = 0; i < ${MAX_COLOR_KEYS}; i++) {
-    if (float(i) >= u_keyCount) break;
-    if (only >= 0.0 ? float(i) != only : u_keyOn[i] < 0.5) continue;
-    vec2 t = u_keyTune[i];
-    float k = 1.0 - smoothstep(t.x, t.x + t.y, distance(lab, u_keyLab[i]));
-    if (u_keyTouch[i] > 0.5) {
-      if (reach < 0.0) reach = reachAt(uv);
-      k *= reach;
-    }
-    m = max(m, k);
-  }
-  return m;
-}
-
 float coverage(vec2 uv, vec4 base) {
   if (u_shape > 5.5) return imageCoverage(uv);
-  if (u_shape > 4.5) return keysCoverage(uv, oklab(base.rgb), -1.0);
+  if (u_shape > 4.5) return keysMatch(oklab(base.rgb), uv, -1.0);
   if (u_shape > 3.5) return texture(u_brush, uv).r;
   if (u_shape > 2.5) {
     float l = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
@@ -366,7 +344,7 @@ void main() {
     // A focused Key colour shows only what it selects, invert aside.
     float shown = m;
     if (u_shape > 4.5 && u_shape < 5.5 && u_previewKey >= 0.0) {
-      shown = keysCoverage(v_uv, oklab(base.rgb), u_previewKey);
+      shown = keysMatch(oklab(base.rgb), v_uv, u_previewKey);
     }
     // Outside tinted, edge traced, so the area reads whatever the effects do. Scaled
     // by u_preview, which the preview eases in and out.

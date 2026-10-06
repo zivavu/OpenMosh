@@ -56,9 +56,8 @@
 	import { isMaskEffect, maskAwaitingImage } from "../../effects/catalog/mask";
 	import { maskFromImage } from "../../brush/mask-image";
 	import { showToast } from "./toast.svelte";
+	import { KEY_RANGE_MAX, KEY_SOFTNESS_MAX } from "../../color-key";
 	import {
-		KEY_RANGE_MAX,
-		KEY_SOFTNESS_MAX,
 		parseKeys,
 		serializeKeys,
 		type ColorKey,

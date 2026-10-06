@@ -5,6 +5,8 @@
 		DEFAULT_KEY_SOFTNESS,
 		KEY_RANGE_MAX,
 		MAX_COLOR_KEYS,
+	} from "../../color-key";
+	import {
 		parseKeys,
 		serializeKeys,
 		type ColorKey,
