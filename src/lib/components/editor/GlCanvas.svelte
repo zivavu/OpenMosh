@@ -228,8 +228,10 @@
 		highlightLit = !!selectedHighlightKey;
 	});
 
-	/** The trace wanted now: lit, and switched on in settings. */
-	const highlightOn = $derived(highlightLit && layerHighlight.value);
+	/** The trace wanted now: lit, switched on in settings, and no Mask tool on the preview. */
+	const highlightOn = $derived(
+		highlightLit && layerHighlight.value && !maskPaint.target,
+	);
 
 	/** Out of the way, so the mosh can be seen. */
 	export function dismissHighlight() {
@@ -1307,7 +1309,8 @@
 		style:width="{outline?.frame.w ?? 0}px"
 		style:height="{outline?.frame.h ?? 0}px"
 	></canvas>
-	{#if outline}
+	<!-- A Mask tool owns the preview: the box would sit over what it edits. -->
+	{#if outline && !maskPaint.target}
 		<!-- Sits under .canvas-overlay: when that is up there is nothing worth pointing at. -->
 		<div
 			class="layer-outline"
