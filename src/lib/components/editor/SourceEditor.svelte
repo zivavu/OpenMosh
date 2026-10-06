@@ -358,6 +358,13 @@
 	}
 
 	/** Reach and on/off: the same on every key, like the points themselves. */
+	/** Delete from the picker: the last point takes the key back to where it started. */
+	function deletePoint(i: number) {
+		soloPoint = -1;
+		if (key.points.length > 1) removePoint(i);
+		else resetTool("key");
+	}
+
 	function setPointFlag(patch: Pick<Partial<KeyPoint>, "connected" | "on">) {
 		const i = pointIndex;
 		reshapePoints((points) =>
@@ -1418,6 +1425,7 @@
 									onchange={pickerChange}
 									onmoved={pickerMoved}
 									onfocus={(i) => (soloPoint = i)}
+									ondelete={deletePoint}
 								/>
 							{/if}
 							{#if !isFullCrop(crop)}
@@ -1598,7 +1606,7 @@
 
 						<div class="row">
 							<span class="row-label">Points</span>
-							<div class="key-points">
+							<div class="key-points" data-key-points>
 								{#each key.points as p, i (i)}
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<span

@@ -117,6 +117,17 @@
 		redraw();
 	}
 
+	function remove(index: number) {
+		focus(-1);
+		write(
+			keys.filter((_, i) => i !== index),
+			false,
+		);
+		if (maskPaint.keyIndex >= index && maskPaint.keyIndex > 0) {
+			maskPaint.keyIndex--;
+		}
+	}
+
 	/** Narrow the tint to one colour, or widen it back with -1. */
 	function focus(index: number) {
 		const now = maskPaint.keyFocus;
@@ -152,6 +163,7 @@
 	onchange={change}
 	onmoved={moved}
 	onfocus={focus}
+	ondelete={remove}
 >
 	<MaskToolBar
 		message={!box

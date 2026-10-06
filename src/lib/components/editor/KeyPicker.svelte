@@ -14,8 +14,9 @@
 </script>
 
 <script lang="ts">
-	import type { Snippet } from "svelte";
+	import { onMount, type Snippet } from "svelte";
 	import { KEY_RANGE_MAX } from "../../color-key";
+	import { isTextEntryTarget } from "../../editor/shortcut-target";
 	import { boxUv, uvPoint, type MaskBox } from "./mask-tools";
 
 	/** Colour picking over a picture, shared by the Mask's Key shape and the media
@@ -42,6 +43,9 @@
 		onmoved: (index: number) => void;
 		/** The dot under the pointer, -1 for none. */
 		onfocus: (index: number) => void;
+		/** Delete or Backspace, after a press on the picker or on an element marked
+		 * `data-key-points` (the host's swatches). */
+		ondelete: (index: number) => void;
 		children?: Snippet;
 	}
 
@@ -55,6 +59,7 @@
 		onchange,
 		onmoved,
 		onfocus,
+		ondelete,
 		children,
 	}: Props = $props();
 
@@ -213,6 +218,33 @@
 		onfocus(markerAt(localPoint(e)));
 		if (d?.mode === "move" && d.moved && d.index !== null) onmoved(d.index);
 	}
+
+	/** The last press was on the points, so Delete means the selected one. */
+	let armed = false;
+	onMount(() => {
+		// Opened from a swatch: that press came before this listener.
+		armed = !!document.activeElement?.closest("[data-key-points]");
+		const onPress = (e: PointerEvent) => {
+			const t = e.target as Element | null;
+			armed = !!t && (el.contains(t) || !!t.closest("[data-key-points]"));
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== "Delete" && e.key !== "Backspace") return;
+			if (!armed || drag || !keys[selected] || isTextEntryTarget(e.target)) {
+				return;
+			}
+			// Ahead of the host's own Delete, which would take a keyframe instead.
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			ondelete(selected);
+		};
+		window.addEventListener("pointerdown", onPress, true);
+		window.addEventListener("keydown", onKey, true);
+		return () => {
+			window.removeEventListener("pointerdown", onPress, true);
+			window.removeEventListener("keydown", onKey, true);
+		};
+	});
 
 	function onLeave() {
 		if (drag) return;
