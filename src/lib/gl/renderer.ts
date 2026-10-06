@@ -47,6 +47,7 @@ import {
 	smoothSpectrum,
 } from "../audio/spectrum-range";
 import { createProgram, getUniformLocations } from "./utils";
+import { PYRAMID_DOWN_FRAG } from "./shader-lib";
 import {
 	VERTEX_SHADER,
 	PASSTHROUGH_FRAG,
@@ -97,6 +98,15 @@ const reportedFBOStatuses = new Set<number>();
 
 /** Effect ids already warned about, so a stale preset logs once, not per frame. */
 const reportedUnknownEffects = new Set<string>();
+
+interface PyramidLevel {
+	w: number;
+	h: number;
+	down: WebGLTexture;
+	downFBO: WebGLFramebuffer;
+	up: WebGLTexture;
+	upFBO: WebGLFramebuffer;
+}
 
 interface CompiledProgram {
 	program: WebGLProgram;
@@ -305,6 +315,9 @@ export class GlRenderer {
 	private hdrFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
 	private hdrW = 0;
 	private hdrH = 0;
+	/** Mip levels for pyramid pre-passes, from half the HDR size down. */
+	private pyramidLevels: PyramidLevel[] = [];
+	private pyramidDownProgram: CompiledProgram | null = null;
 	/** Per-side outputs for transitions: chain A and chain B render into these. */
 	private sceneTextures: [WebGLTexture, WebGLTexture] | null = null;
 	private sceneFBOs: [WebGLFramebuffer, WebGLFramebuffer] | null = null;
@@ -337,6 +350,7 @@ export class GlRenderer {
 				program: CompiledProgram;
 				linearFilter?: boolean;
 				feedback?: boolean;
+				pyramid?: boolean;
 			}[];
 		}
 	>();
@@ -1883,6 +1897,11 @@ export class GlRenderer {
 						input = pair.textures[writeSlot];
 						continue;
 					}
+					if (pp.pyramid) {
+						input = this.runPyramid(pp.program, input, entry.def, values);
+						hdrIdx = this.hdrScratch(input);
+						continue;
+					}
 					if (pp.linearFilter) this.setTextureFilter(input, true);
 					this.drawPass(
 						pp.program,
@@ -3280,6 +3299,10 @@ export class GlRenderer {
 		if (this.fbFBO) gl.deleteFramebuffer(this.fbFBO);
 		this.deleteTexturePair(this.hdrTextures);
 		this.deleteFBOPair(this.hdrFBOs);
+		this.deletePyramid();
+		if (this.pyramidDownProgram)
+			gl.deleteProgram(this.pyramidDownProgram.program);
+		this.pyramidDownProgram = null;
 		this.deleteTexturePair(this.sceneTextures);
 		this.deleteFBOPair(this.sceneFBOs);
 		if (this.blendTexture) gl.deleteTexture(this.blendTexture);
@@ -3460,6 +3483,7 @@ export class GlRenderer {
 						program: CompiledProgram;
 						linearFilter?: boolean;
 						feedback?: boolean;
+						pyramid?: boolean;
 				  }[]
 				| undefined;
 			if (def.prePasses) {
@@ -3467,6 +3491,7 @@ export class GlRenderer {
 					program: this.compile(pp.fragment),
 					linearFilter: pp.linearFilter,
 					feedback: pp.feedback,
+					pyramid: pp.pyramid,
 				}));
 			}
 			const entry = { program, def, prePasses };
@@ -3670,6 +3695,7 @@ export class GlRenderer {
 		this.hdrFBOs = null;
 		this.hdrW = 0;
 		this.hdrH = 0;
+		this.deletePyramid();
 		this.deleteTexturePair(this.sceneTextures);
 		this.deleteFBOPair(this.sceneFBOs);
 		this.sceneTextures = null;
@@ -3725,6 +3751,130 @@ export class GlRenderer {
 			this.createHdrTexture(this.hdrW, this.hdrH),
 		];
 		this.hdrFBOs = this.createFBOPair(this.hdrTextures);
+	}
+
+	/** Levels halve from the HDR size until the short side would drop under 8px. */
+	private ensurePyramid() {
+		const first = this.pyramidLevels[0];
+		if (
+			first &&
+			first.w === Math.max(1, this.hdrW >> 1) &&
+			first.h === Math.max(1, this.hdrH >> 1)
+		)
+			return;
+		this.deletePyramid();
+		let w = this.hdrW,
+			h = this.hdrH;
+		while (this.pyramidLevels.length < 8 && Math.min(w, h) >= 16) {
+			w = Math.max(1, w >> 1);
+			h = Math.max(1, h >> 1);
+			const down = this.createHdrTexture(w, h);
+			const up = this.createHdrTexture(w, h);
+			this.pyramidLevels.push({
+				w,
+				h,
+				down,
+				downFBO: this.createRenderTarget(down)!,
+				up,
+				upFBO: this.createRenderTarget(up)!,
+			});
+		}
+	}
+
+	private deletePyramid() {
+		const gl = this.gl;
+		for (const l of this.pyramidLevels) {
+			gl.deleteTexture(l.down);
+			gl.deleteTexture(l.up);
+			gl.deleteFramebuffer(l.downFBO);
+			gl.deleteFramebuffer(l.upFBO);
+		}
+		this.pyramidLevels = [];
+	}
+
+	/** Runs a pyramid pre-pass over `input` (an HDR-size texture) and returns the
+	 * combined result at the HDR size. */
+	private runPyramid(
+		combine: CompiledProgram,
+		input: WebGLTexture,
+		def: EffectShaderDef,
+		values: Record<string, number | string>,
+	): WebGLTexture {
+		this.ensurePyramid();
+		const levels = this.pyramidLevels;
+		if (!levels.length) return input;
+		this.pyramidDownProgram ??= this.compile(PYRAMID_DOWN_FRAG);
+		const down = this.pyramidDownProgram;
+		let src = input,
+			srcW = this.hdrW,
+			srcH = this.hdrH;
+		for (const l of levels) {
+			this.drawPyramidPass(down, l.downFBO, l.w, l.h, src, srcW, srcH);
+			src = l.down;
+			srcW = l.w;
+			srcH = l.h;
+		}
+		// The coarsest level has nothing below it, so its downsample stands as its result.
+		let coarse = levels[levels.length - 1].down;
+		for (let i = levels.length - 2; i >= -1; i--) {
+			const l = levels[i + 1];
+			const target = i >= 0 ? levels[i] : null;
+			const fbo = target ? target.upFBO : this.hdrFBOs![this.hdrScratch(input)];
+			const levelTex = target ? target.down : input;
+			this.drawPyramidPass(
+				combine,
+				fbo,
+				target ? target.w : this.hdrW,
+				target ? target.h : this.hdrH,
+				coarse,
+				l.w,
+				l.h,
+				levelTex,
+				def,
+				values,
+			);
+			coarse = target ? target.up : this.hdrTextures![this.hdrScratch(input)];
+		}
+		return coarse;
+	}
+
+	/** The HDR ping-pong slot `input` isn't in, so the pyramid's top level can't overwrite it. */
+	private hdrScratch(input: WebGLTexture): 0 | 1 {
+		return this.hdrTextures![0] === input ? 1 : 0;
+	}
+
+	private drawPyramidPass(
+		compiled: CompiledProgram,
+		fbo: WebGLFramebuffer,
+		w: number,
+		h: number,
+		src: WebGLTexture,
+		srcW: number,
+		srcH: number,
+		level?: WebGLTexture,
+		def?: EffectShaderDef,
+		values?: Record<string, number | string>,
+	) {
+		const gl = this.gl;
+		const u = compiled.uniforms;
+		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+		gl.viewport(0, 0, w, h);
+		gl.useProgram(compiled.program);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, src);
+		if (u["u_texture"]) gl.uniform1i(u["u_texture"], 0);
+		if (u["u_flipY"]) gl.uniform1f(u["u_flipY"], 1);
+		if (u["u_texel"]) gl.uniform2f(u["u_texel"], 1 / srcW, 1 / srcH);
+		if (u["u_resolution"])
+			gl.uniform2f(u["u_resolution"], this.imgW, this.imgH);
+		if (level && u["u_level"]) {
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_2D, level);
+			gl.uniform1i(u["u_level"], 1);
+			gl.activeTexture(gl.TEXTURE0);
+		}
+		if (def && values) def.setUniforms(gl, u, values);
+		gl.drawArrays(gl.TRIANGLES, 0, 6);
 	}
 
 	private ensureSceneBuffers() {
