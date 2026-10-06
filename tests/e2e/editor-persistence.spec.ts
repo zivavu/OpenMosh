@@ -143,6 +143,11 @@ test("a project saved to a file comes back after storage is cleared", async ({
 	await page.goto("/");
 	await page.evaluate(async () => {
 		localStorage.clear();
+		// Back off, as the config set it: the demo's worlds starve a CI runner's CPU.
+		localStorage.setItem(
+			"openmosh-settings",
+			JSON.stringify({ demoBackground: false }),
+		);
 		const dbs = await indexedDB.databases();
 		await Promise.all(
 			dbs.map(
