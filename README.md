@@ -80,7 +80,7 @@ Two things do go over the network, and only when you use them. The feedback form
 
 <!-- x-release-please-start-version -->
 
-Version 0.9.8. Single and slideshow modes are more or less settled. The editor is still moving, but every past save format is tested on load, so updates bring old projects along. Save a project file now and then anyway: browsers can clear site data, and the file is your backup. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
+Version 0.9.9. Single and slideshow modes are more or less settled. The editor is still moving, but every past save format is tested on load, so updates bring old projects along. Save a project file now and then anyway: browsers can clear site data, and the file is your backup. See [CHANGELOG.md](CHANGELOG.md) for what each version changed.
 
 <!-- x-release-please-end -->
 

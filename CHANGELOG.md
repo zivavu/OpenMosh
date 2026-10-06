@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.9.9](https://github.com/zivavu/OpenMosh/compare/v0.9.8...v0.9.9) (2026-10-06)
+
+The new Mask effect limits effects to part of the picture. It started as a feature request ([#44](https://github.com/zivavu/OpenMosh/issues/44)). Edit Media's background key now matches colors the same way the Mask does.
+
+A key saved in Edit Media keeps its colors and points, but its old Threshold, Brightness range and Smoothing settings go back to the new defaults, so it may need retuning.
+
+### Added
+
+* Limit the effects above a Mask to one area: an ellipse, a rectangle, a gradient, a brightness range, a brush painting, picked colors or a black-and-white image ([1636f73](https://github.com/zivavu/OpenMosh/commit/1636f73fa0ba1d7c98d5d23175b60d81f28f7865), [97ce107](https://github.com/zivavu/OpenMosh/commit/97ce10783ad3ba961fb46b897834cc2e6d6abcda), [bfb4f33](https://github.com/zivavu/OpenMosh/commit/bfb4f3318a96543bcff02375f62637ac8045ddee), [e14f2e9](https://github.com/zivavu/OpenMosh/commit/e14f2e9cd5101973dc97dc9898117435b168145f), [d8033c2](https://github.com/zivavu/OpenMosh/commit/d8033c2c2fa7a809ad167014f259fd48015446b1), [a9f3e36](https://github.com/zivavu/OpenMosh/commit/a9f3e36d1cd758adfa99778d3315cacee5c60af5), [61c1869](https://github.com/zivavu/OpenMosh/commit/61c18695ec648cd4258f76081267ee12f26443f9), [3ebe4e7](https://github.com/zivavu/OpenMosh/commit/3ebe4e750180e6df13727d8a1f564c9ae1679fbe), [dc0aa61](https://github.com/zivavu/OpenMosh/commit/dc0aa6115ae5db29ab5bd14fb42e98195e23b617))
+* Move, resize and rotate Mask shapes and images on the preview ([f3bb1dd](https://github.com/zivavu/OpenMosh/commit/f3bb1ddaa4c7323d3a3b6e8ddc5ac8edbb4849d7), [ec95bda](https://github.com/zivavu/OpenMosh/commit/ec95bda8e1d018ca15e85d382063f225d082d898))
+* Feather a Mask's brush painting after you paint it ([ef0e252](https://github.com/zivavu/OpenMosh/commit/ef0e2523c4c83379c1ffad63ec12a52c7fab5d35))
+* Pick a Mask's colors on the preview, drag them around, and limit a color to the patch it was picked in ([60e35e6](https://github.com/zivavu/OpenMosh/commit/60e35e6ed750bc488cfaeac852f64f9179e06b91), [18de2d8](https://github.com/zivavu/OpenMosh/commit/18de2d8b86ae08a10de0249b19dbae7a6b801539), [a0d84a3](https://github.com/zivavu/OpenMosh/commit/a0d84a3af7888197e4823304cb4874c906c8312e), [bab32fa](https://github.com/zivavu/OpenMosh/commit/bab32fa1dd7d67323fd9287080737f757fa93807))
+* See what each Mask color selects, and switch colors off ([163c2c7](https://github.com/zivavu/OpenMosh/commit/163c2c78feba0eea5af15bd9b69b6b9786c67ac2))
+* See a Mask's area while you change it ([73734fb](https://github.com/zivavu/OpenMosh/commit/73734fb9769c73d5f67ddecb5756ce253efbecf7), [b79ed80](https://github.com/zivavu/OpenMosh/commit/b79ed80bb11e07558dfdfc7a924a1b0a61f4efad), [7e75852](https://github.com/zivavu/OpenMosh/commit/7e758523a0156d5a995c25b008afe29b5e023dc8))
+* Key media in Edit Media by color like the Mask does: drag points on the preview, set their range, switch them off and preview one at a time ([cc02492](https://github.com/zivavu/OpenMosh/commit/cc0249252ff00998bc4b7eef28c74f4967f66129), [b0110b5](https://github.com/zivavu/OpenMosh/commit/b0110b5154019fc1113edb428eda807bfc4a9696), [736d203](https://github.com/zivavu/OpenMosh/commit/736d203934342654160c5270341af09791e7470a), [fb6de55](https://github.com/zivavu/OpenMosh/commit/fb6de553cf3eacb8f4d2e06d5225f19eca852519))
+* Delete the selected key point with the Delete key ([3d9c586](https://github.com/zivavu/OpenMosh/commit/3d9c5863b77494551a094dff09d58f573ca7ff74))
+* Turn off the selected layer's highlight in settings ([4cfd38f](https://github.com/zivavu/OpenMosh/commit/4cfd38f8df1973dd93dc362e696581900202eb9c))
+* Hide the layer outline while editing a Mask ([756171d](https://github.com/zivavu/OpenMosh/commit/756171d3a6bd55599b97bccdfd6952ae89781acd))
+
+### Fixed
+
+* Keep the key's Whole frame and Connected buttons the same size ([5134583](https://github.com/zivavu/OpenMosh/commit/5134583a7904c5e2a30d4d752e61c4eed417a0ec))
+
 ## [0.9.8](https://github.com/zivavu/OpenMosh/compare/v0.9.7...v0.9.8) (2026-10-04)
 
 OpenMosh now lives at [openmosh.com](https://openmosh.com/). Projects saved on open-mosh.vercel.app stay in your browser at that address, which keeps working: save them to files there, then open the files on the new site.
