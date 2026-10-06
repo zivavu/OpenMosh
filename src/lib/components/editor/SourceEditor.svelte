@@ -123,7 +123,7 @@
 		{
 			value: "key",
 			label: "Key",
-			hint: "Click a colour to remove it, dragging outward to set its range. Drag a dot to move it, or the ring around it to change its range",
+			hint: "Click a color to remove it, dragging outward to set its range. Drag a dot to move it, or the ring around it to change its range",
 		},
 		{
 			value: "crop",
@@ -1622,7 +1622,7 @@
 												? ', connected'
 												: ''}{p.on
 												? ''
-												: ', off'}. Select it to change its colour and reach; hover to see only what it cuts."
+												: ', off'}. Select it to change its color and reach; hover to see only what it cuts."
 											aria-pressed={i === pointIndex}
 											style:background={toHex(p.color)}
 											onclick={() => (selectedPoint = i)}
@@ -1656,7 +1656,7 @@
 						</div>
 
 						<div class="row">
-							<label for="ck-color">Colour</label>
+							<label for="ck-color">Color</label>
 							<ColorPicker
 								id="ck-color"
 								value={toHex(point.color)}
@@ -1667,7 +1667,7 @@
 
 						<div
 							class="row"
-							title="Whole frame cuts this colour wherever it appears. Connected cuts only the patch of it that touches the point, so the same colour elsewhere, in a shirt say, stays."
+							title="Whole frame cuts this color wherever it appears. Connected cuts only the patch of it that touches the point, so the same color elsewhere, in a shirt say, stays."
 						>
 							<span class="row-label">Reach</span>
 							<div
@@ -1697,7 +1697,7 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="row"
-							title="How close a colour has to be to the selected point's to be cut. Raise it until the background is gone; lower it if the subject starts going too. Double-click to reset."
+							title="How close a color has to be to the selected point's to be cut. Raise it until the background is gone; lower it if the subject starts going too. Double-click to reset."
 							ondblclick={() => setTune("range", DEFAULT_KEY_POINT.range)}
 						>
 							<label for="ck-range">Color range</label>
