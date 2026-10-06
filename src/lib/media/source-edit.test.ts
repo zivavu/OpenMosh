@@ -3,6 +3,7 @@ import {
 	createSourceEdit,
 	cropExtent,
 	DEFAULT_CHROMA_KEY,
+	DEFAULT_KEY_POINT,
 	isFullCrop,
 	isIdleSourceEdit,
 	keyCoverage,
@@ -71,7 +72,7 @@ describe("isIdleSourceEdit", () => {
 		const tuned = createSourceEdit();
 		tuned.chromaKey = {
 			...DEFAULT_CHROMA_KEY,
-			points: [createKeyPoint({ threshold: 0.7 })],
+			points: [createKeyPoint({ range: 0.4 })],
 		};
 		expect(isIdleSourceEdit(tuned)).toBe(false);
 	});
@@ -114,12 +115,12 @@ describe("keyframes", () => {
 		e.chromaKey.enabled = true;
 		e.anim = {
 			key: [
-				{ t: 0, v: { points: [createKeyPoint({ threshold: 0.1 })] } },
-				{ t: 2, v: { points: [createKeyPoint({ threshold: 0.5 })] } },
+				{ t: 0, v: { points: [createKeyPoint({ range: 0.1 })] } },
+				{ t: 2, v: { points: [createKeyPoint({ range: 0.3 })] } },
 			],
 		};
 		const mid = sampleSourceEdit(e, 1);
-		expect(mid.chromaKey.points[0].threshold).toBeCloseTo(0.3, 5);
+		expect(mid.chromaKey.points[0].range).toBeCloseTo(0.2, 5);
 		expect(mid.chromaKey.enabled).toBe(true);
 	});
 
@@ -335,16 +336,12 @@ describe("keyed erase masks", () => {
 });
 
 describe("keyCoverage", () => {
-	const tune = { threshold: 0.01, smoothing: 0.1, lumaRange: 0.35 };
 	const greyPoint = createKeyPoint({
-		...tune,
+		range: 0.02,
+		softness: 0.02,
 		color: { r: 0.5, g: 0.5, b: 0.5 },
 	});
-	const greenPoint = createKeyPoint({
-		...tune,
-		threshold: 0.3,
-		color: { r: 0, g: 1, b: 0 },
-	});
+	const greenPoint = createKeyPoint({ color: { r: 0, g: 1, b: 0 } });
 	const grey = { points: [greyPoint] };
 	const green = { points: [greenPoint] };
 
@@ -353,31 +350,14 @@ describe("keyCoverage", () => {
 		expect(keyCoverage(0, 1, 0, green)).toBe(0);
 	});
 
-	it("keeps white and black under a grey key at the lowest threshold", () => {
-		// Same chroma as the key; only brightness tells them apart.
+	it("keeps white and black under a tight grey key", () => {
 		expect(keyCoverage(1, 1, 1, grey)).toBe(1);
 		expect(keyCoverage(0, 0, 0, grey)).toBe(1);
 	});
 
-	it("cuts shades of the key within the brightness range", () => {
-		expect(keyCoverage(0.4, 0.4, 0.4, grey)).toBe(0);
-		expect(keyCoverage(0, 0.6, 0, green)).toBe(0);
-	});
-
-	it("keeps colours off the key's chroma", () => {
+	it("keeps colours far from the key", () => {
 		expect(keyCoverage(1, 0, 0, green)).toBe(1);
 		expect(keyCoverage(0.5, 0.5, 0.8, grey)).toBe(1);
-	});
-
-	it("feathers only inside the smoothing band", () => {
-		// Grey slightly bluer than the key: past the threshold, inside the band.
-		const c = keyCoverage(0.5, 0.5, 0.56, grey);
-		expect(c).toBeGreaterThan(0);
-		expect(c).toBeLessThan(1);
-		// Brightness just past the range, inside its band.
-		const y = keyCoverage(0.9, 0.9, 0.9, grey);
-		expect(y).toBeGreaterThan(0);
-		expect(y).toBeLessThan(1);
 	});
 
 	it("cuts a pixel matching any of its points", () => {
@@ -388,10 +368,8 @@ describe("keyCoverage", () => {
 	});
 
 	it("tests each point against its own tolerances", () => {
-		// Bluer than the grey point: past its tight threshold and band, inside a wide one.
-		const tight = { points: [greyPoint] };
-		const wide = { points: [{ ...greyPoint, threshold: 0.3 }] };
-		expect(keyCoverage(0.5, 0.5, 0.8, tight)).toBe(1);
+		const wide = { points: [{ ...greyPoint, range: 0.2 }] };
+		expect(keyCoverage(0.5, 0.5, 0.8, grey)).toBe(1);
 		expect(keyCoverage(0.5, 0.5, 0.8, wide)).toBe(0);
 	});
 
@@ -405,23 +383,28 @@ describe("keyCoverage", () => {
 describe("key points", () => {
 	it("reads a single-colour key from before points", () => {
 		const e = normalizeSourceEdit({
-			chromaKey: { enabled: true, color: { r: 0, g: 0, b: 1 }, threshold: 0.2 },
+			chromaKey: { enabled: true, color: { r: 0, g: 0, b: 1 } },
 		});
 		expect(e.chromaKey.points).toHaveLength(1);
 		expect(e.chromaKey.points[0].color).toEqual({ r: 0, g: 0, b: 1 });
 		expect(e.chromaKey.points[0].connected).toBe(false);
-		// The old key-wide tolerances carry over onto the point.
-		expect(e.chromaKey.points[0].threshold).toBe(0.2);
 	});
 
-	it("fills in tolerances a saved point lacks from the key", () => {
+	it("resets tolerances saved before the OKLab key", () => {
 		const e = normalizeSourceEdit({
 			chromaKey: {
 				threshold: 0.05,
-				points: [{ color: { r: 1, g: 0, b: 0 } }, { threshold: 0.4 }],
+				points: [
+					{ color: { r: 1, g: 0, b: 0 }, threshold: 0.4, lumaRange: 0.2 },
+					{ range: 0.3, softness: 0.1 },
+				],
 			},
 		});
-		expect(e.chromaKey.points.map((p) => p.threshold)).toEqual([0.05, 0.4]);
+		const [old, kept] = e.chromaKey.points;
+		expect(old.range).toBe(DEFAULT_KEY_POINT.range);
+		expect(old.softness).toBe(DEFAULT_KEY_POINT.softness);
+		expect(old).not.toHaveProperty("threshold");
+		expect([kept.range, kept.softness]).toEqual([0.3, 0.1]);
 	});
 
 	it("counts an added point as a change", () => {

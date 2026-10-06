@@ -785,7 +785,7 @@
 											/>
 										</label>
 										<div class="paint-setting">
-											<span>Range</span>
+											<span>Color range</span>
 											<RangeSlider
 												value={k.range}
 												min={0}
