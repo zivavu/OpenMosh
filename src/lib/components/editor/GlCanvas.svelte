@@ -45,6 +45,7 @@
 	} from "../../media";
 	import type { VideoPreviewPlayer } from "../../video-preview/preview-player.svelte";
 	import { maskPaint, tintedMask } from "../../effects/mask-paint.svelte";
+	import { layerHighlight } from "../../editor/layer-highlight.svelte";
 	import MaskPaintLayer from "./MaskPaintLayer.svelte";
 	import MaskKeyLayer from "./MaskKeyLayer.svelte";
 	import MaskShapeLayer from "./MaskShapeLayer.svelte";
@@ -227,6 +228,9 @@
 		highlightLit = !!selectedHighlightKey;
 	});
 
+	/** The trace wanted now: lit, and switched on in settings. */
+	const highlightOn = $derived(highlightLit && layerHighlight.value);
+
 	/** Out of the way, so the mosh can be seen. */
 	export function dismissHighlight() {
 		highlightLit = false;
@@ -234,7 +238,7 @@
 
 	/** Traced at the frame's on-screen size, so the shader's widths are CSS pixels. */
 	function requestHighlight() {
-		const target = highlightLit ? selectedHighlight() : null;
+		const target = highlightOn ? selectedHighlight() : null;
 		const fit = target ? frameFit() : null;
 		if (!target || !fit || !renderer || !canvasEl) return;
 		const w = canvasEl.width * fit.s;
@@ -1176,7 +1180,7 @@
 		textTime;
 		// The highlight is traced by a render.
 		selectedHighlightKey;
-		highlightLit;
+		highlightOn;
 		// A late layer upload landing while paused is what gets that frame onto the
 		// canvas.
 		sourceKey;
@@ -1294,7 +1298,7 @@
 		aria-hidden="true"
 		style:display={outline &&
 		!externallyDriven &&
-		highlightLit &&
+		highlightOn &&
 		highlightShown === selectedHighlightKey
 			? null
 			: "none"}

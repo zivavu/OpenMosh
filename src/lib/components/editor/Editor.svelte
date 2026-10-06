@@ -84,6 +84,7 @@
 	} from "../../editor/settings";
 	import { linkBand } from "../../editor/link-band.svelte";
 	import { showSpectrum } from "../../editor/show-spectrum.svelte";
+	import { layerHighlight } from "../../editor/layer-highlight.svelte";
 	import {
 		cloneEffectInstance,
 		loadInitialEffects,
@@ -756,6 +757,7 @@
 		audioPunch;
 		showFps;
 		showSpectrum.value;
+		layerHighlight.value;
 		const outputVolume = isSequenceMode
 			? mixer.outputVolume
 			: audio.outputVolume;
@@ -774,6 +776,7 @@
 			audioPunch,
 			showFps,
 			showSpectrum: showSpectrum.value,
+			layerHighlight: layerHighlight.value,
 			outputVolume,
 			loopAudio,
 			loopVideo: videoLoop,
@@ -4262,6 +4265,20 @@
 						</label>
 						<Checkbox id="show-spectrum" bind:checked={showSpectrum.value} />
 					</div>
+					{#if isSequenceMode}
+						<div class="mosh-setting-row">
+							<label
+								for="layer-highlight"
+								title="Outline the shape of a layer on the preview when you select it, until the next mosh"
+							>
+								Highlight selected layer
+							</label>
+							<Checkbox
+								id="layer-highlight"
+								bind:checked={layerHighlight.value}
+							/>
+						</div>
+					{/if}
 					<div class="mosh-setting-row">
 						<label
 							for="source-fit"
