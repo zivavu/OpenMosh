@@ -228,6 +228,21 @@ describe("hydrateValues", () => {
 			);
 		});
 	});
+
+	describe("slices' direction, saved before it became an angle", () => {
+		it("turns vertical into 90 and horizontal into 0", () => {
+			expect(hydrateValues("slices", { direction: "vertical" }).angle).toBe(90);
+			expect(hydrateValues("slices", { direction: "horizontal" }).angle).toBe(
+				0,
+			);
+		});
+
+		it("leaves an angle the user has since set alone", () => {
+			expect(
+				hydrateValues("slices", { direction: "vertical", angle: 30 }).angle,
+			).toBe(30);
+		});
+	});
 });
 
 describe("hydrateEffects", () => {
