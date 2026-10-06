@@ -50,7 +50,8 @@ void main() {
   float seg = 6.28318530 / u_sides;
   a = mod(a, seg);
   a = abs(a - seg * 0.5);
-  vec2 kUV = vec2(cos(a), sin(a)) * r + 0.5;
+  // Mirrors the wedge above the centre.
+  vec2 kUV = vec2(cos(a), -sin(a)) * r + 0.5;
   kUV = vec2(bounce(kUV.x), bounce(kUV.y));
   outColor = mix(texture(u_texture, v_uv), texture(u_texture, kUV), u_amount);
 }`,
