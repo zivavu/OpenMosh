@@ -5,6 +5,13 @@ import {
 	smoothBandLevel,
 	type AudioResponse,
 } from "./auto-range";
+import {
+	activeSongProfile,
+	getLevelFromFrequencyRange,
+	songLinkRange,
+} from "./song-profile";
+
+export { getLevelFromFrequencyRange };
 
 function bandKey(scope: string, freqMin: number, freqMax: number): string {
 	return `${scope}|${freqMin}:${freqMax}`;
@@ -51,7 +58,12 @@ export function applyVolumeLinksToEffects(
 				: volumeLevel;
 		// Smoothed before ranging, not after: the envelope must see the same steadied signal.
 		const raw = smoothBandLevel(key, measured, dt, response.smoothing);
-		const ranged = autoRangeLevel(key, raw, dt);
+		const profile =
+			frequencyData && sampleRate > 0 ? activeSongProfile() : null;
+		const song = profile
+			? songLinkRange(profile, freqMin, freqMax, response.smoothing)
+			: null;
+		const ranged = autoRangeLevel(key, raw, dt, song);
 		perBand.set(key, ranged);
 		return ranged;
 	};
@@ -82,26 +94,6 @@ export function applyVolumeLinksToEffects(
 			effect.values[param.key] = value;
 		}
 	}
-}
-
-export function getLevelFromFrequencyRange(
-	freqData: Uint8Array,
-	sampleRate: number,
-	fftSize: number,
-	freqMin: number,
-	freqMax: number,
-): number {
-	const binCount = freqData.length;
-	const minBin = Math.max(0, Math.floor((freqMin / sampleRate) * fftSize));
-	const maxBin = Math.min(
-		binCount - 1,
-		Math.ceil((freqMax / sampleRate) * fftSize),
-	);
-	if (minBin > maxBin) return 0;
-	let sum = 0;
-	for (let i = minBin; i <= maxBin; i++) sum += freqData[i];
-	const count = maxBin - minBin + 1;
-	return Math.min(1, sum / count / 255);
 }
 
 export function formatTime(sec: number): string {

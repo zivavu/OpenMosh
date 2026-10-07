@@ -76,6 +76,9 @@
 	import { SaveTracker } from "../../editor/save-status.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
 	import { AudioManager } from "../../audio/audio-manager.svelte";
+	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
+	import { songProfileOf } from "../../audio/build-song-profile";
+	import { publishSongProfile } from "../../audio/song-profile";
 	import { DEFAULT_AUDIO_RESPONSE } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
 	import {
@@ -901,6 +904,18 @@
 	$effect(() => {
 		audio.setAudioEl(audioEl);
 	});
+
+	// Audio links and Audio Bars read each moment against the whole song.
+	$effect(() => {
+		const song = audio.trackFile;
+		const gain = audio.normalizeGain;
+		publishSongProfile(
+			song
+				? () => getDecodedAudioBuffer(song).then((b) => songProfileOf(b, gain))
+				: null,
+		);
+	});
+	$effect(() => () => publishSongProfile(null));
 
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {

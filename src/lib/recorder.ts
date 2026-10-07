@@ -13,6 +13,7 @@ import {
 	loopAudioBuffer,
 	trimAudioBuffer,
 } from "./audio/offline-audio";
+import { songProfileReady } from "./audio/song-profile";
 import { resetSpectrumBars } from "./audio/spectrum-bars";
 import { stretchAudioBuffer } from "./audio/time-stretch";
 import {
@@ -373,6 +374,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	let audioBufferForMux: AudioBuffer | null = null;
 	let frameAudioData: FrameAudioData[] = [];
 	let audioSampleRate = 0;
+	// The links and bars read the song's profile; the preview's must be in first.
+	await songProfileReady();
 
 	if (audioMix) {
 		audioBufferForMux = audioMix.mix;

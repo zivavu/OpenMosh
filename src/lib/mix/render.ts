@@ -9,9 +9,10 @@ async function renderPart(
 	from: number,
 	to: number,
 	part: "mix" | "drive",
+	channels = 2,
 ): Promise<AudioBuffer> {
 	const length = Math.max(1, Math.ceil((to - from) * SAMPLE_RATE));
-	const ctx = new OfflineAudioContext(2, length, SAMPLE_RATE);
+	const ctx = new OfflineAudioContext(channels, length, SAMPLE_RATE);
 	scheduleMix(
 		ctx,
 		plan,
@@ -45,4 +46,18 @@ export async function renderMix(
 			? await renderPart(driving, bufferOf, from, to, "drive")
 			: null;
 	return { mix, drive };
+}
+
+/** What the effects react to across the whole timeline, mixed to mono (as the analysis
+ * hears it anyway), for the song profile. Null when nothing drives them. */
+export async function renderDrive(
+	plan: MixSegment[],
+	bufferOf: (sourceId: string) => AudioBuffer | null,
+	duration: number,
+): Promise<AudioBuffer | null> {
+	const driving = plan.filter(
+		(s) => s.drives && bufferOf(s.sourceId) && trimSegment(s, 0, duration),
+	);
+	if (driving.length === 0 || duration <= 0) return null;
+	return renderPart(driving, bufferOf, 0, duration, "drive", 1);
 }
