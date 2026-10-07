@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { getToasts, dismissToast, runToastAction } from "./toast.svelte";
-
-	const toasts = getToasts();
 </script>
 
 <div
@@ -10,7 +8,7 @@
 	aria-live="polite"
 	aria-atomic="true"
 >
-	{#each toasts as toast (toast.id)}
+	{#each getToasts() as toast (toast.id)}
 		<div
 			class="toast"
 			class:error={toast.type === "error"}
