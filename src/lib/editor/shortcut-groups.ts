@@ -218,6 +218,7 @@ export function slideshowShortcutGroups(opts: {
 				{ keys: ["Esc"], description: "Stop the preview" },
 				MOSH,
 				...UNDO,
+				SAVE_FRAME,
 			],
 		},
 		TIMELINE,
