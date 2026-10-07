@@ -126,6 +126,8 @@
 		stagedMedia = null;
 	}
 	let isMultiMode = $derived(selectedMode !== "single");
+	/** The slideshow cuts to the beat; the editor plays fine with no song. */
+	let songRequired = $derived(selectedMode === "slideshow");
 
 	const MODES = [
 		{ value: "single", label: "Single" },
@@ -396,8 +398,8 @@
 				"info",
 			);
 		}
-		// Both multi modes cut media to a track, so hold the files until a song arrives.
-		if (!pendingAudio) {
+		// The slideshow cuts media to a track, so hold the files until a song arrives.
+		if (!pendingAudio && songRequired) {
 			stagedMedia = accepted;
 			showToast(
 				`${accepted.length} file${accepted.length === 1 ? "" : "s"} ready — add a song to start`,
@@ -554,7 +556,7 @@
 		pendingAudio = file;
 		onaudio?.(file);
 		// The song was the only thing missing, so go rather than re-dropping media.
-		if (stagedMedia && isMultiMode) launchMultiMode(stagedMedia);
+		if (stagedMedia && songRequired) launchMultiMode(stagedMedia);
 	}
 
 	function openAudioPicker() {
@@ -800,8 +802,12 @@
 			>
 				<Music size={14} />
 				<span>Add a song</span>
-				<span class="song-tag" class:required={isMultiMode}>
-					{isMultiMode ? "required" : "optional"}
+				<span class="song-tag" class:required={songRequired}>
+					{songRequired
+						? "required"
+						: selectedMode === "sequence"
+							? "recommended"
+							: "optional"}
 				</span>
 			</button>
 		{/if}
