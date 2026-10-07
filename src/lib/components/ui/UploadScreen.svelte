@@ -43,6 +43,7 @@
 	import YoutubeLink from "./YoutubeLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { getCapabilityReport } from "../../capabilities.svelte";
+	import { readRaw, writeRaw } from "../../storage";
 	import { onOldHost, SITE_URL } from "../../site";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo, saveBlobAs } from "../../utils";
@@ -573,6 +574,17 @@
 		if (file) handleAudioFile(file);
 	}
 
+	const SLOW_BROWSER_HIDDEN_KEY = "openmosh-slow-browser-hidden";
+	let slowBrowserHidden = $state(!!readRaw(SLOW_BROWSER_HIDDEN_KEY));
+	const slowBrowserNote = $derived(
+		slowBrowserHidden ? null : getCapabilityReport()?.slowBrowser,
+	);
+
+	function hideSlowBrowserNote() {
+		writeRaw(SLOW_BROWSER_HIDDEN_KEY, "1");
+		slowBrowserHidden = true;
+	}
+
 	const compatMessages = $derived.by(() => {
 		const r = getCapabilityReport();
 		if (!r) return [];
@@ -618,6 +630,20 @@
 			{#each compatMessages as message (message)}
 				<p>{message}</p>
 			{/each}
+		</div>
+	{/if}
+
+	{#if slowBrowserNote}
+		<div class="compat compat--dismissible" role="status">
+			<p>{slowBrowserNote}</p>
+			<button
+				class="compat-hide"
+				onclick={hideSlowBrowserNote}
+				aria-label="Don't show this again"
+				title="Don't show this again"
+			>
+				<X size={12} />
+			</button>
 		</div>
 	{/if}
 
@@ -1035,6 +1061,28 @@
 	}
 
 	.compat a {
+		color: var(--text);
+	}
+
+	.compat--dismissible {
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+
+	.compat-hide {
+		display: flex;
+		flex-shrink: 0;
+		padding: 3px;
+		border: none;
+		border-radius: var(--r-1);
+		background: none;
+		color: var(--text-3);
+		cursor: pointer;
+		transition: color var(--t-fast);
+	}
+
+	.compat-hide:hover {
 		color: var(--text);
 	}
 

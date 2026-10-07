@@ -3,6 +3,7 @@ export interface Capabilities {
 	floatTargets: boolean;
 	maxTexture: number;
 	videoEncode: boolean;
+	firefox: boolean;
 }
 
 export interface CapabilityReport {
@@ -12,6 +13,8 @@ export interface CapabilityReport {
 	exportBlocked: string | null;
 	/** Works, with caveats. */
 	notes: string[];
+	/** Works, slower than in Chromium. The user can hide it for good. */
+	slowBrowser: string | null;
 }
 
 export function assess(c: Capabilities): CapabilityReport {
@@ -19,6 +22,7 @@ export function assess(c: Capabilities): CapabilityReport {
 		blocking: null,
 		exportBlocked: null,
 		notes: [],
+		slowBrowser: null,
 	};
 	if (!c.webgl2) {
 		report.blocking =
@@ -28,6 +32,9 @@ export function assess(c: Capabilities): CapabilityReport {
 	if (!c.videoEncode)
 		report.exportBlocked =
 			"This browser can't encode video, so export is off. You can still edit here; Chrome or Edge can export.";
+	if (c.firefox)
+		report.slowBrowser =
+			"OpenMosh is slower in Firefox than in Chrome or Edge. Playback runs at a lower frame rate and exports take longer, but everything works.";
 	if (!c.floatTargets)
 		report.notes.push(
 			"Your graphics driver can't render to float textures, so glow and bloom effects may look wrong.",
@@ -73,5 +80,9 @@ function probeGl(): Pick<
 }
 
 export async function detectCapabilities(): Promise<CapabilityReport> {
-	return assess({ ...probeGl(), videoEncode: await canEncode() });
+	return assess({
+		...probeGl(),
+		videoEncode: await canEncode(),
+		firefox: navigator.userAgent.includes("Firefox"),
+	});
 }

@@ -6,6 +6,7 @@ const full: Capabilities = {
 	floatTargets: true,
 	maxTexture: 16384,
 	videoEncode: true,
+	firefox: false,
 };
 
 describe("assess", () => {
@@ -14,6 +15,7 @@ describe("assess", () => {
 			blocking: null,
 			exportBlocked: null,
 			notes: [],
+			slowBrowser: null,
 		});
 	});
 
@@ -36,5 +38,12 @@ describe("assess", () => {
 		expect(r.exportBlocked).toBeNull();
 		expect(r.notes).toHaveLength(2);
 		expect(r.notes[1]).toContain("2048px");
+	});
+
+	test("Firefox gets a speed note of its own", () => {
+		const r = assess({ ...full, firefox: true });
+		expect(r.blocking).toBeNull();
+		expect(r.notes).toEqual([]);
+		expect(r.slowBrowser).toContain("Firefox");
 	});
 });
