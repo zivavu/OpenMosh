@@ -30,6 +30,7 @@ import {
 	getAllSessions,
 	getAllTimelines,
 	getSession,
+	isOwnSessionKey,
 	loadMediaPool,
 	sessionTimelineKeys,
 	type StoredMediaPool,
@@ -291,7 +292,12 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 
 	const looseEdits: StorageLooseEdit[] = [];
 	for (const session of sessions) {
-		if (session.trackId && trackIds.has(session.trackId)) continue;
+		// A song lists its song-keyed edits; one with its own key is a row of its own.
+		const songListed =
+			!!session.trackId &&
+			trackIds.has(session.trackId) &&
+			!isOwnSessionKey(session.key);
+		if (songListed) continue;
 		const items = resolve(session.sourceIds);
 		looseEdits.push({
 			key: session.key,
@@ -476,7 +482,9 @@ export async function deleteRecentEdit(
 		for (const timeline of timelines) await deleteTimeline(timeline);
 		const keys = [key, ...timelines];
 		const first = session?.sourceIds[0];
-		if (!session?.trackId && first) keys.push(renderKeyFromSourceId(first));
+		if (!session?.trackId && first && !isOwnSessionKey(key)) {
+			keys.push(renderKeyFromSourceId(first));
+		}
 		forgetTrackEntries(keys);
 		if (projectKeyForSession(key) === key) forgetProjectNames([key]);
 		await dropOrphanedMedia(session?.sourceIds ?? []);

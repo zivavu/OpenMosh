@@ -1,8 +1,15 @@
-/** Resumable edits for single and slideshow mode, keyed by the song when there is one. */
+/** Resumable edits for single and slideshow mode, each under its own key. */
 
 import { getAllTracks, getTrack, trackToFile } from "../audio/track-library";
 import { createListCache } from "../storage";
+import { generateId } from "../effects/types";
 import { rememberLastOpened } from "./last-opened";
+import {
+	projectKeyForSession,
+	readProjectNames,
+	setProjectName,
+	uniqueName,
+} from "./project-names";
 import {
 	getAllSessions,
 	getSequenceMediaByIds,
@@ -31,16 +38,10 @@ export interface SavedSession {
 	updatedAt: number;
 }
 
-/** What identifies a resumable edit: the song whenever there is one. */
-function sessionKey(
-	mode: SessionMode,
-	files: File[],
-	trackId?: string | null,
-): string | null {
-	if (trackId) return `${mode}:track:${trackId}`;
-	if (mode === "slideshow") return null;
-	if (files.length === 0) return null;
-	return `single:${stableSourceId(files[0])}`;
+/** A new edit's own key, so a second upload of the same file or song is a project of
+ * its own. Edits saved before this are keyed by their song or file, and keep that key. */
+export function newSessionKey(mode: SessionMode): string {
+	return `${mode}:p:${generateId()}`;
 }
 
 function defaultLabel(mode: SessionMode, files: File[]): string {
@@ -48,16 +49,37 @@ function defaultLabel(mode: SessionMode, files: File[]): string {
 	return `${files.length} image${files.length === 1 ? "" : "s"}`;
 }
 
+/** What the upload screen would call each saved edit of a mode. */
+async function shownLabels(
+	mode: SessionMode,
+	except: string,
+): Promise<string[]> {
+	const [sessions, tracks] = await Promise.all([
+		getAllSessions(),
+		getAllTracks(),
+	]);
+	const trackName = new Map(tracks.map((t) => [t.id, t.name]));
+	const names = readProjectNames();
+	return sessions
+		.filter((s) => s.mode === mode && s.key !== except)
+		.map(
+			(s) =>
+				names[projectKeyForSession(s.key)] ??
+				((s.trackId && trackName.get(s.trackId)) || s.label),
+		);
+}
+
 /** Store the media and editor state under this session's key. False when the edit has
  * no key to be kept under (a slideshow without a song), so nothing was written. */
 export async function saveSession(
+	key: string,
 	mode: SessionMode,
 	files: File[],
 	state: unknown,
 	trackId?: string | null,
 ): Promise<boolean> {
-	const key = sessionKey(mode, files, trackId);
-	if (!key) return false;
+	if (mode === "slideshow" && !trackId) return false;
+	const isNew = !(await getSession(key).catch(() => undefined));
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
 	await putSequenceMedia(entries);
 	// A song-keyed session is named after the song, matching the sequence list.
@@ -65,6 +87,11 @@ export async function saveSession(
 	if (trackId) {
 		const track = await getTrack(trackId).catch(() => null);
 		if (track) label = track.name;
+	}
+	// A second edit of the same file or song reads "name (2)" rather than as the first.
+	if (isNew) {
+		const taken = await shownLabels(mode, key).catch((): string[] => []);
+		if (taken.includes(label)) setProjectName(key, uniqueName(label, taken));
 	}
 	await putSession({
 		key,

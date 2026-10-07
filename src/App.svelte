@@ -9,7 +9,11 @@
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
 	import { openProjectFile } from "./lib/project-file/import";
-	import { openSession, type SingleSessionState } from "./lib/editor/sessions";
+	import {
+		newSessionKey,
+		openSession,
+		type SingleSessionState,
+	} from "./lib/editor/sessions";
 	import {
 		forgetLastOpened,
 		readLastOpened,
@@ -52,6 +56,8 @@
 	let restoredSlideshowConfig: SlideshowConfig | null = $state(null);
 	/** Library id of the song a reopened session was keyed to. */
 	let sessionTrackId: string | null = $state(null);
+	/** What the open single or slideshow edit saves under; new for every upload. */
+	let sessionKey: string | null = $state(null);
 
 	// Named for what each view is, not for the route it answers to: the two stopped
 	// matching when the segment editor took the "#editor" name.
@@ -179,6 +185,7 @@
 		restoredSingle = null;
 		restoredSlideshowConfig = null;
 		sessionTrackId = null;
+		sessionKey = null;
 	}
 
 	/** Reopen a saved single or slideshow edit: its media and the work done. False when
@@ -194,6 +201,7 @@
 		// editor restores have the track they're keyed to.
 		pendingAudioFile = opened.trackFile;
 		sessionTrackId = opened.trackId;
+		sessionKey = key;
 		if (mode === "single") {
 			restoredSingle = opened.state as SingleSessionState;
 			// Older single sessions stored layer media after the source; only the
@@ -333,6 +341,7 @@
 				initialAudioFile={pendingAudioFile}
 				initialTrackId={sessionTrackId}
 				initialConfig={restoredSlideshowConfig}
+				sessionKey={sessionKey ?? newSessionKey("slideshow")}
 				{warmCanvas}
 				{warmRenderer}
 				onExit={exitToUpload}
@@ -373,6 +382,7 @@
 				initialAudioFile={pendingAudioFile}
 				initialTrackId={sessionTrackId}
 				initialSession={restoredSingle}
+				sessionKey={sessionKey ?? newSessionKey("single")}
 				onfile={async (f: File) => (file = await gifToVideo(f))}
 				{warmCanvas}
 				{warmRenderer}
@@ -388,6 +398,7 @@
 		<UploadScreen
 			onfile={async (f: File) => {
 				forgetLastOpened();
+				sessionKey = newSessionKey("single");
 				file = await gifToVideo(f);
 				navigateTo("single");
 			}}
@@ -409,6 +420,7 @@
 			}}
 			onSlideshow={async (files: File[]) => {
 				forgetLastOpened();
+				sessionKey = newSessionKey("slideshow");
 				slideshowFiles = await gifsToVideo(files);
 				navigateTo("slideshow");
 			}}

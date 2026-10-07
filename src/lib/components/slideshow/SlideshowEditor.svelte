@@ -103,7 +103,7 @@
 		updateSettings,
 	} from "../../editor/settings";
 	import { linkBand } from "../../editor/link-band.svelte";
-	import { saveSession } from "../../editor/sessions";
+	import { newSessionKey, saveSession } from "../../editor/sessions";
 	import {
 		deleteSequenceMediaProxy,
 		getSequenceMediaProxy,
@@ -122,6 +122,8 @@
 		initialAudioFile?: File | null;
 		initialTrackId?: string | null;
 		initialConfig?: SlideshowConfig | null;
+		/** What this slideshow saves under. */
+		sessionKey?: string | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
@@ -132,6 +134,7 @@
 		initialAudioFile = null,
 		initialTrackId = null,
 		initialConfig = null,
+		sessionKey = null,
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
@@ -471,6 +474,9 @@
 		slides = [...restored, ...slides.filter((s) => !known.has(s.id))];
 	}
 
+	/** Read once: the slideshow keeps its key for life. */
+	const ownSessionKey = untrack(() => sessionKey ?? newSessionKey("slideshow"));
+
 	let sessionSaveTimer: ReturnType<typeof setTimeout> | undefined;
 	/** A debounced save hasn't run yet; leaving the page must not drop it. */
 	let sessionSavePending = false;
@@ -485,6 +491,7 @@
 			return;
 		}
 		const write = saveSession(
+			ownSessionKey,
 			"slideshow",
 			slides.map((s) => s.file),
 			{ config: $state.snapshot(config) as SlideshowConfig },

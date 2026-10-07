@@ -66,7 +66,15 @@
 		type AudioClip,
 		type AudioLane,
 	} from "../../mix/types";
-	import { readProjectNames, setProjectName } from "../../editor/project-names";
+	import {
+		readProjectNames,
+		setProjectName,
+		uniqueName,
+	} from "../../editor/project-names";
+	import {
+		listSavedSequences,
+		readCachedSavedSequences,
+	} from "../../editor/saved-sequences";
 	import { draggedTrackId } from "../../editor/source-drag.svelte";
 	import { generateId } from "../../effects/types";
 	import AudioLanes from "../timeline/AudioLanes.svelte";
@@ -220,10 +228,15 @@
 	import {
 		loadMediaPool,
 		pruneSequenceMediaThrottled,
+		isOwnSessionKey,
 		saveMediaPool,
 		stableSourceId,
 	} from "../../editor/sequence-media-store";
-	import { saveSession, type SingleSessionState } from "../../editor/sessions";
+	import {
+		newSessionKey,
+		saveSession,
+		type SingleSessionState,
+	} from "../../editor/sessions";
 	import { rememberLastOpened } from "../../editor/last-opened";
 	import {
 		migrateLegacySegments,
@@ -297,6 +310,8 @@
 		mode?: "single" | "sequence";
 		/** Single mode: work restored from a saved session. */
 		initialSession?: SingleSessionState | null;
+		/** Single mode: what this edit saves under. */
+		sessionKey?: string | null;
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
@@ -313,6 +328,7 @@
 		initialProjectKey = null,
 		mode = "single",
 		initialSession = null,
+		sessionKey = null,
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
@@ -879,6 +895,10 @@
 				end: savedSpan.spanEnd,
 			};
 		}
+		if (singleProjectBase) {
+			await restoreProjectSongBpm(trackId);
+			return;
+		}
 		const key = seqKeyPrefix + trackId;
 		loadedTimelineKey = null;
 		const savedSeq = await loadSeqEntry(trackId);
@@ -900,6 +920,18 @@
 			isSequenceMode && savedSeq.segments.length
 				? { key, segments: savedSeq.segments }
 				: null;
+	}
+
+	/** The tempo for a song in an edit with its own key: what the edit found for it, else
+	 * what the song's older single-mode timeline kept. Neither leaves detection to run. */
+	async function restoreProjectSongBpm(trackId: string) {
+		const [own, song] = await Promise.all([
+			loadSeqEntry(singleProjectBase!),
+			loadSeqEntry(trackId),
+		]);
+		if (currentTrackId !== trackId) return;
+		const bpm = own?.song === trackId && own.bpm > 0 ? own.bpm : song?.bpm;
+		if (bpm && bpm > 0) restoreSequenceBpm(bpm);
 	}
 
 	/** The editor learned a track's library id without being asked to load it. */
@@ -1097,13 +1129,25 @@
 		),
 	);
 
+	/** Single mode's session key; read once, since the edit keeps it for life. */
+	const singleSessionKey = untrack(() =>
+		mode === "sequence" ? null : (sessionKey ?? newSessionKey("single")),
+	);
+	/** A single edit keyed by its own id saves its timeline there too, not under its
+	 * song or video, so two edits of the same file or song never share one. */
+	const singleProjectBase =
+		singleSessionKey && isOwnSessionKey(singleSessionKey)
+			? singleSessionKey.slice("single:".length)
+			: null;
+
 	// The song/video this editor saves against, before the mode prefix.
 	let seqBaseKey = $derived(
 		isSequenceMode
 			? projectKey
-			: seqMasterIsAudio
-				? currentTrackId
-				: (videoSeqKey ?? currentTrackId),
+			: (singleProjectBase ??
+					(seqMasterIsAudio
+						? currentTrackId
+						: (videoSeqKey ?? currentTrackId))),
 	);
 
 	/** Single and sequence share this component, so the store is namespaced. */
@@ -1125,7 +1169,7 @@
 	let restoredSeqKey: string | null = null;
 	$effect(() => {
 		const key = videoSeqKey;
-		if (!key || key === restoredSeqKey) return;
+		if (singleProjectBase || !key || key === restoredSeqKey) return;
 		restoredSeqKey = key;
 		if (untrack(() => seqMasterIsAudio)) return;
 		const storeKey = seqKeyPrefix + key;
@@ -1141,6 +1185,26 @@
 			restoreMediaTimeline(saved.media);
 			sourceRegistry.restoreEdits(saved.sourceEdits);
 		})();
+	});
+
+	// A single edit with its own key restores its timeline once, whatever song it plays.
+	$effect(() => {
+		if (!singleProjectBase) return;
+		const storeKey = seqKeyPrefix + singleProjectBase;
+		untrack(() => {
+			loadedTimelineKey = null;
+			void (async () => {
+				const saved = await loadSeqEntry(singleProjectBase);
+				loadedTimelineKey = storeKey;
+				if (saved === null) return;
+				if (saved.song && saved.song === currentTrackId) {
+					restoreSequenceBpm(saved.bpm);
+				}
+				restoreTextTimeline(saved.text);
+				restoreMediaTimeline(saved.media);
+				sourceRegistry.restoreEdits(saved.sourceEdits);
+			})();
+		});
 	});
 
 	/** A restored BPM wins over any detection in flight: the clips were built against it. */
@@ -1190,8 +1254,9 @@
 		if (isSequenceMode) {
 			entry.length = mixer.duration;
 			entry.span = { start: mixer.spanStart, end: mixer.spanEnd };
-			entry.song = currentTrackId;
 		}
+		// Single mode too: an edit with its own key keeps a BPM only for the song it was found for.
+		entry.song = currentTrackId;
 		return entry;
 	}
 
@@ -1805,6 +1870,16 @@
 		void loadProject(key);
 	});
 
+	/** A second project from the same song or file reads "name (2)", not as the first. */
+	async function nameNewProject(key: string, name: string) {
+		const saved = await listSavedSequences().catch(readCachedSavedSequences);
+		const names = readProjectNames();
+		const taken = saved
+			.filter((p) => p.trackId !== key)
+			.map((p) => names[p.trackId] ?? p.trackName);
+		setProjectName(key, uniqueName(name, taken));
+	}
+
 	async function loadProject(key: string) {
 		const storeKey = seqKeyPrefix + key;
 		loadedTimelineKey = null;
@@ -1815,7 +1890,8 @@
 		if (saved === null) {
 			// Named after its song, else what it was opened with, until the user names it.
 			if (key.startsWith("proj-") && !readProjectNames()[key]) {
-				setProjectName(key, initialAudioFile?.name ?? file.name);
+				await nameNewProject(key, initialAudioFile?.name ?? file.name);
+				if (seqStoreKey !== storeKey) return;
 			}
 			pendingInit = { key: storeKey, seed: true };
 			return;
@@ -2999,13 +3075,17 @@
 				: null,
 		};
 		// Keyed by the song when there is one, alongside the text timeline and span.
-		const write = saveSession("single", [source], state, currentTrackId).catch(
-			(e) => {
-				// Logged, not swallowed: a silent failure here is invisible.
-				if (import.meta.env.DEV) console.error("Session save failed:", e);
-				return false;
-			},
-		);
+		const write = saveSession(
+			singleSessionKey!,
+			"single",
+			[source],
+			state,
+			currentTrackId,
+		).catch((e) => {
+			// Logged, not swallowed: a silent failure here is invisible.
+			if (import.meta.env.DEV) console.error("Session save failed:", e);
+			return false;
+		});
 		void saves.track("session", write).then((ok) => {
 			if (ok) void pruneSequenceMediaThrottled().catch(() => {});
 		});
