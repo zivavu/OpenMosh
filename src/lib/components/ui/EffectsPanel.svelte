@@ -460,7 +460,15 @@
 		if (dragFromIndex < targetIndex) targetIndex -= 1;
 
 		onBeforeUserEdit?.();
-		const [moved] = effects.splice(dragFromIndex, 1);
+		const moved = effects[dragFromIndex];
+		// Dropped into the other group, it takes that group's switch, unless a roll owns it.
+		const intoLive = inLiveGroup(effects[index]);
+		const switchable = !(rolledNote && isRolled(moved));
+		if (liveFirst && switchable && inLiveGroup(moved) !== intoLive) {
+			held.delete(moved.instanceId);
+			moved.enabled = intoLive;
+		}
+		effects.splice(dragFromIndex, 1);
 		effects.splice(targetIndex, 0, moved);
 		clearDragState();
 		appliedIndex = null;
