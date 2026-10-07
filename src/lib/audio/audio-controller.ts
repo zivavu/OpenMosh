@@ -1,4 +1,5 @@
 import { applyVolumeLinksToEffects, type AudioLinkGroup } from "./audio-utils";
+import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
 
 export { applyVolumeLinksToEffects as applyVolumeLinksTick } from "./audio-utils";
 
@@ -55,6 +56,8 @@ function buildGraph(
 	// Raw bins. Smoothing lives in smoothBandLevel, which an export runs too: left at
 	// the 0.8 default this path would be smoothed twice over and a render not at all.
 	analyser.smoothingTimeConstant = 0;
+	analyser.minDecibels = SPECTRUM_MIN_DB;
+	analyser.maxDecibels = SPECTRUM_MAX_DB;
 	const gain = ctx.createGain();
 	source?.connect(normalizeGain);
 	normalizeGain.connect(analyser);

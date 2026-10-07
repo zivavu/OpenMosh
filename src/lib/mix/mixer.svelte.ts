@@ -4,6 +4,7 @@
 import { startLinkTick } from "../audio/audio-controller";
 import type { AudioLinkGroup } from "../audio/audio-utils";
 import { resetAutoRange } from "../audio/auto-range";
+import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "../audio/offline-audio";
 import { resetSpectrumRange } from "../audio/spectrum-range";
 import type { SpectrumData } from "../types";
 import type { MixSegment } from "./plan";
@@ -154,6 +155,8 @@ export class SequenceMixer {
 		analyser.fftSize = 2048;
 		// Raw bins; smoothing lives in the link code, which the export runs too.
 		analyser.smoothingTimeConstant = 0;
+		analyser.minDecibels = SPECTRUM_MIN_DB;
+		analyser.maxDecibels = SPECTRUM_MAX_DB;
 		// Kept pulled without being heard.
 		const sink = ctx.createGain();
 		sink.gain.value = 0;
