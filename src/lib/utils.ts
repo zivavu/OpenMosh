@@ -37,21 +37,25 @@ type SaveFilePicker = (
 	options: SaveFilePickerOptions,
 ) => Promise<{ createWritable: () => Promise<WritableStream<Uint8Array>> }>;
 
+const PROJECT_FILE_TYPE = {
+	description: "OpenMosh project",
+	accept: { "application/zip": [".openmosh"] },
+};
+
 /** Save a blob to disk: streamed through the file picker where the browser has one,
  * a plain download otherwise. A cancelled picker saves nothing. */
-export async function saveBlobAs(blob: Blob, name: string): Promise<void> {
+export async function saveBlobAs(
+	blob: Blob,
+	name: string,
+	type: NonNullable<SaveFilePickerOptions["types"]>[number] = PROJECT_FILE_TYPE,
+): Promise<void> {
 	const picker = (window as { showSaveFilePicker?: unknown })
 		.showSaveFilePicker;
 	if (typeof picker === "function") {
 		try {
 			const handle = await (picker as SaveFilePicker)({
 				suggestedName: name,
-				types: [
-					{
-						description: "OpenMosh project",
-						accept: { "application/zip": [".openmosh"] },
-					},
-				],
+				types: [type],
 			});
 			const writable = await handle.createWritable();
 			await blob.stream().pipeTo(writable);
