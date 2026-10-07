@@ -3,6 +3,10 @@ import { applyVolumeLinksToEffects } from "./audio-utils";
 import type { AudioResponse } from "./auto-range";
 
 export const FFT_SIZE = 2048;
+/** The dB window every analyser maps onto 0-255. A ceiling of -30 (the Web Audio
+ * default) pinned the kick and bass bins of a loud master at 255 for most of a song. */
+export const SPECTRUM_MIN_DB = -100;
+export const SPECTRUM_MAX_DB = -10;
 
 export async function decodeAudioFile(file: File): Promise<AudioBuffer> {
 	const arrayBuffer = await file.arrayBuffer();
@@ -237,10 +241,8 @@ function computeFrameAnalysis(
 	fftMagnitude(real, imag, magnitude, fftSize);
 
 	// Same dB scale as AnalyserNode.getByteFrequencyData: dB = 20*log10(mag / fftSize),
-	// mapped from [minDecibels, maxDecibels] to [0, 255].
-	const minDecibels = -100;
-	const maxDecibels = -30;
-	const dbRange = maxDecibels - minDecibels;
+	// mapped from the analysers' dB window to [0, 255].
+	const dbRange = SPECTRUM_MAX_DB - SPECTRUM_MIN_DB;
 	const frequencyData = new Uint8Array(fftSize / 2);
 	for (let i = 0; i < frequencyData.length; i++) {
 		const mag = magnitude[i];
@@ -249,7 +251,7 @@ function computeFrameAnalysis(
 			continue;
 		}
 		const dB = 20 * Math.log10(mag / fftSize);
-		const scaled = (255 * (dB - minDecibels)) / dbRange;
+		const scaled = (255 * (dB - SPECTRUM_MIN_DB)) / dbRange;
 		frequencyData[i] = Math.max(0, Math.min(255, Math.round(scaled)));
 	}
 
