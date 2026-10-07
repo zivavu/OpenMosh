@@ -431,7 +431,7 @@
 		sampling = true;
 		try {
 			const gen = await import("../../generators");
-			const count = { single: 1, sequence: 3, slideshow: 8 }[selectedMode];
+			const count = { single: 1, sequence: 5, slideshow: 20 }[selectedMode];
 			const specs = gen.planBatch(gen.randomSeed(), {
 				count,
 				variety: "wild",
