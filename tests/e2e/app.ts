@@ -135,13 +135,15 @@ export interface OpenEditorOptions {
 	 * test image instead of a flat fill, which a spec needs to assert the preview changed. */
 	sources: [string, Rgb | "pattern"][];
 	track?: WavOptions & { name?: string };
+	/** Side of the flat sources in px; past the preview's size, the output outgrows the canvas. */
+	size?: number;
 }
 
 /** Take the upload screen through to the editor. The song goes in first on
  * purpose: the upload screen holds media back until a track arrives and launches then. */
 export async function openEditor(
 	page: Page,
-	{ sources, track = {} }: OpenEditorOptions,
+	{ sources, track = {}, size }: OpenEditorOptions,
 ): Promise<void> {
 	await page.goto("/");
 	await selectMode(page, "Editor");
@@ -154,7 +156,9 @@ export async function openEditor(
 		.locator('input[type="file"][accept*="image/png"]')
 		.setInputFiles(
 			sources.map(([file, color]) =>
-				color === "pattern" ? patternImageFile(file) : imageFile(file, color),
+				color === "pattern"
+					? patternImageFile(file)
+					: imageFile(file, color, size),
 			),
 		);
 
@@ -216,7 +220,10 @@ export async function openSingle(
 	page: Page,
 	file: string,
 	color: Rgb | "pattern",
-	{ track }: { track?: WavOptions & { name?: string } } = {},
+	{
+		track,
+		size,
+	}: { track?: WavOptions & { name?: string }; size?: number } = {},
 ): Promise<void> {
 	await page.goto("/");
 	if (track) {
@@ -228,7 +235,9 @@ export async function openSingle(
 	await page
 		.locator('input[type="file"][accept*="image/png"]')
 		.setInputFiles(
-			color === "pattern" ? patternImageFile(file) : imageFile(file, color),
+			color === "pattern"
+				? patternImageFile(file)
+				: imageFile(file, color, size),
 		);
 	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
 }
