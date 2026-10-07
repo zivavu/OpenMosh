@@ -6,6 +6,7 @@ import type { EffectDefinition } from "../types";
 export const definition: EffectDefinition = {
 	id: "audio-bars",
 	name: "Audio Bars",
+	needsAudio: true,
 	params: [
 		{
 			key: "bars",

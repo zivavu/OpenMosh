@@ -205,6 +205,26 @@ describe("generateMosh styles", () => {
 			}
 		}
 	});
+
+	it("picks music-only effects only when there is music", () => {
+		const musicOnly = EFFECT_DEFINITIONS.filter((d) => d.needsAudio).map(
+			(d) => d.id,
+		);
+		const picked = (hasAudio: boolean) => {
+			const seen = new Set<string>();
+			for (let seed = 1; seed <= 400; seed++) {
+				const effects = loadInitialEffects();
+				withSeededRandom(seed, () =>
+					generateMosh(effects, { ...options, hasAudio }),
+				);
+				for (const e of effects) if (e.enabled) seen.add(e.defId);
+			}
+			return musicOnly.some((id) => seen.has(id));
+		};
+		expect(musicOnly.length).toBeGreaterThan(0);
+		expect(picked(false)).toBe(false);
+		expect(picked(true)).toBe(true);
+	});
 });
 
 describe("Mask effects", () => {
