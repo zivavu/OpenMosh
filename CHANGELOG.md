@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.9.11](https://github.com/zivavu/OpenMosh/compare/v0.9.10...v0.9.11) (2026-10-07)
+
+This release rebuilds Audio Bars and the way effects follow the music. It also adds a backup: the storage button on the start screen saves every project, preset and setting to one file, which you can load in another browser.
+
+Exports made since 0.9.1 reacted to noise instead of the music, so an exported video's Audio Bars and audio-linked effects didn't match the preview. Export them again to get what the preview shows. Audio Bars in saved projects keep their settings but look different. Effects linked to the music now measure each moment against the whole song, so a quiet intro moves them less than a drop.
+
+### Added
+
+* Back up every project, preset and setting to one file and load it in another browser ([32eb7ec](https://github.com/zivavu/OpenMosh/commit/32eb7ec017e632d2dd9a53314076f38f40e65a6b))
+* Spread Audio Bars across the song's range and add falling peaks ([5cba654](https://github.com/zivavu/OpenMosh/commit/5cba654c159e4d3146e2e1d6ff337fc37fc4894e))
+* Keep a song's quiet parts quiet in audio links and Audio Bars ([beed0fa](https://github.com/zivavu/OpenMosh/commit/beed0fa65804929d3fd7bced7c6d3223377e5b15))
+* Open the editor without a song ([a932abd](https://github.com/zivavu/OpenMosh/commit/a932abd22c11e604b8f7014d0760a5e034954dc8))
+* Drag an effect into or out of the live group to switch it ([44bbb47](https://github.com/zivavu/OpenMosh/commit/44bbb4725742d430bc64d8bc2e0e31a641221f48))
+* Save the slideshow's frame with Ctrl+S ([6bbfdf8](https://github.com/zivavu/OpenMosh/commit/6bbfdf8798d7bc4f94d55d93b0cb1037a86ec660))
+* Keep Audio Bars out of the effect list and moshes until there's music, and out of curated moshes ([9488490](https://github.com/zivavu/OpenMosh/commit/9488490e00159169f388c9e3340d2bd4d2910c46), [5956eb4](https://github.com/zivavu/OpenMosh/commit/5956eb493f56e9bb271589b764191c2dd03ba992))
+* Hide effects' beat Sync until there's a song to sync to ([3e6c8db](https://github.com/zivavu/OpenMosh/commit/3e6c8db12a9772774f6637e6bb3930dc8994f06b))
+* Try a sample with 5 images in the editor and 20 in a slideshow ([5b2f90b](https://github.com/zivavu/OpenMosh/commit/5b2f90b8f8f3b1c01193dd5f016145a7e3a4e02a))
+* Warn Firefox users that playback and export run slower ([9f72383](https://github.com/zivavu/OpenMosh/commit/9f723838ae4da0ab3889ff7fbc9909245793928a))
+
+### Fixed
+
+* Make exported videos react to the music like the preview ([568e95b](https://github.com/zivavu/OpenMosh/commit/568e95bf30f7707ba809903416c9d680662a31b0))
+* Keep loud bass moving in Audio Bars and audio links ([01e2884](https://github.com/zivavu/OpenMosh/commit/01e288409285c3191acf49550eeecf32ca0e5be3))
+* Keep the first project when the same file or song is uploaded again ([8d75f03](https://github.com/zivavu/OpenMosh/commit/8d75f034bbe5b37a07ca67499d4393f7c0a877fb))
+* Save the editor's frame instead of a black image ([e4c80cd](https://github.com/zivavu/OpenMosh/commit/e4c80cdf9aac5e21944ae082b6cec2487faae871))
+* Show notifications again ([4941f1e](https://github.com/zivavu/OpenMosh/commit/4941f1ee01eeb60051a1ea6b0f01215f9e3dd884))
+
 ## [0.9.10](https://github.com/zivavu/OpenMosh/compare/v0.9.9...v0.9.10) (2026-10-07)
 
 This release reworks several effects ahead of 1.0. Glow, VHS, Insta Color, Bulge and Jitter look different, Slices has an Angle slider, and Polar is gone.
