@@ -147,7 +147,6 @@ export const CURATION: Record<string, Curation> = {
 	vignette: c("finish", "frame", "amount"),
 	strobe: c("finish", "flash", "amount"),
 	"rgb-strobe": c("finish", "flash"),
-	"audio-bars": c("finish", "overlay", "opacity"),
 	tracking: c("finish", "overlay", "opacity"),
 };
 
