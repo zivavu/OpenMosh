@@ -2757,14 +2757,16 @@
 			resizeWidth > 0 &&
 			resizeHeight > 0 &&
 			(resizeWidth !== prevW || resizeHeight !== prevH);
-		if (needsResize) {
-			r.resize(resizeWidth, resizeHeight);
-			r.render(renderedEffects, time);
-		}
+		// Through the canvas, not r.render: the editor's picture is its layers, not the base chain.
+		const draw = () => {
+			if (!glCanvasRef?.drawNow(time)) r.render(renderedEffects, time);
+		};
+		if (needsResize) r.resize(resizeWidth, resizeHeight);
+		draw();
 		capture(() => {
 			if (needsResize) {
 				r.resize(prevW, prevH);
-				r.render(renderedEffects, time);
+				draw();
 			}
 		});
 	}
