@@ -7,6 +7,7 @@ export const definition: EffectDefinition = {
 	id: "audio-bars",
 	name: "Audio Bars",
 	needsAudio: true,
+	moshable: false,
 	params: [
 		{
 			key: "bars",
