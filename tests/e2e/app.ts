@@ -134,13 +134,14 @@ export interface OpenEditorOptions {
 	/** Pool sources, as [name, colour] pairs. `"pattern"` gives that source the detailed
 	 * test image instead of a flat fill, which a spec needs to assert the preview changed. */
 	sources: [string, Rgb | "pattern"][];
-	track?: WavOptions & { name?: string };
+	/** Null opens the editor with no song at all. */
+	track?: (WavOptions & { name?: string }) | null;
 	/** Side of the flat sources in px; past the preview's size, the output outgrows the canvas. */
 	size?: number;
 }
 
-/** Take the upload screen through to the editor. The song goes in first on
- * purpose: the upload screen holds media back until a track arrives and launches then. */
+/** Take the upload screen through to the editor. The song, when there is one, goes in
+ * first: media dropped without one launches the editor straight away. */
 export async function openEditor(
 	page: Page,
 	{ sources, track = {}, size }: OpenEditorOptions,
@@ -148,10 +149,12 @@ export async function openEditor(
 	await page.goto("/");
 	await selectMode(page, "Editor");
 
-	const { name = "track.wav", ...wav } = track;
-	await page
-		.locator('input[type="file"][accept*="audio"]')
-		.setInputFiles(trackFile(name, wav));
+	if (track) {
+		const { name = "track.wav", ...wav } = track;
+		await page
+			.locator('input[type="file"][accept*="audio"]')
+			.setInputFiles(trackFile(name, wav));
+	}
 	await page
 		.locator('input[type="file"][accept*="image/png"]')
 		.setInputFiles(
