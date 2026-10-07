@@ -8,7 +8,11 @@
 		smoothBandLevel,
 		type AudioResponse,
 	} from "../../audio/auto-range";
-	import { getLevelFromFrequencyRange } from "../../audio/audio-utils";
+	import {
+		activeSongProfile,
+		getLevelFromFrequencyRange,
+		songLinkRange,
+	} from "../../audio/song-profile";
 	import { FREQ_PRESETS, generateId } from "../../effects/types";
 
 	interface Props {
@@ -84,7 +88,13 @@
 			freqMax,
 		);
 		const smoothed = smoothBandLevel(key, measured, dt, response.smoothing);
-		return autoRangeLevel(key, smoothed, dt) ** punchExponent(response.punch);
+		const profile = activeSongProfile();
+		const song = profile
+			? songLinkRange(profile, freqMin, freqMax, response.smoothing)
+			: null;
+		return (
+			autoRangeLevel(key, smoothed, dt, song) ** punchExponent(response.punch)
+		);
 	}
 
 	$effect(() => {

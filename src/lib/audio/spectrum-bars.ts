@@ -1,8 +1,10 @@
 /** Turns raw FFT bins into Audio Bars heights: one band per bar on a log-like scale,
- * read through a dB window under the song's loud parts, falling under gravity. */
+ * read through a dB window under the song's loud parts, falling under gravity. The loud
+ * parts come from the song profile; until it's in, the ceilings learn them as it plays. */
 
 import { followerTaus } from "./auto-range";
 import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
+import { activeSongProfile, type SongProfile } from "./song-profile";
 
 const FREQ_MIN = 30;
 /** Most lossy files cut off around here; bars above it would never move. */
@@ -18,8 +20,8 @@ const RANGE_DB = 36;
 /** How far each bar's window follows its own loudest moments instead of the loudest
  * bar's, so a band that's quiet all song still reaches the top on its own hits. */
 const BAND_CONTRAST = 0.5;
-/** Where the ceiling starts: about where a loud master's chorus peaks, so an intro reads
- * as an intro instead of being stretched to full height before the drop arrives. */
+/** Where the learned ceiling starts: about where a loud master's chorus peaks, so an
+ * intro reads as an intro instead of being stretched to full height before the drop. */
 const CEIL_START_DB = -24;
 /** Slow both ways, so the window holds the song's loud parts rather than its last few
  * seconds: a quiet stretch stays small and a drop towers over it. */
@@ -105,6 +107,37 @@ function bandDb(
 	return db + TILT_DB_PER_OCTAVE * Math.log2(centre / TILT_PIVOT);
 }
 
+function topOf(ceil: number, own: number): number {
+	const shared = Math.max(ceil, MIN_CEIL_DB);
+	return shared + (Math.max(own, MIN_CEIL_DB) - shared) * BAND_CONTRAST;
+}
+
+const songTops = new WeakMap<SongProfile, Map<number, Float32Array>>();
+
+/** Each bar's ceiling from the whole song's loud parts, so it never depends on what
+ * has played so far. */
+function songTopsOf(profile: SongProfile, bars: number): Float32Array {
+	let byCount = songTops.get(profile);
+	if (!byCount) {
+		byCount = new Map();
+		songTops.set(profile, byCount);
+	}
+	let tops = byCount.get(bars);
+	if (!tops) {
+		const edges = barEdges(bars);
+		const binHz = profile.sampleRate / 2 / profile.loud.length;
+		tops = new Float32Array(bars);
+		let ceil = -Infinity;
+		for (let b = 0; b < bars; b++) {
+			tops[b] = bandDb(profile.loud, binHz, edges[b], edges[b + 1]);
+			if (tops[b] > ceil) ceil = tops[b];
+		}
+		for (let b = 0; b < bars; b++) tops[b] = topOf(ceil, tops[b]);
+		byCount.set(bars, tops);
+	}
+	return tops;
+}
+
 /** Seconds a bar takes to fall its full height from rest, for a smoothing amount. */
 export function barFallTime(smoothing: number): number {
 	return 0.1 + followerTaus(smoothing).release;
@@ -165,17 +198,18 @@ export function stepSpectrumBars(
 			target[b] = bandDb(bins, binHz, edges[b], edges[b + 1]);
 			if (target[b] > loudest) loudest = target[b];
 		}
+		const profile = activeSongProfile();
+		const tops = profile ? songTopsOf(profile, bars) : null;
+		// Without a profile yet, the ceilings learn the song as it plays.
 		const tau = loudest > state.ceil ? CEIL_RISE_TAU : CEIL_FALL_TAU;
 		state.ceil += (loudest - state.ceil) * (1 - Math.exp(-step / tau));
-		const ceil = Math.max(state.ceil, MIN_CEIL_DB);
 		const riseK = 1 - Math.exp(-step / CEIL_RISE_TAU);
 		const fallK = 1 - Math.exp(-step / CEIL_FALL_TAU);
 		for (let b = 0; b < bars; b++) {
 			const db = target[b];
 			const bc = state.bandCeil[b];
 			state.bandCeil[b] += (db - bc) * (db > bc ? riseK : fallK);
-			const own = Math.max(state.bandCeil[b], MIN_CEIL_DB);
-			const top = ceil + (own - ceil) * BAND_CONTRAST;
+			const top = tops ? tops[b] : topOf(state.ceil, state.bandCeil[b]);
 			const v = (db - (top - RANGE_DB)) / RANGE_DB;
 			target[b] = v < 0 ? 0 : v > 1 ? 1 : v;
 		}

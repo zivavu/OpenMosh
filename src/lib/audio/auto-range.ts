@@ -107,8 +107,17 @@ export function smoothBandLevel(
 	return next;
 }
 
-/** Position of `level` in the band's recent range, in [0, 1]. */
-export function autoRangeLevel(key: string, level: number, dt: number): number {
+/** Position of `level` in the band's recent range, in [0, 1]. Given the band's range
+ * from the whole song, that is used instead, so the reading never depends on what
+ * played before: a quiet stretch stays quiet however the playhead got there. */
+export function autoRangeLevel(
+	key: string,
+	level: number,
+	dt: number,
+	song?: { floor: number; ceil: number } | null,
+): number {
+	if (song) return clamp01((level - song.floor) / (song.ceil - song.floor));
+
 	let env = envelopes.get(key);
 	if (!env) {
 		// Seeded around the first sample so playback starts mid-scale, not at 0.

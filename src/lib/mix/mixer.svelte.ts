@@ -5,9 +5,12 @@ import { startLinkTick } from "../audio/audio-controller";
 import type { AudioLinkGroup } from "../audio/audio-utils";
 import { resetAutoRange } from "../audio/auto-range";
 import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "../audio/offline-audio";
+import { buildSongProfile } from "../audio/build-song-profile";
+import type { SongProfile } from "../audio/song-profile";
 import { resetSpectrumBars } from "../audio/spectrum-bars";
 import type { SpectrumData } from "../types";
 import type { MixSegment } from "./plan";
+import { renderDrive } from "./render";
 import { scheduleMix, stopNodes, type ScheduledNode } from "./schedule";
 import type { SourceAudioBank } from "./source-audio.svelte";
 
@@ -105,6 +108,17 @@ export class SequenceMixer {
 				onLevel: (level) => (this.volumeLevel = level),
 			});
 		});
+	}
+
+	/** Profile of everything that drives the effects across the whole timeline: the
+	 * same sound an export reacts to, so both read it on the same scale. */
+	async analyseDrive(): Promise<SongProfile | null> {
+		const drive = await renderDrive(
+			this.plan,
+			(id) => this.#bank.buffer(id),
+			this.duration,
+		);
+		return drive ? buildSongProfile(drive) : null;
 	}
 
 	/** Swap in a new plan; a playing mix picks it up where it is. A change of volume

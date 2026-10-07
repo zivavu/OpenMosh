@@ -52,6 +52,9 @@
 		videoSourceEnds,
 	} from "../../mix/plan";
 	import { renderMix } from "../../mix/render";
+	import { getDecodedAudioBuffer } from "../../audio/audio-buffer-cache";
+	import { songProfileOf } from "../../audio/build-song-profile";
+	import { publishSongProfile } from "../../audio/song-profile";
 	import {
 		audioLanesEnd,
 		createAudioClip,
@@ -722,6 +725,29 @@
 		mixer.dispose();
 		audioBank.dispose();
 	});
+
+	// The audio links and Audio Bars read each moment against the whole song, so the
+	// song on screen is analysed once it's known, and again when the mix changes.
+	$effect(() => {
+		if (isSequenceMode) {
+			void mixer.plan;
+			void mixer.duration;
+			void audioBank.version;
+			const timer = setTimeout(
+				() => publishSongProfile(() => mixer.analyseDrive()),
+				400,
+			);
+			return () => clearTimeout(timer);
+		}
+		const song = audio.trackFile ?? (isVideo && videoHasAudio ? file : null);
+		const gain = audio.normalizeGain;
+		publishSongProfile(
+			song
+				? () => getDecodedAudioBuffer(song).then((b) => songProfileOf(b, gain))
+				: null,
+		);
+	});
+	$effect(() => () => publishSongProfile(null));
 
 	// Pull the element clock every frame while playing; ~4 Hz timeupdate alone makes it jump.
 	$effect(() => {
