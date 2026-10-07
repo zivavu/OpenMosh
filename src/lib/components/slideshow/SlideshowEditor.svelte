@@ -43,6 +43,7 @@
 	import { detectBpm } from "../../slideshow/bpm-detector";
 	import { SlideshowFrameDriver } from "../../slideshow/frame-driver";
 	import { executeSlideshowRecording } from "../../slideshow/slideshow-recorder";
+	import { downloadBlob } from "../../recorder";
 	import type {
 		SlideshowConfig,
 		SlideshowMoshMode,
@@ -1589,6 +1590,37 @@
 	/** The timeline's shared axis, once mounted: the C shortcut fires from the window. */
 	let timelineAxis = $state<TimelineStackState | undefined>(undefined);
 
+	/** The frame on screen as a PNG, re-rendered at the output size; effects at time 0, as the editor saves. */
+	function saveFrame() {
+		const canvas = canvasEl;
+		const r = glRenderer;
+		if (!canvas || !r || recordingState.recording) return;
+		if (slides.length === 0) {
+			showToast("Add images before saving a frame", "info");
+			return;
+		}
+		const shown =
+			previewPlaying && previewEffects.length > 0 ? previewEffects : effects;
+		const prevW = canvas.width;
+		const prevH = canvas.height;
+		const w = resizeWidth || prevW;
+		const h = resizeHeight || prevH;
+		const needsResize = w !== prevW || h !== prevH;
+		const draw = () => {
+			r.setBeat(beatsAt(textTime), config.bpm / 60);
+			r.render(shown, 0, currentTextLayers());
+		};
+		if (needsResize) r.resize(w, h);
+		draw();
+		canvas.toBlob((blob) => {
+			if (needsResize) {
+				r.resize(prevW, prevH);
+				draw();
+			}
+			if (blob) downloadBlob(blob, "png");
+		}, "image/png");
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		const mod = e.ctrlKey || e.metaKey;
 		const key = e.key.toLowerCase();
@@ -1606,7 +1638,12 @@
 			undoLatest(undoSources());
 			return;
 		}
-		// Leave every other modifier combo (copy, paste, save…) to the browser.
+		if (mod && key === "s" && !e.shiftKey) {
+			e.preventDefault();
+			saveFrame();
+			return;
+		}
+		// Leave every other modifier combo (copy, paste…) to the browser.
 		if (mod) return;
 
 		// The media lightbox owns the keyboard while it's up.

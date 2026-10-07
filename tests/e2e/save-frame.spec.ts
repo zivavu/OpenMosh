@@ -6,10 +6,11 @@ import {
 	openEditor,
 	openSingle,
 	PREVIEW_CANVAS,
+	selectMode,
 	waitForRender,
 	waitForSaved,
 } from "./app";
-import { BLUE, GREEN, RED, type Rgb } from "./fixtures";
+import { BLUE, GREEN, imageFile, RED, trackFile, type Rgb } from "./fixtures";
 
 /** Ctrl+S saves the frame as an image. It re-renders at the output size first, so the
  * saved file can disagree with the preview: a reopened editor project once saved black. */
@@ -87,4 +88,23 @@ test("saves the single-mode frame", async ({ page }) => {
 	await waitForRender(page);
 
 	expect(nearestColor(await saveAndMeasure(page), PALETTE)).toBe("blue");
+});
+
+test("saves the slideshow's frame", async ({ page }) => {
+	await page.goto("/");
+	await selectMode(page, "Slideshow");
+	await page
+		.locator('input[type="file"][accept*="audio"]')
+		.setInputFiles(trackFile("song.wav", { seconds: 3 }));
+	await page
+		.locator('input[type="file"][accept*="image/png"]')
+		.setInputFiles([
+			imageFile("green.png", GREEN, OUTGROWS_PREVIEW),
+			imageFile("green2.png", GREEN, OUTGROWS_PREVIEW),
+		]);
+	// A new slideshow opens on its grid; the preview canvas is there, just hidden.
+	await expect(page.locator(PREVIEW_CANVAS)).toBeAttached({ timeout: 30_000 });
+	await waitForRender(page);
+
+	expect(nearestColor(await saveAndMeasure(page), PALETTE)).toBe("green");
 });
