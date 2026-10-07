@@ -103,10 +103,9 @@ function getTwiddleTables(n: number): {
 	let real = twiddleRealTables.get(n);
 	let imag = twiddleImagTables.get(n);
 	if (!real || !imag) {
-		const log2n = Math.round(Math.log2(n));
-		const total = (n / 2) * log2n;
-		real = new Float32Array(total);
-		imag = new Float32Array(total);
+		// Each stage stores its len/2 twiddles once, shared by all of its blocks.
+		real = new Float32Array(n - 1);
+		imag = new Float32Array(n - 1);
 		let idx = 0;
 		for (let len = 2; len <= n; len *= 2) {
 			const angle = (-2 * Math.PI) / len;
@@ -164,15 +163,15 @@ function fftMagnitude(
 	}
 
 	const { real: wReal, imag: wImag } = getTwiddleTables(n);
-	let twiddleIdx = 0;
+	let stageBase = 0;
 	for (let len = 2; len <= n; len *= 2) {
 		const half = len / 2;
 		for (let i = 0; i < n; i += len) {
 			for (let j = 0; j < half; j++) {
 				const idx1 = i + j;
 				const idx2 = idx1 + half;
-				const wr = wReal[twiddleIdx];
-				const wi = wImag[twiddleIdx];
+				const wr = wReal[stageBase + j];
+				const wi = wImag[stageBase + j];
 				const uReal = real[idx1];
 				const uImag = imag[idx1];
 				const vReal = real[idx2] * wr - imag[idx2] * wi;
@@ -181,9 +180,9 @@ function fftMagnitude(
 				imag[idx1] = uImag + vImag;
 				real[idx2] = uReal - vReal;
 				imag[idx2] = uImag - vImag;
-				twiddleIdx++;
 			}
 		}
+		stageBase += half;
 	}
 
 	const half = n / 2;

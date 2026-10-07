@@ -1,7 +1,10 @@
 import { expect, mock, test } from "bun:test";
 
 let decodes = 0;
+// Spread the real module: bun's mocks outlive this file and other suites need the rest.
+const actual = { ...(await import("./offline-audio")) };
 mock.module("./offline-audio", () => ({
+	...actual,
 	decodeAudioFile: async () => ({ id: ++decodes }) as unknown as AudioBuffer,
 }));
 const { getDecodedAudioBuffer } = await import("./audio-buffer-cache");
