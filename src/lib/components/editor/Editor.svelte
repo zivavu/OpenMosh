@@ -4234,6 +4234,9 @@
 						? noMediaOverlay
 						: undefined}
 				spectrum={isSequenceMode ? mixer.frequencyData : audio.frequencyData}
+				spectrumSampleRate={isSequenceMode
+					? (mixer.spectrumData?.sampleRate ?? 0)
+					: audio.audioSampleRate}
 				{sourceFit}
 				sourceEdits={sourceRegistry.edits}
 				{sourceDurations}

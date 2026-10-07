@@ -41,11 +41,7 @@ import {
 	readCaptionParams,
 } from "../caption";
 import { DEFAULT_AUDIO_RESPONSE } from "../audio/auto-range";
-import {
-	dropSpectrumFollower,
-	normalizeSpectrum,
-	smoothSpectrum,
-} from "../audio/spectrum-range";
+import { dropSpectrumBars, stepSpectrumBars } from "../audio/spectrum-bars";
 import { createProgram, getUniformLocations } from "./utils";
 import { PYRAMID_DOWN_FRAG } from "./shader-lib";
 import {
@@ -1732,7 +1728,7 @@ export class GlRenderer {
 		for (const id of this.spectrumSmoothed.keys()) {
 			if (!live.has(id)) {
 				this.spectrumSmoothed.delete(id);
-				dropSpectrumFollower(id);
+				dropSpectrumBars(id);
 			}
 		}
 		for (const id of this.trackingStates.keys()) {
@@ -3344,22 +3340,23 @@ export class GlRenderer {
 		gl.getExtension("WEBGL_lose_context")?.loseContext();
 	}
 
-	/** One texel per FFT bin, R8. Rewritten per audio-bars instance as the chain is
-	 * walked, so each can follow the audio with its own Smoothing. */
+	/** One RG8 texel per bar: its level and its falling cap. Rewritten per audio-bars
+	 * instance as the chain is walked, so each steps its own bars. */
 	private spectrumTexture: WebGLTexture | null = null;
 	private spectrumW = 0;
 	private spectrumTime = -1;
-	/** This frame's normalized bins, held until the chain walk consumes them. */
+	/** This frame's raw bins, held until the chain walk consumes them. */
 	private spectrumFrame: Uint8Array | null = null;
+	private spectrumSampleRate = 0;
 	private spectrumDt = 0;
 	/** Bumped once per setSpectrum, so a chain walked twice in one frame (a transition
-	 * blend, stacked lanes) doesn't step the followers twice. */
+	 * blend, stacked lanes) doesn't step the bars twice. */
 	private spectrumSerial = 0;
 	private spectrumSmoothed = new Map<
 		string,
 		{ buf: Uint8Array; serial: number }
 	>();
-	private static readonly SILENCE = new Uint8Array(1);
+	private static readonly SILENCE = new Uint8Array(2);
 
 	/** Beat position of the frame being rendered, or null when no BPM is known. */
 	private beatPhase: number | null = null;
@@ -3373,24 +3370,24 @@ export class GlRenderer {
 	}
 
 	/** Hand the renderer this frame's FFT bins. Both drivers must keep calling it or a
-	 * visualizer would preview and export differently. Null uploads silence. */
-	setSpectrum(data: Uint8Array | null, time: number): void {
+	 * visualizer would preview and export differently. Null reads as silence. */
+	setSpectrum(data: Uint8Array | null, time: number, sampleRate: number): void {
 		// Its own clock, not frameDelta's: that one is consumed by render() and
 		// reading it here would leave the effect chain with a zero delta.
 		const raw = this.spectrumTime >= 0 ? time - this.spectrumTime : 0;
 		this.spectrumTime = time;
 		this.spectrumDt = raw > 0 && raw < 0.5 ? raw : 0;
-		this.spectrumFrame = normalizeSpectrum(data, this.spectrumDt);
+		this.spectrumFrame = data && data.length > 0 ? data : null;
+		this.spectrumSampleRate = sampleRate;
 		this.spectrumSerial++;
-		this.uploadSpectrumTexture(this.spectrumFrame);
 	}
 
-	/** Re-point the shared texture at `data`, resizing it if the bin count moved. */
+	/** Re-point the shared texture at `data`, resizing it if the bar count moved. */
 	private uploadSpectrumTexture(data: Uint8Array | null): void {
 		const gl = this.gl;
 		const payload =
-			data && data.length > 0 ? data : (GlRenderer.SILENCE as Uint8Array);
-		const width = payload.length;
+			data && data.length >= 2 ? data : (GlRenderer.SILENCE as Uint8Array);
+		const width = payload.length >> 1;
 		if (!this.spectrumTexture || this.spectrumW !== width) {
 			if (this.spectrumTexture) gl.deleteTexture(this.spectrumTexture);
 			this.spectrumTexture = gl.createTexture()!;
@@ -3398,14 +3395,14 @@ export class GlRenderer {
 			gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-			gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, width, 1);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+			gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG8, width, 1);
 		} else {
 			gl.bindTexture(gl.TEXTURE_2D, this.spectrumTexture);
 		}
-		// A single row of bytes: the default 4-byte row alignment would misread
-		// any bin count that isn't a multiple of four.
+		// A single row of two-byte texels: the default 4-byte row alignment would
+		// misread any odd bar count.
 		gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 		gl.texSubImage2D(
 			gl.TEXTURE_2D,
@@ -3414,39 +3411,36 @@ export class GlRenderer {
 			0,
 			width,
 			1,
-			gl.RED,
+			gl.RG,
 			gl.UNSIGNED_BYTE,
 			payload as Uint8Array<ArrayBuffer>,
 		);
 		gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
 	}
 
-	/** Put this instance's own envelope-followed copy of the frame on the texture,
-	 * right before it draws. Two Audio Bars at different Smoothing get their own follower. */
+	/** Step this instance's bars on this frame's bins and put them on the texture, right
+	 * before it draws. Two Audio Bars at different settings each keep their own. */
 	private uploadSpectrumFor(eff: EffectInstance): void {
-		const frame = this.spectrumFrame;
-		if (!frame || frame.length === 0) return;
 		const smoothing =
 			typeof eff.values.smoothing === "number"
 				? eff.values.smoothing
 				: DEFAULT_AUDIO_RESPONSE.smoothing;
+		const bars = typeof eff.values.bars === "number" ? eff.values.bars : 48;
 		let entry = this.spectrumSmoothed.get(eff.instanceId);
-		if (!entry || entry.buf.length !== frame.length) {
-			entry = { buf: new Uint8Array(frame.length), serial: -1 };
-			this.spectrumSmoothed.set(eff.instanceId, entry);
-		}
-		if (entry.serial !== this.spectrumSerial) {
-			entry.serial = this.spectrumSerial;
-			smoothSpectrum(
+		if (!entry || entry.serial !== this.spectrumSerial) {
+			const buf = stepSpectrumBars(
 				eff.instanceId,
-				frame,
-				entry.buf,
+				this.spectrumFrame,
+				this.spectrumSampleRate,
 				this.spectrumDt,
+				bars,
 				smoothing,
 			);
+			entry = { buf, serial: this.spectrumSerial };
+			this.spectrumSmoothed.set(eff.instanceId, entry);
 		}
-		// Re-uploaded even when the follower didn't step: another instance may have
-		// left its own buffer on the texture since.
+		// Re-uploaded even when the bars didn't step: another instance may have left
+		// its own on the texture since.
 		this.uploadSpectrumTexture(entry.buf);
 	}
 

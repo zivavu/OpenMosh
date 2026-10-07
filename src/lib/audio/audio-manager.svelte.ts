@@ -5,7 +5,7 @@ import {
 	type AudioGraphState,
 } from "./audio-controller";
 import { resetAutoRange } from "./auto-range";
-import { resetSpectrumRange } from "./spectrum-range";
+import { resetSpectrumBars } from "./spectrum-bars";
 import type { AudioLinkGroup } from "./audio-utils";
 import type { SpectrumData } from "../types";
 
@@ -270,12 +270,12 @@ export class AudioManager {
 		this.pastSpan = this.spanEnd > 0 && clamped >= this.spanEnd;
 		this.#resetClock(clamped);
 		resetAutoRange();
-		resetSpectrumRange();
+		resetSpectrumBars();
 	}
 
 	clearTrack() {
 		resetAutoRange();
-		resetSpectrumRange();
+		resetSpectrumBars();
 		this.#audioEl?.pause();
 		this.audioPlaying = false;
 		this.autoplayOnLoad = false;
