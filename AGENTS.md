@@ -69,6 +69,9 @@ edit: they eat context fast.
   `SEQ_ENTRY_VERSION`; a change to either gets a fixture. The zip writer and reader
   (`lib/project-file/zip.ts`) have no dependency and store entries rather than deflating them,
   so an archive is built from the media blobs without copying them through memory.
+- A backup (`.openmosh-backup`, `lib/backup/backup.ts`) is the same stored zip holding every
+  IndexedDB record and the `openmosh*` localStorage keys, with its own `BACKUP_VERSION`.
+  Loading one merges: records keep their ids and replace same-keyed ones; proxies stay out.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
   `chain-fanout.ts`, or a multi-selection edits only the primary clip.

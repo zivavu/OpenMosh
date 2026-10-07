@@ -499,6 +499,25 @@ function lastModifiedFromId(id: string): number {
 }
 
 /** Empties every store; clears rather than deleting the DB, which the open connection blocks. */
+/** The stores a backup carries; proxies rebuild themselves. */
+export type BackupStoreName =
+	| typeof STORE
+	| typeof POOL_STORE
+	| typeof SESSION_STORE
+	| typeof TIMELINE_STORE;
+
+/** Write records exactly as a backup holds them, timestamps included. */
+export async function putBackupRecords(
+	store: BackupStoreName,
+	entries: object[],
+): Promise<void> {
+	if (entries.length === 0) return;
+	void requestPersistentStorage();
+	await write(store, (s) => {
+		for (const entry of entries) s.put(entry);
+	});
+}
+
 export async function clearAllSequenceStores(): Promise<void> {
 	const db = await openDb();
 	await transact(db, REQUIRED_STORES, "readwrite", (tx) => {

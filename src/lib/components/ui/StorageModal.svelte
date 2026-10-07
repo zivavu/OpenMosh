@@ -18,6 +18,7 @@
 		Pencil,
 		Trash2,
 		Type,
+		Upload,
 		X,
 	} from "lucide-svelte";
 	import { onMount } from "svelte";
@@ -54,6 +55,12 @@
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo, saveBlobAs } from "../../utils";
 	import { buildProjectFile } from "../../project-file/export";
+	import {
+		BACKUP_EXTENSION,
+		backupFileName,
+		buildBackup,
+		restoreBackup,
+	} from "../../backup/backup";
 
 	let { onClose, onChanged }: Props = $props();
 
@@ -131,6 +138,46 @@
 				e instanceof Error ? e.message : "Couldn't save that project",
 				"error",
 			);
+		}
+	}
+
+	/** Which backup step is running, for the button's label. */
+	let backingUp = $state<"save" | "load" | null>(null);
+	let backupInput = $state<HTMLInputElement>();
+
+	async function downloadBackup() {
+		busy = true;
+		backingUp = "save";
+		try {
+			await saveBlobAs(await buildBackup(), backupFileName(), {
+				description: "OpenMosh backup",
+				accept: { "application/zip": [BACKUP_EXTENSION] },
+			});
+		} catch (e) {
+			console.error(e);
+			showToast("Couldn't build the backup", "error");
+		} finally {
+			busy = false;
+			backingUp = null;
+		}
+	}
+
+	/** Merged in, then reloaded: settings and fonts are read once at startup. */
+	async function loadBackup(file: File) {
+		busy = true;
+		backingUp = "load";
+		try {
+			await restoreBackup(file);
+			location.reload();
+		} catch (e) {
+			showToast(
+				e instanceof Error ? e.message : "Couldn't load that backup",
+				"error",
+				8000,
+			);
+			busy = false;
+			backingUp = null;
+			void refresh();
 		}
 	}
 
@@ -832,6 +879,49 @@
 				</section>
 			{/if}
 
+			<section>
+				<div class="section-head">
+					<span class="section-title">Backup</span>
+				</div>
+				<div class="backup">
+					<p class="note">
+						One file with everything above, plus your presets and settings. Load
+						it in another browser to pick up where you left off. Anything
+						already in that browser stays.
+					</p>
+					<span class="backup-actions">
+						<button
+							class="text-btn outline"
+							disabled={busy || isEmpty}
+							onclick={downloadBackup}
+						>
+							<Download size={12} />
+							{backingUp === "save" ? "Packing…" : "Download"}
+						</button>
+						<button
+							class="text-btn outline"
+							disabled={busy}
+							onclick={() => backupInput?.click()}
+						>
+							<Upload size={12} />
+							{backingUp === "load" ? "Loading…" : "Load"}
+						</button>
+					</span>
+					<input
+						bind:this={backupInput}
+						type="file"
+						accept={BACKUP_EXTENSION}
+						hidden
+						onchange={(e) => {
+							const input = e.currentTarget;
+							const file = input.files?.[0];
+							input.value = "";
+							if (file) void loadBackup(file);
+						}}
+					/>
+				</div>
+			</section>
+
 			{#if selectedCount > 0}
 				<div class="bulk">
 					<span class="bulk-text">
@@ -1452,6 +1542,28 @@
 
 	.proxy-size {
 		color: var(--start-dim);
+	}
+
+	.backup {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--line);
+		border-radius: var(--r-2);
+		background: var(--sunken);
+	}
+
+	.backup-actions {
+		display: flex;
+		flex-shrink: 0;
+		gap: 0.35rem;
+	}
+
+	.backup-actions .text-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 	}
 
 	.footer {

@@ -76,6 +76,13 @@ export function renameTrack(id: string, name: string): Promise<void> {
 	});
 }
 
+/** Songs from a backup, under the ids their projects point at. */
+export function putTracks(tracks: StoredTrack[]): Promise<void> {
+	return db.run("readwrite", (store) => {
+		for (const track of tracks) store.put(track);
+	});
+}
+
 export function deleteTrack(id: string): Promise<void> {
 	return db.delete(id);
 }
