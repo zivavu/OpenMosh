@@ -32,6 +32,7 @@
 		/** Deselects the clip, which puts the image effects back in the sidebar. */
 		onClose?: () => void;
 		hasTrack?: boolean;
+		beatSync?: boolean;
 		spectrumData?: SpectrumData | null;
 		response?: AudioResponse;
 		/** Which half to show: the clip's controls, or the lane's effect chain. */
@@ -50,6 +51,7 @@
 		onBeforeEdit,
 		onClose,
 		hasTrack = false,
+		beatSync = false,
 		spectrumData = null,
 		response = undefined,
 		section = "clip",
@@ -366,6 +368,7 @@
 				{onClipChange}
 				{onBeforeEdit}
 				{hasTrack}
+				{beatSync}
 				{spectrumData}
 				{response}
 				hint="this clip's text"

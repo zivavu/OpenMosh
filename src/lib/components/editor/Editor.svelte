@@ -4865,6 +4865,7 @@
 				onBeforeEdit={beforeMediaClipEdit}
 				onClose={() => (selectedMediaClipId = null)}
 				hasTrack={linksHaveAudio}
+				beatSync={sequenceBpm > 0}
 				spectrumData={liveSpectrum}
 				response={selectedMediaLane
 					? laneAudioResponse(selectedMediaLane, audioResponse)
@@ -4889,6 +4890,7 @@
 				onBeforeEdit={beforeTextClipEdit}
 				onClose={() => (selectedTextClipId = null)}
 				hasTrack={linksHaveAudio}
+				beatSync={sequenceBpm > 0}
 				spectrumData={liveSpectrum}
 				response={audioResponse}
 				{section}
@@ -4918,6 +4920,7 @@
 					rolledChain={!!panelIntervalClip}
 					rolledScope="moshable"
 					hasTrack={linksHaveAudio}
+					beatSync={sequenceBpm > 0}
 					spectrumData={liveSpectrum}
 					response={audioResponse}
 					onVolumeLinkChange={(index, paramKey, link) => {

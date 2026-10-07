@@ -50,6 +50,7 @@
 		/** Deselects the clip, which puts the image effects back in the sidebar. */
 		onClose?: () => void;
 		hasTrack?: boolean;
+		beatSync?: boolean;
 		spectrumData?: SpectrumData | null;
 		response?: AudioResponse;
 		/** Per-source edits, keyed by source id. Sparse: only edited media. */
@@ -77,6 +78,7 @@
 		onBeforeEdit,
 		onClose,
 		hasTrack = false,
+		beatSync = false,
 		spectrumData = null,
 		response = undefined,
 		edits = {},
@@ -603,6 +605,7 @@
 				{onClipChange}
 				{onBeforeEdit}
 				{hasTrack}
+				{beatSync}
 				{spectrumData}
 				{response}
 				hint="this clip's media"

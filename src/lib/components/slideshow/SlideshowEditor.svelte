@@ -1896,6 +1896,7 @@
 			onBeforeEdit={pushTextHistory}
 			onClose={() => (selectedTextClipId = null)}
 			hasTrack={!!audio.trackFile}
+			beatSync={config.bpm > 0}
 			spectrumData={audio.spectrumData}
 			response={DEFAULT_AUDIO_RESPONSE}
 			{section}
@@ -1923,6 +1924,7 @@
 				headless
 				bind:effects
 				hasTrack={!!audio.trackFile}
+				beatSync={config.bpm > 0}
 				spectrumData={audio.spectrumData}
 				rolledNote={panelRolledNote}
 				rolledChain={config.moshMode === "random"}

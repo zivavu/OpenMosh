@@ -56,6 +56,7 @@
 	import { isMaskEffect, maskAwaitingImage } from "../../effects/catalog/mask";
 	import { maskFromImage } from "../../brush/mask-image";
 	import { showToast } from "./toast.svelte";
+	import { SYNC_KEY } from "../../effects/clock-params";
 	import { KEY_RANGE_MAX, KEY_SOFTNESS_MAX } from "../../color-key";
 	import {
 		parseKeys,
@@ -118,6 +119,8 @@
 	interface Props {
 		effect: EffectInstance;
 		hasTrack?: boolean;
+		/** False without a beat grid: Sync goes and clock effects show their free speed. */
+		beatSync?: boolean;
 		spectrumData?: SpectrumData | null;
 		/** How this chain follows the music; the spectrum read-out is drawn through
 		 * it, so it shows the value the parameter actually rides. */
@@ -161,6 +164,7 @@
 	let {
 		effect,
 		hasTrack = false,
+		beatSync = false,
 		spectrumData = null,
 		response = DEFAULT_AUDIO_RESPONSE,
 		onVolumeLinkChange,
@@ -188,6 +192,21 @@
 	}: Props = $props();
 
 	const def = $derived(getDefinition(effect.defId));
+
+	// The renderer runs a beat-synced clock free when there's no grid, so the panel shows it that way.
+	const visibleParams = $derived.by(() => {
+		if (!def) return [];
+		if (beatSync || !(SYNC_KEY in effect.values)) {
+			return def.params.filter((p) => isParamVisible(p, effect));
+		}
+		const asFree = {
+			...effect,
+			values: { ...effect.values, [SYNC_KEY]: "free" },
+		};
+		return def.params.filter(
+			(p) => p.key !== SYNC_KEY && isParamVisible(p, asFree),
+		);
+	});
 
 	let canDrag = $state(false);
 
@@ -533,7 +552,7 @@
 							{/if}
 						</div>
 					{/if}
-					{#each def.params.filter((p) => isParamVisible(p, effect)) as param}
+					{#each visibleParams as param}
 						<div class="param-row">
 							<label class="param-label" for="{effect.instanceId}-{param.key}"
 								>{param.label}</label
