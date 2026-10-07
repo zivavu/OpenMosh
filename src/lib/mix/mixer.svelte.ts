@@ -5,7 +5,7 @@ import { startLinkTick } from "../audio/audio-controller";
 import type { AudioLinkGroup } from "../audio/audio-utils";
 import { resetAutoRange } from "../audio/auto-range";
 import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "../audio/offline-audio";
-import { resetSpectrumRange } from "../audio/spectrum-range";
+import { resetSpectrumBars } from "../audio/spectrum-bars";
 import type { SpectrumData } from "../types";
 import type { MixSegment } from "./plan";
 import { scheduleMix, stopNodes, type ScheduledNode } from "./schedule";
@@ -255,7 +255,7 @@ export class SequenceMixer {
 			this.#reschedule(true);
 		}
 		resetAutoRange();
-		resetSpectrumRange();
+		resetSpectrumBars();
 	}
 
 	#frame = () => {

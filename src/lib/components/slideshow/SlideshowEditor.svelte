@@ -1253,7 +1253,11 @@
 
 			textTime = t;
 			// Slideshow drives the renderer itself, so it owns this call too.
-			glRenderer.setSpectrum(audio.frequencyData, nowMs / 1000);
+			glRenderer.setSpectrum(
+				audio.frequencyData,
+				nowMs / 1000,
+				audio.audioSampleRate,
+			);
 			glRenderer.setBeat(beatsAt(t), config.bpm / 60);
 			glRenderer.render(
 				previewEffects.length > 0 ? previewEffects : effects,

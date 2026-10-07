@@ -13,7 +13,7 @@ import {
 	loopAudioBuffer,
 	trimAudioBuffer,
 } from "./audio/offline-audio";
-import { resetSpectrumRange } from "./audio/spectrum-range";
+import { resetSpectrumBars } from "./audio/spectrum-bars";
 import { stretchAudioBuffer } from "./audio/time-stretch";
 import {
 	type MediaChainSource,
@@ -696,7 +696,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 
 	// Otherwise the output's first seconds depend on where the preview was scrubbed.
 	resetAutoRange();
-	resetSpectrumRange();
+	resetSpectrumBars();
 
 	let finished = false;
 	try {
@@ -754,7 +754,11 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				layerGroups.length > 0 ? layerGroups : null,
 			);
 			// The bars read this straight off the GPU, so push the same bins the preview would.
-			renderer.setSpectrum(frameAudioData[i]?.frequencyData ?? null, time);
+			renderer.setSpectrum(
+				frameAudioData[i]?.frequencyData ?? null,
+				time,
+				audioSampleRate,
+			);
 			// Beat-synced effects read the grid off the same master clock the text lanes do.
 			renderer.setBeat(beat, bpm / 60);
 			if (typeof skipRender === "function") skipRender(textLayers, mediaLayers);

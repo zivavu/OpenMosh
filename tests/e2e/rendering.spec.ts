@@ -115,7 +115,7 @@ async function renderEveryEffect(page: Page): Promise<RenderReport> {
 			};
 
 			const drawAt = (chain: unknown[], time: number) => {
-				renderer.setSpectrum(spectrumAt(time), time);
+				renderer.setSpectrum(spectrumAt(time), time, 48000);
 				// Two beats a second, so the beat-synced effects advance too.
 				renderer.setBeat(time * 2, 2);
 				renderer.render(chain, time);

@@ -59,6 +59,12 @@ export const definition: EffectDefinition = {
 			defaultValue: 0.4,
 		},
 		{
+			key: "peaks",
+			label: "Peaks",
+			type: "checkbox",
+			defaultValue: 1,
+		},
+		{
 			key: "opacity",
 			label: "Opacity",
 			type: "range",
@@ -108,25 +114,24 @@ uniform float u_punch;
 uniform float u_opacity;
 uniform int u_anchor;
 uniform int u_style;
+uniform int u_peaks;
 uniform vec3 u_color;
+
+// Punch reshapes the response as for volume links: below 1 lifts quiet detail
+// into movement, above 1 leaves only the hits.
+float shape(float v) {
+  return clamp(pow(v, u_punch) * u_gain, 0.0, 1.0) * u_height;
+}
+
 void main() {
   vec4 src = texture(u_texture, v_uv);
   float bars = max(floor(u_bars), 1.0);
   float slot = v_uv.x * bars;
-  float idx = floor(slot) / bars;
-
-  // Bass occupies a tiny slice of a linear FFT, so square the lookup to give the low end width.
-  float lo = idx * idx;
-  float hi = (idx + 1.0 / bars) * (idx + 1.0 / bars);
-  float level = 0.0;
-  for (int i = 0; i < 8; i++) {
-    float f = mix(lo, hi, (float(i) + 0.5) / 8.0);
-    // Peak of the bins this bar spans, not their mean, which reads as mush.
-    level = max(level, texture(u_spectrum, vec2(f, 0.5)).r);
-  }
-  // Punch reshapes the response as for volume links: below 1 lifts quiet detail
-  // into movement, above 1 leaves only the hits.
-  level = clamp(pow(level, u_punch) * u_gain, 0.0, 1.0) * u_height;
+  // One texel per bar: its level, then its falling cap.
+  int last = textureSize(u_spectrum, 0).x - 1;
+  vec2 bar = texelFetch(u_spectrum, ivec2(min(int(slot), last), 0), 0).rg;
+  float level = shape(bar.r);
+  float peak = shape(bar.g);
 
   // v_uv.y runs top-down, so anchoring to the bottom means measuring back up.
   float d = u_anchor == 1 ? v_uv.y
@@ -144,6 +149,12 @@ void main() {
   // Hot tips: a flat colour column reads as a dead bar chart.
   float tip = 1.0 + 0.8 * (1.0 - smoothstep(0.0, 0.12, max(level - d, 0.0)));
   vec3 col = clamp(u_color * tip, 0.0, 1.0);
+
+  if (u_peaks == 1 && peak > 0.01) {
+    float cap = smoothstep(peak - 0.014, peak - 0.010, d) * (1.0 - smoothstep(peak - 0.002, peak + 0.002, d)) * gap;
+    col = mix(col, mix(u_color, vec3(1.0), 0.6), cap);
+    fill = max(fill, cap);
+  }
   outColor = vec4(mix(src.rgb, col, clamp(fill, 0.0, 1.0) * u_opacity), src.a);
 }`,
 	animated: true,
@@ -169,6 +180,7 @@ void main() {
 			v.anchor === "top" ? 1 : v.anchor === "center" ? 2 : 0,
 		);
 		setInt(gl, l, "u_style", v.style === "segmented" ? 1 : 0);
+		setInt(gl, l, "u_peaks", v.peaks === 0 ? 0 : 1);
 		setColor(gl, l, "u_color", v.color as string);
 	},
 };

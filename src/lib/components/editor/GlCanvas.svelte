@@ -127,6 +127,8 @@
 		onTextDragStart?: ((clipId: string) => void) | null;
 		/** Live FFT bins for the audio-bars effect; the AnalyserNode mutates one array in place. */
 		spectrum?: Uint8Array | null;
+		/** Sample rate of the context that produced `spectrum`, to place its bins in Hz. */
+		spectrumSampleRate?: number;
 	}
 
 	let {
@@ -150,6 +152,7 @@
 		postLayers = EMPTY_POST,
 		sourceKey = null,
 		spectrum = null,
+		spectrumSampleRate = 0,
 		sourceFit = "contain",
 		sourceEdits = EMPTY_SOURCE_EDITS,
 		sourceDurations = EMPTY_SOURCE_DURATIONS,
@@ -817,7 +820,7 @@
 
 	function drawFrame(now: number) {
 		// Before anything renders: the bars have to see this frame's audio.
-		renderer!.setSpectrum(spectrum, now);
+		renderer!.setSpectrum(spectrum, now, spectrumSampleRate);
 		const beat = bpm > 0 ? (textTime * bpm) / 60 : null;
 		renderer!.setBeat(beat, bpm / 60);
 		const solo = soloMediaLaneId;
