@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.10](https://github.com/zivavu/OpenMosh/compare/v0.9.9...v0.9.10) (2026-10-07)
+
+This release reworks several effects ahead of 1.0. Glow, VHS, Insta Color, Bulge and Jitter look different, Slices has an Angle slider, and Polar is gone.
+
+Older projects keep their settings, but some of them now look different. Glow's Cutoff runs the other way: a low value lights up less of the picture. Saved chains lose Polar. Kaleido mirrors the top half of the frame. VHS static comes and goes in bursts, Insta Color's filters keep their names with new grading, and Bulge is gentler at middle amounts. Slices set to Horizontal open at 0° and Vertical at 90°. Jitter's Speed slider now sets how fast it jitters.
+
+### Added
+
+* Give Glow a soft, colourful halo ([61d7a0e](https://github.com/zivavu/OpenMosh/commit/61d7a0ee437148c523044f2611549e826f5211ae))
+* Make VHS static flicker in random bursts ([07bed17](https://github.com/zivavu/OpenMosh/commit/07bed17d238d51ebb94d683ea2acf1fdd1d4e148))
+* Rebuild Insta Color's filters with smoother, cleaner grading ([33abb76](https://github.com/zivavu/OpenMosh/commit/33abb769dd1d27093386ee8133321aa4723d9125))
+* Make Jitter fray the image in random, drifting patches ([d4ddd4b](https://github.com/zivavu/OpenMosh/commit/d4ddd4b23e4a5aa3a100208c13ceb895f4b3e041))
+* Replace Slices' direction with an Angle slider ([a151de7](https://github.com/zivavu/OpenMosh/commit/a151de7525ce07fa354f8a169ac09144c239da40))
+* Add Feather to Circle Warp ([89ddbef](https://github.com/zivavu/OpenMosh/commit/89ddbefa9c46bc65fc69c81f249066668e43b0cd))
+* Add Position X and Y to 3D Transform ([24ddda3](https://github.com/zivavu/OpenMosh/commit/24ddda3525beaa13ca6c2983eb16c5f8740346cc))
+* Remove the Polar effect ([c6b6183](https://github.com/zivavu/OpenMosh/commit/c6b6183c02a16430462cfd6629c5e1d7a99ec67a))
+
+### Fixed
+
+* Stop Bulge smearing into rays at high amounts ([38ab14d](https://github.com/zivavu/OpenMosh/commit/38ab14d8d340ae763f774fb0942fe361398f1941))
+* Mirror Kaleido from the top half of the frame ([31a6931](https://github.com/zivavu/OpenMosh/commit/31a6931aa817082d2c1db11193a1e94454e1d730))
+
 ## [0.9.9](https://github.com/zivavu/OpenMosh/compare/v0.9.8...v0.9.9) (2026-10-06)
 
 The new Mask effect limits effects to part of the picture. It started as a feature request ([#44](https://github.com/zivavu/OpenMosh/issues/44)). Edit Media's background key now matches colors the same way the Mask does.
