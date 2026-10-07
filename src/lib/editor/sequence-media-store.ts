@@ -48,7 +48,7 @@ export interface StoredSession {
 	mode: SessionMode;
 	/** What the upload screen shows: the song's name, or the media's. */
 	label: string;
-	/** The song this edit belongs to, when one was loaded. Part of the key. */
+	/** The song this edit belongs to, when one was loaded. Older edits are keyed by it. */
 	trackId?: string;
 	sourceIds: string[];
 	/** Mode-specific; shape is owned by whoever wrote it. */
@@ -433,9 +433,16 @@ export async function pruneSequenceMedia(): Promise<void> {
 	}
 }
 
-/** The timelines a session's editor saves to: its song's, else its video's. */
+/** An edit keyed by its own id (`single:p:…`), not by the song or file it began with. */
+export function isOwnSessionKey(key: string): boolean {
+	return /^(?:single|slideshow):p:/.test(key);
+}
+
+/** The timelines a session's editor saves to: its own, else its song's, else its video's. */
 export function sessionTimelineKeys(session: StoredSession): string[] {
 	if (session.mode !== "single") return [];
+	// The editor keys a single edit's timeline exactly as the session.
+	if (isOwnSessionKey(session.key)) return [session.key];
 	if (session.trackId) return [`single:${session.trackId}`];
 	const id = session.sourceIds[0];
 	const parts = id?.startsWith("src:") ? id.slice(4).split(":") : [];

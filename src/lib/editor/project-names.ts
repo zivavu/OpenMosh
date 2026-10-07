@@ -12,6 +12,15 @@ export function projectKeyForSession(sessionKey: string): string {
 	return TRACK_SESSION.exec(sessionKey)?.[1] ?? sessionKey;
 }
 
+/** `name`, or `name (2)`, `name (3)`… whichever no other project shows yet. */
+export function uniqueName(name: string, taken: Iterable<string>): string {
+	const used = new Set(taken);
+	if (!used.has(name)) return name;
+	let n = 2;
+	while (used.has(`${name} (${n})`)) n++;
+	return `${name} (${n})`;
+}
+
 export function readProjectNames(): Record<string, string> {
 	const raw = readJson<unknown>(KEY, null);
 	return raw && typeof raw === "object" && !Array.isArray(raw)
