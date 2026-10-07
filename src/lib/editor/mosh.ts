@@ -42,14 +42,17 @@ export function isMoshable(effect: EffectInstance): boolean {
 }
 
 /** Effects a roll may switch on. Curated skips the ones marked `moshable: false`;
- * random takes anything unlocked. */
+ * random takes anything unlocked. Without music, neither picks a `needsAudio` one. */
 export function isRollable(
 	effect: EffectInstance,
 	style: MoshStyle = "random",
+	hasAudio = true,
 ): boolean {
+	const def = getDefinition(effect.defId);
 	return (
 		isMoshable(effect) &&
-		(style !== "curated" || getDefinition(effect.defId)?.moshable !== false)
+		(style !== "curated" || def?.moshable !== false) &&
+		(hasAudio || !def?.needsAudio)
 	);
 }
 
@@ -167,10 +170,12 @@ export function generateMosh(
 	const style = options.moshStyle ?? "random";
 	// Unlocked effects the style never picks still go off with the roll.
 	for (const e of effects) {
-		if (isMoshable(e) && !isRollable(e, style)) e.enabled = false;
+		if (isMoshable(e) && !isRollable(e, style, options.hasAudio))
+			e.enabled = false;
 	}
 	const moshable = effects.filter(
-		(e) => isRollable(e, style) && (!onlyMoshEnabled || e.enabled),
+		(e) =>
+			isRollable(e, style, options.hasAudio) && (!onlyMoshEnabled || e.enabled),
 	);
 	const clampedMin = Math.min(moshMin, moshable.length);
 	const clampedMax = Math.min(moshMax, moshable.length);

@@ -108,6 +108,8 @@ export interface EffectDefinition {
 	hint?: string;
 	/** Never picked by a curated roll; random rolls and the lock treat it like any other. */
 	moshable?: false;
+	/** Draws nothing useful without music, so the panel hides it until there is a track. */
+	needsAudio?: true;
 	/** The param the renderer integrates into `u_time`, so changing it changes the rate
 	 * rather than the position. Defaults to "speed", where there is one. */
 	rateParam?: string;

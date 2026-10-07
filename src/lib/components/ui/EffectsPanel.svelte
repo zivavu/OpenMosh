@@ -347,8 +347,10 @@
 		const rows = effects
 			.map((e, i) => ({ effect: e, index: i }))
 			.filter(({ effect }) => {
-				if (!searchQuery) return true;
 				const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
+				// A switched-on one stays, so nothing renders that the list doesn't show.
+				if (def?.needsAudio && !hasTrack && !inLiveGroup(effect)) return false;
+				if (!searchQuery) return true;
 				return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
 			});
 		if (!liveFirst) return rows;
