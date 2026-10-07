@@ -51,6 +51,7 @@
 		/** No "Signal chain" head; the live count moves into the search row. */
 		headless?: boolean;
 		hasTrack?: boolean;
+		beatSync?: boolean;
 		spectrumData?: SpectrumData | null;
 		/** Passed to the spectrum read-out on each volume link. */
 		response?: AudioResponse;
@@ -85,6 +86,7 @@
 	let {
 		effects = $bindable(),
 		hasTrack = false,
+		beatSync = false,
 		spectrumData = null,
 		response = undefined,
 		onVolumeLinkChange,
@@ -900,6 +902,7 @@
 					canMoveDown={rows[rows.length - 1]?.effect !== effect}
 					onMove={(direction, toEnd) => moveEffect(effect, direction, toEnd)}
 					{hasTrack}
+					{beatSync}
 					{spectrumData}
 					{response}
 					onVolumeLinkChange={onVolumeLinkChange

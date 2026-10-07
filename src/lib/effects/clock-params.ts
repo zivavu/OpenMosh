@@ -1,5 +1,7 @@
 import type { EffectParam } from "./types";
 
+export const SYNC_KEY = "sync";
+
 /** A clock the renderer can run free or off the song grid; a division is cycles per beat. */
 export function clockParams(
 	label: string,
@@ -15,7 +17,7 @@ export function clockParams(
 ): EffectParam[] {
 	return [
 		{
-			key: "sync",
+			key: SYNC_KEY,
 			label: "Sync",
 			type: "select",
 			defaultValue: "free",

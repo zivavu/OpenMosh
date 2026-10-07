@@ -14,6 +14,7 @@
 		onClipChange: (clip: C) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
 		hasTrack?: boolean;
+		beatSync?: boolean;
 		spectrumData?: SpectrumData | null;
 		response?: AudioResponse;
 		/** What the chain runs on: "this clip's media", "this clip's text". */
@@ -29,6 +30,7 @@
 		onClipChange,
 		onBeforeEdit,
 		hasTrack = false,
+		beatSync = false,
 		spectrumData = null,
 		response = undefined,
 		hint,
@@ -70,6 +72,7 @@
 	rolledChain={clip.mode === "interval"}
 	rolledScope="moshable"
 	{hasTrack}
+	{beatSync}
 	{spectrumData}
 	{response}
 	onVolumeLinkChange={(i, key, link) => {
