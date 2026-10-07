@@ -1091,6 +1091,13 @@
 		renderer?.setSourceDurations(new Map(Object.entries(sourceDurations)));
 	});
 
+	/** Draw the whole frame (layers, lanes, text) now, for a capture to read back. */
+	export function drawNow(time: number): boolean {
+		if (!renderer || suspended || externallyDriven) return false;
+		drawFrame(time);
+		return true;
+	}
+
 	// An erase mask is decoded from a data URL, so it lands a frame or two after the edit.
 	/** Draw what the editor holds right now and judge it; false whenever it can't tell. */
 	export function frameLooksDeadNow(): boolean {
