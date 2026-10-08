@@ -831,7 +831,9 @@ export class ClipLaneController<
 			}
 			return;
 		}
+		// Escape marked as used, so fullscreen only exits on one nothing else took.
 		if (e.key === "Escape" && this.pastingJoins) {
+			e.preventDefault();
 			this.cancelJoinPaste();
 			return;
 		}
@@ -839,6 +841,7 @@ export class ClipLaneController<
 			e.key === "Escape" &&
 			(this.host.selectedClipIds.length > 0 || this.selectedJoins.length > 0)
 		) {
+			e.preventDefault();
 			this.deselect();
 			return;
 		}

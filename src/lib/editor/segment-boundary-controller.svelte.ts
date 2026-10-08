@@ -244,10 +244,12 @@ export class SegmentBoundaryController<
 		}
 		if (e.key === "Escape" && !isInteractiveTarget(e.target)) {
 			if (this.pasteMode) {
+				e.preventDefault();
 				this.cancelPaste();
 				return true;
 			}
 			if (this.selectedBoundaryTimes.length > 0) {
+				e.preventDefault();
 				this.clearSelection();
 				return true;
 			}

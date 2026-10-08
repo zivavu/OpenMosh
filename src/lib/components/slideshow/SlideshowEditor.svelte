@@ -1680,6 +1680,7 @@
 		if (isInteractiveTarget(e.target)) return;
 
 		if (e.code === "Escape" && previewPlaying) {
+			e.preventDefault();
 			stopPreview();
 		} else if (e.key === "ArrowRight") {
 			e.preventDefault();
