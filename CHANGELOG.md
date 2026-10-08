@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.9.12](https://github.com/zivavu/OpenMosh/compare/v0.9.11...v0.9.12) (2026-10-08)
+
+
+### Added
+
+* Auto clips run their own effect chain after the mosh, and you can edit it. In older projects an auto clip keeps only its locked effects and Masks, which is all it ever showed. ([16d3d2e](https://github.com/zivavu/OpenMosh/commit/16d3d2e996b50d1b482727e7fc68abc69a58eae3))
+* In Chrome and Edge, Esc clears the selection before it leaves fullscreen. Hold Esc to leave straight away. ([0e84a7f](https://github.com/zivavu/OpenMosh/commit/0e84a7f6cfc78664867bc8eedefb6bb5643eb1fb))
+* Tell you what an old save lost when it loads ([ad62acd](https://github.com/zivavu/OpenMosh/commit/ad62acd5d4836db133fb0008b4748db305bac2a2))
+
+
+### Fixed
+
+* A Mask on a media clip no longer snaps the clip to the middle of the frame, and its shape and Invert work again. ([88772ff](https://github.com/zivavu/OpenMosh/commit/88772ffc1d5e4f18f9c0128c49d4d143282375b7))
+* Keep this browser's presets when loading a backup ([0487459](https://github.com/zivavu/OpenMosh/commit/048745952dca1dc5bdd2227d62558be124d33867))
+
+
+### Faster
+
+* Soloing a media lane no longer slows the preview down. ([727bfb3](https://github.com/zivavu/OpenMosh/commit/727bfb3b1ee2271180c658f1be6d37977a13fdf5))
+
 ## [0.9.11](https://github.com/zivavu/OpenMosh/compare/v0.9.10...v0.9.11) (2026-10-07)
 
 This release rebuilds Audio Bars and the way effects follow the music. It also adds a backup: the storage button on the start screen saves every project, preset and setting to one file, which you can load in another browser.
