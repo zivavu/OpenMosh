@@ -847,6 +847,7 @@
 		// What a click can land on is what the frame actually drew.
 		pickable = { media: shown, text: layers };
 		renderer!.setBlankSource(!!solo);
+		if (solo) renderer!.holdMediaLayers(media);
 		// The render hands over the source chain plus the layers, not the flat `effects`.
 		const stacked = postLayers.reduce((n, l) => n + l.effects.length, 0);
 		const base =
