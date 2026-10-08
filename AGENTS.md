@@ -178,7 +178,8 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
   `bun run test:e2e` when a change touches a flow `tests/e2e` covers (drops, the timeline,
   export, persistence). A `main` ruleset requires `check`, `e2e` and `conventional` to pass, so a
   red e2e blocks the merge; when a behavior change breaks a spec, update the spec in the same
-  commit.
+  commit. CI runs on PRs only (release PRs skip it), and the ruleset requires a PR to be up to
+  date with `main`, so what merges is exactly what was tested.
 - Don't open a PR until I ask for one: I test by hand first. Then rebase the branch on current
   `main`, push, and open it with `gh pr create`. The title just names the batch; the body lists
   the commits in a few lines, each starting with its short hash
