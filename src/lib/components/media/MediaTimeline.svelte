@@ -443,7 +443,9 @@
 
 	function chainLabel(clip: MediaClip): string | null {
 		if (clip.label === "clean" && !clip.modified) return null;
-		return clip.modified ? `${clip.label}*` : clip.label;
+		return clip.modified && clip.mode !== "interval"
+			? `${clip.label}*`
+			: clip.label;
 	}
 
 	/** Turning solo on aims the sidebar at the lane too. Only ever an existing clip,

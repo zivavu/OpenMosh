@@ -48,11 +48,14 @@
 	$effect(() => chain.sync());
 
 	/** A hand-edit to a preset-filled clip: the label gains a "*" and explicit
-	 * preset overwrites stop clobbering it. */
+	 * preset overwrites stop clobbering it. An auto clip keeps its label. */
 	function onChainEdited() {
 		chain.commit();
 		const next = $state.snapshot(clip) as C;
-		if (isHandBuiltLabel(next)) next.label = handBuiltLabel(next.effects);
+		if (next.mode === "interval") {
+			if (next.presetName) next.modified = true;
+		} else if (isHandBuiltLabel(next))
+			next.label = handBuiltLabel(next.effects);
 		else if (!next.modified) next.modified = true;
 		if (next.label !== clip.label || next.modified !== clip.modified) {
 			onClipChange({ ...clip, label: next.label, modified: next.modified });
@@ -61,16 +64,17 @@
 </script>
 
 {@render children?.()}
-<p class="hint">These effects only run on {hint}, before it meets the frame.</p>
+<p class="hint">
+	{#if clip.mode === "interval"}
+		These effects run on {hint} after the auto mosh, before it meets the frame.
+	{:else}
+		These effects only run on {hint}, before it meets the frame.
+	{/if}
+</p>
 <EffectsPanel
 	headless
 	{note}
 	bind:effects={() => chain.effects, (v) => (chain.effects = v)}
-	rolledNote={clip.mode === "interval"
-		? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Lock an effect to keep it through every roll, hide one to keep it out, or switch the clip to Static in the clip bar to build a chain by hand."
-		: null}
-	rolledChain={clip.mode === "interval"}
-	rolledScope="moshable"
 	{hasTrack}
 	{beatSync}
 	{spectrumData}
@@ -85,7 +89,7 @@
 		onClipChange({
 			...clip,
 			effects: $state.snapshot(chain.effects) as C["effects"],
-			label: preset.name,
+			label: clip.mode === "interval" ? clip.label : preset.name,
 			presetName: preset.name,
 			modified: false,
 		})}

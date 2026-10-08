@@ -257,6 +257,31 @@ describe("interval clips", () => {
 			renderShape(source(lanes)(2.5)),
 		);
 	});
+
+	test("the clip's own chain runs after every roll", () => {
+		const own = clip("own", 0, 8, ["grain"]).effects;
+		const lanes = [lane("a", [{ ...auto("c1", 0, 8, 1), effects: own }])];
+		const src = source(lanes);
+		for (const t of [0.5, 1.5, 2.5]) {
+			expect(src(t).slice(-own.length)).toEqual(own);
+		}
+		expect(src(0.5)).not.toEqual(src(1.5));
+	});
+
+	test("a tick hands back the same chain until the clip's chain is replaced", () => {
+		const c = auto("c1", 0, 8, 1);
+		const lanes = [lane("a", [c])];
+		const src = createFxLayerSource(
+			() => lanes,
+			() => OPTIONS,
+		);
+		const before = src(0.2)[0].effects;
+		expect(src(0.6)[0].effects).toBe(before);
+		c.effects = clip("own", 0, 8, ["grain"]).effects;
+		const after = src(0.7)[0].effects;
+		expect(after).not.toBe(before);
+		expect(after.at(-1)).toBe(c.effects[0]);
+	});
 });
 
 describe("fxClipWeight", () => {
@@ -681,7 +706,7 @@ describe("per-lane settings", () => {
 			{
 				...lane("a", [
 					{
-						...clip("c1", 0, 5, ["grain"]),
+						...clip("c1", 0, 5, []),
 						mode: "interval" as const,
 						seed: 3,
 					},

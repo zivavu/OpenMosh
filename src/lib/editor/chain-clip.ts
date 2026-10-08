@@ -22,8 +22,8 @@ import {
 	cleanEffects,
 	DEFAULT_INTERVAL_SEC,
 	handBuiltLabel,
+	isHeld,
 	keepLocked,
-	lockedKey,
 	randomSeed,
 	rollEffects,
 	type ChainMode,
@@ -61,7 +61,10 @@ export function withChainMode<C extends ChainClip>(
 	intervalBeats?: number | null,
 ): C {
 	if (mode === "static") {
-		return { ...clip, mode: "static", label: clip.presetName ?? clip.label };
+		const label =
+			clip.presetName ??
+			(clip.mode === "interval" ? handBuiltLabel(clip.effects) : clip.label);
+		return { ...clip, mode: "static", label };
 	}
 	return {
 		...clip,
@@ -199,7 +202,37 @@ export function splitChainClipAt<
 	};
 }
 
-/** The chain a clip contributes at `time`; static clips hand back their own array. */
+/** Each chain array's identity as a number, so a cache key follows a replaced chain. */
+const chainIds = new WeakMap<EffectInstance[], number>();
+let nextChainId = 0;
+
+function chainId(effects: EffectInstance[]): number {
+	let id = chainIds.get(effects);
+	if (id === undefined) {
+		id = nextChainId++;
+		chainIds.set(effects, id);
+	}
+	return id;
+}
+
+/** The clip's own chain; with `clone`, a deep copy cached per clip, since it holds
+ * for the clip's whole span. */
+function ownChain(
+	clip: ChainClip,
+	cache: Map<string, EffectInstance[]>,
+	clone: boolean,
+): EffectInstance[] {
+	if (!clone) return clip.effects;
+	let cloned = cache.get(clip.id);
+	if (!cloned) {
+		cloned = cloneChainEffects(clip.effects);
+		cache.set(clip.id, cloned);
+	}
+	return cloned;
+}
+
+/** The chain a clip contributes at `time`. A static clip hands back its own chain; an
+ * auto clip rolls a mosh per tick and runs its own chain after it. */
 export function chainClipEffectsAt(
 	clip: ChainClip,
 	time: number,
@@ -207,27 +240,37 @@ export function chainClipEffectsAt(
 	clone: boolean,
 	getMoshOptions: () => MoshOptions,
 ): EffectInstance[] {
-	if (clip.mode !== "interval") {
-		if (!clone) return clip.effects;
-		// Cached per clip, not per frame: a static clip's chain is the same for its whole span.
-		let cloned = cache.get(clip.id);
-		if (!cloned) {
-			cloned = cloneChainEffects(clip.effects);
-			cache.set(clip.id, cloned);
-		}
-		return cloned;
-	}
+	const own = ownChain(clip, cache, clone);
+	if (clip.mode !== "interval") return own;
 
 	const options = getMoshOptions();
 	const tick = chainClipTick(clip, time);
 	const seed = (clip.seed ?? 0) + tick * 7919;
-	const key = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${options.model}:${lockedKey(clip.effects)}`;
+	const rollKey = `${clip.id}:${seed}:${options.moshMin}:${options.moshMax}:${options.moshStyle ?? "random"}:${options.randomizeOrder}:${options.moshAudioLink}:${options.moshAudioLinkStrength}:${options.moshLinkBand}:${options.hasAudio}:${options.model}`;
+	let rolled = cache.get(rollKey);
+	if (!rolled) {
+		rolled = rollEffects(seed, options);
+		putRoll(cache, rollKey, rolled);
+	}
+	const key = `${rollKey}:${chainId(own)}`;
 	let effects = cache.get(key);
 	if (!effects) {
-		effects = rollEffects(seed, options, clip.effects);
+		effects = [...rolled, ...own];
 		putRoll(cache, key, effects);
 	}
 	return effects;
+}
+
+/** Before auto clips ran their chain after the roll, the roll only borrowed its held
+ * effects; switch the rest off so an old save looks as it did. */
+export function withLegacyAutoChain<C extends ChainClip>(clip: C): C {
+	if (clip.mode !== "interval") return clip;
+	return {
+		...clip,
+		effects: clip.effects.map((e) =>
+			e.enabled && !isHeld(e) ? { ...e, enabled: false } : e,
+		),
+	};
 }
 
 /** Normalize the chain fields a saved clip may predate or have dropped. */

@@ -5,7 +5,6 @@ import {
 	DEFAULT_INTERVAL_SEC,
 	intervalLabel,
 	keepLocked,
-	lockedKey,
 	rollEffects,
 	withSeededRandom,
 } from "./sequence";
@@ -156,16 +155,6 @@ describe("locked effects", () => {
 		const fresh = rollEffects(1, OPTIONS);
 		expect(keepLocked(fresh, rollEffects(2, OPTIONS))).toBe(fresh);
 	});
-
-	test("the lock key follows what the locks hold", () => {
-		const { base, last } = withLockedLast();
-		const before = lockedKey(base);
-		expect(before).not.toBe("");
-		last.enabled = false;
-		expect(lockedKey(base)).not.toBe(before);
-		last.locked = false;
-		expect(lockedKey(base)).toBe("");
-	});
 });
 
 describe("beat-based re-roll spacing", () => {
@@ -197,7 +186,7 @@ describe("beat-based re-roll spacing", () => {
 });
 
 describe("Masks in a rolled chain", () => {
-	test("an enabled Mask keeps its place and painting through an auto clip's roll", () => {
+	test("an enabled Mask keeps its place and painting through a roll", () => {
 		const base = rollEffects(5, { ...OPTIONS, randomizeOrder: false });
 		const at = base.findIndex((e) => e.defId === MASK_EFFECT_ID);
 		base[at].enabled = true;
@@ -209,10 +198,5 @@ describe("Masks in a rolled chain", () => {
 			expect(rolled[at].enabled).toBe(true);
 			expect(rolled[at].values).toEqual(base[at].values);
 		}
-		expect(lockedKey(base)).not.toBe("");
-	});
-
-	test("a Mask that is off leaves the roll's cache key alone", () => {
-		expect(lockedKey(rollEffects(5, OPTIONS))).toBe("");
 	});
 });

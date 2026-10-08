@@ -138,7 +138,9 @@
 	/** The chain's label, unless it is the default a fresh clip carries. */
 	function chainLabel(clip: TextClip): string | null {
 		if (clip.label === "clean" && !clip.modified) return null;
-		return clip.modified ? `${clip.label}*` : clip.label;
+		return clip.modified && clip.mode !== "interval"
+			? `${clip.label}*`
+			: clip.label;
 	}
 
 	// Same shape as the media lane's: a paste goes onto the selection when there is

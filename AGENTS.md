@@ -74,7 +74,9 @@ edit: they eat context fast.
   Loading one merges: records keep their ids and replace same-keyed ones; proxies stay out.
 - Chain-clip behavior (fill/mosh/clear/static/auto) lives once in `lib/editor/chain-clip.ts`;
   `media/chain.ts` and `fx-lanes.ts` are thin wrappers. New chain-editing paths go through
-  `chain-fanout.ts`, or a multi-selection edits only the primary clip.
+  `chain-fanout.ts`, or a multi-selection edits only the primary clip. An auto clip rolls a
+  fresh mosh per tick and runs its own chain, freely editable, after it; saves before
+  `SEQ_ENTRY_VERSION` 4 keep only their held effects on load.
 - Undo: `createSnapshotHistory` stores the state _before_ each change. Push before mutating, pass
   the live state to `undo`/`redo`, and keep a coalesce key for one gesture only. Ctrl+Z goes to
   the stack with the newest edit, not the selected one.
