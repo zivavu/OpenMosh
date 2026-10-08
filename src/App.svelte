@@ -30,6 +30,7 @@
 	} from "./lib/components/ui/feedback.svelte";
 	import { loadCustomFonts } from "./lib/text-overlay";
 	import { probeCapabilities } from "./lib/capabilities.svelte";
+	import { onLoadLosses, type LoadLosses } from "./lib/effects/load-report";
 
 	// The editors are the bulk of the bundle and none of it is needed to paint the
 	// upload screen, so they load with the route instead of with the app.
@@ -42,6 +43,20 @@
 	const loadFeedbackModal = lazy(
 		() => import("./lib/components/ui/FeedbackModal.svelte"),
 	);
+	const loadLossesDialog = lazy(
+		() => import("./lib/components/ui/LoadLossesDialog.svelte"),
+	);
+
+	/** What an old save had to leave behind; a second report joins the open one. */
+	let loadLosses: LoadLosses | null = $state(null);
+	// At init, not onMount: an editor can restore its chain before the shell mounts.
+	onLoadLosses((next) => {
+		const merge = (a: string[], b: string[]) => [...new Set([...a, ...b])];
+		loadLosses = {
+			effects: merge(loadLosses?.effects ?? [], next.effects),
+			settings: merge(loadLosses?.settings ?? [], next.settings),
+		};
+	});
 
 	let file: File | null = $state(null);
 	let sequenceFiles: File[] = $state([]);
@@ -446,6 +461,12 @@
 		{/key}
 	{:catch}
 		<LoadFailed onclose={closeFeedback} />
+	{/await}
+{/if}
+
+{#if loadLosses}
+	{#await loadLossesDialog() then LoadLossesDialog}
+		<LoadLossesDialog losses={loadLosses} onClose={() => (loadLosses = null)} />
 	{/await}
 {/if}
 

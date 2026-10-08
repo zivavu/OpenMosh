@@ -1,6 +1,7 @@
 import type { EffectInstance, Preset, VolumeLink } from "./types";
 import { generateId } from "./types";
-import { getDefinition, hydrateValues } from "./hydrate";
+import { getDefinition, hydrateLinks, hydrateValues } from "./hydrate";
+import { reportRemovedEffect } from "./load-report";
 import { STARTER_PRESETS } from "./starter-presets";
 import { readJson, readRaw, writeJson, writeRaw } from "../storage";
 
@@ -10,7 +11,7 @@ const SEEDED_KEY = "openmosh-presets-seeded";
 
 export function loadPresets(): Preset[] {
 	const stored = readJson<Preset[] | null>(PRESETS_KEY, null);
-	if (stored !== null) return stored;
+	if (stored !== null) return withoutRemovedEffects(stored);
 	// First run: seed the starters as ordinary, editable user presets. Guarded by
 	// its own key so a user who deletes them all doesn't get them back.
 	if (readRaw(SEEDED_KEY) === null) {
@@ -19,6 +20,24 @@ export function loadPresets(): Preset[] {
 		return structuredClone(STARTER_PRESETS) as Preset[];
 	}
 	return [];
+}
+
+/** Drops effects OpenMosh no longer has, and a preset left with none, for good. */
+function withoutRemovedEffects(presets: Preset[]): Preset[] {
+	let changed = false;
+	const kept: Preset[] = [];
+	for (const preset of presets) {
+		const effects = preset.effects.filter((e) => {
+			if (getDefinition(e.defId)) return true;
+			if (e.enabled) reportRemovedEffect(e.defId);
+			changed = true;
+			return false;
+		});
+		if (effects.length > 0 || preset.effects.length === 0)
+			kept.push({ ...preset, effects });
+	}
+	if (changed) writeJson(PRESETS_KEY, kept);
+	return kept;
 }
 
 /** Names only ever render in narrow one-line rows. */
@@ -88,17 +107,22 @@ export function deletePreset(index: number): Preset[] {
 }
 
 export function applyPreset(preset: Preset): EffectInstance[] {
-	return preset.effects.map((pe) => ({
-		instanceId: generateId(),
-		defId: pe.defId,
-		enabled: pe.enabled,
-		locked: false,
-		expanded: false,
-		// Definition defaults underneath, so a preset saved before a param existed
-		// still gets a sane value for it.
-		values: hydrateValues(pe.defId, pe.values),
-		...(pe.volumeLinks && { volumeLinks: copyLinks(pe.volumeLinks) }),
-	}));
+	return preset.effects
+		.filter((pe) => getDefinition(pe.defId))
+		.map((pe) => {
+			const links = pe.volumeLinks && hydrateLinks(pe.defId, pe.volumeLinks);
+			return {
+				instanceId: generateId(),
+				defId: pe.defId,
+				enabled: pe.enabled,
+				locked: false,
+				expanded: false,
+				// Definition defaults underneath, so a preset saved before a param existed
+				// still gets a sane value for it.
+				values: hydrateValues(pe.defId, pe.values),
+				...(links && { volumeLinks: links }),
+			};
+		});
 }
 
 const FILE_FORMAT = "openmosh-presets";
@@ -145,12 +169,11 @@ export function parsePresetFile(text: string): Preset[] {
 			continue;
 		const effects: Preset["effects"] = [];
 		for (const e of p.effects) {
-			if (
-				!isRecord(e) ||
-				typeof e.defId !== "string" ||
-				!getDefinition(e.defId)
-			)
+			if (!isRecord(e) || typeof e.defId !== "string") continue;
+			if (!getDefinition(e.defId)) {
+				if (e.enabled !== false) reportRemovedEffect(e.defId);
 				continue;
+			}
 			effects.push({
 				defId: e.defId,
 				enabled: e.enabled !== false,

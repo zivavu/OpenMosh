@@ -1,11 +1,13 @@
 import { EFFECT_DEFINITIONS } from "./definitions";
 import { hueToHex } from "../color";
 import { parseKeys, serializeKeys } from "./mask-keys";
+import { reportRemovedEffect, reportResetSetting } from "./load-report";
 import {
 	generateId,
 	type EffectDefinition,
 	type EffectInstance,
 	type EffectParam,
+	type VolumeLink,
 } from "./types";
 
 /** Lookup table, not a scan: hydration runs over every restored instance. */
@@ -99,11 +101,23 @@ function reconcile(
 	}
 }
 
+/** A value the param has since stopped taking, as opposed to one only stored loosely. */
+function noLongerFits(param: EffectParam, value: number | string): boolean {
+	if (param.type === "range")
+		return (
+			typeof value === "number" && (value < param.min || value > param.max)
+		);
+	if (param.type === "select")
+		return !param.options.some((o) => o.value === value);
+	return false;
+}
+
 /** Fill in every param a stored instance is missing, using its definition's defaults,
- * and bring the ones it has back in line. */
+ * and bring the ones it has back in line. `report` names the ones that had to move. */
 export function hydrateValues(
 	defId: string,
 	values: Record<string, number | string> | undefined,
+	report = false,
 ): Record<string, number | string> {
 	const def = getDefinition(defId);
 	if (!def) return { ...values };
@@ -112,22 +126,56 @@ export function hydrateValues(
 	// find its value still there.
 	const hydrated = { ...stored };
 	for (const param of def.params) {
-		hydrated[param.key] =
-			param.key in stored
-				? reconcile(param, stored[param.key])
-				: param.defaultValue;
+		if (!(param.key in stored)) {
+			hydrated[param.key] = param.defaultValue;
+			continue;
+		}
+		hydrated[param.key] = reconcile(param, stored[param.key]);
+		if (report && noLongerFits(param, stored[param.key]))
+			reportResetSetting(def.name, param.label);
 	}
 	return hydrated;
 }
 
-/** Bring a stored chain back to something the editor can render. */
+/** Links survive only on params that still take one, inside the range they have now. */
+export function hydrateLinks(
+	defId: string,
+	links: Record<string, VolumeLink> | undefined,
+): Record<string, VolumeLink> | undefined {
+	const def = getDefinition(defId);
+	if (!def || !links || typeof links !== "object") return undefined;
+	const kept: Record<string, VolumeLink> = {};
+	for (const param of def.params) {
+		const link = links[param.key];
+		if (param.type !== "range" || !link) continue;
+		const clamp = (n: unknown) =>
+			typeof n === "number" && Number.isFinite(n)
+				? Math.min(param.max, Math.max(param.min, n))
+				: param.defaultValue;
+		kept[param.key] = { ...link, min: clamp(link.min), max: clamp(link.max) };
+	}
+	return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+/** Bring a stored chain back to something the editor can render. Only switched-on
+ * effects are reported: every saved chain lists the whole library. */
 export function hydrateEffects(saved: unknown): EffectInstance[] {
 	if (!Array.isArray(saved)) return [];
-	return saved
-		.filter((e: EffectInstance | null) => !!e && !!getDefinition(e.defId))
-		.map((e: EffectInstance) => ({
+	const hydrated: EffectInstance[] = [];
+	for (const e of saved as (EffectInstance | null | undefined)[]) {
+		if (!e) continue;
+		if (!getDefinition(e.defId)) {
+			if (e.enabled) reportRemovedEffect(e.defId);
+			continue;
+		}
+		hydrated.push({
 			...e,
 			instanceId: e.instanceId ?? generateId(),
-			values: hydrateValues(e.defId, e.values),
-		}));
+			values: hydrateValues(e.defId, e.values, e.enabled),
+			...("volumeLinks" in e && {
+				volumeLinks: hydrateLinks(e.defId, e.volumeLinks),
+			}),
+		});
+	}
+	return hydrated;
 }
