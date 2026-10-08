@@ -105,6 +105,38 @@ function vertexColouredTriangle(): Uint8Array {
 	);
 }
 
+/** Four vertices, drawn as `mode` (0 points, 5 strip, 6 fan), coloured per vertex. */
+function fourVertices(mode: number): Uint8Array {
+	const bin = new ArrayBuffer(48 + 48);
+	const view = new DataView(bin);
+	[0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0].forEach((v, i) =>
+		view.setFloat32(i * 4, v, true),
+	);
+	[1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1].forEach((v, i) =>
+		view.setFloat32(48 + i * 4, v, true),
+	);
+	return packGlb(
+		{
+			asset: { version: "2.0" },
+			scene: 0,
+			scenes: [{ nodes: [0] }],
+			nodes: [{ mesh: 0 }],
+			meshes: [
+				{ primitives: [{ attributes: { POSITION: 0, COLOR_0: 1 }, mode }] },
+			],
+			accessors: [
+				{ bufferView: 0, componentType: 5126, count: 4, type: "VEC3" },
+				{ bufferView: 1, componentType: 5126, count: 4, type: "VEC3" },
+			],
+			bufferViews: [
+				{ byteOffset: 0, byteLength: 48 },
+				{ byteOffset: 48, byteLength: 48 },
+			],
+		},
+		bin,
+	);
+}
+
 function packGlb(json: object, bin: ArrayBuffer): Uint8Array {
 	const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
 	const jsonPad = (4 - (jsonBytes.length % 4)) % 4;
@@ -127,6 +159,22 @@ function packGlb(json: object, bin: ArrayBuffer): Uint8Array {
 }
 
 describe("parseGlb", () => {
+	it("reads a point cloud as one dot per vertex", () => {
+		const mesh = parseGlb(fourVertices(0))!;
+		expect(mesh.points).toBe(true);
+		expect(mesh.triangles).toBe(0);
+		expect(mesh.positions.length).toBe(12);
+		expect(Array.from(mesh.colors!.subarray(3, 6))).toEqual([0, 1, 0]);
+	});
+
+	it("unrolls strips and fans into triangles", () => {
+		for (const mode of [5, 6]) {
+			const mesh = parseGlb(fourVertices(mode))!;
+			expect(mesh.points).toBe(false);
+			expect(mesh.triangles).toBe(2);
+		}
+	});
+
 	it("reads a skinned triangle and its animation", () => {
 		const mesh = parseGlb(slidingTriangle())!;
 		expect(mesh.triangles).toBe(1);
