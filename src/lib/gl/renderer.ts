@@ -410,6 +410,8 @@ export class GlRenderer {
 	 * next render and cleared by it, so a caller that never asks can't inherit it. */
 	private pendingBlank = false;
 	private blankSource = false;
+	/** Solo: lanes still driven but not drawn, whose textures the next render keeps. */
+	private heldMediaLayers: ResolvedMediaLayer[] = [];
 	private blankTex: WebGLTexture | null = null;
 	private mediaScratch: { tex: WebGLTexture; fbo: WebGLFramebuffer } | null =
 		null;
@@ -747,6 +749,12 @@ export class GlRenderer {
 	 * button uses it. One-shot: the preview re-asks every frame. */
 	setBlankSource(on: boolean) {
 		this.pendingBlank = on;
+	}
+
+	/** Keep these lanes' textures through the next render though it doesn't draw them,
+	 * or the driver would upload them again every frame. One-shot, like setBlankSource. */
+	holdMediaLayers(layers: ResolvedMediaLayer[]) {
+		this.heldMediaLayers = layers;
 	}
 
 	private takeBlankSource() {
@@ -3078,8 +3086,12 @@ export class GlRenderer {
 	}
 
 	private gcMediaLayers(layers: ResolvedMediaLayer[]) {
+		const held = this.heldMediaLayers;
+		this.heldMediaLayers = [];
 		if (this.mediaLayerTextures.size === 0) return;
-		const live = new Set(mediaLayerSides(layers).map((l) => l.key));
+		const live = new Set(
+			[...mediaLayerSides(layers), ...mediaLayerSides(held)].map((l) => l.key),
+		);
 		for (const key of this.mediaLayerTextures.keys()) {
 			if (!live.has(key)) this.dropLayerTexture(key);
 		}
