@@ -139,15 +139,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isIdList(value: unknown): value is { id: unknown }[] {
-	return (
-		Array.isArray(value) &&
-		value.every((item) => isPlainObject(item) && typeof item.id === "string")
-	);
+/** What a list's records are keyed on; presets have no id, only a name. */
+function recordKey(list: unknown[]): "id" | "name" | null {
+	for (const field of ["id", "name"] as const) {
+		if (
+			list.every(
+				(item) => isPlainObject(item) && typeof item[field] === "string",
+			)
+		)
+			return field;
+	}
+	return null;
 }
 
 /** A backed-up localStorage value laid over this browser's. Maps keyed by song or
- * project merge, lists of records (presets) merge by id, anything else is replaced;
+ * project merge, lists of records merge by id (presets by name), anything else is replaced;
  * the backup wins wherever both have an entry. */
 export function mergeStoredValue(
 	current: string | null,
@@ -165,10 +171,15 @@ export function mergeStoredValue(
 	if (isPlainObject(here) && isPlainObject(there)) {
 		return JSON.stringify({ ...here, ...there });
 	}
-	if (isIdList(here) && isIdList(there)) {
-		const byId = new Map(here.map((item) => [item.id, item]));
-		for (const item of there) byId.set(item.id, item);
-		return JSON.stringify([...byId.values()]);
+	if (Array.isArray(here) && Array.isArray(there)) {
+		// Judged over both, so an empty list on either side still merges.
+		const field = recordKey([...here, ...there]);
+		if (field) {
+			const key = (item: Record<string, unknown>) => item[field];
+			const merged = new Map(here.map((item) => [key(item), item]));
+			for (const item of there) merged.set(key(item), item);
+			return JSON.stringify([...merged.values()]);
+		}
 	}
 	return incoming;
 }
