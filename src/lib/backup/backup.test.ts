@@ -103,11 +103,17 @@ describe("a backup round trip", () => {
 
 	test("merges into what the browser already has", async () => {
 		local.seedJson("openmosh-project-names", { a: "From backup" });
-		local.seedJson("openmosh-presets", [{ id: "p1", name: "Backed up" }]);
+		local.seedJson("openmosh-presets", [
+			{ name: "Backed up", effects: [] },
+			{ name: "Both", effects: [{ defId: "blur", enabled: true, values: {} }] },
+		]);
 		const backup = await buildBackup();
 		await wipe();
 		local.seedJson("openmosh-project-names", { b: "Here already" });
-		local.seedJson("openmosh-presets", [{ id: "p2", name: "Local" }]);
+		local.seedJson("openmosh-presets", [
+			{ name: "Local", effects: [] },
+			{ name: "Both", effects: [] },
+		]);
 
 		await restoreBackup(backup);
 
@@ -115,11 +121,12 @@ describe("a backup round trip", () => {
 			b: "Here already",
 			a: "From backup",
 		});
-		expect(
-			JSON.parse(local.store.get("openmosh-presets")!).map(
-				(p: { id: string }) => p.id,
-			),
-		).toEqual(["p2", "p1"]);
+		// Presets carry no id; a name both sides have takes the backup's.
+		expect(JSON.parse(local.store.get("openmosh-presets")!)).toEqual([
+			{ name: "Local", effects: [] },
+			{ name: "Both", effects: [{ defId: "blur", enabled: true, values: {} }] },
+			{ name: "Backed up", effects: [] },
+		]);
 	});
 
 	test("turns away files that aren't backups", async () => {
@@ -154,6 +161,12 @@ describe("mergeStoredValue", () => {
 		expect(mergeStoredValue('{"a":1,"b":1}', '{"b":2}')).toBe('{"a":1,"b":2}');
 		expect(mergeStoredValue('[{"id":"x","v":1}]', '[{"id":"x","v":2}]')).toBe(
 			'[{"id":"x","v":2}]',
+		);
+	});
+
+	test("keeps what's here when the backup's list is empty", () => {
+		expect(mergeStoredValue('[{"name":"mine"}]', "[]")).toBe(
+			'[{"name":"mine"}]',
 		);
 	});
 });
