@@ -1603,18 +1603,22 @@ export class GlRenderer {
 				xf?.scale ?? 1,
 			);
 		}
-		if (mask && prog.uniforms["u_mask"]) {
+		// Bound even without a mask: a sampler keeps its unit, and a Mask effect leaves
+		// the layer's own texture there, which a draw into that layer can't read.
+		const keep = mask ?? this.blankTexture();
+		if (prog.uniforms["u_mask"]) {
 			gl.activeTexture(gl.TEXTURE3);
-			gl.bindTexture(gl.TEXTURE_2D, mask);
+			gl.bindTexture(gl.TEXTURE_2D, keep);
 			gl.uniform1i(prog.uniforms["u_mask"], 3);
 		}
-		if (mask && prog.uniforms["u_maskNext"]) {
+		if (prog.uniforms["u_maskNext"]) {
 			gl.activeTexture(gl.TEXTURE4);
 			// Bound to the same field when nothing is morphing: a sampler left pointing
 			// at whatever was in the unit last is undefined, and the mix is 0 either way.
-			gl.bindTexture(gl.TEXTURE_2D, morphing ? next! : mask);
+			gl.bindTexture(gl.TEXTURE_2D, morphing ? next! : keep);
 			gl.uniform1i(prog.uniforms["u_maskNext"], 4);
 		}
+		gl.activeTexture(gl.TEXTURE0);
 	}
 
 	/** The texture the effect chain should read. A source that doesn't share the
