@@ -20,6 +20,7 @@ uniform float u_distance;
 uniform float u_focal;
 uniform vec2 u_half;
 uniform vec2 u_depth;
+uniform float u_dotScale;
 out vec3 v_normal;
 out vec3 v_color;
 out vec3 v_world;
@@ -49,6 +50,7 @@ void main() {
   v_uv = a_uv;
   v_world = w;
   gl_Position = vec4(u_focal * w.x / u_half.x, u_focal * w.y / u_half.y, u_depth.x * w.z + u_depth.y, w.z);
+  gl_PointSize = max(u_dotScale / w.z, 1.0);
 }`;
 
 const MESH_FRAG = `#version 300 es
@@ -58,8 +60,17 @@ in vec3 v_color;
 in vec3 v_world;
 in vec3 v_uv;
 uniform sampler2D u_texture;
+uniform bool u_points;
 out vec4 outColor;
 void main() {
+  vec3 base = v_color;
+  if (v_uv.z > 0.5) base *= texture(u_texture, v_uv.xy).rgb;
+  // Scanned points carry their own lighting and no normals.
+  if (u_points) {
+    if (length(gl_PointCoord - 0.5) > 0.5) discard;
+    outColor = vec4(base, 1.0);
+    return;
+  }
   vec3 n = normalize(v_normal);
   vec3 toEye = normalize(-v_world);
   // Two-sided: hand-made meshes often wind some faces backwards.
@@ -68,13 +79,15 @@ void main() {
   vec3 light = normalize(vec3(-0.45, -0.65, -0.6));
   float diffuse = max(dot(n, light), 0.0);
   float spec = pow(max(dot(n, normalize(light + toEye)), 0.0), 32.0) * 0.25;
-  vec3 base = v_color;
-  if (v_uv.z > 0.5) base *= texture(u_texture, v_uv.xy).rgb;
   outColor = vec4(base * (0.28 + 0.8 * diffuse) + spec, 1.0);
 }`;
 
 /** What a mesh with no colours of its own is drawn in. */
 const DEFAULT_COLOR = 0.82;
+
+/** A dot's width over the gap between points, were they spread evenly over the
+ * unit sphere's surface. Under 1: a scan's surface is smaller than the sphere's. */
+const DOT_SPREAD = 0.75;
 
 /** Units the pass binds its textures to, so unit 0 stays as the renderer left it. */
 const BONE_UNIT = 1;
@@ -84,6 +97,8 @@ interface GpuMesh {
 	vao: WebGLVertexArrayObject;
 	buffers: WebGLBuffer[];
 	count: number;
+	/** Dot width in model units for a point cloud; 0 draws triangles. */
+	dot: number;
 	extent: [number, number, number];
 	texture: WebGLTexture | null;
 	skin: { skin: Skin; bones: WebGLTexture; matrices: Float32Array } | null;
@@ -153,7 +168,8 @@ export class MeshPass {
 		this.#meshes.set(id, {
 			vao,
 			buffers,
-			count: mesh.triangles * 3,
+			count: vertices,
+			dot: mesh.points ? DOT_SPREAD * Math.sqrt((4 * Math.PI) / vertices) : 0,
 			extent: mesh.extent,
 			texture: mesh.texture ? this.#colorTexture(mesh.texture) : null,
 			skin: skin
@@ -265,6 +281,12 @@ export class MeshPass {
 		gl.uniform1i(u["u_bones"], BONE_UNIT);
 		gl.uniform1i(u["u_texture"], TEXTURE_UNIT);
 		gl.uniform1i(u["u_skinned"], mesh.skin ? 1 : 0);
+		gl.uniform1i(u["u_points"], mesh.dot > 0 ? 1 : 0);
+		// The dot's pixel width at unit depth: model units to frame units to pixels.
+		gl.uniform1f(
+			u["u_dotScale"],
+			(mesh.dot * camera.radius * camera.focal * h) / (2 * half.y),
+		);
 		if (mesh.skin) {
 			const { skin, bones, matrices } = mesh.skin;
 			skin.pose(time, matrices);
@@ -291,7 +313,7 @@ export class MeshPass {
 		// An unskinned mesh has no joint buffer, so the shader's uvec4 reads the generic
 		// value, which defaults to float; ANGLE refuses the draw on the type mismatch.
 		if (!mesh.skin) gl.vertexAttribI4ui(4, 0, 0, 0, 0);
-		gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+		gl.drawArrays(mesh.dot > 0 ? gl.POINTS : gl.TRIANGLES, 0, mesh.count);
 		gl.disable(gl.DEPTH_TEST);
 
 		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, target.resolveFbo);

@@ -1,6 +1,7 @@
 import { multiply, scaling, translation, type Mat4 } from "./mat4";
 
-/** A triangle soup ready for the GPU: three vertices per triangle, nothing shared. */
+/** A triangle soup ready for the GPU: three vertices per triangle, nothing shared.
+ * A point cloud has one vertex per point instead. */
 export interface Mesh {
 	/** xyz per vertex, fitted into a unit sphere at the origin; y up, front facing +z. */
 	positions: Float32Array;
@@ -19,6 +20,8 @@ export interface Mesh {
 	 * units, over its whole animation. Centred on the origin. */
 	extent: [number, number, number];
 	triangles: number;
+	/** Drawn as unlit dots, one per vertex; scanned models come like this. */
+	points: boolean;
 }
 
 /** Skinned-mesh data: four bone influences per vertex, and the bones' motion. */
@@ -54,15 +57,29 @@ export interface TriangleExtra {
 	weights?: Corners;
 }
 
-/** Collects triangles while a parser walks its file. */
+/** `TriangleExtra` for a single vertex. */
+export interface VertexExtra {
+	uv?: ArrayLike<number>;
+	joints?: ArrayLike<number>;
+	weights?: ArrayLike<number>;
+}
+
+/** One kind of primitive's vertex attributes, as a parser adds them. */
+class Vertices {
+	positions: number[] = [];
+	normals: number[] = [];
+	colors: number[] = [];
+	hasColor = false;
+	uvs: number[] = [];
+	joints: number[] = [];
+	weights: number[] = [];
+}
+
+/** Collects triangles, or points, while a parser walks its file. A file with any
+ * triangles is drawn as those; its points only count when it has nothing else. */
 export class MeshBuilder {
-	#positions: number[] = [];
-	#normals: number[] = [];
-	#colors: number[] = [];
-	#hasColor = false;
-	#uvs: number[] = [];
-	#joints: number[] = [];
-	#weights: number[] = [];
+	#tris = new Vertices();
+	#dots = new Vertices();
 	#withUv: boolean;
 	#withSkin: boolean;
 
@@ -80,36 +97,66 @@ export class MeshBuilder {
 		colors: Corners | null,
 		extra?: TriangleExtra,
 	) {
-		this.#positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
 		const flat = faceNormal(a, b, c);
-		for (const n of normals ?? [flat, flat, flat]) {
+		const corners = [a, b, c];
+		for (let k = 0; k < 3; k++) {
+			const n = normals?.[k] ?? flat;
 			const len = Math.hypot(n[0], n[1], n[2]);
 			// A zeroed normal in the file shades as flat rather than black.
-			if (len > 1e-9) this.#normals.push(n[0] / len, n[1] / len, n[2] / len);
-			else this.#normals.push(flat[0], flat[1], flat[2]);
+			this.#vertex(
+				this.#tris,
+				corners[k],
+				len > 1e-9 ? [n[0] / len, n[1] / len, n[2] / len] : flat,
+				colors?.[k] ?? null,
+				{
+					uv: extra?.uvs?.[k],
+					joints: extra?.joints?.[k],
+					weights: extra?.weights?.[k],
+				},
+			);
 		}
-		if (colors) this.#hasColor = true;
-		for (const col of colors ?? [WHITE, WHITE, WHITE]) {
-			this.#colors.push(col[0], col[1], col[2]);
+	}
+
+	point(
+		p: ArrayLike<number>,
+		color: ArrayLike<number> | null,
+		extra: VertexExtra = {},
+	) {
+		this.#vertex(this.#dots, p, NO_NORMAL, color, extra);
+	}
+
+	#vertex(
+		to: Vertices,
+		p: ArrayLike<number>,
+		n: ArrayLike<number>,
+		color: ArrayLike<number> | null,
+		extra: VertexExtra,
+	) {
+		to.positions.push(p[0], p[1], p[2]);
+		to.normals.push(n[0], n[1], n[2]);
+		if (color) to.hasColor = true;
+		const col = color ?? WHITE;
+		to.colors.push(col[0], col[1], col[2]);
+		if (this.#withUv) {
+			const uv = extra.uv ?? NO_UV;
+			to.uvs.push(uv[0], uv[1], uv[2]);
 		}
-		for (let k = 0; k < 3; k++) {
-			if (this.#withUv) {
-				const uv = extra?.uvs?.[k] ?? NO_UV;
-				this.#uvs.push(uv[0], uv[1], uv[2]);
-			}
-			if (this.#withSkin) {
-				const j = extra?.joints?.[k] ?? NO_JOINTS;
-				const w = extra?.weights?.[k] ?? NO_WEIGHTS;
-				this.#joints.push(j[0], j[1], j[2], j[3]);
-				this.#weights.push(w[0], w[1], w[2], w[3]);
-			}
+		if (this.#withSkin) {
+			const j = extra.joints ?? NO_JOINTS;
+			const w = extra.weights ?? NO_WEIGHTS;
+			to.joints.push(j[0], j[1], j[2], j[3]);
+			to.weights.push(w[0], w[1], w[2], w[3]);
 		}
+	}
+
+	get #drawn(): Vertices {
+		return this.#tris.positions.length > 0 ? this.#tris : this.#dots;
 	}
 
 	/** Null when nothing drawable was found. */
 	build(): Mesh | null {
-		if (this.#positions.length === 0) return null;
-		const positions = new Float32Array(this.#positions);
+		if (this.#drawn.positions.length === 0) return null;
+		const positions = new Float32Array(this.#drawn.positions);
 		if (!fitUnitSphere(positions)) return null;
 		return this.#finish(positions, null, halfExtent(positions));
 	}
@@ -117,10 +164,11 @@ export class MeshBuilder {
 	/** Like `build`, but the rig's whole motion decides the fit, so a dancer
 	 * straying from the bind pose stays inside the sphere. */
 	buildSkinned(rig: Rig): Mesh | null {
-		if (this.#positions.length === 0 || !this.#withSkin) return null;
-		const bind = new Float32Array(this.#positions);
-		const joints = new Uint16Array(this.#joints);
-		const weights = new Float32Array(this.#weights);
+		const v = this.#drawn;
+		if (v.positions.length === 0 || !this.#withSkin) return null;
+		const bind = new Float32Array(v.positions);
+		const joints = new Uint16Array(v.joints);
+		const weights = new Float32Array(v.weights);
 		const fitted = fitRig(bind, joints, weights, rig);
 		if (!fitted) return null;
 		const { fit, extent } = fitted;
@@ -150,21 +198,25 @@ export class MeshBuilder {
 		skin: Skin | null,
 		extent: [number, number, number],
 	): Mesh {
+		const v = this.#drawn;
+		const points = v === this.#dots;
 		return {
 			positions,
-			normals: new Float32Array(this.#normals),
-			colors: this.#hasColor ? new Float32Array(this.#colors) : null,
-			uvs: this.#withUv ? new Float32Array(this.#uvs) : null,
+			normals: new Float32Array(v.normals),
+			colors: v.hasColor ? new Float32Array(v.colors) : null,
+			uvs: this.#withUv ? new Float32Array(v.uvs) : null,
 			image: null,
 			texture: null,
 			skin,
 			extent,
-			triangles: this.#positions.length / 9,
+			triangles: points ? 0 : v.positions.length / 9,
+			points,
 		};
 	}
 }
 
 const WHITE = [1, 1, 1];
+const NO_NORMAL = [0, 0, 0];
 const NO_UV = [0, 0, 0];
 const NO_JOINTS = [0, 0, 0, 0];
 const NO_WEIGHTS = [1, 0, 0, 0];

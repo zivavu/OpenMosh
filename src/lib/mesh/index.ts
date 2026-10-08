@@ -33,7 +33,7 @@ export function asMeshFile(file: File): File {
 	});
 }
 
-/** Null for a file with no drawable triangles. */
+/** Null for a file with no triangles or points to draw. */
 export async function parseMesh(file: File): Promise<Mesh | null> {
 	try {
 		const mesh = await parseByExtension(file);

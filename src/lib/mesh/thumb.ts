@@ -1,4 +1,9 @@
-import { meshCamera, modelToWorld, projectToUv } from "./camera";
+import {
+	meshCamera,
+	modelToWorld,
+	projectToUv,
+	type MeshCamera,
+} from "./camera";
 import type { Mesh } from "./mesh";
 
 /** A three-quarter view, so a cube reads as a cube. */
@@ -30,6 +35,10 @@ export async function renderMeshThumb(
 	const ctx = canvas.getContext("2d");
 	if (!ctx) return null;
 	const cam = meshCamera([{ values: THUMB_VIEW, time: 0 }]);
+	if (mesh.points) {
+		drawDots(ctx, mesh, cam, size);
+		return canvas.convertToBlob({ type: "image/png" });
+	}
 	const p = mesh.positions;
 	const tris: { depth: number; pts: number[]; fill: string }[] = [];
 	for (let t = 0; t < mesh.triangles; t++) {
@@ -83,3 +92,28 @@ export async function renderMeshThumb(
 	}
 	return canvas.convertToBlob({ type: "image/png" });
 }
+
+/** A point cloud as square dots, far ones first, in their own colours. */
+function drawDots(
+	ctx: OffscreenCanvasRenderingContext2D,
+	mesh: Mesh,
+	cam: MeshCamera,
+	size: number,
+) {
+	const count = mesh.positions.length / 3;
+	const dots = Array.from({ length: count }, (_, i) => {
+		const w = modelToWorld(cam, mesh.positions.subarray(i * 3, i * 3 + 3));
+		return { i, depth: w[2], at: projectToUv(cam, 1, w) };
+	});
+	dots.sort((a, b) => b.depth - a.depth);
+	// Wide enough that a dense scan reads as a surface, not a mist.
+	const r = Math.max(0.5, Math.min(3, (size * 1.5) / Math.sqrt(count)));
+	for (const { i, at } of dots) {
+		const c = mesh.colors?.subarray(i * 3, i * 3 + 3) ?? DEFAULT_RGB;
+		const [cr, cg, cb] = Array.from(c, (v) => Math.round(Math.min(1, v) * 255));
+		ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+		ctx.fillRect(at[0] * size - r, at[1] * size - r, r * 2, r * 2);
+	}
+}
+
+const DEFAULT_RGB = [DEFAULT_COLOR, DEFAULT_COLOR, DEFAULT_COLOR];

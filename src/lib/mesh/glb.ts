@@ -59,8 +59,9 @@ const COMPONENTS: Record<string, number> = {
 	MAT4: 16,
 };
 
-/** Binary glTF: meshes with materials, skins and the first animation. Images
- * must be embedded; external buffers aren't reachable from a single file. */
+/** Binary glTF: meshes or point clouds with materials, skins and the first
+ * animation. Images must be embedded; external buffers aren't reachable from a
+ * single file. */
 export function parseGlb(bytes: Uint8Array): Mesh | null {
 	const chunks = readChunks(bytes);
 	if (!chunks) return null;
@@ -156,7 +157,8 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 			? accessor(skin.inverseBindMatrices).data
 			: null;
 		for (const prim of json.meshes?.[node.mesh]?.primitives ?? []) {
-			if ((prim.mode ?? 4) !== 4 || prim.attributes.POSITION === undefined) {
+			const mode = prim.mode ?? TRIANGLES;
+			if (!DRAWN_MODES.has(mode) || prim.attributes.POSITION === undefined) {
 				continue;
 			}
 			const pos = accessor(prim.attributes.POSITION).data;
@@ -217,8 +219,16 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 					: [factor[0], factor[1], factor[2]],
 			});
 			const count = index ? index.length : pos.length / 3;
-			for (let i = 0; i + 2 < count; i += 3) {
-				const c = [0, 1, 2].map((k) => corner(index ? index[i + k] : i + k));
+			const vertexAt = (i: number) => (index ? index[i] : i);
+			if (mode === POINTS) {
+				for (let i = 0; i < count; i++) {
+					const c = corner(vertexAt(i));
+					builder.point(c.p, c.col, { uv: c.uv, joints: c.j, weights: c.w });
+				}
+				continue;
+			}
+			for (const tri of triangleCorners(mode, count)) {
+				const c = tri.map((i) => corner(vertexAt(i)));
 				builder.triangle(
 					c[0].p,
 					c[1].p,
@@ -254,6 +264,29 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 }
 
 const WHITE = [1, 1, 1];
+
+const POINTS = 0;
+const TRIANGLES = 4;
+const TRIANGLE_STRIP = 5;
+const TRIANGLE_FAN = 6;
+/** Lines are left out: they have no surface to draw. */
+const DRAWN_MODES = new Set([POINTS, TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN]);
+
+/** The corners of each triangle a list, strip or fan of `count` vertices draws. */
+function triangleCorners(mode: number, count: number): number[][] {
+	const tris: number[][] = [];
+	if (mode === TRIANGLE_STRIP) {
+		// Every other strip triangle swaps two corners to keep the winding.
+		for (let i = 0; i + 2 < count; i++) {
+			tris.push(i % 2 ? [i + 1, i, i + 2] : [i, i + 1, i + 2]);
+		}
+	} else if (mode === TRIANGLE_FAN) {
+		for (let i = 1; i + 1 < count; i++) tris.push([0, i, i + 1]);
+	} else {
+		for (let i = 0; i + 2 < count; i += 3) tris.push([i, i + 1, i + 2]);
+	}
+	return tris;
+}
 
 /** Influences that add up to one; a vertex with none follows its first bone. */
 function weightsAt(wgt: Float32Array | null, v: number): number[] {
