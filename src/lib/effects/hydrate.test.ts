@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { hueToHex } from "../color";
 import { EFFECT_DEFINITIONS } from "./definitions";
-import { getDefinition, hydrateEffects, hydrateValues } from "./hydrate";
+import {
+	getDefinition,
+	hydrateEffects,
+	hydrateLinks,
+	hydrateValues,
+} from "./hydrate";
+import { onLoadLosses, type LoadLosses } from "./load-report";
 import type { EffectDefinition, EffectParam } from "./types";
 
 /** Params are looked up in the live registry rather than hard-coded, so these stay honest. */
@@ -18,6 +24,16 @@ function findParam<T extends EffectParam["type"]>(
 		}
 	}
 	throw new Error(`no ${type} param in the registry to test against`);
+}
+
+/** What a load reports once it settles; null when it lost nothing. */
+async function lossesFrom(load: () => void): Promise<LoadLosses | null> {
+	let losses = null as LoadLosses | null;
+	const stop = onLoadLosses((l) => (losses = l));
+	load();
+	await Bun.sleep(300);
+	stop();
+	return losses;
 }
 
 describe("getDefinition", () => {
@@ -309,6 +325,85 @@ describe("hydrateEffects", () => {
 		]);
 		expect(chain[0].enabled).toBe(false);
 		expect(chain[0].locked).toBe(true);
+	});
+});
+
+describe("hydrateLinks", () => {
+	const { def, param } = findParam("range");
+
+	it("pulls a link's ends into the param's range", () => {
+		const links = hydrateLinks(def.id, {
+			[param.key]: { min: param.min - 50, max: param.max + 50, inverted: true },
+		});
+		expect(links).toEqual({
+			[param.key]: { min: param.min, max: param.max, inverted: true },
+		});
+	});
+
+	it("drops a link on a param that's gone or can't take one", () => {
+		const select = findParam("select");
+		expect(
+			hydrateLinks(def.id, { retiredKnob: { min: 0, max: 1 } }),
+		).toBeUndefined();
+		expect(
+			hydrateLinks(select.def.id, {
+				[select.param.key]: { min: 0, max: 1 },
+			}),
+		).toBeUndefined();
+	});
+});
+
+describe("what a load reports", () => {
+	const { def, param } = findParam("range");
+
+	it("names a removed effect that was switched on", async () => {
+		const losses = await lossesFrom(() =>
+			hydrateEffects([{ defId: "polar", enabled: true, values: {} }]),
+		);
+		expect(losses?.effects).toEqual(["Polar"]);
+	});
+
+	it("says nothing about a removed effect that was off", async () => {
+		// Every saved chain lists the whole library, mostly switched off.
+		const losses = await lossesFrom(() =>
+			hydrateEffects([{ defId: "polar", enabled: false, values: {} }]),
+		);
+		expect(losses).toBeNull();
+	});
+
+	it("names a setting that no longer fits a switched-on effect", async () => {
+		const losses = await lossesFrom(() =>
+			hydrateEffects([
+				{
+					defId: def.id,
+					enabled: true,
+					values: { [param.key]: param.max + 1 },
+				},
+			]),
+		);
+		expect(losses?.settings).toEqual([`${def.name}: ${param.label}`]);
+	});
+
+	it("says nothing about settings that fit or were never saved", async () => {
+		const losses = await lossesFrom(() =>
+			hydrateEffects([
+				{ defId: def.id, enabled: true, values: { [param.key]: param.min } },
+				{ defId: def.id, enabled: true, values: {} },
+				{
+					defId: def.id,
+					enabled: false,
+					values: { [param.key]: param.max + 1 },
+				},
+			]),
+		);
+		expect(losses).toBeNull();
+	});
+
+	it("gives an effect it has no name for one from its id", async () => {
+		const losses = await lossesFrom(() =>
+			hydrateEffects([{ defId: "some-old-thing", enabled: true, values: {} }]),
+		);
+		expect(losses?.effects).toEqual(["Some Old Thing"]);
 	});
 });
 

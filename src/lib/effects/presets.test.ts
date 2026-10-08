@@ -17,6 +17,7 @@ import {
 	savePreset,
 	updatePreset,
 } from "./presets";
+import { onLoadLosses, type LoadLosses } from "./load-report";
 import { STARTER_PRESETS } from "./starter-presets";
 import type { EffectInstance, Preset } from "./types";
 
@@ -82,6 +83,30 @@ describe("loadPresets", () => {
 		ls.seed(SEEDED_KEY, "1");
 		expect(loadPresets()).toEqual([]);
 		expect(ls.store.has(PRESETS_KEY)).toBe(false);
+	});
+
+	it("drops effects that were removed, for good", () => {
+		ls.seedJson(PRESETS_KEY, [
+			{
+				name: "mixed",
+				effects: [
+					{ defId: "polar", enabled: true, values: {} },
+					{ defId: DEF.id, enabled: true, values: {} },
+				],
+			},
+			{
+				name: "gone",
+				effects: [{ defId: "polar", enabled: true, values: {} }],
+			},
+		]);
+		const expected = [
+			{
+				name: "mixed",
+				effects: [{ defId: DEF.id, enabled: true, values: {} }],
+			},
+		];
+		expect(loadPresets()).toEqual(expected);
+		expect(stored()).toEqual(expected);
 	});
 
 	it("seeds only once even if the write never lands", () => {
@@ -293,6 +318,32 @@ describe("applyPreset", () => {
 		expect(preset.effects[0].volumeLinks!.size.max).toBe(1);
 	});
 
+	it("leaves out an effect that was removed", () => {
+		const chain = applyPreset({
+			name: "p",
+			effects: [
+				{ defId: "polar", enabled: true, values: {} },
+				{ defId: DEF.id, enabled: true, values: {} },
+			],
+		});
+		expect(chain.map((e) => e.defId)).toEqual([DEF.id]);
+	});
+
+	it("drops a link whose param is gone", () => {
+		const [effect] = applyPreset({
+			name: "p",
+			effects: [
+				{
+					defId: DEF.id,
+					enabled: true,
+					values: {},
+					volumeLinks: { retiredKnob: { min: 0, max: 1 } },
+				},
+			],
+		});
+		expect(effect.volumeLinks).toBeUndefined();
+	});
+
 	it("leaves volumeLinks off an effect that never had them", () => {
 		const [effect] = applyPreset({
 			name: "p",
@@ -396,6 +447,30 @@ describe("preset files", () => {
 		expect(parsed[0].effects).toEqual([
 			{ defId: known, enabled: true, values: {} },
 		]);
+	});
+
+	it("reports the switched-on effects it drops", async () => {
+		let losses = null as LoadLosses | null;
+		const stop = onLoadLosses((l) => (losses = l));
+		parsePresetFile(
+			JSON.stringify({
+				format: "openmosh-presets",
+				version: 1,
+				presets: [
+					{
+						name: "Old",
+						effects: [
+							{ defId: "polar", values: {} },
+							{ defId: "crt", enabled: false, values: {} },
+							{ defId: known, values: {} },
+						],
+					},
+				],
+			}),
+		);
+		await Bun.sleep(300);
+		stop();
+		expect(losses?.effects).toEqual(["Polar"]);
 	});
 
 	it("numbers imported names that are taken", () => {
