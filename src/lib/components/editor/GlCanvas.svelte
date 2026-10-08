@@ -25,6 +25,8 @@
 		scaleFromHandle,
 	} from "../../editor/layer-drag";
 	import { frameLooksDead } from "../../editor/frame-check";
+	import { isTextEntryTarget } from "../../editor/shortcut-target";
+	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { onFontsChanged } from "../../text-overlay";
 	import { overlayTextBox } from "../../text-overlay/draw";
 	import {
@@ -752,9 +754,39 @@
 		if (!el) return;
 		const onChange = () => {
 			fullscreen = document.fullscreenElement === el;
+			// Chromium then hands Escape to the page; holding it still leaves.
+			if (fullscreen)
+				void keyboardLock()
+					?.lock(["Escape"])
+					.catch(() => {});
+			else keyboardLock()?.unlock();
 		};
 		document.addEventListener("fullscreenchange", onChange);
 		return () => document.removeEventListener("fullscreenchange", onChange);
+	});
+
+	/** Keyboard Lock, which only Chromium has. */
+	function keyboardLock() {
+		return (
+			navigator as Navigator & {
+				keyboard?: { lock(keys: string[]): Promise<void>; unlock(): void };
+			}
+		).keyboard;
+	}
+
+	// With Escape locked, a press clears a selection first; one nothing used leaves.
+	$effect(() => {
+		if (!fullscreen) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== "Escape" || isTextEntryTarget(e.target)) return;
+			if (isModalKeyboardOpen()) return;
+			// Checked once every other listener has had the press.
+			setTimeout(() => {
+				if (!e.defaultPrevented) fullscreen = false;
+			});
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
 	});
 
 	$effect(() => {
