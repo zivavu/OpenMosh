@@ -83,7 +83,7 @@ export function isHandBuiltLabel(span: {
 }
 
 /** Kept through a roll or a clear: what the user locked, and Masks in use. */
-function isHeld(e: EffectInstance): boolean {
+export function isHeld(e: EffectInstance): boolean {
 	return !!e.locked || (isMaskEffect(e) && e.enabled);
 }
 
@@ -107,21 +107,6 @@ export function keepLocked(
 		byDef.delete(e.defId);
 	}
 	return [...out, ...byDef.values()];
-}
-
-/** What a chain's locks hold, for cache keys: a roll over it changes with them. */
-export function lockedKey(effects: EffectInstance[]): string {
-	const locked = effects.filter(isHeld);
-	if (locked.length === 0) return "";
-	return JSON.stringify(
-		locked.map((e) => [
-			effects.indexOf(e),
-			e.defId,
-			e.enabled,
-			e.values,
-			e.volumeLinks,
-		]),
-	);
 }
 
 /** Deterministic mosh roll: same seed + options → same effects. Effects locked in

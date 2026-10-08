@@ -2441,8 +2441,11 @@
 	function markPanelClipEdited() {
 		const target = selectedFxClip;
 		if (!target) return;
-		// A hand-built chain takes its name from what it switches on.
-		if (isHandBuiltLabel(target)) target.label = handBuiltLabel(target.effects);
+		// A hand-built chain takes its name from what it switches on; an auto clip keeps its label.
+		if (target.mode === "interval") {
+			if (target.presetName) target.modified = true;
+		} else if (isHandBuiltLabel(target))
+			target.label = handBuiltLabel(target.effects);
 		else if (!target.modified) target.modified = true;
 	}
 
@@ -2460,16 +2463,15 @@
 		};
 	});
 
-	/** The selected fx clip when it rolls its own chain (interval mode). */
-	let panelIntervalClip = $derived(
-		selectedFxClip?.mode === "interval" ? selectedFxClip : null,
-	);
-
-	/** An interval clip rolls its own chain, so the switches would be overwritten next tick. */
-	let panelRolledNote = $derived(
-		panelIntervalClip
-			? "Auto clip re-rolls its own mosh on an interval, so the switches follow it. Lock an effect to keep it through every roll, hide one to keep it out, or switch the clip to Static in the clip bar to build a chain by hand."
-			: null,
+	let panelNote = $derived(
+		[
+			selectedFxClip?.mode === "interval"
+				? "These effects run after the auto mosh."
+				: null,
+			fxChainNote,
+		]
+			.filter(Boolean)
+			.join(" ") || null,
 	);
 
 	function setPanelEffects(v: EffectInstance[]) {
@@ -5024,12 +5026,9 @@
 			{#if !selectedMediaClip && !selectedTextClip}
 				<EffectsPanel
 					headless
-					note={fxChainNote}
+					note={panelNote}
 					bind:effects={getPanelEffects, setPanelEffects}
 					noTarget={panelNoTarget}
-					rolledNote={panelRolledNote}
-					rolledChain={!!panelIntervalClip}
-					rolledScope="moshable"
 					hasTrack={linksHaveAudio}
 					beatSync={sequenceBpm > 0}
 					spectrumData={liveSpectrum}
@@ -5050,7 +5049,7 @@
 					onPresetApplied={(preset) => {
 						const target = selectedFxClip;
 						if (target) {
-							target.label = preset.name;
+							if (target.mode !== "interval") target.label = preset.name;
 							target.presetName = preset.name;
 							target.modified = false;
 							fanOutFxEdit();

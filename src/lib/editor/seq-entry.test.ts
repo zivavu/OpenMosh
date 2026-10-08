@@ -8,10 +8,11 @@ import segmentsOnly from "./fixtures/seq-entry/v0-segments-only.json";
 import v0 from "./fixtures/seq-entry/v0.json";
 import v2 from "./fixtures/seq-entry/v2.json";
 import v3 from "./fixtures/seq-entry/v3.json";
+import v4 from "./fixtures/seq-entry/v4.json";
 
 /** Entries as each version saved them, built with that version's own factories.
  * Never regenerate these: they stand for projects already on people's machines. */
-const FIXTURES = { v0, v2, v3 } as unknown as Record<string, SeqEntry>;
+const FIXTURES = { v0, v2, v3, v4 } as unknown as Record<string, SeqEntry>;
 const OPENED = "opened-file";
 
 describe.each(Object.entries(FIXTURES))("a %s entry", (_, entry) => {
@@ -85,13 +86,44 @@ describe("before v3", () => {
 	});
 });
 
-describe("v3", () => {
+describe.each([
+	["v3", v3],
+	["v4", v4],
+])("%s", (_, entry) => {
 	it("keeps its length, song and a span clamped to the length", () => {
-		const restored = readSeqEntry(structuredClone(v3) as SeqEntry, OPENED);
+		const restored = readSeqEntry(structuredClone(entry) as SeqEntry, OPENED);
 		expect(restored.length).toBe(30);
 		expect(restored.span).toEqual({ start: 2, end: 30 });
 		expect(restored.song).toBe("song-1");
 		expect(restored.segments).toEqual([]);
+	});
+});
+
+describe("auto clips", () => {
+	const enabledIn = (restored: ReturnType<typeof readSeqEntry>) =>
+		restored.fx[0].clips[1].effects.filter((e) => e.enabled);
+
+	it("from v4 keep their whole chain, which runs after the roll", () => {
+		const restored = readSeqEntry(structuredClone(v4) as SeqEntry, OPENED);
+		expect(restored.fx[0].clips[1].mode).toBe("interval");
+		expect(enabledIn(restored).map((e) => e.defId)).toEqual(["pixelate"]);
+	});
+
+	it("from before v4 keep only what they held through the roll", () => {
+		const entry = structuredClone(v4) as SeqEntry;
+		entry.v = 3;
+		const restored = readSeqEntry(structuredClone(entry), OPENED);
+		expect(enabledIn(restored)).toEqual([]);
+
+		entry.fx![0].clips[1].effects[0].locked = true;
+		const locked = readSeqEntry(entry, OPENED);
+		expect(enabledIn(locked).map((e) => e.defId)).toEqual(["pixelate"]);
+	});
+
+	it("leave static clips alone", () => {
+		const restored = readSeqEntry(structuredClone(v3) as SeqEntry, OPENED);
+		const live = restored.fx[0].clips[0].effects.filter((e) => e.enabled);
+		expect(live.map((e) => e.defId)).toEqual(["pixelate"]);
 	});
 });
 

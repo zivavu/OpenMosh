@@ -1,14 +1,16 @@
 /** A song's or project's saved timeline, and how every version of it is read back. */
 
 import { records } from "../records";
+import { withLegacyAutoChain, type ChainClip } from "./chain-clip";
 import { normalizeFxLanes, type FxLane } from "./fx-lanes";
 import { normalizeTextTimeline, type TextTimeline } from "../text/types";
 import { normalizeMediaTimeline, type MediaTimeline } from "../media/types";
 import { normalizeSourceEdits, type SourceEdit } from "../media/source-edit";
 
 /** Bumped when what a saved entry means changes; see SeqEntry.v. v3 moved the song
- * onto an audio lane and gave the project its own length. */
-export const SEQ_ENTRY_VERSION = 3;
+ * onto an audio lane and gave the project its own length; v4 runs an auto clip's
+ * chain after its roll. */
+export const SEQ_ENTRY_VERSION = 4;
 
 /** As much of a saved segment as the migration reads. */
 export interface LegacySegmentEntry {
@@ -66,6 +68,14 @@ function clampSpan(
 	return end > start ? { start, end } : null;
 }
 
+/** Every lane's auto clips, settled to how they rolled before v4. */
+function legacyAutoChains<L extends { clips: ChainClip[] }>(lanes: L[]): L[] {
+	return lanes.map((lane) => ({
+		...lane,
+		clips: lane.clips.map(withLegacyAutoChain),
+	}));
+}
+
 /** `openedSourceId` is the file the editor opened with: before layers took the media
  * over, a segment with no source drew it. */
 export function readSeqEntry(
@@ -78,11 +88,19 @@ export function readSeqEntry(
 	const length =
 		(entry.v ?? 0) >= 3 && (entry.length ?? 0) > 0 ? entry.length! : null;
 	const span = length !== null ? clampSpan(entry.span, length) : null;
+	const fx = normalizeFxLanes(entry.fx);
+	const text = entry.text ? normalizeTextTimeline(entry.text) : null;
+	const media = entry.media ? normalizeMediaTimeline(entry.media) : null;
+	const legacy = (entry.v ?? 0) < 4;
 	return {
 		bpm: entry.bpm ?? 0,
-		fx: normalizeFxLanes(entry.fx),
-		text: entry.text ? normalizeTextTimeline(entry.text) : null,
-		media: entry.media ? normalizeMediaTimeline(entry.media) : null,
+		fx: legacy ? legacyAutoChains(fx) : fx,
+		text:
+			legacy && text ? { ...text, lanes: legacyAutoChains(text.lanes) } : text,
+		media:
+			legacy && media
+				? { ...media, lanes: legacyAutoChains(media.lanes) }
+				: media,
 		sourceEdits: normalizeSourceEdits(entry.sourceEdits),
 		segments,
 		length,

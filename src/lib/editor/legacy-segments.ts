@@ -2,7 +2,7 @@
  * for span) and a media layer under the effects (sources and transitions). */
 
 import { restoreEffects, type EffectInstance } from "../effects";
-import { normalizeChainFields } from "./chain-clip";
+import { normalizeChainFields, withLegacyAutoChain } from "./chain-clip";
 import type { ChainMode } from "./sequence";
 import { createFxClip, createFxLane, type FxLane } from "./fx-lanes";
 import {
@@ -80,10 +80,12 @@ export function migrateLegacySegments(
 		const effects = restoreEffects(seg.effects);
 		if (!contributes(seg, effects)) continue;
 		const { effects: _, ...chain } = seg;
-		fxLane.clips.push({
-			...createFxClip(start, end),
-			...normalizeChainFields(chain, effects),
-		});
+		fxLane.clips.push(
+			withLegacyAutoChain({
+				...createFxClip(start, end),
+				...normalizeChainFields(chain, effects),
+			}),
+		);
 	}
 
 	const mediaLane = createMediaLane("Base", null, BOTTOM_Z);
