@@ -1,12 +1,17 @@
 name: CI
 
+# PR-only: main takes nothing but PRs, so a push to main re-tests code that already passed.
 on:
-  push:
-    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.head_ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
+    # The release PR only bumps the version and changelog; a skipped job satisfies the ruleset.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +39,7 @@ jobs:
   # runners, since one runner's CPU can't take a second worker; by file rather
   # than --shard, which balances test counts, not time.
   e2e-half:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -73,7 +79,7 @@ jobs:
   # The main ruleset requires a check named "e2e"; matrix jobs don't report under it.
   e2e:
     needs: e2e-half
-    if: always()
+    if: ${{ always() && !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - run: test "${{ needs.e2e-half.result }}" = success
