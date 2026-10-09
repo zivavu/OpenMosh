@@ -43,42 +43,34 @@
 	const initialRatio = matchingPreset();
 	let selectedRatio = $state<RatioValue>(initialRatio);
 	let lockAspect = $state(initialRatio === "free");
+	// Captured once, not re-read from the size: a half-typed "1" would round it to 1:1.
+	let lockedRatio = currentRatio();
 
-	function getPresetRatio(): number | null {
-		return RATIO_PRESETS.find((p) => p.value === selectedRatio)?.ratio ?? null;
+	function currentRatio(): number {
+		return width > 0 && height > 0 ? width / height : 1;
+	}
+
+	function activeRatio(): number | null {
+		const preset = RATIO_PRESETS.find((p) => p.value === selectedRatio)?.ratio;
+		return preset ?? (lockAspect ? lockedRatio : null);
+	}
+
+	function clampSize(n: number): number {
+		return Math.min(MAX_RESIZE, Math.max(1, Math.round(n)));
 	}
 
 	function setWidth(w: number) {
-		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(w)));
-		const presetRatio = getPresetRatio();
-		if (presetRatio !== null) {
-			width = val;
-			height = Math.min(MAX_RESIZE, Math.max(1, Math.round(val / presetRatio)));
-		} else if (lockAspect && height > 0) {
-			const currentRatio = width / height;
-			width = val;
-			height = Math.min(
-				MAX_RESIZE,
-				Math.max(1, Math.round(val / currentRatio)),
-			);
-		} else {
-			width = val;
-		}
+		if (w <= 0) return;
+		width = clampSize(w);
+		const ratio = activeRatio();
+		if (ratio !== null) height = clampSize(width / ratio);
 	}
 
 	function setHeight(h: number) {
-		const val = Math.min(MAX_RESIZE, Math.max(1, Math.round(h)));
-		const presetRatio = getPresetRatio();
-		if (presetRatio !== null) {
-			height = val;
-			width = Math.min(MAX_RESIZE, Math.max(1, Math.round(val * presetRatio)));
-		} else if (lockAspect && width > 0) {
-			const currentRatio = width / height;
-			height = val;
-			width = Math.min(MAX_RESIZE, Math.max(1, Math.round(val * currentRatio)));
-		} else {
-			height = val;
-		}
+		if (h <= 0) return;
+		height = clampSize(h);
+		const ratio = activeRatio();
+		if (ratio !== null) width = clampSize(height * ratio);
 	}
 
 	function selectRatio(value: RatioValue) {
@@ -127,7 +119,6 @@
 		unit="width"
 		upTitle="Wider (shift for one pixel)"
 		downTitle="Narrower (shift for one pixel)"
-		commitOnBlur
 		onChange={setWidth}
 	/>
 	<button
@@ -135,7 +126,10 @@
 		class:active={lockAspect}
 		onclick={() => {
 			lockAspect = !lockAspect;
-			if (lockAspect) selectedRatio = "free";
+			if (lockAspect) {
+				selectedRatio = "free";
+				lockedRatio = currentRatio();
+			}
 		}}
 		title={lockAspect ? "Unlock aspect ratio" : "Lock aspect ratio"}
 	>
@@ -186,7 +180,6 @@
 		unit="height"
 		upTitle="Taller (shift for one pixel)"
 		downTitle="Shorter (shift for one pixel)"
-		commitOnBlur
 		onChange={setHeight}
 	/>
 </div>
