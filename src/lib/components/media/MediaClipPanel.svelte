@@ -67,6 +67,8 @@
 		sourceHasAudio?: boolean;
 		/** Move the clip's sound onto an audio lane of its own. */
 		onDetachAudio?: () => void;
+		/** Bring the sound back from the audio lanes into the clip. */
+		onAttachAudio?: () => void;
 	}
 
 	let {
@@ -88,6 +90,7 @@
 		chainNote = null,
 		sourceHasAudio = true,
 		onDetachAudio,
+		onAttachAudio,
 	}: Props = $props();
 
 	// This chain runs on the lane's media, so a Mask paints over its box.
@@ -390,6 +393,18 @@
 						This clip's sound was moved to an audio lane, where it plays on its
 						own.
 					</p>
+					{#if onAttachAudio}
+						<div class="row">
+							<span class="label-spacer"></span>
+							<button
+								class="detach"
+								title="Put the sound back in this clip so it moves with the picture again. This removes its clip from the audio lane."
+								onclick={onAttachAudio}
+							>
+								Attach sound
+							</button>
+						</div>
+					{/if}
 				{:else}
 					<div class="row" title="Play this lane's video sound">
 						<label for="mc-sound">Sound</label>

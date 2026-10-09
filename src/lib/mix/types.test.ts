@@ -6,6 +6,7 @@ import {
 	createAudioLane,
 	normalizeAudioLanes,
 	removeAudioSource,
+	removeAudioSourceIn,
 	retargetAudioSource,
 	setAudioClipSources,
 	splitAudioClipAt,
@@ -129,5 +130,26 @@ describe("song swaps", () => {
 	it("tells library sources from pool ones", () => {
 		expect(trackIdOf(song)).toBe("a");
 		expect(trackIdOf("src:clip.mkv:1:2")).toBeNull();
+	});
+});
+
+describe("removeAudioSourceIn", () => {
+	it("drops only that source's clips overlapping the span, and lanes it empties", () => {
+		const detached = createAudioLane("Audio 2");
+		detached.clips = [createAudioClip(2, 6, "vid")];
+		const shared = createAudioLane("Audio 1");
+		const song = createAudioClip(0, 10, trackSourceId("s"));
+		const later = createAudioClip(12, 14, "vid");
+		shared.clips = [song, later];
+		const out = removeAudioSourceIn([shared, detached], "vid", 2, 6);
+		expect(out).toHaveLength(1);
+		expect(out[0].clips).toEqual([song, later]);
+	});
+
+	it("returns the same lanes when nothing overlaps", () => {
+		const lane = createAudioLane("Audio 1");
+		lane.clips = [createAudioClip(6, 8, "vid")];
+		const lanes = [lane];
+		expect(removeAudioSourceIn(lanes, "vid", 2, 6)).toBe(lanes);
 	});
 });
