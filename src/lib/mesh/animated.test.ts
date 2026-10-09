@@ -299,6 +299,23 @@ describe("parseGlb", () => {
 		expect(mesh.uvs![9 + 2]).toBe(2);
 	});
 
+	it("moves a texture's coordinates as its transform says", () => {
+		const { json, bin } = readGlb(twoTextures())!;
+		json.materials![0].pbrMetallicRoughness!.baseColorTexture!.extensions = {
+			KHR_texture_transform: {
+				offset: [0.5, 0],
+				rotation: Math.PI / 2,
+				scale: [2, 1],
+			},
+		};
+		const uvs = parseGltf(json, bin)!.uvs!;
+		// (1, 0): scaled to (2, 0), turned to (0, -2), moved to (0.5, -2).
+		expect(uvs[3]).toBeCloseTo(0.5);
+		expect(uvs[4]).toBeCloseTo(-2);
+		// The other material keeps its own.
+		expect(uvs[9 + 3]).toBeCloseTo(1);
+	});
+
 	it("unrolls strips and fans into triangles", () => {
 		for (const mode of [5, 6]) {
 			const mesh = parseGlb(fourVertices(mode))!;
