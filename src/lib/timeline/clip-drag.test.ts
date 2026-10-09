@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { dragClipsStep, laneSnapPoints, type ClipDrag } from "./clip-drag";
+import {
+	dragClipsStep,
+	frontGrowth,
+	laneSnapPoints,
+	type ClipDrag,
+} from "./clip-drag";
 import { MIN_CLIP_LENGTH, type ClipLane, type TimelineClip } from "./clips";
 import { sourceEndOwner } from "./snap";
 
@@ -233,5 +238,47 @@ describe("laneSnapPoints", () => {
 			{ time: 3, ownerId: "b" },
 		]);
 		expect(laneSnapPoints(undefined)).toEqual([]);
+	});
+});
+
+describe("frontGrowth", () => {
+	const lanes = () => [
+		laneOf(clip("a", 0, 10), clip("b", 20, 30)),
+		laneOf(clip("c", 5, 15)),
+	];
+	const move: ClipDrag = {
+		laneId: "",
+		clipId: "a",
+		mode: "move",
+		grabOffset: 2,
+	};
+	const trim: ClipDrag = {
+		laneId: "",
+		clipId: "a",
+		mode: "start",
+		grabOffset: 0,
+	};
+
+	it("grows by as far as a move wants the clips before 0", () => {
+		// Grabbed 2s in: the pointer at -1 wants the clip at -3.
+		expect(frontGrowth(lanes(), move, ["a"], -1, 0)).toBe(3);
+		expect(frontGrowth(lanes(), move, ["a"], 4, 3)).toBe(0);
+	});
+
+	it("leaves a clip with another ahead of it on its row alone", () => {
+		const drag = { ...move, clipId: "b" };
+		expect(frontGrowth(lanes(), drag, ["b"], -5, 0)).toBe(0);
+	});
+
+	it("stops a trim where its media begins", () => {
+		const slack = () => 4;
+		expect(frontGrowth(lanes(), trim, ["a"], -10, 0, slack)).toBe(4);
+		// Already grown by 3, with 1s of media left: the clip has come back to 0.
+		expect(frontGrowth(lanes(), trim, ["a"], -10, 3, () => 1)).toBe(4);
+		expect(frontGrowth(lanes(), trim, ["a"], -2, 0)).toBe(2);
+	});
+
+	it("grows nothing for a selection that stays inside", () => {
+		expect(frontGrowth(lanes(), move, ["a", "c"], 3, 0)).toBe(0);
 	});
 });

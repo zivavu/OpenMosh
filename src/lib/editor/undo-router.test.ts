@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { asOneEdit, NO_EDIT, nextEditSeq } from "./edit-clock";
+import {
+	asOneEdit,
+	joinEdit,
+	NO_EDIT,
+	nextEditSeq,
+	sharedEditSeq,
+} from "./edit-clock";
 import { redoLatest, undoLatest, type UndoSource } from "./undo-router";
 
 /** A stack that stamps like the real ones: an edit takes a fresh tick, and
@@ -110,5 +116,23 @@ describe("one edit across several stacks", () => {
 		undoLatest([media, text, fx]);
 		undoLatest([media, text, fx]);
 		expect(log.slice(-1)).toEqual(["undo fx"]);
+	});
+});
+
+describe("an edit that reaches more stacks partway", () => {
+	test("undoes with the gesture it joined, in one step", () => {
+		const log: string[] = [];
+		const media = fakeStack(log, "media");
+		const text = fakeStack(log, "text");
+		let seq: number | null = null;
+		asOneEdit(() => {
+			media.edit();
+			seq = sharedEditSeq();
+		});
+		// Something else happens in between: the gesture still undoes as one.
+		joinEdit(seq!, () => text.edit());
+
+		undoLatest([media, text]);
+		expect(log.sort()).toEqual(["undo media", "undo text"]);
 	});
 });

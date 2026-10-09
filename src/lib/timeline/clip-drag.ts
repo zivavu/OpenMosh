@@ -96,6 +96,41 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 	return { lanes: next, edges: movedEdges(next, [mode]) };
 }
 
+/** How many seconds a drag should have added before the project's start: as far
+ * as the dragged clips want to go before 0, and none once they come back in. Only
+ * clips leading their rows can lead the project, and a trimmed start (with
+ * `slack`, how much media it can still uncover) stops where its media begins. */
+export function frontGrowth<C extends TimelineClip, L extends ClipLane<C>>(
+	lanes: L[],
+	drag: ClipDrag,
+	groupIds: string[],
+	/** Where the pointer is, unclamped: before 0 off the track's left edge. */
+	pointer: number,
+	/** What the drag has added so far. */
+	grown: number,
+	slack?: (clip: C) => number,
+): number {
+	if (drag.mode !== "move" && drag.mode !== "start") return 0;
+	const held = lanes.flatMap((l) => l.clips).find((c) => c.id === drag.clipId);
+	if (!held) return 0;
+	let first = Infinity;
+	let room = Infinity;
+	for (const lane of lanes) {
+		for (const c of lane.clips) {
+			if (!groupIds.includes(c.id)) continue;
+			const ahead = lane.clips.some(
+				(o) => !groupIds.includes(o.id) && o.start < c.start,
+			);
+			if (ahead) return 0;
+			first = Math.min(first, c.start);
+			if (drag.mode === "start" && slack) room = Math.min(room, slack(c));
+		}
+	}
+	const edge = drag.mode === "move" ? pointer - drag.grabOffset : pointer;
+	const wanted = edge + first - held.start;
+	return Math.max(0, Math.min(-wanted, grown + room - first));
+}
+
 /** Every edge on a lane, owned by its clip — the lane's snap targets. */
 export function laneSnapPoints<C extends TimelineClip>(
 	lane: ClipLane<C> | undefined,

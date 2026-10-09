@@ -21,6 +21,23 @@ export function asOneEdit<T>(fn: () => T): T {
 	}
 }
 
+/** The stamp the enclosing `asOneEdit` gives its pushes; null outside one. */
+export function sharedEditSeq(): number | null {
+	return shared;
+}
+
+/** Run `fn` as part of the earlier edit `seq`: a gesture that reaches more stacks
+ * partway through still undoes in one step. */
+export function joinEdit<T>(seq: number, fn: () => T): T {
+	const outer = shared;
+	shared = seq;
+	try {
+		return fn();
+	} finally {
+		shared = outer;
+	}
+}
+
 /** Below every real stamp: a stack with nothing to undo never wins. */
 export const NO_EDIT = -1;
 

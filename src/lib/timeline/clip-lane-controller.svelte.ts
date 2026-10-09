@@ -7,7 +7,13 @@ import { isTextEntryTarget } from "../editor/shortcut-target";
 import { isModalKeyboardOpen } from "../modal-keyboard";
 import { latestCopy, markCopied } from "../editor/copy-stamp";
 import { dropAutoRangeScope } from "../audio/auto-range";
-import { dragClipsStep, laneSnapPoints, type ClipDrag } from "./clip-drag";
+import {
+	dragClipsStep,
+	frontGrowth,
+	laneSnapPoints,
+	type ClipDrag,
+} from "./clip-drag";
+import { asOneEdit } from "../editor/edit-clock";
 import { sourceEndOwner, type SnapPoint } from "./snap";
 import {
 	addClip,
@@ -79,10 +85,6 @@ export interface ClipLaneHost<
 	writeJoin?(right: C, data: unknown): C;
 	/** Set where a start trim uncovers or hides the media instead of sliding it. */
 	sourceAnchor?: SourceAnchor<C>;
-	/** Takes over dragging this clip's start edge: the returned function gets how far
-	 * the edge has moved since the press, in seconds, unclamped. Null leaves the drag
-	 * as a plain trim. */
-	dragStart?(clipId: string): ((moved: number) => void) | null;
 }
 
 /** A shift-drag box over the lanes it spans, in time. */
@@ -100,8 +102,6 @@ export class ClipLaneController<
 	readonly stack: TimelineStackState;
 
 	drag = $state<ClipDrag | null>(null);
-	/** A start-edge drag the host took over, and where the pointer went down. */
-	#hostDrag: { apply: (moved: number) => void; x: number } | null = null;
 	scrubbing = $state(false);
 	/** Lane the delete button is asking about; null when nothing is pending. */
 	lanePendingDelete = $state<L | null>(null);
@@ -437,11 +437,6 @@ export class ClipLaneController<
 
 		const clip = this.laneOf(laneId)?.clips.find((c) => c.id === clipId);
 		if (!clip) return;
-		const takeover =
-			mode === "start" && host.selectedClipIds.length <= 1
-				? host.dragStart?.(clipId)
-				: null;
-		this.#hostDrag = takeover ? { apply: takeover, x: e.clientX } : null;
 		this.drag = {
 			laneId,
 			clipId,
@@ -449,8 +444,8 @@ export class ClipLaneController<
 			grabOffset: this.timeAt(e.clientX) - clip.start,
 		};
 		this.stack.beginDrag();
-		// One undo entry per gesture, not per pointermove; a host taking over records its own.
-		if (!takeover) host.onBeforeEdit?.(`${host.kind}-${mode}-${clipId}`);
+		// One undo entry per gesture, not per pointermove.
+		this.#recordDrag(`${host.kind}-${mode}-${clipId}`);
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
@@ -715,29 +710,34 @@ export class ClipLaneController<
 		if (this.scrubbing) this.stack.seekStatic(this.timeAt(e.clientX));
 		const drag = this.drag;
 		if (!drag) return;
-		const hostDrag = this.#hostDrag;
-		if (hostDrag) {
-			this.#clickOnUp = null;
-			// Measured in pixels: the pointer may leave the track, where time stops at its edge.
-			hostDrag.apply((e.clientX - hostDrag.x) * this.stack.vp.secondsPerPixel);
-			return;
-		}
 		this.stack.edgeScroll(e.clientX, () => {
 			if (this.drag === drag) this.onPointerMove(e);
 		});
-		const t = this.stack.dragTime(e.clientX);
-		const limit = this.stack.dragLimit;
 		const { laneId, clipId, mode, grabOffset } = drag;
 		this.#clickOnUp = null;
 		this.#joinPress = null;
 		if (this.#pendingEditKey) {
-			this.host.onBeforeEdit?.(this.#pendingEditKey);
+			this.#recordDrag(this.#pendingEditKey);
 			this.#pendingEditKey = null;
 		}
-		const lanes = this.host.lanes;
 		const group = this.host.selectedClipIds.includes(clipId)
 			? this.host.selectedClipIds
 			: [clipId];
+		// Past the project's start the pointer leaves the track, so read it unclamped there.
+		const pointer = this.stack.vp.clientXToTimeUnclamped(e.clientX);
+		// Mirrors growing at the end: past the start, the project grows there instead.
+		const front = frontGrowth(
+			this.host.lanes,
+			drag,
+			group,
+			pointer,
+			this.stack.frontGrowth,
+			drag.mode === "start" ? this.host.sourceAnchor?.slack : undefined,
+		);
+		this.stack.growFrontTo(front);
+		const t = front > 0 ? pointer : this.stack.dragTime(e.clientX);
+		const limit = this.stack.dragLimit;
+		const lanes = this.host.lanes;
 		// A move that crossed into another row of this kind carries the clips over, if they
 		// fit; otherwise they keep sliding on the row they came from. A selection spread
 		// over several rows only slides.
@@ -783,6 +783,14 @@ export class ClipLaneController<
 		if (step.lanes !== lanes) this.host.setLanes(step.lanes);
 		this.stack.confirmSnap(step.edges);
 		if (mode !== "boundary") this.#reach(group);
+	}
+
+	/** The drag's undo entry, under a stamp the front's growth can join later. */
+	#recordDrag(key: string): void {
+		asOneEdit(() => {
+			this.host.onBeforeEdit?.(key);
+			this.stack.markDragEdit();
+		});
 	}
 
 	/** Let the project grow to where the dragged clips end. */
@@ -832,7 +840,6 @@ export class ClipLaneController<
 		this.scrubbing = false;
 		if (!this.drag) return;
 		this.drag = null;
-		this.#hostDrag = null;
 		this.stack.endDrag();
 		this.stack.endSnap();
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);

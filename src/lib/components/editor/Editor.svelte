@@ -160,12 +160,11 @@
 		snapshotUndoSource,
 	} from "../../timeline/snapshot-history.svelte";
 	import { createSpanHistory } from "../../audio/span-history.svelte";
-	import { asOneEdit, PENDING_EDIT } from "../../editor/edit-clock";
 	import {
-		moveProjectStart,
-		opensProject,
-		type ProjectTimelines,
-	} from "../../editor/front-trim";
+		asOneEdit,
+		PENDING_EDIT,
+		sharedEditSeq,
+	} from "../../editor/edit-clock";
 	import {
 		redoLatest,
 		undoLatest,
@@ -2020,6 +2019,30 @@
 		return end;
 	}
 
+	/** Where the first clip on any lane starts; 0 for an empty project. */
+	function timelineContentStart(): number {
+		let start = Infinity;
+		for (const lane of [
+			...mediaTimeline.lanes,
+			...(mediaTimeline.audioLanes ?? []),
+			...textTimeline.lanes,
+			...fxLanes,
+		]) {
+			for (const clip of lane.clips) start = Math.min(start, clip.start);
+		}
+		return Number.isFinite(start) ? start : 0;
+	}
+
+	/** Trim the project to its clips at both ends, as one undo step. */
+	function fitProjectToClips() {
+		const start = timelineContentStart();
+		const end = timelineContentEnd();
+		asOneEdit(() => {
+			if (start > 0) growProjectFront(-start);
+			setProjectLength(end - start);
+		});
+	}
+
 	function finishProjectInit(
 		seedFrom: SequenceSource | null,
 		songId: string | null,
@@ -2429,54 +2452,46 @@
 		mixer.setDuration(next);
 	}
 
-	/** Dragging the start edge of the song that opens the project moves the project's
-	 * start: time goes in before everything, or comes off the front, and every lane,
-	 * the playhead and the playback span keep their place against the music. */
-	function dragProjectStart(clipId: string): ((moved: number) => void) | null {
-		const song = (mediaTimeline.audioLanes ?? [])
-			.flatMap((l) => l.clips)
-			.find((c) => c.id === clipId);
-		if (!song || !opensProject(song)) return null;
-		const key = `project-start-${clipId}`;
-		asOneEdit(() => {
-			pushMediaHistory(key);
-			pushTextHistory(key);
-			pushFxHistory(key);
-			lengthHistory.push(mixer.duration, key);
+	/** `by` seconds go in before everything (negative takes them back out), and the
+	 * playhead and playback span keep their place against it. Joins the undo entry
+	 * it's called under: a drag's (see growFrontTo) or Fit's. */
+	function growProjectFront(by: number) {
+		const seq = sharedEditSeq();
+		if (mediaHistory.undoSeq !== seq) pushMediaHistory();
+		if (textHistory.undoSeq !== seq) pushTextHistory();
+		if (fxHistory.undoSeq !== seq) pushFxHistory();
+		if (lengthHistory.undoSeq !== seq) lengthHistory.push(mixer.duration);
+		pauseTrack();
+		const later = <C extends TimelineClip, L extends ClipLane<C>>(
+			lanes: L[],
+		): L[] =>
+			lanes.map((l) => ({
+				...l,
+				clips: l.clips.map((c) => ({
+					...c,
+					start: c.start + by,
+					end: c.end + by,
+				})),
+			}));
+		setMediaTimeline({
+			...mediaTimeline,
+			lanes: later(mediaTimeline.lanes),
+			audioLanes: later(mediaTimeline.audioLanes ?? []),
 		});
-		const base: ProjectTimelines = {
-			media: $state.snapshot(mediaTimeline) as MediaTimeline,
-			text: $state.snapshot(textTimeline) as TextTimeline,
-			fx: $state.snapshot(fxLanes) as FxLane[],
-			length: mixer.duration,
-		};
+		setTextTimeline({ ...textTimeline, lanes: later(textTimeline.lanes) });
+		setFxLanes(later(fxLanes));
+		const whole =
+			mixer.spanStart <= 1e-6 && mixer.spanEnd >= mixer.duration - 1e-6;
 		const span = { start: mixer.spanStart, end: mixer.spanEnd };
-		const spanWhole = span.start <= 1e-6 && span.end >= base.length - 1e-6;
-		const repeat = repeatSpan;
 		const playhead = mixer.currentTime;
-		let paused = false;
-		return (moved) => {
-			// Not on the press: a click on the edge only selects the song.
-			if (!paused) pauseTrack();
-			paused = true;
-			const next = moveProjectStart(
-				base,
-				clipId,
-				moved,
-				MAX_PROJECT_LENGTH,
-				sourceRegistry.edits,
-			);
-			const at = (t: number) =>
-				Math.min(next.length, Math.max(0, t - next.cut));
-			setMediaTimeline(next.media);
-			setTextTimeline(next.text);
-			setFxLanes(next.fx);
-			mixer.setDuration(next.length);
-			mixer.spanStart = spanWhole ? 0 : at(span.start);
-			mixer.spanEnd = spanWhole ? next.length : at(span.end);
-			if (repeat) repeatSpan = { start: at(repeat.start), end: at(repeat.end) };
-			mixer.seek(at(playhead));
-		};
+		mixer.setDuration(mixer.duration + by);
+		const at = (t: number) => Math.min(mixer.duration, Math.max(0, t + by));
+		mixer.spanStart = whole ? 0 : at(span.start);
+		mixer.spanEnd = whole ? mixer.duration : at(span.end);
+		if (repeatSpan) {
+			repeatSpan = { start: at(repeatSpan.start), end: at(repeatSpan.end) };
+		}
+		mixer.seek(at(playhead));
 	}
 
 	/** Detach a video clip's sound onto an audio lane of its own. */
@@ -4732,6 +4747,7 @@
 				{repeatClipIds}
 				onToggleRepeat={toggleRepeat}
 				onGrow={isSequenceMode ? (length) => mixer.setDuration(length) : null}
+				onGrowFront={isSequenceMode ? growProjectFront : null}
 				maxLength={MAX_PROJECT_LENGTH}
 			>
 				{#snippet toolbar()}
@@ -4840,9 +4856,9 @@
 						/>
 						<button
 							class="tl-tool-btn"
-							title="Fit the project to its clips: end where the last one does"
+							title="Fit the project to its clips: start where the first one does and end where the last one does"
 							disabled={timelineContentEnd() <= 0}
-							onclick={() => setProjectLength(timelineContentEnd())}
+							onclick={fitProjectToClips}
 						>
 							Fit
 						</button>
@@ -4931,7 +4947,6 @@
 							onChange={(audioLanes) =>
 								setMediaTimeline({ ...mediaTimeline, audioLanes })}
 							onBeforeEdit={pushMediaHistory}
-							dragStart={dragProjectStart}
 							plan={mixPlan}
 							{peaksOf}
 							version={audioBank.version}
