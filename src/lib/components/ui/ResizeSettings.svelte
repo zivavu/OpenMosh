@@ -28,8 +28,21 @@
 		height = $bindable(0),
 	}: Props = $props();
 
-	let selectedRatio = $state<RatioValue>("free");
-	let lockAspect = $state(true);
+	// The popover remounts this on every open, so the preset is read back from the size.
+	function matchingPreset(): RatioValue {
+		if (width <= 0 || height <= 0) return "free";
+		const match = RATIO_PRESETS.find(
+			(p) =>
+				p.ratio !== null &&
+				(Math.round(width / p.ratio) === height ||
+					Math.round(height * p.ratio) === width),
+		);
+		return match?.value ?? "free";
+	}
+
+	const initialRatio = matchingPreset();
+	let selectedRatio = $state<RatioValue>(initialRatio);
+	let lockAspect = $state(initialRatio === "free");
 
 	function getPresetRatio(): number | null {
 		return RATIO_PRESETS.find((p) => p.value === selectedRatio)?.ratio ?? null;
