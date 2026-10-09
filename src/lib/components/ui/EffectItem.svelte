@@ -24,9 +24,13 @@
 		getDefinition,
 		isParamVisible,
 		type EffectInstance,
-		type FreqBand,
 		type VolumeLink,
 	} from "../../effects";
+	import {
+		bandOfLink,
+		FREQ_BAND_OPTIONS,
+		withBand,
+	} from "../../effects/link-bands";
 	import type { SpectrumData } from "../../types";
 	import { linkBand } from "../../editor/link-band.svelte";
 	import { showSpectrum } from "../../editor/show-spectrum.svelte";
@@ -77,44 +81,6 @@
 		if (hz <= 8000) return ((hz - 20) / (8000 - 20)) * 750;
 		return 750 + ((hz - 8000) / (20000 - 8000)) * 250;
 	}
-
-	const FREQ_PRESET_BUTTONS = [
-		// Full stores no band on the link; it resolves to FREQ_PRESETS.full.
-		{
-			id: "full",
-			label: "Full",
-			title: "Full spectrum (20–16k Hz)",
-			min: undefined,
-			max: undefined,
-		},
-		{
-			id: "low",
-			label: "Low",
-			title: "Low (20–500 Hz)",
-			min: FREQ_PRESETS.low.min,
-			max: FREQ_PRESETS.low.max,
-		},
-		{
-			id: "mid",
-			label: "Mid",
-			title: "Mid (500–4000 Hz)",
-			min: FREQ_PRESETS.mid.min,
-			max: FREQ_PRESETS.mid.max,
-		},
-		{
-			id: "high",
-			label: "High",
-			title: "High (4k–16k Hz)",
-			min: FREQ_PRESETS.high.min,
-			max: FREQ_PRESETS.high.max,
-		},
-	] as const satisfies {
-		id: FreqBand;
-		label: string;
-		title: string;
-		min?: number;
-		max?: number;
-	}[];
 
 	interface Props {
 		effect: EffectInstance;
@@ -628,19 +594,17 @@
 											<div class="volume-freq-row">
 												<span class="volume-link-label">Freq</span>
 												<div class="freq-presets">
-													{#each FREQ_PRESET_BUTTONS as preset}
+													{#each FREQ_BAND_OPTIONS as preset}
 														<button
 															type="button"
 															class="freq-preset-btn"
-															class:active={link.freqMin == preset.min &&
-																link.freqMax == preset.max}
+															class:active={bandOfLink(link) === preset.id}
 															title={preset.title}
 															onclick={() => {
-																onVolumeLinkChange(param.key, {
-																	...link,
-																	freqMin: preset.min,
-																	freqMax: preset.max,
-																});
+																onVolumeLinkChange(
+																	param.key,
+																	withBand(link, preset.id),
+																);
 																// Every next link, here or in any other panel, starts on it.
 																linkBand.value = preset.id;
 															}}>{preset.label}</button

@@ -39,6 +39,14 @@
 	import type { SpectrumData } from "../../types";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { moveItem, resolveMoveTarget } from "../../effects/reorder";
+	import {
+		FREQ_BAND_OPTIONS,
+		hasVolumeLinks,
+		setAllLinkBands,
+		sharedLinkBand,
+	} from "../../effects/link-bands";
+	import type { FreqBand } from "../../effects";
+	import { linkBand } from "../../editor/link-band.svelte";
 	import { isMoshable } from "../../editor/mosh";
 	import EffectItem from "./EffectItem.svelte";
 	import { showToast } from "./toast.svelte";
@@ -234,6 +242,17 @@
 
 	function collapseAll() {
 		for (const effect of effects) effect.expanded = false;
+	}
+
+	const showAllBands = $derived(!rolledChain && hasVolumeLinks(effects));
+	const allBand = $derived(sharedLinkBand(effects));
+
+	function setAllBands(band: FreqBand) {
+		onBeforeUserEdit?.();
+		effects = setAllLinkBands(effects, band);
+		linkBand.value = band;
+		appliedIndex = null;
+		onUserEdit?.();
 	}
 
 	// Hidden effects are an explicit set of ids the user chose to hide, not every
@@ -881,6 +900,26 @@
 					</button>
 				{/if}
 			</div>
+
+			{#if showAllBands}
+				<div
+					class="all-bands"
+					role="group"
+					aria-label="Band for every audio link"
+				>
+					<span class="all-bands-label">All links</span>
+					{#each FREQ_BAND_OPTIONS as option}
+						<button
+							class="all-bands-btn"
+							class:active={allBand === option.id}
+							onclick={() => setAllBands(option.id)}
+							title="Set every audio link in this chain to {option.title}"
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 	</div>
 
@@ -1411,6 +1450,51 @@
 
 	.live-filter.on {
 		color: var(--live);
+	}
+
+	.all-bands {
+		display: flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0.35rem 0.7rem;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.all-bands-label {
+		flex: 1;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--live-dim);
+	}
+
+	.all-bands-btn {
+		padding: 0.1rem 0.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-3);
+		background: none;
+		border: 1px solid var(--line);
+		border-radius: var(--r-pill);
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast),
+			background var(--t-fast);
+	}
+
+	.all-bands-btn:hover {
+		color: var(--text-2);
+		border-color: var(--line-strong);
+	}
+
+	.all-bands-btn.active {
+		color: var(--live);
+		border-color: var(--live-dim);
+		background: rgba(110, 231, 192, 0.12);
 	}
 
 	/* Between the live effects and the switched-off ones under them. */
