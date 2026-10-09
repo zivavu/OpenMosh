@@ -141,7 +141,8 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 	};
 
 	const builder = new MeshBuilder({ uv: true, skin: true });
-	let image: number | null = null;
+	/** Image index to texture layer. */
+	const layerOf = new Map<number, number>();
 	const imageOf = (material: number | undefined) => {
 		const tex =
 			json.materials?.[material ?? -1]?.pbrMetallicRoughness?.baseColorTexture
@@ -187,8 +188,10 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 				prim.indices === undefined ? null : accessor(prim.indices).data;
 
 			const source = imageOf(prim.material);
-			if (source !== undefined && image === null) image = source;
-			const textured = source !== undefined && source === image ? 1 : 0;
+			if (source !== undefined && !layerOf.has(source)) {
+				layerOf.set(source, layerOf.size);
+			}
+			const textured = source === undefined ? 0 : layerOf.get(source)! + 1;
 			const factor =
 				json.materials?.[prim.material ?? -1]?.pbrMetallicRoughness
 					?.baseColorFactor ?? WHITE;
@@ -249,17 +252,18 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 	const rig = buildRig(json, nodes, parent, order, bones, accessor);
 	const mesh = builder.buildSkinned(rig);
 	if (!mesh) return null;
-	if (image !== null) {
+	// An image outside the file decodes to nothing and draws untextured.
+	mesh.images = [...layerOf.keys()].map((image) => {
 		const view = json.bufferViews?.[json.images?.[image]?.bufferView ?? -1];
-		if (view) {
-			const start = view.byteOffset ?? 0;
-			mesh.image = {
-				bytes: bin.slice(start, start + view.byteLength),
-				mime: json.images?.[image]?.mimeType ?? "image/png",
-			};
-		}
-	}
-	if (!mesh.image) mesh.uvs = null;
+		const start = view?.byteOffset ?? 0;
+		return {
+			bytes: view
+				? bin.slice(start, start + view.byteLength)
+				: new Uint8Array(0),
+			mime: json.images?.[image]?.mimeType ?? "image/png",
+		};
+	});
+	if (mesh.images.length === 0) mesh.uvs = null;
 	return mesh;
 }
 

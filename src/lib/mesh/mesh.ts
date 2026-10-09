@@ -8,11 +8,13 @@ export interface Mesh {
 	normals: Float32Array;
 	/** rgb per vertex, 0-1; null when the file carries no colour. */
 	colors: Float32Array | null;
-	/** u, v and a 0/1 "take the texture" flag per vertex; null without coordinates. */
+	/** u, v and which texture per vertex: 0 for none, else its index in
+	 * `textures` plus one. Null without coordinates. */
 	uvs: Float32Array | null;
-	/** Encoded picture bytes, as the file carries them; `parseMesh` decodes them into `texture`. */
-	image: { bytes: Uint8Array; mime: string } | null;
-	texture: ImageBitmap | null;
+	/** Encoded pictures, as the file carries them; `parseMesh` decodes them into `textures`. */
+	images: { bytes: Uint8Array; mime: string }[];
+	/** All one size, so they stack into one texture array. */
+	textures: ImageBitmap[];
 	/** Bones and animation. When set, `positions` is the pose at time 0 (for
 	 * thumbnails) and the GPU draws `skin.bindPositions` instead. */
 	skin: Skin | null;
@@ -205,8 +207,8 @@ export class MeshBuilder {
 			normals: new Float32Array(v.normals),
 			colors: v.hasColor ? new Float32Array(v.colors) : null,
 			uvs: this.#withUv ? new Float32Array(v.uvs) : null,
-			image: null,
-			texture: null,
+			images: [],
+			textures: [],
 			skin,
 			extent,
 			triangles: points ? 0 : v.positions.length / 9,

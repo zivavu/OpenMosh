@@ -38,11 +38,11 @@ export function asMeshFile(file: File): File {
 export async function parseMesh(file: File): Promise<Mesh | null> {
 	try {
 		const mesh = await parseByExtension(file);
-		if (mesh?.image) {
-			mesh.texture = await decodeTexture(mesh.image).catch(() => null);
-			mesh.image = null;
-			// A texture that won't decode leaves the model in its material colours.
-			if (!mesh.texture) mesh.uvs = null;
+		if (mesh?.images.length) {
+			mesh.textures = await decodeTextures(mesh.images);
+			mesh.images = [];
+			// Textures that won't decode leave the model in its material colours.
+			if (mesh.textures.length === 0) mesh.uvs = null;
 		}
 		return mesh;
 	} catch {
@@ -65,11 +65,47 @@ async function parseByExtension(file: File): Promise<Mesh | null> {
 	}
 }
 
-function decodeTexture(
-	image: NonNullable<Mesh["image"]>,
-): Promise<ImageBitmap> {
-	return createImageBitmap(
-		new Blob([image.bytes as BlobPart], { type: image.mime }),
-		{ premultiplyAlpha: "none", colorSpaceConversion: "none" },
+/** Largest side of the shared texture size. */
+const MAX_TEXTURE_SIDE = 2048;
+/** Pixels across every layer, so a model with dozens of maps stays in memory. */
+const TEXTURE_BUDGET = 64 * 1024 * 1024;
+
+/** Every picture decoded and scaled to one size; one that won't decode becomes
+ * white, so it shows its material colour. Empty when none decode. */
+async function decodeTextures(images: Mesh["images"]): Promise<ImageBitmap[]> {
+	const decoded = await Promise.all(
+		images.map((image) =>
+			createImageBitmap(
+				new Blob([image.bytes as BlobPart], { type: image.mime }),
+				{
+					premultiplyAlpha: "none",
+					colorSpaceConversion: "none",
+				},
+			).catch(() => null),
+		),
+	);
+	const ok = decoded.filter((b): b is ImageBitmap => b !== null);
+	if (ok.length === 0) return [];
+	let w = Math.min(MAX_TEXTURE_SIDE, Math.max(...ok.map((b) => b.width)));
+	let h = Math.min(MAX_TEXTURE_SIDE, Math.max(...ok.map((b) => b.height)));
+	while (w * h * decoded.length > TEXTURE_BUDGET && w > 1 && h > 1) {
+		w = Math.ceil(w / 2);
+		h = Math.ceil(h / 2);
+	}
+	const white = new ImageData(1, 1);
+	white.data.fill(255);
+	return Promise.all(
+		decoded.map(async (bitmap) => {
+			if (bitmap && bitmap.width === w && bitmap.height === h) return bitmap;
+			const sized = await createImageBitmap(bitmap ?? white, {
+				resizeWidth: w,
+				resizeHeight: h,
+				resizeQuality: "high",
+				premultiplyAlpha: "none",
+				colorSpaceConversion: "none",
+			});
+			bitmap?.close();
+			return sized;
+		}),
 	);
 }

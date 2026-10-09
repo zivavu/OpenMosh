@@ -137,6 +137,69 @@ function fourVertices(mode: number): Uint8Array {
 	);
 }
 
+/** Two triangles, each in its own material with its own embedded image. */
+function twoTextures(): Uint8Array {
+	const bin = new ArrayBuffer(72 + 48 + 8);
+	const view = new DataView(bin);
+	[0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1].forEach((v, i) =>
+		view.setFloat32(i * 4, v, true),
+	);
+	[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1].forEach((v, i) =>
+		view.setFloat32(72 + i * 4, v, true),
+	);
+	new Uint8Array(bin, 120, 8).set([1, 2, 3, 4, 5, 6, 7, 8]);
+	const material = (texture: number) => ({
+		pbrMetallicRoughness: { baseColorTexture: { index: texture } },
+	});
+	return packGlb(
+		{
+			asset: { version: "2.0" },
+			scene: 0,
+			scenes: [{ nodes: [0] }],
+			nodes: [{ mesh: 0 }],
+			meshes: [
+				{
+					primitives: [0, 1].map((k) => ({
+						attributes: { POSITION: k, TEXCOORD_0: 2 + k },
+						material: k,
+					})),
+				},
+			],
+			materials: [material(0), material(1)],
+			textures: [{ source: 1 }, { source: 0 }],
+			images: [
+				{ bufferView: 2, mimeType: "image/png" },
+				{ bufferView: 3, mimeType: "image/jpeg" },
+			],
+			accessors: [
+				{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+				{
+					bufferView: 0,
+					byteOffset: 36,
+					componentType: 5126,
+					count: 3,
+					type: "VEC3",
+				},
+				{ bufferView: 1, componentType: 5126, count: 3, type: "VEC2" },
+				{
+					bufferView: 1,
+					byteOffset: 24,
+					componentType: 5126,
+					count: 3,
+					type: "VEC2",
+				},
+			],
+			bufferViews: [
+				{ byteOffset: 0, byteLength: 72 },
+				{ byteOffset: 72, byteLength: 48 },
+				{ byteOffset: 120, byteLength: 4 },
+				{ byteOffset: 124, byteLength: 4 },
+			],
+		},
+		bin,
+	);
+}
+
 function packGlb(json: object, bin: ArrayBuffer): Uint8Array {
 	const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
 	const jsonPad = (4 - (jsonBytes.length % 4)) % 4;
@@ -165,6 +228,14 @@ describe("parseGlb", () => {
 		expect(mesh.triangles).toBe(0);
 		expect(mesh.positions.length).toBe(12);
 		expect(Array.from(mesh.colors!.subarray(3, 6))).toEqual([0, 1, 0]);
+	});
+
+	it("keeps every material's texture, each on its own layer", () => {
+		const mesh = parseGlb(twoTextures())!;
+		expect(mesh.images.map((i) => i.mime)).toEqual(["image/jpeg", "image/png"]);
+		expect(Array.from(mesh.images[0].bytes)).toEqual([5, 6, 7, 8]);
+		expect(mesh.uvs![2]).toBe(1);
+		expect(mesh.uvs![9 + 2]).toBe(2);
 	});
 
 	it("unrolls strips and fans into triangles", () => {
