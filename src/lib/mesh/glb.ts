@@ -11,7 +11,8 @@ interface GltfNode {
 	scale?: number[];
 }
 
-interface Gltf {
+export interface Gltf {
+	extensionsUsed?: string[];
 	scene?: number;
 	scenes?: { nodes?: number[] }[];
 	nodes?: GltfNode[];
@@ -21,6 +22,12 @@ interface Gltf {
 			indices?: number;
 			material?: number;
 			mode?: number;
+			extensions?: {
+				KHR_draco_mesh_compression?: {
+					bufferView: number;
+					attributes: Record<string, number>;
+				};
+			};
 		}[];
 	}[];
 	skins?: { joints: number[]; inverseBindMatrices?: number }[];
@@ -44,12 +51,27 @@ interface Gltf {
 		count: number;
 		type: string;
 	}[];
-	bufferViews?: {
-		byteOffset?: number;
-		byteLength: number;
-		byteStride?: number;
-	}[];
+	bufferViews?: GltfBufferView[];
 }
+
+export interface GltfBufferView {
+	byteOffset?: number;
+	byteLength: number;
+	byteStride?: number;
+	extensions?: {
+		EXT_meshopt_compression?: {
+			byteOffset?: number;
+			byteLength: number;
+			byteStride: number;
+			count: number;
+			mode: string;
+			filter?: string;
+		};
+	};
+}
+
+/** Buffer views decompressed ahead of parsing, by index; they start at byte 0. */
+export type UnpackedViews = Map<number, Uint8Array>;
 
 const COMPONENTS: Record<string, number> = {
 	SCALAR: 1,
@@ -63,10 +85,41 @@ const COMPONENTS: Record<string, number> = {
  * animation. Images must be embedded; external buffers aren't reachable from a
  * single file. */
 export function parseGlb(bytes: Uint8Array): Mesh | null {
+	const glb = readGlb(bytes);
+	return glb && parseGltf(glb.json, glb.bin);
+}
+
+/** The JSON and binary chunks of a GLB; null for anything else. */
+export function readGlb(
+	bytes: Uint8Array,
+): { json: Gltf; bin: Uint8Array } | null {
 	const chunks = readChunks(bytes);
 	if (!chunks) return null;
 	const json = JSON.parse(new TextDecoder().decode(chunks.json)) as Gltf;
-	const bin = chunks.bin;
+	return { json, bin: chunks.bin };
+}
+
+/** A view's bytes, from `unpacked` when it was compressed. */
+export function viewBytes(
+	json: Gltf,
+	bin: Uint8Array,
+	index: number,
+	unpacked?: UnpackedViews,
+): Uint8Array | null {
+	const done = unpacked?.get(index);
+	if (done) return done;
+	const view = json.bufferViews?.[index];
+	if (!view) return null;
+	const start = view.byteOffset ?? 0;
+	return bin.subarray(start, start + view.byteLength);
+}
+
+/** Draco and meshopt files go through `unpackGltf` first. */
+export function parseGltf(
+	json: Gltf,
+	bin: Uint8Array,
+	unpacked?: UnpackedViews,
+): Mesh | null {
 	const nodes = json.nodes ?? [];
 
 	const accessor = (index: number): { data: Float32Array; size: number } => {
@@ -76,14 +129,18 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 		const data = new Float32Array(acc.count * size);
 		const view =
 			acc.bufferView === undefined ? null : json.bufferViews?.[acc.bufferView];
-		if (!view) return { data, size };
-		const dv = new DataView(bin.buffer, bin.byteOffset, bin.byteLength);
+		const bytes =
+			acc.bufferView === undefined
+				? null
+				: viewBytes(json, bin, acc.bufferView, unpacked);
+		if (!view || !bytes) return { data, size };
+		const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 		const width = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }[
 			acc.componentType
 		];
 		if (!width) throw new Error("bad component type");
 		const stride = view.byteStride || width * size;
-		const start = (view.byteOffset ?? 0) + (acc.byteOffset ?? 0);
+		const start = acc.byteOffset ?? 0;
 		const norm = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 }[
 			acc.componentType
 		];
@@ -253,16 +310,12 @@ export function parseGlb(bytes: Uint8Array): Mesh | null {
 	const mesh = builder.buildSkinned(rig);
 	if (!mesh) return null;
 	// An image outside the file decodes to nothing and draws untextured.
-	mesh.images = [...layerOf.keys()].map((image) => {
-		const view = json.bufferViews?.[json.images?.[image]?.bufferView ?? -1];
-		const start = view?.byteOffset ?? 0;
-		return {
-			bytes: view
-				? bin.slice(start, start + view.byteLength)
-				: new Uint8Array(0),
-			mime: json.images?.[image]?.mimeType ?? "image/png",
-		};
-	});
+	mesh.images = [...layerOf.keys()].map((image) => ({
+		bytes:
+			viewBytes(json, bin, json.images?.[image]?.bufferView ?? -1)?.slice() ??
+			new Uint8Array(0),
+		mime: json.images?.[image]?.mimeType ?? "image/png",
+	}));
 	if (mesh.images.length === 0) mesh.uvs = null;
 	return mesh;
 }

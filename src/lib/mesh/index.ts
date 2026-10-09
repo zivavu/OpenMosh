@@ -1,5 +1,5 @@
 import { parseFbx } from "./fbx";
-import { parseGlb } from "./glb";
+import { parseGltf, readGlb } from "./glb";
 import type { Mesh, Skin } from "./mesh";
 import { parseObj } from "./obj";
 import { parsePly } from "./ply";
@@ -55,7 +55,7 @@ async function parseByExtension(file: File): Promise<Mesh | null> {
 		case ".stl":
 			return parseStl(new Uint8Array(await file.arrayBuffer()));
 		case ".glb":
-			return parseGlb(new Uint8Array(await file.arrayBuffer()));
+			return parseGlbFile(new Uint8Array(await file.arrayBuffer()));
 		case ".fbx":
 			return parseFbx(new Uint8Array(await file.arrayBuffer()));
 		case ".ply":
@@ -64,6 +64,21 @@ async function parseByExtension(file: File): Promise<Mesh | null> {
 			return parseObj(await file.text());
 	}
 }
+
+/** Draco and meshopt files load their decoders first. */
+async function parseGlbFile(bytes: Uint8Array): Promise<Mesh | null> {
+	const glb = readGlb(bytes);
+	if (!glb) return null;
+	const used = glb.json.extensionsUsed ?? [];
+	const compressed = used.some((e) => COMPRESSIONS.includes(e));
+	const unpacked = compressed
+		? await (await import("./glb-unpack")).unpackGltf(glb.json, glb.bin)
+		: undefined;
+	return parseGltf(glb.json, glb.bin, unpacked);
+}
+
+/** Kept in step with glb-unpack, which stays out of the main chunk. */
+const COMPRESSIONS = ["KHR_draco_mesh_compression", "EXT_meshopt_compression"];
 
 /** Largest side of the shared texture size. */
 const MAX_TEXTURE_SIDE = 2048;

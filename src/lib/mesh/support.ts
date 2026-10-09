@@ -130,7 +130,7 @@ function describe(ext: string, head: Uint8Array): Omit<ModelProblem, "name"> {
 			if (compressed) {
 				return {
 					format: "GLB (glTF 2.0), compressed",
-					reason: `It's compressed with ${compressed[0]}, which OpenMosh doesn't unpack.`,
+					reason: `It's compressed with ${compressed[0]}, and it didn't unpack.`,
 					fix: "Export it again with mesh compression turned off.",
 				};
 			}
