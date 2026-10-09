@@ -32,6 +32,12 @@ export class TimelineViewport {
 		return td > 0 && (this.viewStart > 0.001 || this.viewEnd < td - 0.001);
 	}
 
+	/** Seconds one pixel of the track spans at the current zoom. */
+	get secondsPerPixel(): number {
+		const r = this.#getRect();
+		return r && r.width > 0 ? this.viewDuration / r.width : 0;
+	}
+
 	/** Client-x pixel → absolute track time via the current view window. */
 	clientXToTime(cx: number): number {
 		const r = this.#getRect();
