@@ -184,6 +184,19 @@
 		onClipChange({ ...clip, transition: edit(clip.transition) });
 	}
 
+	function setAnimation(index: number) {
+		if (!clip) return;
+		onBeforeEdit?.();
+		onClipChange({ ...clip, animation: index > 0 ? index : undefined });
+	}
+
+	/** Seconds the clip's chosen animation loops over; 0 for a still model. */
+	let animationLength = $derived(
+		source?.animations?.[clip?.animation ?? 0]?.duration ??
+			source?.animations?.[0]?.duration ??
+			0,
+	);
+
 	function setSourceStart(v: number) {
 		if (!clip) return;
 		onBeforeEdit?.(`media-in-${clip.id}`);
@@ -284,8 +297,30 @@
 				</p>
 			{/if}
 
-			{#if source?.kind === "model" && source.animationLength}
-				{const length = source.animationLength}
+			{#if source?.kind === "model" && source.animations && source.animations.length > 1}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="row"
+					title="Which of the model's animations this clip plays"
+				>
+					<label for="mc-animation">Animation</label>
+					<select
+						id="mc-animation"
+						value={clip.animation ?? 0}
+						onchange={(e) =>
+							setAnimation(
+								Number((e.currentTarget as HTMLSelectElement).value),
+							)}
+					>
+						{#each source.animations as a, i (i)}
+							<option value={i}>{a.name} ({a.duration.toFixed(1)}s)</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+
+			{#if source?.kind === "model" && animationLength}
+				{const length = animationLength}
 				<!-- The animation loops, so a split clip's in-point past the end wraps back. -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div

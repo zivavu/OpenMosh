@@ -32,6 +32,7 @@ export interface Gltf {
 	}[];
 	skins?: { joints: number[]; inverseBindMatrices?: number }[];
 	animations?: {
+		name?: string;
 		channels: { sampler: number; target: { node?: number; path: string } }[];
 		samplers: { input: number; output: number; interpolation?: string }[];
 	}[];
@@ -391,32 +392,34 @@ function buildRig(
 	bones: { node: number; inverseBind: Mat4 }[],
 	accessor: (i: number) => { data: Float32Array; size: number },
 ): Rig {
-	const tracks: Track[] = [];
-	let duration = 0;
-	const anim = json.animations?.[0];
-	for (const ch of anim?.channels ?? []) {
-		const sampler = anim!.samplers[ch.sampler];
-		const path = ch.target.path;
-		if (
-			ch.target.node === undefined ||
-			!sampler ||
-			(path !== "translation" && path !== "rotation" && path !== "scale")
-		) {
-			continue;
+	const clips = (json.animations ?? []).map((anim, i) => {
+		const tracks: Track[] = [];
+		let duration = 0;
+		for (const ch of anim.channels) {
+			const sampler = anim.samplers[ch.sampler];
+			const path = ch.target.path;
+			if (
+				ch.target.node === undefined ||
+				!sampler ||
+				(path !== "translation" && path !== "rotation" && path !== "scale")
+			) {
+				continue;
+			}
+			const times = accessor(sampler.input).data;
+			const out = accessor(sampler.output);
+			tracks.push({
+				node: ch.target.node,
+				path,
+				times,
+				values: out.data,
+				size: path === "rotation" ? 4 : 3,
+				step: sampler.interpolation === "STEP",
+				cubic: sampler.interpolation === "CUBICSPLINE",
+			});
+			if (times.length) duration = Math.max(duration, times[times.length - 1]);
 		}
-		const times = accessor(sampler.input).data;
-		const out = accessor(sampler.output);
-		tracks.push({
-			node: ch.target.node,
-			path,
-			times,
-			values: out.data,
-			size: path === "rotation" ? 4 : 3,
-			step: sampler.interpolation === "STEP",
-			cubic: sampler.interpolation === "CUBICSPLINE",
-		});
-		if (times.length) duration = Math.max(duration, times[times.length - 1]);
-	}
+		return { name: anim.name || `Animation ${i + 1}`, duration, tracks };
+	});
 
 	const rest = nodes.map((n) => {
 		if (n.matrix) return { matrix: n.matrix as Mat4 };
@@ -429,8 +432,11 @@ function buildRig(
 
 	return {
 		bones: bones.length,
-		duration,
-		pose(time, out) {
+		animations: clips.map(({ name, duration }) => ({ name, duration })),
+		pose(time, out, animation = 0) {
+			const clip = clips[animation] ?? clips[0];
+			const duration = clip?.duration ?? 0;
+			const tracks = clip?.tracks ?? [];
 			const t = duration > 0 ? ((time % duration) + duration) % duration : 0;
 			const local = rest.map((r) => ({
 				t: r.t?.slice(),

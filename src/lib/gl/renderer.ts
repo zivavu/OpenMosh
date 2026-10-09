@@ -2764,6 +2764,7 @@ export class GlRenderer {
 			camera,
 			{ x: boxW / 2 / unit, y: boxH / 2 / unit },
 			side.sourceTime,
+			side.animation,
 		);
 		this.gl.bindVertexArray(this.quadVAO);
 		return drawn;

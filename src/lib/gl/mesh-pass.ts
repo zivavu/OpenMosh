@@ -251,7 +251,7 @@ export class MeshPass {
 	}
 
 	/** Clears `tex` (w x h) and draws the mesh into it, posed `time` seconds into its
-	 * animation. `half` is the screen box the texture covers, in the frame's
+	 * `animation`. `half` is the screen box the texture covers, in the frame's
 	 * half-height units. False when it couldn't. */
 	draw(
 		id: string,
@@ -261,6 +261,7 @@ export class MeshPass {
 		camera: MeshCamera,
 		half: { x: number; y: number },
 		time: number,
+		animation?: number,
 	): boolean {
 		const mesh = this.#meshes.get(id);
 		const prog = this.#ensureProgram();
@@ -304,7 +305,7 @@ export class MeshPass {
 		);
 		if (mesh.skin) {
 			const { skin, bones, matrices } = mesh.skin;
-			skin.pose(time, matrices);
+			skin.pose(time, matrices, animation);
 			gl.activeTexture(gl.TEXTURE0 + BONE_UNIT);
 			gl.bindTexture(gl.TEXTURE_2D, bones);
 			gl.texImage2D(
