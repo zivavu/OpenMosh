@@ -680,6 +680,7 @@ async function makeThumbUrl(
 		const canvas = new OffscreenCanvas(size, size);
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return null;
+		paintChecker(ctx, size);
 		ctx.drawImage(
 			bitmap,
 			(w - crop) / 2,
@@ -701,6 +702,19 @@ async function makeThumbUrl(
 		return null;
 	} finally {
 		bitmap?.close();
+	}
+}
+
+/** Mid-grey squares, so a JPEG chip of a cut-out shows its shape, dark or light. */
+function paintChecker(ctx: OffscreenCanvasRenderingContext2D, size: number) {
+	const cell = Math.max(4, Math.round(size / 16));
+	ctx.fillStyle = "#5c5c5c";
+	ctx.fillRect(0, 0, size, size);
+	ctx.fillStyle = "#7a7a7a";
+	for (let y = 0; y < size; y += cell) {
+		for (let x = (y / cell) % 2 ? cell : 0; x < size; x += cell * 2) {
+			ctx.fillRect(x, y, cell, cell);
+		}
 	}
 }
 
