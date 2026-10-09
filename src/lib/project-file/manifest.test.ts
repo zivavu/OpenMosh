@@ -99,6 +99,7 @@ describe("remapProject", () => {
 		return {
 			v: 3,
 			song: "old-song",
+			bpmSource: "src-b",
 			media: { enabled: true, lanes: [lane], audioLanes: [audio] },
 			sourceEdits: { "src-a": createSourceEdit() },
 		};
@@ -114,6 +115,7 @@ describe("remapProject", () => {
 			]),
 		);
 		expect(out.song).toBe("new-song");
+		expect(out.bpmSource).toBe("src:new-b");
 		expect(out.media!.lanes[0].sourceId).toBe("src:new-a");
 		expect(out.media!.lanes[0].clips[0].sourceId).toBe("src:new-b");
 		expect(out.media!.audioLanes![0].clips[0].sourceId).toBe("track:new-song");

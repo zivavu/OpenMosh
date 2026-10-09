@@ -1309,6 +1309,7 @@
 		}
 		// Single mode too: an edit with its own key keeps a BPM only for the song it was found for.
 		entry.song = currentTrackId;
+		if (bpmPoolSource) entry.bpmSource = bpmPoolSource;
 		return entry;
 	}
 
@@ -1947,9 +1948,11 @@
 				await nameNewProject(key, initialAudioFile?.name ?? file.name);
 				if (seqStoreKey !== storeKey) return;
 			}
+			bpmPoolSource = null;
 			pendingInit = { key: storeKey, seed: true };
 			return;
 		}
+		bpmPoolSource = saved.bpmSource ?? null;
 		restoreSequenceBpm(saved.bpm);
 		restoreFxLanes(saved.fx);
 		restoreTextTimeline(saved.text);
@@ -2090,6 +2093,8 @@
 	let songSourceId = $derived(
 		isSequenceMode && currentTrackId ? trackSourceId(currentTrackId) : null,
 	);
+	/** A video's sound the BPM is measured from instead of the song. */
+	let bpmPoolSource = $state<string | null>(null);
 	let mixPlan = $derived.by(() =>
 		isSequenceMode
 			? planMix({
@@ -2186,7 +2191,7 @@
 	function dropSong() {
 		audio.clearTrack();
 		currentTrackId = null;
-		sequenceBpm = 0;
+		if (!bpmPoolSource) sequenceBpm = 0;
 	}
 
 	/** Sequence mode: sound files onto lanes. The first becomes the song when there's none. */
@@ -2331,6 +2336,7 @@
 		const from = songSourceId;
 		const to = trackSourceId(trackId);
 		sequenceBpm = 0;
+		bpmPoolSource = null;
 		setSong(songFile, trackId);
 		const lanes = mediaTimeline.audioLanes ?? [];
 		if (from && lanes.some((l) => l.clips.some((c) => c.sourceId === from))) {
@@ -2349,11 +2355,24 @@
 		});
 	}
 
-	/** A track already on the lanes becomes the song, the one the BPM is measured from.
-	 * Unlike replaceSong, every clip stays where it is. */
+	/** A track already on the lanes becomes the song, the one the BPM is measured from;
+	 * a video's sound is measured without becoming the song. Unlike replaceSong, every
+	 * clip stays where it is. */
 	async function setBpmSource(sourceId: string) {
 		const trackId = trackIdOf(sourceId);
-		if (!trackId || trackId === currentTrackId) return;
+		if (!trackId) {
+			if (sourceId === bpmPoolSource) return;
+			bpmPoolSource = sourceId;
+			sequenceBpm = 0;
+			return;
+		}
+		if (trackId === currentTrackId) {
+			if (!bpmPoolSource) return;
+			bpmPoolSource = null;
+			sequenceBpm = 0;
+			return;
+		}
+		bpmPoolSource = null;
 		const track = await getTrack(trackId).catch(() => null);
 		if (!track) {
 			showToast("That track is no longer in the library", "error");
@@ -2629,7 +2648,11 @@
 	}
 
 	const bpmDetection = new BpmDetection({
-		track: () => audio.trackFile,
+		source: () => bpmPoolSource ?? audio.trackFile,
+		decode: async (id) => {
+			await audioBank.settle([id]);
+			return audioBank.buffer(id);
+		},
 		bpm: () => sequenceBpm,
 		onDetected: setSequenceBpm,
 	});
@@ -4889,7 +4912,7 @@
 							{peaksOf}
 							version={audioBank.version}
 							sourceName={audioSourceName}
-							bpmSourceId={songSourceId}
+							bpmSourceId={bpmPoolSource ?? songSourceId}
 							onSetBpmSource={setBpmSource}
 							repeatsOf={audioClipRepeats}
 							edits={sourceRegistry.edits}
