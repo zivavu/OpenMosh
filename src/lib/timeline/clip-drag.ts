@@ -8,6 +8,7 @@ import {
 	resizeClipsIn,
 	sortClips,
 	type ClipLane,
+	type SourceAnchor,
 	type TimelineClip,
 } from "./clips";
 import { sourceEndOwner } from "./snap";
@@ -41,6 +42,7 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 	groupIds: string[],
 	duration: number,
 	snap: SnapShift,
+	anchor?: SourceAnchor<C>,
 ): ClipDragStep<L> {
 	const { clipId, otherId, mode, grabOffset } = drag;
 	const ids = groupIds.includes(clipId) ? groupIds : [clipId];
@@ -83,7 +85,14 @@ export function dragClipsStep<C extends TimelineClip, L extends ClipLane<C>>(
 		moving.map((c) => c[mode] + wanted),
 		exclude,
 	);
-	const next = resizeClipsIn(lanes, ids, mode, wanted + shift, duration);
+	const next = resizeClipsIn(
+		lanes,
+		ids,
+		mode,
+		wanted + shift,
+		duration,
+		anchor,
+	);
 	return { lanes: next, edges: movedEdges(next, [mode]) };
 }
 

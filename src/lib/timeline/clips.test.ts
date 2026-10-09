@@ -16,9 +16,11 @@ import {
 	retargetClipBlock,
 	resizeBoundary,
 	resizeClip,
+	resizeClipsIn,
 	sortClips,
 	updateLaneIn,
 	type ClipLane,
+	type SourceAnchor,
 	type TimelineClip,
 	trimClipsAt,
 } from "./clips";
@@ -731,5 +733,32 @@ describe("trimClipsAt", () => {
 			[15, 20],
 		]);
 		expect(trimClipsAt(lane, 4.5)).toBe(lane);
+	});
+});
+
+describe("resizeClipsIn with a source anchor", () => {
+	type Sound = { id: string; start: number; end: number; sourceStart: number };
+	const anchor: SourceAnchor<Sound> = {
+		slack: (c) => c.sourceStart,
+		move: (c, step) => ({ ...c, sourceStart: c.sourceStart + step }),
+	};
+	const lanes = () => [
+		{ clips: [{ id: "s", start: 10, end: 20, sourceStart: 4 }] as Sound[] },
+	];
+	const sound = (l: { clips: Sound[] }[]) => l[0].clips[0];
+
+	it("uncovers the media before the clip instead of sliding it", () => {
+		const s = sound(resizeClipsIn(lanes(), ["s"], "start", -3, 60, anchor));
+		expect(s).toMatchObject({ start: 7, end: 20, sourceStart: 1 });
+	});
+
+	it("hides the front when trimmed in", () => {
+		const s = sound(resizeClipsIn(lanes(), ["s"], "start", 2, 60, anchor));
+		expect(s).toMatchObject({ start: 12, sourceStart: 6 });
+	});
+
+	it("stops where the media begins", () => {
+		const s = sound(resizeClipsIn(lanes(), ["s"], "start", -9, 60, anchor));
+		expect(s).toMatchObject({ start: 6, sourceStart: 0 });
 	});
 });

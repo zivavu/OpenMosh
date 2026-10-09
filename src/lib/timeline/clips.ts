@@ -163,12 +163,22 @@ export function moveClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 
 /** Move one edge of every clip in `clipIds` by `delta`. The tightest limit any member
  * meets (a neighbour, the timeline's ends, the shortest clip) holds them all. */
+/** Clips whose media holds still under a start trim, as in a DAW: the edge uncovers
+ * or hides it, moving the clip's in-point along. */
+export interface SourceAnchor<C> {
+	/** How far the start may move left before the media runs out, in seconds. */
+	slack(clip: C): number;
+	/** The clip's in-point moved for its start moving by `step` seconds. */
+	move(clip: C, step: number): C;
+}
+
 export function resizeClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 	lanes: L[],
 	clipIds: string[],
 	edge: "start" | "end",
 	delta: number,
 	duration: number,
+	anchor?: SourceAnchor<C>,
 ): L[] {
 	const ids = new Set(clipIds);
 	let lower = -Infinity;
@@ -184,6 +194,7 @@ export function resizeClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 				for (const o of others)
 					if (o.end <= clip.start) floor = Math.max(floor, o.end);
 				lower = Math.max(lower, floor - clip.start);
+				if (anchor) lower = Math.max(lower, -anchor.slack(clip));
 				upper = Math.min(upper, clip.end - MIN_CLIP_LENGTH - clip.start);
 			} else {
 				let ceiling = duration;
@@ -197,7 +208,10 @@ export function resizeClipsIn<C extends TimelineClip, L extends ClipLane<C>>(
 	if (!any || lower > upper) return lanes;
 	const step = Math.min(Math.max(delta, lower), upper);
 	if (step === 0) return lanes;
-	return shiftIn(lanes, ids, (c) => ({ ...c, [edge]: c[edge] + step }));
+	return shiftIn(lanes, ids, (c) => {
+		const moved = { ...c, [edge]: c[edge] + step } as C;
+		return anchor && edge === "start" ? anchor.move(moved, step) : moved;
+	});
 }
 
 function shiftIn<C extends TimelineClip, L extends ClipLane<C>>(
