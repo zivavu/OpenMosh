@@ -3,9 +3,14 @@ import {
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
 	sortClips,
+	type SourceAnchor,
 	type TimelineClip,
 } from "../timeline/clips";
-import { sourceTimeAt, type SourceEdit } from "../media/source-edit";
+import {
+	sourceSpeed,
+	sourceTimeAt,
+	type SourceEdit,
+} from "../media/source-edit";
 
 /** Audio sources that live in the track library rather than the media pool. */
 export const TRACK_SOURCE_PREFIX = "track:";
@@ -19,6 +24,22 @@ export function trackIdOf(sourceId: string): string | null {
 	return sourceId.startsWith(TRACK_SOURCE_PREFIX)
 		? sourceId.slice(TRACK_SOURCE_PREFIX.length)
 		: null;
+}
+
+/** How an audio clip's start trims, as in a DAW: the sound holds still and the edge
+ * uncovers or hides it, at the source's own speed, down to where the file begins. */
+export function audioSourceAnchor(
+	edits?: Record<string, SourceEdit>,
+): SourceAnchor<AudioClip> {
+	const rate = (c: AudioClip) =>
+		sourceSpeed(c.sourceId ? edits?.[c.sourceId] : undefined);
+	return {
+		slack: (c) => c.sourceStart / rate(c),
+		move: (c, step) => ({
+			...c,
+			sourceStart: Math.max(0, c.sourceStart + step * rate(c)),
+		}),
+	};
 }
 
 /** Linear gain the clip volume reaches: +6 dB of headroom over unity. */

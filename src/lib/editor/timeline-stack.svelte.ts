@@ -4,6 +4,7 @@ import { getContext, setContext, untrack, type Snippet } from "svelte";
 import { findSnap, landedAt, type SnapPoint } from "../timeline/snap";
 import { edgeOvershoot, edgeScrollSpeed } from "../timeline/edge-scroll";
 import { TimelineViewport } from "./timeline-viewport.svelte";
+import { joinEdit, sharedEditSeq } from "./edit-clock";
 
 /** How close, on screen, a dragged edge has to come to a target to snap. */
 const SNAP_PX = 7;
@@ -130,10 +131,20 @@ export class TimelineStackState {
 
 	/** Grows the project when a drag carries clips past its end; null where the length is fixed. */
 	growTo = $state<((length: number) => void) | null>(null);
+	/** Puts `by` seconds before everything (negative takes them back out), when a
+	 * drag carries clips past the start; null where it can't. */
+	growFront = $state<((by: number) => void) | null>(null);
 	maxLength = $state(Infinity);
 
-	/** The view and length a clip drag started from. */
-	#drag: { start: number; end: number; duration: number } | null = null;
+	/** The view and length a clip drag started from, the stamp of its undo entry, and
+	 * the seconds it has added before the start. */
+	#drag: {
+		start: number;
+		end: number;
+		duration: number;
+		seq: number | null;
+		front: number;
+	} | null = null;
 
 	get dragging(): boolean {
 		return this.#drag !== null;
@@ -144,7 +155,36 @@ export class TimelineStackState {
 			start: this.vp.viewStart,
 			end: this.vp.viewEnd,
 			duration: this.#getDuration(),
+			seq: null,
+			front: 0,
 		};
+	}
+
+	/** Called inside the `asOneEdit` that records the drag's undo entry, so growing
+	 * the front later joins that same entry. */
+	markDragEdit(): void {
+		const seq = sharedEditSeq();
+		if (this.#drag && seq !== null) this.#drag.seq = seq;
+	}
+
+	/** Bring the seconds the drag has added before the start to `target`; giving it
+	 * back stops at the length the drag started from. */
+	growFrontTo(target: number): void {
+		const drag = this.#drag;
+		const grow = this.growFront;
+		if (!drag || !grow) return;
+		const room = this.maxLength - (this.#getDuration() - drag.front);
+		const next = Math.max(0, Math.min(target, room));
+		const by = next - drag.front;
+		if (Math.abs(by) < 1e-9) return;
+		drag.front = next;
+		if (drag.seq === null) grow(by);
+		else joinEdit(drag.seq, () => grow(by));
+	}
+
+	/** Seconds the drag in progress has added before the start. */
+	get frontGrowth(): number {
+		return this.#drag?.front ?? 0;
 	}
 
 	endDrag(): void {
@@ -178,7 +218,10 @@ export class TimelineStackState {
 	reach(end: number): void {
 		const view = this.#drag;
 		if (!this.growTo || !view) return;
-		const length = Math.min(this.maxLength, Math.max(view.duration, end));
+		const length = Math.min(
+			this.maxLength,
+			Math.max(view.duration + view.front, end),
+		);
 		if (Math.abs(length - this.#getDuration()) > 1e-6) this.growTo(length);
 	}
 

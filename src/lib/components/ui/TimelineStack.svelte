@@ -36,6 +36,8 @@
 		onToggleRepeat?: ((clipIds: string[]) => void) | null;
 		/** Set where the project owns its length: dragging clips past the end grows it. */
 		onGrow?: ((length: number) => void) | null;
+		/** Adds seconds before everything; see TimelineStackState.growFront. */
+		onGrowFront?: ((by: number) => void) | null;
 		maxLength?: number;
 		/** The lanes' own actions, one toolbar for the whole stack. */
 		toolbar?: Snippet;
@@ -65,6 +67,7 @@
 		repeatClipIds = [],
 		onToggleRepeat = null,
 		onGrow = null,
+		onGrowFront = null,
 		maxLength = Infinity,
 		toolbar,
 		selectionHint = null,
@@ -91,6 +94,7 @@
 	});
 	$effect(() => {
 		stack.growTo = onGrow;
+		stack.growFront = onGrowFront;
 		stack.maxLength = maxLength;
 	});
 	const vp = stack.vp;

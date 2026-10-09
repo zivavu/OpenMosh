@@ -15,9 +15,10 @@
 	} from "../../mix/clipboard";
 	import { ClipLaneController } from "../../timeline/clip-lane-controller.svelte";
 	import { repeatNote, type MixSegment } from "../../mix/plan";
-	import { sourceSpeed, type SourceEdit } from "../../media/source-edit";
+	import type { SourceEdit } from "../../media/source-edit";
 	import ClipRepeats from "./ClipRepeats.svelte";
 	import {
+		audioSourceAnchor,
 		createAudioClip,
 		splitAudioClipAt,
 		trackSourceId,
@@ -43,8 +44,6 @@
 		selectedClipIds?: string[];
 		onChange: (lanes: AudioLane[]) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
-		/** See ClipLaneHost.dragStart. */
-		dragStart?: (clipId: string) => ((moved: number) => void) | null;
 		/** The mix, for the waveforms. */
 		plan: MixSegment[];
 		peaksOf: (sourceId: string) => Float32Array | null;
@@ -78,7 +77,6 @@
 		selectedClipIds = $bindable([]),
 		onChange,
 		onBeforeEdit,
-		dragStart,
 		plan,
 		peaksOf,
 		version,
@@ -97,10 +95,6 @@
 
 	const stack = getTimelineStack();
 	const vp = stack.vp;
-
-	/** Seconds of the source each second of the clip plays: a video's sound runs at its speed. */
-	const rateOf = (c: AudioClip) =>
-		sourceSpeed(c.sourceId ? edits?.[c.sourceId] : undefined);
 
 	const ctrl = new ClipLaneController<AudioClip, AudioLane>(
 		{
@@ -130,14 +124,8 @@
 			copy: copySelection,
 			paste: pasteClipboard,
 			sourceEnds: (clip, _lane, until) => sourceEndsOf?.(clip, until) ?? [],
-			dragStart: (clipId) => dragStart?.(clipId) ?? null,
-			// As in a DAW: the sound stays put and the left edge uncovers or hides it.
-			sourceAnchor: {
-				slack: (c) => c.sourceStart / rateOf(c),
-				move: (c, step) => ({
-					...c,
-					sourceStart: Math.max(0, c.sourceStart + step * rateOf(c)),
-				}),
+			get sourceAnchor() {
+				return audioSourceAnchor(edits);
 			},
 		},
 		stack,
