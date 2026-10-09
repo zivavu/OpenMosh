@@ -1,9 +1,10 @@
 import { compose, identity, multiply, slerp, type Mat4 } from "./mat4";
-import { MeshBuilder, type Mesh, type Rig } from "./mesh";
+import { MeshBuilder, type Mesh, type Morph, type Rig } from "./mesh";
 
 interface GltfNode {
 	children?: number[];
 	mesh?: number;
+	weights?: number[];
 	skin?: number;
 	matrix?: number[];
 	translation?: number[];
@@ -17,8 +18,10 @@ export interface Gltf {
 	scenes?: { nodes?: number[] }[];
 	nodes?: GltfNode[];
 	meshes?: {
+		weights?: number[];
 		primitives: {
 			attributes: Record<string, number>;
+			targets?: Record<string, number>[];
 			indices?: number;
 			material?: number;
 			mode?: number;
@@ -199,6 +202,11 @@ export function parseGltf(
 	};
 
 	const builder = new MeshBuilder({ uv: true, skin: true });
+	// Morph targets: offsets per emitted triangle corner, and each node's weight slots.
+	const morphLayout: number[] = [];
+	const morphDeltas: number[] = [];
+	const weightSlots = new Map<number, { base: number; defaults: number[] }>();
+	let slots = 0;
 	/** Image index to texture layer. */
 	const layerOf = new Map<number, number>();
 	const imageOf = (material: number | undefined) => {
@@ -281,6 +289,9 @@ export function parseGltf(
 			});
 			const count = index ? index.length : pos.length / 3;
 			const vertexAt = (i: number) => (index ? index[i] : i);
+			const targets = (prim.targets ?? []).map((t) =>
+				t.POSITION === undefined ? null : accessor(t.POSITION).data,
+			);
 			if (mode === POINTS) {
 				for (let i = 0; i < count; i++) {
 					const c = corner(vertexAt(i));
@@ -288,7 +299,39 @@ export function parseGltf(
 				}
 				continue;
 			}
-			for (const tri of triangleCorners(mode, count)) {
+			const tris = triangleCorners(mode, count);
+			const corners = tris.length * 3;
+			let morph = [0, 0, 0, 0];
+			if (targets.length > 0) {
+				let slot = weightSlots.get(nodeIndex);
+				if (!slot) {
+					const defaults =
+						node.weights ?? json.meshes?.[node.mesh]?.weights ?? [];
+					slot = {
+						base: slots,
+						defaults: targets.map((_, k) => defaults[k] ?? 0),
+					};
+					weightSlots.set(nodeIndex, slot);
+					slots += targets.length;
+				}
+				const first = morphLayout.length / 4;
+				const at = morphDeltas.length / 3;
+				morph = [at - first, slot.base, targets.length, corners];
+				for (let n = targets.length * corners * 3; n > 0; n--)
+					morphDeltas.push(0);
+				targets.forEach((t, k) => {
+					if (!t) return;
+					tris.forEach((tri, n) =>
+						tri.forEach((i, j) => {
+							const v = vertexAt(i);
+							const to = (at + k * corners + n * 3 + j) * 3;
+							for (let c = 0; c < 3; c++) morphDeltas[to + c] = t[v * 3 + c];
+						}),
+					);
+				});
+			}
+			for (const tri of tris) {
+				morphLayout.push(...morph, ...morph, ...morph);
 				const c = tri.map((i) => corner(vertexAt(i)));
 				builder.triangle(
 					c[0].p,
@@ -307,9 +350,25 @@ export function parseGltf(
 	}
 	if (bones.length === 0) return null;
 
-	const rig = buildRig(json, nodes, parent, order, bones, accessor);
+	const rig = buildRig(
+		json,
+		nodes,
+		parent,
+		order,
+		bones,
+		accessor,
+		weightSlots,
+	);
 	const mesh = builder.buildSkinned(rig);
 	if (!mesh) return null;
+	if (slots > 0 && !mesh.points && rig.weights) {
+		mesh.morph = {
+			deltas: new Float32Array(morphDeltas),
+			layout: new Int32Array(morphLayout),
+			slots,
+			weights: rig.weights,
+		} satisfies Morph;
+	}
 	// An image outside the file decodes to nothing and draws untextured.
 	mesh.images = [...layerOf.keys()].map((image) => ({
 		bytes:
@@ -376,7 +435,7 @@ function readChunks(
 
 interface Track {
 	node: number;
-	path: "translation" | "rotation" | "scale";
+	path: "translation" | "rotation" | "scale" | "weights";
 	times: Float32Array;
 	values: Float32Array;
 	size: number;
@@ -391,6 +450,7 @@ function buildRig(
 	order: number[],
 	bones: { node: number; inverseBind: Mat4 }[],
 	accessor: (i: number) => { data: Float32Array; size: number },
+	weightSlots: Map<number, { base: number; defaults: number[] }>,
 ): Rig {
 	const clips = (json.animations ?? []).map((anim, i) => {
 		const tracks: Track[] = [];
@@ -401,7 +461,10 @@ function buildRig(
 			if (
 				ch.target.node === undefined ||
 				!sampler ||
-				(path !== "translation" && path !== "rotation" && path !== "scale")
+				(path !== "translation" &&
+					path !== "rotation" &&
+					path !== "scale" &&
+					(path !== "weights" || !weightSlots.has(ch.target.node)))
 			) {
 				continue;
 			}
@@ -412,7 +475,12 @@ function buildRig(
 				path,
 				times,
 				values: out.data,
-				size: path === "rotation" ? 4 : 3,
+				size:
+					path === "weights"
+						? weightSlots.get(ch.target.node)!.defaults.length
+						: path === "rotation"
+							? 4
+							: 3,
 				step: sampler.interpolation === "STEP",
 				cubic: sampler.interpolation === "CUBICSPLINE",
 			});
@@ -430,14 +498,29 @@ function buildRig(
 		};
 	});
 
+	const loop = (time: number, duration: number) =>
+		duration > 0 ? ((time % duration) + duration) % duration : 0;
+
 	return {
 		bones: bones.length,
 		animations: clips.map(({ name, duration }) => ({ name, duration })),
+		weights(time, out, animation = 0) {
+			for (const { base, defaults } of weightSlots.values()) {
+				out.set(defaults, base);
+			}
+			const clip = clips[animation] ?? clips[0];
+			if (!clip) return;
+			const t = loop(time, clip.duration);
+			for (const track of clip.tracks) {
+				if (track.path !== "weights") continue;
+				out.set(sample(track, t), weightSlots.get(track.node)!.base);
+			}
+		},
 		pose(time, out, animation = 0) {
 			const clip = clips[animation] ?? clips[0];
 			const duration = clip?.duration ?? 0;
 			const tracks = clip?.tracks ?? [];
-			const t = duration > 0 ? ((time % duration) + duration) % duration : 0;
+			const t = loop(time, duration);
 			const local = rest.map((r) => ({
 				t: r.t?.slice(),
 				r: r.r?.slice(),
@@ -445,6 +528,7 @@ function buildRig(
 				matrix: r.matrix,
 			}));
 			for (const track of tracks) {
+				if (track.path === "weights") continue;
 				const target = local[track.node];
 				const key =
 					track.path === "translation"
@@ -485,7 +569,9 @@ function sample(track: Track, t: number): number[] {
 				k * stride + (track.cubic ? size : 0) + size,
 			),
 		);
-	if (n === 0) return size === 4 ? [0, 0, 0, 1] : [0, 0, 0];
+	if (n === 0) {
+		return track.path === "rotation" ? [0, 0, 0, 1] : new Array(size).fill(0);
+	}
 	if (t <= times[0] || n === 1) return at(0);
 	if (t >= times[n - 1]) return at(n - 1);
 	let lo = 0;
@@ -499,5 +585,7 @@ function sample(track: Track, t: number): number[] {
 	if (track.step) return a;
 	const f = (t - times[lo]) / (times[hi] - times[lo]);
 	const b = at(hi);
-	return size === 4 ? slerp(a, b, f) : a.map((v, i) => v + (b[i] - v) * f);
+	return track.path === "rotation"
+		? slerp(a, b, f)
+		: a.map((v, i) => v + (b[i] - v) * f);
 }

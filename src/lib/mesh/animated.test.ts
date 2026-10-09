@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseGlb } from "./glb";
+import { parseGlb, parseGltf, readGlb } from "./glb";
 import { packGlb } from "./glb-fixtures";
 import { compose, invert, multiply, slerp } from "./mat4";
 
@@ -210,7 +210,79 @@ function twoTextures(): Uint8Array {
 	);
 }
 
+/** A triangle with one morph target lifting its top corner, at 0.25 by default,
+ * and an animation taking the weight from 0 to 1 over two seconds. */
+function morphingTriangle(): Uint8Array {
+	const bin = new ArrayBuffer(36 + 36 + 8 + 8);
+	const view = new DataView(bin);
+	[0, 0, 0, 1, 0, 0, 0, 1, 0].forEach((v, i) =>
+		view.setFloat32(i * 4, v, true),
+	);
+	[0, 0, 0, 0, 0, 0, 0, 2, 0].forEach((v, i) =>
+		view.setFloat32(36 + i * 4, v, true),
+	);
+	[0, 2, 0, 1].forEach((v, i) => view.setFloat32(72 + i * 4, v, true));
+	return packGlb(
+		{
+			asset: { version: "2.0" },
+			scene: 0,
+			scenes: [{ nodes: [0] }],
+			nodes: [{ mesh: 0 }],
+			meshes: [
+				{
+					weights: [0.25],
+					primitives: [
+						{ attributes: { POSITION: 0 }, targets: [{ POSITION: 1 }] },
+					],
+				},
+			],
+			animations: [
+				{
+					channels: [{ sampler: 0, target: { node: 0, path: "weights" } }],
+					samplers: [{ input: 2, output: 3 }],
+				},
+			],
+			accessors: [
+				{ bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+				{ bufferView: 1, componentType: 5126, count: 3, type: "VEC3" },
+				{ bufferView: 2, componentType: 5126, count: 2, type: "SCALAR" },
+				{ bufferView: 3, componentType: 5126, count: 2, type: "SCALAR" },
+			],
+			bufferViews: [
+				{ byteOffset: 0, byteLength: 36 },
+				{ byteOffset: 36, byteLength: 36 },
+				{ byteOffset: 72, byteLength: 8 },
+				{ byteOffset: 80, byteLength: 8 },
+			],
+		},
+		bin,
+	);
+}
+
 describe("parseGlb", () => {
+	it("reads morph targets and animates their weights", () => {
+		const mesh = parseGlb(morphingTriangle())!;
+		const morph = mesh.morph!;
+		expect(morph.slots).toBe(1);
+		// Delta starts at entry 0, weight slot 0, one target, three corners.
+		expect(Array.from(morph.layout.subarray(0, 4))).toEqual([0, 0, 1, 3]);
+		expect(Array.from(morph.deltas)).toEqual([0, 0, 0, 0, 0, 0, 0, 2, 0]);
+		expect(mesh.skin!.animations[0].duration).toBe(2);
+		const w = new Float32Array(1);
+		morph.weights(1, w);
+		expect(w[0]).toBeCloseTo(0.5);
+	});
+
+	it("holds a still model's morphs at their default weights", () => {
+		const bytes = morphingTriangle();
+		const glb = readGlb(bytes)!;
+		glb.json.animations = [];
+		const mesh = parseGltf(glb.json, glb.bin)!;
+		const w = new Float32Array(1);
+		mesh.morph!.weights(3, w);
+		expect(w[0]).toBe(0.25);
+	});
+
 	it("reads a point cloud as one dot per vertex", () => {
 		const mesh = parseGlb(fourVertices(0))!;
 		expect(mesh.points).toBe(true);

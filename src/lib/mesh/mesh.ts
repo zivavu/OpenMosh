@@ -18,6 +18,8 @@ export interface Mesh {
 	/** Bones and animation. When set, `positions` is the pose at time 0 (for
 	 * thumbnails) and the GPU draws `skin.bindPositions` instead. */
 	skin: Skin | null;
+	/** Blend shapes, added to the bind positions before the bones move them. */
+	morph: Morph | null;
 	/** Half-size of the box the model fills along x, y and z, in the unit sphere's
 	 * units, over its whole animation. Centred on the origin. */
 	extent: [number, number, number];
@@ -52,6 +54,21 @@ export interface Rig {
 	bones: number;
 	animations: MeshAnimation[];
 	pose(time: number, out: Float32Array, animation?: number): void;
+	/** Writes every morph weight slot at `time` into `out`. */
+	weights?(time: number, out: Float32Array, animation?: number): void;
+}
+
+/** Morph targets, read on the GPU per vertex. */
+export interface Morph {
+	/** xyz position offsets. A vertex's target k sits at entry
+	 * `layout.x + k * layout.w + vertex`. */
+	deltas: Float32Array;
+	/** Per vertex: where its deltas start (less its own index), its first weight
+	 * slot, how many targets it has (0 for none) and its primitive's vertex count. */
+	layout: Int32Array;
+	/** Weight slots across the whole model. */
+	slots: number;
+	weights(time: number, out: Float32Array, animation?: number): void;
 }
 
 type Corners = [ArrayLike<number>, ArrayLike<number>, ArrayLike<number>];
@@ -216,6 +233,7 @@ export class MeshBuilder {
 			images: [],
 			textures: [],
 			skin,
+			morph: null,
 			extent,
 			triangles: points ? 0 : v.positions.length / 9,
 			points,
