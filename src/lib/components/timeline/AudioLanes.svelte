@@ -20,7 +20,6 @@
 	import {
 		createAudioClip,
 		splitAudioClipAt,
-		trackIdOf,
 		trackSourceId,
 		type AudioClip,
 		type AudioLane,
@@ -51,7 +50,7 @@
 		peaksOf: (sourceId: string) => Float32Array | null;
 		version: number;
 		sourceName: (sourceId: string | null) => string;
-		/** The song: the source the BPM is measured from. */
+		/** The source the BPM is measured from: the song, or a video's sound. */
 		bpmSourceId?: string | null;
 		onSetBpmSource?: (sourceId: string) => void;
 		/** Where each clip's sound starts over, if it does. */
@@ -161,11 +160,8 @@
 	}
 
 	let allLoop = $derived(selectedClips.every((c) => c.loop));
-	/** The one library track the selection plays, if that's all it plays. */
-	let commonTrack = $derived.by(() => {
-		const id = common(selectedClips.map((c) => c.sourceId));
-		return id && trackIdOf(id) ? id : null;
-	});
+	/** The one source the selection plays, if that's all it plays. */
+	let commonSource = $derived(common(selectedClips.map((c) => c.sourceId)));
 	let commonGain = $derived(common(selectedClips.map((c) => c.gain ?? 1)));
 	let commonFadeIn = $derived(
 		common(selectedClips.map((c) => c.fadeInSec ?? 0)),
@@ -476,16 +472,16 @@
 			>
 				<Repeat size={12} /> Loop
 			</button>
-			{#if commonTrack && onSetBpmSource}
-				{@const isSource = commonTrack === bpmSourceId}
+			{#if commonSource && onSetBpmSource}
+				{@const isSource = commonSource === bpmSourceId}
 				<button
 					class="tl-tool-btn"
 					class:active={isSource}
 					aria-pressed={isSource}
 					title={isSource
-						? "The BPM is measured from this track"
-						: "Measure the BPM from this track instead, and time the beat grid by it"}
-					onclick={() => onSetBpmSource(commonTrack)}
+						? "The BPM comes from this sound"
+						: "Measure the BPM from this sound instead, and time the beat grid by it"}
+					onclick={() => onSetBpmSource(commonSource)}
 				>
 					<Metronome size={12} /> BPM source
 				</button>

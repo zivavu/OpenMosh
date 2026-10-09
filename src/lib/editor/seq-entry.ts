@@ -39,6 +39,8 @@ export interface SeqEntry {
 	span?: { start: number; end: number };
 	/** Library id of the song: the BPM source, and what the library shows as loaded. */
 	song?: string | null;
+	/** A pool source (a video's sound) the BPM was measured from instead of the song. */
+	bpmSource?: string;
 }
 
 /** A saved entry, normalised into what the editor restores. */
@@ -54,6 +56,7 @@ export interface RestoredEntry {
 	length: number | null;
 	span: { start: number; end: number } | null;
 	song: string | null | undefined;
+	bpmSource: string | null;
 }
 
 /** The span inside the project, or null when nothing of it is left. */
@@ -106,5 +109,6 @@ export function readSeqEntry(
 		length,
 		span,
 		song: entry.song,
+		bpmSource: typeof entry.bpmSource === "string" ? entry.bpmSource : null,
 	};
 }

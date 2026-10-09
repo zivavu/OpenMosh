@@ -32,14 +32,15 @@ function getMonoSamples(audioBuffer: AudioBuffer): Float32Array {
 }
 
 export async function detectBpm(
-	audioFile: File,
+	audio: File | AudioBuffer,
 	signal?: AbortSignal,
 ): Promise<BpmResult> {
 	if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
 	// Audio decoding stays on the main thread; the decoded buffer is usually
 	// cached from an earlier loudness/export pass.
-	const audioBuffer = await getDecodedAudioBuffer(audioFile);
+	const audioBuffer =
+		audio instanceof File ? await getDecodedAudioBuffer(audio) : audio;
 	const samples = getMonoSamples(audioBuffer);
 	if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 

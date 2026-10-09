@@ -186,6 +186,8 @@ export function remapProject(
 	const next: SeqEntry = { ...entry };
 	if (entry.song && trackIds.has(entry.song))
 		next.song = trackIds.get(entry.song);
+	if (typeof entry.bpmSource === "string")
+		next.bpmSource = source(entry.bpmSource) ?? undefined;
 
 	// The editor's normalisers repair anything else; this only has to not trip on it.
 	if (isRecord(entry.media)) {
