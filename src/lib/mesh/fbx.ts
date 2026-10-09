@@ -359,8 +359,9 @@ function build(root: FbxNode): Mesh | null {
 	};
 
 	const builder = new MeshBuilder({ uv: true, skin: true });
-	let image: { bytes: Uint8Array; mime: string } | null = null;
-	let imageTexture: number | null = null;
+	const images: { bytes: Uint8Array; mime: string }[] = [];
+	/** Texture object id to its layer. */
+	const layerOf = new Map<number, number>();
 
 	for (const meshModel of models) {
 		for (const { object: geometry } of childrenOfType(
@@ -416,7 +417,7 @@ function build(root: FbxNode): Mesh | null {
 				const rgb = (object && property(object.node, "DiffuseColor")) ?? [
 					0.8, 0.8, 0.8,
 				];
-				let textured = false;
+				let textured = 0;
 				if (object) {
 					const tex = childrenOfType(object.id, "Texture").find(
 						(t) => t.prop === "DiffuseColor",
@@ -425,11 +426,11 @@ function build(root: FbxNode): Mesh | null {
 					const content =
 						video?.object && child(video.object.node, "Content")?.props[0];
 					if (tex && content instanceof Uint8Array && content.length > 0) {
-						if (imageTexture === null) {
-							imageTexture = tex.child;
-							image = { bytes: content, mime: mimeOf(content) };
+						if (!layerOf.has(tex.child)) {
+							layerOf.set(tex.child, images.length);
+							images.push({ bytes: content, mime: mimeOf(content) });
 						}
-						textured = imageTexture === tex.child;
+						textured = layerOf.get(tex.child)! + 1;
 					}
 				}
 				return { color: [rgb[0], rgb[1], rgb[2]], textured };
@@ -470,7 +471,7 @@ function build(root: FbxNode): Mesh | null {
 					return {
 						p: [vertices[cp * 3], vertices[cp * 3 + 1], vertices[cp * 3 + 2]],
 						n: normals?.(cp, at, 3) ?? null,
-						uv: [uv?.[0] ?? 0, uv?.[1] ?? 0, mat?.textured ? 1 : 0],
+						uv: [uv?.[0] ?? 0, uv?.[1] ?? 0, mat?.textured ?? 0],
 						...skin,
 					};
 				});
@@ -519,8 +520,8 @@ function build(root: FbxNode): Mesh | null {
 	};
 	const mesh = builder.buildSkinned(rig);
 	if (!mesh) return null;
-	mesh.image = image;
-	if (!image) mesh.uvs = null;
+	mesh.images = images;
+	if (images.length === 0) mesh.uvs = null;
 	return mesh;
 }
 

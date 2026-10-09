@@ -59,12 +59,12 @@ in vec3 v_normal;
 in vec3 v_color;
 in vec3 v_world;
 in vec3 v_uv;
-uniform sampler2D u_texture;
+uniform highp sampler2DArray u_texture;
 uniform bool u_points;
 out vec4 outColor;
 void main() {
   vec3 base = v_color;
-  if (v_uv.z > 0.5) base *= texture(u_texture, v_uv.xy).rgb;
+  if (v_uv.z > 0.5) base *= texture(u_texture, vec3(v_uv.xy, round(v_uv.z) - 1.0)).rgb;
   // Scanned points carry their own lighting and no normals.
   if (u_points) {
     if (length(gl_PointCoord - 0.5) > 0.5) discard;
@@ -171,7 +171,7 @@ export class MeshPass {
 			count: vertices,
 			dot: mesh.points ? DOT_SPREAD * Math.sqrt((4 * Math.PI) / vertices) : 0,
 			extent: mesh.extent,
-			texture: mesh.texture ? this.#colorTexture(mesh.texture) : null,
+			texture: mesh.textures.length ? this.#colorTexture(mesh.textures) : null,
 			skin: skin
 				? {
 						skin,
@@ -192,22 +192,37 @@ export class MeshPass {
 		return buf;
 	}
 
-	#colorTexture(image: ImageBitmap): WebGLTexture {
+	/** One layer per picture; `parseMesh` made them all one size. */
+	#colorTexture(images: ImageBitmap[]): WebGLTexture {
 		const gl = this.#gl;
+		const T = gl.TEXTURE_2D_ARRAY;
+		const { width, height } = images[0];
 		const tex = gl.createTexture()!;
 		gl.activeTexture(gl.TEXTURE0 + TEXTURE_UNIT);
-		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.bindTexture(T, tex);
 		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-		gl.generateMipmap(gl.TEXTURE_2D);
-		gl.texParameteri(
-			gl.TEXTURE_2D,
-			gl.TEXTURE_MIN_FILTER,
-			gl.LINEAR_MIPMAP_LINEAR,
+		const levels = Math.floor(Math.log2(Math.max(width, height))) + 1;
+		gl.texStorage3D(T, levels, gl.RGBA8, width, height, images.length);
+		images.forEach((image, layer) =>
+			gl.texSubImage3D(
+				T,
+				0,
+				0,
+				0,
+				layer,
+				width,
+				height,
+				1,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				image,
+			),
 		);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+		gl.generateMipmap(T);
+		gl.texParameteri(T, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+		gl.texParameteri(T, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(T, gl.TEXTURE_WRAP_S, gl.REPEAT);
+		gl.texParameteri(T, gl.TEXTURE_WRAP_T, gl.REPEAT);
 		gl.activeTexture(gl.TEXTURE0);
 		return tex;
 	}
@@ -306,7 +321,7 @@ export class MeshPass {
 		}
 		if (mesh.texture) {
 			gl.activeTexture(gl.TEXTURE0 + TEXTURE_UNIT);
-			gl.bindTexture(gl.TEXTURE_2D, mesh.texture);
+			gl.bindTexture(gl.TEXTURE_2D_ARRAY, mesh.texture);
 		}
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindVertexArray(mesh.vao);
