@@ -28,7 +28,6 @@ const OTHER_FORMATS: Record<string, { format: string; fix: string }> = {
 	".ma": { format: "Maya scene", fix: EXPORT_GLB },
 	".mb": { format: "Maya scene", fix: EXPORT_GLB },
 	".c4d": { format: "Cinema 4D scene", fix: EXPORT_GLB },
-	".ply": { format: "PLY", fix: EXPORT_GLB },
 	".usd": { format: "USD", fix: EXPORT_GLB },
 	".usda": { format: "USD", fix: EXPORT_GLB },
 	".usdc": { format: "USD", fix: EXPORT_GLB },
@@ -141,6 +140,14 @@ function describe(ext: string, head: Uint8Array): Omit<ModelProblem, "name"> {
 				fix: "Make sure the export includes the mesh, not just the skeleton or animation.",
 			};
 		}
+		case ".ply":
+			return {
+				format: "PLY",
+				reason: head.subarray(0, 3).every((b, i) => b === "ply".charCodeAt(i))
+					? "OpenMosh couldn't find any points or faces in it."
+					: "This isn't a PLY file, whatever its name says.",
+				fix: "Check that it opens in a 3D app, or export it as GLB.",
+			};
 		default:
 			return {
 				format: ext === ".stl" ? "STL" : "OBJ",

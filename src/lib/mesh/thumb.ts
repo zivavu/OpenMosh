@@ -100,8 +100,12 @@ function drawDots(
 	cam: MeshCamera,
 	size: number,
 ) {
-	const count = mesh.positions.length / 3;
-	const dots = Array.from({ length: count }, (_, i) => {
+	const all = mesh.positions.length / 3;
+	// A big splat file has millions; a thumbnail can't show them anyway.
+	const step = Math.ceil(all / MAX_THUMB_DOTS);
+	const count = Math.ceil(all / step);
+	const dots = Array.from({ length: count }, (_, k) => {
+		const i = k * step;
 		const w = modelToWorld(cam, mesh.positions.subarray(i * 3, i * 3 + 3));
 		return { i, depth: w[2], at: projectToUv(cam, 1, w) };
 	});
@@ -117,3 +121,4 @@ function drawDots(
 }
 
 const DEFAULT_RGB = [DEFAULT_COLOR, DEFAULT_COLOR, DEFAULT_COLOR];
+const MAX_THUMB_DOTS = 200_000;
