@@ -72,6 +72,8 @@ export interface MediaClip extends ChainClip {
 	sourceId?: string;
 	/** Models only: how fast the animation plays. Absent means 1. */
 	speed?: number;
+	/** Models only: which of the file's animations plays. Absent means the first. */
+	animation?: number;
 	/** Fade the layer in over this many seconds from the clip's start, and out over
 	 * `fadeOutSec` before its end. */
 	fadeInSec?: number;
@@ -265,6 +267,10 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					sourceStart: clip.sourceStart ?? 0,
 					sourceId: clip.sourceId ?? undefined,
 					speed: normalizeClipSpeed(clip.speed),
+					animation:
+						Number.isInteger(clip.animation) && clip.animation! > 0
+							? clip.animation
+							: undefined,
 					// Saved before the two edges split, `fadeSec` ramped both.
 					fadeInSec: clip.fadeInSec ?? clip.fadeSec,
 					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,

@@ -6,7 +6,13 @@ import {
 } from "../media";
 import { GeneratedSizeSync, readGenerated } from "../generators";
 import { gifsToVideo } from "../media/gif";
-import { asMeshFile, isMeshFile, parseMesh, type Mesh } from "../mesh";
+import {
+	asMeshFile,
+	isMeshFile,
+	parseMesh,
+	type Mesh,
+	type MeshAnimation,
+} from "../mesh";
 import { renderMeshThumb } from "../mesh/thumb";
 import { probeSlideVideo, SlideVideoSampler } from "../slideshow/video-sampler";
 import { needsProxy, startProxyJob, type ProxyJob } from "../video/proxy";
@@ -48,8 +54,8 @@ export interface SequenceSource {
 	height?: number;
 	/** Videos only; 0 for images. */
 	duration: number;
-	/** Models only: seconds their animation loops over; absent for a still model. */
-	animationLength?: number;
+	/** Models only: the animations a clip can pick from, in the file's order. */
+	animations?: MeshAnimation[];
 	/** <=1080p stand-in the preview decodes; exports still read `file`. */
 	proxyFile?: File;
 	/** Proxy size: target while transcoding, finished size after; absent means still looking. */
@@ -516,7 +522,9 @@ export class SequenceSourceRegistry {
 			thumbUrl: thumb ? URL.createObjectURL(thumb) : null,
 			thumbPending: false,
 			duration: 0,
-			animationLength: mesh.skin?.duration || undefined,
+			animations: mesh.skin?.animations.length
+				? mesh.skin.animations
+				: undefined,
 		};
 	}
 

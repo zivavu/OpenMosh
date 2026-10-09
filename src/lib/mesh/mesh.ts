@@ -34,18 +34,24 @@ export interface Skin {
 	joints: Uint16Array;
 	weights: Float32Array;
 	bones: number;
-	/** Seconds the animation runs; 0 for a rig with nothing to play. */
-	duration: number;
+	/** The file's animations; empty for a rig with nothing to play. */
+	animations: MeshAnimation[];
 	/** Writes every bone's column-major 4x4 at `time` (looped) into `out`, with the
-	 * unit-sphere fit folded in. */
-	pose(time: number, out: Float32Array): void;
+	 * unit-sphere fit folded in. An `animation` the rig lacks poses the first. */
+	pose(time: number, out: Float32Array, animation?: number): void;
+}
+
+export interface MeshAnimation {
+	name: string;
+	/** Seconds it runs before looping. */
+	duration: number;
 }
 
 /** A rig before its mesh has been fitted to the unit sphere. */
 export interface Rig {
 	bones: number;
-	duration: number;
-	pose(time: number, out: Float32Array): void;
+	animations: MeshAnimation[];
+	pose(time: number, out: Float32Array, animation?: number): void;
 }
 
 type Corners = [ArrayLike<number>, ArrayLike<number>, ArrayLike<number>];
@@ -179,9 +185,9 @@ export class MeshBuilder {
 			joints,
 			weights,
 			bones: rig.bones,
-			duration: rig.duration,
-			pose(time, out) {
-				rig.pose(time, out);
+			animations: rig.animations,
+			pose(time, out, animation) {
+				rig.pose(time, out, animation);
 				for (let b = 0; b < rig.bones; b++) {
 					const m = multiply(fit, out.subarray(b * 16, b * 16 + 16));
 					for (let i = 0; i < 16; i++) out[b * 16 + i] = m[i];
@@ -223,8 +229,10 @@ const NO_UV = [0, 0, 0];
 const NO_JOINTS = [0, 0, 0, 0];
 const NO_WEIGHTS = [1, 0, 0, 0];
 
-/** How many poses along the animation decide the fit. */
-const FIT_SAMPLES = 48;
+/** How many poses along the animations decide the fit, shared between them. */
+const FIT_SAMPLES = 192;
+/** The fewest poses one animation gets, however many the file has. */
+const FIT_SAMPLES_MIN = 8;
 
 function faceNormal(
 	a: ArrayLike<number>,
@@ -288,24 +296,29 @@ function halfExtent(positions: Float32Array): [number, number, number] {
 
 /** The matrix that centres the rig's poses on the origin and scales the furthest
  * vertex to 1, and the box those poses fill; null for a rig with no extent or a
- * non-finite pose. */
+ * non-finite pose. Every animation counts, so switching one keeps the scale. */
 function fitRig(
 	bind: Float32Array,
 	joints: Uint16Array,
 	weights: Float32Array,
 	rig: Rig,
 ): { fit: Mat4; extent: [number, number, number] } | null {
-	const times =
-		rig.duration > 0
-			? Array.from(
-					{ length: FIT_SAMPLES },
-					(_, i) => (i / FIT_SAMPLES) * rig.duration,
-				)
-			: [0];
+	const per = Math.max(
+		FIT_SAMPLES_MIN,
+		Math.floor(FIT_SAMPLES / Math.max(1, rig.animations.length)),
+	);
+	const samples = rig.animations.length
+		? rig.animations.flatMap((a, animation) =>
+				Array.from({ length: a.duration > 0 ? per : 1 }, (_, i) => ({
+					time: (i / per) * a.duration,
+					animation,
+				})),
+			)
+		: [{ time: 0, animation: 0 }];
 	const mats = new Float32Array(rig.bones * 16);
 	const posed = new Float32Array(bind.length);
-	const poses = times.map((t) => {
-		rig.pose(t, mats);
+	const poses = samples.map(({ time, animation }) => {
+		rig.pose(time, mats, animation);
 		skinPositions(bind, joints, weights, mats, posed);
 		return posed.slice();
 	});

@@ -505,7 +505,8 @@ function build(root: FbxNode): Mesh | null {
 
 	const rig: Rig = {
 		bones: bones.length,
-		duration,
+		// Only the first animation stack is read.
+		animations: duration > 0 ? [{ name: "Animation", duration }] : [],
 		pose(time, out) {
 			const t = duration > 0 ? ((time % duration) + duration) % duration : 0;
 			const world = worldAt(t);

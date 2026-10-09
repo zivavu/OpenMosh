@@ -3,9 +3,10 @@ import { parseGlb } from "./glb";
 import { packGlb } from "./glb-fixtures";
 import { compose, invert, multiply, slerp } from "./mat4";
 
-/** One triangle skinned to one bone that slides along x over a second. */
+/** One triangle skinned to one bone that slides along x over a second; a second
+ * animation, "Hold", keeps it still. */
 function slidingTriangle(): Uint8Array {
-	const bin = new ArrayBuffer(36 + 12 + 48 + 8 + 24);
+	const bin = new ArrayBuffer(36 + 12 + 48 + 8 + 24 + 24);
 	const view = new DataView(bin);
 	let at = 0;
 	for (const v of [0, 0, 0, 1, 0, 0, 0, 1, 0]) {
@@ -39,8 +40,14 @@ function slidingTriangle(): Uint8Array {
 		skins: [{ joints: [0] }],
 		animations: [
 			{
+				name: "Slide",
 				channels: [{ sampler: 0, target: { node: 0, path: "translation" } }],
 				samplers: [{ input: 3, output: 4 }],
+			},
+			{
+				name: "Hold",
+				channels: [{ sampler: 0, target: { node: 0, path: "translation" } }],
+				samplers: [{ input: 3, output: 5 }],
 			},
 		],
 		accessors: [
@@ -49,6 +56,7 @@ function slidingTriangle(): Uint8Array {
 			{ bufferView: 2, componentType: 5126, count: 3, type: "VEC4" },
 			{ bufferView: 3, componentType: 5126, count: 2, type: "SCALAR" },
 			{ bufferView: 4, componentType: 5126, count: 2, type: "VEC3" },
+			{ bufferView: 5, componentType: 5126, count: 2, type: "VEC3" },
 		],
 		bufferViews: [
 			{ byteOffset: 0, byteLength: 36 },
@@ -56,6 +64,7 @@ function slidingTriangle(): Uint8Array {
 			{ byteOffset: 48, byteLength: 48 },
 			{ byteOffset: 96, byteLength: 8 },
 			{ byteOffset: 104, byteLength: 24 },
+			{ byteOffset: 128, byteLength: 24 },
 		],
 	};
 	return packGlb(json, bin);
@@ -230,7 +239,10 @@ describe("parseGlb", () => {
 		const mesh = parseGlb(slidingTriangle())!;
 		expect(mesh.triangles).toBe(1);
 		expect(mesh.skin?.bones).toBe(1);
-		expect(mesh.skin?.duration).toBe(1);
+		expect(mesh.skin?.animations).toEqual([
+			{ name: "Slide", duration: 1 },
+			{ name: "Hold", duration: 1 },
+		]);
 		expect(mesh.uvs).toBeNull();
 	});
 
@@ -245,6 +257,19 @@ describe("parseGlb", () => {
 		expect(travel).toBeGreaterThan(0);
 		expect(at(0.5) - at(0)).toBeCloseTo(travel / 2, 2);
 		expect(at(1.5)).toBeCloseTo(at(0.5), 5);
+	});
+
+	it("poses the animation it's asked for", () => {
+		const skin = parseGlb(slidingTriangle())!.skin!;
+		const at = (t: number, animation: number) => {
+			const out = new Float32Array(16);
+			skin.pose(t, out, animation);
+			return out[12];
+		};
+		expect(at(0.5, 1)).toBeCloseTo(at(0, 1), 5);
+		expect(at(0.5, 0)).not.toBeCloseTo(at(0, 0), 2);
+		// One it doesn't have falls back to the first.
+		expect(at(0.5, 7)).toBeCloseTo(at(0.5, 0), 5);
 	});
 
 	it("keeps the whole dance inside the unit sphere", () => {

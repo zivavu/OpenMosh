@@ -1249,6 +1249,7 @@
 				c.end;
 				c.sourceStart;
 				c.speed;
+				c.animation;
 				c.sourceId;
 				c.mode;
 				c.seed;

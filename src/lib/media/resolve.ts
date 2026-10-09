@@ -41,6 +41,8 @@ export interface ResolvedMediaLayer {
 	sourceId: string;
 	/** Seconds into the source to show. Videos wrap; images ignore it. */
 	sourceTime: number;
+	/** Models only: which animation `sourceTime` is in. */
+	animation?: number;
 	style: MediaStyle;
 	/** What the composite draws this layer at: the lane's opacity scaled by the clip's
 	 * fade. Separate from `style.opacity` so the per-frame value needn't clone. */
@@ -58,6 +60,7 @@ export interface MediaLayerSide {
 	clipId: string;
 	sourceId: string;
 	sourceTime: number;
+	animation?: number;
 	effects: EffectInstance[];
 }
 
@@ -233,6 +236,7 @@ export function resolveMediaLayersAt(
 									clipId: prev.id,
 									sourceId: prevSource,
 									sourceTime: clipSourceTime(prev, prevSource, time, edits),
+									animation: prev.animation,
 									effects: chains ? chains(lane, prev, time) : prev.effects,
 								}
 							: null,
@@ -249,6 +253,7 @@ export function resolveMediaLayersAt(
 			z: lane.z,
 			sourceId,
 			sourceTime: clipSourceTime(clip, sourceId, time, edits),
+			animation: clip.animation,
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),
 			effects: chains ? chains(lane, clip, time) : clip.effects,
