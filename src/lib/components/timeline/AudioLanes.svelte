@@ -44,6 +44,8 @@
 		selectedClipIds?: string[];
 		onChange: (lanes: AudioLane[]) => void;
 		onBeforeEdit?: (coalesceKey?: string) => void;
+		/** See ClipLaneHost.dragStart. */
+		dragStart?: (clipId: string) => ((moved: number) => void) | null;
 		/** The mix, for the waveforms. */
 		plan: MixSegment[];
 		peaksOf: (sourceId: string) => Float32Array | null;
@@ -77,6 +79,7 @@
 		selectedClipIds = $bindable([]),
 		onChange,
 		onBeforeEdit,
+		dragStart,
 		plan,
 		peaksOf,
 		version,
@@ -124,6 +127,7 @@
 			copy: copySelection,
 			paste: pasteClipboard,
 			sourceEnds: (clip, _lane, until) => sourceEndsOf?.(clip, until) ?? [],
+			dragStart: (clipId) => dragStart?.(clipId) ?? null,
 		},
 		stack,
 	);

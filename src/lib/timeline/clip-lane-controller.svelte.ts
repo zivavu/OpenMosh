@@ -76,6 +76,10 @@ export interface ClipLaneHost<
 	/** What a copied join carries over to where it's pasted. */
 	readJoin?(right: C): unknown;
 	writeJoin?(right: C, data: unknown): C;
+	/** Takes over dragging this clip's start edge: the returned function gets how far
+	 * the edge has moved since the press, in seconds, unclamped. Null leaves the drag
+	 * as a plain trim. */
+	dragStart?(clipId: string): ((moved: number) => void) | null;
 }
 
 /** A shift-drag box over the lanes it spans, in time. */
@@ -93,6 +97,8 @@ export class ClipLaneController<
 	readonly stack: TimelineStackState;
 
 	drag = $state<ClipDrag | null>(null);
+	/** A start-edge drag the host took over, and where the pointer went down. */
+	#hostDrag: { apply: (moved: number) => void; x: number } | null = null;
 	scrubbing = $state(false);
 	/** Lane the delete button is asking about; null when nothing is pending. */
 	lanePendingDelete = $state<L | null>(null);
@@ -428,6 +434,11 @@ export class ClipLaneController<
 
 		const clip = this.laneOf(laneId)?.clips.find((c) => c.id === clipId);
 		if (!clip) return;
+		const takeover =
+			mode === "start" && host.selectedClipIds.length <= 1
+				? host.dragStart?.(clipId)
+				: null;
+		this.#hostDrag = takeover ? { apply: takeover, x: e.clientX } : null;
 		this.drag = {
 			laneId,
 			clipId,
@@ -435,8 +446,8 @@ export class ClipLaneController<
 			grabOffset: this.timeAt(e.clientX) - clip.start,
 		};
 		this.stack.beginDrag();
-		// One undo entry per gesture, not per pointermove.
-		host.onBeforeEdit?.(`${host.kind}-${mode}-${clipId}`);
+		// One undo entry per gesture, not per pointermove; a host taking over records its own.
+		if (!takeover) host.onBeforeEdit?.(`${host.kind}-${mode}-${clipId}`);
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 
@@ -701,6 +712,13 @@ export class ClipLaneController<
 		if (this.scrubbing) this.stack.seekStatic(this.timeAt(e.clientX));
 		const drag = this.drag;
 		if (!drag) return;
+		const hostDrag = this.#hostDrag;
+		if (hostDrag) {
+			this.#clickOnUp = null;
+			// Measured in pixels: the pointer may leave the track, where time stops at its edge.
+			hostDrag.apply((e.clientX - hostDrag.x) * this.stack.vp.secondsPerPixel);
+			return;
+		}
 		this.stack.edgeScroll(e.clientX, () => {
 			if (this.drag === drag) this.onPointerMove(e);
 		});
@@ -810,6 +828,7 @@ export class ClipLaneController<
 		this.scrubbing = false;
 		if (!this.drag) return;
 		this.drag = null;
+		this.#hostDrag = null;
 		this.stack.endDrag();
 		this.stack.endSnap();
 		(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
