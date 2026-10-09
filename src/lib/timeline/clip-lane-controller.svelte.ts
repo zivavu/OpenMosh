@@ -19,6 +19,7 @@ import {
 	sortClips,
 	updateLaneIn,
 	type ClipLane,
+	type SourceAnchor,
 	type TimelineClip,
 } from "./clips";
 import {
@@ -76,6 +77,8 @@ export interface ClipLaneHost<
 	/** What a copied join carries over to where it's pasted. */
 	readJoin?(right: C): unknown;
 	writeJoin?(right: C, data: unknown): C;
+	/** Set where a start trim uncovers or hides the media instead of sliding it. */
+	sourceAnchor?: SourceAnchor<C>;
 	/** Takes over dragging this clip's start edge: the returned function gets how far
 	 * the edge has moved since the press, in seconds, unclamped. Null leaves the drag
 	 * as a plain trim. */
@@ -775,6 +778,7 @@ export class ClipLaneController<
 			this.host.selectedClipIds,
 			limit,
 			(edges, exclude) => this.stack.snapShift(edges, exclude, e.altKey),
+			this.host.sourceAnchor,
 		);
 		if (step.lanes !== lanes) this.host.setLanes(step.lanes);
 		this.stack.confirmSnap(step.edges);
