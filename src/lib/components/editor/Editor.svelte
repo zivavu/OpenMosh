@@ -292,7 +292,12 @@
 	import { showToast, dismissToast } from "../ui/toast.svelte";
 	import { isLiveFile, liveStreamOf, stopLiveFile } from "../../webcam/camera";
 	import { lazy } from "../../lazy";
-	import { GeneratedSizeSync, readGenerated } from "../../generators";
+	import {
+		GeneratedSizeSync,
+		readGenerated,
+		specRender,
+	} from "../../generators";
+	import { isSvgFile, rasterizeSvg } from "../../media/svg";
 
 	const loadShortcutsModal = lazy(() => import("../ui/ShortcutsModal.svelte"));
 	const loadGeneratePanel = lazy(
@@ -537,9 +542,24 @@
 			if (generatedSrc) URL.revokeObjectURL(generatedSrc);
 			generatedSrc = null;
 		});
+		// An SVG is redrawn crisp at the output size; it has no pixels of its own yet.
+		if (f && isSvgFile(f)) {
+			primarySync.track(
+				"primary",
+				async (w, h) => (await rasterizeSvg(f, w, h)).blob,
+				0,
+				0,
+			);
+			return () => primarySync.untrack("primary");
+		}
 		void readGenerated(f).then((info) => {
 			if (info && f === file)
-				primarySync.track("primary", info.spec, info.width, info.height);
+				primarySync.track(
+					"primary",
+					specRender(info.spec),
+					info.width,
+					info.height,
+				);
 		});
 		return () => primarySync.untrack("primary");
 	});

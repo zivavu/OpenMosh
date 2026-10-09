@@ -32,7 +32,7 @@ Built with Svelte 5, Vite, TypeScript and WebGL2. `mediabunny` handles WebM muxi
 
 Pick one of three modes on the upload screen.
 
-**Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Set the mosh style to Curated and a roll picks effects that work together instead: it runs them in a sensible order, lets one of them carry the look, and rolls again when the frame comes out blank. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
+**Single** takes one image or video. Animated GIFs count as video: they come in as a short clip, so they play, scrub and loop like any other one. SVGs are redrawn at the output size, so a logo stays sharp. Hit Mosh and you get a random stack of glitch effects, which you can then tweak one by one, or lock the good ones and re-roll the rest. Set the mosh style to Curated and a roll picks effects that work together instead: it runs them in a sensible order, lets one of them carry the look, and rolls again when the frame comes out blank. Add a track and any effect parameter can be wired to a frequency band of the song, so the distortion moves with the music.
 
 ![Single mode with a moshed image and its signal chain](assets/screenshots/single.webp)
 
