@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.9.13](https://github.com/zivavu/OpenMosh/compare/v0.9.12...v0.9.13) (2026-10-09)
+
+This release is mostly about 3D. The editor opens PLY files, point clouds and Gaussian splats, and GLBs compressed with Draco or meshopt. Models show all their textures, play their blend shapes, and let each clip pick which of the file's animations it plays. SVGs come in as image layers that stay sharp at any output size. On the timeline, the project now grows at its start as well as its end, and trimming an audio clip's start works as it does in a DAW.
+
+### Added
+
+* Open PLY files: meshes, point clouds and Gaussian splats. GLB point clouds and triangle strips open too. ([03133a4](https://github.com/zivavu/OpenMosh/commit/03133a4759290c9e7b11918b6a953a61163485cb), [3908c7e](https://github.com/zivavu/OpenMosh/commit/3908c7ebcfda97ce18c7886a610ea0c04ae7d131))
+* Open GLBs compressed with Draco or meshopt ([3600237](https://github.com/zivavu/OpenMosh/commit/360023710ed8f11fdd9c540c369950e535eadc99))
+* Show every texture a GLB or FBX model carries, not only the first ([16e379e](https://github.com/zivavu/OpenMosh/commit/16e379e21e45c93a2a131547cfe74948c3b7d6f8))
+* Pick which of a model's animations each clip plays ([c6732d1](https://github.com/zivavu/OpenMosh/commit/c6732d11b4244b0333739a2746ad8b9f70c00788))
+* Play blend-shape animation in GLB models ([f1a91eb](https://github.com/zivavu/OpenMosh/commit/f1a91eba2a04b7c4bd93bc0f9748bd31e4bd20d2))
+* Add SVGs as image layers that stay sharp at any output size ([00db876](https://github.com/zivavu/OpenMosh/commit/00db8763e01fb083a366b086531c238cb027df0a))
+* Drag a clip, or its start edge, past the start of the project to add time there, the way dragging past the end already did. Fit now trims empty time at the front too. ([bb4e0d2](https://github.com/zivavu/OpenMosh/commit/bb4e0d26cb23957fa49a289f5115d2abbd72d15c), [2406f7a](https://github.com/zivavu/OpenMosh/commit/2406f7a36a81e903c48730f4183bbaf70b332471))
+* Trimming an audio clip's start keeps its sound where it is: the edge uncovers or hides the sound instead of sliding it ([77e6bb0](https://github.com/zivavu/OpenMosh/commit/77e6bb0f6984c3ce4b260176867f2c03f69bc5d1))
+* Measure the BPM from a video's sound ([d228725](https://github.com/zivavu/OpenMosh/commit/d22872598d41c08e0ec204cbe1946172b992800a))
+* Attach a video's sound back to its clip ([8692cf3](https://github.com/zivavu/OpenMosh/commit/8692cf3da33050451d6d1f37b15d670eba66dea2))
+* Set every audio link's band at once ([2575472](https://github.com/zivavu/OpenMosh/commit/25754729d7abc6335a64ee763146faf5abfac9c0))
+
+
+### Fixed
+
+* Line up textures on GLBs that shift their texture coordinates, as files packed with gltfpack do ([beb74c0](https://github.com/zivavu/OpenMosh/commit/beb74c0e27a2b99018a25c50e0d5c4ad5fb2f44c))
+* Show see-through images on a checkerboard in the media pool, so a dark logo no longer comes out as a black square ([ebc125c](https://github.com/zivavu/OpenMosh/commit/ebc125c278de4adb7cddcd97389cab17591cb332))
+* Zoom out smoothly when a drag grows the project, and keep the scrollbar inside its track ([cbb4c34](https://github.com/zivavu/OpenMosh/commit/cbb4c3475b384ef64a79cc75f7c75ff63b3ae41a))
+* Keep the chosen aspect ratio selected after closing settings ([5e0b633](https://github.com/zivavu/OpenMosh/commit/5e0b633e677d442d3ab9dd9c3a79df0479558625))
+* Resize as you type in the size fields ([331e681](https://github.com/zivavu/OpenMosh/commit/331e6813dfa421e10a34b74ab89f81a1c2b2b21c))
+
 ## [0.9.12](https://github.com/zivavu/OpenMosh/compare/v0.9.11...v0.9.12) (2026-10-08)
 
 
