@@ -19,13 +19,12 @@
 		barWidth: number;
 	} | null = null;
 
-	let left = $derived(
-		trackDuration > 0 ? (vp.viewStart / trackDuration) * 100 : 0,
-	);
+	// A drag can carry the view past the end and then pull the project back in under
+	// it; the bar spans whichever is longer, so the thumb stays inside it.
+	let span = $derived(Math.max(trackDuration, vp.viewEnd));
+	let left = $derived(span > 0 ? (vp.viewStart / span) * 100 : 0);
 	let width = $derived(
-		trackDuration > 0
-			? Math.max(2, (vp.viewDuration / trackDuration) * 100)
-			: 100,
+		span > 0 ? Math.max(2, (vp.viewDuration / span) * 100) : 100,
 	);
 
 	function onDown(e: PointerEvent) {

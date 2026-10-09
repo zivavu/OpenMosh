@@ -6,6 +6,9 @@ import { edgeOvershoot, edgeScrollSpeed } from "../timeline/edge-scroll";
 import { TimelineViewport } from "./timeline-viewport.svelte";
 import { joinEdit, sharedEditSeq } from "./edit-clock";
 
+/** How long the view takes to settle on the whole project after a drag. */
+const FIT_EASE_MS = 180;
+
 /** How close, on screen, a dragged edge has to come to a target to snap. */
 const SNAP_PX = 7;
 /** The least a group dragged across rows may slide to find room, on screen. */
@@ -136,28 +139,44 @@ export class TimelineStackState {
 	growFront = $state<((by: number) => void) | null>(null);
 	maxLength = $state(Infinity);
 
-	/** The view and length a clip drag started from, the stamp of its undo entry, and
-	 * the seconds it has added before the start. */
+	/** The view and length a clip drag started from, whether that view showed the
+	 * whole project, the stamp of its undo entry, and the seconds it has added before
+	 * the start. */
 	#drag: {
 		start: number;
 		end: number;
 		duration: number;
+		whole: boolean;
 		seq: number | null;
 		front: number;
 	} | null = null;
+	/** The view easing back to the whole project after a drag. */
+	#fitFrame = 0;
 
 	get dragging(): boolean {
 		return this.#drag !== null;
 	}
 
 	beginDrag(): void {
+		cancelAnimationFrame(this.#fitFrame);
+		const duration = this.#getDuration();
 		this.#drag = {
 			start: this.vp.viewStart,
 			end: this.vp.viewEnd,
-			duration: this.#getDuration(),
+			duration,
+			whole: this.vp.viewStart <= 1e-6 && this.vp.viewEnd >= duration - 1e-6,
 			seq: null,
 			front: 0,
 		};
+	}
+
+	/** A drag that started on the whole project keeps it all in view as it grows,
+	 * zooming out rather than scrolling. It never zooms back in mid-drag: the clips
+	 * follow the pointer at one scale, and the view settles when the drag ends. */
+	#widen(): void {
+		if (!this.#drag?.whole) return;
+		this.vp.viewStart = 0;
+		this.vp.viewEnd = Math.max(this.vp.viewEnd, this.#getDuration());
 	}
 
 	/** Called inside the `asOneEdit` that records the drag's undo entry, so growing
@@ -180,6 +199,7 @@ export class TimelineStackState {
 		drag.front = next;
 		if (drag.seq === null) grow(by);
 		else joinEdit(drag.seq, () => grow(by));
+		this.#widen();
 	}
 
 	/** Seconds the drag in progress has added before the start. */
@@ -192,11 +212,10 @@ export class TimelineStackState {
 		this.#drag = null;
 		this.#stopEdgeScroll();
 		if (!view) return;
-		const duration = this.#getDuration();
-		// Started on the whole project: show the whole of it again, however far it grew.
-		if (view.start <= 1e-6 && view.end >= view.duration - 1e-6) {
-			this.vp.viewStart = 0;
-			this.vp.viewEnd = duration;
+		// Started on the whole project: ease to the whole of it again, however far it
+		// grew or was pulled back in.
+		if (view.whole) {
+			this.#easeToWhole();
 			return;
 		}
 		// Scrolling past the end ahead of the clips can leave the view hanging off it.
@@ -223,6 +242,23 @@ export class TimelineStackState {
 			Math.max(view.duration + view.front, end),
 		);
 		if (Math.abs(length - this.#getDuration()) > 1e-6) this.growTo(length);
+		this.#widen();
+	}
+
+	/** Zoom from the view a drag left to the whole project, briefly, not in one jump. */
+	#easeToWhole(): void {
+		const from = this.vp.viewEnd;
+		const began = performance.now();
+		const step = (now: number) => {
+			const to = this.#getDuration();
+			const t = Math.min(1, (now - began) / FIT_EASE_MS);
+			const eased = 1 - (1 - t) ** 3;
+			this.vp.viewStart = 0;
+			this.vp.viewEnd = from + (to - from) * eased;
+			if (t < 1) this.#fitFrame = requestAnimationFrame(step);
+		};
+		cancelAnimationFrame(this.#fitFrame);
+		this.#fitFrame = requestAnimationFrame(step);
 	}
 
 	#edgeScroll: {
@@ -278,6 +314,16 @@ export class TimelineStackState {
 	 * so the clips can be carried there. False when the view is already at the limit. */
 	#scrollDragView(delta: number): boolean {
 		const vp = this.vp;
+		if (this.#drag?.whole) {
+			// The whole project stays in view: past the end it zooms out instead, and
+			// before the start there's nothing to scroll to.
+			if (delta <= 0 || !this.growTo) return false;
+			const end = Math.min(this.maxLength, vp.viewEnd + delta);
+			if (end - vp.viewEnd < 1e-9) return false;
+			vp.viewStart = 0;
+			vp.viewEnd = end;
+			return true;
+		}
 		const limit = this.growTo ? this.maxLength : this.#getDuration();
 		const span = vp.viewEnd - vp.viewStart;
 		const start = Math.max(0, Math.min(limit - span, vp.viewStart + delta));
