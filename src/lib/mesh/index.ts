@@ -1,11 +1,11 @@
 import { parseFbx } from "./fbx";
 import { parseGltf, readGlb } from "./glb";
-import type { Mesh, MeshAnimation, Skin } from "./mesh";
+import type { Mesh, MeshAnimation, Morph, Skin } from "./mesh";
 import { parseObj } from "./obj";
 import { parsePly } from "./ply";
 import { parseStl } from "./stl";
 
-export type { Mesh, MeshAnimation, Skin };
+export type { Mesh, MeshAnimation, Morph, Skin };
 
 export const MESH_EXTENSIONS = [".obj", ".stl", ".glb", ".fbx", ".ply"];
 /** For a file input's `accept`. */

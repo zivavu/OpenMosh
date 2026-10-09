@@ -1,6 +1,9 @@
 import { depthRange, type MeshCamera } from "../mesh/camera";
-import type { Mesh, Skin } from "../mesh";
+import type { Mesh, Morph, Skin } from "../mesh";
 import { createProgram, getUniformLocations } from "./utils";
+
+/** Texels per row of the morph delta texture. */
+const MORPH_ROW = 4096;
 
 // Same world as the transform-3d shader: x right, y down, z away from the camera.
 const MESH_VERT = `#version 300 es
@@ -12,8 +15,11 @@ layout(location = 2) in vec3 a_color;
 layout(location = 3) in vec3 a_uv;
 layout(location = 4) in uvec4 a_joints;
 layout(location = 5) in vec4 a_weights;
+layout(location = 6) in ivec4 a_morph;
 uniform sampler2D u_bones;
 uniform bool u_skinned;
+uniform highp sampler2D u_morphDeltas;
+uniform highp sampler2D u_morphWeights;
 uniform mat3 u_rotation;
 uniform float u_radius;
 uniform float u_distance;
@@ -36,6 +42,12 @@ mat4 bone(uint j) {
 void main() {
   vec3 pos = a_position;
   vec3 nrm = a_normal;
+  for (int k = 0; k < a_morph.z; k++) {
+    float w = texelFetch(u_morphWeights, ivec2(a_morph.y + k, 0), 0).r;
+    if (w == 0.0) continue;
+    int i = a_morph.x + k * a_morph.w + gl_VertexID;
+    pos += w * texelFetch(u_morphDeltas, ivec2(i % ${MORPH_ROW}, i / ${MORPH_ROW}), 0).xyz;
+  }
   if (u_skinned) {
     mat4 m = a_weights.x * bone(a_joints.x) + a_weights.y * bone(a_joints.y)
            + a_weights.z * bone(a_joints.z) + a_weights.w * bone(a_joints.w);
@@ -92,6 +104,8 @@ const DOT_SPREAD = 0.75;
 /** Units the pass binds its textures to, so unit 0 stays as the renderer left it. */
 const BONE_UNIT = 1;
 const TEXTURE_UNIT = 2;
+const MORPH_DELTA_UNIT = 3;
+const MORPH_WEIGHT_UNIT = 4;
 
 interface GpuMesh {
 	vao: WebGLVertexArrayObject;
@@ -102,6 +116,12 @@ interface GpuMesh {
 	extent: [number, number, number];
 	texture: WebGLTexture | null;
 	skin: { skin: Skin; bones: WebGLTexture; matrices: Float32Array } | null;
+	morph: {
+		morph: Morph;
+		deltas: WebGLTexture;
+		weights: WebGLTexture;
+		values: Float32Array;
+	} | null;
 }
 
 /**
@@ -164,6 +184,21 @@ export class MeshPass {
 			gl.vertexAttribIPointer(4, 4, gl.UNSIGNED_SHORT, 0, 0);
 			buffers.push(joints, this.#attribute(5, skin.weights, 4));
 		}
+		// More offsets than a texture holds: the model draws without its blend shapes.
+		const morph =
+			mesh.morph &&
+			mesh.morph.deltas.length / 3 / MORPH_ROW <=
+				(gl.getParameter(gl.MAX_TEXTURE_SIZE) as number)
+				? mesh.morph
+				: null;
+		if (morph) {
+			const layout = gl.createBuffer()!;
+			gl.bindBuffer(gl.ARRAY_BUFFER, layout);
+			gl.bufferData(gl.ARRAY_BUFFER, morph.layout, gl.STATIC_DRAW);
+			gl.enableVertexAttribArray(6);
+			gl.vertexAttribIPointer(6, 4, gl.INT, 0, 0);
+			buffers.push(layout);
+		}
 		gl.bindVertexArray(null);
 		this.#meshes.set(id, {
 			vao,
@@ -177,6 +212,14 @@ export class MeshPass {
 						skin,
 						bones: this.#boneTexture(),
 						matrices: new Float32Array(skin.bones * 16),
+					}
+				: null,
+			morph: morph
+				? {
+						morph,
+						deltas: this.#deltaTexture(morph.deltas),
+						weights: this.#floatTexture(MORPH_WEIGHT_UNIT),
+						values: new Float32Array(morph.slots),
 					}
 				: null,
 		});
@@ -227,6 +270,40 @@ export class MeshPass {
 		return tex;
 	}
 
+	/** xyz per entry, `MORPH_ROW` to a row; half floats hold an offset well enough. */
+	#deltaTexture(deltas: Float32Array): WebGLTexture {
+		const gl = this.#gl;
+		const entries = deltas.length / 3;
+		const rows = Math.ceil(entries / MORPH_ROW);
+		const padded = new Float32Array(rows * MORPH_ROW * 3);
+		padded.set(deltas);
+		const tex = this.#floatTexture(MORPH_DELTA_UNIT);
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGB16F,
+			MORPH_ROW,
+			rows,
+			0,
+			gl.RGB,
+			gl.FLOAT,
+			padded,
+		);
+		gl.activeTexture(gl.TEXTURE0);
+		return tex;
+	}
+
+	/** Bound on `unit` and left active, for the caller to fill. */
+	#floatTexture(unit: number): WebGLTexture {
+		const gl = this.#gl;
+		const tex = gl.createTexture()!;
+		gl.activeTexture(gl.TEXTURE0 + unit);
+		gl.bindTexture(gl.TEXTURE_2D, tex);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		return tex;
+	}
+
 	/** A bone's matrix is four RGBA32F texels, read with texelFetch: no filtering. */
 	#boneTexture(): WebGLTexture {
 		const gl = this.#gl;
@@ -247,6 +324,10 @@ export class MeshPass {
 		for (const buf of held.buffers) gl.deleteBuffer(buf);
 		if (held.texture) gl.deleteTexture(held.texture);
 		if (held.skin) gl.deleteTexture(held.skin.bones);
+		if (held.morph) {
+			gl.deleteTexture(held.morph.deltas);
+			gl.deleteTexture(held.morph.weights);
+		}
 		this.#meshes.delete(id);
 	}
 
@@ -296,6 +377,8 @@ export class MeshPass {
 		);
 		gl.uniform1i(u["u_bones"], BONE_UNIT);
 		gl.uniform1i(u["u_texture"], TEXTURE_UNIT);
+		gl.uniform1i(u["u_morphDeltas"], MORPH_DELTA_UNIT);
+		gl.uniform1i(u["u_morphWeights"], MORPH_WEIGHT_UNIT);
 		gl.uniform1i(u["u_skinned"], mesh.skin ? 1 : 0);
 		gl.uniform1i(u["u_points"], mesh.dot > 0 ? 1 : 0);
 		// The dot's pixel width at unit depth: model units to frame units to pixels.
@@ -320,6 +403,25 @@ export class MeshPass {
 				matrices,
 			);
 		}
+		if (mesh.morph) {
+			const { morph, deltas, weights, values } = mesh.morph;
+			morph.weights(time, values, animation);
+			gl.activeTexture(gl.TEXTURE0 + MORPH_DELTA_UNIT);
+			gl.bindTexture(gl.TEXTURE_2D, deltas);
+			gl.activeTexture(gl.TEXTURE0 + MORPH_WEIGHT_UNIT);
+			gl.bindTexture(gl.TEXTURE_2D, weights);
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.R32F,
+				values.length,
+				1,
+				0,
+				gl.RED,
+				gl.FLOAT,
+				values,
+			);
+		}
 		if (mesh.texture) {
 			gl.activeTexture(gl.TEXTURE0 + TEXTURE_UNIT);
 			gl.bindTexture(gl.TEXTURE_2D_ARRAY, mesh.texture);
@@ -329,6 +431,8 @@ export class MeshPass {
 		// An unskinned mesh has no joint buffer, so the shader's uvec4 reads the generic
 		// value, which defaults to float; ANGLE refuses the draw on the type mismatch.
 		if (!mesh.skin) gl.vertexAttribI4ui(4, 0, 0, 0, 0);
+		// Likewise a_morph; zero targets skips the loop.
+		if (!mesh.morph) gl.vertexAttribI4i(6, 0, 0, 0, 0);
 		gl.drawArrays(mesh.dot > 0 ? gl.POINTS : gl.TRIANGLES, 0, mesh.count);
 		gl.disable(gl.DEPTH_TEST);
 
