@@ -42,7 +42,7 @@ export interface Gltf {
 	materials?: {
 		pbrMetallicRoughness?: {
 			baseColorFactor?: number[];
-			baseColorTexture?: { index: number };
+			baseColorTexture?: TextureInfo;
 		};
 	}[];
 	textures?: { source?: number }[];
@@ -56,6 +56,19 @@ export interface Gltf {
 		type: string;
 	}[];
 	bufferViews?: GltfBufferView[];
+}
+
+type UvTransform = {
+	offset?: number[];
+	rotation?: number;
+	scale?: number[];
+	texCoord?: number;
+};
+
+interface TextureInfo {
+	index: number;
+	texCoord?: number;
+	extensions?: { KHR_texture_transform?: UvTransform };
 }
 
 export interface GltfBufferView {
@@ -233,10 +246,18 @@ export function parseGltf(
 				prim.attributes.NORMAL === undefined
 					? null
 					: accessor(prim.attributes.NORMAL).data;
+			const texInfo =
+				json.materials?.[prim.material ?? -1]?.pbrMetallicRoughness
+					?.baseColorTexture;
+			const transform = texInfo?.extensions?.KHR_texture_transform;
+			const uvAccessor =
+				prim.attributes[
+					`TEXCOORD_${transform?.texCoord ?? texInfo?.texCoord ?? 0}`
+				];
 			const uv =
-				prim.attributes.TEXCOORD_0 === undefined
+				uvAccessor === undefined
 					? null
-					: accessor(prim.attributes.TEXCOORD_0).data;
+					: transformUvs(accessor(uvAccessor).data, transform);
 			const jnt =
 				skin && prim.attributes.JOINTS_0 !== undefined
 					? accessor(prim.attributes.JOINTS_0).data
@@ -403,6 +424,22 @@ function triangleCorners(mode: number, count: number): number[][] {
 		for (let i = 0; i + 2 < count; i += 3) tris.push([i, i + 1, i + 2]);
 	}
 	return tris;
+}
+
+/** KHR_texture_transform, in place: scale, then rotate, then offset. */
+function transformUvs(uv: Float32Array, t: UvTransform | undefined) {
+	if (!t) return uv;
+	const [ox, oy] = t.offset ?? [0, 0];
+	const [sx, sy] = t.scale ?? [1, 1];
+	const cos = Math.cos(t.rotation ?? 0);
+	const sin = Math.sin(t.rotation ?? 0);
+	for (let i = 0; i < uv.length; i += 2) {
+		const u = uv[i] * sx;
+		const v = uv[i + 1] * sy;
+		uv[i] = cos * u + sin * v + ox;
+		uv[i + 1] = -sin * u + cos * v + oy;
+	}
+	return uv;
 }
 
 /** Influences that add up to one; a vertex with none follows its first bone. */
