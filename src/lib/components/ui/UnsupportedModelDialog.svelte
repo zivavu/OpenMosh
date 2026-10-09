@@ -58,6 +58,7 @@
 				<li><b>GLB</b> (glTF 2.0)</li>
 				<li><b>FBX</b> 7 or newer, binary</li>
 				<li><b>OBJ</b> and <b>STL</b></li>
+				<li><b>PLY</b>, meshes and point clouds</li>
 			</ul>
 			<p>Textures have to be inside the GLB or FBX file.</p>
 		</div>

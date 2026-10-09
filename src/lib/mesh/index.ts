@@ -2,11 +2,12 @@ import { parseFbx } from "./fbx";
 import { parseGlb } from "./glb";
 import type { Mesh, Skin } from "./mesh";
 import { parseObj } from "./obj";
+import { parsePly } from "./ply";
 import { parseStl } from "./stl";
 
 export type { Mesh, Skin };
 
-export const MESH_EXTENSIONS = [".obj", ".stl", ".glb", ".fbx"];
+export const MESH_EXTENSIONS = [".obj", ".stl", ".glb", ".fbx", ".ply"];
 /** For a file input's `accept`. */
 export const MESH_ACCEPT = MESH_EXTENSIONS.join(",");
 
@@ -57,6 +58,8 @@ async function parseByExtension(file: File): Promise<Mesh | null> {
 			return parseGlb(new Uint8Array(await file.arrayBuffer()));
 		case ".fbx":
 			return parseFbx(new Uint8Array(await file.arrayBuffer()));
+		case ".ply":
+			return parsePly(new Uint8Array(await file.arrayBuffer()));
 		default:
 			return parseObj(await file.text());
 	}
