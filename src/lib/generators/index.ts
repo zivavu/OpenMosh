@@ -7,7 +7,7 @@ export { planBatch } from "./plan";
 export { type FieldKind } from "./field/spec";
 export { readGenerated, type GeneratedInfo } from "./png-meta";
 export { renderSpec } from "./render";
-export { GeneratedSizeSync } from "./size-sync";
+export { GeneratedSizeSync, specRender } from "./size-sync";
 export { randomSeed } from "../rng";
 export type {
 	BatchOptions,

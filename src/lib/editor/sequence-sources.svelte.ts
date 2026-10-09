@@ -4,7 +4,8 @@ import {
 	normalizeSourceEdits,
 	type SourceEdit,
 } from "../media";
-import { GeneratedSizeSync, readGenerated } from "../generators";
+import { GeneratedSizeSync, readGenerated, specRender } from "../generators";
+import { isSvgFile, rasterizeSvg } from "../media/svg";
 import { gifsToVideo } from "../media/gif";
 import {
 	asMeshFile,
@@ -194,17 +195,54 @@ export class SequenceSourceRegistry {
 			const videos = fresh.filter((f) => f.type.startsWith("video/"));
 
 			// Images need no pixels to enter the pool, so chips appear in one frame
-			// instead of waiting on a decode and encode each.
+			// instead of waiting on a decode and encode each. An SVG is drawn once first:
+			// the layer shows that picture until it's redrawn at the output size.
 			if (images.length > 0) {
-				const batch = this.#accept(images.map((f) => this.#buildImage(f)));
+				const svgs = new Map(
+					await Promise.all(
+						images
+							.filter(isSvgFile)
+							.map(
+								async (f) =>
+									[
+										f,
+										await rasterizeSvg(f, SVG_FIRST_SIDE, SVG_FIRST_SIDE).catch(
+											() => null,
+										),
+									] as const,
+							),
+					),
+				);
+				const batch = this.#accept(
+					images.map((f) => {
+						if (!svgs.has(f)) return this.#buildImage(f);
+						const raster = svgs.get(f);
+						return raster ? this.#buildImage(f, raster.blob) : null;
+					}),
+				);
 				if (this.#disposed) return [];
 				ok.push(...batch);
 				this.loadingDone += images.length;
 				void this.#fillThumbnails(batch).catch(() => {});
 				for (const s of batch) {
+					const raster = svgs.get(s.file);
+					if (raster) {
+						this.#sizeSync.track(
+							s.id,
+							async (w, h) => (await rasterizeSvg(s.file, w, h)).blob,
+							raster.width,
+							raster.height,
+						);
+						continue;
+					}
 					void readGenerated(s.file).then((info) => {
 						if (info && !this.#disposed && this.get(s.id))
-							this.#sizeSync.track(s.id, info.spec, info.width, info.height);
+							this.#sizeSync.track(
+								s.id,
+								specRender(info.spec),
+								info.width,
+								info.height,
+							);
 					});
 				}
 			}
@@ -490,12 +528,13 @@ export class SequenceSourceRegistry {
 	}
 
 	/** Synchronous: an image needs no decoding to become a pool entry. */
-	#buildImage(file: File): SequenceSource {
+	/** `pixels` stands in for a file the browser can't draw as is. */
+	#buildImage(file: File, pixels: Blob = file): SequenceSource {
 		return {
 			id: stableSourceId(file),
 			file,
 			name: file.name,
-			objectUrl: URL.createObjectURL(file),
+			objectUrl: URL.createObjectURL(pixels),
 			kind: "image",
 			thumbUrl: null,
 			thumbPending: true,
@@ -616,6 +655,11 @@ export class SequenceSourceRegistry {
 	}
 }
 
+/** Side of the box an SVG is first drawn into, before the output size is known. */
+const SVG_FIRST_SIDE = 2048;
+/** Big enough for a crisp chip; the size reported is only read for its shape. */
+const SVG_THUMB_SIDE = 512;
+
 /** Cover-cropped square JPEG for a chip, as an object URL. */
 async function makeThumbUrl(
 	file: File,
@@ -623,7 +667,11 @@ async function makeThumbUrl(
 ): Promise<{ url: string; width: number; height: number } | null> {
 	let bitmap: ImageBitmap | undefined;
 	try {
-		bitmap = await createImageBitmap(file);
+		bitmap = await createImageBitmap(
+			isSvgFile(file)
+				? (await rasterizeSvg(file, SVG_THUMB_SIDE, SVG_THUMB_SIDE)).blob
+				: file,
+		);
 		const w = bitmap.width;
 		const h = bitmap.height;
 		if (w <= 0 || h <= 0) return null;

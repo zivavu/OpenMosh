@@ -3,12 +3,20 @@ import type { GeneratedSpec } from "./types";
 
 const DEBOUNCE_MS = 400;
 
+/** Pixels for an entry at the output size. */
+export type SizedRender = (width: number, height: number) => Promise<Blob>;
+
+/** A generated image, re-rendered from its spec. */
+export function specRender(spec: GeneratedSpec): SizedRender {
+	return (w, h) => renderSpec(spec, w, h, "image/jpeg");
+}
+
 /**
- * Keeps generated sources rendered at the output size. Each editor tracks its
- * entries here; after a pause this re-renders the stale ones with a fresh object URL.
+ * Keeps generated sources and SVGs rendered at the output size. Each editor tracks
+ * its entries here; after a pause this re-renders the stale ones with a fresh object URL.
  */
 export class GeneratedSizeSync {
-	#specs = new Map<string, GeneratedSpec>();
+	#renders = new Map<string, SizedRender>();
 	/** "w×h" each entry currently renders at. */
 	#at = new Map<string, string>();
 	#width = 0;
@@ -23,23 +31,23 @@ export class GeneratedSizeSync {
 	}
 
 	/** Start managing an entry, given the size its current pixels are. */
-	track(id: string, spec: GeneratedSpec, width: number, height: number) {
-		this.#specs.set(id, spec);
+	track(id: string, render: SizedRender, width: number, height: number) {
+		this.#renders.set(id, render);
 		this.#at.set(id, `${width}×${height}`);
 		this.#schedule();
 	}
 
 	untrack(id: string) {
-		this.#specs.delete(id);
+		this.#renders.delete(id);
 		this.#at.delete(id);
 	}
 
 	has(id: string): boolean {
-		return this.#specs.has(id);
+		return this.#renders.has(id);
 	}
 
 	get size(): number {
-		return this.#specs.size;
+		return this.#renders.size;
 	}
 
 	resize(width: number, height: number) {
@@ -63,13 +71,13 @@ export class GeneratedSizeSync {
 		this.#disposed = true;
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = null;
-		this.#specs.clear();
+		this.#renders.clear();
 		this.#at.clear();
 	}
 
 	#stale(): string[] {
 		const want = `${this.#width}×${this.#height}`;
-		return [...this.#specs.keys()].filter((id) => this.#at.get(id) !== want);
+		return [...this.#renders.keys()].filter((id) => this.#at.get(id) !== want);
 	}
 
 	#schedule() {
@@ -89,15 +97,13 @@ export class GeneratedSizeSync {
 			for (;;) {
 				const id = this.#stale()[0];
 				if (id === undefined || this.#disposed) break;
-				const spec = this.#specs.get(id)!;
+				const render = this.#renders.get(id)!;
 				const w = this.#width;
 				const h = this.#height;
-				const blob = await renderSpec(spec, w, h, "image/jpeg").catch(
-					() => null,
-				);
+				const blob = await render(w, h).catch(() => null);
 				if (this.#disposed) break;
 				// Removed or re-targeted while rendering: leave it for the next pass.
-				if (!blob || !this.#specs.has(id)) continue;
+				if (!blob || !this.#renders.has(id)) continue;
 				if (w !== this.#width || h !== this.#height) continue;
 				this.#at.set(id, `${w}×${h}`);
 				this.#apply(id, URL.createObjectURL(blob));

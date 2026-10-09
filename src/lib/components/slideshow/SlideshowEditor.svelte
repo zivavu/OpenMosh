@@ -57,7 +57,11 @@
 	import { showToast } from "../ui/toast.svelte";
 	import { shuffleInPlace } from "../../utils";
 	import { lazy } from "../../lazy";
-	import { GeneratedSizeSync, readGenerated } from "../../generators";
+	import {
+		GeneratedSizeSync,
+		readGenerated,
+		specRender,
+	} from "../../generators";
 	import GlCanvas from "../editor/GlCanvas.svelte";
 	import RecordOverlay from "../editor/RecordOverlay.svelte";
 	import AudioTimeline from "../ui/AudioTimeline.svelte";
@@ -176,7 +180,12 @@
 				generateThumb(slide.id, slide.file, slide.objectUrl);
 				void readGenerated(file).then((info) => {
 					if (info && slides.some((s) => s.id === slide.id))
-						sizeSync.track(slide.id, info.spec, info.width, info.height);
+						sizeSync.track(
+							slide.id,
+							specRender(info.spec),
+							info.width,
+							info.height,
+						);
 				});
 			} else if (videoTypes.includes(file.type)) {
 				const slide: SlideshowSlide = {
