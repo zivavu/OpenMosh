@@ -217,15 +217,34 @@ export function removeAudioSource(
 	lanes: AudioLane[],
 	sourceId: string,
 ): AudioLane[] {
-	const plays = (l: AudioLane) => l.clips.some((c) => c.sourceId === sourceId);
+	return removeAudioClips(lanes, (c) => c.sourceId === sourceId);
+}
+
+/** Drop the clips playing `sourceId` that overlap `start`..`end`, as a video clip's
+ * sound goes back to it; lanes this empties go too. */
+export function removeAudioSourceIn(
+	lanes: AudioLane[],
+	sourceId: string,
+	start: number,
+	end: number,
+): AudioLane[] {
+	return removeAudioClips(
+		lanes,
+		(c) => c.sourceId === sourceId && c.start < end && c.end > start,
+	);
+}
+
+function removeAudioClips(
+	lanes: AudioLane[],
+	drop: (clip: AudioClip) => boolean,
+): AudioLane[] {
+	const plays = (l: AudioLane) => l.clips.some(drop);
 	if (!lanes.some(plays)) return lanes;
 	return lanes
-		.filter(
-			(lane) => !plays(lane) || lane.clips.some((c) => c.sourceId !== sourceId),
-		)
+		.filter((lane) => !plays(lane) || !lane.clips.every(drop))
 		.map((lane) =>
 			plays(lane)
-				? { ...lane, clips: lane.clips.filter((c) => c.sourceId !== sourceId) }
+				? { ...lane, clips: lane.clips.filter((c) => !drop(c)) }
 				: lane,
 		);
 }

@@ -62,6 +62,7 @@
 		MAX_AUDIO_LANES,
 		nextAudioLaneName,
 		removeAudioSource,
+		removeAudioSourceIn,
 		retargetAudioSource,
 		setAudioClipSources,
 		trackIdOf,
@@ -2521,6 +2522,29 @@
 				),
 			})),
 			audioLanes,
+		});
+	}
+
+	/** Give a video clip its sound back: the audio clips playing it under the clip go. */
+	function reattachClipAudio(clipId: string) {
+		const lane = findMediaClipLane(mediaTimeline, clipId);
+		const clip = lane?.clips.find((c) => c.id === clipId);
+		const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
+		if (!lane || !clip?.audioDetached || !sourceId) return;
+		pushMediaHistory();
+		setMediaTimeline({
+			...updateMediaLaneIn(mediaTimeline, lane.id, (l) => ({
+				...l,
+				clips: l.clips.map((c) =>
+					c.id === clipId ? { ...c, audioDetached: undefined } : c,
+				),
+			})),
+			audioLanes: removeAudioSourceIn(
+				mediaTimeline.audioLanes ?? [],
+				sourceId,
+				clip.start,
+				clip.end,
+			),
 		});
 	}
 
@@ -5102,6 +5126,9 @@
 					!audioBank.isSilent(selectedMediaSourceId)}
 				onDetachAudio={isSequenceMode && selectedMediaClip
 					? () => detachClipAudio(selectedMediaClip!.id)
+					: undefined}
+				onAttachAudio={isSequenceMode && selectedMediaClip
+					? () => reattachClipAudio(selectedMediaClip!.id)
 					: undefined}
 			/>
 		{:else if selectedTextClip}
