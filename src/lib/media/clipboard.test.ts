@@ -75,6 +75,17 @@ describe("pasteMediaClips", () => {
 		expect(pasted.sourceStart).toBe(12);
 	});
 
+	it("keeps a detached clip silent, at its own volume", () => {
+		const lane = laneWith([[0, 5]]);
+		lane.clips[0] = { ...lane.clips[0], audioDetached: true, gain: 0.4 };
+		const t = timelineOf([lane]);
+		const copied = copyMediaClips(t, [lane.clips[0].id]);
+		const { timeline, clipIds } = pasteMediaClips(t, copied, 20, 60);
+		const pasted = timeline.lanes[0].clips.find((c) => c.id === clipIds[0])!;
+		expect(pasted.audioDetached).toBe(true);
+		expect(pasted.gain).toBe(0.4);
+	});
+
 	it("pastes a retargeted clip still showing its own media", () => {
 		const lane = laneWith([[0, 5]]);
 		lane.clips[0].sourceId = "src-b";

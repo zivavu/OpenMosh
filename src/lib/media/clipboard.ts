@@ -35,6 +35,9 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	chain: CopiedChain;
 	fadeInSec?: number;
 	fadeOutSec?: number;
+	gain?: number;
+	/** Its sound went to an audio lane; a paste mustn't play it a second time. */
+	audioDetached?: boolean;
 }
 
 /** A pasted chain, with fresh instance ids: the renderer keys per-effect state by them. */
@@ -69,6 +72,8 @@ export function copyMediaClips(
 			chain: captureChain(clip),
 			fadeInSec: clip.fadeInSec,
 			fadeOutSec: clip.fadeOutSec,
+			gain: clip.gain,
+			audioDetached: clip.audioDetached,
 		}),
 	);
 }
@@ -105,6 +110,8 @@ export function pasteMediaClips(
 			if (e.animation !== undefined) clip.animation = e.animation;
 			if (e.fadeInSec !== undefined) clip.fadeInSec = e.fadeInSec;
 			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
+			if (e.gain !== undefined) clip.gain = e.gain;
+			if (e.audioDetached) clip.audioDetached = true;
 			return clip;
 		},
 	);
