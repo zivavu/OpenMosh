@@ -583,20 +583,6 @@
 						<Focus size={12} />
 					</button>
 				{/if}
-				{#if plan && laneHasSound(lane)}
-					{const muted = $derived(lane.audio?.muted ?? false)}
-					<button
-						class="lane-sound"
-						class:off={muted}
-						aria-pressed={!muted}
-						title={muted
-							? "Sound muted — click to hear this lane's videos"
-							: "Sound on — click to mute this lane's videos"}
-						onclick={() => toggleSound(lane)}
-					>
-						{#if muted}<VolumeX size={12} />{:else}<Volume2 size={12} />{/if}
-					</button>
-				{/if}
 				{#if onCopyLane}
 					<button
 						class="lane-copy"
@@ -606,6 +592,22 @@
 						<Copy size={12} />
 					</button>
 				{/if}
+				{#snippet trailing()}
+					{#if plan && laneHasSound(lane)}
+						{const muted = $derived(lane.audio?.muted ?? false)}
+						<button
+							class="lane-sound"
+							class:off={muted}
+							aria-pressed={!muted}
+							title={muted
+								? "Sound muted — click to hear this lane's videos"
+								: "Sound on — click to mute this lane's videos"}
+							onclick={() => toggleSound(lane)}
+						>
+							{#if muted}<VolumeX size={12} />{:else}<Volume2 size={12} />{/if}
+						</button>
+					{/if}
+				{/snippet}
 			</ClipLaneGutter>
 
 			<div

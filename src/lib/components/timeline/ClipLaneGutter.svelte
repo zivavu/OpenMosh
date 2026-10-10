@@ -12,8 +12,10 @@
 	import LaneGrip from "../ui/LaneGrip.svelte";
 	import LaneName from "../ui/LaneName.svelte";
 
-	/** The gutter every clip lane wears: grip, fold, eye, name, delete, with
-	 * room between the eye and the name for a kind's own switch (solo). */
+	/** The gutter every clip lane wears: grip, name, then eye, a kind's own
+	 * switches (solo first), fold, delete and `trailing` last (a speaker eye after it). Where there's a mouse
+	 * the controls wait for a hover, apart from the ones holding a non-default state:
+	 * those belong in `trailing`, so the hover doesn't move them. */
 	interface Props {
 		lane: { id: string; name: string; enabled: boolean };
 		layerOrder: LayerRef[];
@@ -31,6 +33,7 @@
 		onRename: (name: string) => void;
 		onDelete: () => void;
 		children?: Snippet;
+		trailing?: Snippet;
 	}
 
 	let {
@@ -48,6 +51,7 @@
 		onRename,
 		onDelete,
 		children,
+		trailing,
 	}: Props = $props();
 </script>
 
@@ -58,6 +62,15 @@
 		laneName={lane.name}
 		onDragStart={onLaneDragStart}
 	/>
+	<LaneName
+		name={lane.name}
+		active={nameActive}
+		title={nameTitle}
+		onclick={onNameClick}
+		{onRename}
+	/>
+	{#if eyeIcon === "eye"}{@render eye()}{/if}
+	{@render children?.()}
 	<button
 		class="lane-fold"
 		class:folded
@@ -67,6 +80,15 @@
 	>
 		<ChevronDown size={11} />
 	</button>
+	<button class="lane-del" title="Delete this lane" onclick={onDelete}>
+		<Trash2 size={12} />
+	</button>
+	{@render trailing?.()}
+	<!-- A speaker sits last, where the media lanes keep their mute. -->
+	{#if eyeIcon === "sound"}{@render eye()}{/if}
+</div>
+
+{#snippet eye()}
 	<button
 		class="lane-eye"
 		class:off={!lane.enabled}
@@ -77,18 +99,7 @@
 			{#if lane.enabled}<Volume2 size={12} />{:else}<VolumeX size={12} />{/if}
 		{:else if lane.enabled}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
 	</button>
-	{@render children?.()}
-	<LaneName
-		name={lane.name}
-		active={nameActive}
-		title={nameTitle}
-		onclick={onNameClick}
-		{onRename}
-	/>
-	<button class="lane-del" title="Delete this lane" onclick={onDelete}>
-		<Trash2 size={12} />
-	</button>
-</div>
+{/snippet}
 
 <style>
 	.lane-eye,
@@ -126,5 +137,26 @@
 
 	.lane-eye.off {
 		color: var(--text-4);
+	}
+
+	/* At rest a row shows its title, plus any switch that is off or on. */
+	@media (hover: hover) {
+		.tl-gutter > :global(button:not(.lane-name, .lane-grip, .off, .on)) {
+			display: none;
+		}
+
+		.tl-gutter > :global(.lane-grip) {
+			visibility: hidden;
+		}
+
+		.tl-gutter:hover > :global(button:not(.lane-name)),
+		.tl-gutter:focus-within > :global(button:not(.lane-name)) {
+			display: inline-flex;
+			visibility: visible;
+		}
+
+		:global(.tl-row.lifted) > .tl-gutter > :global(.lane-grip) {
+			visibility: visible;
+		}
 	}
 </style>
