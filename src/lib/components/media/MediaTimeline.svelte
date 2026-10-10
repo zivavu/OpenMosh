@@ -70,6 +70,8 @@
 		onToggleSolo?: (laneId: string) => void;
 		/** Absent once the lane cap is reached. */
 		onCopyLane?: (laneId: string) => void;
+		/** A video known to have no sound track. */
+		isSilent?: (sourceId: string) => boolean;
 		selectedClipId?: string | null;
 		/** The whole selection, so the media rail can assign to all of it. `selectedClipId`
 		 * stays the primary and is always a member here. */
@@ -106,6 +108,7 @@
 		soloLaneId = null,
 		onToggleSolo,
 		onCopyLane,
+		isSilent = () => false,
 		selectedClipId = $bindable(null),
 		selectedClipIds = $bindable([]),
 		onChange,
@@ -429,9 +432,12 @@
 
 	/** Only a lane with a video still holding its own sound has anything to mute. */
 	function laneHasSound(lane: MediaLane): boolean {
-		return lane.clips.some(
-			(c) => !c.audioDetached && clipSource(lane, c)?.kind === "video",
-		);
+		return lane.clips.some((c) => {
+			const source = clipSource(lane, c);
+			return (
+				!c.audioDetached && source?.kind === "video" && !isSilent(source.id)
+			);
+		});
 	}
 
 	function toggleSound(lane: MediaLane) {

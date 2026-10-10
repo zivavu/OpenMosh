@@ -104,6 +104,7 @@ export class SourceAudioBank {
 
 	/** Known to have none, so there's nothing to wait for. */
 	isSilent(id: string): boolean {
+		void this.version;
 		return this.#entries.get(id)?.state === "none";
 	}
 
