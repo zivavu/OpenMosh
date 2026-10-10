@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { maskPaint, peekArea } from "../../effects/mask-paint.svelte";
+	import { maskPaint } from "../../effects/mask-paint.svelte";
 	import type { GlRenderer } from "../../gl/renderer";
 	import type { MediaLane } from "../../media";
 	import type { HandleFrame } from "../../editor/layer-drag";
@@ -215,13 +215,11 @@
 
 	function save(json: string, extend = false) {
 		session.save(json, extend);
-		peekArea(target.instanceId);
 		redraw();
 	}
 
 	function step(changed: string | null) {
 		if (changed === null) return;
-		peekArea(target.instanceId);
 		redraw();
 	}
 

@@ -46,7 +46,6 @@
 	import {
 		MASK_LANE_CONTEXT,
 		maskPaint,
-		peekArea,
 		type MaskPaintTarget,
 		type ParamHistory,
 	} from "../../effects/mask-paint.svelte";
@@ -262,7 +261,6 @@
 			if (!effect.enabled) onToggle();
 			onParamChange(key, url, "new");
 			onParamChange("channel", cutout ? "alpha" : "luma", "none");
-			peekArea(effect.instanceId);
 		} catch {
 			showToast("Couldn't read that image as a mask", "error");
 		}
@@ -274,7 +272,7 @@
 	);
 
 	function setKey(key: string, i: number, patch: Partial<ColorKey>) {
-		change(
+		onParamChange(
 			key,
 			serializeKeys(
 				colorKeys.map((k, j) => (j === i ? { ...k, ...patch } : k)),
@@ -298,18 +296,11 @@
 			serializeKeys(colorKeys.filter((_, j) => j !== i)),
 			"new",
 		);
-		peekArea(effect.instanceId);
 		if (maskPaint.keyIndex >= i && maskPaint.keyIndex > 0) maskPaint.keyIndex--;
 	}
 
 	const isMask = $derived(isMaskEffect(effect));
 	const areaShown = $derived(maskPaint.shownId === effect.instanceId);
-
-	/** A param edit; on a Mask the area shows while it changes. */
-	function change(key: string, value: number | string) {
-		onParamChange(key, value);
-		if (isMask) peekArea(effect.instanceId);
-	}
 
 	function toggleArea() {
 		maskPaint.shownId = areaShown ? null : effect.instanceId;
@@ -533,8 +524,9 @@
 										step={param.step}
 										curve={param.curve}
 										disabled={!!effect.volumeLinks?.[param.key]}
-										oninput={(v) => change(param.key, v)}
-										ondblclick={() => change(param.key, param.defaultValue)}
+										oninput={(v) => onParamChange(param.key, v)}
+										ondblclick={() =>
+											onParamChange(param.key, param.defaultValue)}
 									/>
 									<span class="param-value"
 										>{parseFloat(effect.values[param.key].toString()).toFixed(
@@ -681,20 +673,21 @@
 									id="{effect.instanceId}-{param.key}"
 									checked={effect.values[param.key] === 1}
 									onchange={(e) =>
-										change(param.key, e.currentTarget.checked ? 1 : 0)}
+										onParamChange(param.key, e.currentTarget.checked ? 1 : 0)}
 								/>
 							{/if}
 							{#if param.type === "select" && param.fontPicker}
 								<FontSelect
 									id="{effect.instanceId}-{param.key}"
 									value={String(effect.values[param.key])}
-									onChange={(family) => change(param.key, family)}
+									onChange={(family) => onParamChange(param.key, family)}
 								/>
 							{:else if param.type === "select"}
 								<select
 									id="{effect.instanceId}-{param.key}"
 									value={effect.values[param.key]}
-									onchange={(e) => change(param.key, e.currentTarget.value)}
+									onchange={(e) =>
+										onParamChange(param.key, e.currentTarget.value)}
 								>
 									{#each param.options as opt}
 										<option value={opt.value}>{opt.label}</option>
@@ -709,7 +702,8 @@
 									value={effect.values[param.key]}
 									maxlength={param.maxLength}
 									placeholder={param.placeholder ?? ""}
-									oninput={(e) => change(param.key, e.currentTarget.value)}
+									oninput={(e) =>
+										onParamChange(param.key, e.currentTarget.value)}
 								/>
 							{/if}
 							{#if param.type === "keys"}
@@ -836,7 +830,7 @@
 											class="icon-btn"
 											title="Remove the image"
 											aria-label="Remove the image"
-											onclick={() => change(param.key, "")}
+											onclick={() => onParamChange(param.key, "")}
 										>
 											<Trash2 size={14} />
 										</button>
@@ -861,7 +855,7 @@
 												class="icon-btn"
 												title="Clear the painting"
 												aria-label="Clear the painting"
-												onclick={() => change(param.key, "")}
+												onclick={() => onParamChange(param.key, "")}
 											>
 												<Trash2 size={14} />
 											</button>
@@ -904,7 +898,7 @@
 									id="{effect.instanceId}-{param.key}"
 									value={String(effect.values[param.key])}
 									defaultValue={param.defaultValue}
-									onChange={(hex) => change(param.key, hex)}
+									onChange={(hex) => onParamChange(param.key, hex)}
 								/>
 							{/if}
 						</div>
