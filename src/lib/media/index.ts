@@ -97,6 +97,7 @@ export {
 	createMediaClip,
 	createMediaLane,
 	DEFAULT_MEDIA_STYLE,
+	duplicateMediaLane,
 	EMPTY_MEDIA_TIMELINE,
 	fitMediaTimeline,
 	MAX_MEDIA_LANES,
