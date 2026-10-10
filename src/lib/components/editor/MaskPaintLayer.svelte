@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { maskPaint } from "../../effects/mask-paint.svelte";
-	import { softDab } from "../../brush/soft-dab";
+	import { maskDab } from "../../brush/soft-dab";
 	import type { GlRenderer } from "../../gl/renderer";
 	import type { MediaLane } from "../../media";
 	import { MASK_MAX } from "../../media/source-edit";
@@ -136,23 +136,29 @@
 	}
 
 	let last: { x: number; y: number } | null = null;
+	/** Distance along the stroke since its last dab. */
+	let sinceDab = 0;
 	let erasing = false;
 	let cursor = $state<{ x: number; y: number } | null>(null);
 
 	function strokeTo(p: { x: number; y: number }) {
 		if (!ctx) return;
 		const r = (maskPaint.size * Math.max(paint.width, paint.height)) / 2;
-		const core = 1 - maskPaint.softness;
-		// Dabs half a radius apart: close enough for a line, loose enough to stay soft.
-		const from = last ?? p;
-		const steps = Math.max(
-			1,
-			Math.ceil(Math.hypot(p.x - from.x, p.y - from.y) / Math.max(1, r / 2)),
-		);
-		for (let i = last ? 1 : 0; i <= steps; i++) {
-			const t = i / steps;
-			const x = from.x + (p.x - from.x) * t;
-			softDab(ctx, x, from.y + (p.y - from.y) * t, r, !erasing, core);
+		const dab = (x: number, y: number) =>
+			maskDab(ctx!, x, y, r, !erasing, maskPaint.softness);
+		// Evenly spaced along the path whatever the pointer's speed.
+		const gap = Math.max(1, r / 8);
+		if (!last) {
+			dab(p.x, p.y);
+			sinceDab = 0;
+		} else {
+			const len = Math.hypot(p.x - last.x, p.y - last.y);
+			let d = gap - sinceDab;
+			for (; d <= len; d += gap) {
+				const t = d / len;
+				dab(last.x + (p.x - last.x) * t, last.y + (p.y - last.y) * t);
+			}
+			sinceDab = len - (d - gap);
 		}
 		last = p;
 		show();
