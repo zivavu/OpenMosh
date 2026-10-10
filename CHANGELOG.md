@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.9.14](https://github.com/zivavu/OpenMosh/compare/v0.9.13...v0.9.14) (2026-10-10)
+
+This release is mostly about lanes in the editor. You can copy a media lane from its header, drag audio lanes into a new order, and paste clips under the pointer. A new lane goes in next to the one you last clicked. The eraser now paints with the Mask's brush and has a Softness slider.
+
+### Added
+
+* Copy a media lane, with its clips and effects, from its header ([b497051](https://github.com/zivavu/OpenMosh/commit/b49705193d5845a85e90ccc58742ea7feac7c722))
+* Drag audio lanes to reorder them ([eb94005](https://github.com/zivavu/OpenMosh/commit/eb94005f3c638469cf1fe00c1e98da0a2ebc0862))
+* Add a new lane next to the one last clicked, and scroll a new media lane into view ([87296dd](https://github.com/zivavu/OpenMosh/commit/87296dd3ce826724657299ee36b7a32fc3e8e535), [ac14aba](https://github.com/zivavu/OpenMosh/commit/ac14aba00dfcc403ef2ab3b765f6bd047e76901c))
+* Paste clips where the pointer is ([b953a58](https://github.com/zivavu/OpenMosh/commit/b953a586c3039ca04c74a2650570a30a2adfd18c))
+* Scroll the lanes when a dragged clip nears their top or bottom ([13b1122](https://github.com/zivavu/OpenMosh/commit/13b112279457dac3dd0eae0972e7b192b7216502))
+* With a mouse, a lane's controls show only while you hover its header. A media lane's solo switch now sits next to its eye. ([ccf8920](https://github.com/zivavu/OpenMosh/commit/ccf89202c5df94f1f8b3ce1e2f8df5ef3bdf7138), [fe59d2e](https://github.com/zivavu/OpenMosh/commit/fe59d2ef1224c477a5295eefa32a861f47f540b1))
+* Give the eraser the Mask brush and a Softness slider ([6a0f0e5](https://github.com/zivavu/OpenMosh/commit/6a0f0e5edf6b9496704e7180bee869636d393069))
+* Mix more effects into the upload demo ([271f90a](https://github.com/zivavu/OpenMosh/commit/271f90a46d48994b7946b5a30d210ee6ce47354d))
+* Show a moshed 404 page for broken links ([2af17c2](https://github.com/zivavu/OpenMosh/commit/2af17c2ad44597861e18aaf7205bf6c186a8a26b))
+
+
+### Fixed
+
+* Detach the sound of every selected clip, not just one, and keep a pasted clip silent if its sound was detached ([d12c1fd](https://github.com/zivavu/OpenMosh/commit/d12c1fdc7150d1af72c734b06855eb36be4ce401), [d2336cc](https://github.com/zivavu/OpenMosh/commit/d2336cc0206e1035b38794d56b779bb98b22c8be))
+* Hide a lane's mute button once its video sound is detached ([93d35a0](https://github.com/zivavu/OpenMosh/commit/93d35a0d8e01f2694a668f013cae652bb92c5f9d))
+* Make the Mask brush softer, and equally soft at any speed ([82b11a0](https://github.com/zivavu/OpenMosh/commit/82b11a03d303db1851db5fca0b656f9b93d689a8))
+* Show a Mask's area while editing only when Show area is on ([45f1f8a](https://github.com/zivavu/OpenMosh/commit/45f1f8a922c994870ba98ac557a7ba7af83fa110))
+* Hide the demo dolphin fully before its leap restarts ([9eab4e4](https://github.com/zivavu/OpenMosh/commit/9eab4e4c54b0aa1fc3d5a995e58cea5f8a5bc8e4))
+
 ## [0.9.13](https://github.com/zivavu/OpenMosh/compare/v0.9.12...v0.9.13) (2026-10-09)
 
 This release is mostly about 3D. The editor opens PLY files, point clouds and Gaussian splats, and GLBs compressed with Draco or meshopt. Models show all their textures, play their blend shapes, and let each clip pick which of the file's animations it plays. SVGs come in as image layers that stay sharp at any output size. On the timeline, the project now grows at its start as well as its end, and trimming an audio clip's start works as it does in a DAW.
