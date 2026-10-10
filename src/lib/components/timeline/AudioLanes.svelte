@@ -332,17 +332,19 @@
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
 			>
-				<button
-					class="lane-drives"
-					class:on={lane.drives}
-					aria-pressed={lane.drives}
-					title={lane.drives
-						? "Drives the effects: audio links follow this lane. Click to stop."
-						: "Doesn't drive the effects. Click to let audio links follow this lane."}
-					onclick={() => ctrl.setLane(lane.id, "drives", !lane.drives)}
-				>
-					<Activity size={12} />
-				</button>
+				{#snippet trailing()}
+					<button
+						class="lane-drives"
+						class:on={lane.drives}
+						aria-pressed={lane.drives}
+						title={lane.drives
+							? "Drives the effects: audio links follow this lane. Click to stop."
+							: "Doesn't drive the effects. Click to let audio links follow this lane."}
+						onclick={() => ctrl.setLane(lane.id, "drives", !lane.drives)}
+					>
+						<Activity size={12} />
+					</button>
+				{/snippet}
 			</ClipLaneGutter>
 
 			<div
