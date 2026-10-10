@@ -174,12 +174,13 @@
 	}
 
 	function pasteClips(): boolean {
+		const at = stack.pasteTarget();
 		const result = pasteTextClips(
 			timeline,
 			clipboard,
-			stack.staticTime,
+			at.time,
 			stack.trackDuration,
-			stack.activeLaneId,
+			at.laneId,
 		);
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();

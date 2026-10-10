@@ -516,13 +516,17 @@
 		return pasteClips();
 	}
 
+	/** Where the Ctrl ghost shows, so Ctrl+V lands like a Ctrl+click would. */
 	function pasteClips(): boolean {
+		const at = addGhost
+			? { time: addGhost.start, laneId: addGhost.laneId }
+			: stack.pasteTarget();
 		const result = pasteMediaClips(
 			timeline,
 			clipboard,
-			stack.staticTime,
+			at.time,
 			trackDuration,
-			stack.activeLaneId,
+			at.laneId,
 		);
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();
