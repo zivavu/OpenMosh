@@ -42,6 +42,7 @@
 	import GithubLink from "./GithubLink.svelte";
 	import VersionTag from "./VersionTag.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
+	import InstagramLink from "./InstagramLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 	import { getCapabilityReport } from "../../capabilities.svelte";
 	import { readRaw, writeRaw } from "../../storage";
@@ -954,6 +955,7 @@
 		</a>
 		<GithubLink />
 		<YoutubeLink />
+		<InstagramLink />
 		<FeedbackButton />
 	</div>
 

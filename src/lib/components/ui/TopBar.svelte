@@ -3,6 +3,7 @@
 	import { Home } from "lucide-svelte";
 	import GithubLink from "./GithubLink.svelte";
 	import YoutubeLink from "./YoutubeLink.svelte";
+	import InstagramLink from "./InstagramLink.svelte";
 	import FeedbackButton from "./FeedbackButton.svelte";
 
 	/** The strip above the preview: home, the links, then whatever the mode
@@ -26,6 +27,7 @@
 		{/if}
 		<GithubLink />
 		<YoutubeLink />
+		<InstagramLink />
 		<FeedbackButton />
 		<div class="bar-sep"></div>
 		{@render status?.()}
