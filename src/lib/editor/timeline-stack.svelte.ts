@@ -15,6 +15,10 @@ const SNAP_PX = 7;
 const CROSS_LANE_PX = 32;
 /** Beats closer than this on screen are left out of the targets. */
 const MIN_BEAT_PX = 24;
+/** Fastest the lane list scrolls under a drag, in px per second: rows are short. */
+const MAX_ROW_SCROLL_PX = 900;
+/** Narrower than the sideways zone: a row is barely taller than that. */
+const ROW_EDGE_ZONE_PX = 10;
 
 const KEY = Symbol("timeline-stack");
 
@@ -211,6 +215,7 @@ export class TimelineStackState {
 		const view = this.#drag;
 		this.#drag = null;
 		this.#stopEdgeScroll();
+		this.#stopRowScroll();
 		if (!view) return;
 		// Started on the whole project: ease to the whole of it again, however far it
 		// grew or was pulled back in.
@@ -308,6 +313,75 @@ export class TimelineStackState {
 	#stopEdgeScroll(): void {
 		if (this.#edgeScroll) cancelAnimationFrame(this.#edgeScroll.frame);
 		this.#edgeScroll = null;
+	}
+
+	#rowScroll: {
+		clientY: number;
+		reapply: () => void;
+		scroller: HTMLElement;
+		frame: number;
+		last: number;
+	} | null = null;
+
+	/** Scroll the lane list while a drag holds the pointer near or past its top or
+	 * bottom, calling `reapply` so the dragged clips land on the row now under it. */
+	edgeScrollRows(clientY: number, reapply: () => void): void {
+		if (!this.#drag) return;
+		const running = this.#rowScroll;
+		if (running) {
+			running.clientY = clientY;
+			running.reapply = reapply;
+			return;
+		}
+		const scroller = this.#rowScroller();
+		if (!scroller) return;
+		const r = scroller.getBoundingClientRect();
+		if (edgeOvershoot(clientY, r.top, r.bottom, ROW_EDGE_ZONE_PX) === 0) return;
+		this.#rowScroll = {
+			clientY,
+			reapply,
+			scroller,
+			frame: requestAnimationFrame(this.#rowScrollTick),
+			last: performance.now(),
+		};
+	}
+
+	#rowScrollTick = (now: number): void => {
+		const s = this.#rowScroll;
+		const r = s?.scroller.getBoundingClientRect();
+		const over =
+			s && r ? edgeOvershoot(s.clientY, r.top, r.bottom, ROW_EDGE_ZONE_PX) : 0;
+		if (!s || !this.#drag || over === 0) {
+			this.#stopRowScroll();
+			return;
+		}
+		const dt = Math.min(0.05, (now - s.last) / 1000);
+		s.last = now;
+		const before = s.scroller.scrollTop;
+		s.scroller.scrollTop +=
+			Math.sign(over) * Math.min(MAX_ROW_SCROLL_PX, edgeScrollSpeed(over)) * dt;
+		if (s.scroller.scrollTop !== before) s.reapply();
+		s.frame = requestAnimationFrame(this.#rowScrollTick);
+	};
+
+	#stopRowScroll(): void {
+		if (this.#rowScroll) cancelAnimationFrame(this.#rowScroll.frame);
+		this.#rowScroll = null;
+	}
+
+	/** The nearest ancestor of the lane rows that scrolls them, if they overflow it. */
+	#rowScroller(): HTMLElement | null {
+		const [lane] = this.#laneEls.keys();
+		for (let el = lane?.parentElement; el; el = el.parentElement) {
+			const { overflowY } = getComputedStyle(el);
+			if (
+				(overflowY === "auto" || overflowY === "scroll") &&
+				el.scrollHeight > el.clientHeight
+			) {
+				return el;
+			}
+		}
+		return null;
 	}
 
 	/** Slide the view by `delta`. A project that can grow may be scrolled past its end,

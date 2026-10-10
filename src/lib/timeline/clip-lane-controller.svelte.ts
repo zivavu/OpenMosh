@@ -713,6 +713,11 @@ export class ClipLaneController<
 		this.stack.edgeScroll(e.clientX, () => {
 			if (this.drag === drag) this.onPointerMove(e);
 		});
+		if (drag.mode === "move") {
+			this.stack.edgeScrollRows(e.clientY, () => {
+				if (this.drag === drag) this.onPointerMove(e);
+			});
+		}
 		const { laneId, clipId, mode, grabOffset } = drag;
 		this.#clickOnUp = null;
 		this.#joinPress = null;
