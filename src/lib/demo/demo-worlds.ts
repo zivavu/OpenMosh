@@ -38,107 +38,145 @@ export interface World {
 	/** One pool per element, in id order. */
 	elementPools: string[][];
 	postPool: string[];
-	/** One effect per element, not up to two. */
+	/** One effect per layer and post pass, not a stack. */
 	lean?: boolean;
 }
+
+/** Rolled on every 3D world's backdrop and post pass, on top of its own picks. */
+const BACKDROP_EXTRA = [
+	"trio-tone",
+	"thermal",
+	"hsv-swap",
+	"color-halves",
+	"grain",
+	"bleach",
+];
+const POST_EXTRA = ["rgb-burst", "stylize-glitch", "pixel-shifter", "grain"];
 
 export const WORLDS: World[] = [
 	{
 		scene: NEON_CANYON,
-		backdropPool: ["posterize", "soft-glitch", "duotone"],
+		backdropPool: ["posterize", "soft-glitch", "duotone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["glow", "channel-split", "solarize", "data-bend"],
-			["neon-edges", "posterize", "glow", "halftone"],
-			["glow", "channel-split", "neon-edges"],
-			["glow", "ripple", "wobble", "channel-split"],
+			["glow", "channel-split", "solarize", "data-bend", "sobel-neon"],
+			["neon-edges", "posterize", "glow", "halftone", "radial-blur", "slices"],
+			["glow", "channel-split", "neon-edges", "rgb-burst", "kaleido"],
+			["glow", "ripple", "wobble", "channel-split", "shockwave", "ring-warp"],
 		],
-		postPool: ["vhs", "channel-split", "soft-glitch", "scanlines"],
+		postPool: [
+			"vhs",
+			"channel-split",
+			"soft-glitch",
+			"scanlines",
+			...POST_EXTRA,
+		],
 	},
 	{
 		scene: ABYSS,
-		backdropPool: ["posterize", "soft-glitch", "halftone"],
+		backdropPool: ["posterize", "soft-glitch", "halftone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["glow", "wobble", "channel-split"],
-			["glow", "neon-edges", "ripple"],
-			["glow", "solarize", "wobble"],
+			["glow", "wobble", "channel-split", "liquid-light", "swirl"],
+			["glow", "neon-edges", "ripple", "ring-warp", "ghosting"],
+			["glow", "solarize", "wobble", "melt", "bulge"],
 		],
-		postPool: ["vhs", "scanlines", "channel-split"],
+		postPool: ["vhs", "scanlines", "channel-split", ...POST_EXTRA],
 	},
 	{
 		scene: SNACK_GALAXY,
-		backdropPool: ["posterize", "halftone", "duotone"],
+		backdropPool: ["posterize", "halftone", "duotone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["pixel-sort", "glow", "halftone", "channel-split"],
-			["glow", "solarize", "posterize"],
-			["data-bend", "channel-split", "neon-edges"],
-			["wobble", "glow", "posterize"],
+			["pixel-sort", "glow", "halftone", "channel-split", "kaleido", "tile"],
+			["glow", "solarize", "posterize", "hsv-swap", "bulge"],
+			["data-bend", "channel-split", "neon-edges", "slices", "pixel-shifter"],
+			["wobble", "glow", "posterize", "swirl", "rgb-burst"],
 		],
-		postPool: ["soft-glitch", "channel-split", "scanlines"],
+		postPool: ["soft-glitch", "channel-split", "scanlines", ...POST_EXTRA],
 	},
 	{
 		scene: GLOW_FOREST,
-		backdropPool: ["posterize", "soft-glitch", "halftone"],
+		backdropPool: ["posterize", "soft-glitch", "halftone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["glow", "neon-edges", "solarize"],
-			["pixel-sort", "channel-split", "glow"],
-			["wobble", "posterize", "channel-split"],
-			["glow"],
+			["glow", "neon-edges", "solarize", "sobel-neon", "ghosting"],
+			["pixel-sort", "channel-split", "glow", "smear", "melt"],
+			["wobble", "posterize", "channel-split", "flow-contours", "swirl"],
+			["glow", "radial-blur", "shockwave"],
 		],
-		postPool: ["vhs", "scanlines", "soft-glitch"],
+		postPool: ["vhs", "scanlines", "soft-glitch", ...POST_EXTRA],
 	},
 	{
 		scene: SKY_WHALE,
-		backdropPool: ["posterize", "soft-glitch", "halftone"],
+		backdropPool: ["posterize", "soft-glitch", "halftone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["pixel-sort", "channel-split", "glow", "data-bend"],
-			["glow", "channel-split"],
-			["posterize", "wobble", "neon-edges"],
+			["pixel-sort", "channel-split", "glow", "data-bend", "smear", "slices"],
+			["glow", "channel-split", "ghosting", "radial-blur"],
+			["posterize", "wobble", "neon-edges", "ripple", "stereoscopic"],
 		],
-		postPool: ["vhs", "scanlines", "channel-split"],
+		postPool: ["vhs", "scanlines", "channel-split", ...POST_EXTRA],
 	},
 	{
 		scene: VAPOR_PLAZA,
-		backdropPool: ["posterize", "soft-glitch", "halftone", "duotone"],
-		elementPools: [
-			["glow", "channel-split", "solarize"],
-			["glow", "neon-edges"],
-			["glow", "channel-split", "data-bend"],
+		backdropPool: [
+			"posterize",
+			"soft-glitch",
+			"halftone",
+			"duotone",
+			...BACKDROP_EXTRA,
 		],
-		postPool: ["vhs", "scanlines", "channel-split"],
+		elementPools: [
+			["glow", "channel-split", "solarize", "mirror", "trio-tone"],
+			["glow", "neon-edges", "sobel-neon", "kaleido"],
+			["glow", "channel-split", "data-bend", "slices", "pixel-shifter"],
+		],
+		postPool: ["vhs", "scanlines", "channel-split", ...POST_EXTRA],
 	},
 	{
 		scene: DEEP_SPACE,
-		backdropPool: ["posterize", "soft-glitch", "halftone"],
+		backdropPool: ["posterize", "soft-glitch", "halftone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["glow", "channel-split", "pixel-sort"],
-			["neon-edges", "posterize", "data-bend"],
-			["solarize", "halftone", "wobble"],
+			["glow", "channel-split", "pixel-sort", "radial-blur", "shockwave"],
+			["neon-edges", "posterize", "data-bend", "sobel-neon", "stereoscopic"],
+			["solarize", "halftone", "wobble", "swirl", "ring-warp"],
 		],
-		postPool: ["vhs", "scanlines", "channel-split"],
+		postPool: ["vhs", "scanlines", "channel-split", ...POST_EXTRA],
 	},
 	{
 		scene: MAGMA_RIVER,
-		backdropPool: ["posterize", "soft-glitch", "halftone"],
+		backdropPool: ["posterize", "soft-glitch", "halftone", ...BACKDROP_EXTRA],
 		elementPools: [
-			["glow", "channel-split", "data-bend"],
-			["pixel-sort", "posterize", "channel-split"],
-			["glow", "neon-edges", "solarize"],
+			["glow", "channel-split", "data-bend", "melt", "thermal"],
+			["pixel-sort", "posterize", "channel-split", "smear", "slices"],
+			["glow", "neon-edges", "solarize", "liquid-light", "ghosting"],
 		],
-		postPool: ["vhs", "scanlines", "channel-split"],
+		postPool: ["vhs", "scanlines", "channel-split", ...POST_EXTRA],
 	},
 ];
 
 /** Single-pass effects only: no glow bloom, no wide sampling loops. */
-const FLAT_BACKDROP = ["posterize", "duotone", "halftone", "soft-glitch"];
-const FLAT_POST = ["scanlines", "channel-split", "vhs"];
+const FLAT_BACKDROP = [
+	"posterize",
+	"duotone",
+	"halftone",
+	"soft-glitch",
+	"trio-tone",
+	"thermal",
+	"hsv-swap",
+	"color-halves",
+];
+const FLAT_POST = [
+	"scanlines",
+	"channel-split",
+	"vhs",
+	"grain",
+	"pixel-shifter",
+];
 
 export const FLAT_WORLDS: World[] = [
 	{
 		scene: SUNSET_DRIVE,
 		backdropPool: FLAT_BACKDROP,
 		elementPools: [
-			["channel-split", "solarize", "data-bend"],
-			["wobble", "channel-split", "posterize"],
+			["channel-split", "solarize", "data-bend", "slices", "stereoscopic"],
+			["wobble", "channel-split", "posterize", "mirror", "jitter"],
 		],
 		postPool: FLAT_POST,
 		lean: true,
@@ -147,8 +185,8 @@ export const FLAT_WORLDS: World[] = [
 		scene: LAVA_LAMP,
 		backdropPool: FLAT_BACKDROP,
 		elementPools: [
-			["ripple", "solarize", "posterize"],
-			["channel-split", "wobble", "halftone"],
+			["ripple", "solarize", "posterize", "swirl", "bulge"],
+			["channel-split", "wobble", "halftone", "ring-warp"],
 		],
 		postPool: FLAT_POST,
 		lean: true,
@@ -157,9 +195,9 @@ export const FLAT_WORLDS: World[] = [
 		scene: POP_SHAPES,
 		backdropPool: FLAT_BACKDROP,
 		elementPools: [
-			["halftone", "channel-split"],
-			["data-bend", "solarize"],
-			["wobble", "posterize"],
+			["halftone", "channel-split", "tile"],
+			["data-bend", "solarize", "slices"],
+			["wobble", "posterize", "bulge"],
 		],
 		postPool: FLAT_POST,
 		lean: true,
@@ -168,8 +206,8 @@ export const FLAT_WORLDS: World[] = [
 		scene: RINGED_PLANET,
 		backdropPool: FLAT_BACKDROP,
 		elementPools: [
-			["posterize", "channel-split", "data-bend"],
-			["solarize", "wobble"],
+			["posterize", "channel-split", "data-bend", "stereoscopic"],
+			["solarize", "wobble", "swirl"],
 		],
 		postPool: FLAT_POST,
 		lean: true,
@@ -178,8 +216,8 @@ export const FLAT_WORLDS: World[] = [
 		scene: NEON_TUNNEL,
 		backdropPool: FLAT_BACKDROP,
 		elementPools: [
-			["channel-split", "solarize", "ripple"],
-			["wobble", "data-bend"],
+			["channel-split", "solarize", "ripple", "ring-warp"],
+			["wobble", "data-bend", "jitter"],
 		],
 		postPool: FLAT_POST,
 		lean: true,
@@ -255,13 +293,16 @@ function laneKey(lane: number, alt: boolean): string {
 	return alt ? altLayerKey(key) : key;
 }
 
+/** 1 to `max` effects; a lean world always takes one. */
+function rollCount(world: World, max: number): number {
+	return world.lean ? 1 : 1 + Math.floor(Math.random() * max);
+}
+
 export function startWorld(world: World, alt: boolean): WorldShow {
 	const chains = [
-		moshed(pickSome(world.backdropPool, 1)),
+		moshed(pickSome(world.backdropPool, rollCount(world, 2))),
 		...world.elementPools.map((pool) =>
-			moshed(
-				pickSome(pool, world.lean ? 1 : 1 + Math.floor(Math.random() * 2)),
-			),
+			moshed(pickSome(pool, rollCount(world, 3))),
 		),
 	];
 	return {
@@ -272,7 +313,7 @@ export function startWorld(world: World, alt: boolean): WorldShow {
 			part,
 		})),
 		chains,
-		post: moshed(pickSome(world.postPool, 1)),
+		post: moshed(pickSome(world.postPool, rollCount(world, 2))),
 	};
 }
 
