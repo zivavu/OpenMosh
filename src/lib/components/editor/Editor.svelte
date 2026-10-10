@@ -1,6 +1,6 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
-	import { onMount, untrack } from "svelte";
+	import { onMount, tick, untrack } from "svelte";
 	import { hasKeyboard } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
@@ -3469,6 +3469,14 @@
 		}
 	}
 
+	/** Scroll the stack just enough to show a lane's row. */
+	async function revealLaneRow(laneId: string) {
+		await tick();
+		document
+			.querySelector(`[data-layer-id="${laneId}"]`)
+			?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}
+
 	/** A copy of the media lane, stacked right above it, in one undo step. */
 	function copyMediaLane(laneId: string) {
 		const lane = mediaTimeline.lanes.find((l) => l.id === laneId);
@@ -3486,6 +3494,7 @@
 			});
 			restackFxAndText(moves);
 		});
+		revealLaneRow(copy.id);
 	}
 
 	// Owned here rather than by either lane component: a drag crosses between text and media rows.
@@ -3637,9 +3646,13 @@
 		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
 		const sourceId = defaultLayerSourceId();
 		pushMediaHistory();
-		setMediaTimeline(
-			appendMediaLane(mediaTimeline, sourceId, nextLayerZ(layerOrder)),
+		const next = appendMediaLane(
+			mediaTimeline,
+			sourceId,
+			nextLayerZ(layerOrder),
 		);
+		setMediaTimeline(next);
+		revealLaneRow(next.lanes[next.lanes.length - 1].id);
 		// Nothing in the pool to draw, so ask for the file.
 		if (!sourceId) sourceInput?.click();
 	}
