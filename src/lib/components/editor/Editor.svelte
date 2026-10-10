@@ -2496,73 +2496,78 @@
 		mixer.seek(at(playhead));
 	}
 
-	/** Detach a video clip's sound onto an audio lane of its own. */
-	function detachClipAudio(clipId: string) {
-		const lane = findMediaClipLane(mediaTimeline, clipId);
-		const clip = lane?.clips.find((c) => c.id === clipId);
-		const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
-		if (!lane || !clip || !sourceId) return;
-		const lanes = mediaTimeline.audioLanes ?? [];
-		// The first free-standing lane with room takes it; otherwise a new one does.
-		const fits = (l: AudioLane) =>
-			l.clips.every((c) => c.end <= clip.start || c.start >= clip.end);
-		const target = lanes.find((l) => !l.drives && fits(l));
-		if (!target && lanes.length >= MAX_AUDIO_LANES) {
-			showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
-			return;
-		}
-		const detached = {
-			...createAudioClip(clip.start, clip.end, sourceId, clip.sourceStart),
-			gain: clip.gain,
-			fadeInSec: clip.fadeInSec,
-			fadeOutSec: clip.fadeOutSec,
-		};
-		const audioLanes = target
-			? lanes.map((l) =>
-					l.id === target.id
-						? {
-								...l,
-								clips: [...l.clips, detached].sort((a, b) => a.start - b.start),
-							}
-						: l,
-				)
-			: [
-					...lanes,
-					{ ...createAudioLane(nextAudioLaneName(lanes)), clips: [detached] },
-				];
-		pushMediaHistory();
-		setMediaTimeline({
-			...updateMediaLaneIn(mediaTimeline, lane.id, (l) => ({
+	/** Detach each video clip's sound onto an audio lane of its own. */
+	function detachClipsAudio(clipIds: string[]) {
+		let timeline = mediaTimeline;
+		let lanes = timeline.audioLanes ?? [];
+		for (const clipId of clipIds) {
+			const lane = findMediaClipLane(timeline, clipId);
+			const clip = lane?.clips.find((c) => c.id === clipId);
+			const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
+			if (!lane || !clip || !sourceId || clip.audioDetached) continue;
+			const source = sequenceSources.find((s) => s.id === sourceId);
+			if (source?.kind !== "video" || audioBank.isSilent(sourceId)) continue;
+			// The first free-standing lane with room takes it; otherwise a new one does.
+			const fits = (l: AudioLane) =>
+				l.clips.every((c) => c.end <= clip.start || c.start >= clip.end);
+			const target = lanes.find((l) => !l.drives && fits(l));
+			if (!target && lanes.length >= MAX_AUDIO_LANES) {
+				showToast(`${MAX_AUDIO_LANES} audio lanes is the limit`, "error");
+				break;
+			}
+			const detached = {
+				...createAudioClip(clip.start, clip.end, sourceId, clip.sourceStart),
+				gain: clip.gain,
+				fadeInSec: clip.fadeInSec,
+				fadeOutSec: clip.fadeOutSec,
+			};
+			lanes = target
+				? lanes.map((l) =>
+						l.id === target.id
+							? {
+									...l,
+									clips: [...l.clips, detached].sort(
+										(a, b) => a.start - b.start,
+									),
+								}
+							: l,
+					)
+				: [
+						...lanes,
+						{ ...createAudioLane(nextAudioLaneName(lanes)), clips: [detached] },
+					];
+			timeline = updateMediaLaneIn(timeline, lane.id, (l) => ({
 				...l,
 				clips: l.clips.map((c) =>
 					c.id === clipId ? { ...c, audioDetached: true } : c,
 				),
-			})),
-			audioLanes,
-		});
+			}));
+		}
+		if (timeline === mediaTimeline) return;
+		pushMediaHistory();
+		setMediaTimeline({ ...timeline, audioLanes: lanes });
 	}
 
-	/** Give a video clip its sound back: the audio clips playing it under the clip go. */
-	function reattachClipAudio(clipId: string) {
-		const lane = findMediaClipLane(mediaTimeline, clipId);
-		const clip = lane?.clips.find((c) => c.id === clipId);
-		const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
-		if (!lane || !clip?.audioDetached || !sourceId) return;
-		pushMediaHistory();
-		setMediaTimeline({
-			...updateMediaLaneIn(mediaTimeline, lane.id, (l) => ({
+	/** Give video clips their sound back: the audio clips playing it under each go. */
+	function reattachClipsAudio(clipIds: string[]) {
+		let timeline = mediaTimeline;
+		let lanes = timeline.audioLanes ?? [];
+		for (const clipId of clipIds) {
+			const lane = findMediaClipLane(timeline, clipId);
+			const clip = lane?.clips.find((c) => c.id === clipId);
+			const sourceId = lane && clip ? clipSourceId(lane, clip) : null;
+			if (!lane || !clip?.audioDetached || !sourceId) continue;
+			lanes = removeAudioSourceIn(lanes, sourceId, clip.start, clip.end);
+			timeline = updateMediaLaneIn(timeline, lane.id, (l) => ({
 				...l,
 				clips: l.clips.map((c) =>
 					c.id === clipId ? { ...c, audioDetached: undefined } : c,
 				),
-			})),
-			audioLanes: removeAudioSourceIn(
-				mediaTimeline.audioLanes ?? [],
-				sourceId,
-				clip.start,
-				clip.end,
-			),
-		});
+			}));
+		}
+		if (timeline === mediaTimeline) return;
+		pushMediaHistory();
+		setMediaTimeline({ ...timeline, audioLanes: lanes });
 	}
 
 	/** What is on screen now: the main chain, then each fx lane's in lane order. */
@@ -4916,6 +4921,7 @@
 							bind:selectedClipIds={selectedMediaClipIds}
 							{soloLaneId}
 							onToggleSolo={toggleMediaSolo}
+							isSilent={(id) => audioBank.isSilent(id)}
 							onCopyLane={mediaTimeline.lanes.length < MAX_MEDIA_LANES
 								? copyMediaLane
 								: undefined}
@@ -5172,10 +5178,10 @@
 				sourceHasAudio={!selectedMediaSourceId ||
 					!audioBank.isSilent(selectedMediaSourceId)}
 				onDetachAudio={isSequenceMode && selectedMediaClip
-					? () => detachClipAudio(selectedMediaClip!.id)
+					? () => detachClipsAudio(selectedMediaClipIds)
 					: undefined}
 				onAttachAudio={isSequenceMode && selectedMediaClip
-					? () => reattachClipAudio(selectedMediaClip!.id)
+					? () => reattachClipsAudio(selectedMediaClipIds)
 					: undefined}
 			/>
 		{:else if selectedTextClip}
