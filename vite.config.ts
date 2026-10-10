@@ -2,6 +2,7 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 
 const { version } = JSON.parse(
@@ -92,6 +93,37 @@ function labRedirect(): Plugin {
 	};
 }
 
+// Vercel answers an unknown path with the build's 404.html; the dev and preview
+// servers would hand it the app instead. Paths with an extension stay theirs.
+function notFoundPage(): Plugin {
+	const rewrite = (
+		req: { url?: string; method?: string; headers: { accept?: string } },
+		_res: unknown,
+		next: () => void,
+	) => {
+		const path = req.url?.split(/[?#]/)[0] ?? "/";
+		if (
+			req.method === "GET" &&
+			req.headers.accept?.includes("text/html") &&
+			path !== "/" &&
+			!path.startsWith("/lab") &&
+			!/\.\w+$/.test(path)
+		) {
+			req.url = "/404.html";
+		}
+		next();
+	};
+	return {
+		name: "openmosh:not-found-page",
+		configureServer(server) {
+			server.middlewares.use(rewrite);
+		},
+		configurePreviewServer(server) {
+			server.middlewares.use(rewrite);
+		},
+	};
+}
+
 /** Public files left out of the install: only link previews fetch the share image. */
 const OFFLINE_SKIP = new Set(["og.jpg"]);
 /** Text-overlay fonts are half the build and load on demand, so the worker caches them on use. */
@@ -141,7 +173,21 @@ function serviceWorker(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-	plugins: [svelte(), preloadLatinFonts(), labRedirect(), serviceWorker()],
+	plugins: [
+		svelte(),
+		preloadLatinFonts(),
+		labRedirect(),
+		notFoundPage(),
+		serviceWorker(),
+	],
+	build: {
+		rollupOptions: {
+			input: {
+				index: fileURLToPath(new URL("./index.html", import.meta.url)),
+				notFound: fileURLToPath(new URL("./404.html", import.meta.url)),
+			},
+		},
+	},
 	define: {
 		__APP_VERSION__: JSON.stringify(version),
 		__APP_CHANNEL__: JSON.stringify(channel),
