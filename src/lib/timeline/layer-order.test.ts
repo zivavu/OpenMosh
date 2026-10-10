@@ -5,6 +5,7 @@ import {
 	moveLayerTo,
 	stackIndex,
 	stackTitle,
+	zAbove,
 	type OrderedLane,
 } from "./layer-order";
 
@@ -70,6 +71,28 @@ describe("fx lanes in the stack", () => {
 			"t1",
 			"m1",
 		]);
+	});
+});
+
+describe("zAbove", () => {
+	const order = combinedLayerOrder(
+		[lane("a", 0), lane("b", 1)],
+		[lane("t", 2)],
+	);
+
+	it("slots between a lane and the row over it", () => {
+		const z = zAbove(order, "a");
+		expect(z).toBeGreaterThan(0);
+		expect(z).toBeLessThan(1);
+	});
+
+	it("goes over the top row", () => {
+		expect(zAbove(order, "t")).toBe(3);
+	});
+
+	it("goes on top when the lane isn't stacked", () => {
+		expect(zAbove(order, null)).toBe(3);
+		expect(zAbove(order, "audio-1")).toBe(3);
 	});
 });
 

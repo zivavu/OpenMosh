@@ -11,6 +11,7 @@
 	import type { LayerRef } from "../../timeline/layer-order";
 	import LaneGrip from "../ui/LaneGrip.svelte";
 	import LaneName from "../ui/LaneName.svelte";
+	import { tryGetTimelineStack } from "../../editor/timeline-stack.svelte";
 
 	/** The gutter every clip lane wears: grip, name, then eye, a kind's own
 	 * switches (solo first), fold, delete and `trailing` last (a speaker eye after it). Where there's a mouse
@@ -53,9 +54,15 @@
 		children,
 		trailing,
 	}: Props = $props();
+
+	const stack = tryGetTimelineStack();
 </script>
 
-<div class="tl-gutter">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="tl-gutter"
+	onpointerdowncapture={() => stack?.markLaneUsed(lane.id)}
+>
 	<LaneGrip
 		{layerOrder}
 		laneId={lane.id}

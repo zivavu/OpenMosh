@@ -65,6 +65,16 @@ export function nextLayerZ(order: LayerRef[]): number {
 	return top + 1;
 }
 
+/** A z just above `laneId` and under the row over it, so a new lane slots in
+ * without renumbering the rest. On top when the lane isn't stacked. */
+export function zAbove(order: LayerRef[], laneId: string | null): number {
+	const at = laneId ? stackIndex(order, laneId) : -1;
+	if (at === -1) return nextLayerZ(order);
+	const z = order[at].z;
+	const over = order[at - 1];
+	return over ? (z + over.z) / 2 : z + 1;
+}
+
 /** Lift one layer out of the stack and drop it at `toIndex` (front-first). Returns
  * the z every layer takes afterwards, or null when nothing would move. The whole
  * stack is renumbered rather than two entries swapped, so a drag can cross rows. */
