@@ -570,6 +570,19 @@
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
 			>
+				{#if onToggleSolo}
+					<button
+						class="lane-solo"
+						class:on={soloLaneId === lane.id}
+						title={soloLaneId === lane.id
+							? "Stop soloing — show the whole frame again"
+							: "Solo: show only this lane on the canvas"}
+						aria-pressed={soloLaneId === lane.id}
+						onclick={() => soloLane(lane)}
+					>
+						<Focus size={12} />
+					</button>
+				{/if}
 				{#if plan && laneHasSound(lane)}
 					{const muted = $derived(lane.audio?.muted ?? false)}
 					<button
@@ -582,19 +595,6 @@
 						onclick={() => toggleSound(lane)}
 					>
 						{#if muted}<VolumeX size={12} />{:else}<Volume2 size={12} />{/if}
-					</button>
-				{/if}
-				{#if onToggleSolo}
-					<button
-						class="lane-solo"
-						class:on={soloLaneId === lane.id}
-						title={soloLaneId === lane.id
-							? "Stop soloing — show the whole frame again"
-							: "Solo: show only this lane on the canvas"}
-						aria-pressed={soloLaneId === lane.id}
-						onclick={() => soloLane(lane)}
-					>
-						<Focus size={12} />
 					</button>
 				{/if}
 				{#if onCopyLane}
