@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { maskPaint } from "../../effects/mask-paint.svelte";
-	import { maskDab } from "../../brush/soft-dab";
+	import { createStroke, maskDab } from "../../brush/soft-dab";
 	import type { GlRenderer } from "../../gl/renderer";
 	import type { MediaLane } from "../../media";
 	import { MASK_MAX } from "../../media/source-edit";
@@ -135,32 +135,17 @@
 		return { x: u * paint.width, y: v * paint.height };
 	}
 
-	let last: { x: number; y: number } | null = null;
-	/** Distance along the stroke since its last dab. */
-	let sinceDab = 0;
+	let stroke: ReturnType<typeof createStroke> | null = null;
 	let erasing = false;
 	let cursor = $state<{ x: number; y: number } | null>(null);
 
 	function strokeTo(p: { x: number; y: number }) {
-		if (!ctx) return;
-		const r = (maskPaint.size * Math.max(paint.width, paint.height)) / 2;
-		const dab = (x: number, y: number) =>
-			maskDab(ctx!, x, y, r, !erasing, maskPaint.softness);
-		// Evenly spaced along the path whatever the pointer's speed.
-		const gap = Math.max(1, r / 8);
-		if (!last) {
-			dab(p.x, p.y);
-			sinceDab = 0;
-		} else {
-			const len = Math.hypot(p.x - last.x, p.y - last.y);
-			let d = gap - sinceDab;
-			for (; d <= len; d += gap) {
-				const t = d / len;
-				dab(last.x + (p.x - last.x) * t, last.y + (p.y - last.y) * t);
-			}
-			sinceDab = len - (d - gap);
-		}
-		last = p;
+		if (!ctx || !stroke) return;
+		stroke(
+			p.x,
+			p.y,
+			(maskPaint.size * Math.max(paint.width, paint.height)) / 2,
+		);
 		show();
 	}
 
@@ -172,21 +157,23 @@
 		if (!p) return;
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 		erasing = maskPaint.erase !== e.altKey;
-		last = null;
+		stroke = createStroke((x, y, r) =>
+			maskDab(ctx!, x, y, r, !erasing, maskPaint.softness),
+		);
 		strokeTo(p);
 	}
 
 	function onMove(e: PointerEvent) {
 		const ar = area.getBoundingClientRect();
 		cursor = { x: e.clientX - ar.left, y: e.clientY - ar.top };
-		if (!last) return;
+		if (!stroke) return;
 		const p = local(e);
 		if (p) strokeTo(p);
 	}
 
 	function onUp() {
-		if (!last) return;
-		last = null;
+		if (!stroke) return;
+		stroke = null;
 		session.save(paint.toDataURL("image/png"));
 		show();
 	}
