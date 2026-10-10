@@ -118,6 +118,9 @@ edit: they eat context fast.
 - The site is `openmosh.com`; `www` redirects to it. Never switch those around: each address
   keeps its own saves. `open-mosh.vercel.app` keeps serving the app with a moved notice
   (`lib/site.ts`) and is never redirected, since early users' projects are stored there.
+- `/about` (`about/index.html`) is plain HTML, so crawlers read it without running JS; the app
+  stays hash-routed on `/`. A new static page goes in `PAGES` in `vite.config.ts`, the build
+  inputs and `public/sitemap.xml`. A test holds the effect count in it and the README.
 - Chrome never grants `navigator.storage.persist()` on `localhost`, and code can't fix that. Use
   `127.0.0.1`.
 
