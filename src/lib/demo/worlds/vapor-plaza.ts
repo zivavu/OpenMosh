@@ -25,12 +25,13 @@ vec3 ringCentre() {
   return CAM + vec3(0.0, 2.4, 10.0);
 }
 
-// Where the leap is, 0-1, and the dolphin's centre and heading.
+// Where the leap is, 0-1, and the dolphin's centre and heading. Both ends sit
+// deep enough under the floor to hide it whole, so the wrap never shows.
 vec3 dolphinPos(out float heading) {
   float s = fract(T * 0.16);
-  float x = mix(-4.0, 4.0, s);
-  float y = -0.5 + 2.9 * sin(PI * s);
-  float dy = 2.9 * PI * cos(PI * s) / 8.0;
+  float x = mix(-5.0, 5.0, s);
+  float y = -3.2 + 5.6 * sin(PI * s);
+  float dy = 5.6 * PI * cos(PI * s) / 10.0;
   heading = atan(dy, 1.0);
   return ringCentre() + vec3(x, y - 2.4, 0.0);
 }
