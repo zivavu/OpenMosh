@@ -8,6 +8,7 @@
 			name="description"
 			content="Browser-based glitch art studio. Drop in a photo or video, layer WebGL effects, sync them to your music, or sequence images into a beat-matched slideshow — all client-side."
 		/>
+		<link rel="canonical" href="https://openmosh.com/" />
 		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
 		<link rel="apple-touch-icon" href="/icon-192.png" />
 		<link rel="manifest" href="/manifest.webmanifest" />
@@ -28,6 +29,23 @@
 			content="OpenMosh in glitched chrome lettering"
 		/>
 		<meta name="twitter:card" content="summary_large_image" />
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebApplication",
+				"name": "OpenMosh",
+				"url": "https://openmosh.com/",
+				"description": "Glitch art in your browser. Drop in a photo or video, pile on effects and sync them to a song. Nothing gets uploaded.",
+				"image": "https://openmosh.com/og.jpg",
+				"applicationCategory": "MultimediaApplication",
+				"operatingSystem": "Any",
+				"browserRequirements": "Requires WebGL2",
+				"isAccessibleForFree": true,
+				"offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+				"license": "https://github.com/zivavu/OpenMosh/blob/main/LICENSE",
+				"sameAs": ["https://github.com/zivavu/OpenMosh"]
+			}
+		</script>
 	</head>
 	<body>
 		<div id="app"></div>
