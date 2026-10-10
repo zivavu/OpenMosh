@@ -424,10 +424,11 @@
 		return ` — ${label} in`;
 	}
 
-	/** Only a lane that can play a video has sound to mute. */
-	function laneHasVideo(lane: MediaLane): boolean {
-		if (sourceById(lane.sourceId)?.kind === "video") return true;
-		return lane.clips.some((c) => clipSource(lane, c)?.kind === "video");
+	/** Only a lane with a video still holding its own sound has anything to mute. */
+	function laneHasSound(lane: MediaLane): boolean {
+		return lane.clips.some(
+			(c) => !c.audioDetached && clipSource(lane, c)?.kind === "video",
+		);
 	}
 
 	function toggleSound(lane: MediaLane) {
@@ -560,7 +561,7 @@
 				onRename={(name) => ctrl.setLane(lane.id, "name", name)}
 				onDelete={() => ctrl.requestDeleteLane(lane)}
 			>
-				{#if plan && laneHasVideo(lane)}
+				{#if plan && laneHasSound(lane)}
 					{const muted = $derived(lane.audio?.muted ?? false)}
 					<button
 						class="lane-sound"
