@@ -93,6 +93,9 @@ function labRedirect(): Plugin {
 	};
 }
 
+/** Static pages Vercel serves at their bare path, from `<page>/index.html`. */
+const PAGES = ["/about"];
+
 // Vercel answers an unknown path with the build's 404.html; the dev and preview
 // servers would hand it the app instead. Paths with an extension stay theirs.
 function notFoundPage(): Plugin {
@@ -102,7 +105,10 @@ function notFoundPage(): Plugin {
 		next: () => void,
 	) => {
 		const path = req.url?.split(/[?#]/)[0] ?? "/";
-		if (
+		const page = PAGES.find((p) => path === p || path === p + "/");
+		if (page) {
+			req.url = page + "/index.html" + req.url!.slice(path.length);
+		} else if (
 			req.method === "GET" &&
 			req.headers.accept?.includes("text/html") &&
 			path !== "/" &&
@@ -126,6 +132,8 @@ function notFoundPage(): Plugin {
 
 /** Public files left out of the install: only link previews fetch the share image. */
 const OFFLINE_SKIP = new Set(["og.jpg"]);
+/** Built assets left out too: the about page's screenshots are big and only it shows them. */
+const OFFLINE_SKIP_SOURCES = "assets/screenshots/";
 /** Text-overlay fonts are half the build and load on demand, so the worker caches them on use. */
 const ON_USE_DIR = "fonts/";
 
@@ -149,7 +157,18 @@ function serviceWorker(): Plugin {
 			publicDir = config.publicDir;
 		},
 		writeBundle(_, bundle) {
-			const built = Object.keys(bundle).filter((f) => !f.endsWith(".map"));
+			const built = Object.values(bundle)
+				.filter(
+					(out) =>
+						!out.fileName.endsWith(".map") &&
+						!(
+							out.type === "asset" &&
+							out.originalFileNames.some((f) =>
+								f.startsWith(OFFLINE_SKIP_SOURCES),
+							)
+						),
+				)
+				.map((out) => out.fileName);
 			const copied = listFiles(publicDir)
 				.map((f) => relative(publicDir, f).replaceAll("\\", "/"))
 				.filter((f) => !OFFLINE_SKIP.has(f) && !f.startsWith(ON_USE_DIR));
@@ -185,6 +204,7 @@ export default defineConfig({
 			input: {
 				index: fileURLToPath(new URL("./index.html", import.meta.url)),
 				notFound: fileURLToPath(new URL("./404.html", import.meta.url)),
+				about: fileURLToPath(new URL("./about/index.html", import.meta.url)),
 			},
 		},
 	},

@@ -21,6 +21,7 @@
 		FolderOpen,
 		HardDrive,
 		Image,
+		Info,
 		ListVideo,
 		Music,
 		Pencil,
@@ -943,6 +944,14 @@
 		>
 			<HardDrive size={14} />
 		</button>
+		<a
+			class="storage-btn"
+			href="/about"
+			title="About OpenMosh"
+			aria-label="About OpenMosh"
+		>
+			<Info size={14} />
+		</a>
 		<GithubLink />
 		<YoutubeLink />
 		<FeedbackButton />

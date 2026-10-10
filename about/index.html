@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>About OpenMosh | Glitch art in your browser</title>
+		<meta
+			name="description"
+			content="OpenMosh is a free, open-source glitch art studio that runs in your browser. Mosh photos and videos with 69 effects, sync them to a song and export WebM. Nothing gets uploaded."
+		/>
+		<link rel="canonical" href="https://openmosh.com/about" />
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<link rel="apple-touch-icon" href="/icon-192.png" />
+		<meta name="theme-color" content="#0a0a0c" />
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="OpenMosh" />
+		<meta property="og:title" content="About OpenMosh" />
+		<meta
+			property="og:description"
+			content="A free, open-source glitch art studio in your browser. Nothing gets uploaded."
+		/>
+		<meta property="og:url" content="https://openmosh.com/about" />
+		<meta property="og:image" content="https://openmosh.com/og.jpg" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta
+			property="og:image:alt"
+			content="OpenMosh in glitched chrome lettering"
+		/>
+		<meta name="twitter:card" content="summary_large_image" />
+	</head>
+	<body>
+		<main class="about">
+			<header class="hero">
+				<canvas class="wordmark" aria-hidden="true"></canvas>
+				<h1>
+					<span class="name">OpenMosh</span>
+					<span class="tagline">Glitch art in your browser</span>
+				</h1>
+				<p class="lead">
+					Drop in a photo or a video, pile on effects until it falls apart, hook
+					the whole thing up to a song and save the result. OpenMosh is free,
+					open source and inspired by PhotoMosh. Everything runs on your own
+					device, so nothing gets uploaded.
+				</p>
+				<div class="actions">
+					<a class="bar-key mosh" href="/">Open the app</a>
+					<a class="bar-key" href="https://github.com/zivavu/OpenMosh"
+						>Source on GitHub</a
+					>
+				</div>
+			</header>
+
+			<section>
+				<h2 class="rack-label">Three modes</h2>
+
+				<article class="mode">
+					<h3>Single</h3>
+					<p>
+						One image or video. Hit Mosh and you get a random stack of glitch
+						effects. Tweak them one at a time, or lock the ones you like and
+						roll the rest again. The Curated style picks effects that work
+						together and runs them in a sensible order. Add a song and any
+						effect setting can follow a frequency band of it, so the distortion
+						moves with the music. Animated GIFs come in as short clips, and SVGs
+						are redrawn sharp at the output size.
+					</p>
+					<img
+						src="/assets/screenshots/single.webp"
+						alt="Single mode with a moshed image and its effect chain"
+						width="1906"
+						height="903"
+						loading="lazy"
+					/>
+				</article>
+
+				<article class="mode">
+					<h3>Editor</h3>
+					<p>
+						A timeline built around your song. Lay your media out as clips on
+						layers, give each clip its own mosh, and run effect lanes over the
+						whole frame. Text has its own lanes. Any clip can be cropped, keyed
+						or erased by hand, and play at its own speed. 3D models go on layers
+						too (OBJ, STL, GLB, FBX and PLY), and animated ones play their
+						animation. Save the project as a <code>.openmosh</code> file and the
+						media, the song and the fonts travel with it.
+					</p>
+					<img
+						src="/assets/screenshots/editor.webp"
+						alt="Editor mode with media layers and effect lanes on the timeline"
+						width="1912"
+						height="901"
+						loading="lazy"
+					/>
+				</article>
+
+				<article class="mode">
+					<h3>Slideshow</h3>
+					<p>
+						The fast one. Throw in a pile of images or videos and a track.
+						OpenMosh finds the BPM and cuts between them on the beat, with
+						effects firing on the grid.
+					</p>
+				</article>
+			</section>
+
+			<section>
+				<h2 class="rack-label">69 effects</h2>
+				<p>
+					They start with the tame ones (pixelate, posterize, blur) and go
+					through the usual glitch vocabulary: data bend, pixel sort, VHS,
+					channel split. Some follow motion, or whatever part of the frame
+					stands out. A Mask effect keeps the effects above it inside a shape, a
+					gradient, the bright parts of the picture, colors you pick or an area
+					you paint. Strobes, rolls and pulses can run free or lock to the beat.
+				</p>
+			</section>
+
+			<section>
+				<h2 class="rack-label">Your files stay yours</h2>
+				<p>
+					There's no account, no server and no upload. Your files are read
+					straight from disk, your GPU renders them with WebGL2 and your browser
+					writes the export. Projects are kept in the browser's own storage, and
+					after the first visit OpenMosh works offline. Two things go over the
+					network, and only when you use them: a message you send through the
+					feedback form, and a font you add from a link.
+				</p>
+			</section>
+
+			<section>
+				<h2 class="rack-label">Export and requirements</h2>
+				<p>
+					Videos export as WebM with sound. There's no MP4 or GIF export. A
+					recent Chromium browser (Chrome, Edge, Brave, Arc) is what OpenMosh is
+					built and tested on. Firefox and Safari can load it, but their support
+					for the video encoder that export needs is newer and patchier. Any GPU
+					from the last ten years previews fine, and long exports finish faster
+					on a CPU with more cores.
+				</p>
+			</section>
+
+			<section>
+				<h2 class="rack-label">Open source</h2>
+				<p>
+					OpenMosh is MIT licensed. The code, the changelog and the credits for
+					the effects it ports are
+					<a href="https://github.com/zivavu/OpenMosh">on GitHub</a>. Videos
+					made with it are
+					<a href="https://www.youtube.com/@zivavu144">on YouTube</a> and
+					<a href="https://www.instagram.com/zivavu144/">Instagram</a>.
+				</p>
+			</section>
+
+			<footer class="actions">
+				<a class="bar-key mosh" href="/">Open the app</a>
+			</footer>
+		</main>
+		<script type="module" src="/src/about.ts"></script>
+	</body>
+</html>
