@@ -35,8 +35,6 @@ export const maskPaint = $state({
 	erase: false,
 	/** The Mask whose area the user asked to see. Only Show area sets it. */
 	shownId: null as string | null,
-	/** A Mask being changed right now, whose area shows until the change settles. */
-	peekId: null as string | null,
 	/** The Mask whose Show area button the pointer rests on. */
 	hoverId: null as string | null,
 	/** A Key colour pointed at or dragged: the tint shows only what it selects. */
@@ -45,27 +43,13 @@ export const maskPaint = $state({
 	keyIndex: 0,
 });
 
-/** How long the area stays up after the last change, in ms. */
-const PEEK_MS = 700;
-let peekTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** Show Mask `id`'s area while it changes; each call restarts the clock, so a
- * slider drag keeps it up until the drag stops. */
-export function peekArea(id: string) {
-	maskPaint.peekId = id;
-	clearTimeout(peekTimer);
-	peekTimer = setTimeout(() => {
-		if (maskPaint.peekId === id) maskPaint.peekId = null;
-	}, PEEK_MS);
-}
-
 /** The Mask whose area the preview tints right now, if any. */
 export function tintedMask(): string | null {
 	return (
 		maskPaint.shownId ??
 		maskPaint.hoverId ??
 		maskPaint.keyFocus?.instanceId ??
-		maskPaint.peekId
+		null
 	);
 }
 
