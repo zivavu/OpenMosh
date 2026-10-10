@@ -174,6 +174,7 @@
 	import {
 		applyLayerMoves,
 		combinedLayerOrder,
+		zAbove,
 		nextLayerZ,
 		moveLayerTo,
 		stackIndex,
@@ -1454,7 +1455,7 @@
 			fxLanes,
 			currentFxLaneSettings(),
 			seqMasterDuration,
-			nextLayerZ(layerOrder),
+			newLaneZ(),
 		);
 		// At the cap this is a no-op; recording it would leave a Ctrl+Z that undoes nothing.
 		if (next === fxLanes) return;
@@ -2345,14 +2346,21 @@
 		if (!audio.trackFile) await loadSong(trackId);
 	}
 
-	/** A lane with no sound yet, for clips pasted or dragged in from another. */
+	/** A lane with no sound yet, for clips pasted or dragged in from another. Goes
+	 * under the audio lane last pressed, or last. */
 	function addEmptyAudioLane() {
 		const lanes = mediaTimeline.audioLanes ?? [];
 		if (lanes.length >= MAX_AUDIO_LANES) return;
+		const active = lanes.findIndex((l) => l.id === timelineAxis?.activeLaneId);
+		const at = active === -1 ? lanes.length : active + 1;
 		pushMediaHistory();
 		setMediaTimeline({
 			...mediaTimeline,
-			audioLanes: [...lanes, createAudioLane(nextAudioLaneName(lanes))],
+			audioLanes: [
+				...lanes.slice(0, at),
+				createAudioLane(nextAudioLaneName(lanes)),
+				...lanes.slice(at),
+			],
 		});
 	}
 
@@ -3410,7 +3418,7 @@
 
 	function addTextLane() {
 		pushTextHistory();
-		setTextTimeline(appendTextLane(textTimeline, nextLayerZ(layerOrder)));
+		setTextTimeline(appendTextLane(textTimeline, newLaneZ()));
 	}
 
 	$effect(() => {
@@ -3467,6 +3475,11 @@
 				lanes: applyLayerMoves(textTimeline.lanes, moves),
 			});
 		}
+	}
+
+	/** Where a new stacked lane goes: just above the lane last pressed, else on top. */
+	function newLaneZ(): number {
+		return zAbove(layerOrder, timelineAxis?.activeLaneId ?? null);
 	}
 
 	/** Scroll the stack just enough to show a lane's row. */
@@ -3646,11 +3659,7 @@
 		if (mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
 		const sourceId = defaultLayerSourceId();
 		pushMediaHistory();
-		const next = appendMediaLane(
-			mediaTimeline,
-			sourceId,
-			nextLayerZ(layerOrder),
-		);
+		const next = appendMediaLane(mediaTimeline, sourceId, newLaneZ());
 		setMediaTimeline(next);
 		revealLaneRow(next.lanes[next.lanes.length - 1].id);
 		// Nothing in the pool to draw, so ask for the file.
