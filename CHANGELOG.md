@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.15](https://github.com/zivavu/OpenMosh/compare/v0.9.14...v0.9.15) (2026-10-10)
+
+
+### Added
+
+* Add an About page ([b375895](https://github.com/zivavu/OpenMosh/commit/b375895fdc8c222c41b7bd9762c00cc433f43d63))
+* Link the Instagram account beside YouTube ([273599a](https://github.com/zivavu/OpenMosh/commit/273599af229e6df42fe33920ce9d7811ded1966a))
+
 ## [0.9.14](https://github.com/zivavu/OpenMosh/compare/v0.9.13...v0.9.14) (2026-10-10)
 
 This release is mostly about lanes in the editor. You can copy a media lane from its header, drag audio lanes into a new order, and paste clips under the pointer. A new lane goes in next to the one you last clicked. The eraser now paints with the Mask's brush and has a Softness slider.
