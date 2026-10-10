@@ -1,29 +1,7 @@
-/** Share of the radius a dab stays solid for; the rest fades to nothing. */
-export const DEFAULT_DAB_CORE = 0.6;
+/** 0 = hard edge, 1 = fading from the centre. */
+export const DEFAULT_BRUSH_SOFTNESS = 0.4;
 
-/** One round dab of white (`on`) or black, solid to `core` of its radius and
- * fading linearly past it. Shared by the eraser and the Mask brush. */
-export function softDab(
-	ctx: CanvasRenderingContext2D,
-	x: number,
-	y: number,
-	radius: number,
-	on: boolean,
-	core = DEFAULT_DAB_CORE,
-) {
-	const r = Math.max(radius, 1);
-	const rgb = on ? "255,255,255" : "0,0,0";
-	const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-	grad.addColorStop(0, `rgba(${rgb},1)`);
-	grad.addColorStop(Math.min(Math.max(core, 0), 1), `rgba(${rgb},1)`);
-	grad.addColorStop(1, `rgba(${rgb},0)`);
-	ctx.fillStyle = grad;
-	ctx.beginPath();
-	ctx.arc(x, y, r, 0, Math.PI * 2);
-	ctx.fill();
-}
-
-/** A Mask brush dab on an opaque canvas. It keeps the brighter of itself and what's
+/** One brush dab on an opaque mask canvas. It keeps the brighter of itself and what's
  * there (the darker when erasing), so overlaps don't build up and a stroke's edge is
  * as soft as one dab at any speed. Softness widens the fade and eases it out. */
 export function maskDab(
@@ -59,4 +37,28 @@ export function maskDab(
 	ctx.arc(x, y, r, 0, Math.PI * 2);
 	ctx.fill();
 	ctx.restore();
+}
+
+/** Lays a stroke's dabs evenly along the pointer's path, so it looks the same at
+ * any speed. Make one per stroke. */
+export function createStroke(
+	dab: (x: number, y: number, radius: number) => void,
+) {
+	let last: { x: number; y: number } | null = null;
+	let sinceDab = 0;
+	return (x: number, y: number, radius: number) => {
+		const gap = Math.max(1, radius / 8);
+		if (!last) {
+			dab(x, y, radius);
+		} else {
+			const len = Math.hypot(x - last.x, y - last.y);
+			let d = gap - sinceDab;
+			for (; d <= len; d += gap) {
+				const t = d / len;
+				dab(last.x + (x - last.x) * t, last.y + (y - last.y) * t, radius);
+			}
+			sinceDab = len - (d - gap);
+		}
+		last = { x, y };
+	};
 }

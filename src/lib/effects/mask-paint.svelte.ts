@@ -1,3 +1,5 @@
+import { DEFAULT_BRUSH_SOFTNESS } from "../brush/soft-dab";
+
 /** A Mask effect the preview is taking brush strokes or colour picks for. */
 export interface MaskPaintTarget {
 	instanceId: string;
@@ -27,8 +29,7 @@ export const maskPaint = $state({
 	target: null as MaskPaintTarget | null,
 	/** Brush diameter as a share of the painted box's long edge. */
 	size: 0.1,
-	/** 0 = hard edge, 1 = fading from the centre. */
-	softness: 0.4,
+	softness: DEFAULT_BRUSH_SOFTNESS,
 	/** Paint the effects back out instead of in. */
 	erase: false,
 	/** The Mask whose area the user asked to see. Only Show area sets it. */

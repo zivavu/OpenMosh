@@ -3,7 +3,11 @@
 </script>
 
 <script lang="ts">
-	import { softDab } from "../../brush/soft-dab";
+	import {
+		createStroke,
+		DEFAULT_BRUSH_SOFTNESS,
+		maskDab,
+	} from "../../brush/soft-dab";
 	import { modalDialog } from "../../actions/modal-dialog";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
@@ -140,6 +144,7 @@
 	/** Brush width as a share of the preview's long edge. */
 	const BRUSH_DEFAULT = 0.12;
 	let brush = $state(BRUSH_DEFAULT);
+	let softness = $state(DEFAULT_BRUSH_SOFTNESS);
 	/** Alt, or the toggle: paint coverage back instead of taking it away. */
 	let restoring = $state(false);
 	let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);
@@ -641,16 +646,19 @@
 		img.src = url;
 	}
 
-	/** Paint one dab, in raw-buffer pixels. Soft-edged, so strokes blend. */
-	function dab(x: number, y: number) {
+	let stroke: ReturnType<typeof createStroke> | null = null;
+
+	/** Carry the stroke to a point in raw-buffer pixels. */
+	function strokeTo(x: number, y: number) {
 		const ctx = ensureMask();
 		if (!ctx || !maskCanvas || !raw) return;
+		stroke ??= createStroke((sx, sy, r) =>
+			maskDab(maskCtx ?? ctx, sx, sy, r, restoring, softness),
+		);
 		// Back through the mask's own transform: a moved mask is painted where the brush appears.
 		const u = unmoved(x / raw.width, y / raw.height);
-		const sx = u.x * maskCanvas.width;
-		const sy = u.y * maskCanvas.height;
 		const r = (brush * Math.max(maskCanvas.width, maskCanvas.height)) / 2;
-		softDab(ctx, sx, sy, r, restoring);
+		stroke(u.x * maskCanvas.width, u.y * maskCanvas.height, r);
 	}
 
 	/** A point in source space, put back into the mask's own space. */
@@ -1079,7 +1087,8 @@
 			const held = restoring;
 			if (e.altKey) restoring = !restoring;
 			drag = { kind: "erase" };
-			dab(p.x, p.y);
+			stroke = null;
+			strokeTo(p.x, p.y);
 			paint();
 			if (e.altKey) restoring = held;
 			return;
@@ -1131,7 +1140,7 @@
 			if (!p) return;
 			const held = restoring;
 			if (e.altKey) restoring = !restoring;
-			dab(p.x, p.y);
+			strokeTo(p.x, p.y);
 			paint();
 			if (e.altKey) restoring = held;
 			return;
@@ -1174,6 +1183,7 @@
 		if (drag?.kind === "erase") {
 			commitMask();
 			painting = false;
+			stroke = null;
 		}
 		drag = null;
 		gestureTime = null;
@@ -1776,6 +1786,24 @@
 								oninput={(v) => (brush = v)}
 							/>
 							<span class="val">{Math.round(brush * 100)}%</span>
+						</div>
+
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="row"
+							title="How far the brush's edge fades. Double-click to reset."
+							ondblclick={() => (softness = DEFAULT_BRUSH_SOFTNESS)}
+						>
+							<label for="er-softness">Softness</label>
+							<RangeSlider
+								id="er-softness"
+								value={softness}
+								min={0}
+								max={1}
+								step={0.01}
+								oninput={(v) => (softness = v)}
+							/>
+							<span class="val">{Math.round(softness * 100)}%</span>
 						</div>
 
 						<div class="row">
