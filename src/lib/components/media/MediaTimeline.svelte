@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Focus, Volume2, VolumeX } from "lucide-svelte";
+	import { Copy, Focus, Volume2, VolumeX } from "lucide-svelte";
 	import type { MixSegment } from "../../mix/plan";
 	import { DEFAULT_LANE_AUDIO } from "../../mix/types";
 	import LaneWaveform from "../timeline/LaneWaveform.svelte";
@@ -68,6 +68,8 @@
 		edits?: Record<string, SourceEdit>;
 		soloLaneId?: string | null;
 		onToggleSolo?: (laneId: string) => void;
+		/** Absent once the lane cap is reached. */
+		onCopyLane?: (laneId: string) => void;
 		selectedClipId?: string | null;
 		/** The whole selection, so the media rail can assign to all of it. `selectedClipId`
 		 * stays the primary and is always a member here. */
@@ -103,6 +105,7 @@
 		edits = {},
 		soloLaneId = null,
 		onToggleSolo,
+		onCopyLane,
 		selectedClipId = $bindable(null),
 		selectedClipIds = $bindable([]),
 		onChange,
@@ -588,6 +591,15 @@
 						<Focus size={12} />
 					</button>
 				{/if}
+				{#if onCopyLane}
+					<button
+						class="lane-copy"
+						title="Copy this lane with its clips and effects into a new lane above it"
+						onclick={() => onCopyLane(lane.id)}
+					>
+						<Copy size={12} />
+					</button>
+				{/if}
 			</ClipLaneGutter>
 
 			<div
@@ -776,7 +788,8 @@
 		box-shadow: inset 0 0 0 1px var(--live);
 	}
 
-	.lane-sound:hover {
+	.lane-sound:hover,
+	.lane-copy:hover {
 		color: var(--text);
 	}
 

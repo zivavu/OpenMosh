@@ -2,6 +2,7 @@ import { records } from "../records";
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
+	cloneChainEffects,
 	normalizeChainFields,
 	normalizeLaneSettings,
 	type ChainClip,
@@ -226,6 +227,23 @@ export function appendMediaLane(
 			...timeline.lanes,
 			createMediaLane(`Media ${timeline.lanes.length + 1}`, sourceId, z),
 		],
+	};
+}
+
+/** A copy of `lane` at `z`. Every id is fresh: the renderer keys per-effect state
+ * by instance id. */
+export function duplicateMediaLane(lane: MediaLane, z: number): MediaLane {
+	return {
+		...lane,
+		id: nextId("mlane"),
+		name: `${lane.name} copy`,
+		z,
+		style: { ...lane.style },
+		clips: lane.clips.map((clip) => ({
+			...clip,
+			id: nextId("mclip"),
+			effects: cloneChainEffects(clip.effects),
+		})),
 	};
 }
 

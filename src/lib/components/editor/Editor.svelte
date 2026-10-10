@@ -176,6 +176,7 @@
 		combinedLayerOrder,
 		nextLayerZ,
 		moveLayerTo,
+		stackIndex,
 		startLayerRowDrag,
 	} from "../../timeline/layer-order";
 	import {
@@ -209,6 +210,7 @@
 		createMediaHistory,
 		createMediaLane,
 		detachMediaSource,
+		duplicateMediaLane,
 		EMPTY_MEDIA_TIMELINE,
 		fillMediaClipsFromPreset,
 		findMediaClip,
@@ -3428,29 +3430,56 @@
 	function reorderLayer(laneId: string, toIndex: number, coalesceKey?: string) {
 		const moves = moveLayerTo(layerOrder, laneId, toIndex);
 		if (!moves) return;
-		const moved = new Set(moves.map((m) => m.id));
-		const touched = (lanes: { id: string }[]) =>
-			lanes.some((l) => moved.has(l.id));
 		// Only the stacks whose lanes moved record it, under one stamp: one Ctrl+Z.
 		asOneEdit(() => {
-			if (touched(fxLanes)) {
-				pushFxHistory(coalesceKey);
-				setFxLanes(applyLayerMoves(fxLanes, moves));
-			}
-			if (touched(mediaTimeline.lanes)) {
+			if (movesAny(moves, mediaTimeline.lanes)) {
 				pushMediaHistory(coalesceKey);
 				setMediaTimeline({
 					...mediaTimeline,
 					lanes: applyLayerMoves(mediaTimeline.lanes, moves),
 				});
 			}
-			if (touched(textTimeline.lanes)) {
-				pushTextHistory(coalesceKey);
-				setTextTimeline({
-					...textTimeline,
-					lanes: applyLayerMoves(textTimeline.lanes, moves),
-				});
-			}
+			restackFxAndText(moves, coalesceKey);
+		});
+	}
+
+	function movesAny(moves: { id: string }[], lanes: { id: string }[]) {
+		return lanes.some((l) => moves.some((m) => m.id === l.id));
+	}
+
+	function restackFxAndText(
+		moves: { id: string; z: number }[],
+		coalesceKey?: string,
+	) {
+		if (movesAny(moves, fxLanes)) {
+			pushFxHistory(coalesceKey);
+			setFxLanes(applyLayerMoves(fxLanes, moves));
+		}
+		if (movesAny(moves, textTimeline.lanes)) {
+			pushTextHistory(coalesceKey);
+			setTextTimeline({
+				...textTimeline,
+				lanes: applyLayerMoves(textTimeline.lanes, moves),
+			});
+		}
+	}
+
+	/** A copy of the media lane, stacked right above it, in one undo step. */
+	function copyMediaLane(laneId: string) {
+		const lane = mediaTimeline.lanes.find((l) => l.id === laneId);
+		if (!lane || mediaTimeline.lanes.length >= MAX_MEDIA_LANES) return;
+		const copy = duplicateMediaLane(lane, nextLayerZ(layerOrder));
+		const lanes = [...mediaTimeline.lanes, copy];
+		const order = combinedLayerOrder(lanes, textTimeline.lanes, fxLanes);
+		const moves =
+			moveLayerTo(order, copy.id, stackIndex(layerOrder, laneId)) ?? [];
+		asOneEdit(() => {
+			pushMediaHistory();
+			setMediaTimeline({
+				...mediaTimeline,
+				lanes: applyLayerMoves(lanes, moves),
+			});
+			restackFxAndText(moves);
 		});
 	}
 
@@ -4887,6 +4916,9 @@
 							bind:selectedClipIds={selectedMediaClipIds}
 							{soloLaneId}
 							onToggleSolo={toggleMediaSolo}
+							onCopyLane={mediaTimeline.lanes.length < MAX_MEDIA_LANES
+								? copyMediaLane
+								: undefined}
 							onChange={setMediaTimeline}
 							onBeforeEdit={pushMediaHistory}
 							bpm={sequenceBpm}
