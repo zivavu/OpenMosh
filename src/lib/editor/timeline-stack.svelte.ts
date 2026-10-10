@@ -61,6 +61,18 @@ export class TimelineStackState {
 		this.activeLaneId = laneId;
 	}
 
+	/** The lane track under the pointer, and where on it; null once it leaves. */
+	#hover: { laneId: string; clientX: number } | null = null;
+
+	/** Where a paste lands: under the pointer while it's over a lane, else at the
+	 * start marker on the lane last touched. */
+	pasteTarget(): { time: number; laneId: string | null } {
+		const hover = this.#hover;
+		return hover
+			? { time: this.vp.clientXToTime(hover.clientX), laneId: hover.laneId }
+			: { time: this.staticTime, laneId: this.activeLaneId };
+	}
+
 	// Every lane publishes its edges; a drag can land on any of them, plus the
 	// track ends, the start marker and the beat grid.
 
@@ -551,12 +563,23 @@ export class TimelineStackState {
 			if (laneId) this.markLaneUsed(laneId);
 		};
 		el.addEventListener("pointerdown", markUsed, true);
+		const hover = (e: PointerEvent) => {
+			if (laneId) this.#hover = { laneId, clientX: e.clientX };
+		};
+		const leave = () => {
+			if (this.#hover?.laneId === laneId) this.#hover = null;
+		};
+		el.addEventListener("pointermove", hover);
+		el.addEventListener("pointerleave", leave);
 		const detachWheel = this.vp.attachWheel(node, () => {
 			this.followPlayhead = false;
 		});
 		return {
 			destroy: () => {
 				el.removeEventListener("pointerdown", markUsed, true);
+				el.removeEventListener("pointermove", hover);
+				el.removeEventListener("pointerleave", leave);
+				leave();
 				detachWheel();
 				this.#resizeObserver.unobserve(el);
 				this.#trackEls.delete(el);

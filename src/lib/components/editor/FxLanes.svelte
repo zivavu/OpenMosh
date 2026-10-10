@@ -197,12 +197,13 @@
 		if (clipClipboard.length === 0 || latestCopy() !== clipClipStamp) {
 			return false;
 		}
+		const at = stack.pasteTarget();
 		const result = pasteFxClips(
 			lanes,
 			clipClipboard,
-			stack.staticTime,
+			at.time,
 			stack.trackDuration,
-			stack.activeLaneId,
+			at.laneId,
 		);
 		if (result.clipIds.length === 0) return false;
 		onBeforeEdit?.();
