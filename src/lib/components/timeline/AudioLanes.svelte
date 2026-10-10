@@ -8,6 +8,7 @@
 		TRACK_DND_TYPE,
 	} from "../../editor/source-drag.svelte";
 	import { freeRangeAt, MIN_CLIP_LENGTH } from "../../timeline/clips";
+	import { startLayerRowDrag, type LayerRef } from "../../timeline/layer-order";
 	import {
 		copyAudioClips,
 		pasteAudioClips,
@@ -95,6 +96,29 @@
 
 	const stack = getTimelineStack();
 	const vp = stack.vp;
+
+	/** Sound lanes stack only among themselves, and their order is just for the eye. */
+	let laneOrder = $derived<LayerRef[]>(
+		lanes.map((l, i) => ({ ...l, kind: "media", z: lanes.length - i })),
+	);
+	let draggingLaneId = $state<string | null>(null);
+
+	function moveLane(laneId: string, to: number, coalesceKey: string) {
+		const from = lanes.findIndex((l) => l.id === laneId);
+		if (from === -1 || from === to) return;
+		const next = lanes.slice();
+		next.splice(to, 0, ...next.splice(from, 1));
+		onBeforeEdit?.(coalesceKey);
+		onChange(next);
+	}
+
+	function startLaneDrag(laneId: string, e: PointerEvent) {
+		startLayerRowDrag(e, laneId, {
+			order: () => laneOrder,
+			reorder: moveLane,
+			setDragging: (id) => (draggingLaneId = id),
+		});
+	}
 
 	const ctrl = new ClipLaneController<AudioClip, AudioLane>(
 		{
@@ -308,6 +332,7 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="tl-row audio-row"
+			class:lifted={draggingLaneId === lane.id}
 			class:folded={foldedLaneIds.has(lane.id)}
 			class:drop-target={dropLaneId === lane.id && !dropClipId}
 			style="order: {orderBase + i}"
@@ -318,7 +343,8 @@
 		>
 			<ClipLaneGutter
 				{lane}
-				layerOrder={[]}
+				layerOrder={laneOrder}
+				onLaneDragStart={startLaneDrag}
 				folded={foldedLaneIds.has(lane.id)}
 				{onToggleFold}
 				eyeTitles={["Mute this lane", "Unmute this lane"]}
