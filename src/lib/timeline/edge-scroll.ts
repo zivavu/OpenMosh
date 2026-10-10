@@ -10,10 +10,11 @@ export function edgeOvershoot(
 	clientX: number,
 	left: number,
 	right: number,
+	zone = EDGE_ZONE_PX,
 ): number {
-	if (right - left <= EDGE_ZONE_PX * 2) return 0;
-	if (clientX < left + EDGE_ZONE_PX) return clientX - (left + EDGE_ZONE_PX);
-	if (clientX > right - EDGE_ZONE_PX) return clientX - (right - EDGE_ZONE_PX);
+	if (right - left <= zone * 2) return 0;
+	if (clientX < left + zone) return clientX - (left + zone);
+	if (clientX > right - zone) return clientX - (right - zone);
 	return 0;
 }
 
