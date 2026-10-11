@@ -2,8 +2,6 @@
 	import { modalDialog } from "../../actions/modal-dialog";
 	import type { Snippet } from "svelte";
 	import { X } from "lucide-svelte";
-	import { onMount } from "svelte";
-	import { pushModalKeyboard } from "../../modal-keyboard";
 
 	/** The centred tool panel the generator and the webcam open in: overlay, card, a
 	 * titled head with a close button, and the keyboard claimed while it is up. */
@@ -29,8 +27,6 @@
 		icon,
 		children,
 	}: Props = $props();
-
-	onMount(() => pushModalKeyboard());
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

@@ -1,4 +1,5 @@
 import type { Attachment } from "svelte/attachments";
+import { pushModalKeyboard } from "../modal-keyboard";
 
 const FOCUSABLE =
 	"a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]";
@@ -29,11 +30,13 @@ function onKeydown(e: KeyboardEvent) {
 	}
 }
 
-/** Modal behaviour for a dialog element: focus moves in, Tab stays in, and focus
- * returns to where it was on close. Escape stays with each dialog. */
+/** Modal behaviour for a dialog element: focus moves in, Tab stays in, the editors'
+ * shortcuts stand down, and focus returns to where it was on close. Escape stays
+ * with each dialog. */
 export function modalDialog(): Attachment<HTMLElement> {
 	return (node) => {
 		const returnTo = document.activeElement as HTMLElement | null;
+		const releaseKeyboard = pushModalKeyboard();
 		if (!node.hasAttribute("tabindex")) node.tabIndex = -1;
 		if (stack.length === 0) document.addEventListener("keydown", onKeydown);
 		stack.push(node);
@@ -44,6 +47,7 @@ export function modalDialog(): Attachment<HTMLElement> {
 		});
 
 		return () => {
+			releaseKeyboard();
 			stack.splice(stack.indexOf(node), 1);
 			if (stack.length === 0)
 				document.removeEventListener("keydown", onKeydown);
