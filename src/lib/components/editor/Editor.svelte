@@ -255,6 +255,7 @@
 	} from "../../editor/legacy-segments";
 	import { ClipMoshes } from "../../editor/clip-moshes.svelte";
 	import {
+		isNewerEntry,
 		readSeqEntry,
 		SEQ_ENTRY_VERSION,
 		type LegacySegmentEntry,
@@ -1223,10 +1224,28 @@
 
 	/** Read this mode's entry for a song, falling back to the legacy un-prefixed entry. */
 	async function loadSeqEntry(baseKey: string): Promise<RestoredEntry | null> {
+		const key = seqKeyPrefix + baseKey;
 		const entry =
-			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
+			(await loadTimeline<SeqEntry>(key)) ??
 			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
+		if (entry && isNewerEntry(entry)) {
+			holdNewerTimeline(key);
+			return null;
+		}
 		return entry && readSeqEntry(entry, file ? stableSourceId(file) : "");
+	}
+
+	/** Timelines a newer OpenMosh saved: left as they are, never written over. */
+	const newerTimelineKeys = new Set<string>();
+
+	function holdNewerTimeline(key: string) {
+		if (newerTimelineKeys.has(key)) return;
+		newerTimelineKeys.add(key);
+		showToast(
+			"A newer version of OpenMosh saved this. Reload the page to open it; changes here won't be saved.",
+			"error",
+			0,
+		);
 	}
 
 	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.
@@ -1289,6 +1308,7 @@
 		const entry = seqEntryNow();
 		const key = seqStoreKey;
 		if (!key || key !== loadedTimelineKey || !entry) return;
+		if (newerTimelineKeys.has(key)) return;
 		clearTimeout(seqSaveTimer);
 		untrack(() => saves.schedule("timeline"));
 		seqSaveTimer = setTimeout(() => {
@@ -1343,7 +1363,12 @@
 		clearTimeout(seqSaveTimer);
 		const key = seqStoreKey;
 		const entry = seqEntryNow();
-		if (!key || key !== loadedTimelineKey || !entry) {
+		if (
+			!key ||
+			key !== loadedTimelineKey ||
+			!entry ||
+			newerTimelineKeys.has(key)
+		) {
 			saves.drop("timeline");
 			return;
 		}
@@ -1977,6 +2002,8 @@
 		const saved = await loadSeqEntry(key);
 		if (seqStoreKey !== storeKey) return;
 		loadedTimelineKey = storeKey;
+		// Not ready, so nothing of it is seeded or saved over.
+		if (newerTimelineKeys.has(storeKey)) return;
 		if (saved === null) {
 			// Named after its song, else what it was opened with, until the user names it.
 			if (key.startsWith("proj-") && !readProjectNames()[key]) {

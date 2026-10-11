@@ -1,7 +1,11 @@
 /** The manifest inside a project file: its shape, how it's validated, and how the
  * ids it carries are rewritten when an import lands on different ones. */
 
-import type { LegacySegmentEntry, SeqEntry } from "../editor/seq-entry";
+import {
+	isNewerEntry,
+	type LegacySegmentEntry,
+	type SeqEntry,
+} from "../editor/seq-entry";
 import type { MediaClip, MediaLane } from "../media/types";
 import type { AudioClip, AudioLane } from "../mix/types";
 import { records } from "../records";
@@ -147,7 +151,8 @@ export function parseManifest(raw: unknown): ProjectManifest {
 		throw new Error("That isn't an OpenMosh project file");
 	}
 	const version = typeof raw.version === "number" ? raw.version : 0;
-	if (version > PROJECT_VERSION) {
+	// The timeline has its own version: a newer one can ride in a manifest this reads.
+	if (version > PROJECT_VERSION || isNewerEntry(raw.entry)) {
 		throw new Error("Made by a newer OpenMosh; update and try again");
 	}
 	if (!isRecord(raw.entry)) {

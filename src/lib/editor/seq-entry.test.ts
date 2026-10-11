@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { readSeqEntry, type SeqEntry } from "./seq-entry";
+import {
+	isNewerEntry,
+	readSeqEntry,
+	SEQ_ENTRY_VERSION,
+	type SeqEntry,
+} from "./seq-entry";
 import { migrateLegacySegments } from "./legacy-segments";
 import { normalizeFxLanes } from "./fx-lanes";
 import { normalizeTextTimeline } from "../text/types";
@@ -156,5 +161,19 @@ describe("a damaged entry", () => {
 		expect(readSeqEntry(damaged, "opened").span).toBeNull();
 		const partly = { ...damaged, span: { start: -2, end: 30 } };
 		expect(readSeqEntry(partly, "opened").span).toEqual({ start: 0, end: 10 });
+	});
+});
+
+describe("isNewerEntry", () => {
+	it("is false for every version this build reads", () => {
+		for (const entry of Object.values(FIXTURES)) {
+			expect(isNewerEntry(entry)).toBe(false);
+		}
+		expect(isNewerEntry({ v: SEQ_ENTRY_VERSION })).toBe(false);
+		expect(isNewerEntry(null)).toBe(false);
+	});
+
+	it("is true past the current version", () => {
+		expect(isNewerEntry({ v: SEQ_ENTRY_VERSION + 1 })).toBe(true);
 	});
 });

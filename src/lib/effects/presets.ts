@@ -126,10 +126,11 @@ export function applyPreset(preset: Preset): EffectInstance[] {
 }
 
 const FILE_FORMAT = "openmosh-presets";
+const FILE_VERSION = 1;
 
 /** A preset file: versioned so a later shape can still read this one. */
 export function presetsToFile(presets: Preset[]): Blob {
-	const file = { format: FILE_FORMAT, version: 1, presets };
+	const file = { format: FILE_FORMAT, version: FILE_VERSION, presets };
 	return new Blob([JSON.stringify(file, null, "	")], {
 		type: "application/json",
 	});
@@ -163,6 +164,10 @@ export function parsePresetFile(text: string): Preset[] {
 		!Array.isArray(data.presets)
 	)
 		throw new Error("That isn't an OpenMosh preset file");
+	if (typeof data.version === "number" && data.version > FILE_VERSION)
+		throw new Error(
+			"That preset file is from a newer OpenMosh. Reload the page and try again",
+		);
 	const presets: Preset[] = [];
 	for (const p of data.presets) {
 		if (!isRecord(p) || typeof p.name !== "string" || !Array.isArray(p.effects))
