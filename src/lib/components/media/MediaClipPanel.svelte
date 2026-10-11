@@ -200,6 +200,12 @@
 			0,
 	);
 
+	function setBounce(on: boolean) {
+		if (!clip) return;
+		onBeforeEdit?.();
+		onClipChange({ ...clip, bounce: on || undefined, bounceBack: undefined });
+	}
+
 	function setSourceStart(v: number) {
 		if (!clip) return;
 		onBeforeEdit?.(`media-in-${clip.id}`);
@@ -374,6 +380,18 @@
 						`How fast “${source.name}” plays, everywhere it's used. It's the same speed as in its edit dialog. Double-click to reset.`,
 					)}
 				{/if}
+				<div
+					class="row"
+					title="Play the video to its end, then backward to the start, and on again, instead of jumping back to the beginning"
+				>
+					<label for="mc-bounce">Bounce</label>
+					<Checkbox
+						id="mc-bounce"
+						checked={!!clip.bounce}
+						onchange={(e) =>
+							setBounce((e.currentTarget as HTMLInputElement).checked)}
+					/>
+				</div>
 			{/if}
 
 			<FadeRows {clip} noun="this media" idPrefix="mc" onFade={setFade} />

@@ -829,6 +829,7 @@
 				textTime,
 				sourceEdits,
 				mediaChains ?? undefined,
+				sourceDurations,
 			).some((l) =>
 				l.effects.some((e) => e.enabled && ANIMATED_EFFECTS.has(e.defId)),
 			)) ||
@@ -872,6 +873,7 @@
 					textTime,
 					sourceEdits,
 					mediaChains ?? undefined,
+					sourceDurations,
 				)
 			: EMPTY_MEDIA;
 		// Every lane is still driven, not just the soloed one, or leaving solo would stall.
@@ -1249,6 +1251,8 @@
 				c.start;
 				c.end;
 				c.sourceStart;
+				c.bounce;
+				c.bounceBack;
 				c.speed;
 				c.animation;
 				c.sourceId;

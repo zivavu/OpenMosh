@@ -218,3 +218,36 @@ describe("source ends", () => {
 		expect(trackSourceEnds({ ...clip, loop: true }, 5, 12)).toEqual([4, 9]);
 	});
 });
+
+describe("bouncing clips", () => {
+	it("plays the sound back the other way between turns", () => {
+		const timeline = videoTimeline([[0, 10, 1]]);
+		timeline.lanes[0].clips[0].bounce = true;
+		const plan = planMix({ timeline, edits: {}, videos: { vid: 4 } });
+		expect(plan.map((s) => [s.start, s.end, s.offset, !!s.reversed])).toEqual([
+			[0, 3, 1, false],
+			[3, 7, 4, true],
+			[7, 10, 0, false],
+		]);
+		expect(trimSegment(plan[1], 4, 7)?.offset).toBe(3);
+		expect(videoClipRepeats(undefined, 4, timeline.lanes[0].clips[0])).toEqual([
+			3, 7,
+		]);
+	});
+
+	it("bounces detached sound with its picture", () => {
+		const lane = createAudioLane("Detached");
+		const clip = createAudioClip(0, 6, "vid", 0);
+		clip.bounce = true;
+		lane.clips = [clip];
+		const plan = planMix({
+			timeline: { enabled: true, lanes: [], audioLanes: [lane] },
+			edits: {},
+			videos: { vid: 4 },
+		});
+		expect(plan.map((s) => [s.start, s.end, !!s.reversed])).toEqual([
+			[0, 4, false],
+			[4, 6, true],
+		]);
+	});
+});

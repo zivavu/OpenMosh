@@ -37,8 +37,11 @@ export function scheduleMix(
 		const heard = buses.mix !== null;
 		const drives = seg.drives && buses.drive !== null;
 		if (!heard && !drives) continue;
-		const buffer = bufferOf(seg.sourceId);
-		if (!buffer || seg.offset >= buffer.duration) continue;
+		const forward = bufferOf(seg.sourceId);
+		if (!forward || seg.offset >= forward.duration) continue;
+		const buffer = seg.reversed ? reversedBuffer(forward) : forward;
+		// Read from the reversed copy's end, where the forward offset lands.
+		const offset = seg.reversed ? forward.duration - seg.offset : seg.offset;
 
 		const node = ctx.createBufferSource();
 		node.buffer = buffer;
@@ -55,10 +58,28 @@ export function scheduleMix(
 		fade.connect(trim);
 		if (heard) trim.connect(buses.mix!);
 		if (drives) trim.connect(buses.drive!);
-		node.start(when(seg.start), seg.offset, (seg.end - seg.start) * seg.rate);
+		node.start(when(seg.start), offset, (seg.end - seg.start) * seg.rate);
 		nodes.push({ node, trim, index });
 	}
 	return nodes;
+}
+
+/** Each source's sound back to front, made once: a bouncing clip's return pass. */
+const reversed = new WeakMap<AudioBuffer, AudioBuffer>();
+
+function reversedBuffer(buffer: AudioBuffer): AudioBuffer {
+	const held = reversed.get(buffer);
+	if (held) return held;
+	const out = new AudioBuffer({
+		numberOfChannels: buffer.numberOfChannels,
+		length: buffer.length,
+		sampleRate: buffer.sampleRate,
+	});
+	for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+		out.copyToChannel(buffer.getChannelData(ch).slice().reverse(), ch);
+	}
+	reversed.set(buffer, out);
+	return out;
 }
 
 export function stopNodes(nodes: ScheduledNode[]): void {

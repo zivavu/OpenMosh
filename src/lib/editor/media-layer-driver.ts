@@ -87,15 +87,17 @@ export class MediaLayerDriver {
 			// the frame as shown.
 			const lost = !renderer?.hasLayerTexture(key);
 			// Non-blocking: a lane whose decoder has nothing new keeps its current frame.
-			void sampler.at(layer.sourceTime, false, lost).then((frame) => {
-				if (!frame) return;
-				// A request that outlived the clip it was made for.
-				if (!this.#disposed && this.#uploaded.get(key) === wanted) {
-					this.#getRenderer()?.updateLayerFrame(key, frame);
-					this.#onUpload?.();
-				}
-				frame.close();
-			});
+			void sampler
+				.at(layer.sourceTime, false, lost, layer.bounce)
+				.then((frame) => {
+					if (!frame) return;
+					// A request that outlived the clip it was made for.
+					if (!this.#disposed && this.#uploaded.get(key) === wanted) {
+						this.#getRenderer()?.updateLayerFrame(key, frame);
+						this.#onUpload?.();
+					}
+					frame.close();
+				});
 		}
 		// Lanes that stopped asking for frames drop theirs; decoders are kept for a later clip.
 		for (const key of this.#uploaded.keys()) {
@@ -124,7 +126,9 @@ export class MediaLayerDriver {
 		}
 		if (this.#creating.has(id)) return undefined;
 		this.#creating.add(id);
-		void SlideVideoSampler.create(file).then((sampler) => {
+		void SlideVideoSampler.create(file, {
+			reverseMaxSide: PREVIEW_REVERSE_MAX_SIDE,
+		}).then((sampler) => {
 			this.#creating.delete(id);
 			if (!sampler) return;
 			if (this.#disposed) {
@@ -169,6 +173,9 @@ export class MediaLayerDriver {
 		this.#samplers.clear();
 	}
 }
+
+/** A backward pass holds a chunk of frames at once; the preview keeps them this size. */
+const PREVIEW_REVERSE_MAX_SIDE = 1280;
 
 /** How many decoders one lane may hold at once. */
 const MAX_LANE_SAMPLERS = 4;

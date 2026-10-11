@@ -707,6 +707,7 @@
 			textTime,
 			sourceRegistry.edits,
 			previewMediaChains,
+			sourceDurations,
 		).map((layer) => ({
 			scope: layer.laneId,
 			effects: layer.effects,
@@ -2532,6 +2533,8 @@
 				gain: clip.gain,
 				fadeInSec: clip.fadeInSec,
 				fadeOutSec: clip.fadeOutSec,
+				bounce: clip.bounce,
+				bounceBack: clip.bounceBack,
 			};
 			lanes = target
 				? lanes.map((l) =>
@@ -5019,6 +5022,7 @@
 							onSetBpmSource={setBpmSource}
 							repeatsOf={audioClipRepeats}
 							edits={sourceRegistry.edits}
+							{videoLengths}
 							sourceEndsOf={audioSourceEnds}
 							orderBase={layerOrder.length}
 							foldedLaneIds={laneFolds.ids}

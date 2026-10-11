@@ -22,9 +22,10 @@ import {
 } from "../mix/types";
 
 import {
-	sourceTimeAt,
+	clipSourcePosition,
 	SPEED_MAX,
 	SPEED_MIN,
+	type BounceWalk,
 	type SourceEdit,
 } from "./source-edit";
 import { normalizeClipTransition, type ClipTransition } from "./transition";
@@ -85,6 +86,20 @@ export interface MediaClip extends ChainClip {
 	audioDetached?: boolean;
 	/** Blends in from the clip before it on the lane, or from nothing after a gap. */
 	transition?: ClipTransition;
+	/** Videos only: at the end of the media it plays backward to the start, and on. */
+	bounce?: boolean;
+	/** A bouncing clip starts on a backward pass: the right half of a split made there. */
+	bounceBack?: boolean;
+}
+
+/** How a clip walks its media: bouncing once its length is known, else wrapping. */
+export function clipBounceWalk(
+	clip: { bounce?: boolean; bounceBack?: boolean },
+	length: number | undefined,
+): BounceWalk | null {
+	return clip.bounce && length && length > 0
+		? { length, back: clip.bounceBack }
+		: null;
 }
 
 /** A media layer: a source from the pool, drawn with the lane's placement and chain. */
@@ -175,25 +190,33 @@ export function mediaClipWeight(clip: MediaClip, time: number): number {
 }
 
 /** Cut the clip covering `at` into two. The right half picks up the source time
- * the left reached, walked at its source's speed and trim. */
+ * the left reached, walked at its source's speed and trim, and a bouncing one its
+ * direction too. */
 export function splitMediaClipAt(
 	lane: MediaLane,
 	at: number,
 	edits?: Record<string, SourceEdit>,
+	durations?: Record<string, number>,
 ): MediaLane {
 	return splitChainClipAt(
 		lane,
 		at,
 		() => nextId("mclip"),
-		(half, clip) => ({
-			...half,
-			sourceStart: sourceTimeAt(
-				edits?.[clip.sourceId ?? lane.sourceId ?? ""],
+		(half, clip) => {
+			const sourceId = clip.sourceId ?? lane.sourceId ?? "";
+			const reached = clipSourcePosition(
+				edits?.[sourceId],
 				(at - clip.start) * mediaClipSpeed(clip),
 				clip.sourceStart,
-			),
-			transition: undefined,
-		}),
+				clipBounceWalk(clip, durations?.[sourceId]),
+			);
+			return {
+				...half,
+				sourceStart: reached.time,
+				bounceBack: reached.back || undefined,
+				transition: undefined,
+			};
+		},
 	);
 }
 
@@ -295,6 +318,8 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					gain: clip.gain,
 					audioDetached: clip.audioDetached || undefined,
 					transition: normalizeClipTransition(clip.transition),
+					bounce: clip.bounce || undefined,
+					bounceBack: (clip.bounce && clip.bounceBack) || undefined,
 					...normalizeChainFields(clip, effects),
 				};
 			}),

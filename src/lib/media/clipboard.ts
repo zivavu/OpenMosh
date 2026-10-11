@@ -38,6 +38,8 @@ export interface MediaClipboardEntry extends ClipBlockEntry {
 	gain?: number;
 	/** Its sound went to an audio lane; a paste mustn't play it a second time. */
 	audioDetached?: boolean;
+	bounce?: boolean;
+	bounceBack?: boolean;
 }
 
 /** A pasted chain, with fresh instance ids: the renderer keys per-effect state by them. */
@@ -74,6 +76,8 @@ export function copyMediaClips(
 			fadeOutSec: clip.fadeOutSec,
 			gain: clip.gain,
 			audioDetached: clip.audioDetached,
+			bounce: clip.bounce,
+			bounceBack: clip.bounceBack,
 		}),
 	);
 }
@@ -112,6 +116,8 @@ export function pasteMediaClips(
 			if (e.fadeOutSec !== undefined) clip.fadeOutSec = e.fadeOutSec;
 			if (e.gain !== undefined) clip.gain = e.gain;
 			if (e.audioDetached) clip.audioDetached = true;
+			if (e.bounce) clip.bounce = true;
+			if (e.bounce && e.bounceBack) clip.bounceBack = true;
 			return clip;
 		},
 	);
@@ -140,6 +146,8 @@ export function pasteMediaContentOnto(
 					speed: e.speed,
 					animation: e.animation,
 					sourceId: pinnedSource(e, lane),
+					bounce: e.bounce,
+					bounceBack: e.bounceBack,
 				},
 				chainOf(e),
 			),

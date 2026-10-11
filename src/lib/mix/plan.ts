@@ -3,10 +3,12 @@
 
 import type { MediaTimeline } from "../media/types";
 import {
+	clipSourcePosition,
+	sourceSpan,
 	sourceSpeed,
-	sourceTimeAt,
 	type SourceEdit,
 } from "../media/source-edit";
+import { clipBounceWalk } from "../media/types";
 import { clipFadeWeight } from "../timeline/clips";
 import { trackIdOf } from "./types";
 
@@ -42,6 +44,8 @@ export interface MixSegment {
 	/** Source seconds at `start`. */
 	offset: number;
 	rate: number;
+	/** Plays the source backward from `offset`: a bouncing clip's return pass. */
+	reversed?: boolean;
 	/** Clip × source gain, before the fade. */
 	gain: number;
 	fade: MixFade;
@@ -60,12 +64,42 @@ interface Walk {
 	rate: number;
 	/** The stretch the source wraps inside, or null when it plays once. */
 	loop: { start: number; end: number } | null;
+	/** Turns at the loop's ends instead of wrapping; `back` starts it backward. */
+	bounce?: { back: boolean };
 }
 
-/** The clip's run through its source, cut wherever the source wraps. */
-function walkClip(w: Walk): { start: number; end: number; offset: number }[] {
-	const out: { start: number; end: number; offset: number }[] = [];
+interface WalkPiece {
+	start: number;
+	end: number;
+	offset: number;
+	reversed?: boolean;
+}
+
+/** The clip's run through its source, cut wherever the source wraps or turns. */
+function walkClip(w: Walk): WalkPiece[] {
+	const out: WalkPiece[] = [];
 	const loop = w.loop && w.loop.end - w.loop.start >= MIN_LOOP ? w.loop : null;
+	if (loop && w.bounce && w.rate > 0) {
+		let t = w.start;
+		let p = w.from;
+		let back = w.bounce.back;
+		while (w.end - t >= MIN_SEGMENT) {
+			const room = back ? p - loop.start : loop.end - p;
+			const until = Math.min(w.end, t + room / w.rate);
+			if (until - t >= MIN_SEGMENT) {
+				out.push({
+					start: t,
+					end: until,
+					offset: p,
+					reversed: back || undefined,
+				});
+			}
+			t = Math.max(until, t + MIN_SEGMENT);
+			p = back ? loop.start : loop.end;
+			back = !back;
+		}
+		return out;
+	}
 	if (!loop || w.rate <= 0) {
 		if (w.end - w.start >= MIN_SEGMENT)
 			out.push({ start: w.start, end: w.end, offset: w.from });
@@ -83,23 +117,44 @@ function walkClip(w: Walk): { start: number; end: number; offset: number }[] {
 	return out;
 }
 
+/** A clip as the sound walks it. */
+interface WalkedClip {
+	start: number;
+	end: number;
+	sourceStart: number;
+	bounce?: boolean;
+	bounceBack?: boolean;
+}
+
 /** How a pool video's sound runs for a clip: the same walk the picture takes, or,
- * unlooped, one pass that stops where the source runs out. */
+ * unlooped, one pass that stops where the source runs out. A bouncing clip turns at
+ * either end whether looped or not. */
 function videoWalk(
 	edit: SourceEdit | undefined,
 	length: number,
-	clip: { start: number; end: number; sourceStart: number },
+	clip: WalkedClip,
 	loops = true,
 ): Walk {
-	const span = edit?.span;
-	const loop = span
-		? { start: span.start, end: span.end }
-		: { start: 0, end: length };
-	const raw = sourceTimeAt(edit, 0, clip.sourceStart);
+	const span = sourceSpan(edit, length);
+	const loop = { start: span.start, end: span.end };
+	const bounce = clipBounceWalk(clip, length);
+	const at = clipSourcePosition(edit, 0, clip.sourceStart, bounce);
 	const len = loop.end - loop.start;
 	const from =
-		len > 0 ? loop.start + ((((raw - loop.start) % len) + len) % len) : raw;
+		len > 0 && !bounce
+			? loop.start + ((((at.time - loop.start) % len) + len) % len)
+			: at.time;
 	const rate = sourceSpeed(edit);
+	if (bounce) {
+		return {
+			start: clip.start,
+			end: clip.end,
+			from,
+			rate,
+			loop,
+			bounce: { back: at.back },
+		};
+	}
 	if (!loops) {
 		const runsOut = rate > 0 ? clip.start + (loop.end - from) / rate : clip.end;
 		return {
@@ -208,11 +263,11 @@ export function planMix(input: MixInput): MixSegment[] {
 export function videoClipRepeats(
 	edit: SourceEdit | undefined,
 	length: number,
-	clip: { start: number; end: number; sourceStart: number },
+	clip: WalkedClip,
 	loops = true,
 ): number[] {
-	if (!(length > 0) || !loops) return [];
-	return walkClip(videoWalk(edit, length, clip))
+	if (!(length > 0) || (!loops && !clip.bounce)) return [];
+	return walkClip(videoWalk(edit, length, clip, loops))
 		.slice(1)
 		.map((s) => s.start);
 }
@@ -242,16 +297,16 @@ const MAX_SOURCE_ENDS = 200;
 export function videoSourceEnds(
 	edit: SourceEdit | undefined,
 	length: number,
-	clip: { start: number; sourceStart: number },
+	clip: Omit<WalkedClip, "end">,
 	until: number,
 	loops = true,
 ): number[] {
-	if (!loops) {
+	if (!loops && !clip.bounce) {
 		if (!(length > 0)) return [];
 		const end = videoWalk(edit, length, { ...clip, end: Infinity }, false).end;
 		return end > clip.start && Number.isFinite(end) ? [end] : [];
 	}
-	return videoClipRepeats(edit, length, { ...clip, end: until }).slice(
+	return videoClipRepeats(edit, length, { ...clip, end: until }, loops).slice(
 		0,
 		MAX_SOURCE_ENDS,
 	);
@@ -288,11 +343,12 @@ export function trimSegment(
 	const start = Math.max(seg.start, from);
 	const end = Math.min(seg.end, to);
 	if (end - start < MIN_SEGMENT) return null;
+	const walked = (start - seg.start) * seg.rate;
 	return {
 		...seg,
 		start,
 		end,
-		offset: seg.offset + (start - seg.start) * seg.rate,
+		offset: seg.reversed ? seg.offset - walked : seg.offset + walked,
 	};
 }
 

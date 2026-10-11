@@ -312,6 +312,7 @@ function sameButGain(a: MixSegment[], b: MixSegment[]): boolean {
 			x.end === y.end &&
 			x.offset === y.offset &&
 			x.rate === y.rate &&
+			x.reversed === y.reversed &&
 			x.fade.start === y.fade.start &&
 			x.fade.end === y.fade.end &&
 			x.fade.fadeIn === y.fade.fadeIn &&

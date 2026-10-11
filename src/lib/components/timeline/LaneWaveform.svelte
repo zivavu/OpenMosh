@@ -59,11 +59,16 @@
 			if (!seg || seg.start > t) continue;
 			const peaks = peaksOf(seg.sourceId);
 			if (!peaks) continue;
-			const src = seg.offset + (t - seg.start) * seg.rate;
-			const i0 = Math.floor(src * PEAKS_PER_SEC);
+			// The stretch of source this pixel covers; a bounce's way back walks it downward.
+			const walked = (t - seg.start) * seg.rate;
+			const step = perPx * seg.rate;
+			const from = seg.reversed
+				? seg.offset - walked - step
+				: seg.offset + walked;
+			const i0 = Math.floor(from * PEAKS_PER_SEC);
 			const i1 = Math.min(
 				peaks.length,
-				Math.max(i0 + 1, Math.floor((src + perPx * seg.rate) * PEAKS_PER_SEC)),
+				Math.max(i0 + 1, Math.floor((from + step) * PEAKS_PER_SEC)),
 				i0 + 4000,
 			);
 			let peak = 0;

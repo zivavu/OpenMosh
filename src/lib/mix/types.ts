@@ -7,8 +7,8 @@ import {
 	type TimelineClip,
 } from "../timeline/clips";
 import {
+	clipSourcePosition,
 	sourceSpeed,
-	sourceTimeAt,
 	type SourceEdit,
 } from "../media/source-edit";
 
@@ -37,7 +37,11 @@ export function audioSourceAnchor(
 		slack: (c) => c.sourceStart / rate(c),
 		move: (c, step) => ({
 			...c,
-			sourceStart: Math.max(0, c.sourceStart + step * rate(c)),
+			// A clip that starts on a bounce's way back walks its media the other way.
+			sourceStart: Math.max(
+				0,
+				c.sourceStart + (c.bounceBack ? -step : step) * rate(c),
+			),
 		}),
 	};
 }
@@ -57,6 +61,9 @@ export interface AudioClip extends TimelineClip {
 	fadeOutSec?: number;
 	/** Starts the file over when it runs out, for as long as the clip lasts. */
 	loop?: boolean;
+	/** A video's sound detached from a bouncing clip: it bounces with the picture. */
+	bounce?: boolean;
+	bounceBack?: boolean;
 }
 
 export interface AudioLane {
@@ -122,11 +129,13 @@ export function createAudioLane(name: string, drives = false): AudioLane {
 }
 
 /** Cut the clip covering `at` into two; the right half picks up where the left stopped.
- * `edits` covers a video's sound, walked at the picture's speed and trim. */
+ * `edits` covers a video's sound, walked at the picture's speed and trim; `durations`
+ * its length, which a bouncing clip turns at. */
 export function splitAudioClipAt(
 	lane: AudioLane,
 	at: number,
 	edits?: Record<string, SourceEdit>,
+	durations?: Record<string, number>,
 ): AudioLane {
 	const clip = lane.clips.find((c) => at > c.start && at < c.end);
 	if (!clip) return lane;
@@ -134,15 +143,19 @@ export function splitAudioClipAt(
 		return lane;
 	}
 	const left: AudioClip = { ...clip, end: at, fadeOutSec: undefined };
+	const length = clip.sourceId ? durations?.[clip.sourceId] : undefined;
+	const reached = clipSourcePosition(
+		clip.sourceId ? edits?.[clip.sourceId] : undefined,
+		at - clip.start,
+		clip.sourceStart,
+		clip.bounce && length ? { length, back: clip.bounceBack } : null,
+	);
 	const right: AudioClip = {
 		...clip,
 		id: nextId("aclip"),
 		start: at,
-		sourceStart: sourceTimeAt(
-			clip.sourceId ? edits?.[clip.sourceId] : undefined,
-			at - clip.start,
-			clip.sourceStart,
-		),
+		sourceStart: reached.time,
+		bounceBack: reached.back || undefined,
 		fadeInSec: undefined,
 	};
 	return {
@@ -175,6 +188,8 @@ export function normalizeAudioLanes(raw: unknown): AudioLane[] {
 			fadeInSec: c.fadeInSec,
 			fadeOutSec: c.fadeOutSec,
 			loop: c.loop || undefined,
+			bounce: c.bounce || undefined,
+			bounceBack: (c.bounce && c.bounceBack) || undefined,
 		})),
 	}));
 }
