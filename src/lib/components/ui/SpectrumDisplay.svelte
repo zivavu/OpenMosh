@@ -14,6 +14,7 @@
 		songLinkRange,
 	} from "../../audio/song-profile";
 	import { FREQ_PRESETS, generateId } from "../../effects/types";
+	import { onFrame } from "../../frame-loop";
 
 	interface Props {
 		data: Uint8Array;
@@ -106,7 +107,6 @@
 		const h = height;
 		const bars = 64;
 		const barW = w / bars;
-		let rafId: number;
 		// The analyser hands out raw bins, so the bars are damped here on the same
 		// asymmetric curve the band follower uses.
 		const shown = new Float32Array(bars);
@@ -158,11 +158,8 @@
 			ctx.fillRect(x0, y, Math.max(1, x1 - x0), h - y);
 			ctx.fillStyle = "#6ee7c0";
 			ctx.fillRect(x0, Math.min(h - 2, y - 1), Math.max(1, x1 - x0), 2);
-
-			rafId = requestAnimationFrame(draw);
 		}
-		rafId = requestAnimationFrame(draw);
-		return () => cancelAnimationFrame(rafId);
+		return onFrame("draw", draw);
 	});
 
 	$effect(() => () => dropAutoRangeScope(previewScope));

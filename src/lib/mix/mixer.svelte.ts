@@ -1,12 +1,12 @@
 /** The editor's transport: a clock over the project timeline, and every lane's sound
  * mixed through one Web Audio graph. The project, not a song, sets the length. */
 
-import { startLinkTick } from "../audio/audio-controller";
+import { createAnalysisTap, startLinkTick } from "../audio/audio-controller";
 import type { AudioLinkGroup } from "../audio/audio-utils";
 import { resetAutoRange } from "../audio/auto-range";
-import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "../audio/offline-audio";
 import { buildSongProfile } from "../audio/build-song-profile";
 import type { SongProfile } from "../audio/song-profile";
+import { onFrame } from "../frame-loop";
 import { resetSpectrumBars } from "../audio/spectrum-bars";
 import type { SpectrumData } from "../types";
 import type { MixSegment } from "./plan";
@@ -64,13 +64,14 @@ export class SequenceMixer {
 	#ctx: AudioContext | null = null;
 	#master: GainNode | null = null;
 	#drive: GainNode | null = null;
+	#analysisDelay: DelayNode | null = null;
 	#nodes: ScheduledNode[] = [];
 	/** Timeline time at context time `#anchorCtx`, while playing. */
 	#anchorTime = 0;
 	#anchorCtx = 0;
 	/** performance.now() at the anchor; the clock falls back on it if the context stalls. */
 	#anchorWall = 0;
-	#raf = 0;
+	#stopFrame: (() => void) | null = null;
 	/** Buffers that were missing when the playing mix was scheduled. */
 	#missing = new Set<string>();
 
@@ -101,6 +102,7 @@ export class SequenceMixer {
 			if (!analyser || !this.hasDrive) return;
 			return startLinkTick({
 				analyser,
+				analysisDelay: this.#analysisDelay,
 				frequencyData: data,
 				sampleRate: analyser.context.sampleRate,
 				isPaused: () => !this.playing,
@@ -165,23 +167,14 @@ export class SequenceMixer {
 		master.gain.value = this.outputVolume;
 		master.connect(ctx.destination);
 		const drive = ctx.createGain();
-		const analyser = ctx.createAnalyser();
-		analyser.fftSize = 2048;
-		// Raw bins; smoothing lives in the link code, which the export runs too.
-		analyser.smoothingTimeConstant = 0;
-		analyser.minDecibels = SPECTRUM_MIN_DB;
-		analyser.maxDecibels = SPECTRUM_MAX_DB;
-		// Kept pulled without being heard.
-		const sink = ctx.createGain();
-		sink.gain.value = 0;
-		drive.connect(analyser);
-		analyser.connect(sink);
-		sink.connect(ctx.destination);
+		const tap = createAnalysisTap(ctx);
+		drive.connect(tap.input);
 		this.#ctx = ctx;
 		this.#master = master;
 		this.#drive = drive;
-		this.analyserNode = analyser;
-		this.frequencyData = new Uint8Array(analyser.frequencyBinCount);
+		this.#analysisDelay = tap.input;
+		this.analyserNode = tap.analyser;
+		this.frequencyData = new Uint8Array(tap.analyser.frequencyBinCount);
 		return ctx;
 	}
 
@@ -241,7 +234,9 @@ export class SequenceMixer {
 		this.currentTime = t;
 		this.playing = true;
 		this.#reschedule(true);
-		this.#raf = requestAnimationFrame(this.#frame);
+		this.#stopFrame?.();
+		// Read phase: the clock moves before the frame that shows it draws.
+		this.#stopFrame = onFrame("read", this.#frame);
 	}
 
 	pause(): void {
@@ -252,7 +247,8 @@ export class SequenceMixer {
 
 	#halt(): void {
 		this.playing = false;
-		cancelAnimationFrame(this.#raf);
+		this.#stopFrame?.();
+		this.#stopFrame = null;
 		stopNodes(this.#nodes);
 		this.#nodes = [];
 		this.#missing.clear();
@@ -278,7 +274,6 @@ export class SequenceMixer {
 		const repeat = this.repeat;
 		if (repeat && t >= repeat.end) {
 			this.seek(repeat.start);
-			this.#raf = requestAnimationFrame(this.#frame);
 			return;
 		}
 		const end =
@@ -294,13 +289,13 @@ export class SequenceMixer {
 		} else {
 			this.currentTime = t;
 		}
-		this.#raf = requestAnimationFrame(this.#frame);
 	};
 
 	dispose(): void {
 		this.#halt();
 		void this.#ctx?.close().catch(() => {});
 		this.#ctx = null;
+		this.#analysisDelay = null;
 		this.analyserNode = null;
 	}
 }

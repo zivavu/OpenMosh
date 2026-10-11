@@ -46,6 +46,7 @@ export class AudioManager {
 
 	audioContext = $state<AudioContext | null>(null);
 	analyserNode = $state<AnalyserNode | null>(null);
+	#analysisDelay: DelayNode | null = null;
 	gainNode = $state<GainNode | null>(null);
 	normalizeGainNode = $state<GainNode | null>(null);
 	mediaSource = $state<MediaElementAudioSourceNode | null>(null);
@@ -96,6 +97,7 @@ export class AudioManager {
 			if (!analyser) return;
 			return startLinkTick({
 				analyser,
+				analysisDelay: this.#analysisDelay,
 				// Captured at effect-run time, matching the original editors.
 				frequencyData: this.frequencyData,
 				sampleRate: this.audioSampleRate,
@@ -121,6 +123,7 @@ export class AudioManager {
 		this.mediaSource = state.source;
 		this.normalizeGainNode = state.normalizeGain;
 		this.normalizeGainNode.gain.value = this.normalizeGain;
+		this.#analysisDelay = state.analysisDelay;
 		this.analyserNode = state.analyser;
 		this.gainNode = state.gain;
 		this.gainNode.gain.value = this.outputVolume;
@@ -134,6 +137,7 @@ export class AudioManager {
 		this.mediaSource = null;
 		this.normalizeGainNode = null;
 		this.analyserNode = null;
+		this.#analysisDelay = null;
 		this.gainNode = null;
 		this.frequencyData = null;
 		this.audioSampleRate = 0;
