@@ -132,6 +132,26 @@ describe("looping tracks", () => {
 			[7, 10, 0],
 		]);
 	});
+
+	it("plays detached video sound once until looped", () => {
+		const lane = createAudioLane("Detached");
+		const clip = createAudioClip(0, 5, "vid", 2);
+		lane.clips = [clip];
+		const input = {
+			timeline: { enabled: true, lanes: [], audioLanes: [lane] },
+			edits: {},
+			videos: { vid: 3 },
+		};
+		expect(planMix(input).map((s) => [s.start, s.end, s.offset])).toEqual([
+			[0, 1, 2],
+		]);
+		clip.loop = true;
+		expect(planMix(input).map((s) => [s.start, s.end, s.offset])).toEqual([
+			[0, 1, 2],
+			[1, 4, 0],
+			[4, 5, 0],
+		]);
+	});
 });
 
 describe("repeat points", () => {
@@ -189,6 +209,7 @@ describe("source ends", () => {
 	it("finds where a video runs out past the clip's end, and every restart after", () => {
 		const clip = { start: 2, sourceStart: 1 };
 		expect(videoSourceEnds(undefined, 4, clip, 12)).toEqual([5, 9]);
+		expect(videoSourceEnds(undefined, 4, clip, 12, false)).toEqual([5]);
 	});
 
 	it("gives a track that plays once a single end, a looping one each restart", () => {

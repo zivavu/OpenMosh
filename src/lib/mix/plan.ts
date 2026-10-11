@@ -83,11 +83,13 @@ function walkClip(w: Walk): { start: number; end: number; offset: number }[] {
 	return out;
 }
 
-/** How a pool video's sound runs for a clip: the same walk the picture takes. */
+/** How a pool video's sound runs for a clip: the same walk the picture takes, or,
+ * unlooped, one pass that stops where the source runs out. */
 function videoWalk(
 	edit: SourceEdit | undefined,
 	length: number,
 	clip: { start: number; end: number; sourceStart: number },
+	loops = true,
 ): Walk {
 	const span = edit?.span;
 	const loop = span
@@ -97,13 +99,18 @@ function videoWalk(
 	const len = loop.end - loop.start;
 	const from =
 		len > 0 ? loop.start + ((((raw - loop.start) % len) + len) % len) : raw;
-	return {
-		start: clip.start,
-		end: clip.end,
-		from,
-		rate: sourceSpeed(edit),
-		loop,
-	};
+	const rate = sourceSpeed(edit);
+	if (!loops) {
+		const runsOut = rate > 0 ? clip.start + (loop.end - from) / rate : clip.end;
+		return {
+			start: clip.start,
+			end: Math.min(clip.end, runsOut),
+			from,
+			rate,
+			loop: null,
+		};
+	}
+	return { start: clip.start, end: clip.end, from, rate, loop };
 }
 
 export function planMix(input: MixInput): MixSegment[] {
@@ -172,14 +179,14 @@ export function planMix(input: MixInput): MixSegment[] {
 			const gain = clip.gain ?? 1;
 			const length = videos[sourceId];
 			if (length) {
-				// A video's sound keeps the picture's speed and wrap even once detached.
+				// A detached video's sound keeps the picture's speed; it wraps only when looped.
 				push(
 					lane.id,
 					clip,
 					sourceId,
 					lane.drives,
 					gain,
-					videoWalk(edits[sourceId], length, clip),
+					videoWalk(edits[sourceId], length, clip, !!clip.loop),
 				);
 			} else if (trackIdOf(sourceId)) {
 				const trackLength = tracks[sourceId] ?? 0;
@@ -202,8 +209,9 @@ export function videoClipRepeats(
 	edit: SourceEdit | undefined,
 	length: number,
 	clip: { start: number; end: number; sourceStart: number },
+	loops = true,
 ): number[] {
-	if (!(length > 0)) return [];
+	if (!(length > 0) || !loops) return [];
 	return walkClip(videoWalk(edit, length, clip))
 		.slice(1)
 		.map((s) => s.start);
@@ -236,7 +244,13 @@ export function videoSourceEnds(
 	length: number,
 	clip: { start: number; sourceStart: number },
 	until: number,
+	loops = true,
 ): number[] {
+	if (!loops) {
+		if (!(length > 0)) return [];
+		const end = videoWalk(edit, length, { ...clip, end: Infinity }, false).end;
+		return end > clip.start && Number.isFinite(end) ? [end] : [];
+	}
 	return videoClipRepeats(edit, length, { ...clip, end: until }).slice(
 		0,
 		MAX_SOURCE_ENDS,
