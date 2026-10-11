@@ -22,11 +22,10 @@
 		Undo2,
 		X,
 	} from "lucide-svelte";
-	import { onMount, untrack } from "svelte";
+	import { untrack } from "svelte";
 	import { hexToVec3 } from "../../color";
 	import { KEY_RANGE_MAX, KEY_SOFTNESS_MAX } from "../../color-key";
 	import { formatTime } from "../../audio/audio-utils";
-	import { pushModalKeyboard } from "../../modal-keyboard";
 	import { createSnapshotHistory } from "../../timeline/snapshot-history.svelte";
 	import {
 		createChromaKey,
@@ -91,9 +90,6 @@
 	/** Long edge of the grid the pointer, brush and erase mask work in. The picture
 	 * itself is keyed on the GPU at full resolution. */
 	const PREVIEW_MAX = 640;
-
-	// The keyboard is ours while the dialog is up: Space is the transport here.
-	onMount(() => pushModalKeyboard());
 
 	/** Undo for the dialog's own edits; every tool writes through `onChange`. */
 	const history = createSnapshotHistory<SourceEdit>();

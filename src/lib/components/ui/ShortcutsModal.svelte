@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { modalDialog } from "../../actions/modal-dialog";
 	import { MousePointer2, X } from "lucide-svelte";
-	import { onMount } from "svelte";
-	import { pushModalKeyboard } from "../../modal-keyboard";
 
 	interface ShortcutGroup {
 		title: string;
@@ -15,10 +13,6 @@
 	}
 
 	let { groups, onClose }: Props = $props();
-
-	// The editor's own shortcuts stay off while the sheet has the keyboard: pressing
-	// Space here is a question, not a transport command.
-	onMount(() => pushModalKeyboard());
 
 	const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 	const MOD_LABEL: Record<string, string> = isMac
