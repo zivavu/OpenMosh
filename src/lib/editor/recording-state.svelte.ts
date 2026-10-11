@@ -4,6 +4,12 @@ export interface RunRecordingOptions {
 	fallbackErrorMessage?: string;
 }
 
+function holdPage(e: BeforeUnloadEvent) {
+	e.preventDefault();
+	// Safari only asks when this is set.
+	e.returnValue = "";
+}
+
 /** Shared recording state machine: progress/finalizing flags + abort-aware error handling. */
 export function createRecordingState() {
 	let recording = $state(false);
@@ -21,6 +27,8 @@ export function createRecordingState() {
 		recordFinalizing = false;
 		const abort = new AbortController();
 		recordAbort = abort;
+		// A reload or a closed tab would throw away a render that may have run for minutes.
+		window.addEventListener("beforeunload", holdPage);
 
 		try {
 			await task(abort.signal);
@@ -36,6 +44,7 @@ export function createRecordingState() {
 				);
 			}
 		} finally {
+			window.removeEventListener("beforeunload", holdPage);
 			recording = false;
 			recordFinalizing = false;
 			recordAbort = null;
