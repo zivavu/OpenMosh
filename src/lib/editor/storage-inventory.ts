@@ -38,6 +38,9 @@ import {
 	type StoredTimeline,
 } from "./sequence-media-store";
 import { listSavedSessions } from "./sessions";
+import type { SeqEntry } from "./seq-entry";
+import { records } from "../records";
+import { trackSourceId, type AudioClip, type AudioLane } from "../mix/types";
 
 export type ProjectMode = "sequence" | "single" | "slideshow";
 
@@ -378,6 +381,37 @@ export async function loadStorageInventory(): Promise<StorageInventory> {
 		fonts: fontItems,
 		totals,
 	};
+}
+
+/** How many saved projects and edits play a library song: as the song, on an audio
+ * lane, or keyed by it. Single mode's per-song timeline only holds the BPM, so it
+ * doesn't count. `except` is the open one's timeline or session key. */
+export async function countTrackUsers(
+	trackId: string,
+	except?: string | null,
+): Promise<number> {
+	const [timelines, sessions] = await Promise.all([
+		getAllTimelines(),
+		getAllSessions(),
+	]);
+	const lanes = trackSourceId(trackId);
+	const users = new Set<string>();
+	for (const t of timelines) {
+		if (!t.key.startsWith("seq:")) continue;
+		const entry = t.state as SeqEntry | null;
+		if (
+			t.key === `seq:${trackId}` ||
+			entry?.song === trackId ||
+			records<AudioLane>(entry?.media?.audioLanes).some((lane) =>
+				records<AudioClip>(lane.clips).some((c) => c.sourceId === lanes),
+			)
+		) {
+			users.add(t.key);
+		}
+	}
+	for (const s of sessions) if (s.trackId === trackId) users.add(s.key);
+	if (except) users.delete(except);
+	return users.size;
 }
 
 /** Delete the blobs in `ids` that nothing remaining points at, plus their proxies. */

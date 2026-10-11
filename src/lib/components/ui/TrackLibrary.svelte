@@ -34,7 +34,10 @@
 		endTrackDrag,
 		TRACK_DND_TYPE,
 	} from "../../editor/source-drag.svelte";
-	import { deleteRecentEdit } from "../../editor/storage-inventory";
+	import {
+		countTrackUsers,
+		deleteRecentEdit,
+	} from "../../editor/storage-inventory";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
 	import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -59,6 +62,11 @@
 		activeProjectKey?: string | null;
 		/** Editor only: songs drag out onto the audio lanes. */
 		tracksDraggable?: boolean;
+		/** Editor only: the loaded song sits on the project's lanes, so removing it takes
+		 * it off them rather than handing over to the next song. */
+		songOnLanes?: boolean;
+		/** The open edit's timeline or session key, left out of a song's users. */
+		openKey?: string | null;
 	}
 
 	let {
@@ -75,6 +83,8 @@
 		onOpenProject,
 		activeProjectKey = null,
 		tracksDraggable = false,
+		songOnLanes = false,
+		openKey = null,
 	}: Props = $props();
 
 	const hasProjects = $derived(!!onOpenProject);
@@ -259,12 +269,40 @@
 	}
 
 	let pendingDelete = $state<StoredTrack | null>(null);
+	/** Saved projects and edits that play the song up for removal; null while counting. */
+	let pendingDeleteUsers = $state<number | null>(null);
+	$effect(() => {
+		const track = pendingDelete;
+		pendingDeleteUsers = null;
+		if (!track) return;
+		let stale = false;
+		void countTrackUsers(track.id, openKey)
+			.then((n) => {
+				if (!stale) pendingDeleteUsers = n;
+			})
+			.catch(() => {});
+		return () => {
+			stale = true;
+		};
+	});
+
+	function removalMessage(track: StoredTrack, users: number | null): string {
+		const here = !isTrackActive(track)
+			? "This removes the track from the library."
+			: songOnLanes
+				? "It's this project's song, so its clips come off the lanes too."
+				: "It's the loaded track. The next one in the library takes its place.";
+		if (!users) return here;
+		return `${here} ${users} other saved project${users === 1 ? " plays" : "s play"} it and will lose that sound.`;
+	}
 
 	/** Removing the loaded track hands the editor its neighbour first, so it never
 	 * sits on a file that is gone. */
 	async function onDelete(track: StoredTrack) {
 		pendingDelete = null;
-		if (isTrackActive(track)) {
+		if (isTrackActive(track) && songOnLanes) {
+			onUnloadTrack?.();
+		} else if (isTrackActive(track)) {
 			const i = tracks.indexOf(track);
 			const next = tracks[i + 1] ?? tracks[i - 1];
 			if (next) onLoad(next, mainPlaying);
@@ -612,9 +650,7 @@
 {#if pendingDelete}
 	<ConfirmDialog
 		title="Remove “{pendingDelete.name}”?"
-		message={isTrackActive(pendingDelete)
-			? "It's the loaded track. The next one in the library takes its place."
-			: "This removes the track from the library."}
+		message={removalMessage(pendingDelete, pendingDeleteUsers)}
 		confirmLabel="Remove track"
 		cancelLabel="Cancel"
 		danger
