@@ -1660,10 +1660,8 @@
 				(sourceRegistry.loadingTotal > 0 && sequenceSources.length === 0)),
 	);
 
-	/** Files are still landing in the pool, so playback would stutter or show gaps. */
-	let mediaBusy = $derived(
-		isSequenceMode && (openingMedia || sourceRegistry.loadingTotal > 0),
-	);
+	/** Playback waits for the project to open; media added while it plays joins in. */
+	let mediaBusy = $derived(mediaLoading);
 	$effect(() => {
 		if (mediaBusy && untrack(() => mixer.playing)) pauseTrack();
 	});
