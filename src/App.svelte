@@ -263,7 +263,7 @@
 		try {
 			const key = await openProjectFile(file);
 			if (!(await openSequenceFromSong(key))) {
-				showToast("That project has no media to open", "error");
+				showToast("Couldn't open that project", "error");
 			}
 		} catch (e) {
 			showToast(
@@ -387,7 +387,7 @@
 					onExit={exitToUpload}
 					onOpenProject={async (key: string) => {
 						if (!(await openSequenceFromSong(key, true))) {
-							showToast("That project's media is no longer stored", "error");
+							showToast("That project is no longer stored", "error");
 						}
 					}}
 				/>
@@ -429,7 +429,7 @@
 			}}
 			onSequenceFromSong={async (trackId: string) => {
 				if (!(await openSequenceFromSong(trackId))) {
-					showToast("That song's media is no longer stored", "error");
+					showToast("That project is no longer stored", "error");
 				}
 			}}
 			onProjectFile={openProjectFromFile}

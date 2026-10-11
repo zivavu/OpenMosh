@@ -4312,8 +4312,8 @@
 			<div class="no-media">
 				<span class="no-media-label">NO MEDIA</span>
 				<p class="no-media-text">
-					Every source is gone from this song. Add an image, a video or a 3D
-					model and the layers have something to show again.
+					This project has no media. Add an image, a video or a 3D model and the
+					layers have something to show again.
 				</p>
 				<div class="no-media-actions">
 					<button class="no-media-btn" onclick={() => sourceInput?.click()}>
@@ -5369,7 +5369,7 @@
 	{#if showClearSourcesConfirm}
 		<ConfirmDialog
 			title="Clear all sources?"
-			message="Every source is removed from this song, and its media clips are left with nothing to show until media is added back. Media that other songs still use is kept."
+			message="Removes every source from this project. Its media clips show nothing until you add media back. Media other projects still use is kept."
 			confirmLabel="Clear sources"
 			cancelLabel="Cancel"
 			danger
