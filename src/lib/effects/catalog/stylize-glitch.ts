@@ -85,9 +85,11 @@ void main() {
     for (int i = 0; i < 10; i++) {
       if (float(i) >= u_count) break;
       vec4 rc = rand4((float(i) + tick) * vec4(0.2123, 0.34517, 0.53428, 0.7431));
-      rc.zw *= u_level;
-      rc.zw = min(rc.zw, 1.0 - rc.xy);
-      if (all(greaterThanEqual(v_uv, rc.xy)) && all(lessThanEqual(v_uv, rc.xy + rc.zw))) {
+      // Centre and size: Glitch Size grows each box out from its middle.
+      vec2 extent = rc.zw * u_level * 0.5;
+      vec2 lo = max(rc.xy - extent, 0.0);
+      vec2 hi = min(rc.xy + extent, 1.0);
+      if (all(greaterThanEqual(v_uv, lo)) && all(lessThanEqual(v_uv, hi))) {
         int style = u_mode == 0
           ? int(min(3.0 * hash(vec2(2.7413 + float(i), 1.325821 * tick)), 2.0))
           : u_mode - 1;
