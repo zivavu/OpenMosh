@@ -26,6 +26,8 @@ export interface EncoderPoolOptions {
 export class EncoderPool {
 	private workers: Worker[] = [];
 	private pending = new Map<number, PoolPacket>();
+	/** Frames the encoders skipped: emission steps over them. */
+	private dropped = new Set<number>();
 	private nextEmitIndex = 0;
 	private inFlight = 0;
 	private readonly maxInFlight: number;
@@ -149,6 +151,7 @@ export class EncoderPool {
 		for (const worker of this.workers) worker.terminate();
 		this.workers = [];
 		this.pending.clear();
+		this.dropped.clear();
 	}
 
 	private post(
@@ -160,28 +163,42 @@ export class EncoderPool {
 	}
 
 	private handleMessage(msg: EncodeWorkerResponse) {
-		if (msg.type === "packet") {
+		if (msg.type === "packet" || msg.type === "dropped") {
 			this.inFlight--;
 			this.slotWaiters.shift()?.();
-			this.pending.set(msg.frameIndex, {
-				data: new Uint8Array(msg.data),
-				type: msg.packetType,
-				timestamp: msg.timestamp / 1e6,
-				duration: msg.duration / 1e6,
-				decoderConfig: msg.decoderConfig,
-			});
-			while (this.pending.has(this.nextEmitIndex)) {
-				const packet = this.pending.get(this.nextEmitIndex)!;
-				this.pending.delete(this.nextEmitIndex);
-				this.nextEmitIndex++;
-				this.opts.onPacket(packet);
+			if (msg.type === "packet") {
+				this.pending.set(msg.frameIndex, {
+					data: new Uint8Array(msg.data),
+					type: msg.packetType,
+					timestamp: msg.timestamp / 1e6,
+					duration: msg.duration / 1e6,
+					decoderConfig: msg.decoderConfig,
+				});
+			} else {
+				this.dropped.add(msg.frameIndex);
 			}
+			this.emitInOrder();
 			this.checkFlushed();
 		} else if (msg.type === "flushed") {
 			this.flushedCount++;
 			this.checkFlushed();
 		} else if (msg.type === "error") {
 			this.fail(new Error(msg.message));
+		}
+	}
+
+	private emitInOrder() {
+		for (;;) {
+			const index = this.nextEmitIndex;
+			if (this.dropped.delete(index)) {
+				this.nextEmitIndex++;
+				continue;
+			}
+			const packet = this.pending.get(index);
+			if (!packet) return;
+			this.pending.delete(index);
+			this.nextEmitIndex++;
+			this.opts.onPacket(packet);
 		}
 	}
 
