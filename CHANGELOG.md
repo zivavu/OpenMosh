@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.9.16](https://github.com/zivavu/OpenMosh/compare/v0.9.15...v0.9.16) (2026-10-11)
+
+This one is mostly fixes. An export no longer hangs when the encoder drops a frame, and the page asks before you leave one half done. Editing a big video in Single mode no longer copies the whole file into browser storage on every autosave. A project whose media you cleared stays on the list and opens again, and SVGs open from the start screen. While a dialog is open, the arrow keys, Space and Delete no longer reach the timeline behind it. Removing a song from the library now tells you how many other projects use it.
+
+Saved projects open as before, with one change in behaviour: removing the open project's song from the Editor's library takes its clips off the lanes instead of moving them onto the next song. An older tab also leaves a project saved by a newer OpenMosh alone rather than saving over it.
+
+
+### Fixed
+
+* Finish exports when the encoder drops a frame, instead of hanging ([87e4f8c](https://github.com/zivavu/OpenMosh/commit/87e4f8cd20e4caa6d91788e1585553da3f46b8a8))
+* Ask before leaving the page mid-export ([83cff20](https://github.com/zivavu/OpenMosh/commit/83cff20ae58d2bc47ddd66ab592f7db726d59596))
+* Keep listing projects whose media was all cleared, and open them again ([ef28ef4](https://github.com/zivavu/OpenMosh/commit/ef28ef4a2394c104ef5bd166d6aa97ec48a92650))
+* Keep the arrow keys, Space, S and Delete from reaching the editor while a dialog is open ([735af1f](https://github.com/zivavu/OpenMosh/commit/735af1ff0b043004d4f5724f5aa32b9448793f3e))
+* Warn before removing a song other projects use. Removing the open project's song in the Editor takes its clips off the lanes instead of moving them to the next song ([f80757d](https://github.com/zivavu/OpenMosh/commit/f80757dd34aa5201ca168ae624d5eb9dab356179))
+* Open SVGs from the start screen in Single and Editor ([853234d](https://github.com/zivavu/OpenMosh/commit/853234defc5609362cf1bcad8b30544ed0b58ba0))
+* Stop a failing SVG redraw from freezing the page ([eb2c379](https://github.com/zivavu/OpenMosh/commit/eb2c379906617dd55ce60f977f83b43d21421ed8))
+* Say when a dropped file is already in the pool, instead of calling it undecodable ([81dbac7](https://github.com/zivavu/OpenMosh/commit/81dbac713125d5058f1aae7012f9c35fa10cd65f))
+* Leave a project saved by a newer OpenMosh alone instead of saving over it ([9e5303c](https://github.com/zivavu/OpenMosh/commit/9e5303cc1fc92cd865163299b6c4a4ba393b6f30))
+* Stop a cleanup in another tab from deleting media a backup or project file is still restoring ([6391111](https://github.com/zivavu/OpenMosh/commit/63911116314f5c959934f803c2f179873249fb66))
+* Clear old export files from browser storage ([3dd8e23](https://github.com/zivavu/OpenMosh/commit/3dd8e23ad2966f47719c31882e4b20d0469ae8bc))
+* Load presets when one of them is damaged ([11968fa](https://github.com/zivavu/OpenMosh/commit/11968fa49af15bebd665b4cb40f2bfb1b9e62f3c))
+* Say Editor and project, not Sequence and song, in messages ([f0c68fb](https://github.com/zivavu/OpenMosh/commit/f0c68fb3f558bb790dd7673b375e78359b536264))
+
+
+### Faster
+
+* Save Single and Slideshow edits without copying their media into storage again on every autosave ([8b96193](https://github.com/zivavu/OpenMosh/commit/8b96193a5a7c33605e2ac9f93f95c37d2bc91760))
+
 ## [0.9.15](https://github.com/zivavu/OpenMosh/compare/v0.9.14...v0.9.15) (2026-10-11)
 
 The big one is bouncing video clips. Tick Bounce on a clip and it plays to the end, then backward to the start, then forward again, and its sound follows along. Stylize Glitch and Resize Glitch can sync to the beat much faster now, and you can drag an effect in the chain by its name or number instead of hunting for the grip. On phones, audio-reactive effects land in time with the sound. The editor also got a round of playback fixes: adding media no longer stops playback, a paused video layer no longer goes blank, and detached video sound doesn't loop by itself anymore. There's a new About page too, and an Instagram link next to YouTube.
