@@ -83,8 +83,11 @@ export class MediaLayerDriver {
 			const { key } = layer;
 			const wanted = src.id;
 			this.#uploaded.set(key, wanted);
+			// A render that skips a lane frees its texture, though its decoder still counts
+			// the frame as shown.
+			const lost = !renderer?.hasLayerTexture(key);
 			// Non-blocking: a lane whose decoder has nothing new keeps its current frame.
-			void sampler.at(layer.sourceTime, false).then((frame) => {
+			void sampler.at(layer.sourceTime, false, lost).then((frame) => {
 				if (!frame) return;
 				// A request that outlived the clip it was made for.
 				if (!this.#disposed && this.#uploaded.get(key) === wanted) {

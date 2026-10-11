@@ -123,8 +123,9 @@ export class SlideVideoSampler {
 	}
 
 	/** Move to absolute position `t` (wrapped into the clip) and return the frame due
-	 * there, or null to keep the previous upload. `wait` separates the two callers. */
-	async at(t: number, wait = true): Promise<VideoFrame | null> {
+	 * there, or null to keep the previous upload. `wait` separates the two callers;
+	 * `lost` says the previous upload is gone, so a frame is due even standing still. */
+	async at(t: number, wait = true, lost = false): Promise<VideoFrame | null> {
 		if (this.#disposed || this.duration <= 0) return null;
 		if (this.#busy) return null;
 		this.#busy = true;
@@ -134,7 +135,12 @@ export class SlideVideoSampler {
 			this.position = want;
 			// Creeping forward is what the queue is for; anything else is a jump, and
 			// re-pumping beats decoding through the gap.
-			if (!this.#queue.started || delta < -BACK_EPS || delta > SEEK_AHEAD) {
+			if (
+				lost ||
+				!this.#queue.started ||
+				delta < -BACK_EPS ||
+				delta > SEEK_AHEAD
+			) {
 				this.#delivered = false;
 				this.#queue.start(want);
 			} else if (
