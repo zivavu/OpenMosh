@@ -1672,7 +1672,7 @@
 						</div>
 
 						<div
-							class="row"
+							class="row stacked"
 							title="Whole frame cuts this color wherever it appears. Connected cuts only the patch of it that touches the point, so the same color elsewhere, in a shirt say, stays."
 						>
 							<span class="row-label">Reach</span>
@@ -2344,9 +2344,15 @@
 		display: inline-flex;
 	}
 
+	/* Beside the label column the toggle got too little width for its two labels. */
+	.row.stacked {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.35rem;
+	}
+
 	.reach-toggle {
 		display: flex;
-		flex: 1;
 	}
 
 	/* Equal halves on one line, whatever the labels' lengths. */
@@ -2354,7 +2360,7 @@
 		flex: 1 1 0;
 		min-width: 0;
 		white-space: nowrap;
-		height: 22px;
+		height: 24px;
 		font-size: 0.56rem;
 		letter-spacing: 0.08em;
 	}
