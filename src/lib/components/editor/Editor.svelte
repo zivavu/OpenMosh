@@ -2162,13 +2162,18 @@
 		}
 	});
 
-	/** Where an audio clip's sound starts over: a video's always wraps, a track's when looped. */
+	/** Where a looped audio clip's sound starts over. */
 	function audioClipRepeats(clip: AudioClip): number[] {
 		const id = clip.sourceId;
 		if (!id) return [];
 		const videoLength = videoLengths[id];
 		if (videoLength) {
-			return videoClipRepeats(sourceRegistry.edits[id], videoLength, clip);
+			return videoClipRepeats(
+				sourceRegistry.edits[id],
+				videoLength,
+				clip,
+				!!clip.loop,
+			);
 		}
 		const trackLength = trackLengths[id];
 		return clip.loop && trackLength ? trackClipRepeats(clip, trackLength) : [];
@@ -2185,6 +2190,7 @@
 				videoLength,
 				clip,
 				until,
+				!!clip.loop,
 			);
 		}
 		return trackSourceEnds(clip, trackLengths[id] ?? 0, until);
