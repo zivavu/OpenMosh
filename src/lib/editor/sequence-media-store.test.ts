@@ -14,6 +14,7 @@ import {
 	saveMediaPool,
 	stableSourceId,
 	storedMediaToFile,
+	withMediaWrites,
 	type StoredSequenceMedia,
 } from "./sequence-media-store";
 
@@ -185,4 +186,56 @@ test("autosave prunes run at most once a minute", async () => {
 	expect(await count()).toBe(20);
 	await pruneSequenceMediaThrottled(1_061_000);
 	expect(await count()).toBe(8);
+});
+
+/** Exclusive locks only, with `ifAvailable`: all the store asks of Web Locks. */
+function installFakeLocks() {
+	const held = new Set<string>();
+	const nav = navigator as { locks?: unknown };
+	nav.locks = {
+		async request(
+			name: string,
+			options: { ifAvailable?: boolean } | (() => unknown),
+			callback?: (lock: object | null) => unknown,
+		) {
+			const run = (callback ?? options) as (lock: object | null) => unknown;
+			const ifAvailable = typeof options === "object" && options.ifAvailable;
+			if (held.has(name)) {
+				if (ifAvailable) return run(null);
+				throw new Error("the fake only queues with ifAvailable");
+			}
+			held.add(name);
+			try {
+				return await run({ name });
+			} finally {
+				held.delete(name);
+			}
+		},
+	};
+	return () => delete nav.locks;
+}
+
+test("a prune waits out a write that stores media before its records", async () => {
+	await clearAllSequenceStores();
+	const restore = installFakeLocks();
+	try {
+		for (let i = 0; i < 20; i++) {
+			await putTimeline(`single:video:t${i}.mp4:1:1`, { v: 3 });
+		}
+		const kept = async () => {
+			let n = 0;
+			for (let i = 0; i < 20; i++) {
+				if (await getTimeline(`single:video:t${i}.mp4:1:1`)) n++;
+			}
+			return n;
+		};
+		await withMediaWrites(async () => {
+			await pruneSequenceMedia();
+			expect(await kept()).toBe(20);
+		});
+		await pruneSequenceMedia();
+		expect(await kept()).toBe(8);
+	} finally {
+		restore();
+	}
 });

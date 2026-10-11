@@ -14,6 +14,7 @@ import {
 	getAllSessions,
 	getAllTimelines,
 	putBackupRecords,
+	withMediaWrites,
 	type StoredMediaPool,
 	type StoredSequenceMedia,
 	type StoredSession,
@@ -232,77 +233,82 @@ export async function restoreBackup(file: Blob): Promise<RestoreSummary> {
 		);
 	}
 
-	// Bytes first, records after: a write refused partway leaves media nothing points
-	// at, which the next prune clears, rather than edits whose media is missing.
-	const media: StoredSequenceMedia[] = [];
-	for (const item of keyed<WithPath<StoredSequenceMedia>>(raw.media, "id")) {
-		const blob = typeof item.path === "string" && byPath.get(item.path);
-		if (!blob) continue;
-		const { path: _path, ...meta } = item;
-		const type = typeof meta.type === "string" ? meta.type : "";
-		media.push({
-			...(meta as Omit<StoredSequenceMedia, "blob">),
-			type,
-			blob: new Blob([blob], { type }),
-		});
-	}
-	await putBackupRecords("media", media);
-
-	const tracks: StoredTrack[] = [];
-	for (const item of keyed<WithPath<StoredTrack> & { type: string }>(
-		raw.tracks,
-		"id",
-	)) {
-		const blob = typeof item.path === "string" && byPath.get(item.path);
-		if (!blob) continue;
-		const { path: _path, type, ...meta } = item;
-		tracks.push({
-			...(meta as Omit<StoredTrack, "blob">),
-			blob: new Blob([blob], { type: typeof type === "string" ? type : "" }),
-		});
-	}
-	if (tracks.length > 0) await putTracks(tracks);
-
-	let fonts = 0;
-	const families = new Set(customFonts().map((f) => f.family));
-	for (const item of keyed<WithPath<CustomFont>>(raw.fonts, "id")) {
-		const blob = typeof item.path === "string" && byPath.get(item.path);
-		if (!blob || typeof item.name !== "string") continue;
-		if (typeof item.family === "string" && families.has(item.family)) continue;
-		try {
-			await addCustomFontData(
-				item.name,
-				item.sourceUrl ?? item.name,
-				await blob.arrayBuffer(),
-			);
-			fonts++;
-		} catch {
-			// A face this browser can't read; text set in it falls back.
+	// One hold over every write: no tab's prune runs between the media and the records
+	// that keep it.
+	return withMediaWrites(async () => {
+		// Bytes first, records after: a write refused partway leaves media nothing points
+		// at, which the next prune clears, rather than edits whose media is missing.
+		const media: StoredSequenceMedia[] = [];
+		for (const item of keyed<WithPath<StoredSequenceMedia>>(raw.media, "id")) {
+			const blob = typeof item.path === "string" && byPath.get(item.path);
+			if (!blob) continue;
+			const { path: _path, ...meta } = item;
+			const type = typeof meta.type === "string" ? meta.type : "";
+			media.push({
+				...(meta as Omit<StoredSequenceMedia, "blob">),
+				type,
+				blob: new Blob([blob], { type }),
+			});
 		}
-	}
+		await putBackupRecords("media", media);
 
-	const pools = keyed<StoredMediaPool>(raw.pools, "key").filter((p) =>
-		Array.isArray(p.sourceIds),
-	);
-	const sessions = keyed<StoredSession>(raw.sessions, "key").filter((s) =>
-		Array.isArray(s.sourceIds),
-	);
-	const timelines = keyed<StoredTimeline>(raw.timelines, "key");
-	await putBackupRecords("pools", pools);
-	await putBackupRecords("sessions", sessions);
-	await putBackupRecords("timelines", timelines);
-
-	if (isPlainObject(raw.localStorage)) {
-		for (const [key, value] of Object.entries(raw.localStorage)) {
-			if (typeof value !== "string" || !isBackedUpKey(key)) continue;
-			writeRaw(key, mergeStoredValue(readRaw(key), value));
+		const tracks: StoredTrack[] = [];
+		for (const item of keyed<WithPath<StoredTrack> & { type: string }>(
+			raw.tracks,
+			"id",
+		)) {
+			const blob = typeof item.path === "string" && byPath.get(item.path);
+			if (!blob) continue;
+			const { path: _path, type, ...meta } = item;
+			tracks.push({
+				...(meta as Omit<StoredTrack, "blob">),
+				blob: new Blob([blob], { type: typeof type === "string" ? type : "" }),
+			});
 		}
-	}
+		if (tracks.length > 0) await putTracks(tracks);
 
-	return {
-		media: media.length,
-		songs: tracks.length,
-		fonts,
-		edits: sessions.length + timelines.length,
-	};
+		let fonts = 0;
+		const families = new Set(customFonts().map((f) => f.family));
+		for (const item of keyed<WithPath<CustomFont>>(raw.fonts, "id")) {
+			const blob = typeof item.path === "string" && byPath.get(item.path);
+			if (!blob || typeof item.name !== "string") continue;
+			if (typeof item.family === "string" && families.has(item.family))
+				continue;
+			try {
+				await addCustomFontData(
+					item.name,
+					item.sourceUrl ?? item.name,
+					await blob.arrayBuffer(),
+				);
+				fonts++;
+			} catch {
+				// A face this browser can't read; text set in it falls back.
+			}
+		}
+
+		const pools = keyed<StoredMediaPool>(raw.pools, "key").filter((p) =>
+			Array.isArray(p.sourceIds),
+		);
+		const sessions = keyed<StoredSession>(raw.sessions, "key").filter((s) =>
+			Array.isArray(s.sourceIds),
+		);
+		const timelines = keyed<StoredTimeline>(raw.timelines, "key");
+		await putBackupRecords("pools", pools);
+		await putBackupRecords("sessions", sessions);
+		await putBackupRecords("timelines", timelines);
+
+		if (isPlainObject(raw.localStorage)) {
+			for (const [key, value] of Object.entries(raw.localStorage)) {
+				if (typeof value !== "string" || !isBackedUpKey(key)) continue;
+				writeRaw(key, mergeStoredValue(readRaw(key), value));
+			}
+		}
+
+		return {
+			media: media.length,
+			songs: tracks.length,
+			fonts,
+			edits: sessions.length + timelines.length,
+		};
+	});
 }

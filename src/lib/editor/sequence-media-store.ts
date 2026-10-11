@@ -384,9 +384,38 @@ export function pruneSequenceMediaThrottled(now = Date.now()): Promise<void> {
 	return pruneSequenceMedia();
 }
 
+/** Held while media is written ahead of what points at it, in any tab: a prune in
+ * between would see that media as unreferenced. */
+const MEDIA_WRITES_LOCK = "openmosh-media-writes";
+
+function locks(): LockManager | null {
+	return typeof navigator !== "undefined" && navigator.locks
+		? navigator.locks
+		: null;
+}
+
+/** Run a write that stores media before the record that keeps it, out of a prune's way. */
+export async function withMediaWrites<T>(write: () => Promise<T>): Promise<T> {
+	const manager = locks();
+	return manager ? manager.request(MEDIA_WRITES_LOCK, write) : write();
+}
+
 /** Drops media no project or edit references, except the newest MAX_UNREFERENCED.
- * Projects and edits themselves go only when the user deletes them. */
+ * Projects and edits themselves go only when the user deletes them. Skipped while
+ * any tab is part way through writing media and its records. */
 export async function pruneSequenceMedia(): Promise<void> {
+	const manager = locks();
+	if (!manager) return pruneNow();
+	await manager.request(
+		MEDIA_WRITES_LOCK,
+		{ ifAvailable: true },
+		async (lock) => {
+			if (lock) await pruneNow();
+		},
+	);
+}
+
+async function pruneNow(): Promise<void> {
 	const pools = await getAllMediaPools();
 
 	const allSessions = await getAllSessions();
