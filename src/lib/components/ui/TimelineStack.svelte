@@ -783,6 +783,9 @@
 		color: var(--text-3);
 		text-transform: uppercase;
 		flex-shrink: 0;
+		/* Centres the caps rather than the line box, which sat them high beside icons. */
+		line-height: 1;
+		text-box: trim-both cap alphabetic;
 	}
 
 	/* One toolbar for the whole stack: transport, lane actions, then Follow. Wraps. */
