@@ -100,13 +100,16 @@ export class GeneratedSizeSync {
 				const render = this.#renders.get(id)!;
 				const w = this.#width;
 				const h = this.#height;
-				const blob = await render(w, h).catch(() => null);
+				const blob = await Promise.resolve()
+					.then(() => render(w, h))
+					.catch(() => null);
 				if (this.#disposed) break;
 				// Removed or re-targeted while rendering: leave it for the next pass.
-				if (!blob || !this.#renders.has(id)) continue;
+				if (!this.#renders.has(id)) continue;
 				if (w !== this.#width || h !== this.#height) continue;
+				// A failed size is marked done too: retrying it at once would spin forever.
 				this.#at.set(id, `${w}×${h}`);
-				this.#apply(id, URL.createObjectURL(blob));
+				if (blob) this.#apply(id, URL.createObjectURL(blob));
 			}
 		})().finally(() => {
 			this.#job = null;
