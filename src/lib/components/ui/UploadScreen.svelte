@@ -26,6 +26,8 @@
 		Music,
 		Pencil,
 		Palette,
+		Play,
+		Square,
 		Trash2,
 		Upload,
 		X,
@@ -111,6 +113,12 @@
 
 	// Owned here rather than inside the demo, so STOP quiets the wordmark's tear too.
 	let demoPlaying = $state(demoBackgroundEnabled());
+	let demoReady = $state(false);
+
+	function toggleDemo() {
+		demoPlaying = !demoPlaying;
+		updateSettings({ demoBackground: demoPlaying });
+	}
 
 	// Editor and Slideshow are timeline work, so a touch device offers only Single.
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
@@ -610,7 +618,12 @@
 
 <svelte:window onkeydown={onModeKey} />
 
-<DemoBackground {warmCanvas} {warmRenderer} bind:playing={demoPlaying} />
+<DemoBackground
+	{warmCanvas}
+	{warmRenderer}
+	bind:playing={demoPlaying}
+	bind:ready={demoReady}
+/>
 
 <div class="upload-screen">
 	<div class="hero">
@@ -945,29 +958,48 @@
 		{/if}
 	</div>
 
-	<div class="github-corner">
-		<VersionTag />
-		<button
-			class="storage-btn"
-			onclick={() => (storageOpen = true)}
-			title="Manage stored projects and media"
-			aria-label="Manage storage"
-		>
-			<HardDrive size={14} />
-		</button>
-		<a
-			class="storage-btn"
-			href="/about"
-			title="About OpenMosh"
-			aria-label="About OpenMosh"
-		>
-			<Info size={14} />
-		</a>
-		<GithubLink />
-		<YoutubeLink />
-		<InstagramLink />
-		<FeedbackButton />
-	</div>
+	<footer class="corner-bar">
+		{#if demoReady}
+			<button
+				class="demo-toggle"
+				onclick={toggleDemo}
+				title={demoPlaying
+					? "Black out the background demo"
+					: "Resume the background demo"}
+			>
+				{#if demoPlaying}
+					<Square size={12} />
+					STOP
+				{:else}
+					<Play size={12} />
+					ANIMATE
+				{/if}
+			</button>
+		{/if}
+		<div class="corner-version"><VersionTag /></div>
+		<div class="corner-links">
+			<button
+				class="storage-btn"
+				onclick={() => (storageOpen = true)}
+				title="Manage stored projects and media"
+				aria-label="Manage storage"
+			>
+				<HardDrive size={14} />
+			</button>
+			<a
+				class="storage-btn"
+				href="/about"
+				title="About OpenMosh"
+				aria-label="About OpenMosh"
+			>
+				<Info size={14} />
+			</a>
+			<GithubLink />
+			<YoutubeLink />
+			<InstagramLink />
+			<FeedbackButton />
+		</div>
+	</footer>
 
 	{#if pendingDelete}
 		{#await loadConfirmDialog() then ConfirmDialog}
@@ -1027,14 +1059,57 @@
 		overscroll-behavior: contain;
 	}
 
-	.github-corner {
+	/* STOP pinned bottom left, the version and links bottom right. */
+	.corner-bar {
 		position: fixed;
-		bottom: 1rem;
 		right: 1rem;
+		bottom: 1rem;
+		left: 1rem;
 		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		pointer-events: none;
+	}
+
+	.corner-bar > * {
+		pointer-events: auto;
+	}
+
+	.corner-version {
+		margin-left: auto;
+	}
+
+	.corner-links {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.demo-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.75rem;
+		border: 1.5px solid rgba(255, 255, 255, 0.14);
+		border-radius: 999px;
+		background: rgba(10, 10, 12, 0.5);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		color: #7d7d7d;
+		font-family: inherit;
+		font-size: 0.66rem;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		cursor: pointer;
+		transition:
+			color 0.2s,
+			border-color 0.2s;
+	}
+
+	.demo-toggle:hover {
+		border-color: rgba(255, 255, 255, 0.32);
+		color: #ccc;
 	}
 
 	/* Same shape as the links beside it. */
@@ -1904,6 +1979,27 @@
 
 		.drop-hint {
 			display: none;
+		}
+	}
+
+	/* Too narrow to pin both corners: the bar ends the page instead of covering the
+	   recent list, STOP and the version on one row, the links on the next. */
+	@media (max-width: 520px) {
+		.corner-bar {
+			position: static;
+			align-self: stretch;
+			flex-wrap: wrap;
+			justify-content: center;
+			flex-shrink: 0;
+		}
+
+		.corner-version {
+			margin-left: 0;
+		}
+
+		.corner-links {
+			flex-basis: 100%;
+			justify-content: center;
 		}
 	}
 </style>
