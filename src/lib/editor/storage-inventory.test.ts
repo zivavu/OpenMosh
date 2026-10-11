@@ -661,3 +661,36 @@ describe("a song-less single video edit", () => {
 		expect(await store.getTimeline(timelineKey)).toBeNull();
 	});
 });
+
+describe("countTrackUsers", () => {
+	test("counts every project and edit that plays the song", async () => {
+		const song = await seedTrack("song.wav", 10);
+		const other = await seedTrack("other.wav", 20);
+		// Keyed by the song, from before projects had ids.
+		await store.putTimeline(`seq:${song}`, { v: 3 });
+		// The project's song.
+		await store.putTimeline("seq:proj-a", { v: 4, song });
+		// Only on an audio lane.
+		await store.putTimeline("seq:proj-b", {
+			v: 4,
+			song: other,
+			media: {
+				lanes: [],
+				audioLanes: [{ id: "l", clips: [{ sourceId: `track:${song}` }] }],
+			},
+		});
+		await store.putSession({
+			key: "slideshow:p:1",
+			mode: "slideshow",
+			label: "s",
+			trackId: song,
+			sourceIds: [],
+			state: null,
+		});
+		// Single mode's per-song timeline only remembers the BPM.
+		await store.putTimeline(`single:${song}`, { v: 4, bpm: 120 });
+		expect(await inventory.countTrackUsers(song)).toBe(4);
+		expect(await inventory.countTrackUsers(other)).toBe(1);
+		expect(await inventory.countTrackUsers(song, "seq:proj-a")).toBe(3);
+	});
+});

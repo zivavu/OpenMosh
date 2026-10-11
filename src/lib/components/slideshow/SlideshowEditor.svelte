@@ -1764,6 +1764,7 @@
 		pendingTrack={audio.trackFile}
 		onNormalizeChange={(gain) => audio.setNormalizeGain(gain)}
 		onAutoAdded={adoptLibraryTrack}
+		openKey={ownSessionKey}
 	/>
 	<div class="main-area">
 		<SlideshowTopBar

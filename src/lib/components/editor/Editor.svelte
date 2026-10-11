@@ -4261,6 +4261,8 @@
 		onAutoAdded={adoptLibraryTrack}
 		activeProjectKey={projectKey}
 		tracksDraggable={isSequenceMode}
+		songOnLanes={isSequenceMode}
+		openKey={isSequenceMode ? seqStoreKey : singleSessionKey}
 		onOpenProject={isSequenceMode && onOpenProject
 			? openOtherProject
 			: undefined}
