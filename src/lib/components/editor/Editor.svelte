@@ -1799,6 +1799,7 @@
 		}
 		const otherModels = files.filter(isOtherModelFile);
 		files = files.filter((f) => !isOtherModelFile(f));
+		const repeats = alreadyPooled(files);
 		// Single mode's pool is session-scoped: no song to persist under.
 		const added = await sourceRegistry.add(files, {
 			persist: isSequenceMode,
@@ -1811,14 +1812,36 @@
 			...files,
 		]);
 		const skipped =
-			files.length - added.length - (rejectedModels - otherModels.length);
+			files.length -
+			added.length -
+			repeats.length -
+			(rejectedModels - otherModels.length);
 		if (skipped > 0) {
 			showToast(
 				`Skipped ${skipped} file${skipped === 1 ? "" : "s"} that couldn't be decoded`,
 				"error",
 			);
 		}
+		if (repeats.length > 0 && added.length === 0 && skipped <= 0) {
+			showToast(
+				repeats.length === 1
+					? `"${repeats[0].name}" is already in the pool`
+					: `Those ${repeats.length} files are already in the pool`,
+				"info",
+			);
+		}
 		return added;
+	}
+
+	/** Files the pool holds already, or that repeat one earlier in the batch. */
+	function alreadyPooled(files: File[]): File[] {
+		const seen = new Set<string>();
+		return files.filter((f) => {
+			const id = stableSourceId(f);
+			const repeat = seen.has(id) || !!sourceRegistry.get(id);
+			seen.add(id);
+			return repeat;
+		});
 	}
 
 	/** 3D files the pool turned down, and why; the dialog is up while there are any. */
