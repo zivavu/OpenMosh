@@ -19,6 +19,7 @@ import {
 	putSession,
 	stableSourceId,
 	storedMediaToFile,
+	withMediaWrites,
 	type SessionMode,
 } from "./sequence-media-store";
 
@@ -82,9 +83,6 @@ export async function saveSession(
 	if (mode === "slideshow" && !trackId) return false;
 	const isNew = !(await getSession(key).catch(() => undefined));
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
-	// Only what isn't stored yet: a put copies the bytes again on every autosave.
-	const stored = await getAllSequenceMediaIds();
-	await putSequenceMedia(entries.filter((e) => !stored.has(e.id)));
 	// A song-keyed session is named after the song, matching the sequence list.
 	let label = defaultLabel(mode, files);
 	if (trackId) {
@@ -96,13 +94,18 @@ export async function saveSession(
 		const taken = await shownLabels(mode, key).catch((): string[] => []);
 		if (taken.includes(label)) setProjectName(key, uniqueName(label, taken));
 	}
-	await putSession({
-		key,
-		mode,
-		label,
-		trackId: trackId ?? undefined,
-		sourceIds: entries.map((e) => e.id),
-		state,
+	await withMediaWrites(async () => {
+		// Only what isn't stored yet: a put copies the bytes again on every autosave.
+		const stored = await getAllSequenceMediaIds();
+		await putSequenceMedia(entries.filter((e) => !stored.has(e.id)));
+		await putSession({
+			key,
+			mode,
+			label,
+			trackId: trackId ?? undefined,
+			sourceIds: entries.map((e) => e.id),
+			state,
+		});
 	});
 	// Saved edits are the open one, so this is what a reload comes back to.
 	rememberLastOpened({ mode, key });

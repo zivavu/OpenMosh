@@ -9,6 +9,7 @@ import {
 	putTimeline,
 	saveMediaPool,
 	stableSourceId,
+	withMediaWrites,
 } from "../editor/sequence-media-store";
 import {
 	addCustomFont,
@@ -43,62 +44,68 @@ export async function openProjectFile(file: Blob): Promise<string> {
 	}
 	const manifest = parseManifest(raw);
 
-	// Media first: the timeline is written last, so a failure partway leaves an
-	// unregistered project whose media the next prune cleans up.
-	const sourceIds = new Map<string, string>();
-	const media: { id: string; file: File }[] = [];
-	for (const item of manifest.pool) {
-		const entry = byPath.get(item.path);
-		if (!entry) continue;
-		const mediaFile = new File([entry.blob], item.name, {
-			type: item.type || entry.blob.type,
-			lastModified: item.lastModified,
-		});
-		const id = stableSourceId(mediaFile);
-		if (id !== item.id) sourceIds.set(item.id, id);
-		media.push({ id, file: mediaFile });
-	}
-	if (media.length > 0) await putSequenceMedia(media);
-
-	const trackIds = new Map<string, string>();
-	for (const item of manifest.songs) {
-		const entry = byPath.get(item.path);
-		if (!entry) continue;
-		const songFile = new File([entry.blob], item.fileName, {
-			type: item.type || "audio/mpeg",
-		});
-		const track = await addTrack(songFile);
-		if (track.id !== item.trackId) trackIds.set(item.trackId, track.id);
-	}
-
-	for (const item of manifest.fonts) {
-		try {
-			if (item.path) {
-				const entry = byPath.get(item.path);
-				if (entry) {
-					const name = item.family.replace(/^'|'$/g, "") || "Custom Font";
-					await addCustomFontData(
-						name,
-						item.path,
-						await entry.blob.arrayBuffer(),
-					);
-				}
-			} else if (item.url && isFetchableFontUrl(item.url)) {
-				await addCustomFont(item.url);
-			}
-		} catch {
-			// Already added, or the face wouldn't load; the text falls back.
+	// Held from the first media write to the pool that keeps it, so no tab's prune
+	// sees the media unreferenced in between.
+	const projectKey = await withMediaWrites(async () => {
+		// Media first: the timeline is written last, so a failure partway leaves an
+		// unregistered project whose media the next prune cleans up.
+		const sourceIds = new Map<string, string>();
+		const media: { id: string; file: File }[] = [];
+		for (const item of manifest.pool) {
+			const entry = byPath.get(item.path);
+			if (!entry) continue;
+			const mediaFile = new File([entry.blob], item.name, {
+				type: item.type || entry.blob.type,
+				lastModified: item.lastModified,
+			});
+			const id = stableSourceId(mediaFile);
+			if (id !== item.id) sourceIds.set(item.id, id);
+			media.push({ id, file: mediaFile });
 		}
-	}
+		if (media.length > 0) await putSequenceMedia(media);
 
-	const key = `proj-${generateId()}`;
-	const entry = remapProject(manifest.entry, trackIds, sourceIds);
-	await putTimeline(`seq:${key}`, entry);
-	await saveMediaPool(
-		key,
-		manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id),
-	);
-	const name = manifest.name || readProjectNames()[key] || "Untitled project";
-	setProjectName(key, await availableName(name));
-	return key;
+		const trackIds = new Map<string, string>();
+		for (const item of manifest.songs) {
+			const entry = byPath.get(item.path);
+			if (!entry) continue;
+			const songFile = new File([entry.blob], item.fileName, {
+				type: item.type || "audio/mpeg",
+			});
+			const track = await addTrack(songFile);
+			if (track.id !== item.trackId) trackIds.set(item.trackId, track.id);
+		}
+
+		for (const item of manifest.fonts) {
+			try {
+				if (item.path) {
+					const entry = byPath.get(item.path);
+					if (entry) {
+						const name = item.family.replace(/^'|'$/g, "") || "Custom Font";
+						await addCustomFontData(
+							name,
+							item.path,
+							await entry.blob.arrayBuffer(),
+						);
+					}
+				} else if (item.url && isFetchableFontUrl(item.url)) {
+					await addCustomFont(item.url);
+				}
+			} catch {
+				// Already added, or the face wouldn't load; the text falls back.
+			}
+		}
+
+		const key = `proj-${generateId()}`;
+		const entry = remapProject(manifest.entry, trackIds, sourceIds);
+		await putTimeline(`seq:${key}`, entry);
+		await saveMediaPool(
+			key,
+			manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id),
+		);
+		return key;
+	});
+	const name =
+		manifest.name || readProjectNames()[projectKey] || "Untitled project";
+	setProjectName(projectKey, await availableName(name));
+	return projectKey;
 }
