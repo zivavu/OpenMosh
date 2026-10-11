@@ -274,9 +274,14 @@
 		}
 	}
 
+	/** A project whose pool was emptied opens with no files; a new one always has some. */
+	function sequenceOpen(): boolean {
+		return sequenceFiles.length > 0 || sequenceProjectKey !== null;
+	}
+
 	/** Whether the current route has its media, or would fall through to the upload screen. */
 	function editorOpen(): boolean {
-		if (view === "sequence") return sequenceFiles.length > 0;
+		if (view === "sequence") return sequenceOpen();
 		if (view === "slideshow") return slideshowFiles.length > 0;
 		if (view === "single") return !!file;
 		return false;
@@ -364,13 +369,13 @@
 		{:catch err}
 			{@render loadFailed(err)}
 		{/await}
-	{:else if view === "sequence" && sequenceFiles.length > 0}
+	{:else if view === "sequence" && sequenceOpen()}
 		{#await loadEditor() then Editor}
 			<!-- Keyed: another project is a fresh editor, not this one's state reseeded. -->
 			{#key sequenceProjectKey}
 				<Editor
 					mode="sequence"
-					file={sequenceFiles[0]}
+					file={sequenceFiles[0] ?? null}
 					extraFiles={sequenceFiles.slice(1)}
 					initialAudioFile={pendingAudioFile}
 					initialTrackId={sequenceTrackId}

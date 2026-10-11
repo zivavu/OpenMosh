@@ -45,7 +45,8 @@ export interface RecordingContext {
 	videoSpanEnd: number;
 	/** Video playback speed factor (1 = normal). Defaults to 1. */
 	videoSpeed?: number;
-	file: File;
+	/** The opened file; null in the Editor when its pool is empty. */
+	file: File | null;
 	/** Single mode's webcam; the export runs in real time, not frame by frame. */
 	live?: HTMLVideoElement | null;
 	/** Fired as the first live frame is taken, so the host can start the song. */
@@ -161,7 +162,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			: Math.min(videoSpanStart + srcElapsed, videoSpanEnd);
 	};
 	// Only decode the video's own audio when it has a track; decodeAudioData throws on silence.
-	const useVideoSourceAudio = isVideo && !hasExplicitAudio && videoHasAudio;
+	const videoFile = isVideo ? file : null;
+	const useVideoSourceAudio = !!videoFile && !hasExplicitAudio && videoHasAudio;
 
 	const audioStart = projectSpan
 		? projectSpan.start
@@ -200,8 +202,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 	> | null = null;
 
 	let videoInput: { dispose(): void } | null = null;
-	if (isVideo && videoEl) {
-		const opened = await openDecodableVideo(file);
+	if (videoFile && videoEl) {
+		const opened = await openDecodableVideo(videoFile);
 		videoInput = opened?.input ?? null;
 		if (opened) {
 			const totalFrames = Math.ceil(exportDuration * fps);
@@ -372,13 +374,14 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 				audioEnd,
 			}),
 			// Video source audio: include when no explicit track, loop if video loops
-			...(useVideoSourceAudio && {
-				audioFile: file,
-				audioStart,
-				audioEnd,
-				audioSpeed: videoSpeed,
-				...(loopVideo && { loopAudio: true }),
-			}),
+			...(useVideoSourceAudio &&
+				videoFile && {
+					audioFile: videoFile,
+					audioStart,
+					audioEnd,
+					audioSpeed: videoSpeed,
+					...(loopVideo && { loopAudio: true }),
+				}),
 			...(sequence
 				? { onBeforeRender: sequenceBeforeRender }
 				: live
