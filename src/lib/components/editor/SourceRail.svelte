@@ -427,7 +427,8 @@
 	}
 
 	/* Inside the edge: the strip scrolls, so it clips anything drawn past it. */
-	.rail-item:focus-visible {
+	.rail-item:focus-visible,
+	.rail-add:focus-visible {
 		outline-offset: -2px;
 	}
 
