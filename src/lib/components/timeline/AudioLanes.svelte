@@ -57,6 +57,8 @@
 		repeatsOf?: (clip: AudioClip) => number[];
 		/** Per-source edits, so a video's sound splits where its picture would. */
 		edits?: Record<string, SourceEdit>;
+		/** Pool videos' lengths, where a bouncing clip's sound turns. */
+		videoLengths?: Record<string, number>;
 		/** Where a clip's sound runs out, measured as if it ran to `until`: snap targets. */
 		sourceEndsOf?: (clip: AudioClip, until: number) => number[];
 		/** Sits under the layer rows, whatever their stacking. */
@@ -86,6 +88,7 @@
 		onSetBpmSource,
 		repeatsOf = () => [],
 		edits = {},
+		videoLengths = {},
 		sourceEndsOf,
 		orderBase,
 		foldedLaneIds = NO_FOLDS,
@@ -142,7 +145,8 @@
 				selectedClipIds = v;
 			},
 			createClip: (start, end) => createAudioClip(start, end, null),
-			splitClipAt: (lane, at) => splitAudioClipAt(lane, at, edits),
+			splitClipAt: (lane, at) =>
+				splitAudioClipAt(lane, at, edits, videoLengths),
 			// Sound comes in as files, never as an empty clip drawn on the lane.
 			clipSpanAt: () => null,
 			copy: copySelection,

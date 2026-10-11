@@ -8,7 +8,7 @@ import {
 	updateClipsIn,
 	updateLaneIn,
 } from "../timeline/clips";
-import { sourceTimeAt, type SourceEdit } from "./source-edit";
+import { clipSourcePosition, sourceSpan, type SourceEdit } from "./source-edit";
 import {
 	resolveConcreteTransition,
 	transitionLength,
@@ -16,6 +16,7 @@ import {
 } from "./transition";
 import { audioLaneSourceIds, trackIdOf, type AudioLane } from "../mix/types";
 import {
+	clipBounceWalk,
 	mediaClipSpeed,
 	mediaClipWeight,
 	type MediaClip,
@@ -43,6 +44,8 @@ export interface ResolvedMediaLayer {
 	sourceTime: number;
 	/** Models only: which animation `sourceTime` is in. */
 	animation?: number;
+	/** Set on a bouncing clip; see `SideBounce`. */
+	bounce?: SideBounce;
 	style: MediaStyle;
 	/** What the composite draws this layer at: the lane's opacity scaled by the clip's
 	 * fade. Separate from `style.opacity` so the per-frame value needn't clone. */
@@ -61,7 +64,15 @@ export interface MediaLayerSide {
 	sourceId: string;
 	sourceTime: number;
 	animation?: number;
+	bounce?: SideBounce;
 	effects: EffectInstance[];
+}
+
+/** Which way a bouncing clip walks its media now, and the source time it turns at
+ * next, so a decoder can have the other direction ready by then. */
+export interface SideBounce {
+	reverse: boolean;
+	turnAt: number;
 }
 
 export interface ResolvedLayerTransition {
@@ -188,18 +199,29 @@ export function createMediaChainSource(
 		);
 }
 
-/** Seconds into the clip's media at timeline `time`. */
+/** Where the clip is in its media at timeline `time`, and which way a bouncing one walks. */
 function clipSourceTime(
 	clip: MediaClip,
 	sourceId: string,
 	time: number,
 	edits?: Record<string, SourceEdit>,
-): number {
-	return sourceTimeAt(
-		edits?.[sourceId],
+	durations?: Record<string, number>,
+): { sourceTime: number; bounce?: SideBounce } {
+	const edit = edits?.[sourceId];
+	const length = durations?.[sourceId];
+	const walk = clipBounceWalk(clip, length);
+	const at = clipSourcePosition(
+		edit,
 		(time - clip.start) * mediaClipSpeed(clip),
 		clip.sourceStart,
+		walk,
 	);
+	if (!walk) return { sourceTime: at.time };
+	const span = sourceSpan(edit, walk.length);
+	return {
+		sourceTime: at.time,
+		bounce: { reverse: at.back, turnAt: at.back ? span.start : span.end },
+	};
 }
 
 /** The media layers visible at `time`, in lane order. Preview and export both go
@@ -210,6 +232,8 @@ export function resolveMediaLayersAt(
 	/** Per-source edits, for the rate each clip walks its media at. */
 	edits?: Record<string, SourceEdit>,
 	chains?: MediaChainSource,
+	/** Media lengths, which a bouncing clip turns at. Without one it wraps. */
+	durations?: Record<string, number>,
 ): ResolvedMediaLayer[] {
 	if (!timeline?.enabled) return [];
 	const layers: ResolvedMediaLayer[] = [];
@@ -235,7 +259,7 @@ export function resolveMediaLayersAt(
 									key: laneClipKey(lane, index - 1),
 									clipId: prev.id,
 									sourceId: prevSource,
-									sourceTime: clipSourceTime(prev, prevSource, time, edits),
+									...clipSourceTime(prev, prevSource, time, edits, durations),
 									animation: prev.animation,
 									effects: chains ? chains(lane, prev, time) : prev.effects,
 								}
@@ -252,7 +276,7 @@ export function resolveMediaLayersAt(
 			clipId: clip.id,
 			z: lane.z,
 			sourceId,
-			sourceTime: clipSourceTime(clip, sourceId, time, edits),
+			...clipSourceTime(clip, sourceId, time, edits, durations),
 			animation: clip.animation,
 			style: lane.style,
 			opacity: lane.style.opacity * mediaClipWeight(clip, time),

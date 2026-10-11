@@ -102,6 +102,8 @@ export interface RecordOptions {
 	mediaTimeline?: MediaTimeline | null;
 	/** Per-source edits, for the rate each media clip runs at. */
 	sourceEdits?: Record<string, SourceEdit>;
+	/** Media lengths, which a bouncing clip turns at. */
+	sourceDurations?: Record<string, number>;
 	/** Uploads each visible layer's frame; awaited, so the written frame is the one asked for. */
 	mediaLayerSink?: ((layers: ResolvedMediaLayer[]) => Promise<void>) | null;
 	/** Chain per media clip and frame, the export's own; see recording.ts. */
@@ -352,6 +354,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		textTimeline = null,
 		mediaTimeline = null,
 		sourceEdits,
+		sourceDurations,
 		mediaLayerSink = null,
 		mediaChains = null,
 		textChains = null,
@@ -727,6 +730,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 						clockTime,
 						sourceEdits,
 						mediaChains ?? undefined,
+						sourceDurations,
 					)
 				: [];
 			if (mediaLayers.length > 0 && mediaLayerSink) {

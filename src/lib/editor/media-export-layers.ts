@@ -100,7 +100,12 @@ export async function createMediaExportLayers(
 					const sampler = await samplerFor(layer.key, src.file, src.id);
 					if (!sampler) return;
 					uploaded.set(layer.key, src.id);
-					const frame = await sampler.at(layer.sourceTime);
+					const frame = await sampler.at(
+						layer.sourceTime,
+						true,
+						false,
+						layer.bounce,
+					);
 					if (frame) {
 						renderer.updateLayerFrame(layer.key, frame);
 						frame.close();

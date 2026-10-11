@@ -275,6 +275,46 @@ export function sourceTimeAt(
 	);
 }
 
+/** Where a clip stands in its media; `back` is set on a bouncing clip's backward pass. */
+export interface SourcePosition {
+	time: number;
+	back: boolean;
+}
+
+/** How a bouncing clip walks: `length` is the media's, `back` starts it backward. */
+export interface BounceWalk {
+	length: number;
+	back?: boolean;
+}
+
+/** Kept off the span's very end, which a sampler wrapping by the file's length reads as 0. */
+const BOUNCE_END_EPS = 1e-3;
+
+/** As `sourceTimeAt`, but a bouncing clip turns at either end of its span and plays
+ * back the other way rather than starting over. */
+export function clipSourcePosition(
+	edit: SourceEdit | undefined,
+	elapsed: number,
+	start: number,
+	bounce: BounceWalk | null,
+): SourcePosition {
+	const span = bounce && sourceSpan(edit, bounce.length);
+	const len = span ? span.end - span.start : 0;
+	if (!span || !(len > 0)) {
+		return { time: sourceTimeAt(edit, elapsed, start), back: false };
+	}
+	const into = Math.min(Math.max(start, span.start), span.end) - span.start;
+	const unfolded =
+		(bounce.back ? 2 * len - into : into) + elapsed * sourceSpeed(edit);
+	const phase = wrapSourceTime(unfolded, 2 * len);
+	const back = phase > len;
+	const offset = back ? 2 * len - phase : phase;
+	return {
+		time: span.start + Math.min(offset, len - BOUNCE_END_EPS),
+		back,
+	};
+}
+
 export function sourceSpan(
 	edit: SourceEdit | undefined,
 	duration: number,

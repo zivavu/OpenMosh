@@ -472,3 +472,50 @@ describe("clipMoshOptions", () => {
 		);
 	});
 });
+
+describe("bouncing clips", () => {
+	function bouncing(spans: [number, number, number?][]): MediaLane {
+		const lane = laneWith(spans);
+		return { ...lane, clips: lane.clips.map((c) => ({ ...c, bounce: true })) };
+	}
+	const at = (lane: MediaLane, time: number) =>
+		resolveMediaLayersAt(timelineOf([lane]), time, {}, undefined, {
+			"src-a": 4,
+		})[0];
+
+	it("turns at the end and plays back to the start, then forward again", () => {
+		const lane = bouncing([[0, 20]]);
+		expect(at(lane, 1).sourceTime).toBe(1);
+		expect(at(lane, 1).bounce).toEqual({ reverse: false, turnAt: 4 });
+		expect(at(lane, 5).sourceTime).toBe(3);
+		expect(at(lane, 5).bounce).toEqual({ reverse: true, turnAt: 0 });
+		expect(at(lane, 9).sourceTime).toBe(1);
+		expect(at(lane, 9).bounce?.reverse).toBe(false);
+	});
+
+	it("wraps as before without the media's length", () => {
+		const layer = resolveMediaLayersAt(timelineOf([bouncing([[0, 20]])]), 5)[0];
+		expect(layer.sourceTime).toBe(5);
+		expect(layer.bounce).toBeUndefined();
+	});
+
+	it("carries the direction across a split made on the way back", () => {
+		const split = splitMediaClipAt(bouncing([[0, 20]]), 5, {}, { "src-a": 4 });
+		const right = split.clips[1];
+		expect(right.sourceStart).toBe(3);
+		expect(right.bounceBack).toBe(true);
+		// The halves join without a jump or a change of direction.
+		expect(at(split, 6).sourceTime).toBe(2);
+		expect(at(split, 6).bounce?.reverse).toBe(true);
+	});
+
+	it("keeps the flags through a save round-trip", () => {
+		const split = splitMediaClipAt(bouncing([[0, 20]]), 5, {}, { "src-a": 4 });
+		const raw = JSON.parse(JSON.stringify(timelineOf([split])));
+		const clips = normalizeMediaTimeline(raw).lanes[0].clips;
+		expect(clips.map((c) => [c.bounce, c.bounceBack])).toEqual([
+			[true, undefined],
+			[true, true],
+		]);
+	});
+});

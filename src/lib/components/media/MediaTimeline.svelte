@@ -128,6 +128,9 @@
 	const stack = getTimelineStack();
 	const vp = stack.vp;
 	let trackDuration = $derived(stack.trackDuration);
+	let sourceDurations = $derived(
+		Object.fromEntries(sources.map((s) => [s.id, s.duration])),
+	);
 
 	// Selection, drags, scrubbing, split/add/delete and the keyboard: the gestures
 	// every clip lane shares.
@@ -161,7 +164,8 @@
 					sourceId && sourceId !== lane.sourceId ? sourceId : undefined,
 				);
 			},
-			splitClipAt: (lane, at) => splitMediaClipAt(lane, at, edits),
+			splitClipAt: (lane, at) =>
+				splitMediaClipAt(lane, at, edits, sourceDurations),
 			clipSpanAt: (lane, time) =>
 				clipSpanAt(lane, time, newClipSourceId(lane, time)),
 			// A clip keeps showing what it showed: one that inherited its old lane's source

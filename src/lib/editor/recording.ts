@@ -347,6 +347,9 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			mediaChains,
 			textChains,
 			sourceEdits,
+			sourceDurations: Object.fromEntries(
+				layerSources.map((s) => [s.id, s.duration]),
+			),
 			mediaLayerSink: exportLayers
 				? (layers) => exportLayers!.advance(layers)
 				: null,
