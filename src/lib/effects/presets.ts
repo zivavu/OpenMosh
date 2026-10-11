@@ -4,13 +4,14 @@ import { getDefinition, hydrateLinks, hydrateValues } from "./hydrate";
 import { reportRemovedEffect } from "./load-report";
 import { STARTER_PRESETS } from "./starter-presets";
 import { readJson, readRaw, writeJson, writeRaw } from "../storage";
+import { records } from "../records";
 
 const PRESETS_KEY = "openmosh-presets";
 /** Set once the starter presets have been written, so deleting them sticks. */
 const SEEDED_KEY = "openmosh-presets-seeded";
 
 export function loadPresets(): Preset[] {
-	const stored = readJson<Preset[] | null>(PRESETS_KEY, null);
+	const stored = readJson<unknown>(PRESETS_KEY, null);
 	if (stored !== null) return withoutRemovedEffects(stored);
 	// First run: seed the starters as ordinary, editable user presets. Guarded by
 	// its own key so a user who deletes them all doesn't get them back.
@@ -22,19 +23,27 @@ export function loadPresets(): Preset[] {
 	return [];
 }
 
-/** Drops effects OpenMosh no longer has, and a preset left with none, for good. */
-function withoutRemovedEffects(presets: Preset[]): Preset[] {
-	let changed = false;
+/** Drops effects OpenMosh no longer has, and a preset left with none, for good. A
+ * damaged entry goes the same way rather than taking the whole list down with it. */
+function withoutRemovedEffects(stored: unknown): Preset[] {
+	let changed = !Array.isArray(stored);
 	const kept: Preset[] = [];
-	for (const preset of presets) {
-		const effects = preset.effects.filter((e) => {
-			if (getDefinition(e.defId)) return true;
-			if (e.enabled) reportRemovedEffect(e.defId);
+	for (const preset of records<Preset>(stored)) {
+		if (typeof preset.name !== "string" || !Array.isArray(preset.effects)) {
+			changed = true;
+			continue;
+		}
+		const all = records<Preset["effects"][number]>(preset.effects);
+		if (all.length !== preset.effects.length) changed = true;
+		const effects = all.filter((e): e is Preset["effects"][number] => {
+			if (typeof e.defId === "string" && getDefinition(e.defId)) return true;
+			if (e.enabled && typeof e.defId === "string")
+				reportRemovedEffect(e.defId);
 			changed = true;
 			return false;
 		});
 		if (effects.length > 0 || preset.effects.length === 0)
-			kept.push({ ...preset, effects });
+			kept.push({ ...(preset as Preset), effects });
 	}
 	if (changed) writeJson(PRESETS_KEY, kept);
 	return kept;
@@ -94,6 +103,8 @@ export function updatePreset(
 	effects: EffectInstance[],
 ): Preset[] {
 	const presets = loadPresets();
+	// Another tab may have deleted it since this one listed it.
+	if (!presets[index]) return presets;
 	presets[index].effects = serializeEffects(effects);
 	writeJson(PRESETS_KEY, presets);
 	return presets;

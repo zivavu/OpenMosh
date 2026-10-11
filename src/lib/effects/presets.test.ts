@@ -109,6 +109,24 @@ describe("loadPresets", () => {
 		expect(stored()).toEqual(expected);
 	});
 
+	it("drops a damaged entry and keeps the rest", () => {
+		const good = { name: "good", effects: [{ defId: DEF.id, enabled: true }] };
+		ls.seedJson(PRESETS_KEY, [
+			null,
+			{ name: "no chain" },
+			{ effects: [] },
+			{ name: "bad effect", effects: [null, { enabled: true }] },
+			good,
+		]);
+		expect(loadPresets()).toEqual([good] as Preset[]);
+		expect(stored()).toEqual([good] as Preset[]);
+	});
+
+	it("reads a stored value that isn't a list as no presets", () => {
+		ls.seedJson(PRESETS_KEY, { name: "not a list" });
+		expect(loadPresets()).toEqual([]);
+	});
+
 	it("seeds only once even if the write never lands", () => {
 		// A private window can't persist anything; it should still get the
 		// starters in memory rather than an empty panel.
@@ -231,6 +249,11 @@ describe("updatePreset", () => {
 		expect(list[1].effects[0].values).toEqual({ size: 3 });
 		expect(list[0].effects).toEqual([]);
 		expect(stored()[1].effects[0].values).toEqual({ size: 3 });
+	});
+
+	it("leaves the list alone when the preset is already gone", () => {
+		const list = updatePreset(5, [instance()]);
+		expect(list.map((p) => p.name)).toEqual(["one", "two"]);
 	});
 });
 
