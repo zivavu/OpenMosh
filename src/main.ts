@@ -4,6 +4,7 @@ import "./app.css";
 import "./lib/install-prompt";
 import App from "./App.svelte";
 import { showToast } from "./lib/components/ui/toast.svelte";
+import { clearStaleExports } from "./lib/export-files";
 
 // A deploy renames every chunk, so an open tab 404s on its next lazy import. Reload
 // once to pick up the new build; a second failure soon after is a real outage and
@@ -29,6 +30,10 @@ function reportUncaught(reason: unknown) {
 }
 window.addEventListener("error", (e) => reportUncaught(e.error ?? e.message));
 window.addEventListener("unhandledrejection", (e) => reportUncaught(e.reason));
+
+// Exports left by tabs that have since closed. Not at once: a download started just
+// before a reload may still be reading its file.
+setTimeout(() => void clearStaleExports(), 60_000);
 
 // The offline copy; dev serves unbundled modules, which it can't list.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

@@ -40,6 +40,7 @@ import type { StreamTargetChunk, VideoCodec } from "mediabunny";
 import type { EffectInstance } from "./effects";
 import type { GlRenderer } from "./gl/renderer";
 import { downloadFile } from "./utils";
+import { openExportFile, removeExportFile } from "./export-files";
 
 /** Bitrate scales with output size: a fixed rate starves big canvases and bloats
  * small ones. Chrome honors the target, Firefox clamps it. */
@@ -295,21 +296,12 @@ class SlabBuffer implements OutputBuffer {
 	}
 }
 
-const EXPORT_DIR = "exports";
-
 /** A file in the origin's private storage, so a long export never sits in memory.
  * Null where the browser can't write one; the slabs take over there. */
 async function openDiskBuffer(): Promise<OutputBuffer | null> {
+	const handle = await openExportFile();
+	if (!handle || typeof handle.createWritable !== "function") return null;
 	try {
-		if (!navigator.storage?.getDirectory) return null;
-		const root = await navigator.storage.getDirectory();
-		// The last export was read straight off its file, and has long been saved.
-		await root.removeEntry(EXPORT_DIR, { recursive: true }).catch(() => {});
-		const dir = await root.getDirectoryHandle(EXPORT_DIR, { create: true });
-		const handle = await dir.getFileHandle(`export-${Date.now()}.webm`, {
-			create: true,
-		});
-		if (typeof handle.createWritable !== "function") return null;
 		const writable = await handle.createWritable();
 		return {
 			// Copied: the muxer may reuse the buffer before the queued write runs.
@@ -320,10 +312,14 @@ async function openDiskBuffer(): Promise<OutputBuffer | null> {
 				return new Blob([await handle.getFile()], { type });
 			},
 			discard() {
-				void writable.abort().catch(() => {});
+				void writable
+					.abort()
+					.catch(() => {})
+					.then(() => removeExportFile(handle));
 			},
 		};
 	} catch {
+		void removeExportFile(handle);
 		return null;
 	}
 }
