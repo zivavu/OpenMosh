@@ -52,8 +52,7 @@ export async function getCustomFontSizes(): Promise<Map<string, number>> {
 export async function getCustomFontData(
 	id: string,
 ): Promise<ArrayBuffer | null> {
-	const stored = await getAllStored();
-	return stored.find((f) => f.id === id)?.data ?? null;
+	return (await db.get<StoredFont>(id))?.data ?? null;
 }
 
 /** Every font the user has added, newest last. Reactive. */
