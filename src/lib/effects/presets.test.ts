@@ -427,6 +427,13 @@ describe("preset files", () => {
 		expect(() => parsePresetFile(JSON.stringify({ presets: [] }))).toThrow();
 	});
 
+	it("rejects a file from a newer OpenMosh", () => {
+		const file = { format: "openmosh-presets", version: 2, presets: [preset] };
+		expect(() => parsePresetFile(JSON.stringify(file))).toThrow(
+			"That preset file is from a newer OpenMosh",
+		);
+	});
+
 	it("drops unknown effects and presets left empty", () => {
 		const text = JSON.stringify({
 			format: "openmosh-presets",

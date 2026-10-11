@@ -59,6 +59,13 @@ export interface RestoredEntry {
 	bpmSource: string | null;
 }
 
+/** Saved by a later OpenMosh than this one: reading it would drop what it added, and
+ * saving it back would lose that for good. */
+export function isNewerEntry(entry: unknown): boolean {
+	const v = (entry as { v?: unknown } | null)?.v;
+	return typeof v === "number" && v > SEQ_ENTRY_VERSION;
+}
+
 /** The span inside the project, or null when nothing of it is left. */
 function clampSpan(
 	span: SeqEntry["span"],

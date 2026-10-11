@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createAudioClip, createAudioLane } from "../mix/types";
 import { createMediaClip, createMediaLane } from "../media/types";
 import { createSourceEdit } from "../media/source-edit";
-import type { SeqEntry } from "../editor/seq-entry";
+import { SEQ_ENTRY_VERSION, type SeqEntry } from "../editor/seq-entry";
 import {
 	parseManifest,
 	PROJECT_FORMAT,
@@ -62,6 +62,15 @@ describe("parseManifest", () => {
 	it("rejects a newer file version", () => {
 		expect(() =>
 			parseManifest({ ...validManifest(), version: PROJECT_VERSION + 1 }),
+		).toThrow("Made by a newer OpenMosh; update and try again");
+	});
+
+	it("rejects a timeline saved by a newer OpenMosh", () => {
+		expect(() =>
+			parseManifest({
+				...validManifest(),
+				entry: { v: SEQ_ENTRY_VERSION + 1 },
+			}),
 		).toThrow("Made by a newer OpenMosh; update and try again");
 	});
 
