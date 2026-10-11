@@ -1,4 +1,5 @@
 import { applyVolumeLinksToEffects, type AudioLinkGroup } from "./audio-utils";
+import { onFrame } from "../frame-loop";
 import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
 
 export { applyVolumeLinksToEffects as applyVolumeLinksTick } from "./audio-utils";
@@ -9,6 +10,8 @@ export interface AudioGraphState {
 	source: MediaElementAudioSourceNode | null;
 	/** Applied before the analyser so FFT/volume-link data sees the normalized signal. */
 	normalizeGain: GainNode;
+	/** Feeds the analyser, holding it back by the output latency. */
+	analysisDelay: DelayNode;
 	analyser: AnalyserNode;
 	gain: GainNode;
 	frequencyData: Uint8Array;
@@ -45,12 +48,19 @@ export function createOutputAudioGraph(): AudioGraphState {
 	return buildGraph(new AudioContext(), null);
 }
 
-/** source -> normalizeGain -> analyser -> gain -> destination. */
-function buildGraph(
-	ctx: AudioContext,
-	source: MediaElementAudioSourceNode | null,
-): AudioGraphState {
-	const normalizeGain = ctx.createGain();
+/** Seconds between the graph processing a sample and the speaker playing it. Large on
+ * phones and Bluetooth, where an undelayed analyser runs visibly ahead of the sound. */
+function heardLatency(ctx: AudioContext): number {
+	return (ctx.baseLatency ?? 0) + (ctx.outputLatency ?? 0);
+}
+
+/** An analyser fed through a delay that keeps it in step with what is heard, pulled
+ * by a silent sink so it runs off the audible path. Connect the signal to `input`. */
+export function createAnalysisTap(ctx: AudioContext): {
+	input: DelayNode;
+	analyser: AnalyserNode;
+} {
+	const input = ctx.createDelay(1);
 	const analyser = ctx.createAnalyser();
 	analyser.fftSize = 2048;
 	// Raw bins. Smoothing lives in smoothBandLevel, which an export runs too: left at
@@ -58,20 +68,45 @@ function buildGraph(
 	analyser.smoothingTimeConstant = 0;
 	analyser.minDecibels = SPECTRUM_MIN_DB;
 	analyser.maxDecibels = SPECTRUM_MAX_DB;
+	const sink = ctx.createGain();
+	sink.gain.value = 0;
+	input.connect(analyser);
+	analyser.connect(sink);
+	sink.connect(ctx.destination);
+	syncAnalysisDelay(input);
+	return { input, analyser };
+}
+
+/** The output latency is only known once the context runs, and moves with the device. */
+function syncAnalysisDelay(delay: DelayNode): void {
+	const target = Math.min(heardLatency(delay.context as AudioContext), 1);
+	if (Math.abs(delay.delayTime.value - target) > 0.005) {
+		delay.delayTime.value = target;
+	}
+}
+
+/** source -> normalizeGain -> gain -> destination, with normalizeGain also tapped. */
+function buildGraph(
+	ctx: AudioContext,
+	source: MediaElementAudioSourceNode | null,
+): AudioGraphState {
+	const normalizeGain = ctx.createGain();
+	const tap = createAnalysisTap(ctx);
 	const gain = ctx.createGain();
 	source?.connect(normalizeGain);
-	normalizeGain.connect(analyser);
-	analyser.connect(gain);
+	normalizeGain.connect(gain);
+	normalizeGain.connect(tap.input);
 	gain.connect(ctx.destination);
 	return {
 		context: ctx,
 		source,
 		normalizeGain,
-		analyser,
+		analysisDelay: tap.input,
+		analyser: tap.analyser,
 		gain,
-		frequencyData: new Uint8Array(analyser.frequencyBinCount),
+		frequencyData: new Uint8Array(tap.analyser.frequencyBinCount),
 		sampleRate: ctx.sampleRate,
-		binCount: analyser.frequencyBinCount,
+		binCount: tap.analyser.frequencyBinCount,
 	};
 }
 
@@ -101,6 +136,8 @@ export function computeVolumeLevel(
 
 export interface LinkTickOptions {
 	analyser: AnalyserNode;
+	/** The analyser's input delay, kept matched to the output latency. */
+	analysisDelay: DelayNode | null;
 	frequencyData: Uint8Array | null;
 	sampleRate: number;
 	isPaused: () => boolean;
@@ -112,6 +149,7 @@ export interface LinkTickOptions {
  * Returns the stop function. */
 export function startLinkTick({
 	analyser,
+	analysisDelay,
 	frequencyData,
 	sampleRate,
 	isPaused,
@@ -120,7 +158,6 @@ export function startLinkTick({
 }: LinkTickOptions): () => void {
 	const timeData = new Uint8Array(analyser.fftSize);
 	const fftSize = analyser.fftSize;
-	let rafId: number;
 	let wasPaused = false;
 	let lastTick = performance.now();
 	const applyAll = (level: number, dt: number) => {
@@ -150,17 +187,16 @@ export function startLinkTick({
 				// Envelopes survive a pause; re-learning would cost dead seconds.
 				applyAll(0, dt);
 			}
-			rafId = requestAnimationFrame(tick);
 			return;
 		}
 		wasPaused = false;
+		if (analysisDelay) syncAnalysisDelay(analysisDelay);
 		const level = computeVolumeLevel(analyser, timeData);
 		onLevel(level);
 		if (frequencyData)
 			analyser.getByteFrequencyData(frequencyData as Uint8Array<ArrayBuffer>);
 		applyAll(level, dt);
-		rafId = requestAnimationFrame(tick);
 	};
-	rafId = requestAnimationFrame(tick);
-	return () => cancelAnimationFrame(rafId);
+	// Read before the frame draws, so the draw shows this frame's audio.
+	return onFrame("read", tick);
 }

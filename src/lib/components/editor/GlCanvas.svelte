@@ -26,6 +26,7 @@
 	} from "../../editor/layer-drag";
 	import { frameLooksDead } from "../../editor/frame-check";
 	import { isTextEntryTarget } from "../../editor/shortcut-target";
+	import { onFrame } from "../../frame-loop";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { onFontsChanged } from "../../text-overlay";
 	import { overlayTextBox } from "../../text-overlay/draw";
@@ -1291,9 +1292,8 @@
 		if (suspended || !renderer || !imageReady) return;
 		if (!needsAnimation) return;
 
-		let rafId: number;
 		let lastVideoTime = -1;
-		const loop = () => {
+		return onFrame("draw", () => {
 			const nowMs = performance.now();
 			if (frameSource) {
 				const frame = frameSource.takeFrame();
@@ -1310,11 +1310,7 @@
 			}
 			drawFrame(nowMs / 1000);
 			if (showFps) trackFps(nowMs);
-			rafId = requestAnimationFrame(loop);
-		};
-		rafId = requestAnimationFrame(loop);
-
-		return () => cancelAnimationFrame(rafId);
+		});
 	});
 </script>
 
