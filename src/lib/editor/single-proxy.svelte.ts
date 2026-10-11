@@ -13,7 +13,7 @@ import {
 interface SingleProxyOptions {
 	/** Single mode with a video open. */
 	active: () => boolean;
-	file: () => File;
+	file: () => File | null;
 	player: () => VideoPreviewPlayer | null;
 }
 
@@ -91,8 +91,9 @@ export class SingleProxy {
 
 	/** The "Optimize large videos" setting changed: follow it unless this file has its own say. */
 	refresh() {
-		if (!this.#opts.active()) return;
-		const disabled = isProxyDisabled(this.#opts.file());
+		const f = this.#opts.file();
+		if (!this.#opts.active() || !f) return;
+		const disabled = isProxyDisabled(f);
 		if (disabled === this.disabled) return;
 		this.#reset();
 		this.disabled = disabled;
@@ -105,8 +106,8 @@ export class SingleProxy {
 	};
 
 	#run() {
-		if (!this.#opts.active()) return;
 		const f = this.#opts.file();
+		if (!this.#opts.active() || !f) return;
 		if (this.#jobFor !== f) {
 			// Different media: drop the previous file's proxy and job.
 			this.#reset();

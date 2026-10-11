@@ -313,7 +313,8 @@
 	);
 
 	interface Props {
-		file: File;
+		/** Null only in the Editor, for a project whose pool is empty. */
+		file: File | null;
 		onfile: (f: File) => void;
 		/** Sequence mode: the rest of the media pool. */
 		extraFiles?: File[];
@@ -355,14 +356,14 @@
 	let dragging = $state(false);
 
 	// Sequence mode never plays `file`; media comes from the pool.
-	let isVideo = $derived(!isSequenceMode && file.type.startsWith("video/"));
+	let isVideo = $derived(!isSequenceMode && !!file?.type.startsWith("video/"));
 	// Live webcam: a `<video>` on the camera stream stands in for the player.
 	let isLive = $derived(!isSequenceMode && isLiveFile(file));
 	let liveVideoEl = $state<HTMLVideoElement | null>(null);
 	let liveStream = $state<MediaStream | null>(null);
 	$effect(() => {
-		if (!isLive) return;
 		const f = file;
+		if (!isLive || !f) return;
 		let dropped = false;
 		void liveStreamOf(f)
 			.then((stream) => {
@@ -418,9 +419,10 @@
 	let playerFile: File | null = null;
 
 	$effect(() => {
-		if (!isVideo) return;
-		const proxy = singleProxy.forFile(file);
-		const previewFile = proxy ?? file;
+		const current = file;
+		if (!isVideo || !current) return;
+		const proxy = singleProxy.forFile(current);
+		const previewFile = proxy ?? current;
 		// Read untracked: tracking would rebuild the player.
 		const media = proxy
 			? untrack(() => ({
@@ -430,7 +432,7 @@
 				}))
 			: undefined;
 		// Same file means only the decoder changed: the proxy landed, or was turned off.
-		const swap = playerFile === file;
+		const swap = playerFile === current;
 		const resume = untrack(() => ({
 			time: previewPlayer?.currentTime ?? 0,
 			playing: previewPlayer?.playing ?? false,
@@ -446,7 +448,7 @@
 				return;
 			}
 			player = p;
-			playerFile = file;
+			playerFile = current;
 			previewPlayer = p;
 			videoEl?.pause();
 			if (videoEl) videoEl.muted = true;
@@ -500,8 +502,8 @@
 
 	// Probe for an audio track; gates the volume slider and Web Audio capture.
 	$effect(() => {
-		if (!isVideo) return;
 		const probed = file;
+		if (!isVideo || !probed) return;
 		videoHasAudio = false;
 		(async () => {
 			try {
@@ -530,6 +532,10 @@
 	let isVideoFormat = $derived(format === "webm");
 	let imageSrc = $state("");
 	$effect(() => {
+		if (!file) {
+			imageSrc = "";
+			return;
+		}
 		const url = URL.createObjectURL(file);
 		imageSrc = url;
 		return () => URL.revokeObjectURL(url);
@@ -542,8 +548,8 @@
 		generatedSrc = url;
 	});
 	$effect(() => {
-		if (isSequenceMode) return;
 		const f = file;
+		if (isSequenceMode || !f) return;
 		primarySync.untrack("primary");
 		// Untracked: a re-render landing must not count as a change of file.
 		untrack(() => {
@@ -1174,7 +1180,9 @@
 
 	// Keyed by master clock: clip times are relative to it.
 	let videoSeqKey = $derived(
-		isVideo ? `video:${file.name}:${file.size}:${file.lastModified}` : null,
+		isVideo && file
+			? `video:${file.name}:${file.size}:${file.lastModified}`
+			: null,
 	);
 	/** Sequence mode's project id: the song's id for projects from before v3, else its own. */
 	let projectKey = $state<string | null>(
@@ -1218,7 +1226,7 @@
 		const entry =
 			(await loadTimeline<SeqEntry>(seqKeyPrefix + baseKey)) ??
 			(isSequenceMode ? await loadTimeline<SeqEntry>(baseKey) : null);
-		return entry && readSeqEntry(entry, stableSourceId(file));
+		return entry && readSeqEntry(entry, file ? stableSourceId(file) : "");
 	}
 
 	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.
@@ -1674,13 +1682,15 @@
 			try {
 				// Opened from a saved project: these blobs came from storage, so don't write them back.
 				const persist = !initialTrackId && !initialProjectKey;
-				await sourceRegistry.add([file], { persist });
+				// A project whose pool was emptied opens with no file at all.
+				const opened = file ? [file] : [];
+				if (opened.length > 0) await sourceRegistry.add(opened, { persist });
 				poolFilled = true;
 				const extras = extraFiles.filter((f) => f !== file);
 				if (extras.length > 0) {
 					await sourceRegistry.add(extras, { persist });
 				}
-				void explainRejectedModels([file, ...extras]);
+				void explainRejectedModels([...opened, ...extras]);
 			} finally {
 				mountMediaDone = true;
 			}
@@ -1947,7 +1957,10 @@
 		if (saved === null) {
 			// Named after its song, else what it was opened with, until the user names it.
 			if (key.startsWith("proj-") && !readProjectNames()[key]) {
-				await nameNewProject(key, initialAudioFile?.name ?? file.name);
+				await nameNewProject(
+					key,
+					initialAudioFile?.name ?? file?.name ?? "Untitled project",
+				);
 				if (seqStoreKey !== storeKey) return;
 			}
 			bpmPoolSource = null;
@@ -1999,7 +2012,9 @@
 			if (!buffer && !audioBank.isSilent(songId)) return;
 			songLength = buffer?.duration ?? 0;
 		}
-		const first = sourceRegistry.get(stableSourceId(file)) ?? null;
+		const first = file
+			? (sourceRegistry.get(stableSourceId(file)) ?? null)
+			: null;
 		// An opened file that never decoded won't seed anything; don't wait on it forever.
 		if (pending.seed && !first && !mountMediaDone) return;
 		pendingInit = null;
@@ -3048,8 +3063,8 @@
 	function reInput() {
 		if (!canvasEl) return;
 		// Single mode only: sequence draws from a pool of sources through its layers.
-		if (isSequenceMode) return;
 		const prevFile = file;
+		if (isSequenceMode || !prevFile) return;
 		const prevEffects = $state.snapshot(effects) as EffectInstance[];
 		captureAtOutputRes(performance.now() / 1000, (done) => {
 			canvasEl!.toBlob((blob) => {
@@ -3136,7 +3151,7 @@
 	/** Which project the export settings belong to; `seqStoreKey` carries the mode prefix. */
 	let renderKey = $derived(
 		seqStoreKey ??
-			(isSequenceMode
+			(isSequenceMode || !file
 				? null
 				: `single:file:${file.name}:${file.size}:${file.lastModified}`),
 	);
@@ -3259,12 +3274,12 @@
 	);
 
 	function saveSingleSession() {
-		if (!singleSessionKept) {
+		const source = file;
+		if (!singleSessionKept || !source) {
 			saves.drop("session");
 			return;
 		}
 		const hasText = textTimeline.lanes.length > 0;
-		const source = file;
 		const state: SingleSessionState = {
 			effects: $state.snapshot(effects) as EffectInstance[],
 			text: hasText

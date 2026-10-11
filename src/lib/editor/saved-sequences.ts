@@ -10,8 +10,8 @@ import {
 } from "./sequence-media-store";
 
 /** A saved editor project, offered on the upload screen: one keyed by its song, or,
- * since projects got their own length, by an id of its own. Video-driven pools and
- * pools whose blobs were pruned are skipped. */
+ * since projects got their own length, by an id of its own. Video-driven pools are
+ * skipped; a project whose pool was emptied is still listed. */
 export interface SavedSequence {
 	/** The project key: a track id for song-keyed projects, else a `proj-` id. */
 	trackId: string;
@@ -66,7 +66,6 @@ export async function listSavedSequences(): Promise<SavedSequence[]> {
 		const own = isProjectKey(pool.key);
 		if (!track && !own) continue;
 		const sourceCount = pool.sourceIds.filter((id) => stored.has(id)).length;
-		if (sourceCount === 0) continue;
 		out.push({
 			trackId: pool.key,
 			trackName: track?.name ?? names[pool.key] ?? "Untitled project",
@@ -90,7 +89,7 @@ export interface OpenedSequence {
 	trackId: string;
 	/** Null for a project keyed by its own id: its song, if any, is in its timeline. */
 	trackFile: File | null;
-	/** Pool order; the first becomes the editor's primary source. */
+	/** Pool order; the first becomes the editor's primary source. Empty when the pool was emptied. */
 	sources: File[];
 }
 
@@ -114,8 +113,6 @@ export async function openSavedSequence(
 	} catch {
 		return null;
 	}
-	if (sources.length === 0) return null;
-
 	return {
 		trackId,
 		trackFile: track ? trackToFile(track) : null,
