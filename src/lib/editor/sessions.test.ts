@@ -119,3 +119,19 @@ describe("the same song used twice", () => {
 		expect((await sessions.openSession(second))?.state).toEqual({ n: 2 });
 	});
 });
+
+describe("autosaving an edit", () => {
+	test("stores its media once, not again on every save", async () => {
+		const key = sessions.newSessionKey("single");
+		await sessions.saveSession(key, "single", [image()], { effects: ["a"] });
+		const [first] = await store.getAllSequenceMedia();
+		await new Promise((r) => setTimeout(r, 5));
+		await sessions.saveSession(key, "single", [image()], { effects: ["b"] });
+		const all = await store.getAllSequenceMedia();
+		expect(all).toHaveLength(1);
+		expect(all[0].addedAt).toBe(first.addedAt);
+		expect((await sessions.openSession(key))?.state).toEqual({
+			effects: ["b"],
+		});
+	});
+});

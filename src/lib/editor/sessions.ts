@@ -11,6 +11,7 @@ import {
 	uniqueName,
 } from "./project-names";
 import {
+	getAllSequenceMediaIds,
 	getAllSessions,
 	getSequenceMediaByIds,
 	getSession,
@@ -81,7 +82,9 @@ export async function saveSession(
 	if (mode === "slideshow" && !trackId) return false;
 	const isNew = !(await getSession(key).catch(() => undefined));
 	const entries = files.map((file) => ({ id: stableSourceId(file), file }));
-	await putSequenceMedia(entries);
+	// Only what isn't stored yet: a put copies the bytes again on every autosave.
+	const stored = await getAllSequenceMediaIds();
+	await putSequenceMedia(entries.filter((e) => !stored.has(e.id)));
 	// A song-keyed session is named after the song, matching the sequence list.
 	let label = defaultLabel(mode, files);
 	if (trackId) {
