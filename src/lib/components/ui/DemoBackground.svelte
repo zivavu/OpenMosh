@@ -2,9 +2,8 @@
 	/** Live mosh running behind the upload screen, rendering into the warm canvas App
 	 * keeps for shader pre-compilation, so the demo costs no extra WebGL context. */
 	import { untrack } from "svelte";
-	import { Play, Square } from "lucide-svelte";
 	import { GlRenderer } from "../../gl/renderer";
-	import { demoBackgroundEnabled, updateSettings } from "../../editor/settings";
+	import { demoBackgroundEnabled } from "../../editor/settings";
 	import { DEMO_HEIGHT, DEMO_WIDTH } from "../../demo/demo-worlds";
 	import {
 		getDemoDirector,
@@ -21,12 +20,15 @@
 		warmRenderer: GlRenderer | null;
 		/** Bound so the STOP button can also quiet things outside the demo. */
 		playing?: boolean;
+		/** Out: whether the render loop is wired up, so STOP has something to drive. */
+		ready?: boolean;
 	}
 
 	let {
 		warmCanvas,
 		warmRenderer,
 		playing = $bindable(demoBackgroundEnabled()),
+		ready = $bindable(false),
 	}: Props = $props();
 
 	let holder = $state<HTMLDivElement>(undefined!);
@@ -35,18 +37,13 @@
 	const FADE_SECONDS = 1.2;
 	const easeOut = (p: number) => 1 - (1 - p) ** 3;
 
-	/** Set once the render loop is wired up, so the button can drive it without
+	/** Set once the render loop is wired up, so STOP can drive it without
 	 * reparenting the canvas on every toggle. */
 	let transport = $state<{
 		start: () => void;
 		stop: () => void;
 		blank: () => void;
 	} | null>(null);
-
-	function togglePlaying() {
-		playing = !playing;
-		updateSettings({ demoBackground: playing });
-	}
 
 	$effect(() => {
 		if (!import.meta.env.DEV) return;
@@ -152,10 +149,12 @@
 		if (untrack(() => playing)) untrack(drawFrame);
 		document.addEventListener("visibilitychange", onVisibility);
 		transport = { start, stop, blank };
+		ready = true;
 
 		return () => {
 			stop();
 			transport = null;
+			ready = false;
 			document.removeEventListener("visibilitychange", onVisibility);
 			for (const key of staged) renderer.dropLayerTexture(key);
 			renderer.releaseScenes();
@@ -182,24 +181,6 @@
 	<div class="demo-holder" bind:this={holder}></div>
 	<div class="scrim"></div>
 </div>
-
-{#if transport}
-	<button
-		class="demo-toggle"
-		onclick={togglePlaying}
-		title={playing
-			? "Black out the background demo"
-			: "Resume the background demo"}
-	>
-		{#if playing}
-			<Square size={12} />
-			STOP
-		{:else}
-			<Play size={12} />
-			ANIMATE
-		{/if}
-	</button>
-{/if}
 
 <style>
 	.demo-bg {
@@ -237,38 +218,6 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-	}
-
-	/* Bottom left, opposite the GitHub link. Above the upload screen, which would
-	   otherwise swallow the click. */
-	.demo-toggle {
-		position: fixed;
-		bottom: 1rem;
-		left: 1rem;
-		z-index: 2;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.35rem 0.75rem;
-		border: 1.5px solid rgba(255, 255, 255, 0.14);
-		border-radius: 999px;
-		background: rgba(10, 10, 12, 0.5);
-		backdrop-filter: blur(16px);
-		-webkit-backdrop-filter: blur(16px);
-		color: #7d7d7d;
-		font-family: inherit;
-		font-size: 0.66rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		cursor: pointer;
-		transition:
-			color 0.2s,
-			border-color 0.2s;
-	}
-
-	.demo-toggle:hover {
-		border-color: rgba(255, 255, 255, 0.32);
-		color: #ccc;
 	}
 
 	/* The upload UI has to stay readable over whatever the mosh throws up: a
