@@ -17,17 +17,26 @@ export type EncodeWorkerResponse =
 			/** Present on the first packet only. */
 			decoderConfig: VideoDecoderConfig | null;
 	  }
+	/** The encoder skipped this frame; it will never have a packet. */
+	| { type: "dropped"; frameIndex: number }
 	| { type: "flushed" }
 	| { type: "error"; message: string };
 
 let encoder: VideoEncoder | null = null;
-// VP8/VP9/AV1 emit exactly one packet per frame in submission order (no
-// B-frames via WebCodecs), so a FIFO maps encoder output back to frame indices.
-const pendingIndices: number[] = [];
+/** Frames handed to the encoder, oldest first. Output comes in submission order (no
+ * B-frames via WebCodecs), but a realtime encoder may skip a frame, so each packet is
+ * matched by timestamp and anything older that's still waiting was dropped. */
+const pending: { frameIndex: number; timestamp: number }[] = [];
 let sentDecoderConfig = false;
 
 function post(msg: EncodeWorkerResponse, transfer?: Transferable[]) {
 	(self as unknown as Worker).postMessage(msg, transfer ?? []);
+}
+
+function dropPending(until: number) {
+	for (const { frameIndex } of pending.splice(0, until)) {
+		post({ type: "dropped", frameIndex });
+	}
 }
 
 function fail(err: unknown) {
@@ -45,11 +54,13 @@ self.onmessage = async (e: MessageEvent<EncodeWorkerRequest>) => {
 			}
 			encoder = new VideoEncoder({
 				output: (chunk, meta) => {
-					const frameIndex = pendingIndices.shift();
-					if (frameIndex === undefined) {
-						fail("Encoder produced more packets than frames submitted");
+					const at = pending.findIndex((p) => p.timestamp === chunk.timestamp);
+					if (at === -1) {
+						fail("Encoder produced a packet for a frame it wasn't given");
 						return;
 					}
+					dropPending(at);
+					const { frameIndex } = pending.shift()!;
 					const data = new ArrayBuffer(chunk.byteLength);
 					chunk.copyTo(data);
 					const decoderConfig =
@@ -75,11 +86,15 @@ self.onmessage = async (e: MessageEvent<EncodeWorkerRequest>) => {
 			encoder.configure(msg.config);
 			post({ type: "ready" });
 		} else if (msg.type === "encode") {
-			pendingIndices.push(msg.frameIndex);
+			pending.push({
+				frameIndex: msg.frameIndex,
+				timestamp: msg.frame.timestamp,
+			});
 			encoder!.encode(msg.frame, { keyFrame: msg.keyFrame });
 			msg.frame.close();
 		} else if (msg.type === "flush") {
 			await encoder!.flush();
+			dropPending(pending.length);
 			post({ type: "flushed" });
 		}
 	} catch (err) {

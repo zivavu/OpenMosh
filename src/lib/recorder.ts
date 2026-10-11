@@ -468,12 +468,10 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 	const output = new mb.Output({ format: outputFormat, target });
 
 	const wantsAudioTrack = audioBufferForMux != null;
-	// Progress tracks encoded packets, not submitted frames (the real bottleneck).
-	let encodedFrames = 0;
-	const reportPacket = () => {
-		encodedFrames++;
+	// Progress tracks encoded frames, not submitted ones (the real bottleneck).
+	const reportEncoded = (frames: number) => {
 		// Audio analysis gets the first 15% of the bar; encoding fills the rest.
-		onProgress?.(Math.min(0.15 + (encodedFrames / totalFrames) * 0.85, 1));
+		onProgress?.(Math.min(0.15 + (frames / totalFrames) * 0.85, 1));
 	};
 
 	const makeCanvasSink = (): FrameSink => {
@@ -482,6 +480,9 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		// videoSource.add() resolves on hand-off, not completion, so it is no backpressure:
 		// submitting as fast as we render outruns the encoder and exhausts GPU memory.
 		const MAX_BACKLOG = 16;
+		/** Frames the encoder is done with: every one up to its newest packet. A realtime
+		 * encoder may drop a frame, which then never gets a packet of its own. */
+		let encodedThrough = 0;
 		let resolveWait: (() => void) | null = null;
 		let rejectWait: ((reason?: unknown) => void) | null = null;
 		const notifyPacket = () => {
@@ -518,10 +519,12 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			...(hardware
 				? { hardwareAcceleration: "prefer-hardware" as const }
 				: { latencyMode: "realtime" as const }),
-			onEncodedPacket: () => {
+			onEncodedPacket: (packet) => {
 				resolveFirstPacket?.();
 				resolveFirstPacket = null;
-				reportPacket();
+				const frame = Math.round(packet.timestamp * fps);
+				encodedThrough = Math.max(encodedThrough, frame + 1);
+				reportEncoded(encodedThrough);
 				notifyPacket();
 			},
 		});
@@ -558,7 +561,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 				if (queue.length >= 8) {
 					await Promise.race([queue.shift()!, abortOrNever, queueErrorPromise]);
 				}
-				while (frameIndex - encodedFrames > MAX_BACKLOG) {
+				while (frameIndex - encodedThrough > MAX_BACKLOG) {
 					checkAbort(signal);
 					if (queueError) throw queueError;
 					await Promise.race([
@@ -602,6 +605,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		let drain: Promise<void> = Promise.resolve();
 		let drainError: unknown = null;
 		let first = true;
+		let encoded = 0;
 		const pool = new EncoderPool({
 			config: {
 				codec: "vp8",
@@ -630,9 +634,12 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 							meta,
 						),
 					)
-					.then(reportPacket, (err) => {
-						drainError = err;
-					});
+					.then(
+						() => reportEncoded(++encoded),
+						(err) => {
+							drainError = err;
+						},
+					);
 			},
 		});
 		// Init before adding the track: on worker failure we fall back to the canvas sink.
