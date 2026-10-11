@@ -19,7 +19,9 @@ bun test           # Unit suite (bun:test)
 bun run test:e2e   # Playwright suite under tests/e2e (`bunx playwright install chromium firefox` once)
 ```
 
-Unit tests sit next to what they cover as `*.test.ts` and cover pure logic only.
+Unit tests sit next to what they cover as `*.test.ts` and cover pure logic only. A
+preload (`src/lib/testing/svelte-runes.ts`) compiles `.svelte.ts` modules, so their runes
+run under bun; `$effect` still needs a component or an `$effect.root`.
 
 Keep the local Bun on the version `.github/workflows/ci.yml` pins (`bun --version`). Older Bun
 can't `structuredClone` a Blob, so the storage tests fail locally while CI passes.
