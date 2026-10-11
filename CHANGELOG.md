@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.9.15](https://github.com/zivavu/OpenMosh/compare/v0.9.14...v0.9.15) (2026-10-11)
+
+The big one is bouncing video clips. Tick Bounce on a clip and it plays to the end, then backward to the start, then forward again, and its sound follows along. Stylize Glitch and Resize Glitch can sync to the beat much faster now, and you can drag an effect in the chain by its name or number instead of hunting for the grip. On phones, audio-reactive effects land in time with the sound. The editor also got a round of playback fixes: adding media no longer stops playback, a paused video layer no longer goes blank, and detached video sound doesn't loop by itself anymore. There's a new About page too, and an Instagram link next to YouTube.
+
+Two changes affect saved projects. Stylize Glitch boxes now grow from their centre, and detached sound that used to loop plays once until you turn Loop on.
+
+
+### Added
+
+* Add an About page ([b375895](https://github.com/zivavu/OpenMosh/commit/b375895fdc8c222c41b7bd9762c00cc433f43d63))
+* Bounce video clips: they play to the end, then backward to the start, and round again ([6b5abb2](https://github.com/zivavu/OpenMosh/commit/6b5abb24fa04643e1563a360000ce94d52997885))
+* Drag effects by their name or number ([c9e4f8b](https://github.com/zivavu/OpenMosh/commit/c9e4f8ba1362a156d752a7b2b1ec79b88663ac2e))
+* Link the Instagram account beside YouTube ([273599a](https://github.com/zivavu/OpenMosh/commit/273599af229e6df42fe33920ce9d7811ded1966a))
+* Sync Stylize Glitch and Resize Glitch at up to 32 rolls a beat ([bde5c48](https://github.com/zivavu/OpenMosh/commit/bde5c486760959eb644e44942a7b85136318712e))
+
+
+### Fixed
+
+* Grow Stylize Glitch boxes from their centre, so saved projects that use it look a little different ([2fc0aae](https://github.com/zivavu/OpenMosh/commit/2fc0aaec52ebc538674b6f46e0965ef655740d11))
+* Keep audio-reactive effects in time with the sound on phones ([e4ea047](https://github.com/zivavu/OpenMosh/commit/e4ea047080aeb0c5ef577aad638a495483939143))
+* Keep paused video layers from going blank ([c83f80d](https://github.com/zivavu/OpenMosh/commit/c83f80d975e0f0b51c5b757cdbad9d9f7d4033f6))
+* Keep the editor playing when you add media ([2a85046](https://github.com/zivavu/OpenMosh/commit/2a8504651941618d07bf71c24ffa1abc8d5ea21c))
+* Play detached video sound once unless Loop is on. Detached sound in saved projects that used to loop now plays once, so turn Loop on to keep it looping ([59700b8](https://github.com/zivavu/OpenMosh/commit/59700b8fb4cc60e2cc2a1d7ef434efddbc22e7eb))
+* Show the full focus ring on the media rail's add button ([569fc37](https://github.com/zivavu/OpenMosh/commit/569fc376d87d0b1f66a585739891b1df1e57f92a))
+
 ## [0.9.14](https://github.com/zivavu/OpenMosh/compare/v0.9.13...v0.9.14) (2026-10-10)
 
 This release is mostly about lanes in the editor. You can copy a media lane from its header, drag audio lanes into a new order, and paste clips under the pointer. A new lane goes in next to the one you last clicked. The eraser now paints with the Mask's brush and has a Softness slider.
