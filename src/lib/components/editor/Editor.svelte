@@ -1422,6 +1422,8 @@
 		return () => {
 			window.removeEventListener("pagehide", onHide);
 			onHide();
+			// After the save: disposing empties the pool, which would then save as empty.
+			sourceRegistry.dispose();
 		};
 	});
 
@@ -1720,7 +1722,6 @@
 				mountMediaDone = true;
 			}
 		})();
-		return () => sourceRegistry.dispose();
 	});
 
 	// Keyed like the sequence timeline (seqBaseKey), so a track brings back both.
