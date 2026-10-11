@@ -321,6 +321,14 @@
 		focusKey(null);
 	});
 
+	/** The rail, the name and the grip pick the strip up; a press anywhere else, a
+	 * slider's included, stays with what it landed on. */
+	function armDrag(e: MouseEvent) {
+		if (e.button !== 0 || rolledChain) return;
+		canDrag = true;
+		window.addEventListener("mouseup", () => (canDrag = false), { once: true });
+	}
+
 	function handleDragStart(e: DragEvent) {
 		if (!canDrag) {
 			e.preventDefault();
@@ -360,7 +368,12 @@
 	>
 		<!-- The rail runs the height of every strip, lit where signal passes, so the
 		     chain reads as one continuous path down the panel. -->
-		<div class="rail" aria-hidden="true">
+		<div
+			class="rail"
+			class:grabbable={!rolledChain}
+			aria-hidden="true"
+			onmousedown={armDrag}
+		>
 			<span class="rail-index readout"
 				>{String((effectIndex ?? 0) + 1).padStart(2, "0")}</span
 			>
@@ -372,7 +385,11 @@
 						><span class="name">{def.name}</span></span
 					>
 				{:else}
-					<button class="expand-trigger" onclick={toggleExpand}>
+					<button
+						class="expand-trigger"
+						onclick={toggleExpand}
+						onmousedown={armDrag}
+					>
 						<span class="expand-arrow" class:expanded={effect.expanded}>
 							<ChevronRight size={12} />
 						</span>
@@ -435,8 +452,7 @@
 						<span
 							class="drag-handle"
 							title="Drag to reorder"
-							onmousedown={() => (canDrag = true)}
-							onmouseup={() => (canDrag = false)}
+							onmousedown={armDrag}
 							ontouchstart={onTouchDragStart}
 						>
 							<GripVertical size={14} />
@@ -924,6 +940,11 @@
 		width: 30px;
 		padding-top: 0.62rem;
 		text-align: center;
+	}
+
+	.rail.grabbable {
+		cursor: grab;
+		user-select: none;
 	}
 
 	.rail::after {
