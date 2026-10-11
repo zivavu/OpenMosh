@@ -479,7 +479,7 @@
 			showToast(
 				isMobile
 					? `Loaded "${file.name}" only. Editor and Slideshow, which take a set, need a desktop browser`
-					: `Loaded "${file.name}" only. Switch to Sequence or Slideshow mode to use all ${all.length}`,
+					: `Loaded "${file.name}" only. Switch to Editor or Slideshow to use all ${all.length}`,
 				"info",
 				6000,
 			);
