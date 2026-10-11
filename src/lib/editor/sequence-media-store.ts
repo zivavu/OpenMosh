@@ -534,7 +534,6 @@ function lastModifiedFromId(id: string): number {
 	return Number.isFinite(n) ? n : 0;
 }
 
-/** Empties every store; clears rather than deleting the DB, which the open connection blocks. */
 /** The stores a backup carries; proxies rebuild themselves. */
 export type BackupStoreName =
 	| typeof STORE
@@ -554,6 +553,7 @@ export async function putBackupRecords(
 	});
 }
 
+/** Empties every store; clears rather than deleting the DB, which the open connection blocks. */
 export async function clearAllSequenceStores(): Promise<void> {
 	const db = await openDb();
 	await transact(db, REQUIRED_STORES, "readwrite", (tx) => {
