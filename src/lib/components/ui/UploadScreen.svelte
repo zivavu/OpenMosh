@@ -33,6 +33,7 @@
 	import type { GlRenderer } from "../../gl/renderer";
 	import { lazy } from "../../lazy";
 	import { isMeshFile, MESH_ACCEPT } from "../../mesh";
+	import { isSvgFile } from "../../media/svg";
 	import {
 		diagnoseModel,
 		isOtherModelFile,
@@ -315,8 +316,12 @@
 		return name.slice(name.lastIndexOf(".")).toLowerCase();
 	}
 
+	/** The slideshow has no redraw-at-output-size for SVGs; the other modes do. */
+	let takesSvg = $derived(selectedMode !== "slideshow");
+
 	function isAcceptedFile(file: File) {
 		if (isMeshFile(file)) return selectedMode === "sequence";
+		if (isSvgFile(file)) return takesSvg;
 		if (file.type) return ACCEPTED_TYPES.includes(file.type);
 		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 	}
@@ -330,7 +335,11 @@
 		return AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/");
 	}
 
-	const SUPPORTED_LABEL = "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV";
+	let supportedLabel = $derived(
+		takesSvg
+			? "PNG, JPG, WEBP, GIF, HEIC, SVG, MP4, WEBM, MOV"
+			: "PNG, JPG, WEBP, GIF, HEIC, MP4, WEBM, MOV",
+	);
 
 	/** 3D files in a format we can't read, and why; the dialog is up while there are any. */
 	let modelProblems = $state<ModelProblem[]>([]);
@@ -353,7 +362,7 @@
 			return;
 		}
 		showToast(
-			`Can't open "${file.name}". Supported formats: ${SUPPORTED_LABEL}`,
+			`Can't open "${file.name}". Supported formats: ${supportedLabel}`,
 			"error",
 			6000,
 		);
@@ -387,7 +396,7 @@
 			if (all.length === 1) rejectFile(all[0]);
 			else
 				showToast(
-					`None of those ${all.length} files are supported. Try ${SUPPORTED_LABEL}`,
+					`None of those ${all.length} files are supported. Try ${supportedLabel}`,
 					"error",
 					6000,
 				);
@@ -542,6 +551,7 @@
 		return [
 			...ACCEPTED_TYPES,
 			...ACCEPTED_EXTENSIONS,
+			...(takesSvg ? ["image/svg+xml", ".svg"] : []),
 			...models,
 			".openmosh",
 		].join(",");
