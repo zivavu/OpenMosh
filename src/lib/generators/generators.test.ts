@@ -1,8 +1,12 @@
 import { describe, expect, it } from "bun:test";
+import { mulberry32 } from "../rng";
+import { searchSystem } from "./attractor/systems";
+import { isAttractorSpec } from "./attractor/spec";
+import { isCutoutSpec } from "./cutout/spec";
 import { isFieldSpec } from "./field/spec";
-import { isGradientSpec } from "./gradient/spec";
-import { planBatch } from "./plan";
-import { embedSpec, readGenerated } from "./png-meta";
+import { isInkSpec } from "./ink/spec";
+import { ONE_KINDS, planBatch, specKind } from "./plan";
+import { embedSpec, isGeneratedSpec, readGenerated } from "./png-meta";
 import type { BatchOptions } from "./types";
 
 const wild = (over: Partial<BatchOptions> = {}): BatchOptions => ({
@@ -20,23 +24,18 @@ describe("planBatch", () => {
 	});
 
 	it("produces valid specs at every count and kind", () => {
-		for (const kind of [
-			"mix",
-			"gradient",
-			"voronoi",
-			"stripes",
-			"plasma",
-			"rings",
-		] as const)
-			for (const count of [1, 2, 8, 64]) {
-				const specs = planBatch(1, wild({ count, kind }));
-				expect(specs).toHaveLength(count);
-				for (const s of specs)
-					expect(isGradientSpec(s) || isFieldSpec(s)).toBe(true);
-				if (kind !== "mix")
-					for (const s of specs)
-						expect(s.gen === "gradient" ? "gradient" : s.field).toBe(kind);
-			}
+		for (const kind of ["mix", ...ONE_KINDS] as const)
+			for (const variety of ["wild", "cohesive"] as const)
+				for (const count of [1, 2, 8, 64]) {
+					const specs = planBatch(1, wild({ count, kind, variety }));
+					expect(specs).toHaveLength(count);
+					for (const s of specs) {
+						expect(isGeneratedSpec(s)).toBe(true);
+						expect(isGeneratedSpec(JSON.parse(JSON.stringify(s)))).toBe(true);
+					}
+					if (kind !== "mix")
+						for (const s of specs) expect(specKind(s)).toBe(kind);
+				}
 	});
 
 	it("deals gradient modes in proportion rather than by luck, and never masks", () => {
@@ -54,10 +53,7 @@ describe("planBatch", () => {
 
 	it("mixes every generator into a big batch", () => {
 		const specs = planBatch(4, wild({ count: 32 }));
-		const kinds = new Set(
-			specs.map((s) => (s.gen === "gradient" ? "gradient" : s.field)),
-		);
-		expect(kinds.size).toBe(5);
+		expect(new Set(specs.map(specKind)).size).toBe(ONE_KINDS.length);
 	});
 
 	it("keeps a named palette on every image", () => {
@@ -89,10 +85,29 @@ describe("planBatch", () => {
 
 	it("keeps a cohesive batch to one generator", () => {
 		const specs = planBatch(9, wild({ variety: "cohesive" }));
-		const kinds = new Set(
-			specs.map((s) => (s.gen === "gradient" ? "gradient" : s.field)),
+		expect(new Set(specs.map(specKind)).size).toBe(1);
+	});
+
+	it("keeps a cohesive drawn batch to one scene, system or style", () => {
+		const cohesive = (kind: "cutout" | "attractor" | "ink") =>
+			planBatch(10, wild({ count: 8, kind, variety: "cohesive" }));
+		const one = (values: unknown[]) => expect(new Set(values).size).toBe(1);
+		one(cohesive("cutout").map((s) => s.gen === "cutout" && s.scene));
+		one(cohesive("attractor").map((s) => s.gen === "attractor" && s.system));
+		one(cohesive("ink").map((s) => s.gen === "ink" && s.style));
+	});
+
+	it("deals every cutout scene, attractor system and ink style in a wild batch", () => {
+		const of = (kind: "cutout" | "attractor" | "ink") =>
+			planBatch(11, wild({ count: 16, kind }));
+		const count = (values: unknown[]) => new Set(values).size;
+		expect(count(of("cutout").map((s) => s.gen === "cutout" && s.scene))).toBe(
+			4,
 		);
-		expect(kinds.size).toBe(1);
+		expect(
+			count(of("attractor").map((s) => s.gen === "attractor" && s.system)),
+		).toBe(3);
+		expect(count(of("ink").map((s) => s.gen === "ink" && s.style))).toBe(2);
 	});
 });
 
@@ -130,7 +145,7 @@ function fakePng(width: number, height: number): Blob {
 
 describe("png spec embedding", () => {
 	it("round-trips a spec and the image size", async () => {
-		for (const kind of ["gradient", "voronoi"] as const) {
+		for (const kind of ONE_KINDS) {
 			const [spec] = planBatch(2, wild({ count: 1, kind }));
 			const blob = await embedSpec(fakePng(640, 360), spec);
 			const file = new File([blob], "g.png", { type: "image/png" });
@@ -149,6 +164,19 @@ describe("png spec embedding", () => {
 		expect(isFieldSpec({ ...spec, style: 2 })).toBe(false);
 	});
 
+	it("refuses drawn specs with values a render can't use", () => {
+		const [cutout] = planBatch(3, wild({ count: 1, kind: "cutout" }));
+		const [attractor] = planBatch(3, wild({ count: 1, kind: "attractor" }));
+		const [ink] = planBatch(3, wild({ count: 1, kind: "ink" }));
+		expect(isCutoutSpec({ ...cutout, layers: 40 })).toBe(false);
+		expect(isCutoutSpec({ ...cutout, scene: "sea" })).toBe(false);
+		expect(isCutoutSpec({ ...cutout, seed: 1.5 })).toBe(false);
+		expect(isAttractorSpec({ ...attractor, density: 0 })).toBe(false);
+		expect(isAttractorSpec({ ...attractor, symmetry: 2.5 })).toBe(false);
+		expect(isInkSpec({ ...ink, strokes: 1e6 })).toBe(false);
+		expect(isInkSpec({ ...ink, colors: ["#000"] })).toBe(false);
+	});
+
 	it("reads ordinary PNGs and other files as plain media", async () => {
 		const plain = new File([fakePng(10, 10)], "p.png", { type: "image/png" });
 		expect(await readGenerated(plain)).toBeNull();
@@ -156,5 +184,20 @@ describe("png spec embedding", () => {
 			type: "image/jpeg",
 		});
 		expect(await readGenerated(jpg)).toBeNull();
+	});
+});
+
+describe("attractor search", () => {
+	it("finds the same system and finite bounds for a seed", () => {
+		for (const kind of ["clifford", "dejong", "flame"] as const) {
+			const a = searchSystem(mulberry32(42), kind);
+			const b = searchSystem(mulberry32(42), kind);
+			expect(a.bounds).toEqual(b.bounds);
+			expect(a.system.coef).toEqual(b.system.coef);
+			const [x0, x1, y0, y1] = a.bounds;
+			expect(x1 - x0).toBeGreaterThan(0);
+			expect(y1 - y0).toBeGreaterThan(0);
+			expect(a.bounds.every(Number.isFinite)).toBe(true);
+		}
 	});
 });

@@ -1,7 +1,11 @@
 import { createProgram, getUniformLocations } from "../gl/utils";
+import { drawAttractor } from "./attractor/render";
+import { drawCutout } from "./cutout/render";
 import { FRAG_FIELD } from "./field/shader";
-import { FIELD_INDEX } from "./field/spec";
+import { FIELD_INDEX, type FieldSpec } from "./field/spec";
 import { FRAG, FRAG_BLIT, VERT, VERT_BLIT } from "./gradient/shader";
+import type { GradientSpec } from "./gradient/spec";
+import { drawInk } from "./ink/render";
 import type { GeneratedSpec } from "./types";
 
 /** Longest side the supersampled buffer may reach. */
@@ -12,6 +16,7 @@ type Uniforms = Record<string, WebGLUniformLocation>;
 interface Ctx {
 	canvas: OffscreenCanvas;
 	gl: WebGL2RenderingContext;
+	vao: WebGLVertexArrayObject;
 	gradient: { prog: WebGLProgram; u: Uniforms };
 	field: { prog: WebGLProgram; u: Uniforms };
 	blit: { prog: WebGLProgram; u: Uniforms };
@@ -38,10 +43,10 @@ function getCtx(): Ctx {
 		const prog = createProgram(gl, vs, fs);
 		return { prog, u: getUniformLocations(gl, prog) };
 	};
-	gl.bindVertexArray(gl.createVertexArray());
 	ctx = {
 		canvas,
 		gl,
+		vao: gl.createVertexArray()!,
 		gradient: link(FRAG),
 		field: link(FRAG_FIELD),
 		blit: link(FRAG_BLIT, VERT_BLIT),
@@ -98,11 +103,11 @@ function hex2rgb(hex: string): [number, number, number] {
 	return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
 }
 
-/** Uniforms every generator shares: placement, lighting, finish, ramp. */
+/** Uniforms the supersampled fields share: placement, lighting, finish, ramp. */
 function setCommon(
 	gl: WebGL2RenderingContext,
 	u: Uniforms,
-	spec: GeneratedSpec,
+	spec: GradientSpec | FieldSpec,
 	w: number,
 	h: number,
 ) {
@@ -126,6 +131,23 @@ function drawSpec(
 ): OffscreenCanvas {
 	const c = getCtx();
 	const { gl } = c;
+
+	// These run their own passes and antialias on their own terms.
+	if (spec.gen === "cutout" || spec.gen === "attractor" || spec.gen === "ink") {
+		if (c.canvas.width !== w || c.canvas.height !== h) {
+			c.canvas.width = w;
+			c.canvas.height = h;
+		}
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.viewport(0, 0, w, h);
+		if (spec.gen === "cutout") drawCutout(gl, spec, w, h);
+		else if (spec.gen === "attractor") drawAttractor(gl, spec, w, h);
+		else drawInk(gl, spec, w, h);
+		return c.canvas;
+	}
+
+	gl.bindVertexArray(c.vao);
+	gl.activeTexture(gl.TEXTURE0);
 	const maxHi = Math.min(MAX_HI, c.maxTex);
 	let ss = aa;
 	const maxSide = Math.max(w, h);
