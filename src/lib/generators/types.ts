@@ -1,16 +1,21 @@
 /** Procedural source images. A generated image is a spec, not pixels: the spec
  * is what the app keeps (embedded in the PNG), re-rendered at the needed size. */
 
+import type { AttractorSpec } from "./attractor/spec";
+import type { CutoutSpec } from "./cutout/spec";
 import type { FieldKind, FieldSpec } from "./field/spec";
 import type { GradientSpec } from "./gradient/spec";
+import type { InkSpec } from "./ink/spec";
 
 /** One image's recipe, discriminated on `gen`. */
-export type GeneratedSpec = GradientSpec | FieldSpec;
+export type GeneratedSpec =
+	GradientSpec | FieldSpec | CutoutSpec | AttractorSpec | InkSpec;
 
 export type Variety = "wild" | "cohesive";
 
 /** What a batch is made of: one generator, or a mix dealt across the batch. */
-export type GeneratorKind = "mix" | "gradient" | FieldKind;
+export type GeneratorKind =
+	"mix" | "gradient" | FieldKind | "cutout" | "attractor" | "ink";
 
 export interface BatchOptions {
 	count: number;

@@ -45,6 +45,12 @@
 		{ label: "Plasma", value: "plasma" },
 		{ label: "Rings", value: "rings" },
 	]);
+	// Drawn rather than fields; a second group so the first still fits one row.
+	const DRAWN: { label: string; value: GeneratorKind }[] = [
+		{ label: "Cutout", value: "cutout" },
+		{ label: "Attractor", value: "attractor" },
+		{ label: "Ink", value: "ink" },
+	];
 	const VARIETIES: { label: string; value: Variety }[] = [
 		{ label: "Wild", value: "wild" },
 		{ label: "Cohesive", value: "cohesive" },
@@ -150,6 +156,10 @@
 		<div class="ctrl">
 			<span class="label">Field</span>
 			<ButtonGroup buttons={KINDS} value={kind} onchange={(v) => (kind = v)} />
+		</div>
+		<div class="ctrl">
+			<span class="label">Drawn</span>
+			<ButtonGroup buttons={DRAWN} value={kind} onchange={(v) => (kind = v)} />
 		</div>
 		{#if !single}
 			<div class="ctrl">

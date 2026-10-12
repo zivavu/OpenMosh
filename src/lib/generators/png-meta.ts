@@ -1,8 +1,21 @@
 /** The spec travels inside the PNG as a tEXt chunk, right after IHDR. */
 
+import { isAttractorSpec } from "./attractor/spec";
+import { isCutoutSpec } from "./cutout/spec";
 import { isFieldSpec } from "./field/spec";
 import { isGradientSpec } from "./gradient/spec";
+import { isInkSpec } from "./ink/spec";
 import { SPEC_KEYWORD, type GeneratedSpec } from "./types";
+
+export function isGeneratedSpec(v: unknown): v is GeneratedSpec {
+	return (
+		isGradientSpec(v) ||
+		isFieldSpec(v) ||
+		isCutoutSpec(v) ||
+		isAttractorSpec(v) ||
+		isInkSpec(v)
+	);
+}
 
 const SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -93,7 +106,7 @@ async function parseGenerated(file: File): Promise<GeneratedInfo | null> {
 					const parsed = JSON.parse(
 						new TextDecoder().decode(body.subarray(nul + 1)),
 					);
-					return isGradientSpec(parsed) || isFieldSpec(parsed)
+					return isGeneratedSpec(parsed)
 						? { spec: parsed, width, height }
 						: null;
 				}
