@@ -99,17 +99,9 @@ edit: they eat context fast.
   The unit-sphere fit is folded into the bone matrices and sampled across the whole clip.
   A model's layer box is its own footprint, not the frame: the front view fits the frame like an
   image, and turning or zooming resizes the box around it at that scale (`modelFootprint`).
-- The upload demo is only 3D worlds (`lib/demo/worlds/`), raymarched GLSL scenes drawn by
-  `gl/scene-pass.ts`, not meshes. A scene is marched once with element ids and once without its
-  elements; each element, and the backdrop, becomes its own layer with its own mosh. Shader loops
-  start at `ZERO`: on Windows, Direct3D unrolls constant loops and a world takes seconds to
-  compile. The next world compiles halfway through the current one, except in Firefox: it never
-  shipped `KHR_parallel_shader_compile` and a compile freezes the page, so there every world
-  compiles before the demo first shows.
-  Devices under 40fps on the 3D worlds (`demo/demo-quality.ts` measures the first seconds) cut
-  to flat 2D worlds (`lib/demo/flat-worlds/`) with single-pass effects, and start on them for a
-  week. Touch devices always run the flat worlds. Same scene contract, no marching.
-  In dev, `?world=<id>` holds one world, `?bare` drops the mosh and `?flat` starts on 2D.
+- The upload demo is one layer: procedural canvas posters (`lib/demo/demo-sources.ts`), each
+  cut moshed with one rolled chain and blended into the next by a transition. I tried moshed
+  3D and layered 2D worlds instead and dropped both: too heavy, and off the app's vibe.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and

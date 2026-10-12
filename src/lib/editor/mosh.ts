@@ -56,17 +56,19 @@ export function isRollable(
 	);
 }
 
-/** Roll fresh values for every randomizable param of one effect, in place. */
+/** Roll fresh values for every randomizable param of one effect, in place. Ranges
+ * land between the `bias` shares of their span. */
 export function randomizeParams(
 	values: Record<string, number | string>,
 	def: EffectDefinition,
+	bias: [number, number] = [0.15, 0.7],
 ): void {
 	for (const param of def.params) {
 		if (param.type === "range") {
 			const lo = param.moshMin ?? param.min;
 			const hi = param.moshMax ?? param.max;
-			const bias = 0.15 + Math.random() * 0.55;
-			const raw = lo + bias * (hi - lo);
+			const share = bias[0] + Math.random() * (bias[1] - bias[0]);
+			const raw = lo + share * (hi - lo);
 			values[param.key] =
 				param.step > 0
 					? Math.round((raw - param.min) / param.step) * param.step + param.min

@@ -32,7 +32,7 @@ export default defineConfig({
 		: [["list"]],
 	use: {
 		baseURL: `http://localhost:${PORT}`,
-		// The upload screen's raymarched worlds would eat the CPU the specs render on.
+		// The upload screen's demo would eat the CPU the specs render on.
 		storageState: {
 			cookies: [],
 			origins: [

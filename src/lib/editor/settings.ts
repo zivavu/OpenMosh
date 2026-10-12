@@ -37,8 +37,6 @@ export interface EditorSettings {
 	previewProxies: boolean;
 	/** Whether the upload screen's demo keeps moshing behind the UI. */
 	demoBackground: boolean;
-	/** When the demo last ran too slow for its 3D worlds; 0 if it never has. */
-	demoSlowAt: number;
 }
 
 /** What a fresh editor starts from, and what double-clicking a control restores. */
@@ -63,7 +61,6 @@ export const DEFAULT_SETTINGS: EditorSettings = {
 	sourceFit: "contain",
 	previewProxies: true,
 	demoBackground: true,
-	demoSlowAt: 0,
 };
 
 export function loadSettings(): Partial<EditorSettings> {
