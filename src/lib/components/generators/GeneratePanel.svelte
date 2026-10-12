@@ -36,13 +36,16 @@
 		{ label: "32", value: "32" },
 		{ label: "64", value: "64" },
 	];
-	// Mix deals kinds across a batch; with one image it just hides a random pick.
-	const KINDS: { label: string; value: GeneratorKind }[] = $derived([
-		...(single ? [] : [{ label: "Mix", value: "mix" as const }]),
+	// Mix deals kinds from both groups across a batch, so it sits apart from
+	// them; with one image it would just hide a random pick, so single mode drops it.
+	const MIX: { label: string; value: GeneratorKind }[] = [
+		{ label: "Mix", value: "mix" },
+	];
+	const FIELDS: { label: string; value: GeneratorKind }[] = [
 		{ label: "Gradient", value: "gradient" },
 		{ label: "Plasma", value: "plasma" },
 		{ label: "Rings", value: "rings" },
-	]);
+	];
 	// Drawn rather than fields, so they get a group of their own.
 	const DRAWN: { label: string; value: GeneratorKind }[] = [
 		{ label: "Cutout", value: "cutout" },
@@ -171,9 +174,15 @@
 >
 	{#snippet icon()}<Palette size={12} />{/snippet}
 	<div class="controls">
+		{#if !single}
+			<div class="ctrl">
+				<span class="label">All</span>
+				<ButtonGroup buttons={MIX} value={kind} onchange={(v) => (kind = v)} />
+			</div>
+		{/if}
 		<div class="ctrl">
 			<span class="label">Field</span>
-			<ButtonGroup buttons={KINDS} value={kind} onchange={(v) => (kind = v)} />
+			<ButtonGroup buttons={FIELDS} value={kind} onchange={(v) => (kind = v)} />
 		</div>
 		<div class="ctrl">
 			<span class="label">Drawn</span>
