@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.9.17](https://github.com/zivavu/OpenMosh/compare/v0.9.16...v0.9.17) (2026-10-12)
+
+The Generate panel has three new generators under Drawn. Cutout stacks layers of cut paper with soft shadows, Attractor piles millions of points from strange attractors and fractal flames into glowing filaments, and Ink traces strokes through a flow field as fine strands or brush marks. All three can leave the background transparent, so you can lay them over footage, and switching a batch between Solid and Transparent keeps the same images. Voronoi and Stripes are gone from the panel. A cohesive Mix now picks a different generator each time instead of always landing on the same one, and the panel shows which option is selected. The poster demo is back behind the upload screen.
+
+Saved projects open as before. Images already made with Voronoi or Stripes still redraw at the project's size; only new batches can't use them.
+
+
+### Added
+
+* Generate paper cutouts, attractors and ink strokes, on a solid or transparent background ([2bddd95](https://github.com/zivavu/OpenMosh/commit/2bddd95b9492017de750fade0bc11ac6ac06199b), [683f1f0](https://github.com/zivavu/OpenMosh/commit/683f1f08d7446d1c670fbca293d6cfe667957ad9))
+* Keep the same images when a batch switches between a solid and a transparent background ([14da47e](https://github.com/zivavu/OpenMosh/commit/14da47e3a13def403befa3d9413d1b6b6a2ee371))
+* Bring back the poster demo behind the upload screen ([d20e163](https://github.com/zivavu/OpenMosh/commit/d20e16366aad3e24d0fa53dcb96e309a59144563))
+
+
+### Removed
+
+* Drop the Voronoi and Stripes generators. Images already made with them still redraw at new sizes ([e0a034d](https://github.com/zivavu/OpenMosh/commit/e0a034d9f9c19ce36b1ac6e42aef920c8fc20ba9))
+
+
+### Fixed
+
+* Pick a different generator for each cohesive Mix, instead of always the same one ([c4279df](https://github.com/zivavu/OpenMosh/commit/c4279df7d601d3d038494a08b04f4a7d62bb8426))
+* Keep showing generator previews after one fails to draw ([9ceae43](https://github.com/zivavu/OpenMosh/commit/9ceae43ecfced7bc8ccfdfb2e52976c026e41cdd))
+* Show which option is picked in the Generate and Webcam panels ([97e1cfe](https://github.com/zivavu/OpenMosh/commit/97e1cfea166edcb212c98f67911b7ea7b1314c52))
+* Give Mix its own group in the Generate panel, apart from the fields ([4bcfbf2](https://github.com/zivavu/OpenMosh/commit/4bcfbf2a1a300118d67059503eb8136af8e80297))
+* Center timeline row labels beside their icons ([98bde39](https://github.com/zivavu/OpenMosh/commit/98bde39e633e167686facd3a3909d84d6099eb8b))
+* Give the chroma key's Reach toggle room for its labels ([e6b1d16](https://github.com/zivavu/OpenMosh/commit/e6b1d160b4439cdce3e09239ff992dc2a0e7cf42))
+* Stop the home screen's bottom bar covering things on phones ([09c97a9](https://github.com/zivavu/OpenMosh/commit/09c97a92dcd35e7848a947d76dd2974c4be4bb9a))
+
 ## [0.9.16](https://github.com/zivavu/OpenMosh/compare/v0.9.15...v0.9.16) (2026-10-11)
 
 This one is mostly fixes. An export no longer hangs when the encoder drops a frame, and the page asks before you leave one half done. Editing a big video in Single mode no longer copies the whole file into browser storage on every autosave. A project whose media you cleared stays on the list and opens again, and SVGs open from the start screen. While a dialog is open, the arrow keys, Space and Delete no longer reach the timeline behind it. Removing a song from the library now tells you how many other projects use it.
