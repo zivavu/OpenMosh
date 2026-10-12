@@ -11,8 +11,9 @@
 <div class="btn-group">
 	{#each buttons as btn}
 		<button
-			class="btn"
+			class="option"
 			class:active={value === btn.value}
+			aria-pressed={value === btn.value}
 			onclick={() => onchange(btn.value)}
 		>
 			{btn.label}
@@ -31,7 +32,9 @@
 		overflow: hidden;
 	}
 
-	.btn {
+	/* Not `.btn`: PanelModal styles every `.btn` inside it, which boxed each
+	 * option in its own border and hid which one was active. */
+	.option {
 		padding: 0.3rem 0.85rem;
 		font-family: var(--font-mono);
 		font-size: 0.62rem;
@@ -49,16 +52,16 @@
 			background var(--t-fast);
 	}
 
-	.btn:last-child {
+	.option:last-child {
 		border-right: none;
 	}
 
-	.btn.active {
+	.option.active {
 		color: var(--text);
 		background: rgba(255, 255, 255, 0.07);
 	}
 
-	.btn:hover {
+	.option:hover:not(.active) {
 		color: var(--text-2);
 	}
 </style>
