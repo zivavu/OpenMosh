@@ -3,7 +3,7 @@
 
 import type { AttractorSpec } from "./attractor/spec";
 import type { CutoutSpec } from "./cutout/spec";
-import type { FieldKind, FieldSpec } from "./field/spec";
+import type { FieldSpec, PlannedField } from "./field/spec";
 import type { GradientSpec } from "./gradient/spec";
 import type { InkSpec } from "./ink/spec";
 
@@ -15,7 +15,7 @@ export type Variety = "wild" | "cohesive";
 
 /** What a batch is made of: one generator, or a mix dealt across the batch. */
 export type GeneratorKind =
-	"mix" | "gradient" | FieldKind | "cutout" | "attractor" | "ink";
+	"mix" | "gradient" | PlannedField | "cutout" | "attractor" | "ink";
 
 export interface BatchOptions {
 	count: number;

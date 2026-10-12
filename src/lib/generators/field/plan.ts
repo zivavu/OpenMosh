@@ -1,9 +1,9 @@
-/** Textures for the height-field generators. Each kind has its own tuned ranges. */
+/** Textures for the height-field generators new batches use. Each kind has its own tuned ranges. */
 
 import { deal, pickWeighted } from "../palette";
 import { randIn, randLog, type Rand } from "../../rng";
 import type { Variety } from "../types";
-import type { Domain, FieldKind, FieldSpec } from "./spec";
+import type { Domain, FieldSpec, PlannedField } from "./spec";
 
 export type FieldTexture = Omit<FieldSpec, "colors">;
 
@@ -17,21 +17,10 @@ interface Look {
 	gamma?: [number, number];
 	contrast?: [number, number];
 	cycles: number;
-	style?: 1;
 }
 
 /** Which domain bends suit each kind: the kaleidoscope's fold seams smooth fields. */
-const DOMAIN_WEIGHTS: Record<FieldKind, [Domain, number][]> = {
-	// The tunnel's wrap cuts cells in half along a seam.
-	voronoi: [
-		[0, 0.75],
-		[2, 0.25],
-	],
-	stripes: [
-		[0, 0.7],
-		[1, 0.15],
-		[2, 0.15],
-	],
+const DOMAIN_WEIGHTS: Record<PlannedField, [Domain, number][]> = {
 	plasma: [[0, 1]],
 	rings: [
 		[0, 0.85],
@@ -39,51 +28,8 @@ const DOMAIN_WEIGHTS: Record<FieldKind, [Domain, number][]> = {
 	],
 };
 
-/** Style-1 voronoi looks: 0 glass, 1 pebbles, 2 veins, 3 blobs. */
-function pickVoronoiLook(rng: Rand): number {
-	const r = rng();
-	return r < 0.35 ? 0 : r < 0.65 ? 1 : r < 0.85 ? 2 : 3;
-}
-
-/** Pebbles need the lighting to read as round; veins glow and want little of it. */
-const VORONOI_LIGHT: [number, number][] = [
-	[0.4, 1.2],
-	[1.2, 2.5],
-	[0.2, 0.8],
-	[0.6, 2],
-];
-
 /** A random look per kind; `near` reuses another look's structure for cohesion. */
-const LOOKS: Record<FieldKind, (rng: Rand, near?: Look) => Look> = {
-	voronoi(rng, near) {
-		const look = near ? near.params[2] : pickVoronoiLook(rng);
-		return {
-			scale: near ? near.scale * randLog(rng, 0.8, 1.25) : randLog(rng, 3, 7),
-			params: [randIn(rng, 0.7, 1), 0, look, randIn(rng, 0, 1)],
-			light: VORONOI_LIGHT[look],
-			cycles: near
-				? near.cycles
-				: look === 3 && rng() < 0.2
-					? randIn(rng, 2, 3)
-					: 1,
-			style: 1,
-		};
-	},
-	stripes(rng, near) {
-		const hard = near ? near.params[2] : rng();
-		return {
-			scale: near ? near.scale * randLog(rng, 0.8, 1.25) : randLog(rng, 0.8, 4),
-			params: [
-				near ? near.params[0] * randLog(rng, 0.8, 1.25) : randLog(rng, 1.5, 12),
-				randIn(rng, 0.2, 2.5),
-				hard,
-				near ? near.params[3] + randIn(rng, -0.3, 0.3) : rng() * Math.PI,
-			],
-			light: [0.8, 2.2],
-			cycles: 1,
-			style: 1,
-		};
-	},
+const LOOKS: Record<PlannedField, (rng: Rand, near?: Look) => Look> = {
 	plasma(rng, near) {
 		return {
 			scale: near ? near.scale * randLog(rng, 0.8, 1.25) : randLog(rng, 2, 6),
@@ -116,7 +62,7 @@ const LOOKS: Record<FieldKind, (rng: Rand, near?: Look) => Look> = {
 
 function texture(
 	rng: Rand,
-	kind: FieldKind,
+	kind: PlannedField,
 	look: Look,
 	domain: Domain,
 ): FieldTexture {
@@ -134,7 +80,6 @@ function texture(
 		contrast: randIn(rng, ...(look.contrast ?? [1.0, 1.6])),
 		gamma: randIn(rng, ...(look.gamma ?? [0.45, 0.75])),
 		grain: rng() < 0.5 ? 0 : randIn(rng, 0.5, 3),
-		...(look.style ? { style: look.style } : {}),
 	};
 }
 
@@ -142,7 +87,7 @@ export function planFieldTextures(
 	rng: Rand,
 	n: number,
 	variety: Variety,
-	kind: FieldKind,
+	kind: PlannedField,
 ): FieldTexture[] {
 	if (variety === "cohesive") {
 		const base = LOOKS[kind](rng);

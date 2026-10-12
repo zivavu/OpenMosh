@@ -3,7 +3,7 @@ import { mulberry32 } from "../rng";
 import { searchSystem } from "./attractor/systems";
 import { isAttractorSpec } from "./attractor/spec";
 import { isCutoutSpec } from "./cutout/spec";
-import { isFieldSpec } from "./field/spec";
+import { isFieldSpec, type FieldSpec } from "./field/spec";
 import { isInkSpec } from "./ink/spec";
 import {
 	DRAWN_KINDS,
@@ -67,20 +67,11 @@ describe("planBatch", () => {
 		for (const s of specs) expect(s.colors[2]).toBe("#e8197a");
 	});
 
-	it("draws new voronoi and stripes in the second style, euclid only and off the tunnel", () => {
-		const voronoi = planBatch(6, wild({ count: 32, kind: "voronoi" }));
-		const looks = new Set<number>();
-		for (const s of voronoi) {
-			if (s.gen !== "field") throw new Error("not a field");
-			expect(s.style).toBe(1);
-			expect(s.params[1]).toBe(0);
-			expect(s.domain).not.toBe(1);
-			looks.add(s.params[2]);
-		}
-		expect([...looks].every((l) => l >= 0 && l <= 3)).toBe(true);
-		expect(looks.size).toBeGreaterThan(2);
-		for (const s of planBatch(6, wild({ count: 8, kind: "stripes" })))
-			expect(s.gen === "field" && s.style).toBe(1);
+	it("no longer plans voronoi or stripes, in a mix or anywhere else", () => {
+		for (let seed = 0; seed < 30; seed++)
+			for (const variety of ["wild", "cohesive"] as const)
+				for (const s of planBatch(seed, wild({ count: 16, variety })))
+					expect(["voronoi", "stripes"]).not.toContain(specKind(s));
 	});
 
 	it("leaves the other fields in the original style", () => {
@@ -111,7 +102,7 @@ describe("planBatch", () => {
 	});
 
 	it("varies the cohesive pick within a generator across seeds", () => {
-		const across = (kind: "attractor" | "ink" | "voronoi", key: string) =>
+		const across = (kind: "attractor" | "ink" | "rings", key: string) =>
 			new Set(
 				Array.from(
 					{ length: 40 },
@@ -126,7 +117,7 @@ describe("planBatch", () => {
 			).size;
 		expect(across("attractor", "system")).toBe(3);
 		expect(across("ink", "style")).toBe(2);
-		expect(across("voronoi", "domain")).toBe(2);
+		expect(across("rings", "domain")).toBe(2);
 	});
 
 	it("keeps a cohesive drawn batch to one scene, system or style", () => {
@@ -145,7 +136,7 @@ describe("planBatch", () => {
 				wild({ count: 8, kind, transparent: true }),
 			))
 				expect(isTransparentSpec(s)).toBe(true);
-		const field = planBatch(12, wild({ kind: "voronoi", transparent: true }));
+		const field = planBatch(12, wild({ kind: "plasma", transparent: true }));
 		expect(field.some(isTransparentSpec)).toBe(false);
 		const opaque = planBatch(12, wild({ kind: "ink" }));
 		for (const s of opaque) expect("transparent" in s).toBe(false);
@@ -177,6 +168,25 @@ describe("planBatch", () => {
 		expect(count(of("ink").map((s) => s.gen === "ink" && s.style))).toBe(2);
 	});
 });
+
+/** A voronoi image as one was saved before the generator was retired. */
+const SAVED_FIELD: FieldSpec = {
+	gen: "field",
+	field: "voronoi",
+	seed: 41.7,
+	offset: [1.2, -0.8],
+	scale: 4.5,
+	domain: 0,
+	cycles: 1,
+	params: [0.85, 0, 1, 0.4],
+	angle: 2.1,
+	light: 1.8,
+	contrast: 1.3,
+	gamma: 0.6,
+	grain: 0,
+	colors: ["#000000", "#5c0026", "#e8197a", "#ff6a1a", "#ffd23a"],
+	style: 1,
+};
 
 /** Smallest valid-looking PNG: signature + IHDR + empty IDAT + IEND. */
 function fakePng(width: number, height: number): Blob {
@@ -224,11 +234,24 @@ describe("png spec embedding", () => {
 		}
 	});
 
+	it("still reads images made with the retired voronoi and stripes", async () => {
+		for (const field of ["voronoi", "stripes"] as const) {
+			const blob = await embedSpec(fakePng(320, 180), {
+				...SAVED_FIELD,
+				field,
+			});
+			const file = new File([blob], "old.png", { type: "image/png" });
+			expect((await readGenerated(file))?.spec).toEqual({
+				...SAVED_FIELD,
+				field,
+			});
+		}
+	});
+
 	it("reads older specs without a style, and refuses a style it doesn't know", () => {
-		const [spec] = planBatch(2, wild({ count: 1, kind: "voronoi" }));
-		const { style: _, ...older } = spec as typeof spec & { style?: 1 };
+		const { style: _, ...older } = SAVED_FIELD;
 		expect(isFieldSpec(older)).toBe(true);
-		expect(isFieldSpec({ ...spec, style: 2 })).toBe(false);
+		expect(isFieldSpec({ ...SAVED_FIELD, style: 2 })).toBe(false);
 	});
 
 	it("refuses drawn specs with values a render can't use", () => {
