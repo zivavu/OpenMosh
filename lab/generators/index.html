@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>OpenMosh — Generator Lab</title>
+		<style>
+			:root {
+				--bg: #0e0f11;
+				--panel: #16181c;
+				--line: #262a31;
+				--text: #d7dae0;
+				--dim: #7d8490;
+				--accent: #ffb454;
+				--bad: #ff5c5c;
+				font-family:
+					system-ui,
+					-apple-system,
+					"Segoe UI",
+					sans-serif;
+				font-size: 13px;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: var(--bg);
+				color: var(--text);
+			}
+			body {
+				display: grid;
+				grid-template-columns: 260px 1fr 320px;
+				grid-template-rows: 100%;
+				height: 100vh;
+				overflow: hidden;
+			}
+			.panel {
+				background: var(--panel);
+				border-right: 1px solid var(--line);
+				display: flex;
+				flex-direction: column;
+				min-height: 0;
+			}
+			.panel.right {
+				border-right: 0;
+				border-left: 1px solid var(--line);
+			}
+			.panel header {
+				padding: 10px 12px;
+				border-bottom: 1px solid var(--line);
+				display: flex;
+				gap: 8px;
+				align-items: center;
+			}
+			#list {
+				overflow-y: auto;
+				flex: 1;
+				padding: 6px 0 20px;
+			}
+			#list h4 {
+				margin: 12px 12px 4px;
+				font-size: 11px;
+				text-transform: uppercase;
+				letter-spacing: 0.08em;
+				color: var(--dim);
+				font-weight: 600;
+			}
+			#list .item {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				padding: 5px 12px;
+				cursor: pointer;
+				user-select: none;
+			}
+			#list .item:hover {
+				background: #1d2026;
+			}
+			#list .item.active {
+				background: #23272f;
+				color: #fff;
+			}
+			#list .item .name {
+				flex: 1;
+			}
+			#list .item .star {
+				color: var(--dim);
+				font-size: 14px;
+				width: 16px;
+				text-align: center;
+			}
+			#list .item.fav .star {
+				color: var(--accent);
+			}
+			main {
+				position: relative;
+				display: flex;
+				flex-direction: column;
+				min-width: 0;
+			}
+			#stage {
+				flex: 1;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: #000;
+				position: relative;
+				min-height: 0;
+				padding: 12px;
+			}
+			#stage > canvas {
+				max-width: 100%;
+				max-height: 100%;
+			}
+			#stage.sheet {
+				display: grid;
+				grid-template-columns: repeat(3, 1fr);
+				grid-template-rows: repeat(3, 1fr);
+				gap: 8px;
+			}
+			#stage.sheet .cell {
+				position: relative;
+				min-width: 0;
+				min-height: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+			}
+			#stage.sheet .cell canvas {
+				max-width: 100%;
+				max-height: 100%;
+				outline: 1px solid transparent;
+			}
+			#stage.sheet .cell:hover canvas {
+				outline-color: var(--accent);
+			}
+			#stage.sheet .cell span {
+				position: absolute;
+				left: 6px;
+				top: 4px;
+				font-size: 10px;
+				color: #fff;
+				text-shadow: 0 0 3px #000;
+				font-variant-numeric: tabular-nums;
+			}
+			#busy {
+				position: absolute;
+				right: 14px;
+				top: 10px;
+				color: var(--accent);
+				font-size: 11px;
+				display: none;
+			}
+			#busy.show {
+				display: block;
+			}
+			#toolbar {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				align-items: center;
+				padding: 8px 10px;
+				border-top: 1px solid var(--line);
+				background: var(--panel);
+			}
+			button,
+			select,
+			input[type="number"] {
+				background: #1f232a;
+				color: var(--text);
+				border: 1px solid var(--line);
+				border-radius: 4px;
+				padding: 4px 9px;
+				font: inherit;
+				cursor: pointer;
+			}
+			input[type="number"] {
+				width: 110px;
+				cursor: text;
+				font-variant-numeric: tabular-nums;
+			}
+			button:hover {
+				border-color: #3a404b;
+			}
+			button.on {
+				border-color: var(--accent);
+				color: var(--accent);
+			}
+			#time {
+				color: var(--dim);
+				font-variant-numeric: tabular-nums;
+				margin-left: auto;
+			}
+			#params {
+				overflow-y: auto;
+				flex: 1;
+				padding: 10px 12px 24px;
+			}
+			.ctl {
+				margin-bottom: 9px;
+			}
+			.ctl label {
+				display: flex;
+				justify-content: space-between;
+				color: var(--dim);
+				font-size: 11px;
+				margin-bottom: 2px;
+			}
+			.ctl label .val {
+				color: var(--text);
+				font-variant-numeric: tabular-nums;
+			}
+			.ctl input[type="range"],
+			.ctl select {
+				width: 100%;
+			}
+			.ctl.row {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			}
+			.ctl.row label {
+				margin: 0;
+				flex: 1;
+			}
+			.info {
+				border-top: 1px solid var(--line);
+				padding: 10px 12px;
+				color: var(--text);
+				font-size: 12px;
+				line-height: 1.45;
+			}
+			#error {
+				white-space: pre-wrap;
+				font-family: ui-monospace, Consolas, monospace;
+				font-size: 11px;
+				color: var(--bad);
+				padding: 8px 12px;
+				border-top: 1px solid var(--line);
+				max-height: 200px;
+				overflow: auto;
+				display: none;
+			}
+			#error.show {
+				display: block;
+			}
+			textarea {
+				width: 100%;
+				min-height: 70px;
+				background: var(--bg);
+				color: var(--text);
+				border: 1px solid var(--line);
+				border-radius: 4px;
+				padding: 6px;
+				font: inherit;
+				resize: vertical;
+			}
+			.actions {
+				display: flex;
+				gap: 6px;
+				flex-wrap: wrap;
+				padding: 8px 12px;
+				border-top: 1px solid var(--line);
+			}
+			kbd {
+				background: #23272f;
+				border: 1px solid var(--line);
+				border-radius: 3px;
+				padding: 0 4px;
+				font-size: 10px;
+			}
+			.hint {
+				padding: 6px 12px;
+				color: var(--dim);
+				font-size: 11px;
+				border-top: 1px solid var(--line);
+				line-height: 1.7;
+			}
+			a {
+				color: var(--accent);
+				text-decoration: none;
+			}
+		</style>
+	</head>
+	<body>
+		<aside class="panel">
+			<header>
+				<b style="flex: 1">Generators</b>
+				<a href="../">Shader lab →</a>
+			</header>
+			<div id="list"></div>
+			<div class="hint">
+				<kbd>↑</kbd><kbd>↓</kbd> generator · <kbd>←</kbd><kbd>→</kbd> seed ·
+				<kbd>Space</kbd> random seed · <kbd>G</kbd> contact sheet ·
+				<kbd>X</kbd> shuffle knobs · <kbd>R</kbd> reset knobs ·
+				<kbd>F</kbd> star · <kbd>D</kbd> download
+			</div>
+			<div class="actions">
+				<button
+					id="exportList"
+					title="Copy stars, notes and knob settings as markdown"
+				>
+					Copy shortlist
+				</button>
+			</div>
+		</aside>
+		<main>
+			<div id="stage"></div>
+			<div id="toolbar">
+				<button id="prev" title="Previous seed">◀</button>
+				<input id="seed" type="number" min="0" step="1" title="Seed" />
+				<button id="next" title="Next seed">▶</button>
+				<button id="reroll" title="Random seed">Reroll</button>
+				<select id="palette" title="Palette"></select>
+				<select id="ratio" title="Aspect ratio">
+					<option>16:9</option>
+					<option>9:16</option>
+					<option>1:1</option>
+					<option>4:5</option>
+					<option>3:2</option>
+				</select>
+				<select id="size" title="Short side in pixels">
+					<option value="540">540p</option>
+					<option value="720">720p</option>
+					<option value="1080" selected>1080p</option>
+				</select>
+				<button id="sheetBtn" title="Nine seeds at once">Sheet</button>
+				<button
+					id="download"
+					title="Download as PNG, then drop it into the app"
+				>
+					PNG
+				</button>
+				<span id="time"></span>
+			</div>
+			<div id="busy">rendering…</div>
+		</main>
+		<aside class="panel right">
+			<header>
+				<b id="title" style="flex: 1">—</b>
+				<button id="reset" title="Default knobs">Reset</button>
+				<button id="random" title="Shuffle knobs">Rnd</button>
+			</header>
+			<div id="params"></div>
+			<div id="error"></div>
+			<div class="info" id="info"></div>
+			<div class="info">
+				<label style="color: var(--dim); font-size: 11px"
+					>Notes for this generator (saved locally)</label
+				>
+				<textarea
+					id="notes"
+					placeholder="Keep it? Which knobs matter? How does it mosh?"
+				></textarea>
+			</div>
+		</aside>
+		<script type="module" src="./main.ts"></script>
+	</body>
+</html>

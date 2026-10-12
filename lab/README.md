@@ -30,3 +30,17 @@ transitions as `endImage`). Pick a shader on the left, tweak on the right, hold
   (MIT): Godray, Reflection.
 
 Every header carries `CREDIT`, `LICENSE` and `SOURCE`.
+
+# Generator Lab
+
+`http://localhost:5173/lab/generators/` auditions image generators before any of
+them is ported into `src/lib/generators`. Pick a generator, step through seeds
+(**←/→**, **Space** for a random one), switch palette and ratio, open a 3×3
+contact sheet (**G**), and download a PNG (**D**) to drop into the app. Stars and
+notes work as in the shader lab; **Copy shortlist** includes each starred
+generator's knob settings.
+
+Each generator is one file in `generators/gens/` that draws onto a 2D canvas
+from a seed, a five-ink palette and its own knobs (`generators/kit.ts`).
+Reaction–diffusion runs its simulation in WebGL2; the rest are Canvas 2D or
+plain typed-array maths.

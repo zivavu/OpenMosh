@@ -70,20 +70,17 @@ function preloadLatinFonts(): Plugin {
 	};
 }
 
-// `/lab` without the slash would fall through to the SPA fallback and land in
-// the app; the lab page only resolves at `/lab/`.
+// A lab page without its trailing slash (`/lab`, `/lab/generators`) would fall
+// through to the SPA fallback and land in the app; each only resolves at `…/`.
 function labRedirect(): Plugin {
 	return {
 		name: "openmosh:lab-redirect",
 		configureServer(server) {
 			server.middlewares.use((req, res, next) => {
-				if (
-					req.url === "/lab" ||
-					req.url?.startsWith("/lab?") ||
-					req.url?.startsWith("/lab#")
-				) {
+				const m = req.url?.match(/^(\/lab(?:\/[\w-]+)*)([?#].*)?$/);
+				if (m) {
 					res.statusCode = 302;
-					res.setHeader("Location", "/lab/" + req.url.slice(4));
+					res.setHeader("Location", m[1] + "/" + (m[2] ?? ""));
 					res.end();
 					return;
 				}
