@@ -5,7 +5,13 @@ import { isAttractorSpec } from "./attractor/spec";
 import { isCutoutSpec } from "./cutout/spec";
 import { isFieldSpec } from "./field/spec";
 import { isInkSpec } from "./ink/spec";
-import { ONE_KINDS, planBatch, specKind } from "./plan";
+import {
+	DRAWN_KINDS,
+	isTransparentSpec,
+	ONE_KINDS,
+	planBatch,
+	specKind,
+} from "./plan";
 import { embedSpec, isGeneratedSpec, readGenerated } from "./png-meta";
 import type { BatchOptions } from "./types";
 
@@ -97,6 +103,32 @@ describe("planBatch", () => {
 		one(cohesive("ink").map((s) => s.gen === "ink" && s.style));
 	});
 
+	it("marks drawn images transparent when asked, and only those", () => {
+		for (const kind of DRAWN_KINDS)
+			for (const s of planBatch(
+				12,
+				wild({ count: 8, kind, transparent: true }),
+			))
+				expect(isTransparentSpec(s)).toBe(true);
+		const field = planBatch(12, wild({ kind: "voronoi", transparent: true }));
+		expect(field.some(isTransparentSpec)).toBe(false);
+		const opaque = planBatch(12, wild({ kind: "ink" }));
+		for (const s of opaque) expect("transparent" in s).toBe(false);
+	});
+
+	it("deals only drawn kinds into a transparent mix", () => {
+		for (const variety of ["wild", "cohesive"] as const) {
+			const specs = planBatch(
+				13,
+				wild({ count: 32, variety, transparent: true }),
+			);
+			for (const s of specs) {
+				expect(DRAWN_KINDS).toContain(specKind(s));
+				expect(isTransparentSpec(s)).toBe(true);
+			}
+		}
+	});
+
 	it("deals every cutout scene, attractor system and ink style in a wild batch", () => {
 		const of = (kind: "cutout" | "attractor" | "ink") =>
 			planBatch(11, wild({ count: 16, kind }));
@@ -175,6 +207,8 @@ describe("png spec embedding", () => {
 		expect(isAttractorSpec({ ...attractor, symmetry: 2.5 })).toBe(false);
 		expect(isInkSpec({ ...ink, strokes: 1e6 })).toBe(false);
 		expect(isInkSpec({ ...ink, colors: ["#000"] })).toBe(false);
+		expect(isInkSpec({ ...ink, transparent: true })).toBe(true);
+		expect(isInkSpec({ ...ink, transparent: false })).toBe(false);
 	});
 
 	it("reads ordinary PNGs and other files as plain media", async () => {

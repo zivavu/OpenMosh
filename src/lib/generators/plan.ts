@@ -45,6 +45,14 @@ const MIX_WEIGHTS: [OneKind, number][] = [
 	["ink", 0.1],
 ];
 
+/** The kinds that draw onto a ground, so can leave it clear. */
+export const DRAWN_KINDS: OneKind[] = ["cutout", "attractor", "ink"];
+
+/** Whether a spec renders with a clear ground (and so must stay PNG). */
+export function isTransparentSpec(spec: GeneratedSpec): boolean {
+	return "transparent" in spec && spec.transparent === true;
+}
+
 /** Which panel choice a spec belongs to. */
 export function specKind(spec: GeneratedSpec): OneKind {
 	return spec.gen === "field" ? spec.field : spec.gen;
@@ -76,11 +84,14 @@ export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 	const preset = opts.palette ? PALETTES[opts.palette] : undefined;
 
 	// Which generator fills each slot.
+	const weights = opts.transparent
+		? MIX_WEIGHTS.filter(([k]) => DRAWN_KINDS.includes(k))
+		: MIX_WEIGHTS;
 	let kinds: OneKind[];
 	if (opts.kind !== "mix") kinds = Array<OneKind>(n).fill(opts.kind);
 	else if (opts.variety === "cohesive")
-		kinds = Array<OneKind>(n).fill(deal(rng, 1, MIX_WEIGHTS)[0]);
-	else kinds = deal(rng, n, MIX_WEIGHTS);
+		kinds = Array<OneKind>(n).fill(deal(rng, 1, weights)[0]);
+	else kinds = deal(rng, n, weights);
 
 	// Each generator plans its slots as one group, so its own stratification
 	// (gradient's mode split, the fields' domains) still holds inside a mix.
@@ -89,7 +100,13 @@ export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 		const slots = kinds.flatMap((k, i) => (k === kind ? [i] : []));
 		if (slots.length === 0) continue;
 		const textures = texturesFor(rng, kind, slots.length, opts.variety);
-		slots.forEach((slot, j) => (bySlot[slot] = textures[j]));
+		const clear = opts.transparent && DRAWN_KINDS.includes(kind);
+		slots.forEach(
+			(slot, j) =>
+				(bySlot[slot] = clear
+					? ({ ...textures[j], transparent: true } as Texture)
+					: textures[j]),
+		);
 	}
 
 	if (opts.variety === "cohesive") {

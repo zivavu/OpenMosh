@@ -1,5 +1,11 @@
 import type { Colors } from "../palette";
-import { allFinite, isColors, isRecord, isSeed } from "../spec-check";
+import {
+	allFinite,
+	isColors,
+	isRecord,
+	isSeed,
+	isTransparentFlag,
+} from "../spec-check";
 
 export const CUTOUT_SCENES = ["hills", "tunnel", "islands", "arches"] as const;
 export type CutoutScene = (typeof CUTOUT_SCENES)[number];
@@ -20,6 +26,8 @@ export interface CutoutSpec {
 	lightFront: boolean;
 	grain: number;
 	colors: Colors;
+	/** No ground: only what is drawn is opaque. Absent on opaque images. */
+	transparent?: true;
 }
 
 export function isCutoutSpec(v: unknown): v is CutoutSpec {
@@ -32,6 +40,7 @@ export function isCutoutSpec(v: unknown): v is CutoutSpec {
 		(v.layers as number) <= 14 &&
 		allFinite(v, ["shadow", "wobble", "grain"]) &&
 		typeof v.lightFront === "boolean" &&
+		isTransparentFlag(v.transparent) &&
 		isColors(v.colors)
 	);
 }

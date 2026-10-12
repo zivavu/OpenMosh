@@ -15,6 +15,11 @@ export function isSeed(v: unknown): v is number {
 	return Number.isInteger(v) && (v as number) >= 0 && (v as number) < 2 ** 32;
 }
 
+/** Drawn generators can leave their ground clear; absent means opaque. */
+export function isTransparentFlag(v: unknown): boolean {
+	return v === undefined || v === true;
+}
+
 export function isColors(v: unknown): boolean {
 	return (
 		Array.isArray(v) &&

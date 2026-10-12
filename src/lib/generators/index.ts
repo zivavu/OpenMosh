@@ -3,7 +3,7 @@ import { renderSpec } from "./render";
 import type { GeneratedSpec } from "./types";
 
 export { PALETTES } from "./palette";
-export { planBatch } from "./plan";
+export { DRAWN_KINDS, isTransparentSpec, planBatch } from "./plan";
 export { type FieldKind } from "./field/spec";
 export { readGenerated, type GeneratedInfo } from "./png-meta";
 export { renderSpec } from "./render";
