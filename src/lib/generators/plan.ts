@@ -81,36 +81,64 @@ function texturesFor(
 	}
 }
 
+/**
+ * Each generator plans its slots as one group, so its own stratification
+ * (gradient's mode split, the fields' domains) still holds inside a mix.
+ */
+function planSlots(
+	rng: Rand,
+	kinds: OneKind[],
+	variety: Variety,
+	into: Texture[],
+) {
+	for (const kind of ONE_KINDS) {
+		const slots = kinds.flatMap((k, i) => (k === kind ? [i] : []));
+		if (slots.length === 0) continue;
+		const textures = texturesFor(rng, kind, slots.length, variety);
+		slots.forEach((slot, j) => (into[slot] = textures[j]));
+	}
+}
+
+const isDrawn = (k: OneKind) => DRAWN_KINDS.includes(k);
+
 export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 	const rng = mulberry32(seed);
 	const n = Math.max(1, opts.count);
 	const preset = opts.palette ? PALETTES[opts.palette] : undefined;
 
 	// Which generator fills each slot.
-	const weights = opts.transparent
-		? MIX_WEIGHTS.filter(([k]) => DRAWN_KINDS.includes(k))
-		: MIX_WEIGHTS;
 	let kinds: OneKind[];
 	if (opts.kind !== "mix") kinds = Array<OneKind>(n).fill(opts.kind);
 	else if (opts.variety === "cohesive")
-		kinds = Array<OneKind>(n).fill(pickWeighted(rng, weights));
-	else kinds = deal(rng, n, weights);
+		kinds = Array<OneKind>(n).fill(pickWeighted(rng, MIX_WEIGHTS));
+	else kinds = deal(rng, n, MIX_WEIGHTS);
 
-	// Each generator plans its slots as one group, so its own stratification
-	// (gradient's mode split, the fields' domains) still holds inside a mix.
 	const bySlot: Texture[] = new Array(n);
-	for (const kind of ONE_KINDS) {
-		const slots = kinds.flatMap((k, i) => (k === kind ? [i] : []));
-		if (slots.length === 0) continue;
-		const textures = texturesFor(rng, kind, slots.length, opts.variety);
-		const clear = opts.transparent && DRAWN_KINDS.includes(kind);
-		slots.forEach(
-			(slot, j) =>
-				(bySlot[slot] = clear
-					? ({ ...textures[j], transparent: true } as Texture)
-					: textures[j]),
-		);
+	planSlots(rng, kinds, opts.variety, bySlot);
+
+	// A transparent mix is the solid one with its field slots re-dealt to drawn
+	// kinds from a stream of their own, so flipping the background keeps every
+	// drawn image and every colour where it was.
+	if (opts.transparent && opts.kind === "mix") {
+		const swap = mulberry32(seed ^ 0x5bd1e995);
+		const drawnWeights = MIX_WEIGHTS.filter(([k]) => isDrawn(k));
+		const swapped = kinds.flatMap((k, i) => (isDrawn(k) ? [] : [i]));
+		const fresh =
+			opts.variety === "cohesive"
+				? Array<OneKind>(swapped.length).fill(pickWeighted(swap, drawnWeights))
+				: deal(swap, swapped.length, drawnWeights);
+		const replaced: Texture[] = new Array(swapped.length);
+		planSlots(swap, fresh, opts.variety, replaced);
+		swapped.forEach((slot, j) => {
+			kinds[slot] = fresh[j];
+			bySlot[slot] = replaced[j];
+		});
 	}
+	if (opts.transparent)
+		kinds.forEach((k, i) => {
+			if (isDrawn(k))
+				bySlot[i] = { ...bySlot[i], transparent: true } as Texture;
+		});
 
 	if (opts.variety === "cohesive") {
 		const colors = cohesiveColors(rng, n, preset);
