@@ -51,6 +51,10 @@
 		{ label: "Attractor", value: "attractor" },
 		{ label: "Ink", value: "ink" },
 	];
+	const BACKGROUNDS = [
+		{ label: "Solid", value: "solid" },
+		{ label: "Transparent", value: "transparent" },
+	] as const;
 	const VARIETIES: { label: string; value: Variety }[] = [
 		{ label: "Wild", value: "wild" },
 		{ label: "Cohesive", value: "cohesive" },
@@ -63,13 +67,25 @@
 	let ratio = $state<RatioLabel>("16:9");
 	let palette = $state<string>("");
 	let variety = $state<Variety>("wild");
+	let background = $state<"solid" | "transparent">("solid");
 	let kind = $state<GeneratorKind>(
 		untrack(() => (single ? "gradient" : "mix")),
 	);
 
 	let total = $derived(single ? 1 : Number(count));
+	// Only the drawn kinds have a ground to leave out; a mix then deals only those.
+	let canClear = $derived(
+		kind === "mix" || DRAWN.some((d) => d.value === kind),
+	);
+	let transparent = $derived(canClear && background === "transparent");
 	let specs = $derived(
-		planBatch(seed, { count: total, variety, kind, palette: palette || null }),
+		planBatch(seed, {
+			count: total,
+			variety,
+			kind,
+			palette: palette || null,
+			transparent,
+		}),
 	);
 	let target = $derived(size ?? ratioSize(ratio, GENERATED_SHORT_SIDE));
 	let aspect = $derived(target.width / target.height);
@@ -86,9 +102,8 @@
 		(async () => {
 			const urls: string[] = [];
 			for (const spec of shown) {
-				const blob = await renderSpec(spec, w, h, "image/jpeg").catch(
-					() => null,
-				);
+				const type = transparent ? "image/png" : "image/jpeg";
+				const blob = await renderSpec(spec, w, h, type).catch(() => null);
 				if (cancelled) {
 					urls.forEach((u) => URL.revokeObjectURL(u));
 					return;
@@ -190,6 +205,16 @@
 				{/each}
 			</select>
 		</div>
+		{#if canClear}
+			<div class="ctrl">
+				<span class="label">Background</span>
+				<ButtonGroup
+					buttons={[...BACKGROUNDS]}
+					value={background}
+					onchange={(v) => (background = v)}
+				/>
+			</div>
+		{/if}
 		{#if !single}
 			<div class="ctrl">
 				<span class="label">Variety</span>
@@ -205,7 +230,11 @@
 	<div class="strip" class:single style:--aspect={aspect}>
 		{#each specs.slice(0, PREVIEW_MAX) as _, i (i)}
 			<div class="cell">
-				<div class="thumb" class:pending={!previews[i]}>
+				<div
+					class="thumb"
+					class:pending={!previews[i]}
+					class:clear={transparent}
+				>
 					{#if previews[i]}
 						<img src={previews[i]} alt="" />
 					{/if}
@@ -295,6 +324,13 @@
 		overflow: hidden;
 		background: var(--sunken);
 		border: 1px solid var(--line);
+	}
+	.thumb.clear {
+		background: repeating-conic-gradient(
+				var(--raised) 0 25%,
+				var(--sunken) 0 50%
+			)
+			0 0 / 12px 12px;
 	}
 	.thumb.pending {
 		animation: pulse 1.2s ease-in-out infinite;

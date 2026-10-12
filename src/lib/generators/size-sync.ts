@@ -1,3 +1,4 @@
+import { isTransparentSpec } from "./plan";
 import { renderSpec } from "./render";
 import type { GeneratedSpec } from "./types";
 
@@ -6,9 +7,10 @@ const DEBOUNCE_MS = 400;
 /** Pixels for an entry at the output size. */
 export type SizedRender = (width: number, height: number) => Promise<Blob>;
 
-/** A generated image, re-rendered from its spec. */
+/** A generated image, re-rendered from its spec; PNG when it has a clear ground. */
 export function specRender(spec: GeneratedSpec): SizedRender {
-	return (w, h) => renderSpec(spec, w, h, "image/jpeg");
+	const type = isTransparentSpec(spec) ? "image/png" : "image/jpeg";
+	return (w, h) => renderSpec(spec, w, h, type);
 }
 
 /**

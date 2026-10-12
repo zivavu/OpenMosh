@@ -19,7 +19,7 @@ precision highp float;
 out vec4 o;
 ${GLSL_COMMON}
 uniform vec2 uRes;
-uniform float uU, uSeed, uWobble, uShadow, uLightFront, uGrain, uSunLayer, uArchX, uRows;
+uniform float uU, uSeed, uWobble, uShadow, uLightFront, uGrain, uSunLayer, uArchX, uRows, uClear;
 uniform int uScene, uLayers, uIsleCount;
 uniform vec4 uSun, uTunnel;
 uniform vec4 uIsles[5];
@@ -50,7 +50,9 @@ float layerSd(int i, vec2 p){
     return best;
   }
   vec2 c=vec2(uArchX,uRes.y+uU*0.05);
-  float maxR=length(vec2(max(c.x,uRes.x-c.x),uRes.y))*1.05;
+  // Opaque arches fill the frame; on a clear ground the outer one sits inside it.
+  float maxR=uClear>0.5 ? min(uRes.y*0.85,max(c.x,uRes.x-c.x))
+                        : length(vec2(max(c.x,uRes.x-c.x),uRes.y))*1.05;
   vec2 d=p-c;
   float u=clamp(atan(d.y,d.x)/PI+1.0,0.,1.);
   return maxR*(1.0-(fi-1.0)/L)*(1.0+uWobble*0.05*lut(u,i))-length(d);
@@ -63,23 +65,28 @@ vec3 tone(float i){
 
 float cover(float sd){ return clamp(sd/max(fwidth(sd),1e-3)+0.5,0.,1.); }
 
+// Premultiplied "over": a shadow is black at its strength, a layer its tone at
+// its coverage. On a clear ground, shadows that fall on nothing stay as soft black.
+vec4 over(vec4 dst, vec3 rgb, float a){ return vec4(rgb*a+dst.rgb*(1.0-a), a+dst.a*(1.0-a)); }
+
 void main(){
   vec2 p=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
-  vec3 col=tone(0.);
+  vec4 col=uClear>0.5 ? vec4(0.) : vec4(tone(0.),1.);
   float blur=max(uU*0.018*uShadow,1.0);
   vec2 off=vec2(0.004,0.008)*uU*uShadow;
   float sa=0.55*uShadow;
   if(uScene==0 && uSun.w>0.5){
-    col*=1.0-sa*smoothstep(-blur,blur,uSun.z-length(p-off-uSun.xy));
-    col=mix(col,tone(uSunLayer),cover(uSun.z-length(p-uSun.xy)));
+    col=over(col,vec3(0.),sa*smoothstep(-blur,blur,uSun.z-length(p-off-uSun.xy)));
+    col=over(col,tone(uSunLayer),cover(uSun.z-length(p-uSun.xy)));
   }
   for(int i=1;i<14;i++){
     if(i>=uLayers) break;
-    col*=1.0-sa*smoothstep(-blur,blur,layerSd(i,p-off));
-    col=mix(col,tone(float(i)),cover(layerSd(i,p)));
+    col=over(col,vec3(0.),sa*smoothstep(-blur,blur,layerSd(i,p-off)));
+    col=over(col,tone(float(i)),cover(layerSd(i,p)));
   }
-  col+=(hash12(gl_FragCoord.xy+uSeed)-0.5)*uGrain*0.02;
-  o=vec4(max(col,0.),1.);
+  vec3 rgb=col.a>0.0 ? col.rgb/col.a : vec3(0.);
+  rgb+=(hash12(gl_FragCoord.xy+uSeed)-0.5)*uGrain*0.02;
+  o=vec4(max(rgb,0.),col.a);
 }`;
 
 const LUT_SIZE = 1024;
@@ -178,6 +185,7 @@ export function drawCutout(
 	gl.uniform1f(loc(gl, prog, "uShadow"), spec.shadow);
 	gl.uniform1f(loc(gl, prog, "uLightFront"), spec.lightFront ? 1 : 0);
 	gl.uniform1f(loc(gl, prog, "uGrain"), spec.grain);
+	gl.uniform1f(loc(gl, prog, "uClear"), spec.transparent ? 1 : 0);
 	setInks(gl, prog, spec.colors);
 	fullscreen(gl);
 	gl.deleteTexture(lut);

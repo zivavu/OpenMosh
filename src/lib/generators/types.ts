@@ -23,6 +23,8 @@ export interface BatchOptions {
 	kind: GeneratorKind;
 	/** A named palette to keep every image in, or null for random. */
 	palette: string | null;
+	/** Leave the ground clear. Only the drawn kinds can; a mix then deals only those. */
+	transparent?: boolean;
 }
 
 /** PNG tEXt keyword the spec is stored under. */

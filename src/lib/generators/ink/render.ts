@@ -48,12 +48,16 @@ float bristle(int b, float x, float t){
   float aa=max(fwidth(x),1e-4);
   return (0.25+0.35*r1)*clamp(0.5-(abs(x-centre)-hw)/aa,0.,1.);
 }
+// Premultiplied, so strokes blend onto a clear ground without dark fringes.
 void main(){
-  if(uBrush==0){ o=vColor; return; }
-  float x=vEdge.x*1.1;
-  float keep=1.0;
-  for(int b=0;b<BRISTLES;b++) keep*=1.0-bristle(b,x,vEdge.y);
-  o=vec4(vColor.rgb,1.0-keep);
+  float a=vColor.a;
+  if(uBrush==1){
+    float x=vEdge.x*1.1;
+    float keep=1.0;
+    for(int b=0;b<BRISTLES;b++) keep*=1.0-bristle(b,x,vEdge.y);
+    a=1.0-keep;
+  }
+  o=vec4(vColor.rgb*a,a);
 }`;
 
 const GRAIN_FS = `#version 300 es
@@ -63,8 +67,9 @@ uniform sampler2D uImg;
 uniform float uGrain, uSeed;
 out vec4 o;
 void main(){
-  vec3 c=texelFetch(uImg,ivec2(gl_FragCoord.xy),0).rgb;
-  o=vec4(max(c+(hash12(gl_FragCoord.xy+uSeed)-0.5)*uGrain*0.02,0.),1.);
+  vec4 c=texelFetch(uImg,ivec2(gl_FragCoord.xy),0);
+  vec3 rgb=c.a>0.0 ? c.rgb/c.a : vec3(0.);
+  o=vec4(max(rgb+(hash12(gl_FragCoord.xy+uSeed)-0.5)*uGrain*0.02,0.),c.a);
 }`;
 
 /** Field samples across the short side. */
@@ -259,7 +264,8 @@ export function drawInk(
 	const bg = spec.dark
 		? hexRgb(ink[0])
 		: hexRgb(ink[4]).map((c, i) => c * 0.4 + [244, 239, 228][i] * 0.6);
-	gl.clearColor(bg[0] / 255, bg[1] / 255, bg[2] / 255, 1);
+	if (spec.transparent) gl.clearColor(0, 0, 0, 0);
+	else gl.clearColor(bg[0] / 255, bg[1] / 255, bg[2] / 255, 1);
 	gl.clear(gl.COLOR_BUFFER_BIT);
 
 	const vao = gl.createVertexArray()!;
@@ -281,7 +287,7 @@ export function drawInk(
 	gl.uniform2f(loc(gl, prog, "uRes"), w, h);
 	gl.uniform1i(loc(gl, prog, "uBrush"), brush ? 1 : 0);
 	gl.enable(gl.BLEND);
-	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+	gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 	if (nv > 0) gl.drawArrays(gl.TRIANGLE_STRIP, 0, nv);
 	gl.disable(gl.BLEND);
 	gl.bindVertexArray(null);

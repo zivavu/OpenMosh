@@ -1,5 +1,11 @@
 import type { Colors } from "../palette";
-import { allFinite, isColors, isRecord, isSeed } from "../spec-check";
+import {
+	allFinite,
+	isColors,
+	isRecord,
+	isSeed,
+	isTransparentFlag,
+} from "../spec-check";
 
 export const INK_STYLES = ["strands", "brush"] as const;
 export type InkStyle = (typeof INK_STYLES)[number];
@@ -24,6 +30,8 @@ export interface InkSpec {
 	dark: boolean;
 	grain: number;
 	colors: Colors;
+	/** No ground: only what is drawn is opaque. Absent on opaque images. */
+	transparent?: true;
 }
 
 export function isInkSpec(v: unknown): v is InkSpec {
@@ -40,6 +48,7 @@ export function isInkSpec(v: unknown): v is InkSpec {
 		(v.length as number) <= 1000 &&
 		(v.width as number) > 0 &&
 		typeof v.dark === "boolean" &&
+		isTransparentFlag(v.transparent) &&
 		isColors(v.colors)
 	);
 }

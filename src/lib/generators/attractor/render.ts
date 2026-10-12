@@ -99,37 +99,45 @@ precision highp float;
 ${GLSL_COMMON}
 uniform sampler2D uDens, uMax;
 uniform vec3 uBg;
-uniform float uExposure, uInvGamma, uLight;
+uniform float uExposure, uInvGamma, uLight, uClear;
 out vec4 o;
+// On a clear ground the density is the coverage, written premultiplied so the
+// glow's mip chain averages it correctly.
 void main(){
   vec2 d=texelFetch(uDens,ivec2(gl_FragCoord.xy),0).rg;
   float mx=texelFetch(uMax,ivec2(0),0).r;
-  vec3 col=uBg;
+  o=uClear>0.5 ? vec4(0.) : vec4(uBg,1.);
   if(d.r>0.){
     float a=min(1.0,pow(log(1.0+d.r)/log(1.0+mx),uInvGamma)*uExposure);
     float t=d.g/d.r;
-    col=mix(col, ramp(uLight>0.5 ? 0.05+t*0.6 : 0.35+t*0.65), a);
+    vec3 fg=ramp(uLight>0.5 ? 0.05+t*0.6 : 0.35+t*0.65);
+    o=uClear>0.5 ? vec4(fg*a,a) : vec4(mix(uBg,fg,a),1.);
   }
-  o=vec4(col,1.);
 }`;
 
-/** Glow: screened over a dark ground, multiplied over a light one. */
+/** Glow: screened over a dark ground, multiplied over a light one. On a clear
+ * ground it is screened premultiplied, alpha too, so the halo fades out. */
 const GLOW_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uImg;
 uniform vec2 uRes;
-uniform float uGlow, uLod, uLight;
+uniform float uGlow, uLod, uLight, uClear;
 out vec4 o;
 void main(){
   vec2 uv=gl_FragCoord.xy/uRes;
-  vec3 base=texture(uImg,uv).rgb;
+  vec4 base=texture(uImg,uv);
   vec2 px=exp2(uLod)/uRes;
-  vec3 g=vec3(0.);
+  vec4 g=vec4(0.);
   for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++)
-    g+=textureLod(uImg,uv+vec2(x,y)*px,uLod).rgb;
+    g+=textureLod(uImg,uv+vec2(x,y)*px,uLod);
   g/=9.0;
-  vec3 lit=uLight>0.5 ? base*g : 1.0-(1.0-base)*(1.0-g);
-  o=vec4(mix(base,lit,uGlow),1.);
+  if(uClear>0.5){
+    vec4 c=mix(base,1.0-(1.0-base)*(1.0-g),uGlow);
+    o=vec4(c.a>0.0 ? c.rgb/c.a : vec3(0.),c.a);
+    return;
+  }
+  vec3 lit=uLight>0.5 ? base.rgb*g.rgb : 1.0-(1.0-base.rgb)*(1.0-g.rgb);
+  o=vec4(mix(base.rgb,lit,uGlow),1.);
 }`;
 
 /** Draws into the default framebuffer at w×h. Every rng draw is part of the
@@ -272,6 +280,7 @@ export function drawAttractor(
 	gl.uniform1f(loc(gl, tone, "uExposure"), spec.exposure);
 	gl.uniform1f(loc(gl, tone, "uInvGamma"), 1 / spec.gamma);
 	gl.uniform1f(loc(gl, tone, "uLight"), spec.light ? 1 : 0);
+	gl.uniform1f(loc(gl, tone, "uClear"), spec.transparent ? 1 : 0);
 	setInks(gl, tone, spec.colors);
 	fullscreen(gl);
 	gl.bindTexture(gl.TEXTURE_2D, null);
@@ -287,6 +296,7 @@ export function drawAttractor(
 	gl.uniform1f(loc(gl, glow, "uGlow"), spec.glow);
 	gl.uniform1f(loc(gl, glow, "uLod"), Math.log2(Math.max(1, u * 0.012)));
 	gl.uniform1f(loc(gl, glow, "uLight"), spec.light ? 1 : 0);
+	gl.uniform1f(loc(gl, glow, "uClear"), spec.transparent ? 1 : 0);
 	fullscreen(gl);
 
 	bufs.forEach((b) => gl.deleteBuffer(b));
