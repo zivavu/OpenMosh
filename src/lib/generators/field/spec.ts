@@ -3,6 +3,11 @@ import type { Colors } from "../palette";
 export const FIELD_KINDS = ["voronoi", "stripes", "plasma", "rings"] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
+/** Fields new batches use. Voronoi and stripes were retired, but images made
+ * with them still re-render from their saved spec, so they stay readable. */
+export const PLANNED_FIELDS = ["plasma", "rings"] as const;
+export type PlannedField = (typeof PLANNED_FIELDS)[number];
+
 /** Shader-side index of each kind; keep in step with `uField` in the shader. */
 export const FIELD_INDEX: Record<FieldKind, number> = {
 	voronoi: 0,

@@ -4,7 +4,11 @@
 import { planAttractorTextures } from "./attractor/plan";
 import { planCutoutTextures } from "./cutout/plan";
 import { planFieldTextures } from "./field/plan";
-import { FIELD_KINDS, type FieldKind } from "./field/spec";
+import {
+	PLANNED_FIELDS,
+	type FieldKind,
+	type PlannedField,
+} from "./field/spec";
 import { planGradientTextures } from "./gradient/plan";
 import { planInkTextures } from "./ink/plan";
 import {
@@ -29,21 +33,19 @@ export type OneKind = Exclude<GeneratorKind, "mix">;
 /** Every single-generator kind, in the order a mix plans them. */
 export const ONE_KINDS: OneKind[] = [
 	"gradient",
-	...FIELD_KINDS,
+	...PLANNED_FIELDS,
 	"cutout",
 	"attractor",
 	"ink",
 ];
 
 const MIX_WEIGHTS: [OneKind, number][] = [
-	["gradient", 0.22],
-	["voronoi", 0.14],
-	["stripes", 0.14],
-	["plasma", 0.1],
-	["rings", 0.1],
-	["cutout", 0.1],
-	["attractor", 0.1],
-	["ink", 0.1],
+	["gradient", 0.25],
+	["plasma", 0.15],
+	["rings", 0.15],
+	["cutout", 0.15],
+	["attractor", 0.15],
+	["ink", 0.15],
 ];
 
 /** The kinds that draw onto a ground, so can leave it clear. */
@@ -54,8 +56,8 @@ export function isTransparentSpec(spec: GeneratedSpec): boolean {
 	return "transparent" in spec && spec.transparent === true;
 }
 
-/** Which panel choice a spec belongs to. */
-export function specKind(spec: GeneratedSpec): OneKind {
+/** Which panel choice a spec belongs to; a saved image can be a retired field. */
+export function specKind(spec: GeneratedSpec): OneKind | FieldKind {
 	return spec.gen === "field" ? spec.field : spec.gen;
 }
 
@@ -75,7 +77,7 @@ function texturesFor(
 		case "ink":
 			return planInkTextures(rng, n, variety);
 		default:
-			return planFieldTextures(rng, n, variety, kind as FieldKind);
+			return planFieldTextures(rng, n, variety, kind as PlannedField);
 	}
 }
 

@@ -40,12 +40,10 @@
 	const KINDS: { label: string; value: GeneratorKind }[] = $derived([
 		...(single ? [] : [{ label: "Mix", value: "mix" as const }]),
 		{ label: "Gradient", value: "gradient" },
-		{ label: "Voronoi", value: "voronoi" },
-		{ label: "Stripes", value: "stripes" },
 		{ label: "Plasma", value: "plasma" },
 		{ label: "Rings", value: "rings" },
 	]);
-	// Drawn rather than fields; a second group so the first still fits one row.
+	// Drawn rather than fields, so they get a group of their own.
 	const DRAWN: { label: string; value: GeneratorKind }[] = [
 		{ label: "Cutout", value: "cutout" },
 		{ label: "Attractor", value: "attractor" },
