@@ -101,6 +101,15 @@ export function deal<T>(rng: Rand, n: number, weights: [T, number][]): T[] {
 	return shuffle(rng, out);
 }
 
+/** One value drawn by weight. `deal` with a single slot can't do this: it
+ * always lands on whichever value crosses the halfway mark. */
+export function pickWeighted<T>(rng: Rand, weights: [T, number][]): T {
+	const total = weights.reduce((s, [, w]) => s + w, 0);
+	let r = rng() * total;
+	for (const [v, w] of weights) if ((r -= w) < 0) return v;
+	return weights[weights.length - 1][0];
+}
+
 /**
  * Colours for a wild batch: hues step around the wheel by the golden angle so
  * any N covers it evenly, and ramp shapes are dealt in fixed proportions.

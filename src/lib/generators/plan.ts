@@ -10,6 +10,7 @@ import { planInkTextures } from "./ink/plan";
 import {
 	cohesiveColors,
 	deal,
+	pickWeighted,
 	orderByHue,
 	PALETTES,
 	wildColors,
@@ -90,7 +91,7 @@ export function planBatch(seed: number, opts: BatchOptions): GeneratedSpec[] {
 	let kinds: OneKind[];
 	if (opts.kind !== "mix") kinds = Array<OneKind>(n).fill(opts.kind);
 	else if (opts.variety === "cohesive")
-		kinds = Array<OneKind>(n).fill(deal(rng, 1, weights)[0]);
+		kinds = Array<OneKind>(n).fill(pickWeighted(rng, weights));
 	else kinds = deal(rng, n, weights);
 
 	// Each generator plans its slots as one group, so its own stratification
