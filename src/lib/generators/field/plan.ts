@@ -1,6 +1,6 @@
 /** Textures for the height-field generators. Each kind has its own tuned ranges. */
 
-import { deal } from "../palette";
+import { deal, pickWeighted } from "../palette";
 import { randIn, randLog, type Rand } from "../../rng";
 import type { Variety } from "../types";
 import type { Domain, FieldKind, FieldSpec } from "./spec";
@@ -146,7 +146,7 @@ export function planFieldTextures(
 ): FieldTexture[] {
 	if (variety === "cohesive") {
 		const base = LOOKS[kind](rng);
-		const domain = deal(rng, 1, DOMAIN_WEIGHTS[kind])[0];
+		const domain = pickWeighted(rng, DOMAIN_WEIGHTS[kind]);
 		return Array.from({ length: n }, () =>
 			texture(rng, kind, LOOKS[kind](rng, base), domain),
 		);

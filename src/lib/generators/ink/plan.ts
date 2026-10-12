@@ -1,4 +1,4 @@
-import { deal } from "../palette";
+import { deal, pickWeighted } from "../palette";
 import { randIn, randLog, type Rand } from "../../rng";
 import type { Variety } from "../types";
 import type { InkSpec, InkStyle } from "./spec";
@@ -34,7 +34,7 @@ export function planInkTextures(
 	variety: Variety,
 ): InkTexture[] {
 	if (variety === "cohesive") {
-		const base = texture(rng, deal(rng, 1, STYLE_WEIGHTS)[0]);
+		const base = texture(rng, pickWeighted(rng, STYLE_WEIGHTS));
 		return Array.from({ length: n }, () => texture(rng, base.style, base));
 	}
 	return deal(rng, n, STYLE_WEIGHTS).map((style) => texture(rng, style));

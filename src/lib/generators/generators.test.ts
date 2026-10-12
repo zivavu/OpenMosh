@@ -94,6 +94,41 @@ describe("planBatch", () => {
 		expect(new Set(specs.map(specKind)).size).toBe(1);
 	});
 
+	it("picks a different generator for a cohesive mix across seeds", () => {
+		const seen = (transparent: boolean) =>
+			new Set(
+				Array.from({ length: 40 }, (_, seed) =>
+					specKind(
+						planBatch(
+							seed,
+							wild({ count: 4, variety: "cohesive", transparent }),
+						)[0],
+					),
+				),
+			);
+		expect(seen(false).size).toBeGreaterThan(4);
+		expect(seen(true).size).toBe(DRAWN_KINDS.length);
+	});
+
+	it("varies the cohesive pick within a generator across seeds", () => {
+		const across = (kind: "attractor" | "ink" | "voronoi", key: string) =>
+			new Set(
+				Array.from(
+					{ length: 40 },
+					(_, seed) =>
+						(
+							planBatch(
+								seed,
+								wild({ count: 2, kind, variety: "cohesive" }),
+							)[0] as unknown as Record<string, unknown>
+						)[key],
+				),
+			).size;
+		expect(across("attractor", "system")).toBe(3);
+		expect(across("ink", "style")).toBe(2);
+		expect(across("voronoi", "domain")).toBe(2);
+	});
+
 	it("keeps a cohesive drawn batch to one scene, system or style", () => {
 		const cohesive = (kind: "cutout" | "attractor" | "ink") =>
 			planBatch(10, wild({ count: 8, kind, variety: "cohesive" }));

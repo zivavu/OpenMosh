@@ -1,4 +1,4 @@
-import { deal } from "../palette";
+import { deal, pickWeighted } from "../palette";
 import { randIn, randLog, type Rand } from "../../rng";
 import type { Variety } from "../types";
 import type { AttractorSpec, AttractorSystem } from "./spec";
@@ -39,7 +39,7 @@ export function planAttractorTextures(
 	variety: Variety,
 ): AttractorTexture[] {
 	if (variety === "cohesive") {
-		const base = texture(rng, deal(rng, 1, SYSTEM_WEIGHTS)[0]);
+		const base = texture(rng, pickWeighted(rng, SYSTEM_WEIGHTS));
 		return Array.from({ length: n }, () => texture(rng, base.system, base));
 	}
 	return deal(rng, n, SYSTEM_WEIGHTS).map((system) => texture(rng, system));
