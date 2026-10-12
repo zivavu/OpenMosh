@@ -90,7 +90,8 @@
 	let target = $derived(size ?? ratioSize(ratio, GENERATED_SHORT_SIDE));
 	let aspect = $derived(target.width / target.height);
 
-	let previews = $state<string[]>([]);
+	/** Object URLs by slot; null where a render failed. */
+	let previews = $state<(string | null)[]>([]);
 	let previewing = $state(false);
 
 	$effect(() => {
@@ -100,17 +101,21 @@
 		let cancelled = false;
 		previewing = true;
 		(async () => {
-			const urls: string[] = [];
+			const urls: (string | null)[] = [];
 			for (const spec of shown) {
 				const type = transparent ? "image/png" : "image/jpeg";
-				const blob = await renderSpec(spec, w, h, type).catch(() => null);
+				// renderSpec throws synchronously when a render fails; one bad
+				// image mustn't stop the rest.
+				const blob = await Promise.resolve()
+					.then(() => renderSpec(spec, w, h, type))
+					.catch(() => null);
 				if (cancelled) {
-					urls.forEach((u) => URL.revokeObjectURL(u));
+					urls.forEach((u) => u && URL.revokeObjectURL(u));
 					return;
 				}
-				if (blob) urls.push(URL.createObjectURL(blob));
+				urls.push(blob && URL.createObjectURL(blob));
 				// Show what's ready as it lands rather than all at the end.
-				previews.forEach((u) => URL.revokeObjectURL(u));
+				previews.forEach((u) => u && URL.revokeObjectURL(u));
 				previews = [...urls];
 			}
 			previewing = false;
@@ -120,7 +125,7 @@
 		};
 	});
 
-	onDestroy(() => previews.forEach((u) => URL.revokeObjectURL(u)));
+	onDestroy(() => previews.forEach((u) => u && URL.revokeObjectURL(u)));
 
 	let busy = $state(false);
 	let done = $state(0);
@@ -232,7 +237,7 @@
 			<div class="cell">
 				<div
 					class="thumb"
-					class:pending={!previews[i]}
+					class:pending={previews[i] === undefined}
 					class:clear={transparent}
 				>
 					{#if previews[i]}
