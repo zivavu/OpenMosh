@@ -142,6 +142,27 @@ describe("planBatch", () => {
 		for (const s of opaque) expect("transparent" in s).toBe(false);
 	});
 
+	it("keeps every drawn image and colour when the background turns transparent", () => {
+		const strip = (spec: object) => {
+			const { transparent: _, ...rest } = spec as { transparent?: true };
+			return rest;
+		};
+		for (const kind of ["mix", ...DRAWN_KINDS] as const)
+			for (const variety of ["wild", "cohesive"] as const)
+				for (let seed = 0; seed < 12; seed++) {
+					const solid = planBatch(seed, wild({ count: 16, kind, variety }));
+					const clear = planBatch(
+						seed,
+						wild({ count: 16, kind, variety, transparent: true }),
+					);
+					solid.forEach((s, i) => {
+						expect(clear[i].colors).toEqual(s.colors);
+						if (DRAWN_KINDS.includes(specKind(s) as never))
+							expect(strip(clear[i])).toEqual(strip(s));
+					});
+				}
+	});
+
 	it("deals only drawn kinds into a transparent mix", () => {
 		for (const variety of ["wild", "cohesive"] as const) {
 			const specs = planBatch(
