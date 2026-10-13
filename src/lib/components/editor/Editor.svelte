@@ -31,10 +31,9 @@
 	import { AudioManager } from "../../audio/audio-manager.svelte";
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
 	import { downloadBlob } from "../../recorder";
-	import { saveBlobAs } from "../../utils";
 	import {
-		buildProjectFile,
 		missingFilesNotice,
+		saveProjectFileAs,
 	} from "../../project-file/export";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
@@ -1403,29 +1402,27 @@
 		if (!isSequenceMode || !projectKey) return;
 		flushSequenceSave();
 		flushMediaPoolSave();
-		const progress = showToast("Building the project file…", "info", 0);
+		let progress: number | null = null;
 		try {
 			const entry = seqEntryNow();
 			const media = sourceRegistry.sources.map((s) => ({
 				id: s.id,
 				file: s.file,
 			}));
-			const { blob, name, missing } = await buildProjectFile(
+			const missing = await saveProjectFileAs(
 				projectKey,
 				entry ? { entry, media } : undefined,
+				() => (progress = showToast("Building the project file…", "info", 0)),
 			);
-			dismissToast(progress);
-			await saveBlobAs(blob, name);
-			if (missing > 0) {
-				showToast(missingFilesNotice(missing), "info", 8000);
-			}
+			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
 		} catch (e) {
-			dismissToast(progress);
 			showToast(
 				e instanceof Error ? e.message : "Couldn't save the project file",
 				"error",
 				8000,
 			);
+		} finally {
+			if (progress !== null) dismissToast(progress);
 		}
 	}
 

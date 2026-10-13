@@ -25,6 +25,7 @@ import {
 	type ProjectPoolEntry,
 	type ProjectSongEntry,
 } from "./manifest";
+import { chooseSaveTarget } from "../utils";
 import { writeZip, type ZipEntryInput } from "./zip";
 
 export interface ProjectFileResult {
@@ -112,20 +113,42 @@ async function poolMedia(
 	};
 }
 
-/** Build the file. Without `live` the stored timeline is used, which may be an
- * older format the importer still reads. */
-export async function buildProjectFile(
+/** The live timeline, else the stored one, which may be an older format the
+ * importer still reads. */
+async function projectEntry(
 	projectKey: string,
 	live?: LiveProject,
-): Promise<ProjectFileResult> {
-	let entry =
+): Promise<SeqEntry> {
+	const entry =
 		live?.entry ??
 		((await getTimeline(`seq:${projectKey}`)) as SeqEntry | null);
 	if (!entry) throw new Error("This project has nothing saved yet");
 	// A project keyed by its song predates the song field; the import gives it a key
 	// of its own, so the song has to be named.
 	if (!isProjectKey(projectKey) && !entry.song)
-		entry = { ...entry, song: projectKey };
+		return { ...entry, song: projectKey };
+	return entry;
+}
+
+/** The project's own name, else its song's. */
+async function projectName(
+	projectKey: string,
+	entry: SeqEntry,
+): Promise<string> {
+	const own = readProjectNames()[projectKey];
+	if (own) return own;
+	const track = entry.song
+		? await getTrack(entry.song).catch(() => null)
+		: null;
+	return track?.name || "Untitled project";
+}
+
+/** Build the file. */
+export async function buildProjectFile(
+	projectKey: string,
+	live?: LiveProject,
+): Promise<ProjectFileResult> {
+	const entry = await projectEntry(projectKey, live);
 
 	const { media, missing } = await poolMedia(projectKey, live);
 	const pool: ProjectPoolEntry[] = [];
@@ -172,15 +195,7 @@ export async function buildProjectFile(
 		fontParts.push({ name: path, blob: new Blob([data]) });
 	}
 
-	const names = readProjectNames();
-	let name: string | undefined = names[projectKey];
-	if (!name) {
-		if (entry.song) {
-			const track = await getTrack(entry.song).catch(() => null);
-			name = track?.name;
-		}
-	}
-	name = name || "Untitled project";
+	const name = await projectName(projectKey, entry);
 
 	const render = loadRenderSettings(`seq:${projectKey}`);
 	const manifest: ProjectManifest = {
@@ -209,4 +224,24 @@ export async function buildProjectFile(
 	]);
 
 	return { blob, name: projectFileName(name), missing };
+}
+
+/** Ask where to save, then build and write the file. Asked first: the picker only
+ * opens on the click that asked for it, and building a big project outlasts that.
+ * `onBuild` runs once a place is picked. Null when the picker was cancelled, else
+ * how many pool files were missing. */
+export async function saveProjectFileAs(
+	projectKey: string,
+	live?: LiveProject,
+	onBuild?: () => void,
+): Promise<number | null> {
+	const entry = await projectEntry(projectKey, live);
+	const target = await chooseSaveTarget(
+		projectFileName(await projectName(projectKey, entry)),
+	);
+	if (!target) return null;
+	onBuild?.();
+	const { blob, missing } = await buildProjectFile(projectKey, live);
+	await target.write(blob);
+	return missing;
 }
