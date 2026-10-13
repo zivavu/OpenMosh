@@ -23,6 +23,7 @@ skills-lock.json
 #misc
 ZEN*
 test_models
+probe
 
 # Editor directories and files
 .vscode/*
