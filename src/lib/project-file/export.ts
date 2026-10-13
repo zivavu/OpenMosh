@@ -3,6 +3,7 @@
 import { getTrack } from "../audio/track-library";
 import { APP_VERSION } from "../build-info";
 import { readProjectNames } from "../editor/project-names";
+import { loadRenderSettings } from "../editor/render-settings";
 import { isProjectKey } from "../editor/saved-sequences";
 import type { SeqEntry } from "../editor/seq-entry";
 import {
@@ -174,6 +175,7 @@ export async function buildProjectFile(
 	}
 	name = name || "Untitled project";
 
+	const render = loadRenderSettings(`seq:${projectKey}`);
 	const manifest: ProjectManifest = {
 		format: PROJECT_FORMAT,
 		version: PROJECT_VERSION,
@@ -184,6 +186,7 @@ export async function buildProjectFile(
 		pool,
 		songs,
 		fonts,
+		...(render ? { render } : {}),
 	};
 
 	const blob = await writeZip([
