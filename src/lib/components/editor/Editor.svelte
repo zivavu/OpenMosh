@@ -1033,6 +1033,8 @@
 				adoptLibraryTrack(track.id);
 			} catch (e) {
 				console.error("Failed to register track:", e);
+				// Storage refused it; an unsaved id still lets the project start.
+				if (audio.trackFile === f) adoptLibraryTrack(generateId());
 			} finally {
 				registeringTrack = null;
 			}
