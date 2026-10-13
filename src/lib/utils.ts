@@ -42,28 +42,43 @@ const PROJECT_FILE_TYPE = {
 	accept: { "application/zip": [".openmosh"] },
 };
 
-/** Save a blob to disk: streamed through the file picker where the browser has one,
- * a plain download otherwise. A cancelled picker saves nothing. */
-export async function saveBlobAs(
-	blob: Blob,
+/** Where a file is about to be saved. */
+export interface SaveTarget {
+	write(blob: Blob): Promise<void>;
+}
+
+/** Ask where to save before the file is built: the picker only opens on the click
+ * that asked for it, and building a big file outlasts that. Streams through the
+ * picker where the browser has one, else downloads. Null when the picker is
+ * cancelled. */
+export async function chooseSaveTarget(
 	name: string,
 	type: NonNullable<SaveFilePickerOptions["types"]>[number] = PROJECT_FILE_TYPE,
-): Promise<void> {
+): Promise<SaveTarget | null> {
+	const download: SaveTarget = {
+		write: async (blob) => downloadFile(blob, name),
+	};
 	const picker = (window as { showSaveFilePicker?: unknown })
 		.showSaveFilePicker;
-	if (typeof picker === "function") {
-		try {
-			const handle = await (picker as SaveFilePicker)({
-				suggestedName: name,
-				types: [type],
-			});
-			const writable = await handle.createWritable();
-			await blob.stream().pipeTo(writable);
-			return;
-		} catch (e) {
-			if (e instanceof DOMException && e.name === "AbortError") return;
-			// Any other failure falls back to a download.
-		}
+	if (typeof picker !== "function") return download;
+	let handle: Awaited<ReturnType<SaveFilePicker>>;
+	try {
+		handle = await (picker as SaveFilePicker)({
+			suggestedName: name,
+			types: [type],
+		});
+	} catch (e) {
+		if (e instanceof DOMException && e.name === "AbortError") return null;
+		// Any other failure falls back to a download.
+		return download;
 	}
-	downloadFile(blob, name);
+	return {
+		async write(blob) {
+			try {
+				await blob.stream().pipeTo(await handle.createWritable());
+			} catch {
+				downloadFile(blob, name);
+			}
+		},
+	};
 }

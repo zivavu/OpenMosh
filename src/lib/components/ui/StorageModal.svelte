@@ -53,10 +53,10 @@
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
 	import { showToast } from "./toast.svelte";
-	import { fmtAgo, saveBlobAs } from "../../utils";
+	import { chooseSaveTarget, fmtAgo } from "../../utils";
 	import {
-		buildProjectFile,
 		missingFilesNotice,
+		saveProjectFileAs,
 	} from "../../project-file/export";
 	import {
 		BACKUP_EXTENSION,
@@ -134,9 +134,8 @@
 	/** Save an editor project to a `.openmosh` file without opening it. */
 	async function downloadProject(key: string) {
 		try {
-			const { blob, name, missing } = await buildProjectFile(key);
-			await saveBlobAs(blob, name);
-			if (missing > 0) showToast(missingFilesNotice(missing), "info", 8000);
+			const missing = await saveProjectFileAs(key);
+			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
 		} catch (e) {
 			showToast(
 				e instanceof Error ? e.message : "Couldn't save that project",
@@ -153,10 +152,11 @@
 		busy = true;
 		backingUp = "save";
 		try {
-			await saveBlobAs(await buildBackup(), backupFileName(), {
+			const target = await chooseSaveTarget(backupFileName(), {
 				description: "OpenMosh backup",
 				accept: { "application/zip": [BACKUP_EXTENSION] },
 			});
+			if (target) await target.write(await buildBackup());
 		} catch (e) {
 			console.error(e);
 			showToast("Couldn't build the backup", "error");
