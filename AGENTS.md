@@ -33,6 +33,9 @@ skill's harness, ad-hoc Playwright scripts) unless I ask, or a bug can't be diag
 way, and say so first. When I do ask for screenshots, take one or two at the end, not one per
 edit: they eat context fast.
 
+While working, run only the e2e specs a change touches (`bunx playwright test <spec>
+--project=chromium`). The full `bun run test:e2e` is for right before a PR.
+
 ## Key Conventions
 
 - Svelte 5 runes only — use `$state`, `$derived`, `$effect`, `$props`, `$bindable`; use `mount()`
