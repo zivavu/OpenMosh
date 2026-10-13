@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { nearestColor, openEditor, poolCount, waitForRender } from "./app";
+import {
+	mediaClips,
+	nearestColor,
+	openEditor,
+	poolCount,
+	waitForRender,
+} from "./app";
 import { BLUE, GREEN, RED } from "./fixtures";
 
 /** Some browsers (private windows, a full disk) refuse to store files in IndexedDB.
@@ -33,6 +39,8 @@ test("the editor shows its media and says it couldn't save it", async ({
 }) => {
 	await openEditor(page, { sources: [["blue.png", BLUE]] });
 	await expect(poolCount(page)).toContainText("1");
+	// The song couldn't be stored either; the project still has to start.
+	await expect(mediaClips(page)).toHaveCount(1);
 	const stats = await waitForRender(page);
 	expect(nearestColor(stats.mean, { RED, GREEN, BLUE })).toBe("BLUE");
 	// The stub has to have refused something, or this proves nothing.
