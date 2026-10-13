@@ -347,6 +347,8 @@
 		onExit?: () => void;
 		/** Sequence mode: open another saved project in place of this one. */
 		onOpenProject?: (key: string) => void;
+		/** The edit now saves under this key. */
+		onProjectReady?: (key: string) => void;
 	}
 
 	let {
@@ -363,6 +365,7 @@
 		warmRenderer = null,
 		onExit,
 		onOpenProject,
+		onProjectReady,
 	}: Props = $props();
 
 	let isSequenceMode = $derived(mode === "sequence");
@@ -2005,6 +2008,7 @@
 	$effect(() => {
 		if (isSequenceMode && projectReady && projectKey) {
 			rememberLastOpened({ mode: "sequence", key: projectKey });
+			onProjectReady?.(projectKey);
 		}
 	});
 
@@ -3393,7 +3397,9 @@
 			return false;
 		});
 		void saves.track("session", write).then((ok) => {
-			if (ok) void pruneSequenceMediaThrottled().catch(() => {});
+			if (!ok) return;
+			onProjectReady?.(singleSessionKey!);
+			void pruneSequenceMediaThrottled().catch(() => {});
 		});
 	}
 

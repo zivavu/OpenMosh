@@ -31,6 +31,7 @@
 	import { loadCustomFonts } from "./lib/text-overlay";
 	import { probeCapabilities } from "./lib/capabilities.svelte";
 	import { onLoadLosses, type LoadLosses } from "./lib/effects/load-report";
+	import { parseRoute, routeHash, type View } from "./lib/route";
 
 	// The editors are the bulk of the bundle and none of it is needed to paint the
 	// upload screen, so they load with the route instead of with the app.
@@ -74,43 +75,18 @@
 	/** What the open single or slideshow edit saves under; new for every upload. */
 	let sessionKey: string | null = $state(null);
 
-	// Named for what each view is, not for the route it answers to: the two stopped
-	// matching when the segment editor took the "#editor" name.
-	type View = "upload" | "single" | "sequence" | "slideshow";
+	let view: View = $state(parseRoute(window.location.hash).view);
+	/** What the open edit saves under, once it saves: a new edit gets linked late. */
+	let openKey: string | null = null;
 
-	/** The segment editor is "#editor" now, though internally it is still "sequence": the
-	 * mode's saved timelines, media pool and sessions are keyed under that word. */
-	const VIEW_HASH: Record<View, string> = {
-		upload: "#",
-		single: "#single",
-		sequence: "#editor",
-		slideshow: "#slideshow",
-	};
-
-	function hashToView(hash: string): View {
-		switch (hash) {
-			case "#slideshow":
-				return "slideshow";
-			// "#sequence" is the route this mode used to answer to; kept so links and
-			// bookmarks from before the rename still land in it.
-			case "#editor":
-			case "#sequence":
-				return "sequence";
-			case "#single":
-				return "single";
-			default:
-				return "upload";
-		}
-	}
-
-	let view: View = $state(hashToView(window.location.hash));
-
-	function navigateTo(v: View, replace = false) {
-		// Already there after a reload: a second entry would make Back a no-op.
-		if (replace || window.location.hash === VIEW_HASH[v]) {
-			history.replaceState(null, "", VIEW_HASH[v]);
+	function navigateTo(v: View, replace = false, key: string | null = null) {
+		const hash = routeHash(v, key);
+		// Already on this view (a reload, or another edit): a second entry would make
+		// Back a no-op.
+		if (replace || parseRoute(window.location.hash).view === v) {
+			history.replaceState(null, "", hash);
 		} else {
-			history.pushState(null, "", VIEW_HASH[v]);
+			history.pushState(null, "", hash);
 		}
 		// A warmup still queued would land after the editor already built its own
 		// context, leaving a stray hidden one behind.
@@ -201,6 +177,26 @@
 		restoredSlideshowConfig = null;
 		sessionTrackId = null;
 		sessionKey = null;
+		openKey = null;
+	}
+
+	/** The warmed canvas went to the editor being replaced, which destroys it on the way
+	 * out; cleared in this same step, so that editor never sees it go. */
+	function releaseWarm() {
+		cancelWarm();
+		warmCanvas = null;
+		warmRenderer = null;
+	}
+
+	/** The open edit has saved under `key`: link to it, so a reload or a copied URL
+	 * comes back to it. */
+	function linkOpenEdit(v: View, key: string) {
+		// An editor swapped out by a link flushes its save on the way out, landing late.
+		const open = v === "sequence" ? sequenceProjectKey : sessionKey;
+		if (view !== v || (open !== null && key !== open)) return;
+		openKey = key;
+		const hash = routeHash(v, key);
+		if (window.location.hash !== hash) history.replaceState(null, "", hash);
 	}
 
 	/** Reopen a saved single or slideshow edit: its media and the work done. False when
@@ -208,27 +204,34 @@
 	async function openSessionByKey(
 		mode: SessionMode,
 		key: string,
+		/** Opened in place of the edit the editor has open. */
+		replacing = false,
 	): Promise<boolean> {
 		const opened = await openSession(key);
 		if (!opened) return false;
 		rememberLastOpened({ mode, key });
+		// Older single sessions stored layer media after the source; only the source
+		// is wanted now.
+		const files =
+			mode === "single"
+				? [await gifToVideo(opened.files[0])]
+				: await gifsToVideo(opened.files);
+		if (replacing) releaseWarm();
 		// The song comes back too, so the per-song text timeline and segments the
 		// editor restores have the track they're keyed to.
 		pendingAudioFile = opened.trackFile;
 		sessionTrackId = opened.trackId;
 		sessionKey = key;
+		openKey = key;
 		if (mode === "single") {
 			restoredSingle = opened.state as SingleSessionState;
-			// Older single sessions stored layer media after the source; only the
-			// source is wanted now.
-			file = await gifToVideo(opened.files[0]);
-			navigateTo("single");
-			return true;
+			file = files[0];
+		} else {
+			const state = opened.state as { config?: SlideshowConfig } | null;
+			restoredSlideshowConfig = state?.config ?? null;
+			slideshowFiles = files;
 		}
-		const state = opened.state as { config?: SlideshowConfig } | null;
-		restoredSlideshowConfig = state?.config ?? null;
-		slideshowFiles = await gifsToVideo(opened.files);
-		navigateTo("slideshow");
+		navigateTo(mode, false, key);
 		return true;
 	}
 
@@ -243,18 +246,13 @@
 		if (!opened) return false;
 		rememberLastOpened({ mode: "sequence", key: trackId });
 		const files = await gifsToVideo(opened.sources);
-		if (replacing) {
-			// The warmed canvas went to the editor being replaced, which destroys it on
-			// the way out; cleared in this same step, so that editor never sees it go.
-			cancelWarm();
-			warmCanvas = null;
-			warmRenderer = null;
-		}
+		if (replacing) releaseWarm();
 		sequenceFiles = files;
 		pendingAudioFile = opened.trackFile;
 		sequenceTrackId = opened.trackFile ? opened.trackId : null;
 		sequenceProjectKey = opened.trackId;
-		navigateTo("sequence");
+		openKey = opened.trackId;
+		navigateTo("sequence", false, opened.trackId);
 		return true;
 	}
 
@@ -290,7 +288,28 @@
 	/** A reload lands on an editor's route with nothing open: bring back what was. */
 	let restoring = $state(untrack(() => view) !== "upload");
 
+	/** Open the edit a link names, in place of the one open if there is one. */
+	async function openLinked(v: Exclude<View, "upload">, key: string) {
+		const replacing = editorOpen();
+		if (!replacing) restoring = true;
+		const ok =
+			v === "sequence"
+				? await openSequenceFromSong(key, replacing)
+				: await openSessionByKey(v, key, replacing);
+		restoring = false;
+		if (ok) return;
+		showToast("That project is no longer stored", "error");
+		// Back to the edit still open, or off the dead route.
+		if (replacing) {
+			history.replaceState(null, "", routeHash(v, openKey));
+		} else {
+			navigateTo("upload", true);
+		}
+	}
+
 	async function restoreLastOpened() {
+		const linked = parseRoute(window.location.hash).key;
+		if (linked && view !== "upload") return openLinked(view, linked);
 		const last = readLastOpened();
 		// Replaced, not pushed: Back onto the dead route would only bounce here again.
 		if (!last || last.mode !== view) {
@@ -323,12 +342,23 @@
 		void loadCustomFonts();
 
 		const onPopState = () => {
-			view = hashToView(window.location.hash);
+			const route = parseRoute(window.location.hash);
+			const from = view;
+			view = route.view;
 			if (view === "upload") {
 				resetFiles();
 				scheduleWarm();
-			} else if (!editorOpen()) {
+				return;
+			}
+			// A hand-edited URL can jump straight from one editor to another.
+			if (from !== "upload" && from !== view) {
+				resetFiles();
+				releaseWarm();
+			}
+			if (!editorOpen()) {
 				void restoreLastOpened();
+			} else if (route.key && route.key !== openKey) {
+				void openLinked(view, route.key);
 			}
 		};
 		window.addEventListener("popstate", onPopState);
@@ -356,16 +386,19 @@
 <svelte:boundary onerror={(err) => console.error(err)}>
 	{#if view === "slideshow" && slideshowFiles.length > 0}
 		{#await loadSlideshowEditor() then SlideshowEditor}
-			<SlideshowEditor
-				initialFiles={slideshowFiles}
-				initialAudioFile={pendingAudioFile}
-				initialTrackId={sessionTrackId}
-				initialConfig={restoredSlideshowConfig}
-				sessionKey={sessionKey ?? newSessionKey("slideshow")}
-				{warmCanvas}
-				{warmRenderer}
-				onExit={exitToUpload}
-			/>
+			{#key sessionKey}
+				<SlideshowEditor
+					initialFiles={slideshowFiles}
+					initialAudioFile={pendingAudioFile}
+					initialTrackId={sessionTrackId}
+					initialConfig={restoredSlideshowConfig}
+					sessionKey={sessionKey ?? newSessionKey("slideshow")}
+					{warmCanvas}
+					{warmRenderer}
+					onExit={exitToUpload}
+					onProjectReady={(key: string) => linkOpenEdit("slideshow", key)}
+				/>
+			{/key}
 		{:catch err}
 			{@render loadFailed(err)}
 		{/await}
@@ -385,6 +418,7 @@
 					{warmCanvas}
 					{warmRenderer}
 					onExit={exitToUpload}
+					onProjectReady={(key: string) => linkOpenEdit("sequence", key)}
 					onOpenProject={async (key: string) => {
 						if (!(await openSequenceFromSong(key, true))) {
 							showToast("That project is no longer stored", "error");
@@ -397,17 +431,20 @@
 		{/await}
 	{:else if view === "single" && file}
 		{#await loadEditor() then Editor}
-			<Editor
-				{file}
-				initialAudioFile={pendingAudioFile}
-				initialTrackId={sessionTrackId}
-				initialSession={restoredSingle}
-				sessionKey={sessionKey ?? newSessionKey("single")}
-				onfile={async (f: File) => (file = await gifToVideo(f))}
-				{warmCanvas}
-				{warmRenderer}
-				onExit={exitToUpload}
-			/>
+			{#key sessionKey}
+				<Editor
+					{file}
+					initialAudioFile={pendingAudioFile}
+					initialTrackId={sessionTrackId}
+					initialSession={restoredSingle}
+					sessionKey={sessionKey ?? newSessionKey("single")}
+					onfile={async (f: File) => (file = await gifToVideo(f))}
+					{warmCanvas}
+					{warmRenderer}
+					onExit={exitToUpload}
+					onProjectReady={(key: string) => linkOpenEdit("single", key)}
+				/>
+			{/key}
 		{:catch err}
 			{@render loadFailed(err)}
 		{/await}
