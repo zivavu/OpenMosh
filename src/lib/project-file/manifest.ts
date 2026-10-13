@@ -6,6 +6,7 @@ import {
 	type LegacySegmentEntry,
 	type SeqEntry,
 } from "../editor/seq-entry";
+import type { RenderSettings } from "../editor/render-settings";
 import type { MediaClip, MediaLane } from "../media/types";
 import type { AudioClip, AudioLane } from "../mix/types";
 import { records } from "../records";
@@ -53,6 +54,8 @@ export interface ProjectManifest {
 	pool: ProjectPoolEntry[];
 	songs: ProjectSongEntry[];
 	fonts: ProjectFontEntry[];
+	/** Output size, fps and take length; files from before it carried none. */
+	render?: RenderSettings;
 }
 
 /** Whether a font link a project file names may be fetched on import: Google Fonts
@@ -145,6 +148,18 @@ function parseFonts(raw: unknown): ProjectFontEntry[] {
 	return out;
 }
 
+function parseRender(raw: unknown): RenderSettings | undefined {
+	if (!isRecord(raw)) return undefined;
+	const render: RenderSettings = {};
+	for (const field of ["fps", "duration", "width", "height"] as const) {
+		const value = raw[field];
+		if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+			render[field] = value;
+		}
+	}
+	return Object.keys(render).length > 0 ? render : undefined;
+}
+
 /** Read a `project.json`, rejecting anything that isn't one of ours. */
 export function parseManifest(raw: unknown): ProjectManifest {
 	if (!isRecord(raw) || raw.format !== PROJECT_FORMAT) {
@@ -168,6 +183,7 @@ export function parseManifest(raw: unknown): ProjectManifest {
 		pool: parsePool(raw.pool),
 		songs: parseSongs(raw.songs),
 		fonts: parseFonts(raw.fonts),
+		render: parseRender(raw.render),
 	};
 }
 

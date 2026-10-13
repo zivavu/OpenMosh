@@ -3,6 +3,7 @@
 import { addTrack } from "../audio/track-library";
 import { generateId } from "../effects/types";
 import { readProjectNames, setProjectName } from "../editor/project-names";
+import { saveRenderSettings } from "../editor/render-settings";
 import { listSavedSequences } from "../editor/saved-sequences";
 import {
 	putSequenceMedia,
@@ -104,6 +105,7 @@ export async function openProjectFile(file: Blob): Promise<string> {
 		);
 		return key;
 	});
+	if (manifest.render) saveRenderSettings(`seq:${projectKey}`, manifest.render);
 	const name =
 		manifest.name || readProjectNames()[projectKey] || "Untitled project";
 	setProjectName(projectKey, await availableName(name));

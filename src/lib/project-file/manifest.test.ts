@@ -50,6 +50,15 @@ describe("parseManifest", () => {
 		expect(m.fonts[0].url).toBe("https://fonts.google.com/x");
 	});
 
+	it("keeps only usable render settings", () => {
+		const m = parseManifest({
+			...validManifest(),
+			render: { fps: 30, width: -5, height: "1080", duration: Infinity },
+		});
+		expect(m.render).toEqual({ fps: 30 });
+		expect(parseManifest(validManifest()).render).toBeUndefined();
+	});
+
 	it("rejects a file that isn't an OpenMosh project", () => {
 		expect(() => parseManifest({ format: "something-else" })).toThrow(
 			"That isn't an OpenMosh project file",

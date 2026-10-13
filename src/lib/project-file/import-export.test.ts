@@ -21,6 +21,8 @@ const { readSeqEntry } = await import("../editor/seq-entry");
 import type { SeqEntry } from "../editor/seq-entry";
 const { readProjectNames, setProjectName } =
 	await import("../editor/project-names");
+const { loadRenderSettings, saveRenderSettings } =
+	await import("../editor/render-settings");
 const { createMediaClip, createMediaLane } = await import("../media/types");
 const { createAudioClip, createAudioLane } = await import("../mix/types");
 const { createSourceEdit } = await import("../media/source-edit");
@@ -188,6 +190,18 @@ describe("a project file round trip", () => {
 		});
 		const newKey = await openProjectFile(built.blob);
 		expect(await store.loadMediaPool(newKey)).toEqual([a.id, freshId]);
+	});
+
+	test("brings back the output size, fps and take length", async () => {
+		const key = "proj-render";
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10 });
+		const render = { fps: 24, duration: 12, width: 1080, height: 1920 };
+		saveRenderSettings(`seq:${key}`, render);
+
+		const built = await buildProjectFile(key);
+		localData.clear();
+		const newKey = await openProjectFile(built.blob);
+		expect(loadRenderSettings(`seq:${newKey}`)).toEqual(render);
 	});
 
 	test("names a copy when the name is taken", async () => {
