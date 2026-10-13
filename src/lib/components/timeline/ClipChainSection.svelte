@@ -5,6 +5,7 @@
 	import { handBuiltLabel, isHandBuiltLabel } from "../../editor/sequence";
 	import { LaneEffects } from "../../timeline/lane-effects.svelte";
 	import type { SpectrumData } from "../../types";
+	import type { FreqBand } from "../../effects";
 	import EffectsPanel from "../ui/EffectsPanel.svelte";
 
 	/** A layer clip's own effect chain, as the clip panels edit it: the mirror
@@ -23,6 +24,7 @@
 		children?: Snippet;
 		/** Whether edits here also reach the rest of a multi-selection. */
 		note?: string | null;
+		onAllBands?: (band: FreqBand) => void;
 	}
 
 	let {
@@ -36,6 +38,7 @@
 		hint,
 		children,
 		note = null,
+		onAllBands,
 	}: Props = $props();
 
 	// The clip's chain, mirrored for EffectsPanel to own and written back on every
@@ -94,4 +97,5 @@
 			modified: false,
 		})}
 	onBeforeUserEdit={onBeforeEdit}
+	{onAllBands}
 />

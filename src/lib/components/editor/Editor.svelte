@@ -103,8 +103,11 @@
 		restoreEffects,
 		setVolumeLink,
 		type EffectInstance,
+		type FreqBand,
 		type Preset,
 	} from "../../effects";
+	import { updateMediaClips } from "../../media/resolve";
+	import { updateTextClips } from "../../text/resolve";
 	import {
 		appendTextLane,
 		applyBpmToTextClips,
@@ -153,7 +156,11 @@
 		type FxLane,
 		type FxLaneSettings,
 	} from "../../editor/fx-lanes";
-	import { fanOutEdit, fanOutNote } from "../../editor/chain-fanout";
+	import {
+		fanOutEdit,
+		fanOutNote,
+		withAllLinkBands,
+	} from "../../editor/chain-fanout";
 	import {
 		fanOutMediaClipFields,
 		fanOutMediaLaneEdit,
@@ -2776,6 +2783,18 @@
 		panelBurst.beforeEdit(coalesceKey);
 	};
 
+	/** "All links" reaches every selected fx clip, whatever effects it runs. */
+	function setFxClipsBand(band: FreqBand) {
+		const ids = new Set(selectedFxClipIds);
+		if (ids.size < 2) return;
+		fxLanes = fxLanes.map((l) => ({
+			...l,
+			clips: l.clips.map((c) =>
+				ids.has(c.id) ? withAllLinkBands(c, band) : c,
+			),
+		}));
+	}
+
 	/** The panel edits the fx clip in place; carry the edit to the other selected clips. */
 	function fanOutFxEdit() {
 		const clip = selectedFxClip;
@@ -3682,6 +3701,16 @@
 		textTimeline = [next, ...fanned].reduce(replaceTextClip, textTimeline);
 	}
 
+	/** "All links" reaches every selected text clip, whatever effects it runs. */
+	function setTextClipsBand(band: FreqBand) {
+		if (selectedTextClipIds.length < 2) return;
+		textTimeline = updateTextClips(
+			textTimeline,
+			new Set(selectedTextClipIds),
+			(c) => withAllLinkBands(c, band),
+		);
+	}
+
 	/** The lanes behind the selected text clips, each once. */
 	let selectedTextLaneIds = $derived(
 		selectedTextClipId
@@ -3766,6 +3795,16 @@
 				)
 			: chained;
 		mediaTimeline = [next, ...fanned].reduce(replaceMediaClip, mediaTimeline);
+	}
+
+	/** "All links" reaches every selected layer clip, whatever effects it runs. */
+	function setMediaClipsBand(band: FreqBand) {
+		if (selectedMediaClipIds.length < 2) return;
+		mediaTimeline = updateMediaClips(
+			mediaTimeline,
+			new Set(selectedMediaClipIds),
+			(c) => withAllLinkBands(c, band),
+		);
 	}
 
 	/** The lanes behind the selected layer clips, each once. */
@@ -5365,6 +5404,7 @@
 				{section}
 				chainNote={mediaChainNote}
 				selectionNote={mediaSelectionNote}
+				onAllBands={setMediaClipsBand}
 				sourceHasAudio={!selectedMediaSourceId ||
 					!audioBank.isSilent(selectedMediaSourceId)}
 				onDetachAudio={isSequenceMode && selectedMediaClip
@@ -5389,6 +5429,7 @@
 				{section}
 				chainNote={textChainNote}
 				selectionNote={textSelectionNote}
+				onAllBands={setTextClipsBand}
 				bpm={sequenceBpm}
 			/>
 		{/if}
@@ -5441,6 +5482,7 @@
 						fanOutFxEdit();
 					}}
 					onBeforeUserEdit={panelBeforeEdit}
+					onAllBands={setFxClipsBand}
 				/>
 			{/if}
 		{/snippet}

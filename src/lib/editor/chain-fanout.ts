@@ -3,8 +3,10 @@
 import {
 	cloneEffectInstance,
 	type EffectInstance,
+	type FreqBand,
 	type VolumeLink,
 } from "../effects";
+import { hasVolumeLinks, setAllLinkBands } from "../effects/link-bands";
 import type { ChainClip } from "./chain-clip";
 import { handBuiltLabel, isHandBuiltLabel } from "./sequence";
 
@@ -137,6 +139,18 @@ export function fanOutEdit<C extends ChainClip>(
 	if (!sameLiveChain([before.effects, ...others.map((c) => c.effects)]))
 		return [];
 	return others.map((c) => fanOutClipEdit(before, after, c));
+}
+
+/** The chain panel's "All links" on one clip of a selection, whatever effects it runs.
+ * A preset-filled clip counts as hand-edited after. */
+export function withAllLinkBands<C extends ChainClip>(
+	clip: C,
+	band: FreqBand,
+): C {
+	if (!hasVolumeLinks(clip.effects)) return clip;
+	const next: C = { ...clip, effects: setAllLinkBands(clip.effects, band) };
+	if (next.presetName) next.modified = true;
+	return next;
 }
 
 /** What the chain panel says about a multi-selection; null for a single clip. */
