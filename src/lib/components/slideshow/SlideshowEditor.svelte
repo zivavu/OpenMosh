@@ -135,6 +135,8 @@
 		warmCanvas?: HTMLCanvasElement | null;
 		warmRenderer?: import("../../gl/renderer").GlRenderer | null;
 		onExit?: () => void;
+		/** The slideshow now saves under this key. */
+		onProjectReady?: (key: string) => void;
 	}
 
 	let {
@@ -146,6 +148,7 @@
 		warmCanvas = null,
 		warmRenderer = null,
 		onExit,
+		onProjectReady,
 	}: Props = $props();
 
 	let slides: SlideshowSlide[] = $state([]);
@@ -516,7 +519,9 @@
 			return false;
 		});
 		void saves.track("session", write).then((ok) => {
-			if (ok) void pruneSequenceMediaThrottled().catch(() => {});
+			if (!ok) return;
+			onProjectReady?.(ownSessionKey);
+			void pruneSequenceMediaThrottled().catch(() => {});
 		});
 	}
 

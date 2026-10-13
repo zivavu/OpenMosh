@@ -51,7 +51,8 @@ ${JSON.stringify(chain)}`;
 /** Where the reporter was and what they were running: the context that otherwise
  * takes three round trips to get out of a bug report. */
 function collectContext(): string {
-	const view = window.location.hash || "#";
+	// The project id in an editor link means nothing off this browser.
+	const view = window.location.hash.split("/")[0] || "#";
 	return [
 		`View: ${view}`,
 		`Screen: ${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}x`,
