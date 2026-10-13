@@ -1101,11 +1101,12 @@
 	});
 
 	// A source reset sizes the frame to the source; the effect below may not re-run after it.
+	// Either clears the canvas, so one that already showed a frame redraws here.
 	function refitPreview() {
 		untrack(() => {
-			if (!suspended && renderSize) {
-				renderer?.resize(renderSize.width, renderSize.height);
-			}
+			if (suspended || !renderer || !renderSize) return;
+			renderer.resize(renderSize.width, renderSize.height);
+			if (imageReady && !externallyDriven && !needsAnimation) drawFrame(0);
 		});
 	}
 
