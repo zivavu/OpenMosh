@@ -154,26 +154,29 @@ function serviceWorker(): Plugin {
 			publicDir = config.publicDir;
 		},
 		writeBundle(_, bundle) {
-			const built = Object.values(bundle)
-				.filter(
-					(out) =>
-						!out.fileName.endsWith(".map") &&
-						!(
-							out.type === "asset" &&
-							out.originalFileNames.some((f) =>
-								f.startsWith(OFFLINE_SKIP_SOURCES),
-							)
-						),
+			// By content, not name: public files keep their names across deploys.
+			const contents = new Map<string, string | Uint8Array>();
+			for (const out of Object.values(bundle)) {
+				if (out.fileName.endsWith(".map")) continue;
+				if (
+					out.type === "asset" &&
+					out.originalFileNames.some((f) => f.startsWith(OFFLINE_SKIP_SOURCES))
 				)
-				.map((out) => out.fileName);
-			const copied = listFiles(publicDir)
-				.map((f) => relative(publicDir, f).replaceAll("\\", "/"))
-				.filter((f) => !OFFLINE_SKIP.has(f) && !f.startsWith(ON_USE_DIR));
-			const files = [...new Set([...built, ...copied])].sort();
-			const version = createHash("sha256")
-				.update(files.join("\n"))
-				.digest("hex")
-				.slice(0, 12);
+					continue;
+				contents.set(
+					out.fileName,
+					out.type === "chunk" ? out.code : out.source,
+				);
+			}
+			for (const path of listFiles(publicDir)) {
+				const f = relative(publicDir, path).replaceAll("\\", "/");
+				if (OFFLINE_SKIP.has(f) || f.startsWith(ON_USE_DIR)) continue;
+				if (!contents.has(f)) contents.set(f, readFileSync(path));
+			}
+			const files = [...contents.keys()].sort();
+			const hash = createHash("sha256");
+			for (const f of files) hash.update(f).update(contents.get(f)!);
+			const version = hash.digest("hex").slice(0, 12);
 			const precache = files.map((f) => "/" + f);
 			const source = readFileSync(
 				new URL("./sw/service-worker.js", import.meta.url),
