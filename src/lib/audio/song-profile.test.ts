@@ -106,6 +106,13 @@ describe("song profile", () => {
 		expect(Math.min(...drop)).toBeLessThan(0.3);
 	});
 
+	it("lands the drop on its first kick", async () => {
+		await use(profile);
+		const fx = lowLink();
+		ride(fx, INTRO - 2, INTRO);
+		expect(Math.max(...ride(fx, INTRO, INTRO + 0.2))).toBeGreaterThan(0.9);
+	});
+
 	it("reads the intro the same at the start as after a trip to the drop", async () => {
 		await use(profile);
 		const fromStart = ride(lowLink(), 0, 6).slice(-15);

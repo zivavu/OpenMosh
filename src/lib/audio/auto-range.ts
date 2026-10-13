@@ -3,7 +3,7 @@
 
 /** How the raw band level is turned into the number a volume link rides. */
 export interface AudioResponse {
-	/** 0 = twitchy and immediate, 1 = slow and glidey; sets the follower's release. */
+	/** 0 = twitchy, 1 = slow and glidey; sets how long the follower falls off a hit. */
 	smoothing: number;
 	/** Response curve. Low lifts quiet detail, high leaves only the big hits. */
 	punch: number;
@@ -73,18 +73,15 @@ function approach(
 	return current + (target - current) * (1 - Math.exp(-step / tau));
 }
 
-/** Attack and release of the band follower, in seconds, for a smoothing amount.
- * Asymmetric: the rise stays quick so a kick reads as a kick, the fall much longer. */
-export function followerTaus(smoothing: number): {
-	attack: number;
-	release: number;
-} {
+/** Seconds the band follower takes to fall off a hit, for a smoothing amount. */
+export function followerRelease(smoothing: number): number {
 	const s = clamp01(smoothing);
-	return { attack: 0.02 + s * 0.08, release: 0.05 + s * s * 0.95 };
+	return 0.05 + s * s * 0.95;
 }
 
-/** One-pole envelope follow of a raw band level, stepped in seconds. The preview took
- * this from the AnalyserNode, which the offline export has no equivalent for. */
+/** Envelope follow of a raw band level, stepped in seconds: it rises at once, so a kick
+ * lands on the frame it plays, and falls off it on the release. A smoothed rise left
+ * a drop's first kick at a fraction of the range. */
 export function smoothBandLevel(
 	key: string,
 	level: number,
@@ -92,17 +89,11 @@ export function smoothBandLevel(
 	smoothing: number = DEFAULT_AUDIO_RESPONSE.smoothing,
 ): number {
 	const prev = smoothed.get(key);
-	if (prev === undefined) {
+	if (prev === undefined || level >= prev) {
 		smoothed.set(key, level);
 		return level;
 	}
-	const { attack, release } = followerTaus(smoothing);
-	const next = approach(
-		prev,
-		level,
-		level > prev ? attack : release,
-		stepOf(dt),
-	);
+	const next = approach(prev, level, followerRelease(smoothing), stepOf(dt));
 	smoothed.set(key, next);
 	return next;
 }

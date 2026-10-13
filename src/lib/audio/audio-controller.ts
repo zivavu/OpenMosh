@@ -1,6 +1,6 @@
 import { applyVolumeLinksToEffects, type AudioLinkGroup } from "./audio-utils";
 import { onFrame } from "../frame-loop";
-import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
+import { FFT_SIZE, SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
 
 export { applyVolumeLinksToEffects as applyVolumeLinksTick } from "./audio-utils";
 
@@ -62,7 +62,7 @@ export function createAnalysisTap(ctx: AudioContext): {
 } {
 	const input = ctx.createDelay(1);
 	const analyser = ctx.createAnalyser();
-	analyser.fftSize = 2048;
+	analyser.fftSize = FFT_SIZE;
 	// Raw bins. Smoothing lives in smoothBandLevel, which an export runs too: left at
 	// the 0.8 default this path would be smoothed twice over and a render not at all.
 	analyser.smoothingTimeConstant = 0;
@@ -77,9 +77,13 @@ export function createAnalysisTap(ctx: AudioContext): {
 	return { input, analyser };
 }
 
-/** The output latency is only known once the context runs, and moves with the device. */
+/** The output latency is only known once the context runs, and moves with the device.
+ * The analyser reads the window ending now, where the export centres it on the frame,
+ * so half a window comes off the delay to line the two up. */
 function syncAnalysisDelay(delay: DelayNode): void {
-	const target = Math.min(heardLatency(delay.context as AudioContext), 1);
+	const ctx = delay.context as AudioContext;
+	const halfWindow = FFT_SIZE / 2 / ctx.sampleRate;
+	const target = Math.max(0, Math.min(heardLatency(ctx) - halfWindow, 1));
 	if (Math.abs(delay.delayTime.value - target) > 0.005) {
 		delay.delayTime.value = target;
 	}

@@ -3,7 +3,7 @@
 		autoRangeLevel,
 		DEFAULT_AUDIO_RESPONSE,
 		dropAutoRangeScope,
-		followerTaus,
+		followerRelease,
 		punchExponent,
 		smoothBandLevel,
 		type AudioResponse,
@@ -76,7 +76,7 @@
 		return a + (b - a) * frac;
 	}
 
-	/** The number the linked parameter is riding this frame: band mean, envelope
+	/** The number the linked parameter is riding this frame: band power, envelope
 	 * followed, auto-ranged, then shaped by Punch, as `applyVolumeLinksToEffects` does. */
 	function modulationLevel(dt: number): number {
 		if (!sampleRate || !data.length) return 0;
@@ -107,8 +107,8 @@
 		const h = height;
 		const bars = 64;
 		const barW = w / bars;
-		// The analyser hands out raw bins, so the bars are damped here on the same
-		// asymmetric curve the band follower uses.
+		// The analyser hands out raw bins, so the bars fall here on the band follower's
+		// release, rising at once as it does.
 		const shown = new Float32Array(bars);
 		let lastFrame = performance.now();
 
@@ -117,7 +117,7 @@
 			const now = performance.now();
 			const dt = Math.min((now - lastFrame) / 1000, 0.25);
 			lastFrame = now;
-			const { attack, release } = followerTaus(response.smoothing);
+			const release = followerRelease(response.smoothing);
 			ctx.fillStyle = "#1a1a1a";
 			ctx.fillRect(0, 0, w, h);
 			for (let i = 0; i < bars; i++) {
@@ -138,8 +138,10 @@
 						if (data[b] > peak) peak = data[b];
 					}
 				}
-				const tau = peak > shown[i] ? attack : release;
-				shown[i] += (peak - shown[i]) * (1 - Math.exp(-dt / tau));
+				shown[i] =
+					peak >= shown[i]
+						? peak
+						: shown[i] + (peak - shown[i]) * (1 - Math.exp(-dt / release));
 				const level = shown[i] / 255;
 				const inRange = hiHz >= freqMin && loHz <= freqMax;
 				ctx.fillStyle = inRange

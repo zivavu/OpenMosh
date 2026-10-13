@@ -2,7 +2,7 @@
  * read through a dB window under the song's loud parts, falling under gravity. The loud
  * parts come from the song profile; until it's in, the ceilings learn them as it plays. */
 
-import { followerTaus } from "./auto-range";
+import { followerRelease } from "./auto-range";
 import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./offline-audio";
 import { activeSongProfile, type SongProfile } from "./song-profile";
 
@@ -140,7 +140,7 @@ function songTopsOf(profile: SongProfile, bars: number): Float32Array {
 
 /** Seconds a bar takes to fall its full height from rest, for a smoothing amount. */
 export function barFallTime(smoothing: number): number {
-	return 0.1 + followerTaus(smoothing).release;
+	return 0.1 + followerRelease(smoothing);
 }
 
 /** Rise time constant: instant with no smoothing, so a kick lands on its frame. */
