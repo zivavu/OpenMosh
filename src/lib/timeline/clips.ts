@@ -54,6 +54,31 @@ export function clipRange<C extends TimelineClip>(
 	return ordered.slice(lo, hi + 1).map((c) => c.id);
 }
 
+/** A shift-click range over several lanes, given top to bottom: every clip on the
+ * lanes from one clip's to the other's that overlaps the time between them. */
+export function clipRangeAcross<C extends TimelineClip>(
+	lanes: ClipLane<C>[],
+	fromId: string,
+	toId: string,
+): string[] {
+	const laneIndex = (id: string) =>
+		lanes.findIndex((l) => l.clips.some((c) => c.id === id));
+	const a = laneIndex(fromId);
+	const b = laneIndex(toId);
+	if (b === -1) return [];
+	if (a === -1) return [toId];
+	if (a === b) return clipRange(lanes[a], fromId, toId);
+	const from = lanes[a].clips.find((c) => c.id === fromId)!;
+	const to = lanes[b].clips.find((c) => c.id === toId)!;
+	const start = Math.min(from.start, to.start);
+	const end = Math.max(from.end, to.end);
+	return lanes.slice(Math.min(a, b), Math.max(a, b) + 1).flatMap((l) =>
+		sortClips(l.clips)
+			.filter((c) => c.end > start && c.start < end)
+			.map((c) => c.id),
+	);
+}
+
 /** The empty span around `time`, bounded by its neighbours and [0, duration]. */
 export function freeRangeAt<C extends TimelineClip>(
 	lane: ClipLane<C>,

@@ -4,6 +4,7 @@ import {
 	clipAt,
 	clipFadeWeight,
 	clipRange,
+	clipRangeAcross,
 	fitClipsToDuration,
 	freeRangeAt,
 	MIN_CLIP_LENGTH,
@@ -79,6 +80,30 @@ describe("clipRange", () => {
 
 	it("is empty when the clicked clip isn't on this lane", () => {
 		expect(clipRange(lane, "a", "elsewhere")).toEqual([]);
+	});
+});
+
+describe("clipRangeAcross", () => {
+	const top = laneOf(clip("a", 0, 1), clip("b", 2, 3), clip("c", 6, 7));
+	const middle = laneOf(clip("d", 0.5, 1.5), clip("e", 3, 4), clip("f", 5, 6));
+	const bottom = laneOf(clip("g", 1, 2), clip("h", 4, 5));
+	const lanes = [top, middle, bottom];
+
+	it("takes every lane between and the clips overlapping the span", () => {
+		expect(clipRangeAcross(lanes, "b", "h")).toEqual(["b", "e", "h"]);
+		expect(clipRangeAcross(lanes, "h", "b")).toEqual(["b", "e", "h"]);
+	});
+
+	it("includes clips that only partly overlap the span", () => {
+		expect(clipRangeAcross(lanes, "a", "g")).toEqual(["a", "d", "g"]);
+	});
+
+	it("is the single-lane range when both clips share a lane", () => {
+		expect(clipRangeAcross(lanes, "a", "c")).toEqual(["a", "b", "c"]);
+	});
+
+	it("falls back to the clicked clip when the anchor is gone", () => {
+		expect(clipRangeAcross(lanes, "gone", "e")).toEqual(["e"]);
 	});
 });
 
