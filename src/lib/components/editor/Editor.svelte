@@ -907,18 +907,21 @@
 
 	let trackInput: HTMLInputElement;
 
-	/** Latched when a track restores a size, so the default below can't overwrite it. */
-	let sizeRestoredFromTrack = false;
+	/** Set while the output size is the project's saved one: media still loading reports
+	 * its own size more than once, and none of those reports may replace it. */
+	let sizeRestored = false;
+
+	// A different file in single mode is new media, which takes its own size again.
+	$effect(() => {
+		void file;
+		if (!isSequenceMode) sizeRestored = false;
+	});
 
 	// New media defaults the output to its own size.
 	$effect(() => {
 		const nw = naturalWidth;
 		const nh = naturalHeight;
-		if (nw != null && nh != null && nw > 0 && nh > 0) {
-			if (sizeRestoredFromTrack) {
-				sizeRestoredFromTrack = false;
-				return;
-			}
+		if (nw != null && nh != null && nw > 0 && nh > 0 && !sizeRestored) {
 			resizeWidth = nw;
 			resizeHeight = nh;
 		}
@@ -950,7 +953,6 @@
 		flushMediaPoolSave();
 		audio.clearTrack();
 		currentTrackId = null;
-		sizeRestoredFromTrack = false;
 		// Belongs to the song that just left; the next one restores or detects its own.
 		sequenceBpm = 0;
 	}
@@ -3258,18 +3260,17 @@
 			const saved = loadRenderSettings(key);
 			if (saved?.fps) recordFps = saved.fps;
 			if (saved?.duration) recordDuration = saved.duration;
-			// Falls back to the per-track size store used before the output size lived here.
+			// Single mode falls back to the per-track size store used before the output size lived here.
 			const size =
 				saved?.width && saved?.height
 					? { width: saved.width, height: saved.height }
-					: currentTrackId
+					: !isSequenceMode && currentTrackId
 						? sizeStore.load(currentTrackId)
 						: null;
-			if (size && size.width > 0 && size.height > 0) {
+			sizeRestored = !!size && size.width > 0 && size.height > 0;
+			if (size && sizeRestored) {
 				resizeWidth = size.width;
 				resizeHeight = size.height;
-				// Media finishing its load after this would otherwise default the output back to its own size.
-				sizeRestoredFromTrack = true;
 			}
 		});
 	});
