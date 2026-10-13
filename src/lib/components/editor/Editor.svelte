@@ -32,7 +32,10 @@
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
 	import { downloadBlob } from "../../recorder";
 	import { saveBlobAs } from "../../utils";
-	import { buildProjectFile } from "../../project-file/export";
+	import {
+		buildProjectFile,
+		missingFilesNotice,
+	} from "../../project-file/export";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
 	import { loadTimeline, saveTimeline } from "../../editor/timeline-store";
@@ -1414,11 +1417,7 @@
 			dismissToast(progress);
 			await saveBlobAs(blob, name);
 			if (missing > 0) {
-				showToast(
-					`${missing} file${missing === 1 ? "" : "s"} were missing and weren't saved`,
-					"info",
-					8000,
-				);
+				showToast(missingFilesNotice(missing), "info", 8000);
 			}
 		} catch (e) {
 			dismissToast(progress);
