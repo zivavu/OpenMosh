@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import {
 	autoRangeLevel,
 	dropAutoRangeScope,
+	followerTaus,
 	resetAutoRange,
 	smoothBandLevel,
 } from "./auto-range";
@@ -94,6 +95,20 @@ describe("smoothBandLevel", () => {
 		};
 		expect(decay(1)).toBeGreaterThan(decay(0.45));
 		expect(decay(0.45)).toBeGreaterThan(decay(0));
+	});
+});
+
+describe("followerTaus", () => {
+	it("rises at once up to the middle, and eases in past it", () => {
+		expect(followerTaus(0).attack).toBe(0);
+		expect(followerTaus(0.5).attack).toBe(0);
+		expect(followerTaus(1).attack).toBeGreaterThan(0.1);
+	});
+
+	it("swells into a hit at full smoothing", () => {
+		resetAutoRange();
+		smoothBandLevel("a", 0, 1 / 60, 1);
+		expect(smoothBandLevel("a", 1, 1 / 60, 1)).toBeLessThan(0.5);
 	});
 });
 
