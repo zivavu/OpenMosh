@@ -663,52 +663,53 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		};
 	};
 
-	let sink: FrameSink;
-	if (!hardware && selectedCodec === "vp8") {
-		try {
-			sink = await makePoolSink();
-		} catch {
-			sink = makeCanvasSink();
-		}
-	} else {
-		sink = makeCanvasSink();
-	}
-
-	// Add audio track for WebM when we have audio (add track before start; add data after start)
-	let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
-	if (wantsAudioTrack && audioBufferForMux) {
-		const supportedAudio = outputFormat.getSupportedAudioCodecs();
-		const preferredAudio = ["opus", "vorbis"] as const;
-		const audioCandidates = preferredAudio.filter((c) =>
-			supportedAudio.includes(c),
-		);
-		const audioCodec = await mb.getFirstEncodableAudioCodec(audioCandidates, {
-			numberOfChannels: audioBufferForMux.numberOfChannels,
-			sampleRate: audioBufferForMux.sampleRate,
-			bitrate: 256_000,
-		});
-		if (audioCodec) {
-			audioSource = new mb.AudioBufferSource({
-				codec: audioCodec,
-				bitrate: 256_000,
-			});
-			output.addAudioTrack(audioSource);
-		}
-	}
-
-	await output.start();
-
-	if (audioSource && audioBufferForMux) {
-		await audioSource.add(audioBufferForMux);
-		audioSource.close();
-	}
-
-	// Otherwise the output's first seconds depend on where the preview was scrubbed.
-	resetAutoRange();
-	resetSpectrumBars();
-
+	// From here on a failure must release the encoders and the partial file.
+	let sink: FrameSink | null = null;
 	let finished = false;
 	try {
+		if (!hardware && selectedCodec === "vp8") {
+			try {
+				sink = await makePoolSink();
+			} catch {
+				sink = makeCanvasSink();
+			}
+		} else {
+			sink = makeCanvasSink();
+		}
+
+		// Add audio track for WebM when we have audio (add track before start; add data after start)
+		let audioSource: InstanceType<typeof mb.AudioBufferSource> | null = null;
+		if (wantsAudioTrack && audioBufferForMux) {
+			const supportedAudio = outputFormat.getSupportedAudioCodecs();
+			const preferredAudio = ["opus", "vorbis"] as const;
+			const audioCandidates = preferredAudio.filter((c) =>
+				supportedAudio.includes(c),
+			);
+			const audioCodec = await mb.getFirstEncodableAudioCodec(audioCandidates, {
+				numberOfChannels: audioBufferForMux.numberOfChannels,
+				sampleRate: audioBufferForMux.sampleRate,
+				bitrate: 256_000,
+			});
+			if (audioCodec) {
+				audioSource = new mb.AudioBufferSource({
+					codec: audioCodec,
+					bitrate: 256_000,
+				});
+				output.addAudioTrack(audioSource);
+			}
+		}
+
+		await output.start();
+
+		if (audioSource && audioBufferForMux) {
+			await audioSource.add(audioBufferForMux);
+			audioSource.close();
+		}
+
+		// Otherwise the output's first seconds depend on where the preview was scrubbed.
+		resetAutoRange();
+		resetSpectrumBars();
+
 		for (let i = 0; i < totalFrames; i++) {
 			checkAbort(signal);
 
@@ -783,7 +784,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		await output.finalize();
 		finished = true;
 	} finally {
-		sink.dispose();
+		sink?.dispose();
 		if (!finished) {
 			// Releases the encoders now rather than whenever they're collected.
 			void output.cancel().catch(() => {});
