@@ -76,8 +76,9 @@ export function gifsToVideo(files: File[]): Promise<File[]> {
 	return Promise.all(files.map(gifToVideo));
 }
 
-/** Decodes every frame of a GIF, composited onto the logical screen. */
-function decodeGif(bytes: Uint8Array): DecodedGif {
+/** Decodes every frame of a GIF, composited onto the logical screen. A file cut
+ * off partway gives back the frames before the cut. */
+export function decodeGif(bytes: Uint8Array): DecodedGif {
 	const sig = String.fromCharCode(...bytes.subarray(0, 6));
 	if (sig !== "GIF87a" && sig !== "GIF89a") throw new Error("not a GIF");
 	const width = bytes[6] | (bytes[7] << 8);
@@ -98,8 +99,9 @@ function decodeGif(bytes: Uint8Array): DecodedGif {
 	let disposal = 0;
 	let transparent = -1;
 
+	// Bounded: a file cut off mid-block would otherwise walk past the end forever.
 	const skipSubBlocks = () => {
-		while (bytes[pos] !== 0) pos += bytes[pos] + 1;
+		while (pos < bytes.length && bytes[pos] !== 0) pos += bytes[pos] + 1;
 		pos++;
 	};
 
@@ -232,17 +234,23 @@ function lzwDecode(
 		bitCount -= codeSize;
 		return code;
 	};
+	// Both walks are bounded by the entry's length: a crafted stream can point an
+	// entry at itself, and an unbounded walk would never end.
 	const emit = (code: number) => {
 		const len = length[code];
 		let p = outPos + len - 1;
 		outPos += len;
-		for (let c = code; c >= 0 && p < out.length; c = prefix[c])
-			out[p--] = suffix[c];
+		let c = code;
+		for (let n = 0; n < len && c >= 0; n++, c = prefix[c]) {
+			if (p < out.length) out[p] = suffix[c];
+			p--;
+		}
 		// Past the end: keep the cursor clamped so a corrupt stream can't overrun.
 		if (outPos > out.length) outPos = out.length;
 	};
 	const firstByte = (code: number): number => {
-		while (prefix[code] >= 0) code = prefix[code];
+		for (let n = length[code]; n > 1 && prefix[code] >= 0; n--)
+			code = prefix[code];
 		return suffix[code];
 	};
 
@@ -256,6 +264,8 @@ function lzwDecode(
 			prev = -1;
 			continue;
 		}
+		// Past the dictionary: the stream is corrupt from here on.
+		if (code > next || (prev === -1 && code >= next)) break;
 		if (prev === -1) {
 			emit(code);
 			prev = code;
