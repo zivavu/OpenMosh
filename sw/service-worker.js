@@ -1,5 +1,5 @@
 // Offline copy of the app. The build prepends PRECACHE (every file it wrote but the
-// fonts) and VERSION (a hash of their names, which are content-hashed), so a deploy gets its own
+// fonts) and VERSION (a hash of their contents), so a deploy gets its own
 // cache. There's no skipWaiting: a new version takes over only once every tab on the
 // old one has closed, so an open tab keeps finding the chunks it lazy-loads.
 /* global PRECACHE, VERSION */
