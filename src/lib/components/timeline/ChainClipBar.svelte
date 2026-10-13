@@ -133,11 +133,13 @@
 		{/if}
 		<button
 			class="tl-tool-btn"
-			title={commonMode === "interval"
-				? "New random seed"
-				: many
-					? "Random mosh for each selected clip"
-					: "Random mosh for this clip"}
+			title={many
+				? commonMode === "interval"
+					? "New random seed"
+					: "Random mosh for each selected clip"
+				: commonMode === "interval"
+					? "New random seed (→)"
+					: "Random mosh for this clip (→)"}
 			onclick={() => onRoll?.(ids)}
 		>
 			<Dices size={12} /> Mosh

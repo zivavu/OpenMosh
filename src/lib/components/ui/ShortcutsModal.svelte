@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { modalDialog } from "../../actions/modal-dialog";
 	import { MousePointer2, X } from "lucide-svelte";
+	import { isMac } from "../../input-device";
 
 	interface ShortcutGroup {
 		title: string;
@@ -14,7 +15,6 @@
 
 	let { groups, onClose }: Props = $props();
 
-	const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 	const MOD_LABEL: Record<string, string> = isMac
 		? { "Ctrl/Cmd": "⌘", Shift: "⇧", Alt: "⌥" }
 		: { "Ctrl/Cmd": "Ctrl" };

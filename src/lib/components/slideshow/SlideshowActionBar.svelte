@@ -150,7 +150,12 @@
 	</div>
 	<div class="bar-sep"></div>
 
-	<button class="bar-key live" onclick={onTogglePreview} disabled={slidesEmpty}>
+	<button
+		class="bar-key live"
+		onclick={onTogglePreview}
+		disabled={slidesEmpty}
+		title={previewPlaying ? "Stop (Space)" : "Play (Space)"}
+	>
 		{#if previewPlaying}
 			<Pause size={14} fill="currentColor" stroke="none" />
 			STOP
