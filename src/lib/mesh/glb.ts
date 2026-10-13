@@ -98,6 +98,9 @@ const COMPONENTS: Record<string, number> = {
 	MAT4: 16,
 };
 
+/** Floats an accessor with no buffer view may ask for; it can only be zeros. */
+const MAX_ZERO_ACCESSOR = 1 << 24;
+
 /** Binary glTF: meshes or point clouds with materials, skins and the first
  * animation. Images must be embedded; external buffers aren't reachable from a
  * single file. */
@@ -143,21 +146,36 @@ export function parseGltf(
 		const acc = json.accessors?.[index];
 		if (!acc) throw new Error("missing accessor");
 		const size = COMPONENTS[acc.type] ?? 1;
-		const data = new Float32Array(acc.count * size);
+		if (!Number.isInteger(acc.count) || acc.count < 0) {
+			throw new Error("bad accessor count");
+		}
 		const view =
 			acc.bufferView === undefined ? null : json.bufferViews?.[acc.bufferView];
 		const bytes =
 			acc.bufferView === undefined
 				? null
 				: viewBytes(json, bin, acc.bufferView, unpacked);
-		if (!view || !bytes) return { data, size };
-		const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+		if (!view || !bytes) {
+			// No data behind it: zeros, as the spec says, but not a file's worth of them.
+			if (acc.count * size > MAX_ZERO_ACCESSOR)
+				throw new Error("accessor too big");
+			return { data: new Float32Array(acc.count * size), size };
+		}
 		const width = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }[
 			acc.componentType
 		];
 		if (!width) throw new Error("bad component type");
 		const stride = view.byteStride || width * size;
 		const start = acc.byteOffset ?? 0;
+		// Sized from the count only once the view is known to hold that many.
+		if (
+			acc.count > 0 &&
+			start + (acc.count - 1) * stride + size * width > bytes.byteLength
+		) {
+			throw new Error("accessor runs past its view");
+		}
+		const data = new Float32Array(acc.count * size);
+		const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 		const norm = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 }[
 			acc.componentType
 		];
@@ -195,12 +213,18 @@ export function parseGltf(
 	const parent = new Array<number>(nodes.length).fill(-1);
 	nodes.forEach((n, i) => n.children?.forEach((c) => (parent[c] = i)));
 	const order: number[] = [];
-	const visit = (i: number) => {
+	const seen = new Set<number>();
+	// A node reached twice is a cycle, which a hand-made file can hold. The parent is
+	// the one it was reached from, so it always comes first in `order`.
+	const visit = (i: number, from: number) => {
+		if (seen.has(i) || !nodes[i]) return;
+		seen.add(i);
+		parent[i] = from;
 		order.push(i);
-		nodes[i].children?.forEach(visit);
+		nodes[i].children?.forEach((c) => visit(c, i));
 	};
 	const roots = json.scenes?.[json.scene ?? 0]?.nodes ?? [];
-	roots.forEach(visit);
+	roots.forEach((i) => visit(i, -1));
 
 	const bones: { node: number; inverseBind: Mat4 }[] = [];
 	const boneOf = new Map<string, number>();

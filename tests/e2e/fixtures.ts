@@ -250,9 +250,65 @@ export function skinnedGlbFile(name: string) {
 			{ byteOffset: 104, byteLength: 24 },
 		],
 	};
+	return { name, mimeType: "", buffer: packGlb(json, Buffer.from(bin)) };
+}
+
+/** A square facing the camera, textured with a solid `color` PNG and nothing
+ * else: told apart on the canvas only if the texture reaches it. */
+export function texturedGlbFile(name: string, color: Rgb) {
+	const png = pngBytes(color, 256);
+	const geometry = Buffer.alloc(48 + 12 + 32);
+	[-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0].forEach((v, i) =>
+		geometry.writeFloatLE(v, i * 4),
+	);
+	[0, 1, 2, 0, 2, 3].forEach((v, i) => geometry.writeUInt16LE(v, 48 + i * 2));
+	[0, 1, 1, 1, 1, 0, 0, 0].forEach((v, i) =>
+		geometry.writeFloatLE(v, 60 + i * 4),
+	);
+	const json = {
+		asset: { version: "2.0" },
+		scene: 0,
+		scenes: [{ nodes: [0] }],
+		nodes: [{ mesh: 0 }],
+		meshes: [
+			{
+				primitives: [
+					{
+						attributes: { POSITION: 0, TEXCOORD_0: 2 },
+						indices: 1,
+						material: 0,
+					},
+				],
+			},
+		],
+		materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+		textures: [{ source: 0 }],
+		images: [{ bufferView: 3, mimeType: "image/png" }],
+		accessors: [
+			{ bufferView: 0, componentType: 5126, count: 4, type: "VEC3" },
+			{ bufferView: 1, componentType: 5123, count: 6, type: "SCALAR" },
+			{ bufferView: 2, componentType: 5126, count: 4, type: "VEC2" },
+		],
+		bufferViews: [
+			{ byteOffset: 0, byteLength: 48 },
+			{ byteOffset: 48, byteLength: 12 },
+			{ byteOffset: 60, byteLength: 32 },
+			{ byteOffset: 92, byteLength: png.length },
+		],
+	};
+	return {
+		name,
+		mimeType: "",
+		buffer: packGlb(json, Buffer.concat([geometry, png])),
+	};
+}
+
+/** The GLB container: a JSON chunk padded with spaces, then the binary one. */
+function packGlb(json: object, bin: Buffer): Buffer {
 	const jsonBytes = Buffer.from(JSON.stringify(json));
 	const jsonLength = jsonBytes.length + ((4 - (jsonBytes.length % 4)) % 4);
-	const total = 12 + 8 + jsonLength + 8 + bin.byteLength;
+	const binLength = bin.length + ((4 - (bin.length % 4)) % 4);
+	const total = 12 + 8 + jsonLength + 8 + binLength;
 	const out = Buffer.alloc(total);
 	out.writeUInt32LE(0x46546c67, 0);
 	out.writeUInt32LE(2, 4);
@@ -262,8 +318,8 @@ export function skinnedGlbFile(name: string) {
 	jsonBytes.copy(out, 20);
 	out.fill(0x20, 20 + jsonBytes.length, 20 + jsonLength);
 	const binAt = 20 + jsonLength;
-	out.writeUInt32LE(bin.byteLength, binAt);
+	out.writeUInt32LE(binLength, binAt);
 	out.writeUInt32LE(0x004e4942, binAt + 4);
-	Buffer.from(bin).copy(out, binAt + 8);
-	return { name, mimeType: "", buffer: out };
+	bin.copy(out, binAt + 8);
+	return out;
 }

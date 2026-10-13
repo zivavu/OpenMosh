@@ -91,6 +91,26 @@ describe("parsePly", () => {
 		expect(mesh.colors![4]).toBeCloseTo(0, 3);
 	});
 
+	it("turns down a header that counts more than the file holds", () => {
+		const big = binaryCloud(["x", "y", "z"], [[0, 0, 0]]);
+		const text = new TextDecoder("latin1").decode(big);
+		const lying = text.replace("element vertex 1", "element vertex 900000000");
+		expect(parsePly(Uint8Array.from(lying, (c) => c.charCodeAt(0)))).toBeNull();
+	});
+
+	it("doesn't walk the count of an element with no properties", () => {
+		const empty = ASCII_QUAD.replace(
+			"element vertex 4",
+			"element nothing 1000000000000\nelement vertex 4",
+		);
+		expect(parsePly(encode(empty))?.positions.length).toBeGreaterThan(0);
+	});
+
+	it("turns down a face list longer than the file", () => {
+		const long = ASCII_QUAD.replace("4 0 1 2 3", "4000000000 0 1 2 3");
+		expect(() => parsePly(encode(long))).toThrow();
+	});
+
 	it("turns down anything that isn't a PLY", () => {
 		expect(parsePly(encode("solid cube\nendsolid"))).toBeNull();
 	});

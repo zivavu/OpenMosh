@@ -283,6 +283,18 @@ describe("parseGlb", () => {
 		expect(w[0]).toBe(0.25);
 	});
 
+	it("throws on an accessor that counts past its view, before sizing it", () => {
+		const glb = readGlb(vertexColouredTriangle())!;
+		glb.json.accessors![0].count = 1_000_000_000;
+		expect(() => parseGltf(glb.json, glb.bin)).toThrow("past its view");
+	});
+
+	it("reads a scene whose nodes loop back on themselves", () => {
+		const glb = readGlb(vertexColouredTriangle())!;
+		glb.json.nodes = [{ mesh: 0, children: [1] }, { children: [0] }];
+		expect(parseGltf(glb.json, glb.bin)?.triangles).toBe(1);
+	});
+
 	it("reads a point cloud as one dot per vertex", () => {
 		const mesh = parseGlb(fourVertices(0))!;
 		expect(mesh.points).toBe(true);

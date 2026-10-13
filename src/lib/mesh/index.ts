@@ -86,41 +86,43 @@ const MAX_TEXTURE_SIDE = 2048;
 const TEXTURE_BUDGET = 64 * 1024 * 1024;
 
 /** Every picture decoded and scaled to one size; one that won't decode becomes
- * white, so it shows its material colour. Empty when none decode. */
+ * white, so it shows its material colour. Empty when none decode. Read one at a
+ * time, sized first and then decoded straight to that size, so a model with many
+ * large maps never holds them all at full size. */
 async function decodeTextures(images: Mesh["images"]): Promise<ImageBitmap[]> {
-	const decoded = await Promise.all(
-		images.map((image) =>
-			createImageBitmap(
-				new Blob([image.bytes as BlobPart], { type: image.mime }),
-				{
-					premultiplyAlpha: "none",
-					colorSpaceConversion: "none",
-				},
-			).catch(() => null),
-		),
-	);
-	const ok = decoded.filter((b): b is ImageBitmap => b !== null);
+	const blobOf = (image: Mesh["images"][number]) =>
+		new Blob([image.bytes as BlobPart], { type: image.mime });
+	const sizes: ({ width: number; height: number } | null)[] = [];
+	for (const image of images) {
+		const bitmap = await createImageBitmap(blobOf(image), DECODE).catch(
+			() => null,
+		);
+		sizes.push(bitmap && { width: bitmap.width, height: bitmap.height });
+		bitmap?.close();
+	}
+	const ok = sizes.filter((s) => s !== null);
 	if (ok.length === 0) return [];
 	let w = Math.min(MAX_TEXTURE_SIDE, Math.max(...ok.map((b) => b.width)));
 	let h = Math.min(MAX_TEXTURE_SIDE, Math.max(...ok.map((b) => b.height)));
-	while (w * h * decoded.length > TEXTURE_BUDGET && w > 1 && h > 1) {
+	while (w * h * images.length > TEXTURE_BUDGET && w > 1 && h > 1) {
 		w = Math.ceil(w / 2);
 		h = Math.ceil(h / 2);
 	}
+	const sized = { ...DECODE, resizeWidth: w, resizeHeight: h } as const;
 	const white = new ImageData(1, 1);
 	white.data.fill(255);
-	return Promise.all(
-		decoded.map(async (bitmap) => {
-			if (bitmap && bitmap.width === w && bitmap.height === h) return bitmap;
-			const sized = await createImageBitmap(bitmap ?? white, {
-				resizeWidth: w,
-				resizeHeight: h,
-				resizeQuality: "high",
-				premultiplyAlpha: "none",
-				colorSpaceConversion: "none",
-			});
-			bitmap?.close();
-			return sized;
-		}),
-	);
+	const out: ImageBitmap[] = [];
+	for (const [i, image] of images.entries()) {
+		const bitmap = sizes[i]
+			? await createImageBitmap(blobOf(image), sized).catch(() => null)
+			: null;
+		out.push(bitmap ?? (await createImageBitmap(white, sized)));
+	}
+	return out;
 }
+
+const DECODE = {
+	premultiplyAlpha: "none",
+	colorSpaceConversion: "none",
+	resizeQuality: "high",
+} as const;

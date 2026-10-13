@@ -61,6 +61,20 @@ export function parsePly(bytes: Uint8Array): Mesh | null {
 	const head = readHeader(bytes);
 	if (!head) return null;
 	const { format, elements, bodyAt } = head;
+	const bodyBytes = bytes.length - bodyAt;
+	// Counts come from the header; each is checked against the bytes there are
+	// before a buffer is sized from it. Text takes at least a digit and a space.
+	const fits = (el: Element) => {
+		const least = el.props.reduce(
+			(n, p) => n + (format === "ascii" ? 2 : WIDTH[p.countType ?? p.type]),
+			0,
+		);
+		return (
+			Number.isInteger(el.count) &&
+			el.count >= 0 &&
+			el.count * least <= bodyBytes + 1
+		);
+	};
 	const read =
 		format === "ascii"
 			? asciiReader(new TextDecoder().decode(bytes.subarray(bodyAt)))
@@ -76,6 +90,7 @@ export function parsePly(bytes: Uint8Array): Mesh | null {
 		),
 	);
 	for (const el of elements.slice(0, last + 1)) {
+		if (!fits(el)) return null;
 		if (el.name === "vertex") {
 			vertexCount = el.count;
 			vertices = Object.fromEntries(
@@ -84,10 +99,14 @@ export function parsePly(bytes: Uint8Array): Mesh | null {
 					.map((p) => [p.name, new Float64Array(el.count)]),
 			);
 		}
+		if (el.props.length === 0) continue;
 		for (let i = 0; i < el.count; i++) {
 			for (const p of el.props) {
 				if (p.countType) {
 					const n = read(p.countType);
+					if (!(Number.isInteger(n) && n >= 0 && n <= bodyBytes)) {
+						throw new Error("PLY list longer than the file");
+					}
 					const list = Array.from({ length: n }, () => read(p.type));
 					if (
 						el.name === "face" &&
