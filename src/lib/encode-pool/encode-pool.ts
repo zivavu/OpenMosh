@@ -101,10 +101,7 @@ export class EncoderPool {
 	): Promise<void> {
 		this.throwIfFailed();
 		if (this.inFlight >= this.maxInFlight) {
-			await new Promise<void>((resolve, reject) => {
-				this.slotWaiters.push(resolve);
-				this.failureWaiters.push(reject);
-			});
+			await this.waitUnlessFailed((resolve) => this.slotWaiters.push(resolve));
 			this.throwIfFailed();
 		}
 		this.inFlight++;
@@ -129,9 +126,8 @@ export class EncoderPool {
 	/** Flushes all workers and waits until every packet has been emitted in order. */
 	async flush(): Promise<void> {
 		this.throwIfFailed();
-		await new Promise<void>((resolve, reject) => {
+		await this.waitUnlessFailed((resolve) => {
 			this.flushWaiter = resolve;
-			this.failureWaiters.push(reject);
 			for (const worker of this.workers) this.post(worker, { type: "flush" });
 		});
 		this.throwIfFailed();
@@ -211,6 +207,18 @@ export class EncoderPool {
 			this.flushWaiter();
 			this.flushWaiter = null;
 		}
+	}
+
+	/** Wait for `register`'s callback, or reject when the pool fails first. A settled
+	 * wait leaves the failure list, which would otherwise grow by a frame each time. */
+	private waitUnlessFailed(register: (resolve: () => void) => void) {
+		return new Promise<void>((resolve, reject) => {
+			this.failureWaiters.push(reject);
+			register(() => {
+				this.failureWaiters = this.failureWaiters.filter((r) => r !== reject);
+				resolve();
+			});
+		});
 	}
 
 	private fail(err: Error) {
