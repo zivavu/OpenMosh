@@ -35,17 +35,17 @@ jobs:
       - run: bun run build
 
   # Separate job: it needs a browser download and takes minutes, and a failure
-  # here means something different from a failing unit test. Split across two
+  # here means something different from a failing unit test. Split across three
   # runners, since one runner's CPU can't take a second worker; by file rather
   # than --shard, which balances test counts, not time.
-  e2e-half:
+  e2e-part:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        half: [1, 2]
-    name: e2e (${{ matrix.half }}/2)
+        part: [1, 2, 3]
+    name: e2e (${{ matrix.part }}/3)
     steps:
       - uses: actions/checkout@v4
 
@@ -65,21 +65,35 @@ jobs:
       # shared library Playwright's Chromium links against is already installed.
       # Skipping apt removes the entire class of failure rather than racing it.
       # If a library ever does go missing, capabilities.spec.ts is what says so.
+      - id: playwright
+        run: echo "version=$(bunx playwright --version | cut -d" " -f2)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
       - run: bunx playwright install chromium
 
-      - run: bun run test:e2e ${{ matrix.half == 1 && '--test-list' || '--test-list-invert' }} tests/e2e/ci-first-half.txt
+      - if: matrix.part != 3
+        run: bun run test:e2e --test-list tests/e2e/ci-part-${{ matrix.part }}.txt
+
+      - if: matrix.part == 3
+        run: |
+          cat tests/e2e/ci-part-1.txt tests/e2e/ci-part-2.txt > "$RUNNER_TEMP/ci-parts.txt"
+          bun run test:e2e --test-list-invert "$RUNNER_TEMP/ci-parts.txt"
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report-${{ matrix.half }}
+          name: playwright-report-${{ matrix.part }}
           path: playwright-report
           retention-days: 7
 
   # The main ruleset requires a check named "e2e"; matrix jobs don't report under it.
   e2e:
-    needs: e2e-half
+    needs: e2e-part
     if: ${{ always() && !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
-      - run: test "${{ needs.e2e-half.result }}" = success
+      - run: test "${{ needs.e2e-part.result }}" = success
