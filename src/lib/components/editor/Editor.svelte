@@ -312,7 +312,7 @@
 	import RecordGroup from "./RecordGroup.svelte";
 	import RecordOverlay from "./RecordOverlay.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
-	import { showToast, dismissToast } from "../ui/toast.svelte";
+	import { showToast, dismissToast, updateToast } from "../ui/toast.svelte";
 	import { isLiveFile, liveStreamOf, stopLiveFile } from "../../webcam/camera";
 	import { lazy } from "../../lazy";
 	import {
@@ -1402,7 +1402,8 @@
 		if (!isSequenceMode || !projectKey) return;
 		flushSequenceSave();
 		flushMediaPoolSave();
-		let progress: number | null = null;
+		// Cast: assigned in a callback, which TS can't see, so it would narrow to null.
+		let progress = null as number | null;
 		try {
 			const entry = seqEntryNow();
 			const media = sourceRegistry.sources.map((s) => ({
@@ -1414,7 +1415,11 @@
 				entry ? { entry, media } : undefined,
 				() => (progress = showToast("Building the project file…", "info", 0)),
 			);
-			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
+			if (progress === null) return;
+			if (missing)
+				updateToast(progress, missingFilesNotice(missing), "info", 8000);
+			else updateToast(progress, "Project file saved", "success");
+			progress = null;
 		} catch (e) {
 			showToast(
 				e instanceof Error ? e.message : "Couldn't save the project file",

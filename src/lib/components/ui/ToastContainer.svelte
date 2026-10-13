@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Check } from "lucide-svelte";
 	import { getToasts, dismissToast, runToastAction } from "./toast.svelte";
 </script>
 
@@ -13,7 +14,11 @@
 			class="toast"
 			class:error={toast.type === "error"}
 			class:info={toast.type === "info"}
+			class:success={toast.type === "success"}
 		>
+			{#if toast.type === "success"}
+				<Check size={14} strokeWidth={2.5} />
+			{/if}
 			<span class="message">{toast.message}</span>
 			{#if toast.action}
 				<button class="action" onclick={() => runToastAction(toast.id)}>
@@ -62,6 +67,15 @@
 	.toast.error {
 		border-color: rgba(192, 80, 80, 0.5);
 		color: var(--rec);
+	}
+
+	.toast.success {
+		border-color: var(--live-dim);
+	}
+
+	.toast :global(svg) {
+		flex-shrink: 0;
+		color: var(--live);
 	}
 
 	.message {
