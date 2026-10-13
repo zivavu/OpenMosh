@@ -2,11 +2,17 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { applyVolumeLinksToEffects } from "./audio-utils";
 import { resetAutoRange } from "./auto-range";
 import { buildSongProfile } from "./build-song-profile";
-import { analyzeFrames, FFT_SIZE } from "./offline-audio";
+import {
+	analyzeFrames,
+	FFT_SIZE,
+	SPECTRUM_MAX_DB,
+	SPECTRUM_MIN_DB,
+} from "./offline-audio";
 import {
 	activeSongProfile,
 	publishSongProfile,
-	songLinkRange,
+	songRideRange,
+	stepBandHits,
 	songProfileReady,
 	type SongProfile,
 } from "./song-profile";
@@ -92,7 +98,7 @@ afterEach(async () => {
 describe("song profile", () => {
 	it("keeps an intro's link readings low", async () => {
 		await use(profile);
-		const range = songLinkRange(profile, 20, 250, 0.45);
+		const range = songRideRange(profile, 20, 250, 0.45, 0.4);
 		expect(range.ceil).toBeGreaterThan(range.floor);
 		// Past the follower's first frames, which start from the raw level.
 		const intro = ride(lowLink(), 2, INTRO).slice(10);
@@ -183,9 +189,41 @@ describe("song profile", () => {
 	});
 });
 
+describe("stepBandHits", () => {
+	/** A held bass over bins 0-9, with a kick lifting bins 2-5 on `kick` frames. */
+	function frame(kick: boolean): Uint8Array {
+		const f = new Uint8Array(10).fill(200);
+		if (kick) f.fill(230, 2, 6);
+		return f;
+	}
+
+	it("reads a kick over a held bass, and nothing from the bass alone", () => {
+		const floors = new Float32Array(10).fill(-1);
+		let held = 0;
+		for (let i = 0; i < 60; i++)
+			held = stepBandHits(frame(false), 0, 9, floors, 1 / 60);
+		expect(held).toBe(0);
+		expect(stepBandHits(frame(true), 0, 9, floors, 1 / 60)).toBeGreaterThan(
+			0.5,
+		);
+	});
+
+	it("stops counting a held note as a hit once it settles", () => {
+		const floors = new Float32Array(10).fill(-1);
+		stepBandHits(frame(false), 0, 9, floors, 1 / 60);
+		const first = stepBandHits(frame(true), 0, 9, floors, 1 / 60);
+		let later = first;
+		for (let i = 0; i < 120; i++)
+			later = stepBandHits(frame(true), 0, 9, floors, 1 / 60);
+		// More than the 24 dB a range spans: it reads as nothing.
+		const dbPerUnit = SPECTRUM_MAX_DB - SPECTRUM_MIN_DB;
+		expect((first - later) * dbPerUnit).toBeGreaterThan(24);
+	});
+});
+
 describe("publishSongProfile", () => {
 	it("lets the latest song win over one still being analysed", async () => {
-		const other = { ...profile, ranges: new Map() };
+		const other = { ...profile, bands: new Map(), rides: new Map() };
 		let release!: () => void;
 		const slow = new Promise<void>((r) => (release = r));
 		publishSongProfile(async () => {

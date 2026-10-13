@@ -1,11 +1,12 @@
-/** Per-band envelope follower and rolling normalization, keyed by band and cleared
- * together on a discontinuity; a rolling window reads a drop at any mastering level. */
+/** Per-band state behind the audio links: the envelope follower, each bin's recent
+ * floor for reading hits, and the rolling range used until a song profile is in. Keyed
+ * by band and cleared together on a discontinuity. */
 
 /** How the raw band level is turned into the number a volume link rides. */
 export interface AudioResponse {
-	/** 0 = twitchy, 1 = slow and glidey; sets how long the follower falls off a hit. */
+	/** 0 strobes on every hit, 1 swells: how slowly the link rises and falls. */
 	smoothing: number;
-	/** Response curve. Low lifts quiet detail, high leaves only the big hits. */
+	/** 0 rides the band's loudness, 1 only its hits: kicks, snares, plucks. */
 	punch: number;
 }
 
@@ -14,9 +15,16 @@ export const DEFAULT_AUDIO_RESPONSE: AudioResponse = {
 	punch: 0.4,
 };
 
-/** Exponent applied after auto-ranging. 0.4 reproduces the old fixed 1.5. */
+/** Audio Bars' curve on its bar heights: below 1 lifts quiet detail, above it leaves
+ * only the big hits. */
 export function punchExponent(punch: number): number {
 	return 0.5 + clamp01(punch) * 2.5;
+}
+
+/** A link's curve on its ride: under 1 lifts the quiet detail of a loudness ride, over
+ * 1 leaves a hit ride its strong hits. */
+export function rideExponent(punch: number): number {
+	return 0.7 * (1.6 / 0.7) ** clamp01(punch);
 }
 
 const CEIL_DECAY_TAU = 2.5;
@@ -36,11 +44,13 @@ interface BandEnvelope {
 
 const envelopes = new Map<string, BandEnvelope>();
 const smoothed = new Map<string, number>();
+const hitFloors = new Map<string, Float32Array>();
 
 /** Call on any signal discontinuity: seek, track change, export start. */
 export function resetAutoRange(): void {
 	envelopes.clear();
 	smoothed.clear();
+	hitFloors.clear();
 }
 
 /** Forget one scope's bands. Scopes are fx lane ids, so without this a deleted lane's
@@ -53,6 +63,19 @@ export function dropAutoRangeScope(scope: string): void {
 	for (const key of smoothed.keys()) {
 		if (key.startsWith(prefix)) smoothed.delete(key);
 	}
+	for (const key of hitFloors.keys()) {
+		if (key.startsWith(prefix)) hitFloors.delete(key);
+	}
+}
+
+/** A band's per-bin floors for `stepBandHits`, kept across frames; -1 until seen. */
+export function hitFloorsOf(key: string, bins: number): Float32Array {
+	let floors = hitFloors.get(key);
+	if (!floors || floors.length !== bins) {
+		floors = new Float32Array(bins).fill(-1);
+		hitFloors.set(key, floors);
+	}
+	return floors;
 }
 
 function clamp01(v: number): number {
@@ -73,15 +96,21 @@ function approach(
 	return current + (target - current) * (1 - Math.exp(-step / tau));
 }
 
-/** Seconds the band follower takes to fall off a hit, for a smoothing amount. */
-export function followerRelease(smoothing: number): number {
+/** The band follower's rise and fall, in seconds, for a smoothing amount. Up to the
+ * middle it rises at once, so a kick lands on its frame; past it the rise eases in
+ * too, until the link swells with the music instead of hitting. */
+export function followerTaus(smoothing: number): {
+	attack: number;
+	release: number;
+} {
 	const s = clamp01(smoothing);
-	return 0.05 + s * s * 0.95;
+	return {
+		attack: s <= 0.5 ? 0 : 0.3 * ((s - 0.5) / 0.5) ** 2,
+		release: 0.03 * 30 ** s,
+	};
 }
 
-/** Envelope follow of a raw band level, stepped in seconds: it rises at once, so a kick
- * lands on the frame it plays, and falls off it on the release. A smoothed rise left
- * a drop's first kick at a fraction of the range. */
+/** Envelope follow of a band reading, stepped in seconds. */
 export function smoothBandLevel(
 	key: string,
 	level: number,
@@ -89,26 +118,16 @@ export function smoothBandLevel(
 	smoothing: number = DEFAULT_AUDIO_RESPONSE.smoothing,
 ): number {
 	const prev = smoothed.get(key);
-	if (prev === undefined || level >= prev) {
-		smoothed.set(key, level);
-		return level;
-	}
-	const next = approach(prev, level, followerRelease(smoothing), stepOf(dt));
+	const { attack, release } = followerTaus(smoothing);
+	const tau = prev === undefined ? 0 : level >= prev ? attack : release;
+	const next = tau === 0 ? level : approach(prev!, level, tau, stepOf(dt));
 	smoothed.set(key, next);
 	return next;
 }
 
-/** Position of `level` in the band's recent range, in [0, 1]. Given the band's range
- * from the whole song, that is used instead, so the reading never depends on what
- * played before: a quiet stretch stays quiet however the playhead got there. */
-export function autoRangeLevel(
-	key: string,
-	level: number,
-	dt: number,
-	song?: { floor: number; ceil: number } | null,
-): number {
-	if (song) return clamp01((level - song.floor) / (song.ceil - song.floor));
-
+/** Position of `level` in the band's recent range, in [0, 1]: the stand-in for the
+ * song's own range until a profile is in. */
+export function autoRangeLevel(key: string, level: number, dt: number): number {
 	let env = envelopes.get(key);
 	if (!env) {
 		// Seeded around the first sample so playback starts mid-scale, not at 0.

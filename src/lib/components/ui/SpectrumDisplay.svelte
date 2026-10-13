@@ -1,18 +1,12 @@
 <script lang="ts">
 	import {
-		autoRangeLevel,
 		DEFAULT_AUDIO_RESPONSE,
 		dropAutoRangeScope,
-		followerRelease,
-		punchExponent,
-		smoothBandLevel,
+		followerTaus,
+		rideExponent,
 		type AudioResponse,
 	} from "../../audio/auto-range";
-	import {
-		activeSongProfile,
-		getLevelFromFrequencyRange,
-		songLinkRange,
-	} from "../../audio/song-profile";
+	import { bandKey, bandRideLevel } from "../../audio/audio-utils";
 	import { FREQ_PRESETS, generateId } from "../../effects/types";
 	import { onFrame } from "../../frame-loop";
 
@@ -76,25 +70,22 @@
 		return a + (b - a) * frac;
 	}
 
-	/** The number the linked parameter is riding this frame: band power, envelope
-	 * followed, auto-ranged, then shaped by Punch, as `applyVolumeLinksToEffects` does. */
+	/** The number the linked parameter is riding this frame, as
+	 * `applyVolumeLinksToEffects` works it out. */
 	function modulationLevel(dt: number): number {
 		if (!sampleRate || !data.length) return 0;
-		const key = `${previewScope}|${freqMin}:${freqMax}`;
-		const measured = getLevelFromFrequencyRange(
-			data,
-			sampleRate,
-			binCount * 2,
-			freqMin,
-			freqMax,
-		);
-		const smoothed = smoothBandLevel(key, measured, dt, response.smoothing);
-		const profile = activeSongProfile();
-		const song = profile
-			? songLinkRange(profile, freqMin, freqMax, response.smoothing)
-			: null;
 		return (
-			autoRangeLevel(key, smoothed, dt, song) ** punchExponent(response.punch)
+			bandRideLevel(
+				bandKey(previewScope, freqMin, freqMax),
+				data,
+				0,
+				sampleRate,
+				binCount * 2,
+				freqMin,
+				freqMax,
+				dt,
+				response,
+			) ** rideExponent(response.punch)
 		);
 	}
 
@@ -107,8 +98,8 @@
 		const h = height;
 		const bars = 64;
 		const barW = w / bars;
-		// The analyser hands out raw bins, so the bars fall here on the band follower's
-		// release, rising at once as it does.
+		// The analyser hands out raw bins, so the bars move here on the band follower's
+		// rise and fall.
 		const shown = new Float32Array(bars);
 		let lastFrame = performance.now();
 
@@ -117,7 +108,7 @@
 			const now = performance.now();
 			const dt = Math.min((now - lastFrame) / 1000, 0.25);
 			lastFrame = now;
-			const release = followerRelease(response.smoothing);
+			const { attack, release } = followerTaus(response.smoothing);
 			ctx.fillStyle = "#1a1a1a";
 			ctx.fillRect(0, 0, w, h);
 			for (let i = 0; i < bars; i++) {
@@ -138,10 +129,11 @@
 						if (data[b] > peak) peak = data[b];
 					}
 				}
+				const tau = peak >= shown[i] ? attack : release;
 				shown[i] =
-					peak >= shown[i]
+					tau === 0
 						? peak
-						: shown[i] + (peak - shown[i]) * (1 - Math.exp(-dt / release));
+						: shown[i] + (peak - shown[i]) * (1 - Math.exp(-dt / tau));
 				const level = shown[i] / 255;
 				const inRange = hiHz >= freqMin && loHz <= freqMax;
 				ctx.fillStyle = inRange

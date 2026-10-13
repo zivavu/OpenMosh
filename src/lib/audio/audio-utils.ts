@@ -1,20 +1,96 @@
 import { FREQ_PRESETS, getDefinition, type EffectInstance } from "../effects";
 import {
 	autoRangeLevel,
-	punchExponent,
+	hitFloorsOf,
+	rideExponent,
 	smoothBandLevel,
 	type AudioResponse,
 } from "./auto-range";
 import {
 	activeSongProfile,
+	bandBins,
+	blendBand,
 	getLevelFromFrequencyRange,
-	songLinkRange,
+	placeInRange,
+	songBand,
+	songRideRange,
+	stepBandHits,
 } from "./song-profile";
 
 export { getLevelFromFrequencyRange };
 
-function bandKey(scope: string, freqMin: number, freqMax: number): string {
+export function bandKey(
+	scope: string,
+	freqMin: number,
+	freqMax: number,
+): string {
 	return `${scope}|${freqMin}:${freqMax}`;
+}
+
+/** What a link on [freqMin, freqMax] rides this frame, 0-1, before Punch's curve: the
+ * band's loudness and hits blended by Punch, followed by Smoothing and placed in the
+ * song's range. Steps the band's state under `key`, so call it once per band a frame. */
+export function bandRideLevel(
+	key: string,
+	frequencyData: Uint8Array | null,
+	volumeLevel: number,
+	sampleRate: number,
+	fftSize: number,
+	freqMin: number,
+	freqMax: number,
+	dt: number,
+	response: AudioResponse,
+): number {
+	if (!frequencyData || sampleRate <= 0) {
+		const level = smoothBandLevel(key, volumeLevel, dt, response.smoothing);
+		return autoRangeLevel(key, level, dt);
+	}
+	const level = getLevelFromFrequencyRange(
+		frequencyData,
+		sampleRate,
+		fftSize,
+		freqMin,
+		freqMax,
+	);
+	const { first, last } = bandBins(
+		frequencyData.length,
+		sampleRate,
+		fftSize,
+		freqMin,
+		freqMax,
+	);
+	const hits = stepBandHits(
+		frequencyData,
+		first,
+		last,
+		hitFloorsOf(key, Math.max(0, last - first + 1)),
+		dt,
+	);
+	const profile = activeSongProfile();
+	if (!profile) {
+		// Until the song is analysed, each reading learns its range as it plays.
+		const body = autoRangeLevel(`${key}|level`, level, dt);
+		const hit = autoRangeLevel(`${key}|hits`, hits, dt);
+		const blend = body + (hit - body) * response.punch;
+		return smoothBandLevel(key, blend, dt, response.smoothing);
+	}
+	const band = songBand(profile, freqMin, freqMax);
+	const ride = smoothBandLevel(
+		key,
+		blendBand(level, hits, band, response.punch),
+		dt,
+		response.smoothing,
+	);
+	return placeInRange(
+		ride,
+		songRideRange(
+			profile,
+			freqMin,
+			freqMax,
+			response.smoothing,
+			response.punch,
+		),
+	);
 }
 
 /** Scratch for applyVolumeLinksToEffects; valid only within one call. */
@@ -39,33 +115,26 @@ export function applyVolumeLinksToEffects(
 	response: AudioResponse,
 	scope: string = "",
 ): void {
-	const exponent = punchExponent(response.punch);
-	// Cached so a band's envelope advances once per frame, not once per link.
+	const exponent = rideExponent(response.punch);
+	// Cached so a band's state advances once per frame, not once per link.
 	perBand.clear();
 	const levelForBand = (freqMin: number, freqMax: number): number => {
 		const key = bandKey(scope, freqMin, freqMax);
 		const cached = perBand.get(key);
 		if (cached !== undefined) return cached;
-		const measured =
-			frequencyData && sampleRate > 0
-				? getLevelFromFrequencyRange(
-						frequencyData,
-						sampleRate,
-						fftSize,
-						freqMin,
-						freqMax,
-					)
-				: volumeLevel;
-		// Smoothed before ranging, not after: the envelope must see the same steadied signal.
-		const raw = smoothBandLevel(key, measured, dt, response.smoothing);
-		const profile =
-			frequencyData && sampleRate > 0 ? activeSongProfile() : null;
-		const song = profile
-			? songLinkRange(profile, freqMin, freqMax, response.smoothing)
-			: null;
-		const ranged = autoRangeLevel(key, raw, dt, song);
-		perBand.set(key, ranged);
-		return ranged;
+		const level = bandRideLevel(
+			key,
+			frequencyData,
+			volumeLevel,
+			sampleRate,
+			fftSize,
+			freqMin,
+			freqMax,
+			dt,
+			response,
+		);
+		perBand.set(key, level);
+		return level;
 	};
 
 	for (const effect of effects) {

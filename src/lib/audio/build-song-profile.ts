@@ -65,7 +65,8 @@ export async function buildSongProfile(
 		fftSize: FFT_SIZE,
 		loud,
 		frames,
-		ranges: new Map(),
+		bands: new Map(),
+		rides: new Map(),
 	};
 }
 

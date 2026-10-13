@@ -331,7 +331,7 @@
 		{@render row(
 			"audio-smoothing",
 			"Smoothing",
-			"How long an effect takes to ease back down after a hit. The rise is always quick, so this stretches the fall only: higher rides over the gaps between hits, lower snaps back at once and flickers on busy music.",
+			"How the effect moves with the music. Low snaps up on every hit and drops straight back, like a strobe. High rises and falls slowly, so it swells with the song instead of hitting.",
 			audioSmoothing !== DEFAULT_SETTINGS.audioSmoothing,
 			() => (audioSmoothing = DEFAULT_SETTINGS.audioSmoothing),
 			smoothCtl,
@@ -349,7 +349,7 @@
 		{@render row(
 			"audio-punch",
 			"Punch",
-			"How hard an effect has to be hit before it moves far. Higher leaves it near the bottom until the loud hits land, lower lets the quiet parts move it too and keeps it busy the whole track.",
+			"What the effect follows. Low rides how loud the band is, so it stays up through a drop. High follows only the hits, like kicks and snares, and drops back between them.",
 			audioPunch !== DEFAULT_SETTINGS.audioPunch,
 			() => (audioPunch = DEFAULT_SETTINGS.audioPunch),
 			punchCtl,
