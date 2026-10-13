@@ -44,6 +44,8 @@
 		targetLabel?: string | null;
 		/** Whether that lane carries its own settings or follows the editor's. */
 		targetOwnsSettings?: boolean;
+		/** How many lanes an edit here reaches. */
+		targetCount?: number;
 		/** Drop the lane's own settings so it follows the editor's again. */
 		onFollowEditor?: () => void;
 		/** With no lane targeted, say the settings are the editor's own. */
@@ -70,6 +72,7 @@
 		hasAudio,
 		targetLabel = null,
 		targetOwnsSettings = false,
+		targetCount = 1,
 		onFollowEditor,
 		labelEditorScope = false,
 		showTiming = false,
@@ -100,7 +103,9 @@
 			{#if targetOwnsSettings}
 				<button
 					class="scope-mode own"
-					title="This lane has its own settings. Click to drop them and follow the editor's again."
+					title={targetCount > 1
+						? "Some of these lanes have their own settings. Click to drop them and follow the editor's again."
+						: "This lane has its own settings. Click to drop them and follow the editor's again."}
 					onclick={onFollowEditor}
 				>
 					own
@@ -108,7 +113,9 @@
 			{:else}
 				<span
 					class="scope-mode"
-					title="This lane follows the editor's settings. Changing anything here gives it its own."
+					title={targetCount > 1
+						? "These lanes follow the editor's settings. Changing anything here gives them their own."
+						: "This lane follows the editor's settings. Changing anything here gives it its own."}
 				>
 					follows editor
 				</span>

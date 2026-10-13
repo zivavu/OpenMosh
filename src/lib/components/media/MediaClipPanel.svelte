@@ -63,6 +63,8 @@
 		section?: "clip" | "chain";
 		/** Whether chain edits also reach the rest of a multi-selection. */
 		chainNote?: string | null;
+		/** Whether placement and clip edits also reach the rest of a multi-selection. */
+		selectionNote?: string | null;
 		/** False once the clip's video is known to have no sound. */
 		sourceHasAudio?: boolean;
 		/** Move the clip's sound onto an audio lane of its own. */
@@ -88,6 +90,7 @@
 		onEditingChange,
 		section = "clip",
 		chainNote = null,
+		selectionNote = null,
 		sourceHasAudio = true,
 		onDetachAudio,
 		onAttachAudio,
@@ -264,6 +267,9 @@
 >
 	{#snippet controls()}
 		{#if clip && lane}
+			{#if selectionNote}
+				<p class="hint">{selectionNote}</p>
+			{/if}
 			{#if sources.length > 0}
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
