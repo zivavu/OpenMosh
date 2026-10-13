@@ -57,6 +57,13 @@ export function projectFileName(name: string): string {
 	return `${base || "openmosh-project"}.openmosh`;
 }
 
+/** The notice for pool files whose bytes were gone, so the file went without them. */
+export function missingFilesNotice(missing: number): string {
+	return missing === 1
+		? "1 file was missing and wasn't saved"
+		: `${missing} files were missing and weren't saved`;
+}
+
 /** Every library song the project plays: its main song and any on an audio lane. */
 function songIdsOf(entry: SeqEntry): string[] {
 	const ids = new Set<string>();

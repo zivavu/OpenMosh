@@ -52,7 +52,10 @@
 	import { onOldHost, SITE_URL } from "../../site";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo, saveBlobAs } from "../../utils";
-	import { buildProjectFile } from "../../project-file/export";
+	import {
+		buildProjectFile,
+		missingFilesNotice,
+	} from "../../project-file/export";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import {
@@ -260,8 +263,9 @@
 	/** Save a project to a `.openmosh` file without opening it. */
 	async function downloadProject(projectKey: string) {
 		try {
-			const { blob, name } = await buildProjectFile(projectKey);
+			const { blob, name, missing } = await buildProjectFile(projectKey);
 			await saveBlobAs(blob, name);
+			if (missing > 0) showToast(missingFilesNotice(missing), "info", 8000);
 		} catch (e) {
 			showToast(
 				e instanceof Error ? e.message : "Couldn't save that project",
