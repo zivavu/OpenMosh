@@ -89,10 +89,12 @@ export const definition: EffectDefinition = {
 			key: "spin",
 			label: "Spin",
 			type: "range",
-			min: 0,
-			max: 180,
+			// Degrees a second; below zero turns the other way.
+			min: -720,
+			max: 720,
 			step: 1,
 			defaultValue: 0,
+			moshMin: -70,
 			moshMax: 70,
 		},
 		{
@@ -106,7 +108,7 @@ export const definition: EffectDefinition = {
 				{ label: "Z", value: "z" },
 				{ label: "Tumble", value: "tumble" },
 			],
-			visibleWhen: (v) => (v.spin as number) > 0,
+			visibleWhen: (v) => (v.spin as number) !== 0,
 		},
 		{
 			key: "edge",
