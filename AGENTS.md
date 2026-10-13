@@ -99,9 +99,10 @@ edit: they eat context fast.
   The unit-sphere fit is folded into the bone matrices and sampled across the whole clip.
   A model's layer box is its own footprint, not the frame: the front view fits the frame like an
   image, and turning or zooming resizes the box around it at that scale (`modelFootprint`).
-- The upload demo is one layer: procedural canvas posters (`lib/demo/demo-sources.ts`), each
-  cut moshed with one rolled chain and blended into the next by a transition. I tried moshed
-  3D and layered 2D worlds instead and dropped both: too heavy, and off the app's vibe.
+- The upload demo is one layer: a fresh mixed batch from the image generators
+  (`lib/demo/demo-sources.ts`), each cut moshed with one rolled chain and blended into the next
+  by a transition. They replaced hand-drawn canvas posters. I tried moshed 3D and layered 2D
+  worlds instead and dropped both: too heavy, and off the app's vibe.
 - Area masking is the Mask effect (`effects/catalog/mask.ts`), not a per-effect toggle. It
   limits the effects above it, back to the previous Mask or the top of its own chain (an FX
   lane's chain too), and blends the rest back to how that scope began. Moshes, clears and
