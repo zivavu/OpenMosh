@@ -40,11 +40,11 @@ describe("smoothBandLevel", () => {
 		expect(Math.abs(at60 - at144)).toBeLessThan(0.02);
 	});
 
-	it("damps a one-frame spike instead of passing it through", () => {
-		// A raw FFT transient is what used to pin the auto-range ceiling.
+	it("takes a hit on its frame and glides off it", () => {
+		// A smoothed rise left a drop's first kick at a fraction of the range.
 		smoothBandLevel("a", 0.1, 1 / 60);
-		const spiked = smoothBandLevel("a", 1, 1 / 60);
-		expect(spiked).toBeLessThan(0.35);
+		expect(smoothBandLevel("a", 1, 1 / 60)).toBe(1);
+		expect(smoothBandLevel("a", 0.1, 1 / 60)).toBeGreaterThan(0.5);
 	});
 
 	it("still reaches a sustained level", () => {
@@ -62,9 +62,9 @@ describe("smoothBandLevel", () => {
 		expect(smoothBandLevel("high", 0.2, 1 / 60)).toBe(0.2);
 	});
 
-	it("survives a stalled clock without snapping to the input", () => {
-		smoothBandLevel("a", 0, 1 / 60);
-		expect(smoothBandLevel("a", 1, 30)).toBeLessThan(1);
+	it("survives a stalled clock without dropping straight to the input", () => {
+		smoothBandLevel("a", 1, 1 / 60);
+		expect(smoothBandLevel("a", 0, 30)).toBeGreaterThan(0);
 	});
 
 	it("is cleared by resetAutoRange", () => {
@@ -193,6 +193,6 @@ describe("dropAutoRangeScope", () => {
 		smoothBandLevel("lane10|20:250", 0.5, 1 / 60, 0.5);
 		dropAutoRangeScope("lane1");
 		// lane10 is not lane1: the "|" in the prefix is what keeps them apart.
-		expect(smoothBandLevel("lane10|20:250", 0.9, 1 / 60, 0.5)).not.toBe(0.9);
+		expect(smoothBandLevel("lane10|20:250", 0.1, 1 / 60, 0.5)).not.toBe(0.1);
 	});
 });

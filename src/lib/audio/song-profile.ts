@@ -3,10 +3,12 @@
  * played. That keeps an intro an intro, and makes a moment look the same however the
  * playhead got there, in preview and export alike. */
 
-import { followerTaus } from "./auto-range";
+import { followerRelease } from "./auto-range";
+import { SPECTRUM_MAX_DB, SPECTRUM_MIN_DB } from "./spectrum-scale";
 
-/** Analysis rate: enough to catch every beat's level, cheap enough for a long song. */
-export const PROFILE_FPS = 20;
+/** Analysis rate: the preview's, so the song's peaks are read the way playback reads
+ * them. At 20 a kick's peak fell between frames and the range sat above playback. */
+export const PROFILE_FPS = 60;
 /** Where a link band's range starts and ends across the song. */
 const LINK_FLOOR_PERCENTILE = 0.05;
 const LINK_CEIL_PERCENTILE = 0.98;
@@ -28,7 +30,15 @@ export interface SongProfile {
 	ranges: Map<string, { floor: number; ceil: number }>;
 }
 
-/** Mean of the bins covering [freqMin, freqMax], 0-1: the level a link band rides. */
+const DB_PER_BYTE = (SPECTRUM_MAX_DB - SPECTRUM_MIN_DB) / 255;
+/** Each analyser byte as power over the window's floor; 0 is silence. */
+const BYTE_POWER = Float64Array.from({ length: 256 }, (_, b) =>
+	b === 0 ? 0 : 10 ** ((b * DB_PER_BYTE) / 10),
+);
+
+/** The band's mean power over [freqMin, freqMax], back on the 0-1 byte scale: the
+ * level a link band rides. Averaging power, not dB, lets a kick that lights a few bins
+ * stand out from a pad spread over all of them. */
 export function getLevelFromFrequencyRange(
 	freqData: Uint8Array,
 	sampleRate: number,
@@ -44,9 +54,10 @@ export function getLevelFromFrequencyRange(
 	);
 	if (minBin > maxBin) return 0;
 	let sum = 0;
-	for (let i = minBin; i <= maxBin; i++) sum += freqData[i];
-	const count = maxBin - minBin + 1;
-	return Math.min(1, sum / count / 255);
+	for (let i = minBin; i <= maxBin; i++) sum += BYTE_POWER[freqData[i]];
+	const mean = sum / (maxBin - minBin + 1);
+	if (mean <= 1) return 0;
+	return Math.min(1, (10 * Math.log10(mean)) / DB_PER_BYTE / 255);
 }
 
 /** Where a link band sits across the song, after the same follower the live level
@@ -60,10 +71,7 @@ export function songLinkRange(
 	const key = `${freqMin}:${freqMax}:${smoothing}`;
 	let range = profile.ranges.get(key);
 	if (range) return range;
-	const { attack, release } = followerTaus(smoothing);
-	const dt = 1 / PROFILE_FPS;
-	const upK = 1 - Math.exp(-dt / attack);
-	const downK = 1 - Math.exp(-dt / release);
+	const downK = 1 - Math.exp(-1 / PROFILE_FPS / followerRelease(smoothing));
 	const levels = new Float32Array(profile.frames.length);
 	let env = -1;
 	profile.frames.forEach((frame, i) => {
@@ -74,7 +82,7 @@ export function songLinkRange(
 			freqMin,
 			freqMax,
 		);
-		env = env < 0 ? v : env + (v - env) * (v > env ? upK : downK);
+		env = v >= env ? v : env + (v - env) * downK;
 		levels[i] = env;
 	});
 	const sorted = levels.slice().sort();
