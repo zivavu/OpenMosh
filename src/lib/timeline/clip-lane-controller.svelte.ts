@@ -17,7 +17,7 @@ import { asOneEdit } from "../editor/edit-clock";
 import { sourceEndOwner, type SnapPoint } from "./snap";
 import {
 	addClip,
-	clipRange,
+	clipRangeAcross,
 	freeRangeAt,
 	MIN_CLIP_LENGTH,
 	moveClipsToLane,
@@ -632,13 +632,14 @@ export class ClipLaneController<
 		this.marquee = null;
 		const host = this.host;
 		if (!box) {
-			// A shift-click: extend from the primary, or clear on empty space.
+			// A shift-click: extend from the primary, across lanes too, or clear on empty space.
 			if (!start.clipId) return this.deselect();
-			const lane = this.laneOf(start.laneId);
-			const range =
-				lane && host.selectedClipId
-					? clipRange(lane, host.selectedClipId, start.clipId)
-					: [];
+			const lanes = this.#laneOrder()
+				.map((id) => this.laneOf(id))
+				.filter((l): l is L => !!l);
+			const range = host.selectedClipId
+				? clipRangeAcross(lanes, host.selectedClipId, start.clipId)
+				: [];
 			if (range.length > 0) host.selectedClipIds = range;
 			else this.selectOnly(start.clipId);
 			return;

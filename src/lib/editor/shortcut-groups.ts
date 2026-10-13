@@ -72,7 +72,8 @@ const CLIP_ROWS: ShortcutRow[] = [
 	},
 	{
 		keys: ["Shift+Click"],
-		description: "Select every clip between it and the last one picked",
+		description:
+			"Select every clip between it and the last one picked, across the lanes in between too",
 	},
 	{
 		keys: ["Ctrl/Cmd+Shift+Click"],
