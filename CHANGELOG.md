@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.9.18](https://github.com/zivavu/OpenMosh/compare/v0.9.17...v0.9.18) (2026-10-13)
+
+Shift-click now selects every clip between two, across the lanes in between, and the clip panel edits the whole selection at once: fades, transitions, volume, Bounce and placement on media clips, position, fades and style on text clips, and the link band on both. Punch on an audio link now sets what the effect follows, from the band's loudness down to just its kicks and snares, and Smoothing runs from a strobe on every hit to a slow swell. Links also hit at full strength on a drop's first kick. 3D Transform spins up to 720° a second, either way round. The demo behind the upload screen moshes a fresh batch of generated images in place of the posters, blending each into the next. Project files keep the output size, fps and take length now, and a project no longer loses its output size when it reopens.
+
+Saved projects open as before, but audio links with the same Smoothing and Punch move differently now, so check any you tuned by ear. Project files saved before this release carry no output settings and open as they did.
+
+
+### Added
+
+* Edit every selected media or text clip at once ([f3cc4bc](https://github.com/zivavu/OpenMosh/commit/f3cc4bc3de3f1d2f845f98a953412c5a81bfbe08), [0863b43](https://github.com/zivavu/OpenMosh/commit/0863b43b4897ec9cb7b8125404732713ae3ed3f1))
+* Shift-click selects clips across lanes ([ec495c1](https://github.com/zivavu/OpenMosh/commit/ec495c1f26ab2faec4121669ad8f5588834b782b))
+* Choose whether an audio link follows a band's loudness or only its hits with Punch, and swell it with high Smoothing ([fe01809](https://github.com/zivavu/OpenMosh/commit/fe0180908548dfafd739a8d59b8014ff73546799))
+* Spin 3D Transform up to 720° a second, in either direction ([29f3aa9](https://github.com/zivavu/OpenMosh/commit/29f3aa9c3ca24264d4559170607e9b9d7803fd8c))
+* Mosh generated images in the upload screen's demo ([688f6ad](https://github.com/zivavu/OpenMosh/commit/688f6adcb62b2cba7f8463f87dffd624a0495370))
+
+
+### Fixed
+
+* Keep a project's output size when it reopens, and save it with the fps and take length in project files ([7681489](https://github.com/zivavu/OpenMosh/commit/76814892e689f916a9fe401971a38253018724c9), [55a081d](https://github.com/zivavu/OpenMosh/commit/55a081d3c102ff1a79a04ec076de4fe74053d703))
+* Make audio links hit on the kick, from a drop's first beat ([c146016](https://github.com/zivavu/OpenMosh/commit/c146016a32aff4527437bc0bf92beb2c27293f2f))
+* Set the link band on every selected clip ([e172ded](https://github.com/zivavu/OpenMosh/commit/e172ded598d3a0f2f8f3a40f66114920ede72d2f))
+* Stop the editor preview going blank once its media loads ([b40626f](https://github.com/zivavu/OpenMosh/commit/b40626fd6b06e1d49e88a4edacc2b9fd0fa81228))
+* Put opened media on the timeline when browser storage won't save the song ([5d6aa3a](https://github.com/zivavu/OpenMosh/commit/5d6aa3a8475d46b98a5c2680bc25016d44846fde))
+
 ## [0.9.17](https://github.com/zivavu/OpenMosh/compare/v0.9.16...v0.9.17) (2026-10-12)
 
 The Generate panel has three new generators under Drawn. Cutout stacks layers of cut paper with soft shadows, Attractor piles millions of points from strange attractors and fractal flames into glowing filaments, and Ink traces strokes through a flow field as fine strands or brush marks. All three can leave the background transparent, so you can lay them over footage, and switching a batch between Solid and Transparent keeps the same images. Voronoi and Stripes are gone from the panel. A cohesive Mix now picks a different generator each time instead of always landing on the same one, and the panel shows which option is selected. The poster demo is back behind the upload screen.
