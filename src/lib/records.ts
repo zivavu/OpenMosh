@@ -6,3 +6,9 @@ export function records<T>(raw: unknown): Partial<T>[] {
 		(item): item is Partial<T> => !!item && typeof item === "object",
 	);
 }
+
+/** A saved number, or `fallback` when a damaged save or a hand-edited project file
+ * holds anything else there. */
+export function finiteOr<F>(value: unknown, fallback: F): number | F {
+	return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}

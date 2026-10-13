@@ -1,4 +1,4 @@
-import { records } from "../records";
+import { finiteOr, records } from "../records";
 import {
 	fitClipsToDuration,
 	MIN_CLIP_LENGTH,
@@ -168,10 +168,6 @@ export function splitAudioClipAt(
 	};
 }
 
-function num(v: unknown, fallback: number): number {
-	return typeof v === "number" && Number.isFinite(v) ? v : fallback;
-}
-
 export function normalizeAudioLanes(raw: unknown): AudioLane[] {
 	return records<AudioLane>(raw).map((lane, i) => ({
 		id: lane.id ?? nextId("alane"),
@@ -180,13 +176,13 @@ export function normalizeAudioLanes(raw: unknown): AudioLane[] {
 		drives: !!lane.drives,
 		clips: records<AudioClip>(lane.clips).map((c) => ({
 			id: c.id ?? nextId("aclip"),
-			start: num(c.start, 0),
-			end: num(c.end, 0),
-			sourceStart: num(c.sourceStart, 0),
+			start: finiteOr(c.start, 0),
+			end: finiteOr(c.end, 0),
+			sourceStart: finiteOr(c.sourceStart, 0),
 			sourceId: c.sourceId ?? null,
-			gain: c.gain,
-			fadeInSec: c.fadeInSec,
-			fadeOutSec: c.fadeOutSec,
+			gain: finiteOr(c.gain, undefined),
+			fadeInSec: finiteOr(c.fadeInSec, undefined),
+			fadeOutSec: finiteOr(c.fadeOutSec, undefined),
 			loop: c.loop || undefined,
 			bounce: c.bounce || undefined,
 			bounceBack: (c.bounce && c.bounceBack) || undefined,

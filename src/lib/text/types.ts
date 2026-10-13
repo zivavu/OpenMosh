@@ -1,4 +1,4 @@
-import { records } from "../records";
+import { finiteOr, records } from "../records";
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
@@ -238,8 +238,8 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 						: clipEffects(legacyChain);
 					const out: TextClip = {
 						id: clip.id ?? nextId("clip"),
-						start: clip.start ?? 0,
-						end: clip.end ?? 0,
+						start: finiteOr(clip.start, 0),
+						end: finiteOr(clip.end, 0),
 						text: clip.text ?? "",
 						...normalizeChainFields(clip, effects),
 					};
@@ -248,8 +248,10 @@ export function normalizeTextTimeline(raw: unknown): TextTimeline {
 						out.label = handBuiltLabel(effects);
 					if (typeof clip.x === "number") out.x = clip.x;
 					if (typeof clip.y === "number") out.y = clip.y;
-					if (clip.fadeInSec! > 0) out.fadeInSec = clip.fadeInSec;
-					if (clip.fadeOutSec! > 0) out.fadeOutSec = clip.fadeOutSec;
+					const fadeIn = finiteOr(clip.fadeInSec, 0);
+					const fadeOut = finiteOr(clip.fadeOutSec, 0);
+					if (fadeIn > 0) out.fadeInSec = fadeIn;
+					if (fadeOut > 0) out.fadeOutSec = fadeOut;
 					return out;
 				}),
 			};

@@ -157,6 +157,44 @@ describe("a damaged entry", () => {
 		expect(restored.segments).toEqual([]);
 	});
 
+	it("puts defaults where a clip's times aren't numbers", () => {
+		const entry = structuredClone(v4) as unknown as SeqEntry;
+		const media = entry.media!;
+		Object.assign(media.lanes[0].clips[0], {
+			start: "0",
+			end: null,
+			sourceStart: {},
+			fadeInSec: "1",
+			gain: "loud",
+		});
+		Object.assign(entry.text!.lanes[0].clips[0], {
+			start: [],
+			fadeInSec: "2",
+		});
+		Object.assign(entry.fx![0].clips[0], { start: "x", end: true });
+		media.audioLanes = [
+			{
+				id: "a",
+				name: "Audio 1",
+				enabled: true,
+				clips: [
+					{ id: "c", start: "1", end: 4, sourceStart: 0, sourceId: null },
+				],
+			},
+		] as unknown as typeof media.audioLanes;
+		const restored = readSeqEntry(entry, OPENED);
+		const clip = restored.media!.lanes[0].clips[0];
+		expect([clip.start, clip.end, clip.sourceStart]).toEqual([0, 0, 0]);
+		expect(clip.fadeInSec).toBeUndefined();
+		expect(clip.gain).toBeUndefined();
+		const text = restored.text!.lanes[0].clips[0];
+		expect(text.start).toBe(0);
+		expect(text.fadeInSec).toBeUndefined();
+		expect(restored.fx[0].clips[0].start).toBe(0);
+		expect(restored.fx[0].clips[0].end).toBe(0);
+		expect(restored.media!.audioLanes[0].clips[0].start).toBe(0);
+	});
+
 	it("drops a span that lies past the project's end", () => {
 		expect(readSeqEntry(damaged, "opened").span).toBeNull();
 		const partly = { ...damaged, span: { start: -2, end: 30 } };

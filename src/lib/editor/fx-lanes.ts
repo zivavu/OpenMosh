@@ -1,6 +1,6 @@
 /** Stacked effect lanes for sequence mode; an fx lane takes no media, just effects. */
 
-import { records } from "../records";
+import { finiteOr, records } from "../records";
 import {
 	generateId,
 	restoreEffects,
@@ -303,8 +303,8 @@ export function normalizeFxLanes(raw: unknown): FxLane[] {
 			.filter((c): c is FxClip => Array.isArray(c.effects))
 			.map((clip) => ({
 				id: clip.id ?? generateId(),
-				start: clip.start ?? 0,
-				end: clip.end ?? 0,
+				start: finiteOr(clip.start, 0),
+				end: finiteOr(clip.end, 0),
 				label: clip.label ?? "clean",
 				mode: clip.mode === "interval" ? "interval" : ("static" as ChainMode),
 				presetName: clip.presetName,
