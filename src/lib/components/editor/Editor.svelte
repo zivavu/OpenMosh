@@ -156,6 +156,10 @@
 	} from "../../editor/fx-lanes";
 	import { fanOutEdit, fanOutNote } from "../../editor/chain-fanout";
 	import {
+		fanOutMediaClipFields,
+		fanOutMediaLaneEdit,
+	} from "../../editor/field-fanout";
+	import {
 		createSnapshotHistory,
 		snapshotUndoSource,
 	} from "../../timeline/snapshot-history.svelte";
@@ -1564,6 +1568,20 @@
 		return fxLanes.find((l) => l.id === selectedFxLaneId) ?? selectedMediaLane;
 	});
 
+	/** Every lane a settings edit reaches: the panel's, then the rest of the selection's. */
+	let panelLanes = $derived.by((): (FxLane | MediaLane)[] => {
+		const lane = panelLane;
+		if (!lane) return [];
+		const rest: (FxLane | MediaLane)[] = findFxClip(fxLanes, selectedFxClipId)
+			? fxLanes.filter((l) =>
+					l.clips.some((c) => selectedFxClipIds.includes(c.id)),
+				)
+			: lane === selectedMediaLane
+				? mediaTimeline.lanes.filter((l) => selectedMediaLaneIds.includes(l.id))
+				: [];
+		return [lane, ...rest.filter((l) => l.id !== lane.id)];
+	});
+
 	/** Panel value: the lane's, or the editor's for lanes without settings yet. */
 	function fxSetting<K extends keyof FxLaneSettings>(
 		key: K,
@@ -1578,20 +1596,21 @@
 		value: FxLaneSettings[K],
 		setGlobal: (v: FxLaneSettings[K]) => void,
 	) {
-		const lane = panelLane;
-		if (!lane) {
+		if (panelLanes.length === 0) {
 			setGlobal(value);
 			return;
 		}
-		lane.settings = {
-			...(lane.settings ?? currentFxLaneSettings()),
-			[key]: value,
-		};
+		for (const lane of panelLanes) {
+			lane.settings = {
+				...(lane.settings ?? currentFxLaneSettings()),
+				[key]: value,
+			};
+		}
 	}
 
-	/** Hand a lane back to the editor's settings, so the panel reads those again. */
+	/** Hand the lanes back to the editor's settings, so the panel reads those again. */
 	function followEditorSettings() {
-		if (panelLane) panelLane.settings = undefined;
+		for (const lane of panelLanes) lane.settings = undefined;
 	}
 
 	/** The three audio-response sliders, which sit one level down. */
@@ -1607,16 +1626,17 @@
 		value: number,
 		setGlobal: (v: number) => void,
 	) {
-		const lane = panelLane;
-		if (!lane) {
+		if (panelLanes.length === 0) {
 			setGlobal(value);
 			return;
 		}
-		const settings = lane.settings ?? currentFxLaneSettings();
-		lane.settings = {
-			...settings,
-			audioResponse: { ...settings.audioResponse, [key]: value },
-		};
+		for (const lane of panelLanes) {
+			const settings = lane.settings ?? currentFxLaneSettings();
+			lane.settings = {
+				...settings,
+				audioResponse: { ...settings.audioResponse, [key]: value },
+			};
+		}
 	}
 
 	/** A lane's audio response, falling back to the editor's for older lanes. */
@@ -3693,23 +3713,49 @@
 		pushMediaHistory(coalesceKey);
 	}
 
-	/** See updateTextClip. */
+	/** See updateTextClip. Fades, transitions and the like reach the whole selection. */
 	function updateMediaClip(next: MediaClip) {
 		const base = mediaEditBase;
 		mediaEditBase = null;
-		const others = mediaClipsById(new Set(selectedMediaClipIds)).filter(
-			(c) => c.id !== next.id,
-		);
-		const fanned = fanOutEdit(
-			base?.id === next.id ? base : findMediaClip(mediaTimeline, next.id),
-			next,
-			$state.snapshot(others) as MediaClip[],
-		);
+		const before =
+			base?.id === next.id ? base : findMediaClip(mediaTimeline, next.id);
+		const others = $state.snapshot(
+			mediaClipsById(new Set(selectedMediaClipIds)).filter(
+				(c) => c.id !== next.id,
+			),
+		) as MediaClip[];
+		const chained = fanOutEdit(before, next, others);
+		const fanned = before
+			? (chained.length > 0 ? chained : others).map((c) =>
+					fanOutMediaClipFields(before, next, c),
+				)
+			: chained;
 		mediaTimeline = [next, ...fanned].reduce(replaceMediaClip, mediaTimeline);
 	}
 
+	/** The lanes behind the selected layer clips, each once. */
+	let selectedMediaLaneIds = $derived(
+		selectedMediaClipId
+			? mediaTimeline.lanes
+					.filter((l) =>
+						l.clips.some((c) => selectedMediaClipIds.includes(c.id)),
+					)
+					.map((l) => l.id)
+			: [],
+	);
+
+	/** A placement or sound edit reaches every lane in the selection. */
 	function updateMediaLane(next: MediaLane) {
-		mediaTimeline = updateMediaLaneIn(mediaTimeline, next.id, () => next);
+		const before = mediaTimeline.lanes.find((l) => l.id === next.id);
+		const snapshot = before && ($state.snapshot(before) as MediaLane);
+		mediaTimeline = {
+			...mediaTimeline,
+			lanes: mediaTimeline.lanes.map((l) => {
+				if (l.id === next.id) return next;
+				if (!snapshot || !selectedMediaLaneIds.includes(l.id)) return l;
+				return fanOutMediaLaneEdit(snapshot, next, l);
+			}),
+		};
 	}
 
 	/** Adopt a saved timeline, or clear back to empty. Always on in sequence mode. */
@@ -3933,6 +3979,12 @@
 			),
 		),
 	);
+	let mediaSelectionNote = $derived.by(() => {
+		const count = mediaClipsById(new Set(selectedMediaClipIds)).length;
+		return selectedMediaClip && count > 1
+			? `Edits here change all ${count} selected clips. Media, start and speed stay per clip.`
+			: null;
+	});
 	/** What the selected layer clip draws, and plays. */
 	let selectedMediaSourceId = $derived(
 		selectedMediaLane && selectedMediaClip
@@ -5236,8 +5288,11 @@
 					() => fxResponse("punch", audioPunch),
 					(v) => setFxResponse("punch", v, (g) => (audioPunch = g))
 				}
-				targetLabel={panelLane?.name ?? null}
-				targetOwnsSettings={!!panelLane?.settings}
+				targetLabel={panelLanes.length > 1
+					? `${panelLanes.length} lanes`
+					: (panelLane?.name ?? null)}
+				targetCount={panelLanes.length}
+				targetOwnsSettings={panelLanes.some((l) => !!l.settings)}
 				onFollowEditor={followEditorSettings}
 				labelEditorScope={isSequenceMode}
 				{hasAudio}
@@ -5273,6 +5328,7 @@
 				onEditingChange={onSourceEditingChange}
 				{section}
 				chainNote={mediaChainNote}
+				selectionNote={mediaSelectionNote}
 				sourceHasAudio={!selectedMediaSourceId ||
 					!audioBank.isSilent(selectedMediaSourceId)}
 				onDetachAudio={isSequenceMode && selectedMediaClip
