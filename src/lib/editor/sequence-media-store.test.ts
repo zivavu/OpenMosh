@@ -5,9 +5,11 @@ import {
 	clearAllSequenceStores,
 	getSession,
 	getTimeline,
+	getAllSequenceMediaIds,
 	loadMediaPool,
 	pruneSequenceMedia,
 	pruneSequenceMediaThrottled,
+	putBackupRecords,
 	putSequenceMedia,
 	putSession,
 	putTimeline,
@@ -162,6 +164,38 @@ describe("pruneSequenceMedia", () => {
 			),
 		);
 		expect(left.filter((t) => t !== null)).toHaveLength(8);
+	});
+
+	/** Stores `count` media records nothing refers to, added `ageMs` ago. */
+	async function seedLoose(prefix: string, count: number, ageMs: number) {
+		const addedAt = Date.now() - ageMs;
+		await putBackupRecords(
+			"media",
+			Array.from({ length: count }, (_, i) => ({
+				id: `${prefix}-${i}`,
+				name: `${prefix}-${i}.png`,
+				blob: new Blob(["x"]),
+				type: "image/png",
+				addedAt: addedAt + i,
+			})),
+		);
+	}
+
+	test("unreferenced media is dropped past the newest 64", async () => {
+		await seedLoose("old", 70, 60 * 60_000);
+		await pruneSequenceMedia();
+		const left = await getAllSequenceMediaIds();
+		expect(left.size).toBe(64);
+		expect(left.has("old-0")).toBe(false);
+		expect(left.has("old-69")).toBe(true);
+	});
+
+	// A big drop is stored before the pool that keeps it; another tab's prune can land
+	// in between.
+	test("freshly added media survives a prune before its pool is saved", async () => {
+		await seedLoose("drop", 100, 0);
+		await pruneSequenceMedia();
+		expect((await getAllSequenceMediaIds()).size).toBe(100);
 	});
 });
 
