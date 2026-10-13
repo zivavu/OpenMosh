@@ -39,6 +39,8 @@
 		section?: "clip" | "chain";
 		/** Whether chain edits also reach the rest of a multi-selection. */
 		chainNote?: string | null;
+		/** Whether style and clip edits also reach the rest of a multi-selection. */
+		selectionNote?: string | null;
 		/** For the font-on-beat rows to say when there's no tempo to follow. */
 		bpm?: number;
 	}
@@ -56,6 +58,7 @@
 		response = undefined,
 		section = "clip",
 		chainNote = null,
+		selectionNote = null,
 		bpm,
 	}: Props = $props();
 
@@ -156,6 +159,9 @@
 >
 	{#snippet controls()}
 		{#if clip && lane}
+			{#if selectionNote}
+				<p class="hint">{selectionNote}</p>
+			{/if}
 			<textarea
 				class="text-input"
 				placeholder="Type the text for this clip"

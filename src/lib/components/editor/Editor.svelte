@@ -125,7 +125,6 @@
 		setTextClipsMode,
 		syncTextClipsToPreset,
 		toggledTextTimeline,
-		updateLane,
 		type TextClip,
 		type TextLane,
 		type TextTimeline,
@@ -158,6 +157,8 @@
 	import {
 		fanOutMediaClipFields,
 		fanOutMediaLaneEdit,
+		fanOutTextClipFields,
+		fanOutTextLaneEdit,
 	} from "../../editor/field-fanout";
 	import {
 		createSnapshotHistory,
@@ -3660,24 +3661,58 @@
 		pushTextHistory(coalesceKey);
 	}
 
-	/** A chain edit also reaches the other selected clips, when they run the same effects. */
+	/** A chain edit also reaches the other selected clips, when they run the same
+	 * effects; position and fades always do. */
 	function updateTextClip(next: TextClip) {
 		const base = textEditBase;
 		textEditBase = null;
-		const others = textClipsById(new Set(selectedTextClipIds)).filter(
-			(c) => c.id !== next.id,
-		);
-		const fanned = fanOutEdit(
-			base?.id === next.id ? base : findTextClip(textTimeline, next.id),
-			next,
-			$state.snapshot(others) as TextClip[],
-		);
+		const before =
+			base?.id === next.id ? base : findTextClip(textTimeline, next.id);
+		const others = $state.snapshot(
+			textClipsById(new Set(selectedTextClipIds)).filter(
+				(c) => c.id !== next.id,
+			),
+		) as TextClip[];
+		const chained = fanOutEdit(before, next, others);
+		const fanned = before
+			? (chained.length > 0 ? chained : others).map((c) =>
+					fanOutTextClipFields(before, next, c),
+				)
+			: chained;
 		textTimeline = [next, ...fanned].reduce(replaceTextClip, textTimeline);
 	}
 
+	/** The lanes behind the selected text clips, each once. */
+	let selectedTextLaneIds = $derived(
+		selectedTextClipId
+			? textTimeline.lanes
+					.filter((l) =>
+						l.clips.some((c) => selectedTextClipIds.includes(c.id)),
+					)
+					.map((l) => l.id)
+			: [],
+	);
+
+	/** A style edit reaches every lane in the selection. */
 	function updateTextLane(next: TextLane) {
-		textTimeline = updateLane(textTimeline, next.id, () => next);
+		const before = textTimeline.lanes.find((l) => l.id === next.id);
+		const snapshot = before && ($state.snapshot(before) as TextLane);
+		textTimeline = {
+			...textTimeline,
+			lanes: textTimeline.lanes.map((l) => {
+				if (l.id === next.id) return next;
+				if (!snapshot || !selectedTextLaneIds.includes(l.id)) return l;
+				return fanOutTextLaneEdit(snapshot, next, l);
+			}),
+		};
 	}
+
+	let textSelectionNote = $derived.by(() => {
+		const count = textClipsById(new Set(selectedTextClipIds)).length;
+		return selectedTextClip && count > 1
+			? `Edits here change all ${count} selected clips. Each keeps its own text.`
+			: null;
+	});
 
 	/** Adopt a saved timeline, or clear back to empty when a track has none. */
 	function restoreTextTimeline(saved: TextTimeline | null) {
@@ -4604,7 +4639,8 @@
 				onTextDragStart={() => pushTextHistory()}
 				onTextMove={(clipId, x, y) => {
 					const clip = findTextClip(textTimeline, clipId);
-					if (clip) updateTextClip({ ...clip, x, y });
+					if (clip)
+						textTimeline = replaceTextClip(textTimeline, { ...clip, x, y });
 				}}
 				onLayerStyleChange={(id, style) =>
 					(mediaTimeline = updateMediaLaneIn(mediaTimeline, id, (l) => ({
@@ -5352,6 +5388,7 @@
 				response={audioResponse}
 				{section}
 				chainNote={textChainNote}
+				selectionNote={textSelectionNote}
 				bpm={sequenceBpm}
 			/>
 		{/if}
