@@ -1,4 +1,4 @@
-import { records } from "../records";
+import { finiteOr, records } from "../records";
 import { restoreEffects } from "../effects";
 import type { EffectInstance } from "../effects/types";
 import {
@@ -288,7 +288,7 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 			id: lane.id ?? nextId("mlane"),
 			name: lane.name ?? `Media ${i + 1}`,
 			enabled: lane.enabled !== false,
-			z: typeof lane.z === "number" ? lane.z : i,
+			z: finiteOr(lane.z, i),
 			sourceId: lane.sourceId ?? null,
 			style: { ...DEFAULT_MEDIA_STYLE, ...(lane.style ?? {}) },
 			settings: normalizeLaneSettings(lane.settings),
@@ -303,9 +303,9 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 					: clipEffects(legacyChain);
 				return {
 					id: clip.id ?? nextId("mclip"),
-					start: clip.start ?? 0,
-					end: clip.end ?? 0,
-					sourceStart: clip.sourceStart ?? 0,
+					start: finiteOr(clip.start, 0),
+					end: finiteOr(clip.end, 0),
+					sourceStart: finiteOr(clip.sourceStart, 0),
 					sourceId: clip.sourceId ?? undefined,
 					speed: normalizeClipSpeed(clip.speed),
 					animation:
@@ -313,9 +313,9 @@ export function normalizeMediaTimeline(raw: unknown): MediaTimeline {
 							? clip.animation
 							: undefined,
 					// Saved before the two edges split, `fadeSec` ramped both.
-					fadeInSec: clip.fadeInSec ?? clip.fadeSec,
-					fadeOutSec: clip.fadeOutSec ?? clip.fadeSec,
-					gain: clip.gain,
+					fadeInSec: finiteOr(clip.fadeInSec ?? clip.fadeSec, undefined),
+					fadeOutSec: finiteOr(clip.fadeOutSec ?? clip.fadeSec, undefined),
+					gain: finiteOr(clip.gain, undefined),
 					audioDetached: clip.audioDetached || undefined,
 					transition: normalizeClipTransition(clip.transition),
 					bounce: clip.bounce || undefined,
