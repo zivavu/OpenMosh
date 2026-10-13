@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createMediaClip, createMediaLane } from "../media";
+import { createTextClip, createTextLane } from "../text/types";
 import {
 	fanOutMediaClipFields,
 	fanOutMediaLaneEdit,
+	fanOutTextClipFields,
+	fanOutTextLaneEdit,
 	withChangedFields,
 } from "./field-fanout";
 
@@ -81,5 +84,31 @@ describe("fanOutMediaClipFields", () => {
 		);
 		expect(next.bounce).toBe(true);
 		expect(next.bounceBack).toBeUndefined();
+	});
+});
+
+describe("fanOutTextClipFields", () => {
+	test("carries position and keeps the clip's own words", () => {
+		const before = createTextClip(0, 2, "one");
+		const after = { ...before, text: "uno", x: 0.2 };
+		const next = fanOutTextClipFields(
+			before,
+			after,
+			createTextClip(2, 4, "two"),
+		);
+		expect(next.x).toBe(0.2);
+		expect(next.text).toBe("two");
+	});
+});
+
+describe("fanOutTextLaneEdit", () => {
+	test("carries the edited style key and keeps the rest", () => {
+		const before = createTextLane("A");
+		const after = { ...before, style: { ...before.style, color: "#ff0000" } };
+		const target = createTextLane("B");
+		target.style.size = 0.3;
+		const next = fanOutTextLaneEdit(before, after, target);
+		expect(next.style.color).toBe("#ff0000");
+		expect(next.style.size).toBe(0.3);
 	});
 });

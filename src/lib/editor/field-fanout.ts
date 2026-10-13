@@ -2,6 +2,7 @@
 
 import type { MediaClip, MediaLane } from "../media";
 import { DEFAULT_LANE_AUDIO } from "../mix/types";
+import type { TextClip, TextLane } from "../text/types";
 
 function sameValue(a: unknown, b: unknown): boolean {
 	return a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -51,18 +52,22 @@ export function fanOutMediaClipFields(
 	return next;
 }
 
+function withChangedStyle<S extends object>(before: S, after: S, target: S): S {
+	return withChangedFields(
+		before,
+		after,
+		target,
+		Object.keys(after) as (keyof S)[],
+	);
+}
+
 /** The lane's placement and sound, as `before` → `after` changed them, on `target`. */
 export function fanOutMediaLaneEdit(
 	before: MediaLane,
 	after: MediaLane,
 	target: MediaLane,
 ): MediaLane {
-	const style = withChangedFields(
-		before.style,
-		after.style,
-		target.style,
-		Object.keys(after.style) as (keyof MediaLane["style"])[],
-	);
+	const style = withChangedStyle(before.style, after.style, target.style);
 	const audio = withChangedFields(
 		before.audio ?? DEFAULT_LANE_AUDIO,
 		after.audio ?? DEFAULT_LANE_AUDIO,
@@ -72,4 +77,30 @@ export function fanOutMediaLaneEdit(
 	const audioChanged = audio !== (target.audio ?? DEFAULT_LANE_AUDIO);
 	if (style === target.style && !audioChanged) return target;
 	return { ...target, style, ...(audioChanged ? { audio } : {}) };
+}
+
+/** A text clip's own words stay its own; where it sits and how it fades carry. */
+const SHARED_TEXT_CLIP_FIELDS = [
+	"x",
+	"y",
+	"fadeInSec",
+	"fadeOutSec",
+] as const satisfies readonly (keyof TextClip)[];
+
+export function fanOutTextClipFields(
+	before: TextClip,
+	after: TextClip,
+	target: TextClip,
+): TextClip {
+	return withChangedFields(before, after, target, SHARED_TEXT_CLIP_FIELDS);
+}
+
+/** The lane's look, as `before` → `after` changed it, on `target`. */
+export function fanOutTextLaneEdit(
+	before: TextLane,
+	after: TextLane,
+	target: TextLane,
+): TextLane {
+	const style = withChangedStyle(before.style, after.style, target.style);
+	return style === target.style ? target : { ...target, style };
 }
