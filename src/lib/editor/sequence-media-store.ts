@@ -67,6 +67,8 @@ const DB_VERSION = 5;
 const MAX_UNREFERENCED_TIMELINES = 8;
 /** Fresh files land here until the pool save catches up, kept up to this many. */
 const MAX_UNREFERENCED = 64;
+/** Media this new is never pruned: its pool may not be saved yet, in this tab or another. */
+const FRESH_MEDIA_MS = 10 * 60_000;
 
 /** Unreferenced proxies kept up to this many; a session-scoped source has no pool. */
 const MAX_UNREFERENCED_PROXIES = 16;
@@ -400,9 +402,10 @@ export async function withMediaWrites<T>(write: () => Promise<T>): Promise<T> {
 	return manager ? manager.request(MEDIA_WRITES_LOCK, write) : write();
 }
 
-/** Drops media no project or edit references, except the newest MAX_UNREFERENCED.
- * Projects and edits themselves go only when the user deletes them. Skipped while
- * any tab is part way through writing media and its records. */
+/** Drops media no project or edit references, except the newest MAX_UNREFERENCED
+ * and any added in the last few minutes. Projects and edits themselves go only when
+ * the user deletes them. Skipped while any tab is part way through writing media and
+ * its records. */
 export async function pruneSequenceMedia(): Promise<void> {
 	const manager = locks();
 	if (!manager) return pruneNow();
@@ -445,7 +448,9 @@ async function pruneNow(): Promise<void> {
 	const unreferenced = (await getAllSequenceMedia()).filter(
 		(m) => !referenced.has(m.id),
 	);
+	const now = Date.now();
 	for (const entry of unreferenced.slice(0, -MAX_UNREFERENCED)) {
+		if (now - entry.addedAt < FRESH_MEDIA_MS) continue;
 		await deleteSequenceMedia(entry.id);
 	}
 
