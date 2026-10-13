@@ -1,7 +1,7 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
 	import { onMount, tick, untrack } from "svelte";
-	import { hasKeyboard } from "../../input-device";
+	import { hasKeyboard, modKey } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
 		ChevronsDownUp,
@@ -4413,7 +4413,7 @@
 						{#if isSequenceMode}
 							<button
 								class="save-file-btn"
-								title="Save the project as a file you can keep or share (Ctrl+Shift+S)"
+								title="Save the project as a file you can keep or share ({modKey}+Shift+S)"
 								aria-label="Save project file"
 								onclick={saveProjectFile}
 							>
@@ -4843,7 +4843,11 @@
 					class="bar-key live"
 					onclick={toggleMasterPlay}
 					disabled={mediaBusy && !textClockRunning}
-					title={mediaBusy ? "Media is still loading" : undefined}
+					title={mediaBusy
+						? "Media is still loading"
+						: textClockRunning
+							? "Stop (Space)"
+							: "Play (Space)"}
 				>
 					{#if textClockRunning}
 						<Pause size={14} fill="currentColor" stroke="none" />
@@ -4855,7 +4859,11 @@
 				</button>
 			{/if}
 			{#if isImageFormat}
-				<button class="bar-key live" onclick={save}>
+				<button
+					class="bar-key live"
+					onclick={save}
+					title="Save this frame as an image ({modKey}+S)"
+				>
 					<Download size={14} />
 					SAVE
 				</button>

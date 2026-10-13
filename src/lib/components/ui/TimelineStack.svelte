@@ -320,10 +320,10 @@
 				onclick={onTogglePlay}
 				disabled={playDisabled && !isPlaying}
 				title={isPlaying
-					? "Pause"
+					? "Pause (Space)"
 					: playDisabled
 						? "Media is still loading"
-						: "Play"}
+						: "Play (Space)"}
 			>
 				{#if isPlaying}
 					<Pause size={13} fill="currentColor" stroke="none" />

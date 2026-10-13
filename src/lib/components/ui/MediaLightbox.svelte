@@ -167,7 +167,7 @@
 					<button
 						class="lb-arrow lb-arrow-left"
 						onclick={prev}
-						title="Previous"
+						title="Previous (←)"
 					>
 						<ChevronLeft size={18} />
 					</button>
@@ -195,7 +195,11 @@
 					/>
 				{/if}
 				{#if items.length > 1}
-					<button class="lb-arrow lb-arrow-right" onclick={next} title="Next">
+					<button
+						class="lb-arrow lb-arrow-right"
+						onclick={next}
+						title="Next (→)"
+					>
 						<ChevronRight size={18} />
 					</button>
 				{/if}

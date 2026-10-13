@@ -63,8 +63,8 @@
 					class="bar-icon"
 					onclick={onUndo}
 					disabled={!canUndo}
-					title="Undo"
-					aria-label="Undo"
+					title="Undo the last mosh (←)"
+					aria-label="Undo the last mosh"
 				>
 					<RotateCcw size={14} />
 				</button>
@@ -72,7 +72,7 @@
 		</div>
 	{/if}
 	{#if !hideActions}
-		<button class="bar-key mosh" onclick={onMosh}>
+		<button class="bar-key mosh" onclick={onMosh} title="Mosh (→)">
 			<Zap size={14} />
 			MOSH
 		</button>

@@ -9,6 +9,7 @@
 		maskDab,
 	} from "../../brush/soft-dab";
 	import { modalDialog } from "../../actions/modal-dialog";
+	import { modKey } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import {
 		Crop,
@@ -1896,7 +1897,7 @@
 					class="bar-icon"
 					disabled={!history.canUndo}
 					onclick={undo}
-					title="Undo (Ctrl+Z)"
+					title="Undo ({modKey}+Z)"
 					aria-label="Undo"
 				>
 					<Undo2 size={13} />
@@ -1905,7 +1906,7 @@
 					class="bar-icon"
 					disabled={!history.canRedo}
 					onclick={redo}
-					title="Redo (Ctrl+Shift+Z)"
+					title="Redo ({modKey}+Shift+Z)"
 					aria-label="Redo"
 				>
 					<Redo2 size={13} />
