@@ -11,6 +11,7 @@
 		type TextStyle,
 	} from "../../text";
 	import type { SpectrumData } from "../../types";
+	import type { FreqBand } from "../../effects";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import ColorPicker from "../ui/ColorPicker.svelte";
 	import { Plus } from "lucide-svelte";
@@ -41,6 +42,8 @@
 		chainNote?: string | null;
 		/** Whether style and clip edits also reach the rest of a multi-selection. */
 		selectionNote?: string | null;
+		/** "All links" in the chain, for the rest of a multi-selection to follow. */
+		onAllBands?: (band: FreqBand) => void;
 		/** For the font-on-beat rows to say when there's no tempo to follow. */
 		bpm?: number;
 	}
@@ -59,6 +62,7 @@
 		section = "clip",
 		chainNote = null,
 		selectionNote = null,
+		onAllBands,
 		bpm,
 	}: Props = $props();
 
@@ -379,6 +383,7 @@
 				{response}
 				hint="this clip's text"
 				note={chainNote}
+				{onAllBands}
 			>
 				{#if opaqueNames.length > 0}
 					<p class="warn">

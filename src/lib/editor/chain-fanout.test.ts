@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { EffectInstance } from "../effects";
+import { FREQ_PRESETS, type EffectInstance } from "../effects";
 import type { ChainClip } from "./chain-clip";
 import {
 	fanOutChainEdit,
 	fanOutClipEdit,
 	fanOutEdit,
 	sameLiveChain,
+	withAllLinkBands,
 } from "./chain-fanout";
 
 let nextId = 0;
@@ -177,5 +178,26 @@ describe("fanOutEdit", () => {
 		const before = clip([fx("pixelate", true)]);
 		const other = clip([fx("pixelate", true)]);
 		expect(fanOutEdit(before, { ...before }, [other])).toEqual([]);
+	});
+});
+
+describe("withAllLinkBands", () => {
+	test("sets every link's band, whatever effects the clip runs", () => {
+		const linked = fx("blur", true);
+		linked.volumeLinks = { size: { min: 0, max: 1 } };
+		const next = withAllLinkBands(
+			clip([linked], { presetName: "Haze" }),
+			"low",
+		);
+		expect(next.effects[0].volumeLinks?.size).toMatchObject({
+			freqMin: FREQ_PRESETS.low.min,
+			freqMax: FREQ_PRESETS.low.max,
+		});
+		expect(next.modified).toBe(true);
+	});
+
+	test("leaves a clip without links alone", () => {
+		const plain = clip([fx("blur", true)], { presetName: "Haze" });
+		expect(withAllLinkBands(plain, "low")).toBe(plain);
 	});
 });

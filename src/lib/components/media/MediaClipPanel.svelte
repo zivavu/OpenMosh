@@ -20,6 +20,7 @@
 	} from "../../media";
 	import type { SequenceSource } from "../../editor/sequence-sources.svelte";
 	import type { SpectrumData } from "../../types";
+	import type { FreqBand } from "../../effects";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import {
 		DEFAULT_LANE_AUDIO,
@@ -65,6 +66,8 @@
 		chainNote?: string | null;
 		/** Whether placement and clip edits also reach the rest of a multi-selection. */
 		selectionNote?: string | null;
+		/** "All links" in the chain, for the rest of a multi-selection to follow. */
+		onAllBands?: (band: FreqBand) => void;
 		/** False once the clip's video is known to have no sound. */
 		sourceHasAudio?: boolean;
 		/** Move the clip's sound onto an audio lane of its own. */
@@ -91,6 +94,7 @@
 		section = "clip",
 		chainNote = null,
 		selectionNote = null,
+		onAllBands,
 		sourceHasAudio = true,
 		onDetachAudio,
 		onAttachAudio,
@@ -684,6 +688,7 @@
 				{response}
 				hint="this clip's media"
 				note={chainNote}
+				{onAllBands}
 			/>
 		{/if}
 	{/snippet}

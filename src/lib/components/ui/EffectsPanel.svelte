@@ -78,6 +78,8 @@
 		/** Called before a change is applied, while the pre-edit state is intact.
 		 * `coalesceKey` merges consecutive ticks of one drag into one undo entry. */
 		onBeforeUserEdit?: (coalesceKey?: string) => void;
+		/** After "All links" sets a band, so a multi-selection can follow. */
+		onAllBands?: (band: FreqBand) => void;
 		/** Shown over the list, e.g. what an edit reaches in a multi-selection. */
 		note?: string | null;
 		/** Set when `effects` is not a chain the user can edit; the rack shows this instead. */
@@ -103,6 +105,7 @@
 		onPresetApplied,
 		onUserEdit,
 		onBeforeUserEdit,
+		onAllBands,
 		noTarget = null,
 		note = null,
 		rolledNote = null,
@@ -253,6 +256,7 @@
 		linkBand.value = band;
 		appliedIndex = null;
 		onUserEdit?.();
+		onAllBands?.(band);
 	}
 
 	// Hidden effects are an explicit set of ids the user chose to hide, not every
