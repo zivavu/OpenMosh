@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { canvasStats, PREVIEW_CANVAS, selectMode } from "./app";
-import { objCubeFile, RED, skinnedGlbFile, trackFile } from "./fixtures";
+import {
+	GREEN,
+	objCubeFile,
+	RED,
+	skinnedGlbFile,
+	texturedGlbFile,
+	trackFile,
+} from "./fixtures";
 
 /**
  * 3D models in the editor's canvas. A draw WebGL refuses leaves the frame empty and
@@ -60,6 +67,23 @@ test("an animated model draws on the canvas", async ({ page }) => {
 				return mean.r + mean.g + mean.b;
 			},
 			{ message: "the animated model never showed up", timeout: 30_000 },
+		)
+		.toBeGreaterThan(60);
+	expect(glErrors).toEqual([]);
+});
+
+test("a textured model draws its texture", async ({ page }) => {
+	const glErrors = collectGlErrors(page);
+	await openModel(page, texturedGlbFile("quad.glb", GREEN));
+
+	// The square fills the front view, and only its texture is green.
+	await expect
+		.poll(
+			async () => {
+				const { mean } = await canvasStats(page);
+				return mean.g - Math.max(mean.r, mean.b);
+			},
+			{ message: "the texture never showed up", timeout: 30_000 },
 		)
 		.toBeGreaterThan(60);
 	expect(glErrors).toEqual([]);

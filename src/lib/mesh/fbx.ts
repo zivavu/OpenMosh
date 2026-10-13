@@ -19,6 +19,11 @@ const MAGIC = "Kaydara FBX Binary";
 /** FBX time is in ticks of 1/46186158000 s. */
 const TICKS_PER_SECOND = 46186158000;
 
+/** Bytes per element of each array property type. */
+const ARRAY_WIDTH: Record<string, number> = { d: 8, l: 8, f: 4, i: 4, b: 1 };
+/** Largest array a model may unpack: far past any real mesh. */
+const MAX_ARRAY_BYTES = 512 * 1024 * 1024;
+
 /** Binary FBX: meshes with their skin, materials, an embedded texture and the
  * first animation stack. ASCII FBX and textures kept in separate files aren't read. */
 export async function parseFbx(bytes: Uint8Array): Promise<Mesh | null> {
@@ -45,6 +50,11 @@ export async function readTree(bytes: Uint8Array): Promise<FbxNode | null> {
 		const byteLength = dv.getUint32(pos + 8, true);
 		const raw = bytes.subarray(pos + 12, pos + 12 + byteLength);
 		pos += 12 + byteLength;
+		// Checked before anything is sized from it: the count is the file's word.
+		const size = count * (ARRAY_WIDTH[type] ?? 1);
+		if (size > (encoding === 0 ? raw.length : MAX_ARRAY_BYTES)) {
+			throw new Error("FBX array larger than its data");
+		}
 		const decode = (data: Uint8Array) => {
 			const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 			switch (type) {
@@ -71,7 +81,9 @@ export async function readTree(bytes: Uint8Array): Promise<FbxNode | null> {
 		if (encoding === 0) props[slot] = decode(raw);
 		else
 			pending.push(
-				inflate(raw).then((data) => void (props[slot] = decode(data))),
+				inflate(raw, size + 1024).then(
+					(data) => void (props[slot] = decode(data)),
+				),
 			);
 	};
 
@@ -132,6 +144,7 @@ export async function readTree(bytes: Uint8Array): Promise<FbxNode | null> {
 	};
 
 	const readNode = (): FbxNode | null => {
+		const start = pos;
 		const end = word(pos);
 		const count = word(pos + (wide ? 8 : 4));
 		const nameLength = bytes[pos + (wide ? 24 : 12)];
@@ -139,6 +152,8 @@ export async function readTree(bytes: Uint8Array): Promise<FbxNode | null> {
 			pos += headerSize;
 			return null;
 		}
+		// An end at or before the start would send the walk back over the same bytes forever.
+		if (end <= start) throw new Error("bad FBX node offset");
 		pos += headerSize;
 		const name = new TextDecoder().decode(
 			bytes.subarray(pos, pos + nameLength),
@@ -168,11 +183,32 @@ export async function readTree(bytes: Uint8Array): Promise<FbxNode | null> {
 	return root;
 }
 
-async function inflate(data: Uint8Array): Promise<Uint8Array> {
-	const stream = new Blob([data as BlobPart])
+/** Inflate up to `limit` bytes; a stream that would go further is refused, so a
+ * small array can't unpack into gigabytes. */
+async function inflate(data: Uint8Array, limit: number): Promise<Uint8Array> {
+	const reader = new Blob([data as BlobPart])
 		.stream()
-		.pipeThrough(new DecompressionStream("deflate"));
-	return new Uint8Array(await new Response(stream).arrayBuffer());
+		.pipeThrough(new DecompressionStream("deflate"))
+		.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.length;
+		if (total > limit) {
+			await reader.cancel();
+			throw new Error("FBX array inflates past its size");
+		}
+		chunks.push(value);
+	}
+	const out = new Uint8Array(total);
+	let at = 0;
+	for (const chunk of chunks) {
+		out.set(chunk, at);
+		at += chunk.length;
+	}
+	return out;
 }
 
 const child = (node: FbxNode | undefined, name: string) =>
@@ -261,11 +297,17 @@ function build(root: FbxNode): Mesh | null {
 	}
 	const order: number[] = [];
 	const seen = new Set<number>();
+	const placed = new Set<number>();
 	const place = (id: number) => {
 		if (seen.has(id)) return;
 		seen.add(id);
 		const p = parentModel.get(id);
-		if (p !== null && p !== undefined) place(p);
+		if (p !== null && p !== undefined) {
+			place(p);
+			// A parent still waiting on this one is a cycle; this model roots it.
+			if (!placed.has(p)) parentModel.set(id, null);
+		}
+		placed.add(id);
 		order.push(id);
 	};
 	models.forEach((m) => place(m.id));

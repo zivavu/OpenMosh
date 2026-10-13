@@ -335,26 +335,32 @@ function fitRig(
 		: [{ time: 0, animation: 0 }];
 	const mats = new Float32Array(rig.bones * 16);
 	const posed = new Float32Array(bind.length);
-	const poses = samples.map(({ time, animation }) => {
-		rig.pose(time, mats, animation);
-		skinPositions(bind, joints, weights, mats, posed);
-		return posed.slice();
-	});
+	// Posed again for each pass rather than kept: every sample of a big rig would be
+	// a full copy of its vertices.
+	const eachPose = (visit: (p: Float32Array) => boolean | void) => {
+		for (const { time, animation } of samples) {
+			rig.pose(time, mats, animation);
+			skinPositions(bind, joints, weights, mats, posed);
+			if (visit(posed) === false) return false;
+		}
+		return true;
+	};
 	const min = [Infinity, Infinity, Infinity];
 	const max = [-Infinity, -Infinity, -Infinity];
-	for (const p of poses) {
+	const finite = eachPose((p) => {
 		for (let i = 0; i < p.length; i += 3) {
 			for (let k = 0; k < 3; k++) {
 				const v = p[i + k];
-				if (!Number.isFinite(v)) return null;
+				if (!Number.isFinite(v)) return false;
 				if (v < min[k]) min[k] = v;
 				if (v > max[k]) max[k] = v;
 			}
 		}
-	}
+	});
+	if (!finite) return null;
 	const centre = [0, 1, 2].map((k) => (min[k] + max[k]) / 2);
 	let radius = 0;
-	for (const p of poses) {
+	eachPose((p) => {
 		for (let i = 0; i < p.length; i += 3) {
 			radius = Math.max(
 				radius,
@@ -365,7 +371,7 @@ function fitRig(
 				),
 			);
 		}
-	}
+	});
 	if (radius <= 0) return null;
 	return {
 		fit: multiply(
