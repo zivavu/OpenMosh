@@ -59,6 +59,35 @@ test("the bottom sheet opens on the chain, with mosh settings a tap away and bac
 	await expect(chain.first()).toBeVisible();
 });
 
+test("grabbing the bottom sheet's handle leaves it where it was", async ({
+	page,
+}) => {
+	await openSingle(page, "red.png", RED);
+	await waitForRender(page);
+	const sheet = page.locator(".sheet-container");
+	const before = (await sheet.boundingBox())!.y;
+	const handle = (await sheetHandle(page).boundingBox())!;
+	await page.mouse.move(
+		handle.x + handle.width / 2,
+		handle.y + handle.height / 2,
+	);
+	await page.mouse.down();
+	expect(Math.abs((await sheet.boundingBox())!.y - before)).toBeLessThan(2);
+	await page.mouse.up();
+	await expect(sheetHandle(page)).toHaveAttribute("aria-expanded", "true");
+});
+
+test("the bottom sheet opens and shuts from the keyboard", async ({ page }) => {
+	await openSingle(page, "red.png", RED);
+	await waitForRender(page);
+	await sheetHandle(page).focus();
+	await page.keyboard.press("Enter");
+	await expect(sheetHandle(page)).toHaveAttribute("aria-expanded", "true");
+	// Enter, not Space: Space is play and pause wherever focus is.
+	await page.keyboard.press("Enter");
+	await expect(sheetHandle(page)).toHaveAttribute("aria-expanded", "false");
+});
+
 test.describe("action bar", () => {
 	// Narrower than the Pixel 5, at the width the bar used to overrun.
 	test.use({ viewport: { width: 360, height: 740 } });
