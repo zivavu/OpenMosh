@@ -200,8 +200,7 @@ export class AudioManager {
 		this.#audioEl.currentTime = this.spanStart;
 		this.trackCurrentTime = this.spanStart;
 		this.#resetClock(this.spanStart);
-		this.#audioEl.play();
-		this.audioPlaying = true;
+		this.#play(this.#audioEl);
 	}
 
 	playAudio() {
@@ -216,8 +215,18 @@ export class AudioManager {
 			this.trackCurrentTime = this.spanStart;
 		}
 		this.#resetClock(this.#audioEl.currentTime);
-		this.#audioEl.play();
+		this.#play(this.#audioEl);
+	}
+
+	/** Start the element. A refused play (autoplay blocked, a source that won't load)
+	 * leaves the transport stopped rather than showing it playing in silence. */
+	#play(el: HTMLAudioElement) {
 		this.audioPlaying = true;
+		void el.play().catch((e: unknown) => {
+			// A pause cut it short: that's the pause's call, not a failure.
+			if (e instanceof DOMException && e.name === "AbortError") return;
+			if (this.#audioEl === el && el.paused) this.audioPlaying = false;
+		});
 	}
 
 	pauseAudio() {
