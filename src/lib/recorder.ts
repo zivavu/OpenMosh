@@ -138,6 +138,25 @@ function checkAbort(signal?: AbortSignal) {
 		throw new DOMException("Recording cancelled", "AbortError");
 }
 
+/** `work`, or a rejection as soon as the export is cancelled: a frame stuck on a
+ * decoder or a seek mustn't keep Cancel from landing. */
+function untilAborted<T>(
+	work: T | Promise<T>,
+	signal?: AbortSignal,
+): Promise<T> {
+	if (!signal) return Promise.resolve(work);
+	checkAbort(signal);
+	let onAbort = () => {};
+	const aborted = new Promise<never>((_, reject) => {
+		onAbort = () =>
+			reject(new DOMException("Recording cancelled", "AbortError"));
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+	return Promise.race([work, aborted]).finally(() =>
+		signal.removeEventListener("abort", onAbort),
+	);
+}
+
 function applyFrameAudio(
 	effects: EffectInstance[],
 	frameAudioData: FrameAudioData[],
@@ -714,9 +733,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			checkAbort(signal);
 
 			const time = i * frameDuration;
-			const renderResult = onBeforeRender?.(i, time);
-			const skipRender =
-				renderResult instanceof Promise ? await renderResult : renderResult;
+			const skipRender = await untilAborted(onBeforeRender?.(i, time), signal);
 			const renderEffects = effectsRef ? effectsRef.current : effects;
 			const clockTime = textTimeOffset + time * textTimeScale;
 			const beat = bpm > 0 ? ((clockTime - beatOffset) * bpm) / 60 : null;
@@ -738,7 +755,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					)
 				: [];
 			if (mediaLayers.length > 0 && mediaLayerSink) {
-				await mediaLayerSink(mediaLayers);
+				await untilAborted(mediaLayerSink(mediaLayers), signal);
 			}
 			// The layers' chains are per clip, so they are read off the resolved layers every
 			// frame; the lane is the scope, so one lane's smoothing never steps another's.

@@ -89,6 +89,9 @@ export interface SamplerBounce {
 
 /** Frame sampler for a video slide, shared by preview and export. No clock, audio
  * or speed: the caller states the position with `at(t)`. */
+/** How long a wait for a frame goes without one landing before it gives up. */
+const STALL_MS = 10_000;
+
 export class SlideVideoSampler {
 	readonly duration: number;
 	readonly width: number;
@@ -201,6 +204,8 @@ export class SlideVideoSampler {
 	/** The newest queued frame due at `t`. Waits for decode if none has landed and
 	 * `wait` allows it; a caller with a frame on screen keeps it. */
 	async #take(t: number, wait: boolean): Promise<VideoFrame | null> {
+		let received = this.#queue.received;
+		let lastProgress = performance.now();
 		while (!this.#disposed) {
 			const due = this.#queue.takeDue(t);
 			if (due) {
@@ -216,6 +221,13 @@ export class SlideVideoSampler {
 			}
 			if (this.#queue.done) return null;
 			if (!wait && this.#delivered) return null;
+			// A decoder that stops sending frames would otherwise hold its caller forever.
+			if (this.#queue.received !== received) {
+				received = this.#queue.received;
+				lastProgress = performance.now();
+			} else if (performance.now() - lastProgress > STALL_MS) {
+				return null;
+			}
 			await sleep(5);
 		}
 		return null;

@@ -398,7 +398,8 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 		downloadBlob(blob);
 	} finally {
 		// Stops mediabunny's pre-decode pipeline and closes its decoder on abort/error.
-		await videoFrames?.return().catch(() => {});
+		// Not awaited: a cancel can leave a read pending, and return() queues behind it.
+		void videoFrames?.return().catch(() => {});
 		videoInput?.dispose();
 		exportLayers?.dispose();
 	}
