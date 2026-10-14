@@ -934,8 +934,13 @@
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
-			// Reopened from a saved session: adopting the library id brings its segments back.
-			if (initialTrackId) adoptLibraryTrack(initialTrackId);
+			// Reopened from a saved session: adopting the library id brings its span back,
+			// and its segments too when the session predates carrying its own.
+			if (initialTrackId)
+				adoptLibraryTrack(
+					initialTrackId,
+					Array.isArray(untrack(() => initialConfig)?.segments),
+				);
 		}
 	});
 
@@ -976,8 +981,17 @@
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
-	function applySavedSegments(trackId: string) {
+	/** `spanOnly` when the session restored its own segments, BPM and text: the song's
+	 * entry holds whichever slideshow on it saved last. */
+	function applySavedSegments(trackId: string, spanOnly = false) {
 		const saved = segmentsStore.load(trackId);
+		if (spanOnly) {
+			// The session's tempo was set for these segments; a detection mustn't move it.
+			bpmEpoch++;
+			bpmRestoredFor = trackId;
+			if (saved) applySavedSpan(saved);
+			return;
+		}
 		if (saved === null) {
 			// A song of its own starts from a fresh flat line (see TimelineSegments).
 			config = { ...config, segments: [] };
@@ -996,6 +1010,10 @@
 			bpmEpoch++;
 			bpmRestoredFor = trackId;
 		}
+		applySavedSpan(saved);
+	}
+
+	function applySavedSpan(saved: { spanStart?: number; spanEnd?: number }) {
 		// An empty span is an older build's leftover, never a choice; use the whole track.
 		if (
 			saved.spanStart !== undefined &&
@@ -1006,10 +1024,10 @@
 		}
 	}
 
-	function adoptLibraryTrack(trackId: string) {
+	function adoptLibraryTrack(trackId: string, spanOnly = false) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
-		applySavedSegments(trackId);
+		applySavedSegments(trackId, spanOnly);
 	}
 
 	let bpmDetecting = $state(false);
