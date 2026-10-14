@@ -259,6 +259,9 @@ async function prepareFrameAudio(
 	return { frameAudioData, sampleRate: audioBuffer.sampleRate, audioBuffer };
 }
 
+/** Bytes of captured frames the worker pool may hold in flight. */
+const POOL_FRAME_BUDGET = 1024 * 1024 * 1024;
+
 // Blob's ArrayBuffer branch refuses anything over 2 GB, so a long export can't be
 // handed to it as one buffer; the muxer's writes land in fixed-size slabs instead.
 const SLAB_SIZE = 64 * 1024 * 1024;
@@ -609,13 +612,17 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		if (!EncoderPool.isSupported())
 			throw new Error("Workers or WebCodecs unavailable");
 		const CHUNK_SIZE = 24;
+		// Every worker can hold a chunk of full-size frames at once; past the budget, fewer
+		// workers, and at sizes where even two won't fit, the single encoder instead.
+		const chunkBytes = CHUNK_SIZE * canvas.width * canvas.height * 4;
 		const workerCount = Math.min(
 			4,
 			Math.max(2, Math.floor((navigator.hardwareConcurrency || 8) / 4)),
 			Math.max(1, Math.ceil(totalFrames / CHUNK_SIZE)),
+			Math.floor(POOL_FRAME_BUDGET / chunkBytes),
 		);
 		if (workerCount < 2)
-			throw new Error("Export too short to benefit from the encode pool");
+			throw new Error("Too short, or too big, for the encode pool");
 		let packetSource: InstanceType<typeof mb.EncodedVideoPacketSource>;
 		let drain: Promise<void> = Promise.resolve();
 		let drainError: unknown = null;
