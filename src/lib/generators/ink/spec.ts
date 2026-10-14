@@ -40,6 +40,9 @@ export function isInkSpec(v: unknown): v is InkSpec {
 		isSeed(v.seed) &&
 		INK_STYLES.includes(v.style as InkStyle) &&
 		allFinite(v, ["zoom", "turbulence", "width", "grain"]) &&
+		// It sets the noise octaves per field cell; a file can't ask for millions.
+		(v.turbulence as number) >= 0 &&
+		(v.turbulence as number) <= 1 &&
 		Number.isInteger(v.strokes) &&
 		(v.strokes as number) >= 1 &&
 		(v.strokes as number) <= 10000 &&
