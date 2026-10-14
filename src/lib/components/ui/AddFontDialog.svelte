@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { modalDialog } from "../../actions/modal-dialog";
 	import { Trash2, Upload, X } from "lucide-svelte";
 	import {
 		addCustomFont,
@@ -83,7 +84,15 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="font-overlay" onclick={onClose} onkeydown={onKeydown}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="font-modal" onclick={(e) => e.stopPropagation()}>
+	<div
+		class="font-modal"
+		{@attach modalDialog()}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Add a font"
+		tabindex="-1"
+		onclick={(e) => e.stopPropagation()}
+	>
 		<div class="header">
 			<span class="title">Add a font</span>
 			<button class="close-btn" onclick={onClose} title="Close">
