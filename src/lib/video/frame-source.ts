@@ -151,8 +151,9 @@ class WorkerFrameQueue implements FrameQueue {
 		this.#id = id;
 	}
 
+	/** A dead worker sends nothing more, so a stream on it has ended too. */
 	get done() {
-		return this.#done;
+		return this.#done || workerUnavailable;
 	}
 
 	get started() {
