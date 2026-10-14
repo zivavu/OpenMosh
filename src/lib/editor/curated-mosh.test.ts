@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+	createEffectInstance,
 	EFFECT_DEFINITIONS,
 	getDefinition,
 	loadInitialEffects,
@@ -8,6 +9,7 @@ import {
 	CURATION,
 	curationOf,
 	FAMILIES,
+	isCurated,
 	STAGES,
 	type Family,
 } from "../effects/curation";
@@ -58,6 +60,26 @@ describe("curation table", () => {
 });
 
 describe("curated roll", () => {
+	it("doesn't count effects a roll never picks against a family", () => {
+		// Masks have no family; counted as the fallback, three would fill displace's cap.
+		let displaced = 0;
+		for (let seed = 1; seed <= 40; seed++) {
+			const effects = loadInitialEffects();
+			const mask = getDefinition("mask")!;
+			for (let i = 0; i < 3; i++) {
+				effects.push({ ...createEffectInstance(mask), enabled: true });
+			}
+			withSeededRandom(seed, () => generateMosh(effects, OPTIONS));
+			displaced += effects.filter(
+				(e) =>
+					e.enabled &&
+					isCurated(e.defId) &&
+					curationOf(e.defId).family === "displace",
+			).length;
+		}
+		expect(displaced).toBeGreaterThan(0);
+	});
+
 	it("stays within the count and never past a family's cap", () => {
 		for (let seed = 1; seed <= 60; seed++) {
 			const on = roll(seed).filter((e) => e.enabled);
