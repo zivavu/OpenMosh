@@ -30,6 +30,7 @@ export interface SlideshowRecordContext {
 	moshOptions: MoshOptions;
 	onProgress: (p: number) => void;
 	onFinalizing: () => void;
+	onNotice?: (message: string) => void;
 	signal: AbortSignal;
 }
 
@@ -127,6 +128,7 @@ export async function executeSlideshowRecording(
 	let blob: Blob;
 	try {
 		blob = await recordVideo({
+			onNotice: ctx.onNotice,
 			duration,
 			fps,
 			canvas,
