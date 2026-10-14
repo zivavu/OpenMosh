@@ -1269,14 +1269,16 @@
 		);
 	}
 
-	// Once per video; with a track loaded, onLibraryLoadTrack owns restoring.
-	let restoredSeqKey: string | null = null;
+	// The video's own timeline, whenever it is the master: when it opens, and again once
+	// a song leaves. With a song loaded, onLibraryLoadTrack owns restoring.
 	$effect(() => {
 		const key = videoSeqKey;
-		if (singleProjectBase || !key || key === restoredSeqKey) return;
-		restoredSeqKey = key;
-		if (untrack(() => seqMasterIsAudio)) return;
+		if (singleProjectBase || !key || seqMasterIsAudio) return;
 		const storeKey = seqKeyPrefix + key;
+		untrack(() => restoreVideoTimeline(key, storeKey));
+	});
+
+	function restoreVideoTimeline(key: string, storeKey: string) {
 		loadedTimelineKey = null;
 		void (async () => {
 			const saved = await loadSeqEntry(key);
@@ -1289,7 +1291,7 @@
 			restoreMediaTimeline(saved.media);
 			sourceRegistry.restoreEdits(saved.sourceEdits);
 		})();
-	});
+	}
 
 	// A single edit with its own key restores its timeline once, whatever song it plays.
 	$effect(() => {
