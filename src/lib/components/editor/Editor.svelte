@@ -2248,6 +2248,10 @@
 		const ids = planSourceIds(mixPlan);
 		if (songSourceId) ids.push(songSourceId);
 		audioBank.ensure(ids);
+		// Sound off the lanes, the song and the pool is let go; the pool's stays, as
+		// whether a video is silent decides its lane's mute button.
+		const keep = new Set([...ids, ...sourceRegistry.sources.map((s) => s.id)]);
+		untrack(() => audioBank.retain(keep));
 	});
 
 	const peaksOf = (id: string) => audioBank.peaks(id);
