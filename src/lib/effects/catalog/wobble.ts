@@ -34,6 +34,7 @@ export const definition: EffectDefinition = {
 			defaultValue: 1,
 		},
 	],
+	rateExponent: 2,
 };
 
 export const shader: EffectShaderDef = {
@@ -41,7 +42,6 @@ export const shader: EffectShaderDef = {
 		H +
 		`uniform float u_amount;
 uniform float u_frequency;
-uniform float u_speed;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -67,7 +67,7 @@ float fbm(vec2 p) {
 
 void main() {
   vec2 px = 1.0 / vec2(textureSize(u_texture, 0));
-  float t = u_time * u_speed;
+  float t = u_time;
   vec2 st = v_uv * u_frequency;
 
   // 2D noise-based displacement, varies in both axes
@@ -78,5 +78,5 @@ void main() {
   outColor = texture(u_texture, v_uv + off);
 }`,
 	animated: true,
-	setUniforms: floats("amount", "frequency", "speed"),
+	setUniforms: floats("amount", "frequency"),
 };
