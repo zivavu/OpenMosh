@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import { Camera, Circle, Square } from "lucide-svelte";
 	import { onDestroy, onMount } from "svelte";
 	import PanelModal from "../ui/PanelModal.svelte";
@@ -221,7 +222,12 @@
 			e.preventDefault();
 			if (phase === "capturing" && mode === "record") void stopRecording();
 			else if (!busy) onClose();
-		} else if (e.key === " " && !(e.target instanceof HTMLButtonElement)) {
+		} else if (
+			e.key === " " &&
+			// A button, a dropdown or a field takes its own Space.
+			!(e.target instanceof HTMLButtonElement) &&
+			!isInteractiveTarget(e.target)
+		) {
 			e.preventDefault();
 			primary();
 		}
