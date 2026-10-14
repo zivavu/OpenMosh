@@ -16,6 +16,19 @@ import type { SourceAudioBank } from "./source-audio.svelte";
 
 /** Scheduling lead: sound asked to start "now" would clip its first few ms. */
 const LEAD = 0.03;
+/** A loop shorter than this restarts by seeking, as any loop once did. */
+const MIN_PASS = 0.05;
+
+/** A loop's passes, each scheduled before the one ahead of it ends, so the turn is
+ * seamless rather than a stop and a fresh start. */
+interface LoopPasses {
+	start: number;
+	end: number;
+	/** Context time the playing pass ends and the next begins. */
+	endsAt: number;
+	current: ScheduledNode[];
+	next: ScheduledNode[];
+}
 
 export interface MixerOptions {
 	bank: SourceAudioBank;
@@ -74,6 +87,7 @@ export class SequenceMixer {
 	#stopFrame: (() => void) | null = null;
 	/** Buffers that were missing when the playing mix was scheduled. */
 	#missing = new Set<string>();
+	#passes: LoopPasses | null = null;
 
 	constructor({
 		bank,
@@ -196,16 +210,22 @@ export class SequenceMixer {
 		this.#anchorTime = t;
 		this.#anchorCtx = ctx.currentTime + LEAD;
 		this.#anchorWall = performance.now() + LEAD * 1000;
-		// Scheduled out to the project's end: playback past the span runs on.
-		this.#nodes = scheduleMix(
-			ctx,
-			this.plan,
-			(id) => this.#bank.buffer(id),
-			{ mix: this.#master, drive: this.#drive },
-			t,
-			Math.max(t, this.duration),
-			this.#anchorCtx,
-		);
+		const loop = this.#loopRange();
+		if (loop && t < loop.end) {
+			const current = this.#schedule(t, loop.end, this.#anchorCtx);
+			const endsAt = this.#anchorCtx + (loop.end - t);
+			const next = this.#schedule(loop.start, loop.end, endsAt);
+			this.#passes = { ...loop, endsAt, current, next };
+			this.#nodes = [...current, ...next];
+		} else {
+			this.#passes = null;
+			// Scheduled out to the project's end: playback past the span runs on.
+			this.#nodes = this.#schedule(
+				t,
+				Math.max(t, this.duration),
+				this.#anchorCtx,
+			);
+		}
 		this.#missing = new Set(
 			this.plan
 				.filter((s) => s.end > t && !this.#bank.buffer(s.sourceId))
@@ -251,6 +271,7 @@ export class SequenceMixer {
 		this.#stopFrame = null;
 		stopNodes(this.#nodes);
 		this.#nodes = [];
+		this.#passes = null;
 		this.#missing.clear();
 	}
 
@@ -270,6 +291,7 @@ export class SequenceMixer {
 
 	#frame = () => {
 		if (!this.playing) return;
+		if (this.#turnLoop()) return;
 		const t = this.#now();
 		const repeat = this.repeat;
 		if (repeat && t >= repeat.end) {
@@ -290,6 +312,62 @@ export class SequenceMixer {
 			this.currentTime = t;
 		}
 	};
+
+	/** The timeline range that plays round: the repeat, else a looping span. */
+	#loopRange(): { start: number; end: number } | null {
+		const range =
+			this.repeat ??
+			(this.loop && !this.pastSpan
+				? {
+						start: this.spanStart,
+						end: this.spanEnd > 0 ? this.spanEnd : this.duration,
+					}
+				: null);
+		return range && range.end - range.start >= MIN_PASS ? range : null;
+	}
+
+	#schedule(from: number, to: number, at: number): ScheduledNode[] {
+		return scheduleMix(
+			this.#ctx!,
+			this.plan,
+			(id) => this.#bank.buffer(id),
+			{ mix: this.#master, drive: this.#drive },
+			from,
+			to,
+			at,
+		);
+	}
+
+	/** Keep a loop's passes running on the context clock. False when there are none,
+	 * or the clock isn't the context's, and the frame goes the old way round. */
+	#turnLoop(): boolean {
+		const passes = this.#passes;
+		const ctx = this.#ctx;
+		if (!passes || !ctx || ctx.state !== "running") return false;
+		const loop = this.#loopRange();
+		if (!loop || loop.start !== passes.start || loop.end !== passes.end) {
+			// The range moved under the scheduled passes: lay them again from here.
+			this.#reschedule();
+			this.currentTime = Math.min(this.duration, this.#now());
+			return true;
+		}
+		if (ctx.currentTime >= passes.endsAt) {
+			// The next pass is already sounding; move the clock onto it, and queue another.
+			stopNodes(passes.current);
+			this.#anchorTime = passes.start;
+			this.#anchorCtx = passes.endsAt;
+			this.#anchorWall =
+				performance.now() - (ctx.currentTime - passes.endsAt) * 1000;
+			const endsAt = passes.endsAt + (passes.end - passes.start);
+			const next = this.#schedule(passes.start, passes.end, endsAt);
+			this.#passes = { ...passes, endsAt, current: passes.next, next };
+			this.#nodes = [...passes.next, ...next];
+			resetAutoRange();
+			resetSpectrumBars();
+		}
+		this.currentTime = this.#now();
+		return true;
+	}
 
 	dispose(): void {
 		this.#halt();
