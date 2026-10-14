@@ -3215,8 +3215,22 @@ export class GlRenderer {
 		);
 	}
 
+	/** Stop the work still running in the background: shader warm-up, and decodes that
+	 * would build masks for nothing. For a renderer replaced on the same context, where
+	 * destroy()'s loseContext would take the new one down too. */
+	retire() {
+		this.warmCancelled = true;
+		// A load that lands finds its entry gone and drops out.
+		this.maskTextures.clear();
+		this.brushTextures.clear();
+	}
+
 	destroy() {
 		const gl = this.gl;
+		for (const entry of this.maskTextures.values()) gl.deleteTexture(entry.tex);
+		this.maskTextures.clear();
+		if (this.blankTex) gl.deleteTexture(this.blankTex);
+		this.blankTex = null;
 		if (this.sourceTexture) gl.deleteTexture(this.sourceTexture);
 		for (const entry of this.brushTextures.values())
 			gl.deleteTexture(entry.tex);
