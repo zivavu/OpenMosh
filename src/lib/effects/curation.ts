@@ -150,6 +150,11 @@ export const CURATION: Record<string, Curation> = {
 	tracking: c("finish", "overlay", "opacity"),
 };
 
+/** Whether a roll can pick this effect, so it has a family to fill. */
+export function isCurated(defId: string): boolean {
+	return defId in CURATION;
+}
+
 /** What an effect missing from the table is treated as: a mid-chain glitch. */
 export function curationOf(defId: string): Curation {
 	return CURATION[defId] ?? { stage: "glitch", family: "displace" };

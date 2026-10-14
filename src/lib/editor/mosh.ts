@@ -10,7 +10,7 @@ import { TRANSFORM_3D_ID } from "../mesh/camera";
 import { isMaskEffect } from "../effects/catalog/mask";
 import { shuffleInPlace } from "../utils";
 import type { Family } from "../effects/curation";
-import { curationOf } from "../effects/curation";
+import { curationOf, isCurated } from "../effects/curation";
 import { applyHierarchy, curatedOrder, pickCurated } from "./curated-mosh";
 
 /** Random scatters any effects in any order; curated composes. See curated-mosh.ts. */
@@ -275,7 +275,8 @@ function rollCurated(
 	// What's already on and out of the roll's reach still fills its family.
 	const taken = new Map<Family, number>();
 	for (const e of effects) {
-		if (!e.enabled || pool.includes(e)) continue;
+		// One a roll never picks, like a Mask, has no family to fill.
+		if (!e.enabled || pool.includes(e) || !isCurated(e.defId)) continue;
 		const family = curationOf(e.defId).family;
 		taken.set(family, (taken.get(family) ?? 0) + 1);
 	}
