@@ -24,7 +24,9 @@
 		topPanelLabel = "Clip",
 	}: Props = $props();
 
-	const SHEET_HEIGHT_VH = 70;
+	/** The handle row, the part of the sheet that stays on screen when it's shut. */
+	const HANDLE_HEIGHT = 44;
+	let sheetEl = $state<HTMLDivElement>();
 	let panelOpen = $state(false);
 	let sheetDragOffset = $state(0);
 	let sheetDragging = $state(false);
@@ -38,10 +40,6 @@
 	const activeTab = $derived<Tab>(
 		preferredTab === "clip" && !topPanel ? "effects" : preferredTab,
 	);
-
-	export function openSheet() {
-		panelOpen = true;
-	}
 
 	$effect(() => {
 		const el = sheetHandleEl;
@@ -67,7 +65,11 @@
 		const startOpen = panelOpen;
 		let moved = false;
 
-		const maxTranslate = (window.innerHeight * SHEET_HEIGHT_VH) / 100 - 44;
+		// Measured, not assumed: the CSS sets the height, and a guess here jumps the sheet.
+		const maxTranslate = Math.max(
+			0,
+			(sheetEl?.offsetHeight ?? 0) - HANDLE_HEIGHT,
+		);
 		const currentTranslateY = startOpen ? 0 : maxTranslate;
 
 		sheetDragOffset = currentTranslateY;
@@ -123,6 +125,7 @@
 	></button>
 {/if}
 <div
+	bind:this={sheetEl}
 	class="sheet-container"
 	class:sheet-open={panelOpen && !sheetDragging}
 	class:sheet-dragging={sheetDragging}
@@ -132,6 +135,10 @@
 		class="sheet-handle-row"
 		bind:this={sheetHandleEl}
 		onpointerdown={onSheetPointerDown}
+		onclick={(e) => {
+			// Enter or Space; a pointer already toggled it on the way down and up.
+			if (e.detail === 0) panelOpen = !panelOpen;
+		}}
 		aria-label="Toggle panel"
 		aria-expanded={panelOpen}
 	>
