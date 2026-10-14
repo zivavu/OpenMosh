@@ -448,6 +448,13 @@ describe("preset files", () => {
 	it("rejects files that aren't preset files", () => {
 		expect(() => parsePresetFile("not json")).toThrow();
 		expect(() => parsePresetFile(JSON.stringify({ presets: [] }))).toThrow();
+		// A version that isn't a number can't be held against this build's.
+		for (const version of [undefined, "9", null]) {
+			const file = { format: "openmosh-presets", version, presets: [preset] };
+			expect(() => parsePresetFile(JSON.stringify(file))).toThrow(
+				"That isn't an OpenMosh preset file",
+			);
+		}
 	});
 
 	it("rejects a file from a newer OpenMosh", () => {

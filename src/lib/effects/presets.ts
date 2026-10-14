@@ -169,13 +169,15 @@ export function parsePresetFile(text: string): Preset[] {
 	} catch {
 		throw new Error("That file isn't valid JSON");
 	}
+	// Every file this app has written carries a numeric version.
 	if (
 		!isRecord(data) ||
 		data.format !== FILE_FORMAT ||
+		typeof data.version !== "number" ||
 		!Array.isArray(data.presets)
 	)
 		throw new Error("That isn't an OpenMosh preset file");
-	if (typeof data.version === "number" && data.version > FILE_VERSION)
+	if (data.version > FILE_VERSION)
 		throw new Error(
 			"That preset file is from a newer OpenMosh. Reload the page and try again",
 		);
