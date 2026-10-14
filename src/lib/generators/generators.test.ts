@@ -285,6 +285,8 @@ describe("png spec embedding", () => {
 		expect(isAttractorSpec({ ...attractor, density: 0 })).toBe(false);
 		expect(isAttractorSpec({ ...attractor, symmetry: 2.5 })).toBe(false);
 		expect(isInkSpec({ ...ink, strokes: 1e6 })).toBe(false);
+		expect(isInkSpec({ ...ink, turbulence: 1e9 })).toBe(false);
+		expect(isInkSpec({ ...ink, turbulence: -1 })).toBe(false);
 		expect(isInkSpec({ ...ink, colors: ["#000"] })).toBe(false);
 		expect(isInkSpec({ ...ink, transparent: true })).toBe(true);
 		expect(isInkSpec({ ...ink, transparent: false })).toBe(false);
