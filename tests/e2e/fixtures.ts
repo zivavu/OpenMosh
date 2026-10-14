@@ -323,3 +323,85 @@ function packGlb(json: object, bin: Buffer): Buffer {
 	bin.copy(out, binAt + 8);
 	return out;
 }
+
+/** An animated GIF: one solid frame per colour, `delayMs` each. */
+export function gifFile(name: string, colors: Rgb[], size = 64, delayMs = 200) {
+	const palette = colors.flatMap((c) => [c.r, c.g, c.b]);
+	// The global table holds a power of two entries; pad it with black.
+	const bits = Math.max(1, Math.ceil(Math.log2(colors.length)));
+	while (palette.length < 3 << bits) palette.push(0);
+	const frames = colors.flatMap((_, index) => [
+		// Graphic control: no disposal, delay in hundredths.
+		...[0x21, 0xf9, 4, 0, (delayMs / 10) & 0xff, (delayMs / 10) >> 8, 0, 0],
+		...[0x2c, 0, 0, 0, 0, size & 0xff, size >> 8, size & 0xff, size >> 8, 0],
+		...lzw(new Array(size * size).fill(index), Math.max(2, bits)),
+	]);
+	const bytes = [
+		...Buffer.from("GIF89a"),
+		size & 0xff,
+		size >> 8,
+		size & 0xff,
+		size >> 8,
+		0x80 | (bits - 1),
+		0,
+		0,
+		...palette,
+		// Loop forever.
+		...[0x21, 0xff, 11, ...Buffer.from("NETSCAPE2.0"), 3, 1, 0, 0, 0],
+		...frames,
+		0x3b,
+	];
+	return { name, mimeType: "image/gif", buffer: Buffer.from(bytes) };
+}
+
+/** GIF-flavoured LZW, the textbook encoder, packed into sub-blocks. */
+function lzw(indices: number[], minCodeSize: number): number[] {
+	const clear = 1 << minCodeSize;
+	const eoi = clear + 1;
+	let codeSize = minCodeSize + 1;
+	let next = eoi + 1;
+	let dict = new Map<string, number>();
+	const out: number[] = [];
+	let acc = 0;
+	let held = 0;
+	const write = (code: number) => {
+		acc |= code << held;
+		held += codeSize;
+		while (held >= 8) {
+			out.push(acc & 0xff);
+			acc >>= 8;
+			held -= 8;
+		}
+	};
+	const codeOf = (run: string) =>
+		run.includes(",") ? dict.get(run)! : Number(run);
+	write(clear);
+	let run = String(indices[0]);
+	for (const index of indices.slice(1)) {
+		const grown = `${run},${index}`;
+		if (dict.has(grown)) {
+			run = grown;
+			continue;
+		}
+		write(codeOf(run));
+		if (next < 4096) {
+			dict.set(grown, next++);
+			if (next > 1 << codeSize && codeSize < 12) codeSize++;
+		} else {
+			write(clear);
+			dict = new Map();
+			codeSize = minCodeSize + 1;
+			next = eoi + 1;
+		}
+		run = String(index);
+	}
+	write(codeOf(run));
+	write(eoi);
+	if (held > 0) out.push(acc & 0xff);
+	const blocks: number[] = [];
+	for (let i = 0; i < out.length; i += 255) {
+		const chunk = out.slice(i, i + 255);
+		blocks.push(chunk.length, ...chunk);
+	}
+	return [minCodeSize, ...blocks, 0];
+}

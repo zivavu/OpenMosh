@@ -23,8 +23,14 @@ const DEFAULT_DELAY_MS = 100;
 export async function gifToVideo(file: File): Promise<File> {
 	if (file.type !== "image/gif") return file;
 	try {
-		const gif = decodeGif(new Uint8Array(await file.arrayBuffer()));
-		if (gif.frames.length < 2) return file;
+		const bytes = new Uint8Array(await file.arrayBuffer());
+		const gif = gifScreen(bytes);
+		// Pulled one at a time and encoded as they come: holding every frame of a long,
+		// large GIF at full size runs to gigabytes.
+		const frames = decodeGifFrames(bytes);
+		const first = frames.next();
+		const second = frames.next();
+		if (first.done || second.done) return file;
 		// Deferred like every other mediabunny user: a static import would pull in the library.
 		const {
 			BufferTarget,
@@ -52,7 +58,7 @@ export async function gifToVideo(file: File): Promise<File> {
 		output.addVideoTrack(source);
 		await output.start();
 		let t = 0;
-		for (const frame of gif.frames) {
+		const add = async (frame: GifFrame) => {
 			ctx.putImageData(
 				new ImageData(frame.pixels, gif.width, gif.height),
 				0,
@@ -60,7 +66,10 @@ export async function gifToVideo(file: File): Promise<File> {
 			);
 			await source.add(t, frame.delayMs / 1000);
 			t += frame.delayMs / 1000;
-		}
+		};
+		await add(first.value);
+		await add(second.value);
+		for (const frame of frames) await add(frame);
 		await output.finalize();
 		if (!target.buffer) return file;
 		return new File([target.buffer], file.name, {
@@ -79,10 +88,22 @@ export function gifsToVideo(files: File[]): Promise<File[]> {
 /** Decodes every frame of a GIF, composited onto the logical screen. A file cut
  * off partway gives back the frames before the cut. */
 export function decodeGif(bytes: Uint8Array): DecodedGif {
+	return { ...gifScreen(bytes), frames: [...decodeGifFrames(bytes)] };
+}
+
+/** The logical screen's size; throws on anything that isn't a GIF. */
+function gifScreen(bytes: Uint8Array): { width: number; height: number } {
 	const sig = String.fromCharCode(...bytes.subarray(0, 6));
 	if (sig !== "GIF87a" && sig !== "GIF89a") throw new Error("not a GIF");
-	const width = bytes[6] | (bytes[7] << 8);
-	const height = bytes[8] | (bytes[9] << 8);
+	return {
+		width: bytes[6] | (bytes[7] << 8),
+		height: bytes[8] | (bytes[9] << 8),
+	};
+}
+
+/** Each frame in turn, as decodeGif reads them. */
+function* decodeGifFrames(bytes: Uint8Array): Generator<GifFrame> {
+	const { width, height } = gifScreen(bytes);
 	let pos = 13;
 	let globalPalette: Uint8Array | null = null;
 	if (bytes[10] & 0x80) {
@@ -92,7 +113,6 @@ export function decodeGif(bytes: Uint8Array): DecodedGif {
 	}
 
 	const canvas = new Uint8ClampedArray(new ArrayBuffer(width * height * 4));
-	const frames: GifFrame[] = [];
 	const snapshot = () => new Uint8ClampedArray(canvas.slice().buffer);
 	// Graphic control state for the next image descriptor.
 	let delayMs = DEFAULT_DELAY_MS;
@@ -158,7 +178,7 @@ export function decodeGif(bytes: Uint8Array): DecodedGif {
 				canvas[o + 3] = 255;
 			}
 		}
-		frames.push({ pixels: snapshot(), delayMs });
+		yield { pixels: snapshot(), delayMs };
 
 		if (disposal === 2) {
 			for (let y = top; y < Math.min(top + h, height); y++) {
@@ -175,7 +195,6 @@ export function decodeGif(bytes: Uint8Array): DecodedGif {
 		disposal = 0;
 		transparent = -1;
 	}
-	return { width, height, frames };
 }
 
 function interlacedRow(row: number, h: number): number {
