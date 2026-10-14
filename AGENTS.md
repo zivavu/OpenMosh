@@ -146,6 +146,9 @@ what Vercel serves. `main` itself only deploys as a Vercel preview.
   first, rebuild the branch on current `main` as one commit, force-push it, and edit the PR body
   too, since the body is what becomes the GitHub Release notes. Do it after everything else for
   the release has merged; a later merge can overwrite it.
+- A tidy also opens the release's section with a short summary: a paragraph of what users
+  will notice, then one on what happens to saved projects. Below it, related lines merge
+  into one, their links in one parenthesis, comma-separated.
 - Keep the commit (and PR) links release-please puts after each changelog line. 0.9.2 went out
   without them only because its lines all came from one override on a single commit.
 - Run changelog text through the `/humanizer` skill before it goes in: the release PR's
