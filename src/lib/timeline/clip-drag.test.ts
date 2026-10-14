@@ -55,7 +55,8 @@ describe("dragClipsStep", () => {
 	});
 
 	it("offers both edges of every moving clip to the snap, excluding them", () => {
-		let seen: { edges: number[]; exclude: string[] } | null = null;
+		// Cast: set in a callback, which TS can't see, so it would narrow to null.
+		let seen = null as { edges: number[]; exclude: string[] } | null;
 		dragOne(
 			laneOf(clip("a", 0, 1), clip("b", 2, 3), clip("c", 5, 6)),
 			move("a"),

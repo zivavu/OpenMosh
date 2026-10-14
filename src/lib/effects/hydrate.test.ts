@@ -219,8 +219,9 @@ describe("hydrateValues", () => {
 			const hydrated = hydrateValues("duotone", { shadowHue: 200 });
 			expect(hydrated.shadowColor).toBe(hueToHex(200, 0.3));
 			expect(hydrated.highlightColor).toBe(
-				getDefinition("duotone")?.params.find((p) => p.key === "highlightColor")
-					?.defaultValue,
+				getDefinition("duotone")!.params.find(
+					(p) => p.key === "highlightColor",
+				)!.defaultValue,
 			);
 		});
 

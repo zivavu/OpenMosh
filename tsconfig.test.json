@@ -1,0 +1,10 @@
+{
+	"extends": "./tsconfig.app.json",
+	"compilerOptions": {
+		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+		"types": ["svelte", "vite/client", "bun"]
+	},
+	// The app config leaves the unit tests out; this one checks them too.
+	"include": ["src/**/*.ts"],
+	"exclude": []
+}

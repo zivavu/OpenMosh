@@ -24,7 +24,7 @@ afterEach(() => {
 describe("readJson", () => {
 	it("round-trips what writeJson stored", () => {
 		writeJson("k", { a: 1, b: ["two"] });
-		expect(readJson("k", null)).toEqual({ a: 1, b: ["two"] });
+		expect(readJson<unknown>("k", null)).toEqual({ a: 1, b: ["two"] });
 	});
 
 	it("falls back when the key was never written", () => {

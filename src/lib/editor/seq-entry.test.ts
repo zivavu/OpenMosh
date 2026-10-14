@@ -55,7 +55,7 @@ describe.each(Object.entries(FIXTURES))("a %s entry", (_, entry) => {
 
 describe("before v3", () => {
 	it("sizes the project from its song", () => {
-		for (const entry of [v0, v2] as SeqEntry[]) {
+		for (const entry of [FIXTURES.v0, FIXTURES.v2]) {
 			const restored = readSeqEntry(structuredClone(entry), OPENED);
 			expect(restored.length).toBeNull();
 			expect(restored.span).toBeNull();
@@ -63,7 +63,7 @@ describe("before v3", () => {
 	});
 
 	it("points unsourced v0 segments at the opened file, and folds them", () => {
-		const restored = readSeqEntry(structuredClone(v0) as SeqEntry, OPENED);
+		const restored = readSeqEntry(structuredClone(FIXTURES.v0), OPENED);
 		expect(restored.segments.map((s) => s.sourceId)).toEqual([OPENED, OPENED]);
 		const { fxLane, mediaLane } = migrateLegacySegments(restored.segments, 10);
 		expect(fxLane?.clips.map((c) => [c.start, c.end])).toEqual([
@@ -74,7 +74,7 @@ describe("before v3", () => {
 	});
 
 	it("leaves v2 segments on the source they named", () => {
-		const restored = readSeqEntry(structuredClone(v2) as SeqEntry, OPENED);
+		const restored = readSeqEntry(structuredClone(FIXTURES.v2), OPENED);
 		expect(restored.segments.map((s) => s.sourceId)).toEqual(["src-b"]);
 	});
 
@@ -92,11 +92,11 @@ describe("before v3", () => {
 });
 
 describe.each([
-	["v3", v3],
-	["v4", v4],
+	["v3", FIXTURES.v3],
+	["v4", FIXTURES.v4],
 ])("%s", (_, entry) => {
 	it("keeps its length, song and a span clamped to the length", () => {
-		const restored = readSeqEntry(structuredClone(entry) as SeqEntry, OPENED);
+		const restored = readSeqEntry(structuredClone(entry), OPENED);
 		expect(restored.length).toBe(30);
 		expect(restored.span).toEqual({ start: 2, end: 30 });
 		expect(restored.song).toBe("song-1");
@@ -109,13 +109,13 @@ describe("auto clips", () => {
 		restored.fx[0].clips[1].effects.filter((e) => e.enabled);
 
 	it("from v4 keep their whole chain, which runs after the roll", () => {
-		const restored = readSeqEntry(structuredClone(v4) as SeqEntry, OPENED);
+		const restored = readSeqEntry(structuredClone(FIXTURES.v4), OPENED);
 		expect(restored.fx[0].clips[1].mode).toBe("interval");
 		expect(enabledIn(restored).map((e) => e.defId)).toEqual(["pixelate"]);
 	});
 
 	it("from before v4 keep only what they held through the roll", () => {
-		const entry = structuredClone(v4) as SeqEntry;
+		const entry = structuredClone(FIXTURES.v4);
 		entry.v = 3;
 		const restored = readSeqEntry(structuredClone(entry), OPENED);
 		expect(enabledIn(restored)).toEqual([]);
@@ -126,7 +126,7 @@ describe("auto clips", () => {
 	});
 
 	it("leave static clips alone", () => {
-		const restored = readSeqEntry(structuredClone(v3) as SeqEntry, OPENED);
+		const restored = readSeqEntry(structuredClone(FIXTURES.v3), OPENED);
 		const live = restored.fx[0].clips[0].effects.filter((e) => e.enabled);
 		expect(live.map((e) => e.defId)).toEqual(["pixelate"]);
 	});
@@ -158,7 +158,7 @@ describe("a damaged entry", () => {
 	});
 
 	it("puts defaults where a clip's times aren't numbers", () => {
-		const entry = structuredClone(v4) as unknown as SeqEntry;
+		const entry = structuredClone(FIXTURES.v4);
 		const media = entry.media!;
 		Object.assign(media.lanes[0].clips[0], {
 			start: "0",
@@ -192,7 +192,7 @@ describe("a damaged entry", () => {
 		expect(text.fadeInSec).toBeUndefined();
 		expect(restored.fx[0].clips[0].start).toBe(0);
 		expect(restored.fx[0].clips[0].end).toBe(0);
-		expect(restored.media!.audioLanes[0].clips[0].start).toBe(0);
+		expect(restored.media!.audioLanes![0].clips[0].start).toBe(0);
 	});
 
 	it("drops a span that lies past the project's end", () => {

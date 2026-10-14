@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { readZip, writeZip, type ZipEntryInput } from "./zip";
 
-function bytes(text: string): Uint8Array {
+function bytes(text: string): Uint8Array<ArrayBuffer> {
 	return new TextEncoder().encode(text);
 }
 
-async function blobBytes(blob: Blob): Promise<Uint8Array> {
+async function blobBytes(blob: Blob): Promise<Uint8Array<ArrayBuffer>> {
 	return new Uint8Array(await blob.arrayBuffer());
 }
 
