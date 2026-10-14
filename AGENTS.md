@@ -37,6 +37,8 @@ While working, run only the e2e specs a change touches (`bunx playwright test <s
 --project=chromium`). The full `bun run test:e2e` is for right before a PR. The
 `preview` project (`tests/e2e/preview.spec.ts`) checks the production build under
 `vite preview`; it builds into `dist-e2e` first, and only when a run includes it.
+Outside CI a run reuses whatever already serves its port, so when my dev server is up on
+5173, run with `E2E_PORT=5183` (from a worktree, always).
 
 ## Key Conventions
 

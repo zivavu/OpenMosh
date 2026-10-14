@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 5173;
+/** E2E_PORT moves the run off a dev server already on 5173, which it would reuse. */
+const PORT = Number(process.env.E2E_PORT) || 5173;
 /** Where the production build is served for the spec that checks it. */
 const PREVIEW_PORT = 4174;
 /** The production-build spec; it runs alone, against `vite preview`. */
