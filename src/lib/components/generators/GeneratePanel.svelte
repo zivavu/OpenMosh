@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import { RefreshCw, Palette } from "lucide-svelte";
 	import { onDestroy, untrack } from "svelte";
 	import {
@@ -155,7 +156,9 @@
 		} else if (
 			e.key === " " &&
 			!busy &&
-			!(e.target instanceof HTMLButtonElement)
+			// A button, a dropdown or a field takes its own Space.
+			!(e.target instanceof HTMLButtonElement) &&
+			!isInteractiveTarget(e.target)
 		) {
 			e.preventDefault();
 			seed = randomSeed();
