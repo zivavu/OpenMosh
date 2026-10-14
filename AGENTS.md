@@ -55,6 +55,12 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   unless it's `moshable: false`.
 - Write user-facing UI copy (hints, tooltips, toasts, empty states) through the `/humanizer`
   skill, the same as changelog text.
+- Parsers of dropped files (`media/gif.ts`, `mesh/*`) run on the main thread over untrusted
+  bytes: bound every loop and size every allocation by the bytes actually there, never by a
+  count the file states. A hang can't be caught; each parser has a crafted-input test.
+- The renderer runs `u_time` at an effect's rate param (`rateParam`, default `speed`), so a
+  shader must never multiply by that param again (a test holds it); `rateExponent` keeps
+  the feel of one that once did.
 - Never gate motion on `prefers-reduced-motion`. Windows ships with animations off by default, so
   honoring it flattened every animation, glitch effects included.
 - PhotoMosh's code is proprietary: match its effects by how they look and behave, never by
