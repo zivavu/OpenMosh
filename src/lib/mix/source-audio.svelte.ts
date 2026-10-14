@@ -114,6 +114,17 @@ export class SourceAudioBank {
 		if (this.#entries.delete(id)) this.version++;
 	}
 
+	/** Let go of every decoded source not in `keep`; one still decoding finishes. */
+	retain(keep: Set<string>): void {
+		let dropped = false;
+		for (const [id, entry] of this.#entries) {
+			if (keep.has(id) || entry.state === "pending") continue;
+			this.#entries.delete(id);
+			dropped = true;
+		}
+		if (dropped) this.version++;
+	}
+
 	dispose(): void {
 		this.#disposed = true;
 		this.#entries.clear();
