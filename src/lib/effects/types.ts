@@ -113,6 +113,9 @@ export interface EffectDefinition {
 	/** The param the renderer integrates into `u_time`, so changing it changes the rate
 	 * rather than the position. Defaults to "speed", where there is one. */
 	rateParam?: string;
+	/** Phase runs at the rate param to this power. 2 keeps the feel of effects whose
+	 * shader once multiplied the speed in a second time. Defaults to 1. */
+	rateExponent?: number;
 }
 
 /** When set, this range param is driven by music volume in [min, max]. */

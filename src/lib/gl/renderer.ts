@@ -2081,7 +2081,8 @@ export class GlRenderer {
 		dt: number,
 	): { time: number; delta: number } {
 		const out = this.effectTimeOut;
-		const rate = getDefinition(eff.defId)?.rateParam ?? "speed";
+		const def = getDefinition(eff.defId);
+		const rate = def?.rateParam ?? "speed";
 		if (!(rate in eff.values)) {
 			out.time = time;
 			out.delta = dt;
@@ -2095,7 +2096,7 @@ export class GlRenderer {
 			out.delta = dt * perBeat * this.beatsPerSecond;
 			return out;
 		}
-		const speed = eff.values[rate] as number;
+		const speed = (eff.values[rate] as number) ** (def?.rateExponent ?? 1);
 		const prev = this.phaseMap.get(eff.instanceId) ?? 0;
 		const phase = prev + dt * speed;
 		this.phaseMap.set(eff.instanceId, phase);

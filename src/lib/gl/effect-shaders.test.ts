@@ -55,6 +55,20 @@ describe("EFFECT_SHADERS", () => {
 		}
 		expect(missing).toEqual([]);
 	});
+
+	it("leaves the rate to u_time, never multiplying it in again", () => {
+		// The renderer already runs u_time at the rate param; a shader that scales by it
+		// again jumps whenever the rate changes.
+		const doubled = EFFECT_DEFINITIONS.filter((def) => {
+			const rate = def.rateParam ?? "speed";
+			const fragment = EFFECT_SHADERS[def.id]?.fragment ?? "";
+			return (
+				def.params.some((p) => p.key === rate) &&
+				new RegExp(`\\bu_${rate}\\b`).test(fragment)
+			);
+		}).map((def) => def.id);
+		expect(doubled).toEqual([]);
+	});
 });
 
 /** Swallows every gl call; the test only cares which values were read. */
