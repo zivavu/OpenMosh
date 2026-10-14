@@ -158,6 +158,13 @@ export class ClipLaneController<
 		this.host.onSelectOnly?.();
 	}
 
+	/** Enter picks a focused clip, as a click would. Space stays play and pause. */
+	onClipKeydown(e: KeyboardEvent, clipId: string): void {
+		if (e.key !== "Enter" || e.repeat) return;
+		e.preventDefault();
+		this.selectOnly(clipId);
+	}
+
 	deselect(): void {
 		this.host.selectedClipId = null;
 		this.host.selectedClipIds = [];

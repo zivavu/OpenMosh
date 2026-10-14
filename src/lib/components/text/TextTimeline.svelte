@@ -250,6 +250,7 @@
 							ondragstart={(e) => e.preventDefault()}
 							onpointerdown={(e) =>
 								ctrl.onClipPointerDown(e, lane.id, clip.id, "move")}
+							onkeydown={(e) => ctrl.onClipKeydown(e, clip.id)}
 						>
 							<span
 								class="clip-edge start"
