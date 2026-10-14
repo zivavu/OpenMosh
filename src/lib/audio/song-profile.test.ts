@@ -250,4 +250,30 @@ describe("publishSongProfile", () => {
 		await songProfileReady();
 		expect(activeSongProfile()).toBeNull();
 	});
+
+	it("runs one analysis at a time, skipping any superseded before its turn", async () => {
+		const other = { ...profile, bands: new Map(), rides: new Map() };
+		const started: string[] = [];
+		let release!: () => void;
+		const slow = new Promise<void>((r) => (release = r));
+		publishSongProfile(async () => {
+			started.push("first");
+			await slow;
+			return profile;
+		});
+		publishSongProfile(async () => {
+			started.push("second");
+			return profile;
+		});
+		publishSongProfile(async () => {
+			started.push("third");
+			return other;
+		});
+		await Promise.resolve();
+		expect(started).toEqual(["first"]);
+		release();
+		await songProfileReady();
+		expect(started).toEqual(["first", "third"]);
+		expect(activeSongProfile()).toBe(other);
+	});
 });

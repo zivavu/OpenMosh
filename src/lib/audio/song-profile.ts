@@ -272,7 +272,8 @@ export function activeSongProfile(): SongProfile | null {
 
 /** Make `load`'s profile the active one once it resolves; the previous one holds
  * until then, so a mix edit doesn't flicker. A later call supersedes an earlier one
- * still loading; pass null to clear. */
+ * still loading; pass null to clear. Loads run one at a time, each rendering the
+ * whole mix, and one superseded before its turn never starts. */
 export function publishSongProfile(
 	load: (() => Promise<SongProfile | null>) | null,
 ): void {
@@ -282,14 +283,18 @@ export function publishSongProfile(
 		pending = null;
 		return;
 	}
-	const run = load().then(
-		(profile) => {
-			if (mine === token) active = profile;
-		},
-		() => {
-			if (mine === token) active = null;
-		},
-	);
+	const start = () =>
+		load().then(
+			(profile) => {
+				if (mine === token) active = profile;
+			},
+			() => {
+				if (mine === token) active = null;
+			},
+		);
+	const run = pending
+		? pending.then(() => (mine === token ? start() : undefined))
+		: start();
 	pending = run;
 	void run.finally(() => {
 		if (pending === run) pending = null;
