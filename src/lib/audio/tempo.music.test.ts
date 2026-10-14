@@ -76,12 +76,13 @@ describe.skipIf(!enabled)("tempo vs essentia", () => {
 			const rows: string[] = [];
 			const failures: string[] = [];
 			for (const song of songs) {
-				const samples = decode(join(MUSIC_DIR, song));
-				if (truth[song]?.offset === undefined) {
-					truth[song] = await essentia(samples);
-					writeFileSync(TRUTH_FILE, JSON.stringify(truth, null, "\t"));
-				}
 				const ref = truth[song];
+				// The reference comes from essentia, run outside this test.
+				if (ref?.offset === undefined) {
+					failures.push(`${song}: no essentia reference in ${TRUTH_FILE}`);
+					continue;
+				}
+				const samples = decode(join(MUSIC_DIR, song));
 				const t0 = performance.now();
 				const ours = estimateTempo(samples, SAMPLE_RATE);
 				const ms = performance.now() - t0;

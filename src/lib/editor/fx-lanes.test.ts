@@ -76,7 +76,7 @@ function clip(
 }
 
 function lane(id: string, clips: FxClip[], enabled = true): FxLane {
-	return { id, name: id, enabled, clips };
+	return { id, name: id, enabled, z: 0, clips };
 }
 
 describe("resolveFxEffectsAt", () => {

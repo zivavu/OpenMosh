@@ -227,7 +227,8 @@ describe("old projects", () => {
 				lanes: { sourceId: string | null; clips: { sourceId?: string }[] }[];
 				audioLanes?: { clips: { sourceId: string | null }[] }[];
 			};
-			sourceEdits: Record<string, unknown>;
+			// Swapped for a list below: only how many edits there were is compared.
+			sourceEdits: Record<string, unknown> | string[];
 			segments: { sourceId?: unknown }[];
 		};
 		for (const seg of clone.segments) seg.sourceId = "src";

@@ -170,7 +170,7 @@ describe("planBatch", () => {
 				wild({ count: 32, variety, transparent: true }),
 			);
 			for (const s of specs) {
-				expect(DRAWN_KINDS).toContain(specKind(s));
+				expect(DRAWN_KINDS as readonly string[]).toContain(specKind(s));
 				expect(isTransparentSpec(s)).toBe(true);
 			}
 		}

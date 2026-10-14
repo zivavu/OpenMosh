@@ -440,8 +440,10 @@ describe("deleteProject", () => {
 		]);
 		const [project] = (await loadStorageInventory()).projects;
 		await deleteProject(project);
-		expect(readJson("openmosh-saved-sequences", null)).toEqual([]);
-		expect(readJson("openmosh-saved-sessions:single", null)).toEqual([]);
+		expect(readJson<unknown>("openmosh-saved-sequences", null)).toEqual([]);
+		expect(readJson<unknown>("openmosh-saved-sessions:single", null)).toEqual(
+			[],
+		);
 	});
 });
 
@@ -579,9 +581,13 @@ describe("deleteEverything", () => {
 		expect(inv.unassigned).toEqual([]);
 		expect(inv.proxyCount).toBe(0);
 		expect(inv.fonts).toEqual([]);
-		expect(readJson("openmosh-track-segments", null)).toEqual({});
-		expect(readJson("openmosh-presets", null)).toEqual([{ name: "mine" }]);
-		expect(readJson("openmosh-settings", null)).toEqual({ moshMin: 2 });
+		expect(readJson<unknown>("openmosh-track-segments", null)).toEqual({});
+		expect(readJson<unknown>("openmosh-presets", null)).toEqual([
+			{ name: "mine" },
+		]);
+		expect(readJson<unknown>("openmosh-settings", null)).toEqual({
+			moshMin: 2,
+		});
 	});
 });
 
