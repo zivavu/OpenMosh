@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.9.19](https://github.com/zivavu/OpenMosh/compare/v0.9.18...v0.9.19) (2026-10-14)
+
+Damaged GIFs, 3D models, project files and backups no longer freeze the page or load broken, and long animated GIFs open without running out of memory. Exports clean up after a failed start, stop on Cancel even when stuck on a video, and say when they have to leave the sound out. The editor's sound loops without a gap, long sessions use less memory, and saving a project file asks where first and confirms when it's done. Enter selects a focused clip, and the phone panel stays put when you grab it.
+
+Saved projects open as before. Shake, Wobble and Channel Split look the same at a steady speed, but auto clips that roll a curated mosh beside a Mask roll differently now.
+
+
+### Added
+
+* Confirm when a project file is saved ([b64ca84](https://github.com/zivavu/OpenMosh/commit/b64ca843695755001073daeea7b136c39172ce3d))
+* Put the open project in the URL ([bc628dd](https://github.com/zivavu/OpenMosh/commit/bc628ddc665ba16cb6f138fea307123362313c4c))
+* Show keyboard shortcuts in button tooltips ([df3cb18](https://github.com/zivavu/OpenMosh/commit/df3cb1893b1cdc490420dc7d8cf82f2286718b97))
+
+
+### Fixed
+
+* Ask where to save a project file or backup before building it, and warn about missing media wherever a project file is saved ([8333e54](https://github.com/zivavu/OpenMosh/commit/8333e54fd9e6f7105daed8e12c035b2d8f3a8826), [8a5e7e4](https://github.com/zivavu/OpenMosh/commit/8a5e7e483201376c036e2c57ce5e7ef02a4d95f0))
+* Turn down a damaged project file, backup or preset file instead of loading it broken, and open project files whose clip times are damaged ([238b49d](https://github.com/zivavu/OpenMosh/commit/238b49df28dc4e460ec04450943731b804f8df26), [72460b0](https://github.com/zivavu/OpenMosh/commit/72460b02917a1237a64f228494828c2919c94da5), [68b4e37](https://github.com/zivavu/OpenMosh/commit/68b4e3759c213482dcf32610ae15dc683cea81ed))
+* Stop a damaged GIF, 3D model or generated image from freezing the page, and open long animated GIFs without running out of memory ([f59b86f](https://github.com/zivavu/OpenMosh/commit/f59b86fccd53163f4f9ee952e7cc5ea06fddea9f), [1681ad3](https://github.com/zivavu/OpenMosh/commit/1681ad3a04f3ef5463fa795ca97628e4513fb5ce), [a7efd7d](https://github.com/zivavu/OpenMosh/commit/a7efd7d139f8405ab8b31fc1959c85ed551e13a7), [f0246fd](https://github.com/zivavu/OpenMosh/commit/f0246fda1613e461b74497304da666e7f96c9a09))
+* Keep media from a big drop when another tab clears out storage ([89abfa5](https://github.com/zivavu/OpenMosh/commit/89abfa52258c22512380a4977faaaa2012b0c934))
+* Never write over a project a newer OpenMosh saved, and say that loading a backup replaces any project you already have ([2c9f1e2](https://github.com/zivavu/OpenMosh/commit/2c9f1e2b3d7bde98b3b36a691bc2d4762e1065e4), [ccc3398](https://github.com/zivavu/OpenMosh/commit/ccc3398316073072d741eaefdda71921bf8069c5))
+* Keep saving a video's edits after you unload its song, and keep each slideshow's own edits when two share a song ([8bb4310](https://github.com/zivavu/OpenMosh/commit/8bb4310fc9be5a878b0bcbbba3dc460a02469b01), [ac203bc](https://github.com/zivavu/OpenMosh/commit/ac203bcbd25d70f2b0bd88b9d55c0fc95c20416e))
+* Still say what an old save left out when its notice can't load ([bbac34e](https://github.com/zivavu/OpenMosh/commit/bbac34ed4b955d1422af4e6585519c4d8431d1cc))
+* Refresh the offline copy when only an icon or the app manifest changes ([32452f2](https://github.com/zivavu/OpenMosh/commit/32452f2360a1410f3eee807cd64742c6ed443c62))
+* Clean up when an export fails to start, let Cancel stop an export stuck waiting on a video, and say when an export has to leave its sound out ([dc1d514](https://github.com/zivavu/OpenMosh/commit/dc1d51431b4fffafd82d04f45bb3f97eb3d3ec91), [fae5510](https://github.com/zivavu/OpenMosh/commit/fae551092fd4fc348df6d60e1a8ba0819be158dd), [a8b98b3](https://github.com/zivavu/OpenMosh/commit/a8b98b3f33ee747bc92495931418e923dffaf86c))
+* Loop the editor's sound without a gap at each turn ([6320191](https://github.com/zivavu/OpenMosh/commit/632019171f7e6e5ada1f7cd6846f77916d251943))
+* Show a song as stopped when the browser won't play it, and load the song picked last when two picks overlap ([37a755a](https://github.com/zivavu/OpenMosh/commit/37a755a37fdc99e126961f7603847306dcc8ba7f), [1ff5fe1](https://github.com/zivavu/OpenMosh/commit/1ff5fe116ba436fdbc0e54c2317f2860c4b3a3ce))
+* Run one slideshow preview after a quick stop and restart, and start audio-reactive effects fresh when the slideshow's song changes ([e80a5ab](https://github.com/zivavu/OpenMosh/commit/e80a5ab88681a08bb320bb60ad7d130724288b53), [7771e3b](https://github.com/zivavu/OpenMosh/commit/7771e3b2a54939b59c29f2942e30afdf764bc94c))
+* Stop Wobble, Shake and Channel Split jumping when their speed changes; at a steady speed they look as before ([19b83bc](https://github.com/zivavu/OpenMosh/commit/19b83bc7c7d0552a5729a8533ea8d38beaa54d4a))
+* Stop Masks crowding displacement effects out of curated moshes. Saved auto clips that roll a curated mosh beside a Mask will roll differently from before ([91f28bb](https://github.com/zivavu/OpenMosh/commit/91f28bb036ff3c1cb49b674fbdac65ab1e5f9653))
+* Re-add a removed video without its old preview build getting in the way ([35773b7](https://github.com/zivavu/OpenMosh/commit/35773b71fd30797dc07cd1b93d3424295310847b))
+* Select a focused timeline clip with Enter, keep keyboard focus inside the Add a font dialog, and let a focused dropdown keep Space in the webcam and generate panels ([47d9d98](https://github.com/zivavu/OpenMosh/commit/47d9d986e4ee2f2866f1f0cc4f3f3a8635ea96a9), [c7af934](https://github.com/zivavu/OpenMosh/commit/c7af934a2f883505cf46d08008091f6fb3fb8594), [fa1dbcc](https://github.com/zivavu/OpenMosh/commit/fa1dbccb1933f01f1aea8b0d20357f7e91416e0f))
+* Stop the phone panel jumping when you grab it, and open it from the keyboard ([cf42a41](https://github.com/zivavu/OpenMosh/commit/cf42a4122874b0b9c4bbccc92c783bf87fad85df))
+
+
+### Faster
+
+* Use less memory: free the video decoders and decoded sound of media you remove, and hold fewer frames when exporting large videos ([fe3944d](https://github.com/zivavu/OpenMosh/commit/fe3944d9dca2f7d4da8ccd5215d784adab9d39dc), [4fae9c8](https://github.com/zivavu/OpenMosh/commit/4fae9c86f313a49e86178c88a88042b9ff5415d0), [06ae1ed](https://github.com/zivavu/OpenMosh/commit/06ae1edc2cefa67f3132565c16c99281b40db730))
+* Stop scrubbing or editing a playing project from piling up audio work, and stop leftover work after the preview recovers from a graphics reset ([ed48bd4](https://github.com/zivavu/OpenMosh/commit/ed48bd47c865a7970a76e22f2a6b4a873d4d8f9e), [58b4c8e](https://github.com/zivavu/OpenMosh/commit/58b4c8eb1f804f1dc43d5541e383d57ac5b40251), [1a8aea5](https://github.com/zivavu/OpenMosh/commit/1a8aea58df2dc34aa5e8b893164c49707bcca668))
+
+
 ## [0.9.18](https://github.com/zivavu/OpenMosh/compare/v0.9.17...v0.9.18) (2026-10-13)
 
 Shift-click now selects every clip between two, across the lanes in between, and the clip panel edits the whole selection at once: fades, transitions, volume, Bounce and placement on media clips, position, fades and style on text clips, and the link band on both. Punch on an audio link now sets what the effect follows, from the band's loudness down to just its kicks and snares, and Smoothing runs from a strobe on every hit to a slow swell. Links also hit at full strength on a drop's first kick. 3D Transform spins up to 720° a second, either way round. The demo behind the upload screen moshes a fresh batch of generated images in place of the posters, blending each into the next. Project files keep the output size, fps and take length now, and a project no longer loses its output size when it reopens.
