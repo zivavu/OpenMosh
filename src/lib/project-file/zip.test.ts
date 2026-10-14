@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { readZip, writeZip, type ZipEntryInput } from "./zip";
+import { entryIntact, readZip, writeZip, type ZipEntryInput } from "./zip";
 
 function bytes(text: string): Uint8Array<ArrayBuffer> {
 	return new TextEncoder().encode(text);
@@ -91,6 +91,19 @@ describe("zip64", () => {
 		]);
 		const data = await blobBytes(zip);
 		expect(findSignature(data, 0x06064b50)).toBe(-1);
+	});
+});
+
+describe("entryIntact", () => {
+	it("holds for what was written, and not once a byte has changed", async () => {
+		const zip = await writeZip([
+			{ name: "a.bin", blob: new Blob([bytes("hello, zip")]) },
+		]);
+		expect(await entryIntact((await readZip(zip))[0])).toBe(true);
+		const data = await blobBytes(zip);
+		const at = data.indexOf("h".charCodeAt(0), 30);
+		data[at] ^= 0xff;
+		expect(await entryIntact((await readZip(new Blob([data])))[0])).toBe(false);
 	});
 });
 

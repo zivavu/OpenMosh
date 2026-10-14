@@ -28,7 +28,12 @@ import {
 	getCustomFontData,
 	type CustomFont,
 } from "../text-overlay/custom-fonts.svelte";
-import { readZip, writeZip, type ZipEntryInput } from "../project-file/zip";
+import {
+	entryIntact,
+	readZip,
+	writeZip,
+	type ZipEntryInput,
+} from "../project-file/zip";
 
 export const BACKUP_FORMAT = "openmosh-backup";
 /** Bumped when the manifest's shape changes. */
@@ -209,6 +214,13 @@ export async function restoreBackup(file: Blob): Promise<RestoreSummary> {
 		throw new Error("That isn't an OpenMosh backup");
 	}
 	const byPath = new Map(entries.map((e) => [e.name, e.blob]));
+	// Every entry, before anything is stored: damage in transit would otherwise land
+	// as broken media with nothing said.
+	for (const entry of entries) {
+		if (!(await entryIntact(entry))) {
+			throw new Error("That backup is damaged");
+		}
+	}
 	const manifestBlob = byPath.get("backup.json");
 	if (!manifestBlob) {
 		throw new Error(

@@ -17,7 +17,7 @@ import {
 	addCustomFontData,
 } from "../text-overlay/custom-fonts.svelte";
 import { isFetchableFontUrl, parseManifest, remapProject } from "./manifest";
-import { readZip } from "./zip";
+import { entryIntact, readZip } from "./zip";
 
 /** A name that isn't already in the library; a taken one gets "(copy)". */
 async function availableName(name: string): Promise<string> {
@@ -44,6 +44,19 @@ export async function openProjectFile(file: Blob): Promise<string> {
 		throw new Error("That project file is damaged");
 	}
 	const manifest = parseManifest(raw);
+	// Checked before anything is stored: a file damaged in transit would otherwise
+	// import its media broken, with nothing said.
+	const used = [
+		manifestEntry,
+		...[...manifest.pool, ...manifest.songs, ...manifest.fonts].flatMap(
+			(item) => (item.path ? (byPath.get(item.path) ?? []) : []),
+		),
+	];
+	for (const entry of used) {
+		if (!(await entryIntact(entry))) {
+			throw new Error("That project file is damaged");
+		}
+	}
 
 	// Held from the first media write to the pool that keeps it, so no tab's prune
 	// sees the media unreferenced in between.

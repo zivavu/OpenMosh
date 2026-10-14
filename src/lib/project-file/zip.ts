@@ -269,6 +269,14 @@ export interface ReadZipEntry {
 	/** A view into the source file; nothing is copied. */
 	blob: Blob;
 	size: number;
+	/** The checksum the archive recorded; see entryIntact. */
+	crc: number;
+}
+
+/** Whether an entry's bytes still match the checksum written with them. Reads the
+ * whole entry, so it's run once, before anything is stored from it. */
+export async function entryIntact(entry: ReadZipEntry): Promise<boolean> {
+	return (await crc32Of(entry.blob)) === entry.crc;
 }
 
 /** The EOCD sits at the end, after an optional comment; scan back for it. */
@@ -351,6 +359,7 @@ export async function readZip(file: Blob): Promise<ReadZipEntry[]> {
 		if (view.getUint32(0, true) !== CENTRAL_SIG) throw new Error("Corrupt zip");
 		if (view.getUint16(10, true) !== STORE)
 			throw new Error("Unsupported compression in zip");
+		const crc = view.getUint32(16, true);
 		let compSize = view.getUint32(20, true);
 		let uncompSize = view.getUint32(24, true);
 		const nameLen = view.getUint16(28, true);
@@ -388,6 +397,7 @@ export async function readZip(file: Blob): Promise<ReadZipEntry[]> {
 			name,
 			blob: file.slice(dataStart, dataStart + compSize),
 			size: uncompSize,
+			crc,
 		});
 		at += 46 + nameLen + extraLen + commentLen;
 	}
