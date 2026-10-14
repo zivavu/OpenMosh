@@ -988,6 +988,8 @@
 			};
 			const onContextRestored = () => {
 				clearTimeout(rebuildTimer);
+				// Not destroyed: it shares the restored context with its replacement.
+				current.renderer.retire();
 				try {
 					adopt(activeCanvas, new GlRenderer(activeCanvas));
 				} catch {
