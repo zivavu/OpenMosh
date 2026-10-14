@@ -1610,6 +1610,7 @@
 					onFinalizing: () => {
 						recordingState.recordFinalizing = true;
 					},
+					onNotice: (message) => showToast(message, "info", 8000),
 					signal,
 				}),
 			{

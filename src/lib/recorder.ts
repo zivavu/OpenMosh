@@ -70,6 +70,8 @@ export interface RecordOptions {
 	onProgress?: (progress: number) => void;
 	/** Called when frame capture is done and finalization (mux, blob) begins. */
 	onFinalizing?: () => void;
+	/** Something the user should know that doesn't stop the export. */
+	onNotice?: (message: string) => void;
 	signal?: AbortSignal;
 	/** Decoded to drive effects during recording; for WebM it is also muxed. */
 	audioFile?: File;
@@ -357,6 +359,7 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 		effects,
 		onProgress,
 		onFinalizing,
+		onNotice,
 		signal,
 		audioFile,
 		audioStart = 0,
@@ -722,6 +725,10 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 					bitrate: 256_000,
 				});
 				output.addAudioTrack(audioSource);
+			} else {
+				onNotice?.(
+					"This browser can't encode audio, so this video will be silent.",
+				);
 			}
 		}
 

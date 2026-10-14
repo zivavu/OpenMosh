@@ -67,6 +67,7 @@ export interface RecordingContext {
 	} | null;
 	onProgress: (p: number) => void;
 	onFinalizing: () => void;
+	onNotice?: (message: string) => void;
 	signal: AbortSignal;
 	/** Linear normalize gain to apply to audio. Defaults to 1.0. */
 	normalizeGain?: number;
@@ -365,6 +366,7 @@ export async function executeRecording(ctx: RecordingContext): Promise<void> {
 			})),
 			onProgress,
 			onFinalizing,
+			onNotice: ctx.onNotice,
 			signal,
 			...(ctx.sequence?.mix && { audioMix: ctx.sequence.mix }),
 			// Explicit audio track: always include for both mux output and FFT reactivity
