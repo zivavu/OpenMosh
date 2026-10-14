@@ -313,5 +313,8 @@ export class AudioManager {
 		this.pastSpan = false;
 		this.spanEnd = 0;
 		this.pendingSpan = null;
+		// A track change: the last song's levels mustn't carry into the next.
+		resetAutoRange();
+		resetSpectrumBars();
 	}
 }
