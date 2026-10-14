@@ -1198,8 +1198,13 @@
 		return imageCache.get(slide.id);
 	}
 
+	/** Bumped by every start and stop: a start still decoding when it's overtaken
+	 * must not run a render loop of its own beside the newer one. */
+	let previewRun = 0;
+
 	async function startPreview() {
 		if (slides.length === 0) return;
+		const run = ++previewRun;
 		activeView = "preview";
 		previewPlaying = true;
 
@@ -1218,7 +1223,7 @@
 				.map((slide) => ensureSampler(slide).then(() => {})),
 		]);
 
-		if (!previewPlaying || !glRenderer) return;
+		if (run !== previewRun || !previewPlaying || !glRenderer) return;
 
 		// Fresh run: video slides start from their beginning, like the export
 		for (const sampler of videoSamplers.values()) sampler.reset();
@@ -1252,7 +1257,7 @@
 		let lastAppliedEffects: EffectInstance[] | null = null;
 
 		function tick() {
-			if (!previewPlaying || !glRenderer) return;
+			if (run !== previewRun || !previewPlaying || !glRenderer) return;
 
 			let t: number;
 			if (audio.trackFile && audio.audioPlaying) {
@@ -1319,6 +1324,7 @@
 	}
 
 	function stopPreview() {
+		previewRun++;
 		previewPlaying = false;
 		frameTimes = [];
 		currentFps = 0;
