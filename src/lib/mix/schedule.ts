@@ -83,12 +83,14 @@ function reversedBuffer(buffer: AudioBuffer): AudioBuffer {
 }
 
 export function stopNodes(nodes: ScheduledNode[]): void {
-	for (const { node } of nodes) {
+	for (const { node, trim } of nodes) {
 		try {
 			node.stop();
 		} catch {
 			// Never started.
 		}
 		node.disconnect();
+		// The fade hangs off the trim; still wired to the bus, the pair outlives the stop.
+		trim.disconnect();
 	}
 }
