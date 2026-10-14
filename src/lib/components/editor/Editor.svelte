@@ -2308,14 +2308,18 @@
 		return sourceRegistry.get(id)?.name ?? "Missing media";
 	}
 
+	/** Bumped per song pick, so a slower read can't land over a newer pick. */
+	let songPick = 0;
+
 	/** Load a library track as the song, or drop the song for null. */
 	async function loadSong(trackId: string | null) {
+		const pick = ++songPick;
 		if (!trackId) {
 			dropSong();
 			return;
 		}
 		const track = await getTrack(trackId).catch(() => null);
-		if (!track) return;
+		if (!track || pick !== songPick) return;
 		setSong(trackToFile(track), trackId);
 	}
 
