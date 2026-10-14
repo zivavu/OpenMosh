@@ -34,7 +34,9 @@ way, and say so first. When I do ask for screenshots, take one or two at the end
 edit: they eat context fast.
 
 While working, run only the e2e specs a change touches (`bunx playwright test <spec>
---project=chromium`). The full `bun run test:e2e` is for right before a PR.
+--project=chromium`). The full `bun run test:e2e` is for right before a PR. The
+`preview` project (`tests/e2e/preview.spec.ts`) checks the production build under
+`vite preview`; it builds into `dist-e2e` first, and only when a run includes it.
 
 ## Key Conventions
 
