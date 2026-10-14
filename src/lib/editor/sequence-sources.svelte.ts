@@ -599,6 +599,7 @@ export class SequenceSourceRegistry {
 	/** Attach a <=1080p preview proxy; previews use the original until it lands. */
 	async #makeProxy(id: string, file: File) {
 		const stored = await getSequenceMediaProxy(file);
+		if (this.#disposed) return;
 		let proxy = stored;
 		if (!proxy) {
 			const job = startProxyJob(file, {
@@ -620,6 +621,8 @@ export class SequenceSourceRegistry {
 			});
 			this.#proxyJobs.set(id, job);
 			proxy = await job.promise;
+			// Removed meanwhile, or removed and added again with a job of its own.
+			if (this.#proxyJobs.get(id) !== job) return;
 			this.#proxyJobs.delete(id);
 		}
 		if (this.#disposed) return;
