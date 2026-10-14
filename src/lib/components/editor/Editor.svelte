@@ -1803,6 +1803,11 @@
 	});
 
 	function savePool(key: string, ids: string[]) {
+		// Saved by a newer OpenMosh: nothing of it is written, as the toast promised.
+		if (newerTimelineKeys.has(seqKeyPrefix + key)) {
+			saves.drop("pool");
+			return;
+		}
 		void saves
 			.track(
 				"pool",
@@ -3384,7 +3389,8 @@
 
 	function saveSingleSession() {
 		const source = file;
-		if (!singleSessionKept || !source) {
+		const heldAsNewer = !!seqStoreKey && newerTimelineKeys.has(seqStoreKey);
+		if (!singleSessionKept || !source || heldAsNewer) {
 			saves.drop("session");
 			return;
 		}
