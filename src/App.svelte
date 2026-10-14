@@ -59,6 +59,19 @@
 		};
 	});
 
+	/** The dialog's code didn't download: the gist goes in a toast rather than nowhere. */
+	function reportLossesPlainly() {
+		const losses = loadLosses;
+		loadLosses = null;
+		if (!losses) return;
+		const names = [...losses.effects, ...losses.settings].join(", ");
+		showToast(
+			`Not everything loaded. Left out or changed: ${names}`,
+			"info",
+			0,
+		);
+	}
+
 	let file: File | null = $state(null);
 	let sequenceFiles: File[] = $state([]);
 	/** Set when sequence mode was opened from a saved song. */
@@ -509,6 +522,8 @@
 {#if loadLosses}
 	{#await loadLossesDialog() then LoadLossesDialog}
 		<LoadLossesDialog losses={loadLosses} onClose={() => (loadLosses = null)} />
+	{:catch}
+		<LoadFailed onclose={reportLossesPlainly} />
 	{/await}
 {/if}
 
