@@ -23,6 +23,8 @@ export class MediaLayerDriver {
 	#samplers = new Map<string, { sampler: SlideVideoSampler; file: File }>();
 	/** Keys whose sampler is still being created, so we don't start a second. */
 	#creating = new Set<string>();
+	/** Sampler keys the latest frame asked for: never evicted. */
+	#active = new Set<string>();
 	#disposed = false;
 
 	constructor(opts: MediaLayerDriverOptions) {
@@ -35,6 +37,7 @@ export class MediaLayerDriver {
 		if (this.#disposed) return;
 		const renderer = this.#getRenderer();
 		const sides = mediaLayerSides(layers);
+		this.#active = new Set();
 		for (const layer of sides) {
 			const src = this.#registry.get(layer.sourceId);
 			if (!src) {
@@ -74,6 +77,7 @@ export class MediaLayerDriver {
 				continue;
 			}
 
+			this.#active.add(samplerKey(layer.key, src.id));
 			const sampler = this.#samplerFor(
 				layer.key,
 				src.id,
@@ -143,13 +147,25 @@ export class MediaLayerDriver {
 		return undefined;
 	}
 
-	/** Retire this lane's coldest decoders once it holds more than the cap. */
+	/** Retire the coldest decoders: this lane's past its cap, then any lane's past the
+	 * total, which is what frees a deleted lane's. Ones the latest frame uses stay. */
 	#evict(key: string) {
 		const mine = [...this.#samplers.keys()].filter((k) => laneOfKey(k) === key);
 		for (const id of mine.slice(0, mine.length - MAX_LANE_SAMPLERS)) {
-			this.#samplers.get(id)?.sampler.dispose();
-			this.#samplers.delete(id);
+			this.#drop(id);
 		}
+		let excess = this.#samplers.size - MAX_SAMPLERS;
+		for (const id of [...this.#samplers.keys()]) {
+			if (excess <= 0) break;
+			if (this.#active.has(id)) continue;
+			this.#drop(id);
+			excess--;
+		}
+	}
+
+	#drop(id: string) {
+		this.#samplers.get(id)?.sampler.dispose();
+		this.#samplers.delete(id);
 	}
 
 	#release(key: string) {
@@ -179,6 +195,9 @@ const PREVIEW_REVERSE_MAX_SIDE = 1280;
 
 /** How many decoders one lane may hold at once. */
 const MAX_LANE_SAMPLERS = 4;
+
+/** How many decoders every lane together may hold. */
+const MAX_SAMPLERS = 12;
 
 /** Lane ids are generated with no "|" in them, so this splits cleanly. */
 function samplerKey(laneKey: string, sourceId: string): string {
