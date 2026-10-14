@@ -159,6 +159,25 @@ describe("a project file round trip", () => {
 		expect(built.missing).toBe(1);
 	});
 
+	test("turns down a file damaged in transit, storing none of it", async () => {
+		const key = "proj-damaged";
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(key, [a.id]);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10 });
+		const bytes = new Uint8Array(
+			await (await buildProjectFile(key)).blob.arrayBuffer(),
+		);
+		// One flipped byte inside the media's run of 7s.
+		const media = bytes.findIndex((b, i) => b === 7 && bytes[i + 99] === 7);
+		bytes[media + 50] ^= 0xff;
+
+		await store.clearAllSequenceStores();
+		await expect(openProjectFile(new Blob([bytes]))).rejects.toThrow(
+			"That project file is damaged",
+		);
+		expect((await store.getAllSequenceMediaIds()).size).toBe(0);
+	});
+
 	test("names the song of a project keyed by it", async () => {
 		const trackId = await seedTrack("song.wav", 500);
 		const a = await seedMedia("a.png", 100, 1000);
