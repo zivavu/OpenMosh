@@ -890,8 +890,9 @@
 				<div class="backup">
 					<p class="note">
 						One file with everything above, plus your presets and settings. Load
-						it in another browser to pick up where you left off. Anything
-						already in that browser stays.
+						it in another browser to pick up where you left off. What's already
+						there stays, but the backup's copy replaces any project that's in
+						both.
 					</p>
 					<span class="backup-actions">
 						<button
