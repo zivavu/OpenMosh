@@ -9,7 +9,12 @@ describe("effect count in the copy", () => {
 				new URL(`../../../${file}`, import.meta.url),
 				"utf8",
 			);
-			expect(text).toContain(`${EFFECT_DEFINITIONS.length} effects`);
+			// Every count the copy states, so a stale second mention or "169 effects" fails.
+			const stated = [...text.matchAll(/\b(\d+)\s+effects\b/g)].map((m) =>
+				Number(m[1]),
+			);
+			expect(stated.length).toBeGreaterThan(0);
+			expect(stated).toEqual(stated.map(() => EFFECT_DEFINITIONS.length));
 		});
 	}
 });
