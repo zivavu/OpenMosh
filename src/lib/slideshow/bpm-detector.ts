@@ -48,31 +48,33 @@ export async function detectBpm(
 	const id = nextRequestId++;
 	const w = getWorker();
 	return new Promise<BpmResult>((resolve, reject) => {
-		const onAbort = () => {
+		// Every way out detaches all three, or each call leaves a listener behind.
+		const detach = () => {
+			w.removeEventListener("message", onMessage);
+			w.removeEventListener("error", onError);
 			signal?.removeEventListener("abort", onAbort);
+		};
+		const onAbort = () => {
+			detach();
 			reject(new DOMException("Aborted", "AbortError"));
 		};
-		signal?.addEventListener("abort", onAbort, { once: true });
-
 		const onMessage = (e: MessageEvent<BpmWorkerResponse>) => {
 			if (e.data.id !== id) return;
-			w.removeEventListener("message", onMessage);
-			signal?.removeEventListener("abort", onAbort);
+			detach();
 			if (e.data.ok) {
 				resolve({ bpm: Math.round(e.data.bpm), offset: e.data.offset });
 			} else {
 				reject(new Error(e.data.error));
 			}
 		};
-
 		const onError = (err: ErrorEvent) => {
-			w.removeEventListener("message", onMessage);
-			signal?.removeEventListener("abort", onAbort);
+			detach();
 			reject(err.error ?? new Error(String(err.message)));
 		};
 
+		signal?.addEventListener("abort", onAbort, { once: true });
 		w.addEventListener("message", onMessage);
-		w.addEventListener("error", onError, { once: true });
+		w.addEventListener("error", onError);
 
 		// Transfer the buffer so no copy is needed.
 		w.postMessage({ id, samples, sampleRate: audioBuffer.sampleRate }, [
