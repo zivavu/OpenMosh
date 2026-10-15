@@ -213,7 +213,7 @@
 		{/if}
 		<div class="ctrl">
 			<span class="label">Palette</span>
-			<select bind:value={palette}>
+			<select bind:value={palette} aria-label="Palette">
 				<option value="">Random</option>
 				{#each Object.keys(PALETTES) as name}
 					<option value={name}>{name}</option>

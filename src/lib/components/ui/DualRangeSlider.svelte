@@ -59,6 +59,7 @@
 			{max}
 			{step}
 			value={valueLow}
+			aria-label="Minimum"
 			oninput={handleLow}
 			class="thumb thumb-low"
 		/>
@@ -68,6 +69,7 @@
 			{max}
 			{step}
 			value={valueHigh}
+			aria-label="Maximum"
 			oninput={handleHigh}
 			class="thumb thumb-high"
 		/>

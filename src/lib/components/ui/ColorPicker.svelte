@@ -136,6 +136,7 @@
 		<input
 			class="hex"
 			type="text"
+			aria-label="Hex color"
 			spellcheck="false"
 			{value}
 			oninput={(e) => onChange(e.currentTarget.value)}
