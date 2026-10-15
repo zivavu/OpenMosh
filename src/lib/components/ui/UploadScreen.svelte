@@ -154,6 +154,35 @@
 		{ value: "slideshow", label: "Slideshow" },
 	] as const;
 
+	const PANEL_HINTS: Record<UploadMode, string> = {
+		single:
+			"One image or video. Mosh it, then lock whatever survived and roll again.",
+		sequence:
+			"Your song on a timeline. The media goes on lanes, cut into clips with their own effects. 3D models (OBJ, STL, GLB, FBX, PLY) work here too.",
+		slideshow:
+			"A pile of media and a track. It finds the BPM and cuts on the beat.",
+	};
+	const DROP_HINTS: Record<UploadMode, string> = {
+		single:
+			"or drop an image, a video or a project file anywhere on this panel",
+		sequence:
+			"or drop images, videos, 3D models or a project file anywhere on this panel",
+		slideshow:
+			"or drop images, videos or a project file anywhere on this panel",
+	};
+
+	/** Every mode's hints sit in the panel at once, the unpicked ones hidden, so the
+	 * panel keeps the tallest one's height and switching modes moves nothing. */
+	const hintModes: UploadMode[] = isMobile
+		? ["single"]
+		: MODES.map((m) => m.value);
+
+	function panelHint(mode: UploadMode): string {
+		return isMobile
+			? "One image or video. The Editor and Slideshow modes are built for a desktop browser, so they're not offered here."
+			: PANEL_HINTS[mode];
+	}
+
 	// 1, 2, 3 pick a mode, the way they pick a group in the shortcuts sheet.
 	function onModeKey(e: KeyboardEvent) {
 		if (isMobile || generateOpen || storageOpen || isModalKeyboardOpen())
@@ -716,20 +745,13 @@
 		ondragleave={onDragLeave}
 	>
 		<div class="panel-main">
-			<p class="panel-hint">
-				{#if isMobile}
-					One image or video. The Editor and Slideshow modes are built for a
-					desktop browser, so they're not offered here.
-				{:else if selectedMode === "slideshow"}
-					A pile of media and a track. It finds the BPM and cuts on the beat.
-				{:else if selectedMode === "sequence"}
-					Your song on a timeline. The media goes on lanes, cut into clips with
-					their own effects. 3D models (OBJ, STL, GLB, FBX, PLY) work here too.
-				{:else}
-					One image or video. Mosh it, then lock whatever survived and roll
-					again.
-				{/if}
-			</p>
+			<div class="hint-stack">
+				{#each hintModes as mode (mode)}
+					<p class="panel-hint" class:shown={mode === selectedMode}>
+						{panelHint(mode)}
+					</p>
+				{/each}
+			</div>
 
 			<div class="load-row">
 				<label class="load-btn primary-btn">
@@ -763,19 +785,19 @@
 				{/if}
 			</div>
 
-			<p class="drop-hint" class:staged={stagedMedia}>
-				{#if stagedMedia}
-					{stagedMedia.length} file{stagedMedia.length === 1 ? "" : "s"} ready. Add
-					a song to start.
-				{:else if selectedMode === "sequence"}
-					or drop images, videos, 3D models or a project file anywhere on this
-					panel
-				{:else if isMultiMode}
-					or drop images, videos or a project file anywhere on this panel
-				{:else}
-					or drop an image, a video or a project file anywhere on this panel
-				{/if}
-			</p>
+			<div class="hint-stack">
+				{#each hintModes as mode (mode)}
+					<p
+						class="drop-hint"
+						class:shown={mode === selectedMode}
+						class:staged={stagedMedia && mode === selectedMode}
+					>
+						{stagedMedia && mode === selectedMode
+							? `${stagedMedia.length} file${stagedMedia.length === 1 ? "" : "s"} ready. Add a song to start.`
+							: DROP_HINTS[mode]}
+					</p>
+				{/each}
+			</div>
 
 			<div class="link-row">
 				<button
@@ -1599,6 +1621,21 @@
 		align-items: center;
 		gap: 1.1rem;
 		padding: 1.75rem 2rem;
+	}
+
+	.hint-stack {
+		display: grid;
+		align-items: center;
+	}
+
+	.hint-stack > * {
+		grid-area: 1 / 1;
+	}
+
+	/* Hidden, not removed: it still holds the panel at its height, and screen readers
+	   skip it. */
+	.hint-stack > :not(.shown) {
+		visibility: hidden;
 	}
 
 	/* What this mode does, as the panel's first line. */
