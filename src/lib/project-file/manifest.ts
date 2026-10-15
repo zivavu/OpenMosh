@@ -216,6 +216,12 @@ function parseSlideshowConfig(raw: unknown): Record<string, unknown> {
 				typeof seg.id === "string" && finiteOr(seg.startTime, null) !== null,
 		);
 	}
+	const span = isRecord(raw.span) ? raw.span : null;
+	const start = finiteOr(span?.start, null);
+	const end = finiteOr(span?.end, null);
+	if (start !== null && end !== null && end > start) {
+		config.span = { start, end };
+	}
 	return config;
 }
 

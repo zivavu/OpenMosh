@@ -513,7 +513,7 @@
 			ownSessionKey,
 			"slideshow",
 			slides.map((s) => s.file),
-			{ config: $state.snapshot(config) as SlideshowConfig },
+			{ config: sessionConfig() },
 			currentTrackId,
 		).catch((e) => {
 			// Logged, not swallowed: a silent failure here is invisible.
@@ -528,10 +528,20 @@
 		});
 	}
 
+	/** The config as saved, with the span the audio holds. */
+	function sessionConfig(): SlideshowConfig {
+		return {
+			...($state.snapshot(config) as SlideshowConfig),
+			span: spanForSave(),
+		};
+	}
+
 	$effect(() => {
 		// Deep-read, discarded: a shallow read of `slides`/`config` never re-arms the debounce.
 		$state.snapshot(slides);
 		$state.snapshot(config);
+		audio.spanStart;
+		audio.spanEnd;
 		// Loading a different song re-keys the session, so it has to re-save.
 		currentTrackId;
 		if (!sessionKept) return;
@@ -651,11 +661,19 @@
 		}
 		const saved = readJson<Partial<SlideshowConfig> | null>(CONFIG_KEY, null);
 		if (saved) {
+			// Only the last slideshow's settings carry over, not its cuts, text or tempo.
+			const {
+				segments: _segments,
+				text: _text,
+				bpm: _bpm,
+				beatOffset: _beatOffset,
+				span: _span,
+				...settings
+			} = saved;
 			return {
 				...DEFAULT_SLIDESHOW_CONFIG,
-				...saved,
-				moshMode: knownMoshMode(saved.moshMode),
-				text: normalizeTextTimeline(saved.text),
+				...settings,
+				moshMode: knownMoshMode(settings.moshMode),
 			};
 		}
 		return { ...DEFAULT_SLIDESHOW_CONFIG };
@@ -681,6 +699,7 @@
 			: null,
 	);
 
+	/** A slideshow's work on one song. */
 	interface SegmentsEntry {
 		segments: SlideshowConfig["segments"];
 		bpm?: number;
@@ -690,35 +709,42 @@
 		spanEnd?: number;
 	}
 
+	/** Where slideshows kept their work per song before each carried its own; read
+	 * only to open one saved back then. */
 	const segmentsStore = createTrackStore<SegmentsEntry>(
 		"openmosh-track-segments",
 		// Backward compat: old format stored the segments array directly
 		(raw) => (Array.isArray(raw) ? { segments: raw } : (raw as SegmentsEntry)),
 	);
 
-	/** The span worth writing back: between adopting a track id and the audio element
+	/** The span worth saving: between adopting a track id and the audio element
 	 * reporting its duration the live span reads 0/0, which would wipe the saved one. */
-	function spanForSave(
-		trackId: string,
-	): Pick<SegmentsEntry, "spanStart" | "spanEnd"> {
+	function spanForSave(): SlideshowConfig["span"] {
 		const pending = audio.pendingSpan;
-		if (pending) return { spanStart: pending.start, spanEnd: pending.end };
+		if (pending) return { start: pending.start, end: pending.end };
 		if (audio.trackDuration > 0 && audio.spanEnd > audio.spanStart) {
-			return { spanStart: audio.spanStart, spanEnd: audio.spanEnd };
+			return { start: audio.spanStart, end: audio.spanEnd };
 		}
-		const prev = segmentsStore.load(trackId);
-		if (prev?.spanStart !== undefined && prev.spanEnd !== undefined) {
-			return { spanStart: prev.spanStart, spanEnd: prev.spanEnd };
-		}
-		return {};
+		return config.span;
 	}
 
-	function saveSegments(trackId: string) {
-		segmentsStore.save(trackId, {
-			segments: config.segments,
+	function entrySpan(entry: SegmentsEntry): SlideshowConfig["span"] {
+		return entry.spanStart !== undefined && entry.spanEnd !== undefined
+			? { start: entry.spanStart, end: entry.spanEnd }
+			: undefined;
+	}
+
+	/** This slideshow's work on each song it has played, so switching back finds it. */
+	const songEdits = new Map<string, SegmentsEntry>();
+
+	function stashSongEdit(trackId: string) {
+		const span = spanForSave();
+		songEdits.set(trackId, {
+			segments: $state.snapshot(config.segments),
 			bpm: config.bpm,
 			text: $state.snapshot(config.text) as TextTimeline,
-			...spanForSave(trackId),
+			spanStart: span?.start,
+			spanEnd: span?.end,
 		});
 	}
 
@@ -726,14 +752,7 @@
 		// A tempo set by hand outranks a detection still running.
 		if (next.bpm !== config.bpm) bpmEpoch++;
 		config = next;
-		if (currentTrackId) saveSegments(currentTrackId);
 	}
-
-	$effect(() => {
-		audio.spanStart;
-		audio.spanEnd;
-		if (currentTrackId) saveSegments(currentTrackId);
-	});
 
 	let selectedSegmentId = $state<string | null>(null);
 
@@ -937,13 +956,7 @@
 	$effect(() => {
 		if (initialAudioFile && !audio.trackFile) {
 			audio.trackFile = initialAudioFile;
-			// Reopened from a saved session: adopting the library id brings its span back,
-			// and its segments too when the session predates carrying its own.
-			if (initialTrackId)
-				adoptLibraryTrack(
-					initialTrackId,
-					Array.isArray(untrack(() => initialConfig)?.segments),
-				);
+			if (initialTrackId) restoreSessionTrack(initialTrackId);
 		}
 	});
 
@@ -964,73 +977,71 @@
 	}
 
 	function clearTrack() {
-		// Unloading is a song change too, so dropping the track saves like a switch does.
-		if (currentTrackId) saveSegments(currentTrackId);
+		// Unloading is a song change too, so its work is kept like a switch keeps it.
+		if (currentTrackId) stashSongEdit(currentTrackId);
 		audio.clearTrack();
 		currentTrackId = null;
-		config = { ...config, segments: [] };
+		config = { ...config, segments: [], span: undefined };
 	}
 
 	function onLibraryLoadTrack(file: File, trackId: string, autoplay = false) {
 		stopPreview();
-		if (currentTrackId) saveSegments(currentTrackId);
+		if (currentTrackId) stashSongEdit(currentTrackId);
 		// Partial reset: trackDuration and trackFile are left, so AudioTimeline doesn't flash.
 		audio.resetPlayback();
 		currentTrackId = null;
 		audio.disposeAudioGraph();
-		currentTrackId = trackId;
 		audio.trackFile = file;
-		applySavedSegments(trackId);
+		adoptLibraryTrack(trackId);
 		if (autoplay) audio.autoplayOnLoad = true;
 	}
 
-	/** `spanOnly` when the session restored its own segments, BPM and text: the song's
-	 * entry holds whichever slideshow on it saved last. */
-	function applySavedSegments(trackId: string, spanOnly = false) {
-		const saved = segmentsStore.load(trackId);
-		if (spanOnly) {
-			// The session's tempo was set for these segments; a detection mustn't move it.
-			bpmEpoch++;
-			bpmRestoredFor = trackId;
-			if (saved) applySavedSpan(saved);
+	/** A reopened session's song. One saved before it carried its own segments takes
+	 * them, and its span, from what the song kept back then. */
+	function restoreSessionTrack(trackId: string) {
+		currentTrackId = trackId;
+		const own = untrack(() => initialConfig);
+		const legacy = segmentsStore.load(trackId);
+		if (!Array.isArray(own?.segments)) {
+			if (legacy) applySongEdit(trackId, legacy);
 			return;
 		}
-		if (saved === null) {
-			// A song of its own starts from a fresh flat line (see TimelineSegments).
-			config = { ...config, segments: [] };
-			return;
-		}
+		// The session's tempo was set for these segments; a detection mustn't move it.
+		bpmEpoch++;
+		bpmRestoredFor = trackId;
+		applySpan(own.span ?? (legacy ? entrySpan(legacy) : undefined));
+	}
+
+	function applySongEdit(trackId: string, edit: SegmentsEntry) {
 		config = {
 			...config,
-			segments: saved.segments,
-			...(saved.bpm !== undefined ? { bpm: saved.bpm } : {}),
-			...(saved.text !== undefined
-				? { text: normalizeTextTimeline(saved.text) }
+			segments: edit.segments,
+			...(edit.bpm !== undefined ? { bpm: edit.bpm } : {}),
+			...(edit.text !== undefined
+				? { text: normalizeTextTimeline(edit.text) }
 				: {}),
 		};
-		if (saved.bpm !== undefined) {
+		if (edit.bpm !== undefined) {
 			// The song brought its own tempo back; a running detection must not overwrite it.
 			bpmEpoch++;
 			bpmRestoredFor = trackId;
 		}
-		applySavedSpan(saved);
+		applySpan(entrySpan(edit));
 	}
 
-	function applySavedSpan(saved: { spanStart?: number; spanEnd?: number }) {
+	function applySpan(span: SlideshowConfig["span"]) {
 		// An empty span is an older build's leftover, never a choice; use the whole track.
-		if (
-			saved.spanStart !== undefined &&
-			saved.spanEnd !== undefined &&
-			saved.spanEnd > saved.spanStart
-		) {
-			audio.pendingSpan = { start: saved.spanStart, end: saved.spanEnd };
-		}
+		if (span && span.end > span.start) audio.pendingSpan = { ...span };
 	}
 
-	function adoptLibraryTrack(trackId: string, spanOnly = false) {
+	/** A song picked or added here. Another slideshow's work on it stays with that one. */
+	function adoptLibraryTrack(trackId: string) {
 		if (currentTrackId === trackId) return;
 		currentTrackId = trackId;
-		applySavedSegments(trackId, spanOnly);
+		const edit = songEdits.get(trackId);
+		if (edit) applySongEdit(trackId, edit);
+		// A song new to this slideshow starts from a fresh flat line (see TimelineSegments).
+		else config = { ...config, segments: [], span: undefined };
 	}
 
 	let bpmDetecting = $state(false);
@@ -1424,35 +1435,31 @@
 	let recordFps = $state(60);
 	let recordDuration = $state(10);
 
-	// Export settings ride with the song under their own mode prefix.
-	let renderKey = $derived(currentTrackId && `slideshow:${currentTrackId}`);
-	let renderKeyLoaded = $state<string | null>(null);
+	/** This slideshow's export settings. One saved before they were its own reads
+	 * what its song kept. */
+	function restoreRenderSettings() {
+		const songKey =
+			untrack(() => initialConfig) && untrack(() => initialTrackId);
+		const saved =
+			loadRenderSettings(ownSessionKey) ??
+			(songKey ? loadRenderSettings(`slideshow:${songKey}`) : null);
+		if (saved?.fps) recordFps = saved.fps;
+		if (saved?.duration) recordDuration = saved.duration;
+		if (saved?.width && saved?.height) {
+			resizeWidth = saved.width;
+			resizeHeight = saved.height;
+			sizeRestoredFromProject = true;
+		}
+	}
+	restoreRenderSettings();
 
 	$effect(() => {
-		const key = renderKey;
-		if (!key || untrack(() => renderKeyLoaded) === key) return;
-		untrack(() => {
-			renderKeyLoaded = key;
-			const saved = loadRenderSettings(key);
-			if (saved?.fps) recordFps = saved.fps;
-			if (saved?.duration) recordDuration = saved.duration;
-			if (saved?.width && saved?.height) {
-				resizeWidth = saved.width;
-				resizeHeight = saved.height;
-				sizeRestoredFromProject = true;
-			}
-		});
-	});
-
-	$effect(() => {
-		const key = renderKey;
 		const fps = recordFps;
 		const duration = recordDuration;
 		const width = resizeWidth;
 		const height = resizeHeight;
-		// Until this song's own values are in, the live ones are the last song's.
-		if (!key || renderKeyLoaded !== key) return;
-		saveRenderSettings(key, {
+		if (!sessionKept) return;
+		saveRenderSettings(ownSessionKey, {
 			fps,
 			duration,
 			...(width > 0 && height > 0 ? { width, height } : {}),
@@ -1693,13 +1700,13 @@
 			live: {
 				mode: "slideshow",
 				entry: null,
-				state: { config: $state.snapshot(config) as SlideshowConfig },
+				state: { config: sessionConfig() },
 				trackId: currentTrackId,
 				media: slides.map((s) => ({
 					id: stableSourceId(s.file),
 					file: s.file,
 				})),
-				render: renderKey ? loadRenderSettings(renderKey) : null,
+				render: loadRenderSettings(ownSessionKey),
 			},
 		});
 	}

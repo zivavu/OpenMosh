@@ -308,14 +308,12 @@ export async function storeProjectFile(
 		});
 		return key;
 	});
-	const renderKey =
-		manifest.mode === "sequence"
-			? `seq:${projectKey}`
-			: manifest.mode === "single"
-				? projectKey
-				: sessionTrackId && `slideshow:${sessionTrackId}`;
-	if (manifest.render && renderKey)
-		saveRenderSettings(renderKey, manifest.render);
+	if (manifest.render) {
+		saveRenderSettings(
+			manifest.mode === "sequence" ? `seq:${projectKey}` : projectKey,
+			manifest.render,
+		);
+	}
 	const name =
 		manifest.name || readProjectNames()[projectKey] || "Untitled project";
 	setProjectName(projectKey, await availableName(name, manifest.mode));

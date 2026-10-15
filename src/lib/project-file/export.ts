@@ -183,11 +183,12 @@ async function storedSessionProject(key: string) {
 		state: session.state,
 		trackId: session.trackId ?? null,
 		media,
-		render: loadRenderSettings(
+		render:
 			session.mode === "slideshow"
-				? session.trackId && `slideshow:${session.trackId}`
-				: timelineKey,
-		),
+				? // Its song's for a slideshow saved before they were its own.
+					(loadRenderSettings(key) ??
+					loadRenderSettings(session.trackId && `slideshow:${session.trackId}`))
+				: loadRenderSettings(timelineKey),
 	};
 	return { content, missing };
 }

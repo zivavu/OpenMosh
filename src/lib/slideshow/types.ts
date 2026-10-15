@@ -65,6 +65,8 @@ export interface SlideshowConfig {
 	text: TextTimeline;
 	/** Persisted alongside the config; the live value lives on the AudioManager. */
 	outputVolume: number;
+	/** The export span on the song. Absent on slideshows saved before it was their own. */
+	span?: { start: number; end: number };
 }
 
 export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
