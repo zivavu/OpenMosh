@@ -405,6 +405,7 @@ describe("single and slideshow edits", () => {
 			segments: [{ id: "seg-1", startTime: 4, subdivision: 1 }],
 			text: { enabled: false, lanes: [] },
 			outputVolume: 0.8,
+			span: { start: 2, end: 9 },
 		};
 		await store.putSession({
 			key,
@@ -428,10 +429,12 @@ describe("single and slideshow edits", () => {
 		expect(session?.sourceIds).toEqual([b.id, a.id]);
 		expect(session?.trackId).toBe(song.id);
 		expect(session?.state).toEqual({ config });
-		expect(loadRenderSettings(`slideshow:${song.id}`)).toEqual({
+		expect(loadRenderSettings(landed.key)).toEqual({
 			width: 1080,
 			height: 1080,
 		});
+		// Another slideshow on the same song keeps its own.
+		expect(loadRenderSettings(`slideshow:${song.id}`)).toBeNull();
 	});
 
 	test("an unchanged single edit is found as a copy, and an edited one isn't", async () => {
