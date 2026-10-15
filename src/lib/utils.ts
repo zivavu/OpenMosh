@@ -37,11 +37,6 @@ type SaveFilePicker = (
 	options: SaveFilePickerOptions,
 ) => Promise<{ createWritable: () => Promise<WritableStream<Uint8Array>> }>;
 
-const PROJECT_FILE_TYPE = {
-	description: "OpenMosh project",
-	accept: { "application/zip": [".openmosh"] },
-};
-
 /** Where a file is about to be saved. */
 export interface SaveTarget {
 	write(blob: Blob): Promise<void>;
@@ -53,7 +48,7 @@ export interface SaveTarget {
  * cancelled. */
 export async function chooseSaveTarget(
 	name: string,
-	type: NonNullable<SaveFilePickerOptions["types"]>[number] = PROJECT_FILE_TYPE,
+	type: NonNullable<SaveFilePickerOptions["types"]>[number],
 ): Promise<SaveTarget | null> {
 	const download: SaveTarget = {
 		write: async (blob) => downloadFile(blob, name),

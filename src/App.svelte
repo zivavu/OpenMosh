@@ -15,6 +15,7 @@
 		type ProjectImportProgress,
 		type ProjectOpening,
 	} from "./lib/project-file/import";
+	import type { ProjectFileMode } from "./lib/project-file/manifest";
 	import {
 		newSessionKey,
 		openSession,
@@ -278,7 +279,7 @@
 		return true;
 	}
 
-	/** A `.openmosh` file on its way in; the editor's own loading takes over once it opens. */
+	/** A project file on its way in; the editor's own loading takes over once it opens. */
 	let projectOpening = $state<ProjectOpening | null>(null);
 
 	type CopyChoice = "open" | "copy" | "cancel";
@@ -300,11 +301,18 @@
 		});
 	}
 
-	/** Import a `.openmosh` file as a new project, then open it the normal way. */
-	async function openProjectFromFile(file: File) {
+	const MODE_FILE: Record<ProjectFileMode, { kind: string; mode: string }> = {
+		sequence: { kind: "an Editor project", mode: "Editor" },
+		single: { kind: "a Single edit", mode: "Single" },
+		slideshow: { kind: "a Slideshow", mode: "Slideshow" },
+	};
+
+	/** Import a project file as a new project or edit, then open it the normal way.
+	 * Only a file of the mode the upload screen is on opens. */
+	async function openProjectFromFile(file: File, mode: ProjectFileMode) {
 		if (projectOpening) return;
 		projectOpening = {
-			name: file.name.replace(/\.openmosh$/i, ""),
+			name: file.name.replace(/\.openmosh(?:-single|-slideshow)?$/i, ""),
 			stage: "checking",
 			percent: 0,
 		};
@@ -317,17 +325,28 @@
 		};
 		try {
 			const project = await readProjectFile(file);
+			const saved = MODE_FILE[project.manifest.mode];
+			if (project.manifest.mode !== mode) {
+				showToast(
+					`That file is ${saved.kind}. Switch to ${saved.mode} to open it.`,
+					"error",
+					8000,
+				);
+				return;
+			}
 			const copy = await findStoredCopy(project);
 			const choice = copy ? await askAboutStoredCopy(copy.name) : "copy";
 			if (choice === "cancel") return;
-			const key =
+			const { key } =
 				copy && choice === "open"
-					? copy.key
+					? copy
 					: await storeProjectFile(project, report);
 			if (projectOpening) projectOpening.stage = "opening";
-			if (!(await openSequenceFromSong(key))) {
-				showToast("Couldn't open that project", "error");
-			}
+			const opened =
+				mode === "sequence"
+					? await openSequenceFromSong(key)
+					: await openSessionByKey(mode, key);
+			if (!opened) showToast("Couldn't open that project", "error");
 		} catch (e) {
 			showToast(
 				e instanceof Error ? e.message : "Couldn't open that project file",

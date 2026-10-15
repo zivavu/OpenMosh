@@ -9,7 +9,7 @@
 		setVolumeLink,
 		type EffectInstance,
 	} from "../../effects";
-	import { MicVocal, Plus } from "lucide-svelte";
+	import { FolderDown, MicVocal, Plus } from "lucide-svelte";
 	import {
 		appendTextLane,
 		createTextChainSource,
@@ -54,7 +54,12 @@
 		probeSlideVideo,
 		SlideVideoSampler,
 	} from "../../slideshow/video-sampler";
-	import { showToast } from "../ui/toast.svelte";
+	import { dismissToast, showToast, updateToast } from "../ui/toast.svelte";
+	import { modKey } from "../../input-device";
+	import {
+		missingFilesNotice,
+		saveProjectFileAs,
+	} from "../../project-file/export";
 	import { shuffleInPlace } from "../../utils";
 	import { lazy } from "../../lazy";
 	import {
@@ -117,6 +122,7 @@
 		getSequenceMediaProxy,
 		pruneSequenceMediaThrottled,
 		putSequenceMediaProxy,
+		stableSourceId,
 	} from "../../editor/sequence-media-store";
 	import { needsProxy, startProxyJob, type ProxyJob } from "../../video/proxy";
 	import { gifsToVideo } from "../../media/gif";
@@ -1679,6 +1685,47 @@
 		}, "image/png");
 	}
 
+	/** Save the slideshow as a `.openmosh` file: its slides, song, settings and fonts,
+	 * as they are on screen. */
+	async function saveProjectFile() {
+		if (!currentTrackId) {
+			showToast("A slideshow saves with its song, so add one first.", "info");
+			return;
+		}
+		// Cast: assigned in a callback, which TS can't see, so it would narrow to null.
+		let progress = null as number | null;
+		try {
+			const missing = await saveProjectFileAs(ownSessionKey, {
+				live: {
+					mode: "slideshow",
+					entry: null,
+					state: { config: $state.snapshot(config) as SlideshowConfig },
+					trackId: currentTrackId,
+					media: slides.map((s) => ({
+						id: stableSourceId(s.file),
+						file: s.file,
+					})),
+					render: renderKey ? loadRenderSettings(renderKey) : null,
+				},
+				onBuild: () =>
+					(progress = showToast("Building the project file…", "info", 0)),
+			});
+			if (progress === null) return;
+			if (missing)
+				updateToast(progress, missingFilesNotice(missing), "info", 8000);
+			else updateToast(progress, "Project file saved", "success");
+			progress = null;
+		} catch (e) {
+			showToast(
+				e instanceof Error ? e.message : "Couldn't save the project file",
+				"error",
+				8000,
+			);
+		} finally {
+			if (progress !== null) dismissToast(progress);
+		}
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		const mod = e.ctrlKey || e.metaKey;
 		const key = e.key.toLowerCase();
@@ -1694,6 +1741,11 @@
 			if (isTextEntryTarget(e.target)) return;
 			e.preventDefault();
 			undoLatest(undoSources());
+			return;
+		}
+		if (mod && key === "s" && e.shiftKey) {
+			e.preventDefault();
+			void saveProjectFile();
 			return;
 		}
 		if (mod && key === "s" && !e.shiftKey) {
@@ -1816,7 +1868,21 @@
 					state={saves.state}
 					lastSavedAt={saves.lastSavedAt}
 					{notSaved}
-				/>
+				>
+					{#snippet action()}
+						<button
+							class="save-file-btn"
+							title={currentTrackId
+								? `Save the slideshow as a file you can keep or share (${modKey}+Shift+S)`
+								: "A slideshow saves with its song, so add one first."}
+							aria-label="Save project file"
+							disabled={!currentTrackId}
+							onclick={saveProjectFile}
+						>
+							<FolderDown size={14} />
+						</button>
+					{/snippet}
+				</SaveIndicator>
 			{/snippet}
 		</SlideshowTopBar>
 		<input
@@ -2167,5 +2233,33 @@
 		.main-area {
 			padding-bottom: 44px;
 		}
+	}
+
+	.save-file-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: var(--r-1);
+		background: none;
+		color: var(--text-3);
+		cursor: pointer;
+		transition:
+			color var(--t-fast),
+			border-color var(--t-fast);
+	}
+
+	.save-file-btn:hover:not(:disabled) {
+		color: var(--text);
+		border-color: var(--line-strong);
+	}
+
+	.save-file-btn:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 </style>

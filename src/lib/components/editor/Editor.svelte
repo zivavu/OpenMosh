@@ -34,6 +34,7 @@
 	import {
 		missingFilesNotice,
 		saveProjectFileAs,
+		type ProjectContent,
 	} from "../../project-file/export";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { createTrackStore } from "../../audio/track-persistence";
@@ -1398,25 +1399,46 @@
 		void saves.track("timeline", saveTimeline(key, entry)).then(reportSeqSave);
 	}
 
+	/** What's on screen, for a project file that doesn't wait on autosaves. */
+	function liveProject(): ProjectContent | null {
+		const render = renderKey ? loadRenderSettings(renderKey) : null;
+		if (isSequenceMode) {
+			const entry = seqEntryNow();
+			if (!entry) return null;
+			const media = sourceRegistry.sources.map((s) => ({
+				id: s.id,
+				file: s.file,
+			}));
+			return { mode: "sequence", entry, media, render };
+		}
+		if (!file) return null;
+		return {
+			mode: "single",
+			entry: seqEntryNow(),
+			state: singleStateNow(),
+			trackId: currentTrackId,
+			media: [{ id: stableSourceId(file), file }],
+			render,
+		};
+	}
+
 	/** Save the whole project as a `.openmosh` file: the timeline, its pool, songs and
 	 * fonts. The pending autosave is flushed first so the file matches what's on screen. */
 	async function saveProjectFile() {
-		if (!isSequenceMode || !projectKey) return;
+		const key = isSequenceMode ? projectKey : singleSessionKey;
+		if (!key) return;
 		flushSequenceSave();
 		flushMediaPoolSave();
 		// Cast: assigned in a callback, which TS can't see, so it would narrow to null.
 		let progress = null as number | null;
 		try {
-			const entry = seqEntryNow();
-			const media = sourceRegistry.sources.map((s) => ({
-				id: s.id,
-				file: s.file,
-			}));
-			const missing = await saveProjectFileAs(
-				projectKey,
-				entry ? { entry, media } : undefined,
-				() => (progress = showToast("Building the project file…", "info", 0)),
-			);
+			const live = liveProject() ?? undefined;
+			const missing = await saveProjectFileAs(key, {
+				mode: isSequenceMode ? "sequence" : "single",
+				live,
+				onBuild: () =>
+					(progress = showToast("Building the project file…", "info", 0)),
+			});
 			if (progress === null) return;
 			if (missing)
 				updateToast(progress, missingFilesNotice(missing), "info", 8000);
@@ -3387,6 +3409,16 @@
 			(moshSession.touched || textTimeline.lanes.length > 0),
 	);
 
+	function singleStateNow(): SingleSessionState {
+		const hasText = textTimeline.lanes.length > 0;
+		return {
+			effects: $state.snapshot(effects) as EffectInstance[],
+			text: hasText
+				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
+				: null,
+		};
+	}
+
 	function saveSingleSession() {
 		const source = file;
 		const heldAsNewer = !!seqStoreKey && newerTimelineKeys.has(seqStoreKey);
@@ -3394,13 +3426,7 @@
 			saves.drop("session");
 			return;
 		}
-		const hasText = textTimeline.lanes.length > 0;
-		const state: SingleSessionState = {
-			effects: $state.snapshot(effects) as EffectInstance[],
-			text: hasText
-				? layersAsLoaded($state.snapshot(textTimeline) as TextTimeline, "text")
-				: null,
-		};
+		const state = singleStateNow();
 		// Keyed by the song when there is one, alongside the text timeline and span.
 		const write = saveSession(
 			singleSessionKey!,
@@ -4434,16 +4460,14 @@
 					{notSaved}
 				>
 					{#snippet action()}
-						{#if isSequenceMode}
-							<button
-								class="save-file-btn"
-								title="Save the project as a file you can keep or share ({modKey}+Shift+S)"
-								aria-label="Save project file"
-								onclick={saveProjectFile}
-							>
-								<FolderDown size={14} />
-							</button>
-						{/if}
+						<button
+							class="save-file-btn"
+							title="Save the project as a file you can keep or share ({modKey}+Shift+S)"
+							aria-label="Save project file"
+							onclick={saveProjectFile}
+						>
+							<FolderDown size={14} />
+						</button>
 					{/snippet}
 				</SaveIndicator>
 			{/snippet}

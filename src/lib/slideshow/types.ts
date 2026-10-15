@@ -44,7 +44,7 @@ export interface SlideshowSlide {
 	proxyDisabled?: boolean;
 }
 
-import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "../text";
+import { EMPTY_TEXT_TIMELINE, type TextTimeline } from "../text/types";
 
 export interface SlideshowConfig {
 	bpm: number;

@@ -5,6 +5,7 @@ import { createSourceEdit } from "../media/source-edit";
 import { SEQ_ENTRY_VERSION, type SeqEntry } from "../editor/seq-entry";
 import {
 	parseManifest,
+	projectFileModeOf,
 	PROJECT_FORMAT,
 	PROJECT_VERSION,
 	remapProject,
@@ -105,6 +106,85 @@ describe("parseManifest", () => {
 		expect(() => parseManifest(manifest)).toThrow(
 			"That project file has a file in the wrong place",
 		);
+	});
+});
+
+describe("parseManifest on single and slideshow edits", () => {
+	it("reads a file with no mode as an editor project", () => {
+		const m = parseManifest({ ...validManifest(), version: 1 });
+		expect(m.mode).toBe("sequence");
+		expect(m.state).toBeUndefined();
+	});
+
+	it("rejects a mode it doesn't know", () => {
+		expect(() =>
+			parseManifest({ ...validManifest(), mode: "collage" }),
+		).toThrow("Made by a newer OpenMosh; update and try again");
+	});
+
+	it("still needs a timeline for an editor project, but not for a slideshow", () => {
+		const { entry: _, ...noEntry } = validManifest();
+		expect(() => parseManifest(noEntry)).toThrow(
+			"That project file has no timeline",
+		);
+		const m = parseManifest({ ...noEntry, mode: "slideshow", state: {} });
+		expect(m.entry).toBeNull();
+	});
+
+	it("keeps a single edit's effects and text, and a song it names", () => {
+		const m = parseManifest({
+			...validManifest(),
+			mode: "single",
+			trackId: "song-1",
+			state: { effects: [{ defId: "x" }, 5, null], text: "nope" },
+		});
+		expect(m.state).toEqual({ effects: [{ defId: "x" }], text: null });
+		expect(m.trackId).toBe("song-1");
+	});
+
+	it("keeps only slideshow settings of the type they should be", () => {
+		const m = parseManifest({
+			...validManifest(),
+			mode: "slideshow",
+			state: {
+				config: {
+					bpm: "fast",
+					beatOffset: Infinity,
+					moshMode: "smooth",
+					moshAudioLink: true,
+					smoothSpeed: 3,
+					segments: [
+						{ id: "a", startTime: 2, subdivision: 1 },
+						{ id: "b", startTime: "later" },
+						{ startTime: 1 },
+					],
+					text: [],
+					extra: 1,
+				},
+			},
+		});
+		expect(m.state).toEqual({
+			config: {
+				moshMode: "smooth",
+				moshAudioLink: true,
+				smoothSpeed: 3,
+				segments: [{ id: "a", startTime: 2, subdivision: 1 }],
+			},
+		});
+		expect(m.entry).toBeNull();
+	});
+});
+
+describe("projectFileModeOf", () => {
+	it("reads each mode's extension, whatever its case", () => {
+		expect(projectFileModeOf("a.openmosh")).toBe("sequence");
+		expect(projectFileModeOf("a.OpenMosh-Single")).toBe("single");
+		expect(projectFileModeOf("a.openmosh-slideshow")).toBe("slideshow");
+	});
+
+	it("knows no other file, a backup included", () => {
+		expect(projectFileModeOf("a.openmosh-backup")).toBeNull();
+		expect(projectFileModeOf("a.zip")).toBeNull();
 	});
 });
 
