@@ -32,8 +32,7 @@
 	import type { AudioLinkGroup } from "../../audio/audio-utils";
 	import { downloadBlob } from "../../recorder";
 	import {
-		missingFilesNotice,
-		saveProjectFileAs,
+		downloadProjectFile,
 		type ProjectContent,
 	} from "../../project-file/export";
 	import type { AudioResponse } from "../../audio/auto-range";
@@ -313,7 +312,7 @@
 	import RecordGroup from "./RecordGroup.svelte";
 	import RecordOverlay from "./RecordOverlay.svelte";
 	import ConfirmDialog from "../ui/ConfirmDialog.svelte";
-	import { showToast, dismissToast, updateToast } from "../ui/toast.svelte";
+	import { showToast } from "../ui/toast.svelte";
 	import { isLiveFile, liveStreamOf, stopLiveFile } from "../../webcam/camera";
 	import { lazy } from "../../lazy";
 	import {
@@ -1429,30 +1428,10 @@
 		if (!key) return;
 		flushSequenceSave();
 		flushMediaPoolSave();
-		// Cast: assigned in a callback, which TS can't see, so it would narrow to null.
-		let progress = null as number | null;
-		try {
-			const live = liveProject() ?? undefined;
-			const missing = await saveProjectFileAs(key, {
-				mode: isSequenceMode ? "sequence" : "single",
-				live,
-				onBuild: () =>
-					(progress = showToast("Building the project file…", "info", 0)),
-			});
-			if (progress === null) return;
-			if (missing)
-				updateToast(progress, missingFilesNotice(missing), "info", 8000);
-			else updateToast(progress, "Project file saved", "success");
-			progress = null;
-		} catch (e) {
-			showToast(
-				e instanceof Error ? e.message : "Couldn't save the project file",
-				"error",
-				8000,
-			);
-		} finally {
-			if (progress !== null) dismissToast(progress);
-		}
+		await downloadProjectFile(key, {
+			mode: isSequenceMode ? "sequence" : "single",
+			live: liveProject() ?? undefined,
+		});
 	}
 
 	// Reloading or closing mid-playback would lose the session: no pause settles the debounce.

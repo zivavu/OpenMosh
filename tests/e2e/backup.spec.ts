@@ -131,14 +131,6 @@ test("a backup loaded into another browser brings every byte back", async ({
 	baseURL,
 }) => {
 	failOnPageErrors(page);
-	// The file picker is a native dialog Playwright can't drive; take the download path.
-	await page.addInitScript(() => {
-		Object.defineProperty(window, "showSaveFilePicker", {
-			value: undefined,
-			configurable: true,
-		});
-	});
-
 	// A song-less single edit lives in the sessions store, not under a song.
 	// First: once the editor has run, the start screen opens on it, not on Single.
 	await openSingle(page, "lone.png", RED);

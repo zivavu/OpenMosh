@@ -53,11 +53,8 @@
 	import ConfirmDialog from "./ConfirmDialog.svelte";
 	import RenameInput from "./RenameInput.svelte";
 	import { showToast } from "./toast.svelte";
-	import { chooseSaveTarget, fmtAgo } from "../../utils";
-	import {
-		missingFilesNotice,
-		saveProjectFileAs,
-	} from "../../project-file/export";
+	import { downloadFile, fmtAgo } from "../../utils";
+	import { downloadProjectFile } from "../../project-file/export";
 	import {
 		BACKUP_EXTENSION,
 		backupFileName,
@@ -131,17 +128,9 @@
 		void refresh();
 	}
 
-	/** Save a project or edit to a `.openmosh` file without opening it. */
-	async function downloadProject(key: string, mode: ProjectMode = "sequence") {
-		try {
-			const missing = await saveProjectFileAs(key, { mode });
-			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
-		} catch (e) {
-			showToast(
-				e instanceof Error ? e.message : "Couldn't save that project",
-				"error",
-			);
-		}
+	/** Save a project or edit to a file without opening it. */
+	function downloadProject(key: string, mode: ProjectMode = "sequence") {
+		void downloadProjectFile(key, { mode });
 	}
 
 	/** Which backup step is running, for the button's label. */
@@ -152,11 +141,7 @@
 		busy = true;
 		backingUp = "save";
 		try {
-			const target = await chooseSaveTarget(backupFileName(), {
-				description: "OpenMosh backup",
-				accept: { "application/zip": [BACKUP_EXTENSION] },
-			});
-			if (target) await target.write(await buildBackup());
+			downloadFile(await buildBackup(), backupFileName());
 		} catch (e) {
 			console.error(e);
 			showToast("Couldn't build the backup", "error");

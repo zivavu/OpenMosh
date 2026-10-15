@@ -18,13 +18,6 @@ test.beforeEach(async ({ page }) => {
 	page.on("pageerror", (error) => {
 		throw new Error(`uncaught page error: ${error.message}`);
 	});
-	// The file picker is a native dialog Playwright can't drive; take the download path.
-	await page.addInitScript(() => {
-		Object.defineProperty(window, "showSaveFilePicker", {
-			value: undefined,
-			configurable: true,
-		});
-	});
 });
 
 async function saveProjectFile(page: Page, extension: string): Promise<string> {
