@@ -53,10 +53,7 @@
 	import { onOldHost, SITE_URL } from "../../site";
 	import { showToast } from "./toast.svelte";
 	import { fmtAgo } from "../../utils";
-	import {
-		missingFilesNotice,
-		saveProjectFileAs,
-	} from "../../project-file/export";
+	import { downloadProjectFile } from "../../project-file/export";
 	import { isModalKeyboardOpen } from "../../modal-keyboard";
 	import { isInteractiveTarget } from "../../editor/shortcut-target";
 	import {
@@ -270,16 +267,8 @@
 	}
 
 	/** Save a project or edit to a file without opening it. */
-	async function downloadProject(key: string, mode: ProjectFileMode) {
-		try {
-			const missing = await saveProjectFileAs(key, { mode });
-			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
-		} catch (e) {
-			showToast(
-				e instanceof Error ? e.message : "Couldn't save that project",
-				"error",
-			);
-		}
+	function downloadProject(key: string, mode: ProjectFileMode) {
+		void downloadProjectFile(key, { mode });
 	}
 
 	let dragging = $state(false);

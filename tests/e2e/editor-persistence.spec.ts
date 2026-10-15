@@ -107,14 +107,6 @@ test("a reload mid-edit doesn't lose the last change", async ({ page }) => {
 test("a project saved to a file comes back after storage is cleared", async ({
 	page,
 }) => {
-	// The file picker is a native dialog Playwright can't drive; take the download path.
-	await page.addInitScript(() => {
-		Object.defineProperty(window, "showSaveFilePicker", {
-			value: undefined,
-			configurable: true,
-		});
-	});
-
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],
@@ -181,13 +173,6 @@ test("a project saved to a file comes back after storage is cleared", async ({
 test("opening a file of a stored project offers that project back", async ({
 	page,
 }) => {
-	await page.addInitScript(() => {
-		Object.defineProperty(window, "showSaveFilePicker", {
-			value: undefined,
-			configurable: true,
-		});
-	});
-
 	await openEditor(page, {
 		sources: [
 			["red.png", RED],

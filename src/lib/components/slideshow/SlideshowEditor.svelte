@@ -54,12 +54,9 @@
 		probeSlideVideo,
 		SlideVideoSampler,
 	} from "../../slideshow/video-sampler";
-	import { dismissToast, showToast, updateToast } from "../ui/toast.svelte";
+	import { showToast } from "../ui/toast.svelte";
 	import { modKey } from "../../input-device";
-	import {
-		missingFilesNotice,
-		saveProjectFileAs,
-	} from "../../project-file/export";
+	import { downloadProjectFile } from "../../project-file/export";
 	import { shuffleInPlace } from "../../utils";
 	import { lazy } from "../../lazy";
 	import {
@@ -1692,38 +1689,19 @@
 			showToast("A slideshow saves with its song, so add one first.", "info");
 			return;
 		}
-		// Cast: assigned in a callback, which TS can't see, so it would narrow to null.
-		let progress = null as number | null;
-		try {
-			const missing = await saveProjectFileAs(ownSessionKey, {
-				live: {
-					mode: "slideshow",
-					entry: null,
-					state: { config: $state.snapshot(config) as SlideshowConfig },
-					trackId: currentTrackId,
-					media: slides.map((s) => ({
-						id: stableSourceId(s.file),
-						file: s.file,
-					})),
-					render: renderKey ? loadRenderSettings(renderKey) : null,
-				},
-				onBuild: () =>
-					(progress = showToast("Building the project file…", "info", 0)),
-			});
-			if (progress === null) return;
-			if (missing)
-				updateToast(progress, missingFilesNotice(missing), "info", 8000);
-			else updateToast(progress, "Project file saved", "success");
-			progress = null;
-		} catch (e) {
-			showToast(
-				e instanceof Error ? e.message : "Couldn't save the project file",
-				"error",
-				8000,
-			);
-		} finally {
-			if (progress !== null) dismissToast(progress);
-		}
+		await downloadProjectFile(ownSessionKey, {
+			live: {
+				mode: "slideshow",
+				entry: null,
+				state: { config: $state.snapshot(config) as SlideshowConfig },
+				trackId: currentTrackId,
+				media: slides.map((s) => ({
+					id: stableSourceId(s.file),
+					file: s.file,
+				})),
+				render: renderKey ? loadRenderSettings(renderKey) : null,
+			},
+		});
 	}
 
 	function handleKeydown(e: KeyboardEvent) {

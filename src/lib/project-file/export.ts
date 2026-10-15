@@ -36,7 +36,8 @@ import {
 	type ProjectPoolEntry,
 	type ProjectSongEntry,
 } from "./manifest";
-import { chooseSaveTarget } from "../utils";
+import { showToast, updateToast } from "../components/ui/toast.svelte";
+import { downloadFile } from "../utils";
 import { writeZip, type ZipEntryInput } from "./zip";
 
 export interface ProjectFileResult {
@@ -72,12 +73,6 @@ export function projectFileName(
 		.replace(/^-+|-+$/g, "");
 	return `${base || "openmosh-project"}${PROJECT_EXTENSIONS[mode]}`;
 }
-
-const FILE_DESCRIPTIONS: Record<ProjectFileMode, string> = {
-	sequence: "OpenMosh project",
-	single: "OpenMosh single edit",
-	slideshow: "OpenMosh slideshow",
-};
 
 /** The notice for pool files whose bytes were gone, so the file went without them. */
 export function missingFilesNotice(missing: number): string {
@@ -319,25 +314,24 @@ export async function buildProjectFile(
 	return { blob, name: projectFileName(name, content.mode), missing };
 }
 
-/** Ask where to save, then build and write the file. Asked first: the picker only
- * opens on the click that asked for it, and building a big project outlasts that.
- * `onBuild` runs once a place is picked. Null when the picker was cancelled, else
- * how many pool files were missing. */
-export async function saveProjectFileAs(
+/** Build the file and download it, with a toast while it builds and when it's done. */
+export async function downloadProjectFile(
 	key: string,
-	options: ProjectFileOptions & { onBuild?: () => void } = {},
-): Promise<number | null> {
-	const { content } = await projectContent(key, options);
-	const target = await chooseSaveTarget(
-		projectFileName(await projectName(key, content), content.mode),
-		{
-			description: FILE_DESCRIPTIONS[content.mode],
-			accept: { "application/zip": [PROJECT_EXTENSIONS[content.mode]] },
-		},
-	);
-	if (!target) return null;
-	options.onBuild?.();
-	const { blob, missing } = await buildProjectFile(key, options);
-	await target.write(blob);
-	return missing;
+	options: ProjectFileOptions = {},
+): Promise<void> {
+	const progress = showToast("Building the project file…", "info", 0);
+	try {
+		const { blob, name, missing } = await buildProjectFile(key, options);
+		downloadFile(blob, name);
+		if (missing) {
+			updateToast(progress, missingFilesNotice(missing), "info", 8000);
+		} else updateToast(progress, "Project file downloaded", "success");
+	} catch (e) {
+		updateToast(
+			progress,
+			e instanceof Error ? e.message : "Couldn't save the project file",
+			"error",
+			8000,
+		);
+	}
 }
