@@ -514,6 +514,7 @@
 				<span class="tl-tool-label">{label}</span>
 				<select
 					class="audio-select"
+					aria-label={label}
 					value={value === undefined ? "" : String(value)}
 					onchange={(e) => {
 						const v = e.currentTarget.value;

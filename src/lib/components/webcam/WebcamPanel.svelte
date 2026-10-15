@@ -273,6 +273,7 @@
 		<div class="ctrl">
 			<span class="label">Camera</span>
 			<select
+				aria-label="Camera"
 				value={deviceId ?? ""}
 				disabled={busy || cameras.length < 2}
 				onchange={(e) => void open(e.currentTarget.value || null)}
