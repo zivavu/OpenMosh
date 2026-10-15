@@ -28,7 +28,9 @@ const { createAudioClip, createAudioLane } = await import("../mix/types");
 const { createSourceEdit } = await import("../media/source-edit");
 const { createTextClip, createTextLane } = await import("../text/types");
 const { buildProjectFile } = await import("./export");
-const { openProjectFile } = await import("./import");
+const { findStoredCopy, readProjectFile, storeProjectFile } =
+	await import("./import");
+type ImportProgress = import("./import").ProjectImportProgress;
 const { writeZip } = await import("./zip");
 
 import v0 from "../editor/fixtures/seq-entry/v0.json";
@@ -36,6 +38,13 @@ import v2 from "../editor/fixtures/seq-entry/v2.json";
 import v3 from "../editor/fixtures/seq-entry/v3.json";
 
 const OPENED = "opened-file";
+
+async function openProjectFile(
+	blob: Blob,
+	onProgress?: (p: ImportProgress) => void,
+): Promise<string> {
+	return storeProjectFile(await readProjectFile(blob), onProgress);
+}
 
 function mediaFile(name: string, size: number, mtime: number): File {
 	return new File([new Uint8Array(size).fill(7)], name, {
@@ -197,6 +206,55 @@ describe("a project file round trip", () => {
 		expect(fractions.at(-1)).toBe(1);
 		expect(fractions).toEqual([...fractions].sort((x, y) => x - y));
 		expect(seen.at(-1)).toEqual({ stage: "storing" });
+	});
+
+	test("finds the stored project a file is an unchanged copy of", async () => {
+		const key = "proj-same";
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(key, [a.id]);
+		const trackId = await seedTrack("song.wav", 500);
+		const lane = createMediaLane("Layer 1", a.id);
+		lane.clips = [createMediaClip(0, 8, 0, a.id)];
+		await store.putTimeline(`seq:${key}`, {
+			v: 3,
+			song: trackId,
+			length: 10,
+			media: { enabled: true, lanes: [lane], audioLanes: [] },
+		});
+		setProjectName(key, "Same");
+		const built = await buildProjectFile(key);
+
+		const copy = await findStoredCopy(await readProjectFile(built.blob));
+		expect(copy).toEqual({ key, name: "Same" });
+
+		// What an import stores is found as the same project the next time.
+		const imported = await openProjectFile(built.blob);
+		await store.deleteMediaPool(key);
+		const again = await findStoredCopy(await readProjectFile(built.blob));
+		expect(again?.key).toBe(imported);
+	});
+
+	test("finds no copy once the stored project has changed", async () => {
+		const key = "proj-changed";
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(key, [a.id]);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10 });
+		const built = await buildProjectFile(key);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 12 });
+
+		expect(await findStoredCopy(await readProjectFile(built.blob))).toBeNull();
+	});
+
+	test("finds no copy when the song isn't in the library", async () => {
+		const key = "proj-songless";
+		const a = await seedMedia("a.png", 100, 1000);
+		await store.saveMediaPool(key, [a.id]);
+		const trackId = await seedTrack("song.wav", 500);
+		await store.putTimeline(`seq:${key}`, { v: 3, song: trackId, length: 10 });
+		const built = await buildProjectFile(key);
+		await tracks.clearTracks();
+
+		expect(await findStoredCopy(await readProjectFile(built.blob))).toBeNull();
 	});
 
 	test("names the song of a project keyed by it", async () => {

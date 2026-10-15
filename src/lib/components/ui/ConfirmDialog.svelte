@@ -7,6 +7,9 @@
 		cancelLabel?: string;
 		/** Tints the confirm button red for destructive actions. */
 		danger?: boolean;
+		/** A second way forward, between cancel and confirm. */
+		altLabel?: string;
+		onAlt?: () => void;
 		onConfirm: () => void;
 		onCancel: () => void;
 	}
@@ -17,6 +20,8 @@
 		confirmLabel = "Confirm",
 		cancelLabel = "Cancel",
 		danger = false,
+		altLabel,
+		onAlt,
 		onConfirm,
 		onCancel,
 	}: Props = $props();
@@ -53,6 +58,9 @@
 		<p class="message">{message}</p>
 		<div class="actions">
 			<button class="btn cancel-btn" onclick={onCancel}>{cancelLabel}</button>
+			{#if altLabel && onAlt}
+				<button class="btn" onclick={onAlt}>{altLabel}</button>
+			{/if}
 			<button
 				bind:this={confirmBtnEl}
 				class="btn confirm-btn"
