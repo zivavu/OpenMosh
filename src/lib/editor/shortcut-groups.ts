@@ -217,6 +217,7 @@ export function slideshowShortcutGroups(opts: {
 			shortcuts: [
 				{ keys: ["Space"], description: "Play or pause the preview" },
 				{ keys: ["Esc"], description: "Stop the preview" },
+				FULLSCREEN,
 				MOSH,
 				...UNDO,
 				SAVE_FRAME,
