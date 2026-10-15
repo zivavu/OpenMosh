@@ -70,11 +70,14 @@ async function availableName(
 export type ProjectImportProgress =
 	{ stage: "checking"; fraction: number } | { stage: "storing" };
 
-/** What the upload screen shows while a project file opens. */
+/** What the opening card shows while a project file, or anything else that can
+ * take a moment, opens. */
 export interface ProjectOpening {
 	name: string;
 	stage: ProjectImportProgress["stage"] | "opening";
 	percent: number;
+	/** Shown only if it's still going after a moment, so a quick open doesn't flash. */
+	quiet?: boolean;
 }
 
 /** A project file whose manifest has been read; its media is still unchecked. */

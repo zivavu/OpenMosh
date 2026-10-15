@@ -3,6 +3,11 @@
 	import { onMount, untrack } from "svelte";
 	import UploadScreen from "./lib/components/ui/UploadScreen.svelte";
 	import ToastContainer from "./lib/components/ui/ToastContainer.svelte";
+	import {
+		projectKeyForSession,
+		readProjectNames,
+	} from "./lib/editor/project-names";
+	import OpeningCard from "./lib/components/ui/OpeningCard.svelte";
 	import AppError from "./lib/components/ui/AppError.svelte";
 	import { lazy } from "./lib/lazy";
 
@@ -230,32 +235,57 @@
 		/** Opened in place of the edit the editor has open. */
 		replacing = false,
 	): Promise<boolean> {
-		const opened = await openSession(key);
-		if (!opened) return false;
-		rememberLastOpened({ mode, key });
-		// Older single sessions stored layer media after the source; only the source
-		// is wanted now.
-		const files =
-			mode === "single"
-				? [await gifToVideo(opened.files[0])]
-				: await gifsToVideo(opened.files);
-		if (replacing) releaseWarm();
-		// The song comes back too, so the per-song text timeline and segments the
-		// editor restores have the track they're keyed to.
-		pendingAudioFile = opened.trackFile;
-		sessionTrackId = opened.trackId;
-		sessionKey = key;
-		openKey = key;
-		if (mode === "single") {
-			restoredSingle = opened.state as SingleSessionState;
-			file = files[0];
-		} else {
-			const state = opened.state as { config?: SlideshowConfig } | null;
-			restoredSlideshowConfig = state?.config ?? null;
-			slideshowFiles = files;
+		return whileOpening(
+			readProjectNames()[projectKeyForSession(key)] ?? "",
+			async () => {
+				const opened = await openSession(key);
+				if (!opened) return false;
+				rememberLastOpened({ mode, key });
+				// Older single sessions stored layer media after the source; only the source
+				// is wanted now.
+				const files =
+					mode === "single"
+						? [await gifToVideo(opened.files[0])]
+						: await gifsToVideo(opened.files);
+				if (replacing) releaseWarm();
+				// The song comes back too, so the per-song text timeline and segments the
+				// editor restores have the track they're keyed to.
+				pendingAudioFile = opened.trackFile;
+				sessionTrackId = opened.trackId;
+				sessionKey = key;
+				openKey = key;
+				if (mode === "single") {
+					restoredSingle = opened.state as SingleSessionState;
+					file = files[0];
+				} else {
+					const state = opened.state as { config?: SlideshowConfig } | null;
+					restoredSlideshowConfig = state?.config ?? null;
+					slideshowFiles = files;
+				}
+				navigateTo(mode, false, key);
+				return true;
+			},
+		);
+	}
+
+	/** Run an open that can take a moment (stored media, GIFs turned into video) behind
+	 * the opening card, which only shows if it does. Inside an open already showing
+	 * the card, it just runs. */
+	async function whileOpening<T>(
+		name: string,
+		run: () => Promise<T>,
+	): Promise<T> {
+		if (projectOpening) return run();
+		projectOpening = { name, stage: "opening", percent: 0, quiet: true };
+		try {
+			return await run();
+		} finally {
+			projectOpening = null;
 		}
-		navigateTo(mode, false, key);
-		return true;
+	}
+
+	function filesName(files: File[]): string {
+		return files.length === 1 ? files[0].name : `${files.length} files`;
 	}
 
 	/** Reopen a song's saved sequence: its media becomes the pool, and the song
@@ -265,18 +295,20 @@
 		/** Opened from inside the editor, in place of the project it has open. */
 		replacing = false,
 	): Promise<boolean> {
-		const opened = await openSavedSequence(trackId);
-		if (!opened) return false;
-		rememberLastOpened({ mode: "sequence", key: trackId });
-		const files = await gifsToVideo(opened.sources);
-		if (replacing) releaseWarm();
-		sequenceFiles = files;
-		pendingAudioFile = opened.trackFile;
-		sequenceTrackId = opened.trackFile ? opened.trackId : null;
-		sequenceProjectKey = opened.trackId;
-		openKey = opened.trackId;
-		navigateTo("sequence", false, opened.trackId);
-		return true;
+		return whileOpening(readProjectNames()[trackId] ?? "", async () => {
+			const opened = await openSavedSequence(trackId);
+			if (!opened) return false;
+			rememberLastOpened({ mode: "sequence", key: trackId });
+			const files = await gifsToVideo(opened.sources);
+			if (replacing) releaseWarm();
+			sequenceFiles = files;
+			pendingAudioFile = opened.trackFile;
+			sequenceTrackId = opened.trackFile ? opened.trackId : null;
+			sequenceProjectKey = opened.trackId;
+			openKey = opened.trackId;
+			navigateTo("sequence", false, opened.trackId);
+			return true;
+		});
 	}
 
 	/** A project file on its way in; the editor's own loading takes over once it opens. */
@@ -500,7 +532,10 @@
 					initialTrackId={sequenceTrackId}
 					initialProjectKey={sequenceProjectKey}
 					onfile={async (f: File) =>
-						(sequenceFiles = [await gifToVideo(f), ...sequenceFiles.slice(1)])}
+						(sequenceFiles = [
+							await whileOpening(f.name, () => gifToVideo(f)),
+							...sequenceFiles.slice(1),
+						])}
 					{warmCanvas}
 					{warmRenderer}
 					onExit={exitToUpload}
@@ -524,7 +559,8 @@
 					initialTrackId={sessionTrackId}
 					initialSession={restoredSingle}
 					sessionKey={sessionKey ?? newSessionKey("single")}
-					onfile={async (f: File) => (file = await gifToVideo(f))}
+					onfile={async (f: File) =>
+						(file = await whileOpening(f.name, () => gifToVideo(f)))}
 					{warmCanvas}
 					{warmRenderer}
 					onExit={exitToUpload}
@@ -540,32 +576,40 @@
 	{:else}
 		<UploadScreen
 			onfile={async (f: File) => {
+				if (projectOpening) return;
 				forgetLastOpened();
 				sessionKey = newSessionKey("single");
-				file = await gifToVideo(f);
+				file = await whileOpening(f.name, () => gifToVideo(f));
 				navigateTo("single");
 			}}
 			onSequence={async (files: File[]) => {
+				if (projectOpening) return;
 				forgetLastOpened();
-				sequenceFiles = await gifsToVideo(files);
+				sequenceFiles = await whileOpening(filesName(files), () =>
+					gifsToVideo(files),
+				);
 				navigateTo("sequence");
 			}}
 			onSequenceFromSong={async (trackId: string) => {
+				if (projectOpening) return;
 				if (!(await openSequenceFromSong(trackId))) {
 					showToast("That project is no longer stored", "error");
 				}
 			}}
 			onProjectFile={openProjectFromFile}
-			projectOpening={storedCopy ? null : projectOpening}
 			onSessionOpen={async (mode: SessionMode, key: string) => {
+				if (projectOpening) return;
 				if (!(await openSessionByKey(mode, key))) {
 					showToast("That session's media is no longer stored", "error");
 				}
 			}}
 			onSlideshow={async (files: File[]) => {
+				if (projectOpening) return;
 				forgetLastOpened();
 				sessionKey = newSessionKey("slideshow");
-				slideshowFiles = await gifsToVideo(files);
+				slideshowFiles = await whileOpening(filesName(files), () =>
+					gifsToVideo(files),
+				);
 				navigateTo("slideshow");
 			}}
 			onaudio={(f: File) => (pendingAudioFile = f)}
@@ -599,6 +643,10 @@
 	{:catch}
 		<LoadFailed onclose={reportLossesPlainly} />
 	{/await}
+{/if}
+
+{#if projectOpening && !storedCopy}
+	<OpeningCard opening={projectOpening} />
 {/if}
 
 {#if storedCopy}
