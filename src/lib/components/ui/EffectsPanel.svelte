@@ -39,6 +39,7 @@
 	import type { SpectrumData } from "../../types";
 	import type { AudioResponse } from "../../audio/auto-range";
 	import { moveItem, resolveMoveTarget } from "../../effects/reorder";
+	import { effectMatchesSearch } from "../../effects/search";
 	import {
 		FREQ_BAND_OPTIONS,
 		hasVolumeLinks,
@@ -375,8 +376,7 @@
 				const def = EFFECT_DEFINITIONS.find((d) => d.id === effect.defId);
 				// A switched-on one stays, so nothing renders that the list doesn't show.
 				if (def?.needsAudio && !hasTrack && !inLiveGroup(effect)) return false;
-				if (!searchQuery) return true;
-				return def?.name.toLowerCase().includes(searchQuery.toLowerCase());
+				return !searchQuery || (!!def && effectMatchesSearch(def, searchQuery));
 			});
 		if (!liveFirst) return rows;
 		return [
@@ -401,9 +401,7 @@
 
 	let filteredHiddenDefs = $derived(
 		searchQuery
-			? hiddenDefs.filter((def) =>
-					def.name.toLowerCase().includes(searchQuery.toLowerCase()),
-				)
+			? hiddenDefs.filter((def) => effectMatchesSearch(def, searchQuery))
 			: hiddenDefs,
 	);
 
