@@ -5,8 +5,8 @@
 		onSequence: (files: File[]) => void;
 		/** Reopen a song's saved sequence, no media picking needed. */
 		onSequenceFromSong: (trackId: string) => void;
-		/** A `.openmosh` file dropped or picked; the app imports and opens it. */
-		onProjectFile: (file: File) => void;
+		/** A project file dropped or picked on this mode; the app imports and opens it. */
+		onProjectFile: (file: File, mode: ProjectFileMode) => void;
 		/** The project file being opened, while it is. */
 		projectOpening?: ProjectOpening | null;
 		onSessionOpen: (mode: SessionMode, key: string) => void;
@@ -20,7 +20,6 @@
 	import {
 		Camera,
 		Download,
-		FolderOpen,
 		HardDrive,
 		Image,
 		Info,
@@ -72,6 +71,11 @@
 	} from "../../editor/sessions";
 	import type { SessionMode } from "../../editor/sequence-media-store";
 	import type { ProjectOpening } from "../../project-file/import";
+	import {
+		PROJECT_EXTENSIONS,
+		projectFileModeOf,
+		type ProjectFileMode,
+	} from "../../project-file/manifest";
 	import {
 		projectKeyForSession,
 		readProjectNames,
@@ -183,8 +187,8 @@
 		updatedAt: number;
 		title: string;
 		open: () => void;
-		/** Editor projects can be saved to a file; sessions can't. */
-		download?: () => void;
+		/** Save it to a project file. */
+		download: () => void;
 	}
 	let recentRows = $derived<RecentRow[]>(
 		selectedMode === "sequence"
@@ -201,7 +205,7 @@
 						updateSettings({ lastMode: "sequence" });
 						onSequenceFromSong(seq.trackId);
 					},
-					download: () => downloadProject(seq.trackId),
+					download: () => downloadProject(seq.trackId, "sequence"),
 				}))
 			: savedForMode.map((session) => {
 					const projectKey = projectKeyForSession(session.key);
@@ -219,6 +223,7 @@
 							updateSettings({ lastMode: selectedMode });
 							onSessionOpen(session.mode, session.key);
 						},
+						download: () => downloadProject(session.key, session.mode),
 					};
 				}),
 	);
@@ -264,10 +269,10 @@
 		projectNames = readProjectNames();
 	}
 
-	/** Save a project to a `.openmosh` file without opening it. */
-	async function downloadProject(projectKey: string) {
+	/** Save a project or edit to a file without opening it. */
+	async function downloadProject(key: string, mode: ProjectFileMode) {
 		try {
-			const missing = await saveProjectFileAs(projectKey);
+			const missing = await saveProjectFileAs(key, { mode });
 			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
 		} catch (e) {
 			showToast(
@@ -305,7 +310,7 @@
 	function onProjectInputChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
-		if (file) onProjectFile(file);
+		if (file) onProjectFile(file, selectedMode);
 		input.value = "";
 	}
 
@@ -347,9 +352,10 @@
 		return ACCEPTED_EXTENSIONS.includes(getExtension(file.name));
 	}
 
-	/** A saved project file; it opens the Editor whatever mode is showing. */
+	/** A saved project file of any mode; one from another mode is turned down with
+	 * where to open it. */
 	function isProjectFile(file: File) {
-		return file.name.toLowerCase().endsWith(".openmosh");
+		return projectFileModeOf(file.name) !== null;
 	}
 
 	function isAudioFile(file: File) {
@@ -391,7 +397,7 @@
 
 	function handleFile(file: File) {
 		if (isProjectFile(file)) {
-			onProjectFile(file);
+			onProjectFile(file, selectedMode);
 			return;
 		}
 		if (!isAcceptedFile(file)) {
@@ -405,7 +411,7 @@
 		const all = Array.from(files);
 		const project = all.find(isProjectFile);
 		if (project) {
-			onProjectFile(project);
+			onProjectFile(project, selectedMode);
 			return;
 		}
 		const accepted = all.filter((f) => isAcceptedFile(f));
@@ -517,7 +523,7 @@
 		const all = Array.from(files);
 		const project = all.find(isProjectFile);
 		if (project) {
-			onProjectFile(project);
+			onProjectFile(project, selectedMode);
 			return;
 		}
 
@@ -554,7 +560,7 @@
 
 		const project = Array.from(input.files).find(isProjectFile);
 		if (project) {
-			onProjectFile(project);
+			onProjectFile(project, selectedMode);
 			input.value = "";
 			return;
 		}
@@ -574,7 +580,7 @@
 			...ACCEPTED_EXTENSIONS,
 			...(takesSvg ? ["image/svg+xml", ".svg"] : []),
 			...models,
-			".openmosh",
+			PROJECT_EXTENSIONS[selectedMode],
 		].join(",");
 	}
 	function getIsMultiple() {
@@ -766,16 +772,6 @@
 						Webcam
 					</button>
 				{/if}
-				{#if selectedMode === "sequence"}
-					<button
-						class="load-btn alt-btn"
-						onclick={openProjectPicker}
-						onkeydown={(e) => e.stopPropagation()}
-					>
-						<FolderOpen size={16} />
-						Open project
-					</button>
-				{/if}
 			</div>
 
 			<p class="drop-hint" class:staged={stagedMedia}>
@@ -786,17 +782,27 @@
 					or drop images, videos, 3D models or a project file anywhere on this
 					panel
 				{:else if isMultiMode}
-					or drop images and videos anywhere on this panel
+					or drop images, videos or a project file anywhere on this panel
 				{:else}
-					or drop an image or video anywhere on this panel
+					or drop an image, a video or a project file anywhere on this panel
 				{/if}
 			</p>
 
-			{#if !stagedMedia}
-				<button class="sample-btn" onclick={trySample} disabled={sampling}>
-					{sampling ? "Making a sample…" : "No file handy? Try a sample"}
+			<div class="link-row">
+				<button
+					class="link-btn"
+					onclick={openProjectPicker}
+					onkeydown={(e) => e.stopPropagation()}
+				>
+					Open a project file
 				</button>
-			{/if}
+				{#if !stagedMedia}
+					<span class="link-sep" aria-hidden="true">·</span>
+					<button class="link-btn" onclick={trySample} disabled={sampling}>
+						{sampling ? "Making a sample…" : "No file handy? Try a sample"}
+					</button>
+				{/if}
+			</div>
 		</div>
 
 		{#if pendingAudio}
@@ -862,7 +868,7 @@
 	<input
 		bind:this={projectInput}
 		type="file"
-		accept=".openmosh"
+		accept={PROJECT_EXTENSIONS[selectedMode]}
 		onchange={onProjectInputChange}
 		hidden
 	/>
@@ -972,16 +978,14 @@
 								{/if}
 								<span class="saved-when">{fmtAgo(row.updatedAt)}</span>
 							</button>
-							{#if row.download}
-								<button
-									class="saved-action"
-									title="Save to a project file"
-									aria-label={`Save ${row.label} to a file`}
-									onclick={row.download}
-								>
-									<Download size={12} />
-								</button>
-							{/if}
+							<button
+								class="saved-action"
+								title="Save to a project file"
+								aria-label={`Save ${row.label} to a file`}
+								onclick={row.download}
+							>
+								<Download size={12} />
+							</button>
 							<button
 								class="saved-action"
 								title="Rename"
@@ -1692,8 +1696,20 @@
 		color: var(--live);
 	}
 
-	.sample-btn {
-		align-self: center;
+	.link-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: center;
+		gap: 0.15rem 0.35rem;
+	}
+
+	.link-sep {
+		color: var(--text-4);
+		font-size: 0.78rem;
+	}
+
+	.link-btn {
 		padding: 0.2rem 0.4rem;
 		border: none;
 		background: none;
@@ -1705,11 +1721,11 @@
 		transition: color var(--t);
 	}
 
-	.sample-btn:hover:not(:disabled) {
+	.link-btn:hover:not(:disabled) {
 		color: var(--text);
 	}
 
-	.sample-btn:disabled {
+	.link-btn:disabled {
 		cursor: progress;
 	}
 

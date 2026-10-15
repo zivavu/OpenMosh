@@ -186,7 +186,7 @@ export function editorShortcutGroups(opts: {
 				...(sequence ? [] : [MOSH]),
 				...UNDO,
 				SAVE_FRAME,
-				...(sequence ? [SAVE_PROJECT] : []),
+				SAVE_PROJECT,
 				...(sequence
 					? []
 					: [
@@ -220,6 +220,7 @@ export function slideshowShortcutGroups(opts: {
 				MOSH,
 				...UNDO,
 				SAVE_FRAME,
+				SAVE_PROJECT,
 			],
 		},
 		TIMELINE,

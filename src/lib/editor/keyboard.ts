@@ -3,7 +3,7 @@ import { isInteractiveTarget, isTextEntryTarget } from "./shortcut-target";
 
 export interface KeyboardActions {
 	save: () => void;
-	/** Ctrl/Cmd+Shift+S: save the whole project as a file (Editor mode). */
+	/** Ctrl/Cmd+Shift+S: save the whole project as a file. */
 	saveProject: () => void;
 	/** → : step forward through the mosh history, or roll a new mosh at its top. */
 	mosh: () => void;

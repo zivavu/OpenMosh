@@ -36,14 +36,25 @@ const { writeZip } = await import("./zip");
 import v0 from "../editor/fixtures/seq-entry/v0.json";
 import v2 from "../editor/fixtures/seq-entry/v2.json";
 import v3 from "../editor/fixtures/seq-entry/v3.json";
+import projectV1 from "./fixtures/v1.json";
+import projectV2Single from "./fixtures/v2-single.json";
+import projectV2Slideshow from "./fixtures/v2-slideshow.json";
+import type { ProjectManifest } from "./manifest";
+
+const PROJECT_FIXTURES = {
+	v1: projectV1,
+	"v2 single": projectV2Single,
+	"v2 slideshow": projectV2Slideshow,
+} as unknown as Record<string, ProjectManifest>;
 
 const OPENED = "opened-file";
 
+/** Import a file, returning where it landed. */
 async function openProjectFile(
 	blob: Blob,
 	onProgress?: (p: ImportProgress) => void,
 ): Promise<string> {
-	return storeProjectFile(await readProjectFile(blob), onProgress);
+	return (await storeProjectFile(await readProjectFile(blob), onProgress)).key;
 }
 
 function mediaFile(name: string, size: number, mtime: number): File {
@@ -225,7 +236,7 @@ describe("a project file round trip", () => {
 		const built = await buildProjectFile(key);
 
 		const copy = await findStoredCopy(await readProjectFile(built.blob));
-		expect(copy).toEqual({ key, name: "Same" });
+		expect(copy).toEqual({ mode: "sequence", key, name: "Same" });
 
 		// What an import stores is found as the same project the next time.
 		const imported = await openProjectFile(built.blob);
@@ -280,11 +291,14 @@ describe("a project file round trip", () => {
 		const freshId = store.stableSourceId(fresh);
 
 		const built = await buildProjectFile(key, {
-			entry: { v: 3, length: 10 },
-			media: [
-				{ id: a.id, file: mediaFile("a.png", 100, 1000) },
-				{ id: freshId, file: fresh },
-			],
+			live: {
+				mode: "sequence",
+				entry: { v: 3, length: 10 },
+				media: [
+					{ id: a.id, file: mediaFile("a.png", 100, 1000) },
+					{ id: freshId, file: fresh },
+				],
+			},
 		});
 		const newKey = await openProjectFile(built.blob);
 		expect(await store.loadMediaPool(newKey)).toEqual([a.id, freshId]);
@@ -313,6 +327,174 @@ describe("a project file round trip", () => {
 		const newKey = await openProjectFile(built.blob);
 		expect(readProjectNames()[newKey]).toBe("Shared name (copy)");
 	});
+});
+
+describe("single and slideshow edits", () => {
+	async function seedSingle() {
+		const key = "single:p:test";
+		const a = await seedMedia("clip.mp4", 300, 3000);
+		const trackId = await seedTrack("beat.wav", 400);
+		const text = createTextLane("Text 1");
+		text.clips = [createTextClip(0, 2, "HI")];
+		const state = {
+			effects: [
+				{
+					instanceId: "fx-1",
+					defId: "rgbShift",
+					enabled: true,
+					locked: false,
+					expanded: false,
+					values: { amount: 0.4 },
+				},
+			],
+			text: { enabled: true, lanes: [text] },
+		};
+		await store.putSession({
+			key,
+			mode: "single",
+			label: "clip.mp4",
+			trackId,
+			sourceIds: [a.id],
+			state,
+		});
+		await store.putTimeline(key, { v: 4, song: trackId, sourceEdits: {} });
+		saveRenderSettings(key, { fps: 25, duration: 6 });
+		setProjectName(key, "My single");
+		return { key, a, trackId, state };
+	}
+
+	test("a single edit comes back as a single edit", async () => {
+		const { key, a, state } = await seedSingle();
+		const built = await buildProjectFile(key, { mode: "single" });
+		expect(built.name).toBe("My-single.openmosh-single");
+		await store.clearAllSequenceStores();
+		await tracks.clearTracks();
+		localData.clear();
+
+		const landed = await storeProjectFile(await readProjectFile(built.blob));
+		expect(landed.mode).toBe("single");
+		expect(landed.key.startsWith("single:p:")).toBe(true);
+		const session = await store.getSession(landed.key);
+		const [song] = await tracks.getAllTracks();
+		expect(session?.mode).toBe("single");
+		expect(session?.sourceIds).toEqual([a.id]);
+		expect(session?.trackId).toBe(song.id);
+		expect(session?.state).toEqual(state);
+		expect(await store.getTimeline(landed.key)).toMatchObject({
+			song: song.id,
+		});
+		expect(loadRenderSettings(landed.key)).toEqual({ fps: 25, duration: 6 });
+		expect(readProjectNames()[landed.key]).toBe("My single");
+	});
+
+	test("a slideshow comes back with its slides in order and its song", async () => {
+		const key = "slideshow:p:test";
+		const a = await seedMedia("one.png", 100, 1000);
+		const b = await seedMedia("two.png", 200, 2000);
+		const trackId = await seedTrack("song.wav", 500);
+		const config = {
+			bpm: 140,
+			beatOffset: 0.2,
+			subdivision: 0.5,
+			moshMode: "smooth",
+			moshMin: 1,
+			moshMax: 4,
+			smoothSpeed: 2,
+			moshAudioLink: true,
+			moshAudioLinkStrength: 0.5,
+			segments: [{ id: "seg-1", startTime: 4, subdivision: 1 }],
+			text: { enabled: false, lanes: [] },
+			outputVolume: 0.8,
+		};
+		await store.putSession({
+			key,
+			mode: "slideshow",
+			label: "song.wav",
+			trackId,
+			sourceIds: [b.id, a.id],
+			state: { config },
+		});
+		saveRenderSettings(`slideshow:${trackId}`, { width: 1080, height: 1080 });
+		const built = await buildProjectFile(key, { mode: "slideshow" });
+		expect(built.name).toBe("song.wav.openmosh-slideshow");
+		await store.clearAllSequenceStores();
+		await tracks.clearTracks();
+		localData.clear();
+
+		const landed = await storeProjectFile(await readProjectFile(built.blob));
+		expect(landed.mode).toBe("slideshow");
+		const session = await store.getSession(landed.key);
+		const [song] = await tracks.getAllTracks();
+		expect(session?.sourceIds).toEqual([b.id, a.id]);
+		expect(session?.trackId).toBe(song.id);
+		expect(session?.state).toEqual({ config });
+		expect(loadRenderSettings(`slideshow:${song.id}`)).toEqual({
+			width: 1080,
+			height: 1080,
+		});
+	});
+
+	test("an unchanged single edit is found as a copy, and an edited one isn't", async () => {
+		const { key } = await seedSingle();
+		const built = await buildProjectFile(key, { mode: "single" });
+		const read = await readProjectFile(built.blob);
+		expect(await findStoredCopy(read)).toEqual({
+			mode: "single",
+			key,
+			name: "My single",
+		});
+
+		const session = (await store.getSession(key))!;
+		await store.putSession({ ...session, state: { effects: [], text: null } });
+		expect(await findStoredCopy(read)).toBeNull();
+	});
+
+	test("an editor project is never taken for a copy of a single edit", async () => {
+		const { key } = await seedSingle();
+		const built = await buildProjectFile(key, { mode: "single" });
+		await store.deleteSession(key);
+		await store.saveMediaPool("proj-other", [
+			(await seedMedia("clip.mp4", 300, 3000)).id,
+		]);
+		await store.putTimeline("seq:proj-other", { v: 4, sourceEdits: {} });
+		expect(await findStoredCopy(await readProjectFile(built.blob))).toBeNull();
+	});
+});
+
+describe("project files from every past version", () => {
+	/** Wrap a stored manifest in a zip, with bytes at every path it names. */
+	async function zipOf(manifest: ProjectManifest): Promise<Blob> {
+		const paths = [...manifest.pool, ...manifest.songs, ...manifest.fonts]
+			.map((item) => item.path)
+			.filter((path): path is string => !!path);
+		return writeZip([
+			{ name: "project.json", blob: new Blob([JSON.stringify(manifest)]) },
+			...paths.map((name) => ({ name, blob: new Blob([name]) })),
+		]);
+	}
+
+	test.each(Object.entries(PROJECT_FIXTURES))(
+		"a %s file opens in the mode it was saved from",
+		async (_, fixture) => {
+			const landed = await storeProjectFile(
+				await readProjectFile(await zipOf(fixture)),
+			);
+			const mode = fixture.mode ?? "sequence";
+			expect(landed.mode).toBe(mode);
+			expect(readProjectNames()[landed.key]).toBe(fixture.name);
+			if (mode === "sequence") {
+				expect(await store.loadMediaPool(landed.key)).toHaveLength(
+					fixture.pool.length,
+				);
+				const saved = await store.getTimeline(`seq:${landed.key}`);
+				expect(saved).toMatchObject({ v: fixture.entry!.v });
+			} else {
+				const session = await store.getSession(landed.key);
+				expect(session?.sourceIds).toHaveLength(fixture.pool.length);
+				expect(session?.trackId).toBeTruthy();
+			}
+		},
+	);
 });
 
 describe("old projects", () => {

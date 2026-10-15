@@ -131,10 +131,10 @@
 		void refresh();
 	}
 
-	/** Save an editor project to a `.openmosh` file without opening it. */
-	async function downloadProject(key: string) {
+	/** Save a project or edit to a `.openmosh` file without opening it. */
+	async function downloadProject(key: string, mode: ProjectMode = "sequence") {
 		try {
-			const missing = await saveProjectFileAs(key);
+			const missing = await saveProjectFileAs(key, { mode });
 			if (missing) showToast(missingFilesNotice(missing), "info", 8000);
 		} catch (e) {
 			showToast(
@@ -728,17 +728,15 @@
 									<span class="row-when">{fmtAgo(e.updatedAt)}</span>
 								</svelte:element>
 								<span class="row-actions">
-									{#if e.kind === "pool"}
-										<button
-											class="icon-btn"
-											title="Save to a project file"
-											aria-label={`Save ${e.label} to a file`}
-											disabled={busy}
-											onclick={() => downloadProject(e.key)}
-										>
-											<Download size={13} />
-										</button>
-									{/if}
+									<button
+										class="icon-btn"
+										title="Save to a project file"
+										aria-label={`Save ${e.label} to a file`}
+										disabled={busy}
+										onclick={() => downloadProject(e.key, e.mode)}
+									>
+										<Download size={13} />
+									</button>
 									<button
 										class="icon-btn"
 										title="Rename edit"

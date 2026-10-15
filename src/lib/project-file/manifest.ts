@@ -9,13 +9,38 @@ import {
 import type { RenderSettings } from "../editor/render-settings";
 import type { MediaClip, MediaLane } from "../media/types";
 import type { AudioClip, AudioLane } from "../mix/types";
-import { records } from "../records";
+import { finiteOr, records } from "../records";
 import type { SourceEdit } from "../media/source-edit";
+import type { SessionMode } from "../editor/sequence-media-store";
+import {
+	DEFAULT_SLIDESHOW_CONFIG,
+	type TimelineSegment,
+} from "../slideshow/types";
 import { trackIdOf, trackSourceId } from "../mix/types";
 
 export const PROJECT_FORMAT = "openmosh-project";
-/** Bumped when the manifest's shape changes; separate from SEQ_ENTRY_VERSION. */
-export const PROJECT_VERSION = 1;
+/** Bumped when the manifest's shape changes; separate from SEQ_ENTRY_VERSION.
+ * 2: single and slideshow edits, with `mode`, `state` and `trackId`. */
+export const PROJECT_VERSION = 2;
+
+export type ProjectFileMode = "sequence" | SessionMode;
+
+/** Each mode's files have their own extension, so a picker shows only the ones that
+ * open there. Editor files kept the original one. */
+export const PROJECT_EXTENSIONS: Record<ProjectFileMode, string> = {
+	sequence: ".openmosh",
+	single: ".openmosh-single",
+	slideshow: ".openmosh-slideshow",
+};
+
+/** The mode a file's name says it belongs to; null when it isn't a project file. */
+export function projectFileModeOf(name: string): ProjectFileMode | null {
+	const lower = name.toLowerCase();
+	const found = Object.entries(PROJECT_EXTENSIONS).find(([, ext]) =>
+		lower.endsWith(ext),
+	);
+	return found ? (found[0] as ProjectFileMode) : null;
+}
 
 export interface ProjectPoolEntry {
 	/** The source id the timeline references. */
@@ -50,7 +75,14 @@ export interface ProjectManifest {
 	app: string;
 	savedAt: number;
 	name: string;
-	entry: SeqEntry;
+	/** Files before version 2 are all editor projects. */
+	mode: ProjectFileMode;
+	/** The editor's timeline, or a single edit's; a slideshow has none. */
+	entry: SeqEntry | null;
+	/** A single or slideshow edit's own state, as its session stores it. */
+	state?: unknown;
+	/** The song a single or slideshow edit is keyed to. */
+	trackId?: string;
 	pool: ProjectPoolEntry[];
 	songs: ProjectSongEntry[];
 	fonts: ProjectFontEntry[];
@@ -160,26 +192,78 @@ function parseRender(raw: unknown): RenderSettings | undefined {
 	return Object.keys(render).length > 0 ? render : undefined;
 }
 
+const MODES: readonly ProjectFileMode[] = ["sequence", "single", "slideshow"];
+
+/** A slideshow config keeps only the fields it has, each of the type it has. */
+function parseSlideshowConfig(raw: unknown): Record<string, unknown> {
+	if (!isRecord(raw)) return {};
+	const config: Record<string, unknown> = {};
+	for (const [key, fallback] of Object.entries(DEFAULT_SLIDESHOW_CONFIG)) {
+		const value = raw[key];
+		if (Array.isArray(fallback)) {
+			if (Array.isArray(value)) config[key] = records(value);
+		} else if (isRecord(fallback)) {
+			if (isRecord(value)) config[key] = value;
+		} else if (typeof value === typeof fallback) {
+			if (typeof value !== "number" || Number.isFinite(value)) {
+				config[key] = value;
+			}
+		}
+	}
+	if (config.segments) {
+		config.segments = records<TimelineSegment>(config.segments).filter(
+			(seg) =>
+				typeof seg.id === "string" && finiteOr(seg.startTime, null) !== null,
+		);
+	}
+	return config;
+}
+
+/** A session's state, in the shape its editor restores from; the editors normalise
+ * the rest. */
+function parseState(mode: SessionMode, raw: unknown): unknown {
+	const state = isRecord(raw) ? raw : {};
+	if (mode === "slideshow") {
+		return { config: parseSlideshowConfig(state.config) };
+	}
+	return {
+		effects: Array.isArray(state.effects) ? records(state.effects) : [],
+		text: isRecord(state.text) ? state.text : null,
+	};
+}
+
 /** Read a `project.json`, rejecting anything that isn't one of ours. */
 export function parseManifest(raw: unknown): ProjectManifest {
 	if (!isRecord(raw) || raw.format !== PROJECT_FORMAT) {
 		throw new Error("That isn't an OpenMosh project file");
 	}
 	const version = typeof raw.version === "number" ? raw.version : 0;
+	const mode = raw.mode ?? "sequence";
 	// The timeline has its own version: a newer one can ride in a manifest this reads.
-	if (version > PROJECT_VERSION || isNewerEntry(raw.entry)) {
+	if (
+		version > PROJECT_VERSION ||
+		isNewerEntry(raw.entry) ||
+		!MODES.includes(mode as ProjectFileMode)
+	) {
 		throw new Error("Made by a newer OpenMosh; update and try again");
 	}
-	if (!isRecord(raw.entry)) {
+	const entry = isRecord(raw.entry) ? (raw.entry as SeqEntry) : null;
+	if (mode === "sequence" && !entry) {
 		throw new Error("That project file has no timeline");
 	}
+	const session = mode === "sequence" ? null : (mode as SessionMode);
 	return {
 		format: PROJECT_FORMAT,
 		version,
 		app: typeof raw.app === "string" ? raw.app : "",
 		savedAt: typeof raw.savedAt === "number" ? raw.savedAt : 0,
 		name: typeof raw.name === "string" ? raw.name : "",
-		entry: raw.entry as SeqEntry,
+		mode: mode as ProjectFileMode,
+		entry: mode === "slideshow" ? null : entry,
+		...(session ? { state: parseState(session, raw.state) } : {}),
+		...(session && typeof raw.trackId === "string"
+			? { trackId: raw.trackId }
+			: {}),
 		pool: parsePool(raw.pool),
 		songs: parseSongs(raw.songs),
 		fonts: parseFonts(raw.fonts),

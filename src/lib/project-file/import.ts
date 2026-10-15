@@ -1,18 +1,26 @@
-/** Read a `.openmosh` file back into storage as a new project. */
+/** Read a `.openmosh` file back into storage as a new project or edit. */
 
 import { addTrack, getAllTracks, trackFileName } from "../audio/track-library";
 import { generateId } from "../effects/types";
-import { readProjectNames, setProjectName } from "../editor/project-names";
+import {
+	projectKeyForSession,
+	readProjectNames,
+	setProjectName,
+} from "../editor/project-names";
 import { saveRenderSettings } from "../editor/render-settings";
 import { listSavedSequences } from "../editor/saved-sequences";
 import type { SeqEntry } from "../editor/seq-entry";
 import { readSeqEntry } from "../editor/seq-entry";
+import { listSavedSessions, newSessionKey } from "../editor/sessions";
 import {
+	getSession,
 	getTimeline,
 	loadMediaPool,
 	putSequenceMedia,
+	putSession,
 	putTimeline,
 	saveMediaPool,
+	sessionTimelineKeys,
 	stableSourceId,
 	withMediaWrites,
 } from "../editor/sequence-media-store";
@@ -24,13 +32,34 @@ import {
 	isFetchableFontUrl,
 	parseManifest,
 	remapProject,
+	type ProjectFileMode,
 	type ProjectManifest,
 } from "./manifest";
 import { entryIntact, readZip, type ReadZipEntry } from "./zip";
 
-/** A name that isn't already in the library; a taken one gets "(copy)". */
-async function availableName(name: string): Promise<string> {
-	const taken = new Set((await listSavedSequences()).map((s) => s.trackName));
+/** What the upload screen lists for a mode: each project's key and shown name. */
+async function listedProjects(
+	mode: ProjectFileMode,
+): Promise<{ key: string; name: string }[]> {
+	if (mode === "sequence") {
+		return (await listSavedSequences()).map((s) => ({
+			key: s.trackId,
+			name: s.trackName,
+		}));
+	}
+	const names = readProjectNames();
+	return (await listSavedSessions(mode)).map((s) => ({
+		key: s.key,
+		name: names[projectKeyForSession(s.key)] ?? s.label,
+	}));
+}
+
+/** A name that isn't already in the mode's list; a taken one gets "(copy)". */
+async function availableName(
+	name: string,
+	mode: ProjectFileMode,
+): Promise<string> {
+	const taken = new Set((await listedProjects(mode)).map((p) => p.name));
 	if (!taken.has(name)) return name;
 	let candidate = `${name} (copy)`;
 	for (let n = 2; taken.has(candidate); n++) candidate = `${name} (copy ${n})`;
@@ -104,14 +133,52 @@ function poolMedia({ manifest, byPath }: ProjectFile) {
 	return { sourceIds, media };
 }
 
-/** A stored project the file would only duplicate: same pool, songs and timeline.
- * Null when there's none, or the file differs from every one. */
+/** What two copies of a project share, as a string that compares equal for them. */
+function fingerprint(parts: {
+	pool: string[];
+	entry: SeqEntry | null;
+	state?: unknown;
+	trackId?: string | null;
+}): string {
+	return canonicalJson({
+		pool: parts.pool,
+		entry: parts.entry && readSeqEntry(parts.entry, ""),
+		state: parts.state ?? null,
+		trackId: parts.trackId ?? null,
+	});
+}
+
+/** A stored project's fingerprint, or null when it has nothing to compare. */
+async function storedFingerprint(
+	mode: ProjectFileMode,
+	key: string,
+): Promise<string | null> {
+	if (mode === "sequence") {
+		const entry = (await getTimeline(`seq:${key}`)) as SeqEntry | null;
+		const pool = await loadMediaPool(key);
+		return entry && pool ? fingerprint({ pool, entry }) : null;
+	}
+	const session = await getSession(key);
+	if (!session) return null;
+	const timelineKey = sessionTimelineKeys(session)[0];
+	const entry = timelineKey
+		? ((await getTimeline(timelineKey)) as SeqEntry | null)
+		: null;
+	return fingerprint({
+		pool: session.sourceIds,
+		entry,
+		state: session.state,
+		trackId: session.trackId,
+	});
+}
+
+/** A stored project the file would only duplicate: same mode, pool, songs and
+ * work. Null when there's none, or the file differs from every one. */
 export async function findStoredCopy(
 	project: ProjectFile,
-): Promise<{ key: string; name: string } | null> {
+): Promise<{ mode: ProjectFileMode; key: string; name: string } | null> {
 	const { manifest, byPath } = project;
 	const { sourceIds } = poolMedia(project);
-	const pool = manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id);
 
 	const tracks = await getAllTracks();
 	const trackIds = new Map<string, string>();
@@ -123,30 +190,29 @@ export async function findStoredCopy(
 		if (!local) return null;
 		if (local.id !== item.trackId) trackIds.set(item.trackId, local.id);
 	}
-	const incoming = canonicalJson(
-		readSeqEntry(remapProject(manifest.entry, trackIds, sourceIds), ""),
-	);
-	const poolJson = JSON.stringify(pool);
+	const incoming = fingerprint({
+		pool: manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id),
+		entry: manifest.entry && remapProject(manifest.entry, trackIds, sourceIds),
+		state: manifest.state,
+		trackId:
+			manifest.trackId && (trackIds.get(manifest.trackId) ?? manifest.trackId),
+	});
 
-	for (const saved of await listSavedSequences()) {
-		const storedPool = await loadMediaPool(saved.trackId);
-		if (JSON.stringify(storedPool) !== poolJson) continue;
-		const stored = await getTimeline(`seq:${saved.trackId}`);
-		if (!stored) continue;
-		if (canonicalJson(readSeqEntry(stored as SeqEntry, "")) === incoming) {
-			return { key: saved.trackId, name: saved.trackName };
+	for (const listed of await listedProjects(manifest.mode)) {
+		if ((await storedFingerprint(manifest.mode, listed.key)) === incoming) {
+			return { mode: manifest.mode, ...listed };
 		}
 	}
 	return null;
 }
 
-/** Check and store a read project file. Returns the new project key, ready for the
- * editor's normal open path. Throws with a readable message on a damaged file or a
+/** Check and store a read project file. Returns where it landed, ready for its
+ * mode's normal open path. Throws with a readable message on a damaged file or a
  * write that storage refused. */
 export async function storeProjectFile(
 	project: ProjectFile,
 	onProgress?: (progress: ProjectImportProgress) => void,
-): Promise<string> {
+): Promise<{ mode: ProjectFileMode; key: string }> {
 	const { manifest, manifestEntry, byPath } = project;
 	// Checked before anything is stored: a file damaged in transit would otherwise
 	// import its media broken, with nothing said.
@@ -171,6 +237,8 @@ export async function storeProjectFile(
 	}
 	onProgress?.({ stage: "storing" });
 
+	/** The song a single or slideshow edit plays, once it's in the library. */
+	let sessionTrackId: string | undefined;
 	// Held from the first media write to the pool that keeps it, so no tab's prune
 	// sees the media unreferenced in between.
 	const projectKey = await withMediaWrites(async () => {
@@ -180,6 +248,7 @@ export async function storeProjectFile(
 		if (media.length > 0) await putSequenceMedia(media);
 
 		const trackIds = new Map<string, string>();
+		const storedTracks = new Set<string>();
 		for (const item of manifest.songs) {
 			const entry = byPath.get(item.path);
 			if (!entry) continue;
@@ -187,8 +256,12 @@ export async function storeProjectFile(
 				type: item.type || "audio/mpeg",
 			});
 			const track = await addTrack(songFile);
+			storedTracks.add(track.id);
 			if (track.id !== item.trackId) trackIds.set(item.trackId, track.id);
 		}
+		const songId =
+			manifest.trackId && (trackIds.get(manifest.trackId) ?? manifest.trackId);
+		sessionTrackId = songId && storedTracks.has(songId) ? songId : undefined;
 
 		for (const item of manifest.fonts) {
 			try {
@@ -210,18 +283,38 @@ export async function storeProjectFile(
 			}
 		}
 
-		const key = `proj-${generateId()}`;
-		const entry = remapProject(manifest.entry, trackIds, sourceIds);
-		await putTimeline(`seq:${key}`, entry);
-		await saveMediaPool(
+		const pool = manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id);
+		const entry =
+			manifest.entry && remapProject(manifest.entry, trackIds, sourceIds);
+		if (manifest.mode === "sequence") {
+			const key = `proj-${generateId()}`;
+			await putTimeline(`seq:${key}`, entry);
+			await saveMediaPool(key, pool);
+			return key;
+		}
+		const key = newSessionKey(manifest.mode);
+		// The editor keys an edit's timeline exactly as its session.
+		if (entry) await putTimeline(key, entry);
+		await putSession({
 			key,
-			manifest.pool.map((p) => sourceIds.get(p.id) ?? p.id),
-		);
+			mode: manifest.mode,
+			label: manifest.name || media[0]?.file.name || "Untitled",
+			trackId: sessionTrackId,
+			sourceIds: media.map((m) => m.id),
+			state: manifest.state,
+		});
 		return key;
 	});
-	if (manifest.render) saveRenderSettings(`seq:${projectKey}`, manifest.render);
+	const renderKey =
+		manifest.mode === "sequence"
+			? `seq:${projectKey}`
+			: manifest.mode === "single"
+				? projectKey
+				: sessionTrackId && `slideshow:${sessionTrackId}`;
+	if (manifest.render && renderKey)
+		saveRenderSettings(renderKey, manifest.render);
 	const name =
 		manifest.name || readProjectNames()[projectKey] || "Untitled project";
-	setProjectName(projectKey, await availableName(name));
-	return projectKey;
+	setProjectName(projectKey, await availableName(name, manifest.mode));
+	return { mode: manifest.mode, key: projectKey };
 }

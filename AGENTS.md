@@ -84,6 +84,10 @@ Outside CI a run reuses whatever already serves its port, so when my dev server 
   `SEQ_ENTRY_VERSION`; a change to either gets a fixture. The zip writer and reader
   (`lib/project-file/zip.ts`) have no dependency and store entries rather than deflating them,
   so an archive is built from the media blobs without copying them through memory.
+  Since `PROJECT_VERSION` 2 a file carries a `mode`: single and slideshow edits ride as
+  their session state plus a single edit's timeline, and import as a fresh `p:` session.
+  Each mode has its own extension (`PROJECT_EXTENSIONS`; the editor kept `.openmosh`), and
+  a file only opens on its own mode's upload screen, judged by its manifest.
 - A backup (`.openmosh-backup`, `lib/backup/backup.ts`) is the same stored zip holding every
   IndexedDB record and the `openmosh*` localStorage keys, with its own `BACKUP_VERSION`.
   Loading one merges: records keep their ids and replace same-keyed ones; proxies stay out.
