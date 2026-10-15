@@ -8,7 +8,11 @@
 
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
-	import { openProjectFile } from "./lib/project-file/import";
+	import {
+		openProjectFile,
+		type ProjectImportProgress,
+		type ProjectOpening,
+	} from "./lib/project-file/import";
 	import {
 		newSessionKey,
 		openSession,
@@ -269,10 +273,27 @@
 		return true;
 	}
 
+	/** A `.openmosh` file on its way in; the editor's own loading takes over once it opens. */
+	let projectOpening = $state<ProjectOpening | null>(null);
+
 	/** Import a `.openmosh` file as a new project, then open it the normal way. */
 	async function openProjectFromFile(file: File) {
+		if (projectOpening) return;
+		projectOpening = {
+			name: file.name.replace(/\.openmosh$/i, ""),
+			stage: "checking",
+			percent: 0,
+		};
+		const report = (progress: ProjectImportProgress) => {
+			if (!projectOpening) return;
+			projectOpening.stage = progress.stage;
+			if (progress.stage === "checking") {
+				projectOpening.percent = Math.floor(progress.fraction * 100);
+			}
+		};
 		try {
-			const key = await openProjectFile(file);
+			const key = await openProjectFile(file, report);
+			if (projectOpening) projectOpening.stage = "opening";
 			if (!(await openSequenceFromSong(key))) {
 				showToast("Couldn't open that project", "error");
 			}
@@ -282,6 +303,8 @@
 				"error",
 				8000,
 			);
+		} finally {
+			projectOpening = null;
 		}
 	}
 
@@ -483,6 +506,7 @@
 				}
 			}}
 			onProjectFile={openProjectFromFile}
+			{projectOpening}
 			onSessionOpen={async (mode: SessionMode, key: string) => {
 				if (!(await openSessionByKey(mode, key))) {
 					showToast("That session's media is no longer stored", "error");

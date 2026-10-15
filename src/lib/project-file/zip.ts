@@ -36,9 +36,13 @@ function crc32Update(crc: number, bytes: Uint8Array): number {
 }
 
 /** Checksum a blob by streaming it once, so a 2 GB file is never held whole. */
-async function crc32Of(blob: Blob): Promise<number> {
+async function crc32Of(
+	blob: Blob,
+	onBytes?: (count: number) => void,
+): Promise<number> {
 	if (typeof blob.stream !== "function") {
 		const bytes = new Uint8Array(await blob.arrayBuffer());
+		onBytes?.(bytes.length);
 		return (crc32Update(0xffffffff, bytes) ^ 0xffffffff) >>> 0;
 	}
 	const reader = blob.stream().getReader();
@@ -48,6 +52,7 @@ async function crc32Of(blob: Blob): Promise<number> {
 			const { done, value } = await reader.read();
 			if (done) break;
 			crc = crc32Update(crc, value);
+			onBytes?.(value.length);
 		}
 	} finally {
 		reader.releaseLock();
@@ -275,8 +280,11 @@ export interface ReadZipEntry {
 
 /** Whether an entry's bytes still match the checksum written with them. Reads the
  * whole entry, so it's run once, before anything is stored from it. */
-export async function entryIntact(entry: ReadZipEntry): Promise<boolean> {
-	return (await crc32Of(entry.blob)) === entry.crc;
+export async function entryIntact(
+	entry: ReadZipEntry,
+	onBytes?: (count: number) => void,
+): Promise<boolean> {
+	return (await crc32Of(entry.blob, onBytes)) === entry.crc;
 }
 
 /** The EOCD sits at the end, after an optional comment; scan back for it. */

@@ -28,10 +28,24 @@ async function availableName(name: string): Promise<string> {
 	return candidate;
 }
 
+/** The checksum pass reads every byte, so it's the one stage with a fraction. */
+export type ProjectImportProgress =
+	{ stage: "checking"; fraction: number } | { stage: "storing" };
+
+/** What the upload screen shows while a project file opens. */
+export interface ProjectOpening {
+	name: string;
+	stage: ProjectImportProgress["stage"] | "opening";
+	percent: number;
+}
+
 /** Parse, validate and store a project file. Returns the new project key, ready
  * for the editor's normal open path. Throws with a readable message on a bad file
  * or a write that storage refused. */
-export async function openProjectFile(file: Blob): Promise<string> {
+export async function openProjectFile(
+	file: Blob,
+	onProgress?: (progress: ProjectImportProgress) => void,
+): Promise<string> {
 	const entries = await readZip(file);
 	const byPath = new Map(entries.map((e) => [e.name, e]));
 	const manifestEntry = byPath.get("project.json");
@@ -52,11 +66,20 @@ export async function openProjectFile(file: Blob): Promise<string> {
 			(item) => (item.path ? (byPath.get(item.path) ?? []) : []),
 		),
 	];
+	const total = used.reduce((sum, entry) => sum + entry.size, 0);
+	let checked = 0;
+	onProgress?.({ stage: "checking", fraction: 0 });
 	for (const entry of used) {
-		if (!(await entryIntact(entry))) {
-			throw new Error("That project file is damaged");
-		}
+		const intact = await entryIntact(entry, (count) => {
+			checked += count;
+			onProgress?.({
+				stage: "checking",
+				fraction: total > 0 ? Math.min(checked / total, 1) : 1,
+			});
+		});
+		if (!intact) throw new Error("That project file is damaged");
 	}
+	onProgress?.({ stage: "storing" });
 
 	// Held from the first media write to the pool that keeps it, so no tab's prune
 	// sees the media unreferenced in between.
