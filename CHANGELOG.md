@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.9.20](https://github.com/zivavu/OpenMosh/compare/v0.9.19...v0.9.20) (2026-10-15)
+
+Single edits and slideshows save to project files now, as editor projects do, and each mode has a file type of its own. Every project file and backup goes straight to your Downloads. Opening a project file shows how far along it is, and opening one you already have offers the stored project instead of a second copy. Any open that takes a while shows a loading card, a notification stays up while you point at it, the effects search finds a whole family such as warp or rgb, and a slideshow's preview plays fullscreen. Two slideshows on one song keep their own settings, Safari no longer fails a download that starts late, and the upload screen stays still when you switch modes.
+
+Saved projects open as before, and older `.openmosh` files still open in the editor. Project files saved from now on use a newer format, so a tab still running an older OpenMosh turns them down until it updates. A slideshow saved before this keeps its song's export settings until you change them, and from then on they're its own.
+
+
+### Added
+
+* Save and open single and slideshow edits as project files, and save every project file and backup straight to Downloads ([9888421](https://github.com/zivavu/OpenMosh/commit/988842104ce754517fb46ff76dc174d372aef157), [7c2bcea](https://github.com/zivavu/OpenMosh/commit/7c2bceaa3b77468ecb561dd9859a33a09d87e91e))
+* Show progress while a project file opens, and a loading card whenever opening media or a saved project takes a while ([ebcb93c](https://github.com/zivavu/OpenMosh/commit/ebcb93c438eff4b58f8e0f1a96ff1328fca977ad), [0a5a879](https://github.com/zivavu/OpenMosh/commit/0a5a8796cbf8329a6f6971fd4845ce3c09ef05f7))
+* Offer the saved project when its file is opened again ([dd62dd8](https://github.com/zivavu/OpenMosh/commit/dd62dd862a991ef71456ce5409ae17646bc98374))
+* Play a slideshow's preview fullscreen ([f189606](https://github.com/zivavu/OpenMosh/commit/f189606a0369fbafaa6464bd54cbc67f52a04e7b))
+* Keep a notification up while the pointer is on it ([90c5ac2](https://github.com/zivavu/OpenMosh/commit/90c5ac258bcda66c76a5c5850aa379bba9a1569e))
+* Find effects by their family in the effects search ([0a347ce](https://github.com/zivavu/OpenMosh/commit/0a347ce8cc097d6bf4c5c7c0e95a6317836f4990))
+
+
+### Fixed
+
+* Keep two slideshows on one song from sharing their work ([82fb506](https://github.com/zivavu/OpenMosh/commit/82fb5060bf111c985bd7801d8b31ee853a58f934))
+* Keep Safari downloads from failing when they start late ([bfebb4e](https://github.com/zivavu/OpenMosh/commit/bfebb4e3b161a83fe90aaa2c1d82e25e959ba518))
+* Keep the upload screen still when switching modes ([01f1e28](https://github.com/zivavu/OpenMosh/commit/01f1e2855830e65ba3aa67e0b45175cfd5129bf8))
+* Name each effect's on/off switch and label more controls for screen readers ([da78d79](https://github.com/zivavu/OpenMosh/commit/da78d796ef0bd400cc97a9cce7d827b5be83fe7c), [b528ed9](https://github.com/zivavu/OpenMosh/commit/b528ed9018ff99c6d7a492b6b79ab462f781fae8))
+
 ## [0.9.19](https://github.com/zivavu/OpenMosh/compare/v0.9.18...v0.9.19) (2026-10-14)
 
 Damaged GIFs, 3D models, project files and backups no longer freeze the page or load broken, and long animated GIFs open without running out of memory. Exports clean up after a failed start, stop on Cancel even when stuck on a video, and say when they have to leave the sound out. The editor's sound loops without a gap, long sessions use less memory, and saving a project file asks where first and confirms when it's done. Enter selects a focused clip, and the phone panel stays put when you grab it.
