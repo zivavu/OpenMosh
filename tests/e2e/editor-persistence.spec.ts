@@ -177,3 +177,59 @@ test("a project saved to a file comes back after storage is cleared", async ({
 	await selectClip(page, 1);
 	await expect(liveEffects(page)).toHaveCount(0);
 });
+
+test("opening a file of a stored project offers that project back", async ({
+	page,
+}) => {
+	await page.addInitScript(() => {
+		Object.defineProperty(window, "showSaveFilePicker", {
+			value: undefined,
+			configurable: true,
+		});
+	});
+
+	await openEditor(page, {
+		sources: [
+			["red.png", RED],
+			["green.png", GREEN],
+		],
+	});
+	await waitForRender(page);
+	await splitClipAt(page, 0.5);
+	await waitForSaved(page);
+	const downloadPromise = page.waitForEvent("download");
+	await saveProjectButton(page).click();
+	const filePath = await (await downloadPromise).path();
+
+	const openFile = async () => {
+		await page.goto("/");
+		await selectMode(page, "Editor");
+		await page.locator('input[accept=".openmosh"]').setInputFiles(filePath!);
+	};
+	const prompt = page.getByRole("alertdialog", {
+		name: "Already in your projects",
+	});
+
+	await openFile();
+	await prompt.getByRole("button", { name: "Open it" }).click();
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await waitForRender(page);
+	await expect(mediaClips(page)).toHaveCount(2);
+
+	await page.goto("/");
+	await selectMode(page, "Editor");
+	await expect(page.locator(".saved-item")).toHaveCount(1);
+
+	// A second copy is still one click away, and is itself recognised next time.
+	await openFile();
+	await prompt.getByRole("button", { name: "Import a copy" }).click();
+	await expect(page.locator(PREVIEW_CANVAS)).toBeVisible({ timeout: 30_000 });
+	await waitForRender(page);
+	await waitForSaved(page);
+	await page.goto("/");
+	await selectMode(page, "Editor");
+	await expect(page.locator(".saved-item")).toHaveCount(2);
+
+	await openFile();
+	await expect(prompt).toBeVisible();
+});

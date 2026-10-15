@@ -9,7 +9,9 @@
 	import { GlRenderer } from "./lib/gl/renderer";
 	import { openSavedSequence } from "./lib/editor/saved-sequences";
 	import {
-		openProjectFile,
+		findStoredCopy,
+		readProjectFile,
+		storeProjectFile,
 		type ProjectImportProgress,
 		type ProjectOpening,
 	} from "./lib/project-file/import";
@@ -50,6 +52,9 @@
 	);
 	const loadLossesDialog = lazy(
 		() => import("./lib/components/ui/LoadLossesDialog.svelte"),
+	);
+	const loadConfirmDialog = lazy(
+		() => import("./lib/components/ui/ConfirmDialog.svelte"),
 	);
 
 	/** What an old save had to leave behind; a second report joins the open one. */
@@ -276,6 +281,25 @@
 	/** A `.openmosh` file on its way in; the editor's own loading takes over once it opens. */
 	let projectOpening = $state<ProjectOpening | null>(null);
 
+	type CopyChoice = "open" | "copy" | "cancel";
+	/** A project file that's already stored unchanged, waiting on what to do with it. */
+	let storedCopy = $state<{
+		name: string;
+		choose: (choice: CopyChoice) => void;
+	} | null>(null);
+
+	function askAboutStoredCopy(name: string): Promise<CopyChoice> {
+		return new Promise((resolve) => {
+			storedCopy = {
+				name,
+				choose: (choice) => {
+					storedCopy = null;
+					resolve(choice);
+				},
+			};
+		});
+	}
+
 	/** Import a `.openmosh` file as a new project, then open it the normal way. */
 	async function openProjectFromFile(file: File) {
 		if (projectOpening) return;
@@ -292,7 +316,14 @@
 			}
 		};
 		try {
-			const key = await openProjectFile(file, report);
+			const project = await readProjectFile(file);
+			const copy = await findStoredCopy(project);
+			const choice = copy ? await askAboutStoredCopy(copy.name) : "copy";
+			if (choice === "cancel") return;
+			const key =
+				copy && choice === "open"
+					? copy.key
+					: await storeProjectFile(project, report);
 			if (projectOpening) projectOpening.stage = "opening";
 			if (!(await openSequenceFromSong(key))) {
 				showToast("Couldn't open that project", "error");
@@ -506,7 +537,7 @@
 				}
 			}}
 			onProjectFile={openProjectFromFile}
-			{projectOpening}
+			projectOpening={storedCopy ? null : projectOpening}
 			onSessionOpen={async (mode: SessionMode, key: string) => {
 				if (!(await openSessionByKey(mode, key))) {
 					showToast("That session's media is no longer stored", "error");
@@ -548,6 +579,23 @@
 		<LoadLossesDialog losses={loadLosses} onClose={() => (loadLosses = null)} />
 	{:catch}
 		<LoadFailed onclose={reportLossesPlainly} />
+	{/await}
+{/if}
+
+{#if storedCopy}
+	{@const choose = storedCopy.choose}
+	{#await loadConfirmDialog() then ConfirmDialog}
+		<ConfirmDialog
+			title="Already in your projects"
+			message={`Your project "${storedCopy.name}" is the same as this file. Open it, or import a second copy?`}
+			confirmLabel="Open it"
+			altLabel="Import a copy"
+			onConfirm={() => choose("open")}
+			onAlt={() => choose("copy")}
+			onCancel={() => choose("cancel")}
+		/>
+	{:catch}
+		<LoadFailed onclose={() => choose("copy")} />
 	{/await}
 {/if}
 
