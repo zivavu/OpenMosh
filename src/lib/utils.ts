@@ -24,6 +24,7 @@ export function downloadFile(blob: Blob, name: string) {
 	a.href = url;
 	a.download = name;
 	a.click();
-	// Deleting the object URL immediately can cancel the download in some browsers.
-	setTimeout(() => URL.revokeObjectURL(url), 1000);
+	// Revoked late: Safari reads the blob only once its "allow downloads" prompt is
+	// answered, and a big file takes a while; a revoked URL fails the download.
+	setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
