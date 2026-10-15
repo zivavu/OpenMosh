@@ -479,6 +479,9 @@
 					<button
 						class="toggle"
 						class:on={effect.enabled}
+						role="switch"
+						aria-checked={effect.enabled}
+						aria-label={def.name}
 						onclick={onToggle}
 						disabled={!!rolledNote}
 						title={rolledNote ?? (effect.enabled ? "Disable" : "Enable")}
