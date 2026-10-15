@@ -2,9 +2,13 @@ import { describe, expect, it } from "bun:test";
 import {
 	dismissToast,
 	getToasts,
+	holdToast,
+	releaseToast,
 	showToast,
 	updateToast,
 } from "./toast.svelte";
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("updateToast", () => {
 	it("turns a toast into another where it stands", () => {
@@ -34,6 +38,53 @@ describe("updateToast", () => {
 		updateToast(id, "Saved", "success", 0);
 		await new Promise((r) => setTimeout(r, 40));
 		expect(getToasts().map((t) => t.message)).toEqual(["Saved"]);
+		dismissToast(id);
+	});
+});
+
+describe("holdToast", () => {
+	it("keeps a toast up past its duration while held", async () => {
+		const id = showToast("Removed", "info", 20);
+		holdToast(id);
+		await wait(40);
+		expect(getToasts().map((t) => t.id)).toContain(id);
+		dismissToast(id);
+	});
+
+	it("runs out once let go, after the floor a let-go toast gets", async () => {
+		const id = showToast("Removed", "info", 20);
+		holdToast(id);
+		await wait(40);
+		releaseToast(id);
+		await wait(40);
+		expect(getToasts().map((t) => t.id)).toContain(id);
+		dismissToast(id);
+	});
+
+	it("waits for every hold to end, pointer and focus alike", async () => {
+		const id = showToast("Removed", "info", 2000);
+		holdToast(id);
+		holdToast(id);
+		releaseToast(id);
+		await wait(20);
+		expect(getToasts().map((t) => t.id)).toContain(id);
+		dismissToast(id);
+	});
+
+	it("holds a progress toast that turns into done under the pointer", async () => {
+		const id = showToast("Building…", "info", 0);
+		holdToast(id);
+		updateToast(id, "Saved", "success", 20);
+		await wait(40);
+		expect(getToasts().map((t) => t.message)).toContain("Saved");
+		dismissToast(id);
+	});
+
+	it("leaves an untimed toast alone", () => {
+		const id = showToast("Building…", "info", 0);
+		holdToast(id);
+		releaseToast(id);
+		expect(getToasts().map((t) => t.id)).toContain(id);
 		dismissToast(id);
 	});
 });

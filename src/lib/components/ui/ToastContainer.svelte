@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { Check } from "lucide-svelte";
-	import { getToasts, dismissToast, runToastAction } from "./toast.svelte";
+	import {
+		dismissToast,
+		getToasts,
+		holdToast,
+		releaseToast,
+		runToastAction,
+	} from "./toast.svelte";
 </script>
 
 <div
@@ -10,8 +16,14 @@
 	aria-atomic="true"
 >
 	{#each getToasts() as toast (toast.id)}
+		<!-- Held while pointed at or focused, so an Undo doesn't vanish under the cursor. -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="toast"
+			onpointerenter={() => holdToast(toast.id)}
+			onpointerleave={() => releaseToast(toast.id)}
+			onfocusin={() => holdToast(toast.id)}
+			onfocusout={() => releaseToast(toast.id)}
 			class:error={toast.type === "error"}
 			class:info={toast.type === "info"}
 			class:success={toast.type === "success"}
