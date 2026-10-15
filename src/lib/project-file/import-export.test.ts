@@ -178,6 +178,27 @@ describe("a project file round trip", () => {
 		expect((await store.getAllSequenceMediaIds()).size).toBe(0);
 	});
 
+	test("reports the check rising to a whole file, then the store", async () => {
+		const key = "proj-progress";
+		const a = await seedMedia("a.png", 100, 1000);
+		const b = await seedMedia("b.png", 200, 2000);
+		await store.saveMediaPool(key, [a.id, b.id]);
+		await store.putTimeline(`seq:${key}`, { v: 3, length: 10 });
+		const built = await buildProjectFile(key);
+		await store.clearAllSequenceStores();
+
+		const seen: { stage: string; fraction?: number }[] = [];
+		await openProjectFile(built.blob, (p) => seen.push({ ...p }));
+
+		const fractions = seen.flatMap((p) =>
+			p.stage === "checking" ? [p.fraction!] : [],
+		);
+		expect(fractions[0]).toBe(0);
+		expect(fractions.at(-1)).toBe(1);
+		expect(fractions).toEqual([...fractions].sort((x, y) => x - y));
+		expect(seen.at(-1)).toEqual({ stage: "storing" });
+	});
+
 	test("names the song of a project keyed by it", async () => {
 		const trackId = await seedTrack("song.wav", 500);
 		const a = await seedMedia("a.png", 100, 1000);
