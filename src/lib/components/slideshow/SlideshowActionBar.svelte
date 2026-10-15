@@ -1,6 +1,13 @@
 <script lang="ts">
 	import LoadFailed from "../ui/LoadFailed.svelte";
-	import { HelpCircle, Pause, Play, Settings, Type } from "lucide-svelte";
+	import {
+		HelpCircle,
+		Maximize,
+		Pause,
+		Play,
+		Settings,
+		Type,
+	} from "lucide-svelte";
 	import { hasKeyboard } from "../../input-device";
 	import Checkbox from "../ui/Checkbox.svelte";
 	import RecordGroup from "../editor/RecordGroup.svelte";
@@ -25,6 +32,8 @@
 		recordDuration: number;
 		showFps: boolean;
 		sourceFit: SourceFit;
+		fullscreen?: boolean;
+		onToggleFullscreen?: () => void;
 		textEnabled?: boolean;
 		onToggleText?: () => void;
 		onTogglePreview: () => void;
@@ -46,6 +55,8 @@
 		recordDuration,
 		showFps = $bindable(false),
 		sourceFit = $bindable("contain"),
+		fullscreen = false,
+		onToggleFullscreen,
 		textEnabled = false,
 		onToggleText,
 		onTogglePreview,
@@ -55,6 +66,7 @@
 	}: Props = $props();
 
 	const isMobile = window.matchMedia("(pointer: coarse)").matches;
+	const fullscreenSupported = document.fullscreenEnabled;
 	let showOptionsPanel = $state(false);
 	let showRecordSettings = $state(false);
 	let showShortcuts = $state(false);
@@ -95,6 +107,17 @@
 					aria-label="Keyboard shortcuts"
 				>
 					<HelpCircle size={14} />
+				</button>
+			{/if}
+			{#if fullscreenSupported && onToggleFullscreen}
+				<button
+					class="bar-icon"
+					class:on={fullscreen}
+					onclick={onToggleFullscreen}
+					title="Fullscreen preview (F)"
+					aria-label="Fullscreen preview"
+				>
+					<Maximize size={14} />
 				</button>
 			{/if}
 

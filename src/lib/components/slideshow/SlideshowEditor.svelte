@@ -801,6 +801,7 @@
 	});
 	let resizeWidth = $state(0);
 	let resizeHeight = $state(0);
+	let previewFullscreen = $state(false);
 
 	/** Set when a project restores its output size, so slides finishing their load don't
 	 * default it back to their own. */
@@ -1216,6 +1217,12 @@
 	 * must not run a render loop of its own beside the newer one. */
 	let previewRun = 0;
 
+	/** The grid hides the preview, so going fullscreen shows it first. */
+	function toggleFullscreen() {
+		if (!previewFullscreen) activeView = "preview";
+		previewFullscreen = !previewFullscreen;
+	}
+
 	async function startPreview() {
 		if (slides.length === 0) return;
 		const run = ++previewRun;
@@ -1588,6 +1595,8 @@
 			return;
 
 		if (previewPlaying) stopPreview();
+		// The record overlay lives outside the fullscreen element, so staying in it would hide it.
+		previewFullscreen = false;
 		// Generated slides may still be catching up with a size change.
 		await sizeSync.settle();
 
@@ -1764,6 +1773,9 @@
 		} else if (e.key === "ArrowLeft") {
 			e.preventDefault();
 			moshSession.back();
+		} else if (key === "f" && !e.altKey && !e.shiftKey) {
+			e.preventDefault();
+			toggleFullscreen();
 		} else if (key === "c" && !e.altKey && !e.shiftKey) {
 			e.preventDefault();
 			if (timelineAxis)
@@ -1921,6 +1933,7 @@
 				{warmCanvas}
 				{warmRenderer}
 				{sourceFit}
+				bind:fullscreen={previewFullscreen}
 			/>
 		</div>
 
@@ -1943,6 +1956,8 @@
 			onStartRecording={startRecording}
 			bind:showFps
 			bind:sourceFit
+			fullscreen={previewFullscreen}
+			onToggleFullscreen={toggleFullscreen}
 			onRecordFpsChange={(fps) => (recordFps = fps)}
 			onRecordDurationChange={(d) => (recordDuration = d)}
 		/>
