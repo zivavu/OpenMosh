@@ -415,7 +415,6 @@ describe("single and slideshow edits", () => {
 			moshAudioLinkStrength: 0.5,
 			segments: [{ id: "seg-1", startTime: 4, subdivision: 1 }],
 			text: { enabled: false, lanes: [] },
-			outputVolume: 0.8,
 			span: { start: 2, end: 9 },
 		};
 		await store.putSession({
