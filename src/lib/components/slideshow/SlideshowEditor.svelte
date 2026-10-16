@@ -688,7 +688,7 @@
 	let config: SlideshowConfig = $state(loadConfig());
 
 	$effect(() => {
-		writeJson(CONFIG_KEY, { ...config, outputVolume: audio.outputVolume });
+		writeJson(CONFIG_KEY, config);
 	});
 
 	let currentTrackId = $state<string | null>(null);
@@ -912,8 +912,6 @@
 		glRenderer.render(effects, 0, currentTextLayers());
 	});
 
-	const savedOutputVolume = loadConfig().outputVolume ?? 1;
-
 	const audio = new AudioManager({
 		// One group: the slideshow drives effects from beats, so there are no per-lane responses.
 		getLinkGroups: () => [
@@ -932,8 +930,13 @@
 				response: DEFAULT_AUDIO_RESPONSE,
 			})),
 		],
-		initialOutputVolume: savedOutputVolume,
+		initialOutputVolume:
+			loadSettings().outputVolume ?? DEFAULT_SETTINGS.outputVolume,
 		initialLoop: loadSettings().loopAudio ?? false,
+	});
+
+	$effect(() => {
+		updateSettings({ outputVolume: audio.outputVolume });
 	});
 
 	function toggleLoop() {

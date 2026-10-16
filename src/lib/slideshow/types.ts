@@ -63,8 +63,6 @@ export interface SlideshowConfig {
 	segments: TimelineSegment[];
 	/** Optional timed text lanes, keyed to audio time. */
 	text: TextTimeline;
-	/** Persisted alongside the config; the live value lives on the AudioManager. */
-	outputVolume: number;
 	/** The export span on the song. Absent on slideshows saved before it was their own. */
 	span?: { start: number; end: number };
 }
@@ -81,5 +79,4 @@ export const DEFAULT_SLIDESHOW_CONFIG: SlideshowConfig = {
 	moshAudioLinkStrength: 0.8,
 	segments: [],
 	text: { ...EMPTY_TEXT_TIMELINE },
-	outputVolume: 1,
 };
