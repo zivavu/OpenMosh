@@ -4,7 +4,10 @@ import type { ResolvedMediaLayer } from "../media";
 /** Every sampler the driver opened, and whether it was let go. */
 const opened: { file: File; disposed: boolean }[] = [];
 
+// The mock lasts the whole run, so it keeps the module's other exports for later files.
+const sampler = await import("../slideshow/video-sampler");
 mock.module("../slideshow/video-sampler", () => ({
+	...sampler,
 	SlideVideoSampler: {
 		create: async (file: File) => {
 			const entry = { file, disposed: false };

@@ -1681,22 +1681,45 @@
 
 	/** Once per session: a browser that won't store files refuses every add. */
 	let mediaSaveFailed = false;
-	const sourceRegistry = new SequenceSourceRegistry(bumpSourceTick, (write) => {
-		void saves
-			.track(
-				"media",
-				write.then(() => true),
-			)
-			.then((ok) => {
-				if (ok || mediaSaveFailed) return;
-				mediaSaveFailed = true;
-				showToast(
-					"This browser wouldn't store your media, so it won't be here after a reload. Save a project file to keep it.",
-					"error",
-					10000,
-				);
-			});
-	});
+	const sourceRegistry = new SequenceSourceRegistry(
+		bumpSourceTick,
+		(write) => {
+			void saves
+				.track(
+					"media",
+					write.then(() => true),
+				)
+				.then((ok) => {
+					if (ok || mediaSaveFailed) return;
+					mediaSaveFailed = true;
+					showToast(
+						"This browser wouldn't store your media, so it won't be here after a reload. Save a project file to keep it.",
+						"error",
+						10000,
+					);
+				});
+		},
+		reportUnreadableImages,
+	);
+
+	/** The pool has dropped these already; the lanes that drew them let go too. */
+	function reportUnreadableImages(sources: SequenceSource[]) {
+		for (const src of sources) {
+			setMediaTimeline(detachMediaSource(mediaTimeline, src.id));
+		}
+		const heic = sources.some((s) => /^image\/hei[cf]$/.test(s.file.type));
+		const what =
+			sources.length === 1
+				? `Couldn't read "${sources[0].name}", so it was removed from the pool`
+				: `Couldn't read ${sources.length} images, so they were removed from the pool`;
+		showToast(
+			heic
+				? `${what}. This browser can't open HEIC photos. Convert them to JPG or use Safari`
+				: what,
+			"error",
+			heic ? 10000 : 6000,
+		);
+	}
 	// Saved here rather than with the other settings, so the refresh reads the new value.
 	$effect(() => {
 		const on = previewProxies;
@@ -1847,7 +1870,8 @@
 	/** Add to the pool, then seat a source-less lane on the first file added. */
 	async function addLayerSources(files: File[]) {
 		const added = await addSequenceSources(files);
-		const first = added[0];
+		// An image the browser couldn't read may already be out of the pool.
+		const first = added.find((s) => sourceRegistry.get(s.id));
 		if (!first) return;
 		// Nothing anywhere on the lane to draw; clips that each point somewhere already carry media.
 		const unset = mediaTimeline.lanes.find(
