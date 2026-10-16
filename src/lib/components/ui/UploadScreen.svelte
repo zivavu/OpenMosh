@@ -374,14 +374,40 @@
 		return AUDIO_TYPES.includes(file.type) || file.type.startsWith("audio/");
 	}
 
+	/** HEIC goes unlisted: only Safari reads it, and only there does it get past
+	 * unreadableHeic. */
 	let supportedLabel = $derived(
 		[
 			"PNG, JPG, WEBP, AVIF, GIF",
-			...(takesHeic ? ["HEIC"] : []),
 			...(takesSvg ? ["SVG"] : []),
 			"MP4, WEBM, MOV",
 		].join(", "),
 	);
+
+	/** The HEIC files among these this browser can't decode; elsewhere they'd open
+	 * straight into an error. */
+	async function unreadableHeic(files: File[]): Promise<File[]> {
+		const heic = files.filter((f) => HEIC_ACCEPT.includes(f.type));
+		const readable = await Promise.all(
+			heic.map((f) =>
+				createImageBitmap(f).then(
+					(bitmap) => (bitmap.close(), true),
+					() => false,
+				),
+			),
+		);
+		return heic.filter((_, i) => !readable[i]);
+	}
+
+	function rejectHeic(files: File[]) {
+		showToast(
+			files.length === 1
+				? `Can't open "${files[0].name}". This browser can't read HEIC photos. Convert it to JPG or use Safari`
+				: `Can't open ${files.length} HEIC photos in this browser. Convert them to JPG or use Safari`,
+			"error",
+			8000,
+		);
+	}
 
 	/** 3D files in a format we can't read, and why; the dialog is up while there are any. */
 	let modelProblems = $state<ModelProblem[]>([]);
@@ -410,7 +436,7 @@
 		);
 	}
 
-	function handleFile(untyped: File) {
+	async function handleFile(untyped: File) {
 		const file = withMediaType(untyped);
 		if (isProjectFile(file)) {
 			onProjectFile(file, selectedMode);
@@ -420,17 +446,21 @@
 			rejectFile(file);
 			return;
 		}
+		if ((await unreadableHeic([file])).length > 0) {
+			rejectHeic([file]);
+			return;
+		}
 		onfile(file);
 	}
 
-	function handleMultiFiles(files: FileList | File[]) {
+	async function handleMultiFiles(files: FileList | File[]) {
 		const all = Array.from(files, withMediaType);
 		const project = all.find(isProjectFile);
 		if (project) {
 			onProjectFile(project, selectedMode);
 			return;
 		}
-		const accepted = all.filter((f) => isAcceptedFile(f));
+		let accepted = all.filter((f) => isAcceptedFile(f));
 		// A lone file is rejectFile's to explain.
 		const otherModels = all.filter(isOtherModelFile);
 		if (all.length > 1 && otherModels.length > 0)
@@ -446,6 +476,12 @@
 			return;
 		}
 		const skipped = all.length - accepted.length;
+		const unreadable = await unreadableHeic(accepted);
+		if (unreadable.length > 0) {
+			rejectHeic(unreadable);
+			accepted = accepted.filter((f) => !unreadable.includes(f));
+			if (accepted.length === 0) return;
+		}
 		if (skipped > 0) {
 			showToast(
 				`Skipped ${skipped} unsupported file${skipped === 1 ? "" : "s"}`,
@@ -474,8 +510,8 @@
 
 	function useGenerated(files: File[]) {
 		generateOpen = false;
-		if (isMultiMode) handleMultiFiles(files);
-		else handleFile(files[0]);
+		if (isMultiMode) void handleMultiFiles(files);
+		else void handleFile(files[0]);
 	}
 
 	/** One click in with no file: a random generated batch, sized for the mode. */
@@ -527,7 +563,7 @@
 				6000,
 			);
 		}
-		handleFile(file);
+		void handleFile(file);
 	}
 
 	function onDrop(e: DragEvent) {
@@ -551,7 +587,7 @@
 		if (media.length === 0) return;
 
 		if (isMultiMode) {
-			handleMultiFiles(media);
+			void handleMultiFiles(media);
 		} else {
 			handleSingleFile(media);
 		}
@@ -582,7 +618,7 @@
 		}
 
 		if (isMultiMode) {
-			handleMultiFiles(input.files);
+			void handleMultiFiles(input.files);
 		} else {
 			handleSingleFile(input.files);
 		}
