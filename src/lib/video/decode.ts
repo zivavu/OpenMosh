@@ -5,6 +5,7 @@ import type {
 	VideoSample,
 	VideoSampleSink,
 } from "mediabunny";
+import { decoderOptions } from "./decoder-options";
 
 export const sleep = (ms: number) =>
 	new Promise<void>((r) => setTimeout(r, ms));
@@ -42,7 +43,11 @@ export async function openDecodableVideo(
 		});
 		const track = await input.getPrimaryVideoTrack();
 		if (track && track.rotation === 0 && (await track.canDecode())) {
-			return { input, track, sink: new mb.VideoSampleSink(track) };
+			return {
+				input,
+				track,
+				sink: new mb.VideoSampleSink(track, decoderOptions(track)),
+			};
 		}
 	} catch {
 		// Not a video this path can decode.

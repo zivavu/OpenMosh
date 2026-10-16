@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { decodeGif } from "./gif";
+import { decodeGif, evenSize } from "./gif";
 
 const HEADER = [
 	0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0x80, 0, 0,
@@ -142,5 +142,15 @@ describe("decodeGif", () => {
 	it("stops at a comment that claims more bytes than the file has", () => {
 		const cut = gif(HEADER, FRAME, [0x21, 0xfe, 0x05, 0x41, 0x42]);
 		expect(decodeGif(cut).frames).toHaveLength(1);
+	});
+});
+
+describe("evenSize", () => {
+	it("drops an odd last row or column, so hardware decoders take the video", () => {
+		expect(evenSize({ width: 498, height: 485 })).toEqual({
+			width: 498,
+			height: 484,
+		});
+		expect(evenSize({ width: 1, height: 1 })).toEqual({ width: 2, height: 2 });
 	});
 });
