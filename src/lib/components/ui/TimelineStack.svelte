@@ -146,7 +146,8 @@
 	}
 
 	let ticks = $derived.by(() => {
-		if (trackDuration <= 0) return [];
+		// An endless window would never run out of ticks.
+		if (trackDuration <= 0 || !Number.isFinite(vp.viewEnd)) return [];
 		const step = tickStep(vp.viewDuration);
 		const first = Math.ceil(vp.viewStart / step) * step;
 		const out: { pct: number; label: string }[] = [];

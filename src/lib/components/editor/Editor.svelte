@@ -4584,12 +4584,15 @@
 				onloadedmetadata={() => {
 					// Player owns duration/span/audio when active; the element is only the recording fallback then
 					if (previewPlayer) return;
-					const dur = videoEl!.duration;
+					// A recorder's WebM reports Infinity until played through: no length, not an endless one.
+					const dur = Number.isFinite(videoEl!.duration)
+						? videoEl!.duration
+						: 0;
 					videoDuration = dur;
 					videoSpanStart = 0;
 					videoSpanEnd = dur;
 					videoPastSpan = false;
-					recordDuration = Math.round(dur * 10) / 10;
+					if (dur > 0) recordDuration = Math.round(dur * 10) / 10;
 					ensureVideoAudioGraph();
 				}}
 				ontimeupdate={() => {
