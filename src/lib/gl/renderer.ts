@@ -3215,6 +3215,12 @@ export class GlRenderer {
 		);
 	}
 
+	/** WebGL ignores every call on a lost context without an error, so a caller that
+	 * can't afford blank frames asks. */
+	get contextLost(): boolean {
+		return this.gl.isContextLost();
+	}
+
 	/** Stop the work still running in the background: shader warm-up, and decodes that
 	 * would build masks for nothing. For a renderer replaced on the same context, where
 	 * destroy()'s loseContext would take the new one down too. */

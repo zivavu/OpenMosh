@@ -44,6 +44,8 @@ import { openExportFile, removeExportFile } from "./export-files";
 
 /** Bitrate scales with output size: a fixed rate starves big canvases and bloats
  * small ones. Chrome honors the target, Firefox clamps it. */
+const CONTEXT_LOST =
+	"The graphics card reset during the export, so it stopped. Try again";
 const BITS_PER_PIXEL = 0.2;
 const MIN_VIDEO_BITRATE = 3_000_000;
 const MAX_VIDEO_BITRATE = 60_000_000;
@@ -807,6 +809,8 @@ async function recordWebM(opts: RecordOptions): Promise<Blob> {
 			else if (!skipRender) {
 				renderer.render(renderEffects, time, textLayers, [], mediaLayers);
 			}
+			// The preview rebuilds onto a fresh context, but this export's frames are gone.
+			if (renderer.contextLost) throw new Error(CONTEXT_LOST);
 			await sink.submit(i, time);
 		}
 
